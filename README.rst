@@ -32,9 +32,11 @@ directory and run install script:
 
 Document:
 
-The document you can check http://develop.aliyun.com/command
+The document you can check http://www.aliyun.com
 
 Command complete:
 
 This tool support command complete , you can use "Tab" after any command which maybe not input completed, and the
 command line will show the relative command information
+
+
