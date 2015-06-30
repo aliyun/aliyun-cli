@@ -1,0 +1,8 @@
+workspace.xml
+.DS_Store
+.tmp
+.settings
+.pyc
+*.pyc
+aliyuncli/aliyun
+
