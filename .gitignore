@@ -3,6 +3,8 @@ workspace.xml
 .tmp
 .settings
 .pyc
-*.pyc
+*.py[co]
 aliyuncli/aliyun
-
+# IDEA IDE 
+.idea* 
+src/ 
