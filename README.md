@@ -42,7 +42,11 @@ linux 和 MAC os 请执行:
 
 	aliyuncli/* 是整个的业务逻辑部分, 包含数据的解析, 命令行解析, 以及基本的SDK的调用过程.
 
-	aliyuncli/advance/* 是API聚合逻辑, 这里主要放针对于 aliyuncli 的各种高级功能的开发, 例如ECS的导入导出功能, RDS的导入导出功能.未来会持续的开发更多的高级功能.
+	aliyuncli/advance/* 是API聚合逻辑, 这里主要放针对于 aliyuncli 的各种高级功能的开发.
+
+	例如ECS的导入导出功能, RDS的导入导出功能.
+
+	未来会持续的开发更多的高级功能.
 
 
 ###自动补全功能:
