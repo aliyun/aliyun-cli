@@ -38,20 +38,6 @@ class AliyunCommandLine:
 
     def main(self):
 
-        # no matter what error happened , should not interrupt user execute the cmd
-        # we must keep this code pass and cmdline can running normally.
-        try:
-            isNewVersion, url = self.upgradeHandler.checkForUpgrade()
-            if isNewVersion:
-                print "\nAliyuncli new version is ready, you can download the package from the www.aliyun.com.\n"
-                choice = raw_input("Notify later ? [Y: notify later; N:I have known it]:")
-                # print choice
-                self.upgradeHandler.handleUserChoice(choice)
-        except Exception as e:
-            pass
-        finally:
-            pass
-
         # fetch command
         cmd = self.parser.getCliCmd()
         extensionCmdList = self.extensionHandler.getAllExtensionCommands()
@@ -64,8 +50,7 @@ class AliyunCommandLine:
         operation = self.parser.getCliOperation()
 
         # fetch paramlist
-        keyValues = self.parser.getCliKeyValues()
-
+        keyValues = self.parser._getKeyValues()
         outPutFormat = self.parser.getOutPutFormat(keyValues)
         if outPutFormat is None or len(outPutFormat) == 0:
             outPutFormat = self.extensionHandler.getUserFormat()
@@ -75,39 +60,53 @@ class AliyunCommandLine:
             outPutFormat = outPutFormat[0]
 
         if self.handler.isAvailableCmd(cmd):
+            # fetch getversion
+            version=self.handler.getSdkVersion(cmd,keyValues)
+            if version is None:
+                return
             # here handler the openapi cmd
-            if self.handler.isAvailableOperation(cmd, operation): # cmd and operation both are right
-                # fetch getversion
-                version = self.handler.getLatestVersionByCmdName(cmd)
-                cmdInstance = self.handler.getInstanceByCmd(cmd, operation, version)
-                if not cmdInstance is None:
-                    if self.showInstanceAttribute(cmd, operation, cmdInstance):
-                        return
-                    # here should handle the keyValues first
-                    keyValues = self.parser.getOpenApiKeyValues(keyValues)
-                    if self.handler.needSetDefaultRegion(cmdInstance, keyValues):
-                        keyValues["RegionId"] = [self.extensionHandler.getUserRegion()]
-                    self.handler.setAttr(cmdInstance, keyValues) # set all key values in instance
-                    #print "domain:", cmdInstance._RestApi__domain , keyValues
-                    self.handler.changeEndPoint(cmdInstance, keyValues)
-                    #print "domain:", cmdInstance._RestApi__domain
-                    try:
-                        result = cmdInstance.getResponse()
-                        if("Code" in result):
-                            response.display_response("error", result, "json")
-                            # print("failed")
-                            # print(result["Code"])
-                            # print(result["Message"])
-                            # print("Please check your parameters first.")
-                        else:
-                            #print(result)
-                            response.display_response(operation, result, outPutFormat)
-                    except Exception,e:
-                        print(e)
+            if self.handler.isAvailableOperation(cmd, operation,version): # cmd and operation both are right
+                instanceAndClassName=self.handler.getInstanceByCmdOperation(cmd, operation,version)
+                if instanceAndClassName is not None and len(instanceAndClassName)==2:
+                    cmdInstance = instanceAndClassName[0]
+                    className = instanceAndClassName[1]
+                    if cmdInstance is not None and className is not None:
+                        if self.showInstanceAttribute(cmd, operation, cmdInstance):
+                            return
+                        # here should handle the keyValues first
+                        keyValues = self.parser.getOpenApiKeyValues(keyValues)
+                        if self.handler.needSetDefaultRegion(cmdInstance, keyValues):
+                            keyValues["RegionId"] = [self.extensionHandler.getUserRegion()]
+                        #check necessaryArgs as:accesskeyid accesskeysecret regionId
+                        if not self.handler.hasNecessaryArgs(keyValues):
+                            print 'accesskeyid/accesskeysecret/regionId is absence'
+                            return
+                        try:
+                            result = self.handler.getResponse(cmd,operation,className,cmdInstance,keyValues)
+                            if("Code" in result):
+                                response.display_response("error", result, "json")
+                                # print("failed")
+                                # print(result["Code"])
+                                # print(result["Message"])
+                                # print("Please check your parameters first.")
+                            else:
+                                #print(result)
+                                response.display_response(operation, result, outPutFormat,keyValues)
+                        except Exception as e:
+                            print(e)
+                    else:
+                        print 'aliyuncli internal error, please contact: xixi.xxx'
+            elif self.handler.isAvailableExtensionOperation(cmd, operation):
+                if self.args.__len__() >= 3 and self.args[2] == 'help':
+                    import commandConfigure
+                    configure = commandConfigure.commandConfigure()
+                    configure.showExtensionOperationHelp(cmd, operation)
                 else:
-                    print 'aliyuncli internal error, please contact: xixi.xxx'
+                    self.extensionHandler.handlerExtensionOperation(cmd,operation,version)
+                # self.extensionHandler.handlerExtensionOperation(cmd,operation,version)
             else:
                 # cmd is right but operation is not right
+                print "error here"
                 self.helper.showOperationError(cmd, operation)
         else:
             self.helper.showCmdError(cmd)

@@ -31,7 +31,7 @@ class Completer(object):
         self.openApiDataHandler = aliyunOpenApiData.aliyunOpenApiDataHandler()
         self.driver = None
         self.main_hc = None
-        self.main_options = ['output', 'AccessKeyId', 'AccessKeySecret', 'Endpoint']
+        self.main_options = ['output', 'AccessKeyId', 'AccessKeySecret', 'RegionId' ,'profile', 'version']
         self.cmdline = None
         self.point = None
         self.command_hc = None
@@ -61,7 +61,7 @@ class Completer(object):
             l = ['--' + n for n in self.main_options
                  if n.startswith(cw)]
             retval = l
-        elif self.current_word == './aliyuncli' or self.current_word == self.aliyuncli:
+        elif self.current_word == './testcli' or self.current_word == self.aliyuncli:
             retval = self._documented(self.openApiDataHandler.getApiCmdsLower())
         else:
             # Otherwise, see if they have entered a partial command name
@@ -72,14 +72,37 @@ class Completer(object):
     def _complete_command(self):
         retval = []
         if self.current_word == self.command_name: # here means only cmd give operation is None
-            retval = self._documented(self.openApiDataHandler.getApiOperations(self.command_name, self.version))
+            _operations = set()
+            apiOperations = self.openApiDataHandler.getApiOperations(self.command_name, self.version)
+            import commandConfigure
+            _configure = commandConfigure.commandConfigure()
+            extensionOperations = _configure.getExtensionOperations(self.command_name)
+            for item in apiOperations:
+                _operations.add(item)
+            if extensionOperations is not None:
+                for item in extensionOperations:
+                    _operations.add(item)
+            if self.openApiDataHandler.getApiOperations(self.command_name, self.version):
+                retval = self._documented(_operations)
+            # retval = self._documented(self.openApiDataHandler.getApiOperations(self.command_name, self.version))
         elif self.current_word.startswith('-'): # this is complete the key and values
             retval = self._find_possible_options()
         else: # here means cmd give we need complete the operation
             # See if they have entered a partial command name
+            _operations = set()
+            apiOperations = self.openApiDataHandler.getApiOperations(self.command_name, self.version)
+            import commandConfigure
+            _configure = commandConfigure.commandConfigure()
+            extensionOperations = _configure.getExtensionOperations(self.command_name)
+            for item in apiOperations:
+                _operations.add(item)
+            if extensionOperations is not None:
+                for item in extensionOperations:
+                    _operations.add(item)
             if self.openApiDataHandler.getApiOperations(self.command_name, self.version):
-                retval = self._documented(self.openApiDataHandler.getApiOperations(self.command_name, self.version),
-                                          startswith=self.current_word)
+                retval = self._documented(_operations, startswith=self.current_word)
+                # retval = self._documented(self.openApiDataHandler.getApiOperations(self.command_name, self.version),
+                #                           startswith=self.current_word)
         return retval
 
     def _documented(self, table, startswith=None):
@@ -108,8 +131,16 @@ class Completer(object):
         # here give all attribute list
         # where code run here , self.version should be decide before
         # self.subcommand_name = self.operation
-        cmdInstance = self.openApiDataHandler.getInstanceByCmd(self.command_name, self.operation, self.version)
-        old_arg_list = self.openApiDataHandler.getAttrList(cmdInstance)
+        # cmdInstance = self.openApiDataHandler.getInstanceByCmd(self.command_name, self.operation, self.version)
+        cmdInstance, mclassname = self.openApiDataHandler.getInstanceByCmdOperation(self.command_name, self.operation, self.version)
+        # old_arg_list = self.openApiDataHandler.getAttrList(cmdInstance)
+        old_arg_list = list()
+        if cmdInstance is None:
+            import commandConfigure
+            _configure = commandConfigure.commandConfigure()
+            old_arg_list = _configure.getExtensionOptions(self.command_name, self.operation)
+        else:
+            old_arg_list = self.openApiDataHandler.getAttrList(mclassname)
         new_arg_list = set()
         if not old_arg_list is None:
             for item in old_arg_list:
@@ -179,13 +210,21 @@ class Completer(object):
         for w in self.non_options:
             if w in self.openApiDataHandler.getApiCmdsLower() or w in self.openApiDataHandler.getApiCmds(): # cmd check
                 self.command_name = w # here give the command_name
-                self.version = self.openApiDataHandler.getLatestVersionByCmdName(self.command_name)
+                self.version = self.openApiDataHandler.getSdkVersion(self.command_name, None)
                 cmd_obj = self.openApiDataHandler.getApiOperations(self.command_name, self.version)
                 # self.command_hc = cmd_obj.create_help_command()
                 if not cmd_obj is None:
                 #     Look for subcommand name
                     for w in self.non_options:
                         if w in cmd_obj:
+                            self.operation = w
+                            # cmd_obj = self.command_hc.command_table[self.subcommand_name]
+                            # self.subcommand_hc = cmd_obj.create_help_command()
+                            break
+                cmd_extension_obj = self.openApiDataHandler.getExtensionOperationsFromCmd(self.command_name)
+                if not cmd_extension_obj is None:
+                    for w in self.non_options:
+                        if w in cmd_extension_obj:
                             self.operation = w
                             # cmd_obj = self.command_hc.command_table[self.subcommand_name]
                             # self.subcommand_hc = cmd_obj.create_help_command()
@@ -222,6 +261,6 @@ if __name__ == '__main__':
     # else:
     #     print('usage: %s <cmdline> <point>' % sys.argv[0])
     #     sys.exit(1)
-    cmdline = './testcli ecs DescribeInstance --'
+    cmdline = './testcli E'
     point = len(cmdline)
     print(complete(cmdline, point))

@@ -17,6 +17,7 @@
  under the License.
 '''
 import sys
+import paramOptimize
 
 class aliyunCliParser():
     def __init__(self):
@@ -32,6 +33,52 @@ class aliyunCliParser():
     def getCliOperation(self):
         if self.args.__len__() >= 2:
             return self.args[1]
+
+    def _getCommand(self):
+        if self.args.__len__() >=1:
+            return self.args[0]
+
+    def _getOperations(self):
+        operations = []
+        i =1
+        _len = self.args.__len__()
+        if _len >=2:
+            while i < _len:
+                if  self.args[i].strip().find('--'):
+                    operations.append(self.args[i])
+                else:
+                    break
+                i =i+1
+        if len(operations):
+            return operations
+        else :
+            return None
+
+    def _getKeyValues(self):
+        keyValues = dict()
+        len = self.args.__len__()
+        i =1
+        if len >= 2:
+            while i <len:
+                values = list()
+                if self.args[i].strip().find('--') >=0:
+                    j =i+1
+                    key = self.args[i].strip()
+                    while j<len:
+                        if self.args[j].strip().find('--')>=0:
+                            i=j
+                            break
+                        else :
+                            values.append(self.args[j].strip())
+                            j=j+1
+                            i = j
+                    i=i+1
+                    keyValues[key] = values
+                else:
+                    i = i+1
+        paramOptimize._paramOptimize(keyValues)
+        return keyValues
+
 
 # this function find cli key:values , notice here is values , we need consider multiple values case
 # --args is key, and if no -- is value
@@ -95,6 +142,18 @@ class aliyunCliParser():
             key = key.replace('--', '')
             newMap[key] = value
         return newMap
+    
+
+    def _getOpenApiKeyValues(self, map):
+        keys = map.keys()
+        newMap = dict()
+        for key in keys:
+            value = map.get(key)
+            key = key.replace('--', '')
+            newMap[key] = value
+        return newMap
+
+# this function will filter all key and values which is in extension command
 
 # this function will filter all key and values which is in extension command
     def getExtensionKeyValues(self, map):
@@ -104,7 +163,7 @@ class aliyunCliParser():
     def getOutPutFormat(self, map):
         keys = map.keys()
         for key in keys:
-            if key.find('--output') >= 0 :
+            if key == '--output' :
                 return map.get(key)
         return None
 

@@ -22,6 +22,7 @@ import sys
 import json
 import text
 from table import MultiTable
+import jmespath
 
 
 class Response(object):
@@ -31,6 +32,10 @@ class Response(object):
     def __call__(self, command,response, stream=None):
         if stream is None:
             stream = sys.stdout
+        if _has_filter_param(self.args)[0]:
+            filter_value =_has_filter_param(self.args)[1]
+            expression = jmespath.compile(filter_value)
+            response = expression.search(response)
         try:
             self._format_response(command, response, stream)
         except IOError as e:
@@ -65,6 +70,10 @@ class TextResponse (Response):
             self._flush_stream(stream)
 
     def _format_response(self, response, stream):
+        if _has_filter_param(self.args)[0]:
+            filter_value =_has_filter_param(self.args)[1]
+            expression = jmespath.compile(filter_value)
+            response = expression.search(response)
         text.format_text(response, stream)
 
 class TableResponse (Response):
@@ -174,6 +183,18 @@ class TableResponse (Response):
         return headers, more
 
 
+def _has_filter_param(args):
+    has = False
+    param =None
+    if isinstance(args,dict):
+        value = args.get('filter')
+        if isinstance(value,list) and len(value)>0:
+            param=value[0]
+            param = param.strip()
+            if len(param) >0:
+                has=True
+    return [has,param]
+
 
 
 def get_response (output_type,parsed_args):
@@ -190,8 +211,7 @@ def get_response (output_type,parsed_args):
 
 
 
-def display_response(command, response,parsed_globals):
-    output = parsed_globals
+def display_response(command, response,output,parsed_globals=None):
     if output is None:
         output = 'JSON'
     formatter = get_response(output, parsed_globals)

@@ -16,58 +16,41 @@
  specific language governing permissions and limitations
  under the License.
 '''
-
 import re
 import os
-import sys
-import aliyun.api
+import sys,imp,uuid
 import aliyunExtensionCliHandler
 import aliyunCliParser
+import commandConfigure
+from distutils.sysconfig import get_python_lib
+import aliyunSdkConfigure
+import json
+import cliError
+
 class aliyunOpenApiDataHandler():
     def __init__(self, path=None):
         self.path = path
         self.extensionHandler = aliyunExtensionCliHandler.aliyunExtensionCliHandler()
         self.parser = aliyunCliParser.aliyunCliParser()
-        # init app info first
-        userKey = ""
-        userSecret = ""
-        userKey, userSecret = self.parser.getTempKeyAndSecret()
-        if userKey is None:
-            if not self.extensionHandler.getUserKey() is None:
-                userKey = self.extensionHandler.getUserKey()
-            else:
-                userKey = ""
-        if userSecret is None:
-            if not self.extensionHandler.getUserSecret() is None:
-                userSecret = self.extensionHandler.getUserSecret()
-            else:
-                userSecret = ""
-        # if not self.extensionHandler.getUserKey() is None and userKey is None:
-        #     userKey = self.extensionHandler.getUserKey()
-        # if not self.extensionHandler.getUserSecret() is None and userSecret is None:
-        #     userSecret = self.extensionHandler.getUserSecret()
-        aliyun.setDefaultAppInfo(userKey, userSecret)
 
 # this api will return all command from api, such as , ecs, rds, slb
     def getApiCmds(self):
-        cmd = set()
-        modules = sys.modules.keys()
-        for mclass in modules:
-            numbers = self.filterNumbers(mclass)
-            if numbers.__len__() and mclass.find('aliyun.api') >= 0 and mclass.split('.').__len__() > 3 : # class aliyun.api.rest.classname
-                cmd.add(mclass.split(numbers.encode())[0].split('.')[3])
-        try:
-            for item in ['Bss', 'Yundun']:
-                cmd.remove(item)
-        except Exception as e:
-            pass
-        return cmd
+        sitepackages_path=get_python_lib()
+        cmds=[]
+        sub_objects=os.listdir(sitepackages_path)
+        if sub_objects is not None:
+            for object in sub_objects:
+                if object.startswith('aliyunsdk') and os.path.isdir(os.path.join(sitepackages_path,object)):
+                    cmd=object.split('aliyunsdk',1)[1]
+                    if len(cmd)>0 and cmd not in['core']:
+                        cmds.append(cmd)
+        return set(cmds)
 
     def getApiCmdsLower(self):
         cmds = self.getApiCmds()
         lowerCmds = set()
         for cmd in cmds:
-            lowerCmds.add(cmd.lower())
+            lowerCmds.add(cmd)
         return lowerCmds
 
 # this api will check if the cmd is the available
@@ -82,28 +65,80 @@ class aliyunOpenApiDataHandler():
             return False
 
 # this api will define all operations from given command
-    def getApiOperations(self, command, version):
-        operations = set()
-        if version.__len__() != 8:
-            return operations # 20130110 the date format should equeal 8
-        cmds = self.getApiCmds()
-        _match = "can not find the operations"
-        for cmd in cmds:
-            if cmd.lower() == command.lower(): # the cmd comes form cli maybe lower maybe upper
-                _match = cmd+version
-        modules = sys.modules.keys()
-        for mclass in modules:
-            if mclass.find('aliyun.api') >= 0 and mclass.split('.').__len__() > 3:
-                if mclass.split(_match).__len__() > 1:
-                    operations.add(mclass.split(_match)[1].split('Request')[0])
-        return operations
+    def getApiOperations(self, command,version):
+        operations = []
+        sitepackages_path=get_python_lib()
+        pre_module='aliyunsdk'
+        module=pre_module+command
+        sub_path='request'
+        request_path=os.path.join(sitepackages_path,module,sub_path)
+        version_path=os.path.join(request_path,str(version))
+        for root, dirs, files in os.walk(version_path):
+            for name in files:
+                if name.endswith('Request.py'):
+                    operation=name.split('Request.py',1)[0]
+                    if len(operation) >0:
+                        self.path=root
+                        operations.append(operation)
+        return set(operations)
 
+    def getInstanceByCmdOperation(self,cmd,operation,version=None):
+        if cmd is  None or operation is None:
+            return None,None
+        else:
+            return self.getInstance(operation,cmd,version)
+# this api will return operations which is not comes from aliyun open api.
+# parameter : cmd
+# cmd will decide which operations need return.
+
+    def getExtensionOperationsFromCmdLower(self, cmd):
+        if cmd is None:
+            return None
+        defaultExtensionOpers=set(['configversion','showversions'])
+        if cmd.lower() == "ecs":
+            ecsExtensionOpers=set(['exportinstance', 'importinstance'])
+            defaultExtensionOpers.update(ecsExtensionOpers)
+        if cmd.lower() == "rds":
+            rdsConfigure = commandConfigure.rds()
+            rdsExtensionOpers = set()
+            for item in rdsConfigure.extensionOperations:
+                rdsExtensionOpers.add(item.lower())
+            defaultExtensionOpers.update(rdsExtensionOpers)
+        return defaultExtensionOpers
+
+    def getExtensionOperationsFromCmd(self, cmd):
+        if cmd is None:
+            return None
+        defaultExtensionOpers=set(['ConfigVersion','ShowVersions'])
+        if cmd.lower() == "ecs":
+            ecsConfigure = commandConfigure.ecs()
+            cmdSet = set()
+            for item in ecsConfigure.extensionOperations:
+                cmdSet.add(item)
+            defaultExtensionOpers.update(cmdSet)
+        if cmd.lower() == "rds":
+            rdsConfigure = commandConfigure.rds()
+            cmdSet = set()
+            for item in rdsConfigure.extensionOperations:
+                cmdSet.add(item)
+            defaultExtensionOpers.update(cmdSet)
+        return defaultExtensionOpers
+			
+#check if the operation is ExtensionOperation
+    def isAvailableExtensionOperation(self,cmd, operation):
+        if operation is None:
+            return False
+        extension_operations = self.getExtensionOperationsFromCmdLower(cmd)
+        if  extension_operations is None:
+            return False
+        elif operation.lower() in extension_operations:
+            return True
+        else :
+            return False
 # this api will check if the operation is the available
     def isAvailableOperation(self, cmd, operation, version=None):
         if operation is None:
             return False
-        if version is None:
-            version = self.getLatestVersionByCmdName(cmd)
         operations = self.getApiOperations(cmd,version)
         for item in operations:
             if operation.lower() == item.lower():
@@ -115,8 +150,17 @@ class aliyunOpenApiDataHandler():
     def getAttrList(self, classname):
         try:
             # here should be a instance
-            return classname.__dict__.keys()
+            SetFuncs=[]
+            keys=[]
+            if classname is not None:
+                keys = classname.__dict__.keys()
+            for key in keys:
+                if key.startswith('set_'):
+                    SetFuncs.append(key.replace('set_', ''))
+            return SetFuncs
+            # return classname.__dict__.keys()
         except Exception as e:
+
             return None
 # this method will set all key:value for open api class
     def setAttr(self, classname, map):
@@ -146,42 +190,30 @@ class aliyunOpenApiDataHandler():
                 need = False
         except Exception as e:
             pass
-        if need: # user dont give the RegionId and classname has no this attribute
-            need = False
-            for item in self.getAttrList(classname):
-                if item == "RegionId":
-                    need = True
         return need
 
 
 # this method will create a instance by give class name
-    def getInstance(self, className):
-        if className.find('Request') < 0:
-            className = className+"Request"
-        moduleName = 'aliyun.api.rest.'+className # here need to change to find the right package
+    def getInstance(self, operation,cmdName,version=None):
+        if self.path is None:
+            return None
+        moduleName=operation+'Request'
         try:
-            module = sys.modules[moduleName]
-            mInstance= getattr(module, className)()
-            return mInstance
+            fp, pathname, desc = imp.find_module(moduleName,[self.path])
+            imp.load_module(moduleName, fp, pathname, desc)
+            modules_keys=sys.modules.keys()
+            for key in modules_keys:
+                if key==moduleName:
+                    try:
+                        module = sys.modules[moduleName]
+                        mInstance= getattr(module, moduleName)()
+                        className=getattr(module,moduleName)
+                        return mInstance,className
+                    except Exception as err:
+                        print err
         except Exception as err:
-            print err
-            return None
-
-
-# this method create a instance from cli reading cmd + version, should change lower and upper
-    def getInstanceByCmd(self, cmdName, operationName, version):
-        apiCmds = self.getApiCmds()
-        for cmd in apiCmds:
-            if cmdName.lower() == cmd.lower():
-                cmdName = cmd
-        operations = self.getApiOperations(cmdName, version)
-        if operationName is None:
-            return None
-        for item in operations:
-            if operationName.lower() == item.lower():
-                operationName = item
-        className = cmdName+version+operationName
-        return self.getInstance(className)
+            pass
+        return None, None
 
 # the following api maybe need to remove
 # this api will filter all numbers in one string
@@ -218,26 +250,149 @@ class aliyunOpenApiDataHandler():
         return files
 
 # this api will get ALL service version
-    def getAllServiceVersion(self):
+    def getAllServiceVersion(self,cmd):
         pass
 
 # this api will get ALL service latest version
     def getAllServiceLatestVersion(self):
         pass
 
-# this api will give the Service latest version by command name
-    def getLatestVersionByCmdName(self, cmdName):
-        versions = set()
-        numberSet = set()
-        modules = sys.modules.keys()
-        for mclass in modules:
-            # here must be .cmdName , avoid any class contain the cmd but not the real class we need.
-            if mclass.find('aliyun.api') >= 0 and mclass.lower().find(("."+cmdName).lower()) >= 0 : # class aliyun.api.rest.classname
-                numbers = self.filterNumbers(mclass)
-                versions.add(int(numbers))
-        latestVersion = max(versions)
-        return str(latestVersion)
+
+    def hasNecessaryArgs(self,keyValues):
+        region_id=self.getRegionId(keyValues)
+        userKey=self.extensionHandler.getUserKey()
+        userSecret=self.extensionHandler.getUserSecret()
+        if region_id is None or userKey is None  or userSecret is None:
+            return False
+        else:
+            return True
+
+    def getResponse(self,cmd,operation,classname,instance,keyValues):
+        setFuncs=self.getSetFuncs(classname)
+        if len(setFuncs)>0:
+            for func in setFuncs:
+                key=func.split('set_',1)[1]
+                if len(key)>0 and key in keyValues:
+                    arg=keyValues[key]
+                    if arg is not None and len(arg)>0:
+                        param=arg[0]
+                        getattr(instance,func)(param)
+        userKey=self.getUserKey()
+        userSecret=self.getUserSecret()
+        regionId=self.getRegionId(keyValues)
+        userAgent=self.getUserAgent()
+        module='aliyunsdkcore'
+        try:
+            # core=__import__(module)
+            from aliyunsdkcore import client
+            Client=client.AcsClient(userKey,userSecret,regionId,True,3,userAgent)
+            instance.set_accept_format('json')
+            result=Client.do_action(instance)
+            jsonobj = json.loads(result)
+            return jsonobj
+        except ImportError:
+            print module, 'is not exist!'
+            return
+
+
+    def getSetFuncs(self,classname):
+        SetFuncs=[]
+        keys=[]
+        if classname is not None:
+            keys = classname.__dict__.keys()
+        for key in keys:
+            if key.startswith('set_'):
+                SetFuncs.append(key)
+        return SetFuncs
 
 # this api will return the special version from the configure file.
     def getVersionFromCfgFile(self, cmdName):
         pass
+
+    def getAllVersionsByCmdName(self,command):
+        versions=[]
+        pre_module='aliyunsdk'
+        module=pre_module+command
+        sitepackages_path=get_python_lib()
+        sub_path='request'
+        module='aliyunsdk'+command
+        request_path=os.path.join(sitepackages_path,module,sub_path)
+        objects=os.listdir(request_path)
+        for object in objects :
+            if object.startswith('v') and os.path.isdir(os.path.join(request_path,object)):
+                versions.append(object)
+        versions.reverse()
+        return versions
+
+    def getLatestVersion(self,versions):
+        if versions is not None and len(versions)>0:
+            return versions[0]
+
+    def getTempVersion(self,keyValues):
+        key='--version'
+        if keyValues is not None and keyValues.has_key(key):
+            return keyValues.get(key)
+        key = 'version'
+        if keyValues is not None and keyValues.has_key(key):
+            return keyValues.get(key)
+
+    def getVersionFromFile(self,cmd):
+        version=None
+        versionHandler=aliyunSdkConfigure.AliyunSdkConfigure()
+        filename=versionHandler.aliyunConfigurePath
+        version=versionHandler.getCmdVersionFromFile(cmd,filename)
+        return version
+
+    def getSdkVersion(self,cmd,keyValues):
+        tempVersion=self.getTempVersion(keyValues)
+        versions=self.getAllVersionsByCmdName(cmd)
+        if tempVersion is not None:
+            if tempVersion[0] in versions:
+                return tempVersion[0]
+            else:
+                # show error
+                error = cliError.error()
+                error.printInFormat("Wrong version", "The version input is not exit.")
+                return None
+        configVersion=self.getVersionFromFile(cmd)
+        if configVersion is not None:
+            return configVersion
+        defaultVersion=self.getLatestVersion(versions)
+        if defaultVersion is not None:
+            return defaultVersion
+    def getUserKey(self):
+        userKey=None
+        userKey, userSecret = self.parser.getTempKeyAndSecret()
+        if userKey is None:
+            if self.extensionHandler.getUserKey() is not None:
+                userKey = self.extensionHandler.getUserKey()
+        return userKey
+
+    def getUserSecret(self):
+        userSecret=None
+        userKey, userSecret = self.parser.getTempKeyAndSecret()
+        if userSecret is None:
+            if not self.extensionHandler.getUserSecret() is None:
+                userSecret = self.extensionHandler.getUserSecret()
+        return userSecret
+
+    def getRegionId(self,keyValues):
+        key='RegionId'
+        if key in keyValues:
+            return keyValues[key][0]
+        else:
+            return None
+
+    def getUserAgent(self):
+        return None
+
+    def getMacAddress(self):
+        node = uuid.getnode()
+        mac = uuid.UUID(int = node).hex[-12:]
+        return mac
+
+if __name__ == '__main__':
+    handler = aliyunOpenApiDataHandler()
+    print "###############",handler.isAvailableExtensionOperation('ecs', 'exportInstance')
+    print "###############",handler.isAvailableOperation('ecs', 'DescribeInstances')
+    print "###############",handler.getExtensionOperationsFromCmd('ecs')

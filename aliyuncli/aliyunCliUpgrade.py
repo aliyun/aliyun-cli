@@ -21,16 +21,75 @@ import aliyunCliConfiugre
 import urllib2
 import re
 import os
-import aliyunExtensionCliHandler
+import platform
+class updateFileHandler(object):
+    def __init__(self):
+        self.home = ".aliyuncli"
+        self.update = "update"
+        self.tag = "/"
+        if platform.system() == "Windows":
+            self.tag = "\\"
+        self.aliyuncliUpdatePath = self._findHomePath()+self.tag+self.home+self.tag
+        self.globalConfigure = aliyunCliConfiugre.configure()
+    def _getValueFromFile(self,filename,key):
+        if os.path.isfile(filename):
+            with open(filename, 'r') as f:
+                contents = f.readlines()
+                value = self._getValueFromContents(key,contents)
+                return value
+        else:
+            return None
+    def _getValueFromContents(self,key,contents):
+        value = None
+        if contents is None:
+            return None
+        else:
+            for i in range(len(contents)):
+                line = contents[i]
+                key = self._getKey(line)
+                if key  is not None:
+                    if key.strip().lower() == 'ignore':
+                        value = self._getValue(line)
+        return value
+
+    def _getKey(self,line):
+        key = None
+        if line is not None and  line.strip().find('=') >0 :
+            key = line.split("=",1)[0].strip()
+        return key
+    def _getValue(self,line):
+        value = None
+        if line is not None and  line.strip().find('=') >0 :
+            value = line.split("=",1)[1].strip()
+        return value
+
+    def _findHomePath(self):
+        homePath = ""
+        if platform.system() == "Windows":
+            homePath = os.environ['HOMEPATH']
+            pass
+        else:
+            homePath = os.environ['HOME']
+            pass
+        return homePath
+    def _getUpdateFileName(self):
+        filename = None
+        filename = self.aliyuncliUpdatePath+ self.update
+        return filename
 class aliyunCliUpgradeHandler():
     def __init__(self):
         self.configure = aliyunCliConfiugre.configure()
-        self.extensionHandler = aliyunExtensionCliHandler.aliyunExtensionCliHandler()
         self.latest_update_time = self._getLatestTimeFromServer()
+        self._updateFileHandler = updateFileHandler()
 
 # this function give the upgrade info
     def checkForUpgrade(self):
-        ignore_info = self.extensionHandler.getIgnoreValues()
+        filename = self._updateFileHandler._getUpdateFileName()
+        ignore = 'ignore'
+        ignoreValue = self._updateFileHandler._getValueFromFile(filename,ignore)
+        ignore_info = 'no'
+        if ignoreValue is not None:
+            ignore_info = ignoreValue
         need_notify = True
         latest_update_time = self.getLatestTimeFromServer().replace("\n","")
         if ignore_info.find("yes")>=0 and len(ignore_info.split("_"))==2: #should be yes_20150426 format
@@ -47,20 +106,25 @@ class aliyunCliUpgradeHandler():
 
 # this function handle user choice when notify the new version is comming
     def handleUserChoice(self, choice):
-        configurePath = self.extensionHandler.aliyunConfigurePath+self.extensionHandler.configure
+        updatePath = self._updateFileHandler._getUpdateFileName()
         latest_update_time = self.getLatestTimeFromServer().replace("\n","")
-        _format = self.extensionHandler.getUserFormat()
-        _region = self.extensionHandler.getUserRegion()
         _ignore = "no"
         if choice in ["no", "NO", "n", "N"]:
             _ignore = "yes_"+latest_update_time
-        fd = open(configurePath, 'w')
+        self._createFile(updatePath)
+        fd = open(updatePath, 'w')
         try:
-            configtxt = "[default]\nregion="+_region+"\noutput="+_format+"\n"
-            configtxt = configtxt + "ignore="+_ignore+"\n"
+            configtxt ="ignore="+_ignore+"\n"
             fd.write(configtxt)
         finally:
             fd.close()
+
+    def _createFile(self,filename):
+        namePath = os.path.split(filename)[0]
+        if not os.path.isdir(namePath):
+            os.makedirs(namePath)
+            with os.fdopen(os.open(filename, os.O_WRONLY | os.O_CREAT, 0o600), 'w'):
+                pass
 
 
 # this function checks if there is new version

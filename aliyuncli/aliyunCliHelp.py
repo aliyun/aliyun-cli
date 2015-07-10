@@ -36,9 +36,17 @@ class aliyunCliHelper:
 
     def showOperationError(self, cmd, operation):
         self.showUsage()
+        keyValues=self.openApiDataHandler.parser._getKeyValues()
         print "["+cmd+"]","valid operations as follows:\n"
-        version = self.openApiDataHandler.getLatestVersionByCmdName(cmd)
+        version = self.openApiDataHandler.getSdkVersion(cmd,keyValues)
         operations = self.openApiDataHandler.getApiOperations(cmd, version)
+        extensions = self.openApiDataHandler.getExtensionOperationsFromCmd(cmd)
+        operations.update(extensions)
+        import commandConfigure
+        if cmd.lower() == 'rds':
+            rdsConfigure = commandConfigure.rds()
+            operations.add(rdsConfigure.exportDBInstance)
+            operations.add(rdsConfigure.importDBInstance)
         self.printAsFormat(operations)
 
     def showParameterError(self, cmd, operation, parameterlist):

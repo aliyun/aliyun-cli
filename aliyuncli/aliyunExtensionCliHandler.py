@@ -21,6 +21,12 @@ import os
 import platform
 import aliyunCliHelp
 import aliyunCliConfiugre
+import advance.userProfileHandler
+import advance.userConfigHandler
+import configure
+import advance.ecsExportHandler
+import advance.ecsImportHandler
+import aliyunCliParser
 from __init__ import __version__ as version
 class color:
     if platform.system() == "Windows":
@@ -56,19 +62,68 @@ class aliyunExtensionCliHandler:
         self.home = ".aliyuncli"
         self.configure = "configure"
         self.credentials = "credentials"
-        self.tag = "/"
-        if platform.system() == "Windows":
-            self.tag = "\\"
-        self.aliyunConfigurePath = self.findConfigureFilePath()+self.tag+self.home+self.tag
+        self.aliyunConfigurePath = os.path.join(self.findConfigureFilePath(),self.home)
         self.globalConfigure = aliyunCliConfiugre.configure()
+        self.parser = aliyunCliParser.aliyunCliParser()
     def getExtensionCmd(self):
         return None
 
 # this function will give all extension command defined by us
     def getAllExtensionCommands(self):
         cmds = list()
-        cmds = ['-h', '--help', 'help', 'configure', '--version', 'version']
+        cmds = ['-h', '--help', 'help', 'configure', '--version', 'version', 'useprofile', 'addprofile','showconfig']
         return cmds
+# this function will handler extension operation
+    def handlerExtensionOperation(self,cmd,operation,version):
+        defaultOperations=['configversion','showversions']
+        if operation.lower() in defaultOperations:
+            import aliyunSdkConfigure
+            aliyunSdkConfigure.handleSdkVersion(cmd,operation,version)
+        if cmd.lower() == 'ecs':
+            import commandConfigure
+            import advance.ecsExportHandler
+            import advance.ecsImportHandler
+            ecsConfigure = commandConfigure.ecs()
+            _ecsImportHandler = advance.ecsImportHandler.EcsImportHandler()
+            _ecsExportHandler = advance.ecsExportHandler.EcsExportHandler()
+            if  operation.lower() == ecsConfigure.importInstance.lower():
+                _ecsImportHandler.ImportInstance(cmd,operation,version)
+            elif operation.lower() == ecsConfigure.exportInstance.lower():
+                _ecsExportHandler.exportInstance(cmd,operation,version)
+
+        if cmd.lower() == 'rds':
+            import commandConfigure
+            import advance.rdsExportHandler
+            import advance.rdsImportHandler
+            rdsConfigure = commandConfigure.rds()
+            rdsExportDBInstanceHandler = advance.rdsExportHandler.RdsExportDBInstanceHanlder()
+            rdsImportDBInstanceHanlder = advance.rdsImportHandler.RdsImportDBInstanceHandler()
+            if operation.lower() == rdsConfigure.exportDBInstance.lower():
+                rdsExportDBInstanceHandler.exportDBInstance(cmd,operation,version)
+            elif operation.lower() == rdsConfigure.importDBInstance.lower():
+                rdsImportDBInstanceHanlder.importInstance(cmd, operation, version)
+		
+# this function will handler extension command
+    def handlerExtensionCmd(self, cmd):
+        _cmd = self.parser._getCommand()
+        _keyvalues = self.parser._getKeyValues()
+        operation = self.parser._getOperations()
+        if cmd.lower() in ['help', '-h', '--help']:
+            self.showAliyunCliHelp()
+        if cmd.lower() == 'configure':
+            configure.handleConfigure(cmd,operation)
+        if cmd.lower() == 'useprofile':
+            _profileHandler = advance.userProfileHandler.ProfileHandler()
+            _profileHandler.handleProfileCmd(_cmd, _keyvalues)
+        if cmd.lower() == 'addprofile':
+            _profileHandler = advance.userProfileHandler.ProfileHandler()
+            _profileHandler.addProfileCmd(_cmd, _keyvalues)
+        if cmd.lower() in ['--version', 'version']:
+            self.showCurrentVersion()
+        if cmd.lower() == 'showconfig':
+            _configHandler = advance.userConfigHandler.ConfigHandler()
+            _configHandler.showConfig()
+		 
 
 # this api will show help page when user input aliyuncli help(-h or --help)
     def showAliyunCliHelp(self):
@@ -95,157 +150,8 @@ class aliyunExtensionCliHandler:
         print "\n\to rds"
         print "\n\to slb"
 
-
-
-
-# this function will handler extension command
-    def handlerExtensionCmd(self, cmd):
-        if cmd.lower() in ['help', '-h', '--help']:
-            self.showAliyunCliHelp()
-        if cmd.lower() == 'configure':
-            self.handleConfigureCmd()
-            # print self.getUserFormat()
-            # print self.getUserKey()
-            # print self.getUserSecret()
-        if cmd.lower() in ['--version', 'version']:
-            self.showCurrentVersion()
-
     def showCurrentVersion(self):
         print self._version
-
-    name2prompt = [
-        ('aliyun_access_key_id', "Aliyun Access Key ID"),
-        ('aliyun_access_key_secret', "Aliyun Access Key Secret"),
-        ('region', "Default Region Id"),
-        ('output', "Default output format"),
-    ]
-
-    def handleConfigureCmd(self):
-        if not os.path.exists(self.aliyunConfigurePath):
-            os.makedirs(self.aliyunConfigurePath)
-        config = self.getConfig()
-        
-        if not os.path.isfile(self.aliyunConfigurePath+self.configure):
-            _configFile = open(self.aliyunConfigurePath+self.configure, 'w')
-            try:
-                configtxt = "[default]\n"
-                configtxt = configtxt + "ignore=no\n"
-                _configFile.write(configtxt)
-            finally:
-                _configFile.close()
-        if not os.path.isfile(self.aliyunConfigurePath+self.credentials):
-            _credentialsFile = open(self.aliyunConfigurePath+self.credentials, 'w')
-            try:
-                credentialstxt = "[default]\n"
-                _credentialsFile.write(credentialstxt)
-            finally:
-                _credentialsFile.close()
-        new_values = {}
-        if config['ignore'] is None:
-            new_values['ignore'] = 'no'
-        for name, prompt in self.name2prompt:
-            value = config.get(name)
-            new_value = self.get_value(value, name,prompt)
-            if new_value is not None and new_value != value:
-                new_values[name] = new_value
-        config_filename = self.getConfigFileName()
-        creds_filename = self.getCredsFileName()
-        if new_values:
-            self._writeCredsToFile(new_values,creds_filename)
-            self._updateConfig(new_values,config_filename)
-
-
-    def getConfig(self):
-        config = {}
-        ignoreValue = self.getIgnoreValues()
-        if ignoreValue == '':
-            ignoreValue = None
-        userRegion = self.getUserRegion()
-        if userRegion == '':
-            userRegion = None
-        userFormat = self.getUserFormat()
-        userKey = self.getUserKey()
-        userSecret = self.getUserSecret()
-        config['ignore'] = ignoreValue
-        config['output'] = userFormat
-        config['region'] = userRegion
-        config['aliyun_access_key_secret'] = userSecret
-        config['aliyun_access_key_id'] = userKey
-        return config
-
-
-    def getConfigFileName(self):
-        configFileName = self.aliyunConfigurePath+self.configure
-        return configFileName
-
-    def getCredsFileName(self):
-        credsFileName = self.aliyunConfigurePath+self.credentials
-        return credsFileName
-
-    def _writeCredsToFile(self,new_values,creds_filename):
-        credential_file_values = {}
-        if 'aliyun_access_key_id' in new_values:
-            credential_file_values['aliyun_access_key_id'] = new_values.pop(
-                'aliyun_access_key_id')
-        if 'aliyun_access_key_secret' in new_values:
-            credential_file_values['aliyun_access_key_secret'] = new_values.pop(
-                'aliyun_access_key_secret')
-        if credential_file_values:
-            if creds_filename is not None:
-                self._updateConfig(credential_file_values,creds_filename)
-
-    def _updateConfig(self,new_values,config_filename):
-        contents = []
-        try:
-            with open(config_filename, 'r') as f:
-                contents = f.readlines()
-            self._updateContents(contents, new_values)
-            with open(config_filename, 'w') as f:
-                f.write(''.join(contents))
-        finally:
-            f.close()
-
-    def _updateContents(self,contents,new_values):
-        new_values = new_values.copy()
-        j = 0
-        while j < len(contents):
-            line = contents[j]
-            key_name = self.getKey(line)
-            if key_name in new_values:
-                value = new_values[key_name]
-                new_line = '%s=%s\n' %(key_name,value)
-                contents[j] = new_line
-                del new_values[key_name]
-            j = j+1
-        if new_values:
-            self._insertNewValues(contents,new_values)
-    
-    def getKey(self,line):
-        key = None
-        if line is not None and  line.find('=') >0 :
-            key = line.split("=",1)[0]
-        return key
-    
-    def _insertNewValues(self,contents,new_values):
-        for key, value in list(new_values.items()):
-            contents.append('%s=%s\n' % (key,value))
-            del new_values[key]
-
-
-    def get_value(self, current_value, config_name, prompt_text=''):
-        if config_name in ('aliyun_access_key_id', 'aliyun_access_key_secret'):
-            if current_value != '' and not current_value is None:
-                current_value = self._mask_value(current_value)
-        response = raw_input("%s [%s]: " % (prompt_text, current_value))
-        if response is '':
-            response = None
-        return response
-
-    def _mask_value(self,current_value):
-        if current_value is None:
-            return 'None'
-        else:
-            return ('*' * 16) + current_value[-4:]
 
     def findConfigureFilePath(self):
         homePath = ""
@@ -256,97 +162,20 @@ class aliyunExtensionCliHandler:
             homePath = os.environ['HOME']
             pass
         return homePath
-
-    def getIgnoreValues(self):
-        configurePath = self.aliyunConfigurePath+self.configure
-        if os.path.exists(configurePath):
-            f = open(configurePath, 'r')
-            _ignore = ""
-            try:
-                while True:
-                    line = f.readline()
-                    if not line:
-                        break
-                    if line.find('ignore') >=0 :
-                        if len(line.split("=",1)) == 2:
-                            _ignore = line.split("=",1)[1].replace("\n","")
-                return _ignore
-            finally:
-                f.close()
-
     def getUserRegion(self):
-        configurePath = self.aliyunConfigurePath+self.configure
-        if os.path.exists(configurePath):
-            f = open(configurePath, 'r')
-            _region = ""
-            try:
-                while True:
-                    line = f.readline()
-                    if not line:
-                        break
-                    if line.find('region') >=0 :
-                        if len(line.split("=",1)) == 2:
-                            _region = line.split("=",1)[1].replace("\n","")
-                return _region
-            finally:
-                f.close()
+        handler = configure.AliyunConfig()
+        return handler._getUserRegion()
 
     def getUserFormat(self):
-        configurePath = self.aliyunConfigurePath+self.configure
-        if os.path.exists(configurePath):
-            f = open(configurePath, 'r')
-            _format = None 
-            try:
-                while True:
-                    line = f.readline()
-                    if not line:
-                        break
-                    if line.find('output') >=0 :
-                        if len(line.split("=",1)) == 2:
-                            _format = line.split("=",1)[1].replace("\n","")
-                return _format
-            finally:
-                f.close()
-
+        handler = configure.AliyunConfig()
+        return handler._getUserFormat()
     def getUserKey(self):
-        credentials = self.aliyunConfigurePath+self.credentials
-        if os.path.exists(credentials):
-            f = open(credentials, 'r')
-            key = None
-            try:
-                while True:
-                    line = f.readline()
-                    if not line:
-                        break
-                    if line.find(AliyunCredentials.aliyun_access_key_id) >= 0:
-                        if len(line.split("=",1)) == 2:
-                            key = line.split("=",1)[1].replace("\n", "")
-                return key
-            finally:
-                f.close()
+        handler = configure.AliyunConfig()
+        return handler._getUserKey()
 
     def getUserSecret(self):
-        credentials = self.aliyunConfigurePath+self.credentials
-        if os.path.exists(credentials):
-            f = open(credentials, 'r')
-            secret = None
-            try:
-                while True:
-                    line = f.readline()
-                    if not line:
-                        break
-                    if line.find(AliyunCredentials.aliyun_access_key_secret) >= 0:
-                        if len(line.split("=",1)) == 2:
-                            secret = line.split("=",1)[1].replace("\n", "")
-                return secret
-            finally:
-                f.close()
-
+        handler = configure.AliyunConfig()
+        return  handler._getUserSecret()
 if __name__ == "__main__":
-    handler = aliyunExtensionCliHandler()
-    print handler.getUserRegion()
-    print handler.getUserFormat()
-    print handler.getUserKey()
-    print handler.getUserSecret()
-    print handler.getConfig()
+    pass
 # this function will show aliyun cli help
