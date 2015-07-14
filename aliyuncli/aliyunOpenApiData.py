@@ -26,6 +26,10 @@ from distutils.sysconfig import get_python_lib
 import aliyunSdkConfigure
 import json
 import cliError
+from __init__ import  __version__
+_userAgent='aliyuncli/'+str(__version__)
+
+version_cmds = ['ConfigVersion','ShowVersions']
 
 class aliyunOpenApiDataHandler():
     def __init__(self, path=None):
@@ -339,14 +343,14 @@ class aliyunOpenApiDataHandler():
     def getVersionFromFile(self,cmd):
         version=None
         versionHandler=aliyunSdkConfigure.AliyunSdkConfigure()
-        filename=versionHandler.aliyunConfigurePath
+        filename=versionHandler.fileName
         version=versionHandler.getCmdVersionFromFile(cmd,filename)
         return version
 
     def getSdkVersion(self,cmd,keyValues):
         tempVersion=self.getTempVersion(keyValues)
         versions=self.getAllVersionsByCmdName(cmd)
-        if tempVersion is not None:
+        if tempVersion is not None and len(tempVersion)>0:
             if tempVersion[0] in versions:
                 return tempVersion[0]
             else:
@@ -384,7 +388,7 @@ class aliyunOpenApiDataHandler():
             return None
 
     def getUserAgent(self):
-        return None
+        return _userAgent
 
     def getMacAddress(self):
         node = uuid.getnode()

@@ -32,6 +32,8 @@ class commandConfigure:
     def getExtensionOptions(self, cmd, operation):
         if cmd is None or operation is None:
             return None
+        if operation in aliyunOpenApiData.version_cmds:
+            return None
         if cmd.lower() == 'rds':
             _rds = rds()
             return _rds.extensionOptions[operation]

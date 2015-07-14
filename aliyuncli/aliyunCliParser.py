@@ -54,30 +54,30 @@ class aliyunCliParser():
         else :
             return None
 
+
+
     def _getKeyValues(self):
         keyValues = dict()
         len = self.args.__len__()
-        i =1
         if len >= 2:
-            while i <len:
-                values = list()
-                if self.args[i].strip().find('--') >=0:
-                    j =i+1
-                    key = self.args[i].strip()
-                    while j<len:
-                        if self.args[j].strip().find('--')>=0:
-                            i=j
-                            break
-                        else :
-                            values.append(self.args[j].strip())
-                            j=j+1
-                            i = j
-                    i=i+1
+            current=1
+            while current <len:
+                #values = list()
+                if self.args[current].strip().startswith('--'):
+                    key=self.args[current].strip()
+                    start=current + 1
+                    values=list()
+                    while start <len and not self.args[start].strip().startswith('--'):
+                            values.append(self.args[start].strip())
+                            start=start+1
                     keyValues[key] = values
+                    current=start
                 else:
-                    i = i+1
+                    current=current+1
         paramOptimize._paramOptimize(keyValues)
         return keyValues
+
+
 
 
 # this function find cli key:values , notice here is values , we need consider multiple values case

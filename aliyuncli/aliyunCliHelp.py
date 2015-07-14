@@ -18,6 +18,7 @@
 '''
 
 import aliyunOpenApiData
+import cliError
 class aliyunCliHelper:
     def __init__(self):
         self.openApiDataHandler = aliyunOpenApiData.aliyunOpenApiDataHandler()
@@ -35,10 +36,15 @@ class aliyunCliHelper:
         self.printAsFormat(cmds)
 
     def showOperationError(self, cmd, operation):
-        self.showUsage()
         keyValues=self.openApiDataHandler.parser._getKeyValues()
-        print "["+cmd+"]","valid operations as follows:\n"
         version = self.openApiDataHandler.getSdkVersion(cmd,keyValues)
+        versions=self.openApiDataHandler.getAllVersionsByCmdName(cmd)
+        if version not in versions:
+                error = cliError.error()
+                error.printInFormat("Wrong version", "The sdk version is not exit.")
+                return None
+        self.showUsage()
+        print "["+cmd+"]","valid operations as follows:\n"
         operations = self.openApiDataHandler.getApiOperations(cmd, version)
         extensions = self.openApiDataHandler.getExtensionOperationsFromCmd(cmd)
         operations.update(extensions)

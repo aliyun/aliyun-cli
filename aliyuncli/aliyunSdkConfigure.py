@@ -56,7 +56,7 @@ class AliyunSdkConfigure(object):
         import aliyunOpenApiData
         apiHandler =aliyunOpenApiData.aliyunOpenApiDataHandler()
         versions =apiHandler.getAllVersionsByCmdName(cmd)
-        stream.write('%s%s\n' % ('*',configureVersion))
+        stream.write('%s%s\n' % ('* ',configureVersion))
         for version in versions:
             stream.write('  %s\n' % (version))
 
@@ -101,7 +101,7 @@ class AliyunSdkConfigure(object):
                     with open(filename, 'w') as f:
                         f.write(''.join(contents))
                 else:
-                    self._insertNewCmdVersion(cmd,version,contents)
+                    self.insertCmdVersion(cmd,version,filename)
             finally:
                 f.close()
 
@@ -115,12 +115,14 @@ class AliyunSdkConfigure(object):
         if cmd is not None and version is not None :
             if filename is not None :
                 self.updateCmdVersion(cmd,version,filename)
+
     def hasCmdName(self,cmd,contents):
         keys=self._getKeys(contents)
         if cmd in keys:
             return True
         else:
             return False
+
     def _updateContents(self,cmd,version,contents):
         for j in range(len(contents)):
             line = contents[j]
@@ -129,10 +131,12 @@ class AliyunSdkConfigure(object):
                 new_line = '%s=%s\n' %(cmd,version)
                 contents[j] = new_line
                 break
+
     def _insertNewCmdVersion(self,cmd,version,contents):
         new_contents = []
         new_contents.append('%s=%s\n' %(cmd,version))
         contents.append(''.join(new_contents))
+
     def _getKeys(self,contents):
         keys=[]
         for j in range(len(contents)):
@@ -140,11 +144,13 @@ class AliyunSdkConfigure(object):
             key = self._getKey(line)
             keys.append(key)
         return keys
+
     def _getKey(self,line):
         key = None
         if line is not None and  line.strip().find('=') >0 :
             key = line.split("=",1)[0].strip()
         return key
+
     def _getKeyValues(self,contents):
         keyValues={}
         for j in range(len(contents)):
@@ -154,6 +160,7 @@ class AliyunSdkConfigure(object):
                 value = line.split("=",1)[1].strip()
                 keyValues[key]=value
         return keyValues
+
     def _createFile(self,filename):
         namePath = os.path.split(filename)[0]
         if not os.path.isdir(namePath):

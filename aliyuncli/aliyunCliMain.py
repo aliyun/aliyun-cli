@@ -58,7 +58,6 @@ class AliyunCommandLine:
                 outPutFormat = 'json'
         else:
             outPutFormat = outPutFormat[0]
-
         if self.handler.isAvailableCmd(cmd):
             # fetch getversion
             version=self.handler.getSdkVersion(cmd,keyValues)
@@ -106,7 +105,6 @@ class AliyunCommandLine:
                 # self.extensionHandler.handlerExtensionOperation(cmd,operation,version)
             else:
                 # cmd is right but operation is not right
-                print "error here"
                 self.helper.showOperationError(cmd, operation)
         else:
             self.helper.showCmdError(cmd)
