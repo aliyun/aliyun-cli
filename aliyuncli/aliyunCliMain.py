@@ -82,6 +82,8 @@ class AliyunCommandLine:
                             return
                         try:
                             result = self.handler.getResponse(cmd,operation,className,cmdInstance,keyValues)
+                            if result is None:
+                                return
                             if("Code" in result):
                                 response.display_response("error", result, "json")
                                 # print("failed")

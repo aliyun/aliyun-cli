@@ -287,15 +287,20 @@ class aliyunOpenApiDataHandler():
         userAgent=self.getUserAgent()
         module='aliyunsdkcore'
         try:
-            # core=__import__(module)
             from aliyunsdkcore import client
+            from aliyunsdkcore.acs_exception.exceptions import ClientException as exs
             Client=client.AcsClient(userKey,userSecret,regionId,True,3,userAgent)
             instance.set_accept_format('json')
             result=Client.do_action(instance)
             jsonobj = json.loads(result)
             return jsonobj
-        except ImportError:
+        except ImportError as e:
             print module, 'is not exist!'
+            return
+        except exs as e:
+            # print e.get_error_msg()
+            error = cliError.error()
+            error.printInFormat(e.get_error_code(), e.get_error_msg())
             return
 
 
