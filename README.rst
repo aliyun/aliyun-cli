@@ -44,7 +44,9 @@ linux 和 MAC os 请执行:
 
 	aliyuncli/advance/* 是API聚合逻辑, 这里主要放针对于 aliyuncli 的各种高级功能的开发.
 
-	例如ECS的导入导出功能, RDS的导入导出功能. 未来会持续的开发更多的高级功能.
+	例如ECS的导入导出功能, RDS的导入导出功能.
+
+	未来会持续的开发更多的高级功能.
 
 
 ###自动补全功能:
@@ -73,6 +75,33 @@ linux 和 MAC os 请执行:
 	$ aliyuncli Ecs DescribeInstances
 	$ aliyuncli Ecs StartInstance --InstanceId your_instance_id
 	$ aliyuncli Rds DescribeDBInstances
+###如何从源码直接运行:
+
+	$ git clone https://github.com/aliyun/aliyun-cli.git
+	$ cd aliyuncli/aliyuncli
+	$ python aliyuncli.py ecs DescribeRegions --output json
+
+源码下载后, 可以不安装直接运行, 前提是要安装阿里云python版SDK.
+
+###通过pip安装阿里云python版SDK
+安装阿里云的python版SDK步骤参考如下:
+
+	1. 用curl 或者 浏览器打开"https://bootstrap.pypa.io/get-pip.py" , 将内容保存为pip-install.py
+	2. 执行python pip-install.py
+	3. pip 安装完毕后, 执行
+	pip install aliyun-python-sdk-[productname]
+
+例如, 要安装ECS 产品, 那么就执行:
+
+	$ sudo pip install aliyun-python-sdk-ecs
+	
+要安装RDS产品SDK, 就执行:
+
+	$ sudo pip install aliyun-python-sdk-rds
+	
+SLB 则执行:
+
+	$ sudo pip install aliyun-python-sdk-slb
 
 更多介绍, 请参阅官网介绍:
 

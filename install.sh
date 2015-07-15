@@ -30,11 +30,11 @@ InstallPip()
 }
 InstallAliyuncli()
 {
-    tar -zvxf aliyuncli-0.9.0.tar.gz
-    cd aliyuncli-0.9.0
+    tar -zvxf aliyuncli-1.0.0.tar.gz
+    cd aliyuncli-1.0.0
     sudo python setup.py install --record ../../files.txt
     cd ..
-    sudo rm -rf aliyuncli-0.9.0
+    sudo rm -rf aliyuncli-1.0.0
 }
 pipv=`which pip 2>&1| awk -F: '{print $1}' | awk -F'/' '{print $NF}'`
 if [ "$pipv" = "pip" ]
