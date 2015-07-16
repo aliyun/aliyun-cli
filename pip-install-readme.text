@@ -1,0 +1,14 @@
+如何快速安装pip:
+首先在根目录下找到pip-install.py
+1. Linux 用户, 请执行
+$ sudo python pip-install.py
+
+2. Windows 用户, 请执行
+c>python pip-install.py
+
+安装完毕后:
+Linux 用户可以直接运行:
+$ sudo pip install XXXX
+
+Windows 用户请进入到Python/Script 下面执行:
+$ pip install XXXX
