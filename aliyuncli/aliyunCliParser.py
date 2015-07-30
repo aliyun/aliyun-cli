@@ -27,7 +27,7 @@ class aliyunCliParser():
 # this function find cli cmd
     def getCliCmd(self):
         if self.args.__len__() >= 1:
-            return self.args[0]
+            return self.args[0].lower()
 
 # this function find cli operation
     def getCliOperation(self):

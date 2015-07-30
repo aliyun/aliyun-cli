@@ -105,4 +105,4 @@ SLB 则执行:
 
 更多介绍, 请参阅官网介绍:
 
-http://docs.aliyun.com/?spm=5176.1829009.1002.1.zAXfza#/pub/aliyun-command-line-interface
+https://docs.aliyun.com/?spm=5176.383338.201.97.nlXsxq#/pub/aliyun-command-line-interface
