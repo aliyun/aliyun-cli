@@ -330,7 +330,7 @@ class aliyunOpenApiDataHandler():
         for object in objects :
             if object.startswith('v') and os.path.isdir(os.path.join(request_path,object)):
                 versions.append(object)
-        versions.reverse()
+        versions.sort(reverse = True)
         return versions
 
     def getLatestVersion(self,versions):

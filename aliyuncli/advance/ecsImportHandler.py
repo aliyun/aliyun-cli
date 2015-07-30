@@ -18,6 +18,7 @@ class EcsImportHandler:
         else:
             print "A profile is needed! please use \'--filename\' and add the profile name."
         return filename
+
     def getInstanceCount(self,keyValues):
         count = 1
         if keyValues.has_key('--instancecount') and len(keyValues['--instancecount']) > 0:
@@ -33,7 +34,9 @@ class EcsImportHandler:
             operations = ['CreateInstance']
         return operations 
 
-    def _handSubOperation(self,cmd,operations,keyValues,version):
+    def _handSubOperation(self,cmd,operations,keyValues,version,_isAllocatePublicIp=False):
+        if keyValues is None:
+            return
         for item in operations:
             if self.apiHandler.isAvailableOperation(cmd, item, version):
                 cmdInstance,mclassname = self.apiHandler.getInstanceByCmdOperation(cmd, item, version)
@@ -50,10 +53,39 @@ class EcsImportHandler:
                             response.display_response("error", result, "json")
                         else:
                             response.display_response(item, result, "json")
+                            if _isAllocatePublicIp is True:
+                                extraOperation = "AllocatePublicIpAddress"
+                                instanceId = self.getInstanceIdFromJsonBody(result)
+                                if instanceId is not None:
+                                    key=list()
+                                    _newkeyValues=dict()
+                                    key.append(instanceId)
+                                    _newkeyValues["InstanceId"] = key
+                                    _newkeyValues["RegionId"] = newkeyValues["RegionId"]
+                                    self._handExtraOperation(cmd,extraOperation,_newkeyValues,version)
+                                else:
+                                    print "InstanceId  is need!"
                     except Exception,e:
                         print(e)
-   
+
+    def _handExtraOperation(self,cmd,extraOperation,keyValues,version):
+        if self.apiHandler.isAvailableOperation(cmd, extraOperation, version):
+            cmdInstance,mclassname = self.apiHandler.getInstanceByCmdOperation(cmd, extraOperation, version)
+            if  cmdInstance is not None:
+                try:
+                    # result = cmdInstance.getResponse()
+                    result = self.apiHandler.getResponse(cmd, extraOperation, mclassname, cmdInstance, keyValues)
+                    if("Code" in result):
+                        response.display_response("error", result, "json")
+                    else:
+                        response.display_response(extraOperation, result, "json")
+                except Exception,e:
+                    print(e)
+
+
     def getKVFromJson(self,filename):
+        if filename is None:
+            return None
         inputFilePath  = os.path.split(filename)[0]
         inputFileName = os.path.split(filename)[1]
         if not os.path.isfile(filename):
@@ -77,14 +109,37 @@ class EcsImportHandler:
         finally:
             fp.close()
 
+    def isAllocatePublicIpAddress(self,keyValues):
+        _publicIp = False
+        if keyValues.has_key('--allocatepublicip') and len(keyValues['--allocatepublicip']) > 0:
+            if  keyValues['--allocatepublicip'][0] == "yes":
+                _publicIp = True
+        return _publicIp
+
+    def getInstanceIdFromJsonBody(self,jsonbody):
+        instanceId = None
+        try:
+            data = jsonbody
+            '''
+            data = json.loads(jsonbody)
+            '''
+            if data.has_key('InstanceId') and len(data['InstanceId']) > 0:
+                instanceId = data['InstanceId']
+        except Exception,e:
+            pass
+        finally:
+            return instanceId
+
+
     def ImportInstance(self,cmd,operation,version):
         _keyValues = self.parser.getCliKeyValues()
+        _isAllocatePublicIp = self.isAllocatePublicIpAddress(_keyValues)
         operations = self.getSubOperations(cmd,operation)
         _instanceCount = self.getInstanceCount(_keyValues)
         filename = self.getFileName(_keyValues)
         keyValues = self.getKVFromJson(filename)
         for i in range(1,_instanceCount+1):
-            self._handSubOperation(cmd,operations,keyValues,version)
+            self._handSubOperation(cmd,operations,keyValues,version,_isAllocatePublicIp)
 # this method will set all key:value for open api class
     def _setAttr(self, classname, map):
         try:

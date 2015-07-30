@@ -25,7 +25,7 @@ import aliyuncli
 install_requires = [
         'colorama>=0.2.5,<=0.3.3',
         'jmespath>=0.6.1,<=0.7.1',
-        'aliyun-python-sdk-ecs>=0.0.0',
+        'aliyun-python-sdk-ecs>=0.1.2',
         ]
 def main():
     setup(
@@ -33,7 +33,7 @@ def main():
         description='Universal Command Line Environment for aliyun',
         version= aliyuncli.__version__,
         long_description = open("README.rst").read(),
-        url='http://www.aliyun.com/',
+        url='http://docs.aliyun.com/?spm=5176.1829009.1002.1.LxlLfS#/pub/aliyun-command-line-interface',
         packages = find_packages(),
         platforms=['unix', 'linux','osx','win64'],
         install_requires = install_requires,
