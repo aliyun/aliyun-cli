@@ -161,12 +161,12 @@ class Completer(object):
             return self._complete_option(possibles[0])
         return possibles
 
-    def _help_to_show_instance_attribute(self, cmdInstance):
+    def _help_to_show_instance_attribute(self, classname):
         all_options = copy.copy(self.main_options)
         # here give all attribute list
         # where code run here , self.version should be decide before
         # self.subcommand_name = self.operation
-        old_arg_list = self.openApiDataHandler.getAttrList(cmdInstance)
+        old_arg_list = self.openApiDataHandler.getAttrList(classname)
         new_arg_list = set()
         if not old_arg_list is None:
             for item in old_arg_list:

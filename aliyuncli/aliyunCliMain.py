@@ -70,7 +70,7 @@ class AliyunCommandLine:
                     cmdInstance = instanceAndClassName[0]
                     className = instanceAndClassName[1]
                     if cmdInstance is not None and className is not None:
-                        if self.showInstanceAttribute(cmd, operation, cmdInstance):
+                        if self.showInstanceAttribute(cmd, operation, className):
                             return
                         # here should handle the keyValues first
                         keyValues = self.parser.getOpenApiKeyValues(keyValues)
@@ -116,9 +116,9 @@ class AliyunCommandLine:
     def handlerExtensionCmd(self, cmd):
         self.extensionHandler.handlerExtensionCmd(cmd)
 
-    def showInstanceAttribute(self, cmd, operation, cmdInstance):
+    def showInstanceAttribute(self, cmd, operation, classname):
         if self.args.__len__() >= 3 and self.args[2] == "help":
-            self.helper.showParameterError(cmd, operation, self.completer._help_to_show_instance_attribute(cmdInstance))
+            self.helper.showParameterError(cmd, operation, self.completer._help_to_show_instance_attribute(classname))
             #print self.completer._help_to_show_instance_attribute(cmdInstance)
             return True
         return False

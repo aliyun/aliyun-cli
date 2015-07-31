@@ -90,7 +90,8 @@ class aliyunOpenApiDataHandler():
         if cmd is  None or operation is None:
             return None,None
         else:
-            return self.getInstance(operation,cmd,version)
+            cmdInstance, mclassname = self.getInstance(operation,cmd,version)
+            return cmdInstance, mclassname
 # this api will return operations which is not comes from aliyun open api.
 # parameter : cmd
 # cmd will decide which operations need return.
