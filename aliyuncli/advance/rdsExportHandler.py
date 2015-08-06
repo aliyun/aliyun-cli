@@ -68,6 +68,7 @@ class RdsExportDBInstanceHanlder():
                 self.apiHandler.changeEndPoint(cmdInstance, newkeyValues)
                 try:
                     result = self.apiHandler.getResponse(cmd,operation, mclassname, cmdInstance, newkeyValues)
+                    self.apiHandler.responseOptimize(result,cmd,operation)
                     # result = cmdInstance.getResponse()
                     # result = self._optimizeResult(result)
                     if("Code" in result):

@@ -52,6 +52,7 @@ class RdsImportDBInstanceHandler:
                     # self.apiHandler.changeEndPoint(cmdInstance, newkeyValues)
                     try:
                         result = self.apiHandler.getResponse(cmd, item, mclassname, cmdInstance, newkeyValues)
+                        self.apiHandler.responseOptimize(result,cmd,item)
                         # result = cmdInstance.getResponse()
                         if("Code" in result):
                             response.display_response("error", result, "json")

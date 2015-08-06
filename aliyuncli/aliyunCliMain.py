@@ -32,7 +32,6 @@ class AliyunCommandLine:
         self.handler = aliyunOpenApiData.aliyunOpenApiDataHandler()
         self.extensionHandler = aliyunExtensionCliHandler.aliyunExtensionCliHandler()
         self.helper = aliyunCliHelp.aliyunCliHelper()
-        self.upgradeHandler = aliyunCliUpgrade.aliyunCliUpgradeHandler()
         self.args = sys.argv[1:]
         self.completer = aliyunCompleter.Completer()
 
@@ -84,6 +83,7 @@ class AliyunCommandLine:
                             result = self.handler.getResponse(cmd,operation,className,cmdInstance,keyValues)
                             if result is None:
                                 return
+                            self.handler.responseOptimize(result,cmd,operation)
                             if("Code" in result):
                                 response.display_response("error", result, "json")
                                 # print("failed")

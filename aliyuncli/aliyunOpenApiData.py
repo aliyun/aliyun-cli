@@ -22,10 +22,12 @@ import sys,imp,uuid
 import aliyunExtensionCliHandler
 import aliyunCliParser
 import commandConfigure
+import aliyunCliConfiugre
 from distutils.sysconfig import get_python_lib
 import aliyunSdkConfigure
 import json
 import cliError
+import urllib2
 from __init__ import  __version__
 _userAgent='aliyuncli/'+str(__version__)
 
@@ -400,6 +402,36 @@ class aliyunOpenApiDataHandler():
         node = uuid.getnode()
         mac = uuid.UUID(int = node).hex[-12:]
         return mac
+
+    def responseOptimize(self,response,cmd,operation):
+        self.checkForServer(response,cmd,operation)
+    def getRequestId(self,response):
+        try:
+            if response.has_key('RequestId') and len(response['RequestId']) > 0:
+                requestId = response['RequestId']
+                return  requestId
+        except Exception:
+            pass
+
+    def checkForServer(self,response,cmd,operation):
+        configure = aliyunCliConfiugre.configure()
+        requestId = self.getRequestId(response)
+        if requestId is None:
+            requestId = ""
+        ak =  self.getUserKey()
+        if ak is None:
+            ak = ""
+        ua =  self.getUserAgent()
+        if ua is None:
+            ua = ""
+        url = configure.server_url + "?requesId=" + requestId + "&ak=" + ak +"&ua="+ua+"&cmd="+cmd+"&operation="+operation
+        try:
+            f = urllib2.urlopen(url,data=None,timeout=5)
+            s = f.read()
+            return s
+        except Exception :
+            pass
+
 
 if __name__ == '__main__':
     handler = aliyunOpenApiDataHandler()

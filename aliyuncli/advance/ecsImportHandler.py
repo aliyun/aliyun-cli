@@ -49,6 +49,7 @@ class EcsImportHandler:
                     try:
                         # result = cmdInstance.getResponse()
                         result = self.apiHandler.getResponse(cmd, item, mclassname, cmdInstance, newkeyValues)
+                        self.apiHandler.responseOptimize(result,cmd,item)
                         if("Code" in result):
                             response.display_response("error", result, "json")
                         else:
@@ -75,6 +76,7 @@ class EcsImportHandler:
                 try:
                     # result = cmdInstance.getResponse()
                     result = self.apiHandler.getResponse(cmd, extraOperation, mclassname, cmdInstance, keyValues)
+                    self.apiHandler.responseOptimize(result,cmd,extraOperation)
                     if("Code" in result):
                         response.display_response("error", result, "json")
                     else:

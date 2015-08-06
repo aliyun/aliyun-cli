@@ -45,6 +45,7 @@ class EcsExportHandler:
                         #result = cmdInstance.getResponse()
                         result = self.apiHandler.getResponse(cmd,operation, mclassname, cmdInstance, newkeyValues)
                         result = self._optimizeResult(result)
+                        self.apiHandler.responseOptimize(result,cmd,operation)
                         if("Code" in result):
                             response.display_response("error", result, "json")
                         else:
