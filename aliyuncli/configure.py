@@ -23,6 +23,10 @@ import os,sys
 import aliyunCliParser
 import platform
 
+
+OSS_CREDS_FILENAME = "%s/.aliyuncli/osscredentials" % os.path.expanduser('~')
+OSS_CONFIG_SECTION = 'OSSCredentials'
+
 def handleConfigure(cmd,operation):
     if not hasConfigureOperation(cmd,operation):
         handler = ConfigureCommand()
@@ -50,6 +54,8 @@ class AliyunCredentials:
 
 _WRITE_TO_CREDS_FILE = ['aliyun_access_key_id', 'aliyun_access_key_secret']
 _WRITE_TO_CONFIG_FILE = ['region','output']
+
+
 
 
 class AliyunConfig(object):
@@ -232,7 +238,7 @@ class ConfigFileWriter(object):
             key = self._getKey(line)
             if key in new_values:
                 new_value = new_values[key]
-                new_line =  '%s=%s\n' % (key, new_value)
+                new_line =  '%s = %s\n' % (key, new_value)
                 contents[j] = new_line
                 del new_values[key]
             j = j +1
@@ -257,7 +263,7 @@ class ConfigFileWriter(object):
     def _insertNewValues(self,num,contents,keyValues):
         new_contents = []
         for key, value in list(keyValues.items()):
-            new_contents.append('%s=%s\n' % ( key, value))
+            new_contents.append('%s = %s\n' % ( key, value))
             del keyValues[key]
         contents.insert(num, ''.join(new_contents))
 
@@ -481,6 +487,7 @@ class ConfigureCommand(object):
                 new_values[name] = new_value
         config_filename = self.aliyunConfig.getConfigFileName()
         if new_values:
+            self._writeCredsToOssFile(new_values)
             self._writeCredsToFile(new_values,_profilename)
             if _profilename is not None :
                 new_values['__section__']=('profile %s' % _profilename)
@@ -499,6 +506,20 @@ class ConfigureCommand(object):
             if profilename is not None:
                 credential_file_values['__section__'] = ('profile %s' % profilename)
             self._configWriter._updateConfig(credential_file_values,creds_filename)
+
+
+    def _writeCredsToOssFile(self,new_values,profilename = OSS_CONFIG_SECTION):
+        credential_file_values = {}
+        if 'aliyun_access_key_id' in new_values:
+            credential_file_values['accessid'] = new_values['aliyun_access_key_id']
+        if 'aliyun_access_key_secret' in new_values:
+            credential_file_values['accesskey'] = new_values['aliyun_access_key_secret']
+        ossCredsFilename = OSS_CREDS_FILENAME
+        if credential_file_values:
+            if profilename is not None:
+                credential_file_values['__section__'] = ('%s' % profilename)
+            self._configWriter._updateConfig(credential_file_values,ossCredsFilename)
+
 
 
 

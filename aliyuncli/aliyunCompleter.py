@@ -210,6 +210,8 @@ class Completer(object):
         for w in self.non_options:
             if w in self.openApiDataHandler.getApiCmdsLower() or w in self.openApiDataHandler.getApiCmds(): # cmd check
                 self.command_name = w # here give the command_name
+                if self.command_name.lower()=="oss":
+                    return
                 self.version = self.openApiDataHandler.getSdkVersion(self.command_name, None)
                 cmd_obj = self.openApiDataHandler.getApiOperations(self.command_name, self.version)
                 # self.command_hc = cmd_obj.create_help_command()

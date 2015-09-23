@@ -57,8 +57,17 @@ class AliyunCommandLine:
                 outPutFormat = 'json'
         else:
             outPutFormat = outPutFormat[0]
+
+        if self.handler.isEndPointOperation(operation):
+            keyValues = self.parser.getOpenApiKeyValues(keyValues)
+            self.handler.handleEndPointOperation(cmd,operation,keyValues)
+            return
+
         if self.handler.isAvailableCmd(cmd):
             # fetch getversion
+            if self.handler.isNonStandardSdkCmd(cmd):
+                self.handler.nonStandardSdkCmdHandle(cmd)
+                return
             version=self.handler.getSdkVersion(cmd,keyValues)
             if version is None:
                 return

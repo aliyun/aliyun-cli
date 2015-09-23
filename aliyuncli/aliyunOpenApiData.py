@@ -28,10 +28,28 @@ import aliyunSdkConfigure
 import json
 import cliError
 import urllib2
+import handleEndPoint
+
 from __init__ import  __version__
 _userAgent='aliyuncli/'+str(__version__)
 
 version_cmds = ['ConfigVersion','ShowVersions']
+END_POINT_OPERATION_LIST = ['ModifyEndPoint']
+# import oss
+nonStandardSdkCmds = []
+try:
+    import oss.oss_api
+    import oss.oss_util
+    import oss.oss_xml_handler
+except Exception:
+    pass
+else:
+    nonStandardSdkCmds = ['oss']
+    import ossadp.ossHandler
+
+
+
+
 
 class aliyunOpenApiDataHandler():
     def __init__(self, path=None):
@@ -42,7 +60,8 @@ class aliyunOpenApiDataHandler():
 # this api will return all command from api, such as , ecs, rds, slb
     def getApiCmds(self):
         sitepackages_path=get_python_lib()
-        cmds=[]
+        cmds = list()
+        cmds.extend(nonStandardSdkCmds)
         sub_objects=os.listdir(sitepackages_path)
         if sub_objects is not None:
             for object in sub_objects:
@@ -69,10 +88,27 @@ class aliyunOpenApiDataHandler():
             return False
         except Exception as e:
             return False
+#this function is to handle no-POP SDK
+    def isNonStandardSdkCmd(self,cmd):
+        if cmd in nonStandardSdkCmds:
+            return True
+        else:
+            return False
+#this function is to handle no-POP cmd
+    def nonStandardSdkCmdHandle(self,cmd):
+        if cmd == 'oss':
+            self.handleOssCmd(cmd)
+#this function is to handle no-POP oss
+    def handleOssCmd(self,cmd):
+        ossadp.ossHandler.handleOss()
 
 # this api will define all operations from given command
     def getApiOperations(self, command,version):
         operations = []
+
+        if command == 'oss':
+            return ossadp.ossHandler.getAvailableOperations()
+
         sitepackages_path=get_python_lib()
         pre_module='aliyunsdk'
         module=pre_module+command
@@ -114,7 +150,7 @@ class aliyunOpenApiDataHandler():
         return defaultExtensionOpers
 
     def getExtensionOperationsFromCmd(self, cmd):
-        if cmd is None:
+        if cmd is None and cmd == 'oss':
             return None
         defaultExtensionOpers=set(['ConfigVersion','ShowVersions'])
         if cmd.lower() == "ecs":
@@ -148,7 +184,8 @@ class aliyunOpenApiDataHandler():
             return False
         operations = self.getApiOperations(cmd,version)
         for item in operations:
-            if operation.lower() == item.lower():
+            #if operation.lower() == item.lower():
+            if operation == item:
                 return True
         return False
 
@@ -432,6 +469,14 @@ class aliyunOpenApiDataHandler():
         except Exception :
             pass
 
+    def isEndPointOperation(self,operation):
+        if operation is not None and operation in END_POINT_OPERATION_LIST:
+            return True
+        else:
+            return False
+
+    def handleEndPointOperation(self,cmd,operation,keyValues):
+        handleEndPoint.handleEndPoint(cmd,operation,keyValues)
 
 if __name__ == '__main__':
     handler = aliyunOpenApiDataHandler()
