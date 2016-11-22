@@ -120,8 +120,8 @@ For SLB:
 
  $ sudo pip install aliyun-python-sdk-slb
 
-The SDK list
-^^^^^^^^^^^^
+SDK List
+^^^^^^^^
 
 +--------------+--------------------------------+
 | Product      |  SDK                           |
@@ -271,13 +271,13 @@ Command Completion
 ---------------------
 
 On Unix-like systems, the ``aliyuncli`` includes a command-completion feature 
-that enables you to use the TAB key to complete a partially typed command. 
+that enables you to use the ``TAB`` key to complete a partially typed command. 
 This feature is not automatically installed, so you need to configure it manually.
 
 Configuring command completion requires two pieces of information:
 
 * the name of the shell you are using
-* the location of aliyun_completer script.
+* the location of ``aliyun_completer`` script.
 
 Check Your Shell
 ^^^^^^^^^^^^^^^^
@@ -287,7 +287,7 @@ Currently ``aliyuncli`` supports these shells:
 * bash
 * zsh. 
 
-1. To find aliyun_completer, you can use:
+1. To find the ``aliyun_completer``, you can use:
 ::
 
  $ which aliyun_completer
@@ -320,5 +320,4 @@ add a configuration command to enable command completion to your shell profile.
 
 	$ vim ~/.bash_profile
 	
-Add ``complete -C ‘/usr/local/bin/aliyun_completer’ aliyuncli`` at the end.
-
+Add ``complete -C ‘/usr/local/bin/aliyun_completer’ aliyuncli`` at the end of the file.
