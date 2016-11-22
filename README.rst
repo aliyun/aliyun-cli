@@ -188,17 +188,17 @@ Output format choices are
 
 Table format sample:
 ::
- 
+
  <sample>
- 
+
 JSON format sample:
- ::
-  
- <sample>
-  
-Text format sample:
 ::
  
+ <sample>
+ 
+Text format sample:
+::
+
  <sample>
 
 How to use aliyuncli
@@ -224,7 +224,8 @@ Additional Usage Information
 
  --filter
 
-Aliyuncli supports a filter function. When we call any API, the data returned from the server is JSON formatted by default. The filter function can help the user handle the JSON formatted data more easily. 
+Aliyuncli supports a filter function. When we call any API, the data returned from the server is JSON formatted by default. 
+The filter function can help the user handle the JSON formatted data more easily. 
 
 Here are some examples:
 ::
