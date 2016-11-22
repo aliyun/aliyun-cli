@@ -123,28 +123,49 @@ For SLB:
 The SDK list
 ^^^^^^^^^^^^
 
-Product|SDK
-----|----
-BatchCompute	|aliyun-python-sdk-batchcompute
-Bsn				|aliyun-python-sdk-bsn
-Bss				|aliyun-python-sdk-bss
-Cms				|aliyun-python-sdk-cms
-Crm				|aliyun-python-sdk-crm
-Drds			|aliyun-python-sdk-drds
-Ecs				|aliyun-python-sdk-ecs
-Ess				|aliyun-python-sdk-ess
-Ft				|aliyun-python-sdk-ft
-Ocs				|aliyun-python-sdk-ocs
-Oms				|aliyun-python-sdk-oms
-OssAdmin		|aliyun-python-sdk-ossadmin
-Ram				|aliyun-python-sdk-ram
-Rds				|aliyun-python-sdk-rds
-Risk			|aliyun-python-sdk-risk
-R-kvstore		|aliyun-python-sdk-r-kvstore
-Slb				|aliyun-python-sdk-slb
-Sts				|aliyun-python-sdk-sts
-Ubsms			|aliyun-python-sdk-ubsms
-Yundun			|aliyun-python-sdk-yundun
++--------------+--------------------------------+
+| Product      |  SDK                           |
++==============+================================+
+| BatchCompute | aliyun-python-sdk-batchcompute |
++--------------+--------------------------------+
+| Bsn          | aliyun-python-sdk-bsn          |
++--------------+--------------------------------+
+| Bss          | aliyun-python-sdk-bss          |
++--------------+--------------------------------+
+| Cms          | aliyun-python-sdk-cms          |
++--------------+--------------------------------+
+| Crm          | aliyun-python-sdk-crm          |
++--------------+--------------------------------+
+| Drds         | aliyun-python-sdk-drds         |
++--------------+--------------------------------+
+| Ecs          | aliyun-python-sdk-ecs          |
++--------------+--------------------------------+
+| Ess          | aliyun-python-sdk-ess          |
++--------------+--------------------------------+
+| Ft           | aliyun-python-sdk-ft           |
++--------------+--------------------------------+
+| Ocs          | aliyun-python-sdk-ocs          |
++--------------+--------------------------------+
+| Oms          | aliyun-python-sdk-oms          |
++--------------+--------------------------------+
+| OssAdmin     | aliyun-python-sdk-ossadmin     |
++--------------+--------------------------------+
+| Ram          | aliyun-python-sdk-ram          |
++--------------+--------------------------------+
+| Ocs          | aliyun-python-sdk-ocs          |
++--------------+--------------------------------+
+| Rds          | aliyun-python-sdk-rds          |
++--------------+--------------------------------+
+| Risk         | aliyun-python-sdk-risk         |
++--------------+--------------------------------+
+| R-kvstore    | aliyun-python-r-kvstore        |
++--------------+--------------------------------+
+| Slb          | aliyun-python-sdk-slb          |
++--------------+--------------------------------+
+| Ubsms        | aliyun-python-sdk-ubsms        |
++--------------+--------------------------------+
+| Yundun       | aliyun-python-sdk-yundun       |
++--------------+--------------------------------+
 
 Install Python Environment
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -300,3 +321,4 @@ add a configuration command to enable command completion to your shell profile.
 	$ vim ~/.bash_profile
 	
 Add ``complete -C ‘/usr/local/bin/aliyun_completer’ aliyuncli`` at the end.
+
