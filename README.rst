@@ -147,12 +147,10 @@ Sts				|aliyun-python-sdk-sts
 Ubsms			|aliyun-python-sdk-ubsms
 Yundun			|aliyun-python-sdk-yundun
 
-
-
 Install Python Environment
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Aliyuncli must run under Python. 
+``aliyuncli`` must run under Python. 
 
 If you don’t have Python installed , install version 2.6 or 2.7 using one of the following methods. Version 3 is not supported at this time.
 
@@ -190,6 +188,7 @@ Output format choices are
 
 Table format sample:
 ::
+ 
  <sample>
  
 JSON format sample:
@@ -225,7 +224,7 @@ Additional Usage Information
 
  --filter
 
-Aliyuncli supports a filter function. When we call any  API, the data from the server is JSON format by default. The filter function can help user handle the JSON formatted data easily. 
+Aliyuncli supports a filter function. When we call any API, the data returned from the server is JSON formatted by default. The filter function can help the user handle the JSON formatted data more easily. 
 
 Here are some examples:
 ::
@@ -254,39 +253,48 @@ On Unix-like systems, the ``aliyuncli`` includes a command-completion feature
 that enables you to use the TAB key to complete a partially typed command. 
 This feature is not automatically installed, so you need to configure it manually.
 
+Configuring command completion requires two pieces of information:
 
-Configuring command completion requires two pieces of information: the name of the shell you are using and the location of aliyun_completer script.
+* the name of the shell you are using
+* the location of aliyun_completer script.
 
-Check your shell:
+Check Your Shell
 ^^^^^^^^^^^^^^^^^^^^^
 
-Current aliyuncli only supports two shells: bash and zsh. 
+Currently ``aliyuncli`` supports these shells: 
 
-1. find aliyun_completer, you can use:
+* bash
+* zsh. 
+
+1. To find aliyun_completer, you can use:
 ::
 
-	$ which aliyun_completer
-	/usr/local/bin/aliyun_completer
+ $ which aliyun_completer
+ /usr/local/bin/aliyun_completer
 
-2. enable command completion:
+2. To enable command completion:
 
 bash - use the build-in command complete:
+::
 
-
-	$ complete -C ‘/usr/local/bin/aliyun_completer’ aliyuncli
+ $ complete -C ‘/usr/local/bin/aliyun_completer’ aliyuncli
+	
 zsh - source bin/aliyun_zsh_completer.sh
+::
 
-	% source /usr/local/bin/aliyun_zsh_completer.sh
+ % source /usr/local/bin/aliyun_zsh_completer.sh
 	
 Test Command Completion
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 ::
 
-	$ aliyuncli sTAB
+	$ aliyuncli s<TAB>
 	ecs     rds     slb
-The services showing dependences the sdk you installed. 
 
-Finally, to ensure that completion continues to work after a reboot, add the configuration command that you used to enable command completion to your shell profile.
+The services display the SDK(s) you installed. 
+
+Finally, to ensure that completion continues to work after a reboot, 
+add a configuration command to enable command completion to your shell profile.
 ::
 
 	$ vim ~/.bash_profile
