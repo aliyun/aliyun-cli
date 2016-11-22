@@ -1,92 +1,86 @@
-=============================
 Aliyun Command Line Interface
 =============================
+Overview
 ------------------
-Brief introduction
-------------------
-Aliyun Command Line Interface (aliyuncli) is a unified tool to manage your Aliyun services. From this tool you can invoke the open API of Aliyun productions easily. With just this one tool to download and configure , you can control multiple Aliyun services from the command line and automate them through scripts (like shell or python). 
+Aliyun Command Line Interface ``aliyuncli`` is a unified tool to manage your Aliyun services. From this tool you can easily invoke the Aliyun open API. Also, you can control multiple Aliyun services from the command line and automate them through scripts, like the Bash shell or Python. 
 
+Aliyuncli on Github
 ----------------------
-###Aliyuncli on github
-----------------------
-Now aliyuncli has been uploaded the source code to github, and any one can fork the code freely. You can access the url of github: https://github.com/aliyun/aliyun-cli
+The ``aliyuncli`` has been uploaded to Github and anyone can fork the code freely. You can access it at: https://github.com/aliyun/aliyun-cli
 
-
-
----------------------------
-###How to install aliyuncli
----------------------------
-Now aliyun provides two way to install the aliyuncli:
+How to install aliyuncli
+^^^^^^^^^^^^^^^^^^^^^^^^
+Aliyun provides two way to install the aliyuncli:
 
 1. install aliyuncli using pip
-
 2. install from software package
 
+Install aliyuncli using pip
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+If pip is installed in your operating system, whether Windows, Linux, or Mac OS, you can install ``aliyuncli`` using pip:
 
-####Install aliyuncli using pip:
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-If you have installed the pip in your operation system, no matter windows Linux or Mac OS, you can install aliyuncli using pip:
-####Windows:
-	
+Windows
+^^^^^^^
+::
 
-	> pip install aliyuncli
+ pip install aliyuncli
 
-To upgrade the existing aliyuncli , use the --upgrade option:
-	
+To upgrade the existing aliyuncli , use the ``--upgrade`` option:
+::	
 
-	> pip install --upgrade aliyuncli
+ pip install --upgrade aliyuncli
 
-####Linux , Mac OS and Unix:
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Linux, Mac OS and Unix
+^^^^^^^^^^^^^^^^^^^^^^
+::
 
-	$ sudo pip install aliyuncli
+ $ sudo pip install aliyuncli
 
-To upgrade the existing aliyuncli , use the --upgrade option:
+To upgrade the existing aliyuncli , use the ``--upgrade`` option:
+::
 
-	$ pip install --upgrade aliyuncli
-
-
-###Install from software package
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-If you dont have the pip tool, you can also install aliyuncli from software package.
-
-Aliyuncli supports all kind of operation systems: Windows , Linux and mac OS. You can choose the method by different OS.
-
-You can find the software package from the following link:
-	
-[click and download](http://market.aliyun.com/products/53690006/cmgj000314.html?spm=5176.900004.4.2.esAaC2)
-
-It is free downloading now. The package contains three install packages: 
-cli.tar.gz is for Linux and mac OS, AliyunCLI_x86 is for windows 32 OS and AliyunCLI_x64 is for windows 64 OS. 
-
-You can choose the install package according your operation system.
+ $ pip install --upgrade aliyuncli
 
 
-####For windows:
+Install from software package
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If you don't have the pip tool, you can also install ``aliyuncli`` from a Aliyun supplied software package.
+
+Aliyuncli supports several operating systems:
+
+* Windows
+* Linux
+* Mac OS. 
+
+You can choose the method for the different OS.
+
+You can find the software package at the following link http://market.aliyun.com/products/53690006/cmgj000314.html?spm=5176.900004.4.2.esAaC2
+
+It is a free download. 
+
+The package contains three install packages: 
+
+* ``cli.tar.gz`` is for Linux and mac OS 
+* ``AliyunCLI_x86`` is for Windows 32 bit OS 
+* ``AliyunCLI_x64`` is for Windows 64 bit OS
+
+Windows
 ^^^^^^^^^^^^^^^^
 
-1.	Find AliyunCLI.msi and double click the msi, you will go into the installation guide.
+1. Find ``AliyunCLI.msi`` and double click the msi, you will go into the installation guide.
+2. Click the “next” button and choose your desired path and confirm
+3. Finish the install
 
-2.	Click the “next” button and choose your favorite path and confirm
-
-
-3.	finish the install
-
-
-
- 
-
-####For Linux and Mac OS:
+Linux and Mac OS
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-You can install like follow step:
+Install as follows:
+::
 
-	$ tar -zxvf cli.tar.gz
-	$ cd cli
-	$ sudo sh install.sh
-
-
+ $ tar -zxvf cli.tar.gz
+ $ cd cli
+ $ sudo sh install.sh
 
 ###Check the aliyuncli installation:
 ------------------------------------
