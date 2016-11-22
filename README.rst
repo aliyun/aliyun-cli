@@ -1,17 +1,21 @@
-##Aliyun Command Line Interface
-###Brief introduction
+=============================
+Aliyun Command Line Interface
+=============================
+------------------
+Brief introduction
+------------------
 Aliyun Command Line Interface (aliyuncli) is a unified tool to manage your Aliyun services. From this tool you can invoke the open API of Aliyun productions easily. With just this one tool to download and configure , you can control multiple Aliyun services from the command line and automate them through scripts (like shell or python). 
 
-
+----------------------
 ###Aliyuncli on github
-
+----------------------
 Now aliyuncli has been uploaded the source code to github, and any one can fork the code freely. You can access the url of github: https://github.com/aliyun/aliyun-cli
 
 
 
-
+---------------------------
 ###How to install aliyuncli
-
+---------------------------
 Now aliyun provides two way to install the aliyuncli:
 
 1. install aliyuncli using pip
@@ -20,6 +24,7 @@ Now aliyun provides two way to install the aliyuncli:
 
 
 ####Install aliyuncli using pip:
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 If you have installed the pip in your operation system, no matter windows Linux or Mac OS, you can install aliyuncli using pip:
 ####Windows:
 	
@@ -32,6 +37,7 @@ To upgrade the existing aliyuncli , use the --upgrade option:
 	> pip install --upgrade aliyuncli
 
 ####Linux , Mac OS and Unix:
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 	$ sudo pip install aliyuncli
 
@@ -41,6 +47,7 @@ To upgrade the existing aliyuncli , use the --upgrade option:
 
 
 ###Install from software package
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you dont have the pip tool, you can also install aliyuncli from software package.
 
@@ -57,6 +64,8 @@ You can choose the install package according your operation system.
 
 
 ####For windows:
+^^^^^^^^^^^^^^^^
+
 1.	Find AliyunCLI.msi and double click the msi, you will go into the installation guide.
 
 2.	Click the “next” button and choose your favorite path and confirm
@@ -69,6 +78,8 @@ You can choose the install package according your operation system.
  
 
 ####For Linux and Mac OS:
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
 You can install like follow step:
 
 	$ tar -zxvf cli.tar.gz
@@ -78,6 +89,7 @@ You can install like follow step:
 
 
 ###Check the aliyuncli installation:
+------------------------------------
 
 
 Confirm the aliyuncli installed correctly by viewing the help file:
@@ -89,10 +101,12 @@ dddd
 	$ aliyuncli
 
 ###How to install Aliyun python SDK
+-----------------------------------
 aliyuncli must work with aliyun python sdk(2.0) , you should install the sdk after you install the aliyuncli. Otherwise you can not access the aliyun service normally.
 
 
 ####Install SDK using pip:
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 Aliyun python sdk only can be installed by pip. So please make sure your operation system has installed pip. Each product of aliyun has one sdk , you can install the required sdk one by one and no need install all of them.
 
 
@@ -108,6 +122,7 @@ For SLB, you using:
 
 
 ####The SDK list:
+^^^^^^^^^^^^^^^^^
 
 Product|SDK
 ----|----
@@ -137,6 +152,7 @@ Yundun			|aliyun-python-sdk-yundun
 	
 
 ####Install python environment:
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 Aliyuncli must run under python environment, so please make sure your operation system has installed python environment. 
@@ -151,6 +167,7 @@ On Linux, OS X, or Unix, install Python using your distribution's package manage
 
 
 ###How to configure aliyuncli
+-----------------------------
 Before using aliyuncli you should create a AccessKey from your console. After login the aliyun console you can click the like as follow: 
 
 
@@ -159,6 +176,7 @@ Then you can create the access key and access secret:
 
 
 ###Configure the aliyuncli quickly
+----------------------------------
 
 After create access key and access secret , you can configure aliyuncli quickly:
 
@@ -181,6 +199,8 @@ You can choose one format as your wish.
 
 
 ###How to use aliyuncli
+-----------------------
+
 aliyuncli has four parts:
 
 
@@ -199,6 +219,8 @@ Here are some examples:
 	$ aliyuncli rds DescribeDBInstanceAttribute --DBInstanceId xxxxxx
 
 ####More usage
+^^^^^^^^^^^^^^
+
 	--filter
 Aliyuncli supports filter function. When we call any open API , the data from the server is json format by default. And filter function can help user handle the "json" format data easily. 
 
@@ -225,11 +247,16 @@ Here are some examples:
 
 
 ###Command Completion
+---------------------
+
 On Unix-like systems, the aliyuncli includes a command-completion feature that enables you to use the TAB key to complete a partially typed command. This feature is not automatically installed so you need to configure it manually.
 
 
 Configuring command completion requires two pieces of information: the name of the shell you are using and the location of aliyun_completer script.
+
 ####Check your shell:
+^^^^^^^^^^^^^^^^^^^^^
+
 Current aliyuncli only supports two shells: bash and zsh. 
 
 
@@ -247,7 +274,9 @@ bash - use the build-in command complete:
 zsh - source bin/aliyun_zsh_completer.sh
 
 	% source /usr/local/bin/aliyun_zsh_completer.sh
+	
 ####Test Command Completion
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 	$ aliyuncli sTAB
 	ecs     rds     slb
