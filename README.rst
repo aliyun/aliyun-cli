@@ -82,41 +82,48 @@ Install as follows:
  $ cd cli
  $ sudo sh install.sh
 
-###Check the aliyuncli installation:
-------------------------------------
-
+Check the aliyuncli Installation
+--------------------------------
 
 Confirm the aliyuncli installed correctly by viewing the help file:
+::
 
 	$ aliyuncli help
 
 or 
-dddd
+
+::
+
 	$ aliyuncli
 
-###How to install Aliyun python SDK
+How to install Aliyun Python SDK
 -----------------------------------
-aliyuncli must work with aliyun python sdk(2.0) , you should install the sdk after you install the aliyuncli. Otherwise you can not access the aliyun service normally.
+
+``aliyuncli`` must work with Aliyun Python sdk 2.0 You should install the SDK after you install ``aliyuncli``, otherwise you can not access the Aliyun service.
 
 
-####Install SDK using pip:
+Install SDK using pip
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
-Aliyun python sdk only can be installed by pip. So please make sure your operation system has installed pip. Each product of aliyun has one sdk , you can install the required sdk one by one and no need install all of them.
+Aliyun Python SDK can only be installed by pip. Since each product of aliyun has their own SDK, 
+you can install a required SDK individually with no need install all of them.
 
+For example, if you need only the ECS SDK, you can install only it as follows:
+::
 
-Such as you need ECS sdk, you just install it as following command:
+ $ sudo pip install aliyun-python-sdk-ecs
 
-	$ sudo pip install aliyun-python-sdk-ecs
-If you need RDS sdk, you just install it using:
+If you need only the RDS SDK:
+::
 
-	$ sudo pip install aliyun-python-sdk-rds
-For SLB, you using:
+ $ sudo pip install aliyun-python-sdk-rds
 
-	$ sudo pip install aliyun-python-sdk-slb
+For SLB:
+::
 
+ $ sudo pip install aliyun-python-sdk-slb
 
-####The SDK list:
-^^^^^^^^^^^^^^^^^
+The SDK list
+^^^^^^^^^^^^
 
 Product|SDK
 ----|----
@@ -143,11 +150,8 @@ Yundun			|aliyun-python-sdk-yundun
 
 
 
-	
-
-####Install python environment:
+Install Python Environment
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
 
 Aliyuncli must run under python environment, so please make sure your operation system has installed python environment. 
 
@@ -158,18 +162,13 @@ On Windows or OS X, download the Python package for your operating system from p
 
 On Linux, OS X, or Unix, install Python using your distribution's package manager.
 
-
-
-###How to configure aliyuncli
+How to Configure aliyuncli
 -----------------------------
 Before using aliyuncli you should create a AccessKey from your console. After login the aliyun console you can click the like as follow: 
 
-
 Then you can create the access key and access secret:
 
-
-
-###Configure the aliyuncli quickly
+Configure the aliyuncli quickly
 ----------------------------------
 
 After create access key and access secret , you can configure aliyuncli quickly:
@@ -192,7 +191,7 @@ Text format like:
 You can choose one format as your wish. 
 
 
-###How to use aliyuncli
+How to use aliyuncli
 -----------------------
 
 aliyuncli has four parts:
@@ -212,13 +211,14 @@ Here are some examples:
 	$ aliyuncli ecs DescribeRegions
 	$ aliyuncli rds DescribeDBInstanceAttribute --DBInstanceId xxxxxx
 
-####More usage
+More usage
 ^^^^^^^^^^^^^^
 
 	--filter
 Aliyuncli supports filter function. When we call any open API , the data from the server is json format by default. And filter function can help user handle the "json" format data easily. 
 
 Here are some examples:
+::
 
 	$ aliyuncli ecs DescribeRegions --output json --filter Regions.Region[0]
 	{
@@ -237,10 +237,7 @@ Here are some examples:
 	$ aliyuncli ecs DescribeRegions --output json --filter Regions.Region[3].RegionId
 	"cn-hongkong"
 
-
-
-
-###Command Completion
+Command Completion
 ---------------------
 
 On Unix-like systems, the aliyuncli includes a command-completion feature that enables you to use the TAB key to complete a partially typed command. This feature is not automatically installed so you need to configure it manually.
@@ -248,18 +245,18 @@ On Unix-like systems, the aliyuncli includes a command-completion feature that e
 
 Configuring command completion requires two pieces of information: the name of the shell you are using and the location of aliyun_completer script.
 
-####Check your shell:
+Check your shell:
 ^^^^^^^^^^^^^^^^^^^^^
 
 Current aliyuncli only supports two shells: bash and zsh. 
 
-
-1.find aliyun_completer, you can use:
+1. find aliyun_completer, you can use:
+::
 
 	$ which aliyun_completer
 	/usr/local/bin/aliyun_completer
-2.enable command completion:
 
+2. enable command completion:
 
 bash - use the build-in command complete:
 
@@ -269,15 +266,17 @@ zsh - source bin/aliyun_zsh_completer.sh
 
 	% source /usr/local/bin/aliyun_zsh_completer.sh
 	
-####Test Command Completion
+Test Command Completion
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+::
 
 	$ aliyuncli sTAB
 	ecs     rds     slb
 The services showing dependences the sdk you installed. 
 
 Finally, to ensure that completion continues to work after a reboot, add the configuration command that you used to enable command completion to your shell profile.
-
+::
 
 	$ vim ~/.bash_profile
-	Add complete -C ‘/usr/local/bin/aliyun_completer’ aliyuncli to the end line.
+	
+Add ``complete -C ‘/usr/local/bin/aliyun_completer’ aliyuncli`` at the end.
