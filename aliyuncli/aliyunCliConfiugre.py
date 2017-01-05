@@ -17,6 +17,6 @@
  under the License.
 '''
 class configure:
-    server_url = "http://ide.cdnpe.com/cli/descriptor"
-    update_url = "http://10.232.4.30:9999/aliyuncli/update/latestversion/version_test.rar"
+    server_url = "http://*****/cli/descriptor"
+    update_url = "http://*****/aliyuncli/update/latestversion/version_test.rar"
     update_time = "20150429"
