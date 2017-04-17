@@ -1,5 +1,5 @@
 
-#阿里云命令行工具 <Aliyun Command Line Interface>
+# 阿里云命令行工具 <Aliyun Command Line Interface>
 
 
 阿里云命令行工具是用 Python 编写的, 基于阿里云open API 打造的用于管理阿里云资源的统一工具.
@@ -14,13 +14,13 @@
 
 aliyun-developers-efficiency@list.alibaba-inc.com
 
-###系统要求:
+### 系统要求:
 
 阿里云命令行工具需要系统安装python:
 
     * 支持2.6.5 及以上版本
 
-###安装方法:
+### 安装方法:
 
 最简单的安装方式是通过 pip 直接安装, 如果您的系统中有安装 pip 工具, 请执行:
 
@@ -38,7 +38,7 @@ linux 和 MAC os 请执行:
     $ cd <aliyuncli_path>
     $ sudo sh install.sh
 
-###文件结构:
+### 文件结构:
 
 	aliyuncli/* 是整个的业务逻辑部分, 包含数据的解析, 命令行解析, 以及基本的SDK的调用过程.
 
@@ -49,18 +49,18 @@ linux 和 MAC os 请执行:
 	未来会持续的开发更多的高级功能.
 
 
-###自动补全功能:
+### 自动补全功能:
     阿里云命令行工具具备了命令行自动提示和补全的功能. 这个功能安装后不会默认打开, 需要您手动开启:
 
-####对于bash:
+#### 对于bash:
 
     $ complete -C '/usr/local/bin/aliyun_completer' aliyuncli
 
-####对于zsh:
+#### 对于zsh:
 
     % source /usr/local/bin/aliyun_zsh_complete.sh
 
-###如何使用:
+### 如何使用:
 
 阿里云命令行工具在使用前, 首先需要配置access key 和 access secret, 您可以通过执行下面的命令直接配置:
 
@@ -75,7 +75,7 @@ linux 和 MAC os 请执行:
 	$ aliyuncli Ecs DescribeInstances
 	$ aliyuncli Ecs StartInstance --InstanceId your_instance_id
 	$ aliyuncli Rds DescribeDBInstances
-###如何从源码直接运行:
+### 如何从源码直接运行:
 
 	$ git clone https://github.com/aliyun/aliyun-cli.git
 	$ cd aliyuncli/aliyuncli
@@ -83,7 +83,7 @@ linux 和 MAC os 请执行:
 
 源码下载后, 可以不安装直接运行, 前提是要安装阿里云python版SDK.
 
-###通过pip安装阿里云python版SDK
+### 通过pip安装阿里云python版SDK
 安装阿里云的python版SDK步骤参考如下:
 
 	1. 用curl 或者 浏览器打开"https://bootstrap.pypa.io/get-pip.py" , 将内容保存为pip-install.py
