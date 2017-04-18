@@ -23,7 +23,8 @@ import aliyunExtensionCliHandler
 import aliyunCliParser
 import commandConfigure
 import aliyunCliConfiugre
-from distutils.sysconfig import get_python_lib
+#from distutils.sysconfig import get_python_lib
+import site
 import aliyunSdkConfigure
 import json
 import cliError
@@ -59,16 +60,18 @@ class aliyunOpenApiDataHandler():
 
 # this api will return all command from api, such as , ecs, rds, slb
     def getApiCmds(self):
-        sitepackages_path=get_python_lib()
+        #sitepackages_path=get_python_lib()
+        sitepackages_paths=site.getsitepackages()
         cmds = list()
         cmds.extend(nonStandardSdkCmds)
-        sub_objects=os.listdir(sitepackages_path)
-        if sub_objects is not None:
-            for object in sub_objects:
-                if object.startswith('aliyunsdk') and os.path.isdir(os.path.join(sitepackages_path,object)):
-                    cmd=object.split('aliyunsdk',1)[1]
-                    if len(cmd)>0 and cmd not in['core']:
-                        cmds.append(cmd)
+        for sitepackages_path in sitepackages_paths:
+            sub_objects=os.listdir(sitepackages_path)
+            if sub_objects is not None:
+                for object in sub_objects:
+                    if object.startswith('aliyunsdk') and os.path.isdir(os.path.join(sitepackages_path,object)):
+                        cmd=object.split('aliyunsdk',1)[1]
+                        if len(cmd)>0 and cmd not in['core']:
+                            cmds.append(cmd)
         return set(cmds)
 
     def getApiCmdsLower(self):
@@ -109,19 +112,23 @@ class aliyunOpenApiDataHandler():
         if command == 'oss':
             return ossadp.ossHandler.getAvailableOperations()
 
-        sitepackages_path=get_python_lib()
+        #sitepackages_path=get_python_lib()
+        sitepackages_paths=site.getsitepackages()
         pre_module='aliyunsdk'
         module=pre_module+command
         sub_path='request'
-        request_path=os.path.join(sitepackages_path,module,sub_path)
-        version_path=os.path.join(request_path,str(version))
-        for root, dirs, files in os.walk(version_path):
-            for name in files:
-                if name.endswith('Request.py'):
-                    operation=name.split('Request.py',1)[0]
-                    if len(operation) >0:
-                        self.path=root
-                        operations.append(operation)
+
+        for sitepackages_path in sitepackages_paths:
+            request_path=os.path.join(sitepackages_path,module,sub_path)
+            version_path=os.path.join(request_path,str(version))
+            if os.path.exists(version_path):
+                for root, dirs, files in os.walk(version_path):
+                    for name in files:
+                        if name.endswith('Request.py'):
+                            operation=name.split('Request.py',1)[0]
+                            if len(operation) >0:
+                                self.path=root
+                            operations.append(operation)
         return set(operations)
 
     def getInstanceByCmdOperation(self,cmd,operation,version=None):
@@ -362,14 +369,16 @@ class aliyunOpenApiDataHandler():
         versions=[]
         pre_module='aliyunsdk'
         module=pre_module+command
-        sitepackages_path=get_python_lib()
+        #sitepackages_path=get_python_lib()
         sub_path='request'
         module='aliyunsdk'+command
-        request_path=os.path.join(sitepackages_path,module,sub_path)
-        objects=os.listdir(request_path)
-        for object in objects :
-            if object.startswith('v') and os.path.isdir(os.path.join(request_path,object)):
-                versions.append(object)
+        for sitepackages_path in site.getsitepackages():
+            request_path=os.path.join(sitepackages_path,module,sub_path)
+            if os.path.exists(request_path):
+                objects=os.listdir(request_path)
+                for object in objects :
+                    if object.startswith('v') and os.path.isdir(os.path.join(request_path,object)):
+                        versions.append(object)
         versions.sort(reverse = True)
         return versions
 
