@@ -77,13 +77,13 @@ def _getParamFromUrl(prefix,value,mode):
         print e
 
 PrefixMap = {'file://': _getParamFromFile,
-             'fileb://': _getParamFromFile,
-             'http://': _getParamFromUrl,
-             'https://': _getParamFromUrl
+             'fileb://': _getParamFromFile
+             #'http://': _getParamFromUrl,
+             #'https://': _getParamFromUrl
             }
 
 KwargsMap = {'file://': {'mode': 'r'},
              'fileb://': {'mode': 'rb'},
-             'http://': {},
-             'https://': {}
+             #'http://': {},
+             #'https://': {}
             }

@@ -17,14 +17,12 @@
  under the License.
 '''
 import re
-import os
+import os,sys
 import sys,imp,uuid
 import aliyunExtensionCliHandler
 import aliyunCliParser
 import commandConfigure
 import aliyunCliConfiugre
-#from distutils.sysconfig import get_python_lib
-import site
 import aliyunSdkConfigure
 import json
 import cliError
@@ -36,21 +34,41 @@ _userAgent='aliyuncli/'+str(__version__)
 
 version_cmds = ['ConfigVersion','ShowVersions']
 END_POINT_OPERATION_LIST = ['ModifyEndPoint']
-# import oss
+
 nonStandardSdkCmds = []
+
+
+def oss_notice():
+    print "OSS operation in aliyuncli is not supported."
+    print "Please use 'ossutil' command line tool for Alibaba Cloud OSS operation."
+    print "You can find information about 'ossutil' here: https://github.com/aliyun/ossutil.\n"
+
+    
 try:
-    import oss.oss_api
-    import oss.oss_util
-    import oss.oss_xml_handler
+    import oas
 except Exception:
     pass
 else:
-    nonStandardSdkCmds = ['oss']
-    import ossadp.ossHandler
+    nonStandardSdkCmds.append('oas')
+    import oasadp.oasHandler
 
 
+def get_python_lib():
+    ''''find aliyun sdk install path
 
+    you will need install  corresponding  AliYun sdk for using aliyuncli subcommand . 
+    For example, ECS sdk is needed for running  "$aliyuncli  ecs ", you can install the sdk with this cmd:  "$pip install aliyun-python-sdk-ecs"     
 
+    >>> os.path.isdir(get_python_lib())
+    True
+    '''
+    for path in sys.path:
+        if path and os.path.isdir(path):
+            objects=os.listdir(path)
+            for object in objects:
+                if object.startswith('aliyunsdk') and os.path.isdir(os.path.join(path,object)):
+                    return path
+    raise RuntimeError("aliyun sdk not properly installed, you will need install at least one sdk.\nECS sdk install cmd for example:  pip install aliyun-python-sdk-ecs ")            
 
 class aliyunOpenApiDataHandler():
     def __init__(self, path=None):
@@ -60,18 +78,16 @@ class aliyunOpenApiDataHandler():
 
 # this api will return all command from api, such as , ecs, rds, slb
     def getApiCmds(self):
-        #sitepackages_path=get_python_lib()
-        sitepackages_paths=site.getsitepackages()
+        sitepackages_path=get_python_lib()
         cmds = list()
         cmds.extend(nonStandardSdkCmds)
-        for sitepackages_path in sitepackages_paths:
-            sub_objects=os.listdir(sitepackages_path)
-            if sub_objects is not None:
-                for object in sub_objects:
-                    if object.startswith('aliyunsdk') and os.path.isdir(os.path.join(sitepackages_path,object)):
-                        cmd=object.split('aliyunsdk',1)[1]
-                        if len(cmd)>0 and cmd not in['core']:
-                            cmds.append(cmd)
+        sub_objects=os.listdir(sitepackages_path)
+        if sub_objects is not None:
+            for object in sub_objects:
+                if object.startswith('aliyunsdk') and os.path.isdir(os.path.join(sitepackages_path,object)):
+                    cmd=object.split('aliyunsdk',1)[1]
+                    if len(cmd)>0 and cmd not in['core']:
+                        cmds.append(cmd)
         return set(cmds)
 
     def getApiCmdsLower(self):
@@ -88,47 +104,56 @@ class aliyunOpenApiDataHandler():
             for cmd in apiCmds:
                 if cmdName.lower() == cmd.lower():
                     return True
+            if cmdName == 'oss':  # just for displaying notification
+                return True
             return False
         except Exception as e:
             return False
 #this function is to handle no-POP SDK
     def isNonStandardSdkCmd(self,cmd):
-        if cmd in nonStandardSdkCmds:
+        if cmd in nonStandardSdkCmds or cmd == 'oss':
             return True
         else:
             return False
 #this function is to handle no-POP cmd
     def nonStandardSdkCmdHandle(self,cmd):
         if cmd == 'oss':
-            self.handleOssCmd(cmd)
+            oss_notice()
+
+        if cmd == 'oas':
+            self.handleOasCmd()
+            
 #this function is to handle no-POP oss
-    def handleOssCmd(self,cmd):
-        ossadp.ossHandler.handleOss()
+    def handleOasCmd(self):
+        if len(sys.argv) >=3:
+            oasadp.oasHandler.handleOas(sys.argv[2:])
+        else:
+            oasadp.oasHandler.handleOas()
 
 # this api will define all operations from given command
     def getApiOperations(self, command,version):
         operations = []
 
         if command == 'oss':
-            return ossadp.ossHandler.getAvailableOperations()
+            oss_notice()
+            sys.exit(0)                        
+        
+        if command == 'oas':
+            return oasadp.oasHandler.getAvailableOperations()
 
-        #sitepackages_path=get_python_lib()
-        sitepackages_paths=site.getsitepackages()
+        sitepackages_path=get_python_lib()
         pre_module='aliyunsdk'
         module=pre_module+command
         sub_path='request'
-
-        for sitepackages_path in sitepackages_paths:
-            request_path=os.path.join(sitepackages_path,module,sub_path)
-            version_path=os.path.join(request_path,str(version))
-            if os.path.exists(version_path):
-                for root, dirs, files in os.walk(version_path):
-                    for name in files:
-                        if name.endswith('Request.py'):
-                            operation=name.split('Request.py',1)[0]
-                            if len(operation) >0:
-                                self.path=root
-                            operations.append(operation)
+        request_path=os.path.join(sitepackages_path,module,sub_path)
+        version_path=os.path.join(request_path,str(version))
+        for root, dirs, files in os.walk(version_path):
+            for name in files:
+                if name.endswith('Request.py'):
+                    operation=name.split('Request.py',1)[0]
+                    if len(operation) >0:
+                        self.path=root
+                        operations.append(operation)
         return set(operations)
 
     def getInstanceByCmdOperation(self,cmd,operation,version=None):
@@ -157,8 +182,9 @@ class aliyunOpenApiDataHandler():
         return defaultExtensionOpers
 
     def getExtensionOperationsFromCmd(self, cmd):
-        if cmd is None and cmd == 'oss':
+        if cmd is None :
             return None
+        
         defaultExtensionOpers=set(['ConfigVersion','ShowVersions'])
         if cmd.lower() == "ecs":
             ecsConfigure = commandConfigure.ecs()
@@ -318,7 +344,10 @@ class aliyunOpenApiDataHandler():
         else:
             return True
 
-    def getResponse(self,cmd,operation,classname,instance,keyValues):
+    def getResponse(self,cmd,operation,classname,instance,keyValues, secureRequest = False ):
+        if secureRequest:
+            instance.set_protocol_type('https')            
+        
         setFuncs=self.getSetFuncs(classname)
         if len(setFuncs)>0:
             for func in setFuncs:
@@ -332,24 +361,39 @@ class aliyunOpenApiDataHandler():
         userSecret=self.getUserSecret()
         regionId=self.getRegionId(keyValues)
         userAgent=self.getUserAgent()
+        port = self.getPort()
         module='aliyunsdkcore'
         try:
             from aliyunsdkcore import client
-            from aliyunsdkcore.acs_exception.exceptions import ClientException as exs
-            Client=client.AcsClient(userKey,userSecret,regionId,True,3,userAgent)
+            from aliyunsdkcore.acs_exception.exceptions import ClientException  , ServerException
+            Client=client.AcsClient(userKey,userSecret,regionId,True,3,userAgent,port)
             instance.set_accept_format('json')
-            result=Client.do_action(instance)
+            
+            if hasattr(Client ,"do_action_with_exception"):
+                result = Client.do_action_with_exception(instance)
+            else:    
+                result=Client.do_action(instance)
             jsonobj = json.loads(result)
             return jsonobj
+        
         except ImportError as e:
             print module, 'is not exist!'
-            return
-        except exs as e:
+            sys.exit(1)            
+
+        except ServerException as e:
+            error = cliError.error()
+            error.printInFormat(e.get_error_code(), e.get_error_msg())
+            print "Detail of Server Exception:\n"
+            print str(e)
+            sys.exit(1)
+        
+        except ClientException as e:            
             # print e.get_error_msg()
             error = cliError.error()
             error.printInFormat(e.get_error_code(), e.get_error_msg())
-            return
-
+            print "Detail of Client Exception:\n"
+            print str(e)
+            sys.exit(1)
 
     def getSetFuncs(self,classname):
         SetFuncs=[]
@@ -369,16 +413,14 @@ class aliyunOpenApiDataHandler():
         versions=[]
         pre_module='aliyunsdk'
         module=pre_module+command
-        #sitepackages_path=get_python_lib()
+        sitepackages_path=get_python_lib()
         sub_path='request'
         module='aliyunsdk'+command
-        for sitepackages_path in site.getsitepackages():
-            request_path=os.path.join(sitepackages_path,module,sub_path)
-            if os.path.exists(request_path):
-                objects=os.listdir(request_path)
-                for object in objects :
-                    if object.startswith('v') and os.path.isdir(os.path.join(request_path,object)):
-                        versions.append(object)
+        request_path=os.path.join(sitepackages_path,module,sub_path)
+        objects=os.listdir(request_path)
+        for object in objects :
+            if object.startswith('v') and os.path.isdir(os.path.join(request_path,object)):
+                versions.append(object)
         versions.sort(reverse = True)
         return versions
 
@@ -433,7 +475,11 @@ class aliyunOpenApiDataHandler():
             if not self.extensionHandler.getUserSecret() is None:
                 userSecret = self.extensionHandler.getUserSecret()
         return userSecret
-
+    def getPort(self):
+        port = self.extensionHandler.getPort()
+        if port is None:
+            port = 80
+        return port
     def getRegionId(self,keyValues):
         key='RegionId'
         if key in keyValues:

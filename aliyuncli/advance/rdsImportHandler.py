@@ -37,7 +37,7 @@ class RdsImportDBInstanceHandler:
             operations = ['CreateDBInstance']
         return operations 
 
-    def _handSubOperation(self,cmd,operations,keyValues,version):
+    def _handSubOperation(self,cmd,operations,keyValues,version,secureRequest=False):
         for item in operations:
             if self.apiHandler.isAvailableOperation(cmd, item, version):
                 cmdInstance, mclassname = self.apiHandler.getInstanceByCmdOperation(cmd, item, version)
@@ -51,7 +51,7 @@ class RdsImportDBInstanceHandler:
                     # self._setAttr(cmdInstance, newkeyValues) # set all key values in instance
                     # self.apiHandler.changeEndPoint(cmdInstance, newkeyValues)
                     try:
-                        result = self.apiHandler.getResponse(cmd, item, mclassname, cmdInstance, newkeyValues)
+                        result = self.apiHandler.getResponse(cmd, item, mclassname, cmdInstance, newkeyValues,secureRequest)
                         self.apiHandler.responseOptimize(result,cmd,item)
                         # result = cmdInstance.getResponse()
                         if("Code" in result):
@@ -91,7 +91,7 @@ class RdsImportDBInstanceHandler:
         finally:
             fp.close()
 
-    def importInstance(self,cmd,operation,version):
+    def importInstance(self,cmd,operation,version,secureRequest = False):
         _keyValues = self.parser.getCliKeyValues()
         operations = self.getSubOperations(cmd,operation)
         _instanceCount, countMsg = self.getInstanceCount(_keyValues)
@@ -104,7 +104,7 @@ class RdsImportDBInstanceHandler:
         keyValues = self.getKVFromJson(filename)
         keyValues['PayType'] = ["Postpaid"]
         for i in range(1,_instanceCount+1):
-            self._handSubOperation(cmd,operations,keyValues,version)
+            self._handSubOperation(cmd,operations,keyValues,version,secureRequest)
 
     # this method will set all key:value for open api class
     def _setAttr(self, classname, map):

@@ -18,5 +18,5 @@
 '''
 class configure:
     server_url = "http://*****/cli/descriptor"
-    update_url = "http://*****/aliyuncli/update/latestversion/version_test.rar"
+    update_url = "http://****/aliyuncli/update/latestversion/version_test.rar"
     update_time = "20150429"

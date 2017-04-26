@@ -44,7 +44,7 @@ class RdsExportDBInstanceHanlder():
             return filename, "A file name is needed! please use \'--filename\' and add the file name."
         return filename, ''
 
-    def exportDBInstance(self, cmd, operation, version):
+    def exportDBInstance(self, cmd, operation, version, secureRequest=False):
         rdsConfigure = commandConfigure.rds()
         if cmd.lower() == rdsConfigure.cmdName.lower() and operation.lower() ==rdsConfigure.exportDBInstance.lower():
             pass
@@ -67,7 +67,7 @@ class RdsExportDBInstanceHanlder():
                 self.apiHandler.setAttr(cmdInstance, newkeyValues) # set all key values in instance
                 self.apiHandler.changeEndPoint(cmdInstance, newkeyValues)
                 try:
-                    result = self.apiHandler.getResponse(cmd,operation, mclassname, cmdInstance, newkeyValues)
+                    result = self.apiHandler.getResponse(cmd,operation, mclassname, cmdInstance, newkeyValues,secureRequest)
                     self.apiHandler.responseOptimize(result,cmd,operation)
                     # result = cmdInstance.getResponse()
                     # result = self._optimizeResult(result)

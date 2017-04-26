@@ -59,12 +59,20 @@ class aliyunCliParser():
     def _getKeyValues(self):
         keyValues = dict()
         len = self.args.__len__()
+
+        # check is using ecs cli now?
+        ecsFlag = False
+        if "ecs" == str(self.getCliCmd()):
+            ecsFlag = True
+
         if len >= 2:
             current=1
             while current <len:
                 #values = list()
                 if self.args[current].strip().startswith('--'):
                     key=self.args[current].strip()
+                    if ecsFlag:  # if using ecs cli, we need compate xx.yy.zz and xxyyzz in cli
+                        key = key.replace('.', '')
                     start=current + 1
                     values=list()
                     while start <len and not self.args[start].strip().startswith('--'):
@@ -166,5 +174,14 @@ class aliyunCliParser():
             if key == '--output' :
                 return map.get(key)
         return None
+
+# this function will return whether to use HTTPS request
+    def getSecureChoice(self, map):
+        keys = map.keys()
+        for key in keys:
+            if key == '--secure' :
+                return True 
+        return False
+    
 
 

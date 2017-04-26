@@ -50,6 +50,7 @@ class AliyunCommandLine:
 
         # fetch paramlist
         keyValues = self.parser._getKeyValues()
+        
         outPutFormat = self.parser.getOutPutFormat(keyValues)
         if outPutFormat is None or len(outPutFormat) == 0:
             outPutFormat = self.extensionHandler.getUserFormat()
@@ -57,6 +58,8 @@ class AliyunCommandLine:
                 outPutFormat = 'json'
         else:
             outPutFormat = outPutFormat[0]
+
+        secureRequest = self.parser.getSecureChoice(keyValues)
 
         if self.handler.isEndPointOperation(operation):
             keyValues = self.parser.getOpenApiKeyValues(keyValues)
@@ -89,7 +92,7 @@ class AliyunCommandLine:
                             print 'accesskeyid/accesskeysecret/regionId is absence'
                             return
                         try:
-                            result = self.handler.getResponse(cmd,operation,className,cmdInstance,keyValues)
+                            result = self.handler.getResponse(cmd,operation,className,cmdInstance,keyValues,secureRequest)
                             if result is None:
                                 return
                             self.handler.responseOptimize(result,cmd,operation)
@@ -105,14 +108,14 @@ class AliyunCommandLine:
                         except Exception as e:
                             print(e)
                     else:
-                        print 'aliyuncli internal error, please contact: xixi.xxx'
+                        print 'aliyuncli internal error, please contact: zikuan.ly@alibaba-inc.com'
             elif self.handler.isAvailableExtensionOperation(cmd, operation):
                 if self.args.__len__() >= 3 and self.args[2] == 'help':
                     import commandConfigure
                     configure = commandConfigure.commandConfigure()
                     configure.showExtensionOperationHelp(cmd, operation)
                 else:
-                    self.extensionHandler.handlerExtensionOperation(cmd,operation,version)
+                    self.extensionHandler.handlerExtensionOperation(cmd,operation,version,secureRequest)
                 # self.extensionHandler.handlerExtensionOperation(cmd,operation,version)
             else:
                 # cmd is right but operation is not right

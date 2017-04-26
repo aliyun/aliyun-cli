@@ -2,9 +2,14 @@ workspace.xml
 .DS_Store
 .tmp
 .settings
+*~
 .pyc
 *.py[co]
 aliyuncli/aliyun
 # IDEA IDE 
 .idea* 
-src/ 
+src/
+aliyuncli.egg-info/
+build/
+dist/
+

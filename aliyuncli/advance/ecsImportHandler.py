@@ -34,7 +34,7 @@ class EcsImportHandler:
             operations = ['CreateInstance']
         return operations 
 
-    def _handSubOperation(self,cmd,operations,keyValues,version,_isAllocatePublicIp=False):
+    def _handSubOperation(self,cmd,operations,keyValues,version,_isAllocatePublicIp=False,secureRequest=False):
         if keyValues is None:
             return
         for item in operations:
@@ -48,7 +48,7 @@ class EcsImportHandler:
                     # self.apiHandler.changeEndPoint(cmdInstance, newkeyValues)
                     try:
                         # result = cmdInstance.getResponse()
-                        result = self.apiHandler.getResponse(cmd, item, mclassname, cmdInstance, newkeyValues)
+                        result = self.apiHandler.getResponse(cmd, item, mclassname, cmdInstance, newkeyValues,secureRequest)
                         self.apiHandler.responseOptimize(result,cmd,item)
                         if("Code" in result):
                             response.display_response("error", result, "json")
@@ -63,19 +63,19 @@ class EcsImportHandler:
                                     key.append(instanceId)
                                     _newkeyValues["InstanceId"] = key
                                     _newkeyValues["RegionId"] = newkeyValues["RegionId"]
-                                    self._handExtraOperation(cmd,extraOperation,_newkeyValues,version)
+                                    self._handExtraOperation(cmd,extraOperation,_newkeyValues,version,secureRequest)
                                 else:
                                     print "InstanceId  is need!"
                     except Exception,e:
                         print(e)
 
-    def _handExtraOperation(self,cmd,extraOperation,keyValues,version):
+    def _handExtraOperation(self,cmd,extraOperation,keyValues,version , secureRequest = False):
         if self.apiHandler.isAvailableOperation(cmd, extraOperation, version):
             cmdInstance,mclassname = self.apiHandler.getInstanceByCmdOperation(cmd, extraOperation, version)
             if  cmdInstance is not None:
                 try:
                     # result = cmdInstance.getResponse()
-                    result = self.apiHandler.getResponse(cmd, extraOperation, mclassname, cmdInstance, keyValues)
+                    result = self.apiHandler.getResponse(cmd, extraOperation, mclassname, cmdInstance, keyValues,secureRequest)
                     self.apiHandler.responseOptimize(result,cmd,extraOperation)
                     if("Code" in result):
                         response.display_response("error", result, "json")
@@ -133,7 +133,7 @@ class EcsImportHandler:
             return instanceId
 
 
-    def ImportInstance(self,cmd,operation,version):
+    def ImportInstance(self,cmd,operation,version,secureRequest = False):
         _keyValues = self.parser.getCliKeyValues()
         _isAllocatePublicIp = self.isAllocatePublicIpAddress(_keyValues)
         operations = self.getSubOperations(cmd,operation)
@@ -141,7 +141,7 @@ class EcsImportHandler:
         filename = self.getFileName(_keyValues)
         keyValues = self.getKVFromJson(filename)
         for i in range(1,_instanceCount+1):
-            self._handSubOperation(cmd,operations,keyValues,version,_isAllocatePublicIp)
+            self._handSubOperation(cmd,operations,keyValues,version,_isAllocatePublicIp,secureRequest)
 # this method will set all key:value for open api class
     def _setAttr(self, classname, map):
         try:

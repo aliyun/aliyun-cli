@@ -1,3 +1,3 @@
-__author__ = 'zhaoyang.szy'
+__author__ = 'zhaoyang.szy & zikuan.ly'
 
-__version__ = '2.0.3'
+__version__ = '2.1.6'

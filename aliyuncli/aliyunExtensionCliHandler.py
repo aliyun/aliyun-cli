@@ -74,7 +74,7 @@ class aliyunExtensionCliHandler:
         cmds = ['-h', '--help', 'help', 'configure', '--version', 'version', 'useprofile', 'addprofile','showconfig']
         return cmds
 # this function will handler extension operation
-    def handlerExtensionOperation(self,cmd,operation,version):
+    def handlerExtensionOperation(self,cmd,operation,version,secureRequest = False):
         defaultOperations=['configversion','showversions']
         if operation.lower() in defaultOperations:
             import aliyunSdkConfigure
@@ -87,9 +87,9 @@ class aliyunExtensionCliHandler:
             _ecsImportHandler = advance.ecsImportHandler.EcsImportHandler()
             _ecsExportHandler = advance.ecsExportHandler.EcsExportHandler()
             if  operation.lower() == ecsConfigure.importInstance.lower():
-                _ecsImportHandler.ImportInstance(cmd,operation,version)
+                _ecsImportHandler.ImportInstance(cmd,operation,version,secureRequest)
             elif operation.lower() == ecsConfigure.exportInstance.lower():
-                _ecsExportHandler.exportInstance(cmd,operation,version)
+                _ecsExportHandler.exportInstance(cmd,operation,version,secureRequest)
 
         if cmd.lower() == 'rds':
             import commandConfigure
@@ -99,9 +99,9 @@ class aliyunExtensionCliHandler:
             rdsExportDBInstanceHandler = advance.rdsExportHandler.RdsExportDBInstanceHanlder()
             rdsImportDBInstanceHanlder = advance.rdsImportHandler.RdsImportDBInstanceHandler()
             if operation.lower() == rdsConfigure.exportDBInstance.lower():
-                rdsExportDBInstanceHandler.exportDBInstance(cmd,operation,version)
+                rdsExportDBInstanceHandler.exportDBInstance(cmd,operation,version,secureRequest)
             elif operation.lower() == rdsConfigure.importDBInstance.lower():
-                rdsImportDBInstanceHanlder.importInstance(cmd, operation, version)
+                rdsImportDBInstanceHanlder.importInstance(cmd, operation, version,secureRequest)
 		
 # this function will handler extension command
     def handlerExtensionCmd(self, cmd):
@@ -143,6 +143,10 @@ class aliyunExtensionCliHandler:
         print "\n\to json"
         print "\n\to text"
         print "\n\to table"
+        
+        print color.bold+"\n\t--secure"+color.end
+        print "\n\tMaking secure requests(HTTPS) to service"
+        
         print color.bold+"\nAVAILABLE SERVICES"+color.end
         print "\n\to ecs"
         print "\n\to ess"
@@ -176,6 +180,10 @@ class aliyunExtensionCliHandler:
     def getUserSecret(self):
         handler = configure.AliyunConfig()
         return  handler._getUserSecret()
+
+    def getPort(self):
+        handler = configure.AliyunConfig()
+        return  handler._getPort()
 if __name__ == "__main__":
     pass
 # this function will show aliyun cli help

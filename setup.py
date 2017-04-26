@@ -24,8 +24,7 @@ import aliyuncli
 
 install_requires = [
         'colorama>=0.2.5,<=0.3.3',
-        'jmespath>=0.6.1,<=0.7.1',
-        'aliyun-python-sdk-ecs>=0.1.2',
+        'jmespath>=0.7.0,<=0.7.1',
         ]
 def main():
     setup(

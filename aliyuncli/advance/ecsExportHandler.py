@@ -19,7 +19,7 @@ class EcsExportHandler:
             return filename, "A file name is needed! please use \'--filename\' and add the file name."
         return filename, ''
     
-    def exportInstance(self,cmd,operation,version):
+    def exportInstance(self,cmd,operation,version,secureRequest = False):
         if cmd.lower() == 'ecs' and operation.lower() =='exportinstance':
             operations = ['DescribeInstanceAttribute']
         else :
@@ -43,7 +43,7 @@ class EcsExportHandler:
                     self.apiHandler.changeEndPoint(cmdInstance, newkeyValues)
                     try:
                         #result = cmdInstance.getResponse()
-                        result = self.apiHandler.getResponse(cmd,operation, mclassname, cmdInstance, newkeyValues)
+                        result = self.apiHandler.getResponse(cmd,operation, mclassname, cmdInstance, newkeyValues,secureRequest)
                         result = self._optimizeResult(result)
                         self.apiHandler.responseOptimize(result,cmd,operation)
                         if("Code" in result):

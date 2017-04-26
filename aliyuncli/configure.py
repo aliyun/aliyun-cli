@@ -27,6 +27,8 @@ import platform
 OSS_CREDS_FILENAME = "%s/.aliyuncli/osscredentials" % os.path.expanduser('~')
 OSS_CONFIG_SECTION = 'OSSCredentials'
 
+OAS_CREDS_FILENAME = "%s/.aliyuncli/oascredentials" % os.path.expanduser('~')
+OAS_CONFIG_SECTION = 'OASCredentials'
 def handleConfigure(cmd,operation):
     if not hasConfigureOperation(cmd,operation):
         handler = ConfigureCommand()
@@ -158,6 +160,15 @@ class AliyunConfig(object):
         _config = self.getConfig(_profileName)
         _secretId = _config.get(AliyunCredentials.aliyun_access_key_secret)
         return _secretId
+
+    def _getPort(self):
+        _keyValues = self.parser._getKeyValues()
+        _profileName = _keyValues.get('--profile')
+        if _profileName is not None and len(_profileName)>0:
+            _profileName = _profileName[0]
+        _config = self.getConfig(_profileName)
+        _port = _config.get('port')
+        return _port
 
 class InteractivePrompter(object):
     def __init__(self):
@@ -333,12 +344,12 @@ class ConfigureSetCommand(object):
 
     def _writeCredsToFile(self,new_values,profilename):
         credential_file_values = {}
-        if 'aliyun_access_key_id' in new_values:
+        if 'AccessKeyId' in new_values:
             credential_file_values['aliyun_access_key_id'] = new_values.pop(
-                'aliyun_access_key_id')
-        if 'aliyun_access_key_secret' in new_values:
+                'AccessKeyId')
+        if 'AccessKeySecret' in new_values:
             credential_file_values['aliyun_access_key_secret'] = new_values.pop(
-                'aliyun_access_key_secret')
+                'AccessKeySecret')
         creds_filename = self.aliyunConfig.getCredsFileName()
         if credential_file_values:
             if profilename is not None:
@@ -473,6 +484,7 @@ class ConfigureCommand(object):
 
     def _run_main(self):
         new_values = {}
+        all_values = {}
         keyValues = self.aliyunConfig.parser._getKeyValues()
         _profilename = None
         _profilenameList = keyValues.get('--profile')
@@ -483,11 +495,14 @@ class ConfigureCommand(object):
         for name, prompt in self.name2prompt:
             value = config.get(name)
             new_value = self._prompter.get_value(value, name,prompt)
+            all_values[name] = new_value
             if new_value is not None and new_value != value:
                 new_values[name] = new_value
         config_filename = self.aliyunConfig.getConfigFileName()
+        if all_values:
+            self._writeCredsToOssFile(all_values)
+            self._writeCredsToOasFile(all_values)
         if new_values:
-            self._writeCredsToOssFile(new_values)
             self._writeCredsToFile(new_values,_profilename)
             if _profilename is not None :
                 new_values['__section__']=('profile %s' % _profilename)
@@ -519,6 +534,18 @@ class ConfigureCommand(object):
             if profilename is not None:
                 credential_file_values['__section__'] = ('%s' % profilename)
             self._configWriter._updateConfig(credential_file_values,ossCredsFilename)
+
+    def _writeCredsToOasFile(self,new_values,profilename = OAS_CONFIG_SECTION):
+        credential_file_values = {}
+        if 'aliyun_access_key_id' in new_values:
+            credential_file_values['accessid'] = new_values['aliyun_access_key_id']
+        if 'aliyun_access_key_secret' in new_values:
+            credential_file_values['accesskey'] = new_values['aliyun_access_key_secret']
+        oasCredsFilename = OAS_CREDS_FILENAME
+        if credential_file_values:
+            if profilename is not None:
+                credential_file_values['__section__'] = ('%s' % profilename)
+            self._configWriter._updateConfig(credential_file_values,oasCredsFilename)
 
 
 
