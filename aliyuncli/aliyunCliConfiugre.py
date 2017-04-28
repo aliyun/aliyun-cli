@@ -17,6 +17,9 @@
  under the License.
 '''
 class configure:
-    server_url = "http://*****/cli/descriptor"
-    update_url = "http://****/aliyuncli/update/latestversion/version_test.rar"
+
+
+    ## the server used for update checking is offline.
+    server_url = "http://127.0.0.1/cli/descriptor"
+    update_url = "http://127.0.0.1/aliyuncli/update/latestversion/version_test.rar"
     update_time = "20150429"
