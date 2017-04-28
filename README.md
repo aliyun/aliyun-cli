@@ -6,13 +6,11 @@
 
 通过下载和配置该工具，您可以在同一个命令行方式下控制多个阿里云产品.
 
-阿里云命令行工具代码开源, 并接受开发者的 pull requests. 您可以fork 仓库进行任何修改, 如果遇到问题, 开发团队会直接进行相关支持.
+阿里云命令行工具代码开源, 并接受开发者的 pull requests. 您可以fork 仓库进行任何修改.
 
 优秀的功能, 我们在审核后, 会吸收进官方的版本中, 并统一发布在阿里云官网.
 
-欢迎通过邮件与我们沟通:
-
-aliyun-developers-efficiency@list.alibaba-inc.com
+欢迎通过提交[Github Issue](https://github.com/aliyun/aliyun-cli/issues/new)与我们沟通.
 
 ### 系统要求:
 
@@ -75,6 +73,14 @@ linux 和 MAC os 请执行:
 	$ aliyuncli Ecs DescribeInstances
 	$ aliyuncli Ecs StartInstance --InstanceId your_instance_id
 	$ aliyuncli Rds DescribeDBInstances
+
+### 用HTTPS(SSL/TLS)通信
+
+添加 --secure 参数即可使用HTTPS替代HTTP方式来和阿里云服务器通信
+
+	$ aliyuncli Ecs DescribeInstances --secure
+
+
 ### 如何从源码直接运行:
 
 	$ git clone https://github.com/aliyun/aliyun-cli.git
