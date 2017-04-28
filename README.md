@@ -290,6 +290,14 @@ Here are some examples: :
     $ aliyuncli ecs DescribeRegions --output json --filter Regions.Region[3].RegionId
     "cn-hongkong"
 
+## USING HTTPS
+
+Your can switch to HTTPS request by add --secure argument to your command.
+
+'''
+	$ aliyuncli Ecs DescribeInstances --secure
+'''
+
 ## Command Completion
 
 On Unix-like systems, the `aliyuncli` includes a command-completion feature that enables you to use the `TAB` key to complete a partially typed command. This feature is not automatically installed, so you need to configure it manually.
