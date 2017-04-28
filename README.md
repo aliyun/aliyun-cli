@@ -1,6 +1,8 @@
 Aliyun Command Line Interface
 =============================
 
+[Chinese document(中文文档)](./README_cn.md)
+
 Overview
 --------
 
@@ -290,13 +292,12 @@ Here are some examples: :
     $ aliyuncli ecs DescribeRegions --output json --filter Regions.Region[3].RegionId
     "cn-hongkong"
 
-## USING HTTPS
+## Using HTTPS
 
 Your can switch to HTTPS request by add --secure argument to your command.
 
-'''
-	$ aliyuncli Ecs DescribeInstances --secure
-'''
+    $ aliyuncli Ecs DescribeInstances --secure
+	
 
 ## Command Completion
 
