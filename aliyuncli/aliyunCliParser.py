@@ -16,7 +16,7 @@
  specific language governing permissions and limitations
  under the License.
 '''
-import sys
+import sys,json
 import paramOptimize
 
 class aliyunCliParser():
@@ -65,6 +65,10 @@ class aliyunCliParser():
         if "ecs" == str(self.getCliCmd()):
             ecsFlag = True
 
+        emrFlag = False            
+        if  "emr"  ==  str(self.getCliCmd()):
+            emrFlag = True
+
         if len >= 2:
             current=1
             while current <len:
@@ -76,17 +80,24 @@ class aliyunCliParser():
                     start=current + 1
                     values=list()
                     while start <len and not self.args[start].strip().startswith('--'):
-                            values.append(self.args[start].strip())
-                            start=start+1
+                        v = self.args[start].strip()
+                        if emrFlag and   key.strip("--") in {'BootstrapActions', 'ClusterTypeLists', 'Columns', 'EcsOrders', 'EcsResetAutoRenewDos', 'ExecutionPlanIdLists', 'JobIdLists', 'OptionSoftWareLists', 'RenewEcsDos', 'StatusLists'} :
+                            try:
+                                v  = v.replace("'","\"")
+                                v = json.loads(v)
+                            except ValueError as e:
+                                print("aliyuncli JSON argument parse failed. Detail message:")
+                                print("\tcurrent argument:{0}".format(key))
+                                print("\tdiagnostic message: {0} ".format(e.message))
+                                sys.exit(-1)
+                        values.append(v)
+                        start=start+1
                     keyValues[key] = values
                     current=start
                 else:
                     current=current+1
         paramOptimize._paramOptimize(keyValues)
         return keyValues
-
-
-
 
 # this function find cli key:values , notice here is values , we need consider multiple values case
 # --args is key, and if no -- is value
