@@ -68,7 +68,12 @@ def get_python_lib():
             for object in objects:
                 if object.startswith('aliyunsdk') and os.path.isdir(os.path.join(path,object)):
                     return path
-    raise RuntimeError("aliyun sdk not properly installed, you will need install at least one sdk.\nECS sdk install cmd for example:  pip install aliyun-python-sdk-ecs ")            
+    
+    if len(sys.argv) >= 2 and sys.argv[1] == "oss":
+        oss_notice()
+        sys.exit(0)                        
+    else:
+        raise RuntimeError("aliyun sdk not properly installed, you will need install at least one sdk.\nECS sdk install cmd for example:  pip install aliyun-python-sdk-ecs ")            
 
 class aliyunOpenApiDataHandler():
     def __init__(self, path=None):
