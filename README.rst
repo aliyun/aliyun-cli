@@ -169,13 +169,18 @@ SDK List
 
 
 Install SDK on no network environment
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 1. Find an internet accessible computer, access the Python Package Index page https://pypi.python.org.
+
 2. Search SDK package name which listed in the above paragraph “SDK List" and download the file (tar.gz compressed file)
+
 3. Download aliyun-python-sdk-core file (a tar.gz compressed file) from https://pypi.python.org/pypi/aliyun-python-sdk-core/
+
 4. Unzip the aliyun-python-sdk-core file and previously downloaded SDK file.  
+
 5. Copy these unzipped folders to your aliyuncli installed environment.
+
 6. Open your terminal on your aliyuncli installed environment and go to these folders then execute "pip install ."  command. ( aliyun-python-sdk-core at first then other SDK )
 
 
