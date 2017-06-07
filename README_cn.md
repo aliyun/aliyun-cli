@@ -109,6 +109,117 @@ SLB 则执行:
 
 	$ sudo pip install aliyun-python-sdk-slb
 
-更多介绍, 请参阅官网介绍:
+### SDK 列表
+
+<table style="width:67%;">
+<colgroup>
+<col width="20%" />
+<col width="45%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Product</th>
+<th>SDK</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>BatchCompute</td>
+<td>aliyun-python-sdk-batchcompute</td>
+</tr>
+<tr class="even">
+<td>Bsn</td>
+<td>aliyun-python-sdk-bsn</td>
+</tr>
+<tr class="odd">
+<td>Bss</td>
+<td>aliyun-python-sdk-bss</td>
+</tr>
+<tr class="even">
+<td>Cms</td>
+<td>aliyun-python-sdk-cms</td>
+</tr>
+<tr class="odd">
+<td>Crm</td>
+<td>aliyun-python-sdk-crm</td>
+</tr>
+<tr class="even">
+<td>Drds</td>
+<td>aliyun-python-sdk-drds</td>
+</tr>
+<tr class="odd">
+<td>Ecs</td>
+<td>aliyun-python-sdk-ecs</td>
+</tr>
+<tr class="even">
+<td>Ess</td>
+<td>aliyun-python-sdk-ess</td>
+</tr>
+<tr class="odd">
+<td>Ft</td>
+<td>aliyun-python-sdk-ft</td>
+</tr>
+<tr class="even">
+<td>Ocs</td>
+<td>aliyun-python-sdk-ocs</td>
+</tr>
+<tr class="odd">
+<td>Oms</td>
+<td>aliyun-python-sdk-oms</td>
+</tr>
+<tr class="even">
+<td>OssAdmin</td>
+<td>aliyun-python-sdk-ossadmin</td>
+</tr>
+<tr class="odd">
+<td>Ram</td>
+<td>aliyun-python-sdk-ram</td>
+</tr>
+<tr class="even">
+<td>Ocs</td>
+<td>aliyun-python-sdk-ocs</td>
+</tr>
+<tr class="odd">
+<td>Rds</td>
+<td>aliyun-python-sdk-rds</td>
+</tr>
+<tr class="even">
+<td>Risk</td>
+<td>aliyun-python-sdk-risk</td>
+</tr>
+<tr class="odd">
+<td>R-kvstore</td>
+<td>aliyun-python-r-kvstore</td>
+</tr>
+<tr class="even">
+<td>Slb</td>
+<td>aliyun-python-sdk-slb</td>
+</tr>
+<tr class="odd">
+<td>Ubsms</td>
+<td>aliyun-python-sdk-ubsms</td>
+</tr>
+<tr class="even">
+<td>Yundun</td>
+<td>aliyun-python-sdk-yundun</td>
+</tr>
+</tbody>
+</table>
+
+### 如何在不能使用pip直接访问网络的环境安装SDK
+
+1. 在能访问网络的环境下访问Python软件包索引站点 https://pypi.python.org.
+
+2. 搜索上文SDK列表段落中列出的SDK并下载 （tar.gz 压缩文件)
+
+3. 从 https://pypi.python.org/pypi/aliyun-python-sdk-core/  下载 aliyun-python-sdk-core  (tar.gz 压缩文件) 
+
+4. 解压 aliyun-python-sdk-core 和之前下载的SDK文件
+
+5. 拷贝解压出的文件夹到已经安装了 aliyuncli 的环境
+
+6. 打开命令行终端程序，访问这些文件夹，执行 "pip install ."命令 (首先针对 aliyun-python-sdk-core 执行）
+
+### 更多介绍, 请参阅官网介绍:
 
 https://help.aliyun.com/document_detail/29993.html
