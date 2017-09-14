@@ -360,7 +360,13 @@ class aliyunOpenApiDataHandler():
                 if len(key)>0 and key in keyValues:
                     arg=keyValues[key]
                     if arg is not None and len(arg)>0:
-                        param=arg[0]
+                        if len(arg) == 1:
+                            param=arg[0]
+                        else:
+                            param=[]
+                            for i in range(len(arg)):
+                                if i < len(arg)-1:
+                                    param.append(arg[i])
                         getattr(instance,func)(param)
         userKey=self.getUserKey()
         userSecret=self.getUserSecret()
