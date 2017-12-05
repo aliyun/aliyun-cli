@@ -280,22 +280,17 @@ class aliyunOpenApiDataHandler():
         if self.path is None:
             return None
         moduleName=operation+'Request'
-        try:
-            fp, pathname, desc = imp.find_module(moduleName,[self.path])
-            imp.load_module(moduleName, fp, pathname, desc)
-            modules_keys=sys.modules.keys()
-            for key in modules_keys:
-                if key==moduleName:
-                    try:
-                        module = sys.modules[moduleName]
-                        mInstance= getattr(module, moduleName)()
-                        className=getattr(module,moduleName)
-                        return mInstance,className
-                    except Exception as err:
-                        print err
-        except Exception as err:
-            pass
-        return None, None
+
+        fp, pathname, desc = imp.find_module(moduleName,[self.path])
+        imp.load_module(moduleName, fp, pathname, desc)
+        modules_keys=sys.modules.keys()
+        for key in modules_keys:
+            if key==moduleName:
+                module = sys.modules[moduleName]
+                mInstance= getattr(module, moduleName)()
+                className=getattr(module,moduleName)
+                return mInstance,className
+        raise Exception("Can not load module %s" % moduleName)
 
 # the following api maybe need to remove
 # this api will filter all numbers in one string
@@ -361,7 +356,21 @@ class aliyunOpenApiDataHandler():
                     arg=keyValues[key]
                     if arg is not None and len(arg)>0:
                         param=arg[0]
-                        getattr(instance,func)(param)
+                        try:
+                            getattr(instance,func)(param)
+                        except AttributeError as e:
+                            # When the param is a json string, and it's handled as a 'repeat list',
+                            # set it in the string format will raise AttributeError
+                            # in this case, handle it in the json format
+                            # FIXME 
+                            if str(e) == "'str' object has no attribute 'get'":
+                                try:
+                                    param_in_obj = json.loads(param)
+                                except ValueError:
+                                    raise Exception("Can not handle param %s: not a valid json string" % key)
+                                getattr(instance,func)(param_in_obj)
+                            else:
+                                raise e
         userKey=self.getUserKey()
         userSecret=self.getUserSecret()
         regionId=self.getRegionId(keyValues)

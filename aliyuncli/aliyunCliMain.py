@@ -26,6 +26,7 @@ import aliyunCliUpgrade
 import aliyunCompleter
 import sys
 
+
 class AliyunCommandLine:
     def __init__(self):
         self.parser = aliyunCliParser.aliyunCliParser()
@@ -74,6 +75,7 @@ class AliyunCommandLine:
             version=self.handler.getSdkVersion(cmd,keyValues)
             if version is None:
                 return
+
             # here handler the openapi cmd
             if self.handler.isAvailableOperation(cmd, operation,version): # cmd and operation both are right
                 instanceAndClassName=self.handler.getInstanceByCmdOperation(cmd, operation,version)
@@ -91,24 +93,16 @@ class AliyunCommandLine:
                         if not self.handler.hasNecessaryArgs(keyValues):
                             print 'accesskeyid/accesskeysecret/regionId is absence'
                             return
-                        try:
-                            result = self.handler.getResponse(cmd,operation,className,cmdInstance,keyValues,secureRequest)
-                            if result is None:
-                                return
-                            self.handler.responseOptimize(result,cmd,operation)
-                            if("Code" in result):
-                                response.display_response("error", result, "json")
-                                # print("failed")
-                                # print(result["Code"])
-                                # print(result["Message"])
-                                # print("Please check your parameters first.")
-                            else:
-                                #print(result)
-                                response.display_response(operation, result, outPutFormat,keyValues)
-                        except Exception as e:
-                            print(e)
+                        result = self.handler.getResponse(cmd,operation,className,cmdInstance,keyValues,secureRequest)
+                        if result is None:
+                            return
+                        self.handler.responseOptimize(result,cmd,operation)
+                        if("Code" in result):
+                            response.display_response("error", result, "json")
+                        else:
+                            response.display_response(operation, result, outPutFormat,keyValues)
                     else:
-                        print 'aliyuncli internal error, please contact: zikuan.ly@alibaba-inc.com'
+                        print 'aliyuncli internal error, please contact: haowei.yao@alibaba-inc.com'
             elif self.handler.isAvailableExtensionOperation(cmd, operation):
                 if self.args.__len__() >= 3 and self.args[2] == 'help':
                     import commandConfigure
