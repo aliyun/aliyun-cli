@@ -1,0 +1,4 @@
+package meta
+
+func LoadFromGit() {
+}
