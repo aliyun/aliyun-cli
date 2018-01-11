@@ -7,6 +7,8 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/core"
 	"github.com/aliyun/aliyun-cli/meta"
+	"time"
+	"strings"
 )
 
 var products = meta.LoadProfile()
@@ -47,11 +49,19 @@ func CallOpenApi(product string, api string, parameters map[string]string) error
 		return fmt.Errorf("unknown product %s", product)
 	}
 
+	method, roa := parameters["roa"]
+
 	request := requests.NewCommonRequest()
 	request.RegionId = cp.RegionId
 	request.Product = product
 	request.ApiName = api
 	request.Version = productInfo.MajorVersion
+
+	if roa {
+		request.Method = method
+		request.Headers["Date"] = time.Now().Format(time.RFC1123Z)
+		request.PathPattern = api
+	}
 
 	for k, v := range parameters {
 		switch k {
@@ -61,6 +71,15 @@ func CallOpenApi(product string, api string, parameters map[string]string) error
 			request.Domain = v
 		case "version":
 			request.Version = v
+		case "body":
+			request.SetContent([]byte(v))
+		case "accept":
+			request.Headers["Accept"] = v
+			if strings.Contains(v, "xml") {
+				request.SetAcceptFormat("XML")
+			} else if strings.Contains(v, "json") {
+				request.SetAcceptFormat("JSON")
+			}
 		default:
 			request.QueryParams[k] = v
 		}
@@ -75,7 +94,10 @@ func CallOpenApi(product string, api string, parameters map[string]string) error
 
 	resp, err := client.ProcessCommonRequest(request)
 	if err != nil {
-		return fmt.Errorf("failed with new call %v", err)
+		if !strings.Contains(err.Error(), "unmarshal") {
+			fmt.Printf("%v\n", err)
+			return nil
+		}
 	}
 
 	fmt.Println(resp.GetHttpContentString())

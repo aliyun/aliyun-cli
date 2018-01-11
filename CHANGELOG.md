@@ -1,8 +1,12 @@
 # CHANGE LOG
 
+### 0.11
+
+- Support simple ROA call
+
 ### 0.1
 
-- refactoring with golang
-- basic configure
-- auto endpoint locator
+- Refactoring with golang
+- Basic configure
+- Auto endpoint locator
 - 2018.1.11
