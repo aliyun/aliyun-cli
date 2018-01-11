@@ -56,7 +56,13 @@ func LoadProfile() (map[string]Product) {
 
 	products := make(map[string]Product)
 	for _, product := range profile.Products {
-		products[product.Name] = product
+		name := strings.ToLower(product.Name)
+		_, ok := products[name]
+		if !ok {
+			products[name] = product
+		} else {
+			panic("Duplicated Name:" + product.Name)
+		}
 	}
 	return products
 }

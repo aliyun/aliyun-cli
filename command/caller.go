@@ -52,6 +52,7 @@ func CallOpenApi(product string, api string, parameters map[string]string) error
 		fmt.Errorf("failed with new client %v", err)
 	}
 
+	product = strings.ToLower(product)
 	productInfo, ok := products[product]
 	if !ok {
 		return fmt.Errorf("unknown product %s", product)
@@ -61,7 +62,7 @@ func CallOpenApi(product string, api string, parameters map[string]string) error
 
 	request := requests.NewCommonRequest()
 	request.RegionId = cp.RegionId
-	request.Product = product
+	request.Product = productInfo.Name
 	request.ApiName = api
 	request.Version = productInfo.MajorVersion
 
