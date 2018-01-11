@@ -16,7 +16,7 @@ var products = meta.LoadProfile()
 func InitOpenApiCaller(cmd *cli.Command) {
 	cmd.Run = func(c *cli.Command, args []string) error {
 		if len(args) < 2 {
-			return fmt.Errorf("usage aliyun [product] API")
+			return fmt.Errorf("invaild arguments")
 		}
 
 		product := args[0]
@@ -37,6 +37,14 @@ func CallOpenApi(product string, api string, parameters map[string]string) error
 		return err
 	}
 	cp := conf.GetCurrentProfile()
+
+	if cp.AccessKeyId == "" || cp.AccessKeySecret == "" {
+		return fmt.Errorf("AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first")
+	}
+
+	if cp.RegionId == "" {
+		return fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
+	}
 
 	client, err := sdk.NewClientWithAccessKey(cp.RegionId, cp.AccessKeyId, cp.AccessKeySecret)
 

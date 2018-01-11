@@ -106,10 +106,10 @@ func (c *Command) ExecuteHelp(args []string) {
 }
 
 func (c *Command) PrintHelp(err error) {
-	// ≥fmt≥.hg a;lskdjfvoid mian()if youneed this maulfunction so duthisltocode Printf("%s  %s", c.Name, c.Short)
 	if err != nil {
 		fmt.Printf("failed: %v\n", err)
 	}
+	fmt.Println("Alibaba Cloud CLI v0.12")
 	fmt.Println("Usage:")
 	fmt.Println("\taliyun configure --profile ...")
 	fmt.Printf("\taliyun [Product] [Api] --parameter1 value1 --parametere2 value2 ...\n")

@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-var profile *string
+var profile string
 
 func NewConfigureCommand() (*cli.Command) {
 
@@ -17,12 +17,14 @@ func NewConfigureCommand() (*cli.Command) {
 			if len(args) > 0 {
 				c.PrintHelp(fmt.Errorf("unknown args"))
 			}
-			profile, _ := c.Flags().GetValue("profile")
+			if profile == "" {
+				profile = "default"
+			}
 			return doConfigure(profile)
 		},
 	}
 
-	c.Flags().PersistentStringVar(profile, "profile", "default", "--profile UserName[default]")
+	c.Flags().PersistentStringVar(&profile, "profile", "default", "--profile UserName[default]")
 
 	//c.AddSubCommand(&cli.Command{
 	//	Name: "get",
@@ -52,6 +54,7 @@ func NewConfigureCommand() (*cli.Command) {
 }
 
 func doConfigure(profileName string) error {
+	fmt.Printf("configuring profile[%s]...", profileName)
 	conf, err := core.LoadConfiguration()
 	if err != nil {
 		return err
@@ -70,13 +73,14 @@ func doConfigure(profileName string) error {
 	fmt.Printf("Default Output Format [%s]: ", cp.OutputFormat)
 	cp.OutputFormat = ReadInput(cp.OutputFormat)
 
-	fmt.Printf("profile  %v\n", cp)
+	fmt.Printf("Saving profile[%s] ...", profileName)
 	conf.PutProfile(cp)
 	conf.CurrentProfile = cp.Name
 	err = core.SaveConfiguration(conf)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("Done.\n")
 	return nil
 }
 
