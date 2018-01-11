@@ -49,7 +49,7 @@ func (c *Command) UnknownFlags() (*FlagSet) {
 }
 
 func (c *Command) Execute(args []string) {
-	fmt.Printf(">>> Execute %s\n", c.Name)
+	// fmt.Printf(">>> Execute %s\n", c.Name)
 
 	sub := GetFirstArgs(args)
 	if sub == "help" {
@@ -108,8 +108,12 @@ func (c *Command) ExecuteHelp(args []string) {
 func (c *Command) PrintHelp(err error) {
 	// ≥fmt≥.hg a;lskdjfvoid mian()if youneed this maulfunction so duthisltocode Printf("%s  %s", c.Name, c.Short)
 	if err != nil {
-		fmt.Printf("failed: %v", err)
+		fmt.Printf("failed: %v\n", err)
 	}
+	fmt.Println("Usage:")
+	fmt.Println("\taliyun configure --profile ...")
+	fmt.Printf("\taliyun [Product] [Api] --parameter1 value1 --parametere2 value2 ...\n")
+	fmt.Printf("\tSample: aliyun Ecs DescribeRegions \n")
 }
 
 func (c *Command) findSubCommand(s string) (*Command) {

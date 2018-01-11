@@ -1,6 +1,7 @@
 
 # 阿里云命令行工具 <Aliyun Command Line Interface>
 
+# 此文档以过期，重构后的文档正在写作中
 
 阿里云命令行工具是用 Python 编写的, 基于阿里云open API 打造的用于管理阿里云资源的统一工具.
 

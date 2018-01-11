@@ -94,7 +94,7 @@ func LoadConfiguration() (Configuration, error) {
 }
 
 func SaveConfiguration(config Configuration) (error) {
-	fmt.Printf("conf %v\n", config)
+	// fmt.Printf("conf %v\n", config)
 	bytes, err := json.Marshal(config)
 	if err != nil {
 		return err

@@ -1,5 +1,5 @@
 package meta
 
-type Product struct {
-
-}
+//type Product struct {
+//
+//}

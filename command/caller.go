@@ -6,8 +6,10 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/core"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/endpoints"
+	"github.com/aliyun/aliyun-cli/meta"
 )
+
+var products = meta.LoadProfile()
 
 func InitOpenApiCaller(cmd *cli.Command) {
 	cmd.Run = func(c *cli.Command, args []string) error {
@@ -39,30 +41,35 @@ func CallOpenApi(product string, api string, parameters map[string]string) error
 	if err != nil {
 		fmt.Errorf("failed with new client %v", err)
 	}
+
+	productInfo, ok := products[product]
+	if !ok {
+		return fmt.Errorf("unknown product %s", product)
+	}
+
 	request := requests.NewCommonRequest()
 	request.RegionId = cp.RegionId
 	request.Product = product
 	request.ApiName = api
-
-	params := endpoints.ResolveParam{
-		Product: product,
-		RegionId: cp.RegionId,
-	}
-
-	ep, err := endpoints.Resolve(&params)
-	if err != nil {
-		return err
-	}
-	request.Domain = ep
+	request.Version = productInfo.MajorVersion
 
 	for k, v := range parameters {
 		switch k {
-		//case "domain":
-		//	request.Domain = v
+		case "region":
+			request.RegionId = v
+		case "endpoint":
+			request.Domain = v
 		case "version":
 			request.Version = v
 		default:
 			request.QueryParams[k] = v
+		}
+	}
+
+	if request.Domain == "" {
+		request.Domain, err = productInfo.GetEndpoint(request.RegionId, client)
+		if err != nil {
+			return err
 		}
 	}
 

@@ -3,6 +3,9 @@ Aliyun Command Line Interface
 
 [Chinese document(中文文档)](./README_cn.md)
 
+Following doc is obsoleted, new documents is writing.
+=====================================================
+
 Overview
 --------
 

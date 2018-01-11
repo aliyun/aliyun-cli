@@ -7,9 +7,8 @@ workspace.xml
 *.py[co]
 aliyuncli/aliyun
 # IDEA IDE 
-.idea* 
-src/
+.idea*
 aliyuncli.egg-info/
 build/
 dist/
-
+out/
