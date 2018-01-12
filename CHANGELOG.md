@@ -1,5 +1,11 @@
 # CHANGE LOG
 
+### 0.15
+
+- support ecs-ram-role
+- fix cross platform build problem
+- test after configure
+
 ### 0.12
 
 - fix bug for configure

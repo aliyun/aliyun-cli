@@ -9,11 +9,14 @@ import (
 func DoHello() {
 	 s, err := CallOpenApi("Ecs", "DescribeRegions", map[string]string{})
 	 if err != nil {
+	 	fmt.Println("-----------------------------------------------")
 	 	fmt.Println("!!! Configure Failed please configure again !!!")
 	 	fmt.Println("-----------------------------------------------")
 	 	fmt.Println(err)
 	 	fmt.Println("-----------------------------------------------")
 	 	fmt.Println("!!! Configure Failed please configure again !!!")
+	 	fmt.Println("-----------------------------------------------")
+	 	return
 	 }
 
 	 fmt.Printf("Configuring...")
