@@ -1,5 +1,10 @@
 # CHANGE LOG
 
+### 0.12
+
+- fix bug for configure
+- ignore case of ProductName
+
 ### 0.11
 
 - Support simple ROA call

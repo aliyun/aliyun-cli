@@ -1,4 +1,4 @@
-export VERSION=0.12
+export VERSION=0.15
 all: build
 release: build build_mac build_linux build_windows
 
@@ -14,19 +14,13 @@ install: build
 	cp out/aliyun /usr/local/bin
 
 build_mac:
-	export GOOS=darwin
-	export GOARCH=amd64
-	go build -o out/aliyun main/main.go
+	GOOS=darwin GOARCH=amd64 go build -o out/aliyun main/main.go
 	tar zcvf out/aliyun-cli-macosx-${VERSION}-amd64.tgz -C out aliyun
 
 build_linux:
-	export GOOS=linux
-	export GOARCH=amd64
-	go build -o out/aliyun main/main.go
+	GOOS=linux GOARCH=amd64 go build -o out/aliyun main/main.go
 	tar zcvf out/aliyun-cli-linux-${VERSION}-amd64.tgz -C out aliyun
 
 build_windows:
-	export GOOS=windows
-	export GOARCH=amd64
-	go build -o out/aliyun.exe main/main.go
+	GOOS=windows GOARCH=amd64 go build -o out/aliyun.exe main/main.go
 	tar zcvf out/aliyun-cli-windows-${VERSION}-amd64.tgz -C out aliyun.exe

@@ -14,23 +14,6 @@ const (
 	DefaultConfigProfile = "default"
 )
 
-type Profile struct {
-	Name string				`json:"name"`
-	AccessKeyId string		`json:"access_key_id"`
-	AccessKeySecret string	`json:"access_key_secret"`
-	RegionId string 		`json:"region_id"`
-	OutputFormat string 	`json:"output_format"`
-	Language string			`json:"language"`
-}
-
-func NewProfile(name string) (Profile) {
-	return Profile {
-		Name: name,
-		OutputFormat: "json",
-		Language: "en-US",
-	}
-}
-
 type Configuration struct {
 	CurrentProfile string	`json:"current"`
 	Profiles []Profile		`json:"profiles"`
@@ -67,7 +50,6 @@ func (c *Configuration) GetCurrentProfile() (Profile) {
 	p, _ := c.GetProfile(c.CurrentProfile)
 	return p
 }
-
 
 func (c *Configuration) PutProfile(profile Profile) {
 	for i, p := range c.Profiles {

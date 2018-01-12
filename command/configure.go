@@ -7,9 +7,9 @@ import (
 )
 
 var profile string
+var ecsRamUser string
 
 func NewConfigureCommand() (*cli.Command) {
-
 	c := &cli.Command{
 		Name: "configure",
 		Short: "configure [get|set|list] --profile profileName",
@@ -24,7 +24,8 @@ func NewConfigureCommand() (*cli.Command) {
 		},
 	}
 
-	c.Flags().PersistentStringVar(&profile, "profile", "default", "--profile UserName[default]")
+	c.Flags().PersistentStringVar(&profile, "profile", "default", "--profile UserName")
+	c.Flags().PersistentStringVar(&ecsRamUser, "ecs-ram-role", "", "--ecs-ram-role RAMName")
 
 	//c.AddSubCommand(&cli.Command{
 	//	Name: "get",
@@ -59,10 +60,34 @@ func doConfigure(profileName string) error {
 	if err != nil {
 		return err
 	}
+
 	cp, ok := conf.GetProfile(profileName)
 	if !ok {
 		cp = conf.NewProfile(profileName)
 	}
+
+	if ecsRamUser != "" {
+		err = configureEcsRamUser(&cp, ecsRamUser)
+	} else {
+		err = configureAK(&cp)
+	}
+
+	fmt.Printf("Saving profile[%s] ...", profileName)
+	conf.PutProfile(cp)
+	conf.CurrentProfile = cp.Name
+	err = core.SaveConfiguration(conf)
+
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Done.\n")
+
+	DoHello()
+	return nil
+}
+
+func configureAK(cp *core.Profile) error  {
+	cp.Mode = core.AK
 
 	fmt.Printf("Aliyun Access Key Id [%s]: ", cp.AccessKeyId)
 	cp.AccessKeyId = ReadInput(cp.AccessKeyId)
@@ -73,14 +98,20 @@ func doConfigure(profileName string) error {
 	fmt.Printf("Default Output Format [%s]: ", cp.OutputFormat)
 	cp.OutputFormat = ReadInput(cp.OutputFormat)
 
-	fmt.Printf("Saving profile[%s] ...", profileName)
-	conf.PutProfile(cp)
-	conf.CurrentProfile = cp.Name
-	err = core.SaveConfiguration(conf)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Done.\n")
+	return nil
+}
+
+func configureEcsRamUser(cp *core.Profile, ecsRamUser string) error {
+	cp.Mode = core.EcsRamUser
+	cp.RamRole = ecsRamUser
+
+	fmt.Printf("Aliyun Ecs Ram Role [%s]: ", cp.RamRole)
+	cp.RamRole = ReadInput(cp.RamRole)
+	fmt.Printf("Default Region Id [%s]: ", cp.RegionId)
+	cp.RegionId = ReadInput(cp.RegionId)
+	fmt.Printf("Default Output Format [%s]: ", cp.OutputFormat)
+	cp.OutputFormat = ReadInput(cp.OutputFormat)
+
 	return nil
 }
 
@@ -92,3 +123,5 @@ func ReadInput(defaultValue string) (string) {
 	}
 	return s
 }
+
+
