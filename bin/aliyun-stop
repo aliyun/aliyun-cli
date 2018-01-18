@@ -1,0 +1,18 @@
+#!/bin/bash
+set +x
+
+source aliyun-common
+
+lookup_any $1
+[[ $instance_status == 'Stopped'  ]] && exit
+##Try to stop  instance
+echo 
+echo "Confirm to stop instance "$instance_id" at region "$region_id" yes(y/n)":
+read ans
+#echo $ans
+if [[ $ans == 'y' ]] || [[ $ans == 'yes' ]];
+then 
+    echo Stopping $instance_id at $region_id
+    aliyun Ecs StopInstance  --RegionId $region_id --InstanceId $instance_id
+    lookup_any $instance_id
+fi

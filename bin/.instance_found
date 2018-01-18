@@ -1,0 +1,86 @@
+{
+  "InnerIpAddress": {
+    "IpAddress": []
+  },
+  "ImageId": "sles_12_sp2_64_20G_alibase_20170907.vhd",
+  "InstanceTypeFamily": "ecs.mn4",
+  "VlanId": "",
+  "NetworkInterfaces": {
+    "NetworkInterface": [
+      {
+        "MacAddress": "00:16:3e:0d:38:d5",
+        "PrimaryIpAddress": "192.168.33.72",
+        "NetworkInterfaceId": "eni-bp1fzbxshf53sfehyrmo"
+      }
+    ]
+  },
+  "InstanceId": "i-bp185dy2o3o6lnlo4f06",
+  "EipAddress": {
+    "IpAddress": "",
+    "AllocationId": "",
+    "InternetChargeType": ""
+  },
+  "InternetMaxBandwidthIn": 800,
+  "ZoneId": "cn-hangzhou-f",
+  "InternetChargeType": "PayByTraffic",
+  "SpotStrategy": "NoSpot",
+  "StoppedMode": "Not-applicable",
+  "SerialNumber": "0613ce21-668f-4300-af2a-9e8bc6cee77a",
+  "IoOptimized": true,
+  "Memory": 16384,
+  "Cpu": 4,
+  "VpcAttributes": {
+    "NatIpAddress": "",
+    "PrivateIpAddress": {
+      "IpAddress": [
+        "192.168.33.72"
+      ]
+    },
+    "VSwitchId": "vsw-bp14kx1s6lfgj8iqhxa94",
+    "VpcId": "vpc-bp1iy514wvp25qwtd1a91"
+  },
+  "InternetMaxBandwidthOut": 100,
+  "DeviceAvailable": true,
+  "SecurityGroupIds": {
+    "SecurityGroupId": [
+      "sg-bp1ehv4tldw8b7gqd0gq"
+    ]
+  },
+  "SaleCycle": "",
+  "SpotPriceLimit": 0,
+  "AutoReleaseTime": "",
+  "StartTime": "2018-01-05T05:13Z",
+  "InstanceName": "iZbp185dy2o3o6lnlo4f06Z",
+  "Description": "",
+  "ResourceGroupId": "",
+  "OSType": "linux",
+  "OSName": "SUSE Linux  Enterprise Server 12 SP2 64位",
+  "InstanceNetworkType": "vpc",
+  "PublicIpAddress": {
+    "IpAddress": [
+      "47.96.15.179"
+    ]
+  },
+  "HostName": "iZbp185dy2o3o6lnlo4f06Z",
+  "InstanceType": "ecs.mn4.xlarge",
+  "CreationTime": "2018-01-05T05:13Z",
+  "Tags": {
+    "Tag": [
+      {
+        "TagValue": "UCPNode_stack_0aab7c61-e6f3-4672-9620-0a993234303b",
+        "TagKey": "ros-aliyun-created"
+      }
+    ]
+  },
+  "Status": "Running",
+  "ClusterId": "",
+  "Recyclable": false,
+  "RegionId": "cn-hangzhou",
+  "GPUSpec": "",
+  "OperationLocks": {
+    "LockReason": []
+  },
+  "InstanceChargeType": "PostPaid",
+  "GPUAmount": 0,
+  "ExpiredTime": "2999-09-08T16:00Z"
+}

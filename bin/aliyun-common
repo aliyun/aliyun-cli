@@ -1,0 +1,33 @@
+#!/bin/bash
+#set -x
+function lookup_any() 
+{
+
+instanceId=${1}
+
+for region in $(cat ./region_ids);
+do
+    aliyun Ecs DescribeInstances --RegionId $region |jq '.Instances.Instance'| jq '.[] | select(.InstanceId == "'$instanceId'"  or .PublicIpAddress.IpAddress[0] == "'$instanceId'" or .NetworkInterfaces.NetworkInterface[0].PrimaryIpAddress == "'$instanceId'" or .HostName == "'$instanceId'")' > .instance_temp
+    if [[ $(cat .instance_temp | wc -l) -gt  0 ]];
+    then
+        mv .instance_temp .instance_found
+        [[ $DEBUG == true ]] && cat .instance_found
+        export instance_id=$(jq -r '.InstanceId' .instance_found)
+        export region_id=$(jq -r '.RegionId' .instance_found)
+        export image_id=$(jq -r '.ImageId' .instance_found)
+        export instance_status=$(jq -r '.Status' .instance_found)
+        jq -r '["ID                ", "Hostname            ", "Public IP", "Internal IP", "ZoneId", "    Status", "ImageId"], ["---------------------", "---------------------", "-------------", "-------------", "-------------", "------", "------------------"], ( [.InstanceId, .HostName, .PublicIpAddress.IpAddress[0], .NetworkInterfaces.NetworkInterface[0].PrimaryIpAddress, .ZoneId, .Status, .ImageId]) | @tsv' .instance_found
+       break 
+    fi
+done
+}
+
+function wait_until()
+{
+    expected_status=${1-Running}
+    while [[ $instance_status != $expected_status ]];
+    do
+        sleep 5
+        lookup_any $instance_id
+    done
+}
