@@ -1,9 +1,0 @@
-#!/bin/bash
-set +x
-
-source aliyun-common
-
-lookup_any $1
-echo Stopping $instance_id at $region_id
-aliyun Ecs StopInstance  --RegionId $region_id --InstanceId $instance_id
-lookup_any $instance_id

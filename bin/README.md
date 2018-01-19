@@ -115,6 +115,17 @@ ID                	Hostname            	Public IP	Internal IP	ZoneId	    Status	
 i-j6cg0s7swgbn77gmrcll	eric-hongkong-1		10.1.2.48	cn-hongkong-b	Stopped	centos_7_04_64_20G_alibase_201701015.vhd
 ```
 
+#### Force to stop an instance or reload
+
+```
+#export FORCE=true
+#aliyun-stop 192.168.33.71
+
+ID                	Hostname            	Public IP	Internal IP	ZoneId	    Status	ImageId
+---------------------	---------------------	-------------	-------------	-------------	------	------------------
+i-bp185dy2o3o6lnlo4f07	iZbp185dy2o3o6lnlo4f07Z		192.168.33.71	cn-hangzhou-f	Stopped	sles_12_sp2_64_20G_alibase_20170907.vhd
+```
+
 #### Start any instance with instanceId, private ip, public ip or hostname
 
 `aliyun-start <any instanceid, public/private ip, hostname>`
