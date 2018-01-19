@@ -1,0 +1,25 @@
+#!/bin/bash
+set +x
+
+source aliyun-common
+
+lookup_any $1
+##Try to stop and start instance
+if [[ $FORCE != 'true'  ]];
+then
+    echo "\nConfirm to restart instance "$instance_id" at region "$region_id" yes(y/n)": 
+    read ans
+fi
+#echo $ans
+if [[ $FORCE == 'true'  ]] || [[ $ans == 'y' ]] || [[ $ans == 'yes' ]];
+then 
+    echo Stopping $instance_id at $region_id, current status: $instance_status
+    [[ $instance_status == 'Running' ]] && aliyun Ecs StopInstance  --RegionId $region_id --InstanceId $instance_id
+    #lookup_any $instance_id
+    echo Replacing system of  $instance_id at $region_id, current status: $instance_status
+    wait_until Stopped && aliyun Ecs ReplaceSystemDisk --InstanceId=$instance_id --ImageId=$imange_id
+    #lookup_any $instance_id
+    echo Starting system of  $instance_id at $region_id, current status: $instance_status
+    sleep 5 && aliyun Ecs StartInstance  --RegionId $region_id --InstanceId $instance_id
+    wait_until Running
+fi

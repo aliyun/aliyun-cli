@@ -1,0 +1,8 @@
+#!/bin/bash
+set +x
+
+source aliyun-common
+
+lookup_any $1
+
+[[ $instance_status == 'Running'  ]] && aliyun Ecs RebootInstance --RegionId $region_id --InstanceId $instance_id && lookup_any $1
