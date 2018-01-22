@@ -13,6 +13,11 @@ Aliyuncli on Github
 
 The `aliyuncli` tool is on Github and anyone can fork the code, subject to the license. You can access it at: <https://github.com/aliyun/aliyun-cli>
 
+### Environment requirements
+
+1. Python 2.6.5 or higher
+2. python-dev
+
 ### How to Install aliyuncli
 
 Aliyun provides two ways to install the `aliyuncli` tool:
