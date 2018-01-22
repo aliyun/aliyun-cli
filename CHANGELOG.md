@@ -1,5 +1,10 @@
 # CHANGE LOG
 
+### 0.16
+
+- support --content-type flag to set Header
+- support --body-file flat to use file as body input
+
 ### 0.15
 
 - support ecs-ram-role

@@ -63,7 +63,7 @@ func (cp *Profile) GetClientByEcsRamUser() (*sdk.Client, error) {
 		return nil, fmt.Errorf("RamUser is empty! run `aliyun configure` first")
 	}
 
-	cred := credentials.EcsInstanceCredential{
+	cred := credentials.StsRoleNameOnEcsCredential {
 		RoleName: cp.RamRole,
 	}
 	config := sdk.NewConfig()

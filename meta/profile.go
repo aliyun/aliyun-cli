@@ -30,7 +30,7 @@ func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error)
 			Product: a.Name,
 			RegionId: region,
 			LocationProduct: a.LocationServiceCode,
-			LocationEndpoint: "openAPI",
+			LocationEndpointType: "openAPI",
 			CommonApi: client.ProcessCommonRequest,
 		}
 		ep, err := endpoints.Resolve(&rp)

@@ -8,6 +8,7 @@ import (
 	"github.com/aliyun/aliyun-cli/meta"
 	"time"
 	"strings"
+	"io/ioutil"
 )
 
 var products = meta.LoadProfile()
@@ -78,13 +79,21 @@ func CallOpenApi(product string, api string, parameters map[string]string) (stri
 			request.Version = v
 		case "body":
 			request.SetContent([]byte(v))
+		case "body-file":
+			buf, err := ioutil.ReadFile(v)
+			if err != nil {
+				fmt.Errorf("failed read file: %s %v", v, err)
+			}
+			request.SetContent(buf)
 		case "accept":
 			request.Headers["Accept"] = v
 			if strings.Contains(v, "xml") {
-				request.SetAcceptFormat("XML")
+				request.AcceptFormat = "XML"
 			} else if strings.Contains(v, "json") {
-				request.SetAcceptFormat("JSON")
+				request.AcceptFormat = "JSON"
 			}
+		case "content-type":
+			request.SetContentType(v)
 		default:
 			request.QueryParams[k] = v
 		}
