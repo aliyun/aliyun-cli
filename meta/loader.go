@@ -1,4 +1,5 @@
 package meta
 
-func LoadFromGit() {
+type FileReader interface {
+	ReadYaml(path string, v interface{}) error
 }
