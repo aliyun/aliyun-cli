@@ -10,8 +10,6 @@ import (
 	"strings"
 )
 
-var products = meta.LoadProfile()
-
 func InitOpenApiCaller(cmd *cli.Command) {
 	cmd.Run = func(c *cli.Command, args []string) error {
 		if len(args) < 2 {
@@ -78,6 +76,8 @@ func CallOpenApi(product string, api string, parameters map[string]string) (stri
 			request.Version = v
 		case "body":
 			request.SetContent([]byte(v))
+		case "content-type":
+			request.Headers["Content-Type"] = v
 		case "accept":
 			request.Headers["Accept"] = v
 			if strings.Contains(v, "xml") {

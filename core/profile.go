@@ -70,3 +70,30 @@ func (cp *Profile) GetClientByEcsRamUser() (*sdk.Client, error) {
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, &cred)
 	return client, err
 }
+
+//TODO
+func (cp *Profile) GetClientBySts() (*sdk.Client, error) {
+	cred := credentials.StsCredential{}
+	config := sdk.NewConfig()
+	client, err := sdk.NewClientWithOptions(cp.RegionId, config, &cred)
+	return client, err
+}
+
+//TODO
+func (cp *Profile) GetClientByRoleArn() (*sdk.Client, error) {
+	cred := credentials.StsAssumeRoleCredential{}
+	config := sdk.NewConfig()
+	client, err := sdk.NewClientWithOptions(cp.RegionId, config, &cred)
+	return client, err
+}
+
+//TODO
+func (cp *Profile) GetClientByPrivateKey() (*sdk.Client, error) {
+	cred := credentials.KeyPairCredential{}
+	config := sdk.NewConfig()
+	client, err := sdk.NewClientWithOptions(cp.RegionId, config, &cred)
+	return client, err
+}
+
+
+
