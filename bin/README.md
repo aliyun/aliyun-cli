@@ -105,6 +105,15 @@ ID                	Hostname            	Public IP	Internal IP	ZoneId	    Status	
 i-j6cg0s7swgbn77gmrcll	eric-hongkong-1	47.75.14.57	10.1.2.48	cn-hongkong-b	Running	centos_7_04_64_20G_alibase_201701015.vhd
 ```
 
+#### Reload instance with specific system disk
+
+`aliyun-reload <any instanceid, public/private ip, hostname> <image_id>`
+
+e.g.
+
+`aliyun-reload i-bp185dy2o3o6lnlo4f07 sles_12_sp2_64_20G_alibase_20170907.vhd`
+
+
 #### Stop any instance with instanceId, private ip, public ip or hostname
 
 `aliyun-stop i-j6cg0s7swgbn77gmrcll`
