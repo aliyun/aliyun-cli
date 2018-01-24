@@ -158,8 +158,8 @@ For SLB: :
 <td>aliyun-python-sdk-ess</td>
 </tr>
 <tr class="odd">
-<td>Ft</td>
-<td>aliyun-python-sdk-ft</td>
+<td>Mts</td>
+<td>aliyun-python-sdk-mts</td>
 </tr>
 <tr class="even">
 <td>Ocs</td>
