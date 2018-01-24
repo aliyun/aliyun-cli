@@ -1,13 +1,14 @@
-package command
+package config
 
 import (
 	"fmt"
 	"encoding/json"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
+	"github.com/aliyun/aliyun-cli/openapi"
 )
 
-func DoHello() {
-	 s, err := CallOpenApi("Ecs", "DescribeRegions", map[string]string{})
+func DoHello(caller *openapi.Caller) {
+	 s, err := caller.Run("Ecs", "DescribeRegions", map[string]string{})
 	 if err != nil {
 	 	fmt.Println("-----------------------------------------------")
 	 	fmt.Println("!!! Configure Failed please configure again !!!")

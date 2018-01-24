@@ -15,7 +15,7 @@ func NewConfigureCommand() (*cli.Command) {
 		Short: "configure [get|set|list] --profile profileName",
 		Run: func(c *cli.Command, args []string) error {
 			if len(args) > 0 {
-				c.PrintHelp(fmt.Errorf("unknown args"))
+				return fmt.Errorf("unknown args")
 			}
 			if profile == "" {
 				profile = "default"

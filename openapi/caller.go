@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/core"
-	"github.com/aliyun/aliyun-cli/meta"
 	"time"
 	"strings"
+	"io/ioutil"
+	"github.com/aliyun/aliyun-cli/resource"
+	"github.com/aliyun/aliyun-cli/meta"
 )
+
+var products = meta.LoadProductSet(resource.NewReader())
 
 func InitOpenApiCaller(cmd *cli.Command) {
 	cmd.Run = func(c *cli.Command, args []string) error {
@@ -31,6 +35,15 @@ func InitOpenApiCaller(cmd *cli.Command) {
 		fmt.Println(s)
 		return nil
 	}
+	cmd.Help = func(c *cli.Command, args []string) {
+		c.PrintHead()
+		c.PrintSubCommands()
+		for _, p := range products.Products {
+			fmt.Printf("  %s/%s\t\t%s\n", p.Name, p.Version, p.Descriptions["zh"])
+		}
+		c.PrintFlags()
+		c.PrintTail()
+	}
 }
 
 func CallOpenApi(product string, api string, parameters map[string]string) (string, error) {
@@ -46,8 +59,7 @@ func CallOpenApi(product string, api string, parameters map[string]string) (stri
 		fmt.Errorf("failed with new client %v", err)
 	}
 
-	product = strings.ToLower(product)
-	productInfo, ok := products[product]
+	productInfo, ok := products.GetProduct(product)
 	if !ok {
 		return "", fmt.Errorf("unknown product %s", product)
 	}
@@ -58,7 +70,7 @@ func CallOpenApi(product string, api string, parameters map[string]string) (stri
 	request.RegionId = cp.RegionId
 	request.Product = productInfo.Name
 	request.ApiName = api
-	request.Version = productInfo.MajorVersion
+	request.Version = productInfo.Version
 
 	if roa {
 		request.Method = method
@@ -76,15 +88,21 @@ func CallOpenApi(product string, api string, parameters map[string]string) (stri
 			request.Version = v
 		case "body":
 			request.SetContent([]byte(v))
-		case "content-type":
-			request.Headers["Content-Type"] = v
+		case "body-file":
+			buf, err := ioutil.ReadFile(v)
+			if err != nil {
+				fmt.Errorf("failed read file: %s %v", v, err)
+			}
+			request.SetContent(buf)
 		case "accept":
 			request.Headers["Accept"] = v
 			if strings.Contains(v, "xml") {
-				request.SetAcceptFormat("XML")
+				request.AcceptFormat = "XML"
 			} else if strings.Contains(v, "json") {
-				request.SetAcceptFormat("JSON")
+				request.AcceptFormat = "JSON"
 			}
+		case "content-type":
+			request.SetContentType(v)
 		default:
 			request.QueryParams[k] = v
 		}

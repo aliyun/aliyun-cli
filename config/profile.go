@@ -63,7 +63,7 @@ func (cp *Profile) GetClientByEcsRamUser() (*sdk.Client, error) {
 		return nil, fmt.Errorf("RamUser is empty! run `aliyun configure` first")
 	}
 
-	cred := credentials.EcsInstanceCredential{
+	cred := credentials.StsRoleNameOnEcsCredential {
 		RoleName: cp.RamRole,
 	}
 	config := sdk.NewConfig()
@@ -73,7 +73,7 @@ func (cp *Profile) GetClientByEcsRamUser() (*sdk.Client, error) {
 
 //TODO
 func (cp *Profile) GetClientBySts() (*sdk.Client, error) {
-	cred := credentials.StsCredential{}
+	cred := credentials.StsTokenCredential{}
 	config := sdk.NewConfig()
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, &cred)
 	return client, err
@@ -81,7 +81,7 @@ func (cp *Profile) GetClientBySts() (*sdk.Client, error) {
 
 //TODO
 func (cp *Profile) GetClientByRoleArn() (*sdk.Client, error) {
-	cred := credentials.StsAssumeRoleCredential{}
+	cred := credentials.StsRoleArnCredential{}
 	config := sdk.NewConfig()
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, &cred)
 	return client, err
@@ -89,7 +89,7 @@ func (cp *Profile) GetClientByRoleArn() (*sdk.Client, error) {
 
 //TODO
 func (cp *Profile) GetClientByPrivateKey() (*sdk.Client, error) {
-	cred := credentials.KeyPairCredential{}
+	cred := credentials.RsaKeyPairCredential{}
 	config := sdk.NewConfig()
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, &cred)
 	return client, err

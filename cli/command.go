@@ -109,7 +109,7 @@ func (c *Command) PrintHelp(err error) {
 	if err != nil {
 		fmt.Printf("failed: %v\n", err)
 	}
-	fmt.Println("Alibaba Cloud CLI v0.15")
+	fmt.Println("Alibaba Cloud CLI v0.16")
 	fmt.Println("Usage:")
 	fmt.Println("\taliyun configure --profile ... --ecs-ram-role ...")
 	fmt.Printf("\taliyun [Product] [Api] --parameter1 value1 --parametere2 value2 ...\n")
