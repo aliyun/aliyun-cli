@@ -1,91 +1,117 @@
 package cli
 
-import "strings"
+import (
+	"strings"
+	"fmt"
+)
 
 type Parser struct {
-	addArg func(arg string)
-	addFlag func(name string, value string)
+	current int
+	args    []string
+	detector func(string) (*Flag, error)
 }
 
-func NewParser(addArg func(arg string), addFlag func(name string, value string)) *Parser {
+func NewParser(args []string, detector func(string) (*Flag, error)) *Parser {
 	return &Parser {
-		addArg: addArg,
-		addFlag: addFlag,
+		args:    args,
+		current: 0,
+		detector: detector,
 	}
 }
 
-func ParseArgs(args []string) ([]string, map[string]string) {
-	r1 := []string{}
-	r2 := make(map[string]string)
-	parser := NewParser(
-		func(arg string) {
-			r1 = append(r1, arg)
-		},
-		func(name string, value string) {
-			r2[name] = value
-		},
-	)
-	parser.Parse(args)
-	return r1, r2
-}
-
-func (p *Parser) Parse(args []string) {
-	lastFlag := ""
-	for _, s := range args {
-		if strings.HasPrefix(s, "--") {
-			name := s[2:]
-			if lastFlag == "" {
-				lastFlag = p.parseFlag(name)
-			} else {
-				p.addFlag(lastFlag, "")
-				lastFlag = name
-			}
-		} else if strings.HasPrefix(s,"-") {
-			name := s[1:]
-			if lastFlag == "" {
-				lastFlag = p.parseFlag(name)
-			} else {
-				p.addFlag(lastFlag, "")
-				lastFlag = name
-			}
-		} else {
-			if lastFlag != "" {
-				p.addFlag(lastFlag, s)
-				lastFlag = ""
-			} else {
-				p.addArg(s)
-			}
+func (p *Parser) ReadNextArg() (arg string, more bool, err error) {
+	for {
+		arg, _, more, err = p.readNext()
+		if err != nil {
+			return
+		}
+		if !more {
+			return
+		}
+		if arg != "" {
+			return
 		}
 	}
 }
 
-func (p *Parser) parseFlag(s string) string {
-	if name, value, ok := splitWithFirstChars(s, "=:"); ok {
-		p.addFlag(name, value)
-		return ""
-	} else {
-		return name
+func (p *Parser) GetRemains() []string {
+	return p.args[p.current:]
+}
+
+func (p *Parser) ReadAll() ([]string, error) {
+	r := make([]string, 0)
+	for {
+		arg, _, more, err := p.readNext()
+		if err != nil {
+			return r, err
+		}
+		if arg != "" {
+			r = append(r, arg)
+		}
+		if !more {
+			return r, nil
+		}
 	}
 }
 
-func splitWithFirstChars(s string, splitters string) (string, string, bool) {
-	i := strings.IndexAny(s, splitters)
-	if i < 0 {
-		return s, "", false
+func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
+	if p.current >= len(p.args) {
+		more = false
+		return
+	}
+	s := p.args[p.current]
+	p.current++
+	more = true
+
+	if strings.HasPrefix(s, "--") {
+		if name, value, ok := SplitWith(s[2:], "=:"); ok {
+			flag, err = p.detector(name)
+			if err != nil {
+				return
+			}
+			err = flag.PutValue(value)
+			if err != nil {
+				return
+			}
+			return
+		} else {
+			flag, err = p.detector(name)
+			if err != nil {
+				return
+			}
+			if !flag.Assignable {
+				flag.PutValue("")
+				return
+			} else {
+				if value, ok := p.readNextValue(flag.Assignable); ok {
+					flag.PutValue(value)
+				}
+				return
+			}
+		}
+	} else if strings.HasPrefix(s,"-") {
+		err = fmt.Errorf("not support single dash flag YET, next-version")
+		return
 	} else {
-		return s[:i], s[i + 1:], true
+		arg = s
+		return
 	}
 }
 
-
-func GetFirstArgs(args []string) string {
-	if len(args) == 0 {
-		return ""
+func (p *Parser) readNextValue(force bool) (string, bool) {
+	if p.current >= len(p.args) {
+		return "", false
 	}
-	a := args[0]
-	if strings.HasPrefix(a, "-") || strings.HasPrefix(a, "--") {
-		return ""
+	s := p.args[p.current]
+	if force {
+		p.current++
+		return s, true
 	} else {
-		return a
+		if !strings.HasPrefix(s, "--") && !strings.HasPrefix(s, "-") {
+			p.current++
+			return s, true
+		} else {
+			return "", false
+		}
 	}
 }

@@ -1,12 +1,12 @@
 package cli
 
 import (
-	"testing"
-	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"testing"
 )
 
-func TestCli(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Cli Suite")
+func TestBooks(t *testing.T) {
+	RegisterFailHandler(ginkgo.Fail)
+	ginkgo.RunSpecs(t, "Cli Suite")
 }

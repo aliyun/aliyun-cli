@@ -1,21 +1,24 @@
 package cli
 
 import (
+	"strings"
 	"fmt"
 )
 
 type Flag struct {
 	Name			string
-	ShortName		string
+	SingleChars		string
 	Usage			string
 	DefaultValue	string
 	Required 		bool
 	Assignable		bool
 	Persistent		bool
+	Repeatable		bool
 
 	assigned		bool
 	value			string
-	p				*string
+	values			[]string
+ 	p				*string
 }
 
 func (f *Flag) IsAssigned() (bool) {
@@ -27,92 +30,46 @@ func (f *Flag) GetValue() (string) {
 }
 
 //
-// FlagSet
-type FlagSet struct {
-	flags	[]Flag
+// for Repeatable flag, return values
+func (f *Flag) GetValues() []string {
+	return f.values
 }
 
-func NewFlagSet() (*FlagSet) {
-	return &FlagSet{}
-}
-
-func (a *FlagSet) Items() ([]Flag) {
-	return a.flags
-}
-
-func (a *FlagSet) Add(f Flag) {
-	a.flags = append(a.flags, f)
-}
-
-func (a *FlagSet) PutValue(name string, value string) {
-	for _, v := range a.flags {
-		if v.Name == name {
-			v.value = value
-			if v.p != nil {
-				*v.p = value
-			}
+func (f *Flag) PutValue(v string) error {
+	if !f.assigned {
+		f.assigned = true
+		f.value = v
+		if f.p != nil {
+			*f.p = v
 		}
+	} else if !f.Repeatable {
+		return fmt.Errorf("flag duplucated: --%s", f.Name)
 	}
-	a.flags = append(a.flags, Flag {
-		Name: name,
-		value: value,
-	})
-}
-
-func (a *FlagSet) Get(name string) *Flag {
-	for _, v := range a.flags {
-		if v.Name == name {
-			return &v
-		}
+	if f.Repeatable {
+		f.values = append(f.values, v)
 	}
 	return nil
 }
 
-func (a *FlagSet) GetValue(name string) (string, bool) {
-	for _, v := range a.flags {
-		if v.Name == name {
-			return v.value, true
+func (f *Flag) UseDefaultValue() bool {
+	if f.DefaultValue != "" {
+		f.value = f.DefaultValue
+		if f.p != nil {
+			*f.p = f.DefaultValue
 		}
+		return true
+	} else {
+		return false
 	}
-	return "", false
 }
 
-func (a *FlagSet) ParseArgs(args []string, unknownFlags *FlagSet) ([]string, error) {
-	a2, ff := ParseArgs(args)
-	for k, v := range ff {
-		f2 := a.Get(k)
-		if f2 != nil {
-			a.PutValue(k, v)
-		} else if unknownFlags == nil {
-			return a2, fmt.Errorf("unknown flag --" + k)
-		} else {
-			unknownFlags.PutValue(k, v)
-		}
+func SplitWith(s string, splitters string) (string, string, bool) {
+	i := strings.IndexAny(s, splitters)
+	if i < 0 {
+		return s, "", false
+	} else {
+		return s[:i], s[i + 1:], true
 	}
-	return a2, nil
 }
 
-func (a *FlagSet) StringVar(p *string, name string, defaultValue string, usage string) {
-	a.Add(Flag{
-		Name: name,
-		Usage: usage,
-		DefaultValue: defaultValue,
-		Required: false,
-		Assignable: true,
-		Persistent: false,
-		p: p,
-	})
-}
-
-func (a *FlagSet) PersistentStringVar(p *string, name string, defaultValue string, usage string) {
-	a.Add(Flag{
-		Name: name,
-		Usage: usage,
-		DefaultValue: defaultValue,
-		Required: false,
-		Assignable: true,
-		Persistent: true,
-		p: p,
-	})
-}
 
