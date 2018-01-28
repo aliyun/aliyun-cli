@@ -165,13 +165,18 @@ func (c *Command) PrintFlags() {
 	fmt.Printf("\nFlags:\n")
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
 	for _, flag := range c.Flags().Flags() {
-		fmt.Fprintf(w, "  %s\t%s\n", flag.Name, flag.Usage)
+		fmt.Fprintf(w, "  --%s\t%s\n", flag.Name, flag.Usage)
 	}
 	w.Flush()
 }
 
+func (c *Command) PrintFailed(err error, suggestion string) {
+	Errorf("ERROR: %v\n", err)
+	fmt.Printf("%s\n", suggestion)
+}
+
 func (c *Command) PrintTail() {
-	fmt.Printf("\nuse\"%s --help\" for more information.\n", c.Name)
+	fmt.Printf("\nUse `%s --help` for more information.\n", c.Name)
 }
 
 

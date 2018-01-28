@@ -1,4 +1,4 @@
-package core
+package config
 
 import (
 	"fmt"
@@ -59,6 +59,22 @@ func (c *Configuration) PutProfile(profile Profile) {
 		}
 	}
 	c.Profiles = append(c.Profiles, profile)
+}
+
+func LoadProfile(name string) (Profile, error) {
+	var p Profile
+	config, err := LoadConfiguration()
+	if err != nil {
+		return p, fmt.Errorf("init config failed %v", err)
+	}
+	if name == "" {
+		name = config.CurrentProfile
+	}
+	p, ok := config.GetProfile(name)
+	if !ok {
+		return p, fmt.Errorf("unknown profile %s, run configure to check", name)
+	}
+	return p, nil
 }
 
 func LoadConfiguration() (Configuration, error) {

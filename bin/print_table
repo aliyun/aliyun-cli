@@ -1,5 +1,5 @@
 #!/bin/bash
 region=${1-cn-hangzhou}
-#aliyun Ecs DescribeInstances --RegionId $region|jq '.Instances.Instance'|jq -r '["ID                ", "Hostname            ", "Public IP", "Internal IP"], ["---------------------", "---------------------", "-------------", "-------------"], (.[] | [.InstanceId, .HostName, .PublicIpAddress.IpAddress[0], .NetworkInterfaces.NetworkInterface[0].PrimaryIpAddress]) | @tsv'
+#aliyun Ecs DescribeInstances --RegionId $region|jq '.Instances.Instance'|jq -r '["ID                ", "Hostname            ", "Public IP", "Internal IP"], ["---------------------", "---------------------", "-------------", "-------------"],(.[] | [.InstanceId, .HostName, .PublicIpAddress.IpAddress[0], .NetworkInterfaces.NetworkInterface[0].PrimaryIpAddress]) | @tsv'
 
 aliyun Ecs  DescribeInstances --RegionId $region | jq '.Instances.Instance'| jq -r '["ID                ", "Hostname            ", "Public IP", "Internal IP", "ZoneId", "    Status"], ["---------------------", "---------------------", "-------------", "-------------", "-------------", "------"], ( .[] | [.InstanceId, .HostName,     .PublicIpAddress.IpAddress[0], .NetworkInterfaces.NetworkInterface[0].PrimaryIpAddress, .ZoneId, .Status]) | @tsv'

@@ -1,19 +1,21 @@
-package command
+package config
 
 import (
 	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/core"
 	"fmt"
+	"strings"
+	"io/ioutil"
 )
 
 var profile string
-var ecsRamUser string
+var mode string
 
 func NewConfigureCommand() (*cli.Command) {
 	c := &cli.Command{
 		Name: "configure",
-		Short: "configure [get|set|list] --profile profileName",
-		Run: func(c *cli.Command, args []string) error {
+		Short: "configure credential",
+		Usage: "configure --mode certificatedMode --profile profileName",
+		Run: func(c *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return fmt.Errorf("unknown args")
 			}
@@ -24,8 +26,9 @@ func NewConfigureCommand() (*cli.Command) {
 		},
 	}
 
-	c.Flags().PersistentStringVar(&profile, "profile", "default", "--profile UserName")
-	c.Flags().PersistentStringVar(&ecsRamUser, "ecs-ram-role", "", "--ecs-ram-role RAMName")
+	f := c.Flags().StringVar(&profile, "profile", "default", "--profile ProfileName")
+	f.Persistent = true
+	c.Flags().StringVar(&mode, "mode", "AK", "--mode [AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair]")
 
 	//c.AddSubCommand(&cli.Command{
 	//	Name: "get",
@@ -55,8 +58,7 @@ func NewConfigureCommand() (*cli.Command) {
 }
 
 func doConfigure(profileName string) error {
-	fmt.Printf("configuring profile[%s]...", profileName)
-	conf, err := core.LoadConfiguration()
+	conf, err := LoadConfiguration()
 	if err != nil {
 		return err
 	}
@@ -66,52 +68,100 @@ func doConfigure(profileName string) error {
 		cp = conf.NewProfile(profileName)
 	}
 
-	if ecsRamUser != "" {
-		err = configureEcsRamUser(&cp, ecsRamUser)
+	fmt.Printf("Configuring profile '%s'...\n", profileName)
+	if mode != "" {
+		switch CertificateMode(mode) {
+		case AK:
+			cp.Mode = AK
+			configureAK(&cp)
+		case StsToken:
+			cp.Mode = StsToken
+			configureStsToken(&cp)
+		case RamRoleArn:
+			cp.Mode = RamRoleArn
+			configureRamRoleArn(&cp)
+		case EcsRamRole:
+			cp.Mode = EcsRamRole
+			configureEcsRamRole(&cp)
+		case RsaKeyPair:
+			cp.Mode = RsaKeyPair
+			configureRsaKeyPair(&cp)
+		default:
+			return fmt.Errorf("unexcepted certificated mode: %s", mode)
+		}
 	} else {
-		err = configureAK(&cp)
+		configureAK(&cp)
 	}
+
+	//
+	// configure common
+	fmt.Printf("Default Region Id [%s]: ", cp.RegionId)
+	cp.RegionId = ReadInput(cp.RegionId)
+	fmt.Printf("Default Output Format [%s]: ", cp.OutputFormat)
+	cp.OutputFormat = ReadInput(cp.OutputFormat)
 
 	fmt.Printf("Saving profile[%s] ...", profileName)
 	conf.PutProfile(cp)
 	conf.CurrentProfile = cp.Name
-	err = core.SaveConfiguration(conf)
+	err = SaveConfiguration(conf)
 
 	if err != nil {
 		return err
 	}
 	fmt.Printf("Done.\n")
 
-	DoHello()
+	DoHello(&cp)
 	return nil
 }
 
-func configureAK(cp *core.Profile) error  {
-	cp.Mode = core.AK
-
-	fmt.Printf("Aliyun Access Key Id [%s]: ", cp.AccessKeyId)
+func configureAK(cp *Profile) error  {
+	fmt.Printf("Access Key Id [%s]: ", MosaicString(cp.AccessKeyId, 3))
 	cp.AccessKeyId = ReadInput(cp.AccessKeyId)
-	fmt.Printf("Aliyun Access Key Secret [%s]: ", cp.AccessKeySecret)
+	fmt.Printf("Access Key Secret [%s]: ", MosaicString(cp.AccessKeySecret, 3))
 	cp.AccessKeySecret = ReadInput(cp.AccessKeySecret)
-	fmt.Printf("Default Region Id [%s]: ", cp.RegionId)
-	cp.RegionId = ReadInput(cp.RegionId)
-	fmt.Printf("Default Output Format [%s]: ", cp.OutputFormat)
-	cp.OutputFormat = ReadInput(cp.OutputFormat)
-
 	return nil
 }
 
-func configureEcsRamUser(cp *core.Profile, ecsRamUser string) error {
-	cp.Mode = core.EcsRamUser
-	cp.RamRole = ecsRamUser
+func configureStsToken(cp *Profile) error  {
+	err := configureAK(cp)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Sts Token [%s]: ", cp.StsToken)
+	cp.StsToken = ReadInput(cp.StsToken)
+	return nil
+}
 
-	fmt.Printf("Aliyun Ecs Ram Role [%s]: ", cp.RamRole)
-	cp.RamRole = ReadInput(cp.RamRole)
-	fmt.Printf("Default Region Id [%s]: ", cp.RegionId)
-	cp.RegionId = ReadInput(cp.RegionId)
-	fmt.Printf("Default Output Format [%s]: ", cp.OutputFormat)
-	cp.OutputFormat = ReadInput(cp.OutputFormat)
+func configureRamRoleArn(cp *Profile) error  {
+	err := configureAK(cp)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Ram Role Arn [%s]: ", cp.RamRoleArn)
+	cp.RamRoleArn = ReadInput(cp.RamRoleArn)
+	fmt.Printf("Role Session Name [%s]: ", cp.RoleSessionName)
+	cp.RoleSessionName = ReadInput(cp.RoleSessionName)
+	cp.ExpiredSeconds = 900
+	return nil
+}
 
+func configureEcsRamRole(cp *Profile) error {
+	fmt.Printf("Ecs Ram Role [%s]: ", cp.RamRoleName)
+	cp.RamRoleName = ReadInput(cp.RamRoleName)
+	return nil
+}
+
+func configureRsaKeyPair(cp *Profile) error {
+	fmt.Printf("Rsa Private Key File: ")
+	keyFile := ReadInput("")
+	buf, err := ioutil.ReadFile(keyFile)
+	if err != nil {
+		return fmt.Errorf("read key file %s failed %v", keyFile, err)
+	}
+	cp.PrivateKey = string(buf)
+	fmt.Printf("Rsa Key Pair Name: ")
+	cp.KeyPairName = ReadInput("")
+	cp.ExpiredSeconds = 900
 	return nil
 }
 
@@ -124,4 +174,12 @@ func ReadInput(defaultValue string) (string) {
 	return s
 }
 
+func MosaicString(s string, lastChars int) string {
+	r := len(s) - lastChars
+	if r > 0 {
+		return strings.Repeat("*", r) + s[r:]
+	} else {
+		return strings.Repeat("*", len(s))
+	}
+}
 

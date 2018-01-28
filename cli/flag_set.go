@@ -151,7 +151,7 @@ func (a *FlagSet) PersistentStringVar(p *string, name string, defaultValue strin
 }
 
 // get assigned count for flags
-func (a *FlagSet) assignedCount() int {
+func (a *FlagSet) AssignedCount() int {
 	n := 0
 	for _, f := range a.flags {
 		if f.assigned {

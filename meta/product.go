@@ -5,6 +5,10 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/endpoints"
 )
 
+type Products struct {
+	Products []Product 				`yaml:"products"`
+}
+
 type Product struct {
 	Name                string            `yaml:"name"`
 	Version      		string            `yaml:"version"`
@@ -45,3 +49,5 @@ func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error)
 	//}
 	return "", nil
 }
+
+

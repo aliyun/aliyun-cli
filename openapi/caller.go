@@ -1,127 +1,97 @@
-package command
+package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/cli"
 	"fmt"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"github.com/aliyun/aliyun-cli/core"
-	"time"
 	"strings"
-	"io/ioutil"
-	"github.com/aliyun/aliyun-cli/resource"
 	"github.com/aliyun/aliyun-cli/meta"
+	"github.com/aliyun/aliyun-cli/config"
+	"github.com/aliyun/aliyun-cli/cli"
 )
 
-var products = meta.LoadProductSet(resource.NewReader())
+type Caller struct {
+	profile *config.Profile
+	library *meta.Library
+	helper *Helper
 
-func InitOpenApiCaller(cmd *cli.Command) {
-	cmd.Run = func(c *cli.Command, args []string) error {
-		if len(args) < 2 {
-			return fmt.Errorf("invaild arguments")
-		}
+	force bool
+	verbose bool		//TODO: next version
+}
 
-		product := args[0]
-		api := args[1]
-		parameters := make(map[string]string)
-
-		for _, v := range c.UnknownFlags().Items() {
-			parameters[v.Name] = v.GetValue()
-		}
-
-		s, err := CallOpenApi(product, api, parameters)
-		if err != nil {
-			return err
-		}
-		fmt.Println(s)
-		return nil
-	}
-	cmd.Help = func(c *cli.Command, args []string) {
-		c.PrintHead()
-		c.PrintSubCommands()
-		for _, p := range products.Products {
-			fmt.Printf("  %s/%s\t\t%s\n", p.Name, p.Version, p.Descriptions["zh"])
-		}
-		c.PrintFlags()
-		c.PrintTail()
+func NewCaller(profile *config.Profile, library *meta.Library) (*Caller) {
+	return &Caller {
+		profile: profile,
+		library: library,
+		helper: NewHelper(library),
 	}
 }
 
-func CallOpenApi(product string, api string, parameters map[string]string) (string, error) {
-	conf, err := core.LoadConfiguration()
-	if err != nil {
-		return "", err
-	}
-	cp := conf.GetCurrentProfile()
+func (c *Caller) Validate() error {
+	return c.profile.Validate()
+}
 
-	client, err := cp.GetClient()
+//
+// entrance call from main
+func (c *Caller) Run(ctx *cli.Context, productName string, apiOrMethod string, path string) {
+	c.force = ctx.Flags().IsAssigned("force")
 
-	if err != nil {
-		fmt.Errorf("failed with new client %v", err)
-	}
-
-	productInfo, ok := products.GetProduct(product)
+	//
+	// get product info
+	product, ok := c.library.GetProduct(productName)
 	if !ok {
-		return "", fmt.Errorf("unknown product %s", product)
+		if !c.force {
+			ctx.Command().PrintFailed(fmt.Errorf("unknown product: %s", productName),
+				"Use\n  `aliyun help`  to view product list\n  or add --force flag to skip name check")
+			return
+		} else {
+			product = meta.Product {
+				Name: productName,
+			}
+		}
 	}
 
-	method, roa := parameters["roa"]
-
-	request := requests.NewCommonRequest()
-	request.RegionId = cp.RegionId
-	request.Product = productInfo.Name
-	request.ApiName = api
-	request.Version = productInfo.Version
-
-	if roa {
-		request.Method = method
-		request.Headers["Date"] = time.Now().Format(time.RFC1123Z)
-		request.PathPattern = api
-	}
-
-	for k, v := range parameters {
-		switch k {
-		case "region":
-			request.RegionId = v
-		case "endpoint":
-			request.Domain = v
-		case "version":
-			request.Version = v
-		case "body":
-			request.SetContent([]byte(v))
-		case "body-file":
-			buf, err := ioutil.ReadFile(v)
+	if strings.ToLower(product.ApiStyle) == "rpc" || product.ApiStyle == "" {
+		//
+		// Rpc call
+		if path != "" {
+			ctx.Command().PrintFailed(fmt.Errorf("invalid arguments"), "")
+			return
+		}
+		if c.force {
+			c.InvokeRpcForce(ctx, &product, apiOrMethod)
+		} else {
+			c.InvokeRpc(ctx, &product, apiOrMethod)
+		}
+	} else if product.Version != "" {
+		//
+		// Restful Call
+		// aliyun cs GET /clusters
+		// aliyun cs /clusters --roa GET
+		ok, method, path, err := CheckRestfulMethod(ctx, apiOrMethod, path)
+		if !ok {
 			if err != nil {
-				fmt.Errorf("failed read file: %s %v", v, err)
+				ctx.Command().PrintFailed(err, "")
+			} else {
+				ctx.Command().PrintFailed(fmt.Errorf("product %s need restful call", product.Name), "")
 			}
-			request.SetContent(buf)
-		case "accept":
-			request.Headers["Accept"] = v
-			if strings.Contains(v, "xml") {
-				request.AcceptFormat = "XML"
-			} else if strings.Contains(v, "json") {
-				request.AcceptFormat = "JSON"
-			}
-		case "content-type":
-			request.SetContentType(v)
-		default:
-			request.QueryParams[k] = v
+			return
 		}
-	}
-
-	if request.Domain == "" {
-		request.Domain, err = productInfo.GetEndpoint(request.RegionId, client)
+		c.InvokeRestful(ctx, &product, method, path)
 		if err != nil {
-			return "", err
+			ctx.Command().PrintFailed(fmt.Errorf("call restful %s%s.%s faild %v", product.Name, path, method, err), "")
+			return
+		}
+	} else {
+		ok, method, path, err := CheckRestfulMethod(ctx, apiOrMethod, path)
+		if ok {
+			if err != nil {
+				ctx.Command().PrintFailed(err, "")
+			} else {
+				c.InvokeRestful(ctx, &product, method, path)
+			}
+		} else {
+			c.InvokeRpcForce(ctx, &product, apiOrMethod)
 		}
 	}
-
-	resp, err := client.ProcessCommonRequest(request)
-	if err != nil {
-		if !strings.Contains(err.Error(), "unmarshal") {
-			// fmt.Printf("%v\n", err)
-			return "", err
-		}
-	}
-
-	return resp.GetHttpContentString(), nil
 }
+
+

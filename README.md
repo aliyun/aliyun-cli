@@ -1,116 +1,123 @@
-Aliyun Command Line Interface
-=============================
+# Aliyun Command Line Interface
 
-[Chinese document(中文文档)](./README_cn.md)
+[中文文档](./README_cn.md)
 
-Following doc is obsoleted, new documents is writing.
-=====================================================
+This is a refactoring beta version rewrite with golang, for old stable python verison switch to [python]() branch
 
-Overview
---------
+## Overview
 
-Aliyun Command Line Interface `aliyuncli` is a unified tool to manage your Aliyun services. Using this tool you can easily invoke the Aliyun open API to control multiple Aliyun services from the command line and also automate them through scripts, for instance using the Bash shell or Python.
+Aliyun Command Line Interface `aliyun` is a unified tool to manage your Aliyun services. Using this tool you can easily invoke the Aliyun OpenAPI to control multiple Aliyun services from the command line and also automate them through scripts, for instance using the Bash shell or Python.
 
-Aliyuncli on Github
--------------------
+## Install 
 
-The `aliyuncli` tool is on Github and anyone can fork the code, subject to the license. You can access it at: <https://github.com/aliyun/aliyun-cli>
-
-### How to Install aliyuncli
-
-Aliyun provides two ways to install the `aliyuncli` tool:
-
-1.  Install using pip
-2.  Install from a software package
-
-### Install aliyuncli Using pip
-
-If you have Windows, Linux, or Mac OS and pip is installed in your operating system, you can install `aliyuncli` using pip:
-
-### Windows
-
-    pip install aliyuncli
-
-To upgrade the existing `aliyuncli`, use the `--upgrade` option: :
-
-    pip install --upgrade aliyuncli
-
-### Linux, Mac OS and Unix
-
-    $ sudo pip install aliyuncli
-
-To upgrade the existing `aliyuncli`, use the `--upgrade` option: :
-
-    $ pip install --upgrade aliyuncli
-
-### Install from a Software Package
-
-If you don't have the pip tool, you can also install `aliyuncli` from an Aliyun supplied software package.
-
-Aliyuncli supports several operating systems with the package:
-
--   Windows
--   Linux
--   Mac OS.
-
-You can find the software package for a free download at the following link <http://market.aliyun.com/products/53690006/cmgj000314.html?spm=5176.900004.4.2.esAaC2>
-
-The package contains three install packages:
-
--   `cli.tar.gz` is for Linux and Mac OS
--   `AliyunCLI_x86` is for Windows 32 bit OS
--   `AliyunCLI_x64` is for Windows 64 bit OS
-
-### Windows
-
-1.  Find `AliyunCLI.msi` and double click the msi. You will go into the installation guide.
-2.  Click the “next” button and choose your desired path and confirm
-3.  Finish the install
-
-### Linux and Mac OS
-
-Install as follows: :
-
-    $ tar -zxvf cli.tar.gz
-    $ cd cli
-    $ sudo sh install.sh
-
-Check the aliyuncli Installation
---------------------------------
-
-Confirm that `aliyuncli` installed correctly by viewing the help file: :
-
-    $ aliyuncli help
-
-or
+You can download binary release in the following links 
 
 
-    $ aliyuncli
+OR
 
-How to Install the Aliyun Python SDK
-------------------------------------
+make it by youself
 
-`aliyuncli` requires the Aliyun Python SDK 2.0. You should install the SDK after you install `aliyuncli`, otherwise you can not access the Aliyun service.
+## Configure
 
-### Install SDK Using pip
+### 
 
-The Aliyun Python SDK can only be installed by pip.
+## Usage
 
-Since each Aliyun service has their own SDK, you can install a required SDK individually with no need install all of them.
+How to Use aliyuncli
+--------------------
 
-For example, if you need only the ECS SDK, you can install only it as follows: :
+An `aliyuncli` command has four parts:
 
-    $ sudo pip install aliyun-python-sdk-ecs
+-   Name of the tool “aliyuncli”
+-   Service name, such as: ecs, rds, slb, ots
+-   Available operations for each service
+-   List of keys and values, with possible multiple keys and values. The values can be number, string, or JSON format.
 
-If you need only the RDS SDK: :
+Here are some examples: :
 
-    $ sudo pip install aliyun-python-sdk-rds
+    $ aliyuncli rds DescribeDBInstances --PageSize 50
+    $ aliyuncli ecs DescribeRegions
+    $ aliyuncli rds DescribeDBInstanceAttribute --DBInstanceId xxxxxx
 
-For SLB: :
+### Additional Usage Information
 
-    $ sudo pip install aliyun-python-sdk-slb
+    --filter
 
-### SDK List
+`aliyuncli` supports a filter function. When any API is called, the data returned is JSON formatted by default. The filter function can help the user manipulate the JSON formatted data more easily.
+
+Here are some examples: :
+
+    $ aliyuncli ecs DescribeRegions --output json --filter Regions.Region[0]
+    {
+        "LocalName":"\u6df1\u5733"
+        "RegionId": "cn-shenzhen"
+    }
+    $ aliyuncli ecs DescribeRegions --output json --filter Regions.Region[*].RegionId
+    [
+        "cn-shenzhen", 
+        "cn-qingdao", 
+        "cn-beijing", 
+        "cn-hongkong", 
+        "cn-hangzhou", 
+        "us-west-1"
+    ]
+    $ aliyuncli ecs DescribeRegions --output json --filter Regions.Region[3].RegionId
+    "cn-hongkong"
+
+## Using HTTPS
+
+Your can switch to HTTPS request by add --secure argument to your command.
+
+    $ aliyuncli Ecs DescribeInstances --secure
+	
+
+## Command Completion
+
+On Unix-like systems, the `aliyuncli` includes a command-completion feature that enables you to use the `TAB` key to complete a partially typed command. This feature is not automatically installed, so you need to configure it manually.
+
+Configuring command completion requires two pieces of information:
+
+-   the name of the shell you are using
+-   the location of `aliyun_completer` script.
+
+### Check Your Shell
+
+Currently `aliyuncli` supports these shells:
+
+-   bash
+-   zsh.
+
+1. To find the `aliyun_completer`, you can use: :
+
+    $ which aliyun_completer
+    /usr/local/bin/aliyun_completer
+
+1.  To enable command completion:
+
+bash - use the build-in command complete: :
+
+    $ complete -C ‘/usr/local/bin/aliyun_completer’ aliyuncli
+
+zsh - source bin/aliyun\_zsh\_completer.sh :
+
+    % source /usr/local/bin/aliyun_zsh_completer.sh
+
+### Test Command Completion
+
+    $ aliyuncli s<TAB>
+    ecs     rds     slb
+
+The services display the SDK(s) you installed.
+
+Finally, to ensure that completion continues to work after a reboot, add a configuration command to enable command completion to your shell profile. :
+
+    $ vim ~/.bash_profile
+
+Add `complete -C ‘/usr/local/bin/aliyun_completer’ aliyuncli` at the end of the file.
+
+## Support Products
+
+## 
 
 <table style="width:67%;">
 <colgroup>
@@ -269,94 +276,4 @@ Text format sample: :
 
     <sample>
 
-How to Use aliyuncli
---------------------
 
-An `aliyuncli` command has four parts:
-
--   Name of the tool “aliyuncli”
--   Service name, such as: ecs, rds, slb, ots
--   Available operations for each service
--   List of keys and values, with possible multiple keys and values. The values can be number, string, or JSON format.
-
-Here are some examples: :
-
-    $ aliyuncli rds DescribeDBInstances --PageSize 50
-    $ aliyuncli ecs DescribeRegions
-    $ aliyuncli rds DescribeDBInstanceAttribute --DBInstanceId xxxxxx
-
-### Additional Usage Information
-
-    --filter
-
-`aliyuncli` supports a filter function. When any API is called, the data returned is JSON formatted by default. The filter function can help the user manipulate the JSON formatted data more easily.
-
-Here are some examples: :
-
-    $ aliyuncli ecs DescribeRegions --output json --filter Regions.Region[0]
-    {
-        "LocalName":"\u6df1\u5733"
-        "RegionId": "cn-shenzhen"
-    }
-    $ aliyuncli ecs DescribeRegions --output json --filter Regions.Region[*].RegionId
-    [
-        "cn-shenzhen", 
-        "cn-qingdao", 
-        "cn-beijing", 
-        "cn-hongkong", 
-        "cn-hangzhou", 
-        "us-west-1"
-    ]
-    $ aliyuncli ecs DescribeRegions --output json --filter Regions.Region[3].RegionId
-    "cn-hongkong"
-
-## Using HTTPS
-
-Your can switch to HTTPS request by add --secure argument to your command.
-
-    $ aliyuncli Ecs DescribeInstances --secure
-	
-
-## Command Completion
-
-On Unix-like systems, the `aliyuncli` includes a command-completion feature that enables you to use the `TAB` key to complete a partially typed command. This feature is not automatically installed, so you need to configure it manually.
-
-Configuring command completion requires two pieces of information:
-
--   the name of the shell you are using
--   the location of `aliyun_completer` script.
-
-### Check Your Shell
-
-Currently `aliyuncli` supports these shells:
-
--   bash
--   zsh.
-
-1. To find the `aliyun_completer`, you can use: :
-
-    $ which aliyun_completer
-    /usr/local/bin/aliyun_completer
-
-1.  To enable command completion:
-
-bash - use the build-in command complete: :
-
-    $ complete -C ‘/usr/local/bin/aliyun_completer’ aliyuncli
-
-zsh - source bin/aliyun\_zsh\_completer.sh :
-
-    % source /usr/local/bin/aliyun_zsh_completer.sh
-
-### Test Command Completion
-
-    $ aliyuncli s<TAB>
-    ecs     rds     slb
-
-The services display the SDK(s) you installed.
-
-Finally, to ensure that completion continues to work after a reboot, add a configuration command to enable command completion to your shell profile. :
-
-    $ vim ~/.bash_profile
-
-Add `complete -C ‘/usr/local/bin/aliyun_completer’ aliyuncli` at the end of the file.
