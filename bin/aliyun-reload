@@ -4,6 +4,9 @@ set +x
 source aliyun-common
 
 lookup_any $1
+imageid=$image_id # using default image id
+# Overide image id with $2
+[[ $2 != '' ]] &&  imageid=$2
 ##Try to stop and start instance
 if [[ $FORCE != 'true'  ]];
 then
@@ -16,8 +19,8 @@ then
     echo Stopping $instance_id at $region_id, current status: $instance_status
     [[ $instance_status == 'Running' ]] && aliyun Ecs StopInstance  --RegionId $region_id --InstanceId $instance_id
     #lookup_any $instance_id
-    echo Replacing system of  $instance_id at $region_id, current status: $instance_status
-    wait_until Stopped && aliyun Ecs ReplaceSystemDisk --InstanceId=$instance_id --ImageId=$imange_id
+    echo Replacing system of  $instance_id at $region_id with $imageid, current status: $instance_status
+    wait_until Stopped && aliyun Ecs ReplaceSystemDisk --InstanceId $instance_id --ImageId $imageid
     #lookup_any $instance_id
     echo Starting system of  $instance_id at $region_id, current status: $instance_status
     sleep 5 && aliyun Ecs StartInstance  --RegionId $region_id --InstanceId $instance_id

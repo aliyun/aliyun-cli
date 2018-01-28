@@ -7,7 +7,7 @@ instanceId=${1}
 
 for region in $(cat ./region_ids);
 do
-    aliyun Ecs DescribeInstances --RegionId $region |jq '.Instances.Instance'| jq '.[] | select(.InstanceId == "'$instanceId'"  or .PublicIpAddress.IpAddress[0] == "'$instanceId'" or .NetworkInterfaces.NetworkInterface[0].PrimaryIpAddress == "'$instanceId'" or .HostName == "'$instanceId'")' > .instance_temp
+    aliyun Ecs DescribeInstances --RegionId $region --PageSize 100 |jq '.Instances.Instance'| jq '.[] | select(.InstanceId == "'$instanceId'"  or .PublicIpAddress.IpAddress[0] == "'$instanceId'" or .NetworkInterfaces.NetworkInterface[0].PrimaryIpAddress == "'$instanceId'" or .HostName == "'$instanceId'")' > .instance_temp
     if [[ $(cat .instance_temp | wc -l) -gt  0 ]];
     then
         mv .instance_temp .instance_found
