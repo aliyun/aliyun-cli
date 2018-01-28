@@ -1,5 +1,11 @@
 # CHANGE LOG
 
+### 0.30
+
+- integrate with 64 products meta
+- implemented help command for product and api
+- support fully certificated mode AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair,
+
 ### 0.16
 
 - support --content-type flag to set Header

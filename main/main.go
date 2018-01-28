@@ -129,6 +129,7 @@ func processHelp(ctx *cli.Context, args []string, err error) {
 func printUsage(c *cli.Command, configError error) {
 	c.PrintHead()
 	c.PrintUsage()
+	c.PrintSubCommands()
 	c.PrintFlags()
 	c.PrintSample()
 	if configError != nil {
