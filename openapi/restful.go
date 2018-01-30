@@ -29,13 +29,12 @@ func (c *Caller) InvokeRestful(ctx *cli.Context, product *meta.Product, method s
 
 	resp, err := client.ProcessCommonRequest(request)
 	if err != nil {
-		if !strings.Contains(err.Error(), "unmarshal") {
+		if strings.Contains(strings.ToLower(err.Error()), "unmarshal") {
 			// fmt.Printf("%v\n", err)
 		} else {
-			ctx.Command().PrintFailed(err, "")
+			ctx.Command().PrintFailed(err, "---")
 		}
 	}
-
 	fmt.Println(resp.GetHttpContentString())
 }
 
