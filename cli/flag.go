@@ -14,6 +14,7 @@ type Flag struct {
 	Assignable		bool
 	Persistent		bool
 	Repeatable		bool
+	Hidden			bool
 
 	assigned		bool
 	value			string

@@ -165,6 +165,9 @@ func (c *Command) PrintFlags() {
 	fmt.Printf("\nFlags:\n")
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
 	for _, flag := range c.Flags().Flags() {
+		if flag.Hidden {
+			continue
+		}
 		fmt.Fprintf(w, "  --%s\t%s\n", flag.Name, flag.Usage)
 	}
 	w.Flush()
