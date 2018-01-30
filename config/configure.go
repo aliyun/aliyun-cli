@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"io/ioutil"
+	"text/tabwriter"
+	"os"
 )
 
 var profile string
@@ -46,13 +48,13 @@ func NewConfigureCommand() (*cli.Command) {
 	//		return doSetConfigure()
 	//	},
 	//})
-	//c.AddSubCommand(&cli.Command{
-	//	Name: "list",
-	//	Run: func(cmd *cli.Command, args []string) error {
-	//		// profile, _ := c.Flags().GetValue("profile")
-	//		// return true, nil
-	//	},
-	//})
+	c.AddSubCommand(&cli.Command{
+		Name: "list",
+		Run: func(c *cli.Context, args []string) error {
+			doConfigureList()
+			return nil
+		},
+	})
 
 	return c
 }
@@ -68,7 +70,7 @@ func doConfigure(profileName string) error {
 		cp = conf.NewProfile(profileName)
 	}
 
-	fmt.Printf("Configuring profile '%s'...\n", profileName)
+	fmt.Printf("Configuring profile '%s' ...\n", profileName)
 	if mode != "" {
 		switch CertificateMode(mode) {
 		case AK:
@@ -112,6 +114,29 @@ func doConfigure(profileName string) error {
 
 	DoHello(&cp)
 	return nil
+}
+
+func doConfigureList() {
+	conf, err := LoadConfiguration()
+	if err != nil {
+		cli.Errorf("ERROR: load configure failed: %v\n", err)
+	}
+	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
+	fmt.Fprint(w, "Profile\t| CertificationMode\t| Valid\t| AccessKeyId\n")
+	fmt.Fprint(w, "---------\t| -----------------\t| -------\t| ----------------\n")
+	for _, profile := range conf.Profiles {
+		name := profile.Name
+		if name == conf.CurrentProfile {
+			name = name + " *"
+		}
+		err := profile.Validate()
+		valid := "Valid"
+		if err != nil {
+			valid = "Invalid"
+		}
+		fmt.Fprintf(w, "%s\t| %s\t| %s\t| %s\n", name, profile.Mode, valid, MosaicString(profile.AccessKeyId, 3))
+	}
+	w.Flush()
 }
 
 func configureAK(cp *Profile) error  {
