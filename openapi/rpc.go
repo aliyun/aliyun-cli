@@ -12,8 +12,8 @@ import (
 func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName string) {
 	api, ok := c.library.GetApi(product.Name, product.Version, apiName)
 	if !ok {
-		ctx.Command().PrintFailed(fmt.Errorf("unknown api: %s", apiName),
-			fmt.Sprintf("Use\n `aliyun help %s` to view product list\n  or add --force to skip check", apiName))
+		ctx.Command().PrintFailed(fmt.Errorf("invailed api: %s", apiName),
+			fmt.Sprintf("Use\n `aliyun help %s` to view product list\n  or add --force to skip check", product.Name))
 		return
 	}
 
@@ -22,6 +22,7 @@ func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName stri
 	// return: if check failed return error, otherwise return nil
 	client, request, err := c.InitClient(ctx, product, true)
 	request.ApiName = apiName
+	// fmt.Printf(">>> %v\n", request)
 
 	if err != nil {
 		ctx.Command().PrintFailed(fmt.Errorf("init client failed: %v", err), "")
@@ -72,7 +73,14 @@ func (c *Caller) FillRpcParameters(ctx *cli.Context, request *requests.CommonReq
 	}
 	if api != nil {
 		err := api.CheckRequiredParameters(func(s string) bool {
-			return ctx.UnknownFlags().IsAssigned(s)
+			switch s {
+			case "RegionId":
+				return request.RegionId != ""
+			case "Action":
+				return request.ApiName != ""
+			default:
+				return ctx.UnknownFlags().IsAssigned(s)
+			}
 		})
 		if err != nil {
 			return err
@@ -87,10 +95,11 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 	// return: if check failed return error, otherwise return nil
 	client, err := c.profile.GetClient()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("get client failed %b", err)
 	}
 
 	request := requests.NewCommonRequest()
+	request.Headers["User-Agent"] = "Aliyun-CLI-V0.31"
 	request.RegionId = c.profile.RegionId
 	request.Product = product.Name
 	request.Version = product.Version

@@ -8,6 +8,7 @@ import (
 	"github.com/aliyun/aliyun-cli/resource"
 	"fmt"
 	"github.com/aliyun/aliyun-cli/meta"
+	"github.com/aliyun/aliyun-cli/command"
 )
 
 var usage = `
@@ -43,7 +44,7 @@ var configureCommand = config.NewConfigureCommand()
 func main() {
 	rootCmd := &cli.Command{
 		Name: "aliyun",
-		Short: "Alibaba Cloud Command Line Interface Version 0.30 Beta",
+		Short: "Alibaba Cloud Command Line Interface Version 0.31 Beta",
 		Usage: "aliyun <product> <operation> --parameter1 value1 --parameter2 value2 ...",
 		Sample: "aliyun ecs DescribeRegions",
 		EnableUnknownFlag: true,
@@ -61,6 +62,7 @@ func main() {
 	rootCmd.Flags().Add(cli.Flag{Name: "region", Usage: "use assigned region", Assignable:true})
 	rootCmd.Flags().Add(cli.Flag{Name: "version", Usage: "assign product version", Assignable:true})
 	rootCmd.AddSubCommand(configureCommand)
+	rootCmd.AddSubCommand(command.NewTestCommand())
 	rootCmd.Execute(os.Args[1:])
 }
 

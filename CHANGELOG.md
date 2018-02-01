@@ -1,5 +1,10 @@
 # CHANGE LOG
 
+### 0.31
+
+- fix bug of check parameters, skip Action, Region parameters
+- support `aliyun configure list` command
+
 ### 0.30
 
 - integrate with 64 products meta

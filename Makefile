@@ -1,4 +1,4 @@
-export VERSION=0.30
+export VERSION=0.31
 
 all: build
 release: build build_mac build_linux build_windows
@@ -13,6 +13,7 @@ metas:
 
 clean:
 	rm -f resource/metas.go
+	rm -rf out/*
 
 build: metas
 	go build -o out/aliyun main/main.go

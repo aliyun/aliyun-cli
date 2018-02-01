@@ -34,7 +34,7 @@ func (a *Api) HasParameter(name string) bool {
 
 func (a *Api) CheckRequiredParameters(checker func (string) bool) error {
 	for _, p := range a.Parameters {
-		if !checker(p.Name) {
+		if p.Required && !checker(p.Name) {
 			return fmt.Errorf("required parameter %s not assigned", p.Name)
 		}
 	}
