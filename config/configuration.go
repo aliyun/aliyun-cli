@@ -80,7 +80,16 @@ func LoadProfile(name string) (Profile, error) {
 func LoadConfiguration() (Configuration, error) {
 	path := GetConfigPath() + "/" + configFile
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return NewConfiguration(), nil
+		lc := MigrateLegacyConfiguration()
+		if lc != nil {
+			err := SaveConfiguration(*lc)
+			if err != nil {
+				return *lc, fmt.Errorf("save failed %v", err)
+			}
+			return *lc, nil
+		} else {
+			return NewConfiguration(), nil
+		}
 	}
 
 	bytes, err := ioutil.ReadFile(path)
