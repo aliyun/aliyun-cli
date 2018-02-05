@@ -1,5 +1,14 @@
 # CHANGE LOG
 
+### 0.33
+
+- fix bug for error processing when rpc/restful call
+- auto add Content-Type header for restful call
+
+### 0.32
+
+- auto migrate legacy settings
+
 ### 0.31
 
 - fix bug of check parameters, skip Action, Region parameters

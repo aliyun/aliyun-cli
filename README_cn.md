@@ -1,226 +1,156 @@
 
-# 阿里云命令行工具 <Aliyun Command Line Interface>
+# 阿里云命令行工具 (Aliyun Command Line Interface)
 
-# 此文档以过期，重构后的文档正在写作中
+[English Document](README.md) 
 
-阿里云命令行工具是用 Python 编写的, 基于阿里云open API 打造的用于管理阿里云资源的统一工具.
+目前, Go语言重构版本的CLI处于**BETA**发布中，如果您还希望使用原有的Python版本，请切换到[python分支]()
 
-通过下载和配置该工具，您可以在同一个命令行方式下控制多个阿里云产品.
+## 简介
 
-阿里云命令行工具代码开源, 并接受开发者的 pull requests. 您可以fork 仓库进行任何修改.
+- 阿里云命令行工具是用Go语言编写的, 基于阿里云OpenAPI打造的用于管理阿里云资源的统一工具. 通过下载和配置该工具，您可以在同一个命令行方式下控制多个阿里云产品.
 
-优秀的功能, 我们在审核后, 会吸收进官方的版本中, 并统一发布在阿里云官网.
+- 欢迎通过提交[Github Issue](https://github.com/aliyun/aliyun-cli/issues/new)与我们沟通.
 
-欢迎通过提交[Github Issue](https://github.com/aliyun/aliyun-cli/issues/new)与我们沟通.
+## 安装
 
-### 系统要求:
+### 下载
 
-阿里云命令行工具需要系统安装python:
+目前CLI工具支持下载即可用，支持Mac, Linux, Windows平台(x64版本)
 
-    * 支持2.6.5 及以上版本
+- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.31-amd64.tgz)
+- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.31-amd64.tgz)
+- [Windows](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.31-amd64.tgz)
 
-### 安装方法:
+解压即可用、您可以将`aliyun`工具挪到`/usr/local/bin`目录下，或添加到`$PATH`中，以获得更便捷的访问
 
-最简单的安装方式是通过 pip 直接安装, 如果您的系统中有安装 pip 工具, 请执行:
+或
 
-    $ sudo pip install aliyuncli
+## 下载源码后自行编译
 
-如果已经安装了阿里云命令行工具, 您可以通过pip升级到最新的版本:
+当遇到不支持的平台，或其他需求时，请先安装并配置好golang环境，并按照如下步骤下载源码并编译
 
-    $ sudo pip install --upgrade aliyuncli
+```
+$ mkdir -p $GOPATH/src/github.com/aliyun
+$ cd $GOPATH/src/github.com/aliyun
+$ git clone http://github.com/aliyun/aliyun-cli.git
+$ git clone http://github.com/aliyun/aliyun-openapi-meta.git
+$ cd aliyun-cli
+$ make install
+```
 
-您也可以去阿里云官网下载安装包使用[点击下载](http://market.aliyun.com/products/53690006/cmgj000314.html?spm=5176.900004.4.2.IpMOOc)
+## 配置
 
-windows 版本直接双击MSI 安装即可.
-linux 和 MAC os 请执行:
+- 在使用`aliyun`命令行工具前，您需要运行`aliuyun configure`命令进行配置.
+- 要使用阿里云命令行工具，您需要一个云账号以及一对AccessKeyId和AccessKeySecret. 请在阿里云控制台中的[AccessKey管理控制台](https://ak-console.aliyun.com/#/accesskey)上创建和查看您的AK，或者联系您的系统管理员
+- 命令行工具使用OpenAPI方式访问云产品，您需要事先在阿里云控制台中开通这个产品
 
-    $ cd <aliyuncli_path>
-    $ sudo sh install.sh
+### 基本配置
 
-### 文件结构:
+```
+$ aliyun configure
+Configuring profile 'default' ...
+Aliyun Access Key ID [None]: <Your aliyun access key id>
+Aliyun Access Key Secret [None]: <Your aliyun access key secret>
+Default Region Id [None]: cn-hangzhou
+Default output format [json]: json
+Default Languate [zh]: zh
+```
 
-	aliyuncli/* 是整个的业务逻辑部分, 包含数据的解析, 命令行解析, 以及基本的SDK的调用过程.
+### 多用户
 
-	aliyuncli/advance/* 是API聚合逻辑, 这里主要放针对于 aliyuncli 的各种高级功能的开发.
+- `aliyun`支持多用户配置, 使用`$ aliyun configure --profile user1`可以配置指定的用户
+- `$ aliyun configure list`命令可以列出当前所有配置, 如下表, 其中打在Profile列后面打*的为当前使用的默认配置
+- 您可以使用`--profile user1`参数在后续的调用中, 来指定调用时的用户
 
-	例如ECS的导入导出功能, RDS的导入导出功能.
+```
+Profile   | CertificationMode | Valid   | AccessKeyId
+--------- | ----------------- | ------- | ----------------
+default * | AK                | Valid   | *************ac8
+ram       | EcsRamRole        | Invalid |
+test      | StsToken          | Invalid | **
+leo       | AK                | Valid   | *************bb2 
+```
 
-	未来会持续的开发更多的高级功能.
+### 其他认证方式
+
+- `aliyun`命令行工具，可在`configure`命令后增加`--mode ...`方式使用不同认证方式，目前支持的认证方式如下
+
+| 验证方式  | 说明 |
+| --------       | -------- |
+| AK             | 使用AccessKeyId/Secret访问 |
+| StsToken       | 使用StsToken访问    |
+| RamRoleArn     | 使用Ram子账号的AssumeRole方式访问     |
+| EcsRamRole     | 在ECS实例上通过EcsRamRole实现免密验证   |
+| RsaKeyPair     | 使用Rsa公私钥方式(仅日本站支持)     |
+
+### 使用自动补全功能
+
+- TODO
+
+## 如何使用
+
+### 基本使用方式
+
+```
+$ aliyun <product> <operation> --parameter1 value1 --parameter2 value2 ...
+```
+
+例如: 
+
+```
+$ aliyun rds DescribeDBInstances --PageSize 50
+$ aliyun ecs DescribeRegions
+$ aliyun rds DescribeDBInstanceAttribute --DBInstanceId xxxxxx
+```
+
+### 获取帮助信息
+
+`aliyun`集成了一部分产品的API和参数列表的信息, 您可以使用如下命令来获取帮助
+
+- `$ aliyun help`: 打印产品列表
+- `$ aliyun help ecs`: 获取产品的API信息
+- `$ aliyuh help ecs CreateInstance`: 获取API的调用信息
 
 
-### 自动补全功能:
-    阿里云命令行工具具备了命令行自动提示和补全的功能. 这个功能安装后不会默认打开, 需要您手动开启:
+### Restful风格的调用
 
-#### 对于bash:
+部分阿里云产品的OpenAPI为Restful风格，调用Restful风格的接口与RPC方式不用，需要使用
 
-    $ complete -C '/usr/local/bin/aliyun_completer' aliyuncli
+- GET的例子: 
 
-#### 对于zsh:
+```
+$ aliyun cs GET /clusters
+```
 
-    % source /usr/local/bin/aliyun_zsh_complete.sh
+- POST的例子: 
 
-### 如何使用:
+```
+$ aliyun cs POST /clusters --body "$(cat input.json)"
+```
 
-阿里云命令行工具在使用前, 首先需要配置access key 和 access secret, 您可以通过执行下面的命令直接配置:
+- DELETE的例子
 
-	$ aliyuncli configure
-	Aliyun Access Key ID [****************wQ7v]:
-	Aliyun Access Key Secret [****************fxGu]:
-	Default Region Id [cn-hangzhou]:
-	Default output format [json]:
+```
+$ aliyun cs DELETE /clusters/ce2cdc26227e09c864d0ca0b2d5671a07
+```
 
-配置完成后, 您就可以通过执行命令来控制您的云资产:
+如何区分Rpc风格和Restful风格？
 
-	$ aliyuncli Ecs DescribeInstances
-	$ aliyuncli Ecs StartInstance --InstanceId your_instance_id
-	$ aliyuncli Rds DescribeDBInstances
+- 简单来说，API参数中，包含Action字段的是RPC风格，需要PathPattern的是Restful风格。
+- 一般情况下，每个产品内，所有API的调用风格是统一的。
+- 每个API仅支持特定的一种风格调用，传入错误的标识，可能会调用到其他API，或收到“ApiNotFound”的错误信息。
 
-### 用HTTPS(SSL/TLS)通信
+### 使用`--force`参数
 
-添加 --secure 参数即可使用HTTPS替代HTTP方式来和阿里云服务器通信
+`aliyun`命令行工具集成了一部分云产品的元数据，在调用时会进行参数的合法性检查，使用一个元数据中未包含的API或参数会导致`unknown api`或`unknown parameter`的报错。可以使用`--force`参数来跳过API和参数检查，强制调用元数据列表外的API和参数，如:
 
-	$ aliyuncli Ecs DescribeInstances --secure
+```
+$ aliyun newproduct --version 2018-01-01 --endpoint newproduct.aliyuncs.com --param1 ... --force
+```
+
+使用前请阅读阿里云各产品的OpenAPI文档，来了解OpenAPI的使用方式及参数列表，在使用`--force`参数时，有两个参数是额外需要指定的:
+
+- `--version`: 指定OpenAPI的版本，你可以再API文档中找到这个版本号，如: ECS的版本号是`2014-05-26`
+- `--endpoint`: 指定产品的接入地址，一般产品接入地址是`product.aliyuncs.com`，或`product.en-central-1.aliyuncs.com`，请参照文档官网
 
 
-### 如何从源码直接运行:
-
-	$ git clone https://github.com/aliyun/aliyun-cli.git
-	$ cd aliyuncli/aliyuncli
-	$ python aliyuncli.py ecs DescribeRegions --output json
-
-源码下载后, 可以不安装直接运行, 前提是要安装阿里云python版SDK.
-
-### 通过pip安装阿里云python版SDK
-安装阿里云的python版SDK步骤参考如下:
-
-	1. 用curl 或者 浏览器打开"https://bootstrap.pypa.io/get-pip.py" , 将内容保存为pip-install.py
-	2. 执行python pip-install.py
-	3. pip 安装完毕后, 执行
-	pip install aliyun-python-sdk-[productname]
-
-例如, 要安装ECS 产品, 那么就执行:
-
-	$ sudo pip install aliyun-python-sdk-ecs
-	
-要安装RDS产品SDK, 就执行:
-
-	$ sudo pip install aliyun-python-sdk-rds
-	
-SLB 则执行:
-
-	$ sudo pip install aliyun-python-sdk-slb
-
-### SDK 列表
-
-<table style="width:67%;">
-<colgroup>
-<col width="20%" />
-<col width="45%" />
-</colgroup>
-<thead>
-<tr class="header">
-<th>Product</th>
-<th>SDK</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>BatchCompute</td>
-<td>aliyun-python-sdk-batchcompute</td>
-</tr>
-<tr class="even">
-<td>Bsn</td>
-<td>aliyun-python-sdk-bsn</td>
-</tr>
-<tr class="odd">
-<td>Bss</td>
-<td>aliyun-python-sdk-bss</td>
-</tr>
-<tr class="even">
-<td>Cms</td>
-<td>aliyun-python-sdk-cms</td>
-</tr>
-<tr class="odd">
-<td>Crm</td>
-<td>aliyun-python-sdk-crm</td>
-</tr>
-<tr class="even">
-<td>Drds</td>
-<td>aliyun-python-sdk-drds</td>
-</tr>
-<tr class="odd">
-<td>Ecs</td>
-<td>aliyun-python-sdk-ecs</td>
-</tr>
-<tr class="even">
-<td>Ess</td>
-<td>aliyun-python-sdk-ess</td>
-</tr>
-<tr class="odd">
-<td>Ft</td>
-<td>aliyun-python-sdk-ft</td>
-</tr>
-<tr class="even">
-<td>Ocs</td>
-<td>aliyun-python-sdk-ocs</td>
-</tr>
-<tr class="odd">
-<td>Oms</td>
-<td>aliyun-python-sdk-oms</td>
-</tr>
-<tr class="even">
-<td>OssAdmin</td>
-<td>aliyun-python-sdk-ossadmin</td>
-</tr>
-<tr class="odd">
-<td>Ram</td>
-<td>aliyun-python-sdk-ram</td>
-</tr>
-<tr class="even">
-<td>Ocs</td>
-<td>aliyun-python-sdk-ocs</td>
-</tr>
-<tr class="odd">
-<td>Rds</td>
-<td>aliyun-python-sdk-rds</td>
-</tr>
-<tr class="even">
-<td>Risk</td>
-<td>aliyun-python-sdk-risk</td>
-</tr>
-<tr class="odd">
-<td>R-kvstore</td>
-<td>aliyun-python-r-kvstore</td>
-</tr>
-<tr class="even">
-<td>Slb</td>
-<td>aliyun-python-sdk-slb</td>
-</tr>
-<tr class="odd">
-<td>Ubsms</td>
-<td>aliyun-python-sdk-ubsms</td>
-</tr>
-<tr class="even">
-<td>Yundun</td>
-<td>aliyun-python-sdk-yundun</td>
-</tr>
-</tbody>
-</table>
-
-### 如何在不能使用pip直接访问网络的环境安装SDK
-
-1. 在能访问网络的环境下访问Python软件包索引站点 https://pypi.python.org.
-
-2. 搜索上文SDK列表段落中列出的SDK并下载 （tar.gz 压缩文件)
-
-3. 从 https://pypi.python.org/pypi/aliyun-python-sdk-core/  下载 aliyun-python-sdk-core  (tar.gz 压缩文件) 
-
-4. 解压 aliyun-python-sdk-core 和之前下载的SDK文件
-
-5. 拷贝解压出的文件夹到已经安装了 aliyuncli 的环境
-
-6. 打开命令行终端程序，访问这些文件夹，执行 "pip install ."命令 (首先针对 aliyun-python-sdk-core 执行）
-
-### 更多介绍, 请参阅官网介绍:
-
-https://help.aliyun.com/document_detail/29993.html
