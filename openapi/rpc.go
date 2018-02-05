@@ -98,7 +98,7 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 	}
 
 	request := requests.NewCommonRequest()
-	request.Headers["User-Agent"] = "Aliyun-CLI-V0.31"
+	request.Headers["User-Agent"] = "Aliyun-CLI-V0.32"
 	request.RegionId = c.profile.RegionId
 	request.Product = product.Name
 	request.Version = product.Version
@@ -132,7 +132,7 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 			if k2, v2, ok := cli.SplitWith(v, "="); ok {
 				request.Headers[k2] = v2
 			} else {
-				return nil, nil, fmt.Errorf("invaild flag --header %s", v)
+				return nil, nil, fmt.Errorf("invaild flag --header `%s` use `--header HeaderName=Value`", v)
 			}
 		}
 	}

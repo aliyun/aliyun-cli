@@ -11,6 +11,10 @@ import (
 
 func (c *Caller) InvokeRestful(ctx *cli.Context, product *meta.Product, method string, path string) {
 	client, request, err := c.InitClient(ctx, product, false)
+	if err != nil {
+		ctx.Command().PrintFailed(fmt.Errorf("bad client %v", err), "")
+		return
+	}
 
 	request.Headers["Date"] = time.Now().Format(time.RFC1123Z)
 	request.PathPattern = path
@@ -27,12 +31,22 @@ func (c *Caller) InvokeRestful(ctx *cli.Context, product *meta.Product, method s
 		request.SetContent(buf)
 	}
 
+	if _, ok := request.Headers["Content-Type"]; !ok {
+		content := string(request.Content)
+		if strings.HasPrefix(content, "{") {
+			request.SetContentType("application/json")
+		} else if strings.HasPrefix(content, "<") {
+			request.SetContentType("application/xml")
+		}
+	}
+
 	resp, err := client.ProcessCommonRequest(request)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unmarshal") {
 			// fmt.Printf("%v\n", err)
 		} else {
-			ctx.Command().PrintFailed(err, "---")
+			ctx.Command().PrintFailed(err, "")
+			return
 		}
 	}
 	fmt.Println(resp.GetHttpContentString())

@@ -144,7 +144,7 @@ func (c *Command) PrintSample() {
 }
 
 func (c *Command) PrintSubCommands() {
-	fmt.Printf("Commands:\n")
+	fmt.Printf("\nCommands:\n")
 
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
 	if len(c.subCommands) > 0 {

@@ -1,14 +1,19 @@
-export VERSION=0.31
+export VERSION=0.33
+export GOVERSION=1.8.1
 
 all: build
 release: build build_mac build_linux build_windows
+
+deps:
+	go get gopkg.in/ini.v1
+	go get -u github.com/jteeuwen/go-bindata/...
 
 testdeps:
 	go get -v github.com/onsi/ginkgo/ginkgo
 	go get -v github.com/onsi/gomega
 	go install github.com/onsi/ginkgo/ginkgo
 
-metas:
+metas: deps
 	go-bindata -o resource/metas.go -pkg resource -prefix ../aliyun-openapi-meta ../aliyun-openapi-meta/**/* ../aliyun-openapi-meta/products.yml
 
 clean:

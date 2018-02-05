@@ -45,7 +45,7 @@ i-bp17esjfzl57qv1ym05n	iZbp17esjfzl57qv1ym05nZ	116.62.163.58	192.168.33.73	cn-ha
 i-bp185dy2o3o6lnlo4f07	iZbp185dy2o3o6lnlo4f07Z	116.62.223.146	192.168.33.71	cn-hangzhou-f	Running
 i-bp185dy2o3o6lnlo4f06	iZbp185dy2o3o6lnlo4f06Z	47.96.15.179	192.168.33.72	cn-hangzhou-f	Running
 i-bp185dy2o3o6lnlo4f05	iZbp185dy2o3o6lnlo4f05Z	47.96.16.255	192.168.33.70	cn-hangzhou-f	Running
-i-bp1e7obsg3ccc6fgyil4	iZbp1e7obsg3ccc6fgyil4Z	116.62.168.131	192.168.33.69	cn-hangzhou-f	Running
+i-bp1e7obsg3ccc6fgyil4	iZbp1e7obsg3ccc6fgyil4Z	116.62.16 8.131	192.168.33.69	cn-hangzhou-f	Running
 i-bp1e7obsg3ccc6fgyil5	iZbp1e7obsg3ccc6fgyil5Z	118.31.64.70	192.168.33.68	cn-hangzhou-f	Running
 i-bp1e7obsg3ccc6fgyil3	iZbp1e7obsg3ccc6fgyil3Z	47.96.5.184	192.168.33.67	cn-hangzhou-f	Running
 i-bp1fveanl3zy002cfyyv	iZbp1fveanl3zy002cfyyvZ	118.31.65.19	192.168.33.66	cn-hangzhou-f	Running
