@@ -21,17 +21,15 @@ func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName stri
 	// call OpenApi
 	// return: if check failed return error, otherwise return nil
 	client, request, err := c.InitClient(ctx, product, true)
-	request.ApiName = apiName
-	// fmt.Printf(">>> %v\n", request)
-
 	if err != nil {
-		ctx.Command().PrintFailed(fmt.Errorf("init client failed: %v", err), "")
+		ctx.Command().PrintFailed(fmt.Errorf("init failed: %v", err), "")
 		return
 	}
 
+	request.ApiName = apiName
 	err = c.FillRpcParameters(ctx, request, &api)
 	if err != nil {
-		ctx.Command().PrintFailed(fmt.Errorf("init client failed: %v", err), "")
+		ctx.Command().PrintFailed(fmt.Errorf("init failed: %v", err), "")
 		return
 	}
 	resp, err := client.ProcessCommonRequest(request)
@@ -47,12 +45,13 @@ func (c *Caller) InvokeRpcForce(ctx *cli.Context, product *meta.Product, apiName
 	// call OpenApi
 	// return: if check failed return error, otherwise return nil
 	client, request, err := c.InitClient(ctx, product, true)
-	request.ApiName = apiName
 
 	if err != nil {
 		ctx.Command().PrintFailed(fmt.Errorf("init client failed: %v", err), "")
 		return
 	}
+
+	request.ApiName = apiName
 
 	c.FillRpcParameters(ctx, request, nil)
 	resp, err := client.ProcessCommonRequest(request)
@@ -95,7 +94,7 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 	// return: if check failed return error, otherwise return nil
 	client, err := c.profile.GetClient()
 	if err != nil {
-		return nil, nil, fmt.Errorf("get client failed %b", err)
+		return nil, nil, fmt.Errorf("bad client %v", err)
 	}
 
 	request := requests.NewCommonRequest()
