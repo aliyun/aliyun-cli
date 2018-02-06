@@ -1,3 +1,6 @@
+//
+// copyright: https://github.com/texttheater/golang-levenshtein
+//
 package cli
 
 import (

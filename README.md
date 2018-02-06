@@ -14,9 +14,9 @@ Aliyun Command Line Interface `aliyun` is a unified tool to manage your Aliyun s
 
 You can download binary release (0.31) in the following links:
 
-- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.31-amd64.tgz)
-- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.31-amd64.tgz)
-- [Windows](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.31-amd64.tgz)
+- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.33-amd64.tgz)
+- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.33-amd64.tgz)
+- [Windows](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.33-amd64.tgz)
 
 Unzip and use. You can move `aliyun` to `/usr/local/bin` or add to `$PATH` to quick access.
 

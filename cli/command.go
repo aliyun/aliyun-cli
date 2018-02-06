@@ -1,14 +1,13 @@
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 package cli
-
-
 
 import (
 	"fmt"
 	"text/tabwriter"
 	"os"
 )
-
-type HelpMode string
 
 type Command struct {
 	Parent *Command
@@ -181,74 +180,3 @@ func (c *Command) PrintFailed(err error, suggestion string) {
 func (c *Command) PrintTail() {
 	fmt.Printf("\nUse `%s --help` for more information.\n", c.Name)
 }
-
-
-
-
-//
-////
-//// Execute command
-//func (c *Command) Execute(args []string) {
-//	parser := NewParser(args, func(name string) (*Flag, error) {
-//		flag := c.Flags().Get(name)
-//		if flag != nil {
-//			return flag, nil
-//		} else if c.UnknownFlags() != nil {
-//			return c.UnknownFlags().AddByName(name), nil
-//		} else {
-//			return nil, fmt.Errorf("unknown flag: %s", name)
-//		}
-//	})
-//
-//	//
-//	// try get sub command
-//	sub, ok, err := parser.GetNextArg()
-//	if err != nil {
-//		Errorf("ERROR: %s", err)
-//		c.ExecuteHelp(args, ByInvalid)
-//	}
-//
-//	if ok {
-//		//
-//		// if first sub command is "help" run help
-//		if sub == "help" {
-//			c.ExecuteHelp(args[1:], ByHelp)
-//			return
-//		} else {
-//			//
-//			// if exist sub command, run sub command
-//			if len(c.subCommands) > 0 {
-//				c2 := c.findSubCommand(sub)
-//				if c2 != nil {
-//					c2.Execute(args[1:])
-//					return
-//				}
-//			}
-//		}
-//	}
-//
-//	//
-//	// no sub command assigned, if Run is empty, print Usage
-//	if c.Run == nil {
-//		//fmt.Printf("\n use \"%s [command] --help\" for more information about command", c.Name)
-//		c.ExecuteHelp(args, ByMissing)
-//		return
-//	}
-//
-//	//
-//	// parse flags before run command
-//	err = parser.ParseAll()
-//	if err != nil {
-//		Errorf("ERROR: %s", err)
-//		c.ExecuteHelp(args, ByInvalid)
-//		return
-//	}
-//
-//	//
-//	// command runnable, execute command.Run
-//	err = c.Run(c, parser.GetResultArgs())
-//	if err != nil {
-//		Errorf("ERROR: %s", err)
-//		c.ExecuteHelp(args, ByInvalid)
-//	}
-//}

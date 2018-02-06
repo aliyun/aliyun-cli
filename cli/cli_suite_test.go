@@ -1,3 +1,6 @@
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 package cli
 
 import (
@@ -6,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestBooks(t *testing.T) {
+func TestCliSuite(t *testing.T) {
 	RegisterFailHandler(ginkgo.Fail)
 	ginkgo.RunSpecs(t, "Cli Suite")
 }

@@ -1,5 +1,7 @@
 package config
-
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 import (
 	"fmt"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"

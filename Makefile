@@ -6,7 +6,9 @@ release: build build_mac build_linux build_windows
 
 deps:
 	go get gopkg.in/ini.v1
+	go get github.com/aliyun/alibaba-cloud-sdk-go
 	go get -u github.com/jteeuwen/go-bindata/...
+
 
 testdeps:
 	go get -v github.com/onsi/ginkgo/ginkgo
