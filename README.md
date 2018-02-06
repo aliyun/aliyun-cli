@@ -1,6 +1,6 @@
 # Aliyun Command Line Interface
 
-[中文文档](./README_cn.md)
+[中文文档](./README_zh.md)
 
 This is a refactoring **BETA** version rewrite with golang, for old stable python verison switch to [python branch](https://github.com/aliyun/aliyun-cli/tree/python_final)
 
