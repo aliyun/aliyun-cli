@@ -3,7 +3,7 @@
 
 阿里云命令行工具是开源项目，[Github地址](https://github.com/aliyun/aliyun-cli)。
 
-该版本的CLI为Go语言重构版本，目前处于**BETA**发布中，如果您还希望使用原有的Python版本，请切换到[python分支](https://github.com/aliyun/aliyun-cli/tree/python)。
+该版本的CLI为Go语言重构版本，目前处于**BETA**发布中，如果您还希望使用原有的Python版本，请切换到[python分支](https://github.com/aliyun/aliyun-cli/tree/python_final)。
 
 ## 简介
 
