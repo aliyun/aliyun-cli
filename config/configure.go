@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"text/tabwriter"
 	"os"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 var profile string
@@ -18,7 +19,7 @@ var mode string
 func NewConfigureCommand() (*cli.Command) {
 	c := &cli.Command{
 		Name: "configure",
-		Short: "configure credential",
+		Short: i18n.En("configure.usage", "configure credential"),
 		Usage: "configure --mode certificatedMode --profile profileName",
 		Run: func(c *cli.Context, args []string) error {
 			if len(args) > 0 {
@@ -31,9 +32,12 @@ func NewConfigureCommand() (*cli.Command) {
 		},
 	}
 
-	f := c.Flags().StringVar(&profile, "profile", "default", "--profile ProfileName")
+	f := c.Flags().StringVar(&profile, "profile", "default",
+		i18n.En("root.profile", "--profile ProfileName"))
 	f.Persistent = true
-	c.Flags().StringVar(&mode, "mode", "AK", "--mode [AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair]")
+
+	c.Flags().StringVar(&mode, "mode", "AK",
+		i18n.En("root.mode", "--mode [AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair]"))
 
 	//c.AddSubCommand(&cli.Command{
 	//	Name: "get",

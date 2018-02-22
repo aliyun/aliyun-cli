@@ -5,6 +5,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 type FlagDetector interface {
@@ -129,7 +130,7 @@ func MergeFlagSet(to *FlagSet, from *FlagSet, applier func(flag Flag) bool) *Fla
 	return result
 }
 
-func (a *FlagSet) StringVar(p *string, name string, defaultValue string, usage string) (*Flag) {
+func (a *FlagSet) StringVar(p *string, name string, defaultValue string, usage *i18n.Text) (*Flag) {
 	return a.Add(Flag{
 		Name: name,
 		Usage: usage,
@@ -141,7 +142,7 @@ func (a *FlagSet) StringVar(p *string, name string, defaultValue string, usage s
 	})
 }
 
-func (a *FlagSet) PersistentStringVar(p *string, name string, defaultValue string, usage string) (*Flag) {
+func (a *FlagSet) PersistentStringVar(p *string, name string, defaultValue string, usage *i18n.Text) (*Flag) {
 	return a.Add(Flag{
 		Name: name,
 		Usage: usage,

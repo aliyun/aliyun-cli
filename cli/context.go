@@ -3,11 +3,15 @@
  */
 package cli
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/aliyun/aliyun-cli/i18n"
+)
 
 //
 // default help flag
-var helpFlag = Flag{Name: "help", Usage: "print help", Assignable: false }
+var helpFlag = Flag{Name: "help", Usage: i18n.En("help.usage", "print help"), Assignable: false }
+
 //
 // CLI Command Context
 type Context struct {

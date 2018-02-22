@@ -1,4 +1,4 @@
-export VERSION=0.33
+export VERSION=0.31
 export GOVERSION=1.8.1
 
 all: build

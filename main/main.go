@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/meta"
 	"github.com/aliyun/aliyun-cli/command"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 var usage = `
@@ -45,7 +46,7 @@ var configureCommand = config.NewConfigureCommand()
 func main() {
 	rootCmd := &cli.Command{
 		Name: "aliyun",
-		Short: "Alibaba Cloud Command Line Interface Version 0.33 Beta",
+		Short: i18n.En("root.short", "Alibaba Cloud Command Line Interface Version 0.33 Beta"),
 		Usage: "aliyun <product> <operation> --parameter1 value1 --parameter2 value2 ...",
 		Sample: "aliyun ecs DescribeRegions",
 		EnableUnknownFlag: true,
@@ -56,16 +57,25 @@ func main() {
 			processHelp(ctx, args, err)
 		},
 	}
-	rootCmd.Flags().StringVar(&profileName, "profile", "default", "use configured profile")
-	rootCmd.Flags().Add(cli.Flag{Name: "force", Usage: "call OpenAPI without check", Assignable:false})
-	rootCmd.Flags().Add(cli.Flag{Name: "endpoint", Usage: "use assigned endpoint", Assignable:true})
-	rootCmd.Flags().Add(cli.Flag{Name: "region", Usage: "use assigned region", Assignable:true})
-	rootCmd.Flags().Add(cli.Flag{Name: "version", Usage: "assign product version", Assignable:true})
-	rootCmd.Flags().Add(cli.Flag{Name: "header", Usage: "add custom HTTP header with --header x-foo=bar",
-		Assignable:true, Repeatable:true})
-	rootCmd.Flags().Add(cli.Flag{Name: "body", Usage: "assign http body in Restful call", Assignable:true})
-	rootCmd.Flags().Add(cli.Flag{Name: "body-file", Usage: "assign http body in Restful call with local file",
-		Assignable:true, Hidden: true})
+
+	rootCmd.Flags().StringVar(&profileName, "profile", "default",
+		i18n.En("root.profile", "use configured profile"))
+
+	rootCmd.Flags().Add(cli.Flag{Name: "force", Assignable:false,
+		Usage: i18n.En("root.force", "call OpenAPI without check")})
+	rootCmd.Flags().Add(cli.Flag{Name: "endpoint", Assignable:true,
+		Usage: i18n.En("root.endpoint", "use assigned endpoint")})
+	rootCmd.Flags().Add(cli.Flag{Name: "region", Assignable:true,
+		Usage: i18n.En("root.region","use assigned region")})
+	rootCmd.Flags().Add(cli.Flag{Name: "version", Assignable:true,
+		Usage: i18n.En("root.version", "assign product version")})
+	rootCmd.Flags().Add(cli.Flag{Name: "header", Assignable:true, Repeatable:true,
+		Usage: i18n.En("root.header", "add custom HTTP header with --header x-foo=bar")})
+	rootCmd.Flags().Add(cli.Flag{Name: "body", Assignable:true,
+		Usage: i18n.En("root.body", "assign http body in Restful call")})
+	rootCmd.Flags().Add(cli.Flag{Name: "body-file", Assignable:true, Hidden: true,
+		Usage: i18n.En("root.body", "assign http body in Restful call with local file")})
+
 	rootCmd.AddSubCommand(configureCommand)
 	rootCmd.AddSubCommand(command.NewTestCommand())
 	rootCmd.Execute(os.Args[1:])
