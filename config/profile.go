@@ -41,7 +41,7 @@ func NewProfile(name string) (Profile) {
 		Name: name,
 		Mode: AK,
 		OutputFormat: "json",
-		Language: "en-US",
+		Language: "en",
 	}
 }
 
@@ -93,10 +93,10 @@ func (cp *Profile) Validate() error {
 
 func (cp *Profile) ValidateAK() error {
 	if len(cp.AccessKeyId) != 16 {
-		return fmt.Errorf("invalid access_key_id")
+		return fmt.Errorf("invalid access_key_id: %s", cp.AccessKeyId)
 	}
 	if len(cp.AccessKeySecret) != 30 {
-		return fmt.Errorf("invaild access_key_secret")
+		return fmt.Errorf("invaild access_key_secret: %s", cp.AccessKeySecret)
 	}
 	return nil
 }

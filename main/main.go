@@ -46,7 +46,7 @@ var configureCommand = config.NewConfigureCommand()
 func main() {
 	rootCmd := &cli.Command{
 		Name: "aliyun",
-		Short: i18n.En("root.short", "Alibaba Cloud Command Line Interface Version 0.33 Beta"),
+		Short: i18n.T("Alibaba Cloud Command Line Interface Version 0.33 Beta", "阿里云CLI命令行工具 0.33 Beta"),
 		Usage: "aliyun <product> <operation> --parameter1 value1 --parameter2 value2 ...",
 		Sample: "aliyun ecs DescribeRegions",
 		EnableUnknownFlag: true,
@@ -62,7 +62,7 @@ func main() {
 		i18n.En("root.profile", "use configured profile"))
 
 	rootCmd.Flags().Add(cli.Flag{Name: "force", Assignable:false,
-		Usage: i18n.En("root.force", "call OpenAPI without check")})
+		Usage: i18n.T("root.force", "call OpenAPI without check")})
 	rootCmd.Flags().Add(cli.Flag{Name: "endpoint", Assignable:true,
 		Usage: i18n.En("root.endpoint", "use assigned endpoint")})
 	rootCmd.Flags().Add(cli.Flag{Name: "region", Assignable:true,

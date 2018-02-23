@@ -19,11 +19,13 @@ var mode string
 func NewConfigureCommand() (*cli.Command) {
 	c := &cli.Command{
 		Name: "configure",
-		Short: i18n.En("configure.usage", "configure credential"),
+		Short: i18n.T("configure credential and settings", ""),
 		Usage: "configure --mode certificatedMode --profile profileName",
+		SuggestionLevel: 2,
 		Run: func(c *cli.Context, args []string) error {
 			if len(args) > 0 {
-				return fmt.Errorf("unknown args")
+				cli.Errorf("unknown command or args %s", args[0])
+				return nil
 			}
 			if profile == "" {
 				profile = "default"
@@ -32,29 +34,15 @@ func NewConfigureCommand() (*cli.Command) {
 		},
 	}
 
-	f := c.Flags().StringVar(&profile, "profile", "default",
-		i18n.En("root.profile", "--profile ProfileName"))
+	f := c.Flags().PersistentStringVar(&profile, "profile", "default",
+		i18n.T("--profile ProfileName", ""))
 	f.Persistent = true
 
-	c.Flags().StringVar(&mode, "mode", "AK",
-		i18n.En("root.mode", "--mode [AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair]"))
+	c.Flags().PersistentStringVar(&mode, "mode", "AK",
+		i18n.T("--mode [AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair]", ""))
 
-	//c.AddSubCommand(&cli.Command{
-	//	Name: "get",
-	//	Short: "",
-	//	Run: func(c *cli.Command, args []string) error {
-	//		profile, _ := c.Flags().GetValue("profile")
-	//		return doConfigure(profile)
-	//	},
-	//})
-	//
-	//c.AddSubCommand(&cli.Command{
-	//	Name: "set",
-	//	Run: func(cmd *cli.Command, args []string) error {
-	//		profile, _ := c.Flags().GetValue("profile")
-	//		return doSetConfigure()
-	//	},
-	//})
+	c.AddSubCommand(NewConfigureGetCommand())
+	c.AddSubCommand(NewConfigureSetCommand())
 	c.AddSubCommand(&cli.Command{
 		Name: "list",
 		Run: func(c *cli.Context, args []string) error {
@@ -108,6 +96,9 @@ func doConfigure(profileName string) error {
 	cp.RegionId = ReadInput(cp.RegionId)
 	fmt.Printf("Default Output Format [%s]: ", cp.OutputFormat)
 	cp.OutputFormat = ReadInput(cp.OutputFormat)
+	fmt.Printf("Default Language [%s]: ", cp.Language)
+	cp.Language = ReadInput(cp.Language)
+
 
 	fmt.Printf("Saving profile[%s] ...", profileName)
 	conf.PutProfile(cp)
@@ -129,8 +120,8 @@ func doConfigureList() {
 		cli.Errorf("ERROR: load configure failed: %v\n", err)
 	}
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
-	fmt.Fprint(w, "Profile\t| CertificationMode\t| Valid\t| AccessKeyId\n")
-	fmt.Fprint(w, "---------\t| -----------------\t| -------\t| ----------------\n")
+	fmt.Fprint(w, "Profile\t| Certification Mode\t| Valid\t| AccessKeyId\t|Region\n")
+	fmt.Fprint(w, "---------\t| ------------------\t| -------\t| ----------------\t|------\n")
 	for _, profile := range conf.Profiles {
 		name := profile.Name
 		if name == conf.CurrentProfile {
@@ -141,7 +132,9 @@ func doConfigureList() {
 		if err != nil {
 			valid = "Invalid"
 		}
-		fmt.Fprintf(w, "%s\t| %s\t| %s\t| %s\n", name, profile.Mode, valid, MosaicString(profile.AccessKeyId, 3))
+
+		ak := MosaicString(profile.AccessKeyId, 3)
+		fmt.Fprintf(w, "%s\t| %s\t| %s\t| %s\t|%s\n", name, profile.Mode, valid, ak, profile.RegionId)
 	}
 	w.Flush()
 }
