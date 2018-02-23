@@ -1,5 +1,4 @@
-export VERSION=0.31
-export GOVERSION=1.8.1
+export VERSION=0.50
 
 all: build
 release: build build_mac build_linux build_windows

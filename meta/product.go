@@ -13,17 +13,19 @@ type Products struct {
 }
 
 type Product struct {
-	Name                string            `yaml:"name"`
-	Version      		string            `yaml:"version"`
+	Code                string            `yaml:"code"`
+	Version             string            `yaml:"version"`
 	LocationServiceCode string            `yaml:"location_service_code"`
-	Descriptions		map[string]string `yaml:"descriptions"`
-	Links				map[string]string `yaml:"links"`
+	Name                map[string]string `yaml:"name"`
+	DocumentId			string 			  `yaml:"document_id"`
+	SiteUrl				string			  `yaml:"site_url"`
+	Sites				[]string 		  `yaml:"sites"`
 	EndpointPatterns    []string          `yaml:"endpoint_patterns"`
 	Endpoints           map[string]string `yaml:"endpoints"`
 	KnownEndpoints      map[string]string `yaml:"known_endpoints"`
-	ApiStyle			string 			  `yaml:"api_style"`
+	ApiStyle            string            `yaml:"api_style"`
 	ApiNames            []string          `yaml:"apis"`
-	apis				map[string]Api	  `yaml:"-"`
+	apis                map[string]Api    `yaml:"-"`
 }
 
 func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error) {
@@ -33,7 +35,7 @@ func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error)
 	}
 	if a.LocationServiceCode != "" {
 		rp := endpoints.ResolveParam{
-			Product:          a.Name,
+			Product:          a.Code,
 			RegionId:         region,
 			LocationProduct:  a.LocationServiceCode,
 			LocationEndpointType: "openAPI",
@@ -44,6 +46,18 @@ func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error)
 			return ep, nil
 		}
 	}
+
+	ep, ok = a.KnownEndpoints[region]
+	if ok {
+		return ep, nil
+	}
+
+	//
+	//for _, ep := range a.EndpointPatterns {
+	//	if strings.Contains(ep, "[RegionId]") {
+	//
+	//	}
+	//}
 	//if strings.Contains(a.Domain, "[RegionId]") {
 	//	return "", fmt.Errorf("can't resolve endpoint for %s(%s):%s, use --endpoint xxx.aliyuncs.com parameter instead",
 	//		a.Name, a.LocationServiceCode, a.Domain)
@@ -51,6 +65,19 @@ func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error)
 	//	return "", nil
 	//}
 	return "", nil
+}
+
+func (a *Product) GetDocumentLink(lang string) string {
+	switch lang {
+	case "zh":
+		return "https://www.alibabacloud.com/help/doc-detail/" + a.DocumentId + ".html"
+	case "en":
+		return "https://www.alibabacloud.com/help/doc-detail/" + a.DocumentId + ".html"
+	case "jp":
+		return "https://jp.alibabacloud.com/help/doc-detail/" + a.DocumentId + ".html"
+	default:
+		return "https://www.alibabacloud.com/help/doc-detail/" + a.DocumentId + ".html"
+	}
 }
 
 

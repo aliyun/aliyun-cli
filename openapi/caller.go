@@ -17,7 +17,7 @@ type Caller struct {
 	helper *Helper
 
 	force bool
-	verbose bool		//TODO: next version
+	verbose bool		// TODO: next version
 }
 
 func NewCaller(profile *config.Profile, library *meta.Library) (*Caller) {
@@ -47,7 +47,7 @@ func (c *Caller) Run(ctx *cli.Context, productName string, apiOrMethod string, p
 			return
 		} else {
 			product = meta.Product {
-				Name: productName,
+				Code: productName,
 			}
 		}
 	}
@@ -74,13 +74,13 @@ func (c *Caller) Run(ctx *cli.Context, productName string, apiOrMethod string, p
 			if err != nil {
 				ctx.Command().PrintFailed(err, "")
 			} else {
-				ctx.Command().PrintFailed(fmt.Errorf("product %s need restful call", product.Name), "")
+				ctx.Command().PrintFailed(fmt.Errorf("product %s need restful call", product.Code), "")
 			}
 			return
 		}
 		c.InvokeRestful(ctx, &product, method, path)
 		if err != nil {
-			ctx.Command().PrintFailed(fmt.Errorf("call restful %s%s.%s faild %v", product.Name, path, method, err), "")
+			ctx.Command().PrintFailed(fmt.Errorf("call restful %s%s.%s faild %v", product.Code, path, method, err), "")
 			return
 		}
 	} else {

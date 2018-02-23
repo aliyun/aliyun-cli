@@ -11,6 +11,7 @@ import (
 type Library struct {
 	Products []Product
 	Names []string
+
 	index map[string]Product
 	reader Reader
 }
@@ -27,13 +28,13 @@ func LoadLibrary(reader Reader) *Library {
 		reader: reader,
 	}
 	for _, product := range e.Products {
-		name := strings.ToLower(product.Name)
+		name := strings.ToLower(product.Code)
 		_, ok := r.index[name]
 		if !ok {
-			r.Names = append(r.Names, product.Name)
+			r.Names = append(r.Names, product.Code)
 			r.index[name] = product
 		} else {
-			panic("Duplicated Name:" + product.Name)
+			panic("Duplicated Name:" + product.Code)
 		}
 		r.Products = append(r.Products, product)
 	}
@@ -53,7 +54,7 @@ func (a *Library) GetApi(name string, version string, apiName string) (Api, bool
 		return result, false
 	}
 
-	err := ReadYamlFrom(a.reader, product.Name + "/" + apiName + ".yml", &result)
+	err := ReadYamlFrom(a.reader, product.Code+ "/" + apiName + ".yml", &result)
 	if err != nil {
 		return result, false
 	}

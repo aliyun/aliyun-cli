@@ -29,6 +29,10 @@ type Command struct {
 	// Enable unknown flags
 	EnableUnknownFlag bool
 
+	// Enable command suggestion
+	// default is 0, turn on suggestion need set to 2
+	SuggestionLevel int
+
 	// Run
 	Run func(ctx *Context, args []string) error
 
@@ -138,7 +142,6 @@ func (c *Command) getSubCommand(s string) (*Command) {
 	}
 	return nil
 }
-
 
 func (c *Command) PrintHead(){
 	fmt.Printf("%s\n", c.Short.Get("en"))

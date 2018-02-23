@@ -77,6 +77,19 @@ func (a *FlagSet) Get(name string) *Flag {
 	return nil
 }
 
+//
+// get suggestions
+func (a *FlagSet) GetSuggestions(name string, distance int) []*Flag {
+	r := make([]*Flag, 0)
+	for i, v := range a.flags {
+		d := CalculateStringDistance(name, v.Name)
+		if d <= distance {
+			r = append(r, &a.flags[i])
+		}
+	}
+	return r
+}
+
 // check if the flag is assigned
 func (a *FlagSet) IsAssigned(name string) bool {
 	f := a.Get(name)
@@ -99,6 +112,16 @@ func (a *FlagSet) GetValue(name string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// get value by flag name, if not assigned return default value
+func (a *FlagSet) GetValueOrDefault(name string, def string) string {
+	v, ok := a.GetValue(name)
+	if ok {
+		return v
+	} else {
+		return def
+	}
 }
 
 // put value
