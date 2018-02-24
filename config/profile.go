@@ -101,7 +101,6 @@ func (cp *Profile) ValidateAK() error {
 	return nil
 }
 
-
 func (cp *Profile) GetClient() (*sdk.Client, error) {
 	switch cp.Mode {
 	case AK:

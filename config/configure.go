@@ -120,8 +120,8 @@ func doConfigureList() {
 		cli.Errorf("ERROR: load configure failed: %v\n", err)
 	}
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
-	fmt.Fprint(w, "Profile\t| Certification Mode\t| Valid\t| AccessKeyId\t|Region\n")
-	fmt.Fprint(w, "---------\t| ------------------\t| -------\t| ----------------\t|------\n")
+	fmt.Fprint(w, "Profile\t| Credential \t| Valid\t| Region\t| Language\n")
+	fmt.Fprint(w, "---------\t| ------------------\t| -------\t| ----------------\t| --------\n")
 	for _, profile := range conf.Profiles {
 		name := profile.Name
 		if name == conf.CurrentProfile {
@@ -133,8 +133,20 @@ func doConfigureList() {
 			valid = "Invalid"
 		}
 
-		ak := MosaicString(profile.AccessKeyId, 3)
-		fmt.Fprintf(w, "%s\t| %s\t| %s\t| %s\t|%s\n", name, profile.Mode, valid, ak, profile.RegionId)
+		cred := ""
+		switch profile.Mode {
+		case AK:
+			cred = "AK:" + "***" + GetLastChars(profile.AccessKeyId, 3)
+		case StsToken:
+			cred = "StsToken:" +  "***" + GetLastChars(profile.AccessKeyId, 3)
+		case RamRoleArn:
+			cred = "RamRoleArn:" +  "***" + GetLastChars(profile.AccessKeyId, 3)
+		case EcsRamRole:
+			cred = "EcsRamRole:" + profile.RamRoleName
+		case RsaKeyPair:
+			cred = "RsaKeyPair:" + profile.KeyPairName
+		}
+		fmt.Fprintf(w, "%s\t| %s\t| %s\t| %s\t| %s\n", name, cred, valid, profile.RegionId, profile.Language)
 	}
 	w.Flush()
 }
@@ -208,3 +220,11 @@ func MosaicString(s string, lastChars int) string {
 	}
 }
 
+func GetLastChars(s string, lastChars int) string {
+	r := len(s) - lastChars
+	if r > 0 {
+		return s[r:]
+	} else {
+		return strings.Repeat("*", len(s))
+	}
+}
