@@ -14,7 +14,7 @@ testdeps:
 	go get -v github.com/onsi/gomega
 	go install github.com/onsi/ginkgo/ginkgo
 
-metas: deps
+metas:
 	go-bindata -o resource/metas.go -pkg resource -prefix ../aliyun-openapi-meta ../aliyun-openapi-meta/**/* ../aliyun-openapi-meta/products.yml
 
 clean:

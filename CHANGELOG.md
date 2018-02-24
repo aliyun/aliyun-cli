@@ -1,5 +1,12 @@
 # CHANGE LOG
 
+### 0.50
+
+- support i18n `aliyun-openapi-meta`
+- full support `configure [get|set|list]` command
+- optimize help
+- support `--quiet` flag
+
 ### 0.33
 
 - fix bug for error processing when rpc/restful call

@@ -33,6 +33,9 @@ type Command struct {
 	// default is 0, turn on suggestion need set to 2
 	SuggestionLevel int
 
+	// Hidden command
+	Hidden bool
+
 	// Run
 	Run func(ctx *Context, args []string) error
 
@@ -144,7 +147,7 @@ func (c *Command) getSubCommand(s string) (*Command) {
 }
 
 func (c *Command) PrintHead(){
-	fmt.Printf("%s\n", c.Short.Get("en"))
+	fmt.Printf("%s\n", c.Short.Get(i18n.GetLanguage()))
 }
 
 func (c *Command) PrintUsage() {
@@ -167,6 +170,9 @@ func (c *Command) PrintSubCommands() {
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
 	if len(c.subCommands) > 0 {
 		for _, cmd := range c.subCommands {
+			if cmd.Hidden {
+				continue
+			}
 			fmt.Fprintf(w, "  %s\t%s\n", cmd.Name, cmd.Usage)
 		}
 	} else {
@@ -186,7 +192,7 @@ func (c *Command) PrintFlags() {
 		if flag.Hidden {
 			continue
 		}
-		fmt.Fprintf(w, "  --%s\t%s\n", flag.Name, flag.Usage.Get("en"))
+		fmt.Fprintf(w, "  --%s\t%s\n", flag.Name, flag.Usage.Get(i18n.GetLanguage()))
 	}
 	w.Flush()
 }

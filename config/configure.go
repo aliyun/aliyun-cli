@@ -19,7 +19,7 @@ var mode string
 func NewConfigureCommand() (*cli.Command) {
 	c := &cli.Command{
 		Name: "configure",
-		Short: i18n.T("configure credential and settings", ""),
+		Short: i18n.T("configure credential and settings", "配置身份认证和其他信息"),
 		Usage: "configure --mode certificatedMode --profile profileName",
 		SuggestionLevel: 2,
 		Run: func(c *cli.Context, args []string) error {
@@ -35,11 +35,13 @@ func NewConfigureCommand() (*cli.Command) {
 	}
 
 	f := c.Flags().PersistentStringVar(&profile, "profile", "default",
-		i18n.T("--profile ProfileName", ""))
+		i18n.T("use `--profile <profileName>` to select profile",
+			"使用 `--profile <profileName>` 来指定需要操作的配置"))
 	f.Persistent = true
 
 	c.Flags().PersistentStringVar(&mode, "mode", "AK",
-		i18n.T("--mode [AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair]", ""))
+		i18n.T("use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` to assign certificate mode",
+			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` 指定认证方式"))
 
 	c.AddSubCommand(NewConfigureGetCommand())
 	c.AddSubCommand(NewConfigureSetCommand())

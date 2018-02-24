@@ -9,6 +9,8 @@ import (
 	"text/tabwriter"
 	"os"
 	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
+	"strings"
 )
 
 // var compactList = []string {"Ecs", "Rds", "Vpc", "Slb", "Dm", "Ots", "Ess", "Ocs", "CloudApi"}
@@ -28,7 +30,7 @@ func (a *Helper) PrintProducts() {
 	fmt.Printf("\nProducts:\n")
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
 	for _, product := range a.library.Products {
-		fmt.Fprintf(w, "  %s\t%s\t%s\n", product.Code, product.Name["en"] + " ", product.GetDocumentLink("zh") + " ")
+		fmt.Fprintf(w, "  %s\t%s\n", strings.ToLower(product.Code), product.Name[i18n.GetLanguage()])
 	}
 	w.Flush()
 }
@@ -45,13 +47,12 @@ func (a *Helper) PrintProductUsage(productName string) {
 	} else {
 		fmt.Printf("\nUsage:\n  aliyun %s [GET|PUT|POST|DELETE] <PathPattern> --body \"...\" \n", product.Code)
 	}
-	fmt.Printf("\nAvailable Api List: ")
 
-	fmt.Printf("\nProduct: %s (%s)\n", product.Code, product.Name["zh"])
+	fmt.Printf("\nProduct: %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
 	fmt.Printf("Version: %s \n", product.Version)
+	fmt.Printf("Link: %s\n", product.GetDocumentLink(i18n.GetLanguage()))
 
-	fmt.Printf("Link: %s\n", product.GetDocumentLink("zh"))
-
+	fmt.Printf("\nAvailable Api List: \n")
 	// w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
 	for _, apiName := range product.ApiNames {
 		fmt.Printf( "  %s\n", apiName)
@@ -75,13 +76,27 @@ func (a *Helper) PrintApiUsage(productName string, apiName string) {
 	fmt.Printf("\nParameters:\n")
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
 	for _, param := range api.Parameters {
-		if param.Required {
-			fmt.Fprintf(w,"  --%s\t%s\t%s\n", param.Name, param.Type, "Required")
+		if param.Hidden {
+			continue
+		}
+
+		if len(param.SubParameters) > 0 {
+			for _, sp := range param.SubParameters {
+				fmt.Fprintf(w,"  --%s.n.%s\t%s\t%s\n", param.Name, sp.Name, sp.Type, required(sp.Required))
+			}
 		} else {
-			fmt.Fprintf(w,"  --%s\t%s\t%s\n", param.Name, param.Type, "Optional")
+			fmt.Fprintf(w,"  --%s\t%s\t%s\n", param.Name, param.Type, required(param.Required))
 		}
 	}
 	w.Flush()
+}
+
+func required(r bool) string {
+	if r {
+		return "Required"
+	} else {
+		return "Optional"
+	}
 }
 //
 //func (a *Helper) printCompactList() {

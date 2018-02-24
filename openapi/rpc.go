@@ -106,6 +106,10 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 	request.Product = product.Code
 	request.Version = product.Version
 
+	if _, ok := ctx.Flags().GetValue("secure"); ok {
+		request.Scheme = "https"
+	}
+
 	if v, ok := ctx.Flags().GetValue("region"); ok {
 		request.RegionId = v
 	}

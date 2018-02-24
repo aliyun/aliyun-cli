@@ -107,7 +107,7 @@ func (a *FlagSet) GetValue(name string) (string, bool) {
 			if f.IsAssigned() {
 				return f.value, true
 			} else {
-				return "", false
+				return f.DefaultValue, false
 			}
 		}
 	}
