@@ -17,6 +17,7 @@ type Parameter struct {
 	Name string		`yaml:"name"`
 	Type string 	`yaml:"type"`
 	Required bool	`yaml:"required"`
+	Hidden bool		`yaml:"hidden"`
 	SubParameters []Parameter	`yaml:""`
 }
 

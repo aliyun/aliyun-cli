@@ -70,7 +70,7 @@ func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error)
 func (a *Product) GetDocumentLink(lang string) string {
 	switch lang {
 	case "zh":
-		return "https://www.alibabacloud.com/help/doc-detail/" + a.DocumentId + ".html"
+		return "https://help.aliyun.com/document_detail/" + a.DocumentId + ".html"
 	case "en":
 		return "https://www.alibabacloud.com/help/doc-detail/" + a.DocumentId + ".html"
 	case "jp":

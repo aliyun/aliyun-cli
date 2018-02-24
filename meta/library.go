@@ -36,25 +36,26 @@ func LoadLibrary(reader Reader) *Library {
 		} else {
 			panic("Duplicated Name:" + product.Code)
 		}
+		sort.Strings(product.ApiNames)
 		r.Products = append(r.Products, product)
 	}
 	sort.Strings(r.Names)
 	return &r
 }
 
-func (a *Library) GetProduct(name string) (Product, bool) {
-	p, ok := a.index[strings.ToLower(name)]
+func (a *Library) GetProduct(code string) (Product, bool) {
+	p, ok := a.index[strings.ToLower(code)]
 	return p, ok
 }
 
-func (a *Library) GetApi(name string, version string, apiName string) (Api, bool) {
+func (a *Library) GetApi(productCode string, version string, apiName string) (Api, bool) {
 	var result Api
-	product, ok := a.GetProduct(name)
+	product, ok := a.GetProduct(productCode)
 	if !ok {
 		return result, false
 	}
 
-	err := ReadYamlFrom(a.reader, product.Code+ "/" + apiName + ".yml", &result)
+	err := ReadYamlFrom(a.reader, product.Code + "/" + apiName + ".yml", &result)
 	if err != nil {
 		return result, false
 	}
