@@ -52,16 +52,15 @@ func NewConfigureSetCommand() (*cli.Command) {
 }
 
 func doConfigureSet(c *cli.Context) {
-	profileName, ok := c.Flags().GetValue("profile")
-	if !ok {
-		cli.Errorf("expected --profile")
-		return
-	}
-
 	config, err := LoadConfiguration()
 	if err != nil {
 		cli.Errorf("load configuration failed %s", err)
 		return
+	}
+
+	profileName, ok := c.Flags().GetValue("profile")
+	if !ok {
+		profileName = config.CurrentProfile
 	}
 
 	profile, ok := config.GetProfile(profileName)
