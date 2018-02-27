@@ -14,6 +14,10 @@ const (
 	ColorTail = "\033[0m"
 )
 
+func Debug(s string) {
+	fmt.Print(DebugColor + s + ColorTail)
+}
+
 func Info(s string) {
 	fmt.Print(InfoColor + s + ColorTail)
 }
@@ -30,14 +34,22 @@ func Error(s string) {
 	fmt.Print(ErrorColor + s + ColorTail)
 }
 
-func Debug(s string) {
-	fmt.Print(DebugColor + s + ColorTail)
+func Debugf(format string, args ...interface{}) {
+	Debug(fmt.Sprintf(format, args...))
+}
+
+func Infof(format string, args ...interface{}) {
+	Info(fmt.Sprintf(format, args...))
+}
+
+func Noticef(format string, args ...interface{}) {
+	Notice(fmt.Sprintf(format, args...))
 }
 
 func Warningf(format string, args ...interface{}) {
-	Warning(fmt.Sprintf(format, args))
+	Warning(fmt.Sprintf(format, args...))
 }
 
 func Errorf(format string, args ...interface{}) {
-	Error(fmt.Sprintf(format, args))
+	Error(fmt.Sprintf(format, args...))
 }
