@@ -16,7 +16,7 @@
 
 ### 下载及使用
 
-CLI工具下载即可使用，支持Mac, Linux, Windows平台(x64版本)。
+CLI工具下载即可使用(0.50 Beta)，支持Mac, Linux, Windows平台(x64版本)。
 
 - [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.50-amd64.tgz)
 - [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.50-amd64.tgz)
@@ -64,12 +64,12 @@ Default Languate [zh]: zh
 - 在后续的调用中，您可以使用`--profile user1`参数来指定调用时的用户。
 
 ```
-Profile   | CertificationMode | Valid   | AccessKeyId
---------- | ----------------- | ------- | ----------------
-default * | AK                | Valid   | *************ac8
-ram       | EcsRamRole        | Invalid |
-test      | StsToken          | Invalid | **
-leo       | AK                | Valid   | *************bb2
+Profile   | Credential         | Valid   | Region           | Language
+--------- | ------------------ | ------- | ---------------- | --------
+default * | AK:***ddc          | Valid   | cn-beijing       | zh
+aaa       | AK:******          | Invalid |                  |
+test      | AK:***412          | Valid   |                  | en
+ecs       | EcsRamRole:EcsTest | Valid   | cn-beijing       | en
 ```
 
 ### 其他认证方式

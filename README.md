@@ -12,7 +12,7 @@ Aliyun Command Line Interface `aliyun` is a unified tool to manage your Aliyun s
 
 ### Download
 
-You can download binary release (0.31) in the following links:
+You can download binary release (0.50 Beta) in the following links:
 
 - [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.50-amd64.tgz)
 - [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.50-amd64.tgz)
@@ -60,12 +60,12 @@ Default Language [zh]: en
 - You can add flag `--profile user1` to use assigned profile, in invoke commands.
 
 ```
-Profile   | CertificationMode | Valid   | AccessKeyId
---------- | ----------------- | ------- | ----------------
-default * | AK                | Valid   | *************ac8
-ram       | EcsRamRole        | Invalid |
-test      | StsToken          | Invalid | **
-leo       | AK                | Valid   | *************bb2
+Profile   | Credential         | Valid   | Region           | Language
+--------- | ------------------ | ------- | ---------------- | --------
+default * | AK:***ddc          | Valid   | cn-beijing       | zh
+aaa       | AK:******          | Invalid |                  |
+test      | AK:***412          | Valid   |                  | en
+ecs       | EcsRamRole:EcsTest | Valid   | cn-beijing       | en
 ```
 
 ### Other Certification Mode
