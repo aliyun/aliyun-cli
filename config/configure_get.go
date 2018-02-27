@@ -9,10 +9,22 @@ import (
 	"fmt"
 )
 
+const configureGetHelpEn = `
+`
+const configureGetHelpZh = `
+`
+
 func NewConfigureGetCommand() (*cli.Command) {
 	cmd := &cli.Command{
 		Name:  "get",
-		Short: i18n.T("get config values", ""),
+		Short: i18n.T(
+			"print configuration values",
+			"打印配置信息"),
+		Usage: "get [profile] [language] ...",
+		Long: i18n.T(
+			configureGetHelpEn,
+			configureGetHelpZh,
+		),
 		Run: func(c *cli.Context, args []string) error {
 			doConfigureGet(c, args)
 			return nil

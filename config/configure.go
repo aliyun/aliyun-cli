@@ -36,7 +36,7 @@ func NewConfigureCommand() (*cli.Command) {
 
 	f := c.Flags().PersistentStringVar(&profile, "profile", "default",
 		i18n.T("use `--profile <profileName>` to select profile",
-			"使用 `--profile <profileName>` 来指定需要操作的配置"))
+			"使用 `--profile <profileName>` 来指定操作的配置集"))
 	f.Persistent = true
 
 	c.Flags().PersistentStringVar(&mode, "mode", "AK",

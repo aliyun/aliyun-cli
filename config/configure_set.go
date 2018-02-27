@@ -8,45 +8,62 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 )
 
+const configureSetHelpZh = `
+`
+const configureSetHelpEn = `
+`
+
 func NewConfigureSetCommand() (*cli.Command) {
 	cmd := &cli.Command{
 		Name: "set",
-		Short: i18n.T("set config in command mode", ""),
+		Short: i18n.T(
+			"set config in non interactive mode",
+			"使用非交互式方式进行配置"),
+		Long: i18n.T(
+			configureSetHelpEn,
+			configureSetHelpZh,
+		),
+		Usage: "set [--profile <profileName>] [--language {en|zh}] ...",
 		Run: func(c *cli.Context, args []string) error {
 			doConfigureSet(c)
 			return nil
 		},
 	}
 
-	//Name            string          `json:"name"`
-	//Mode            CertificateMode `json:"mode"`
-	//AccessKeyId     string          `json:"access_key_id"`
-	//AccessKeySecret string          `json:"access_key_secret"`
-	//StsToken		string			`json:"sts_token"`
-	//RamRoleName		string          `json:"ram_role_name"`
-	//RamRoleArn		string			`json:"ram_role_arn"`
-	//RoleSessionName	string 			`json:"ram_session_name"`
-	//PrivateKey		string 			`json:"private_key"`
-	//KeyPairName		string 			`json:"key_pair_name"`
-	//ExpiredSeconds	int				`json:"expired_seconds"`
-	//Verified		string			`json:"verified"`
-	//RegionId        string          `json:"region_id"`
-	//OutputFormat    string          `json:"output_format"`
-	//Language        string          `json:"language"`
-
 	fs := cmd.Flags()
-	// fs.Add(cli.Flag{Name: "output", Assignable: true, Usage: "set output "})
-	fs.Add(cli.Flag{Name: "access-key-id", Assignable: true, Usage: i18n.T("--access-key-id <access-key-id>", "")})
-	fs.Add(cli.Flag{Name: "access-key-secret", Assignable: true, Usage: i18n.T("--access-key-secret <access-key-secret>", "")})
-	fs.Add(cli.Flag{Name: "sts-token", Assignable: true, Usage: i18n.T("--sts-token <sts-token>", "")})
-	fs.Add(cli.Flag{Name: "ram-role-name", Assignable: true, Usage: i18n.T("--ram-role-name <ram-role-name>", "")})
-	fs.Add(cli.Flag{Name: "ram-role-arn", Assignable: true, Usage: i18n.T("--ram-role-arn <ram-role-arn>", "")})
-	fs.Add(cli.Flag{Name: "role-session-name", Assignable: true, Usage: i18n.T("--role-session-name <role-session-name>", "")})
-	fs.Add(cli.Flag{Name: "private-key", Assignable: true, Usage: i18n.T("--private-key <private-key>", "")})
-	fs.Add(cli.Flag{Name: "key-pair-name", Assignable: true, Usage: i18n.T("--key-pair-name <key-pair-name>", "")})
-	fs.Add(cli.Flag{Name: "region", Assignable: true, Usage: i18n.T("--region <region>", "")})
-	fs.Add(cli.Flag{Name: "output", Assignable: true, Usage: i18n.T("--output [json]", "")})
-	fs.Add(cli.Flag{Name: "language", Assignable: true, Usage: i18n.T("--language [en|zh]", "")})
+
+	fs.Add(cli.Flag{Name: "access-key-id", Assignable: true,
+		Usage: i18n.T("assign AccessKeyId, required in AK/StsToken/RamRoleArn mode", "")})
+
+	fs.Add(cli.Flag{Name: "access-key-secret", Assignable: true,
+		Usage: i18n.T("assign AccessKeySecret, required in AK/StsToken/RamRoleArn mode", "")})
+
+	fs.Add(cli.Flag{Name: "sts-token", Assignable: true,
+		Usage: i18n.T("assign StsToken, required in StsToken mode", "")})
+
+	fs.Add(cli.Flag{Name: "ram-role-name", Assignable: true,
+		Usage: i18n.T("assign RamRoleName, required in RamRoleArn/EcsRamRole mode", "")})
+
+	fs.Add(cli.Flag{Name: "ram-role-arn", Assignable: true,
+		Usage: i18n.T("assign RamRoleArn, required in RamRoleArn mode", "")})
+
+	fs.Add(cli.Flag{Name: "role-session-name", Assignable: true,
+		Usage: i18n.T("assign RoleSessionName, required in RamRoleArn mode", "")})
+
+	fs.Add(cli.Flag{Name: "private-key", Assignable: true,
+		Usage: i18n.T("assign PrivateKey, required in RsaKeyPair mode", "")})
+
+	fs.Add(cli.Flag{Name: "key-pair-name", Assignable: true,
+		Usage: i18n.T("assign KeyPairName, required in RsaKeyPair mode", "")})
+
+	fs.Add(cli.Flag{Name: "region", Assignable: true,
+		Usage: i18n.T("assign default Region", "")})
+
+	fs.Add(cli.Flag{Name: "output", Assignable: true, Hidden: true,
+		Usage: i18n.T("* assign output format, only support json", "")})
+
+	fs.Add(cli.Flag{Name: "language", Assignable: true,
+		Usage: i18n.T("assign language, support en/zh", "")})
 
 	return cmd
 }
