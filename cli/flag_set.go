@@ -5,6 +5,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 type FlagDetector interface {
@@ -76,6 +77,19 @@ func (a *FlagSet) Get(name string) *Flag {
 	return nil
 }
 
+//
+// get suggestions
+func (a *FlagSet) GetSuggestions(name string, distance int) []*Flag {
+	r := make([]*Flag, 0)
+	for i, v := range a.flags {
+		d := CalculateStringDistance(name, v.Name)
+		if d <= distance {
+			r = append(r, &a.flags[i])
+		}
+	}
+	return r
+}
+
 // check if the flag is assigned
 func (a *FlagSet) IsAssigned(name string) bool {
 	f := a.Get(name)
@@ -93,11 +107,21 @@ func (a *FlagSet) GetValue(name string) (string, bool) {
 			if f.IsAssigned() {
 				return f.value, true
 			} else {
-				return "", false
+				return f.DefaultValue, false
 			}
 		}
 	}
 	return "", false
+}
+
+// get value by flag name, if not assigned return default value
+func (a *FlagSet) GetValueOrDefault(name string, def string) string {
+	v, ok := a.GetValue(name)
+	if ok {
+		return v
+	} else {
+		return def
+	}
 }
 
 // put value
@@ -129,7 +153,7 @@ func MergeFlagSet(to *FlagSet, from *FlagSet, applier func(flag Flag) bool) *Fla
 	return result
 }
 
-func (a *FlagSet) StringVar(p *string, name string, defaultValue string, usage string) (*Flag) {
+func (a *FlagSet) StringVar(p *string, name string, defaultValue string, usage *i18n.Text) (*Flag) {
 	return a.Add(Flag{
 		Name: name,
 		Usage: usage,
@@ -141,7 +165,7 @@ func (a *FlagSet) StringVar(p *string, name string, defaultValue string, usage s
 	})
 }
 
-func (a *FlagSet) PersistentStringVar(p *string, name string, defaultValue string, usage string) (*Flag) {
+func (a *FlagSet) PersistentStringVar(p *string, name string, defaultValue string, usage *i18n.Text) (*Flag) {
 	return a.Add(Flag{
 		Name: name,
 		Usage: usage,

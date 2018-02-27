@@ -1,5 +1,4 @@
-export VERSION=0.33
-export GOVERSION=1.8.1
+export VERSION=0.50
 
 all: build
 release: build build_mac build_linux build_windows
@@ -15,7 +14,7 @@ testdeps:
 	go get -v github.com/onsi/gomega
 	go install github.com/onsi/ginkgo/ginkgo
 
-metas: deps
+metas:
 	go-bindata -o resource/metas.go -pkg resource -prefix ../aliyun-openapi-meta ../aliyun-openapi-meta/**/* ../aliyun-openapi-meta/products.yml
 
 clean:

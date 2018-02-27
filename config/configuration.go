@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	configPath = "/.aliyun"
-	configFile = "config.json"
-	DefaultConfigProfile = "default"
+	configPath               = "/.aliyun"
+	configFile               = "config.json"
+	DefaultConfigProfileName = "default"
 )
 
 type Configuration struct {
@@ -24,9 +24,9 @@ type Configuration struct {
 
 func NewConfiguration() (Configuration) {
 	return Configuration{
-		CurrentProfile: DefaultConfigProfile,
+		CurrentProfile: DefaultConfigProfileName,
 		Profiles: []Profile{
-			NewProfile(DefaultConfigProfile),
+			NewProfile(DefaultConfigProfileName),
 		},
 	}
 }
@@ -62,6 +62,10 @@ func (c *Configuration) PutProfile(profile Profile) {
 		}
 	}
 	c.Profiles = append(c.Profiles, profile)
+}
+
+func LoadCurrentProfile() (Profile, error) {
+	return LoadProfile("")
 }
 
 func LoadProfile(name string) (Profile, error) {

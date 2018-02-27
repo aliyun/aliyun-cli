@@ -6,17 +6,35 @@ package cli
 import (
 	"strings"
 	"fmt"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 type Flag struct {
+	// Name of flag --{Name}
 	Name			string
+
+	// Flag is the single characters
 	SingleChars		string
-	Usage			string
+
+	// Help Message
+	Usage			*i18n.Text
+
+	// Default value
 	DefaultValue	string
+
+	//
 	Required 		bool
+
+	//
 	Assignable		bool
+
+	//
 	Persistent		bool
+
+	//
 	Repeatable		bool
+
+	//
 	Hidden			bool
 
 	assigned		bool

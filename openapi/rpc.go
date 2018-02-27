@@ -13,10 +13,10 @@ import (
 )
 
 func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName string) {
-	api, ok := c.library.GetApi(product.Name, product.Version, apiName)
+	api, ok := c.library.GetApi(product.Code, product.Version, apiName)
 	if !ok {
 		ctx.Command().PrintFailed(fmt.Errorf("invailed api: %s", apiName),
-			fmt.Sprintf("Use\n `aliyun help %s` to view product list\n  or add --force to skip check", product.Name))
+			fmt.Sprintf("Use\n `aliyun help %s` to view product list\n  or add --force to skip check", product.Code))
 		return
 	}
 
@@ -103,8 +103,12 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 	request := requests.NewCommonRequest()
 	request.Headers["User-Agent"] = "Aliyun-CLI-V0.32"
 	request.RegionId = c.profile.RegionId
-	request.Product = product.Name
+	request.Product = product.Code
 	request.Version = product.Version
+
+	if _, ok := ctx.Flags().GetValue("secure"); ok {
+		request.Scheme = "https"
+	}
 
 	if v, ok := ctx.Flags().GetValue("region"); ok {
 		request.RegionId = v

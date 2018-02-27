@@ -7,25 +7,48 @@ import (
 	"fmt"
 	"text/tabwriter"
 	"os"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 type Command struct {
-	Parent *Command
+	// Command Name
 	Name   string
-	Short  string
+
+	// Short is the short description shown in the 'help' output.
+	Short  *i18n.Text
+
+	// Long is the long message shown in the 'help <this-command>' output.
+	Long   *i18n.Text
+
+	// Syntax for usage
 	Usage  string
+
+	// Sample command
 	Sample string
+
+	// Enable unknown flags
 	EnableUnknownFlag bool
 
-	Run func(ctx *Context, args []string) error
-	Help func(ctx *Context, args[] string, err error)
+	// Enable command suggestion
+	// default is 0, turn on suggestion need set to 2
+	SuggestionLevel int
 
+	// Hidden command
+	Hidden bool
+
+	// Run
+	Run func(ctx *Context, args []string) error
+
+	// Help
+	Help func(ctx *Context, args []string, err error)
+
+	parent			*Command
 	subCommands     []*Command
 	flags        	*FlagSet
 }
 
 func (c *Command) AddSubCommand(cmd *Command) {
-	cmd.Parent = c
+	cmd.parent = c
 	c.subCommands = append(c.subCommands, cmd)
 }
 
@@ -123,9 +146,8 @@ func (c *Command) getSubCommand(s string) (*Command) {
 	return nil
 }
 
-
 func (c *Command) PrintHead(){
-	fmt.Printf("%s\n", c.Short)
+	fmt.Printf("%s\n", c.Short.Get(i18n.GetLanguage()))
 }
 
 func (c *Command) PrintUsage() {
@@ -148,6 +170,9 @@ func (c *Command) PrintSubCommands() {
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
 	if len(c.subCommands) > 0 {
 		for _, cmd := range c.subCommands {
+			if cmd.Hidden {
+				continue
+			}
 			fmt.Fprintf(w, "  %s\t%s\n", cmd.Name, cmd.Usage)
 		}
 	} else {
@@ -167,7 +192,7 @@ func (c *Command) PrintFlags() {
 		if flag.Hidden {
 			continue
 		}
-		fmt.Fprintf(w, "  --%s\t%s\n", flag.Name, flag.Usage)
+		fmt.Fprintf(w, "  --%s\t%s\n", flag.Name, flag.Usage.Get(i18n.GetLanguage()))
 	}
 	w.Flush()
 }

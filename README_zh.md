@@ -18,9 +18,9 @@
 
 CLI工具下载即可使用，支持Mac, Linux, Windows平台(x64版本)。
 
-- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.33-amd64.tgz)
-- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.33-amd64.tgz)
-- [Windows](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.33-amd64.tgz)
+- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.50-amd64.tgz)
+- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.50-amd64.tgz)
+- [Windows](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.50-amd64.tgz)
 
 解压即可用，您可以将`aliyun`工具挪到`/usr/local/bin`目录下，或添加到`$PATH`中，以获得更便捷的访问。
 

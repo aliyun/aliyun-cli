@@ -3,11 +3,15 @@
  */
 package cli
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/aliyun/aliyun-cli/i18n"
+)
 
 //
 // default help flag
-var helpFlag = Flag{Name: "help", Usage: "print help", Assignable: false }
+var helpFlag = Flag{Name: "help", Usage: i18n.En("help.usage", "print help"), Assignable: false }
+
 //
 // CLI Command Context
 type Context struct {
@@ -41,7 +45,7 @@ func (ctx *Context) UnknownFlags() *FlagSet {
 }
 
 //
-// Before go into the sub command, we need take over flags and merge with parent
+// Before go into the sub command, we need traverse flags and merge with parent
 func (ctx *Context) EnterCommand(cmd *Command) {
 	ctx.command = cmd
 	if cmd.EnableUnknownFlag && ctx.unknownFlags == nil {
@@ -71,6 +75,9 @@ func (ctx *Context) DetectFlag(name string) (*Flag, error) {
 	} else if ctx.unknownFlags != nil {
 		return ctx.unknownFlags.AddByName(name)
 	} else {
-		return nil, fmt.Errorf("unknown flag: %s", name)
+		return nil, &InvalidFlagError{
+			Name: name,
+			Suggestions: ctx.flags.GetSuggestions(name, 2),
+		}
 	}
 }
