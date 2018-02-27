@@ -35,10 +35,23 @@ func (a *Helper) PrintProducts() {
 	w.Flush()
 }
 
-func (a *Helper) PrintProductUsage(productName string) {
-	product, ok := a.library.GetProduct(productName)
+func (a *Helper) PrintProductUsage(productCode string) {
+	product, ok := a.library.GetProduct(productCode)
 	if !ok {
-		cli.Errorf("unknown product %s", productName)
+		suggestions := GetProductSuggestions(a.library, productCode)
+		msg := ""
+		if len(suggestions) > 0 {
+			for i, s := range suggestions {
+				if i == 0 {
+					msg = "did you mean: " + s
+				} else {
+					msg = msg + " or " + s
+				}
+			}
+		}
+		cli.Error(fmt.Sprintf("unknown product: %s %s \n", productCode, msg))
+		cli.Warning("Use\n  `aliyun help`  to view product list\n  or add --force flag to skip name check")
+
 		return
 	}
 

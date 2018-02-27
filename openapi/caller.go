@@ -34,20 +34,30 @@ func (c *Caller) Validate() error {
 
 //
 // entrance call from main
-func (c *Caller) Run(ctx *cli.Context, productName string, apiOrMethod string, path string) {
+func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, path string) {
 	c.force = ctx.Flags().IsAssigned("force")
 
 	//
 	// get product info
-	product, ok := c.library.GetProduct(productName)
+	product, ok := c.library.GetProduct(productCode)
 	if !ok {
 		if !c.force {
-			ctx.Command().PrintFailed(fmt.Errorf("unknown product: %s", productName),
-				"Use\n  `aliyun help`  to view product list\n  or add --force flag to skip name check")
-			return
+			suggestions := GetProductSuggestions(c.library, productCode)
+			msg := ""
+			if len(suggestions) > 0 {
+				for i, s := range suggestions {
+					if i == 0 {
+						msg = "did you mean: " + s
+					} else {
+						msg = msg + " or " + s
+					}
+				}
+			}
+			ctx.Command().PrintFailed(fmt.Errorf("unknown product: %s", productCode),
+				msg + "Use\n  `aliyun help`  to view product list\n  or add --force flag to skip name check")
 		} else {
 			product = meta.Product {
-				Code: productName,
+				Code: productCode,
 			}
 		}
 	}
