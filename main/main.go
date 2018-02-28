@@ -90,6 +90,7 @@ func main() {
 
 	rootCmd.AddSubCommand(configureCommand)
 	rootCmd.AddSubCommand(command.NewTestCommand())
+	rootCmd.AddSubCommand(openapi.NewResolveCommand())
 	rootCmd.Execute(os.Args[1:])
 }
 
@@ -118,7 +119,7 @@ func processMain(ctx *cli.Context, args []string) error  {
 
 	caller := openapi.NewCaller(&prof, library)
 	if len(args) < 2 {
-		helper.PrintProductUsage(productName)
+		helper.PrintProductUsage(productName, true)
 	} else if len(args) == 2 {
 		caller.Run(ctx, productName, args[1], "")
 	} else if len(args) == 3 {
@@ -145,7 +146,7 @@ func processHelp(ctx *cli.Context, args []string, err error) {
 			c.PrintTail()
 		} else if len(args) == 1 {
 			c.PrintHead()
-			helper.PrintProductUsage(args[0])
+			helper.PrintProductUsage(args[0], true)
 			// c.PrintFlags() TODO add later
 		} else if len(args) == 2 {
 			c.PrintHead()

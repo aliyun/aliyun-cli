@@ -51,20 +51,31 @@ func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error)
 	if ok {
 		return ep, nil
 	}
+	return "", nil
+}
 
-	//
-	//for _, ep := range a.EndpointPatterns {
-	//	if strings.Contains(ep, "[RegionId]") {
-	//
-	//	}
-	//}
+func (a *Product) TryGetEndpoints(region string, client *sdk.Client) (endpoint string, lcEndpoint string) {
+	endpoint, _ = a.Endpoints[region]
+
+	rp := endpoints.ResolveParam{
+		Product:          a.Code,
+		RegionId:         region,
+		LocationProduct:  a.LocationServiceCode,
+		LocationEndpointType: "openAPI",
+		CommonApi:        client.ProcessCommonRequest,
+	}
+	lcEndpoint, err := endpoints.Resolve(&rp)
+	if err != nil {
+		lcEndpoint = ""
+	}
+
 	//if strings.Contains(a.Domain, "[RegionId]") {
 	//	return "", fmt.Errorf("can't resolve endpoint for %s(%s):%s, use --endpoint xxx.aliyuncs.com parameter instead",
 	//		a.Name, a.LocationServiceCode, a.Domain)
 	//} else {
 	//	return "", nil
 	//}
-	return "", nil
+	return
 }
 
 func (a *Product) GetDocumentLink(lang string) string {

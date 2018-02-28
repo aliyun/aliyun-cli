@@ -35,7 +35,7 @@ func (a *Helper) PrintProducts() {
 	w.Flush()
 }
 
-func (a *Helper) PrintProductUsage(productCode string) {
+func (a *Helper) PrintProductUsage(productCode string, withApi bool) {
 	product, ok := a.library.GetProduct(productCode)
 	if !ok {
 		suggestions := GetProductSuggestions(a.library, productCode)
@@ -65,10 +65,12 @@ func (a *Helper) PrintProductUsage(productCode string) {
 	fmt.Printf("Version: %s \n", product.Version)
 	fmt.Printf("Link: %s\n", product.GetDocumentLink(i18n.GetLanguage()))
 
-	fmt.Printf("\nAvailable Api List: \n")
-	// w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
-	for _, apiName := range product.ApiNames {
-		fmt.Printf( "  %s\n", apiName)
+	if withApi {
+		fmt.Printf("\nAvailable Api List: \n")
+		// w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
+		for _, apiName := range product.ApiNames {
+			fmt.Printf("  %s\n", apiName)
+		}
 	}
 
 	fmt.Printf("\nRun `aliyun help %s <ApiName>` to get more information about api", product.Code)
