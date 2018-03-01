@@ -15,21 +15,25 @@ type Products struct {
 type Product struct {
 	Code                string            `yaml:"code"`
 	Version             string            `yaml:"version"`
-	LocationServiceCode string            `yaml:"location_service_code"`
+	Catalog1			map[string]string `yaml:"catalog1"`
+	Catalog2			map[string]string `yaml:"catalog2"`
 	Name                map[string]string `yaml:"name"`
 	DocumentId			string 			  `yaml:"document_id"`
-	SiteUrl				string			  `yaml:"site_url"`
-	Sites				[]string 		  `yaml:"sites"`
-	EndpointPatterns    []string          `yaml:"endpoint_patterns"`
-	Endpoints           map[string]string `yaml:"endpoints"`
-	KnownEndpoints      map[string]string `yaml:"known_endpoints"`
+	// Sites				map[string]string `yaml:"sites"`				// china, international, japan
+
+	LocationServiceCode string            `yaml:"location_service_code"`
+	GlobalEndpoint	    string			  `yaml:"global_endpoint"`
+	RegionalEndpoints	map[string]string `yaml:"endpoints"`
+
+	EndpointPatterns 	[]string 		 `yaml:"endpoint_patterns"`
+
 	ApiStyle            string            `yaml:"api_style"`
 	ApiNames            []string          `yaml:"apis"`
 	apis                map[string]Api    `yaml:"-"`
 }
 
 func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error) {
-	ep, ok := a.Endpoints[region]
+	ep, ok := a.RegionalEndpoints[region]
 	if ok {
 		return ep, nil
 	}
@@ -47,26 +51,30 @@ func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error)
 		}
 	}
 
-	ep, ok = a.KnownEndpoints[region]
-	if ok {
-		return ep, nil
-	}
+	//ep, ok = a.KnownEndpoints[region]
+	//if ok {
+	//	return ep, nil
+	//}
 	return "", nil
 }
 
 func (a *Product) TryGetEndpoints(region string, client *sdk.Client) (endpoint string, lcEndpoint string) {
-	endpoint, _ = a.Endpoints[region]
+	endpoint, _ = a.RegionalEndpoints[region]
 
-	rp := endpoints.ResolveParam{
-		Product:          a.Code,
-		RegionId:         region,
-		LocationProduct:  a.LocationServiceCode,
-		LocationEndpointType: "openAPI",
-		CommonApi:        client.ProcessCommonRequest,
-	}
-	lcEndpoint, err := endpoints.Resolve(&rp)
-	if err != nil {
-		lcEndpoint = ""
+	if a.LocationServiceCode != "" {
+		rp := endpoints.ResolveParam{
+			Product:              a.Code,
+			RegionId:             region,
+			LocationProduct:      a.LocationServiceCode,
+			LocationEndpointType: "openAPI",
+			CommonApi:            client.ProcessCommonRequest,
+		}
+		ep, err := endpoints.Resolve(&rp)
+		if err != nil {
+			lcEndpoint = ""
+		} else {
+			lcEndpoint = ep
+		}
 	}
 
 	//if strings.Contains(a.Domain, "[RegionId]") {

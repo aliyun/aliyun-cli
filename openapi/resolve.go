@@ -8,6 +8,7 @@ import (
 	"net"
 	"fmt"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"strings"
 )
 
 func NewResolveCommand() (*cli.Command) {
@@ -49,7 +50,19 @@ func ResolveEndpoint(code string) {
 	library := meta.LoadLibrary(resource.NewReader())
 	product, ok := library.GetProduct(code)
 	if !ok {
-		cli.Errorf("Error: unknown product %s\n", code)
+		suggestions := GetProductSuggestions(library, code)
+		msg := ""
+		if len(suggestions) > 0 {
+			for i, s := range suggestions {
+				if i == 0 {
+					msg = "did you mean: " + s
+				} else {
+					msg = msg + " or " + s
+				}
+			}
+		}
+		cli.Errorf("Error: unknown product %s ", code)
+		cli.Warningf(" %s \n", msg)
 		return
 	}
 
@@ -65,13 +78,21 @@ func ResolveEndpoint(code string) {
 
 	fmt.Printf("\nTest endpoints...:\n")
 
+
+	regionalPattern := ""
+	globalEndpoints := make(map[string]bool, 0)
+	regionalEndpoints := make(map[string]string, 0)
 	for _, region := range regions {
 		ep, lep := product.TryGetEndpoints(string(region.RegionId), client)
 		fmt.Printf("- %s(%s): ", region.RegionId, region.LocalName)
+
+		known := false
 		if ep == "" {
 			cli.Warning("EP=,")
 		} else {
 			if ValidateDomain(ep) {
+				known = true
+				regionalEndpoints[region.RegionId] = ep
 				cli.Noticef("EP=%s, ", ep)
 			} else {
 				cli.Errorf("EP=%s(BAD), ", ep)
@@ -79,14 +100,57 @@ func ResolveEndpoint(code string) {
 		}
 
 		if lep == "" {
-			cli.Warning("LC=\n")
+			cli.Warning("LC=")
 		} else {
 			if ValidateDomain(lep) {
-				cli.Noticef("LC=%s\n", lep)
+				known = true
+				delete(regionalEndpoints, region.RegionId)
+				cli.Noticef("LC=%s", lep)
 			} else {
-				cli.Errorf("LC=%s(BAD)\n", lep)
+				cli.Errorf("LC=%s(BAD)", lep)
 			}
 		}
+
+		if !known {
+			for _, pattern := range product.EndpointPatterns {
+				if strings.Contains(pattern, "[RegionId]") {
+					ep = strings.Replace(pattern, "[RegionId]", region.RegionId, 1)
+					if ValidateDomain(ep) {
+						regionalEndpoints[region.RegionId] = ep
+						if regionalPattern == "" {
+							regionalPattern = pattern
+						} else if regionalPattern != pattern {
+							regionalPattern = "Conflict!!!"
+						}
+						cli.Noticef(", GUESS=%s", ep)
+					}
+				} else {
+					if ValidateDomain(pattern) {
+						globalEndpoints[pattern] = true
+					} else {
+						globalEndpoints[pattern] = false
+					}
+				}
+			}
+		}
+		fmt.Println()
+	}
+	for k, v := range globalEndpoints {
+		if v {
+			cli.Noticef("- GLOBAL: %s\n", k)
+		} else {
+			cli.Errorf("- GLOBAL: %s(BAD)\n", k)
+		}
+	}
+
+	if len(regionalEndpoints) == 0 {
+		return
+	}
+
+	fmt.Printf("\n  endpoint_pattern: %s", regionalPattern)
+	fmt.Printf("\n  regional_endpoints:\n")
+	for k, v := range regionalEndpoints {
+		fmt.Printf("    %s: %s\n", k, v)
 	}
 }
 
