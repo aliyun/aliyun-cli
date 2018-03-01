@@ -12,6 +12,7 @@ import (
 )
 
 func NewResolveCommand() (*cli.Command) {
+	var locationServiceCode string
 	cmd := &cli.Command{
 		Name: "resolve",
 		Usage: "resolve <productCode>",
@@ -20,15 +21,16 @@ func NewResolveCommand() (*cli.Command) {
 				cli.Errorf("Error: invalid args %v", args)
 				ctx.Command().PrintUsage()
 			} else {
-				ResolveEndpoint(args[0])
+				ResolveEndpoint(args[0], locationServiceCode)
 			}
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&locationServiceCode, "location-service-code", "", i18n.T("", ""))
 	return cmd
 }
 
-func ResolveEndpoint(code string) {
+func ResolveEndpoint(code string, locationServiceCode string) {
 	profile, err := config.LoadCurrentProfile()
 	if err != nil {
 		cli.Errorf("Error: please configure first")
@@ -64,6 +66,10 @@ func ResolveEndpoint(code string) {
 		cli.Errorf("Error: unknown product %s ", code)
 		cli.Warningf(" %s \n", msg)
 		return
+	}
+
+	if locationServiceCode != "" {
+		product.LocationServiceCode = locationServiceCode
 	}
 
 	fmt.Printf("\nProduct: %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
