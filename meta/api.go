@@ -9,16 +9,22 @@ import (
 )
 
 type Api struct {
-	Name string				`yaml:"name"`
-	Parameters []Parameter	`yaml:"parameters"`
+	Name        string            `yaml:"name"`
+	Method      string            `yaml:"method"`
+	Protocol    string            `yaml:"protocol"`
+	Description map[string]string `yaml:"description"`
+	DocumentId  string            `yaml:"document_id"`
+	Parameters  []Parameter       `yaml:"parameters"`
 }
 
 type Parameter struct {
-	Name string		`yaml:"name"`
-	Type string 	`yaml:"type"`
-	Required bool	`yaml:"required"`
-	Hidden bool		`yaml:"hidden"`
-	SubParameters []Parameter	`yaml:""`
+	Name          string            `yaml:"name"`
+	Type          string            `yaml:"type"`
+	Description   map[string]string `yaml:"description"`
+	Required      bool              `yaml:"required"`
+	Hidden        bool              `yaml:"hidden"`
+	Example       string            `yaml:"example"`
+	SubParameters []Parameter       `yaml:""`
 }
 
 //
@@ -36,7 +42,7 @@ func (a *Api) HasParameter(name string) bool {
 	return false
 }
 
-func (a *Api) CheckRequiredParameters(checker func (string) bool) error {
+func (a *Api) CheckRequiredParameters(checker func(string) bool) error {
 	for _, p := range a.Parameters {
 		if p.Required && !checker(p.Name) {
 			return fmt.Errorf("required parameter %s not assigned", p.Name)
