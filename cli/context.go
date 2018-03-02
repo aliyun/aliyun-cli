@@ -10,7 +10,11 @@ import (
 
 //
 // default help flag
-var helpFlag = Flag{Name: "help", Usage: i18n.En("help.usage", "print help"), Assignable: false }
+var helpFlag = Flag{
+	Name: "help",
+	Usage: i18n.T("print help", "打印帮助信息"),
+	Assignable: false,
+}
 
 //
 // CLI Command Context
@@ -77,7 +81,7 @@ func (ctx *Context) DetectFlag(name string) (*Flag, error) {
 	} else {
 		return nil, &InvalidFlagError{
 			Name: name,
-			Suggestions: ctx.flags.GetSuggestions(name, 2),
+			ctx: ctx,
 		}
 	}
 }

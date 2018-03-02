@@ -2,22 +2,32 @@ package cli
 
 import "fmt"
 
+//
+type PrintableError interface {
+	GetText(lang string) string
+}
+
+
 type InvalidCommandError struct {
 	Name string
-	Suggestions []*Command
+	ctx *Context
+}
+
+func NewInvalidCommandError(name string, ctx *Context) error {
+	return &InvalidCommandError {
+		Name: name,
+		ctx: ctx,
+	}
 }
 
 func (e *InvalidCommandError) Error() string {
-	return fmt.Sprintf("invalid command %s", e.Name)
+	return fmt.Sprintf("'%s' is not a vaild command", e.Name)
 }
 
-type InvalidFlagError struct {
-	Name string
-	Suggestions []*Flag
+func (e *InvalidCommandError) GetSuggestions() []string {
+	cmd := e.ctx.command
+	return cmd.GetSuggestions(e.Name)
 }
 
-func (e *InvalidFlagError) Error() string {
-	return fmt.Sprintf("invalid flag --%s", e.Name)
-}
 
 

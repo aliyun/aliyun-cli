@@ -21,11 +21,9 @@ func NewConfigureCommand() (*cli.Command) {
 		Name: "configure",
 		Short: i18n.T("configure credential and settings", "配置身份认证和其他信息"),
 		Usage: "configure --mode certificatedMode --profile profileName",
-		SuggestionLevel: 2,
 		Run: func(c *cli.Context, args []string) error {
 			if len(args) > 0 {
-				cli.Errorf("unknown command or args %s", args[0])
-				return nil
+				return cli.NewInvalidCommandError(args[0], c)
 			}
 			if profile == "" {
 				profile = "default"

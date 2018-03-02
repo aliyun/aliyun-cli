@@ -57,8 +57,8 @@ func main() {
 		Run: func(ctx *cli.Context, args []string) error {
 			return processMain(ctx, args)
 		},
-		Help: func(ctx *cli.Context, args []string, err error) {
-			processHelp(ctx, args, err)
+		Help: func(ctx *cli.Context, args []string) {
+			processHelp(ctx, args)
 		},
 	}
 
@@ -131,12 +131,12 @@ func processMain(ctx *cli.Context, args []string) error  {
 	return nil
 }
 
-func processHelp(ctx *cli.Context, args []string, err error) {
+func processHelp(ctx *cli.Context, args []string) {
 	c := ctx.Command()
-	if err != nil {
-		cli.Errorf("ERROR: %s\n", err.Error())
-		printUsage(ctx.Command(), nil)
-	} else {
+	//if err != nil {
+	//	cli.Errorf("ERROR: %s\n", err.Error())
+	//	printUsage(ctx.Command(), nil)
+	// } else {
 		if len(args) == 0 {
 			c.PrintHead()
 			c.PrintUsage()
@@ -153,7 +153,7 @@ func processHelp(ctx *cli.Context, args []string, err error) {
 			helper.PrintApiUsage(args[0], args[1])
 			// c.PrintFlags() TODO add later
 		}
-	}
+	//}
 }
 
 func printUsage(c *cli.Command, configError error) {
