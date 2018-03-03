@@ -12,12 +12,10 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 )
 
-func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName string) {
+func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName string) error {
 	api, ok := c.library.GetApi(product.Code, product.Version, apiName)
 	if !ok {
-		ctx.Command().PrintFailed(fmt.Errorf("invailed api: %s", apiName),
-			fmt.Sprintf("Use\n `aliyun help %s` to view product list\n  or add --force to skip check", product.Code))
-		return
+		return &InvalidApiError{Name: apiName, product: product}
 	}
 
 	//
@@ -26,14 +24,14 @@ func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName stri
 	client, request, err := c.InitClient(ctx, product, true)
 	if err != nil {
 		ctx.Command().PrintFailed(fmt.Errorf("init failed: %v", err), "")
-		return
+		return nil
 	}
 
 	request.ApiName = apiName
 	err = c.FillRpcParameters(ctx, request, &api)
 	if err != nil {
 		ctx.Command().PrintFailed(fmt.Errorf("init failed: %v", err), "")
-		return
+		return err
 	}
 	resp, err := client.ProcessCommonRequest(request)
 
@@ -41,6 +39,7 @@ func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName stri
 		ctx.Command().PrintFailed(err, "")
 	}
 	fmt.Println(resp.GetHttpContentString())
+	return nil
 }
 
 func (c *Caller) InvokeRpcForce(ctx *cli.Context, product *meta.Product, apiName string) {
@@ -70,7 +69,8 @@ func (c *Caller) FillRpcParameters(ctx *cli.Context, request *requests.CommonReq
 	for _, f := range ctx.UnknownFlags().Flags() {
 		request.QueryParams[f.Name] = f.GetValue()
 		if api != nil && !api.HasParameter(f.Name){
-			return fmt.Errorf("unknown parameter %s", f.Name)
+			//return fmt.Errorf("unknown parameter %s", f.Name)
+			return &InvalidParameterError{Name: f.Name, api: api, flags: ctx.Flags()}
 		}
 	}
 	if api != nil {

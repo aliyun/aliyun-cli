@@ -15,6 +15,7 @@ type Api struct {
 	Description map[string]string `yaml:"description"`
 	DocumentId  string            `yaml:"document_id"`
 	Parameters  []Parameter       `yaml:"parameters"`
+	Product     *Product 		  `yaml:"-"`
 }
 
 type Parameter struct {

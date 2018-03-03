@@ -2,12 +2,6 @@ package cli
 
 import "fmt"
 
-//
-type PrintableError interface {
-	GetText(lang string) string
-}
-
-
 type InvalidCommandError struct {
 	Name string
 	ctx *Context
@@ -29,5 +23,23 @@ func (e *InvalidCommandError) GetSuggestions() []string {
 	return cmd.GetSuggestions(e.Name)
 }
 
+type InvalidFlagError struct {
+	Name string
+	ctx *Context
+}
 
+func NewInvalidFlagError(name string, ctx *Context) error {
+	return &InvalidFlagError{
+		Name: name,
+		ctx: ctx,
+	}
+}
 
+func (e *InvalidFlagError) Error() string {
+	return fmt.Sprintf("invalid flag --%s", e.Name)
+}
+
+func (e *InvalidFlagError) GetSuggestions() []string {
+	distance := e.ctx.command.GetSuggestDistance()
+	return e.ctx.Flags().GetSuggestions(e.Name, distance)
+}

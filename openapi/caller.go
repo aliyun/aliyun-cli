@@ -34,7 +34,7 @@ func (c *Caller) Validate() error {
 
 //
 // entrance call from main
-func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, path string) {
+func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
 	c.force = ctx.Flags().IsAssigned("force")
 
 	//
@@ -42,19 +42,7 @@ func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, p
 	product, ok := c.library.GetProduct(productCode)
 	if !ok {
 		if !c.force {
-			suggestions := GetProductSuggestions(c.library, productCode)
-			msg := ""
-			if len(suggestions) > 0 {
-				for i, s := range suggestions {
-					if i == 0 {
-						msg = "did you mean: " + s
-					} else {
-						msg = msg + " or " + s
-					}
-				}
-			}
-			ctx.Command().PrintFailed(fmt.Errorf("unknown product: %s", productCode),
-				msg + "Use\n  `aliyun help`  to view product list\n  or add --force flag to skip name check")
+			return &InvalidProductError{Name: productCode, library: c.library}
 		} else {
 			product = meta.Product {
 				Code: productCode,
@@ -66,13 +54,14 @@ func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, p
 		//
 		// Rpc call
 		if path != "" {
-			ctx.Command().PrintFailed(fmt.Errorf("invalid arguments"), "")
-			return
+			// ctx.Command().PrintFailed(fmt.Errorf("invalid arguments"), "")
+			return fmt.Errorf("invailed argument")
 		}
 		if c.force {
 			c.InvokeRpcForce(ctx, &product, apiOrMethod)
+			return nil
 		} else {
-			c.InvokeRpc(ctx, &product, apiOrMethod)
+			return c.InvokeRpc(ctx, &product, apiOrMethod)
 		}
 	} else if product.Version != "" {
 		//
@@ -86,12 +75,12 @@ func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, p
 			} else {
 				ctx.Command().PrintFailed(fmt.Errorf("product %s need restful call", product.Code), "")
 			}
-			return
+			return nil
 		}
 		c.InvokeRestful(ctx, &product, method, path)
 		if err != nil {
 			ctx.Command().PrintFailed(fmt.Errorf("call restful %s%s.%s faild %v", product.Code, path, method, err), "")
-			return
+			return nil
 		}
 	} else {
 		ok, method, path, err := CheckRestfulMethod(ctx, apiOrMethod, path)
@@ -105,6 +94,7 @@ func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, p
 			c.InvokeRpcForce(ctx, &product, apiOrMethod)
 		}
 	}
+	return nil
 }
 
 

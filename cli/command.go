@@ -39,7 +39,7 @@ type Command struct {
 	Run func(ctx *Context, args []string) error
 
 	// Help
-	Help func(ctx *Context, args []string)
+	Help func(ctx *Context, args []string) error
 
 	suggestDistance int
 	parent			*Command
@@ -89,8 +89,8 @@ func (c *Command) GetSuggestions(s string) []string {
 func (c *Command) GetSuggestDistance() int {
 	if c.SuggestDistance < 0 {
 		return 0
-	} else if c.SuggestDistance == DefaultSuggestDistance {
-		return 2
+	} else if c.SuggestDistance == 0 {
+		return DefaultSuggestDistance
 	} else {
 		return c.SuggestDistance
 	}
@@ -109,9 +109,7 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 	// get next arg
 	nextArg, _, err := parser.ReadNextArg()
 	if err != nil {
-		return fmt.Errorf("command parse error %s", err.Error())
-		//c.executeHelp(ctx, args, err)
-		//return
+		return err
 	}
 
 	//
@@ -134,7 +132,7 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 	// raise error
 	if c.Run == nil {
 		// c.executeHelp(ctx, args, fmt.Errorf("unknown command: %s", nextArg))
-		return &InvalidCommandError{Name: nextArg}
+		return NewInvalidCommandError(nextArg, ctx)
 	}
 
 	//
@@ -177,11 +175,11 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 func (c *Command) processError(err error) {
 	//
 	// process error
-	if e, ok := err.(PrintableError); ok {
-		Errorf("error: %s\n", e.GetText(i18n.GetLanguage()))
-	} else {
+	//if e, ok := err.(PrintableError); ok {
+	//	Errorf("error: %s\n", e.GetText(i18n.GetLanguage()))
+	//} else {
 		Errorf("error: %s\n", err.Error())
-	}
+//	}
 
 	if e, ok := err.(SuggestibleError); ok {
 		ss := e.GetSuggestions()
@@ -193,7 +191,19 @@ func (c *Command) processError(err error) {
 
 func (c *Command) executeHelp(ctx *Context, args []string)  {
 	if c.Help != nil {
-		c.Help(ctx, args)
+		err := c.Help(ctx, args)
+		if err != nil {
+			Errorf("Error: %s\n", err)
+		}
+		if se, ok := err.(SuggestibleError); ok {
+			ss := se.GetSuggestions()
+			if len(ss) > 0 {
+				Noticef("\nDid you mean:\n")
+				for _, s := range ss {
+					Noticef("  %s\n", s)
+				}
+			}
+		}
 		return
 	}
 

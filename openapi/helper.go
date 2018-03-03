@@ -8,7 +8,6 @@ import (
 	"github.com/aliyun/aliyun-cli/meta"
 	"text/tabwriter"
 	"os"
-	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"strings"
 )
@@ -35,24 +34,10 @@ func (a *Helper) PrintProducts() {
 	w.Flush()
 }
 
-func (a *Helper) PrintProductUsage(productCode string, withApi bool) {
+func (a *Helper) PrintProductUsage(productCode string, withApi bool) error {
 	product, ok := a.library.GetProduct(productCode)
 	if !ok {
-		suggestions := GetProductSuggestions(a.library, productCode)
-		msg := ""
-		if len(suggestions) > 0 {
-			for i, s := range suggestions {
-				if i == 0 {
-					msg = "did you mean: " + s
-				} else {
-					msg = msg + " or " + s
-				}
-			}
-		}
-		cli.Error(fmt.Sprintf("unknown product: %s %s \n", productCode, msg))
-		cli.Warning("Use\n  `aliyun help`  to view product list\n  or add --force flag to skip name check")
-
-		return
+		return &InvalidProductError{Name: productCode, library: a.library}
 	}
 
 	if product.ApiStyle == "rpc" {
@@ -74,18 +59,17 @@ func (a *Helper) PrintProductUsage(productCode string, withApi bool) {
 	}
 
 	fmt.Printf("\nRun `aliyun help %s <ApiName>` to get more information about api", product.Code)
+	return nil
 }
 
-func (a *Helper) PrintApiUsage(productName string, apiName string) {
+func (a *Helper) PrintApiUsage(productName string, apiName string) error {
 	product, ok := a.library.GetProduct(productName)
 	if !ok {
-		cli.Errorf("unknown product %s", productName)
-		return
+		return &InvalidProductError{Name: productName, library: a.library}
 	}
 	api, ok := a.library.GetApi(productName, product.Version, apiName)
 	if !ok {
-		cli.Errorf("unknown api: %s/%s/%s", product.Code, product.Version, apiName)
-		return
+		return &InvalidApiError{Name: apiName, product: &product}
 	}
 
 	fmt.Printf("\nParameters:\n")
@@ -104,6 +88,8 @@ func (a *Helper) PrintApiUsage(productName string, apiName string) {
 		}
 	}
 	w.Flush()
+
+	return nil
 }
 
 func required(r bool) string {

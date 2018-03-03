@@ -8,12 +8,6 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 )
 
-//
-// to parser to
-type FlagDetector interface {
-	DetectFlag(name string) (*Flag, error)
-}
-
 type FlagSet struct {
 	flags	[]Flag
 }
@@ -86,7 +80,11 @@ func (a *FlagSet) GetSuggestions(name string, distance int) []string {
 	for _, v := range a.flags {
 		sr.Apply(v.Name)
 	}
-	return sr.GetResults()
+	ss := make([]string, 0)
+	for _, s := range sr.GetResults() {
+		ss = append(ss, "--" + s)
+	}
+	return ss
 }
 
 // check if the flag is assigned
@@ -185,18 +183,4 @@ func (a *FlagSet) assignedCount() int {
 		}
 	}
 	return n
-}
-
-type InvalidFlagError struct {
-	Name string
-	ctx *Context
-}
-
-func (e *InvalidFlagError) Error() string {
-	return fmt.Sprintf("invalid flag --%s", e.Name)
-}
-
-func (e *InvalidFlagError) GetSuggestions() []string {
-	distance := e.ctx.command.GetSuggestDistance()
-	return e.ctx.Flags().GetSuggestions(e.Name, distance)
 }

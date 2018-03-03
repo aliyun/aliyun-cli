@@ -8,7 +8,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/endpoints"
 )
 
-type Products struct {
+type ProductSet struct {
 	Products []Product 				`yaml:"products"`
 }
 
@@ -19,7 +19,7 @@ type Product struct {
 	Catalog2			map[string]string `yaml:"catalog2"`
 	Name                map[string]string `yaml:"name"`
 	DocumentId			string 			  `yaml:"document_id"`
-	// Sites				map[string]string `yaml:"sites"`				// china, international, japan
+	// Sites			map[string]string `yaml:"sites"`			// china, international, japan
 
 	LocationServiceCode string            `yaml:"location_service_code"`
 	GlobalEndpoint	    string			  `yaml:"global_endpoint"`
