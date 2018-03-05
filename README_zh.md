@@ -1,102 +1,110 @@
 
 # 阿里云命令行工具 (Aliyun Command Line Interface)
 
-阿里云命令行工具是开源项目，[Github地址](https://github.com/aliyun/aliyun-cli)。
+阿里云命令行工具（Alibaba Cloud Command Line Interface
+）是开源项目，您可以从[Github](https://github.com/aliyun/aliyun-cli)上获取最新版本的CLI。
 
-该版本的CLI为Go语言重构版本，目前处于**BETA**发布中，如果您还希望使用原有的Python版本，请切换到[python分支](https://github.com/aliyun/aliyun-cli/tree/python_final)。
+该版本的CLI为Go语言重构版本，目前处于**BETA**发布中，如果您想使用原有的Python版本，请切换到[Python分支](https://github.com/aliyun/aliyun-cli/tree/python_final)。
 
 ## 简介
 
-- 阿里云命令行工具是用Go语言编写的, 是基于阿里云OpenAPI打造的，用于管理阿里云资源的统一工具。通过下载和配置该工具，您可以在一个命令行方式下控制多个阿里云产品。
-- 欢迎通过提交[Github Issue](https://github.com/aliyun/aliyun-cli/issues/new)与我们沟通。
-- 同时更建议您加入阿里云官方SDK&CLI客户服务群，钉钉群号：11771185。
+阿里云命令行工具是用Go语言编写的, 基于阿里云OpenAPI打造的，用于管理阿里云资源的工具。通过下载和配置该工具，您可以在一个命令行方式下使用多个阿里云产品。
+
+欢迎通过提交[Github Issue](https://github.com/aliyun/aliyun-cli/issues/new)与我们沟通。建议您加入阿里云官方SDK&CLI客户服务群，钉钉群号：11771185。
+
+**注意**：阿里云CLI使用OpenAPI方式访问云产品，确保您已经开通了要使用的云产品并了解该产品的OpenAPI的使用。您可以在[阿里云API平台](https://developer.aliyun.com/api)获取产品API文档，了解API的使用方式及参数列表。
 
 
-## 安装
+## 安装阿里云CLI
 
-### 下载及使用
+您可以通过下载安装包或者直接编译源码的方式安装阿里云CLI：
 
-CLI工具下载即可使用(0.50 Beta)，支持Mac, Linux, Windows平台(x64版本)。
+- **下载安装包**
 
-- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.50-amd64.tgz)
-- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.50-amd64.tgz)
-- [Windows](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.50-amd64.tgz)
+	阿里云CLI工具下载、解压后即可使用，支持Mac, Linux, Windows平台(x64版本)。	您可以将解压的`aliyun`目录移至`/usr/local/bin`目录下，或添加到`$PATH`中。
 
-解压即可用，您可以将`aliyun`工具挪到`/usr/local/bin`目录下，或添加到`$PATH`中，以获得更便捷的访问。
+	下载链接如下：
 
-**或**
+	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.33-amd64.tgz)
+	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.33-amd64.tgz)
+	- [Windows](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.33-amd64.tgz)
 
-## 下载源码后自行编译
+- **编译源码**
 
-当遇到不支持的平台，或其他需求时，请先安装并配置好golang环境，并按照如下步骤下载源码并编译。
+	请先安装并配置好Golang环境，并按照如下步骤下载源码并编译。
 
-```
-$ mkdir -p $GOPATH/src/github.com/aliyun
-$ cd $GOPATH/src/github.com/aliyun
-$ git clone http://github.com/aliyun/aliyun-cli.git
-$ git clone http://github.com/aliyun/aliyun-openapi-meta.git
-$ cd aliyun-cli
-$ make install
-```
+	```
+	$ mkdir -p $GOPATH/src/github.com/aliyun
+	$ cd $GOPATH/src/github.com/aliyun
+	$ git clone http://github.com/aliyun/aliyun-cli.git
+	$ git clone http://github.com/aliyun/aliyun-openapi-meta.git
+	$ cd aliyun-cli
+	$ make install
+	```
 
-## 配置
+## 配置阿里云CLI
 
-- 在使用`aliyun`命令行工具前，您需要运行`aliuyun configure`命令进行配置。
-- 要使用阿里云命令行工具，您需要一个云账号以及一对AccessKeyId和AccessKeySecret。 请在阿里云控制台中的[AccessKey管理控制台](https://ak-console.aliyun.com/#/accesskey)上创建和查看您的AK，或者联系您的系统管理员。
-- 命令行工具使用OpenAPI方式访问云产品，您需要事先在阿里云开通这个产品并详细了解产品的OpenAPI。
+在使用阿里云CLI前，您需要运行`aliyun configure`命令进行配置。在配置阿里云CLI时，您需要提供阿里云账号以及一对AccessKeyId和AccessKeySecret。
 
-### 基本配置
+您可以在阿里云控制台的[AccessKey页面](https://ak-console.aliyun.com/#/accesskey)创建和查看您的AccessKey，或者联系您的系统管理员获取AccessKey。
+
+#### 基本配置
 
 ```
 $ aliyun configure
 Configuring profile 'default' ...
-Aliyun Access Key ID [None]: <Your aliyun access key id>
-Aliyun Access Key Secret [None]: <Your aliyun access key secret>
+Aliyun Access Key ID [None]: <Your AccessKey ID>
+Aliyun Access Key Secret [None]: <Your AccessKey Secret>
 Default Region Id [None]: cn-hangzhou
 Default output format [json]: json
 Default Languate [zh]: zh
 ```
 
-### 多用户
+#### 多用户配置
 
-- `aliyun`支持多用户配置, 使用`$ aliyun configure --profile user1`可以配置指定的用户。
-- `$ aliyun configure list`命令可以列出当前所有配置, 如下表, 其中在Profile列后面打*的为当前使用的默认配置。
-- 在后续的调用中，您可以使用`--profile user1`参数来指定调用时的用户。
+阿里云CLI支持多用户配置。您可以使用`$ aliyun configure --profile user1`命令指定使用哪个账号调用OpenAPI。
+
+执行`$ aliyun configure list`命令可以查看当前的用户配置, 如下表。 其中在Profile后面有星号（*）标志的为当前使用的默认用户配置。
 
 ```
-Profile   | Credential         | Valid   | Region           | Language
---------- | ------------------ | ------- | ---------------- | --------
-default * | AK:***ddc          | Valid   | cn-beijing       | zh
-aaa       | AK:******          | Invalid |                  |
-test      | AK:***412          | Valid   |                  | en
-ecs       | EcsRamRole:EcsTest | Valid   | cn-beijing       | en
+Profile   | CertificationMode | Valid   | AccessKeyId
+--------- | ----------------- | ------- | ----------------
+default * | AK                | Valid   | *************ac8
+ram       | EcsRamRole        | Invalid |
+test      | StsToken          | Invalid | **
+leo       | AK                | Valid   | *************bb2 
 ```
 
-### 其他认证方式
+#### 其他认证方式
 
-- `aliyun`命令行工具，可通过在`configure`命令后增加`--mode ...`的方式来使用不同的认证方式，目前支持的认证方式如下：
+阿里云CLI，可通过在`configure`命令后增加`--mode <authenticationMethod>`参数的方式来使用不同的认证方式，目前支持的认证方式如下：
 
 | 验证方式  | 说明 |
 | --------       | -------- |
-| AK             | 使用AccessKeyId/Secret访问 |
-| StsToken       | 使用StsToken访问    |
-| RamRoleArn     | 使用Ram子账号的AssumeRole方式访问     |
+| AK             | 使用AccessKey ID/Secret访问 |
+| StsToken       | 使用STS Token访问    |
+| RamRoleArn     | 使用RAM子账号的AssumeRole方式访问     |
 | EcsRamRole     | 在ECS实例上通过EcsRamRole实现免密验证   |
-| RsaKeyPair     | 使用Rsa公私钥方式(仅日本站支持)     |
 
-### 使用自动补全功能
+## 使用阿里云CLI
 
-- TODO
+阿里云云产品的OpenAPI有RPC和RESTful两种风格，大部分产品使用的是RPC风格。不同风格的API的调用方法也不同。
 
-## 如何使用
+您可以通过以下特点判断API风格：
 
-### 基本使用方式
+- API参数中包含`Action`字段的是RPC风格，需要`PathPattern`参数的是Restful风格。
+- 一般情况下，每个产品内，所有API的调用风格是统一的。
+- 每个API仅支持特定的一种风格，传入错误的标识，可能会调用到其他API，或收到“ApiNotFound”的错误信息。
+
+####调用RPC风格的API
+
+阿里云CLI中RPC风格的API调用的基本结构如下：
 
 ```
 $ aliyun <product> <operation> --parameter1 value1 --parameter2 value2 ...
 ```
 
-例如:
+代码示例：
 
 ```
 $ aliyun rds DescribeDBInstances --PageSize 50
@@ -104,53 +112,52 @@ $ aliyun ecs DescribeRegions
 $ aliyun rds DescribeDBInstanceAttribute --DBInstanceId xxxxxx
 ```
 
-### 获取帮助信息
 
-`aliyun`集成了一部分产品的API和参数列表的信息, 您可以使用如下命令来获取帮助：
+#### 调用RESTful风格的API
 
-- `$ aliyun help`: 打印产品列表
-- `$ aliyun help ecs`: 获取产品的API信息
-- `$ aliyuh help ecs CreateInstance`: 获取API的调用信息
+部分阿里云产品如容器服务的OpenAPI为Restful风格，调用Restful风格的接口与调用RPC风格的接口方式不同。参考以下代码示例，调用RESTful API。
 
+- GET请求示例：
 
-### Restful风格的调用
+	```
+	$ aliyun cs GET /clusters
+	```
 
-部分阿里云产品的OpenAPI为Restful风格，调用Restful风格的接口与调用RPC风格的接口方式不用，需要使用：
+- POST请求示例：
 
-- GET的例子:
+	```
+	$ aliyun cs POST /clusters --body "$(cat input.json)"
+	```
 
-```
-$ aliyun cs GET /clusters
-```
+- DELETE请求示例：
 
-- POST的例子:
+	```
+	$ aliyun cs DELETE /clusters/ce2cdc26227e09c864d0ca0b2d5671a07
+	```
 
-```
-$ aliyun cs POST /clusters --body "$(cat input.json)"
-```
+#### 获取帮助信息
 
-- DELETE的例子
+阿里云CLI集成了一部分产品的API和参数列表信息, 您可以使用如下命令来获取帮助：
 
-```
-$ aliyun cs DELETE /clusters/ce2cdc26227e09c864d0ca0b2d5671a07
-```
+- `$ aliyun help`: 获取产品列表
 
-注：如何区分Rpc风格和Restful风格？
+- `$ aliyun help <product>`: 获取产品的API信息
 
-- 简单来说，API参数中，包含Action字段的是RPC风格，需要PathPattern的是Restful风格。
-- 一般情况下，每个产品内，所有API的调用风格是统一的。
-- 每个API仅支持特定的一种风格调用，传入错误的标识，可能会调用到其他API，或收到“ApiNotFound”的错误信息。
+	如获取ECS的API信息：`$ aliyun help ecs`
 
-### 使用`--force`参数
+- `$ aliyun help <product> <apiName>`: 获取API的调用信息
 
-`aliyun`命令行工具集成了一部分云产品的元数据，在调用时会进行参数的合法性检查，使用一个元数据中未包含的API或参数会导致`unknown api`或`unknown parameter`的报错。可以使用`--force`参数来跳过API和参数检查，强制调用元数据列表外的API和参数，如:
+	如获取ECS的CreateInstance的信息： `aliyun help ecs CreateInstance`
+
+#### 使用`--force`参数
+
+阿里云CLI集成了一部分云产品的元数据，在调用时会对参数的合法性进行检查。如果使用了一个元数据中未包含的API或参数会导致`unknown api`或`unknown parameter`错误。可以使用`--force`参数跳过API和参数检查，强制调用元数据列表外的API和参数，如:
 
 ```
 $ aliyun newproduct --version 2018-01-01 --endpoint newproduct.aliyuncs.com --param1 ... --force
 ```
 
-使用前请阅读阿里云各产品的OpenAPI文档，来了解OpenAPI的使用方式及参数列表，您可以在[阿里云API平台](https://developer.aliyun.com/api)获取产品API文档。在使用`--force`参数时，有两个参数是额外需要指定的:
+在使用`--force`参数时，必须指定以下两个参数：
 
-- `--version`: 指定OpenAPI的版本，你可以在API文档中找到这个版本号，如: ECS的版本号是`2014-05-26`。
-- `--endpoint`: 指定产品的接入地址，一般产品接入地址是`product.aliyuncs.com`，或`product.en-central-1.aliyuncs.com`，请参照具体文档。
-
+- `--version`: 指定API的版本，你可以在API文档中找到版本号，如ECS的版本号是`2014-05-26`。
+- `--endpoint`: 指定产品的接入地址，一般产品接入地址是`product.aliyuncs.com`，或`product.en-central-1.aliyuncs.com`，请参考各产品的API文档。
