@@ -20,13 +20,13 @@ You can install Alibaba Cloud CLI either through the installer or the source cod
 
 - **Download installer**
 
-	Download the installer, then extract the installer. You can move the extracted `aliyun` folder to the `/usr/local/bin` directory or add it to the `$PATH`.
+	Download the installer, then extract the installer. You can move the extracted `aliyun` executable file to the `/usr/local/bin` directory or add it to the `$PATH`.
 
 	Download link:
 
-	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.33-amd64.tgz)
-	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.33-amd64.tgz)
-	- [Windows (64 bit)](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.33-amd64.tgz)
+	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.60-amd64.tgz)
+	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.60-amd64.tgz)
+	- [Windows (64 bit)](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.60-amd64.tgz)
 
 - **Compile source code**
 
@@ -71,12 +71,12 @@ Alibaba Cloud CLI supports configuring multiple user profiles. You can specify w
 Run the `aliyun configure list` command to view the configured user profiles. The profile followed by an asterisk (*) is the profile current in use.
 
 ```
-Profile   | CertificationMode | Valid   | AccessKeyId
---------- | ----------------- | ------- | ----------------
-default * | AK                | Valid   | *************ac8
-ram       | EcsRamRole        | Invalid |
-test      | StsToken          | Invalid | **
-leo       | AK                | Valid   | *************bb2 
+Profile   | Credential         | Valid   | Region           | Language
+--------- | ------------------ | ------- | ---------------- | --------
+default * | AK:***f9b          | Valid   | cn-beijing       | zh
+aaa       | AK:******          | Invalid |                  |
+test      | AK:***456          | Valid   |                  | en
+ecs       | EcsRamRole:EcsTest | Valid   | cn-beijing       | en
 ```
 
 #### Configure authentication methods

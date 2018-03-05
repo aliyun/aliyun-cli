@@ -1,8 +1,6 @@
-
 # 阿里云命令行工具 (Aliyun Command Line Interface)
 
-阿里云命令行工具（Alibaba Cloud Command Line Interface
-）是开源项目，您可以从[Github](https://github.com/aliyun/aliyun-cli)上获取最新版本的CLI。
+阿里云命令行工具（Alibaba Cloud Command Line Interface）是开源项目，您可以从[Github](https://github.com/aliyun/aliyun-cli)上获取最新版本的CLI。
 
 该版本的CLI为Go语言重构版本，目前处于**BETA**发布中，如果您想使用原有的Python版本，请切换到[Python分支](https://github.com/aliyun/aliyun-cli/tree/python_final)。
 
@@ -21,13 +19,13 @@
 
 - **下载安装包**
 
-	阿里云CLI工具下载、解压后即可使用，支持Mac, Linux, Windows平台(x64版本)。	您可以将解压的`aliyun`目录移至`/usr/local/bin`目录下，或添加到`$PATH`中。
+	阿里云CLI工具下载、解压后即可使用，支持Mac, Linux, Windows平台(x64版本)。	您可以将解压的`aliyun`可执行文件移至`/usr/local/bin`目录下，或添加到`$PATH`中。
 
 	下载链接如下：
 
-	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.33-amd64.tgz)
-	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.33-amd64.tgz)
-	- [Windows](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.33-amd64.tgz)
+	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.60-amd64.tgz)
+	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.60-amd64.tgz)
+	- [Windows](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.60-amd64.tgz)
 
 - **编译源码**
 
@@ -67,12 +65,12 @@ Default Languate [zh]: zh
 执行`$ aliyun configure list`命令可以查看当前的用户配置, 如下表。 其中在Profile后面有星号（*）标志的为当前使用的默认用户配置。
 
 ```
-Profile   | CertificationMode | Valid   | AccessKeyId
---------- | ----------------- | ------- | ----------------
-default * | AK                | Valid   | *************ac8
-ram       | EcsRamRole        | Invalid |
-test      | StsToken          | Invalid | **
-leo       | AK                | Valid   | *************bb2 
+Profile   | Credential         | Valid   | Region           | Language
+--------- | ------------------ | ------- | ---------------- | --------
+default * | AK:***f9b          | Valid   | cn-beijing       | zh
+aaa       | AK:******          | Invalid |                  |
+test      | AK:***456          | Valid   |                  | en
+ecs       | EcsRamRole:EcsTest | Valid   | cn-beijing       | en
 ```
 
 #### 其他认证方式
@@ -101,7 +99,7 @@ leo       | AK                | Valid   | *************bb2
 阿里云CLI中RPC风格的API调用的基本结构如下：
 
 ```
-$ aliyun <product> <operation> --parameter1 value1 --parameter2 value2 ...
+$ aliyun <product> <operation> [--parameter1 value1 --parameter2 value2 ...]
 ```
 
 代码示例：
