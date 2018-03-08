@@ -20,7 +20,7 @@ func NewConfigureCommand() (*cli.Command) {
 	c := &cli.Command{
 		Name: "configure",
 		Short: i18n.T("configure credential and settings", "配置身份认证和其他信息"),
-		Usage: "configure --mode certificatedMode --profile profileName",
+		Usage: "configure --mode <AuthenticateMode> --profile <profileName>",
 		Run: func(c *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], c)
@@ -38,7 +38,7 @@ func NewConfigureCommand() (*cli.Command) {
 	f.Persistent = true
 
 	c.Flags().PersistentStringVar(&mode, "mode", "AK",
-		i18n.T("use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` to assign certificate mode",
+		i18n.T("use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` to assign authenticate mode",
 			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` 指定认证方式"))
 
 	c.AddSubCommand(NewConfigureGetCommand())
@@ -67,7 +67,7 @@ func doConfigure(profileName string) error {
 
 	fmt.Printf("Configuring profile '%s' ...\n", profileName)
 	if mode != "" {
-		switch CertificateMode(mode) {
+		switch AuthenticateMode(mode) {
 		case AK:
 			cp.Mode = AK
 			configureAK(&cp)
@@ -84,7 +84,7 @@ func doConfigure(profileName string) error {
 			cp.Mode = RsaKeyPair
 			configureRsaKeyPair(&cp)
 		default:
-			return fmt.Errorf("unexcepted certificated mode: %s", mode)
+			return fmt.Errorf("unexcepted authenticate mode: %s", mode)
 		}
 	} else {
 		configureAK(&cp)
@@ -94,11 +94,16 @@ func doConfigure(profileName string) error {
 	// configure common
 	fmt.Printf("Default Region Id [%s]: ", cp.RegionId)
 	cp.RegionId = ReadInput(cp.RegionId)
-	fmt.Printf("Default Output Format [%s]: ", cp.OutputFormat)
-	cp.OutputFormat = ReadInput(cp.OutputFormat)
-	fmt.Printf("Default Language [%s]: ", cp.Language)
+	fmt.Printf("Default Output Format [%s]: json", cp.OutputFormat)
+	// cp.OutputFormat = ReadInput(cp.OutputFormat)
+	cp.OutputFormat = "json"
+	fmt.Printf("Default Language [zh|en] %s: ", cp.Language)
 	cp.Language = ReadInput(cp.Language)
-
+	if cp.Language != "zh" && cp.Language != "en" {
+		cp.Language = "en"
+	}
+	fmt.Printf("User site: [china|international|japan] %s", cp.Site)
+	cp.Site = ReadInput(cp.Site)
 
 	fmt.Printf("Saving profile[%s] ...", profileName)
 	conf.PutProfile(cp)

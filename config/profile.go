@@ -1,4 +1,5 @@
 package config
+
 /*
  * Copyright (C) 2017-2018 Alibaba Group Holding Limited
  */
@@ -8,40 +9,41 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials"
 )
 
-type CertificateMode string
+type AuthenticateMode string
 
 const (
-	AK = CertificateMode("AK")
-	StsToken = CertificateMode("StsToken")
-	RamRoleArn = CertificateMode("RamRoleArn")
-	EcsRamRole = CertificateMode("EcsRamRole")
-	RsaKeyPair = CertificateMode("RsaKeyPair")
+	AK         = AuthenticateMode("AK")
+	StsToken   = AuthenticateMode("StsToken")
+	RamRoleArn = AuthenticateMode("RamRoleArn")
+	EcsRamRole = AuthenticateMode("EcsRamRole")
+	RsaKeyPair = AuthenticateMode("RsaKeyPair")
 )
 
 type Profile struct {
-	Name            string          `json:"name"`
-	Mode            CertificateMode `json:"mode"`
-	AccessKeyId     string          `json:"access_key_id"`
-	AccessKeySecret string          `json:"access_key_secret"`
-	StsToken		string			`json:"sts_token"`
-	RamRoleName		string          `json:"ram_role_name"`
-	RamRoleArn		string			`json:"ram_role_arn"`
-	RoleSessionName	string 			`json:"ram_session_name"`
-	PrivateKey		string 			`json:"private_key"`
-	KeyPairName		string 			`json:"key_pair_name"`
-	ExpiredSeconds	int				`json:"expired_seconds"`
-	Verified		string			`json:"verified"`
-	RegionId        string          `json:"region_id"`
-	OutputFormat    string          `json:"output_format"`
-	Language        string          `json:"language"`
+	Name            string           `json:"name"`
+	Mode            AuthenticateMode `json:"mode"`
+	AccessKeyId     string           `json:"access_key_id"`
+	AccessKeySecret string           `json:"access_key_secret"`
+	StsToken        string           `json:"sts_token"`
+	RamRoleName     string           `json:"ram_role_name"`
+	RamRoleArn      string           `json:"ram_role_arn"`
+	RoleSessionName string           `json:"ram_session_name"`
+	PrivateKey      string           `json:"private_key"`
+	KeyPairName     string           `json:"key_pair_name"`
+	ExpiredSeconds  int              `json:"expired_seconds"`
+	Verified        string           `json:"verified"`
+	RegionId        string           `json:"region_id"`
+	OutputFormat    string           `json:"output_format"`
+	Language        string           `json:"language"`
+	Site            string           `json:"Site"`
 }
 
 func NewProfile(name string) (Profile) {
-	return Profile {
-		Name: name,
-		Mode: AK,
+	return Profile{
+		Name:         name,
+		Mode:         AK,
 		OutputFormat: "json",
-		Language: "en",
+		Language:     "en",
 	}
 }
 
@@ -136,32 +138,29 @@ func (cp *Profile) GetClientByEcsRamRole() (*sdk.Client, error) {
 		return nil, fmt.Errorf("RamRole is empty! run `aliyun configure` first")
 	}
 
-	cred := credentials.NewStsRoleNameOnEcsCredential(cp.RamRoleName)
+	cred := credentials.NewEcsRamRoleCredential(cp.RamRoleName)
 	config := sdk.NewConfig()
-	client, err := sdk.NewClientWithOptions(cp.RegionId, config, &cred)
+	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
 
 func (cp *Profile) GetClientBySts() (*sdk.Client, error) {
 	cred := credentials.NewStsTokenCredential(cp.AccessKeyId, cp.AccessKeySecret, cp.StsToken)
 	config := sdk.NewConfig()
-	client, err := sdk.NewClientWithOptions(cp.RegionId, config, &cred)
+	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
 
 func (cp *Profile) GetClientByRoleArn() (*sdk.Client, error) {
-	cred := credentials.NewStsRoleArnCredential(cp.AccessKeyId, cp.AccessKeySecret, cp.RamRoleArn, cp.RoleSessionName, cp.ExpiredSeconds)
+	cred := credentials.NewRamRoleArnCredential(cp.AccessKeyId, cp.AccessKeySecret, cp.RamRoleArn, cp.RoleSessionName, cp.ExpiredSeconds)
 	config := sdk.NewConfig()
-	client, err := sdk.NewClientWithOptions(cp.RegionId, config, &cred)
+	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
 
 func (cp *Profile) GetClientByPrivateKey() (*sdk.Client, error) {
 	cred := credentials.NewRsaKeyPairCredential(cp.PrivateKey, cp.KeyPairName, cp.ExpiredSeconds)
 	config := sdk.NewConfig()
-	client, err := sdk.NewClientWithOptions(cp.RegionId, config, &cred)
+	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
-
-
-

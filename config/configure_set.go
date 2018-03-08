@@ -65,6 +65,9 @@ func NewConfigureSetCommand() (*cli.Command) {
 	fs.Add(cli.Flag{Name: "language", Assignable: true,
 		Usage: i18n.T("assign language, support en/zh", "")})
 
+	fs.Add(cli.Flag{Name: "site", Assignable: true,
+		Usage: i18n.T("assign site, support china/international/japan", "")})
+
 	return cmd
 }
 
@@ -87,7 +90,7 @@ func doConfigureSet(c *cli.Context) {
 
 	mode, ok := c.Flags().GetValue("mode")
 	if ok {
-		profile.Mode = CertificateMode(mode)
+		profile.Mode = AuthenticateMode(mode)
 	} else {
 		if profile.Mode == "" {
 			profile.Mode = AK
@@ -118,6 +121,7 @@ func doConfigureSet(c *cli.Context) {
 	profile.RegionId = fs.GetValueOrDefault("region", profile.RegionId)
 	profile.Language = fs.GetValueOrDefault("language", profile.Language)
 	profile.OutputFormat = fs.GetValueOrDefault("output", profile.OutputFormat)
+	profile.Site = fs.GetValueOrDefault("site", profile.Site)
 
 	err = profile.Validate()
 	if err != nil {
