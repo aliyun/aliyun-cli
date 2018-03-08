@@ -6,6 +6,7 @@ package meta
 import (
 	"fmt"
 	"gopkg.in/yaml.v2"
+	"encoding/json"
 )
 
 type Reader interface {
@@ -19,7 +20,21 @@ func ReadYamlFrom(r Reader, path string, v interface{}) error {
 	}
 	err = yaml.Unmarshal(buf, v)
 	if err != nil {
-		return fmt.Errorf("unmarshal %s failed %v", path, err)
+		return fmt.Errorf("unmarshal yaml %s failed %v", path, err)
 	}
 	return nil
 }
+
+func ReadJsonFrom(r Reader, path string, v interface{}) error {
+	buf, err := r.ReadFrom(path)
+	if err != nil {
+		return fmt.Errorf("read json from %s failed %v", path, v)
+	}
+	err = json.Unmarshal(buf, v)
+	if err != nil {
+		return fmt.Errorf("unmarshal json %s failed %v", path, err)
+	}
+	return nil
+}
+
+

@@ -8,6 +8,32 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
 )
 
+type Region struct {
+	RegionId  string
+	LocalName string
+}
+
+func GetRegions(profile *Profile) ([]Region, error) {
+	client, err := profile.GetClient()
+
+	regions := make([]Region, 0)
+	if err != nil {
+		return regions, err
+	}
+
+	request := ecs.CreateDescribeRegionsRequest()
+	response := ecs.CreateDescribeRegionsResponse()
+	err = client.DoAction(request, response)
+
+	for _, region := range response.Regions.Region {
+		regions = append(regions, Region {
+			RegionId:  region.RegionId,
+			LocalName: region.LocalName,
+		})
+	}
+	return regions, nil
+}
+
 func DoHello(profile *Profile) {
 	client, err := profile.GetClient()
 

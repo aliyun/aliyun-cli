@@ -2,13 +2,13 @@ package i18n
 
 var library = make(map[string]*Text)
 
-func En(id string, text string) (*Text) {
-	return putText(id, "en", text)
-}
-
-func Zh(id string, text string) (*Text) {
-	return putText(id, "zh", text)
-}
+//func En(id string, text string) (*Text) {
+//	return putText(id, "en", text)
+//}
+//
+//func Zh(id string, text string) (*Text) {
+//	return putText(id, "zh", text)
+//}
 
 func T(en string, zh string) (*Text) {
 	t := &Text {

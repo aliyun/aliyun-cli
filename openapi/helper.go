@@ -8,7 +8,6 @@ import (
 	"github.com/aliyun/aliyun-cli/meta"
 	"text/tabwriter"
 	"os"
-	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"strings"
 )
@@ -35,29 +34,16 @@ func (a *Helper) PrintProducts() {
 	w.Flush()
 }
 
-func (a *Helper) PrintProductUsage(productCode string) {
+func (a *Helper) PrintProductUsage(productCode string, withApi bool) error {
 	product, ok := a.library.GetProduct(productCode)
 	if !ok {
-		suggestions := GetProductSuggestions(a.library, productCode)
-		msg := ""
-		if len(suggestions) > 0 {
-			for i, s := range suggestions {
-				if i == 0 {
-					msg = "did you mean: " + s
-				} else {
-					msg = msg + " or " + s
-				}
-			}
-		}
-		cli.Error(fmt.Sprintf("unknown product: %s %s \n", productCode, msg))
-		cli.Warning("Use\n  `aliyun help`  to view product list\n  or add --force flag to skip name check")
-
-		return
+		return &InvalidProductError{Name: productCode, library: a.library}
 	}
 
 	if product.ApiStyle == "rpc" {
 		fmt.Printf("\nUsage:\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ...\n", product.Code)
 	} else {
+		withApi = false
 		fmt.Printf("\nUsage:\n  aliyun %s [GET|PUT|POST|DELETE] <PathPattern> --body \"...\" \n", product.Code)
 	}
 
@@ -65,28 +51,43 @@ func (a *Helper) PrintProductUsage(productCode string) {
 	fmt.Printf("Version: %s \n", product.Version)
 	fmt.Printf("Link: %s\n", product.GetDocumentLink(i18n.GetLanguage()))
 
-	fmt.Printf("\nAvailable Api List: \n")
-	// w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
-	for _, apiName := range product.ApiNames {
-		fmt.Printf( "  %s\n", apiName)
+	if withApi {
+		fmt.Printf("\nAvailable Api List: \n")
+		for _, apiName := range product.ApiNames {
+			fmt.Printf("  %s\n", apiName)
+		}
+		// TODO some ApiName is too long, two column not seems good
+		//w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
+		//for i := 0; i < len(product.ApiNames); i += 2 {
+		//	name1 := product.ApiNames[i]
+		//	name2 := ""
+		//	if i + 1 < len(product.ApiNames) {
+		//		name2 = product.ApiNames[i + 1]
+		//	}
+		//	fmt.Fprintf(w, "  %s\t%s\n", name1, name2)
+		//}
+		//w.Flush()
 	}
 
-	fmt.Printf("\nRun `aliyun help %s <ApiName>` to get more information about api", product.Code)
+	fmt.Printf("\nRun `aliyun help %s <ApiName>` to get more information about api", product.GetLowerCode())
+	return nil
 }
 
-func (a *Helper) PrintApiUsage(productName string, apiName string) {
+func (a *Helper) PrintApiUsage(productName string, apiName string) error {
 	product, ok := a.library.GetProduct(productName)
 	if !ok {
-		cli.Errorf("unknown product %s", productName)
-		return
+		return &InvalidProductError{Name: productName, library: a.library}
 	}
 	api, ok := a.library.GetApi(productName, product.Version, apiName)
 	if !ok {
-		cli.Errorf("unknown api: %s/%s/%s", product.Code, product.Version, apiName)
-		return
+		return &InvalidApiError{Name: apiName, product: &product}
 	}
 
+	fmt.Printf("\nProduct: %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
+	// fmt.Printf("Api: %s %s\n", api.Name, api.Description[i18n.GetLanguage()])
+	fmt.Printf("Link:    %s\n", api.GetDocumentLink())
 	fmt.Printf("\nParameters:\n")
+
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
 	for _, param := range api.Parameters {
 		if param.Hidden {
@@ -102,6 +103,8 @@ func (a *Helper) PrintApiUsage(productName string, apiName string) {
 		}
 	}
 	w.Flush()
+
+	return nil
 }
 
 func required(r bool) string {

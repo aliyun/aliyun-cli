@@ -31,7 +31,7 @@ $ aliyuncli configure
 
 	$ aliyuncli Ecs DescribeInstances --secure
 */
-const Version = "0.50 BETA"
+const Version = "0.60 BETA"
 
 var profileName string
 var library = meta.LoadLibrary(resource.NewReader())
@@ -57,8 +57,8 @@ func main() {
 		Run: func(ctx *cli.Context, args []string) error {
 			return processMain(ctx, args)
 		},
-		Help: func(ctx *cli.Context, args []string, err error) {
-			processHelp(ctx, args, err)
+		Help: func(ctx *cli.Context, args []string) error {
+			return processHelp(ctx, args)
 		},
 	}
 
@@ -118,40 +118,42 @@ func processMain(ctx *cli.Context, args []string) error  {
 
 	caller := openapi.NewCaller(&prof, library)
 	if len(args) < 2 {
-		helper.PrintProductUsage(productName)
+		return helper.PrintProductUsage(productName, true)
 	} else if len(args) == 2 {
-		caller.Run(ctx, productName, args[1], "")
+		return caller.Run(ctx, productName, args[1], "")
 	} else if len(args) == 3 {
-		caller.Run(ctx, productName, args[1], args[2])
+		return caller.Run(ctx, productName, args[1], args[2])
 	} else {
 		ctx.Command().PrintFailed(fmt.Errorf("too many arguments"),
 			"Use aliyun --help to show usage")
+		return nil
 	}
-	return nil
 }
 
-func processHelp(ctx *cli.Context, args []string, err error) {
+func processHelp(ctx *cli.Context, args []string) error {
 	c := ctx.Command()
-	if err != nil {
-		cli.Errorf("ERROR: %s\n", err.Error())
-		printUsage(ctx.Command(), nil)
+	//if err != nil {
+	//	cli.Errorf("ERROR: %s\n", err.Error())
+	//	printUsage(ctx.Command(), nil)
+	// } else {
+	if len(args) == 0 {
+		c.PrintHead()
+		c.PrintUsage()
+		c.PrintFlags()
+		c.PrintSample()
+		helper.PrintProducts()
+		c.PrintTail()
+		return nil
+	} else if len(args) == 1 {
+		c.PrintHead()
+		return helper.PrintProductUsage(args[0], true)
+		// c.PrintFlags() TODO add later
+	} else if len(args) == 2 {
+		c.PrintHead()
+		return helper.PrintApiUsage(args[0], args[1])
+		// c.PrintFlags() TODO add later
 	} else {
-		if len(args) == 0 {
-			c.PrintHead()
-			c.PrintUsage()
-			c.PrintFlags()
-			c.PrintSample()
-			helper.PrintProducts()
-			c.PrintTail()
-		} else if len(args) == 1 {
-			c.PrintHead()
-			helper.PrintProductUsage(args[0])
-			// c.PrintFlags() TODO add later
-		} else if len(args) == 2 {
-			c.PrintHead()
-			helper.PrintApiUsage(args[0], args[1])
-			// c.PrintFlags() TODO add later
-		}
+		return fmt.Errorf("too many arguments: %d", len(args))
 	}
 }
 

@@ -8,10 +8,6 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 )
 
-type FlagDetector interface {
-	DetectFlag(name string) (*Flag, error)
-}
-
 type FlagSet struct {
 	flags	[]Flag
 }
@@ -79,15 +75,16 @@ func (a *FlagSet) Get(name string) *Flag {
 
 //
 // get suggestions
-func (a *FlagSet) GetSuggestions(name string, distance int) []*Flag {
-	r := make([]*Flag, 0)
-	for i, v := range a.flags {
-		d := CalculateStringDistance(name, v.Name)
-		if d <= distance {
-			r = append(r, &a.flags[i])
-		}
+func (a *FlagSet) GetSuggestions(name string, distance int) []string {
+	sr := NewSuggester(name, distance)
+	for _, v := range a.flags {
+		sr.Apply(v.Name)
 	}
-	return r
+	ss := make([]string, 0)
+	for _, s := range sr.GetResults() {
+		ss = append(ss, "--" + s)
+	}
+	return ss
 }
 
 // check if the flag is assigned
@@ -178,7 +175,7 @@ func (a *FlagSet) PersistentStringVar(p *string, name string, defaultValue strin
 }
 
 // get assigned count for flags
-func (a *FlagSet) AssignedCount() int {
+func (a *FlagSet) assignedCount() int {
 	n := 0
 	for _, f := range a.flags {
 		if f.assigned {

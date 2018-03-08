@@ -2,99 +2,115 @@
 
 [中文文档](./README_zh.md)
 
-This is a refactoring **BETA** version rewrite with golang, for old stable python verison switch to [python branch](https://github.com/aliyun/aliyun-cli/tree/python_final)
+The Alibaba Cloud CLI is an open source tool, you can get the latest version from [GitHub](https://github.com/aliyun/aliyun-cli).
 
-## Overview
+This version is a new version built on Go. The new CLI is in the testing phase.  If you want to use the old version (built on Alibaba Cloud Python SDK), click [here](https://github.com/aliyun/aliyun-cli/tree/python_final).
 
-Aliyun Command Line Interface `aliyun` is a unified tool to manage your Aliyun services. Using this tool you can easily invoke the Aliyun OpenAPI to control multiple Aliyun services from the command line and also automate them through scripts, for instance using the Bash shell or Python.
+## Introduction
 
-## Install
+The Alibaba Cloud CLI is a tool to manage and use Alibaba Cloud resources through a command line interface. It is written in Go and built on the top of Alibaba Cloud OpenAPI.
 
-### Download
+If you encounter an issue when using Alibaba Cloud CLI, please submit your issue through [GitHub Issue](https://github.com/aliyun/aliyun-cli/issues/new) or joining the official SDK & CLI customer service group (DingDing Group No. 11771185).
 
-You can download binary release (0.50 Beta) in the following links:
+**Note**: Alibaba Cloud CLI access the Alibaba Cloud services through OpenAPI. Before using Alibaba Cloud CLI, make sure that you have activated the service to use and known how to use OpenAPI.
 
-- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.50-amd64.tgz)
-- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.50-amd64.tgz)
-- [Windows](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.50-amd64.tgz)
+## Install Alibaba Cloud CLI
 
-Unzip and use. You can move `aliyun` to `/usr/local/bin` or add to `$PATH` to quick access.
+You can install Alibaba Cloud CLI either through the installer or the source code:
 
-or
+- **Download installer**
 
-### Clone source and build
+	Download the installer, then extract the installer. You can move the extracted `aliyun` executable file to the `/usr/local/bin` directory or add it to the `$PATH`.
 
-- When platform not suppoted or other requirement, you can clone code and make it by yourself. Install and configure [golang](golang.org) first.
+	Download link:
 
-```
-$ mkdir -p $GOPATH/src/github.com/aliyun
-$ cd $GOPATH/src/github.com/aliyun
-$ git clone http://github.com/aliyun/aliyun-cli.git
-$ git clone http://github.com/aliyun/aliyun-openapi-meta.git
-$ cd aliyun-cli
-$ make install
-```
+	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.60-amd64.tgz)
+	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.60-amd64.tgz)
+	- [Windows (64 bit)](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.60-amd64.tgz)
 
-## Configure
+- **Compile source code**
 
-- Before using `aliyun`, you should run `aliuyun configure` first
-- Configure need a vaild AccessKeyId/Secret, you can create a AccessKeyId/Secret from [AccessKey Console](https://ak-console.aliyun.com/#/accesskey), or contact your Admin.
-- CLI use OpenAPI to access cloud product, you need provisioning it first from console.
+	If you have configured Golang, run the following command to install the CLI:
 
-## Basic Configure
+	```
+	$ mkdir -p $GOPATH/src/github.com/aliyun
+	$ cd $GOPATH/src/github.com/aliyun
+	$ git clone http://github.com/aliyun/aliyun-cli.git
+	$ git clone http://github.com/aliyun/aliyun-openapi-meta.git
+	$ cd aliyun-cli
+	$ make install
+	```
+
+## Configure Alibaba Cloud CLI
+
+Before using the CLI, you must complete the basic configurations.
+
+#### Basic configurations
+
+Before using the CLI, you must run the `aliyun configure` command to complete the CLI configuration. An Alibaba Cloud account and a pair of AccessKey ID and AccessKey Secret are required. You can get the AccessKey on the [AccessKey](https://ak-console.aliyun.com/#/accesskey) page or get it from your system administrator.
+
+ A default profile is created with information provided.
 
 ```
 $ aliyun configure
 Configuring profile 'default' ...
-Aliyun Access Key ID [None]: <Your aliyun access key id>
-Aliyun Access Key Secret [None]: <Your aliyun access key secret>
+Aliyun Access Key ID [None]: <Your AccessKey ID>
+Aliyun Access Key Secret [None]: <Your AccessKey Secret>
 Default Region Id [None]: cn-hangzhou
-Default output format [json]: table
-Default Language [zh]: en
+Default output format [json]: json
+Default Languate [zh]: zh
 ```
 
-### Multi-User Configure
+#### Configure multiple user profiles
 
-- `aliyun` support multi-user configure, Use `$ aliyun configure --profile user1` you can configure profile of assigned user name
-- Use `$ aliyun configure list`, you can list all configured profiles.
-- You can add flag `--profile user1` to use assigned profile, in invoke commands.
+Alibaba Cloud CLI supports configuring multiple user profiles. You can specify which user profile is used to call the API by using the `aliyun configure` command with the `--profile` option as shown in the following example:
+
+`$ aliyun configure --profile user1`
+
+
+Run the `aliyun configure list` command to view the configured user profiles. The profile followed by an asterisk (*) is the profile current in use.
 
 ```
 Profile   | Credential         | Valid   | Region           | Language
 --------- | ------------------ | ------- | ---------------- | --------
-default * | AK:***ddc          | Valid   | cn-beijing       | zh
+default * | AK:***f9b          | Valid   | cn-beijing       | zh
 aaa       | AK:******          | Invalid |                  |
-test      | AK:***412          | Valid   |                  | en
+test      | AK:***456          | Valid   |                  | en
 ecs       | EcsRamRole:EcsTest | Valid   | cn-beijing       | en
 ```
 
-### Other Certification Mode
+#### Configure authentication methods
 
-- When use `aliyun configure` you can add flag `--mode ...` to specific certification mode
+You can specify the authentication method to use by using the `configure` command with the `--mode <authenticationMethod>` option.
 
-| Certificated Mode  | Description |
+The following are supported authentication methods:
+
+| Authentication methods  | Description |
 | --------       | -------- |
-| AK             | Use AccessKeyId/Secret to access  |
-| StsToken       | Use StsToken to access   |
-| RamRoleArn     | Use RAM and AssumeRole method to access     |
-| EcsRamRole     | Use EcsRamRole in ECS instance to access without key |
-| RsaKeyPair     | Use Rsa Key Pair (Only supprted in Japen Site)     |
+| AK             | Use AccessKey ID and Secret to access Alibaba Cloud services |
+| StsToken       | Use STS token to access Alibaba Cloud services    |
+| RamRoleArn     | Use the AssumeRole to access Alibaba Cloud services    |
+| EcsRamRole     | Use the EcsRamRole to access ECS resources   |
 
-### Use Auto Completion
+## Use Alibaba Cloud CLI
 
-- TODO
+The Alibaba Cloud OpenAPI has two styles, RPC style and RESTful style. Most of the Alibaba Cloud products use the RPC style. The way of calling an API varies depending on the API style.
 
-## Usage
+You can distinguish the API style from the following characteristics:
 
-### Basic Usage
+- The API requiring the `Action` parameter is the RPC style, while the API requiring the `PathPattern` parameter is the RESTful style.
+- In general, the API style for a product is consistent.
+- Each API only supports one style. If an incorrect calling method is used, another API may be called or an error `ApiNotFound` is returned.
 
-Usage:
+####Call RPC APIs
+
+The following statement shows how to call RPC APIs in the Alibaba Cloud CLI:
 
 ```
 $ aliyun <product> <operation> --parameter1 value1 --parameter2 value2 ...
 ```
 
-Samples:
+Examples:
 
 ```
 $ aliyun rds DescribeDBInstances --PageSize 50
@@ -102,64 +118,55 @@ $ aliyun ecs DescribeRegions
 $ aliyun rds DescribeDBInstanceAttribute --DBInstanceId xxxxxx
 ```
 
-### Help Message
 
-`aliyun` integrated a part of alibaba cloud product's meta data, include product, api, parameter. Use the following command to get help information:
+#### Call RESTful APIs
 
-- `$ aliyun help`: print product list
-- `$ aliyun help ecs`: print product info
-- `$ aliyuh help ecs CreateInstance`: print api info
+APIs of some products such as Container Service are RESTful style. The way to call RESTful APIs is different from RPC APIs. 
 
-### Restful Invoke
+The following examples show how to call RESTful APIs in the Alibaba Cloud CLI:
 
-A part of OpenAPI is Restful style，invoke Restful style is defferent with RPC style.
+- GET request:
 
-- Sample(GET):
+	```
+	$ aliyun cs GET /clusters
+	```
 
-```
-$ aliyun cs GET /clusters
-```
+- POST request:
 
-- Sample(POST):
+	```
+	$ aliyun cs POST /clusters --body "$(cat input.json)"
+	```
 
-```
-$ aliyun cs POST /clusters --body "$(cat input.json)"
-```
+- DELETE request:
 
-- Sample(DELETE)
+	```
+	$ aliyun cs DELETE /clusters/ce2cdc26227e09c864d0ca0b2d5671a07
+	```
 
-```
-$ aliyun cs DELETE /clusters/ce2cdc26227e09c864d0ca0b2d5671a07
-```
+#### Get help information
 
-How to regconize openapi style is RPC or Restful, when reading OpenAPI product doc.
+Alibaba Cloud CLI integrates API descriptions for some products, you can get help by using the following commands:
 
-- References to API parameters，`Action` indicate RPC style, `PathPattern` indicates Restful style。
-- Generally, APIs of one product have accordance style.
-- Every API only support one style, When call with error parameters, you may invoke to error API or receive `ApiNotFound` error message.
+- `aliyun help`: get product list
 
-### Use `--force` Flag
+- `aliyun help <product>`: get the API information of a specific product
 
-`aliyun` CLI integrated a part of products meta data. Before invoke CLI will check api and parameters, use a unknown api or parameters will cause `unknown api` or `unknown parameter` error. If you are using API or parameters not integrated in our meta, add `--force` flag to skip meta check.
+	For example, get help of ECS APIs: `$ aliyun help ecs`
+
+- `$ aliyun help <product> <apiName>`: get the detailed API information of a specific APU
+
+	For example, get the help information of the CreateInstance API: `aliyun help ecs CreateInstance`
+
+#### Use the `--force` option
+
+Alibaba Cloud CLI integrates the product metadata of some products. It will validate API parameters when calling the API. If an API or a parameter that is not included in the metadata is used, an error `unknown api` or `unknown parameter` will be returned. You can use the `--force` option to skip the validation and call the API by force as shown in the following example:
 
 ```
 $ aliyun newproduct --version 2018-01-01 --endpoint newproduct.aliyuncs.com --param1 ... --force
 ```
 
-Please read Alibaba Cloud OpenAPI document, find api style and parameters. There are two flags is important
+The following two options are required when using the `--force` option:
 
-- `--version`: assign OpenAPI version, you can find this Version from OpenAPI document, for example: Ecs's version is 2014-05-26
-- `--endpoint`: assign product domain, you can find Domain from OpenAPI document, in general the endpoint may be `product.aliyuncs.com` or `product.en-central-1.aliyuncs.com`
-
-
-### Additional Flags
-
-- `--profile`  use configured profile
-- `--force`    call OpenAPI without check
-- `--header`   add custom HTTP header with --header x-foo=bar
-- `--endpoint` use assigned endpoint
-- `--region`   use assigned region
-- `--version`  assign product version
-
-
+- `--version`: the API version. You can find the API version in the API documentation. For example, the ECS API version is `2014-05-26`.
+- `--endpoint`: the product endpoint. Most of the product endpoints are in the format of `product.aliyuncs.com`, while some product endpoints are `product.en-central-1.aliyuncs.com`. Get the product endpoint in the corresponding API documentation.
 

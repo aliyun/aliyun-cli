@@ -8,6 +8,10 @@ import (
 	"fmt"
 )
 
+type FlagDetector interface {
+	DetectFlag(name string) (*Flag, error)
+}
+
 type Parser struct {
 	current int
 	args    []string

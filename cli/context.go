@@ -10,7 +10,11 @@ import (
 
 //
 // default help flag
-var helpFlag = Flag{Name: "help", Usage: i18n.En("help.usage", "print help"), Assignable: false }
+var helpFlag = Flag{
+	Name: "help",
+	Usage: i18n.T("print help", "打印帮助信息"),
+	Assignable: false,
+}
 
 //
 // CLI Command Context
@@ -48,9 +52,12 @@ func (ctx *Context) UnknownFlags() *FlagSet {
 // Before go into the sub command, we need traverse flags and merge with parent
 func (ctx *Context) EnterCommand(cmd *Command) {
 	ctx.command = cmd
-	if cmd.EnableUnknownFlag && ctx.unknownFlags == nil {
+	if !cmd.EnableUnknownFlag {
+		ctx.unknownFlags = nil
+	} else if ctx.unknownFlags == nil {
 		ctx.unknownFlags = NewFlagSet()
 	}
+
 	ctx.flags = MergeFlagSet(cmd.Flags(), ctx.flags, func(f Flag) bool {
 		return f.Persistent
 	})
@@ -75,9 +82,6 @@ func (ctx *Context) DetectFlag(name string) (*Flag, error) {
 	} else if ctx.unknownFlags != nil {
 		return ctx.unknownFlags.AddByName(name)
 	} else {
-		return nil, &InvalidFlagError{
-			Name: name,
-			Suggestions: ctx.flags.GetSuggestions(name, 2),
-		}
+		return nil, NewInvalidFlagError(name, ctx)
 	}
 }

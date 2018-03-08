@@ -12,12 +12,10 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 )
 
-func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName string) {
+func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName string) error {
 	api, ok := c.library.GetApi(product.Code, product.Version, apiName)
 	if !ok {
-		ctx.Command().PrintFailed(fmt.Errorf("invailed api: %s", apiName),
-			fmt.Sprintf("Use\n `aliyun help %s` to view product list\n  or add --force to skip check", product.Code))
-		return
+		return &InvalidApiError{Name: apiName, product: product}
 	}
 
 	//
@@ -25,22 +23,30 @@ func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName stri
 	// return: if check failed return error, otherwise return nil
 	client, request, err := c.InitClient(ctx, product, true)
 	if err != nil {
-		ctx.Command().PrintFailed(fmt.Errorf("init failed: %v", err), "")
-		return
+		return nil
 	}
 
 	request.ApiName = apiName
 	err = c.FillRpcParameters(ctx, request, &api)
 	if err != nil {
-		ctx.Command().PrintFailed(fmt.Errorf("init failed: %v", err), "")
-		return
+		return err
 	}
+
+	request.Scheme = api.GetProtocol()
+	request.Method = api.GetMethod()
+
+	err = c.UpdateRequest(ctx, request)
+	if err != nil {
+		return err
+	}
+
 	resp, err := client.ProcessCommonRequest(request)
 
 	if err != nil {
 		ctx.Command().PrintFailed(err, "")
 	}
 	fmt.Println(resp.GetHttpContentString())
+	return nil
 }
 
 func (c *Caller) InvokeRpcForce(ctx *cli.Context, product *meta.Product, apiName string) {
@@ -55,22 +61,43 @@ func (c *Caller) InvokeRpcForce(ctx *cli.Context, product *meta.Product, apiName
 	}
 
 	request.ApiName = apiName
+	err = c.FillRpcParameters(ctx, request, nil)
+	if err != nil {
+		ctx.Command().PrintFailed(err, "")
+		return
+	}
 
-	c.FillRpcParameters(ctx, request, nil)
+	err = c.UpdateRequest(ctx, request)
+	if err == nil {
+		ctx.Command().PrintFailed(err, "")
+		return
+	}
+
 	resp, err := client.ProcessCommonRequest(request)
-
 	if err != nil {
 		ctx.Command().PrintFailed(err, "")
 	}
+
 	fmt.Println(resp.GetHttpContentString())
 }
 
-
 func (c *Caller) FillRpcParameters(ctx *cli.Context, request *requests.CommonRequest, api *meta.Api) error {
 	for _, f := range ctx.UnknownFlags().Flags() {
-		request.QueryParams[f.Name] = f.GetValue()
-		if api != nil && !api.HasParameter(f.Name){
-			return fmt.Errorf("unknown parameter %s", f.Name)
+		if api != nil {
+			param := api.FindParameter(f.Name)
+			if param == nil {
+				return &InvalidParameterError{Name: f.Name, api: api, flags: ctx.Flags()}
+			}
+			if param.Position == "Query" {
+				request.QueryParams[f.Name] = f.GetValue()
+			} else if param.Position == "Body" {
+				request.FormParams[f.Name] = f.GetValue()
+			} else {
+				return fmt.Errorf("unknown parameter position; %s is %s", param.Name, param.Position)
+			}
+			//return fmt.Errorf("unknown parameter %s", f.Name)
+		} else {
+			request.QueryParams[f.Name] = f.GetValue()
 		}
 	}
 	if api != nil {
@@ -85,7 +112,8 @@ func (c *Caller) FillRpcParameters(ctx *cli.Context, request *requests.CommonReq
 			}
 		})
 		if err != nil {
-			return err
+			return fmt.Errorf("%s \n\n use `aliyun %s %s --help` to get more information",
+				err.Error(), api.Product.GetLowerCode(), api.Name)
 		}
 	}
 	return nil
@@ -101,14 +129,10 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 	}
 
 	request := requests.NewCommonRequest()
-	request.Headers["User-Agent"] = "Aliyun-CLI-V0.32"
+	request.Headers["User-Agent"] = "Aliyun-CLI-V0.60"
 	request.RegionId = c.profile.RegionId
 	request.Product = product.Code
 	request.Version = product.Version
-
-	if _, ok := ctx.Flags().GetValue("secure"); ok {
-		request.Scheme = "https"
-	}
 
 	if v, ok := ctx.Flags().GetValue("region"); ok {
 		request.RegionId = v
@@ -134,18 +158,11 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 			request.AcceptFormat = "JSON"
 		}
 	}
-	if f := ctx.Flags().Get("header"); f != nil {
-		for _, v := range f.GetValues() {
-			if k2, v2, ok := cli.SplitWith(v, "="); ok {
-				request.Headers[k2] = v2
-			} else {
-				return nil, nil, fmt.Errorf("invaild flag --header `%s` use `--header HeaderName=Value`", v)
-			}
-		}
-	}
+
 	if request.Version == "" {
 		return nil, nil, fmt.Errorf("unknown version! Use flag --version 2016-07-09 to assign version")
 	}
+
 	if request.Domain == "" {
 		request.Domain, err = product.GetEndpoint(request.RegionId, client)
 		if err != nil {
@@ -154,4 +171,21 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 	}
 
 	return client, request, nil
+}
+
+func (c *Caller) UpdateRequest(ctx *cli.Context, request *requests.CommonRequest) error {
+	if _, ok := ctx.Flags().GetValue("secure"); ok {
+		request.Scheme = "https"
+	}
+
+	if f := ctx.Flags().Get("header"); f != nil {
+		for _, v := range f.GetValues() {
+			if k2, v2, ok := cli.SplitWith(v, "="); ok {
+				request.Headers[k2] = v2
+			} else {
+				return fmt.Errorf("invaild flag --header `%s` use `--header HeaderName=Value`", v)
+			}
+		}
+	}
+	return nil
 }

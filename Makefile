@@ -1,4 +1,4 @@
-export VERSION=0.50
+export VERSION=0.60
 
 all: build
 release: build build_mac build_linux build_windows
@@ -15,7 +15,7 @@ testdeps:
 	go install github.com/onsi/ginkgo/ginkgo
 
 metas:
-	go-bindata -o resource/metas.go -pkg resource -prefix ../aliyun-openapi-meta ../aliyun-openapi-meta/**/* ../aliyun-openapi-meta/products.yml
+	go-bindata -o resource/metas.go -pkg resource -prefix ../aliyun-openapi-meta ../aliyun-openapi-meta/**/* ../aliyun-openapi-meta/products.json
 
 clean:
 	rm -f resource/metas.go

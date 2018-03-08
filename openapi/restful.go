@@ -23,9 +23,14 @@ func (c *Caller) InvokeRestful(ctx *cli.Context, product *meta.Product, method s
 	request.PathPattern = path
 	request.Method = method
 
+	if request.RegionId != "" {
+		request.Headers["x-acs-region-id"] = request.RegionId
+	}
+
 	if v, ok := ctx.Flags().GetValue("body"); ok {
 		request.SetContent([]byte(v))
 	}
+
 	if v, ok := ctx.Flags().GetValue("body-file"); ok {
 		buf, err := ioutil.ReadFile(v)
 		if err != nil {
@@ -41,6 +46,12 @@ func (c *Caller) InvokeRestful(ctx *cli.Context, product *meta.Product, method s
 		} else if strings.HasPrefix(content, "<") {
 			request.SetContentType("application/xml")
 		}
+	}
+
+	err = c.UpdateRequest(ctx, request)
+	if err != nil {
+		ctx.Command().PrintFailed(err, "")
+		return
 	}
 
 	resp, err := client.ProcessCommonRequest(request)

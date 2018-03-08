@@ -60,10 +60,6 @@ func (operation EditOperation) String() string {
 	return "del"
 }
 
-func CalculateStringDistance(source string, target string) int {
-	return DistanceForStrings([]rune(source), []rune(target), DefaultOptions)
-}
-
 // DistanceForStrings returns the edit distance between source and target.
 //
 // It has a runtime proportional to len(source) * len(target) and memory use

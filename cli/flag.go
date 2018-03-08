@@ -16,19 +16,19 @@ type Flag struct {
 	// Flag is the single characters
 	SingleChars		string
 
-	// Help Message
+	// Help message
 	Usage			*i18n.Text
 
-	// Default value
+	// default value
 	DefaultValue	string
 
-	//
+	// true if required
 	Required 		bool
 
 	//
 	Assignable		bool
 
-	//
+	// can to child commands
 	Persistent		bool
 
 	//

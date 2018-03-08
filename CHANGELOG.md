@@ -1,5 +1,12 @@
 # CHANGE LOG
 
+### 0.60
+
+- support suggestions
+- optimized error and help message
+- integrate more completion of metadata
+- fix some caller bugs
+
 ### 0.50
 
 - support i18n `aliyun-openapi-meta`

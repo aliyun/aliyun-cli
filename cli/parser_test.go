@@ -39,7 +39,7 @@ var _ = ginkgo.Describe("Parser", func() {
 		s, _, err := parser.ReadNextArg()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(s).Should(Equal("s1"))
-		Expect(fs.AssignedCount()).Should(Equal(0))
+		Expect(fs.assignedCount()).Should(Equal(0))
 
 		ginkgo.By("remain args")
 		s2, err := parser.ReadAll()

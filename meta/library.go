@@ -17,8 +17,8 @@ type Library struct {
 }
 
 func LoadLibrary(reader Reader) *Library {
-	var e Products
-	err := ReadYamlFrom(reader, "products.yml", &e)
+	var e ProductSet
+	err := ReadJsonFrom(reader, "products.json", &e)
 	if err != nil {
 		panic(err)
 	}
@@ -55,9 +55,10 @@ func (a *Library) GetApi(productCode string, version string, apiName string) (Ap
 		return result, false
 	}
 
-	err := ReadYamlFrom(a.reader, product.Code + "/" + apiName + ".yml", &result)
+	err := ReadJsonFrom(a.reader, strings.ToLower(product.Code) + "/" + apiName + ".json", &result)
 	if err != nil {
 		return result, false
 	}
+	result.Product = &product
 	return result, true
 }
