@@ -31,7 +31,7 @@ $ aliyuncli configure
 
 	$ aliyuncli Ecs DescribeInstances --secure
 */
-const Version = "0.50 BETA"
+const Version = "0.60 BETA"
 
 var profileName string
 var library = meta.LoadLibrary(resource.NewReader())
@@ -90,7 +90,6 @@ func main() {
 
 	rootCmd.AddSubCommand(configureCommand)
 	rootCmd.AddSubCommand(command.NewTestCommand())
-	rootCmd.AddSubCommand(openapi.NewResolveCommand())
 	rootCmd.Execute(os.Args[1:])
 }
 
