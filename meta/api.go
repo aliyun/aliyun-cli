@@ -17,15 +17,24 @@ type Api struct {
 	Product     *Product 		  `json:"-"`
 }
 
-type Parameter struct {
-	Name          string            `json:"name"`
-	Position	  string 			`json:"position"`
-	Type          string            `json:"type"`
-	Description   map[string]string `json:"description,omitempty"`
-	Required      bool              `json:"required"`
-	Hidden        bool              `json:"hidden"`
-	Example       string            `json:"example,omitempty"`
-	SubParameters []Parameter       `json:"sub_parameters,omitempty"`
+func (a *Api) GetMethod() string {
+	method := strings.ToUpper(a.Method)
+	if strings.Contains(method, "POST") {
+		return "POST"
+	}
+	if strings.Contains(method,"GET") {
+		return "GET"
+	}
+	return "GET"
+}
+
+func (a *Api) GetProtocol() string {
+	protocol := strings.ToLower(a.Protocol)
+	if strings.HasPrefix(protocol, "https") {
+		return "https"
+	} else {
+		return "http"
+	}
 }
 
 func (a *Api) FindParameter(name string) *Parameter {
@@ -53,17 +62,29 @@ func (a *Api) GetDocumentLink() string {
 	return fmt.Sprintf("https://help.aliyun.com/api/%s/%s.html", strings.ToLower(a.Product.Code), a.Name)
 }
 
-//
-// support Name or Name.1.xxx.2.xxx
-func (a *Api) HasParameter(name string) bool {
-	return a.FindParameter(name) != nil
-}
-
 func (a *Api) CheckRequiredParameters(checker func(string) bool) error {
+	missing := false
+	s := ""
 	for _, p := range a.Parameters {
 		if p.Required && !checker(p.Name) {
-			return fmt.Errorf("required parameter %s not assigned", p.Name)
+			missing = true
+			s = s + "\n  --" + p.Name
 		}
 	}
-	return nil
+	if missing {
+		return fmt.Errorf("required parameters not assigned: " + s)
+	} else {
+		return nil
+	}
+}
+
+type Parameter struct {
+	Name          string            `json:"name"`
+	Position	  string 			`json:"position"`
+	Type          string            `json:"type"`
+	Description   map[string]string `json:"description,omitempty"`
+	Required      bool              `json:"required"`
+	Hidden        bool              `json:"hidden"`
+	Example       string            `json:"example,omitempty"`
+	SubParameters []Parameter       `json:"sub_parameters,omitempty"`
 }

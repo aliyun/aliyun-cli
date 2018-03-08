@@ -49,7 +49,7 @@ type InvalidParameterError struct {
 
 func (e *InvalidParameterError) Error() string {
 	return fmt.Sprintf("'--%s' is not a valid parameter or flag. See `aliyun help %s %s`.",
-		e.Name, e.api.Product.Code, e.api.Name)
+		e.Name, e.api.Product.GetLowerCode(), e.api.Name)
 }
 
 func (e *InvalidParameterError) GetSuggestions() []string {

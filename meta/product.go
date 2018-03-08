@@ -38,6 +38,10 @@ type Product struct {
 	apis                map[string]Api    `yaml:"-"`
 }
 
+func (a *Product) GetLowerCode() string {
+	return strings.ToLower(a.Code)
+}
+
 func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error) {
 	if a.LocationServiceCode != "" {
 		rp := endpoints.ResolveParam{

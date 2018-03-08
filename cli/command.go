@@ -178,7 +178,7 @@ func (c *Command) processError(err error) {
 	//if e, ok := err.(PrintableError); ok {
 	//	Errorf("error: %s\n", e.GetText(i18n.GetLanguage()))
 	//} else {
-		Errorf("error: %s\n", err.Error())
+		Errorf("ERROR: %s\n", err.Error())
 //	}
 
 	if e, ok := err.(SuggestibleError); ok {
