@@ -40,6 +40,17 @@ func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName stri
 		return err
 	}
 
+	if collectionName, ok := ctx.Flags().GetValue("all-pages"); ok {
+		pager := NewPager(collectionName)
+		r, err := c.InvokeRpcWithPager(client, request, pager)
+		if err != nil {
+			ctx.Command().PrintFailed(err, "")
+		} else {
+			fmt.Println(r)
+		}
+		return nil
+	}
+
 	resp, err := client.ProcessCommonRequest(request)
 
 	if err != nil {
@@ -188,4 +199,25 @@ func (c *Caller) UpdateRequest(ctx *cli.Context, request *requests.CommonRequest
 		}
 	}
 	return nil
+}
+
+func (c *Caller) InvokeRpcWithPager(client *sdk.Client, request *requests.CommonRequest, pager *Pager) (string, error) {
+	for {
+		resp, err := client.ProcessCommonRequest(request)
+		if err != nil {
+			return "", fmt.Errorf("call failed %s", err)
+		}
+		// jmespath.Parser{}
+		err = pager.FeedResponse(resp.GetHttpContentBytes())
+		if err != nil {
+			return "", fmt.Errorf("call failed %s", err)
+		}
+
+		if !pager.HasMore() {
+			break
+		}
+		pager.MoveNextPage(request)
+	}
+
+	return pager.GetResponseCollection(), nil
 }

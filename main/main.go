@@ -31,7 +31,7 @@ $ aliyuncli configure
 
 	$ aliyuncli Ecs DescribeInstances --secure
 */
-const Version = "0.60 BETA"
+const Version = "0.61 BETA"
 
 var profileName string
 var library = meta.LoadLibrary(resource.NewReader())
@@ -87,6 +87,9 @@ func main() {
 
 	rootCmd.Flags().Add(cli.Flag{Name: "body-file", Assignable:true, Hidden: true,
 		Usage: i18n.T("assign http body in Restful call with local file", "")})
+
+	rootCmd.Flags().Add(cli.Flag{Name: "all-pages", Assignable: true, Hidden: true,
+		Usage: i18n.T("get all pages data via pager", "")})
 
 	rootCmd.AddSubCommand(configureCommand)
 	rootCmd.AddSubCommand(command.NewTestCommand())
