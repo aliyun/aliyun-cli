@@ -56,6 +56,30 @@ func TestMerge(t *testing.T) {
 	fmt.Printf(string(result))
 }
 
+func TestSearchList(t *testing.T) {
+	var data2 interface{}
+	err := json.Unmarshal(pagerTestJson2, &data2)
+	if err != nil {
+		panic(err)
+	}
+
+	m, ok := data2.(map[string]interface{})
+	if !ok {
+		return
+	}
+
+	for k, v := range m {
+		// t.Logf("%v %v\n", k, v)
+		if m2, ok := v.(map[string]interface{}); ok {
+			for k2, v2 := range m2 {
+				if _, ok := v2.([]interface{}); ok {
+					t.Logf("%s.%s[]", k, k2)
+				}
+			}
+		}
+	}
+}
+
 var pagerTestJson = []byte(`{
 	"PageNumber": 5,
 	"TotalCount": 37,

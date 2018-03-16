@@ -40,15 +40,17 @@ func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName stri
 		return err
 	}
 
-	if collectionName, ok := ctx.Flags().GetValue("all-pages"); ok {
-		pager := NewPager(collectionName)
-		r, err := c.InvokeRpcWithPager(client, request, pager)
-		if err != nil {
-			ctx.Command().PrintFailed(err, "")
-		} else {
-			fmt.Println(r)
+	if flag := ctx.Flags().Get("all-pages"); flag != nil {
+		if flag.IsAssigned() {
+			pager := NewPager(flag.GetValue())
+			r, err := c.InvokeRpcWithPager(client, request, pager)
+			if err != nil {
+				ctx.Command().PrintFailed(err, "")
+			} else {
+				fmt.Println(r)
+			}
+			return nil
 		}
-		return nil
 	}
 
 	resp, err := client.ProcessCommonRequest(request)

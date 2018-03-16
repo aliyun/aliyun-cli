@@ -11,6 +11,7 @@ import (
 	"github.com/aliyun/aliyun-cli/meta"
 	"github.com/aliyun/aliyun-cli/command"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/aliyun/aliyun-cli/oss/lib"
 )
 
 /**
@@ -88,11 +89,12 @@ func main() {
 	rootCmd.Flags().Add(cli.Flag{Name: "body-file", Assignable:true, Hidden: true,
 		Usage: i18n.T("assign http body in Restful call with local file", "")})
 
-	rootCmd.Flags().Add(cli.Flag{Name: "all-pages", Assignable: true, Hidden: true,
+	rootCmd.Flags().Add(cli.Flag{Name: "all-pages", Assignable: false, Hidden: true,
 		Usage: i18n.T("get all pages data via pager", "")})
 
 	rootCmd.AddSubCommand(configureCommand)
 	rootCmd.AddSubCommand(command.NewTestCommand())
+	rootCmd.AddSubCommand(lib.NewOssCommand())
 	rootCmd.Execute(os.Args[1:])
 }
 

@@ -7,6 +7,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"strconv"
 	"math"
+	"strings"
 )
 
 type Pager struct {
@@ -21,13 +22,12 @@ type Pager struct {
 
 	totalCount int
 	currentPageNumber int
-	collectionName string
 	collectionPath string
 
 	results []interface{}
 }
 
-func NewPager(name string) (*Pager) {
+func NewPager(path string) (*Pager) {
 	pager := &Pager {
 		PageNumberFlag: "PageNumber",
 		PageSizeFlag: "PageSize",
@@ -36,8 +36,9 @@ func NewPager(name string) (*Pager) {
 		TotalCountExpr: "TotalCount",
 	}
 
-	pager.collectionName = name
-	pager.collectionPath = name + "." + name[0: len(name) - 1] + "[]"
+	pager.collectionPath = path
+	// pager.collectionName = name
+	// pager.collectionPath = name + "." + name[0: len(name) - 1] + "[]"
 	// fmt.Printf("collection path: %s", pager.collectionPath)
 	return pager
 }
@@ -53,7 +54,14 @@ func (a *Pager) HasMore() bool {
 
 func (a *Pager) GetResponseCollection() string {
 	r := make(map[string]interface{})
-	r[a.collectionName] = a.results
+
+	path := ""
+	l := strings.Index(a.collectionPath, ".")
+	if l > 0 {
+		path = a.collectionPath[:l]
+	}
+
+	r[path] = a.results
 	// return json.Mar
 	s, err := json.Marshal(r)
 	if err != nil {
@@ -87,6 +95,15 @@ func (a *Pager) FeedResponse(body []byte) error {
 		return fmt.Errorf("jmespath: '%s' failed %s", a.PageSizeExpr, err)
 	}
 
+	if a.collectionPath == "" {
+		p2 := a.detectArrayPath(j)
+		if p2 == "" {
+			return fmt.Errorf("can't auto reconize collections path: you need add `--all-page VSwitches.VSwitch[]` to assign manually")
+		} else {
+			a.collectionPath = p2
+		}
+	}
+
 	a.mergeCollections(j)
 	return nil
 }
@@ -108,5 +125,23 @@ func (a *Pager) mergeCollections(body interface{}) error {
 		a.results = append(a.results, i)
 	}
 	return nil
+}
+
+func (a *Pager) detectArrayPath(d interface{}) string {
+	m, ok := d.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	for k, v := range m {
+		// t.Logf("%v %v\n", k, v)
+		if m2, ok := v.(map[string]interface{}); ok {
+			for k2, v2 := range m2 {
+				if _, ok := v2.([]interface{}); ok {
+					return fmt.Sprintf("%s.%s[]", k, k2)
+				}
+			}
+		}
+	}
+	return ""
 }
 
