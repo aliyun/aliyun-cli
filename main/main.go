@@ -92,6 +92,9 @@ func main() {
 	rootCmd.Flags().Add(cli.Flag{Name: "all-pages", Assignable: false, Hidden: true,
 		Usage: i18n.T("get all pages data via pager", "")})
 
+	rootCmd.Flags().Add(cli.Flag{Name: "accept", Assignable: true, Hidden: true,
+		Usage: i18n.T("add Accept header to call command", "")})
+
 	rootCmd.AddSubCommand(configureCommand)
 	rootCmd.AddSubCommand(command.NewTestCommand())
 	rootCmd.AddSubCommand(lib.NewOssCommand())

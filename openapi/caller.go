@@ -33,8 +33,11 @@ func (c *Caller) Validate() error {
 }
 
 //
-// entrance call from main
+// entrance of calling from main
+// will call rpc or restful
 func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
+	//
+	// get force call information
 	c.force = ctx.Flags().IsAssigned("force")
 
 	//
@@ -43,46 +46,12 @@ func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, p
 	if !ok {
 		if !c.force {
 			return &InvalidProductError{Name: productCode, library: c.library}
-		} else {
-			product = meta.Product {
-				Code: productCode,
-			}
 		}
-	}
 
-	if strings.ToLower(product.ApiStyle) == "rpc" || product.ApiStyle == "" {
-		//
-		// Rpc call
-		if path != "" {
-			// ctx.Command().PrintFailed(fmt.Errorf("invalid arguments"), "")
-			return fmt.Errorf("invailed argument")
-		}
-		if c.force {
-			c.InvokeRpcForce(ctx, &product, apiOrMethod)
-			return nil
-		} else {
-			return c.InvokeRpc(ctx, &product, apiOrMethod)
-		}
-	} else if product.Version != "" {
 		//
 		// Restful Call
 		// aliyun cs GET /clusters
 		// aliyun cs /clusters --roa GET
-		ok, method, path, err := CheckRestfulMethod(ctx, apiOrMethod, path)
-		if !ok {
-			if err != nil {
-				ctx.Command().PrintFailed(err, "")
-			} else {
-				ctx.Command().PrintFailed(fmt.Errorf("product %s need restful call", product.Code), "")
-			}
-			return nil
-		}
-		c.InvokeRestful(ctx, &product, method, path)
-		if err != nil {
-			ctx.Command().PrintFailed(fmt.Errorf("call restful %s%s.%s faild %v", product.Code, path, method, err), "")
-			return nil
-		}
-	} else {
 		ok, method, path, err := CheckRestfulMethod(ctx, apiOrMethod, path)
 		if ok {
 			if err != nil {
@@ -92,6 +61,42 @@ func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, p
 			}
 		} else {
 			c.InvokeRpcForce(ctx, &product, apiOrMethod)
+		}
+	} else {
+		//
+		//
+		if strings.ToLower(product.ApiStyle) == "rpc" {
+			//
+			// Rpc call
+			if path != "" {
+				// ctx.Command().PrintFailed(fmt.Errorf("invalid arguments"), "")
+				return fmt.Errorf("invailed argument")
+			}
+			if c.force {
+				c.InvokeRpcForce(ctx, &product, apiOrMethod)
+				return nil
+			} else {
+				return c.InvokeRpc(ctx, &product, apiOrMethod)
+			}
+		} else {
+			//
+			// Restful Call
+			// aliyun cs GET /clusters
+			// aliyun cs /clusters --roa GET
+			ok, method, path, err := CheckRestfulMethod(ctx, apiOrMethod, path)
+			if !ok {
+				if err != nil {
+					ctx.Command().PrintFailed(err, "")
+				} else {
+					ctx.Command().PrintFailed(fmt.Errorf("product %s need restful call", product.Code), "")
+				}
+				return nil
+			}
+			c.InvokeRestful(ctx, &product, method, path)
+			if err != nil {
+				ctx.Command().PrintFailed(fmt.Errorf("call restful %s%s.%s faild %v", product.Code, path, method, err), "")
+				return nil
+			}
 		}
 	}
 	return nil
