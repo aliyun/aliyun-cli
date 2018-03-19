@@ -13,7 +13,7 @@ import (
 var helpFlag = Flag{
 	Name: "help",
 	Usage: i18n.T("print help", "打印帮助信息"),
-	Assignable: false,
+	AssignedMode: AssignedNone,
 }
 
 //
@@ -67,7 +67,7 @@ func (ctx *Context) EnterCommand(cmd *Command) {
 func (ctx *Context) CheckFlags() error {
 	for _, f := range ctx.flags.Flags() {
 		if f.Required && !f.IsAssigned() {
-			if !f.UseDefaultValue() {
+			if !f.useDefaultValue() {
 				return fmt.Errorf("missing flag --%s", f.Name)
 			}
 		}

@@ -34,7 +34,6 @@ $ aliyuncli configure
 */
 const Version = "0.61 BETA"
 
-var profileName string
 var library = meta.LoadLibrary(resource.NewReader())
 var helper = openapi.NewHelper(library)
 var configureCommand = config.NewConfigureCommand()
@@ -63,36 +62,43 @@ func main() {
 		},
 	}
 
-	rootCmd.Flags().StringVar(&profileName, "profile", "default",
-		i18n.T("use --profile <profileName> to use specified profile", "使用 --profile <profileName> 来使用指定的配置"))
+	fs := rootCmd.Flags()
+	fs.Add(config.AccessKeyIdFlag)
+	fs.Add(config.AccessKeySecretFlag)
+	fs.Add(config.StsTokenFlag)
+	fs.Add(config.RamRoleNameFlag)
+	fs.Add(config.RamRoleArnFlag)
+	fs.Add(config.RoleSessionNameFlag)
+	fs.Add(config.PrivateKeyFlag)
+	fs.Add(config.KeyPairNameFlag)
+	fs.Add(config.RegionFlag)
+	fs.Add(config.LanguageFlag)
 
-	rootCmd.Flags().Add(cli.Flag{Name: "secure", Assignable:false,
+	rootCmd.Flags().Add(cli.Flag{Name: "secure", AssignedMode: cli.AssignedNone,
 		Usage: i18n.T("use --secure to force https", "使用 --secure 开关强制使用https方式调用")})
 
-	rootCmd.Flags().Add(cli.Flag{Name: "force", Assignable:false,
+	rootCmd.Flags().Add(cli.Flag{Name: "force", AssignedMode: cli.AssignedNone,
 		Usage: i18n.T("use --force to skip api and parameters check", "添加 --force 开关可跳过API与参数的合法性检查")})
 
-	rootCmd.Flags().Add(cli.Flag{Name: "endpoint", Assignable:true,
+	rootCmd.Flags().Add(cli.Flag{Name: "endpoint", AssignedMode: cli.AssignedOnce,
 		Usage: i18n.T("use --endpoint <endpoint> to assign endpoint", "使用 --endpoint <endpoint> 来指定接入点地址")})
 
-	rootCmd.Flags().Add(cli.Flag{Name: "region", Assignable:true,
-		Usage: i18n.T("use --region <regionId> to assign region", "使用 --region <regionId> 来指定访问地域")})
-	rootCmd.Flags().Add(cli.Flag{Name: "version", Assignable:true,
+	rootCmd.Flags().Add(cli.Flag{Name: "version", AssignedMode: cli.AssignedOnce,
 		Usage: i18n.T("use --version <YYYY-MM-DD> to assign product api version", "使用 --version <YYYY-MM-DD> 来指定访问的API版本")})
 
-	rootCmd.Flags().Add(cli.Flag{Name: "header", Assignable:true, Repeatable:true,
+	rootCmd.Flags().Add(cli.Flag{Name: "header", AssignedMode: cli.AssignedRepeatable,
 		Usage: i18n.T("use --header X-foo=bar to add custom HTTP header, repeatable", "使用 --header X-foo=bar 来添加特定的HTTP头, 可多次添加")})
 
-	rootCmd.Flags().Add(cli.Flag{Name: "body", Assignable:true,
+	rootCmd.Flags().Add(cli.Flag{Name: "body", AssignedMode: cli.AssignedOnce,
 		Usage: i18n.T("use --body $(cat foo.json) to assign http body in RESTful call", "使用 --body $(cat foo.json) 来指定在RESTful调用中的HTTP包体")})
 
-	rootCmd.Flags().Add(cli.Flag{Name: "body-file", Assignable:true, Hidden: true,
+	rootCmd.Flags().Add(cli.Flag{Name: "body-file",AssignedMode: cli.AssignedOnce, Hidden: true,
 		Usage: i18n.T("assign http body in Restful call with local file", "")})
 
-	rootCmd.Flags().Add(cli.Flag{Name: "all-pages", Assignable: false, Hidden: true,
+	rootCmd.Flags().Add(cli.Flag{Name: "all-pages", AssignedMode: cli.AssignedDefault, Hidden: true,
 		Usage: i18n.T("get all pages data via pager", "")})
 
-	rootCmd.Flags().Add(cli.Flag{Name: "accept", Assignable: true, Hidden: true,
+	rootCmd.Flags().Add(cli.Flag{Name: "accept", AssignedMode: cli.AssignedOnce, Hidden: true,
 		Usage: i18n.T("add Accept header to call command", "")})
 
 	rootCmd.AddSubCommand(configureCommand)
@@ -113,11 +119,13 @@ func processMain(ctx *cli.Context, args []string) error  {
 	// aliyun ecs
 	// 1. check configure
 	productName := args[0]
-	prof, err := config.LoadProfile(profileName)
+	cfg, err := config.LoadConfiguration()
 	if err != nil {
 		ctx.Command().PrintFailed(err, "Use `aliyun configure` again.")
 		return nil
 	}
+
+	prof := cfg.GetCurrentProfile(ctx)
 	err = prof.Validate()
 	if err != nil {
 		ctx.Command().PrintFailed(err, "Use `aliyun configure` again.")

@@ -81,7 +81,7 @@ func (c *Caller) InvokeRpcForce(ctx *cli.Context, product *meta.Product, apiName
 	}
 
 	err = c.UpdateRequest(ctx, request)
-	if err == nil {
+	if err != nil {
 		ctx.Command().PrintFailed(err, "")
 		return
 	}

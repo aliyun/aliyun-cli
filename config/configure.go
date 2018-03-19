@@ -13,33 +13,26 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 )
 
-var profile string
-var mode string
-
 func NewConfigureCommand() (*cli.Command) {
 	c := &cli.Command{
 		Name: "configure",
-		Short: i18n.T("configure credential and settings", "配置身份认证和其他信息"),
+		Short: i18n.T(
+			"configure credential and settings",
+			"配置身份认证和其他信息"),
 		Usage: "configure --mode <AuthenticateMode> --profile <profileName>",
-		Run: func(c *cli.Context, args []string) error {
+		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
-				return cli.NewInvalidCommandError(args[0], c)
+				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			if profile == "" {
-				profile = "default"
-			}
-			return doConfigure(profile)
+			profileName, _ := ctx.Flags().GetValue(ProfileFlag.Name)
+			mode, _ := ctx.Flags().GetValue(ModeFlag.Name)
+
+			return doConfigure(profileName, mode)
 		},
 	}
 
-	f := c.Flags().PersistentStringVar(&profile, "profile", "default",
-		i18n.T("use `--profile <profileName>` to select profile",
-			"使用 `--profile <profileName>` 来指定操作的配置集"))
-	f.Persistent = true
-
-	c.Flags().PersistentStringVar(&mode, "mode", "AK",
-		i18n.T("use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` to assign authenticate mode",
-			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` 指定认证方式"))
+	c.Flags().Add(ProfileFlag)
+	c.Flags().Add(ModeFlag)
 
 	c.AddSubCommand(NewConfigureGetCommand())
 	c.AddSubCommand(NewConfigureSetCommand())
@@ -54,7 +47,7 @@ func NewConfigureCommand() (*cli.Command) {
 	return c
 }
 
-func doConfigure(profileName string) error {
+func doConfigure(profileName string, mode string) error {
 	conf, err := LoadConfiguration()
 	if err != nil {
 		return err
@@ -94,16 +87,18 @@ func doConfigure(profileName string) error {
 	// configure common
 	fmt.Printf("Default Region Id [%s]: ", cp.RegionId)
 	cp.RegionId = ReadInput(cp.RegionId)
-	fmt.Printf("Default Output Format [%s]: json", cp.OutputFormat)
+	fmt.Printf("Default Output Format [%s]: json (Only support json))\n", cp.OutputFormat)
 	// cp.OutputFormat = ReadInput(cp.OutputFormat)
 	cp.OutputFormat = "json"
+
 	fmt.Printf("Default Language [zh|en] %s: ", cp.Language)
 	cp.Language = ReadInput(cp.Language)
 	if cp.Language != "zh" && cp.Language != "en" {
 		cp.Language = "en"
 	}
-	fmt.Printf("User site: [china|international|japan] %s", cp.Site)
-	cp.Site = ReadInput(cp.Site)
+
+	//fmt.Printf("User site: [china|international|japan] %s", cp.Site)
+	//cp.Site = ReadInput(cp.Site)
 
 	fmt.Printf("Saving profile[%s] ...", profileName)
 	conf.PutProfile(cp)
@@ -127,31 +122,31 @@ func doConfigureList() {
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
 	fmt.Fprint(w, "Profile\t| Credential \t| Valid\t| Region\t| Language\n")
 	fmt.Fprint(w, "---------\t| ------------------\t| -------\t| ----------------\t| --------\n")
-	for _, profile := range conf.Profiles {
-		name := profile.Name
+	for _, pf := range conf.Profiles {
+		name := pf.Name
 		if name == conf.CurrentProfile {
 			name = name + " *"
 		}
-		err := profile.Validate()
+		err := pf.Validate()
 		valid := "Valid"
 		if err != nil {
 			valid = "Invalid"
 		}
 
 		cred := ""
-		switch profile.Mode {
+		switch pf.Mode {
 		case AK:
-			cred = "AK:" + "***" + GetLastChars(profile.AccessKeyId, 3)
+			cred = "AK:" + "***" + GetLastChars(pf.AccessKeyId, 3)
 		case StsToken:
-			cred = "StsToken:" +  "***" + GetLastChars(profile.AccessKeyId, 3)
+			cred = "StsToken:" +  "***" + GetLastChars(pf.AccessKeyId, 3)
 		case RamRoleArn:
-			cred = "RamRoleArn:" +  "***" + GetLastChars(profile.AccessKeyId, 3)
+			cred = "RamRoleArn:" +  "***" + GetLastChars(pf.AccessKeyId, 3)
 		case EcsRamRole:
-			cred = "EcsRamRole:" + profile.RamRoleName
+			cred = "EcsRamRole:" + pf.RamRoleName
 		case RsaKeyPair:
-			cred = "RsaKeyPair:" + profile.KeyPairName
+			cred = "RsaKeyPair:" + pf.KeyPairName
 		}
-		fmt.Fprintf(w, "%s\t| %s\t| %s\t| %s\t| %s\n", name, cred, valid, profile.RegionId, profile.Language)
+		fmt.Fprintf(w, "%s\t| %s\t| %s\t| %s\t| %s\n", name, cred, valid, pf.RegionId, pf.Language)
 	}
 	w.Flush()
 }

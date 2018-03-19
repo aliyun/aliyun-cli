@@ -44,7 +44,6 @@ func (a *FlagSet) AddByName(name string) (*Flag, error) {
 	}
 	f := Flag {
 		Name: name,
-		Assignable: true,
 	}
 	a.flags = append(a.flags, f)
 	return &a.flags[len(a.flags) - 1], nil
@@ -126,7 +125,7 @@ func (a *FlagSet) GetValueOrDefault(name string, def string) string {
 func (a *FlagSet) PutValue(name string, value string) (error) {
 	f := a.Get(name)
 	if f != nil {
-		return f.PutValue(value)
+		return f.putValue(value)
 	} else {
 		f := Flag {
 			Name:  name,
@@ -156,7 +155,7 @@ func (a *FlagSet) StringVar(p *string, name string, defaultValue string, usage *
 		Usage: usage,
 		DefaultValue: defaultValue,
 		Required: false,
-		Assignable: true,
+		AssignedMode: AssignedOnce,
 		Persistent: false,
 		p: p,
 	})
@@ -168,7 +167,7 @@ func (a *FlagSet) PersistentStringVar(p *string, name string, defaultValue strin
 		Usage: usage,
 		DefaultValue: defaultValue,
 		Required: false,
-		Assignable: true,
+		AssignedMode: AssignedOnce,
 		Persistent: true,
 		p: p,
 	})

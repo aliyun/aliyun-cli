@@ -39,7 +39,7 @@ func doConfigureGet(c *cli.Context, args []string) {
 		cli.Errorf("load configuration failed %s", err)
 	}
 
-	profile := config.GetCurrentProfile()
+	profile := config.GetCurrentProfile(c)
 
 	if pn, ok := c.Flags().GetValue("profile"); ok {
 		profile, ok = config.GetProfile(pn)
@@ -50,32 +50,32 @@ func doConfigureGet(c *cli.Context, args []string) {
 
 	for _, arg := range args {
 		switch arg {
-		case "profile":
+		case ProfileFlag.Name:
 			fmt.Printf("profile=%s\n", profile.Name)
-		case "mode":
+		case ModeFlag.Name:
 			fmt.Printf("mode=%s\n", profile.Mode)
-		case "access-key-id":
+		case AccessKeyIdFlag.Name:
 			fmt.Printf("access-key-id=%s\n", MosaicString(profile.AccessKeyId, 3))
-		case "access-key-secret":
+		case AccessKeySecretFlag.Name:
 			fmt.Printf("access-key-secret=%s\n", MosaicString(profile.AccessKeySecret, 3))
-		case "sts-token":
+		case StsTokenFlag.Name:
 			fmt.Printf("sts-token=%s\n", profile.StsToken)
-		case "ram-role-name":
+		case RamRoleNameFlag.Name:
 			fmt.Printf("ram-role-name=%s\n", profile.RamRoleName)
-		case "ram-role-arn":
+		case RamRoleArnFlag.Name:
 			fmt.Printf("ram-role-arn=%s\n", profile.RamRoleArn)
-		case "role-session-name":
+		case RoleSessionNameFlag.Name:
 			fmt.Printf("role-session-name=%s\n", profile.RoleSessionName)
-		case "key-pair-name":
+		case KeyPairNameFlag.Name:
 			fmt.Printf("key-pair-name=%s\n", profile.KeyPairName)
-		case "private-key":
+		case PrivateKeyFlag.Name:
 			fmt.Printf("private-key=%s\n", profile.PrivateKey)
-		case "region":
+		case RegionFlag.Name:
 			fmt.Printf("region=%s\n", profile.RegionId)
-		case "output":
-			fmt.Printf("output=%s\n", profile.OutputFormat)
-		case "language":
+		case LanguageFlag.Name:
 			fmt.Printf("language=%s\n", profile.Language)
+		case OutputFlag.Name:
+			fmt.Printf("output=%s\n", profile.OutputFormat)
 		}
 	}
 }
