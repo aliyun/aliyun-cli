@@ -61,7 +61,7 @@ func MigrateCredentials(path string) (Configuration, error) {
 				AccessKeySecret: k2.String(),
 				OutputFormat: "json",
 			})
-			// fmt.Printf(" %s/%s Done", MosaicString(k1.String(), 3), MosaicString(k2.String(), 3))
+			// fmt.Printf(" %s/%s Done", MosaicString(k1.Text(), 3), MosaicString(k2.Text(), 3))
 		} else {
 			// fmt.Printf(" invalid! %v %v", e1, e2)
 		}

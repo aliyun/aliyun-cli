@@ -121,7 +121,7 @@ func processHelp(ctx *cli.Context, args []string) error {
 	if len(args) == 0 {
 		c.PrintHead()
 		c.PrintUsage()
-		c.PrintFlags()
+		c.PrintFlags(ctx)
 		c.PrintSample()
 		helper.PrintProducts()
 		c.PrintTail()
@@ -143,7 +143,7 @@ func printUsage(c *cli.Command, configError error) {
 	c.PrintHead()
 	c.PrintUsage()
 	c.PrintSubCommands()
-	c.PrintFlags()
+	c.PrintFlags(nil)
 	c.PrintSample()
 	if configError != nil {
 		fmt.Printf("Configuration Invailed: %s\n", configError)

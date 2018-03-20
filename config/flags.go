@@ -25,13 +25,13 @@ func AddFlags(fs *cli.FlagSet) {
 }
 
 var ProfileFlag = cli.Flag{Category: "config",
-	Name: "profile", DefaultValue: "default", Persistent: true,
+	Name: "profile", DefaultValue: "default",
 	Usage: i18n.T(
 		"use `--profile <profileName>` to select profile",
 		"使用 `--profile <profileName>` 指定操作的配置集")}
 
 var ModeFlag = cli.Flag{Category: "config",
-	Name: "mode", Persistent: true,
+	Name: "mode", DefaultValue: "AK", Persistent: true,
 	Usage: i18n.T(
 		"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` to assign authenticate mode",
 		"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` 指定认证方式")}

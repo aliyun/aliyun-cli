@@ -96,6 +96,13 @@ func (c *Command) GetSuggestDistance() int {
 	}
 }
 
+func (c *Command) GetUsageWithParent() string {
+	usage := c.Usage
+	for p := c.parent; p != nil; p = p.parent {
+		usage = p.Name + " " + usage
+	}
+	return usage
+}
 //
 //
 func (c *Command) executeInner(ctx *Context, args []string) error {
@@ -217,6 +224,6 @@ func (c *Command) executeHelp(ctx *Context, args []string)  {
 	c.PrintHead()
 	c.PrintUsage()
 	c.PrintSubCommands()
-	c.PrintFlags()
+	c.PrintFlags(ctx)
 	c.PrintTail()
 }

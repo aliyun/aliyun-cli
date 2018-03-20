@@ -4,16 +4,18 @@ import (
 	"fmt"
 	"text/tabwriter"
 	"os"
-	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 func (c *Command) PrintHead(){
-	fmt.Printf("%s\n", c.Short.Get(i18n.GetLanguage()))
+	fmt.Printf("%s\n", c.Short.Text())
+	//if c.Long != nil {
+	//	fmt.Printf("\n%s\n", c.Long.Text())
+	//}
 }
 
 func (c *Command) PrintUsage() {
 	if c.Usage != "" {
-		fmt.Printf("\nUsage:\n  %s\n", c.Usage)
+		fmt.Printf("\nUsage:\n  %s\n", c.GetUsageWithParent())
 	} else {
 		c.PrintSubCommands()
 	}
@@ -26,34 +28,36 @@ func (c *Command) PrintSample() {
 }
 
 func (c *Command) PrintSubCommands() {
-	fmt.Printf("\nCommands:\n")
-
-	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
 	if len(c.subCommands) > 0 {
+		fmt.Printf("\nCommands:\n")
+
+		w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
 		for _, cmd := range c.subCommands {
 			if cmd.Hidden {
 				continue
 			}
-			fmt.Fprintf(w, "  %s\t%s\n", cmd.Name, cmd.Usage)
+			fmt.Fprintf(w, "  %s\t%s\n", cmd.Name, cmd.Short.Text())
 		}
-	} else {
-		fmt.Printf("  %s\n", c.Usage)
+		w.Flush()
 	}
-	w.Flush()
 }
 
-func (c *Command) PrintFlags() {
+func (c *Command) PrintFlags(ctx *Context) {
 	if len(c.flags.Flags()) == 0 {
 		return
 	}
 
 	fmt.Printf("\nFlags:\n")
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
-	for _, flag := range c.Flags().Flags() {
+	fs := c.Flags()
+	if ctx != nil {
+		fs = ctx.Flags()
+	}
+	for _, flag := range fs.Flags() {
 		if flag.Hidden {
 			continue
 		}
-		fmt.Fprintf(w, "  --%s\t%s\n", flag.Name, flag.Usage.Get(i18n.GetLanguage()))
+		fmt.Fprintf(w, "  --%s\t%s\n", flag.Name, flag.Usage.Text())
 	}
 	w.Flush()
 }

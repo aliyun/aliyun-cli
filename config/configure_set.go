@@ -8,10 +8,8 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 )
 
-const configureSetHelpZh = `
-`
-const configureSetHelpEn = `
-`
+const configureSetHelpEn = ``
+const configureSetHelpZh = ``
 
 func NewConfigureSetCommand() (*cli.Command) {
 	cmd := &cli.Command{
@@ -32,6 +30,7 @@ func NewConfigureSetCommand() (*cli.Command) {
 
 	fs := cmd.Flags()
 
+	fs.Add(ModeFlag)
 	fs.Add(AccessKeyIdFlag)
 	fs.Add(AccessKeySecretFlag)
 	fs.Add(StsTokenFlag)
