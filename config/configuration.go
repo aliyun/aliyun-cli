@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"os"
 	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 const (
@@ -48,26 +47,13 @@ func (c *Configuration) GetProfile(pn string) (Profile, bool) {
 			return p, true
 		}
 	}
-	return Profile{}, false
+	return Profile{Name: pn}, false
 }
 
 func (c *Configuration) GetCurrentProfile(ctx *cli.Context) (Profile) {
-	profileName := ProfileFlag.GetValueOrDefault(ctx, "default")
+	profileName := ProfileFlag.GetValueOrDefault(ctx, c.CurrentProfile)
 	p, _ := c.GetProfile(profileName)
-
-	p.Mode = AuthenticateMode(RegionFlag.GetValueOrDefault(ctx, string(p.Mode)))
-	p.AccessKeyId = AccessKeyIdFlag.GetValueOrDefault(ctx, p.AccessKeyId)
-	p.AccessKeySecret = AccessKeySecretFlag.GetValueOrDefault(ctx, p.AccessKeySecret)
-	p.StsToken = StsTokenFlag.GetValueOrDefault(ctx, p.StsToken)
-	p.RamRoleName = RamRoleNameFlag.GetValueOrDefault(ctx, p.RamRoleName)
-	p.RamRoleArn = RamRoleArnFlag.GetValueOrDefault(ctx, p.RamRoleArn)
-	p.RoleSessionName = RoleSessionNameFlag.GetValueOrDefault(ctx, p.RoleSessionName)
-	p.KeyPairName = KeyPairNameFlag.GetValueOrDefault(ctx, p.KeyPairName)
-	p.PrivateKey = PrivateKeyFlag.GetValueOrDefault(ctx, p.PrivateKey)
-
-	p.RegionId = RegionFlag.GetValueOrDefault(ctx, p.RegionId)
-	p.Language = LanguageFlag.GetValueOrDefault(ctx, p.Language)
-	i18n.SetLanguage(p.Language)
+	p.OverwriteWithFlags(ctx)
 	return p
 }
 

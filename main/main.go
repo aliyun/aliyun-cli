@@ -32,7 +32,7 @@ $ aliyuncli configure
 
 	$ aliyuncli Ecs DescribeInstances --secure
 */
-const Version = "0.61 BETA"
+const Version = "0.70 BETA"
 
 var library = meta.LoadLibrary(resource.NewReader())
 var helper = openapi.NewHelper(library)
@@ -63,6 +63,11 @@ func main() {
 	}
 
 	fs := rootCmd.Flags()
+	fs.Add(config.ModeFlag)
+	fs.Add(config.ProfileFlag)
+	fs.Add(config.LanguageFlag)
+	fs.Add(config.RegionFlag)
+
 	fs.Add(config.AccessKeyIdFlag)
 	fs.Add(config.AccessKeySecretFlag)
 	fs.Add(config.StsTokenFlag)
@@ -71,8 +76,6 @@ func main() {
 	fs.Add(config.RoleSessionNameFlag)
 	fs.Add(config.PrivateKeyFlag)
 	fs.Add(config.KeyPairNameFlag)
-	fs.Add(config.RegionFlag)
-	fs.Add(config.LanguageFlag)
 
 	rootCmd.Flags().Add(cli.Flag{Name: "secure", AssignedMode: cli.AssignedNone,
 		Usage: i18n.T("use --secure to force https", "使用 --secure 开关强制使用https方式调用")})
@@ -131,6 +134,7 @@ func processMain(ctx *cli.Context, args []string) error  {
 		ctx.Command().PrintFailed(err, "Use `aliyun configure` again.")
 		return nil
 	}
+	i18n.SetLanguage(prof.Language)
 
 	caller := openapi.NewCaller(&prof, library)
 	if len(args) < 2 {

@@ -1,12 +1,13 @@
-package config
-
 /*
  * Copyright (C) 2017-2018 Alibaba Group Holding Limited
  */
+package config
+
 import (
 	"fmt"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials"
+	"github.com/aliyun/aliyun-cli/cli"
 )
 
 type AuthenticateMode string
@@ -49,7 +50,7 @@ func NewProfile(name string) (Profile) {
 
 func (cp *Profile) Validate() error {
 	if cp.Mode == "" {
-		return fmt.Errorf("not configure yet")
+		return fmt.Errorf("profile %s is not configure yet, run `aliyun configure --profile %s` first", cp.Name, cp.Name)
 	}
 	switch cp.Mode {
 	case AK:
@@ -93,11 +94,37 @@ func (cp *Profile) Validate() error {
 	return nil
 }
 
+func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
+	cp.Mode = AuthenticateMode(ModeFlag.GetValueOrDefault(ctx, string(cp.Mode)))
+	cp.AccessKeyId = AccessKeyIdFlag.GetValueOrDefault(ctx, cp.AccessKeyId)
+	cp.AccessKeySecret = AccessKeySecretFlag.GetValueOrDefault(ctx, cp.AccessKeySecret)
+	cp.StsToken = StsTokenFlag.GetValueOrDefault(ctx, cp.StsToken)
+	cp.RamRoleName = RamRoleNameFlag.GetValueOrDefault(ctx, cp.RamRoleName)
+	cp.RamRoleArn = RamRoleArnFlag.GetValueOrDefault(ctx, cp.RamRoleArn)
+	cp.RoleSessionName = RoleSessionNameFlag.GetValueOrDefault(ctx, cp.RoleSessionName)
+	cp.KeyPairName = KeyPairNameFlag.GetValueOrDefault(ctx, cp.KeyPairName)
+	cp.PrivateKey = PrivateKeyFlag.GetValueOrDefault(ctx, cp.PrivateKey)
+	cp.RegionId = RegionFlag.GetValueOrDefault(ctx, cp.RegionId)
+	cp.Language = LanguageFlag.GetValueOrDefault(ctx, cp.Language)
+
+	if cp.AccessKeyId != "" && cp.AccessKeySecret != "" {
+		cp.Mode = AK
+		if cp.StsToken != "" {
+			cp.Mode = StsToken
+		} else if cp.RamRoleArn != "" {
+			cp.Mode = RamRoleArn
+		}
+	}
+	if cp.PrivateKey != "" && cp.KeyPairName != "" {
+		cp.Mode = RsaKeyPair
+	}
+}
+
 func (cp *Profile) ValidateAK() error {
-	if len(cp.AccessKeyId) != 16 {
+	if len(cp.AccessKeyId) == 0 {
 		return fmt.Errorf("invalid access_key_id: %s", cp.AccessKeyId)
 	}
-	if len(cp.AccessKeySecret) != 30 {
+	if len(cp.AccessKeySecret) == 0 {
 		return fmt.Errorf("invaild access_key_secret: %s", cp.AccessKeySecret)
 	}
 	return nil

@@ -23,7 +23,7 @@ func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName stri
 	// return: if check failed return error, otherwise return nil
 	client, request, err := c.InitClient(ctx, product, true)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	request.ApiName = apiName
@@ -179,7 +179,8 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 	if request.Domain == "" {
 		request.Domain, err = product.GetEndpoint(request.RegionId, client)
 		if err != nil {
-			return nil, nil, fmt.Errorf("unknown endpoint! Use flag --endpoint xxx.aliyuncs.com to assign endpoint")
+			return nil, nil, fmt.Errorf("unknown endpoint for %s/%s! Use flag --endpoint xxx.aliyuncs.com to assign endpoint" +
+				"\n  error: %s", product.Code, request.RegionId, err.Error())
 		}
 	}
 
