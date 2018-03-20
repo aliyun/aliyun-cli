@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/cli"
-	"strings"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 )
 

@@ -47,7 +47,7 @@ func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, p
 	product, ok := c.library.GetProduct(productCode)
 	if !ok {
 		if !c.force {
-			return &InvalidProductError{Name: productCode, library: c.library}
+			return &InvalidProductError{Code: productCode, library: c.library}
 		}
 
 		//
@@ -174,5 +174,17 @@ func (c *Caller) UpdateRequest(ctx *cli.Context, request *requests.CommonRequest
 			}
 		}
 	}
+
+	if accept, ok :=  request.Headers["Accept"]; ok {
+		accept = strings.ToLower(accept)
+		if strings.Contains(accept, "xml") {
+			request.AcceptFormat = "XML"
+		} else if strings.Contains(accept, "json") {
+			request.AcceptFormat = "JSON"
+		} else {
+			return fmt.Errorf("unsupported accept: %s", accept)
+		}
+	}
+
 	return nil
 }
