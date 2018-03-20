@@ -503,8 +503,8 @@ func (cmd *Command) getOSSOptions(hopMap map[string]interface{}, headers map[str
 }
 
 // GetAllCommands returns all commands list
-func GetAllCommands() []Commander {
-	return []Commander {
+func GetAllCommands() []interface{} {
+	return []interface{}{
 		&helpCommand,
 		&configCommand,
 		&makeBucketCommand,

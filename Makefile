@@ -1,10 +1,14 @@
 export VERSION=0.70
 
 all: build
-release: build build_mac build_linux build_windows
+publish: build build_mac build_linux build_windows
 
 deps:
 	go get gopkg.in/ini.v1
+	go get github.com/droundy/goopt
+	go get github.com/alyu/configparser
+	go get github.com/syndtr/goleveldb/leveldb
+	go get github.com/aliyun/aliyun-oss-go-sdk/oss
 	go get github.com/aliyun/alibaba-cloud-sdk-go/...
 	go get -u github.com/jteeuwen/go-bindata/...
 
@@ -29,12 +33,16 @@ install: build
 build_mac:
 	GOOS=darwin GOARCH=amd64 go build -o out/aliyun main/main.go
 	tar zcvf out/aliyun-cli-macosx-${VERSION}-amd64.tgz -C out aliyun
+	aliyun oss cp out/aliyun-cli-macosx-${VERSION}-amd64.tgz oss://aliyun-cli --force
 
 build_linux:
 	GOOS=linux GOARCH=amd64 go build -o out/aliyun main/main.go
 	tar zcvf out/aliyun-cli-linux-${VERSION}-amd64.tgz -C out aliyun
+	aliyun oss cp out/aliyun-cli-linux-${VERSION}-amd64.tgz oss://aliyun-cli --force
 
 build_windows:
 	GOOS=windows GOARCH=amd64 go build -o aliyun.exe main/main.go
 	zip -r out/aliyun-cli-windows-${VERSION}-amd64.zip aliyun.exe
+	aliyun oss cp out/aliyun-cli-windows-${VERSION}-amd64.zip oss://aliyun-cli --force
 	rm aliyun.exe
+

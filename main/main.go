@@ -63,46 +63,8 @@ func main() {
 	}
 
 	fs := rootCmd.Flags()
-	fs.Add(config.ModeFlag)
-	fs.Add(config.ProfileFlag)
-	fs.Add(config.LanguageFlag)
-	fs.Add(config.RegionFlag)
-
-	fs.Add(config.AccessKeyIdFlag)
-	fs.Add(config.AccessKeySecretFlag)
-	fs.Add(config.StsTokenFlag)
-	fs.Add(config.RamRoleNameFlag)
-	fs.Add(config.RamRoleArnFlag)
-	fs.Add(config.RoleSessionNameFlag)
-	fs.Add(config.PrivateKeyFlag)
-	fs.Add(config.KeyPairNameFlag)
-
-	rootCmd.Flags().Add(cli.Flag{Name: "secure", AssignedMode: cli.AssignedNone,
-		Usage: i18n.T("use --secure to force https", "使用 --secure 开关强制使用https方式调用")})
-
-	rootCmd.Flags().Add(cli.Flag{Name: "force", AssignedMode: cli.AssignedNone,
-		Usage: i18n.T("use --force to skip api and parameters check", "添加 --force 开关可跳过API与参数的合法性检查")})
-
-	rootCmd.Flags().Add(cli.Flag{Name: "endpoint", AssignedMode: cli.AssignedOnce,
-		Usage: i18n.T("use --endpoint <endpoint> to assign endpoint", "使用 --endpoint <endpoint> 来指定接入点地址")})
-
-	rootCmd.Flags().Add(cli.Flag{Name: "version", AssignedMode: cli.AssignedOnce,
-		Usage: i18n.T("use --version <YYYY-MM-DD> to assign product api version", "使用 --version <YYYY-MM-DD> 来指定访问的API版本")})
-
-	rootCmd.Flags().Add(cli.Flag{Name: "header", AssignedMode: cli.AssignedRepeatable,
-		Usage: i18n.T("use --header X-foo=bar to add custom HTTP header, repeatable", "使用 --header X-foo=bar 来添加特定的HTTP头, 可多次添加")})
-
-	rootCmd.Flags().Add(cli.Flag{Name: "body", AssignedMode: cli.AssignedOnce,
-		Usage: i18n.T("use --body $(cat foo.json) to assign http body in RESTful call", "使用 --body $(cat foo.json) 来指定在RESTful调用中的HTTP包体")})
-
-	rootCmd.Flags().Add(cli.Flag{Name: "body-file",AssignedMode: cli.AssignedOnce, Hidden: true,
-		Usage: i18n.T("assign http body in Restful call with local file", "")})
-
-	rootCmd.Flags().Add(cli.Flag{Name: "all-pages", AssignedMode: cli.AssignedDefault, Hidden: true,
-		Usage: i18n.T("get all pages data via pager", "")})
-
-	rootCmd.Flags().Add(cli.Flag{Name: "accept", AssignedMode: cli.AssignedOnce, Hidden: true,
-		Usage: i18n.T("add Accept header to call command", "")})
+	config.AddFlags(fs)
+	openapi.AddFlags(fs)
 
 	rootCmd.AddSubCommand(configureCommand)
 	rootCmd.AddSubCommand(command.NewTestCommand())
