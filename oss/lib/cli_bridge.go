@@ -16,9 +16,6 @@ func NewOssCommand() *cli.Command {
 		Usage: "aliyun oss [command] [args...] [options...]",
 		Hidden: false,
 		Short: i18n.T("Object Storage Service", "阿里云OSS对象存储"),
-		//Run: func(ctx *cli.Context, args []string) error {
-		//	return nil
-		//},
 	}
 
 	result.AddSubCommand(NewCommandBridge(&configCommand))

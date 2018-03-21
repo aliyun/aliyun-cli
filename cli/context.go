@@ -23,6 +23,7 @@ type Context struct {
 	flags *FlagSet
 	unknownFlags *FlagSet
 	command *Command
+	completion *Completion
 }
 
 func NewCommandContext() (*Context){
@@ -38,6 +39,10 @@ func (ctx *Context) IsHelp() bool {
 
 func (ctx *Context) Command() *Command {
 	return ctx.command
+}
+
+func (ctx *Context) Completion() *Completion {
+	return ctx.completion
 }
 
 func (ctx *Context) Flags() *FlagSet {

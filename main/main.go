@@ -60,6 +60,9 @@ func main() {
 		Help: func(ctx *cli.Context, args []string) error {
 			return processHelp(ctx, args)
 		},
+		AutoComplete: func(ctx *cli.Context) []string {
+			return processCompletion(ctx)
+		},
 	}
 
 	fs := rootCmd.Flags()
@@ -110,6 +113,11 @@ func processMain(ctx *cli.Context, args []string) error  {
 			"Use aliyun --help to show usage")
 		return nil
 	}
+}
+
+func processCompletion(ctx *cli.Context) []string {
+	//openapi.
+	return make([]string, 0)
 }
 
 func processHelp(ctx *cli.Context, args []string) error {

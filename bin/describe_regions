@@ -1,0 +1,1 @@
+aliyun ecs DescribeRegions | jq '.Regions.Region'| jq -r '["RegionId   ", "LocalName "], ["---------------------", "---------------------"],(.[] | [.RegionId, .LocalName]) | @tsv'

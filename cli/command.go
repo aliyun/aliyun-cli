@@ -6,6 +6,7 @@ package cli
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"os"
 )
 
 type Command struct {
@@ -41,6 +42,9 @@ type Command struct {
 	// Help
 	Help func(ctx *Context, args []string) error
 
+	// auto compete
+	AutoComplete func(ctx *Context) []string
+
 	suggestDistance int
 	parent			*Command
 	subCommands     []*Command
@@ -62,6 +66,13 @@ func (c *Command) Flags() (*FlagSet) {
 func (c *Command) Execute(args []string) {
 	ctx := NewCommandContext()
 	ctx.EnterCommand(c)
+	ctx.completion = NewCompletion()
+
+	//
+	// if
+	if ctx.completion != nil {
+		args = ctx.completion.GetArgs()
+	}
 
 	err := c.executeInner(ctx, args)
 	if err != nil {
@@ -103,8 +114,7 @@ func (c *Command) GetUsageWithParent() string {
 	}
 	return usage
 }
-//
-//
+
 func (c *Command) executeInner(ctx *Context, args []string) error {
 	//
 	// fmt.Printf(">>> Execute Command: %s args=%v\n", c.Name, args)
