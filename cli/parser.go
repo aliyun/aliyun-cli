@@ -92,6 +92,8 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 			case AssignedDefault:
 				if value, ok := p.readNextValue(false); ok {
 					flag.putValue(value)
+				} else {
+					flag.putValue("")
 				}
 			case AssignedOnce:
 				if value, ok := p.readNextValue(true); ok {
