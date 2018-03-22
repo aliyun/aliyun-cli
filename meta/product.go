@@ -43,6 +43,7 @@ func (a *Product) GetLowerCode() string {
 }
 
 func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error) {
+	var le error
 	if a.LocationServiceCode != "" {
 		rp := endpoints.ResolveParam{
 			Product:          a.Code,
@@ -54,6 +55,8 @@ func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error)
 		ep, err := endpoints.Resolve(&rp)
 		if err == nil {
 			return ep, nil
+		} else {
+			le = err
 		}
 	}
 
@@ -66,7 +69,7 @@ func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error)
 		return a.GlobalEndpoint, nil
 	}
 
-	return "", &InvalidEndpointError{region, a}
+	return "", &InvalidEndpointError{le, region, a}
 }
 
 func (a *Product) TryGetEndpoints(region string, client *sdk.Client) (endpoint string, lcEndpoint string) {

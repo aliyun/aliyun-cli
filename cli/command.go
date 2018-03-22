@@ -41,6 +41,9 @@ type Command struct {
 	// Help
 	Help func(ctx *Context, args []string) error
 
+	// auto compete
+	AutoComplete func(ctx *Context) []string
+
 	suggestDistance int
 	parent			*Command
 	subCommands     []*Command
@@ -62,6 +65,13 @@ func (c *Command) Flags() (*FlagSet) {
 func (c *Command) Execute(args []string) {
 	ctx := NewCommandContext()
 	ctx.EnterCommand(c)
+	ctx.completion = ParseCompletion()
+
+	//
+	// if
+	if ctx.completion != nil {
+		args = ctx.completion.GetArgs()
+	}
 
 	err := c.executeInner(ctx, args)
 	if err != nil {
@@ -96,8 +106,14 @@ func (c *Command) GetSuggestDistance() int {
 	}
 }
 
-//
-//
+func (c *Command) GetUsageWithParent() string {
+	usage := c.Usage
+	for p := c.parent; p != nil; p = p.parent {
+		usage = p.Name + " " + usage
+	}
+	return usage
+}
+
 func (c *Command) executeInner(ctx *Context, args []string) error {
 	//
 	// fmt.Printf(">>> Execute Command: %s args=%v\n", c.Name, args)
@@ -120,19 +136,23 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 	}
 
 	//
-	// if has sub command, run it
-	subCommand := c.GetSubCommand(nextArg)
-	if subCommand != nil {
-		ctx.EnterCommand(subCommand)
-		return subCommand.executeInner(ctx, parser.GetRemains())
-	}
+	// if next args is not empty, try find sub commands
+	if nextArg != "" {
+		//
+		// if has sub command, run it
+		subCommand := c.GetSubCommand(nextArg)
+		if subCommand != nil {
+			ctx.EnterCommand(subCommand)
+			return subCommand.executeInner(ctx, parser.GetRemains())
+		}
 
-	//
-	// no sub command and command.Run == nil
-	// raise error
-	if c.Run == nil {
-		// c.executeHelp(ctx, args, fmt.Errorf("unknown command: %s", nextArg))
-		return NewInvalidCommandError(nextArg, ctx)
+		//
+		// no sub command and command.Run == nil
+		// raise error
+		if c.Run == nil {
+			// c.executeHelp(ctx, args, fmt.Errorf("unknown command: %s", nextArg))
+			return NewInvalidCommandError(nextArg, ctx)
+		}
 	}
 
 	//
@@ -165,6 +185,9 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 	}
 
 	if ctx.help {
+		c.executeHelp(ctx, callArgs)
+		return nil
+	} else if c.Run == nil {
 		c.executeHelp(ctx, callArgs)
 		return nil
 	} else {
@@ -210,6 +233,6 @@ func (c *Command) executeHelp(ctx *Context, args []string)  {
 	c.PrintHead()
 	c.PrintUsage()
 	c.PrintSubCommands()
-	c.PrintFlags()
+	c.PrintFlags(ctx)
 	c.PrintTail()
 }

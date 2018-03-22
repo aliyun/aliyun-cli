@@ -13,7 +13,7 @@ import (
 var helpFlag = Flag{
 	Name: "help",
 	Usage: i18n.T("print help", "打印帮助信息"),
-	Assignable: false,
+	AssignedMode: AssignedNone,
 }
 
 //
@@ -23,6 +23,7 @@ type Context struct {
 	flags *FlagSet
 	unknownFlags *FlagSet
 	command *Command
+	completion *Completion
 }
 
 func NewCommandContext() (*Context){
@@ -38,6 +39,10 @@ func (ctx *Context) IsHelp() bool {
 
 func (ctx *Context) Command() *Command {
 	return ctx.command
+}
+
+func (ctx *Context) Completion() *Completion {
+	return ctx.completion
 }
 
 func (ctx *Context) Flags() *FlagSet {
@@ -67,7 +72,7 @@ func (ctx *Context) EnterCommand(cmd *Command) {
 func (ctx *Context) CheckFlags() error {
 	for _, f := range ctx.flags.Flags() {
 		if f.Required && !f.IsAssigned() {
-			if !f.UseDefaultValue() {
+			if !f.useDefaultValue() {
 				return fmt.Errorf("missing flag --%s", f.Name)
 			}
 		}

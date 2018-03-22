@@ -2,19 +2,21 @@ package cli
 
 const DefaultSuggestDistance = 2
 
+func CalculateStringDistance(source string, target string) int {
+	return DistanceForStrings([]rune(source), []rune(target), DefaultOptions)
+}
+
+type Noticeable interface {
+	GetNotice() string
+}
+
 // error with suggestions
 type SuggestibleError interface {
 	GetSuggestions() []string
 }
 
-type SuggestibleObject interface {
-	GetName() string
-}
-
-func CalculateStringDistance(source string, target string) int {
-	return DistanceForStrings([]rune(source), []rune(target), DefaultOptions)
-}
-
+//
+// helper class for Suggester
 type Suggester struct {
 	suggestFor string
 	distance int

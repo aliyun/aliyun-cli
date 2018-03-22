@@ -9,6 +9,8 @@ import (
 	"github.com/aliyun/aliyun-cli/meta"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 )
 
 type Caller struct {
@@ -33,8 +35,11 @@ func (c *Caller) Validate() error {
 }
 
 //
-// entrance call from main
+// entrance of calling from main
+// will call rpc or restful
 func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
+	//
+	// get force call information
 	c.force = ctx.Flags().IsAssigned("force")
 
 	//
@@ -42,47 +47,13 @@ func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, p
 	product, ok := c.library.GetProduct(productCode)
 	if !ok {
 		if !c.force {
-			return &InvalidProductError{Name: productCode, library: c.library}
-		} else {
-			product = meta.Product {
-				Code: productCode,
-			}
+			return &InvalidProductError{Code: productCode, library: c.library}
 		}
-	}
 
-	if strings.ToLower(product.ApiStyle) == "rpc" || product.ApiStyle == "" {
-		//
-		// Rpc call
-		if path != "" {
-			// ctx.Command().PrintFailed(fmt.Errorf("invalid arguments"), "")
-			return fmt.Errorf("invailed argument")
-		}
-		if c.force {
-			c.InvokeRpcForce(ctx, &product, apiOrMethod)
-			return nil
-		} else {
-			return c.InvokeRpc(ctx, &product, apiOrMethod)
-		}
-	} else if product.Version != "" {
 		//
 		// Restful Call
 		// aliyun cs GET /clusters
 		// aliyun cs /clusters --roa GET
-		ok, method, path, err := CheckRestfulMethod(ctx, apiOrMethod, path)
-		if !ok {
-			if err != nil {
-				ctx.Command().PrintFailed(err, "")
-			} else {
-				ctx.Command().PrintFailed(fmt.Errorf("product %s need restful call", product.Code), "")
-			}
-			return nil
-		}
-		c.InvokeRestful(ctx, &product, method, path)
-		if err != nil {
-			ctx.Command().PrintFailed(fmt.Errorf("call restful %s%s.%s faild %v", product.Code, path, method, err), "")
-			return nil
-		}
-	} else {
 		ok, method, path, err := CheckRestfulMethod(ctx, apiOrMethod, path)
 		if ok {
 			if err != nil {
@@ -93,8 +64,127 @@ func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, p
 		} else {
 			c.InvokeRpcForce(ctx, &product, apiOrMethod)
 		}
+	} else {
+		//
+		//
+		if strings.ToLower(product.ApiStyle) == "rpc" {
+			//
+			// Rpc call
+			if path != "" {
+				// ctx.Command().PrintFailed(fmt.Errorf("invalid arguments"), "")
+				return fmt.Errorf("invailed argument")
+			}
+			if c.force {
+				c.InvokeRpcForce(ctx, &product, apiOrMethod)
+				return nil
+			} else {
+				return c.InvokeRpc(ctx, &product, apiOrMethod)
+			}
+		} else {
+			//
+			// Restful Call
+			// aliyun cs GET /clusters
+			// aliyun cs /clusters --roa GET
+			ok, method, path, err := CheckRestfulMethod(ctx, apiOrMethod, path)
+			if !ok {
+				if err != nil {
+					ctx.Command().PrintFailed(err, "")
+				} else {
+					ctx.Command().PrintFailed(fmt.Errorf("product %s need restful call", product.Code), "")
+				}
+				return nil
+			}
+			c.InvokeRestful(ctx, &product, method, path)
+			if err != nil {
+				ctx.Command().PrintFailed(fmt.Errorf("call restful %s%s.%s faild %v", product.Code, path, method, err), "")
+				return nil
+			}
+		}
 	}
 	return nil
 }
 
 
+func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool) (*sdk.Client, *requests.CommonRequest, error){
+	//
+	// call OpenApi
+	// return: if check failed return error, otherwise return nil
+	client, err := c.profile.GetClient()
+	if err != nil {
+		return nil, nil, fmt.Errorf("bad client %v", err)
+	}
+
+	request := requests.NewCommonRequest()
+	request.Headers["User-Agent"] = "Aliyun-CLI-V0.60"
+	request.RegionId = c.profile.RegionId
+	request.Product = product.Code
+	request.Version = product.Version
+
+	if v, ok := ctx.Flags().GetValue("region"); ok {
+		request.RegionId = v
+	}
+	if v, ok := ctx.Flags().GetValue("endpoint"); ok {
+		request.Domain = v
+	}
+	if v, ok := ctx.Flags().GetValue("version"); ok {
+		request.Version = v
+	}
+
+	if v, ok := ctx.Flags().GetValue("content-type"); ok {
+		request.SetContentType(v)
+	} else if isRpc {
+		request.SetContentType("application/json")
+	}
+
+	if v, ok := ctx.Flags().GetValue("accept"); ok {
+		request.Headers["Accept"] = v
+		if strings.Contains(v, "xml") {
+			request.AcceptFormat = "XML"
+		} else if strings.Contains(v, "json") {
+			request.AcceptFormat = "JSON"
+		}
+	}
+
+	if request.Version == "" {
+		return nil, nil, fmt.Errorf("unknown version! Use flag --version 2016-07-09 to assign version")
+	}
+
+	if request.Domain == "" {
+		request.Domain, err = product.GetEndpoint(request.RegionId, client)
+		if err != nil {
+			return nil, nil, fmt.Errorf("unknown endpoint for %s/%s! Use flag --endpoint xxx.aliyuncs.com to assign endpoint" +
+				"\n  error: %s", product.Code, request.RegionId, err.Error())
+		}
+	}
+
+	return client, request, nil
+}
+
+func (c *Caller) UpdateRequest(ctx *cli.Context, request *requests.CommonRequest) error {
+	if _, ok := ctx.Flags().GetValue("secure"); ok {
+		request.Scheme = "https"
+	}
+
+	if f := ctx.Flags().Get("header"); f != nil {
+		for _, v := range f.GetValues() {
+			if k2, v2, ok := cli.SplitWith(v, "="); ok {
+				request.Headers[k2] = v2
+			} else {
+				return fmt.Errorf("invaild flag --header `%s` use `--header HeaderName=Value`", v)
+			}
+		}
+	}
+
+	if accept, ok :=  request.Headers["Accept"]; ok {
+		accept = strings.ToLower(accept)
+		if strings.Contains(accept, "xml") {
+			request.AcceptFormat = "XML"
+		} else if strings.Contains(accept, "json") {
+			request.AcceptFormat = "JSON"
+		} else {
+			return fmt.Errorf("unsupported accept: %s", accept)
+		}
+	}
+
+	return nil
+}

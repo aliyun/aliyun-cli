@@ -76,7 +76,7 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 			if err != nil {
 				return
 			}
-			err = flag.PutValue(value)
+			err = flag.putValue(value)
 			if err != nil {
 				return
 			}
@@ -86,15 +86,23 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 			if err != nil {
 				return
 			}
-			if !flag.Assignable {
-				flag.PutValue("")
-				return
-			} else {
-				if value, ok := p.readNextValue(flag.Assignable); ok {
-					flag.PutValue(value)
+			switch flag.AssignedMode {
+			case AssignedNone:
+				flag.putValue("")
+			case AssignedDefault:
+				if value, ok := p.readNextValue(false); ok {
+					flag.putValue(value)
 				}
-				return
+			case AssignedOnce:
+				if value, ok := p.readNextValue(true); ok {
+					flag.putValue(value)
+				}
+			case AssignedRepeatable:
+				if value, ok := p.readNextValue(true); ok {
+					flag.putValue(value)
+				}
 			}
+			return
 		}
 	} else if strings.HasPrefix(s,"-") {
 		err = fmt.Errorf("not support single dash flag YET, next-version")
@@ -105,6 +113,8 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 	}
 }
 
+//
+//
 func (p *Parser) readNextValue(force bool) (string, bool) {
 	if p.current >= len(p.args) {
 		return "", false

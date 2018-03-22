@@ -39,6 +39,10 @@ func (c *Caller) InvokeRestful(ctx *cli.Context, product *meta.Product, method s
 		request.SetContent(buf)
 	}
 
+	if v, ok := ctx.Flags().GetValue("accept"); ok {
+		request.AcceptFormat = v
+	}
+
 	if _, ok := request.Headers["Content-Type"]; !ok {
 		content := string(request.Content)
 		if strings.HasPrefix(content, "{") {

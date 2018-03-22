@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"runtime"
 	"os"
+	"github.com/aliyun/aliyun-cli/cli"
 )
 
 const (
@@ -46,11 +47,13 @@ func (c *Configuration) GetProfile(pn string) (Profile, bool) {
 			return p, true
 		}
 	}
-	return Profile{}, false
+	return Profile{Name: pn}, false
 }
 
-func (c *Configuration) GetCurrentProfile() (Profile) {
-	p, _ := c.GetProfile(c.CurrentProfile)
+func (c *Configuration) GetCurrentProfile(ctx *cli.Context) (Profile) {
+	profileName := ProfileFlag.GetValueOrDefault(ctx, c.CurrentProfile)
+	p, _ := c.GetProfile(profileName)
+	p.OverwriteWithFlags(ctx)
 	return p
 }
 

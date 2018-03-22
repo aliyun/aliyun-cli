@@ -37,7 +37,7 @@ func (a *Helper) PrintProducts() {
 func (a *Helper) PrintProductUsage(productCode string, withApi bool) error {
 	product, ok := a.library.GetProduct(productCode)
 	if !ok {
-		return &InvalidProductError{Name: productCode, library: a.library}
+		return &InvalidProductError{Code: productCode, library: a.library}
 	}
 
 	if product.ApiStyle == "rpc" {
@@ -73,12 +73,12 @@ func (a *Helper) PrintProductUsage(productCode string, withApi bool) error {
 	return nil
 }
 
-func (a *Helper) PrintApiUsage(productName string, apiName string) error {
-	product, ok := a.library.GetProduct(productName)
+func (a *Helper) PrintApiUsage(productCode string, apiName string) error {
+	product, ok := a.library.GetProduct(productCode)
 	if !ok {
-		return &InvalidProductError{Name: productName, library: a.library}
+		return &InvalidProductError{Code: productCode, library: a.library}
 	}
-	api, ok := a.library.GetApi(productName, product.Version, apiName)
+	api, ok := a.library.GetApi(productCode, product.Version, apiName)
 	if !ok {
 		return &InvalidApiError{Name: apiName, product: &product}
 	}

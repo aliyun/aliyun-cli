@@ -5,7 +5,7 @@ type Text struct {
 	dic map[string]string
 }
 
-func (a *Text) String() string {
+func (a *Text) Text() string {
 	lang := GetLanguage()
 	return a.Get(lang)
 }

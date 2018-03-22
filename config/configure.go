@@ -8,53 +8,38 @@ import (
 	"fmt"
 	"strings"
 	"io/ioutil"
-	"text/tabwriter"
-	"os"
 	"github.com/aliyun/aliyun-cli/i18n"
 )
-
-var profile string
-var mode string
 
 func NewConfigureCommand() (*cli.Command) {
 	c := &cli.Command{
 		Name: "configure",
-		Short: i18n.T("configure credential and settings", "配置身份认证和其他信息"),
+		Short: i18n.T(
+			"configure credential and settings",
+			"配置身份认证和其他信息"),
 		Usage: "configure --mode <AuthenticateMode> --profile <profileName>",
-		Run: func(c *cli.Context, args []string) error {
+		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
-				return cli.NewInvalidCommandError(args[0], c)
+				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			if profile == "" {
-				profile = "default"
-			}
-			return doConfigure(profile)
+			profileName, _ := ctx.Flags().GetValue(ProfileFlag.Name)
+			mode, _ := ctx.Flags().GetValue(ModeFlag.Name)
+
+			return doConfigure(profileName, mode)
 		},
 	}
 
-	f := c.Flags().PersistentStringVar(&profile, "profile", "default",
-		i18n.T("use `--profile <profileName>` to select profile",
-			"使用 `--profile <profileName>` 来指定操作的配置集"))
-	f.Persistent = true
-
-	c.Flags().PersistentStringVar(&mode, "mode", "AK",
-		i18n.T("use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` to assign authenticate mode",
-			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` 指定认证方式"))
+	c.Flags().Add(ProfileFlag)
+	c.Flags().Add(ModeFlag)
 
 	c.AddSubCommand(NewConfigureGetCommand())
 	c.AddSubCommand(NewConfigureSetCommand())
-	c.AddSubCommand(&cli.Command{
-		Name: "list",
-		Run: func(c *cli.Context, args []string) error {
-			doConfigureList()
-			return nil
-		},
-	})
-
+	c.AddSubCommand(NewConfigureListCommand())
+	c.AddSubCommand(NewConfigureDeleteCommand())
 	return c
 }
 
-func doConfigure(profileName string) error {
+func doConfigure(profileName string, mode string) error {
 	conf, err := LoadConfiguration()
 	if err != nil {
 		return err
@@ -65,7 +50,7 @@ func doConfigure(profileName string) error {
 		cp = conf.NewProfile(profileName)
 	}
 
-	fmt.Printf("Configuring profile '%s' ...\n", profileName)
+	fmt.Printf("Configuring profile '%s' in '%s' authenticate mode...\n", profileName, mode)
 	if mode != "" {
 		switch AuthenticateMode(mode) {
 		case AK:
@@ -94,16 +79,18 @@ func doConfigure(profileName string) error {
 	// configure common
 	fmt.Printf("Default Region Id [%s]: ", cp.RegionId)
 	cp.RegionId = ReadInput(cp.RegionId)
-	fmt.Printf("Default Output Format [%s]: json", cp.OutputFormat)
+	fmt.Printf("Default Output Format [%s]: json (Only support json))\n", cp.OutputFormat)
 	// cp.OutputFormat = ReadInput(cp.OutputFormat)
 	cp.OutputFormat = "json"
+
 	fmt.Printf("Default Language [zh|en] %s: ", cp.Language)
 	cp.Language = ReadInput(cp.Language)
 	if cp.Language != "zh" && cp.Language != "en" {
 		cp.Language = "en"
 	}
-	fmt.Printf("User site: [china|international|japan] %s", cp.Site)
-	cp.Site = ReadInput(cp.Site)
+
+	//fmt.Printf("User site: [china|international|japan] %s", cp.Site)
+	//cp.Site = ReadInput(cp.Site)
 
 	fmt.Printf("Saving profile[%s] ...", profileName)
 	conf.PutProfile(cp)
@@ -117,43 +104,6 @@ func doConfigure(profileName string) error {
 
 	DoHello(&cp)
 	return nil
-}
-
-func doConfigureList() {
-	conf, err := LoadConfiguration()
-	if err != nil {
-		cli.Errorf("ERROR: load configure failed: %v\n", err)
-	}
-	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
-	fmt.Fprint(w, "Profile\t| Credential \t| Valid\t| Region\t| Language\n")
-	fmt.Fprint(w, "---------\t| ------------------\t| -------\t| ----------------\t| --------\n")
-	for _, profile := range conf.Profiles {
-		name := profile.Name
-		if name == conf.CurrentProfile {
-			name = name + " *"
-		}
-		err := profile.Validate()
-		valid := "Valid"
-		if err != nil {
-			valid = "Invalid"
-		}
-
-		cred := ""
-		switch profile.Mode {
-		case AK:
-			cred = "AK:" + "***" + GetLastChars(profile.AccessKeyId, 3)
-		case StsToken:
-			cred = "StsToken:" +  "***" + GetLastChars(profile.AccessKeyId, 3)
-		case RamRoleArn:
-			cred = "RamRoleArn:" +  "***" + GetLastChars(profile.AccessKeyId, 3)
-		case EcsRamRole:
-			cred = "EcsRamRole:" + profile.RamRoleName
-		case RsaKeyPair:
-			cred = "RsaKeyPair:" + profile.KeyPairName
-		}
-		fmt.Fprintf(w, "%s\t| %s\t| %s\t| %s\t| %s\n", name, cred, valid, profile.RegionId, profile.Language)
-	}
-	w.Flush()
 }
 
 func configureAK(cp *Profile) error  {

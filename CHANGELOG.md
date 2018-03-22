@@ -1,5 +1,17 @@
 # CHANGE LOG
 
+### 0.70
+
+- integrate `ossutil` toolset with aliyun-cli
+- optimize `--help` command messages
+- config flags (such as ak, profile, sts) can used with openapi call
+- support `configure delete`
+- fix bug with restful force call
+
+### 0.61
+
+- support --all-pages flags to merge pager APIs
+
 ### 0.60
 
 - support suggestions

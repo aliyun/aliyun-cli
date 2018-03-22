@@ -11,6 +11,7 @@ import (
 	"github.com/aliyun/aliyun-cli/meta"
 	"github.com/aliyun/aliyun-cli/command"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/aliyun/aliyun-cli/oss/lib"
 )
 
 /**
@@ -31,9 +32,8 @@ $ aliyuncli configure
 
 	$ aliyuncli Ecs DescribeInstances --secure
 */
-const Version = "0.60 BETA"
+const Version = "0.70 BETA"
 
-var profileName string
 var library = meta.LoadLibrary(resource.NewReader())
 var helper = openapi.NewHelper(library)
 var configureCommand = config.NewConfigureCommand()
@@ -60,36 +60,18 @@ func main() {
 		Help: func(ctx *cli.Context, args []string) error {
 			return processHelp(ctx, args)
 		},
+		AutoComplete: func(ctx *cli.Context) []string {
+			return processCompletion(ctx)
+		},
 	}
 
-	rootCmd.Flags().StringVar(&profileName, "profile", "default",
-		i18n.T("use --profile <profileName> to use specified profile", "使用 --profile <profileName> 来使用指定的配置"))
-
-	rootCmd.Flags().Add(cli.Flag{Name: "secure", Assignable:false,
-		Usage: i18n.T("use --secure to force https", "使用 --secure 开关强制使用https方式调用")})
-
-	rootCmd.Flags().Add(cli.Flag{Name: "force", Assignable:false,
-		Usage: i18n.T("use --force to skip api and parameters check", "添加 --force 开关可跳过API与参数的合法性检查")})
-
-	rootCmd.Flags().Add(cli.Flag{Name: "endpoint", Assignable:true,
-		Usage: i18n.T("use --endpoint <endpoint> to assign endpoint", "使用 --endpoint <endpoint> 来指定接入点地址")})
-
-	rootCmd.Flags().Add(cli.Flag{Name: "region", Assignable:true,
-		Usage: i18n.T("use --region <regionId> to assign region", "使用 --region <regionId> 来指定访问地域")})
-	rootCmd.Flags().Add(cli.Flag{Name: "version", Assignable:true,
-		Usage: i18n.T("use --version <YYYY-MM-DD> to assign product api version", "使用 --version <YYYY-MM-DD> 来指定访问的API版本")})
-
-	rootCmd.Flags().Add(cli.Flag{Name: "header", Assignable:true, Repeatable:true,
-		Usage: i18n.T("use --header X-foo=bar to add custom HTTP header, repeatable", "使用 --header X-foo=bar 来添加特定的HTTP头, 可多次添加")})
-
-	rootCmd.Flags().Add(cli.Flag{Name: "body", Assignable:true,
-		Usage: i18n.T("use --body $(cat foo.json) to assign http body in RESTful call", "使用 --body $(cat foo.json) 来指定在RESTful调用中的HTTP包体")})
-
-	rootCmd.Flags().Add(cli.Flag{Name: "body-file", Assignable:true, Hidden: true,
-		Usage: i18n.T("assign http body in Restful call with local file", "")})
+	fs := rootCmd.Flags()
+	config.AddFlags(fs)
+	openapi.AddFlags(fs)
 
 	rootCmd.AddSubCommand(configureCommand)
 	rootCmd.AddSubCommand(command.NewTestCommand())
+	rootCmd.AddSubCommand(lib.NewOssCommand())
 	rootCmd.Execute(os.Args[1:])
 }
 
@@ -105,16 +87,19 @@ func processMain(ctx *cli.Context, args []string) error  {
 	// aliyun ecs
 	// 1. check configure
 	productName := args[0]
-	prof, err := config.LoadProfile(profileName)
+	cfg, err := config.LoadConfiguration()
 	if err != nil {
 		ctx.Command().PrintFailed(err, "Use `aliyun configure` again.")
 		return nil
 	}
+
+	prof := cfg.GetCurrentProfile(ctx)
 	err = prof.Validate()
 	if err != nil {
 		ctx.Command().PrintFailed(err, "Use `aliyun configure` again.")
 		return nil
 	}
+	i18n.SetLanguage(prof.Language)
 
 	caller := openapi.NewCaller(&prof, library)
 	if len(args) < 2 {
@@ -130,6 +115,11 @@ func processMain(ctx *cli.Context, args []string) error  {
 	}
 }
 
+func processCompletion(ctx *cli.Context) []string {
+	//openapi.
+	return make([]string, 0)
+}
+
 func processHelp(ctx *cli.Context, args []string) error {
 	c := ctx.Command()
 	//if err != nil {
@@ -139,7 +129,7 @@ func processHelp(ctx *cli.Context, args []string) error {
 	if len(args) == 0 {
 		c.PrintHead()
 		c.PrintUsage()
-		c.PrintFlags()
+		c.PrintFlags(ctx)
 		c.PrintSample()
 		helper.PrintProducts()
 		c.PrintTail()
@@ -161,7 +151,7 @@ func printUsage(c *cli.Command, configError error) {
 	c.PrintHead()
 	c.PrintUsage()
 	c.PrintSubCommands()
-	c.PrintFlags()
+	c.PrintFlags(nil)
 	c.PrintSample()
 	if configError != nil {
 		fmt.Printf("Configuration Invailed: %s\n", configError)

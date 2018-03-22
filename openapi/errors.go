@@ -8,16 +8,16 @@ import (
 )
 
 type InvalidProductError struct {
-	Name string
+	Code    string
 	library *meta.Library
 }
 
 func (e *InvalidProductError) Error() string {
-	return fmt.Sprintf("'%s' is not a valid command or product. See `aliyun help`.", e.Name)
+	return fmt.Sprintf("'%s' is not a valid command or product. See `aliyun help`.", strings.ToLower(e.Code))
 }
 
 func (e *InvalidProductError) GetSuggestions() []string {
-	sr := cli.NewSuggester(strings.ToLower(e.Name), 2)
+	sr := cli.NewSuggester(strings.ToLower(e.Code), 2)
 	for _, p := range e.library.Products {
 		sr.Apply(strings.ToLower(p.Code))
 	}
@@ -30,7 +30,7 @@ type InvalidApiError struct {
 }
 
 func (e *InvalidApiError) Error() string {
-	return fmt.Sprintf("'%s' is not a valid api. See `aliyun help %s`.", e.Name, e.product.Code)
+	return fmt.Sprintf("'%s' is not a valid api. See `aliyun help %s`.", e.Name, e.product.GetLowerCode())
 }
 
 func (e *InvalidApiError) GetSuggestions() []string {
