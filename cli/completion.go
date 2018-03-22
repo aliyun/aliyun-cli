@@ -15,11 +15,14 @@ type Completion struct {
 	Point int
 }
 
-func NewCompletion() *Completion {
+func ParseCompletion() *Completion {
 	line := os.Getenv("COMP_LINE")
+	if line == "" {
+		return nil
+	}
+
 	point, _ := strconv.Atoi(os.Getenv("COMP_POINT"))
 	words := os.Getenv("COMP_WORDS")
-
 	return &Completion{
 		Words: strings.Split(words, " "),
 		Line: line,

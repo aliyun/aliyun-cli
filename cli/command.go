@@ -6,7 +6,6 @@ package cli
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/i18n"
-	"os"
 )
 
 type Command struct {
@@ -66,7 +65,7 @@ func (c *Command) Flags() (*FlagSet) {
 func (c *Command) Execute(args []string) {
 	ctx := NewCommandContext()
 	ctx.EnterCommand(c)
-	ctx.completion = NewCompletion()
+	ctx.completion = ParseCompletion()
 
 	//
 	// if

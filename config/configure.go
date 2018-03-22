@@ -50,7 +50,7 @@ func doConfigure(profileName string, mode string) error {
 		cp = conf.NewProfile(profileName)
 	}
 
-	fmt.Printf("Configuring profile '%s' ...\n", profileName)
+	fmt.Printf("Configuring profile '%s' in '%s' authenticate mode...\n", profileName, mode)
 	if mode != "" {
 		switch AuthenticateMode(mode) {
 		case AK:

@@ -160,6 +160,13 @@ func (cp *Profile) GetClientByAK() (*sdk.Client, error) {
 	return client, err
 }
 
+func (cp *Profile) GetClientBySts() (*sdk.Client, error) {
+	cred := credentials.NewStsTokenCredential(cp.AccessKeyId, cp.AccessKeySecret, cp.StsToken)
+	config := sdk.NewConfig()
+	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
+	return client, err
+}
+
 func (cp *Profile) GetClientByEcsRamRole() (*sdk.Client, error) {
 	if cp.RamRoleName == "" {
 		return nil, fmt.Errorf("RamRole is empty! run `aliyun configure` first")
@@ -167,13 +174,8 @@ func (cp *Profile) GetClientByEcsRamRole() (*sdk.Client, error) {
 
 	cred := credentials.NewEcsRamRoleCredential(cp.RamRoleName)
 	config := sdk.NewConfig()
-	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
-	return client, err
-}
+	// keyId, keySecret, stsToken := singer.GetSessionKey(cred)
 
-func (cp *Profile) GetClientBySts() (*sdk.Client, error) {
-	cred := credentials.NewStsTokenCredential(cp.AccessKeyId, cp.AccessKeySecret, cp.StsToken)
-	config := sdk.NewConfig()
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
