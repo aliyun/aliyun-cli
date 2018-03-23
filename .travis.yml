@@ -19,5 +19,5 @@ notifications:
     on_failure: always
 
 script:
-  - make install
+  - make build
   - go test -v -timeout 30m ./...
