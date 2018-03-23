@@ -13,6 +13,7 @@ deps:
 	go get -u github.com/jteeuwen/go-bindata/...
 	go get github.com/jmespath/go-jmespath
 	go get github.com/aliyun/alibaba-cloud-sdk-go/sdk
+	go get github.com/posener/complete
 
 testdeps:
 	go get -v github.com/onsi/ginkgo/ginkgo
