@@ -4,6 +4,7 @@ all: build
 publish: build build_mac build_linux build_windows
 
 deps:
+	-go get github.com/aliyun/aliyun-openapi-meta
 	go get gopkg.in/ini.v1
 	go get github.com/droundy/goopt
 	go get github.com/alyu/configparser
@@ -12,7 +13,6 @@ deps:
 	go get -u github.com/jteeuwen/go-bindata/...
 	go get github.com/jmespath/go-jmespath
 	go get github.com/aliyun/alibaba-cloud-sdk-go/sdk
-	go get github.com/aliyun/aliyun-openapi-meta
 
 testdeps:
 	go get -v github.com/onsi/ginkgo/ginkgo
