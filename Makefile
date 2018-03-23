@@ -11,7 +11,7 @@ deps:
 	go get github.com/aliyun/aliyun-oss-go-sdk/oss
 	go get -u github.com/jteeuwen/go-bindata/...
 	go get github.com/jmespath/go-jmespath
-	go get github.com/aliyun/alibaba-cloud-sdk-go/...
+	go get github.com/aliyun/alibaba-cloud-sdk-go/sdk
 
 testdeps:
 	go get -v github.com/onsi/ginkgo/ginkgo
