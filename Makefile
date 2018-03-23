@@ -14,6 +14,7 @@ deps:
 	go get github.com/jmespath/go-jmespath
 	go get github.com/aliyun/alibaba-cloud-sdk-go/sdk
 	go get github.com/posener/complete
+	go get github.com/aliyun/ossutil/lib
 
 testdeps:
 	go get -v github.com/onsi/ginkgo/ginkgo
