@@ -19,6 +19,7 @@ testdeps:
 	go get -v github.com/onsi/ginkgo/ginkgo
 	go get -v github.com/onsi/gomega
 	go install github.com/onsi/ginkgo/ginkgo
+	go get gopkg.in/check.v1
 
 metas:
 	go-bindata -o resource/metas.go -pkg resource -prefix ../aliyun-openapi-meta ../aliyun-openapi-meta/**/* ../aliyun-openapi-meta/products.json

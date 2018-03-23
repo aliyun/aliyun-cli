@@ -1,0 +1,27 @@
+
+----------------------------------------------------------------------
+FAIL: config_test.go:47: OssutilConfigSuite.TestConfigNonInteractive
+
+config_test.go:67:
+    c.Assert(len(opts), Equals, 5)
+... obtained int = 2
+... expected int = 5
+
+
+----------------------------------------------------------------------
+FAIL: config_test.go:75: OssutilConfigSuite.TestConfigNonInteractiveLanguage
+
+config_test.go:95:
+    c.Assert(len(opts), Equals, 3)
+... obtained int = 2
+... expected int = 3
+
+
+----------------------------------------------------------------------
+FAIL: config_test.go:189: OssutilConfigSuite.TestConfigOptionEmptyValue
+
+config_test.go:211:
+    c.Assert(len(opts), Equals, 3)
+... obtained int = 2
+... expected int = 3
+
