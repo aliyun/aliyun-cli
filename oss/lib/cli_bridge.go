@@ -18,7 +18,6 @@ func NewOssCommand() *cli.Command {
 		Short: i18n.T("Object Storage Service", "阿里云OSS对象存储"),
 	}
 
-	result.AddSubCommand(NewCommandBridge(&configCommand))
 	result.AddSubCommand(NewCommandBridge(&makeBucketCommand))
 	result.AddSubCommand(NewCommandBridge(&listCommand))
 	result.AddSubCommand(NewCommandBridge(&removeCommand))
@@ -43,7 +42,7 @@ func NewCommandBridge(a Commander) *cli.Command {
 		Short: i18n.T(cmd.specEnglish.synopsisText, cmd.specChinese.synopsisText),
 		Long: i18n.T(cmd.specEnglish.detailHelpText, cmd.specChinese.detailHelpText),
 		Run: func(ctx *cli.Context, args []string) error {
-			return ParseAndRunCommandFromCli(ctx, cmd)
+			return ParseAndRunCommandFromCli(ctx, args)
 		},
 	}
 
@@ -64,23 +63,21 @@ func NewCommandBridge(a Commander) *cli.Command {
 	return result
 }
 
-func ParseAndRunCommandFromCli(ctx *cli.Context, cmd *Command) error {
+func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	profile, err := config.LoadCurrentProfile()
 	if err != nil {
 		return fmt.Errorf("config failed: %s", err.Error())
 	}
 
-	switch profile.Mode {
-	case config.AK:
-	case config.StsToken:
-	default:
-		return fmt.Errorf("oss only support AK|StsToken mode")
+	sc, err := profile.GetSessionCredential()
+	if err != nil {
+		return fmt.Errorf("can't get credential %s", err)
 	}
 
 	configs := make(map[string]string, 0)
-	configs["access-key-id"] = profile.AccessKeyId
-	configs["access-key-secret"] = profile.AccessKeySecret
-	configs["sts-token"] = profile.StsToken
+	configs["access-key-id"] = sc.AccessKeyId
+	configs["access-key-secret"] = sc.AccessKeySecret
+	configs["sts-token"] = sc.StsToken
 	configs["endpoint"] = "oss-" + profile.RegionId + ".aliyuncs.com"
 
 	//if i18n.GetLanguage() == "zh" {
@@ -88,19 +85,41 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, cmd *Command) error {
 	//} else {
 	//	configs[OptionLanguage] = "EN"
 	//}
-	// cmd.assignExternalConfig(configs)
 
 	ts := time.Now().UnixNano()
 	commandLine = strings.Join(os.Args[1:], " ")
 	// os.Args = []string {"aliyun", "oss", "ls"}
 
 	clearEnv()
-	for k, v := range configs {
-		if v != "" {
-			os.Args = append(os.Args, "--" + k)
-			os.Args = append(os.Args, v)
+	a2 := []string {"aliyun", "oss"}
+	a2 = append(a2, ctx.Command().Name)
+	for _, a := range args {
+		a2 = append(a2, a)
+	}
+	configFlagSet := cli.NewFlagSet()
+	config.AddFlags(configFlagSet)
+
+	for _, f := range ctx.Flags().Flags() {
+		if configFlagSet.Get(f.Name) != nil {
+			continue;
+		}
+		if f.IsAssigned() {
+			a2 = append(a2, "--" + f.Name)
+			if f.GetValue() != "" {
+				a2 = append(a2, f.GetValue())
+			}
 		}
 	}
+
+	for k, v := range configs {
+		if v != "" {
+			a2 = append(a2, "--" + k)
+			a2 = append(a2, v)
+		}
+	}
+
+	os.Args = a2
+	// cli.Noticef("%v", os.Args)
 
 	args, options, err := ParseArgOptions()
 	if err != nil {

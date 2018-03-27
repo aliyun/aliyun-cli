@@ -4,6 +4,9 @@
 
 - support auto completion for zsh/bash
 - fix bugs for RepeatList parameter
+- refactoring RamRoleArn and EcsRamRole authenticate flow
+- oss command can support RamRoleArn and EcsRamRole authenticate mode
+- oss command can support --profile and other configure flags
 
 ### 0.70
 
