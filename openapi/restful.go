@@ -67,7 +67,12 @@ func (c *Caller) InvokeRestful(ctx *cli.Context, product *meta.Product, method s
 			return
 		}
 	}
-	fmt.Println(resp.GetHttpContentString())
+
+	err = outputProcessor(ctx, resp.GetHttpContentString())
+	if err != nil {
+		ctx.Command().PrintFailed(err, "")
+	}
+	//fmt.Println(resp.GetHttpContentString())
 }
 
 func CheckRestfulMethod(ctx *cli.Context, methodOrPath string, pathPattern string) (ok bool, method string, path string, err error) {
