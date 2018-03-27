@@ -90,6 +90,11 @@ ecs       | EcsRamRole:EcsTest | Valid   | cn-beijing       | en
 | RamRoleArn     | 使用RAM子账号的AssumeRole方式访问     |
 | EcsRamRole     | 在ECS实例上通过EcsRamRole实现免密验证   |
 
+#### 启用zsh/bash自动补全
+
+- 使用`aliyun auto-completion`命令开启自动补全，目前支持zsh/bash
+- 使用`aliyun auto-completion --uninstall`命令关闭自动补全
+
 ## 使用阿里云CLI
 
 阿里云云产品的OpenAPI有RPC和RESTful两种风格，大部分产品使用的是RPC风格。不同风格的API的调用方法也不同。

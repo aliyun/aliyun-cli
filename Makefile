@@ -1,4 +1,4 @@
-export VERSION=0.70
+export VERSION=0.80
 
 all: build
 publish: build build_mac build_linux build_windows

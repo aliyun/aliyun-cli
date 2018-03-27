@@ -6,6 +6,7 @@ package cli
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"strings"
 )
 
 type Command struct {
@@ -42,7 +43,7 @@ type Command struct {
 	Help func(ctx *Context, args []string) error
 
 	// auto compete
-	AutoComplete func(ctx *Context) []string
+	AutoComplete func(ctx *Context, args[]string) []string
 
 	suggestDistance int
 	parent			*Command
@@ -68,7 +69,7 @@ func (c *Command) Execute(args []string) {
 	ctx.completion = ParseCompletion()
 
 	//
-	// if
+	// if completion
 	if ctx.completion != nil {
 		args = ctx.completion.GetArgs()
 	}
@@ -112,6 +113,31 @@ func (c *Command) GetUsageWithParent() string {
 		usage = p.Name + " " + usage
 	}
 	return usage
+}
+
+
+func (c *Command) ExecuteComplete(ctx *Context, args []string) {
+	if strings.HasPrefix(ctx.completion.Current, "-") {
+		for _, f := range ctx.flags.Flags() {
+			if f.Hidden {
+				continue
+			}
+			if !strings.HasPrefix(f.Name, "--" + ctx.completion.Current) {
+				continue
+			}
+			fmt.Printf("--%s\n", f.Name)
+		}
+	} else {
+		for _, sc := range c.subCommands {
+			if sc.Hidden {
+				continue
+			}
+			if !strings.HasPrefix(sc.Name, ctx.completion.Current) {
+				continue
+			}
+			fmt.Printf("%s\n", sc.Name)
+		}
+	}
 }
 
 func (c *Command) executeInner(ctx *Context, args []string) error {
@@ -182,6 +208,18 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 		} else {
 			ctx.help = true
 		}
+	}
+
+	if ctx.completion != nil {
+		if c.AutoComplete != nil {
+			ss := c.AutoComplete(ctx, callArgs)
+			for _, s := range ss {
+				fmt.Printf("%s\n", s)
+			}
+		} else {
+			c.ExecuteComplete(ctx, callArgs)
+		}
+		return nil
 	}
 
 	if ctx.help {

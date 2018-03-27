@@ -98,6 +98,12 @@ The following are supported authentication methods:
 | RamRoleArn     | Use the AssumeRole to access Alibaba Cloud services    |
 | EcsRamRole     | Use the EcsRamRole to access ECS resources   |
 
+
+#### Enable bash/zsh auto completion
+
+- Use `aliyun auto-completion` command to enable auto completion in zsh/bash
+- Use `aliyun auto-completion --uninstall` command to disable auto completion.
+
 ## Use Alibaba Cloud CLI
 
 The Alibaba Cloud OpenAPI has two styles, RPC style and RESTful style. Most of the Alibaba Cloud products use the RPC style. The way of calling an API varies depending on the API style.
