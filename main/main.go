@@ -152,20 +152,11 @@ func processCompletion(ctx *cli.Context, args []string) []string {
 			return r
 		}
 
-		for _, p := range api.Parameters {
-			//for _, f := range ctx.Flags().Flags() {
-			//	if f.Hidden {
-			//		continue
-			//	}
-			//	fmt.Printf("--%s\n", f.Name)
-			//}
-			if strings.HasPrefix(p.Name, ctx.Completion().Current) {
-				continue
+		api.ForeachParameters(func(s string, p meta.Parameter) {
+			if strings.HasPrefix("--" + s, ctx.Completion().Current) && !p.Hidden {
+				fmt.Printf("--%s\n", s)
 			}
-			if !p.Hidden {
-				fmt.Printf("--%s\n", p.Name)
-			}
-		}
+		})
 	} else if product.ApiStyle == "restful" {
 		if len(args) == 1 {
 			fmt.Printf("GET\n")

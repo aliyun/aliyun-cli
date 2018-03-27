@@ -1,5 +1,10 @@
 # CHANGE LOG
 
+### 0.80
+
+- support auto completion for zsh/bash
+- fix bugs for RepeatList parameter
+
 ### 0.70
 
 - integrate `ossutil` toolset with aliyun-cli

@@ -122,7 +122,7 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 			if f.Hidden {
 				continue
 			}
-			if !strings.HasPrefix(f.Name, "--" + ctx.completion.Current) {
+			if !strings.HasPrefix("--" + f.Name, ctx.completion.Current) {
 				continue
 			}
 			fmt.Printf("--%s\n", f.Name)
