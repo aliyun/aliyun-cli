@@ -10,6 +10,7 @@ import (
 	"os"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"strings"
+	"io"
 )
 
 // var compactList = []string {"Ecs", "Rds", "Vpc", "Slb", "Dm", "Ots", "Ess", "Ocs", "CloudApi"}
@@ -89,22 +90,28 @@ func (a *Helper) PrintApiUsage(productCode string, apiName string) error {
 	fmt.Printf("\nParameters:\n")
 
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
-	for _, param := range api.Parameters {
-		if param.Hidden {
-			continue
-		}
-
-		if len(param.SubParameters) > 0 {
-			for _, sp := range param.SubParameters {
-				fmt.Fprintf(w,"  --%s.n.%s\t%s\t%s\n", param.Name, sp.Name, sp.Type, required(sp.Required))
-			}
-		} else {
-			fmt.Fprintf(w,"  --%s\t%s\t%s\n", param.Name, param.Type, required(param.Required))
-		}
-	}
+	printParameters(w, api.Parameters, "")
 	w.Flush()
 
 	return nil
+}
+
+func printParameters(w io.Writer, params []meta.Parameter, prefix string) {
+	for _, param := range params {
+		if param.Hidden {
+			continue
+		}
+		if len(param.SubParameters) > 0 {
+			printParameters(w, param.SubParameters, param.Name + ".n.")
+			//for _, sp := range param.SubParameters {
+			//	fmt.Fprintf(w,"  --%s.n.%s\t%s\t%s\n", param.Name, sp.Name, sp.Type, required(sp.Required))
+			//}
+		} else if param.Type == "RepeatList" {
+			fmt.Fprintf(w,"  --%s%s.n\t%s\t%s\n", prefix, param.Name, param.Type, required(param.Required))
+		} else {
+			fmt.Fprintf(w,"  --%s%s\t%s\t%s\n", prefix, param.Name, param.Type, required(param.Required))
+		}
+	}
 }
 
 func required(r bool) string {
