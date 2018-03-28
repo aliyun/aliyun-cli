@@ -15,7 +15,7 @@ const (
 
 	flagWaitForExpr = "wait-for-expr"
 	flagWaitForTarget = "wait-for-target"
-	flagWaitTimeout = "wait-time-out"
+	flagWaitTimeout = "wait-timeout"
 	flagWaitInterval = "wait-interval"
 
 	flagRetryTimeout = "retry-timeout"
