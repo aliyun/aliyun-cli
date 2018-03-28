@@ -22,13 +22,13 @@ You can install Alibaba Cloud CLI either through the installer or the source cod
 
 	Download the installer, then extract the installer. You can move the extracted `aliyun` executable file to the `/usr/local/bin` directory or add it to the `$PATH`.
 
-	Download link: (0.70 Beta)
+	Download link: (0.80 Beta)
 
 	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.70-amd64.tgz)
 	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.70-amd64.tgz)
 	- [Windows (64 bit)](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.70-amd64.zip)
 
-    Download link: (0.60 Beta)
+    Download link: (0.70 Beta)
 
 	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.60-amd64.tgz)
 	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.60-amd64.tgz)
@@ -97,6 +97,12 @@ The following are supported authentication methods:
 | StsToken       | Use STS token to access Alibaba Cloud services    |
 | RamRoleArn     | Use the AssumeRole to access Alibaba Cloud services    |
 | EcsRamRole     | Use the EcsRamRole to access ECS resources   |
+
+
+#### Enable bash/zsh auto completion
+
+- Use `aliyun auto-completion` command to enable auto completion in zsh/bash
+- Use `aliyun auto-completion --uninstall` command to disable auto completion.
 
 ## Use Alibaba Cloud CLI
 

@@ -21,13 +21,13 @@
 
 	阿里云CLI工具下载、解压后即可使用，支持Mac, Linux, Windows平台(x64版本)。	您可以将解压的`aliyun`可执行文件移至`/usr/local/bin`目录下，或添加到`$PATH`中。
 
-	下载链接如下 (0.70 Beta)：
+	下载链接如下 (0.80 Beta)：
 
 	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.70-amd64.tgz)
 	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.70-amd64.tgz)
 	- [Windows (64 bit)](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.70-amd64.zip)
 
-    下载链接如下: (0.60 Beta)
+    下载链接如下: (0.70 Beta)
 
 	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.60-amd64.tgz)
 	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.60-amd64.tgz)
@@ -89,6 +89,11 @@ ecs       | EcsRamRole:EcsTest | Valid   | cn-beijing       | en
 | StsToken       | 使用STS Token访问    |
 | RamRoleArn     | 使用RAM子账号的AssumeRole方式访问     |
 | EcsRamRole     | 在ECS实例上通过EcsRamRole实现免密验证   |
+
+#### 启用zsh/bash自动补全
+
+- 使用`aliyun auto-completion`命令开启自动补全，目前支持zsh/bash
+- 使用`aliyun auto-completion --uninstall`命令关闭自动补全
 
 ## 使用阿里云CLI
 

@@ -41,6 +41,26 @@ func (a *Api) FindParameter(name string) *Parameter {
 	return findParameterInner(&a.Parameters, name)
 }
 
+//
+// Foreach parameter use recursion
+func (a *Api) ForeachParameters(f func (s string, p Parameter)) {
+	foreachParameters(a.Parameters, "", f)
+}
+
+func foreachParameters(params []Parameter, prefix string, f func (s string, p Parameter)) {
+	for _, p := range params {
+		if len(p.SubParameters) > 0 {
+			foreachParameters(p.SubParameters, prefix + p.Name + ".1.", f)
+		} else if p.Type == "RepeatList" {
+			f(prefix + p.Name + ".1", p)
+		} else {
+			f(prefix + p.Name, p)
+		}
+	}
+}
+
+//
+//
 func findParameterInner(params *[]Parameter, name string) *Parameter {
 	for i, p := range *params {
 		if p.Name == name {
@@ -48,8 +68,18 @@ func findParameterInner(params *[]Parameter, name string) *Parameter {
 		}
 		if len(p.SubParameters) > 0 && strings.HasPrefix(name, p.Name){
 			s := name[len(p.Name):]
+			// XXX.1.YYY
 			if len(s) >= 4 && s[0] == '.' && s[2] == '.' {
 				return findParameterInner(&p.SubParameters, name[len(p.Name) + 3:])
+			} else {
+				return nil
+			}
+		}
+		if p.Type == "RepeatList" {
+			// XXX.1
+			s := name[len(p.Name):]
+			if len(s) >= 2 && s[0] == '.' {
+				return &((*params)[i])
 			} else {
 				return nil
 			}
@@ -66,9 +96,14 @@ func (a *Api) CheckRequiredParameters(checker func(string) bool) error {
 	missing := false
 	s := ""
 	for _, p := range a.Parameters {
-		if p.Required && !checker(p.Name) {
-			missing = true
-			s = s + "\n  --" + p.Name
+		if p.Required {
+			name := p.Name
+			if p.Type != "RepeatList" {
+				if !checker(name) {
+					missing = true
+					s = s + "\n  --" + p.Name
+				}
+			}
 		}
 	}
 	if missing {

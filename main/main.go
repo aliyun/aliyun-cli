@@ -12,6 +12,7 @@ import (
 	"github.com/aliyun/aliyun-cli/command"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/oss/lib"
+	"strings"
 )
 
 /**
@@ -32,7 +33,7 @@ $ aliyuncli configure
 
 	$ aliyuncli Ecs DescribeInstances --secure
 */
-const Version = "0.70 BETA"
+const Version = "0.80 BETA"
 
 var library = meta.LoadLibrary(resource.NewReader())
 var helper = openapi.NewHelper(library)
@@ -60,8 +61,8 @@ func main() {
 		Help: func(ctx *cli.Context, args []string) error {
 			return processHelp(ctx, args)
 		},
-		AutoComplete: func(ctx *cli.Context) []string {
-			return processCompletion(ctx)
+		AutoComplete: func(ctx *cli.Context, args []string) []string {
+			return processCompletion(ctx, args)
 		},
 	}
 
@@ -72,6 +73,7 @@ func main() {
 	rootCmd.AddSubCommand(configureCommand)
 	rootCmd.AddSubCommand(command.NewTestCommand())
 	rootCmd.AddSubCommand(lib.NewOssCommand())
+	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
 	rootCmd.Execute(os.Args[1:])
 }
 
@@ -115,9 +117,57 @@ func processMain(ctx *cli.Context, args []string) error  {
 	}
 }
 
-func processCompletion(ctx *cli.Context) []string {
-	//openapi.
-	return make([]string, 0)
+func processCompletion(ctx *cli.Context, args []string) []string {
+	r := make([]string, 0)
+	//
+	// aliyun
+	if len(args) == 0 {
+		ctx.Command().ExecuteComplete(ctx, args)
+		for _, p := range library.Products {
+			if !strings.HasPrefix(p.GetLowerCode(), ctx.Completion().Current) {
+				continue
+			}
+			fmt.Printf("%s\n", p.GetLowerCode())
+		}
+		return r
+	}
+
+	product, ok := library.GetProduct(args[0])
+	if !ok {
+		return r
+	}
+
+	if product.ApiStyle == "rpc" {
+		if len(args) == 1 {
+			for _, name := range product.ApiNames {
+				if !strings.HasPrefix(name, ctx.Completion().Current) {
+					continue
+				}
+				fmt.Printf("%s\n", name)
+			}
+			return r
+		}
+		api, ok := library.GetApi(product.Code, product.Version, args[1])
+		if !ok {
+			return r
+		}
+
+		api.ForeachParameters(func(s string, p meta.Parameter) {
+			if strings.HasPrefix("--" + s, ctx.Completion().Current) && !p.Hidden {
+				fmt.Printf("--%s\n", s)
+			}
+		})
+	} else if product.ApiStyle == "restful" {
+		if len(args) == 1 {
+			fmt.Printf("GET\n")
+			fmt.Printf("POST\n")
+			fmt.Printf("DELETE\n")
+			fmt.Printf("PUT\n")
+			return r
+		}
+	}
+
+	return r
 }
 
 func processHelp(ctx *cli.Context, args []string) error {
