@@ -49,6 +49,19 @@ func (a *FlagSet) AddByName(name string) (*Flag, error) {
 	return &a.flags[len(a.flags) - 1], nil
 }
 
+func (a *FlagSet) AddByShorthand(shorthand string) (*Flag, error) {
+	for _, f := range a.flags {
+		if f.Shorthand == shorthand {
+			return nil, fmt.Errorf("flag duplicated -%s", f.Shorthand)
+		}
+	}
+	f := Flag {
+		Shorthand: shorthand,
+	}
+	a.flags = append(a.flags, f)
+	return &a.flags[len(a.flags) - 1], nil
+}
+
 //
 // put flags if duplicated replace
 func (a *FlagSet) Put(flag Flag) {
@@ -66,6 +79,17 @@ func (a *FlagSet) Put(flag Flag) {
 func (a *FlagSet) Get(name string) *Flag {
 	for i, v := range a.flags {
 		if v.Name == name {
+			return &a.flags[i]
+		}
+	}
+	return nil
+}
+
+//
+// get flag by name
+func (a *FlagSet) GetByShorthand(shorthand string) *Flag {
+	for i, v := range a.flags {
+		if v.Shorthand == shorthand {
 			return &a.flags[i]
 		}
 	}

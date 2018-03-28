@@ -84,6 +84,9 @@ func (f *Flag) GetValues() []string {
 }
 
 func (f *Flag) GetValueOrDefault(ctx *Context, def string) string {
+	if f == nil {
+		return def
+	}
 	v, ok := ctx.Flags().GetValue(f.Name)
 	if ok {
 		return v

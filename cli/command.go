@@ -143,9 +143,7 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 func (c *Command) executeInner(ctx *Context, args []string) error {
 	//
 	// fmt.Printf(">>> Execute Command: %s args=%v\n", c.Name, args)
-	parser := NewParser(args, func(s string) (*Flag, error) {
-		return ctx.DetectFlag(s)
-	})
+	parser := NewParser(args, ctx)
 
 	//
 	// get next arg

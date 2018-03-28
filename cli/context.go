@@ -80,12 +80,24 @@ func (ctx *Context) CheckFlags() error {
 	return nil
 }
 
-func (ctx *Context) DetectFlag(name string) (*Flag, error) {
-	flag := ctx.flags.Get(name)
+func (ctx *Context) DetectFlag(name string, isShorthand bool) (*Flag, error) {
+
+	var flag *Flag
+
+	if isShorthand {
+		flag = ctx.flags.GetByShorthand(name)
+	} else {
+		flag = ctx.flags.Get(name)
+	}
+
 	if flag != nil {
 		return flag, nil
 	} else if ctx.unknownFlags != nil {
-		return ctx.unknownFlags.AddByName(name)
+		if isShorthand {
+			return ctx.unknownFlags.AddByShorthand(name)
+		} else {
+			return ctx.unknownFlags.AddByName(name)
+		}
 	} else {
 		return nil, NewInvalidFlagError(name, ctx)
 	}

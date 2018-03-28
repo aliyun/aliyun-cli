@@ -112,7 +112,7 @@ func (c *Caller) FillRpcParameters(ctx *cli.Context, request *requests.CommonReq
 		if api != nil {
 			param := api.FindParameter(f.Name)
 			if param == nil {
-				return &InvalidParameterError{Name: f.Name, api: api, flags: ctx.Flags()}
+				return &InvalidParameterError{Name: f.Name, Shorthand: f.Shorthand, api: api, flags: ctx.Flags()}
 			}
 			if param.Position == "Query" {
 				request.QueryParams[f.Name] = f.GetValue()
