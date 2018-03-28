@@ -46,18 +46,29 @@ func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName stri
 			if err != nil {
 				ctx.Command().PrintFailed(err, "")
 			} else {
-				fmt.Println(r)
+				err = outputProcessor(ctx,r)
+				if err != nil {
+					ctx.Command().PrintFailed(err, "")
+				}
 			}
 			return nil
 		}
 	}
 
-	resp, err := client.ProcessCommonRequest(request)
+	waiter := NewWaiterWithCTX(ctx, client, request)
+	//resp, err := client.ProcessCommonRequest(request)
+
+	resp, err := waiter.Wait()
 
 	if err != nil {
 		ctx.Command().PrintFailed(err, "")
 	}
-	fmt.Println(resp.GetHttpContentString())
+
+	err = outputProcessor(ctx, resp.GetHttpContentString())
+	if err != nil {
+		ctx.Command().PrintFailed(err, "")
+	}
+
 	return nil
 }
 
@@ -90,7 +101,10 @@ func (c *Caller) InvokeRpcForce(ctx *cli.Context, product *meta.Product, apiName
 		ctx.Command().PrintFailed(err, "")
 	}
 
-	fmt.Println(resp.GetHttpContentString())
+	err = outputProcessor(ctx, resp.GetHttpContentString())
+	if err != nil {
+		ctx.Command().PrintFailed(err, "")
+	}
 }
 
 func (c *Caller) FillRpcParameters(ctx *cli.Context, request *requests.CommonRequest, api *meta.Api) error {

@@ -6,7 +6,19 @@ package openapi
 import (
 	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/cli"
+	"fmt"
 )
+
+const (
+	flagOutputTableRows = "output-table-rows"
+	flagOutputTableCols = "output-table-cols"
+
+	flagWaitForExpr = "wait-for-expr"
+	flagWaitForTarget = "wait-for-target"
+	flagWaitTimeout = "wait-time-out"
+	flagWaitInterval = "wait-interval"
+)
+
 
 func AddFlags(fs *cli.FlagSet) {
 	fs.Add(SecureFlag)
@@ -18,58 +30,104 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(BodyFileFlag)
 	fs.Add(PagerFlag)
 	fs.Add(AcceptFlag)
+
+	fs.Add(OutputTableRowFlag)
+	fs.Add(OutputTableColsFlag)
+
+	fs.Add(WaitForExprFlag)
+	fs.Add(WaitForTargetFlag)
+	fs.Add(WaitTimeoutFlag)
+	fs.Add(WaitIntervalFlag)
 }
 
-var SecureFlag = cli.Flag{Category: "caller",
+var (
+	SecureFlag = cli.Flag{Category: "caller",
 	Name: "secure", AssignedMode: cli.AssignedNone,
 	Usage: i18n.T(
 		"use `--secure` to force https",
 		"使用 `--secure` 开关强制使用https方式调用")}
 
-var ForceFlag = cli.Flag{Category: "caller",
+    ForceFlag = cli.Flag{Category: "caller",
 	Name: "force", AssignedMode: cli.AssignedNone,
 	Usage: i18n.T(
 		"use `--force` to skip api and parameters check",
 		"添加 `--force` 开关可跳过API与参数的合法性检查")}
 
-var EndpointFlag = cli.Flag{Category: "caller",
+    EndpointFlag = cli.Flag{Category: "caller",
 	Name: "endpoint", AssignedMode: cli.AssignedOnce,
 	Usage: i18n.T(
 		"use `--endpoint <endpoint>` to assign endpoint",
 		"使用 `--endpoint <endpoint>` 来指定接入点地址")}
 
-var VersionFlag = cli.Flag{Category: "caller",
+    VersionFlag = cli.Flag{Category: "caller",
 	Name: "version", AssignedMode: cli.AssignedOnce,
 	Usage: i18n.T(
 		"use `--version <YYYY-MM-DD>` to assign product api version",
 		"使用 `--version <YYYY-MM-DD>` 来指定访问的API版本")}
 
-var HeaderFlag = cli.Flag{Category: "caller",
+    HeaderFlag = cli.Flag{Category: "caller",
 	Name: "header", AssignedMode: cli.AssignedRepeatable,
 	Usage: i18n.T(
 		"use `--header X-foo=bar` to add custom HTTP header, repeatable",
 		"使用 `--header X-foo=bar` 来添加特定的HTTP头, 可多次添加")}
 
-var BodyFlag = cli.Flag{Category: "caller",
+    BodyFlag = cli.Flag{Category: "caller",
 	Name: "body", AssignedMode: cli.AssignedOnce,
 	Usage: i18n.T(
 		"use `--body $(cat foo.json)` to assign http body in RESTful call",
 		"使用 `--body $(cat foo.json)` 来指定在RESTful调用中的HTTP包体")}
 
-var BodyFileFlag = cli.Flag{Category: "caller",
+    BodyFileFlag = cli.Flag{Category: "caller",
 	Name: "body-file",AssignedMode: cli.AssignedOnce, Hidden: true,
 	Usage: i18n.T(
 		"assign http body in Restful call with local file",
 		"使用 `--body-file foo.json` 来指定输入包体")}
 
-var PagerFlag = cli.Flag{Category: "caller",
+    PagerFlag = cli.Flag{Category: "caller",
 	Name: "all-pages", AssignedMode: cli.AssignedDefault, Hidden: true,
 	Usage: i18n.T(
 		"use `--all-pages` to merge pages for pageable APIs",
 		"使用 `--all-pages` 在访问分页的API时合并分页")}
 
-var AcceptFlag = cli.Flag{Category: "caller",
+    AcceptFlag = cli.Flag{Category: "caller",
 	Name: "accept", AssignedMode: cli.AssignedOnce, Hidden: true,
 	Usage: i18n.T(
 		"add `--accept {json|xml}` to add Accept header",
 		"使用 `--accept {json|xml}` 来指定Accept头")}
+
+    OutputTableRowFlag = cli.Flag{Category: "caller",
+	Name: flagOutputTableRows, AssignedMode: cli.AssignedOnce, Hidden: true,
+	Usage: i18n.T(
+		fmt.Sprintf("use `--%s` to assign fields of table row", flagOutputTableRows),
+		fmt.Sprintf("使用 `--%s` 指定表格行的内容", flagOutputTableRows))}
+
+    OutputTableColsFlag = cli.Flag{Category: "caller",
+	Name: flagOutputTableCols, AssignedMode: cli.AssignedOnce, Hidden: true,
+	Usage: i18n.T(
+		fmt.Sprintf("use `--%s` to assign table column names", flagOutputTableCols),
+		fmt.Sprintf("使用 `--%s` 指定表格的列名", flagOutputTableCols))}
+
+    WaitForExprFlag = cli.Flag{Category: "caller",
+	Name: flagWaitForExpr, AssignedMode: cli.AssignedOnce, Hidden: true,
+	Usage: i18n.T(
+		fmt.Sprintf("use `--%s` ", flagWaitForExpr),
+		fmt.Sprintf("使用 `--%s` ", flagWaitForExpr))}
+
+    WaitForTargetFlag = cli.Flag{Category: "caller",
+	Name: flagWaitForTarget, AssignedMode: cli.AssignedOnce, Hidden: true,
+	Usage: i18n.T(
+		fmt.Sprintf("use `--%s` ", flagWaitForTarget),
+		fmt.Sprintf("使用 `--%s` ", flagWaitForTarget))}
+
+    WaitTimeoutFlag = cli.Flag{Category: "caller",
+	Name: flagWaitTimeout, AssignedMode: cli.AssignedOnce, Hidden: true,
+	Usage: i18n.T(
+		fmt.Sprintf("use `--%s` ", flagWaitTimeout),
+		fmt.Sprintf("使用 `--%s` ", flagWaitTimeout))}
+
+    WaitIntervalFlag = cli.Flag{Category: "caller",
+	Name: flagWaitInterval, AssignedMode: cli.AssignedOnce, Hidden: true,
+	Usage: i18n.T(
+		fmt.Sprintf("use `--%s` ", flagWaitInterval),
+		fmt.Sprintf("使用 `--%s` ", flagWaitInterval))}
+)
