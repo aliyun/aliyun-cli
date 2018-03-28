@@ -110,24 +110,24 @@ var (
     WaitForExprFlag = cli.Flag{Category: "caller",
 	Name: flagWaitForExpr, AssignedMode: cli.AssignedOnce, Hidden: true,
 	Usage: i18n.T(
-		fmt.Sprintf("use `--%s` ", flagWaitForExpr),
-		fmt.Sprintf("使用 `--%s` ", flagWaitForExpr))}
+		fmt.Sprintf("use `--%s` to assign jmes expr", flagWaitForExpr),
+		fmt.Sprintf("使用 `--%s` 指定jmes表达式", flagWaitForExpr))}
 
     WaitForTargetFlag = cli.Flag{Category: "caller",
 	Name: flagWaitForTarget, AssignedMode: cli.AssignedOnce, Hidden: true,
 	Usage: i18n.T(
-		fmt.Sprintf("use `--%s` ", flagWaitForTarget),
-		fmt.Sprintf("使用 `--%s` ", flagWaitForTarget))}
+		fmt.Sprintf("use `--%s` to assign target", flagWaitForTarget),
+		fmt.Sprintf("使用 `--%s` 指定目标的值", flagWaitForTarget))}
 
     WaitTimeoutFlag = cli.Flag{Category: "caller",
 	Name: flagWaitTimeout, AssignedMode: cli.AssignedOnce, Hidden: true,
 	Usage: i18n.T(
-		fmt.Sprintf("use `--%s` ", flagWaitTimeout),
-		fmt.Sprintf("使用 `--%s` ", flagWaitTimeout))}
+		fmt.Sprintf("use `--%s` to set timeout(seconds)", flagWaitTimeout),
+		fmt.Sprintf("使用 `--%s` 设定等待超时时间(秒)", flagWaitTimeout))}
 
     WaitIntervalFlag = cli.Flag{Category: "caller",
 	Name: flagWaitInterval, AssignedMode: cli.AssignedOnce, Hidden: true,
 	Usage: i18n.T(
-		fmt.Sprintf("use `--%s` ", flagWaitInterval),
-		fmt.Sprintf("使用 `--%s` ", flagWaitInterval))}
+		fmt.Sprintf("use `--%s` to set interval(seconds)", flagWaitInterval),
+		fmt.Sprintf("使用 `--%s` 去指定请求间隔时间(秒)", flagWaitInterval))}
 )
