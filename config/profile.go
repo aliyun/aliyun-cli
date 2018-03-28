@@ -138,18 +138,18 @@ func (cp *Profile) ValidateAK() error {
 	return nil
 }
 
-func (cp *Profile) GetClient() (*sdk.Client, error) {
+func (cp *Profile) GetClient(config *sdk.Config) (*sdk.Client, error) {
 	switch cp.Mode {
 	case AK:
-		return cp.GetClientByAK()
+		return cp.GetClientByAK(config)
 	case StsToken:
-		return cp.GetClientBySts()
+		return cp.GetClientBySts(config)
 	case RamRoleArn:
-		return cp.GetClientByRoleArn()
+		return cp.GetClientByRoleArn(config)
 	case EcsRamRole:
-		return cp.GetClientByEcsRamRole()
+		return cp.GetClientByEcsRamRole(config)
 	case RsaKeyPair:
-		return cp.GetClientByPrivateKey()
+		return cp.GetClientByPrivateKey(config)
 	default:
 		return nil, fmt.Errorf("unexcepted certificate mode: %s", cp.Mode)
 	}
@@ -177,7 +177,7 @@ func (cp *Profile) GetSessionCredential() (*signers.SessionCredential, error) {
 	}
 }
 
-func (cp *Profile) GetClientByAK() (*sdk.Client, error) {
+func (cp *Profile) GetClientByAK(config *sdk.Config) (*sdk.Client, error) {
 	if cp.AccessKeyId == "" || cp.AccessKeySecret == "" {
 		return nil, fmt.Errorf("AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first")
 	}
@@ -186,13 +186,15 @@ func (cp *Profile) GetClientByAK() (*sdk.Client, error) {
 		return nil, fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
 	}
 
-	client, err := sdk.NewClientWithAccessKey(cp.RegionId, cp.AccessKeyId, cp.AccessKeySecret)
+	cred := credentials.NewAccessKeyCredential(cp.AccessKeyId, cp.AccessKeySecret)
+
+	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
+
 	return client, err
 }
 
-func (cp *Profile) GetClientBySts() (*sdk.Client, error) {
+func (cp *Profile) GetClientBySts(config *sdk.Config) (*sdk.Client, error) {
 	cred := credentials.NewStsTokenCredential(cp.AccessKeyId, cp.AccessKeySecret, cp.StsToken)
-	config := sdk.NewConfig()
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
@@ -225,12 +227,11 @@ func (cp *Profile) GetSessionCredentialByRoleArn() (*signers.SessionCredential, 
 }
 
 
-func (cp *Profile) GetClientByRoleArn() (*sdk.Client, error) {
+func (cp *Profile) GetClientByRoleArn(config *sdk.Config) (*sdk.Client, error) {
 	sc, err := cp.GetSessionCredentialByRoleArn()
 	if err != nil {
 		return nil, fmt.Errorf("get session credential failed %s", err)
 	}
-	config := sdk.NewConfig()
 	cred := credentials.NewStsTokenCredential(sc.AccessKeyId, sc.AccessKeySecret, sc.StsToken)
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
@@ -293,21 +294,19 @@ func (cp *Profile) GetSessionCredentialByEcsRamRole() (*signers.SessionCredentia
 }
 
 
-func (cp *Profile) GetClientByEcsRamRole() (*sdk.Client, error) {
+func (cp *Profile) GetClientByEcsRamRole(config *sdk.Config) (*sdk.Client, error) {
 	sc, err := cp.GetSessionCredentialByEcsRamRole()
 	if err != nil {
 		return nil, fmt.Errorf("get session credential failed %s", err)
 	}
 
 	cred := credentials.NewStsTokenCredential(sc.AccessKeyId, sc.AccessKeySecret, sc.StsToken)
-	config := sdk.NewConfig()
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
 
-func (cp *Profile) GetClientByPrivateKey() (*sdk.Client, error) {
+func (cp *Profile) GetClientByPrivateKey(config *sdk.Config) (*sdk.Client, error) {
 	cred := credentials.NewRsaKeyPairCredential(cp.PrivateKey, cp.KeyPairName, cp.ExpiredSeconds)
-	config := sdk.NewConfig()
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }

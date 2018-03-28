@@ -17,6 +17,9 @@ const (
 	flagWaitForTarget = "wait-for-target"
 	flagWaitTimeout = "wait-time-out"
 	flagWaitInterval = "wait-interval"
+
+	flagRetryTimeout = "retry-timeout"
+	flagRetryCount = "retry-count"
 )
 
 
@@ -38,6 +41,9 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(WaitForTargetFlag)
 	fs.Add(WaitTimeoutFlag)
 	fs.Add(WaitIntervalFlag)
+
+	fs.Add(RetryTimeoutFlag)
+	fs.Add(RetryCountFlag)
 }
 
 var (
@@ -123,11 +129,23 @@ var (
 	Name: flagWaitTimeout, AssignedMode: cli.AssignedOnce, Hidden: true,
 	Usage: i18n.T(
 		fmt.Sprintf("use `--%s` to set timeout(seconds)", flagWaitTimeout),
-		fmt.Sprintf("使用 `--%s` 设定等待超时时间(秒)", flagWaitTimeout))}
+		fmt.Sprintf("使用 `--%s` 指定等待超时时间(秒)", flagWaitTimeout))}
 
     WaitIntervalFlag = cli.Flag{Category: "caller",
 	Name: flagWaitInterval, AssignedMode: cli.AssignedOnce, Hidden: true,
 	Usage: i18n.T(
 		fmt.Sprintf("use `--%s` to set interval(seconds)", flagWaitInterval),
-		fmt.Sprintf("使用 `--%s` 去指定请求间隔时间(秒)", flagWaitInterval))}
+		fmt.Sprintf("使用 `--%s` 指定请求间隔时间(秒)", flagWaitInterval))}
+
+	RetryTimeoutFlag = cli.Flag{Category: "caller",
+		Name: flagRetryTimeout, AssignedMode: cli.AssignedOnce, Hidden: true,
+		Usage: i18n.T(
+			fmt.Sprintf("use `--%s` to set retry timeout(seconds)", flagRetryTimeout),
+			fmt.Sprintf("使用 `--%s` 指定请求超时时间(秒)", flagRetryTimeout))}
+
+	RetryCountFlag = cli.Flag{Category: "caller",
+		Name: flagRetryCount, AssignedMode: cli.AssignedOnce, Hidden: true,
+		Usage: i18n.T(
+			fmt.Sprintf("use `--%s` to set retry count", flagRetryCount),
+			fmt.Sprintf("使用 `--%s` 指定重试次数", flagRetryCount))}
 )
