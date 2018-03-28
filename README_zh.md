@@ -21,13 +21,13 @@
 
 	阿里云CLI工具下载、解压后即可使用，支持Mac, Linux, Windows平台(x64版本)。	您可以将解压的`aliyun`可执行文件移至`/usr/local/bin`目录下，或添加到`$PATH`中。
 
-	下载链接如下 (0.70 Beta)：
+	下载链接如下 (0.80 Beta)：
 
 	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.70-amd64.tgz)
 	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.70-amd64.tgz)
 	- [Windows (64 bit)](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.70-amd64.zip)
 
-    下载链接如下: (0.60 Beta)
+    下载链接如下: (0.70 Beta)
 
 	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.60-amd64.tgz)
 	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.60-amd64.tgz)
