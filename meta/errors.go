@@ -7,8 +7,8 @@ import (
 
 type InvalidEndpointError struct {
 	LocationError error
-	Region string
-	Product *Product
+	Region        string
+	Product       *Product
 }
 
 func (e *InvalidEndpointError) Error() string {
@@ -26,5 +26,3 @@ func (e *InvalidEndpointError) Error() string {
 	}
 	return s
 }
-
-

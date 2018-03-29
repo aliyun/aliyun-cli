@@ -19,14 +19,14 @@ type SuggestibleError interface {
 // helper class for Suggester
 type Suggester struct {
 	suggestFor string
-	distance int
-	results []string
+	distance   int
+	results    []string
 }
 
 func NewSuggester(v string, distance int) *Suggester {
 	return &Suggester{
 		suggestFor: v,
-		distance: distance,
+		distance:   distance,
 	}
 }
 

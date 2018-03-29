@@ -10,9 +10,9 @@ var library = make(map[string]*Text)
 //	return putText(id, "zh", text)
 //}
 
-func T(en string, zh string) (*Text) {
-	t := &Text {
-		id: "",
+func T(en string, zh string) *Text {
+	t := &Text{
+		id:  "",
 		dic: make(map[string]string),
 	}
 	t.dic["en"] = en
@@ -22,11 +22,11 @@ func T(en string, zh string) (*Text) {
 	return t
 }
 
-func putText(id string, lang string, text string) (*Text) {
+func putText(id string, lang string, text string) *Text {
 	t, ok := library[id]
 	if !ok {
-		t = &Text {
-			id: id,
+		t = &Text{
+			id:  id,
 			dic: make(map[string]string),
 		}
 		library[id] = t

@@ -4,13 +4,13 @@
 package config
 
 import (
-	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
-func NewConfigureDeleteCommand() (*cli.Command) {
+func NewConfigureDeleteCommand() *cli.Command {
 	cmd := &cli.Command{
-		Name: "delete",
+		Name:  "delete",
 		Usage: "delete --profile <profileName>",
 		Short: i18n.T("list all config profile", "列出所有配置集"),
 		Run: func(c *cli.Context, args []string) error {

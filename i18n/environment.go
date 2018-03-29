@@ -6,6 +6,7 @@ const (
 	Zh = LanguageCode("zh")
 	En = LanguageCode("en")
 )
+
 var language = "en"
 
 func SetLanguage(lang string) {

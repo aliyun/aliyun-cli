@@ -8,10 +8,10 @@ import (
 	"github.com/posener/complete"
 )
 
-func NewTestCommand() (*cli.Command) {
+func NewTestCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "test",
-		Usage: "Test",
+		Name:   "test",
+		Usage:  "Test",
 		Hidden: true,
 		Run: func(ctx *cli.Context, args []string) error {
 			// create a Command object, that represents the command we want
@@ -23,7 +23,7 @@ func NewTestCommand() (*cli.Command) {
 				Sub: complete.Commands{
 
 					// add a build sub command
-					"build": complete.Command {
+					"build": complete.Command{
 
 						// define flags of the build sub command
 						Flags: complete.Flags{

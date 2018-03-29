@@ -9,10 +9,10 @@ import (
 )
 
 type FlagSet struct {
-	flags	[]Flag
+	flags []Flag
 }
 
-func NewFlagSet() (*FlagSet) {
+func NewFlagSet() *FlagSet {
 	return &FlagSet{
 		flags: make([]Flag, 0),
 	}
@@ -20,33 +20,37 @@ func NewFlagSet() (*FlagSet) {
 
 //
 // traverse all values
-func (a *FlagSet) Flags() ([]Flag) {
+func (a *FlagSet) Flags() []Flag {
 	return a.flags
 }
 
 //
 // call from user program, if flag duplicated, panic!
-func (a *FlagSet) Add(flag Flag) (*Flag) {
+func (a *FlagSet) Add(flag Flag) *Flag {
 	for _, f := range a.flags {
 		if f.Name == flag.Name {
 			panic(fmt.Errorf("flag duplicated: --%s", f.Name))
 		}
 	}
 	a.flags = append(a.flags, flag)
-	return &a.flags[len(a.flags) - 1]
+	return &a.flags[len(a.flags)-1]
 }
 
-func (a *FlagSet) AddByName(name string) (*Flag, error) {
+func (a *FlagSet) AddByName(name, shorthand string) (*Flag, error) {
 	for _, f := range a.flags {
 		if f.Name == name {
 			return nil, fmt.Errorf("flag duplicated --%s", f.Name)
 		}
+		if f.Shorthand == shorthand {
+			return nil, fmt.Errorf("flag duplicated -%s", f.Shorthand)
+		}
 	}
-	f := Flag {
-		Name: name,
+	f := Flag{
+		Name:      name,
+		Shorthand: shorthand,
 	}
 	a.flags = append(a.flags, f)
-	return &a.flags[len(a.flags) - 1], nil
+	return &a.flags[len(a.flags)-1], nil
 }
 
 //
@@ -63,9 +67,9 @@ func (a *FlagSet) Put(flag Flag) {
 
 //
 // get flag by name
-func (a *FlagSet) Get(name string) *Flag {
+func (a *FlagSet) Get(name, shorthand string) *Flag {
 	for i, v := range a.flags {
-		if v.Name == name {
+		if (name != "" && v.Name == name) || (shorthand != "" && v.Shorthand == shorthand) {
 			return &a.flags[i]
 		}
 	}
@@ -81,14 +85,14 @@ func (a *FlagSet) GetSuggestions(name string, distance int) []string {
 	}
 	ss := make([]string, 0)
 	for _, s := range sr.GetResults() {
-		ss = append(ss, "--" + s)
+		ss = append(ss, "--"+s)
 	}
 	return ss
 }
 
 // check if the flag is assigned
-func (a *FlagSet) IsAssigned(name string) bool {
-	f := a.Get(name)
+func (a *FlagSet) IsAssigned(name, shorthand string) bool {
+	f := a.Get(name, shorthand)
 	if f == nil {
 		return false
 	} else {
@@ -122,12 +126,12 @@ func (a *FlagSet) GetValueOrDefault(name string, def string) string {
 
 // put value
 // return: if duplicated return error
-func (a *FlagSet) PutValue(name string, value string) (error) {
-	f := a.Get(name)
+func (a *FlagSet) PutValue(name, shorthand, value string) error {
+	f := a.Get(name, shorthand)
 	if f != nil {
 		return f.putValue(value)
 	} else {
-		f := Flag {
+		f := Flag{
 			Name:  name,
 			value: value,
 		}
@@ -137,7 +141,7 @@ func (a *FlagSet) PutValue(name string, value string) (error) {
 }
 
 func MergeFlagSet(to *FlagSet, from *FlagSet, applier func(flag Flag) bool) *FlagSet {
-	result := &FlagSet {}
+	result := &FlagSet{}
 	result.flags = to.flags
 	if from != nil {
 		for _, rv := range from.Flags() {
@@ -149,27 +153,27 @@ func MergeFlagSet(to *FlagSet, from *FlagSet, applier func(flag Flag) bool) *Fla
 	return result
 }
 
-func (a *FlagSet) StringVar(p *string, name string, defaultValue string, usage *i18n.Text) (*Flag) {
+func (a *FlagSet) StringVar(p *string, name string, defaultValue string, usage *i18n.Text) *Flag {
 	return a.Add(Flag{
-		Name: name,
-		Usage: usage,
+		Name:         name,
+		Usage:        usage,
 		DefaultValue: defaultValue,
-		Required: false,
+		Required:     false,
 		AssignedMode: AssignedOnce,
-		Persistent: false,
-		p: p,
+		Persistent:   false,
+		p:            p,
 	})
 }
 
-func (a *FlagSet) PersistentStringVar(p *string, name string, defaultValue string, usage *i18n.Text) (*Flag) {
+func (a *FlagSet) PersistentStringVar(p *string, name string, defaultValue string, usage *i18n.Text) *Flag {
 	return a.Add(Flag{
-		Name: name,
-		Usage: usage,
+		Name:         name,
+		Usage:        usage,
 		DefaultValue: defaultValue,
-		Required: false,
+		Required:     false,
 		AssignedMode: AssignedOnce,
-		Persistent: true,
-		p: p,
+		Persistent:   true,
+		p:            p,
 	})
 }
 

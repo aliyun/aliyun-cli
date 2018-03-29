@@ -5,22 +5,23 @@ package openapi
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-cli/meta"
-	"text/tabwriter"
-	"os"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/aliyun/aliyun-cli/meta"
+	"io"
+	"os"
 	"strings"
+	"text/tabwriter"
 )
 
 // var compactList = []string {"Ecs", "Rds", "Vpc", "Slb", "Dm", "Ots", "Ess", "Ocs", "CloudApi"}
 
 type Helper struct {
 	language string
-	library *meta.Library
+	library  *meta.Library
 }
 
-func NewHelper(library *meta.Library) (*Helper) {
-	return &Helper {
+func NewHelper(library *meta.Library) *Helper {
+	return &Helper{
 		library: library,
 	}
 }
@@ -89,22 +90,28 @@ func (a *Helper) PrintApiUsage(productCode string, apiName string) error {
 	fmt.Printf("\nParameters:\n")
 
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
-	for _, param := range api.Parameters {
-		if param.Hidden {
-			continue
-		}
-
-		if len(param.SubParameters) > 0 {
-			for _, sp := range param.SubParameters {
-				fmt.Fprintf(w,"  --%s.n.%s\t%s\t%s\n", param.Name, sp.Name, sp.Type, required(sp.Required))
-			}
-		} else {
-			fmt.Fprintf(w,"  --%s\t%s\t%s\n", param.Name, param.Type, required(param.Required))
-		}
-	}
+	printParameters(w, api.Parameters, "")
 	w.Flush()
 
 	return nil
+}
+
+func printParameters(w io.Writer, params []meta.Parameter, prefix string) {
+	for _, param := range params {
+		if param.Hidden {
+			continue
+		}
+		if len(param.SubParameters) > 0 {
+			printParameters(w, param.SubParameters, param.Name+".n.")
+			//for _, sp := range param.SubParameters {
+			//	fmt.Fprintf(w,"  --%s.n.%s\t%s\t%s\n", param.Name, sp.Name, sp.Type, required(sp.Required))
+			//}
+		} else if param.Type == "RepeatList" {
+			fmt.Fprintf(w, "  --%s%s.n\t%s\t%s\n", prefix, param.Name, param.Type, required(param.Required))
+		} else {
+			fmt.Fprintf(w, "  --%s%s\t%s\t%s\n", prefix, param.Name, param.Type, required(param.Required))
+		}
+	}
 }
 
 func required(r bool) string {
@@ -114,6 +121,7 @@ func required(r bool) string {
 		return "Optional"
 	}
 }
+
 //
 //func (a *Helper) printCompactList() {
 //	for _, s := range compactList {
@@ -127,4 +135,3 @@ func (a *Helper) printProduct(product meta.Product) {
 	fmt.Printf("  %s(%s)\t%s\t%s\n", product.Code, product.Version, product.Name["zh"],
 		product.GetDocumentLink("zh"))
 }
-

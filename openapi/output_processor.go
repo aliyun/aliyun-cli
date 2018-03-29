@@ -1,22 +1,19 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/cli"
-	"fmt"
 	"encoding/json"
-	"text/tabwriter"
+	"fmt"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/jmespath/go-jmespath"
 	"os"
 	"strings"
-	"github.com/jmespath/go-jmespath"
+	"text/tabwriter"
 )
 
 var (
-
-	processors = []func (ctx *cli.Context, response string) (bool, error) {
+	processors = []func(ctx *cli.Context, response string) (bool, error){
 		outputTable,
 	}
-
-
 )
 
 func outputProcessor(ctx *cli.Context, response string) error {
@@ -34,8 +31,8 @@ func outputProcessor(ctx *cli.Context, response string) error {
 }
 
 func outputTable(ctx *cli.Context, response string) (bool, error) {
-	rowsFlag := ctx.Flags().Get(flagOutputTableRows)
-	colsFlag := ctx.Flags().Get(flagOutputTableCols)
+	rowsFlag := ctx.Flags().Get(OutputTableRowFlag.Name, OutputTableRowFlag.Shorthand)
+	colsFlag := ctx.Flags().Get(OutputTableColsFlag.Name, OutputTableColsFlag.Shorthand)
 
 	if (!rowsFlag.IsAssigned()) && (!colsFlag.IsAssigned()) {
 		return false, nil
@@ -93,7 +90,7 @@ func outputTable(ctx *cli.Context, response string) (bool, error) {
 	return true, nil
 }
 
-func toIntfArray(stringArray []string)[]interface{} {
+func toIntfArray(stringArray []string) []interface{} {
 	intfArray := []interface{}{}
 
 	for _, elem := range stringArray {

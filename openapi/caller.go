@@ -5,28 +5,30 @@ package openapi
 
 import (
 	"fmt"
-	"strings"
-	"github.com/aliyun/aliyun-cli/meta"
-	"github.com/aliyun/aliyun-cli/config"
-	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/config"
+	"github.com/aliyun/aliyun-cli/meta"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type Caller struct {
 	profile *config.Profile
 	library *meta.Library
-	helper *Helper
+	helper  *Helper
 
-	force bool
-	verbose bool		// TODO: next version
+	force   bool
+	verbose bool // TODO: next version
 }
 
-func NewCaller(profile *config.Profile, library *meta.Library) (*Caller) {
-	return &Caller {
+func NewCaller(profile *config.Profile, library *meta.Library) *Caller {
+	return &Caller{
 		profile: profile,
 		library: library,
-		helper: NewHelper(library),
+		helper:  NewHelper(library),
 	}
 }
 
@@ -40,7 +42,7 @@ func (c *Caller) Validate() error {
 func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
 	//
 	// get force call information
-	c.force = ctx.Flags().IsAssigned("force")
+	c.force = ctx.Flags().IsAssigned("force", "")
 
 	//
 	// get product info
@@ -104,18 +106,31 @@ func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, p
 	return nil
 }
 
-
-func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool) (*sdk.Client, *requests.CommonRequest, error){
+func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool) (*sdk.Client, *requests.CommonRequest, error) {
 	//
 	// call OpenApi
 	// return: if check failed return error, otherwise return nil
-	client, err := c.profile.GetClient()
+
+	clientConfig := sdk.NewConfig()
+	timeout, err := strconv.Atoi(RetryTimeoutFlag.GetValueOrDefault(ctx, "-1"))
+
+	if err == nil && timeout > 0 {
+		clientConfig.WithTimeout(time.Duration(timeout) * time.Second)
+	}
+
+	retryCount, err := strconv.Atoi(RetryCountFlag.GetValueOrDefault(ctx, "-1"))
+
+	if err == nil && retryCount > 0 {
+		clientConfig.WithMaxRetryTime(retryCount)
+	}
+
+	client, err := c.profile.GetClient(clientConfig)
 	if err != nil {
 		return nil, nil, fmt.Errorf("bad client %v", err)
 	}
 
 	request := requests.NewCommonRequest()
-	request.Headers["User-Agent"] = "Aliyun-CLI-V0.70"
+	request.Headers["User-Agent"] = "Aliyun-CLI-V0.80"
 	request.RegionId = c.profile.RegionId
 	request.Product = product.Code
 	request.Version = product.Version
@@ -152,7 +167,7 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 	if request.Domain == "" {
 		request.Domain, err = product.GetEndpoint(request.RegionId, client)
 		if err != nil {
-			return nil, nil, fmt.Errorf("unknown endpoint for %s/%s! Use flag --endpoint xxx.aliyuncs.com to assign endpoint" +
+			return nil, nil, fmt.Errorf("unknown endpoint for %s/%s! Use flag --endpoint xxx.aliyuncs.com to assign endpoint"+
 				"\n  error: %s", product.Code, request.RegionId, err.Error())
 		}
 	}
@@ -165,7 +180,7 @@ func (c *Caller) UpdateRequest(ctx *cli.Context, request *requests.CommonRequest
 		request.Scheme = "https"
 	}
 
-	if f := ctx.Flags().Get("header"); f != nil {
+	if f := ctx.Flags().Get("header", ""); f != nil {
 		for _, v := range f.GetValues() {
 			if k2, v2, ok := cli.SplitWith(v, "="); ok {
 				request.Headers[k2] = v2
@@ -175,7 +190,7 @@ func (c *Caller) UpdateRequest(ctx *cli.Context, request *requests.CommonRequest
 		}
 	}
 
-	if accept, ok :=  request.Headers["Accept"]; ok {
+	if accept, ok := request.Headers["Accept"]; ok {
 		accept = strings.ToLower(accept)
 		if strings.Contains(accept, "xml") {
 			request.AcceptFormat = "XML"

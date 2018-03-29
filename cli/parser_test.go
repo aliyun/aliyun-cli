@@ -9,12 +9,12 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func newTestFlagSet() (*FlagSet) {
+func newTestFlagSet() *FlagSet {
 	fs := NewFlagSet()
-	fs.Add(Flag{Name: "test", Assignable: true})
-	fs.Add(Flag{Name: "test2", Assignable: true})
-	fs.Add(Flag{Name: "prev", Assignable: false})
-	fs.Add(Flag{Name: "test-required", Required:true})
+	fs.Add(Flag{Name: "test", Assignable: AssignedOnce})
+	fs.Add(Flag{Name: "test2", Assignable: AssignedOnce})
+	fs.Add(Flag{Name: "prev", Assignable: AssignedNone})
+	fs.Add(Flag{Name: "test-required", Required: true})
 	return fs
 }
 
@@ -61,7 +61,6 @@ var _ = ginkgo.Describe("Parser", func() {
 		Expect(fs.Get("prev")).ShouldNot(Equal(nil))
 	})
 })
-
 
 //var _ = ginkgo.Describe("Parser", func() {
 //	ginkgo.It("can parse args", func() {

@@ -4,21 +4,23 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/i18n"
-	"github.com/aliyun/aliyun-cli/cli"
 	"fmt"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 const (
 	flagOutputTableRows = "output-table-rows"
 	flagOutputTableCols = "output-table-cols"
 
-	flagWaitForExpr = "wait-for-expr"
+	flagWaitForExpr   = "wait-for-expr"
 	flagWaitForTarget = "wait-for-target"
-	flagWaitTimeout = "wait-time-out"
-	flagWaitInterval = "wait-interval"
-)
+	flagWaitTimeout   = "wait-timeout"
+	flagWaitInterval  = "wait-interval"
 
+	flagRetryTimeout = "retry-timeout"
+	flagRetryCount   = "retry-count"
+)
 
 func AddFlags(fs *cli.FlagSet) {
 	fs.Add(SecureFlag)
@@ -38,6 +40,9 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(WaitForTargetFlag)
 	fs.Add(WaitTimeoutFlag)
 	fs.Add(WaitIntervalFlag)
+
+	fs.Add(RetryTimeoutFlag)
+	fs.Add(RetryCountFlag)
 }
 
 var (
@@ -78,7 +83,7 @@ var (
 			"使用 `--body $(cat foo.json)` 来指定在RESTful调用中的HTTP包体")}
 
 	BodyFileFlag = cli.Flag{Category: "caller",
-		Name: "body-file",AssignedMode: cli.AssignedOnce, Hidden: true,
+		Name: "body-file", AssignedMode: cli.AssignedOnce, Hidden: true,
 		Usage: i18n.T(
 			"assign http body in Restful call with local file",
 			"使用 `--body-file foo.json` 来指定输入包体")}
@@ -123,11 +128,23 @@ var (
 		Name: flagWaitTimeout, AssignedMode: cli.AssignedOnce, Hidden: true,
 		Usage: i18n.T(
 			fmt.Sprintf("use `--%s` to set timeout(seconds)", flagWaitTimeout),
-			fmt.Sprintf("使用 `--%s` 设定等待超时时间(秒)", flagWaitTimeout))}
+			fmt.Sprintf("使用 `--%s` 指定等待超时时间(秒)", flagWaitTimeout))}
 
 	WaitIntervalFlag = cli.Flag{Category: "caller",
 		Name: flagWaitInterval, AssignedMode: cli.AssignedOnce, Hidden: true,
 		Usage: i18n.T(
 			fmt.Sprintf("use `--%s` to set interval(seconds)", flagWaitInterval),
-			fmt.Sprintf("使用 `--%s` 去指定请求间隔时间(秒)", flagWaitInterval))}
+			fmt.Sprintf("使用 `--%s` 指定请求间隔时间(秒)", flagWaitInterval))}
+
+	RetryTimeoutFlag = cli.Flag{Category: "caller",
+		Name: flagRetryTimeout, AssignedMode: cli.AssignedOnce, Hidden: true,
+		Usage: i18n.T(
+			fmt.Sprintf("use `--%s` to set retry timeout(seconds)", flagRetryTimeout),
+			fmt.Sprintf("使用 `--%s` 指定请求超时时间(秒)", flagRetryTimeout))}
+
+	RetryCountFlag = cli.Flag{Category: "caller",
+		Name: flagRetryCount, AssignedMode: cli.AssignedOnce, Hidden: true,
+		Usage: i18n.T(
+			fmt.Sprintf("use `--%s` to set retry count", flagRetryCount),
+			fmt.Sprintf("使用 `--%s` 指定重试次数", flagRetryCount))}
 )

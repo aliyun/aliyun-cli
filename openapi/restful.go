@@ -4,12 +4,12 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/meta"
-	"strings"
-	"github.com/aliyun/aliyun-cli/cli"
 	"fmt"
-	"time"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/meta"
 	"io/ioutil"
+	"strings"
+	"time"
 )
 
 func (c *Caller) InvokeRestful(ctx *cli.Context, product *meta.Product, method string, path string) {

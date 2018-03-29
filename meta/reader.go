@@ -4,9 +4,9 @@
 package meta
 
 import (
+	"encoding/json"
 	"fmt"
 	"gopkg.in/yaml.v2"
-	"encoding/json"
 )
 
 type Reader interface {
@@ -36,5 +36,3 @@ func ReadJsonFrom(r Reader, path string, v interface{}) error {
 	}
 	return nil
 }
-
-

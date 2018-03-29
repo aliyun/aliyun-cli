@@ -11,7 +11,7 @@ import (
 const configureSetHelpEn = ``
 const configureSetHelpZh = ``
 
-func NewConfigureSetCommand() (*cli.Command) {
+func NewConfigureSetCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name: "set",
 		Short: i18n.T(
@@ -44,7 +44,6 @@ func NewConfigureSetCommand() (*cli.Command) {
 
 	//fs.Add(cli.Flag{Name: "output", AssignedMode: cli.AssignedOnce, Hidden: true,
 	//	Usage: i18n.T("* assign output format, only support json", "")})
-
 
 	//fs.Add(cli.Flag{Name: "site", AssignedMode: cli.AssignedOnce,
 	//	Usage: i18n.T("assign site, support china/international/japan", "")})
@@ -101,8 +100,8 @@ func doConfigureSet(c *cli.Context) {
 
 	profile.RegionId = fs.GetValueOrDefault(RegionFlag.Name, profile.RegionId)
 	profile.Language = fs.GetValueOrDefault(LanguageFlag.Name, profile.Language)
-	profile.OutputFormat = "json" 	// fs.GetValueOrDefault("output", profile.OutputFormat)
-	profile.Site = "china"			// fs.GetValueOrDefault("site", profile.Site)
+	profile.OutputFormat = "json" // fs.GetValueOrDefault("output", profile.OutputFormat)
+	profile.Site = "china"        // fs.GetValueOrDefault("site", profile.Site)
 
 	err = profile.Validate()
 	if err != nil {
@@ -117,4 +116,3 @@ func doConfigureSet(c *cli.Context) {
 		cli.Errorf("save configuration failed %s", err)
 	}
 }
-

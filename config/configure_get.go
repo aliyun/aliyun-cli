@@ -4,9 +4,9 @@
 package config
 
 import (
-	"github.com/aliyun/aliyun-cli/i18n"
-	"github.com/aliyun/aliyun-cli/cli"
 	"fmt"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 const configureGetHelpEn = `
@@ -14,9 +14,9 @@ const configureGetHelpEn = `
 const configureGetHelpZh = `
 `
 
-func NewConfigureGetCommand() (*cli.Command) {
+func NewConfigureGetCommand() *cli.Command {
 	cmd := &cli.Command{
-		Name:  "get",
+		Name: "get",
 		Short: i18n.T(
 			"print configuration values",
 			"打印配置信息"),

@@ -83,11 +83,9 @@ var updateCommand = UpdateCommand{
 	},
 }
 
-
 func (uc *UpdateCommand) GetCommand() *Command {
 	return &uc.command
 }
-
 
 // function for RewriteLoadConfiger interface
 func (uc *UpdateCommand) rewriteLoadConfig(configFile string) error {
