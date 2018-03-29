@@ -52,9 +52,17 @@ func NewCommandBridge(a Commander) *cli.Command {
 			// fmt.Printf("INIT ERROR: unknown oss options: %s\n", s)
 			break
 		}
-		if result.Flags().Get(opt.name, "") == nil {
+		name := opt.nameAlias[2:]
+
+		shorthand := ""
+		if len(opt.name) > 0 {
+			shorthand = opt.name[1:]
+		}
+
+		if result.Flags().Get(name, "") == nil {
 			result.Flags().Add(cli.Flag{
-				Name:  opt.nameAlias[2:],
+				Name:  name,
+				Shorthand: shorthand,
 				Usage: i18n.T(opt.helpEnglish, opt.helpChinese),
 				// Assignable: opt.optionType todo
 			})
