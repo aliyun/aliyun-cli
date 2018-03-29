@@ -30,7 +30,7 @@ clean:
 	rm -rf out/*
 
 build: metas
-	go build -o out/aliyun main/main.go
+	go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
 
 install: build
 	cp out/aliyun /usr/local/bin

@@ -61,9 +61,9 @@ func NewCommandBridge(a Commander) *cli.Command {
 
 		if result.Flags().Get(name, "") == nil {
 			result.Flags().Add(cli.Flag{
-				Name:  name,
+				Name:      name,
 				Shorthand: shorthand,
-				Usage: i18n.T(opt.helpEnglish, opt.helpChinese),
+				Usage:     i18n.T(opt.helpEnglish, opt.helpChinese),
 				// Assignable: opt.optionType todo
 			})
 		}

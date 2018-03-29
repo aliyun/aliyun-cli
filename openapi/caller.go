@@ -130,7 +130,7 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 	}
 
 	request := requests.NewCommonRequest()
-	request.Headers["User-Agent"] = "Aliyun-CLI-V0.80"
+	request.Headers["User-Agent"] = fmt.Sprintf("Aliyun-CLI-V%s", strings.Replace(cli.Version, " ", "-", -1))
 	request.RegionId = c.profile.RegionId
 	request.Product = product.Code
 	request.Version = product.Version

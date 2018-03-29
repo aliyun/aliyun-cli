@@ -32,7 +32,6 @@ $ aliyuncli configure
 
 	$ aliyuncli Ecs DescribeInstances --secure
 */
-const Version = "0.80 BETA"
 
 var library = meta.LoadLibrary(resource.NewReader())
 var helper = openapi.NewHelper(library)
@@ -50,7 +49,7 @@ func main() {
 
 	rootCmd := &cli.Command{
 		Name:              "aliyun",
-		Short:             i18n.T("Alibaba Cloud Command Line Interface Version "+Version, "阿里云CLI命令行工具 "+Version),
+		Short:             i18n.T("Alibaba Cloud Command Line Interface Version "+cli.Version, "阿里云CLI命令行工具 "+cli.Version),
 		Usage:             "aliyun <product> <operation> [--parameter1 value1 --parameter2 value2 ...]",
 		Sample:            "aliyun ecs DescribeRegions",
 		EnableUnknownFlag: true,
