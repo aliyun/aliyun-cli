@@ -4,13 +4,13 @@ import "fmt"
 
 type InvalidCommandError struct {
 	Name string
-	ctx *Context
+	ctx  *Context
 }
 
 func NewInvalidCommandError(name string, ctx *Context) error {
-	return &InvalidCommandError {
+	return &InvalidCommandError{
 		Name: name,
-		ctx: ctx,
+		ctx:  ctx,
 	}
 }
 
@@ -24,19 +24,27 @@ func (e *InvalidCommandError) GetSuggestions() []string {
 }
 
 type InvalidFlagError struct {
-	Name string
-	ctx *Context
+	Name      string
+	Shorthand string
+	ctx       *Context
 }
 
-func NewInvalidFlagError(name string, ctx *Context) error {
+func NewInvalidFlagError(name, shorthand string, ctx *Context) error {
 	return &InvalidFlagError{
-		Name: name,
-		ctx: ctx,
+		Name:      name,
+		Shorthand: shorthand,
+		ctx:       ctx,
 	}
 }
 
 func (e *InvalidFlagError) Error() string {
-	return fmt.Sprintf("invalid flag --%s", e.Name)
+	var param string
+	if e.Name != "" {
+		param = "--" + e.Name
+	} else {
+		param = "-" + e.Shorthand
+	}
+	return fmt.Sprintf("invalid flag %s", param)
 }
 
 func (e *InvalidFlagError) GetSuggestions() []string {

@@ -8,19 +8,19 @@ import (
 )
 
 type FlagDetector interface {
-	DetectFlag(name string, isShorthand bool) (*Flag, error)
+	DetectFlag(name, shorthand string) (*Flag, error)
 }
 
 type Parser struct {
-	current int
-	args    []string
+	current  int
+	args     []string
 	detector FlagDetector
 }
 
 func NewParser(args []string, detector FlagDetector) *Parser {
-	return &Parser {
-		args:    args,
-		current: 0,
+	return &Parser{
+		args:     args,
+		current:  0,
 		detector: detector,
 	}
 }
@@ -80,7 +80,11 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 
 	if prefixLen > 0 {
 		if name, value, ok := SplitWith(s[prefixLen:], "=:"); ok {
-			flag, err = p.detector.DetectFlag(name, prefixLen == 1)
+			if prefixLen == 1 {
+				flag, err = p.detector.DetectFlag("", name)
+			} else {
+				flag, err = p.detector.DetectFlag(name, "")
+			}
 			if err != nil {
 				return
 			}
@@ -90,7 +94,11 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 			}
 			return
 		} else {
-			flag, err = p.detector.DetectFlag(name, prefixLen == 1)
+			if prefixLen == 1 {
+				flag, err = p.detector.DetectFlag("", name)
+			} else {
+				flag, err = p.detector.DetectFlag(name, "")
+			}
 			if err != nil {
 				return
 			}

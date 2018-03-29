@@ -1,8 +1,8 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/meta"
 	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/meta"
 	"strings"
 )
 
@@ -18,5 +18,3 @@ func GetProductSuggestions(library *meta.Library, code string) []string {
 	}
 	return result
 }
-
-

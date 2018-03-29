@@ -4,11 +4,11 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/meta"
 	"fmt"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
+	"github.com/aliyun/aliyun-cli/meta"
 )
 
 func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName string) error {
@@ -39,14 +39,14 @@ func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName stri
 		return err
 	}
 
-	if flag := ctx.Flags().Get("all-pages"); flag != nil {
+	if flag := ctx.Flags().Get("all-pages", ""); flag != nil {
 		if flag.IsAssigned() {
 			pager := NewPager(flag.GetValue())
 			r, err := c.InvokeRpcWithPager(client, request, pager)
 			if err != nil {
 				ctx.Command().PrintFailed(err, "")
 			} else {
-				err = outputProcessor(ctx,r)
+				err = outputProcessor(ctx, r)
 				if err != nil {
 					ctx.Command().PrintFailed(err, "")
 				}
@@ -134,7 +134,7 @@ func (c *Caller) FillRpcParameters(ctx *cli.Context, request *requests.CommonReq
 			case "Action":
 				return request.ApiName != ""
 			default:
-				return ctx.UnknownFlags().IsAssigned(s)
+				return ctx.UnknownFlags().IsAssigned(s, "")
 			}
 		})
 		if err != nil {

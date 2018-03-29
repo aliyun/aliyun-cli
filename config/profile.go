@@ -4,18 +4,18 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials"
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/sts"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/signers"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/sts"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/jmespath/go-jmespath"
 	"net/http"
 	"strings"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
-	"encoding/json"
-	"github.com/jmespath/go-jmespath"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/signers"
 )
 
 type AuthenticateMode string
@@ -47,7 +47,7 @@ type Profile struct {
 	Site            string           `json:"Site"`
 }
 
-func NewProfile(name string) (Profile) {
+func NewProfile(name string) Profile {
 	return Profile{
 		Name:         name,
 		Mode:         AK,
@@ -159,14 +159,14 @@ func (cp *Profile) GetSessionCredential() (*signers.SessionCredential, error) {
 	switch cp.Mode {
 	case AK:
 		return &signers.SessionCredential{
-			AccessKeyId:cp.AccessKeyId,
-			AccessKeySecret:cp.AccessKeySecret,
+			AccessKeyId:     cp.AccessKeyId,
+			AccessKeySecret: cp.AccessKeySecret,
 		}, nil
 	case StsToken:
 		return &signers.SessionCredential{
-			AccessKeyId:cp.AccessKeyId,
-			AccessKeySecret:cp.AccessKeySecret,
-			StsToken:cp.StsToken,
+			AccessKeyId:     cp.AccessKeyId,
+			AccessKeySecret: cp.AccessKeySecret,
+			StsToken:        cp.StsToken,
 		}, nil
 	case RamRoleArn:
 		return cp.GetSessionCredentialByRoleArn()
@@ -220,12 +220,11 @@ func (cp *Profile) GetSessionCredentialByRoleArn() (*signers.SessionCredential, 
 	}
 
 	return &signers.SessionCredential{
-		AccessKeyId: response.Credentials.AccessKeyId,
+		AccessKeyId:     response.Credentials.AccessKeyId,
 		AccessKeySecret: response.Credentials.AccessKeySecret,
-		StsToken: response.Credentials.AccessKeySecret,
+		StsToken:        response.Credentials.AccessKeySecret,
 	}, nil
 }
-
 
 func (cp *Profile) GetClientByRoleArn(config *sdk.Config) (*sdk.Client, error) {
 	sc, err := cp.GetSessionCredentialByRoleArn()
@@ -287,12 +286,11 @@ func (cp *Profile) GetSessionCredentialByEcsRamRole() (*signers.SessionCredentia
 		return nil, fmt.Errorf("read SecurityToken from meta-data failed %s", err)
 	}
 	return &signers.SessionCredential{
-		AccessKeyId: accessKeyId.(string),
+		AccessKeyId:     accessKeyId.(string),
 		AccessKeySecret: accessKeySecret.(string),
-		StsToken: securityToken.(string),
+		StsToken:        securityToken.(string),
 	}, nil
 }
-
 
 func (cp *Profile) GetClientByEcsRamRole(config *sdk.Config) (*sdk.Client, error) {
 	sc, err := cp.GetSessionCredentialByEcsRamRole()

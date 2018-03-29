@@ -4,15 +4,15 @@
 package meta
 
 import (
-	"strings"
 	"sort"
+	"strings"
 )
 
 type Library struct {
 	Products []Product
-	Names []string
+	Names    []string
 
-	index map[string]Product
+	index  map[string]Product
 	reader Reader
 }
 
@@ -23,8 +23,8 @@ func LoadLibrary(reader Reader) *Library {
 		panic(err)
 	}
 
-	r := Library {
-		index: make(map[string]Product),
+	r := Library{
+		index:  make(map[string]Product),
 		reader: reader,
 	}
 	for _, product := range e.Products {
@@ -55,7 +55,7 @@ func (a *Library) GetApi(productCode string, version string, apiName string) (Ap
 		return result, false
 	}
 
-	err := ReadJsonFrom(a.reader, strings.ToLower(product.Code) + "/" + apiName + ".json", &result)
+	err := ReadJsonFrom(a.reader, strings.ToLower(product.Code)+"/"+apiName+".json", &result)
 	if err != nil {
 		return result, false
 	}

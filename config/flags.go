@@ -26,7 +26,7 @@ func AddFlags(fs *cli.FlagSet) {
 
 var ProfileFlag = cli.Flag{Category: "config",
 	Name: "profile", DefaultValue: "default", Persistent: true,
-	Shorthand:"p",
+	Shorthand: "p",
 	Usage: i18n.T(
 		"use `--profile <profileName>` to select profile",
 		"使用 `--profile <profileName>` 指定操作的配置集")}

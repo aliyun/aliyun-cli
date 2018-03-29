@@ -1,38 +1,38 @@
 package openapi
 
 import (
-	"github.com/jmespath/go-jmespath"
 	"encoding/json"
 	"fmt"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"strconv"
+	"github.com/jmespath/go-jmespath"
 	"math"
+	"strconv"
 	"strings"
 )
 
 type Pager struct {
 	PageNumberFlag string
-	PageSizeFlag string
+	PageSizeFlag   string
 
 	PageNumberExpr string
-	PageSizeExpr string
+	PageSizeExpr   string
 	TotalCountExpr string
 
 	PageSize int
 
-	totalCount int
+	totalCount        int
 	currentPageNumber int
-	collectionPath string
+	collectionPath    string
 
 	results []interface{}
 }
 
-func NewPager(path string) (*Pager) {
-	pager := &Pager {
+func NewPager(path string) *Pager {
+	pager := &Pager{
 		PageNumberFlag: "PageNumber",
-		PageSizeFlag: "PageSize",
+		PageSizeFlag:   "PageSize",
 		PageNumberExpr: "PageNumber",
-		PageSizeExpr: "PageSize",
+		PageSizeExpr:   "PageSize",
 		TotalCountExpr: "TotalCount",
 	}
 
@@ -85,7 +85,7 @@ func (a *Pager) FeedResponse(body []byte) error {
 
 	if pageNumber, err := jmespath.Search(a.PageNumberExpr, j); err == nil {
 		a.currentPageNumber = int(pageNumber.(float64))
-	 } else {
+	} else {
 		return fmt.Errorf("jmespath: '%s' failed %s", a.PageNumberExpr, err)
 	}
 
@@ -144,4 +144,3 @@ func (a *Pager) detectArrayPath(d interface{}) string {
 	}
 	return ""
 }
-

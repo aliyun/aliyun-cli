@@ -1,10 +1,10 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/meta"
-	"github.com/aliyun/aliyun-cli/cli"
-	"strings"
 	"fmt"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/meta"
+	"strings"
 )
 
 type InvalidProductError struct {
@@ -25,7 +25,7 @@ func (e *InvalidProductError) GetSuggestions() []string {
 }
 
 type InvalidApiError struct {
-	Name string
+	Name    string
 	product *meta.Product
 }
 
@@ -42,10 +42,10 @@ func (e *InvalidApiError) GetSuggestions() []string {
 }
 
 type InvalidParameterError struct {
-	Name string
+	Name      string
 	Shorthand string
-	api *meta.Api
-	flags *cli.FlagSet
+	api       *meta.Api
+	flags     *cli.FlagSet
 }
 
 func (e *InvalidParameterError) Error() string {

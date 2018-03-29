@@ -11,24 +11,24 @@ import (
 //
 // default help flag
 var helpFlag = Flag{
-	Name: "help",
-	Usage: i18n.T("print help", "打印帮助信息"),
+	Name:         "help",
+	Usage:        i18n.T("print help", "打印帮助信息"),
 	AssignedMode: AssignedNone,
 }
 
 //
 // CLI Command Context
 type Context struct {
-	help bool
-	flags *FlagSet
+	help         bool
+	flags        *FlagSet
 	unknownFlags *FlagSet
-	command *Command
-	completion *Completion
+	command      *Command
+	completion   *Completion
 }
 
-func NewCommandContext() (*Context){
+func NewCommandContext() *Context {
 	return &Context{
-		flags: NewFlagSet(),
+		flags:        NewFlagSet(),
 		unknownFlags: nil,
 	}
 }
@@ -80,25 +80,14 @@ func (ctx *Context) CheckFlags() error {
 	return nil
 }
 
-func (ctx *Context) DetectFlag(name string, isShorthand bool) (*Flag, error) {
-
-	var flag *Flag
-
-	if isShorthand {
-		flag = ctx.flags.GetByShorthand(name)
-	} else {
-		flag = ctx.flags.Get(name)
-	}
+func (ctx *Context) DetectFlag(name, shorthand string) (*Flag, error) {
+	flag := ctx.flags.Get(name, shorthand)
 
 	if flag != nil {
 		return flag, nil
 	} else if ctx.unknownFlags != nil {
-		if isShorthand {
-			return ctx.unknownFlags.AddByShorthand(name)
-		} else {
-			return ctx.unknownFlags.AddByName(name)
-		}
+		return ctx.unknownFlags.AddByName(name, shorthand)
 	} else {
-		return nil, NewInvalidFlagError(name, ctx)
+		return nil, NewInvalidFlagError(name, shorthand, ctx)
 	}
 }

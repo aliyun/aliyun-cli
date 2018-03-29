@@ -4,9 +4,9 @@
 package cli
 
 import (
-"fmt"
-"os"
-"testing"
+	"fmt"
+	"os"
+	"testing"
 )
 
 var testCases = []struct {

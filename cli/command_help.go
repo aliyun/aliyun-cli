@@ -2,11 +2,11 @@ package cli
 
 import (
 	"fmt"
-	"text/tabwriter"
 	"os"
+	"text/tabwriter"
 )
 
-func (c *Command) PrintHead(){
+func (c *Command) PrintHead() {
 	fmt.Printf("%s\n", c.Short.Text())
 	//if c.Long != nil {
 	//	fmt.Printf("\n%s\n", c.Long.Text())
@@ -61,7 +61,7 @@ func (c *Command) PrintFlags(ctx *Context) {
 		if flag.Shorthand != "" {
 			format = fmt.Sprintf("-%s, %s", flag.Shorthand, format)
 		}
-		fmt.Fprintf(w, "  " + format, flag.Name, flag.Usage.Text())
+		fmt.Fprintf(w, "  "+format, flag.Name, flag.Usage.Text())
 	}
 	w.Flush()
 }

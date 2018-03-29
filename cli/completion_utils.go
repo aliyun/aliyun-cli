@@ -2,12 +2,12 @@ package cli
 
 import (
 	"bufio"
-	"io"
-	"os"
 	"fmt"
+	"io"
 	"io/ioutil"
-	"path/filepath"
+	"os"
 	"os/user"
+	"path/filepath"
 )
 
 func lineInFile(name string, lookFor string) bool {
