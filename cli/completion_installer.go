@@ -20,7 +20,7 @@ func NewAutoCompleteCommand() *Command {
 			//	// i = append(i, zshInstaller{f})
 			//	fmt.Printf("zshInstaller: %s\n", f)
 			//}
-			if ctx.flags.IsAssigned("uninstall") {
+			if ctx.flags.IsAssigned("uninstall", "") {
 				uninstallCompletion("aliyun")
 			} else {
 				installCompletion("aliyun")
@@ -29,13 +29,13 @@ func NewAutoCompleteCommand() *Command {
 		},
 	}
 	cmd.Flags().Add(Flag{
-		Name: "uninstall",
+		Name:  "uninstall",
 		Usage: i18n.T("uninstall auto completion", "卸载自动完成"),
 	})
 	return cmd
 }
 
-func installCompletion(cmd string)  {
+func installCompletion(cmd string) {
 	bin, err := getBinaryPath()
 	if err != nil {
 		Errorf("can't get binary path %s", err)
@@ -123,7 +123,6 @@ func (z zshInstaller) Uninstall(cmd, bin string) error {
 func (zshInstaller) cmd(cmd, bin string) string {
 	return fmt.Sprintf("complete -o nospace -F %s %s", bin, cmd)
 }
-
 
 // (un)install in bashInstaller
 // basically adds/remove from .bashrc:

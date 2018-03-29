@@ -5,23 +5,22 @@ package cli
 
 import (
 	"strings"
-	"fmt"
 )
 
 type FlagDetector interface {
-	DetectFlag(name string) (*Flag, error)
+	DetectFlag(name, shorthand string) (*Flag, error)
 }
 
 type Parser struct {
-	current int
-	args    []string
-	detector func(string) (*Flag, error)
+	current  int
+	args     []string
+	detector FlagDetector
 }
 
-func NewParser(args []string, detector func(string) (*Flag, error)) *Parser {
-	return &Parser {
-		args:    args,
-		current: 0,
+func NewParser(args []string, detector FlagDetector) *Parser {
+	return &Parser{
+		args:     args,
+		current:  0,
 		detector: detector,
 	}
 }
@@ -70,9 +69,22 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 	p.current++
 	more = true
 
+	var prefixLen int
 	if strings.HasPrefix(s, "--") {
-		if name, value, ok := SplitWith(s[2:], "=:"); ok {
-			flag, err = p.detector(name)
+		prefixLen = 2
+	} else if strings.HasPrefix(s, "-") {
+		prefixLen = 1
+	} else {
+		prefixLen = 0
+	}
+
+	if prefixLen > 0 {
+		if name, value, ok := SplitWith(s[prefixLen:], "=:"); ok {
+			if prefixLen == 1 {
+				flag, err = p.detector.DetectFlag("", name)
+			} else {
+				flag, err = p.detector.DetectFlag(name, "")
+			}
 			if err != nil {
 				return
 			}
@@ -82,7 +94,11 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 			}
 			return
 		} else {
-			flag, err = p.detector(name)
+			if prefixLen == 1 {
+				flag, err = p.detector.DetectFlag("", name)
+			} else {
+				flag, err = p.detector.DetectFlag(name, "")
+			}
 			if err != nil {
 				return
 			}
@@ -106,9 +122,6 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 			}
 			return
 		}
-	} else if strings.HasPrefix(s,"-") {
-		err = fmt.Errorf("not support single dash flag YET, next-version")
-		return
 	} else {
 		arg = s
 		return

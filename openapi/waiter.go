@@ -1,17 +1,17 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/cli"
-	"time"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"fmt"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
-	"github.com/jmespath/go-jmespath"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/jmespath/go-jmespath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Waiter struct {
@@ -21,15 +21,13 @@ type Waiter struct {
 	targets  []string
 	timeout  time.Duration
 	interval time.Duration
-
 }
 
-
-func NewWaiterWithCTX(ctx *cli.Context, client *sdk.Client, request *requests.CommonRequest) *Waiter{
-	waitForExprFlag := ctx.Flags().Get(flagWaitForExpr)
-	waitForTargetFlag := ctx.Flags().Get(flagWaitForTarget)
-	waitTimeoutFlag := ctx.Flags().Get(flagWaitTimeout)
-	waitIntervalFlag := ctx.Flags().Get(flagWaitInterval)
+func NewWaiterWithCTX(ctx *cli.Context, client *sdk.Client, request *requests.CommonRequest) *Waiter {
+	waitForExprFlag := ctx.Flags().Get(WaitForExprFlag.Name, WaitForExprFlag.Shorthand)
+	waitForTargetFlag := ctx.Flags().Get(WaitForTargetFlag.Name, WaitForTargetFlag.Shorthand)
+	waitTimeoutFlag := ctx.Flags().Get(WaitTimeoutFlag.Name, WaitTimeoutFlag.Shorthand)
+	waitIntervalFlag := ctx.Flags().Get(WaitIntervalFlag.Name, WaitIntervalFlag.Shorthand)
 
 	timeout, err := strconv.Atoi(waitTimeoutFlag.GetValueOrDefault(ctx, "0"))
 	if err != nil {
@@ -52,22 +50,19 @@ func NewWaiterWithCTX(ctx *cli.Context, client *sdk.Client, request *requests.Co
 	}
 
 	return &Waiter{
-		client: client,
-		request: request,
+		client:   client,
+		request:  request,
 		waitExpr: waitForExprFlag.GetValueOrDefault(ctx, ""),
-		targets: strings.Split(waitForTargetFlag.GetValueOrDefault(ctx, ""), ","),
-		timeout:time.Duration(timeout) * time.Second,
-		interval:time.Duration(interval) * time.Second,
+		targets:  strings.Split(waitForTargetFlag.GetValueOrDefault(ctx, ""), ","),
+		timeout:  time.Duration(timeout) * time.Second,
+		interval: time.Duration(interval) * time.Second,
 	}
 }
 
-
-
-func (w *Waiter)Wait() (response *responses.CommonResponse, err error){
+func (w *Waiter) Wait() (response *responses.CommonResponse, err error) {
 	if w.timeout == 0 {
 		return w.client.ProcessCommonRequest(w.request)
 	}
-
 
 	doRequestAndCheck := func() (bool, *responses.CommonResponse, error) {
 		var v interface{}
@@ -121,9 +116,9 @@ func (w *Waiter)Wait() (response *responses.CommonResponse, err error){
 		}
 
 		select {
-		case <- time.After(w.interval):
+		case <-time.After(w.interval):
 			//fmt.Println("interval done")
-		case <- t.C:
+		case <-t.C:
 			return req, errors.New("Timeout")
 		}
 

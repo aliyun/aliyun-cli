@@ -4,17 +4,17 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"strconv"
-	"fmt"
 	"strings"
 )
 
 type Completion struct {
 	Current string
-	Args []string
-	line string
-	point int
+	Args    []string
+	line    string
+	point   int
 }
 
 func ParseCompletion() *Completion {
@@ -39,8 +39,8 @@ func ParseCompletion() *Completion {
 		}
 	} else {
 		if len(args) > 1 {
-			current = args[len(args) - 1]
-			args = args[1:len(args)-1]
+			current = args[len(args)-1]
+			args = args[1 : len(args)-1]
 		} else {
 			panic(fmt.Errorf("unexcepted args %v for line '%s'", args, line))
 		}
@@ -48,9 +48,9 @@ func ParseCompletion() *Completion {
 
 	return &Completion{
 		Current: current,
-		Args: args,
-		line: line,
-		point: p,
+		Args:    args,
+		line:    line,
+		point:   p,
 	}
 }
 

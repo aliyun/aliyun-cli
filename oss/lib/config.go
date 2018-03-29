@@ -286,7 +286,7 @@ type ConfigCommand struct {
 	command Command
 }
 
-func (cc *ConfigCommand) GetCommand() (*Command) {
+func (cc *ConfigCommand) GetCommand() *Command {
 	return &cc.command
 }
 

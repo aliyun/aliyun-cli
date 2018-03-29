@@ -1,21 +1,21 @@
 package lib
 
 import (
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/i18n"
-	"github.com/aliyun/aliyun-cli/config"
 	"fmt"
-	"strings"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/config"
+	"github.com/aliyun/aliyun-cli/i18n"
 	"os"
+	"strings"
 	"time"
 )
 
 func NewOssCommand() *cli.Command {
-	result :=  &cli.Command{
-		Name: "oss",
-		Usage: "aliyun oss [command] [args...] [options...]",
+	result := &cli.Command{
+		Name:   "oss",
+		Usage:  "aliyun oss [command] [args...] [options...]",
 		Hidden: false,
-		Short: i18n.T("Object Storage Service", "阿里云OSS对象存储"),
+		Short:  i18n.T("Object Storage Service", "阿里云OSS对象存储"),
 	}
 
 	result.AddSubCommand(NewCommandBridge(&makeBucketCommand))
@@ -37,10 +37,10 @@ func NewOssCommand() *cli.Command {
 func NewCommandBridge(a Commander) *cli.Command {
 	cmd := a.GetCommand()
 	result := &cli.Command{
-		Name: cmd.name,
+		Name:  cmd.name,
 		Usage: cmd.specEnglish.syntaxText,
 		Short: i18n.T(cmd.specEnglish.synopsisText, cmd.specChinese.synopsisText),
-		Long: i18n.T(cmd.specEnglish.detailHelpText, cmd.specChinese.detailHelpText),
+		Long:  i18n.T(cmd.specEnglish.detailHelpText, cmd.specChinese.detailHelpText),
 		Run: func(ctx *cli.Context, args []string) error {
 			return ParseAndRunCommandFromCli(ctx, args)
 		},
@@ -52,10 +52,18 @@ func NewCommandBridge(a Commander) *cli.Command {
 			// fmt.Printf("INIT ERROR: unknown oss options: %s\n", s)
 			break
 		}
-		if result.Flags().Get(opt.name) == nil {
+		name := opt.nameAlias[2:]
+
+		shorthand := ""
+		if len(opt.name) > 0 {
+			shorthand = opt.name[1:]
+		}
+
+		if result.Flags().Get(name, "") == nil {
 			result.Flags().Add(cli.Flag{
-				Name:  opt.nameAlias[2:],
-				Usage: i18n.T(opt.helpEnglish, opt.helpChinese),
+				Name:      name,
+				Shorthand: shorthand,
+				Usage:     i18n.T(opt.helpEnglish, opt.helpChinese),
 				// Assignable: opt.optionType todo
 			})
 		}
@@ -91,7 +99,7 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	// os.Args = []string {"aliyun", "oss", "ls"}
 
 	clearEnv()
-	a2 := []string {"aliyun", "oss"}
+	a2 := []string{"aliyun", "oss"}
 	a2 = append(a2, ctx.Command().Name)
 	for _, a := range args {
 		a2 = append(a2, a)
@@ -100,11 +108,11 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	config.AddFlags(configFlagSet)
 
 	for _, f := range ctx.Flags().Flags() {
-		if configFlagSet.Get(f.Name) != nil {
-			continue;
+		if configFlagSet.Get(f.Name, f.Shorthand) != nil {
+			continue
 		}
 		if f.IsAssigned() {
-			a2 = append(a2, "--" + f.Name)
+			a2 = append(a2, "--"+f.Name)
 			if f.GetValue() != "" {
 				a2 = append(a2, f.GetValue())
 			}
@@ -113,7 +121,7 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 
 	for k, v := range configs {
 		if v != "" {
-			a2 = append(a2, "--" + k)
+			a2 = append(a2, "--"+k)
 			a2 = append(a2, v)
 		}
 	}

@@ -1,10 +1,10 @@
 package openapi
 
 import (
-	"testing"
 	"encoding/json"
-	"github.com/jmespath/go-jmespath"
 	"fmt"
+	"github.com/jmespath/go-jmespath"
+	"testing"
 )
 
 func TestPager(t *testing.T) {

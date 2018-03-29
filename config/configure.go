@@ -4,14 +4,14 @@
 package config
 
 import (
-	"github.com/aliyun/aliyun-cli/cli"
 	"fmt"
-	"strings"
-	"io/ioutil"
+	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"io/ioutil"
+	"strings"
 )
 
-func NewConfigureCommand() (*cli.Command) {
+func NewConfigureCommand() *cli.Command {
 	c := &cli.Command{
 		Name: "configure",
 		Short: i18n.T(
@@ -106,7 +106,7 @@ func doConfigure(profileName string, mode string) error {
 	return nil
 }
 
-func configureAK(cp *Profile) error  {
+func configureAK(cp *Profile) error {
 	fmt.Printf("Access Key Id [%s]: ", MosaicString(cp.AccessKeyId, 3))
 	cp.AccessKeyId = ReadInput(cp.AccessKeyId)
 	fmt.Printf("Access Key Secret [%s]: ", MosaicString(cp.AccessKeySecret, 3))
@@ -114,7 +114,7 @@ func configureAK(cp *Profile) error  {
 	return nil
 }
 
-func configureStsToken(cp *Profile) error  {
+func configureStsToken(cp *Profile) error {
 	err := configureAK(cp)
 	if err != nil {
 		return err
@@ -124,7 +124,7 @@ func configureStsToken(cp *Profile) error  {
 	return nil
 }
 
-func configureRamRoleArn(cp *Profile) error  {
+func configureRamRoleArn(cp *Profile) error {
 	err := configureAK(cp)
 	if err != nil {
 		return err
@@ -157,7 +157,7 @@ func configureRsaKeyPair(cp *Profile) error {
 	return nil
 }
 
-func ReadInput(defaultValue string) (string) {
+func ReadInput(defaultValue string) string {
 	var s string
 	fmt.Scanf("%s\n", &s)
 	if s == "" {

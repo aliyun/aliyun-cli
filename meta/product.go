@@ -10,32 +10,32 @@ import (
 )
 
 type ProductSet struct {
-	Products []Product 					`json:"products"`
+	Products []Product `json:"products"`
 }
 
 type SiteType string
 
 const (
-	ChinaSite = SiteType("china")
+	ChinaSite         = SiteType("china")
 	InternationalSite = SiteType("international")
-	JapanSite = SiteType("japan")
+	JapanSite         = SiteType("japan")
 )
 
 type Product struct {
-	Code                string            `json:"code"`
-	Version             string            `json:"version"`
-	Catalog1			map[string]string `json:"catalog1"`
-	Catalog2			map[string]string `json:"catalog2"`
-	Name                map[string]string `json:"name"`
+	Code     string            `json:"code"`
+	Version  string            `json:"version"`
+	Catalog1 map[string]string `json:"catalog1"`
+	Catalog2 map[string]string `json:"catalog2"`
+	Name     map[string]string `json:"name"`
 
-	LocationServiceCode string            `json:"location_service_code"`
-	RegionalEndpoints	map[string]string `json:"regional_endpoints"`
-	GlobalEndpoint	    string			  `json:"global_endpoint"`
-	RegionalEndpointPattern string		  `json:"regional_endpoint_patterns"`
+	LocationServiceCode     string            `json:"location_service_code"`
+	RegionalEndpoints       map[string]string `json:"regional_endpoints"`
+	GlobalEndpoint          string            `json:"global_endpoint"`
+	RegionalEndpointPattern string            `json:"regional_endpoint_patterns"`
 
-	ApiStyle            string            `json:"api_style"`
-	ApiNames            []string          `json:"apis"`
-	apis                map[string]Api    `yaml:"-"`
+	ApiStyle string         `json:"api_style"`
+	ApiNames []string       `json:"apis"`
+	apis     map[string]Api `yaml:"-"`
 }
 
 func (a *Product) GetLowerCode() string {
@@ -46,11 +46,11 @@ func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error)
 	var le error
 	if a.LocationServiceCode != "" {
 		rp := endpoints.ResolveParam{
-			Product:          a.Code,
-			RegionId:         region,
-			LocationProduct:  a.LocationServiceCode,
+			Product:              a.Code,
+			RegionId:             region,
+			LocationProduct:      a.LocationServiceCode,
 			LocationEndpointType: "openAPI",
-			CommonApi:        client.ProcessCommonRequest,
+			CommonApi:            client.ProcessCommonRequest,
 		}
 		ep, err := endpoints.Resolve(&rp)
 		if err == nil {
@@ -113,5 +113,3 @@ func (a *Product) GetDocumentLink(lang string) string {
 	//}
 	return "https://help.aliyun.com/api/" + strings.ToLower(a.Code)
 }
-
-
