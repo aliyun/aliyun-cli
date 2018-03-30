@@ -27,11 +27,11 @@ func (c *Caller) InvokeRestful(ctx *cli.Context, product *meta.Product, method s
 		request.Headers["x-acs-region-id"] = request.RegionId
 	}
 
-	if v, ok := ctx.Flags().GetValue("body"); ok {
+	if v, ok := BodyFlag.GetValue(); ok {
 		request.SetContent([]byte(v))
 	}
 
-	if v, ok := ctx.Flags().GetValue("body-file"); ok {
+	if v, ok := BodyFileFlag.GetValue(); ok {
 		buf, err := ioutil.ReadFile(v)
 		if err != nil {
 			fmt.Errorf("failed read file: %s %v", v, err)
@@ -39,7 +39,7 @@ func (c *Caller) InvokeRestful(ctx *cli.Context, product *meta.Product, method s
 		request.SetContent(buf)
 	}
 
-	if v, ok := ctx.Flags().GetValue("accept"); ok {
+	if v, ok := AcceptFlag.GetValue(); ok {
 		request.AcceptFormat = v
 	}
 
@@ -68,11 +68,11 @@ func (c *Caller) InvokeRestful(ctx *cli.Context, product *meta.Product, method s
 		}
 	}
 
-	err = outputProcessor(ctx, resp.GetHttpContentString())
-	if err != nil {
-		ctx.Command().PrintFailed(err, "")
-	}
-	//fmt.Println(resp.GetHttpContentString())
+	//err = outputProcessor(ctx, resp.GetHttpContentString())
+	//if err != nil {
+	//	ctx.Command().PrintFailed(err, "")
+	//}
+	fmt.Println(resp.GetHttpContentString())
 }
 
 func CheckRestfulMethod(ctx *cli.Context, methodOrPath string, pathPattern string) (ok bool, method string, path string, err error) {
@@ -84,14 +84,14 @@ func CheckRestfulMethod(ctx *cli.Context, methodOrPath string, pathPattern strin
 			err = fmt.Errorf("bad restful path %s", pathPattern)
 			return
 		}
-	} else if method, ok = ctx.Flags().GetValue("roa"); ok {
-		if strings.HasPrefix(methodOrPath, "/") && pathPattern == "" {
-			path = methodOrPath
-			return
-		} else {
-			err = fmt.Errorf("bad restful path %s", methodOrPath)
-			return
-		}
+	//} else if method, ok = ctx.Flags().GetValue("roa"); ok {
+	//	if strings.HasPrefix(methodOrPath, "/") && pathPattern == "" {
+	//		path = methodOrPath
+	//		return
+	//	} else {
+	//		err = fmt.Errorf("bad restful path %s", methodOrPath)
+	//		return
+	//	}
 	} else {
 		ok = false
 		return

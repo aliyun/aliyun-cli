@@ -5,6 +5,11 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 )
 
+var uninstallFlag = &Flag{
+	Name:  "uninstall",
+	Usage: i18n.T("uninstall auto completion", "卸载自动完成"),
+}
+
 func NewAutoCompleteCommand() *Command {
 	cmd := &Command{
 		Name: "auto-completion",
@@ -20,7 +25,7 @@ func NewAutoCompleteCommand() *Command {
 			//	// i = append(i, zshInstaller{f})
 			//	fmt.Printf("zshInstaller: %s\n", f)
 			//}
-			if ctx.flags.IsAssigned("uninstall", "") {
+			if uninstallFlag.IsAssigned() {
 				uninstallCompletion("aliyun")
 			} else {
 				installCompletion("aliyun")
@@ -28,10 +33,7 @@ func NewAutoCompleteCommand() *Command {
 			return nil
 		},
 	}
-	cmd.Flags().Add(Flag{
-		Name:  "uninstall",
-		Usage: i18n.T("uninstall auto completion", "卸载自动完成"),
-	})
+	cmd.Flags().Add(uninstallFlag)
 	return cmd
 }
 

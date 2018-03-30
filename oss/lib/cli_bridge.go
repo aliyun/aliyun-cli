@@ -54,13 +54,13 @@ func NewCommandBridge(a Commander) *cli.Command {
 		}
 		name := opt.nameAlias[2:]
 
-		shorthand := ""
+		shorthand := rune(0)
 		if len(opt.name) > 0 {
-			shorthand = opt.name[1:]
+			shorthand = rune(opt.name[1])
 		}
 
-		if result.Flags().Get(name, "") == nil {
-			result.Flags().Add(cli.Flag{
+		if result.Flags().Get(name) == nil {
+			result.Flags().Add(&cli.Flag{
 				Name:      name,
 				Shorthand: shorthand,
 				Usage:     i18n.T(opt.helpEnglish, opt.helpChinese),
@@ -86,7 +86,12 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	configs["access-key-id"] = sc.AccessKeyId
 	configs["access-key-secret"] = sc.AccessKeySecret
 	configs["sts-token"] = sc.StsToken
-	configs["endpoint"] = "oss-" + profile.RegionId + ".aliyuncs.com"
+
+	if ep, ok := ctx.Flags().GetValue("endpoint"); !ok {
+		configs["endpoint"] = "oss-" + profile.RegionId + ".aliyuncs.com"
+	} else {
+		configs["endpoint"] = ep
+	}
 
 	//if i18n.GetLanguage() == "zh" {
 	//	configs[OptionLanguage] = "CH"
@@ -108,13 +113,13 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	config.AddFlags(configFlagSet)
 
 	for _, f := range ctx.Flags().Flags() {
-		if configFlagSet.Get(f.Name, f.Shorthand) != nil {
+		if configFlagSet.Get(f.Name) != nil {
 			continue
 		}
 		if f.IsAssigned() {
-			a2 = append(a2, "--"+f.Name)
-			if f.GetValue() != "" {
-				a2 = append(a2, f.GetValue())
+			a2 = append(a2, "--" + f.Name)
+			if s2, ok := f.GetValue(); ok && s2 != ""{
+				a2 = append(a2, s2)
 			}
 		}
 	}

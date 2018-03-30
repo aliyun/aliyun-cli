@@ -6,7 +6,6 @@ package cli
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/i18n"
-	"strings"
 )
 
 //
@@ -24,7 +23,7 @@ type Flag struct {
 	Name string
 
 	// Flag is the single characters
-	Shorthand string
+	Shorthand rune
 
 	// Message print with --help command
 	Usage *i18n.Text
@@ -36,11 +35,14 @@ type Flag struct {
 	// If Required is true, the flag must be assigned with `--flag value` or DefaultValue is not empty
 	Required bool
 
+	// Enable flag has alias names
+	Aliases []string
+
 	// Ref to AssignedMode
 	// `AssignedNone`: 		flag only appear with `--flag1` `--flag2`
 	// `AssignedDefault`: 	flag can appear with `--flag1` or `--flag1 value1`
 	// `AssignedOnce`: 		flag only appear with `--flag1 value1`
-	// `AssignedRepeatable`: flag can appear multi times sample: `--flag1 v1 --flag1 v2`
+	// `AssignedRepeatable`: flag can appear multi times sample: `--flag1 v1 v2 v3`
 	AssignedMode AssignedMode
 
 	// If Persistent is true, the flag can apply to child commands
@@ -55,6 +57,7 @@ type Flag struct {
 	assigned bool
 	value    string
 	values   []string
+	form 	 string
 	p        *string
 }
 
@@ -67,13 +70,13 @@ func (f *Flag) IsAssigned() bool {
 //
 // return flag value, if not assigned return f.DefaultValue
 //   for `AssignedMode == AssignedRepeatable`. Use GetValues() to get all values
-func (f *Flag) GetValue() string {
+func (f *Flag) GetValue() (string, bool) {
 	if f.assigned {
-		return f.value
+		return f.value, true
 	} else if f.Required {
-		return f.DefaultValue
+		return f.DefaultValue, false
 	} else {
-		return ""
+		return "", false
 	}
 }
 
@@ -83,15 +86,74 @@ func (f *Flag) GetValues() []string {
 	return f.values
 }
 
-func (f *Flag) GetValueOrDefault(ctx *Context, def string) string {
-	if f == nil {
-		return def
-	}
-	v, ok := ctx.Flags().GetValue(f.Name)
-	if ok {
-		return v
+//
+// `AssignedMode == AssignedRepeatable` flag, return values, in Map
+//func (f *Flag) GetValuesByMap() map[string]string {
+//	r := make(map[string]string)
+//	for _, v = range f.values {
+//		if k2, v2, ok := SplitWith(v, "="); ok {
+//			request.Headers[k2] = v2
+//		} else {
+//			return fmt.Errorf("invaild flag --header `%s` use `--header HeaderName=Value`", v)
+//		}
+//	}
+//	return
+//}
+
+//
+// return def if Flag is not assigned
+func (f *Flag) GetValueOrDefault(def string) string {
+	if f.assigned {
+		return f.value
 	} else {
 		return def
+	}
+}
+
+//
+// get all appears forms, maybe {"--Name", "--Alias1", "-Shorthand"}
+func (f *Flag) GetForms() []string {
+	r := make([]string, 0)
+	if f.Name != "" {
+		r = append(r, "--" + f.Name)
+	}
+	for _, s := range f.Aliases {
+		r = append(r, "--" + s)
+	}
+	if f.Shorthand != 0 {
+		r = append(r, "-" + string(f.Shorthand))
+	}
+	return r
+}
+
+
+//
+// if this flag is appeared set assigned = true
+func (f *Flag) setIsAssigned() error {
+	if !f.assigned {
+		f.assigned = true
+	} else {
+		if f.AssignedMode != AssignedRepeatable {
+			return fmt.Errorf("%s duplicated", f.form)
+		}
+	}
+	return nil
+}
+
+//
+// return true, if this flag need assigned with values
+func (f *Flag) needValue() bool {
+	switch f.AssignedMode {
+	case AssignedNone:
+		return false
+	case AssignedDefault:
+		return f.value == ""
+	case AssignedOnce:
+		return f.value == ""
+	case AssignedRepeatable:
+		return true
+	default:
+		panic(fmt.Errorf("unexpected Flag.AssignedMode %s", f.AssignedMode))
 	}
 }
 
@@ -100,28 +162,23 @@ func (f *Flag) GetValueOrDefault(ctx *Context, def string) string {
 func (f *Flag) putValue(v string) error {
 	switch f.AssignedMode {
 	case AssignedNone:
-		if f.assigned {
-			return fmt.Errorf("flag duplucated: --%s", f.Name)
-		}
-		if v != "" {
-			return fmt.Errorf("flag --%s can't be assiged", f.Name)
-		}
-		f.setValue(v)
+		return fmt.Errorf("flag --%s can't be assiged", f.Name)
 	case AssignedDefault:
-		if f.assigned {
-			return fmt.Errorf("flag duplicated: --%s", f.Name)
-		}
 		f.setValue(v)
 	case AssignedOnce:
-		if f.assigned {
-			return fmt.Errorf("flag duplicated: --%s", f.Name)
-		}
 		f.setValue(v)
 	case AssignedRepeatable:
 		f.setValue(v)
 		f.values = append(f.values, v)
 	default:
 		return fmt.Errorf("unexpect assigned mode %v for flag --%s", f.AssignedMode, f.Name)
+	}
+	return nil
+}
+
+func (f *Flag) validate() error {
+	if f.AssignedMode == AssignedOnce && f.value == "" {
+		return fmt.Errorf("%s must be assigned with value", f.form)
 	}
 	return nil
 }
@@ -145,14 +202,5 @@ func (f *Flag) useDefaultValue() bool {
 		return true
 	} else {
 		return false
-	}
-}
-
-func SplitWith(s string, splitters string) (string, string, bool) {
-	i := strings.IndexAny(s, splitters)
-	if i < 0 {
-		return s, "", false
-	} else {
-		return s[:i], s[i+1:], true
 	}
 }

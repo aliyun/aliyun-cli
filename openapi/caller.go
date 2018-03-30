@@ -10,9 +10,7 @@ import (
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/meta"
-	"strconv"
 	"strings"
-	"time"
 )
 
 type Caller struct {
@@ -42,7 +40,7 @@ func (c *Caller) Validate() error {
 func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
 	//
 	// get force call information
-	c.force = ctx.Flags().IsAssigned("force", "")
+	c.force = ForceFlag.IsAssigned()
 
 	//
 	// get product info
@@ -112,17 +110,17 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 	// return: if check failed return error, otherwise return nil
 
 	clientConfig := sdk.NewConfig()
-	timeout, err := strconv.Atoi(RetryTimeoutFlag.GetValueOrDefault(ctx, "-1"))
-
-	if err == nil && timeout > 0 {
-		clientConfig.WithTimeout(time.Duration(timeout) * time.Second)
-	}
-
-	retryCount, err := strconv.Atoi(RetryCountFlag.GetValueOrDefault(ctx, "-1"))
-
-	if err == nil && retryCount > 0 {
-		clientConfig.WithMaxRetryTime(retryCount)
-	}
+	//timeout, err := strconv.Atoi(RetryTimeoutFlag.GetValueOrDefault(ctx, "-1"))
+	//
+	//if err == nil && timeout > 0 {
+	//	clientConfig.WithTimeout(time.Duration(timeout) * time.Second)
+	//}
+	//
+	//retryCount, err := strconv.Atoi(RetryCountFlag.GetValueOrDefault(ctx, "-1"))
+	//
+	//if err == nil && retryCount > 0 {
+	//	clientConfig.WithMaxRetryTime(retryCount)
+	//}
 
 	client, err := c.profile.GetClient(clientConfig)
 	if err != nil {
@@ -135,23 +133,23 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 	request.Product = product.Code
 	request.Version = product.Version
 
-	if v, ok := ctx.Flags().GetValue("region"); ok {
+	if v, ok := config.RegionFlag.GetValue(); ok {
 		request.RegionId = v
 	}
-	if v, ok := ctx.Flags().GetValue("endpoint"); ok {
+	if v, ok := EndpointFlag.GetValue(); ok {
 		request.Domain = v
 	}
-	if v, ok := ctx.Flags().GetValue("version"); ok {
+	if v, ok := VersionFlag.GetValue(); ok {
 		request.Version = v
 	}
 
-	if v, ok := ctx.Flags().GetValue("content-type"); ok {
-		request.SetContentType(v)
-	} else if isRpc {
-		request.SetContentType("application/json")
-	}
+	//if v, ok := ctx.Flags().GetValue("content-type"); ok {
+	//	request.SetContentType(v)
+	//} else if isRpc {
+	//	request.SetContentType("application/json")
+	//}
 
-	if v, ok := ctx.Flags().GetValue("accept"); ok {
+	if v, ok := AcceptFlag.GetValue(); ok {
 		request.Headers["Accept"] = v
 		if strings.Contains(v, "xml") {
 			request.AcceptFormat = "XML"
@@ -176,21 +174,19 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 }
 
 func (c *Caller) UpdateRequest(ctx *cli.Context, request *requests.CommonRequest) error {
-	if _, ok := ctx.Flags().GetValue("secure"); ok {
+	if _, ok := SecureFlag.GetValue(); ok {
 		request.Scheme = "https"
 	}
 
-	if f := ctx.Flags().Get("header", ""); f != nil {
-		for _, v := range f.GetValues() {
-			if k2, v2, ok := cli.SplitWith(v, "="); ok {
-				request.Headers[k2] = v2
-			} else {
-				return fmt.Errorf("invaild flag --header `%s` use `--header HeaderName=Value`", v)
-			}
+	for _, v := range HeaderFlag.GetValues() {
+		if k2, v2, ok := cli.SplitWith(v, "="); ok {
+			request.Headers[k2] = v2
+		} else {
+			return fmt.Errorf("invaild flag --header `%s` use `--header HeaderName=Value`", v)
 		}
 	}
 
-	if accept, ok := request.Headers["Accept"]; ok {
+	if accept, ok := AcceptFlag.GetValue(); ok {
 		accept = strings.ToLower(accept)
 		if strings.Contains(accept, "xml") {
 			request.AcceptFormat = "XML"

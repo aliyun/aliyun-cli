@@ -103,17 +103,17 @@ func (cp *Profile) Validate() error {
 }
 
 func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
-	cp.Mode = AuthenticateMode(ModeFlag.GetValueOrDefault(ctx, string(cp.Mode)))
-	cp.AccessKeyId = AccessKeyIdFlag.GetValueOrDefault(ctx, cp.AccessKeyId)
-	cp.AccessKeySecret = AccessKeySecretFlag.GetValueOrDefault(ctx, cp.AccessKeySecret)
-	cp.StsToken = StsTokenFlag.GetValueOrDefault(ctx, cp.StsToken)
-	cp.RamRoleName = RamRoleNameFlag.GetValueOrDefault(ctx, cp.RamRoleName)
-	cp.RamRoleArn = RamRoleArnFlag.GetValueOrDefault(ctx, cp.RamRoleArn)
-	cp.RoleSessionName = RoleSessionNameFlag.GetValueOrDefault(ctx, cp.RoleSessionName)
-	cp.KeyPairName = KeyPairNameFlag.GetValueOrDefault(ctx, cp.KeyPairName)
-	cp.PrivateKey = PrivateKeyFlag.GetValueOrDefault(ctx, cp.PrivateKey)
-	cp.RegionId = RegionFlag.GetValueOrDefault(ctx, cp.RegionId)
-	cp.Language = LanguageFlag.GetValueOrDefault(ctx, cp.Language)
+	cp.Mode = AuthenticateMode(ModeFlag.GetValueOrDefault(string(cp.Mode)))
+	cp.AccessKeyId = AccessKeyIdFlag.GetValueOrDefault(cp.AccessKeyId)
+	cp.AccessKeySecret = AccessKeySecretFlag.GetValueOrDefault(cp.AccessKeySecret)
+	cp.StsToken = StsTokenFlag.GetValueOrDefault(cp.StsToken)
+	cp.RamRoleName = RamRoleNameFlag.GetValueOrDefault(cp.RamRoleName)
+	cp.RamRoleArn = RamRoleArnFlag.GetValueOrDefault(cp.RamRoleArn)
+	cp.RoleSessionName = RoleSessionNameFlag.GetValueOrDefault(cp.RoleSessionName)
+	cp.KeyPairName = KeyPairNameFlag.GetValueOrDefault(cp.KeyPairName)
+	cp.PrivateKey = PrivateKeyFlag.GetValueOrDefault(cp.PrivateKey)
+	cp.RegionId = RegionFlag.GetValueOrDefault(cp.RegionId)
+	cp.Language = LanguageFlag.GetValueOrDefault(cp.Language)
 
 	if cp.AccessKeyId != "" && cp.AccessKeySecret != "" {
 		cp.Mode = AK

@@ -5,16 +5,19 @@ package cli
 
 import (
 	"strings"
+	"fmt"
 )
 
 type FlagDetector interface {
-	DetectFlag(name, shorthand string) (*Flag, error)
+	DetectFlag(name string) (*Flag, error)
+	DetectFlagByShorthand(ch rune) (*Flag, error)
 }
 
 type Parser struct {
 	current  int
 	args     []string
 	detector FlagDetector
+	currentFlag	 *Flag
 }
 
 func NewParser(args []string, detector FlagDetector) *Parser {
@@ -22,6 +25,7 @@ func NewParser(args []string, detector FlagDetector) *Parser {
 		args:     args,
 		current:  0,
 		detector: detector,
+		currentFlag: nil,
 	}
 }
 
@@ -69,81 +73,83 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 	p.current++
 	more = true
 
-	var prefixLen int
-	if strings.HasPrefix(s, "--") {
-		prefixLen = 2
-	} else if strings.HasPrefix(s, "-") {
-		prefixLen = 1
-	} else {
-		prefixLen = 0
+	value := ""
+	flag, value, err = p.parseCommandArg(s)
+	if err != nil {
+		return
+	}
+	if flag != nil {
+		err = flag.setIsAssigned()
+		if err != nil {
+			return
+		}
 	}
 
-	if prefixLen > 0 {
-		if name, value, ok := SplitWith(s[prefixLen:], "=:"); ok {
-			if prefixLen == 1 {
-				flag, err = p.detector.DetectFlag("", name)
-			} else {
-				flag, err = p.detector.DetectFlag(name, "")
+	if flag == nil { // parse with value xxxx
+		if p.currentFlag != nil { // value need to feed to previous flag xxx
+			p.currentFlag.putValue(value)
+			if !p.currentFlag.needValue() {	// if current flag is feeds close it
+				p.currentFlag = nil
 			}
+		} else {
+			arg = value	// this is a arg
+		}
+	} else {	// parse with flag	--xxx or -x
+		if p.currentFlag != nil {
+			err = p.currentFlag.validate()
 			if err != nil {
 				return
 			}
+			p.currentFlag = nil
+		}
+
+		if value != "" { // pattern --xx=aa, -x:aa, -xxx=bb
 			err = flag.putValue(value)
 			if err != nil {
 				return
 			}
-			return
-		} else {
-			if prefixLen == 1 {
-				flag, err = p.detector.DetectFlag("", name)
-			} else {
-				flag, err = p.detector.DetectFlag(name, "")
+		} else { // pattern --xx -- yy
+			if flag.needValue() {
+				p.currentFlag = flag
 			}
-			if err != nil {
-				return
-			}
-			switch flag.AssignedMode {
-			case AssignedNone:
-				flag.putValue("")
-			case AssignedDefault:
-				if value, ok := p.readNextValue(false); ok {
-					flag.putValue(value)
-				} else {
-					flag.putValue("")
-				}
-			case AssignedOnce:
-				if value, ok := p.readNextValue(true); ok {
-					flag.putValue(value)
-				}
-			case AssignedRepeatable:
-				if value, ok := p.readNextValue(true); ok {
-					flag.putValue(value)
-				}
-			}
-			return
 		}
-	} else {
-		arg = s
-		return
 	}
+	return
 }
 
+
 //
-//
-func (p *Parser) readNextValue(force bool) (string, bool) {
-	if p.current >= len(p.args) {
-		return "", false
+// TODO support shorthands combination, sample -ab
+func (p *Parser) parseCommandArg(s string) (flag *Flag, value string, err error){
+	prefix, v, ok := SplitWith(s, "=:")
+
+	if ok {
+		value = v
 	}
-	s := p.args[p.current]
-	if force {
-		p.current++
-		return s, true
-	} else {
-		if !strings.HasPrefix(s, "--") && !strings.HasPrefix(s, "-") {
-			p.current++
-			return s, true
+
+	if strings.HasPrefix(prefix, "--") {
+		if len(prefix) > 2 {
+			flag, err = p.detector.DetectFlag(prefix[2:])
 		} else {
-			return "", false
+			err = fmt.Errorf("not support '--' in command line")
 		}
+	} else if strings.HasPrefix(prefix, "-") {
+		if len(prefix) == 2 {
+			flag, err = p.detector.DetectFlagByShorthand(rune(prefix[1]))
+		} else {
+			err = fmt.Errorf("not support flag form %s", prefix)
+		}
+	} else {
+		value = s
+	}
+	return
+}
+
+func SplitWith(s string, splitters string) (string, string, bool) {
+	i := strings.IndexAny(s, splitters)
+	if i < 0 {
+		return s, "", false
+	} else {
+		return s[:i], s[i+1:], true
 	}
 }

@@ -39,36 +39,39 @@ func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName stri
 		return err
 	}
 
-	if flag := ctx.Flags().Get("all-pages", ""); flag != nil {
-		if flag.IsAssigned() {
-			pager := NewPager(flag.GetValue())
-			r, err := c.InvokeRpcWithPager(client, request, pager)
-			if err != nil {
-				ctx.Command().PrintFailed(err, "")
-			} else {
-				err = outputProcessor(ctx, r)
-				if err != nil {
-					ctx.Command().PrintFailed(err, "")
-				}
-			}
-			return nil
-		}
-	}
+	//if flag := ctx.Flags().Get("all-pages", ""); flag != nil {
+	//	if flag.IsAssigned() {
+	//		pager := NewPager(flag.GetValue())
+	//		r, err := c.InvokeRpcWithPager(client, request, pager)
+	//		if err != nil {
+	//			ctx.Command().PrintFailed(err, "")
+	//		} else {
+	//			err = outputProcessor(ctx, r)
+	//			if err != nil {
+	//				ctx.Command().PrintFailed(err, "")
+	//			}
+	//		}
+	//		return nil
+	//	}
+	//}
 
-	waiter := NewWaiterWithCTX(ctx, client, request)
-	//resp, err := client.ProcessCommonRequest(request)
+	// waiter := NewWaiterWithCTX(ctx, client, request)
+	resp, err := client.ProcessCommonRequest(request)
 
-	resp, err := waiter.Wait()
 
+	//resp, err := waiter.Wait()
+	//
+	//if err != nil {
+	//	ctx.Command().PrintFailed(err, "")
+	//}
+	//
+	//err = outputProcessor(ctx, resp.GetHttpContentString())
 	if err != nil {
 		ctx.Command().PrintFailed(err, "")
+	} else {
+		fmt.Println(resp.GetHttpContentString())
 	}
-
-	err = outputProcessor(ctx, resp.GetHttpContentString())
-	if err != nil {
-		ctx.Command().PrintFailed(err, "")
-	}
-
+	//
 	return nil
 }
 
@@ -101,10 +104,11 @@ func (c *Caller) InvokeRpcForce(ctx *cli.Context, product *meta.Product, apiName
 		ctx.Command().PrintFailed(err, "")
 	}
 
-	err = outputProcessor(ctx, resp.GetHttpContentString())
-	if err != nil {
-		ctx.Command().PrintFailed(err, "")
-	}
+	// err = outputProcessor(ctx, resp.GetHttpContentString())
+	//if err != nil {
+	//	ctx.Command().PrintFailed(err, "")
+	//}
+	fmt.Println(resp.GetHttpContentString())
 }
 
 func (c *Caller) FillRpcParameters(ctx *cli.Context, request *requests.CommonRequest, api *meta.Api) error {
@@ -112,18 +116,18 @@ func (c *Caller) FillRpcParameters(ctx *cli.Context, request *requests.CommonReq
 		if api != nil {
 			param := api.FindParameter(f.Name)
 			if param == nil {
-				return &InvalidParameterError{Name: f.Name, Shorthand: f.Shorthand, api: api, flags: ctx.Flags()}
+				return &InvalidParameterError{Name: f.Name, api: api, flags: ctx.Flags()}
 			}
 			if param.Position == "Query" {
-				request.QueryParams[f.Name] = f.GetValue()
+				request.QueryParams[f.Name], _ = f.GetValue()
 			} else if param.Position == "Body" {
-				request.FormParams[f.Name] = f.GetValue()
+				request.FormParams[f.Name], _ = f.GetValue()
 			} else {
 				return fmt.Errorf("unknown parameter position; %s is %s", param.Name, param.Position)
 			}
 			//return fmt.Errorf("unknown parameter %s", f.Name)
 		} else {
-			request.QueryParams[f.Name] = f.GetValue()
+			request.QueryParams[f.Name], _ = f.GetValue()
 		}
 	}
 	if api != nil {
@@ -134,7 +138,8 @@ func (c *Caller) FillRpcParameters(ctx *cli.Context, request *requests.CommonReq
 			case "Action":
 				return request.ApiName != ""
 			default:
-				return ctx.UnknownFlags().IsAssigned(s, "")
+				f := ctx.UnknownFlags().Get(s)
+				return f != nil && f.IsAssigned()
 			}
 		})
 		if err != nil {

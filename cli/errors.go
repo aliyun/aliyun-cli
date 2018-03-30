@@ -24,30 +24,22 @@ func (e *InvalidCommandError) GetSuggestions() []string {
 }
 
 type InvalidFlagError struct {
-	Name      string
-	Shorthand string
+	Form      string
 	ctx       *Context
 }
 
-func NewInvalidFlagError(name, shorthand string, ctx *Context) error {
+func NewInvalidFlagError(name string, ctx *Context) error {
 	return &InvalidFlagError{
-		Name:      name,
-		Shorthand: shorthand,
+		Form:      name,
 		ctx:       ctx,
 	}
 }
 
 func (e *InvalidFlagError) Error() string {
-	var param string
-	if e.Name != "" {
-		param = "--" + e.Name
-	} else {
-		param = "-" + e.Shorthand
-	}
-	return fmt.Sprintf("invalid flag %s", param)
+	return fmt.Sprintf("invalid flag %s", e.Form)
 }
 
 func (e *InvalidFlagError) GetSuggestions() []string {
 	distance := e.ctx.command.GetSuggestDistance()
-	return e.ctx.Flags().GetSuggestions(e.Name, distance)
+	return e.ctx.Flags().GetSuggestions(e.Form, distance)
 }

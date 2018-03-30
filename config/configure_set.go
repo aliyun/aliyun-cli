@@ -58,7 +58,7 @@ func doConfigureSet(c *cli.Context) {
 		return
 	}
 
-	profileName, ok := c.Flags().GetValue("profile")
+	profileName, ok := ProfileFlag.GetValue()
 	if !ok {
 		profileName = config.CurrentProfile
 	}
@@ -68,7 +68,7 @@ func doConfigureSet(c *cli.Context) {
 		profile = NewProfile(profileName)
 	}
 
-	mode, ok := c.Flags().GetValue(ModeFlag.Name)
+	mode, ok := ModeFlag.GetValue()
 	if ok {
 		profile.Mode = AuthenticateMode(mode)
 	} else {
@@ -77,31 +77,30 @@ func doConfigureSet(c *cli.Context) {
 		}
 	}
 
-	fs := c.Flags()
 	switch profile.Mode {
 	case AK:
-		profile.AccessKeyId = fs.GetValueOrDefault(AccessKeyIdFlag.Name, profile.AccessKeyId)
-		profile.AccessKeySecret = fs.GetValueOrDefault(AccessKeySecretFlag.Name, profile.AccessKeySecret)
+		profile.AccessKeyId = AccessKeyIdFlag.GetValueOrDefault(profile.AccessKeyId)
+		profile.AccessKeySecret = AccessKeySecretFlag.GetValueOrDefault(profile.AccessKeySecret)
 	case StsToken:
-		profile.AccessKeyId = fs.GetValueOrDefault(AccessKeyIdFlag.Name, profile.AccessKeyId)
-		profile.AccessKeySecret = fs.GetValueOrDefault(AccessKeyIdFlag.Name, profile.AccessKeySecret)
-		profile.StsToken = fs.GetValueOrDefault(StsTokenFlag.Name, profile.StsToken)
+		profile.AccessKeyId = AccessKeyIdFlag.GetValueOrDefault(profile.AccessKeyId)
+		profile.AccessKeySecret = AccessKeyIdFlag.GetValueOrDefault(profile.AccessKeySecret)
+		profile.StsToken = StsTokenFlag.GetValueOrDefault(profile.StsToken)
 	case RamRoleArn:
-		profile.AccessKeyId = fs.GetValueOrDefault(AccessKeyIdFlag.Name, profile.AccessKeyId)
-		profile.AccessKeySecret = fs.GetValueOrDefault(AccessKeySecretFlag.Name, profile.AccessKeySecret)
-		profile.RamRoleArn = fs.GetValueOrDefault(RamRoleArnFlag.Name, profile.RamRoleArn)
-		profile.RoleSessionName = fs.GetValueOrDefault(RoleSessionNameFlag.Name, profile.RoleSessionName)
+		profile.AccessKeyId = AccessKeyIdFlag.GetValueOrDefault(profile.AccessKeyId)
+		profile.AccessKeySecret = AccessKeySecretFlag.GetValueOrDefault(profile.AccessKeySecret)
+		profile.RamRoleArn = RamRoleArnFlag.GetValueOrDefault(profile.RamRoleArn)
+		profile.RoleSessionName = RoleSessionNameFlag.GetValueOrDefault(profile.RoleSessionName)
 	case EcsRamRole:
-		profile.RamRoleName = fs.GetValueOrDefault(RamRoleNameFlag.Name, profile.RamRoleName)
+		profile.RamRoleName = RamRoleNameFlag.GetValueOrDefault(profile.RamRoleName)
 	case RsaKeyPair:
-		profile.PrivateKey = fs.GetValueOrDefault(PrivateKeyFlag.Name, profile.PrivateKey)
-		profile.KeyPairName = fs.GetValueOrDefault(KeyPairNameFlag.Name, profile.KeyPairName)
+		profile.PrivateKey = PrivateKeyFlag.GetValueOrDefault(profile.PrivateKey)
+		profile.KeyPairName = KeyPairNameFlag.GetValueOrDefault(profile.KeyPairName)
 	}
 
-	profile.RegionId = fs.GetValueOrDefault(RegionFlag.Name, profile.RegionId)
-	profile.Language = fs.GetValueOrDefault(LanguageFlag.Name, profile.Language)
-	profile.OutputFormat = "json" // fs.GetValueOrDefault("output", profile.OutputFormat)
-	profile.Site = "china"        // fs.GetValueOrDefault("site", profile.Site)
+	profile.RegionId = RegionFlag.GetValueOrDefault(profile.RegionId)
+	profile.Language = LanguageFlag.GetValueOrDefault(profile.Language)
+	profile.OutputFormat = "json" // "output", profile.OutputFormat)
+	profile.Site = "china"        // "site", profile.Site)
 
 	err = profile.Validate()
 	if err != nil {

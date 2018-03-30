@@ -51,7 +51,7 @@ func (c *Configuration) GetProfile(pn string) (Profile, bool) {
 }
 
 func (c *Configuration) GetCurrentProfile(ctx *cli.Context) Profile {
-	profileName := ProfileFlag.GetValueOrDefault(ctx, c.CurrentProfile)
+	profileName := ProfileFlag.GetValueOrDefault(c.CurrentProfile)
 	p, _ := c.GetProfile(profileName)
 	p.OverwriteWithFlags(ctx)
 	return p

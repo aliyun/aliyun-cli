@@ -58,7 +58,7 @@ func (c *Command) PrintFlags(ctx *Context) {
 			continue
 		}
 		format := "--%s\t%s\n"
-		if flag.Shorthand != "" {
+		if flag.Shorthand != 0 {
 			format = fmt.Sprintf("-%s, %s", flag.Shorthand, format)
 		}
 		fmt.Fprintf(w, "  "+format, flag.Name, flag.Usage.Text())
