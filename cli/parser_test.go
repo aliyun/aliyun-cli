@@ -13,7 +13,7 @@ type testContext struct {
 	fs *FlagSet
 }
 
-func (tc *testContext) DetectFlag(name string) (*Flag, error) {
+func (tc *testContext) detectFlag(name string) (*Flag, error) {
 	f := tc.fs.Get(name)
 	if f != nil {
 		return f, nil
@@ -22,7 +22,7 @@ func (tc *testContext) DetectFlag(name string) (*Flag, error) {
 	}
 }
 
-func (tc *testContext) DetectFlagByShorthand(ch rune) (*Flag, error) {
+func (tc *testContext) detectFlagByShorthand(ch rune) (*Flag, error) {
 	f := tc.fs.GetByShorthand(ch)
 	if f != nil {
 		return f, nil

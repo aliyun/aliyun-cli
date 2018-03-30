@@ -9,8 +9,8 @@ import (
 )
 
 type FlagDetector interface {
-	DetectFlag(name string) (*Flag, error)
-	DetectFlagByShorthand(ch rune) (*Flag, error)
+	detectFlag(name string) (*Flag, error)
+	detectFlagByShorthand(ch rune) (*Flag, error)
 }
 
 type Parser struct {
@@ -129,13 +129,13 @@ func (p *Parser) parseCommandArg(s string) (flag *Flag, value string, err error)
 
 	if strings.HasPrefix(prefix, "--") {
 		if len(prefix) > 2 {
-			flag, err = p.detector.DetectFlag(prefix[2:])
+			flag, err = p.detector.detectFlag(prefix[2:])
 		} else {
 			err = fmt.Errorf("not support '--' in command line")
 		}
 	} else if strings.HasPrefix(prefix, "-") {
 		if len(prefix) == 2 {
-			flag, err = p.detector.DetectFlagByShorthand(rune(prefix[1]))
+			flag, err = p.detector.detectFlagByShorthand(rune(prefix[1]))
 		} else {
 			err = fmt.Errorf("not support flag form %s", prefix)
 		}

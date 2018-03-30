@@ -63,9 +63,7 @@ func (ctx *Context) EnterCommand(cmd *Command) {
 		ctx.unknownFlags = NewFlagSet()
 	}
 
-	parentFlags := ctx.flags
-	ctx.flags = cmd.flags
-	ctx.flags.mergeWith(parentFlags, func(f *Flag) bool {
+	ctx.flags = cmd.flags.mergeWith(ctx.flags, func(f *Flag) bool {
 		return f.Persistent
 	})
 	ctx.flags.Add(HelpFlag)
@@ -82,7 +80,7 @@ func (ctx *Context) CheckFlags() error {
 	return nil
 }
 
-func (ctx *Context) DetectFlag(name string) (*Flag, error) {
+func (ctx *Context) detectFlag(name string) (*Flag, error) {
 	flag := ctx.flags.Get(name)
 
 	if flag != nil {
@@ -94,7 +92,7 @@ func (ctx *Context) DetectFlag(name string) (*Flag, error) {
 	}
 }
 
-func (ctx *Context) DetectFlagByShorthand(ch rune) (*Flag, error) {
+func (ctx *Context) detectFlagByShorthand(ch rune) (*Flag, error) {
 	flag := ctx.flags.GetByShorthand(ch)
 	if flag != nil {
 		return flag, nil

@@ -169,15 +169,22 @@ func (fs *FlagSet) assignedCount() int {
 
 //
 // merge FlagSet with from
-func (fs *FlagSet)mergeWith(from *FlagSet, applier func(f *Flag) bool) {
+func (fs *FlagSet) mergeWith(from *FlagSet, applier func(f *Flag) bool) (*FlagSet) {
 	if from == nil {
-		return
+		return fs
+	}
+	r := NewFlagSet()
+	if fs != nil {
+		for _, f := range fs.flags {
+			r.Add(f)
+		}
 	}
 	for _, rv := range from.Flags() {
 		if applier(rv) {
-			fs.put(rv)
+			r.put(rv)
 		}
 	}
+	return r
 }
 
 // put flag, replace old value if duplicated
