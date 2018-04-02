@@ -71,15 +71,15 @@ func (ctx *Context) EnterCommand(cmd *Command) {
 
 func (ctx *Context) CheckFlags() error {
 	for _, f := range ctx.flags.Flags() {
-		if f.Required && !f.IsAssigned() {
-			//if !f.useDefaultValue() {
-			return fmt.Errorf("missing flag --%s", f.Name)
-			//}
+		if !f.IsAssigned() {
+			if f.Required {
+				return fmt.Errorf("missing flag --%s", f.Name)
+			}
+		} else {
+			if err := f.checkFields(); err != nil {
+				return err
+			}
 		}
-		if err := f.checkFields(); err != nil {
-			return err
-		}
-
 	}
 	return nil
 }
