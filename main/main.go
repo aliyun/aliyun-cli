@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/command"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/meta"
@@ -69,7 +68,7 @@ func main() {
 	openapi.AddFlags(fs)
 
 	rootCmd.AddSubCommand(configureCommand)
-	rootCmd.AddSubCommand(command.NewTestCommand())
+	// rootCmd.AddSubCommand(command.NewTestCommand())
 	rootCmd.AddSubCommand(lib.NewOssCommand())
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
 	rootCmd.Execute(os.Args[1:])

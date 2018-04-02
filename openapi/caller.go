@@ -22,6 +22,10 @@ type Caller struct {
 	verbose bool // TODO: next version
 }
 
+type CallerProcessor interface {
+	CallerProcessor(caller *Caller)
+}
+
 func NewCaller(profile *config.Profile, library *meta.Library) *Caller {
 	return &Caller{
 		profile: profile,
@@ -57,7 +61,7 @@ func (c *Caller) Run(ctx *cli.Context, productCode string, apiOrMethod string, p
 		ok, method, path, err := CheckRestfulMethod(ctx, apiOrMethod, path)
 		if ok {
 			if err != nil {
-				ctx.Command().PrintFailed(err, "")
+				return err
 			} else {
 				c.InvokeRestful(ctx, &product, method, path)
 			}

@@ -32,4 +32,5 @@ Because aliyun cli need process unknown flags,and the following popular library 
 - [ ] Help document generation (ref: https://github.com/spf13/cobra#generating-documentation-for-your-command)
 - [ ] Optimize --help message view
 - [x] Support Group Options
+- [ ] Optimize noticeable error
 

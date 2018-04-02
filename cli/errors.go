@@ -5,6 +5,39 @@ package cli
 
 import "fmt"
 
+//
+// If command.Execute return Noticeable error, print i18n Notice under error information
+type ErrorWithTip interface {
+	GetTip(lang string) string
+}
+
+type errorWithTip struct {
+	err error
+	tip string
+}
+
+func NewErrorWithTip(err error, tipFormat string, args... interface{}) ErrorWithTip {
+	return &errorWithTip{
+		err: err,
+		tip: fmt.Sprintf(tipFormat, args...),
+	}
+}
+
+func (e *errorWithTip) Error() string {
+	return e.err.Error()
+}
+
+func (e *errorWithTip) GetTip(lang string) string {
+	return e.GetTip(lang)
+}
+
+
+//
+// OUTPUT:
+// Error: "'%s' is not a valid command
+//
+// {Hint}
+//
 type InvalidCommandError struct {
 	Name string
 	ctx  *Context
