@@ -5,7 +5,6 @@ package cli
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 type FlagSet struct {
@@ -89,7 +88,7 @@ func (fs *FlagSet) GetSuggestions(name string, distance int) []string {
 	return ss
 }
 
-// get value by flag name, not recommanded
+// get value by flag name, not recommended
 func (fs *FlagSet) GetValue(name string) (string, bool) {
 	f := fs.Get(name)
 	if f == nil {
@@ -128,33 +127,33 @@ func (fs *FlagSet) GetValue(name string) (string, bool) {
 //}
 
 
-func (fs *FlagSet) StringVar(p *string, name string, defaultValue string, usage *i18n.Text) *Flag {
-	f := &Flag{
-		Name:         name,
-		Usage:        usage,
-		DefaultValue: defaultValue,
-		Required:     false,
-		AssignedMode: AssignedOnce,
-		Persistent:   false,
-		p:            p,
-	}
-	fs.Add(f)
-	return f
-}
-
-func (fs *FlagSet) PersistentStringVar(p *string, name string, defaultValue string, usage *i18n.Text) *Flag {
-	f := &Flag{
-		Name:         name,
-		Usage:        usage,
-		DefaultValue: defaultValue,
-		Required:     false,
-		AssignedMode: AssignedOnce,
-		Persistent:   true,
-		p:            p,
-	}
-	fs.Add(f)
-	return f
-}
+//func (fs *FlagSet) StringVar(p *string, name string, defaultValue string, usage *i18n.Text) *Flag {
+//	f := &Flag{
+//		Name:         name,
+//		Short:        usage,
+//		DefaultValue: defaultValue,
+//		Required:     false,
+//		AssignedMode: AssignedOnce,
+//		Persistent:   false,
+//		p:            p,
+//	}
+//	fs.Add(f)
+//	return f
+//}
+//
+//func (fs *FlagSet) PersistentStringVar(p *string, name string, defaultValue string, usage *i18n.Text) *Flag {
+//	f := &Flag{
+//		Name:         name,
+//		Short:        usage,
+//		DefaultValue: defaultValue,
+//		Required:     false,
+//		AssignedMode: AssignedOnce,
+//		Persistent:   true,
+//		p:            p,
+//	}
+//	fs.Add(f)
+//	return f
+//}
 
 // get assigned count for flags
 func (fs *FlagSet) assignedCount() int {

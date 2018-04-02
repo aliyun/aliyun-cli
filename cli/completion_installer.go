@@ -1,3 +1,6 @@
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 package cli
 
 import (
@@ -7,7 +10,7 @@ import (
 
 var uninstallFlag = &Flag{
 	Name:  "uninstall",
-	Usage: i18n.T("uninstall auto completion", "卸载自动完成"),
+	Short: i18n.T("uninstall auto completion", "卸载自动完成"),
 }
 
 func NewAutoCompleteCommand() *Command {

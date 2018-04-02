@@ -3,6 +3,9 @@
  */
 package cli
 
+//
+// This variable is replaced in compile time
+// `-ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'"`
 var (
 	Version = "0.0.1"
 )

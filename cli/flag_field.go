@@ -1,15 +1,34 @@
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 package cli
 
 import (
 	"github.com/aliyun/aliyun-cli/i18n"
+	"fmt"
 )
 
 type Field struct {
-	Key string			// if key is null, it can appear with
+	//
+	// appear in `--flag key1=value1, key2=value2`
+	// if Key assigned with "", it can used with `--flag value1 value2`
+	Key string
+
+	//
+	// if Required is true, this field must be assigned
 	Required bool
+
+	//
+	// if Repeatable is true, this field can appear multiply times, eg: "--flag key1=value1 key2=value2"
 	Repeatable bool
+
+	//
+	// if field not appear, use this value, not used with Required
 	DefaultValue string
-	Short i18n.Text
+
+	//
+	// Message show
+	Short *i18n.Text
 
 	assigned bool
 	value string
@@ -30,4 +49,22 @@ func (f *Field) getValue() (string, bool) {
 	} else {
 		return "", false
 	}
+}
+
+func (f *Field) check() error {
+	if f.Required && !f.assigned {
+		if f.Key != "" {
+			return fmt.Errorf("%s= required", f.Key)
+		} else {
+			return fmt.Errorf("value required")
+		}
+	}
+	if !f.Repeatable && len(f.values) > 1 {
+		if f.Key != "" {
+			return fmt.Errorf("%s= duplicated", f.Key)
+		} else {
+			return fmt.Errorf("value duplicated")
+		}
+	}
+	return nil
 }

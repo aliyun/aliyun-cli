@@ -12,7 +12,7 @@ import (
 // default help flag
 var HelpFlag = &Flag{
 	Name:         "help",
-	Usage:        i18n.T("print help", "打印帮助信息"),
+	Short:        i18n.T("print help", "打印帮助信息"),
 	AssignedMode: AssignedNone,
 }
 
@@ -72,10 +72,14 @@ func (ctx *Context) EnterCommand(cmd *Command) {
 func (ctx *Context) CheckFlags() error {
 	for _, f := range ctx.flags.Flags() {
 		if f.Required && !f.IsAssigned() {
-			if !f.useDefaultValue() {
-				return fmt.Errorf("missing flag --%s", f.Name)
-			}
+			//if !f.useDefaultValue() {
+			return fmt.Errorf("missing flag --%s", f.Name)
+			//}
 		}
+		if err := f.checkFields(); err != nil {
+			return err
+		}
+
 	}
 	return nil
 }

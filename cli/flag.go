@@ -25,7 +25,10 @@ type Flag struct {
 	Shorthand rune
 
 	// Message print with --help command
-	Usage *i18n.Text
+	Short *i18n.Text
+
+	// Message print with `help --flag` command
+	Long *i18n.Text
 
 	// If DefaultValue is not "" and Required is true, if flag is not assign
 	//   GetValue() will return DefaultValue, and IsAssigned() will be false
@@ -63,7 +66,6 @@ type Flag struct {
 	value     string
 	values    []string
 	formation string
-	p         *string
 }
 
 //
@@ -199,13 +201,13 @@ func (f *Flag) validate() error {
 }
 
 //
-// assign
+// assign value
 func (f *Flag) assign(v string) {
 	f.assigned = true
 	f.value = v
-	if f.p != nil {
-		*f.p = v
-	}
+	//if f.p != nil {
+	//	*f.p = v
+	//}
 
 	if f.AssignedMode == AssignedRepeatable {
 		f.values = append(f.values, v)
@@ -215,6 +217,8 @@ func (f *Flag) assign(v string) {
 	}
 }
 
+//
+// assign field
 func (f *Flag) assignField(s string) error {
 	if k, v, ok := SplitStringWithPrefix(s, "="); ok {
 		field, ok2 := f.getField(k)
@@ -234,14 +238,27 @@ func (f *Flag) assignField(s string) error {
 	return nil
 }
 
-func (f *Flag) useDefaultValue() bool {
-	if f.DefaultValue != "" {
-		f.value = f.DefaultValue
-		if f.p != nil {
-			*f.p = f.DefaultValue
-		}
-		return true
-	} else {
-		return false
+//
+func (f *Flag) checkFields() error {
+	if len(f.Fields) == 0 {
+		return nil
 	}
+	for _, field := range f.Fields {
+		if err := field.check(); err != nil {
+			return fmt.Errorf("bad flag format --%s with field %s", f.Name, err)
+		}
+	}
+	return nil
 }
+
+//func (f *Flag) useDefaultValue() bool {
+//	if f.DefaultValue != "" {
+//		f.value = f.DefaultValue
+//		if f.p != nil {
+//			*f.p = f.DefaultValue
+//		}
+//		return true
+//	} else {
+//		return false
+//	}
+//}

@@ -15,7 +15,7 @@ import (
 var OutputFlag = &cli.Flag{
 	Name: "output",
 	AssignedMode: cli.AssignedRepeatable,
-	Usage: i18n.T(
+	Short: i18n.T(
 		"",
 		"",
 	),

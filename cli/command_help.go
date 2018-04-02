@@ -61,7 +61,7 @@ func (c *Command) PrintFlags(ctx *Context) {
 		if flag.Shorthand != 0 {
 			format = fmt.Sprintf("%s,-%c", format, flag.Shorthand)
 		}
-		fmt.Fprintf(w, "  " + format, flag.Name, flag.Usage.Text())
+		fmt.Fprintf(w, "  " + format, flag.Name, flag.Short.Text())
 	}
 	w.Flush()
 }
