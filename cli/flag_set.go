@@ -101,7 +101,7 @@ func (fs *FlagSet) GetValue(name string) (string, bool) {
 
 //
 //// get value by flag name, if not assigned return default value
-//func (a *FlagSet) GetValueOrDefault(name string, def string) string {
+//func (a *FlagSet) GetStringOrDefault(name string, def string) string {
 //	v, ok := a.GetValue(name)
 //	if ok {
 //		return v

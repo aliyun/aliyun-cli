@@ -113,20 +113,7 @@ func (c *Caller) InitClient(ctx *cli.Context, product *meta.Product, isRpc bool)
 	// call OpenApi
 	// return: if check failed return error, otherwise return nil
 
-	clientConfig := sdk.NewConfig()
-	//timeout, err := strconv.Atoi(RetryTimeoutFlag.GetValueOrDefault(ctx, "-1"))
-	//
-	//if err == nil && timeout > 0 {
-	//	clientConfig.WithTimeout(time.Duration(timeout) * time.Second)
-	//}
-	//
-	//retryCount, err := strconv.Atoi(RetryCountFlag.GetValueOrDefault(ctx, "-1"))
-	//
-	//if err == nil && retryCount > 0 {
-	//	clientConfig.WithMaxRetryTime(retryCount)
-	//}
-
-	client, err := c.profile.GetClient(clientConfig)
+	client, err := c.profile.GetClient()
 	if err != nil {
 		return nil, nil, fmt.Errorf("bad client %v", err)
 	}

@@ -30,7 +30,7 @@ package openapi
 //	waitTimeoutFlag := ctx.Flags().Get(WaitTimeoutFlag.Name, WaitTimeoutFlag.Shorthand)
 //	waitIntervalFlag := ctx.Flags().Get(WaitIntervalFlag.Name, WaitIntervalFlag.Shorthand)
 //
-//	timeout, err := strconv.Atoi(waitTimeoutFlag.GetValueOrDefault(ctx, "0"))
+//	timeout, err := strconv.Atoi(waitTimeoutFlag.GetStringOrDefault(ctx, "0"))
 //	if err != nil {
 //		fmt.Println(err)
 //		timeout = 0
@@ -40,7 +40,7 @@ package openapi
 //		timeout = 0
 //	}
 //
-//	interval, err := strconv.Atoi(waitIntervalFlag.GetValueOrDefault(ctx, "1"))
+//	interval, err := strconv.Atoi(waitIntervalFlag.GetStringOrDefault(ctx, "1"))
 //	if err != nil {
 //		fmt.Println(err)
 //		interval = 1
@@ -53,8 +53,8 @@ package openapi
 //	return &Waiter{
 //		client: client,
 //		request: request,
-//		waitExpr: waitForExprFlag.GetValueOrDefault(ctx, ""),
-//		targets: strings.Split(waitForTargetFlag.GetValueOrDefault(ctx, ""), ","),
+//		waitExpr: waitForExprFlag.GetStringOrDefault(ctx, ""),
+//		targets: strings.Split(waitForTargetFlag.GetStringOrDefault(ctx, ""), ","),
 //		timeout:time.Duration(timeout) * time.Second,
 //		interval:time.Duration(interval) * time.Second,
 //	}

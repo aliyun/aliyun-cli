@@ -16,6 +16,7 @@ import (
 	"github.com/jmespath/go-jmespath"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type AuthenticateMode string
@@ -44,7 +45,9 @@ type Profile struct {
 	RegionId        string           `json:"region_id"`
 	OutputFormat    string           `json:"output_format"`
 	Language        string           `json:"language"`
-	Site            string           `json:"Site"`
+	Site            string           `json:"site"`
+	RetryTimeout 	int 			 `json:"retry_timeout"`
+	RetryCount		int 			 `json:retry_count`
 }
 
 func NewProfile(name string) Profile {
@@ -103,17 +106,19 @@ func (cp *Profile) Validate() error {
 }
 
 func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
-	cp.Mode = AuthenticateMode(ModeFlag.GetValueOrDefault(string(cp.Mode)))
-	cp.AccessKeyId = AccessKeyIdFlag.GetValueOrDefault(cp.AccessKeyId)
-	cp.AccessKeySecret = AccessKeySecretFlag.GetValueOrDefault(cp.AccessKeySecret)
-	cp.StsToken = StsTokenFlag.GetValueOrDefault(cp.StsToken)
-	cp.RamRoleName = RamRoleNameFlag.GetValueOrDefault(cp.RamRoleName)
-	cp.RamRoleArn = RamRoleArnFlag.GetValueOrDefault(cp.RamRoleArn)
-	cp.RoleSessionName = RoleSessionNameFlag.GetValueOrDefault(cp.RoleSessionName)
-	cp.KeyPairName = KeyPairNameFlag.GetValueOrDefault(cp.KeyPairName)
-	cp.PrivateKey = PrivateKeyFlag.GetValueOrDefault(cp.PrivateKey)
-	cp.RegionId = RegionFlag.GetValueOrDefault(cp.RegionId)
-	cp.Language = LanguageFlag.GetValueOrDefault(cp.Language)
+	cp.Mode = AuthenticateMode(ModeFlag.GetStringOrDefault(string(cp.Mode)))
+	cp.AccessKeyId = AccessKeyIdFlag.GetStringOrDefault(cp.AccessKeyId)
+	cp.AccessKeySecret = AccessKeySecretFlag.GetStringOrDefault(cp.AccessKeySecret)
+	cp.StsToken = StsTokenFlag.GetStringOrDefault(cp.StsToken)
+	cp.RamRoleName = RamRoleNameFlag.GetStringOrDefault(cp.RamRoleName)
+	cp.RamRoleArn = RamRoleArnFlag.GetStringOrDefault(cp.RamRoleArn)
+	cp.RoleSessionName = RoleSessionNameFlag.GetStringOrDefault(cp.RoleSessionName)
+	cp.KeyPairName = KeyPairNameFlag.GetStringOrDefault(cp.KeyPairName)
+	cp.PrivateKey = PrivateKeyFlag.GetStringOrDefault(cp.PrivateKey)
+	cp.RegionId = RegionFlag.GetStringOrDefault(cp.RegionId)
+	cp.Language = LanguageFlag.GetStringOrDefault(cp.Language)
+	cp.RetryTimeout = RetryTimeoutFlag.GetIntegerOrDefault(cp.RetryTimeout)
+	cp.RetryCount = RetryTimeoutFlag.GetIntegerOrDefault(cp.RetryCount)
 
 	if cp.AccessKeyId != "" && cp.AccessKeySecret != "" {
 		cp.Mode = AK
@@ -138,7 +143,15 @@ func (cp *Profile) ValidateAK() error {
 	return nil
 }
 
-func (cp *Profile) GetClient(config *sdk.Config) (*sdk.Client, error) {
+func (cp *Profile) GetClient() (*sdk.Client, error) {
+	config := sdk.NewConfig()
+	if cp.RetryTimeout > 0 {
+		config.WithTimeout(time.Duration(cp.RetryTimeout) * time.Second)
+	}
+	if cp.RetryCount > 0 {
+		config.WithMaxRetryTime(cp.RetryCount)
+	}
+
 	switch cp.Mode {
 	case AK:
 		return cp.GetClientByAK(config)
@@ -187,9 +200,7 @@ func (cp *Profile) GetClientByAK(config *sdk.Config) (*sdk.Client, error) {
 	}
 
 	cred := credentials.NewAccessKeyCredential(cp.AccessKeyId, cp.AccessKeySecret)
-
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
-
 	return client, err
 }
 

@@ -6,6 +6,7 @@ package cli
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"strconv"
 )
 
 type AssignedMode int
@@ -127,12 +128,23 @@ func (f *Flag) GetFieldValues(key string) []string {
 
 //
 // return def if Flag is not assigned
-func (f *Flag) GetValueOrDefault(def string) string {
+func (f *Flag) GetStringOrDefault(def string) string {
 	if f.assigned {
 		return f.value
 	} else {
 		return def
 	}
+}
+
+// TODO: flag support integer validate
+// return def if Flag is not assign or assign failed
+func (f *Flag) GetIntegerOrDefault(def int) int {
+	if f.assigned {
+		if i, err := strconv.Atoi(f.value); err != nil {
+			return i
+		}
+	}
+	return def
 }
 
 //

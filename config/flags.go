@@ -6,6 +6,7 @@ package config
 import (
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"fmt"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -22,6 +23,8 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(RoleSessionNameFlag)
 	fs.Add(PrivateKeyFlag)
 	fs.Add(KeyPairNameFlag)
+	fs.Add(RetryTimeoutFlag)
+	fs.Add(RetryCountFlag)
 }
 
 var ProfileFlag = &cli.Flag{Category: "config",
@@ -97,6 +100,18 @@ var LanguageFlag = &cli.Flag{Category: "config",
 	Short: i18n.T(
 		"use `--language [en|zh]` to assign language",
 		"使用 `--language [en|zh]` 来指定语言")}
+
+var RetryTimeoutFlag = &cli.Flag{Category: "caller",
+	Name: "retry-timeout", AssignedMode: cli.AssignedOnce, Hidden: true,
+	Short: i18n.T(
+		fmt.Sprintf("use `--retry-timeout <seconds>` to set retry timeout(seconds)"),
+		fmt.Sprintf("使用 `--retry-timeout <seconds>` 指定请求超时时间(秒)"))}
+
+var RetryCountFlag = &cli.Flag{Category: "caller",
+	Name: "retry-count", AssignedMode: cli.AssignedOnce, Hidden: true,
+	Short: i18n.T(
+		fmt.Sprintf("use `--retry-count <count>` to set retry count"),
+		fmt.Sprintf("使用 `--retry-count <count>` 指定重试次数"))}
 
 //var OutputFlag = &cli.Flag{Category: "config",
 //	Name: "output", AssignedMode: cli.AssignedOnce, Hidden: true,

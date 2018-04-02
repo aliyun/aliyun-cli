@@ -79,28 +79,30 @@ func doConfigureSet(c *cli.Context) {
 
 	switch profile.Mode {
 	case AK:
-		profile.AccessKeyId = AccessKeyIdFlag.GetValueOrDefault(profile.AccessKeyId)
-		profile.AccessKeySecret = AccessKeySecretFlag.GetValueOrDefault(profile.AccessKeySecret)
+		profile.AccessKeyId = AccessKeyIdFlag.GetStringOrDefault(profile.AccessKeyId)
+		profile.AccessKeySecret = AccessKeySecretFlag.GetStringOrDefault(profile.AccessKeySecret)
 	case StsToken:
-		profile.AccessKeyId = AccessKeyIdFlag.GetValueOrDefault(profile.AccessKeyId)
-		profile.AccessKeySecret = AccessKeyIdFlag.GetValueOrDefault(profile.AccessKeySecret)
-		profile.StsToken = StsTokenFlag.GetValueOrDefault(profile.StsToken)
+		profile.AccessKeyId = AccessKeyIdFlag.GetStringOrDefault(profile.AccessKeyId)
+		profile.AccessKeySecret = AccessKeyIdFlag.GetStringOrDefault(profile.AccessKeySecret)
+		profile.StsToken = StsTokenFlag.GetStringOrDefault(profile.StsToken)
 	case RamRoleArn:
-		profile.AccessKeyId = AccessKeyIdFlag.GetValueOrDefault(profile.AccessKeyId)
-		profile.AccessKeySecret = AccessKeySecretFlag.GetValueOrDefault(profile.AccessKeySecret)
-		profile.RamRoleArn = RamRoleArnFlag.GetValueOrDefault(profile.RamRoleArn)
-		profile.RoleSessionName = RoleSessionNameFlag.GetValueOrDefault(profile.RoleSessionName)
+		profile.AccessKeyId = AccessKeyIdFlag.GetStringOrDefault(profile.AccessKeyId)
+		profile.AccessKeySecret = AccessKeySecretFlag.GetStringOrDefault(profile.AccessKeySecret)
+		profile.RamRoleArn = RamRoleArnFlag.GetStringOrDefault(profile.RamRoleArn)
+		profile.RoleSessionName = RoleSessionNameFlag.GetStringOrDefault(profile.RoleSessionName)
 	case EcsRamRole:
-		profile.RamRoleName = RamRoleNameFlag.GetValueOrDefault(profile.RamRoleName)
+		profile.RamRoleName = RamRoleNameFlag.GetStringOrDefault(profile.RamRoleName)
 	case RsaKeyPair:
-		profile.PrivateKey = PrivateKeyFlag.GetValueOrDefault(profile.PrivateKey)
-		profile.KeyPairName = KeyPairNameFlag.GetValueOrDefault(profile.KeyPairName)
+		profile.PrivateKey = PrivateKeyFlag.GetStringOrDefault(profile.PrivateKey)
+		profile.KeyPairName = KeyPairNameFlag.GetStringOrDefault(profile.KeyPairName)
 	}
 
-	profile.RegionId = RegionFlag.GetValueOrDefault(profile.RegionId)
-	profile.Language = LanguageFlag.GetValueOrDefault(profile.Language)
+	profile.RegionId = RegionFlag.GetStringOrDefault(profile.RegionId)
+	profile.Language = LanguageFlag.GetStringOrDefault(profile.Language)
 	profile.OutputFormat = "json" // "output", profile.OutputFormat)
 	profile.Site = "china"        // "site", profile.Site)
+	profile.RetryTimeout = RetryTimeoutFlag.GetIntegerOrDefault(profile.RetryTimeout)
+	profile.RetryCount = RetryCountFlag.GetIntegerOrDefault(profile.RetryCount)
 
 	err = profile.Validate()
 	if err != nil {
