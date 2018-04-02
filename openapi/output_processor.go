@@ -98,3 +98,78 @@ func toIntfArray(stringArray []string) []interface{} {
 	}
 	return intfArray
 }
+
+
+
+//func outputTable1(flag *cli.Flag, response string) error {
+//
+//	var v interface{}
+//	err := json.Unmarshal([]byte(response), &v)
+//
+//	if err != nil {
+//		return err
+//	}
+//
+//	targets := strings.Split(flag.GetValue(), ",")
+//	cols := columnFinder(targets, v)
+//
+//	if len(cols) == 0 {
+//		return fmt.Errorf("%s field %s error", flagOutputTableRow, flag.GetValue())
+//	}
+//
+//	format := strings.Repeat("%v\t", len(cols[0]) - 1) + "%v"
+//
+//	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
+//
+//	fmt.Fprintln(w, fmt.Sprintf(format, toIntfArray(targets)...))
+//	separator := "-----------------"
+//	fmt.Fprintln(w, strings.Repeat(separator + "\t", len(cols[0]) - 1) + separator)
+//	for _, col := range cols {
+//		fmt.Fprintln(w, fmt.Sprintf(format, col...))
+//	}
+//	w.Flush()
+//
+//	return nil
+//}
+//
+//func isBaseType(v interface{}) bool {
+//	switch v.(type) {
+//	case map[string]interface{}:
+//		return false
+//	case []interface{}:
+//		return false
+//	}
+//
+//	return true
+//}
+//
+//func columnFinder(targets []string, v interface{}) [][]interface{} {
+//	var outputTable [][]interface{}
+//	switch v1 := v.(type) {
+//	case map[string]interface{}:
+//		row := []interface{}{}
+//		for _, target := range targets {
+//			colValue, ok := v1[target]
+//			if ok && isBaseType(colValue) {
+//				row = append(row, colValue)
+//			}
+//		}
+//
+//		if len(row) == len(targets) {
+//			outputTable = append(outputTable, row)
+//			return outputTable
+//		}
+//
+//		for _, intf := range v1 {
+//			outputTable = append(outputTable, columnFinder(targets, intf)...)
+//		}
+//
+//	case []interface{}:
+//		for _, intf := range v1{
+//			outputTable = append(outputTable, columnFinder(targets, intf)...)
+//		}
+//	}
+//
+//	return outputTable
+//}
+
