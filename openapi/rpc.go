@@ -68,9 +68,26 @@ func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName stri
 	//err = outputProcessor(ctx, resp.GetHttpContentString())
 	if err != nil {
 		ctx.Command().PrintFailed(err, "")
-	} else {
-		fmt.Println(resp.GetHttpContentString())
+		return nil
 	}
+
+	out := resp.GetHttpContentString()
+
+	filter, err := NewOutputFilter()
+	if err != nil {
+		ctx.Command().PrintFailed(err,"init output filter failed")
+		return nil
+	}
+
+	if filter != nil {
+		out, err = filter.FilterOutput(out)
+		if err != nil {
+			ctx.Command().PrintFailed(err,"output filter process failed")
+			return nil
+		}
+	}
+	fmt.Println(out)
+
 	//
 	return nil
 }
@@ -108,7 +125,24 @@ func (c *Caller) InvokeRpcForce(ctx *cli.Context, product *meta.Product, apiName
 	//if err != nil {
 	//	ctx.Command().PrintFailed(err, "")
 	//}
-	fmt.Println(resp.GetHttpContentString())
+
+	out := resp.GetHttpContentString()
+
+	filter, err := NewOutputFilter()
+
+	if err != nil {
+		ctx.Command().PrintFailed(err,"init output filter failed")
+		return
+	}
+
+	if filter != nil {
+		out, err = filter.FilterOutput(out)
+		if err != nil {
+			ctx.Command().PrintFailed(err,"output filter process failed")
+			return
+		}
+	}
+	fmt.Println(out)
 }
 
 func (c *Caller) FillRpcParameters(ctx *cli.Context, request *requests.CommonRequest, api *meta.Api) error {

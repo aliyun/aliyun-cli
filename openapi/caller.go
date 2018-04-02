@@ -179,7 +179,7 @@ func (c *Caller) UpdateRequest(ctx *cli.Context, request *requests.CommonRequest
 	}
 
 	for _, v := range HeaderFlag.GetValues() {
-		if k2, v2, ok := cli.SplitWith(v, "="); ok {
+		if k2, v2, ok := cli.SplitStringWithPrefix(v, "="); ok {
 			request.Headers[k2] = v2
 		} else {
 			return fmt.Errorf("invaild flag --header `%s` use `--header HeaderName=Value`", v)

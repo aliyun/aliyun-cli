@@ -8,7 +8,6 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 )
 
-//
 type AssignedMode int
 
 const (
@@ -54,11 +53,17 @@ type Flag struct {
 	// Using in FlagSet.GetByCategory()...
 	Category string
 
-	assigned bool
-	value    string
-	values   []string
-	form 	 string
-	p        *string
+	// Use to validate flag is in correct format
+	Validate func(f *Flag) error
+
+	// Flag can assigned with --flag field1=value1 field2=value2 value3 ...
+	Fields []Field
+
+	assigned  bool
+	value     string
+	values    []string
+	formation string
+	p         *string
 }
 
 //
@@ -87,18 +92,36 @@ func (f *Flag) GetValues() []string {
 }
 
 //
-// `AssignedMode == AssignedRepeatable` flag, return values, in Map
-//func (f *Flag) GetValuesByMap() map[string]string {
-//	r := make(map[string]string)
-//	for _, v = range f.values {
-//		if k2, v2, ok := SplitWith(v, "="); ok {
-//			request.Headers[k2] = v2
-//		} else {
-//			return fmt.Errorf("invaild flag --header `%s` use `--header HeaderName=Value`", v)
-//		}
-//	}
-//	return
-//}
+// for `AssignedMode == AssignedRepeatable` flag, return fields, multiply assignable
+// Sample: --output abc bbc acd bb=2 cc=3
+func (f *Flag) getField(key string) (*Field, bool) {
+	for i, field := range f.Fields {
+		if field.Key == key {
+			return &(f.Fields[i]), true
+		}
+	}
+	return nil, false
+}
+
+//
+// --flag field1=value1
+func (f *Flag) GetFieldValue(key string) (string, bool) {
+	if field, ok := f.getField(key); ok {
+		return field.getValue()
+	} else {
+		return "", false
+	}
+}
+
+//
+//
+func (f *Flag) GetFieldValues(key string) []string {
+	if field, ok := f.getField(key); ok {
+		return field.values
+	} else {
+		return make([]string, 0)
+	}
+}
 
 //
 // return def if Flag is not assigned
@@ -112,7 +135,7 @@ func (f *Flag) GetValueOrDefault(def string) string {
 
 //
 // get all appears forms, maybe {"--Name", "--Alias1", "-Shorthand"}
-func (f *Flag) GetForms() []string {
+func (f *Flag) GetFormations() []string {
 	r := make([]string, 0)
 	if f.Name != "" {
 		r = append(r, "--" + f.Name)
@@ -134,7 +157,7 @@ func (f *Flag) setIsAssigned() error {
 		f.assigned = true
 	} else {
 		if f.AssignedMode != AssignedRepeatable {
-			return fmt.Errorf("%s duplicated", f.form)
+			return fmt.Errorf("%s duplicated", f.formation)
 		}
 	}
 	return nil
@@ -160,37 +183,55 @@ func (f *Flag) needValue() bool {
 //
 // used in parser to put value to flag
 func (f *Flag) putValue(v string) error {
-	switch f.AssignedMode {
-	case AssignedNone:
+	if f.AssignedMode == AssignedNone {
 		return fmt.Errorf("flag --%s can't be assiged", f.Name)
-	case AssignedDefault:
-		f.setValue(v)
-	case AssignedOnce:
-		f.setValue(v)
-	case AssignedRepeatable:
-		f.setValue(v)
-		f.values = append(f.values, v)
-	default:
-		return fmt.Errorf("unexpect assigned mode %v for flag --%s", f.AssignedMode, f.Name)
+	} else {
+		f.assign(v)
 	}
 	return nil
 }
 
 func (f *Flag) validate() error {
 	if f.AssignedMode == AssignedOnce && f.value == "" {
-		return fmt.Errorf("%s must be assigned with value", f.form)
+		return fmt.Errorf("%s must be assigned with value", f.formation)
 	}
 	return nil
 }
 
 //
-// set value
-func (f *Flag) setValue(v string) {
+// assign
+func (f *Flag) assign(v string) {
 	f.assigned = true
 	f.value = v
 	if f.p != nil {
 		*f.p = v
 	}
+
+	if f.AssignedMode == AssignedRepeatable {
+		f.values = append(f.values, v)
+		if len(f.Fields) > 0 {
+			f.assignField(v)
+		}
+	}
+}
+
+func (f *Flag) assignField(s string) error {
+	if k, v, ok := SplitStringWithPrefix(s, "="); ok {
+		field, ok2 := f.getField(k)
+		if ok2 {
+			field.assign(v)
+		} else {
+			return fmt.Errorf("--%s can't assign with %s=", f.Name, k)
+		}
+	} else {
+		field, ok2 := f.getField("")
+		if ok2 {
+			field.assign(v)
+		} else {
+			return fmt.Errorf("--%s can't assign with value", f.Name)
+		}
+	}
+	return nil
 }
 
 func (f *Flag) useDefaultValue() bool {

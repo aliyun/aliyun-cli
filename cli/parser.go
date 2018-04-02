@@ -8,19 +8,19 @@ import (
 	"fmt"
 )
 
-type FlagDetector interface {
+type flagDetector interface {
 	detectFlag(name string) (*Flag, error)
 	detectFlagByShorthand(ch rune) (*Flag, error)
 }
 
 type Parser struct {
-	current  int
-	args     []string
-	detector FlagDetector
-	currentFlag	 *Flag
+	current     int
+	args        []string
+	detector    flagDetector
+	currentFlag *Flag
 }
 
-func NewParser(args []string, detector FlagDetector) *Parser {
+func NewParser(args []string, detector flagDetector) *Parser {
 	return &Parser{
 		args:     args,
 		current:  0,
@@ -117,11 +117,8 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 	return
 }
 
-
-//
-// TODO support shorthands combination, sample -ab
 func (p *Parser) parseCommandArg(s string) (flag *Flag, value string, err error){
-	prefix, v, ok := SplitWith(s, "=:")
+	prefix, v, ok := SplitStringWithPrefix(s, "=:")
 
 	if ok {
 		value = v
@@ -145,11 +142,23 @@ func (p *Parser) parseCommandArg(s string) (flag *Flag, value string, err error)
 	return
 }
 
-func SplitWith(s string, splitters string) (string, string, bool) {
+func SplitStringWithPrefix(s string, splitters string) (string, string, bool) {
 	i := strings.IndexAny(s, splitters)
 	if i < 0 {
 		return s, "", false
 	} else {
 		return s[:i], s[i+1:], true
+	}
+}
+
+func SplitString(s string, sep string) []string {
+	return strings.Split(s, sep)
+}
+
+func UnquoteString(s string) string {
+	if strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"") && len(s) >= 2 {
+		return s[1:len(s)-1]
+	} else {
+		return s
 	}
 }

@@ -31,6 +31,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(BodyFileFlag)
 	fs.Add(PagerFlag)
 	fs.Add(AcceptFlag)
+	fs.Add(OutputFlag)
 
 	//fs.Add(OutputTableRowFlag)
 	//fs.Add(OutputTableColsFlag)

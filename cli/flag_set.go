@@ -29,7 +29,7 @@ func (fs *FlagSet) Flags() []*Flag {
 //
 // call from user program, if flag duplicated, panic!
 func (fs *FlagSet) Add(f *Flag) {
-	for _, s := range f.GetForms() {
+	for _, s := range f.GetFormations() {
 		if _, ok := fs.index[s]; ok {
 			panic(fmt.Errorf("flag duplicated -%s", string(s)))
 		}
@@ -56,7 +56,7 @@ func (fs *FlagSet) AddByName(name string) (*Flag, error) {
 // get flag by name, sample --name
 func (fs *FlagSet) Get(name string) *Flag {
 	if f, ok := fs.index["--" + name]; ok {
-		f.form = "--" + name
+		f.formation = "--" + name
 		return f
 	} else {
 		return nil
@@ -67,7 +67,7 @@ func (fs *FlagSet) Get(name string) *Flag {
 // get flag by shorthand, sample -a
 func (fs *FlagSet) GetByShorthand(c rune) *Flag {
 	if f, ok := fs.index["-" + string(c)]; ok {
-		f.form = "-" + string(c)
+		f.formation = "-" + string(c)
 		return f
 	} else {
 		return nil
@@ -195,7 +195,7 @@ func (fs *FlagSet) put(f *Flag) {
 		}
 	}
 	fs.flags = append(fs.flags, f)
-	for _, s := range f.GetForms() {
+	for _, s := range f.GetFormations() {
 		fs.index[s] = f
 	}
 }
