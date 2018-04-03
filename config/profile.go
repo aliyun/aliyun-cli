@@ -47,7 +47,8 @@ type Profile struct {
 	Language        string           `json:"language"`
 	Site            string           `json:"site"`
 	RetryTimeout 	int 			 `json:"retry_timeout"`
-	RetryCount		int 			 `json:retry_count`
+	RetryCount		int 			 `json:"retry_count"`
+	parent 			*Configuration	`json:"-"`
 }
 
 func NewProfile(name string) Profile {
@@ -103,6 +104,10 @@ func (cp *Profile) Validate() error {
 		return fmt.Errorf("region can't be empty")
 	}
 	return nil
+}
+
+func (cp *Profile) GetParent() *Configuration {
+	return cp.parent
 }
 
 func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {

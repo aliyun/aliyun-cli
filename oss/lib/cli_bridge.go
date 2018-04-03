@@ -72,6 +72,7 @@ func NewCommandBridge(a Commander) *cli.Command {
 }
 
 func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
+	// TODO: use --profile
 	profile, err := config.LoadCurrentProfile()
 	if err != nil {
 		return fmt.Errorf("config failed: %s", err.Error())

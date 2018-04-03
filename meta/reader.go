@@ -36,3 +36,7 @@ func ReadJsonFrom(r Reader, path string, v interface{}) error {
 	}
 	return nil
 }
+
+type FileReader struct {
+	//TODO GA-1
+}

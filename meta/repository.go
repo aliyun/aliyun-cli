@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-type Library struct {
+type Repository struct {
 	Products []Product
 	Names    []string
 
@@ -16,14 +16,14 @@ type Library struct {
 	reader Reader
 }
 
-func LoadLibrary(reader Reader) *Library {
+func LoadRepository(reader Reader) *Repository {
 	var e ProductSet
 	err := ReadJsonFrom(reader, "products.json", &e)
 	if err != nil {
 		panic(err)
 	}
 
-	r := Library{
+	r := Repository{
 		index:  make(map[string]Product),
 		reader: reader,
 	}
@@ -43,12 +43,12 @@ func LoadLibrary(reader Reader) *Library {
 	return &r
 }
 
-func (a *Library) GetProduct(code string) (Product, bool) {
+func (a *Repository) GetProduct(code string) (Product, bool) {
 	p, ok := a.index[strings.ToLower(code)]
 	return p, ok
 }
 
-func (a *Library) GetApi(productCode string, version string, apiName string) (Api, bool) {
+func (a *Repository) GetApi(productCode string, version string, apiName string) (Api, bool) {
 	var result Api
 	product, ok := a.GetProduct(productCode)
 	if !ok {

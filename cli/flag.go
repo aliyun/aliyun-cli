@@ -63,6 +63,9 @@ type Flag struct {
 	// Flag can assigned with --flag field1=value1 field2=value2 value3 ...
 	Fields []Field
 
+	// Flag can't appear with other flags
+	ExcludeWith []string
+
 	assigned  bool
 	value     string
 	values    []string
@@ -195,16 +198,18 @@ func (f *Flag) needValue() bool {
 }
 
 //
-// used in parser to put value to flag
-func (f *Flag) putValue(v string) error {
-	if f.AssignedMode == AssignedNone {
-		return fmt.Errorf("flag --%s can't be assiged", f.Name)
-	} else {
-		f.assign(v)
+// make check valid
+func (f *Flag) checkValid() {
+	if len(f.Fields) > 0 {
+		if f.AssignedMode != AssignedRepeatable {
+			panic(fmt.Errorf("flag %s with fields must use AssignedRepeatable", f.Name))
+		}
 	}
-	return nil
 }
 
+
+//
+// validate flag value
 func (f *Flag) validate() error {
 	if f.AssignedMode == AssignedOnce && f.value == "" {
 		return fmt.Errorf("%s must be assigned with value", f.formation)
@@ -214,12 +219,13 @@ func (f *Flag) validate() error {
 
 //
 // assign value
-func (f *Flag) assign(v string) {
+func (f *Flag) assign(v string) error {
+	if f.AssignedMode == AssignedNone {
+		return fmt.Errorf("flag --%s can't be assiged", f.Name)
+	}
+
 	f.assigned = true
 	f.value = v
-	//if f.p != nil {
-	//	*f.p = v
-	//}
 
 	if f.AssignedMode == AssignedRepeatable {
 		f.values = append(f.values, v)
@@ -227,6 +233,7 @@ func (f *Flag) assign(v string) {
 			f.assignField(v)
 		}
 	}
+	return nil
 }
 
 //

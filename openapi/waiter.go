@@ -1,72 +1,91 @@
 package openapi
-//
-//import (
-//	"github.com/aliyun/aliyun-cli/cli"
-//	"time"
-//	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-//	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-//	"fmt"
-//	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
-//	"github.com/jmespath/go-jmespath"
-//	"encoding/json"
-//	"errors"
-//	"strconv"
-//	"strings"
-//)
-//
-//type Waiter struct {
-//	client   *sdk.Client
-//	request  *requests.CommonRequest
-//	waitExpr string
-//	targets  []string
-//	timeout  time.Duration
-//	interval time.Duration
-//
-//}
-//
-//func NewWaiterWithCTX(ctx *cli.Context, client *sdk.Client, request *requests.CommonRequest) *Waiter {
-//	waitForExprFlag := ctx.Flags().Get(WaitForExprFlag.Name, WaitForExprFlag.Shorthand)
-//	waitForTargetFlag := ctx.Flags().Get(WaitForTargetFlag.Name, WaitForTargetFlag.Shorthand)
-//	waitTimeoutFlag := ctx.Flags().Get(WaitTimeoutFlag.Name, WaitTimeoutFlag.Shorthand)
-//	waitIntervalFlag := ctx.Flags().Get(WaitIntervalFlag.Name, WaitIntervalFlag.Shorthand)
-//
-//	timeout, err := strconv.Atoi(waitTimeoutFlag.GetStringOrDefault(ctx, "0"))
-//	if err != nil {
-//		fmt.Println(err)
-//		timeout = 0
-//	}
-//
-//	if timeout < 0 {
-//		timeout = 0
-//	}
-//
-//	interval, err := strconv.Atoi(waitIntervalFlag.GetStringOrDefault(ctx, "1"))
-//	if err != nil {
-//		fmt.Println(err)
-//		interval = 1
-//	}
-//
-//	if interval < 0 {
-//		interval = 1
-//	}
-//
-//	return &Waiter{
-//		client: client,
-//		request: request,
-//		waitExpr: waitForExprFlag.GetStringOrDefault(ctx, ""),
-//		targets: strings.Split(waitForTargetFlag.GetStringOrDefault(ctx, ""), ","),
-//		timeout:time.Duration(timeout) * time.Second,
-//		interval:time.Duration(interval) * time.Second,
-//	}
-//}
-//
-//
-//
-//func (w *Waiter)Wait() (response *responses.CommonResponse, err error){
-//	if w.timeout == 0 {
-//		return w.client.ProcessCommonRequest(w.request)
-//	}
-//
+
+import (
+	"github.com/aliyun/aliyun-cli/cli"
+	"time"
+	"fmt"
+	"github.com/aliyun/aliyun-cli/i18n"
+)
+
+var WaiterFlag = &cli.Flag {Category:"helper",
+	Name: "waiter",
+	AssignedMode: cli.AssignedRepeatable,
+	Short: i18n.T("",""),
+	Long: i18n.T("", ""),
+	Fields: []cli.Field {
+		{Key:"expr", Required:true, Short: i18n.T("", "")},
+		{Key:"to", Required:true, Short: i18n.T("", "")},
+		{Key:"timeout",DefaultValue:"180", Short:i18n.T("", "")},
+		{Key:"interval",DefaultValue:"5", Short:i18n.T("","")},
+	},
+	ExcludeWith:[]string{"pager"},
+}
+
+type Waiter struct {
+	expr string
+	to string
+	timeout  time.Duration
+	interval time.Duration
+}
+
+func GetWaiter() *Waiter {
+	if !WaiterFlag.IsAssigned() {
+		return nil
+	}
+
+	waiter := &Waiter {
+	}
+	waiter.expr, _ = WaiterFlag.GetFieldValue("expr")
+	waiter.to, _ = WaiterFlag.GetFieldValue("to")
+	waiter.timeout = time.Duration(time.Second * 180)
+	waiter.interval = time.Duration(time.Second * 5)
+
+	//timeout, err := strconv.Atoi(waitTimeoutFlag.GetStringOrDefault(ctx, "0"))
+	//if err != nil {
+	//	fmt.Println(err)
+	//	timeout = 0
+	//}
+	//
+	//if timeout < 0 {
+	//	timeout = 0
+	//}
+	//
+	//interval, err := strconv.Atoi(waitIntervalFlag.GetStringOrDefault(ctx, "1"))
+	//if err != nil {
+	//	fmt.Println(err)
+	//	interval = 1
+	//}
+	//
+	//if interval < 0 {
+	//	interval = 1
+	//}
+	//
+	return waiter
+}
+
+func (a *Waiter) CallWith(invoker Invoker) (string, error) {
+	begin := time.Now()
+	for {
+		resp, err := invoker.Call()
+		if err != nil {
+			return "", err
+		}
+
+		v, err := evaluateExpr(resp.GetHttpContentBytes(), a.expr)
+		if err != nil {
+			return "", err
+		}
+
+		if v == a.to {
+			return resp.GetHttpContentString(), nil
+		}
+		duration := time.Now().Sub(begin)
+		if duration > a.timeout {
+			return "", fmt.Errorf("wait %s to %s Timtout: last result=%s", a.expr, a.to, v)
+		}
+		time.Sleep(a.interval)
+	}
+}
 //
 //	doRequestAndCheck := func() (bool, *responses.CommonResponse, error) {
 //		var v interface{}
@@ -82,7 +101,6 @@ package openapi
 //			return true, resp, fmt.Errorf("no target targets: %v", w.targets)
 //		}
 //
-//		err = json.Unmarshal(resp.GetHttpContentBytes(), &v)
 //
 //		if err != nil {
 //			return false, resp, err

@@ -14,10 +14,15 @@ import (
 
 var OutputFlag = &cli.Flag{
 	Name: "output",
+	Shorthand: 'o',
 	AssignedMode: cli.AssignedRepeatable,
 	Short: i18n.T(
-		"",
-		"",
+		"use `--output cols=Column1,Columns2` to print output as table",
+		"使用 `--output cols=Column1,Columns2` 打印表格输出",
+	),
+	Long: i18n.T (
+			"",
+			"",
 	),
 	Fields: []cli.Field {
 		{Key: "cols", Repeatable:false, Required:true},
@@ -35,9 +40,9 @@ type OutputFilter interface {
 //	}
 //)
 
-func NewOutputFilter() (OutputFilter, error) {
+func GetOutputFilter() (OutputFilter) {
 	if !OutputFlag.IsAssigned() {
-		return nil, nil
+		return nil
 	}
 	return NewTableOutputFilter()
 }
@@ -47,8 +52,8 @@ type TableOutputFilter struct {
 //	colsName []string
 }
 
-func NewTableOutputFilter() (OutputFilter, error) {
-	return &TableOutputFilter{}, nil
+func NewTableOutputFilter() (OutputFilter) {
+	return &TableOutputFilter{}
 }
 
 func (a *TableOutputFilter) FilterOutput(s string) (string, error) {
@@ -58,7 +63,7 @@ func (a *TableOutputFilter) FilterOutput(s string) (string, error) {
 		return s, fmt.Errorf("unmarshal output failed %s", err)
 	}
 
-	rowPath := detectJmesArrayPath(v)
+	rowPath := detectArrayPath(v)
 	if v, ok := OutputFlag.GetFieldValue("rows"); ok {
 		rowPath = v
 	}

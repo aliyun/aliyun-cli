@@ -28,6 +28,7 @@ func (fs *FlagSet) Flags() []*Flag {
 //
 // call from user program, if flag duplicated, panic!
 func (fs *FlagSet) Add(f *Flag) {
+	f.checkValid()
 	for _, s := range f.GetFormations() {
 		if _, ok := fs.index[s]; ok {
 			panic(fmt.Errorf("flag duplicated -%s", string(s)))

@@ -1,8 +1,14 @@
 package openapi
 
-import "fmt"
+import (
+	"fmt"
+	"encoding/json"
+	"github.com/jmespath/go-jmespath"
+)
 
-func detectJmesArrayPath(d interface{}) string {
+// find array in json object
+
+func detectArrayPath(d interface{}) string {
 	m, ok := d.(map[string]interface{})
 	if !ok {
 		return ""
@@ -18,4 +24,29 @@ func detectJmesArrayPath(d interface{}) string {
 		}
 	}
 	return ""
+}
+
+//
+
+func mergeWith(to interface{}, from interface{}) interface{} {
+	return nil
+}
+
+func evaluateExpr(body []byte, expr string) (string, error) {
+	var entity interface{}
+	err := json.Unmarshal(body, &entity)
+	if err != nil {
+		return "", fmt.Errorf("unmarshal failed %s", err)
+	}
+
+	obj, err := jmespath.Search(expr, entity)
+	if err != nil {
+		return "", fmt.Errorf("jmes search failed %s", err)
+	}
+
+	if s, ok := obj.(string); ok {
+		return s, nil
+	} else {
+		return "", fmt.Errorf("object %v isn't string", obj)
+	}
 }

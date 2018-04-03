@@ -9,7 +9,7 @@ import (
 
 type InvalidProductError struct {
 	Code    string
-	library *meta.Library
+	library *Library
 }
 
 func (e *InvalidProductError) Error() string {
@@ -18,7 +18,7 @@ func (e *InvalidProductError) Error() string {
 
 func (e *InvalidProductError) GetSuggestions() []string {
 	sr := cli.NewSuggester(strings.ToLower(e.Code), 2)
-	for _, p := range e.library.Products {
+	for _, p := range e.library.GetProducts() {
 		sr.Apply(strings.ToLower(p.Code))
 	}
 	return sr.GetResults()

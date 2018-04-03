@@ -85,10 +85,15 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 		}
 	}
 
+	// fmt.Printf(">>> current=%v\n    flag=%v\n    value=%s\n    err=%s\n", p.currentFlag, flag, value, err)
 	if flag == nil { // parse with value xxxx
 		if p.currentFlag != nil { // value need to feed to previous flag xxx
-			p.currentFlag.putValue(value)
+			err = p.currentFlag.assign(value)
+			if err != nil {
+				return
+			}
 			if !p.currentFlag.needValue() {	// if current flag is feeds close it
+				// fmt.Printf("$$$ clear %s\n", p.currentFlag.AssignedMode)
 				p.currentFlag = nil
 			}
 		} else {
@@ -104,7 +109,7 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 		}
 
 		if value != "" { // pattern --xx=aa, -x:aa, -xxx=bb
-			err = flag.putValue(value)
+			err = flag.assign(value)
 			if err != nil {
 				return
 			}

@@ -32,17 +32,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(PagerFlag)
 	fs.Add(AcceptFlag)
 	fs.Add(OutputFlag)
-
-	//fs.Add(OutputTableRowFlag)
-	//fs.Add(OutputTableColsFlag)
-	//
-	//fs.Add(WaitForExprFlag)
-	//fs.Add(WaitForTargetFlag)
-	//fs.Add(WaitTimeoutFlag)
-	//fs.Add(WaitIntervalFlag)
-	//
-	//fs.Add(RetryTimeoutFlag)
-	//fs.Add(RetryCountFlag)
+	fs.Add(WaiterFlag)
 }
 
 var (
@@ -88,17 +78,50 @@ var (
 			"assign http body in Restful call with local file",
 			"使用 `--body-file foo.json` 来指定输入包体")}
 
-	PagerFlag = &cli.Flag{Category: "caller",
-		Name: "all-pages", AssignedMode: cli.AssignedDefault, Hidden: true,
-		Short: i18n.T(
-			"use `--all-pages` to merge pages for pageable APIs",
-			"使用 `--all-pages` 在访问分页的API时合并分页")}
-
 	AcceptFlag = &cli.Flag{Category: "caller",
 		Name: "accept", AssignedMode: cli.AssignedOnce, Hidden: true,
 		Short: i18n.T(
 			"add `--accept {json|xml}` to add Accept header",
 			"使用 `--accept {json|xml}` 来指定Accept头")}
+
+	RoaFlag = &cli.Flag{Category: "caller",
+		Name: "roa", AssignedMode: cli.AssignedOnce, Hidden: true,
+		Short: i18n.T(
+			"use `--roa {GET|PUT|POST|DELETE}` to assign restful call.[DEPRECATED]",
+			"使用 `--roa {GET|PUT|POST|DELETE}` 使用restful方式调用[已过期]",
+		),
+	}
+
+	VerboseFlag = &cli.Flag{Category: "caller",
+		Name: "verbose",
+		Shorthand: 'v',
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			"add `--verbose` to enable verbose mode",
+			"使用 `--verbose` 开启啰嗦模式",
+		),
+	}
+
+	DryRunFlag = &cli.Flag{Category: "caller",
+		Name: "dry-run",
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			"add `--dry-run` to only validate and without running.",
+			"使用 `--dry-run` 在执行校验后跳过实际运行",
+		),
+		ExcludeWith: []string{"pager", "waiter"},
+	}
+
+	QuietFlag = &cli.Flag{Category: "caller",
+		Name: "quiet",
+		Shorthand: 'q',
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			"add `--quiet` to hide normal output",
+			"使用 `--quiet` 关闭正常输出",
+		),
+	}
+
 
 	//ContentTypeFlag = &cli.Flag{Category: "caller",
 	//	Name: "content-type", AssignedMode: cli.AssignedOnce, Hidden: true,
@@ -143,17 +166,6 @@ var (
 	//		fmt.Sprintf("use `--%s` to set interval(seconds)", flagWaitInterval),
 	//		fmt.Sprintf("使用 `--%s` 指定请求间隔时间(秒)", flagWaitInterval))}
 	//
-	//RetryTimeoutFlag = cli.Flag{Category: "caller",
-	//	Name: flagRetryTimeout, AssignedMode: cli.AssignedOnce, Hidden: true,
-	//	Usage: i18n.T(
-	//		fmt.Sprintf("use `--%s` to set retry timeout(seconds)", flagRetryTimeout),
-	//		fmt.Sprintf("使用 `--%s` 指定请求超时时间(秒)", flagRetryTimeout))}
-	//
-	//RetryCountFlag = cli.Flag{Category: "caller",
-	//	Name: flagRetryCount, AssignedMode: cli.AssignedOnce, Hidden: true,
-	//	Usage: i18n.T(
-	//		fmt.Sprintf("use `--%s` to set retry count", flagRetryCount),
-	//		fmt.Sprintf("使用 `--%s` 指定重试次数", flagRetryCount))}
 	//
 	//WaiterFlag = cli.Flag{Category: "helper",
 	//	Name: "waiter", AssignedMode: cli.AssignedKeyValues, Hidden: true,

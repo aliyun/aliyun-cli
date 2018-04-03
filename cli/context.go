@@ -79,6 +79,13 @@ func (ctx *Context) CheckFlags() error {
 			if err := f.checkFields(); err != nil {
 				return err
 			}
+			if len(f.ExcludeWith) > 0 {
+				for _, es := range f.ExcludeWith {
+					if _, ok := ctx.flags.GetValue(es); ok {
+						return fmt.Errorf("flag --%s is exclusive with --%s", f.Name, es)
+					}
+				}
+			}
 		}
 	}
 	return nil

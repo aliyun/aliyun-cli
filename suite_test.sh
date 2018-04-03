@@ -1,0 +1,2 @@
+aliyun ecs DescribeRegions
+

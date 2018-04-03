@@ -8,7 +8,7 @@ import (
 
 const SuggestDistance = 2
 
-func GetProductSuggestions(library *meta.Library, code string) []string {
+func GetProductSuggestions(library *meta.Repository, code string) []string {
 	result := make([]string, 0)
 	for _, p := range library.Products {
 		dist := cli.CalculateStringDistance(strings.ToLower(code), strings.ToLower(p.Code))

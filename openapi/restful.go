@@ -6,29 +6,30 @@ package openapi
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/meta"
 	"io/ioutil"
 	"strings"
 	"time"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 )
 
-func (c *Caller) InvokeRestful(ctx *cli.Context, product *meta.Product, method string, path string) {
-	client, request, err := c.InitClient(ctx, product, false)
-	if err != nil {
-		ctx.Command().PrintFailed(fmt.Errorf("bad client %v", err), "")
-		return
-	}
+type RestfulInvoker struct {
+	*BasicInvoker
+	method string
+	path string
+	force bool
+}
 
-	request.Headers["Date"] = time.Now().Format(time.RFC1123Z)
-	request.PathPattern = path
-	request.Method = method
+func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
+	a.request.Headers["Date"] = time.Now().Format(time.RFC1123Z)
+	a.request.PathPattern = a.path
+	a.request.Method = a.method
 
-	if request.RegionId != "" {
-		request.Headers["x-acs-region-id"] = request.RegionId
+	if a.request.RegionId != "" {
+		a.request.Headers["x-acs-region-id"] = a.request.RegionId
 	}
 
 	if v, ok := BodyFlag.GetValue(); ok {
-		request.SetContent([]byte(v))
+		a.request.SetContent([]byte(v))
 	}
 
 	if v, ok := BodyFileFlag.GetValue(); ok {
@@ -36,47 +37,36 @@ func (c *Caller) InvokeRestful(ctx *cli.Context, product *meta.Product, method s
 		if err != nil {
 			fmt.Errorf("failed read file: %s %v", v, err)
 		}
-		request.SetContent(buf)
+		a.request.SetContent(buf)
 	}
 
-	if v, ok := AcceptFlag.GetValue(); ok {
-		request.AcceptFormat = v
-	}
-
-	if _, ok := request.Headers["Content-Type"]; !ok {
-		content := string(request.Content)
+	if _, ok := a.request.Headers["Content-Type"]; !ok {
+		content := string(a.request.Content)
 		if strings.HasPrefix(content, "{") {
-			request.SetContentType("application/json")
+			a.request.SetContentType("application/json")
 		} else if strings.HasPrefix(content, "<") {
-			request.SetContentType("application/xml")
+			a.request.SetContentType("application/xml")
 		}
 	}
 
-	err = c.UpdateRequest(ctx, request)
-	if err != nil {
-		ctx.Command().PrintFailed(err, "")
-		return
+	if _, ok := SecureFlag.GetValue(); ok {
+		a.request.Scheme = "https"
 	}
 
-	resp, err := client.ProcessCommonRequest(request)
-	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "unmarshal") {
-			// fmt.Printf("%v\n", err)
-		} else {
-			ctx.Command().PrintFailed(err, "")
-			return
-		}
-	}
-
-	//err = outputProcessor(ctx, resp.GetHttpContentString())
-	//if err != nil {
-	//	ctx.Command().PrintFailed(err, "")
-	//}
-	fmt.Println(resp.GetHttpContentString())
+	return nil
 }
 
-func CheckRestfulMethod(ctx *cli.Context, methodOrPath string, pathPattern string) (ok bool, method string, path string, err error) {
-	if method, ok = CheckHttpMethod(methodOrPath); ok {
+func (a *RestfulInvoker) Call() (*responses.CommonResponse, error) {
+	resp, err := a.client.ProcessCommonRequest(a.request)
+	return resp, err
+}
+
+func checkRestfulMethod(methodOrPath string, pathPattern string) (ok bool, method string, path string, err error) {
+	if path == "" {
+		ok = false
+		return
+	}
+	if method, ok = checkHttpMethod(methodOrPath); ok {
 		if strings.HasPrefix(pathPattern, "/") {
 			path = pathPattern
 			return
@@ -84,21 +74,21 @@ func CheckRestfulMethod(ctx *cli.Context, methodOrPath string, pathPattern strin
 			err = fmt.Errorf("bad restful path %s", pathPattern)
 			return
 		}
-	//} else if method, ok = ctx.Flags().GetValue("roa"); ok {
-	//	if strings.HasPrefix(methodOrPath, "/") && pathPattern == "" {
-	//		path = methodOrPath
-	//		return
-	//	} else {
-	//		err = fmt.Errorf("bad restful path %s", methodOrPath)
-	//		return
-	//	}
+	} else if method, ok = RoaFlag.GetValue(); ok {
+		if strings.HasPrefix(methodOrPath, "/") && pathPattern == "" {
+			path = methodOrPath
+			return
+		} else {
+			err = fmt.Errorf("bad restful path %s", methodOrPath)
+			return
+		}
 	} else {
 		ok = false
 		return
 	}
 }
 
-func CheckHttpMethod(s string) (string, bool) {
+func checkHttpMethod(s string) (string, bool) {
 	m := strings.ToUpper(s)
 	if m == "GET" || m == "POST" || m == "PUT" || m == "DELETE" {
 		return m, true

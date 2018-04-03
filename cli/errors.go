@@ -16,7 +16,7 @@ type errorWithTip struct {
 	tip string
 }
 
-func NewErrorWithTip(err error, tipFormat string, args... interface{}) ErrorWithTip {
+func NewErrorWithTip(err error, tipFormat string, args... interface{}) error {
 	return &errorWithTip{
 		err: err,
 		tip: fmt.Sprintf(tipFormat, args...),
@@ -28,7 +28,7 @@ func (e *errorWithTip) Error() string {
 }
 
 func (e *errorWithTip) GetTip(lang string) string {
-	return e.GetTip(lang)
+	return e.tip
 }
 
 

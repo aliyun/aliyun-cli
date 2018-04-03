@@ -115,6 +115,15 @@ var _ = ginkgo.Describe("Parser", func() {
 		Expect(s).Should(Equal("s1"))
 		Expect(fs.Get("prev")).ShouldNot(Equal(nil))
 	})
+
+	ginkgo.It("4. can read fields", func() {
+		parser, fs := newTestParser("--waiter", "expr=aaa", "to=bbb")
+		s, _, err := parser.ReadNextArg()
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(s).Should(Equal(""))
+		Expect(fs.Get("prev")).ShouldNot(Equal(nil))
+	})
 })
 
 //var _ = ginkgo.Describe("Parser", func() {
