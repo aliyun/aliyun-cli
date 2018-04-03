@@ -1,5 +1,19 @@
 # CHANGE LOG
 
+### 3.0.0 GA Version
+
+- refactoring cli package design, support composite flag with fields
+- refactoring openapi package design, make it more extensible
+- support `--quiet` flag
+- support `--dry-run` flag
+- support `aliyun oss --profile xxx`
+
+### 0.81
+
+- support `--output`
+- support `--waiter`
+- use `go -ldflags` to enable single Version in Makefile
+
 ### 0.80
 
 - support auto completion for zsh/bash

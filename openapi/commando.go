@@ -78,12 +78,26 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	if err != nil {
 		return err
 	}
-	invoker.Prepare(ctx)
+	err = invoker.Prepare(ctx)
+	if err != nil {
+		return err
+	}
+
+	if DryRunFlag.IsAssigned() {
+		fmt.Printf("Dry-run with request: \n------------------------------------\n%v\n",
+			invoker.getRequest())
+		return nil
+	}
 
 	// if invoke with helper
 	out, err, ok := c.invokeWithHelper(invoker)
+
 	// fmt.Printf("invoker %v %v \n", invoker, reflect.TypeOf(invoker))
-	if !ok {
+	if ok {
+		if err != nil {	// call with helper failed
+			return err
+		}
+	} else {
 		resp, err := invoker.Call()
 		if err != nil {
 			// if unmarshal failed,
@@ -176,7 +190,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 				return nil, err
 			}
 			if !ok {
-				return nil, cli.NewErrorWithTip(fmt.Errorf("product %s need restful call", product.GetLowerCode()),
+				return nil, cli.NewErrorWithTip(fmt.Errorf("product '%s' need restful call", product.GetLowerCode()),
 					"Use `aliyun %s {GET|PUT|POST|DELETE} <path> ...`", product.GetLowerCode())
 			}
 			return &RestfulInvoker{

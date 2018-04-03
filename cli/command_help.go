@@ -57,11 +57,11 @@ func (c *Command) PrintFlags(ctx *Context) {
 		if flag.Hidden {
 			continue
 		}
-		format := "--%s\t%s\n"
+		s := "--" + flag.Name
 		if flag.Shorthand != 0 {
-			format = fmt.Sprintf("%s,-%c", format, flag.Shorthand)
+			s = s + ",-" + string(flag.Shorthand)
 		}
-		fmt.Fprintf(w, "  " + format, flag.Name, flag.Short.Text())
+		fmt.Fprintf(w, "  %s\t%s\n", s, flag.Short.Text())
 	}
 	w.Flush()
 }

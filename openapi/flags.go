@@ -8,19 +8,6 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 )
 
-const (
-	flagOutputTableRows = "output-table-rows"
-	flagOutputTableCols = "output-table-cols"
-
-	flagWaitForExpr   = "wait-for-expr"
-	flagWaitForTarget = "wait-for-target"
-	flagWaitTimeout   = "wait-timeout"
-	flagWaitInterval  = "wait-interval"
-
-	flagRetryTimeout = "retry-timeout"
-	flagRetryCount   = "retry-count"
-)
-
 func AddFlags(fs *cli.FlagSet) {
 	fs.Add(SecureFlag)
 	fs.Add(ForceFlag)
@@ -33,6 +20,8 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(AcceptFlag)
 	fs.Add(OutputFlag)
 	fs.Add(WaiterFlag)
+	fs.Add(DryRunFlag)
+	fs.Add(QuietFlag)
 }
 
 var (
@@ -91,23 +80,23 @@ var (
 			"使用 `--roa {GET|PUT|POST|DELETE}` 使用restful方式调用[已过期]",
 		),
 	}
-
-	VerboseFlag = &cli.Flag{Category: "caller",
-		Name: "verbose",
-		Shorthand: 'v',
-		AssignedMode: cli.AssignedNone,
-		Short: i18n.T(
-			"add `--verbose` to enable verbose mode",
-			"使用 `--verbose` 开启啰嗦模式",
-		),
-	}
+	//
+	//VerboseFlag = &cli.Flag{Category: "caller",
+	//	Name: "verbose",
+	//	Shorthand: 'v',
+	//	AssignedMode: cli.AssignedNone,
+	//	Short: i18n.T(
+	//		"add `--verbose` to enable verbose mode",
+	//		"使用 `--verbose` 开启啰嗦模式",
+	//	),
+	//}
 
 	DryRunFlag = &cli.Flag{Category: "caller",
 		Name: "dry-run",
 		AssignedMode: cli.AssignedNone,
 		Short: i18n.T(
-			"add `--dry-run` to only validate and without running.",
-			"使用 `--dry-run` 在执行校验后跳过实际运行",
+			"add `--dry-run` to validate and print request without running.",
+			"使用 `--dry-run` 在执行校验后打印请求包体，跳过实际运行",
 		),
 		ExcludeWith: []string{"pager", "waiter"},
 	}

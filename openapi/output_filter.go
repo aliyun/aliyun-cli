@@ -17,8 +17,8 @@ var OutputFlag = &cli.Flag{
 	Shorthand: 'o',
 	AssignedMode: cli.AssignedRepeatable,
 	Short: i18n.T(
-		"use `--output cols=Column1,Columns2` to print output as table",
-		"使用 `--output cols=Column1,Columns2` 打印表格输出",
+		"use `--output cols=Field1,Field2 [rows=jmesPath]` to print output as table",
+		"使用 `--output cols=Field1,Field1 [rows=jmesPath]` 使用表格方式打印输出",
 	),
 	Long: i18n.T (
 			"",
@@ -93,12 +93,18 @@ func (a *TableOutputFilter) FormatTable(rowPath string, colNames []string, v int
 
 	var buf bytes.Buffer
 	writer := bufio.NewWriter(&buf)
-	format := strings.Repeat("%v\t", len(colNames)-1) + "%v"
-
+	format := strings.Repeat("%v\t ", len(colNames)-1) + "%v"
 	w := tabwriter.NewWriter(writer, 0, 0, 1, ' ', tabwriter.Debug)
 	fmt.Fprintln(w, fmt.Sprintf(format, toIntfArray(colNames)...))
-	separator := "-----------------"
-	fmt.Fprintln(w, strings.Repeat(separator+"\t", len(colNames)-1)+separator)
+
+	separator := ""
+	for i, colName := range colNames {
+		separator = separator + strings.Repeat("-", len(colName))
+		if i < len(colNames) - 1 {
+			separator = separator + "\t "
+		}
+	}
+	fmt.Fprintln(w, separator)
 
 
 	for _, row := range rowsArray {

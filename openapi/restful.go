@@ -62,7 +62,7 @@ func (a *RestfulInvoker) Call() (*responses.CommonResponse, error) {
 }
 
 func checkRestfulMethod(methodOrPath string, pathPattern string) (ok bool, method string, path string, err error) {
-	if path == "" {
+	if pathPattern == "" {
 		ok = false
 		return
 	}

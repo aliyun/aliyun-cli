@@ -28,6 +28,7 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 	// assign parameters
 	for _, f := range ctx.UnknownFlags().Flags() {
 		param := api.FindParameter(f.Name)
+		// fmt.Printf("flag: %s %v\n", f.Name, param)
 		if param == nil {
 			return &InvalidParameterError{Name: f.Name, api: api, flags: ctx.Flags()}
 		}

@@ -14,17 +14,17 @@ import (
 
 var PagerFlag = &cli.Flag{Category: "caller",
 	Name: "pager",
-	Hidden: true,
+	Hidden: false,
 	AssignedMode: cli.AssignedRepeatable,
 	Aliases: []string{"--all-pages"},
 	Short: i18n.T(
-		"use `--all-pages` to merge pages for pageable APIs",
-		"使用 `--all-pages` 在访问分页的API时合并分页"),
+		"use `--pager` to merge pages for pageable APIs",
+		"使用 `--pager` 在访问分页的API时合并结果分页"),
 	Fields: []cli.Field{
 		{Key: "", Required:false},
 		{Key: "PageNumber", DefaultValue: "PageNumber", Short: i18n.T(" PageNumber", "指定PageNumber的属性")},
-		{Key: "PageSize", DefaultValue: "PageSize", Short: i18n.T("", "")},
-		{Key: "TotalCount", DefaultValue: "TotalCount", Short: i18n.T("", "")},
+		{Key: "PageSize", DefaultValue: "PageSize", Short: i18n.T("PageSize", "")},
+		{Key: "TotalCount", DefaultValue: "TotalCount", Short: i18n.T("TotalCount", "")},
 	},
 	ExcludeWith: []string {"waiter"},
 }
