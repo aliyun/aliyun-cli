@@ -80,16 +80,6 @@ var (
 			"使用 `--roa {GET|PUT|POST|DELETE}` 使用restful方式调用[已过期]",
 		),
 	}
-	//
-	//VerboseFlag = &cli.Flag{Category: "caller",
-	//	Name: "verbose",
-	//	Shorthand: 'v',
-	//	AssignedMode: cli.AssignedNone,
-	//	Short: i18n.T(
-	//		"add `--verbose` to enable verbose mode",
-	//		"使用 `--verbose` 开启啰嗦模式",
-	//	),
-	//}
 
 	DryRunFlag = &cli.Flag{Category: "caller",
 		Name: "dry-run",
@@ -98,7 +88,7 @@ var (
 			"add `--dry-run` to validate and print request without running.",
 			"使用 `--dry-run` 在执行校验后打印请求包体，跳过实际运行",
 		),
-		ExcludeWith: []string{"pager", "waiter"},
+		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name},
 	}
 
 	QuietFlag = &cli.Flag{Category: "caller",
@@ -109,57 +99,17 @@ var (
 			"add `--quiet` to hide normal output",
 			"使用 `--quiet` 关闭正常输出",
 		),
+		ExcludeWith: []string{DryRunFlag.Name},
 	}
 
-
-	//ContentTypeFlag = &cli.Flag{Category: "caller",
-	//	Name: "content-type", AssignedMode: cli.AssignedOnce, Hidden: true,
-	//	Usage: i18n.T(
-	//		"add `--content-type {json|xml}` to add Accept header",
-	//		"使用 `--content-type {json|xml}` 来指定Accept头")}
+	// TODO
+	//VerboseFlag = &cli.Flag{Category: "caller",
+	//	Name: "verbose",
+	//	Shorthand: 'v',
+	//	AssignedMode: cli.AssignedNone,
+	//	Short: i18n.T(
+	//		"add `--verbose` to enable verbose mode",
+	//		"使用 `--verbose` 开启啰嗦模式",
+	//	),
 	//}
-
-	//OutputTableRowFlag = cli.Flag{Category: "caller",
-	//	Name: flagOutputTableRows, AssignedMode: cli.AssignedOnce, Hidden: true,
-	//	Usage: i18n.T(
-	//		fmt.Sprintf("use `--%s` to assign fields of table row", flagOutputTableRows),
-	//		fmt.Sprintf("使用 `--%s` 指定表格行的内容", flagOutputTableRows))}
-	//
-	//OutputTableColsFlag = cli.Flag{Category: "caller",
-	//	Name: flagOutputTableCols, AssignedMode: cli.AssignedOnce, Hidden: true,
-	//	Usage: i18n.T(
-	//		fmt.Sprintf("use `--%s` to assign table column names", flagOutputTableCols),
-	//		fmt.Sprintf("使用 `--%s` 指定表格的列名", flagOutputTableCols))}
-	//
-	//WaitForExprFlag = cli.Flag{Category: "caller",
-	//	Name: flagWaitForExpr, AssignedMode: cli.AssignedOnce, Hidden: true,
-	//	Usage: i18n.T(
-	//		fmt.Sprintf("use `--%s` to assign jmes expr", flagWaitForExpr),
-	//		fmt.Sprintf("使用 `--%s` 指定jmes表达式", flagWaitForExpr))}
-	//
-	//WaitForTargetFlag = cli.Flag{Category: "caller",
-	//	Name: flagWaitForTarget, AssignedMode: cli.AssignedOnce, Hidden: true,
-	//	Usage: i18n.T(
-	//		fmt.Sprintf("use `--%s` to assign target", flagWaitForTarget),
-	//		fmt.Sprintf("使用 `--%s` 指定目标的值", flagWaitForTarget))}
-	//
-	//WaitTimeoutFlag = cli.Flag{Category: "caller",
-	//	Name: flagWaitTimeout, AssignedMode: cli.AssignedOnce, Hidden: true,
-	//	Usage: i18n.T(
-	//		fmt.Sprintf("use `--%s` to set timeout(seconds)", flagWaitTimeout),
-	//		fmt.Sprintf("使用 `--%s` 指定等待超时时间(秒)", flagWaitTimeout))}
-	//
-	//WaitIntervalFlag = cli.Flag{Category: "caller",
-	//	Name: flagWaitInterval, AssignedMode: cli.AssignedOnce, Hidden: true,
-	//	Usage: i18n.T(
-	//		fmt.Sprintf("use `--%s` to set interval(seconds)", flagWaitInterval),
-	//		fmt.Sprintf("使用 `--%s` 指定请求间隔时间(秒)", flagWaitInterval))}
-	//
-	//
-	//WaiterFlag = cli.Flag{Category: "helper",
-	//	Name: "waiter", AssignedMode: cli.AssignedKeyValues, Hidden: true,
-	//	Usage: i18n.T(
-	//		"use `--waiter expr=<jmespath> to=<expectValue> [timeout=<seconds>] [interval=<seconds>]` to wait until response value equals to expect",
-	//		"使用 `--waiter expr=<jmespath> to=<expectValue> [timeout=<秒>] [interval=<秒>]` 来等待返回值"),
-	// }
 )

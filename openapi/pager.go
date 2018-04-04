@@ -1,3 +1,6 @@
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 package openapi
 
 import (
@@ -26,7 +29,7 @@ var PagerFlag = &cli.Flag{Category: "caller",
 		{Key: "PageSize", DefaultValue: "PageSize", Short: i18n.T("PageSize", "")},
 		{Key: "TotalCount", DefaultValue: "TotalCount", Short: i18n.T("TotalCount", "")},
 	},
-	ExcludeWith: []string {"waiter"},
+	ExcludeWith: []string {WaiterFlag.Name},
 }
 
 type Pager struct {
@@ -69,15 +72,6 @@ func (a *Pager) CallWith(invoker Invoker) (string, error) {
 			return "", err
 		}
 
-		// client *sdk.Client, request *requests.CommonRequest, pager *Pager
-		// s, err := invoker.client.ProcessCommonRequest(invoker.request)
-
-		// resp, err := invoker.Call()
-		//if err != nil {
-		//	return "", fmt.Errorf("call failed %s", err)
-		//}
-		//
-		// jmespath.Parser{}
 		err = a.FeedResponse(resp.GetHttpContentString())
 		if err != nil {
 			return "", fmt.Errorf("call failed %s", err)

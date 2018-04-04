@@ -1,3 +1,6 @@
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 package openapi
 
 import (
@@ -7,7 +10,6 @@ import (
 )
 
 // find array in json object
-
 func detectArrayPath(d interface{}) string {
 	m, ok := d.(map[string]interface{})
 	if !ok {
@@ -27,7 +29,6 @@ func detectArrayPath(d interface{}) string {
 }
 
 //
-
 func mergeWith(to interface{}, from interface{}) interface{} {
 	return nil
 }

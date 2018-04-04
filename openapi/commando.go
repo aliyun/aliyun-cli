@@ -1,3 +1,6 @@
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 package openapi
 
 import (
@@ -9,6 +12,7 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 )
 
+// main entrance of aliyun cli
 type Commando struct {
 	profile config.Profile
 	library *Library
@@ -83,6 +87,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		return err
 	}
 
+	// process --dry-run
 	if DryRunFlag.IsAssigned() {
 		fmt.Printf("Dry-run with request: \n------------------------------------\n%v\n",
 			invoker.getRequest())
@@ -108,15 +113,17 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		out = resp.GetHttpContentString()
 	}
 
+	// if `--quiet` assigned. do not print anything
+	if QuietFlag.IsAssigned() {
+		return nil
+	}
+
+	// process `--output ...`
 	if filter := GetOutputFilter(); filter != nil {
 		out, err = filter.FilterOutput(out)
 		if err != nil {
 			return err
 		}
-	}
-
-	if QuietFlag.IsAssigned() {
-		return nil
 	}
 
 	fmt.Println(out)

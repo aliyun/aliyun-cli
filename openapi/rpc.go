@@ -25,6 +25,11 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 	request.Scheme = api.GetProtocol()
 	request.Method = api.GetMethod()
 
+	// if `--secure` assigned, use https
+	if _, ok := SecureFlag.GetValue(); ok {
+		a.request.Scheme = "https"
+	}
+
 	// assign parameters
 	for _, f := range ctx.UnknownFlags().Flags() {
 		param := api.FindParameter(f.Name)
@@ -67,6 +72,8 @@ func (a *RpcInvoker) Call() (*responses.CommonResponse, error) {
 	// fmt.Printf("Resp: %s", resp.String())
 	return resp, err
 }
+
+// Deprecated Code
 //
 //func (c *Caller) InvokeRpc(ctx *cli.Context, product *meta.Product, apiName string) error {
 //	api, ok := c.library.GetApi(product.Code, product.Version, apiName)

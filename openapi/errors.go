@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// return when use unknown product
 type InvalidProductError struct {
 	Code    string
 	library *Library
@@ -24,6 +25,7 @@ func (e *InvalidProductError) GetSuggestions() []string {
 	return sr.GetResults()
 }
 
+// return when use unknown api
 type InvalidApiError struct {
 	Name    string
 	product *meta.Product
@@ -41,6 +43,7 @@ func (e *InvalidApiError) GetSuggestions() []string {
 	return sr.GetResults()
 }
 
+// return when use unknown parameter
 type InvalidParameterError struct {
 	Name      string
 	api       *meta.Api

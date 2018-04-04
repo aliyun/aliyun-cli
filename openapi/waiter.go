@@ -1,3 +1,6 @@
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 package openapi
 
 import (
@@ -29,8 +32,8 @@ var WaiterFlag = &cli.Flag {Category:"helper",
 type Waiter struct {
 	expr string
 	to string
-//	timeout  time.Duration
-//	interval time.Duration
+//	timeout  time.Duration	TODO use Flag.Field to validate
+//	interval time.Duration  TODO use Flag.Field to validate
 }
 
 func GetWaiter() *Waiter {
@@ -45,26 +48,6 @@ func GetWaiter() *Waiter {
 	//waiter.timeout = time.Duration(time.Second * 180)
 	//waiter.interval = time.Duration(time.Second * 5)
 
-	//timeout, err := strconv.Atoi(waitTimeoutFlag.GetStringOrDefault(ctx, "0"))
-	//if err != nil {
-	//	fmt.Println(err)
-	//	timeout = 0
-	//}
-	//
-	//if timeout < 0 {
-	//	timeout = 0
-	//}
-	//
-	//interval, err := strconv.Atoi(waitIntervalFlag.GetStringOrDefault(ctx, "1"))
-	//if err != nil {
-	//	fmt.Println(err)
-	//	interval = 1
-	//}
-	//
-	//if interval < 0 {
-	//	interval = 1
-	//}
-	//
 	return waiter
 }
 
@@ -95,8 +78,7 @@ func (a *Waiter) CallWith(invoker Invoker) (string, error) {
 			return "", fmt.Errorf("--waiter interval=%s must be integer", s)
 		}
 	}
-	//waiter.timeout = time.Duration(time.Second * 180)
-	//waiter.interval = time.Duration(time.Second * 5)
+
 	begin := time.Now()
 	for {
 		resp, err := invoker.Call()
@@ -120,63 +102,3 @@ func (a *Waiter) CallWith(invoker Invoker) (string, error) {
 		time.Sleep(interval)
 	}
 }
-//
-//	doRequestAndCheck := func() (bool, *responses.CommonResponse, error) {
-//		var v interface{}
-//
-//		resp, err := w.client.ProcessCommonRequest(w.request)
-//
-//		if err != nil {
-//			fmt.Println(err)
-//			return false, nil, err
-//		}
-//
-//		if len(w.targets) == 0 {
-//			return true, resp, fmt.Errorf("no target targets: %v", w.targets)
-//		}
-//
-//
-//		if err != nil {
-//			return false, resp, err
-//		}
-//
-//		intf, err := jmespath.Search(w.waitExpr, v)
-//
-//		if err != nil {
-//			return false, resp, fmt.Errorf("jmespath: '%s' failed %s", w.waitExpr, err)
-//		}
-//
-//		res := fmt.Sprintf("%v", intf)
-//		if res == w.targets[0] {
-//			return true, resp, nil
-//		} else {
-//			//fmt.Println("response value: " + res)
-//		}
-//
-//		return false, resp, err
-//	}
-//
-//	t := time.NewTimer(w.timeout)
-//
-//	for {
-//
-//		find, req, err := doRequestAndCheck()
-//
-//		if find {
-//			//fmt.Printf("Find targets %v\n", w.targets)
-//			return req, err
-//		}
-//
-//		if err != nil {
-//			fmt.Println(err)
-//		}
-//
-//		select {
-//		case <- time.After(w.interval):
-//			//fmt.Println("interval done")
-//		case <- t.C:
-//			return req, errors.New("Timeout")
-//		}
-//
-//	}
-//}

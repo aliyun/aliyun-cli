@@ -1,3 +1,6 @@
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 package openapi
 
 import (
@@ -34,12 +37,6 @@ type OutputFilter interface {
 	FilterOutput(input string) (string, error)
 }
 
-//var (
-//	processors = []func(ctx *cli.Context, response string) (bool, error){
-//		outputTable,
-//	}
-//)
-
 func GetOutputFilter() (OutputFilter) {
 	if !OutputFlag.IsAssigned() {
 		return nil
@@ -48,8 +45,6 @@ func GetOutputFilter() (OutputFilter) {
 }
 
 type TableOutputFilter struct {
-//	rowExpr string
-//	colsName []string
 }
 
 func NewTableOutputFilter() (OutputFilter) {
@@ -125,11 +120,17 @@ func (a *TableOutputFilter) FormatTable(rowPath string, colNames []string, v int
 	return buf.String(), nil
 }
 
+func toIntfArray(stringArray []string) []interface{} {
+	intfArray := []interface{}{}
+
+	for _, elem := range stringArray {
+		intfArray = append(intfArray, elem)
+	}
+	return intfArray
+}
 
 
-
-
-//
+// Deprecated Code
 //func outputProcessor(ctx *cli.Context, response string) error {
 //
 //	for _, processor := range processors {
@@ -204,11 +205,3 @@ func (a *TableOutputFilter) FormatTable(rowPath string, colNames []string, v int
 //	return true, nil
 //}
 //
-func toIntfArray(stringArray []string) []interface{} {
-	intfArray := []interface{}{}
-
-	for _, elem := range stringArray {
-		intfArray = append(intfArray, elem)
-	}
-	return intfArray
-}
