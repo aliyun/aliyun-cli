@@ -45,7 +45,7 @@ type Flag struct {
 	// `AssignedNone`: 		flag only appear with `--flag1` `--flag2`
 	// `AssignedDefault`: 	flag can appear with `--flag1` or `--flag1 value1`
 	// `AssignedOnce`: 		flag only appear with `--flag1 value1`
-	// `AssignedRepeatable`: flag can appear multi times sample: `--flag1 v1 v2 v3`
+	// `AssignedRepeatable`: flag can appear multi times sample: `--flag1 [v1] [v2] [v3] [field1=value1]`, use with Fields
 	AssignedMode AssignedMode
 
 	// If Persistent is true, the flag can apply to child commands
@@ -61,9 +61,10 @@ type Flag struct {
 	Validate func(f *Flag) error
 
 	// Flag can assigned with --flag field1=value1 field2=value2 value3 ...
+	// must used with AssignedMode=AssignedRepeatable
 	Fields []Field
 
-	// Flag can't appear with other flags
+	// Flag can't appear with other flags, use Flag.Name
 	ExcludeWith []string
 
 	assigned  bool

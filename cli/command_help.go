@@ -43,7 +43,7 @@ func (c *Command) PrintSubCommands() {
 }
 
 func (c *Command) PrintFlags(ctx *Context) {
-	if len(c.flags.Flags()) == 0 {
+	if len(c.Flags().Flags()) == 0 {
 		return
 	}
 

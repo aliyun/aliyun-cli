@@ -178,7 +178,7 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 		}
 	}
 
-	//
+	// cmd is find by args, try run cmd.Run
 	// parse remain args
 	remainArgs, err := parser.ReadAll()
 	if err != nil {

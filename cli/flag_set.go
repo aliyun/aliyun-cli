@@ -8,7 +8,9 @@ import (
 )
 
 type FlagSet struct {
+	// flags
 	flags []*Flag
+	// key: "--name" "-c"
 	index map[string]*Flag
 }
 
