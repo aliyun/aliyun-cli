@@ -11,16 +11,16 @@ import (
 
 type Command struct {
 	// Command Name
-	Name   string
+	Name string
 
 	// Short is the short description shown in the 'help' output.
-	Short  *i18n.Text
+	Short *i18n.Text
 
 	// Long is the long message shown in the 'help <this-command>' output.
-	Long   *i18n.Text
+	Long *i18n.Text
 
 	// Syntax for usage
-	Usage  string
+	Usage string
 
 	// Sample command
 	Sample string
@@ -43,12 +43,12 @@ type Command struct {
 	Help func(ctx *Context, args []string) error
 
 	// auto compete
-	AutoComplete func(ctx *Context, args[]string) []string
+	AutoComplete func(ctx *Context, args []string) []string
 
 	suggestDistance int
-	parent			*Command
+	parent          *Command
 	subCommands     []*Command
-	flags        	*FlagSet
+	flags           *FlagSet
 }
 
 func (c *Command) AddSubCommand(cmd *Command) {
@@ -56,7 +56,7 @@ func (c *Command) AddSubCommand(cmd *Command) {
 	c.subCommands = append(c.subCommands, cmd)
 }
 
-func (c *Command) Flags() (*FlagSet) {
+func (c *Command) Flags() *FlagSet {
 	if c.flags == nil {
 		c.flags = NewFlagSet()
 	}
@@ -80,7 +80,7 @@ func (c *Command) Execute(args []string) {
 	}
 }
 
-func (c *Command) GetSubCommand(s string) (*Command) {
+func (c *Command) GetSubCommand(s string) *Command {
 	for _, cmd := range c.subCommands {
 		if cmd.Name == s {
 			return cmd
@@ -115,7 +115,6 @@ func (c *Command) GetUsageWithParent() string {
 	return usage
 }
 
-
 func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 	if strings.HasPrefix(ctx.completion.Current, "-") {
 		for _, f := range ctx.flags.Flags() {
@@ -143,9 +142,7 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 func (c *Command) executeInner(ctx *Context, args []string) error {
 	//
 	// fmt.Printf(">>> Execute Command: %s args=%v\n", c.Name, args)
-	parser := NewParser(args, func(s string) (*Flag, error) {
-		return ctx.DetectFlag(s)
-	})
+	parser := NewParser(args, ctx)
 
 	//
 	// get next arg
@@ -181,7 +178,7 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 		}
 	}
 
-	//
+	// cmd is find by args, try run cmd.Run
 	// parse remain args
 	remainArgs, err := parser.ReadAll()
 	if err != nil {
@@ -195,7 +192,7 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 		return err
 	}
 
-	if ctx.flags.IsAssigned("help") {
+	if HelpFlag.IsAssigned() {
 		ctx.help = true
 	}
 	callArgs := make([]string, 0)
@@ -234,36 +231,22 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 }
 
 func (c *Command) processError(err error) {
-	//
-	// process error
-	//if e, ok := err.(PrintableError); ok {
-	//	Errorf("error: %s\n", e.GetText(i18n.GetLanguage()))
-	//} else {
-		Errorf("ERROR: %s\n", err.Error())
-//	}
-
+	Errorf("ERROR: %s\n", err.Error())
 	if e, ok := err.(SuggestibleError); ok {
-		ss := e.GetSuggestions()
-		if len(ss) > 0 {
-			Noticef("\ndid you mean: \n  %s \n", ss[0])
-		}
+		PrintSuggestions(i18n.GetLanguage(), e.GetSuggestions())
+		return
+	}
+	if e, ok := err.(ErrorWithTip); ok {
+		Noticef("\n%s\n", e.GetTip(i18n.GetLanguage()))
+		return
 	}
 }
 
-func (c *Command) executeHelp(ctx *Context, args []string)  {
+func (c *Command) executeHelp(ctx *Context, args []string) {
 	if c.Help != nil {
 		err := c.Help(ctx, args)
 		if err != nil {
-			Errorf("Error: %s\n", err)
-		}
-		if se, ok := err.(SuggestibleError); ok {
-			ss := se.GetSuggestions()
-			if len(ss) > 0 {
-				Noticef("\nDid you mean:\n")
-				for _, s := range ss {
-					Noticef("  %s\n", s)
-				}
-			}
+			c.processError(err)
 		}
 		return
 	}

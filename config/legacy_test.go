@@ -4,8 +4,8 @@
 package config
 
 import (
-	"testing"
 	"gopkg.in/ini.v1"
+	"testing"
 )
 
 var lcfgText = []byte(`

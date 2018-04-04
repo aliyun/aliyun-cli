@@ -8,21 +8,24 @@ import (
 	"fmt"
 )
 
-type FlagDetector interface {
-	DetectFlag(name string) (*Flag, error)
+type flagDetector interface {
+	detectFlag(name string) (*Flag, error)
+	detectFlagByShorthand(ch rune) (*Flag, error)
 }
 
 type Parser struct {
-	current int
-	args    []string
-	detector func(string) (*Flag, error)
+	current     int
+	args        []string
+	detector    flagDetector
+	currentFlag *Flag
 }
 
-func NewParser(args []string, detector func(string) (*Flag, error)) *Parser {
-	return &Parser {
-		args:    args,
-		current: 0,
+func NewParser(args []string, detector flagDetector) *Parser {
+	return &Parser{
+		args:     args,
+		current:  0,
 		detector: detector,
+		currentFlag: nil,
 	}
 }
 
@@ -70,67 +73,97 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 	p.current++
 	more = true
 
-	if strings.HasPrefix(s, "--") {
-		if name, value, ok := SplitWith(s[2:], "=:"); ok {
-			flag, err = p.detector(name)
-			if err != nil {
-				return
-			}
-			err = flag.putValue(value)
-			if err != nil {
-				return
-			}
-			return
-		} else {
-			flag, err = p.detector(name)
-			if err != nil {
-				return
-			}
-			switch flag.AssignedMode {
-			case AssignedNone:
-				flag.putValue("")
-			case AssignedDefault:
-				if value, ok := p.readNextValue(false); ok {
-					flag.putValue(value)
-				} else {
-					flag.putValue("")
-				}
-			case AssignedOnce:
-				if value, ok := p.readNextValue(true); ok {
-					flag.putValue(value)
-				}
-			case AssignedRepeatable:
-				if value, ok := p.readNextValue(true); ok {
-					flag.putValue(value)
-				}
-			}
+	value := ""
+	flag, value, err = p.parseCommandArg(s)
+	if err != nil {
+		return
+	}
+	if flag != nil {
+		err = flag.setIsAssigned()
+		if err != nil {
 			return
 		}
-	} else if strings.HasPrefix(s,"-") {
-		err = fmt.Errorf("not support single dash flag YET, next-version")
-		return
+	}
+
+	// fmt.Printf(">>> current=%v\n    flag=%v\n    value=%s\n    err=%s\n", p.currentFlag, flag, value, err)
+	if flag == nil { // parse with value xxxx
+		if p.currentFlag != nil { // value need to feed to previous flag xxx
+			err = p.currentFlag.assign(value)
+			if err != nil {
+				return
+			}
+			if !p.currentFlag.needValue() {	// if current flag is feeds close it
+				// fmt.Printf("$$$ clear %s\n", p.currentFlag.AssignedMode)
+				p.currentFlag = nil
+			}
+		} else {
+			arg = value	// this is a arg
+		}
+	} else {	// parse with flag	--xxx or -x
+		if p.currentFlag != nil {
+			err = p.currentFlag.validate()
+			if err != nil {
+				return
+			}
+			p.currentFlag = nil
+		}
+
+		if value != "" { // pattern --xx=aa, -x:aa, -xxx=bb
+			err = flag.assign(value)
+			if err != nil {
+				return
+			}
+		} else { // pattern --xx -- yy
+			if flag.needValue() {
+				p.currentFlag = flag
+			}
+		}
+	}
+	return
+}
+
+func (p *Parser) parseCommandArg(s string) (flag *Flag, value string, err error){
+	prefix, v, ok := SplitStringWithPrefix(s, "=:")
+
+	if ok {
+		value = v
+	}
+
+	if strings.HasPrefix(prefix, "--") {
+		if len(prefix) > 2 {
+			flag, err = p.detector.detectFlag(prefix[2:])
+		} else {
+			err = fmt.Errorf("not support '--' in command line")
+		}
+	} else if strings.HasPrefix(prefix, "-") {
+		if len(prefix) == 2 {
+			flag, err = p.detector.detectFlagByShorthand(rune(prefix[1]))
+		} else {
+			err = fmt.Errorf("not support flag form %s", prefix)
+		}
 	} else {
-		arg = s
-		return
+		value = s
+	}
+	return
+}
+
+func SplitStringWithPrefix(s string, splitters string) (string, string, bool) {
+	i := strings.IndexAny(s, splitters)
+	if i < 0 {
+		return s, "", false
+	} else {
+		return s[:i], s[i+1:], true
 	}
 }
 
-//
-//
-func (p *Parser) readNextValue(force bool) (string, bool) {
-	if p.current >= len(p.args) {
-		return "", false
-	}
-	s := p.args[p.current]
-	if force {
-		p.current++
-		return s, true
+func SplitString(s string, sep string) []string {
+	return strings.Split(s, sep)
+}
+
+func UnquoteString(s string) string {
+	if strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"") && len(s) >= 2 {
+		return s[1:len(s)-1]
 	} else {
-		if !strings.HasPrefix(s, "--") && !strings.HasPrefix(s, "-") {
-			p.current++
-			return s, true
-		} else {
-			return "", false
-		}
+		return s
 	}
 }

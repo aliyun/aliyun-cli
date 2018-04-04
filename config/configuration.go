@@ -4,12 +4,12 @@
 package config
 
 import (
-	"fmt"
-	"io/ioutil"
 	"encoding/json"
-	"runtime"
-	"os"
+	"fmt"
 	"github.com/aliyun/aliyun-cli/cli"
+	"io/ioutil"
+	"os"
+	"runtime"
 )
 
 const (
@@ -19,11 +19,13 @@ const (
 )
 
 type Configuration struct {
-	CurrentProfile string	`json:"current"`
-	Profiles []Profile		`json:"profiles"`
+	CurrentProfile string    `json:"current"`
+	Profiles       []Profile `json:"profiles"`
+	MetaPath	   string 	 `json:"meta_path"`
+	//Plugins 		[]Plugin `json:"plugin"`
 }
 
-func NewConfiguration() (Configuration) {
+func NewConfiguration() Configuration {
 	return Configuration{
 		CurrentProfile: DefaultConfigProfileName,
 		Profiles: []Profile{
@@ -32,7 +34,7 @@ func NewConfiguration() (Configuration) {
 	}
 }
 
-func (c *Configuration) NewProfile(pn string) (Profile) {
+func (c *Configuration) NewProfile(pn string) Profile {
 	p, ok := c.GetProfile(pn)
 	if !ok {
 		p = NewProfile(pn)
@@ -50,8 +52,8 @@ func (c *Configuration) GetProfile(pn string) (Profile, bool) {
 	return Profile{Name: pn}, false
 }
 
-func (c *Configuration) GetCurrentProfile(ctx *cli.Context) (Profile) {
-	profileName := ProfileFlag.GetValueOrDefault(ctx, c.CurrentProfile)
+func (c *Configuration) GetCurrentProfile(ctx *cli.Context) Profile {
+	profileName := ProfileFlag.GetStringOrDefault(c.CurrentProfile)
 	p, _ := c.GetProfile(profileName)
 	p.OverwriteWithFlags(ctx)
 	return p
@@ -81,10 +83,24 @@ func LoadProfile(name string) (Profile, error) {
 		name = config.CurrentProfile
 	}
 	p, ok := config.GetProfile(name)
+	p.parent = &config
 	if !ok {
 		return p, fmt.Errorf("unknown profile %s, run configure to check", name)
 	}
 	return p, nil
+}
+
+func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
+	if name, ok := ProfileFlag.GetValue(); ok {
+		profile, err = LoadProfile(name)
+	} else {
+		profile, err = LoadProfile("")
+	}
+	if err != nil {
+		return
+	}
+	profile.OverwriteWithFlags(ctx)
+	return
 }
 
 func LoadConfiguration() (Configuration, error) {
@@ -110,7 +126,7 @@ func LoadConfiguration() (Configuration, error) {
 	return NewConfigFromBytes(bytes)
 }
 
-func SaveConfiguration(config Configuration) (error) {
+func SaveConfiguration(config Configuration) error {
 	// fmt.Printf("conf %v\n", config)
 	bytes, err := json.Marshal(config)
 	if err != nil {

@@ -6,11 +6,10 @@ package resource
 type Reader struct {
 }
 
-func NewReader() (*Reader) {
+func NewReader() *Reader {
 	return &Reader{}
 }
 
 func (r *Reader) ReadFrom(path string) ([]byte, error) {
 	return Asset(path)
 }
-

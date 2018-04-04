@@ -4,9 +4,9 @@
 package config
 
 import (
-	"github.com/aliyun/aliyun-cli/i18n"
-	"github.com/aliyun/aliyun-cli/cli"
 	"fmt"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 const configureGetHelpEn = `
@@ -14,9 +14,9 @@ const configureGetHelpEn = `
 const configureGetHelpZh = `
 `
 
-func NewConfigureGetCommand() (*cli.Command) {
+func NewConfigureGetCommand() *cli.Command {
 	cmd := &cli.Command{
-		Name:  "get",
+		Name: "get",
 		Short: i18n.T(
 			"print configuration values",
 			"打印配置信息"),
@@ -41,7 +41,7 @@ func doConfigureGet(c *cli.Context, args []string) {
 
 	profile := config.GetCurrentProfile(c)
 
-	if pn, ok := c.Flags().GetValue("profile"); ok {
+	if pn, ok := ProfileFlag.GetValue(); ok {
 		profile, ok = config.GetProfile(pn)
 		if !ok {
 			cli.Errorf("profile %s not found!", pn)
@@ -74,8 +74,6 @@ func doConfigureGet(c *cli.Context, args []string) {
 			fmt.Printf("region=%s\n", profile.RegionId)
 		case LanguageFlag.Name:
 			fmt.Printf("language=%s\n", profile.Language)
-		case OutputFlag.Name:
-			fmt.Printf("output=%s\n", profile.OutputFormat)
 		}
 	}
 }

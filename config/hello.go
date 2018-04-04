@@ -26,7 +26,7 @@ func GetRegions(profile *Profile) ([]Region, error) {
 	err = client.DoAction(request, response)
 
 	for _, region := range response.Regions.Region {
-		regions = append(regions, Region {
+		regions = append(regions, Region{
 			RegionId:  region.RegionId,
 			LocalName: region.LocalName,
 		})

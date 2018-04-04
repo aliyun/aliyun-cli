@@ -4,8 +4,8 @@
 package config
 
 import (
-	"testing"
 	. "github.com/onsi/ginkgo"
+	"testing"
 )
 
 func TestConfigSuite(t *testing.T) {

@@ -4,13 +4,13 @@
 package config
 
 import (
-	"os"
+	"fmt"
 	"github.com/aliyun/aliyun-cli/cli"
 	"gopkg.in/ini.v1"
-	"fmt"
+	"os"
 )
 
-func MigrateLegacyConfiguration() (*Configuration) {
+func MigrateLegacyConfiguration() *Configuration {
 	path := GetHomePath() + "/.aliyuncli/credentials"
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
@@ -55,11 +55,11 @@ func MigrateCredentials(path string) (Configuration, error) {
 		k2, e2 := section.GetKey("aliyun_access_key_secret")
 		if e1 == nil && e2 == nil {
 			r.Profiles = append(r.Profiles, Profile{
-				Name: profileName,
-				Mode: AK,
-				AccessKeyId: k1.String(),
+				Name:            profileName,
+				Mode:            AK,
+				AccessKeyId:     k1.String(),
 				AccessKeySecret: k2.String(),
-				OutputFormat: "json",
+				OutputFormat:    "json",
 			})
 			// fmt.Printf(" %s/%s Done", MosaicString(k1.Text(), 3), MosaicString(k2.Text(), 3))
 		} else {
@@ -90,5 +90,3 @@ func MigrateConfigure(path string, config *Configuration) error {
 	}
 	return nil
 }
-
-

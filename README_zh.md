@@ -170,3 +170,5 @@ $ aliyun newproduct --version 2018-01-01 --endpoint newproduct.aliyuncs.com --pa
 
 - `--version`: 指定API的版本，你可以在API文档中找到版本号，如ECS的版本号是`2014-05-26`。
 - `--endpoint`: 指定产品的接入地址，一般产品接入地址是`product.aliyuncs.com`，或`product.en-central-1.aliyuncs.com`，请参考各产品的API文档。
+
+- `--waiter timeout=xxx`：

@@ -1,15 +1,16 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/meta"
-	"github.com/aliyun/aliyun-cli/cli"
-	"strings"
 	"fmt"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/meta"
+	"strings"
 )
 
+// return when use unknown product
 type InvalidProductError struct {
 	Code    string
-	library *meta.Library
+	library *Library
 }
 
 func (e *InvalidProductError) Error() string {
@@ -18,14 +19,15 @@ func (e *InvalidProductError) Error() string {
 
 func (e *InvalidProductError) GetSuggestions() []string {
 	sr := cli.NewSuggester(strings.ToLower(e.Code), 2)
-	for _, p := range e.library.Products {
+	for _, p := range e.library.GetProducts() {
 		sr.Apply(strings.ToLower(p.Code))
 	}
 	return sr.GetResults()
 }
 
+// return when use unknown api
 type InvalidApiError struct {
-	Name string
+	Name    string
 	product *meta.Product
 }
 
@@ -41,10 +43,11 @@ func (e *InvalidApiError) GetSuggestions() []string {
 	return sr.GetResults()
 }
 
+// return when use unknown parameter
 type InvalidParameterError struct {
-	Name string
-	api *meta.Api
-	flags *cli.FlagSet
+	Name      string
+	api       *meta.Api
+	flags     *cli.FlagSet
 }
 
 func (e *InvalidParameterError) Error() string {

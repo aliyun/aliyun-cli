@@ -1,10 +1,13 @@
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 package openapi
 
 import (
-	"testing"
 	"encoding/json"
-	"github.com/jmespath/go-jmespath"
 	"fmt"
+	"github.com/jmespath/go-jmespath"
+	"testing"
 )
 
 func TestPager(t *testing.T) {

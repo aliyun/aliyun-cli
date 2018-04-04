@@ -4,27 +4,27 @@
 package meta
 
 import (
-	"strings"
 	"sort"
+	"strings"
 )
 
-type Library struct {
+type Repository struct {
 	Products []Product
-	Names []string
+	Names    []string
 
-	index map[string]Product
+	index  map[string]Product
 	reader Reader
 }
 
-func LoadLibrary(reader Reader) *Library {
+func LoadRepository(reader Reader) *Repository {
 	var e ProductSet
 	err := ReadJsonFrom(reader, "products.json", &e)
 	if err != nil {
 		panic(err)
 	}
 
-	r := Library {
-		index: make(map[string]Product),
+	r := Repository{
+		index:  make(map[string]Product),
 		reader: reader,
 	}
 	for _, product := range e.Products {
@@ -43,19 +43,19 @@ func LoadLibrary(reader Reader) *Library {
 	return &r
 }
 
-func (a *Library) GetProduct(code string) (Product, bool) {
+func (a *Repository) GetProduct(code string) (Product, bool) {
 	p, ok := a.index[strings.ToLower(code)]
 	return p, ok
 }
 
-func (a *Library) GetApi(productCode string, version string, apiName string) (Api, bool) {
+func (a *Repository) GetApi(productCode string, version string, apiName string) (Api, bool) {
 	var result Api
 	product, ok := a.GetProduct(productCode)
 	if !ok {
 		return result, false
 	}
 
-	err := ReadJsonFrom(a.reader, strings.ToLower(product.Code) + "/" + apiName + ".json", &result)
+	err := ReadJsonFrom(a.reader, strings.ToLower(product.Code)+"/"+apiName+".json", &result)
 	if err != nil {
 		return result, false
 	}

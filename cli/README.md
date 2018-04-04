@@ -25,9 +25,14 @@ Because aliyun cli need process unknown flags,and the following popular library 
 ### TODO
 
 - [x] Suggestions
-- [ ] Support shorthand flag, -a -b
-- [ ] Flag alias
-- [ ] Auto complete framework
+- [x] Support shorthand flag, -a -b
+- [x] Flag alias
+- [x] Auto complete framework
 - [ ] Help document generation (ref: https://github.com/spf13/cobra#generating-documentation-for-your-command)
 - [ ] Optimize --help message view
+- [ ] Support `help --waiter`
+- [x] Support Group Options
+- [x] Optimize noticeable error
+- [ ] (low)Support shorthand combination -ab
+
 
