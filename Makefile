@@ -4,7 +4,7 @@ all: build
 publish: build build_mac build_linux build_windows
 
 deps:
-	-go get github.com/aliyun/aliyun-openapi-meta
+	go get github.com/aliyun/aliyun-openapi-meta 2>/dev/null || echo "this command currently errors, using \"2>/dev/null || echo \" as work around"
 	go get gopkg.in/ini.v1
 	go get github.com/droundy/goopt
 	go get github.com/alyu/configparser
@@ -15,14 +15,15 @@ deps:
 	go get github.com/aliyun/alibaba-cloud-sdk-go/sdk
 	go get github.com/posener/complete
 	go get github.com/aliyun/ossutil/lib
+	go get gopkg.in/yaml.v2
 
-testdeps:
+testdeps: deps
 	go get -v github.com/onsi/ginkgo/ginkgo
 	go get -v github.com/onsi/gomega
 	go install github.com/onsi/ginkgo/ginkgo
 	go get gopkg.in/check.v1
 
-metas:
+metas: deps
 	go-bindata -o resource/metas.go -pkg resource -prefix ../aliyun-openapi-meta ../aliyun-openapi-meta/**/* ../aliyun-openapi-meta/products.json
 
 clean:
@@ -50,4 +51,3 @@ build_windows:
 	zip -r out/aliyun-cli-windows-${VERSION}-amd64.zip aliyun.exe
 	aliyun oss cp out/aliyun-cli-windows-${VERSION}-amd64.zip oss://aliyun-cli --force --profile oss
 	rm aliyun.exe
-
