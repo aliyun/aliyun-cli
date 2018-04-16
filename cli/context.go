@@ -24,12 +24,14 @@ type Context struct {
 	unknownFlags *FlagSet
 	command      *Command
 	completion   *Completion
+	attachments  map[string]interface{}
 }
 
 func NewCommandContext() *Context {
 	return &Context{
 		flags:        NewFlagSet(),
 		unknownFlags: nil,
+		attachments: make(map[string]interface{}),
 	}
 }
 
@@ -43,6 +45,15 @@ func (ctx *Context) Command() *Command {
 
 func (ctx *Context) Completion() *Completion {
 	return ctx.completion
+}
+
+func (ctx *Context) PutAttachment(k string, v interface{}) {
+	ctx.attachments[k] = v
+}
+
+func (ctx *Context) GetAttachment(k string) (interface{}, bool) {
+	v, ok := ctx.attachments[k]
+	return v, ok
 }
 
 func (ctx *Context) Flags() *FlagSet {

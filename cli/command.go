@@ -33,8 +33,11 @@ type Command struct {
 	// 0: default distance
 	SuggestDistance int
 
-	// Hidden command
+	// If true, not appear with help command
 	Hidden bool
+
+	// Pre processor, if failed
+	PreProcess func(ctx *Context, args[] string) error
 
 	// Run, command error will be catch
 	Run func(ctx *Context, args []string) error
