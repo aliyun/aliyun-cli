@@ -89,7 +89,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 
 	// process --dry-run
 	if DryRunFlag.IsAssigned() {
-		fmt.Printf("Dry-run with request: \n------------------------------------\n%v\n",
+		fmt.Printf("Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
 			invoker.getRequest())
 		return nil
 	}

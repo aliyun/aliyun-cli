@@ -1,4 +1,4 @@
-export VERSION=3.0.0
+export VERSION=3.0.1
 
 all: build
 publish: build build_mac build_linux build_windows
