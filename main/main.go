@@ -7,6 +7,7 @@ import (
 	"github.com/aliyun/aliyun-cli/openapi"
 	"github.com/aliyun/aliyun-cli/oss/lib"
 	"os"
+	"github.com/aliyun/aliyun-cli/plugins/cloudapi"
 )
 
 /**
@@ -63,5 +64,6 @@ func main() {
 	// rootCmd.AddSubCommand(command.NewTestCommand())
 	rootCmd.AddSubCommand(lib.NewOssCommand())
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
+	rootCmd.AddSubCommand(cloudapi.NewImportSwaggerCommand())
 	rootCmd.Execute(os.Args[1:])
 }
