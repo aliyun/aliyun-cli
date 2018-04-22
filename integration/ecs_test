@@ -70,7 +70,7 @@ ecs_test() {
 
 	ecs_instance_status_wait_until $id Running
 
-	ecs_stop_instance $id
+	ecs_stop_instance $id $force
 
 	ecs_instance_status_wait_until $id Stopped
 
