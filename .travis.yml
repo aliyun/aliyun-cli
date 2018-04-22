@@ -5,6 +5,11 @@ sudo: true
 go:
   - 1.8.x
 
+branches:
+  only:
+    - master
+    - pre-release
+
 before_install:
   - sudo apt-get install -y jq
 
