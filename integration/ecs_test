@@ -19,7 +19,7 @@ ecs_instance_status_wait_until() {
 }
 
 ecs_describe_instances() {
-	do_command "aliyun ecs DescribeInstances" $2
+	do_command "aliyun ecs DescribeInstances" $1
 }
 
 ecs_delete_instance() {
