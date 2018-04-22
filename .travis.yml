@@ -1,12 +1,14 @@
 language: go
 
-sudo: false
+sudo: true
 
 go:
   - 1.9.x
 
+before_install:
+  - sudo apt-get install -y jq
+
 install:
-  - apt-get install jq
   - make deps
   - make testdeps
 
@@ -18,4 +20,4 @@ notifications:
 
 script:
   - make build
-  - ./integration/test
+  - cd ./integration && ./test && cd..

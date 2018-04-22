@@ -1,24 +1,28 @@
 
 g_var=
 g_error=0
+force="force"
 #!/bin/bash
 
 do_command() {
-	if [[ $g_error -eq 1 ]]
+	if [[ $2 != $force && $g_error -eq 1 ]]
 	then
 		g_var=
 		return $g_error
 	fi
 
-	echo $1
+	cmd="$1 --access-key-id $ACCESS_KEY_ID --access-key-secret $ACCESS_KEY_SECRET --region cn-beijing 2>&1"
+	echo $cmd
 
-    g_var=$(eval $1 2>&1)
+    g_var=$(eval $cmd)
 
+	echo "*************************************************************"
 	echo "Result is: $g_var"
+	echo "*************************************************************"
 
     err=$(echo $g_var | grep -i "error")
 
-    if [[ $err != "" ]]
+    if [[ $2 != $force && $err != "" ]]
     then
     	g_var=
     	g_error=1
