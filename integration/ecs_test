@@ -28,14 +28,14 @@ ecs_delete_instance() {
 
 ecs_get_instance_ids() {
 	ecs_describe_instances $force
-    ids=$(echo $g_var | jq '.Instances.Instance[].InstanceId')
-    err=$(echo ids | grep -i "error")
-    if [[ $err != "" ]]
-    then
-    	g_var=""
-    else
-    	g_var=$ids
-    fi
+	ids=$(echo $g_var | jq '.Instances.Instance[].InstanceId')
+	err=$(echo ids | grep -i "error")
+	if [[ $err != "" ]]
+	then
+		g_var=""
+	else
+		g_var=$ids
+	fi
 }
 
 ecs_clear_all_instances() {
@@ -46,15 +46,15 @@ ecs_clear_all_instances() {
 	for id in ${ids[@]}; do
 		echo "###### Try to stop instance $id ######"
 		ecs_stop_instance $id $force
-    done
+	done
 
-    for id in ${ids[@]}; do
-    	echo "###### Try to delete instance $id ######"
+	for id in ${ids[@]}; do
+		echo "###### Try to delete instance $id ######"
 
-    	ecs_instance_status_wait_until $id Stopped $force
+		ecs_instance_status_wait_until $id Stopped $force
 
-    	ecs_delete_instance $id $force
-    done
+		ecs_delete_instance $id $force
+	done
 }
 
 ecs_test() {

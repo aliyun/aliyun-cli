@@ -1,8 +1,8 @@
+#!/bin/bash
 
 g_var=
 g_error=0
 force="force"
-#!/bin/bash
 
 do_command() {
 	if [[ $2 != $force && $g_error -eq 1 ]]
@@ -17,20 +17,20 @@ do_command() {
 	echo $cmd
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Command"
 
-    g_var=$(eval $cmd)
+	g_var=$(eval $cmd)
 
 	echo "Result<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
 	echo $g_var
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Result"
 
-    err=$(echo $g_var | grep -i "error")
+	err=$(echo $g_var | grep -i "error")
 
-    if [[ $2 != $force && $err != "" ]]
-    then
-    	g_var=
-    	g_error=1
-        return $g_error
-    fi
+	if [[ $2 != $force && $err != "" ]]
+	then
+		g_var=
+		g_error=1
+		return $g_error
+	fi
 
-    return 0
+	return 0
 }
