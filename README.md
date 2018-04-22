@@ -1,5 +1,7 @@
 # Aliyun Command Line Interface
 
+[![Build Status](https://travis-ci.org/aliyun/aliyun-cli.svg?branch=master)](https://travis-ci.org/aliyun/aliyun-cli) 
+
 [中文文档](./README_zh.md)
 
 The Alibaba Cloud CLI is an open source tool, you can get the latest version from [GitHub](https://github.com/aliyun/aliyun-cli).
