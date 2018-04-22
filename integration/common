@@ -1,0 +1,29 @@
+
+g_var=
+g_error=0
+#!/bin/bash
+
+do_command() {
+	if [[ $g_error -eq 1 ]]
+	then
+		g_var=
+		return $g_error
+	fi
+
+	echo $1
+
+    g_var=$(eval $1 2>&1)
+
+	echo "Result is: $g_var"
+
+    err=$(echo $g_var | grep -i "error")
+
+    if [[ $err != "" ]]
+    then
+    	g_var=
+    	g_error=1
+        return $g_error
+    fi
+
+    return 0
+}

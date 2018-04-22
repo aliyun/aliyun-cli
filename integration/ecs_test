@@ -1,0 +1,54 @@
+#!/bin/bash
+source common
+
+
+create_instance() {
+	do_command "aliyun ecs CreateInstance --ImageId ubuntu_16_0402_64_20G_alibase_20171227.vhd --InstanceType ecs.xn4.small"
+}
+
+start_instance() {
+	do_command "aliyun ecs StartInstance --InstanceId $1"
+}
+
+stop_instance() {
+	do_command "aliyun ecs StopInstance --InstanceId $1"
+}
+
+instance_status_wait_until() {
+	do_command "aliyun ecs DescribeInstances --InstanceIds ['$1'] --waiter expr=Instances.Instance[0].Status to=$2"
+}
+
+describe_instances() {
+	do_command "aliyun ecs DescribeInstances | jq '.Instances.Instance[].InstanceId'"
+}
+
+delete_instance() {
+	do_command "aliyun ecs DeleteInstance --InstanceId $1"
+}
+
+ecs_test() {
+	create_instance
+
+	describe_instances
+
+	ids=$g_var
+
+	for id in ${ids[@]}; do
+		echo "###### Try to delete instance $id ######"
+		instance_status_wait_until $id Stopped
+
+		start_instance $id
+
+		instance_status_wait_until $id Running
+
+		stop_instance $id
+
+		instance_status_wait_until $id Stopped
+
+		delete_instance $id
+	done
+
+	return $g_error
+}
+
+
