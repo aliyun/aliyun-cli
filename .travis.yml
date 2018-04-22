@@ -19,6 +19,6 @@ notifications:
     on_failure: always
 
 script:
-  - make build
+  - make install
   - cd ./integration && ./test
   - cd..
