@@ -19,5 +19,6 @@ notifications:
     on_failure: always
 
 script:
-  - sudo make install
+  - make build
+  - sudo cp out/aliyun /usr/local/bin
   - cd ./integration && ./test
