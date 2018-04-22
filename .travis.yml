@@ -3,7 +3,7 @@ language: go
 sudo: true
 
 go:
-  - 1.9.x
+  - 1.8.x
 
 before_install:
   - sudo apt-get install -y jq
@@ -20,4 +20,5 @@ notifications:
 
 script:
   - make build
-  - cd ./integration && ./test && cd..
+  - cd ./integration && ./test
+  - cd..
