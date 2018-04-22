@@ -76,7 +76,10 @@ ecs_test() {
 
 	ecs_delete_instance $id
 
-	ecs_clear_all_instances
+	if [[ $g_error -eq 1 ]]
+	then
+		ecs_clear_all_instances
+	fi
 
 	return $g_error
 }
