@@ -18,7 +18,7 @@ install:
   - make testdeps
 
 notifications:
-    #webhooks: https://oapi.dingtalk.com/robot/send?access_token=096ed387df243a6d60835aadeccc47165f3813bc7cb81cdd0cfeadfd28e3acc1
+    webhooks: https://oapi.dingtalk.com/robot/send?access_token=096ed387df243a6d60835aadeccc47165f3813bc7cb81cdd0cfeadfd28e3acc1
     email: false
     on_success: change
     on_failure: always
