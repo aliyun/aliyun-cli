@@ -60,25 +60,21 @@ ecs_clear_all_instances() {
 ecs_test() {
 	ecs_create_instance
 
-	ecs_get_instance_ids
+	id=$(echo $g_var | jq '.InstanceId')
 
-    ids=$g_var
+	echo "###### Try to test instance $id ######"
 
-	for id in ${ids[@]}; do
-		echo "###### Try to test instance $id ######"
+	ecs_instance_status_wait_until $id Stopped
 
-		ecs_instance_status_wait_until $id Stopped
+	ecs_start_instance $id
 
-		ecs_start_instance $id
+	ecs_instance_status_wait_until $id Running
 
-		ecs_instance_status_wait_until $id Running
+	ecs_stop_instance $id
 
-		ecs_stop_instance $id
+	ecs_instance_status_wait_until $id Stopped
 
-		ecs_instance_status_wait_until $id Stopped
-
-		ecs_delete_instance $id
-	done
+	ecs_delete_instance $id
 
 	ecs_clear_all_instances
 
