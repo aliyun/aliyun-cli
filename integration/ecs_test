@@ -15,7 +15,7 @@ stop_instance() {
 }
 
 instance_status_wait_until() {
-	do_command "aliyun ecs DescribeInstances --InstanceIds ['$1'] --waiter expr=Instances.Instance[0].Status to=$2"
+	do_command "aliyun ecs DescribeInstances --InstanceIds ['$1'] --waiter expr=Instances.Instance[0].Status to=$2 timeout=600"
 }
 
 describe_instances() {
