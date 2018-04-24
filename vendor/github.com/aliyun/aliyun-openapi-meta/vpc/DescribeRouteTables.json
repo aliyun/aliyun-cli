@@ -1,0 +1,140 @@
+{
+  "name": "DescribeRouteTables",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n查询用户账户下的BGP路由条目。\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：DescribeRouteTables"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "VRouterId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "指定VRouter的ID。指定V该参数后参数RouterType为VRouter。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RouteTableId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例 ID"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RouterType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "所属的路由器类型。取值范围：{VRouter | VBR}"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RouterId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "指定VBR或VRouter的ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Type",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "路由表类型"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RouteTableName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "路由表名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageNumber",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "实例状态列表的页码，起始值为1。默认值：1"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "分页查询时设置的每页行数，最大值为50行。默认值：10"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

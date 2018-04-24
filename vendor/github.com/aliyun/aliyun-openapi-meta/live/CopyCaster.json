@@ -1,0 +1,60 @@
+{
+  "name": "CopyCaster",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "复制导播台实例，从指定导播台复制全量信息，返回新导播台实例\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：CopyCaster"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "CasterName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "新导播台名称"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "SrcCasterId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "原导播台Id"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于保证请求的幂等性。由客户端生成该参数值，要保证在不同请求间唯一，最大不值过 64 个 ASCII 字符。"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

@@ -1,0 +1,207 @@
+{
+  "name": "DescribeEipAddresses",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n查询指定地域的EIP列表。此接口支持分页查询，每页的数量默认为10条。\n\n* 此接口不会校验参数之间的依赖关系，返回结果是所有条件的“交集”。\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：DescribeEipAddresses"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "需要查询的地域"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Status",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "Eip状态，包括Associating | Unassociating | InUse | Available"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "EipAddress",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "EIP的IP地址。指定后可查看指定IP地址的EIP的信息。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AllocationId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "EIP的实例Id"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ResourceGroupId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageNumber",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "实例状态列表的页码，起始值为1，默认值为1"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "分页查询时设置的每页行数，最大值50行，默认为10"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "Filter.1.Key",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "过滤的内容"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Filter.2.Key",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "过滤的内容"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Filter.1.Value",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "过滤的值"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Filter.2.Value",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "过滤的值"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "LockReason",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "锁定类型\nfinancial：因欠费被锁定\nsecurity：因安全原因被锁定"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AssociatedInstanceType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "绑定的资源的类型；\u003cbr\u003e这是一个过滤器性质的参数，若不指定，则表示不使用该条件对结果进行过滤。\u003cbr\u003e            \u003cfont color=\"#ff5f25\"\u003e取值范围：EcsInstance |  SlbInstance  |  Nat  |  HaVip   。 \u003cbr\u003e            \u003cb\u003e注意：区分大小写\u003c/b\u003e\u003c/font\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AssociatedInstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "绑定的资源的Id。\u003cbr\u003e这是一个过滤器性质的参数，若不指定，则表示不适用该条件对结果进行过滤。\u003cbr\u003e如果要使用该过滤器，必须同时使用AssociatedInstanceType。\u003cbr\u003e            若InstanceType为EcsInstance，则此处填写ECS实例Id。\u003cbr\u003e            若InstanceType为SlbInstance，则此处填写\u003cfont color=\"#ff5f25\"\u003eVPC类型的私网\u003c/font\u003eSLB 的实例ID。\u003cbr\u003e            若InstanceType为Nat，则此处填写NAT 的实例ID。。\u003cbr\u003e            若InstanceType为HaVip，则此处填写HaVipId。            "
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ChargeType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "弹性公网IP的计费方式，取值为PostPaid和PrePaid。该参数可作为过滤参数使用。"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

@@ -1,0 +1,174 @@
+{
+  "name": "ARMSQueryDataSet",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "DatasetId",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "IntervalInSec",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "DateStr",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "MinTime",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "MaxTime",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Dimensions",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "Key",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Value",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Type",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "Measures",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "IsDrillDown",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OrderByKey",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Limit",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ReduceTail",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HungryMode",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RequiredDims",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "Key",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Value",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Type",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "OptionalDims",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "Key",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Value",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Type",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    }
+  ]
+}

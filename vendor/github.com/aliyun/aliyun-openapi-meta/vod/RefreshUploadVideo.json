@@ -1,0 +1,60 @@
+{
+  "name": "RefreshUploadVideo",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n用于视频文件上传超时后重新获取上传凭证。\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值： RefreshUploadVideo"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "VideoId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频ID"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

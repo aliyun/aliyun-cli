@@ -1,0 +1,60 @@
+{
+  "name": "EffectCasterVideoResource",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "在指定场景引用该视频源时生效\n\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：EffectCasterVideoResource"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "CasterId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "导播台ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "SceneId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "场景ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ResourceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "资源ID"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

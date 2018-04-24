@@ -1,0 +1,28 @@
+{
+  "name": "GetApPortalBind",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "BindId",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ConfigType",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "name": "DescribeLiveDomainTranscodeData",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": " 获取直播域名转码时长数据\n \n\u003e 支持用户查询单个直播域名在指定时间区段内的每日转码时长数据\n\n\u003e 每日转码时长数据包括：当日转码总时长和区分转码规格的时长数据列表\n\n\u003e 支持查询 2018/01/01 起的数据，数据查询的起止时间跨度最大为90天"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数，取值：DescribeLiveDomainTranscodeData"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "需要查询的直播域名"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "StartTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "获取数据起始时间点，日期格式按照ISO8601表示法，并使用UTC时间。\n格式为：YYYY-MM-DDThh:mm:ssZ\n\n支持查询2018/01/01起的数据，即 StartTime \u003e= 2018-01-01T00:00:00Z"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "EndTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "获取数据结束时间，需大于起始时间；获日期格式按照ISO8601表示法，并使用UTC时间。 格式为：YYYY-MM-DDThh:mm:ssZ"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

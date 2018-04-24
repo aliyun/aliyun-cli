@@ -1,0 +1,35 @@
+{
+  "name": "ModifyApp",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "AppId",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "AppName",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

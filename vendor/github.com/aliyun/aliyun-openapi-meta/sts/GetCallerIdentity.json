@@ -1,0 +1,6 @@
+{
+  "name": "GetCallerIdentity",
+  "protocol": "HTTPS",
+  "method": "POST|GET",
+  "parameters": []
+}

@@ -1,0 +1,14 @@
+{
+  "name": "GetBusinessCategoryList",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "JsonStr",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

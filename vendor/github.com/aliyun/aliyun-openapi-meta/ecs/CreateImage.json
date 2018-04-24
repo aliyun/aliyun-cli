@@ -1,0 +1,221 @@
+{
+  "name": "CreateImage",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "DiskDeviceMapping",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "Size",
+          "position": "Query",
+          "type": "Integer",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "SnapshotId",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Device",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "DiskType",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "镜像所在的 Region ID。RegionId 的列表详见 \u003ca target='_blank' href=\"https://help.aliyun.com/document_detail/40654.html\"\u003e地域列表\u003c/a\u003e。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "SnapshotId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "快照ID。从指定的快照创建自定义镜像。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例Id"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ImageName",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ImageVersion",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Platform",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Architecture",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "Tag.1.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.2.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.3.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.4.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.5.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.1.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.2.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.3.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.4.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.5.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

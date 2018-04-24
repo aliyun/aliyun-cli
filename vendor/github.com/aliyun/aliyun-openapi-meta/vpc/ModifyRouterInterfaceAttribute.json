@@ -1,0 +1,160 @@
+{
+  "name": "ModifyRouterInterfaceAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n修改路由器接口的Name/Description/连接对端信息。\n\n*\t只有当RouterInterface的状态为Idle时，才允许修改连接对端信息（OppositeInterfaceId/OppositeRouterId/OppositeInterfaceOwnerId）；\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：ModifyRouterInterfaceAttribute"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "所在地域（管理实例的Region ID）"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "RouterInterfaceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "路由器接口的ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "自定义名称。\\[2, 128] 个英文或中文字符，必须以大小字母或中文开头，可包含数字，“.”，“_”或“-”。不能以 http:// 和 https:// 开头。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "自定义描述。\\[2, 256] 个字符，实例描述会显示在控制台。不能以 http:// 和 https:// 开头"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OppositeInterfaceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "连接对端的InterfaceId。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OppositeRouterId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "连接对端的Interface所属的路由器Id。在OppositeRouterType是VBR时OppositeRouterId所指定的VBR必须在OppositeAccessPointId所指定的接入点内。在创建/修改RouterInterface时不会做对端OppositeRouterId，OppositeAccessPointId等的校验，在进行连接操作时会出错。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OppositeRouterType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "要连接的对端路由器接口所属的路由器类型。可选值：VRouter，VBR；缺省为VRouter类型。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OppositeInterfaceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": "连接对端路由器接口的持有者账号ID。您可以登录阿里云官网以后，在 控制台-用户中心-账号管理 中看到您的账号ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HealthCheckSourceIp",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "专线容灾和ECMP场景下用来做专线HealthCheck的Packet的Source IP。只对本端是VRouter而且对端是VBR的Router Interface有效。必须是本端VRouter所在的VPC内的一个未被使用的IP。HealthCheckSourceIp与HealthCheckTargetIp必须同时指定或同时不指定。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HealthCheckTargetIp",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "专线容灾和ECMP场景下用来做专线HealthCheck的Packet的Target IP。只对本端是VRouter而且对端是VBR的Router Interface有效。通常可以用专线用户端CPE的IP（也就是对端RI所在的VBR上的PeerGatewayIp），用户也可以指定专线用户端的其他可以用来做HealthCheck Target的IP。HealthCheckSourceIp与HealthCheckTargetIp必须同时指定或同时不指定。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DeleteHealthCheckIp",
+      "position": "Query",
+      "type": "Boolean",
+      "description": {
+        "zh": "删除健康检查 IP"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

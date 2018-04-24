@@ -1,0 +1,84 @@
+{
+  "name": "OnsMqttQueryMsgTransTrend",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "OnsRegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "OnsPlatform",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PreventCache",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "TpsType",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "TransType",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ParentTopic",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "SubTopic",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "MsgType",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Qos",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "BeginTime",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "EndTime",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

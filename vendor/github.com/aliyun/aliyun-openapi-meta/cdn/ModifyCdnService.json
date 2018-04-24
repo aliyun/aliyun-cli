@@ -1,0 +1,60 @@
+{
+  "name": "ModifyCdnService",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n变更CDN服务的计费类型.\n\n* 需先开通才可执行此操作。\n* 变更计费类型，次日00:00生效；多次变更以最新提交的为准。\n* 计费类型：\n    * 按峰值带宽计费\n    * 按使用流量计费\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数，取值：ModifyCdnService"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InternetChargeType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "开通服务的计费类型：按流量、按带宽峰值。\u003cbr\u003e用户必须指定类型：按流量“PayByTraffic”，按带宽峰值“PayByBandwidth”"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "name": "SaveApgroupConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Id",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "EchoInt",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Country",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Dai",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "LogIp",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "LogLevel",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Scan",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

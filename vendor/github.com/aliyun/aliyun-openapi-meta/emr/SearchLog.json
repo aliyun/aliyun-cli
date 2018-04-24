@@ -1,0 +1,91 @@
+{
+  "name": "SearchLog",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ClusterId",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "HostInnerIp",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "LogstoreName",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "FromTimestamp",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ToTimestamp",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "SlsQueryString",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Offset",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Line",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Reverse",
+      "position": "Query",
+      "type": "Boolean",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

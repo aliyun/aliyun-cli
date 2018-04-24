@@ -1,0 +1,111 @@
+{
+  "name": "AddCasterVideoResource",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "添加一路视频源，定义视频源名称、类型、直播流地址或素材ID\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：AddCasterVideoResource"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "CasterId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "导播台ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ResourceName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频源名称"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "LocationId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于指定视频源位置，定义布局画面的引用编号，每个位置至多设置一个资源，数量受限于导播台创建时的输入路数，格式需符合“RV01...RV12”"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "LiveStreamUrl",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "直播流地址，视频源类型为直播流时必填"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "MaterialId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "媒资库素材Id，视频源类型为视频点播素材时必填"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "VodUrl",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "BeginOffset",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "EndOffset",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RepeatNum",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "仅对文件视频有效，表示播放完后重复继续播放的次数，默认值为0表示不重复播放。-1 表示一直循环重复。"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

@@ -1,0 +1,154 @@
+{
+  "name": "SaveApRadioConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Id",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Hwmode",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Htmode",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Channel",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Txpower",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "BeaconInt",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Rts",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Frag",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Shortgi",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Probereq",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Noscan",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Minrate",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "BcastRate",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "McastRate",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Uapsd",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Disabled",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "RadioIndex",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "RequireMode",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Mac",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InstantlyEffective",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

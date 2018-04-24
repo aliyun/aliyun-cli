@@ -1,0 +1,91 @@
+{
+  "name": "ListCallDetailRecords",
+  "protocol": "HTTPS|HTTP",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "PhoneNumber",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "StartTime",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "StopTime",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Criteria",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ContactType",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ContactDisposition",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "WithRecording",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OrderBy",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageNumber",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

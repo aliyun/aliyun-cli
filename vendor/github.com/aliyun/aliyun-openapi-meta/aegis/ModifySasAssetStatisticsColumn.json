@@ -1,0 +1,21 @@
+{
+  "name": "ModifySasAssetStatisticsColumn",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "SourceIp",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "StatisticsColumn",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

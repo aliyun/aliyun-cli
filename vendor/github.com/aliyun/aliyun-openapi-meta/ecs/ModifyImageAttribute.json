@@ -1,0 +1,82 @@
+{
+  "name": "ModifyImageAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "自定义镜像的 RegionId。RegionId 的列表详见 \u003ca target='_blank' href=\"https://help.aliyun.com/document_detail/40654.html\"\u003e地域列表\u003c/a\u003e。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ImageId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "自定义镜像的 ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ImageName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "自定义镜像名称，[2, 128] 英文或中文字符，必须以大小字母或中文开头，可包含数字，”_”或”-”。不能以 http:// 和 https:// 开头。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "自定义镜像的描述信息，长度限制在 0 ~ 256 个字符，不填则为空，默认为空。不能以 http:// 和 https:// 开头。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

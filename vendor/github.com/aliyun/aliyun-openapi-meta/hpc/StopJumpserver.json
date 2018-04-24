@@ -1,0 +1,42 @@
+{
+  "name": "StopJumpserver",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST",
+  "parameters": [
+    {
+      "name": "TOKEN",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Force",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

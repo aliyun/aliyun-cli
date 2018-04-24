@@ -1,0 +1,140 @@
+{
+  "name": "AddCustomLiveStreamTranscode",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "添加自定义转码配置信息；"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名\n"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数，取值：AddCustomLiveStreamTranscode\n"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "Version",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "版本号"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Domain",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "您的加速域名\n"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "App",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "直播流所属应用名称, 取值要求：数字, 大小写字母, 下划线(\"_\")或短横线(\"-\")\n"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Template",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "转码模板自定义名称, 取值要求：数字, 大小写字母或短横线(\"-\")。注意不能与标准的转码模板命名重复\n"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "TemplateType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "自定义转码模版类型, 目前支持 h264 (自定义H264标准模版), h264-nbhd (自定义H264窄带高清模版)\n"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Height",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "转码视频宽度, 取值要求: Width \u003e= 100 ; max(Height, Width) \u003c= 1920 ; min(Height, Width) \u003c= 1080\n"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Width",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "转码视频宽度, 取值要求: Width \u003e= 100 ; max(Height, Width) \u003c= 1920 ; min(Height, Width) \u003c= 1080\n"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "FPS",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "转码视频帧率, 单位：fps, 取值要求: 1 \u003c= FPS \u003c= 30\n"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "VideoBitrate",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "转码视频比特率, 单位: kbps, 取值要求： 1 \u003c= VideoBitrate \u003c= 6000 (注: 转码视频会尽量接近您所设定的比特率, 但转码视频的实际比特率不能保证和您所设定的完全一致, 尤其是当您设定的比特率过大或过小的时候)\n"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

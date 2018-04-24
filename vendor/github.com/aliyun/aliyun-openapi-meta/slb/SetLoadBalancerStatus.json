@@ -1,0 +1,110 @@
+{
+  "name": "SetLoadBalancerStatus",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "设置负载均衡实例的状态。\n"
+  },
+  "parameters": [
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e负载均衡实例的地域ID。\n\u003cp\u003e您可以从[地域和可用区](~~40654~~)列表或通过调用[DescribeRegions](~~25609~~)接口查询地域ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：`SetLoadBalancerStatus`"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "LoadBalancerId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "负载均衡实例的ID。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "LoadBalancerStatus",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "负载均衡实例状态。取值：acitve | inactive\n\u003cul\u003e\n\t  \u003cli\u003e\u003cp\u003eactive\n\t\u003cp\u003e当负载均衡实例的状态为`active`时，实例中的监听可以根据规则转发接收的流量。\n\t\u003cp\u003e实例创建后的状态默认为`active`。\u003c/p\u003e\u003c/li\u003e\n\t  \u003cli\u003e\u003cp\u003einactive\n\t  \u003cp\u003e当负载均衡实例的状态为`inactive`时，实例中的监听不会再转发接收的流量。\n\t\u003cp\u003e**注意**：当一个实例下的所有监听都被删除后，实例状态会被自动改为`inactive`。\u003c/li\u003e\n\u003c/ul\u003e"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "access_key_id",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "阿里云颁发给用户的访问服务所用的密钥ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tags",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户标签。"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

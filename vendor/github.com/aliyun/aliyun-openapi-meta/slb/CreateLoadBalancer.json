@@ -1,0 +1,250 @@
+{
+  "name": "CreateLoadBalancer",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "创建一个负载均衡实例。\n\n调用该接口创建实例时，请注意：\n\n- 实例创建后，会产生费用。关于负载均衡的计费说明，参见[计费说明](~~27692~~)。\n\n- 如果不指定实例规格（`LoadBalancerSpec`），则创建性能共享型实例。建议在创建负载均衡实例时，通过规格参数（`LoadBalancerSpec`）指定实例的规格。"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：`CreateLoadBalancer`"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e负载均衡实例的地域。\n\u003cp\u003e您可以从[地域和可用区](~~40654~~)列表或通过调用[DescribeRegions](~~25609~~)接口查询地域ID。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "AddressType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e负载均衡实例的网络类型。取值：\n\t  \u003cul\u003e\n\t  \u003cli\u003e\u003cp\u003e`internet`：创建公网负载均衡实例后，系统会分配一个公网IP地址，可以转发公网请求。\u003c/p\u003e\u003c/li\u003e\n\t  \u003cli\u003e\u003cp\u003e`intranet`：创建公网负载均衡实例后，系统会分配一个内网IP地址，仅可转发内网请求。\u003c/p\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InternetChargeType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e公网类型实例的付费方式。取值：\n\t  \u003cul\u003e\n\t  \u003cli\u003e\u003cp\u003e`paybybandwidth`：按带宽计费 \u003c/p\u003e\u003c/li\u003e\n\t  \u003cli\u003e\u003cp\u003e`paybytraffic`：按流量计费（默认值） \u003c/p\u003e\u003c/li\u003e\n\t  \u003c/ul\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Bandwidth",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "\u003cp\u003e按固定带宽计费方式的公网类型实例的带宽峰值。\n\t  \u003cp\u003e实例中的监听共享该带宽，详情参见[共享实例带宽](~~57846~~)。\n\t  \u003cp\u003e取值：1-5000 Mbps。各地域的带宽峰值会有不同。\n\t  \u003cp\u003e**注意**：按流量计费的实例不需要指定该参数（即`InternetChargeType`为`paybytraffic`）。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e用于保证请求的幂等性。由客户端生成该参数值，要保证在不同请求间唯一，最大不值过64个ASCII字符。\n\t  \u003cp\u003e详情参见[如何保证幂等性](~~27639~~)。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "LoadBalancerName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e负载均衡实例的名称。\u003cp\u003e\n\u003cp\u003e长度为 [2, 128] 个英文或中文字符，必须以大小字母或中文开头，可包含数字，点号（.），下划线（_）和短横线（-）。\u003cp\u003e\n不指定该参数时，默认由系统分配一个实例名称。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "VpcId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "负载均衡实例的VPC唯一标识。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "VSwitchId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e专有网络实例的所属交换机ID。\n\t  \u003cp\u003e要创建专有网络类型的负载均衡实例，必须指定该参数。\u003cp\u003e如果指定了该参数，`AddessType`的值会默认被设置为`intranet`。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "MasterZoneId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e实例的主可用区ID。\n\t  \u003cp\u003e您可以从[地域和可用区](~~40654~~)列表或通过调用[DescribeZone](~~27585~~)接口可查到相应地域下的主备可用区信息。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SlaveZoneId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e实例的备可用区ID。\n\t  \u003cp\u003e您可以从[地域和可用区](~~40654~~)列表或通过调用[DescribeZone](~~27585~~)接口可查到相应地域下的主备可用区信息。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "access_key_id",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "阿里云颁发给用户的访问服务所用的密钥ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tags",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户标签。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "EnableVpcVipFlow",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "开启Vpc类型实例的引流。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "LoadBalancerSpec",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e负载均衡实例的规格。取值：\u003cul\u003e\n  \t\u003cli\u003e\u003cp\u003eslb.s1.small\u003c/li\u003e\n\t  \u003cli\u003e\u003cp\u003eslb.s2.small\u003c/li\u003e\n\t  \u003cli\u003e\u003cp\u003eslb.s2.medium\u003c/li\u003e\n\t  \u003cli\u003e\u003cp\u003eslb.s3.small\u003c/li\u003e\n\t  \u003cli\u003e\u003cp\u003eslb.s3.medium\u003c/li\u003e\n\t  \u003cli\u003e\u003cp\u003eslb.s3.large\u003c/li\u003e\n\t  \u003c/ul\u003e\n\t  \u003cp\u003e**注意**： 若不指定规格，则创建性能共享型实例。\n\t  \u003cp\u003e每个地域支持的规格不同。目前支持性能保障型实例的地域有：华北 1（青岛）、华北 2（北京）、华东 1（杭州）、华东 2（上海）、华南 1（深圳）、华北 3（张家口）、华北 5 （呼和浩特）、亚太东南 1（新加坡）和美国东部 1（弗吉尼亚）。关于每种规格的说明，参见[性能保障型实例](~~27657~~)。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ResourceGroupId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "企业资源组ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PayType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e目标付费类型。\u003c/p\u003e\u003cp\u003e取值：PrePay\u003c/p\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PricingCycle",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e计费周期。\u003c/p\u003e\u003cp\u003e取值：year或month。\u003c/p\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Duration",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "\u003cp\u003e计费时长。\u003c/p\u003e\u003cp\u003e如果PricingCycle为month，取值1-9；\u003c/p\u003e\u003cp\u003e如果PricingCycle为year，取值1-3。\u003c/p\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AutoPay",
+      "position": "Query",
+      "type": "Boolean",
+      "description": {
+        "zh": "是否自动付费。\n\n取值为true则自动支付订单；取值为false则需要在订单中心中进行支付。\n\n默认值：false。"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

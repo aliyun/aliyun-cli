@@ -1,0 +1,28 @@
+{
+  "name": "DebugRuleSql",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Sql",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "JsonInfo",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "IsBuyWaf",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": []
+}

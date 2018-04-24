@@ -1,0 +1,70 @@
+{
+  "name": "UpdateCategory",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n修改视频分类。\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值： UpdateCategory"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "CateName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "分类名称，不能超过64个字节，UTF8编码"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "CateId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": "分类ID"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

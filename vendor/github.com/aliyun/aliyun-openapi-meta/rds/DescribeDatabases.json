@@ -1,0 +1,107 @@
+{
+  "name": "DescribeDatabases",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n查找指定实例、指定DB的DB列表信息。如果查找参数类型错误，返回错误提示，返回数据为空。  \n\n\u003e**注意：**此接口不支持PostgreSQL和PPAS。  \n  \n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "阿里云颁发给用户的访问服务所用的密钥ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：DescribeDatabases。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例名。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "DBName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "数据库名称。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DBStatus",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "数据库状态，取值范围：\u003cul\u003e\u003cli\u003eCreating：创建中；\u003c/li\u003e\u003cli\u003eRunning：使用中；\u003c/li\u003e\u003cli\u003eDeleting：删除中。\u003c/li\u003e\u003c/ul\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户主账号。"
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

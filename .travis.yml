@@ -14,8 +14,8 @@ before_install:
   - sudo apt-get install -y jq
 
 install:
-  - make deps
-  - make testdeps
+  - make build
+  - sudo cp out/aliyun /usr/local/bin
 
 notifications:
     webhooks: https://oapi.dingtalk.com/robot/send?access_token=096ed387df243a6d60835aadeccc47165f3813bc7cb81cdd0cfeadfd28e3acc1
@@ -24,6 +24,4 @@ notifications:
     on_failure: always
 
 script:
-  - make build
-  - sudo cp out/aliyun /usr/local/bin
   - cd ./integration && ./test

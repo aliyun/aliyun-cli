@@ -1,0 +1,90 @@
+{
+  "name": "ModifyVRouterAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "修改指定 VRouter 的属性\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：ModifyVRouterAttribute"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "VRouterId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "需要修改的 VRouter 的 ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "VRouterName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "修改后的 VRouter 名字，不填则为空，默认值为空，\\[2, 128] 英文或中文字符，必须以大小字母或中文开头，可包含数字，”_”或”-”，这个值会展示在控制台。不能以 http:// 和 https:// 开头。            "
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "修改后的 VRouter 描述，不填则为空，默认值为空，\\[2, 256] 英文或中文字符，不能以 http:// 和 https:// 开头。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

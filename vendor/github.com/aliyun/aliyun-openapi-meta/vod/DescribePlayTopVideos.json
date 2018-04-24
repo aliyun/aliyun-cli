@@ -1,0 +1,60 @@
+{
+  "name": "DescribePlayTopVideos",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "## 描述\n\n统计用户指定日期的所有视频播放，基于VV数排序返回TOP视频的播放数据，包括：每个视频播放VV、UV和播放总时长。\n\n每个用户最多能查询该日TOP1000个视频的播放统计数据。"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数，取值：DescribePlayTopVideos"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "BizDate",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "日期，UTC格式"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "PageNo",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": "分页的页码，默认值：1"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": "每页大小，默认值为100，最大值为1000"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

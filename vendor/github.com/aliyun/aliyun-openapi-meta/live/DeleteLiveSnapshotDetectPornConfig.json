@@ -1,0 +1,70 @@
+{
+  "name": "DeleteLiveSnapshotDetectPornConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n删除审核配置接口。\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：DeleteLiveSnapshotDetectPornConfig"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户域名"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "AppName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "app名，支持\u003ccode\u003e*\u003c/code\u003e表示全部"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "name": "SetOptimizeConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n设置页面优化功能，开启后可以删除 html ， 内嵌 javascript 和 css 中的注释以及重复的空白符；这样可以有效地去除页面的冗余内容，减小文件体积，提高加速分发效率\n\n\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数，取值：SetOptimizeConfig"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "要设置页面优化功能的加速域名"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Enable",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "配置页面优化功能的开启或关闭 取值：On、Off"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

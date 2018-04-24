@@ -1,0 +1,90 @@
+{
+  "name": "ModifyCommonBandwidthPackageSpec",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "修改共享带宽的带宽峰值\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：ModifyCommonBandwidthPackageSpec"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "region no"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "BandwidthPackageId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "共享带宽Id"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Bandwidth",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "共享带宽的带宽峰值 Mbps"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "name": "CreateCommonBandwidthPackage",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "请确保在使用该接口前，已充分了解该产品的收费方式和 [价格](https://help.aliyun.com/document_detail/55790.html)\n\n创建共享带宽包\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：CreateCommonBandwidthPackage"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "地域，如cn-hangzhou"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "名称"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "描述"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于保证请求的幂等性。由客户端生成该参数值，要保证在不同请求间唯一，最大值不超过 64 个 ASCII 字符。 \u003cbr\u003e 具体参见附录"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Bandwidth",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "通用带宽包带宽 Mbps，默认为5Mbps"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Ratio",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "带宽保底比例，取值范围是\\[10,100]，对于是10%~100%，PayByBandwidth取值只能是100，用户输入其他值无效"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InternetChargeType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "流量计费类型，取值：PayByBandwidth、PayBy95，默认是PayByBandwidth"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

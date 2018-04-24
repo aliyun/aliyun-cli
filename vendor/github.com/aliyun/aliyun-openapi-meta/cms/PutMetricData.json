@@ -1,0 +1,21 @@
+{
+  "name": "PutMetricData",
+  "protocol": "HTTP",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "callby_cms_owner",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Body",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

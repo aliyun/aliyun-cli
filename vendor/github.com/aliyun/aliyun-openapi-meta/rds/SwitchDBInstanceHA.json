@@ -1,0 +1,127 @@
+{
+  "name": "SwitchDBInstanceHA",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\nRDS主实例是由分布在不同服务器上面的主库和备库组成的。可以通过API进行主备库切换，并由新的主库来承担业务流量。  \n  \n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "阿里云颁发给用户的访问服务所用的密钥ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：SwitchDBInstanceHA。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例名。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "NodeId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "节点的唯一标识，从\u003ca href=\"~~26244~~\"\u003eDescribeDBInstanceHAConfig\u003c/a\u003e接口可查询该值。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Operation",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "无"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Force",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "Yes：强制；No：非强制；默认为非强制。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户主账号。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "EffectiveTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "生效时间"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

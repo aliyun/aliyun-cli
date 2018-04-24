@@ -1,0 +1,100 @@
+{
+  "name": "ModifyNatGatewaySpec",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n修改NAT网关的规格。\n\n在一个计费周期内，无论NAT网关的规格发生过多少次变化，均以该周期内配置过的最高规格为计费标准。\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：\u003ccode\u003eModifyNatGatewaySpec\u003c/code\u003e。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "NAT网关的所属地域。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "NatGatewayId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "要修改规格的NAT网关的ID。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Spec",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003eNAT网关的规格。\u003c/p\u003e\u003cp\u003e可选值：Small、Middle、Large。不指定时，使用默认值\u003ccode\u003eSmall\u003c/code\u003e。\u003c/p\u003e"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e用于保证请求的幂等性。\u003c/p\u003e\u003cp\u003e由客户端生成该参数值，要保证在不同请求间唯一，最大值不能超过64个ASCII字符。      \u003c/p\u003e\u003cp\u003e更多信息，参考\u003ca href=\"~~36569~~\"\u003e如何保证幂等性\u003c/a\u003e。\u003c/p\u003e"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "name": "DescribeWebshell",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "获取后门文件记录，包括发现时间、后门文件路径等。"
+  },
+  "parameters": [
+    {
+      "name": "SourceIp",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "访问者源IP"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "GroupId",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "分组id"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Remark",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "服务器ip或者主机名称"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "标签id"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Dealed",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "事件状态\n- n: 待处理\n- y: 已处理"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

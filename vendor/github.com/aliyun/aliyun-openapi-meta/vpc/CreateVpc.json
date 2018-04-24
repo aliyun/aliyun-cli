@@ -1,0 +1,127 @@
+{
+  "name": "CreateVpc",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n在指定的地域创建 1 个 VPC\n\n*\tVPC 只能指定 1 个 CidrBlock，CidrBlock 的范围包括 10.0.0.0 / 8、172.16.0.0 / 12 和 192.168.0.0 / 16 及它们的子网，CidrBlock 的掩码为 8 - 24 位，默认为 172.16.0.0 / 12\n*\tVPC 创建后无法修改 CidrBlock\n*\t每个 VPC 包含的云产品实例不能分布在不同地域，可以分布在同一地域的不同可用区内\n*\t每个 VPC 包含的云产品实例数量不超过 10000 个\n*\t创建 VPC 时，会自动创建 1 个虚拟路由器和 1 个路由表。每个 VPC 只允许有 1 个虚拟路由器和 1 个路由表\n* 每个VPC，支持3个用户侧网络的网段 UserCidr ；如果多个用户侧网段之间存在互相包含(比如10.0.0.0/8和10.1.0.0/16，以10.0.0.0/8实际生效)\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：CreateVpc"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "新建的 VPC 所在的地域"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "CidrBlock",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "可选值 10.0.0.0/8、172.16.0.0/12和192.168.0.0/16及它们包含的子网。默认是172.16.0.0/12"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "VpcName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "VPC 名称，不填则为空，默认值为空。长度范围为2～128个字节。支持英文或中文字符，必须以大小写字母或中文开头，可包含数字， “_” 或 “-” ，不能以 “http://” 或“https://” 开头"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "对新建 VPC 的描述，不填则为空，默认值为空。长度范围为2～256个字节。支持英文或中文字符，不能以 “http://” 或“https://” 开头"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ResourceGroupId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于保证请求的幂等性。由客户端生成该参数值，要保证在不同请求间唯一，最大不值过 64 个 ASCII 字符，具体参见\u003ca href=\"https://help.aliyun.com/document_detail/36569.html?spm=5176.doc35737.6.785.bWrLAv\" title=\"如何保证幂等性\"\u003e如何保证幂等性\u003c/a\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "UserCidr",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户侧网络的网段，如需定义多个网段请使用用半角逗号字符隔开，最多支持3个网段"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

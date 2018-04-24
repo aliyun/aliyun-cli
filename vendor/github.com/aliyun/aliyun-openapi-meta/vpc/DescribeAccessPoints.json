@@ -1,0 +1,139 @@
+{
+  "name": "DescribeAccessPoints",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n* 查询本Region管理下的所有专线接入点（AccessPoint）的详细信息"
+  },
+  "parameters": [
+    {
+      "name": "Filter",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "Key",
+          "position": "Query",
+          "type": "String",
+          "description": {
+            "zh": "第n个过滤器的类型。N取值[1，5)"
+          },
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Value",
+          "position": "Query",
+          "type": "RepeatList",
+          "description": {
+            "zh": "第n个过滤器的第m个值。M取值[1，5)"
+          },
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：`DescribeAccessPoints`。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": "用户ID"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "本次 API 请求访问到的资源拥有者账户，即登录用户名。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": "资源拥有者ID"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "所在地域（管理实例的Region ID）"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Type",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "专线接入点（AP）类型，不指定表示返回所有类型的AP。 可选值：\u003cbr\u003e\u003cli\u003eVPC - VPC接入点，可接受访问VPC类型网络的专线接入\u003c/li\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "专线接入点（AP）的名称"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HostOperator",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "专线接入点（AP）机房所属的运营商"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageNumber",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "查询结果的页码；不指定时，默认为1；\u003cbr\u003e取值范围：正整数；若PageNumber大于实际结果的最大页码，则返回最后一页的内容。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "查询结果的分页大小。取值范围为\\[1,100]，默认为10。"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

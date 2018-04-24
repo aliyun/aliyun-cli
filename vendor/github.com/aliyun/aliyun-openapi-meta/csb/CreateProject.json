@@ -1,0 +1,28 @@
+{
+  "name": "CreateProject",
+  "protocol": "HTTPS",
+  "method": "POST",
+  "parameters": [
+    {
+      "name": "CsbId",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Data",
+      "position": "Body",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Host",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

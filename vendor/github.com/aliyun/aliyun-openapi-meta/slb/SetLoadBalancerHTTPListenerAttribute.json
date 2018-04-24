@@ -1,0 +1,340 @@
+{
+  "name": "SetLoadBalancerHTTPListenerAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "修改HTTP协议监听的配置。\n"
+  },
+  "parameters": [
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e负载均衡实例的地域。\n\u003cp\u003e您可以从[地域和可用区](~~40654~~)列表或通过调用[DescribeRegions](~~25609~~)接口查询地域ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：`SetLoadBalancerHTTPListenerAttribute`"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "LoadBalancerId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "负载均衡实例的ID。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ListenerPort",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "负载均衡实例前端使用的端口。取值\\[1,65535]"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Bandwidth",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "\u003cp\u003e监听的带宽峰值。\u003cp\u003e取值：-1 | [1-5000]\n\t  \u003cul\u003e\n\t  \u003cli\u003e\u003cp\u003e-1：对于按流量计费的公网负载均衡实例，可以将带宽峰值设置为`-1`，即不限制带宽峰值。\u003c/li\u003e\n\t  \u003cli\u003e\u003cp\u003e1-5000Mbps： 对于按带宽计费的公网负载均衡实例，可以设置每个监听的带宽峰值，但所有监听的带宽峰值之和不能超过实例的带宽峰值。详情参见[共享实例带宽](~~57846~~)。\u003c/li\u003e\n\t  \u003c/ul\u003e"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "XForwardedFor",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e是否通过`X-Forwarded-For`获取客户端请求的真实IP。\u003cp\u003e取值：on （默认值） | off"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Scheduler",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "调度算法。\u003cp\u003e取值：wrr/wlc\u003c/p\u003e\u003cp\u003e默认值：wrr。\u003c/p\u003e\u003cp\u003e调度算法。\u003cp\u003e取值：wrr | wlc | rr\n\u003cul\u003e\n\t  \u003cli\u003e\u003cp\u003ewrr（默认值）：权重值越高的后端服务器，被轮询到的次数（概率）也越高。\u003c/li\u003e\n\t  \u003cli\u003e\u003cp\u003ewlc：除了根据每台后端服务器设定的权重值来进行轮询，同时还考虑后端服务器的实际负载（即连接数）。当权重值相同时，当前连接数越小的后端服务器被轮询到的次数（概率）也越高。\u003c/li\u003e\n\t  \u003cli\u003e\u003cp\u003err：按照访问顺序依次将外部请求依序分发到后端服务器。\u003c/li\u003e\n\u003c/ul\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "StickySession",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "是否开启会话保持。\u003cp\u003e取值：on/off。\u003c/p\u003e"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "StickySessionType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003ecookie的处理方式。当StickySession的值为`on`时，必须指定该参数。\u003cp\u003e取值：insert | server\u003cul\u003e\n\t  \u003cli\u003e\u003cp\u003einsert：植入Cookie。\n\t  \u003cp\u003e\n\t  客户端第一次访问时，负载均衡会在返回请求中植入Cookie（即在HTTP/HTTPS响应报文中插入SERVERID），下次客户端携带此Cookie访问，负载均衡服务会将请求定向转发给之前记录到的后端服务器上。  \u003c/p\u003e\u003c/li\u003e\n\t  \u003cli\u003e\u003cp\u003eserver：重写Cookie。\n\t  \u003cp\u003e负载均衡发现用户自定义了Cookie，将会对原来的Cookie进行重写，下次客户端携带新的Cookie访问，负载均衡服务会将请求定向转发给之前记录到的后端服务器。\u003c/li\u003e\n\t  \u003c/ul\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "CookieTimeout",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "\u003cp\u003eCookie超时时间。\u003cp\u003e取值[1,86400]（秒）\n\u003cp\u003e当StickySession为`on`且StickySessionType为`insert`时，该参数必选。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Cookie",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e服务器上配置的Cookie。\u003cp\u003e长度为[1,200]，只能包含ASCII英文字母和数字字符，不能包含逗号、分号或空格，也不能以$开头。\n\t  \u003cp\u003e当StickySession为`on`且StickySessionType为`server`时，该参数必选。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HealthCheck",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "是否开启健康检查。\u003cp\u003e取值：on/off。\u003c/p\u003e"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "HealthCheckDomain",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于健康检查的域名。\u003cp\u003e取值：\n\u003cul\u003e\n\t  \u003cli\u003e\u003cp\u003e`$_ip`： 后端服务器的私网IP。当指定了IP或该参数未指定时，负载均衡会使用各后端服务器的私网IP当做健康检查使用的域名。\u003c/p\u003e\u003c/li\u003e\n\t  \u003cli\u003e\u003cp\u003e`domain`：域名长度为[1,80]，只能包含字母、数字、点号（.）和连字符（-）。\u003c/p\u003e\u003c/li\u003e \u003c/ul\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HealthCheckURI",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于健康检查的URI。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HealthyThreshold",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "健康检查连续成功多少次后，将后端服务器的健康检查状态由`fail`判定为`success`。\u003cp\u003e取值\\[2,10]"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "UnhealthyThreshold",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "健康检查连续失败多少次后，将后端服务器的健康检查状态由`success`判定为`fail`。\u003cp\u003e取值\\[2,10]"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HealthCheckTimeout",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "\u003cp\u003e接收来自运行状况检查的响应需要等待的时间。如果后端ECS在指定的时间内没有正确响应，则判定为健康检查失败。\u003cp\u003e取值[1,300]（秒）\n\u003cp\u003e**注意**：如果`HealthCHeckTimeout`的值小于`HealthCheckInterval`的值，则`HealthCHeckTimeout`无效，超时时间为`HealthCheckInterval`的值。 "
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HealthCheckInterval",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "\u003cp\u003e健康检查的时间间隔。\u003cp\u003e取值[1,50]（秒）"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HealthCheckConnectPort",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "\u003cp\u003e健康检查使用的端口。\u003cp\u003e取值：[1,65535]或-520\n\t  \u003cp\u003e 如果设置为`-520`表示使用监听配置的后端服务端口。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HealthCheckHttpCode",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e健康检查正常的HTTP状态码，多个状态码用逗号（,）分割。\n\t  \u003cp\u003e取值：http_2xx（默认值） | http_3xx | http_4xx | http_5xx"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "MaxConnection",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "最大连接数。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "access_key_id",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "阿里云颁发给用户的访问服务所用的密钥ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "VServerGroup",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "是否使用虚拟服务器组，取值：on/off，默认值：off。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "VServerGroupId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "服务器组ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tags",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户标签。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "XForwardedFor_SLBIP",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e是否通过`SLB-IP`头字段获取客户端请求的真实IP。\u003cp\u003e取值：on | off（默认值）\u003c/p\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "XForwardedFor_SLBID",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e是否通过`SLB-ID`头字段获取负载均衡实例ID。\u003cp\u003e取值：on | off（默认值）"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "XForwardedFor_proto",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e是否通过`X-Forwarded-Proto`头字段获取负载均衡实例的监听协议。\u003cp\u003e取值：on | off（默认值）"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Gzip",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e是否开启Gzip压缩，对特定文件类型进行压缩。\u003cp\u003e取值：on（默认值）| off"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

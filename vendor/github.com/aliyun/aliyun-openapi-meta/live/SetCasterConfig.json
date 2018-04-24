@@ -1,0 +1,134 @@
+{
+  "name": "SetCasterConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "对导播台进行全局配置，配置内容包括导播台名称、域名、录制、转码、延播、备播等"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：SetCasterConfig"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "CasterId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "导播台ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "CasterName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "导播台名称"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "域名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "TranscodeConfig",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "转码配置"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RecordConfig",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "录制配置, 为空时表示不启用录制功能"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Delay",
+      "position": "Query",
+      "type": "Float",
+      "description": {
+        "zh": "延时播放 0-禁用延时,大于0为启用延时,时间单位:秒"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "UrgentMaterialId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "备播视频，媒资库素材Id"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SideOutputUrl",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户自定义导播台旁路输出地址。若为空，则默认使用阿里云自动生成的输出地址"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "CallbackUrl",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户回调地址"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ProgramEffect",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ProgramName",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

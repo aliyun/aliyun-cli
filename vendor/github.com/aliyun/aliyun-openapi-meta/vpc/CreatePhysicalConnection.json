@@ -1,0 +1,187 @@
+{
+  "name": "CreatePhysicalConnection",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "* 客户申请专线接入，在同一时间，处于`enabled`状态之外的物理专线不得超过5条。\n* 若用户名下有物理专线处于欠费状态，则不允许新建更多的物理专线。\n* 新创建的物理专线为Initial状态。\n"
+  },
+  "parameters": [
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "所在地域（管理实例的Region ID）"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "AccessPointId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "申请接入物理专线所在的接入点ID，所选择的接入点必须存在且处于可接入的状态。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Type",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "专线类型，默认值：VPC ;可选值：     VPC - VPC类型专线"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "LineOperator",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "提供接入物理线路的运营商,可选值：        \u003cul\u003e          \u003cli\u003eCT - 中国电信\u003c/li\u003e          \u003cli\u003eCU - 中国联通\u003c/li\u003e          \u003cli\u003eCM - 中国移动\u003c/li\u003e          \u003cli\u003eCO - 中国其他\u003c/li\u003e          \u003cli\u003eEquinix - Equinix\u003c/li\u003e          \u003cli\u003eOther - 境外其他\u003c/li\u003e        \u003c/ul\u003e      "
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "bandwidth",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "带宽包的带宽。取值范围：\\[5,5000]，单位为Mbps。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PeerLocation",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "专线对端所在物理位置（地址）。\\[2,256]个字符，不能以\u003ccode\u003ehttp://\u003c/code\u003e和\u003ccode\u003ehttps://\u003c/code\u003e开头。            "
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "PortType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "物理专线接入端口类型，默认为\u003ccode\u003e1000Base-T\u003c/code\u003e，如不清楚可以不填写,可选值：      \u003cul\u003e        \u003cli\u003e100Base-T - 百兆电口\u003c/li\u003e        \u003cli\u003e1000Base-T - 千兆电口\u003c/li\u003e        \u003cli\u003e1000Base-LX - 千兆单模光口（10千米）\u003c/li\u003e        \u003cli\u003e10GBase-T - 万兆电口\u003c/li\u003e        \u003cli\u003e10GBase-LR - 万兆单模光口（10千米）\u003c/li\u003e      \u003c/ul\u003e      "
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RedundantPhysicalConnectionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "互为冗余的物理专线Id（在建立第二条物理专线连接时，如果传入需要冗余的物理专线ID，阿里云将为其分配尽量独立的AD设备，以提供更高的高可用性）。传入对应的物理专线必须存在，而且处于\u003ccode\u003eAllocated\u003c/code\u003e/\u003ccode\u003eConfirmed\u003c/code\u003e/\u003ccode\u003eEnabled\u003c/code\u003e状态之一。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "物理专线描述信息。\\[2,256]个字符，不能以\u003ccode\u003ehttp://\u003c/code\u003e 和\u003ccode\u003ehttps://\u003c/code\u003e 开头。      "
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "物理专线名字。\\[2,128]个字符。不能以\u003ccode\u003ehttp://\u003c/code\u003e 和 \u003ccode\u003ehttps://\u003c/code\u003e 开头。      "
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "CircuitCode",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "专线侧接口对应运营商的电路编码。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于保证请求的幂等性。由客户端生成该参数值，要保证在不同请求间唯一，最大不值过64个ASCII字符。      "
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：`CreatePhysicalConnection`。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

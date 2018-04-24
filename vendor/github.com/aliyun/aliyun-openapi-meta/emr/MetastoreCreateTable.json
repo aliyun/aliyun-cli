@@ -1,0 +1,86 @@
+{
+  "name": "MetastoreCreateTable",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "DbName",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "TableName",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "LocationUri",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "FieldDelimiter",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Column",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": true,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "Name",
+          "position": "Query",
+          "type": "String",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "Type",
+          "position": "Query",
+          "type": "String",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "Comment",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    }
+  ]
+}

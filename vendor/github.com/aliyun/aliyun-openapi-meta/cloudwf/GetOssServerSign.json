@@ -1,0 +1,21 @@
+{
+  "name": "GetOssServerSign",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DirType",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

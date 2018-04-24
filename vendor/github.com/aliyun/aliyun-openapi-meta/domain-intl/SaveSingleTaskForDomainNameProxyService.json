@@ -1,0 +1,35 @@
+{
+  "name": "SaveSingleTaskForDomainNameProxyService",
+  "protocol": "HTTPS|HTTP",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "UserClientIp",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Lang",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Status",
+      "position": "Query",
+      "type": "Boolean",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

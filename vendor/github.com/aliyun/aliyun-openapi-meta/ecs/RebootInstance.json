@@ -1,0 +1,62 @@
+{
+  "name": "RebootInstance",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "指定实例的 ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ForceStop",
+      "position": "Query",
+      "type": "Boolean",
+      "description": {
+        "zh": "重启机器时的是否强制关机策略。取值：\u003cul\u003e\u003cli\u003etrue\u003c/li\u003e\u003cli\u003efalse\u003c/li\u003e\u003c/ul\u003e若为 false 则走正常关机流程；若为 true 则强制关机。 \u003cbr\u003e如果不指定，则默认值为 false。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

@@ -1,0 +1,160 @@
+{
+  "name": "DescribeGlobalAccelerationInstances",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n查询全球加速实例列表\n* 支持通过GlobalAccelerationInstanceId、Name、Status、ServiceLocation、ServerId 作为条件仅筛选\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：DescribeGlobalAccelerationInstances"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "所在地域"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "GlobalAccelerationInstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "全球加速实例 ID"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "IpAddress",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "全球加速实例公网 IP"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "全球加速实例名称"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Status",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "全球加速实例状态，可选值：Available，Inuse，Associating，Unassociating"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "BandwidthType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例带宽类型，默认为 Exclusive\n\u003cul\u003e\n  \u003cli\u003eSharing 共享带宽型\u003c/li\u003e\n\u003cli\u003eExclusive 独享带宽型\u003c/li\u003e\n  \u003c/ul\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ServiceLocation",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "全球加速实例的服务区域"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ServerId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "后端服务器的实例 ID"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageNumber",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "实例状态列表的页码，起始值为1，默认值为1"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "分页查询时设置的每页行数，最大值50行，默认为10"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

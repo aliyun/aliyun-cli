@@ -1,0 +1,180 @@
+{
+  "name": "AddCdnDomain",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n添加加速域名，一次只能提交一个加速域名，一个用户最多添加20个域名。\n\n限制条件：\n\n* 创建加速域名之前, 必须先开通CDN服务。\n* 加速域名必须已备案完成。\n* 源站内容，如果不在阿里云平台上，需要审核，审核工作会在下一工作日前完成。\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数 取值：AddCdnDomain"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "OwnerAccount"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "需要接入CDN的域名。支持泛域名，以符号“.”开头，如：.a.com"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "CdnType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "加速域名的业务类型； 取值：web：图片及小文件分发；download：大文件下载加速；video：视音频点播加速；liveStream：直播流媒体加速"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "TopLevelDomain",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "顶级调度域"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ResourceGroupId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "资源组id"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SourceType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "源站类型 取值：ipaddr、 domain、oss分别表示：IP源站、域名源站、OSS Bucket为源站。注：若选择了直播流媒体加速的业务类型，无需填写源站类型和信息"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Sources",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "回源地址，可以是IP或域名；IP支持最多20个，以逗号区分，域名只能输入一个。IP与域名不能同时输入。除了业务类型为直播流媒体加速无需输入源站地址外，其他业务类型源站地址必填（内部用户，类型为common公有源，可以填写类型枚举值）"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SourcePort",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "可以指定443,80。默认值80。443的话走https回源。oss不支持443"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "CheckUrl",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "源站健康检查"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Region",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "直播域名单元化信息"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "LiveType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "直播边缘推流"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Scope",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "取值范围：domestic,overseas,global，默认domestic。国际用户、国内L3及以上用户设置有效"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Priorities",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "优先级，用逗号分隔，个数与sources保持一致"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "QuerySystemEventDetail",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "parameters": [
+    {
+      "name": "QueryJson",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

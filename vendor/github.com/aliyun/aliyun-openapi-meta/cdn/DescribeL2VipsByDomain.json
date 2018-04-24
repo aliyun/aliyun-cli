@@ -1,0 +1,60 @@
+{
+  "name": "DescribeL2VipsByDomain",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "* 按域名查询L2节点vip列表。配置白名单后才可以生效\n* 注：支持日峰值带宽为 **1Gbps** 以上的用户提工单申请该接口调用权限，[立即申请](https://workorder.console.aliyun.com/console.htm?lang=#/ticket/add?productCode=cdn \"立即申请\")\n* 使用场景介绍，请了解：[CDN的回源地址有哪些？](https://help.aliyun.com/knowledge_detail/40205.html \"CDN的回源地址有哪些？\")\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数，取值：DescribeL2VipsByDomain"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "域名，取值范围： 只支持单个域名，需加白名单"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

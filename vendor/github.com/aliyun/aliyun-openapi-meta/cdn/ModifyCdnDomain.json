@@ -1,0 +1,120 @@
+{
+  "name": "ModifyCdnDomain",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "修改加速域名，目前支持修改源站\n\n限制条件：\n\n* 创建加速域名之前, 必须先开通CDN服务。\n* 加速域名必须已备案完成。"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数 取值：ModifyCdnDomain"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "接入CDN的域名"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "SourceType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "源站类型 取值：ipaddr：IP源站；domain：域名源站；oss：OSS Bucket为源站，（内部common：公共源）。注：若选择了直播流媒体加速的业务类型，无需填写源站类型和信息"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SourcePort",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "回源端口"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Sources",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "回源地址，可以是IP或域名；IP或域名支持最多20个，以逗号区分。IP与域名不能同时输入。除了业务类型为直播流媒体加速无需输入源站地址外，其他业务类型源站地址必填（内部用户，类型为common公有源，可以填写类型枚举值）"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ResourceGroupId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "资源组id"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Priorities",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "源站地址对应的优先级，默认20。多个源站时，用逗号分隔"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "TopLevelDomain",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "顶级接入域，只有白名单用户CDN_TOP_LEVEL_DOMAIN_GREY_USER_LIST设置才有效"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

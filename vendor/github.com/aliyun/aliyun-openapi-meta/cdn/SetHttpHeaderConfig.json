@@ -1,0 +1,87 @@
+{
+  "name": "SetHttpHeaderConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n设置自定义http头\n\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数，取值：SetHttpHeaderConfig"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "您的加速域名"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "HeaderKey",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "要设置HTTP头参数：取值：Content-Type,Cache-Control,Content-Disposition,Content-Language,Expires,Access-Control-Allow-Origin,Access-Control-Allow-Methods,Access-Control-Allow-Headers,Access-Control-Max-Age,Access-Control-Expose-Headers,Access-Control-Allow-Credentials"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "HeaderValue",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "要设置的HTTP头参数的取值"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ConfigId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

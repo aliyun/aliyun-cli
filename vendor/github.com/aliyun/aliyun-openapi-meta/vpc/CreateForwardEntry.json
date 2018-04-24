@@ -1,0 +1,130 @@
+{
+  "name": "CreateForwardEntry",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n在DNAT表（端口转发表）中添加DNAT条目。\n\n添加DNAT条目时，注意：\n\n- 每条DNAT条目由五部分组成：[ExternalIp，ExternalPort，Protocal，InternalIp，InternalPort]。\n\n- DNAT条目的效果是：将ExternalIp：ExternalPort上收到的指定协议的消息转发给InternalIp:InternalPort，并将回复消息原路返回。\n\n- ExternalIp需满足以下条件：\n\n\t- \u003cfont  color=#ff5f25\u003e对于2017年11月3日 23:59之前账户下存在NAT带宽包的用户，ExternalIp必须是该NAT网关的NAT带宽包中的公网IP地址。\n\t- 对于2017年11月3日 23:59之前账户下不存在NAT带宽包的用户，ExternalIp必须是绑定了该NAT网关的弹性公网IP,详情请参考[绑定弹性公网IP](~~36017~~)。\u003c/font\u003e\n\t- 目前暂时只支持TCP和UDP两种协议，也可以指定为Any，即不限制协议类型。\n\t- 一个公网IP地址不能同时用于DNAT条目和SNAT条目中。\n\t\n- InternalIp需满足以下要求：\n\n\t- InternalIp必需属于本VPC的网段范围。\n\t- 该IP地址可以是一个存在的ECS私网IP地址，也可以是一个不存在的IP地址。\n\t- 只有当InternalIp被一个ECS实例使用且该实例没有绑定EIP时，DNAT条目才生效。若该IP地址被HAVIP/SLB/RDS等非ECS资源使用，DNAT条目无效，公网流量无法转发到该IP上。\n\n- 唯一性要求：\n\n\t- 所有DNAT条目的[公网IP、公网端口、协议]三个字段组成的组合必须互不重复。即不允许将同一个源IP、同一个端口、同一个协议的消息转发到多个目标。\n\t\n\t- 所有DNAT条目的[目标私网IP、目标私网端口、协议]三个字段组成的组合也必须互不重复。\n\t\n- 当DNAT表中有DNAT条目的状态处于Pending或Modifying状态时，无法添加DNAT条目。\n\n- 一个DNAT表最多可添加40条DNAT条目。\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：\u003ccode\u003eCreateForwardEntry\u003c/code\u003e。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "NAT网关的所属地域。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ForwardTableId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "DNAT表的ID。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ExternalIp",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cfont color=\"#ff5f25\"\u003e对于2017年11月3日 23:59之前账户下存在NAT带宽包的用户，ExternalIp必须是该NAT网关的NAT带宽包中的公网IP地址。\u003cbr\u003e    \u003cbr\u003e 对于2017年11月3日 23:59之前账户下不存在NAT带宽包的用户，ExternalIp必须是绑定了该NAT网关的弹性公网IP,详情请参考\u003ca href=\"~~36017~~\"\u003e绑定弹性公网IP\u003c/a\u003e。\u003c/font\u003e"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ExternalPort",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "公网端口。取值：\\[1,65535]"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "InternalIp",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "目标私网IP。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "InternalPort",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "目标私网端口。取值：\\[1,65535]"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "IpProtocol",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e协议类型。\u003c/p\u003e\u003cp\u003e可选值：TCP、UDP、Any。\u003c/p\u003e"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

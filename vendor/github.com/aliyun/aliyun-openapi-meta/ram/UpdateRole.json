@@ -1,0 +1,21 @@
+{
+  "name": "UpdateRole",
+  "protocol": "HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "RoleName",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "NewAssumeRolePolicyDocument",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

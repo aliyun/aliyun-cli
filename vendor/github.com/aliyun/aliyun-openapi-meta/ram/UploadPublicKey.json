@@ -1,0 +1,21 @@
+{
+  "name": "UploadPublicKey",
+  "protocol": "HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "UserName",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PublicKeySpec",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

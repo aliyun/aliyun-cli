@@ -1,0 +1,110 @@
+{
+  "name": "UpdateVideoInfo",
+  "protocol": "HTTPS|HTTP",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n修改视频信息。注意：传入参数则更新相应字段，否则该字段不会被覆盖或更新。\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值： UpdateVideoInfo"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "VideoId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Title",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频标题，长度不超过128个字节，UTF8编码"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tags",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频标签，单个标签不超过32字节，最多不超过16个标签。多个用逗号分隔，UTF8编码"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频描述，长度不超过1024个字节，UTF8编码"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "CoverURL",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频封面URL地址"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "CateId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": "视频分类ID"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

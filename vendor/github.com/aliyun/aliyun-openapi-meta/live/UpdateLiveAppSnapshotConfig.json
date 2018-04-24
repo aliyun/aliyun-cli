@@ -1,0 +1,120 @@
+{
+  "name": "UpdateLiveAppSnapshotConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "更新直播流下的 AppName 截图配置，输出内容保存到 OSS 中，重新推流生效。"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：UpdateLiveAppSnapshotConfig。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "加速域名"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "AppName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "直播流所属应用名称，支持＊号，代表该域名下所有的 AppName。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "TimeInterval",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "截图周期，范围：\\[5,3600]，单位秒。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OssEndpoint",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "OssEndpoint域名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OssBucket",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "OssBucket名称"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OverwriteOssObject",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "OSS 存储文件名，每次截图都覆盖此文件，小于 256byte，目前仅支持生成 jpg 图片，支持变量匹配，包含 {AppName}、{StreamName}，如：{AppName}/{StreamName}.jpg，传入-，表示删除此字段。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SequenceOssObject",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "OSS 存储文件名，每次截图都递增存储，DescribeLiveStreamSnapshotInfo接口查询一段时间的文件，小于 256byte，目前仅支持生成 jpg 图片，支持变量匹配，包含 {AppName}、{StreamName}、{UnixTimestamp}、{Sequence}，其中 {UnixTimestamp}、{Sequence} 必填一个，如：snapshot/{AppName}/{StreamName}/{UnixTimestamp}.jpg，传入-，表示删除此字段。"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

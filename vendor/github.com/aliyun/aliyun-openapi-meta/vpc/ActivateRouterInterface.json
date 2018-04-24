@@ -1,0 +1,70 @@
+{
+  "name": "ActivateRouterInterface",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n将一个Inactive状态的RouterInterface的状态置为Active。\n\n* 这是一个异步操作，返回成功后，RouterInterface会进入Activating状态；用户可以通过轮询RouterInterface状态的方式得知是否已经进入Active状态。\n* 若该RI处于欠费状态，则不允许进行该操作\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：ActivateRouterInterface"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例所在的地域"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "RouterInterfaceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "路由器接口ID"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

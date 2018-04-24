@@ -1,0 +1,6 @@
+{
+  "name": "ListPhotoStores",
+  "protocol": "HTTPS",
+  "method": "POST|GET",
+  "parameters": []
+}

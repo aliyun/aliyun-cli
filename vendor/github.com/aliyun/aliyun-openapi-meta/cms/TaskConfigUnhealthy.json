@@ -1,0 +1,14 @@
+{
+  "name": "TaskConfigUnhealthy",
+  "protocol": "HTTPS|HTTP",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "TaskIdList",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

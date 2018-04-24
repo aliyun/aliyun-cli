@@ -1,0 +1,28 @@
+{
+  "name": "AddCatalogRelations",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "CatalogId",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ApiIds",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

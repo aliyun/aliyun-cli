@@ -1,0 +1,14 @@
+{
+  "name": "CreateVirtualMFADevice",
+  "protocol": "HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "VirtualMFADeviceName",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

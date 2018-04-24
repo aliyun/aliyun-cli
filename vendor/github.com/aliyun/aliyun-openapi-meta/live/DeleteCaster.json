@@ -1,0 +1,40 @@
+{
+  "name": "DeleteCaster",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "删除导播台实例，清除导播台配置及资源、布局、场景信息\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：DeleteCaster"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "CasterId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "导播台Id"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

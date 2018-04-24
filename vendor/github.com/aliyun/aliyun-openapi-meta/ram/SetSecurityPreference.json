@@ -1,0 +1,56 @@
+{
+  "name": "SetSecurityPreference",
+  "protocol": "HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "EnableSaveMFATicket",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AllowUserToChangePassword",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AllowUserToManageAccessKeys",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AllowUserToManagePublicKeys",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AllowUserToManageMFADevices",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "LoginSessionDuration",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "LoginNetworkMasks",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

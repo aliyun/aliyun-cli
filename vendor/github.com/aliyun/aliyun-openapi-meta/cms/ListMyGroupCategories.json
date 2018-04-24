@@ -1,0 +1,14 @@
+{
+  "name": "ListMyGroupCategories",
+  "protocol": "HTTPS|HTTP",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "GroupId",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

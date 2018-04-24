@@ -1,0 +1,50 @@
+{
+  "name": "DescribePlayUserAvg",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "## 描述\n\n获取用户在指定时间范围内的每日播放均量统计数据"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": " 操作接口名，系统规定参数，取值：DescribePlayUserAvg"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "StartTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "起始时间，UTC格式"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "EndTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "结束时间，UTC格式"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

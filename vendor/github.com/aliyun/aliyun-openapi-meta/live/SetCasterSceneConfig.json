@@ -1,0 +1,70 @@
+{
+  "name": "SetCasterSceneConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "全量设置场景配置，清空场景配置，并将布局信息设置并生效至指定场景\n\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：SetCasterSceneConfig"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "CasterId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "导播台ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "SceneId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "场景ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "LayoutId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "布局ID"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ComponentId",
+      "position": "Query",
+      "type": "RepeatList",
+      "description": {
+        "zh": "组件ID列表"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

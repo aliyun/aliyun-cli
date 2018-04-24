@@ -1,0 +1,21 @@
+{
+  "name": "TaskConfigEnable",
+  "protocol": "HTTPS|HTTP",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "IdList",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Enabled",
+      "position": "Query",
+      "type": "Boolean",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

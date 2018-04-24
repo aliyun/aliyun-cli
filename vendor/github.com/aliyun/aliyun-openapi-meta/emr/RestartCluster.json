@@ -1,0 +1,49 @@
+{
+  "name": "RestartCluster",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ClusterId",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "RollingRestart",
+      "position": "Query",
+      "type": "Boolean",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "UpgradedHostGroupOnly",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

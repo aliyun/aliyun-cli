@@ -1,0 +1,90 @@
+{
+  "name": "ModifyVpcAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n修改指定 VPC 的属性\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：ModifyVpcAttribute"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "VpcId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "需要修改的 VPC 的 Id "
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "修改后的描述，不填则为空，默认值为空，[2, 256] 英文或中文字符，不能以 http:// 和 https:// 开头。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "VpcName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "修改后的名字，不填则为空，默认值为空，[2, 128] 英文或中文字符，必须以大小字母或中文开头，可包含数字，”_”或”-”，这个值会展示在控制台。不能以 http:// 和 https:// 开头。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "name": "AddLiveSnapshotDetectPornConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "审核配置接口，可按照域名和 App 级别配置直播流审核服务。\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：AddLiveSnapshotDetectPornConfig"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户域名"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "AppName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "app 名，支持\u003ccode\u003e*\u003c/code\u003e表示全部"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "OssEndpoint",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "OSS 域名"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "OssBucket",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "OSS 存储 bucket 名称"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "OssObject",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "保存涉黄涉政等违规图片的对象模板， 如不明确给出，默认为{AppName}/{StreamName}/{Date}/{Hour}/{Minute}_{Second}.jpg"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Scene",
+      "position": "Query",
+      "type": "RepeatList",
+      "description": {
+        "zh": "检测场景 包括”porn”,”terrorism”,”ad”,”live”,默认值为“porn”"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Interval",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "采样间隔，可选范围 \\[5,3600] 秒"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

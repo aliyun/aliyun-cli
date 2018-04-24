@@ -1,0 +1,140 @@
+{
+  "name": "ModifyForwardEntry",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n修改指定的DNAT条目。\n\n\u003e注意：当DNAT表中有DNAT条目的状态为Pending或Modifying时，无法修改DNAT条目。\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：\u003ccode\u003eModifyForwardEntry\u003c/code\u003e。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ForwardTableId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "DNAT表的ID。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ForwardEntryId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "要修改的DNAT条目的ID。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ExternalIp",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用来转发和接收请求的公网IP。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ExternalPort",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "公网端口。取值：\\[1,65535]"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InternalIp",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "私网IP。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InternalPort",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "私网端口。取值：\\[1,65535]"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "IpProtocol",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e协议类型。\u003c/p\u003e\u003cp\u003e可选值：TCP、UDP、Any。\u003c/p\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "NAT网关的所属地域。"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

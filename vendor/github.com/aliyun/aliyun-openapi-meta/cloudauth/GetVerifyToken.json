@@ -1,0 +1,42 @@
+{
+  "name": "GetVerifyToken",
+  "protocol": "HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "Biz",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "TicketId",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Binding",
+      "position": "Query",
+      "type": "Map",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "UserData",
+      "position": "Query",
+      "type": "Map",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

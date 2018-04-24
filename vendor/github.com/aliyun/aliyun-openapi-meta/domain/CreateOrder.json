@@ -1,0 +1,58 @@
+{
+  "name": "CreateOrder",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SubOrderParam",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": true,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "SaleID",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "RelatedName",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Action",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": true
+        },
+        {
+          "name": "Period",
+          "position": "Query",
+          "type": "Integer",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "DomainTemplateID",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    }
+  ]
+}
