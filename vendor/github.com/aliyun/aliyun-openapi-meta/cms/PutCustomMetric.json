@@ -1,0 +1,14 @@
+{
+  "name": "PutCustomMetric",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "parameters": [
+    {
+      "name": "MetricList",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

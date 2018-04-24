@@ -1,0 +1,127 @@
+{
+  "name": "DescribeBinlogFiles",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n查询实例的BINLOG文件（仅MySQL数据库实例），支持分页。RDS提供Binlog文件下载。 \n\n* 当DownloadLink为NULL时，表示RDS没有提供下载链接URL。\n\n* 当DownloadLink不为NULL时，用户可以根据此URL，通过wget（请加双引号）、浏览器、编写程序下载备份文件，此URL已设置过期时间LinkExpiredTime，请在过期时间之前使用。若过期，用户在下载时，将会出现如下错误码：\n\n\t```xml\n\u003c?xml version=\"1.0\" encoding=\"UTF-8\" ?\u003e\n\u003cError\u003e\n\u003cCode\u003eAccessDenied\u003c/Code\u003e\n\u003cMessage\u003eRequest has expired.\u003c/Message\u003e\n\u003cExpires\u003e2012-12-25T09:47:52.000Z\u003c/Expires\u003e\n\u003cServerTime\u003e2012-12-25T09:49:00.000Z\u003c/ServerTime\u003e\n\u003cRequestId\u003e50D9768CA801C2F102005C70\u003c/RequestId\u003e\n\u003cHostId\u003eoss-test.aliyun-inc.com\u003c/HostId\u003e\n\u003c/Error\u003e\n```\n  \n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "阿里云颁发给用户的访问服务所用的密钥ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：DescribeBinlogFiles。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例名。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "StartTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "查询开始时间，格式：yyyy-MM-dd’T’HH:mm:ssZ。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "EndTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "查询结束时间，格式：yyyy-MM-dd’T’HH:mm:ssZ，且大于查询开始时间。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "每页记录数，取值：30/50/100/；默认值：30。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageNumber",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "页码，大于0且不超过Integer的最大值；默认值：1。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户主账号。"
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

@@ -1,0 +1,150 @@
+{
+  "name": "ModifyVpnConnectionAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n本接口用于修改VPN连接信息\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：ModifyVpnConnectionAttribute"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "指定VPNConnection所在的地域"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于保证请求的幂等性。由客户端生成该参数值，要保证在不同请求间唯一，最大值不超过 64 个 ASCII 字符。 \u003cbr\u003e 具体参见附录"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "VpnConnectionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "VPNConnection的Id"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例的显示名称，\\[2, 128] 英文或中文字符，必须以大小字母或中文开头，可包含数字，“.”，“_”或“-”。    \u003cbr\u003e如果没有指定该参数，默认值为VpnConnectionId\u003cbr\u003e不能以http:// 和 https:// 开头"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "LocalSubnet",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "本端网段，CIDR格式，多个网段用逗号分隔"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RemoteSubnet",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "对端网段，CIDR格式，多个网段用逗号分隔"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "EffectImmediately",
+      "position": "Query",
+      "type": "Boolean",
+      "description": {
+        "zh": "默认false 基本配置"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "IkeConfig",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "IkeConfig.Psk  预共享密钥, 长度限制100个字符\u003cbr\u003eIkeConfig. IkeVersion  版本，可选值: ikev1, ikev2； 默认ikev1\u003cbr\u003eIkeConfig. IkeMode   IkeVersion 为v1时必填， 可选值: main,aggressive； 默认main\u003cbr\u003eIkeConfig. IkeEncAlg  可选值：aes，aes192，aes256，des，3des； 默认aes\u003cbr\u003eIkeConfig.IkeAuthAlg  可选值：md5、sha1；   默认sha1\u003cbr\u003eIkeConfig.IkePfs      可选值：group1，group2，group5，group14，group24; 默认group2\u003cbr\u003eIkeConfig.IkeLifetime  (IKE SA Lifetime，Long类型)，取值范围\\[0,86400],单位为秒; 默认86400\u003cbr\u003eIkeConfig.LocalId      本端标识，长度限制100个字符，默认填写vpn网关ip\u003cbr\u003eIkeConfig.RemoteId     对端标识，长度限制100个字符，默认填写用户网关IP"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "IpsecConfig",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "IpsecConfig. IpsecEncAlg  可选值：aes，aes192，aes256，des，3des；默认aes\u003cbr\u003eIpsecConfig. IpsecAuthAlg  可选值：md5、sha1；   默认sha1\u003cbr\u003eIpsecConfig. IpsecPfs      可选值：disabled，group1，group2，group5，group14，group24；默认group2\u003cbr\u003eIpsecConfig. IpsecLifetime  (Ipsec lifetime Long类型)，取值范围\\[0,86400],单位为秒; 默认86400"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

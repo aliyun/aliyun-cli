@@ -1,0 +1,50 @@
+{
+  "name": "DeleteCasterLayout",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "删除指定布局\n\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：DeleteCasterLayout"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "CasterId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "导播台Id"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "LayoutId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "布局Id"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

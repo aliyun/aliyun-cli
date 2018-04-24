@@ -1,0 +1,90 @@
+{
+  "name": "ModifyBandwidthPackageSpec",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "修改指定NAT带宽包的带宽。"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：\u003ccode\u003eModifyBandwidthPackageSpec\u003c/code\u003e。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "NAT带宽包所属的地域。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "BandwidthPackageId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "待修改的NAT带宽包的ID。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Bandwidth",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "NAT带宽包的带宽。取值范围：\\[5,5000]，单位为Mbps。"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

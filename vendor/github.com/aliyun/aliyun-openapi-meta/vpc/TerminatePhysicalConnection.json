@@ -1,0 +1,90 @@
+{
+  "name": "TerminatePhysicalConnection",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n在物理专线开通后终止物理专线接入\n\n* 只允许开通当前处在Enabled状态的物理专线\n* 如果还存在VBR owner是物理专线owner自己的VBR，则不允许终止物理专线（物理专线owner必须先把属于自己的VBR删除）\n* 如果还存在VBR owner不是物理专线owner自己的而且状态不是Terminated状态的VBR，则不允许终止物理专线（物理专线owner必须先把未被其他用户接受的VBR删除，并把已被其他用户接受的VBR终止，后者不允许跨用户删除但可以终止）\n* 终止开始后进入Terminating状态，完成后进入Terminated状态\n\n"
+  },
+  "parameters": [
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "所在地域（管理实例的Region ID）"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "PhysicalConnectionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "物理专线Id"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：`TerminatePhysicalConnection`。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于保证请求的幂等性。由客户端生成该参数值，要保证在不同请求间唯一，最大不值过64个ASCII字符。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

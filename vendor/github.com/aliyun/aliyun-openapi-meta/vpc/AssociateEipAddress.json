@@ -1,0 +1,110 @@
+{
+  "name": "AssociateEipAddress",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n将EIP绑定到相同地域的云服务实例ECS, NAT,负载均衡或HaVip实例上\n\n* 目前EIP只支持绑定到，NAT，负载均衡ECS实例和HaVip实例上\n* 只有Available状态的EIP才能够进行绑定操作\n* EIP绑定成功后立刻生效，不需要重启云服务器实例\n* EIP目前只能被绑定到相同地域的专有网络类型云服务器实例上\n* 每个云服务器实例ECS,负载均衡或HaVip实例只能同时绑定一个EIP\n* 每个NAT网关可以同时绑定多个EIP\n* 每个EIP同一时间只能绑定一个云产品实例\n* 只有处于运行中和已停止状态的云服务器实例可以绑定弹性公网IP\n* 只有处于Available或者InUse状态的HaVip可以绑定弹性公网IP\n* 因为安全原因被锁定的EIP无法进行绑定和解绑操作\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：AssociateEipAddress"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "查询指定地域的 ID"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AllocationId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "需要进行绑定操作的EIP的申请Id，申请Id是EIP的唯一标识"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "需要进行绑定操作的实例id。\u003cbr\u003e若InstanceType为EcsInstance，则此处填写ECS实例Id。\u003cbr\u003e            若InstanceType为SlbInstance，则此处填写\u003cfont color=\"#ff5f25\"\u003eVPC类型的私网\u003c/font\u003eSLB 的实例ID。\u003cbr\u003e            若InstanceType为Nat，则此处填写NAT 的实例ID。\u003cfont color=\"#ff5f25\"\u003e如果已购NAT带宽包则无法将EIP绑定NAT\u003c/font\u003e，需要\u003ca href=\"https://workorder.console.aliyun.com/console.htm#/ticket/add?productCode=vpc\u0026amp;commonQuestionId=309\u0026amp;isSmart=true\"\u003e提交工单\u003c/a\u003e 。\u003cbr\u003e            若InstanceType为HaVip，则此处填写HaVipId。 "
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "InstanceType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "绑定的对象类型。\u003cbr\u003e            \u003cfont color=\"#ff5f25\"\u003e取值范围：EcsInstance |  SlbInstance  |  Nat  |  HaVip   。 \u003cbr\u003e默认值：EcsInstance \u003c/font\u003e\u003cbr\u003e\u003cb\u003e注意：区分大小写\u003c/b\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InstanceRegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "绑定的实例区域"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

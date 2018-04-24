@@ -1,0 +1,55 @@
+{
+  "name": "DescribeUserData",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例所属的 Region ID。Region ID 的列表详见 \u003ca target='_blank' href=\"https://help.aliyun.com/document_detail/40654.html\"\u003e地域列表\u003c/a\u003e。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "指定的实例 ID"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

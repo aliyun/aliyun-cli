@@ -1,0 +1,80 @@
+{
+  "name": "AddLiveStreamTranscode",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n添加转码配置信息。\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：AddLiveStreamTranscode"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "Domain",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "您的加速域名"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "App",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "直播流所属应用名称"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Template",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "转码模版，目前有标准质量模板：lld、lsd、lhd、lud，高品质（窄带高清转码）模板：ld、sd、hd、ud"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

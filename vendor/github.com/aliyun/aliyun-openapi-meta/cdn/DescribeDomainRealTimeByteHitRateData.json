@@ -1,0 +1,60 @@
+{
+  "name": "DescribeDomainRealTimeByteHitRateData",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "descriptions": {
+    "zh": "获取域名1分钟粒度字节命中率数据. \u003cbr\u003e\n可以查询7天内的数据, 单次查询StartTime和EndTime跨度不能超过24小时. 如果StartTime和EndTime均未指定, 默认返回当前时间起一小时内的数据. \u003cbr\u003e\n注意: 由于存在多域名合并存储的情况, 可能会导致命中率数据不准确, 具体情况以配置为准. \u003cbr\u003e"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数，取值：DescribeDomainRealTimeByteHitRateData\n"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "加速域名"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "StartTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "起始时间，日期格式按照ISO8601表示法，并使用UTC时间,例如：2016-10-20T04:00:00Z.不填默认查询从EndTime起一小时内的数据.\n"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "EndTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "结束时间，日期格式按照ISO8601表示法，并使用UTC时间,例如：2016-10-20T04:00:00Z.不填默认查询从StartTime起一小时内的数据.\n"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

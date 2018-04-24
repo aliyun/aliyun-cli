@@ -1,0 +1,159 @@
+{
+  "name": "CreateRouteEntry",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n新建RouteEntry\n\n支持在专有网络中的路由器（VRouter）和高速通道中的边界路由器（VBR）上的路由表（RouteTable）里，新建路由条目（RouteEntry）\n\n在专有网络中的路由器上的RouteTable中创建RouteEntry：\n- 同一个路由表中自定义路由条目不能超过48条\n- RouteEntry的`DestinationCidrBlock`不允许和VPC内VSwitch的`CIDRBlock`相同，也不允许包含VSwitch的`CIDRBlock`或者被VSwitch的`CIDRBlock`包含\n- RouteEntry的`DestinationCidrBlock`网段不允许指向100.64.0.0/10，也不允许被100.64.0.0/10包含\n- 同一RouteTable下RouteEntry的`DestinationCidrBlock`不允许相同\n- 如果指定的`DestinationCidrBlock`是一个IP地址，会按照掩码为32位来处理\n- 多条RouteEntry允许指向同一个`NextHopId`\n- RouteEntry指定的下一跳`NextHopId`，必须属于所在的VPC\n- 一个VPC内，指向HaVip的路由条目最多可以同时存在5条；\n- 支持通过NextHopList参数配置ECMP路由：\n\t- \u003cfont color=\"#FF0000\"\u003e添加普通（非 ECMP ）自定义路由时，需指定 `DestinationCidrBlock`、`NextHopType`（默认为Instance） 和 `NextHopId`，且不能指定 `NextHopList`；\n\t- 添加 ECMP 路由时，需指定`DestinationCidrBlock`和 `NextHopList`，且不能指定`NextHopType` 和 `NextHopId`；\u003c/font \u003e\n\n在边界路由器上的RouteTable中新建RouteEntry\n- 同一个路由表中自定义路由条目不能超过48条\n- 不支持NextHopList参数\n- RouteEntry的`DestCidrBlock`网段不允许指向100.64.0.0/10，也不允许被100.64.0.0/10包含\n- 同一RouteTable下RouteEntry的`DestCidrBlock`不允许相同\n- 如果指定的`DestinationCidrBlock`是一个IP地址，会按照掩码为32位来处理\n- 多条RouteEntry允许指向同一个`InstanceId`\n- RouteEntry指定的下一跳`InstanceId`，必须属于所在的VBR\n- RouteEntry的下一跳类型仅支持RouterInterface\n- 只允许在VBR状态是Active，而且对应的物理专线状态是Enabled且没有被欠费锁定的情况下在VBR上新建RouteEntry\n- \u003cfont color=\"#FF0000\"\u003e仅支持添加普通路由（非 ECMP），需指定 DestinationCidrBlock、NextHopType（默认为Instance） 和 NextHopId，且不能指定 NextHopList；\u003c/font \u003e\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：CreateRouteEntry"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "查询指定地域的 ID"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RouteTableId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "RouteTableId"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "DestinationCidrBlock",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "RouteEntry的目的网段"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "NextHopId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "路由条目的下一跳实例ID，非ECMP路由"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于保证请求的幂等性。由客户端生成该参数值，要保证在不同请求间唯一，最大不值过64个ASCII字符。\u003cbr\u003e\u003cbr\u003e具体参见附录：\u003ca href=\"~~36569~~\"\u003e如何保证幂等性\u003c/a\u003e。            "
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "NextHopType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "下一跳的类型，可选值为Instance|Tunnel|HaVip|RouterInterface|VpnGateway，默认值为Instance，即ECS实例"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "NextHopList",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "NextHopType",
+          "position": "Query",
+          "type": "String",
+          "description": {
+            "zh": "下一跳的类型，可选值为Instance|Tunnel|HaVip|RouterInterface|VpnGateway，默认值为Instance，即ECS实例"
+          },
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "NextHopId",
+          "position": "Query",
+          "type": "String",
+          "description": {
+            "zh": "RouteEntry 指向的下一跳实例的Id，非 ECMP 路由必须指定NextHopId 而且必须与被删除路由的 NextHopId 匹配。"
+          },
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Weight",
+          "position": "Query",
+          "type": "Integer",
+          "description": {
+            "zh": "下一跳权重"
+          },
+          "required": false,
+          "hidden": false
+        }
+      ]
+    }
+  ]
+}

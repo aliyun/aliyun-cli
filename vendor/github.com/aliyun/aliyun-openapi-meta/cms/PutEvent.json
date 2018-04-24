@@ -1,0 +1,14 @@
+{
+  "name": "PutEvent",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "parameters": [
+    {
+      "name": "EventInfo",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

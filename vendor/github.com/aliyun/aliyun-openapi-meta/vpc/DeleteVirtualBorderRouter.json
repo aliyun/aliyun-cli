@@ -1,0 +1,90 @@
+{
+  "name": "DeleteVirtualBorderRouter",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n删除虚拟边界路由器   \n* 如果VBR上还有Router Interface（用户侧接口除外）或路由则不允许删除\n* VBR owner允许删除Unconfirmed，Enabled或Terminated状态的VBR\n* 物理专线owner只允许删除处在Unconfirmed状态的VBR，一旦VBR进入了Active状态以后（已经被VBR owner接收可以开始使用），只有VBR owner可以删除该VBR\n\n"
+  },
+  "parameters": [
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "所在地域"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "VbrId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "虚拟边界路由器Id"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：DeleteVirtualBorderRouter"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于保证请求的幂等性。由客户端生成该参数值，要保证在不同请求间唯一，最大值不超过 64 个 ASCII 字符。 \u003cbr\u003e 具体参见附录"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

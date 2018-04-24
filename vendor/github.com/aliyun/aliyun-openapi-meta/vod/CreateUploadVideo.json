@@ -1,0 +1,160 @@
+{
+  "name": "CreateUploadVideo",
+  "protocol": "HTTPS|HTTP",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n获取视频上传地址和凭证，并创建视频信息。\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值： CreateUploadVideo"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "CoverURL",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "自定义视频封面URL地址"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频描述，长度不超过1024个字节，UTF8编码"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "FileName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频源文件名，必须带扩展名，且扩展名不区分大小写, 支持的扩展名参见\u003ca href=\"~~55396~~\"\u003e上传概述\u003c/a\u003e的限制部分"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "FileSize",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": "视频文件大小，单位：字节"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "IP",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "发送请求的客户端IP"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Title",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频标题，长度不超过128个字节，UTF8编码"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "CateId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": "视频分类ID，请在“点播控制台-全局设置-分类管理”里编辑或查看分类的ID"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tags",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频标签，单个标签不超过32字节，最多不超过16个标签。多个用逗号分隔，UTF8编码"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "TranscodeMode",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "转码类型，取值：FastTranscode（上传完成即转码，且转码完成才能播放），NoTranscode（上传完成不转码，且立即能播放），默认取值FastTranscode"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "UserData",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "{\"Duration\":\"90.0483\",\"Bitrate\":\"1653.828\",\"Fps\":\"23.976\",\"Width\":\"1280\",\"Height\":\"720\"}"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "TemplateGroupId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "模板组ID，当不为空时，视频转码使用当前指定的模板组进行转码。可在控制台转码设置里查看模版组ID。"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

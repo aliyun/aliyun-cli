@@ -1,0 +1,109 @@
+{
+  "name": "ModifyInstanceAttribute",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "指定的实例 ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Password",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "重置为用户指定的密。8-30个字符，必须同时包含三项（大、小写字母，数字和特殊符号）。支持以下特殊字符：( ) ` ~ ! @ # $ % ^ \u0026 * - + = |{ } [ ] : ;‘ \u003c \u003c , . ? /\u003cbr\u003e如果传入 Password 参数，请务必使用 HTTPS 协议调用 API 以避免可能发生的密码泄露。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HostName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "表示操作系统内部的计算机名，最少 2 字符，”.”和”-“是不能作为 hostname 的首尾字符，不能连续使用。\u003cbr\u003eWindows 平台最长为 15 字符，允许字母（不限制大小写）、数字和”-“组成，不支持点号（”.”），不能全是数字。\u003cbr\u003e其他（Linux 等）平台最长为 30 字符，允许支持多个点号，点之间为一段，每段允许字母（不限制大小写）、数字和”-“组成。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InstanceName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例的显示名称，[2, 128] 英文或中文字符，必须以大小字母或中文开头，可包含数字，”.”，”_“或”-“。不能以 http:// 和 https:// 开头。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例的描述，[2, 256] 个字符。实例描述会显示在控制台。默认为空。不能以 http:// 和 https:// 开头。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "UserData",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例的用户数据，需要以base64的方式编码，原始数据最多为16KB。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Recyclable",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

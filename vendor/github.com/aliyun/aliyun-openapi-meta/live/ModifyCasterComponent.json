@@ -1,0 +1,117 @@
+{
+  "name": "ModifyCasterComponent",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "编辑组件属性\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：ModifyCasterComponent"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "CasterId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "导播间Id"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ComponentId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "组件ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ComponentName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "组件名称，默认为组件ID"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ComponentType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "组件的类型，只能是预设值的一种: “text”/“image”等。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Effect",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "组件显示的特效，默认为none none-无 animateH-水平滚动 animateV-垂直滚动 FadeIn-渐入 FadeOut-渐出 FlyIn-飞入 FlyOut-飞出"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ComponentLayer",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "设置该组件Layer的尺寸，布局等信息，JSON格式字符串，参数名采用首字母大写、驼峰格式"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "TextLayerContent",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "如果是text，设置该Layer元素属性，JSON格式字符串，参数名采用首字母大写，驼峰格式"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ImageLayerContent",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "如果是image，设置该Layer元素属性，JSON格式字符串，参数名采用首字母大写，驼峰格式"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "CaptionLayerContent",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

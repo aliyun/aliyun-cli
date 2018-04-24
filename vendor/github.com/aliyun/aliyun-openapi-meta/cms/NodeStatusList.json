@@ -1,0 +1,14 @@
+{
+  "name": "NodeStatusList",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "parameters": [
+    {
+      "name": "InstanceIds",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

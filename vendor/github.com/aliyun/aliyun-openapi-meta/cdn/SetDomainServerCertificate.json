@@ -1,0 +1,110 @@
+{
+  "name": "SetDomainServerCertificate",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "该接口用于设置某域名下证书功能是否启用及 修改证书信息"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数。取值：SetDomainServerCertificate"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "指定证书所属加速域名 需属于https加速类型"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "CertName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "证书名称"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ServerCertificateStatus",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "HTTPS证书是否启用，取值on：启用；off：不启用，默认取值：off：不启用"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ServerCertificate",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "安全证书内容，不启用证书则无需输入，配置证书请输入证书内容。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PrivateKey",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "私钥内容，不启用证书则无需输入，配置证书请输入私钥内容。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Region",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "地区"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

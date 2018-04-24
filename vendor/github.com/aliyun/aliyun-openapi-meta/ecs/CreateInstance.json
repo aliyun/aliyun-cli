@@ -1,0 +1,508 @@
+{
+  "name": "CreateInstance",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例所属的 Region ID。Region ID 的列表详见 \u003ca target='_blank' href=\"https://help.aliyun.com/document_detail/40654.html\"\u003e地域列表\u003c/a\u003e。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ImageId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "镜像文件ID，表示启动实例时选择的镜像资源。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "InstanceType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例的资源规格。取值参见附表\u003ca target='_blank' href=\"https://help.aliyun.com/document_detail/25685.html\"\u003e实例资源规格对照表\u003c/a\u003e，也可以调用\u003ca target='_blank' href=\"https://help.aliyun.com/document_detail/25620.html\"\u003e查询实例资源规格列表\u003c/a\u003e接口获得最新的规格表。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "SecurityGroupId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "指定新创建实例所属于的安全组代码，同一个安全组内的实例之间可以互相访问。若不指定，则会将创建的实例加入到默认安全组中。如果默认安全组还不存在，或者默认安全组的实例数量已经超过了上限，则自动新建一个。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InstanceName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例的显示名称，[2,128]英文或中文字符，必须以大小字母或中文开头，可包含数字，“.”，“_”或“-”。实例名称会显示在控制台。如果没有指定该参数，默认值为实例的InstanceId不能以http:// 和https:// 开头。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InternetChargeType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "网络计费类型，按流量计费还是按固定带宽计费。\u003cbr\u003e可选值：\u003cul\u003e\u003cli\u003ePayByBandwidth\u003c/li\u003e\u003cli\u003ePayByTraffic\u003c/li\u003e\u003c/ul\u003e如用户不指定，默认是 PayByTraffic。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AutoRenew",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AutoRenewPeriod",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InternetMaxBandwidthIn",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "公网入带宽最大值，单位为 Mbps (Mega bit per second)，取值范围：[1,200]\u003cbr\u003e如果客户不指定，API 将自动将入带宽设置成 200 Mbps。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InternetMaxBandwidthOut",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "公网出带宽最大值，单位为 Mbps(Mega bit per second)，取值范围：\u003cbr\u003e\u003cul\u003e\u003cli\u003e按带宽计费：[0, 100]。如果客户不指定，API 将自动将出带宽设置成 0 Mbps。\u003c/li\u003e\u003cli\u003e按流量计费：[0, 100]。如果客户不指定，API 将自动将出带宽设置成 0 Mbps。\u003c/li\u003e\u003c/ul\u003e如果需要，可以通过阿里云工单系统申请将带宽范围设置成 0 ~ 200 Mbps。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HostName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "表示云服务器的主机名，最少2字符，“.”和“-”是不能作为hostname的首尾字符，不能连续使用。Windows平台最长为15字符，允许字母（不限制大小写）、数字和“-”组成，不支持点号（”.”），不能全是数字。\u003cbr\u003e其他（Linux等）平台最长为30字符，允许支持多个点号，点之间为一段，每段允许字母（不限制大小写）、数字和“-”组成。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Password",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例的密码。8-30个字符，必须同时包含三项（大、小写字母，数字和特殊符号）。支持以下特殊字符：( ) ` ~ ! @ # $ % ^ \u0026 * - + = |{ } [ ] : ;‘ \u003c \u003e , . ? /\u003cbr\u003e如果传入Password参数，请务必使用HTTPS协议调用API以避免可能发生的密码泄露。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DeploymentSetId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ZoneId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例所属的可用区编号，空表示由系统选择，默认值：空。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ClusterId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "VlanId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InnerIpAddress",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SystemDisk.Size",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "系统盘大小，以GB为单位，取值范围为：\u003cbr\u003e\u003cul\u003e\u003cli\u003ecloud – 40~500\u003c/li\u003e\u003cli\u003ecloud_efficiency – 40~500\u003c/li\u003e\u003cli\u003ecloud_ssd – 40~500\u003c/li\u003e\u003cli\u003eephemeral_ssd - 40~500\u003c/li\u003e\u003c/ul\u003e默认值：size=max{40，ImageSize} \u003cbr\u003e指定该参数后，size必须大于等于max{40, ImageSize}。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SystemDisk.Category",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统盘的磁盘种类\u003cbr\u003e可选值：\u003cul\u003e\u003cli\u003ecloud – 普通云盘\u003c/li\u003e\u003cli\u003ecloud_efficiency – 高效云盘\u003c/li\u003e\u003cli\u003ecloud_ssd – SSD云盘\u003c/li\u003e\u003cli\u003eephemeral_ssd - 本地 SSD 盘\u003c/li\u003e\u003c/ul\u003e默认值：若InstanceType为系列I的规格且IO优化类型为none，则默认为cloud，否则默认为cloud_efficiency"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SystemDisk.DiskName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统盘名称，不填则为空，默认值为空，[2,128]英文或中文字符，必须以大小字母或中文开头，可包含数字，”_”或”-”，磁盘名称会展示在控制台。不能以http:// 和https:// 开头。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SystemDisk.Description",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统盘描述，不填则为空，默认值为空，[2,256]个字符，实例描述会显示在控制台。不填则为空，默认为空。不能以http:// 和https:// 开头。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DataDisk",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "Size",
+          "position": "Query",
+          "type": "Integer",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "SnapshotId",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Category",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "DiskName",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Description",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Device",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "DeleteWithInstance",
+          "position": "Query",
+          "type": "Boolean",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Encrypted",
+          "position": "Query",
+          "type": "Boolean",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "NodeControllerId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例的描述，[2,256]个字符，实例描述会显示在控制台。不填则为空，默认为空。不能以 http:// 和 https:// 开头。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "VSwitchId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PrivateIpAddress",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "IoOptimized",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "IO优化。\u003cbr\u003e可选值：\u003cul\u003e\u003cli\u003enone：非 IO 优化\u003c/li\u003e\u003cli\u003eoptimized：IO 优化\u003c/li\u003e\u003c/ul\u003e默认值：若InstanceType为系列I的规格，则默认为none否则则默认为optimized。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "UseAdditionalService",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InstanceChargeType",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Period",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PeriodUnit",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.1.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.2.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.3.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.4.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.5.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.1.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.2.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.3.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.4.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.5.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "UserData",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SpotStrategy",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "KeyPairName",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SpotPriceLimit",
+      "position": "Query",
+      "type": "Float",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RamRoleName",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SecurityEnhancementStrategy",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ResourceGroupId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HpcClusterId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DryRun",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

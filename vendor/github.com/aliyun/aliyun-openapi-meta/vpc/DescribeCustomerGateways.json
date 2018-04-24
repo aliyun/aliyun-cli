@@ -1,0 +1,100 @@
+{
+  "name": "DescribeCustomerGateways",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n本接口用于查询用户网关列表。支持分页查询，每页默认10条。\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：DescribeCustomerGateways"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "指定查询CustomerGateways列表的地域"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "CustomerGatewayId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "过滤类参数。如指定该参数，只返回指定CustomerGatewayId的结果，不指定该参数则为不过滤。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageNumber",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "实例状态列表的页码，起始值为 1，默认值为 1"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "分页查询时设置的每页行数，最大值 50 行，默认为 10"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

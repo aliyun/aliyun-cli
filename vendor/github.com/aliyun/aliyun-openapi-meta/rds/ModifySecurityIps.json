@@ -1,0 +1,157 @@
+{
+  "name": "ModifySecurityIps",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n修改允许访问实例的IP名单。接口调用必须满足以下条件，否则将失败：  \n\n*  实例运行中\n\n*  实例没有被锁定\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "阿里云颁发给用户的访问服务所用的密钥ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：ModifySecurityIps。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于保证幂等性。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户主账号。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例名。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "SecurityIps",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "IP白名单分组下的IP列表，最多1000个以逗号隔开，格式如下：\u003cbr\u003e0.0.0.0/0，10.23.12.24（IP），或者10.23.12.24/24（CIDR模式，无类域间路由，/24表示了地址中前缀的长度，范围[1,32]）。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "DBInstanceIPArrayName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "IP白名单分组的名字，如果不传默认操作“Default”分组。\u003cbr\u003e\u003cstrong\u003e备注：\u003c/strong\u003e1个实例最多支持50个白名单分组。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DBInstanceIPArrayAttribute",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "默认为空。用于区分不同的属性值，控制台不显示带有“hidden”标签的分组。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "WhitelistNetworkType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "白名单的网络类型。取值范围：Classic：经典网络；VPC：专有网络; MIX:混访模式，默认是MIX 注意：当ModifyMode的值为Cover的时候，WhitelistNetworkType不能为MIX。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SecurityGroupId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "源安全组编码"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ModifyMode",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "修改方式，取值如下：\nCover：默认值，覆盖原白名单。\nAppend：追加白名单。\nDelete：删除该白名单。"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

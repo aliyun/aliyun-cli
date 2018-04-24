@@ -1,0 +1,150 @@
+{
+  "name": "GetPlayInfo",
+  "protocol": "HTTPS|HTTP",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n通过视频ID直接获取媒体文件（支持视频和音频）的播放地址。\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值： GetPlayInfo"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "VideoId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Formats",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频流格式，多个用逗号分隔，支持格式mp4,m3u8,mp3，默认获取所有格式的流"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AuthTimeout",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": "播放鉴权过期时间，默认为1800秒，支持设置最小值为1800秒"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Rand",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "客户端通过公钥生成的加密随机数"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AuthInfo",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "GetVideoPlayAuth接口返回的AuthInfo"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Channel",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "渠道号，取值 Android，iOS，Flash，HTML5，播放器需传入，用于服务端日志统计"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PlayerVersion",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "播放器版本号"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "StreamType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频流类型，多个用逗号分隔，支持类型video,audio，默认获取所有类型的流"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ReAuthInfo",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "二次鉴权信息"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Definition",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "视频流清晰度，多个用逗号分隔，取值FD(流畅)，LD(标清)，SD(高清)，HD(超清)，OD(原画)，2K(2K)，4K(4K)，默认获取所有清晰度的流"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

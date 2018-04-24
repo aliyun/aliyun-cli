@@ -1,0 +1,60 @@
+{
+  "name": "StopCdnDomain",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n停用某个加速域名，将DomainStatus变更为offline\n\n注意\n\n* 停用该加速域名后，该条加速域名信息仍保留，针对加速域名的请求系统将做自动回源处理\n* 若暂时不需要对某域名进行加速，推荐使用StopDomain接口，暂停域名加速效果\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数 \u003cbr\u003e取值：StopCdnDomain"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "需要接入CDN的域名"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

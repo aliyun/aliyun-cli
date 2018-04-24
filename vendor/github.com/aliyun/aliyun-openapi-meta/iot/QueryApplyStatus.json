@@ -1,0 +1,21 @@
+{
+  "name": "QueryApplyStatus",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ApplyId",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

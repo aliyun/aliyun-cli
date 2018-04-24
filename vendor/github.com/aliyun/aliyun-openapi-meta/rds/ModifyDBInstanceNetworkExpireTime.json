@@ -1,0 +1,107 @@
+{
+  "name": "ModifyDBInstanceNetworkExpireTime",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "当实例在混访模式下（同时包含VPC和经典网络两种网络类型的实例），可修改经典网络使用期限。"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "阿里云颁发给用户的访问服务所用的密钥ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：ModifyDBInstanceNetworkExpireTime。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例ID。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ConnectionString",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\t\n实例的连接串。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ClassicExpiredDays",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "经典网络字符串保留天数[1-120]。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户主账号。"
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

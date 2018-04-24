@@ -1,0 +1,70 @@
+{
+  "name": "ListDomainsByLogConfigId",
+  "protocol": "HTTP|HTTPS",
+  "method": "GET",
+  "descriptions": {
+    "zh": "查询应用某自定义日志格式的所有域名列表"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数，取值：ListDomainsByLogConfigId"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "Version",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "api版本号"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ConfigId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "自定义配置ID "
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

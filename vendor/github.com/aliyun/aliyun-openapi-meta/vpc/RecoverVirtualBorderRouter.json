@@ -1,0 +1,90 @@
+{
+  "name": "RecoverVirtualBorderRouter",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n恢复虚拟边界路由器\n* 只有物理专线owner可以调用该接口恢复VBR的专线使用\n* 只允许恢复Terminated状态的VBR\n* 只允许恢复对应的物理专线处于Enabled状态的VBR\n* 操作开始后VBR接入Recovering状态，完成后VBR接入Enabled状态\n* 需要进行VlanId的校验：\n  * 如果VlanId还没有被其他VBR占用（Terminate后7天内保证），可以保证成功恢复\n  * 如果VlanId已经被其他VBR占用（Terminate后7天已过，而且物理专线owner已经在其他VBR上重用了该VlanId），则恢复会失败\n"
+  },
+  "parameters": [
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "所在地域"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "VbrId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "VBR ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：RecoverVirtualBorderRouter"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于保证请求的幂等性。由客户端生成该参数值，要保证在不同请求间唯一，最大不值过64个ASCII字符。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

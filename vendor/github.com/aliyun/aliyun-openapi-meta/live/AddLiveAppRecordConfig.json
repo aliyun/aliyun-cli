@@ -1,0 +1,167 @@
+{
+  "name": "AddLiveAppRecordConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "配置 APP 录制，输出内容保存到 OSS 中。"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：AddLiveAppRecordConfig"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "加速域名"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "AppName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "直播流所属应用名称，支持通配符*，代表该域名下所有的 AppName"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "OssEndpoint",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "OssEndpoint域名"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "OssBucket",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "OssBucket名称"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "RecordFormat",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": true,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "Format",
+          "position": "Query",
+          "type": "String",
+          "description": {
+            "zh": "格式，目前支持 m3u8、flv、mp4 周期录制"
+          },
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "OssObjectPrefix",
+          "position": "Query",
+          "type": "String",
+          "description": {
+            "zh": "OSS 存储的录制文件名，小于 256 byte，支持变量匹配，包含 {AppName}、{StreamName}、{Sequence}、{StartTime}、{EndTime}、{EscapedStartTime}、{EscapedEndTime}。如：record/{AppName}/{StreamName}/{Sequence}_{EscapedStartTime}_{EscapedEndTime}；参数值必须要有 {StartTime} 或 {EscapedStartTime} 和 {EndTime} 或 {EscapedEndTime} 变量。默认支持 1 小时周期录制，最小周期时间 15 分钟，最多 6 小时。{StartTime}/{EndTime} 格式为：2006-01-02-15：04：05，{EscapedStartTime}/{EscapedEndTime} 格式为：2006-01-02-15-04-05， 推荐使用 Escaped 格式，避免特殊字符在 URL 中带来的一些问题。"
+          },
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "SliceOssObjectPrefix",
+          "position": "Query",
+          "type": "String",
+          "description": {
+            "zh": "当 format 格式是 m3u8 录制，则需要配置，表示 ts 切片名称，默认 30 秒一片，小于 256byte，支持变量匹配，包含{AppName}、{StreamName}、{UnixTimestamp}、{Sequence}，如：record/{AppName}/{StreamName}/{UnixTimestamp}_{Sequence}; 参数值必须包含{UnixTimestamp}和{Sequence}变量。"
+          },
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "CycleDuration",
+          "position": "Query",
+          "type": "Integer",
+          "description": {
+            "zh": "周期录制时长，单位秒, 不填则默认为 1 小时"
+          },
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "StreamName",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "StartTime",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "EndTime",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OnDemand",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

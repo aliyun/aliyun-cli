@@ -1,0 +1,120 @@
+{
+  "name": "AddListenerWhiteListItem",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "添加监听访问控制白名单。该接口支持增量更新。\n"
+  },
+  "parameters": [
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e负载均衡实例的地域。\n\u003cp\u003e您可以从[地域和可用区](~~40654~~)列表或通过调用[DescribeRegions](~~25609~~)接口查询地域ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：`AddListenerWhiteListItem`"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "LoadBalancerId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "负载均衡实例的ID。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ListenerPort",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "负载均衡实例前端使用的端口。取值\\[1,65535]"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "SourceItems",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "\u003cp\u003e访问控制列表。\u003c/p\u003e\n\u003cp\u003e监听的AccessControlStatus为`open_white_list`时有效。\u003c/p\u003e\n\u003cp\u003e支持输入IP地址或IP地址段（CIDR block形式），多个IP地址或地址段用逗号（,）分割。\u003c/p\u003e\n\u003cp\u003e不允许输入0.0.0.0或0.0.0.0/0。您可以通过调用[SetListenerAccessControlStatus](~~27599~~)接口将AccessControlStatus的值设置为close，关闭访问控制。\u003c/p\u003e"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "access_key_id",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "阿里云颁发给用户的访问服务所用的密钥ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tags",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户标签。"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "name": "DeleteAlarm",
+  "protocol": "HTTP",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "callby_cms_owner",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Id",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

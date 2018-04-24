@@ -1,0 +1,110 @@
+{
+  "name": "DescribeLiveStreamOnlineUserNum",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "查询在线人数"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：DescribeLiveStreamOnlineUserNum"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "您的加速域名"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "AppName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "直播流所属应用名称"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "StreamName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "直播流名称"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "StartTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "开始时间，UTC格式, StartTime和EndTime时间间隔在7天内\n"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "EndTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "结束时间，UTC格式, StartTime和EndTime时间间隔在7天内\n"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "HlsSwitch",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "hls流开关"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

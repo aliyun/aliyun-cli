@@ -1,0 +1,120 @@
+{
+  "name": "DescribeWarning",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "获取基线检查的风险结果数据，包括问题描述， 修复方法建议等。"
+  },
+  "parameters": [
+    {
+      "name": "SourceIp",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "接口访问者源IP"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "TypeNames",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "主分类名称，为空就查找所有主分类和子分类"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SubTypeNames",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "子分类名称 ，不为空的话则主分类必须不为空"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RiskLevels",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "风险等级。\n- serious: 严重\n- high: 高危\n- medium: 中危\n- low: 低危\n"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "StatusList",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "状态列表\n- 1: 表示未处理\n- 2: 表示已处理\n- 不传: 表示全部查询"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RiskName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "风险名称，支持模糊匹配"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "StrategyId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": "策略ID"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "分页查询时设置的每页行数。默认值: 20。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "CurrentPage",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "实例状态列表的页码。起始值：1\n默认值：1"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Uuids",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "机器的唯一标识，筛选单台机器的时候需要"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Dealed",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "事件状态\n- n: 待处理\n- y: 已处理"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

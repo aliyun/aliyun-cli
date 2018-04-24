@@ -1,0 +1,70 @@
+{
+  "name": "DeleteVSwitch",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n删除指定的VSwitch\n\n* 只允许删除Available状态下的VSwitch\n* 删除VSwitch之前，需要先释放或移走VSwitch下的所有产品实例，比如ECS实例\n* 指定RouteTable所在的VPC正在创建/删除VSwitch或正在创建/删除RouteEntry操作时，无法进行删除VSwitch操作\n* 删除VSwitch之前，需要先释放该VSwitch下所有的HaVip实例\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：`DeleteVSwitch`。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "VSwitchId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "需要删除的VSwitch的Id"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

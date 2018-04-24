@@ -1,0 +1,121 @@
+{
+  "name": "CreateResourcePool",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ClusterId",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "PoolType",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Active",
+      "position": "Query",
+      "type": "Boolean",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Note",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "YarnSiteConfig",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Config",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "ConfigKey",
+          "position": "Query",
+          "type": "String",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "ConfigValue",
+          "position": "Query",
+          "type": "String",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "configType",
+          "position": "Query",
+          "type": "String",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "TargetId",
+          "position": "Query",
+          "type": "String",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "Category",
+          "position": "Query",
+          "type": "String",
+          "required": true,
+          "hidden": false
+        },
+        {
+          "name": "Note",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    }
+  ]
+}

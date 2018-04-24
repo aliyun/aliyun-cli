@@ -1,0 +1,140 @@
+{
+  "name": "DescribeDomainFlowData",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n获取加速域名的网络流量监控数据，单位 byte\n\n不指定StartTime和EndTime时，默认读取过去24小时的数据，同时支持按指定的起止时间查询，两者需要同时指定。\n\n* 支持批量域名查询，多个域名用逗号（半角）分隔\n* 最多可获取最近90天的数据\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数\u003cbr\u003e取值：DescribeDomainFlowData"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "若参数为空，默认返回所有加速域名合并后数据\u003cbr\u003e可输入需要查询的加速域名\u003cbr\u003e支持批量域名查询，多个域名用逗号（半角）分隔"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "StartTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "获取数据起始时间点，日期格式按照ISO8601表示法，并使用UTC时间。\u003cbr\u003e格式为：YYYY-MM-DDThh:mmZ\u003cbr\u003e 最小数据粒度为5分钟\u003cbr\u003e 不写默认读取过去24小时数据"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "EndTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "结束时间需大于起始时间；获日期格式按照ISO8601表示法，并使用UTC时间。\u003cbr\u003e格式为：YYYY-MM-DDThh:mmZ"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "TimeMerge",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "取值范围 on：默认值，每条记录的时间间隔会根据时间跨度做合并；off：返回5分钟粒度数据，最大时间跨度为31天"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "LocationNameEn",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "区域英文名，通过DescribeCdnRegionAndIsp接口获得，不传为所有区域"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "IspNameEn",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "运营商英文名，通过DescribeCdnRegionAndIsp接口获得，不传为所有运营商"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "查询类型，传dynamic时，查询全站加速动态资源的实时流量和静态资源的实时流量。不传时查询静态资源的实时流量"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Interval",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "查询数据的时间粒度，支持300, 3600, 14400, 28800和86400秒。不传和传的值不支持时，使用默认值300秒"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "FixTimeGap",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "是否补零"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

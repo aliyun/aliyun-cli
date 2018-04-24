@@ -1,0 +1,350 @@
+{
+  "name": "DescribeDisks",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "磁盘所属于的 Region ID"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ZoneId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "默认值为空，空代表查询所有可用区下的磁盘。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DiskIds",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "磁盘 ID \u003cbr\u003e一个带有格式的 Json Array：[“d-xxxxxxxxx”, ”d-yyyyyyyyy”, … “d-zzzzzzzzz”]，最多 100 个 Id，用半角逗号字符隔开。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例 ID"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DiskType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "all | system | data，默认值为 all。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Category",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "磁盘种类\u003cbr\u003eall | cloud | cloud_efficiency | cloud_ssd | ephemeral | ephemeral_ssd。默认值为all"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Status",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "磁盘状态\u003cbr\u003eIn_use | Available | Attaching | Detaching | Creating | ReIniting | All，默认值为 All。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "SnapshotId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "创建磁盘使用的快照"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Portable",
+      "position": "Query",
+      "type": "Boolean",
+      "description": {
+        "zh": "磁盘是否支持卸载：\u003cul\u003e\u003cli\u003etrue 代表是可卸载云盘，可以独立存在且可以自由在可用区内挂载和下载\u003c/li\u003e\u003cli\u003efalse 代表不可卸载云盘，只能和实例同生同灭\u003c/li\u003e\u003c/ul\u003e用户如果需要做 attach 和 detach 操作，必须先查询一下这个属性为 true 的磁盘才能操作。\u003cbr\u003e本地磁盘、本地SSD盘 和 普通云盘，高效云盘和SSD云盘的系统盘 和 包月的普通云盘、高效云盘、SSD云盘，该属性都为 false。\u003cbr\u003e这个属性用户不能更改。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DeleteWithInstance",
+      "position": "Query",
+      "type": "Boolean",
+      "description": {
+        "zh": "磁盘是否随实例释放：\u003cul\u003e\u003cli\u003etrue 表示 Instance 释放时，这块磁盘随 Instance 一起释放\u003c/li\u003e\u003cli\u003efalse 表示 Instance 释放时，这块磁盘保留不释放\u003c/li\u003e\u003c/ul\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DeleteAutoSnapshot",
+      "position": "Query",
+      "type": "Boolean",
+      "description": {
+        "zh": "删除磁盘时，是否同时删除自动快照。\u003cul\u003e\u003cli\u003etrue 表示同时删除自动快照\u003c/li\u003e\u003cli\u003efalse 表示保留自动快照\u003c/li\u003e\u003c/ul\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageNumber",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Integer",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "DiskName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "磁盘名称"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AutoSnapshotPolicyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "EnableAutoSnapshot",
+      "position": "Query",
+      "type": "Boolean",
+      "description": {
+        "zh": "磁盘是否执行自动快照策略（前提是用户整体的自动快照策略已经开启）：\u003cul\u003e\u003cli\u003etrue，表示这块磁盘执行自动快照策略\u003c/li\u003e\u003cli\u003efalse，表示这块磁盘不执行自动快照策略\u003c/li\u003e\u003c/ul\u003e默认值：无，表示不改变当前的值"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "EnableAutomatedSnapshotPolicy",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DiskChargeType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "磁盘的付费方式。\u003cul\u003e\u003cli\u003ePrePaid：预付费，即包年包月\u003c/li\u003e\u003cli\u003ePostPaid：后付费，即按量付费\u003c/li\u003e\u003c/ul\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "LockReason",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Filter.1.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Filter.2.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Filter.1.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Filter.2.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.1.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.2.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.3.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.4.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.5.Key",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.1.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.2.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.3.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.4.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Tag.5.Value",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ResourceGroupId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "EnableShared",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Encrypted",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AdditionalAttributes",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DryRun",
+      "position": "Query",
+      "type": "Boolean",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

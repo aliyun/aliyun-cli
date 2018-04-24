@@ -1,0 +1,107 @@
+{
+  "name": "CreateTempDBInstance",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n基于备份集或者7天内的一个时间点创建临时实例。临时实例创建成功后，账号和数据库将继承备份集数据。实例必须满足以下条件，否则将操作失败：\n\n* 运行中。\n\n* 没有迁移任务。\n\n* 没有被锁定。\n\n* 当前实例备份集的状态是：完成备份。\n  \n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "阿里云颁发给用户的访问服务所用的密钥ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：CreateTempDBInstance。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "DBInstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例名。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "BackupId",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "备份ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RestoreTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "7天之内并且早于当前时间半小时以上的任意时间点，默认时区为UTC。例如：2011-06-11T16:00:00Z。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用户主账号。"
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

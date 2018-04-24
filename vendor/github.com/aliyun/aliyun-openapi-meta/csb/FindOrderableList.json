@@ -1,0 +1,49 @@
+{
+  "name": "FindOrderableList",
+  "protocol": "HTTPS",
+  "method": "GET",
+  "parameters": [
+    {
+      "name": "CsbId",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ServiceName",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Alias",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ProjectName",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageNum",
+      "position": "Query",
+      "type": "Integer",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Host",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

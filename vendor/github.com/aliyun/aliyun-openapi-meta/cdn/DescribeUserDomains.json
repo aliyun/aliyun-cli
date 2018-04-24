@@ -1,0 +1,160 @@
+{
+  "name": "DescribeUserDomains",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n查询用户名下所有的域名与状态。\n支持域名模糊匹配过滤和域名状态过滤\n域名状态包括：\n\n* 运行中（表示域名服务状态正常，可以）\n* 已停止\n* 配置中\n* 配置失败\n* 审核中\n* 审核失败\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数，取值：DescribeUserDomains"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "分页大小，默认20，最大50，取值：1~50之前的任意整数"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageNumber",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "取得第几页，取值范围为：1~100000"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "域名模糊匹配过滤"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainStatus",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "域名状态过滤"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainSearchType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "域名查询类型：fuzzy_match 模糊匹配,pre_match 前匹配,suf_match 后匹配,full_match 完全匹配，默认fuzzy_match"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Sources",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "根据回源地址查询"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "CdnType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "cdn业务类型，多个用逗号隔开"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "CheckDomainShow",
+      "position": "Query",
+      "type": "Boolean",
+      "description": {
+        "zh": "是否显示审核状态域名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ResourceGroupId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "资源组id资源组id"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "FuncId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "funcid,如图片鉴黄功能98"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "FuncFilter",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "过滤，支持config和unconfig。config是开通了funcid的，unconfig是没有开通funcid的。"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

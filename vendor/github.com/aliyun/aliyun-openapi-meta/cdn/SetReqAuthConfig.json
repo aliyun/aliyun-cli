@@ -1,0 +1,110 @@
+{
+  "name": "SetReqAuthConfig",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n设置加速域名的访问鉴权配置\n\n* [鉴权功能说明](~~27135~~)\n* [python版本的鉴权代码示例](~~27277~~)\n\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数，取值：SetReqAuthConfig"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "您的加速域名"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "AuthType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "鉴权类型，取值: “no_auth”:关闭,”type_a”:A方式，”type_b”:B方式, “type_c”:C方式, \u003cbr\u003e“type_d”:D方式,”type_e”:E方式"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Key1",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "主鉴权key,输入大小写字母，数字，长度1到64位"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Key2",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "副鉴权Key，输入大小写字母，数字，长度1到64位"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "TimeOut",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "有效时间，输入数字"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "AuthRemoteDesc",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "模式字符串"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

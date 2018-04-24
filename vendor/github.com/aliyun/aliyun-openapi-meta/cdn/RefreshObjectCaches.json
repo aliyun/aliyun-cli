@@ -1,0 +1,70 @@
+{
+  "name": "RefreshObjectCaches",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n- 刷新节点上的文件内容。\n- 刷新指定URL内容至Cache节点，支持URL批量刷新。\n- 支持post请求，参数用form表单。\n\n限制：\n\n* 同一个 ID 每天最多提交预热刷新类请求数量：URL：2000条；目录：100个。\n* 刷新预热类接口包含 `RefreshObjectCaches` 刷新接口和 `PushObjectCache` 预热接口\n\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数，取值：RefreshObjectCaches"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "ObjectPath",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "输入示例：abc.com/image/1.png，多个URL之间需要用换行符（\\n或\\r\\n）分隔"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ObjectType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "可选， 刷新的类型， 其值可以为File"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

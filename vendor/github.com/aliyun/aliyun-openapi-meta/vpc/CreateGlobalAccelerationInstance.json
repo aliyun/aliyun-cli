@@ -1,0 +1,140 @@
+{
+  "name": "CreateGlobalAccelerationInstance",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n创建全球加速实例，创建完成后，会在实例所在 Region 分配一个公网 IP 地址。\n通过 OpenAPI 仅支持创建后付费的实例。\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：CreateGlobalAccelerationInstance"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "所在地域"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ServiceLocation",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "被加速的服务所在区域。区域与传递值对应如下：\u003cul\u003e\u003cli\u003e中国大陆：china-mainland\u003c/li\u003e\u003cli\u003e北美：north-america\u003c/li\u003e\u003cli\u003e亚太：asia-pacific\u003c/li\u003e\u003cli\u003e欧洲：europe\u003c/li\u003e\u003c/ul\u003e当前已经支持的区域和地域请参考\u003ca href=\"~~57448~~\"\u003e加速区域和服务区域\u003c/a\u003e"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Bandwidth",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "全球加速实例描述信息，支持\\[2, 256] 英文或中文字符，不能以 “http://” 和 “https://” 开头"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "InternetChargeType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "将下线"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "BandwidthType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例带宽类型，默认为 Exclusive\u003cul\u003e \u003cli\u003eSharing 共享带宽型\u003c/li\u003e \u003cli\u003eExclusive 独享带宽型\u003c/li\u003e \u003c/ul\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Name",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "全球加速实例名称，支持\\[2, 128] 英文或中文字符，必须以大小字母或中文开头，可包含数字，“_ ”或 “-”，不能以 “http://” 和 “https://” 开头。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "全球加速实例描述信息，支持\\[2, 256] 英文或中文字符，不能以 “http://” 和 “https://” 开头"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于保证请求的幂等性。由客户端生成该参数值，要保证在不同请求间唯一，最大不值过 64 个 ASCII 字符。具体参见附录"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

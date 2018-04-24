@@ -1,0 +1,6 @@
+{
+  "name": "GetSecurityPreference",
+  "protocol": "HTTPS",
+  "method": "POST|GET",
+  "parameters": []
+}

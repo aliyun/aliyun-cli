@@ -1,0 +1,28 @@
+{
+  "name": "GetAllActiveShopByGroup",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Bid",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Gids",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

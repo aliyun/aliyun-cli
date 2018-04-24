@@ -1,0 +1,100 @@
+{
+  "name": "ModifyRouterInterfaceSpec",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n\n修改路由器接口的规格。\n\n该操作会产生一个变配订单。\n\n若该RI处于欠费状态，则不允许进行该操作\n\n\n"
+  },
+  "parameters": [
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "实例所在的地域"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "RouterInterfaceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "路由器接口的Id"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Spec",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "规格，详见\u003ca href=\"~~52412~~\"\u003e路由器接口\u003c/a\u003e"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：ModifyRouterInterfaceSpec"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于保证请求的幂等性。由客户端生成该参数值，要保证在不同请求间唯一，最大不值过64个ASCII字符。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "name": "OpenCdnService",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "**请确保在使用该接口前，已充分了解CDN产品的收费方式和价格**，[计费方式详情](https://help.aliyun.com/document_detail/27271.html)。\n\n开通CDN服务，只有开通后，才能进行域名操作.\n\n* 一个用户只能开通一次。\n* 开通条件：帐号已通过实名认证\n\n"
+  },
+  "parameters": [
+    {
+      "name": "AccessKeyId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "当认证方式为Accesskey时必填，用户需要显式指定，校验签名使用，不指定则不校验签名"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作接口名，系统规定参数\u003cbr\u003e取值：OpenCdnService"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "SecurityToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "InternetChargeType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "开通服务的计费类型：按流量(PayByTraffic)、按带宽峰值(PayByBandwidth)。\u003cbr\u003e 如果用户不指定，默认按流量（PayByTraffic）"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

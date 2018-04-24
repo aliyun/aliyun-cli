@@ -1,0 +1,153 @@
+{
+  "name": "ImportImage",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "DiskDeviceMapping",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "Format",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "OSSBucket",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "OSSObject",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "DiskImSize",
+          "position": "Query",
+          "type": "Integer",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "DiskImageSize",
+          "position": "Query",
+          "type": "Integer",
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Device",
+          "position": "Query",
+          "type": "String",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "源自定义镜像的 RegionId。RegionId 的列表详见 \u003ca target='_blank' href=\"https://help.aliyun.com/document_detail/40654.html\"\u003e地域列表\u003c/a\u003e。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ImageName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "镜像名称，[2,128]英文或中文字符，必须以大小字母或中文开头，可包含数字，”_”或”-”。不能以\u003ca target='_blank' href=\"http://和https://开头。\"\u003ehttp://和https://开头。\u003c/a\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Description",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "镜像的描述信息，长度限制在0~256 个字符，不填则为空，默认为空。不能以\u003ca target='_blank' href=\"http://和https://开头。\"\u003ehttp://和https://开头。\u003c/a\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Architecture",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统架构，取值范围：i386 | x86_64 \u003cbr\u003e 默认值：x86_64"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OSType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作系统平台类型，取值范围：windows | linux \u003cbr\u003e默认值：linux"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Platform",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "操作系统发行版，\u003cbr\u003e取值：\u003cul\u003e\u003cli\u003eCentOS\u003c/li\u003e\u003cli\u003eUbuntu\u003c/li\u003e\u003cli\u003eSUSE\u003c/li\u003e\u003cli\u003eOpenSUSE\u003c/li\u003e\u003cli\u003eRedHat\u003c/li\u003e\u003cli\u003eDebian\u003c/li\u003e\u003cli\u003eCoreOS\u003c/li\u003e\u003cli\u003eAliyun Linux\u003c/li\u003e\u003cli\u003eWindows Server 2003\u003c/li\u003e\u003cli\u003eWindows Server 2008\u003c/li\u003e\u003cli\u003eWindows Server 2012\u003c/li\u003e\u003cli\u003eWindows 7\u003c/li\u003e\u003cli\u003eOthers Linux\u003c/li\u003e\u003cli\u003eCustomized Linux\u003c/li\u003e\u003c/ul\u003e默认值：Others Linux \u003cbr\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "RoleName",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

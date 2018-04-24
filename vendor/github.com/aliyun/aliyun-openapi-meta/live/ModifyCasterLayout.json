@@ -1,0 +1,162 @@
+{
+  "name": "ModifyCasterLayout",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "修改布局配置，传递修改项，非修改内容无需传递\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：ModifyCasterLayout"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "CasterId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "导播台Id"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "LayoutId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "布局Id"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "VideoLayer",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": true,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "HeightNormalized",
+          "position": "Query",
+          "type": "Float",
+          "description": {
+            "zh": "设置该layer元素的高度归一化比例值，其中元素的宽度会按照该高度来进行等比缩放。默认值 0 表示按照元素的原始尺寸进行显示。"
+          },
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "WidthNormalized",
+          "position": "Query",
+          "type": "Float",
+          "description": {
+            "zh": "设置该layer元素的宽度归一化比例值，其中元素的高度会按照该宽度来进行等比缩放。默认值 0 表示按照元素的原始尺寸进行显示。该字段和heightNormalized有冲突，一旦heightNormalized和widthNormalized都设置了，则只有heightNormalized有效。如果heightNormalized和widthNormalized设置只能同时设置一个，后面设置的值会影响前面设置的。"
+          },
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "PositionRefer",
+          "position": "Query",
+          "type": "String",
+          "description": {
+            "zh": "设置元素的position 参考坐标值，取值范围\"topLeft\"/\"topRight\"/\"bottomLeft\"/\"bottomRight\"以及\"center/topCenter/bottomCenter/leftCenter/rightCenter\", 默认\"topLeft\"."
+          },
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "PositionNormalized",
+          "position": "Query",
+          "type": "RepeatList",
+          "description": {
+            "zh": "设置该layer 元素的位置归一化值[x,y], 默认为[0,0]。注意x,y需要进行归一化计算。"
+          },
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "FixedDelayDuration",
+          "position": "Query",
+          "type": "Integer",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "AudioLayer",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": true,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "VolumeRate",
+          "position": "Query",
+          "type": "Float",
+          "description": {
+            "zh": "设置该layer元素的高度归一化比例值，其中元素的宽度会按照该高度来进行等比缩放。默认值 0 表示按照元素的原始尺寸进行显示。"
+          },
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "ValidChannel",
+          "position": "Query",
+          "type": "String",
+          "description": {
+            "zh": "确定哪些声道可以作为音量输入，取值范围\"leftChannel/rightChannel/all\"默认是\"all\"。"
+          },
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "FixedDelayDuration",
+          "position": "Query",
+          "type": "Integer",
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "BlendList",
+      "position": "Query",
+      "type": "RepeatList",
+      "description": {
+        "zh": "位置关联列表，与VideoLayers顺序保持一致"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "MixList",
+      "position": "Query",
+      "type": "RepeatList",
+      "description": {
+        "zh": "位置关联列表，与AudioLayers顺序保持一致"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

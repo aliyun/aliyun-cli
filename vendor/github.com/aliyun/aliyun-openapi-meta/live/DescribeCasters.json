@@ -1,0 +1,100 @@
+{
+  "name": "DescribeCasters",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "查询导播台列表，支持高级查询、分页查询"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：DescribeCasters"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "CasterId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "导播台Id"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "CasterName",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "导播台名称"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "StartTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "起始时间，UTC 格式，例如：2016-06-29T19:00:00Z"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "EndTime",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "结束时间"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageNum",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "页码"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "每页条数"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Status",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "状态 0-空闲 1-导播中"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

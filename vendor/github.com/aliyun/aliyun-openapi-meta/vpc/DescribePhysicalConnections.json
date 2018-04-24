@@ -1,0 +1,129 @@
+{
+  "name": "DescribePhysicalConnections",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "查看路由器接口列表\n* 可通过各种Filter对结果进行过滤；目前支持的Filter包括：PhysicalConnectionId、AccessPointId、Type、LineOperator、Spec、Status、Name\n*\t一个Filter的多个值之间是“or”关系（只要与其中一个值吻合则视为符合该Filter的过滤条件）；各个Filter之间为“and”逻辑关系（符合所有Filter的过滤条件，才会进入最终查询结果中）。\n\n\n"
+  },
+  "parameters": [
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "所在地域（管理实例的Region ID）"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "PageNumber",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "查询结果的页码；不指定时，默认为1；取值范围：正整数；若PageNumber大于实际结果的最大页码，则返回最后一页的内容。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "查询结果的分页大小。取值范围为[1,50]，默认为10"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Filter",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false,
+      "sub_parameters": [
+        {
+          "name": "Key",
+          "position": "Query",
+          "type": "String",
+          "description": {
+            "zh": "第n个过滤器的类型。N从1开始，不大于5。"
+          },
+          "required": false,
+          "hidden": false
+        },
+        {
+          "name": "Value",
+          "position": "Query",
+          "type": "RepeatList",
+          "description": {
+            "zh": "第n个过滤器的第m个值。M从1开始，不大于5。"
+          },
+          "required": false,
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：`DescribePhysicalConnections`。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ClientToken",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "用于保证请求的幂等性。由客户端生成该参数值，要保证在不同请求间唯一，最大不值过64个ASCII字符。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    }
+  ]
+}

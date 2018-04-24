@@ -1,0 +1,90 @@
+{
+  "name": "AddCommonBandwidthPackageIp",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "将IP加入到共享带宽\n\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：AddCommonBandwidthPackageIp"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "地域名称，如cn-hangzhou"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "BandwidthPackageId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "共享带宽实例Id"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "IpInstanceId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "EIP的InstanceId。\u003cfont size=\"\" color=\"red\"\u003e仅支持后付费的EIP实例加入到共享带宽包，且带宽包和EIP必须在同一个region\u003c/font\u003e 请到\u003ca href=\"https://ip.console.aliyun.com/\"\u003eEIP控制台\u003c/a\u003e查询EIP实例ID，或通过\u003ca href=\"https://help.aliyun.com/document_detail/36018.html\"\u003eEIP查询接口\u003c/a\u003e通过API查询。"
+      },
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

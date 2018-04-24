@@ -1,0 +1,6 @@
+{
+  "name": "ClearAccountAlias",
+  "protocol": "HTTPS",
+  "method": "POST|GET",
+  "parameters": []
+}

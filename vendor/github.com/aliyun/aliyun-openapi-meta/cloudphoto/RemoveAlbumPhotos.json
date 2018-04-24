@@ -1,0 +1,35 @@
+{
+  "name": "RemoveAlbumPhotos",
+  "protocol": "HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "AlbumId",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "PhotoId",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "StoreName",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "LibraryId",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

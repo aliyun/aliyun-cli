@@ -1,0 +1,42 @@
+{
+  "name": "SaveBatchTaskForModifyingDomainDns",
+  "protocol": "HTTPS|HTTP",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "UserClientIp",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Lang",
+      "position": "Query",
+      "type": "String",
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "DomainName",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "AliyunDns",
+      "position": "Query",
+      "type": "Boolean",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "DomainNameServer",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

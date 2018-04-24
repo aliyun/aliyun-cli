@@ -1,0 +1,6 @@
+{
+  "name": "ListNasPlusBeta",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "parameters": []
+}

@@ -1,0 +1,28 @@
+{
+  "name": "FindProjectsNameList",
+  "protocol": "HTTPS",
+  "method": "GET",
+  "parameters": [
+    {
+      "name": "CsbId",
+      "position": "Query",
+      "type": "Long",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "OperationFlag",
+      "position": "Query",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "RegionId",
+      "position": "Host",
+      "type": "String",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

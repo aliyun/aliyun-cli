@@ -1,0 +1,90 @@
+{
+  "name": "DescribeSuspiciousEvents",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "获取主机异常数据，企业版可以看到异常事件的详情及修复建议。"
+  },
+  "parameters": [
+    {
+      "name": "SourceIp",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "访问者源IP"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "分页查询时设置的每页行数。默认值: 20。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "CurrentPage",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "实例状态列表的页码。起始值：1 默认值：1"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Uuid",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "机器的唯一标识，获取单台机器数据的时候需要"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Dealed",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "事件状态\n- n: 待处理\n- y: 已处理"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Remark",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "服务器ip或者名称"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "Level",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "风险等级。\n- serious: 严重\n- high: 高危\n- medium: 中危\n- low: 低危"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "EventType",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "事件类型"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

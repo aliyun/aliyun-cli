@@ -1,0 +1,110 @@
+{
+  "name": "DescribeForwardTableEntries",
+  "protocol": "HTTP|HTTPS",
+  "method": "POST|GET",
+  "descriptions": {
+    "zh": "\n查询指定的DNAT表的DNAT条目。\n\n此接口支持分页查询，每页的数量默认为10条。\n"
+  },
+  "parameters": [
+    {
+      "name": "Action",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统规定参数，取值：\u003ccode\u003eDescribeForwardTableEntries\u003c/code\u003e。"
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "ResourceOwnerId",
+      "position": "Query",
+      "type": "Long",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "OwnerAccount",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": ""
+      },
+      "required": false,
+      "hidden": true
+    },
+    {
+      "name": "RegionId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "NAT网关的所属地域。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ForwardTableId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "要查询的DNAT表ID。"
+      },
+      "required": true,
+      "hidden": false
+    },
+    {
+      "name": "ForwardEntryId",
+      "position": "Query",
+      "type": "String",
+      "description": {
+        "zh": "系统分配的DNAT条目ID。"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageNumber",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "\u003cp\u003eDNAT条目列表的页码。\u003c/p\u003e\u003cp\u003e起始值为1，默认值也为1。\u003c/p\u003e"
+      },
+      "required": false,
+      "hidden": false
+    },
+    {
+      "name": "PageSize",
+      "position": "Query",
+      "type": "Integer",
+      "description": {
+        "zh": "\u003cp\u003e分页查询时设置的每页行数。\u003c/p\u003e\u003cp\u003e最大值为50，默认值为10。\u003c/p\u003e"
+      },
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

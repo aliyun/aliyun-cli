@@ -1,0 +1,14 @@
+{
+  "name": "TaskConfigDelete",
+  "protocol": "HTTPS|HTTP",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "IdList",
+      "position": "Query",
+      "type": "RepeatList",
+      "required": true,
+      "hidden": false
+    }
+  ]
+}

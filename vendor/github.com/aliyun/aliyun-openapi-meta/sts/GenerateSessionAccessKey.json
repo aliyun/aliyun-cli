@@ -1,0 +1,14 @@
+{
+  "name": "GenerateSessionAccessKey",
+  "protocol": "HTTPS",
+  "method": "POST|GET",
+  "parameters": [
+    {
+      "name": "DurationSeconds",
+      "position": "Query",
+      "type": "Long",
+      "required": false,
+      "hidden": false
+    }
+  ]
+}

@@ -4,24 +4,10 @@ all: build
 publish: build build_mac build_linux build_windows
 
 deps:
-	-go get github.com/aliyun/aliyun-openapi-meta
-	go get gopkg.in/ini.v1
-	go get github.com/droundy/goopt
-	go get github.com/alyu/configparser
-	go get github.com/syndtr/goleveldb/leveldb
-	go get github.com/aliyun/aliyun-oss-go-sdk/oss
-	go get -u github.com/jteeuwen/go-bindata/...
-	go get github.com/jmespath/go-jmespath
-	go get github.com/aliyun/alibaba-cloud-sdk-go/sdk
-	go get github.com/posener/complete
-	go get github.com/aliyun/ossutil/lib
-	go get gopkg.in/yaml.v2
+	go get -u github.com/Masterminds/glide
+	glide install
 
 testdeps: deps
-	go get -v github.com/onsi/ginkgo/ginkgo
-	go get -v github.com/onsi/gomega
-	go install github.com/onsi/ginkgo/ginkgo
-	go get gopkg.in/check.v1
 
 metas: deps
 	go-bindata -o resource/metas.go -pkg resource -prefix ../aliyun-openapi-meta ../aliyun-openapi-meta/**/* ../aliyun-openapi-meta/products.json
