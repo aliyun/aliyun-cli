@@ -1,7 +1,6 @@
 package: github.com/aliyun/aliyun-cli
 license: Apache-2.0
 import:
-- package: github.com/aliyun/aliyun-openapi-meta
 - package: gopkg.in/ini.v1
 - package: github.com/droundy/goopt
 - package: github.com/alyu/configparser
@@ -11,8 +10,6 @@ import:
 - package: github.com/aliyun/aliyun-oss-go-sdk
   subpackages:
     - oss
-- package: github.com/jteeuwen/go-bindata/
-  version: ^3.0.7
 - package: github.com/jmespath/go-jmespath
   version: ^0.2.2
 - package: github.com/aliyun/alibaba-cloud-sdk-go

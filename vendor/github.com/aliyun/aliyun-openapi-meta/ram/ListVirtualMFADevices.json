@@ -1,6 +1,0 @@
-{
-  "name": "ListVirtualMFADevices",
-  "protocol": "HTTPS",
-  "method": "POST|GET",
-  "parameters": []
-}

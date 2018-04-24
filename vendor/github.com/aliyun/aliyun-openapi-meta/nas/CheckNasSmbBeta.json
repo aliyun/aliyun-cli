@@ -1,6 +1,0 @@
-{
-  "name": "CheckNasSmbBeta",
-  "protocol": "HTTP|HTTPS",
-  "method": "POST|GET",
-  "parameters": []
-}

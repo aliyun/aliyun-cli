@@ -9,6 +9,7 @@ branches:
   only:
     - master
     - pre-release
+    - dev-jxy
 
 before_install:
   - sudo apt-get install -y jq
