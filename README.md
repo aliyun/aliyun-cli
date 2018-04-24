@@ -5,7 +5,7 @@
 
 The Alibaba Cloud CLI is an open source tool, you can get the latest version from [GitHub](https://github.com/aliyun/aliyun-cli).
 
-This version is a new version built on Go. The new CLI is in the testing phase.  If you want to use the old version (built on Alibaba Cloud Python SDK), click [here](https://github.com/aliyun/aliyun-cli/tree/python_final).
+This version is a new version built on Go. If you want to use the old version (built on Alibaba Cloud Python SDK), click [here](https://github.com/aliyun/aliyun-cli/tree/python_final).
 
 ## Introduction
 
