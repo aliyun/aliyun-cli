@@ -1,4 +1,5 @@
 # Aliyun Command Line Interface
+[![Build Status](https://travis-ci.org/aliyun/aliyun-cli.svg?branch=master)](https://travis-ci.org/aliyun/aliyun-cli) 
 
 [中文文档](./README_zh.md)
 

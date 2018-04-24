@@ -1,4 +1,5 @@
 # 阿里云命令行工具 (Aliyun Command Line Interface)
+[![Build Status](https://travis-ci.org/aliyun/aliyun-cli.svg?branch=master)](https://travis-ci.org/aliyun/aliyun-cli) 
 
 阿里云命令行工具（Alibaba Cloud Command Line Interface）是开源项目，您可以从[Github](https://github.com/aliyun/aliyun-cli)上获取最新版本的CLI。
 
