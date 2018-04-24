@@ -1,0 +1,22 @@
+#!/bin/sh
+
+set -ev
+
+# Make sure we can run git add from out of tree:
+GIT_DIR=`pwd`/.git
+GIT_INDEX_FILE=`pwd`/$GIT_INDEX_FILE
+
+# Create a clean temp directory for running tests:
+TEMPDIR=`mktemp -d -t testing-XXXXXXXXX`
+git checkout-index --prefix=$TEMPDIR/ -af
+cd $TEMPDIR
+./.test
+
+# Now let's gofmt everything...
+
+GIT_WORK_TREE=$TEMPDIR
+# First we format everything and add all our changes to the repository!
+find . -name '*.go' -exec echo gofmt -w '{}' \; -exec gofmt -w '{}' \; \
+    -exec git add '{}' \;
+
+echo Tests all passed!
