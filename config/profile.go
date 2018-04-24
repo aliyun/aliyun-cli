@@ -227,7 +227,7 @@ func (cp *Profile) GetSessionCredentialByRoleArn() (*signers.SessionCredential, 
 	request := sts.CreateAssumeRoleRequest()
 	request.RoleArn = cp.RamRoleArn
 	request.RoleSessionName = cp.RoleSessionName
-	request.DurationSeconds = requests.NewInteger(600)
+	request.DurationSeconds = requests.NewInteger(900)
 	request.Scheme = "https"
 
 	response, err := client.AssumeRole(request)
