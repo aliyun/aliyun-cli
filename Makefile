@@ -4,6 +4,7 @@ all: build
 publish: build build_mac build_linux build_windows
 
 deps:
+	go get -u github.com/jteeuwen/go-bindata
 	go get -u github.com/Masterminds/glide
 	glide install
 
