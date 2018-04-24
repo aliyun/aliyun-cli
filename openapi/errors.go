@@ -1,3 +1,6 @@
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 package openapi
 
 import (
@@ -7,9 +10,10 @@ import (
 	"strings"
 )
 
+// return when use unknown product
 type InvalidProductError struct {
 	Code    string
-	library *meta.Library
+	library *Library
 }
 
 func (e *InvalidProductError) Error() string {
@@ -18,12 +22,13 @@ func (e *InvalidProductError) Error() string {
 
 func (e *InvalidProductError) GetSuggestions() []string {
 	sr := cli.NewSuggester(strings.ToLower(e.Code), 2)
-	for _, p := range e.library.Products {
+	for _, p := range e.library.GetProducts() {
 		sr.Apply(strings.ToLower(p.Code))
 	}
 	return sr.GetResults()
 }
 
+// return when use unknown api
 type InvalidApiError struct {
 	Name    string
 	product *meta.Product
@@ -41,22 +46,16 @@ func (e *InvalidApiError) GetSuggestions() []string {
 	return sr.GetResults()
 }
 
+// return when use unknown parameter
 type InvalidParameterError struct {
 	Name      string
-	Shorthand string
 	api       *meta.Api
 	flags     *cli.FlagSet
 }
 
 func (e *InvalidParameterError) Error() string {
-	var param string
-	if e.Name != "" {
-		param = "--" + e.Name
-	} else {
-		param = "-" + e.Shorthand
-	}
-	return fmt.Sprintf("'%s' is not a valid parameter or flag. See `aliyun help %s %s`.",
-		param, e.api.Product.GetLowerCode(), e.api.Name)
+	return fmt.Sprintf("'--%s' is not a valid parameter or flag. See `aliyun help %s %s`.",
+		e.Name, e.api.Product.GetLowerCode(), e.api.Name)
 }
 
 func (e *InvalidParameterError) GetSuggestions() []string {

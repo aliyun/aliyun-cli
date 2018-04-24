@@ -10,9 +10,9 @@ import (
 
 //
 // default help flag
-var helpFlag = Flag{
+var HelpFlag = &Flag{
 	Name:         "help",
-	Usage:        i18n.T("print help", "打印帮助信息"),
+	Short:        i18n.T("print help", "打印帮助信息"),
 	AssignedMode: AssignedNone,
 }
 
@@ -63,31 +63,51 @@ func (ctx *Context) EnterCommand(cmd *Command) {
 		ctx.unknownFlags = NewFlagSet()
 	}
 
-	ctx.flags = MergeFlagSet(cmd.Flags(), ctx.flags, func(f Flag) bool {
+	ctx.flags = cmd.flags.mergeWith(ctx.flags, func(f *Flag) bool {
 		return f.Persistent
 	})
-	ctx.flags.Add(helpFlag)
+	ctx.flags.Add(HelpFlag)
 }
 
 func (ctx *Context) CheckFlags() error {
 	for _, f := range ctx.flags.Flags() {
-		if f.Required && !f.IsAssigned() {
-			if !f.useDefaultValue() {
+		if !f.IsAssigned() {
+			if f.Required {
 				return fmt.Errorf("missing flag --%s", f.Name)
+			}
+		} else {
+			if err := f.checkFields(); err != nil {
+				return err
+			}
+			if len(f.ExcludeWith) > 0 {
+				for _, es := range f.ExcludeWith {
+					if _, ok := ctx.flags.GetValue(es); ok {
+						return fmt.Errorf("flag --%s is exclusive with --%s", f.Name, es)
+					}
+				}
 			}
 		}
 	}
 	return nil
 }
 
-func (ctx *Context) DetectFlag(name, shorthand string) (*Flag, error) {
-	flag := ctx.flags.Get(name, shorthand)
+func (ctx *Context) detectFlag(name string) (*Flag, error) {
+	flag := ctx.flags.Get(name)
 
 	if flag != nil {
 		return flag, nil
 	} else if ctx.unknownFlags != nil {
-		return ctx.unknownFlags.AddByName(name, shorthand)
+		return ctx.unknownFlags.AddByName(name)
 	} else {
-		return nil, NewInvalidFlagError(name, shorthand, ctx)
+		return nil, NewInvalidFlagError(name, ctx)
+	}
+}
+
+func (ctx *Context) detectFlagByShorthand(ch rune) (*Flag, error) {
+	flag := ctx.flags.GetByShorthand(ch)
+	if flag != nil {
+		return flag, nil
+	} else {
+		return nil, fmt.Errorf("unknown flag -%s", string(ch))
 	}
 }

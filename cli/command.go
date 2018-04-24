@@ -121,7 +121,7 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 			if f.Hidden {
 				continue
 			}
-			if !strings.HasPrefix("--"+f.Name, ctx.completion.Current) {
+			if !strings.HasPrefix("--" + f.Name, ctx.completion.Current) {
 				continue
 			}
 			fmt.Printf("--%s\n", f.Name)
@@ -178,7 +178,7 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 		}
 	}
 
-	//
+	// cmd is find by args, try run cmd.Run
 	// parse remain args
 	remainArgs, err := parser.ReadAll()
 	if err != nil {
@@ -192,7 +192,7 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 		return err
 	}
 
-	if ctx.flags.IsAssigned("help", "") {
+	if HelpFlag.IsAssigned() {
 		ctx.help = true
 	}
 	callArgs := make([]string, 0)
@@ -231,19 +231,14 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 }
 
 func (c *Command) processError(err error) {
-	//
-	// process error
-	//if e, ok := err.(PrintableError); ok {
-	//	Errorf("error: %s\n", e.GetText(i18n.GetLanguage()))
-	//} else {
 	Errorf("ERROR: %s\n", err.Error())
-	//	}
-
 	if e, ok := err.(SuggestibleError); ok {
-		ss := e.GetSuggestions()
-		if len(ss) > 0 {
-			Noticef("\ndid you mean: \n  %s \n", ss[0])
-		}
+		PrintSuggestions(i18n.GetLanguage(), e.GetSuggestions())
+		return
+	}
+	if e, ok := err.(ErrorWithTip); ok {
+		Noticef("\n%s\n", e.GetTip(i18n.GetLanguage()))
+		return
 	}
 }
 
@@ -251,16 +246,7 @@ func (c *Command) executeHelp(ctx *Context, args []string) {
 	if c.Help != nil {
 		err := c.Help(ctx, args)
 		if err != nil {
-			Errorf("Error: %s\n", err)
-		}
-		if se, ok := err.(SuggestibleError); ok {
-			ss := se.GetSuggestions()
-			if len(ss) > 0 {
-				Noticef("\nDid you mean:\n")
-				for _, s := range ss {
-					Noticef("  %s\n", s)
-				}
-			}
+			c.processError(err)
 		}
 		return
 	}

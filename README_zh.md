@@ -1,8 +1,9 @@
 # 阿里云命令行工具 (Aliyun Command Line Interface)
+[![Build Status](https://travis-ci.org/aliyun/aliyun-cli.svg?branch=master)](https://travis-ci.org/aliyun/aliyun-cli) 
 
 阿里云命令行工具（Alibaba Cloud Command Line Interface）是开源项目，您可以从[Github](https://github.com/aliyun/aliyun-cli)上获取最新版本的CLI。
 
-该版本的CLI为Go语言重构版本，目前处于**BETA**发布中，如果您想使用原有的Python版本，请切换到[Python分支](https://github.com/aliyun/aliyun-cli/tree/python_final)。
+该版本的CLI为Go语言重构版本，如果您想使用原有的Python版本，请切换到[Python分支](https://github.com/aliyun/aliyun-cli/tree/python_final)。
 
 ## 简介
 
@@ -21,17 +22,11 @@
 
 	阿里云CLI工具下载、解压后即可使用，支持Mac, Linux, Windows平台(x64版本)。	您可以将解压的`aliyun`可执行文件移至`/usr/local/bin`目录下，或添加到`$PATH`中。
 
-	下载链接如下 (0.80 Beta)：
+	下载链接如下 (3.0.1)：
 
-	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.70-amd64.tgz)
-	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.70-amd64.tgz)
-	- [Windows (64 bit)](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.70-amd64.zip)
-
-    下载链接如下: (0.70 Beta)
-
-	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-0.60-amd64.tgz)
-	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-0.60-amd64.tgz)
-	- [Windows (64 bit)](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-0.60-amd64.zip)
+	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-3.0.1-amd64.tgz)
+	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-3.0.1-amd64.tgz)
+	- [Windows (64 bit)](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-3.0.1-amd64.zip)
 
 - **编译源码**
 
@@ -170,3 +165,66 @@ $ aliyun newproduct --version 2018-01-01 --endpoint newproduct.aliyuncs.com --pa
 
 - `--version`: 指定API的版本，你可以在API文档中找到版本号，如ECS的版本号是`2014-05-26`。
 - `--endpoint`: 指定产品的接入地址，一般产品接入地址是`product.aliyuncs.com`，或`product.en-central-1.aliyuncs.com`，请参考各产品的API文档。
+
+#### 使用`--output`参数
+
+阿里云产品的查询接口会返回json结构化数据，不方便阅读。例如：
+
+```
+$ aliyun ecs DescribeInstances
+```
+
+执行以上命令将得到以下json结果：
+
+```
+{
+  "PageNumber": 1,
+  "TotalCount": 2,
+  "PageSize": 10,
+  "RequestId": "2B76ECBD-A296-407E-BE17-7E668A609DDA",
+  "Instances": {
+    "Instance": [
+      {
+        "ImageId": "ubuntu_16_0402_64_20G_alibase_20171227.vhd",
+        "InstanceTypeFamily": "ecs.xn4",
+        "VlanId": "",
+        "InstanceId": "i-12345678912345678123",
+        "Status": "Stopped",
+        //omit some fields
+      },
+      Instance": [
+      {
+        "ImageId": "ubuntu_16_0402_64_20G_alibase_20171227.vhd",
+        "InstanceTypeFamily": "ecs.xn4",
+        "VlanId": "",
+        "InstanceId": "i-abcdefghijklmnopqrst",
+        "Status": "Running",
+        //omit some fields
+      },
+    ]
+  }
+}
+```
+
+可以使用`--output`参数提取结果中感兴趣的字段，并进行表格化输出。例如：
+
+
+```
+$ aliyun ecs DescribeInstances --output cols=InstanceId,Status
+```
+
+执行以上命令将得到以下形式的结果：
+```
+InstanceId             | Status
+----------             | ------
+i-12345678912345678123 | Stopped
+i-abcdefghijklmnopqrst | Running
+```
+
+在使用`--output`参数时，必须指定以下参数：
+
+- `--cols`: 表格的列名，需要与json数据中的字段相对应。如ECS DescribeInstances 接口返回结果中的字段`InstanceId` 以及 `Status`。
+
+可选参数：
+- `--rows`: 通过[jmespath](http://jmespath.org/)查询语句来指定表格行在json结果中的数据来源。当查询语句具有`Instances.Instance[]`的形式时，可以省略该参数。
+

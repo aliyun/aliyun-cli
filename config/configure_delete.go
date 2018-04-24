@@ -14,7 +14,7 @@ func NewConfigureDeleteCommand() *cli.Command {
 		Usage: "delete --profile <profileName>",
 		Short: i18n.T("list all config profile", "列出所有配置集"),
 		Run: func(c *cli.Context, args []string) error {
-			profileName, ok := c.Flags().GetValue(ProfileFlag.Name)
+			profileName, ok := ProfileFlag.GetValue()
 			if !ok {
 				cli.Errorf("missing --profile <profileName>\n")
 				cli.Noticef("\nusage:\n  aliyun configure delete --profile <profileName>\n")

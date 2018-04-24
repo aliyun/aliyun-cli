@@ -1,3 +1,6 @@
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 package cli
 
 const DefaultSuggestDistance = 2
@@ -6,13 +9,18 @@ func CalculateStringDistance(source string, target string) int {
 	return DistanceForStrings([]rune(source), []rune(target), DefaultOptions)
 }
 
-type Noticeable interface {
-	GetNotice() string
-}
-
 // error with suggestions
 type SuggestibleError interface {
 	GetSuggestions() []string
+}
+
+func PrintSuggestions(lang string, ss []string) {
+	if len(ss) > 0 {
+		Noticef("\nDid you mean:\n")
+		for _, s := range ss {
+			Noticef("  %s\n", s)
+		}
+	}
 }
 
 //

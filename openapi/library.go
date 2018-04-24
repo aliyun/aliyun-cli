@@ -4,41 +4,62 @@
 package openapi
 
 import (
-	"fmt"
-	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/meta"
-	"io"
+	"github.com/aliyun/aliyun-cli/resource"
+	"github.com/aliyun/aliyun-cli/i18n"
+	"fmt"
+	"text/tabwriter"
 	"os"
 	"strings"
-	"text/tabwriter"
+	"io"
 )
 
-// var compactList = []string {"Ecs", "Rds", "Vpc", "Slb", "Dm", "Ots", "Ess", "Ocs", "CloudApi"}
-
-type Helper struct {
-	language string
-	library  *meta.Library
+type Library struct {
+	lang string
+	builtinRepo *meta.Repository
+	extraRepo *meta.Repository
 }
 
-func NewHelper(library *meta.Library) *Helper {
-	return &Helper{
-		library: library,
+func NewLibrary(lang string) (*Library) {
+	return &Library{
+		builtinRepo: meta.LoadRepository(resource.NewReader()),
+		extraRepo: nil,
+		lang: lang,
 	}
 }
 
-func (a *Helper) PrintProducts() {
+func (a *Library) GetProduct(productCode string) (meta.Product, bool){
+	return a.builtinRepo.GetProduct(productCode)
+}
+
+func (a *Library) GetApi(productCode string, version string, apiName string) (meta.Api, bool) {
+	return a.builtinRepo.GetApi(productCode, version, apiName)
+}
+
+func (a *Library) GetProducts() []meta.Product {
+	return a.builtinRepo.Products
+}
+
+
+func (a *Library) PrintProducts() {
 	fmt.Printf("\nProducts:\n")
 	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
-	for _, product := range a.library.Products {
+	for _, product := range a.builtinRepo.Products {
 		fmt.Fprintf(w, "  %s\t%s\n", strings.ToLower(product.Code), product.Name[i18n.GetLanguage()])
 	}
 	w.Flush()
 }
 
-func (a *Helper) PrintProductUsage(productCode string, withApi bool) error {
-	product, ok := a.library.GetProduct(productCode)
+func (a *Library) printProduct(product meta.Product) {
+	fmt.Printf("  %s(%s)\t%s\t%s\n", product.Code, product.Version, product.Name["zh"],
+		product.GetDocumentLink("zh"))
+}
+
+
+func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
+	product, ok := a.GetProduct(productCode)
 	if !ok {
-		return &InvalidProductError{Code: productCode, library: a.library}
+		return &InvalidProductError{Code: productCode, library: a}
 	}
 
 	if product.ApiStyle == "rpc" {
@@ -74,12 +95,12 @@ func (a *Helper) PrintProductUsage(productCode string, withApi bool) error {
 	return nil
 }
 
-func (a *Helper) PrintApiUsage(productCode string, apiName string) error {
-	product, ok := a.library.GetProduct(productCode)
+func (a *Library) PrintApiUsage(productCode string, apiName string) error {
+	product, ok := a.builtinRepo.GetProduct(productCode)
 	if !ok {
-		return &InvalidProductError{Code: productCode, library: a.library}
+		return &InvalidProductError{Code: productCode, library: a}
 	}
-	api, ok := a.library.GetApi(productCode, product.Version, apiName)
+	api, ok := a.builtinRepo.GetApi(productCode, product.Version, apiName)
 	if !ok {
 		return &InvalidApiError{Name: apiName, product: &product}
 	}
@@ -107,9 +128,9 @@ func printParameters(w io.Writer, params []meta.Parameter, prefix string) {
 			//	fmt.Fprintf(w,"  --%s.n.%s\t%s\t%s\n", param.Name, sp.Name, sp.Type, required(sp.Required))
 			//}
 		} else if param.Type == "RepeatList" {
-			fmt.Fprintf(w, "  --%s%s.n\t%s\t%s\n", prefix, param.Name, param.Type, required(param.Required))
+			fmt.Fprintf(w, "  --%s%s.n\t%s\t%s\t%s\n", prefix, param.Name, param.Type, required(param.Required), getDescription(param.Description))
 		} else {
-			fmt.Fprintf(w, "  --%s%s\t%s\t%s\n", prefix, param.Name, param.Type, required(param.Required))
+			fmt.Fprintf(w, "  --%s%s\t%s\t%s\t%s\n", prefix, param.Name, param.Type, required(param.Required), getDescription(param.Description))
 		}
 	}
 }
@@ -122,6 +143,18 @@ func required(r bool) string {
 	}
 }
 
+func getDescription(d map[string]string) string {
+	return ""
+	// TODO: description too long, need optimize for display
+	//if d == nil {
+	//	return ""
+	//}
+	//if v, ok := d[i18n.GetLanguage()]; ok {
+	//	return v
+	//} else {
+	//	return ""
+	//}
+}
 //
 //func (a *Helper) printCompactList() {
 //	for _, s := range compactList {
@@ -131,7 +164,4 @@ func required(r bool) string {
 //	fmt.Printf("  ... ")
 //}
 
-func (a *Helper) printProduct(product meta.Product) {
-	fmt.Printf("  %s(%s)\t%s\t%s\n", product.Code, product.Version, product.Name["zh"],
-		product.GetDocumentLink("zh"))
-}
+

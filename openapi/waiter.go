@@ -1,126 +1,104 @@
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 package openapi
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/jmespath/go-jmespath"
-	"strconv"
-	"strings"
 	"time"
+	"fmt"
+	"github.com/aliyun/aliyun-cli/i18n"
+	"strconv"
 )
 
+var WaiterFlag = &cli.Flag {Category:"helper",
+	Name: "waiter",
+	AssignedMode: cli.AssignedRepeatable,
+	Short: i18n.T(
+		"use `--waiter expr=<jmesPath> to=<value>` to pull api until result equal to expected value",
+		"使用 `--waiter expr=<jmesPath> to=<value>` 来轮询调用OpenAPI，知道返回期望的值"),
+	Long: i18n.T(
+		"",
+		""),
+	Fields: []cli.Field {
+		{Key:"expr", Required:true, Short: i18n.T("", "")},
+		{Key:"to", Required:true, Short: i18n.T("", "")},
+		{Key:"timeout",DefaultValue:"180", Short:i18n.T("", "")},
+		{Key:"interval",DefaultValue:"5", Short:i18n.T("","")},
+	},
+	ExcludeWith:[]string{"pager"},
+}
+
 type Waiter struct {
-	client   *sdk.Client
-	request  *requests.CommonRequest
-	waitExpr string
-	targets  []string
-	timeout  time.Duration
-	interval time.Duration
+	expr string
+	to string
+//	timeout  time.Duration	TODO use Flag.Field to validate
+//	interval time.Duration  TODO use Flag.Field to validate
 }
 
-func NewWaiterWithCTX(ctx *cli.Context, client *sdk.Client, request *requests.CommonRequest) *Waiter {
-	waitForExprFlag := ctx.Flags().Get(WaitForExprFlag.Name, WaitForExprFlag.Shorthand)
-	waitForTargetFlag := ctx.Flags().Get(WaitForTargetFlag.Name, WaitForTargetFlag.Shorthand)
-	waitTimeoutFlag := ctx.Flags().Get(WaitTimeoutFlag.Name, WaitTimeoutFlag.Shorthand)
-	waitIntervalFlag := ctx.Flags().Get(WaitIntervalFlag.Name, WaitIntervalFlag.Shorthand)
-
-	timeout, err := strconv.Atoi(waitTimeoutFlag.GetValueOrDefault(ctx, "0"))
-	if err != nil {
-		fmt.Println(err)
-		timeout = 0
+func GetWaiter() *Waiter {
+	if !WaiterFlag.IsAssigned() {
+		return nil
 	}
 
-	if timeout < 0 {
-		timeout = 0
+	waiter := &Waiter {
 	}
+	waiter.expr, _ = WaiterFlag.GetFieldValue("expr")
+	waiter.to, _ = WaiterFlag.GetFieldValue("to")
+	//waiter.timeout = time.Duration(time.Second * 180)
+	//waiter.interval = time.Duration(time.Second * 5)
 
-	interval, err := strconv.Atoi(waitIntervalFlag.GetValueOrDefault(ctx, "1"))
-	if err != nil {
-		fmt.Println(err)
-		interval = 1
-	}
-
-	if interval < 0 {
-		interval = 1
-	}
-
-	return &Waiter{
-		client:   client,
-		request:  request,
-		waitExpr: waitForExprFlag.GetValueOrDefault(ctx, ""),
-		targets:  strings.Split(waitForTargetFlag.GetValueOrDefault(ctx, ""), ","),
-		timeout:  time.Duration(timeout) * time.Second,
-		interval: time.Duration(interval) * time.Second,
-	}
+	return waiter
 }
 
-func (w *Waiter) Wait() (response *responses.CommonResponse, err error) {
-	if w.timeout == 0 {
-		return w.client.ProcessCommonRequest(w.request)
-	}
-
-	doRequestAndCheck := func() (bool, *responses.CommonResponse, error) {
-		var v interface{}
-
-		resp, err := w.client.ProcessCommonRequest(w.request)
-
-		if err != nil {
-			fmt.Println(err)
-			return false, nil, err
-		}
-
-		if len(w.targets) == 0 {
-			return true, resp, fmt.Errorf("no target targets: %v", w.targets)
-		}
-
-		err = json.Unmarshal(resp.GetHttpContentBytes(), &v)
-
-		if err != nil {
-			return false, resp, err
-		}
-
-		intf, err := jmespath.Search(w.waitExpr, v)
-
-		if err != nil {
-			return false, resp, fmt.Errorf("jmespath: '%s' failed %s", w.waitExpr, err)
-		}
-
-		res := fmt.Sprintf("%v", intf)
-		if res == w.targets[0] {
-			return true, resp, nil
+func (a *Waiter) CallWith(invoker Invoker) (string, error) {
+	//
+	// timeout is 1-600 seconds, default is 180
+	timeout := time.Duration(time.Second * 180)
+	if s, ok := WaiterFlag.GetFieldValue("timeout"); ok {
+		if n, err := strconv.Atoi(s); err == nil {
+			if n <= 0 && n > 600 {
+				return "", fmt.Errorf("--waiter timeout=%s must between 1-600 (seconds)", s)
+			}
+			timeout = time.Duration(time.Second * time.Duration(n))
 		} else {
-			//fmt.Println("response value: " + res)
+			return "", fmt.Errorf("--waiter timeout=%s must be integer", s)
 		}
-
-		return false, resp, err
+	}
+	//
+	// interval is 2-10 seconds, default is 5
+	interval := time.Duration(time.Second * 5)
+	if s, ok := WaiterFlag.GetFieldValue("interval"); ok {
+		if n, err := strconv.Atoi(s); err == nil {
+			if n <= 1 && n > 10 {
+				return "", fmt.Errorf("--waiter interval=%s must between 2-10 (seconds)", s)
+			}
+			interval = time.Duration(time.Second * time.Duration(n))
+		} else {
+			return "", fmt.Errorf("--waiter interval=%s must be integer", s)
+		}
 	}
 
-	t := time.NewTimer(w.timeout)
-
+	begin := time.Now()
 	for {
-
-		find, req, err := doRequestAndCheck()
-
-		if find {
-			//fmt.Printf("Find targets %v\n", w.targets)
-			return req, err
-		}
-
+		resp, err := invoker.Call()
 		if err != nil {
-			fmt.Println(err)
+			return "", err
 		}
 
-		select {
-		case <-time.After(w.interval):
-			//fmt.Println("interval done")
-		case <-t.C:
-			return req, errors.New("Timeout")
+		v, err := evaluateExpr(resp.GetHttpContentBytes(), a.expr)
+		if err != nil {
+			return "", err
 		}
 
+		if v == a.to {
+			return resp.GetHttpContentString(), nil
+		}
+		duration := time.Now().Sub(begin)
+		if duration > timeout {
+			return "", fmt.Errorf("wait '%s' to '%s' timeout(%dseconds), last='%s'",
+				a.expr, a.to, timeout / time.Second, v)
+		}
+		time.Sleep(interval)
 	}
 }

@@ -5,7 +5,6 @@ package config
 
 import (
 	"fmt"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
 )
 
@@ -15,7 +14,7 @@ type Region struct {
 }
 
 func GetRegions(profile *Profile) ([]Region, error) {
-	client, err := profile.GetClient(sdk.NewConfig())
+	client, err := profile.GetClient()
 
 	regions := make([]Region, 0)
 	if err != nil {
@@ -36,7 +35,7 @@ func GetRegions(profile *Profile) ([]Region, error) {
 }
 
 func DoHello(profile *Profile) {
-	client, err := profile.GetClient(sdk.NewConfig())
+	client, err := profile.GetClient()
 
 	if err != nil {
 		fmt.Println("-----------------------------------------------")

@@ -22,8 +22,8 @@ func NewConfigureCommand() *cli.Command {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			profileName, _ := ctx.Flags().GetValue(ProfileFlag.Name)
-			mode, _ := ctx.Flags().GetValue(ModeFlag.Name)
+			profileName, _ := ProfileFlag.GetValue()
+			mode, _ := ModeFlag.GetValue()
 
 			return doConfigure(profileName, mode)
 		},

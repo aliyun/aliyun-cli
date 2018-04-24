@@ -1,23 +1,29 @@
 language: go
 
-sudo: false
+sudo: true
 
 go:
-  - 1.7.x
   - 1.8.x
-  - 1.9.x
-  - 1.10.x
+
+branches:
+  only:
+    - master
+    - pre-release
+
+before_install:
+  - sudo apt-get install -y jq
 
 install:
   - make deps
   - make testdeps
 
 notifications:
-    #webhooks: https://oapi.dingtalk.com/robot/send?access_token=096ed387df243a6d60835aadeccc47165f3813bc7cb81cdd0cfeadfd28e3acc1
+    webhooks: https://oapi.dingtalk.com/robot/send?access_token=096ed387df243a6d60835aadeccc47165f3813bc7cb81cdd0cfeadfd28e3acc1
     email: false
     on_success: change
     on_failure: always
 
 script:
   - make build
-  - go test -v -timeout 30m ./...
+  - sudo cp out/aliyun /usr/local/bin
+  - cd ./integration && ./test

@@ -1,3 +1,6 @@
+/*
+ * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ */
 package openapi
 
 import (
@@ -8,7 +11,26 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
+
+var PagerFlag = &cli.Flag{Category: "caller",
+	Name: "pager",
+	Hidden: false,
+	AssignedMode: cli.AssignedRepeatable,
+	Aliases: []string{"--all-pages"},
+	Short: i18n.T(
+		"use `--pager` to merge pages for pageable APIs",
+		"使用 `--pager` 在访问分页的API时合并结果分页"),
+	Fields: []cli.Field{
+		{Key: "", Required:false},
+		{Key: "PageNumber", DefaultValue: "PageNumber", Short: i18n.T(" PageNumber", "指定PageNumber的属性")},
+		{Key: "PageSize", DefaultValue: "PageSize", Short: i18n.T("PageSize", "")},
+		{Key: "TotalCount", DefaultValue: "TotalCount", Short: i18n.T("TotalCount", "")},
+	},
+	ExcludeWith: []string {WaiterFlag.Name},
+}
 
 type Pager struct {
 	PageNumberFlag string
@@ -27,20 +49,41 @@ type Pager struct {
 	results []interface{}
 }
 
-func NewPager(path string) *Pager {
-	pager := &Pager{
-		PageNumberFlag: "PageNumber",
-		PageSizeFlag:   "PageSize",
-		PageNumberExpr: "PageNumber",
-		PageSizeExpr:   "PageSize",
-		TotalCountExpr: "TotalCount",
+
+func GetPager() *Pager {
+	if !PagerFlag.IsAssigned() {
+		return nil
+	}
+	pager := &Pager{}
+	pager.PageNumberFlag, _ = PagerFlag.GetFieldValue("PageNumber")
+	pager.PageSizeFlag, _ = PagerFlag.GetFieldValue("PageSize")
+	pager.PageNumberExpr, _ = PagerFlag.GetFieldValue("PageNumber")
+	pager.PageSizeExpr, _ = PagerFlag.GetFieldValue("PageSize")
+	pager.TotalCountExpr, _ = PagerFlag.GetFieldValue("TotalCount")
+
+	pager.collectionPath, _ = PagerFlag.GetFieldValue("")
+	return pager
+}
+
+func (a *Pager) CallWith(invoker Invoker) (string, error) {
+	for {
+		resp, err := invoker.Call()
+		if err != nil {
+			return "", err
+		}
+
+		err = a.FeedResponse(resp.GetHttpContentString())
+		if err != nil {
+			return "", fmt.Errorf("call failed %s", err)
+		}
+
+		if !a.HasMore() {
+			break
+		}
+		a.MoveNextPage(invoker.getRequest())
 	}
 
-	pager.collectionPath = path
-	// pager.collectionName = name
-	// pager.collectionPath = name + "." + name[0: len(name) - 1] + "[]"
-	// fmt.Printf("collection path: %s", pager.collectionPath)
-	return pager
+	return a.GetResponseCollection(), nil
 }
 
 func (a *Pager) HasMore() bool {
@@ -53,26 +96,36 @@ func (a *Pager) HasMore() bool {
 }
 
 func (a *Pager) GetResponseCollection() string {
-	r := make(map[string]interface{})
+	root := make(map[string]interface{})
+	current := make(map[string]interface{})
+	path := a.collectionPath
 
-	path := ""
-	l := strings.Index(a.collectionPath, ".")
-	if l > 0 {
-		path = a.collectionPath[:l]
+	for {
+		l := strings.Index(path, ".")
+		if l > 0 {
+			// fmt.Printf("%s %d\n", path, l)
+			prefix := path[:l]
+			root[prefix] = current
+			path = path[l + 1:]
+		} else {
+			if strings.HasSuffix(path, "[]") {
+				key := path[:len(path) - 2]
+				current[key] = a.results
+				break
+			}
+		}
 	}
 
-	r[path] = a.results
-	// return json.Mar
-	s, err := json.Marshal(r)
+	s, err := json.Marshal(root)
 	if err != nil {
 		panic(err)
 	}
 	return string(s)
 }
 
-func (a *Pager) FeedResponse(body []byte) error {
+func (a *Pager) FeedResponse(body string) error {
 	var j interface{}
-	err := json.Unmarshal(body, &j)
+	err := json.Unmarshal([]byte(body), &j)
 	if err != nil {
 		return fmt.Errorf("unmarshal %s", err.Error())
 	}
@@ -98,7 +151,7 @@ func (a *Pager) FeedResponse(body []byte) error {
 	if a.collectionPath == "" {
 		p2 := a.detectArrayPath(j)
 		if p2 == "" {
-			return fmt.Errorf("can't auto reconize collections path: you need add `--all-page VSwitches.VSwitch[]` to assign manually")
+			return fmt.Errorf("can't auto reconize collections path: you need add `--pager VSwitches.VSwitch[]` to assign manually")
 		} else {
 			a.collectionPath = p2
 		}

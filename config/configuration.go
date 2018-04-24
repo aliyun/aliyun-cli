@@ -21,6 +21,8 @@ const (
 type Configuration struct {
 	CurrentProfile string    `json:"current"`
 	Profiles       []Profile `json:"profiles"`
+	MetaPath	   string 	 `json:"meta_path"`
+	//Plugins 		[]Plugin `json:"plugin"`
 }
 
 func NewConfiguration() Configuration {
@@ -51,7 +53,7 @@ func (c *Configuration) GetProfile(pn string) (Profile, bool) {
 }
 
 func (c *Configuration) GetCurrentProfile(ctx *cli.Context) Profile {
-	profileName := ProfileFlag.GetValueOrDefault(ctx, c.CurrentProfile)
+	profileName := ProfileFlag.GetStringOrDefault(c.CurrentProfile)
 	p, _ := c.GetProfile(profileName)
 	p.OverwriteWithFlags(ctx)
 	return p
@@ -81,10 +83,24 @@ func LoadProfile(name string) (Profile, error) {
 		name = config.CurrentProfile
 	}
 	p, ok := config.GetProfile(name)
+	p.parent = &config
 	if !ok {
 		return p, fmt.Errorf("unknown profile %s, run configure to check", name)
 	}
 	return p, nil
+}
+
+func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
+	if name, ok := ProfileFlag.GetValue(); ok {
+		profile, err = LoadProfile(name)
+	} else {
+		profile, err = LoadProfile("")
+	}
+	if err != nil {
+		return
+	}
+	profile.OverwriteWithFlags(ctx)
+	return
 }
 
 func LoadConfiguration() (Configuration, error) {
