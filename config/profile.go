@@ -238,7 +238,7 @@ func (cp *Profile) GetSessionCredentialByRoleArn() (*signers.SessionCredential, 
 	return &signers.SessionCredential{
 		AccessKeyId:     response.Credentials.AccessKeyId,
 		AccessKeySecret: response.Credentials.AccessKeySecret,
-		StsToken:        response.Credentials.AccessKeySecret,
+		StsToken:        response.Credentials.SecurityToken,
 	}, nil
 }
 
