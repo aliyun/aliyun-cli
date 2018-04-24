@@ -62,6 +62,7 @@ func main() {
 	rootCmd.AddSubCommand(configureCommand)
 	// rootCmd.AddSubCommand(command.NewTestCommand())
 	rootCmd.AddSubCommand(lib.NewOssCommand())
+	rootCmd.AddSubCommand(cli.NewVersionCommand())
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
 	rootCmd.Execute(os.Args[1:])
 }

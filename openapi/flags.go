@@ -82,11 +82,11 @@ var (
 	}
 
 	DryRunFlag = &cli.Flag{Category: "caller",
-		Name: "dry-run",
+		Name: "dryrun",
 		AssignedMode: cli.AssignedNone,
 		Short: i18n.T(
-			"add `--dry-run` to validate and print request without running.",
-			"使用 `--dry-run` 在执行校验后打印请求包体，跳过实际运行",
+			"add `--dryrun` to validate and print request without running.",
+			"使用 `--dryrun` 在执行校验后打印请求包体，跳过实际运行",
 		),
 		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name},
 	}
@@ -102,7 +102,7 @@ var (
 		ExcludeWith: []string{DryRunFlag.Name},
 	}
 
-	// TODO
+	// TODO next version
 	//VerboseFlag = &cli.Flag{Category: "caller",
 	//	Name: "verbose",
 	//	Shorthand: 'v',

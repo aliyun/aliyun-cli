@@ -21,6 +21,7 @@ import (
 // - RpcForceInvoker
 // - RestfulInvoker
 type Invoker interface {
+	getClient() *sdk.Client
 	getRequest() *requests.CommonRequest
 	Prepare(ctx *cli.Context) error
 	Call() (*responses.CommonResponse, error)
@@ -45,6 +46,10 @@ type BasicInvoker struct {
 
 func NewBasicInvoker(cp *config.Profile) (*BasicInvoker) {
 	return &BasicInvoker{profile: cp}
+}
+
+func (a *BasicInvoker) getClient() (*sdk.Client) {
+	return a.client
 }
 
 func (a *BasicInvoker) getRequest() (*requests.CommonRequest) {

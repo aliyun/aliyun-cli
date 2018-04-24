@@ -1,11 +1,17 @@
 # CHANGE LOG
 
+### 3.0.1 Final Version
+
+- support `version` command
+- fix `--dryrun` flag bugs
+-
+
 ### 3.0.0 GA Version
 
 - refactoring cli package design, support composite flag with fields
 - refactoring openapi package design, make it more extensible
 - support `--quiet` flag
-- support `--dry-run` flag
+- support `--dryrun` flag
 - support `aliyun oss --profile xxx`
 
 ### 0.81

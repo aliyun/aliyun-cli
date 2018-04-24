@@ -3,7 +3,11 @@
  */
 package cli
 
-import "strings"
+import (
+	"strings"
+	"github.com/aliyun/aliyun-cli/i18n"
+	"fmt"
+)
 
 //
 // This variable is replaced in compile time
@@ -14,4 +18,16 @@ var (
 
 func GetVersion() string {
 	return strings.Replace(Version, " ", "-", -1)
+}
+
+func NewVersionCommand() *Command {
+	return &Command{
+		Name: "version",
+		Short: i18n.T("print current version", "打印当前版本号"),
+		Hidden: true,
+		Run: func(ctx *Context, args []string) error {
+			fmt.Printf("%s\n", Version)
+			return nil
+		},
+	}
 }

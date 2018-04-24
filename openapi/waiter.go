@@ -53,7 +53,7 @@ func GetWaiter() *Waiter {
 
 func (a *Waiter) CallWith(invoker Invoker) (string, error) {
 	//
-	// timeout is 1-180 seconds
+	// timeout is 1-600 seconds, default is 180
 	timeout := time.Duration(time.Second * 180)
 	if s, ok := WaiterFlag.GetFieldValue("timeout"); ok {
 		if n, err := strconv.Atoi(s); err == nil {
@@ -66,7 +66,7 @@ func (a *Waiter) CallWith(invoker Invoker) (string, error) {
 		}
 	}
 	//
-	// interval is 2-10 seconds
+	// interval is 2-10 seconds, default is 5
 	interval := time.Duration(time.Second * 5)
 	if s, ok := WaiterFlag.GetFieldValue("interval"); ok {
 		if n, err := strconv.Atoi(s); err == nil {
