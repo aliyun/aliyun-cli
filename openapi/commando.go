@@ -87,10 +87,12 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		return err
 	}
 
-	// process --dry-run
+	// process --dryrun
 	if DryRunFlag.IsAssigned() {
+		invoker.getRequest().TransToAcsRequest()
+		invoker.getClient().BuildRequestWithSigner(invoker.getRequest(), nil)
 		fmt.Printf("Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
-			invoker.getRequest())
+			invoker.getRequest().String())
 		return nil
 	}
 
