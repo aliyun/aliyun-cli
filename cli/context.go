@@ -53,6 +53,10 @@ func (ctx *Context) UnknownFlags() *FlagSet {
 	return ctx.unknownFlags
 }
 
+func (ctx *Context) SetCompletion(completion *Completion) {
+	ctx.completion = completion
+}
+
 //
 // Before go into the sub command, we need traverse flags and merge with parent
 func (ctx *Context) EnterCommand(cmd *Command) {

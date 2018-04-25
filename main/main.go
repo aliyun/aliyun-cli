@@ -59,10 +59,14 @@ func main() {
 	commando := openapi.NewCommando(profile)
 	commando.InitWithCommand(rootCmd)
 
+	ctx := cli.NewCommandContext()
+	ctx.EnterCommand(rootCmd)
+	ctx.SetCompletion(cli.ParseCompletionForShell())
+
 	rootCmd.AddSubCommand(configureCommand)
 	// rootCmd.AddSubCommand(command.NewTestCommand())
 	rootCmd.AddSubCommand(lib.NewOssCommand())
 	rootCmd.AddSubCommand(cli.NewVersionCommand())
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
-	rootCmd.Execute(os.Args[1:])
+	rootCmd.Execute(ctx, os.Args[1:])
 }

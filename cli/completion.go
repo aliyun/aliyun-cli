@@ -17,12 +17,20 @@ type Completion struct {
 	point   int
 }
 
-func ParseCompletion() *Completion {
-	line := os.Getenv("COMP_LINE")
+func ParseCompletionForShell() *Completion {
+	return ParseCompletion(os.Getenv("COMP_LINE"), os.Getenv("COMP_POINT"))
+}
+
+func ParseCompletion(line, point string) *Completion {
 	if line == "" {
 		return nil
 	}
-	p, _ := strconv.Atoi(os.Getenv("COMP_POINT"))
+
+	p, err := strconv.Atoi(point)
+
+	if err != nil {
+		return nil
+	}
 
 	if p >= len(line) {
 		p = len(line)

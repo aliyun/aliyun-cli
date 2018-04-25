@@ -63,10 +63,8 @@ func (c *Command) Flags() *FlagSet {
 	return c.flags
 }
 
-func (c *Command) Execute(args []string) {
-	ctx := NewCommandContext()
-	ctx.EnterCommand(c)
-	ctx.completion = ParseCompletion()
+func (c *Command) Execute(ctx *Context, args []string) {
+
 
 	//
 	// if completion
