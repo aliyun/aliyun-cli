@@ -1,7 +1,0 @@
-#!/bin/sh
-
-set -ev
-
-# Now let's gofmt everything in the working directory...
-
-find . -name '*.go' -exec echo gofmt -w '{}' \; -exec gofmt -w '{}' \;
