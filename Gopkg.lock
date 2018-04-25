@@ -176,12 +176,12 @@
   revision = "5f9ae10d9af5b1c89ae6904293b14b064d4ada23"
 
 [[projects]]
+  branch = "master"
   name = "golang.org/x/sys"
   packages = ["unix"]
-  revision = "2f57af4873d00d535c5c9028850aa2152e6a5566"
+  revision = "79b0c6888797020a994db17c8510466c72fe75d9"
 
 [[projects]]
-  branch = "master"
   name = "golang.org/x/text"
   packages = [
     "encoding",
@@ -195,8 +195,6 @@
     "encoding/traditionalchinese",
     "encoding/unicode",
     "internal/gen",
-    "internal/language",
-    "internal/language/compact",
     "internal/tag",
     "internal/utf8internal",
     "language",
@@ -204,7 +202,8 @@
     "transform",
     "unicode/cldr"
   ]
-  revision = "7922cc490dd5a7dbaa7fd5d6196b49db59ac042f"
+  revision = "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
+  version = "v0.3.0"
 
 [[projects]]
   branch = "v1"
