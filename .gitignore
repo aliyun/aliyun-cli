@@ -12,5 +12,6 @@ aliyuncli.egg-info/
 build/
 dist/
 out/
+releases/
 resource/metas.go
 local-*
