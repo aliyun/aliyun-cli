@@ -6,7 +6,6 @@ package config
 import (
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
-	"fmt"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -25,6 +24,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(KeyPairNameFlag)
 	fs.Add(RetryTimeoutFlag)
 	fs.Add(RetryCountFlag)
+	fs.Add(SkipSecureVerify)
 }
 
 var ProfileFlag = &cli.Flag{Category: "config",
@@ -104,14 +104,25 @@ var LanguageFlag = &cli.Flag{Category: "config",
 var RetryTimeoutFlag = &cli.Flag{Category: "caller",
 	Name: "retry-timeout", AssignedMode: cli.AssignedOnce, Hidden: true,
 	Short: i18n.T(
-		fmt.Sprintf("use `--retry-timeout <seconds>` to set retry timeout(seconds)"),
-		fmt.Sprintf("使用 `--retry-timeout <seconds>` 指定请求超时时间(秒)"))}
+		"use `--retry-timeout <seconds>` to set retry timeout(seconds)",
+		"使用 `--retry-timeout <seconds>` 指定请求超时时间(秒)"),
+}
 
 var RetryCountFlag = &cli.Flag{Category: "caller",
 	Name: "retry-count", AssignedMode: cli.AssignedOnce, Hidden: true,
 	Short: i18n.T(
-		fmt.Sprintf("use `--retry-count <count>` to set retry count"),
-		fmt.Sprintf("使用 `--retry-count <count>` 指定重试次数"))}
+		"use `--retry-count <count>` to set retry count",
+		"使用 `--retry-count <count>` 指定重试次数"),
+}
+
+var SkipSecureVerify = &cli.Flag{Category: "caller",
+	Name: "skip-secure-verify", AssignedMode: cli.AssignedNone, Hidden: true,
+	Short: i18n.T(
+		"use `--skip-secure-verify` to skip https certification validate",
+		"使用 `--skip-secure-verify` 跳过https的证书校验",
+	),
+}
+
 
 //var OutputFlag = &cli.Flag{Category: "config",
 //	Name: "output", AssignedMode: cli.AssignedOnce, Hidden: true,
