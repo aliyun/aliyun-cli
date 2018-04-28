@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"crypto/tls"
 )
 
 type AuthenticateMode string
@@ -155,6 +156,11 @@ func (cp *Profile) GetClient() (*sdk.Client, error) {
 	}
 	if cp.RetryCount > 0 {
 		config.WithMaxRetryTime(cp.RetryCount)
+	}
+	if SkipSecureVerify.IsAssigned() {
+		config.HttpTransport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
 	}
 
 	switch cp.Mode {
