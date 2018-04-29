@@ -48,9 +48,9 @@ func (e *InvalidApiError) GetSuggestions() []string {
 
 // return when use unknown parameter
 type InvalidParameterError struct {
-	Name      string
-	api       *meta.Api
-	flags     *cli.FlagSet
+	Name  string
+	api   *meta.Api
+	flags *cli.FlagSet
 }
 
 func (e *InvalidParameterError) Error() string {

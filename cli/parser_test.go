@@ -31,14 +31,13 @@ func (tc *testContext) detectFlagByShorthand(ch rune) (*Flag, error) {
 	}
 }
 
-
 func newTestContext() *testContext {
 	fs := NewFlagSet()
 	fs.Add(&Flag{Name: "test", AssignedMode: AssignedOnce})
 	fs.Add(&Flag{Name: "test2", Shorthand: 't', AssignedMode: AssignedOnce})
 	fs.Add(&Flag{Name: "prev", AssignedMode: AssignedNone})
 	fs.Add(&Flag{Name: "test-required", Required: true})
-	return &testContext{fs:fs}
+	return &testContext{fs: fs}
 }
 
 func newTestParser(args ...string) (*Parser, *FlagSet) {

@@ -5,9 +5,9 @@ package openapi
 
 import (
 	"fmt"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/meta"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 )
 
 type RpcInvoker struct {

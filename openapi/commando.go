@@ -4,12 +4,12 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/meta"
-	"github.com/aliyun/aliyun-cli/config"
 	"fmt"
-	"strings"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/aliyun/aliyun-cli/meta"
+	"strings"
 )
 
 // main entrance of aliyun cli
@@ -22,7 +22,7 @@ func NewCommando(profile config.Profile) *Commando {
 	r := &Commando{
 		profile: profile,
 	}
-	r.library = NewLibrary(profile.Language)	//TODO: load from local repository
+	r.library = NewLibrary(profile.Language) //TODO: load from local repository
 	return r
 }
 
@@ -101,7 +101,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 
 	// cli.Printf("invoker %v %v \n", invoker, reflect.TypeOf(invoker))
 	if ok {
-		if err != nil {	// call with helper failed
+		if err != nil { // call with helper failed
 			return err
 		}
 	} else {
@@ -172,7 +172,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			// Rpc call
 			if path != "" {
 				return nil, cli.NewErrorWithTip(fmt.Errorf("invalid argument %s", path),
-				"Use `aliyun help %s` see more information.", product.GetLowerCode())
+					"Use `aliyun help %s` see more information.", product.GetLowerCode())
 			}
 			if force {
 				return &ForceRpcInvoker{
@@ -237,7 +237,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			return nil, err
 		}
 		if ok {
-			return &RestfulInvoker {
+			return &RestfulInvoker{
 				basicInvoker,
 				method,
 				path,
@@ -246,7 +246,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			// return invoker, nil
 			// c.InvokeRestful(ctx, &product, method, path)
 		} else {
-			return &ForceRpcInvoker {
+			return &ForceRpcInvoker{
 				basicInvoker,
 				method,
 			}, nil
@@ -336,7 +336,6 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 
 	return r
 }
-
 
 func (c *Commando) printUsage(cmd *cli.Command) {
 	cmd.PrintHead()

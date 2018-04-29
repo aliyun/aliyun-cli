@@ -50,29 +50,29 @@ func doConfigureGet(c *cli.Context, args []string) {
 	for _, arg := range args {
 		switch arg {
 		case ProfileFlag.Name:
-			cli.Printf( "profile=%s\n", profile.Name)
+			cli.Printf("profile=%s\n", profile.Name)
 		case ModeFlag.Name:
-			cli.Printf( "mode=%s\n", profile.Mode)
+			cli.Printf("mode=%s\n", profile.Mode)
 		case AccessKeyIdFlag.Name:
-			cli.Printf( "access-key-id=%s\n", MosaicString(profile.AccessKeyId, 3))
+			cli.Printf("access-key-id=%s\n", MosaicString(profile.AccessKeyId, 3))
 		case AccessKeySecretFlag.Name:
-			cli.Printf( "access-key-secret=%s\n", MosaicString(profile.AccessKeySecret, 3))
+			cli.Printf("access-key-secret=%s\n", MosaicString(profile.AccessKeySecret, 3))
 		case StsTokenFlag.Name:
-			cli.Printf( "sts-token=%s\n", profile.StsToken)
+			cli.Printf("sts-token=%s\n", profile.StsToken)
 		case RamRoleNameFlag.Name:
-			cli.Printf( "ram-role-name=%s\n", profile.RamRoleName)
+			cli.Printf("ram-role-name=%s\n", profile.RamRoleName)
 		case RamRoleArnFlag.Name:
-			cli.Printf( "ram-role-arn=%s\n", profile.RamRoleArn)
+			cli.Printf("ram-role-arn=%s\n", profile.RamRoleArn)
 		case RoleSessionNameFlag.Name:
-			cli.Printf( "role-session-name=%s\n", profile.RoleSessionName)
+			cli.Printf("role-session-name=%s\n", profile.RoleSessionName)
 		case KeyPairNameFlag.Name:
-			cli.Printf( "key-pair-name=%s\n", profile.KeyPairName)
+			cli.Printf("key-pair-name=%s\n", profile.KeyPairName)
 		case PrivateKeyFlag.Name:
-			cli.Printf( "private-key=%s\n", profile.PrivateKey)
+			cli.Printf("private-key=%s\n", profile.PrivateKey)
 		case RegionFlag.Name:
-			cli.Printf( "region=%s\n", profile.RegionId)
+			cli.Printf("region=%s\n", profile.RegionId)
 		case LanguageFlag.Name:
-			cli.Printf( "language=%s\n", profile.Language)
+			cli.Printf("language=%s\n", profile.Language)
 		}
 	}
 }

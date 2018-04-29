@@ -6,7 +6,7 @@ import (
 )
 
 func (c *Command) PrintHead() {
-	Printf( "%s\n", c.Short.Text())
+	Printf("%s\n", c.Short.Text())
 	//if c.Long != nil {
 	//	fmt.Printf("\n%s\n", c.Long.Text())
 	//}
@@ -14,7 +14,7 @@ func (c *Command) PrintHead() {
 
 func (c *Command) PrintUsage() {
 	if c.Usage != "" {
-		Printf( "\nUsage:\n  %s\n", c.GetUsageWithParent())
+		Printf("\nUsage:\n  %s\n", c.GetUsageWithParent())
 	} else {
 		c.PrintSubCommands()
 	}
@@ -28,7 +28,7 @@ func (c *Command) PrintSample() {
 
 func (c *Command) PrintSubCommands() {
 	if len(c.subCommands) > 0 {
-		Printf( "\nCommands:\n")
+		Printf("\nCommands:\n")
 		w := tabwriter.NewWriter(GetOutputWriter(), 8, 0, 1, ' ', 0)
 		for _, cmd := range c.subCommands {
 			if cmd.Hidden {
@@ -65,9 +65,9 @@ func (c *Command) PrintFlags(ctx *Context) {
 
 func (c *Command) PrintFailed(err error, suggestion string) {
 	Errorf("ERROR: %v\n", err)
-	Printf( "%s\n", suggestion)
+	Printf("%s\n", suggestion)
 }
 
 func (c *Command) PrintTail() {
-	Printf( "\nUse `%s --help` for more information.\n", c.Name)
+	Printf("\nUse `%s --help` for more information.\n", c.Name)
 }

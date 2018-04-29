@@ -82,7 +82,7 @@ var (
 	}
 
 	DryRunFlag = &cli.Flag{Category: "caller",
-		Name: "dryrun",
+		Name:         "dryrun",
 		AssignedMode: cli.AssignedNone,
 		Short: i18n.T(
 			"add `--dryrun` to validate and print request without running.",
@@ -92,8 +92,8 @@ var (
 	}
 
 	QuietFlag = &cli.Flag{Category: "caller",
-		Name: "quiet",
-		Shorthand: 'q',
+		Name:         "quiet",
+		Shorthand:    'q',
 		AssignedMode: cli.AssignedNone,
 		Short: i18n.T(
 			"add `--quiet` to hide normal output",

@@ -5,18 +5,18 @@ package openapi
 
 import (
 	"fmt"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
 	"io/ioutil"
 	"strings"
 	"time"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 )
 
 type RestfulInvoker struct {
 	*BasicInvoker
 	method string
-	path string
-	force bool
+	path   string
+	force  bool
 }
 
 func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {

@@ -4,15 +4,15 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	"github.com/aliyun/aliyun-cli/meta"
-	"github.com/aliyun/aliyun-cli/config"
-	"strings"
 	"fmt"
-	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/config"
+	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/aliyun/aliyun-cli/meta"
+	"strings"
 )
 
 //
@@ -39,20 +39,20 @@ type InvokeHelper interface {
 // basic invoker to init common object and headers
 type BasicInvoker struct {
 	profile *config.Profile
-	client *sdk.Client
+	client  *sdk.Client
 	request *requests.CommonRequest
 	product *meta.Product
 }
 
-func NewBasicInvoker(cp *config.Profile) (*BasicInvoker) {
+func NewBasicInvoker(cp *config.Profile) *BasicInvoker {
 	return &BasicInvoker{profile: cp}
 }
 
-func (a *BasicInvoker) getClient() (*sdk.Client) {
+func (a *BasicInvoker) getClient() *sdk.Client {
 	return a.client
 }
 
-func (a *BasicInvoker) getRequest() (*requests.CommonRequest) {
+func (a *BasicInvoker) getRequest() *requests.CommonRequest {
 	return a.request
 }
 
@@ -82,7 +82,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 		a.request.Domain = v
 	}
 
-	for _, s :=	range HeaderFlag.GetValues() {
+	for _, s := range HeaderFlag.GetValues() {
 		if k, v, ok := cli.SplitStringWithPrefix(s, "="); ok {
 			a.request.Headers[k] = v
 			if k == "Accept" {
@@ -108,12 +108,12 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 
 	if a.request.Version == "" {
 		return cli.NewErrorWithTip(fmt.Errorf("missing version for product %s", product.Code),
-			"Use flag `--version <YYYY-MM-DD>` to assign version, " + hint)
+			"Use flag `--version <YYYY-MM-DD>` to assign version, "+hint)
 	}
 
 	if a.request.RegionId == "" {
 		return cli.NewErrorWithTip(fmt.Errorf("missing region for product %s", product.Code),
-			"Use flag --region <regionId> to assign region, " + hint)
+			"Use flag --region <regionId> to assign region, "+hint)
 	}
 
 	if a.request.Domain == "" {
@@ -121,7 +121,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 		if err != nil {
 			return cli.NewErrorWithTip(
 				fmt.Errorf("unknown endpoint for %s/%s! failed %s", product.GetLowerCode(), a.request.RegionId, err),
-				"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, " + hint)
+				"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, "+hint)
 		}
 	}
 

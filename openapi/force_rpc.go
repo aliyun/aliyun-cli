@@ -4,8 +4,8 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
+	"github.com/aliyun/aliyun-cli/cli"
 )
 
 type ForceRpcInvoker struct {

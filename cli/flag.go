@@ -156,17 +156,16 @@ func (f *Flag) GetIntegerOrDefault(def int) int {
 func (f *Flag) GetFormations() []string {
 	r := make([]string, 0)
 	if f.Name != "" {
-		r = append(r, "--" + f.Name)
+		r = append(r, "--"+f.Name)
 	}
 	for _, s := range f.Aliases {
-		r = append(r, "--" + s)
+		r = append(r, "--"+s)
 	}
 	if f.Shorthand != 0 {
-		r = append(r, "-" + string(f.Shorthand))
+		r = append(r, "-"+string(f.Shorthand))
 	}
 	return r
 }
-
 
 //
 // if this flag is appeared set assigned = true
@@ -207,7 +206,6 @@ func (f *Flag) checkValid() {
 		}
 	}
 }
-
 
 //
 // validate flag value

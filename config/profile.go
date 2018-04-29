@@ -4,6 +4,7 @@
 package config
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
@@ -17,7 +18,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"crypto/tls"
 )
 
 type AuthenticateMode string
@@ -47,9 +47,9 @@ type Profile struct {
 	OutputFormat    string           `json:"output_format"`
 	Language        string           `json:"language"`
 	Site            string           `json:"site"`
-	RetryTimeout 	int 			 `json:"retry_timeout"`
-	RetryCount		int 			 `json:"retry_count"`
-	parent 			*Configuration	`json:"-"`
+	RetryTimeout    int              `json:"retry_timeout"`
+	RetryCount      int              `json:"retry_count"`
+	parent          *Configuration   `json:"-"`
 }
 
 func NewProfile(name string) Profile {

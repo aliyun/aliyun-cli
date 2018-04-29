@@ -39,13 +39,13 @@ func DoHello(profile *Profile) {
 	client, err := profile.GetClient()
 
 	if err != nil {
-		fmt.Println( "-----------------------------------------------")
-		fmt.Println("!!! Configure Failed please configure again !!!" )
-		fmt.Println( "-----------------------------------------------")
-		fmt.Println( err)
-		fmt.Println( "-----------------------------------------------")
-		fmt.Println( "!!! Configure Failed please configure again !!!")
-		fmt.Println( "-----------------------------------------------")
+		fmt.Println("-----------------------------------------------")
+		fmt.Println("!!! Configure Failed please configure again !!!")
+		fmt.Println("-----------------------------------------------")
+		fmt.Println(err)
+		fmt.Println("-----------------------------------------------")
+		fmt.Println("!!! Configure Failed please configure again !!!")
+		fmt.Println("-----------------------------------------------")
 		return
 	}
 	request := ecs.CreateDescribeRegionsRequest()
@@ -59,7 +59,7 @@ func DoHello(profile *Profile) {
 	for _, region := range response.Regions.Region {
 		cli.Printf("  %s\n", region.RegionId)
 	}
-	fmt.Println( icon)
+	fmt.Println(icon)
 }
 
 var icon = string(`

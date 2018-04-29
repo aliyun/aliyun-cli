@@ -4,15 +4,15 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/cli"
-	"time"
 	"fmt"
+	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"strconv"
+	"time"
 )
 
-var WaiterFlag = &cli.Flag {Category:"helper",
-	Name: "waiter",
+var WaiterFlag = &cli.Flag{Category: "helper",
+	Name:         "waiter",
 	AssignedMode: cli.AssignedRepeatable,
 	Short: i18n.T(
 		"use `--waiter expr=<jmesPath> to=<value>` to pull api until result equal to expected value",
@@ -20,20 +20,20 @@ var WaiterFlag = &cli.Flag {Category:"helper",
 	Long: i18n.T(
 		"",
 		""),
-	Fields: []cli.Field {
-		{Key:"expr", Required:true, Short: i18n.T("", "")},
-		{Key:"to", Required:true, Short: i18n.T("", "")},
-		{Key:"timeout",DefaultValue:"180", Short:i18n.T("", "")},
-		{Key:"interval",DefaultValue:"5", Short:i18n.T("","")},
+	Fields: []cli.Field{
+		{Key: "expr", Required: true, Short: i18n.T("", "")},
+		{Key: "to", Required: true, Short: i18n.T("", "")},
+		{Key: "timeout", DefaultValue: "180", Short: i18n.T("", "")},
+		{Key: "interval", DefaultValue: "5", Short: i18n.T("", "")},
 	},
-	ExcludeWith:[]string{"pager"},
+	ExcludeWith: []string{"pager"},
 }
 
 type Waiter struct {
 	expr string
-	to string
-//	timeout  time.Duration	TODO use Flag.Field to validate
-//	interval time.Duration  TODO use Flag.Field to validate
+	to   string
+	//	timeout  time.Duration	TODO use Flag.Field to validate
+	//	interval time.Duration  TODO use Flag.Field to validate
 }
 
 func GetWaiter() *Waiter {
@@ -41,8 +41,7 @@ func GetWaiter() *Waiter {
 		return nil
 	}
 
-	waiter := &Waiter {
-	}
+	waiter := &Waiter{}
 	waiter.expr, _ = WaiterFlag.GetFieldValue("expr")
 	waiter.to, _ = WaiterFlag.GetFieldValue("to")
 	//waiter.timeout = time.Duration(time.Second * 180)
@@ -97,7 +96,7 @@ func (a *Waiter) CallWith(invoker Invoker) (string, error) {
 		duration := time.Now().Sub(begin)
 		if duration > timeout {
 			return "", fmt.Errorf("wait '%s' to '%s' timeout(%dseconds), last='%s'",
-				a.expr, a.to, timeout / time.Second, v)
+				a.expr, a.to, timeout/time.Second, v)
 		}
 		time.Sleep(interval)
 	}

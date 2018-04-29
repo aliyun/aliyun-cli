@@ -28,8 +28,8 @@ func AddFlags(fs *cli.FlagSet) {
 }
 
 var ProfileFlag = &cli.Flag{Category: "config",
-	Name: "profile",
-	Shorthand: 'p',
+	Name:         "profile",
+	Shorthand:    'p',
 	DefaultValue: "default", Persistent: true,
 	Short: i18n.T(
 		"use `--profile <profileName>` to select profile",
@@ -122,7 +122,6 @@ var SkipSecureVerify = &cli.Flag{Category: "caller",
 		"使用 `--skip-secure-verify` 跳过https的证书校验",
 	),
 }
-
 
 //var OutputFlag = &cli.Flag{Category: "config",
 //	Name: "output", AssignedMode: cli.AssignedOnce, Hidden: true,

@@ -7,29 +7,29 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/jmespath/go-jmespath"
 	"math"
 	"strconv"
 	"strings"
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 var PagerFlag = &cli.Flag{Category: "caller",
-	Name: "pager",
-	Hidden: false,
+	Name:         "pager",
+	Hidden:       false,
 	AssignedMode: cli.AssignedRepeatable,
-	Aliases: []string{"--all-pages"},
+	Aliases:      []string{"--all-pages"},
 	Short: i18n.T(
 		"use `--pager` to merge pages for pageable APIs",
 		"使用 `--pager` 在访问分页的API时合并结果分页"),
 	Fields: []cli.Field{
-		{Key: "", Required:false},
+		{Key: "", Required: false},
 		{Key: "PageNumber", DefaultValue: "PageNumber", Short: i18n.T(" PageNumber", "指定PageNumber的属性")},
 		{Key: "PageSize", DefaultValue: "PageSize", Short: i18n.T("PageSize", "")},
 		{Key: "TotalCount", DefaultValue: "TotalCount", Short: i18n.T("TotalCount", "")},
 	},
-	ExcludeWith: []string {WaiterFlag.Name},
+	ExcludeWith: []string{WaiterFlag.Name},
 }
 
 type Pager struct {
@@ -48,7 +48,6 @@ type Pager struct {
 
 	results []interface{}
 }
-
 
 func GetPager() *Pager {
 	if !PagerFlag.IsAssigned() {
@@ -106,10 +105,10 @@ func (a *Pager) GetResponseCollection() string {
 			// cli.Printf("%s %d\n", path, l)
 			prefix := path[:l]
 			root[prefix] = current
-			path = path[l + 1:]
+			path = path[l+1:]
 		} else {
 			if strings.HasSuffix(path, "[]") {
-				key := path[:len(path) - 2]
+				key := path[:len(path)-2]
 				current[key] = a.results
 				break
 			}

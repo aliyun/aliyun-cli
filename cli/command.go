@@ -65,7 +65,6 @@ func (c *Command) Flags() *FlagSet {
 
 func (c *Command) Execute(ctx *Context, args []string) {
 
-
 	//
 	// if completion
 	if ctx.completion != nil {
@@ -119,7 +118,7 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 			if f.Hidden {
 				continue
 			}
-			if !strings.HasPrefix("--" + f.Name, ctx.completion.Current) {
+			if !strings.HasPrefix("--"+f.Name, ctx.completion.Current) {
 				continue
 			}
 			Printf("--%s\n", f.Name)
@@ -132,7 +131,7 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 			if !strings.HasPrefix(sc.Name, ctx.completion.Current) {
 				continue
 			}
-			Printf( "%s\n", sc.Name)
+			Printf("%s\n", sc.Name)
 		}
 	}
 }

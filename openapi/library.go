@@ -4,31 +4,31 @@
 package openapi
 
 import (
+	"fmt"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/meta"
 	"github.com/aliyun/aliyun-cli/resource"
-	"github.com/aliyun/aliyun-cli/i18n"
-	"fmt"
-	"text/tabwriter"
-	"strings"
 	"io"
-	"github.com/aliyun/aliyun-cli/cli"
+	"strings"
+	"text/tabwriter"
 )
 
 type Library struct {
-	lang string
+	lang        string
 	builtinRepo *meta.Repository
-	extraRepo *meta.Repository
+	extraRepo   *meta.Repository
 }
 
-func NewLibrary(lang string) (*Library) {
+func NewLibrary(lang string) *Library {
 	return &Library{
 		builtinRepo: meta.LoadRepository(resource.NewReader()),
-		extraRepo: nil,
-		lang: lang,
+		extraRepo:   nil,
+		lang:        lang,
 	}
 }
 
-func (a *Library) GetProduct(productCode string) (meta.Product, bool){
+func (a *Library) GetProduct(productCode string) (meta.Product, bool) {
 	return a.builtinRepo.GetProduct(productCode)
 }
 
@@ -39,7 +39,6 @@ func (a *Library) GetApi(productCode string, version string, apiName string) (me
 func (a *Library) GetProducts() []meta.Product {
 	return a.builtinRepo.Products
 }
-
 
 func (a *Library) PrintProducts() {
 	cli.Printf("\nProducts:\n")
@@ -54,7 +53,6 @@ func (a *Library) printProduct(product meta.Product) {
 	cli.Printf("  %s(%s)\t%s\t%s\n", product.Code, product.Version, product.Name["zh"],
 		product.GetDocumentLink("zh"))
 }
-
 
 func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 	product, ok := a.GetProduct(productCode)
@@ -155,6 +153,7 @@ func getDescription(d map[string]string) string {
 	//	return ""
 	//}
 }
+
 //
 //func (a *Helper) printCompactList() {
 //	for _, s := range compactList {
@@ -163,5 +162,3 @@ func getDescription(d map[string]string) string {
 //	}
 //	cli.Printf("  ... ")
 //}
-
-

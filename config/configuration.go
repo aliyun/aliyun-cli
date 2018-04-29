@@ -21,7 +21,7 @@ const (
 type Configuration struct {
 	CurrentProfile string    `json:"current"`
 	Profiles       []Profile `json:"profiles"`
-	MetaPath	   string 	 `json:"meta_path"`
+	MetaPath       string    `json:"meta_path"`
 	//Plugins 		[]Plugin `json:"plugin"`
 }
 

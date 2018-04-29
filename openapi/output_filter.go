@@ -4,32 +4,32 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/i18n"
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/jmespath/go-jmespath"
 	"strings"
 	"text/tabwriter"
-	"github.com/jmespath/go-jmespath"
-	"bytes"
-	"bufio"
 )
 
 var OutputFlag = &cli.Flag{
-	Name: "output",
-	Shorthand: 'o',
+	Name:         "output",
+	Shorthand:    'o',
 	AssignedMode: cli.AssignedRepeatable,
 	Short: i18n.T(
 		"use `--output cols=Field1,Field2 [rows=jmesPath]` to print output as table",
 		"使用 `--output cols=Field1,Field1 [rows=jmesPath]` 使用表格方式打印输出",
 	),
-	Long: i18n.T (
-			"",
-			"",
+	Long: i18n.T(
+		"",
+		"",
 	),
-	Fields: []cli.Field {
-		{Key: "cols", Repeatable:false, Required:true},
-		{Key: "rows", Repeatable:false, Required:false},
+	Fields: []cli.Field{
+		{Key: "cols", Repeatable: false, Required: true},
+		{Key: "rows", Repeatable: false, Required: false},
 	},
 }
 
@@ -37,7 +37,7 @@ type OutputFilter interface {
 	FilterOutput(input string) (string, error)
 }
 
-func GetOutputFilter() (OutputFilter) {
+func GetOutputFilter() OutputFilter {
 	if !OutputFlag.IsAssigned() {
 		return nil
 	}
@@ -47,7 +47,7 @@ func GetOutputFilter() (OutputFilter) {
 type TableOutputFilter struct {
 }
 
-func NewTableOutputFilter() (OutputFilter) {
+func NewTableOutputFilter() OutputFilter {
 	return &TableOutputFilter{}
 }
 
@@ -95,12 +95,11 @@ func (a *TableOutputFilter) FormatTable(rowPath string, colNames []string, v int
 	separator := ""
 	for i, colName := range colNames {
 		separator = separator + strings.Repeat("-", len(colName))
-		if i < len(colNames) - 1 {
+		if i < len(colNames)-1 {
 			separator = separator + "\t "
 		}
 	}
 	fmt.Fprintln(w, separator)
-
 
 	for _, row := range rowsArray {
 		rowIntf, ok := row.(interface{})
@@ -128,7 +127,6 @@ func toIntfArray(stringArray []string) []interface{} {
 	}
 	return intfArray
 }
-
 
 // Deprecated Code
 //func outputProcessor(ctx *cli.Context, response string) error {
