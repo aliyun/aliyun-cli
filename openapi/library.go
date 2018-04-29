@@ -9,9 +9,9 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 	"fmt"
 	"text/tabwriter"
-	"os"
 	"strings"
 	"io"
+	"github.com/aliyun/aliyun-cli/cli"
 )
 
 type Library struct {
@@ -42,8 +42,8 @@ func (a *Library) GetProducts() []meta.Product {
 
 
 func (a *Library) PrintProducts() {
-	fmt.Printf("\nProducts:\n")
-	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
+	cli.Printf("\nProducts:\n")
+	w := tabwriter.NewWriter(cli.GetOutputWriter(), 8, 0, 1, ' ', 0)
 	for _, product := range a.builtinRepo.Products {
 		fmt.Fprintf(w, "  %s\t%s\n", strings.ToLower(product.Code), product.Name[i18n.GetLanguage()])
 	}
@@ -51,7 +51,7 @@ func (a *Library) PrintProducts() {
 }
 
 func (a *Library) printProduct(product meta.Product) {
-	fmt.Printf("  %s(%s)\t%s\t%s\n", product.Code, product.Version, product.Name["zh"],
+	cli.Printf("  %s(%s)\t%s\t%s\n", product.Code, product.Version, product.Name["zh"],
 		product.GetDocumentLink("zh"))
 }
 
@@ -63,23 +63,23 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 	}
 
 	if product.ApiStyle == "rpc" {
-		fmt.Printf("\nUsage:\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ...\n", product.Code)
+		cli.Printf("\nUsage:\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ...\n", product.Code)
 	} else {
 		withApi = false
-		fmt.Printf("\nUsage:\n  aliyun %s [GET|PUT|POST|DELETE] <PathPattern> --body \"...\" \n", product.Code)
+		cli.Printf("\nUsage:\n  aliyun %s [GET|PUT|POST|DELETE] <PathPattern> --body \"...\" \n", product.Code)
 	}
 
-	fmt.Printf("\nProduct: %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
-	fmt.Printf("Version: %s \n", product.Version)
-	fmt.Printf("Link: %s\n", product.GetDocumentLink(i18n.GetLanguage()))
+	cli.Printf("\nProduct: %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
+	cli.Printf("Version: %s \n", product.Version)
+	cli.Printf("Link: %s\n", product.GetDocumentLink(i18n.GetLanguage()))
 
 	if withApi {
-		fmt.Printf("\nAvailable Api List: \n")
+		cli.Printf("\nAvailable Api List: \n")
 		for _, apiName := range product.ApiNames {
-			fmt.Printf("  %s\n", apiName)
+			cli.Printf("  %s\n", apiName)
 		}
 		// TODO some ApiName is too long, two column not seems good
-		//w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
+		//w := tabwriter.NewWriter(cli.GetOutputWriter(), 8, 0, 1, ' ', 0)
 		//for i := 0; i < len(product.ApiNames); i += 2 {
 		//	name1 := product.ApiNames[i]
 		//	name2 := ""
@@ -91,7 +91,7 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 		//w.Flush()
 	}
 
-	fmt.Printf("\nRun `aliyun help %s <ApiName>` to get more information about api", product.GetLowerCode())
+	cli.Printf("\nRun `aliyun help %s <ApiName>` to get more information about api", product.GetLowerCode())
 	return nil
 }
 
@@ -105,12 +105,12 @@ func (a *Library) PrintApiUsage(productCode string, apiName string) error {
 		return &InvalidApiError{Name: apiName, product: &product}
 	}
 
-	fmt.Printf("\nProduct: %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
-	// fmt.Printf("Api: %s %s\n", api.Name, api.Description[i18n.GetLanguage()])
-	fmt.Printf("Link:    %s\n", api.GetDocumentLink())
-	fmt.Printf("\nParameters:\n")
+	cli.Printf("\nProduct: %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
+	// cli.Printf("Api: %s %s\n", api.Name, api.Description[i18n.GetLanguage()])
+	cli.Printf("Link:    %s\n", api.GetDocumentLink())
+	cli.Printf("\nParameters:\n")
 
-	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
+	w := tabwriter.NewWriter(cli.GetOutputWriter(), 8, 0, 1, ' ', 0)
 	printParameters(w, api.Parameters, "")
 	w.Flush()
 
@@ -161,7 +161,7 @@ func getDescription(d map[string]string) string {
 //		product, _ := c.products.GetProduct(s)
 //		c.PrintProduct(product)
 //	}
-//	fmt.Printf("  ... ")
+//	cli.Printf("  ... ")
 //}
 
 

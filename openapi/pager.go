@@ -103,7 +103,7 @@ func (a *Pager) GetResponseCollection() string {
 	for {
 		l := strings.Index(path, ".")
 		if l > 0 {
-			// fmt.Printf("%s %d\n", path, l)
+			// cli.Printf("%s %d\n", path, l)
 			prefix := path[:l]
 			root[prefix] = current
 			path = path[l + 1:]
@@ -163,7 +163,7 @@ func (a *Pager) FeedResponse(body string) error {
 
 func (a *Pager) MoveNextPage(request *requests.CommonRequest) {
 	a.currentPageNumber = a.currentPageNumber + 1
-	// fmt.Printf("Move to page %d", a.currentPageNumber)
+	// cli.Printf("Move to page %d", a.currentPageNumber)
 	request.QueryParams[a.PageNumberFlag] = strconv.Itoa(a.currentPageNumber)
 }
 

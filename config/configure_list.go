@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
-	"os"
 	"text/tabwriter"
 )
 
@@ -28,7 +27,7 @@ func doConfigureList() {
 	if err != nil {
 		cli.Errorf("ERROR: load configure failed: %v\n", err)
 	}
-	w := tabwriter.NewWriter(os.Stdout, 8, 0, 1, ' ', 0)
+	w := tabwriter.NewWriter(cli.GetOutputWriter(), 8, 0, 1, ' ', 0)
 	fmt.Fprint(w, "Profile\t| Credential \t| Valid\t| Region\t| Language\n")
 	fmt.Fprint(w, "---------\t| ------------------\t| -------\t| ----------------\t| --------\n")
 	for _, pf := range conf.Profiles {

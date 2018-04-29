@@ -86,42 +86,42 @@ const (
 	ErrorColor   = BRed
 )
 
-func Debug(s string) {
-	fmt.Print(DebugColor + s + ColorOff)
+func Debug(a ...interface{}) (n int, err error) {
+	return Print(DebugColor + fmt.Sprint(a...) + ColorOff)
 }
 
-func Info(s string) {
-	fmt.Print(InfoColor + s + ColorOff)
+func Info(a ...interface{}) (n int, err error) {
+	return Print(InfoColor + fmt.Sprint(a...) + ColorOff)
 }
 
-func Notice(s string) {
-	fmt.Print(NoticeColor + s + ColorOff)
+func Notice(a ...interface{}) (n int, err error) {
+	return Print(NoticeColor + fmt.Sprint(a...) + ColorOff)
 }
 
-func Warning(s string) {
-	fmt.Print(WarningColor + s + ColorOff)
+func Warning(a ...interface{}) (n int, err error) {
+	return Print(WarningColor + fmt.Sprint(a...) + ColorOff)
 }
 
-func Error(s string) {
-	fmt.Print(ErrorColor + s + ColorOff)
+func Error(a ...interface{}) (n int, err error) {
+	return Print(ErrorColor + fmt.Sprint(a...) + ColorOff)
 }
 
-func Debugf(format string, args ...interface{}) {
-	Debug(fmt.Sprintf(format, args...))
+func Debugf(format string, args ...interface{}) (n int, err error) {
+	return Debug(fmt.Sprintf(format, args...))
 }
 
-func Infof(format string, args ...interface{}) {
-	Info(fmt.Sprintf(format, args...))
+func Infof(format string, args ...interface{}) (n int, err error) {
+	return Info(fmt.Sprintf(format, args...))
 }
 
-func Noticef(format string, args ...interface{}) {
-	Notice(fmt.Sprintf(format, args...))
+func Noticef(format string, args ...interface{}) (n int, err error) {
+	return Notice(fmt.Sprintf(format, args...))
 }
 
-func Warningf(format string, args ...interface{}) {
-	Warning(fmt.Sprintf(format, args...))
+func Warningf(format string, args ...interface{}) (n int, err error) {
+	return Warning(fmt.Sprintf(format, args...))
 }
 
-func Errorf(format string, args ...interface{}) {
-	Error(fmt.Sprintf(format, args...))
+func Errorf(format string, args ...interface{}) (n int, err error) {
+	return Error(fmt.Sprintf(format, args...))
 }

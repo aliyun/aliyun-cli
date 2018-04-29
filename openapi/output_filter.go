@@ -141,7 +141,7 @@ func toIntfArray(stringArray []string) []interface{} {
 //		return err
 //	}
 //
-//	fmt.Println(response)
+//	cli.Println(response)
 //	return nil
 //}
 //

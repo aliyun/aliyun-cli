@@ -91,7 +91,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	if DryRunFlag.IsAssigned() {
 		invoker.getRequest().TransToAcsRequest()
 		invoker.getClient().BuildRequestWithSigner(invoker.getRequest(), nil)
-		fmt.Printf("Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
+		cli.Printf("Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
 			invoker.getRequest().String())
 		return nil
 	}
@@ -99,7 +99,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	// if invoke with helper
 	out, err, ok := c.invokeWithHelper(invoker)
 
-	// fmt.Printf("invoker %v %v \n", invoker, reflect.TypeOf(invoker))
+	// cli.Printf("invoker %v %v \n", invoker, reflect.TypeOf(invoker))
 	if ok {
 		if err != nil {	// call with helper failed
 			return err
@@ -128,21 +128,21 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		}
 	}
 
-	fmt.Println(out)
+	cli.Println(out)
 	return nil
 }
 
 // invoke with helper
 func (c *Commando) invokeWithHelper(invoker Invoker) (resp string, err error, ok bool) {
 	if pager := GetPager(); pager != nil {
-		// fmt.Printf("call with pager")
+		// cli.Printf("call with pager")
 		resp, err = pager.CallWith(invoker)
 		ok = true
 		return
 	}
 
 	if waiter := GetWaiter(); waiter != nil {
-		// fmt.Printf("call with waiter")
+		// cli.Printf("call with waiter")
 		resp, err = waiter.CallWith(invoker)
 		ok = true
 		return
@@ -294,7 +294,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 			if !strings.HasPrefix(p.GetLowerCode(), ctx.Completion().Current) {
 				continue
 			}
-			fmt.Printf("%s\n", p.GetLowerCode())
+			cli.Printf("%s\n", p.GetLowerCode())
 		}
 		return r
 	}
@@ -310,7 +310,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 				if !strings.HasPrefix(name, ctx.Completion().Current) {
 					continue
 				}
-				fmt.Printf("%s\n", name)
+				cli.Printf("%s\n", name)
 			}
 			return r
 		}
@@ -321,15 +321,15 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 
 		api.ForeachParameters(func(s string, p meta.Parameter) {
 			if strings.HasPrefix("--"+s, ctx.Completion().Current) && !p.Hidden {
-				fmt.Printf("--%s\n", s)
+				cli.Printf("--%s\n", s)
 			}
 		})
 	} else if product.ApiStyle == "restful" {
 		if len(args) == 1 {
-			fmt.Printf("GET\n")
-			fmt.Printf("POST\n")
-			fmt.Printf("DELETE\n")
-			fmt.Printf("PUT\n")
+			cli.Printf("GET\n")
+			cli.Printf("POST\n")
+			cli.Printf("DELETE\n")
+			cli.Printf("PUT\n")
 			return r
 		}
 	}
@@ -345,8 +345,8 @@ func (c *Commando) printUsage(cmd *cli.Command) {
 	cmd.PrintFlags(nil)
 	cmd.PrintSample()
 	//if configError != nil {
-	//	fmt.Printf("Configuration Invailed: %s\n", configError)
-	//	fmt.Printf("Run `aliyun configure` first:\n  %s\n", configureCommand.Usage)
+	//	cli.Printf("Configuration Invailed: %s\n", configError)
+	//	cli.Printf("Run `aliyun configure` first:\n  %s\n", configureCommand.Usage)
 	//}
 	cmd.PrintTail()
 }
