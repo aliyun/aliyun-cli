@@ -176,7 +176,6 @@ func NewDryRunFlag() *cli.Flag {
 	return &cli.Flag{Category: "caller",
 		Name:         DryRunFlagName,
 		AssignedMode: cli.AssignedNone,
-		Persistent:   true,
 		Short: i18n.T(
 			"add `--dryrun` to validate and print request without running.",
 			"使用 `--dryrun` 在执行校验后打印请求包体，跳过实际运行",
