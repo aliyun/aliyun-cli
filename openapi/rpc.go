@@ -26,7 +26,7 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 	request.Method = api.GetMethod()
 
 	// if `--secure` assigned, use https
-	if _, ok := SecureFlag.GetValue(); ok {
+	if _, ok := SecureFlag(ctx.Flags()).GetValue(); ok {
 		a.request.Scheme = "https"
 	}
 

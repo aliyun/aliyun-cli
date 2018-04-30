@@ -17,7 +17,6 @@ import (
 type Commando struct {
 	profile config.Profile
 	library *Library
-	writer  io.Writer
 }
 
 func NewCommando(w io.Writer, profile config.Profile) *Commando {
@@ -45,7 +44,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 
 	// update current `Profile` with flags
 	var err error
-	c.profile, err = config.LoadProfileWithContext(c.writer, ctx)
+	c.profile, err = config.LoadProfileWithContext(ctx)
 	if err != nil {
 		return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it")
 	}
@@ -90,7 +89,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	}
 
 	// process --dryrun
-	if DryRunFlag.IsAssigned() {
+	if DryRunFlag(ctx.Flags()).IsAssigned() {
 		invoker.getRequest().TransToAcsRequest()
 		invoker.getClient().BuildRequestWithSigner(invoker.getRequest(), nil)
 		cli.Printf(ctx.Writer(), "Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
@@ -118,19 +117,19 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	}
 
 	// if `--quiet` assigned. do not print anything
-	if QuietFlag.IsAssigned() {
+	if QuietFlag(ctx.Flags()).IsAssigned() {
 		return nil
 	}
 
 	// process `--output ...`
-	if filter := GetOutputFilter(); filter != nil {
+	if filter := GetOutputFilter(ctx); filter != nil {
 		out, err = filter.FilterOutput(out)
 		if err != nil {
 			return err
 		}
 	}
 
-	cli.Println(c.writer, out)
+	cli.Println(ctx.Writer(), out)
 	return nil
 }
 
@@ -159,7 +158,7 @@ func (c *Commando) invokeWithHelper(invoker Invoker) (resp string, err error, ok
 // rpc: RpcInvoker, ForceRpcInvoker
 // restful: RestfulInvoker
 func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMethod string, path string) (Invoker, error) {
-	force := ForceFlag.IsAssigned()
+	force := ForceFlag(ctx.Flags()).IsAssigned()
 	basicInvoker := NewBasicInvoker(&c.profile)
 
 	//
@@ -196,7 +195,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			// Restful Call
 			// aliyun cs GET /clusters
 			// aliyun cs /clusters --roa GET
-			ok, method, path, err := checkRestfulMethod(apiOrMethod, path)
+			ok, method, path, err := checkRestfulMethod(ctx, apiOrMethod, path)
 			if err != nil {
 				return nil, err
 			}
@@ -234,7 +233,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 		// Restful Call
 		// aliyun cs GET /clusters
 		// aliyun cs /clusters --roa GET
-		ok, method, path, err := checkRestfulMethod(apiOrMethod, path)
+		ok, method, path, err := checkRestfulMethod(ctx, apiOrMethod, path)
 		if err != nil {
 			return nil, err
 		}
@@ -287,6 +286,8 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 
 //
 func (c *Commando) complete(ctx *cli.Context, args []string) []string {
+	w := ctx.Writer()
+
 	r := make([]string, 0)
 	//
 	// aliyun
@@ -296,7 +297,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 			if !strings.HasPrefix(p.GetLowerCode(), ctx.Completion().Current) {
 				continue
 			}
-			cli.Printf(c.writer, "%s\n", p.GetLowerCode())
+			cli.Printf(w, "%s\n", p.GetLowerCode())
 		}
 		return r
 	}
@@ -312,7 +313,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 				if !strings.HasPrefix(name, ctx.Completion().Current) {
 					continue
 				}
-				cli.Printf(c.writer, "%s\n", name)
+				cli.Printf(w, "%s\n", name)
 			}
 			return r
 		}
@@ -323,15 +324,15 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 
 		api.ForeachParameters(func(s string, p meta.Parameter) {
 			if strings.HasPrefix("--"+s, ctx.Completion().Current) && !p.Hidden {
-				cli.Printf(c.writer, "--%s\n", s)
+				cli.Printf(ctx.Writer(), "--%s\n", s)
 			}
 		})
 	} else if product.ApiStyle == "restful" {
 		if len(args) == 1 {
-			cli.Printf(c.writer, "GET\n")
-			cli.Printf(c.writer, "POST\n")
-			cli.Printf(c.writer, "DELETE\n")
-			cli.Printf(c.writer, "PUT\n")
+			cli.Printf(w, "GET\n")
+			cli.Printf(w, "POST\n")
+			cli.Printf(w, "DELETE\n")
+			cli.Printf(w, "PUT\n")
 			return r
 		}
 	}

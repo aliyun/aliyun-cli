@@ -63,6 +63,10 @@ func (c *Command) Flags() *FlagSet {
 	return c.flags
 }
 
+func (c *Command) SetFlags(flags *FlagSet) {
+	c.flags = flags
+}
+
 func (c *Command) Execute(ctx *Context, args []string) {
 
 	//

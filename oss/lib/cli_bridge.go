@@ -17,7 +17,6 @@ func NewOssCommand(w io.Writer) *cli.Command {
 		Usage:  "aliyun oss [command] [args...] [options...]",
 		Hidden: false,
 		Short:  i18n.T("Object Storage Service", "阿里云OSS对象存储"),
-		Writer: w,
 	}
 
 	result.AddSubCommand(NewCommandBridge(w,&makeBucketCommand))
@@ -44,9 +43,8 @@ func NewCommandBridge(w io.Writer, a Commander) *cli.Command {
 		Short: i18n.T(cmd.specEnglish.synopsisText, cmd.specChinese.synopsisText),
 		Long:  i18n.T(cmd.specEnglish.detailHelpText, cmd.specChinese.detailHelpText),
 		Run: func(ctx *cli.Context, args []string) error {
-			return ParseAndRunCommandFromCli(w, ctx, args)
+			return ParseAndRunCommandFromCli(ctx, args)
 		},
-		Writer:w,
 	}
 
 	for _, s := range cmd.validOptionNames {
@@ -74,8 +72,8 @@ func NewCommandBridge(w io.Writer, a Commander) *cli.Command {
 	return result
 }
 
-func ParseAndRunCommandFromCli(w io.Writer, ctx *cli.Context, args []string) error {
-	profile, err := config.LoadProfileWithContext(w,ctx)
+func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
+	profile, err := config.LoadProfileWithContext(ctx)
 	if err != nil {
 		return fmt.Errorf("config failed: %s", err.Error())
 	}

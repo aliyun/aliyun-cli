@@ -3,8 +3,6 @@
  */
 package cli
 
-import "io"
-
 const DefaultSuggestDistance = 2
 
 func CalculateStringDistance(source string, target string) int {

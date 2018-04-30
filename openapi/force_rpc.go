@@ -23,7 +23,7 @@ func (a *ForceRpcInvoker) Prepare(ctx *cli.Context) error {
 	}
 
 	// --secure use https
-	if _, ok := SecureFlag.GetValue(); ok {
+	if _, ok := SecureFlag(ctx.Flags()).GetValue(); ok {
 		a.request.Scheme = "https"
 	}
 	return nil

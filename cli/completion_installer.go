@@ -14,7 +14,7 @@ var uninstallFlag = &Flag{
 	Short: i18n.T("uninstall auto completion", "卸载自动完成"),
 }
 
-func NewAutoCompleteCommand(w io.Writer) *Command {
+func NewAutoCompleteCommand() *Command {
 	cmd := &Command{
 		Name: "auto-completion",
 		Short: i18n.T(
@@ -30,9 +30,9 @@ func NewAutoCompleteCommand(w io.Writer) *Command {
 			//	fmt.Printf("zshInstaller: %s\n", f)
 			//}
 			if uninstallFlag.IsAssigned() {
-				uninstallCompletion(w, "aliyun")
+				uninstallCompletion(ctx.Writer(), "aliyun")
 			} else {
-				installCompletion(w, "aliyun")
+				installCompletion(ctx.Writer(), "aliyun")
 			}
 			return nil
 		},

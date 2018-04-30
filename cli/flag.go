@@ -83,7 +83,7 @@ func (f *Flag) IsAssigned() bool {
 // return flag value, if not assigned return f.DefaultValue
 //   for `AssignedMode == AssignedRepeatable`. Use GetValues() to get all values
 func (f *Flag) GetValue() (string, bool) {
-	if f.assigned {
+	if f.IsAssigned() {
 		return f.value, true
 	} else if f.Required {
 		return f.DefaultValue, false

@@ -11,16 +11,15 @@ import (
 	"text/tabwriter"
 )
 
-func NewConfigureListCommand(w io.Writer) *cli.Command {
+func NewConfigureListCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "list",
 		Usage: "list",
 		Short: i18n.T("list all config profile", "列出所有配置集"),
 		Run: func(c *cli.Context, args []string) error {
-			doConfigureList(w)
+			doConfigureList(c.Writer())
 			return nil
 		},
-		Writer: w,
 	}
 }
 

@@ -15,40 +15,43 @@ import (
 	"text/tabwriter"
 )
 
-var OutputFlag = &cli.Flag{
-	Name:         "output",
-	Shorthand:    'o',
-	AssignedMode: cli.AssignedRepeatable,
-	Short: i18n.T(
-		"use `--output cols=Field1,Field2 [rows=jmesPath]` to print output as table",
-		"使用 `--output cols=Field1,Field1 [rows=jmesPath]` 使用表格方式打印输出",
-	),
-	Long: i18n.T(
-		"",
-		"",
-	),
-	Fields: []cli.Field{
-		{Key: "cols", Repeatable: false, Required: true},
-		{Key: "rows", Repeatable: false, Required: false},
-	},
+func NewOutputFlag() *cli.Flag {
+	return &cli.Flag{
+		Name:         OutputFlagName,
+		Shorthand:    'o',
+		AssignedMode: cli.AssignedRepeatable,
+		Short: i18n.T(
+			"use `--output cols=Field1,Field2 [rows=jmesPath]` to print output as table",
+			"使用 `--output cols=Field1,Field1 [rows=jmesPath]` 使用表格方式打印输出",
+		),
+		Long: i18n.T(
+			"",
+			"",
+		),
+		Fields: []cli.Field{
+			{Key: "cols", Repeatable: false, Required: true},
+			{Key: "rows", Repeatable: false, Required: false},
+		},
+	}
 }
 
 type OutputFilter interface {
 	FilterOutput(input string) (string, error)
 }
 
-func GetOutputFilter() OutputFilter {
-	if !OutputFlag.IsAssigned() {
+func GetOutputFilter(ctx *cli.Context) OutputFilter {
+	if !OutputFlag(ctx.Flags()).IsAssigned() {
 		return nil
 	}
-	return NewTableOutputFilter()
+	return NewTableOutputFilter(ctx)
 }
 
 type TableOutputFilter struct {
+	ctx *cli.Context
 }
 
-func NewTableOutputFilter() OutputFilter {
-	return &TableOutputFilter{}
+func NewTableOutputFilter(ctx *cli.Context) OutputFilter {
+	return &TableOutputFilter{ctx: ctx}
 }
 
 func (a *TableOutputFilter) FilterOutput(s string) (string, error) {
@@ -59,12 +62,12 @@ func (a *TableOutputFilter) FilterOutput(s string) (string, error) {
 	}
 
 	rowPath := detectArrayPath(v)
-	if v, ok := OutputFlag.GetFieldValue("rows"); ok {
+	if v, ok := OutputFlag(a.ctx.Flags()).GetFieldValue("rows"); ok {
 		rowPath = v
 	}
 
 	var colNames []string
-	if v, ok := OutputFlag.GetFieldValue("cols"); ok {
+	if v, ok := OutputFlag(a.ctx.Flags()).GetFieldValue("cols"); ok {
 		v = cli.UnquoteString(v)
 		colNames = strings.Split(v, ",")
 	} else {

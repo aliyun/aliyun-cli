@@ -59,7 +59,7 @@ func (a *BasicInvoker) getRequest() *requests.CommonRequest {
 func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
 	a.product = product
-	a.client, err = a.profile.GetClient()
+	a.client, err = a.profile.GetClient(ctx)
 	if err != nil {
 		return fmt.Errorf("init client failed %s", err)
 	}
@@ -69,20 +69,20 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	a.request.Product = product.Code
 
 	a.request.RegionId = a.profile.RegionId
-	if v, ok := config.RegionFlag.GetValue(); ok {
+	if v, ok := config.RegionFlag(ctx.Flags()).GetValue(); ok {
 		a.request.RegionId = v
 	}
 
 	a.request.Version = product.Version
-	if v, ok := VersionFlag.GetValue(); ok {
+	if v, ok := VersionFlag(ctx.Flags()).GetValue(); ok {
 		a.request.Version = v
 	}
 
-	if v, ok := EndpointFlag.GetValue(); ok {
+	if v, ok := EndpointFlag(ctx.Flags()).GetValue(); ok {
 		a.request.Domain = v
 	}
 
-	for _, s := range HeaderFlag.GetValues() {
+	for _, s := range HeaderFlag(ctx.Flags()).GetValues() {
 		if k, v, ok := cli.SplitStringWithPrefix(s, "="); ok {
 			a.request.Headers[k] = v
 			if k == "Accept" {

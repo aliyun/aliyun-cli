@@ -112,19 +112,19 @@ func (cp *Profile) GetParent() *Configuration {
 }
 
 func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
-	cp.Mode = AuthenticateMode(ModeFlag.GetStringOrDefault(string(cp.Mode)))
-	cp.AccessKeyId = AccessKeyIdFlag.GetStringOrDefault(cp.AccessKeyId)
-	cp.AccessKeySecret = AccessKeySecretFlag.GetStringOrDefault(cp.AccessKeySecret)
-	cp.StsToken = StsTokenFlag.GetStringOrDefault(cp.StsToken)
-	cp.RamRoleName = RamRoleNameFlag.GetStringOrDefault(cp.RamRoleName)
-	cp.RamRoleArn = RamRoleArnFlag.GetStringOrDefault(cp.RamRoleArn)
-	cp.RoleSessionName = RoleSessionNameFlag.GetStringOrDefault(cp.RoleSessionName)
-	cp.KeyPairName = KeyPairNameFlag.GetStringOrDefault(cp.KeyPairName)
-	cp.PrivateKey = PrivateKeyFlag.GetStringOrDefault(cp.PrivateKey)
-	cp.RegionId = RegionFlag.GetStringOrDefault(cp.RegionId)
-	cp.Language = LanguageFlag.GetStringOrDefault(cp.Language)
-	cp.RetryTimeout = RetryTimeoutFlag.GetIntegerOrDefault(cp.RetryTimeout)
-	cp.RetryCount = RetryTimeoutFlag.GetIntegerOrDefault(cp.RetryCount)
+	cp.Mode = AuthenticateMode(ModeFlag(ctx.Flags()).GetStringOrDefault(string(cp.Mode)))
+	cp.AccessKeyId = AccessKeyIdFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeyId)
+	cp.AccessKeySecret = AccessKeySecretFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeySecret)
+	cp.StsToken = StsTokenFlag(ctx.Flags()).GetStringOrDefault(cp.StsToken)
+	cp.RamRoleName = RamRoleNameFlag(ctx.Flags()).GetStringOrDefault(cp.RamRoleName)
+	cp.RamRoleArn = RamRoleArnFlag(ctx.Flags()).GetStringOrDefault(cp.RamRoleArn)
+	cp.RoleSessionName = RoleSessionNameFlag(ctx.Flags()).GetStringOrDefault(cp.RoleSessionName)
+	cp.KeyPairName = KeyPairNameFlag(ctx.Flags()).GetStringOrDefault(cp.KeyPairName)
+	cp.PrivateKey = PrivateKeyFlag(ctx.Flags()).GetStringOrDefault(cp.PrivateKey)
+	cp.RegionId = RegionFlag(ctx.Flags()).GetStringOrDefault(cp.RegionId)
+	cp.Language = LanguageFlag(ctx.Flags()).GetStringOrDefault(cp.Language)
+	cp.RetryTimeout = RetryTimeoutFlag(ctx.Flags()).GetIntegerOrDefault(cp.RetryTimeout)
+	cp.RetryCount = RetryTimeoutFlag(ctx.Flags()).GetIntegerOrDefault(cp.RetryCount)
 
 	if cp.AccessKeyId != "" && cp.AccessKeySecret != "" {
 		cp.Mode = AK
@@ -149,7 +149,7 @@ func (cp *Profile) ValidateAK() error {
 	return nil
 }
 
-func (cp *Profile) GetClient() (*sdk.Client, error) {
+func (cp *Profile) GetClient(ctx *cli.Context) (*sdk.Client, error) {
 	config := sdk.NewConfig()
 	if cp.RetryTimeout > 0 {
 		config.WithTimeout(time.Duration(cp.RetryTimeout) * time.Second)
@@ -157,7 +157,7 @@ func (cp *Profile) GetClient() (*sdk.Client, error) {
 	if cp.RetryCount > 0 {
 		config.WithMaxRetryTime(cp.RetryCount)
 	}
-	if SkipSecureVerify.IsAssigned() {
+	if SkipSecureVerify(ctx.Flags()).IsAssigned() {
 		config.HttpTransport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}

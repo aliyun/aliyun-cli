@@ -6,7 +6,6 @@ package config
 import (
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
-	"io"
 )
 
 const configureGetHelpEn = `
@@ -15,6 +14,7 @@ const configureGetHelpZh = `
 `
 
 func NewConfigureGetCommand() *cli.Command {
+
 	cmd := &cli.Command{
 		Name: "get",
 		Short: i18n.T(
@@ -26,10 +26,11 @@ func NewConfigureGetCommand() *cli.Command {
 			configureGetHelpZh,
 		),
 		Run: func(c *cli.Context, args []string) error {
-			doConfigureGet(w, c, args)
+			doConfigureGet(c, args)
 			return nil
 		},
 	}
+
 	return cmd
 }
 
@@ -41,7 +42,7 @@ func doConfigureGet(c *cli.Context, args []string) {
 
 	profile := config.GetCurrentProfile(c)
 
-	if pn, ok := ProfileFlag.GetValue(); ok {
+	if pn, ok := ProfileFlag(c.Flags()).GetValue(); ok {
 		profile, ok = config.GetProfile(pn)
 		if !ok {
 			cli.Errorf(c.Writer(), "profile %s not found!", pn)
@@ -50,29 +51,29 @@ func doConfigureGet(c *cli.Context, args []string) {
 
 	for _, arg := range args {
 		switch arg {
-		case ProfileFlag.Name:
+		case ProfileFlagName:
 			cli.Printf(c.Writer(), "profile=%s\n", profile.Name)
-		case ModeFlag.Name:
+		case ModeFlagName:
 			cli.Printf(c.Writer(), "mode=%s\n", profile.Mode)
-		case AccessKeyIdFlag.Name:
+		case AccessKeyIdFlagName:
 			cli.Printf(c.Writer(), "access-key-id=%s\n", MosaicString(profile.AccessKeyId, 3))
-		case AccessKeySecretFlag.Name:
+		case AccessKeySecretFlagName:
 			cli.Printf(c.Writer(), "access-key-secret=%s\n", MosaicString(profile.AccessKeySecret, 3))
-		case StsTokenFlag.Name:
+		case StsTokenFlagName:
 			cli.Printf(c.Writer(), "sts-token=%s\n", profile.StsToken)
-		case RamRoleNameFlag.Name:
+		case RamRoleNameFlagName:
 			cli.Printf(c.Writer(), "ram-role-name=%s\n", profile.RamRoleName)
-		case RamRoleArnFlag.Name:
+		case RamRoleArnFlagName:
 			cli.Printf(c.Writer(), "ram-role-arn=%s\n", profile.RamRoleArn)
-		case RoleSessionNameFlag.Name:
+		case RoleSessionNameFlagName:
 			cli.Printf(c.Writer(), "role-session-name=%s\n", profile.RoleSessionName)
-		case KeyPairNameFlag.Name:
+		case KeyPairNameFlagName:
 			cli.Printf(c.Writer(), "key-pair-name=%s\n", profile.KeyPairName)
-		case PrivateKeyFlag.Name:
+		case PrivateKeyFlagName:
 			cli.Printf(c.Writer(), "private-key=%s\n", profile.PrivateKey)
-		case RegionFlag.Name:
+		case RegionFlagName:
 			cli.Printf(c.Writer(), profile.RegionId)
-		case LanguageFlag.Name:
+		case LanguageFlagName:
 			cli.Printf(c.Writer(), "language=%s\n", profile.Language)
 		}
 	}

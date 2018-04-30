@@ -9,23 +9,22 @@ import (
 	"io"
 )
 
-func NewConfigureDeleteCommand(w io.Writer) *cli.Command {
+func NewConfigureDeleteCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "delete",
 		Usage: "delete --profile <profileName>",
 		Short: i18n.T("list all config profile", "列出所有配置集"),
 		Run: func(c *cli.Context, args []string) error {
-			profileName, ok := ProfileFlag.GetValue()
+			profileName, ok := ProfileFlag(c.Flags()).GetValue()
 			if !ok {
-				cli.Errorf(w, "missing --profile <profileName>\n")
-				cli.Noticef(w, "\nusage:\n  aliyun configure delete --profile <profileName>\n")
+				cli.Errorf(c.Writer(), "missing --profile <profileName>\n")
+				cli.Noticef(c.Writer(), "\nusage:\n  aliyun configure delete --profile <profileName>\n")
 				return nil
 			}
 			doConfigureDelete(c.Writer(), profileName)
 			return nil
 		},
 	}
-	cmd.Flags().Add(ProfileFlag)
 	return cmd
 }
 

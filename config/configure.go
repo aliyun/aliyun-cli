@@ -13,6 +13,7 @@ import (
 )
 
 func NewConfigureCommand() *cli.Command {
+
 	c := &cli.Command{
 		Name: "configure",
 		Short: i18n.T(
@@ -23,25 +24,24 @@ func NewConfigureCommand() *cli.Command {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			profileName, _ := ProfileFlag.GetValue()
-			mode, _ := ModeFlag.GetValue()
+			profileName, _ := ProfileFlag(ctx.Flags()).GetValue()
+			mode, _ := ModeFlag(ctx.Flags()).GetValue()
 
-			return doConfigure(ctx.Writer(), profileName, mode)
+			return doConfigure(ctx, profileName, mode)
 		},
 	}
 
-	c.Flags().Add(ProfileFlag)
-	c.Flags().Add(ModeFlag)
-
-	c.AddSubCommand(NewConfigureGetCommand(w))
-	c.AddSubCommand(NewConfigureSetCommand(w))
-	c.AddSubCommand(NewConfigureListCommand(w))
-	c.AddSubCommand(NewConfigureDeleteCommand(w))
+	c.AddSubCommand(NewConfigureGetCommand())
+	c.AddSubCommand(NewConfigureSetCommand())
+	c.AddSubCommand(NewConfigureListCommand())
+	c.AddSubCommand(NewConfigureDeleteCommand())
 	return c
 }
 
-func doConfigure(w io.Writer, profileName string, mode string) error {
-	conf, err := LoadConfiguration(w)
+func doConfigure(ctx *cli.Context, profileName string, mode string) error {
+	w := ctx.Writer()
+
+	conf, err := LoadConfiguration(ctx.Writer())
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func doConfigure(w io.Writer, profileName string, mode string) error {
 	}
 	cli.Printf(w, "Done.\n")
 
-	DoHello(w, &cp)
+	DoHello(ctx, &cp)
 	return nil
 }
 

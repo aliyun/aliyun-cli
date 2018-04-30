@@ -63,10 +63,10 @@ func main() {
 	ctx.EnterCommand(rootCmd)
 	ctx.SetCompletion(cli.ParseCompletionForShell())
 
-	rootCmd.AddSubCommand(config.NewConfigureCommand(writer))
+	rootCmd.AddSubCommand(config.NewConfigureCommand())
 	// rootCmd.AddSubCommand(command.NewTestCommand())
 	rootCmd.AddSubCommand(lib.NewOssCommand(writer))
-	rootCmd.AddSubCommand(cli.NewVersionCommand(writer))
-	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand(writer))
+	rootCmd.AddSubCommand(cli.NewVersionCommand())
+	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
 	rootCmd.Execute(ctx, os.Args[1:])
 }

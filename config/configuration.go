@@ -54,7 +54,7 @@ func (c *Configuration) GetProfile(pn string) (Profile, bool) {
 }
 
 func (c *Configuration) GetCurrentProfile(ctx *cli.Context) Profile {
-	profileName := ProfileFlag.GetStringOrDefault(c.CurrentProfile)
+	profileName := ProfileFlag(ctx.Flags()).GetStringOrDefault(c.CurrentProfile)
 	p, _ := c.GetProfile(profileName)
 	p.OverwriteWithFlags(ctx)
 	return p
@@ -91,11 +91,11 @@ func LoadProfile(w io.Writer, name string) (Profile, error) {
 	return p, nil
 }
 
-func LoadProfileWithContext(w io.Writer, ctx *cli.Context) (profile Profile, err error) {
-	if name, ok := ProfileFlag.GetValue(); ok {
-		profile, err = LoadProfile(w, name)
+func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
+	if name, ok := ProfileFlag(ctx.Flags()).GetValue(); ok {
+		profile, err = LoadProfile(ctx.Writer(), name)
 	} else {
-		profile, err = LoadProfile(w, "")
+		profile, err = LoadProfile(ctx.Writer(), "")
 	}
 	if err != nil {
 		return

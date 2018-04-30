@@ -25,14 +25,14 @@ type Context struct {
 	unknownFlags *FlagSet
 	command      *Command
 	completion   *Completion
-	writer io.Writer
+	writer       io.Writer
 }
 
 func NewCommandContext(w io.Writer) *Context {
 	return &Context{
 		flags:        NewFlagSet(),
 		unknownFlags: nil,
-		writer: w,
+		writer:       w,
 	}
 }
 

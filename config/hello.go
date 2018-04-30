@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
 	"github.com/aliyun/aliyun-cli/cli"
-	"io"
 )
 
 type Region struct {
@@ -15,8 +14,8 @@ type Region struct {
 	LocalName string
 }
 
-func GetRegions(profile *Profile) ([]Region, error) {
-	client, err := profile.GetClient()
+func GetRegions(ctx *cli.Context, profile *Profile) ([]Region, error) {
+	client, err := profile.GetClient(ctx)
 
 	regions := make([]Region, 0)
 	if err != nil {
@@ -36,8 +35,10 @@ func GetRegions(profile *Profile) ([]Region, error) {
 	return regions, nil
 }
 
-func DoHello(w io.Writer, profile *Profile) {
-	client, err := profile.GetClient()
+func DoHello(ctx *cli.Context, profile *Profile) {
+	w := ctx.Writer()
+
+	client, err := profile.GetClient(ctx)
 
 	if err != nil {
 		cli.Println(w, "-----------------------------------------------")
