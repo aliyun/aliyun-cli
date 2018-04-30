@@ -49,7 +49,6 @@ func main() {
 		Usage:             "aliyun <product> <operation> [--parameter1 value1 --parameter2 value2 ...]",
 		Sample:            "aliyun ecs DescribeRegions",
 		EnableUnknownFlag: true,
-		Writer:            writer,
 	}
 
 	// add default flags
@@ -60,7 +59,7 @@ func main() {
 	commando := openapi.NewCommando(writer, profile)
 	commando.InitWithCommand(rootCmd)
 
-	ctx := cli.NewCommandContext()
+	ctx := cli.NewCommandContext(writer)
 	ctx.EnterCommand(rootCmd)
 	ctx.SetCompletion(cli.ParseCompletionForShell())
 

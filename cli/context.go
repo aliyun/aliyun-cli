@@ -6,6 +6,7 @@ package cli
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"io"
 )
 
 //
@@ -24,12 +25,14 @@ type Context struct {
 	unknownFlags *FlagSet
 	command      *Command
 	completion   *Completion
+	writer io.Writer
 }
 
-func NewCommandContext() *Context {
+func NewCommandContext(w io.Writer) *Context {
 	return &Context{
 		flags:        NewFlagSet(),
 		unknownFlags: nil,
+		writer: w,
 	}
 }
 
@@ -47,6 +50,10 @@ func (ctx *Context) Completion() *Completion {
 
 func (ctx *Context) Flags() *FlagSet {
 	return ctx.flags
+}
+
+func (ctx *Context) Writer() io.Writer {
+	return ctx.writer
 }
 
 func (ctx *Context) UnknownFlags() *FlagSet {

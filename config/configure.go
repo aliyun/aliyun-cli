@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-func NewConfigureCommand(w io.Writer) *cli.Command {
+func NewConfigureCommand() *cli.Command {
 	c := &cli.Command{
 		Name: "configure",
 		Short: i18n.T(
@@ -26,9 +26,8 @@ func NewConfigureCommand(w io.Writer) *cli.Command {
 			profileName, _ := ProfileFlag.GetValue()
 			mode, _ := ModeFlag.GetValue()
 
-			return doConfigure(w, profileName, mode)
+			return doConfigure(ctx.Writer(), profileName, mode)
 		},
-		Writer: w,
 	}
 
 	c.Flags().Add(ProfileFlag)

@@ -21,7 +21,7 @@ func NewConfigureDeleteCommand(w io.Writer) *cli.Command {
 				cli.Noticef(w, "\nusage:\n  aliyun configure delete --profile <profileName>\n")
 				return nil
 			}
-			doConfigureDelete(w, profileName)
+			doConfigureDelete(c.Writer(), profileName)
 			return nil
 		},
 	}

@@ -36,7 +36,6 @@ func NewAutoCompleteCommand(w io.Writer) *Command {
 			}
 			return nil
 		},
-		Writer: w,
 	}
 	cmd.Flags().Add(uninstallFlag)
 	return cmd

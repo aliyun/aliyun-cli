@@ -23,7 +23,6 @@ type Commando struct {
 func NewCommando(w io.Writer, profile config.Profile) *Commando {
 	r := &Commando{
 		profile: profile,
-		writer:  w,
 	}
 	r.library = NewLibrary(w, profile.Language) //TODO: load from local repository
 	return r
@@ -40,7 +39,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	//
 	// aliyun
 	if len(args) == 0 {
-		c.printUsage(ctx.Command())
+		c.printUsage(ctx)
 		return nil
 	}
 
@@ -94,7 +93,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	if DryRunFlag.IsAssigned() {
 		invoker.getRequest().TransToAcsRequest()
 		invoker.getClient().BuildRequestWithSigner(invoker.getRequest(), nil)
-		cli.Printf(c.writer, "Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
+		cli.Printf(ctx.Writer(), "Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
 			invoker.getRequest().String())
 		return nil
 	}
@@ -266,19 +265,19 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 	//	printUsage(ctx.Command(), nil)
 	// } else {
 	if len(args) == 0 {
-		cmd.PrintHead()
-		cmd.PrintUsage()
+		cmd.PrintHead(ctx)
+		cmd.PrintUsage(ctx)
 		cmd.PrintFlags(ctx)
-		cmd.PrintSample()
+		cmd.PrintSample(ctx)
 		c.library.PrintProducts()
-		cmd.PrintTail()
+		cmd.PrintTail(ctx)
 		return nil
 	} else if len(args) == 1 {
-		cmd.PrintHead()
+		cmd.PrintHead(ctx)
 		return c.library.PrintProductUsage(args[0], true)
 		// c.PrintFlags() TODO add later
 	} else if len(args) == 2 {
-		cmd.PrintHead()
+		cmd.PrintHead(ctx)
 		return c.library.PrintApiUsage(args[0], args[1])
 		// c.PrintFlags() TODO add later
 	} else {
@@ -340,15 +339,16 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 	return r
 }
 
-func (c *Commando) printUsage(cmd *cli.Command) {
-	cmd.PrintHead()
-	cmd.PrintUsage()
-	cmd.PrintSubCommands()
-	cmd.PrintFlags(nil)
-	cmd.PrintSample()
+func (c *Commando) printUsage(ctx *cli.Context) {
+	cmd := ctx.Command()
+	cmd.PrintHead(ctx)
+	cmd.PrintUsage(ctx)
+	cmd.PrintSubCommands(ctx)
+	cmd.PrintFlags(ctx)
+	cmd.PrintSample(ctx)
 	//if configError != nil {
 	//	cli.Printf("Configuration Invailed: %s\n", configError)
 	//	cli.Printf("Run `aliyun configure` first:\n  %s\n", configureCommand.Usage)
 	//}
-	cmd.PrintTail()
+	cmd.PrintTail(ctx)
 }

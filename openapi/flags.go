@@ -113,3 +113,99 @@ var (
 	//	),
 	//}
 )
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
+
+func New() *cli.Flag {
+	return
+}
