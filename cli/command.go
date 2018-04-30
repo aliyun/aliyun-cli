@@ -233,12 +233,15 @@ func (c *Command) processError(err error) {
 	Errorf(c.Writer, "ERROR: %s\n", err.Error())
 	if e, ok := err.(SuggestibleError); ok {
 		PrintSuggestions(c.Writer, i18n.GetLanguage(), e.GetSuggestions())
+		Exit(2)
 		return
 	}
 	if e, ok := err.(ErrorWithTip); ok {
 		Noticef(c.Writer, "\n%s\n", e.GetTip(i18n.GetLanguage()))
+		Exit(3)
 		return
 	}
+	Exit(1)
 }
 
 func (c *Command) executeHelp(ctx *Context, args []string) {

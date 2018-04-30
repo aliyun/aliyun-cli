@@ -89,24 +89,43 @@ const (
 	ErrorColor   = BRed
 )
 
+var (
+	withColor = true
+)
+
+func EnableColor() {
+	withColor = true
+}
+
+func DisableColor() {
+	withColor = false
+}
+
+func colorized(color string, a ...interface{}) string {
+	if withColor {
+		return color + fmt.Sprint(a...) + ColorOff
+	}
+	return fmt.Sprint(a...)
+}
+
 func Debug(w io.Writer, a ...interface{}) (n int, err error) {
-	return Print(w, DebugColor+fmt.Sprint(a...)+ColorOff)
+	return Print(w, colorized(DebugColor, a...))
 }
 
 func Info(w io.Writer, a ...interface{}) (n int, err error) {
-	return Print(w, InfoColor+fmt.Sprint(a...)+ColorOff)
+	return Print(w, colorized(InfoColor, a...))
 }
 
 func Notice(w io.Writer, a ...interface{}) (n int, err error) {
-	return Print(w, NoticeColor+fmt.Sprint(a...)+ColorOff)
+	return Print(w, colorized(NoticeColor, a...))
 }
 
 func Warning(w io.Writer, a ...interface{}) (n int, err error) {
-	return Print(w, WarningColor+fmt.Sprint(a...)+ColorOff)
+	return Print(w, colorized(WarningColor, a...))
 }
 
 func Error(w io.Writer, a ...interface{}) (n int, err error) {
-	return Print(w, ErrorColor+fmt.Sprint(a...)+ColorOff)
+	return Print(w, colorized(ErrorColor, a...))
 }
 
 func Debugf(w io.Writer, format string, args ...interface{}) (n int, err error) {
