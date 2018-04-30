@@ -6,12 +6,13 @@ package config
 import (
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"io"
 )
 
 const configureSetHelpEn = ``
 const configureSetHelpZh = ``
 
-func NewConfigureSetCommand() *cli.Command {
+func NewConfigureSetCommand(w io.Writer) *cli.Command {
 	cmd := &cli.Command{
 		Name: "set",
 		Short: i18n.T(
@@ -23,9 +24,10 @@ func NewConfigureSetCommand() *cli.Command {
 		),
 		Usage: "set [--profile <profileName>] [--language {en|zh}] ...",
 		Run: func(c *cli.Context, args []string) error {
-			doConfigureSet(c)
+			doConfigureSet(w, c)
 			return nil
 		},
+		Writer: w,
 	}
 
 	fs := cmd.Flags()
@@ -51,10 +53,10 @@ func NewConfigureSetCommand() *cli.Command {
 	return cmd
 }
 
-func doConfigureSet(c *cli.Context) {
-	config, err := LoadConfiguration()
+func doConfigureSet(w io.Writer, c *cli.Context) {
+	config, err := LoadConfiguration(w)
 	if err != nil {
-		cli.Errorf("load configuration failed %s", err)
+		cli.Errorf(w, "load configuration failed %s", err)
 		return
 	}
 
@@ -106,7 +108,7 @@ func doConfigureSet(c *cli.Context) {
 
 	err = profile.Validate()
 	if err != nil {
-		cli.Errorf("fail to set configuration: %s", err.Error())
+		cli.Errorf(w, "fail to set configuration: %s", err.Error())
 		return
 	}
 
@@ -114,6 +116,6 @@ func doConfigureSet(c *cli.Context) {
 	config.CurrentProfile = profile.Name
 	err = SaveConfiguration(config)
 	if err != nil {
-		cli.Errorf("save configuration failed %s", err)
+		cli.Errorf(w, "save configuration failed %s", err)
 	}
 }

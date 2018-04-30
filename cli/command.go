@@ -6,6 +6,7 @@ package cli
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"io"
 	"strings"
 )
 
@@ -49,6 +50,7 @@ type Command struct {
 	parent          *Command
 	subCommands     []*Command
 	flags           *FlagSet
+	Writer          io.Writer
 }
 
 func (c *Command) AddSubCommand(cmd *Command) {
@@ -121,7 +123,7 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 			if !strings.HasPrefix("--"+f.Name, ctx.completion.Current) {
 				continue
 			}
-			Printf("--%s\n", f.Name)
+			Printf(c.Writer, "--%s\n", f.Name)
 		}
 	} else {
 		for _, sc := range c.subCommands {
@@ -131,7 +133,7 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 			if !strings.HasPrefix(sc.Name, ctx.completion.Current) {
 				continue
 			}
-			Printf("%s\n", sc.Name)
+			Printf(c.Writer, "%s\n", sc.Name)
 		}
 	}
 }
@@ -208,7 +210,7 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 		if c.AutoComplete != nil {
 			ss := c.AutoComplete(ctx, callArgs)
 			for _, s := range ss {
-				Printf("%s\n", s)
+				Printf(c.Writer, "%s\n", s)
 			}
 		} else {
 			c.ExecuteComplete(ctx, callArgs)
@@ -228,13 +230,13 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 }
 
 func (c *Command) processError(err error) {
-	Errorf("ERROR: %s\n", err.Error())
+	Errorf(c.Writer, "ERROR: %s\n", err.Error())
 	if e, ok := err.(SuggestibleError); ok {
-		PrintSuggestions(i18n.GetLanguage(), e.GetSuggestions())
+		PrintSuggestions(c.Writer, i18n.GetLanguage(), e.GetSuggestions())
 		return
 	}
 	if e, ok := err.(ErrorWithTip); ok {
-		Noticef("\n%s\n", e.GetTip(i18n.GetLanguage()))
+		Noticef(c.Writer, "\n%s\n", e.GetTip(i18n.GetLanguage()))
 		return
 	}
 }

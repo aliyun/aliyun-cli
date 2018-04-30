@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/aliyun/aliyun-cli/cli"
+	"io"
 	"io/ioutil"
 	"os"
 	"runtime"
@@ -69,13 +70,13 @@ func (c *Configuration) PutProfile(profile Profile) {
 	c.Profiles = append(c.Profiles, profile)
 }
 
-func LoadCurrentProfile() (Profile, error) {
-	return LoadProfile("")
+func LoadCurrentProfile(w io.Writer) (Profile, error) {
+	return LoadProfile(w, "")
 }
 
-func LoadProfile(name string) (Profile, error) {
+func LoadProfile(w io.Writer, name string) (Profile, error) {
 	var p Profile
-	config, err := LoadConfiguration()
+	config, err := LoadConfiguration(w)
 	if err != nil {
 		return p, fmt.Errorf("init config failed %v", err)
 	}
@@ -90,11 +91,11 @@ func LoadProfile(name string) (Profile, error) {
 	return p, nil
 }
 
-func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
+func LoadProfileWithContext(w io.Writer, ctx *cli.Context) (profile Profile, err error) {
 	if name, ok := ProfileFlag.GetValue(); ok {
-		profile, err = LoadProfile(name)
+		profile, err = LoadProfile(w, name)
 	} else {
-		profile, err = LoadProfile("")
+		profile, err = LoadProfile(w, "")
 	}
 	if err != nil {
 		return
@@ -103,10 +104,10 @@ func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
 	return
 }
 
-func LoadConfiguration() (Configuration, error) {
+func LoadConfiguration(w io.Writer) (Configuration, error) {
 	path := GetConfigPath() + "/" + configFile
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		lc := MigrateLegacyConfiguration()
+		lc := MigrateLegacyConfiguration(w)
 		if lc != nil {
 			err := SaveConfiguration(*lc)
 			if err != nil {

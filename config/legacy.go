@@ -7,10 +7,11 @@ import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/cli"
 	"gopkg.in/ini.v1"
+	"io"
 	"os"
 )
 
-func MigrateLegacyConfiguration() *Configuration {
+func MigrateLegacyConfiguration(w io.Writer) *Configuration {
 	path := GetHomePath() + "/.aliyuncli/credentials"
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
@@ -22,7 +23,7 @@ func MigrateLegacyConfiguration() *Configuration {
 	}
 
 	path = GetHomePath() + "/.aliyuncli/configure"
-	err = MigrateConfigure(path, &result)
+	err = MigrateConfigure(w, path, &result)
 	if err != nil {
 		return nil
 	}
@@ -69,10 +70,10 @@ func MigrateCredentials(path string) (Configuration, error) {
 	return r, nil
 }
 
-func MigrateConfigure(path string, config *Configuration) error {
+func MigrateConfigure(w io.Writer, path string, config *Configuration) error {
 	ini, err := ini.Load(path)
 	if err != nil {
-		cli.Errorf(" parse failed: %v\n", err)
+		cli.Errorf(w, " parse failed: %v\n", err)
 		return err
 	}
 

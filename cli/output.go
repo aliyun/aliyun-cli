@@ -6,44 +6,42 @@ import (
 	"os"
 )
 
-var DefaultOutput = NewOutput(os.Stdout)
+var (
+	defaultOutput = NewOutput()
+	defaultWriter = os.Stdout
+)
 
-func Print(a ...interface{}) (n int, err error) {
-	return DefaultOutput.Print(a...)
+func DefaultWriter() io.Writer {
+	return defaultWriter
 }
 
-func Println(a ...interface{}) (n int, err error) {
-	return DefaultOutput.Println(a...)
+func Print(w io.Writer, a ...interface{}) (n int, err error) {
+	return defaultOutput.Print(w, a...)
 }
 
-func Printf(format string, args ...interface{}) (n int, err error) {
-	return DefaultOutput.Printf(format, args...)
+func Println(w io.Writer, a ...interface{}) (n int, err error) {
+	return defaultOutput.Println(w, a...)
 }
 
-func GetOutputWriter() io.Writer {
-	return DefaultOutput.GetWriter()
+func Printf(w io.Writer, format string, args ...interface{}) (n int, err error) {
+	return defaultOutput.Printf(w, format, args...)
 }
 
-func NewOutput(writer io.Writer) *Output {
-	return &Output{writer: writer}
+func NewOutput() *Output {
+	return &Output{}
 }
 
 type Output struct {
-	writer io.Writer
 }
 
-func (o *Output) GetWriter() io.Writer {
-	return o.writer
+func (o *Output) Print(w io.Writer, a ...interface{}) (n int, err error) {
+	return fmt.Fprint(w, a...)
 }
 
-func (o *Output) Print(a ...interface{}) (n int, err error) {
-	return fmt.Fprint(o.writer, a...)
+func (o *Output) Println(w io.Writer, a ...interface{}) (n int, err error) {
+	return fmt.Fprintln(w, a...)
 }
 
-func (o *Output) Println(a ...interface{}) (n int, err error) {
-	return fmt.Fprintln(o.writer, a...)
-}
-
-func (o *Output) Printf(format string, a ...interface{}) (n int, err error) {
-	return fmt.Fprintf(o.writer, format, a...)
+func (o *Output) Printf(w io.Writer, format string, a ...interface{}) (n int, err error) {
+	return fmt.Fprintf(w, format, a...)
 }

@@ -3,7 +3,10 @@
  */
 package cli
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+)
 
 const (
 	ColorOff = "\033[0m" // Reset Color
@@ -86,42 +89,42 @@ const (
 	ErrorColor   = BRed
 )
 
-func Debug(a ...interface{}) (n int, err error) {
-	return Print(DebugColor + fmt.Sprint(a...) + ColorOff)
+func Debug(w io.Writer, a ...interface{}) (n int, err error) {
+	return Print(w, DebugColor+fmt.Sprint(a...)+ColorOff)
 }
 
-func Info(a ...interface{}) (n int, err error) {
-	return Print(InfoColor + fmt.Sprint(a...) + ColorOff)
+func Info(w io.Writer, a ...interface{}) (n int, err error) {
+	return Print(w, InfoColor+fmt.Sprint(a...)+ColorOff)
 }
 
-func Notice(a ...interface{}) (n int, err error) {
-	return Print(NoticeColor + fmt.Sprint(a...) + ColorOff)
+func Notice(w io.Writer, a ...interface{}) (n int, err error) {
+	return Print(w, NoticeColor+fmt.Sprint(a...)+ColorOff)
 }
 
-func Warning(a ...interface{}) (n int, err error) {
-	return Print(WarningColor + fmt.Sprint(a...) + ColorOff)
+func Warning(w io.Writer, a ...interface{}) (n int, err error) {
+	return Print(w, WarningColor+fmt.Sprint(a...)+ColorOff)
 }
 
-func Error(a ...interface{}) (n int, err error) {
-	return Print(ErrorColor + fmt.Sprint(a...) + ColorOff)
+func Error(w io.Writer, a ...interface{}) (n int, err error) {
+	return Print(w, ErrorColor+fmt.Sprint(a...)+ColorOff)
 }
 
-func Debugf(format string, args ...interface{}) (n int, err error) {
-	return Debug(fmt.Sprintf(format, args...))
+func Debugf(w io.Writer, format string, args ...interface{}) (n int, err error) {
+	return Debug(w, fmt.Sprintf(format, args...))
 }
 
-func Infof(format string, args ...interface{}) (n int, err error) {
-	return Info(fmt.Sprintf(format, args...))
+func Infof(w io.Writer, format string, args ...interface{}) (n int, err error) {
+	return Info(w, fmt.Sprintf(format, args...))
 }
 
-func Noticef(format string, args ...interface{}) (n int, err error) {
-	return Notice(fmt.Sprintf(format, args...))
+func Noticef(w io.Writer, format string, args ...interface{}) (n int, err error) {
+	return Notice(w, fmt.Sprintf(format, args...))
 }
 
-func Warningf(format string, args ...interface{}) (n int, err error) {
-	return Warning(fmt.Sprintf(format, args...))
+func Warningf(w io.Writer, format string, args ...interface{}) (n int, err error) {
+	return Warning(w, fmt.Sprintf(format, args...))
 }
 
-func Errorf(format string, args ...interface{}) (n int, err error) {
-	return Error(fmt.Sprintf(format, args...))
+func Errorf(w io.Writer, format string, args ...interface{}) (n int, err error) {
+	return Error(w, fmt.Sprintf(format, args...))
 }

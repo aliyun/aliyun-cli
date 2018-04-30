@@ -6,6 +6,7 @@ package cli
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"io"
 )
 
 var uninstallFlag = &Flag{
@@ -13,7 +14,7 @@ var uninstallFlag = &Flag{
 	Short: i18n.T("uninstall auto completion", "卸载自动完成"),
 }
 
-func NewAutoCompleteCommand() *Command {
+func NewAutoCompleteCommand(w io.Writer) *Command {
 	cmd := &Command{
 		Name: "auto-completion",
 		Short: i18n.T(
@@ -29,43 +30,44 @@ func NewAutoCompleteCommand() *Command {
 			//	fmt.Printf("zshInstaller: %s\n", f)
 			//}
 			if uninstallFlag.IsAssigned() {
-				uninstallCompletion("aliyun")
+				uninstallCompletion(w, "aliyun")
 			} else {
-				installCompletion("aliyun")
+				installCompletion(w, "aliyun")
 			}
 			return nil
 		},
+		Writer: w,
 	}
 	cmd.Flags().Add(uninstallFlag)
 	return cmd
 }
 
-func installCompletion(cmd string) {
+func installCompletion(w io.Writer, cmd string) {
 	bin, err := getBinaryPath()
 	if err != nil {
-		Errorf("can't get binary path %s", err)
+		Errorf(w, "can't get binary path %s", err)
 		return
 	}
 
 	for _, i := range completionInstallers() {
 		err := i.Install(cmd, bin)
 		if err != nil {
-			Errorf("install completion failed for %s %s\n", bin, err)
+			Errorf(w, "install completion failed for %s %s\n", bin, err)
 		}
 	}
 }
 
-func uninstallCompletion(cmd string) {
+func uninstallCompletion(w io.Writer, cmd string) {
 	bin, err := getBinaryPath()
 	if err != nil {
-		Errorf("can't get binary path %s", err)
+		Errorf(w, "can't get binary path %s", err)
 		return
 	}
 
 	for _, i := range completionInstallers() {
 		err := i.Uninstall(cmd, bin)
 		if err != nil {
-			Errorf("uninstall %s failed\n", err)
+			Errorf(w, "uninstall %s failed\n", err)
 		}
 	}
 }

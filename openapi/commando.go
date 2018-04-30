@@ -9,6 +9,7 @@ import (
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/meta"
+	"io"
 	"strings"
 )
 
@@ -16,13 +17,15 @@ import (
 type Commando struct {
 	profile config.Profile
 	library *Library
+	writer  io.Writer
 }
 
-func NewCommando(profile config.Profile) *Commando {
+func NewCommando(w io.Writer, profile config.Profile) *Commando {
 	r := &Commando{
 		profile: profile,
+		writer:  w,
 	}
-	r.library = NewLibrary(profile.Language) //TODO: load from local repository
+	r.library = NewLibrary(w, profile.Language) //TODO: load from local repository
 	return r
 }
 
@@ -43,7 +46,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 
 	// update current `Profile` with flags
 	var err error
-	c.profile, err = config.LoadProfileWithContext(ctx)
+	c.profile, err = config.LoadProfileWithContext(c.writer, ctx)
 	if err != nil {
 		return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it")
 	}
@@ -91,7 +94,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	if DryRunFlag.IsAssigned() {
 		invoker.getRequest().TransToAcsRequest()
 		invoker.getClient().BuildRequestWithSigner(invoker.getRequest(), nil)
-		cli.Printf("Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
+		cli.Printf(c.writer, "Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
 			invoker.getRequest().String())
 		return nil
 	}
@@ -128,7 +131,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		}
 	}
 
-	cli.Println(out)
+	cli.Println(c.writer, out)
 	return nil
 }
 
@@ -294,7 +297,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 			if !strings.HasPrefix(p.GetLowerCode(), ctx.Completion().Current) {
 				continue
 			}
-			cli.Printf("%s\n", p.GetLowerCode())
+			cli.Printf(c.writer, "%s\n", p.GetLowerCode())
 		}
 		return r
 	}
@@ -310,7 +313,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 				if !strings.HasPrefix(name, ctx.Completion().Current) {
 					continue
 				}
-				cli.Printf("%s\n", name)
+				cli.Printf(c.writer, "%s\n", name)
 			}
 			return r
 		}
@@ -321,15 +324,15 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 
 		api.ForeachParameters(func(s string, p meta.Parameter) {
 			if strings.HasPrefix("--"+s, ctx.Completion().Current) && !p.Hidden {
-				cli.Printf("--%s\n", s)
+				cli.Printf(c.writer, "--%s\n", s)
 			}
 		})
 	} else if product.ApiStyle == "restful" {
 		if len(args) == 1 {
-			cli.Printf("GET\n")
-			cli.Printf("POST\n")
-			cli.Printf("DELETE\n")
-			cli.Printf("PUT\n")
+			cli.Printf(c.writer, "GET\n")
+			cli.Printf(c.writer, "POST\n")
+			cli.Printf(c.writer, "DELETE\n")
+			cli.Printf(c.writer, "PUT\n")
 			return r
 		}
 	}

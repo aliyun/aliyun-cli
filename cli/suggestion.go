@@ -3,6 +3,8 @@
  */
 package cli
 
+import "io"
+
 const DefaultSuggestDistance = 2
 
 func CalculateStringDistance(source string, target string) int {
@@ -14,11 +16,11 @@ type SuggestibleError interface {
 	GetSuggestions() []string
 }
 
-func PrintSuggestions(lang string, ss []string) {
+func PrintSuggestions(w io.Writer, lang string, ss []string) {
 	if len(ss) > 0 {
-		Noticef("\nDid you mean:\n")
+		Noticef(w, "\nDid you mean:\n")
 		for _, s := range ss {
-			Noticef("  %s\n", s)
+			Noticef(w, "  %s\n", s)
 		}
 	}
 }

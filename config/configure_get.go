@@ -6,6 +6,7 @@ package config
 import (
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"io"
 )
 
 const configureGetHelpEn = `
@@ -13,7 +14,7 @@ const configureGetHelpEn = `
 const configureGetHelpZh = `
 `
 
-func NewConfigureGetCommand() *cli.Command {
+func NewConfigureGetCommand(w io.Writer) *cli.Command {
 	cmd := &cli.Command{
 		Name: "get",
 		Short: i18n.T(
@@ -25,17 +26,18 @@ func NewConfigureGetCommand() *cli.Command {
 			configureGetHelpZh,
 		),
 		Run: func(c *cli.Context, args []string) error {
-			doConfigureGet(c, args)
+			doConfigureGet(w, c, args)
 			return nil
 		},
+		Writer: w,
 	}
 	return cmd
 }
 
-func doConfigureGet(c *cli.Context, args []string) {
-	config, err := LoadConfiguration()
+func doConfigureGet(w io.Writer, c *cli.Context, args []string) {
+	config, err := LoadConfiguration(w)
 	if err != nil {
-		cli.Errorf("load configuration failed %s", err)
+		cli.Errorf(w, "load configuration failed %s", err)
 	}
 
 	profile := config.GetCurrentProfile(c)
@@ -43,36 +45,36 @@ func doConfigureGet(c *cli.Context, args []string) {
 	if pn, ok := ProfileFlag.GetValue(); ok {
 		profile, ok = config.GetProfile(pn)
 		if !ok {
-			cli.Errorf("profile %s not found!", pn)
+			cli.Errorf(w, "profile %s not found!", pn)
 		}
 	}
 
 	for _, arg := range args {
 		switch arg {
 		case ProfileFlag.Name:
-			cli.Printf("profile=%s\n", profile.Name)
+			cli.Printf(w, "profile=%s\n", profile.Name)
 		case ModeFlag.Name:
-			cli.Printf("mode=%s\n", profile.Mode)
+			cli.Printf(w, "mode=%s\n", profile.Mode)
 		case AccessKeyIdFlag.Name:
-			cli.Printf("access-key-id=%s\n", MosaicString(profile.AccessKeyId, 3))
+			cli.Printf(w, "access-key-id=%s\n", MosaicString(profile.AccessKeyId, 3))
 		case AccessKeySecretFlag.Name:
-			cli.Printf("access-key-secret=%s\n", MosaicString(profile.AccessKeySecret, 3))
+			cli.Printf(w, "access-key-secret=%s\n", MosaicString(profile.AccessKeySecret, 3))
 		case StsTokenFlag.Name:
-			cli.Printf("sts-token=%s\n", profile.StsToken)
+			cli.Printf(w, "sts-token=%s\n", profile.StsToken)
 		case RamRoleNameFlag.Name:
-			cli.Printf("ram-role-name=%s\n", profile.RamRoleName)
+			cli.Printf(w, "ram-role-name=%s\n", profile.RamRoleName)
 		case RamRoleArnFlag.Name:
-			cli.Printf("ram-role-arn=%s\n", profile.RamRoleArn)
+			cli.Printf(w, "ram-role-arn=%s\n", profile.RamRoleArn)
 		case RoleSessionNameFlag.Name:
-			cli.Printf("role-session-name=%s\n", profile.RoleSessionName)
+			cli.Printf(w, "role-session-name=%s\n", profile.RoleSessionName)
 		case KeyPairNameFlag.Name:
-			cli.Printf("key-pair-name=%s\n", profile.KeyPairName)
+			cli.Printf(w, "key-pair-name=%s\n", profile.KeyPairName)
 		case PrivateKeyFlag.Name:
-			cli.Printf("private-key=%s\n", profile.PrivateKey)
+			cli.Printf(w, "private-key=%s\n", profile.PrivateKey)
 		case RegionFlag.Name:
-			cli.Printf("region=%s\n", profile.RegionId)
+			cli.Printf(w, profile.RegionId)
 		case LanguageFlag.Name:
-			cli.Printf("language=%s\n", profile.Language)
+			cli.Printf(w, "language=%s\n", profile.Language)
 		}
 	}
 }
