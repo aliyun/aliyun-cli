@@ -46,6 +46,9 @@ func NewCommandBridge(a Commander) *cli.Command {
 		},
 	}
 
+	config.AddFlags(result.Flags())
+
+
 	for _, s := range cmd.validOptionNames {
 		opt, ok := OptionMap[s]
 		if !ok {

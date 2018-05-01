@@ -14,20 +14,6 @@ const configureSetHelpZh = ``
 
 func NewConfigureSetCommand() *cli.Command {
 
-	fs := cli.NewFlagSet()
-
-	fs.Add(NewModeFlag())
-	fs.Add(NewAccessKeyIdFlag())
-	fs.Add(NewAccessKeySecretFlag())
-	fs.Add(NewStsTokenFlag())
-	fs.Add(NewRamRoleNameFlag())
-	fs.Add(NewRamRoleArnFlag())
-	fs.Add(NewRoleSessionNameFlag())
-	fs.Add(NewPrivateKeyFlag())
-	fs.Add(NewKeyPairNameFlag())
-	fs.Add(NewRegionFlag())
-	fs.Add(NewLanguageFlag())
-
 	cmd := &cli.Command{
 		Name: "set",
 		Short: i18n.T(
@@ -44,7 +30,7 @@ func NewConfigureSetCommand() *cli.Command {
 		},
 	}
 
-	cmd.SetFlags(fs)
+	AddFlags(cmd.Flags())
 
 	//fs.Add(cli.Flag{Name: "output", AssignedMode: cli.AssignedOnce, Hidden: true,
 	//	Usage: i18n.T("* assign output format, only support json", "")})
