@@ -65,7 +65,7 @@ func main() {
 
 	rootCmd.AddSubCommand(config.NewConfigureCommand())
 	// rootCmd.AddSubCommand(command.NewTestCommand())
-	rootCmd.AddSubCommand(lib.NewOssCommand(writer))
+	rootCmd.AddSubCommand(lib.NewOssCommand())
 	rootCmd.AddSubCommand(cli.NewVersionCommand())
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
 	rootCmd.Execute(ctx, os.Args[1:])

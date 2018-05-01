@@ -8,10 +8,9 @@ import (
 	"os"
 	"strings"
 	"time"
-	"io"
 )
 
-func NewOssCommand(w io.Writer) *cli.Command {
+func NewOssCommand() *cli.Command {
 	result := &cli.Command{
 		Name:   "oss",
 		Usage:  "aliyun oss [command] [args...] [options...]",
@@ -19,23 +18,23 @@ func NewOssCommand(w io.Writer) *cli.Command {
 		Short:  i18n.T("Object Storage Service", "阿里云OSS对象存储"),
 	}
 
-	result.AddSubCommand(NewCommandBridge(w,&makeBucketCommand))
-	result.AddSubCommand(NewCommandBridge(w,&listCommand))
-	result.AddSubCommand(NewCommandBridge(w,&removeCommand))
-	result.AddSubCommand(NewCommandBridge(w,&statCommand))
-	result.AddSubCommand(NewCommandBridge(w,&setACLCommand))
-	result.AddSubCommand(NewCommandBridge(w,&setMetaCommand))
-	result.AddSubCommand(NewCommandBridge(w,&copyCommand))
-	result.AddSubCommand(NewCommandBridge(w,&restoreCommand))
-	result.AddSubCommand(NewCommandBridge(w,&createSymlinkCommand))
-	result.AddSubCommand(NewCommandBridge(w,&readSymlinkCommand))
-	result.AddSubCommand(NewCommandBridge(w,&signURLCommand))
-	result.AddSubCommand(NewCommandBridge(w,&hashCommand))
-	result.AddSubCommand(NewCommandBridge(w,&helpCommand))
+	result.AddSubCommand(NewCommandBridge(&makeBucketCommand))
+	result.AddSubCommand(NewCommandBridge(&listCommand))
+	result.AddSubCommand(NewCommandBridge(&removeCommand))
+	result.AddSubCommand(NewCommandBridge(&statCommand))
+	result.AddSubCommand(NewCommandBridge(&setACLCommand))
+	result.AddSubCommand(NewCommandBridge(&setMetaCommand))
+	result.AddSubCommand(NewCommandBridge(&copyCommand))
+	result.AddSubCommand(NewCommandBridge(&restoreCommand))
+	result.AddSubCommand(NewCommandBridge(&createSymlinkCommand))
+	result.AddSubCommand(NewCommandBridge(&readSymlinkCommand))
+	result.AddSubCommand(NewCommandBridge(&signURLCommand))
+	result.AddSubCommand(NewCommandBridge(&hashCommand))
+	result.AddSubCommand(NewCommandBridge(&helpCommand))
 	return result
 }
 
-func NewCommandBridge(w io.Writer, a Commander) *cli.Command {
+func NewCommandBridge(a Commander) *cli.Command {
 	cmd := a.GetCommand()
 	result := &cli.Command{
 		Name:  cmd.name,
