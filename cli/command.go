@@ -189,7 +189,7 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 		return err
 	}
 
-	if HelpFlag.IsAssigned() {
+	if HelpFlag(ctx.Flags()).IsAssigned() {
 		ctx.help = true
 	}
 	callArgs := make([]string, 0)

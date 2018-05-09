@@ -11,10 +11,17 @@ import (
 
 //
 // default help flag
-var HelpFlag = &Flag{
-	Name:         "help",
-	Short:        i18n.T("print help", "打印帮助信息"),
-	AssignedMode: AssignedNone,
+
+func HelpFlag(fs *FlagSet) *Flag {
+	return fs.Get("help")
+}
+
+func NewHelpFlag() *Flag {
+	return &Flag{
+		Name:         "help",
+		Short:        i18n.T("print help", "打印帮助信息"),
+		AssignedMode: AssignedNone,
+	}
 }
 
 //
@@ -77,7 +84,7 @@ func (ctx *Context) EnterCommand(cmd *Command) {
 	ctx.flags = cmd.flags.mergeWith(ctx.flags, func(f *Flag) bool {
 		return f.Persistent
 	})
-	ctx.flags.Add(HelpFlag)
+	ctx.flags.Add(NewHelpFlag())
 }
 
 func (ctx *Context) CheckFlags() error {
