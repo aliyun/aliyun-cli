@@ -237,7 +237,7 @@ i-abcdefghijklmnopqrst | Running
 例如：
 
 ```
-aliyun ecs DescribeInstances --InstanceIds '["i-12345678912345678123"]' --waiter expr='Instances.Instance[0].Status' to=Running
+$ aliyun ecs DescribeInstances --InstanceIds '["i-12345678912345678123"]' --waiter expr='Instances.Instance[0].Status' to=Running
 ```
 
 执行以上命令后,命令行程序将以一定时间间隔进行实例状态轮询，并在实例状态变为`Running`时停止轮询。
