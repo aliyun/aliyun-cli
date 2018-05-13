@@ -221,10 +221,34 @@ i-12345678912345678123 | Stopped
 i-abcdefghijklmnopqrst | Running
 ```
 
-在使用`--output`参数时，必须指定以下参数：
+在使用`--output`参数时，必须指定以下子参数：
 
-- `--cols`: 表格的列名，需要与json数据中的字段相对应。如ECS DescribeInstances 接口返回结果中的字段`InstanceId` 以及 `Status`。
+- `cols`: 表格的列名，需要与json数据中的字段相对应。如ECS DescribeInstances 接口返回结果中的字段`InstanceId` 以及 `Status`。
 
-可选参数：
-- `--rows`: 通过[jmespath](http://jmespath.org/)查询语句来指定表格行在json结果中的数据来源。当查询语句具有`Instances.Instance[]`的形式时，可以省略该参数。
+可选子参数：
+
+- `rows`: 通过[jmespath](http://jmespath.org/)查询语句来指定表格行在json结果中的数据来源。当查询语句具有`Instances.Instance[]`的形式时，可以省略该参数。
+
+#### 使用`--waiter`参数
+该参数用于轮询实例信息直到出现特定状态。
+
+例如使用ECS创建实例后，实例会有启动的过程。我们会不断的查询实例的运行状态，直到状态变为"Running"。
+
+例如：
+
+```
+aliyun ecs DescribeInstances --InstanceIds '["i-12345678912345678123"]' --waiter expr='Instances.Instance[0].Status' to=Running
+```
+
+执行以上命令后,命令行程序将以一定时间间隔进行实例状态轮询，并在实例状态变为`Running`时停止轮询。
+
+在使用`--waiter `参数时，必须指定以下两个子参数：
+
+- `expr`: 通过[jmespath](http://jmespath.org/)查询语句来指定json结果中的被轮询字段。
+- `to`: 被轮询字段的目标值。
+
+可选子参数：
+
+- `timeout`: 轮询的超时时间(秒)。
+- `interval`: 轮询的间隔时间(秒)。
 
