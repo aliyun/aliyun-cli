@@ -29,7 +29,7 @@ $ aliyuncli configure
 */
 
 func main() {
-
+	cli.PlatformCompatible()
 	writer := cli.DefaultWriter()
 	//
 	// load current configuration
