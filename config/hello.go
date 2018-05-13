@@ -6,6 +6,7 @@ package config
 import (
 	"fmt"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
+	"github.com/aliyun/aliyun-cli/cli"
 )
 
 type Region struct {
@@ -13,8 +14,8 @@ type Region struct {
 	LocalName string
 }
 
-func GetRegions(profile *Profile) ([]Region, error) {
-	client, err := profile.GetClient()
+func GetRegions(ctx *cli.Context, profile *Profile) ([]Region, error) {
+	client, err := profile.GetClient(ctx)
 
 	regions := make([]Region, 0)
 	if err != nil {
@@ -34,17 +35,19 @@ func GetRegions(profile *Profile) ([]Region, error) {
 	return regions, nil
 }
 
-func DoHello(profile *Profile) {
-	client, err := profile.GetClient()
+func DoHello(ctx *cli.Context, profile *Profile) {
+	w := ctx.Writer()
+
+	client, err := profile.GetClient(ctx)
 
 	if err != nil {
-		fmt.Println("-----------------------------------------------")
-		fmt.Println("!!! Configure Failed please configure again !!!")
-		fmt.Println("-----------------------------------------------")
-		fmt.Println(err)
-		fmt.Println("-----------------------------------------------")
-		fmt.Println("!!! Configure Failed please configure again !!!")
-		fmt.Println("-----------------------------------------------")
+		cli.Println(w, "-----------------------------------------------")
+		cli.Println(w, "!!! Configure Failed please configure again !!!")
+		cli.Println(w, "-----------------------------------------------")
+		cli.Println(w, err)
+		cli.Println(w, "-----------------------------------------------")
+		cli.Println(w, "!!! Configure Failed please configure again !!!")
+		cli.Println(w, "-----------------------------------------------")
 		return
 	}
 	request := ecs.CreateDescribeRegionsRequest()
@@ -54,9 +57,9 @@ func DoHello(profile *Profile) {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf(" available regions: \n")
+	cli.Printf(w, " available regions: \n")
 	for _, region := range response.Regions.Region {
-		fmt.Printf("  %s\n", region.RegionId)
+		cli.Printf(w, "  %s\n", region.RegionId)
 	}
 	fmt.Println(icon)
 }

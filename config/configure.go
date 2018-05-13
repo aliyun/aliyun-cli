@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"io"
 	"io/ioutil"
 	"strings"
 )
 
 func NewConfigureCommand() *cli.Command {
+
 	c := &cli.Command{
 		Name: "configure",
 		Short: i18n.T(
@@ -22,15 +24,12 @@ func NewConfigureCommand() *cli.Command {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			profileName, _ := ProfileFlag.GetValue()
-			mode, _ := ModeFlag.GetValue()
+			profileName, _ := ProfileFlag(ctx.Flags()).GetValue()
+			mode, _ := ModeFlag(ctx.Flags()).GetValue()
 
-			return doConfigure(profileName, mode)
+			return doConfigure(ctx, profileName, mode)
 		},
 	}
-
-	c.Flags().Add(ProfileFlag)
-	c.Flags().Add(ModeFlag)
 
 	c.AddSubCommand(NewConfigureGetCommand())
 	c.AddSubCommand(NewConfigureSetCommand())
@@ -39,8 +38,10 @@ func NewConfigureCommand() *cli.Command {
 	return c
 }
 
-func doConfigure(profileName string, mode string) error {
-	conf, err := LoadConfiguration()
+func doConfigure(ctx *cli.Context, profileName string, mode string) error {
+	w := ctx.Writer()
+
+	conf, err := LoadConfiguration(ctx.Writer())
 	if err != nil {
 		return err
 	}
@@ -50,40 +51,43 @@ func doConfigure(profileName string, mode string) error {
 		cp = conf.NewProfile(profileName)
 	}
 
-	fmt.Printf("Configuring profile '%s' in '%s' authenticate mode...\n", profileName, mode)
+	cli.Printf(w, "Configuring profile '%s' in '%s' authenticate mode...\n", profileName, mode)
+
 	if mode != "" {
 		switch AuthenticateMode(mode) {
 		case AK:
 			cp.Mode = AK
-			configureAK(&cp)
+			configureAK(w, &cp)
 		case StsToken:
 			cp.Mode = StsToken
-			configureStsToken(&cp)
+			configureStsToken(w, &cp)
 		case RamRoleArn:
 			cp.Mode = RamRoleArn
-			configureRamRoleArn(&cp)
+			configureRamRoleArn(w, &cp)
 		case EcsRamRole:
 			cp.Mode = EcsRamRole
-			configureEcsRamRole(&cp)
+			configureEcsRamRole(w, &cp)
 		case RsaKeyPair:
 			cp.Mode = RsaKeyPair
-			configureRsaKeyPair(&cp)
+			configureRsaKeyPair(w, &cp)
 		default:
 			return fmt.Errorf("unexcepted authenticate mode: %s", mode)
 		}
 	} else {
-		configureAK(&cp)
+		configureAK(w, &cp)
 	}
 
 	//
 	// configure common
-	fmt.Printf("Default Region Id [%s]: ", cp.RegionId)
+	cli.Printf(w, "Default Region Id [%s]: ", cp.RegionId)
 	cp.RegionId = ReadInput(cp.RegionId)
-	fmt.Printf("Default Output Format [%s]: json (Only support json))\n", cp.OutputFormat)
+	cli.Printf(w, "Default Output Format [%s]: json (Only support json))\n", cp.OutputFormat)
+
 	// cp.OutputFormat = ReadInput(cp.OutputFormat)
 	cp.OutputFormat = "json"
 
-	fmt.Printf("Default Language [zh|en] %s: ", cp.Language)
+	cli.Printf(w, "Default Language [zh|en] %s: ", cp.Language)
+
 	cp.Language = ReadInput(cp.Language)
 	if cp.Language != "zh" && cp.Language != "en" {
 		cp.Language = "en"
@@ -92,7 +96,8 @@ func doConfigure(profileName string, mode string) error {
 	//fmt.Printf("User site: [china|international|japan] %s", cp.Site)
 	//cp.Site = ReadInput(cp.Site)
 
-	fmt.Printf("Saving profile[%s] ...", profileName)
+	cli.Printf(w, "Saving profile[%s] ...", profileName)
+
 	conf.PutProfile(cp)
 	conf.CurrentProfile = cp.Name
 	err = SaveConfiguration(conf)
@@ -100,58 +105,58 @@ func doConfigure(profileName string, mode string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Done.\n")
+	cli.Printf(w, "Done.\n")
 
-	DoHello(&cp)
+	DoHello(ctx, &cp)
 	return nil
 }
 
-func configureAK(cp *Profile) error {
-	fmt.Printf("Access Key Id [%s]: ", MosaicString(cp.AccessKeyId, 3))
+func configureAK(w io.Writer, cp *Profile) error {
+	cli.Printf(w, "Access Key Id [%s]: ", MosaicString(cp.AccessKeyId, 3))
 	cp.AccessKeyId = ReadInput(cp.AccessKeyId)
-	fmt.Printf("Access Key Secret [%s]: ", MosaicString(cp.AccessKeySecret, 3))
+	cli.Printf(w, "Access Key Secret [%s]: ", MosaicString(cp.AccessKeySecret, 3))
 	cp.AccessKeySecret = ReadInput(cp.AccessKeySecret)
 	return nil
 }
 
-func configureStsToken(cp *Profile) error {
-	err := configureAK(cp)
+func configureStsToken(w io.Writer, cp *Profile) error {
+	err := configureAK(w, cp)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Sts Token [%s]: ", cp.StsToken)
+	cli.Printf(w, "Sts Token [%s]: ", cp.StsToken)
 	cp.StsToken = ReadInput(cp.StsToken)
 	return nil
 }
 
-func configureRamRoleArn(cp *Profile) error {
-	err := configureAK(cp)
+func configureRamRoleArn(w io.Writer, cp *Profile) error {
+	err := configureAK(w, cp)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Ram Role Arn [%s]: ", cp.RamRoleArn)
+	cli.Printf(w, "Ram Role Arn [%s]: ", cp.RamRoleArn)
 	cp.RamRoleArn = ReadInput(cp.RamRoleArn)
-	fmt.Printf("Role Session Name [%s]: ", cp.RoleSessionName)
+	cli.Printf(w, "Role Session Name [%s]: ", cp.RoleSessionName)
 	cp.RoleSessionName = ReadInput(cp.RoleSessionName)
 	cp.ExpiredSeconds = 900
 	return nil
 }
 
-func configureEcsRamRole(cp *Profile) error {
-	fmt.Printf("Ecs Ram Role [%s]: ", cp.RamRoleName)
+func configureEcsRamRole(w io.Writer, cp *Profile) error {
+	cli.Printf(w, "Ecs Ram Role [%s]: ", cp.RamRoleName)
 	cp.RamRoleName = ReadInput(cp.RamRoleName)
 	return nil
 }
 
-func configureRsaKeyPair(cp *Profile) error {
-	fmt.Printf("Rsa Private Key File: ")
+func configureRsaKeyPair(w io.Writer, cp *Profile) error {
+	cli.Printf(w, "Rsa Private Key File: ")
 	keyFile := ReadInput("")
 	buf, err := ioutil.ReadFile(keyFile)
 	if err != nil {
 		return fmt.Errorf("read key file %s failed %v", keyFile, err)
 	}
 	cp.PrivateKey = string(buf)
-	fmt.Printf("Rsa Key Pair Name: ")
+	cli.Printf(w, "Rsa Key Pair Name: ")
 	cp.KeyPairName = ReadInput("")
 	cp.ExpiredSeconds = 900
 	return nil

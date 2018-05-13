@@ -28,14 +28,14 @@ $ aliyuncli configure
 	$ aliyuncli Ecs DescribeInstances --secure
 */
 
-var configureCommand = config.NewConfigureCommand()
-
 func main() {
+	cli.PlatformCompatible()
+	writer := cli.DefaultWriter()
 	//
 	// load current configuration
-	profile, err := config.LoadCurrentProfile()
+	profile, err := config.LoadCurrentProfile(writer)
 	if err != nil {
-		cli.Errorf("ERROR: load current configuration failed %s", err)
+		cli.Errorf(writer, "ERROR: load current configuration failed %s", err)
 		return
 	}
 
@@ -56,13 +56,17 @@ func main() {
 	openapi.AddFlags(rootCmd.Flags())
 
 	// new open api commando to process rootCmd
-	commando := openapi.NewCommando(profile)
+	commando := openapi.NewCommando(writer, profile)
 	commando.InitWithCommand(rootCmd)
 
-	rootCmd.AddSubCommand(configureCommand)
+	ctx := cli.NewCommandContext(writer)
+	ctx.EnterCommand(rootCmd)
+	ctx.SetCompletion(cli.ParseCompletionForShell())
+
+	rootCmd.AddSubCommand(config.NewConfigureCommand())
 	// rootCmd.AddSubCommand(command.NewTestCommand())
 	rootCmd.AddSubCommand(lib.NewOssCommand())
 	rootCmd.AddSubCommand(cli.NewVersionCommand())
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
-	rootCmd.Execute(os.Args[1:])
+	rootCmd.Execute(ctx, os.Args[1:])
 }

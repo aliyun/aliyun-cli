@@ -43,7 +43,7 @@ func (fs *FlagSet) Add(f *Flag) {
 //
 // add by name, not support add by shorthand
 func (fs *FlagSet) AddByName(name string) (*Flag, error) {
-	if _, ok := fs.index["--" + name]; ok {
+	if _, ok := fs.index["--"+name]; ok {
 		return nil, fmt.Errorf("flag duplicated --%s", name)
 	}
 	f := &Flag{
@@ -53,11 +53,10 @@ func (fs *FlagSet) AddByName(name string) (*Flag, error) {
 	return f, nil
 }
 
-
 //
 // get flag by name, sample --name
 func (fs *FlagSet) Get(name string) *Flag {
-	if f, ok := fs.index["--" + name]; ok {
+	if f, ok := fs.index["--"+name]; ok {
 		f.formation = "--" + name
 		return f
 	} else {
@@ -68,14 +67,13 @@ func (fs *FlagSet) Get(name string) *Flag {
 //
 // get flag by shorthand, sample -a
 func (fs *FlagSet) GetByShorthand(c rune) *Flag {
-	if f, ok := fs.index["-" + string(c)]; ok {
+	if f, ok := fs.index["-"+string(c)]; ok {
 		f.formation = "-" + string(c)
 		return f
 	} else {
 		return nil
 	}
 }
-
 
 //
 // get suggestions
@@ -100,7 +98,6 @@ func (fs *FlagSet) GetValue(name string) (string, bool) {
 		return f.GetValue()
 	}
 }
-
 
 //
 //// get value by flag name, if not assigned return default value
@@ -128,7 +125,6 @@ func (fs *FlagSet) GetValue(name string) (string, bool) {
 //		return nil
 //	}
 //}
-
 
 //func (fs *FlagSet) StringVar(p *string, name string, defaultValue string, usage *i18n.Text) *Flag {
 //	f := &Flag{
@@ -171,7 +167,7 @@ func (fs *FlagSet) assignedCount() int {
 
 //
 // merge FlagSet with from
-func (fs *FlagSet) mergeWith(from *FlagSet, applier func(f *Flag) bool) (*FlagSet) {
+func (fs *FlagSet) mergeWith(from *FlagSet, applier func(f *Flag) bool) *FlagSet {
 	if from == nil {
 		return fs
 	}

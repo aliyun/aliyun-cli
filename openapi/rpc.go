@@ -5,9 +5,9 @@ package openapi
 
 import (
 	"fmt"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/meta"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 )
 
 type RpcInvoker struct {
@@ -26,14 +26,14 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 	request.Method = api.GetMethod()
 
 	// if `--secure` assigned, use https
-	if _, ok := SecureFlag.GetValue(); ok {
+	if _, ok := SecureFlag(ctx.Flags()).GetValue(); ok {
 		a.request.Scheme = "https"
 	}
 
 	// assign parameters
 	for _, f := range ctx.UnknownFlags().Flags() {
 		param := api.FindParameter(f.Name)
-		// fmt.Printf("flag: %s %v\n", f.Name, param)
+		// cli.Printf("flag: %s %v\n", f.Name, param)
 		if param == nil {
 			return &InvalidParameterError{Name: f.Name, api: api, flags: ctx.Flags()}
 		}
@@ -69,7 +69,7 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 
 func (a *RpcInvoker) Call() (*responses.CommonResponse, error) {
 	resp, err := a.client.ProcessCommonRequest(a.request)
-	// fmt.Printf("Resp: %s", resp.String())
+	// cli.Printf("Resp: %s", resp.String())
 	return resp, err
 }
 
@@ -122,7 +122,7 @@ func (a *RpcInvoker) Call() (*responses.CommonResponse, error) {
 //					return nil
 //				}
 //			}
-//			fmt.Println(r)
+//			cli.Println(r)
 //			if err != nil {
 //				ctx.Command().PrintFailed(err, "")
 //			}
@@ -146,7 +146,7 @@ func (a *RpcInvoker) Call() (*responses.CommonResponse, error) {
 //			return nil
 //		}
 //	}
-//	fmt.Println(out)
+//	cli.Println(out)
 //
 //	//
 //	return nil
@@ -196,7 +196,7 @@ func (a *RpcInvoker) Call() (*responses.CommonResponse, error) {
 //			return
 //		}
 //	}
-//	fmt.Println(out)
+//	cli.Println(out)
 //}
 //
 //func (c *Caller) FillRpcParameters(ctx *cli.Context, request *requests.CommonRequest, api *meta.Api) error {

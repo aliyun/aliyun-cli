@@ -63,10 +63,7 @@ func (c *Command) Flags() *FlagSet {
 	return c.flags
 }
 
-func (c *Command) Execute(args []string) {
-	ctx := NewCommandContext()
-	ctx.EnterCommand(c)
-	ctx.completion = ParseCompletion()
+func (c *Command) Execute(ctx *Context, args []string) {
 
 	//
 	// if completion
@@ -76,7 +73,7 @@ func (c *Command) Execute(args []string) {
 
 	err := c.executeInner(ctx, args)
 	if err != nil {
-		c.processError(err)
+		c.processError(ctx, err)
 	}
 }
 
@@ -121,10 +118,10 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 			if f.Hidden {
 				continue
 			}
-			if !strings.HasPrefix("--" + f.Name, ctx.completion.Current) {
+			if !strings.HasPrefix("--"+f.Name, ctx.completion.Current) {
 				continue
 			}
-			fmt.Printf("--%s\n", f.Name)
+			Printf(ctx.Writer(), "--%s\n", f.Name)
 		}
 	} else {
 		for _, sc := range c.subCommands {
@@ -134,7 +131,7 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 			if !strings.HasPrefix(sc.Name, ctx.completion.Current) {
 				continue
 			}
-			fmt.Printf("%s\n", sc.Name)
+			Printf(ctx.Writer(), "%s\n", sc.Name)
 		}
 	}
 }
@@ -192,7 +189,7 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 		return err
 	}
 
-	if HelpFlag.IsAssigned() {
+	if HelpFlag(ctx.Flags()).IsAssigned() {
 		ctx.help = true
 	}
 	callArgs := make([]string, 0)
@@ -211,7 +208,7 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 		if c.AutoComplete != nil {
 			ss := c.AutoComplete(ctx, callArgs)
 			for _, s := range ss {
-				fmt.Printf("%s\n", s)
+				Printf(ctx.Writer(), "%s\n", s)
 			}
 		} else {
 			c.ExecuteComplete(ctx, callArgs)
@@ -230,30 +227,33 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 	}
 }
 
-func (c *Command) processError(err error) {
-	Errorf("ERROR: %s\n", err.Error())
+func (c *Command) processError(ctx *Context, err error) {
+	Errorf(ctx.Writer(), "ERROR: %s\n", err.Error())
 	if e, ok := err.(SuggestibleError); ok {
-		PrintSuggestions(i18n.GetLanguage(), e.GetSuggestions())
+		PrintSuggestions(ctx, i18n.GetLanguage(), e.GetSuggestions())
+		Exit(2)
 		return
 	}
 	if e, ok := err.(ErrorWithTip); ok {
-		Noticef("\n%s\n", e.GetTip(i18n.GetLanguage()))
+		Noticef(ctx.Writer(), "\n%s\n", e.GetTip(i18n.GetLanguage()))
+		Exit(3)
 		return
 	}
+	Exit(1)
 }
 
 func (c *Command) executeHelp(ctx *Context, args []string) {
 	if c.Help != nil {
 		err := c.Help(ctx, args)
 		if err != nil {
-			c.processError(err)
+			c.processError(ctx, err)
 		}
 		return
 	}
 
-	c.PrintHead()
-	c.PrintUsage()
-	c.PrintSubCommands()
+	c.PrintHead(ctx)
+	c.PrintUsage(ctx)
+	c.PrintSubCommands(ctx)
 	c.PrintFlags(ctx)
-	c.PrintTail()
+	c.PrintTail(ctx)
 }

@@ -56,7 +56,7 @@ func TestMerge(t *testing.T) {
 		panic(err)
 	}
 
-	fmt.Printf(string(result))
+	cli.Printf(string(result))
 }
 
 func TestSearchList(t *testing.T) {

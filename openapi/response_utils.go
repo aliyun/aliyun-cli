@@ -4,8 +4,8 @@
 package openapi
 
 import (
-	"fmt"
 	"encoding/json"
+	"fmt"
 	"github.com/jmespath/go-jmespath"
 )
 

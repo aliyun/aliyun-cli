@@ -4,9 +4,8 @@
 package cli
 
 import (
-	"strings"
 	"github.com/aliyun/aliyun-cli/i18n"
-	"fmt"
+	"strings"
 )
 
 //
@@ -22,11 +21,11 @@ func GetVersion() string {
 
 func NewVersionCommand() *Command {
 	return &Command{
-		Name: "version",
-		Short: i18n.T("print current version", "打印当前版本号"),
+		Name:   "version",
+		Short:  i18n.T("print current version", "打印当前版本号"),
 		Hidden: true,
 		Run: func(ctx *Context, args []string) error {
-			fmt.Printf("%s\n", Version)
+			Printf(ctx.Writer(), "%s\n", Version)
 			return nil
 		},
 	}

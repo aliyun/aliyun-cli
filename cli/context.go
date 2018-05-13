@@ -6,14 +6,22 @@ package cli
 import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"io"
 )
 
 //
 // default help flag
-var HelpFlag = &Flag{
-	Name:         "help",
-	Short:        i18n.T("print help", "打印帮助信息"),
-	AssignedMode: AssignedNone,
+
+func HelpFlag(fs *FlagSet) *Flag {
+	return fs.Get("help")
+}
+
+func NewHelpFlag() *Flag {
+	return &Flag{
+		Name:         "help",
+		Short:        i18n.T("print help", "打印帮助信息"),
+		AssignedMode: AssignedNone,
+	}
 }
 
 //
@@ -24,12 +32,14 @@ type Context struct {
 	unknownFlags *FlagSet
 	command      *Command
 	completion   *Completion
+	writer       io.Writer
 }
 
-func NewCommandContext() *Context {
+func NewCommandContext(w io.Writer) *Context {
 	return &Context{
 		flags:        NewFlagSet(),
 		unknownFlags: nil,
+		writer:       w,
 	}
 }
 
@@ -49,8 +59,16 @@ func (ctx *Context) Flags() *FlagSet {
 	return ctx.flags
 }
 
+func (ctx *Context) Writer() io.Writer {
+	return ctx.writer
+}
+
 func (ctx *Context) UnknownFlags() *FlagSet {
 	return ctx.unknownFlags
+}
+
+func (ctx *Context) SetCompletion(completion *Completion) {
+	ctx.completion = completion
 }
 
 //
@@ -66,7 +84,7 @@ func (ctx *Context) EnterCommand(cmd *Command) {
 	ctx.flags = cmd.flags.mergeWith(ctx.flags, func(f *Flag) bool {
 		return f.Persistent
 	})
-	ctx.flags.Add(HelpFlag)
+	ctx.flags.Add(NewHelpFlag())
 }
 
 func (ctx *Context) CheckFlags() error {

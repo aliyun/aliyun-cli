@@ -75,7 +75,7 @@ func findParameterInner(params *[]Parameter, name string) *Parameter {
 				return nil
 			}
 		}
-		if p.Type == "RepeatList" && strings.HasPrefix(name, p.Name){
+		if p.Type == "RepeatList" && strings.HasPrefix(name, p.Name) {
 			// XXX.1
 			s := name[len(p.Name):]
 			if len(s) >= 2 && s[0] == '.' {

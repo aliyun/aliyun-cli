@@ -14,11 +14,11 @@ type SuggestibleError interface {
 	GetSuggestions() []string
 }
 
-func PrintSuggestions(lang string, ss []string) {
+func PrintSuggestions(ctx *Context, lang string, ss []string) {
 	if len(ss) > 0 {
-		Noticef("\nDid you mean:\n")
+		Noticef(ctx.Writer(), "\nDid you mean:\n")
 		for _, s := range ss {
-			Noticef("  %s\n", s)
+			Noticef(ctx.Writer(), "  %s\n", s)
 		}
 	}
 }

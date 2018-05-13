@@ -5,18 +5,18 @@ package openapi
 
 import (
 	"fmt"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
 	"io/ioutil"
 	"strings"
 	"time"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 )
 
 type RestfulInvoker struct {
 	*BasicInvoker
 	method string
-	path string
-	force bool
+	path   string
+	force  bool
 }
 
 func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
@@ -28,11 +28,11 @@ func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
 		a.request.Headers["x-acs-region-id"] = a.request.RegionId
 	}
 
-	if v, ok := BodyFlag.GetValue(); ok {
+	if v, ok := BodyFlag(ctx.Flags()).GetValue(); ok {
 		a.request.SetContent([]byte(v))
 	}
 
-	if v, ok := BodyFileFlag.GetValue(); ok {
+	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok {
 		buf, err := ioutil.ReadFile(v)
 		if err != nil {
 			fmt.Errorf("failed read file: %s %v", v, err)
@@ -49,7 +49,7 @@ func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
 		}
 	}
 
-	if _, ok := SecureFlag.GetValue(); ok {
+	if _, ok := SecureFlag(ctx.Flags()).GetValue(); ok {
 		a.request.Scheme = "https"
 	}
 
@@ -61,7 +61,7 @@ func (a *RestfulInvoker) Call() (*responses.CommonResponse, error) {
 	return resp, err
 }
 
-func checkRestfulMethod(methodOrPath string, pathPattern string) (ok bool, method string, path string, err error) {
+func checkRestfulMethod(ctx *cli.Context, methodOrPath string, pathPattern string) (ok bool, method string, path string, err error) {
 	if pathPattern == "" {
 		ok = false
 		return
@@ -74,7 +74,7 @@ func checkRestfulMethod(methodOrPath string, pathPattern string) (ok bool, metho
 			err = fmt.Errorf("bad restful path %s", pathPattern)
 			return
 		}
-	} else if method, ok = RoaFlag.GetValue(); ok {
+	} else if method, ok = RoaFlag(ctx.Flags()).GetValue(); ok {
 		if strings.HasPrefix(methodOrPath, "/") && pathPattern == "" {
 			path = methodOrPath
 			return

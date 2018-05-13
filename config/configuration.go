@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/aliyun/aliyun-cli/cli"
+	"io"
 	"io/ioutil"
 	"os"
 	"runtime"
@@ -21,7 +22,7 @@ const (
 type Configuration struct {
 	CurrentProfile string    `json:"current"`
 	Profiles       []Profile `json:"profiles"`
-	MetaPath	   string 	 `json:"meta_path"`
+	MetaPath       string    `json:"meta_path"`
 	//Plugins 		[]Plugin `json:"plugin"`
 }
 
@@ -53,7 +54,7 @@ func (c *Configuration) GetProfile(pn string) (Profile, bool) {
 }
 
 func (c *Configuration) GetCurrentProfile(ctx *cli.Context) Profile {
-	profileName := ProfileFlag.GetStringOrDefault(c.CurrentProfile)
+	profileName := ProfileFlag(ctx.Flags()).GetStringOrDefault(c.CurrentProfile)
 	p, _ := c.GetProfile(profileName)
 	p.OverwriteWithFlags(ctx)
 	return p
@@ -69,13 +70,13 @@ func (c *Configuration) PutProfile(profile Profile) {
 	c.Profiles = append(c.Profiles, profile)
 }
 
-func LoadCurrentProfile() (Profile, error) {
-	return LoadProfile("")
+func LoadCurrentProfile(w io.Writer) (Profile, error) {
+	return LoadProfile(w, "")
 }
 
-func LoadProfile(name string) (Profile, error) {
+func LoadProfile(w io.Writer, name string) (Profile, error) {
 	var p Profile
-	config, err := LoadConfiguration()
+	config, err := LoadConfiguration(w)
 	if err != nil {
 		return p, fmt.Errorf("init config failed %v", err)
 	}
@@ -91,10 +92,10 @@ func LoadProfile(name string) (Profile, error) {
 }
 
 func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
-	if name, ok := ProfileFlag.GetValue(); ok {
-		profile, err = LoadProfile(name)
+	if name, ok := ProfileFlag(ctx.Flags()).GetValue(); ok {
+		profile, err = LoadProfile(ctx.Writer(), name)
 	} else {
-		profile, err = LoadProfile("")
+		profile, err = LoadProfile(ctx.Writer(), "")
 	}
 	if err != nil {
 		return
@@ -103,10 +104,10 @@ func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
 	return
 }
 
-func LoadConfiguration() (Configuration, error) {
+func LoadConfiguration(w io.Writer) (Configuration, error) {
 	path := GetConfigPath() + "/" + configFile
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		lc := MigrateLegacyConfiguration()
+		lc := MigrateLegacyConfiguration(w)
 		if lc != nil {
 			err := SaveConfiguration(*lc)
 			if err != nil {

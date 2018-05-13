@@ -6,6 +6,7 @@ package config
 import (
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"io"
 )
 
 func NewConfigureDeleteCommand() *cli.Command {
@@ -14,24 +15,23 @@ func NewConfigureDeleteCommand() *cli.Command {
 		Usage: "delete --profile <profileName>",
 		Short: i18n.T("list all config profile", "列出所有配置集"),
 		Run: func(c *cli.Context, args []string) error {
-			profileName, ok := ProfileFlag.GetValue()
+			profileName, ok := ProfileFlag(c.Flags()).GetValue()
 			if !ok {
-				cli.Errorf("missing --profile <profileName>\n")
-				cli.Noticef("\nusage:\n  aliyun configure delete --profile <profileName>\n")
+				cli.Errorf(c.Writer(), "missing --profile <profileName>\n")
+				cli.Noticef(c.Writer(), "\nusage:\n  aliyun configure delete --profile <profileName>\n")
 				return nil
 			}
-			doConfigureDelete(profileName)
+			doConfigureDelete(c.Writer(), profileName)
 			return nil
 		},
 	}
-	cmd.Flags().Add(ProfileFlag)
 	return cmd
 }
 
-func doConfigureDelete(profileName string) {
-	conf, err := LoadConfiguration()
+func doConfigureDelete(w io.Writer, profileName string) {
+	conf, err := LoadConfiguration(w)
 	if err != nil {
-		cli.Errorf("ERROR: load configure failed: %v\n", err)
+		cli.Errorf(w, "ERROR: load configure failed: %v\n", err)
 	}
 	deleted := false
 	r := make([]Profile, 0)
@@ -44,7 +44,7 @@ func doConfigureDelete(profileName string) {
 	}
 
 	if !deleted {
-		cli.Errorf("Error: configuration profile `%s` not found\n", profileName)
+		cli.Errorf(w, "Error: configuration profile `%s` not found\n", profileName)
 		return
 	}
 
@@ -59,6 +59,6 @@ func doConfigureDelete(profileName string) {
 
 	err = SaveConfiguration(conf)
 	if err != nil {
-		cli.Errorf("Error: save configuration failed %s\n", err)
+		cli.Errorf(w, "Error: save configuration failed %s\n", err)
 	}
 }

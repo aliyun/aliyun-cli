@@ -4,12 +4,13 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/meta"
-	"github.com/aliyun/aliyun-cli/config"
 	"fmt"
-	"strings"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/aliyun/aliyun-cli/meta"
+	"io"
+	"strings"
 )
 
 // main entrance of aliyun cli
@@ -18,11 +19,11 @@ type Commando struct {
 	library *Library
 }
 
-func NewCommando(profile config.Profile) *Commando {
+func NewCommando(w io.Writer, profile config.Profile) *Commando {
 	r := &Commando{
 		profile: profile,
 	}
-	r.library = NewLibrary(profile.Language)	//TODO: load from local repository
+	r.library = NewLibrary(w, profile.Language) //TODO: load from local repository
 	return r
 }
 
@@ -37,7 +38,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	//
 	// aliyun
 	if len(args) == 0 {
-		c.printUsage(ctx.Command())
+		c.printUsage(ctx)
 		return nil
 	}
 
@@ -88,10 +89,10 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	}
 
 	// process --dryrun
-	if DryRunFlag.IsAssigned() {
+	if DryRunFlag(ctx.Flags()).IsAssigned() {
 		invoker.getRequest().TransToAcsRequest()
 		invoker.getClient().BuildRequestWithSigner(invoker.getRequest(), nil)
-		fmt.Printf("Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
+		cli.Printf(ctx.Writer(), "Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
 			invoker.getRequest().String())
 		return nil
 	}
@@ -99,9 +100,9 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	// if invoke with helper
 	out, err, ok := c.invokeWithHelper(invoker)
 
-	// fmt.Printf("invoker %v %v \n", invoker, reflect.TypeOf(invoker))
+	// cli.Printf("invoker %v %v \n", invoker, reflect.TypeOf(invoker))
 	if ok {
-		if err != nil {	// call with helper failed
+		if err != nil { // call with helper failed
 			return err
 		}
 	} else {
@@ -116,33 +117,33 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	}
 
 	// if `--quiet` assigned. do not print anything
-	if QuietFlag.IsAssigned() {
+	if QuietFlag(ctx.Flags()).IsAssigned() {
 		return nil
 	}
 
 	// process `--output ...`
-	if filter := GetOutputFilter(); filter != nil {
+	if filter := GetOutputFilter(ctx); filter != nil {
 		out, err = filter.FilterOutput(out)
 		if err != nil {
 			return err
 		}
 	}
 
-	fmt.Println(out)
+	cli.Println(ctx.Writer(), out)
 	return nil
 }
 
 // invoke with helper
 func (c *Commando) invokeWithHelper(invoker Invoker) (resp string, err error, ok bool) {
 	if pager := GetPager(); pager != nil {
-		// fmt.Printf("call with pager")
+		// cli.Printf("call with pager")
 		resp, err = pager.CallWith(invoker)
 		ok = true
 		return
 	}
 
 	if waiter := GetWaiter(); waiter != nil {
-		// fmt.Printf("call with waiter")
+		// cli.Printf("call with waiter")
 		resp, err = waiter.CallWith(invoker)
 		ok = true
 		return
@@ -157,7 +158,7 @@ func (c *Commando) invokeWithHelper(invoker Invoker) (resp string, err error, ok
 // rpc: RpcInvoker, ForceRpcInvoker
 // restful: RestfulInvoker
 func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMethod string, path string) (Invoker, error) {
-	force := ForceFlag.IsAssigned()
+	force := ForceFlag(ctx.Flags()).IsAssigned()
 	basicInvoker := NewBasicInvoker(&c.profile)
 
 	//
@@ -172,7 +173,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			// Rpc call
 			if path != "" {
 				return nil, cli.NewErrorWithTip(fmt.Errorf("invalid argument %s", path),
-				"Use `aliyun help %s` see more information.", product.GetLowerCode())
+					"Use `aliyun help %s` see more information.", product.GetLowerCode())
 			}
 			if force {
 				return &ForceRpcInvoker{
@@ -194,7 +195,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			// Restful Call
 			// aliyun cs GET /clusters
 			// aliyun cs /clusters --roa GET
-			ok, method, path, err := checkRestfulMethod(apiOrMethod, path)
+			ok, method, path, err := checkRestfulMethod(ctx, apiOrMethod, path)
 			if err != nil {
 				return nil, err
 			}
@@ -232,12 +233,12 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 		// Restful Call
 		// aliyun cs GET /clusters
 		// aliyun cs /clusters --roa GET
-		ok, method, path, err := checkRestfulMethod(apiOrMethod, path)
+		ok, method, path, err := checkRestfulMethod(ctx, apiOrMethod, path)
 		if err != nil {
 			return nil, err
 		}
 		if ok {
-			return &RestfulInvoker {
+			return &RestfulInvoker{
 				basicInvoker,
 				method,
 				path,
@@ -246,7 +247,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			// return invoker, nil
 			// c.InvokeRestful(ctx, &product, method, path)
 		} else {
-			return &ForceRpcInvoker {
+			return &ForceRpcInvoker{
 				basicInvoker,
 				method,
 			}, nil
@@ -263,19 +264,19 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 	//	printUsage(ctx.Command(), nil)
 	// } else {
 	if len(args) == 0 {
-		cmd.PrintHead()
-		cmd.PrintUsage()
+		cmd.PrintHead(ctx)
+		cmd.PrintUsage(ctx)
 		cmd.PrintFlags(ctx)
-		cmd.PrintSample()
+		cmd.PrintSample(ctx)
 		c.library.PrintProducts()
-		cmd.PrintTail()
+		cmd.PrintTail(ctx)
 		return nil
 	} else if len(args) == 1 {
-		cmd.PrintHead()
+		cmd.PrintHead(ctx)
 		return c.library.PrintProductUsage(args[0], true)
 		// c.PrintFlags() TODO add later
 	} else if len(args) == 2 {
-		cmd.PrintHead()
+		cmd.PrintHead(ctx)
 		return c.library.PrintApiUsage(args[0], args[1])
 		// c.PrintFlags() TODO add later
 	} else {
@@ -285,6 +286,8 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 
 //
 func (c *Commando) complete(ctx *cli.Context, args []string) []string {
+	w := ctx.Writer()
+
 	r := make([]string, 0)
 	//
 	// aliyun
@@ -294,7 +297,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 			if !strings.HasPrefix(p.GetLowerCode(), ctx.Completion().Current) {
 				continue
 			}
-			fmt.Printf("%s\n", p.GetLowerCode())
+			cli.Printf(w, "%s\n", p.GetLowerCode())
 		}
 		return r
 	}
@@ -310,7 +313,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 				if !strings.HasPrefix(name, ctx.Completion().Current) {
 					continue
 				}
-				fmt.Printf("%s\n", name)
+				cli.Printf(w, "%s\n", name)
 			}
 			return r
 		}
@@ -321,15 +324,15 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 
 		api.ForeachParameters(func(s string, p meta.Parameter) {
 			if strings.HasPrefix("--"+s, ctx.Completion().Current) && !p.Hidden {
-				fmt.Printf("--%s\n", s)
+				cli.Printf(ctx.Writer(), "--%s\n", s)
 			}
 		})
 	} else if product.ApiStyle == "restful" {
 		if len(args) == 1 {
-			fmt.Printf("GET\n")
-			fmt.Printf("POST\n")
-			fmt.Printf("DELETE\n")
-			fmt.Printf("PUT\n")
+			cli.Printf(w, "GET\n")
+			cli.Printf(w, "POST\n")
+			cli.Printf(w, "DELETE\n")
+			cli.Printf(w, "PUT\n")
 			return r
 		}
 	}
@@ -337,16 +340,16 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 	return r
 }
 
-
-func (c *Commando) printUsage(cmd *cli.Command) {
-	cmd.PrintHead()
-	cmd.PrintUsage()
-	cmd.PrintSubCommands()
-	cmd.PrintFlags(nil)
-	cmd.PrintSample()
+func (c *Commando) printUsage(ctx *cli.Context) {
+	cmd := ctx.Command()
+	cmd.PrintHead(ctx)
+	cmd.PrintUsage(ctx)
+	cmd.PrintSubCommands(ctx)
+	cmd.PrintFlags(ctx)
+	cmd.PrintSample(ctx)
 	//if configError != nil {
-	//	fmt.Printf("Configuration Invailed: %s\n", configError)
-	//	fmt.Printf("Run `aliyun configure` first:\n  %s\n", configureCommand.Usage)
+	//	cli.Printf("Configuration Invailed: %s\n", configError)
+	//	cli.Printf("Run `aliyun configure` first:\n  %s\n", configureCommand.Usage)
 	//}
-	cmd.PrintTail()
+	cmd.PrintTail(ctx)
 }

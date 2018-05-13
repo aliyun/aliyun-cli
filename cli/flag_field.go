@@ -4,8 +4,8 @@
 package cli
 
 import (
-	"github.com/aliyun/aliyun-cli/i18n"
 	"fmt"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 type Field struct {
@@ -31,8 +31,8 @@ type Field struct {
 	Short *i18n.Text
 
 	assigned bool
-	value string
-	values []string
+	value    string
+	values   []string
 }
 
 func (f *Field) assign(v string) {

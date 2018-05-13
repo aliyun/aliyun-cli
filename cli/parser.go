@@ -4,8 +4,8 @@
 package cli
 
 import (
-	"strings"
 	"fmt"
+	"strings"
 )
 
 type flagDetector interface {
@@ -22,9 +22,9 @@ type Parser struct {
 
 func NewParser(args []string, detector flagDetector) *Parser {
 	return &Parser{
-		args:     args,
-		current:  0,
-		detector: detector,
+		args:        args,
+		current:     0,
+		detector:    detector,
 		currentFlag: nil,
 	}
 }
@@ -92,14 +92,14 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 			if err != nil {
 				return
 			}
-			if !p.currentFlag.needValue() {	// if current flag is feeds close it
+			if !p.currentFlag.needValue() { // if current flag is feeds close it
 				// fmt.Printf("$$$ clear %s\n", p.currentFlag.AssignedMode)
 				p.currentFlag = nil
 			}
 		} else {
-			arg = value	// this is a arg
+			arg = value // this is a arg
 		}
-	} else {	// parse with flag	--xxx or -x
+	} else { // parse with flag	--xxx or -x
 		if p.currentFlag != nil {
 			err = p.currentFlag.validate()
 			if err != nil {
@@ -122,7 +122,7 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 	return
 }
 
-func (p *Parser) parseCommandArg(s string) (flag *Flag, value string, err error){
+func (p *Parser) parseCommandArg(s string) (flag *Flag, value string, err error) {
 	prefix, v, ok := SplitStringWithPrefix(s, "=:")
 
 	if ok {
@@ -162,7 +162,7 @@ func SplitString(s string, sep string) []string {
 
 func UnquoteString(s string) string {
 	if strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"") && len(s) >= 2 {
-		return s[1:len(s)-1]
+		return s[1 : len(s)-1]
 	} else {
 		return s
 	}
