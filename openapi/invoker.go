@@ -65,7 +65,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	}
 
 	a.request = requests.NewCommonRequest()
-	a.request.Headers["User-Agent"] = fmt.Sprintf("Aliyun-CLI-V%s", cli.GetVersion())
+	a.request.Headers["User-Agent"] = config.GetUserAgent()
 	a.request.Product = product.Code
 
 	a.request.RegionId = a.profile.RegionId
