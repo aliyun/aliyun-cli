@@ -133,9 +133,10 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		} else if cp.RamRoleArn != "" {
 			cp.Mode = RamRoleArn
 		}
-	}
-	if cp.PrivateKey != "" && cp.KeyPairName != "" {
+	} else if cp.PrivateKey != "" && cp.KeyPairName != "" {
 		cp.Mode = RsaKeyPair
+	} else if cp.RamRoleName != "" {
+		cp.Mode = EcsRamRole
 	}
 }
 
