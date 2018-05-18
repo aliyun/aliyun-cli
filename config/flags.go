@@ -158,7 +158,7 @@ func NewStsTokenFlag() *cli.Flag {
 
 func NewRamRoleNameFlag() *cli.Flag {
 	return &cli.Flag{Category: "config",
-		Name: RamRoleNameFlagName, AssignedMode: cli.AssignedOnce,
+		Name: RamRoleNameFlagName, AssignedMode: cli.AssignedOnce, Persistent: true,
 		Short: i18n.T(
 			"use `--ram-role-name <RamRoleName>` to assign RamRoleName",
 			"使用 `--ram-role-name <RamRoleName>` 指定RamRoleName")}
