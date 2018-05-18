@@ -126,6 +126,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.RetryTimeout = RetryTimeoutFlag(ctx.Flags()).GetIntegerOrDefault(cp.RetryTimeout)
 	cp.RetryCount = RetryTimeoutFlag(ctx.Flags()).GetIntegerOrDefault(cp.RetryCount)
 
+	//TODO:remove code below
 	if cp.AccessKeyId != "" && cp.AccessKeySecret != "" {
 		cp.Mode = AK
 		if cp.StsToken != "" {
