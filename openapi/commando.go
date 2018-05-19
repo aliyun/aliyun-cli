@@ -297,7 +297,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 			if !strings.HasPrefix(p.GetLowerCode(), ctx.Completion().Current) {
 				continue
 			}
-			cli.Printf(w, "%s\n", p.GetLowerCode())
+			cli.PrintfWithColor(w, cli.ProductListColor(),"%s\n", p.GetLowerCode())
 		}
 		return r
 	}
@@ -313,7 +313,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 				if !strings.HasPrefix(name, ctx.Completion().Current) {
 					continue
 				}
-				cli.Printf(w, "%s\n", name)
+				cli.PrintfWithColor(w, cli.APIListColor(),"%s\n", name)
 			}
 			return r
 		}
@@ -329,10 +329,11 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 		})
 	} else if product.ApiStyle == "restful" {
 		if len(args) == 1 {
-			cli.Printf(w, "GET\n")
-			cli.Printf(w, "POST\n")
-			cli.Printf(w, "DELETE\n")
-			cli.Printf(w, "PUT\n")
+			cli.PrintfWithColor(w, cli.APIListColor(),"GET\n")
+			cli.PrintfWithColor(w, cli.APIListColor(),"POST\n")
+			cli.PrintfWithColor(w, cli.APIListColor(),"DELETE\n")
+			cli.PrintfWithColor(w, cli.APIListColor(),"PUT\n")
+
 			return r
 		}
 	}
