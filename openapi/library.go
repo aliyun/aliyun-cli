@@ -46,7 +46,7 @@ func (a *Library) PrintProducts() {
 	cli.Printf(a.writer, "\nProducts:\n")
 	w := tabwriter.NewWriter(a.writer, 8, 0, 1, ' ', 0)
 	for _, product := range a.builtinRepo.Products {
-		fmt.Fprintf(w, "  %s\t%s\n", strings.ToLower(product.Code), product.Name[i18n.GetLanguage()])
+		cli.PrintfWithColor(w, cli.Cyan,"  %s\t%s\n", strings.ToLower(product.Code), product.Name[i18n.GetLanguage()])
 	}
 	w.Flush()
 }
@@ -76,7 +76,7 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 	if withApi {
 		cli.Printf(a.writer, "\nAvailable Api List: \n")
 		for _, apiName := range product.ApiNames {
-			cli.Printf(a.writer, "  %s\n", apiName)
+			cli.PrintfWithColor(a.writer, cli.Blue,"  %s\n", apiName)
 		}
 		// TODO some ApiName is too long, two column not seems good
 		//w := tabwriter.NewWriter(cli.GetOutputWriter(), 8, 0, 1, ' ', 0)
