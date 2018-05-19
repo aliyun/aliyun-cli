@@ -91,6 +91,8 @@ const (
 
 var (
 	withColor = true
+	productListColor = ""
+	apiListColor = ""
 )
 
 func EnableColor() {
@@ -101,11 +103,31 @@ func DisableColor() {
 	withColor = false
 }
 
+func ProductListColor() string {
+	return productListColor
+}
+
+func SetProductListColor(color string) {
+	productListColor = color
+}
+
+func APIListColor() string {
+	return apiListColor
+}
+
+func SetAPIListColor(color string) {
+	apiListColor = color
+}
+
 func colorized(color string, a ...interface{}) string {
-	if withColor {
+	if withColor && color != "" {
 		return color + fmt.Sprint(a...) + ColorOff
 	}
 	return fmt.Sprint(a...)
+}
+
+func PrintWithColor(w io.Writer, color string, a ...interface{}) (n int, err error) {
+	return Print(w, colorized(color, a...))
 }
 
 func Debug(w io.Writer, a ...interface{}) (n int, err error) {
@@ -146,4 +168,8 @@ func Warningf(w io.Writer, format string, args ...interface{}) (n int, err error
 
 func Errorf(w io.Writer, format string, args ...interface{}) (n int, err error) {
 	return Error(w, fmt.Sprintf(format, args...))
+}
+
+func PrintfWithColor(w io.Writer, color string, format string, args ...interface{}) (n int, err error) {
+	return PrintWithColor(w, color, fmt.Sprintf(format, args...))
 }
