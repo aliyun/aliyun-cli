@@ -89,7 +89,7 @@ func (cp *Profile) Validate() error {
 		}
 	case EcsRamRole:
 		if cp.RamRoleName == "" {
-			return fmt.Errorf("invailed ram_role_name")
+			//return fmt.Errorf("invailed ram_role_name")
 		}
 	case RsaKeyPair:
 		if cp.PrivateKey == "" {
@@ -261,17 +261,32 @@ func (cp *Profile) GetClientByRoleArn(config *sdk.Config) (*sdk.Client, error) {
 }
 
 func (cp *Profile) GetSessionCredentialByEcsRamRole() (*signers.SessionCredential, error) {
-	if cp.RamRoleName == "" {
-		return nil, fmt.Errorf("RamRole is empty! run `aliyun configure` first")
+	httpClient := &http.Client{}
+
+	baseURL := "http://100.100.100.200/latest/meta-data/ram/security-credentials/"
+	ecsRamRoleName := cp.RamRoleName
+	if ecsRamRoleName == "" {
+		resp, err := httpClient.Get(baseURL)
+		if err != nil {
+			return nil, fmt.Errorf("Get default RamRole error: %s. Or Run `aliyun configure` to configure it.", err.Error())
+		}
+
+		response := responses.NewCommonResponse()
+		err = responses.Unmarshal(response, resp, "")
+
+		if response.GetHttpStatus() != http.StatusOK {
+			return nil, fmt.Errorf("Get meta-data status=%d please check RAM settings. Or Run `aliyun configure` to configure it.", response.GetHttpStatus())
+		}
+
+		ecsRamRoleName = response.GetHttpContentString()
 	}
 
-	requestUrl := "http://100.100.100.200/latest/meta-data/ram/security-credentials/" + cp.RamRoleName
+	requestUrl := baseURL + ecsRamRoleName
 	httpRequest, err := http.NewRequest(requests.GET, requestUrl, strings.NewReader(""))
 	if err != nil {
 		return nil, fmt.Errorf("new http request failed %s", err)
 	}
 
-	httpClient := &http.Client{}
 	httpResponse, err := httpClient.Do(httpRequest)
 	if err != nil {
 		return nil, fmt.Errorf("failed get credentials from meta-data %s, please check RAM settings", err)
@@ -281,7 +296,7 @@ func (cp *Profile) GetSessionCredentialByEcsRamRole() (*signers.SessionCredentia
 	err = responses.Unmarshal(response, httpResponse, "")
 
 	if response.GetHttpStatus() != http.StatusOK {
-		return nil, fmt.Errorf("get meta-data status=%d please check RAM settings", response.GetHttpStatus())
+		return nil, fmt.Errorf("get meta-data with role %s ,status=%d, please check RAM settings", ecsRamRoleName, response.GetHttpStatus())
 	}
 
 	var data interface{}
