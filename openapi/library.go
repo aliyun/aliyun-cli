@@ -76,7 +76,7 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 	if withApi {
 		cli.Printf(a.writer, "\nAvailable Api List: \n")
 		for _, apiName := range product.ApiNames {
-			cli.PrintfWithColor(a.writer, cli.Blue,"  %s\n", apiName)
+			cli.PrintfWithColor(a.writer, cli.Green,"  %s\n", apiName)
 		}
 		// TODO some ApiName is too long, two column not seems good
 		//w := tabwriter.NewWriter(cli.GetOutputWriter(), 8, 0, 1, ' ', 0)
