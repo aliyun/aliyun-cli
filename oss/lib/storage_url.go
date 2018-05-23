@@ -144,8 +144,9 @@ func (fu *FileURL) Init(urlStr, encodingType string) error {
 		ex, derr := os.Executable()
 		if derr != nil {
 			dir = "/tmp"
+		} else {
+			dir = filepath.Dir(ex)
 		}
-		dir = filepath.Dir(ex)
 	} else {
 		dir = usr.HomeDir
 	}
