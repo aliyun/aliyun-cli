@@ -10,10 +10,9 @@ import (
 func PlatformCompatible() {
 	if runtime.GOOS == `windows` {
 		DisableColor()
-
-		var ok bool
-		if utils.TZData, ok = resource.GetTZData("GMT"); ok {
-			utils.LoadLocationFromTZData = time.LoadLocationFromTZData
-		}
+	}
+	var ok bool
+	if utils.TZData, ok = resource.GetTZData("GMT"); ok {
+		utils.LoadLocationFromTZData = time.LoadLocationFromTZData
 	}
 }
