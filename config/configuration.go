@@ -101,6 +101,7 @@ func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
 		return
 	}
 	profile.OverwriteWithFlags(ctx)
+	err = profile.Validate()
 	return
 }
 

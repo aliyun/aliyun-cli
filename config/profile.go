@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"regexp"
 )
 
 type AuthenticateMode string
@@ -62,9 +63,19 @@ func NewProfile(name string) Profile {
 }
 
 func (cp *Profile) Validate() error {
+
+	if cp.RegionId == "" {
+		return fmt.Errorf("region can't be empty")
+	}
+
+	if !IsRegion(cp.RegionId) {
+		return fmt.Errorf("invailed region %s", cp.RegionId)
+	}
+
 	if cp.Mode == "" {
 		return fmt.Errorf("profile %s is not configure yet, run `aliyun configure --profile %s` first", cp.Name, cp.Name)
 	}
+
 	switch cp.Mode {
 	case AK:
 		return cp.ValidateAK()
@@ -101,9 +112,7 @@ func (cp *Profile) Validate() error {
 	default:
 		return fmt.Errorf("invailed mode: %s", cp.Mode)
 	}
-	if cp.RegionId == "" {
-		return fmt.Errorf("region can't be empty")
-	}
+
 	return nil
 }
 
@@ -346,4 +355,11 @@ func (cp *Profile) GetClientByPrivateKey(config *sdk.Config) (*sdk.Client, error
 	cred := credentials.NewRsaKeyPairCredential(cp.PrivateKey, cp.KeyPairName, cp.ExpiredSeconds)
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
+}
+
+func IsRegion(region string) bool {
+	if match, _ := regexp.MatchString("^[a-zA-Z0-9-]*$", region); !match {
+		return false
+	}
+	return true
 }
