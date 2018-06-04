@@ -135,7 +135,7 @@ func SaveConfiguration(config Configuration) error {
 		return err
 	}
 	path := GetConfigPath() + "/" + configFile
-	err = ioutil.WriteFile(path, bytes, 0755)
+	err = ioutil.WriteFile(path, bytes, 0600)
 	if err != nil {
 		return err
 	}
