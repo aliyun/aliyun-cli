@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/user"
 	"strings"
+	"path/filepath"
 )
 
 // SchemePrefix is the prefix of oss url
@@ -137,8 +138,18 @@ func (fu *FileURL) Init(urlStr, encodingType string) error {
 		urlStr = vurl
 	}
 
-	usr, _ := user.Current()
-	dir := usr.HomeDir
+	usr, err := user.Current()
+	var dir string
+	if err != nil {
+		ex, derr := os.Executable()
+		if derr != nil {
+			dir = "/tmp"
+		} else {
+			dir = filepath.Dir(ex)
+		}
+	} else {
+		dir = usr.HomeDir
+	}
 	if len(urlStr) >= 2 && urlStr[:2] == "~"+string(os.PathSeparator) {
 		urlStr = strings.Replace(urlStr, "~", dir, 1)
 	}
