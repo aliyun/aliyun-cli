@@ -90,6 +90,14 @@ ecs       | EcsRamRole:EcsTest | Valid   | cn-beijing       | en
 - 使用`aliyun auto-completion`命令开启自动补全，目前支持zsh/bash
 - 使用`aliyun auto-completion --uninstall`命令关闭自动补全
 
+#### 配置Pretty JSON
+
+阿里云CLI返回的执行结果为Raw JSON,如需Pretty JSON，可安装[jq](https://stedolan.github.io/jq/download/)工具，使用方式如下：
+
+```
+$ aliyun ecs DescribeRegions | jq
+```
+
 ## 使用阿里云CLI
 
 阿里云云产品的OpenAPI有RPC和RESTful两种风格，大部分产品使用的是RPC风格。不同风格的API的调用方法也不同。
