@@ -92,7 +92,7 @@ ecs       | EcsRamRole:EcsTest | Valid   | cn-beijing       | en
 
 #### 配置Pretty JSON
 
-阿里云CLI返回的执行结果为Raw JSON,如需Pretty JSON，可安装[jq](https://stedolan.github.io/jq/download/)工具，使用方式如下：
+阿里云CLI返回的执行结果为Raw JSON，如需Pretty JSON，可安装[jq](https://stedolan.github.io/jq/download/)工具，使用方式如下：
 
 ```
 $ aliyun ecs DescribeRegions | jq
