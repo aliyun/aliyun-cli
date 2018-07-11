@@ -91,7 +91,7 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 		//w.Flush()
 	}
 
-	cli.Printf(a.writer, "\nRun `aliyun %s <ApiName> --help` to get more information about api", product.GetLowerCode())
+	cli.Printf(a.writer, "\nRun `aliyun %s <ApiName> --help` to get more information about api\n", product.GetLowerCode())
 	return nil
 }
 
