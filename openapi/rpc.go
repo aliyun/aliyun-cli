@@ -42,7 +42,9 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 			request.QueryParams[f.Name], _ = f.GetValue()
 		} else if param.Position == "Body" {
 			request.FormParams[f.Name], _ = f.GetValue()
-		} else {
+		} else if param.Position == "Domain" {
+			continue
+		}else {
 			return fmt.Errorf("unknown parameter position; %s is %s", param.Name, param.Position)
 		}
 	}

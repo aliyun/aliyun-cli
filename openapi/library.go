@@ -122,6 +122,9 @@ func printParameters(w io.Writer, params []meta.Parameter, prefix string) {
 		if param.Hidden {
 			continue
 		}
+		if param.Position == "Domain" {
+			continue
+		}
 		if len(param.SubParameters) > 0 {
 			printParameters(w, param.SubParameters, param.Name+".n.")
 			//for _, sp := range param.SubParameters {
