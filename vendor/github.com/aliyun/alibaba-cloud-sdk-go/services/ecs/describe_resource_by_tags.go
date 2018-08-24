@@ -76,22 +76,19 @@ func (client *Client) DescribeResourceByTagsWithCallback(request *DescribeResour
 // DescribeResourceByTagsRequest is the request struct for api DescribeResourceByTags
 type DescribeResourceByTagsRequest struct {
 	*requests.RpcRequest
-	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
-	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	PageSize             requests.Integer `position:"Query" name:"PageSize"`
-	PageNumber           requests.Integer `position:"Query" name:"PageNumber"`
-	ResourceType         string           `position:"Query" name:"ResourceType"`
-	Tag1Key              string           `position:"Query" name:"Tag.1.Key"`
-	Tag2Key              string           `position:"Query" name:"Tag.2.Key"`
-	Tag3Key              string           `position:"Query" name:"Tag.3.Key"`
-	Tag4Key              string           `position:"Query" name:"Tag.4.Key"`
-	Tag5Key              string           `position:"Query" name:"Tag.5.Key"`
-	Tag1Value            string           `position:"Query" name:"Tag.1.Value"`
-	Tag2Value            string           `position:"Query" name:"Tag.2.Value"`
-	Tag3Value            string           `position:"Query" name:"Tag.3.Value"`
-	Tag4Value            string           `position:"Query" name:"Tag.4.Value"`
-	Tag5Value            string           `position:"Query" name:"Tag.5.Value"`
+	ResourceOwnerId      requests.Integer             `position:"Query" name:"ResourceOwnerId"`
+	ResourceOwnerAccount string                       `position:"Query" name:"ResourceOwnerAccount"`
+	PageSize             requests.Integer             `position:"Query" name:"PageSize"`
+	Tag                  *[]DescribeResourceByTagsTag `position:"Query" name:"Tag"  type:"Repeated"`
+	OwnerId              requests.Integer             `position:"Query" name:"OwnerId"`
+	ResourceType         string                       `position:"Query" name:"ResourceType"`
+	PageNumber           requests.Integer             `position:"Query" name:"PageNumber"`
+}
+
+// DescribeResourceByTagsTag is a repeated param struct in DescribeResourceByTagsRequest
+type DescribeResourceByTagsTag struct {
+	Value string `name:"Value"`
+	Key   string `name:"Key"`
 }
 
 // DescribeResourceByTagsResponse is the response struct for api DescribeResourceByTags

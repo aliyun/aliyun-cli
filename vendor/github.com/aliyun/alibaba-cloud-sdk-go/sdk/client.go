@@ -220,6 +220,9 @@ func (client *Client) DoActionWithSigner(request requests.AcsRequest, response r
 	}
 	request.SetDomain(endpoint)
 
+	if request.GetScheme() == "" {
+		request.SetScheme(client.config.Scheme)
+	}
 	// init request params
 	err = requests.InitParams(request)
 	if err != nil {
@@ -247,7 +250,9 @@ func (client *Client) DoActionWithSigner(request requests.AcsRequest, response r
 		var timeout bool
 		// receive error
 		if err != nil {
-			if timeout = isTimeout(err); !timeout {
+			if !client.config.AutoRetry {
+				return
+			} else if timeout = isTimeout(err); !timeout {
 				// if not timeout error, return
 				return
 			} else if retryTimes >= client.config.MaxRetryTime {
@@ -328,6 +333,10 @@ func (client *Client) AddAsyncTask(task func()) (err error) {
 		err = errors.NewClientError(errors.AsyncFunctionNotEnabledCode, errors.AsyncFunctionNotEnabledMessage, nil)
 	}
 	return
+}
+
+func (client *Client) GetConfig() *Config {
+	return client.config
 }
 
 func NewClient() (client *Client, err error) {

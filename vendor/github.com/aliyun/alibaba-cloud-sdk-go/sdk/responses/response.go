@@ -17,11 +17,11 @@ package responses
 import (
 	"bytes"
 	"encoding/xml"
+	"fmt"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"io/ioutil"
 	"net/http"
 	"strings"
-	"fmt"
 )
 
 type AcsResponse interface {
@@ -47,6 +47,11 @@ func Unmarshal(response AcsResponse, httpResponse *http.Response, format string)
 		// common response need not unmarshal
 		return
 	}
+
+	if len(response.GetHttpContentBytes()) == 0 {
+		return
+	}
+
 	if strings.ToUpper(format) == "JSON" {
 		initJsonParserOnce()
 		err = jsonParser.Unmarshal(response.GetHttpContentBytes(), response)

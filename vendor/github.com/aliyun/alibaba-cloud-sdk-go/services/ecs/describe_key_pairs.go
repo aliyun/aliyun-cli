@@ -76,13 +76,21 @@ func (client *Client) DescribeKeyPairsWithCallback(request *DescribeKeyPairsRequ
 // DescribeKeyPairsRequest is the request struct for api DescribeKeyPairs
 type DescribeKeyPairsRequest struct {
 	*requests.RpcRequest
-	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
-	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	KeyPairName          string           `position:"Query" name:"KeyPairName"`
-	KeyPairFingerPrint   string           `position:"Query" name:"KeyPairFingerPrint"`
-	PageNumber           requests.Integer `position:"Query" name:"PageNumber"`
-	PageSize             requests.Integer `position:"Query" name:"PageSize"`
+	ResourceGroupId      string                 `position:"Query" name:"ResourceGroupId"`
+	ResourceOwnerId      requests.Integer       `position:"Query" name:"ResourceOwnerId"`
+	ResourceOwnerAccount string                 `position:"Query" name:"ResourceOwnerAccount"`
+	KeyPairFingerPrint   string                 `position:"Query" name:"KeyPairFingerPrint"`
+	PageSize             requests.Integer       `position:"Query" name:"PageSize"`
+	KeyPairName          string                 `position:"Query" name:"KeyPairName"`
+	Tag                  *[]DescribeKeyPairsTag `position:"Query" name:"Tag"  type:"Repeated"`
+	OwnerId              requests.Integer       `position:"Query" name:"OwnerId"`
+	PageNumber           requests.Integer       `position:"Query" name:"PageNumber"`
+}
+
+// DescribeKeyPairsTag is a repeated param struct in DescribeKeyPairsRequest
+type DescribeKeyPairsTag struct {
+	Value string `name:"Value"`
+	Key   string `name:"Key"`
 }
 
 // DescribeKeyPairsResponse is the response struct for api DescribeKeyPairs

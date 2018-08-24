@@ -76,29 +76,26 @@ func (client *Client) CreateDiskWithCallback(request *CreateDiskRequest, callbac
 // CreateDiskRequest is the request struct for api CreateDisk
 type CreateDiskRequest struct {
 	*requests.RpcRequest
-	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
-	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
-	ZoneId               string           `position:"Query" name:"ZoneId"`
 	SnapshotId           string           `position:"Query" name:"SnapshotId"`
-	DiskName             string           `position:"Query" name:"DiskName"`
-	Size                 requests.Integer `position:"Query" name:"Size"`
-	DiskCategory         string           `position:"Query" name:"DiskCategory"`
-	Description          string           `position:"Query" name:"Description"`
-	Encrypted            requests.Boolean `position:"Query" name:"Encrypted"`
+	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	ClientToken          string           `position:"Query" name:"ClientToken"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
-	Tag1Key              string           `position:"Query" name:"Tag.1.Key"`
-	Tag2Key              string           `position:"Query" name:"Tag.2.Key"`
-	Tag3Key              string           `position:"Query" name:"Tag.3.Key"`
-	Tag4Key              string           `position:"Query" name:"Tag.4.Key"`
-	Tag5Key              string           `position:"Query" name:"Tag.5.Key"`
-	Tag1Value            string           `position:"Query" name:"Tag.1.Value"`
-	Tag2Value            string           `position:"Query" name:"Tag.2.Value"`
-	Tag3Value            string           `position:"Query" name:"Tag.3.Value"`
-	Tag4Value            string           `position:"Query" name:"Tag.4.Value"`
-	Tag5Value            string           `position:"Query" name:"Tag.5.Value"`
+	Description          string           `position:"Query" name:"Description"`
+	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	DiskName             string           `position:"Query" name:"DiskName"`
 	ResourceGroupId      string           `position:"Query" name:"ResourceGroupId"`
+	Size                 requests.Integer `position:"Query" name:"Size"`
+	Encrypted            requests.Boolean `position:"Query" name:"Encrypted"`
+	DiskCategory         string           `position:"Query" name:"DiskCategory"`
+	ZoneId               string           `position:"Query" name:"ZoneId"`
+	Tag                  *[]CreateDiskTag `position:"Query" name:"Tag"  type:"Repeated"`
+}
+
+// CreateDiskTag is a repeated param struct in CreateDiskRequest
+type CreateDiskTag struct {
+	Value string `name:"Value"`
+	Key   string `name:"Key"`
 }
 
 // CreateDiskResponse is the response struct for api CreateDisk

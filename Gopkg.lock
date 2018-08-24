@@ -2,6 +2,7 @@
 
 
 [[projects]]
+  branch = "master"
   name = "github.com/aliyun/alibaba-cloud-sdk-go"
   packages = [
     "sdk",
@@ -11,13 +12,13 @@
     "sdk/endpoints",
     "sdk/errors",
     "sdk/requests",
+    "sdk/resource",
     "sdk/responses",
     "sdk/utils",
     "services/ecs",
     "services/sts"
   ]
-  revision = "5ecf717b8db71a9db7fa3d7e953032c31debcbfc"
-  version = "1.9.5"
+  revision = "89a49455acb77a90f228cdda701be3d8cc9083d4"
 
 [[projects]]
   name = "github.com/aliyun/aliyun-oss-go-sdk"
@@ -226,6 +227,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "c347277909dabe14237a43d8c5510cbdda66f4f9c83b2174718186ef2a5f3e5c"
+  inputs-digest = "5f0bd1daa3934cbb584ac5ed8b3fce0338885d91800c12ce7be52dd4e3b6faa0"
   solver-name = "gps-cdcl"
   solver-version = 1

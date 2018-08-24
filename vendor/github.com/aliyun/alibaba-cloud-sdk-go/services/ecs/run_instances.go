@@ -76,6 +76,83 @@ func (client *Client) RunInstancesWithCallback(request *RunInstancesRequest, cal
 // RunInstancesRequest is the request struct for api RunInstances
 type RunInstancesRequest struct {
 	*requests.RpcRequest
+	LaunchTemplateName          string                          `position:"Query" name:"LaunchTemplateName"`
+	ResourceOwnerId             requests.Integer                `position:"Query" name:"ResourceOwnerId"`
+	UniqueSuffix                requests.Boolean                `position:"Query" name:"UniqueSuffix"`
+	HpcClusterId                string                          `position:"Query" name:"HpcClusterId"`
+	SecurityEnhancementStrategy string                          `position:"Query" name:"SecurityEnhancementStrategy"`
+	KeyPairName                 string                          `position:"Query" name:"KeyPairName"`
+	SpotPriceLimit              requests.Float                  `position:"Query" name:"SpotPriceLimit"`
+	ResourceGroupId             string                          `position:"Query" name:"ResourceGroupId"`
+	HostName                    string                          `position:"Query" name:"HostName"`
+	Password                    string                          `position:"Query" name:"Password"`
+	Tag                         *[]RunInstancesTag              `position:"Query" name:"Tag"  type:"Repeated"`
+	AutoRenewPeriod             requests.Integer                `position:"Query" name:"AutoRenewPeriod"`
+	Period                      requests.Integer                `position:"Query" name:"Period"`
+	DryRun                      requests.Boolean                `position:"Query" name:"DryRun"`
+	LaunchTemplateId            string                          `position:"Query" name:"LaunchTemplateId"`
+	OwnerId                     requests.Integer                `position:"Query" name:"OwnerId"`
+	VSwitchId                   string                          `position:"Query" name:"VSwitchId"`
+	SpotStrategy                string                          `position:"Query" name:"SpotStrategy"`
+	PrivateIpAddress            string                          `position:"Query" name:"PrivateIpAddress"`
+	PeriodUnit                  string                          `position:"Query" name:"PeriodUnit"`
+	InstanceName                string                          `position:"Query" name:"InstanceName"`
+	AutoRenew                   requests.Boolean                `position:"Query" name:"AutoRenew"`
+	InternetChargeType          string                          `position:"Query" name:"InternetChargeType"`
+	ZoneId                      string                          `position:"Query" name:"ZoneId"`
+	InternetMaxBandwidthIn      requests.Integer                `position:"Query" name:"InternetMaxBandwidthIn"`
+	ImageId                     string                          `position:"Query" name:"ImageId"`
+	SpotInterruptionBehavior    string                          `position:"Query" name:"SpotInterruptionBehavior"`
+	ClientToken                 string                          `position:"Query" name:"ClientToken"`
+	IoOptimized                 string                          `position:"Query" name:"IoOptimized"`
+	SecurityGroupId             string                          `position:"Query" name:"SecurityGroupId"`
+	InternetMaxBandwidthOut     requests.Integer                `position:"Query" name:"InternetMaxBandwidthOut"`
+	Description                 string                          `position:"Query" name:"Description"`
+	SystemDiskCategory          string                          `position:"Query" name:"SystemDisk.Category"`
+	UserData                    string                          `position:"Query" name:"UserData"`
+	PasswordInherit             requests.Boolean                `position:"Query" name:"PasswordInherit"`
+	InstanceType                string                          `position:"Query" name:"InstanceType"`
+	InstanceChargeType          string                          `position:"Query" name:"InstanceChargeType"`
+	NetworkInterface            *[]RunInstancesNetworkInterface `position:"Query" name:"NetworkInterface"  type:"Repeated"`
+	Amount                      requests.Integer                `position:"Query" name:"Amount"`
+	ResourceOwnerAccount        string                          `position:"Query" name:"ResourceOwnerAccount"`
+	OwnerAccount                string                          `position:"Query" name:"OwnerAccount"`
+	SystemDiskDiskName          string                          `position:"Query" name:"SystemDisk.DiskName"`
+	RamRoleName                 string                          `position:"Query" name:"RamRoleName"`
+	AutoReleaseTime             string                          `position:"Query" name:"AutoReleaseTime"`
+	DedicatedHostId             string                          `position:"Query" name:"DedicatedHostId"`
+	CreditSpecification         string                          `position:"Query" name:"CreditSpecification"`
+	DataDisk                    *[]RunInstancesDataDisk         `position:"Query" name:"DataDisk"  type:"Repeated"`
+	LaunchTemplateVersion       requests.Integer                `position:"Query" name:"LaunchTemplateVersion"`
+	SystemDiskSize              string                          `position:"Query" name:"SystemDisk.Size"`
+	SystemDiskDescription       string                          `position:"Query" name:"SystemDisk.Description"`
+}
+
+// RunInstancesTag is a repeated param struct in RunInstancesRequest
+type RunInstancesTag struct {
+	Key   string `name:"Key"`
+	Value string `name:"Value"`
+}
+
+// RunInstancesNetworkInterface is a repeated param struct in RunInstancesRequest
+type RunInstancesNetworkInterface struct {
+	PrimaryIpAddress     string `name:"PrimaryIpAddress"`
+	VSwitchId            string `name:"VSwitchId"`
+	SecurityGroupId      string `name:"SecurityGroupId"`
+	NetworkInterfaceName string `name:"NetworkInterfaceName"`
+	Description          string `name:"Description"`
+}
+
+// RunInstancesDataDisk is a repeated param struct in RunInstancesRequest
+type RunInstancesDataDisk struct {
+	Size               string `name:"Size"`
+	SnapshotId         string `name:"SnapshotId"`
+	Category           string `name:"Category"`
+	Encrypted          string `name:"Encrypted"`
+	DiskName           string `name:"DiskName"`
+	Description        string `name:"Description"`
+	Device             string `name:"Device"`
+	DeleteWithInstance string `name:"DeleteWithInstance"`
 }
 
 // RunInstancesResponse is the response struct for api RunInstances
