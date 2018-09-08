@@ -18,7 +18,7 @@
 
 您可以通过下载安装包或者直接编译源码的方式安装阿里云CLI：
 
-- **下载安装包**
+- **下载安装包 (推荐)**
 
 	阿里云CLI工具下载、解压后即可使用，支持Mac, Linux, Windows平台(x64版本)。	您可以将解压的`aliyun`可执行文件移至`/usr/local/bin`目录下，或添加到`$PATH`中。
 
@@ -30,7 +30,7 @@
 
 - **编译源码**
 
-	请先安装并配置好Golang环境，并按照如下步骤下载源码并编译。
+	如果您能访问[golang.org](https://golang.org/), 并安装配置好Golang环境，请按照如下步骤下载源码并编译。
 
 	```
 	$ mkdir -p $GOPATH/src/github.com/aliyun

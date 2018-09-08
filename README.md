@@ -19,7 +19,7 @@ If you encounter an issue when using Alibaba Cloud CLI, please submit your issue
 
 You can install Alibaba Cloud CLI either through the installer or the source code:
 
-- **Download installer**
+- **Download installer (recommended)**
 
 	Download the installer, then extract the installer. You can move the extracted `aliyun` executable file to the `/usr/local/bin` directory or add it to the `$PATH`.
 
@@ -31,7 +31,7 @@ You can install Alibaba Cloud CLI either through the installer or the source cod
 
 - **Compile source code**
 
-	If you have configured Golang, run the following command to install the CLI:
+	If you can access to [golang.org](https://golang.org/), and have configured Golang, run the following command to install the CLI:
 
 	```
 	$ mkdir -p $GOPATH/src/github.com/aliyun
