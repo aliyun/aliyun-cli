@@ -30,7 +30,7 @@
 
 - **编译源码**
 
-	如果您能访问[golang.org](https://golang.org/), 并安装配置好Golang环境，请按照如下步骤下载源码并编译。
+	如果您能访问[golang.org](https://golang.org/), 并安装配置好Golang环境(go1.10.1)，请按照如下步骤下载源码并编译。
 
 	```
 	$ mkdir -p $GOPATH/src/github.com/aliyun
