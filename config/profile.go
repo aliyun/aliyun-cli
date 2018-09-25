@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 	"regexp"
+	"os"
 )
 
 type AuthenticateMode string
@@ -134,6 +135,18 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.Language = LanguageFlag(ctx.Flags()).GetStringOrDefault(cp.Language)
 	cp.RetryTimeout = RetryTimeoutFlag(ctx.Flags()).GetIntegerOrDefault(cp.RetryTimeout)
 	cp.RetryCount = RetryTimeoutFlag(ctx.Flags()).GetIntegerOrDefault(cp.RetryCount)
+
+	if cp.AccessKeyId == "" {
+		cp.AccessKeyId = os.Getenv("ACCESS_KEY_ID")
+	}
+
+	if cp.AccessKeySecret == "" {
+		cp.AccessKeySecret = os.Getenv("ACCESS_KEY_SECRET")
+	}
+
+	if cp.StsToken == "" {
+		cp.StsToken = os.Getenv("SECURITY_TOKEN")
+	}
 
 	//TODO:remove code below
 	if cp.AccessKeyId != "" && cp.AccessKeySecret != "" {
