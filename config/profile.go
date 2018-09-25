@@ -148,6 +148,10 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		cp.StsToken = os.Getenv("SECURITY_TOKEN")
 	}
 
+	if cp.RegionId == "" {
+		cp.RegionId = os.Getenv("REGION")
+	}
+
 	//TODO:remove code below
 	if cp.AccessKeyId != "" && cp.AccessKeySecret != "" {
 		cp.Mode = AK
