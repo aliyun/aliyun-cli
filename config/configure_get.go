@@ -77,4 +77,5 @@ func doConfigureGet(c *cli.Context, args []string) {
 			cli.Printf(c.Writer(), "language=%s\n", profile.Language)
 		}
 	}
+	cli.Println(c.Writer(), "\n")
 }

@@ -133,6 +133,9 @@ func (f *Flag) GetFieldValues(key string) []string {
 //
 // return def if Flag is not assigned
 func (f *Flag) GetStringOrDefault(def string) string {
+	if f == nil {
+		return def
+	}
 	if f.assigned {
 		return f.value
 	} else {
@@ -143,6 +146,9 @@ func (f *Flag) GetStringOrDefault(def string) string {
 // TODO: flag support integer validate
 // return def if Flag is not assign or assign failed
 func (f *Flag) GetIntegerOrDefault(def int) int {
+	if f == nil {
+		return def
+	}
 	if f.assigned {
 		if i, err := strconv.Atoi(f.value); err != nil {
 			return i
