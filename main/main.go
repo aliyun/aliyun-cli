@@ -1,12 +1,14 @@
 package main
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/openapi"
 	"github.com/aliyun/aliyun-cli/oss/lib"
-	"os"
 )
 
 /**
@@ -37,6 +39,14 @@ func main() {
 	if err != nil {
 		cli.Errorf(writer, "ERROR: load current configuration failed %s", err)
 		return
+	}
+
+	// set user agent
+	userAgentFromEnv := os.Getenv("ALIYUN_USER_AGENT")
+	if userAgentFromEnv != "" {
+		defaultUserAgent := config.GetUserAgent()
+		userAgent := fmt.Sprintf("%s (%s)", defaultUserAgent, userAgentFromEnv)
+		config.SetUserAgent(userAgent)
 	}
 
 	// set language with current profile
