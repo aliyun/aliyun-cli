@@ -9,7 +9,7 @@
 
 阿里云命令行工具是用Go语言编写的, 基于阿里云OpenAPI打造的，用于管理阿里云资源的工具。通过下载和配置该工具，您可以在一个命令行方式下使用多个阿里云产品。
 
-欢迎通过提交[Github Issue](https://github.com/aliyun/aliyun-cli/issues/new)与我们沟通。建议您加入阿里云官方SDK&CLI客户服务群，钉钉群号：11771185。
+如果您在使用SDK的过程中遇到任何问题，欢迎前往[阿里云SDK问答社区](https://yq.aliyun.com/tags/type_ask-tagid_23350)提问，提问前请阅读[提问引导](https://help.aliyun.com/document_detail/93957.html)。亦可在当前GitHub提交Issues。
 
 **注意**：阿里云CLI使用OpenAPI方式访问云产品，确保您已经开通了要使用的云产品并了解该产品的OpenAPI的使用。您可以在[阿里云API平台](https://developer.aliyun.com/api)获取产品API文档，了解API的使用方式及参数列表。
 
