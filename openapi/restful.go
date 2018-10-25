@@ -49,6 +49,11 @@ func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
 		}
 	}
 
+	// assign parameters
+	for _, f := range ctx.UnknownFlags().Flags() {
+		a.request.QueryParams[f.Name], _ = f.GetValue()
+	}
+
 	if _, ok := SecureFlag(ctx.Flags()).GetValue(); ok {
 		a.request.Scheme = "https"
 	}
