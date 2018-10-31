@@ -65,8 +65,8 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 	if product.ApiStyle == "rpc" {
 		cli.Printf(a.writer, "\nUsage:\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ...\n", product.Code)
 	} else {
-		withApi = false
-		cli.Printf(a.writer, "\nUsage:\n  aliyun %s [GET|PUT|POST|DELETE] <PathPattern> --body \"...\" \n", product.Code)
+		cli.Printf(a.writer, "\nUsage 1:\n  aliyun %s [GET|PUT|POST|DELETE] <PathPattern> --body \"...\" \n", product.Code)
+		cli.Printf(a.writer, "\nUsage 2 (For API with NO PARAMS in PathPattern only.):\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ... --body \"...\"\n", product.Code)
 	}
 
 	cli.Printf(a.writer, "\nProduct: %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
@@ -75,8 +75,23 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 
 	if withApi {
 		cli.PrintfWithColor(a.writer, cli.ColorOff,"\nAvailable Api List: \n")
+		maxNameLen := 0
+
 		for _, apiName := range product.ApiNames {
-			cli.PrintfWithColor(a.writer, cli.Green,"  %s\n", apiName)
+			if len(apiName) > maxNameLen {
+				maxNameLen = len(apiName)
+			}
+		}
+
+		for _, apiName := range product.ApiNames {
+			if product.ApiStyle == "restful" {
+				api,_ := a.GetApi(productCode, product.Version, apiName)
+				ptn := fmt.Sprintf("  %%-%ds : %%s %%s\n", maxNameLen + 1)
+				cli.PrintfWithColor(a.writer, cli.Green, ptn, apiName, api.Method, api.PathPattern)
+			} else {
+				cli.PrintfWithColor(a.writer, cli.Green,"  %s\n", apiName)
+			}
+
 		}
 		// TODO some ApiName is too long, two column not seems good
 		//w := tabwriter.NewWriter(cli.GetOutputWriter(), 8, 0, 1, ' ', 0)
@@ -105,9 +120,19 @@ func (a *Library) PrintApiUsage(productCode string, apiName string) error {
 		return &InvalidApiError{Name: apiName, product: &product}
 	}
 
-	cli.Printf(a.writer, "\nProduct: %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
-	// cli.Printf("Api: %s %s\n", api.Name, api.Description[i18n.GetLanguage()])
-	cli.Printf(a.writer, "Link:    %s\n", api.GetDocumentLink())
+
+	if product.ApiStyle == "restful" {
+		cli.Printf(a.writer, "\nProduct:     %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
+		// cli.Printf("Api: %s %s\n", api.Name, api.Description[i18n.GetLanguage()])
+		cli.Printf(a.writer, "Link:        %s\n", api.GetDocumentLink())
+		cli.Printf(a.writer, "Method:      %s\n", api.Method)
+		cli.Printf(a.writer, "PathPattern: %s\n", api.PathPattern)
+	} else {
+		cli.Printf(a.writer, "\nProduct: %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
+		// cli.Printf("Api: %s %s\n", api.Name, api.Description[i18n.GetLanguage()])
+		cli.Printf(a.writer, "Link:    %s\n", api.GetDocumentLink())
+	}
+
 	cli.Printf(a.writer, "\nParameters:\n")
 
 	w := tabwriter.NewWriter(a.writer, 8, 0, 1, ' ', 0)
