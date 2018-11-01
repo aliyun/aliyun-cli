@@ -64,8 +64,15 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		// TODO: aliyun pluginName ...
 		return c.library.PrintProductUsage(productName, true)
 	} else if len(args) == 2 {
-		// rpc call
+		// rpc or restful call
 		// aliyun <productCode> <method> --param1 value1
+		product, _ := c.library.GetProduct(args[0])
+
+		if product.ApiStyle=="restful" {
+			api, _ := c.library.GetApi(product.Code, product.Version, args[1])
+			return c.processInvoke(ctx, productName, api.Method, api.PathPattern)
+		}
+
 		return c.processInvoke(ctx, productName, args[1], "")
 	} else if len(args) == 3 {
 		// restful call

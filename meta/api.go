@@ -12,6 +12,7 @@ type Api struct {
 	Name        string            `json:"name"`
 	Protocol    string            `json:"protocol"`
 	Method      string            `json:"method"`
+	PathPattern string            `json:"pathPattern"`
 	Description map[string]string `json:"descriptions,omitempty"`
 	Parameters  []Parameter       `json:"parameters"`
 	Product     *Product          `json:"-"`
