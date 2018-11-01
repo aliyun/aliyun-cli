@@ -23,11 +23,11 @@ You can install Alibaba Cloud CLI either through the installer or the source cod
 
 	Download the installer, then extract the installer. You can move the extracted `aliyun` executable file to the `/usr/local/bin` directory or add it to the `$PATH`.
 
-	Download link: (3.0.4)
+	Download link: (3.0.5)
 
-	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-3.0.4-amd64.tgz)
-	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-3.0.4-amd64.tgz)
-	- [Windows (64 bit)](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-3.0.4-amd64.zip)
+	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-3.0.5-amd64.tgz)
+	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-3.0.5-amd64.tgz)
+	- [Windows (64 bit)](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-3.0.5-amd64.zip)
 
 - **Compile source code**
 
