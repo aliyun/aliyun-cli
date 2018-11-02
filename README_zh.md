@@ -24,9 +24,9 @@
 
 	下载链接如下 (3.0.5)：
 
-	- [Mac](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-macosx-3.0.5-amd64.tgz)
-	- [Linux](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-linux-3.0.5-amd64.tgz)
-	- [Windows (64 bit)](http://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-windows-3.0.5-amd64.zip)
+	- [Mac](https://aliyuncli.alicdn.com/aliyun-cli-macosx-3.0.5-amd64.tgz)
+	- [Linux](https://aliyuncli.alicdn.com/aliyun-cli-linux-3.0.5-amd64.tgz)
+	- [Windows (64 bit)](https://aliyuncli.alicdn.com/aliyun-cli-windows-3.0.5-amd64.zip)
 
 - **编译源码**
 
