@@ -22,6 +22,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(WaiterFlag)
 	fs.Add(NewDryRunFlag())
 	fs.Add(NewQuietFlag())
+	fs.Add(NewRoaFlag())
 }
 
 const (
