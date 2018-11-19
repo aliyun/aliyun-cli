@@ -1,5 +1,5 @@
 # Aliyun Command Line Interface
-[![Build Status](https://travis-ci.org/aliyun/aliyun-cli.svg?branch=master)](https://travis-ci.org/aliyun/aliyun-cli) 
+[![Build Status](https://travis-ci.org/aliyun/aliyun-cli.svg?branch=master)](https://travis-ci.org/aliyun/aliyun-cli)
 
 [中文文档](./README_zh.md)
 
@@ -13,7 +13,7 @@ The Alibaba Cloud CLI is a tool to manage and use Alibaba Cloud resources throug
 
 If you encounter an issue when using Alibaba Cloud CLI, please submit your issue through [GitHub Issue](https://github.com/aliyun/aliyun-cli/issues/new) or joining the official SDK & CLI customer service group (DingDing Group No. 11771185).
 
-**Note**: Alibaba Cloud CLI access the Alibaba Cloud services through OpenAPI. Before using Alibaba Cloud CLI, make sure that you have activated the service to use and known how to use OpenAPI.
+> **Note**: Alibaba Cloud CLI access the Alibaba Cloud services through OpenAPI. Before using Alibaba Cloud CLI, make sure that you have activated the service to use and known how to use OpenAPI.
 
 ## Install Alibaba Cloud CLI
 
@@ -46,11 +46,11 @@ You can install Alibaba Cloud CLI either through the installer or the source cod
 
 Before using the CLI, you must complete the basic configurations.
 
-#### Basic configurations
+### Basic configurations
 
 Before using the CLI, you must run the `aliyun configure` command to complete the CLI configuration. An Alibaba Cloud account and a pair of AccessKey ID and AccessKey Secret are required. You can get the AccessKey on the [AccessKey](https://ak-console.aliyun.com/#/accesskey) page or get it from your system administrator.
 
- A default profile is created with information provided.
+A default profile is created with information provided.
 
 ```
 $ aliyun configure
@@ -62,14 +62,14 @@ Default output format [json]: json
 Default Languate [zh]: zh
 ```
 
-#### Configure multiple user profiles
+### Configure multiple user profiles
 
 Alibaba Cloud CLI supports configuring multiple user profiles. You can specify which user profile is used to call the API by using the `aliyun configure` command with the `--profile` option as shown in the following example:
 
 `$ aliyun configure --profile user1`
 
 
-Run the `aliyun configure list` command to view the configured user profiles. The profile followed by an asterisk (*) is the profile current in use.
+Run the `aliyun configure list` command to view the configured user profiles. The profile followed by an asterisk (\*) is the profile current in use.
 
 ```
 Profile   | Credential         | Valid   | Region           | Language
@@ -80,7 +80,7 @@ test      | AK:***456          | Valid   |                  | en
 ecs       | EcsRamRole:EcsTest | Valid   | cn-beijing       | en
 ```
 
-#### Configure authentication methods
+### Configure authentication methods
 
 You can specify the authentication method to use by using the `configure` command with the `--mode <authenticationMethod>` option.
 
@@ -94,7 +94,7 @@ The following are supported authentication methods:
 | EcsRamRole     | Use the EcsRamRole to access ECS resources   |
 
 
-#### Enable bash/zsh auto completion
+### Enable bash/zsh auto completion
 
 - Use `aliyun auto-completion` command to enable auto completion in zsh/bash
 - Use `aliyun auto-completion --uninstall` command to disable auto completion.
@@ -109,7 +109,7 @@ You can distinguish the API style from the following characteristics:
 - In general, the API style for a product is consistent.
 - Each API only supports one style. If an incorrect calling method is used, another API may be called or an error `ApiNotFound` is returned.
 
-####Call RPC APIs
+### Call RPC APIs
 
 The following statement shows how to call RPC APIs in the Alibaba Cloud CLI:
 
@@ -126,9 +126,9 @@ $ aliyun rds DescribeDBInstanceAttribute --DBInstanceId xxxxxx
 ```
 
 
-#### Call RESTful APIs
+### Call RESTful APIs
 
-APIs of some products such as Container Service are RESTful style. The way to call RESTful APIs is different from RPC APIs. 
+APIs of some products such as Container Service are RESTful style. The way to call RESTful APIs is different from RPC APIs.
 
 The following examples show how to call RESTful APIs in the Alibaba Cloud CLI:
 
@@ -150,7 +150,7 @@ The following examples show how to call RESTful APIs in the Alibaba Cloud CLI:
 	$ aliyun cs DELETE /clusters/ce2cdc26227e09c864d0ca0b2d5671a07
 	```
 
-#### Get help information
+### Get help information
 
 Alibaba Cloud CLI integrates API descriptions for some products, you can get help by using the following commands:
 
@@ -164,7 +164,7 @@ Alibaba Cloud CLI integrates API descriptions for some products, you can get hel
 
 	For example, get the help information of the CreateInstance API: `aliyun help ecs CreateInstance`
 
-#### Use the `--force` option
+### Use the `--force` option
 
 Alibaba Cloud CLI integrates the product metadata of some products. It will validate API parameters when calling the API. If an API or a parameter that is not included in the metadata is used, an error `unknown api` or `unknown parameter` will be returned. You can use the `--force` option to skip the validation and call the API by force as shown in the following example:
 
