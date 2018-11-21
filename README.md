@@ -177,3 +177,7 @@ The following two options are required when using the `--force` option:
 - `--version`: the API version. You can find the API version in the API documentation. For example, the ECS API version is `2014-05-26`.
 - `--endpoint`: the product endpoint. Most of the product endpoints are in the format of `product.aliyuncs.com`, while some product endpoints are `product.en-central-1.aliyuncs.com`. Get the product endpoint in the corresponding API documentation.
 
+### Special argument:
+
+When you input some argument like "-PortRange -1/-1", will cause parse error.In this case, you could assign value like this:
+--PortRange=-1/-1.
