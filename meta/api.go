@@ -132,7 +132,6 @@ func (p ParameterSlice) Len() int {
 	return len(p)
 }
 
-//Less():成绩将有低到高排序
 func (p ParameterSlice) Less(i, j int) bool {
 	if p[i].Required && p[j].Required {
 		return p[i].Name < p[j].Name
@@ -149,7 +148,6 @@ func (p ParameterSlice) Less(i, j int) bool {
 	return p[i].Name < p[j].Name
 }
 
-//Swap()
 func (p ParameterSlice) Swap(i, j int) {
 	p[i], p[j] = p[j], p[i]
 }
