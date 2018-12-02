@@ -12,6 +12,7 @@ import (
 	"io"
 	"strings"
 	"text/tabwriter"
+	"sort"
 )
 
 type Library struct {
@@ -143,6 +144,9 @@ func (a *Library) PrintApiUsage(productCode string, apiName string) error {
 }
 
 func printParameters(w io.Writer, params []meta.Parameter, prefix string) {
+
+	sort.Sort(meta.ParameterSlice(params))
+
 	for _, param := range params {
 		if param.Hidden {
 			continue
