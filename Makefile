@@ -2,7 +2,7 @@ export VERSION=3.0.6
 export RELEASE_PATH="releases/aliyun-cli-${VERSION}"
 
 all: build
-publish: build build_mac build_linux build_windows
+publish: build build_mac build_linux build_windows gen_version
 
 deps:
 	-go get github.com/aliyun/aliyun-openapi-meta
@@ -38,6 +38,11 @@ build_windows:
 	zip -r out/aliyun-cli-windows-${VERSION}-amd64.zip aliyun.exe
 	aliyun oss cp out/aliyun-cli-windows-${VERSION}-amd64.zip oss://aliyun-cli --force --profile oss
 	rm aliyun.exe
+
+gen_version:
+	-rm out/version
+	echo ${VERSION} >> out/version
+	aliyun oss cp out/version oss://aliyun-cli --force --profile oss
 
 git_release: clean build make_release_dir release_mac release_linux release_windows
 
