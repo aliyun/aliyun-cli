@@ -5,6 +5,10 @@
 
 该版本的CLI为Go语言重构版本，如果您想使用原有的Python版本(不推荐，已不提供支持)，请切换到[Python分支](https://github.com/aliyun/aliyun-cli/tree/python_final)。
 
+<a href="https://shell.aliyun.com/" target="cloudshell">
+  <img src="https://img.alicdn.com/tfs/TB1wt1zq9zqK1RjSZFpXXakSXXa-1066-166.png" width="180" />
+</a>
+
 ## 简介
 
 阿里云命令行工具是用Go语言编写的, 基于阿里云OpenAPI打造的，用于管理阿里云资源的工具。通过下载和配置该工具，您可以在一个命令行方式下使用多个阿里云产品。
