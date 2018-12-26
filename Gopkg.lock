@@ -2,7 +2,6 @@
 
 
 [[projects]]
-  branch = "master"
   name = "github.com/aliyun/alibaba-cloud-sdk-go"
   packages = [
     "sdk",
@@ -18,7 +17,8 @@
     "services/ecs",
     "services/sts"
   ]
-  revision = "89a49455acb77a90f228cdda701be3d8cc9083d4"
+  revision = "56ab3d10ba3172997ee62754078f40358b7f3ac3"
+  version = "1.47.3"
 
 [[projects]]
   name = "github.com/aliyun/aliyun-oss-go-sdk"

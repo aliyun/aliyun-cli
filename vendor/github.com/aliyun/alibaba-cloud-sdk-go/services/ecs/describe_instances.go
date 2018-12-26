@@ -104,6 +104,7 @@ type DescribeInstancesRequest struct {
 	OwnerAccount         string                  `position:"Query" name:"OwnerAccount"`
 	InstanceTypeFamily   string                  `position:"Query" name:"InstanceTypeFamily"`
 	Filter1Value         string                  `position:"Query" name:"Filter.1.Value"`
+	NeedSaleCycle        requests.Boolean        `position:"Query" name:"NeedSaleCycle"`
 	Filter2Key           string                  `position:"Query" name:"Filter.2.Key"`
 	OwnerId              requests.Integer        `position:"Query" name:"OwnerId"`
 	VSwitchId            string                  `position:"Query" name:"VSwitchId"`
@@ -127,11 +128,11 @@ type DescribeInstancesTag struct {
 // DescribeInstancesResponse is the response struct for api DescribeInstances
 type DescribeInstancesResponse struct {
 	*responses.BaseResponse
-	RequestId  string    `json:"RequestId" xml:"RequestId"`
-	TotalCount int       `json:"TotalCount" xml:"TotalCount"`
-	PageNumber int       `json:"PageNumber" xml:"PageNumber"`
-	PageSize   int       `json:"PageSize" xml:"PageSize"`
-	Instances  Instances `json:"Instances" xml:"Instances"`
+	RequestId  string                       `json:"RequestId" xml:"RequestId"`
+	TotalCount int                          `json:"TotalCount" xml:"TotalCount"`
+	PageNumber int                          `json:"PageNumber" xml:"PageNumber"`
+	PageSize   int                          `json:"PageSize" xml:"PageSize"`
+	Instances  InstancesInDescribeInstances `json:"Instances" xml:"Instances"`
 }
 
 // CreateDescribeInstancesRequest creates a request to invoke DescribeInstances API
