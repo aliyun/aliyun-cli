@@ -11,6 +11,13 @@ This version is a new version built on Go. If you want to use the old version (b
   <img src="https://img.alicdn.com/tfs/TB1wt1zq9zqK1RjSZFpXXakSXXa-1066-166.png" width="180" />
 </a>
 
+## Online Demo
+**[API Explorer](https://api.aliyun.com)** provides the ability to call the cloud product OpenAPI online, and dynamically generate SDK Example code and quick retrieval interface, which can significantly reduce the difficulty of using the cloud API. **It is highly recommended**.
+
+<a href="https://api.aliyun.com" target="api_explorer">
+  <img src="https://img.alicdn.com/tfs/TB1xjPBzHvpK1RjSZFqXXcXUVXa-377-61.png" width="180" />
+</a>
+
 ## Introduction
 
 The Alibaba Cloud CLI is a tool to manage and use Alibaba Cloud resources through a command line interface. It is written in Go and built on the top of Alibaba Cloud OpenAPI.
