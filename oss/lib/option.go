@@ -260,10 +260,10 @@ func GetInt(name string, options OptionMapType) (int64, error) {
 		default:
 			return 0, fmt.Errorf("Option value of %s is not int64", name)
 		}
-	} else {
-		return 0, fmt.Errorf("There is no option for %s", name)
 	}
-	return 0, nil
+	return 0, fmt.Errorf("There is no option for %s", name)
+
+	// return 0, nil
 }
 
 // GetString is used to get string option from option map parsed by ParseArgOptions

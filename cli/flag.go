@@ -199,7 +199,7 @@ func (f *Flag) needValue() bool {
 	case AssignedRepeatable:
 		return true
 	default:
-		panic(fmt.Errorf("unexpected Flag.AssignedMode %s", f.AssignedMode))
+		panic(fmt.Errorf("unexpected Flag.AssignedMode %s", strconv.Itoa(int(f.AssignedMode))))
 	}
 }
 

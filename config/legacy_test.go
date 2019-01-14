@@ -4,6 +4,7 @@
 package config
 
 import (
+	"github.com/stretchr/testify/assert"
 	"gopkg.in/ini.v1"
 	"testing"
 )
@@ -36,4 +37,31 @@ func TestLoadLegacyConfiguration(t *testing.T) {
 	//err := gcfg.ReadStringInto(&cfg, string(lcfgText))
 
 	//t.Logf("%v\n", cfg)
+}
+
+func TestMigrateCredentials(t *testing.T) {
+	exProfiles := []Profile{
+		Profile{
+			Name:            "default",
+			Mode:            AK,
+			AccessKeyId:     "**************************",
+			AccessKeySecret: "*************************",
+			OutputFormat:    "json",
+		},
+		Profile{
+			Name:            "aaa",
+			Mode:            AK,
+			AccessKeyId:     "sdf",
+			AccessKeySecret: "ddf",
+			OutputFormat:    "json",
+		},
+	}
+
+	cp, err := MigrateCredentials("../figures/credentials.ini")
+	assert.Nil(t, err)
+	assert.Equal(t, "default", cp.CurrentProfile)
+	assert.Equal(t, "", cp.MetaPath)
+
+	assert.Len(t, cp.Profiles, 2)
+	assert.Subset(t, cp.Profiles, exProfiles)
 }

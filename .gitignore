@@ -16,3 +16,4 @@ releases/
 resource/metas.go
 local-*
 coverage.txt
+coverage

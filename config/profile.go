@@ -16,10 +16,10 @@ import (
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/jmespath/go-jmespath"
 	"net/http"
+	"os"
+	"regexp"
 	"strings"
 	"time"
-	"regexp"
-	"os"
 )
 
 type AuthenticateMode string
@@ -51,7 +51,7 @@ type Profile struct {
 	Site            string           `json:"site"`
 	RetryTimeout    int              `json:"retry_timeout"`
 	RetryCount      int              `json:"retry_count"`
-	parent          *Configuration   `json:"-"`
+	parent          *Configuration
 }
 
 func NewProfile(name string) Profile {
