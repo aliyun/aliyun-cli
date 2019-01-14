@@ -61,3 +61,10 @@ release_windows:
 	GOOS=windows GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o aliyun.exe main/main.go
 	zip -r ${RELEASE_PATH}/aliyun-cli-windows-amd64.exe.zip aliyun.exe
 	rm aliyun.exe
+
+fmt:
+	go fmt ./cli/... ./command/... ./config/... ./i18n/... ./main/... ./openapi/... ./oss/... ./resource/...
+
+test:
+	go test -race -coverprofile=coverage.txt -covermode=atomic ./cli/... ./command/... ./config/... ./i18n/... ./main/... ./openapi/... ./oss/... ./resource/...
+	go tool cover -html=coverage.txt -o coverage.html

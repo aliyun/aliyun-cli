@@ -6,7 +6,7 @@ workspace.xml
 .pyc
 *.py[co]
 aliyuncli/aliyun
-# IDEA IDE 
+# IDEA IDE
 .idea*
 aliyuncli.egg-info/
 build/
@@ -15,3 +15,4 @@ out/
 releases/
 resource/metas.go
 local-*
+coverage.txt
