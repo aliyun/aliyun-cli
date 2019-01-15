@@ -3,6 +3,18 @@
 	"ignore": "",
 	"package": [
 		{
+			"checksumSHA1": "VFwJJfUzB6cwRndTmB3JWKvIgmA=",
+			"path": "github.com/davecgh/go-spew/spew",
+			"revision": "d8f796af33cc11cb798c1aaeb27a4ebc5099927d",
+			"revisionTime": "2018-08-30T19:11:22Z"
+		},
+		{
+			"checksumSHA1": "lDGmGnGs81wjrl2nio3TeoujbvM=",
+			"path": "github.com/pmezard/go-difflib/difflib",
+			"revision": "5d4384ee4fb2527b0a1256a821ebfc92f91efefc",
+			"revisionTime": "2018-12-26T10:54:42Z"
+		},
+		{
 			"checksumSHA1": "z6QcnQ18wVwlkiEhJjzSpDz214s=",
 			"path": "github.com/stretchr/testify/assert",
 			"revision": "363ebb24d041ccea8068222281c2e963e997b9dc",
