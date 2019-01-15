@@ -1,9 +1,0 @@
-#!/bin/bash
-
-source ecs_test
-
-ecs_test
-
-echo "test result is $g_error"
-
-exit $g_error
