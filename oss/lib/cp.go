@@ -2158,7 +2158,7 @@ func (cc *CopyCommand) parseRange(str string, size int64) (int64, error) {
 		}
 		return e - s + 1, nil
 	}
-	return size, nil
+	// return size, nil
 }
 
 func (cc *CopyCommand) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chObjects chan<- objectInfoType, chError chan<- error) {

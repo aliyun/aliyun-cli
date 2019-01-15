@@ -107,7 +107,7 @@ func (a *TableOutputFilter) FormatTable(rowPath string, colNames []string, v int
 	for _, row := range rowsArray {
 		rowIntf, ok := row.(interface{})
 		if !ok {
-			fmt.Errorf("parse row to interface failed")
+			// fmt.Errorf("parse row to interface failed")
 		}
 		r := make([]string, 0)
 		for _, colName := range colNames {

@@ -4,8 +4,9 @@
 package openapi
 
 import (
+	"bytes"
 	"encoding/json"
-	"fmt"
+	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/jmespath/go-jmespath"
 	"testing"
 )
@@ -56,7 +57,7 @@ func TestMerge(t *testing.T) {
 		panic(err)
 	}
 
-	cli.Printf(string(result))
+	cli.Printf(new(bytes.Buffer), string(result))
 }
 
 func TestSearchList(t *testing.T) {
