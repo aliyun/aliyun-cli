@@ -51,7 +51,7 @@ type Profile struct {
 	Site            string           `json:"site"`
 	RetryTimeout    int              `json:"retry_timeout"`
 	RetryCount      int              `json:"retry_count"`
-	parent          *Configuration
+	parent          *Configuration   //`json:"-"`
 }
 
 func NewProfile(name string) Profile {

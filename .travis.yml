@@ -27,7 +27,7 @@ notifications:
 script:
   - go vet ./cli/... ./command/... ./config/... ./i18n/... ./main/... ./openapi/... ./oss/... ./resource/...
   - go test -race -coverprofile=coverage.txt -covermode=atomic ./cli/... ./command/... ./config/... ./i18n/... ./main/... ./openapi/... ./oss/... ./resource/...
-  - cd ./integration && ./test
+  - test -z $ACCESS_KEY_ID -a -z $ACCESS_KEY_SECRET || cd ./integration && ./test
 
 after_success:
   - bash <(curl -s https://codecov.io/bash)

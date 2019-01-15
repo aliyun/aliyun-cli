@@ -35,7 +35,6 @@ func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
 	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok {
 		buf, err := ioutil.ReadFile(v)
 		if err != nil {
-			// result of fmt.Errorf call not used
 			// fmt.Errorf("failed read file: %s %v", v, err)
 		}
 		a.request.SetContent(buf)
