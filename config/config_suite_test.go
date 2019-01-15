@@ -5,10 +5,11 @@ package config
 
 import (
 	. "github.com/onsi/ginkgo"
+	"github.com/onsi/gomega"
 	"testing"
 )
 
 func TestConfigSuite(t *testing.T) {
-	RegisterFailHandler(Fail)
+	gomega.RegisterFailHandler(Fail)
 	RunSpecs(t, "Cli Suite")
 }

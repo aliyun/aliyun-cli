@@ -61,7 +61,8 @@ func (s *OssutilCommandSuite) TestCreateSymlink(c *C) {
 	c.Assert(str, Equals, data1)
 
 	// error put symlink
-	cmdline = fmt.Sprintf("%s %s", CloudURLToString(bucketName, symObject), targetObject1, "abc")
+	// cmdline = fmt.Sprintf("%s %s", CloudURLToString(bucketName, symObject), targetObject1, "abc")
+	cmdline = fmt.Sprintf("%s %s", CloudURLToString(bucketName, symObject), targetObject1)
 	err = s.initCreateSymlink(cmdline)
 	c.Assert(err, NotNil)
 
