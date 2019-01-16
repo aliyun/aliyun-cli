@@ -5,6 +5,7 @@ package cli
 
 import (
 	"fmt"
+
 	"github.com/aliyun/aliyun-cli/i18n"
 )
 
@@ -55,16 +56,16 @@ func (f *Field) check() error {
 	if f.Required && !f.assigned {
 		if f.Key != "" {
 			return fmt.Errorf("%s= required", f.Key)
-		} else {
-			return fmt.Errorf("value required")
 		}
+		return fmt.Errorf("value required")
+
 	}
 	if !f.Repeatable && len(f.values) > 1 {
 		if f.Key != "" {
 			return fmt.Errorf("%s= duplicated", f.Key)
-		} else {
-			return fmt.Errorf("value duplicated")
 		}
+		return fmt.Errorf("value duplicated")
+
 	}
 	return nil
 }

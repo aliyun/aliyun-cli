@@ -5,8 +5,9 @@ package cli
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-cli/i18n"
 	"io"
+
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 //
@@ -125,7 +126,6 @@ func (ctx *Context) detectFlagByShorthand(ch rune) (*Flag, error) {
 	flag := ctx.flags.GetByShorthand(ch)
 	if flag != nil {
 		return flag, nil
-	} else {
-		return nil, fmt.Errorf("unknown flag -%s", string(ch))
 	}
+	return nil, fmt.Errorf("unknown flag -%s", string(ch))
 }
