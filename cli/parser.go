@@ -147,13 +147,14 @@ func (p *Parser) parseCommandArg(s string) (flag *Flag, value string, err error)
 	return
 }
 
+//SplitStringWithPrefix TODO can use function string.SplitN to replace
 func SplitStringWithPrefix(s string, splitters string) (string, string, bool) {
 	i := strings.IndexAny(s, splitters)
 	if i < 0 {
 		return s, "", false
-	} else {
-		return s[:i], s[i+1:], true
 	}
+	return s[:i], s[i+1:], true
+
 }
 
 func SplitString(s string, sep string) []string {
@@ -163,7 +164,6 @@ func SplitString(s string, sep string) []string {
 func UnquoteString(s string) string {
 	if strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"") && len(s) >= 2 {
 		return s[1 : len(s)-1]
-	} else {
-		return s
 	}
+	return s
 }

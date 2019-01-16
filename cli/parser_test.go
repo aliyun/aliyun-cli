@@ -5,6 +5,7 @@ package cli
 
 import (
 	"fmt"
+
 	"github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -17,18 +18,18 @@ func (tc *testContext) detectFlag(name string) (*Flag, error) {
 	f := tc.fs.Get(name)
 	if f != nil {
 		return f, nil
-	} else {
-		return nil, fmt.Errorf("unknown flag --%s", name)
 	}
+	return nil, fmt.Errorf("unknown flag --%s", name)
+
 }
 
 func (tc *testContext) detectFlagByShorthand(ch rune) (*Flag, error) {
 	f := tc.fs.GetByShorthand(ch)
 	if f != nil {
 		return f, nil
-	} else {
-		return nil, fmt.Errorf("unknown flag -%c", ch)
 	}
+	return nil, fmt.Errorf("unknown flag -%c", ch)
+
 }
 
 func newTestContext() *testContext {
