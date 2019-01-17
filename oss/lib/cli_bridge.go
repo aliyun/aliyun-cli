@@ -13,7 +13,7 @@ import (
 func NewOssCommand() *cli.Command {
 	result := &cli.Command{
 		Name:   "oss",
-		Usage:  "aliyun oss [command] [args...] [options...]",
+		Usage:  "oss [command] [args...] [options...]",
 		Hidden: false,
 		Short:  i18n.T("Object Storage Service", "阿里云OSS对象存储"),
 	}
@@ -47,7 +47,6 @@ func NewCommandBridge(a Commander) *cli.Command {
 	}
 
 	config.AddFlags(result.Flags())
-
 
 	for _, s := range cmd.validOptionNames {
 		opt, ok := OptionMap[s]
@@ -120,8 +119,8 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 			continue
 		}
 		if f.IsAssigned() {
-			a2 = append(a2, "--" + f.Name)
-			if s2, ok := f.GetValue(); ok && s2 != ""{
+			a2 = append(a2, "--"+f.Name)
+			if s2, ok := f.GetValue(); ok && s2 != "" {
 				a2 = append(a2, s2)
 			}
 		}

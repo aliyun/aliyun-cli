@@ -59,9 +59,8 @@ func (fs *FlagSet) Get(name string) *Flag {
 	if f, ok := fs.index["--"+name]; ok {
 		f.formation = "--" + name
 		return f
-	} else {
-		return nil
 	}
+	return nil
 }
 
 //
@@ -70,9 +69,8 @@ func (fs *FlagSet) GetByShorthand(c rune) *Flag {
 	if f, ok := fs.index["-"+string(c)]; ok {
 		f.formation = "-" + string(c)
 		return f
-	} else {
-		return nil
 	}
+	return nil
 }
 
 //
@@ -94,9 +92,8 @@ func (fs *FlagSet) GetValue(name string) (string, bool) {
 	f := fs.Get(name)
 	if f == nil {
 		return "", false
-	} else {
-		return f.GetValue()
 	}
+	return f.GetValue()
 }
 
 //

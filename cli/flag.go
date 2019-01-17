@@ -5,8 +5,9 @@ package cli
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-cli/i18n"
 	"strconv"
+
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 type AssignedMode int
@@ -115,9 +116,9 @@ func (f *Flag) getField(key string) (*Field, bool) {
 func (f *Flag) GetFieldValue(key string) (string, bool) {
 	if field, ok := f.getField(key); ok {
 		return field.getValue()
-	} else {
-		return "", false
 	}
+	return "", false
+
 }
 
 //
@@ -125,9 +126,9 @@ func (f *Flag) GetFieldValue(key string) (string, bool) {
 func (f *Flag) GetFieldValues(key string) []string {
 	if field, ok := f.getField(key); ok {
 		return field.values
-	} else {
-		return make([]string, 0)
 	}
+	return make([]string, 0)
+
 }
 
 //
@@ -138,9 +139,9 @@ func (f *Flag) GetStringOrDefault(def string) string {
 	}
 	if f.assigned {
 		return f.value
-	} else {
-		return def
 	}
+	return def
+
 }
 
 // TODO: flag support integer validate
