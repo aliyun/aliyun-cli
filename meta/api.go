@@ -44,19 +44,20 @@ func (a *Api) FindParameter(name string) *Parameter {
 
 //
 // Foreach parameter use recursion
-func (a *Api) ForeachParameters(f func(s string, p Parameter)) {
-	foreachParameters(a.Parameters, "", f)
+func (a *Api) ForeachParameters(f func(s string, p *Parameter)) {
+	foreachParameters(&a.Parameters, "", f)
 }
 
-func foreachParameters(params []Parameter, prefix string, f func(s string, p Parameter)) {
-	for _, p := range params {
+func foreachParameters(params *[]Parameter, prefix string, f func(s string, p *Parameter)) {
+	for i, p := range *params {
 		if len(p.SubParameters) > 0 {
-			foreachParameters(p.SubParameters, prefix+p.Name+".1.", f)
+			foreachParameters(&p.SubParameters, prefix+p.Name+".1.", f)
 		} else if p.Type == "RepeatList" {
-			f(prefix+p.Name+".1", p)
+			f(prefix+p.Name+".1", &p)
 		} else {
-			f(prefix+p.Name, p)
+			f(prefix+p.Name, &p)
 		}
+		(*params)[i] = p
 	}
 }
 
@@ -125,7 +126,7 @@ type Parameter struct {
 	SubParameters []Parameter       `json:"sub_parameters,omitempty"`
 }
 
-type ParameterSlice [] Parameter
+type ParameterSlice []Parameter
 
 
 func (p ParameterSlice) Len() int {

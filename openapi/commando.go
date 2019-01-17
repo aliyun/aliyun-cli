@@ -329,7 +329,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 			return r
 		}
 
-		api.ForeachParameters(func(s string, p meta.Parameter) {
+		api.ForeachParameters(func(s string, p *meta.Parameter) {
 			if strings.HasPrefix("--"+s, ctx.Completion().Current) && !p.Hidden {
 				cli.Printf(ctx.Writer(), "--%s\n", s)
 			}
