@@ -33,7 +33,7 @@ func (fs *FlagSet) Add(f *Flag) {
 	f.checkValid()
 	for _, s := range f.GetFormations() {
 		if _, ok := fs.index[s]; ok {
-			panic(fmt.Errorf("flag duplicated -%s", string(s)))
+			panic(fmt.Errorf("flag duplicated %s", string(s)))
 		}
 		fs.index[s] = f
 	}
@@ -182,6 +182,7 @@ func (fs *FlagSet) mergeWith(from *FlagSet, applier func(f *Flag) bool) *FlagSet
 	return r
 }
 
+//TODO code logic error, update later
 // put flag, replace old value if duplicated
 func (fs *FlagSet) put(f *Flag) {
 	for _, lv := range fs.flags {
