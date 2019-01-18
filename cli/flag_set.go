@@ -5,6 +5,7 @@ package cli
 
 import (
 	"fmt"
+	"reflect"
 )
 
 type FlagSet struct {
@@ -33,7 +34,7 @@ func (fs *FlagSet) Add(f *Flag) {
 	f.checkValid()
 	for _, s := range f.GetFormations() {
 		if _, ok := fs.index[s]; ok {
-			panic(fmt.Errorf("flag duplicated -%s", string(s)))
+			panic(fmt.Errorf("flag duplicated %s", string(s)))
 		}
 		fs.index[s] = f
 	}
@@ -184,13 +185,16 @@ func (fs *FlagSet) mergeWith(from *FlagSet, applier func(f *Flag) bool) *FlagSet
 
 // put flag, replace old value if duplicated
 func (fs *FlagSet) put(f *Flag) {
-	for _, lv := range fs.flags {
-		if lv == f {
+
+	for i, lv := range fs.flags {
+		if f.Name == lv.Name && !reflect.DeepEqual(f, lv) {
+			fs.flags = append(fs.flags[:i], fs.flags[i+1:]...)
+			for _, s := range f.GetFormations() {
+				delete(fs.index, s)
+			}
+			fs.Add(f)
 			return
 		}
 	}
-	fs.flags = append(fs.flags, f)
-	for _, s := range f.GetFormations() {
-		fs.index[s] = f
-	}
+	fs.Add(f)
 }

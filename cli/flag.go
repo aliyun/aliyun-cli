@@ -151,7 +151,7 @@ func (f *Flag) GetIntegerOrDefault(def int) int {
 		return def
 	}
 	if f.assigned {
-		if i, err := strconv.Atoi(f.value); err != nil {
+		if i, err := strconv.Atoi(f.value); err == nil {
 			return i
 		}
 	}

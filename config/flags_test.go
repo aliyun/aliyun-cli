@@ -1,26 +1,12 @@
 package config
 
 import (
+	"testing"
+
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
-
-var NewMethodFlag func() *cli.Flag
-
-func NewFlagTest(t *testing.T, fn func() *cli.Flag, expectFlag *cli.Flag, values []string) {
-	flag := fn()
-	value, ok := flag.GetValue()
-	assert.Equal(t, false, ok)
-	assert.Equal(t, value, "")
-	assert.Nil(t, flag.GetValues())
-	assert.Equal(t, false, flag.IsAssigned())
-	assert.Subset(t, flag.GetFormations(), values)
-	assert.Len(t, flag.GetFormations(), len(values))
-	assert.Equal(t, expectFlag, flag)
-
-}
 
 func TestAddFlag(t *testing.T) {
 	var (
@@ -297,20 +283,49 @@ func TestAddFlag(t *testing.T) {
 			DefaultValue: "",
 		}
 	)
+	f := NewProfileFlag()
+	assert.Equal(t, newProfileFlag, f)
 
-	NewFlagTest(t, NewProfileFlag, newProfileFlag, []string{"--profile", "-p"})
-	NewFlagTest(t, NewModeFlag, newModeFlag, []string{"--mode"})
-	NewFlagTest(t, NewAccessKeyIdFlag, newAccessKeyIDFlag, []string{"--access-key-id"})
-	NewFlagTest(t, NewAccessKeySecretFlag, newAccessKeySecretFlag, []string{"--access-key-secret"})
-	NewFlagTest(t, NewStsTokenFlag, newStsTokenFlag, []string{"--sts-token"})
-	NewFlagTest(t, NewRamRoleNameFlag, newRamRoleNameFlag, []string{"--ram-role-name"})
-	NewFlagTest(t, NewRamRoleArnFlag, newRamRoleArnFlag, []string{"--ram-role-arn"})
-	NewFlagTest(t, NewRoleSessionNameFlag, newRoleSessionNameFlag, []string{"--role-session-name"})
-	NewFlagTest(t, NewPrivateKeyFlag, newPrivateKeyFlag, []string{"--private-key"})
-	NewFlagTest(t, NewKeyPairNameFlag, newKeyPairNameFlag, []string{"--key-pair-name"})
-	NewFlagTest(t, NewRegionFlag, newRegionFlag, []string{"--region"})
-	NewFlagTest(t, NewLanguageFlag, newLanguageFlag, []string{"--language"})
-	NewFlagTest(t, NewRetryTimeoutFlag, newRetryTimeoutFlag, []string{"--retry-timeout"})
-	NewFlagTest(t, NewRetryCountFlag, newRetryCountFlag, []string{"--retry-count"})
-	NewFlagTest(t, NewSkipSecureVerify, newSkipSecureVerify, []string{"--skip-secure-verify"})
+	f = NewModeFlag()
+	assert.Equal(t, newModeFlag, f)
+
+	f = NewAccessKeyIdFlag()
+	assert.Equal(t, newAccessKeyIDFlag, f)
+
+	f = NewAccessKeySecretFlag()
+	assert.Equal(t, newAccessKeySecretFlag, f)
+
+	f = NewStsTokenFlag()
+	assert.Equal(t, newStsTokenFlag, f)
+
+	f = NewRamRoleNameFlag()
+	assert.Equal(t, newRamRoleNameFlag, f)
+
+	f = NewRamRoleArnFlag()
+	assert.Equal(t, newRamRoleArnFlag, f)
+
+	f = NewRoleSessionNameFlag()
+	assert.Equal(t, newRoleSessionNameFlag, f)
+
+	f = NewPrivateKeyFlag()
+	assert.Equal(t, newPrivateKeyFlag, f)
+
+	f = NewKeyPairNameFlag()
+	assert.Equal(t, newKeyPairNameFlag, f)
+
+	f = NewRegionFlag()
+	assert.Equal(t, newRegionFlag, f)
+
+	f = NewLanguageFlag()
+	assert.Equal(t, newLanguageFlag, f)
+
+	f = NewRetryTimeoutFlag()
+	assert.Equal(t, newRetryTimeoutFlag, f)
+
+	f = NewRetryCountFlag()
+	assert.Equal(t, newRetryCountFlag, f)
+
+	f = NewSkipSecureVerify()
+	assert.Equal(t, newSkipSecureVerify, f)
+
 }
