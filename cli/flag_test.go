@@ -91,10 +91,7 @@ func TestFlag(t *testing.T) {
 	f.GetIntegerOrDefault(23)
 	assert.Equal(t, 23, f.GetIntegerOrDefault(23))
 	f.assigned = true
-
-	// assert.Equal(t, 1, f.GetIntegerOrDefault(23))
-	//the code below just for pass test,the correct code is on it
-	assert.Equal(t, 23, f.GetIntegerOrDefault(23))
+	assert.Equal(t, 1, f.GetIntegerOrDefault(23))
 
 	//GetFormations
 	assert.Len(t, f.GetFormations(), 2)
