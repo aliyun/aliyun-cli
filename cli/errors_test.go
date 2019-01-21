@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2018 Alibaba Group Holding Limited
+ * Copyright (C) 1999-2019 Alibaba Group Holding Limited
  */
 package cli
 
@@ -28,8 +28,8 @@ func TestInvalidCommandError(t *testing.T) {
 	e, ok := err.(*InvalidCommandError)
 	assert.True(t, ok)
 	assert.Equal(t, "'MrX' is not a vaild command", e.Error())
-
-	//GetSuggestions TODO
+	e.ctx.EnterCommand(&Command{Name: "oss", flags: NewFlagSet()})
+	assert.Nil(t, e.GetSuggestions())
 }
 
 func TestInvalidFlagError(t *testing.T) {
@@ -40,5 +40,7 @@ func TestInvalidFlagError(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "invalid flag MrX", e.Error())
 
-	//GetSuggestions TODO
+	e.ctx.EnterCommand(&Command{Name: "oss", flags: NewFlagSet()})
+	assert.NotNil(t, e.GetSuggestions())
+	assert.Len(t, e.GetSuggestions(), 0)
 }
