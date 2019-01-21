@@ -27,6 +27,8 @@ import (
 	"fmt"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var testCases = []struct {
@@ -137,6 +139,19 @@ var testCases = []struct {
 			Ins,
 		},
 	},
+}
+
+func TestEditOpString(t *testing.T) {
+	editOp1 := EditOperation(3)
+	assert.Equal(t, "match", editOp1.String())
+	editOp1 = EditOperation(0)
+	assert.Equal(t, "ins", editOp1.String())
+	editOp1 = EditOperation(2)
+	assert.Equal(t, "sub", editOp1.String())
+	editOp1 = EditOperation(1)
+	assert.Equal(t, "del", editOp1.String())
+	// editOp1 = EditOperation(4)
+	// assert.Equal(t, "del", editOp1.String())
 }
 
 func TestDistanceForStrings(t *testing.T) {
