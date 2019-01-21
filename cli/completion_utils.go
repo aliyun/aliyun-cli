@@ -81,12 +81,13 @@ func removeFromFile(name string, content string) error {
 }
 
 func removeContentToTempFile(name, content string) (string, error) {
+
 	rf, err := os.Open(name)
 	if err != nil {
 		return "", err
 	}
 	defer rf.Close()
-	wf, err := ioutil.TempFile("/tmp", "complete-")
+	wf, err := ioutil.TempFile("", "complete-")
 	if err != nil {
 		return "", err
 	}
