@@ -4,11 +4,14 @@
 package openapi
 
 import (
-	"fmt"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/meta"
+
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 )
@@ -68,7 +71,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		// aliyun <productCode> <method> --param1 value1
 		product, _ := c.library.GetProduct(args[0])
 
-		if product.ApiStyle=="restful" {
+		if product.ApiStyle == "restful" {
 			api, _ := c.library.GetApi(product.Code, product.Version, args[1])
 			return c.processInvoke(ctx, productName, api.Method, api.PathPattern)
 		}
@@ -136,8 +139,19 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		}
 	}
 
+	out = FormatJson(out)
+
 	cli.Println(ctx.Writer(), out)
 	return nil
+}
+
+func FormatJson(content string) string {
+	var buf bytes.Buffer
+	err := json.Indent(&buf, []byte(content), "", "\t")
+	if err == nil {
+		content = buf.String()
+	}
+	return content
 }
 
 // invoke with helper
@@ -304,7 +318,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 			if !strings.HasPrefix(p.GetLowerCode(), ctx.Completion().Current) {
 				continue
 			}
-			cli.PrintfWithColor(w, cli.ProductListColor(),"%s\n", p.GetLowerCode())
+			cli.PrintfWithColor(w, cli.ProductListColor(), "%s\n", p.GetLowerCode())
 		}
 		return r
 	}
@@ -320,7 +334,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 				if !strings.HasPrefix(name, ctx.Completion().Current) {
 					continue
 				}
-				cli.PrintfWithColor(w, cli.APIListColor(),"%s\n", name)
+				cli.PrintfWithColor(w, cli.APIListColor(), "%s\n", name)
 			}
 			return r
 		}
@@ -336,10 +350,10 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 		})
 	} else if product.ApiStyle == "restful" {
 		if len(args) == 1 {
-			cli.PrintfWithColor(w, cli.APIListColor(),"GET\n")
-			cli.PrintfWithColor(w, cli.APIListColor(),"POST\n")
-			cli.PrintfWithColor(w, cli.APIListColor(),"DELETE\n")
-			cli.PrintfWithColor(w, cli.APIListColor(),"PUT\n")
+			cli.PrintfWithColor(w, cli.APIListColor(), "GET\n")
+			cli.PrintfWithColor(w, cli.APIListColor(), "POST\n")
+			cli.PrintfWithColor(w, cli.APIListColor(), "DELETE\n")
+			cli.PrintfWithColor(w, cli.APIListColor(), "PUT\n")
 
 			return r
 		}
