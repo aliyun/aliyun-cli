@@ -5,6 +5,9 @@ package cli
 
 import (
 	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -101,10 +104,6 @@ var _ = ginkgo.Describe("Parser", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(s2)).Should(Equal(1))
 		Expect(s2[0]).Should(Equal("s2"))
-		//v1, _ := fs.G("test")
-		//Expect(v1).Should(Equal("aaa"))
-		//v2, _ := fs.GetValue("test2")
-		//Expect(v2).Should(Equal("bbb"))
 	})
 
 	ginkgo.It("3. can read next arg skip prev flag", func() {
@@ -115,37 +114,14 @@ var _ = ginkgo.Describe("Parser", func() {
 		Expect(s).Should(Equal("s1"))
 		Expect(fs.Get("prev")).ShouldNot(Equal(nil))
 	})
-
-	//	Testcase TODO
-	// ginkgo.It("4. can read fields", func() {
-	// 	parser, fs := newTestParser("--waiter", "expr=aaa", "to=bbb")
-	// 	s, _, err := parser.ReadNextArg()
-
-	// 	Expect(err).NotTo(HaveOccurred())
-	// 	Expect(s).Should(Equal(""))
-	// 	Expect(fs.Get("prev")).ShouldNot(Equal(nil))
-	// })
 })
 
-//var _ = ginkgo.Describe("Parser", func() {
-//	ginkgo.It("can parse args", func() {
-//		// parser := NewParser([]string{"1", "2", "3"},str)
-//		//	return &Flag {
-//		//		Name: name,
-//		//	}, nil
-//		//})
-//		//parser.ParseAll()
-//		//Expect(len(parser.GetResultArgs())).Should(Equal(3))
-//		parser := NewParser([]string{"1", "2", "3"}, func(s string) (*Flag, error) {
-//			return nil, nil
-//		})
-//		a, more, err := parser.ReadNextArg()
-//		Expect(err).NotTo(HaveOccurred())
-//		Expect(more).Should(Equal(true))
-//		Expect(a).Should(Equal("1"))
-//	})
-//	ginkgo.It("can parse args with flags", func() {
-//
-//
-//	})
-//})
+func TestSpliString(t *testing.T) {
+	sli := SplitString("nihao-Mrx", "-")
+	assert.Len(t, sli, 2)
+}
+
+func TestUnquoteString(t *testing.T) {
+	str := UnquoteString(`"nicai"`)
+	assert.Equal(t, "nicai", str)
+}

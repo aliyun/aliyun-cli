@@ -5,8 +5,9 @@ package cli
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-cli/i18n"
 	"io"
+
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 var uninstallFlag = &Flag{

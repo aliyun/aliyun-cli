@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,4 +25,12 @@ func TestApply(t *testing.T) {
 	result := s.GetResults()
 	assert.Subset(t, result, []string{"aab", "aa2"})
 	assert.Len(t, result, 2)
+}
+
+func TestPrintSuggestions(t *testing.T) {
+	w := new(bytes.Buffer)
+	ctx := NewCommandContext(w)
+	PrintSuggestions(ctx, "en", []string{"hello", "nihao"})
+	assert.Equal(t, "\x1b[1;33m\nDid you mean:\n\x1b[0m\x1b[1;33m  hello\n\x1b[0m\x1b[1;33m  nihao\n\x1b[0m", w.String())
+
 }
