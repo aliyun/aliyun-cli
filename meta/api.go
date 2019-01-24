@@ -39,40 +39,39 @@ func (a *Api) GetProtocol() string {
 }
 
 func (a *Api) FindParameter(name string) *Parameter {
-	return findParameterInner(&a.Parameters, name)
+	return findParameterInner(a.Parameters, name)
 }
 
 //
 // Foreach parameter use recursion
-func (a *Api) ForeachParameters(f func(s string, p *Parameter)) {
-	foreachParameters(&a.Parameters, "", f)
+func (a *Api) ForeachParameters(f func(s string, p Parameter)) {
+	foreachParameters(a.Parameters, "", f)
 }
 
-func foreachParameters(params *[]Parameter, prefix string, f func(s string, p *Parameter)) {
-	for i, p := range *params {
+func foreachParameters(params []Parameter, prefix string, f func(s string, p Parameter)) {
+	for _, p := range params {
 		if len(p.SubParameters) > 0 {
-			foreachParameters(&p.SubParameters, prefix+p.Name+".1.", f)
+			foreachParameters(p.SubParameters, prefix+p.Name+".1.", f)
 		} else if p.Type == "RepeatList" {
-			f(prefix+p.Name+".1", &p)
+			f(prefix+p.Name+".1", p)
 		} else {
-			f(prefix+p.Name, &p)
+			f(prefix+p.Name, p)
 		}
-		(*params)[i] = p
 	}
 }
 
 //
 //
-func findParameterInner(params *[]Parameter, name string) *Parameter {
-	for i, p := range *params {
+func findParameterInner(params []Parameter, name string) *Parameter {
+	for i, p := range params {
 		if p.Name == name {
-			return &((*params)[i])
+			return &(params[i])
 		}
 		if len(p.SubParameters) > 0 && strings.HasPrefix(name, p.Name) {
 			s := name[len(p.Name):]
 			// XXX.1.YYY
 			if len(s) >= 4 && s[0] == '.' && s[2] == '.' {
-				return findParameterInner(&p.SubParameters, name[len(p.Name)+3:])
+				return findParameterInner(p.SubParameters, name[len(p.Name)+3:])
 			} else {
 				return nil
 			}
@@ -81,7 +80,7 @@ func findParameterInner(params *[]Parameter, name string) *Parameter {
 			// XXX.1
 			s := name[len(p.Name):]
 			if len(s) >= 2 && s[0] == '.' {
-				return &((*params)[i])
+				return &((params)[i])
 			} else {
 				return nil
 			}

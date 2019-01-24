@@ -79,7 +79,7 @@ func TestApi_FindParameter(t *testing.T) {
 
 func TestApi_ForeachParameters(t *testing.T) {
 	api := &Api{}
-	f := func (s string, p *Parameter) {
+	f := func (s string, p Parameter) {
 		p.Name = s
 	}
 	api.Parameters = []Parameter{
@@ -89,11 +89,11 @@ func TestApi_ForeachParameters(t *testing.T) {
 		},
 	}
 	api.ForeachParameters(f)
-	assert.Equal(t, api.Parameters[0].Name, "paramter.1")
+	assert.Equal(t, api.Parameters[0].Name, "paramter")
 
 	api.Parameters[0].Type = ""
 	api.ForeachParameters(f)
-	assert.Equal(t, api.Parameters[0].Name, "paramter.1")
+	assert.Equal(t, api.Parameters[0].Name, "paramter")
 
 	api.Parameters = []Parameter{
 		{
@@ -106,7 +106,7 @@ func TestApi_ForeachParameters(t *testing.T) {
 		},
 	}
 	api.ForeachParameters(f)
-	assert.Equal(t, api.Parameters[0].SubParameters[0].Name, "paramter.1.subparameters")
+	assert.Equal(t, api.Parameters[0].SubParameters[0].Name, "subparameters")
 }
 
 func TestApi_GetDocumentLink(t *testing.T) {
