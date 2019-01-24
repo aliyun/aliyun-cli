@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,11 +17,19 @@ func TestCommand(t *testing.T) {
 		EnableUnknownFlag: true,
 		SuggestDistance:   2,
 		Usage:             "aliyun [subcmd]",
+		Short: i18n.T(
+			"cmd Short",
+			"",
+		),
 	}
 	subcmd := &Command{
 		Name:            "oss",
 		SuggestDistance: 2,
 		Usage:           "oss flag",
+		Short: i18n.T(
+			"oss Short",
+			"",
+		),
 	}
 
 	//AddSubCommand
@@ -77,11 +86,19 @@ func TestCommand(t *testing.T) {
 		SuggestDistance: 2,
 		Usage:           "ecs flag",
 		Hidden:          true,
+		Short: i18n.T(
+			"ecs Short",
+			"",
+		),
 	}
 	subcmd3 := &Command{
 		Name:            "ess",
 		SuggestDistance: 2,
 		Usage:           "ess flag",
+		Short: i18n.T(
+			"ess Short",
+			"",
+		),
 	}
 	cmd.AddSubCommand(subcmd2)
 	cmd.AddSubCommand(subcmd3)
@@ -91,7 +108,23 @@ func TestCommand(t *testing.T) {
 
 	//executeInner TODO
 
+	err := cmd.executeInner(ctx, []string{"a", "b"})
+	assert.Equal(t, &InvalidCommandError{"a", ctx}, err)
+	ctx.flags.flags = append(ctx.flags.flags, &Flag{Name: "help", assigned: true})
+	err = cmd.executeInner(ctx, []string{"help", "oss"})
+	assert.Nil(t, err)
+
+	cmd.subCommands[0].Hidden = false
+	ctx.completion = nil
+	err = cmd.executeInner(ctx, []string{"ess"})
+	assert.Nil(t, err)
+
+	ctx.help = false
+	err = cmd.executeInner(ctx, []string{"ess"})
+	assert.Nil(t, err)
+
 	//processError can not test
 
 	//executeHelp
+
 }
