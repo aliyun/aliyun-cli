@@ -1,10 +1,10 @@
 package cli
 
 import (
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/resource"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/utils"
 	"runtime"
 	"time"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/utils"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/resource"
 )
 
 func PlatformCompatible() {

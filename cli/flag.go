@@ -80,6 +80,14 @@ func (f *Flag) IsAssigned() bool {
 	return f.assigned
 }
 
+func (f *Flag) SetAssigned(istrue bool) {
+	f.assigned = istrue
+}
+
+func (f *Flag) SetValue(value string) {
+	f.value = value
+}
+
 //
 // return flag value, if not assigned return f.DefaultValue
 //   for `AssignedMode == AssignedRepeatable`. Use GetValues() to get all values
@@ -97,6 +105,10 @@ func (f *Flag) GetValue() (string, bool) {
 // for `AssignedMode == AssignedRepeatable` flag, return values
 func (f *Flag) GetValues() []string {
 	return f.values
+}
+
+func (f *Flag) SetValues(values []string) {
+	f.values = values
 }
 
 //

@@ -44,6 +44,10 @@ func NewCommandContext(w io.Writer) *Context {
 	}
 }
 
+func (ctx *Context) SetUnknownFlags(flags *FlagSet) {
+	ctx.unknownFlags = flags
+}
+
 func (ctx *Context) IsHelp() bool {
 	return ctx.help
 }

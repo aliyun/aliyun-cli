@@ -144,4 +144,14 @@ func TestFlag(t *testing.T) {
 	assert.Nil(t, f.checkFields())
 	f.Fields[0].Required = true
 	assert.EqualError(t, f.checkFields(), "bad flag format --MrX with field MrX= required")
+
+	f.SetAssigned(true)
+	assert.True(t, f.assigned)
+
+	f.SetValue("test")
+	assert.Equal(t, "test", f.value)
+
+	f.SetValues([]string{"test", "test1"})
+	assert.Equal(t, "test", f.values[0])
+	assert.Equal(t, "test1", f.values[1])
 }

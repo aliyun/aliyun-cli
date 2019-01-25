@@ -90,9 +90,9 @@ const (
 )
 
 var (
-	withColor = true
+	withColor        = true
 	productListColor = ""
-	apiListColor = ""
+	apiListColor     = ""
 )
 
 func EnableColor() {
