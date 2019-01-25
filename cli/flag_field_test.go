@@ -50,4 +50,10 @@ func TestField(t *testing.T) {
 	assert.EqualError(t, field.check(), "value duplicated")
 	field.Key = "first"
 	assert.EqualError(t, field.check(), "first= duplicated")
+
+	field.SetAssigned(true)
+	assert.True(t, field.assigned)
+
+	field.SetValue("test")
+	assert.Equal(t, "test", field.value)
 }

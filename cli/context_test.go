@@ -29,6 +29,13 @@ func TestNewHelpFlag(t *testing.T) {
 	assert.Equal(t, &Flag{Name: "help", Short: i18n.T("print help", "打印帮助信息"), AssignedMode: AssignedNone}, f)
 }
 
+func TestContext_SetUnknownFlags(t *testing.T) {
+	w := new(bytes.Buffer)
+	ctx := NewCommandContext(w)
+	ctx.SetUnknownFlags(NewFlagSet())
+	assert.NotNil(t, ctx.unknownFlags)
+}
+
 func TestNewCommandContext(t *testing.T) {
 	w := new(bytes.Buffer)
 	ctx := NewCommandContext(w)

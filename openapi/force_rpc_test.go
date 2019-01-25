@@ -23,7 +23,10 @@ func TestForceRpcInvoker_Prepare(t *testing.T) {
 	cmd := config.NewConfigureCommand()
 	cmd.EnableUnknownFlag = true
 	ctx.EnterCommand(cmd)
-	ctx.Flags().Add(NewSecureFlag())
+
+	secureflag := NewSecureFlag()
+	secureflag.SetAssigned(true)
+	ctx.Flags().Add(secureflag)
 	ctx.UnknownFlags().Add(NewSecureFlag())
 	err := a.Prepare(ctx)
 	assert.Nil(t, err)

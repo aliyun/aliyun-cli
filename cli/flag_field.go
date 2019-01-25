@@ -42,6 +42,14 @@ func (f *Field) assign(v string) {
 	f.values = append(f.values, v)
 }
 
+func (f *Field) SetAssigned(istrue bool) {
+	f.assigned = istrue
+}
+
+func (f *Field) SetValue(value string) {
+	f.value = value
+}
+
 func (f *Field) getValue() (string, bool) {
 	if f.assigned {
 		return f.value, true
