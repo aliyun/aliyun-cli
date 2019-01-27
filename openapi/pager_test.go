@@ -4,10 +4,14 @@
 package openapi
 
 import (
-	"bytes"
-	"encoding/json"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/jmespath/go-jmespath"
+	"github.com/stretchr/testify/assert"
+
+	"bytes"
+	"encoding/json"
 	"testing"
 )
 
@@ -82,6 +86,129 @@ func TestSearchList(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestPager_CallWith(t *testing.T) {
+	pager := GetPager()
+	assert.Nil(t, pager)
+
+	PagerFlag.SetAssigned(true)
+	pager = GetPager()
+	PagerFlag.SetAssigned(false)
+	assert.Equal(t, "PageNumber", pager.PageNumberFlag)
+	assert.Equal(t, "PageSize", pager.PageSizeFlag)
+	assert.Equal(t, 0, pager.totalCount)
+
+	client, err := sdk.NewClientWithAccessKey("regionid", "accesskeyid", "accesskeysecret")
+	assert.Nil(t, err)
+
+	invoker := &RpcInvoker{
+		BasicInvoker: &BasicInvoker{
+			client:  client,
+			request: requests.NewCommonRequest(),
+		},
+	}
+	str, err := pager.CallWith(invoker)
+	assert.Equal(t, "", str)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "please check your accessKey with secret, and read the user guide")
+}
+
+func TestPager_HasMore(t *testing.T) {
+	pager := Pager{
+		PageSize:   5,
+		totalCount: 10,
+	}
+	istrue := pager.HasMore()
+	assert.True(t, istrue)
+
+	pager.currentPageNumber = 3
+	istrue = pager.HasMore()
+	assert.False(t, istrue)
+}
+
+func TestPager_GetResponseCollection(t *testing.T) {
+	pager := Pager{
+		collectionPath: "path.t[]",
+	}
+	str := pager.GetResponseCollection()
+	assert.Equal(t, "{\"path\":{\"t\":null}}", str)
+}
+
+func TestPager_FeedResponse(t *testing.T) {
+	pager := Pager{
+		collectionPath: "",
+		totalCount:     0,
+	}
+	body := "test"
+	err := pager.FeedResponse(body)
+	assert.NotNil(t, err)
+	assert.Equal(t, "unmarshal invalid character 'e' in literal true (expecting 'r')", err.Error())
+
+	body = string(pagerTestJson)
+	pager.TotalCountExpr = ""
+	err = pager.FeedResponse(body)
+	assert.NotNil(t, err)
+	assert.Equal(t, "jmespath: '' failed SyntaxError: Incomplete expression", err.Error())
+
+	pager.TotalCountExpr = "TotalCount"
+	pager.PageNumberExpr = ""
+	err = pager.FeedResponse(body)
+	assert.NotNil(t, err)
+	assert.Equal(t, "jmespath: '' failed SyntaxError: Incomplete expression", err.Error())
+
+	pager.PageNumberExpr = "PageNumber"
+	pager.PageSizeExpr = ""
+	err = pager.FeedResponse(body)
+	assert.NotNil(t, err)
+	assert.Equal(t, "jmespath: '' failed SyntaxError: Incomplete expression", err.Error())
+
+	pager.PageSizeExpr = "PageSize"
+	err = pager.FeedResponse(body)
+	assert.Nil(t, err)
+}
+
+func TestPager_MoveNextPage(t *testing.T) {
+	request := requests.NewCommonRequest()
+	pager := Pager{
+		collectionPath: "",
+		totalCount:     0,
+	}
+	pager.MoveNextPage(request)
+	assert.Equal(t, 1, pager.currentPageNumber)
+}
+
+func Test_detectArrayPath(t *testing.T) {
+	d := "test"
+	pager := Pager{
+		collectionPath: "",
+	}
+	str := pager.detectArrayPath(d)
+	assert.Equal(t, "", str)
+
+	arr := map[string]interface{}{
+		"test": "ok",
+	}
+	str = pager.detectArrayPath(arr)
+	assert.Equal(t, "", str)
+}
+
+func Test_mergeCollections(t *testing.T) {
+	pager := Pager{
+		collectionPath: "",
+	}
+	err := pager.mergeCollections(nil)
+	assert.NotNil(t, err)
+	assert.Equal(t, "jmespath search failed: SyntaxError: Incomplete expression", err.Error())
+
+	var body interface{}
+	err = json.Unmarshal(pagerTestJson, &body)
+	assert.Nil(t, err)
+
+	pager.collectionPath = "test"
+	err = pager.mergeCollections(body)
+	assert.NotNil(t, err)
+	assert.Equal(t, "jmespath result empty: test", err.Error())
 }
 
 var pagerTestJson = []byte(`{

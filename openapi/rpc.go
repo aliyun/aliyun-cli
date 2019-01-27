@@ -44,7 +44,7 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 			request.FormParams[f.Name], _ = f.GetValue()
 		} else if param.Position == "Domain" {
 			continue
-		}else {
+		} else {
 			return fmt.Errorf("unknown parameter position; %s is %s", param.Name, param.Position)
 		}
 	}
