@@ -10,17 +10,17 @@ import (
 )
 
 type reader_test struct {
-	content   string
+	content string
 }
 
-func (r *reader_test)ReadFrom(path string) ([]byte, error){
-	if path == "" || r.content == ""{
+func (r *reader_test) ReadFrom(path string) ([]byte, error) {
+	if path == "" || r.content == "" {
 		return nil, fmt.Errorf("Please insert a valid path.")
 	}
 	return []byte(r.content), nil
 }
 
-func (r *reader_test)setcontent(contenth string){
+func (r *reader_test) setcontent(contenth string) {
 	r.content = contenth
 }
 
@@ -35,9 +35,9 @@ func TestLibrary_PrintProducts(t *testing.T) {
 	assert.NotNil(t, products)
 
 	product := meta.Product{
-		Code: "ecs",
-		Version:"v1.0",
-		Name: map[string]string{"zh":"test"},
+		Code:    "ecs",
+		Version: "v1.0",
+		Name:    map[string]string{"zh": "test"},
 	}
 	library.printProduct(product)
 
@@ -83,7 +83,7 @@ func TestLibrary_PrintApiUsage(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-func Test_printParameters(t *testing.T){
+func Test_printParameters(t *testing.T) {
 	writer := cli.DefaultWriter()
 	params := []meta.Parameter{
 		{
@@ -93,7 +93,7 @@ func Test_printParameters(t *testing.T){
 			Position: "Domain",
 		},
 		{
-			Type: "RepeatList",
+			Type:     "RepeatList",
 			Required: true,
 		},
 		{
@@ -110,7 +110,7 @@ func Test_printParameters(t *testing.T){
 	printParameters(writer, params, "")
 }
 
-func getRepository(content string) (*meta.Repository){
+func getRepository(content string) *meta.Repository {
 	reader := &reader_test{
 		content: content,
 	}

@@ -10,9 +10,9 @@ import (
 	"github.com/aliyun/aliyun-cli/meta"
 	"github.com/aliyun/aliyun-cli/resource"
 	"io"
+	"sort"
 	"strings"
 	"text/tabwriter"
-	"sort"
 )
 
 type Library struct {
@@ -45,9 +45,9 @@ func (a *Library) GetProducts() []meta.Product {
 
 func (a *Library) PrintProducts() {
 	w := tabwriter.NewWriter(a.writer, 8, 0, 1, ' ', 0)
-	cli.PrintfWithColor(w, cli.ColorOff,"\nProducts:\n")
+	cli.PrintfWithColor(w, cli.ColorOff, "\nProducts:\n")
 	for _, product := range a.builtinRepo.Products {
-		cli.PrintfWithColor(w, cli.Cyan,"  %s\t%s\n", strings.ToLower(product.Code), product.Name[i18n.GetLanguage()])
+		cli.PrintfWithColor(w, cli.Cyan, "  %s\t%s\n", strings.ToLower(product.Code), product.Name[i18n.GetLanguage()])
 	}
 	w.Flush()
 }
@@ -75,7 +75,7 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 	cli.Printf(a.writer, "Link: %s\n", product.GetDocumentLink(i18n.GetLanguage()))
 
 	if withApi {
-		cli.PrintfWithColor(a.writer, cli.ColorOff,"\nAvailable Api List: \n")
+		cli.PrintfWithColor(a.writer, cli.ColorOff, "\nAvailable Api List: \n")
 		maxNameLen := 0
 
 		for _, apiName := range product.ApiNames {
@@ -86,11 +86,11 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 
 		for _, apiName := range product.ApiNames {
 			if product.ApiStyle == "restful" {
-				api,_ := a.GetApi(productCode, product.Version, apiName)
-				ptn := fmt.Sprintf("  %%-%ds : %%s %%s\n", maxNameLen + 1)
+				api, _ := a.GetApi(productCode, product.Version, apiName)
+				ptn := fmt.Sprintf("  %%-%ds : %%s %%s\n", maxNameLen+1)
 				cli.PrintfWithColor(a.writer, cli.Green, ptn, apiName, api.Method, api.PathPattern)
 			} else {
-				cli.PrintfWithColor(a.writer, cli.Green,"  %s\n", apiName)
+				cli.PrintfWithColor(a.writer, cli.Green, "  %s\n", apiName)
 			}
 
 		}
@@ -120,7 +120,6 @@ func (a *Library) PrintApiUsage(productCode string, apiName string) error {
 	if !ok {
 		return &InvalidApiError{Name: apiName, product: &product}
 	}
-
 
 	if product.ApiStyle == "restful" {
 		cli.Printf(a.writer, "\nProduct:     %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])

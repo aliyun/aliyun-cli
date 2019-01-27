@@ -1,13 +1,13 @@
 package openapi
 
 import (
+	"bufio"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/meta"
 	"github.com/stretchr/testify/assert"
 	"testing"
-	"bufio"
 )
 
 func TestRpcInvoker_Prepare(t *testing.T) {
@@ -19,9 +19,9 @@ func TestRpcInvoker_Prepare(t *testing.T) {
 			Product: &meta.Product{
 				Code: "ecs",
 			},
-			Name: "ecs",
+			Name:     "ecs",
 			Protocol: "https",
-			Method: "GET",
+			Method:   "GET",
 		},
 	}
 	w := new(bufio.Writer)
@@ -39,7 +39,7 @@ func TestRpcInvoker_Prepare(t *testing.T) {
 
 	a.api.Parameters = []meta.Parameter{
 		{
-			Name: "body",
+			Name:     "body",
 			Position: "Domain",
 		},
 		{
@@ -53,22 +53,22 @@ func TestRpcInvoker_Prepare(t *testing.T) {
 
 	a.api.Parameters = []meta.Parameter{
 		{
-			Name: "body",
+			Name:     "body",
 			Position: "Query",
-			Required:true,
+			Required: true,
 		},
 		{
-			Name: "secure",
+			Name:     "secure",
 			Position: "Query",
-			Required:true,
+			Required: true,
 		},
 		{
-			Name: "RegionId",
-			Required:true,
+			Name:     "RegionId",
+			Required: true,
 		},
 		{
-			Name: "Action",
-			Required:true,
+			Name:     "Action",
+			Required: true,
 		},
 	}
 	err = a.Prepare(ctx)
@@ -77,11 +77,11 @@ func TestRpcInvoker_Prepare(t *testing.T) {
 
 	a.api.Parameters = []meta.Parameter{
 		{
-			Name: "body",
+			Name:     "body",
 			Position: "Body",
 		},
 		{
-			Name: "secure",
+			Name:     "secure",
 			Position: "Body",
 		},
 	}
@@ -95,7 +95,7 @@ func TestRpcInvoker_Call(t *testing.T) {
 
 	a := &RpcInvoker{
 		BasicInvoker: &BasicInvoker{
-			client: client,
+			client:  client,
 			request: requests.NewCommonRequest(),
 		},
 	}

@@ -6,8 +6,8 @@ import (
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/stretchr/testify/assert"
 
-	"testing"
 	"bufio"
+	"testing"
 )
 
 func TestRestfulInvoker_Prepare(t *testing.T) {
@@ -57,11 +57,54 @@ func TestRestfulInvoker_Call(t *testing.T) {
 
 	a := &RestfulInvoker{
 		BasicInvoker: &BasicInvoker{
-			client: client,
+			client:  client,
 			request: requests.NewCommonRequest(),
 		},
 	}
 	_, err = a.Call()
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "[SDK.CanNotResolveEndpoint] Can not resolve endpoint")
+}
+
+func Test_checkRestfulMethod(t *testing.T) {
+	w := new(bufio.Writer)
+	ctx := cli.NewCommandContext(w)
+	methodOrPath := "get"
+	pathPattern := "/user"
+	ok, method, path, err := checkRestfulMethod(ctx, methodOrPath, "")
+	assert.False(t, ok)
+	assert.Nil(t, err)
+	assert.Equal(t, "", method)
+	assert.Equal(t, "", path)
+
+	ok, method, path, err = checkRestfulMethod(ctx, methodOrPath, pathPattern)
+	assert.True(t, ok)
+	assert.Nil(t, err)
+	assert.Equal(t, "GET", method)
+	assert.Equal(t, "/user", path)
+
+	pathPattern = "user"
+	ok, method, path, err = checkRestfulMethod(ctx, methodOrPath, pathPattern)
+	assert.True(t, ok)
+	assert.NotNil(t, err)
+	assert.Equal(t, "bad restful path user", err.Error())
+	assert.Equal(t, "GET", method)
+	assert.Equal(t, "", path)
+
+	ctx.Flags().Add(NewRoaFlag())
+	methodOrPath = "update"
+	ok, method, path, err = checkRestfulMethod(ctx, methodOrPath, pathPattern)
+	assert.False(t, ok)
+	assert.Nil(t, err)
+	assert.Equal(t, "", method)
+	assert.Equal(t, "", path)
+
+	RoaFlag(ctx.Flags()).SetAssigned(true)
+	RoaFlag(ctx.Flags()).SetValue("get")
+	ok, method, path, err = checkRestfulMethod(ctx, methodOrPath, pathPattern)
+	assert.True(t, ok)
+	assert.NotNil(t, err)
+	assert.Equal(t, "bad restful path update", err.Error())
+	assert.Equal(t, "get", method)
+	assert.Equal(t, "", path)
 }
