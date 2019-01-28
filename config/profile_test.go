@@ -5,6 +5,7 @@ package config
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -44,6 +45,21 @@ func TestNewProfile(t *testing.T) {
 }
 
 func TestProfile(t *testing.T) {
+	ACCESS_KEY_ID_env := os.Getenv("ACCESS_KEY_ID")
+	if ACCESS_KEY_ID_env != "" {
+		os.Setenv("ACCESS_KEY_ID", "")
+		defer func() {
+			os.Setenv("ACCESS_KEY_ID", ACCESS_KEY_ID_env)
+		}()
+	}
+	ACCESS_KEY_SECRET_env := os.Getenv("ACCESS_KEY_SECRET")
+	if ACCESS_KEY_ID_env != "" {
+		os.Setenv("ACCESS_KEY_SECRET", "")
+		defer func() {
+			os.Setenv("ACCESS_KEY_SECRET", ACCESS_KEY_SECRET_env)
+		}()
+	}
+
 	//ValidateAK
 	p := NewProfile("default")
 	assert.EqualError(t, p.ValidateAK(), "invalid access_key_id: ")
