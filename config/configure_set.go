@@ -4,9 +4,10 @@
 package config
 
 import (
+	"io"
+
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
-	"io"
 )
 
 const configureSetHelpEn = ``
@@ -42,7 +43,7 @@ func NewConfigureSetCommand() *cli.Command {
 }
 
 func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
-	config, err := LoadConfiguration(w)
+	config, err := hookLoadConfiguration(LoadConfiguration)(w)
 	if err != nil {
 		cli.Errorf(w, "load configuration failed %s", err)
 		return
@@ -102,7 +103,7 @@ func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
 
 	config.PutProfile(profile)
 	config.CurrentProfile = profile.Name
-	err = SaveConfiguration(config)
+	err = hookSaveConfiguration(SaveConfiguration)(config)
 	if err != nil {
 		cli.Errorf(w, "save configuration failed %s", err)
 	}

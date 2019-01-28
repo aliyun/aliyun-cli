@@ -4,6 +4,8 @@
 package config
 
 import (
+	"bytes"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -56,4 +58,21 @@ func TestConfiguration(t *testing.T) {
 
 	//GetCurrentProfile
 
+}
+
+func TestLoadProfile(t *testing.T) {
+	originhook := hookLoadConfiguration
+	defer func() {
+		hookLoadConfiguration = originhook
+	}()
+	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
+		return func(w io.Writer) (Configuration, error) {
+			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+		}
+	}
+	w := new(bytes.Buffer)
+	p, err := LoadProfile(w, "")
+	assert.Nil(t, err)
+	p.parent = nil
+	assert.Equal(t, Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, p)
 }

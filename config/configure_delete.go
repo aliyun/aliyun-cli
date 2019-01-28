@@ -4,9 +4,10 @@
 package config
 
 import (
+	"io"
+
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
-	"io"
 )
 
 func NewConfigureDeleteCommand() *cli.Command {
@@ -29,7 +30,7 @@ func NewConfigureDeleteCommand() *cli.Command {
 }
 
 func doConfigureDelete(w io.Writer, profileName string) {
-	conf, err := LoadConfiguration(w)
+	conf, err := hookLoadConfiguration(LoadConfiguration)(w)
 	if err != nil {
 		cli.Errorf(w, "ERROR: load configure failed: %v\n", err)
 	}
@@ -57,7 +58,7 @@ func doConfigureDelete(w io.Writer, profileName string) {
 		}
 	}
 
-	err = SaveConfiguration(conf)
+	err = hookSaveConfiguration(SaveConfiguration)(conf)
 	if err != nil {
 		cli.Errorf(w, "Error: save configuration failed %s\n", err)
 	}

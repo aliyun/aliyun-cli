@@ -5,10 +5,11 @@ package config
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/i18n"
 	"io"
 	"text/tabwriter"
+
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 func NewConfigureListCommand() *cli.Command {
@@ -24,7 +25,7 @@ func NewConfigureListCommand() *cli.Command {
 }
 
 func doConfigureList(w io.Writer) {
-	conf, err := LoadConfiguration(w)
+	conf, err := hookLoadConfiguration(LoadConfiguration)(w)
 	if err != nil {
 		cli.Errorf(w, "ERROR: load configure failed: %v\n", err)
 	}
