@@ -6,11 +6,12 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/aliyun/aliyun-cli/cli"
 	"io"
 	"io/ioutil"
 	"os"
 	"runtime"
+
+	"github.com/aliyun/aliyun-cli/cli"
 )
 
 const (
@@ -76,7 +77,7 @@ func LoadCurrentProfile(w io.Writer) (Profile, error) {
 
 func LoadProfile(w io.Writer, name string) (Profile, error) {
 	var p Profile
-	config, err := LoadConfiguration(w)
+	config, err := hookLoadConfiguration(LoadConfiguration)(w)
 	if err != nil {
 		return p, fmt.Errorf("init config failed %v", err)
 	}
