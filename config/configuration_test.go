@@ -5,8 +5,13 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
+	"os"
+	"runtime"
 	"testing"
+
+	"github.com/aliyun/aliyun-cli/cli"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -75,4 +80,128 @@ func TestLoadProfile(t *testing.T) {
 	assert.Nil(t, err)
 	p.parent = nil
 	assert.Equal(t, Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, p)
+}
+
+func TestHomePath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		assert.Equal(t, os.Getenv("USERPROFILE"), GetHomePath())
+	} else {
+		assert.Equal(t, os.Getenv("HOME"), GetHomePath())
+	}
+}
+
+func TestGetConfigPath(t *testing.T) {
+	orighookGetHomePath := hookGetHomePath
+	defer func() {
+		os.RemoveAll("./.aliyun")
+		hookGetHomePath = orighookGetHomePath
+	}()
+	hookGetHomePath = func(fn func() string) func() string {
+		return func() string {
+			return "."
+		}
+	}
+	assert.Equal(t, "./.aliyun", GetConfigPath())
+}
+
+func TestNewConfigFromBytes(t *testing.T) {
+	bytesConf := `{
+		"current": "",
+		"profiles": [
+			{
+				"name": "default",
+				"mode": "AK",
+				"access_key_id": "access_key_id",
+				"access_key_secret": "access_key_secret",
+				"sts_token": "",
+				"ram_role_name": "",
+				"ram_role_arn": "",
+				"ram_session_name": "",
+				"private_key": "",
+				"key_pair_name": "",
+				"expired_seconds": 0,
+				"verified": "",
+				"region_id": "cn-hangzhou",
+				"output_format": "json",
+				"language": "en",
+				"site": "",
+				"retry_timeout": 0,
+				"retry_count": 0
+			}
+		],
+		"meta_path": ""
+	}`
+
+	conf, err := NewConfigFromBytes([]byte(bytesConf))
+	assert.Nil(t, err)
+	assert.Equal(t, Configuration{Profiles: []Profile{Profile{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}, conf)
+}
+
+func TestSaveConfiguration(t *testing.T) {
+	orighookGetHomePath := hookGetHomePath
+	defer func() {
+		os.RemoveAll("./.aliyun")
+		hookGetHomePath = orighookGetHomePath
+	}()
+	hookGetHomePath = func(fn func() string) func() string {
+		return func() string {
+			return "."
+		}
+	}
+	conf := Configuration{Profiles: []Profile{Profile{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}
+	bytes, err := json.Marshal(conf)
+	assert.Nil(t, err)
+	err = SaveConfiguration(conf)
+	assert.Nil(t, err)
+	file, err := os.Open(GetConfigPath() + "/" + configFile)
+	assert.Nil(t, err)
+	buf := make([]byte, 1024)
+	n, _ := file.Read(buf)
+	file.Close()
+	assert.Equal(t, string(bytes), string(buf[:n]))
+
+}
+
+func TestLoadConfiguration(t *testing.T) {
+	orighookGetHomePath := hookGetHomePath
+	defer func() {
+		os.RemoveAll("./.aliyun")
+		hookGetHomePath = orighookGetHomePath
+	}()
+	hookGetHomePath = func(fn func() string) func() string {
+		return func() string {
+			return "."
+		}
+	}
+	w := new(bytes.Buffer)
+
+	cf, err := LoadConfiguration(w)
+	assert.Nil(t, err)
+	assert.Equal(t, Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: "AK", OutputFormat: "json", Language: "en"}}}, cf)
+	conf := Configuration{Profiles: []Profile{Profile{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}
+	err = SaveConfiguration(conf)
+	assert.Nil(t, err)
+	w.Reset()
+	cf, err = LoadConfiguration(w)
+	assert.Equal(t, Configuration{CurrentProfile: "", Profiles: []Profile{Profile{Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json", Language: "en"}}}, cf)
+	assert.Nil(t, err)
+
+}
+
+func TestLoadProfileWithContext(t *testing.T) {
+	originhook := hookLoadConfiguration
+	defer func() {
+		hookLoadConfiguration = originhook
+	}()
+	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
+		return func(w io.Writer) (Configuration, error) {
+			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+		}
+	}
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w)
+	AddFlags(ctx.Flags())
+	_, err := LoadProfileWithContext(ctx)
+	assert.EqualError(t, err, "region can't be empty")
+
 }

@@ -27,6 +27,10 @@ type Configuration struct {
 	//Plugins 		[]Plugin `json:"plugin"`
 }
 
+var hookGetHomePath = func(fn func() string) func() string {
+	return fn
+}
+
 func NewConfiguration() Configuration {
 	return Configuration{
 		CurrentProfile: DefaultConfigProfileName,
@@ -153,7 +157,7 @@ func NewConfigFromBytes(bytes []byte) (Configuration, error) {
 }
 
 func GetConfigPath() string {
-	path := GetHomePath() + configPath
+	path := hookGetHomePath(GetHomePath)() + configPath
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		err = os.MkdirAll(path, 0755)
 		if err != nil {

@@ -16,6 +16,22 @@ import (
 )
 
 func TestNewConfigureCommand(t *testing.T) {
+	originhook := hookLoadConfiguration
+	originhookSave := hookSaveConfiguration
+	defer func() {
+		hookLoadConfiguration = originhook
+		hookSaveConfiguration = originhookSave
+	}()
+	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
+		return func(w io.Writer) (Configuration, error) {
+			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+		}
+	}
+	hookSaveConfiguration = func(fn func(config Configuration) error) func(config Configuration) error {
+		return func(config Configuration) error {
+			return nil
+		}
+	}
 	excmd := &cli.Command{
 		Name: "configure",
 		Short: i18n.T(
@@ -23,10 +39,37 @@ func TestNewConfigureCommand(t *testing.T) {
 			"配置身份认证和其他信息"),
 		Usage: "configure --mode <AuthenticateMode> --profile <profileName>",
 	}
-	excmd.AddSubCommand(NewConfigureGetCommand())
-	excmd.AddSubCommand(NewConfigureSetCommand())
-	excmd.AddSubCommand(NewConfigureListCommand())
-	excmd.AddSubCommand(NewConfigureDeleteCommand())
+	configureGet := NewConfigureGetCommand()
+	configureSet := NewConfigureSetCommand()
+	configureList := NewConfigureListCommand()
+	configureDelete := NewConfigureDeleteCommand()
+	excmd.AddSubCommand(configureGet)
+	excmd.AddSubCommand(configureSet)
+	excmd.AddSubCommand(configureList)
+	excmd.AddSubCommand(configureDelete)
+
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w)
+	AddFlags(ctx.Flags())
+
+	err := configureGet.Run(ctx, []string{"get"})
+	assert.Nil(t, err)
+	assert.Equal(t, "\n", w.String())
+
+	w.Reset()
+	err = configureSet.Run(ctx, []string{"set"})
+	assert.Nil(t, err)
+	assert.Equal(t, "\x1b[1;31mfail to set configuration: region can't be empty\x1b[0m", w.String())
+
+	w.Reset()
+	err = configureList.Run(ctx, []string{"list"})
+	assert.Nil(t, err)
+	assert.Equal(t, "Profile   | Credential         | Valid   | Region           | Language\n--------- | ------------------ | ------- | ---------------- | --------\ndefault * | AK:***_id          | Invalid |                  | \naaa       | AK:******          | Invalid |                  | \n", w.String())
+
+	w.Reset()
+	err = configureDelete.Run(ctx, []string{"delete"})
+	assert.Nil(t, err)
+	assert.Equal(t, "\x1b[1;31mmissing --profile <profileName>\n\x1b[0m\x1b[1;33m\nusage:\n  aliyun configure delete --profile <profileName>\n\x1b[0m", w.String())
 
 	cmd := NewConfigureCommand()
 	excmd.Run = cmd.Run
