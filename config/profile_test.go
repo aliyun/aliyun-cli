@@ -5,13 +5,18 @@ package config
 
 import (
 	"bytes"
+	"errors"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/sts"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/signers"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
 
 	"github.com/stretchr/testify/assert"
@@ -228,8 +233,56 @@ func TestProfile(t *testing.T) {
 	assert.Nil(t, sessionCredential)
 	assert.True(t, strings.HasPrefix(err.Error(), "sts:AssumeRole() failed"))
 
+	//start hook
+	orighookAssumeRole := hookAssumeRole
+	hookAssumeRole = func(fn func(request *sts.AssumeRoleRequest) (response *sts.AssumeRoleResponse, err error)) func(request *sts.AssumeRoleRequest) (response *sts.AssumeRoleResponse, err error) {
+		return func(request *sts.AssumeRoleRequest) (response *sts.AssumeRoleResponse, err error) {
+			return &sts.AssumeRoleResponse{RequestId: "RequestId", Credentials: sts.Credentials{SecurityToken: "SecurityToken", AccessKeySecret: "AccessKeySecret", AccessKeyId: "AccessKeyId", Expiration: "Expiration"}}, nil
+		}
+	}
+	sessionCredential, err = p.GetSessionCredentialByRoleArn()
+	assert.Nil(t, err)
+	assert.Equal(t, &signers.SessionCredential{AccessKeyId: "AccessKeyId", AccessKeySecret: "AccessKeySecret", StsToken: "SecurityToken"}, sessionCredential)
+
 	//GetClientByRoleArn
-	// p.GetClientByRoleArn(sdkCF)
+	sdkClient, err = p.GetClientByRoleArn(sdkCF)
+	assert.Nil(t, err)
+	assert.NotNil(t, sdkClient)
+
+	hookAssumeRole = orighookAssumeRole
+
+	//GetSessionCredentialByEcsRamRole
+	orighookHTTPGet := hookHTTPGet
+	orighookUnmarshal := hookUnmarshal
+
+	//testcase 1
+	hookHTTPGet = func(fn func(url string) (resp *http.Response, err error)) func(url string) (resp *http.Response, err error) {
+		return func(url string) (resp *http.Response, err error) {
+			return nil, errors.New("mock err")
+		}
+	}
+	p.RamRoleName = ""
+	sessionCredential, err = p.GetSessionCredentialByEcsRamRole()
+	assert.Nil(t, sessionCredential)
+	assert.EqualError(t, err, "Get default RamRole error: mock err. Or Run `aliyun configure` to configure it.")
+
+	//testcase 2
+	hookHTTPGet = func(fn func(url string) (resp *http.Response, err error)) func(url string) (resp *http.Response, err error) {
+		return func(url string) (resp *http.Response, err error) {
+			return new(http.Response), nil
+		}
+	}
+	hookUnmarshal = func(fn func(response responses.AcsResponse, httpResponse *http.Response, format string) (err error)) func(response responses.AcsResponse, httpResponse *http.Response, format string) (err error) {
+		return func(response responses.AcsResponse, httpResponse *http.Response, format string) (err error) {
+			return nil
+		}
+	}
+	sessionCredential, err = p.GetSessionCredentialByEcsRamRole()
+	assert.Nil(t, sessionCredential)
+	assert.EqualError(t, err, "Get meta-data status=0 please check RAM settings. Or Run `aliyun configure` to configure it.")
+
+	hookHTTPGet = orighookHTTPGet
+	hookUnmarshal = orighookUnmarshal
 
 	//GetClientByPrivateKey
 	sdkClient, err = p.GetClientByPrivateKey(sdkCF)

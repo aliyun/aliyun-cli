@@ -12,15 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var lcfgText = []byte(`
-[default]
-aliyun_access_key_id = **************************
-aliyun_access_key_secret = *************************
-[profile aaa]
-aliyun_access_key_secret = ddf
-aliyun_access_key_id = sdf
-`)
-
 func TestMigrateCredentials(t *testing.T) {
 	conf, err := MigrateCredentials("http://nicai")
 	assert.Empty(t, conf)
@@ -98,4 +89,38 @@ func TestMigrateConfigure(t *testing.T) {
 			os.Remove("testconf.ini")
 		}
 	}()
+}
+
+func TestMigrateLegacyConfiguration(t *testing.T) {
+	orighookGetHomePath := hookGetHomePath
+	defer func() {
+		os.RemoveAll("./.aliyuncli")
+		hookGetHomePath = orighookGetHomePath
+	}()
+	hookGetHomePath = func(fn func() string) func() string {
+		return func() string {
+			return "."
+		}
+	}
+	err := os.Mkdir("./.aliyuncli", os.ModePerm)
+	assert.Nil(t, err)
+
+	test, err := os.Create("./.aliyuncli/credentials")
+	assert.Nil(t, err)
+	_, err = test.WriteString(`
+	[DEFAULT]
+	aliyun_access_key_id = DEFAULT_aliyun_access_key_id
+	aliyun_access_key_secret = DEFAULT_aliyun_access_key_secret
+	[default]
+	aliyun_access_key_id = default_aliyun_access_key_id
+	aliyun_access_key_secret = default_aliyun_access_key_secret
+	[profile aaa]
+	aliyun_access_key_id = sdf
+	aliyun_access_key_secret = ddf
+	`)
+	assert.Nil(t, err)
+	test.Close()
+	w := new(bytes.Buffer)
+	conf := MigrateLegacyConfiguration(w)
+	assert.Nil(t, conf)
 }

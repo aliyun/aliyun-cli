@@ -5,6 +5,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -115,5 +116,27 @@ func TestNewAutoCompleteCommand(t *testing.T) {
 	excmd.Flags().Add(uninstallFlag)
 	cmd := NewAutoCompleteCommand()
 	assert.ObjectsAreEqualValues(excmd, cmd)
+	w := new(bytes.Buffer)
+	ctx := NewCommandContext(w)
+	err := cmd.Run(ctx, []string{})
+	assert.Nil(t, err)
+	assert.Empty(t, w.String())
 
+}
+
+func TestUninstallCompletion(t *testing.T) {
+
+	orighookGetBinaryPath := hookGetBinaryPath
+	defer func() {
+		hookGetBinaryPath = orighookGetBinaryPath
+	}()
+	hookGetBinaryPath = func(fn func() (string, error)) func() (string, error) {
+		return func() (string, error) {
+			return ".", errors.New("path error")
+		}
+	}
+
+	w := new(bytes.Buffer)
+	uninstallCompletion(w, "aliyun")
+	assert.Equal(t, "\x1b[1;31mcan't get binary path path error\x1b[0m", w.String())
 }

@@ -7,6 +7,12 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
+	"regexp"
+	"strings"
+	"time"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/signers"
@@ -14,12 +20,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/sts"
 	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/jmespath/go-jmespath"
-	"net/http"
-	"os"
-	"regexp"
-	"strings"
-	"time"
+	jmespath "github.com/jmespath/go-jmespath"
 )
 
 type AuthenticateMode string
@@ -52,6 +53,18 @@ type Profile struct {
 	RetryTimeout    int              `json:"retry_timeout"`
 	RetryCount      int              `json:"retry_count"`
 	parent          *Configuration   //`json:"-"`
+}
+
+var hookAssumeRole = func(fn func(request *sts.AssumeRoleRequest) (response *sts.AssumeRoleResponse, err error)) func(request *sts.AssumeRoleRequest) (response *sts.AssumeRoleResponse, err error) {
+	return fn
+}
+
+var hookHTTPGet = func(fn func(url string) (resp *http.Response, err error)) func(url string) (resp *http.Response, err error) {
+	return fn
+}
+
+var hookUnmarshal = func(fn func(response responses.AcsResponse, httpResponse *http.Response, format string) (err error)) func(response responses.AcsResponse, httpResponse *http.Response, format string) (err error) {
+	return fn
 }
 
 func NewProfile(name string) Profile {
@@ -264,7 +277,7 @@ func (cp *Profile) GetSessionCredentialByRoleArn() (*signers.SessionCredential, 
 	request.DurationSeconds = requests.NewInteger(900)
 	request.Scheme = "https"
 
-	response, err := client.AssumeRole(request)
+	response, err := hookAssumeRole(client.AssumeRole)(request)
 	if err != nil {
 		return nil, fmt.Errorf("sts:AssumeRole() failed %s", err)
 	}
@@ -292,13 +305,13 @@ func (cp *Profile) GetSessionCredentialByEcsRamRole() (*signers.SessionCredentia
 	baseURL := "http://100.100.100.200/latest/meta-data/ram/security-credentials/"
 	ecsRamRoleName := cp.RamRoleName
 	if ecsRamRoleName == "" {
-		resp, err := httpClient.Get(baseURL)
+		resp, err := hookHTTPGet(httpClient.Get)(baseURL)
 		if err != nil {
 			return nil, fmt.Errorf("Get default RamRole error: %s. Or Run `aliyun configure` to configure it.", err.Error())
 		}
 
 		response := responses.NewCommonResponse()
-		err = responses.Unmarshal(response, resp, "")
+		err = hookUnmarshal(responses.Unmarshal)(response, resp, "")
 
 		if response.GetHttpStatus() != http.StatusOK {
 			return nil, fmt.Errorf("Get meta-data status=%d please check RAM settings. Or Run `aliyun configure` to configure it.", response.GetHttpStatus())

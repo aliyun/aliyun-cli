@@ -5,14 +5,15 @@ package config
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-cli/cli"
-	"gopkg.in/ini.v1"
 	"io"
 	"os"
+
+	"github.com/aliyun/aliyun-cli/cli"
+	ini "gopkg.in/ini.v1"
 )
 
 func MigrateLegacyConfiguration(w io.Writer) *Configuration {
-	path := GetHomePath() + "/.aliyuncli/credentials"
+	path := hookGetHomePath(GetHomePath)() + "/.aliyuncli/credentials"
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
 	}
@@ -22,7 +23,7 @@ func MigrateLegacyConfiguration(w io.Writer) *Configuration {
 		return nil
 	}
 
-	path = GetHomePath() + "/.aliyuncli/configure"
+	path = hookGetHomePath(GetHomePath)() + "/.aliyuncli/configure"
 	err = MigrateConfigure(w, path, &result)
 	if err != nil {
 		return nil

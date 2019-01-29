@@ -10,6 +10,9 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 )
 
+var hookGetBinaryPath = func(fn func() (string, error)) func() (string, error) {
+	return fn
+}
 var uninstallFlag = &Flag{
 	Name:  "uninstall",
 	Short: i18n.T("uninstall auto completion", "卸载自动完成"),
@@ -58,7 +61,7 @@ func installCompletion(w io.Writer, cmd string) {
 }
 
 func uninstallCompletion(w io.Writer, cmd string) {
-	bin, err := getBinaryPath()
+	bin, err := hookGetBinaryPath(getBinaryPath)()
 	if err != nil {
 		Errorf(w, "can't get binary path %s", err)
 		return
