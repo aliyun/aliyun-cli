@@ -48,32 +48,59 @@ func TestNewConfigureCommand(t *testing.T) {
 	excmd.AddSubCommand(configureList)
 	excmd.AddSubCommand(configureDelete)
 
+	//testcase
 	w := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w)
 	AddFlags(ctx.Flags())
 
+	//testcase
 	err := configureGet.Run(ctx, []string{"get"})
 	assert.Nil(t, err)
 	assert.Equal(t, "\n", w.String())
 
+	//testcase
 	w.Reset()
 	err = configureSet.Run(ctx, []string{"set"})
 	assert.Nil(t, err)
 	assert.Equal(t, "\x1b[1;31mfail to set configuration: region can't be empty\x1b[0m", w.String())
 
+	//testcase
 	w.Reset()
 	err = configureList.Run(ctx, []string{"list"})
 	assert.Nil(t, err)
 	assert.Equal(t, "Profile   | Credential         | Valid   | Region           | Language\n--------- | ------------------ | ------- | ---------------- | --------\ndefault * | AK:***_id          | Invalid |                  | \naaa       | AK:******          | Invalid |                  | \n", w.String())
 
+	//testcase
 	w.Reset()
 	err = configureDelete.Run(ctx, []string{"delete"})
 	assert.Nil(t, err)
 	assert.Equal(t, "\x1b[1;31mmissing --profile <profileName>\n\x1b[0m\x1b[1;33m\nusage:\n  aliyun configure delete --profile <profileName>\n\x1b[0m", w.String())
 
+	//testcase
 	cmd := NewConfigureCommand()
 	excmd.Run = cmd.Run
 	assert.ObjectsAreEqualValues(excmd, cmd)
+
+	//testcase
+	w.Reset()
+	err = cmd.Run(ctx, []string{"configure"})
+	assert.Empty(t, w.String())
+	assert.NotNil(t, err)
+
+	//testcase
+	w.Reset()
+	err = cmd.Run(ctx, []string{})
+	assert.Nil(t, err)
+	assert.Equal(t, "Configuring profile '' in '' authenticate mode...\n"+
+		"Access Key Id []: Access Key Secret []: Default Region Id []: Default Output Format [json]: json (Only support json))\n"+
+		"Default Language [zh|en] en: Saving profile[] ...Done.\n"+
+		"-----------------------------------------------\n"+
+		"!!! Configure Failed please configure again !!!\n"+
+		"-----------------------------------------------\n"+
+		"AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first\n"+
+		"-----------------------------------------------\n"+
+		"!!! Configure Failed please configure again !!!\n"+
+		"-----------------------------------------------\n", w.String())
 }
 
 func TestDoConfigure(t *testing.T) {
