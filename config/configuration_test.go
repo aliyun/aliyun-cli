@@ -6,6 +6,7 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"runtime"
@@ -67,6 +68,7 @@ func TestConfiguration(t *testing.T) {
 
 func TestLoadProfile(t *testing.T) {
 	originhook := hookLoadConfiguration
+	w := new(bytes.Buffer)
 	defer func() {
 		hookLoadConfiguration = originhook
 	}()
@@ -75,11 +77,34 @@ func TestLoadProfile(t *testing.T) {
 			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	w := new(bytes.Buffer)
+	//testcase 1
 	p, err := LoadProfile(w, "")
 	assert.Nil(t, err)
 	p.parent = nil
 	assert.Equal(t, Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, p)
+
+	//testcase 2
+	_, err = LoadProfile(w, "hello")
+	assert.EqualError(t, err, "unknown profile hello, run configure to check")
+
+	//LoadCurrentProfile testcase
+	w.Reset()
+	p, err = LoadCurrentProfile(w)
+	assert.Nil(t, err)
+	p.parent = nil
+	assert.Equal(t, Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, p)
+
+	//testcase 3
+	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
+		return func(w io.Writer) (Configuration, error) {
+			return Configuration{}, errors.New("error")
+		}
+	}
+	w.Reset()
+	p, err = LoadProfile(w, "")
+	assert.Empty(t, p)
+	assert.EqualError(t, err, "init config failed error")
+
 }
 
 func TestHomePath(t *testing.T) {
@@ -175,12 +200,15 @@ func TestLoadConfiguration(t *testing.T) {
 	}
 	w := new(bytes.Buffer)
 
+	//testcase 1
 	cf, err := LoadConfiguration(w)
 	assert.Nil(t, err)
 	assert.Equal(t, Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: "AK", OutputFormat: "json", Language: "en"}}}, cf)
 	conf := Configuration{Profiles: []Profile{Profile{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}
 	err = SaveConfiguration(conf)
 	assert.Nil(t, err)
+
+	//testcase 2
 	w.Reset()
 	cf, err = LoadConfiguration(w)
 	assert.Equal(t, Configuration{CurrentProfile: "", Profiles: []Profile{Profile{Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json", Language: "en"}}}, cf)
@@ -201,7 +229,14 @@ func TestLoadProfileWithContext(t *testing.T) {
 	w := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w)
 	AddFlags(ctx.Flags())
+
+	//testcase 1
 	_, err := LoadProfileWithContext(ctx)
+	assert.EqualError(t, err, "region can't be empty")
+
+	//testcase 2
+	ctx.Flags().Get("profile").SetAssigned(true)
+	_, err = LoadProfileWithContext(ctx)
 	assert.EqualError(t, err, "region can't be empty")
 
 }

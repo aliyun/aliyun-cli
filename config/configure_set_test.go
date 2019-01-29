@@ -5,6 +5,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"testing"
 
@@ -15,6 +16,7 @@ import (
 
 func TestDoConfigureSet(t *testing.T) {
 	fs := cli.NewFlagSet()
+	w := new(bytes.Buffer)
 	AddFlags(fs)
 	originhook := hookLoadConfiguration
 	originhookSave := hookSaveConfiguration
@@ -22,6 +24,15 @@ func TestDoConfigureSet(t *testing.T) {
 		hookLoadConfiguration = originhook
 		hookSaveConfiguration = originhookSave
 	}()
+	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
+		return func(w io.Writer) (Configuration, error) {
+			return Configuration{}, errors.New("error")
+		}
+	}
+	doConfigureSet(w, fs)
+	assert.Equal(t, "\x1b[1;31mload configuration failed error\x1b[0m", w.String())
+
+	//testcase2
 	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
 		return func(w io.Writer) (Configuration, error) {
 			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
@@ -34,7 +45,7 @@ func TestDoConfigureSet(t *testing.T) {
 			return nil
 		}
 	}
-	w := new(bytes.Buffer)
+	w.Reset()
 	doConfigureSet(w, fs)
 	assert.Equal(t, "\x1b[1;31mfail to set configuration: region can't be empty\x1b[0m", w.String())
 
