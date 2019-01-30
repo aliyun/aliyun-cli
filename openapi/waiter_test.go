@@ -11,6 +11,7 @@ func TestWaiter_CallWith(t *testing.T) {
 	waiter := GetWaiter()
 	assert.Nil(t, waiter)
 
+	originWaiterFlag := WaiterFlag
 	WaiterFlag.SetAssigned(true)
 	waiter = GetWaiter()
 	assert.NotNil(t, waiter)
@@ -40,6 +41,7 @@ func TestWaiter_CallWith(t *testing.T) {
 
 	WaiterFlag.Fields[3].SetValue("5")
 	str, err = waiter.CallWith(invoker)
+	WaiterFlag = originWaiterFlag
 	assert.Equal(t, "", str)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "[SDK.CanNotResolveEndpoint] Can not resolve endpoint")

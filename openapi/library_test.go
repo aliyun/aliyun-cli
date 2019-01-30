@@ -1,11 +1,11 @@
 package openapi
 
 import (
-	"fmt"
-	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/meta"
 	"github.com/stretchr/testify/assert"
 
+	"bytes"
+	"fmt"
 	"testing"
 )
 
@@ -25,8 +25,8 @@ func (r *reader_test) setcontent(contenth string) {
 }
 
 func TestLibrary_PrintProducts(t *testing.T) {
-	writer := cli.DefaultWriter()
-	library := NewLibrary(writer, "en")
+	w := new(bytes.Buffer)
+	library := NewLibrary(w, "en")
 
 	_, isexist := library.GetApi("aos", "v1.0", "describe")
 	assert.False(t, isexist)
@@ -50,8 +50,8 @@ func TestLibrary_PrintProducts(t *testing.T) {
 }
 
 func TestLibrary_PrintProductUsage(t *testing.T) {
-	writer := cli.DefaultWriter()
-	library := NewLibrary(writer, "en")
+	w := new(bytes.Buffer)
+	library := NewLibrary(w, "en")
 	content := `{"products":[{"code":"ecs","api_style":"rpc","apis":["DescribeRegions"]}]}`
 	library.builtinRepo = getRepository(content)
 	err := library.PrintProductUsage("aos", true)
@@ -67,8 +67,8 @@ func TestLibrary_PrintProductUsage(t *testing.T) {
 }
 
 func TestLibrary_PrintApiUsage(t *testing.T) {
-	writer := cli.DefaultWriter()
-	library := NewLibrary(writer, "en")
+	w := new(bytes.Buffer)
+	library := NewLibrary(w, "en")
 	content := `{"products":[{"code":"ecs","api_style":"rpc","apis":["DescribeRegions"]}]}`
 	library.builtinRepo = getRepository(content)
 	err := library.PrintApiUsage("aos", "DescribeRegions")
@@ -84,7 +84,7 @@ func TestLibrary_PrintApiUsage(t *testing.T) {
 }
 
 func Test_printParameters(t *testing.T) {
-	writer := cli.DefaultWriter()
+	w := new(bytes.Buffer)
 	params := []meta.Parameter{
 		{
 			Hidden: true,
@@ -107,7 +107,7 @@ func Test_printParameters(t *testing.T) {
 			},
 		},
 	}
-	printParameters(writer, params, "")
+	printParameters(w, params, "")
 }
 
 func getRepository(content string) *meta.Repository {
