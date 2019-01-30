@@ -4,6 +4,7 @@
 package openapi
 
 import (
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/i18n"
@@ -20,6 +21,10 @@ import (
 type Commando struct {
 	profile config.Profile
 	library *Library
+}
+
+var hookdo = func(fn func()(*responses.CommonResponse, error)) func()(*responses.CommonResponse, error){
+	return fn
 }
 
 func NewCommando(w io.Writer, profile config.Profile) *Commando {
@@ -116,7 +121,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 			return err
 		}
 	} else {
-		resp, err := invoker.Call()
+		resp, err := hookdo(invoker.Call)()
 		if err != nil {
 			// if unmarshal failed,
 			if !strings.Contains(strings.ToLower(err.Error()), "unmarshal") {
