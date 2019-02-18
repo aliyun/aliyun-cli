@@ -3,6 +3,18 @@
 	"ignore": "",
 	"package": [
 		{
+			"checksumSHA1": "a8EZzGjC5A6Yv3eDrRetIKA8BDo=",
+			"path": "github.com/aliyun/alibaba-cloud-sdk-go/sdk",
+			"revision": "29ccdb444337279e7b1a1355176d623b9489152e",
+			"revisionTime": "2019-02-18T04:04:42Z"
+		},
+		{
+			"checksumSHA1": "ZTRznMoc99cr5DOJJgx30ZTqQ1E=",
+			"path": "github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests",
+			"revision": "29ccdb444337279e7b1a1355176d623b9489152e",
+			"revisionTime": "2019-02-18T04:04:42Z"
+		},
+		{
 			"checksumSHA1": "VFwJJfUzB6cwRndTmB3JWKvIgmA=",
 			"path": "github.com/davecgh/go-spew/spew",
 			"revision": "d8f796af33cc11cb798c1aaeb27a4ebc5099927d",

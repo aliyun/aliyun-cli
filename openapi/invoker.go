@@ -64,8 +64,8 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 		return fmt.Errorf("init client failed %s", err)
 	}
 
+	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 	a.request = requests.NewCommonRequest()
-	a.request.Headers["User-Agent"] = config.GetUserAgent()
 	a.request.Product = product.Code
 
 	a.request.RegionId = a.profile.RegionId
