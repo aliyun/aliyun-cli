@@ -252,12 +252,14 @@ func (cp *Profile) GetClientByAK(config *sdk.Config) (*sdk.Client, error) {
 	}
 
 	cred := credentials.NewAccessKeyCredential(cp.AccessKeyId, cp.AccessKeySecret)
+	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
 
 func (cp *Profile) GetClientBySts(config *sdk.Config) (*sdk.Client, error) {
 	cred := credentials.NewStsTokenCredential(cp.AccessKeyId, cp.AccessKeySecret, cp.StsToken)
+	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
@@ -295,6 +297,7 @@ func (cp *Profile) GetClientByRoleArn(config *sdk.Config) (*sdk.Client, error) {
 		return nil, fmt.Errorf("get session credential failed %s", err)
 	}
 	cred := credentials.NewStsTokenCredential(sc.AccessKeyId, sc.AccessKeySecret, sc.StsToken)
+	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
@@ -377,12 +380,14 @@ func (cp *Profile) GetClientByEcsRamRole(config *sdk.Config) (*sdk.Client, error
 	}
 
 	cred := credentials.NewStsTokenCredential(sc.AccessKeyId, sc.AccessKeySecret, sc.StsToken)
+	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
 
 func (cp *Profile) GetClientByPrivateKey(config *sdk.Config) (*sdk.Client, error) {
 	cred := credentials.NewRsaKeyPairCredential(cp.PrivateKey, cp.KeyPairName, cp.ExpiredSeconds)
+	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }

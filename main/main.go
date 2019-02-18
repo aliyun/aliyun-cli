@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/aliyun/aliyun-cli/cli"
@@ -43,11 +42,7 @@ func main() {
 
 	// set user agent
 	userAgentFromEnv := os.Getenv("ALIYUN_USER_AGENT")
-	if userAgentFromEnv != "" {
-		defaultUserAgent := config.GetUserAgent()
-		userAgent := fmt.Sprintf("%s (%s)", defaultUserAgent, userAgentFromEnv)
-		config.SetUserAgent(userAgent)
-	}
+	config.SetUserAgent(userAgentFromEnv)
 
 	// set language with current profile
 	i18n.SetLanguage(profile.Language)

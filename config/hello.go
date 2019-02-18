@@ -24,6 +24,7 @@ func GetRegions(ctx *cli.Context, profile *Profile) ([]Region, error) {
 
 	request := ecs.CreateDescribeRegionsRequest()
 	response := ecs.CreateDescribeRegionsResponse()
+	client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 	err = client.DoAction(request, response)
 
 	for _, region := range response.Regions.Region {
@@ -52,6 +53,7 @@ func DoHello(ctx *cli.Context, profile *Profile) {
 	}
 	request := ecs.CreateDescribeRegionsRequest()
 	response := ecs.CreateDescribeRegionsResponse()
+	client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 	err = client.DoAction(request, response)
 
 	if err != nil {
