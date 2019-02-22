@@ -214,7 +214,8 @@ func NewLanguageFlag() *cli.Flag {
 
 func NewRetryTimeoutFlag() *cli.Flag {
 	return &cli.Flag{Category: "caller",
-		Name: RetryTimeoutFlagName, AssignedMode: cli.AssignedOnce, Hidden: true,
+		Name:         RetryTimeoutFlagName,
+		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--retry-timeout <seconds>` to set retry timeout(seconds)",
 			"使用 `--retry-timeout <seconds>` 指定请求超时时间(秒)"),
@@ -223,7 +224,7 @@ func NewRetryTimeoutFlag() *cli.Flag {
 
 func NewRetryCountFlag() *cli.Flag {
 	return &cli.Flag{Category: "caller",
-		Name: RetryCountFlagName, AssignedMode: cli.AssignedOnce, Hidden: true,
+		Name: RetryCountFlagName, AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--retry-count <count>` to set retry count",
 			"使用 `--retry-count <count>` 指定重试次数"),
