@@ -5,10 +5,11 @@ package openapi
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/i18n"
 	"strconv"
 	"time"
+
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 var WaiterFlag = &cli.Flag{Category: "helper",

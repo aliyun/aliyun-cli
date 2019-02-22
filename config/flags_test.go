@@ -231,7 +231,7 @@ func TestAddFlag(t *testing.T) {
 			Category:     "caller",
 			Name:         RetryTimeoutFlagName,
 			AssignedMode: cli.AssignedOnce,
-			Hidden:       true,
+			Hidden:       false,
 			Short: i18n.T(
 				"use `--retry-timeout <seconds>` to set retry timeout(seconds)",
 				"使用 `--retry-timeout <seconds>` 指定请求超时时间(秒)"),
@@ -249,7 +249,7 @@ func TestAddFlag(t *testing.T) {
 			Category:     "caller",
 			Name:         RetryCountFlagName,
 			AssignedMode: cli.AssignedOnce,
-			Hidden:       true,
+			Hidden:       false,
 			Short: i18n.T(
 				"use `--retry-count <count>` to set retry count",
 				"使用 `--retry-count <count>` 指定重试次数"),
