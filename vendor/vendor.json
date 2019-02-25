@@ -3,10 +3,16 @@
 	"ignore": "",
 	"package": [
 		{
-			"checksumSHA1": "a8EZzGjC5A6Yv3eDrRetIKA8BDo=",
+			"checksumSHA1": "Wmm1SXFd629zX1xCE4K+iBYFCxY=",
 			"path": "github.com/aliyun/alibaba-cloud-sdk-go/sdk",
-			"revision": "29ccdb444337279e7b1a1355176d623b9489152e",
-			"revisionTime": "2019-02-18T04:04:42Z"
+			"revision": "7736520c4d7b436cdae8fc4890ff894f1647b3a4",
+			"revisionTime": "2019-02-25T08:06:22Z"
+		},
+		{
+			"checksumSHA1": "kXkFLuhB2ybCqlFBHJB7bIpry9E=",
+			"path": "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors",
+			"revision": "7736520c4d7b436cdae8fc4890ff894f1647b3a4",
+			"revisionTime": "2019-02-25T08:06:22Z"
 		},
 		{
 			"checksumSHA1": "ZTRznMoc99cr5DOJJgx30ZTqQ1E=",
