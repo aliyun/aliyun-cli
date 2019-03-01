@@ -22,8 +22,8 @@ func TestNewConfigureCommand(t *testing.T) {
 		hookLoadConfiguration = originhook
 		hookSaveConfiguration = originhookSave
 	}()
-	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
-		return func(w io.Writer) (Configuration, error) {
+	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
+		return func(path string, w io.Writer) (Configuration, error) {
 			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
@@ -110,8 +110,8 @@ func TestDoConfigure(t *testing.T) {
 		hookLoadConfiguration = originhook
 		hookSaveConfiguration = originhookSave
 	}()
-	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
-		return func(w io.Writer) (Configuration, error) {
+	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
+		return func(path string, w io.Writer) (Configuration, error) {
 			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}

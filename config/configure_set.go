@@ -43,7 +43,7 @@ func NewConfigureSetCommand() *cli.Command {
 }
 
 func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
-	config, err := hookLoadConfiguration(LoadConfiguration)(w)
+	config, err := hookLoadConfiguration(LoadConfiguration)(GetConfigPath()+"/"+configFile, w)
 	if err != nil {
 		cli.Errorf(w, "load configuration failed %s", err)
 		return
@@ -57,6 +57,15 @@ func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
 	profile, ok := config.GetProfile(profileName)
 	if !ok {
 		profile = NewProfile(profileName)
+	}
+
+	path, ok := ConfigurePathFlag(flags).GetValue()
+	if ok {
+		profile, err = LoadProfile(path, w, profileName)
+		if err != nil {
+			cli.Errorf(w, "load configuration file failed %s", err)
+			return
+		}
 	}
 
 	mode, ok := ModeFlag(flags).GetValue()
