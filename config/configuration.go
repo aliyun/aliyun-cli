@@ -76,12 +76,12 @@ func (c *Configuration) PutProfile(profile Profile) {
 }
 
 func LoadCurrentProfile(w io.Writer) (Profile, error) {
-	return LoadProfile(w, "")
+	return LoadProfile(GetConfigPath()+"/"+configFile, w, "")
 }
 
-func LoadProfile(w io.Writer, name string) (Profile, error) {
+func LoadProfile(path string, w io.Writer, name string) (Profile, error) {
 	var p Profile
-	config, err := hookLoadConfiguration(LoadConfiguration)(w)
+	config, err := hookLoadConfiguration(LoadConfiguration)(path, w)
 	if err != nil {
 		return p, fmt.Errorf("init config failed %v", err)
 	}
@@ -97,21 +97,28 @@ func LoadProfile(w io.Writer, name string) (Profile, error) {
 }
 
 func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
-	if name, ok := ProfileFlag(ctx.Flags()).GetValue(); ok {
-		profile, err = LoadProfile(ctx.Writer(), name)
+	var currentPath string
+	if path, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
+		currentPath = path
 	} else {
-		profile, err = LoadProfile(ctx.Writer(), "")
+		currentPath = GetConfigPath() + "/" + configFile
+	}
+	if name, ok := ProfileFlag(ctx.Flags()).GetValue(); ok {
+		profile, err = LoadProfile(currentPath, ctx.Writer(), name)
+
+	} else {
+		profile, err = LoadProfile(currentPath, ctx.Writer(), "")
 	}
 	if err != nil {
 		return
 	}
+	//Load from flags
 	profile.OverwriteWithFlags(ctx)
 	err = profile.Validate()
 	return
 }
 
-func LoadConfiguration(w io.Writer) (Configuration, error) {
-	path := GetConfigPath() + "/" + configFile
+func LoadConfiguration(path string, w io.Writer) (Configuration, error) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		lc := MigrateLegacyConfiguration(w)
 		if lc != nil {
@@ -120,9 +127,8 @@ func LoadConfiguration(w io.Writer) (Configuration, error) {
 				return *lc, fmt.Errorf("save failed %v", err)
 			}
 			return *lc, nil
-		} else {
-			return NewConfiguration(), nil
 		}
+		return NewConfiguration(), nil
 	}
 
 	bytes, err := ioutil.ReadFile(path)
@@ -135,7 +141,7 @@ func LoadConfiguration(w io.Writer) (Configuration, error) {
 
 func SaveConfiguration(config Configuration) error {
 	// fmt.Printf("conf %v\n", config)
-	bytes, err := json.Marshal(config)
+	bytes, err := json.MarshalIndent(config, "", "\t")
 	if err != nil {
 		return err
 	}

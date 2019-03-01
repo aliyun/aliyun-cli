@@ -72,19 +72,19 @@ func TestLoadProfile(t *testing.T) {
 	defer func() {
 		hookLoadConfiguration = originhook
 	}()
-	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
-		return func(w io.Writer) (Configuration, error) {
+	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
+		return func(path string, w io.Writer) (Configuration, error) {
 			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
 	//testcase 1
-	p, err := LoadProfile(w, "")
+	p, err := LoadProfile(GetConfigPath()+"/"+configFile, w, "")
 	assert.Nil(t, err)
 	p.parent = nil
 	assert.Equal(t, Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, p)
 
 	//testcase 2
-	_, err = LoadProfile(w, "hello")
+	_, err = LoadProfile(GetConfigPath()+"/"+configFile, w, "hello")
 	assert.EqualError(t, err, "unknown profile hello, run configure to check")
 
 	//LoadCurrentProfile testcase
@@ -95,13 +95,13 @@ func TestLoadProfile(t *testing.T) {
 	assert.Equal(t, Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, p)
 
 	//testcase 3
-	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
-		return func(w io.Writer) (Configuration, error) {
+	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
+		return func(path string, w io.Writer) (Configuration, error) {
 			return Configuration{}, errors.New("error")
 		}
 	}
 	w.Reset()
-	p, err = LoadProfile(w, "")
+	p, err = LoadProfile(GetConfigPath()+"/"+configFile, w, "")
 	assert.Empty(t, p)
 	assert.EqualError(t, err, "init config failed error")
 
@@ -174,7 +174,7 @@ func TestSaveConfiguration(t *testing.T) {
 		}
 	}
 	conf := Configuration{Profiles: []Profile{Profile{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}
-	bytes, err := json.Marshal(conf)
+	bytes, err := json.MarshalIndent(conf, "", "\t")
 	assert.Nil(t, err)
 	err = SaveConfiguration(conf)
 	assert.Nil(t, err)
@@ -201,7 +201,7 @@ func TestLoadConfiguration(t *testing.T) {
 	w := new(bytes.Buffer)
 
 	//testcase 1
-	cf, err := LoadConfiguration(w)
+	cf, err := LoadConfiguration(GetConfigPath()+"/"+configFile, w)
 	assert.Nil(t, err)
 	assert.Equal(t, Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: "AK", OutputFormat: "json", Language: "en"}}}, cf)
 	conf := Configuration{Profiles: []Profile{Profile{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}
@@ -210,7 +210,7 @@ func TestLoadConfiguration(t *testing.T) {
 
 	//testcase 2
 	w.Reset()
-	cf, err = LoadConfiguration(w)
+	cf, err = LoadConfiguration(GetConfigPath()+"/"+configFile, w)
 	assert.Equal(t, Configuration{CurrentProfile: "", Profiles: []Profile{Profile{Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json", Language: "en"}}}, cf)
 	assert.Nil(t, err)
 
@@ -221,8 +221,8 @@ func TestLoadProfileWithContext(t *testing.T) {
 	defer func() {
 		hookLoadConfiguration = originhook
 	}()
-	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
-		return func(w io.Writer) (Configuration, error) {
+	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
+		return func(path string, w io.Writer) (Configuration, error) {
 			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}

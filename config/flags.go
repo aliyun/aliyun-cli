@@ -24,6 +24,7 @@ const (
 	RetryTimeoutFlagName    = "retry-timeout"
 	RetryCountFlagName      = "retry-count"
 	SkipSecureVerifyName    = "skip-secure-verify"
+	ConfigurePathFlagName   = "config-path"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -31,7 +32,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewProfileFlag())
 	fs.Add(NewLanguageFlag())
 	fs.Add(NewRegionFlag())
-
+	fs.Add(NewConfigurePathFlag())
 	fs.Add(NewAccessKeyIdFlag())
 	fs.Add(NewAccessKeySecretFlag())
 	fs.Add(NewStsTokenFlag())
@@ -104,6 +105,9 @@ func RetryCountFlag(fs *cli.FlagSet) *cli.Flag {
 func SkipSecureVerify(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(SkipSecureVerifyName)
 }
+func ConfigurePathFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(ConfigurePathFlagName)
+}
 
 //var OutputFlag = &cli.Flag{Category: "config",
 //	Name: "output", AssignedMode: cli.AssignedOnce, Hidden: true,
@@ -115,7 +119,8 @@ func SkipSecureVerify(fs *cli.FlagSet) *cli.Flag {
 //Usage: i18n.T("assign site, support china/international/japan", "")})
 
 func NewProfileFlag() *cli.Flag {
-	return &cli.Flag{Category: "config",
+	return &cli.Flag{
+		Category:     "config",
 		Name:         ProfileFlagName,
 		Shorthand:    'p',
 		DefaultValue: "default", Persistent: true,
@@ -125,48 +130,60 @@ func NewProfileFlag() *cli.Flag {
 }
 
 func NewModeFlag() *cli.Flag {
-	return &cli.Flag{Category: "config",
-		Name: ModeFlagName, DefaultValue: "AK", Persistent: true,
+	return &cli.Flag{
+		Category: "config",
+		Name:     ModeFlagName, DefaultValue: "AK", Persistent: true,
 		Short: i18n.T(
 			"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` to assign authenticate mode",
 			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` 指定认证方式")}
 }
 
 func NewAccessKeyIdFlag() *cli.Flag {
-	return &cli.Flag{Category: "config",
-		Name: AccessKeyIdFlagName, AssignedMode: cli.AssignedOnce,
+	return &cli.Flag{
+		Category:     "config",
+		Name:         AccessKeyIdFlagName,
+		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--access-key-id <AccessKeyId>` to assign AccessKeyId, required in AK/StsToken/RamRoleArn mode",
 			"使用 `--access-key-id <AccessKeyId>` 指定AccessKeyId")}
 }
 
 func NewAccessKeySecretFlag() *cli.Flag {
-	return &cli.Flag{Category: "config",
-		Name: AccessKeySecretFlagName, AssignedMode: cli.AssignedOnce,
+	return &cli.Flag{
+		Category:     "config",
+		Name:         AccessKeySecretFlagName,
+		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--access-key-secret <AccessKeySecret>` to assign AccessKeySecret",
 			"使用 `--access-key-secret <AccessKeySecret>` 指定AccessKeySecret")}
 }
 
 func NewStsTokenFlag() *cli.Flag {
-	return &cli.Flag{Category: "config",
-		Name: StsTokenFlagName, AssignedMode: cli.AssignedOnce,
+	return &cli.Flag{
+		Category:     "config",
+		Name:         StsTokenFlagName,
+		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--sts-token <StsToken>` to assign StsToken",
 			"使用 `--sts-token <StsToken>` 指定StsToken")}
 }
 
 func NewRamRoleNameFlag() *cli.Flag {
-	return &cli.Flag{Category: "config",
-		Name: RamRoleNameFlagName, AssignedMode: cli.AssignedOnce, Persistent: true,
+	return &cli.Flag{
+		Category:     "config",
+		Name:         RamRoleNameFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--ram-role-name <RamRoleName>` to assign RamRoleName",
 			"使用 `--ram-role-name <RamRoleName>` 指定RamRoleName")}
 }
 
 func NewRamRoleArnFlag() *cli.Flag {
-	return &cli.Flag{Category: "config",
-		Name: RamRoleArnFlagName, AssignedMode: cli.AssignedOnce,
+	return &cli.Flag{
+		Category:     "config",
+		Name:         RamRoleArnFlagName,
+		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--ram-role-arn <RamRoleArn>` to assign RamRoleArn",
 			"使用 `--ram-role-arn <RamRoleArn>` 指定RamRoleArn")}
@@ -174,7 +191,8 @@ func NewRamRoleArnFlag() *cli.Flag {
 
 func NewRoleSessionNameFlag() *cli.Flag {
 	return &cli.Flag{Category: "config",
-		Name: RoleSessionNameFlagName, AssignedMode: cli.AssignedOnce,
+		Name:         RoleSessionNameFlagName,
+		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--role-session-name <RoleSessionName>` to assign RoleSessionName",
 			"使用 `--role-session-name <RoleSessionName>` 指定RoleSessionName")}
@@ -182,7 +200,8 @@ func NewRoleSessionNameFlag() *cli.Flag {
 
 func NewPrivateKeyFlag() *cli.Flag {
 	return &cli.Flag{Category: "config",
-		Name: PrivateKeyFlagName, AssignedMode: cli.AssignedOnce,
+		Name:         PrivateKeyFlagName,
+		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--private-key <PrivateKey>` to assign RSA PrivateKey",
 			"使用 `--private-key <PrivateKey>` 指定RSA私钥")}
@@ -190,7 +209,8 @@ func NewPrivateKeyFlag() *cli.Flag {
 
 func NewKeyPairNameFlag() *cli.Flag {
 	return &cli.Flag{Category: "config",
-		Name: KeyPairNameFlagName, AssignedMode: cli.AssignedOnce,
+		Name:         KeyPairNameFlagName,
+		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--key-pair-name <KeyPairName>` to assign KeyPairName",
 			"使用 `--key-pair-name <KeyPairName>` 指定KeyPairName")}
@@ -198,22 +218,38 @@ func NewKeyPairNameFlag() *cli.Flag {
 
 func NewRegionFlag() *cli.Flag {
 	return &cli.Flag{Category: "config",
-		Name: RegionFlagName, AssignedMode: cli.AssignedOnce,
+		Name:         RegionFlagName,
+		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--region <regionId>` to assign region",
 			"使用 `--region <regionId>` 来指定访问大区")}
 }
 
 func NewLanguageFlag() *cli.Flag {
-	return &cli.Flag{Category: "config",
-		Name: LanguageFlagName, AssignedMode: cli.AssignedOnce,
+	return &cli.Flag{
+		Category:     "config",
+		Name:         LanguageFlagName,
+		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--language [en|zh]` to assign language",
 			"使用 `--language [en|zh]` 来指定语言")}
 }
-
+func NewConfigurePathFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         ConfigurePathFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Hidden:       true,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--config-path` to specify the configuration file path",
+			"使用 `--config-path` 指定配置文件路径",
+		),
+	}
+}
 func NewRetryTimeoutFlag() *cli.Flag {
-	return &cli.Flag{Category: "caller",
+	return &cli.Flag{
+		Category:     "caller",
 		Name:         RetryTimeoutFlagName,
 		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
@@ -223,8 +259,10 @@ func NewRetryTimeoutFlag() *cli.Flag {
 }
 
 func NewRetryCountFlag() *cli.Flag {
-	return &cli.Flag{Category: "caller",
-		Name: RetryCountFlagName, AssignedMode: cli.AssignedOnce,
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         RetryCountFlagName,
+		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--retry-count <count>` to set retry count",
 			"使用 `--retry-count <count>` 指定重试次数"),
@@ -232,8 +270,12 @@ func NewRetryCountFlag() *cli.Flag {
 }
 
 func NewSkipSecureVerify() *cli.Flag {
-	return &cli.Flag{Category: "caller",
-		Name: SkipSecureVerifyName, AssignedMode: cli.AssignedNone, Hidden: true, Persistent: true,
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         SkipSecureVerifyName,
+		AssignedMode: cli.AssignedNone,
+		Hidden:       true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--skip-secure-verify` to skip https certification validate",
 			"使用 `--skip-secure-verify` 跳过https的证书校验",

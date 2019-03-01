@@ -22,8 +22,8 @@ func TestDoConfigureDelete(t *testing.T) {
 	}()
 
 	//testcase 1
-	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
-		return func(w io.Writer) (Configuration, error) {
+	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
+		return func(path string, w io.Writer) (Configuration, error) {
 			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "bbb", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
@@ -41,8 +41,8 @@ func TestDoConfigureDelete(t *testing.T) {
 	assert.Equal(t, "\x1b[1;31mError: configuration profile `aaa` not found\n\x1b[0m", w.String())
 
 	//testcase 3
-	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
-		return func(w io.Writer) (Configuration, error) {
+	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
+		return func(path string, w io.Writer) (Configuration, error) {
 			return Configuration{}, errors.New("error")
 		}
 	}
@@ -52,8 +52,8 @@ func TestDoConfigureDelete(t *testing.T) {
 	assert.Equal(t, "\x1b[1;31mERROR: load configure failed: error\n\x1b[0m\x1b[1;31mError: configuration profile `bbb` not found\n\x1b[0m", w.String())
 
 	//testcase 4
-	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
-		return func(w io.Writer) (Configuration, error) {
+	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
+		return func(path string, w io.Writer) (Configuration, error) {
 			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "bbb", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}

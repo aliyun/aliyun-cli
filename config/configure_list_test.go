@@ -20,8 +20,8 @@ func TestDoConfigureList(t *testing.T) {
 	}()
 
 	//testcase 1
-	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
-		return func(w io.Writer) (Configuration, error) {
+	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
+		return func(path string, w io.Writer) (Configuration, error) {
 			return Configuration{
 				CurrentProfile: "default",
 				Profiles: []Profile{
@@ -79,8 +79,8 @@ func TestDoConfigureList(t *testing.T) {
 		"ddd       | RsaKeyPair:KeyPairName | Invalid |                  | \n", w.String())
 
 	//testcase 2
-	hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
-		return func(w io.Writer) (Configuration, error) {
+	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
+		return func(path string, w io.Writer) (Configuration, error) {
 			return Configuration{}, errors.New("error")
 		}
 	}

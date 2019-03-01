@@ -2,6 +2,8 @@
 
 ### Master :
 
+- add `--config-path` flag to specify file path which has a single profile
+>(this flag can use with other flags, like `--access-key-id`, and flag value priority is higher than file content.)  
 - add `--retry-timeout` and `--retry-count` flags to support timeout setting 
 
 ### v3.0.10

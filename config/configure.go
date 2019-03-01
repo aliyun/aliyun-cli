@@ -13,7 +13,7 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 )
 
-var hookLoadConfiguration = func(fn func(w io.Writer) (Configuration, error)) func(w io.Writer) (Configuration, error) {
+var hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
 	return fn
 }
 var hookSaveConfiguration = func(fn func(config Configuration) error) func(config Configuration) error {
@@ -49,7 +49,7 @@ func NewConfigureCommand() *cli.Command {
 func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 	w := ctx.Writer()
 
-	conf, err := hookLoadConfiguration(LoadConfiguration)(ctx.Writer())
+	conf, err := hookLoadConfiguration(LoadConfiguration)(GetConfigPath()+"/"+configFile, ctx.Writer())
 	if err != nil {
 		return err
 	}

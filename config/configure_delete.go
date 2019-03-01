@@ -30,7 +30,7 @@ func NewConfigureDeleteCommand() *cli.Command {
 }
 
 func doConfigureDelete(w io.Writer, profileName string) {
-	conf, err := hookLoadConfiguration(LoadConfiguration)(w)
+	conf, err := hookLoadConfiguration(LoadConfiguration)(GetConfigPath()+"/"+configFile, w)
 	if err != nil {
 		cli.Errorf(w, "ERROR: load configure failed: %v\n", err)
 	}

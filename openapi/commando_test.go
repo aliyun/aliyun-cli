@@ -2,6 +2,7 @@ package openapi
 
 import (
 	"bytes"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
@@ -34,6 +35,7 @@ func Test_main(t *testing.T) {
 
 	args := []string{"test"}
 	profileflag := config.NewProfileFlag()
+	configpathflag := config.NewConfigurePathFlag()
 	profileflag.SetAssigned(true)
 	profileflag.SetValue("ecs")
 	skipflag := config.NewSkipSecureVerify()
@@ -42,6 +44,7 @@ func Test_main(t *testing.T) {
 	ctx.Flags().Add(profileflag)
 	ctx.Flags().Add(skipflag)
 	ctx.Flags().Add(config.NewRegionFlag())
+	ctx.Flags().Add(configpathflag)
 
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
@@ -102,14 +105,14 @@ func Test_processInvoke(t *testing.T) {
 	VersionFlag(ctx.Flags()).SetAssigned(true)
 	VersionFlag(ctx.Flags()).SetValue("v1.0")
 
-	HeaderFlag(ctx.Flags()).SetValues([]string{"Accept=xml","Content-Type=json", })
+	HeaderFlag(ctx.Flags()).SetValues([]string{"Accept=xml", "Content-Type=json"})
 
 	profile := config.Profile{
-		Language: "en",
-		Mode: "AK",
-		AccessKeyId: "accesskeyid",
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
 		AccessKeySecret: "accesskeysecret",
-		RegionId: "cn-hangzhou",
+		RegionId:        "cn-hangzhou",
 	}
 	command := NewCommando(w, profile)
 
@@ -139,12 +142,12 @@ func Test_processInvoke(t *testing.T) {
 	assert.Contains(t, err.Error(), "lookup ecs.cn-hangzhou.aliyuncs")
 
 	originhookdo := hookdo
-	defer func(){
+	defer func() {
 		hookdo = originhookdo
 	}()
-	hookdo = func(fn func()(*responses.CommonResponse, error)) func()(*responses.CommonResponse, error) {
+	hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
 		resp := responses.NewCommonResponse()
-		return  func()(*responses.CommonResponse, error){
+		return func() (*responses.CommonResponse, error) {
 			return resp, nil
 		}
 	}
@@ -168,7 +171,7 @@ func Test_processInvoke(t *testing.T) {
 	assert.Equal(t, "{\n\t\"requestid\": \"test\",\n\t\"name\": \"json\"\n}", out)
 }
 
-func Test_help(t *testing.T){
+func Test_help(t *testing.T) {
 	w := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w)
 	cmd := &cli.Command{}
@@ -179,11 +182,11 @@ func Test_help(t *testing.T){
 	ctx.Command().Short = &i18n.Text{}
 
 	profile := config.Profile{
-		Language: "en",
-		Mode: "AK",
-		AccessKeyId: "accesskeyid",
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
 		AccessKeySecret: "accesskeysecret",
-		RegionId: "cn-hangzhou",
+		RegionId:        "cn-hangzhou",
 	}
 	command := NewCommando(w, profile)
 	args := []string{}
@@ -206,7 +209,7 @@ func Test_help(t *testing.T){
 	assert.Equal(t, "too many arguments: 3", err.Error())
 }
 
-func Test_complete(t *testing.T){
+func Test_complete(t *testing.T) {
 	w := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w)
 	cmd := &cli.Command{}
@@ -220,11 +223,11 @@ func Test_complete(t *testing.T){
 	})
 
 	profile := config.Profile{
-		Language: "en",
-		Mode: "AK",
-		AccessKeyId: "accesskeyid",
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
 		AccessKeySecret: "accesskeysecret",
-		RegionId: "cn-hangzhou",
+		RegionId:        "cn-hangzhou",
 	}
 	command := NewCommando(w, profile)
 	reader := &reader_test{}
