@@ -239,7 +239,6 @@ func NewConfigurePathFlag() *cli.Flag {
 		Category:     "config",
 		Name:         ConfigurePathFlagName,
 		AssignedMode: cli.AssignedOnce,
-		Hidden:       true,
 		Persistent:   true,
 		Short: i18n.T(
 			"use `--config-path` to specify the configuration file path",
