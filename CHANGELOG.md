@@ -2,6 +2,9 @@
 
 ### Master :
 
+### 3.0.11 :
+
+- updata API meta data
 - improve output format of command `configure get`
 - add `--config-path` flag to specify file path which has a single profile
 >(this flag can use with other flags, like `--access-key-id`, and flag value priority is higher than file content.)  
