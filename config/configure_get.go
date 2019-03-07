@@ -4,6 +4,9 @@
 package config
 
 import (
+	"encoding/json"
+	"reflect"
+
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
 )
@@ -49,33 +52,42 @@ func doConfigureGet(c *cli.Context, args []string) {
 		}
 	}
 
-	for _, arg := range args {
-		switch arg {
-		case ProfileFlagName:
-			cli.Printf(c.Writer(), "profile=%s\n", profile.Name)
-		case ModeFlagName:
-			cli.Printf(c.Writer(), "mode=%s\n", profile.Mode)
-		case AccessKeyIdFlagName:
-			cli.Printf(c.Writer(), "access-key-id=%s\n", MosaicString(profile.AccessKeyId, 3))
-		case AccessKeySecretFlagName:
-			cli.Printf(c.Writer(), "access-key-secret=%s\n", MosaicString(profile.AccessKeySecret, 3))
-		case StsTokenFlagName:
-			cli.Printf(c.Writer(), "sts-token=%s\n", profile.StsToken)
-		case RamRoleNameFlagName:
-			cli.Printf(c.Writer(), "ram-role-name=%s\n", profile.RamRoleName)
-		case RamRoleArnFlagName:
-			cli.Printf(c.Writer(), "ram-role-arn=%s\n", profile.RamRoleArn)
-		case RoleSessionNameFlagName:
-			cli.Printf(c.Writer(), "role-session-name=%s\n", profile.RoleSessionName)
-		case KeyPairNameFlagName:
-			cli.Printf(c.Writer(), "key-pair-name=%s\n", profile.KeyPairName)
-		case PrivateKeyFlagName:
-			cli.Printf(c.Writer(), "private-key=%s\n", profile.PrivateKey)
-		case RegionFlagName:
-			cli.Printf(c.Writer(), profile.RegionId)
-		case LanguageFlagName:
-			cli.Printf(c.Writer(), "language=%s\n", profile.Language)
+	if len(args) == 0 && !reflect.DeepEqual(profile, Profile{}) {
+		data, err := json.MarshalIndent(profile, "", "\t")
+		if err != nil {
+			cli.Printf(c.Writer(), "ERROR:"+err.Error())
+		}
+		cli.Println(c.Writer(), string(data))
+	} else {
+		for _, arg := range args {
+			switch arg {
+			case ProfileFlagName:
+				cli.Printf(c.Writer(), "profile=%s\n", profile.Name)
+			case ModeFlagName:
+				cli.Printf(c.Writer(), "mode=%s\n", profile.Mode)
+			case AccessKeyIdFlagName:
+				cli.Printf(c.Writer(), "access-key-id=%s\n", MosaicString(profile.AccessKeyId, 3))
+			case AccessKeySecretFlagName:
+				cli.Printf(c.Writer(), "access-key-secret=%s\n", MosaicString(profile.AccessKeySecret, 3))
+			case StsTokenFlagName:
+				cli.Printf(c.Writer(), "sts-token=%s\n", profile.StsToken)
+			case RamRoleNameFlagName:
+				cli.Printf(c.Writer(), "ram-role-name=%s\n", profile.RamRoleName)
+			case RamRoleArnFlagName:
+				cli.Printf(c.Writer(), "ram-role-arn=%s\n", profile.RamRoleArn)
+			case RoleSessionNameFlagName:
+				cli.Printf(c.Writer(), "role-session-name=%s\n", profile.RoleSessionName)
+			case KeyPairNameFlagName:
+				cli.Printf(c.Writer(), "key-pair-name=%s\n", profile.KeyPairName)
+			case PrivateKeyFlagName:
+				cli.Printf(c.Writer(), "private-key=%s\n", profile.PrivateKey)
+			case RegionFlagName:
+				cli.Printf(c.Writer(), profile.RegionId)
+			case LanguageFlagName:
+				cli.Printf(c.Writer(), "language=%s\n", profile.Language)
+			}
 		}
 	}
+
 	cli.Printf(c.Writer(), "\n")
 }
