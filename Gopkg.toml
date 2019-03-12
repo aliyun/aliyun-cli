@@ -27,7 +27,7 @@
 
 [[constraint]]
   name = "github.com/aliyun/alibaba-cloud-sdk-go"
-  branch = "master"
+  version = "1.53.22"
 
 [[constraint]]
   name = "github.com/aliyun/aliyun-oss-go-sdk"
