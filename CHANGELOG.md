@@ -2,6 +2,15 @@
 
 ### Master :
 
+- update flag `--output`
+> Normally only need to use the field `cols`, like:  
+>   >`aliyun ecs DescribeRegions --output cols=RegionId`  
+
+>and when you want to get value of `requestId` which is not included in the array, you must add field `rows=RootFilter`, the command like this:
+>   >`aliyun ecs DescribeRegions --output cols=RequestId rows=RootFilter`  
+
+>NOTE: Cannot mix the filter fields inside and outside of arrays. If you do this, the result is definitely not complete
+
 ### 3.0.12 :
 
 - update API meta data

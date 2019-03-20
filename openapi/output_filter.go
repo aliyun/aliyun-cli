@@ -55,14 +55,19 @@ func NewTableOutputFilter(ctx *cli.Context) OutputFilter {
 }
 
 func (a *TableOutputFilter) FilterOutput(s string) (string, error) {
-	var v interface{}
-	err := json.Unmarshal([]byte(s), &v)
+	var data interface{}
+	err := json.Unmarshal([]byte(s), &data)
 	if err != nil {
 		return s, fmt.Errorf("unmarshal output failed %s", err)
 	}
 
-	rowPath := detectArrayPath(v)
+	rowPath := detectArrayPath(data)
 	if v, ok := OutputFlag(a.ctx.Flags()).GetFieldValue("rows"); ok {
+		s = fmt.Sprintf("{\"RootFilter\":[%s]}", s)
+		err = json.Unmarshal([]byte(s), &data)
+		if err != nil {
+			return s, fmt.Errorf("unmarshal output failed %s", err)
+		}
 		rowPath = v
 	}
 
@@ -74,7 +79,7 @@ func (a *TableOutputFilter) FilterOutput(s string) (string, error) {
 		return s, fmt.Errorf("you need to assign col=col1,col2,... with --output")
 	}
 
-	return a.FormatTable(rowPath, colNames, v)
+	return a.FormatTable(rowPath, colNames, data)
 }
 
 func (a *TableOutputFilter) FormatTable(rowPath string, colNames []string, v interface{}) (string, error) {
