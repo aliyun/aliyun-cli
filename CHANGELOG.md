@@ -2,8 +2,10 @@
 
 ### Master :
 
+### 3.0.13 :
+- update API meta data
 - update flag `--output`
-> The filtering is based on array form, use `cols=` to Specify the fields to be filtered, and `rows=` to specify the array where the specified field is located, And if the field is below the root element, you can omit `rows=`
+> The filtering is based on array form, use `cols=` to Specify the fields to be filtered, and `rows=` to specify the array where the specified field is located, And if the field is below the root element, you can omit `rows=`.
 >   >`aliyun ecs DescribeRegions --output cols=RequestId`  
 
 >   >`aliyun ecs DescribeRegions --output cols=RegionId rows=RootFilter[0].Regions.Region`  
