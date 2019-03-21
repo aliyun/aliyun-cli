@@ -160,7 +160,7 @@ func Test_processInvoke(t *testing.T) {
 	OutputFlag(ctx.Flags()).SetAssigned(true)
 	err = command.processInvoke(ctx, productCode, apiOrMethod, path)
 	assert.NotNil(t, err)
-	assert.Equal(t, "unmarshal output failed unexpected end of JSON input", err.Error())
+	assert.Equal(t, "you need to assign col=col1,col2,... with --output", err.Error())
 
 	OutputFlag(ctx.Flags()).SetAssigned(false)
 	err = command.processInvoke(ctx, productCode, apiOrMethod, path)
