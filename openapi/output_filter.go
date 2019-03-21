@@ -8,11 +8,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"text/tabwriter"
+
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/jmespath/go-jmespath"
-	"strings"
-	"text/tabwriter"
 )
 
 func NewOutputFlag() *cli.Flag {
@@ -56,6 +57,7 @@ func NewTableOutputFilter(ctx *cli.Context) OutputFilter {
 
 func (a *TableOutputFilter) FilterOutput(s string) (string, error) {
 	var v interface{}
+	s = fmt.Sprintf("{\"RootFilter\":[%s]}", s)
 	err := json.Unmarshal([]byte(s), &v)
 	if err != nil {
 		return s, fmt.Errorf("unmarshal output failed %s", err)
@@ -64,6 +66,8 @@ func (a *TableOutputFilter) FilterOutput(s string) (string, error) {
 	rowPath := detectArrayPath(v)
 	if v, ok := OutputFlag(a.ctx.Flags()).GetFieldValue("rows"); ok {
 		rowPath = v
+	} else {
+		rowPath = "RootFilter"
 	}
 
 	var colNames []string

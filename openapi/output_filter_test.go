@@ -26,7 +26,7 @@ func TestNewTableOutputFilter(t *testing.T) {
 
 	content := `test`
 	str, err := tableout.FilterOutput(content)
-	assert.Equal(t, "test", str)
+	assert.Equal(t, "{\"RootFilter\":[test]}", str)
 	assert.NotNil(t, err)
 	assert.Equal(t, "unmarshal output failed invalid character 'e' in literal true (expecting 'r')", err.Error())
 
