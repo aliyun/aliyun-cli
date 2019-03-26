@@ -275,7 +275,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 		} else {
 			return &ForceRpcInvoker{
 				basicInvoker,
-				method,
+				apiOrMethod,
 			}, nil
 			// c.InvokeRpcForce(ctx, &product, apiOrMethod)
 		}
