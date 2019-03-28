@@ -5,8 +5,6 @@
 
 阿里云命令行工具是开源项目，您可以从[Github](https://github.com/aliyun/aliyun-cli)上获取最新版本的CLI。
 
-该版本的CLI为Go语言重构版本，如果您想使用原有的Python版本(不推荐，已不提供支持)，请切换到[Python分支](https://github.com/aliyun/aliyun-cli/tree/python_final)。
-
 <a href="https://shell.aliyun.com/" target="cloudshell">
   <img src="https://img.alicdn.com/tfs/TB1wt1zq9zqK1RjSZFpXXakSXXa-1066-166.png" width="180" />
 </a>
