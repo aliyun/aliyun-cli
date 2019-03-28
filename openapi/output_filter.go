@@ -13,7 +13,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
-	"github.com/jmespath/go-jmespath"
+	jmespath "github.com/jmespath/go-jmespath"
 )
 
 func NewOutputFlag() *cli.Flag {
@@ -32,6 +32,7 @@ func NewOutputFlag() *cli.Flag {
 		Fields: []cli.Field{
 			{Key: "cols", Repeatable: false, Required: true},
 			{Key: "rows", Repeatable: false, Required: false},
+			{Key: "num", Repeatable: false, Required: false},
 		},
 	}
 }
@@ -82,6 +83,12 @@ func (a *TableOutputFilter) FilterOutput(s string) (string, error) {
 }
 
 func (a *TableOutputFilter) FormatTable(rowPath string, colNames []string, v interface{}) (string, error) {
+	// Add row number
+	if v, ok := OutputFlag(a.ctx.Flags()).GetFieldValue("num"); ok {
+		if v == "true" {
+			colNames = append([]string{"Num"}, colNames...)
+		}
+	}
 	rows, err := jmespath.Search(rowPath, v)
 
 	if err != nil {
@@ -108,15 +115,24 @@ func (a *TableOutputFilter) FormatTable(rowPath string, colNames []string, v int
 	}
 	fmt.Fprintln(w, separator)
 
-	for _, row := range rowsArray {
+	for i, row := range rowsArray {
 		rowIntf, ok := row.(interface{})
 		if !ok {
 			// fmt.Errorf("parse row to interface failed")
 		}
 		r := make([]string, 0)
-		for _, colName := range colNames {
+		var s string
+		var index int
+		if v, ok := OutputFlag(a.ctx.Flags()).GetFieldValue("num"); ok {
+			if v == "true" {
+				s = fmt.Sprintf("%v", i)
+				r = append(r, s)
+				index = 1
+			}
+		}
+		for _, colName := range colNames[index:] {
 			v, _ := jmespath.Search(colName, rowIntf)
-			s := fmt.Sprintf("%v", v)
+			s = fmt.Sprintf("%v", v)
 			r = append(r, s)
 		}
 		fmt.Fprintln(w, fmt.Sprintf(format, toIntfArray(r)...))
@@ -134,79 +150,3 @@ func toIntfArray(stringArray []string) []interface{} {
 	}
 	return intfArray
 }
-
-// Deprecated Code
-//func outputProcessor(ctx *cli.Context, response string) error {
-//
-//	for _, processor := range processors {
-//		ok, err := processor(ctx, response)
-//		if !ok {
-//			continue
-//		}
-//		return err
-//	}
-//
-//	cli.Println(response)
-//	return nil
-//}
-//
-//func outputTable(ctx *cli.Context, response string) (bool, error) {
-//	rowsFlag := ctx.Flags().Get(OutputTableRowFlag.Name, OutputTableRowFlag.Shorthand)
-//	colsFlag := ctx.Flags().Get(OutputTableColsFlag.Name, OutputTableColsFlag.Shorthand)
-//
-//	if (!rowsFlag.IsAssigned()) && (!colsFlag.IsAssigned()) {
-//		return false, nil
-//	}
-//
-//	if !rowsFlag.IsAssigned() {
-//		return true, fmt.Errorf("Need %s", flagOutputTableRows)
-//	}
-//
-//	if !colsFlag.IsAssigned() {
-//		return true, fmt.Errorf("Need %s", flagOutputTableCols)
-//	}
-//
-//	var v interface{}
-//	err := json.Unmarshal([]byte(response), &v)
-//
-//	if err != nil {
-//		return true, err
-//	}
-//
-//	expr := rowsFlag.GetValue()
-//	rowsIntf, err := jmespath.Search(expr, v)
-//
-//	if err != nil {
-//		return true, fmt.Errorf("jmespath: '%s' failed %s", expr, err)
-//	}
-//
-//	rowsArray, ok := rowsIntf.([]interface{})
-//
-//	if !ok {
-//		return true, fmt.Errorf("jmespath: '%s' failed Need Array Expr", expr)
-//	}
-//
-//	colNames := strings.Split(colsFlag.GetValue(), ",")
-//
-//	if len(colNames) == 0 {
-//		return true, fmt.Errorf("%s field %s error", flagOutputTableCols, colsFlag.GetValue())
-//	}
-//
-//	format := strings.Repeat("%v\t", len(colNames)-1) + "%v"
-//
-//	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.Debug)
-//
-//	fmt.Fprintln(w, fmt.Sprintf(format, toIntfArray(colNames)...))
-//	separator := "-----------------"
-//	fmt.Fprintln(w, strings.Repeat(separator+"\t", len(colNames)-1)+separator)
-//	for _, rowIntf := range rowsArray {
-//		rowArray, ok := rowIntf.([]interface{})
-//		if !ok {
-//			continue
-//		}
-//		fmt.Fprintln(w, fmt.Sprintf(format, rowArray...))
-//	}
-//	w.Flush()
-//	return true, nil
-//}
-//
