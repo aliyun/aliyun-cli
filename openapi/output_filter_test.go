@@ -83,4 +83,11 @@ func TestTableOutputFilter_FormatTable(t *testing.T) {
 	str, err = tableout.FormatTable(rowpath, colNames, v)
 	assert.Equal(t, "name  | type  | api\n----  | ----  | ---\n<nil> | <nil> | <nil>\n<nil> | <nil> | <nil>\n", str)
 	assert.Nil(t, err)
+
+	ctx.Flags().Get("output").Fields[2].SetAssigned(true)
+	ctx.Flags().Get("output").Fields[2].SetValue("true")
+	out = NewTableOutputFilter(ctx)
+	str, err = tableout.FormatTable(rowpath, colNames, v)
+	assert.Equal(t, "Num | name  | type  | api\n--- | ----  | ----  | ---\n0   | <nil> | <nil> | <nil>\n1   | <nil> | <nil> | <nil>\n", str)
+	assert.Nil(t, err)
 }
