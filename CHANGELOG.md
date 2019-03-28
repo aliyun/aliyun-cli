@@ -2,6 +2,7 @@
 
 ### Master :
 
+- flag `--pager` can specified collections path
 - add row number for flag `--output` output format.
 > If you want show row number at output format, you can use field `num=ture` after flag `--output` to enable the num.
 
