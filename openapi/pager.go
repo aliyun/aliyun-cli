@@ -6,13 +6,14 @@ package openapi
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/i18n"
-	"github.com/jmespath/go-jmespath"
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
+	jmespath "github.com/jmespath/go-jmespath"
 )
 
 var PagerFlag = &cli.Flag{Category: "caller",
@@ -24,7 +25,7 @@ var PagerFlag = &cli.Flag{Category: "caller",
 		"use `--pager` to merge pages for pageable APIs",
 		"使用 `--pager` 在访问分页的API时合并结果分页"),
 	Fields: []cli.Field{
-		{Key: "", Required: false},
+		{Key: "path", Required: false},
 		{Key: "PageNumber", DefaultValue: "PageNumber", Short: i18n.T(" PageNumber", "指定PageNumber的属性")},
 		{Key: "PageSize", DefaultValue: "PageSize", Short: i18n.T("PageSize", "")},
 		{Key: "TotalCount", DefaultValue: "TotalCount", Short: i18n.T("TotalCount", "")},
@@ -60,7 +61,7 @@ func GetPager() *Pager {
 	pager.PageSizeExpr, _ = PagerFlag.GetFieldValue("PageSize")
 	pager.TotalCountExpr, _ = PagerFlag.GetFieldValue("TotalCount")
 
-	pager.collectionPath, _ = PagerFlag.GetFieldValue("")
+	pager.collectionPath, _ = PagerFlag.GetFieldValue("path")
 	return pager
 }
 
@@ -124,25 +125,44 @@ func (a *Pager) GetResponseCollection() string {
 
 func (a *Pager) FeedResponse(body string) error {
 	var j interface{}
+
 	err := json.Unmarshal([]byte(body), &j)
 	if err != nil {
 		return fmt.Errorf("unmarshal %s", err.Error())
 	}
 
 	if total, err := jmespath.Search(a.TotalCountExpr, j); err == nil {
-		a.totalCount = int(total.(float64))
+		var totalCount float64
+		if strCount, ok := total.(string); ok {
+			totalCount, _ = strconv.ParseFloat(strCount, 64)
+		} else {
+			totalCount = total.(float64)
+		}
+		a.totalCount = int(totalCount)
 	} else {
 		return fmt.Errorf("jmespath: '%s' failed %s", a.TotalCountExpr, err)
 	}
 
 	if pageNumber, err := jmespath.Search(a.PageNumberExpr, j); err == nil {
-		a.currentPageNumber = int(pageNumber.(float64))
+		var currentPageNumber float64
+		if strpageNumber, ok := pageNumber.(string); ok {
+			currentPageNumber, _ = strconv.ParseFloat(strpageNumber, 64)
+		} else {
+			currentPageNumber = pageNumber.(float64)
+		}
+		a.currentPageNumber = int(currentPageNumber)
 	} else {
 		return fmt.Errorf("jmespath: '%s' failed %s", a.PageNumberExpr, err)
 	}
 
 	if pageSize, err := jmespath.Search(a.PageSizeExpr, j); err == nil {
-		a.PageSize = int(pageSize.(float64))
+		var PageSize float64
+		if strpageSize, ok := pageSize.(string); ok {
+			PageSize, _ = strconv.ParseFloat(strpageSize, 64)
+		} else {
+			PageSize = pageSize.(float64)
+		}
+		a.PageSize = int(PageSize)
 	} else {
 		return fmt.Errorf("jmespath: '%s' failed %s", a.PageSizeExpr, err)
 	}
@@ -155,7 +175,6 @@ func (a *Pager) FeedResponse(body string) error {
 			a.collectionPath = p2
 		}
 	}
-
 	a.mergeCollections(j)
 	return nil
 }

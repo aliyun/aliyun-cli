@@ -7,7 +7,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/jmespath/go-jmespath"
+	jmespath "github.com/jmespath/go-jmespath"
 	"github.com/stretchr/testify/assert"
 
 	"bytes"
@@ -213,8 +213,8 @@ func Test_mergeCollections(t *testing.T) {
 
 var pagerTestJson = []byte(`{
 	"PageNumber": 5,
-	"TotalCount": 37,
-	"PageSize": 5,
+	"TotalCount": "37",
+	"PageSize": "5",
 	"RegionId": "cn-beijing",
 	"RequestId": "5CC3B94E-ED7E-4481-98D4-4330C5A8FCA8",
 	"Images": {
