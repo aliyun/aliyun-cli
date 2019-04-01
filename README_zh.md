@@ -1,7 +1,15 @@
-# 阿里云命令行工具 (Alibaba Cloud Command Line Interface)
+[English](./README.md) | 简体中文
 
-[![Build Status](https://travis-ci.org/aliyun/aliyun-cli.svg?branch=master)](https://travis-ci.org/aliyun/aliyun-cli) 
-[![codecov](https://codecov.io/gh/aliyun/aliyun-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/aliyun/aliyun-cli)
+<p align="center">
+<a href=" https://www.alibabacloud.com"><img src="https://aliyunsdk-pages.alicdn.com/icons/Aliyun.svg"></a>
+</p>
+
+<h1 align="center">Alibaba Cloud CLI</h1>
+
+<p align="center">
+<a href="https://travis-ci.org/aliyun/aliyun-cli"><img src="https://travis-ci.org/aliyun/aliyun-cli.svg?branch=master" alt="Travis Build Status"></a>
+<a href="https://codecov.io/gh/aliyun/aliyun-cli"><img src="https://codecov.io/gh/aliyun/aliyun-cli/branch/master/graph/badge.svg" alt="codecov"></a>
+<p>
 
 阿里云命令行工具是开源项目，您可以从[Github](https://github.com/aliyun/aliyun-cli)上获取最新版本的CLI。
 

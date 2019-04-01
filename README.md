@@ -1,9 +1,16 @@
-# Alibaba Cloud Command Line Interface
+English | [简体中文](./README_zh.md)
 
-[![Build Status](https://travis-ci.org/aliyun/aliyun-cli.svg?branch=master)](https://travis-ci.org/aliyun/aliyun-cli)
-[![codecov](https://codecov.io/gh/aliyun/aliyun-cli/branch/master/graph/badge.svg)](https://codecov.io/gh/aliyun/aliyun-cli)
 
-[中文文档](./README_zh.md)
+<p align="center">
+<a href=" https://www.alibabacloud.com"><img src="https://aliyunsdk-pages.alicdn.com/icons/AlibabaCloud.svg"></a>
+</p>
+
+<h1 align="center">Alibaba Cloud CLI</h1>
+
+<p align="center">
+<a href="https://travis-ci.org/aliyun/aliyun-cli"><img src="https://travis-ci.org/aliyun/aliyun-cli.svg?branch=master" alt="Travis Build Status"></a>
+<a href="https://codecov.io/gh/aliyun/aliyun-cli"><img src="https://codecov.io/gh/aliyun/aliyun-cli/branch/master/graph/badge.svg" alt="codecov"></a>
+<p>
 
 The Alibaba Cloud CLI is an open source tool, you can get the latest version from [GitHub](https://github.com/aliyun/aliyun-cli).
 
