@@ -49,7 +49,7 @@ func TestNewTableOutputFilter(t *testing.T) {
 	OutputFlag(tableout.ctx.Flags()).Fields[1].SetAssigned(true)
 	str, err = tableout.FilterOutput(content)
 	assert.NotNil(t, `{"path":"/User"}`, err)
-	assert.Equal(t, "jmespath: '' failed SyntaxError: Incomplete expression", err.Error())
+	assert.Equal(t, "jmespath: 'RootFilter[0].' failed SyntaxError: Expected identifier, lbracket, or lbrace", err.Error())
 }
 
 func TestTableOutputFilter_FormatTable(t *testing.T) {

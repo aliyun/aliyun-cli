@@ -66,7 +66,7 @@ func (a *TableOutputFilter) FilterOutput(s string) (string, error) {
 
 	rowPath := detectArrayPath(v)
 	if v, ok := OutputFlag(a.ctx.Flags()).GetFieldValue("rows"); ok {
-		rowPath = v
+		rowPath = "RootFilter[0]." + v
 	} else {
 		rowPath = "RootFilter"
 	}

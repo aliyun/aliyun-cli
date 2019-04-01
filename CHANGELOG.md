@@ -2,6 +2,12 @@
 
 ### Master :
 
+- Remove the `RootFilter[0]` input at field `rows=` that confuses the user
+> The previous `rows` field requires the user to enter `RootFilter[0]`, which will cause confusion for the user and has been deleted.  
+>example:
+>   >`aliyun ecs DescribeRegions --output cols=RequestId`  
+
+>   >`aliyun ecs DescribeRegions --output cols=RegionId rows=Regions.Region`  
 - flag `--pager` can specified collections path
 - add row number for flag `--output` output format.
 > If you want show row number at output format, you can use field `num=ture` after flag `--output` to enable the num.
