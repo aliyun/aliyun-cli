@@ -40,7 +40,7 @@
 **注意**：阿里云CLI使用OpenAPI方式访问云产品，确保您已经开通了要使用的云产品并了解该产品的OpenAPI的使用。您可以在[阿里云API平台](https://developer.aliyun.com/api)获取产品API文档，了解API的使用方式及参数列表。
 
 
-## 安装阿里云CLI
+## 安装
 
 您可以通过下载安装包或者直接编译源码的方式安装阿里云CLI：
 
@@ -67,7 +67,7 @@
 	$ make install
 	```
 
-## 配置阿里云CLI
+## 配置
 
 在使用阿里云CLI前，您需要运行`aliyun configure`命令进行配置。在配置阿里云CLI时，您需要提供阿里云账号以及一对AccessKeyId和AccessKeySecret。
 
