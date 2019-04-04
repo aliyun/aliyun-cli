@@ -49,34 +49,41 @@ func Test_main(t *testing.T) {
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
 	assert.Equal(t, "unknown profile ecs, run configure to check", err.Error())
+	ctx.Flags().Get("region").SetAssigned(true)
+	ctx.Flags().Get("region").SetValue("cn-hangzhou")
+	ctx.Flags().Add(config.NewAccessKeyIdFlag())
+	ctx.Flags().Get("access-key-id").SetAssigned(true)
+	ctx.Flags().Get("access-key-id").SetValue("AccessKeyID")
+	ctx.Flags().Add(config.NewAccessKeySecretFlag())
+	ctx.Flags().Get("access-key-secret").SetAssigned(true)
+	ctx.Flags().Get("access-key-secret").SetValue("AccessKeySecret")
+	args = []string{"test"}
+	profileflag.SetAssigned(false)
+	err = command.main(ctx, args)
+	assert.NotNil(t, err)
+	assert.Equal(t, "'test' is not a valid command or product. See `aliyun help`.", err.Error())
 
-	//args = []string{"test"}
-	//profileflag.SetAssigned(false)
-	//err = command.main(ctx, args)
-	//assert.NotNil(t, err)
-	//assert.Equal(t, "'test' is not a valid command or product. See `aliyun help`.", err.Error())
-	//
-	//args = []string{"aos", "test2"}
-	//err = command.main(ctx, args)
-	//assert.NotNil(t, err)
-	//assert.Equal(t, "'aos' is not a valid command or product. See `aliyun help`.", err.Error())
-	//
-	//reader := &reader_test{}
-	//reader.content = `{"products":[{"code":"aos","api_style":"restful"}]}`
-	//command.library.builtinRepo = meta.LoadRepository(reader)
-	//err = command.main(ctx, args)
-	//assert.NotNil(t, err)
-	//assert.Equal(t, "missing version for product aos", err.Error())
-	//
-	//args = []string{"test", "test2", "test1"}
-	//err = command.main(ctx, args)
-	//assert.NotNil(t, err)
-	//assert.Equal(t, "'test' is not a valid command or product. See `aliyun help`.", err.Error())
-	//
-	//args = []string{"test", "test2", "test1", "test3"}
-	//err = command.main(ctx, args)
-	//assert.NotNil(t, err)
-	//assert.Equal(t, "too many arguments", err.Error())
+	args = []string{"aos", "test2"}
+	err = command.main(ctx, args)
+	assert.NotNil(t, err)
+	assert.Equal(t, "'aos' is not a valid command or product. See `aliyun help`.", err.Error())
+
+	reader := &reader_test{}
+	reader.content = `{"products":[{"code":"aos","api_style":"restful"}]}`
+	command.library.builtinRepo = meta.LoadRepository(reader)
+	err = command.main(ctx, args)
+	assert.NotNil(t, err)
+	assert.Equal(t, "missing version for product aos", err.Error())
+
+	args = []string{"test", "test2", "test1"}
+	err = command.main(ctx, args)
+	assert.NotNil(t, err)
+	assert.Equal(t, "'test' is not a valid command or product. See `aliyun help`.", err.Error())
+
+	args = []string{"test", "test2", "test1", "test3"}
+	err = command.main(ctx, args)
+	assert.NotNil(t, err)
+	assert.Equal(t, "too many arguments", err.Error())
 }
 
 func Test_processInvoke(t *testing.T) {
@@ -258,4 +265,24 @@ func Test_complete(t *testing.T) {
 	args = []string{"aos"}
 	str = command.complete(ctx, args)
 	assert.Equal(t, []string{}, str)
+}
+
+func TestCreateInvoker(t *testing.T) {
+	profile := config.NewProfile("test")
+	profile.AccessKeyId = "AccessKeyId"
+	profile.AccessKeySecret = "AccessKeySecret"
+	profile.RegionId = "cn-hangzhou"
+	w := new(bytes.Buffer)
+	commando := NewCommando(w, profile)
+
+	tempWriter := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(tempWriter)
+	config.AddFlags(ctx.Flags())
+	AddFlags(ctx.Flags())
+	ctx.Flags().Get("force").SetAssigned(true)
+	invoker, err := commando.createInvoker(ctx, "ecs", "DescribeRegions", "")
+	rpcinvoker, ok := invoker.(*ForceRpcInvoker)
+	assert.True(t, ok)
+	assert.Nil(t, err)
+	assert.Equal(t, rpcinvoker.method, "DescribeRegions")
 }
