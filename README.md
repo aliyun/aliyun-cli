@@ -1,4 +1,4 @@
-English | [简体中文](./README_zh.md)
+English | [简体中文](./README-CN.md)
 
 
 <p align="center">
@@ -40,7 +40,7 @@ If you encounter an issue when using Alibaba Cloud CLI, please submit your issue
 
 > **Note**: Alibaba Cloud CLI access the Alibaba Cloud services through OpenAPI. Before using Alibaba Cloud CLI, make sure that you have activated the service to use and known how to use OpenAPI.
 
-## Install Alibaba Cloud CLI
+## Installation
 
 You can install Alibaba Cloud CLI either through the installer or the source code:
 
@@ -67,7 +67,7 @@ You can install Alibaba Cloud CLI either through the installer or the source cod
 	$ make install
 	```
 
-## Configure Alibaba Cloud CLI
+## Configure
 
 Before using the CLI, you must complete the basic configurations.
 
