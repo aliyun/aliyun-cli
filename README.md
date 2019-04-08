@@ -66,7 +66,14 @@ You can install Alibaba Cloud CLI either through the installer or the source cod
 	$ cd aliyun-cli
 	$ make install
 	```
+- **Use brew**
 
+   If you have installed `brew` in your computer, you can use it to install Alibaba Cloud CLI as following:
+   
+   ```
+   $ brew install aliyun-cli
+   ```
+   
 ## Configure
 
 Before using the CLI, you must complete the basic configurations.
