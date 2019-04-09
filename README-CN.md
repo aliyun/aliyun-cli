@@ -67,6 +67,14 @@
 	$ make install
 	```
 
+- **使用brew**
+
+   如果你的电脑上安装了 `brew`, 你可以使用它来安装阿里云命令行工具:
+   
+   ```
+   $ brew install aliyun-cli
+   ```
+
 ## 配置
 
 在使用阿里云CLI前，您需要运行`aliyun configure`命令进行配置。在配置阿里云CLI时，您需要提供阿里云账号以及一对AccessKeyId和AccessKeySecret。
