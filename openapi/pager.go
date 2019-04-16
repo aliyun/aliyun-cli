@@ -55,8 +55,12 @@ func GetPager() *Pager {
 		return nil
 	}
 	pager := &Pager{}
-	pager.PageNumberFlag, _ = PagerFlag.GetFieldValue("PageNumber")
-	pager.PageSizeFlag, _ = PagerFlag.GetFieldValue("PageSize")
+	pageNumberFlagTemp, _ := PagerFlag.GetFieldValue("PageNumber")
+	tempStr := strings.Split(pageNumberFlagTemp, ".")
+	pager.PageNumberFlag = tempStr[len(tempStr)-1]
+	pageSizeFlagTemp, _ := PagerFlag.GetFieldValue("PageSize")
+	tempStr = strings.Split(pageSizeFlagTemp, ".")
+	pager.PageSizeFlag = tempStr[len(tempStr)-1]
 	pager.PageNumberExpr, _ = PagerFlag.GetFieldValue("PageNumber")
 	pager.PageSizeExpr, _ = PagerFlag.GetFieldValue("PageSize")
 	pager.TotalCountExpr, _ = PagerFlag.GetFieldValue("TotalCount")
@@ -67,6 +71,7 @@ func GetPager() *Pager {
 
 func (a *Pager) CallWith(invoker Invoker) (string, error) {
 	for {
+
 		resp, err := invoker.Call()
 		if err != nil {
 			return "", err
@@ -82,17 +87,12 @@ func (a *Pager) CallWith(invoker Invoker) (string, error) {
 		}
 		a.MoveNextPage(invoker.getRequest())
 	}
-
 	return a.GetResponseCollection(), nil
 }
 
 func (a *Pager) HasMore() bool {
 	pages := int(math.Ceil(float64(a.totalCount) / float64(a.PageSize)))
-	if a.currentPageNumber >= pages {
-		return false
-	} else {
-		return true
-	}
+	return a.currentPageNumber < pages
 }
 
 func (a *Pager) GetResponseCollection() string {
@@ -102,18 +102,15 @@ func (a *Pager) GetResponseCollection() string {
 
 	for {
 		l := strings.Index(path, ".")
+		tempSlice := strings.Split(path, ".")
 		if l > 0 {
-			// cli.Printf("%s %d\n", path, l)
-			prefix := path[:l]
-			root[prefix] = current
-			path = path[l+1:]
-		} else {
-			if strings.HasSuffix(path, "[]") {
-				key := path[:len(path)-2]
-				current[key] = a.results
-				break
-			}
+			tempSlice = tempSlice[len(tempSlice)-2:]
+			root[tempSlice[0]] = current
 		}
+		key := strings.TrimSuffix(tempSlice[len(tempSlice)-1], "[]")
+		current[key] = a.results
+		break
+
 	}
 
 	s, err := json.Marshal(root)
@@ -170,10 +167,9 @@ func (a *Pager) FeedResponse(body string) error {
 	if a.collectionPath == "" {
 		p2 := a.detectArrayPath(j)
 		if p2 == "" {
-			return fmt.Errorf("can't auto reconize collections path: you need add `--pager VSwitches.VSwitch[]` to assign manually")
-		} else {
-			a.collectionPath = p2
+			return fmt.Errorf("can't auto recognize collections path: you need add `--pager path=[jmespath]` to assign manually")
 		}
+		a.collectionPath = p2
 	}
 	a.mergeCollections(j)
 	return nil
@@ -182,6 +178,7 @@ func (a *Pager) FeedResponse(body string) error {
 func (a *Pager) MoveNextPage(request *requests.CommonRequest) {
 	a.currentPageNumber = a.currentPageNumber + 1
 	// cli.Printf("Move to page %d", a.currentPageNumber)
+
 	request.QueryParams[a.PageNumberFlag] = strconv.Itoa(a.currentPageNumber)
 }
 
