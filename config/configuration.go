@@ -85,6 +85,9 @@ func LoadProfile(path string, w io.Writer, name string) (Profile, error) {
 	if err != nil {
 		return p, fmt.Errorf("init config failed %v", err)
 	}
+	if len(config.Profiles) == 0 {
+		config = NewConfiguration()
+	}
 	if name == "" {
 		name = config.CurrentProfile
 	}
