@@ -2,12 +2,13 @@
 
 
 [[projects]]
-  digest = "1:558015b25b4191864d8bacfbb45969e6672cfc5d89c9ffb0e4c8f1d14a7f11bf"
+  digest = "1:06f2ed25d2c0fea6c500453ec03c01f734d8810917a6944de71fc3961e55de84"
   name = "github.com/aliyun/alibaba-cloud-sdk-go"
   packages = [
     "sdk",
     "sdk/auth",
     "sdk/auth/credentials",
+    "sdk/auth/credentials/provider",
     "sdk/auth/signers",
     "sdk/endpoints",
     "sdk/errors",
@@ -18,8 +19,8 @@
     "services/sts",
   ]
   pruneopts = "UT"
-  revision = "25fa436020596d5130cb672653c0b5e803e7e40b"
-  version = "1.53.23"
+  revision = "e28f69e91b82bb19d3b71f48d0ae1255d2f9c0a1"
+  version = "1.58.5"
 
 [[projects]]
   digest = "1:cab86919517cb8197b2fde4ba4c15552181339d46d34c3e3cf242793c1c8bea6"
