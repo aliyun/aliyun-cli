@@ -2,6 +2,7 @@
 
 ### Master
 
+- Update gosdk dependence
 - Change logic of flag `--pager`
 
 ### 3.0.15 :
