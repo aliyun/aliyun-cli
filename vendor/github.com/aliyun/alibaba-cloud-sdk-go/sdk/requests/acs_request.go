@@ -15,6 +15,7 @@
 package requests
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"reflect"
@@ -77,6 +78,8 @@ type AcsRequest interface {
 	GetConnectTimeout() time.Duration
 	SetReadTimeout(readTimeout time.Duration)
 	SetConnectTimeout(connectTimeout time.Duration)
+	SetHTTPSInsecure(isInsecure bool)
+	GetHTTPSInsecure() *bool
 
 	GetUserAgent() map[string]string
 
@@ -104,6 +107,7 @@ type baseRequest struct {
 	RegionId       string
 	ReadTimeout    time.Duration
 	ConnectTimeout time.Duration
+	isInsecure     *bool
 
 	userAgent map[string]string
 	product   string
@@ -148,6 +152,14 @@ func (request *baseRequest) SetReadTimeout(readTimeout time.Duration) {
 
 func (request *baseRequest) SetConnectTimeout(connectTimeout time.Duration) {
 	request.ConnectTimeout = connectTimeout
+}
+
+func (request *baseRequest) GetHTTPSInsecure() *bool {
+	return request.isInsecure
+}
+
+func (request *baseRequest) SetHTTPSInsecure(isInsecure bool) {
+	request.isInsecure = &isInsecure
 }
 
 func (request *baseRequest) GetContent() []byte {
@@ -302,6 +314,10 @@ func flatRepeatedList(dataValue reflect.Value, request AcsRequest, position, pre
 				// simple param
 				key := prefix + name
 				value := dataValue.Field(i).String()
+				if dataValue.Field(i).Kind().String() == "map" {
+					byt, _ := json.Marshal(dataValue.Field(i).Interface())
+					value = string(byt)
+				}
 				err = addParam(request, fieldPosition, key, value)
 				if err != nil {
 					return

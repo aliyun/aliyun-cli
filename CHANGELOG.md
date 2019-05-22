@@ -2,6 +2,8 @@
 
 ### Master
 
+- Update API meta data, and update endpoint pattern of product cr
+- Update gosdk dependence
 - Change logic of flag `--pager`
 
 ### 3.0.15 :
