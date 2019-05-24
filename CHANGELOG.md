@@ -2,17 +2,19 @@
 
 ### Master
 
+### 3.0.16
+
 - Support environment variable `ALIBABA_CLOUD_VENDOR`
   > Set environment variables `ALIBABA_CLOUD_VENDOR` to add a custom UserAgent ID
 - Update API meta data, and update endpoint pattern of product cr
 - Update gosdk dependence
 - Change logic of flag `--pager`
 
-### 3.0.15 :
+### 3.0.15
 
 - Update API meta data, update version of product CMS to 2019-01-01
 
-### 3.0.14 :
+### 3.0.14
 
 - Update API meta data and increase kms product help
 - Remove the `RootFilter[0]` input at field `rows=` that confuses the user
@@ -25,7 +27,8 @@
 - add row number for flag `--output` output format.
 > If you want show row number at output format, you can use field `num=ture` after flag `--output` to enable the num.
 
-### 3.0.13 :
+### 3.0.13
+
 - update API meta data
 - update flag `--output`
 > The filtering is based on array form, use `cols=` to Specify the fields to be filtered, and `rows=` to specify the array where the specified field is located, And if the field is below the root element, you can omit `rows=`.
@@ -35,13 +38,13 @@
 
 >NOTE: Fields in two arrays cannot be mixed
 
-### 3.0.12 :
+### 3.0.12
 
 - update API meta data
 - update dependency package
 - added go1.12 test environment
 
-### 3.0.11 :
+### 3.0.11
 
 - update API meta data
 - improve output format of command `configure get`
