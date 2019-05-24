@@ -5,6 +5,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/ecs"
 	"github.com/aliyun/aliyun-cli/cli"
 )
@@ -24,6 +26,9 @@ func GetRegions(ctx *cli.Context, profile *Profile) ([]Region, error) {
 
 	request := ecs.CreateDescribeRegionsRequest()
 	response := ecs.CreateDescribeRegionsResponse()
+	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
+		client.AppendUserAgent("vendor", vendorEnv)
+	}
 	client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 	err = client.DoAction(request, response)
 
@@ -53,6 +58,9 @@ func DoHello(ctx *cli.Context, profile *Profile) {
 	}
 	request := ecs.CreateDescribeRegionsRequest()
 	response := ecs.CreateDescribeRegionsResponse()
+	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
+		client.AppendUserAgent("vendor", vendorEnv)
+	}
 	client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 	err = client.DoAction(request, response)
 

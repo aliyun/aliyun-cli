@@ -5,6 +5,9 @@ package openapi
 
 import (
 	"fmt"
+	"os"
+	"strings"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
@@ -12,7 +15,6 @@ import (
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/meta"
-	"strings"
 )
 
 //
@@ -63,7 +65,9 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	if err != nil {
 		return fmt.Errorf("init client failed %s", err)
 	}
-
+	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
+		a.client.AppendUserAgent("vendor", vendorEnv)
+	}
 	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 	a.request = requests.NewCommonRequest()
 	a.request.Product = product.Code

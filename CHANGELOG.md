@@ -2,6 +2,8 @@
 
 ### Master
 
+- Support environment variable `ALIBABA_CLOUD_VENDOR`
+  > Set environment variables `ALIBABA_CLOUD_VENDOR` to add a custom UserAgent ID
 - Update API meta data, and update endpoint pattern of product cr
 - Update gosdk dependence
 - Change logic of flag `--pager`

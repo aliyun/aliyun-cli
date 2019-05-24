@@ -1,12 +1,13 @@
 package openapi
 
 import (
-	"bufio"
+	"bytes"
+	"testing"
+
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/meta"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestBasicInvoker_Init(t *testing.T) {
@@ -20,7 +21,7 @@ func TestBasicInvoker_Init(t *testing.T) {
 	req := invooker.getRequest()
 	assert.Nil(t, req)
 
-	w := new(bufio.Writer)
+	w := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w)
 
 	regionflag := config.NewRegionFlag()

@@ -5,6 +5,8 @@ package config
 
 import (
 	"bytes"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -30,6 +32,8 @@ func TestGetRegions(t *testing.T) {
 }
 
 func TestDoHello(t *testing.T) {
+	os.Setenv("ALIBABA_CLOUD_VENDOR", "cli_test_VendorTest")
+
 	w := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w)
 	ctx.Flags().AddByName("skip-secure-verify")
@@ -46,6 +50,7 @@ func TestDoHello(t *testing.T) {
 	assert.Equal(t, exw, w.String())
 
 	w.Reset()
+	os.Setenv("DEBUG", "sdk")
 	profile.AccessKeyId = "AccessKeyId"
 	profile.AccessKeySecret = "AccessKeySecret"
 	profile.RegionId = "cn-hangzhou"
@@ -55,4 +60,5 @@ func TestDoHello(t *testing.T) {
 
 	}()
 	DoHello(ctx, &profile)
+	assert.True(t, strings.Contains(w.String(), "vender/cli_test_VendorTest"))
 }
