@@ -23,7 +23,7 @@ type Commando struct {
 	library *Library
 }
 
-var hookdo = func(fn func()(*responses.CommonResponse, error)) func()(*responses.CommonResponse, error){
+var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
 	return fn
 }
 
@@ -75,7 +75,14 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		// rpc or restful call
 		// aliyun <productCode> <method> --param1 value1
 		product, _ := c.library.GetProduct(args[0])
-
+		if version, _ := ctx.Flags().Get("version").GetValue(); version != "" {
+			if style, ok := c.library.GetStyle(productName, version); ok {
+				product.ApiStyle = style
+			} else {
+				return cli.NewErrorWithTip(fmt.Errorf("uncheked version %s", version),
+					"Please contact the customer support to get more info about API version")
+			}
+		}
 		if product.ApiStyle == "restful" {
 			api, _ := c.library.GetApi(product.Code, product.Version, args[1])
 			return c.processInvoke(ctx, productName, api.Method, api.PathPattern)
@@ -193,6 +200,16 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 		err := basicInvoker.Init(ctx, &product)
 		if err != nil {
 			return nil, err
+		}
+		if force {
+			if version, _ := ctx.Flags().Get("version").GetValue(); version != "" {
+				if style, ok := c.library.GetStyle(productCode, version); ok {
+					product.ApiStyle = style
+				} else {
+					return nil, cli.NewErrorWithTip(fmt.Errorf("uncheked version %s", version),
+						"Please contact the customer support to get more info about API version")
+				}
+			}
 		}
 		if strings.ToLower(product.ApiStyle) == "rpc" {
 			//

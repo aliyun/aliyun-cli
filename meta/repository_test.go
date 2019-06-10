@@ -6,6 +6,23 @@ import (
 	"testing"
 )
 
+var RepositoryTest = &Repository{
+	reader: &reader_test{
+		content: `
+		[
+			{
+				"code": "aegis",
+				"styles": [
+					{
+						"style": "RPC",
+						"version": "2016-11-11"
+					}
+				]
+			}
+		]`,
+	},
+}
+
 func TestLoadRepository(t *testing.T) {
 	r := &reader_test{}
 	r.content = `{"products":[{"code":"ecs"}]}`
@@ -13,7 +30,7 @@ func TestLoadRepository(t *testing.T) {
 	assert.NotNil(t, repository)
 	assert.Contains(t, repository.Names, "ecs")
 
-	defer func(){
+	defer func() {
 		err := recover()
 		assert.NotNil(t, err)
 	}()
@@ -24,7 +41,7 @@ func TestLoadRepository(t *testing.T) {
 
 func TestLoadRepository1(t *testing.T) {
 	r := &reader_test{}
-	defer func(){
+	defer func() {
 		err := recover()
 		assert.NotNil(t, err)
 	}()
@@ -55,4 +72,31 @@ func TestRepository_GetApi(t *testing.T) {
 	}
 	_, ok = repository.GetApi("ecs", "", "")
 	assert.True(t, ok)
+}
+
+func TestGetStyle(t *testing.T) {
+	repository := &Repository{
+		index: map[string]Product{
+			"ecs": {
+				Code: "ecs",
+			},
+		},
+		reader: &reader_test{
+			content: `
+			[
+				{
+					"code": "aegis",
+					"styles": [
+						{
+							"style": "RPC",
+							"version": "2016-11-11"
+						}
+					]
+				}
+			]`,
+		},
+	}
+	style, ok := repository.GetStyle("aegis", "2016-11-11")
+	assert.True(t, ok)
+	assert.Equal(t, "RPC", style)
 }
