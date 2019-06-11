@@ -54,11 +54,6 @@ func TestDoHello(t *testing.T) {
 	profile.AccessKeyId = "AccessKeyId"
 	profile.AccessKeySecret = "AccessKeySecret"
 	profile.RegionId = "cn-hangzhou"
-	defer func() {
-		err := recover()
-		assert.NotNil(t, err)
-
-	}()
 	DoHello(ctx, &profile)
-	assert.True(t, strings.Contains(w.String(), "vender/cli_test_VendorTest"))
+	assert.True(t, strings.Contains(w.String(), "-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------"))
 }
