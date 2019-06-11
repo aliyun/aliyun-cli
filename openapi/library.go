@@ -5,14 +5,15 @@ package openapi
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/i18n"
-	"github.com/aliyun/aliyun-cli/meta"
-	"github.com/aliyun/aliyun-cli/resource"
 	"io"
 	"sort"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/aliyun/aliyun-cli/meta"
+	"github.com/aliyun/aliyun-cli/resource"
 )
 
 type Library struct {
@@ -37,6 +38,10 @@ func (a *Library) GetProduct(productCode string) (meta.Product, bool) {
 
 func (a *Library) GetApi(productCode string, version string, apiName string) (meta.Api, bool) {
 	return a.builtinRepo.GetApi(productCode, version, apiName)
+}
+
+func (a *Library) GetStyle(productCode string, version string) (string, bool) {
+	return a.builtinRepo.GetStyle(productCode, version)
 }
 
 func (a *Library) GetProducts() []meta.Product {

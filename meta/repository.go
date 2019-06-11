@@ -6,6 +6,8 @@ package meta
 import (
 	"sort"
 	"strings"
+
+	jmespath "github.com/jmespath/go-jmespath"
 )
 
 type Repository struct {
@@ -61,4 +63,18 @@ func (a *Repository) GetApi(productCode string, version string, apiName string) 
 	}
 	result.Product = &product
 	return result, true
+}
+
+func (a *Repository) GetStyle(productCode, version string) (string, bool) {
+	v := new(interface{})
+	err := ReadJsonFrom(a.reader, "versions.json", v)
+	if err != nil {
+		return "", false
+	}
+	styles, _ := jmespath.Search("[?code=='"+productCode+"'].styles[]", *v)
+	style, _ := jmespath.Search("[?version=='"+version+"'].style", styles)
+	if len(style.([]interface{})) == 0 {
+		return "", false
+	}
+	return style.([]interface{})[0].(string), true
 }

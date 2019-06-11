@@ -2,6 +2,7 @@ package openapi
 
 import (
 	"bytes"
+	"strings"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
@@ -63,6 +64,23 @@ func Test_main(t *testing.T) {
 	assert.NotNil(t, err)
 	assert.Equal(t, "'test' is not a valid command or product. See `aliyun help`.", err.Error())
 
+	ctx.Flags().Get("force").SetAssigned(true)
+	ctx.Flags().Get("version").SetAssigned(true)
+	ctx.Flags().Get("version").SetValue("2011-11-11")
+	args = []string{"ecs", "DescribeRegions"}
+	err = command.main(ctx, args)
+	assert.NotNil(t, err)
+	assert.Equal(t, "uncheked version 2011-11-11", err.Error())
+
+	ctx.Flags().Get("version").SetValue("2016-03-14")
+	args = []string{"ecs", "DescribeRegions"}
+	err = command.main(ctx, args)
+	assert.NotNil(t, err)
+	assert.True(t, strings.Contains(err.Error(), "SDK.ServerError\nErrorCode: InvalidAction.NotFound\nRecommend: https://error-center.aliyun.com/status/search?Keyword=InvalidAction.NotFound&source=PopGw\nRequestId:"))
+
+	ctx.Flags().Get("force").SetAssigned(false)
+	ctx.Flags().Get("version").SetAssigned(false)
+
 	args = []string{"aos", "test2"}
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
@@ -84,6 +102,7 @@ func Test_main(t *testing.T) {
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
 	assert.Equal(t, "too many arguments", err.Error())
+
 }
 
 func Test_processInvoke(t *testing.T) {
@@ -285,4 +304,19 @@ func TestCreateInvoker(t *testing.T) {
 	assert.True(t, ok)
 	assert.Nil(t, err)
 	assert.Equal(t, rpcinvoker.method, "DescribeRegions")
+
+	ctx.Flags().Get("version").SetAssigned(true)
+	ctx.Flags().Get("version").SetValue("2018-12-01")
+	invoker, err = commando.createInvoker(ctx, "cr", "GetRegion", "")
+	_, ok = invoker.(*ForceRpcInvoker)
+	assert.True(t, ok)
+	assert.Nil(t, err)
+
+	ctx.Flags().Get("force").SetAssigned(false)
+	ctx.Flags().Get("version").SetAssigned(false)
+	invoker, err = commando.createInvoker(ctx, "cr", "Get", "/region")
+	_, ok = invoker.(*RestfulInvoker)
+	assert.True(t, ok)
+	assert.Nil(t, err)
+
 }

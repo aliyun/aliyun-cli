@@ -2,6 +2,8 @@
 
 ### Master
 
+- Forced calls to support different API styles
+
 ### 3.0.16
 
 - Support environment variable `ALIBABA_CLOUD_VENDOR`
