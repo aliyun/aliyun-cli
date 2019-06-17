@@ -2,6 +2,7 @@
 
 ### Master
 
+- update error message when configuration fails
 - Forced calls to support different API styles
 
 ### 3.0.16

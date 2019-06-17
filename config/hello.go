@@ -65,11 +65,14 @@ func DoHello(ctx *cli.Context, profile *Profile) {
 	err = client.DoAction(request, response)
 
 	if err != nil {
-		panic(err)
-	}
-	cli.Printf(w, " available regions: \n")
-	for _, region := range response.Regions.Region {
-		cli.Printf(w, "  %s\n", region.RegionId)
+		cli.Println(w, "-----------------------------------------------")
+		cli.Println(w, "!!! Configure Failed please configure again !!!")
+		cli.Println(w, "-----------------------------------------------")
+		cli.Println(w, err)
+		cli.Println(w, "-----------------------------------------------")
+		cli.Println(w, "!!! Configure Failed please configure again !!!")
+		cli.Println(w, "-----------------------------------------------")
+		return
 	}
 	fmt.Println(icon)
 }
