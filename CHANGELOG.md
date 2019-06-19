@@ -2,9 +2,12 @@
 
 ### Master
 
+### 3.0.17
+
+- update meta data
 - update error message when configuration fails
 - Forced calls to support different API styles
-
+  
 ### 3.0.16
 
 - Support environment variable `ALIBABA_CLOUD_VENDOR`
