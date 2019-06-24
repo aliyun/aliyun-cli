@@ -89,7 +89,7 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 	// configure common
 	cli.Printf(w, "Default Region Id [%s]: ", cp.RegionId)
 	cp.RegionId = ReadInput(cp.RegionId)
-	cli.Printf(w, "Default Output Format [%s]: json (Only support json))\n", cp.OutputFormat)
+	cli.Printf(w, "Default Output Format [%s]: json (Only support json)\n", cp.OutputFormat)
 
 	// cp.OutputFormat = ReadInput(cp.OutputFormat)
 	cp.OutputFormat = "json"
