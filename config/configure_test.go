@@ -92,7 +92,7 @@ func TestNewConfigureCommand(t *testing.T) {
 	err = cmd.Run(ctx, []string{})
 	assert.Nil(t, err)
 	assert.Equal(t, "Configuring profile '' in '' authenticate mode...\n"+
-		"Access Key Id []: Access Key Secret []: Default Region Id []: Default Output Format [json]: json (Only support json))\n"+
+		"Access Key Id []: Access Key Secret []: Default Region Id []: Default Output Format [json]: json (Only support json)\n"+
 		"Default Language [zh|en] en: Saving profile[] ...Done.\n"+
 		"-----------------------------------------------\n"+
 		"!!! Configure Failed please configure again !!!\n"+
@@ -125,7 +125,7 @@ func TestDoConfigure(t *testing.T) {
 	AddFlags(ctx.Flags())
 	err := doConfigure(ctx, "profile", "AK")
 	assert.Nil(t, err)
-	assert.Equal(t, "Configuring profile 'profile' in 'AK' authenticate mode...\nAccess Key Id []: Access Key Secret []: Default Region Id []: Default Output Format [json]: json (Only support json))\nDefault Language [zh|en] en: Saving profile[profile] ...Done.\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\nAccessKeyId/AccessKeySecret is empty! run `aliyun configure` first\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\n", w.String())
+	assert.Equal(t, "Configuring profile 'profile' in 'AK' authenticate mode...\nAccess Key Id []: Access Key Secret []: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] en: Saving profile[profile] ...Done.\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\nAccessKeyId/AccessKeySecret is empty! run `aliyun configure` first\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\n", w.String())
 }
 
 func TestConfigureAK(t *testing.T) {
