@@ -34,7 +34,6 @@ func NewConfigureCommand() *cli.Command {
 			}
 			profileName, _ := ProfileFlag(ctx.Flags()).GetValue()
 			mode, _ := ModeFlag(ctx.Flags()).GetValue()
-
 			return doConfigure(ctx, profileName, mode)
 		},
 	}
@@ -54,6 +53,22 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 		return err
 	}
 
+	if profileName == "" {
+		if conf.CurrentProfile == "" {
+			profileName = "default"
+		} else {
+			profileName = conf.CurrentProfile
+			originMode := string(conf.GetCurrentProfile(ctx).Mode)
+			if mode == "" {
+				mode = originMode
+			} else if mode != originMode {
+				cli.Printf(w, "Warning: You are changing the authentication type of profile '%s' from '%s' to '%s'\n", profileName, originMode, mode)
+			}
+		}
+	}
+	if mode == "" {
+		mode = "AK"
+	}
 	cp, ok := conf.GetProfile(profileName)
 	if !ok {
 		cp = conf.NewProfile(profileName)
