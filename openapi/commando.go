@@ -75,12 +75,14 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		// rpc or restful call
 		// aliyun <productCode> <method> --param1 value1
 		product, _ := c.library.GetProduct(args[0])
-		if version, _ := ctx.Flags().Get("version").GetValue(); version != "" {
-			if style, ok := c.library.GetStyle(productName, version); ok {
-				product.ApiStyle = style
-			} else {
-				return cli.NewErrorWithTip(fmt.Errorf("uncheked version %s", version),
-					"Please contact the customer support to get more info about API version")
+		if product.Code != "" {
+			if version, _ := ctx.Flags().Get("version").GetValue(); version != "" {
+				if style, ok := c.library.GetStyle(productName, version); ok {
+					product.ApiStyle = style
+				} else {
+					return cli.NewErrorWithTip(fmt.Errorf("uncheked version %s", version),
+						"Please contact the customer support to get more info about API version")
+				}
 			}
 		}
 		if product.ApiStyle == "restful" {
