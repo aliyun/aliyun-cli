@@ -2,6 +2,12 @@
 
 ### Master
 
+- fix: the prompt information of the delete command
+- improve: command 'configure' can automatically configure the 
+  default profile when no profile name is specified 
+- fix: cannot force calls to products whose metadata is not entered
+- fix: output message mistake 
+
 ### 3.0.17
 
 - update meta data

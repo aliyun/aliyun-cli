@@ -24,7 +24,7 @@ func NewConfigureDeleteCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "delete",
 		Usage: "delete --profile <profileName>",
-		Short: i18n.T("list all config profile", "列出所有配置集"),
+		Short: i18n.T("Delete the specified profile", "删除指定配置"),
 		Run: func(c *cli.Context, args []string) error {
 			profileName, ok := ProfileFlag(c.Flags()).GetValue()
 			if !ok {
