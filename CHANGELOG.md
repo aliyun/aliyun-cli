@@ -2,6 +2,9 @@
 
 ### Master
 
+### 3.0.18
+
+- updata: API meta data
 - fix: the prompt information of the delete command
 - improve: command 'configure' can automatically configure the 
   default profile when no profile name is specified 
