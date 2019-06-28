@@ -2,6 +2,10 @@
 
 ### Master
 
+### 3.0.19
+
+- add product: oos, default version 2019-06-01
+
 ### 3.0.18
 
 - updata: API meta data
