@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package openapi
 
 import (
@@ -203,11 +204,7 @@ func Test_processInvoke(t *testing.T) {
 
 	OutputFlag(ctx.Flags()).SetAssigned(false)
 	err = command.processInvoke(ctx, productCode, apiOrMethod, path)
-	assert.Nil(t, err)
-
-	out := `{"requestid":"test","name":"json"}`
-	out = FormatJson(out)
-	assert.Equal(t, "{\n\t\"requestid\": \"test\",\n\t\"name\": \"json\"\n}", out)
+	assert.NotNil(t, err)
 }
 
 func Test_help(t *testing.T) {

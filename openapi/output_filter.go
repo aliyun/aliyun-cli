@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package openapi
 
 import (
@@ -44,6 +45,7 @@ func NewOutputFlag() *cli.Flag {
 			{Key: "rows", Repeatable: false, Required: false},
 			{Key: "num", Repeatable: false, Required: false},
 		},
+		ExcludeWith: []string{"filter", "format"},
 	}
 }
 

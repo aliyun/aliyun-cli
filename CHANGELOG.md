@@ -2,6 +2,34 @@
 
 ### Master
 
+- Add flag `--filter` for filtering result, the value of the flag is [jmespath](http://jmespath.org/) format.
+  
+- Add flag `--format` to control the output format, the value can be json or table, the table is not csv format, just like below:
+  
+```shell
++------------------------------------------------------+
+|                   DescribeRegions                    |
++------------------------------------------------------+
+|  RequestId  |  A71F2A35-BA66-496F-8B3F-BC19F4268937  |
+|+----------------------------------------------------+|
+||                      Regions                       ||
+|+----------------------------------------------------+|
+||+--------------------------------------------------+||
+|||                      Region                      |||
+||+--------------------------------------------------+||
+|||  LocalName            |  华北 1                  |||
+|||  RegionEndpoint       |  ecs.aliyuncs.com        |||
+|||  RegionId             |  cn-qingdao              |||
+||+--------------------------------------------------+||
+||+--------------------------------------------------+||
+|||                      Region                      |||
+||+--------------------------------------------------+||
+|||  LocalName            |  华北 2                  |||
+|||  RegionEndpoint       |  ecs.aliyuncs.com        |||
+|||  RegionId             |  cn-beijing              |||
+||+--------------------------------------------------+||
+```
+
 ### 3.0.19
 
 - add product: oos, default version 2019-06-01
