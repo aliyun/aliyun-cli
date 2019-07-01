@@ -73,8 +73,17 @@ You can install Alibaba Cloud CLI either through the installer or the source cod
    ```
    $ brew install aliyun-cli
    ```
-   
-## Configure
+
+- **Use Ubuntu/Debian**
+
+    The latest release is [continuously available](http://apt.starkandwayne.com/) as Debian packages.
+
+		```plain
+		wget -q -O - https://raw.githubusercontent.com/starkandwayne/homebrew-cf/master/public.key | apt-key add -
+		echo "deb http://apt.starkandwayne.com stable main" | tee /etc/apt/sources.list.d/starkandwayne.list
+		apt-get update
+		apt-get install aliyun-cli
+		```
 
 Before using the CLI, you must complete the basic configurations.
 

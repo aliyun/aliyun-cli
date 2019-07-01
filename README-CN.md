@@ -75,6 +75,15 @@
    $ brew install aliyun-cli
    ```
 
+- **Ubuntu/Debian**
+
+		```plain
+		wget -q -O - https://raw.githubusercontent.com/starkandwayne/homebrew-cf/master/public.key | apt-key add -
+		echo "deb http://apt.starkandwayne.com stable main" | tee /etc/apt/sources.list.d/starkandwayne.list
+		apt-get update
+		apt-get install aliyun-cli
+		```
+
 ## 配置
 
 在使用阿里云CLI前，您需要运行`aliyun configure`命令进行配置。在配置阿里云CLI时，您需要提供阿里云账号以及一对AccessKeyId和AccessKeySecret。
