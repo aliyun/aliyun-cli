@@ -2,6 +2,20 @@
 
 ### Master
 
+- new: support for reading the value of a parameter from a file
+    >*Note: Only works on api parameters and rpc style*  
+    
+    >The value of some parameters is very long, which is not conducive to terminal input.
+    >You can add `-FILE` to the original parameter to specify to read from the file, 
+    >followed by the file path.
+
+    >example:  
+    >command `aliyun ecs CreateInstance` has a parameter `--UserData`, You can specify the value of this parameter from a file by using `--UserData-FILE <filePath>`
+    ```shell
+    aliyun ecs CreateInstance --UserData-FILE '/home/Document/user_data'
+    ```
+    >*NOTE: The above example is not a complete command, just a demonstration of how new features are used.*
+
 ### 3.0.19
 
 - add product: oos, default version 2019-06-01
