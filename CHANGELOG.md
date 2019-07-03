@@ -2,6 +2,9 @@
 
 ### Master
 
+### 3.0.20
+
+- add product: fnf, default version 2019-03-15
 - new: support for reading the value of a parameter from a file
     >*Note: Only works on api parameters and rpc style*  
     
