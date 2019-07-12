@@ -25,7 +25,7 @@ function do_command() {
 }
 
 function ecs_create_instance() {
-   do_command "aliyun ecs CreateInstance --ImageId ubuntu_16_0402_64_20G_alibase_20171227.vhd --InstanceType ecs.xn4.small" $($args[0])
+   do_command "aliyun ecs CreateInstance --ImageId ubuntu_18_04_64_20G_alibase_20190624.vhd --InstanceType ecs.xn4.small" $($args[0])
 }
 
 function ecs_start_instance() {
