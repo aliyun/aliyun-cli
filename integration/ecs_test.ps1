@@ -7,7 +7,7 @@ function do_command() {
         $global:g_var = 
         return $g_error
     }
-    $cmd="$($args[0]) --access-key-id $env:ACCESS_KEY_ID --access-key-secret $env:ACCESS_KEY_SECRET --region cn-beijing 2>&1"
+    $cmd="$($args[0]) --access-key-id $env:ACCESS_KEY_ID --access-key-secret $env:ACCESS_KEY_SECRET --region cn-hangzhou 2>&1"
     Write-Output "Command<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
     Write-Output $cmd
     Write-Output ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Command"
