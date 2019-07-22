@@ -2,7 +2,7 @@
 
 
 [[projects]]
-  digest = "1:06f2ed25d2c0fea6c500453ec03c01f734d8810917a6944de71fc3961e55de84"
+  digest = "1:0cad04b4f45b105f74031c18b00e0f11459402f4346388398179674b38051eb8"
   name = "github.com/aliyun/alibaba-cloud-sdk-go"
   packages = [
     "sdk",
@@ -19,8 +19,8 @@
     "services/sts",
   ]
   pruneopts = "UT"
-  revision = "e28f69e91b82bb19d3b71f48d0ae1255d2f9c0a1"
-  version = "1.58.5"
+  revision = "80992abcaefa6088f8affdb28fa6d9a558b23978"
+  version = "1.60.70"
 
 [[projects]]
   digest = "1:cab86919517cb8197b2fde4ba4c15552181339d46d34c3e3cf242793c1c8bea6"
@@ -87,12 +87,11 @@
   revision = "b7773ae218740a7be65057fc60b366a49b538a44"
 
 [[projects]]
-  digest = "1:b87714e57a511d88f307aba7d5b63522da12bed0a050889c81272fc50f71100e"
+  digest = "1:bb81097a5b62634f3e9fec1014657855610c82d19b9a40c17612e32651e35dca"
   name = "github.com/jmespath/go-jmespath"
   packages = ["."]
   pruneopts = "UT"
-  revision = "3433f3ea46d9f8019119e7dd41274e112a2359a9"
-  version = "0.2.2"
+  revision = "c2b33e84"
 
 [[projects]]
   digest = "1:3e551bbb3a7c0ab2a2bf4660e7fcad16db089fdcfbb44b0199e62838038623ea"
@@ -186,14 +185,6 @@
   pruneopts = "UT"
   revision = "98eb9847f27ba2008d380a32c98be474dea55bdf"
   version = "v1.1.1"
-
-[[projects]]
-  digest = "1:274f67cb6fed9588ea2521ecdac05a6d62a8c51c074c1fccc6a49a40ba80e925"
-  name = "github.com/satori/go.uuid"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "f58768cc1a7a7e77a3bd49e98cdd21419399b6a3"
-  version = "v1.2.0"
 
 [[projects]]
   digest = "1:972c2427413d41a1e06ca4897e8528e5a1622894050e2f527b38ddf0f343f759"
