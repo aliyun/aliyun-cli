@@ -80,11 +80,13 @@ type CreateDiskRequest struct {
 	SnapshotId           string           `position:"Query" name:"SnapshotId"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	ClientToken          string           `position:"Query" name:"ClientToken"`
+	PerformanceLevel     string           `position:"Query" name:"PerformanceLevel"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	Description          string           `position:"Query" name:"Description"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 	DiskName             string           `position:"Query" name:"DiskName"`
 	ResourceGroupId      string           `position:"Query" name:"ResourceGroupId"`
+	InstanceId           string           `position:"Query" name:"InstanceId"`
 	Size                 requests.Integer `position:"Query" name:"Size"`
 	Encrypted            requests.Boolean `position:"Query" name:"Encrypted"`
 	DiskCategory         string           `position:"Query" name:"DiskCategory"`

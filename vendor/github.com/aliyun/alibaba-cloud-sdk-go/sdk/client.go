@@ -28,10 +28,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials/provider"
-
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials/provider"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/endpoints"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
@@ -71,6 +70,9 @@ type Client struct {
 	asyncTaskQueue chan func()
 	readTimeout    time.Duration
 	connectTimeout time.Duration
+	EndpointMap    map[string]string
+	EndpointType   string
+	Network        string
 
 	debug     bool
 	isRunning bool
@@ -80,6 +82,12 @@ type Client struct {
 
 func (client *Client) Init() (err error) {
 	panic("not support yet")
+}
+
+func (client *Client) SetEndpointRules(endpointMap map[string]string, endpointType string, netWork string) {
+	client.EndpointMap = endpointMap
+	client.Network = netWork
+	client.EndpointType = endpointType
 }
 
 func (client *Client) SetHTTPSInsecure(isInsecure bool) {
@@ -299,6 +307,21 @@ func (client *Client) DoAction(request requests.AcsRequest, response responses.A
 	return client.DoActionWithSigner(request, response, nil)
 }
 
+func (client *Client) GetEndpointRules(regionId string, product string) (endpointRaw string) {
+	if client.EndpointType == "regional" {
+		endpointRaw = strings.Replace("<product><network>.<region_id>.aliyuncs.com", "<region_id>", regionId, 1)
+	} else {
+		endpointRaw = "<product><network>.aliyuncs.com"
+	}
+	endpointRaw = strings.Replace(endpointRaw, "<product>", strings.ToLower(product), 1)
+	if client.Network == "" || client.Network == "public" {
+		endpointRaw = strings.Replace(endpointRaw, "<network>", "", 1)
+	} else {
+		endpointRaw = strings.Replace(endpointRaw, "<network>", "-"+client.Network, 1)
+	}
+	return endpointRaw
+}
+
 func (client *Client) buildRequestWithSigner(request requests.AcsRequest, signer auth.Signer) (httpRequest *http.Request, err error) {
 	// add clientVersion
 	request.GetHeaders()["x-sdk-core-version"] = Version
@@ -309,18 +332,32 @@ func (client *Client) buildRequestWithSigner(request requests.AcsRequest, signer
 	}
 
 	// resolve endpoint
-	resolveParam := &endpoints.ResolveParam{
-		Domain:               request.GetDomain(),
-		Product:              request.GetProduct(),
-		RegionId:             regionId,
-		LocationProduct:      request.GetLocationServiceCode(),
-		LocationEndpointType: request.GetLocationEndpointType(),
-		CommonApi:            client.ProcessCommonRequest,
+	endpoint := request.GetDomain()
+	if endpoint == "" && client.EndpointType != "" {
+		if client.EndpointMap != nil && client.Network == "" || client.Network == "public" {
+			endpoint = client.EndpointMap[regionId]
+		}
+
+		if endpoint == "" {
+			endpoint = client.GetEndpointRules(regionId, request.GetProduct())
+		}
 	}
-	endpoint, err := endpoints.Resolve(resolveParam)
-	if err != nil {
-		return
+
+	if endpoint == "" {
+		resolveParam := &endpoints.ResolveParam{
+			Domain:               request.GetDomain(),
+			Product:              request.GetProduct(),
+			RegionId:             regionId,
+			LocationProduct:      request.GetLocationServiceCode(),
+			LocationEndpointType: request.GetLocationEndpointType(),
+			CommonApi:            client.ProcessCommonRequest,
+		}
+		endpoint, err = endpoints.Resolve(resolveParam)
+		if err != nil {
+			return
+		}
 	}
+
 	request.SetDomain(endpoint)
 	if request.GetScheme() == "" {
 		request.SetScheme(client.config.Scheme)
@@ -403,8 +440,10 @@ func (client *Client) getTimeout(request requests.AcsRequest) (time.Duration, ti
 		readTimeout = reqReadTimeout
 	} else if client.readTimeout != 0*time.Millisecond {
 		readTimeout = client.readTimeout
-	} else if client.httpClient.Timeout != 0 && client.httpClient.Timeout != 10000000000 {
+	} else if client.httpClient.Timeout != 0 {
 		readTimeout = client.httpClient.Timeout
+	} else if timeout, ok := getAPIMaxTimeout(request.GetProduct(), request.GetActionName()); ok {
+		readTimeout = timeout
 	}
 
 	if reqConnectTimeout != 0*time.Millisecond {
@@ -552,6 +591,8 @@ func (client *Client) DoActionWithSigner(request requests.AcsRequest, response r
 	}
 
 	err = responses.Unmarshal(response, httpResponse, request.GetAcceptFormat())
+	fieldMap["{res_body}"] = response.GetHttpContentString()
+	debug("%s", response.GetHttpContentString())
 	// wrap server errors
 	if serverErr, ok := err.(*errors.ServerError); ok {
 		var wrapInfo = map[string]string{}
