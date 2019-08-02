@@ -109,19 +109,16 @@ func (a *Pager) GetResponseCollection() string {
 	root := make(map[string]interface{})
 	current := make(map[string]interface{})
 	path := a.collectionPath
-
-	for {
-		l := strings.Index(path, ".")
-		tempSlice := strings.Split(path, ".")
-		if l > 0 {
-			tempSlice = tempSlice[len(tempSlice)-2:]
-			root[tempSlice[0]] = current
-		}
-		key := strings.TrimSuffix(tempSlice[len(tempSlice)-1], "[]")
-		current[key] = a.results
-		break
-
+	l := strings.Index(path, ".")
+	tempSlice := strings.Split(path, ".")
+	if l > 0 {
+		tempSlice = tempSlice[len(tempSlice)-2:]
+		root[tempSlice[0]] = current
+	} else {
+		root = current
 	}
+	key := strings.TrimSuffix(tempSlice[len(tempSlice)-1], "[]")
+	current[key] = a.results
 
 	s, err := json.Marshal(root)
 	if err != nil {
