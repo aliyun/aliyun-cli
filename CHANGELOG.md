@@ -2,6 +2,8 @@
 
 ### Master
 
+### 3.0.23
+
 - fix: fix `--pager` error
 - add: product sae
 
