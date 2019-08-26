@@ -2,6 +2,10 @@
 
 ### Master
 
+### 3.0.24
+
+- update: arms, default version 2019-08-08
+
 ### 3.0.23
 
 - fix: fix `--pager` error
