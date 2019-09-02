@@ -2,6 +2,10 @@
 
 ### Master
 
+### 3.0.25
+
+- update: ros, default version 2019-09-10
+
 ### 3.0.24
 
 - update: arms, default version 2019-08-08
