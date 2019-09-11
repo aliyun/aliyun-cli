@@ -2,6 +2,9 @@
 
 ### Master
 
+- Upgrade the ossutil component to version 1.6.6
+- Package manager switches to Go Modules
+
 ### 3.0.25
 
 - update: ros, default version 2019-09-10

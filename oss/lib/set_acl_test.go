@@ -1198,3 +1198,104 @@ func (s *OssutilCommandSuite) TestSetObjectAclWithInvalidIncExc(c *C) {
 	os.RemoveAll(dir)
 	s.removeBucket(bucketName, true, c)
 }
+
+func (s *OssutilCommandSuite) TestSetObjectAclWithVersion(c *C) {
+	bucketName := bucketNamePrefix + "-set-alc-" + randLowStr(10)
+	objectName := randStr(12)
+	
+	s.putBucket(bucketName, c)
+	s.putBucketVersioning(bucketName, "enabled", c)
+
+	// put object v1
+	textBufferV1 := randStr(100)
+	s.createFile(uploadFileName, textBufferV1, c)
+	s.putObject(bucketName, objectName, uploadFileName, c)
+	s.setObjectACL(bucketName, objectName, "public-read", false, true, c)
+	objectStat := s.getStat(bucketName, objectName, c)
+	versionIdV1 := objectStat["X-Oss-Version-Id"]
+	objectACLV1 := objectStat[StatACL]
+	c.Assert(len(versionIdV1) > 0, Equals, true)
+	c.Assert(objectACLV1, Equals, "public-read")
+
+	// put object v2
+	textBufferV2 := randStr(200)
+	s.createFile(uploadFileName, textBufferV2, c)
+	s.putObject(bucketName, objectName, uploadFileName, c)
+	s.setObjectACL(bucketName, objectName, "public-read-write", false, true, c)
+	objectStat = s.getStat(bucketName, objectName, c)
+	versionIdV2 := objectStat["X-Oss-Version-Id"]
+	objectACLV2 := objectStat[StatACL]
+	c.Assert(len(versionIdV2) > 0, Equals, true)
+	c.Assert(objectACLV2, Equals, "public-read-write")
+	c.Assert(strings.Contains(versionIdV1, versionIdV2), Equals, false)
+
+	// begin set-acl with versionidV1
+	var str string
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"stsToken":        &str,
+		"configFile":      &configFile,
+		"versionId":       &versionIdV1,
+	}
+
+	args := []string{CloudURLToString(bucketName, objectName), "private"}
+	_, err := cm.RunCommand("set-acl", args, options)
+	c.Assert(err, IsNil)
+
+	//get without versionId
+	objectStat = s.getStat(bucketName, objectName, c)
+	objectACLV2 = objectStat[StatACL]
+	c.Assert(len(versionIdV2) > 0, Equals, true)
+	c.Assert(objectACLV2, Equals, "public-read-write")
+
+	//stat with version id v1
+	testResultFile, _ = os.OpenFile(resultPath, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
+	oldStdout := os.Stdout
+	os.Stdout = testResultFile
+
+	args = []string{CloudURLToString(bucketName, objectName)}
+	_, err = cm.RunCommand("stat", args, options)
+	c.Assert(err, IsNil)
+	testResultFile.Close()
+	os.Stdout = oldStdout
+	objectStat = s.getStatResults(c)
+	objectACL := objectStat[StatACL]
+	c.Assert(objectACL, Equals, "private")
+}
+
+func (s *OssutilCommandSuite) TestSetObjectAclWithInvalidVersionArgs(c *C) {
+	bucketName := bucketNamePrefix + "-set-alc-" + randLowStr(10)
+	objectName := randStr(12)
+	versionId := "test"
+
+	var str string
+	flag := true
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"stsToken":        &str,
+		"configFile":      &configFile,
+		"allVersions":     &flag,
+	}
+
+	args := []string{CloudURLToString(bucketName, objectName), "private"}
+	_, err := cm.RunCommand("set-acl", args, options)
+	c.Assert(strings.Contains(err.Error(), "the command does not support option: \"allVersions\""), Equals, true)
+
+	options = OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"stsToken":        &str,
+		"configFile":      &configFile,
+		"recursive":       &flag,
+		"versionId":       &versionId,
+	}
+
+	args = []string{CloudURLToString(bucketName, objectName), "private"}
+	_, err = cm.RunCommand("set-acl", args, options)
+	c.Assert(strings.Contains(err.Error(), "--version-id only work on single object"), Equals, true)
+}

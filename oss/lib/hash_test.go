@@ -1,8 +1,8 @@
 package lib
 
 import (
-	. "gopkg.in/check.v1"
 	"os"
+	. "gopkg.in/check.v1"
 )
 
 func (s *OssutilCommandSuite) TestErrorInputFile(c *C) {
@@ -43,6 +43,8 @@ func (s *OssutilCommandSuite) TestCrc64(c *C) {
 	}
 
 	testResultFile, _ = os.OpenFile(resultPath, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
+
+	saveOut := os.Stdout
 	os.Stdout = testResultFile
 
 	showElapse, err := cm.RunCommand(command, args, options)
@@ -51,6 +53,8 @@ func (s *OssutilCommandSuite) TestCrc64(c *C) {
 
 	hashStat := s.getHashResults(c)
 	c.Assert(hashStat[HashCRC64], Equals, "2863152195715871371")
+
+	os.Stdout = saveOut
 
 	os.Remove(inputFileName)
 }
@@ -67,6 +71,8 @@ func (s *OssutilCommandSuite) TestMd5(c *C) {
 	}
 
 	testResultFile, _ = os.OpenFile(resultPath, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
+
+	saveOut := os.Stdout
 	os.Stdout = testResultFile
 
 	showElapse, err := cm.RunCommand(command, args, options)
@@ -76,6 +82,8 @@ func (s *OssutilCommandSuite) TestMd5(c *C) {
 	hashStat := s.getHashResults(c)
 	c.Assert(hashStat[HashMD5], Equals, "B7FCEF7FE745F2A95560FF5F550E3B8F")
 	c.Assert(hashStat[HashContentMD5], Equals, "t/zvf+dF8qlVYP9fVQ47jw==")
+
+	os.Stdout = saveOut
 
 	os.Remove(inputFileName)
 }

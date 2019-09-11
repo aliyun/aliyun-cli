@@ -13,6 +13,7 @@ var _ = Suite(&OssutilHelpSuite{})
 
 // Run once when the suite starts running
 func (s *OssutilHelpSuite) SetUpSuite(c *C) {
+	fmt.Printf("set up suite OssutilHelpSuite\n")
 	testLogger.Println("test help started")
 	os.Stdout = testLogFile
 	os.Stderr = testLogFile
@@ -22,6 +23,7 @@ func (s *OssutilHelpSuite) SetUpSuite(c *C) {
 
 // Run before each test or benchmark starts running
 func (s *OssutilHelpSuite) TearDownSuite(c *C) {
+	fmt.Printf("tear down suite OssutilHelpSuite\n")
 	testLogger.Println("test help completed")
 	os.Remove(configFile)
 	os.Stdout = out
@@ -30,10 +32,12 @@ func (s *OssutilHelpSuite) TearDownSuite(c *C) {
 
 // Run after each test or benchmark runs
 func (s *OssutilHelpSuite) SetUpTest(c *C) {
+	fmt.Printf("set up test:%s\n", c.TestName())
 }
 
 // Run once after all tests or benchmarks have finished running
 func (s *OssutilHelpSuite) TearDownTest(c *C) {
+	fmt.Printf("tear down test:%s\n", c.TestName())
 }
 
 // test "help"

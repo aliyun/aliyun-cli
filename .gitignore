@@ -11,6 +11,9 @@ aliyuncli/aliyun
 aliyuncli.egg-info/
 build/
 dist/
+# VSCode
+.vscode
+# CLI
 out/
 releases/
 resource/metas.go

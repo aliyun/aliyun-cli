@@ -7,9 +7,16 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
 var commandLine string
+
+func LogEnd(startT time.Time) {
+	LogInfo("ossutil run end,cost:%d(ms).\n", time.Now().UnixNano()/1000/1000-startT.UnixNano()/1000/1000)
+	UnInitLogger()
+}
 
 // ParseAndRunCommand parse command line user input, get command and options, then run command
 func ParseAndRunCommand() error {
@@ -24,13 +31,37 @@ func ParseAndRunCommand() error {
 		return err
 	}
 
+	var level = oss.LogOff
+	strLevel, err := GetString(OptionLogLevel, options)
+	if strLevel == "info" {
+		level = oss.Info
+	} else if strLevel == "debug" {
+		level = oss.Debug
+	} else if len(strLevel) > 0 {
+		return fmt.Errorf("loglevel must be:info|debug")
+	}
+
+	if level > oss.LogOff {
+		InitLogger(level, logName)
+	}
+
+	startT := time.Now()
+	LogInfo("ossutil run begin,cmd:%s\n", commandLine)
+	LogInfo("ossutil version is %s\n", Version)
+	LogInfo("oss go sdk version is %s\n", oss.Version)
+	LogInfo("go version is %s\n", runtime.Version())
+	LogInfo("runtime.NumCPU is %d\n", runtime.NumCPU())
+
+	defer LogEnd(startT)
+
 	showElapse, err := RunCommand(args, options)
 	if err != nil {
+		LogError("%s.\n", err.Error())
 		return err
 	}
 	if showElapse {
 		te := time.Now().UnixNano()
-		fmt.Printf("%.6f(s) elapsed\n", float64(te-ts)/1e9)
+		fmt.Printf("\n%.6f(s) elapsed\n", float64(te-ts)/1e9)
 		return nil
 	}
 	return nil

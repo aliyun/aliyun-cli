@@ -3,16 +3,31 @@
 package lib
 
 import (
-	. "gopkg.in/check.v1"
+	"fmt"
 	"syscall"
+
+	. "gopkg.in/check.v1"
 )
 
 func (s *OssutilCommandSuite) TestGetOsLang(c *C) {
 	var mod = syscall.NewLazyDLL("kernel32.dll")
+
 	var proc = mod.NewProc("GetUserDefaultUILanguage")
-	oriLang, _, _ := proc.Call()
+	err := proc.Find()
+	if err != nil {
+		fmt.Printf("%s", err.Error())
+		return
+	}
 
 	var sproc = mod.NewProc("SetUserDefaultUILanguage")
+	err = sproc.Find()
+	if err != nil {
+		fmt.Printf("%s", err.Error())
+		return
+	}
+
+	oriLang, _, _ := proc.Call()
+
 	sproc.Call(1033)
 	c.Assert(getOsLang(), Equals, EnglishLanguage)
 

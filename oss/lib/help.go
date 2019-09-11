@@ -9,7 +9,7 @@ import (
 // global public variable for formating help text
 const (
 	FormatTAB         = "    "
-	MaxCommandNameLen = 16
+	MaxCommandNameLen = 18
 	UsageTextChinese  = "用法: ossutil [command] [args...] [options...]\n请使用ossutil help command来显示command命令的帮助"
 	UsageTextEnglish  = "Usage: ossutil [command] [args...] [options...]\nPlease use 'ossutil help command' to show help of command"
 )
@@ -95,6 +95,7 @@ var helpCommand = HelpCommand{
 		group:       GroupTypeAdditionalCommand,
 		validOptionNames: []string{
 			OptionLanguage,
+			OptionLogLevel,
 		},
 	},
 }

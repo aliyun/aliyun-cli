@@ -2,69 +2,110 @@ package oss
 
 import "os"
 
-// ACLType Bucket/Object的访问控制
+// ACLType bucket/object ACL
 type ACLType string
 
 const (
-	// ACLPrivate 私有读写
+	// ACLPrivate definition : private read and write
 	ACLPrivate ACLType = "private"
 
-	// ACLPublicRead 公共读私有写
+	// ACLPublicRead definition : public read and private write
 	ACLPublicRead ACLType = "public-read"
 
-	// ACLPublicReadWrite 公共读写
+	// ACLPublicReadWrite definition : public read and public write
 	ACLPublicReadWrite ACLType = "public-read-write"
 
-	// ACLDefault Object默认权限，Bucket无此权限
+	// ACLDefault Object. It's only applicable for object.
 	ACLDefault ACLType = "default"
 )
 
-// MetadataDirectiveType 对象COPY时新对象是否使用原对象的Meta
+// bucket versioning status
+type VersioningStatus string
+
+const (
+	// Versioning Status definition: Enabled
+	VersionEnabled VersioningStatus = "Enabled"
+
+	// Versioning Status definition: Suspended
+	VersionSuspended VersioningStatus = "Suspended"
+)
+
+// MetadataDirectiveType specifying whether use the metadata of source object when copying object.
 type MetadataDirectiveType string
 
 const (
-	// MetaCopy 目标对象使用源对象的META
+	// MetaCopy the target object's metadata is copied from the source one
 	MetaCopy MetadataDirectiveType = "COPY"
 
-	// MetaReplace 目标对象使用自定义的META
+	// MetaReplace the target object's metadata is created as part of the copy request (not same as the source one)
 	MetaReplace MetadataDirectiveType = "REPLACE"
 )
 
-// StorageClassType Bucket的存储类型
+// TaggingDirectiveType specifying whether use the tagging of source object when copying object.
+type TaggingDirectiveType string
+
+const (
+	// TaggingCopy the target object's tagging is copied from the source one
+	TaggingCopy TaggingDirectiveType = "COPY"
+
+	// TaggingReplace the target object's tagging is created as part of the copy request (not same as the source one)
+	TaggingReplace TaggingDirectiveType = "REPLACE"
+)
+
+// AlgorithmType specifying the server side encryption algorithm name
+type AlgorithmType string
+
+const (
+	KMSAlgorithm AlgorithmType = "KMS"
+	AESAlgorithm AlgorithmType = "AES256"
+)
+
+// StorageClassType bucket storage type
 type StorageClassType string
 
 const (
-	// StorageStandard 标准存储模式
+	// StorageStandard standard
 	StorageStandard StorageClassType = "Standard"
 
-	// StorageIA 低频存储模式
+	// StorageIA infrequent access
 	StorageIA StorageClassType = "IA"
 
-	// StorageArchive 归档存储模式
+	// StorageArchive archive
 	StorageArchive StorageClassType = "Archive"
 )
 
-// HTTPMethod HTTP请求方法
+// PayerType the type of request payer
+type PayerType string
+
+const (
+	// Requester the requester who send the request
+	Requester PayerType = "Requester"
+
+	// BucketOwner the requester who send the request
+	BucketOwner PayerType = "BucketOwner"
+)
+
+// HTTPMethod HTTP request method
 type HTTPMethod string
 
 const (
-	// HTTPGet HTTP请求方法 GET
+	// HTTPGet HTTP GET
 	HTTPGet HTTPMethod = "GET"
 
-	// HTTPPut HTTP请求方法 PUT
+	// HTTPPut HTTP PUT
 	HTTPPut HTTPMethod = "PUT"
 
-	// HTTPHead HTTP请求方法 HEAD
+	// HTTPHead HTTP HEAD
 	HTTPHead HTTPMethod = "HEAD"
 
-	// HTTPPost HTTP请求方法 POST
+	// HTTPPost HTTP POST
 	HTTPPost HTTPMethod = "POST"
 
-	// HTTPDelete HTTP请求方法 DELETE
+	// HTTPDelete HTTP DELETE
 	HTTPDelete HTTPMethod = "DELETE"
 )
 
-// Http头标签
+// HTTP headers
 const (
 	HTTPHeaderAcceptEncoding     string = "Accept-Encoding"
 	HTTPHeaderAuthorization             = "Authorization"
@@ -89,12 +130,15 @@ const (
 	HTTPHeaderIfUnmodifiedSince         = "If-Unmodified-Since"
 	HTTPHeaderIfMatch                   = "If-Match"
 	HTTPHeaderIfNoneMatch               = "If-None-Match"
+	HTTPHeaderACReqMethod               = "Access-Control-Request-Method"
+	HTTPHeaderACReqHeaders              = "Access-Control-Request-Headers"
 
 	HTTPHeaderOssACL                         = "X-Oss-Acl"
 	HTTPHeaderOssMetaPrefix                  = "X-Oss-Meta-"
 	HTTPHeaderOssObjectACL                   = "X-Oss-Object-Acl"
 	HTTPHeaderOssSecurityToken               = "X-Oss-Security-Token"
 	HTTPHeaderOssServerSideEncryption        = "X-Oss-Server-Side-Encryption"
+	HTTPHeaderOssServerSideEncryptionKeyID   = "X-Oss-Server-Side-Encryption-Key-Id"
 	HTTPHeaderOssCopySource                  = "X-Oss-Copy-Source"
 	HTTPHeaderOssCopySourceRange             = "X-Oss-Copy-Source-Range"
 	HTTPHeaderOssCopySourceIfMatch           = "X-Oss-Copy-Source-If-Match"
@@ -106,27 +150,37 @@ const (
 	HTTPHeaderOssRequestID                   = "X-Oss-Request-Id"
 	HTTPHeaderOssCRC64                       = "X-Oss-Hash-Crc64ecma"
 	HTTPHeaderOssSymlinkTarget               = "X-Oss-Symlink-Target"
+	HTTPHeaderOssStorageClass                = "X-Oss-Storage-Class"
+	HTTPHeaderOssCallback                    = "X-Oss-Callback"
+	HTTPHeaderOssCallbackVar                 = "X-Oss-Callback-Var"
+	HTTPHeaderOssRequester                   = "X-Oss-Request-Payer"
+	HTTPHeaderOssTagging                     = "X-Oss-Tagging"
+	HTTPHeaderOssTaggingDirective            = "X-Oss-Tagging-Directive"
+	HTTPHeaderOssTrafficLimit                = "X-Oss-Traffic-Limit"
 )
 
-// Http Param
+// HTTP Param
 const (
 	HTTPParamExpires       = "Expires"
 	HTTPParamAccessKeyID   = "OSSAccessKeyId"
 	HTTPParamSignature     = "Signature"
 	HTTPParamSecurityToken = "security-token"
+	HTTPParamPlaylistName  = "playlistName"
 )
 
-// 其它常量
+// Other constants
 const (
-	MaxPartSize = 5 * 1024 * 1024 * 1024 // 文件片最大值，5GB
-	MinPartSize = 100 * 1024             // 文件片最小值，100KBß
+	MaxPartSize = 5 * 1024 * 1024 * 1024 // Max part size, 5GB
+	MinPartSize = 100 * 1024             // Min part size, 100KB
 
-	FilePermMode = os.FileMode(0664) // 新建文件默认权限
+	FilePermMode = os.FileMode(0664) // Default file permission
 
-	TempFilePrefix = "oss-go-temp-" // 临时文件前缀
-	TempFileSuffix = ".temp"        // 临时文件后缀
+	TempFilePrefix = "oss-go-temp-" // Temp file prefix
+	TempFileSuffix = ".temp"        // Temp file suffix
 
-	CheckpointFileSuffix = ".cp" // Checkpoint文件后缀
+	CheckpointFileSuffix = ".cp" // Checkpoint file suffix
 
-	Version = "1.8.0" // Go sdk版本
+	NullVersion = "null"
+
+	Version = "v2.0.2" // Go SDK version
 )

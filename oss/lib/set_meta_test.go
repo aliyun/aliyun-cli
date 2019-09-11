@@ -22,7 +22,7 @@ func (s *OssutilCommandSuite) TestSetBucketMeta(c *C) {
 	s.removeBucket(bucketName, true, c)
 }
 
-func (s *OssutilCommandSuite) TestSetObjectMeta(c *C) {
+func (s *OssutilCommandSuite) TestSetObjectMetaBasic(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(10)
 	s.putBucket(bucketName, c)
 
@@ -1339,4 +1339,215 @@ func (s *OssutilCommandSuite) TestSetObjectMetaWithInvalidIncExc(c *C) {
 	// cleanup
 	os.RemoveAll(dir)
 	s.removeBucket(bucketName, true, c)
+}
+
+
+func (s *OssutilCommandSuite) TestSetObjectMetaVersionBasic(c *C) {
+	bucketName := bucketNamePrefix + "-set-meta-" + randLowStr(10)
+	s.putBucket(bucketName, c)
+
+	s.putBucket(bucketName, c)
+	s.putBucketVersioning(bucketName, "enabled", c)
+
+	object := "TestSetObjectMeta_testobject"
+	s.putObject(bucketName, object, uploadFileName, c)
+
+	objectStat := s.getStat(bucketName, object, c)
+	c.Assert(objectStat[StatACL], Equals, "default")
+	_, ok := objectStat["X-Oss-Meta-A"]
+	c.Assert(ok, Equals, false)
+
+	// update
+	s.setObjectMeta(bucketName, object, "x-oss-object-acl:private#X-Oss-Meta-A:A#Expires:2006-01-02T15:04:05Z", true, false, false, true, c)
+
+	objectStat = s.getStat(bucketName, object, c)
+	c.Assert(objectStat[StatACL], Equals, "private")
+	c.Assert(objectStat["X-Oss-Meta-A"], Equals, "A")
+	c.Assert(objectStat["Expires"], Equals, "Mon, 02 Jan 2006 15:04:05 GMT")
+
+	// error expires
+	showElapse, err := s.rawSetMeta(bucketName, object, "Expires:2006-01", true, false, false, true, DefaultLanguage)
+	c.Assert(err, NotNil)
+	c.Assert(showElapse, Equals, false)
+
+	objectStat = s.getStat(bucketName, object, c)
+	c.Assert(objectStat["Expires"], Equals, "Mon, 02 Jan 2006 15:04:05 GMT")
+
+	// delete
+	s.setObjectMeta(bucketName, object, "x-oss-object-acl#X-Oss-Meta-A", false, true, false, true, c)
+	objectStat = s.getStat(bucketName, object, c)
+	c.Assert(objectStat[StatACL], Equals, "private")
+	_, ok = objectStat["X-Oss-Meta-A"]
+	c.Assert(ok, Equals, false)
+
+	s.setObjectMeta(bucketName, object, "X-Oss-Meta-A:A#x-oss-meta-B:b", true, false, false, true, c)
+
+	s.setObjectMeta(bucketName, object, "X-Oss-Meta-c:c", false, false, false, true, c)
+	objectStat = s.getStat(bucketName, object, c)
+	c.Assert(objectStat[StatACL], Equals, "private")
+
+	// without force
+	s.setObjectMeta(bucketName, object, "x-oss-object-acl:public-read#X-Oss-Meta-A:A", true, false, false, false, c)
+
+	// without update, delete and force
+	showElapse, err = s.rawSetMeta(bucketName, object, "x-oss-object-acl:default#X-Oss-Meta-A:A", false, false, false, false, DefaultLanguage)
+	c.Assert(err, NotNil)
+	c.Assert(showElapse, Equals, false)
+
+	showElapse, err = s.rawSetMeta(bucketName, object, "x-oss-object-acl:default#X-Oss-Meta-A:A", false, false, false, false, EnglishLanguage)
+	c.Assert(err, NotNil)
+	c.Assert(showElapse, Equals, false)
+
+	showElapse, err = s.rawSetMeta(bucketName, object, "x-oss-object-acl:default#X-Oss-Meta-A:A", false, false, false, false, LEnglishLanguage)
+	c.Assert(err, NotNil)
+	c.Assert(showElapse, Equals, false)
+
+	// miss meta
+	s.setObjectMeta(bucketName, object, "", true, false, false, true, c)
+
+	showElapse, err = s.rawSetMeta(bucketName, object, "", true, false, false, true, EnglishLanguage)
+	c.Assert(err, IsNil)
+	c.Assert(showElapse, Equals, true)
+
+	showElapse, err = s.rawSetMeta(bucketName, object, "", true, false, false, true, LEnglishLanguage)
+	c.Assert(err, IsNil)
+	c.Assert(showElapse, Equals, true)
+
+	// delete error meta
+	showElapse, err = s.rawSetMeta(bucketName, object, "X-Oss-Meta-A:A", false, true, false, true, DefaultLanguage)
+	c.Assert(err, NotNil)
+	c.Assert(showElapse, Equals, false)
+
+	// update error meta
+	showElapse, err = s.rawSetMeta(bucketName, object, "a:b", true, false, false, true, DefaultLanguage)
+	c.Assert(err, NotNil)
+	c.Assert(showElapse, Equals, false)
+
+	showElapse, err = s.rawSetMeta(bucketName, object, "x-oss-object-acl:private", true, false, false, true, DefaultLanguage)
+	c.Assert(err, IsNil)
+	c.Assert(showElapse, Equals, true)
+
+	//batch
+	s.setObjectMeta(bucketName, "", "content-type:abc#X-Oss-Meta-Update:update", true, false, true, false, c)
+
+	s.setObjectMeta(bucketName, "", "content-type:abc#X-Oss-Meta-Update:update", true, false, true, true, c)
+
+	objectStat = s.getStat(bucketName, object, c)
+	c.Assert(objectStat["Content-Type"], Equals, "abc")
+	c.Assert(objectStat["X-Oss-Meta-Update"], Equals, "update")
+
+	s.setObjectMeta(bucketName, "", "X-Oss-Meta-update", false, true, true, true, c)
+
+	s.setObjectMeta(bucketName, "", "X-Oss-Meta-A:A#x-oss-meta-B:b", true, false, true, true, c)
+
+	s.setObjectMeta(bucketName, "nosetmeta", "X-Oss-Meta-M:c", false, false, true, true, c)
+
+	s.setObjectMeta(bucketName, "", "X-Oss-Meta-C:c", false, false, true, true, c)
+
+	objectStat = s.getStat(bucketName, object, c)
+	c.Assert(objectStat["X-Oss-Meta-C"], Equals, "c")
+
+	showElapse, err = s.rawSetMeta(bucketName, "", "X-Oss-Meta-c:c", false, true, true, true, DefaultLanguage)
+	c.Assert(err, NotNil)
+	c.Assert(showElapse, Equals, false)
+
+	showElapse, err = s.rawSetMeta(bucketName, "", "a:b", true, false, true, true, DefaultLanguage)
+	c.Assert(err, NotNil)
+	c.Assert(showElapse, Equals, false)
+
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestSetObjectMetaWithVersion(c *C) {
+	bucketName := bucketNamePrefix + "-set-meta-" + randLowStr(10)
+	objectName := randStr(12)
+	
+	s.putBucket(bucketName, c)
+	s.putBucketVersioning(bucketName, "enabled", c)
+
+	// put object v1
+	textBufferV1 := randStr(100)
+	s.createFile(uploadFileName, textBufferV1, c)
+	s.putObject(bucketName, objectName, uploadFileName, c)
+	objectStat := s.getStat(bucketName, objectName, c)
+	versionIdV1 := objectStat["X-Oss-Version-Id"]
+	c.Assert(len(versionIdV1) > 0, Equals, true)
+	_, ok := objectStat["X-Oss-Meta-A"]
+	c.Assert(ok, Equals, false)
+
+	// update object to v2 
+	s.setObjectMeta(bucketName, objectName, "x-oss-object-acl:private#X-Oss-Meta-A:A#X-Oss-Meta-B:B", false, false, false, true, c)
+	objectStat = s.getStat(bucketName, objectName, c)
+	versionIdV2 := objectStat["X-Oss-Version-Id"]
+	c.Assert(objectStat[StatACL], Equals, "private")
+	c.Assert(objectStat["X-Oss-Meta-A"], Equals, "A")
+	c.Assert(objectStat["X-Oss-Meta-B"], Equals, "B")
+
+	// update object to v3
+	s.setObjectMeta(bucketName, objectName, "x-oss-object-acl:public-read#X-Oss-Meta-A:C#X-Oss-Meta-B:D", false, false, false, true, c)
+	objectStat = s.getStat(bucketName, objectName, c)
+	c.Assert(objectStat[StatACL], Equals, "public-read")
+	c.Assert(objectStat["X-Oss-Meta-A"], Equals, "C")
+	c.Assert(objectStat["X-Oss-Meta-B"], Equals, "D")
+
+	// begin set-meta from v2
+	var str string
+	update := true
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"stsToken":        &str,
+		"configFile":      &configFile,
+		"update":          &update,
+		"versionId":       &versionIdV2,
+	}
+
+	args := []string{CloudURLToString(bucketName, objectName), "x-oss-object-acl:public-read-write#X-Oss-Meta-A:123#X-Oss-Meta-C:456"}
+	_, err := cm.RunCommand("set-meta", args, options)
+	c.Assert(err, IsNil)
+
+	objectStat = s.getStat(bucketName, objectName, c)
+	c.Assert(objectStat[StatACL], Equals, "public-read-write")
+	c.Assert(objectStat["X-Oss-Meta-A"], Equals, "123")
+	c.Assert(objectStat["X-Oss-Meta-B"], Equals, "B")
+	c.Assert(objectStat["X-Oss-Meta-C"], Equals, "456")
+
+	s.removeBucket(bucketName, true, c)
+}
+
+
+func (s *OssutilCommandSuite) TestSetObjectMetaWithInvalidVersionArgs(c *C) {
+	bucketName := bucketNamePrefix + "-set-alc-" + randLowStr(10)
+	objectName := randStr(12)
+	versionId := "test"
+
+	var str string
+	flag := true
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"stsToken":        &str,
+		"configFile":      &configFile,
+		"allVersions":     &flag,
+	}
+
+	args := []string{CloudURLToString(bucketName, objectName)}
+	_, err := cm.RunCommand("set-meta", args, options)
+	c.Assert(strings.Contains(err.Error(), "the command does not support option: \"allVersions\""), Equals, true)
+
+	options = OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"stsToken":        &str,
+		"configFile":      &configFile,
+		"recursive":       &flag,
+		"versionId":       &versionId,
+	}
+
+	args = []string{CloudURLToString(bucketName, objectName)}
+	_, err = cm.RunCommand("set-meta", args, options)
+	c.Assert(strings.Contains(err.Error(), "--version-id only work on single object"), Equals, true)
 }

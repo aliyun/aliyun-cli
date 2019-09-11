@@ -387,3 +387,31 @@ func (s *OssutilCommandSuite) TestBatchRestoreErrorBreak(c *C) {
 
 	s.removeBucket(bucketName, true, c)
 }
+
+func (s *OssutilCommandSuite) TestRestoreObjectWithPayerError400(c *C) {
+	s.createFile(uploadFileName, content, c)
+	bucketName := payerBucket
+
+	//put object, with --payer=requester
+	args := []string{uploadFileName, CloudURLToString(bucketName, "")}
+	showElapse, err := s.rawCPWithPayer(args, false, true, false, DefaultBigFileThreshold, "requester")
+	c.Assert(err, IsNil)
+	c.Assert(showElapse, Equals, true)
+
+	// stat with payer
+	command := "restore"
+	args = []string{CloudURLToString(bucketName, uploadFileName)}
+	str := ""
+	requester := "requester"
+	options := OptionMapType{
+		"endpoint":        &payerBucketEndPoint,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"stsToken":        &str,
+		"configFile":      &configFile,
+		"payer":           &requester,
+	}
+	_, err = cm.RunCommand(command, args, options)
+	c.Assert(err, NotNil)
+	c.Assert(strings.Contains(err.Error(), "StatusCode=400"), Equals, true)
+}
