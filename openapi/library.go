@@ -168,13 +168,12 @@ func printParameters(w io.Writer, params []meta.Parameter, prefix string) {
 		if param.Position == "Domain" {
 			continue
 		}
-		if len(param.SubParameters) > 0 {
-			printParameters(w, param.SubParameters, param.Name+".n.")
-			//for _, sp := range param.SubParameters {
-			//	fmt.Fprintf(w,"  --%s.n.%s\t%s\t%s\n", param.Name, sp.Name, sp.Type, required(sp.Required))
-			//}
-		} else if param.Type == "RepeatList" {
-			fmt.Fprintf(w, "  --%s%s.n\t%s\t%s\t%s\n", prefix, param.Name, param.Type, required(param.Required), getDescription(param.Description))
+		if param.Type == "RepeatList" {
+			if len(param.SubParameters) > 0 {
+				printParameters(w, param.SubParameters, prefix+param.Name+".n.")
+			} else {
+				fmt.Fprintf(w, "  --%s%s.n\t%s\t%s\t%s\n", prefix, param.Name, param.Type, required(param.Required), getDescription(param.Description))
+			}
 		} else {
 			fmt.Fprintf(w, "  --%s%s\t%s\t%s\t%s\n", prefix, param.Name, param.Type, required(param.Required), getDescription(param.Description))
 		}
