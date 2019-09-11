@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package openapi
 
 import (
@@ -33,6 +34,8 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewDryRunFlag())
 	fs.Add(NewQuietFlag())
 	fs.Add(NewRoaFlag())
+	fs.Add(NewFilterFlag())
+	fs.Add(NewFormatFlag())
 }
 
 const (
@@ -48,8 +51,16 @@ const (
 	DryRunFlagName   = "dryrun"
 	QuietFlagName    = "quiet"
 	OutputFlagName   = "output"
+	FormatFlagName   = "format"
+	FilterFlagName   = "filter"
 )
 
+func FilterFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(FilterFlagName)
+}
+func FormatFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(FormatFlagName)
+}
 func OutputFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(OutputFlagName)
 }
@@ -108,6 +119,14 @@ func QuietFlag(fs *cli.FlagSet) *cli.Flag {
 //		"使用 `--verbose` 开启啰嗦模式",
 //	),
 //}
+
+func NewFilterFlag() *cli.Flag {
+	return &cli.Flag{
+		Name: FilterFlagName, AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--filter` to filte result",
+			"使用 `--filter` 过滤结果")}
+}
 
 func NewSecureFlag() *cli.Flag {
 	return &cli.Flag{Category: "caller",
@@ -205,5 +224,16 @@ func NewQuietFlag() *cli.Flag {
 			"使用 `--quiet` 关闭正常输出",
 		),
 		ExcludeWith: []string{DryRunFlagName},
+	}
+}
+
+func NewFormatFlag() *cli.Flag {
+	return &cli.Flag{Category: "config",
+		Name:         FormatFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"add `--quiet` to hide normal output",
+			"使用 `--quiet` 关闭正常输出",
+		),
 	}
 }

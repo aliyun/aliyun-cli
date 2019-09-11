@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package openapi
 
 import (
@@ -20,8 +21,6 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/meta"
 
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -155,27 +154,28 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		return nil
 	}
 
+	if format, ok := ctx.Flags().GetValue("filter"); ok {
+		out, _ = FilterHandler(format, out)
+	}
+	if format, ok := ctx.Flags().GetValue("format"); ok {
+		f := FormatHandler(format)
+		if f == nil {
+			return fmt.Errorf("\nCLIERROR: unsupported format '%s'", format)
+		}
+		out, err = f.Format(apiOrMethod, out)
+	} else {
+		out, err = FormatHandler("json").Format(apiOrMethod, out)
+	}
+
 	// process `--output ...`
 	if filter := GetOutputFilter(ctx); filter != nil {
 		out, err = filter.FilterOutput(out)
-		if err != nil {
-			return err
-		}
 	}
-
-	out = FormatJson(out)
-
+	if err != nil {
+		return err
+	}
 	cli.Println(ctx.Writer(), out)
 	return nil
-}
-
-func FormatJson(content string) string {
-	var buf bytes.Buffer
-	err := json.Indent(&buf, []byte(content), "", "\t")
-	if err == nil {
-		content = buf.String()
-	}
-	return content
 }
 
 // invoke with helper
