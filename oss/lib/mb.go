@@ -2,8 +2,9 @@ package lib
 
 import (
 	"fmt"
-	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"strings"
+
+	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
 var storageClassList = []string{
@@ -140,15 +141,19 @@ var makeBucketCommand = MakeBucketCommand{
 		specEnglish: specEnglishMakeBucket,
 		group:       GroupTypeNormalCommand,
 		validOptionNames: []string{
-			OptionACL,
-			OptionStorageClass,
 			OptionConfigFile,
 			OptionEndpoint,
 			OptionAccessKeyID,
 			OptionAccessKeySecret,
 			OptionSTSToken,
+			OptionProxyHost,
+			OptionProxyUser,
+			OptionProxyPwd,
 			OptionRetryTimes,
 			OptionLanguage,
+			OptionACL,
+			OptionStorageClass,
+			OptionLogLevel,
 		},
 	},
 }
@@ -225,7 +230,10 @@ func (mc *MakeBucketCommand) getACL(aclStr, language string) (oss.ACLType, error
 }
 
 func (mc *MakeBucketCommand) ossCreateBucketRetry(client *oss.Client, bucket string, options ...oss.Option) error {
-	options = append(options, oss.StorageClass(mc.getStorageClass()))
+	storageClass := mc.getStorageClass()
+	if storageClass != oss.StorageStandard {
+		options = append(options, oss.StorageClass(storageClass))
+	}
 	retryTimes, _ := GetInt(OptionRetryTimes, mc.command.options)
 	for i := 1; ; i++ {
 		err := client.CreateBucket(bucket, options...)

@@ -3,8 +3,10 @@ package lib
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
@@ -52,8 +54,8 @@ type Command struct {
 // Commander is the interface of all commands
 type Commander interface {
 	RunCommand() error
-	GetCommand() *Command
 	Init(args []string, options OptionMapType) error
+	GetCommand() *Command
 }
 
 // RewriteLoadConfiger is the interface for those commands, which do not need to load config, or have other action
@@ -282,19 +284,66 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	accessKeySecret, _ := GetString(OptionAccessKeySecret, cmd.options)
 	stsToken, _ := GetString(OptionSTSToken, cmd.options)
 	disableCRC64, _ := GetBool(OptionDisableCRC64, cmd.options)
-	if err := cmd.checkCredentials(endpoint, accessKeyID, accessKeySecret); err != nil {
-		return nil, err
+	proxyHost, _ := GetString(OptionProxyHost, cmd.options)
+	proxyUser, _ := GetString(OptionProxyUser, cmd.options)
+	proxyPwd, _ := GetString(OptionProxyPwd, cmd.options)
+	ecsUrl, _ := cmd.getEcsRamAkService()
+
+	if accessKeyID == "" && ecsUrl == "" {
+		return nil, fmt.Errorf("accessKeyID and ecsUrl are both empty")
 	}
+
+	if ecsUrl == "" {
+		if err := cmd.checkCredentials(endpoint, accessKeyID, accessKeySecret); err != nil {
+			return nil, err
+		}
+	}
+
 	options := []oss.ClientOption{oss.UseCname(isCname), oss.SecurityToken(stsToken), oss.UserAgent(getUserAgent()), oss.Timeout(120, 1200)}
 	if disableCRC64 {
 		options = append(options, oss.EnableCRC(false))
 	} else {
 		options = append(options, oss.EnableCRC(true))
 	}
+
+	if proxyHost != "" {
+		if proxyUser != "" {
+			options = append(options, oss.AuthProxy(proxyHost, proxyUser, proxyPwd))
+		} else {
+			options = append(options, oss.Proxy(proxyHost))
+		}
+	}
+
+	if logLevel > oss.LogOff {
+		options = append(options, oss.SetLogLevel(logLevel))
+		options = append(options, oss.SetLogger(utilLogger))
+	}
+
+	if accessKeyID == "" {
+		LogInfo("using user ak service:%s\n", ecsUrl)
+		ecsRoleAKBuild := EcsRoleAKBuild{url: ecsUrl}
+		options = append(options, oss.SetCredentialsProvider(&ecsRoleAKBuild))
+	}
+
 	client, err := oss.New(endpoint, accessKeyID, accessKeySecret, options...)
 	if err != nil {
 		return nil, err
 	}
+
+	maxUpSpeed, errUp := GetInt(OptionMaxUpSpeed, cmd.options)
+	if errUp == nil {
+		if maxUpSpeed >= 0 {
+			errUp = client.LimitUploadSpeed(int(maxUpSpeed))
+			if errUp != nil {
+				return nil, errUp
+			} else {
+				LogInfo("set maxupspeed success,value is %d(KB/s)\n", maxUpSpeed)
+			}
+		} else {
+			return nil, fmt.Errorf("invalid value,maxupspeed %d less than 0", maxUpSpeed)
+		}
+	}
+
 	return client, nil
 }
 
@@ -309,6 +358,19 @@ func (cmd *Command) checkCredentials(endpoint, accessKeyID, accessKeySecret stri
 		return fmt.Errorf("invalid accessKeySecret, accessKeySecret is empty, please check your config")
 	}
 	return nil
+}
+
+func (cmd *Command) getEcsRamAkService() (string, bool) {
+	if urlMap, ok := cmd.configOptions[AkServiceSection]; ok {
+		if strUrl, ok := urlMap.(map[string]string)[ItemEcsAk]; ok {
+			if strUrl != "" {
+				return strUrl, true
+			} else {
+				return "", false
+			}
+		}
+	}
+	return "", false
 }
 
 func (cmd *Command) getEndpoint(bucket string) (string, bool) {
@@ -349,6 +411,26 @@ func (cmd *Command) ossListObjectsRetry(bucket *oss.Bucket, options ...oss.Optio
 		if err == nil {
 			return lor, err
 		}
+
+		// http 4XX error no need to retry
+		// only network error or internal error need to retry
+		serviceError, noNeedRetry := err.(oss.ServiceError)
+		if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
+			return lor, ObjectError{err, bucket.BucketName, ""}
+		}
+
+		// wait 1 second
+		time.Sleep(time.Duration(1) * time.Second)
+	}
+}
+
+func (cmd *Command) ossListObjectVersionsRetry(bucket *oss.Bucket, options ...oss.Option) (oss.ListObjectVersionsResult, error) {
+	retryTimes, _ := GetInt(OptionRetryTimes, cmd.options)
+	for i := 1; ; i++ {
+		lor, err := bucket.ListObjectVersions(options...)
+		if err == nil {
+			return lor, err
+		}
 		if int64(i) >= retryTimes {
 			return lor, BucketError{err, bucket.BucketName}
 		}
@@ -362,39 +444,60 @@ func (cmd *Command) ossListMultipartUploadsRetry(bucket *oss.Bucket, options ...
 		if err == nil {
 			return lmr, err
 		}
-		if int64(i) >= retryTimes {
-			return lmr, BucketError{err, bucket.BucketName}
+
+		// http 4XX error no need to retry
+		// only network error or internal error need to retry
+		serviceError, noNeedRetry := err.(oss.ServiceError)
+		if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
+			return lmr, ObjectError{err, bucket.BucketName, ""}
 		}
+
+		// wait 1 second
+		time.Sleep(time.Duration(1) * time.Second)
 	}
 }
 
-func (cmd *Command) ossGetObjectStatRetry(bucket *oss.Bucket, object string) (http.Header, error) {
+func (cmd *Command) ossGetObjectStatRetry(bucket *oss.Bucket, object string, options ...oss.Option) (http.Header, error) {
 	retryTimes, _ := GetInt(OptionRetryTimes, cmd.options)
 	for i := 1; ; i++ {
-		props, err := bucket.GetObjectDetailedMeta(object)
+		props, err := bucket.GetObjectDetailedMeta(object, options...)
 		if err == nil {
 			return props, err
 		}
-		if int64(i) >= retryTimes {
+
+		// http 4XX error no need to retry
+		// only network error or internal error need to retry
+		serviceError, noNeedRetry := err.(oss.ServiceError)
+		if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
 			return props, ObjectError{err, bucket.BucketName, object}
 		}
+
+		// wait 1 second
+		time.Sleep(time.Duration(1) * time.Second)
 	}
 }
 
-func (cmd *Command) ossGetObjectMetaRetry(bucket *oss.Bucket, object string) (http.Header, error) {
+func (cmd *Command) ossGetObjectMetaRetry(bucket *oss.Bucket, object string, options ...oss.Option) (http.Header, error) {
 	retryTimes, _ := GetInt(OptionRetryTimes, cmd.options)
 	for i := 1; ; i++ {
-		props, err := bucket.GetObjectMeta(object)
+		props, err := bucket.GetObjectMeta(object, options...)
 		if err == nil {
 			return props, err
 		}
-		if int64(i) >= retryTimes {
+
+		// http 4XX error no need to retry
+		// only network error or internal error need to retry
+		serviceError, noNeedRetry := err.(oss.ServiceError)
+		if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
 			return props, ObjectError{err, bucket.BucketName, object}
 		}
+
+		// wait 1 second
+		time.Sleep(time.Duration(1) * time.Second)
 	}
 }
 
-func (cmd *Command) objectStatistic(bucket *oss.Bucket, cloudURL CloudURL, monitor Monitorer, filters []filterOptionType) {
+func (cmd *Command) objectStatistic(bucket *oss.Bucket, cloudURL CloudURL, monitor Monitorer, filters []filterOptionType, options ...oss.Option) {
 	if monitor == nil {
 		return
 	}
@@ -402,7 +505,8 @@ func (cmd *Command) objectStatistic(bucket *oss.Bucket, cloudURL CloudURL, monit
 	pre := oss.Prefix(cloudURL.object)
 	marker := oss.Marker("")
 	for {
-		lor, err := cmd.ossListObjectsRetry(bucket, marker, pre)
+		listOptions := append(options, marker, pre)
+		lor, err := cmd.ossListObjectsRetry(bucket, listOptions...)
 		if err != nil {
 			monitor.setScanError(err)
 			return
@@ -423,11 +527,12 @@ func (cmd *Command) objectStatistic(bucket *oss.Bucket, cloudURL CloudURL, monit
 	monitor.setScanEnd()
 }
 
-func (cmd *Command) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chObjects chan<- string, chError chan<- error, filters []filterOptionType) {
+func (cmd *Command) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chObjects chan<- string, chError chan<- error, filters []filterOptionType, options ...oss.Option) {
 	pre := oss.Prefix(cloudURL.object)
 	marker := oss.Marker("")
 	for {
-		lor, err := cmd.ossListObjectsRetry(bucket, marker, pre)
+		listOptions := append(options, marker, pre)
+		lor, err := cmd.ossListObjectsRetry(bucket, listOptions...)
 		if err != nil {
 			chError <- err
 			break
@@ -447,6 +552,18 @@ func (cmd *Command) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chObje
 	}
 	defer close(chObjects)
 	chError <- nil
+}
+
+func (cmd *Command) getRawMarker(str string) (string, error) {
+	encodingType, _ := GetString(OptionEncodingType, cmd.options)
+	if encodingType == URLEncodingType {
+		unencodedStr, err := url.QueryUnescape(str)
+		if err != nil {
+			return str, err
+		}
+		return unencodedStr, nil
+	}
+	return str, nil
 }
 
 func (cmd *Command) updateMonitor(err error, monitor *Monitor) {
@@ -520,5 +637,26 @@ func GetAllCommands() []interface{} {
 		&signURLCommand,
 		&hashCommand,
 		&updateCommand,
+		&probeCommand,
+		&mkdirCommand,
+		&corsCommand,
+		&bucketLogCommand,
+		&bucketRefererCommand,
+		&listPartCommand,
+		&allPartSizeCommand,
+		&appendFileCommand,
+		&catCommand,
+		&bucketTagCommand,
+		&bucketEncryptionCommand,
+		&corsOptionsCommand,
+		&bucketLifeCycleCommand,
+		&bucketWebsiteCommand,
+		&bucketQosCommand,
+		&userQosCommand,
+		&bucketVersioningCommand,
+		&duSizeCommand,
+		&bucketPolicyCommand,
+		&requestPaymentCommand,
+		&objectTagCommand,
 	}
 }

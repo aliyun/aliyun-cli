@@ -1,7 +1,11 @@
 package lib
 
 import (
+	"io/ioutil"
 	"os"
+	"runtime"
+	"strconv"
+	"strings"
 
 	. "gopkg.in/check.v1"
 )
@@ -105,4 +109,49 @@ func (s *OssutilCommandSuite) TestAnonymousGetToFileError(c *C) {
 	fileName := "*"
 	err = updateCommand.anonymousGetToFileRetry(bucket, object, fileName)
 	c.Assert(err, NotNil)
+}
+
+func (s *OssutilCommandSuite) TestUpdateSuccess(c *C) {
+	nowVersion, err := updateCommand.getLastestVersion()
+	c.Assert(err, IsNil)
+
+	// get a version below current
+	pSlice := strings.Split(nowVersion, ".")
+	for index := len(pSlice) - 1; index >= 0; index-- {
+		if pSlice[index] > "0" {
+			b, err := strconv.Atoi(pSlice[index])
+			c.Assert(err, IsNil)
+			pSlice[index] = strconv.Itoa(b - 1)
+			break
+		}
+	}
+
+	lowVersion := ""
+	for k, v := range pSlice {
+		if k == len(pSlice)-1 {
+			lowVersion = lowVersion + v
+		} else {
+			lowVersion = lowVersion + v + "."
+		}
+	}
+
+	// set path enviroment
+	oldPathValue := os.Getenv("PATH")
+	currentDiretory, _ := os.Getwd()
+	if runtime.GOOS == "windows" {
+		os.Setenv("PATH", currentDiretory+";"+oldPathValue)
+	} else {
+		os.Setenv("PATH", currentDiretory+":"+oldPathValue)
+	}
+
+	// binaryName file must be exist
+	binaryName := updateCommand.getBinaryName()
+	ioutil.WriteFile(binaryName, []byte("test-binary"), 0744)
+
+	cmdline := []string{binaryName, "update", "-f"}
+	os.Args = cmdline
+	err = updateCommand.updateVersion(lowVersion, "ch")
+	c.Assert(err, IsNil)
+	os.Remove(binaryName)
+	os.Remove(".temp_" + binaryName)
 }

@@ -20,9 +20,12 @@ type Instance struct {
 	ImageId                    string                               `json:"ImageId" xml:"ImageId"`
 	InstanceType               string                               `json:"InstanceType" xml:"InstanceType"`
 	AutoReleaseTime            string                               `json:"AutoReleaseTime" xml:"AutoReleaseTime"`
+	OsType                     string                               `json:"OsType" xml:"OsType"`
 	DeviceAvailable            bool                                 `json:"DeviceAvailable" xml:"DeviceAvailable"`
 	InstanceNetworkType        string                               `json:"InstanceNetworkType" xml:"InstanceNetworkType"`
 	LocalStorageAmount         int                                  `json:"LocalStorageAmount" xml:"LocalStorageAmount"`
+	NetworkType                string                               `json:"NetworkType" xml:"NetworkType"`
+	IsSpot                     bool                                 `json:"IsSpot" xml:"IsSpot"`
 	InstanceChargeType         string                               `json:"InstanceChargeType" xml:"InstanceChargeType"`
 	ClusterId                  string                               `json:"ClusterId" xml:"ClusterId"`
 	InstanceName               string                               `json:"InstanceName" xml:"InstanceName"`
@@ -33,15 +36,16 @@ type Instance struct {
 	InternetChargeType         string                               `json:"InternetChargeType" xml:"InternetChargeType"`
 	InternetMaxBandwidthIn     int                                  `json:"InternetMaxBandwidthIn" xml:"InternetMaxBandwidthIn"`
 	HostName                   string                               `json:"HostName" xml:"HostName"`
-	Cpu                        int                                  `json:"Cpu" xml:"Cpu"`
 	Status                     string                               `json:"Status" xml:"Status"`
+	CPU                        int                                  `json:"CPU" xml:"CPU"`
+	Cpu                        int                                  `json:"Cpu" xml:"Cpu"`
 	SpotPriceLimit             float64                              `json:"SpotPriceLimit" xml:"SpotPriceLimit"`
 	OSName                     string                               `json:"OSName" xml:"OSName"`
 	OSNameEn                   string                               `json:"OSNameEn" xml:"OSNameEn"`
 	SerialNumber               string                               `json:"SerialNumber" xml:"SerialNumber"`
 	RegionId                   string                               `json:"RegionId" xml:"RegionId"`
-	InternetMaxBandwidthOut    int                                  `json:"InternetMaxBandwidthOut" xml:"InternetMaxBandwidthOut"`
 	IoOptimized                bool                                 `json:"IoOptimized" xml:"IoOptimized"`
+	InternetMaxBandwidthOut    int                                  `json:"InternetMaxBandwidthOut" xml:"InternetMaxBandwidthOut"`
 	ResourceGroupId            string                               `json:"ResourceGroupId" xml:"ResourceGroupId"`
 	InstanceTypeFamily         string                               `json:"InstanceTypeFamily" xml:"InstanceTypeFamily"`
 	InstanceId                 string                               `json:"InstanceId" xml:"InstanceId"`
@@ -56,7 +60,7 @@ type Instance struct {
 	CreationTime               string                               `json:"CreationTime" xml:"CreationTime"`
 	KeyPairName                string                               `json:"KeyPairName" xml:"KeyPairName"`
 	HpcClusterId               string                               `json:"HpcClusterId" xml:"HpcClusterId"`
-	LocalStorageCapacity       int                                  `json:"LocalStorageCapacity" xml:"LocalStorageCapacity"`
+	LocalStorageCapacity       int64                                `json:"LocalStorageCapacity" xml:"LocalStorageCapacity"`
 	VlanId                     string                               `json:"VlanId" xml:"VlanId"`
 	StoppedMode                string                               `json:"StoppedMode" xml:"StoppedMode"`
 	SpotStrategy               string                               `json:"SpotStrategy" xml:"SpotStrategy"`
@@ -68,6 +72,7 @@ type Instance struct {
 	EipAddress                 EipAddress                           `json:"EipAddress" xml:"EipAddress"`
 	EcsCapacityReservationAttr EcsCapacityReservationAttr           `json:"EcsCapacityReservationAttr" xml:"EcsCapacityReservationAttr"`
 	DedicatedHostAttribute     DedicatedHostAttribute               `json:"DedicatedHostAttribute" xml:"DedicatedHostAttribute"`
+	DedicatedInstanceAttribute DedicatedInstanceAttribute           `json:"DedicatedInstanceAttribute" xml:"DedicatedInstanceAttribute"`
 	VpcAttributes              VpcAttributes                        `json:"VpcAttributes" xml:"VpcAttributes"`
 	NetworkInterfaces          NetworkInterfacesInDescribeInstances `json:"NetworkInterfaces" xml:"NetworkInterfaces"`
 	OperationLocks             OperationLocksInDescribeInstances    `json:"OperationLocks" xml:"OperationLocks"`

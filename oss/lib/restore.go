@@ -19,7 +19,7 @@ var specChineseRestore = SpecText{
 	paramText: "cloud_url [options]",
 
 	syntaxText: ` 
-    ossutil restore cloud_url [--encoding-type url] [-r] [-f] [--output-dir=odir] [-c file] 
+    ossutil restore cloud_url [--encoding-type url] [-r] [-f] [--output-dir=odir] [--version-id versionId] [--payer requester] [-c file] 
 `,
 
 	detailHelpText: ` 
@@ -62,6 +62,7 @@ var specChineseRestore = SpecText{
     2) ossutil restore oss://bucket-restore/object-prefix -r
     3) ossutil restore oss://bucket-restore/object-prefix -r -f
     4) ossutil restore oss://bucket-restore/%e4%b8%ad%e6%96%87 --encoding-type url
+    5) ossutil restore oss://bucket-restore/object-store --payer requester
 `,
 }
 
@@ -72,7 +73,7 @@ var specEnglishRestore = SpecText{
 	paramText: "cloud_url [options]",
 
 	syntaxText: ` 
-    ossutil restore cloud_url [--encoding-type url] [-r] [-f] [--output-dir=odir] [-c file] 
+    ossutil restore cloud_url [--encoding-type url] [-r] [-f] [--output-dir=odir] [--version-id versionId] [--payer requester] [-c file] 
 `,
 
 	detailHelpText: ` 
@@ -118,14 +119,16 @@ Usage:
     2) ossutil restore oss://bucket-restore/object-prefix -r
     3) ossutil restore oss://bucket-restore/object-prefix -r -f
     4) ossutil restore oss://bucket-restore/%e4%b8%ad%e6%96%87 --encoding-type url
+    5) ossutil restore oss://bucket-restore/object-store --payer requester
 `,
 }
 
 // RestoreCommand is the command list buckets or objects
 type RestoreCommand struct {
-	monitor  Monitor //Put first for atomic op on some fileds
-	command  Command
-	reOption batchOptionType
+	monitor       Monitor //Put first for atomic op on some fileds
+	command       Command
+	reOption      batchOptionType
+	commonOptions []oss.Option
 }
 
 var restoreCommand = RestoreCommand{
@@ -146,9 +149,15 @@ var restoreCommand = RestoreCommand{
 			OptionAccessKeyID,
 			OptionAccessKeySecret,
 			OptionSTSToken,
+			OptionProxyHost,
+			OptionProxyUser,
+			OptionProxyPwd,
 			OptionRetryTimes,
 			OptionRoutines,
 			OptionOutputDir,
+			OptionLogLevel,
+			OptionVersionId,
+			OptionRequestPayer,
 		},
 	},
 }
@@ -177,13 +186,22 @@ func (rc *RestoreCommand) RunCommand() error {
 
 	encodingType, _ := GetString(OptionEncodingType, rc.command.options)
 	recursive, _ := GetBool(OptionRecursion, rc.command.options)
+	versionid, _ := GetString(OptionVersionId, rc.command.options)
+
+	payer, _ := GetString(OptionRequestPayer, rc.command.options)
+	if payer != "" {
+		if payer != strings.ToLower(string(oss.Requester)) {
+			return fmt.Errorf("invalid request payer: %s, please check", payer)
+		}
+		rc.commonOptions = append(rc.commonOptions, oss.RequestPayer(oss.PayerType(payer)))
+	}
 
 	cloudURL, err := CloudURLFromString(rc.command.args[0], encodingType)
 	if err != nil {
 		return err
 	}
 
-	if err = rc.checkArgs(cloudURL, recursive); err != nil {
+	if err = rc.checkArgs(cloudURL, recursive, versionid); err != nil {
 		return err
 	}
 
@@ -193,25 +211,34 @@ func (rc *RestoreCommand) RunCommand() error {
 	}
 
 	if !recursive {
-		return rc.ossRestoreObject(bucket, cloudURL.object)
+		return rc.ossRestoreObject(bucket, cloudURL.object, versionid)
 	}
 	return rc.batchRestoreObjects(bucket, cloudURL)
 }
 
-func (rc *RestoreCommand) checkArgs(cloudURL CloudURL, recursive bool) error {
+func (rc *RestoreCommand) checkArgs(cloudURL CloudURL, recursive bool, versionid string) error {
 	if cloudURL.bucket == "" {
 		return fmt.Errorf("invalid cloud url: %s, miss bucket", rc.command.args[0])
 	}
 	if !recursive && cloudURL.object == "" {
 		return fmt.Errorf("restore object invalid cloud url: %s, object empty. Restore bucket is not supported, if you mean batch restore objects, please use --recursive", rc.command.args[0])
 	}
+	if recursive && len(versionid) > 0 {
+		return fmt.Errorf("restore bucket dose not support the --version-id=%s argument.", versionid)
+	}
 	return nil
 }
 
-func (rc *RestoreCommand) ossRestoreObject(bucket *oss.Bucket, object string) error {
+func (rc *RestoreCommand) ossRestoreObject(bucket *oss.Bucket, object string, versionid string) error {
 	retryTimes, _ := GetInt(OptionRetryTimes, rc.command.options)
 	for i := 1; ; i++ {
-		err := bucket.RestoreObject(object)
+		var options []oss.Option
+		if len(versionid) > 0 {
+			options = append(options, oss.VersionId(versionid))
+		}
+		options = append(options, rc.commonOptions...)
+
+		err := bucket.RestoreObject(object, options...)
 		if err == nil {
 			return err
 		}
@@ -259,8 +286,8 @@ func (rc *RestoreCommand) restoreObjects(bucket *oss.Bucket, cloudURL CloudURL) 
 	chObjects := make(chan string, ChannelBuf)
 	chError := make(chan error, routines+1)
 	chListError := make(chan error, 1)
-	go rc.command.objectStatistic(bucket, cloudURL, &rc.monitor, []filterOptionType{})
-	go rc.command.objectProducer(bucket, cloudURL, chObjects, chListError, []filterOptionType{})
+	go rc.command.objectStatistic(bucket, cloudURL, &rc.monitor, []filterOptionType{}, rc.commonOptions...)
+	go rc.command.objectProducer(bucket, cloudURL, chObjects, chListError, []filterOptionType{}, rc.commonOptions...)
 	for i := 0; int64(i) < routines; i++ {
 		go rc.restoreConsumer(bucket, cloudURL, chObjects, chError)
 	}
@@ -284,7 +311,7 @@ func (rc *RestoreCommand) restoreConsumer(bucket *oss.Bucket, cloudURL CloudURL,
 }
 
 func (rc *RestoreCommand) restoreObjectWithReport(bucket *oss.Bucket, object string) error {
-	err := rc.ossRestoreObject(bucket, object)
+	err := rc.ossRestoreObject(bucket, object, "")
 	rc.command.updateMonitor(err, &rc.monitor)
 	msg := fmt.Sprintf("restore %s", CloudURLToString(bucket.BucketName, object))
 	rc.command.report(msg, err, &rc.reOption)

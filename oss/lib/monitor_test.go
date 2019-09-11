@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -28,7 +29,7 @@ func (s *OssutilCommandSuite) TestUploadProgressBar(c *C) {
 		s.createFile(udir+string(os.PathSeparator)+filePath, randStr((i+3)*30*num), c)
 		len += (i + 3) * 30 * num
 	}
-	time.Sleep(3 * sleepTime)
+	time.Sleep(sleepTime)
 
 	// init copyCommand
 	err = s.initCopyCommand(udir, CloudURLToString(bucketName, object), true, true, false, DefaultBigFileThreshold, CheckpointDir, DefaultOutputDir)
@@ -68,6 +69,7 @@ func (s *OssutilCommandSuite) TestUploadProgressBar(c *C) {
 	c.Assert(snap.dealNum, Equals, int64(num))
 	c.Assert(copyCommand.monitor.getPrecent(snap) == 100 || copyCommand.monitor.getPrecent(snap) == 0, Equals, true)
 
+	time.Sleep(time.Second)
 	str = strings.ToLower(copyCommand.monitor.getProgressBar())
 	c.Assert(strings.Contains(str, fmt.Sprintf("num: %d", num)), Equals, true)
 	c.Assert(strings.Contains(str, "error"), Equals, false)
@@ -137,6 +139,7 @@ func (s *OssutilCommandSuite) TestUploadProgressBar(c *C) {
 	c.Assert(snap.dealNum, Equals, int64(num+num1+2))
 	c.Assert(copyCommand.monitor.getPrecent(snap) == 100 || copyCommand.monitor.getPrecent(snap) == 0, Equals, true)
 
+	time.Sleep(time.Second)
 	str = strings.ToLower(copyCommand.monitor.getProgressBar())
 	c.Assert(strings.Contains(str, fmt.Sprintf("num: %d", snap.dealNum)), Equals, true)
 	c.Assert(strings.Contains(str, "error"), Equals, false)
@@ -206,6 +209,7 @@ func (s *OssutilCommandSuite) TestDownloadProgressBar(c *C) {
 	c.Assert(snap.dealNum, Equals, int64(1))
 	c.Assert(copyCommand.monitor.getPrecent(snap) == 100 || copyCommand.monitor.getPrecent(snap) == 0, Equals, true)
 
+	time.Sleep(time.Second)
 	str = strings.ToLower(copyCommand.monitor.getProgressBar())
 	c.Assert(strings.Contains(str, fmt.Sprintf("num: %d", 1)), Equals, true)
 	c.Assert(strings.Contains(str, "error"), Equals, false)
@@ -265,6 +269,7 @@ func (s *OssutilCommandSuite) TestCopyProgressBar(c *C) {
 	c.Assert(snap.dealNum, Equals, int64(2))
 	c.Assert(copyCommand.monitor.getPrecent(snap) == 100 || copyCommand.monitor.getPrecent(snap) == 0, Equals, true)
 
+	time.Sleep(time.Second)
 	str = strings.ToLower(copyCommand.monitor.getProgressBar())
 	c.Assert(strings.Contains(str, fmt.Sprintf("num: %d", 2)), Equals, true)
 	c.Assert(strings.Contains(str, "error"), Equals, false)
@@ -326,6 +331,7 @@ func (s *OssutilCommandSuite) TestProgressBarStatisticErr(c *C) {
 	c.Assert(snap.okNum, Equals, int64(0))
 	c.Assert(snap.dealNum, Equals, int64(0))
 
+	time.Sleep(time.Second)
 	str := strings.ToLower(copyCommand.monitor.getProgressBar())
 	c.Assert(strings.Contains(str, fmt.Sprintf("scanned num: %d", snap.dealNum)), Equals, true)
 	c.Assert(strings.Contains(str, "total"), Equals, false)
@@ -397,6 +403,7 @@ func (s *OssutilCommandSuite) TestProgressBarContinueErr(c *C) {
 	c.Assert(snap.okNum, Equals, int64(0))
 	c.Assert(snap.dealNum, Equals, int64(num))
 
+	time.Sleep(time.Second)
 	str := strings.ToLower(copyCommand.monitor.getProgressBar())
 	c.Assert(strings.Contains(str, fmt.Sprintf("num: %d", snap.dealNum)), Equals, true)
 	c.Assert(strings.Contains(str, "error"), Equals, true)
@@ -417,7 +424,7 @@ func (s *OssutilCommandSuite) TestSingleFileProgress(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(10)
 	s.putBucket(bucketName, c)
 	object := randStr(10)
-	destObject := randStr(10)
+	destObject := object + randStr(10)
 
 	// single large file
 	data := strings.Repeat("a", 10240)
@@ -440,6 +447,7 @@ func (s *OssutilCommandSuite) TestSingleFileProgress(c *C) {
 		c.Assert(snap.okNum, Equals, int64(0))
 		c.Assert(snap.dealNum, Equals, int64(0))
 
+		time.Sleep(time.Second)
 		str := strings.ToLower(copyCommand.monitor.getProgressBar())
 		c.Assert(strings.Contains(str, "total num"), Equals, false)
 		c.Assert(strings.Contains(str, "scanned"), Equals, true)
@@ -473,6 +481,7 @@ func (s *OssutilCommandSuite) TestSingleFileProgress(c *C) {
 		c.Assert(snap.okNum, Equals, int64(1))
 		c.Assert(snap.dealNum, Equals, int64(1))
 
+		time.Sleep(time.Second)
 		str = strings.ToLower(copyCommand.monitor.getProgressBar())
 		c.Assert(strings.Contains(str, fmt.Sprintf("num: %d", 1)), Equals, true)
 		c.Assert(strings.Contains(str, "error"), Equals, false)
@@ -508,6 +517,7 @@ func (s *OssutilCommandSuite) TestSingleFileProgress(c *C) {
 		c.Assert(snap.okNum, Equals, int64(1))
 		c.Assert(snap.dealNum, Equals, int64(1))
 
+		time.Sleep(time.Second)
 		str = strings.ToLower(copyCommand.monitor.getProgressBar())
 		c.Assert(strings.Contains(str, fmt.Sprintf("num: %d", 1)), Equals, true)
 		c.Assert(strings.Contains(str, "error"), Equals, false)
@@ -543,6 +553,7 @@ func (s *OssutilCommandSuite) TestSingleFileProgress(c *C) {
 		c.Assert(snap.okNum, Equals, int64(1))
 		c.Assert(snap.dealNum, Equals, int64(1))
 
+		time.Sleep(time.Second)
 		str = strings.ToLower(copyCommand.monitor.getProgressBar())
 		c.Assert(strings.Contains(str, fmt.Sprintf("num: %d", 1)), Equals, true)
 		c.Assert(strings.Contains(str, "error"), Equals, false)
@@ -578,6 +589,7 @@ func (s *OssutilCommandSuite) TestSingleFileProgress(c *C) {
 		c.Assert(snap.okNum, Equals, int64(1))
 		c.Assert(snap.dealNum, Equals, int64(1))
 
+		time.Sleep(time.Second)
 		str = strings.ToLower(copyCommand.monitor.getProgressBar())
 		c.Assert(strings.Contains(str, fmt.Sprintf("num: %d", 1)), Equals, true)
 		c.Assert(strings.Contains(str, "error"), Equals, false)
@@ -1391,7 +1403,7 @@ func (s *OssutilCommandSuite) TestSnapshot(c *C) {
 	c.Assert(err, IsNil)
 
 	// -u --snapshot-path
-	time.Sleep(7 * time.Second)
+	time.Sleep(time.Second)
 	s.createFile(uploadFileName, data, c)
 	err = s.initCopyWithSnapshot(uploadFileName, CloudURLToString(bucketName, object), false, true, true, DefaultBigFileThreshold, spath)
 	c.Assert(err, IsNil)
@@ -1402,13 +1414,13 @@ func (s *OssutilCommandSuite) TestSnapshot(c *C) {
 	c.Assert(copyCommand.monitor.skipNum, Equals, int64(0))
 	c.Assert(copyCommand.monitor.errNum, Equals, int64(0))
 
-	// download with snapshot
+	// download with snapshot:success
 	err = s.initCopyWithSnapshot(CloudURLToString(bucketName, object), downloadFileName, false, false, false, DefaultBigFileThreshold, spath)
 	c.Assert(err, IsNil)
 	err = copyCommand.RunCommand()
-	c.Assert(err, NotNil)
+	c.Assert(err, IsNil)
 
-	// copy with snapshot
+	// copy with snapshot:error
 	err = s.initCopyWithSnapshot(CloudURLToString(bucketName, object), CloudURLToString(bucketNameDest, object), false, false, false, DefaultBigFileThreshold, spath)
 	c.Assert(err, IsNil)
 	err = copyCommand.RunCommand()
@@ -1907,4 +1919,62 @@ func (s *OssutilCommandSuite) TestRangeGet(c *C) {
 
 	os.RemoveAll(dir)
 	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestUploadObjectForProgressBarShowSpeed(c *C) {
+	oldSecondCount := processTickInterval
+	processTickInterval = 2
+
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	// single dir
+	udir := randStr(11)
+	os.RemoveAll(udir)
+	err := os.MkdirAll(udir, 0755)
+	c.Assert(err, IsNil)
+
+	var logBuffer bytes.Buffer
+	for i := 0; i < 200*1024; i++ {
+		logBuffer.WriteString("hellow world.!")
+	}
+
+	tempFile1 := randStr(10) + "1"
+	tempFile2 := randStr(10) + "2"
+	s.createFile(udir+string(os.PathSeparator)+tempFile1, logBuffer.String(), c)
+	s.createFile(udir+string(os.PathSeparator)+tempFile2, logBuffer.String(), c)
+
+	// init copyCommand
+	err = s.initCopyCommand(udir, CloudURLToString(bucketName, ""), true, true, false, DefaultBigFileThreshold, CheckpointDir, DefaultOutputDir)
+	c.Assert(err, IsNil)
+
+	// check output
+	testResultFile, _ = os.OpenFile(resultPath, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
+	out := os.Stdout
+	os.Stdout = testResultFile
+	err = copyCommand.RunCommand()
+	c.Assert(err, IsNil)
+	os.Stdout = out
+
+	// check progress bar file
+	pstr := strings.ToLower(s.readFile(resultPath, c))
+	c.Assert(strings.Contains(pstr, "upload 2 files"), Equals, true)
+
+	err = os.Remove(udir + string(os.PathSeparator) + tempFile1)
+	if err != nil {
+		fmt.Printf("Remove error:%s.\n", err.Error())
+	}
+
+	err = os.Remove(udir + string(os.PathSeparator) + tempFile2)
+	if err != nil {
+		fmt.Printf("Remove error:%s.\n", err.Error())
+	}
+
+	err = os.RemoveAll(udir)
+	if err != nil {
+		fmt.Printf("Remove error:%s.\n", err.Error())
+	}
+
+	s.removeBucket(bucketName, true, c)
+	processTickInterval = oldSecondCount
 }

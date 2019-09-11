@@ -7,7 +7,7 @@ function do_command() {
         $global:g_var = 
         return $g_error
     }
-    $cmd="$($args[0]) --access-key-id $env:ACCESS_KEY_ID --access-key-secret $env:ACCESS_KEY_SECRET --region cn-beijing 2>&1"
+    $cmd="$($args[0]) --access-key-id $env:ACCESS_KEY_ID --access-key-secret $env:ACCESS_KEY_SECRET --region cn-hangzhou 2>&1"
     Write-Output "Command<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
     Write-Output $cmd
     Write-Output ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Command"
@@ -25,7 +25,7 @@ function do_command() {
 }
 
 function ecs_create_instance() {
-   do_command "aliyun ecs CreateInstance --ImageId ubuntu_16_0402_64_20G_alibase_20171227.vhd --InstanceType ecs.xn4.small" $($args[0])
+   do_command "aliyun ecs CreateInstance --ImageId ubuntu_18_04_64_20G_alibase_20190624.vhd --InstanceType ecs.xn4.small" $($args[0])
 }
 
 function ecs_start_instance() {

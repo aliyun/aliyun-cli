@@ -79,12 +79,12 @@ var updateCommand = UpdateCommand{
 			OptionForce,
 			OptionRetryTimes,
 			OptionLanguage,
+			OptionProxyHost,
+			OptionProxyUser,
+			OptionProxyPwd,
+			OptionLogLevel,
 		},
 	},
-}
-
-func (uc *UpdateCommand) GetCommand() *Command {
-	return &uc.command
 }
 
 // function for RewriteLoadConfiger interface
@@ -269,35 +269,43 @@ func (uc *UpdateCommand) updateVersion(version, language string) error {
 }
 
 func (uc *UpdateCommand) revertRename(filePath, renameFilePath string) error {
-	if err := os.Remove(filePath); err != nil {
-		return err
+	if _, err := os.Stat(filePath); err == nil {
+		os.Remove(filePath)
 	}
+
 	if err := os.Rename(renameFilePath, filePath); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (uc *UpdateCommand) getBinary(filePath, version string) error {
+func (uc *UpdateCommand) getBinaryName() string {
 	// get os type
 	var object string
 	switch runtime.GOOS {
 	case "darwin":
 		object = updateBinaryMac64
+		if runtime.GOARCH == "386" {
+			object = updateBinaryMac32
+		}
 	case "windows":
 		object = updateBinaryWindow64
 		if runtime.GOARCH == "386" {
 			object = updateBinaryWindow32
 		}
 	default:
-		object = updateBinaryLinux
+		object = updateBinaryLinux64
+		if runtime.GOARCH == "386" {
+			object = updateBinaryLinux32
+		}
 	}
+	return object
+}
 
-	object = version + "/" + object
-
+func (uc *UpdateCommand) getBinary(filePath, version string) error {
+	object := version + "/" + uc.getBinaryName()
 	if err := uc.anonymousGetToFileRetry(vUpdateBucket, object, filePath); err != nil {
 		return err
 	}
-
 	return nil
 }

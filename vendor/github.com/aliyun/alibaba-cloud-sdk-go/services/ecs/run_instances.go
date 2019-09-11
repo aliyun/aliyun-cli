@@ -88,6 +88,7 @@ type RunInstancesRequest struct {
 	ResourceGroupId               string                          `position:"Query" name:"ResourceGroupId"`
 	HostName                      string                          `position:"Query" name:"HostName"`
 	Password                      string                          `position:"Query" name:"Password"`
+	StorageSetPartitionNumber     requests.Integer                `position:"Query" name:"StorageSetPartitionNumber"`
 	Tag                           *[]RunInstancesTag              `position:"Query" name:"Tag"  type:"Repeated"`
 	AutoRenewPeriod               requests.Integer                `position:"Query" name:"AutoRenewPeriod"`
 	Period                        requests.Integer                `position:"Query" name:"Period"`
@@ -106,6 +107,7 @@ type RunInstancesRequest struct {
 	ZoneId                        string                          `position:"Query" name:"ZoneId"`
 	Ipv6Address                   *[]string                       `position:"Query" name:"Ipv6Address"  type:"Repeated"`
 	InternetMaxBandwidthIn        requests.Integer                `position:"Query" name:"InternetMaxBandwidthIn"`
+	Affinity                      string                          `position:"Query" name:"Affinity"`
 	ImageId                       string                          `position:"Query" name:"ImageId"`
 	SpotInterruptionBehavior      string                          `position:"Query" name:"SpotInterruptionBehavior"`
 	ClientToken                   string                          `position:"Query" name:"ClientToken"`
@@ -115,6 +117,7 @@ type RunInstancesRequest struct {
 	Description                   string                          `position:"Query" name:"Description"`
 	SystemDiskCategory            string                          `position:"Query" name:"SystemDisk.Category"`
 	CapacityReservationId         string                          `position:"Query" name:"CapacityReservationId"`
+	SystemDiskPerformanceLevel    string                          `position:"Query" name:"SystemDisk.PerformanceLevel"`
 	UserData                      string                          `position:"Query" name:"UserData"`
 	PasswordInherit               requests.Boolean                `position:"Query" name:"PasswordInherit"`
 	InstanceType                  string                          `position:"Query" name:"InstanceType"`
@@ -125,13 +128,17 @@ type RunInstancesRequest struct {
 	Amount                        requests.Integer                `position:"Query" name:"Amount"`
 	ResourceOwnerAccount          string                          `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerAccount                  string                          `position:"Query" name:"OwnerAccount"`
+	Tenancy                       string                          `position:"Query" name:"Tenancy"`
 	SystemDiskDiskName            string                          `position:"Query" name:"SystemDisk.DiskName"`
 	RamRoleName                   string                          `position:"Query" name:"RamRoleName"`
 	AutoReleaseTime               string                          `position:"Query" name:"AutoReleaseTime"`
 	DedicatedHostId               string                          `position:"Query" name:"DedicatedHostId"`
 	CreditSpecification           string                          `position:"Query" name:"CreditSpecification"`
+	SecurityGroupIds              *[]string                       `position:"Query" name:"SecurityGroupIds"  type:"Repeated"`
+	SpotDuration                  requests.Integer                `position:"Query" name:"SpotDuration"`
 	DataDisk                      *[]RunInstancesDataDisk         `position:"Query" name:"DataDisk"  type:"Repeated"`
 	LaunchTemplateVersion         requests.Integer                `position:"Query" name:"LaunchTemplateVersion"`
+	StorageSetId                  string                          `position:"Query" name:"StorageSetId"`
 	SystemDiskSize                string                          `position:"Query" name:"SystemDisk.Size"`
 	SystemDiskDescription         string                          `position:"Query" name:"SystemDisk.Description"`
 }
@@ -162,12 +169,14 @@ type RunInstancesDataDisk struct {
 	Description        string `name:"Description"`
 	Device             string `name:"Device"`
 	DeleteWithInstance string `name:"DeleteWithInstance"`
+	PerformanceLevel   string `name:"PerformanceLevel"`
 }
 
 // RunInstancesResponse is the response struct for api RunInstances
 type RunInstancesResponse struct {
 	*responses.BaseResponse
 	RequestId      string         `json:"RequestId" xml:"RequestId"`
+	TradePrice     float64        `json:"TradePrice" xml:"TradePrice"`
 	InstanceIdSets InstanceIdSets `json:"InstanceIdSets" xml:"InstanceIdSets"`
 }
 

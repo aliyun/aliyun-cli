@@ -3,6 +3,7 @@ package lib
 import (
 	"bytes"
 	"fmt"
+	"hash"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -171,21 +172,37 @@ func filterObjectsFromChanWithPattern(srcCh <-chan string, pattern string, dstCh
 }
 
 // Following for strings
-
 func getFilter(cmdline []string) (bool, []filterOptionType) {
 	filters := make([]filterOptionType, 0)
 	for i, item := range cmdline {
-		if item == IncludePrompt || item == ExcludePrompt {
-			var filter filterOptionType
-			filter.name = item
-			// To support standard glob
-			filter.pattern = strings.Replace(cmdline[i+1], "[!", "[^", -1)
+		var strTag = ""
+		if strings.Index(item, IncludePrompt) == 0 {
+			strTag = IncludePrompt
+		} else if strings.Index(item, ExcludePrompt) == 0 {
+			strTag = ExcludePrompt
+		}
 
+		if strTag != "" {
+			var filter filterOptionType
+			var strArg string
+
+			filter.name = strTag
+			if item == strTag {
+				strArg = cmdline[i+1]
+			} else if item[len(strTag)] == '=' {
+				strArg = item[len(strTag)+1:]
+			}
+
+			if strArg == "" {
+				continue
+			}
+
+			// To support standard glob
+			filter.pattern = strings.Replace(strArg, "[!", "[^", -1)
 			dir, _ := filepath.Split(filter.pattern)
 			if dir != "" {
 				return false, filters
 			}
-
 			filters = append(filters, filter)
 		}
 	}
@@ -382,7 +399,8 @@ func getObjectsFromChanToArray(chObjects <-chan objectInfoType) []objectInfoType
 func filterObjectsWithInclude(vs []objectInfoType, p string) []objectInfoType {
 	vsf := make([]objectInfoType, 0)
 	for _, v := range vs {
-		_, key := filepath.Split(v.key)
+		_, key := filepath.Split(v.relativeKey)
+		//_, key := filepath.Split(v.key)
 		res, _ := filepath.Match(p, key)
 		if res {
 			vsf = append(vsf, v)
@@ -394,7 +412,8 @@ func filterObjectsWithInclude(vs []objectInfoType, p string) []objectInfoType {
 func filterObjectsWithExclude(vs []objectInfoType, p string) []objectInfoType {
 	vsf := make([]objectInfoType, 0)
 	for _, v := range vs {
-		_, key := filepath.Split(v.key)
+		_, key := filepath.Split(v.relativeKey)
+		//_, key := filepath.Split(v.key)
 		res, _ := filepath.Match(p, key)
 		if !res {
 			vsf = append(vsf, v)
@@ -436,4 +455,30 @@ func filterObjectsFromChanWithPatterns(chObjects <-chan objectInfoType, filters 
 	vsf := matchFiltersForObjects(objects, filters)
 	makeObjectChanFromArray(vsf, dstObjs)
 	defer close(dstObjs)
+}
+
+func GetCloudUrl(strlUrl, encodingType string) (*CloudURL, error) {
+	bucketUrL, err := StorageURLFromString(strlUrl, encodingType)
+	if err != nil {
+		return nil, err
+	}
+
+	if !bucketUrL.IsCloudURL() {
+		return nil, fmt.Errorf("parameter is not a cloud url,url is %s", bucketUrL.ToString())
+	}
+
+	cloudUrl := bucketUrL.(CloudURL)
+	if cloudUrl.bucket == "" {
+		return nil, fmt.Errorf("bucket name is empty,url is %s", bucketUrL.ToString())
+	}
+	return &cloudUrl, nil
+}
+
+func matchHash(fnvIns hash.Hash64, key string, modeValue int, countValue int) bool {
+	fnvIns.Reset()
+	fnvIns.Write([]byte(key))
+	if fnvIns.Sum64()%uint64(countValue) == uint64(modeValue) {
+		return true
+	}
+	return false
 }

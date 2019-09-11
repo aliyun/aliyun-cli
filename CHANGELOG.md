@@ -3,7 +3,6 @@
 ### Master
 
 - Add flag `--filter` for filtering result, the value of the flag is [jmespath](http://jmespath.org/) format.
-  
 - Add flag `--format` to control the output format, the value can be json or table, the table is not csv format, just like below:
   
 ```shell
@@ -29,6 +28,49 @@
 |||  RegionId             |  cn-beijing              |||
 ||+--------------------------------------------------+||
 ```
+
+- fix: help generating information bug
+- Upgrade the ossutil component to version 1.6.6
+- Package manager switches to Go Modules
+
+### 3.0.25
+
+- update: ros, default version 2019-09-10
+
+### 3.0.24
+
+- update: arms, default version 2019-08-08
+
+### 3.0.23
+
+- fix: fix `--pager` error
+- add: product sae
+
+### 3.0.22
+
+- update: API meta data
+
+### 3.0.21
+
+- update: API meta data
+- update: dependence
+
+### 3.0.20
+
+- add product: fnf, default version 2019-03-15
+- new: support for reading the value of a parameter from a file
+    >*Note: Only works on api parameters and rpc style*  
+    
+    >The value of some parameters is very long, which is not conducive to terminal input.
+    >You can add `-FILE` to the original parameter to specify to read from the file, 
+    >followed by the file path.
+
+    >example:  
+    >command `aliyun ecs CreateInstance` has a parameter `--UserData`, You can specify the value of this parameter from a file by using `--UserData-FILE <filePath>`
+    ```shell
+    aliyun ecs CreateInstance --UserData-FILE '/home/Document/user_data'
+    ```
+    >*NOTE: The above example is not a complete command, just a demonstration of how new features are used.*
 
 ### 3.0.19
 

@@ -1,23 +1,26 @@
 package lib
 
 import (
-    "fmt"
-    configparser "github.com/alyu/configparser"
-    "os"
-    "strings"
+	"bufio"
+	"fmt"
+	"os"
+	"runtime"
+	"strings"
+
+	configparser "github.com/alyu/configparser"
 )
 
 var specChineseConfig = SpecText{
 
-    synopsisText: "创建配置文件用以存储配置项",
+	synopsisText: "创建配置文件用以存储配置项",
 
-    paramText: "[options]",
+	paramText: "[options]",
 
-    syntaxText: ` 
+	syntaxText: ` 
     ossutil config [-e endpoint] [-i id] [-k key] [-t token] [-L language] [--output-dir outdir] [-c file] 
 `,
 
-    detailHelpText: ` 
+	detailHelpText: ` 
     该命令创建配置文件，将用户设置的配置项信息存储进该配置文件，配置项用
     以访问OSS时提供访问信息（某命令是否需要配置项，参见其是否支持
     --config-file选项，具体可见该命令的帮助）。
@@ -132,7 +135,7 @@ var specChineseConfig = SpecText{
         ...
 `,
 
-    sampleText: ` 
+	sampleText: ` 
     ossutil config
     ossutil config -e oss-cn-hangzhou.aliyuncs.com -c ~/.myconfig
 `,
@@ -140,15 +143,15 @@ var specChineseConfig = SpecText{
 
 var specEnglishConfig = SpecText{
 
-    synopsisText: "Create configuration file to store credentials",
+	synopsisText: "Create configuration file to store credentials",
 
-    paramText: "[options]",
+	paramText: "[options]",
 
-    syntaxText: ` 
+	syntaxText: ` 
     ossutil config [-e endpoint] [-i id] [-k key] [-t token] [-L language] [--output-dir outdir] [-c file] 
 `,
 
-    detailHelpText: ` 
+	detailHelpText: ` 
     The command create a configuration file and stores credentials
     information user specified. Credentials information is used when
     access OSS(if a command supports --config-file option, then the 
@@ -275,7 +278,7 @@ Credential File Format:
         ...
 `,
 
-    sampleText: ` 
+	sampleText: ` 
     ossutil config
     ossutil config -e oss-cn-hangzhou.aliyuncs.com -c ~/.myconfig
 `,
@@ -283,203 +286,215 @@ Credential File Format:
 
 // ConfigCommand is the command config user's credentials information
 type ConfigCommand struct {
-    command Command
-}
-
-func (cc *ConfigCommand) GetCommand() *Command {
-    return &cc.command
+	command Command
 }
 
 var configCommand = ConfigCommand{
-    command: Command{
-        name:        "config",
-        nameAlias:   []string{"cfg", "config"},
-        minArgc:     0,
-        maxArgc:     0,
-        specChinese: specChineseConfig,
-        specEnglish: specEnglishConfig,
-        group:       GroupTypeAdditionalCommand,
-        validOptionNames: []string{
-            OptionConfigFile,
-            OptionEndpoint,
-            OptionAccessKeyID,
-            OptionAccessKeySecret,
-            OptionSTSToken,
-            OptionOutputDir,
-            OptionLanguage,
-        },
-    },
+	command: Command{
+		name:        "config",
+		nameAlias:   []string{"cfg", "config"},
+		minArgc:     0,
+		maxArgc:     0,
+		specChinese: specChineseConfig,
+		specEnglish: specEnglishConfig,
+		group:       GroupTypeAdditionalCommand,
+		validOptionNames: []string{
+			OptionConfigFile,
+			OptionEndpoint,
+			OptionAccessKeyID,
+			OptionAccessKeySecret,
+			OptionSTSToken,
+			OptionOutputDir,
+			OptionLanguage,
+			OptionLogLevel,
+		},
+	},
+}
+
+func (cc *ConfigCommand) GetCommand() *Command {
+	return &cc.command
 }
 
 // function for RewriteLoadConfiger interface
 func (cc *ConfigCommand) rewriteLoadConfig(configFile string) error {
-    // read config file, if error exist, do not print error
-    var err error
-    if cc.command.configOptions, err = LoadConfig(configFile); err != nil {
-        cc.command.configOptions = OptionMapType{}
-    }
-    return nil
+	// read config file, if error exist, do not print error
+	var err error
+	if cc.command.configOptions, err = LoadConfig(configFile); err != nil {
+		cc.command.configOptions = OptionMapType{}
+	}
+	return nil
 }
 
 // function for AssembleOptioner interface
 func (cc *ConfigCommand) rewriteAssembleOptions() {
-    // only assemble language option
-    if val, _ := GetString(OptionLanguage, cc.command.options); val == "" {
-        if val, ok := cc.command.configOptions[OptionLanguage]; ok {
-            opval := val.(string)
-            cc.command.options[OptionLanguage] = &opval
-            delete(cc.command.configOptions, OptionLanguage)
-        }
-    }
+	// only assemble language option
+	if val, _ := GetString(OptionLanguage, cc.command.options); val == "" {
+		if val, ok := cc.command.configOptions[OptionLanguage]; ok {
+			opval := val.(string)
+			cc.command.options[OptionLanguage] = &opval
+			delete(cc.command.configOptions, OptionLanguage)
+		}
+	}
 
-    if val, _ := GetString(OptionLanguage, cc.command.options); val == "" {
-        def := OptionMap[OptionLanguage].def
-        cc.command.options[OptionLanguage] = &def
-    }
+	if val, _ := GetString(OptionLanguage, cc.command.options); val == "" {
+		def := OptionMap[OptionLanguage].def
+		cc.command.options[OptionLanguage] = &def
+	}
 }
 
 // function for FormatHelper interface
 func (cc *ConfigCommand) formatHelpForWhole() string {
-    return cc.command.formatHelpForWhole()
+	return cc.command.formatHelpForWhole()
 }
 
 func (cc *ConfigCommand) formatIndependHelp() string {
-    return cc.command.formatIndependHelp()
+	return cc.command.formatIndependHelp()
 }
 
 // Init simulate inheritance, and polymorphism
 func (cc *ConfigCommand) Init(args []string, options OptionMapType) error {
-    return cc.command.Init(args, options, cc)
+	return cc.command.Init(args, options, cc)
 }
 
 // RunCommand simulate inheritance, and polymorphism
 func (cc *ConfigCommand) RunCommand() error {
-    configFile, _ := GetString(OptionConfigFile, cc.command.options)
-    delete(cc.command.options, OptionConfigFile)
-    language, _ := GetString(OptionLanguage, cc.command.options)
-    delete(cc.command.options, OptionLanguage)
+	configFile, _ := GetString(OptionConfigFile, cc.command.options)
+	delete(cc.command.options, OptionConfigFile)
+	language, _ := GetString(OptionLanguage, cc.command.options)
+	delete(cc.command.options, OptionLanguage)
 
-    // filter user input options
-    cc.filterNonInputOptions()
+	// filter user input options
+	cc.filterNonInputOptions()
 
-    var err error
-    if len(cc.command.options) == 0 {
-        err = cc.runCommandInteractive(configFile, language)
-    } else {
-        err = cc.runCommandNonInteractive(configFile, language)
-    }
-    return err
+	var err error
+	if len(cc.command.options) == 0 {
+		err = cc.runCommandInteractive(configFile, language)
+	} else {
+		err = cc.runCommandNonInteractive(configFile, language)
+	}
+	return err
 }
 
 func (cc *ConfigCommand) filterNonInputOptions() {
-    for name := range cc.command.options {
-        if val, err := GetString(name, cc.command.options); err != nil || val == "" {
-            delete(cc.command.options, name)
-        }
-    }
+	for name := range cc.command.options {
+		if val, err := GetString(name, cc.command.options); err != nil || val == "" {
+			delete(cc.command.options, name)
+		}
+	}
 }
 
 func (cc *ConfigCommand) runCommandInteractive(configFile, language string) error {
-    llanguage := strings.ToLower(language)
-    if llanguage == LEnglishLanguage {
-        fmt.Println("The command creates a configuration file and stores credentials.")
-    } else {
-        fmt.Println("该命令创建将一个配置文件，在其中存储配置信息。")
-    }
+	llanguage := strings.ToLower(language)
+	if llanguage == LEnglishLanguage {
+		fmt.Println("The command creates a configuration file and stores credentials.")
+	} else {
+		fmt.Println("该命令创建将一个配置文件，在其中存储配置信息。")
+	}
 
-    if configFile == "" {
-        if llanguage == LEnglishLanguage {
-            fmt.Printf("\nPlease enter the config file path(default " + DecideConfigFile("") + ", carriage return will use the default path. If you specified this option to other path, you should specify --config-file option to the path when you use other commands):")
-        } else {
-            fmt.Printf("\n请输入配置文件路径（默认为：" + DecideConfigFile("") + "，回车将使用默认路径。如果用户设置为其它路径，在使用命令时需要将--config-file选项设置为该路径）：")
-        }
+	if configFile == "" {
+		if llanguage == LEnglishLanguage {
+			fmt.Printf("\nPlease enter the config file path(default " + DecideConfigFile("") + ", carriage return will use the default path. If you specified this option to other path, you should specify --config-file option to the path when you use other commands):")
+		} else {
+			fmt.Printf("\n请输入配置文件路径（默认为：" + DecideConfigFile("") + "，回车将使用默认路径。如果用户设置为其它路径，在使用命令时需要将--config-file选项设置为该路径）：")
+		}
 
-        if _, err := fmt.Scanln(&configFile); err != nil {
-            if llanguage == LEnglishLanguage {
-                fmt.Println("No config file entered, will use the default config file " + DecideConfigFile("") + "\n")
-            } else {
-                fmt.Println("未输入配置文件路径，将使用默认配置文件：" + DecideConfigFile("") + "。\n")
-            }
-        }
-    }
+		if _, err := fmt.Scanln(&configFile); err != nil {
+			if llanguage == LEnglishLanguage {
+				fmt.Println("No config file entered, will use the default config file " + DecideConfigFile("") + "\n")
+			} else {
+				fmt.Println("未输入配置文件路径，将使用默认配置文件：" + DecideConfigFile("") + "。\n")
+			}
+		}
+	}
 
-    configFile = DecideConfigFile(configFile)
-    if llanguage == LEnglishLanguage {
-        fmt.Printf("For the following settings, carriage return means skip the configuration. Please try \"help config\" to see the meaning of the settings.\n")
-    } else {
-        fmt.Printf("对于下述配置，回车将跳过相关配置项的设置，配置项的具体含义，请使用\"help config\"命令查看。\n")
-    }
+	configFile = DecideConfigFile(configFile)
+	if llanguage == LEnglishLanguage {
+		fmt.Println("For the following settings, carriage return means skip the configuration. Please try \"help config\" to see the meaning of the settings")
+	} else {
+		fmt.Println("对于下述配置，回车将跳过相关配置项的设置，配置项的具体含义，请使用\"help config\"命令查看。")
+	}
 
-    if err := cc.configInteractive(configFile, language); err != nil {
-        return err
-    }
-    return nil
+	if err := cc.configInteractive(configFile, language); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (cc *ConfigCommand) configInteractive(configFile, language string) error {
-    var val string
-    config := configparser.NewConfiguration()
-    section := config.NewSection(CREDSection)
+	var val string
+	config := configparser.NewConfiguration()
+	section := config.NewSection(CREDSection)
 
-    // if config file not exist, config Language
-    llanguage := strings.ToLower(language)
-    section.Add(OptionLanguage, language)
-    if _, err := os.Stat(configFile); err != nil {
-        if llanguage == LEnglishLanguage {
-            fmt.Printf("Please enter language(%s, default is:%s, the configuration will go into effect after the command successfully executed):", OptionMap[OptionLanguage].minVal, DefaultLanguage)
-        } else {
-            fmt.Printf("请输入语言(%s，默认为：%s，该配置项将在此次config命令成功结束后生效)：", OptionMap[OptionLanguage].minVal, DefaultLanguage)
-        }
-        if _, err := fmt.Scanln(&val); err == nil {
-            vals := strings.Split(OptionMap[OptionLanguage].minVal, "/")
-            if FindPosCaseInsen(val, vals) == -1 {
-                return fmt.Errorf("invalid option value of %s, the value: %s is not anyone of %s", OptionLanguage, val, OptionMap[OptionLanguage].minVal)
-            }
-            section.Add(OptionLanguage, val)
-        }
-    }
+	// if config file not exist, config Language
+	llanguage := strings.ToLower(language)
+	section.Add(OptionLanguage, language)
+	if _, err := os.Stat(configFile); err != nil {
+		if llanguage == LEnglishLanguage {
+			fmt.Printf("Please enter language(%s, default is:%s, the configuration will go into effect after the command successfully executed):", OptionMap[OptionLanguage].minVal, DefaultLanguage)
+		} else {
+			fmt.Printf("请输入语言(%s，默认为：%s，该配置项将在此次config命令成功结束后生效)：", OptionMap[OptionLanguage].minVal, DefaultLanguage)
+		}
+		if _, err := fmt.Scanln(&val); err == nil {
+			vals := strings.Split(OptionMap[OptionLanguage].minVal, "/")
+			if FindPosCaseInsen(val, vals) == -1 {
+				return fmt.Errorf("invalid option value of %s, the value: %s is not anyone of %s", OptionLanguage, val, OptionMap[OptionLanguage].minVal)
+			}
+			section.Add(OptionLanguage, val)
+		}
+	}
 
-    for name, option := range CredOptionMap {
-        if !option.cfInteractive {
-            continue
-        }
-        str := ""
-        if llanguage == LEnglishLanguage {
-            if OptionMap[name].def != "" {
-                str = fmt.Sprintf("(%sdefault is:%s, carriage return will use the default value)", option.helpEnglish, OptionMap[name].def)
-            }
-            fmt.Printf("Please enter %s%s:", name, str)
-        } else {
-            if OptionMap[name].def != "" {
-                str = fmt.Sprintf("（%s默认为：%s，回车将使用默认值）", option.helpChinese, OptionMap[name].def)
-            }
-            fmt.Printf("请输入%s%s：", name, str)
-        }
-        if _, err := fmt.Scanln(&val); err == nil {
-            section.Add(name, val)
-        } else if OptionMap[name].def != "" {
-            section.Add(name, OptionMap[name].def)
-        }
-    }
+	for name, option := range CredOptionMap {
+		if !option.cfInteractive {
+			continue
+		}
+		str := ""
+		if llanguage == LEnglishLanguage {
+			if OptionMap[name].def != "" {
+				str = fmt.Sprintf("(%sdefault is:%s, carriage return will use the default value)", option.helpEnglish, OptionMap[name].def)
+			}
+			fmt.Printf("Please enter %s%s:", name, str)
+		} else {
+			if OptionMap[name].def != "" {
+				str = fmt.Sprintf("（%s默认为：%s，回车将使用默认值）", option.helpChinese, OptionMap[name].def)
+			}
+			fmt.Printf("请输入%s%s：", name, str)
+		}
 
-    if err := configparser.Save(config, configFile); err != nil {
-        return err
-    }
-    return nil
+		// fmt.Scanln have 256 length limit on windows platform,so use Reader
+		val = ""
+		valueReader := bufio.NewReader(os.Stdin)
+		val, _ = valueReader.ReadString('\n') // Need to pass '\n' as char (byte)
+		if runtime.GOOS == "windows" {
+			val = strings.TrimSuffix(val, "\r\n")
+		} else {
+			val = strings.TrimSuffix(val, "\n")
+		}
+
+		if len(val) > 0 {
+			section.Add(name, val)
+		} else if OptionMap[name].def != "" {
+			section.Add(name, OptionMap[name].def)
+		}
+	}
+
+	if err := configparser.Save(config, configFile); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (cc *ConfigCommand) runCommandNonInteractive(configFile, language string) error {
-    configFile = DecideConfigFile(configFile)
-    config := configparser.NewConfiguration()
-    section := config.NewSection(CREDSection)
-    section.Add(OptionLanguage, language)
-    for name := range CredOptionMap {
-        if val, _ := GetString(name, cc.command.options); val != "" {
-            section.Add(name, val)
-        }
-    }
-    if err := configparser.Save(config, configFile); err != nil {
-        return err
-    }
-    return nil
+	configFile = DecideConfigFile(configFile)
+	config := configparser.NewConfiguration()
+	section := config.NewSection(CREDSection)
+	section.Add(OptionLanguage, language)
+	for name := range CredOptionMap {
+		if val, _ := GetString(name, cc.command.options); val != "" {
+			section.Add(name, val)
+		}
+	}
+	if err := configparser.Save(config, configFile); err != nil {
+		return err
+	}
+	return nil
 }

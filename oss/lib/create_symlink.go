@@ -2,6 +2,7 @@ package lib
 
 import (
 	"fmt"
+	"strings"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
@@ -13,7 +14,7 @@ var specChineseCreateSymlink = SpecText{
 	paramText: "cloud_url target_url [options]",
 
 	syntaxText: ` 
-    ossutil create-symlink cloud_url target_object [--encoding-type url] [-c file] 
+    ossutil create-symlink cloud_url target_object [--encoding-type url] [--payer requester] [-c file] 
 `,
 
 	detailHelpText: ` 
@@ -38,7 +39,10 @@ var specChineseCreateSymlink = SpecText{
 
 	sampleText: ` 
     ossutil create-symlink oss://bucket1/object1 object2 
-        创建从指向object2的符号链接object1。
+      创建从指向object2的符号链接object1。
+    
+    ossutil create-symlink oss://bucket1/object1 object2 --payer requester
+      以访问者付费模式,创建从指向object2的符号链接object1
 `,
 }
 
@@ -49,7 +53,7 @@ var specEnglishCreateSymlink = SpecText{
 	paramText: "cloud_url target_url [options]",
 
 	syntaxText: ` 
-    ossutil create-symlink cloud_url target_object [--encoding-type url] [-c file] 
+    ossutil create-symlink cloud_url target_object [--encoding-type url] [--payer requester] [-c file] 
 `,
 
 	detailHelpText: ` 
@@ -78,13 +82,17 @@ Usage:
 
 	sampleText: ` 
     ossutil create-symlink oss://bucket1/object1 object2 
-        Create symlink object named object1, which point to object2.
+      Create symlink object named object1, which point to object2.
+    
+    ossutil create-symlink oss://bucket1/object1 object2 --payer requester
+      Create symlink object named object1, which point to object2 with requester payment mode
 `,
 }
 
 // CreateSymlinkCommand is the command list buckets or objects
 type CreateSymlinkCommand struct {
-	command Command
+	command       Command
+	commonOptions []oss.Option
 }
 
 var createSymlinkCommand = CreateSymlinkCommand{
@@ -103,7 +111,12 @@ var createSymlinkCommand = CreateSymlinkCommand{
 			OptionAccessKeyID,
 			OptionAccessKeySecret,
 			OptionSTSToken,
+			OptionProxyHost,
+			OptionProxyUser,
+			OptionProxyPwd,
 			OptionRetryTimes,
+			OptionLogLevel,
+			OptionRequestPayer,
 		},
 	},
 }
@@ -153,6 +166,14 @@ func (cc *CreateSymlinkCommand) RunCommand() error {
 		return err
 	}
 
+	payer, _ := GetString(OptionRequestPayer, cc.command.options)
+	if payer != "" {
+		if payer != strings.ToLower(string(oss.Requester)) {
+			return fmt.Errorf("invalid request payer: %s, please check", payer)
+		}
+		cc.commonOptions = append(cc.commonOptions, oss.RequestPayer(oss.PayerType(payer)))
+	}
+
 	return cc.ossCreateSymlinkRetry(bucket, cloudURL.object, targetObject)
 }
 
@@ -180,7 +201,7 @@ func (cc *CreateSymlinkCommand) checkArgs(symlinkURL CloudURL, targetURL Storage
 func (cc *CreateSymlinkCommand) ossCreateSymlinkRetry(bucket *oss.Bucket, symlinkObject, targetObject string) error {
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
-		err := bucket.PutSymlink(symlinkObject, targetObject)
+		err := bucket.PutSymlink(symlinkObject, targetObject, cc.commonOptions...)
 		if err == nil {
 			return err
 		}

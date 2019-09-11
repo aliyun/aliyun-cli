@@ -2,12 +2,13 @@ package lib
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/config"
-	"github.com/aliyun/aliyun-cli/i18n"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/config"
+	"github.com/aliyun/aliyun-cli/i18n"
 )
 
 func NewOssCommand() *cli.Command {
@@ -18,19 +19,40 @@ func NewOssCommand() *cli.Command {
 		Short:  i18n.T("Object Storage Service", "阿里云OSS对象存储"),
 	}
 
-	result.AddSubCommand(NewCommandBridge(&makeBucketCommand))
-	result.AddSubCommand(NewCommandBridge(&listCommand))
-	result.AddSubCommand(NewCommandBridge(&removeCommand))
-	result.AddSubCommand(NewCommandBridge(&statCommand))
-	result.AddSubCommand(NewCommandBridge(&setACLCommand))
-	result.AddSubCommand(NewCommandBridge(&setMetaCommand))
+	result.AddSubCommand(NewCommandBridge(&allPartSizeCommand))
+	result.AddSubCommand(NewCommandBridge(&appendFileCommand))
+	result.AddSubCommand(NewCommandBridge(&corsCommand))
+	result.AddSubCommand(NewCommandBridge(&bucketEncryptionCommand))
+	result.AddSubCommand(NewCommandBridge(&bucketLifeCycleCommand))
+	result.AddSubCommand(NewCommandBridge(&bucketLogCommand))
+	result.AddSubCommand(NewCommandBridge(&bucketPolicyCommand))
+	result.AddSubCommand(NewCommandBridge(&bucketQosCommand))
+	result.AddSubCommand(NewCommandBridge(&bucketRefererCommand))
+	result.AddSubCommand(NewCommandBridge(&bucketTagCommand))
+	result.AddSubCommand(NewCommandBridge(&bucketVersioningCommand))
+	result.AddSubCommand(NewCommandBridge(&bucketWebsiteCommand))
+	result.AddSubCommand(NewCommandBridge(&catCommand))
+	result.AddSubCommand(NewCommandBridge(&corsOptionsCommand))
 	result.AddSubCommand(NewCommandBridge(&copyCommand))
-	result.AddSubCommand(NewCommandBridge(&restoreCommand))
 	result.AddSubCommand(NewCommandBridge(&createSymlinkCommand))
-	result.AddSubCommand(NewCommandBridge(&readSymlinkCommand))
-	result.AddSubCommand(NewCommandBridge(&signURLCommand))
+	result.AddSubCommand(NewCommandBridge(&duSizeCommand))
 	result.AddSubCommand(NewCommandBridge(&hashCommand))
 	result.AddSubCommand(NewCommandBridge(&helpCommand))
+	result.AddSubCommand(NewCommandBridge(&listPartCommand))
+	result.AddSubCommand(NewCommandBridge(&listCommand))
+	result.AddSubCommand(NewCommandBridge(&makeBucketCommand))
+	result.AddSubCommand(NewCommandBridge(&mkdirCommand))
+	result.AddSubCommand(NewCommandBridge(&objectTagCommand))
+	result.AddSubCommand(NewCommandBridge(&probeCommand))
+	result.AddSubCommand(NewCommandBridge(&readSymlinkCommand))
+	result.AddSubCommand(NewCommandBridge(&requestPaymentCommand))
+	result.AddSubCommand(NewCommandBridge(&restoreCommand))
+	result.AddSubCommand(NewCommandBridge(&removeCommand))
+	result.AddSubCommand(NewCommandBridge(&setACLCommand))
+	result.AddSubCommand(NewCommandBridge(&setMetaCommand))
+	result.AddSubCommand(NewCommandBridge(&signURLCommand))
+	result.AddSubCommand(NewCommandBridge(&statCommand))
+	result.AddSubCommand(NewCommandBridge(&userQosCommand))
 	return result
 }
 
@@ -51,8 +73,7 @@ func NewCommandBridge(a Commander) *cli.Command {
 	for _, s := range cmd.validOptionNames {
 		opt, ok := OptionMap[s]
 		if !ok {
-			// fmt.Printf("INIT ERROR: unknown oss options: %s\n", s)
-			break
+			continue
 		}
 		name := opt.nameAlias[2:]
 

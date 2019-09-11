@@ -3,9 +3,10 @@ package lib
 import (
 	"errors"
 	"fmt"
-	goopt "github.com/droundy/goopt"
 	"strconv"
 	"strings"
+
+	goopt "github.com/droundy/goopt"
 )
 
 type optionType int
@@ -74,8 +75,8 @@ var OptionMap = map[string]Option{
 		fmt.Sprintf("checkpoint目录的路径(默认值为:%s)，断点续传时，操作失败ossutil会自动创建该目录，并在该目录下记录checkpoint信息，操作成功会删除该目录。如果指定了该选项，请确保所指定的目录可以被删除。", CheckpointDir),
 		fmt.Sprintf("Path of checkpoint directory(default:%s), the directory is used in resume upload or download, when operate failed, ossutil will create the directory automatically, and record the checkpoint information in the directory, when the operation is succeed, the directory will be removed, so when specify the option, please make sure the directory can be removed.", CheckpointDir)},
 	OptionSnapshotPath: Option{"", "--snapshot-path", "", OptionTypeString, "", "",
-		"该选项用于在某些场景下加速增量上传批量文件（目前，下载和拷贝不支持该选项）。在cp上传文件时使用该选项，ossutil在指定的目录下生成文件记录文件上传的快照信息，在下一次指定该选项上传时，ossutil会读取指定目录下的快照信息进行增量上传。用户指定的snapshot目录必须为本地文件系统上的可写目录，若该目录不存在，ossutil会创建该文件用于记录快照信息，如果该目录已存在，ossutil会读取里面的快照信息，根据快照信息进行增量上传（只上传上次未成功上传的文件和本地进行过修改的文件），并更新快照信息。注意：因为该选项通过在本地记录成功上传的文件的本地lastModifiedTime，从而在下次上传时通过比较lastModifiedTime来决定是否跳过相同文件的上传，所以在使用该选项时，请确保两次上传期间没有其他用户更改了oss上的对应object。当不满足该场景时，如果想要增量上传批量文件，请使用--update选项。另外，ossutil不会主动删除snapshot-path下的快照信息，为了避免快照信息过多，当用户确定快照信息无用时，请用户自行清理snapshot-path。",
-		"This option is used to accelerate the incremental upload of batch files in certain scenarios(currently, download and copy do not support this option). If you use the option when batch copy files, ossutil will generate files to record the snapshot information in the specified directory. When the next time you upload files with the option, ossutil will read the snapshot information under the specified directory for incremental upload. The snapshot-path you specified must be a local file system directory can be written in, if the directory does not exist, ossutil creates the files for recording snapshot information, else ossutil will read snapshot information from the path for incremental upload(ossutil will only upload the files which has not been successfully upload to oss and the files has been locally modified), and update the snapshot information to the directory. Note: The option record the lastModifiedTime of local files which has been successfully upload in local file system, and compare the lastModifiedTime of local files in the next cp to decided whether to skip the upload of the files, so if you use the option to achieve incremental upload, please make sure no other user modified the corresponding object in oss during the two uploads. If you can not guarantee the scenarios, please use --update option to achieve incremental upload. In addition, ossutil does not automatically delete snapshot-path snapshot information, in order to avoid too much snapshot information, when the snapshot information is useless, please clean up your own snapshot-path on your own."},
+		"该选项用于在某些场景下加速增量上传批量文件或者增量下载批量object。在cp上传文件或者下载object时使用该选项，ossutil在指定的目录下生成快照文件，记录文件上传或者object下载的快照信息，在下一次指定该选项上传或下载时，ossutil会读取指定目录下的快照信息进行增量上传或者下载。用户指定的snapshot目录必须为本地文件系统上的可写目录，若该目录不存在，ossutil会创建该文件用于记录快照信息，如果该目录已存在，ossutil会读取里面的快照信息，根据快照信息进行增量上传（只上传上次未成功上传的文件和本地进行过修改的文件）或者增量下载（只下载上次未成功下载的object和修改过的object），并更新快照信息。注意：该选项在本地记录了成功上传的文件的本地lastModifiedTime或者记录了下载object的lastModifiedTime，从而在下次上传或者下载时通过比较lastModifiedTime来决定是否跳过相同文件的上传或者跳过相同的object下载。当使用该选项上传时，请确保两次上传期间没有其他用户更改了oss上的对应object。当不满足该场景时，如果想要增量上传批量文件，请使用--update选项。ossutil不会主动删除snapshot-path下的快照信息，当用户确定快照信息无用时，请用户及时自行删除snapshot-path。",
+		"This option is used to accelerate the incremental upload of batch files or download objects in certain scenarios. If you use the option when upload files or download objects, ossutil will generate files to record the snapshot information in the specified directory. When the next time you upload files or download objects with the option, ossutil will read the snapshot information under the specified directory for incremental upload or incremental download. The snapshot-path you specified must be a local file system directory can be written in, if the directory does not exist, ossutil creates the files for recording snapshot information, else ossutil will read snapshot information from the path for incremental upload(ossutil will only upload the files which haven't not been successfully uploaded to oss or been locally modified) or incremental download(ossutil will only download the objects which have not been successfully downloaded or have been modified), and update the snapshot information to the directory. Note: The option record the lastModifiedTime of local files which have been successfully uploaded in local file system or lastModifiedTime of objects which have been successfully downloaded, and compare the lastModifiedTime of local files or objects in the next cp to decided whether to skip the file or object. If you use the option to achieve incremental upload, please make sure no other user modified the corresponding object in oss during the two uploads. If you can not guarantee the scenarios, please use --update option to achieve incremental upload. In addition, ossutil does not automatically delete snapshot-path snapshot information, in order to avoid too much snapshot information, when the snapshot information is useless, please clean up your own snapshot-path on your own immediately."},
 	OptionRetryTimes: Option{"", "--retry-times", strconv.Itoa(RetryTimes), OptionTypeInt64, strconv.FormatInt(MinRetryTimes, 10), strconv.FormatInt(MaxRetryTimes, 10),
 		fmt.Sprintf("当错误发生时的重试次数，默认值：%d，取值范围：%d-%d", RetryTimes, MinRetryTimes, MaxRetryTimes),
 		fmt.Sprintf("retry times when fail(default: %d), value range is: %d-%d", RetryTimes, MinRetryTimes, MaxRetryTimes)},
@@ -87,8 +88,8 @@ var OptionMap = map[string]Option{
 		fmt.Sprintf("amount of concurrency tasks when work with a file, value range is: %d-%d, by default the value will be decided by ossutil intelligently.", MinRoutines, MaxRoutines)},
 	OptionRange: Option{"", "--range", "", OptionTypeString, "", "", "下载文件时，指定文件下载的范围，格式为：3-9或3-或-9", "the range when download objects, the form is like: 3-9 or 3- or -9"},
 	OptionEncodingType: Option{"", "--encoding-type", "", OptionTypeAlternative, URLEncodingType, "",
-		fmt.Sprintf("输入的object名或文件名的编码方式，目前只支持url encode，即指定该选项时，取值范围为：%s，如果不指定该选项，则表示object名或文件名未经过编码。bucket名不支持url encode。注意，如果指定了该选项，则形如oss://bucket/object的cloud_url，输入形式为：oss://bucket/url_encode(object)，其中oss://bucket/字符串不需要编码。", URLEncodingType),
-		fmt.Sprintf("the encoding type of object name or file name that user inputs, currently ossutil only supports url encode, which means the value range of the option is: %s, if you do not specify the option, it means the object name or file name that user inputed was not encoded. bucket name does not support url encode. Note, if the option is specified, the cloud_url like: oss://bucket/object should be inputted as: oss://bucket/url_encode(object), the string: oss://bucket/ should not be url encoded.", URLEncodingType)},
+		fmt.Sprintf("输入或者输出的object名或文件名的编码方式，目前只支持url encode，即指定该选项时，取值范围为：%s，如果不指定该选项，则表示object名或文件名未经过编码。bucket名不支持url encode。注意，如果指定了该选项，则形如oss://bucket/object的cloud_url，输入形式为：oss://bucket/url_encode(object)，其中oss://bucket/字符串不需要编码。", URLEncodingType),
+		fmt.Sprintf("the encoding type of object name or file name that user inputs or outputs, currently ossutil only supports url encode, which means the value range of the option is: %s, if you do not specify the option, it means the object name or file name that user inputed or outputed was not encoded. bucket name does not support url encode. Note, if the option is specified, the cloud_url like: oss://bucket/object should be inputted as: oss://bucket/url_encode(object), the string: oss://bucket/ should not be url encoded.", URLEncodingType)},
 	OptionInclude: Option{"", "--include", DefaultNonePattern, OptionTypeString, "", "",
 		fmt.Sprintf("包含对象匹配模式，如：*.jpg"),
 		fmt.Sprintf("Include Pattern of key, e.g., *.jpg")},
@@ -106,7 +107,80 @@ var OptionMap = map[string]Option{
 		fmt.Sprintf("set the language of ossutil(default: %s), value range is: %s/%s, if you set it to \"%s\", please make sure your system language is UTF-8.", DefaultLanguage, ChineseLanguage, EnglishLanguage, ChineseLanguage)},
 	OptionHashType: Option{"", "--type", DefaultHashType, OptionTypeAlternative, fmt.Sprintf("%s/%s", DefaultHashType, MD5HashType), "", fmt.Sprintf("计算的类型, 默认值：%s, 取值范围: %s/%s", DefaultHashType, DefaultHashType, MD5HashType),
 		fmt.Sprintf("hash type, Default: %s, value range is: %s/%s", DefaultHashType, DefaultHashType, MD5HashType)},
-	OptionVersion: Option{"-v", "--version", "", OptionTypeFlagTrue, "", "", fmt.Sprintf("显示ossutil的版本（%s）并退出。", Version), fmt.Sprintf("Show ossutil version (%s) and exit.", Version)},
+	OptionVersion:      Option{"-v", "--version", "", OptionTypeFlagTrue, "", "", fmt.Sprintf("显示ossutil的版本（%s）并退出。", Version), fmt.Sprintf("Show ossutil version (%s) and exit.", Version)},
+	OptionRequestPayer: Option{"", "--payer", "", OptionTypeString, "", "", "请求的支付方式，如果为请求者付费模式，可以将该值设置成\"requester\"", "The payer of the request. You can set this value to \"requester\" if you want pay for requester"},
+	OptionLogLevel: Option{"", "--loglevel", "", OptionTypeString, "", "",
+		"日志级别，默认为空,表示不输出日志文件,可选值为:info|debug,info输出提示信息日志,debug输出详细信息日志(包括http请求和响应信息)",
+		"log level,default is empty(no log file output),optional value is:info|debug,info will output information logs,debug will output detail logs(including http request and response logs)"},
+	OptionMaxUpSpeed: Option{"", "--maxupspeed", "", OptionTypeInt64, "", "",
+		"最大上传速度,单位:KB/s,缺省值为0(不受限制)",
+		"max upload speed,the unit is:KB/s,default value is 0(unlimited)"},
+	OptionUpload: Option{"", "--upload", "", OptionTypeFlagTrue, "", "",
+		"表示上传到oss,主要在命令probe中使用",
+		"specifies upload action to oss,primarily used in probe command"},
+	OptionDownload: Option{"", "--download", "", OptionTypeFlagTrue, "", "",
+		"表示从oss下载,主要在命令probe中使用",
+		"specifies download action from oss,primarily used in probe command"},
+	OptionUrl: Option{"", "--url", "", OptionTypeString, "", "",
+		"表示一个url地址,主要在命令probe中使用",
+		"specifies a url address,primarily used in probe command"},
+	OptionBucketName: Option{"", "--bucketname", "", OptionTypeString, "", "",
+		"表示bucket的名称,主要在命令probe中使用",
+		"specifies a name of bucket,primarily used in probe command"},
+	OptionObject: Option{"", "--object", "", OptionTypeString, "", "",
+		"表示oss中对象的名称,主要在命令probe中使用",
+		"specifies a name of object,primarily used in probe command"},
+	OptionAddr: Option{"", "--addr", "", OptionTypeString, "", "",
+		"表示一个网络地址,通常为域名,主要在命令probe中使用",
+		"specifies a network address,usually a domain,primarily used in probe command"},
+	OptionUpMode: Option{"", "--upmode", "", OptionTypeString, "", "",
+		"表示上传模式,缺省值为normal,取值为:normal|append|multipart,分别表示正常上传、追加上传、分块上传,主要在命令probe中使用",
+		"specifies the upload mode,default value is normal,optional value is:normal|append|multipart, which means normal upload、append upload and multipart upload,it is primarily used in probe command."},
+	OptionDisableEmptyReferer: Option{"", "--disable-empty-referer", "", OptionTypeFlagTrue, "", "",
+		"表示不允许referer字段为空,主要在referer命令中使用",
+		"specifies that the referer field is not allowed to be empty, mainly used in the referer command"},
+	OptionMethod: Option{"", "--method", "", OptionTypeString, "", "",
+		"表示http的请求类型,取值为PUT、GET、DELETE等",
+		"specifies the http method,value is PUT、GET、DELETE..."},
+	OptionOrigin: Option{"", "--origin", "", OptionTypeString, "", "",
+		"表示http请求头origin字段的值",
+		"specifies the value of origin field in http header"},
+	OptionPartitionDownload: Option{"", "--partition-download", "", OptionTypeString, "", "",
+		"分区下载使用,一个ossutil命令下载一个分区,其值格式为\"分区编号:总分区数\",比如1:5,表示当前ossutil下载分区1,总共有5个分区;分区号从1开始编号,objects的分区规则由工具内部算法决定;利用该选项,待下载的objects分成多个区,可以由多个ossutil命令一起下载完成,每个ossutil命令下载各自的分区,多个ossutil命令可以并行在不同机器上执行",
+		"the option is used in partition download mode, one command to download one partition,the value format is \"partition number:total count of partitions\",such as 1:5, indicating that the command downloads partition 1,total partition count is 5; the partition number is numbered from 1, and the partitioning rules for objects are determined by ossutil; with this option, the objects to be downloaded are divided into multiple partitions, which can be downloaded by multiple ossutil commands,each ossutil command can download its own partition,multiple ossutil commands can be executed on different machines in parallel."},
+	OptionSSEAlgorithm: Option{"", "--sse-algorithm", "", OptionTypeString, "", "",
+		"表示服务端加密算法，取值为KMS或者AES256",
+		"specifies the server side encryption algorithm,value is KMS or AES256."},
+	OptionKMSMasterKeyID: Option{"", "--kms-masterkey-id", "", OptionTypeString, "", "",
+		"表示kms秘钥托管服务中的主秘钥id",
+		"specifies the primary key id in the kms(key management service)"},
+	OptionAcrHeaders: Option{"", "--acr-headers", "", OptionTypeString, "", "",
+		"表示http header Access-Control-Request-Headers的值,主要用于cors-options命令",
+		"specifies the value of the http header Access-Control-Request-Headers, mainly used for the cors-options command."},
+	OptionAcrMethod: Option{"", "--acr-method", "", OptionTypeString, "", "",
+		"表示http header Access-Control-Request-Method的值,主要用于cors-options命令",
+		"specifies the value of the http header Access-Control-Request-Method, mainly used for the cors-options command."},
+	OptionVersionId: Option{"", "--version-id", "", OptionTypeString, "", "",
+		"表示object的版本id",
+		"specifies the object's version id"},
+	OptionAllversions: Option{"", "--all-versions", "", OptionTypeFlagTrue, "", "",
+		"表示object所有版本",
+		"specifies the object's all versions"},
+	OptionVersionIdMarker: Option{"", "--version-id-marker", "", OptionTypeString, "", "",
+		"表示列举objects所有版本的version id marker",
+		"specifies the marker of object version id when list objects's all versions"},
+	OptionTrafficLimit: Option{"", "--trafic-limit", "", OptionTypeInt64, "", "",
+		"http请求限速,单位:bit/s,缺省值为0(不受限制),用于sign命令",
+		"http request speed limit,the unit is:bit/s,default value is 0(unlimited),used by sign command"},
+	OptionProxyHost: Option{"", "--proxy-host", "", OptionTypeString, "", "",
+		"网络代理服务器的url地址,支持http/https/socks5,比如 https://120.79.128.211:3128, socks5://120.79.128.211:1080",
+		"url of network proxy server, which supports http/https/socks5, such as https://120.79.128.211:3128, socks5://120.79.128.211:1080"},
+	OptionProxyUser: Option{"", "--proxy-user", "", OptionTypeString, "", "",
+		"网络代理服务器的用户名,默认为空",
+		"username of network proxy, default is empty"},
+	OptionProxyPwd: Option{"", "--proxy-pwd", "", OptionTypeString, "", "",
+		"网络代理服务器的密码,默认为空",
+		"password of network proxy, default is empty"},
 }
 
 func (T *Option) getHelp(language string) string {
@@ -132,6 +206,7 @@ func ParseArgOptions() ([]string, OptionMapType, error) {
 	if err := checkOption(options); err != nil {
 		return nil, nil, err
 	}
+
 	return goopt.Args, options, nil
 }
 
@@ -260,10 +335,9 @@ func GetInt(name string, options OptionMapType) (int64, error) {
 		default:
 			return 0, fmt.Errorf("Option value of %s is not int64", name)
 		}
-	} //else {
-	return 0, fmt.Errorf("There is no option for %s", name)
-	// }
-	// return 0, nil
+	} else {
+		return 0, fmt.Errorf("There is no option for %s", name)
+	}
 }
 
 // GetString is used to get string option from option map parsed by ParseArgOptions

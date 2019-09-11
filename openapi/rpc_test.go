@@ -101,6 +101,21 @@ func TestRpcInvoker_Prepare(t *testing.T) {
 	}
 	err = a.Prepare(ctx)
 	assert.Nil(t, err)
+
+	a.api.Parameters = []meta.Parameter{
+		{
+			Name:     "body",
+			Position: "Domain",
+		},
+	}
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	ctx.UnknownFlags().AddByName("body-FILE")
+	defer func() {
+		e := recover()
+		assert.NotNil(t, e)
+	}()
+	a.Prepare(ctx)
+
 }
 
 func TestRpcInvoker_Call(t *testing.T) {
