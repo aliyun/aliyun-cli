@@ -8,13 +8,14 @@ import (
 )
 
 type Reporter struct {
-	rlogger   *log.Logger
-	written   bool
-	prompted  bool
-	path      string
-	comment   string
-	outputDir string
-	createDir bool
+	rlogger    *log.Logger
+	written    bool
+	prompted   bool
+	path       string
+	comment    string
+	outputDir  string
+	createDir  bool
+	fileHandle *os.File
 }
 
 func (re *Reporter) Init(outputDir, comment string) error {
@@ -37,6 +38,7 @@ func (re *Reporter) Init(outputDir, comment string) error {
 	if err != nil {
 		return fmt.Errorf("Create reporter file error: %s", err.Error())
 	}
+	re.fileHandle = f
 	re.rlogger = log.New(f, "", log.Ldate|log.Ltime)
 	re.Comment()
 	re.rlogger.SetFlags(log.Ldate | log.Ltime)
@@ -44,6 +46,10 @@ func (re *Reporter) Init(outputDir, comment string) error {
 }
 
 func (re *Reporter) Clear() {
+	if re != nil && re.fileHandle != nil {
+		re.fileHandle.Close()
+	}
+
 	if re != nil && !re.written {
 		os.Remove(re.path)
 		if re.createDir {

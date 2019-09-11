@@ -17,7 +17,7 @@ var specChineseReadSymlink = SpecText{
 	paramText: "cloud_url [options]",
 
 	syntaxText: ` 
-    ossutil read-symlink oss://bucket/object [--encoding-type url] [-c file] 
+    ossutil read-symlink oss://bucket/object [--encoding-type url] [--version-id versionId] [--payer requester] [-c file] 
 `,
 
 	detailHelpText: ` 
@@ -32,7 +32,7 @@ var specChineseReadSymlink = SpecText{
 
 用法：
 
-    ossutil read-symlink oss://bucket/symlink-object
+    ossutil read-symlink oss://bucket/symlink-object [--version-id versionId] [--payer requester]
 `,
 
 	sampleText: ` 
@@ -40,6 +40,10 @@ var specChineseReadSymlink = SpecText{
         Etag                    : 455E20DBFFF1D588B67D092C46B16DB6
         Last-Modified           : 2017-04-17 14:49:42 +0800 CST
         X-Oss-Symlink-Target    : a
+    
+    ossutil read-symlink oss://bucket1/object --version-id versionId
+
+    ossutil read-symlink oss://bucket1/object --payer requester
 `,
 }
 
@@ -50,7 +54,7 @@ var specEnglishReadSymlink = SpecText{
 	paramText: "cloud_url [options]",
 
 	syntaxText: ` 
-    ossutil read-symlink oss://bucket/object [--encoding-type url] [-c file]
+    ossutil read-symlink oss://bucket/object [--encoding-type url] [--payer requester] [-c file]
 `,
 
 	detailHelpText: ` 
@@ -67,7 +71,7 @@ var specEnglishReadSymlink = SpecText{
 
 Usage:
 
-    ossutil read-symlink oss://bucket/symlink-object
+    ossutil read-symlink oss://bucket/symlink-object [--version-id versionId] [--payer requester]
 `,
 
 	sampleText: ` 
@@ -75,12 +79,17 @@ Usage:
         Etag                    : 455E20DBFFF1D588B67D092C46B16DB6
         Last-Modified           : 2017-04-17 14:49:42 +0800 CST
         X-Oss-Symlink-Target    : a
+    
+    ossutil read-symlink oss://bucket1/object --version-id versionId
+
+    ossutil read-symlink oss://bucket1/object --payer requester
 `,
 }
 
 // ReadSymlinkCommand is the command list buckets or objects
 type ReadSymlinkCommand struct {
-	command Command
+	command       Command
+	commonOptions []oss.Option
 }
 
 var readSymlinkCommand = ReadSymlinkCommand{
@@ -99,7 +108,13 @@ var readSymlinkCommand = ReadSymlinkCommand{
 			OptionAccessKeyID,
 			OptionAccessKeySecret,
 			OptionSTSToken,
+			OptionProxyHost,
+			OptionProxyUser,
+			OptionProxyPwd,
 			OptionRetryTimes,
+			OptionLogLevel,
+			OptionVersionId,
+			OptionRequestPayer,
 		},
 	},
 }
@@ -130,17 +145,32 @@ func (rc *ReadSymlinkCommand) RunCommand() error {
 		return err
 	}
 
+	versionId, _ := GetString(OptionVersionId, rc.command.options)
+	symlinkOptions := []oss.Option{}
+	if len(versionId) > 0 {
+		symlinkOptions = append(symlinkOptions, oss.VersionId(versionId))
+	}
+
+	payer, _ := GetString(OptionRequestPayer, rc.command.options)
+	if payer != "" {
+		if payer != strings.ToLower(string(oss.Requester)) {
+			return fmt.Errorf("invalid request payer: %s, please check", payer)
+		}
+		rc.commonOptions = append(rc.commonOptions, oss.RequestPayer(oss.PayerType(payer)))
+	}
+
+	symlinkOptions = append(symlinkOptions, rc.commonOptions...)
 	bucket, err := rc.command.ossBucket(cloudURL.bucket)
 	if err != nil {
 		return err
 	}
 
-	return rc.linkStat(bucket, cloudURL)
+	return rc.linkStat(bucket, cloudURL, symlinkOptions...)
 }
 
-func (rc *ReadSymlinkCommand) linkStat(bucket *oss.Bucket, cloudURL CloudURL) error {
+func (rc *ReadSymlinkCommand) linkStat(bucket *oss.Bucket, cloudURL CloudURL, options ...oss.Option) error {
 	// normal info
-	props, err := rc.ossGetSymlinkRetry(bucket, cloudURL.object)
+	props, err := rc.ossGetSymlinkRetry(bucket, cloudURL.object, options...)
 	if err != nil {
 		return err
 	}
@@ -176,10 +206,10 @@ func (rc *ReadSymlinkCommand) linkStat(bucket *oss.Bucket, cloudURL CloudURL) er
 	return nil
 }
 
-func (rc *ReadSymlinkCommand) ossGetSymlinkRetry(bucket *oss.Bucket, symlinkObject string) (http.Header, error) {
+func (rc *ReadSymlinkCommand) ossGetSymlinkRetry(bucket *oss.Bucket, symlinkObject string, options ...oss.Option) (http.Header, error) {
 	retryTimes, _ := GetInt(OptionRetryTimes, rc.command.options)
 	for i := 1; ; i++ {
-		props, err := bucket.GetSymlink(symlinkObject)
+		props, err := bucket.GetSymlink(symlinkObject, options...)
 		if err == nil {
 			return props, err
 		}

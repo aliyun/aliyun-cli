@@ -77,24 +77,26 @@ func (client *Client) ModifyInstanceChargeTypeWithCallback(request *ModifyInstan
 type ModifyInstanceChargeTypeRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	ClientToken          string           `position:"Query" name:"ClientToken"`
+	IsDetailFee          requests.Boolean `position:"Query" name:"IsDetailFee"`
+	InstanceChargeType   string           `position:"Query" name:"InstanceChargeType"`
 	Period               requests.Integer `position:"Query" name:"Period"`
 	DryRun               requests.Boolean `position:"Query" name:"DryRun"`
 	AutoPay              requests.Boolean `position:"Query" name:"AutoPay"`
 	IncludeDataDisks     requests.Boolean `position:"Query" name:"IncludeDataDisks"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
-	ClientToken          string           `position:"Query" name:"ClientToken"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
 	PeriodUnit           string           `position:"Query" name:"PeriodUnit"`
 	InstanceIds          string           `position:"Query" name:"InstanceIds"`
-	InstanceChargeType   string           `position:"Query" name:"InstanceChargeType"`
 }
 
 // ModifyInstanceChargeTypeResponse is the response struct for api ModifyInstanceChargeType
 type ModifyInstanceChargeTypeResponse struct {
 	*responses.BaseResponse
-	RequestId string `json:"RequestId" xml:"RequestId"`
-	OrderId   string `json:"OrderId" xml:"OrderId"`
+	RequestId      string         `json:"RequestId" xml:"RequestId"`
+	OrderId        string         `json:"OrderId" xml:"OrderId"`
+	FeeOfInstances FeeOfInstances `json:"FeeOfInstances" xml:"FeeOfInstances"`
 }
 
 // CreateModifyInstanceChargeTypeRequest creates a request to invoke ModifyInstanceChargeType API

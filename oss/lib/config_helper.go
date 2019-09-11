@@ -2,12 +2,12 @@ package lib
 
 import (
 	"fmt"
-	configparser "github.com/alyu/configparser"
 	"os"
 	"os/user"
-	"path/filepath"
 	"strconv"
 	"strings"
+
+	configparser "github.com/alyu/configparser"
 )
 
 // sections in config file
@@ -17,6 +17,13 @@ const (
 	BucketEndpointSection string = "Bucket-Endpoint"
 
 	BucketCnameSection string = "Bucket-Cname"
+
+	AkServiceSection string = "AkService"
+)
+
+// config items in section AKSerivce
+const (
+	ItemEcsAk string = "ecsAk"
 )
 
 type configOption struct {
@@ -53,19 +60,12 @@ func DecideConfigFile(configFile string) string {
 	if configFile == "" {
 		configFile = DefaultConfigFile
 	}
-	usr, err := user.Current()
-	var dir string
-	if err != nil {
-		ex, derr := os.Executable()
-		if derr != nil {
-			return "/tmp"
-		}
-		dir = filepath.Dir(ex)
-	} else {
-		dir = usr.HomeDir
-	}
+
 	if len(configFile) >= 2 && strings.HasPrefix(configFile, "~"+string(os.PathSeparator)) {
-		configFile = strings.Replace(configFile, "~", dir, 1)
+		usr, _ := user.Current()
+		if usr != nil {
+			configFile = strings.Replace(configFile, "~", usr.HomeDir, 1)
+		}
 	}
 	return configFile
 }
@@ -115,6 +115,16 @@ func readConfigFromFile(configFile string) (OptionMapType, error) {
 			for bucket, host := range options {
 				(configMap[sec]).(map[string]string)[strings.TrimSpace(bucket)] = strings.TrimSpace(host)
 			}
+		}
+	}
+
+	// get options in AKService for user-defined GetAk
+	sec := AkServiceSection
+	if section, err := config.Section(sec); err == nil {
+		configMap[sec] = map[string]string{}
+		options := section.Options()
+		for ecsUrl, strUrl := range options {
+			(configMap[sec]).(map[string]string)[strings.TrimSpace(ecsUrl)] = strings.TrimSpace(strUrl)
 		}
 	}
 	return configMap, nil

@@ -158,7 +158,6 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 	if err != nil {
 		return err
 	}
-
 	//
 	// if next arg is help, run help
 	if nextArg == "help" {

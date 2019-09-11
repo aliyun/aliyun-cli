@@ -9,7 +9,8 @@ import (
 
 func newTransport(conn *Conn, config *Config) *http.Transport {
 	httpTimeOut := conn.config.HTTPTimeout
-	// new Transport
+	httpMaxConns := conn.config.HTTPMaxConns
+	// New Transport
 	transport := &http.Transport{
 		Dial: func(netw, addr string) (net.Conn, error) {
 			conn, err := net.DialTimeout(netw, addr, httpTimeOut.ConnectTimeout)
@@ -18,6 +19,7 @@ func newTransport(conn *Conn, config *Config) *http.Transport {
 			}
 			return newTimeoutConn(conn, httpTimeOut.ReadWriteTimeout, httpTimeOut.LongTimeout), nil
 		},
+		MaxIdleConnsPerHost:   httpMaxConns.MaxIdleConnsPerHost,
 		ResponseHeaderTimeout: httpTimeOut.HeaderTimeout,
 	}
 	return transport

@@ -88,6 +88,7 @@ type RunInstancesRequest struct {
 	ResourceGroupId               string                          `position:"Query" name:"ResourceGroupId"`
 	HostName                      string                          `position:"Query" name:"HostName"`
 	Password                      string                          `position:"Query" name:"Password"`
+	StorageSetPartitionNumber     requests.Integer                `position:"Query" name:"StorageSetPartitionNumber"`
 	Tag                           *[]RunInstancesTag              `position:"Query" name:"Tag"  type:"Repeated"`
 	AutoRenewPeriod               requests.Integer                `position:"Query" name:"AutoRenewPeriod"`
 	Period                        requests.Integer                `position:"Query" name:"Period"`
@@ -134,8 +135,10 @@ type RunInstancesRequest struct {
 	DedicatedHostId               string                          `position:"Query" name:"DedicatedHostId"`
 	CreditSpecification           string                          `position:"Query" name:"CreditSpecification"`
 	SecurityGroupIds              *[]string                       `position:"Query" name:"SecurityGroupIds"  type:"Repeated"`
+	SpotDuration                  requests.Integer                `position:"Query" name:"SpotDuration"`
 	DataDisk                      *[]RunInstancesDataDisk         `position:"Query" name:"DataDisk"  type:"Repeated"`
 	LaunchTemplateVersion         requests.Integer                `position:"Query" name:"LaunchTemplateVersion"`
+	StorageSetId                  string                          `position:"Query" name:"StorageSetId"`
 	SystemDiskSize                string                          `position:"Query" name:"SystemDisk.Size"`
 	SystemDiskDescription         string                          `position:"Query" name:"SystemDisk.Description"`
 }

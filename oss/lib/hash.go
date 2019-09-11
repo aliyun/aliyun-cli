@@ -121,6 +121,7 @@ var hashCommand = HashCommand{
 		group:       GroupTypeAdditionalCommand,
 		validOptionNames: []string{
 			OptionHashType,
+			OptionLogLevel,
 		},
 	},
 }

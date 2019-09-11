@@ -11,11 +11,11 @@ type digest struct {
 	tab *crc64.Table
 }
 
-// NewCRC creates a new hash.Hash64 computing the CRC-64 checksum
+// NewCRC creates a new hash.Hash64 computing the CRC64 checksum
 // using the polynomial represented by the Table.
 func NewCRC(tab *crc64.Table, init uint64) hash.Hash64 { return &digest{init, tab} }
 
-// Size returns the number of bytes Sum will return.
+// Size returns the number of bytes sum will return.
 func (d *digest) Size() int { return crc64.Size }
 
 // BlockSize returns the hash's underlying block size.
@@ -24,7 +24,7 @@ func (d *digest) Size() int { return crc64.Size }
 // are a multiple of the block size.
 func (d *digest) BlockSize() int { return 1 }
 
-// Reset resets the Hash to its initial state.
+// Reset resets the hash to its initial state.
 func (d *digest) Reset() { d.crc = 0 }
 
 // Write (via the embedded io.Writer interface) adds more data to the running hash.
@@ -34,7 +34,7 @@ func (d *digest) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-// Sum64 returns crc64 value.
+// Sum64 returns CRC64 value.
 func (d *digest) Sum64() uint64 { return d.crc }
 
 // Sum returns hash value.
@@ -64,10 +64,10 @@ func gf2MatrixSquare(square []uint64, mat []uint64) {
 	}
 }
 
-// CRC64Combine combine crc64
+// CRC64Combine combines CRC64
 func CRC64Combine(crc1 uint64, crc2 uint64, len2 uint64) uint64 {
-	var even [gf2Dim]uint64 // even-power-of-two zeros operator
-	var odd [gf2Dim]uint64  // odd-power-of-two zeros operator
+	var even [gf2Dim]uint64 // Even-power-of-two zeros operator
+	var odd [gf2Dim]uint64  // Odd-power-of-two zeros operator
 
 	// Degenerate case
 	if len2 == 0 {
@@ -117,7 +117,7 @@ func CRC64Combine(crc1 uint64, crc2 uint64, len2 uint64) uint64 {
 		}
 	}
 
-	// Return combined crc
+	// Return combined CRC
 	crc1 ^= crc2
 	return crc1
 }

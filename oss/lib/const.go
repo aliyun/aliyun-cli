@@ -1,50 +1,76 @@
 package lib
 
 import (
-	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"os"
+
+	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
 // all supported options of ossutil
 const (
-	OptionConfigFile       string = "configFile"
-	OptionEndpoint                = "endpoint"
-	OptionAccessKeyID             = "accessKeyID"
-	OptionAccessKeySecret         = "accessKeySecret"
-	OptionSTSToken                = "stsToken"
-	OptionACL                     = "acl"
-	OptionShortFormat             = "shortFormat"
-	OptionLimitedNum              = "limitedNum"
-	OptionMarker                  = "marker"
-	OptionUploadIDMarker          = "uploadIDMarker"
-	OptionDirectory               = "directory"
-	OptionMultipart               = "multipart"
-	OptionAllType                 = "allType"
-	OptionRecursion               = "recursive"
-	OptionBucket                  = "bucket"
-	OptionStorageClass            = "storageClass"
-	OptionForce                   = "force"
-	OptionUpdate                  = "update"
-	OptionDelete                  = "delete"
-	OptionContinue                = "continue"
-	OptionOutputDir               = "outputDir"
-	OptionBigFileThreshold        = "bigfileThreshold"
-	OptionCheckpointDir           = "checkpointDir"
-	OptionSnapshotPath            = "snapshotPath"
-	OptionRetryTimes              = "retryTimes"
-	OptionRoutines                = "routines"
-	OptionParallel                = "parallel"
-	OptionRange                   = "range"
-	OptionEncodingType            = "encodingType"
-	OptionLanguage                = "language"
-	OptionHashType                = "hashType"
-	OptionVersion                 = "version"
-	OptionPartSize                = "partSize"
-	OptionDisableCRC64            = "disableCRC64"
-	OptionTimeout                 = "timeout"
-	OptionInclude                 = "include"
-	OptionExclude                 = "exclude"
-	OptionMeta                    = "meta"
+	OptionConfigFile          string = "configFile"
+	OptionEndpoint                   = "endpoint"
+	OptionAccessKeyID                = "accessKeyID"
+	OptionAccessKeySecret            = "accessKeySecret"
+	OptionSTSToken                   = "stsToken"
+	OptionACL                        = "acl"
+	OptionShortFormat                = "shortFormat"
+	OptionLimitedNum                 = "limitedNum"
+	OptionMarker                     = "marker"
+	OptionUploadIDMarker             = "uploadIDMarker"
+	OptionDirectory                  = "directory"
+	OptionMultipart                  = "multipart"
+	OptionAllType                    = "allType"
+	OptionRecursion                  = "recursive"
+	OptionBucket                     = "bucket"
+	OptionStorageClass               = "storageClass"
+	OptionForce                      = "force"
+	OptionUpdate                     = "update"
+	OptionDelete                     = "delete"
+	OptionContinue                   = "continue"
+	OptionOutputDir                  = "outputDir"
+	OptionBigFileThreshold           = "bigfileThreshold"
+	OptionCheckpointDir              = "checkpointDir"
+	OptionSnapshotPath               = "snapshotPath"
+	OptionRetryTimes                 = "retryTimes"
+	OptionRoutines                   = "routines"
+	OptionParallel                   = "parallel"
+	OptionRange                      = "range"
+	OptionEncodingType               = "encodingType"
+	OptionLanguage                   = "language"
+	OptionHashType                   = "hashType"
+	OptionVersion                    = "version"
+	OptionPartSize                   = "partSize"
+	OptionDisableCRC64               = "disableCRC64"
+	OptionTimeout                    = "timeout"
+	OptionInclude                    = "include"
+	OptionExclude                    = "exclude"
+	OptionMeta                       = "meta"
+	OptionRequestPayer               = "payer"
+	OptionLogLevel                   = "loglevel"
+	OptionMaxUpSpeed                 = "maxupspeed"
+	OptionUpload                     = "upload"
+	OptionDownload                   = "download"
+	OptionUrl                        = "url"
+	OptionBucketName                 = "bucketname"
+	OptionObject                     = "object"
+	OptionAddr                       = "addr"
+	OptionUpMode                     = "upmode"
+	OptionDisableEmptyReferer        = "disableEmptyReferer"
+	OptionMethod                     = "method"
+	OptionOrigin                     = "origin"
+	OptionPartitionDownload          = "partitionDownload"
+	OptionSSEAlgorithm               = "SSEAlgorithm"
+	OptionKMSMasterKeyID             = "KMSMasterKeyID"
+	OptionAcrHeaders                 = "acrHeaders"
+	OptionAcrMethod                  = "acrMethod"
+	OptionVersionId                  = "versionId"
+	OptionAllversions                = "allVersions"
+	OptionVersionIdMarker            = "versionIdMarker"
+	OptionTrafficLimit               = "trafficLimit"
+	OptionProxyHost                  = "proxyHost"
+	OptionProxyUser                  = "proxyUser"
+	OptionProxyPwd                   = "proxyPwd"
 )
 
 // the elements show in stat object
@@ -60,6 +86,8 @@ const (
 	StatContentMD5              = "Content-Md5"
 	StatCRC64                   = "X-Oss-Hash-Crc64ecma"
 	StatStorageClass            = "StorageClass"
+	StatSSEAlgorithm            = "SSEAlgorithm"
+	StatKMSMasterKeyID          = "KMSMasterKeyID"
 )
 
 // the elements show in hash file
@@ -73,9 +101,11 @@ const (
 	updateEndpoint       string = "oss-cn-hangzhou.aliyuncs.com"
 	updateBucket                = "ossutil-version-update"
 	updateVersionObject         = "ossutilversion"
-	updateBinaryLinux           = "ossutil"
+	updateBinaryLinux32         = "ossutil32"
+	updateBinaryLinux64         = "ossutil64"
 	updateBinaryWindow32        = "ossutil32.exe"
 	updateBinaryWindow64        = "ossutil64.exe"
+	updateBinaryMac32           = "ossutilmac32"
 	updateBinaryMac64           = "ossutilmac64"
 	updateTmpVersionFile        = ".ossutil_tmp_vsersion"
 )
@@ -84,7 +114,7 @@ const (
 const (
 	Package                 string = "ossutil"
 	ChannelBuf              int    = 1000
-	Version                 string = "1.4.0"
+	Version                 string = "v1.6.6"
 	DefaultEndpoint         string = "oss.aliyuncs.com"
 	ChineseLanguage                = "CH"
 	EnglishLanguage                = "EN"
@@ -114,10 +144,10 @@ const (
 	MinPartSize             int64  = 1
 	DefaultLimitedNum              = -1
 	MinLimitedNum                  = 0
-	RetryTimes              int    = 3
+	RetryTimes              int    = 10
 	MaxRetryTimes           int64  = 500
 	MinRetryTimes           int64  = 1
-	Routines                int    = 5
+	Routines                int    = 3
 	MaxRoutines             int64  = 10000
 	MinRoutines             int64  = 1
 	MaxParallel             int64  = 10000
@@ -137,6 +167,7 @@ const (
 	DefaultNonePattern             = ""
 	IncludePrompt                  = "--include"
 	ExcludePrompt                  = "--exclude"
+	MaxAppendObjectSize     int64  = 5368709120
 )
 
 const (
