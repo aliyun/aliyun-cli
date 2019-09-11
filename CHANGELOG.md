@@ -2,6 +2,9 @@
 
 ### Master
 
+### 3.0.26
+
+- update: meta data
 - fix: help generating information bug
 - Upgrade the ossutil component to version 1.6.6
 - Package manager switches to Go Modules
