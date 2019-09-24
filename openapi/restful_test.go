@@ -14,6 +14,8 @@
 package openapi
 
 import (
+	"bytes"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/cli"
@@ -62,6 +64,36 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 	a.BasicInvoker.request.Content = []byte("<")
 	err = a.Prepare(ctx)
 	assert.Nil(t, err)
+
+	// testcase 2
+	a = &RestfulInvoker{
+		BasicInvoker: &BasicInvoker{
+			request: requests.NewCommonRequest(),
+		},
+		path:   "/k8s/[ClusterId]/user_config",
+		method: "GET",
+	}
+	a.request.RegionId = "cn-hangzhou"
+	buf := new(bytes.Buffer)
+	library := NewLibrary(buf, "en")
+
+	api, _ := library.GetApi("cs", "2015-12-15", "DescribeClusterUserKubeconfig")
+	a.api = &api
+	w = new(bufio.Writer)
+	ctx = cli.NewCommandContext(w)
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	ctx.Flags().Add(NewBodyFlag())
+	ctx.Flags().Add(NewSecureFlag())
+	ctx.Flags().Add(NewBodyFileFlag())
+	ctx.UnknownFlags().AddByName("ClusterId")
+	ctx.UnknownFlags().Get("ClusterId").SetValue("cluster_id")
+	err = a.Prepare(ctx)
+	assert.Nil(t, err)
+
+	ctx.UnknownFlags().AddByName("TestFlag")
+	ctx.UnknownFlags().Get("TestFlag").SetValue("testFlagValue")
+	err = a.Prepare(ctx)
+	assert.EqualError(t, err, "'--TestFlag' is not a valid parameter or flag. See `aliyun help cs DescribeClusterUserKubeconfig`.")
 }
 
 func TestRestfulInvoker_Call(t *testing.T) {
