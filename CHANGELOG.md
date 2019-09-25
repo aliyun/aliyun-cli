@@ -2,6 +2,9 @@
 
 ### Master
 
+### 3.0.27
+
+- update: meta data
 - fix: Restful interface reported invalid url error
 
 ### 3.0.26
