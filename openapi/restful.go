@@ -21,6 +21,7 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/meta"
 )
 
 type RestfulInvoker struct {
@@ -28,6 +29,7 @@ type RestfulInvoker struct {
 	method string
 	path   string
 	force  bool
+	api    *meta.Api
 }
 
 func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
@@ -59,10 +61,29 @@ func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
 			a.request.SetContentType("application/xml")
 		}
 	}
-
 	// assign parameters
-	for _, f := range ctx.UnknownFlags().Flags() {
-		a.request.QueryParams[f.Name], _ = f.GetValue()
+	if a.api == nil {
+		for _, f := range ctx.UnknownFlags().Flags() {
+			a.request.QueryParams[f.Name], _ = f.GetValue()
+		}
+	} else {
+		for _, f := range ctx.UnknownFlags().Flags() {
+			param := a.api.FindParameter(f.Name)
+			if param == nil {
+				return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+			}
+			if param.Position == "Query" {
+				a.request.QueryParams[f.Name], _ = f.GetValue()
+			} else if param.Position == "Body" {
+				a.request.FormParams[f.Name], _ = f.GetValue()
+			} else if param.Position == "Path" {
+				a.request.PathParams[f.Name], _ = f.GetValue()
+			} else if param.Position == "Domain" {
+				continue
+			} else {
+				return fmt.Errorf("unknown parameter position; %s is %s", param.Name, param.Position)
+			}
+		}
 	}
 
 	if _, ok := SecureFlag(ctx.Flags()).GetValue(); ok {

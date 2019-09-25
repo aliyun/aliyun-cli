@@ -97,6 +97,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		}
 		if product.ApiStyle == "restful" {
 			api, _ := c.library.GetApi(product.Code, product.Version, args[1])
+			ctx.Command().Name = args[1]
 			return c.processInvoke(ctx, productName, api.Method, api.PathPattern)
 		}
 
@@ -235,40 +236,45 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 					basicInvoker,
 					apiOrMethod,
 				}, nil
-			} else {
-				if api, ok := c.library.GetApi(product.Code, product.Version, apiOrMethod); ok {
-					return &RpcInvoker{
-						basicInvoker,
-						&api,
-					}, nil
-				} else {
-					return nil, &InvalidApiError{apiOrMethod, &product}
-				}
 			}
-		} else {
-			//
-			// Restful Call
-			// aliyun cs GET /clusters
-			// aliyun cs /clusters --roa GET
-			ok, method, path, err := checkRestfulMethod(ctx, apiOrMethod, path)
-			if err != nil {
-				return nil, err
+			if api, ok := c.library.GetApi(product.Code, product.Version, apiOrMethod); ok {
+				return &RpcInvoker{
+					basicInvoker,
+					&api,
+				}, nil
 			}
-			if !ok {
-				return nil, cli.NewErrorWithTip(fmt.Errorf("product '%s' need restful call", product.GetLowerCode()),
-					"Use `aliyun %s {GET|PUT|POST|DELETE} <path> ...`", product.GetLowerCode())
-			}
+			return nil, &InvalidApiError{apiOrMethod, &product}
+
+		}
+		//
+		// Restful Call
+		// aliyun cs GET /clusters
+		// aliyun cs /clusters --roa GET
+		ok, method, path, err := checkRestfulMethod(ctx, apiOrMethod, path)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, cli.NewErrorWithTip(fmt.Errorf("product '%s' need restful call", product.GetLowerCode()),
+				"Use `aliyun %s {GET|PUT|POST|DELETE} <path> ...`", product.GetLowerCode())
+		}
+		if api, ok := c.library.GetApi(product.Code, product.Version, ctx.Command().Name); ok {
 			return &RestfulInvoker{
 				basicInvoker,
 				method,
 				path,
 				force,
+				&api,
 			}, nil
-			//if err != nil {
-			//	ctx.Command().PrintFailed(fmt.Errorf("call restful %s%s.%s faild %v", product.Code, path, method, err), "")
-			//	return nil
-			//}
 		}
+		return &RestfulInvoker{
+			basicInvoker,
+			method,
+			path,
+			force,
+			nil,
+		}, nil
+
 	} else {
 		if !force {
 			return nil, &InvalidProductError{Code: productCode, library: c.library}
@@ -298,16 +304,17 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 				method,
 				path,
 				force,
+				nil,
 			}, nil
 			// return invoker, nil
 			// c.InvokeRestful(ctx, &product, method, path)
-		} else {
-			return &ForceRpcInvoker{
-				basicInvoker,
-				apiOrMethod,
-			}, nil
-			// c.InvokeRpcForce(ctx, &product, apiOrMethod)
 		}
+		return &ForceRpcInvoker{
+			basicInvoker,
+			apiOrMethod,
+		}, nil
+		// c.InvokeRpcForce(ctx, &product, apiOrMethod)
+
 	}
 }
 

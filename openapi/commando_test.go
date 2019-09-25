@@ -325,6 +325,9 @@ func TestCreateInvoker(t *testing.T) {
 	assert.True(t, ok)
 	assert.Nil(t, err)
 
+	ctx.EnterCommand(&cli.Command{})
+	ctx.Flags().Add(config.NewRegionFlag())
+	AddFlags(ctx.Flags())
 	ctx.Flags().Get("force").SetAssigned(false)
 	ctx.Flags().Get("version").SetAssigned(false)
 	invoker, err = commando.createInvoker(ctx, "cr", "Get", "/region")
