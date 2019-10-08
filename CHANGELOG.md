@@ -2,6 +2,8 @@
 
 ### Master
 
+- fix: AccessKeySecret in the `configure set` command is the same as AccessKeyId
+
 ### 3.0.27
 
 - update: meta data
