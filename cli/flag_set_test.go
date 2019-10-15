@@ -58,6 +58,11 @@ func TestAddByName(t *testing.T) {
 	assert.Nil(t, f)
 	assert.EqualError(t, err, "flag duplicated --MrX2")
 
+	f, err = fs.AddByName("Mrx-FILE")
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(f.Aliases))
+	assert.Equal(t, "Mrx", f.Aliases[0])
+
 }
 
 func TestGet(t *testing.T) {

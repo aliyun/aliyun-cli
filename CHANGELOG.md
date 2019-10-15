@@ -2,6 +2,8 @@
 
 ### Master
 
+- fix: Invoke error when reading parameter value from file using `-FILE`
+
 ### 3.0.28
 
 - update: meta data
