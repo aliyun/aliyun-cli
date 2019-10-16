@@ -15,6 +15,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 )
 
 type FlagSet struct {
@@ -58,6 +59,9 @@ func (fs *FlagSet) AddByName(name string) (*Flag, error) {
 	}
 	f := &Flag{
 		Name: name,
+	}
+	if strings.HasSuffix(name, "-FILE") {
+		f.Aliases = append(f.Aliases, strings.TrimSuffix(name, "-FILE"))
 	}
 	fs.Add(f)
 	return f, nil
