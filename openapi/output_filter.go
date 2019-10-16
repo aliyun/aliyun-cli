@@ -69,7 +69,9 @@ func NewTableOutputFilter(ctx *cli.Context) OutputFilter {
 func (a *TableOutputFilter) FilterOutput(s string) (string, error) {
 	var v interface{}
 	s = fmt.Sprintf("{\"RootFilter\":[%s]}", s)
-	err := json.Unmarshal([]byte(s), &v)
+	decoder := json.NewDecoder(bytes.NewBufferString(s))
+	decoder.UseNumber()
+	err := decoder.Decode(&v)
 	if err != nil {
 		return s, fmt.Errorf("unmarshal output failed %s", err)
 	}
