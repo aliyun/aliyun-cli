@@ -100,6 +100,7 @@ func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
 		profile.AccessKeySecret = AccessKeySecretFlag(flags).GetStringOrDefault(profile.AccessKeySecret)
 		profile.RamRoleArn = RamRoleArnFlag(flags).GetStringOrDefault(profile.RamRoleArn)
 		profile.RoleSessionName = RoleSessionNameFlag(flags).GetStringOrDefault(profile.RoleSessionName)
+		profile.ExpiredSeconds = ExpiredSecondsFlag(flags).GetIntegerOrDefault(profile.ExpiredSeconds)
 	case EcsRamRole:
 		profile.RamRoleName = RamRoleNameFlag(flags).GetStringOrDefault(profile.RamRoleName)
 	case RsaKeyPair:

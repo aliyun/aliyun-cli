@@ -295,8 +295,29 @@ func TestAddFlag(t *testing.T) {
 			Shorthand:    0,
 			DefaultValue: "",
 		}
+		newExpiredSecondsFlag = &cli.Flag{
+			Category:     "config",
+			Name:         ExpiredSecondsFlagName,
+			AssignedMode: cli.AssignedOnce,
+			Short: i18n.T(
+				"use `--expired-seconds <seconds>` to specify expiration time",
+				"使用 `--expired-seconds <seconds>` 指定凭证过期时间"),
+			Long:         nil,
+			Required:     false,
+			Aliases:      nil,
+			Hidden:       false,
+			Validate:     nil,
+			Fields:       nil,
+			ExcludeWith:  nil,
+			Shorthand:    0,
+			DefaultValue: "",
+			Persistent:   false,
+		}
 	)
-	f := NewProfileFlag()
+	f := NewExpiredSecondsFlag()
+	assert.Equal(t, newExpiredSecondsFlag, f)
+
+	f = NewProfileFlag()
 	assert.Equal(t, newProfileFlag, f)
 
 	f = NewModeFlag()

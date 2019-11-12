@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"strconv"
 	"strings"
 
 	"github.com/aliyun/aliyun-cli/cli"
@@ -171,7 +172,11 @@ func configureRamRoleArn(w io.Writer, cp *Profile) error {
 	cp.RamRoleArn = ReadInput(cp.RamRoleArn)
 	cli.Printf(w, "Role Session Name [%s]: ", cp.RoleSessionName)
 	cp.RoleSessionName = ReadInput(cp.RoleSessionName)
-	cp.ExpiredSeconds = 900
+	if cp.ExpiredSeconds == 0 {
+		cp.ExpiredSeconds = 900
+	}
+	cli.Printf(w, "Expired Seconds [%v]: ", cp.ExpiredSeconds)
+	cp.ExpiredSeconds, _ = strconv.Atoi(ReadInput(strconv.Itoa(cp.ExpiredSeconds)))
 	return nil
 }
 

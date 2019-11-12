@@ -35,6 +35,7 @@ const (
 	RetryCountFlagName      = "retry-count"
 	SkipSecureVerifyName    = "skip-secure-verify"
 	ConfigurePathFlagName   = "config-path"
+	ExpiredSecondsFlagName  = "expired-seconds"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -54,6 +55,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewRetryTimeoutFlag())
 	fs.Add(NewRetryCountFlag())
 	fs.Add(NewSkipSecureVerify())
+	fs.Add(NewExpiredSecondsFlag())
 }
 
 func ProfileFlag(fs *cli.FlagSet) *cli.Flag {
@@ -117,6 +119,9 @@ func SkipSecureVerify(fs *cli.FlagSet) *cli.Flag {
 }
 func ConfigurePathFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ConfigurePathFlagName)
+}
+func ExpiredSecondsFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(ExpiredSecondsFlagName)
 }
 
 //var OutputFlag = &cli.Flag{Category: "config",
@@ -207,7 +212,15 @@ func NewRoleSessionNameFlag() *cli.Flag {
 			"use `--role-session-name <RoleSessionName>` to assign RoleSessionName",
 			"使用 `--role-session-name <RoleSessionName>` 指定RoleSessionName")}
 }
-
+func NewExpiredSecondsFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         ExpiredSecondsFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--expired-seconds <seconds>` to specify expiration time",
+			"使用 `--expired-seconds <seconds>` 指定凭证过期时间")}
+}
 func NewPrivateKeyFlag() *cli.Flag {
 	return &cli.Flag{Category: "config",
 		Name:         PrivateKeyFlagName,

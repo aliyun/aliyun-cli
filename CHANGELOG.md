@@ -2,6 +2,7 @@
 
 ### Master
 
+- add: flag `--expired-seconds` to specify expiration time
 - update: Help information for the configure command
 
 ### 3.0.29
