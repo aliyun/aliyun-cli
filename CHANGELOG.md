@@ -2,6 +2,8 @@
 
 ### Master
 
+- update: Help information for the configure command
+
 ### 3.0.29
 
 - update: meta data
