@@ -158,7 +158,7 @@ func TestConfigureStsToken(t *testing.T) {
 func TestConfigureRamRoleArn(t *testing.T) {
 	w := new(bytes.Buffer)
 	err := configureRamRoleArn(w, &Profile{Name: "default", Mode: AK, AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RamRoleArn: "RamRoleArn", RoleSessionName: "RoleSessionName", RegionId: "cn-hangzhou", OutputFormat: "json"})
-	assert.Equal(t, "Access Key Id [**********_id]: Access Key Secret [**************ret]: Ram Role Arn [RamRoleArn]: Role Session Name [RoleSessionName]: ", w.String())
+	assert.Equal(t, "Access Key Id [**********_id]: Access Key Secret [**************ret]: Ram Role Arn [RamRoleArn]: Role Session Name [RoleSessionName]: Expired Seconds [900]: ", w.String())
 	assert.Nil(t, err)
 }
 

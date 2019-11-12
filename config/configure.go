@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"strconv"
 	"strings"
 
 	"github.com/aliyun/aliyun-cli/cli"
@@ -37,7 +38,7 @@ func NewConfigureCommand() *cli.Command {
 		Short: i18n.T(
 			"configure credential and settings",
 			"配置身份认证和其他信息"),
-		Usage: "configure --mode <AuthenticateMode> --profile <profileName>",
+		Usage: "configure --mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair} --profile <profileName>",
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
@@ -171,7 +172,11 @@ func configureRamRoleArn(w io.Writer, cp *Profile) error {
 	cp.RamRoleArn = ReadInput(cp.RamRoleArn)
 	cli.Printf(w, "Role Session Name [%s]: ", cp.RoleSessionName)
 	cp.RoleSessionName = ReadInput(cp.RoleSessionName)
-	cp.ExpiredSeconds = 900
+	if cp.ExpiredSeconds == 0 {
+		cp.ExpiredSeconds = 900
+	}
+	cli.Printf(w, "Expired Seconds [%v]: ", cp.ExpiredSeconds)
+	cp.ExpiredSeconds, _ = strconv.Atoi(ReadInput(strconv.Itoa(cp.ExpiredSeconds)))
 	return nil
 }
 
