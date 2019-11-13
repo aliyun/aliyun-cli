@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -1275,11 +1276,17 @@ func SetLogger(Logger *log.Logger) ClientOption {
 	}
 }
 
-// SetAKInterface sets funciton for get the user's ak
-//
+// SetCredentialsProvider sets funciton for get the user's ak
 func SetCredentialsProvider(provider CredentialsProvider) ClientOption {
 	return func(client *Client) {
 		client.Config.CredentialsProvider = provider
+	}
+}
+
+// SetLocalAddr sets funciton for local addr
+func SetLocalAddr(localAddr net.Addr) ClientOption {
+	return func(client *Client) {
+		client.Config.LocalAddr = localAddr
 	}
 }
 

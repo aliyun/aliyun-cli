@@ -149,8 +149,8 @@ func NewModeFlag() *cli.Flag {
 		Category: "config",
 		Name:     ModeFlagName, DefaultValue: "AK", Persistent: true,
 		Short: i18n.T(
-			"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` to assign authenticate mode",
-			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` 指定认证方式")}
+			"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName}` to assign authenticate mode",
+			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName}` 指定认证方式")}
 }
 
 func NewAccessKeyIdFlag() *cli.Flag {

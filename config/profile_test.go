@@ -15,18 +15,11 @@ package config
 
 import (
 	"bytes"
-	"errors"
-	"net/http"
 	"os"
-	"strings"
 	"testing"
-
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/sts"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/signers"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
 
 	"github.com/stretchr/testify/assert"
@@ -129,17 +122,20 @@ func TestProfile(t *testing.T) {
 	p.OverwriteWithFlags(ctx)
 	assert.Equal(t, Profile{Name: "default", Mode: "free", RamRoleArn: "RamRoleArn", PrivateKey: "******", OutputFormat: "json", RetryCount: 0, RetryTimeout: 0, Language: "en"}, p)
 
+	p.Mode = StsToken
 	p.AccessKeyId = "****"
 	p.AccessKeySecret = "++++"
 	p.StsToken = "----"
 	p.OverwriteWithFlags(ctx)
 	assert.Equal(t, Profile{Name: "default", Mode: StsToken, StsToken: "----", AccessKeyId: "****", AccessKeySecret: "++++", RamRoleArn: "RamRoleArn", PrivateKey: "******", OutputFormat: "json", RetryCount: 0, RetryTimeout: 0, Language: "en"}, p)
 
+	p.Mode = RamRoleArn
 	p.StsToken = ""
 	p.RamRoleArn = "----"
 	p.OverwriteWithFlags(ctx)
 	assert.Equal(t, Profile{Name: "default", Mode: RamRoleArn, RamRoleArn: "----", AccessKeyId: "****", AccessKeySecret: "++++", PrivateKey: "******", OutputFormat: "json", RetryCount: 0, RetryTimeout: 0, Language: "en"}, p)
 
+	p.Mode = RsaKeyPair
 	p.AccessKeyId = ""
 	p.AccessKeySecret = ""
 	p.PrivateKey = "****"
@@ -147,6 +143,7 @@ func TestProfile(t *testing.T) {
 	p.OverwriteWithFlags(ctx)
 	assert.Equal(t, Profile{Name: "default", Mode: RsaKeyPair, KeyPairName: "++++", RamRoleArn: "----", PrivateKey: "****", OutputFormat: "json", RetryCount: 0, RetryTimeout: 0, Language: "en"}, p)
 
+	p.Mode = EcsRamRole
 	p.PrivateKey = ""
 	p.KeyPairName = ""
 	p.RamRoleName = "RamRoleName"
@@ -173,44 +170,23 @@ func TestProfile(t *testing.T) {
 
 	p.Mode = RamRoleArn
 	sdkClient, err = p.GetClient(ctx)
-	assert.Nil(t, sdkClient)
-	assert.NotNil(t, err)
+	assert.Nil(t, err)
+	assert.NotNil(t, sdkClient)
 
 	p.Mode = EcsRamRole
 	sdkClient, err = p.GetClient(ctx)
-	assert.Nil(t, sdkClient)
+	assert.Nil(t, err)
+	assert.NotNil(t, sdkClient)
+
+	p.Mode = RamRoleArnWithEcs
+	sdkClient, err = p.GetClient(ctx)
 	assert.NotNil(t, err)
+	assert.Nil(t, sdkClient)
 
 	p.Mode = RsaKeyPair
 	sdkClient, err = p.GetClient(ctx)
 	assert.Nil(t, err)
 	assert.NotNil(t, sdkClient)
-
-	//GetSessionCredential
-	p.Mode = AK
-	sessionCredential, err := p.GetSessionCredential()
-	assert.Nil(t, err)
-	assert.Equal(t, &signers.SessionCredential{AccessKeyId: p.AccessKeyId, AccessKeySecret: p.AccessKeySecret}, sessionCredential)
-
-	p.Mode = StsToken
-	sessionCredential, err = p.GetSessionCredential()
-	assert.Nil(t, err)
-	assert.Equal(t, &signers.SessionCredential{AccessKeyId: p.AccessKeyId, AccessKeySecret: p.AccessKeySecret, StsToken: p.StsToken}, sessionCredential)
-
-	p.Mode = RamRoleArn
-	sessionCredential, err = p.GetSessionCredential()
-	assert.NotNil(t, err)
-	assert.Nil(t, sessionCredential)
-
-	p.Mode = EcsRamRole
-	sessionCredential, err = p.GetSessionCredential()
-	assert.NotNil(t, err)
-	assert.Nil(t, sessionCredential)
-
-	p.Mode = "free"
-	sessionCredential, err = p.GetSessionCredential()
-	assert.EqualError(t, err, "unsupported mode 'free' to GetSessionCredential")
-	assert.Nil(t, sessionCredential)
 
 	//GetClientByAK
 	sdkCF := &sdk.Config{}
@@ -236,63 +212,15 @@ func TestProfile(t *testing.T) {
 	assert.Nil(t, err)
 	assert.NotNil(t, sdkClient)
 
-	//GetSessionCredentialByRoleArn
-	p.AccessKeyId = ""
-	p.AccessKeySecret = ""
-	sessionCredential, err = p.GetSessionCredentialByRoleArn()
-	assert.Nil(t, sessionCredential)
-	assert.True(t, strings.HasPrefix(err.Error(), "sts:AssumeRole() failed"))
-
-	//start hook
-	orighookAssumeRole := hookAssumeRole
-	hookAssumeRole = func(fn func(request *sts.AssumeRoleRequest) (response *sts.AssumeRoleResponse, err error)) func(request *sts.AssumeRoleRequest) (response *sts.AssumeRoleResponse, err error) {
-		return func(request *sts.AssumeRoleRequest) (response *sts.AssumeRoleResponse, err error) {
-			return &sts.AssumeRoleResponse{RequestId: "RequestId", Credentials: sts.Credentials{SecurityToken: "SecurityToken", AccessKeySecret: "AccessKeySecret", AccessKeyId: "AccessKeyId", Expiration: "Expiration"}}, nil
-		}
-	}
-	sessionCredential, err = p.GetSessionCredentialByRoleArn()
-	assert.Nil(t, err)
-	assert.Equal(t, &signers.SessionCredential{AccessKeyId: "AccessKeyId", AccessKeySecret: "AccessKeySecret", StsToken: "SecurityToken"}, sessionCredential)
-
 	//GetClientByRoleArn
 	sdkClient, err = p.GetClientByRoleArn(sdkCF)
 	assert.Nil(t, err)
 	assert.NotNil(t, sdkClient)
 
-	hookAssumeRole = orighookAssumeRole
-
-	//GetSessionCredentialByEcsRamRole
-	orighookHTTPGet := hookHTTPGet
-	orighookUnmarshal := hookUnmarshal
-
-	//testcase 1
-	hookHTTPGet = func(fn func(url string) (resp *http.Response, err error)) func(url string) (resp *http.Response, err error) {
-		return func(url string) (resp *http.Response, err error) {
-			return nil, errors.New("mock err")
-		}
-	}
-	p.RamRoleName = ""
-	sessionCredential, err = p.GetSessionCredentialByEcsRamRole()
-	assert.Nil(t, sessionCredential)
-	assert.EqualError(t, err, "Get default RamRole error: mock err. Or Run `aliyun configure` to configure it.")
-
-	//testcase 2
-	hookHTTPGet = func(fn func(url string) (resp *http.Response, err error)) func(url string) (resp *http.Response, err error) {
-		return func(url string) (resp *http.Response, err error) {
-			return new(http.Response), nil
-		}
-	}
-	hookUnmarshal = func(fn func(response responses.AcsResponse, httpResponse *http.Response, format string) (err error)) func(response responses.AcsResponse, httpResponse *http.Response, format string) (err error) {
-		return func(response responses.AcsResponse, httpResponse *http.Response, format string) (err error) {
-			return nil
-		}
-	}
-	sessionCredential, err = p.GetSessionCredentialByEcsRamRole()
-	assert.Nil(t, sessionCredential)
-	assert.EqualError(t, err, "Get meta-data status=0 please check RAM settings. Or Run `aliyun configure` to configure it.")
-
-	hookHTTPGet = orighookHTTPGet
-	hookUnmarshal = orighookUnmarshal
+	//GetClientByRamRoleArnWithEcs
+	sdkClient, err = p.GetClientByRamRoleArnWithEcs(sdkCF)
+	assert.NotNil(t, err)
+	assert.Nil(t, sdkClient)
 
 	//GetClientByPrivateKey
 	sdkClient, err = p.GetClientByPrivateKey(sdkCF)

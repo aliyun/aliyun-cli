@@ -6,9 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/aliyun/credentials-go/credentials"
 )
 
 func NewOssCommand() *cli.Command {
@@ -100,15 +102,15 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 		return fmt.Errorf("config failed: %s", err.Error())
 	}
 
-	sc, err := profile.GetSessionCredential()
+	accessKeyID, accessSecret, stsToken, err := getSessionCredential(&profile)
 	if err != nil {
 		return fmt.Errorf("can't get credential %s", err)
 	}
 
 	configs := make(map[string]string, 0)
-	configs["access-key-id"] = sc.AccessKeyId
-	configs["access-key-secret"] = sc.AccessKeySecret
-	configs["sts-token"] = sc.StsToken
+	configs["access-key-id"] = accessKeyID
+	configs["access-key-secret"] = accessSecret
+	configs["sts-token"] = stsToken
 
 	if ep, ok := ctx.Flags().GetValue("endpoint"); !ok {
 		configs["endpoint"] = "oss-" + profile.RegionId + ".aliyuncs.com"
@@ -175,4 +177,62 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 		return nil
 	}
 	return nil
+}
+
+func getSessionCredential(profile *config.Profile) (string, string, string, error) {
+	var conf *credentials.Configuration
+	switch profile.Mode {
+	case config.AK:
+		conf = &credentials.Configuration{
+			Type:            "access_key",
+			AccessKeyID:     profile.AccessKeyId,
+			AccessKeySecret: profile.AccessKeySecret,
+		}
+	case config.StsToken:
+		conf = &credentials.Configuration{
+			Type:            "sts",
+			AccessKeyID:     profile.AccessKeyId,
+			AccessKeySecret: profile.AccessKeySecret,
+			SecurityToken:   profile.StsToken,
+		}
+	case config.RamRoleArn:
+		conf = &credentials.Configuration{
+			Type:                  "ram_role_arn",
+			AccessKeyID:           profile.AccessKeyId,
+			AccessKeySecret:       profile.AccessKeySecret,
+			RoleArn:               profile.RamRoleArn,
+			RoleSessionName:       profile.RoleSessionName,
+			Policy:                "",
+			RoleSessionExpiration: profile.ExpiredSeconds,
+		}
+	case config.EcsRamRole:
+		conf = &credentials.Configuration{
+			Type:     "ecs_ram_role",
+			RoleName: profile.RamRoleName,
+		}
+	case config.RamRoleArnWithEcs:
+		client, _ := sdk.NewClientWithEcsRamRole(profile.RegionId, profile.RamRoleName)
+		return profile.GetSessionCredential(client)
+	}
+	credential, err := credentials.NewCredential(conf)
+	if err != nil {
+		return "", "", "", err
+	}
+	var lastErr error
+	accessKeyID, err := credential.GetAccessKeyID()
+	if err != nil {
+		lastErr = err
+	}
+	accessSecret, err := credential.GetAccessSecret()
+	if err != nil {
+		lastErr = err
+	}
+	stsToken, err := credential.GetSecurityToken()
+	if err != nil {
+		lastErr = err
+	}
+	if lastErr != nil {
+		return "", "", "", lastErr
+	}
+	return accessKeyID, accessSecret, stsToken, nil
 }

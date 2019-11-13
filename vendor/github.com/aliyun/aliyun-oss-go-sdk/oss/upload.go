@@ -191,6 +191,9 @@ func (bucket Bucket) uploadFile(objectKey, filePath string, partSize int64, opti
 	event := newProgressEvent(TransferStartedEvent, 0, totalBytes, 0)
 	publishProgress(listener, event)
 
+	// oss server don't support x-oss-storage-class
+	options = deleteOption(options, HTTPHeaderOssStorageClass)
+
 	// Start the worker coroutine
 	arg := workerArg{&bucket, filePath, imur, options, uploadPartHooker}
 	for w := 1; w <= routines; w++ {
@@ -478,6 +481,9 @@ func (bucket Bucket) uploadFileWithCp(objectKey, filePath string, partSize int64
 	// because read or write event has been notified in teeReader.Read()
 	event := newProgressEvent(TransferStartedEvent, completedBytes, ucp.FileStat.Size, 0)
 	publishProgress(listener, event)
+
+	// oss server don't support x-oss-storage-class
+	options = deleteOption(options, HTTPHeaderOssStorageClass)
 
 	// Start the workers
 	arg := workerArg{&bucket, filePath, imur, options, uploadPartHooker}

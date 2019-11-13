@@ -2,6 +2,20 @@
 
 ### Master
 
+- add: credential type `RamRoleArnWithRoleName`
+  >This type is to add RamRoleArn credentials based on EcsRamRole, and does not store information such as ak locally. When the ecs role has the AssumeRole permission, it can be used to exchange permissions for another role.
+```shell
+$ aliyun configure --mode RamRoleArnWithRoleName --profile ecsarn
+Configuring profile 'ecsarn' in 'RamRoleArnWithRoleName' authenticate mode...
+Ecs Ram Role []: <YourEcsRamRole>
+Ram Role Arn []: <YourRamRoleArn>
+Role Session Name []: <YourRoleSessionName>
+Expired Seconds [900]: 
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] en:
+Saving profile[ecsarn] ...Done
+```
 - add: flag `--expired-seconds` to specify expiration time
 - update: Help information for the configure command
 
