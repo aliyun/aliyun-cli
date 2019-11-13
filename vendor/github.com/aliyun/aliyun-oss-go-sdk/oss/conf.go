@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"time"
 )
@@ -97,6 +98,7 @@ type Config struct {
 	UploadLimitSpeed    int                 // Upload limit speed:KB/s, 0 is unlimited
 	UploadLimiter       *OssLimiter         // Bandwidth limit reader for upload
 	CredentialsProvider CredentialsProvider // User provides interface to get AccessKeyID, AccessKeySecret, SecurityToken
+	LocalAddr           net.Addr            // local client host info
 }
 
 // LimitUploadSpeed uploadSpeed:KB/s, 0 is unlimited,default is 0

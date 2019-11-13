@@ -63,6 +63,8 @@ func doConfigureList(w io.Writer) {
 			cred = "RamRoleArn:" + "***" + GetLastChars(pf.AccessKeyId, 3)
 		case EcsRamRole:
 			cred = "EcsRamRole:" + pf.RamRoleName
+		case RamRoleArnWithEcs:
+			cred = "arn:" + "***" + GetLastChars(pf.AccessKeyId, 3)
 		case RsaKeyPair:
 			cred = "RsaKeyPair:" + pf.KeyPairName
 		}

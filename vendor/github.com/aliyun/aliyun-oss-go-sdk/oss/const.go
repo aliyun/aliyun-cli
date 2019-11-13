@@ -182,5 +182,5 @@ const (
 
 	NullVersion = "null"
 
-	Version = "v2.0.2" // Go SDK version
+	Version = "v2.0.3" // Go SDK version
 )

@@ -48,8 +48,8 @@ func TestAddFlag(t *testing.T) {
 			DefaultValue: "AK",
 			Persistent:   true,
 			Short: i18n.T(
-				"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` to assign authenticate mode",
-				"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair}` 指定认证方式"),
+				"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName}` to assign authenticate mode",
+				"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName}` 指定认证方式"),
 			Long:         nil,
 			Required:     false,
 			Aliases:      nil,

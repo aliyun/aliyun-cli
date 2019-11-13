@@ -38,7 +38,7 @@ func NewConfigureCommand() *cli.Command {
 		Short: i18n.T(
 			"configure credential and settings",
 			"配置身份认证和其他信息"),
-		Usage: "configure --mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair} --profile <profileName>",
+		Usage: "configure --mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName} --profile <profileName>",
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
@@ -101,6 +101,9 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 		case EcsRamRole:
 			cp.Mode = EcsRamRole
 			configureEcsRamRole(w, &cp)
+		case RamRoleArnWithEcs:
+			cp.Mode = RamRoleArnWithEcs
+			configureRamRoleArnWithEcs(w, &cp)
 		case RsaKeyPair:
 			cp.Mode = RsaKeyPair
 			configureRsaKeyPair(w, &cp)
@@ -183,6 +186,21 @@ func configureRamRoleArn(w io.Writer, cp *Profile) error {
 func configureEcsRamRole(w io.Writer, cp *Profile) error {
 	cli.Printf(w, "Ecs Ram Role [%s]: ", cp.RamRoleName)
 	cp.RamRoleName = ReadInput(cp.RamRoleName)
+	return nil
+}
+
+func configureRamRoleArnWithEcs(w io.Writer, cp *Profile) error {
+	cli.Printf(w, "Ecs Ram Role [%s]: ", cp.RamRoleName)
+	cp.RamRoleName = ReadInput(cp.RamRoleName)
+	cli.Printf(w, "Ram Role Arn [%s]: ", cp.RamRoleArn)
+	cp.RamRoleArn = ReadInput(cp.RamRoleArn)
+	cli.Printf(w, "Role Session Name [%s]: ", cp.RoleSessionName)
+	cp.RoleSessionName = ReadInput(cp.RoleSessionName)
+	if cp.ExpiredSeconds == 0 {
+		cp.ExpiredSeconds = 900
+	}
+	cli.Printf(w, "Expired Seconds [%v]: ", cp.ExpiredSeconds)
+	cp.ExpiredSeconds, _ = strconv.Atoi(ReadInput(strconv.Itoa(cp.ExpiredSeconds)))
 	return nil
 }
 
