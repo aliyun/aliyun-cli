@@ -2,6 +2,9 @@
 
 ### Master
 
+### 3.0.30
+
+- update: meta data
 - add: credential type `RamRoleArnWithRoleName`
   >This type is to add RamRoleArn credentials based on EcsRamRole, and does not store information such as ak locally. When the ecs role has the AssumeRole permission, it can be used to exchange permissions for another role.
 ```shell
