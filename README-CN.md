@@ -4,6 +4,7 @@
 
 <p align="center">
 <a href="https://travis-ci.org/aliyun/aliyun-cli"><img src="https://travis-ci.org/aliyun/aliyun-cli.svg?branch=master" alt="Travis Build Status"></a>
+<a href="https://ci.appveyor.com/project/aliyun/aliyun-cli/master"><img src="https://ci.appveyor.com/api/projects/status/5ahqhua64ifr6skx/branch/master?svg=true" alt="Appveyor Build Status"></a>
 <a href="https://codecov.io/gh/aliyun/aliyun-cli"><img src="https://codecov.io/gh/aliyun/aliyun-cli/branch/master/graph/badge.svg" alt="codecov"></a>
 <a href="https://github.com/aliyun/aliyun-cli/blob/master/LICENSE"><img src="https://img.shields.io/github/license/aliyun/aliyun-cli.svg" alt="License"></a>
 <a href="https://goreportcard.com/report/github.com/aliyun/aliyun-cli"><img src="https://goreportcard.com/badge/github.com/aliyun/aliyun-cli" alt="Go Report" ></a>
@@ -78,12 +79,12 @@ Saving profile[akProfile] ...Done.
 
 阿里云CLI，可通过在`configure`命令后增加`--mode <authenticationMethod>`参数的方式来使用不同的认证方式，目前支持的认证方式如下：
 
-| 验证方式  | 说明 |
-| --------       | -------- |
-| AK             | 使用AccessKey ID/Secret访问 |
-| StsToken       | 使用STS Token访问    |
-| RamRoleArn     | 使用RAM子账号的AssumeRole方式访问     |
-| EcsRamRole     | 在ECS实例上通过EcsRamRole实现免密验证   |
+| 验证方式   | 说明                                  |
+|------------|-------------------------------------|
+| AK         | 使用AccessKey ID/Secret访问           |
+| StsToken   | 使用STS Token访问                     |
+| RamRoleArn | 使用RAM子账号的AssumeRole方式访问     |
+| EcsRamRole | 在ECS实例上通过EcsRamRole实现免密验证 |
 
 ### 启用zsh/bash自动补全
 
@@ -217,7 +218,7 @@ aliyun ecs DescribeInstances --output cols=InstanceId,Status rows=Instances.Inst
 
 ```sh
 InstanceId             | Status
-----------             | ------
+-----------------------|--------
 i-12345678912345678123 | Stopped
 i-abcdefghijklmnopqrst | Running
 ```
