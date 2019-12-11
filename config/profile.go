@@ -142,7 +142,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.RegionId = RegionFlag(ctx.Flags()).GetStringOrDefault(cp.RegionId)
 	cp.Language = LanguageFlag(ctx.Flags()).GetStringOrDefault(cp.Language)
 	cp.RetryTimeout = RetryTimeoutFlag(ctx.Flags()).GetIntegerOrDefault(cp.RetryTimeout)
-	cp.RetryCount = RetryTimeoutFlag(ctx.Flags()).GetIntegerOrDefault(cp.RetryCount)
+	cp.RetryCount = RetryCountFlag(ctx.Flags()).GetIntegerOrDefault(cp.RetryCount)
 	cp.ExpiredSeconds = ExpiredSecondsFlag(ctx.Flags()).GetIntegerOrDefault(cp.ExpiredSeconds)
 
 	if cp.AccessKeyId == "" {
