@@ -2,6 +2,8 @@
 
 ### Master
 
+- fix: flag `--retry-timeout` bug
+
 ### 3.0.30
 
 - update: meta data
