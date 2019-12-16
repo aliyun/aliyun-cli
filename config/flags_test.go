@@ -240,14 +240,32 @@ func TestAddFlag(t *testing.T) {
 			DefaultValue: "",
 			Persistent:   false,
 		}
-		newRetryTimeoutFlag = &cli.Flag{
+		newReadTimeoutFlag = &cli.Flag{
 			Category:     "caller",
-			Name:         RetryTimeoutFlagName,
+			Name:         ReadTimeoutFlagName,
 			AssignedMode: cli.AssignedOnce,
 			Hidden:       false,
 			Short: i18n.T(
-				"use `--retry-timeout <seconds>` to set retry timeout(seconds)",
-				"使用 `--retry-timeout <seconds>` 指定请求超时时间(秒)"),
+				"use `--read-timeout <seconds>` to set I/O timeout(seconds)",
+				"使用 `--read-timeout <seconds>` 指定I/O超时时间(秒)"),
+			Long:         nil,
+			Required:     false,
+			Aliases:      []string{"retry-timeout"},
+			Validate:     nil,
+			Fields:       nil,
+			ExcludeWith:  nil,
+			Shorthand:    0,
+			DefaultValue: "",
+			Persistent:   false,
+		}
+		newConnectTimeFlag = &cli.Flag{
+			Category:     "caller",
+			Name:         ConnectTimeoutFlagName,
+			AssignedMode: cli.AssignedOnce,
+			Hidden:       false,
+			Short: i18n.T(
+				"use `--connect-timeout <seconds>` to set connect timeout(seconds)",
+				"使用 `--connect-timeout <seconds>` 指定请求连接超时时间(秒)"),
 			Long:         nil,
 			Required:     false,
 			Aliases:      nil,
@@ -353,8 +371,11 @@ func TestAddFlag(t *testing.T) {
 	f = NewLanguageFlag()
 	assert.Equal(t, newLanguageFlag, f)
 
-	f = NewRetryTimeoutFlag()
-	assert.Equal(t, newRetryTimeoutFlag, f)
+	f = NewReadTimeoutFlag()
+	assert.Equal(t, newReadTimeoutFlag, f)
+
+	f = NewConnectTimeoutFlag()
+	assert.Equal(t, newConnectTimeFlag, f)
 
 	f = NewRetryCountFlag()
 	assert.Equal(t, newRetryCountFlag, f)

@@ -44,7 +44,8 @@ func TestNewProfile(t *testing.T) {
 		Verified:        "",
 		RegionId:        "",
 		Site:            "",
-		RetryTimeout:    0,
+		ReadTimeout:     0,
+		ConnectTimeout:  0,
 		RetryCount:      0,
 	}
 
@@ -120,20 +121,20 @@ func TestProfile(t *testing.T) {
 	p.StsToken = ""
 	p.RegionId = ""
 	p.OverwriteWithFlags(ctx)
-	assert.Equal(t, Profile{Name: "default", Mode: "free", RamRoleArn: "RamRoleArn", PrivateKey: "******", OutputFormat: "json", RetryCount: 0, RetryTimeout: 0, Language: "en"}, p)
+	assert.Equal(t, Profile{Name: "default", Mode: "free", RamRoleArn: "RamRoleArn", PrivateKey: "******", OutputFormat: "json", RetryCount: 0, ReadTimeout: 0, Language: "en"}, p)
 
 	p.Mode = StsToken
 	p.AccessKeyId = "****"
 	p.AccessKeySecret = "++++"
 	p.StsToken = "----"
 	p.OverwriteWithFlags(ctx)
-	assert.Equal(t, Profile{Name: "default", Mode: StsToken, StsToken: "----", AccessKeyId: "****", AccessKeySecret: "++++", RamRoleArn: "RamRoleArn", PrivateKey: "******", OutputFormat: "json", RetryCount: 0, RetryTimeout: 0, Language: "en"}, p)
+	assert.Equal(t, Profile{Name: "default", Mode: StsToken, StsToken: "----", AccessKeyId: "****", AccessKeySecret: "++++", RamRoleArn: "RamRoleArn", PrivateKey: "******", OutputFormat: "json", RetryCount: 0, ReadTimeout: 0, Language: "en"}, p)
 
 	p.Mode = RamRoleArn
 	p.StsToken = ""
 	p.RamRoleArn = "----"
 	p.OverwriteWithFlags(ctx)
-	assert.Equal(t, Profile{Name: "default", Mode: RamRoleArn, RamRoleArn: "----", AccessKeyId: "****", AccessKeySecret: "++++", PrivateKey: "******", OutputFormat: "json", RetryCount: 0, RetryTimeout: 0, Language: "en"}, p)
+	assert.Equal(t, Profile{Name: "default", Mode: RamRoleArn, RamRoleArn: "----", AccessKeyId: "****", AccessKeySecret: "++++", PrivateKey: "******", OutputFormat: "json", RetryCount: 0, ReadTimeout: 0, Language: "en"}, p)
 
 	p.Mode = RsaKeyPair
 	p.AccessKeyId = ""
@@ -141,17 +142,17 @@ func TestProfile(t *testing.T) {
 	p.PrivateKey = "****"
 	p.KeyPairName = "++++"
 	p.OverwriteWithFlags(ctx)
-	assert.Equal(t, Profile{Name: "default", Mode: RsaKeyPair, KeyPairName: "++++", RamRoleArn: "----", PrivateKey: "****", OutputFormat: "json", RetryCount: 0, RetryTimeout: 0, Language: "en"}, p)
+	assert.Equal(t, Profile{Name: "default", Mode: RsaKeyPair, KeyPairName: "++++", RamRoleArn: "----", PrivateKey: "****", OutputFormat: "json", RetryCount: 0, ReadTimeout: 0, Language: "en"}, p)
 
 	p.Mode = EcsRamRole
 	p.PrivateKey = ""
 	p.KeyPairName = ""
 	p.RamRoleName = "RamRoleName"
 	p.OverwriteWithFlags(ctx)
-	assert.Equal(t, Profile{Name: "default", Mode: EcsRamRole, RamRoleArn: "----", RamRoleName: "RamRoleName", OutputFormat: "json", RetryCount: 0, RetryTimeout: 0, Language: "en"}, p)
+	assert.Equal(t, Profile{Name: "default", Mode: EcsRamRole, RamRoleArn: "----", RamRoleName: "RamRoleName", OutputFormat: "json", RetryCount: 0, ReadTimeout: 0, Language: "en"}, p)
 
 	//GetClient
-	p.RetryTimeout = 1
+	p.ReadTimeout = 1
 	p.RetryCount = 1
 	p.Mode = "free"
 	sdkClient, err := p.GetClient(ctx)

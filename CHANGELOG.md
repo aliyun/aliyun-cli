@@ -2,6 +2,8 @@
 
 ### Master
 
+- update: flag `--retry-timeout` renamed to `--read-timeout`
+- add: flag `--connect-timeout`
 - fix: flag `--retry-timeout` bug
 
 ### 3.0.30

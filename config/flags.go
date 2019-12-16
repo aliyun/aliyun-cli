@@ -31,7 +31,8 @@ const (
 	KeyPairNameFlagName     = "key-pair-name"
 	RegionFlagName          = "region"
 	LanguageFlagName        = "language"
-	RetryTimeoutFlagName    = "retry-timeout"
+	ReadTimeoutFlagName     = "read-timeout"
+	ConnectTimeoutFlagName  = "connect-timeout"
 	RetryCountFlagName      = "retry-count"
 	SkipSecureVerifyName    = "skip-secure-verify"
 	ConfigurePathFlagName   = "config-path"
@@ -52,10 +53,14 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewRoleSessionNameFlag())
 	fs.Add(NewPrivateKeyFlag())
 	fs.Add(NewKeyPairNameFlag())
-	fs.Add(NewRetryTimeoutFlag())
+	fs.Add(NewReadTimeoutFlag())
+	fs.Add(NewConnectTimeoutFlag())
 	fs.Add(NewRetryCountFlag())
 	fs.Add(NewSkipSecureVerify())
 	fs.Add(NewExpiredSecondsFlag())
+}
+func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(ConnectTimeoutFlagName)
 }
 
 func ProfileFlag(fs *cli.FlagSet) *cli.Flag {
@@ -106,8 +111,8 @@ func LanguageFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(LanguageFlagName)
 }
 
-func RetryTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
-	return fs.Get(RetryTimeoutFlagName)
+func ReadTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(ReadTimeoutFlagName)
 }
 
 func RetryCountFlag(fs *cli.FlagSet) *cli.Flag {
@@ -269,14 +274,26 @@ func NewConfigurePathFlag() *cli.Flag {
 		),
 	}
 }
-func NewRetryTimeoutFlag() *cli.Flag {
+func NewReadTimeoutFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "caller",
-		Name:         RetryTimeoutFlagName,
+		Name:         ReadTimeoutFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Aliases:      []string{"retry-timeout"},
+		Short: i18n.T(
+			"use `--read-timeout <seconds>` to set I/O timeout(seconds)",
+			"使用 `--read-timeout <seconds>` 指定I/O超时时间(秒)"),
+	}
+}
+
+func NewConnectTimeoutFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         ConnectTimeoutFlagName,
 		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
-			"use `--retry-timeout <seconds>` to set retry timeout(seconds)",
-			"使用 `--retry-timeout <seconds>` 指定请求超时时间(秒)"),
+			"use `--connect-timeout <seconds>` to set connect timeout(seconds)",
+			"使用 `--connect-timeout <seconds>` 指定请求连接超时时间(秒)"),
 	}
 }
 
