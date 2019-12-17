@@ -60,7 +60,8 @@ type Profile struct {
 	OutputFormat    string           `json:"output_format"`
 	Language        string           `json:"language"`
 	Site            string           `json:"site"`
-	RetryTimeout    int              `json:"retry_timeout"`
+	ReadTimeout     int              `json:"retry_timeout"`
+	ConnectTimeout  int              `json:"connect_timeout"`
 	RetryCount      int              `json:"retry_count"`
 	parent          *Configuration   //`json:"-"`
 }
@@ -141,7 +142,8 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.PrivateKey = PrivateKeyFlag(ctx.Flags()).GetStringOrDefault(cp.PrivateKey)
 	cp.RegionId = RegionFlag(ctx.Flags()).GetStringOrDefault(cp.RegionId)
 	cp.Language = LanguageFlag(ctx.Flags()).GetStringOrDefault(cp.Language)
-	cp.RetryTimeout = RetryTimeoutFlag(ctx.Flags()).GetIntegerOrDefault(cp.RetryTimeout)
+	cp.ReadTimeout = ReadTimeoutFlag(ctx.Flags()).GetIntegerOrDefault(cp.ReadTimeout)
+	cp.ConnectTimeout = ConnectTimeoutFlag(ctx.Flags()).GetIntegerOrDefault(cp.ConnectTimeout)
 	cp.RetryCount = RetryCountFlag(ctx.Flags()).GetIntegerOrDefault(cp.RetryCount)
 	cp.ExpiredSeconds = ExpiredSecondsFlag(ctx.Flags()).GetIntegerOrDefault(cp.ExpiredSeconds)
 
@@ -174,34 +176,41 @@ func (cp *Profile) ValidateAK() error {
 
 func (cp *Profile) GetClient(ctx *cli.Context) (*sdk.Client, error) {
 	config := sdk.NewConfig()
-	if cp.RetryTimeout > 0 {
-		config.WithTimeout(time.Duration(cp.RetryTimeout) * time.Second)
-	}
-	if cp.RetryCount > 0 {
-		config.WithMaxRetryTime(cp.RetryCount)
-	}
 	if SkipSecureVerify(ctx.Flags()).IsAssigned() {
 		config.HttpTransport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 	}
-
+	if cp.RetryCount > 0 {
+		config.WithMaxRetryTime(cp.RetryCount)
+	}
+	var client *sdk.Client
+	var err error
 	switch cp.Mode {
 	case AK:
-		return cp.GetClientByAK(config)
+		client, err = cp.GetClientByAK(config)
 	case StsToken:
-		return cp.GetClientBySts(config)
+		client, err = cp.GetClientBySts(config)
 	case RamRoleArn:
-		return cp.GetClientByRoleArn(config)
+		client, err = cp.GetClientByRoleArn(config)
 	case EcsRamRole:
-		return cp.GetClientByEcsRamRole(config)
+		client, err = cp.GetClientByEcsRamRole(config)
 	case RsaKeyPair:
-		return cp.GetClientByPrivateKey(config)
+		client, err = cp.GetClientByPrivateKey(config)
 	case RamRoleArnWithEcs:
-		return cp.GetClientByRamRoleArnWithEcs(config)
+		client, err = cp.GetClientByRamRoleArnWithEcs(config)
 	default:
-		return nil, fmt.Errorf("unexcepted certificate mode: %s", cp.Mode)
+		client, err = nil, fmt.Errorf("unexcepted certificate mode: %s", cp.Mode)
 	}
+	if client != nil {
+		if cp.ReadTimeout > 0 {
+			client.SetReadTimeout(time.Duration(cp.ReadTimeout) * time.Second)
+		}
+		if cp.ConnectTimeout > 0 {
+			client.SetConnectTimeout(time.Duration(cp.ConnectTimeout) * time.Second)
+		}
+	}
+	return client, err
 }
 
 func (cp *Profile) GetClientByAK(config *sdk.Config) (*sdk.Client, error) {
