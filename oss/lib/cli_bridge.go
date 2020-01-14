@@ -3,8 +3,6 @@ package lib
 import (
 	"fmt"
 	"os"
-	"strings"
-	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/aliyun-cli/cli"
@@ -124,11 +122,6 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	//	configs[OptionLanguage] = "EN"
 	//}
 
-	ts := time.Now().UnixNano()
-	commandLine = strings.Join(os.Args[1:], " ")
-	// os.Args = []string {"aliyun", "oss", "ls"}
-
-	clearEnv()
 	a2 := []string{"aliyun", "oss"}
 	a2 = append(a2, ctx.Command().Name)
 	for _, a := range args {
@@ -155,28 +148,9 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 			a2 = append(a2, v)
 		}
 	}
+	os.Args = a2[1:]
+	return ParseAndRunCommand()
 
-	os.Args = a2
-	// cli.Noticef("%v", os.Args)
-
-	args, options, err := ParseArgOptions()
-	if err != nil {
-		return err
-	}
-
-	args = args[1:]
-	// fmt.Printf("%v", args)
-	showElapse, err := RunCommand(args, options)
-	if err != nil {
-		return err
-	}
-
-	if showElapse {
-		te := time.Now().UnixNano()
-		fmt.Printf("%.6f(s) elapsed\n", float64(te-ts)/1e9)
-		return nil
-	}
-	return nil
 }
 
 func getSessionCredential(profile *config.Profile) (string, string, string, error) {
