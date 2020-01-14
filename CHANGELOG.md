@@ -2,6 +2,8 @@
 
 ### Master
 
+- update: support oss log
+
 ### 3.0.32
 
 - update: meta data
