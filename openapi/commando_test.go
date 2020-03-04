@@ -206,8 +206,8 @@ func Test_processInvoke(t *testing.T) {
 	assert.Nil(t, err)
 
 	out := `{"requestid":"test","name":"json"}`
-	out = FormatJson(out)
-	assert.Equal(t, "{\n\t\"requestid\": \"test\",\n\t\"name\": \"json\"\n}", out)
+	out = sortJSON(out)
+	assert.Equal(t, "{\n\t\"name\": \"json\",\n\t\"requestid\": \"test\"\n}", out)
 }
 
 func Test_help(t *testing.T) {
