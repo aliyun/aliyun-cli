@@ -20,7 +20,6 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/meta"
 
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -164,19 +163,23 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		}
 	}
 
-	out = FormatJson(out)
+	out = sortJSON(out)
 
 	cli.Println(ctx.Writer(), out)
 	return nil
 }
 
-func FormatJson(content string) string {
-	var buf bytes.Buffer
-	err := json.Indent(&buf, []byte(content), "", "\t")
-	if err == nil {
-		content = buf.String()
+func sortJSON(content string) string {
+	var v interface{}
+	err := json.Unmarshal([]byte(content), &v)
+	if err != nil {
+		return content
 	}
-	return content
+	data, err := json.MarshalIndent(v, "", "\t")
+	if err != nil {
+		return content
+	}
+	return string(data)
 }
 
 // invoke with helper
