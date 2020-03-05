@@ -193,11 +193,11 @@ func getSessionCredential(profile *config.Profile) (string, string, string, erro
 		return "", "", "", err
 	}
 	var lastErr error
-	accessKeyID, err := credential.GetAccessKeyID()
+	accessKeyID, err := credential.GetAccessKeyId()
 	if err != nil {
 		lastErr = err
 	}
-	accessSecret, err := credential.GetAccessSecret()
+	accessSecret, err := credential.GetAccessKeySecret()
 	if err != nil {
 		lastErr = err
 	}
