@@ -227,21 +227,6 @@ func (s *OssutilCommandSuite) TestDuPayerErrorObject(c *C) {
 	_, err := cm.RunCommand(command, args, options)
 	c.Assert(err, NotNil)
 
-	// payer endpoint is error
-	requester = "requester"
-	options = OptionMapType{
-		"endpoint":        &str,
-		"accessKeyID":     &str,
-		"accessKeySecret": &str,
-		"stsToken":        &str,
-		"configFile":      &ConfigFile,
-		"payer":           &requester,
-	}
-	srcUrl = CloudURLToString(bucketName, objectName)
-	args = []string{srcUrl}
-	_, err = cm.RunCommand(command, args, options)
-	c.Assert(err, NotNil)
-
 	// srcUrl is error
 	args = []string{"http://bucketname"}
 	_, err = cm.RunCommand(command, args, options)

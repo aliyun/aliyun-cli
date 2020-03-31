@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bytes"
+	"container/list"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -11,6 +12,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
@@ -28,14 +31,15 @@ const (
 )
 
 var specChineseProbe = SpecText{
-	synopsisText: "网络探测，用于对oss上传或者下载的网络链路进行探测,并输出探测报告",
+	synopsisText: "探测命令,支持多种功能探测",
 
 	paramText: "file_name [options]",
 
 	syntaxText: ` 
     ossutil probe --download --url http_url [--addr=domain_name] [file_name]
     ossutil probe --download --bucketname bucket-name  [--object=object_name] [--addr=domain_name] [file_name]
-    ossutil probe --upload [file_name] --bucketname bucket-name [--object=object_name] [--addr=domain_name] 
+    ossutil probe --upload [file_name] --bucketname bucket-name [--object=object_name] [--addr=domain_name]
+    ossutil probe --probe-item item_value --bucketname bucket-name [--object=object_name]
 `,
 
 	detailHelpText: ` 
@@ -52,6 +56,12 @@ var specChineseProbe = SpecText{
         如果不输入--object，则上传到oss中object名称是随机生成的，探测结束后会将该临时object删除
 		   
     上述命令中，file_name是参数，下载探测表示下载文件保存的目录名或者文件名，上传探测表示文件名
+
+    其他探测功能(--probe-item表示)
+    取值cycle-symlink: 探测本地目录是否存在死循环链接文件或者目录
+    取值upload-speed: 探测上传带宽
+    取值download-speed: 探测下载带宽
+     
 
 --url选项
 
@@ -73,9 +83,13 @@ var specChineseProbe = SpecText{
 
     表示上传模式,缺省值为normal,取值为:normal|append|multipart,分别表示正常上传、追加上传、分块上传
 
+--probe-item选项
+
+    表示其他探测功能的项目
+
 用法：
 
-    该命令有三种用法：
+    该命令有四种用法：
 
     1) ossutil probe --download --url http_url [--addr=domain_name] [file_name]
         该用法下载http_url地址到本地文件系统中，并输出探测报告;如果不输入file_name，则下载文
@@ -95,6 +109,10 @@ var specChineseProbe = SpecText{
     中object名称为object_name;如果不输入--object，则oss中object名称为工具自动生成，探测结束
     后会将该临时object删除
         如果输入--addr，工具会探测domain_name, 默认探测 www.aliyun.com
+    
+    4) ossutil probe --probe-item item_value --bucketname bucket-name [--object=object_name]
+       该功能通过选项--probe-item不同的取值,可以实现不同的探测功能,目前取值有cycle-symlink, upload-speed, download-speed
+    分别表示本地死链检测, 探测上传带宽, 探测下载带宽
 `,
 
 	sampleText: ` 
@@ -133,11 +151,20 @@ var specChineseProbe = SpecText{
 
     12) 上传指定文件到指定object,并检测addr地址
         ossutil probe --upload file_name --bucketname bucket-name --object object_name --addr www.aliyun.com
+    
+    13) 检测本地目录dir是否存在死循环链接文件或者目录
+        ossutil probe --probe-item cycle-symlink dir
+
+    14) 探测上传带宽
+        ossutil probe --probe-item upload-speed --bucketname bucket-name
+    
+    15) 探测下载带宽, object要已经存在,且大小最好超过5M
+        ossutil probe --probe-item download-speed --bucketname bucket-name --object object_name
 `,
 }
 
 var specEnglishProbe = SpecText{
-	synopsisText: "Detects oss upload or download network links and outputs reports ",
+	synopsisText: "Probe command, support for multiple function detection",
 
 	paramText: "file_name [options]",
 
@@ -145,6 +172,7 @@ var specEnglishProbe = SpecText{
 	ossutil probe --download --url http_url [--addr=domain_name] [file_name]
     ossutil probe --download --bucketname bucket-name  [--object=object_name] [--addr=domain_name] [file_name]
     ossutil probe --upload [file_name] --bucketname bucket-name [--object=object_name] [--addr=domain_name] 
+    ossutil probe --probe-item item_value --bucketname bucket-name [--object=object_name]
 `,
 
 	detailHelpText: ` 
@@ -161,6 +189,11 @@ var specEnglishProbe = SpecText{
          If do not input --object, the object name is randomly generated, and the temporary object will be deleted after the probe ends.
 		   
     In the above commands, file_name is a parameter which may be a directory name or a file name in the case of download probe, and must be a exist file name in the case of upload probe
+
+    Other detection functions(--probe-item)
+    value cycle-symlink: Detects whether there is an infinite loop link file or directory in the local directory
+    value upload-speed: probe upload bandwidth
+    value download-speed: probe download bandwidth
 
 --url option
 
@@ -182,13 +215,17 @@ var specEnglishProbe = SpecText{
 
     specifies the upload mode,default value is normal,value is:normal|append|multipart
 
+--probe-item选项
+
+    specifies other detection functions
+
 Usage:
 
-    There are three usages for this command:
+    There are four usages for this command:
 
     1) ossutil probe --download --url http_url [--addr=domain_name] [file_name]
 		
-	    The command downloads the http_url address to the local file system and outputs
+        The command downloads the http_url address to the local file system and outputs
 	probe report; if you do not input file_name, the downloaded file is saved in the 
 	current directory and the file name is determined by ossutil; if file_name is inputed, 
 	The downloaded file is named file_name.
@@ -196,20 +233,25 @@ Usage:
 
     2) ossutil probe --download --bucketname bucket-name  [--object=object_name] [--addr=domain_name] [file_namefile_name]
 		
-	    The command downloads object in the specified bucket and outputs probe report; 
+        The command downloads object in the specified bucket and outputs probe report; 
 	if you input --object,ossutil downloads the specified object; if you don't input --object
 	,ossutil creates a temporary file to upload and then downloads it; after probe end,temporary 
     file and temporary object will all be deleted
-	    If you input --addr, ossutil will probe the domain_name,default probe www.aliyun.com
+        If you input --addr, ossutil will probe the domain_name,default probe www.aliyun.com
 
     3) ossutil probe --upload [file_name] --bucketname bucket-name [--object=object_name] [--addr=domain_name] 
 		
-	    The command uploads a file to oss and outputs probe report; if you input file_name,
+        The command uploads a file to oss and outputs probe report; if you input file_name,
 	the file named file_name is uploaded; if you don't input file_name,ossutil creates a temporary
 	file to upload and delete it after the probe ends; if you input --object, the uploaded object
 	is named object_name; if you don't input --object, the uploaded object's name is determined by 
 	ossutil, and after probe end,the temporary object will be deleted
-	    If you input --addr, ossutil will probe the domain_name,default probe www.aliyun.com
+        If you input --addr, ossutil will probe the domain_name,default probe www.aliyun.com
+    
+    4) ossutil probe --probe-item item_value --bucketname bucket-name [--object=object_name]
+        You can implement different detection functions by using the value of the option --probe-item.
+    The current values ​​are cycle-symlink, upload-speed, download-speed which represents local dead link detection, 
+    probe upload bandwidth, and probe download bandwidth
 `,
 
 	sampleText: ` 
@@ -248,6 +290,15 @@ Usage:
 
     12) uploads specified file to specified object, and probe domain
         ossutil probe --upload file_name --bucketname bucket-name --object object_name --addr www.aliyun.com
+    
+    13) Check if the local directory dir has an infinite loop link file or directory
+        ossutil probe --probe-item cycle-symlink dir
+
+    14) Probe upload bandwidth
+        ossutil probe --probe-item upload-speed --bucketname bucket-name
+    
+    15) Detect download bandwidth, object must already exist, and the size is better than 5M
+        ossutil probe --probe-item download-speed --bucketname bucket-name --object object_name
 `,
 }
 
@@ -265,6 +316,7 @@ type probeOptionType struct {
 	dlFileSize       int64
 	dlFilePath       string
 	ulObject         string
+	probeItem        string
 }
 
 type ProbeCommand struct {
@@ -298,12 +350,82 @@ var probeCommand = ProbeCommand{
 			OptionAddr,
 			OptionUpMode,
 			OptionLogLevel,
+			OptionProbeItem,
 		},
 	},
 }
 
-func (pc *ProbeCommand) GetCommand() *Command {
-	return &pc.command
+type TestAppendReader struct {
+	RandText []byte
+	bClosed  bool
+}
+
+// Read
+func (r *TestAppendReader) Close() {
+	r.bClosed = true
+}
+
+// Read
+func (r *TestAppendReader) Read(p []byte) (n int, err error) {
+	if r.bClosed {
+		return 0, fmt.Errorf("ossutil probe closed")
+	}
+
+	n = copy(p, r.RandText)
+	for n < len(p) {
+		nn := copy(p[n:], r.RandText)
+		n += nn
+	}
+	return n, nil
+}
+
+type AverageInfo struct {
+	Parallel int
+	AveSpeed float64
+}
+
+type StatBandWidth struct {
+	Mu         sync.Mutex
+	Parallel   int
+	StartTick  int64
+	TotalBytes int64
+	MaxSpeed   float64
+}
+
+func (s *StatBandWidth) Reset(pc int) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	s.Parallel = pc
+	s.StartTick = time.Now().UnixNano() / 1000 / 1000
+	atomic.StoreInt64(&s.TotalBytes, 0)
+	s.MaxSpeed = 0.0
+}
+
+func (s *StatBandWidth) AddBytes(bc int64) {
+	atomic.AddInt64(&s.TotalBytes, bc)
+}
+
+func (s *StatBandWidth) SetMaxSpeed(ms float64) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	s.MaxSpeed = ms
+}
+
+func (s *StatBandWidth) GetStat() StatBandWidth {
+	var rs StatBandWidth
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	rs.Parallel = s.Parallel
+	rs.StartTick = s.StartTick
+	rs.TotalBytes = atomic.LoadInt64(&s.TotalBytes)
+	rs.MaxSpeed = s.MaxSpeed
+	return rs
+}
+
+func (s *StatBandWidth) ProgressChanged(event *oss.ProgressEvent) {
+	if event.EventType == oss.TransferDataEvent || event.EventType == oss.TransferCompletedEvent {
+		s.AddBytes(event.RwBytes)
+	}
 }
 
 // function for FormatHelper interface
@@ -313,6 +435,10 @@ func (pc *ProbeCommand) formatHelpForWhole() string {
 
 func (pc *ProbeCommand) formatIndependHelp() string {
 	return pc.command.formatIndependHelp()
+}
+
+func (pc *ProbeCommand) GetCommand() *Command {
+	return &pc.command
 }
 
 // Init simulate inheritance, and polymorphism
@@ -332,7 +458,8 @@ func (pc *ProbeCommand) Init(args []string, options OptionMapType) error {
 func isNotNeedConigFile(options OptionMapType) bool {
 	isDownload, _ := GetBool(OptionDownload, options)
 	fromUrl, _ := GetString(OptionUrl, options)
-	if isDownload && fromUrl != "" {
+	probeItem, _ := GetString(OptionProbeItem, options)
+	if (isDownload && fromUrl != "") || probeItem == "cycle-symlink" {
 		return true
 	}
 	return false
@@ -349,6 +476,22 @@ func (pc *ProbeCommand) RunCommand() error {
 	pc.pbOption.objectName, _ = GetString(OptionObject, pc.command.options)
 	pc.pbOption.netAddr, _ = GetString(OptionAddr, pc.command.options)
 	pc.pbOption.upMode, _ = GetString(OptionUpMode, pc.command.options)
+	pc.pbOption.probeItem, _ = GetString(OptionProbeItem, pc.command.options)
+
+	if pc.pbOption.probeItem != "" {
+		var err error
+		if pc.pbOption.probeItem == "cycle-symlink" {
+			err = pc.CheckCycleSymlinkWithDeepTravel()
+			if err == nil {
+				fmt.Println("\n", "success")
+			}
+		} else if pc.pbOption.probeItem == "upload-speed" || pc.pbOption.probeItem == "download-speed" {
+			err = pc.DetectBandWidth()
+		} else {
+			err = fmt.Errorf("not support %s", pc.pbOption.probeItem)
+		}
+		return err
+	}
 
 	pc.pbOption.logFile, pc.pbOption.logName, err = logFileMake()
 	if err != nil {
@@ -370,6 +513,196 @@ func (pc *ProbeCommand) RunCommand() error {
 		err = pc.probeUpload()
 	}
 	return err
+}
+
+func (pc *ProbeCommand) PutObject(bucket *oss.Bucket, st *StatBandWidth, reader io.Reader) {
+	var options []oss.Option
+	options = append(options, oss.Progress(st))
+
+	uniqId, _ := uuid.NewV4()
+	uniqKey := uniqId.String()
+	objectName := objectPrefex + uniqKey
+	err := bucket.PutObject(objectName, reader, options...)
+	if err != nil && !strings.Contains(err.Error(), "ossutil probe closed") {
+		fmt.Printf("%s\n", err.Error())
+	}
+}
+
+func (pc *ProbeCommand) GetObject(bucket *oss.Bucket, objectName string, st *StatBandWidth) {
+	var options []oss.Option
+	options = append(options, oss.Progress(st))
+	options = append(options, oss.AcceptEncoding("identity"))
+	for {
+		result, err := bucket.DoGetObject(&oss.GetObjectRequest{ObjectKey: objectName}, options)
+		if err != nil {
+			fmt.Printf("GetObject error,%s", err.Error())
+			return
+		}
+		io.Copy(ioutil.Discard, result.Response.Body)
+		result.Response.Close()
+	}
+}
+
+func (pc *ProbeCommand) DetectBandWidth() error {
+	if pc.pbOption.bucketName == "" {
+		return fmt.Errorf("--bucketname is empty")
+	}
+
+	bucket, err := pc.command.ossBucket(pc.pbOption.bucketName)
+	if err != nil {
+		return err
+	}
+
+	if pc.pbOption.probeItem == "download-speed" {
+		if pc.pbOption.objectName == "" {
+			return fmt.Errorf("--object is empty when probe-item is download-speed")
+		}
+
+		bExist, err := bucket.IsObjectExist(pc.pbOption.objectName)
+		if err != nil {
+			return err
+		}
+
+		if !bExist {
+			return fmt.Errorf("oss object is not exist,%s", pc.pbOption.objectName)
+		}
+	}
+
+	numCpu := runtime.NumCPU()
+	var statBandwidth StatBandWidth
+	statBandwidth.Reset(numCpu)
+
+	var appendReader TestAppendReader
+	if pc.pbOption.probeItem == "upload-speed" {
+		appendReader.RandText = []byte(strings.Repeat("1", 32*1024))
+	}
+
+	for i := 0; i < numCpu; i++ {
+		time.Sleep(time.Duration(50) * time.Millisecond)
+		if pc.pbOption.probeItem == "upload-speed" {
+			go pc.PutObject(bucket, &statBandwidth, &appendReader)
+		} else if pc.pbOption.probeItem == "download-speed" {
+			go pc.GetObject(bucket, pc.pbOption.objectName, &statBandwidth)
+		}
+	}
+
+	time.Sleep(time.Duration(2) * time.Second)
+
+	fmt.Printf("cpu core count:%d\n", numCpu)
+	startTick := time.Now().UnixNano() / 1000 / 1000
+	nowTick := startTick
+	changeTick := startTick
+	nowParallel := numCpu
+	addParallel := numCpu / 5
+	if addParallel == 0 {
+		addParallel = 1
+	}
+	var averageList []AverageInfo
+
+	// ignore the first max speed
+	bDiscarded := false
+	var oldStat StatBandWidth
+	var nowStat StatBandWidth
+
+	oldStat = statBandwidth.GetStat()
+	for nowParallel <= 2*numCpu {
+		time.Sleep(time.Duration(1) * time.Second)
+		nowStat = statBandwidth.GetStat()
+		nowTick = time.Now().UnixNano() / 1000 / 1000
+
+		nowSpeed := float64(nowStat.TotalBytes-oldStat.TotalBytes) / 1024
+		averSpeed := float64(nowStat.TotalBytes/1024) / float64((nowTick-nowStat.StartTick)/1000)
+		maxSpeed := nowStat.MaxSpeed
+		if nowSpeed > maxSpeed {
+			if !bDiscarded && maxSpeed < 0.0001 {
+				bDiscarded = true
+				oldStat.Reset(nowParallel)
+				statBandwidth.Reset(nowParallel) //discard the first max speed,becase is not accurate
+				continue
+			}
+			maxSpeed = nowSpeed
+			statBandwidth.SetMaxSpeed(maxSpeed)
+		}
+		fmt.Printf("\rparallel:%d,average speed:%.2f(KB/s),current speed:%.2f(KB/s),max speed:%.2f(KB/s)", nowStat.Parallel, averSpeed, nowSpeed, maxSpeed)
+		oldStat = nowStat
+
+		// 30 second
+		if nowTick-changeTick >= 30000 {
+			nowParallel += addParallel
+			for i := 0; i < addParallel; i++ {
+				time.Sleep(time.Duration(50) * time.Millisecond)
+				if pc.pbOption.probeItem == "upload-speed" {
+					go pc.PutObject(bucket, &statBandwidth, &appendReader)
+				} else if pc.pbOption.probeItem == "download-speed" {
+					go pc.GetObject(bucket, pc.pbOption.objectName, &statBandwidth)
+				}
+			}
+			fmt.Printf("\n")
+			bDiscarded = false
+			averageList = append(averageList, AverageInfo{Parallel: nowStat.Parallel, AveSpeed: averSpeed})
+			changeTick = nowTick
+			oldStat.Reset(nowParallel)
+			statBandwidth.Reset(nowParallel)
+		}
+	}
+
+	appendReader.Close()
+
+	maxIndex := 0
+	maxSpeed := 0.0
+	for k, v := range averageList {
+		if v.AveSpeed > maxSpeed {
+			maxIndex = k
+			maxSpeed = v.AveSpeed
+		}
+	}
+
+	fmt.Printf("\nsuggest parallel is %d, max average speed is %.2f(KB/s)\n", averageList[maxIndex].Parallel, averageList[maxIndex].AveSpeed)
+
+	return nil
+}
+
+func (pc *ProbeCommand) CheckCycleSymlinkWithDeepTravel() error {
+	if len(pc.command.args) == 0 {
+		return fmt.Errorf("dir parameter is emtpy")
+	}
+
+	dpath := pc.command.args[0]
+	fileInfo, err := os.Stat(dpath)
+	if err != nil {
+		return err
+	}
+
+	if !fileInfo.IsDir() {
+		return nil
+	}
+
+	if !strings.HasSuffix(dpath, string(os.PathSeparator)) {
+		dpath += string(os.PathSeparator)
+	}
+
+	DirStack := list.New()
+	DirStack.PushBack(dpath)
+	for DirStack.Len() > 0 {
+		dirItem := DirStack.Back()
+		DirStack.Remove(dirItem)
+		dirName := dirItem.Value.(string)
+		fileList, err := ioutil.ReadDir(dirName)
+		if err != nil {
+			return err
+		}
+
+		for _, fileInfo := range fileList {
+			realInfo, err := os.Stat(dirName + fileInfo.Name())
+			if err != nil {
+				return err
+			}
+			if realInfo.IsDir() {
+				DirStack.PushBack(dirName + fileInfo.Name() + string(os.PathSeparator))
+			}
+		}
+	}
+	return nil
 }
 
 func (pc *ProbeCommand) probeDownload() error {

@@ -393,16 +393,16 @@ func (cc *ConfigCommand) runCommandInteractive(configFile, language string) erro
 
 	if configFile == "" {
 		if llanguage == LEnglishLanguage {
-			fmt.Printf("\nPlease enter the config file path(default " + DecideConfigFile("") + ", carriage return will use the default path. If you specified this option to other path, you should specify --config-file option to the path when you use other commands):")
+			fmt.Printf("\nPlease enter the config file name,the file name can include path(default " + DecideConfigFile("") + ", carriage return will use the default file. If you specified this option to other file, you should specify --config-file option to the file when you use other commands):")
 		} else {
-			fmt.Printf("\n请输入配置文件路径（默认为：" + DecideConfigFile("") + "，回车将使用默认路径。如果用户设置为其它路径，在使用命令时需要将--config-file选项设置为该路径）：")
+			fmt.Printf("\n请输入配置文件名,文件名可以带路径(默认为：" + DecideConfigFile("") + "，回车将使用默认配置文件。如果用户设置为其它文件，在使用命令时需要将--config-file选项设置为该文件）：")
 		}
 
 		if _, err := fmt.Scanln(&configFile); err != nil {
 			if llanguage == LEnglishLanguage {
 				fmt.Println("No config file entered, will use the default config file " + DecideConfigFile("") + "\n")
 			} else {
-				fmt.Println("未输入配置文件路径，将使用默认配置文件：" + DecideConfigFile("") + "。\n")
+				fmt.Println("未输入配置文件，将使用默认配置文件：" + DecideConfigFile("") + "。\n")
 			}
 		}
 	}

@@ -2,6 +2,8 @@
 
 ### Master
 
+- update: ossutil version 1.6.10
+
 ### 3.0.37
 
 - update: meta data

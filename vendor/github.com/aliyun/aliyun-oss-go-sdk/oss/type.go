@@ -1,6 +1,7 @@
 package oss
 
 import (
+	"encoding/base64"
 	"encoding/xml"
 	"fmt"
 	"net/url"
@@ -51,14 +52,17 @@ type LifecycleRule struct {
 	Expiration           *LifecycleExpiration           `xml:"Expiration,omitempty"`           // The expiration property
 	Transitions          []LifecycleTransition          `xml:"Transition,omitempty"`           // The transition property
 	AbortMultipartUpload *LifecycleAbortMultipartUpload `xml:"AbortMultipartUpload,omitempty"` // The AbortMultipartUpload property
+	NonVersionExpiration *LifecycleVersionExpiration    `xml:"NoncurrentVersionExpiration,omitempty"`
+	NonVersionTransition *LifecycleVersionTransition    `xml:"NoncurrentVersionTransition,omitempty"`
 }
 
 // LifecycleExpiration defines the rule's expiration property
 type LifecycleExpiration struct {
-	XMLName           xml.Name `xml:"Expiration"`
-	Days              int      `xml:"Days,omitempty"`              // Relative expiration time: The expiration time in days after the last modified time
-	Date              string   `xml:"Date,omitempty"`              // Absolute expiration time: The expiration time in date, not recommended
-	CreatedBeforeDate string   `xml:"CreatedBeforeDate,omitempty"` // objects created before the date will be expired
+	XMLName                   xml.Name `xml:"Expiration"`
+	Days                      int      `xml:"Days,omitempty"`                      // Relative expiration time: The expiration time in days after the last modified time
+	Date                      string   `xml:"Date,omitempty"`                      // Absolute expiration time: The expiration time in date, not recommended
+	CreatedBeforeDate         string   `xml:"CreatedBeforeDate,omitempty"`         // objects created before the date will be expired
+	ExpiredObjectDeleteMarker *bool    `xml:"ExpiredObjectDeleteMarker,omitempty"` // Specifies whether the expired delete tag is automatically deleted
 }
 
 // LifecycleTransition defines the rule's transition propery
@@ -74,6 +78,19 @@ type LifecycleAbortMultipartUpload struct {
 	XMLName           xml.Name `xml:"AbortMultipartUpload"`
 	Days              int      `xml:"Days,omitempty"`              // Relative expiration time: The expiration time in days after the last modified time
 	CreatedBeforeDate string   `xml:"CreatedBeforeDate,omitempty"` // objects created before the date will be expired
+}
+
+// LifecycleVersionExpiration defines the rule's NoncurrentVersionExpiration propery
+type LifecycleVersionExpiration struct {
+	XMLName        xml.Name `xml:"NoncurrentVersionExpiration"`
+	NoncurrentDays int      `xml:"NoncurrentDays,omitempty"` // How many days after the Object becomes a non-current version
+}
+
+// LifecycleVersionTransition defines the rule's NoncurrentVersionTransition propery
+type LifecycleVersionTransition struct {
+	XMLName        xml.Name         `xml:"NoncurrentVersionTransition"`
+	NoncurrentDays int              `xml:"NoncurrentDays,omitempty"` // How many days after the Object becomes a non-current version
+	StorageClass   StorageClassType `xml:"StorageClass,omitempty"`
 }
 
 const iso8601DateFormat = "2006-01-02T15:04:05.000Z"
@@ -109,13 +126,6 @@ func verifyLifecycleRules(rules []LifecycleRule) error {
 			return fmt.Errorf("invalid rule, the value of status must be Enabled or Disabled")
 		}
 
-		expiration := rule.Expiration
-		if expiration != nil {
-			if (expiration.Days != 0 && expiration.CreatedBeforeDate != "") || (expiration.Days != 0 && expiration.Date != "") || (expiration.CreatedBeforeDate != "" && expiration.Date != "") || (expiration.Days == 0 && expiration.CreatedBeforeDate == "" && expiration.Date == "") {
-				return fmt.Errorf("invalid expiration lifecycle, must be set one of CreatedBeforeDate, Days and Date")
-			}
-		}
-
 		abortMPU := rule.AbortMultipartUpload
 		if abortMPU != nil {
 			if (abortMPU.Days != 0 && abortMPU.CreatedBeforeDate != "") || (abortMPU.Days == 0 && abortMPU.CreatedBeforeDate == "") {
@@ -137,8 +147,8 @@ func verifyLifecycleRules(rules []LifecycleRule) error {
 					return fmt.Errorf("invalid transition lifecylce, the value of storage class must be IA or Archive")
 				}
 			}
-		} else if expiration == nil && abortMPU == nil {
-			return fmt.Errorf("invalid rule, must set one of Expiration, AbortMultipartUplaod and Transitions")
+		} else if rule.Expiration == nil && abortMPU == nil && rule.NonVersionExpiration == nil && rule.NonVersionTransition == nil {
+			return fmt.Errorf("invalid rule, must set one of Expiration, AbortMultipartUplaod, NonVersionExpiration, NonVersionTransition and Transitions")
 		}
 	}
 
@@ -292,6 +302,7 @@ type BucketInfo struct {
 	ExtranetEndpoint string    `xml:"ExtranetEndpoint"`         // Bucket external endpoint
 	IntranetEndpoint string    `xml:"IntranetEndpoint"`         // Bucket internal endpoint
 	ACL              string    `xml:"AccessControlList>Grant"`  // Bucket ACL
+	RedundancyType   string    `xml:"DataRedundancyType"`       // Bucket DataRedundancyType
 	Owner            Owner     `xml:"Owner"`                    // Bucket owner
 	StorageClass     string    `xml:"StorageClass"`             // Bucket storage class
 	SseRule          SSERule   `xml:"ServerSideEncryptionRule"` // Bucket ServerSideEncryptionRule
@@ -682,8 +693,9 @@ func decodeListMultipartUploadResult(result *ListMultipartUploadResult) error {
 
 // createBucketConfiguration defines the configuration for creating a bucket.
 type createBucketConfiguration struct {
-	XMLName      xml.Name         `xml:"CreateBucketConfiguration"`
-	StorageClass StorageClassType `xml:"StorageClass,omitempty"`
+	XMLName            xml.Name           `xml:"CreateBucketConfiguration"`
+	StorageClass       StorageClassType   `xml:"StorageClass,omitempty"`
+	DataRedundancyType DataRedundancyType `xml:"DataRedundancyType,omitempty"`
 }
 
 // LiveChannelConfiguration defines the configuration for live-channel
@@ -840,16 +852,16 @@ type RequestPaymentConfiguration struct {
 
 // BucketQoSConfiguration define QoS configuration
 type BucketQoSConfiguration struct {
-	XMLName                   xml.Name `xml:"QoSConfiguration"`	
-	TotalUploadBandwidth      *int      `xml:"TotalUploadBandwidth"`      // Total upload bandwidth
-	IntranetUploadBandwidth   *int      `xml:"IntranetUploadBandwidth"`   // Intranet upload bandwidth
-	ExtranetUploadBandwidth   *int      `xml:"ExtranetUploadBandwidth"`   // Extranet upload bandwidth
-	TotalDownloadBandwidth    *int      `xml:"TotalDownloadBandwidth"`    // Total download bandwidth
-	IntranetDownloadBandwidth *int      `xml:"IntranetDownloadBandwidth"` // Intranet download bandwidth
-	ExtranetDownloadBandwidth *int      `xml:"ExtranetDownloadBandwidth"` // Extranet download bandwidth
-	TotalQPS                  *int      `xml:"TotalQps"`                  // Total Qps
-	IntranetQPS               *int      `xml:"IntranetQps"`               // Intranet Qps
-	ExtranetQPS               *int      `xml:"ExtranetQps"`               // Extranet Qps
+	XMLName                   xml.Name `xml:"QoSConfiguration"`
+	TotalUploadBandwidth      *int     `xml:"TotalUploadBandwidth"`      // Total upload bandwidth
+	IntranetUploadBandwidth   *int     `xml:"IntranetUploadBandwidth"`   // Intranet upload bandwidth
+	ExtranetUploadBandwidth   *int     `xml:"ExtranetUploadBandwidth"`   // Extranet upload bandwidth
+	TotalDownloadBandwidth    *int     `xml:"TotalDownloadBandwidth"`    // Total download bandwidth
+	IntranetDownloadBandwidth *int     `xml:"IntranetDownloadBandwidth"` // Intranet download bandwidth
+	ExtranetDownloadBandwidth *int     `xml:"ExtranetDownloadBandwidth"` // Extranet download bandwidth
+	TotalQPS                  *int     `xml:"TotalQps"`                  // Total Qps
+	IntranetQPS               *int     `xml:"IntranetQps"`               // Intranet Qps
+	ExtranetQPS               *int     `xml:"ExtranetQps"`               // Extranet Qps
 }
 
 // UserQoSConfiguration define QoS and Range configuration
@@ -857,4 +869,212 @@ type UserQoSConfiguration struct {
 	XMLName xml.Name `xml:"QoSConfiguration"`
 	Region  string   `xml:"Region,omitempty"` // Effective area of Qos configuration
 	BucketQoSConfiguration
+}
+
+//////////////////////////////////////////////////////////////
+/////////////////// Select OBject ////////////////////////////
+//////////////////////////////////////////////////////////////
+
+type CsvMetaRequest struct {
+	XMLName            xml.Name           `xml:"CsvMetaRequest"`
+	InputSerialization InputSerialization `xml:"InputSerialization"`
+	OverwriteIfExists  *bool              `xml:"OverwriteIfExists,omitempty"`
+}
+
+// encodeBase64 encode base64 of the CreateSelectObjectMeta api request params
+func (meta *CsvMetaRequest) encodeBase64() {
+	meta.InputSerialization.CSV.RecordDelimiter =
+		base64.StdEncoding.EncodeToString([]byte(meta.InputSerialization.CSV.RecordDelimiter))
+	meta.InputSerialization.CSV.FieldDelimiter =
+		base64.StdEncoding.EncodeToString([]byte(meta.InputSerialization.CSV.FieldDelimiter))
+	meta.InputSerialization.CSV.QuoteCharacter =
+		base64.StdEncoding.EncodeToString([]byte(meta.InputSerialization.CSV.QuoteCharacter))
+}
+
+type JsonMetaRequest struct {
+	XMLName            xml.Name           `xml:"JsonMetaRequest"`
+	InputSerialization InputSerialization `xml:"InputSerialization"`
+	OverwriteIfExists  *bool              `xml:"OverwriteIfExists,omitempty"`
+}
+
+type InputSerialization struct {
+	XMLName         xml.Name `xml:"InputSerialization"`
+	CSV             CSV      `xml:CSV,omitempty`
+	JSON            JSON     `xml:JSON,omitempty`
+	CompressionType string   `xml:"CompressionType,omitempty"`
+}
+type CSV struct {
+	XMLName         xml.Name `xml:"CSV"`
+	RecordDelimiter string   `xml:"RecordDelimiter,omitempty"`
+	FieldDelimiter  string   `xml:"FieldDelimiter,omitempty"`
+	QuoteCharacter  string   `xml:"QuoteCharacter,omitempty"`
+}
+
+type JSON struct {
+	XMLName  xml.Name `xml:"JSON"`
+	JSONType string   `xml:"Type,omitempty"`
+}
+
+// SelectRequest is for the SelectObject request params of json file
+type SelectRequest struct {
+	XMLName                   xml.Name                  `xml:"SelectRequest"`
+	Expression                string                    `xml:"Expression"`
+	InputSerializationSelect  InputSerializationSelect  `xml:"InputSerialization"`
+	OutputSerializationSelect OutputSerializationSelect `xml:"OutputSerialization"`
+	SelectOptions             SelectOptions             `xml:"Options,omitempty"`
+}
+type InputSerializationSelect struct {
+	XMLName         xml.Name        `xml:"InputSerialization"`
+	CsvBodyInput    CSVSelectInput  `xml:CSV,omitempty`
+	JsonBodyInput   JSONSelectInput `xml:JSON,omitempty`
+	CompressionType string          `xml:"CompressionType,omitempty"`
+}
+type CSVSelectInput struct {
+	XMLName          xml.Name `xml:"CSV"`
+	FileHeaderInfo   string   `xml:"FileHeaderInfo,omitempty"`
+	RecordDelimiter  string   `xml:"RecordDelimiter,omitempty"`
+	FieldDelimiter   string   `xml:"FieldDelimiter,omitempty"`
+	QuoteCharacter   string   `xml:"QuoteCharacter,omitempty"`
+	CommentCharacter string   `xml:"CommentCharacter,omitempty"`
+	Range            string   `xml:"Range,omitempty"`
+	SplitRange       string
+}
+type JSONSelectInput struct {
+	XMLName                 xml.Name `xml:"JSON"`
+	JSONType                string   `xml:"Type,omitempty"`
+	Range                   string   `xml:"Range,omitempty"`
+	ParseJSONNumberAsString *bool    `xml:"ParseJsonNumberAsString"`
+	SplitRange              string
+}
+
+func (jsonInput *JSONSelectInput) JsonIsEmpty() bool {
+	if jsonInput.JSONType != "" {
+		return false
+	}
+	return true
+}
+
+type OutputSerializationSelect struct {
+	XMLName          xml.Name         `xml:"OutputSerialization"`
+	CsvBodyOutput    CSVSelectOutput  `xml:CSV,omitempty`
+	JsonBodyOutput   JSONSelectOutput `xml:JSON,omitempty`
+	OutputRawData    *bool            `xml:"OutputRawData,omitempty"`
+	KeepAllColumns   *bool            `xml:"KeepAllColumns,omitempty"`
+	EnablePayloadCrc *bool            `xml:"EnablePayloadCrc,omitempty"`
+	OutputHeader     *bool            `xml:"OutputHeader,omitempty"`
+}
+type CSVSelectOutput struct {
+	XMLName         xml.Name `xml:"CSV"`
+	RecordDelimiter string   `xml:"RecordDelimiter,omitempty"`
+	FieldDelimiter  string   `xml:"FieldDelimiter,omitempty"`
+}
+type JSONSelectOutput struct {
+	XMLName         xml.Name `xml:"JSON"`
+	RecordDelimiter string   `xml:"RecordDelimiter,omitempty"`
+}
+
+func (selectReq *SelectRequest) encodeBase64() {
+	if selectReq.InputSerializationSelect.JsonBodyInput.JsonIsEmpty() {
+		selectReq.csvEncodeBase64()
+	} else {
+		selectReq.jsonEncodeBase64()
+	}
+}
+
+// csvEncodeBase64 encode base64 of the SelectObject api request params
+func (selectReq *SelectRequest) csvEncodeBase64() {
+	selectReq.Expression = base64.StdEncoding.EncodeToString([]byte(selectReq.Expression))
+	selectReq.InputSerializationSelect.CsvBodyInput.RecordDelimiter =
+		base64.StdEncoding.EncodeToString([]byte(selectReq.InputSerializationSelect.CsvBodyInput.RecordDelimiter))
+	selectReq.InputSerializationSelect.CsvBodyInput.FieldDelimiter =
+		base64.StdEncoding.EncodeToString([]byte(selectReq.InputSerializationSelect.CsvBodyInput.FieldDelimiter))
+	selectReq.InputSerializationSelect.CsvBodyInput.QuoteCharacter =
+		base64.StdEncoding.EncodeToString([]byte(selectReq.InputSerializationSelect.CsvBodyInput.QuoteCharacter))
+	selectReq.InputSerializationSelect.CsvBodyInput.CommentCharacter =
+		base64.StdEncoding.EncodeToString([]byte(selectReq.InputSerializationSelect.CsvBodyInput.CommentCharacter))
+	selectReq.OutputSerializationSelect.CsvBodyOutput.FieldDelimiter =
+		base64.StdEncoding.EncodeToString([]byte(selectReq.OutputSerializationSelect.CsvBodyOutput.FieldDelimiter))
+	selectReq.OutputSerializationSelect.CsvBodyOutput.RecordDelimiter =
+		base64.StdEncoding.EncodeToString([]byte(selectReq.OutputSerializationSelect.CsvBodyOutput.RecordDelimiter))
+
+	// handle Range
+	if selectReq.InputSerializationSelect.CsvBodyInput.Range != "" {
+		selectReq.InputSerializationSelect.CsvBodyInput.Range = "line-range=" + selectReq.InputSerializationSelect.CsvBodyInput.Range
+	}
+
+	if selectReq.InputSerializationSelect.CsvBodyInput.SplitRange != "" {
+		selectReq.InputSerializationSelect.CsvBodyInput.Range = "split-range=" + selectReq.InputSerializationSelect.CsvBodyInput.SplitRange
+	}
+}
+
+// jsonEncodeBase64 encode base64 of the SelectObject api request params
+func (selectReq *SelectRequest) jsonEncodeBase64() {
+	selectReq.Expression = base64.StdEncoding.EncodeToString([]byte(selectReq.Expression))
+	selectReq.OutputSerializationSelect.JsonBodyOutput.RecordDelimiter =
+		base64.StdEncoding.EncodeToString([]byte(selectReq.OutputSerializationSelect.JsonBodyOutput.RecordDelimiter))
+
+	// handle Range
+	if selectReq.InputSerializationSelect.JsonBodyInput.Range != "" {
+		selectReq.InputSerializationSelect.JsonBodyInput.Range = "line-range=" + selectReq.InputSerializationSelect.JsonBodyInput.Range
+	}
+
+	if selectReq.InputSerializationSelect.JsonBodyInput.SplitRange != "" {
+		selectReq.InputSerializationSelect.JsonBodyInput.Range = "split-range=" + selectReq.InputSerializationSelect.JsonBodyInput.SplitRange
+	}
+}
+
+// CsvOptions is a element in the SelectObject api request's params
+type SelectOptions struct {
+	XMLName                  xml.Name `xml:"Options"`
+	SkipPartialDataRecord    *bool    `xml:"SkipPartialDataRecord,omitempty"`
+	MaxSkippedRecordsAllowed string   `xml:"MaxSkippedRecordsAllowed,omitempty"`
+}
+
+// SelectObjectResult is the SelectObject api's return
+type SelectObjectResult struct {
+	Version          byte
+	FrameType        int32
+	PayloadLength    int32
+	HeaderCheckSum   uint32
+	Offset           uint64
+	Data             string           // DataFrame
+	EndFrame         EndFrame         // EndFrame
+	MetaEndFrameCSV  MetaEndFrameCSV  // MetaEndFrameCSV
+	MetaEndFrameJSON MetaEndFrameJSON // MetaEndFrameJSON
+	PayloadChecksum  uint32
+	ReadFlagInfo
+}
+
+// ReadFlagInfo if reading the frame data, recode the reading status
+type ReadFlagInfo struct {
+	OpenLine            bool
+	ConsumedBytesLength int32
+	EnablePayloadCrc    bool
+	OutputRawData       bool
+}
+
+// EndFrame is EndFrameType of SelectObject api
+type EndFrame struct {
+	TotalScanned   int64
+	HTTPStatusCode int32
+	ErrorMsg       string
+}
+
+// MetaEndFrameCSV is MetaEndFrameCSVType of CreateSelectObjectMeta
+type MetaEndFrameCSV struct {
+	TotalScanned int64
+	Status       int32
+	SplitsCount  int32
+	RowsCount    int64
+	ColumnsCount int32
+	ErrorMsg     string
+}
+
+// MetaEndFrameJSON is MetaEndFrameJSON of CreateSelectObjectMeta
+type MetaEndFrameJSON struct {
+	TotalScanned int64
+	Status       int32
+	SplitsCount  int32
+	RowsCount    int64
+	ErrorMsg     string
 }

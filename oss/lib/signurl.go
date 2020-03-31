@@ -2,6 +2,7 @@ package lib
 
 import (
 	"fmt"
+	"strings"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
@@ -13,7 +14,7 @@ var specChineseSignurl = SpecText{
 	paramText: "cloud_url [meta] [options]",
 
 	syntaxText: ` 
-    ossutil sign cloud_url [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed]
+    ossutil sign cloud_url [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed] [--disable-encode-slash] [--payer requester]
 `,
 
 	detailHelpText: ` 
@@ -23,7 +24,7 @@ var specChineseSignurl = SpecText{
 
 用法：
 
-    ossutil sign oss://bucket/object [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed]
+    ossutil sign oss://bucket/object [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed] [--disable-encode-slash] [--payer requester]
 `,
 
 	sampleText: ` 
@@ -41,6 +42,12 @@ var specChineseSignurl = SpecText{
     
     ossutil sign oss://bucket1/object1 --trafic-limit 8388608
         生成oss://bucket1/object1的签名url, http限速为8388608(bit/s)
+    
+    ossutil sign oss://bucket1/dir/object1 --disable-encode-slash
+        生成oss://bucket1/dir/object1的签名url, 对path中的'/'不进行编码
+    
+    ossutil sign oss://bucket1/object1  --payer requester
+        生成oss://bucket1/dir/object1的签名url, 使用访问者付费模式
 `,
 }
 
@@ -51,7 +58,7 @@ var specEnglishSignurl = SpecText{
 	paramText: "cloud_url [options]",
 
 	syntaxText: ` 
-    ossutil sign cloud_url [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed]
+    ossutil sign cloud_url [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed] [--disable-encode-slash] [--payer requester]
 `,
 
 	detailHelpText: ` 
@@ -59,11 +66,14 @@ var specEnglishSignurl = SpecText{
     be used by third-party to access the object. 
     Where, cloud_url must like: oss://bucket/object
     Use --timeout to specify the expire time of url, the default is 60s.
-	Use --version-id to specify the version.
+    Use --version-id to specify the version.
+    Use --trafic-limit to specify the trafic speed
+    use --disable-encode-slash to specify not encoding of '/' in url path section
+    use --payer to specify request payment
 
 Usage:
 
-    ossutil sign oss://bucket/object [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed]
+    ossutil sign oss://bucket/object [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed] [--disable-encode-slash] [--payer requester]
 `,
 
 	sampleText: ` 
@@ -81,6 +91,12 @@ Usage:
     
     ossutil sign oss://bucket1/object1  --trafic-limit 8388608
         Generate the signature of oss://bucket1/object1, http limit speed is 8388608(bit/s)
+    
+    ossutil sign oss://bucket1/dir/object1 --disable-encode-slash
+        Generate the signature of oss://bucket1/dir/object1,no encoding of '/' in url path section
+    
+    ossutil sign oss://bucket1/object1  --payer requester
+        Generate the signature of oss://bucket1/object1, use requester payment
 `,
 }
 
@@ -110,6 +126,8 @@ var signURLCommand = SignurlCommand{
 			OptionLogLevel,
 			OptionVersionId,
 			OptionTrafficLimit,
+			OptionDisableEncodeSlash,
+			OptionRequestPayer,
 		},
 	},
 }
@@ -147,6 +165,11 @@ func (sc *SignurlCommand) RunCommand() error {
 		return fmt.Errorf("Option value of --trafic-limit must be greater than 0")
 	}
 
+	payer, _ := GetString(OptionRequestPayer, sc.command.options)
+	if payer != "" && payer != strings.ToLower(string(oss.Requester)) {
+		return fmt.Errorf("invalid request payer: %s, please check", payer)
+	}
+
 	bucket, err := sc.command.ossBucket(cloudURL.bucket)
 	if err != nil {
 		return err
@@ -161,6 +184,10 @@ func (sc *SignurlCommand) RunCommand() error {
 		options = append(options, oss.TrafficLimitParam(trafficLimit))
 	}
 
+	if payer != "" {
+		options = append(options, oss.RequestPayerParam(oss.PayerType(payer)))
+	}
+
 	str, err := sc.ossSign(bucket, cloudURL.object, timeout, options...)
 	if err != nil {
 		return err
@@ -173,9 +200,20 @@ func (sc *SignurlCommand) RunCommand() error {
 
 func (sc *SignurlCommand) ossSign(bucket *oss.Bucket, object string, timeout int64, options ...oss.Option) (string, error) {
 	str, err := bucket.SignURL(object, oss.HTTPMethod(DefaultMethod), timeout, options...)
-	if err == nil {
+	if err != nil {
+		return str, ObjectError{err, bucket.BucketName, object}
+	}
+
+	disableEncodeSlash, _ := GetBool(OptionDisableEncodeSlash, sc.command.options)
+	if !disableEncodeSlash {
 		return str, nil
 	}
 
-	return str, ObjectError{err, bucket.BucketName, object}
+	// replace %2F with /
+	urlSlice := strings.SplitN(str, "?", 2)
+	headStr := strings.Replace(urlSlice[0], "%2F", "/", -1)
+	if len(urlSlice) == 2 {
+		str = headStr + "?" + urlSlice[1]
+	}
+	return str, nil
 }
