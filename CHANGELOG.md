@@ -2,6 +2,8 @@
 
 ### Master
 
+- fix: Skip https certificate verification
+
 ### 3.0.37
 
 - update: meta data
