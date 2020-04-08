@@ -14,11 +14,9 @@
 package config
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"regexp"
 	"strconv"
@@ -176,11 +174,7 @@ func (cp *Profile) ValidateAK() error {
 
 func (cp *Profile) GetClient(ctx *cli.Context) (*sdk.Client, error) {
 	config := sdk.NewConfig()
-	if SkipSecureVerify(ctx.Flags()).IsAssigned() {
-		config.HttpTransport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-	}
+
 	if cp.RetryCount > 0 {
 		config.WithMaxRetryTime(cp.RetryCount)
 	}
@@ -208,6 +202,9 @@ func (cp *Profile) GetClient(ctx *cli.Context) (*sdk.Client, error) {
 		}
 		if cp.ConnectTimeout > 0 {
 			client.SetConnectTimeout(time.Duration(cp.ConnectTimeout) * time.Second)
+		}
+		if SkipSecureVerify(ctx.Flags()).IsAssigned() {
+			client.SetHTTPSInsecure(true)
 		}
 	}
 	return client, err
