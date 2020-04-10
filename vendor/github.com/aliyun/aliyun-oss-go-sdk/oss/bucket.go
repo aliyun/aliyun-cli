@@ -1141,6 +1141,11 @@ func (bucket Bucket) do(method, objectName string, params map[string]interface{}
 		return nil, err
 	}
 
+	err = CheckBucketName(bucket.BucketName)
+	if len(bucket.BucketName) > 0 && err != nil {
+		return nil, err
+	}
+
 	resp, err := bucket.Client.Conn.Do(method, bucket.BucketName, objectName,
 		params, headers, data, 0, listener)
 

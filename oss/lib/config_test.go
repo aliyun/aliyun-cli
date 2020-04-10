@@ -255,12 +255,12 @@ func (s *OssutilConfigSuite) TestConfigNotConfigFile(c *C) {
 	configCommand.runCommandInteractive("", LEnglishLanguage)
 	contents, _ := ioutil.ReadFile(logPath)
 	LogContent := string(contents)
-	c.Assert(strings.Contains(LogContent, "Please enter the config file path"), Equals, true)
+	c.Assert(strings.Contains(LogContent, "Please enter the config file name"), Equals, true)
 
 	configCommand.runCommandInteractive("", ChineseLanguage)
 	contents, _ = ioutil.ReadFile(logPath)
 	LogContent = string(contents)
-	c.Assert(strings.Contains(LogContent, "请输入配置文件路径"), Equals, true)
+	c.Assert(strings.Contains(LogContent, "请输入配置文件名"), Equals, true)
 }
 
 func (s *OssutilConfigSuite) TestConfigConfigInteractive(c *C) {

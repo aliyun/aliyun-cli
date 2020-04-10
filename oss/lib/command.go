@@ -2,8 +2,10 @@ package lib
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -288,6 +290,7 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	proxyUser, _ := GetString(OptionProxyUser, cmd.options)
 	proxyPwd, _ := GetString(OptionProxyPwd, cmd.options)
 	ecsUrl, _ := cmd.getEcsRamAkService()
+	localHost, _ := GetString(OptionLocalHost, cmd.options)
 
 	if accessKeyID == "" && ecsUrl == "" {
 		return nil, fmt.Errorf("accessKeyID and ecsUrl are both empty")
@@ -312,6 +315,15 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 		} else {
 			options = append(options, oss.Proxy(proxyHost))
 		}
+	}
+
+	if localHost != "" {
+		ipAddr, err := net.ResolveIPAddr("ip", localHost)
+		if err != nil {
+			return nil, fmt.Errorf("net.ResolveIPAddr error,%s", err.Error())
+		}
+		localTCPAddr := &(net.TCPAddr{IP: ipAddr.IP})
+		options = append(options, oss.SetLocalAddr(localTCPAddr))
 	}
 
 	if logLevel > oss.LogOff {
@@ -590,6 +602,11 @@ func (cmd *Command) filterError(err error, option *batchOptionType) bool {
 		return false
 	}
 
+	errorTypeName := reflect.TypeOf(err).String()
+	if !strings.Contains(errorTypeName, "ObjectError") {
+		return false
+	}
+
 	err = err.(ObjectError).err
 
 	switch err.(type) {
@@ -617,6 +634,28 @@ func (cmd *Command) getOSSOptions(hopMap map[string]interface{}, headers map[str
 		}
 	}
 	return options, nil
+}
+
+func (cmd *Command) getOSSTagging(strTagging string) ([]oss.Tag, error) {
+	tags := []oss.Tag{}
+	strKeys := strings.Split(strTagging, "&")
+	for _, v := range strKeys {
+		if v == "" {
+			return tags, fmt.Errorf("tagging value is empty,maybe exist &&")
+		}
+		tagNode := strings.Split(v, "=")
+		if len(tagNode) >= 3 {
+			return tags, fmt.Errorf("tagging value error %s", v)
+		}
+
+		// value maybe empty
+		tagNode = append(tagNode, "")
+		tags = append(tags, oss.Tag{
+			Key:   tagNode[0],
+			Value: tagNode[1],
+		})
+	}
+	return tags, nil
 }
 
 // GetAllCommands returns all commands list

@@ -227,21 +227,6 @@ func (s *OssutilCommandSuite) TestDuPayerErrorObject(c *C) {
 	_, err := cm.RunCommand(command, args, options)
 	c.Assert(err, NotNil)
 
-	// payer endpoint is error
-	requester = "requester"
-	options = OptionMapType{
-		"endpoint":        &str,
-		"accessKeyID":     &str,
-		"accessKeySecret": &str,
-		"stsToken":        &str,
-		"configFile":      &ConfigFile,
-		"payer":           &requester,
-	}
-	srcUrl = CloudURLToString(bucketName, objectName)
-	args = []string{srcUrl}
-	_, err = cm.RunCommand(command, args, options)
-	c.Assert(err, NotNil)
-
 	// srcUrl is error
 	args = []string{"http://bucketname"}
 	_, err = cm.RunCommand(command, args, options)
@@ -300,4 +285,97 @@ func (s *OssutilCommandSuite) TestDuHelpInfo(c *C) {
 	mkArgs = []string{}
 	_, err = cm.RunCommand("help", mkArgs, options)
 	c.Assert(err, IsNil)
+}
+
+func (s *OssutilCommandSuite) TestDuVersionsObjectAndStorageClass(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	s.putBucket(bucketName, c)
+	bucket, err := makeBucketCommand.command.ossBucket(bucketName)
+
+	// put bucket version:enabled
+	var str string
+	strMethod := "put"
+	versionsOptions := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"stsToken":        &str,
+		"configFile":      &configFile,
+		"method":          &strMethod,
+	}
+	versioningArgs := []string{CloudURLToString(bucketName, ""), "enabled"}
+	_, err = cm.RunCommand("bucket-versioning", versioningArgs, versionsOptions)
+	c.Assert(err, IsNil)
+
+	// put object
+	content_len := 100
+	content := randLowStr(content_len)
+	fileName := "ossutil-testfile-" + randLowStr(5)
+	s.createFile(fileName, content, c)
+	dirName := randLowStr(5)
+
+	// object jpg
+	object := dirName + "/" + "ossutil-test-object-" + randLowStr(5) + ".jpg"
+	// standard
+	err = bucket.PutObject(object, strings.NewReader(content), oss.ObjectStorageClass(oss.StorageStandard))
+	c.Assert(err, IsNil)
+	err = bucket.PutObject(object, strings.NewReader(content), oss.ObjectStorageClass(oss.StorageStandard))
+	c.Assert(err, IsNil)
+
+	// archive
+	err = bucket.PutObject(object, strings.NewReader(content), oss.ObjectStorageClass(oss.StorageIA))
+	c.Assert(err, IsNil)
+	err = bucket.PutObject(object, strings.NewReader(content), oss.ObjectStorageClass(oss.StorageIA))
+	c.Assert(err, IsNil)
+
+	// IA
+	err = bucket.PutObject(object, strings.NewReader(content), oss.ObjectStorageClass(oss.StorageArchive))
+	c.Assert(err, IsNil)
+	err = bucket.PutObject(object, strings.NewReader(content), oss.ObjectStorageClass(oss.StorageArchive))
+	c.Assert(err, IsNil)
+
+	// du size,all bucket
+	allVersions := true
+	command := "du"
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"configFile":      &ConfigFile,
+		"allVersions":     &allVersions,
+	}
+	srcUrl := CloudURLToString(bucketName, dirName)
+	args := []string{srcUrl}
+	_, err = cm.RunCommand(command, args, options)
+	c.Assert(err, IsNil)
+
+	c.Assert(duSizeCommand.duOption.totalObjectCount, Equals, int64(6))
+	c.Assert(duSizeCommand.duOption.sumObjectSize, Equals, 6*int64(content_len))
+	c.Assert(duSizeCommand.duOption.totalPartCount, Equals, int64(0))
+	c.Assert(duSizeCommand.duOption.sumPartSize, Equals, int64(0))
+
+	c.Assert(duSizeCommand.duOption.countTypeMap["Standard"], Equals, int64(2))
+	c.Assert(duSizeCommand.duOption.countTypeMap["IA"], Equals, int64(2))
+	c.Assert(duSizeCommand.duOption.countTypeMap["Archive"], Equals, int64(2))
+	c.Assert(duSizeCommand.duOption.sizeTypeMap["Standard"], Equals, int64(content_len*2))
+	c.Assert(duSizeCommand.duOption.sizeTypeMap["IA"], Equals, int64(content_len*2))
+	c.Assert(duSizeCommand.duOption.sizeTypeMap["Archive"], Equals, int64(content_len*2))
+
+	// cleanup
+	os.Remove(fileName)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestDuUploadIdNotExist(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	s.putBucket(bucketName, c)
+	bucket, err := makeBucketCommand.command.ossBucket(bucketName)
+
+	object := MultiPartObject{
+		objectName: "123",
+		uploadId:   "123",
+	}
+	err = duSizeCommand.statPartSize(bucket, object)
+	c.Assert(err, IsNil)
+	s.removeBucket(bucketName, true, c)
 }

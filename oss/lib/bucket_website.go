@@ -6,8 +6,6 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
-
-	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
 var specChineseBucketWebSite = SpecText{
@@ -321,19 +319,13 @@ func (bwc *BucketWebSiteCommand) PutBucketWebsite() error {
 		return err
 	}
 
-	websiteConfig := oss.WebsiteXML{}
-	err = xml.Unmarshal(text, &websiteConfig)
-	if err != nil {
-		return err
-	}
-
 	// put bucket website
 	client, err := bwc.command.ossClient(bwc.bwOption.bucketName)
 	if err != nil {
 		return err
 	}
 
-	return client.SetBucketWebsiteDetail(bwc.bwOption.bucketName, websiteConfig)
+	return client.SetBucketWebsiteXml(bwc.bwOption.bucketName, string(text))
 }
 
 func (bwc *BucketWebSiteCommand) confirm(str string) bool {

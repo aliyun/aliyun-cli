@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"hash"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -481,4 +482,15 @@ func matchHash(fnvIns hash.Hash64, key string, modeValue int, countValue int) bo
 		return true
 	}
 	return false
+}
+
+var letters = []rune("0123456789abcdefghijklmnopqrstuvwxyz")
+
+func randStr(n int) string {
+	b := make([]rune, n)
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := range b {
+		b[i] = letters[r.Intn(len(letters))]
+	}
+	return string(b)
 }

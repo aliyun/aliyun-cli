@@ -71,6 +71,16 @@ const (
 	OptionProxyHost                  = "proxyHost"
 	OptionProxyUser                  = "proxyUser"
 	OptionProxyPwd                   = "proxyPwd"
+	OptionLocalHost                  = "localHost"
+	OptionEnableSymlinkDir           = "enableSymlinkDir"
+	OptionOnlyCurrentDir             = "onlyCurrentDir"
+	OptionProbeItem                  = "probeItem"
+	OptionDisableEncodeSlash         = "disableEncodeSlash"
+	OptionDisableDirObject           = "disableDirObject"
+	OptionRedundancyType             = "redundancyType"
+	OptionDisableAllSymlink          = "disableAllSymlink"
+	OptionDisableIgnoreError         = "disableIgnoreError"
+	OptionTagging                    = "tagging"
 )
 
 // the elements show in stat object
@@ -88,6 +98,7 @@ const (
 	StatStorageClass            = "StorageClass"
 	StatSSEAlgorithm            = "SSEAlgorithm"
 	StatKMSMasterKeyID          = "KMSMasterKeyID"
+	StatRedundancyType          = "RedundancyType"
 )
 
 // the elements show in hash file
@@ -114,7 +125,7 @@ const (
 const (
 	Package                 string = "ossutil"
 	ChannelBuf              int    = 1000
-	Version                 string = "v1.6.6"
+	Version                 string = "v1.6.11"
 	DefaultEndpoint         string = "oss.aliyuncs.com"
 	ChineseLanguage                = "CH"
 	EnglishLanguage                = "EN"

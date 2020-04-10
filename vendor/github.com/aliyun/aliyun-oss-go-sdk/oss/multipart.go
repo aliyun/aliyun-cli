@@ -24,8 +24,14 @@ import (
 func (bucket Bucket) InitiateMultipartUpload(objectKey string, options ...Option) (InitiateMultipartUploadResult, error) {
 	var imur InitiateMultipartUploadResult
 	opts := addContentType(options, objectKey)
-	params := map[string]interface{}{}
+	params, _ := getRawParams(options)
+	_, ok := params["sequential"]
+	if ok {
+		// convert "" to nil
+		params["sequential"] = nil
+	}
 	params["uploads"] = nil
+
 	resp, err := bucket.do("POST", objectKey, params, opts, nil, nil)
 	if err != nil {
 		return imur, err

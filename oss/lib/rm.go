@@ -31,7 +31,7 @@ var specChineseRemove = SpecText{
 	paramText: "cloud_url [options]",
 
 	syntaxText: ` 
-    ossutil rm oss://bucket[/prefix] [-r] [-b] [-f]  [--include include-pattern] [--exclude exclude-pattern]  [--version-id versionId | --all-versions] [--payer requester] [-c file]
+    ossutil rm oss://bucket[/prefix] [-r] [-b] [-m] [-a] [-f]  [--include include-pattern] [--exclude exclude-pattern]  [--version-id versionId | --all-versions] [--payer requester] [-c file]
 `,
 
 	detailHelpText: ` 
@@ -152,7 +152,7 @@ var specEnglishRemove = SpecText{
 	paramText: "cloud_url [options]",
 
 	syntaxText: ` 
-    ossutil rm oss://bucket[/prefix] [-r] [-b] [-f]  [--include include-pattern] [--exclude exclude-pattern]  [--version-id versionId | --all-versions] [--payer requester] [-c file]
+    ossutil rm oss://bucket[/prefix] [-r] [-b] [-m] [-a] [-f]  [--include include-pattern] [--exclude exclude-pattern]  [--version-id versionId | --all-versions] [--payer requester] [-c file]
 `,
 
 	detailHelpText: ` 

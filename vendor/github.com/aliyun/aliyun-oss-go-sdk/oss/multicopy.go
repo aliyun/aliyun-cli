@@ -31,8 +31,14 @@ func (bucket Bucket) CopyFile(srcBucketName, srcObjectKey, destObjectKey string,
 	cpConf := getCpConfig(options)
 	routines := getRoutines(options)
 
+	var strVersionId string
+	versionId, _ := findOption(options, "versionId", nil)
+	if versionId != nil {
+		strVersionId = versionId.(string)
+	}
+
 	if cpConf != nil && cpConf.IsEnable {
-		cpFilePath := getCopyCpFilePath(cpConf, srcBucketName, srcObjectKey, destBucketName, destObjectKey)
+		cpFilePath := getCopyCpFilePath(cpConf, srcBucketName, srcObjectKey, destBucketName, destObjectKey, strVersionId)
 		if cpFilePath != "" {
 			return bucket.copyFileWithCp(srcBucketName, srcObjectKey, destBucketName, destObjectKey, partSize, options, cpFilePath, routines)
 		}
@@ -42,11 +48,11 @@ func (bucket Bucket) CopyFile(srcBucketName, srcObjectKey, destObjectKey string,
 		partSize, options, routines)
 }
 
-func getCopyCpFilePath(cpConf *cpConfig, srcBucket, srcObject, destBucket, destObject string) string {
+func getCopyCpFilePath(cpConf *cpConfig, srcBucket, srcObject, destBucket, destObject, versionId string) string {
 	if cpConf.FilePath == "" && cpConf.DirPath != "" {
 		dest := fmt.Sprintf("oss://%v/%v", destBucket, destObject)
 		src := fmt.Sprintf("oss://%v/%v", srcBucket, srcObject)
-		cpFileName := getCpFileName(src, dest)
+		cpFileName := getCpFileName(src, dest, versionId)
 		cpConf.FilePath = cpConf.DirPath + string(os.PathSeparator) + cpFileName
 	}
 	return cpConf.FilePath
@@ -142,9 +148,13 @@ func (bucket Bucket) copyFile(srcBucketName, srcObjectKey, destBucketName, destO
 	srcBucket, err := bucket.Client.Bucket(srcBucketName)
 	listener := getProgressListener(options)
 
-	// for get whole length
-	skipOptions := deleteOption(options, HTTPHeaderRange)
-	meta, err := srcBucket.GetObjectDetailedMeta(srcObjectKey, skipOptions...)
+	// choice valid options
+	headerOptions := ChoiceHeadObjectOption(options)
+	partOptions := ChoiceTransferPartOption(options)
+	completeOptions := ChoiceCompletePartOption(options)
+	abortOptions := ChoiceAbortPartOption(options)
+
+	meta, err := srcBucket.GetObjectDetailedMeta(srcObjectKey, headerOptions...)
 	if err != nil {
 		return err
 	}
@@ -173,7 +183,7 @@ func (bucket Bucket) copyFile(srcBucketName, srcObjectKey, destBucketName, destO
 	publishProgress(listener, event)
 
 	// Start to copy workers
-	arg := copyWorkerArg{descBucket, imur, srcBucketName, srcObjectKey, options, copyPartHooker}
+	arg := copyWorkerArg{descBucket, imur, srcBucketName, srcObjectKey, partOptions, copyPartHooker}
 	for w := 1; w <= routines; w++ {
 		go copyWorker(w, arg, jobs, results, failed, die)
 	}
@@ -195,7 +205,7 @@ func (bucket Bucket) copyFile(srcBucketName, srcObjectKey, destBucketName, destO
 			publishProgress(listener, event)
 		case err := <-failed:
 			close(die)
-			descBucket.AbortMultipartUpload(imur, options...)
+			descBucket.AbortMultipartUpload(imur, abortOptions...)
 			event = newProgressEvent(TransferFailedEvent, completedBytes, totalBytes, 0)
 			publishProgress(listener, event)
 			return err
@@ -210,9 +220,9 @@ func (bucket Bucket) copyFile(srcBucketName, srcObjectKey, destBucketName, destO
 	publishProgress(listener, event)
 
 	// Complete the multipart upload
-	_, err = descBucket.CompleteMultipartUpload(imur, ups, options...)
+	_, err = descBucket.CompleteMultipartUpload(imur, ups, completeOptions...)
 	if err != nil {
-		bucket.AbortMultipartUpload(imur, options...)
+		bucket.AbortMultipartUpload(imur, abortOptions...)
 		return err
 	}
 	return nil
@@ -389,10 +399,12 @@ func (bucket Bucket) copyFileWithCp(srcBucketName, srcObjectKey, destBucketName,
 		os.Remove(cpFilePath)
 	}
 
-	// Make sure the object is not updated.
-	// get whole length
-	skipOptions := deleteOption(options, HTTPHeaderRange)
-	meta, err := srcBucket.GetObjectDetailedMeta(srcObjectKey, skipOptions...)
+	// choice valid options
+	headerOptions := ChoiceHeadObjectOption(options)
+	partOptions := ChoiceTransferPartOption(options)
+	completeOptions := ChoiceCompletePartOption(options)
+
+	meta, err := srcBucket.GetObjectDetailedMeta(srcObjectKey, headerOptions...)
 	if err != nil {
 		return err
 	}
@@ -423,7 +435,7 @@ func (bucket Bucket) copyFileWithCp(srcBucketName, srcObjectKey, destBucketName,
 	publishProgress(listener, event)
 
 	// Start the worker coroutines
-	arg := copyWorkerArg{descBucket, imur, srcBucketName, srcObjectKey, options, copyPartHooker}
+	arg := copyWorkerArg{descBucket, imur, srcBucketName, srcObjectKey, partOptions, copyPartHooker}
 	for w := 1; w <= routines; w++ {
 		go copyWorker(w, arg, jobs, results, failed, die)
 	}
@@ -455,8 +467,8 @@ func (bucket Bucket) copyFileWithCp(srcBucketName, srcObjectKey, destBucketName,
 		}
 	}
 
-	event = newProgressEvent(TransferCompletedEvent, completedBytes, ccp.ObjStat.Size,0)
+	event = newProgressEvent(TransferCompletedEvent, completedBytes, ccp.ObjStat.Size, 0)
 	publishProgress(listener, event)
 
-	return ccp.complete(descBucket, ccp.CopyParts, cpFilePath, options)
+	return ccp.complete(descBucket, ccp.CopyParts, cpFilePath, completeOptions)
 }

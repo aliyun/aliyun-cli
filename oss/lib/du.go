@@ -36,6 +36,10 @@ var specChineseDu = SpecText{
     
     2) 查询指定前缀(目录)占用存储空间大小
        ossutil du oss://bucket/prefix
+    
+    3) 查询指定前缀(目录)占用存储空间大小, 包括多版本object
+       ossutil du oss://bucket/prefix --all-versions
+    
 `,
 }
 
@@ -65,6 +69,9 @@ Usages：
     
     2) get the prefix(directory) stroage size
        ossutil du oss://bucket/prefix
+    
+    3) get the prefix(directory) stroage size, including all versioning objects
+       ossutil du oss://bucket/prefix --all-versions
 `,
 }
 
@@ -77,6 +84,8 @@ type duSizeOptionType struct {
 	bucketName       string
 	object           string
 	payer            string
+	countTypeMap     map[string]int64
+	sizeTypeMap      map[string]int64
 	totalObjectCount int64
 	sumObjectSize    int64
 	totalPartCount   int64
@@ -108,6 +117,7 @@ var duSizeCommand = DuCommand{
 			OptionProxyPwd,
 			OptionLogLevel,
 			OptionRequestPayer,
+			OptionAllversions,
 		},
 	},
 }
@@ -133,6 +143,8 @@ func (duc *DuCommand) Init(args []string, options OptionMapType) error {
 // RunCommand simulate inheritance, and polymorphism
 func (duc *DuCommand) RunCommand() error {
 	// clear for go tests
+	duc.duOption.countTypeMap = make(map[string]int64)
+	duc.duOption.sizeTypeMap = make(map[string]int64)
 	duc.duOption.totalObjectCount = 0
 	duc.duOption.sumObjectSize = 0
 	duc.duOption.totalPartCount = 0
@@ -152,30 +164,51 @@ func (duc *DuCommand) RunCommand() error {
 				strings.ToLower(string(oss.Requester)), strings.ToLower(string(oss.BucketOwner)))
 		}
 	}
+	allVersions, _ := GetBool(OptionAllversions, duc.command.options)
 
 	duc.duOption.bucketName = srcBucketUrL.bucket
 	duc.duOption.object = srcBucketUrL.object
 	duc.duOption.payer = payer
-
 	bucket, err := duc.command.ossBucket(duc.duOption.bucketName)
 	if err != nil {
 		return err
 	}
 
 	// first:get all object size
-	err = duc.getAllObjectSize(bucket)
+	if allVersions {
+		err = duc.getAllObjectVersionsSize(bucket)
+	} else {
+		err = duc.getAllObjectSize(bucket)
+	}
+
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("\robject count:%d\tobject sum size:%d\n", duc.duOption.totalObjectCount, duc.duOption.sumObjectSize)
+	printHeader := false
+	for k, v := range duc.duOption.countTypeMap {
+		if !printHeader {
+			fmt.Printf("\r                                                                      ")
+			fmt.Printf("\r%-14s\t%-20s\t%-30s\n", "storage class", "object count", "sum size(byte)")
+			fmt.Printf("----------------------------------------------------------\n")
+			printHeader = true
+		}
+		fmt.Printf("%-14s\t%-20d\t%-30d\n", k, v, duc.duOption.sizeTypeMap[k])
+	}
+	if !printHeader {
+		fmt.Printf("\r")
+	} else {
+		fmt.Printf("----------------------------------------------------------\n")
+	}
+	fmt.Printf("%-20s%-20d\t%-23s%d\n", "total object count:", duc.duOption.totalObjectCount, "total object sum size:", duc.duOption.sumObjectSize)
 
 	//second:get all part size
 	err = duc.GetAllPartSize(bucket)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("\rpart count:%d\tpart sum size:%d\n", atomic.LoadInt64(&duc.duOption.totalPartCount), atomic.LoadInt64(&duc.duOption.sumPartSize))
+	fmt.Printf("\r                                                                      ")
+	fmt.Printf("\r%-20s%-20d\t%-23s%d\n\n", "total part count:", atomic.LoadInt64(&duc.duOption.totalPartCount), "total part sum size:", atomic.LoadInt64(&duc.duOption.sumPartSize))
 
 	fmt.Printf("total du size(byte):%d\n", duc.duOption.sumObjectSize+duc.duOption.sumPartSize)
 	return nil
@@ -198,6 +231,13 @@ func (duc *DuCommand) getAllObjectSize(bucket *oss.Bucket) error {
 		duc.duOption.totalObjectCount += int64(len(lor.Objects))
 		for _, object := range lor.Objects {
 			duc.duOption.sumObjectSize += object.Size
+			if _, ok := duc.duOption.countTypeMap[object.StorageClass]; ok {
+				duc.duOption.countTypeMap[object.StorageClass]++
+				duc.duOption.sizeTypeMap[object.StorageClass] += object.Size
+			} else {
+				duc.duOption.countTypeMap[object.StorageClass] = 1
+				duc.duOption.sizeTypeMap[object.StorageClass] = object.Size
+			}
 		}
 
 		fmt.Printf("\robject count:%d\tobject sum size:%d", duc.duOption.totalObjectCount, duc.duOption.sumObjectSize)
@@ -209,6 +249,46 @@ func (duc *DuCommand) getAllObjectSize(bucket *oss.Bucket) error {
 			listOptions = append(listOptions, oss.RequestPayer(oss.PayerType(duc.duOption.payer)))
 		}
 
+		if !lor.IsTruncated {
+			break
+		}
+	}
+	return nil
+}
+
+func (duc *DuCommand) getAllObjectVersionsSize(bucket *oss.Bucket) error {
+	// Delete Object Versions and DeleteMarks
+	pre := oss.Prefix(duc.duOption.object)
+	keyMarker := oss.KeyMarker("")
+	versionIdMarker := oss.VersionIdMarker("")
+	listOptions := []oss.Option{pre, keyMarker, versionIdMarker, oss.MaxKeys(1000)}
+	if duc.duOption.payer != "" {
+		listOptions = append(listOptions, oss.RequestPayer(oss.PayerType(duc.duOption.payer)))
+	}
+
+	for {
+		lor, err := bucket.ListObjectVersions(listOptions...)
+		if err != nil {
+			return err
+		}
+		duc.duOption.totalObjectCount += int64(len(lor.ObjectVersions))
+		for _, object := range lor.ObjectVersions {
+			duc.duOption.sumObjectSize += object.Size
+			if _, ok := duc.duOption.countTypeMap[object.StorageClass]; ok {
+				duc.duOption.countTypeMap[object.StorageClass]++
+				duc.duOption.sizeTypeMap[object.StorageClass] += object.Size
+			} else {
+				duc.duOption.countTypeMap[object.StorageClass] = 1
+				duc.duOption.sizeTypeMap[object.StorageClass] = object.Size
+			}
+		}
+		fmt.Printf("\robject count:%d\tobject sum size:%d", duc.duOption.totalObjectCount, duc.duOption.sumObjectSize)
+		keyMarker = oss.KeyMarker(lor.NextKeyMarker)
+		versionIdMarker := oss.VersionIdMarker(lor.NextVersionIdMarker)
+		listOptions = []oss.Option{pre, keyMarker, versionIdMarker, oss.MaxKeys(1000)}
+		if duc.duOption.payer != "" {
+			listOptions = append(listOptions, oss.RequestPayer(oss.PayerType(duc.duOption.payer)))
+		}
 		if !lor.IsTruncated {
 			break
 		}
@@ -257,7 +337,13 @@ func (duc *DuCommand) statPartSize(bucket *oss.Bucket, object MultiPartObject) e
 
 		lpRes, err := bucket.ListUploadedParts(imur, lpOptions...)
 		if err != nil {
-			return err
+			serviceError, ok := err.(oss.ServiceError)
+			if ok && serviceError.StatusCode == 404 {
+				// ignore 404 error; the uploadid maybe abort or completed
+				return nil
+			} else {
+				return err
+			}
 		} else {
 			atomic.AddInt64(&duc.duOption.totalPartCount, int64(len(lpRes.UploadedParts)))
 		}

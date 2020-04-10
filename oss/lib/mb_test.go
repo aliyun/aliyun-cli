@@ -177,3 +177,39 @@ func (s *OssutilCommandSuite) TestMakeBucketStorageClass(c *C) {
 	_, err = s.rawGetStat(bucketName, "")
 	c.Assert(err, NotNil)
 }
+
+func (s *OssutilCommandSuite) TestMbCreateBucketWithRedundancy(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	command := "mb"
+	args := []string{CloudURLToString(bucketName, "")}
+	str := ""
+	strRedundancy := "ZRS"
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"stsToken":        &str,
+		"configFile":      &configFile,
+		"redundancyType":  &strRedundancy,
+	}
+	_, err := cm.RunCommand(command, args, options)
+	c.Assert(err, IsNil)
+
+	bucketStat := s.getStat(bucketName, "", c)
+	fmt.Println(bucketStat)
+	c.Assert(bucketStat[StatRedundancyType], Equals, strRedundancy)
+	s.removeBucket(bucketName, true, c)
+
+	// redundancyType is error
+	strRedundancy = "LLL"
+	_, err = cm.RunCommand(command, args, options)
+	c.Assert(err, NotNil)
+
+	// create without redundancyType
+	delete(options, "redundancyType")
+	_, err = cm.RunCommand(command, args, options)
+	c.Assert(err, IsNil)
+	bucketStat = s.getStat(bucketName, "", c)
+	c.Assert(bucketStat[StatRedundancyType], Equals, "LRS")
+	s.removeBucket(bucketName, true, c)
+}

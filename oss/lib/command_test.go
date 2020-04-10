@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"math/rand"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -171,17 +170,6 @@ func (s *OssutilCommandSuite) TearDownTest(c *C) {
 	endT := time.Now()
 	cost := endT.UnixNano()/1000/1000 - s.startT.UnixNano()/1000/1000
 	fmt.Printf("tear down test:%s,cost:%d(ms)\n", c.TestName(), cost)
-}
-
-var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-
-func randStr(n int) string {
-	b := make([]rune, n)
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	for i := range b {
-		b[i] = letters[r.Intn(len(letters))]
-	}
-	return string(b)
 }
 
 func randLowStr(n int) string {

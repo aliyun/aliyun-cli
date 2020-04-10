@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"runtime"
 	"strings"
 
 	. "gopkg.in/check.v1"
@@ -626,4 +627,221 @@ func (s *OssutilCommandSuite) TestProbeDownloadObjectInvalidParameter(c *C) {
 		err := probeCommand.probeDownloadObject(srcURL, true)
 		c.Assert(err, NotNil)
 	}
+}
+
+func (s *OssutilCommandSuite) TestProbeDetectCycleSymlinkNotExist(c *C) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+
+	// mkdir
+	dirName := "ossutil_test_dir_" + randStr(5)
+	err := os.MkdirAll(dirName, 0755)
+	c.Assert(err, IsNil)
+
+	subDirName := "ossutil_test_dir_" + randStr(5)
+	err = os.MkdirAll(dirName+string(os.PathSeparator)+subDirName, 0755)
+	c.Assert(err, IsNil)
+
+	// mk symlink dir
+	symlinkDir := "ossutil_test_dir_" + randStr(5)
+	err = os.Symlink(subDirName, dirName+string(os.PathSeparator)+symlinkDir)
+	c.Assert(err, IsNil)
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(dirName+string(os.PathSeparator)+subDirName+string(os.PathSeparator)+testFileName, data, c)
+
+	// begin probe
+	probeItem := "cycle-symlink"
+	options := OptionMapType{
+		OptionConfigFile: &configFile,
+		OptionProbeItem:  &probeItem,
+	}
+
+	// probe
+	pbArgs := []string{dirName}
+	_, err = cm.RunCommand("probe", pbArgs, options)
+	c.Assert(err, IsNil)
+}
+
+func (s *OssutilCommandSuite) TestProbeDetectCycleSymlinkExist(c *C) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+
+	// mkdir
+	dirName := "ossutil_test_dir_" + randStr(5)
+	err := os.MkdirAll(dirName, 0755)
+	c.Assert(err, IsNil)
+
+	subDirName := "ossutil_test_dir_" + randStr(5)
+	err = os.MkdirAll(dirName+string(os.PathSeparator)+subDirName, 0755)
+	c.Assert(err, IsNil)
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(dirName+string(os.PathSeparator)+subDirName+string(os.PathSeparator)+testFileName, data, c)
+
+	// mk cycle symlink
+	symlinkDir := "ossutil_test_dir_" + randStr(5)
+	err = os.Symlink(".."+string(os.PathSeparator)+".."+string(os.PathSeparator)+dirName, dirName+string(os.PathSeparator)+subDirName+string(os.PathSeparator)+symlinkDir)
+	c.Assert(err, IsNil)
+
+	// begin probe
+	probeItem := "cycle-symlink"
+	options := OptionMapType{
+		OptionConfigFile: &configFile,
+		OptionProbeItem:  &probeItem,
+	}
+
+	// probe
+	pbArgs := []string{dirName}
+	_, err = cm.RunCommand("probe", pbArgs, options)
+	c.Assert(err, NotNil)
+	os.RemoveAll(dirName)
+}
+
+func (s *OssutilCommandSuite) TestProbeDetectCycleSymlinkError(c *C) {
+	// begin probe
+	probeItem := "cycle-symlink"
+	options := OptionMapType{
+		OptionConfigFile: &configFile,
+		OptionProbeItem:  &probeItem,
+	}
+
+	// probe ,dir is empty
+	pbArgs := []string{}
+	_, err := cm.RunCommand("probe", pbArgs, options)
+	c.Assert(err, NotNil)
+
+	// probe ,dir is not exist
+	pbArgs = []string{"notExistDir"}
+	_, err = cm.RunCommand("probe", pbArgs, options)
+	c.Assert(err, NotNil)
+
+	// probe ,is file
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+	pbArgs = []string{testFileName}
+	_, err = cm.RunCommand("probe", pbArgs, options)
+	c.Assert(err, IsNil)
+}
+
+func (s *OssutilCommandSuite) TestProbeUploadBandWidth(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	// begin probe
+	probeItem := "upload-speed"
+	str := ""
+	options := OptionMapType{
+		OptionEndpoint:        &str,
+		OptionAccessKeyID:     &str,
+		OptionAccessKeySecret: &str,
+		OptionConfigFile:      &configFile,
+		OptionBucketName:      &bucketName,
+		OptionProbeItem:       &probeItem,
+	}
+
+	// probe
+	pbArgs := []string{}
+	_, err := cm.RunCommand("probe", pbArgs, options)
+	c.Assert(err, IsNil)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestProbeDownloadBandWidthSuccess(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	objectName := "ossutil_test_object" + randStr(5)
+	objectValue := randLowStr(1024 * 1024)
+	s.PutObject(bucketName, objectName, objectValue, c)
+
+	// begin probe
+	probeItem := "download-speed"
+	str := ""
+	options := OptionMapType{
+		OptionEndpoint:        &str,
+		OptionAccessKeyID:     &str,
+		OptionAccessKeySecret: &str,
+		OptionConfigFile:      &configFile,
+		OptionObject:          &objectName,
+		OptionBucketName:      &bucketName,
+		OptionProbeItem:       &probeItem,
+	}
+
+	// probe
+	pbArgs := []string{}
+	_, err := cm.RunCommand("probe", pbArgs, options)
+	c.Assert(err, IsNil)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestProbeDownloadBandWidthError(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	objectName := "ossutil_test_object" + randStr(5)
+
+	// begin probe
+	probeItem := "download-speed"
+	str := ""
+	options := OptionMapType{
+		OptionEndpoint:        &str,
+		OptionAccessKeyID:     &str,
+		OptionAccessKeySecret: &str,
+		OptionConfigFile:      &configFile,
+		OptionObject:          &objectName,
+		OptionBucketName:      &bucketName,
+		OptionProbeItem:       &probeItem,
+	}
+
+	// probe error,object not exist
+	pbArgs := []string{}
+	_, err := cm.RunCommand("probe", pbArgs, options)
+	c.Assert(err, NotNil)
+
+	// probe error,object is empty
+	delete(options, OptionObject)
+	_, err = cm.RunCommand("probe", pbArgs, options)
+	c.Assert(err, NotNil)
+
+	// bucket name is empty
+	probeItem = "upload-speed"
+	delete(options, OptionBucketName)
+	_, err = cm.RunCommand("probe", pbArgs, options)
+	c.Assert(err, NotNil)
+
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestProbeItemNotSupported(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	objectName := "ossutil_test_object" + randStr(5)
+
+	// begin probe
+	probeItem := "up-down-speed"
+	str := ""
+	options := OptionMapType{
+		OptionEndpoint:        &str,
+		OptionAccessKeyID:     &str,
+		OptionAccessKeySecret: &str,
+		OptionConfigFile:      &configFile,
+		OptionObject:          &objectName,
+		OptionBucketName:      &bucketName,
+		OptionProbeItem:       &probeItem,
+	}
+
+	// probe
+	pbArgs := []string{}
+	_, err := cm.RunCommand("probe", pbArgs, options)
+	c.Assert(err, NotNil)
+	s.removeBucket(bucketName, true, c)
 }

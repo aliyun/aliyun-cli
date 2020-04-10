@@ -51,9 +51,13 @@ StorageClass:
 
     关于StorageClass的更多信息请参考：https://help.aliyun.com/document_detail/31959.html?spm=5176.doc31957.6.839.E1ifnh
 
+RedundancyType:
+
+    bucket的RedundancyType有两种: LRS和ZRS; LRS是缺省值,表示本地容灾; ZRS表示更高可用的同城容灾, 数据将会同时保存在同一地域(Region)的3个可用区
+
 用法：
 
-    ossutil mb oss://bucket [--acl=acl] [--storage-class class] [-c file]
+    ossutil mb oss://bucket [--acl=acl] [--storage-class class] [--redundancy-type type] [-c file]
         当未指定--acl选项时，ossutil会在指定的身份凭证下创建指定bucket，所创建的bucket的acl
     为默认private。如果需要更改acl信息，可以使用set-acl命令。
         当未指定--storage-class选项时，ossutil创建的bucket的存储方式为默认存储方式：` + DefaultStorageClass + `。
@@ -66,7 +70,8 @@ StorageClass:
     1)ossutil mb oss://bucket1
     2)ossutil mb oss://bucket1 --acl=public-read-write
     3)ossutil mb oss://bucket1 --storage-class IA 
-    4)ossutil mb oss://bucket1 --acl=public-read-write --storage-class IA 
+    4)ossutil mb oss://bucket1 --acl=public-read-write --storage-class IA
+    5)ossutil mb oss://bucket1 --redundancy-type ZRS
 `,
 }
 
@@ -77,7 +82,7 @@ var specEnglishMakeBucket = SpecText{
 	paramText: "cloud_url [options]",
 
 	syntaxText: ` 
-    ossutil mb oss://bucket [--acl acl] [--storage-class class] [-c file] 
+    ossutil mb oss://bucket [--acl acl] [--storage-class class] [--redundancy-type type] [-c file] 
 `,
 
 	detailHelpText: ` 
@@ -104,6 +109,10 @@ StorageClass:
 
     More information about StorageClass see: https://help.aliyun.com/document_detail/31959.html?spm=5176.doc31957.6.839.E1ifnh
 
+RedundancyType:
+
+    There are two types of bucket redundancyType: LRS and ZRS; LRS is the default value, specifies locally redundant storage; ZRS specifies higher availability of redundancy storage, The data will be stored in the 3 availabe zones of the same region
+
 Usage:
 
     ossutil mb oss://bucket [--acl=acl] [--storage-class class] [-c file]
@@ -123,6 +132,7 @@ Usage:
     2)ossutil mb oss://bucket1 --acl=public-read-write
     3)ossutil mb oss://bucket1 --storage-class IA 
     4)ossutil mb oss://bucket1 --acl=public-read-write --storage-class IA 
+    5)ossutil mb oss://bucket1 --redundancy-type ZRS
 `,
 }
 
@@ -154,6 +164,7 @@ var makeBucketCommand = MakeBucketCommand{
 			OptionACL,
 			OptionStorageClass,
 			OptionLogLevel,
+			OptionRedundancyType,
 		},
 	},
 }
@@ -199,16 +210,25 @@ func (mc *MakeBucketCommand) RunCommand() error {
 	aclStr, _ := GetString(OptionACL, mc.command.options)
 	language, _ := GetString(OptionLanguage, mc.command.options)
 	language = strings.ToLower(language)
-	var op oss.Option
+	strRedundancy, _ := GetString(OptionRedundancyType, mc.command.options)
+	var op []oss.Option
 	if aclStr != "" {
 		acl, err := mc.getACL(aclStr, language)
 		if err != nil {
 			return err
 		}
-		op = oss.ACL(acl)
+		op = append(op, oss.ACL(acl))
 	}
 
-	return mc.ossCreateBucketRetry(client, cloudURL.bucket, op)
+	if strRedundancy != "" {
+		if strings.ToUpper(strRedundancy) != string(oss.RedundancyLRS) && strings.ToUpper(strRedundancy) != string(oss.RedundancyZRS) {
+			return fmt.Errorf("--redundancy-type muse be %s or %s", string(oss.RedundancyLRS), string(oss.RedundancyZRS))
+		}
+		redundancyType := oss.DataRedundancyType(strings.ToUpper(strRedundancy))
+		op = append(op, oss.RedundancyType(redundancyType))
+	}
+
+	return mc.ossCreateBucketRetry(client, cloudURL.bucket, op...)
 }
 
 func (mc *MakeBucketCommand) getACL(aclStr, language string) (oss.ACLType, error) {
