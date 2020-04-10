@@ -5,7 +5,7 @@ go 1.12
 require (
 	github.com/alibabacloud-go/debug v0.0.0-20190504072949-9472017b5c68 // indirect
 	github.com/aliyun/alibaba-cloud-sdk-go v0.0.0-20191112024640-6523ede38591
-	github.com/aliyun/aliyun-oss-go-sdk v2.0.3+incompatible
+	github.com/aliyun/aliyun-oss-go-sdk v2.0.8+incompatible
 	github.com/aliyun/credentials-go v0.0.0-20190906110604-c03d72db9395
 	github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc
 	github.com/baiyubin/aliyun-sts-go-sdk v0.0.0-20180326062324-cfa1a18b161f // indirect
@@ -20,7 +20,7 @@ require (
 	github.com/onsi/ginkgo v1.10.3
 	github.com/onsi/gomega v1.7.1
 	github.com/posener/complete v1.2.2
-	github.com/satori/go.uuid v1.2.1-0.20181028125025-b2ce2384e17b
+	github.com/satori/go.uuid v1.2.1-0.20181028125025-b2ce2384e17b // indirect
 	github.com/smartystreets/assertions v1.0.1 // indirect
 	github.com/smartystreets/goconvey v1.6.4 // indirect
 	github.com/stretchr/testify v1.4.0

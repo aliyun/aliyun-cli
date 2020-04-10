@@ -3,6 +3,7 @@ package lib
 import (
 	"fmt"
 	"hash/fnv"
+	"io/ioutil"
 	"math"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
@@ -36,26 +38,32 @@ const (
  * Please guarantee the alignment if you add new filed
  */
 type copyOptionType struct {
-	cpDir          string
-	snapshotPath   string
-	vrange         string
-	encodingType   string
-	meta           string
-	options        []oss.Option
-	filters        []filterOptionType
-	threshold      int64
-	routines       int64
-	reporter       *Reporter
-	snapshotldb    *leveldb.DB
-	recursive      bool
-	force          bool
-	update         bool
-	ctnu           bool
-	payerOptions   []oss.Option
-	partitionInfo  string
-	partitionIndex int
-	partitionCount int
-	versionId      string
+	cpDir             string
+	snapshotPath      string
+	vrange            string
+	encodingType      string
+	meta              string
+	options           []oss.Option
+	filters           []filterOptionType
+	threshold         int64
+	routines          int64
+	reporter          *Reporter
+	snapshotldb       *leveldb.DB
+	recursive         bool
+	force             bool
+	update            bool
+	ctnu              bool
+	payerOptions      []oss.Option
+	partitionInfo     string
+	partitionIndex    int
+	partitionCount    int
+	versionId         string
+	enableSymlinkDir  bool
+	onlyCurrentDir    bool
+	disableDirObject  bool
+	resumeProgress    *OssResumeProgressListener
+	disableAllSymlink bool
+	tagging           string
 }
 
 type filterOptionType struct {
@@ -95,17 +103,53 @@ func freshProgress() {
 
 // OssProgressListener progress listener
 type OssProgressListener struct {
-	monitor  *CPMonitor
-	lastSize int64
-	currSize int64
+	monitor     *CPMonitor
+	lastSize    int64
+	currSize    int64
+	failedEvent bool
 }
 
 // ProgressChanged handle progress event
 func (l *OssProgressListener) ProgressChanged(event *oss.ProgressEvent) {
 	if event.EventType == oss.TransferDataEvent {
 		l.monitor.updateTransferSize(event.RwBytes)
-		freshProgress()
+		l.monitor.updateDealSize(event.RwBytes)
+		l.failedEvent = false
+	} else if !l.failedEvent && event.EventType == oss.TransferFailedEvent {
+		l.monitor.updateDealSize(-event.ConsumedBytes)
+		l.failedEvent = true
 	}
+	freshProgress()
+}
+
+// OssProgressListener resume progress listener
+type OssResumeProgressListener struct {
+	monitor     *CPMonitor
+	lastSize    int64
+	currSize    int64
+	failedEvent bool
+}
+
+// ProgressChanged handle resume progress event
+func (l *OssResumeProgressListener) ProgressChanged(event *oss.ProgressEvent) {
+	if event.EventType == oss.TransferDataEvent {
+		l.monitor.updateTransferSize(event.RwBytes)
+		l.monitor.updateDealSize(event.RwBytes)
+		atomic.AddInt64(&l.currSize, event.RwBytes)
+	} else if event.EventType == oss.TransferStartedEvent {
+		if event.ConsumedBytes > 0 {
+			l.monitor.updateDealSize(event.ConsumedBytes)
+			atomic.StoreInt64(&l.currSize, event.ConsumedBytes)
+		}
+	}
+	freshProgress()
+}
+
+// Retry logic
+func (l *OssResumeProgressListener) Retry() {
+	currSize := atomic.LoadInt64(&l.currSize)
+	l.monitor.updateDealSize(-currSize)
+	atomic.StoreInt64(&l.currSize, 0)
 }
 
 var specChineseCopy = SpecText{
@@ -115,9 +159,9 @@ var specChineseCopy = SpecText{
 	paramText: "src_url dest_url [options]",
 
 	syntaxText: ` 
-    ossutil cp file_url cloud_url  [-r] [-f] [-u] [--output-dir=odir] [--bigfile-threshold=size] [--checkpoint-dir=cdir] [--snapshot-path=sdir] [--payer requester]
-    ossutil cp cloud_url file_url  [-r] [-f] [-u] [--output-dir=odir] [--bigfile-threshold=size] [--checkpoint-dir=cdir] [--range=x-y] [--payer requester] [--version-id versionId]
-    ossutil cp cloud_url cloud_url [-r] [-f] [-u] [--output-dir=odir] [--bigfile-threshold=size] [--checkpoint-dir=cdir] [--payer requester] [--version-id versionId]
+    ossutil cp file_url cloud_url  [-r] [-f] [-u] [--enable-symlink-dir] [--disable-all-symlink] [--disable-ignore-error] [--only-current-dir] [--output-dir=odir] [--bigfile-threshold=size] [--checkpoint-dir=cdir] [--snapshot-path=sdir] [--payer requester]
+    ossutil cp cloud_url file_url  [-r] [-f] [-u] [--only-current-dir] [--disable-ignore-error] [--output-dir=odir] [--bigfile-threshold=size] [--checkpoint-dir=cdir] [--range=x-y] [--payer requester] [--version-id versionId]
+    ossutil cp cloud_url cloud_url [-r] [-f] [-u] [--only-current-dir] [--disable-ignore-error] [--output-dir=odir] [--bigfile-threshold=size] [--checkpoint-dir=cdir] [--payer requester] [--version-id versionId]
 `,
 
 	detailHelpText: ` 
@@ -207,6 +251,11 @@ var specChineseCopy = SpecText{
     注意：header不区分大小写，但value区分大小写。设置后将用指定的meta代替原来的meta。没有指定的
     HTTP HEADER将保留，没有指定的user meta将会被删除。
 
+--tagging选项
+    该选项在上传文件的同时设置object的tagging信息。当指定--recursive选项时，会设置所有上传的
+    objects的tagging信息。
+    如果一次设置多个tagging,必须使用双引号,比如 "tagA=A&tagB=B"
+    
 --acl选项
 
     该选项在上传文件的同时设置object的acl信息。当指定--recursive选项时，会设置所有上传的
@@ -295,6 +344,21 @@ var specChineseCopy = SpecText{
 --encoding-type选项
 
     如果指定该选项为url，则表示输入的object名和文件名都是经过url编码的。
+
+--enable-symlink-dir选项
+
+    允许传输链接子目录下文件,如果存在死循环链接文件或者目录,会导致错误,使用前建议用probe命令
+    检测是否存在死循环链接文件或者目录
+
+--disable-all-symlink选项
+
+    上传目录时,忽略掉该目录下所有的链接文件以及链接子目录
+
+--only-current-dir
+    
+    和-r选项一起使用,表示只操作当前目录下的文件, 会忽略当前目录下的子目录, 如果是下载或者拷贝oss
+    的目录，目录后面要加上反斜线/
+
 
 大文件断点续传：
 
@@ -460,6 +524,18 @@ var specChineseCopy = SpecText{
     ossutil cp %e4%b8%ad%e6%96%87 oss://bucket1/%e6%b5%8b%e8%af%95 --encoding-type url
     在本地查找文件名为“中文”的文件，并上传到bucket1生成名称为”测试“的object
 
+    ossutil cp local_dir oss://bucket1/b -r --enable-symlink-dir
+    支持上传符号链接子目录下的文件
+
+    ossutil cp local_dir oss://bucket1/b -r --only-current-dir
+    只上传当前目录的下文件,忽略其他的子目录
+
+    ossutil cp local_dir oss://bucket1/b -r --disable-all-symlink
+    忽略所有的链接子文件以及链接子目录
+
+    ossutil cp local_dir oss://bucket1/b --tagging "tagA=A&tagB=B" -r
+    上传的同时设置两个tagging,key分别为tagA和tagB,value分别为A和B
+
     2) 从oss下载object
     假设oss上有下列objects：
         oss://bucket/abcdir1/a
@@ -510,6 +586,9 @@ var specChineseCopy = SpecText{
 
     ossutil cp oss://bucket/object local_file --version-id versionId
     指定object版本下载
+
+    ossutil cp oss://bucket/dir/ local_dir -r --only-current-dir
+    只下载当前目录下的object, 忽略其他子目录
 
     3) 在oss间拷贝
     假设oss上有下列objects：
@@ -580,6 +659,12 @@ var specChineseCopy = SpecText{
 
     ossutil cp oss://bucket/object1 oss://bucket/object2 --version-id versionId
     指定object版本copy 
+
+    ossutil cp oss://bucket/dir/ oss://bucket1/ -r --only-current-dir
+    只copy当前目录下的object, 忽略其他子目录
+
+    ossutil cp oss://bucket/object1 oss://bucket/object2 --tagging "tagA=A&tagB=B"
+    copy的同时设置两个tagging,key分别为tagA和tagB,value分别为A和B
 `,
 }
 
@@ -590,9 +675,9 @@ var specEnglishCopy = SpecText{
 	paramText: "src_url dest_url [options]",
 
 	syntaxText: ` 
-    ossutil cp file_url cloud_url  [-r] [-f] [-u] [--output-dir=odir] [--bigfile-threshold=size] [--checkpoint-dir=cdir] [--snapshot-path=sdir] [--payer requester]
-    ossutil cp cloud_url file_url  [-r] [-f] [-u] [--output-dir=odir] [--bigfile-threshold=size] [--checkpoint-dir=cdir] [--range=x-y] [--payer requester]
-    ossutil cp cloud_url cloud_url [-r] [-f] [-u] [--output-dir=odir] [--bigfile-threshold=size] [--checkpoint-dir=cdir] [--payer requester]
+    ossutil cp file_url cloud_url  [-r] [-f] [-u] [--enable-symlink-dir] [--disable-all-symlink] [--disable-ignore-error] [--only-current-dir] [--output-dir=odir] [--bigfile-threshold=size] [--checkpoint-dir=cdir] [--snapshot-path=sdir] [--payer requester]
+    ossutil cp cloud_url file_url  [-r] [-f] [-u] [--only-current-dir] [--output-dir=odir] [--disable-ignore-error] [--bigfile-threshold=size] [--checkpoint-dir=cdir] [--range=x-y] [--payer requester]
+    ossutil cp cloud_url cloud_url [-r] [-f] [-u] [--only-current-dir] [--output-dir=odir] [--disable-ignore-error] [--bigfile-threshold=size] [--checkpoint-dir=cdir] [--payer requester]
 `,
 
 	detailHelpText: ` 
@@ -704,6 +789,12 @@ var specEnglishCopy = SpecText{
     replaced with specified meta. HTTP HEADER will be reserved if no speified value. User meta will be
     deleted if no specified value.
 
+--tagging option
+
+    This option will set the specified objects' tagging data. If --recursive option is specified, 
+    ossutil will set tagging for all uploaded objects. 
+    If you set more than one tagging at a time, you must use double quotes, such as "tagA=A&tagB=B"
+
 --acl option
 
     This option will set acl on the specified objects. If --recursive option is specified, 
@@ -809,6 +900,22 @@ Other Options:
     If the --encoding-type option is setted to url, it means the object name and file name are url 
     endcoded.
 
+--enable-symlink-dir option
+
+   Allows transfer of files in the link subdirectory. If there is an infinite loop link file or directory, 
+   it will cause an error. 
+   It is recommended to use the probe command to detect the existence of an infinite loop link file or 
+   directory before use
+
+--disable-all-symlink option
+
+  specifies that uploading of symlink files and symlink directories under the directory is not allowed
+
+--only-current-dir
+    
+   Used with the -r option, it means that only the files in the current directory will be manipulated, 
+   and the subdirectories under the current directory will be ignored.
+   If you are downloading or copying the oss directory, add a backslash(/) after the directory.
 
 Resume copy of big file:
 
@@ -985,6 +1092,18 @@ Usage:
     ossutil cp %e4%b8%ad%e6%96%87 oss://bucket1/%e6%b5%8b%e8%af%95 --encoding-type url
     Upload the file "中文" to oss://bucket1/测试
 
+    ossutil cp local_dir oss://bucket1/b -r --enable-symlink-dir
+    Support for uploading files in the symlink subdirectory
+
+    ossutil cp local_dir oss://bucket1/b -r --only-current-dir
+    Upload only the files in the current directory, ignoring other subdirectories
+
+    ossutil cp local_dir oss://bucket1/b -r --disable-all-symlink
+    uploading of symlink files and symlink directories under the local_dir is not allowed 
+
+    ossutil cp local_dir oss://bucket/b --tagging "tagA=A&tagB=B"
+    Set two taggings when uploading, the key is tagA and tagB, and the value is A and B
+
     2) download from oss
     Suppose there are following objects in oss:
         oss://bucket/abcdir1/a
@@ -1033,6 +1152,9 @@ Usage:
 
     ossutil cp oss://bucket/object1 local_file --version-id versionId
     Specify object version download
+
+    ossutil cp oss://bucket/dir/ local_dir -r --only-current-dir
+    Only download the object in the current directory, ignore other subdirectories
 
     3) Copy between oss 
     Suppose there are following objects in oss:
@@ -1101,6 +1223,12 @@ Usage:
 
     ossutil cp oss://bucket/object1 oss://bucket/object2 --version-id versionId
     Specify source object version copy
+
+    ossutil cp oss://bucket/dir/ oss://bucket1/ -r --only-current-dir
+    Copy only the object in the current directory, ignoring other subdirectories
+
+    ossutil cp oss://bucket/object1 oss://bucket/object2 --tagging "tagA=A&tagB=B"
+    Set two taggings when copying, the key is tagA and tagB, and the value is A and B
 `,
 }
 
@@ -1153,6 +1281,13 @@ var copyCommand = CopyCommand{
 			OptionMaxUpSpeed,
 			OptionPartitionDownload,
 			OptionVersionId,
+			OptionLocalHost,
+			OptionEnableSymlinkDir,
+			OptionOnlyCurrentDir,
+			OptionDisableDirObject,
+			OptionDisableAllSymlink,
+			OptionDisableIgnoreError,
+			OptionTagging,
 		},
 	},
 }
@@ -1185,17 +1320,27 @@ func (cc *CopyCommand) RunCommand() error {
 	cc.cpOption.routines, _ = GetInt(OptionRoutines, cc.command.options)
 	cc.cpOption.ctnu = false
 	if cc.cpOption.recursive {
-		cc.cpOption.ctnu = true
+		disableIgnoreError, _ := GetBool(OptionDisableIgnoreError, cc.command.options)
+		cc.cpOption.ctnu = !disableIgnoreError
 	}
 	outputDir, _ := GetString(OptionOutputDir, cc.command.options)
 	cc.cpOption.snapshotPath, _ = GetString(OptionSnapshotPath, cc.command.options)
 	cc.cpOption.vrange, _ = GetString(OptionRange, cc.command.options)
 	cc.cpOption.encodingType, _ = GetString(OptionEncodingType, cc.command.options)
 	cc.cpOption.meta, _ = GetString(OptionMeta, cc.command.options)
+	cc.cpOption.tagging, _ = GetString(OptionTagging, cc.command.options)
 	acl, _ := GetString(OptionACL, cc.command.options)
 	payer, _ := GetString(OptionRequestPayer, cc.command.options)
 	cc.cpOption.partitionInfo, _ = GetString(OptionPartitionDownload, cc.command.options)
 	cc.cpOption.versionId, _ = GetString(OptionVersionId, cc.command.options)
+	cc.cpOption.enableSymlinkDir, _ = GetBool(OptionEnableSymlinkDir, cc.command.options)
+	cc.cpOption.onlyCurrentDir, _ = GetBool(OptionOnlyCurrentDir, cc.command.options)
+	cc.cpOption.disableDirObject, _ = GetBool(OptionDisableDirObject, cc.command.options)
+	cc.cpOption.disableAllSymlink, _ = GetBool(OptionDisableAllSymlink, cc.command.options)
+
+	if cc.cpOption.enableSymlinkDir && cc.cpOption.disableAllSymlink {
+		return fmt.Errorf("--enable-symlink-dir and --disable-all-symlink can't be both exist")
+	}
 
 	var res bool
 	res, cc.cpOption.filters = getFilter(os.Args)
@@ -1208,7 +1353,7 @@ func (cc *CopyCommand) RunCommand() error {
 	}
 
 	for k, v := range cc.cpOption.filters {
-		LogInfo("filter %d,name:%s,pattern:%s.\n", k, v.name, v.pattern)
+		LogInfo("filter %d,name:%s,pattern:%s\n", k, v.name, v.pattern)
 	}
 
 	//get file list
@@ -1248,6 +1393,18 @@ func (cc *CopyCommand) RunCommand() error {
 		cc.cpOption.options = append(cc.cpOption.options, topts...)
 	}
 
+	if cc.cpOption.tagging != "" {
+		if opType == operationTypeGet {
+			return fmt.Errorf("No need to set tagging for download")
+		}
+		tags, err := cc.command.getOSSTagging(cc.cpOption.tagging)
+		if err != nil {
+			return err
+		}
+		tagging := oss.Tagging{Tags: tags}
+		cc.cpOption.options = append(cc.cpOption.options, oss.SetTagging(tagging))
+	}
+
 	if acl != "" {
 		if opType == operationTypeGet {
 			return fmt.Errorf("No need to set ACL for download")
@@ -1273,7 +1430,7 @@ func (cc *CopyCommand) RunCommand() error {
 	}
 
 	// init reporter
-	if cc.cpOption.reporter, err = GetReporter(cc.cpOption.ctnu, outputDir, commandLine); err != nil {
+	if cc.cpOption.reporter, err = GetReporter(cc.cpOption.recursive, outputDir, commandLine); err != nil {
 		return err
 	}
 
@@ -1322,20 +1479,20 @@ func (cc *CopyCommand) RunCommand() error {
 
 	switch opType {
 	case operationTypePut:
-		LogInfo("begin uploadFiles.\n")
+		LogInfo("begin uploadFiles\n")
 		err = cc.uploadFiles(srcURLList, destURL.(CloudURL))
 	case operationTypeGet:
-		LogInfo("begin downloadFiles.\n")
+		LogInfo("begin downloadFiles\n")
 		err = cc.downloadFiles(srcURLList[0].(CloudURL), destURL.(FileURL))
 	default:
-		LogInfo("begin copyFiles.\n")
+		LogInfo("begin copyFiles\n")
 		err = cc.copyFiles(srcURLList[0].(CloudURL), destURL.(CloudURL))
 	}
 
 	cc.cpOption.reporter.Clear()
 
 	if err == nil {
-		LogInfo("begin Remove checkpointDir %s.\n", cc.cpOption.cpDir)
+		LogInfo("begin Remove checkpointDir %s\n", cc.cpOption.cpDir)
 		os.RemoveAll(cc.cpOption.cpDir)
 	}
 	return err
@@ -1459,7 +1616,7 @@ func (cc *CopyCommand) uploadFiles(srcURLList []StorageURLer, destURL CloudURL) 
 	go cc.fileStatistic(srcURLList)
 	go cc.fileProducer(srcURLList, chFiles, chListError)
 
-	LogInfo("upload files,routin count:%d,multi part size threshold:%d.\n",
+	LogInfo("upload files,routin count:%d,multi part size threshold:%d\n",
 		cc.cpOption.routines, cc.cpOption.threshold)
 	for i := 0; int64(i) < cc.cpOption.routines; i++ {
 		go cc.uploadConsumer(bucket, destURL, chFiles, chError)
@@ -1525,6 +1682,11 @@ func (cc *CopyCommand) fileStatistic(srcURLList []StorageURLer) {
 			return
 		}
 		if f.IsDir() {
+			if !strings.HasSuffix(name, string(os.PathSeparator)) {
+				// for link directory
+				name += string(os.PathSeparator)
+			}
+
 			err := cc.getFileListStatistic(name)
 			if err != nil {
 				cc.monitor.setScanError(err)
@@ -1541,8 +1703,40 @@ func (cc *CopyCommand) fileStatistic(srcURLList []StorageURLer) {
 	freshProgress()
 }
 
+func (cc *CopyCommand) getCurrentDirFilesStatistic(dpath string) error {
+	if !strings.HasSuffix(dpath, string(os.PathSeparator)) {
+		dpath += string(os.PathSeparator)
+	}
+
+	fileList, err := ioutil.ReadDir(dpath)
+	if err != nil {
+		return err
+	}
+
+	for _, fileInfo := range fileList {
+		if !fileInfo.IsDir() {
+			realInfo, _ := os.Stat(dpath + fileInfo.Name())
+			if realInfo.IsDir() {
+				// for symlink
+				continue
+			}
+
+			if doesSingleFileMatchPatterns(fileInfo.Name(), cc.cpOption.filters) {
+				cc.monitor.updateScanSizeNum(fileInfo.Size(), 1)
+			}
+		}
+	}
+	return nil
+}
+
 func (cc *CopyCommand) getFileListStatistic(dpath string) error {
-	err := filepath.Walk(dpath, func(fpath string, f os.FileInfo, err error) error {
+	if cc.cpOption.onlyCurrentDir {
+		return cc.getCurrentDirFilesStatistic(dpath)
+	}
+
+	name := dpath
+	symlinkDiretorys := []string{dpath}
+	walkFunc := func(fpath string, f os.FileInfo, err error) error {
 		if f == nil {
 			return err
 		}
@@ -1551,10 +1745,10 @@ func (cc *CopyCommand) getFileListStatistic(dpath string) error {
 			return nil
 		}
 
+		realFileSize := f.Size()
 		dpath = filepath.Clean(dpath)
 		fpath = filepath.Clean(fpath)
-
-		_, err = filepath.Rel(dpath, fpath)
+		fileName, err := filepath.Rel(dpath, fpath)
 		if err != nil {
 			return fmt.Errorf("list file error: %s, info: %s", fpath, err.Error())
 		}
@@ -1566,11 +1760,55 @@ func (cc *CopyCommand) getFileListStatistic(dpath string) error {
 			return nil
 		}
 
+		if cc.cpOption.disableAllSymlink && (f.Mode()&os.ModeSymlink) != 0 {
+			return nil
+		}
+
+		// link file or link dir
+		if f.Mode()&os.ModeSymlink != 0 {
+			// there is difference between os.Stat and os.Lstat in filepath.Walk
+			realInfo, err := os.Stat(fpath)
+			if err != nil {
+				return err
+			}
+
+			if realInfo.IsDir() {
+				realFileSize = 0
+			} else {
+				realFileSize = realInfo.Size()
+			}
+
+			if cc.cpOption.enableSymlinkDir && realInfo.IsDir() {
+				// it's symlink dir
+				// if linkDir has suffix os.PathSeparator,os.Lstat determine it is a dir
+				if !strings.HasSuffix(name, string(os.PathSeparator)) {
+					name += string(os.PathSeparator)
+				}
+				linkDir := name + fileName + string(os.PathSeparator)
+				symlinkDiretorys = append(symlinkDiretorys, linkDir)
+				return nil
+			}
+		}
 		if doesSingleFileMatchPatterns(f.Name(), cc.cpOption.filters) {
-			cc.monitor.updateScanSizeNum(f.Size(), 1)
+			cc.monitor.updateScanSizeNum(realFileSize, 1)
 		}
 		return nil
-	})
+	}
+
+	var err error
+	for {
+		symlinks := symlinkDiretorys
+		symlinkDiretorys = []string{}
+		for _, v := range symlinks {
+			err = filepath.Walk(v, walkFunc)
+			if err != nil {
+				return err
+			}
+		}
+		if len(symlinkDiretorys) == 0 {
+			break
+		}
+	}
 	return err
 }
 
@@ -1583,6 +1821,11 @@ func (cc *CopyCommand) fileProducer(srcURLList []StorageURLer, chFiles chan<- fi
 			return
 		}
 		if f.IsDir() {
+			if !strings.HasSuffix(name, string(os.PathSeparator)) {
+				// for link directory
+				name += string(os.PathSeparator)
+			}
+
 			err := cc.getFileList(name, chFiles)
 			if err != nil {
 				chListError <- err
@@ -1598,17 +1841,48 @@ func (cc *CopyCommand) fileProducer(srcURLList []StorageURLer, chFiles chan<- fi
 	chListError <- nil
 }
 
+func (cc *CopyCommand) getCurrentDirFileList(dpath string, chFiles chan<- fileInfoType) error {
+	if !strings.HasSuffix(dpath, string(os.PathSeparator)) {
+		dpath += string(os.PathSeparator)
+	}
+
+	fileList, err := ioutil.ReadDir(dpath)
+	if err != nil {
+		return err
+	}
+
+	for _, fileInfo := range fileList {
+		if !fileInfo.IsDir() {
+			realInfo, _ := os.Stat(dpath + fileInfo.Name())
+			if realInfo.IsDir() {
+				// for symlink
+				continue
+			}
+
+			if doesSingleFileMatchPatterns(fileInfo.Name(), cc.cpOption.filters) {
+				chFiles <- fileInfoType{fileInfo.Name(), dpath}
+			}
+		}
+	}
+	return nil
+}
+
 func (cc *CopyCommand) getFileList(dpath string, chFiles chan<- fileInfoType) error {
+	if cc.cpOption.onlyCurrentDir {
+		return cc.getCurrentDirFileList(dpath, chFiles)
+	}
+
 	name := dpath
-	err := filepath.Walk(dpath, func(fpath string, f os.FileInfo, err error) error {
+	symlinkDiretorys := []string{dpath}
+	walkFunc := func(fpath string, f os.FileInfo, err error) error {
 		if f == nil {
 			return err
 		}
 
 		dpath = filepath.Clean(dpath)
 		fpath = filepath.Clean(fpath)
-		fileName, err := filepath.Rel(dpath, fpath)
 
+		fileName, err := filepath.Rel(dpath, fpath)
 		if err != nil {
 			return fmt.Errorf("list file error: %s, info: %s", fpath, err.Error())
 		}
@@ -1624,12 +1898,49 @@ func (cc *CopyCommand) getFileList(dpath string, chFiles chan<- fileInfoType) er
 			return nil
 		}
 
+		if cc.cpOption.disableAllSymlink && (f.Mode()&os.ModeSymlink) != 0 {
+			return nil
+		}
+
+		if cc.cpOption.enableSymlinkDir && (f.Mode()&os.ModeSymlink) != 0 {
+			// there is difference between os.Stat and os.Lstat in filepath.Walk
+			realInfo, err := os.Stat(fpath)
+			if err != nil {
+				return err
+			}
+
+			if realInfo.IsDir() {
+				// it's symlink dir
+				// if linkDir has suffix os.PathSeparator,os.Lstat determine it is a dir
+				if !strings.HasSuffix(name, string(os.PathSeparator)) {
+					name += string(os.PathSeparator)
+				}
+				linkDir := name + fileName + string(os.PathSeparator)
+				symlinkDiretorys = append(symlinkDiretorys, linkDir)
+				return nil
+			}
+		}
+
 		if doesSingleFileMatchPatterns(fileName, cc.cpOption.filters) {
 			chFiles <- fileInfoType{fileName, name}
 		}
-
 		return nil
-	})
+	}
+
+	var err error
+	for {
+		symlinks := symlinkDiretorys
+		symlinkDiretorys = []string{}
+		for _, v := range symlinks {
+			err = filepath.Walk(v, walkFunc)
+			if err != nil {
+				return err
+			}
+		}
+		if len(symlinkDiretorys) == 0 {
+			break
+		}
+	}
 	return err
 }
 
@@ -1675,7 +1986,7 @@ func (cc *CopyCommand) uploadFileWithReport(bucket *oss.Bucket, destURL CloudURL
 	if err != nil {
 		LogError("upload file error,file:%s,cost:%d(ms),error info:%s\n", file.filePath, cost, err.Error())
 	} else if skip {
-		LogInfo("upload file skip:%s.\n", file.filePath)
+		LogInfo("upload file skip:%s\n", file.filePath)
 	} else {
 		if file.dir == "" {
 			// fix panic
@@ -1728,8 +2039,12 @@ func (cc *CopyCommand) uploadFile(bucket *oss.Bucket, destURL CloudURL, file fil
 
 	skip = false
 	if f.IsDir() {
-		rerr = cc.ossPutObjectRetry(bucket, objectName, "")
 		isDir = true
+		if cc.cpOption.disableDirObject {
+			skip = true
+			return
+		}
+		rerr = cc.ossPutObjectRetry(bucket, objectName, "")
 		if err := cc.updateSnapshot(rerr, spath, srct); err != nil {
 			rerr = err
 		}
@@ -1737,9 +2052,9 @@ func (cc *CopyCommand) uploadFile(bucket *oss.Bucket, destURL CloudURL, file fil
 	}
 
 	size = 0
-	var listener *OssProgressListener = &OssProgressListener{&cc.monitor, 0, 0}
 	//decide whether to use resume upload
 	if f.Size() < cc.cpOption.threshold {
+		var listener *OssProgressListener = &OssProgressListener{&cc.monitor, 0, 0, false}
 		options := cc.cpOption.options
 		options = append(options, oss.Progress(listener))
 		rerr = cc.ossUploadFileRetry(bucket, objectName, filePath, options...)
@@ -1749,10 +2064,13 @@ func (cc *CopyCommand) uploadFile(bucket *oss.Bucket, destURL CloudURL, file fil
 		return
 	}
 
+	var listener *OssResumeProgressListener = &OssResumeProgressListener{&cc.monitor, 0, 0, false}
+	cc.cpOption.resumeProgress = listener
+
 	//make options for resume multipart upload
 	//part size
 	partSize, rt := cc.preparePartOption(f.Size())
-	LogInfo("multipart upload,file:%s,file size:%d,partSize:%d,routin count:%d.\n",
+	LogInfo("multipart upload,file:%s,file size:%d,partSize:%d,routin count:%d\n",
 		filePath, f.Size(), partSize, rt)
 	cp := oss.CheckpointDir(true, cc.cpOption.cpDir)
 	options := cc.cpOption.options
@@ -1850,7 +2168,7 @@ func (cc *CopyCommand) ossUploadFileRetry(bucket *oss.Bucket, objectName string,
 		if i > 1 {
 			time.Sleep(time.Duration(1) * time.Second)
 			if int64(i) >= retryTimes {
-				fmt.Printf("\nretry count:%d:upload file:%s.\n", i-1, filePath)
+				fmt.Printf("\nretry count:%d:upload file:%s\n", i-1, filePath)
 			}
 		}
 
@@ -1928,6 +2246,7 @@ func (cc *CopyCommand) calcPartSize(fileSize int64) (int64, int64) {
 func (cc *CopyCommand) ossResumeUploadRetry(bucket *oss.Bucket, objectName string, filePath string, partSize int64, options ...oss.Option) error {
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
+		cc.cpOption.resumeProgress.Retry()
 		if i > 1 {
 			time.Sleep(time.Duration(1) * time.Second)
 			if int64(i) >= retryTimes {
@@ -1960,10 +2279,14 @@ func (cc *CopyCommand) report(msg string, err error) {
 func (cc *CopyCommand) updateMonitor(skip bool, err error, isDir bool, size int64) {
 	if err != nil {
 		cc.monitor.updateErr(0, 1)
+	} else if skip {
+		if !isDir {
+			cc.monitor.updateSkip(size, 1)
+		} else {
+			cc.monitor.updateSkipDir(1)
+		}
 	} else if isDir {
 		cc.monitor.updateDir(size, 1)
-	} else if skip {
-		cc.monitor.updateSkip(size, 1)
 	} else {
 		cc.monitor.updateFile(size, 1)
 	}
@@ -2010,7 +2333,7 @@ func (cc *CopyCommand) downloadFiles(srcURL CloudURL, destURL FileURL) error {
 		return err
 	}
 
-	LogInfo("downloadFiles,recursive flag:%t.\n", cc.cpOption.recursive)
+	LogInfo("downloadFiles,recursive flag:%t\n", cc.cpOption.recursive)
 	if !cc.cpOption.recursive {
 		if srcURL.object == "" {
 			return fmt.Errorf("copy object invalid url: %v, object empty. If you mean batch copy objects, please use --recursive option", srcURL.ToString())
@@ -2075,7 +2398,7 @@ func (cc *CopyCommand) downloadSingleFileWithReport(bucket *oss.Bucket, objectIn
 	if err != nil {
 		LogError("download error,file:%s,cost:%d(ms),error info:%s\n", objectInfo.relativeKey, cost, err.Error())
 	} else if skip {
-		LogInfo("download skip:%s.\n", objectInfo.relativeKey)
+		LogInfo("download skip:%s\n", objectInfo.relativeKey)
 	} else {
 		if realSize < 0 && logLevel >= oss.Info {
 			fileName := cc.makeFileName(objectInfo.relativeKey, filePath)
@@ -2140,15 +2463,20 @@ func (cc *CopyCommand) downloadSingleFile(bucket *oss.Bucket, objectInfo objectI
 		return false, err, rsize, msg
 	}
 
-	var listener *OssProgressListener = &OssProgressListener{&cc.monitor, 0, 0}
-	downloadOptions := append(cc.cpOption.options, oss.Progress(listener))
+	downloadOptions := cc.cpOption.options
 	if cc.cpOption.vrange != "" {
 		downloadOptions = append(downloadOptions, oss.NormalizedRange(cc.cpOption.vrange))
 	}
 
 	if rsize < cc.cpOption.threshold {
+		var listener *OssProgressListener = &OssProgressListener{&cc.monitor, 0, 0, false}
+		downloadOptions = append(downloadOptions, oss.Progress(listener))
 		return false, cc.ossDownloadFileRetry(bucket, object, fileName, downloadOptions...), 0, msg
 	}
+
+	var listener *OssResumeProgressListener = &OssResumeProgressListener{&cc.monitor, 0, 0, false}
+	cc.cpOption.resumeProgress = listener
+	downloadOptions = append(downloadOptions, oss.Progress(listener))
 
 	partSize, rt := cc.preparePartOption(size)
 	cp := oss.CheckpointDir(true, cc.cpOption.cpDir)
@@ -2237,6 +2565,7 @@ func (cc *CopyCommand) ossDownloadFileRetry(bucket *oss.Bucket, objectName, file
 func (cc *CopyCommand) ossResumeDownloadRetry(bucket *oss.Bucket, objectName string, filePath string, size, partSize int64, options ...oss.Option) error {
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
+		cc.cpOption.resumeProgress.Retry()
 		if i > 1 {
 			time.Sleep(time.Duration(1) * time.Second)
 			if int64(i) >= retryTimes {
@@ -2284,7 +2613,7 @@ func (cc *CopyCommand) batchDownloadFiles(bucket *oss.Bucket, srcURL CloudURL, f
 	go cc.objectStatistic(bucket, srcURL)
 	go cc.objectProducer(bucket, srcURL, chObjects, chListError)
 
-	LogInfo("batch download files,routin count:%d,srcurl:%s,filepath:%s.\n", cc.cpOption.routines, srcURL.ToString(), filePath)
+	LogInfo("batch download files,routin count:%d,srcurl:%s,filepath:%s\n", cc.cpOption.routines, srcURL.ToString(), filePath)
 	for i := 0; int64(i) < cc.cpOption.routines; i++ {
 		go cc.downloadConsumer(bucket, filePath, chObjects, chError)
 	}
@@ -2299,7 +2628,13 @@ func (cc *CopyCommand) objectStatistic(bucket *oss.Bucket, cloudURL CloudURL) {
 		if strings.HasSuffix(cloudURL.object, "/") {
 			marker = oss.Marker(cloudURL.object)
 		}
-		listOptions := append(cc.cpOption.payerOptions, pre, marker)
+
+		del := oss.Delimiter("")
+		if cc.cpOption.onlyCurrentDir {
+			del = oss.Delimiter("/")
+		}
+		listOptions := append(cc.cpOption.payerOptions, pre, marker, del)
+
 		fnvIns := fnv.New64()
 		for {
 			lor, err := cc.command.ossListObjectsRetry(bucket, listOptions...)
@@ -2403,7 +2738,12 @@ func (cc *CopyCommand) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chO
 	if strings.HasSuffix(cloudURL.object, "/") {
 		marker = oss.Marker(cloudURL.object)
 	}
-	listOptions := append(cc.cpOption.payerOptions, pre, marker)
+	del := oss.Delimiter("")
+	if cc.cpOption.onlyCurrentDir {
+		del = oss.Delimiter("/")
+	}
+
+	listOptions := append(cc.cpOption.payerOptions, pre, marker, del)
 	for {
 		lor, err := cc.command.ossListObjectsRetry(bucket, listOptions...)
 		if err != nil {
@@ -2588,7 +2928,8 @@ func (cc *CopyCommand) copySingleFile(bucket *oss.Bucket, objectInfo objectInfoT
 		return false, cc.ossCopyObjectRetry(bucket, srcObject, destURL.bucket, destObject), size, msg
 	}
 
-	var listener *OssProgressListener = &OssProgressListener{&cc.monitor, 0, 0}
+	var listener *OssResumeProgressListener = &OssResumeProgressListener{&cc.monitor, 0, 0, false}
+	cc.cpOption.resumeProgress = listener
 	partSize, rt := cc.preparePartOption(size)
 	cp := oss.CheckpointDir(true, cc.cpOption.cpDir)
 	options := cc.cpOption.options
@@ -2632,6 +2973,7 @@ func (cc *CopyCommand) ossCopyObjectRetry(bucket *oss.Bucket, objectName, destBu
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	options := cc.cpOption.options
 	options = append(options, oss.MetadataDirective(oss.MetaReplace))
+	options = append(options, oss.TaggingDirective(oss.TaggingReplace))
 	for i := 1; ; i++ {
 		if i > 1 {
 			time.Sleep(time.Duration(1) * time.Second)
@@ -2660,6 +3002,7 @@ func (cc *CopyCommand) ossResumeCopyRetry(bucketName, objectName, destBucketName
 	}
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
+		cc.cpOption.resumeProgress.Retry()
 		if i > 1 {
 			time.Sleep(time.Duration(1) * time.Second)
 			if int64(i) >= retryTimes {

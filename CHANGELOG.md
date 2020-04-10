@@ -2,6 +2,7 @@
 
 ### Master
 
+- update: ossutil 1.6.11
 - fix: Skip https certificate verification
 
 ### 3.0.37

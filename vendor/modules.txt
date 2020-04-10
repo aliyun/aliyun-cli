@@ -12,7 +12,7 @@ github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests
 github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses
 github.com/aliyun/alibaba-cloud-sdk-go/sdk/utils
 github.com/aliyun/alibaba-cloud-sdk-go/services/ecs
-# github.com/aliyun/aliyun-oss-go-sdk v2.0.3+incompatible
+# github.com/aliyun/aliyun-oss-go-sdk v2.0.8+incompatible
 github.com/aliyun/aliyun-oss-go-sdk/oss
 # github.com/aliyun/credentials-go v0.0.0-20190906110604-c03d72db9395
 github.com/aliyun/credentials-go/credentials
@@ -87,8 +87,6 @@ github.com/pmezard/go-difflib/difflib
 github.com/posener/complete
 github.com/posener/complete/cmd
 github.com/posener/complete/cmd/install
-# github.com/satori/go.uuid v1.2.1-0.20181028125025-b2ce2384e17b
-github.com/satori/go.uuid
 # github.com/stretchr/testify v1.4.0
 github.com/stretchr/testify/assert
 # github.com/syndtr/goleveldb v1.0.0

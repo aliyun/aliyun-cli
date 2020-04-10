@@ -173,9 +173,10 @@ func (bec *BucketEncryptionCommand) PutBucketEncryption() error {
 	strAlgorithm, _ := GetString(OptionSSEAlgorithm, bec.command.options)
 	strKeyId, _ := GetString(OptionKMSMasterKeyID, bec.command.options)
 
-	if strAlgorithm != string(oss.KMSAlgorithm) && strAlgorithm != string(oss.AESAlgorithm) {
-		return fmt.Errorf("value of option --sse-algorithm must be KMS or AES256")
-	}
+	// support sm4 algorithm
+	//if strAlgorithm != string(oss.KMSAlgorithm) && strAlgorithm != string(oss.AESAlgorithm) {
+	//	return fmt.Errorf("value of option --sse-algorithm must be KMS or AES256")
+	//}
 
 	if strAlgorithm == string(oss.AESAlgorithm) && len(strKeyId) > 0 {
 		return fmt.Errorf("value of option --kms-masterkey-id must be empty if value of option --sse-algorithm is AES256")

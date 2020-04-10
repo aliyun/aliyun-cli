@@ -74,6 +74,17 @@ const (
 	StorageArchive StorageClassType = "Archive"
 )
 
+// RedundancyType bucket data Redundancy type
+type DataRedundancyType string
+
+const (
+	// RedundancyLRS Local redundancy, default value
+	RedundancyLRS DataRedundancyType = "LRS"
+
+	// RedundancyZRS Same city redundancy
+	RedundancyZRS DataRedundancyType = "ZRS"
+)
+
 // PayerType the type of request payer
 type PayerType string
 
@@ -157,6 +168,8 @@ const (
 	HTTPHeaderOssTagging                     = "X-Oss-Tagging"
 	HTTPHeaderOssTaggingDirective            = "X-Oss-Tagging-Directive"
 	HTTPHeaderOssTrafficLimit                = "X-Oss-Traffic-Limit"
+	HTTPHeaderOssForbidOverWrite             = "X-Oss-Forbid-Overwrite"
+	HTTPHeaderOssRangeBehavior               = "X-Oss-Range-Behavior"
 )
 
 // HTTP Param
@@ -166,6 +179,12 @@ const (
 	HTTPParamSignature     = "Signature"
 	HTTPParamSecurityToken = "security-token"
 	HTTPParamPlaylistName  = "playlistName"
+
+	HTTPParamSignatureVersion    = "x-oss-signature-version"
+	HTTPParamExpiresV2           = "x-oss-expires"
+	HTTPParamAccessKeyIDV2       = "x-oss-access-key-id"
+	HTTPParamSignatureV2         = "x-oss-signature"
+	HTTPParamAdditionalHeadersV2 = "x-oss-additional-headers"
 )
 
 // Other constants
@@ -182,5 +201,24 @@ const (
 
 	NullVersion = "null"
 
-	Version = "v2.0.3" // Go SDK version
+	Version = "v2.0.8" // Go SDK version
+)
+
+// FrameType
+const (
+	DataFrameType        = 8388609
+	ContinuousFrameType  = 8388612
+	EndFrameType         = 8388613
+	MetaEndFrameCSVType  = 8388614
+	MetaEndFrameJSONType = 8388615
+)
+
+// AuthVersion the version of auth
+type AuthVersionType string
+
+const (
+	// AuthV1 v1
+	AuthV1 AuthVersionType = "v1"
+	// AuthV2 v2
+	AuthV2 AuthVersionType = "v2"
 )

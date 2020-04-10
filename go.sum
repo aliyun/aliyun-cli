@@ -4,6 +4,8 @@ github.com/aliyun/alibaba-cloud-sdk-go v0.0.0-20191112024640-6523ede38591 h1:rbX
 github.com/aliyun/alibaba-cloud-sdk-go v0.0.0-20191112024640-6523ede38591/go.mod h1:mNZkuqaeM5UCiAdkV4r+lrheu8Q5fe/487bRFrGYZ8A=
 github.com/aliyun/aliyun-oss-go-sdk v2.0.3+incompatible h1:724q2AmQ3m1mrdD9kYqK5+1+Zr77vS21jdQ9iF9t4b8=
 github.com/aliyun/aliyun-oss-go-sdk v2.0.3+incompatible/go.mod h1:T/Aws4fEfogEE9v+HPhhw+CntffsBHJ8nXQCwKr0/g8=
+github.com/aliyun/aliyun-oss-go-sdk v2.0.8+incompatible h1:WaOAKiuezSaRKAYeSf5IjxuAy/0Gx7ts6qWhKWPZf7s=
+github.com/aliyun/aliyun-oss-go-sdk v2.0.8+incompatible/go.mod h1:T/Aws4fEfogEE9v+HPhhw+CntffsBHJ8nXQCwKr0/g8=
 github.com/aliyun/credentials-go v0.0.0-20190906110604-c03d72db9395 h1:ey3Xbk1uAgNOlWZAH7KDBxmoa0IcOt+snhA0vN8EA7s=
 github.com/aliyun/credentials-go v0.0.0-20190906110604-c03d72db9395/go.mod h1:AJeNV4JgJLF+XrTuSe0EPfSs702qFXKNJVOqloWotqs=
 github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc h1:eN2FUvn4J1A31pICABioDYukoh1Tmlei6L3ImZUin/I=

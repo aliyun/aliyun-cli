@@ -49,7 +49,10 @@ func New(endpoint, accessKeyID, accessKeySecret string, options ...ClientOption)
 
 	// URL parse
 	url := &urlMaker{}
-	url.Init(config.Endpoint, config.IsCname, config.IsUseProxy)
+	err := url.Init(config.Endpoint, config.IsCname, config.IsUseProxy)
+	if err != nil {
+		return nil, err
+	}
 
 	// HTTP connect
 	conn := &Conn{config: config, url: url}
@@ -65,8 +68,12 @@ func New(endpoint, accessKeyID, accessKeySecret string, options ...ClientOption)
 		option(client)
 	}
 
+	if config.AuthVersion != AuthV1 && config.AuthVersion != AuthV2 {
+		return nil, fmt.Errorf("Init client Error, invalid Auth version: %v", config.AuthVersion)
+	}
+
 	// Create HTTP connection
-	err := conn.init(config, url, client.HTTPClient)
+	err = conn.init(config, url, client.HTTPClient)
 
 	return client, err
 }
@@ -79,6 +86,11 @@ func New(endpoint, accessKeyID, accessKeySecret string, options ...ClientOption)
 // error    it's nil if no error, otherwise it's an error object.
 //
 func (client Client) Bucket(bucketName string) (*Bucket, error) {
+	err := CheckBucketName(bucketName)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Bucket{
 		client,
 		bucketName,
@@ -100,18 +112,26 @@ func (client Client) CreateBucket(bucketName string, options ...Option) error {
 
 	buffer := new(bytes.Buffer)
 
-	isOptSet, val, _ := isOptionSet(options, storageClass)
-	if isOptSet {
-		cbConfig := createBucketConfiguration{StorageClass: val.(StorageClassType)}
-		bs, err := xml.Marshal(cbConfig)
-		if err != nil {
-			return err
-		}
-		buffer.Write(bs)
+	var cbConfig createBucketConfiguration
+	cbConfig.StorageClass = StorageStandard
 
-		contentType := http.DetectContentType(buffer.Bytes())
-		headers[HTTPHeaderContentType] = contentType
+	isStorageSet, valStroage, _ := isOptionSet(options, storageClass)
+	isRedundancySet, valRedundancy, _ := isOptionSet(options, redundancyType)
+	if isStorageSet {
+		cbConfig.StorageClass = valStroage.(StorageClassType)
 	}
+
+	if isRedundancySet {
+		cbConfig.DataRedundancyType = valRedundancy.(DataRedundancyType)
+	}
+
+	bs, err := xml.Marshal(cbConfig)
+	if err != nil {
+		return err
+	}
+	buffer.Write(bs)
+	contentType := http.DetectContentType(buffer.Bytes())
+	headers[HTTPHeaderContentType] = contentType
 
 	params := map[string]interface{}{}
 	resp, err := client.do("PUT", bucketName, params, headers, buffer, options...)
@@ -536,6 +556,35 @@ func (client Client) SetBucketWebsiteDetail(bucketName string, wxml WebsiteXML, 
 	}
 	buffer := new(bytes.Buffer)
 	buffer.Write(bs)
+
+	contentType := http.DetectContentType(buffer.Bytes())
+	headers := make(map[string]string)
+	headers[HTTPHeaderContentType] = contentType
+
+	params := map[string]interface{}{}
+	params["website"] = nil
+	resp, err := client.do("PUT", bucketName, params, headers, buffer, options...)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return checkRespCode(resp.StatusCode, []int{http.StatusOK})
+}
+
+// SetBucketWebsiteXml sets the bucket's static website's rule
+//
+// OSS supports static web site hosting for the bucket data. When the bucket is enabled with that, you can access the file in the bucket like the way to access a static website.
+// For more information, please check out: https://help.aliyun.com/document_detail/oss/user_guide/static_host_website.html
+//
+// bucketName the bucket name to enable static web site.
+//
+// wxml the website's detail
+//
+// error    it's nil if no error, otherwise it's an error object.
+//
+func (client Client) SetBucketWebsiteXml(bucketName string, webXml string, options ...Option) error {
+	buffer := new(bytes.Buffer)
+	buffer.Write([]byte(webXml))
 
 	contentType := http.DetectContentType(buffer.Bytes())
 	headers := make(map[string]string)
@@ -1290,9 +1339,27 @@ func SetLocalAddr(localAddr net.Addr) ClientOption {
 	}
 }
 
+// AuthVersion  sets auth version: v1 or v2 signature which oss_server needed
+func AuthVersion(authVersion AuthVersionType) ClientOption {
+	return func(client *Client) {
+		client.Config.AuthVersion = authVersion
+	}
+}
+
+// AdditionalHeaders sets special http headers needed to be signed
+func AdditionalHeaders(headers []string) ClientOption {
+	return func(client *Client) {
+		client.Config.AdditionalHeaders = headers
+	}
+}
+
 // Private
 func (client Client) do(method, bucketName string, params map[string]interface{},
 	headers map[string]string, data io.Reader, options ...Option) (*Response, error) {
+	err := CheckBucketName(bucketName)
+	if len(bucketName) > 0 && err != nil {
+		return nil, err
+	}
 
 	resp, err := client.Conn.Do(method, bucketName, "", params, headers, data, 0, nil)
 

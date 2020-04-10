@@ -15,7 +15,7 @@ var specChineseList = SpecText{
 	paramText: "[cloud_url] [options]",
 
 	syntaxText: ` 
-    ossutil ls [oss://bucket[/prefix]] [-s] [-d] [--limited-num num] [--marker marker] [--upload-id-marker umarker] [--payer requester] [--include include-pattern] [--exclude exclude-pattern]  [--version-id-marker id_marker] [--all-versions]  [-c file] 
+    ossutil ls [oss://bucket[/prefix]] [-s] [-d] [-m] [--limited-num num] [--marker marker] [--upload-id-marker umarker] [--payer requester] [--include include-pattern] [--exclude exclude-pattern]  [--version-id-marker id_marker] [--all-versions]  [-c file] 
 `,
 
 	detailHelpText: ` 
@@ -186,7 +186,7 @@ var specEnglishList = SpecText{
 	paramText: "[cloud_url] [options]",
 
 	syntaxText: ` 
-    ossutil ls [oss://bucket[/prefix]] [-s] [-d] [--limited-num num] [--marker marker] [--upload-id-marker umarker] [--payer requester] [--include include-pattern] [--exclude exclude-pattern]  [--version-id-marker id_marker] [--all-versions]  [-c file] 
+    ossutil ls [oss://bucket[/prefix]] [-s] [-d] [-m] [--limited-num num] [--marker marker] [--upload-id-marker umarker] [--payer requester] [--include include-pattern] [--exclude exclude-pattern]  [--version-id-marker id_marker] [--all-versions]  [-c file] 
 `,
 
 	detailHelpText: ` 

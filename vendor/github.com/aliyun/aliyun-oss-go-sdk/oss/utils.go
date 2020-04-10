@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"hash/crc64"
 	"net/http"
 	"os"
@@ -262,4 +263,147 @@ func GetPartEnd(begin int64, total int64, per int64) int64 {
 // crcTable returns the table constructed from the specified polynomial
 var crcTable = func() *crc64.Table {
 	return crc64.MakeTable(crc64.ECMA)
+}
+
+// crcTable returns the table constructed from the specified polynomial
+var crc32Table = func() *crc32.Table {
+	return crc32.MakeTable(crc32.IEEE)
+}
+
+// choiceTransferPartOption choices valid option supported by Uploadpart or DownloadPart
+func ChoiceTransferPartOption(options []Option) []Option {
+	var outOption []Option
+
+	listener, _ := findOption(options, progressListener, nil)
+	if listener != nil {
+		outOption = append(outOption, Progress(listener.(ProgressListener)))
+	}
+
+	payer, _ := findOption(options, HTTPHeaderOssRequester, nil)
+	if payer != nil {
+		outOption = append(outOption, RequestPayer(PayerType(payer.(string))))
+	}
+
+	versionId, _ := findOption(options, "versionId", nil)
+	if versionId != nil {
+		outOption = append(outOption, VersionId(versionId.(string)))
+	}
+
+	trafficLimit, _ := findOption(options, HTTPHeaderOssTrafficLimit, nil)
+	if trafficLimit != nil {
+		speed, _ := strconv.ParseInt(trafficLimit.(string), 10, 64)
+		outOption = append(outOption, TrafficLimitHeader(speed))
+	}
+
+	respHeader, _ := findOption(options, responseHeader, nil)
+	if respHeader != nil {
+		outOption = append(outOption, GetResponseHeader(respHeader.(*http.Header)))
+	}
+
+	return outOption
+}
+
+// ChoiceCompletePartOption choices valid option supported by CompleteMulitiPart
+func ChoiceCompletePartOption(options []Option) []Option {
+	var outOption []Option
+
+	listener, _ := findOption(options, progressListener, nil)
+	if listener != nil {
+		outOption = append(outOption, Progress(listener.(ProgressListener)))
+	}
+
+	payer, _ := findOption(options, HTTPHeaderOssRequester, nil)
+	if payer != nil {
+		outOption = append(outOption, RequestPayer(PayerType(payer.(string))))
+	}
+
+	acl, _ := findOption(options, HTTPHeaderOssObjectACL, nil)
+	if acl != nil {
+		outOption = append(outOption, ObjectACL(ACLType(acl.(string))))
+	}
+
+	callback, _ := findOption(options, HTTPHeaderOssCallback, nil)
+	if callback != nil {
+		outOption = append(outOption, Callback(callback.(string)))
+	}
+
+	callbackVar, _ := findOption(options, HTTPHeaderOssCallbackVar, nil)
+	if callbackVar != nil {
+		outOption = append(outOption, CallbackVar(callbackVar.(string)))
+	}
+
+	respHeader, _ := findOption(options, responseHeader, nil)
+	if respHeader != nil {
+		outOption = append(outOption, GetResponseHeader(respHeader.(*http.Header)))
+	}
+
+	forbidOverWrite, _ := findOption(options, HTTPHeaderOssForbidOverWrite, nil)
+	if forbidOverWrite != nil {
+		if forbidOverWrite.(string) == "true" {
+			outOption = append(outOption, ForbidOverWrite(true))
+		} else {
+			outOption = append(outOption, ForbidOverWrite(false))
+		}
+	}
+
+	return outOption
+}
+
+// ChoiceAbortPartOption choices valid option supported by AbortMultipartUpload
+func ChoiceAbortPartOption(options []Option) []Option {
+	var outOption []Option
+	payer, _ := findOption(options, HTTPHeaderOssRequester, nil)
+	if payer != nil {
+		outOption = append(outOption, RequestPayer(PayerType(payer.(string))))
+	}
+
+	respHeader, _ := findOption(options, responseHeader, nil)
+	if respHeader != nil {
+		outOption = append(outOption, GetResponseHeader(respHeader.(*http.Header)))
+	}
+
+	return outOption
+}
+
+// ChoiceHeadObjectOption choices valid option supported by HeadObject
+func ChoiceHeadObjectOption(options []Option) []Option {
+	var outOption []Option
+
+	// not select HTTPHeaderRange to get whole object length
+	payer, _ := findOption(options, HTTPHeaderOssRequester, nil)
+	if payer != nil {
+		outOption = append(outOption, RequestPayer(PayerType(payer.(string))))
+	}
+
+	versionId, _ := findOption(options, "versionId", nil)
+	if versionId != nil {
+		outOption = append(outOption, VersionId(versionId.(string)))
+	}
+
+	respHeader, _ := findOption(options, responseHeader, nil)
+	if respHeader != nil {
+		outOption = append(outOption, GetResponseHeader(respHeader.(*http.Header)))
+	}
+
+	return outOption
+}
+
+func CheckBucketName(bucketName string) error {
+	nameLen := len(bucketName)
+	if nameLen < 3 || nameLen > 63 {
+		return fmt.Errorf("bucket name %s len is between [3-63],now is %d", bucketName, nameLen)
+	}
+
+	for _, v := range bucketName {
+		if !(('a' <= v && v <= 'z') || ('0' <= v && v <= '9') || v == '-') {
+			return fmt.Errorf("bucket name %s can only include lowercase letters, numbers, and -", bucketName)
+		}
+	}
+
+	if bucketName[0] == '-' || bucketName[nameLen-1] == '-' {
+		return fmt.Errorf("bucket name %s must start and end with a lowercase letter or number", bucketName)
+	}
+
+	return nil
+
 }
