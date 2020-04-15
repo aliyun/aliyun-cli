@@ -357,9 +357,10 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 	//
 	// aliyun
 	if len(args) == 0 {
+		// Case insensitive strings.ToLower()
 		ctx.Command().ExecuteComplete(ctx, args)
 		for _, p := range c.library.GetProducts() {
-			if !strings.HasPrefix(p.GetLowerCode(), ctx.Completion().Current) {
+			if !strings.HasPrefix(p.GetLowerCode(), strings.ToLower(ctx.Completion().Current)) {
 				continue
 			}
 			cli.PrintfWithColor(w, cli.ProductListColor(), "%s\n", p.GetLowerCode())
@@ -375,7 +376,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 	if product.ApiStyle == "rpc" {
 		if len(args) == 1 {
 			for _, name := range product.ApiNames {
-				if !strings.HasPrefix(name, ctx.Completion().Current) {
+				if !strings.HasPrefix(strings.ToLower(name), strings.ToLower(ctx.Completion().Current)) {
 					continue
 				}
 				cli.PrintfWithColor(w, cli.APIListColor(), "%s\n", name)
@@ -388,7 +389,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 		}
 
 		api.ForeachParameters(func(s string, p meta.Parameter) {
-			if strings.HasPrefix("--"+s, ctx.Completion().Current) && !p.Hidden {
+			if strings.HasPrefix("--"+strings.ToLower(s), strings.ToLower(ctx.Completion().Current)) && !p.Hidden {
 				cli.Printf(ctx.Writer(), "--%s\n", s)
 			}
 		})
