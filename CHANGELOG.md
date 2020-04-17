@@ -2,6 +2,9 @@
 
 ### Master
 
+### 3.0.39
+
+- update: meta data
 - update: auto-complete case-insensitive
 
 ### 3.0.38
