@@ -2,6 +2,8 @@
 
 ### Master
 
+- fix: cancel HTML character escaping
+
 ### 3.0.39
 
 - update: meta data

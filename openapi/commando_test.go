@@ -208,6 +208,10 @@ func Test_processInvoke(t *testing.T) {
 	out := `{"requestid":"test","name":"json"}`
 	out = sortJSON(out)
 	assert.Equal(t, "{\n\t\"name\": \"json\",\n\t\"requestid\": \"test\"\n}", out)
+
+	out = `{"downloadlink":"aaa&bbb"}`
+	out = sortJSON(out)
+	assert.Equal(t, "{\n\t\"downloadlink\": \"aaa&bbb\"\n}", out)
 }
 
 func Test_help(t *testing.T) {

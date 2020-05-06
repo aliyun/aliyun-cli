@@ -14,6 +14,8 @@
 package openapi
 
 import (
+	"bytes"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
@@ -175,11 +177,15 @@ func sortJSON(content string) string {
 	if err != nil {
 		return content
 	}
-	data, err := json.MarshalIndent(v, "", "\t")
+	buf := new(bytes.Buffer)
+	encoder := json.NewEncoder(buf)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "\t")
+	err = encoder.Encode(v)
 	if err != nil {
 		return content
 	}
-	return string(data)
+	return strings.TrimSuffix(buf.String(), "\n")
 }
 
 // invoke with helper
