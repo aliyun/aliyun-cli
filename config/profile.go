@@ -146,11 +146,25 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.ExpiredSeconds = ExpiredSecondsFlag(ctx.Flags()).GetIntegerOrDefault(cp.ExpiredSeconds)
 
 	if cp.AccessKeyId == "" {
-		cp.AccessKeyId = os.Getenv("ACCESS_KEY_ID")
+		switch {
+		case os.Getenv("ALIBABACLOUD_ACCESS_KEY_ID") != "":
+			cp.AccessKeyId = os.Getenv("ALIBABACLOUD_ACCESS_KEY_ID")
+		case os.Getenv("ALICLOUD_ACCESS_KEY_ID") != "":
+			cp.AccessKeyId = os.Getenv("ALICLOUD_ACCESS_KEY_ID")
+		case os.Getenv("ACCESS_KEY_ID") != "":
+			cp.AccessKeyId = os.Getenv("ACCESS_KEY_ID")
+		}
 	}
 
 	if cp.AccessKeySecret == "" {
-		cp.AccessKeySecret = os.Getenv("ACCESS_KEY_SECRET")
+		switch {
+		case os.Getenv("ALIBABACLOUD_ACCESS_KEY_SECRET") != "":
+			cp.AccessKeyId = os.Getenv("ALIBABACLOUD_ACCESS_KEY_SECRET")
+		case os.Getenv("ALICLOUD_ACCESS_KEY_SECRET") != "":
+			cp.AccessKeyId = os.Getenv("ALICLOUD_ACCESS_KEY_SECRET")
+		case os.Getenv("ACCESS_KEY_SECRET") != "":
+			cp.AccessKeyId = os.Getenv("ACCESS_KEY_SECRET")
+		}
 	}
 
 	if cp.StsToken == "" {
