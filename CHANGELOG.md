@@ -2,6 +2,8 @@
 
 ### Master
 
+- add: environment variables 
+`ALIBABACLOUD_ACCESS_KEY_ID`, `ALICLOUD_ACCESS_KEY_ID`, `ALIBABACLOUD_ACCESS_KEY_SECRET`, `ALICLOUD_ACCESS_KEY_SECRET`
 - fix: cancel HTML character escaping
 
 ### 3.0.39
