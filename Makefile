@@ -6,12 +6,12 @@ publish: build build_mac build_linux build_windows gen_version
 
 deps:
 	-go get -u github.com/aliyun/aliyun-openapi-meta
-	go get -u github.com/jteeuwen/go-bindata/...
+	go get -u github.com/shuLhan/go-bindata/...
 
 testdeps: deps
 
 metas: deps
-	go-bindata -o resource/metas.go -pkg resource -prefix ../aliyun-openapi-meta ../aliyun-openapi-meta/...
+	go-bindata -o resource/metas.go -pkg resource ../aliyun-openapi-meta/...
 
 clean:
 	rm -f resource/metas.go

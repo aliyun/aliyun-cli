@@ -2,6 +2,8 @@
 
 ### Master
 
+- update: go-bindata program 
+from `https://github.com/jteeuwen/go-bindata` to `https://github.com/shuLhan/go-bindata`
 - add: environment variables 
 `ALIBABACLOUD_ACCESS_KEY_ID`, `ALICLOUD_ACCESS_KEY_ID`, `ALIBABACLOUD_ACCESS_KEY_SECRET`, `ALICLOUD_ACCESS_KEY_SECRET`
 - fix: cancel HTML character escaping
