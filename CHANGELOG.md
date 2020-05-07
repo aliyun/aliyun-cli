@@ -2,6 +2,9 @@
 
 ### Master
 
+### 3.0.40
+
+- update: meta data
 - update: go-bindata program 
 from `https://github.com/jteeuwen/go-bindata` to `https://github.com/shuLhan/go-bindata`
 - add: environment variables 
