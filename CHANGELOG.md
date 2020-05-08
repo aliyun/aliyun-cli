@@ -2,6 +2,8 @@
 
 ### Master
 
+- fix: unable to get accessKeyID from environment variable
+
 ### 3.0.40
 
 - update: meta data

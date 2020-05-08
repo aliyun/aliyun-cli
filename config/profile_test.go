@@ -151,6 +151,18 @@ func TestProfile(t *testing.T) {
 	p.OverwriteWithFlags(ctx)
 	assert.Equal(t, Profile{Name: "default", Mode: EcsRamRole, RamRoleArn: "----", RamRoleName: "RamRoleName", OutputFormat: "json", RetryCount: 0, ReadTimeout: 0, Language: "en"}, p)
 
+	p.Mode = AK
+	p.AccessKeyId = ""
+	p.AccessKeySecret = ""
+	os.Setenv("ACCESS_KEY_ID", "accessKeyID")
+	os.Setenv("ACCESS_KEY_SECRET", "accessKeySecret")
+	p.OverwriteWithFlags(ctx)
+	assert.Equal(t, Profile{Name: "default", Mode: AK, AccessKeyId: "accessKeyID", AccessKeySecret: "accessKeySecret", RamRoleName: "RamRoleName", RamRoleArn: "----", OutputFormat: "json", RetryCount: 0, ReadTimeout: 0, Language: "en"}, p)
+	os.Setenv("ACCESS_KEY_ID", "")
+	os.Setenv("ACCESS_KEY_SECRET", "")
+	p.AccessKeyId = ""
+	p.AccessKeySecret = ""
+
 	//GetClient
 	p.ReadTimeout = 1
 	p.RetryCount = 1
