@@ -40,11 +40,11 @@ CLI 版本更改说明请参考 [CHANGELOG](./CHANGELOG.md)
 
   阿里云CLI工具下载、解压后即可使用，支持Mac, Linux, Windows平台(x64版本)。您可以将解压的`aliyun`可执行文件移至`/usr/local/bin`目录下，或添加到`$PATH`中。
 
-  下载链接如下 (3.0.40)：
+  下载链接如下 (3.0.41)：
 
-  - [Mac](https://aliyuncli.alicdn.com/aliyun-cli-macosx-3.0.40-amd64.tgz)
-  - [Linux](https://aliyuncli.alicdn.com/aliyun-cli-linux-3.0.40-amd64.tgz)
-  - [Windows (64 bit)](https://aliyuncli.alicdn.com/aliyun-cli-windows-3.0.40-amd64.zip)
+  - [Mac](https://aliyuncli.alicdn.com/aliyun-cli-macosx-3.0.41-amd64.tgz)
+  - [Linux](https://aliyuncli.alicdn.com/aliyun-cli-linux-3.0.41-amd64.tgz)
+  - [Windows (64 bit)](https://aliyuncli.alicdn.com/aliyun-cli-windows-3.0.41-amd64.zip)
 
 - **使用brew**
 
