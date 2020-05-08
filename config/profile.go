@@ -159,11 +159,11 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	if cp.AccessKeySecret == "" {
 		switch {
 		case os.Getenv("ALIBABACLOUD_ACCESS_KEY_SECRET") != "":
-			cp.AccessKeyId = os.Getenv("ALIBABACLOUD_ACCESS_KEY_SECRET")
+			cp.AccessKeySecret = os.Getenv("ALIBABACLOUD_ACCESS_KEY_SECRET")
 		case os.Getenv("ALICLOUD_ACCESS_KEY_SECRET") != "":
-			cp.AccessKeyId = os.Getenv("ALICLOUD_ACCESS_KEY_SECRET")
+			cp.AccessKeySecret = os.Getenv("ALICLOUD_ACCESS_KEY_SECRET")
 		case os.Getenv("ACCESS_KEY_SECRET") != "":
-			cp.AccessKeyId = os.Getenv("ACCESS_KEY_SECRET")
+			cp.AccessKeySecret = os.Getenv("ACCESS_KEY_SECRET")
 		}
 	}
 
