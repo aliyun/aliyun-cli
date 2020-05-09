@@ -172,7 +172,14 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	}
 
 	if cp.RegionId == "" {
-		cp.RegionId = os.Getenv("REGION")
+		switch {
+		case os.Getenv("ALIBABACLOUD_REGION_ID") != "":
+			cp.RegionId = os.Getenv("ALIBABACLOUD_REGION_ID")
+		case os.Getenv("ALICLOUD_REGION_ID") != "":
+			cp.RegionId = os.Getenv("ALICLOUD_REGION_ID")
+		case os.Getenv("REGION") != "":
+			cp.RegionId = os.Getenv("REGION")
+		}
 	}
 }
 

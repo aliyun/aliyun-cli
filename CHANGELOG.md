@@ -2,6 +2,8 @@
 
 ### Master
 
+- add: environment variables `ALIBABACLOUD_REGION_ID`, `ALICLOUD_REGION_ID`
+
 ### 3.0.41
 
 - update: meta data
