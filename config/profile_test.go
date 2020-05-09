@@ -68,6 +68,20 @@ func TestProfile(t *testing.T) {
 			os.Setenv("ACCESS_KEY_SECRET", ACCESS_KEY_SECRET_env)
 		}()
 	}
+	ALIBABACLOUD_REGION_ID_env := os.Getenv("ALIBABACLOUD_REGION_ID")
+	if ALIBABACLOUD_REGION_ID_env != "" {
+		os.Setenv("ALIBABACLOUD_REGION_ID", "")
+		defer func() {
+			os.Setenv("ALIBABACLOUD_REGION_ID", ALIBABACLOUD_REGION_ID_env)
+		}()
+	}
+	REGION_env := os.Getenv("REGION")
+	if REGION_env != "" {
+		os.Setenv("REGION", "")
+		defer func() {
+			os.Setenv("REGION", REGION_env)
+		}()
+	}
 
 	//ValidateAK
 	p := NewProfile("default")
@@ -156,12 +170,22 @@ func TestProfile(t *testing.T) {
 	p.AccessKeySecret = ""
 	os.Setenv("ACCESS_KEY_ID", "accessKeyID")
 	os.Setenv("ACCESS_KEY_SECRET", "accessKeySecret")
+	os.Setenv("REGION", "cn-beijing")
 	p.OverwriteWithFlags(ctx)
-	assert.Equal(t, Profile{Name: "default", Mode: AK, AccessKeyId: "accessKeyID", AccessKeySecret: "accessKeySecret", RamRoleName: "RamRoleName", RamRoleArn: "----", OutputFormat: "json", RetryCount: 0, ReadTimeout: 0, Language: "en"}, p)
+	assert.Equal(t, Profile{Name: "default", Mode: AK, AccessKeyId: "accessKeyID", AccessKeySecret: "accessKeySecret", RamRoleName: "RamRoleName", RamRoleArn: "----", RegionId: "cn-beijing", OutputFormat: "json", RetryCount: 0, ReadTimeout: 0, Language: "en"}, p)
+	p.RegionId = ""
+	os.Setenv("ALIBABACLOUD_REGION_ID", "cn-hangzhou")
+	p.OverwriteWithFlags(ctx)
+	assert.Equal(t, Profile{Name: "default", Mode: AK, AccessKeyId: "accessKeyID", AccessKeySecret: "accessKeySecret", RamRoleName: "RamRoleName", RamRoleArn: "----", RegionId: "cn-hangzhou", OutputFormat: "json", RetryCount: 0, ReadTimeout: 0, Language: "en"}, p)
+
 	os.Setenv("ACCESS_KEY_ID", "")
 	os.Setenv("ACCESS_KEY_SECRET", "")
+	os.Setenv("ALIBABACLOUD_REGION_ID", "")
+	os.Setenv("REGION", "")
+
 	p.AccessKeyId = ""
 	p.AccessKeySecret = ""
+	p.RegionId = ""
 
 	//GetClient
 	p.ReadTimeout = 1
