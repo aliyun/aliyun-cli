@@ -2,6 +2,8 @@
 
 ### Master
 
+- feature: Automatic type recognition `AK`,`StsToken`,`RamRoleArn`,`RsaKeyPair`,`EcsRamRole`
+
 ### 3.0.42
 
 - update: meta data
