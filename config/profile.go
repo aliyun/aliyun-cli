@@ -181,6 +181,25 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 			cp.RegionId = os.Getenv("REGION")
 		}
 	}
+	AutoModeRecognition(cp)
+}
+
+func AutoModeRecognition(cp *Profile) {
+	if cp.Mode != AuthenticateMode("") {
+		return
+	}
+	if cp.AccessKeyId != "" && cp.AccessKeySecret != "" {
+		cp.Mode = AK
+		if cp.StsToken != "" {
+			cp.Mode = StsToken
+		} else if cp.RamRoleArn != "" {
+			cp.Mode = RamRoleArn
+		}
+	} else if cp.PrivateKey != "" && cp.KeyPairName != "" {
+		cp.Mode = RsaKeyPair
+	} else if cp.RamRoleName != "" {
+		cp.Mode = EcsRamRole
+	}
 }
 
 func (cp *Profile) ValidateAK() error {
