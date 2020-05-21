@@ -15,6 +15,8 @@ package cli
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/i18n"
@@ -137,4 +139,103 @@ func TestCommand(t *testing.T) {
 
 	//executeHelp
 
+}
+
+func newAliyunCmd() *Command {
+	return &Command{
+		Name:              "aliyun",
+		EnableUnknownFlag: true,
+		SuggestDistance:   2,
+		Usage:             "aliyun [subcmd]",
+		Short: i18n.T(
+			"cmd Short",
+			"",
+		),
+	}
+}
+func newTestCmd() *Command {
+	return &Command{
+		Name:            "test",
+		SuggestDistance: 2,
+		Usage:           "test flag",
+		Short: i18n.T(
+			"test Short",
+			"",
+		),
+	}
+}
+func TestAddSubCommand(t *testing.T) {
+	cmd := newAliyunCmd()
+	subCmd := newTestCmd()
+	assert.Nil(t, subCmd.parent)
+	cmd.AddSubCommand(subCmd)
+	assert.Equal(t, cmd, subCmd.parent)
+}
+
+// Flags
+func TestCmdFlags(t *testing.T) {
+	cmd := newAliyunCmd()
+	fs := cmd.Flags()
+	exfs := NewFlagSet()
+	assert.Equal(t, exfs, fs)
+}
+
+func TestGetSubCommand(t *testing.T) {
+	cmd := newAliyunCmd()
+	subCmd := newTestCmd()
+	actual := cmd.GetSubCommand("test")
+	assert.Nil(t, actual)
+	cmd.AddSubCommand(subCmd)
+	actual = cmd.GetSubCommand("test")
+	assert.Equal(t, subCmd, actual)
+}
+
+func TestExecute(t *testing.T) {
+	buf := new(bytes.Buffer)
+	ctx := NewCommandContext(buf)
+
+	cmd := newAliyunCmd()
+	subCmd := newTestCmd()
+	ctx.command = subCmd
+	// cmd.AddSubCommand(subCmd)
+	ctx.completion = &Completion{
+		Args: []string{"test"},
+	}
+	DisableExitCode()
+	defer EnableExitCode()
+	cmd.Execute(ctx, []string{})
+	assert.Equal(t, "\x1b[1;31mERROR: 'test' is not a vaild command\n\x1b[0m", buf.String())
+}
+
+func TestProcessError(t *testing.T) {
+	DisableExitCode()
+	defer EnableExitCode()
+	cmd := newAliyunCmd()
+	buf := new(bytes.Buffer)
+	ctx := NewCommandContext(buf)
+	e := errors.New("test error tip")
+	err := NewErrorWithTip(e, "")
+	cmd.processError(ctx, err)
+	assert.Equal(t, "\x1b[1;31mERROR: test error tip\n\x1b[0m\x1b[1;33m\n\n\x1b[0m", buf.String())
+}
+
+func TestExecuteHelp(t *testing.T) {
+	cmd := newAliyunCmd()
+	buf := new(bytes.Buffer)
+	ctx := NewCommandContext(buf)
+	cmd.Help = func(ctx *Context, args []string) error {
+		fmt.Fprint(ctx.Writer(), "test execute help")
+		return nil
+	}
+	cmd.executeHelp(ctx, nil)
+	assert.Equal(t, "test execute help", buf.String())
+
+	buf.Reset()
+	DisableExitCode()
+	defer EnableExitCode()
+	cmd.Help = func(ctx *Context, args []string) error {
+		return errors.New("test help error")
+	}
+	cmd.executeHelp(ctx, nil)
+	assert.Equal(t, "\x1b[1;31mERROR: test help error\n\x1b[0m", buf.String())
 }
