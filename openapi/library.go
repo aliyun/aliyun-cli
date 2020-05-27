@@ -68,8 +68,7 @@ func (a *Library) PrintProducts() {
 }
 
 func (a *Library) printProduct(product meta.Product) {
-	cli.Printf(a.writer, "  %s(%s)\t%s\t%s\n", product.Code, product.Version, product.Name["zh"],
-		product.GetDocumentLink("zh"))
+	cli.Printf(a.writer, "  %s(%s)\t%s\n", product.Code, product.Version, product.Name["zh"])
 }
 
 func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
@@ -87,7 +86,6 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 
 	cli.Printf(a.writer, "\nProduct: %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
 	cli.Printf(a.writer, "Version: %s \n", product.Version)
-	cli.Printf(a.writer, "Link: %s\n", product.GetDocumentLink(i18n.GetLanguage()))
 
 	if withApi {
 		cli.PrintfWithColor(a.writer, cli.ColorOff, "\nAvailable Api List: \n")

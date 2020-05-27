@@ -23,7 +23,6 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
-	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/meta"
 )
 
@@ -116,8 +115,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 
 	hint := "you can find it on https://help.aliyun.com"
 	if product.Version != "" {
-		hint = fmt.Sprintf("see '%s' or `aliyun help %s` get more information.",
-			product.GetDocumentLink(i18n.GetLanguage()), product.GetLowerCode())
+		hint = fmt.Sprintf("please use `aliyun help %s` get more information.", product.GetLowerCode())
 	}
 
 	if a.request.Version == "" {
