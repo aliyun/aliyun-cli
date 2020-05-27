@@ -26,8 +26,6 @@ func TestProduct_GetLowerCodeAndGetDocumentLink(t *testing.T) {
 	}
 	code := product.GetLowerCode()
 	assert.Equal(t, code, "code")
-	link := product.GetDocumentLink("link")
-	assert.Equal(t, link, "https://help.aliyun.com/api/code")
 }
 
 func TestProduct_GetEndpoint(t *testing.T) {

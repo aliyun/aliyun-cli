@@ -110,17 +110,3 @@ func (a *Product) TryGetEndpoints(region string, client *sdk.Client) (endpoint s
 	//}
 	return
 }
-
-func (a *Product) GetDocumentLink(lang string) string {
-	//switch lang {
-	//case "zh":
-	//	return "https://help.aliyun.com/document_detail/" + a.DocumentId + ".html"
-	//case "en":
-	//	return "https://www.alibabacloud.com/help/doc-detail/" + a.DocumentId + ".html"
-	//case "jp":
-	//	return "https://jp.alibabacloud.com/help/doc-detail/" + a.DocumentId + ".html"
-	//default:
-	//	return "https://help.aliyun.com/document_detail/" + a.DocumentId + ".html"
-	//}
-	return "https://help.aliyun.com/api/" + strings.ToLower(a.Code)
-}
