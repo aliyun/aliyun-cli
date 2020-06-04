@@ -124,6 +124,30 @@ func TestPager_CallWith(t *testing.T) {
 	assert.Contains(t, err.Error(), "please check your accessKey with secret, and read the user guide")
 }
 
+func TestPager_NextToken(t *testing.T) {
+	pager := &Pager{
+		PageNumberFlag:    "PageNumber",
+		PageSizeFlag:      "PageSize",
+		NextTokenFlag:     "NextToken",
+		PageNumberExpr:    "PageNumber",
+		PageSizeExpr:      "PageSize",
+		TotalCountExpr:    "TotalCount",
+		NextTokenExpr:     "NextToken",
+	}
+	assert.NotNil(t, pager)
+	assert.Nil(t, pager.FeedResponse(pagerTestJsonNextToken1))
+	assert.True(t, pager.HasMore())
+	request := requests.NewCommonRequest()
+	pager.MoveNextPage(request)
+	assert.Equal(t, "7a758b45874db76a0147eb118b6f597f2df87e458f7fbf48e0b5e8707e68181f", request.QueryParams["NextToken"])
+	assert.Nil(t, pager.FeedResponse(pagerTestJsonNextToken2))
+	assert.False(t, pager.HasMore())
+	responseStr := pager.GetResponseCollection()
+	var j map[string]interface{}
+	assert.Nil(t, json.Unmarshal([]byte(responseStr), &j))
+	assert.Equal(t, 7, len(j["TagResources"].(map[string]interface{})["TagResource"].([]interface{})))
+}
+
 func TestPager_HasMore(t *testing.T) {
 	pager := Pager{
 		PageSize:   5,
@@ -135,6 +159,10 @@ func TestPager_HasMore(t *testing.T) {
 	pager.currentPageNumber = 3
 	istrue = pager.HasMore()
 	assert.False(t, istrue)
+
+	pager.nextTokenMode = true
+	pager.nextToken = "aaaaaa"
+	assert.True(t, pager.HasMore())
 }
 
 func TestPager_GetResponseCollection(t *testing.T) {
@@ -176,6 +204,10 @@ func TestPager_FeedResponse(t *testing.T) {
 	pager.PageSizeExpr = "PageSize"
 	err = pager.FeedResponse(body)
 	assert.Nil(t, err)
+
+	pager.NextTokenExpr = "NextToken"
+	err = pager.FeedResponse(body)
+	assert.Nil(t, err)
 }
 
 func TestPager_MoveNextPage(t *testing.T) {
@@ -186,6 +218,12 @@ func TestPager_MoveNextPage(t *testing.T) {
 	}
 	pager.MoveNextPage(request)
 	assert.Equal(t, 1, pager.currentPageNumber)
+
+	pager.nextTokenMode = true
+	pager.nextToken = "aaaaa"
+	pager.NextTokenFlag = "NextToken"
+	pager.MoveNextPage(request)
+	assert.Equal(t, "aaaaa", request.QueryParams["NextToken"])
 }
 
 func Test_detectArrayPath(t *testing.T) {
@@ -533,3 +571,62 @@ var pagerTestJson2 = []byte(`{
     ]
   }
 }`)
+
+const pagerTestJsonNextToken1 = `{
+    "NextToken": "7a758b45874db76a0147eb118b6f597f2df87e458f7fbf48e0b5e8707e68181f",
+    "RequestId": "EAB4BE0E-8CB2-4445-B671-40C8648308D0",
+    "TagResources": {
+        "TagResource": [
+            {
+                "ResourceId": "d-8vbi818ykkw7pmbvb2q7",
+                "ResourceType": "disk",
+                "TagKey": "AppGroup",
+                "TagValue": "daily-test-ecs"
+            },
+            {
+                "ResourceId": "d-8vbi818ykkw7pmbvb2q7",
+                "ResourceType": "disk",
+                "TagKey": "Provider",
+                "TagValue": "sigma"
+            },
+            {
+                "ResourceId": "d-8vb0bdoq6qxw1s11flho",
+                "ResourceType": "disk",
+                "TagKey": "AppGroup",
+                "TagValue": "daily-test-ecs"
+            },
+            {
+                "ResourceId": "d-8vb0bdoq6qxw1s11flho",
+                "ResourceType": "disk",
+                "TagKey": "Provider",
+                "TagValue": "sigma"
+            },
+            {
+                "ResourceId": "d-8vb4qthb8rk0uswg3apn",
+                "ResourceType": "disk",
+                "TagKey": "AppGroup",
+                "TagValue": "daily-test-ecs"
+            },
+            {
+                "ResourceId": "d-8vb4qthb8rk0uswg3apn",
+                "ResourceType": "disk",
+                "TagKey": "Provider",
+                "TagValue": "sigma"
+            }
+        ]
+    }
+}`
+
+const pagerTestJsonNextToken2 = `{
+    "RequestId": "EADUSE0E-8CB2-4445-B671-40C8648308D0",
+    "TagResources": {
+        "TagResource": [
+            {
+                "ResourceId": "d-8vbi818ykkw7pdsadadf",
+                "ResourceType": "disk",
+                "TagKey": "AppGroup",
+                "TagValue": "daily-test-ecs"
+            }
+		]
+	}
+}`

@@ -39,6 +39,7 @@ var PagerFlag = &cli.Flag{Category: "caller",
 		{Key: "PageNumber", DefaultValue: "PageNumber", Short: i18n.T(" PageNumber", "指定PageNumber的属性")},
 		{Key: "PageSize", DefaultValue: "PageSize", Short: i18n.T("PageSize", "")},
 		{Key: "TotalCount", DefaultValue: "TotalCount", Short: i18n.T("TotalCount", "")},
+		{Key: "NextToken", DefaultValue: "NextToken", Short: i18n.T("NextToken", "")},
 	},
 	ExcludeWith: []string{WaiterFlag.Name},
 }
@@ -46,15 +47,19 @@ var PagerFlag = &cli.Flag{Category: "caller",
 type Pager struct {
 	PageNumberFlag string
 	PageSizeFlag   string
+	NextTokenFlag  string
 
 	PageNumberExpr string
 	PageSizeExpr   string
 	TotalCountExpr string
+	NextTokenExpr  string
 
 	PageSize int
 
 	totalCount        int
 	currentPageNumber int
+	nextTokenMode     bool
+	nextToken         string
 	collectionPath    string
 
 	results []interface{}
@@ -74,6 +79,11 @@ func GetPager() *Pager {
 	pager.PageNumberExpr, _ = PagerFlag.GetFieldValue("PageNumber")
 	pager.PageSizeExpr, _ = PagerFlag.GetFieldValue("PageSize")
 	pager.TotalCountExpr, _ = PagerFlag.GetFieldValue("TotalCount")
+
+	nextTokenFlagTemp, _ := PagerFlag.GetFieldValue("NextToken")
+	tempStr = strings.Split(nextTokenFlagTemp, ".")
+	pager.NextTokenFlag = tempStr[len(tempStr)-1]
+	pager.NextTokenExpr = nextTokenFlagTemp
 
 	pager.collectionPath, _ = PagerFlag.GetFieldValue("path")
 	return pager
@@ -101,6 +111,9 @@ func (a *Pager) CallWith(invoker Invoker) (string, error) {
 }
 
 func (a *Pager) HasMore() bool {
+	if a.nextTokenMode {
+		return a.nextToken != ""
+	}
 	pages := int(math.Ceil(float64(a.totalCount) / float64(a.PageSize)))
 	return a.currentPageNumber < pages
 }
@@ -135,40 +148,56 @@ func (a *Pager) FeedResponse(body string) error {
 		return fmt.Errorf("unmarshal %s", err.Error())
 	}
 
-	if total, err := jmespath.Search(a.TotalCountExpr, j); err == nil {
-		var totalCount float64
-		if strCount, ok := total.(string); ok {
-			totalCount, _ = strconv.ParseFloat(strCount, 64)
-		} else {
-			totalCount = total.(float64)
-		}
-		a.totalCount = int(totalCount)
-	} else {
-		return fmt.Errorf("jmespath: '%s' failed %s", a.TotalCountExpr, err)
+	if a.nextTokenMode {
+		a.nextToken = ""
 	}
-
-	if pageNumber, err := jmespath.Search(a.PageNumberExpr, j); err == nil {
-		var currentPageNumber float64
-		if strpageNumber, ok := pageNumber.(string); ok {
-			currentPageNumber, _ = strconv.ParseFloat(strpageNumber, 64)
+	if a.NextTokenExpr != "" {
+		// allow to ignore NextToken mode
+		if val, err := jmespath.Search(a.NextTokenExpr, j); err == nil {
+			if nextToken, ok := val.(string); ok {
+				a.nextToken = nextToken
+				a.nextTokenMode = true
+			}
 		} else {
-			currentPageNumber = pageNumber.(float64)
+			return fmt.Errorf("jmespath: '%s' failed %s", a.NextTokenExpr, err)
 		}
-		a.currentPageNumber = int(currentPageNumber)
-	} else {
-		return fmt.Errorf("jmespath: '%s' failed %s", a.PageNumberExpr, err)
 	}
-
-	if pageSize, err := jmespath.Search(a.PageSizeExpr, j); err == nil {
-		var PageSize float64
-		if strpageSize, ok := pageSize.(string); ok {
-			PageSize, _ = strconv.ParseFloat(strpageSize, 64)
+	if !a.nextTokenMode {
+		if total, err := jmespath.Search(a.TotalCountExpr, j); err == nil {
+			var totalCount float64
+			if strCount, ok := total.(string); ok {
+				totalCount, _ = strconv.ParseFloat(strCount, 64)
+			} else {
+				totalCount = total.(float64)
+			}
+			a.totalCount = int(totalCount)
 		} else {
-			PageSize = pageSize.(float64)
+			return fmt.Errorf("jmespath: '%s' failed %s", a.TotalCountExpr, err)
 		}
-		a.PageSize = int(PageSize)
-	} else {
-		return fmt.Errorf("jmespath: '%s' failed %s", a.PageSizeExpr, err)
+
+		if pageNumber, err := jmespath.Search(a.PageNumberExpr, j); err == nil {
+			var currentPageNumber float64
+			if strpageNumber, ok := pageNumber.(string); ok {
+				currentPageNumber, _ = strconv.ParseFloat(strpageNumber, 64)
+			} else {
+				currentPageNumber = pageNumber.(float64)
+			}
+			a.currentPageNumber = int(currentPageNumber)
+		} else {
+			return fmt.Errorf("jmespath: '%s' failed %s", a.PageNumberExpr, err)
+		}
+
+		if pageSize, err := jmespath.Search(a.PageSizeExpr, j); err == nil {
+			var PageSize float64
+			if strpageSize, ok := pageSize.(string); ok {
+				PageSize, _ = strconv.ParseFloat(strpageSize, 64)
+			} else {
+				PageSize = pageSize.(float64)
+			}
+			a.PageSize = int(PageSize)
+		} else {
+			return fmt.Errorf("jmespath: '%s' failed %s", a.PageSizeExpr, err)
+		}
 	}
 
 	if a.collectionPath == "" {
@@ -183,10 +212,13 @@ func (a *Pager) FeedResponse(body string) error {
 }
 
 func (a *Pager) MoveNextPage(request *requests.CommonRequest) {
-	a.currentPageNumber = a.currentPageNumber + 1
-	// cli.Printf("Move to page %d", a.currentPageNumber)
-
-	request.QueryParams[a.PageNumberFlag] = strconv.Itoa(a.currentPageNumber)
+	if a.nextTokenMode {
+		request.QueryParams[a.NextTokenFlag] = a.nextToken
+	} else {
+		a.currentPageNumber = a.currentPageNumber + 1
+		// cli.Printf("Move to page %d", a.currentPageNumber)
+		request.QueryParams[a.PageNumberFlag] = strconv.Itoa(a.currentPageNumber)
+	}
 }
 
 func (a *Pager) mergeCollections(body interface{}) error {
