@@ -123,9 +123,14 @@ func (z zshInstaller) Install(cmd, bin string) error {
 		return fmt.Errorf("already installed in %s", z.rc)
 	}
 
-	bashCompInit := "autoload -U +X bashcompinit && bashcompinit"
-	if !lineInFile(z.rc, bashCompInit) {
-		completeCmd = bashCompInit + "\n" + completeCmd
+	compInit := "autoload -U +X compinit && compinit -i"
+	bashCompInit := "autoload -U +X bashcompinit && bashcompinit -i"
+	if !lineInFile(z.rc, compInit) {
+		if !lineInFile(z.rc, bashCompInit) {
+			completeCmd = compInit + "\n" + bashCompInit + "\n" + completeCmd
+		} else {
+			completeCmd = compInit + "\n" + completeCmd
+		}
 	}
 
 	return appendToFile(z.rc, completeCmd)
