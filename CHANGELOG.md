@@ -2,6 +2,9 @@
 
 ### Master
 
+### 3.0.47
+
+- update: meta data
 - fix: zsh completion script
 
 ### 3.0.46

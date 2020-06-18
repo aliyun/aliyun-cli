@@ -38,11 +38,11 @@ The release notes for the CLI can be found in the [CHANGELOG](./CHANGELOG.md)
 
   Download the installer, then extract the installer. You can move the extracted `aliyun` executable file to the `/usr/local/bin` directory or add it to the `$PATH`.
 
-  Download link: (3.0.46)
+  Download link: (3.0.47)
 
-  - [Mac](https://aliyuncli.alicdn.com/aliyun-cli-macosx-3.0.46-amd64.tgz)
-  - [Linux](https://aliyuncli.alicdn.com/aliyun-cli-linux-3.0.46-amd64.tgz)
-  - [Windows (64 bit)](https://aliyuncli.alicdn.com/aliyun-cli-windows-3.0.46-amd64.zip)
+  - [Mac](https://aliyuncli.alicdn.com/aliyun-cli-macosx-3.0.47-amd64.tgz)
+  - [Linux](https://aliyuncli.alicdn.com/aliyun-cli-linux-3.0.47-amd64.tgz)
+  - [Windows (64 bit)](https://aliyuncli.alicdn.com/aliyun-cli-windows-3.0.47-amd64.zip)
 
 - **Use brew**
 If you have installed `brew` in your computer, you can use it to install Alibaba Cloud CLI as following:
