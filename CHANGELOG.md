@@ -2,6 +2,10 @@
 
 ### Master
 
+### 3.0.52
+
+- update: meta data
+
 ### 3.0.51
 
 - update: meta data
