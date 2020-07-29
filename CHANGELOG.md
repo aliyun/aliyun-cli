@@ -2,6 +2,8 @@
 
 ### Master
 
+- unhide `--skip-secure-verify`
+
 ### 3.0.54
 
 - update: meta data
