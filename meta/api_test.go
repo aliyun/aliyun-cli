@@ -21,7 +21,7 @@ import (
 
 func TestApi_GetMethod(t *testing.T) {
 	api := &Api{
-		Method:  "post",
+		Method: "post",
 	}
 	method := api.GetMethod()
 	assert.Equal(t, method, "POST")
@@ -37,7 +37,7 @@ func TestApi_GetMethod(t *testing.T) {
 
 func TestApi_GetProtocol(t *testing.T) {
 	api := &Api{
-		Protocol:  "https://",
+		Protocol: "https://",
 	}
 	protocol := api.GetProtocol()
 	assert.Equal(t, protocol, "https")
@@ -51,8 +51,8 @@ func TestApi_FindParameter(t *testing.T) {
 	api := &Api{}
 	api.Parameters = []Parameter{
 		{
-			Name:  "paramter",
-	    },
+			Name: "paramter",
+		},
 	}
 	parameter := api.FindParameter("paramter")
 	assert.Equal(t, parameter.Name, "paramter")
@@ -65,17 +65,23 @@ func TestApi_FindParameter(t *testing.T) {
 				},
 			},
 			Name: "paramter",
-	    },
+		},
 	}
 	parameter = api.FindParameter("paramter_test")
 	assert.Nil(t, parameter)
 
 	parameter = api.FindParameter("paramter.1.10")
 	assert.Nil(t, parameter)
+	parameter = api.FindParameter("paramter.1.subparameters")
+	assert.NotNil(t, parameter)
+	parameter = api.FindParameter("paramter.10.subparameters")
+	assert.NotNil(t, parameter)
+	parameter = api.FindParameter("paramter.100.subparameters")
+	assert.NotNil(t, parameter)
 
 	api.Parameters = []Parameter{
 		{
-			Type:  "RepeatList",
+			Type: "RepeatList",
 			Name: "paramter",
 		},
 	}
@@ -86,19 +92,19 @@ func TestApi_FindParameter(t *testing.T) {
 	assert.Nil(t, parameter)
 
 	api.Parameters = nil
-	parameter =api.FindParameter("paramter.1.10")
+	parameter = api.FindParameter("paramter.1.10")
 	assert.Nil(t, parameter)
 }
 
 func TestApi_ForeachParameters(t *testing.T) {
 	api := &Api{}
-	f := func (s string, p Parameter) {
+	f := func(s string, p Parameter) {
 		p.Name = s
 	}
 	api.Parameters = []Parameter{
 		{
-			Type:  "RepeatList",
-			Name:  "paramter",
+			Type: "RepeatList",
+			Name: "paramter",
 		},
 	}
 	api.ForeachParameters(f)
@@ -137,13 +143,13 @@ func TestApi_CheckRequiredParameters(t *testing.T) {
 	api := &Api{
 		Parameters: []Parameter{
 			{
-				Name:"api",
+				Name:     "api",
 				Required: true,
-				Type: "Repeat",
+				Type:     "Repeat",
 			},
 		},
 	}
-	checker := func(string)bool {
+	checker := func(string) bool {
 		return false
 	}
 	err := api.CheckRequiredParameters(checker)
@@ -156,18 +162,18 @@ func TestApi_CheckRequiredParameters(t *testing.T) {
 func TestParameterSliceLenAndSwap(t *testing.T) {
 	parameters := ParameterSlice{
 		{
-			Name:"api",
+			Name:     "api",
 			Required: true,
-			Type: "RepeatList",
+			Type:     "RepeatList",
 		},
 	}
 	len := parameters.Len()
 	assert.Equal(t, len, 1)
 
 	parameters = append(parameters, Parameter{
-		Name:"api_test",
+		Name:     "api_test",
 		Required: true,
-		Type: "RepeatList",
+		Type:     "RepeatList",
 	})
 	parameters.Swap(0, 1)
 	assert.Equal(t, parameters[0].Name, "api_test")
@@ -182,23 +188,23 @@ func TestParameterSlice_Less(t *testing.T) {
 			Type:     "RepeatList",
 		},
 		{
-			Name:"api_test",
+			Name:     "api_test",
 			Required: true,
-			Type: "RepeatList",
+			Type:     "RepeatList",
 		},
 	}
-	ok := parameters.Less(0,1)
+	ok := parameters.Less(0, 1)
 	assert.True(t, ok)
 
 	parameters[1].Required = false
-	ok = parameters.Less(0,1)
+	ok = parameters.Less(0, 1)
 	assert.True(t, ok)
 
 	parameters[0].Required = false
-	ok = parameters.Less(0,1)
+	ok = parameters.Less(0, 1)
 	assert.True(t, ok)
 
 	parameters[1].Required = true
-	ok = parameters.Less(0,1)
+	ok = parameters.Less(0, 1)
 	assert.False(t, ok)
 }

@@ -80,20 +80,20 @@ func findParameterInner(params []Parameter, name string) *Parameter {
 		if len(p.SubParameters) > 0 && strings.HasPrefix(name, p.Name) {
 			s := name[len(p.Name):]
 			// XXX.1.YYY
-			if len(s) >= 4 && s[0] == '.' && s[2] == '.' {
-				return findParameterInner(p.SubParameters, name[len(p.Name)+3:])
-			} else {
-				return nil
+			if len(s) >= 4 && s[0] == '.' && strings.Count(s, ".") >= 2 {
+				index := strings.Index(name[len(p.Name)+1:], ".")
+				index += 2
+				return findParameterInner(p.SubParameters, name[len(p.Name)+index:])
 			}
+			return nil
 		}
 		if p.Type == "RepeatList" && strings.HasPrefix(name, p.Name) {
 			// XXX.1
 			s := name[len(p.Name):]
 			if len(s) >= 2 && s[0] == '.' {
 				return &((params)[i])
-			} else {
-				return nil
 			}
+			return nil
 		}
 	}
 	return nil

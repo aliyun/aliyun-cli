@@ -2,6 +2,7 @@
 
 ### Master
 
+- fix: the upper limit of array support
 - unhide `--skip-secure-verify`
 
 ### 3.0.54
