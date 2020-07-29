@@ -313,11 +313,10 @@ func NewSkipSecureVerify() *cli.Flag {
 		Category:     "caller",
 		Name:         SkipSecureVerifyName,
 		AssignedMode: cli.AssignedNone,
-		Hidden:       true,
 		Persistent:   true,
 		Short: i18n.T(
-			"use `--skip-secure-verify` to skip https certification validate",
-			"使用 `--skip-secure-verify` 跳过https的证书校验",
+			"use `--skip-secure-verify` to skip https certification validate [Not recommended]",
+			"使用 `--skip-secure-verify` 跳过https的证书校验 [不推荐使用]",
 		),
 	}
 }
