@@ -18,7 +18,7 @@ func (s *OssutilCommandSuite) TestBucketEncryptionPutSuccess(c *C) {
 	strSSEAlgorithm := "KMS"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -83,7 +83,7 @@ func (s *OssutilCommandSuite) TestBucketEncryptionDeleteSuccess(c *C) {
 	strSSEAlgorithm := "KMS"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -124,7 +124,7 @@ func (s *OssutilCommandSuite) TestBucketEncryptionError(c *C) {
 	var str string
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -155,7 +155,7 @@ func (s *OssutilCommandSuite) TestBucketEncryptionPutEmptyEndpoint(c *C) {
 	strSSEAlgorithm := "KMS"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -168,7 +168,7 @@ func (s *OssutilCommandSuite) TestBucketEncryptionPutEmptyEndpoint(c *C) {
 	oldConfigStr, err := ioutil.ReadFile(configFile)
 	c.Assert(err, IsNil)
 	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyId=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
 	fd.WriteString(configStr)
 	fd.Close()
 
@@ -191,7 +191,7 @@ func (s *OssutilCommandSuite) TestBucketEncryptionGetEmptyEndpoint(c *C) {
 	strSSEAlgorithm := "KMS"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -204,7 +204,7 @@ func (s *OssutilCommandSuite) TestBucketEncryptionGetEmptyEndpoint(c *C) {
 	oldConfigStr, err := ioutil.ReadFile(configFile)
 	c.Assert(err, IsNil)
 	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyId=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
 	fd.WriteString(configStr)
 	fd.Close()
 

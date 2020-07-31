@@ -21,7 +21,7 @@ func (s *OssutilCommandSuite) TestBucketLogPutSuccess(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -37,7 +37,7 @@ func (s *OssutilCommandSuite) TestBucketLogPutSuccess(c *C) {
 	strMethod = "get"
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -77,7 +77,7 @@ func (s *OssutilCommandSuite) TestBucketLogDeleteSuccess(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -150,7 +150,7 @@ func (s *OssutilCommandSuite) TestBucketLogGetToStdout(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -185,7 +185,7 @@ func (s *OssutilCommandSuite) TestBucketLogGetConfirm(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -201,7 +201,7 @@ func (s *OssutilCommandSuite) TestBucketLogGetConfirm(c *C) {
 	strMethod = "get"
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -246,7 +246,7 @@ func (s *OssutilCommandSuite) TestBucketLogPutError(c *C) {
 	strMethod := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -314,7 +314,7 @@ func (s *OssutilCommandSuite) TestBucketLogDeleteError(c *C) {
 	strKey := "aaa"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &strKey,
 		"stsToken":        &str,
 		"configFile":      &configFile,

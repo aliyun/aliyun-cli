@@ -41,7 +41,7 @@ func (s *OssutilCommandSuite) TestMakeBucketErrorName(c *C) {
 		str := ""
 		options := OptionMapType{
 			"endpoint":        &str,
-			"accessKeyID":     &str,
+			"accessKeyId":     &str,
 			"accessKeySecret": &str,
 			"stsToken":        &str,
 			"configFile":      &configFile,
@@ -80,7 +80,7 @@ func (s *OssutilCommandSuite) TestMakeBucketErrorOption(c *C) {
 	ok := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -106,7 +106,7 @@ func (s *OssutilCommandSuite) TestMakeBucketIDKey(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(10)
 
 	cfile := randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s", "abc", "def", "ghi", bucketName, "abc")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s", "abc", "def", "ghi", bucketName, "abc")
 	s.createFile(cfile, data, c)
 
 	command := "mb"
@@ -114,7 +114,7 @@ func (s *OssutilCommandSuite) TestMakeBucketIDKey(c *C) {
 	args := []string{CloudURLToString(bucketName, "")}
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -124,7 +124,7 @@ func (s *OssutilCommandSuite) TestMakeBucketIDKey(c *C) {
 
 	options = OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -186,7 +186,7 @@ func (s *OssutilCommandSuite) TestMbCreateBucketWithRedundancy(c *C) {
 	strRedundancy := "ZRS"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,

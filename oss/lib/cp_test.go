@@ -578,7 +578,7 @@ func (s *OssutilCommandSuite) TestUploadErrSrc(c *C) {
 	partSize := strconv.FormatInt(DefaultPartSize, 10)
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"stsToken":         &str,
 		"configFile":       &configFile,
@@ -1080,7 +1080,7 @@ func (s *OssutilCommandSuite) TestCPIDKey(c *C) {
 	s.createFile(ufile, data, c)
 
 	cfile := randStr(10)
-	data = fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
+	data = fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
 	s.createFile(cfile, data, c)
 
 	command := "cp"
@@ -1093,7 +1093,7 @@ func (s *OssutilCommandSuite) TestCPIDKey(c *C) {
 	partSize := strconv.FormatInt(DefaultPartSize, 10)
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"stsToken":         &str,
 		"configFile":       &cfile,
@@ -1108,7 +1108,7 @@ func (s *OssutilCommandSuite) TestCPIDKey(c *C) {
 
 	options = OptionMapType{
 		"endpoint":         &endpoint,
-		"accessKeyID":      &accessKeyID,
+		"accessKeyId":      &accessKeyId,
 		"accessKeySecret":  &accessKeySecret,
 		"stsToken":         &str,
 		"configFile":       &cfile,
@@ -1158,7 +1158,7 @@ func (s *OssutilCommandSuite) TestUploadOutputDir(c *C) {
 	// SignatureDoesNotMatch err copy -> no outputdir
 	cfile := configFile
 	configFile = randStr(10)
-	data = fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s", endpoint, accessKeyID, "abc", bucketName, endpoint)
+	data = fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s", endpoint, accessKeyId, "abc", bucketName, endpoint)
 	s.createFile(configFile, data, c)
 
 	showElapse, err = s.rawCPWithOutputDir(ufile, CloudURLToString(bucketName, object), true, true, false, 1, dir)
@@ -1168,7 +1168,7 @@ func (s *OssutilCommandSuite) TestUploadOutputDir(c *C) {
 	c.Assert(err, NotNil)
 	c.Assert(os.IsNotExist(err), Equals, true)
 
-	data = fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Cname]\n%s=%s", endpoint, accessKeyID, accessKeySecret, bucketName, "abc")
+	data = fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Cname]\n%s=%s", endpoint, accessKeyId, accessKeySecret, bucketName, "abc")
 	s.createFile(configFile, data, c)
 
 	// err copy without -r -> no outputdir
@@ -1262,7 +1262,7 @@ func (s *OssutilCommandSuite) TestBatchUploadOutputDir(c *C) {
 	// err copy -> outputdir
 	cfile := configFile
 	configFile = randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n", "abc", accessKeyID, accessKeySecret)
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n", "abc", accessKeyId, accessKeySecret)
 	s.createFile(configFile, data, c)
 	testResultFile, _ = os.OpenFile(resultPath, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
 	out := os.Stdout
@@ -1342,7 +1342,7 @@ func (s *OssutilCommandSuite) TestDownloadOutputDir(c *C) {
 	// err copy without -r -> no outputdir
 	cfile := configFile
 	configFile = randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Cname]\n%s=%s", endpoint, accessKeyID, accessKeySecret, bucketName, "abc")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Cname]\n%s=%s", endpoint, accessKeyId, accessKeySecret, bucketName, "abc")
 	s.createFile(configFile, data, c)
 
 	showElapse, err = s.rawCPWithOutputDir(CloudURLToString(bucketName, object), downloadFileName, false, true, false, 1, dir)
@@ -1405,7 +1405,7 @@ func (s *OssutilCommandSuite) TestCopyOutputDir(c *C) {
 	// list err copy without -r -> no outputdir
 	cfile := configFile
 	configFile = randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Cname]\n%s=%s", endpoint, accessKeyID, accessKeySecret, srcBucket, "abc")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Cname]\n%s=%s", endpoint, accessKeyId, accessKeySecret, srcBucket, "abc")
 	s.createFile(configFile, data, c)
 	showElapse, err = s.rawCPWithOutputDir(CloudURLToString(srcBucket, object), CloudURLToString(destBucket, object), false, true, false, 1, dir)
 	c.Assert(err, NotNil)
@@ -1471,7 +1471,7 @@ func (s *OssutilCommandSuite) TestBatchCopyOutputDir(c *C) {
 	// test objectStatistic err
 	cfile := configFile
 	configFile = randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", srcBucket, "abc", srcBucket, "abc")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", srcBucket, "abc", srcBucket, "abc")
 	s.createFile(configFile, data, c)
 
 	showElapse, err = s.rawCPWithOutputDir(CloudURLToString(srcBucket, ""), CloudURLToString(destBucket, ""), true, true, false, 1, dir)
@@ -1508,7 +1508,7 @@ func (s *OssutilCommandSuite) TestConfigOutputDir(c *C) {
 	// err copy -> outputdir
 	cfile := configFile
 	configFile = randStr(10)
-	data = fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Cname]\n%s=%s", endpoint, accessKeyID, accessKeySecret, bucketName, "abc")
+	data = fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Cname]\n%s=%s", endpoint, accessKeyId, accessKeySecret, bucketName, "abc")
 	s.createFile(configFile, data, c)
 
 	showElapse, err := s.rawCPWithOutputDir(ufile, CloudURLToString(bucketName, object), true, true, false, 1, edir)
@@ -1525,7 +1525,7 @@ func (s *OssutilCommandSuite) TestConfigOutputDir(c *C) {
 	os.RemoveAll(DefaultOutputDir)
 
 	// config outputdir
-	data = fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\noutputDir=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", endpoint, accessKeyID, accessKeySecret, dir, bucketName, endpoint, bucketName, "abc")
+	data = fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\noutputDir=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", endpoint, accessKeyId, accessKeySecret, dir, bucketName, endpoint, bucketName, "abc")
 	s.createFile(configFile, data, c)
 
 	showElapse, err = s.rawCPWithOutputDir(ufile, CloudURLToString(bucketName, object), true, true, false, 1, "")
@@ -1663,7 +1663,7 @@ func (s *OssutilCommandSuite) TestCPURLEncoding(c *C) {
 	ok := true
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"stsToken":         &str,
 		"configFile":       &configFile,
@@ -3205,7 +3205,7 @@ func (s *OssutilCommandSuite) TestCPObjectLimitSpeed(c *C) {
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -3267,7 +3267,7 @@ func (s *OssutilCommandSuite) TestCPDirLimitSpeed(c *C) {
 	recursive := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -3355,7 +3355,7 @@ func (s *OssutilCommandSuite) TestCPPartionDownloadSuccess(c *C) {
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":          &str,
-		"accessKeyID":       &str,
+		"accessKeyId":       &str,
 		"accessKeySecret":   &str,
 		"configFile":        &ConfigFile,
 		"checkpointDir":     &cpDir,
@@ -3414,7 +3414,7 @@ func (s *OssutilCommandSuite) TestCPPartitionDownloadParameterError(c *C) {
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":          &str,
-		"accessKeyID":       &str,
+		"accessKeyId":       &str,
 		"accessKeySecret":   &str,
 		"configFile":        &ConfigFile,
 		"checkpointDir":     &cpDir,
@@ -3491,7 +3491,7 @@ func (s *OssutilCommandSuite) TestCPDownloadSnapshot(c *C) {
 	recursive := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -3563,7 +3563,7 @@ func (s *OssutilCommandSuite) TestCPVersioingParameterError(c *C) {
 	versionId := "123"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -3611,7 +3611,7 @@ func (s *OssutilCommandSuite) TestCPVersioingDownloadSuccess(c *C) {
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -3663,7 +3663,7 @@ func (s *OssutilCommandSuite) TestCPVersioingCopySuccess(c *C) {
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -3712,7 +3712,7 @@ func (s *OssutilCommandSuite) TestCPWithAuthProxy(c *C) {
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"configFile":       &ConfigFile,
 		"checkpointDir":    &cpDir,
@@ -3753,7 +3753,7 @@ func (s *OssutilCommandSuite) TestCPWithAuthProxyError(c *C) {
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"configFile":       &ConfigFile,
 		"checkpointDir":    &cpDir,
@@ -3803,7 +3803,7 @@ func (s *OssutilCommandSuite) TestCPSetLocalAddrSuccess(c *C) {
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -3852,7 +3852,7 @@ func (s *OssutilCommandSuite) TestCPSetLocalAddrError(c *C) {
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -3904,7 +3904,7 @@ func (s *OssutilCommandSuite) TestUploadSymlinkDir(c *C) {
 	recursive := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -3971,7 +3971,7 @@ func (s *OssutilCommandSuite) TestUploadSubSymlinkDir(c *C) {
 	enableSymlinkDir := true
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"configFile":       &configFile,
 		"checkpointDir":    &cpDir,
@@ -4043,7 +4043,7 @@ func (s *OssutilCommandSuite) TestUploadOnlyCurrentDir(c *C) {
 	onlyCurrentDir := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -4110,7 +4110,7 @@ func (s *OssutilCommandSuite) TestDownloadOnlyCurrentDir(c *C) {
 	onlyCurrentDir := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -4194,7 +4194,7 @@ func (s *OssutilCommandSuite) TestUploadDisableDirObject(c *C) {
 	disableDirObject := true
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"configFile":       &configFile,
 		"checkpointDir":    &cpDir,
@@ -4263,7 +4263,7 @@ func (s *OssutilCommandSuite) TestCPObjectProgressBarNetErrorRetry(c *C) {
 	strRetryTimes := "3"
 	options := OptionMapType{
 		"endpoint":         &mockHost,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"configFile":       &configFile,
 		"checkpointDir":    &cpDir,
@@ -4307,7 +4307,7 @@ func (s *OssutilCommandSuite) TestUploadWithDisableAllSymlinkDirFailure(c *C) {
 
 	options := OptionMapType{
 		"endpoint":          &str,
-		"accessKeyID":       &str,
+		"accessKeyId":       &str,
 		"accessKeySecret":   &str,
 		"configFile":        &configFile,
 		"checkpointDir":     &cpDir,
@@ -4367,7 +4367,7 @@ func (s *OssutilCommandSuite) TestUploadWithDisableAllSymlinkDirSuccess(c *C) {
 	disableAllSymlink := true
 	options := OptionMapType{
 		"endpoint":          &str,
-		"accessKeyID":       &str,
+		"accessKeyId":       &str,
 		"accessKeySecret":   &str,
 		"configFile":        &configFile,
 		"checkpointDir":     &cpDir,
@@ -4439,7 +4439,7 @@ func (s *OssutilCommandSuite) TestUploadSymlinkFileProgressPrecise(c *C) {
 	disableAllSymlink := true
 	options := OptionMapType{
 		"endpoint":          &str,
-		"accessKeyID":       &str,
+		"accessKeyId":       &str,
 		"accessKeySecret":   &str,
 		"configFile":        &configFile,
 		"checkpointDir":     &cpDir,
@@ -4503,7 +4503,7 @@ func (s *OssutilCommandSuite) TestDownLoadWithoutDisableIgnoreError(c *C) {
 	recursive := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -4582,7 +4582,7 @@ func (s *OssutilCommandSuite) TestDownLoadWithDisableIgnoreError(c *C) {
 	disableIgnoreError := true
 	options := OptionMapType{
 		"endpoint":           &str,
-		"accessKeyID":        &str,
+		"accessKeyId":        &str,
 		"accessKeySecret":    &str,
 		"configFile":         &configFile,
 		"checkpointDir":      &cpDir,
@@ -4637,7 +4637,7 @@ func (s *OssutilCommandSuite) TestCpWithTaggingError(c *C) {
 	tagging := "tagA=A&&tagb=B"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -4688,7 +4688,7 @@ func (s *OssutilCommandSuite) TestUploadFileWithTagging(c *C) {
 	tagging := "tagA=A&tagb=B&tagc=C"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -4726,7 +4726,7 @@ func (s *OssutilCommandSuite) TestCopyFileWithoutTagging(c *C) {
 	tagging := "tagA=A&tagb=B&tagc=C"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -4779,7 +4779,7 @@ func (s *OssutilCommandSuite) TestCopyFileWithTagging(c *C) {
 	tagging := "tagA=A&tagb=B&tagc=C"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
@@ -4828,7 +4828,7 @@ func (s *OssutilCommandSuite) TestUploadMultiFileFileWithTagging(c *C) {
 	tagging := "tagA=A&tagb=B&tagc=C"
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"configFile":       &configFile,
 		"checkpointDir":    &cpDir,

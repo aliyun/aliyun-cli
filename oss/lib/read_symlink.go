@@ -105,7 +105,7 @@ var readSymlinkCommand = ReadSymlinkCommand{
 			OptionEncodingType,
 			OptionConfigFile,
 			OptionEndpoint,
-			OptionAccessKeyID,
+			OptionAccessKeyId,
 			OptionAccessKeySecret,
 			OptionSTSToken,
 			OptionProxyHost,

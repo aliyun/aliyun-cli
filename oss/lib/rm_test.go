@@ -54,7 +54,7 @@ func (s *OssutilCommandSuite) TestRemoveObjects(c *C) {
 	ok := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -95,12 +95,12 @@ func (s *OssutilCommandSuite) TestRemoveObjects(c *C) {
 
 	// error remove bucket with config
 	cfile := randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
 	s.createFile(cfile, data, c)
 
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -114,7 +114,7 @@ func (s *OssutilCommandSuite) TestRemoveObjects(c *C) {
 
 	options = OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -147,7 +147,7 @@ func (s *OssutilCommandSuite) TestRemoveObjectBucketOption(c *C) {
 	ok := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -432,7 +432,7 @@ func (s *OssutilCommandSuite) TestRmObjectfilter(c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"limitedNum":      &limitedNum,
@@ -462,7 +462,7 @@ func (s *OssutilCommandSuite) TestRmObjectfilter(c *C) {
 	bForce := true
 	rmOptions := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"recursive":       &bRecusive,
@@ -528,7 +528,7 @@ func (s *OssutilCommandSuite) TestRmPartfilter(c *C) {
 	bPart := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"limitedNum":      &limitedNum,
@@ -582,7 +582,7 @@ func (s *OssutilCommandSuite) TestRmPartfilterExclude(c *C) {
 	bPart := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"limitedNum":      &limitedNum,
@@ -614,7 +614,7 @@ func (s *OssutilCommandSuite) TestRmPartfilterExclude(c *C) {
 	bMultiPart := true
 	rmOptions := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"recursive":       &bRecusive,
@@ -669,7 +669,7 @@ func (s *OssutilCommandSuite) TestRmSpecialCharacterKey(c *C) {
 	encodingType := "url"
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"stsToken":         &str,
 		"configFile":       &configFile,
@@ -740,7 +740,7 @@ func (s *OssutilCommandSuite) TestRemoveObjectsInVersioningBucket(c *C) {
 	ok := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -781,12 +781,12 @@ func (s *OssutilCommandSuite) TestRemoveObjectsInVersioningBucket(c *C) {
 
 	// error remove bucket with config
 	cfile := randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
 	s.createFile(cfile, data, c)
 
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -800,7 +800,7 @@ func (s *OssutilCommandSuite) TestRemoveObjectsInVersioningBucket(c *C) {
 
 	options = OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -842,7 +842,7 @@ func (s *OssutilCommandSuite) TestRemoveObjectWithVersionId(c *C) {
 	ok := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -859,7 +859,7 @@ func (s *OssutilCommandSuite) TestRemoveObjectWithVersionId(c *C) {
 	args = []string{CloudURLToString(bucketName, "")}
 	options = OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &str,
 		"configFile":      &str,
@@ -900,7 +900,7 @@ func (s *OssutilCommandSuite) TestRemoveObjectWithAllVersion(c *C) {
 	ok := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -918,7 +918,7 @@ func (s *OssutilCommandSuite) TestRemoveObjectWithAllVersion(c *C) {
 	args = []string{CloudURLToString(bucketName, objectName)}
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -934,7 +934,7 @@ func (s *OssutilCommandSuite) TestRemoveObjectWithAllVersion(c *C) {
 	args = []string{CloudURLToString(bucketName, "")}
 	options = OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &str,
 		"configFile":      &str,
@@ -974,7 +974,7 @@ func (s *OssutilCommandSuite) TestRmObjectfilterVersioning(c *C) {
 	allVersions := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"limitedNum":      &limitedNum,
@@ -1005,7 +1005,7 @@ func (s *OssutilCommandSuite) TestRmObjectfilterVersioning(c *C) {
 	bForce := true
 	rmOptions := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"recursive":       &bRecusive,
@@ -1064,7 +1064,7 @@ func (s *OssutilCommandSuite) TestRmObjectWithPayer(c *C) {
 	requester := "requester"
 	rmOptions := OptionMapType{
 		"endpoint":        &payerBucketEndPoint,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"force":           &bForce,
@@ -1097,7 +1097,7 @@ func (s *OssutilCommandSuite) TestRmBatchObjectWithPayer(c *C) {
 	requester := "requester"
 	rmOptions := OptionMapType{
 		"endpoint":        &payerBucketEndPoint,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"force":           &bForce,
@@ -1113,7 +1113,7 @@ func (s *OssutilCommandSuite) TestRmBatchObjectWithPayer(c *C) {
 
 func (s *OssutilCommandSuite) TestRmBatchPartsWithPayer(c *C) {
 	bucketName := payerBucket
-	client, err := oss.New(payerBucketEndPoint, accessKeyID, accessKeySecret)
+	client, err := oss.New(payerBucketEndPoint, accessKeyId, accessKeySecret)
 	bucket, err := client.Bucket(bucketName)
 
 	content_len := 100
@@ -1137,7 +1137,7 @@ func (s *OssutilCommandSuite) TestRmBatchPartsWithPayer(c *C) {
 	requester := "requester"
 	rmOptions := OptionMapType{
 		"endpoint":        &payerBucketEndPoint,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"force":           &bForce,

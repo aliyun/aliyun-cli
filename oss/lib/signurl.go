@@ -120,7 +120,7 @@ var signURLCommand = SignurlCommand{
 			OptionEncodingType,
 			OptionConfigFile,
 			OptionEndpoint,
-			OptionAccessKeyID,
+			OptionAccessKeyId,
 			OptionAccessKeySecret,
 			OptionSTSToken,
 			OptionLogLevel,

@@ -11,7 +11,7 @@ import (
 
 func (s *OssutilCommandSuite) TestCatObjectSuccess(c *C) {
 	// create client and bucket
-	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
+	client, err := oss.New(endpoint, accessKeyId, accessKeySecret)
 	c.Assert(err, IsNil)
 
 	bucketName := bucketNamePrefix + randLowStr(5)
@@ -32,7 +32,7 @@ func (s *OssutilCommandSuite) TestCatObjectSuccess(c *C) {
 	var str string
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -62,7 +62,7 @@ func (s *OssutilCommandSuite) TestCatObjectSuccess(c *C) {
 
 func (s *OssutilCommandSuite) TestCatObjectError(c *C) {
 	// create client and bucket
-	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
+	client, err := oss.New(endpoint, accessKeyId, accessKeySecret)
 	c.Assert(err, IsNil)
 
 	bucketName := bucketNamePrefix + randLowStr(5)
@@ -73,7 +73,7 @@ func (s *OssutilCommandSuite) TestCatObjectError(c *C) {
 	var str string
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -98,7 +98,7 @@ func (s *OssutilCommandSuite) TestCatObjectError(c *C) {
 
 func (s *OssutilCommandSuite) TestCatObjecEndpointEmptyError(c *C) {
 	// create client and bucket
-	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
+	client, err := oss.New(endpoint, accessKeyId, accessKeySecret)
 	c.Assert(err, IsNil)
 
 	bucketName := bucketNamePrefix + randLowStr(5)
@@ -109,7 +109,7 @@ func (s *OssutilCommandSuite) TestCatObjecEndpointEmptyError(c *C) {
 	var str string
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -121,7 +121,7 @@ func (s *OssutilCommandSuite) TestCatObjecEndpointEmptyError(c *C) {
 	c.Assert(err, IsNil)
 
 	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyId=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
 	fd.WriteString(configStr)
 	fd.Close()
 
@@ -176,7 +176,7 @@ func (s *OssutilCommandSuite) TestCatObjectWithVersion(c *C) {
 	var str string
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -202,7 +202,7 @@ func (s *OssutilCommandSuite) TestCatObjectWithVersion(c *C) {
 	//begin cat with version id v1
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -242,7 +242,7 @@ func (s *OssutilCommandSuite) TestCatObjectWithPayer(c *C) {
 	requester := "requester"
 	options := OptionMapType{
 		"endpoint":        &payerBucketEndPoint,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,

@@ -32,7 +32,7 @@ func (s *OssutilCommandSuite) TestListPartSuccess(c *C) {
 	defer fd.Close()
 
 	// begin upload part
-	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
+	client, err := oss.New(endpoint, accessKeyId, accessKeySecret)
 	c.Assert(err, IsNil)
 
 	bucket, err := client.Bucket(bucketName)
@@ -55,7 +55,7 @@ func (s *OssutilCommandSuite) TestListPartSuccess(c *C) {
 	var str string
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -106,7 +106,7 @@ func (s *OssutilCommandSuite) TestListPartError(c *C) {
 	var str string
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -148,7 +148,7 @@ func (s *OssutilCommandSuite) TestListPartClientError(c *C) {
 	var str string
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -159,7 +159,7 @@ func (s *OssutilCommandSuite) TestListPartClientError(c *C) {
 	c.Assert(err, IsNil)
 
 	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyId=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
 	fd.WriteString(configStr)
 	fd.Close()
 

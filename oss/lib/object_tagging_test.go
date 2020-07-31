@@ -23,7 +23,7 @@ func (s *OssutilCommandSuite) TestObjectTaggingSingleOperation(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -106,7 +106,7 @@ func (s *OssutilCommandSuite) TestObjectTaggingBatchOperation(c *C) {
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -198,7 +198,7 @@ func (s *OssutilCommandSuite) TestObjectTaggingVersionId(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -278,7 +278,7 @@ func (s *OssutilCommandSuite) TestObjectTaggingError(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -352,7 +352,7 @@ func (s *OssutilCommandSuite) TestObjectTaggingPayer(c *C) {
 	requester := "requester"
 	options := OptionMapType{
 		"endpoint":        &payerBucketEndPoint,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,

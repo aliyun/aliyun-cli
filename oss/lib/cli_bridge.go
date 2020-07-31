@@ -8,6 +8,7 @@ import (
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/credentials-go/credentials"
 )
 
@@ -100,13 +101,13 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 		return fmt.Errorf("config failed: %s", err.Error())
 	}
 
-	accessKeyID, accessSecret, stsToken, err := getSessionCredential(&profile)
+	accessKeyId, accessSecret, stsToken, err := getSessionCredential(&profile)
 	if err != nil {
 		return fmt.Errorf("can't get credential %s", err)
 	}
 
 	configs := make(map[string]string, 0)
-	configs["access-key-id"] = accessKeyID
+	configs["access-key-id"] = accessKeyId
 	configs["access-key-secret"] = accessSecret
 	configs["sts-token"] = stsToken
 
@@ -154,35 +155,35 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 }
 
 func getSessionCredential(profile *config.Profile) (string, string, string, error) {
-	var conf *credentials.Configuration
+	var conf *credentials.Config
 	switch profile.Mode {
 	case config.AK:
-		conf = &credentials.Configuration{
-			Type:            "access_key",
-			AccessKeyID:     profile.AccessKeyId,
-			AccessKeySecret: profile.AccessKeySecret,
+		conf = &credentials.Config{
+			Type:            tea.String("access_key"),
+			AccessKeyId:     tea.String(profile.AccessKeyId),
+			AccessKeySecret: tea.String(profile.AccessKeySecret),
 		}
 	case config.StsToken:
-		conf = &credentials.Configuration{
-			Type:            "sts",
-			AccessKeyID:     profile.AccessKeyId,
-			AccessKeySecret: profile.AccessKeySecret,
-			SecurityToken:   profile.StsToken,
+		conf = &credentials.Config{
+			Type:            tea.String("sts"),
+			AccessKeyId:     tea.String(profile.AccessKeyId),
+			AccessKeySecret: tea.String(profile.AccessKeySecret),
+			SecurityToken:   tea.String(profile.StsToken),
 		}
 	case config.RamRoleArn:
-		conf = &credentials.Configuration{
-			Type:                  "ram_role_arn",
-			AccessKeyID:           profile.AccessKeyId,
-			AccessKeySecret:       profile.AccessKeySecret,
-			RoleArn:               profile.RamRoleArn,
-			RoleSessionName:       profile.RoleSessionName,
-			Policy:                "",
-			RoleSessionExpiration: profile.ExpiredSeconds,
+		conf = &credentials.Config{
+			Type:                  tea.String("ram_role_arn"),
+			AccessKeyId:           tea.String(profile.AccessKeyId),
+			AccessKeySecret:       tea.String(profile.AccessKeySecret),
+			RoleArn:               tea.String(profile.RamRoleArn),
+			RoleSessionName:       tea.String(profile.RoleSessionName),
+			Policy:                tea.String(""),
+			RoleSessionExpiration: tea.Int(profile.ExpiredSeconds),
 		}
 	case config.EcsRamRole:
-		conf = &credentials.Configuration{
-			Type:     "ecs_ram_role",
-			RoleName: profile.RamRoleName,
+		conf = &credentials.Config{
+			Type:     tea.String("ecs_ram_role"),
+			RoleName: tea.String(profile.RamRoleName),
 		}
 	case config.RamRoleArnWithEcs:
 		client, _ := sdk.NewClientWithEcsRamRole(profile.RegionId, profile.RamRoleName)
@@ -193,11 +194,11 @@ func getSessionCredential(profile *config.Profile) (string, string, string, erro
 		return "", "", "", err
 	}
 	var lastErr error
-	accessKeyID, err := credential.GetAccessKeyID()
+	accessKeyId, err := credential.GetAccessKeyId()
 	if err != nil {
 		lastErr = err
 	}
-	accessSecret, err := credential.GetAccessSecret()
+	accessSecret, err := credential.GetAccessKeySecret()
 	if err != nil {
 		lastErr = err
 	}
@@ -208,5 +209,5 @@ func getSessionCredential(profile *config.Profile) (string, string, string, erro
 	if lastErr != nil {
 		return "", "", "", lastErr
 	}
-	return accessKeyID, accessSecret, stsToken, nil
+	return tea.StringValue(accessKeyId), tea.StringValue(accessSecret), tea.StringValue(stsToken), nil
 }

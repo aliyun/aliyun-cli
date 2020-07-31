@@ -146,7 +146,7 @@ var restoreCommand = RestoreCommand{
 			OptionEncodingType,
 			OptionConfigFile,
 			OptionEndpoint,
-			OptionAccessKeyID,
+			OptionAccessKeyId,
 			OptionAccessKeySecret,
 			OptionSTSToken,
 			OptionProxyHost,

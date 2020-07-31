@@ -10,7 +10,7 @@ import (
 
 func (s *OssutilCommandSuite) TestMkdirAll(c *C) {
 	// create bucket
-	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
+	client, err := oss.New(endpoint, accessKeyId, accessKeySecret)
 	c.Assert(err, IsNil)
 
 	bucketName := bucketNamePrefix + randLowStr(12)
@@ -24,7 +24,7 @@ func (s *OssutilCommandSuite) TestMkdirAll(c *C) {
 	var str string
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -91,7 +91,7 @@ func (s *OssutilCommandSuite) TestMkdirAllEncodingError(c *C) {
 	strEncode := "url"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,

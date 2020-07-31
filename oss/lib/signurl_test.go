@@ -282,7 +282,7 @@ func (s *OssutilCommandSuite) TestSignurlWithVersion(c *C) {
 	args := []string{CloudURLToString(bucketName, objectName)}
 	options := OptionMapType{
 		"endpoint":        &str1,
-		"accessKeyID":     &str1,
+		"accessKeyId":     &str1,
 		"accessKeySecret": &str1,
 		"stsToken":        &str1,
 		"configFile":      &configFile,
@@ -331,7 +331,7 @@ func (s *OssutilCommandSuite) TestSignUrlTraficLimit(c *C) {
 	timeOut := strconv.FormatInt(60, 10)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -383,7 +383,7 @@ func (s *OssutilCommandSuite) TestSignUrlWithDisableEncodePathUrl(c *C) {
 	timeOut := strconv.FormatInt(60, 10)
 	options := OptionMapType{
 		"endpoint":           &str,
-		"accessKeyID":        &str,
+		"accessKeyId":        &str,
 		"accessKeySecret":    &str,
 		"stsToken":           &str,
 		"configFile":         &configFile,
@@ -438,7 +438,7 @@ func (s *OssutilCommandSuite) TestSignUrlWithRequestPayer(c *C) {
 	timeOut := strconv.FormatInt(60, 10)
 	options := OptionMapType{
 		"endpoint":        &payerBucketEndPoint,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,

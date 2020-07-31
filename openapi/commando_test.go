@@ -67,7 +67,7 @@ func Test_main(t *testing.T) {
 	ctx.Flags().Get("region").SetValue("cn-hangzhou")
 	ctx.Flags().Add(config.NewAccessKeyIdFlag())
 	ctx.Flags().Get("access-key-id").SetAssigned(true)
-	ctx.Flags().Get("access-key-id").SetValue("AccessKeyID")
+	ctx.Flags().Get("access-key-id").SetValue("AccessKeyId")
 	ctx.Flags().Add(config.NewAccessKeySecretFlag())
 	ctx.Flags().Get("access-key-secret").SetAssigned(true)
 	ctx.Flags().Get("access-key-secret").SetValue("AccessKeySecret")

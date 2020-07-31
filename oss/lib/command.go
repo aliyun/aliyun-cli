@@ -127,7 +127,7 @@ func (cmd *Command) loadConfig(configFile string, cmder interface{}) error {
 }
 
 func (cmd *Command) needConfigFile() bool {
-	for _, name := range []string{OptionEndpoint, OptionAccessKeyID, OptionAccessKeySecret, OptionSTSToken} {
+	for _, name := range []string{OptionEndpoint, OptionAccessKeyId, OptionAccessKeySecret, OptionSTSToken} {
 		val, _ := GetString(name, cmd.options)
 		if val != "" {
 			return false
@@ -282,7 +282,7 @@ func (cmd *Command) formatOption(option Option) string {
 // get oss client according to bucket(if bucket not empty)
 func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	endpoint, isCname := cmd.getEndpoint(bucket)
-	accessKeyID, _ := GetString(OptionAccessKeyID, cmd.options)
+	accessKeyId, _ := GetString(OptionAccessKeyId, cmd.options)
 	accessKeySecret, _ := GetString(OptionAccessKeySecret, cmd.options)
 	stsToken, _ := GetString(OptionSTSToken, cmd.options)
 	disableCRC64, _ := GetBool(OptionDisableCRC64, cmd.options)
@@ -292,12 +292,12 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	ecsUrl, _ := cmd.getEcsRamAkService()
 	localHost, _ := GetString(OptionLocalHost, cmd.options)
 
-	if accessKeyID == "" && ecsUrl == "" {
-		return nil, fmt.Errorf("accessKeyID and ecsUrl are both empty")
+	if accessKeyId == "" && ecsUrl == "" {
+		return nil, fmt.Errorf("accessKeyId and ecsUrl are both empty")
 	}
 
 	if ecsUrl == "" {
-		if err := cmd.checkCredentials(endpoint, accessKeyID, accessKeySecret); err != nil {
+		if err := cmd.checkCredentials(endpoint, accessKeyId, accessKeySecret); err != nil {
 			return nil, err
 		}
 	}
@@ -331,13 +331,13 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 		options = append(options, oss.SetLogger(utilLogger))
 	}
 
-	if accessKeyID == "" {
+	if accessKeyId == "" {
 		LogInfo("using user ak service:%s\n", ecsUrl)
 		ecsRoleAKBuild := EcsRoleAKBuild{url: ecsUrl}
 		options = append(options, oss.SetCredentialsProvider(&ecsRoleAKBuild))
 	}
 
-	client, err := oss.New(endpoint, accessKeyID, accessKeySecret, options...)
+	client, err := oss.New(endpoint, accessKeyId, accessKeySecret, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -359,12 +359,12 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	return client, nil
 }
 
-func (cmd *Command) checkCredentials(endpoint, accessKeyID, accessKeySecret string) error {
+func (cmd *Command) checkCredentials(endpoint, accessKeyId, accessKeySecret string) error {
 	if strings.TrimSpace(endpoint) == "" {
 		return fmt.Errorf("invalid endpoint, endpoint is empty, please check your config")
 	}
-	if strings.TrimSpace(accessKeyID) == "" {
-		return fmt.Errorf("invalid accessKeyID, accessKeyID is empty, please check your config")
+	if strings.TrimSpace(accessKeyId) == "" {
+		return fmt.Errorf("invalid accessKeyId, accessKeyId is empty, please check your config")
 	}
 	if strings.TrimSpace(accessKeySecret) == "" {
 		return fmt.Errorf("invalid accessKeySecret, accessKeySecret is empty, please check your config")

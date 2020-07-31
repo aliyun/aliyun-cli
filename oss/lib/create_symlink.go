@@ -108,7 +108,7 @@ var createSymlinkCommand = CreateSymlinkCommand{
 			OptionEncodingType,
 			OptionConfigFile,
 			OptionEndpoint,
-			OptionAccessKeyID,
+			OptionAccessKeyId,
 			OptionAccessKeySecret,
 			OptionSTSToken,
 			OptionProxyHost,

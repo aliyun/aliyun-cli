@@ -19,7 +19,7 @@ func (s *OssutilCommandSuite) TestBucketRefererPutSuccess(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -37,7 +37,7 @@ func (s *OssutilCommandSuite) TestBucketRefererPutSuccess(c *C) {
 	strMethod = "get"
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -80,7 +80,7 @@ func (s *OssutilCommandSuite) TestBucketRefererDisableEmpty(c *C) {
 	disableEmptyRefer := true
 	options := OptionMapType{
 		"endpoint":            &str,
-		"accessKeyID":         &str,
+		"accessKeyId":         &str,
 		"accessKeySecret":     &str,
 		"stsToken":            &str,
 		"configFile":          &configFile,
@@ -99,7 +99,7 @@ func (s *OssutilCommandSuite) TestBucketRefererDisableEmpty(c *C) {
 	strMethod = "get"
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -141,7 +141,7 @@ func (s *OssutilCommandSuite) TestBucketRefererGetConfirm(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -159,7 +159,7 @@ func (s *OssutilCommandSuite) TestBucketRefererGetConfirm(c *C) {
 	strMethod = "get"
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -205,7 +205,7 @@ func (s *OssutilCommandSuite) TestBucketRefererGetToStdout(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -228,7 +228,7 @@ func (s *OssutilCommandSuite) TestBucketRefererGetToStdout(c *C) {
 	strMethod = "get"
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -265,7 +265,7 @@ func (s *OssutilCommandSuite) TestBucketRefererBucketError(c *C) {
 	disableEmptyRefer := true
 	options := OptionMapType{
 		"endpoint":            &str,
-		"accessKeyID":         &str,
+		"accessKeyId":         &str,
 		"accessKeySecret":     &str,
 		"stsToken":            &str,
 		"configFile":          &configFile,
@@ -290,7 +290,7 @@ func (s *OssutilCommandSuite) TestBucketRefererDeleteSuccess(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -308,7 +308,7 @@ func (s *OssutilCommandSuite) TestBucketRefererDeleteSuccess(c *C) {
 	strMethod = "get"
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -373,7 +373,7 @@ func (s *OssutilCommandSuite) TestBucketRefererError(c *C) {
 	var str string
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -412,7 +412,7 @@ func (s *OssutilCommandSuite) TestBucketRefererPutEmptyEndpoint(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -424,7 +424,7 @@ func (s *OssutilCommandSuite) TestBucketRefererPutEmptyEndpoint(c *C) {
 	oldConfigStr, err := ioutil.ReadFile(configFile)
 	c.Assert(err, IsNil)
 	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyId=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
 	fd.WriteString(configStr)
 	fd.Close()
 
@@ -450,7 +450,7 @@ func (s *OssutilCommandSuite) TestBucketRefererGetEmptyEndpoint(c *C) {
 	strMethod := "get"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -462,7 +462,7 @@ func (s *OssutilCommandSuite) TestBucketRefererGetEmptyEndpoint(c *C) {
 	oldConfigStr, err := ioutil.ReadFile(configFile)
 	c.Assert(err, IsNil)
 	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyId=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
 	fd.WriteString(configStr)
 	fd.Close()
 

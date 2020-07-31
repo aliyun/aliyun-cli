@@ -33,7 +33,7 @@ func (s *OssutilCommandSuite) TestCorsPutSuccess(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -49,7 +49,7 @@ func (s *OssutilCommandSuite) TestCorsPutSuccess(c *C) {
 	strMethod = "get"
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -87,7 +87,7 @@ func (s *OssutilCommandSuite) TestCorsPutError(c *C) {
 	strMethod := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -186,7 +186,7 @@ func (s *OssutilCommandSuite) TestCorsGetConfirm(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -202,7 +202,7 @@ func (s *OssutilCommandSuite) TestCorsGetConfirm(c *C) {
 	strMethod = "get"
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -247,7 +247,7 @@ func (s *OssutilCommandSuite) TestCorsDelete(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -263,7 +263,7 @@ func (s *OssutilCommandSuite) TestCorsDelete(c *C) {
 	strMethod = "get"
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,

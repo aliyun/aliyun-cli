@@ -20,15 +20,15 @@ const (
 func StsHttpHandlerOk(w http.ResponseWriter, r *http.Request) {
 	akJson := &STSAkJson{}
 
-	if accessKeyID == "" {
-		accessKeyID = os.Getenv("OSS_TEST_ACCESS_KEY_ID")
+	if accessKeyId == "" {
+		accessKeyId = os.Getenv("OSS_TEST_ACCESS_KEY_ID")
 	}
 
 	if accessKeySecret == "" {
 		accessKeySecret = os.Getenv("OSS_TEST_ACCESS_KEY_SECRET")
 	}
 
-	akJson.AccessKeyId = accessKeyID
+	akJson.AccessKeyId = accessKeyId
 	akJson.AccessKeySecret = accessKeySecret
 	akJson.SecurityToken = ""
 	nowLocalTime := time.Now()
@@ -78,7 +78,7 @@ func startHttpServer(handler func(http.ResponseWriter, *http.Request)) *http.Ser
 }
 
 func (s *OssutilCommandSuite) TestEcsRoleSuccess(c *C) {
-	accessKeyID = ""
+	accessKeyId = ""
 	accessKeySecret = ""
 	stsToken = ""
 
@@ -112,14 +112,14 @@ func (s *OssutilCommandSuite) TestEcsRoleAkTimeout(c *C) {
 	time.Sleep(time.Duration(1) * time.Second)
 
 	ecsRole := EcsRoleAKBuild{url: "http://127.0.0.1:32915/latest/meta-data/Ram/security-credentials/EcsRamRoleTesting"}
-	strKeyId1 := ecsRole.GetCredentials().GetAccessKeyID()
+	strKeyId1 := ecsRole.GetCredentials().GetAccessKeyId()
 	c.Assert(strKeyId1 == "", Equals, false)
 	Expiration1 := ecsRole.Expiration
 
 	// wait Ak timeout
 	time.Sleep(time.Duration(1+TestEcsTimeout) * time.Second)
 
-	strKeyId2 := ecsRole.GetCredentials().GetAccessKeyID()
+	strKeyId2 := ecsRole.GetCredentials().GetAccessKeyId()
 	c.Assert(strKeyId2 == "", Equals, false)
 	Expiration2 := ecsRole.Expiration
 
@@ -131,7 +131,7 @@ func (s *OssutilCommandSuite) TestEcsRoleAkTimeout(c *C) {
 }
 
 func (s *OssutilCommandSuite) TestEcsRoleNotHttpServerError(c *C) {
-	accessKeyID = ""
+	accessKeyId = ""
 	accessKeySecret = ""
 	stsToken = ""
 
@@ -153,7 +153,7 @@ func (s *OssutilCommandSuite) TestEcsRoleNotHttpServerError(c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -166,7 +166,7 @@ func (s *OssutilCommandSuite) TestEcsRoleNotHttpServerError(c *C) {
 }
 
 func (s *OssutilCommandSuite) TestEcsRoleAkEmptyError(c *C) {
-	accessKeyID = ""
+	accessKeyId = ""
 	accessKeySecret = ""
 	stsToken = ""
 
@@ -191,7 +191,7 @@ func (s *OssutilCommandSuite) TestEcsRoleAkEmptyError(c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -205,7 +205,7 @@ func (s *OssutilCommandSuite) TestEcsRoleAkEmptyError(c *C) {
 }
 
 func (s *OssutilCommandSuite) TestEcsRoleCodeError(c *C) {
-	accessKeyID = ""
+	accessKeyId = ""
 	accessKeySecret = ""
 	stsToken = ""
 
@@ -230,7 +230,7 @@ func (s *OssutilCommandSuite) TestEcsRoleCodeError(c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -244,7 +244,7 @@ func (s *OssutilCommandSuite) TestEcsRoleCodeError(c *C) {
 }
 
 func (s *OssutilCommandSuite) TestEcsRoleJsonError(c *C) {
-	accessKeyID = ""
+	accessKeyId = ""
 	accessKeySecret = ""
 	stsToken = ""
 
@@ -269,7 +269,7 @@ func (s *OssutilCommandSuite) TestEcsRoleJsonError(c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,

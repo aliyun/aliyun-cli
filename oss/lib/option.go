@@ -42,7 +42,7 @@ var OptionMap = map[string]Option{
 	OptionEndpoint: Option{"-e", "--endpoint", "", OptionTypeString, "", "",
 		fmt.Sprintf("ossutil工具的基本endpoint配置（该选项值会覆盖配置文件中的相应设置），注意其必须为一个二级域名。"),
 		fmt.Sprintf("Base endpoint for oss endpoint(Notice that the value of the option will cover the value in config file). Take notice that it should be second-level domain(SLD).")},
-	OptionAccessKeyID:     Option{"-i", "--access-key-id", "", OptionTypeString, "", "", "访问oss使用的AccessKeyID（该选项值会覆盖配置文件中的相应设置）。", "AccessKeyID while access oss(Notice that the value of the option will cover the value in config file)."},
+	OptionAccessKeyId:     Option{"-i", "--access-key-id", "", OptionTypeString, "", "", "访问oss使用的AccessKeyId（该选项值会覆盖配置文件中的相应设置）。", "AccessKeyId while access oss(Notice that the value of the option will cover the value in config file)."},
 	OptionAccessKeySecret: Option{"-k", "--access-key-secret", "", OptionTypeString, "", "", "访问oss使用的AccessKeySecret（该选项值会覆盖配置文件中的相应设置）。", "AccessKeySecret while access oss(Notice that the value of the option will cover the value in config file)."},
 	OptionSTSToken:        Option{"-t", "--sts-token", "", OptionTypeString, "", "", "访问oss使用的STSToken（该选项值会覆盖配置文件中的相应设置），非必须设置项。", "STSToken while access oss(Notice that the value of the option will cover the value in config file), not necessary."},
 	OptionLimitedNum:      Option{"", "--limited-num", strconv.Itoa(DefaultLimitedNum), OptionTypeInt64, strconv.FormatInt(MinLimitedNum, 10), "", "返回结果的最大个数。", "the limited number of return results."},

@@ -289,7 +289,7 @@ func TestOverwriteWithFlagsWithAccessKeySecretEnv(t *testing.T) {
 
 }
 
-func TestOverwriteWithFlagsWithAccessKeyIDEnv(t *testing.T) {
+func TestOverwriteWithFlagsWithAccessKeyIdEnv(t *testing.T) {
 	buf := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(buf)
 	AddFlags(ctx.Flags())
@@ -452,16 +452,16 @@ func TestIsRegion(t *testing.T) {
 
 func TestAutoModeRecognition(t *testing.T) {
 
-	p := &Profile{AccessKeyId: "accessKeyID", AccessKeySecret: "accessKeySecret"}
+	p := &Profile{AccessKeyId: "accessKeyId", AccessKeySecret: "accessKeySecret"}
 	assert.Equal(t, AuthenticateMode(""), p.Mode)
 	AutoModeRecognition(p)
 	assert.Equal(t, AK, p.Mode)
 
-	p = &Profile{AccessKeyId: "accessKeyID", AccessKeySecret: "accessKeySecret", StsToken: "stsToken"}
+	p = &Profile{AccessKeyId: "accessKeyId", AccessKeySecret: "accessKeySecret", StsToken: "stsToken"}
 	AutoModeRecognition(p)
 	assert.Equal(t, StsToken, p.Mode)
 
-	p = &Profile{AccessKeyId: "accessKeyID", AccessKeySecret: "accessKeySecret", RamRoleArn: "ramRoleArn"}
+	p = &Profile{AccessKeyId: "accessKeyId", AccessKeySecret: "accessKeySecret", RamRoleArn: "ramRoleArn"}
 	AutoModeRecognition(p)
 	assert.Equal(t, RamRoleArn, p.Mode)
 
@@ -473,7 +473,7 @@ func TestAutoModeRecognition(t *testing.T) {
 	AutoModeRecognition(p)
 	assert.Equal(t, EcsRamRole, p.Mode)
 
-	p = &Profile{AccessKeyId: "accessKeyID", AccessKeySecret: "accessKeySecret", StsToken: "stsToken", Mode: AK}
+	p = &Profile{AccessKeyId: "accessKeyId", AccessKeySecret: "accessKeySecret", StsToken: "stsToken", Mode: AK}
 	AutoModeRecognition(p)
 	assert.Equal(t, AK, p.Mode)
 

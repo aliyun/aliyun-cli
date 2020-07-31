@@ -283,11 +283,11 @@ func (cp *Profile) GetClientByRamRoleArnWithEcs(config *sdk.Config) (*sdk.Client
 	if err != nil {
 		return nil, err
 	}
-	accessKeyID, accessKeySecret, StsToken, err := cp.GetSessionCredential(client)
+	accessKeyId, accessKeySecret, StsToken, err := cp.GetSessionCredential(client)
 	if err != nil {
 		return nil, err
 	}
-	cred := credentials.NewStsTokenCredential(accessKeyID, accessKeySecret, StsToken)
+	cred := credentials.NewStsTokenCredential(accessKeyId, accessKeySecret, StsToken)
 	return sdk.NewClientWithOptions(cp.RegionId, config, cred)
 }
 
@@ -313,13 +313,13 @@ func (cp *Profile) GetSessionCredential(client *sdk.Client) (string, string, str
 	if err != nil {
 		return "", "", "", err
 	}
-	accessKeyID, _ := jmespath.Search("Credentials.AccessKeyId", v)
+	accessKeyId, _ := jmespath.Search("Credentials.AccessKeyId", v)
 	accessKeySecret, _ := jmespath.Search("Credentials.AccessKeySecret", v)
 	StsToken, _ := jmespath.Search("Credentials.SecurityToken", v)
-	if accessKeyID == nil || accessKeySecret == nil || StsToken == nil {
+	if accessKeyId == nil || accessKeySecret == nil || StsToken == nil {
 		return "", "", "", errors.New("get session credential failed")
 	}
-	return accessKeyID.(string), accessKeySecret.(string), StsToken.(string), nil
+	return accessKeyId.(string), accessKeySecret.(string), StsToken.(string), nil
 }
 
 func (cp *Profile) GetClientByEcsRamRole(config *sdk.Config) (*sdk.Client, error) {

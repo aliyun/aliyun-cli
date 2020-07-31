@@ -301,7 +301,7 @@ func (s *OssutilCommandSuite) TestProgressBarStatisticErr(c *C) {
 
 	cfile := configFile
 	configFile = randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
 	s.createFile(configFile, data, c)
 
 	err := s.initCopyCommand(CloudURLToString(bucketName, ""), downloadDir, true, true, false, DefaultBigFileThreshold, CheckpointDir, DefaultOutputDir)
@@ -372,7 +372,7 @@ func (s *OssutilCommandSuite) TestProgressBarContinueErr(c *C) {
 
 	cfile := configFile
 	configFile = randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n", "abc", accessKeyID, accessKeySecret)
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n", "abc", accessKeyId, accessKeySecret)
 	s.createFile(configFile, data, c)
 
 	err = s.initCopyCommand(udir, CloudURLToString(bucketName, ""), true, true, false, DefaultBigFileThreshold, CheckpointDir, DefaultOutputDir)
@@ -670,7 +670,7 @@ func (s *OssutilCommandSuite) TestSetACLProgress(c *C) {
 	// batch set acl list error
 	cfile := configFile
 	configFile = randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n", endpoint, accessKeyID, "")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n", endpoint, accessKeyId, "")
 	s.createFile(configFile, data, c)
 
 	err = s.initSetACL(bucketName, "TestSetACLProgress", "private", true, false, true)
@@ -787,7 +787,7 @@ func (s *OssutilCommandSuite) TestSetMetaProgress(c *C) {
 	// batch set acl list error
 	cfile := configFile
 	configFile = randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n", endpoint, accessKeyID, "")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n", endpoint, accessKeyId, "")
 	s.createFile(configFile, data, c)
 
 	err = s.initSetMeta(bucketName, prefix, "x-oss-object-acl:default#X-Oss-Meta-A:A", true, false, true, true, DefaultLanguage)
