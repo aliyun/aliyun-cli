@@ -109,7 +109,7 @@ var duSizeCommand = DuCommand{
 		validOptionNames: []string{
 			OptionConfigFile,
 			OptionEndpoint,
-			OptionAccessKeyID,
+			OptionAccessKeyId,
 			OptionAccessKeySecret,
 			OptionSTSToken,
 			OptionProxyHost,

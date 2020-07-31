@@ -116,7 +116,7 @@ var bucketLogCommand = BucketLogCommand{
 		validOptionNames: []string{
 			OptionConfigFile,
 			OptionEndpoint,
-			OptionAccessKeyID,
+			OptionAccessKeyId,
 			OptionAccessKeySecret,
 			OptionSTSToken,
 			OptionProxyHost,

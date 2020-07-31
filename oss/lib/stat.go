@@ -102,7 +102,7 @@ var statCommand = StatCommand{
 			OptionEncodingType,
 			OptionConfigFile,
 			OptionEndpoint,
-			OptionAccessKeyID,
+			OptionAccessKeyId,
 			OptionAccessKeySecret,
 			OptionSTSToken,
 			OptionProxyHost,

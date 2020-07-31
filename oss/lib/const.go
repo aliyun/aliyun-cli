@@ -10,7 +10,7 @@ import (
 const (
 	OptionConfigFile          string = "configFile"
 	OptionEndpoint                   = "endpoint"
-	OptionAccessKeyID                = "accessKeyID"
+	OptionAccessKeyId                = "accessKeyId"
 	OptionAccessKeySecret            = "accessKeySecret"
 	OptionSTSToken                   = "stsToken"
 	OptionACL                        = "acl"

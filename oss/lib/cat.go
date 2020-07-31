@@ -92,7 +92,7 @@ var catCommand = CatCommand{
 		validOptionNames: []string{
 			OptionConfigFile,
 			OptionEndpoint,
-			OptionAccessKeyID,
+			OptionAccessKeyId,
 			OptionAccessKeySecret,
 			OptionSTSToken,
 			OptionProxyHost,

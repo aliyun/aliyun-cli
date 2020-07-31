@@ -153,7 +153,7 @@ var bucketPolicyCommand = BucketPolicyCommand{
 		validOptionNames: []string{
 			OptionConfigFile,
 			OptionEndpoint,
-			OptionAccessKeyID,
+			OptionAccessKeyId,
 			OptionAccessKeySecret,
 			OptionSTSToken,
 			OptionProxyHost,

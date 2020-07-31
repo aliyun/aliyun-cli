@@ -20,7 +20,7 @@ func (s *OssutilCommandSuite) TestStatErrArgc(c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -85,7 +85,7 @@ func (s *OssutilCommandSuite) TestGetStatRetryTimes(c *C) {
 	retryTimes := "1"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -113,7 +113,7 @@ func (s *OssutilCommandSuite) TestStatIDKey(c *C) {
 	s.putBucket(bucketName, c)
 
 	cfile := randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
 	s.createFile(cfile, data, c)
 
 	command := "stat"
@@ -122,7 +122,7 @@ func (s *OssutilCommandSuite) TestStatIDKey(c *C) {
 	retryTimes := "1"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -133,7 +133,7 @@ func (s *OssutilCommandSuite) TestStatIDKey(c *C) {
 
 	options = OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -167,7 +167,7 @@ func (s *OssutilCommandSuite) TestStatURLEncoding(c *C) {
 	encodingType := URLEncodingType
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -228,7 +228,7 @@ func (s *OssutilCommandSuite) TestStatVersioning(c *C) {
 	encodingType := URLEncodingType
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -271,7 +271,7 @@ func (s *OssutilCommandSuite) TestStatObjectWithPayer(c *C) {
 	requester := "requester"
 	options := OptionMapType{
 		"endpoint":        &payerBucketEndPoint,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,

@@ -56,7 +56,7 @@ func (s *OssutilConfigSuite) TestConfigNonInteractive(c *C) {
 	var args []string
 	options := OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &stsToken,
 		"configFile":      &configFile,
@@ -74,7 +74,7 @@ func (s *OssutilConfigSuite) TestConfigNonInteractive(c *C) {
 	c.Assert(len(opts), Equals, 5)
 	c.Assert(opts[OptionLanguage], Equals, DefaultLanguage)
 	c.Assert(opts[OptionEndpoint], Equals, endpoint)
-	c.Assert(opts[OptionAccessKeyID], Equals, accessKeyID)
+	c.Assert(opts[OptionAccessKeyId], Equals, accessKeyId)
 	c.Assert(opts[OptionAccessKeySecret], Equals, accessKeySecret)
 	c.Assert(opts[OptionSTSToken], Equals, stsToken)
 }
@@ -200,7 +200,7 @@ func (s *OssutilConfigSuite) TestConfigOptionEmptyValue(c *C) {
 	id := ""
 	options := OptionMapType{
 		"endpoint":        &endp,
-		"accessKeyID":     &id,
+		"accessKeyId":     &id,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &stsToken,
 		"configFile":      &configFile,
@@ -217,7 +217,7 @@ func (s *OssutilConfigSuite) TestConfigOptionEmptyValue(c *C) {
 	c.Assert(err, IsNil)
 	c.Assert(len(opts), Equals, 3)
 	c.Assert(opts[OptionEndpoint], IsNil)
-	c.Assert(opts[OptionAccessKeyID], IsNil)
+	c.Assert(opts[OptionAccessKeyId], IsNil)
 	c.Assert(opts[OptionLanguage], Equals, DefaultLanguage)
 	c.Assert(opts[OptionAccessKeySecret], Equals, accessKeySecret)
 	c.Assert(opts[OptionSTSToken], Equals, stsToken)

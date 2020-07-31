@@ -138,7 +138,7 @@ func (s *OssutilCommandSuite) probeDownloadWithParameter(c *C, object string, do
 	}
 
 	tempStr := ""
-	options[OptionAccessKeyID] = &tempStr
+	options[OptionAccessKeyId] = &tempStr
 	options[OptionAccessKeySecret] = &tempStr
 	options[OptionEndpoint] = &tempStr
 
@@ -209,7 +209,7 @@ func (s *OssutilCommandSuite) probeUploadObject(c *C, object string, uploadFileN
 	}
 
 	tempStr := ""
-	options[OptionAccessKeyID] = &tempStr
+	options[OptionAccessKeyId] = &tempStr
 	options[OptionAccessKeySecret] = &tempStr
 	options[OptionEndpoint] = &tempStr
 
@@ -369,7 +369,7 @@ func (s *OssutilCommandSuite) TestProbeUploadObjectBucketInvalid(c *C) {
 	}
 
 	tempStr := ""
-	options[OptionAccessKeyID] = &tempStr
+	options[OptionAccessKeyId] = &tempStr
 	options[OptionAccessKeySecret] = &tempStr
 	options[OptionEndpoint] = &tempStr
 
@@ -566,7 +566,7 @@ func (s *OssutilCommandSuite) TestProbeUploadObjectRepeat(c *C) {
 	}
 
 	tempStr := ""
-	options[OptionAccessKeyID] = &tempStr
+	options[OptionAccessKeyId] = &tempStr
 	options[OptionAccessKeySecret] = &tempStr
 	options[OptionEndpoint] = &tempStr
 
@@ -740,7 +740,7 @@ func (s *OssutilCommandSuite) TestProbeUploadBandWidth(c *C) {
 	str := ""
 	options := OptionMapType{
 		OptionEndpoint:        &str,
-		OptionAccessKeyID:     &str,
+		OptionAccessKeyId:     &str,
 		OptionAccessKeySecret: &str,
 		OptionConfigFile:      &configFile,
 		OptionBucketName:      &bucketName,
@@ -767,7 +767,7 @@ func (s *OssutilCommandSuite) TestProbeDownloadBandWidthSuccess(c *C) {
 	str := ""
 	options := OptionMapType{
 		OptionEndpoint:        &str,
-		OptionAccessKeyID:     &str,
+		OptionAccessKeyId:     &str,
 		OptionAccessKeySecret: &str,
 		OptionConfigFile:      &configFile,
 		OptionObject:          &objectName,
@@ -793,7 +793,7 @@ func (s *OssutilCommandSuite) TestProbeDownloadBandWidthError(c *C) {
 	str := ""
 	options := OptionMapType{
 		OptionEndpoint:        &str,
-		OptionAccessKeyID:     &str,
+		OptionAccessKeyId:     &str,
 		OptionAccessKeySecret: &str,
 		OptionConfigFile:      &configFile,
 		OptionObject:          &objectName,
@@ -831,7 +831,7 @@ func (s *OssutilCommandSuite) TestProbeItemNotSupported(c *C) {
 	str := ""
 	options := OptionMapType{
 		OptionEndpoint:        &str,
-		OptionAccessKeyID:     &str,
+		OptionAccessKeyId:     &str,
 		OptionAccessKeySecret: &str,
 		OptionConfigFile:      &configFile,
 		OptionObject:          &objectName,

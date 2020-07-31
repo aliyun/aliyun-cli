@@ -187,7 +187,7 @@ func (s *OssutilCommandSuite) TestErrBatchSetMeta(c *C) {
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str1,
-		"accessKeyID":     &str1,
+		"accessKeyId":     &str1,
 		"accessKeySecret": &str1,
 		"stsToken":        &str,
 		"update":          &ok,
@@ -280,7 +280,7 @@ func (s *OssutilCommandSuite) TestSetMetaIDKey(c *C) {
 	s.putObject(bucketName, object, uploadFileName, c)
 
 	cfile := randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
 	s.createFile(cfile, data, c)
 
 	command := "set-meta"
@@ -290,7 +290,7 @@ func (s *OssutilCommandSuite) TestSetMetaIDKey(c *C) {
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -303,7 +303,7 @@ func (s *OssutilCommandSuite) TestSetMetaIDKey(c *C) {
 
 	options = OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -341,7 +341,7 @@ func (s *OssutilCommandSuite) TestSetMetaURLEncoding(c *C) {
 	encodingType := URLEncodingType
 	options := OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1495,7 +1495,7 @@ func (s *OssutilCommandSuite) TestSetObjectMetaWithVersion(c *C) {
 	update := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1526,7 +1526,7 @@ func (s *OssutilCommandSuite) TestSetObjectMetaWithInvalidVersionArgs(c *C) {
 	flag := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1539,7 +1539,7 @@ func (s *OssutilCommandSuite) TestSetObjectMetaWithInvalidVersionArgs(c *C) {
 
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,

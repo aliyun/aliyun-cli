@@ -283,7 +283,7 @@ var setMetaCommand = SetMetaCommand{
 			OptionExclude,
 			OptionConfigFile,
 			OptionEndpoint,
-			OptionAccessKeyID,
+			OptionAccessKeyId,
 			OptionAccessKeySecret,
 			OptionSTSToken,
 			OptionProxyHost,

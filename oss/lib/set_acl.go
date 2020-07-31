@@ -237,7 +237,7 @@ var setACLCommand = SetACLCommand{
 			OptionInclude,
 			OptionExclude,
 			OptionEndpoint,
-			OptionAccessKeyID,
+			OptionAccessKeyId,
 			OptionAccessKeySecret,
 			OptionSTSToken,
 			OptionProxyHost,

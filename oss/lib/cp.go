@@ -199,7 +199,7 @@ var specChineseCopy = SpecText{
     （1）如果未进入批量文件迭代过程，错误已经发生，则不会产生report文件，ossutil会终止
     运行，不继续迭代过程。如，用户输入cp命令出错时，不会产生report文件，而是屏幕输出错
     误并退出。
-    （2）如果批量操作过程某文件发生的错误为：Bucket不存在、accessKeyID/accessKeySecret
+    （2）如果批量操作过程某文件发生的错误为：Bucket不存在、accessKeyId/accessKeySecret
     错误造成的权限验证非法等错误，ossutil会屏幕输出错误并退出。
 
     report文件名为：` + ReportPrefix + `日期_时间` + ReportSuffix + `。report文件是ossutil输出文件的一种，
@@ -1265,7 +1265,7 @@ var copyCommand = CopyCommand{
 			OptionACL,
 			OptionConfigFile,
 			OptionEndpoint,
-			OptionAccessKeyID,
+			OptionAccessKeyId,
 			OptionAccessKeySecret,
 			OptionSTSToken,
 			OptionProxyHost,

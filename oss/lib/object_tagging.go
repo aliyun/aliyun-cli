@@ -131,7 +131,7 @@ var objectTagCommand = ObjectTagCommand{
 		validOptionNames: []string{
 			OptionConfigFile,
 			OptionEndpoint,
-			OptionAccessKeyID,
+			OptionAccessKeyId,
 			OptionAccessKeySecret,
 			OptionSTSToken,
 			OptionProxyHost,

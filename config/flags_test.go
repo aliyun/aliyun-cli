@@ -60,7 +60,7 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 		}
-		newAccessKeyIDFlag = &cli.Flag{
+		newAccessKeyIdFlag = &cli.Flag{
 			Category:     "config",
 			Name:         AccessKeyIdFlagName,
 			AssignedMode: cli.AssignedOnce,
@@ -342,7 +342,7 @@ func TestAddFlag(t *testing.T) {
 	assert.Equal(t, newModeFlag, f)
 
 	f = NewAccessKeyIdFlag()
-	assert.Equal(t, newAccessKeyIDFlag, f)
+	assert.Equal(t, newAccessKeyIdFlag, f)
 
 	f = NewAccessKeySecretFlag()
 	assert.Equal(t, newAccessKeySecretFlag, f)

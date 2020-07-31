@@ -205,7 +205,7 @@ func (s *OssutilCommandSuite) TestErrBatchSetACL(c *C) {
 	ok := true
 	options := OptionMapType{
 		"endpoint":        &str1,
-		"accessKeyID":     &str1,
+		"accessKeyId":     &str1,
 		"accessKeySecret": &str1,
 		"stsToken":        &str,
 		"routines":        &routines,
@@ -229,7 +229,7 @@ func (s *OssutilCommandSuite) TestSetACLIDKey(c *C) {
 	s.putBucket(bucketName, c)
 
 	cfile := randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
 	s.createFile(cfile, data, c)
 
 	command := "set-acl"
@@ -239,7 +239,7 @@ func (s *OssutilCommandSuite) TestSetACLIDKey(c *C) {
 	ok := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -252,7 +252,7 @@ func (s *OssutilCommandSuite) TestSetACLIDKey(c *C) {
 
 	options = OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -290,7 +290,7 @@ func (s *OssutilCommandSuite) TestSetACLURLEncoding(c *C) {
 	encodingType := URLEncodingType
 	options := OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1233,7 +1233,7 @@ func (s *OssutilCommandSuite) TestSetObjectAclWithVersion(c *C) {
 	var str string
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1274,7 +1274,7 @@ func (s *OssutilCommandSuite) TestSetObjectAclWithInvalidVersionArgs(c *C) {
 	flag := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1287,7 +1287,7 @@ func (s *OssutilCommandSuite) TestSetObjectAclWithInvalidVersionArgs(c *C) {
 
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,

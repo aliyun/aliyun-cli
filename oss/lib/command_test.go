@@ -31,7 +31,7 @@ var _ = Suite(&OssutilCommandSuite{})
 var (
 	// Update before running test
 	endpoint            = ""
-	accessKeyID         = ""
+	accessKeyId         = ""
 	accessKeySecret     = ""
 	stsToken            = ""
 	payerBucket         = ""
@@ -92,8 +92,8 @@ func SetUpCredential() {
 	if strings.HasPrefix(endpoint, "http://") {
 		endpoint = endpoint[7:]
 	}
-	if accessKeyID == "" {
-		accessKeyID = os.Getenv("OSS_TEST_ACCESS_KEY_ID")
+	if accessKeyId == "" {
+		accessKeyId = os.Getenv("OSS_TEST_ACCESS_KEY_ID")
 	}
 	if accessKeySecret == "" {
 		accessKeySecret = os.Getenv("OSS_TEST_ACCESS_KEY_SECRET")
@@ -200,7 +200,7 @@ func getFileList(dpath string) ([]string, error) {
 
 func (s *OssutilCommandSuite) PutObject(bucketName string, object string, body string, c *C) {
 	// create client and bucket
-	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
+	client, err := oss.New(endpoint, accessKeyId, accessKeySecret)
 	c.Assert(err, IsNil)
 
 	bucket, err := client.Bucket(bucketName)
@@ -213,7 +213,7 @@ func (s *OssutilCommandSuite) PutObject(bucketName string, object string, body s
 
 func (s *OssutilCommandSuite) AppendObject(bucketName string, object string, body string, position int64, c *C) {
 	// create client and bucket
-	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
+	client, err := oss.New(endpoint, accessKeyId, accessKeySecret)
 	c.Assert(err, IsNil)
 
 	bucket, err := client.Bucket(bucketName)
@@ -228,7 +228,7 @@ func (s *OssutilCommandSuite) configNonInteractive(c *C) {
 	var args []string
 	options := OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"configFile":      &configFile,
 	}
@@ -241,7 +241,7 @@ func (s *OssutilCommandSuite) configNonInteractive(c *C) {
 	c.Assert(len(opts), Equals, 4)
 	c.Assert(opts[OptionLanguage], Equals, DefaultLanguage)
 	c.Assert(opts[OptionEndpoint], Equals, endpoint)
-	c.Assert(opts[OptionAccessKeyID], Equals, accessKeyID)
+	c.Assert(opts[OptionAccessKeyId], Equals, accessKeyId)
 	c.Assert(opts[OptionAccessKeySecret], Equals, accessKeySecret)
 }
 
@@ -294,7 +294,7 @@ func (s *OssutilCommandSuite) rawList(args []string, cmdline string, optionPairs
 	limitedNum := strconv.FormatInt(-1, 10)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -363,7 +363,7 @@ func (s *OssutilCommandSuite) rawListLimitedMarker(args []string, cmdline string
 	limitedNumStr := strconv.FormatInt(limitedNum, 10)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -461,7 +461,7 @@ func (s *OssutilCommandSuite) rawRemove(args []string, recursive, force, bucket 
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -482,7 +482,7 @@ func (s *OssutilCommandSuite) removeBucketObjectVersions(bucket string, c *C) (b
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -522,7 +522,7 @@ func (s *OssutilCommandSuite) removeWrapper(cmdline string, bucket string, objec
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -558,7 +558,7 @@ func (s *OssutilCommandSuite) initRemove(bucket string, object string, cmdline s
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -629,7 +629,7 @@ func (s *OssutilCommandSuite) rawPutBucketWithACL(args []string, acl string) (bo
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -644,7 +644,7 @@ func (s *OssutilCommandSuite) rawPutBucketWithACLLanguage(args []string, acl, la
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -661,7 +661,7 @@ func (s *OssutilCommandSuite) putBucket(bucket string, c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -677,7 +677,7 @@ func (s *OssutilCommandSuite) putBucketWithEndPoint(bucket string, strEndPoint s
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &strEndPoint,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -694,7 +694,7 @@ func (s *OssutilCommandSuite) putBucketVersioning(bucket string, status string, 
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -717,7 +717,7 @@ func (s *OssutilCommandSuite) initPutBucketWithStorageClass(args []string, stora
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -741,7 +741,7 @@ func (s *OssutilCommandSuite) rawCPWithArgs(args []string, recursive, force, upd
 	partSize := strconv.FormatInt(DefaultPartSize, 10)
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"stsToken":         &str,
 		"configFile":       &configFile,
@@ -817,7 +817,7 @@ func (s *OssutilCommandSuite) rawCPWithFilter(args []string, recursive, force, u
 
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"stsToken":         &str,
 		"configFile":       &configFile,
@@ -847,7 +847,7 @@ func (s *OssutilCommandSuite) rawCPWithOutputDir(srcURL, destURL string, recursi
 	cpDir := CheckpointDir
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"stsToken":         &str,
 		"configFile":       &configFile,
@@ -873,7 +873,7 @@ func (s *OssutilCommandSuite) rawCPWithPayer(args []string, recursive, force, up
 	cpDir := CheckpointDir
 	options := OptionMapType{
 		"endpoint":         &payerBucketEndPoint,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"stsToken":         &str,
 		"configFile":       &configFile,
@@ -898,7 +898,7 @@ func (s *OssutilCommandSuite) initCopyCommand(srcURL, destURL string, recursive,
 	partSize := strconv.FormatInt(DefaultPartSize, 10)
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"stsToken":         &str,
 		"configFile":       &configFile,
@@ -924,7 +924,7 @@ func (s *OssutilCommandSuite) initCopyWithSnapshot(srcURL, destURL string, recur
 	cpDir := CheckpointDir
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"stsToken":         &str,
 		"configFile":       &configFile,
@@ -950,7 +950,7 @@ func (s *OssutilCommandSuite) initCopyWithRange(srcURL, destURL string, recursiv
 	cpDir := CheckpointDir
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"stsToken":         &str,
 		"configFile":       &configFile,
@@ -999,7 +999,7 @@ func (s *OssutilCommandSuite) rawGetStatWithArgs(args []string) (bool, error) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1070,7 +1070,7 @@ func (s *OssutilCommandSuite) rawSetACLWithArgs(args []string, recursive, bucket
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1090,7 +1090,7 @@ func (s *OssutilCommandSuite) rawSetAclWithFilter(args []string, recursive, forc
 
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1112,7 +1112,7 @@ func (s *OssutilCommandSuite) initSetACL(bucket, object, acl string, recursive, 
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1146,7 +1146,7 @@ func (s *OssutilCommandSuite) initSetACLWithArgs(args []string, cmdline string, 
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1187,7 +1187,7 @@ func (s *OssutilCommandSuite) rawSetMetaWithArgs(args []string, update, delete, 
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1214,7 +1214,7 @@ func (s *OssutilCommandSuite) rawSetMetaWithArgsWithPattern(args []string, updat
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1237,7 +1237,7 @@ func (s *OssutilCommandSuite) rawSetMetaWithFilter(args []string, update, delete
 
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1316,7 +1316,7 @@ func (s *OssutilCommandSuite) initSetMeta(bucket, object, meta string, update, d
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1362,7 +1362,7 @@ func (s *OssutilCommandSuite) initSetMetaWithArgs(args []string, cmdline string,
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1396,7 +1396,7 @@ func (s *OssutilCommandSuite) initCreateSymlink(cmdline string) error {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1441,7 +1441,7 @@ func (s *OssutilCommandSuite) initReadSymlink(cmdline string) error {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1465,7 +1465,7 @@ func (s *OssutilCommandSuite) initSignURL(cmdline, encodingType string, timeout 
 	t := strconv.FormatInt(timeout, 10)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1536,7 +1536,7 @@ func (s *OssutilCommandSuite) initRestoreObject(args []string, cmdline string, o
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1740,7 +1740,7 @@ func (s *OssutilCommandSuite) TestErrOssDownloadFile(c *C) {
 	partSize := strconv.FormatInt(DefaultPartSize, 10)
 	options := OptionMapType{
 		"endpoint":         &str,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"stsToken":         &str,
 		"configFile":       &configFile,
@@ -1807,7 +1807,7 @@ func (s *OssutilCommandSuite) TestNeedConfig(c *C) {
 	e := "a"
 	options := OptionMapType{
 		"endpoint":         &e,
-		"accessKeyID":      &str,
+		"accessKeyId":      &str,
 		"accessKeySecret":  &str,
 		"stsToken":         &str,
 		"configFile":       &str,

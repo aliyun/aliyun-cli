@@ -52,7 +52,7 @@ func (s *OssutilCommandSuite) TestWebsitePutSuccess(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -68,7 +68,7 @@ func (s *OssutilCommandSuite) TestWebsitePutSuccess(c *C) {
 	strMethod = "get"
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -111,7 +111,7 @@ func (s *OssutilCommandSuite) TestWebsitePutError(c *C) {
 	strMethod := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -197,7 +197,7 @@ func (s *OssutilCommandSuite) TestWebsiteOptionsEmptyEndpoint(c *C) {
 	strMethod := "get"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -209,7 +209,7 @@ func (s *OssutilCommandSuite) TestWebsiteOptionsEmptyEndpoint(c *C) {
 	oldConfigStr, err := ioutil.ReadFile(configFile)
 	c.Assert(err, IsNil)
 	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyId=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
 	fd.WriteString(configStr)
 	fd.Close()
 
@@ -262,7 +262,7 @@ func (s *OssutilCommandSuite) TestWebsiteGetConfirm(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -278,7 +278,7 @@ func (s *OssutilCommandSuite) TestWebsiteGetConfirm(c *C) {
 	strMethod = "get"
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -341,7 +341,7 @@ func (s *OssutilCommandSuite) TestWebsiteDelete(c *C) {
 	strMethod := "put"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -357,7 +357,7 @@ func (s *OssutilCommandSuite) TestWebsiteDelete(c *C) {
 	strMethod = "get"
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,

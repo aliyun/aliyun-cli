@@ -26,7 +26,7 @@ func (s *OssutilCommandSuite) TestAppendFileSuccessWithoutMeta(c *C) {
 	var str string
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -47,7 +47,7 @@ func (s *OssutilCommandSuite) TestAppendFileSuccessWithoutMeta(c *C) {
 	cpDir := CheckpointDir
 	cpOptions := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"checkpointDir":   &cpDir,
@@ -86,7 +86,7 @@ func (s *OssutilCommandSuite) TestAppendFileSuccessWithMeta(c *C) {
 	strMeta := "x-oss-meta-author:luxun"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -104,7 +104,7 @@ func (s *OssutilCommandSuite) TestAppendFileSuccessWithMeta(c *C) {
 	cpDir := CheckpointDir
 	cpOptions := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"checkpointDir":   &cpDir,
@@ -121,7 +121,7 @@ func (s *OssutilCommandSuite) TestAppendFileSuccessWithMeta(c *C) {
 	c.Assert(strText, Equals, string(fileBody))
 
 	// check meta
-	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
+	client, err := oss.New(endpoint, accessKeyId, accessKeySecret)
 	c.Assert(err, IsNil)
 
 	bucket, err := client.Bucket(bucketName)
@@ -157,7 +157,7 @@ func (s *OssutilCommandSuite) TestAppendFileError(c *C) {
 	var str string
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -213,7 +213,7 @@ func (s *OssutilCommandSuite) TestAppendFileClientError(c *C) {
 	var str string
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -224,7 +224,7 @@ func (s *OssutilCommandSuite) TestAppendFileClientError(c *C) {
 	c.Assert(err, IsNil)
 
 	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyId=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
 	fd.WriteString(configStr)
 	fd.Close()
 
@@ -258,7 +258,7 @@ func (s *OssutilCommandSuite) TestAppendFileObjectExistMetaError(c *C) {
 	strMeta := "x-oss-meta-author:luxun"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -291,7 +291,7 @@ func (s *OssutilCommandSuite) TestAppendFileParserMetaError(c *C) {
 	strMeta := "x-oss-meta-author#luxun"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -323,7 +323,7 @@ func (s *OssutilCommandSuite) TestAppendFileAppendFromFileError(c *C) {
 	var testCommand AppendFileCommand
 	testCommand.afOption.fileName = randLowStr(12)
 
-	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
+	client, err := oss.New(endpoint, accessKeyId, accessKeySecret)
 	c.Assert(err, IsNil)
 
 	bucket, err := client.Bucket(bucketName)
@@ -372,7 +372,7 @@ func (s *OssutilCommandSuite) TestAppendFileWithPayer(c *C) {
 	requester := "requester"
 	options := OptionMapType{
 		"endpoint":        &payerBucketEndPoint,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -390,7 +390,7 @@ func (s *OssutilCommandSuite) TestAppendFileWithPayer(c *C) {
 	cpDir := CheckpointDir
 	cpOptions := OptionMapType{
 		"endpoint":        &payerBucketEndPoint,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"checkpointDir":   &cpDir,

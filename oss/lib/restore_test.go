@@ -405,7 +405,7 @@ func (s *OssutilCommandSuite) TestRestoreObjectWithPayerError400(c *C) {
 	requester := "requester"
 	options := OptionMapType{
 		"endpoint":        &payerBucketEndPoint,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,

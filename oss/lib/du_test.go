@@ -47,7 +47,7 @@ func (s *OssutilCommandSuite) TestDuObjectSize(c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &ConfigFile,
 	}
@@ -104,7 +104,7 @@ func (s *OssutilCommandSuite) TestDuPartSize(c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &ConfigFile,
 	}
@@ -150,7 +150,7 @@ func (s *OssutilCommandSuite) TestDuObjectAndPartSize(c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &ConfigFile,
 	}
@@ -189,7 +189,7 @@ func (s *OssutilCommandSuite) TestDuPayerObject(c *C) {
 	requester := "requester"
 	options := OptionMapType{
 		"endpoint":        &payerBucketEndPoint,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &ConfigFile,
@@ -216,7 +216,7 @@ func (s *OssutilCommandSuite) TestDuPayerErrorObject(c *C) {
 	requester := "requester_test"
 	options := OptionMapType{
 		"endpoint":        &payerBucketEndPoint,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &ConfigFile,
@@ -235,7 +235,7 @@ func (s *OssutilCommandSuite) TestDuPayerErrorObject(c *C) {
 
 func (s *OssutilCommandSuite) TestDuPayerPart(c *C) {
 	bucketName := payerBucket
-	client, err := oss.New(payerBucketEndPoint, accessKeyID, accessKeySecret)
+	client, err := oss.New(payerBucketEndPoint, accessKeyId, accessKeySecret)
 	bucket, err := client.Bucket(bucketName)
 
 	content_len := 100
@@ -256,7 +256,7 @@ func (s *OssutilCommandSuite) TestDuPayerPart(c *C) {
 	requester := "requester"
 	options := OptionMapType{
 		"endpoint":        &payerBucketEndPoint,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &ConfigFile,
@@ -297,7 +297,7 @@ func (s *OssutilCommandSuite) TestDuVersionsObjectAndStorageClass(c *C) {
 	strMethod := "put"
 	versionsOptions := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -339,7 +339,7 @@ func (s *OssutilCommandSuite) TestDuVersionsObjectAndStorageClass(c *C) {
 	command := "du"
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &ConfigFile,
 		"allVersions":     &allVersions,

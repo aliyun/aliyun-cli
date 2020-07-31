@@ -66,7 +66,7 @@ var specChineseConfig = SpecText{
         或者非法，将采用默认语言：` + DefaultLanguage + `。
             注意：该配置项在此次config成功结束后才会生效，在执行config命令过
         程中语言显示不会受用户的选择影响。
-        (3) endpoint, accessKeyID, accessKeySecret
+        (3) endpoint, accessKeyId, accessKeySecret
             回车代表着跳过相应配置项的设置。注意：endpoint应该为一个二级域
         名(SLD)，例如：` + DefaultEndpoint + `。
             以上选项一般为必选项。
@@ -121,7 +121,7 @@ var specChineseConfig = SpecText{
     [Credentials]
         language = CH 
         endpoint = ` + DefaultEndpoint + `
-        accessKeyID = your_key_id
+        accessKeyId = your_key_id
         accessKeySecret = your_key_secret
         stsToken = your_sts_token
         outputDir = your_output_dir
@@ -207,7 +207,7 @@ Usage:
         default language: ` + DefaultLanguage + `.
             Notice that the configuration will go into effect after the config 
         command successfully executed, it's dimmed while execute the command.
-        (3) endpoint, accessKeyID, accessKeySecret
+        (3) endpoint, accessKeyId, accessKeySecret
             Carriage return means skip the configuration of these options.
         Note: Endpoint means a second-level domain(SLD), eg: ` + DefaultEndpoint + `.
             The three options are necessary in normal condition.
@@ -264,7 +264,7 @@ Credential File Format:
     [Credentials]
         language = EN 
         endpoint = ` + DefaultEndpoint + ` 
-        accessKeyID = your_key_id
+        accessKeyId = your_key_id
         accessKeySecret = your_key_secret
         stsToken = your_sts_token
         outputDir = your_output_dir
@@ -301,7 +301,7 @@ var configCommand = ConfigCommand{
 		validOptionNames: []string{
 			OptionConfigFile,
 			OptionEndpoint,
-			OptionAccessKeyID,
+			OptionAccessKeyId,
 			OptionAccessKeySecret,
 			OptionSTSToken,
 			OptionOutputDir,

@@ -21,7 +21,7 @@ func (s *OssutilCommandSuite) TestListLoadConfig(c *C) {
 	limitedNum := strconv.FormatInt(-1, 10)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -34,7 +34,7 @@ func (s *OssutilCommandSuite) TestListLoadConfig(c *C) {
 	args = []string{"oss://"}
 	options = OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -53,7 +53,7 @@ func (s *OssutilCommandSuite) TestListNotExistConfigFile(c *C) {
 	limitedNum := strconv.FormatInt(-1, 10)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -74,7 +74,7 @@ func (s *OssutilCommandSuite) TestListErrConfigFile(c *C) {
 	limitedNum := strconv.FormatInt(-1, 10)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -89,7 +89,7 @@ func (s *OssutilCommandSuite) TestListErrConfigFile(c *C) {
 
 func (s *OssutilCommandSuite) TestListConfigFile(c *C) {
 	cfile := randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\nretryTimes=%s", endpoint, accessKeyID, accessKeySecret, "errretry")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\nretryTimes=%s", endpoint, accessKeyId, accessKeySecret, "errretry")
 	s.createFile(cfile, data, c)
 
 	command := "ls"
@@ -98,7 +98,7 @@ func (s *OssutilCommandSuite) TestListConfigFile(c *C) {
 	limitedNum := strconv.FormatInt(-1, 10)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -115,7 +115,7 @@ func (s *OssutilCommandSuite) TestListWithBucketEndpoint(c *C) {
 	bucketName := bucketNameExist
 
 	cfile := randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s", "abc", accessKeyID, accessKeySecret, bucketName, endpoint)
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s", "abc", accessKeyId, accessKeySecret, bucketName, endpoint)
 	s.createFile(cfile, data, c)
 
 	command := "ls"
@@ -124,7 +124,7 @@ func (s *OssutilCommandSuite) TestListWithBucketEndpoint(c *C) {
 	limitedNum := strconv.FormatInt(-1, 10)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -142,7 +142,7 @@ func (s *OssutilCommandSuite) TestListWithBucketCname(c *C) {
 	s.putBucket(bucketName, c)
 
 	cfile := randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s\n[Bucket-Cname]\n%s=%s", "abc", accessKeyID, accessKeySecret, bucketName, "abc", bucketName, bucketName+"."+endpoint)
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s\n[Bucket-Cname]\n%s=%s", "abc", accessKeyId, accessKeySecret, bucketName, "abc", bucketName, bucketName+"."+endpoint)
 	s.createFile(cfile, data, c)
 
 	command := "ls"
@@ -151,7 +151,7 @@ func (s *OssutilCommandSuite) TestListWithBucketCname(c *C) {
 	limitedNum := strconv.FormatInt(-1, 10)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -174,7 +174,7 @@ func (s *OssutilCommandSuite) TestListObjectsBucketNotExist(c *C) {
 	limitedNum := strconv.FormatInt(-1, 10)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -298,7 +298,7 @@ func (s *OssutilCommandSuite) TestListIDKey(c *C) {
 	s.putBucket(bucketName, c)
 
 	cfile := randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
 	s.createFile(cfile, data, c)
 
 	command := "ls"
@@ -307,7 +307,7 @@ func (s *OssutilCommandSuite) TestListIDKey(c *C) {
 	limitedNum := strconv.FormatInt(-1, 10)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -318,7 +318,7 @@ func (s *OssutilCommandSuite) TestListIDKey(c *C) {
 
 	options = OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -337,7 +337,7 @@ func (s *OssutilCommandSuite) TestListBucketIDKey(c *C) {
 	bucketName := bucketNameExist
 
 	cfile := randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s\n[Bucket-Endpoint]\n%s=%s[Bucket-Cname]\n%s=%s", "abc", "def", "ghi", bucketName, "abc", bucketName, "abc")
 	s.createFile(cfile, data, c)
 
 	command := "ls"
@@ -346,7 +346,7 @@ func (s *OssutilCommandSuite) TestListBucketIDKey(c *C) {
 	limitedNum := strconv.FormatInt(-1, 10)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -357,7 +357,7 @@ func (s *OssutilCommandSuite) TestListBucketIDKey(c *C) {
 
 	options = OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -373,7 +373,7 @@ func (s *OssutilCommandSuite) TestListBucketIDKey(c *C) {
 	// list without config file
 	options = OptionMapType{
 		"endpoint":        &endpoint,
-		"accessKeyID":     &accessKeyID,
+		"accessKeyId":     &accessKeyId,
 		"accessKeySecret": &accessKeySecret,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -396,7 +396,7 @@ func (s *OssutilCommandSuite) TestListMultipartUploads(c *C) {
 	limitedNum := strconv.FormatInt(-1, 10)
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -466,7 +466,7 @@ func (s *OssutilCommandSuite) TestListMultipartUploadsError(c *C) {
 	s.putBucket(bucketName, c)
 
 	cfile := randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s", endpoint, "abc", accessKeySecret)
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyId=%s\naccessKeySecret=%s", endpoint, "abc", accessKeySecret)
 	s.createFile(cfile, data, c)
 
 	command := "ls"
@@ -476,7 +476,7 @@ func (s *OssutilCommandSuite) TestListMultipartUploadsError(c *C) {
 	ok := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &cfile,
@@ -735,7 +735,7 @@ func (s *OssutilCommandSuite) TestListObjectfilterInclude(c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"limitedNum":      &limitedNum,
@@ -801,7 +801,7 @@ func (s *OssutilCommandSuite) TestListObjectfilterExclude(c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"limitedNum":      &limitedNum,
@@ -886,7 +886,7 @@ func (s *OssutilCommandSuite) TestListDirectoryfilterInclude(c *C) {
 	bDirectory := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"limitedNum":      &limitedNum,
@@ -968,7 +968,7 @@ func (s *OssutilCommandSuite) TestListDirectoryfilterExclude(c *C) {
 	bDirectory := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"limitedNum":      &limitedNum,
@@ -1033,7 +1033,7 @@ func (s *OssutilCommandSuite) TestListPartfilterInclude(c *C) {
 	bPart := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"limitedNum":      &limitedNum,
@@ -1089,7 +1089,7 @@ func (s *OssutilCommandSuite) TestListPartfilterExclude(c *C) {
 	bPart := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"limitedNum":      &limitedNum,
@@ -1154,7 +1154,7 @@ func (s *OssutilCommandSuite) TestListObjectVersionsNormal(c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"allVersions":     &allVersions,
@@ -1196,7 +1196,7 @@ func (s *OssutilCommandSuite) TestListObjectVersionsNormal(c *C) {
 	force := true
 	deleteOptions := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
 		"configFile":      &configFile,
@@ -1251,7 +1251,7 @@ func (s *OssutilCommandSuite) TestListObjectVersionsMarker(c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"allVersions":     &allVersions,
@@ -1352,7 +1352,7 @@ func (s *OssutilCommandSuite) TestListObjectfilterIncludeVersions(c *C) {
 	str := ""
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"limitedNum":      &limitedNum,
@@ -1445,7 +1445,7 @@ func (s *OssutilCommandSuite) TestListDirectoryfilterIncludeVersions(c *C) {
 	allVersions := true
 	options := OptionMapType{
 		"endpoint":        &str,
-		"accessKeyID":     &str,
+		"accessKeyId":     &str,
 		"accessKeySecret": &str,
 		"configFile":      &configFile,
 		"limitedNum":      &limitedNum,
