@@ -113,13 +113,7 @@ Examples:
 
 ```sh
 aliyun rds DescribeDBInstances --PageSize 50
-```
-
-```sh
 aliyun ecs DescribeRegions
-```
-
-```sh
 aliyun rds DescribeDBInstanceAttribute --DBInstanceId xxxxxx
 ```
 
@@ -173,6 +167,93 @@ The following two options are required when using the `--force` option:
 
 - `--version`: the API version. You can find the API version in the API documentation. For example, the ECS API version is `2014-05-26`.
 - `--endpoint`: the product endpoint. Get the product endpoint in the corresponding API documentation.
+
+### Use the `--output` parameter
+
+The query interface of Alibaba Cloud products will return json structured data, which is inconvenient to read. Example:
+
+```sh
+aliyun ecs DescribeInstances
+```
+
+Executing the above command will get the following json result:
+
+```sh
+{
+  "PageNumber": 1,
+  "TotalCount": 2,
+  "PageSize": 10,
+  "RequestId": "2B76ECBD-A296-407E-BE17-7E668A609DDA",
+  "Instances": {
+    "Instance": [
+      {
+        "ImageId": "ubuntu_16_0402_64_20G_alibase_20171227.vhd",
+        "InstanceTypeFamily": "ecs.xn4",
+        "VlanId": "",
+        "InstanceId": "i-12345678912345678123",
+        "Status": "Stopped",
+        //omit some fields
+      },
+      Instance": [
+      {
+        "ImageId": "ubuntu_16_0402_64_20G_alibase_20171227.vhd",
+        "InstanceTypeFamily": "ecs.xn4",
+        "VlanId": "",
+        "InstanceId": "i-abcdefghijklmnopqrst",
+        "Status": "Running",
+        //omit some fields
+      },
+    ]
+  }
+}
+```
+
+You can use the `--output` parameter to extract the fields of interest in the results and perform tabular output. Example:
+
+```sh
+aliyun ecs DescribeInstances --output cols=InstanceId,Status rows=Instances.Instance[]
+```
+
+Executing the above command will get the following result:
+
+```sh
+InstanceId             | Status
+-----------------------|--------
+i-12345678912345678123 | Stopped
+i-abcdefghijklmnopqrst | Running
+```
+
+When using the `--output` parameter, the following sub-parameters must be specified:
+
+- `cols`: The column names of the table, which need to correspond to the fields in the json data. For example, the InstanceId and Status fields in the result returned by the ECS DescribeInstances interface.
+
+Optional sub-parameters:
+
+- `rows`: Use the jmespath query statement to specify the data source of the table row in the json result.
+
+### Use `--waiter` parameter
+
+This parameter is used to poll the instance information until a specific state appears.
+
+For example, after creating an instance using ECS, the instance will have a startup process. We will continue to query the running status of the instance until the status becomes "Running".
+
+Example:
+
+```sh
+aliyun ecs DescribeInstances --InstanceIds '["i-12345678912345678123"]' --waiter expr='Instances.Instance[0].Status' to=Running
+```
+
+After executing the above command, the command line program will poll the instance status at a certain time interval and stop polling when the instance status becomes Running.
+
+When using the `--waiter` parameter, you must specify the following two sub-parameters:
+
+- `expr`: Specify the polled field in the json result through the jmespath query statement.
+- `to`: The target value of the polled field.
+
+Optional sub-parameters:
+
+- `timeout`: polling timeout time (seconds).
+- `interval`: polling interval (seconds).
 
 ### Special argument
 
