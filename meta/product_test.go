@@ -20,7 +20,7 @@ import (
 	"testing"
 )
 
-func TestProduct_GetLowerCodeAndGetDocumentLink(t *testing.T) {
+func TestProduct_GetLowerCode(t *testing.T) {
 	product := &Product{
 		Code: "code",
 	}

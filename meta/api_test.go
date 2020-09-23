@@ -128,17 +128,6 @@ func TestApi_ForeachParameters(t *testing.T) {
 	assert.Equal(t, api.Parameters[0].SubParameters[0].Name, "subparameters")
 }
 
-func TestApi_GetDocumentLink(t *testing.T) {
-	api := &Api{
-		Name: "apitest",
-		Product: &Product{
-			Code: "code",
-		},
-	}
-	link := api.GetDocumentLink()
-	assert.Equal(t, link, "https://help.aliyun.com/api/code/apitest.html")
-}
-
 func TestApi_CheckRequiredParameters(t *testing.T) {
 	api := &Api{
 		Parameters: []Parameter{

@@ -99,10 +99,6 @@ func findParameterInner(params []Parameter, name string) *Parameter {
 	return nil
 }
 
-func (a *Api) GetDocumentLink() string {
-	return fmt.Sprintf("https://help.aliyun.com/api/%s/%s.html", strings.ToLower(a.Product.Code), a.Name)
-}
-
 func (a *Api) CheckRequiredParameters(checker func(string) bool) error {
 	missing := false
 	s := ""
