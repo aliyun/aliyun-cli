@@ -136,14 +136,10 @@ func (a *Library) PrintApiUsage(productCode string, apiName string) error {
 
 	if product.ApiStyle == "restful" {
 		cli.Printf(a.writer, "\nProduct:     %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
-		// cli.Printf("Api: %s %s\n", api.Name, api.Description[i18n.GetLanguage()])
-		cli.Printf(a.writer, "Link:        %s\n", api.GetDocumentLink())
 		cli.Printf(a.writer, "Method:      %s\n", api.Method)
 		cli.Printf(a.writer, "PathPattern: %s\n", api.PathPattern)
 	} else {
 		cli.Printf(a.writer, "\nProduct: %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
-		// cli.Printf("Api: %s %s\n", api.Name, api.Description[i18n.GetLanguage()])
-		cli.Printf(a.writer, "Link:    %s\n", api.GetDocumentLink())
 	}
 
 	cli.Printf(a.writer, "\nParameters:\n")

@@ -79,8 +79,8 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 
 	if err != nil {
 		return cli.NewErrorWithTip(err,
-			"See %s or use `aliyun %s %s --help` to get more information",
-			api.GetDocumentLink(), api.Product.GetLowerCode(), api.Name)
+			"use `aliyun %s %s --help` to get more information",
+			api.Product.GetLowerCode(), api.Name)
 	}
 	return nil
 }
