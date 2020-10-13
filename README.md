@@ -28,6 +28,9 @@ The Alibaba Cloud CLI is a tool to manage and use Alibaba Cloud resources throug
 
 > **Note**: Alibaba Cloud CLI access the Alibaba Cloud services through OpenAPI. Before using Alibaba Cloud CLI, make sure that you have activated the service to use and known how to use OpenAPI.
 
+## Troubleshoot
+[Troubleshoot](https://troubleshoot.api.aliyun.com/?source=github_sdk) Provide OpenAPI diagnosis service to help developers locate quickly and provide solutions for developers through `RequestID` or `error message`.
+
 ## CLI Releases
 
 The release notes for the CLI can be found in the [CHANGELOG](./CHANGELOG.md)

@@ -30,6 +30,9 @@
 
 **注意**：阿里云CLI使用OpenAPI方式访问云产品，确保您已经开通了要使用的云产品并了解该产品的OpenAPI的使用。您可以在[阿里云API平台](https://developer.aliyun.com/api)获取产品 API 文档，了解 API 的使用方式及参数列表。
 
+## 使用诊断
+[Troubleshoot](https://troubleshoot.api.aliyun.com/?source=github_sdk) 提供 OpenAPI 使用诊断服务，通过 `RequestID` 或 `报错信息` ，帮助开发者快速定位，为开发者提供解决方案。
+
 ## CLI Releases
 
 CLI 版本更改说明请参考 [CHANGELOG](./CHANGELOG.md)
