@@ -28,6 +28,9 @@ The Alibaba Cloud CLI is a tool to manage and use Alibaba Cloud resources throug
 
 > **Note**: Alibaba Cloud CLI access the Alibaba Cloud services through OpenAPI. Before using Alibaba Cloud CLI, make sure that you have activated the service to use and known how to use OpenAPI.
 
+## Troubleshoot
+[Troubleshoot](https://troubleshoot.api.aliyun.com/?source=github_sdk) Provide OpenAPI diagnosis service to help developers locate quickly and provide solutions for developers through `RequestID` or `error message`.
+
 ## CLI Releases
 
 The release notes for the CLI can be found in the [CHANGELOG](./CHANGELOG.md)
@@ -38,11 +41,11 @@ The release notes for the CLI can be found in the [CHANGELOG](./CHANGELOG.md)
 
   Download the installer, then extract the installer. You can move the extracted `aliyun` executable file to the `/usr/local/bin` directory or add it to the `$PATH`.
 
-  Download link: (3.0.59)
+  Download link: (3.0.60)
 
-  - [Mac](https://aliyuncli.alicdn.com/aliyun-cli-macosx-3.0.59-amd64.tgz)
-  - [Linux](https://aliyuncli.alicdn.com/aliyun-cli-linux-3.0.59-amd64.tgz)
-  - [Windows (64 bit)](https://aliyuncli.alicdn.com/aliyun-cli-windows-3.0.59-amd64.zip)
+  - [Mac](https://aliyuncli.alicdn.com/aliyun-cli-macosx-3.0.60-amd64.tgz)
+  - [Linux](https://aliyuncli.alicdn.com/aliyun-cli-linux-3.0.60-amd64.tgz)
+  - [Windows (64 bit)](https://aliyuncli.alicdn.com/aliyun-cli-windows-3.0.60-amd64.zip)
 
 - **Use brew**
 If you have installed `brew` in your computer, you can use it to install Alibaba Cloud CLI as following:
