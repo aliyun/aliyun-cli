@@ -71,7 +71,7 @@ Aliyun Access Key ID [None]: <Your AccessKey ID>
 Aliyun Access Key Secret [None]: <Your AccessKey Secret>
 Default Region Id [None]: cn-hangzhou
 Default output format [json]: json
-Default Languate [zh]: zh
+Default Language [zh]: zh
 ```
 
 ### Configure authentication methods
