@@ -111,6 +111,8 @@ func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
 	case RsaKeyPair:
 		profile.PrivateKey = PrivateKeyFlag(flags).GetStringOrDefault(profile.PrivateKey)
 		profile.KeyPairName = KeyPairNameFlag(flags).GetStringOrDefault(profile.KeyPairName)
+	case External:
+		profile.ProcessCommand = ProcessCommandFlag(flags).GetStringOrDefault(profile.ProcessCommand)
 	}
 	profile.RegionId = RegionFlag(flags).GetStringOrDefault(profile.RegionId)
 	profile.Language = LanguageFlag(flags).GetStringOrDefault(profile.Language)

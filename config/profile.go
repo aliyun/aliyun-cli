@@ -18,8 +18,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
@@ -39,6 +41,7 @@ const (
 	EcsRamRole        = AuthenticateMode("EcsRamRole")
 	RsaKeyPair        = AuthenticateMode("RsaKeyPair")
 	RamRoleArnWithEcs = AuthenticateMode("RamRoleArnWithRoleName")
+	External          = AuthenticateMode("External")
 )
 
 type Profile struct {
@@ -61,6 +64,7 @@ type Profile struct {
 	ReadTimeout     int              `json:"retry_timeout"`
 	ConnectTimeout  int              `json:"connect_timeout"`
 	RetryCount      int              `json:"retry_count"`
+	ProcessCommand  string           `json:"process_command"`
 	parent          *Configuration   //`json:"-"`
 }
 
@@ -117,10 +121,13 @@ func (cp *Profile) Validate() error {
 		if cp.KeyPairName == "" {
 			return fmt.Errorf("invailed key_pair_name")
 		}
+	case External:
+		if cp.ProcessCommand == "" {
+			return fmt.Errorf("invailed process_command")
+		}
 	default:
 		return fmt.Errorf("invailed mode: %s", cp.Mode)
 	}
-
 	return nil
 }
 
@@ -144,6 +151,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.ConnectTimeout = ConnectTimeoutFlag(ctx.Flags()).GetIntegerOrDefault(cp.ConnectTimeout)
 	cp.RetryCount = RetryCountFlag(ctx.Flags()).GetIntegerOrDefault(cp.RetryCount)
 	cp.ExpiredSeconds = ExpiredSecondsFlag(ctx.Flags()).GetIntegerOrDefault(cp.ExpiredSeconds)
+	cp.ProcessCommand = ProcessCommandFlag(ctx.Flags()).GetStringOrDefault(cp.ProcessCommand)
 
 	if cp.AccessKeyId == "" {
 		switch {
@@ -199,6 +207,8 @@ func AutoModeRecognition(cp *Profile) {
 		cp.Mode = RsaKeyPair
 	} else if cp.RamRoleName != "" {
 		cp.Mode = EcsRamRole
+	} else if cp.ProcessCommand != "" {
+		cp.Mode = External
 	}
 }
 
@@ -233,6 +243,8 @@ func (cp *Profile) GetClient(ctx *cli.Context) (*sdk.Client, error) {
 		client, err = cp.GetClientByPrivateKey(config)
 	case RamRoleArnWithEcs:
 		client, err = cp.GetClientByRamRoleArnWithEcs(config)
+	case External:
+		return cp.GetClientByExternal(config, ctx)
 	default:
 		client, err = nil, fmt.Errorf("unexcepted certificate mode: %s", cp.Mode)
 	}
@@ -334,6 +346,22 @@ func (cp *Profile) GetClientByPrivateKey(config *sdk.Config) (*sdk.Client, error
 	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
+}
+
+func (cp *Profile) GetClientByExternal(config *sdk.Config, ctx *cli.Context) (*sdk.Client, error) {
+	args := strings.Fields(cp.ProcessCommand)
+	cmd := exec.Command(args[0], args[1:]...)
+	buf, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(buf, cp)
+	if err != nil {
+		fmt.Println(cp.ProcessCommand)
+		fmt.Println(string(buf))
+		return nil, err
+	}
+	return cp.GetClient(ctx)
 }
 
 func IsRegion(region string) bool {
