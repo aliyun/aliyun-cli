@@ -108,11 +108,21 @@ func TestDoConfigureSet(t *testing.T) {
 	w.Reset()
 	doConfigureSet(w, fs)
 	assert.Empty(t, w.String())
-	
+
 	//RsaKeyPair
 	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
 		return func(path string, w io.Writer) (Configuration, error) {
 			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: RsaKeyPair, KeyPairName: "KeyPairName", PrivateKey: "PrivateKey", AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json", RegionId: "cn-hangzhou"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+		}
+	}
+	w.Reset()
+	doConfigureSet(w, fs)
+	assert.Empty(t, w.String())
+
+	//External
+	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
+		return func(path string, w io.Writer) (Configuration, error) {
+			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: External, ProcessCommand: "process command", OutputFormat: "json", RegionId: "cn-hangzhou"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
 	w.Reset()

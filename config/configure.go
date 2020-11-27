@@ -14,9 +14,11 @@
 package config
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 
@@ -107,6 +109,9 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 		case RsaKeyPair:
 			cp.Mode = RsaKeyPair
 			configureRsaKeyPair(w, &cp)
+		case External:
+			cp.Mode = External
+			configureExternal(w, &cp)
 		default:
 			return fmt.Errorf("unexcepted authenticate mode: %s", mode)
 		}
@@ -218,9 +223,18 @@ func configureRsaKeyPair(w io.Writer, cp *Profile) error {
 	return nil
 }
 
+func configureExternal(w io.Writer, cp *Profile) error {
+	cli.Printf(w, "Process Command [%s]: ", cp.ProcessCommand)
+	cp.ProcessCommand = ReadInput(cp.ProcessCommand)
+	return nil
+}
+
 func ReadInput(defaultValue string) string {
 	var s string
-	fmt.Scanf("%s\n", &s)
+	scanner := bufio.NewScanner(os.Stdin)
+	if scanner.Scan() {
+		s = scanner.Text()
+	}
 	if s == "" {
 		return defaultValue
 	}

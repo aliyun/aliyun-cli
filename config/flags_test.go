@@ -204,6 +204,25 @@ func TestAddFlag(t *testing.T) {
 			DefaultValue: "",
 			Persistent:   false,
 		}
+		newProcessCommandFlag = &cli.Flag{
+			Category:     "config",
+			Name:         ProcessCommandFlagName,
+			AssignedMode: cli.AssignedOnce,
+			Short: i18n.T(
+				"use `--process-command <ProcessCommand>` to specify external program execution command",
+				"使用 `--process-command <ProcessCommand>` 指定外部程序运行命令",
+			),
+			Long:         nil,
+			Required:     false,
+			Aliases:      nil,
+			Hidden:       false,
+			Validate:     nil,
+			Fields:       nil,
+			ExcludeWith:  nil,
+			Shorthand:    0,
+			DefaultValue: "",
+			Persistent:   false,
+		}
 		newRegionFlag = &cli.Flag{
 			Category:     "config",
 			Name:         RegionFlagName,
@@ -364,6 +383,9 @@ func TestAddFlag(t *testing.T) {
 
 	f = NewKeyPairNameFlag()
 	assert.Equal(t, newKeyPairNameFlag, f)
+
+	f = NewProcessCommandFlag()
+	assert.Equal(t, newProcessCommandFlag, f)
 
 	f = NewRegionFlag()
 	assert.Equal(t, newRegionFlag, f)

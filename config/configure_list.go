@@ -67,6 +67,8 @@ func doConfigureList(w io.Writer) {
 			cred = "arn:" + "***" + GetLastChars(pf.AccessKeyId, 3)
 		case RsaKeyPair:
 			cred = "RsaKeyPair:" + pf.KeyPairName
+		case External:
+			cred = "ProcessCommand:" + pf.ProcessCommand
 		}
 		fmt.Fprintf(tw, "%s\t| %s\t| %s\t| %s\t| %s\n", name, cred, valid, pf.RegionId, pf.Language)
 	}

@@ -37,6 +37,7 @@ const (
 	SkipSecureVerifyName    = "skip-secure-verify"
 	ConfigurePathFlagName   = "config-path"
 	ExpiredSecondsFlagName  = "expired-seconds"
+	ProcessCommandFlagName  = "process-command"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -58,6 +59,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewRetryCountFlag())
 	fs.Add(NewSkipSecureVerify())
 	fs.Add(NewExpiredSecondsFlag())
+	fs.Add(NewProcessCommandFlag())
 }
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ConnectTimeoutFlagName)
@@ -127,6 +129,9 @@ func ConfigurePathFlag(fs *cli.FlagSet) *cli.Flag {
 }
 func ExpiredSecondsFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ExpiredSecondsFlagName)
+}
+func ProcessCommandFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(ProcessCommandFlagName)
 }
 
 //var OutputFlag = &cli.Flag{Category: "config",
@@ -242,6 +247,18 @@ func NewKeyPairNameFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--key-pair-name <KeyPairName>` to assign KeyPairName",
 			"使用 `--key-pair-name <KeyPairName>` 指定KeyPairName")}
+}
+
+func NewProcessCommandFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         ProcessCommandFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--process-command <ProcessCommand>` to specify external program execution command",
+			"使用 `--process-command <ProcessCommand>` 指定外部程序运行命令",
+		),
+	}
 }
 
 func NewRegionFlag() *cli.Flag {

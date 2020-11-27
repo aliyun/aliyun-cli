@@ -179,6 +179,14 @@ func TestConfigureRsaKeyPair(t *testing.T) {
 		assert.EqualError(t, err, "read key file  failed open : no such file or directory")
 	}
 }
+
+func TestConfigureExternal(t *testing.T) {
+	w := new(bytes.Buffer)
+	err := configureExternal(w, &Profile{Name: "default", Mode: External, ProcessCommand: "process command", RegionId: "cn-hangzhou", OutputFormat: "json"})
+	assert.Equal(t, "Process Command [process command]: ", w.String())
+	assert.Nil(t, err)
+}
+
 func TestReadInput(t *testing.T) {
 	assert.Equal(t, "default", ReadInput("default"))
 }
