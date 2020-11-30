@@ -87,6 +87,72 @@ The following are supported authentication methods:
 | RamRoleArn             | Use the AssumeRole to access Alibaba Cloud services          |
 | EcsRamRole             | Use the EcsRamRole to access ECS resources                   |
 
+### Use an external program to get credentials
+
+You can use `--mode External` to specify to obtain credential data through an external program, and CLI will execute the program command and return it as a credential to initiate the call.
+
+Agreement： 
+1. The output location of the external program is standard output.
+2. The output format is json string.
+3. The output contains the key fields required by the CLI and credential fields
+
+Key field:
+- mode: Specify the type of credentials returned
+
+Example of the return of each credential type:
+- AK
+
+```json
+{
+  "mode": "AK",
+  "access_key_id": "accessKeyId",
+  "access_key_secret": "accessKeySecret"
+}
+```
+
+- StsToken
+
+```json
+{
+  "mode": "StsToken",
+  "access_key_id": "accessKeyId",
+  "access_key_secret": "accessKeySecret",
+  "sts_token": "stsToken"
+}
+```
+
+- RamRoleArn
+
+```json
+{
+  "mode": "RamRoleArn",
+  "access_key_id": "accessKeyId",
+  "access_key_secret": "accessKeySecret",
+  "ram_role_arn": "ramRoleArn",
+  "ram_session_name": "ramSessionName"
+}
+```
+
+- EcsRamRole
+
+```json
+{
+    "mode": "EcsRamRole",
+    "ram_role_name": "ramRoleName"
+}
+```
+
+#### Example:
+```shell
+$ aliyun configure --mode External --profile externalTest
+Configuring profile 'externalTest' in 'External' authenticate mode...
+Process Command []: <getCredential ak>
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] en: 
+Saving profile[externalTest] ...Done.
+```
+
 ### Enable bash/zsh auto completion
 
 - Use `aliyun auto-completion` command to enable auto completion in zsh/bash

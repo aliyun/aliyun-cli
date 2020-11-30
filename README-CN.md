@@ -89,6 +89,72 @@ Saving profile[akProfile] ...Done.
 | RamRoleArn | 使用RAM子账号的AssumeRole方式访问     |
 | EcsRamRole | 在ECS实例上通过EcsRamRole实现免密验证 |
 
+### 使用外部程序获取凭证
+
+您可以使用 `--mode External` 指定通过外部程序获取凭证数据，CLI将会以执行该程序命令并其返回作为凭证来发起调用。
+
+约定： 
+1. 外部程序输出位置为标准输出
+2. 输出为json结构字符串
+3. 输出包含关键字段以及凭证字段
+
+关键字段:
+- mode: 指定返回凭证类型
+
+各凭证返回结构示例:
+- AK
+
+```json
+{
+  "mode": "AK",
+  "access_key_id": "accessKeyId",
+  "access_key_secret": "accessKeySecret"
+}
+```
+
+- StsToken
+
+```json
+{
+  "mode": "StsToken",
+  "access_key_id": "accessKeyId",
+  "access_key_secret": "accessKeySecret",
+  "sts_token": "stsToken"
+}
+```
+
+- RamRoleArn
+
+```json
+{
+  "mode": "RamRoleArn",
+  "access_key_id": "accessKeyId",
+  "access_key_secret": "accessKeySecret",
+  "ram_role_arn": "ramRoleArn",
+  "ram_session_name": "ramSessionName"
+}
+```
+
+- EcsRamRole
+
+```json
+{
+    "mode": "EcsRamRole",
+    "ram_role_name": "ramRoleName"
+}
+```
+
+#### Example:
+```shell
+$ aliyun configure --mode External --profile externalTest
+Configuring profile 'externalTest' in 'External' authenticate mode...
+Process Command []: <getCredential ak>
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] en: 
+Saving profile[externalTest] ...Done.
+```
+
 ### 启用zsh/bash自动补全
 
 - 使用`aliyun auto-completion`命令开启自动补全，目前支持zsh/bash
