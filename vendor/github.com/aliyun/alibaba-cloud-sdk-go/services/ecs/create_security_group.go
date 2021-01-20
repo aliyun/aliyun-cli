@@ -21,7 +21,6 @@ import (
 )
 
 // CreateSecurityGroup invokes the ecs.CreateSecurityGroup API synchronously
-// api document: https://help.aliyun.com/api/ecs/createsecuritygroup.html
 func (client *Client) CreateSecurityGroup(request *CreateSecurityGroupRequest) (response *CreateSecurityGroupResponse, err error) {
 	response = CreateCreateSecurityGroupResponse()
 	err = client.DoAction(request, response)
@@ -29,8 +28,6 @@ func (client *Client) CreateSecurityGroup(request *CreateSecurityGroupRequest) (
 }
 
 // CreateSecurityGroupWithChan invokes the ecs.CreateSecurityGroup API asynchronously
-// api document: https://help.aliyun.com/api/ecs/createsecuritygroup.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) CreateSecurityGroupWithChan(request *CreateSecurityGroupRequest) (<-chan *CreateSecurityGroupResponse, <-chan error) {
 	responseChan := make(chan *CreateSecurityGroupResponse, 1)
 	errChan := make(chan error, 1)
@@ -53,8 +50,6 @@ func (client *Client) CreateSecurityGroupWithChan(request *CreateSecurityGroupRe
 }
 
 // CreateSecurityGroupWithCallback invokes the ecs.CreateSecurityGroup API asynchronously
-// api document: https://help.aliyun.com/api/ecs/createsecuritygroup.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) CreateSecurityGroupWithCallback(request *CreateSecurityGroupRequest, callback func(response *CreateSecurityGroupResponse, err error)) <-chan int {
 	result := make(chan int, 1)
 	err := client.AddAsyncTask(func() {
@@ -78,6 +73,7 @@ type CreateSecurityGroupRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer          `position:"Query" name:"ResourceOwnerId"`
 	ClientToken          string                    `position:"Query" name:"ClientToken"`
+	ServiceManaged       requests.Boolean          `position:"Query" name:"ServiceManaged"`
 	Description          string                    `position:"Query" name:"Description"`
 	SecurityGroupName    string                    `position:"Query" name:"SecurityGroupName"`
 	ResourceGroupId      string                    `position:"Query" name:"ResourceGroupId"`
@@ -108,6 +104,7 @@ func CreateCreateSecurityGroupRequest() (request *CreateSecurityGroupRequest) {
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Ecs", "2014-05-26", "CreateSecurityGroup", "ecs", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

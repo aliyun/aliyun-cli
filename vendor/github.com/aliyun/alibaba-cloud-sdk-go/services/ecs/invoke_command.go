@@ -21,7 +21,6 @@ import (
 )
 
 // InvokeCommand invokes the ecs.InvokeCommand API synchronously
-// api document: https://help.aliyun.com/api/ecs/invokecommand.html
 func (client *Client) InvokeCommand(request *InvokeCommandRequest) (response *InvokeCommandResponse, err error) {
 	response = CreateInvokeCommandResponse()
 	err = client.DoAction(request, response)
@@ -29,8 +28,6 @@ func (client *Client) InvokeCommand(request *InvokeCommandRequest) (response *In
 }
 
 // InvokeCommandWithChan invokes the ecs.InvokeCommand API asynchronously
-// api document: https://help.aliyun.com/api/ecs/invokecommand.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) InvokeCommandWithChan(request *InvokeCommandRequest) (<-chan *InvokeCommandResponse, <-chan error) {
 	responseChan := make(chan *InvokeCommandResponse, 1)
 	errChan := make(chan error, 1)
@@ -53,8 +50,6 @@ func (client *Client) InvokeCommandWithChan(request *InvokeCommandRequest) (<-ch
 }
 
 // InvokeCommandWithCallback invokes the ecs.InvokeCommand API asynchronously
-// api document: https://help.aliyun.com/api/ecs/invokecommand.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) InvokeCommandWithCallback(request *InvokeCommandRequest, callback func(response *InvokeCommandResponse, err error)) <-chan int {
 	result := make(chan int, 1)
 	err := client.AddAsyncTask(func() {
@@ -85,6 +80,7 @@ type InvokeCommandRequest struct {
 	OwnerId              requests.Integer       `position:"Query" name:"OwnerId"`
 	InstanceId           *[]string              `position:"Query" name:"InstanceId"  type:"Repeated"`
 	Parameters           map[string]interface{} `position:"Query" name:"Parameters"`
+	Username             string                 `position:"Query" name:"Username"`
 }
 
 // InvokeCommandResponse is the response struct for api InvokeCommand
@@ -100,6 +96,7 @@ func CreateInvokeCommandRequest() (request *InvokeCommandRequest) {
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Ecs", "2014-05-26", "InvokeCommand", "ecs", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

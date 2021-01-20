@@ -21,7 +21,6 @@ import (
 )
 
 // DescribeDisks invokes the ecs.DescribeDisks API synchronously
-// api document: https://help.aliyun.com/api/ecs/describedisks.html
 func (client *Client) DescribeDisks(request *DescribeDisksRequest) (response *DescribeDisksResponse, err error) {
 	response = CreateDescribeDisksResponse()
 	err = client.DoAction(request, response)
@@ -29,8 +28,6 @@ func (client *Client) DescribeDisks(request *DescribeDisksRequest) (response *De
 }
 
 // DescribeDisksWithChan invokes the ecs.DescribeDisks API asynchronously
-// api document: https://help.aliyun.com/api/ecs/describedisks.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) DescribeDisksWithChan(request *DescribeDisksRequest) (<-chan *DescribeDisksResponse, <-chan error) {
 	responseChan := make(chan *DescribeDisksResponse, 1)
 	errChan := make(chan error, 1)
@@ -53,8 +50,6 @@ func (client *Client) DescribeDisksWithChan(request *DescribeDisksRequest) (<-ch
 }
 
 // DescribeDisksWithCallback invokes the ecs.DescribeDisks API asynchronously
-// api document: https://help.aliyun.com/api/ecs/describedisks.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) DescribeDisksWithCallback(request *DescribeDisksRequest, callback func(response *DescribeDisksResponse, err error)) <-chan int {
 	result := make(chan int, 1)
 	err := client.AddAsyncTask(func() {
@@ -94,9 +89,11 @@ type DescribeDisksRequest struct {
 	AdditionalAttributes          *[]string           `position:"Query" name:"AdditionalAttributes"  type:"Repeated"`
 	InstanceId                    string              `position:"Query" name:"InstanceId"`
 	ZoneId                        string              `position:"Query" name:"ZoneId"`
+	MaxResults                    requests.Integer    `position:"Query" name:"MaxResults"`
 	Status                        string              `position:"Query" name:"Status"`
 	SnapshotId                    string              `position:"Query" name:"SnapshotId"`
 	PageNumber                    requests.Integer    `position:"Query" name:"PageNumber"`
+	NextToken                     string              `position:"Query" name:"NextToken"`
 	PageSize                      requests.Integer    `position:"Query" name:"PageSize"`
 	DiskIds                       string              `position:"Query" name:"DiskIds"`
 	DeleteWithInstance            requests.Boolean    `position:"Query" name:"DeleteWithInstance"`
@@ -124,6 +121,7 @@ type DescribeDisksResponse struct {
 	TotalCount int                  `json:"TotalCount" xml:"TotalCount"`
 	PageNumber int                  `json:"PageNumber" xml:"PageNumber"`
 	PageSize   int                  `json:"PageSize" xml:"PageSize"`
+	NextToken  string               `json:"NextToken" xml:"NextToken"`
 	Disks      DisksInDescribeDisks `json:"Disks" xml:"Disks"`
 }
 
@@ -133,6 +131,7 @@ func CreateDescribeDisksRequest() (request *DescribeDisksRequest) {
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Ecs", "2014-05-26", "DescribeDisks", "ecs", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	github.com/alibabacloud-go/debug v0.0.0-20190504072949-9472017b5c68 // indirect
-	github.com/aliyun/alibaba-cloud-sdk-go v0.0.0-20191112024640-6523ede38591
+	github.com/aliyun/alibaba-cloud-sdk-go v1.61.869
 	github.com/aliyun/aliyun-oss-go-sdk v2.0.8+incompatible
 	github.com/aliyun/credentials-go v0.0.0-20190906110604-c03d72db9395
 	github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc

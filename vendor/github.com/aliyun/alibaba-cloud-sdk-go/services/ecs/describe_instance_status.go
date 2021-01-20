@@ -21,7 +21,6 @@ import (
 )
 
 // DescribeInstanceStatus invokes the ecs.DescribeInstanceStatus API synchronously
-// api document: https://help.aliyun.com/api/ecs/describeinstancestatus.html
 func (client *Client) DescribeInstanceStatus(request *DescribeInstanceStatusRequest) (response *DescribeInstanceStatusResponse, err error) {
 	response = CreateDescribeInstanceStatusResponse()
 	err = client.DoAction(request, response)
@@ -29,8 +28,6 @@ func (client *Client) DescribeInstanceStatus(request *DescribeInstanceStatusRequ
 }
 
 // DescribeInstanceStatusWithChan invokes the ecs.DescribeInstanceStatus API asynchronously
-// api document: https://help.aliyun.com/api/ecs/describeinstancestatus.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) DescribeInstanceStatusWithChan(request *DescribeInstanceStatusRequest) (<-chan *DescribeInstanceStatusResponse, <-chan error) {
 	responseChan := make(chan *DescribeInstanceStatusResponse, 1)
 	errChan := make(chan error, 1)
@@ -53,8 +50,6 @@ func (client *Client) DescribeInstanceStatusWithChan(request *DescribeInstanceSt
 }
 
 // DescribeInstanceStatusWithCallback invokes the ecs.DescribeInstanceStatus API asynchronously
-// api document: https://help.aliyun.com/api/ecs/describeinstancestatus.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) DescribeInstanceStatusWithCallback(request *DescribeInstanceStatusRequest, callback func(response *DescribeInstanceStatusResponse, err error)) <-chan int {
 	result := make(chan int, 1)
 	err := client.AddAsyncTask(func() {
@@ -83,6 +78,7 @@ type DescribeInstanceStatusRequest struct {
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	ClusterId            string           `position:"Query" name:"ClusterId"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	InstanceId           *[]string        `position:"Query" name:"InstanceId"  type:"Repeated"`
 	ZoneId               string           `position:"Query" name:"ZoneId"`
 }
 
@@ -102,6 +98,7 @@ func CreateDescribeInstanceStatusRequest() (request *DescribeInstanceStatusReque
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Ecs", "2014-05-26", "DescribeInstanceStatus", "ecs", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

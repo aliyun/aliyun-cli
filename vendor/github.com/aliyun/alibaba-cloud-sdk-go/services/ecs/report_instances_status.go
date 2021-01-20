@@ -21,7 +21,6 @@ import (
 )
 
 // ReportInstancesStatus invokes the ecs.ReportInstancesStatus API synchronously
-// api document: https://help.aliyun.com/api/ecs/reportinstancesstatus.html
 func (client *Client) ReportInstancesStatus(request *ReportInstancesStatusRequest) (response *ReportInstancesStatusResponse, err error) {
 	response = CreateReportInstancesStatusResponse()
 	err = client.DoAction(request, response)
@@ -29,8 +28,6 @@ func (client *Client) ReportInstancesStatus(request *ReportInstancesStatusReques
 }
 
 // ReportInstancesStatusWithChan invokes the ecs.ReportInstancesStatus API asynchronously
-// api document: https://help.aliyun.com/api/ecs/reportinstancesstatus.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) ReportInstancesStatusWithChan(request *ReportInstancesStatusRequest) (<-chan *ReportInstancesStatusResponse, <-chan error) {
 	responseChan := make(chan *ReportInstancesStatusResponse, 1)
 	errChan := make(chan error, 1)
@@ -53,8 +50,6 @@ func (client *Client) ReportInstancesStatusWithChan(request *ReportInstancesStat
 }
 
 // ReportInstancesStatusWithCallback invokes the ecs.ReportInstancesStatus API asynchronously
-// api document: https://help.aliyun.com/api/ecs/reportinstancesstatus.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) ReportInstancesStatusWithCallback(request *ReportInstancesStatusRequest, callback func(response *ReportInstancesStatusResponse, err error)) <-chan int {
 	result := make(chan int, 1)
 	err := client.AddAsyncTask(func() {
@@ -80,6 +75,7 @@ type ReportInstancesStatusRequest struct {
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
 	Description          string           `position:"Query" name:"Description"`
 	StartTime            string           `position:"Query" name:"StartTime"`
+	IssueCategory        string           `position:"Query" name:"IssueCategory"`
 	DiskId               *[]string        `position:"Query" name:"DiskId"  type:"Repeated"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
@@ -101,6 +97,7 @@ func CreateReportInstancesStatusRequest() (request *ReportInstancesStatusRequest
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Ecs", "2014-05-26", "ReportInstancesStatus", "ecs", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

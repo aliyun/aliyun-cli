@@ -21,7 +21,6 @@ import (
 )
 
 // DescribeSecurityGroups invokes the ecs.DescribeSecurityGroups API synchronously
-// api document: https://help.aliyun.com/api/ecs/describesecuritygroups.html
 func (client *Client) DescribeSecurityGroups(request *DescribeSecurityGroupsRequest) (response *DescribeSecurityGroupsResponse, err error) {
 	response = CreateDescribeSecurityGroupsResponse()
 	err = client.DoAction(request, response)
@@ -29,8 +28,6 @@ func (client *Client) DescribeSecurityGroups(request *DescribeSecurityGroupsRequ
 }
 
 // DescribeSecurityGroupsWithChan invokes the ecs.DescribeSecurityGroups API asynchronously
-// api document: https://help.aliyun.com/api/ecs/describesecuritygroups.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) DescribeSecurityGroupsWithChan(request *DescribeSecurityGroupsRequest) (<-chan *DescribeSecurityGroupsResponse, <-chan error) {
 	responseChan := make(chan *DescribeSecurityGroupsResponse, 1)
 	errChan := make(chan error, 1)
@@ -53,8 +50,6 @@ func (client *Client) DescribeSecurityGroupsWithChan(request *DescribeSecurityGr
 }
 
 // DescribeSecurityGroupsWithCallback invokes the ecs.DescribeSecurityGroups API asynchronously
-// api document: https://help.aliyun.com/api/ecs/describesecuritygroups.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) DescribeSecurityGroupsWithCallback(request *DescribeSecurityGroupsRequest, callback func(response *DescribeSecurityGroupsResponse, err error)) <-chan int {
 	result := make(chan int, 1)
 	err := client.AddAsyncTask(func() {
@@ -91,6 +86,7 @@ type DescribeSecurityGroupsRequest struct {
 	OwnerAccount         string                       `position:"Query" name:"OwnerAccount"`
 	OwnerId              requests.Integer             `position:"Query" name:"OwnerId"`
 	SecurityGroupIds     string                       `position:"Query" name:"SecurityGroupIds"`
+	SecurityGroupType    string                       `position:"Query" name:"SecurityGroupType"`
 	VpcId                string                       `position:"Query" name:"VpcId"`
 }
 
@@ -117,6 +113,7 @@ func CreateDescribeSecurityGroupsRequest() (request *DescribeSecurityGroupsReque
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Ecs", "2014-05-26", "DescribeSecurityGroups", "ecs", "openAPI")
+	request.Method = requests.POST
 	return
 }
 
