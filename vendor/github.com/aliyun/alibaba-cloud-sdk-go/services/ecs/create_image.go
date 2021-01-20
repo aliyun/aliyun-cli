@@ -21,7 +21,6 @@ import (
 )
 
 // CreateImage invokes the ecs.CreateImage API synchronously
-// api document: https://help.aliyun.com/api/ecs/createimage.html
 func (client *Client) CreateImage(request *CreateImageRequest) (response *CreateImageResponse, err error) {
 	response = CreateCreateImageResponse()
 	err = client.DoAction(request, response)
@@ -29,8 +28,6 @@ func (client *Client) CreateImage(request *CreateImageRequest) (response *Create
 }
 
 // CreateImageWithChan invokes the ecs.CreateImage API asynchronously
-// api document: https://help.aliyun.com/api/ecs/createimage.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) CreateImageWithChan(request *CreateImageRequest) (<-chan *CreateImageResponse, <-chan error) {
 	responseChan := make(chan *CreateImageResponse, 1)
 	errChan := make(chan error, 1)
@@ -53,8 +50,6 @@ func (client *Client) CreateImageWithChan(request *CreateImageRequest) (<-chan *
 }
 
 // CreateImageWithCallback invokes the ecs.CreateImage API asynchronously
-// api document: https://help.aliyun.com/api/ecs/createimage.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) CreateImageWithCallback(request *CreateImageRequest, callback func(response *CreateImageResponse, err error)) <-chan int {
 	result := make(chan int, 1)
 	err := client.AddAsyncTask(func() {
@@ -90,6 +85,7 @@ type CreateImageRequest struct {
 	OwnerAccount         string                          `position:"Query" name:"OwnerAccount"`
 	OwnerId              requests.Integer                `position:"Query" name:"OwnerId"`
 	InstanceId           string                          `position:"Query" name:"InstanceId"`
+	ImageFamily          string                          `position:"Query" name:"ImageFamily"`
 	ImageVersion         string                          `position:"Query" name:"ImageVersion"`
 }
 
@@ -120,6 +116,7 @@ func CreateCreateImageRequest() (request *CreateImageRequest) {
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Ecs", "2014-05-26", "CreateImage", "ecs", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

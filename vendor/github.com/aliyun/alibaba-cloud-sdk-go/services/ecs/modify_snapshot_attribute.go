@@ -21,7 +21,6 @@ import (
 )
 
 // ModifySnapshotAttribute invokes the ecs.ModifySnapshotAttribute API synchronously
-// api document: https://help.aliyun.com/api/ecs/modifysnapshotattribute.html
 func (client *Client) ModifySnapshotAttribute(request *ModifySnapshotAttributeRequest) (response *ModifySnapshotAttributeResponse, err error) {
 	response = CreateModifySnapshotAttributeResponse()
 	err = client.DoAction(request, response)
@@ -29,8 +28,6 @@ func (client *Client) ModifySnapshotAttribute(request *ModifySnapshotAttributeRe
 }
 
 // ModifySnapshotAttributeWithChan invokes the ecs.ModifySnapshotAttribute API asynchronously
-// api document: https://help.aliyun.com/api/ecs/modifysnapshotattribute.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) ModifySnapshotAttributeWithChan(request *ModifySnapshotAttributeRequest) (<-chan *ModifySnapshotAttributeResponse, <-chan error) {
 	responseChan := make(chan *ModifySnapshotAttributeResponse, 1)
 	errChan := make(chan error, 1)
@@ -53,8 +50,6 @@ func (client *Client) ModifySnapshotAttributeWithChan(request *ModifySnapshotAtt
 }
 
 // ModifySnapshotAttributeWithCallback invokes the ecs.ModifySnapshotAttribute API asynchronously
-// api document: https://help.aliyun.com/api/ecs/modifysnapshotattribute.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) ModifySnapshotAttributeWithCallback(request *ModifySnapshotAttributeRequest, callback func(response *ModifySnapshotAttributeResponse, err error)) <-chan int {
 	result := make(chan int, 1)
 	err := client.AddAsyncTask(func() {
@@ -83,6 +78,7 @@ type ModifySnapshotAttributeRequest struct {
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
 	OwnerId              requests.Integer `position:"Query" name:"OwnerId"`
+	DisableInstantAccess requests.Boolean `position:"Query" name:"DisableInstantAccess"`
 }
 
 // ModifySnapshotAttributeResponse is the response struct for api ModifySnapshotAttribute
@@ -97,6 +93,7 @@ func CreateModifySnapshotAttributeRequest() (request *ModifySnapshotAttributeReq
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Ecs", "2014-05-26", "ModifySnapshotAttribute", "ecs", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

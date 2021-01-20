@@ -21,7 +21,6 @@ import (
 )
 
 // ModifyDiskSpec invokes the ecs.ModifyDiskSpec API synchronously
-// api document: https://help.aliyun.com/api/ecs/modifydiskspec.html
 func (client *Client) ModifyDiskSpec(request *ModifyDiskSpecRequest) (response *ModifyDiskSpecResponse, err error) {
 	response = CreateModifyDiskSpecResponse()
 	err = client.DoAction(request, response)
@@ -29,8 +28,6 @@ func (client *Client) ModifyDiskSpec(request *ModifyDiskSpecRequest) (response *
 }
 
 // ModifyDiskSpecWithChan invokes the ecs.ModifyDiskSpec API asynchronously
-// api document: https://help.aliyun.com/api/ecs/modifydiskspec.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) ModifyDiskSpecWithChan(request *ModifyDiskSpecRequest) (<-chan *ModifyDiskSpecResponse, <-chan error) {
 	responseChan := make(chan *ModifyDiskSpecResponse, 1)
 	errChan := make(chan error, 1)
@@ -53,8 +50,6 @@ func (client *Client) ModifyDiskSpecWithChan(request *ModifyDiskSpecRequest) (<-
 }
 
 // ModifyDiskSpecWithCallback invokes the ecs.ModifyDiskSpec API asynchronously
-// api document: https://help.aliyun.com/api/ecs/modifydiskspec.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) ModifyDiskSpecWithCallback(request *ModifyDiskSpecRequest, callback func(response *ModifyDiskSpecResponse, err error)) <-chan int {
 	result := make(chan int, 1)
 	err := client.AddAsyncTask(func() {
@@ -77,7 +72,9 @@ func (client *Client) ModifyDiskSpecWithCallback(request *ModifyDiskSpecRequest,
 type ModifyDiskSpecRequest struct {
 	*requests.RpcRequest
 	ResourceOwnerId      requests.Integer `position:"Query" name:"ResourceOwnerId"`
+	DiskCategory         string           `position:"Query" name:"DiskCategory"`
 	DiskId               string           `position:"Query" name:"DiskId"`
+	DryRun               requests.Boolean `position:"Query" name:"DryRun"`
 	ResourceOwnerAccount string           `position:"Query" name:"ResourceOwnerAccount"`
 	PerformanceLevel     string           `position:"Query" name:"PerformanceLevel"`
 	OwnerAccount         string           `position:"Query" name:"OwnerAccount"`
@@ -88,6 +85,7 @@ type ModifyDiskSpecRequest struct {
 type ModifyDiskSpecResponse struct {
 	*responses.BaseResponse
 	RequestId string `json:"RequestId" xml:"RequestId"`
+	TaskId    string `json:"TaskId" xml:"TaskId"`
 }
 
 // CreateModifyDiskSpecRequest creates a request to invoke ModifyDiskSpec API
@@ -96,6 +94,7 @@ func CreateModifyDiskSpecRequest() (request *ModifyDiskSpecRequest) {
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Ecs", "2014-05-26", "ModifyDiskSpec", "ecs", "openAPI")
+	request.Method = requests.POST
 	return
 }
 

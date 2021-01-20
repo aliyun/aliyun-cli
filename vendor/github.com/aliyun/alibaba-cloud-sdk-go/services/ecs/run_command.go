@@ -21,7 +21,6 @@ import (
 )
 
 // RunCommand invokes the ecs.RunCommand API synchronously
-// api document: https://help.aliyun.com/api/ecs/runcommand.html
 func (client *Client) RunCommand(request *RunCommandRequest) (response *RunCommandResponse, err error) {
 	response = CreateRunCommandResponse()
 	err = client.DoAction(request, response)
@@ -29,8 +28,6 @@ func (client *Client) RunCommand(request *RunCommandRequest) (response *RunComma
 }
 
 // RunCommandWithChan invokes the ecs.RunCommand API asynchronously
-// api document: https://help.aliyun.com/api/ecs/runcommand.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) RunCommandWithChan(request *RunCommandRequest) (<-chan *RunCommandResponse, <-chan error) {
 	responseChan := make(chan *RunCommandResponse, 1)
 	errChan := make(chan error, 1)
@@ -53,8 +50,6 @@ func (client *Client) RunCommandWithChan(request *RunCommandRequest) (<-chan *Ru
 }
 
 // RunCommandWithCallback invokes the ecs.RunCommand API asynchronously
-// api document: https://help.aliyun.com/api/ecs/runcommand.html
-// asynchronous document: https://help.aliyun.com/document_detail/66220.html
 func (client *Client) RunCommandWithCallback(request *RunCommandRequest, callback func(response *RunCommandResponse, err error)) <-chan int {
 	result := make(chan int, 1)
 	err := client.AddAsyncTask(func() {
@@ -93,6 +88,7 @@ type RunCommandRequest struct {
 	Name                 string                 `position:"Query" name:"Name"`
 	Parameters           map[string]interface{} `position:"Query" name:"Parameters"`
 	EnableParameter      requests.Boolean       `position:"Query" name:"EnableParameter"`
+	Username             string                 `position:"Query" name:"Username"`
 }
 
 // RunCommandResponse is the response struct for api RunCommand
@@ -109,6 +105,7 @@ func CreateRunCommandRequest() (request *RunCommandRequest) {
 		RpcRequest: &requests.RpcRequest{},
 	}
 	request.InitWithApiInfo("Ecs", "2014-05-26", "RunCommand", "ecs", "openAPI")
+	request.Method = requests.POST
 	return
 }
 
