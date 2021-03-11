@@ -27,7 +27,7 @@ var WaiterFlag = &cli.Flag{Category: "helper",
 	AssignedMode: cli.AssignedRepeatable,
 	Short: i18n.T(
 		"use `--waiter expr=<jmesPath> to=<value>` to pull api until result equal to expected value",
-		"使用 `--waiter expr=<jmesPath> to=<value>` 来轮询调用OpenAPI，知道返回期望的值"),
+		"使用 `--waiter expr=<jmesPath> to=<value>` 来轮询调用OpenAPI，直到返回期望的值"),
 	Long: i18n.T(
 		"",
 		""),
