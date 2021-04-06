@@ -85,6 +85,7 @@ type ResizeDiskRequest struct {
 type ResizeDiskResponse struct {
 	*responses.BaseResponse
 	RequestId string `json:"RequestId" xml:"RequestId"`
+	OrderId   string `json:"OrderId" xml:"OrderId"`
 }
 
 // CreateResizeDiskRequest creates a request to invoke ResizeDisk API
