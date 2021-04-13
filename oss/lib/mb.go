@@ -11,6 +11,7 @@ var storageClassList = []string{
 	StorageStandard,
 	StorageIA,
 	StorageArchive,
+	StorageColdArchive,
 }
 
 func formatStorageClassString(sep string) string {
@@ -46,7 +47,7 @@ ACL：
 
 StorageClass:
     
-    bucket的StorageClass有三种：
+    bucket的StorageClass有四种：
         ` + formatStorageClassString("\n        ") + `
 
     关于StorageClass的更多信息请参考：https://help.aliyun.com/document_detail/31959.html?spm=5176.doc31957.6.839.E1ifnh
@@ -104,7 +105,7 @@ ACL:
 
 StorageClass:
 
-    There are three kinds of StorageClass:
+    There are four kinds of StorageClass:
         ` + formatStorageClassString("\n        ") + `
 
     More information about StorageClass see: https://help.aliyun.com/document_detail/31959.html?spm=5176.doc31957.6.839.E1ifnh
@@ -165,12 +166,9 @@ var makeBucketCommand = MakeBucketCommand{
 			OptionStorageClass,
 			OptionLogLevel,
 			OptionRedundancyType,
+			OptionPassword,
 		},
 	},
-}
-
-func (mc *MakeBucketCommand) GetCommand() *Command {
-	return &mc.command
 }
 
 // function for FormatHelper interface
@@ -273,6 +271,9 @@ func (mc *MakeBucketCommand) getStorageClass() oss.StorageClassType {
 	}
 	if strings.EqualFold(storageClass, StorageArchive) {
 		return oss.StorageArchive
+	}
+	if strings.EqualFold(storageClass, StorageColdArchive) {
+		return oss.StorageColdArchive
 	}
 	return oss.StorageStandard
 }

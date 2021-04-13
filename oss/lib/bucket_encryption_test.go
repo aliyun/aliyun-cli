@@ -55,6 +55,35 @@ func (s *OssutilCommandSuite) TestBucketEncryptionPutSuccess(c *C) {
 	c.Assert(bucketEncryptionCommand.encryptionResult.SSEDefault.SSEAlgorithm, Equals, "AES256")
 	c.Assert(bucketEncryptionCommand.encryptionResult.SSEDefault.KMSMasterKeyID, Equals, "")
 
+	// set sm4
+	strMethod = "put"
+	strSSEAlgorithm = "SM4"
+	_, err = cm.RunCommand("bucket-encryption", encryptionArgs, options)
+	c.Assert(err, IsNil)
+
+	// get again
+	strMethod = "get"
+	_, err = cm.RunCommand("bucket-encryption", encryptionArgs, options)
+	c.Assert(err, IsNil)
+	c.Assert(bucketEncryptionCommand.encryptionResult.SSEDefault.SSEAlgorithm, Equals, "SM4")
+	c.Assert(bucketEncryptionCommand.encryptionResult.SSEDefault.KMSMasterKeyID, Equals, "")
+
+	// set kms sm4
+	strMethod = "put"
+	strSSEAlgorithm = "KMS"
+	strDataEncryption := "SM4"
+	options["KMSDataEncryption"] = &strDataEncryption
+
+	_, err = cm.RunCommand("bucket-encryption", encryptionArgs, options)
+	c.Assert(err, IsNil)
+
+	// get again
+	strMethod = "get"
+	_, err = cm.RunCommand("bucket-encryption", encryptionArgs, options)
+	c.Assert(err, IsNil)
+	c.Assert(bucketEncryptionCommand.encryptionResult.SSEDefault.SSEAlgorithm, Equals, "KMS")
+	c.Assert(bucketEncryptionCommand.encryptionResult.SSEDefault.KMSDataEncryption, Equals, "SM4")
+
 	// put error
 	strMethod = "put"
 	strSSEAlgorithm = "BES356"

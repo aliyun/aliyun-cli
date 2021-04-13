@@ -100,10 +100,6 @@ var helpCommand = HelpCommand{
 	},
 }
 
-func (hc *HelpCommand) GetCommand() *Command {
-	return &hc.command
-}
-
 // function for RewriteLoadConfiger interface
 func (hc *HelpCommand) rewriteLoadConfig(configFile string) error {
 	// read config file, if error exist, do not print error

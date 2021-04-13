@@ -1341,7 +1341,6 @@ func (s *OssutilCommandSuite) TestSetObjectMetaWithInvalidIncExc(c *C) {
 	s.removeBucket(bucketName, true, c)
 }
 
-
 func (s *OssutilCommandSuite) TestSetObjectMetaVersionBasic(c *C) {
 	bucketName := bucketNamePrefix + "-set-meta-" + randLowStr(10)
 	s.putBucket(bucketName, c)
@@ -1461,7 +1460,7 @@ func (s *OssutilCommandSuite) TestSetObjectMetaVersionBasic(c *C) {
 func (s *OssutilCommandSuite) TestSetObjectMetaWithVersion(c *C) {
 	bucketName := bucketNamePrefix + "-set-meta-" + randLowStr(10)
 	objectName := randStr(12)
-	
+
 	s.putBucket(bucketName, c)
 	s.putBucketVersioning(bucketName, "enabled", c)
 
@@ -1475,7 +1474,7 @@ func (s *OssutilCommandSuite) TestSetObjectMetaWithVersion(c *C) {
 	_, ok := objectStat["X-Oss-Meta-A"]
 	c.Assert(ok, Equals, false)
 
-	// update object to v2 
+	// update object to v2
 	s.setObjectMeta(bucketName, objectName, "x-oss-object-acl:private#X-Oss-Meta-A:A#X-Oss-Meta-B:B", false, false, false, true, c)
 	objectStat = s.getStat(bucketName, objectName, c)
 	versionIdV2 := objectStat["X-Oss-Version-Id"]
@@ -1516,7 +1515,6 @@ func (s *OssutilCommandSuite) TestSetObjectMetaWithVersion(c *C) {
 	s.removeBucket(bucketName, true, c)
 }
 
-
 func (s *OssutilCommandSuite) TestSetObjectMetaWithInvalidVersionArgs(c *C) {
 	bucketName := bucketNamePrefix + "-set-alc-" + randLowStr(10)
 	objectName := randStr(12)
@@ -1550,4 +1548,56 @@ func (s *OssutilCommandSuite) TestSetObjectMetaWithInvalidVersionArgs(c *C) {
 	args = []string{CloudURLToString(bucketName, objectName)}
 	_, err = cm.RunCommand("set-meta", args, options)
 	c.Assert(strings.Contains(err.Error(), "--version-id only work on single object"), Equals, true)
+}
+
+func (s *OssutilCommandSuite) TestSetObjectMetaUpdateEncryptionWithAclStatus(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	s.putBucket(bucketName, c)
+	object := randStr(12)
+	bucketStr := CloudURLToString(bucketName, object)
+
+	// put object
+	testFileName := "ossutil-test-" + randStr(10)
+	content := randStr(1024)
+	s.createFile(testFileName, content, c)
+
+	// upload files
+	args := []string{testFileName, bucketStr}
+	cmdline := []string{"ossutil", "cp", testFileName, bucketStr, "--meta", "x-oss-server-side-encryption:KMS", "--acl", "public-read"}
+	_, err := s.rawCPWithFilter(args, false, true, false, DefaultBigFileThreshold, CheckpointDir, cmdline, "x-oss-server-side-encryption:KMS", "public-read")
+	c.Assert(err, IsNil)
+
+	// stat object
+	objectStat := s.getStat(bucketName, object, c)
+	objectAcl := objectStat["ACL"]
+	encryptionType := objectStat["X-Oss-Server-Side-Encryption"]
+	c.Assert(objectAcl, Equals, "public-read")
+	c.Assert(encryptionType, Equals, "KMS")
+
+	// update X-Oss-Server-Side-Encryption
+	_, err = s.rawSetMeta(bucketName, object, "X-Oss-Server-Side-Encryption:AES256", true, false, false, true, DefaultLanguage)
+	c.Assert(err, IsNil)
+
+	// stat object again
+	objectStat = s.getStat(bucketName, object, c)
+	objectAcl = objectStat["ACL"]
+	encryptionType = objectStat["X-Oss-Server-Side-Encryption"]
+	c.Assert(objectAcl, Equals, "public-read")
+	c.Assert(encryptionType, Equals, "AES256")
+
+	// set meta with replace all meta
+	// set X-Oss-Server-Side-Encryption:AES256 again
+	// object acl change to default
+	_, err = s.rawSetMeta(bucketName, object, "X-Oss-Server-Side-Encryption:KMS", false, false, false, true, DefaultLanguage)
+	c.Assert(err, IsNil)
+
+	// stat object again
+	objectStat = s.getStat(bucketName, object, c)
+	objectAcl = objectStat["ACL"]
+	encryptionType = objectStat["X-Oss-Server-Side-Encryption"]
+	c.Assert(objectAcl, Equals, "default")
+	c.Assert(encryptionType, Equals, "KMS")
+
+	os.Remove(testFileName)
+	s.removeBucket(bucketName, true, c)
 }

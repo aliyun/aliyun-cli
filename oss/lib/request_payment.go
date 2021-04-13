@@ -106,12 +106,9 @@ var requestPaymentCommand = RequestPaymentCommand{
 			OptionProxyPwd,
 			OptionMethod,
 			OptionLogLevel,
+			OptionPassword,
 		},
 	},
-}
-
-func (reqpc *RequestPaymentCommand) GetCommand() *Command {
-	return &reqpc.command
 }
 
 // function for FormatHelper interface

@@ -75,6 +75,64 @@ func (s *OssutilCommandSuite) TestDuObjectSize(c *C) {
 	s.removeBucket(bucketName, true, c)
 }
 
+func (s *OssutilCommandSuite) TestDuObjectSizeWithBlockSize(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	s.putBucket(bucketName, c)
+
+	fileName := "test-file-" + randStr(5)
+	content := randLowStr(1024 * 1024)
+	s.createFile(fileName, content, c)
+	object := "test-object-" + randStr(5)
+	s.putObject(bucketName, object, fileName, c)
+
+	// du size,all bucket
+	command := "du"
+	str := ""
+	strUnit := "KB"
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"configFile":      &ConfigFile,
+		"blockSize":       &strUnit,
+	}
+	srcUrl := CloudURLToString(bucketName, "")
+	args := []string{srcUrl}
+	_, err := cm.RunCommand(command, args, options)
+	c.Assert(err, IsNil)
+	os.Remove(fileName)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestDuBlockSizeError(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	s.putBucket(bucketName, c)
+
+	fileName := "test-file-" + randStr(5)
+	content := randLowStr(1024 * 1024)
+	s.createFile(fileName, content, c)
+	object := "test-object-" + randStr(5)
+	s.putObject(bucketName, object, fileName, c)
+
+	// du size,all bucket
+	command := "du"
+	str := ""
+	strUnit := "KBbb" // error value
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"configFile":      &ConfigFile,
+		"blockSize":       &strUnit,
+	}
+	srcUrl := CloudURLToString(bucketName, "")
+	args := []string{srcUrl}
+	_, err := cm.RunCommand(command, args, options)
+	c.Assert(err, NotNil)
+	os.Remove(fileName)
+	s.removeBucket(bucketName, true, c)
+}
+
 func (s *OssutilCommandSuite) TestDuPartSize(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(10)
 	s.putBucket(bucketName, c)

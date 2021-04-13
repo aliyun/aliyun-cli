@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"os/user"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -39,6 +38,8 @@ var (
 	proxyHost           = ""
 	proxyUser           = ""
 	proxyPwd            = ""
+	accountID           = ""
+	stsARN              = ""
 )
 
 var (
@@ -131,6 +132,12 @@ func SetUpCredential() {
 	}
 	if proxyPwd == "" {
 		proxyPwd = os.Getenv("OSS_TEST_PROXY_PASSWORD")
+	}
+	if accountID == "" {
+		accountID = os.Getenv("OSS_TEST_ACCOUNT_ID")
+	}
+	if stsARN == "" {
+		stsARN = os.Getenv("OSS_TEST_STS_ARN")
 	}
 }
 
@@ -805,6 +812,45 @@ func (s *OssutilCommandSuite) createTestFiles(dir, subdir string, c *C, contents
 	filename = dir + "/" + filename
 	s.createFile(filename, content, c)
 
+	return filenames
+}
+
+func (s *OssutilCommandSuite) prepareTestFiles(dir, subdir, filePrefix, fileSuffix string, num int, c *C) []string {
+	// Create dirs
+	f, err := os.Stat(dir)
+	if err != nil {
+		err := os.MkdirAll(dir, 0755)
+		c.Assert(err, IsNil)
+	} else {
+		c.Assert(f.IsDir(), Equals, true)
+	}
+
+	f, err = os.Stat(dir + string(os.PathSeparator) + subdir)
+	if err != nil {
+		err = os.MkdirAll(dir+string(os.PathSeparator)+subdir, 0755)
+		c.Assert(err, IsNil)
+	} else {
+		c.Assert(f.IsDir(), Equals, true)
+	}
+
+	filenames := make([]string, 0)
+
+	// Create files
+	for i := 0; i < num; i++ {
+		filename := fmt.Sprintf("%s-testfile%d.txt", filePrefix, i) + fileSuffix
+		content := fmt.Sprintf("include测试文件：%d内容", i)
+		filenames = append(filenames, filename)
+		filename = dir + string(os.PathSeparator) + filename
+		s.createFile(filename, content, c)
+	}
+
+	for i := num; i < 2*num; i++ {
+		filename := fmt.Sprintf("%s-testfile%d.jpg", filePrefix, i) + fileSuffix
+		content := fmt.Sprintf("include test jpg\n%dcontent", i)
+		filenames = append(filenames, subdir+string(os.PathSeparator)+filename)
+		filename = dir + string(os.PathSeparator) + subdir + string(os.PathSeparator) + filename
+		s.createFile(filename, content, c)
+	}
 	return filenames
 }
 
@@ -1588,12 +1634,11 @@ func (s *OssutilCommandSuite) TestNotExistCommand(c *C) {
 }
 
 func (s *OssutilCommandSuite) TestDecideConfigFile(c *C) {
-	usr, _ := user.Current()
 	file := DecideConfigFile("")
-	c.Assert(file, Equals, strings.Replace(DefaultConfigFile, "~", usr.HomeDir, 1))
+	c.Assert(file, Equals, strings.Replace(DefaultConfigFile, "~", currentHomeDir(), 1))
 	input := "~" + string(os.PathSeparator) + "a"
 	file = DecideConfigFile(input)
-	c.Assert(file, Equals, strings.Replace(input, "~", usr.HomeDir, 1))
+	c.Assert(file, Equals, strings.Replace(input, "~", currentHomeDir(), 1))
 }
 
 func (s *OssutilCommandSuite) TestCheckConfig(c *C) {
@@ -1691,8 +1736,7 @@ func (s *OssutilCommandSuite) TestStorageURL(c *C) {
 	c.Assert(cloudURL.bucket, Equals, "abc")
 	c.Assert(cloudURL.object, Equals, "d")
 
-	usr, _ := user.Current()
-	dir := usr.HomeDir
+	dir := currentHomeDir()
 	url := "~" + string(os.PathSeparator) + "test"
 	var fileURL FileURL
 	fileURL.Init(url, "")

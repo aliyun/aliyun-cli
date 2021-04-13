@@ -51,13 +51,13 @@ type Command struct {
 	args             []string
 	options          OptionMapType
 	configOptions    OptionMapType
+	inputKeySecret   string
 }
 
 // Commander is the interface of all commands
 type Commander interface {
 	RunCommand() error
 	Init(args []string, options OptionMapType) error
-	GetCommand() *Command
 }
 
 // RewriteLoadConfiger is the interface for those commands, which do not need to load config, or have other action
@@ -291,6 +291,19 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	proxyPwd, _ := GetString(OptionProxyPwd, cmd.options)
 	ecsUrl, _ := cmd.getEcsRamAkService()
 	localHost, _ := GetString(OptionLocalHost, cmd.options)
+
+	bPassword, _ := GetBool(OptionPassword, cmd.options)
+	if bPassword {
+		if cmd.inputKeySecret == "" {
+			strPwd, err := GetPassword("input access key secret:")
+			fmt.Printf("\r")
+			if err != nil {
+				return nil, err
+			}
+			cmd.inputKeySecret = string(strPwd)
+		}
+		accessKeySecret = cmd.inputKeySecret
+	}
 
 	if accessKeyID == "" && ecsUrl == "" {
 		return nil, fmt.Errorf("accessKeyID and ecsUrl are both empty")
@@ -697,5 +710,9 @@ func GetAllCommands() []interface{} {
 		&bucketPolicyCommand,
 		&requestPaymentCommand,
 		&objectTagCommand,
+		&bucketInventoryCommand,
+		&revertCommand,
+		&syncCommand,
+		&wormCommand,
 	}
 }

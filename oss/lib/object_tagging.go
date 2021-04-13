@@ -144,12 +144,9 @@ var objectTagCommand = ObjectTagCommand{
 			OptionRecursion,
 			OptionVersionId,
 			OptionRequestPayer,
+			OptionPassword,
 		},
 	},
-}
-
-func (otc *ObjectTagCommand) GetCommand() *Command {
-	return &otc.command
 }
 
 // function for FormatHelper interface

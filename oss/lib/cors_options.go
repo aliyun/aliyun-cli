@@ -90,12 +90,9 @@ var corsOptionsCommand = OptionsCommand{
 			OptionOrigin,
 			OptionAcrMethod,
 			OptionAcrHeaders,
+			OptionPassword,
 		},
 	},
-}
-
-func (opsc *OptionsCommand) GetCommand() *Command {
-	return &opsc.command
 }
 
 // function for FormatHelper interface

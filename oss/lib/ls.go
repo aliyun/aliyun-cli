@@ -400,12 +400,9 @@ var listCommand = ListCommand{
 			OptionExclude,
 			OptionAllversions,
 			OptionVersionIdMarker,
+			OptionPassword,
 		},
 	},
-}
-
-func (lc *ListCommand) GetCommand() *Command {
-	return &lc.command
 }
 
 // function for FormatHelper interface

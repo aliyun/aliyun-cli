@@ -94,12 +94,9 @@ var listPartCommand = ListPartCommand{
 			OptionProxyPwd,
 			OptionEncodingType,
 			OptionLogLevel,
+			OptionPassword,
 		},
 	},
-}
-
-func (lpc *ListPartCommand) GetCommand() *Command {
-	return &lpc.command
 }
 
 // function for FormatHelper interface

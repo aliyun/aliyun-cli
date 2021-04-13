@@ -2,6 +2,8 @@ package lib
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
 	"strings"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
@@ -16,17 +18,16 @@ var specChineseRestore = SpecText{
 
 	synopsisText: "恢复冷冻状态的Objects为可读状态",
 
-	paramText: "cloud_url [options]",
+	paramText: "cloud_url [local_xml_file] [options]",
 
 	syntaxText: ` 
-    ossutil restore cloud_url [--encoding-type url] [-r] [-f] [--output-dir=odir] [--version-id versionId] [--payer requester] [-c file] 
+    ossutil restore cloud_url [local_xml_file] [--encoding-type url] [-r] [-f] [--output-dir=odir] [--version-id versionId] [--payer requester] [-c file]
 `,
 
 	detailHelpText: ` 
-    该命令恢复处于冷冻状态的object进入可读状态，即操作对象object必须为` + StorageArchive + `存储类型
-    的object。
+    该命令恢复处于冷冻状态的object进入可读状态，即操作对象object的存储类型为StorageArchive、StorageColdArchive
 
-    一个Archive类型的object初始时处于冷冻状态。
+    一个Archive、StorageColdArchive类型的object初始时处于冷冻状态。
 
     针对处于冷冻状态的object调用restore命令，返回成功。object处于解冻中，服务端执行解
     冻，在此期间再次调用restore命令，同样成功，且不会延长object可读状态持续时间。
@@ -43,18 +44,26 @@ var specChineseRestore = SpecText{
 
     该命令有两种用法：
 
-    1) ossutil restore oss://bucket/object [--encoding-type url] 
+    1) ossutil restore oss://bucket/object [--encoding-type url] [local_xml_file] 
         该用法恢复单个冷冻状态object为可读状态，当指定object不存在时，ossutil会提示错
     误，此时请确保指定的url精确匹配需要设置acl的object，并且不要指定--recursive选项（
     否则ossutil会进行前缀匹配，恢复多个冷冻状态的objects为可读状态）。无论--force选项
     是否指定，都不会进行询问提示。
 
-    2) ossutil restore oss://bucket[/prefix] -r [--encoding-type url] [-f] [--output-dir=odir]
+    2) ossutil restore oss://bucket[/prefix] -r [--encoding-type url] [-f] [--output-dir=odir] [local_xml_file]
         该用法可批量恢复多个冷冻状态的objects为可读状态，此时必须输入--recursive选项，
     ossutil会查找所有前缀匹配url的objects，恢复它们为可读状态。当一个object操作出现错
     误时，会将出错object的错误信息记录到report文件，并继续操作其他object，成功操作的
     object信息将不会被记录到report文件中（更多信息见cp命令的帮助）。如果--force选项被
     指定，则不会进行询问提示。
+
+    上面的local_xml_file是本地xml格式文件, 支持设置更多的restore参数, 举例如下
+    <RestoreRequest>
+        <Days>2</Days>
+        <JobParameters>
+            <Tier>Bulk</Tier>
+        </JobParameters>
+    </RestoreRequest>
 `,
 
 	sampleText: ` 
@@ -63,6 +72,7 @@ var specChineseRestore = SpecText{
     3) ossutil restore oss://bucket-restore/object-prefix -r -f
     4) ossutil restore oss://bucket-restore/%e4%b8%ad%e6%96%87 --encoding-type url
     5) ossutil restore oss://bucket-restore/object-store --payer requester
+    6) ossutil restore oss://bucket-restore/object-prefix -r -f local_xml_file
 `,
 }
 
@@ -70,15 +80,15 @@ var specEnglishRestore = SpecText{
 
 	synopsisText: "Restore Frozen State Object to Read Ready Status",
 
-	paramText: "cloud_url [options]",
+	paramText: "cloud_url [local_xml_file] [options]",
 
 	syntaxText: ` 
-    ossutil restore cloud_url [--encoding-type url] [-r] [-f] [--output-dir=odir] [--version-id versionId] [--payer requester] [-c file] 
+    ossutil restore cloud_url [local_xml_file] [--encoding-type url] [-r] [-f] [--output-dir=odir] [--version-id versionId] [--payer requester] [-c file]
 `,
 
 	detailHelpText: ` 
     The command restore frozen state object to read ready status, the object must be in the storage 
-    class of ` + StorageArchive + `. 
+    class of StorageArchive、StorageColdArchive
 
     An object of Archive storage class will be in frozen state at first.
 
@@ -99,19 +109,27 @@ Usage:
 
     There are two usages:
 
-    1) ossutil restore oss://bucket/object [--encoding-type url] 
+    1) ossutil restore oss://bucket/object [--encoding-type url] [local_xml_file]
         If --recursive option is not specified, ossutil restore the specified frozen state object 
     to readable status. In the usage, please make sure url exactly specified the object you want to 
     restore, if object not exist, error occurs. No matter --force option is specified or not, ossutil 
     will not show prompt question. 
 
-    2) ossutil restore oss://bucket[/prefix] -r [--encoding-type url] [-f] [--output-dir=odir]
+    2) ossutil restore oss://bucket[/prefix] -r [--encoding-type url] [-f] [--output-dir=odir] [local_xml_file]
         The usage restore the objects with the specified prefix and in frozen state to readable status. 
     --recursive option is required for the usage, and ossutil will search for prefix-matching objects 
     and restore those objects. When an error occurs when restore an object, ossutil will record the 
     error message to report file, and ossutil will continue to attempt to set acl on the remaining 
     objects(more information see help of cp command). If --force option is specified, ossutil will 
     not show prompt question. 
+
+    The local_xml_file is a local XML format file, which supports setting more restore configurations. For example:
+    <RestoreRequest>
+        <Days>2</Days>
+        <JobParameters>
+            <Tier>Bulk</Tier>
+        </JobParameters>
+    </RestoreRequest>
 `,
 
 	sampleText: ` 
@@ -120,6 +138,7 @@ Usage:
     3) ossutil restore oss://bucket-restore/object-prefix -r -f
     4) ossutil restore oss://bucket-restore/%e4%b8%ad%e6%96%87 --encoding-type url
     5) ossutil restore oss://bucket-restore/object-store --payer requester
+    6) ossutil restore oss://bucket-restore/object-prefix -r -f local_xml_file
 `,
 }
 
@@ -129,6 +148,9 @@ type RestoreCommand struct {
 	command       Command
 	reOption      batchOptionType
 	commonOptions []oss.Option
+	restoreConfig oss.RestoreConfiguration
+	hasConfig     bool
+	configXml     string
 }
 
 var restoreCommand = RestoreCommand{
@@ -136,7 +158,7 @@ var restoreCommand = RestoreCommand{
 		name:        "restore",
 		nameAlias:   []string{},
 		minArgc:     1,
-		maxArgc:     1,
+		maxArgc:     2,
 		specChinese: specChineseRestore,
 		specEnglish: specEnglishRestore,
 		group:       GroupTypeNormalCommand,
@@ -158,12 +180,9 @@ var restoreCommand = RestoreCommand{
 			OptionLogLevel,
 			OptionVersionId,
 			OptionRequestPayer,
+			OptionPassword,
 		},
 	},
-}
-
-func (rc *RestoreCommand) GetCommand() *Command {
-	return &rc.command
 }
 
 // function for FormatHelper interface
@@ -205,6 +224,35 @@ func (rc *RestoreCommand) RunCommand() error {
 		return err
 	}
 
+	if len(rc.command.args) == 2 {
+		xmlFile := rc.command.args[1]
+		fileInfo, err := os.Stat(xmlFile)
+		if err != nil {
+			return err
+		}
+
+		if fileInfo.IsDir() {
+			return fmt.Errorf("%s is dir,not the expected file", xmlFile)
+		}
+
+		if fileInfo.Size() == 0 {
+			return fmt.Errorf("%s is empty file", xmlFile)
+		}
+
+		// parsing the xml file
+		file, err := os.Open(xmlFile)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		text, err := ioutil.ReadAll(file)
+		if err != nil {
+			return err
+		}
+		rc.hasConfig = true
+		rc.configXml = string(text)
+	}
+
 	bucket, err := rc.command.ossBucket(cloudURL.bucket)
 	if err != nil {
 		return err
@@ -238,7 +286,13 @@ func (rc *RestoreCommand) ossRestoreObject(bucket *oss.Bucket, object string, ve
 		}
 		options = append(options, rc.commonOptions...)
 
-		err := bucket.RestoreObject(object, options...)
+		var err error
+		if rc.hasConfig {
+			err = bucket.RestoreObjectXML(object, rc.configXml, options...)
+		} else {
+			err = bucket.RestoreObject(object, options...)
+		}
+
 		if err == nil {
 			return err
 		}

@@ -126,10 +126,6 @@ var hashCommand = HashCommand{
 	},
 }
 
-func (hc *HashCommand) GetCommand() *Command {
-	return &hc.command
-}
-
 // function for RewriteLoadConfiger interface
 func (hc *HashCommand) rewriteLoadConfig(configFile string) error {
 	// read config file, if error exist, do not print error

@@ -112,12 +112,9 @@ var statCommand = StatCommand{
 			OptionLogLevel,
 			OptionVersionId,
 			OptionRequestPayer,
+			OptionPassword,
 		},
 	},
-}
-
-func (sc *StatCommand) GetCommand() *Command {
-	return &sc.command
 }
 
 // function for FormatHelper interface
@@ -190,6 +187,9 @@ func (sc *StatCommand) bucketStat(bucket *oss.Bucket, cloudURL CloudURL) error {
 	if len(gbar.BucketInfo.SseRule.KMSMasterKeyID) > 0 {
 		fmt.Printf("%-18s: %s\n", StatKMSMasterKeyID, gbar.BucketInfo.SseRule.KMSMasterKeyID)
 	}
+	if len(gbar.BucketInfo.SseRule.KMSDataEncryption) > 0 {
+		fmt.Printf("%-18s: %s\n", StatKMSDataEncryption, gbar.BucketInfo.SseRule.KMSDataEncryption)
+	}
 
 	return nil
 }
@@ -228,7 +228,12 @@ func (sc *StatCommand) objectStat(bucket *oss.Bucket, cloudURL CloudURL) error {
 
 	sortNames := []string{}
 	attrMap := map[string]string{}
+	maxNameLen := 0
 	for name := range props {
+		if len(name) > maxNameLen {
+			maxNameLen = len(name)
+		}
+
 		ln := strings.ToLower(name)
 		if ln != strings.ToLower(oss.HTTPHeaderDate) &&
 			ln != strings.ToLower(oss.HTTPHeaderOssRequestID) &&
@@ -249,12 +254,11 @@ func (sc *StatCommand) objectStat(bucket *oss.Bucket, cloudURL CloudURL) error {
 	}
 
 	sort.Strings(sortNames)
-
 	for _, name := range sortNames {
 		if strings.ToLower(name) != "etag" {
-			fmt.Printf("%-28s: %s\n", name, attrMap[name])
+			fmt.Printf("%-[1]*s: %s\n", maxNameLen+2, name, attrMap[name])
 		} else {
-			fmt.Printf("%-28s: %s\n", name, strings.Trim(attrMap[name], "\""))
+			fmt.Printf("%-[1]*s: %s\n", maxNameLen+2, name, strings.Trim(attrMap[name], "\""))
 		}
 	}
 	return nil

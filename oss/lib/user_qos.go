@@ -84,12 +84,9 @@ var userQosCommand = UserQosCommand{
 			OptionProxyPwd,
 			OptionLogLevel,
 			OptionMethod,
+			OptionPassword,
 		},
 	},
-}
-
-func (uqc *UserQosCommand) GetCommand() *Command {
-	return &uqc.command
 }
 
 // function for FormatHelper interface

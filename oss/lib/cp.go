@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
@@ -61,9 +60,9 @@ type copyOptionType struct {
 	enableSymlinkDir  bool
 	onlyCurrentDir    bool
 	disableDirObject  bool
-	resumeProgress    *OssResumeProgressListener
 	disableAllSymlink bool
 	tagging           string
+	bSyncCommand      bool
 }
 
 type filterOptionType struct {
@@ -124,32 +123,23 @@ func (l *OssProgressListener) ProgressChanged(event *oss.ProgressEvent) {
 
 // OssProgressListener resume progress listener
 type OssResumeProgressListener struct {
-	monitor     *CPMonitor
-	lastSize    int64
-	currSize    int64
-	failedEvent bool
+	monitor        *CPMonitor
+	lastSize       int64
+	currSize       int64
+	failedEvent    bool
+	breakSizeAdded bool
 }
 
 // ProgressChanged handle resume progress event
 func (l *OssResumeProgressListener) ProgressChanged(event *oss.ProgressEvent) {
-	if event.EventType == oss.TransferDataEvent {
+	if event.EventType == oss.TransferStartedEvent && !l.breakSizeAdded {
+		l.monitor.updateDealSize(event.ConsumedBytes)
+		l.breakSizeAdded = true
+	} else if event.EventType == oss.TransferDataEvent {
 		l.monitor.updateTransferSize(event.RwBytes)
 		l.monitor.updateDealSize(event.RwBytes)
-		atomic.AddInt64(&l.currSize, event.RwBytes)
-	} else if event.EventType == oss.TransferStartedEvent {
-		if event.ConsumedBytes > 0 {
-			l.monitor.updateDealSize(event.ConsumedBytes)
-			atomic.StoreInt64(&l.currSize, event.ConsumedBytes)
-		}
 	}
 	freshProgress()
-}
-
-// Retry logic
-func (l *OssResumeProgressListener) Retry() {
-	currSize := atomic.LoadInt64(&l.currSize)
-	l.monitor.updateDealSize(-currSize)
-	atomic.StoreInt64(&l.currSize, 0)
 }
 
 var specChineseCopy = SpecText{
@@ -1288,12 +1278,9 @@ var copyCommand = CopyCommand{
 			OptionDisableAllSymlink,
 			OptionDisableIgnoreError,
 			OptionTagging,
+			OptionPassword,
 		},
 	},
-}
-
-func (cc *CopyCommand) GetCommand() *Command {
-	return &cc.command
 }
 
 // function for FormatHelper interface
@@ -1477,6 +1464,7 @@ func (cc *CopyCommand) RunCommand() error {
 	chProgressSignal = make(chan chProgressSignalType, 10)
 	go cc.progressBar()
 
+	startT := time.Now().UnixNano() / 1000 / 1000
 	switch opType {
 	case operationTypePut:
 		LogInfo("begin uploadFiles\n")
@@ -1488,10 +1476,16 @@ func (cc *CopyCommand) RunCommand() error {
 		LogInfo("begin copyFiles\n")
 		err = cc.copyFiles(srcURLList[0].(CloudURL), destURL.(CloudURL))
 	}
+	endT := time.Now().UnixNano() / 1000 / 1000
+	if endT-startT > 0 {
+		averSpeed := (cc.monitor.transferSize / (endT - startT)) * 1000
+		fmt.Printf("\naverage speed %d(byte/s)\n", averSpeed)
+		LogInfo("average speed %d(byte/s)\n", averSpeed)
+	}
 
 	cc.cpOption.reporter.Clear()
-
-	if err == nil {
+	ckFiles, _ := ioutil.ReadDir(cc.cpOption.cpDir)
+	if err == nil && len(ckFiles) == 0 {
 		LogInfo("begin Remove checkpointDir %s\n", cc.cpOption.cpDir)
 		os.RemoveAll(cc.cpOption.cpDir)
 	}
@@ -1715,8 +1709,8 @@ func (cc *CopyCommand) getCurrentDirFilesStatistic(dpath string) error {
 
 	for _, fileInfo := range fileList {
 		if !fileInfo.IsDir() {
-			realInfo, _ := os.Stat(dpath + fileInfo.Name())
-			if realInfo.IsDir() {
+			realInfo, errF := os.Stat(dpath + fileInfo.Name())
+			if errF == nil && realInfo.IsDir() {
 				// for symlink
 				continue
 			}
@@ -1853,8 +1847,8 @@ func (cc *CopyCommand) getCurrentDirFileList(dpath string, chFiles chan<- fileIn
 
 	for _, fileInfo := range fileList {
 		if !fileInfo.IsDir() {
-			realInfo, _ := os.Stat(dpath + fileInfo.Name())
-			if realInfo.IsDir() {
+			realInfo, errF := os.Stat(dpath + fileInfo.Name())
+			if errF == nil && realInfo.IsDir() {
 				// for symlink
 				continue
 			}
@@ -1964,7 +1958,11 @@ func (cc *CopyCommand) uploadConsumer(bucket *oss.Bucket, destURL CloudURL, chFi
 func (cc *CopyCommand) filterFile(file fileInfoType, cpDir string) bool {
 	filePath := file.filePath
 	if file.dir != "" {
-		filePath = file.dir + string(os.PathSeparator) + file.filePath
+		if strings.HasSuffix(file.dir, string(os.PathSeparator)) {
+			filePath = file.dir + file.filePath
+		} else {
+			filePath = file.dir + string(os.PathSeparator) + file.filePath
+		}
 	}
 	return cc.filterPath(filePath, cpDir)
 }
@@ -1998,7 +1996,9 @@ func (cc *CopyCommand) uploadFileWithReport(bucket *oss.Bucket, destURL CloudURL
 		if cost > 0 && errF == nil {
 			speed = (float64(fileInfo.Size()) / 1024) / (float64(cost) / 1000)
 		}
-		LogInfo("upload file success,file:%s,size:%d,speed:%.2f(KB/s),cost:%d(ms)\n", file.filePath, fileInfo.Size(), speed, cost)
+		if errF == nil {
+			LogInfo("upload file success,file:%s,size:%d,speed:%.2f(KB/s),cost:%d(ms)\n", file.filePath, fileInfo.Size(), speed, cost)
+		}
 	}
 
 	cc.updateMonitor(skip, err, isDir, size)
@@ -2064,8 +2064,7 @@ func (cc *CopyCommand) uploadFile(bucket *oss.Bucket, destURL CloudURL, file fil
 		return
 	}
 
-	var listener *OssResumeProgressListener = &OssResumeProgressListener{&cc.monitor, 0, 0, false}
-	cc.cpOption.resumeProgress = listener
+	var listener *OssResumeProgressListener = &OssResumeProgressListener{&cc.monitor, 0, 0, false, false}
 
 	//make options for resume multipart upload
 	//part size
@@ -2142,7 +2141,7 @@ func (cc *CopyCommand) ossPutObjectRetry(bucket *oss.Bucket, objectName string, 
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
 		if i > 1 {
-			time.Sleep(time.Duration(1) * time.Second)
+			time.Sleep(time.Duration(3) * time.Second)
 			if int64(i) >= retryTimes {
 				fmt.Printf("\nretry count:%d:put object:%s.\n", i-1, objectName)
 			}
@@ -2166,7 +2165,7 @@ func (cc *CopyCommand) ossUploadFileRetry(bucket *oss.Bucket, objectName string,
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
 		if i > 1 {
-			time.Sleep(time.Duration(1) * time.Second)
+			time.Sleep(time.Duration(3) * time.Second)
 			if int64(i) >= retryTimes {
 				fmt.Printf("\nretry count:%d:upload file:%s\n", i-1, filePath)
 			}
@@ -2246,9 +2245,8 @@ func (cc *CopyCommand) calcPartSize(fileSize int64) (int64, int64) {
 func (cc *CopyCommand) ossResumeUploadRetry(bucket *oss.Bucket, objectName string, filePath string, partSize int64, options ...oss.Option) error {
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
-		cc.cpOption.resumeProgress.Retry()
 		if i > 1 {
-			time.Sleep(time.Duration(1) * time.Second)
+			time.Sleep(time.Duration(3) * time.Second)
 			if int64(i) >= retryTimes {
 				fmt.Printf("\nretry count:%d,multipart upload file:%s.\n", i-1, filePath)
 			}
@@ -2368,6 +2366,17 @@ func (cc *CopyCommand) formatResultPrompt(err error) error {
 	return err
 }
 
+func (cc *CopyCommand) adjustSrcURLForCommand(srcURL *CloudURL, bSyncCommand bool) {
+	if !bSyncCommand {
+		return
+	}
+
+	if len(srcURL.object) > 0 && !strings.HasSuffix(srcURL.object, "/") {
+		srcURL.object += "/"
+	}
+	return
+}
+
 func (cc *CopyCommand) adjustDestURLForDownload(destURL FileURL) (string, error) {
 	filePath := destURL.ToString()
 
@@ -2474,8 +2483,7 @@ func (cc *CopyCommand) downloadSingleFile(bucket *oss.Bucket, objectInfo objectI
 		return false, cc.ossDownloadFileRetry(bucket, object, fileName, downloadOptions...), 0, msg
 	}
 
-	var listener *OssResumeProgressListener = &OssResumeProgressListener{&cc.monitor, 0, 0, false}
-	cc.cpOption.resumeProgress = listener
+	var listener *OssResumeProgressListener = &OssResumeProgressListener{&cc.monitor, 0, 0, false, false}
 	downloadOptions = append(downloadOptions, oss.Progress(listener))
 
 	partSize, rt := cc.preparePartOption(size)
@@ -2513,8 +2521,8 @@ func (cc *CopyCommand) skipDownload(fileName string, srcModifiedTime time.Time, 
 		}
 	} else {
 		if !cc.cpOption.force {
-			if _, err := os.Stat(fileName); err == nil {
-				if !cc.confirm(fileName) {
+			if fileInfo, err := os.Stat(fileName); err == nil {
+				if fileInfo.IsDir() || !cc.confirm(fileName) {
 					return true
 				}
 			}
@@ -2536,7 +2544,7 @@ func (cc *CopyCommand) ossDownloadFileRetry(bucket *oss.Bucket, objectName, file
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
 		if i > 1 {
-			time.Sleep(time.Duration(1) * time.Second)
+			time.Sleep(time.Duration(3) * time.Second)
 			if int64(i) >= retryTimes {
 				fmt.Printf("\nretry count:%d:get object to file:%s.\n", i-1, fileName)
 			}
@@ -2565,9 +2573,8 @@ func (cc *CopyCommand) ossDownloadFileRetry(bucket *oss.Bucket, objectName, file
 func (cc *CopyCommand) ossResumeDownloadRetry(bucket *oss.Bucket, objectName string, filePath string, size, partSize int64, options ...oss.Option) error {
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
-		cc.cpOption.resumeProgress.Retry()
 		if i > 1 {
-			time.Sleep(time.Duration(1) * time.Second)
+			time.Sleep(time.Duration(3) * time.Second)
 			if int64(i) >= retryTimes {
 				fmt.Printf("\nretry count:%d:mulitpart download file:%s.\n", i-1, objectName)
 			}
@@ -2606,6 +2613,7 @@ func (cc *CopyCommand) updateSnapshot(err error, spath string, srct int64) error
 }
 
 func (cc *CopyCommand) batchDownloadFiles(bucket *oss.Bucket, srcURL CloudURL, filePath string) error {
+	cc.adjustSrcURLForCommand(&srcURL, cc.cpOption.bSyncCommand)
 	chObjects := make(chan objectInfoType, ChannelBuf)
 	chError := make(chan error, cc.cpOption.routines)
 	chListError := make(chan error, 1)
@@ -2646,6 +2654,21 @@ func (cc *CopyCommand) objectStatistic(bucket *oss.Bucket, cloudURL CloudURL) {
 			for _, object := range lor.Objects {
 				if doesSingleObjectMatchPatterns(object.Key, cc.cpOption.filters) {
 					if cc.cpOption.partitionIndex == 0 || (cc.cpOption.partitionIndex > 0 && matchHash(fnvIns, object.Key, cc.cpOption.partitionIndex-1, cc.cpOption.partitionCount)) {
+						if strings.ToLower(object.Type) == "symlink" {
+							props, err := cc.command.ossGetObjectStatRetry(bucket, object.Key, cc.cpOption.payerOptions...)
+							if err != nil {
+								LogError("ossGetObjectStatRetry error info:%s\n", err.Error())
+								cc.monitor.setScanError(err)
+								return
+							}
+							size, err := strconv.ParseInt(props.Get(oss.HTTPHeaderContentLength), 10, 64)
+							if err != nil {
+								LogError("strconv.ParseInt error info:%s\n", err.Error())
+								cc.monitor.setScanError(err)
+								return
+							}
+							object.Size = size
+						}
 						cc.monitor.updateScanSizeNum(cc.getRangeSize(object.Size), 1)
 					}
 				}
@@ -2763,6 +2786,21 @@ func (cc *CopyCommand) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chO
 
 			if doesSingleObjectMatchPatterns(object.Key, cc.cpOption.filters) {
 				if cc.cpOption.partitionIndex == 0 || (cc.cpOption.partitionIndex > 0 && matchHash(fnvIns, object.Key, cc.cpOption.partitionIndex-1, cc.cpOption.partitionCount)) {
+					if strings.ToLower(object.Type) == "symlink" {
+						props, err := cc.command.ossGetObjectStatRetry(bucket, object.Key, cc.cpOption.payerOptions...)
+						if err != nil {
+							LogError("ossGetObjectStatRetry error info:%s\n", err.Error())
+							chError <- err
+							break
+						}
+						size, err := strconv.ParseInt(props.Get(oss.HTTPHeaderContentLength), 10, 64)
+						if err != nil {
+							LogError("strconv.ParseInt error info:%s\n", err.Error())
+							chError <- err
+							break
+						}
+						object.Size = size
+					}
 					chObjects <- objectInfoType{prefix, relativeKey, int64(object.Size), object.LastModified}
 				}
 			}
@@ -2928,8 +2966,7 @@ func (cc *CopyCommand) copySingleFile(bucket *oss.Bucket, objectInfo objectInfoT
 		return false, cc.ossCopyObjectRetry(bucket, srcObject, destURL.bucket, destObject), size, msg
 	}
 
-	var listener *OssResumeProgressListener = &OssResumeProgressListener{&cc.monitor, 0, 0, false}
-	cc.cpOption.resumeProgress = listener
+	var listener *OssResumeProgressListener = &OssResumeProgressListener{&cc.monitor, 0, 0, false, false}
 	partSize, rt := cc.preparePartOption(size)
 	cp := oss.CheckpointDir(true, cc.cpOption.cpDir)
 	options := cc.cpOption.options
@@ -2976,7 +3013,7 @@ func (cc *CopyCommand) ossCopyObjectRetry(bucket *oss.Bucket, objectName, destBu
 	options = append(options, oss.TaggingDirective(oss.TaggingReplace))
 	for i := 1; ; i++ {
 		if i > 1 {
-			time.Sleep(time.Duration(1) * time.Second)
+			time.Sleep(time.Duration(3) * time.Second)
 			if int64(i) >= retryTimes {
 				fmt.Printf("\nretry count:%d,copy object:%s.\n", i-1, objectName)
 			}
@@ -3002,9 +3039,8 @@ func (cc *CopyCommand) ossResumeCopyRetry(bucketName, objectName, destBucketName
 	}
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
-		cc.cpOption.resumeProgress.Retry()
 		if i > 1 {
-			time.Sleep(time.Duration(1) * time.Second)
+			time.Sleep(time.Duration(3) * time.Second)
 			if int64(i) >= retryTimes {
 				fmt.Printf("\nretry count:%d, resume copy object:%s.\n", i-1, objectName)
 			}
@@ -3021,6 +3057,7 @@ func (cc *CopyCommand) ossResumeCopyRetry(bucketName, objectName, destBucketName
 }
 
 func (cc *CopyCommand) batchCopyFiles(bucket *oss.Bucket, srcURL, destURL CloudURL) error {
+	cc.adjustSrcURLForCommand(&srcURL, cc.cpOption.bSyncCommand)
 	chObjects := make(chan objectInfoType, ChannelBuf)
 	chError := make(chan error, cc.cpOption.routines)
 	chListError := make(chan error, 1)

@@ -164,12 +164,9 @@ var bucketLifeCycleCommand = BucketLifeCycleCommand{
 			OptionProxyPwd,
 			OptionLogLevel,
 			OptionMethod,
+			OptionPassword,
 		},
 	},
-}
-
-func (blc *BucketLifeCycleCommand) GetCommand() *Command {
-	return &blc.command
 }
 
 // function for FormatHelper interface

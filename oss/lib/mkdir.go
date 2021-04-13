@@ -80,12 +80,9 @@ var mkdirCommand = MkdirCommand{
 			OptionProxyPwd,
 			OptionLogLevel,
 			OptionEncodingType,
+			OptionPassword,
 		},
 	},
-}
-
-func (mkc *MkdirCommand) GetCommand() *Command {
-	return &mkc.command
 }
 
 // function for FormatHelper interface
