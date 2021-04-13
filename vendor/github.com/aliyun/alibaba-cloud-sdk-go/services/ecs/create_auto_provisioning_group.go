@@ -79,6 +79,7 @@ type CreateAutoProvisioningGroupRequest struct {
 	ResourceGroupId                                string                                                    `position:"Query" name:"ResourceGroupId"`
 	LaunchConfigurationImageId                     string                                                    `position:"Query" name:"LaunchConfiguration.ImageId"`
 	LaunchConfigurationResourceGroupId             string                                                    `position:"Query" name:"LaunchConfiguration.ResourceGroupId"`
+	LaunchConfigurationPassword                    string                                                    `position:"Query" name:"LaunchConfiguration.Password"`
 	PayAsYouGoAllocationStrategy                   string                                                    `position:"Query" name:"PayAsYouGoAllocationStrategy"`
 	DefaultTargetCapacityType                      string                                                    `position:"Query" name:"DefaultTargetCapacityType"`
 	LaunchConfigurationKeyPairName                 string                                                    `position:"Query" name:"LaunchConfiguration.KeyPairName"`
@@ -92,6 +93,7 @@ type CreateAutoProvisioningGroupRequest struct {
 	LaunchConfigurationHostName                    string                                                    `position:"Query" name:"LaunchConfiguration.HostName"`
 	MaxSpotPrice                                   requests.Float                                            `position:"Query" name:"MaxSpotPrice"`
 	LaunchConfigurationPasswordInherit             requests.Boolean                                          `position:"Query" name:"LaunchConfiguration.PasswordInherit"`
+	ClientToken                                    string                                                    `position:"Query" name:"ClientToken"`
 	LaunchConfigurationSecurityGroupId             string                                                    `position:"Query" name:"LaunchConfiguration.SecurityGroupId"`
 	Description                                    string                                                    `position:"Query" name:"Description"`
 	TerminateInstancesWithExpiration               requests.Boolean                                          `position:"Query" name:"TerminateInstancesWithExpiration"`
@@ -110,6 +112,7 @@ type CreateAutoProvisioningGroupRequest struct {
 	SpotInstanceInterruptionBehavior               string                                                    `position:"Query" name:"SpotInstanceInterruptionBehavior"`
 	LaunchConfigurationSecurityEnhancementStrategy string                                                    `position:"Query" name:"LaunchConfiguration.SecurityEnhancementStrategy"`
 	LaunchConfigurationTag                         *[]CreateAutoProvisioningGroupLaunchConfigurationTag      `position:"Query" name:"LaunchConfiguration.Tag"  type:"Repeated"`
+	LaunchConfigurationDeploymentSetId             string                                                    `position:"Query" name:"LaunchConfiguration.DeploymentSetId"`
 	ResourceOwnerAccount                           string                                                    `position:"Query" name:"ResourceOwnerAccount"`
 	OwnerAccount                                   string                                                    `position:"Query" name:"OwnerAccount"`
 	SpotInstancePoolsToUseCount                    requests.Integer                                          `position:"Query" name:"SpotInstancePoolsToUseCount"`
@@ -165,8 +168,9 @@ type CreateAutoProvisioningGroupLaunchConfigurationTag struct {
 // CreateAutoProvisioningGroupResponse is the response struct for api CreateAutoProvisioningGroup
 type CreateAutoProvisioningGroupResponse struct {
 	*responses.BaseResponse
-	RequestId               string `json:"RequestId" xml:"RequestId"`
-	AutoProvisioningGroupId string `json:"AutoProvisioningGroupId" xml:"AutoProvisioningGroupId"`
+	RequestId               string        `json:"RequestId" xml:"RequestId"`
+	AutoProvisioningGroupId string        `json:"AutoProvisioningGroupId" xml:"AutoProvisioningGroupId"`
+	LaunchResults           LaunchResults `json:"LaunchResults" xml:"LaunchResults"`
 }
 
 // CreateCreateAutoProvisioningGroupRequest creates a request to invoke CreateAutoProvisioningGroup API

@@ -86,6 +86,7 @@ type ModifyDiskSpecResponse struct {
 	*responses.BaseResponse
 	RequestId string `json:"RequestId" xml:"RequestId"`
 	TaskId    string `json:"TaskId" xml:"TaskId"`
+	OrderId   string `json:"OrderId" xml:"OrderId"`
 }
 
 // CreateModifyDiskSpecRequest creates a request to invoke ModifyDiskSpec API
