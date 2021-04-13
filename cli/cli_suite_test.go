@@ -22,5 +22,5 @@ import (
 
 func TestCliSuite(t *testing.T) {
 	RegisterFailHandler(ginkgo.Fail)
-	ginkgo.RunSpecs(t, "Cli Suite")
+	ginkgo.RunSpecs(t, "CLI Suite")
 }

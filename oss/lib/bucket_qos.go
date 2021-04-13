@@ -150,12 +150,9 @@ var bucketQosCommand = BucketQosCommand{
 			OptionProxyPwd,
 			OptionLogLevel,
 			OptionMethod,
+			OptionPassword,
 		},
 	},
-}
-
-func (bqc *BucketQosCommand) GetCommand() *Command {
-	return &bqc.command
 }
 
 // function for FormatHelper interface

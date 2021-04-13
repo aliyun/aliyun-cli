@@ -145,12 +145,9 @@ var corsCommand = CorsCommand{
 			OptionProxyPwd,
 			OptionMethod,
 			OptionLogLevel,
+			OptionPassword,
 		},
 	},
-}
-
-func (corsc *CorsCommand) GetCommand() *Command {
-	return &corsc.command
 }
 
 // function for FormatHelper interface

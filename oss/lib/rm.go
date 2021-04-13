@@ -328,12 +328,9 @@ var removeCommand = RemoveCommand{
 			OptionVersionId,
 			OptionAllversions,
 			OptionRequestPayer,
+			OptionPassword,
 		},
 	},
-}
-
-func (rc *RemoveCommand) GetCommand() *Command {
-	return &rc.command
 }
 
 // function for FormatHelper interface

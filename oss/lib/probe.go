@@ -351,12 +351,9 @@ var probeCommand = ProbeCommand{
 			OptionUpMode,
 			OptionLogLevel,
 			OptionProbeItem,
+			OptionPassword,
 		},
 	},
-}
-
-func (pc *ProbeCommand) GetCommand() *Command {
-	return &pc.command
 }
 
 type TestAppendReader struct {

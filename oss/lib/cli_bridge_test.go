@@ -5,5 +5,5 @@ import (
 )
 
 func TestCliBridge(t *testing.T) {
-	NewCommandBridge(&configCommand)
+	NewCommandBridge(&configCommand.command)
 }

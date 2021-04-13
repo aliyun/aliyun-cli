@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/user"
 	"strings"
 )
 
@@ -138,11 +137,11 @@ func (fu *FileURL) Init(urlStr, encodingType string) error {
 	}
 
 	if len(urlStr) >= 2 && urlStr[:2] == "~"+string(os.PathSeparator) {
-		usr, err := user.Current()
-		if usr != nil {
-			urlStr = strings.Replace(urlStr, "~", usr.HomeDir, 1)
+		homeDir := currentHomeDir()
+		if homeDir != "" {
+			urlStr = strings.Replace(urlStr, "~", homeDir, 1)
 		} else {
-			return fmt.Errorf("%s,get current user error for ~", err.Error())
+			return fmt.Errorf("current home dir is empty")
 		}
 	}
 	fu.urlStr = urlStr

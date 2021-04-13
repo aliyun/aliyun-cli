@@ -117,12 +117,9 @@ var createSymlinkCommand = CreateSymlinkCommand{
 			OptionRetryTimes,
 			OptionLogLevel,
 			OptionRequestPayer,
+			OptionPassword,
 		},
 	},
-}
-
-func (cc *CreateSymlinkCommand) GetCommand() *Command {
-	return &cc.command
 }
 
 // function for FormatHelper interface

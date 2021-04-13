@@ -311,10 +311,6 @@ var configCommand = ConfigCommand{
 	},
 }
 
-func (cc *ConfigCommand) GetCommand() *Command {
-	return &cc.command
-}
-
 // function for RewriteLoadConfiger interface
 func (cc *ConfigCommand) rewriteLoadConfig(configFile string) error {
 	// read config file, if error exist, do not print error

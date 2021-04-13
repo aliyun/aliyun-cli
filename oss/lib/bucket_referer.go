@@ -130,12 +130,9 @@ var bucketRefererCommand = BucketRefererCommand{
 			OptionLogLevel,
 			OptionDisableEmptyReferer,
 			OptionMethod,
+			OptionPassword,
 		},
 	},
-}
-
-func (brc *BucketRefererCommand) GetCommand() *Command {
-	return &brc.command
 }
 
 // function for FormatHelper interface

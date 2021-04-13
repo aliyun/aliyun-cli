@@ -94,6 +94,7 @@ var allPartSizeCommand = AllPartSizeCommand{
 			OptionProxyPwd,
 			OptionEncodingType,
 			OptionLogLevel,
+			OptionPassword,
 		},
 	},
 }
@@ -101,10 +102,6 @@ var allPartSizeCommand = AllPartSizeCommand{
 type StatPartInfo struct {
 	objectName string
 	uploadId   string
-}
-
-func (apc *AllPartSizeCommand) GetCommand() *Command {
-	return &apc.command
 }
 
 // function for FormatHelper interface

@@ -124,12 +124,9 @@ var bucketLogCommand = BucketLogCommand{
 			OptionProxyPwd,
 			OptionMethod,
 			OptionLogLevel,
+			OptionPassword,
 		},
 	},
-}
-
-func (blc *BucketLogCommand) GetCommand() *Command {
-	return &blc.command
 }
 
 // function for FormatHelper interface

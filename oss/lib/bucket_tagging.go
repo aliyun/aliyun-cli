@@ -114,12 +114,9 @@ var bucketTagCommand = BucketTagCommand{
 			OptionProxyPwd,
 			OptionMethod,
 			OptionLogLevel,
+			OptionPassword,
 		},
 	},
-}
-
-func (btc *BucketTagCommand) GetCommand() *Command {
-	return &btc.command
 }
 
 // function for FormatHelper interface

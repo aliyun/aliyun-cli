@@ -115,12 +115,9 @@ var readSymlinkCommand = ReadSymlinkCommand{
 			OptionLogLevel,
 			OptionVersionId,
 			OptionRequestPayer,
+			OptionPassword,
 		},
 	},
-}
-
-func (rc *ReadSymlinkCommand) GetCommand() *Command {
-	return &rc.command
 }
 
 // function for FormatHelper interface

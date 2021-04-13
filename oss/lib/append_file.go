@@ -149,12 +149,9 @@ var appendFileCommand = AppendFileCommand{
 			OptionMaxUpSpeed,
 			OptionLogLevel,
 			OptionRequestPayer,
+			OptionPassword,
 		},
 	},
-}
-
-func (afc *AppendFileCommand) GetCommand() *Command {
-	return &afc.command
 }
 
 // function for FormatHelper interface

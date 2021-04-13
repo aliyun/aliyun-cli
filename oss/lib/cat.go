@@ -102,12 +102,9 @@ var catCommand = CatCommand{
 			OptionLogLevel,
 			OptionVersionId,
 			OptionRequestPayer,
+			OptionPassword,
 		},
 	},
-}
-
-func (catc *CatCommand) GetCommand() *Command {
-	return &catc.command
 }
 
 // function for FormatHelper interface
