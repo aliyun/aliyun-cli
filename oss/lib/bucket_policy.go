@@ -161,12 +161,9 @@ var bucketPolicyCommand = BucketPolicyCommand{
 			OptionProxyPwd,
 			OptionLogLevel,
 			OptionMethod,
+			OptionPassword,
 		},
 	},
-}
-
-func (bpc *BucketPolicyCommand) GetCommand() *Command {
-	return &bpc.command
 }
 
 // function for FormatHelper interface

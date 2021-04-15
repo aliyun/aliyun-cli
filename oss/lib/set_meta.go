@@ -11,16 +11,21 @@ import (
 )
 
 var headerOptionMap = map[string]interface{}{
-	oss.HTTPHeaderContentType:             oss.ContentType,
-	oss.HTTPHeaderCacheControl:            oss.CacheControl,
-	oss.HTTPHeaderContentDisposition:      oss.ContentDisposition,
-	oss.HTTPHeaderContentEncoding:         oss.ContentEncoding,
-	oss.HTTPHeaderExpires:                 oss.Expires,
-	oss.HTTPHeaderAcceptEncoding:          oss.AcceptEncoding,
-	oss.HTTPHeaderOssServerSideEncryption: oss.ServerSideEncryption,
-	oss.HTTPHeaderOssObjectACL:            oss.ObjectACL,
-	oss.HTTPHeaderOrigin:                  oss.Origin,
-	oss.HTTPHeaderOssStorageClass:         oss.ObjectStorageClass,
+	oss.HTTPHeaderContentType:                  oss.ContentType,
+	oss.HTTPHeaderCacheControl:                 oss.CacheControl,
+	oss.HTTPHeaderContentDisposition:           oss.ContentDisposition,
+	oss.HTTPHeaderContentEncoding:              oss.ContentEncoding,
+	oss.HTTPHeaderExpires:                      oss.Expires,
+	oss.HTTPHeaderAcceptEncoding:               oss.AcceptEncoding,
+	oss.HTTPHeaderOssServerSideEncryption:      oss.ServerSideEncryption,
+	oss.HTTPHeaderOssObjectACL:                 oss.ObjectACL,
+	oss.HTTPHeaderOrigin:                       oss.Origin,
+	oss.HTTPHeaderOssStorageClass:              oss.ObjectStorageClass,
+	oss.HTTPHeaderOssServerSideEncryptionKeyID: oss.ServerSideEncryptionKeyID,
+	oss.HTTPHeaderOssServerSideDataEncryption:  oss.ServerSideDataEncryption,
+	oss.HTTPHeaderSSECAlgorithm:                oss.SSECAlgorithm,
+	oss.HTTPHeaderSSECKey:                      oss.SSECKey,
+	oss.HTTPHeaderSSECKeyMd5:                   oss.SSECKeyMd5,
 }
 
 func formatHeaderString(hopMap map[string]interface{}, sep string) string {
@@ -295,12 +300,9 @@ var setMetaCommand = SetMetaCommand{
 			OptionOutputDir,
 			OptionLogLevel,
 			OptionVersionId,
+			OptionPassword,
 		},
 	},
-}
-
-func (sc *SetMetaCommand) GetCommand() *Command {
-	return &sc.command
 }
 
 // function for FormatHelper interface
@@ -489,10 +491,21 @@ func (sc *SetMetaCommand) setObjectMeta(bucket *oss.Bucket, object string, heade
 		if len(versionId) > 0 {
 			options = append(options, oss.VersionId(versionId))
 		}
+
+		// get object meta
 		props, err := sc.command.ossGetObjectStatRetry(bucket, object, options...)
 		if err != nil {
 			return err
 		}
+
+		// get object acl
+		objectACL, err := bucket.GetObjectACL(object, options...)
+		if err != nil {
+			return err
+		}
+		props.Set(StatACL, objectACL.ACL)
+
+		// merge
 		allheaders = sc.mergeHeader(props, headers, isUpdate, isDelete)
 	}
 
@@ -512,7 +525,7 @@ func (sc *SetMetaCommand) mergeHeader(props http.Header, headers map[string]stri
 		if _, err := fetchHeaderOptionMap(headerOptionMap, name); err == nil || strings.HasPrefix(strings.ToLower(name), strings.ToLower(oss.HTTPHeaderOssMetaPrefix)) {
 			allheaders[strings.ToLower(name)] = props.Get(name)
 		}
-		if name == StatACL {
+		if strings.ToLower(name) == strings.ToLower(StatACL) {
 			allheaders[strings.ToLower(oss.HTTPHeaderOssObjectACL)] = props.Get(name)
 		}
 	}

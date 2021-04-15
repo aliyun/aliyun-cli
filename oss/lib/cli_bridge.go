@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
@@ -19,45 +20,13 @@ func NewOssCommand() *cli.Command {
 		Short:  i18n.T("Object Storage Service", "阿里云OSS对象存储"),
 	}
 
-	result.AddSubCommand(NewCommandBridge(&allPartSizeCommand))
-	result.AddSubCommand(NewCommandBridge(&appendFileCommand))
-	result.AddSubCommand(NewCommandBridge(&corsCommand))
-	result.AddSubCommand(NewCommandBridge(&bucketEncryptionCommand))
-	result.AddSubCommand(NewCommandBridge(&bucketLifeCycleCommand))
-	result.AddSubCommand(NewCommandBridge(&bucketLogCommand))
-	result.AddSubCommand(NewCommandBridge(&bucketPolicyCommand))
-	result.AddSubCommand(NewCommandBridge(&bucketQosCommand))
-	result.AddSubCommand(NewCommandBridge(&bucketRefererCommand))
-	result.AddSubCommand(NewCommandBridge(&bucketTagCommand))
-	result.AddSubCommand(NewCommandBridge(&bucketVersioningCommand))
-	result.AddSubCommand(NewCommandBridge(&bucketWebsiteCommand))
-	result.AddSubCommand(NewCommandBridge(&catCommand))
-	result.AddSubCommand(NewCommandBridge(&corsOptionsCommand))
-	result.AddSubCommand(NewCommandBridge(&copyCommand))
-	result.AddSubCommand(NewCommandBridge(&createSymlinkCommand))
-	result.AddSubCommand(NewCommandBridge(&duSizeCommand))
-	result.AddSubCommand(NewCommandBridge(&hashCommand))
-	result.AddSubCommand(NewCommandBridge(&helpCommand))
-	result.AddSubCommand(NewCommandBridge(&listPartCommand))
-	result.AddSubCommand(NewCommandBridge(&listCommand))
-	result.AddSubCommand(NewCommandBridge(&makeBucketCommand))
-	result.AddSubCommand(NewCommandBridge(&mkdirCommand))
-	result.AddSubCommand(NewCommandBridge(&objectTagCommand))
-	result.AddSubCommand(NewCommandBridge(&probeCommand))
-	result.AddSubCommand(NewCommandBridge(&readSymlinkCommand))
-	result.AddSubCommand(NewCommandBridge(&requestPaymentCommand))
-	result.AddSubCommand(NewCommandBridge(&restoreCommand))
-	result.AddSubCommand(NewCommandBridge(&removeCommand))
-	result.AddSubCommand(NewCommandBridge(&setACLCommand))
-	result.AddSubCommand(NewCommandBridge(&setMetaCommand))
-	result.AddSubCommand(NewCommandBridge(&signURLCommand))
-	result.AddSubCommand(NewCommandBridge(&statCommand))
-	result.AddSubCommand(NewCommandBridge(&userQosCommand))
+	for _, cmd := range GetAllCommands() {
+		result.AddSubCommand(NewCommandBridge(cmd.(*Command)))
+	}
 	return result
 }
 
-func NewCommandBridge(a Commander) *cli.Command {
-	cmd := a.GetCommand()
+func NewCommandBridge(cmd *Command) *cli.Command {
 	result := &cli.Command{
 		Name:  cmd.name,
 		Usage: cmd.specEnglish.syntaxText,
@@ -154,35 +123,35 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 }
 
 func getSessionCredential(profile *config.Profile) (string, string, string, error) {
-	var conf *credentials.Configuration
+	var conf *credentials.Config
 	switch profile.Mode {
 	case config.AK:
-		conf = &credentials.Configuration{
-			Type:            "access_key",
-			AccessKeyID:     profile.AccessKeyId,
-			AccessKeySecret: profile.AccessKeySecret,
+		conf = &credentials.Config{
+			Type:            tea.String("access_key"),
+			AccessKeyId:     &profile.AccessKeyId,
+			AccessKeySecret: &profile.AccessKeySecret,
 		}
 	case config.StsToken:
-		conf = &credentials.Configuration{
-			Type:            "sts",
-			AccessKeyID:     profile.AccessKeyId,
-			AccessKeySecret: profile.AccessKeySecret,
-			SecurityToken:   profile.StsToken,
+		conf = &credentials.Config{
+			Type:            tea.String("sts"),
+			AccessKeyId:     &profile.AccessKeyId,
+			AccessKeySecret: &profile.AccessKeySecret,
+			SecurityToken:   &profile.StsToken,
 		}
 	case config.RamRoleArn:
-		conf = &credentials.Configuration{
-			Type:                  "ram_role_arn",
-			AccessKeyID:           profile.AccessKeyId,
-			AccessKeySecret:       profile.AccessKeySecret,
-			RoleArn:               profile.RamRoleArn,
-			RoleSessionName:       profile.RoleSessionName,
-			Policy:                "",
-			RoleSessionExpiration: profile.ExpiredSeconds,
+		conf = &credentials.Config{
+			Type:                  tea.String("ram_role_arn"),
+			AccessKeyId:           &profile.AccessKeyId,
+			AccessKeySecret:       &profile.AccessKeySecret,
+			RoleArn:               &profile.RamRoleArn,
+			RoleSessionName:       &profile.RoleSessionName,
+			Policy:                tea.String(""),
+			RoleSessionExpiration: &profile.ExpiredSeconds,
 		}
 	case config.EcsRamRole:
-		conf = &credentials.Configuration{
-			Type:     "ecs_ram_role",
-			RoleName: profile.RamRoleName,
+		conf = &credentials.Config{
+			Type:     tea.String("ecs_ram_role"),
+			RoleName: &profile.RamRoleName,
 		}
 	case config.RamRoleArnWithEcs:
 		client, _ := sdk.NewClientWithEcsRamRole(profile.RegionId, profile.RamRoleName)
@@ -193,11 +162,11 @@ func getSessionCredential(profile *config.Profile) (string, string, string, erro
 		return "", "", "", err
 	}
 	var lastErr error
-	accessKeyID, err := credential.GetAccessKeyID()
+	accessKeyID, err := credential.GetAccessKeyId()
 	if err != nil {
 		lastErr = err
 	}
-	accessSecret, err := credential.GetAccessSecret()
+	accessSecret, err := credential.GetAccessKeySecret()
 	if err != nil {
 		lastErr = err
 	}
@@ -208,5 +177,5 @@ func getSessionCredential(profile *config.Profile) (string, string, string, erro
 	if lastErr != nil {
 		return "", "", "", lastErr
 	}
-	return accessKeyID, accessSecret, stsToken, nil
+	return *accessKeyID, *accessSecret, *stsToken, nil
 }

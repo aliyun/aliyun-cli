@@ -106,12 +106,9 @@ var bucketVersioningCommand = BucketVersioningCommand{
 			OptionProxyPwd,
 			OptionMethod,
 			OptionLogLevel,
+			OptionPassword,
 		},
 	},
-}
-
-func (bvc *BucketVersioningCommand) GetCommand() *Command {
-	return &bvc.command
 }
 
 // function for FormatHelper interface

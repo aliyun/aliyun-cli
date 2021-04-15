@@ -37,7 +37,7 @@ func InitLogger(level int, name string) {
 	if err != nil {
 		return
 	}
-	utilLogger = log.New(f, "", log.LstdFlags)
+	utilLogger = log.New(f, "", log.LstdFlags|log.Lmicroseconds)
 	logFile = f
 }
 

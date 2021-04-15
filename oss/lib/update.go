@@ -128,6 +128,12 @@ func (uc *UpdateCommand) RunCommand() error {
 	} else {
 		fmt.Printf("当前版本为：%s，最新版本为：%s", vVersion, version)
 	}
+
+	// version is X.X.X
+	// vVersion is vX.X.X
+	if vVersion[0] < '0' || vVersion[0] > '9' {
+		vVersion = vVersion[1:len(vVersion)]
+	}
 	if version == vVersion {
 		if language == LEnglishLanguage {
 			fmt.Println(", current version is the lastest version, no need to update.")

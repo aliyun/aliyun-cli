@@ -4849,3 +4849,183 @@ func (s *OssutilCommandSuite) TestUploadMultiFileFileWithTagging(c *C) {
 	os.Remove(testFileName)
 	s.removeBucket(bucketName, true, c)
 }
+
+// test PutObject with kms sm4
+func (s *OssutilCommandSuite) TestPutObjectWithKmsSm4Encryption(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	s.putBucket(bucketName, c)
+	object := randStr(12)
+	bucketStr := CloudURLToString(bucketName, object)
+
+	// put object
+	testFileName := "ossutil-test-" + randStr(10)
+	content := randStr(1024)
+	s.createFile(testFileName, content, c)
+
+	// upload files
+	args := []string{testFileName, bucketStr}
+	cmdline := []string{"ossutil", "cp", testFileName, bucketStr, "--meta", "x-oss-server-side-encryption:KMS#x-oss-server-side-data-encryption:SM4"}
+	_, err := s.rawCPWithFilter(args, false, true, false, DefaultBigFileThreshold, CheckpointDir, cmdline, "x-oss-server-side-encryption:KMS#x-oss-server-side-data-encryption:SM4", "")
+	c.Assert(err, IsNil)
+
+	// stat
+	objectStat := s.getStat(bucketName, object, c)
+	c.Assert(objectStat[oss.HTTPHeaderOssServerSideEncryption], Equals, "KMS")
+	c.Assert(len(objectStat["Etag"]) > 0, Equals, true)
+	c.Assert(objectStat[oss.HTTPHeaderOssServerSideDataEncryption], Equals, "SM4")
+}
+
+// test PutObject with sm4
+func (s *OssutilCommandSuite) TestPutObjectWithSm4Encryption(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	s.putBucket(bucketName, c)
+	object := randStr(12)
+	bucketStr := CloudURLToString(bucketName, object)
+
+	// put object
+	testFileName := "ossutil-test-" + randStr(10)
+	content := randStr(1024)
+	s.createFile(testFileName, content, c)
+
+	// upload files
+	args := []string{testFileName, bucketStr}
+	cmdline := []string{"ossutil", "cp", testFileName, bucketStr, "--meta", "x-oss-server-side-encryption:SM4"}
+	_, err := s.rawCPWithFilter(args, false, true, false, DefaultBigFileThreshold, CheckpointDir, cmdline, "x-oss-server-side-encryption:SM4", "")
+	c.Assert(err, IsNil)
+
+	// stat
+	objectStat := s.getStat(bucketName, object, c)
+	c.Assert(objectStat[oss.HTTPHeaderOssServerSideEncryption], Equals, "SM4")
+	c.Assert(len(objectStat["Etag"]) > 0, Equals, true)
+	c.Assert(objectStat[oss.HTTPHeaderOssServerSideDataEncryption], Equals, "")
+}
+
+// test PutObject with KMS
+func (s *OssutilCommandSuite) TestPutObjectWithKmsEncryption(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	s.putBucket(bucketName, c)
+	object := randStr(12)
+	bucketStr := CloudURLToString(bucketName, object)
+
+	// put object
+	testFileName := "ossutil-test-" + randStr(10)
+	content := randStr(1024)
+	s.createFile(testFileName, content, c)
+
+	// upload files
+	args := []string{testFileName, bucketStr}
+	cmdline := []string{"ossutil", "cp", testFileName, bucketStr, "--meta", "x-oss-server-side-encryption:KMS"}
+	_, err := s.rawCPWithFilter(args, false, true, false, DefaultBigFileThreshold, CheckpointDir, cmdline, "x-oss-server-side-encryption:KMS", "")
+	c.Assert(err, IsNil)
+
+	// stat
+	objectStat := s.getStat(bucketName, object, c)
+	c.Assert(objectStat[oss.HTTPHeaderOssServerSideEncryption], Equals, "KMS")
+	c.Assert(len(objectStat["Etag"]) > 0, Equals, true)
+	c.Assert(objectStat[oss.HTTPHeaderOssServerSideDataEncryption], Equals, "")
+}
+
+// test PutObject with AES256
+func (s *OssutilCommandSuite) TestPutObjectWithAES256(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	s.putBucket(bucketName, c)
+	object := randStr(12)
+	bucketStr := CloudURLToString(bucketName, object)
+
+	// put object
+	testFileName := "ossutil-test-" + randStr(10)
+	content := randStr(1024)
+	s.createFile(testFileName, content, c)
+
+	// upload files
+	args := []string{testFileName, bucketStr}
+	cmdline := []string{"ossutil", "cp", testFileName, bucketStr, "--meta", "x-oss-server-side-encryption:AES256"}
+	_, err := s.rawCPWithFilter(args, false, true, false, DefaultBigFileThreshold, CheckpointDir, cmdline, "x-oss-server-side-encryption:AES256", "")
+	c.Assert(err, IsNil)
+
+	// stat
+	objectStat := s.getStat(bucketName, object, c)
+	c.Assert(objectStat[oss.HTTPHeaderOssServerSideEncryption], Equals, "AES256")
+	c.Assert(len(objectStat["Etag"]) > 0, Equals, true)
+	c.Assert(objectStat[oss.HTTPHeaderOssServerSideDataEncryption], Equals, "")
+}
+
+func (s *OssutilCommandSuite) TestBatchDownloadSymlinkObject(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	s.putBucket(bucketName, c)
+	object := randStr(12)
+	bucketStr := CloudURLToString(bucketName, object)
+
+	// put object
+	testFileName := "ossutil-test-" + randStr(10)
+	len := 1024 * 1024
+	content := randStr(len)
+	s.createFile(testFileName, content, c)
+
+	// upload files
+	args := []string{testFileName, bucketStr}
+	cmdline := []string{"ossutil", "cp", testFileName, bucketStr}
+	_, err := s.rawCPWithFilter(args, false, true, false, DefaultBigFileThreshold, CheckpointDir, cmdline, "", "")
+	c.Assert(err, IsNil)
+
+	// create symlink object
+	symObject := object + "-link"
+	strCmdline := fmt.Sprintf("%s %s", CloudURLToString(bucketName, symObject), CloudURLToString(bucketName, object))
+	err = s.initCreateSymlink(strCmdline)
+	c.Assert(err, IsNil)
+	err = createSymlinkCommand.RunCommand()
+	c.Assert(err, IsNil)
+
+	// batch download symlink object
+	args = []string{CloudURLToString(bucketName, symObject), "." + string(os.PathSeparator)}
+	cmdline = []string{"ossutil", "cp", CloudURLToString(bucketName, symObject), "." + string(os.PathSeparator)}
+	_, err = s.rawCPWithFilter(args, true, true, false, int64(len/2), CheckpointDir, cmdline, "", "")
+	c.Assert(err, IsNil)
+
+	//check size
+	fileInfo, err := os.Stat(symObject)
+	c.Assert(err, IsNil)
+	c.Assert(fileInfo.Size(), Equals, int64(len))
+	c.Assert(copyCommand.monitor.totalSize, Equals, int64(len))
+
+	os.Remove(testFileName)
+	os.Remove(symObject)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestCPObjectWithInputPassword(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	s.putBucket(bucketName, c)
+
+	// prepare file and object
+	objectContext := randLowStr(1024)
+	fileName := "ossutil_test." + randLowStr(12)
+	s.createFile(fileName, objectContext, c)
+
+	object := randLowStr(12)
+	cpArgs := []string{fileName, CloudURLToString(bucketName, object)}
+
+	str := ""
+    bPassword:=true
+	cpDir := CheckpointDir
+	routines := strconv.Itoa(Routines)
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"configFile":      &configFile,
+		"checkpointDir":   &cpDir,
+		"routines":        &routines,
+        "password":        &bPassword,
+	}
+
+    fmt.Printf("password\n")
+
+	// calculate time
+	_, err := cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, NotNil)
+
+
+	os.Remove(fileName)
+	s.removeBucket(bucketName, true, c)
+}

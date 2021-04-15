@@ -248,12 +248,9 @@ var setACLCommand = SetACLCommand{
 			OptionOutputDir,
 			OptionLogLevel,
 			OptionVersionId,
+			OptionPassword,
 		},
 	},
-}
-
-func (sc *SetACLCommand) GetCommand() *Command {
-	return &sc.command
 }
 
 // function for FormatHelper interface

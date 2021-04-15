@@ -4,16 +4,40 @@ import (
 	"bytes"
 	"fmt"
 	"hash"
+	"io/ioutil"
 	"math/rand"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"golang.org/x/crypto/ssh/terminal"
 )
+
+var sys_name string
+var sys_release string
+var sys_machine string
+
+func init() {
+	sys_name = runtime.GOOS
+	sys_release = "-"
+	sys_machine = runtime.GOARCH
+
+	if out, err := exec.Command("uname", "-s").CombinedOutput(); err == nil {
+		sys_name = string(bytes.TrimSpace(out))
+	}
+	if out, err := exec.Command("uname", "-r").CombinedOutput(); err == nil {
+		sys_release = string(bytes.TrimSpace(out))
+	}
+	if out, err := exec.Command("uname", "-m").CombinedOutput(); err == nil {
+		sys_machine = string(bytes.TrimSpace(out))
+	}
+}
 
 // Output print input string to stdout and add '\n'
 func Output(str string) {
@@ -60,19 +84,7 @@ type sysInfo struct {
 // Get　system info
 // 获取操作系统信息、机器类型
 func getSysInfo() sysInfo {
-	name := runtime.GOOS
-	release := "-"
-	machine := runtime.GOARCH
-	if out, err := exec.Command("uname", "-s").CombinedOutput(); err == nil {
-		name = string(bytes.TrimSpace(out))
-	}
-	if out, err := exec.Command("uname", "-r").CombinedOutput(); err == nil {
-		release = string(bytes.TrimSpace(out))
-	}
-	if out, err := exec.Command("uname", "-m").CombinedOutput(); err == nil {
-		machine = string(bytes.TrimSpace(out))
-	}
-	return sysInfo{name: name, release: release, machine: machine}
+	return sysInfo{name: sys_name, release: sys_release, machine: sys_machine}
 }
 
 func getUserAgent() string {
@@ -493,4 +505,208 @@ func randStr(n int) string {
 		b[i] = letters[r.Intn(len(letters))]
 	}
 	return string(b)
+}
+
+func currentHomeDir() string {
+	homeDir := ""
+	homeDrive := os.Getenv("HOMEDRIVE")
+	homePath := os.Getenv("HOMEPATH")
+	if runtime.GOOS == "windows" && homeDrive != "" && homePath != "" {
+		homeDir = homeDrive + string(os.PathSeparator) + homePath
+	}
+
+	if homeDir != "" {
+		return homeDir
+	}
+
+	usr, _ := user.Current()
+	if usr != nil {
+		homeDir = usr.HomeDir
+	} else {
+		homeDir = os.Getenv("HOME")
+	}
+	return homeDir
+}
+
+func getCurrentDirFileListCommon(dpath string, chFiles chan<- fileInfoType, filters []filterOptionType) error {
+	if !strings.HasSuffix(dpath, string(os.PathSeparator)) {
+		dpath += string(os.PathSeparator)
+	}
+
+	fileList, err := ioutil.ReadDir(dpath)
+	if err != nil {
+		return err
+	}
+
+	for _, fileInfo := range fileList {
+		if !fileInfo.IsDir() {
+			realInfo, errF := os.Stat(dpath + fileInfo.Name())
+			if errF == nil && realInfo.IsDir() {
+				// for symlink
+				continue
+			}
+
+			if doesSingleFileMatchPatterns(fileInfo.Name(), filters) {
+				chFiles <- fileInfoType{fileInfo.Name(), dpath}
+			}
+		}
+	}
+	return nil
+}
+
+func getFileListCommon(dpath string, chFiles chan<- fileInfoType, onlyCurrentDir bool, disableAllSymlink bool,
+	enableSymlinkDir bool, filters []filterOptionType) error {
+	defer close(chFiles)
+	if onlyCurrentDir {
+		return getCurrentDirFileListCommon(dpath, chFiles, filters)
+	}
+
+	name := dpath
+	symlinkDiretorys := []string{dpath}
+	walkFunc := func(fpath string, f os.FileInfo, err error) error {
+		if f == nil {
+			return err
+		}
+
+		dpath = filepath.Clean(dpath)
+		fpath = filepath.Clean(fpath)
+
+		fileName, err := filepath.Rel(dpath, fpath)
+		if err != nil {
+			return fmt.Errorf("list file error: %s, info: %s", fpath, err.Error())
+		}
+
+		if f.IsDir() {
+			if fpath != dpath {
+				if strings.HasSuffix(fileName, "\\") || strings.HasSuffix(fileName, "/") {
+					chFiles <- fileInfoType{fileName, name}
+				} else {
+					chFiles <- fileInfoType{fileName + string(os.PathSeparator), name}
+				}
+			}
+			return nil
+		}
+
+		if disableAllSymlink && (f.Mode()&os.ModeSymlink) != 0 {
+			return nil
+		}
+
+		if enableSymlinkDir && (f.Mode()&os.ModeSymlink) != 0 {
+			// there is difference between os.Stat and os.Lstat in filepath.Walk
+			realInfo, err := os.Stat(fpath)
+			if err != nil {
+				return err
+			}
+
+			if realInfo.IsDir() {
+				// it's symlink dir
+				// if linkDir has suffix os.PathSeparator,os.Lstat determine it is a dir
+				if !strings.HasSuffix(name, string(os.PathSeparator)) {
+					name += string(os.PathSeparator)
+				}
+				linkDir := name + fileName + string(os.PathSeparator)
+				symlinkDiretorys = append(symlinkDiretorys, linkDir)
+				return nil
+			}
+		}
+
+		if doesSingleFileMatchPatterns(fileName, filters) {
+			chFiles <- fileInfoType{fileName, name}
+		}
+		return nil
+	}
+
+	var err error
+	for {
+		symlinks := symlinkDiretorys
+		symlinkDiretorys = []string{}
+		for _, v := range symlinks {
+			err = filepath.Walk(v, walkFunc)
+			if err != nil {
+				return err
+			}
+		}
+		if len(symlinkDiretorys) == 0 {
+			break
+		}
+	}
+	return err
+}
+
+func getObjectListCommon(bucket *oss.Bucket, cloudURL CloudURL, chObjects chan<- objectInfoType,
+	onlyCurrentDir bool, filters []filterOptionType, payerOptions []oss.Option) error {
+	defer close(chObjects)
+	pre := oss.Prefix(cloudURL.object)
+	marker := oss.Marker("")
+	//while the src object is end with "/", use object key as marker, exclude the object itself
+	if strings.HasSuffix(cloudURL.object, "/") {
+		marker = oss.Marker(cloudURL.object)
+	}
+	del := oss.Delimiter("")
+	if onlyCurrentDir {
+		del = oss.Delimiter("/")
+	}
+
+	listOptions := append(payerOptions, pre, marker, del, oss.MaxKeys(1000))
+	for {
+		lor, err := bucket.ListObjects(listOptions...)
+		if err != nil {
+			return err
+		}
+
+		for _, object := range lor.Objects {
+			prefix := ""
+			relativeKey := object.Key
+			index := strings.LastIndex(cloudURL.object, "/")
+			if index > 0 {
+				prefix = object.Key[:index+1]
+				relativeKey = object.Key[index+1:]
+			}
+
+			if doesSingleObjectMatchPatterns(object.Key, filters) {
+				if strings.ToLower(object.Type) == "symlink" {
+					props, err := bucket.GetObjectDetailedMeta(object.Key, payerOptions...)
+					if err != nil {
+						LogError("ossGetObjectStatRetry error info:%s\n", err.Error())
+						return err
+					}
+					size, err := strconv.ParseInt(props.Get(oss.HTTPHeaderContentLength), 10, 64)
+					if err != nil {
+						LogError("strconv.ParseInt error info:%s\n", err.Error())
+						return err
+
+					}
+					object.Size = size
+				}
+				chObjects <- objectInfoType{prefix, relativeKey, int64(object.Size), object.LastModified}
+			}
+		}
+
+		pre = oss.Prefix(lor.Prefix)
+		marker = oss.Marker(lor.NextMarker)
+		listOptions = append(payerOptions, pre, marker, oss.MaxKeys(1000))
+		if !lor.IsTruncated {
+			break
+		}
+	}
+	return nil
+}
+
+func GetPassword(prompt string) ([]byte, error) {
+	fd := int(os.Stdin.Fd())
+	if terminal.IsTerminal(fd) {
+		state, err := terminal.MakeRaw(fd)
+		if err != nil {
+			f := "getpass: cannot disable terminal echoing — %v"
+			return nil, fmt.Errorf(f, err)
+		}
+		defer terminal.Restore(fd, state)
+		defer fmt.Println()
+	}
+
+	if prompt == "" {
+		prompt = "enter password: "
+	}
+	fmt.Fprint(os.Stderr, prompt)
+	return terminal.ReadPassword(fd)
 }
