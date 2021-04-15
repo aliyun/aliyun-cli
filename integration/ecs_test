@@ -23,7 +23,7 @@ do_command() {
 	echo $g_var
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Result"
 
-	err=$(echo $g_var | grep -i "error")
+	err=$(echo $g_var | grep -i -e "error" -e "panic")
 
 	if [[ $2 != $force && $err != "" ]]
 	then

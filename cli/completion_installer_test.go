@@ -103,11 +103,9 @@ func TestCompletion(t *testing.T) {
 	w := new(bytes.Buffer)
 	installCompletion(w, "is this a cmd?")
 	assert.Empty(t, w.String())
-
 }
 
 func TestNewAutoCompleteCommand(t *testing.T) {
-
 	excmd := &Command{
 		Name: "auto-completion",
 		Short: i18n.T(
@@ -131,7 +129,6 @@ func TestNewAutoCompleteCommand(t *testing.T) {
 	err := cmd.Run(ctx, []string{})
 	assert.Nil(t, err)
 	assert.Empty(t, w.String())
-
 }
 
 func TestUninstallCompletion(t *testing.T) {
