@@ -5,13 +5,14 @@ all: build
 publish: build build_mac build_linux build_windows gen_version
 
 deps:
-	-go get -u github.com/aliyun/aliyun-openapi-meta
+	git submodule update
 	go get -u github.com/shuLhan/go-bindata/...
+	go mod tidy
 
 testdeps: deps
 
 metas: deps
-	go-bindata -o resource/metas.go -pkg resource ../aliyun-openapi-meta/...
+	go-bindata -o resource/metas.go -pkg resource ./aliyun-openapi-meta/...
 
 clean:
 	rm -f resource/metas.go
