@@ -21,5 +21,5 @@ func NewReader() *Reader {
 }
 
 func (r *Reader) ReadFrom(path string) ([]byte, error) {
-	return Asset("../aliyun-openapi-meta/" + path)
+	return Asset("aliyun-openapi-meta/" + path)
 }
