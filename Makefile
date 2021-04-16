@@ -2,7 +2,7 @@ export VERSION=3.0.73
 export RELEASE_PATH="releases/aliyun-cli-${VERSION}"
 
 all: build
-publish: build build_mac build_linux build_windows gen_version
+publish: build build_mac build_linux build_windows build_linux_arm64 gen_version
 
 deps:
 	git submodule update
@@ -39,6 +39,11 @@ build_windows:
 	zip -r out/aliyun-cli-windows-${VERSION}-amd64.zip aliyun.exe
 	aliyun oss cp out/aliyun-cli-windows-${VERSION}-amd64.zip oss://aliyun-cli --force --profile oss
 	rm aliyun.exe
+
+build_linux_arm64:
+	GOOS=linux GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+	tar zcvf out/aliyun-cli-linux-${VERSION}-arm64.tgz -C out aliyun
+	aliyun oss cp out/aliyun-cli-linux-${VERSION}-arm64.tgz oss://aliyun-cli --force --profile oss
 
 gen_version:
 	-rm out/version
