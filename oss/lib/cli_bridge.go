@@ -20,13 +20,57 @@ func NewOssCommand() *cli.Command {
 		Short:  i18n.T("Object Storage Service", "阿里云OSS对象存储"),
 	}
 
-	for _, cmd := range GetAllCommands() {
-		result.AddSubCommand(NewCommandBridge(cmd.(*Command)))
+	cmds := []Command{
+		helpCommand.command,
+		configCommand.command,
+		makeBucketCommand.command,
+		listCommand.command,
+		removeCommand.command,
+		statCommand.command,
+		setACLCommand.command,
+		setMetaCommand.command,
+		copyCommand.command,
+		restoreCommand.command,
+		createSymlinkCommand.command,
+		readSymlinkCommand.command,
+		signURLCommand.command,
+		hashCommand.command,
+		updateCommand.command,
+		probeCommand.command,
+		mkdirCommand.command,
+		corsCommand.command,
+		bucketLogCommand.command,
+		bucketRefererCommand.command,
+		listPartCommand.command,
+		allPartSizeCommand.command,
+		appendFileCommand.command,
+		catCommand.command,
+		bucketTagCommand.command,
+		bucketEncryptionCommand.command,
+		corsOptionsCommand.command,
+		bucketLifeCycleCommand.command,
+		bucketWebsiteCommand.command,
+		bucketQosCommand.command,
+		userQosCommand.command,
+		bucketVersioningCommand.command,
+		duSizeCommand.command,
+		bucketPolicyCommand.command,
+		requestPaymentCommand.command,
+		objectTagCommand.command,
+		bucketInventoryCommand.command,
+		revertCommand.command,
+		syncCommand.command,
+		wormCommand.command,
+	}
+
+	for _, cmd := range cmds {
+		result.AddSubCommand(NewCommandBridge(cmd))
 	}
 	return result
 }
 
-func NewCommandBridge(cmd *Command) *cli.Command {
+func NewCommandBridge(cmd Command) *cli.Command {
+
 	result := &cli.Command{
 		Name:  cmd.name,
 		Usage: cmd.specEnglish.syntaxText,

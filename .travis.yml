@@ -3,7 +3,6 @@ language: go
 go:
   - 1.13.x
   - 1.14.x
-  - 1.15.x
 
 branches:
   only:
@@ -18,10 +17,8 @@ install:
   - sudo cp out/aliyun /usr/local/bin
 
 notifications:
-    webhooks: https://oapi.dingtalk.com/robot/send?access_token=096ed387df243a6d60835aadeccc47165f3813bc7cb81cdd0cfeadfd28e3acc1
-    email: false
-    on_success: change
-    on_failure: always
+  webhooks: https://oapi.dingtalk.com/robot/send?access_token=096ed387df243a6d60835aadeccc47165f3813bc7cb81cdd0cfeadfd28e3acc1
+  email: false
 
 script:
   - go vet ./cli/... ./command/... ./config/... ./i18n/... ./main/... ./openapi/... ./oss/... ./resource/...

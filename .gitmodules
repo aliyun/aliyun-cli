@@ -1,0 +1,3 @@
+[submodule "aliyun-openapi-meta"]
+	path = aliyun-openapi-meta
+	url = https://github.com/aliyun/aliyun-openapi-meta.git
