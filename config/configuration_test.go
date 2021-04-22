@@ -73,7 +73,37 @@ func TestConfiguration(t *testing.T) {
 	assert.Equal(t, Profile{Name: "test", Mode: StsToken, OutputFormat: "json", Language: "en"}, cf.Profiles[1])
 
 	//GetCurrentProfile
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w)
+	AddFlags(ctx.Flags())
 
+	os.Setenv("ACCESS_KEY_ID", "")
+	os.Setenv("ACCESS_KEY_SECRET", "")
+	os.Setenv("ALIBABACLOUD_PROFILE", "test")
+	p = cf.GetCurrentProfile(ctx)
+	assert.Equal(t, Profile{Name: "test", Mode: StsToken, OutputFormat: "json", Language: "en"}, p)
+	cf.PutProfile(Profile{Name: "test2", Mode: StsToken, OutputFormat: "json", Language: "en"})
+	cf.CurrentProfile = "test2"
+	p = cf.GetCurrentProfile(ctx)
+	assert.Equal(t, Profile{Name: "test2", Mode: StsToken, OutputFormat: "json", Language: "en"}, p)
+	cf.CurrentProfile = "default"
+	p = cf.GetCurrentProfile(ctx)
+	assert.Equal(t, Profile{Name: "test", Mode: StsToken, OutputFormat: "json", Language: "en"}, p)
+	os.Setenv("ALIBABA_CLOUD_PROFILE", "test2")
+	p = cf.GetCurrentProfile(ctx)
+	assert.Equal(t, Profile{Name: "test", Mode: StsToken, OutputFormat: "json", Language: "en"}, p)
+	os.Setenv("ALIBABACLOUD_PROFILE", "")
+	p = cf.GetCurrentProfile(ctx)
+	assert.Equal(t, Profile{Name: "test2", Mode: StsToken, OutputFormat: "json", Language: "en"}, p)
+	os.Setenv("ALICLOUD_PROFILE", "test")
+	p = cf.GetCurrentProfile(ctx)
+	assert.Equal(t, Profile{Name: "test2", Mode: StsToken, OutputFormat: "json", Language: "en"}, p)
+	os.Setenv("ALIBABA_CLOUD_PROFILE", "")
+	p = cf.GetCurrentProfile(ctx)
+	assert.Equal(t, Profile{Name: "test", Mode: StsToken, OutputFormat: "json", Language: "en"}, p)
+	os.Setenv("ALICLOUD_PROFILE", "")
+	p = cf.GetCurrentProfile(ctx)
+	assert.Equal(t, Profile{Name: "default", Mode: AK, OutputFormat: "json", Language: "en"}, p)
 }
 
 func TestLoadProfile(t *testing.T) {
