@@ -9,7 +9,7 @@ install:
   # by default, all script lines are interpreted as batch
   - cmd: git clone -q --branch=master https://github.com/aliyun/aliyun-openapi-meta.git C:\Users\appveyor\go\src\github.com\aliyun\aliyun-openapi-meta
   - cmd: set path=%path%;C:\Users\appveyor\go\bin
-  - cmd: set VERSION=3.0.74
+  - cmd: set VERSION=3.0.75
   - cmd: go get -u github.com/shuLhan/go-bindata/...  
   - cmd: go-bindata -o resource/metas.go -pkg resource -prefix ../aliyun-openapi-meta ../aliyun-openapi-meta/...
   - cmd: go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=%VERSION%'" -o C:\Users\appveyor\go\bin\aliyun.exe main/main.go
