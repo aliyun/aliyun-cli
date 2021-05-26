@@ -24,6 +24,7 @@ const (
 	AccessKeyIdFlagName     = "access-key-id"
 	AccessKeySecretFlagName = "access-key-secret"
 	StsTokenFlagName        = "sts-token"
+	StsRegionFlagName       = "sts-region"
 	RamRoleNameFlagName     = "ram-role-name"
 	RamRoleArnFlagName      = "ram-role-arn"
 	RoleSessionNameFlagName = "role-session-name"
@@ -49,6 +50,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewAccessKeyIdFlag())
 	fs.Add(NewAccessKeySecretFlag())
 	fs.Add(NewStsTokenFlag())
+	fs.Add(NewStsRegionFlag())
 	fs.Add(NewRamRoleNameFlag())
 	fs.Add(NewRamRoleArnFlag())
 	fs.Add(NewRoleSessionNameFlag())
@@ -83,6 +85,10 @@ func AccessKeySecretFlag(fs *cli.FlagSet) *cli.Flag {
 
 func StsTokenFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(StsTokenFlagName)
+}
+
+func StsRegionFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(StsRegionFlagName)
 }
 
 func RamRoleNameFlag(fs *cli.FlagSet) *cli.Flag {
@@ -191,6 +197,16 @@ func NewStsTokenFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--sts-token <StsToken>` to assign StsToken",
 			"使用 `--sts-token <StsToken>` 指定StsToken")}
+}
+
+func NewStsRegionFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         StsRegionFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--sts-region <StsRegion>` to assign StsRegion",
+			"使用 `--sts-region <StsRegion>` 指定StsRegion")}
 }
 
 func NewRamRoleNameFlag() *cli.Flag {
