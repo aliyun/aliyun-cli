@@ -50,6 +50,7 @@ type Profile struct {
 	AccessKeyId     string           `json:"access_key_id"`
 	AccessKeySecret string           `json:"access_key_secret"`
 	StsToken        string           `json:"sts_token"`
+	StsRegion       string           `json:"sts_region"`
 	RamRoleName     string           `json:"ram_role_name"`
 	RamRoleArn      string           `json:"ram_role_arn"`
 	RoleSessionName string           `json:"ram_session_name"`
@@ -140,6 +141,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.AccessKeyId = AccessKeyIdFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeyId)
 	cp.AccessKeySecret = AccessKeySecretFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeySecret)
 	cp.StsToken = StsTokenFlag(ctx.Flags()).GetStringOrDefault(cp.StsToken)
+	cp.StsRegion = StsRegionFlag(ctx.Flags()).GetStringOrDefault(cp.StsRegion)
 	cp.RamRoleName = RamRoleNameFlag(ctx.Flags()).GetStringOrDefault(cp.RamRoleName)
 	cp.RamRoleArn = RamRoleArnFlag(ctx.Flags()).GetStringOrDefault(cp.RamRoleArn)
 	cp.RoleSessionName = RoleSessionNameFlag(ctx.Flags()).GetStringOrDefault(cp.RoleSessionName)
@@ -284,6 +286,7 @@ func (cp *Profile) GetClientBySts(config *sdk.Config) (*sdk.Client, error) {
 
 func (cp *Profile) GetClientByRoleArn(config *sdk.Config) (*sdk.Client, error) {
 	cred := credentials.NewRamRoleArnCredential(cp.AccessKeyId, cp.AccessKeySecret, cp.RamRoleArn, cp.RoleSessionName, cp.ExpiredSeconds)
+	cred.StsRegion = cp.StsRegion
 	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
@@ -310,7 +313,11 @@ func (cp *Profile) GetSessionCredential(client *sdk.Client) (string, string, str
 	req.Product = "Sts"
 	req.RegionId = cp.RegionId
 	req.Version = "2015-04-01"
-	req.Domain = "sts.aliyuncs.com"
+	if cp.StsRegion != "" {
+		req.Domain = fmt.Sprintf("sts.%s.aliyuncs.com", cp.StsRegion)
+	} else {
+		req.Domain = "sts.aliyuncs.com"
+	}
 	req.ApiName = "AssumeRole"
 	req.QueryParams["RoleArn"] = cp.RamRoleArn
 	req.QueryParams["RoleSessionName"] = cp.RoleSessionName
