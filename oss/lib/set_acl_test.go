@@ -1202,7 +1202,7 @@ func (s *OssutilCommandSuite) TestSetObjectAclWithInvalidIncExc(c *C) {
 func (s *OssutilCommandSuite) TestSetObjectAclWithVersion(c *C) {
 	bucketName := bucketNamePrefix + "-set-alc-" + randLowStr(10)
 	objectName := randStr(12)
-	
+
 	s.putBucket(bucketName, c)
 	s.putBucketVersioning(bucketName, "enabled", c)
 

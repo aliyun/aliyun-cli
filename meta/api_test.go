@@ -94,6 +94,20 @@ func TestApi_FindParameter(t *testing.T) {
 	api.Parameters = nil
 	parameter = api.FindParameter("paramter.1.10")
 	assert.Nil(t, parameter)
+
+	api.Parameters = []Parameter{
+		{
+			Type: "RepeatList",
+			Name: "paramter",
+		},
+		{
+			Type: "Integer",
+			Name: "paramtercount",
+		},
+	}
+	parameterCount := api.FindParameter("paramtercount")
+	assert.NotNil(t, parameterCount)
+	assert.Equal(t, parameterCount.Name, "paramtercount")
 }
 
 func TestApi_ForeachParameters(t *testing.T) {

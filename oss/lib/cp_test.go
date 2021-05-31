@@ -5006,7 +5006,7 @@ func (s *OssutilCommandSuite) TestCPObjectWithInputPassword(c *C) {
 	cpArgs := []string{fileName, CloudURLToString(bucketName, object)}
 
 	str := ""
-    bPassword:=true
+	bPassword := true
 	cpDir := CheckpointDir
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
@@ -5016,15 +5016,14 @@ func (s *OssutilCommandSuite) TestCPObjectWithInputPassword(c *C) {
 		"configFile":      &configFile,
 		"checkpointDir":   &cpDir,
 		"routines":        &routines,
-        "password":        &bPassword,
+		"password":        &bPassword,
 	}
 
-    fmt.Printf("password\n")
+	fmt.Printf("password\n")
 
 	// calculate time
 	_, err := cm.RunCommand("cp", cpArgs, options)
 	c.Assert(err, NotNil)
-
 
 	os.Remove(fileName)
 	s.removeBucket(bucketName, true, c)

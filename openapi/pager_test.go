@@ -126,13 +126,13 @@ func TestPager_CallWith(t *testing.T) {
 
 func TestPager_NextToken(t *testing.T) {
 	pager := &Pager{
-		PageNumberFlag:    "PageNumber",
-		PageSizeFlag:      "PageSize",
-		NextTokenFlag:     "NextToken",
-		PageNumberExpr:    "PageNumber",
-		PageSizeExpr:      "PageSize",
-		TotalCountExpr:    "TotalCount",
-		NextTokenExpr:     "NextToken",
+		PageNumberFlag: "PageNumber",
+		PageSizeFlag:   "PageSize",
+		NextTokenFlag:  "NextToken",
+		PageNumberExpr: "PageNumber",
+		PageSizeExpr:   "PageSize",
+		TotalCountExpr: "TotalCount",
+		NextTokenExpr:  "NextToken",
 	}
 	assert.NotNil(t, pager)
 	assert.Nil(t, pager.FeedResponse(pagerTestJsonNextToken1))
