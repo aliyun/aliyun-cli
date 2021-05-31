@@ -39,7 +39,6 @@ func loadConfiguration() (*Configuration, error) {
 }
 
 func NewConfigureCommand() *cli.Command {
-
 	c := &cli.Command{
 		Name: "configure",
 		Short: i18n.T(

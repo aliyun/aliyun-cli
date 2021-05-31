@@ -32,13 +32,11 @@ func NewFlagSet() *FlagSet {
 	}
 }
 
-//
 // traverse all values
 func (fs *FlagSet) Flags() []*Flag {
 	return fs.flags
 }
 
-//
 // call from user program, if flag duplicated, panic!
 func (fs *FlagSet) Add(f *Flag) {
 	f.checkValid()

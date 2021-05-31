@@ -20,7 +20,6 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 )
 
-//
 // default help flag
 
 func HelpFlag(fs *FlagSet) *Flag {
@@ -35,7 +34,6 @@ func NewHelpFlag() *Flag {
 	}
 }
 
-//
 // CLI Command Context
 type Context struct {
 	help         bool
@@ -92,7 +90,6 @@ func (ctx *Context) SetCompletion(completion *Completion) {
 	ctx.completion = completion
 }
 
-//
 // Before go into the sub command, we need traverse flags and merge with parent
 func (ctx *Context) EnterCommand(cmd *Command) {
 	ctx.command = cmd

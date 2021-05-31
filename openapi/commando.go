@@ -19,7 +19,6 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
-	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/meta"
 
 	"encoding/json"
@@ -52,29 +51,28 @@ func (c *Commando) InitWithCommand(cmd *cli.Command) {
 	cmd.AutoComplete = c.complete
 }
 
-//
+// main entry
 func (c *Commando) main(ctx *cli.Context, args []string) error {
-	//
 	// aliyun
 	if len(args) == 0 {
 		c.printUsage(ctx)
 		return nil
 	}
 
-	// update current `Profile` with flags
-	var err error
-	c.profile, err = config.LoadProfileWithContext(ctx)
-	if err != nil {
-		return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it")
-	}
-	err = c.profile.Validate()
-	if err != nil {
-		return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it.")
-	}
-	i18n.SetLanguage(c.profile.Language)
+	// // update current `Profile` with flags
+	// var err error
+	// c.profile, err = config.LoadProfileWithContext(ctx)
+	// if err != nil {
+	// 	return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it")
+	// }
+	// err = c.profile.Validate()
+	// if err != nil {
+	// 	return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it.")
+	// }
+	// i18n.SetLanguage(c.profile.Language)
 
 	// process following commands:
-	// 	 aliyun <productCode>
+	//   aliyun <productCode>
 	//   aliyun <productCode> <method> --param1 value1
 	//   aliyun <productCode> GET <path>
 	productName := args[0]
@@ -86,6 +84,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		// rpc or restful call
 		// aliyun <productCode> <method> --param1 value1
 		product, _ := c.library.GetProduct(args[0])
+
 		if product.Code != "" {
 			if version, _ := ctx.Flags().Get("version").GetValue(); version != "" {
 				if style, ok := c.library.GetStyle(productName, version); ok {
@@ -218,7 +217,6 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 	force := ForceFlag(ctx.Flags()).IsAssigned()
 	basicInvoker := NewBasicInvoker(&c.profile)
 
-	//
 	// get product info
 	if product, ok := c.library.GetProduct(productCode); ok {
 		err := basicInvoker.Init(ctx, &product)
@@ -254,6 +252,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 				}, nil
 			}
 			if api, ok := c.library.GetApi(product.Code, product.Version, apiOrMethod); ok {
+				fmt.Println(api)
 				return &RpcInvoker{
 					basicInvoker,
 					&api,
@@ -274,6 +273,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			return nil, cli.NewErrorWithTip(fmt.Errorf("product '%s' need restful call", product.GetLowerCode()),
 				"Use `aliyun %s {GET|PUT|POST|DELETE} <path> ...`", product.GetLowerCode())
 		}
+
 		if api, ok := c.library.GetApi(product.Code, product.Version, ctx.Command().Name); ok {
 			return &RestfulInvoker{
 				basicInvoker,
@@ -283,6 +283,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 				&api,
 			}, nil
 		}
+
 		return &RestfulInvoker{
 			basicInvoker,
 			method,
@@ -290,7 +291,6 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			force,
 			nil,
 		}, nil
-
 	} else {
 		if !force {
 			return nil, &InvalidProductError{Code: productCode, library: c.library}
