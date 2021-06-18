@@ -176,6 +176,8 @@ func configureRamRoleArn(w io.Writer, cp *Profile) error {
 	if err != nil {
 		return err
 	}
+	cli.Printf(w, "Sts Region [%s]: ", cp.StsRegion)
+	cp.StsRegion = ReadInput(cp.StsRegion)
 	cli.Printf(w, "Ram Role Arn [%s]: ", cp.RamRoleArn)
 	cp.RamRoleArn = ReadInput(cp.RamRoleArn)
 	cli.Printf(w, "Role Session Name [%s]: ", cp.RoleSessionName)

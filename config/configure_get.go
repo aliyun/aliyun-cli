@@ -81,6 +81,8 @@ func doConfigureGet(c *cli.Context, args []string) {
 				cli.Printf(c.Writer(), "access-key-secret=%s\n", MosaicString(profile.AccessKeySecret, 3))
 			case StsTokenFlagName:
 				cli.Printf(c.Writer(), "sts-token=%s\n", profile.StsToken)
+			case StsRegionFlagName:
+				cli.Printf(c.Writer(), "sts-region=%s\n", profile.StsRegion)
 			case RamRoleNameFlagName:
 				cli.Printf(c.Writer(), "ram-role-name=%s\n", profile.RamRoleName)
 			case RamRoleArnFlagName:

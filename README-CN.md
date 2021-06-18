@@ -3,7 +3,7 @@
 <h1 align="center">Alibaba Cloud CLI</h1>
 
 <p align="center">
-<a href="https://travis-ci.org/aliyun/aliyun-cli"><img src="https://travis-ci.org/aliyun/aliyun-cli.svg?branch=master" alt="Travis Build Status"></a>
+<a href="https://travis-ci.com/aliyun/aliyun-cli"><img src="https://travis-ci.com/aliyun/aliyun-cli.svg?branch=master" alt="Travis Build Status"></a>
 <a href="https://ci.appveyor.com/project/aliyun/aliyun-cli"><img src="https://ci.appveyor.com/api/projects/status/avxoqqcmgksbt3d8/branch/master?svg=true" alt="Appveyor Build Status"></a>
 <a href="https://codecov.io/gh/aliyun/aliyun-cli"><img src="https://codecov.io/gh/aliyun/aliyun-cli/branch/master/graph/badge.svg" alt="codecov"></a>
 <a href="https://github.com/aliyun/aliyun-cli/blob/master/LICENSE"><img src="https://img.shields.io/github/license/aliyun/aliyun-cli.svg" alt="License"></a>
@@ -43,11 +43,11 @@ CLI 版本更改说明请参考 [CHANGELOG](./CHANGELOG.md)
 
   阿里云CLI工具下载、解压后即可使用，支持Mac, Linux, Windows平台(x64版本)。您可以将解压的`aliyun`可执行文件移至`/usr/local/bin`目录下，或添加到`$PATH`中。
 
-  下载链接如下 (3.0.74)：
+  下载链接如下 (3.0.80)：
 
-  - [Mac](https://aliyuncli.alicdn.com/aliyun-cli-macosx-3.0.74-amd64.tgz)
-  - [Linux](https://aliyuncli.alicdn.com/aliyun-cli-linux-3.0.74-amd64.tgz)
-  - [Windows (64 bit)](https://aliyuncli.alicdn.com/aliyun-cli-windows-3.0.74-amd64.zip)
+  - [Mac](https://aliyuncli.alicdn.com/aliyun-cli-macosx-3.0.80-amd64.tgz)
+  - [Linux](https://aliyuncli.alicdn.com/aliyun-cli-linux-3.0.80-amd64.tgz)
+  - [Windows (64 bit)](https://aliyuncli.alicdn.com/aliyun-cli-windows-3.0.80-amd64.zip)
 
 - **使用brew**
 

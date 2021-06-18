@@ -50,6 +50,7 @@ type Profile struct {
 	AccessKeyId     string           `json:"access_key_id"`
 	AccessKeySecret string           `json:"access_key_secret"`
 	StsToken        string           `json:"sts_token"`
+	StsRegion       string           `json:"sts_region"`
 	RamRoleName     string           `json:"ram_role_name"`
 	RamRoleArn      string           `json:"ram_role_arn"`
 	RoleSessionName string           `json:"ram_session_name"`
@@ -140,6 +141,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.AccessKeyId = AccessKeyIdFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeyId)
 	cp.AccessKeySecret = AccessKeySecretFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeySecret)
 	cp.StsToken = StsTokenFlag(ctx.Flags()).GetStringOrDefault(cp.StsToken)
+	cp.StsRegion = StsRegionFlag(ctx.Flags()).GetStringOrDefault(cp.StsRegion)
 	cp.RamRoleName = RamRoleNameFlag(ctx.Flags()).GetStringOrDefault(cp.RamRoleName)
 	cp.RamRoleArn = RamRoleArnFlag(ctx.Flags()).GetStringOrDefault(cp.RamRoleArn)
 	cp.RoleSessionName = RoleSessionNameFlag(ctx.Flags()).GetStringOrDefault(cp.RoleSessionName)
@@ -224,8 +226,12 @@ func (cp *Profile) ValidateAK() error {
 
 func (cp *Profile) GetClient(ctx *cli.Context) (*sdk.Client, error) {
 	config := sdk.NewConfig()
+	// get UserAgent from env
+	config.UserAgent = os.Getenv("ALIYUN_USER_AGENT")
 
 	if cp.RetryCount > 0 {
+		// when use --retry-count, enable auto retry
+		config.WithAutoRetry(true)
 		config.WithMaxRetryTime(cp.RetryCount)
 	}
 	var client *sdk.Client
@@ -248,6 +254,7 @@ func (cp *Profile) GetClient(ctx *cli.Context) (*sdk.Client, error) {
 	default:
 		client, err = nil, fmt.Errorf("unexcepted certificate mode: %s", cp.Mode)
 	}
+
 	if client != nil {
 		if cp.ReadTimeout > 0 {
 			client.SetReadTimeout(time.Duration(cp.ReadTimeout) * time.Second)
@@ -270,27 +277,24 @@ func (cp *Profile) GetClientByAK(config *sdk.Config) (*sdk.Client, error) {
 		return nil, fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
 	}
 	cred := credentials.NewAccessKeyCredential(cp.AccessKeyId, cp.AccessKeySecret)
-	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
 
 func (cp *Profile) GetClientBySts(config *sdk.Config) (*sdk.Client, error) {
 	cred := credentials.NewStsTokenCredential(cp.AccessKeyId, cp.AccessKeySecret, cp.StsToken)
-	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
 
 func (cp *Profile) GetClientByRoleArn(config *sdk.Config) (*sdk.Client, error) {
 	cred := credentials.NewRamRoleArnCredential(cp.AccessKeyId, cp.AccessKeySecret, cp.RamRoleArn, cp.RoleSessionName, cp.ExpiredSeconds)
-	config.UserAgent = userAgent
+	cred.StsRegion = cp.StsRegion
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
 
 func (cp *Profile) GetClientByRamRoleArnWithEcs(config *sdk.Config) (*sdk.Client, error) {
-	config.UserAgent = userAgent
 	client, err := cp.GetClientByEcsRamRole(config)
 	if err != nil {
 		return nil, err
@@ -310,7 +314,11 @@ func (cp *Profile) GetSessionCredential(client *sdk.Client) (string, string, str
 	req.Product = "Sts"
 	req.RegionId = cp.RegionId
 	req.Version = "2015-04-01"
-	req.Domain = "sts.aliyuncs.com"
+	if cp.StsRegion != "" {
+		req.Domain = fmt.Sprintf("sts.%s.aliyuncs.com", cp.StsRegion)
+	} else {
+		req.Domain = "sts.aliyuncs.com"
+	}
 	req.ApiName = "AssumeRole"
 	req.QueryParams["RoleArn"] = cp.RamRoleArn
 	req.QueryParams["RoleSessionName"] = cp.RoleSessionName
@@ -336,14 +344,12 @@ func (cp *Profile) GetSessionCredential(client *sdk.Client) (string, string, str
 
 func (cp *Profile) GetClientByEcsRamRole(config *sdk.Config) (*sdk.Client, error) {
 	cred := credentials.NewEcsRamRoleCredential(cp.RamRoleName)
-	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
 
 func (cp *Profile) GetClientByPrivateKey(config *sdk.Config) (*sdk.Client, error) {
 	cred := credentials.NewRsaKeyPairCredential(cp.PrivateKey, cp.KeyPairName, cp.ExpiredSeconds)
-	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }

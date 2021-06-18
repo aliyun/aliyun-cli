@@ -1,4 +1,4 @@
-export VERSION=3.0.74
+export VERSION=3.0.80
 export RELEASE_PATH="releases/aliyun-cli-${VERSION}"
 
 all: build
@@ -69,8 +69,8 @@ release_windows:
 	rm aliyun.exe
 
 fmt:
-	go fmt ./cli/... ./command/... ./config/... ./i18n/... ./main/... ./openapi/... ./oss/... ./resource/...
+	go fmt ./cli/... ./config/... ./i18n/... ./main/... ./openapi/... ./oss/... ./resource/... ./meta/...
 
 test:
-	go test -race -coverprofile=coverage.txt -covermode=atomic ./cli/... ./command/... ./config/... ./i18n/... ./main/... ./openapi/... ./oss/... ./resource/...
+	go test -race -coverprofile=coverage.txt -covermode=atomic ./cli/... ./config/... ./i18n/... ./main/... ./openapi/... ./oss/... ./resource/... ./meta/...
 	go tool cover -html=coverage.txt -o coverage.html
