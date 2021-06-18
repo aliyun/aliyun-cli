@@ -23,29 +23,10 @@ import (
 	"github.com/aliyun/aliyun-cli/oss/lib"
 )
 
-/**
-## Configure
-
-$ aliyuncli configure
-	Aliyun Access Key ID [****************wQ7v]:
-	Aliyun Access Key Secret [****************fxGu]:
-	Default Region Id [cn-hangzhou]:
-	Default output format [json]:
-
-## OpenApi mode
-	$ aliyuncli Ecs DescribeInstances
-	$ aliyuncli Ecs StartInstance --InstanceId your_instance_id
-	$ aliyuncli Rds DescribeDBInstances
-
-## use HTTPS(SSL/TLS)
-
-	$ aliyuncli Ecs DescribeInstances --secure
-*/
-
 func main() {
 	cli.PlatformCompatible()
 	writer := cli.DefaultWriter()
-	//
+
 	// load current configuration
 	profile, err := config.LoadCurrentProfile(writer)
 	if err != nil {
@@ -78,7 +59,6 @@ func main() {
 	ctx.SetCompletion(cli.ParseCompletionForShell())
 
 	rootCmd.AddSubCommand(config.NewConfigureCommand())
-	// rootCmd.AddSubCommand(command.NewTestCommand())
 	rootCmd.AddSubCommand(lib.NewOssCommand())
 	rootCmd.AddSubCommand(cli.NewVersionCommand())
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
