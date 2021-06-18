@@ -1,7 +1,7 @@
 # Alibaba Cloud OSSUTIL
  
 [![GitHub Version](https://badge.fury.io/gh/aliyun%2Fossutil.svg)](https://badge.fury.io/gh/aliyun%2Fossutil)
-[![Build Status](https://travis-ci.org/aliyun/ossutil.svg?branch=master)](https://travis-ci.org/aliyun/ossutil)
+[![Build Status](https://travis-ci.com/aliyun/ossutil.svg?branch=master)](https://travis-ci.com/aliyun/ossutil)
 [![Coverage Status](https://coveralls.io/repos/github/aliyun/ossutil/badge.svg?branch=master)](https://coveralls.io/github/aliyun/ossutil?branch=master)
 
 ### [README of Chinese](https://github.com/aliyun/ossutil/blob/master/README-CN.md)
