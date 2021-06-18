@@ -12,7 +12,7 @@ deps:
 testdeps: deps
 
 metas: deps
-	go-bindata -o resource/metas.go -pkg resource ./aliyun-openapi-meta/...
+	go-bindata -nomemcopy -o resource/metas.go -pkg resource ./aliyun-openapi-meta/...
 
 clean:
 	rm -f resource/metas.go
