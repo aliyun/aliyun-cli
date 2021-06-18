@@ -226,6 +226,8 @@ func (cp *Profile) ValidateAK() error {
 
 func (cp *Profile) GetClient(ctx *cli.Context) (*sdk.Client, error) {
 	config := sdk.NewConfig()
+	// get UserAgent from env
+	config.UserAgent = os.Getenv("ALIYUN_USER_AGENT")
 
 	if cp.RetryCount > 0 {
 		// when use --retry-count, enable auto retry
@@ -252,6 +254,7 @@ func (cp *Profile) GetClient(ctx *cli.Context) (*sdk.Client, error) {
 	default:
 		client, err = nil, fmt.Errorf("unexcepted certificate mode: %s", cp.Mode)
 	}
+
 	if client != nil {
 		if cp.ReadTimeout > 0 {
 			client.SetReadTimeout(time.Duration(cp.ReadTimeout) * time.Second)
@@ -274,14 +277,12 @@ func (cp *Profile) GetClientByAK(config *sdk.Config) (*sdk.Client, error) {
 		return nil, fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
 	}
 	cred := credentials.NewAccessKeyCredential(cp.AccessKeyId, cp.AccessKeySecret)
-	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
 
 func (cp *Profile) GetClientBySts(config *sdk.Config) (*sdk.Client, error) {
 	cred := credentials.NewStsTokenCredential(cp.AccessKeyId, cp.AccessKeySecret, cp.StsToken)
-	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
@@ -289,13 +290,11 @@ func (cp *Profile) GetClientBySts(config *sdk.Config) (*sdk.Client, error) {
 func (cp *Profile) GetClientByRoleArn(config *sdk.Config) (*sdk.Client, error) {
 	cred := credentials.NewRamRoleArnCredential(cp.AccessKeyId, cp.AccessKeySecret, cp.RamRoleArn, cp.RoleSessionName, cp.ExpiredSeconds)
 	cred.StsRegion = cp.StsRegion
-	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
 
 func (cp *Profile) GetClientByRamRoleArnWithEcs(config *sdk.Config) (*sdk.Client, error) {
-	config.UserAgent = userAgent
 	client, err := cp.GetClientByEcsRamRole(config)
 	if err != nil {
 		return nil, err
@@ -345,14 +344,12 @@ func (cp *Profile) GetSessionCredential(client *sdk.Client) (string, string, str
 
 func (cp *Profile) GetClientByEcsRamRole(config *sdk.Config) (*sdk.Client, error) {
 	cred := credentials.NewEcsRamRoleCredential(cp.RamRoleName)
-	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
 
 func (cp *Profile) GetClientByPrivateKey(config *sdk.Config) (*sdk.Client, error) {
 	cred := credentials.NewRsaKeyPairCredential(cp.PrivateKey, cp.KeyPairName, cp.ExpiredSeconds)
-	config.UserAgent = userAgent
 	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
 	return client, err
 }
