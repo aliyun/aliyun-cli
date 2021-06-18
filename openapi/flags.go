@@ -21,6 +21,7 @@ import (
 func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewSecureFlag())
 	fs.Add(NewForceFlag())
+	// fs.Add(NewVpcFlag())
 	fs.Add(NewEndpointFlag())
 	fs.Add(NewVersionFlag())
 	fs.Add(NewHeaderFlag())
@@ -38,6 +39,7 @@ func AddFlags(fs *cli.FlagSet) {
 const (
 	SecureFlagName   = "secure"
 	ForceFlagName    = "force"
+	VpcFlagName      = "vpc"
 	EndpointFlagName = "endpoint"
 	VersionFlagName  = "version"
 	HeaderFlagName   = "header"
@@ -60,6 +62,10 @@ func SecureFlag(fs *cli.FlagSet) *cli.Flag {
 
 func ForceFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ForceFlagName)
+}
+
+func VpcFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(VpcFlagName)
 }
 
 func EndpointFlag(fs *cli.FlagSet) *cli.Flag {
@@ -123,6 +129,14 @@ func NewForceFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--force` to skip api and parameters check",
 			"添加 `--force` 开关可跳过API与参数的合法性检查")}
+}
+
+func NewVpcFlag() *cli.Flag {
+	return &cli.Flag{Category: "caller",
+		Name: VpcFlagName, AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--vpc` to enable vpc endpoint",
+			"使用 `--vpc` 来启用 VPC 接入点地址")}
 }
 
 func NewEndpointFlag() *cli.Flag {

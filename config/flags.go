@@ -21,6 +21,7 @@ import (
 const (
 	ProfileFlagName         = "profile"
 	ModeFlagName            = "mode"
+	VpcFlagName             = "vpc"
 	AccessKeyIdFlagName     = "access-key-id"
 	AccessKeySecretFlagName = "access-key-secret"
 	StsTokenFlagName        = "sts-token"
@@ -63,6 +64,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewSkipSecureVerify())
 	fs.Add(NewExpiredSecondsFlag())
 	fs.Add(NewProcessCommandFlag())
+	fs.Add(NewVpcFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -75,6 +77,10 @@ func ProfileFlag(fs *cli.FlagSet) *cli.Flag {
 
 func ModeFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ModeFlagName)
+}
+
+func VpcFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(VpcFlagName)
 }
 
 func AccessKeyIdFlag(fs *cli.FlagSet) *cli.Flag {
@@ -136,12 +142,15 @@ func RetryCountFlag(fs *cli.FlagSet) *cli.Flag {
 func SkipSecureVerify(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(SkipSecureVerifyName)
 }
+
 func ConfigurePathFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ConfigurePathFlagName)
 }
+
 func ExpiredSecondsFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ExpiredSecondsFlagName)
 }
+
 func ProcessCommandFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ProcessCommandFlagName)
 }
@@ -173,6 +182,16 @@ func NewModeFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName}` to assign authenticate mode",
 			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName}` 指定认证方式")}
+}
+
+func NewVpcFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         VpcFlagName,
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			"use `--vpc` to enable vpc endpoint",
+			"使用 `--vpc` 启用 VPC 接入点地址")}
 }
 
 func NewAccessKeyIdFlag() *cli.Flag {
