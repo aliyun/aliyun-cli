@@ -24,23 +24,6 @@ import (
 	"github.com/aliyun/aliyun-cli/cli"
 )
 
-func TestGetRegions(t *testing.T) {
-	w := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w)
-	profile := NewProfile("default")
-	ctx.Flags().AddByName("skip-secure-verify")
-	regions, err := GetRegions(ctx, &profile)
-	assert.Empty(t, regions)
-	assert.EqualError(t, err, "AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first")
-
-	profile.AccessKeyId = "AccessKeyId"
-	profile.AccessKeySecret = "AccessKeySecret"
-	profile.RegionId = "cn-hangzhou"
-	regions, err = GetRegions(ctx, &profile)
-	assert.Empty(t, regions)
-	assert.Nil(t, err)
-}
-
 func TestDoHello(t *testing.T) {
 	os.Setenv("ALIBABA_CLOUD_VENDOR", "cli_test_VendorTest")
 
