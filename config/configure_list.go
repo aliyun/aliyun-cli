@@ -35,7 +35,7 @@ func NewConfigureListCommand() *cli.Command {
 }
 
 func doConfigureList(w io.Writer) {
-	conf, err := hookLoadConfiguration(LoadConfiguration)(GetConfigPath()+"/"+configFile, w)
+	conf, err := hookLoadConfiguration(LoadConfiguration)(GetConfigPath() + "/" + configFile)
 	if err != nil {
 		cli.Errorf(w, "ERROR: load configure failed: %v\n", err)
 	}

@@ -16,7 +16,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"runtime"
@@ -41,8 +40,8 @@ var hookGetHomePath = func(fn func() string) func() string {
 	return fn
 }
 
-func NewConfiguration() Configuration {
-	return Configuration{
+func NewConfiguration() *Configuration {
+	return &Configuration{
 		CurrentProfile: DefaultConfigProfileName,
 		Profiles: []Profile{
 			NewProfile(DefaultConfigProfileName),
@@ -95,13 +94,13 @@ func (c *Configuration) PutProfile(profile Profile) {
 	c.Profiles = append(c.Profiles, profile)
 }
 
-func LoadCurrentProfile(w io.Writer) (Profile, error) {
-	return LoadProfile(GetConfigPath()+"/"+configFile, w, "")
+func LoadCurrentProfile() (Profile, error) {
+	return LoadProfile(GetConfigPath()+"/"+configFile, "")
 }
 
-func LoadProfile(path string, w io.Writer, name string) (Profile, error) {
+func LoadProfile(path string, name string) (Profile, error) {
 	var p Profile
-	config, err := hookLoadConfiguration(LoadConfiguration)(path, w)
+	config, err := hookLoadConfiguration(LoadConfiguration)(path)
 	if err != nil {
 		return p, fmt.Errorf("init config failed %v", err)
 	}
@@ -109,7 +108,7 @@ func LoadProfile(path string, w io.Writer, name string) (Profile, error) {
 		name = config.CurrentProfile
 	}
 	p, ok := config.GetProfile(name)
-	p.parent = &config
+	p.parent = config
 	if !ok {
 		return p, fmt.Errorf("unknown profile %s, run configure to check", name)
 	}
@@ -124,10 +123,10 @@ func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
 		currentPath = GetConfigPath() + "/" + configFile
 	}
 	if name, ok := ProfileFlag(ctx.Flags()).GetValue(); ok {
-		profile, err = LoadProfile(currentPath, ctx.Writer(), name)
+		profile, err = LoadProfile(currentPath, name)
 
 	} else {
-		profile, err = LoadProfile(currentPath, ctx.Writer(), "")
+		profile, err = LoadProfile(currentPath, "")
 	}
 	if err != nil {
 		return
@@ -138,48 +137,51 @@ func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
 	return
 }
 
-func LoadConfiguration(path string, w io.Writer) (Configuration, error) {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		lc := MigrateLegacyConfiguration(w)
-		if lc != nil {
-			err := SaveConfiguration(*lc)
-			if err != nil {
-				return *lc, fmt.Errorf("save failed %v", err)
-			}
-			return *lc, nil
+func LoadConfiguration(path string) (conf *Configuration, err error) {
+	_, statErr := os.Stat(path)
+	if os.IsNotExist(statErr) {
+		conf, err = MigrateLegacyConfiguration()
+		if err != nil {
+			return
 		}
-		return NewConfiguration(), nil
+
+		if conf != nil {
+			err = SaveConfiguration(conf)
+			if err != nil {
+				err = fmt.Errorf("save failed %v", err)
+				return
+			}
+			return
+		}
+		conf = NewConfiguration()
+		return
 	}
 
 	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
-		return NewConfiguration(), fmt.Errorf("reading config from '%s' failed %v", path, err)
+		err = fmt.Errorf("reading config from '%s' failed %v", path, err)
+		return
 	}
 
-	return NewConfigFromBytes(bytes)
+	conf, err = NewConfigFromBytes(bytes)
+	return
 }
 
-func SaveConfiguration(config Configuration) error {
+func SaveConfiguration(config *Configuration) (err error) {
 	// fmt.Printf("conf %v\n", config)
 	bytes, err := json.MarshalIndent(config, "", "\t")
 	if err != nil {
-		return err
+		return
 	}
 	path := GetConfigPath() + "/" + configFile
 	err = ioutil.WriteFile(path, bytes, 0600)
-	if err != nil {
-		return err
-	}
-	return nil
+	return
 }
 
-func NewConfigFromBytes(bytes []byte) (Configuration, error) {
-	var conf Configuration
-	err := json.Unmarshal(bytes, &conf)
-	if err != nil {
-		return conf, err
-	}
-	return conf, nil
+func NewConfigFromBytes(bytes []byte) (conf *Configuration, err error) {
+	conf = NewConfiguration()
+	err = json.Unmarshal(bytes, conf)
+	return
 }
 
 func GetConfigPath() string {
