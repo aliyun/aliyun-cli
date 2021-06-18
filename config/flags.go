@@ -63,6 +63,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewExpiredSecondsFlag())
 	fs.Add(NewProcessCommandFlag())
 }
+
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ConnectTimeoutFlagName)
 }

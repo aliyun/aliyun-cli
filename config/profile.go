@@ -228,6 +228,8 @@ func (cp *Profile) GetClient(ctx *cli.Context) (*sdk.Client, error) {
 	config := sdk.NewConfig()
 
 	if cp.RetryCount > 0 {
+		// when use --retry-count, enable auto retry
+		config.WithAutoRetry(true)
 		config.WithMaxRetryTime(cp.RetryCount)
 	}
 	var client *sdk.Client
