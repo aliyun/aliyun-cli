@@ -34,10 +34,6 @@ func main() {
 		return
 	}
 
-	// set user agent
-	userAgentFromEnv := os.Getenv("ALIYUN_USER_AGENT")
-	config.SetUserAgent(userAgentFromEnv)
-
 	// set language with current profile
 	i18n.SetLanguage(profile.Language)
 
