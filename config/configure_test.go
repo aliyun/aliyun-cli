@@ -15,7 +15,6 @@ package config
 
 import (
 	"bytes"
-	"io"
 	"runtime"
 	"strings"
 	"testing"
@@ -33,16 +32,18 @@ func TestNewConfigureCommand(t *testing.T) {
 		hookLoadConfiguration = originhook
 		hookSaveConfiguration = originhookSave
 	}()
-	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
-		return func(path string, w io.Writer) (Configuration, error) {
-			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	hookSaveConfiguration = func(fn func(config Configuration) error) func(config Configuration) error {
-		return func(config Configuration) error {
+
+	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
+		return func(config *Configuration) error {
 			return nil
 		}
 	}
+
 	excmd := &cli.Command{
 		Name: "configure",
 		Short: i18n.T(
@@ -112,13 +113,31 @@ func TestDoConfigure(t *testing.T) {
 		hookLoadConfiguration = originhook
 		hookSaveConfiguration = originhookSave
 	}()
-	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
-		return func(path string, w io.Writer) (Configuration, error) {
-			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					Profile{
+						Name:            "default",
+						Mode:            AK,
+						AccessKeyId:     "default_aliyun_access_key_id",
+						AccessKeySecret: "default_aliyun_access_key_secret",
+						OutputFormat:    "json",
+					},
+					Profile{
+						Name:            "aaa",
+						Mode:            AK,
+						AccessKeyId:     "sdf",
+						AccessKeySecret: "ddf",
+						OutputFormat:    "json",
+					},
+				},
+			}, nil
 		}
 	}
-	hookSaveConfiguration = func(fn func(config Configuration) error) func(config Configuration) error {
-		return func(config Configuration) error {
+	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
+		return func(config *Configuration) error {
 			return nil
 		}
 	}

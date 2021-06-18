@@ -28,7 +28,7 @@ func main() {
 	writer := cli.DefaultWriter()
 
 	// load current configuration
-	profile, err := config.LoadCurrentProfile(writer)
+	profile, err := config.LoadCurrentProfile()
 	if err != nil {
 		cli.Errorf(writer, "ERROR: load current configuration failed %s", err)
 		return

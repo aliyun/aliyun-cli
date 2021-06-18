@@ -16,7 +16,6 @@ package config
 import (
 	"bytes"
 	"errors"
-	"io"
 	"os"
 	"testing"
 
@@ -35,9 +34,9 @@ func TestDoConfigureGet(t *testing.T) {
 	}()
 
 	//testcase 1
-	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
-		return func(path string, w io.Writer) (Configuration, error) {
-			return Configuration{}, errors.New("error")
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{}, errors.New("error")
 		}
 	}
 
@@ -47,9 +46,9 @@ func TestDoConfigureGet(t *testing.T) {
 	assert.Equal(t, "\x1b[1;31mload configuration failed error\x1b[0m\n", w.String())
 
 	//testcase 2
-	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
-		return func(path string, w io.Writer) (Configuration, error) {
-			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
 	w.Reset()
@@ -59,9 +58,9 @@ func TestDoConfigureGet(t *testing.T) {
 	assert.Equal(t, "\x1b[1;31mprofile  not found!\x1b[0m\n", w.String())
 
 	//testcase 3
-	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
-		return func(path string, w io.Writer) (Configuration, error) {
-			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
 	w.Reset()
@@ -70,9 +69,9 @@ func TestDoConfigureGet(t *testing.T) {
 	assert.Equal(t, "profile=default\nmode=AK\naccess-key-id=*************************_id\naccess-key-secret=*****************************ret\nsts-token=\nram-role-name=\nram-role-arn=\nrole-session-name=\nprivate-key=\nkey-pair-name=\nlanguage=\n\n", w.String())
 
 	//TESTCASE 4
-	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
-		return func(path string, w io.Writer) (Configuration, error) {
-			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
 	w.Reset()
@@ -82,9 +81,9 @@ func TestDoConfigureGet(t *testing.T) {
 	assert.Equal(t, "{\n\t\"name\": \"default\",\n\t\"mode\": \"AK\",\n\t\"access_key_id\": \"default_aliyun_access_key_id\",\n\t\"access_key_secret\": \"default_aliyun_access_key_secret\",\n\t\"sts_token\": \"\",\n\t\"sts_region\": \"\",\n\t\"ram_role_name\": \"\",\n\t\"ram_role_arn\": \"\",\n\t\"ram_session_name\": \"\",\n\t\"private_key\": \"\",\n\t\"key_pair_name\": \"\",\n\t\"expired_seconds\": 0,\n\t\"verified\": \"\",\n\t\"region_id\": \"\",\n\t\"output_format\": \"json\",\n\t\"language\": \"\",\n\t\"site\": \"\",\n\t\"retry_timeout\": 0,\n\t\"connect_timeout\": 0,\n\t\"retry_count\": 0,\n\t\"process_command\": \"\"\n}\n\n", w.String())
 
 	//testcase 5
-	hookLoadConfiguration = func(fn func(path string, w io.Writer) (Configuration, error)) func(path string, w io.Writer) (Configuration, error) {
-		return func(path string, w io.Writer) (Configuration, error) {
-			return Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
 	w.Reset()

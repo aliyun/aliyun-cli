@@ -14,7 +14,6 @@
 package config
 
 import (
-	"bytes"
 	"os"
 	"runtime"
 	"testing"
@@ -50,26 +49,22 @@ func TestMigrateCredentials(t *testing.T) {
 
 	conf, err = MigrateCredentials("test.ini")
 	assert.Nil(t, err)
-	assert.Equal(t, Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, conf)
+	assert.Equal(t, &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, conf)
 
 	defer func() {
 		if _, err := os.Stat("test.ini"); err == nil {
 			os.Remove("test.ini")
 		}
-
 	}()
 }
 
 func TestMigrateConfigure(t *testing.T) {
-	w := new(bytes.Buffer)
 	conf := &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}
-	err := MigrateConfigure(w, "http://nici", conf)
+	err := MigrateConfigure("http://nici", conf)
 	if runtime.GOOS == "windows" {
-		assert.Equal(t, "\x1b[1;31m parse failed: open http://nici: The filename, directory name, or volume label syntax is incorrect.\n\x1b[0m", w.String())
-
+		assert.Equal(t, "parse failed: open http://nici: The filename, directory name, or volume label syntax is incorrect.", err.Error())
 	} else {
-		assert.Equal(t, "\x1b[1;31m parse failed: open http://nici: no such file or directory\n\x1b[0m", w.String())
-
+		assert.Equal(t, "parse failed: open http://nici: no such file or directory", err.Error())
 	}
 
 	test, err := os.Create("testconf.ini")
@@ -90,7 +85,7 @@ func TestMigrateConfigure(t *testing.T) {
 
 	test.Close()
 	w.Reset()
-	err = MigrateConfigure(w, "testconf.ini", conf)
+	err = MigrateConfigure("testconf.ini", conf)
 	assert.Nil(t, err)
 	assert.Equal(t, &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, conf)
 
@@ -130,7 +125,7 @@ func TestMigrateLegacyConfiguration(t *testing.T) {
 	`)
 	assert.Nil(t, err)
 	test.Close()
-	w := new(bytes.Buffer)
-	conf := MigrateLegacyConfiguration(w)
+	conf, err := MigrateLegacyConfiguration()
+	assert.Nil(t, err)
 	assert.Nil(t, conf)
 }
