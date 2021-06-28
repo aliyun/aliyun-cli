@@ -84,7 +84,6 @@ func TestMigrateConfigure(t *testing.T) {
 	`)
 
 	test.Close()
-	w.Reset()
 	err = MigrateConfigure("testconf.ini", conf)
 	assert.Nil(t, err)
 	assert.Equal(t, &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, conf)
