@@ -62,9 +62,9 @@ func TestMigrateConfigure(t *testing.T) {
 	conf := &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}
 	err := MigrateConfigure("http://nici", conf)
 	if runtime.GOOS == "windows" {
-		assert.Equal(t, "parse failed: open http://nici: The filename, directory name, or volume label syntax is incorrect.", err.Error())
+		assert.Equal(t, "parse failed: open http://nici: The filename, directory name, or volume label syntax is incorrect.\n", err.Error())
 	} else {
-		assert.Equal(t, "parse failed: open http://nici: no such file or directory", err.Error())
+		assert.Equal(t, "parse failed: open http://nici: no such file or directory\n", err.Error())
 	}
 
 	test, err := os.Create("testconf.ini")
@@ -101,11 +101,13 @@ func TestMigrateLegacyConfiguration(t *testing.T) {
 		os.RemoveAll("./.aliyuncli")
 		hookGetHomePath = orighookGetHomePath
 	}()
+
 	hookGetHomePath = func(fn func() string) func() string {
 		return func() string {
 			return "."
 		}
 	}
+
 	err := os.Mkdir("./.aliyuncli", os.ModePerm)
 	assert.Nil(t, err)
 
@@ -126,5 +128,5 @@ func TestMigrateLegacyConfiguration(t *testing.T) {
 	test.Close()
 	conf, err := MigrateLegacyConfiguration()
 	assert.Nil(t, err)
-	assert.Nil(t, conf)
+	assert.NotNil(t, conf)
 }
