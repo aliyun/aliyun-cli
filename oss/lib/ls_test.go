@@ -89,7 +89,7 @@ func (s *OssutilCommandSuite) TestListErrConfigFile(c *C) {
 
 func (s *OssutilCommandSuite) TestListConfigFile(c *C) {
 	cfile := randStr(10)
-	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\nretryTimes=%s", endpoint, accessKeyID, accessKeySecret, "errretry")
+	data := fmt.Sprintf("[Credentials]\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n", endpoint, accessKeyID, accessKeySecret)
 	s.createFile(cfile, data, c)
 
 	command := "ls"

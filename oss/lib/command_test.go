@@ -39,7 +39,11 @@ var (
 	proxyUser           = ""
 	proxyPwd            = ""
 	accountID           = ""
+	stsAccessID         = ""
+	stsAccessKeySecret  = ""
 	stsARN              = ""
+	ecsRoleName         = ""
+	stsRegion           = ""
 )
 
 var (
@@ -136,8 +140,23 @@ func SetUpCredential() {
 	if accountID == "" {
 		accountID = os.Getenv("OSS_TEST_ACCOUNT_ID")
 	}
+	if stsToken == "" {
+		stsToken = os.Getenv("OSS_TEST_STS_TOKEN")
+	}
+	if stsAccessID == "" {
+		stsAccessID = os.Getenv("OSS_TEST_STS_ID")
+	}
+	if stsAccessKeySecret == "" {
+		stsAccessKeySecret = os.Getenv("OSS_TEST_STS_KEY")
+	}
 	if stsARN == "" {
 		stsARN = os.Getenv("OSS_TEST_STS_ARN")
+	}
+	if ecsRoleName == "" {
+		ecsRoleName = os.Getenv("OSS_TEST_ECS_ROLE_NAME")
+	}
+	if stsRegion == "" {
+		stsRegion = os.Getenv("OSS_TEST_STS_REGION")
 	}
 }
 

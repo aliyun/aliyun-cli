@@ -413,6 +413,14 @@ var syncCommand = SyncCommand{
 			OptionDisableIgnoreError,
 			OptionTagging,
 			OptionPassword,
+			OptionMode,
+			OptionECSRoleName,
+			OptionTokenTimeout,
+			OptionRamRoleArn,
+			OptionRoleSessionName,
+			OptionReadTimeout,
+			OptionConnectTimeout,
+			OptionSTSRegion,
 
 			// The following options are only supported by sc command, not supported by cp command
 			OptionDelete,
