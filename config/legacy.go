@@ -27,13 +27,17 @@ func MigrateLegacyConfiguration() (conf *Configuration, err error) {
 		return
 	}
 
-	conf, err = MigrateCredentials(path)
-	if err != nil {
+	conf, migrateErr := MigrateCredentials(path)
+	if migrateErr != nil {
 		return
 	}
 
 	path = hookGetHomePath(GetHomePath)() + "/.aliyuncli/configure"
-	err = MigrateConfigure(path, conf)
+	mfErr := MigrateConfigure(path, conf)
+	if mfErr != nil {
+		return
+	}
+
 	return
 }
 
@@ -97,5 +101,5 @@ func MigrateConfigure(path string, conf *Configuration) (err error) {
 		}
 	}
 
-	return
+	return nil
 }
