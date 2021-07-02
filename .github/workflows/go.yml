@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    # fetch submodule for aliyun-openapi-meta
+    - run: git submodule update --init --recursive
 
     - name: Set up Go
       uses: actions/setup-go@v2
@@ -22,4 +24,6 @@ jobs:
       run: make build
 
     - name: Test
-      run: make test
+      run: go vet ./cli/... ./config/... ./i18n/... ./main/... ./openapi/... ./oss/... ./resource/...
+    - run: go test -race -coverprofile=coverage.txt -covermode=atomic ./cli/... ./config/... ./i18n/... ./meta/... ./main/... ./openapi/... ./resource/...
+    - run: test -z $ACCESS_KEY_ID -a -z $ACCESS_KEY_SECRET || bash ./integration/ecs_test
