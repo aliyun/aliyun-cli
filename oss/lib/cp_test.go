@@ -5028,3 +5028,811 @@ func (s *OssutilCommandSuite) TestCPObjectWithInputPassword(c *C) {
 	os.Remove(fileName)
 	s.removeBucket(bucketName, true, c)
 }
+
+func (s *OssutilCommandSuite) TestCPObjectUnderAKmode(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	// prepare file and object
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+
+	str := ""
+	mode := "AK"
+	routines := strconv.Itoa(Routines)
+	cpDir := CheckpointDir
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"configFile":      &configFile,
+		"mode":            &mode,
+		"routines":        &routines,
+		"checkpointDir":   &cpDir,
+	}
+
+	c.Log(options)
+	_, err := cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, IsNil)
+
+	// down object
+	downFileName := testFileName + ".down"
+	dwArgs := []string{CloudURLToString(bucketName, object), downFileName}
+	_, err = cm.RunCommand("cp", dwArgs, options)
+	c.Assert(err, IsNil)
+
+	//check content
+	fileBody, err := ioutil.ReadFile(downFileName)
+	c.Assert(err, IsNil)
+	c.Assert(data, Equals, string(fileBody))
+	os.Remove(downFileName)
+	os.Remove(testFileName)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestCPObjectUnderEcsmodeWithConfigEcsUrl(c *C) {
+	oldConfigStr, err := ioutil.ReadFile(configFile)
+	c.Assert(err, IsNil)
+	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
+	ecsAk := "http://100.100.100.200/latest/meta-data/Ram/security-credentials/" + ecsRoleName
+	configStr := "[Credentials]" + "\n" + "language=EN" + "\n" + "endpoint=" + endpoint + "\n"
+	configStr = configStr + "[AkService]" + "\n" + "ecsAk=" + ecsAk
+	fd.WriteString(configStr)
+	fd.Close()
+
+	// create bucket
+	mode := "EcsRamRole"
+
+	str := ""
+	bucketName := bucketNamePrefix + randLowStr(12)
+	command := "mb"
+	args := []string{CloudURLToString(bucketName, "")}
+	options := OptionMapType{
+		"endpoint":   &str,
+		"mode":       &mode,
+		"configFile": &configFile,
+	}
+	_, err = cm.RunCommand(command, args, options)
+	c.Assert(err, IsNil)
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+
+	routines := strconv.Itoa(Routines)
+	cpDir := CheckpointDir
+	options = OptionMapType{
+		"endpoint":      &str,
+		"configFile":    &configFile,
+		"mode":          &mode,
+		"routines":      &routines,
+		"checkpointDir": &cpDir,
+	}
+
+	_, err = cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, IsNil)
+
+	// down object
+	downFileName := testFileName + ".down"
+	dwArgs := []string{CloudURLToString(bucketName, object), downFileName}
+	_, err = cm.RunCommand("cp", dwArgs, options)
+	c.Assert(err, IsNil)
+
+	//check content
+	fileBody, err := ioutil.ReadFile(downFileName)
+	c.Assert(err, IsNil)
+	c.Assert(data, Equals, string(fileBody))
+
+	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
+	c.Assert(err, IsNil)
+
+	os.Remove(downFileName)
+	os.Remove(testFileName)
+
+	// rm bucket
+	command = "rm"
+	args = []string{CloudURLToString(bucketName, "")}
+	ok := true
+	options = OptionMapType{
+		"endpoint":   &str,
+		"configFile": &configFile,
+		"mode":       &mode,
+		"bucket":     &ok,
+		"force":      &ok,
+		"allType":    &ok,
+	}
+	_, err = cm.RunCommand(command, args, options)
+	c.Assert(err, NotNil)
+
+	s.createFile(configFile, string(oldConfigStr), c)
+}
+
+func (s *OssutilCommandSuite) TestCPObjectUnderEcsmodeWithEmptyEcsUrl(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	// prepare file and object
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+
+	str := ""
+	mode := "EcsRamRole"
+	routines := strconv.Itoa(Routines)
+
+	cpDir := CheckpointDir
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"configFile":      &configFile,
+		"mode":            &mode,
+		"routines":        &routines,
+		"checkpointDir":   &cpDir,
+	}
+
+	_, err := cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, NotNil)
+
+	os.Remove(testFileName)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestCPObjectUnderEcsmodeWithRolename(c *C) {
+	mode := "EcsRamRole"
+	str := ""
+
+	// create bucket
+	bucketName := bucketNamePrefix + randLowStr(12)
+	command := "mb"
+	args := []string{CloudURLToString(bucketName, "")}
+	options := OptionMapType{
+		"endpoint":    &str,
+		"mode":        &mode,
+		"configFile":  &configFile,
+		"ecsRoleName": &ecsRoleName,
+	}
+	_, err := cm.RunCommand(command, args, options)
+	c.Assert(err, IsNil)
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+
+	routines := strconv.Itoa(Routines)
+	cpDir := CheckpointDir
+	options = OptionMapType{
+		"endpoint":      &str,
+		"configFile":    &configFile,
+		"mode":          &mode,
+		"routines":      &routines,
+		"checkpointDir": &cpDir,
+		"ecsRoleName":   &ecsRoleName,
+	}
+
+	_, err = cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, IsNil)
+
+	// down object
+	downFileName := testFileName + ".down"
+	dwArgs := []string{CloudURLToString(bucketName, object), downFileName}
+	_, err = cm.RunCommand("cp", dwArgs, options)
+	c.Assert(err, IsNil)
+
+	//check content
+	fileBody, err := ioutil.ReadFile(downFileName)
+	c.Assert(err, IsNil)
+	c.Assert(data, Equals, string(fileBody))
+	os.Remove(downFileName)
+	os.Remove(testFileName)
+
+	// rm bucket
+	command = "rm"
+	args = []string{CloudURLToString(bucketName, "")}
+	ok := true
+	options = OptionMapType{
+		"endpoint":    &str,
+		"configFile":  &configFile,
+		"mode":        &mode,
+		"ecsRoleName": &ecsRoleName,
+		"bucket":      &ok,
+		"force":       &ok,
+		"allType":     &ok,
+	}
+	_, err = cm.RunCommand(command, args, options)
+	c.Assert(err, NotNil)
+}
+
+func (s *OssutilCommandSuite) TestCPObjectUnderRamRoleArnmodeWithArn(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	// prepare file and object
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+
+	str := ""
+	mode := "RamRoleArn"
+	routines := strconv.Itoa(Routines)
+	cpDir := CheckpointDir
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &stsAccessID,
+		"accessKeySecret": &stsAccessKeySecret,
+		"configFile":      &configFile,
+		"mode":            &mode,
+		"routines":        &routines,
+		"checkpointDir":   &cpDir,
+		"ramRoleArn":      &stsARN,
+	}
+
+	_, err := cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, IsNil)
+
+	// down object
+	downFileName := testFileName + ".down"
+	dwArgs := []string{CloudURLToString(bucketName, object), downFileName}
+	_, err = cm.RunCommand("cp", dwArgs, options)
+	c.Assert(err, IsNil)
+
+	//check content
+	fileBody, err := ioutil.ReadFile(downFileName)
+	c.Assert(err, IsNil)
+	c.Assert(data, Equals, string(fileBody))
+	os.Remove(downFileName)
+	os.Remove(testFileName)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestCPObjectUnderRamRoleArnmodeWithConfigArn(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	oldConfigStr, err := ioutil.ReadFile(configFile)
+	c.Assert(err, IsNil)
+	f, err := os.OpenFile(ConfigFile, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0660)
+	configStr := "ramRoleArn=" + stsARN
+
+	f.WriteString(configStr)
+	f.Close()
+
+	// prepare file and object
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+
+	str := ""
+	mode := "RamRoleArn"
+	routines := strconv.Itoa(Routines)
+	cpDir := CheckpointDir
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &stsAccessID,
+		"accessKeySecret": &stsAccessKeySecret,
+		"configFile":      &configFile,
+		"mode":            &mode,
+		"routines":        &routines,
+		"checkpointDir":   &cpDir,
+		"ramRoleArn":      &str,
+	}
+
+	_, err = cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, IsNil)
+
+	// down object
+	downFileName := testFileName + ".down"
+	dwArgs := []string{CloudURLToString(bucketName, object), downFileName}
+	_, err = cm.RunCommand("cp", dwArgs, options)
+	c.Assert(err, IsNil)
+
+	//check content
+	fileBody, err := ioutil.ReadFile(downFileName)
+	c.Assert(err, IsNil)
+	c.Assert(data, Equals, string(fileBody))
+
+	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
+	c.Assert(err, IsNil)
+
+	os.Remove(downFileName)
+	os.Remove(testFileName)
+	s.removeBucket(bucketName, true, c)
+
+}
+
+func (s *OssutilCommandSuite) TestCPObjectUnderRamRoleArnmodeWithEmptyArn(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	// prepare file and object
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+
+	str := ""
+	mode := "RamRoleArn"
+	routines := strconv.Itoa(Routines)
+	cpDir := CheckpointDir
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &stsAccessID,
+		"accessKeySecret": &stsAccessKeySecret,
+		"configFile":      &configFile,
+		"mode":            &mode,
+		"routines":        &routines,
+		"checkpointDir":   &cpDir,
+		"ramRoleArn":      &str,
+	}
+
+	_, err := cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, NotNil)
+
+	os.Remove(testFileName)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestCPObjectUnderRamRoleArnmodeWithTokenTimeout(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	// prepare file and object
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+
+	str := ""
+	mode := "RamRoleArn"
+	routines := strconv.Itoa(Routines)
+	tokenTimeout := "2000"
+	cpDir := CheckpointDir
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &stsAccessID,
+		"accessKeySecret": &stsAccessKeySecret,
+		"configFile":      &configFile,
+		"mode":            &mode,
+		"routines":        &routines,
+		"checkpointDir":   &cpDir,
+		"ramRoleArn":      &stsARN,
+		"tokenTimeout":    &tokenTimeout,
+	}
+
+	_, err := cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, IsNil)
+
+	// down object
+	downFileName := testFileName + ".down"
+	dwArgs := []string{CloudURLToString(bucketName, object), downFileName}
+	_, err = cm.RunCommand("cp", dwArgs, options)
+	c.Assert(err, IsNil)
+
+	//check content
+	fileBody, err := ioutil.ReadFile(downFileName)
+	c.Assert(err, IsNil)
+	c.Assert(data, Equals, string(fileBody))
+	os.Remove(downFileName)
+	os.Remove(testFileName)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestCPObjectUnderRamRoleArnmodeWithStsRegion(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	// prepare file and object
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+	str := ""
+	mode := "RamRoleArn"
+	routines := strconv.Itoa(Routines)
+	cpDir := CheckpointDir
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &stsAccessID,
+		"accessKeySecret": &stsAccessKeySecret,
+		"configFile":      &configFile,
+		"mode":            &mode,
+		"routines":        &routines,
+		"checkpointDir":   &cpDir,
+		"ramRoleArn":      &stsARN,
+		"stsRegion":       &stsRegion,
+	}
+
+	_, err := cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, IsNil)
+
+	// down object
+	downFileName := testFileName + ".down"
+	dwArgs := []string{CloudURLToString(bucketName, object), downFileName}
+	_, err = cm.RunCommand("cp", dwArgs, options)
+	c.Assert(err, IsNil)
+
+	//check content
+	fileBody, err := ioutil.ReadFile(downFileName)
+	c.Assert(err, IsNil)
+	c.Assert(data, Equals, string(fileBody))
+	os.Remove(downFileName)
+	os.Remove(testFileName)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestCPObjectUnderNomode(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	// prepare file and object
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+
+	str := ""
+	routines := strconv.Itoa(Routines)
+	cpDir := CheckpointDir
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"configFile":      &configFile,
+		"routines":        &routines,
+		"checkpointDir":   &cpDir,
+	}
+
+	_, err := cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, IsNil)
+
+	// down object
+	downFileName := testFileName + ".down"
+	dwArgs := []string{CloudURLToString(bucketName, object), downFileName}
+	_, err = cm.RunCommand("cp", dwArgs, options)
+	c.Assert(err, IsNil)
+
+	//check content
+	fileBody, err := ioutil.ReadFile(downFileName)
+	c.Assert(err, IsNil)
+	c.Assert(data, Equals, string(fileBody))
+	os.Remove(downFileName)
+	os.Remove(testFileName)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestCPObjectUnderNomodeWithEmptyAKIdAndEcsUrl(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	oldConfigStr, err := ioutil.ReadFile(configFile)
+	c.Assert(err, IsNil)
+	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
+	configStr := "[Credentials]" + "\n" + "language=EN" + "\n" + "endpoint=oss-cn-shenzhen.aliyuncs.com" + "\n"
+
+	fd.WriteString(configStr)
+	fd.Close()
+    
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+
+	str := ""
+	routines := strconv.Itoa(Routines)
+	cpDir := CheckpointDir
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"configFile":      &configFile,
+		"routines":        &routines,
+		"checkpointDir":   &cpDir,
+	}
+
+	_, err = cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, NotNil)
+
+	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
+	c.Assert(err, IsNil)
+
+	os.Remove(testFileName)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestCPObjectUnderNomodeUsingEcsRoleAK(c *C) {
+	oldConfigStr, err := ioutil.ReadFile(configFile)
+	c.Assert(err, IsNil)
+	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
+	ecsAk := "http://100.100.100.200/latest/meta-data/Ram/security-credentials/" + ecsRoleName
+	configStr := "[Credentials]" + "\n" + "language=EN" + "\n" + "endpoint=" + endpoint + "\n"
+	configStr = configStr + "[AkService]" + "\n" + "ecsAk=" + ecsAk
+	fd.WriteString(configStr)
+	fd.Close()
+
+	// create bucket
+	mode := "EcsRamRole"
+	str := ""
+	bucketName := bucketNamePrefix + randLowStr(12)
+	command := "mb"
+	args := []string{CloudURLToString(bucketName, "")}
+	options := OptionMapType{
+		"endpoint":   &str,
+		"mode":       &mode,
+		"configFile": &configFile,
+	}
+	_, err = cm.RunCommand(command, args, options)
+	c.Assert(err, IsNil)
+
+	// prepare file and object
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+
+	routines := strconv.Itoa(Routines)
+	cpDir := CheckpointDir
+	options = OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"configFile":      &configFile,
+		"routines":        &routines,
+		"checkpointDir":   &cpDir,
+	}
+
+	_, err = cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, IsNil)
+
+	// down object
+	downFileName := testFileName + ".down"
+	dwArgs := []string{CloudURLToString(bucketName, object), downFileName}
+	_, err = cm.RunCommand("cp", dwArgs, options)
+	c.Assert(err, IsNil)
+
+	//check content
+	fileBody, err := ioutil.ReadFile(downFileName)
+	c.Assert(err, IsNil)
+	c.Assert(data, Equals, string(fileBody))
+	os.Remove(downFileName)
+	os.Remove(testFileName)
+
+	// rm bucket
+	command = "rm"
+	args = []string{CloudURLToString(bucketName, "")}
+	ok := true
+	options = OptionMapType{
+		"endpoint":   &str,
+		"configFile": &configFile,
+		"mode":       &mode,
+		"bucket":     &ok,
+		"force":      &ok,
+		"allType":    &ok,
+	}
+	_, err = cm.RunCommand(command, args, options)
+	c.Assert(err, NotNil)
+	s.removeBucket(bucketName, true, c)
+	s.createFile(configFile, string(oldConfigStr), c)
+}
+
+func (s *OssutilCommandSuite) TestCPObjectUnderNomodeWithTimeOut(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	// prepare file and object
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+
+	str := ""
+	readTimeOut := "1000"
+	connectTimeOut := "100"
+	routines := strconv.Itoa(Routines)
+	cpDir := CheckpointDir
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"configFile":      &configFile,
+		"routines":        &routines,
+		"checkpointDir":   &cpDir,
+		"readTimeOut":     &readTimeOut,
+		"connectTimeOut":  &connectTimeOut,
+	}
+
+	c.Log(options)
+	_, err := cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, IsNil)
+
+	// down object
+	downFileName := testFileName + ".down"
+	dwArgs := []string{CloudURLToString(bucketName, object), downFileName}
+	_, err = cm.RunCommand("cp", dwArgs, options)
+	c.Assert(err, IsNil)
+
+	//check content
+	fileBody, err := ioutil.ReadFile(downFileName)
+	c.Assert(err, IsNil)
+	c.Assert(data, Equals, string(fileBody))
+	os.Remove(downFileName)
+	os.Remove(testFileName)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestCPObjectUnderSTStokenmode(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	client := NewClient(stsAccessID, stsAccessKeySecret, stsARN, "sts_test")
+
+	resp, err := client.AssumeRole(900, "")
+	c.Assert(err, IsNil)
+
+	temAccessID := resp.Credentials.AccessKeyId
+	temAccessKeySecret := resp.Credentials.AccessKeySecret
+	temSTSToken := resp.Credentials.SecurityToken
+
+	c.Assert(temAccessID, Not(Equals), "")
+	c.Assert(temAccessKeySecret, Not(Equals), "")
+	c.Assert(temSTSToken, Not(Equals), "")
+
+	// prepare file and object
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+
+	str := ""
+	mode := "StsToken"
+	routines := strconv.Itoa(Routines)
+	cpDir := CheckpointDir
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &temAccessID,
+		"accessKeySecret": &temAccessKeySecret,
+		"configFile":      &configFile,
+		"mode":            &mode,
+		"routines":        &routines,
+		"checkpointDir":   &cpDir,
+		"stsToken":        &temSTSToken,
+	}
+
+	_, err = cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, IsNil)
+
+	// down object
+	downFileName := testFileName + ".down"
+	dwArgs := []string{CloudURLToString(bucketName, object), downFileName}
+	_, err = cm.RunCommand("cp", dwArgs, options)
+	c.Assert(err, IsNil)
+
+	//check content
+	fileBody, err := ioutil.ReadFile(downFileName)
+	c.Assert(err, IsNil)
+	c.Assert(data, Equals, string(fileBody))
+	os.Remove(downFileName)
+	os.Remove(testFileName)
+	s.removeBucket(bucketName, true, c)
+}
+
+func (s *OssutilCommandSuite) TestCPObjectUnderSTSTokenmodeWithEmptySTSToken(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	client := NewClient(stsAccessID, stsAccessKeySecret, stsARN, "sts_test")
+
+	resp, err := client.AssumeRole(900, "")
+	c.Assert(err, IsNil)
+
+	temAccessID := resp.Credentials.AccessKeyId
+	temAccessKeySecret := resp.Credentials.AccessKeySecret
+	temSTSToken := resp.Credentials.SecurityToken
+
+	c.Assert(temAccessID, Not(Equals), "")
+	c.Assert(temAccessKeySecret, Not(Equals), "")
+	c.Assert(temSTSToken, Not(Equals), "")
+
+	// prepare file and object
+
+	// filename
+	testFileName := "ossutil_test_file" + randStr(5)
+	data := randStr(100)
+	s.createFile(testFileName, data, c)
+
+	// begin cp file
+	object := randLowStr(12)
+	cpArgs := []string{testFileName, CloudURLToString(bucketName, object)}
+
+	str := ""
+	mode := "StsToken"
+	routines := strconv.Itoa(Routines)
+	cpDir := CheckpointDir
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &temAccessID,
+		"accessKeySecret": &temAccessKeySecret,
+		"configFile":      &configFile,
+		"mode":            &mode,
+		"routines":        &routines,
+		"checkpointDir":   &cpDir,
+		"stsToken":        &str,
+	}
+
+	_, err = cm.RunCommand("cp", cpArgs, options)
+	c.Assert(err, NotNil)
+
+	os.Remove(testFileName)
+	s.removeBucket(bucketName, true, c)
+}

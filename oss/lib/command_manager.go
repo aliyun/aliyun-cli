@@ -113,6 +113,7 @@ func (cm *CommandManager) Init() {
 
 // RunCommand select command from command map, initialize command and run command
 func (cm *CommandManager) RunCommand(commandName string, args []string, options OptionMapType) (bool, error) {
+
 	if cmd, ok := cm.commandMap[commandName]; ok {
 		if err := cmd.(Commander).Init(args, options); err != nil {
 			return false, err

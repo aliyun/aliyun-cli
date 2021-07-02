@@ -1279,6 +1279,14 @@ var copyCommand = CopyCommand{
 			OptionDisableIgnoreError,
 			OptionTagging,
 			OptionPassword,
+			OptionMode,
+			OptionECSRoleName,
+			OptionTokenTimeout,
+			OptionRamRoleArn,
+			OptionRoleSessionName,
+			OptionReadTimeout,
+			OptionConnectTimeout,
+			OptionSTSRegion,
 		},
 	},
 }
@@ -1423,6 +1431,9 @@ func (cc *CopyCommand) RunCommand() error {
 
 	// create checkpoint dir
 	if err := os.MkdirAll(cc.cpOption.cpDir, 0755); err != nil {
+
+		//
+		//fmt.Printf("%s", cc.cpOption.cpDir)
 		return err
 	}
 

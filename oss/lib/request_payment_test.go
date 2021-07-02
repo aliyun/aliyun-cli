@@ -3,6 +3,7 @@ package lib
 import (
 	"io/ioutil"
 	"os"
+	"time"
 
 	. "gopkg.in/check.v1"
 )
@@ -33,6 +34,8 @@ func (s *OssutilCommandSuite) TestRequestPaymentPutSuccess(c *C) {
 	requestArgs = []string{CloudURLToString(bucketName, ""), "Requester"}
 	_, err = cm.RunCommand("request-payment", requestArgs, options)
 	c.Assert(err, IsNil)
+
+	time.Sleep(5 * time.Second)
 
 	// check
 	strMethod = "get"

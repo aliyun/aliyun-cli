@@ -1,8 +1,8 @@
 package lib
 
 import (
-	. "gopkg.in/check.v1"
 	"os"
+	. "gopkg.in/check.v1"
 )
 
 func (s *OssutilCommandSuite) TestErrorInputFile(c *C) {

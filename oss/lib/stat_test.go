@@ -253,6 +253,7 @@ func (s *OssutilCommandSuite) TestStatVersioning(c *C) {
 	s.removeBucket(bucketName, true, c)
 }
 
+
 func (s *OssutilCommandSuite) TestStatObjectWithPayer(c *C) {
 	s.createFile(uploadFileName, content, c)
 	bucketName := payerBucket
