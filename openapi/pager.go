@@ -148,20 +148,20 @@ func (a *Pager) FeedResponse(body string) error {
 		return fmt.Errorf("unmarshal %s", err.Error())
 	}
 
-	if a.nextTokenMode {
-		a.nextToken = ""
-	}
+	a.nextToken = ""
+
 	if a.NextTokenExpr != "" {
+		a.nextTokenMode = true
 		// allow to ignore NextToken mode
 		if val, err := jmespath.Search(a.NextTokenExpr, j); err == nil {
 			if nextToken, ok := val.(string); ok {
 				a.nextToken = nextToken
-				a.nextTokenMode = true
 			}
 		} else {
 			return fmt.Errorf("jmespath: '%s' failed %s", a.NextTokenExpr, err)
 		}
 	}
+
 	if !a.nextTokenMode {
 		if total, err := jmespath.Search(a.TotalCountExpr, j); err == nil {
 			var totalCount float64
