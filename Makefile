@@ -1,4 +1,4 @@
-export VERSION=3.0.84
+export VERSION=3.0.85
 export RELEASE_PATH="releases/aliyun-cli-${VERSION}"
 
 all: build
