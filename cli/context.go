@@ -44,13 +44,15 @@ type Context struct {
 	command      *Command
 	completion   *Completion
 	writer       io.Writer
+	stderr       io.Writer
 }
 
-func NewCommandContext(w io.Writer) *Context {
+func NewCommandContext(w io.Writer, stderr io.Writer) *Context {
 	return &Context{
 		flags:        NewFlagSet(),
 		unknownFlags: nil,
 		writer:       w,
+		stderr:       stderr,
 	}
 }
 
@@ -76,6 +78,10 @@ func (ctx *Context) Flags() *FlagSet {
 
 func (ctx *Context) Writer() io.Writer {
 	return ctx.writer
+}
+
+func (ctx *Context) Stderr() io.Writer {
+	return ctx.stderr
 }
 
 func (ctx *Context) UnknownFlags() *FlagSet {

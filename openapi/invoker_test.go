@@ -35,7 +35,8 @@ func TestBasicInvoker_Init(t *testing.T) {
 	assert.Nil(t, req)
 
 	w := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
 
 	regionflag := config.NewRegionFlag()
 	regionflag.SetAssigned(true)

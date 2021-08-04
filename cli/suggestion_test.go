@@ -39,7 +39,8 @@ func TestApply(t *testing.T) {
 
 func TestPrintSuggestions(t *testing.T) {
 	w := new(bytes.Buffer)
-	ctx := NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
 	PrintSuggestions(ctx, "en", []string{"hello", "nihao"})
 	assert.Equal(t, "\x1b[1;33m\nDid you mean:\n\x1b[0m\x1b[1;33m  hello\n\x1b[0m\x1b[1;33m  nihao\n\x1b[0m", w.String())
 

@@ -20,12 +20,17 @@ import (
 )
 
 var (
-	defaultOutput = NewOutput()
-	defaultWriter = os.Stdout
+	defaultOutput       = NewOutput()
+	defaultWriter       = os.Stdout
+	defaultStderrWriter = os.Stderr
 )
 
 func DefaultWriter() io.Writer {
 	return defaultWriter
+}
+
+func DefaultStderrWriter() io.Writer {
+	return defaultStderrWriter
 }
 
 func Print(w io.Writer, a ...interface{}) (n int, err error) {

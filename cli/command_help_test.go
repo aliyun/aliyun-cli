@@ -24,7 +24,8 @@ import (
 
 func TestCmdPrint(t *testing.T) {
 	w := new(bytes.Buffer)
-	ctx := NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
 	c := &Command{
 		Name:              "aliyun",
 		EnableUnknownFlag: true,
@@ -44,19 +45,23 @@ func TestCmdPrint(t *testing.T) {
 
 	//PrintUsage
 	w.Reset()
+	stderr.Reset()
 	c.PrintUsage(ctx)
 	assert.Equal(t, "\nUsage:\n  aliyun [subcmd]\n", w.String())
 	w.Reset()
+	stderr.Reset()
 	c.Usage = ""
 	assert.Empty(t, w.String())
 
 	//PrintSample
 	w.Reset()
+	stderr.Reset()
 	c.PrintSample(ctx)
 	assert.Equal(t, "\nSample:\n  aliyun oss\n", w.String())
 
 	//PrintSubCommands
 	w.Reset()
+	stderr.Reset()
 	subcmd := &Command{
 		Name:            "oss",
 		SuggestDistance: 2,
@@ -72,24 +77,29 @@ func TestCmdPrint(t *testing.T) {
 
 	//PrintFlags
 	w.Reset()
+	stderr.Reset()
 	c.PrintFlags(ctx)
 	assert.Empty(t, w.String())
 	c.flags.flags = []*Flag{&Flag{Name: "output", Shorthand: 'o'}}
 	w.Reset()
+	stderr.Reset()
 	c.PrintFlags(ctx)
 	assert.Equal(t, "\nFlags:\n", w.String())
 	w.Reset()
+	stderr.Reset()
 	ctx.flags.flags = []*Flag{&Flag{Name: "output", Shorthand: 'o', Short: i18n.T("o test", "")}, &Flag{Name: "filter", Short: i18n.T("", "")}, &Flag{Name: "hidden", Hidden: true}}
 	c.PrintFlags(ctx)
 	assert.Equal(t, "\nFlags:\n  --output,-o o test\n  --filter    \n", w.String())
 
 	//PrintFailed
 	w.Reset()
+	stderr.Reset()
 	c.PrintFailed(ctx, errors.New("you failed"), "come on again")
-	assert.Equal(t, "\x1b[1;31mERROR: you failed\n\x1b[0mcome on again\n", w.String())
+	assert.Equal(t, "\x1b[1;31mERROR: you failed\n\x1b[0mcome on again\n", stderr.String())
 
 	//PrintTail
 	w.Reset()
+	stderr.Reset()
 	c.PrintTail(ctx)
 	assert.Equal(t, "\nUse `aliyun --help` for more information.\n", w.String())
 }

@@ -28,7 +28,8 @@ func TestDoHello(t *testing.T) {
 	os.Setenv("ALIBABA_CLOUD_VENDOR", "cli_test_VendorTest")
 
 	w := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
 	ctx.Flags().AddByName("skip-secure-verify")
 	profile := NewProfile("default")
 

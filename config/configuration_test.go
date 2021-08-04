@@ -73,7 +73,8 @@ func TestConfiguration(t *testing.T) {
 
 	//GetCurrentProfile
 	w := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
 	AddFlags(ctx.Flags())
 
 	os.Setenv("ACCESS_KEY_ID", "")
@@ -265,7 +266,8 @@ func TestLoadProfileWithContext(t *testing.T) {
 		}
 	}
 	w := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
 	AddFlags(ctx.Flags())
 
 	//testcase 1

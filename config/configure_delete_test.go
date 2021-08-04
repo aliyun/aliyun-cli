@@ -18,11 +18,15 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestDoConfigureDelete(t *testing.T) {
 	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+
 	originhook := hookLoadConfiguration
 	originhookSave := hookSaveConfiguration
 	defer func() {
@@ -33,7 +37,9 @@ func TestDoConfigureDelete(t *testing.T) {
 	//testcase 1
 	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
-			return &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "bbb", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+			return &Configuration{CurrentProfile: "default", Profiles: []Profile{
+				Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
+				Profile{Name: "bbb", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
 	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
@@ -41,13 +47,15 @@ func TestDoConfigureDelete(t *testing.T) {
 			return nil
 		}
 	}
-	doConfigureDelete(w, "bbb")
+
+	doConfigureDelete(ctx, "bbb")
 	assert.Empty(t, w.String())
 
 	//testcase 2
 	w.Reset()
-	doConfigureDelete(w, "aaa")
-	assert.Equal(t, "\x1b[1;31mError: configuration profile `aaa` not found\n\x1b[0m", w.String())
+	stderr.Reset()
+	doConfigureDelete(ctx, "aaa")
+	assert.Equal(t, "\x1b[1;31mError: configuration profile `aaa` not found\n\x1b[0m", stderr.String())
 
 	//testcase 3
 	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
@@ -57,13 +65,16 @@ func TestDoConfigureDelete(t *testing.T) {
 	}
 
 	w.Reset()
-	doConfigureDelete(w, "bbb")
-	assert.Equal(t, "\x1b[1;31mERROR: load configure failed: error\n\x1b[0m\x1b[1;31mError: configuration profile `bbb` not found\n\x1b[0m", w.String())
+	stderr.Reset()
+	doConfigureDelete(ctx, "bbb")
+	assert.Equal(t, "\x1b[1;31mERROR: load configure failed: error\n\x1b[0m\x1b[1;31mError: configuration profile `bbb` not found\n\x1b[0m", stderr.String())
 
 	//testcase 4
 	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
-			return &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "bbb", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+			return &Configuration{CurrentProfile: "default", Profiles: []Profile{
+				Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
+				Profile{Name: "bbb", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
 	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
@@ -72,6 +83,7 @@ func TestDoConfigureDelete(t *testing.T) {
 		}
 	}
 	w.Reset()
-	doConfigureDelete(w, "bbb")
-	assert.Equal(t, "\x1b[1;31mError: save configuration failed save error\n\x1b[0m", w.String())
+	stderr.Reset()
+	doConfigureDelete(ctx, "bbb")
+	assert.Equal(t, "\x1b[1;31mError: save configuration failed save error\n\x1b[0m", stderr.String())
 }

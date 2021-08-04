@@ -62,7 +62,8 @@ func TestNewConfigureCommand(t *testing.T) {
 
 	//testcase
 	w := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
 	AddFlags(ctx.Flags())
 
 	//testcase
@@ -84,9 +85,10 @@ func TestNewConfigureCommand(t *testing.T) {
 
 	//testcase
 	w.Reset()
+	stderr.Reset()
 	err = configureDelete.Run(ctx, []string{"delete"})
 	assert.Nil(t, err)
-	assert.Equal(t, "\x1b[1;31mmissing --profile <profileName>\n\x1b[0m\x1b[1;33m\nusage:\n  aliyun configure delete --profile <profileName>\n\x1b[0m", w.String())
+	assert.Equal(t, "\x1b[1;31mmissing --profile <profileName>\n\x1b[0m\x1b[1;33m\nusage:\n  aliyun configure delete --profile <profileName>\n\x1b[0m", stderr.String())
 
 	//testcase
 	cmd := NewConfigureCommand()
@@ -95,12 +97,14 @@ func TestNewConfigureCommand(t *testing.T) {
 
 	//testcase
 	w.Reset()
+	stderr.Reset()
 	err = cmd.Run(ctx, []string{"configure"})
 	assert.Empty(t, w.String())
 	assert.NotNil(t, err)
 
 	//testcase
 	w.Reset()
+	stderr.Reset()
 	err = cmd.Run(ctx, []string{})
 	assert.Nil(t, err)
 	assert.Equal(t, "Configuring profile 'default' in 'AK' authenticate mode...\nAccess Key Id [*************************_id]: Access Key Secret [*****************************ret]: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] : Saving profile[default] ...Done.\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\ndefault RegionId is empty! run `aliyun configure` first\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\n", w.String())
@@ -142,7 +146,8 @@ func TestDoConfigure(t *testing.T) {
 		}
 	}
 	w := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
 	AddFlags(ctx.Flags())
 	err := doConfigure(ctx, "profile", "AK")
 	assert.Nil(t, err)

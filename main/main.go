@@ -26,11 +26,12 @@ import (
 func main() {
 	cli.PlatformCompatible()
 	writer := cli.DefaultWriter()
+	stderr := cli.DefaultStderrWriter()
 
 	// load current configuration
 	profile, err := config.LoadCurrentProfile()
 	if err != nil {
-		cli.Errorf(writer, "ERROR: load current configuration failed %s", err)
+		cli.Errorf(stderr, "ERROR: load current configuration failed %s", err)
 		return
 	}
 
@@ -54,7 +55,7 @@ func main() {
 	commando := openapi.NewCommando(writer, profile)
 	commando.InitWithCommand(rootCmd)
 
-	ctx := cli.NewCommandContext(writer)
+	ctx := cli.NewCommandContext(writer, stderr)
 	ctx.EnterCommand(rootCmd)
 	ctx.SetCompletion(cli.ParseCompletionForShell())
 
