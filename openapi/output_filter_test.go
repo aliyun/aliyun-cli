@@ -23,7 +23,8 @@ import (
 
 func TestNewTableOutputFilter(t *testing.T) {
 	w := new(bufio.Writer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bufio.Writer)
+	ctx := cli.NewCommandContext(w, stderr)
 	outflag := NewOutputFlag()
 	ctx.Flags().Add(outflag)
 	out := GetOutputFilter(ctx)
@@ -67,7 +68,8 @@ func TestNewTableOutputFilter(t *testing.T) {
 
 func TestTableOutputFilter_FormatTable(t *testing.T) {
 	w := new(bufio.Writer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bufio.Writer)
+	ctx := cli.NewCommandContext(w, stderr)
 	ctx.Flags().Add(NewOutputFlag())
 	out := NewTableOutputFilter(ctx)
 	tableout, ok := out.(*TableOutputFilter)

@@ -77,8 +77,8 @@ func (c *Command) PrintFlags(ctx *Context) {
 }
 
 func (c *Command) PrintFailed(ctx *Context, err error, suggestion string) {
-	Errorf(ctx.Writer(), "ERROR: %v\n", err)
-	Printf(ctx.Writer(), "%s\n", suggestion)
+	Errorf(ctx.Stderr(), "ERROR: %v\n", err)
+	Printf(ctx.Stderr(), "%s\n", suggestion)
 }
 
 func (c *Command) PrintTail(ctx *Context) {

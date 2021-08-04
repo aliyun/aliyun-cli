@@ -41,18 +41,21 @@ func TestNewHelpFlag(t *testing.T) {
 
 func TestContext_SetUnknownFlags(t *testing.T) {
 	w := new(bytes.Buffer)
-	ctx := NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
 	ctx.SetUnknownFlags(NewFlagSet())
 	assert.NotNil(t, ctx.unknownFlags)
 }
 
 func TestNewCommandContext(t *testing.T) {
 	w := new(bytes.Buffer)
-	ctx := NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
 	assert.Equal(t, &Context{
 		flags:        NewFlagSet(),
 		unknownFlags: nil,
 		writer:       w,
+		stderr:       stderr,
 		help:         false,
 		command:      nil,
 		completion:   nil,
@@ -61,7 +64,8 @@ func TestNewCommandContext(t *testing.T) {
 
 func TestCtx(t *testing.T) {
 	w := new(bytes.Buffer)
-	ctx := NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
 	assert.False(t, ctx.IsHelp())
 	assert.Nil(t, ctx.Command())
 	assert.Nil(t, ctx.Completion())
@@ -80,7 +84,8 @@ func TestCtx(t *testing.T) {
 
 func TestCheckFlags(t *testing.T) {
 	w := new(bytes.Buffer)
-	ctx := NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
 	ctx.flags.AddByName("MrX")
 	assert.Nil(t, ctx.CheckFlags())
 	ctx.flags.flags[0].Required = true
@@ -96,7 +101,8 @@ func TestCheckFlags(t *testing.T) {
 
 func TestDetectFlag(t *testing.T) {
 	w := new(bytes.Buffer)
-	ctx := NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
 	ctx.flags.AddByName("MrX")
 	f, err := ctx.detectFlag("mrx")
 	assert.Nil(t, f)
@@ -112,7 +118,8 @@ func TestDetectFlag(t *testing.T) {
 
 func TestDetectFlagByShorthand(t *testing.T) {
 	w := new(bytes.Buffer)
-	ctx := NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
 	ctx.flags.Add(&Flag{Name: "profile", Shorthand: 'p'})
 	f, err := ctx.detectFlagByShorthand('p')
 	assert.Equal(t, &Flag{Name: "profile", Shorthand: 'p', formation: "-p"}, f)

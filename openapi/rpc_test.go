@@ -39,7 +39,8 @@ func TestRpcInvoker_Prepare(t *testing.T) {
 		},
 	}
 	w := new(bufio.Writer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bufio.Writer)
+	ctx := cli.NewCommandContext(w, stderr)
 
 	secureflag := NewSecureFlag()
 	secureflag.SetAssigned(true)

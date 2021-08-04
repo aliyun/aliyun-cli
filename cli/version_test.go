@@ -39,7 +39,8 @@ func TestNewVersionCommand(t *testing.T) {
 	assert.ObjectsAreEqualValues(excmd, cmd)
 
 	w := new(bytes.Buffer)
-	ctx := NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
 	err := cmd.Run(ctx, []string{})
 	assert.Nil(t, err)
 	assert.Equal(t, Version+"\n", w.String())

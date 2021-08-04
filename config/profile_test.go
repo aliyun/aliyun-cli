@@ -152,7 +152,8 @@ func TestGetParent(t *testing.T) {
 }
 func TestOverwriteWithFlags(t *testing.T) {
 	buf := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(buf)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, stderr)
 	AddFlags(ctx.Flags())
 	resetEnv()
 	actual := newProfile()
@@ -216,7 +217,8 @@ func TestOverwriteWithFlags(t *testing.T) {
 }
 func TestOverwriteWithFlagsWithRegionIDEnv(t *testing.T) {
 	buf := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(buf)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, stderr)
 	AddFlags(ctx.Flags())
 
 	resetEnv()
@@ -246,7 +248,8 @@ func TestOverwriteWithFlagsWithRegionIDEnv(t *testing.T) {
 func TestOverwriteWithFlagsWithStsTokenEnv(t *testing.T) {
 	resetEnv()
 	buf := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(buf)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, stderr)
 	AddFlags(ctx.Flags())
 	actual := newProfile()
 	exp := newProfile()
@@ -261,7 +264,8 @@ func TestOverwriteWithFlagsWithStsTokenEnv(t *testing.T) {
 
 func TestOverwriteWithFlagsWithAccessKeySecretEnv(t *testing.T) {
 	buf := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(buf)
+	buf2 := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, buf2)
 	AddFlags(ctx.Flags())
 
 	resetEnv()
@@ -291,7 +295,8 @@ func TestOverwriteWithFlagsWithAccessKeySecretEnv(t *testing.T) {
 
 func TestOverwriteWithFlagsWithAccessKeyIDEnv(t *testing.T) {
 	buf := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(buf)
+	buf2 := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, buf2)
 	AddFlags(ctx.Flags())
 
 	resetEnv()
@@ -334,7 +339,8 @@ func resetEnv() {
 func TestGetClient(t *testing.T) {
 	actual := newProfile()
 	buf := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(buf)
+	buf2 := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, buf2)
 	AddFlags(ctx.Flags())
 	actual.RetryCount = 2
 

@@ -101,7 +101,9 @@ func TestCompletionInstallers(t *testing.T) {
 }
 func TestCompletion(t *testing.T) {
 	w := new(bytes.Buffer)
-	installCompletion(w, "is this a cmd?")
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
+	installCompletion(ctx, "is this a cmd?")
 	assert.Empty(t, w.String())
 }
 
@@ -114,9 +116,9 @@ func TestNewAutoCompleteCommand(t *testing.T) {
 		Usage: "auto-completion [--uninstall]",
 		Run: func(ctx *Context, args []string) error {
 			if uninstallFlag.IsAssigned() {
-				uninstallCompletion(ctx.Writer(), "aliyun")
+				uninstallCompletion(ctx, "aliyun")
 			} else {
-				installCompletion(ctx.Writer(), "aliyun")
+				installCompletion(ctx, "aliyun")
 			}
 			return nil
 		},
@@ -125,14 +127,14 @@ func TestNewAutoCompleteCommand(t *testing.T) {
 	cmd := NewAutoCompleteCommand()
 	assert.ObjectsAreEqualValues(excmd, cmd)
 	w := new(bytes.Buffer)
-	ctx := NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
 	err := cmd.Run(ctx, []string{})
 	assert.Nil(t, err)
 	assert.Empty(t, w.String())
 }
 
 func TestUninstallCompletion(t *testing.T) {
-
 	orighookGetBinaryPath := hookGetBinaryPath
 	defer func() {
 		hookGetBinaryPath = orighookGetBinaryPath
@@ -144,6 +146,8 @@ func TestUninstallCompletion(t *testing.T) {
 	}
 
 	w := new(bytes.Buffer)
-	uninstallCompletion(w, "aliyun")
-	assert.Equal(t, "\x1b[1;31mcan't get binary path path error\x1b[0m", w.String())
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
+	uninstallCompletion(ctx, "aliyun")
+	assert.Equal(t, "\x1b[1;31mcan't get binary path path error\x1b[0m", stderr.String())
 }

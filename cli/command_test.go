@@ -82,7 +82,8 @@ func TestCommand(t *testing.T) {
 
 	//ExecuteComplete
 	w := new(bytes.Buffer)
-	ctx := NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
 	ctx.completion = new(Completion)
 	ctx.completion.Current = "--f"
 	ctx.flags.flags = append(ctx.flags.flags, []*Flag{
@@ -192,7 +193,8 @@ func TestGetSubCommand(t *testing.T) {
 
 func TestExecute(t *testing.T) {
 	buf := new(bytes.Buffer)
-	ctx := NewCommandContext(buf)
+	buf2 := new(bytes.Buffer)
+	ctx := NewCommandContext(buf, buf2)
 
 	cmd := newAliyunCmd()
 	subCmd := newTestCmd()
@@ -204,7 +206,7 @@ func TestExecute(t *testing.T) {
 	DisableExitCode()
 	defer EnableExitCode()
 	cmd.Execute(ctx, []string{})
-	assert.Equal(t, "\x1b[1;31mERROR: 'test' is not a vaild command\n\x1b[0m", buf.String())
+	assert.Equal(t, "\x1b[1;31mERROR: 'test' is not a vaild command\n\x1b[0m", buf2.String())
 }
 
 func TestProcessError(t *testing.T) {
@@ -212,17 +214,19 @@ func TestProcessError(t *testing.T) {
 	defer EnableExitCode()
 	cmd := newAliyunCmd()
 	buf := new(bytes.Buffer)
-	ctx := NewCommandContext(buf)
+	buf2 := new(bytes.Buffer)
+	ctx := NewCommandContext(buf, buf2)
 	e := errors.New("test error tip")
 	err := NewErrorWithTip(e, "")
 	cmd.processError(ctx, err)
-	assert.Equal(t, "\x1b[1;31mERROR: test error tip\n\x1b[0m\x1b[1;33m\n\n\x1b[0m", buf.String())
+	assert.Equal(t, "\x1b[1;31mERROR: test error tip\n\x1b[0m\x1b[1;33m\n\n\x1b[0m", buf2.String())
 }
 
 func TestExecuteHelp(t *testing.T) {
 	cmd := newAliyunCmd()
 	buf := new(bytes.Buffer)
-	ctx := NewCommandContext(buf)
+	buf2 := new(bytes.Buffer)
+	ctx := NewCommandContext(buf, buf2)
 	cmd.Help = func(ctx *Context, args []string) error {
 		fmt.Fprint(ctx.Writer(), "test execute help")
 		return nil
@@ -231,11 +235,12 @@ func TestExecuteHelp(t *testing.T) {
 	assert.Equal(t, "test execute help", buf.String())
 
 	buf.Reset()
+	buf2.Reset()
 	DisableExitCode()
 	defer EnableExitCode()
 	cmd.Help = func(ctx *Context, args []string) error {
 		return errors.New("test help error")
 	}
 	cmd.executeHelp(ctx, nil)
-	assert.Equal(t, "\x1b[1;31mERROR: test help error\n\x1b[0m", buf.String())
+	assert.Equal(t, "\x1b[1;31mERROR: test help error\n\x1b[0m", buf2.String())
 }

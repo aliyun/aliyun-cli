@@ -29,7 +29,8 @@ import (
 
 func Test_main(t *testing.T) {
 	w := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
 	profile := config.Profile{
 		Language: "en",
 		RegionId: "cn-hangzhou",
@@ -120,7 +121,8 @@ func Test_main(t *testing.T) {
 
 func Test_processInvoke(t *testing.T) {
 	w := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
 	cmd := &cli.Command{}
 	cmd.EnableUnknownFlag = true
 
@@ -216,7 +218,8 @@ func Test_processInvoke(t *testing.T) {
 
 func Test_help(t *testing.T) {
 	w := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
 	cmd := &cli.Command{}
 	cmd.EnableUnknownFlag = true
 
@@ -254,7 +257,8 @@ func Test_help(t *testing.T) {
 
 func Test_complete(t *testing.T) {
 	w := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
 	cmd := &cli.Command{}
 	cmd.EnableUnknownFlag = true
 
@@ -312,7 +316,8 @@ func TestCreateInvoker(t *testing.T) {
 	commando := NewCommando(w, profile)
 
 	tempWriter := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(tempWriter)
+	tempStderrWriter := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(tempWriter, tempStderrWriter)
 	config.AddFlags(ctx.Flags())
 	AddFlags(ctx.Flags())
 	ctx.Flags().Get("force").SetAssigned(true)

@@ -15,12 +15,13 @@ package openapi
 
 import (
 	"bufio"
+	"testing"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestForceRpcInvoker_Prepare(t *testing.T) {
@@ -32,7 +33,8 @@ func TestForceRpcInvoker_Prepare(t *testing.T) {
 	}
 	a.BasicInvoker.request.QueryParams = make(map[string]string)
 	w := new(bufio.Writer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bufio.Writer)
+	ctx := cli.NewCommandContext(w, stderr)
 	cmd := config.NewConfigureCommand()
 	cmd.EnableUnknownFlag = true
 	ctx.EnterCommand(cmd)

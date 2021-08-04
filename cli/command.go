@@ -238,14 +238,14 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 }
 
 func (c *Command) processError(ctx *Context, err error) {
-	Errorf(ctx.Writer(), "ERROR: %s\n", err.Error())
+	Errorf(ctx.Stderr(), "ERROR: %s\n", err.Error())
 	if e, ok := err.(SuggestibleError); ok {
 		PrintSuggestions(ctx, i18n.GetLanguage(), e.GetSuggestions())
 		Exit(2)
 		return
 	}
 	if e, ok := err.(ErrorWithTip); ok {
-		Noticef(ctx.Writer(), "\n%s\n", e.GetTip(i18n.GetLanguage()))
+		Noticef(ctx.Stderr(), "\n%s\n", e.GetTip(i18n.GetLanguage()))
 		Exit(3)
 		return
 	}

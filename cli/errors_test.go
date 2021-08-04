@@ -33,7 +33,8 @@ func TestErrorWithTip(t *testing.T) {
 
 func TestInvalidCommandError(t *testing.T) {
 	w := new(bytes.Buffer)
-	ctx := NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
 	err := NewInvalidCommandError("MrX", ctx)
 	e, ok := err.(*InvalidCommandError)
 	assert.True(t, ok)
@@ -44,7 +45,8 @@ func TestInvalidCommandError(t *testing.T) {
 
 func TestInvalidFlagError(t *testing.T) {
 	w := new(bytes.Buffer)
-	ctx := NewCommandContext(w)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
 	err := NewInvalidFlagError("MrX", ctx)
 	e, ok := err.(*InvalidFlagError)
 	assert.True(t, ok)

@@ -35,7 +35,8 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 	a.BasicInvoker.request.RegionId = "cn-hangzhou"
 	a.BasicInvoker.request.Content = []byte("{")
 	w := new(bufio.Writer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bufio.Writer)
+	ctx := cli.NewCommandContext(w, stderr)
 
 	bodyflag := NewBodyFlag()
 	bodyflag.SetAssigned(true)
@@ -80,7 +81,8 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 	api, _ := library.GetApi("cs", "2015-12-15", "DescribeClusterUserKubeconfig")
 	a.api = &api
 	w = new(bufio.Writer)
-	ctx = cli.NewCommandContext(w)
+	stderr = new(bufio.Writer)
+	ctx = cli.NewCommandContext(w, stderr)
 	ctx.SetUnknownFlags(cli.NewFlagSet())
 	ctx.Flags().Add(NewBodyFlag())
 	ctx.Flags().Add(NewSecureFlag())
@@ -113,7 +115,8 @@ func TestRestfulInvoker_Call(t *testing.T) {
 
 func Test_checkRestfulMethod(t *testing.T) {
 	w := new(bufio.Writer)
-	ctx := cli.NewCommandContext(w)
+	stderr := new(bufio.Writer)
+	ctx := cli.NewCommandContext(w, stderr)
 	methodOrPath := "get"
 	pathPattern := "/user"
 	ok, method, path, err := checkRestfulMethod(ctx, methodOrPath, "")
