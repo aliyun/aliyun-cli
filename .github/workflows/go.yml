@@ -10,6 +10,10 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    env:
+      ACCESS_KEY_ID: ${{ secrets.ACCESS_KEY_ID }}
+      ACCESS_KEY_SECRET: ${{ secrets.ACCESS_KEY_SECRET }}
+      REGION_ID: ${{ secrets.REGION_ID }}
     steps:
     - uses: actions/checkout@v2
     # fetch submodule for aliyun-openapi-meta
