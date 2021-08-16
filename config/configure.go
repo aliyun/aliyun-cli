@@ -34,6 +34,10 @@ var hookSaveConfiguration = func(fn func(config *Configuration) error) func(conf
 	return fn
 }
 
+func loadConfiguration() (*Configuration, error) {
+	return hookLoadConfiguration(LoadConfiguration)(GetConfigPath() + "/" + configFile)
+}
+
 func NewConfigureCommand() *cli.Command {
 
 	c := &cli.Command{
@@ -41,7 +45,7 @@ func NewConfigureCommand() *cli.Command {
 		Short: i18n.T(
 			"configure credential and settings",
 			"配置身份认证和其他信息"),
-		Usage: "configure --mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName} --profile <profileName>",
+		Usage: "configure --mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|ChainableRamRoleArn} --profile <profileName>",
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
@@ -62,7 +66,7 @@ func NewConfigureCommand() *cli.Command {
 func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 	w := ctx.Writer()
 
-	conf, err := hookLoadConfiguration(LoadConfiguration)(GetConfigPath() + "/" + configFile)
+	conf, err := loadConfiguration()
 	if err != nil {
 		return err
 	}
@@ -107,6 +111,9 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 		case RamRoleArnWithEcs:
 			cp.Mode = RamRoleArnWithEcs
 			configureRamRoleArnWithEcs(w, &cp)
+		case ChainableRamRoleArn:
+			cp.Mode = ChainableRamRoleArn
+			configureChainableRamRoleArn(w, &cp)
 		case RsaKeyPair:
 			cp.Mode = RsaKeyPair
 			configureRsaKeyPair(w, &cp)
@@ -144,6 +151,8 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 	conf.PutProfile(cp)
 	conf.CurrentProfile = cp.Name
 	err = hookSaveConfiguration(SaveConfiguration)(conf)
+	// cp 要在下文的 DoHello 中使用，所以 需要建立 parent 的关系
+	cp.parent = conf
 
 	if err != nil {
 		return err
@@ -200,6 +209,25 @@ func configureEcsRamRole(w io.Writer, cp *Profile) error {
 func configureRamRoleArnWithEcs(w io.Writer, cp *Profile) error {
 	cli.Printf(w, "Ecs Ram Role [%s]: ", cp.RamRoleName)
 	cp.RamRoleName = ReadInput(cp.RamRoleName)
+	cli.Printf(w, "Sts Region [%s]: ", cp.StsRegion)
+	cp.StsRegion = ReadInput(cp.StsRegion)
+	cli.Printf(w, "Ram Role Arn [%s]: ", cp.RamRoleArn)
+	cp.RamRoleArn = ReadInput(cp.RamRoleArn)
+	cli.Printf(w, "Role Session Name [%s]: ", cp.RoleSessionName)
+	cp.RoleSessionName = ReadInput(cp.RoleSessionName)
+	if cp.ExpiredSeconds == 0 {
+		cp.ExpiredSeconds = 900
+	}
+	cli.Printf(w, "Expired Seconds [%v]: ", cp.ExpiredSeconds)
+	cp.ExpiredSeconds, _ = strconv.Atoi(ReadInput(strconv.Itoa(cp.ExpiredSeconds)))
+	return nil
+}
+
+func configureChainableRamRoleArn(w io.Writer, cp *Profile) error {
+	cli.Printf(w, "Source Profile [%s]: ", cp.SourceProfile)
+	cp.SourceProfile = ReadInput(cp.SourceProfile)
+	cli.Printf(w, "Sts Region [%s]: ", cp.StsRegion)
+	cp.StsRegion = ReadInput(cp.StsRegion)
 	cli.Printf(w, "Ram Role Arn [%s]: ", cp.RamRoleArn)
 	cp.RamRoleArn = ReadInput(cp.RamRoleArn)
 	cli.Printf(w, "Role Session Name [%s]: ", cp.RoleSessionName)

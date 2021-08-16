@@ -84,10 +84,10 @@ Saving profile[akProfile] ...Done.
 
 | 验证方式   | 说明                                  |
 |------------|-------------------------------------|
-| AK         | 使用AccessKey ID/Secret访问           |
-| StsToken   | 使用STS Token访问                     |
-| RamRoleArn | 使用RAM子账号的AssumeRole方式访问     |
-| EcsRamRole | 在ECS实例上通过EcsRamRole实现免密验证 |
+| AK         | 使用AccessKey ID/Secret访问          |
+| StsToken   | 使用STS Token访问                    |
+| RamRoleArn | 使用RAM子账号的AssumeRole方式访问      |
+| EcsRamRole | 在ECS实例上通过EcsRamRole实现免密验证   |
 
 ### 使用外部程序获取凭证
 
@@ -144,7 +144,7 @@ Saving profile[akProfile] ...Done.
 }
 ```
 
-#### Example:
+#### 示例：
 ```shell
 $ aliyun configure --mode External --profile externalTest
 Configuring profile 'externalTest' in 'External' authenticate mode...
@@ -154,6 +154,31 @@ Default Output Format [json]: json (Only support json)
 Default Language [zh|en] en: 
 Saving profile[externalTest] ...Done.
 ```
+
+### 使用链式 RamRoleArn
+
+你可以使用 `--mode ChainableRamRoleArn` 来组合源配置和 RamRoleARN 的角色扮演流程。下面的例子从源配置中获取中间凭证，再基于中间凭证完成角色扮演，获取最终的凭证。
+
+```json
+{
+	"profiles": [
+		{
+			"name": "chain",
+			"mode": "ChainableRamRoleArn",
+			"ram_role_arn": "acs:ram::<Account ID>:role/<Role Name>",
+			"ram_session_name": "session",
+			"source_profile": "cli-test"
+		},
+		{
+			"name": "cli-test",
+			"mode": "AK",
+			"access_key_id": "<Access Key ID>",
+			"access_key_secret": "<Access Key Secret>"
+		}
+	]
+}
+```
+
 
 ### 启用zsh/bash自动补全
 

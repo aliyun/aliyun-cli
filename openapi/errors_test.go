@@ -14,11 +14,12 @@
 package openapi
 
 import (
+	"strings"
+	"testing"
+
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/meta"
 	"github.com/stretchr/testify/assert"
-	"strings"
-	"testing"
 )
 
 func TestInvalidProductError_Error(t *testing.T) {

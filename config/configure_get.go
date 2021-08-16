@@ -48,7 +48,7 @@ func NewConfigureGetCommand() *cli.Command {
 }
 
 func doConfigureGet(c *cli.Context, args []string) {
-	config, err := hookLoadConfiguration(LoadConfiguration)(GetConfigPath() + "/" + configFile)
+	config, err := loadConfiguration()
 	if err != nil {
 		cli.Errorf(c.Stderr(), "load configuration failed %s", err)
 		cli.Printf(c.Stderr(), "\n")

@@ -38,7 +38,7 @@ func NewConfigureDeleteCommand() *cli.Command {
 }
 
 func doConfigureDelete(ctx *cli.Context, profileName string) {
-	conf, err := hookLoadConfiguration(LoadConfiguration)(GetConfigPath() + "/" + configFile)
+	conf, err := loadConfiguration()
 	if err != nil {
 		cli.Errorf(ctx.Stderr(), "ERROR: load configure failed: %v\n", err)
 	}
