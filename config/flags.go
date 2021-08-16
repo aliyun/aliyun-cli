@@ -28,6 +28,7 @@ const (
 	RamRoleNameFlagName     = "ram-role-name"
 	RamRoleArnFlagName      = "ram-role-arn"
 	RoleSessionNameFlagName = "role-session-name"
+	SourceProfileFlagName   = "source-profile"
 	PrivateKeyFlagName      = "private-key"
 	KeyPairNameFlagName     = "key-pair-name"
 	RegionFlagName          = "region"
@@ -98,6 +99,10 @@ func RamRoleNameFlag(fs *cli.FlagSet) *cli.Flag {
 
 func RamRoleArnFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(RamRoleArnFlagName)
+}
+
+func SourceProfileFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(SourceProfileFlagName)
 }
 
 func RoleSessionNameFlag(fs *cli.FlagSet) *cli.Flag {

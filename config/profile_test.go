@@ -64,7 +64,7 @@ func TestValidate(t *testing.T) {
 
 	actual.RegionId = "as*ds%%s*"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invailed region as*ds%%s*")
+	assert.EqualError(t, err, "invalid region as*ds%%s*")
 
 	actual.RegionId = "cn-hangzhou"
 	err = actual.Validate()
@@ -80,7 +80,7 @@ func TestValidate(t *testing.T) {
 
 	actual.Mode = AuthenticateMode("NoMode")
 	err = actual.Validate()
-	assert.EqualError(t, err, "invailed mode: NoMode")
+	assert.EqualError(t, err, "invalid mode: NoMode")
 
 }
 
@@ -102,10 +102,10 @@ func TestValidateWithRsaKeyPair(t *testing.T) {
 	actual.RegionId = "cn-hangzhou"
 	actual.Mode = RsaKeyPair
 	err = actual.Validate()
-	assert.EqualError(t, err, "invailed private_key")
+	assert.EqualError(t, err, "invalid private_key")
 	actual.PrivateKey = "privateKey"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invailed key_pair_name")
+	assert.EqualError(t, err, "invalid key_pair_name")
 	actual.KeyPairName = "keyPairName"
 	err = actual.Validate()
 	assert.Nil(t, err)
@@ -120,10 +120,10 @@ func TestValidateWithRamRoleArn(t *testing.T) {
 	actual.AccessKeyId = "accessKeyId"
 	actual.AccessKeySecret = "accessKeySecret"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invailed ram_role_arn")
+	assert.EqualError(t, err, "invalid ram_role_arn")
 	actual.RamRoleArn = "ramRoleArn"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invailed role_session_name")
+	assert.EqualError(t, err, "invalid role_session_name")
 	actual.RoleSessionName = "roleSessionName"
 	err = actual.Validate()
 	assert.Nil(t, err)
@@ -140,7 +140,7 @@ func TestValidateWithStsToken(t *testing.T) {
 	actual.AccessKeyId = "accessKeyId"
 	actual.AccessKeySecret = "accessKeySecret"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invailed sts_token")
+	assert.EqualError(t, err, "invalid sts_token")
 	actual.StsToken = "stsToken"
 	err = actual.Validate()
 	assert.Nil(t, err)

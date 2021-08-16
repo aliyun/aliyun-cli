@@ -53,7 +53,7 @@ func NewConfigureSetCommand() *cli.Command {
 }
 
 func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
-	config, err := hookLoadConfiguration(LoadConfiguration)(GetConfigPath() + "/" + configFile)
+	config, err := loadConfiguration()
 	if err != nil {
 		cli.Errorf(w, "load configuration failed %s", err)
 		return
@@ -105,6 +105,11 @@ func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
 		profile.RamRoleName = RamRoleNameFlag(flags).GetStringOrDefault(profile.RamRoleName)
 	case RamRoleArnWithEcs:
 		profile.RamRoleName = RamRoleNameFlag(flags).GetStringOrDefault(profile.RamRoleName)
+		profile.RamRoleArn = RamRoleArnFlag(flags).GetStringOrDefault(profile.RamRoleArn)
+		profile.RoleSessionName = RoleSessionNameFlag(flags).GetStringOrDefault(profile.RoleSessionName)
+		profile.ExpiredSeconds = ExpiredSecondsFlag(flags).GetIntegerOrDefault(profile.ExpiredSeconds)
+	case ChainableRamRoleArn:
+		profile.SourceProfile = SourceProfileFlag(flags).GetStringOrDefault(profile.SourceProfile)
 		profile.RamRoleArn = RamRoleArnFlag(flags).GetStringOrDefault(profile.RamRoleArn)
 		profile.RoleSessionName = RoleSessionNameFlag(flags).GetStringOrDefault(profile.RoleSessionName)
 		profile.ExpiredSeconds = ExpiredSecondsFlag(flags).GetIntegerOrDefault(profile.ExpiredSeconds)

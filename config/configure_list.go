@@ -35,7 +35,7 @@ func NewConfigureListCommand() *cli.Command {
 }
 
 func doConfigureList(w io.Writer) {
-	conf, err := hookLoadConfiguration(LoadConfiguration)(GetConfigPath() + "/" + configFile)
+	conf, err := loadConfiguration()
 	if err != nil {
 		cli.Errorf(w, "ERROR: load configure failed: %v\n", err)
 	}
@@ -65,6 +65,8 @@ func doConfigureList(w io.Writer) {
 			cred = "EcsRamRole:" + pf.RamRoleName
 		case RamRoleArnWithEcs:
 			cred = "arn:" + "***" + GetLastChars(pf.AccessKeyId, 3)
+		case ChainableRamRoleArn:
+			cred = "ChainableRamRoleArn:" + pf.SourceProfile + ":" + pf.RamRoleArn
 		case RsaKeyPair:
 			cred = "RsaKeyPair:" + pf.KeyPairName
 		case External:

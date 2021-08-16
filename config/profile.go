@@ -35,13 +35,14 @@ import (
 type AuthenticateMode string
 
 const (
-	AK                = AuthenticateMode("AK")
-	StsToken          = AuthenticateMode("StsToken")
-	RamRoleArn        = AuthenticateMode("RamRoleArn")
-	EcsRamRole        = AuthenticateMode("EcsRamRole")
-	RsaKeyPair        = AuthenticateMode("RsaKeyPair")
-	RamRoleArnWithEcs = AuthenticateMode("RamRoleArnWithRoleName")
-	External          = AuthenticateMode("External")
+	AK                  = AuthenticateMode("AK")
+	StsToken            = AuthenticateMode("StsToken")
+	RamRoleArn          = AuthenticateMode("RamRoleArn")
+	EcsRamRole          = AuthenticateMode("EcsRamRole")
+	RsaKeyPair          = AuthenticateMode("RsaKeyPair")
+	RamRoleArnWithEcs   = AuthenticateMode("RamRoleArnWithRoleName")
+	ChainableRamRoleArn = AuthenticateMode("ChainableRamRoleArn")
+	External            = AuthenticateMode("External")
 )
 
 type Profile struct {
@@ -54,6 +55,7 @@ type Profile struct {
 	RamRoleName     string           `json:"ram_role_name"`
 	RamRoleArn      string           `json:"ram_role_arn"`
 	RoleSessionName string           `json:"ram_session_name"`
+	SourceProfile   string           `json:"source_profile"`
 	PrivateKey      string           `json:"private_key"`
 	KeyPairName     string           `json:"key_pair_name"`
 	ExpiredSeconds  int              `json:"expired_seconds"`
@@ -85,7 +87,7 @@ func (cp *Profile) Validate() error {
 	}
 
 	if !IsRegion(cp.RegionId) {
-		return fmt.Errorf("invailed region %s", cp.RegionId)
+		return fmt.Errorf("invalid region %s", cp.RegionId)
 	}
 
 	if cp.Mode == "" {
@@ -101,7 +103,7 @@ func (cp *Profile) Validate() error {
 			return err
 		}
 		if cp.StsToken == "" {
-			return fmt.Errorf("invailed sts_token")
+			return fmt.Errorf("invalid sts_token")
 		}
 	case RamRoleArn:
 		err := cp.ValidateAK()
@@ -109,25 +111,35 @@ func (cp *Profile) Validate() error {
 			return err
 		}
 		if cp.RamRoleArn == "" {
-			return fmt.Errorf("invailed ram_role_arn")
+			return fmt.Errorf("invalid ram_role_arn")
 		}
 		if cp.RoleSessionName == "" {
-			return fmt.Errorf("invailed role_session_name")
+			return fmt.Errorf("invalid role_session_name")
 		}
 	case EcsRamRole, RamRoleArnWithEcs:
 	case RsaKeyPair:
 		if cp.PrivateKey == "" {
-			return fmt.Errorf("invailed private_key")
+			return fmt.Errorf("invalid private_key")
 		}
 		if cp.KeyPairName == "" {
-			return fmt.Errorf("invailed key_pair_name")
+			return fmt.Errorf("invalid key_pair_name")
 		}
 	case External:
 		if cp.ProcessCommand == "" {
-			return fmt.Errorf("invailed process_command")
+			return fmt.Errorf("invalid process_command")
+		}
+	case ChainableRamRoleArn:
+		if cp.SourceProfile == "" {
+			return fmt.Errorf("invalid source_profile")
+		}
+		if cp.RamRoleArn == "" {
+			return fmt.Errorf("invalid ram_role_arn")
+		}
+		if cp.RoleSessionName == "" {
+			return fmt.Errorf("invalid role_session_name")
 		}
 	default:
-		return fmt.Errorf("invailed mode: %s", cp.Mode)
+		return fmt.Errorf("invalid mode: %s", cp.Mode)
 	}
 	return nil
 }
@@ -249,6 +261,8 @@ func (cp *Profile) GetClient(ctx *cli.Context) (*sdk.Client, error) {
 		client, err = cp.GetClientByPrivateKey(config)
 	case RamRoleArnWithEcs:
 		client, err = cp.GetClientByRamRoleArnWithEcs(config)
+	case ChainableRamRoleArn:
+		return cp.GetClientByChainableRamRoleArn(config, ctx)
 	case External:
 		return cp.GetClientByExternal(config, ctx)
 	default:
@@ -368,6 +382,27 @@ func (cp *Profile) GetClientByExternal(config *sdk.Config, ctx *cli.Context) (*s
 		return nil, err
 	}
 	return cp.GetClient(ctx)
+}
+
+func (cp *Profile) GetClientByChainableRamRoleArn(config *sdk.Config, ctx *cli.Context) (*sdk.Client, error) {
+	profileName := cp.SourceProfile
+
+	// 从 configuration 中重新获取 source profile
+	source, loaded := cp.parent.GetProfile(profileName)
+	if !loaded {
+		return nil, fmt.Errorf("can not load the source profile: " + profileName)
+	}
+
+	client, err := source.GetClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	accessKeyID, accessKeySecret, StsToken, err := cp.GetSessionCredential(client)
+	if err != nil {
+		return nil, err
+	}
+	cred := credentials.NewStsTokenCredential(accessKeyID, accessKeySecret, StsToken)
+	return sdk.NewClientWithOptions(cp.RegionId, config, cred)
 }
 
 func IsRegion(region string) bool {

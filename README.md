@@ -153,6 +153,31 @@ Default Language [zh|en] en:
 Saving profile[externalTest] ...Done.
 ```
 
+### Use chainable RamRoleArn
+
+You can use `--mode ChainableRamRoleArn` to combile a source profile and RAM role ARN flow. The following example
+get intermediate credentials from source profile `cli-test`, then use it to call AssumeRole for get final credentials.
+
+```json
+{
+	"profiles": [
+		{
+			"name": "chain",
+			"mode": "ChainableRamRoleArn",
+			"ram_role_arn": "acs:ram::<Account ID>:role/<Role Name>",
+			"ram_session_name": "session",
+			"source_profile": "cli-test"
+		},
+		{
+			"name": "cli-test",
+			"mode": "AK",
+			"access_key_id": "<Access Key ID>",
+			"access_key_secret": "<Access Key Secret>"
+		}
+	]
+}
+```
+
 ### Enable bash/zsh auto completion
 
 - Use `aliyun auto-completion` command to enable auto completion in zsh/bash
