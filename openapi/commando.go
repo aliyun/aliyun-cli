@@ -91,7 +91,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				if style, ok := c.library.GetStyle(productName, version); ok {
 					product.ApiStyle = style
 				} else {
-					return cli.NewErrorWithTip(fmt.Errorf("uncheked version %s", version),
+					return cli.NewErrorWithTip(fmt.Errorf("unchecked version %s", version),
 						"Please contact the customer support to get more info about API version")
 				}
 			}
