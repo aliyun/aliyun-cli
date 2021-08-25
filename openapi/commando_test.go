@@ -84,7 +84,7 @@ func Test_main(t *testing.T) {
 	args = []string{"ecs", "DescribeRegions"}
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "uncheked version 2011-11-11", err.Error())
+	assert.Equal(t, "unchecked version 2011-11-11", err.Error())
 
 	ctx.Flags().Get("version").SetValue("2016-03-14")
 	args = []string{"ecs", "DescribeRegions"}
