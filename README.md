@@ -41,11 +41,14 @@ The release notes for the CLI can be found in the [CHANGELOG](./CHANGELOG.md)
 
   Download the installer, then extract the installer. You can move the extracted `aliyun` executable file to the `/usr/local/bin` directory or add it to the `$PATH`.
 
-  Download link: (3.0.90)
+  Download link: (<img src="https://img.shields.io/github/release/aliyun/aliyun-cli.svg" alt="Latest Stable Version" />)
 
-  - [Mac](https://aliyuncli.alicdn.com/aliyun-cli-macosx-3.0.90-amd64.tgz)
-  - [Linux](https://aliyuncli.alicdn.com/aliyun-cli-linux-3.0.90-amd64.tgz)
-  - [Windows (64 bit)](https://aliyuncli.alicdn.com/aliyun-cli-windows-3.0.90-amd64.zip)
+  - [Mac](https://aliyuncli.alicdn.com/aliyun-cli-macosx-latest-amd64.tgz)
+  - [Linux (AMD64)](https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz)
+  - [Linux (ARM64)](https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-arm64.tgz)
+  - [Windows (64 bit)](https://aliyuncli.alicdn.com/aliyun-cli-windows-latest-amd64.zip)
+
+  All releases please [click here](https://github.com/aliyun/aliyun-cli/releases).
 
 - **Use brew**
 If you have installed `brew` in your computer, you can use it to install Alibaba Cloud CLI as following:
@@ -137,8 +140,8 @@ Example of the return of each credential type:
 
 ```json
 {
-    "mode": "EcsRamRole",
-    "ram_role_name": "ramRoleName"
+  "mode": "EcsRamRole",
+  "ram_role_name": "ramRoleName"
 }
 ```
 
@@ -160,21 +163,21 @@ get intermediate credentials from source profile `cli-test`, then use it to call
 
 ```json
 {
-	"profiles": [
-		{
-			"name": "chain",
-			"mode": "ChainableRamRoleArn",
-			"ram_role_arn": "acs:ram::<Account ID>:role/<Role Name>",
-			"ram_session_name": "session",
-			"source_profile": "cli-test"
-		},
-		{
-			"name": "cli-test",
-			"mode": "AK",
-			"access_key_id": "<Access Key ID>",
-			"access_key_secret": "<Access Key Secret>"
-		}
-	]
+  "profiles": [
+    {
+      "name": "chain",
+      "mode": "ChainableRamRoleArn",
+      "ram_role_arn": "acs:ram::<Account ID>:role/<Role Name>",
+      "ram_session_name": "session",
+      "source_profile": "cli-test"
+    },
+    {
+      "name": "cli-test",
+      "mode": "AK",
+      "access_key_id": "<Access Key ID>",
+      "access_key_secret": "<Access Key Secret>"
+    }
+  ]
 }
 ```
 
@@ -278,7 +281,5 @@ When you input some argument like "-PortRange -1/-1", will cause parse error.In 
 We use GitHub issues to track bugs and feature requests for user feedback. Please visit the following site for assistance:
 
 - Please visit [Alibaba Cloud CLI](https://www.alibabacloud.com/help/doc-detail/110244.htm?spm=a2c63.p38356.b99.2.58e54573sCfIan) for the manual.
-
 - Ask a question on [Stack Overflow](https://stackoverflow.com/) and tag it with [aliyun-cli](https://stackoverflow.com/questions/tagged/aliyun-cli)
-
 - If you find a bug or want to add a feature, please [submit issue](https://github.com/aliyun/aliyun-cli/issues/new/choose).
