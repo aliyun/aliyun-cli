@@ -228,8 +228,13 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 				if style, ok := c.library.GetStyle(productCode, version); ok {
 					product.ApiStyle = style
 				} else {
-					return nil, cli.NewErrorWithTip(fmt.Errorf("uncheked version %s", version),
-						"Please contact the customer support to get more info about API version")
+					// 没有在 versions.json 中配置的版本可以通过 --style 自行指定
+					style, _ := ctx.Flags().Get("style").GetValue()
+					if style == "" {
+						return nil, cli.NewErrorWithTip(fmt.Errorf("uncheked version %s", version),
+							"Please use --style to speicify API sytle, rpc or restful.")
+					}
+					product.ApiStyle = style
 				}
 			}
 		}
