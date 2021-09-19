@@ -50,7 +50,7 @@ gen_version:
 	echo ${VERSION} >> out/version
 	aliyun oss cp out/version oss://aliyun-cli --force --profile oss
 
-git_release: clean build make_release_dir release_mac release_linux release_windows
+git_release: clean build make_release_dir release_mac release_linux release_linux_arm64 release_windows
 
 make_release_dir:
 	mkdir -p ${RELEASE_PATH}
@@ -62,6 +62,10 @@ release_mac:
 release_linux:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
 	tar zcvf ${RELEASE_PATH}/aliyun-cli-linux-amd64.tar.gz -C out aliyun
+
+release_linux_arm64:
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+	tar zcvf ${RELEASE_PATH}/aliyun-cli-linux-arm64.tar.gz -C out aliyun
 
 release_windows:
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o aliyun.exe main/main.go
