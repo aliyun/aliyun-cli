@@ -14,8 +14,11 @@
 package meta
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
+
+	_ "embed"
 
 	jmespath "github.com/jmespath/go-jmespath"
 )
@@ -75,9 +78,12 @@ func (a *Repository) GetApi(productCode string, version string, apiName string) 
 	return result, true
 }
 
+//go:embed versions.json
+var versions []byte
+
 func (a *Repository) GetStyle(productCode, version string) (string, bool) {
 	v := new(interface{})
-	err := ReadJsonFrom(a.reader, "versions.json", v)
+	err := json.Unmarshal(versions, v)
 	if err != nil {
 		return "", false
 	}

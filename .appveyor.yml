@@ -1,8 +1,12 @@
 # Build worker image (VM template)
 build: off
 
+image: Visual Studio 2019
+
 # clone directory
 clone_folder: C:\Users\appveyor\go\src\github.com\aliyun\aliyun-cli
+
+stack: go 1.16
 
 # scripts that run after cloning repository
 install:
@@ -10,8 +14,6 @@ install:
   - cmd: git submodule update --init --recursive
   - cmd: set path=%path%;C:\Users\appveyor\go\bin
   - cmd: set VERSION=3.0.0-beta
-  - cmd: go get -u github.com/shuLhan/go-bindata/...  
-  - cmd: go-bindata -o resource/metas.go -pkg resource ./aliyun-openapi-meta/...
   - cmd: go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=%VERSION%'" -o C:\Users\appveyor\go\bin\aliyun.exe main/main.go
 
 # build platform, i.e. x86, x64, Any CPU. This setting is optional.

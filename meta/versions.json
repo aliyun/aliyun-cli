@@ -1,0 +1,1125 @@
+[
+	{
+		"code": "aegis",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2016-11-11"
+			}
+		]
+	},
+	{
+		"code": "agency",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2018-07-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-08-15"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-07-03"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-03-28"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-10-30"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-07-18"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-11-18"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-08-18"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-08-01"
+			}
+		]
+	},
+	{
+		"code": "alidns",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2015-01-09"
+			}
+		]
+	},
+	{
+		"code": "arms",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2019-02-19"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-12-19"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-10-15"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-06-20"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-07-25"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-11-25"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-10-31"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-08-04"
+			}
+		]
+	},
+	{
+		"code": "batchcompute",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2016-11-11"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-10-01"
+			},
+			{
+				"style": "ROA",
+				"version": "2016-08-08"
+			},
+			{
+				"style": "ROA",
+				"version": "2015-10-01"
+			},
+			{
+				"style": "ROA",
+				"version": "2015-11-11"
+			},
+			{
+				"style": "ROA",
+				"version": "2015-06-30"
+			},
+			{
+				"style": "ROA",
+				"version": "2013-01-11"
+			}
+		]
+	},
+	{
+		"code": "bssopenapi",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2017-12-14"
+			}
+		]
+	},
+	{
+		"code": "ccc",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2017-07-05"
+			}
+		]
+	},
+	{
+		"code": "cdn",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2018-05-10"
+			},
+			{
+				"style": "RPC",
+				"version": "2014-11-11"
+			}
+		]
+	},
+	{
+		"code": "cds",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2018-04-17"
+			},
+			{
+				"style": "ROA",
+				"version": "2017-09-25"
+			}
+		]
+	},
+	{
+		"code": "chatbot",
+		"styles": [
+			{
+				"style": "ROA",
+				"version": "2018-08-14"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-10-11"
+			}
+		]
+	},
+	{
+		"code": "cloudapi",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2018-09-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-06-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-07-14"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-07-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-02-01"
+			}
+		]
+	},
+	{
+		"code": "cloudauth",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2020-11-12"
+			},
+			{
+				"style": "RPC",
+				"version": "2019-03-07"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-09-16"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-08-07"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-07-03"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-05-04"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-11-17"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-09-07"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-10-10"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-09-12"
+			}
+		]
+	},
+	{
+		"code": "cloudphoto",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2017-07-11"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-05-02"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-05-11"
+			}
+		]
+	},
+	{
+		"code": "cloudwf",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2017-03-28"
+			}
+		]
+	},
+	{
+		"code": "cms",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2019-01-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-03-08"
+			},
+			{
+				"style": "RPC",
+				"version": "0000-00-00"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-08-25"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-08-24"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-06-20"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-03-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-09-22"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-03-18"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-10-20"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-08-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-07-29"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-04-20"
+			}
+		]
+	},
+	{
+		"code": "cr",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2018-12-01"
+			},
+			{
+				"style": "ROA",
+				"version": "2016-06-07"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-05-06"
+			}
+		]
+	},
+	{
+		"code": "cs",
+		"styles": [
+			{
+				"style": "ROA",
+				"version": "2018-04-18"
+			},
+			{
+				"style": "ROA",
+				"version": "2818-04-18"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-04-17"
+			},
+			{
+				"style": "RPC",
+				"version": "2818-04-17"
+			},
+			{
+				"style": "ROA",
+				"version": "2015-12-15"
+			}
+		]
+	},
+	{
+		"code": "csb",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2017-11-18"
+			}
+		]
+	},
+	{
+		"code": "dds",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2015-12-01"
+			}
+		]
+	},
+	{
+		"code": "dm",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2017-06-22"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-08-25"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-11-23"
+			}
+		]
+	},
+	{
+		"code": "domain",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2018-02-08"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-01-29"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-1-24"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-05-11"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-05-03"
+			}
+		]
+	},
+	{
+		"code": "domain-intl",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2017-12-18"
+			}
+		]
+	},
+	{
+		"code": "drds",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2019-01-23"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-10-16"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-09-07"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-12-13"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-05-06"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-04-13"
+			}
+		]
+	},
+	{
+		"code": "eci",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2019-01-10"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-08-08"
+			}
+		]
+	},
+	{
+		"code": "ecs",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2016-03-14"
+			},
+			{
+				"style": "RPC",
+				"version": "2014-05-26"
+			}
+		]
+	},
+	{
+		"code": "edas",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2018-01-31"
+			},
+			{
+				"style": "ROA",
+				"version": "2017-08-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-04-05"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-08-16"
+			}
+		]
+	},
+	{
+		"code": "elasticsearch",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2019-04-22"
+			},
+			{
+				"style": "ROA",
+				"version": "2017-06-13"
+			}
+		]
+	},
+	{
+		"code": "emr",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2016-04-08"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-01-10"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-08-10"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-09-10"
+			}
+		]
+	},
+	{
+		"code": "ess",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2016-07-22"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-04-18"
+			},
+			{
+				"style": "RPC",
+				"version": "2014-08-28"
+			}
+		]
+	},
+	{
+		"code": "green",
+		"styles": [
+			{
+				"style": "ROA",
+				"version": "2018-05-09"
+			},
+			{
+				"style": "ROA",
+				"version": "2018-04-09"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-08-23"
+			},
+			{
+				"style": "ROA",
+				"version": "2017-08-25"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-08-24"
+			},
+			{
+				"style": "ROA",
+				"version": "2017-01-12"
+			},
+			{
+				"style": "ROA",
+				"version": "2016-12-22"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-12-16"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-12-06"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-12-05"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-11-24"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-11-15"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-10-18"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-09-23"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-09-14"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-08-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-06-27"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-06-21"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-06-16"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-06-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-05-25"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-03-08"
+			},
+			{
+				"style": "ROA",
+				"version": "2016-02-24"
+			},
+			{
+				"style": "ROA",
+				"version": "2016-01-18"
+			},
+			{
+				"style": "ROA",
+				"version": "2015-12-09"
+			}
+		]
+	},
+	{
+		"code": "hpc",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2016-12-13"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-06-03"
+			}
+		]
+	},
+	{
+		"code": "httpdns",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2016-02-01"
+			}
+		]
+	},
+	{
+		"code": "iot",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2019-04-11"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-11-20"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-01-20"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-07-20"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-08-20"
+			},
+			{
+				"style": "ROA",
+				"version": "2017-06-20"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-04-20"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-05-30"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-01-04"
+			}
+		]
+	},
+	{
+		"code": "itaas",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2017-05-12"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-05-09"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-05-05"
+			}
+		]
+	},
+	{
+		"code": "jaq",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2018-01-29"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-11-29"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-08-25"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-04-13"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-11-23"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-08-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-05-13"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-04-12"
+			}
+		]
+	},
+	{
+		"code": "kms",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2016-01-20"
+			}
+		]
+	},
+	{
+		"code": "live",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2016-11-01"
+			}
+		]
+	},
+	{
+		"code": "mts",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2018-05-28"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-02-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2014-06-18"
+			}
+		]
+	},
+	{
+		"code": "nas",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2017-06-26"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-02-29"
+			}
+		]
+	},
+	{
+		"code": "ons",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2019-02-14"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-06-28"
+			},
+			{
+				"style": "RPC",
+				"version": "2018-05-16"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-09-18"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-05-03"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-04-05"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-12-14"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-10-20"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-07-01"
+			}
+		]
+	},
+	{
+		"code": "oos",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2019-06-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2019-01-16"
+			}
+		]
+	},
+	{
+		"code": "ots",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2018-05-20"
+			},
+			{
+				"style": "ROA",
+				"version": "2017-11-11"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-09-12"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-06-20"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-12-30"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-11-20"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-11-03"
+			},
+			{
+				"style": "RPC",
+				"version": "2013-09-12"
+			}
+		]
+	},
+	{
+		"code": "polardb",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2017-08-01"
+			}
+		]
+	},
+	{
+		"code": "push",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2016-08-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-08-27"
+			}
+		]
+	},
+	{
+		"code": "qualitycheck",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2019-01-15"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-08-01"
+			}
+		]
+	},
+	{
+		"code": "r-kvstore",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2015-01-01"
+			}
+		]
+	},
+	{
+		"code": "ram",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2018-03-02"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-05-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2014-02-14"
+			}
+		]
+	},
+	{
+		"code": "rds",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2012-06-15"
+			},
+			{
+				"style": "RPC",
+				"version": "2013-05-28"
+			},
+			{
+				"style": "RPC",
+				"version": "2014-08-15"
+			}
+		]
+	},
+	{
+		"code": "ros",
+		"styles": [
+			{
+				"style": "ROA",
+				"version": "2015-09-01"
+			}
+		]
+	},
+	{
+		"code": "sas-api",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2017-07-05"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-06-26"
+			}
+		]
+	},
+	{
+		"code": "slb",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2013-02-21"
+			},
+			{
+				"style": "RPC",
+				"version": "2014-05-15"
+			}
+		]
+	},
+	{
+		"code": "sts",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2018-05-20"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-10-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2015-04-01"
+			}
+		]
+	},
+	{
+		"code": "vod",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2019-06-10"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-05-10"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-03-21"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-03-14"
+			}
+		]
+	},
+	{
+		"code": "vpc",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2016-04-28"
+			}
+		]
+	},
+	{
+		"code": "waf",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2018-04-26"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-09-30"
+			},
+			{
+				"style": "RPC",
+				"version": "2017-09-28"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-07-18"
+			},
+			{
+				"style": "RPC",
+				"version": "2016-03-10"
+			}
+		]
+	}
+]
