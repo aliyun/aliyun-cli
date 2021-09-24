@@ -1,6 +1,8 @@
 # Build worker image (VM template)
 build: off
 
+image: Visual Studio 2019
+
 # clone directory
 clone_folder: C:\Users\appveyor\go\src\github.com\aliyun\aliyun-cli
 
