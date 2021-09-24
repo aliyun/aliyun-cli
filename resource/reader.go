@@ -13,6 +13,10 @@
 // limitations under the License.
 package resource
 
+import (
+	aliyunopenapimeta "github.com/aliyun/aliyun-cli/aliyun-openapi-meta"
+)
+
 type Reader struct {
 }
 
@@ -21,5 +25,5 @@ func NewReader() *Reader {
 }
 
 func (r *Reader) ReadFrom(path string) ([]byte, error) {
-	return Asset("aliyun-openapi-meta/metadatas/" + path)
+	return aliyunopenapimeta.Metadatas.ReadFile("metadatas/" + path)
 }
