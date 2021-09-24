@@ -182,6 +182,35 @@ Saving profile[externalTest] ...Done.
 }
 ```
 
+### 使用 Credentials URI
+
+你可以通过 `--mode CredentialsURI` 来从一个本地或远程的 URI 地址实现 Credentials 的获取。
+
+```json
+{
+  "profiles": [
+    {
+      "name": "uri",
+      "mode": "CredentialsURI",
+      "credentials_uri": "http://localhost:6666/?user=jacksontian"
+    }
+  ]
+}
+```
+
+这个 Credentials URI 必须相应 200 和如下的结构：
+
+```json
+{
+  "Code": "Success",
+  "AccessKeyId": "<ak id>",
+  "AccessKeySecret": "<ak secret>",
+  "SecurityToken": "<security token>",
+  "Expiration" "2006-01-02T15:04:05Z" // utc time
+}
+```
+
+其他情况，CLI 会当作失败案例处理。
 
 ### 启用 zsh/bash 自动补全
 

@@ -84,7 +84,7 @@ You can specify the authentication method to use by using the `configure` comman
 The following are supported authentication methods:
 
 | Authentication methods | Description                                                  |
-|------------------------|--------------------------------------------------------------|
+| ---------------------- | ------------------------------------------------------------ |
 | AK                     | Use AccessKey ID and Secret to access Alibaba Cloud services |
 | StsToken               | Use STS token to access Alibaba Cloud services               |
 | RamRoleArn             | Use the AssumeRole to access Alibaba Cloud services          |
@@ -180,6 +180,36 @@ get intermediate credentials from source profile `cli-test`, then use it to call
   ]
 }
 ```
+
+### Use Credentials URI
+
+You can use `--mode CredentialsURI` to get credentials from local/remote URI.
+
+```json
+{
+  "profiles": [
+    {
+      "name": "uri",
+      "mode": "CredentialsURI",
+      "credentials_uri": "http://localhost:6666/?user=jacksontian"
+    }
+  ]
+}
+```
+
+The Credentials URI must be response with status code 200, and following body:
+
+```json
+{
+  "Code": "Success",
+  "AccessKeyId": "<ak id>",
+  "AccessKeySecret": "<ak secret>",
+  "SecurityToken": "<security token>",
+  "Expiration" "2006-01-02T15:04:05Z" // utc time
+}
+```
+
+Otherwise, CLI treate as failure case.
 
 ### Enable bash/zsh auto completion
 
