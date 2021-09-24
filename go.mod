@@ -1,6 +1,6 @@
 module github.com/aliyun/aliyun-cli
 
-go 1.12
+go 1.16
 
 require (
 	github.com/alibabacloud-go/tea v1.1.15
@@ -25,5 +25,4 @@ require (
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 	gopkg.in/ini.v1 v1.62.0
-	gopkg.in/yaml.v2 v2.4.0
 )
