@@ -17,6 +17,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
@@ -43,6 +45,7 @@ const (
 	RamRoleArnWithEcs   = AuthenticateMode("RamRoleArnWithRoleName")
 	ChainableRamRoleArn = AuthenticateMode("ChainableRamRoleArn")
 	External            = AuthenticateMode("External")
+	CredentialsURI      = AuthenticateMode("CredentialsURI")
 )
 
 type Profile struct {
@@ -68,6 +71,7 @@ type Profile struct {
 	ConnectTimeout  int              `json:"connect_timeout"`
 	RetryCount      int              `json:"retry_count"`
 	ProcessCommand  string           `json:"process_command"`
+	CredentialsURI  string           `json:"credentials_uri"`
 	parent          *Configuration   //`json:"-"`
 }
 
@@ -127,6 +131,10 @@ func (cp *Profile) Validate() error {
 	case External:
 		if cp.ProcessCommand == "" {
 			return fmt.Errorf("invalid process_command")
+		}
+	case CredentialsURI:
+		if cp.CredentialsURI == "" {
+			return fmt.Errorf("invalid credentials_uri")
 		}
 	case ChainableRamRoleArn:
 		if cp.SourceProfile == "" {
@@ -265,6 +273,8 @@ func (cp *Profile) GetClient(ctx *cli.Context) (*sdk.Client, error) {
 		return cp.GetClientByChainableRamRoleArn(config, ctx)
 	case External:
 		return cp.GetClientByExternal(config, ctx)
+	case CredentialsURI:
+		return cp.GetClientByCredentialsURI(config, ctx)
 	default:
 		client, err = nil, fmt.Errorf("unexcepted certificate mode: %s", cp.Mode)
 	}
@@ -382,6 +392,44 @@ func (cp *Profile) GetClientByExternal(config *sdk.Config, ctx *cli.Context) (*s
 		return nil, err
 	}
 	return cp.GetClient(ctx)
+}
+
+func (cp *Profile) GetClientByCredentialsURI(config *sdk.Config, ctx *cli.Context) (*sdk.Client, error) {
+	uri := cp.CredentialsURI
+	res, err := http.Get(uri)
+	if err != nil {
+		return nil, err
+	}
+
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("Get Credentials from %s failed, status code %d", uri, res.StatusCode)
+	}
+
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	type Response struct {
+		Code            string
+		AccessKeyId     string
+		AccessKeySecret string
+		SecurityToken   string
+		Expiration      string
+	}
+	var response Response
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return nil, fmt.Errorf("Unmarshal credentials failed, the body %s", string(body))
+	}
+
+	if response.Code != "Success" {
+		return nil, fmt.Errorf("Get sts token err, Code is not Success")
+	}
+
+	cred := credentials.NewStsTokenCredential(response.AccessKeyId, response.AccessKeySecret, response.SecurityToken)
+	return sdk.NewClientWithOptions(cp.RegionId, config, cred)
 }
 
 func (cp *Profile) GetClientByChainableRamRoleArn(config *sdk.Config, ctx *cli.Context) (*sdk.Client, error) {

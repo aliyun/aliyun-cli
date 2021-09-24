@@ -120,6 +120,9 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 		case External:
 			cp.Mode = External
 			configureExternal(w, &cp)
+		case CredentialsURI:
+			cp.Mode = CredentialsURI
+			configureCredentialsURI(w, &cp)
 		default:
 			return fmt.Errorf("unexcepted authenticate mode: %s", mode)
 		}
@@ -257,6 +260,12 @@ func configureRsaKeyPair(w io.Writer, cp *Profile) error {
 func configureExternal(w io.Writer, cp *Profile) error {
 	cli.Printf(w, "Process Command [%s]: ", cp.ProcessCommand)
 	cp.ProcessCommand = ReadInput(cp.ProcessCommand)
+	return nil
+}
+
+func configureCredentialsURI(w io.Writer, cp *Profile) error {
+	cli.Printf(w, "Credentials URI [%s]: ", cp.CredentialsURI)
+	cp.CredentialsURI = ReadInput(cp.CredentialsURI)
 	return nil
 }
 
