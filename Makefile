@@ -5,7 +5,7 @@ all: build
 publish: build build_mac build_linux build_windows build_linux_arm64 gen_version
 
 deps:
-	git submodule update
+	git submodule update --init --recursive
 
 clean:
 	rm -rf out/*
