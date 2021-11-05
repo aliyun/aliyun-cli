@@ -1,8 +1,11 @@
 package lib
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
@@ -200,6 +203,21 @@ func getSessionCredential(profile *config.Profile) (string, string, string, erro
 	case config.RamRoleArnWithEcs:
 		client, _ := sdk.NewClientWithEcsRamRole(profile.RegionId, profile.RamRoleName)
 		return profile.GetSessionCredential(client)
+	case config.External:
+		args := strings.Fields(profile.ProcessCommand)
+		cmd := exec.Command(args[0], args[1:]...)
+		buf, err := cmd.CombinedOutput()
+		if err != nil {
+			return "", "", "", err
+		}
+		cp := &config.Profile{}
+		err = json.Unmarshal(buf, cp)
+		if err != nil {
+			fmt.Println(cp.ProcessCommand)
+			fmt.Println(string(buf))
+			return "", "", "", err
+		}
+		return getSessionCredential(cp)
 	}
 	credential, err := credentials.NewCredential(conf)
 	if err != nil {
