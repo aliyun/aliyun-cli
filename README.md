@@ -57,7 +57,7 @@ If you have installed `brew` in your computer, you can use it to install Alibaba
 brew install aliyun-cli
 ```
 
-If you need detailed installation steps or compile the installation steps, please visit [Installation Guide](https://www.alibabacloud.com/help/doc-detail/110343.htm?spm=a2c63.p38356.b99.4.56416f39SuRUr3).
+If you need detailed installation steps or compile the installation steps, please visit [Installation Guide](https://www.alibabacloud.com/help/doc-detail/121510.htm?spm=a2c63.p38356.b99.4.5cbe77039gtvbW).
 
 ## Configure
 
