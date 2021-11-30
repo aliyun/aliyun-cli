@@ -57,11 +57,11 @@ If you have installed `brew` in your computer, you can use it to install Alibaba
 brew install aliyun-cli
 ```
 
-If you need detailed installation steps or compile the installation steps, please visit [Installation Guide](https://www.alibabacloud.com/help/doc-detail/121510.htm?spm=a2c63.p38356.b99.4.5cbe77039gtvbW).
+If you need detailed installation steps or compile the installation steps, please visit [Installation Guide](https://www.alibabacloud.com/help/zh/doc-detail/121988.html).
 
 ## Configure
 
-For detailed configuration instructions, please visit the official website [Configuration Alibaba Cloud CLI](https://www.alibabacloud.com/help/zh/doc-detail/121988.html).
+For detailed configuration instructions, please visit the official website [Configuration Alibaba Cloud CLI](https://www.alibabacloud.com/help/doc-detail/110341.htm?spm=a2c63.p38356.b99.12.77d468f5YJVFg1).
 
 Before using Alibaba Cloud CLI to invoke the services, you need to configure the credential information, region, language, etc.
 
