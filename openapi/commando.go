@@ -173,7 +173,9 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 
 func sortJSON(content string) string {
 	var v interface{}
-	err := json.Unmarshal([]byte(content), &v)
+	dec := json.NewDecoder(bytes.NewReader([]byte(content)))
+	dec.UseNumber()
+	err := dec.Decode(&v)
 	if err != nil {
 		return content
 	}
