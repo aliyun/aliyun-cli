@@ -215,7 +215,11 @@ func Test_processInvoke(t *testing.T) {
 	out = sortJSON(out)
 	assert.Equal(t, "{\n\t\"downloadlink\": \"aaa&bbb\"\n}", out)
 }
-
+func Test_sortJSON(t *testing.T) {
+	out := `{"Id":1000000000000000010241024}`
+	out = sortJSON(out)
+	assert.Equal(t, "{\n\t\"Id\": 1000000000000000010241024\n}", out)
+}
 func Test_help(t *testing.T) {
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
