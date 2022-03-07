@@ -1,13 +1,13 @@
 # Alibaba Cloud OSSUTIL
  
 [![GitHub Version](https://badge.fury.io/gh/aliyun%2Fossutil.svg)](https://badge.fury.io/gh/aliyun%2Fossutil)
-[![Build Status](https://travis-ci.com/aliyun/ossutil.svg?branch=master)](https://travis-ci.com/aliyun/ossutil)
+[![Build Status](https://travis-ci.org/aliyun/ossutil.svg?branch=master)](https://travis-ci.org/aliyun/ossutil)
 [![Coverage Status](https://coveralls.io/repos/github/aliyun/ossutil/badge.svg?branch=master)](https://coveralls.io/github/aliyun/ossutil?branch=master)
 
 ### [README of Chinese](https://github.com/aliyun/ossutil/blob/master/README-CN.md)
 
 ## About
-- This tool is developed with Go and built on the official GO SDK v2.1.8 of OSS [Alibaba Cloud Object Storage Service](http://www.aliyun.com/product/oss/).
+- This tool is developed with Go and built on the official GO SDK v2.2.0 of OSS [Alibaba Cloud Object Storage Service](http://www.aliyun.com/product/oss/).
 - OSS is a cloud storage service provided by Alibaba Cloud, featuring massive capacity, security, low cost, and high reliability.
 - OSS can store any type of files. It applies to various websites, development enterprises and developers.
 - This tool aims to provide a convenient-to-use command line for users to manage data in OSS.
@@ -15,7 +15,7 @@
 - The current version does not support bucket management. The feature will be available in future versions.
 
 ## Version
-- Current version: v1.7.3
+- Current version: v1.7.9
 
 ## Run environment
 - Linux

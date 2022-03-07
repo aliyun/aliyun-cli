@@ -305,6 +305,7 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	ecsUrl := ""
 
 	localHost, _ := GetString(OptionLocalHost, cmd.options)
+	bSkipVerifyCert, _ := GetBool(OptionSkipVerfiyCert, cmd.options)
 
 	bPassword, _ := GetBool(OptionPassword, cmd.options)
 
@@ -349,7 +350,7 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 		if roleSessionName == "" {
 			roleSessionName = "SessNameRand" + randStr(5)
 		}
-		// sts.NewClient(stsaccessID, stsaccessKey, stsARN, "oss_test_sess")
+
 		stsClient := NewClient(accessKeyID, accessKeySecret, ramRoleArn, roleSessionName)
 
 		if strTokenTimeout == "" {
@@ -377,7 +378,6 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 		accessKeySecret = resp.Credentials.AccessKeySecret
 		stsToken = resp.Credentials.SecurityToken
 		options = append(options, oss.SecurityToken(stsToken))
-
 	} else if strings.EqualFold(mode, "EcsRamRole") {
 		if ecsRoleName != "" {
 			ecsUrl = "http://100.100.100.200/latest/meta-data/Ram/security-credentials/" + ecsRoleName
@@ -390,9 +390,10 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 		}
 		ecsRoleAKBuild := EcsRoleAKBuild{url: ecsUrl}
 		options = append(options, oss.SetCredentialsProvider(&ecsRoleAKBuild))
+		accessKeyID = ""
+		accessKeySecret = ""
 
 	} else if mode == "" {
-
 		ecsUrl, _ = cmd.getEcsRamAkService()
 		if accessKeyID == "" && ecsUrl == "" {
 			return nil, fmt.Errorf("accessKeyID and ecsUrl are both empty")
@@ -428,7 +429,8 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 		return nil, err
 	}
 
-	options = append(options, oss.UseCname(isCname), oss.UserAgent(getUserAgent()), oss.Timeout(connectTimeout, readTimeout))
+	userAgent, _ := GetString(OptionUserAgent, cmd.options)
+	options = append(options, oss.UseCname(isCname), oss.UserAgent(getUserAgent(userAgent)), oss.Timeout(connectTimeout, readTimeout))
 
 	if disableCRC64 {
 		options = append(options, oss.EnableCRC(false))
@@ -458,6 +460,11 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 		options = append(options, oss.SetLogger(utilLogger))
 	}
 
+	if bSkipVerifyCert {
+		LogInfo("skip verify oss server's tls certificate\n")
+		options = append(options, oss.InsecureSkipVerify(true))
+	}
+
 	client, err := oss.New(endpoint, accessKeyID, accessKeySecret, options...)
 	if err != nil {
 		return nil, err
@@ -474,6 +481,20 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 			}
 		} else {
 			return nil, fmt.Errorf("invalid value,maxupspeed %d less than 0", maxUpSpeed)
+		}
+	}
+
+	maxDownSpeed, errDown := GetInt(OptionMaxDownSpeed, cmd.options)
+	if errDown == nil {
+		if maxDownSpeed >= 0 {
+			errDown = client.LimitDownloadSpeed(int(maxDownSpeed))
+			if errDown != nil {
+				return nil, errDown
+			} else {
+				LogInfo("set maxdownspeed success,value is %d(KB/s)\n", maxDownSpeed)
+			}
+		} else {
+			return nil, fmt.Errorf("invalid value,maxdownspeed %d less than 0", maxDownSpeed)
 		}
 	}
 
@@ -761,10 +782,13 @@ func (cmd *Command) getOSSOptions(hopMap map[string]interface{}, headers map[str
 			options = append(options, oss.Meta(name[len(oss.HTTPHeaderOssMetaPrefix):], value))
 		} else {
 			option, err := getOSSOption(hopMap, name, value)
-			if err != nil {
+			if err == nil {
+				options = append(options, option)
+			} else if strings.HasPrefix(strings.ToLower(name), "x-oss-") {
+				options = append(options, oss.SetHeader(name, value))
+			} else {
 				return nil, err
 			}
-			options = append(options, option)
 		}
 	}
 	return options, nil
@@ -835,5 +859,8 @@ func GetAllCommands() []interface{} {
 		&revertCommand,
 		&syncCommand,
 		&wormCommand,
+		&lrbCommand,
+		&replicationCommand,
+		&bucketCnameCommand,
 	}
 }

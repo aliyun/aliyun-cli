@@ -87,9 +87,12 @@ func getSysInfo() sysInfo {
 	return sysInfo{name: sys_name, release: sys_release, machine: sys_machine}
 }
 
-func getUserAgent() string {
+func getUserAgent(ua string) string {
 	sys := getSysInfo()
-	return fmt.Sprintf("aliyun-sdk-go/%s (%s/%s/%s;%s)/%s-%s", oss.Version, sys.name, sys.release, sys.machine, runtime.Version(), Package, Version)
+	if ua == "" {
+	    return fmt.Sprintf("aliyun-sdk-go/%s (%s/%s/%s;%s)/%s-%s", oss.Version, sys.name, sys.release, sys.machine, runtime.Version(), Package, Version)
+	}
+	return fmt.Sprintf("aliyun-sdk-go/%s (%s/%s/%s;%s)/%s-%s/%s", oss.Version, sys.name, sys.release, sys.machine, runtime.Version(), Package, Version,ua)
 }
 
 func utcToLocalTime(utc time.Time) time.Time {

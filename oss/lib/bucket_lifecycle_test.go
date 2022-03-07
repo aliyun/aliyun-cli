@@ -362,3 +362,43 @@ func (s *OssutilCommandSuite) TestLifecycleHelpInfo(c *C) {
 	_, err = cm.RunCommand("help", mkArgs, options)
 	c.Assert(err, IsNil)
 }
+
+func (s *OssutilCommandSuite) TestLifecyclePutOverLapSuccess(c *C) {
+	lifecycleXml := `<?xml version="1.0" encoding="UTF-8"?>
+    <LifecycleConfiguration>
+        <Rule>
+            <Prefix>testdelete</Prefix>
+            <Status>Enabled</Status>
+            <Expiration>
+                <Days>240</Days>
+            </Expiration>
+            <AbortMultipartUpload>
+                <Days>30</Days>
+            </AbortMultipartUpload>
+        </Rule>
+    </LifecycleConfiguration>`
+
+	lifecycleFileName := randLowStr(12)
+	s.createFile(lifecycleFileName, lifecycleXml, c)
+
+	bucketName := bucketNamePrefix + randLowStr(12)
+	s.putBucket(bucketName, c)
+
+	// lifecycle command test
+	var str string
+	strMethod := "put"
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"stsToken":        &str,
+		"configFile":      &configFile,
+		"method":          &strMethod,
+	}
+
+	lifecycleArgs := []string{CloudURLToString(bucketName, ""), lifecycleFileName}
+	_, err := cm.RunCommand("lifecycle", lifecycleArgs, options)
+	c.Assert(err, IsNil)
+	os.Remove(lifecycleFileName)
+	s.removeBucket(bucketName, true, c)
+}

@@ -49,6 +49,7 @@ const (
 	OptionRequestPayer               = "payer"
 	OptionLogLevel                   = "loglevel"
 	OptionMaxUpSpeed                 = "maxupspeed"
+	OptionMaxDownSpeed               = "maxdownspeed"
 	OptionUpload                     = "upload"
 	OptionDownload                   = "download"
 	OptionUrl                        = "url"
@@ -95,25 +96,30 @@ const (
 	OptionReadTimeout                = "readTimeOut"
 	OptionConnectTimeout             = "connectTimeOut"
 	OptionSTSRegion                  = "stsRegion"
+	OptionSkipVerfiyCert             = "skipVerifyCert"
+	OptionItem                       = "item"
+	OptionUserAgent                  = "userAgent"
 )
 
 // the elements show in stat object
 const (
-	StatName              string = "Name"
-	StatLocation                 = "Location"
-	StatCreationDate             = "CreationDate"
-	StatExtranetEndpoint         = "ExtranetEndpoint"
-	StatIntranetEndpoint         = "IntranetEndpoint"
-	StatACL                      = "ACL"
-	StatOwner                    = "Owner"
-	StatLastModified             = "Last-Modified"
-	StatContentMD5               = "Content-Md5"
-	StatCRC64                    = "X-Oss-Hash-Crc64ecma"
-	StatStorageClass             = "StorageClass"
-	StatSSEAlgorithm             = "SSEAlgorithm"
-	StatKMSMasterKeyID           = "KMSMasterKeyID"
-	StatRedundancyType           = "RedundancyType"
-	StatKMSDataEncryption        = "KMSDataEncryption"
+	StatName                   string = "Name"
+	StatLocation                      = "Location"
+	StatCreationDate                  = "CreationDate"
+	StatExtranetEndpoint              = "ExtranetEndpoint"
+	StatIntranetEndpoint              = "IntranetEndpoint"
+	StatACL                           = "ACL"
+	StatOwner                         = "Owner"
+	StatLastModified                  = "Last-Modified"
+	StatContentMD5                    = "Content-Md5"
+	StatCRC64                         = "X-Oss-Hash-Crc64ecma"
+	StatStorageClass                  = "StorageClass"
+	StatSSEAlgorithm                  = "SSEAlgorithm"
+	StatKMSMasterKeyID                = "KMSMasterKeyID"
+	StatRedundancyType                = "RedundancyType"
+	StatKMSDataEncryption             = "KMSDataEncryption"
+	StatTransferAcceleration          = "TransferAcceleration"
+	StatCrossRegionReplication        = "CrossRegionReplication"
 )
 
 // the elements show in hash file
@@ -140,7 +146,7 @@ const (
 const (
 	Package                 string = "ossutil"
 	ChannelBuf              int    = 1000
-	Version                 string = "v1.7.4"
+	Version                 string = "v1.7.9"
 	DefaultEndpoint         string = "oss.aliyuncs.com"
 	ChineseLanguage                = "CH"
 	EnglishLanguage                = "EN"

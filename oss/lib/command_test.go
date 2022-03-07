@@ -1822,7 +1822,7 @@ func (s *OssutilCommandSuite) TestErrOssDownloadFile(c *C) {
 }
 
 func (s *OssutilCommandSuite) TestUserAgent(c *C) {
-	userAgent := getUserAgent()
+	userAgent := getUserAgent("")
 	c.Assert(userAgent != "", Equals, true)
 
 	client, err := listCommand.command.ossClient("")

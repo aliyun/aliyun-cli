@@ -213,3 +213,35 @@ func (s *OssutilCommandSuite) TestMbCreateBucketWithRedundancy(c *C) {
 	c.Assert(bucketStat[StatRedundancyType], Equals, "LRS")
 	s.removeBucket(bucketName, true, c)
 }
+
+func (s *OssutilCommandSuite) TestMbCreateBucketWithConfigFile(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	inputFile := "test-ossutil-file-" + randLowStr(5)
+	command := "mb"
+	args := []string{CloudURLToString(bucketName, ""), inputFile}
+	str := ""
+	retryCount:="1"
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"stsToken":        &str,
+		"configFile":      &configFile,
+		"retryTimes":      &retryCount,
+	}
+
+	xmlBody := `
+	<?xml version="1.0" encoding="UTF-8"?>
+	<CreateBucketConfiguration>
+		<StorageClass>IA</StorageClass>
+	</CreateBucketConfiguration>
+	`
+	s.createFile(inputFile, xmlBody, c)
+	_, err := cm.RunCommand(command, args, options)
+	c.Assert(err, IsNil)
+
+	bucketStat := s.getStat(bucketName, "", c)
+	c.Assert(bucketStat["StorageClass"], Equals, "IA")
+	s.removeBucket(bucketName, true, c)
+	os.Remove(inputFile)
+}

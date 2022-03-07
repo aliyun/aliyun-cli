@@ -1601,3 +1601,45 @@ func (s *OssutilCommandSuite) TestSetObjectMetaUpdateEncryptionWithAclStatus(c *
 	os.Remove(testFileName)
 	s.removeBucket(bucketName, true, c)
 }
+
+func (s *OssutilCommandSuite) TestSetObjectMetaSkipUpdate(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	s.putBucket(bucketName, c)
+
+	object := "TestSetObjectMeta-" + randLowStr(5)
+	s.putObject(bucketName, object, uploadFileName, c)
+
+	objectStat := s.getStat(bucketName, object, c)
+	c.Assert(objectStat[StatACL], Equals, "default")
+	_, ok := objectStat["X-Oss-Meta-A"]
+	c.Assert(ok, Equals, false)
+
+	// update
+	s.setObjectMeta(bucketName, object, "x-oss-object-acl:private#X-Oss-Meta-A:A#Expires:2006-01-02T15:04:05Z", true, false, false, true, c)
+	objectStat = s.getStat(bucketName, object, c)
+	c.Assert(objectStat[StatACL], Equals, "private")
+	c.Assert(objectStat["X-Oss-Meta-A"], Equals, "A")
+	c.Assert(objectStat["Expires"], Equals, "Mon, 02 Jan 2006 15:04:05 GMT")
+
+	// update again,skip
+	setMetaCommand.skipCount = 0
+	s.setObjectMeta(bucketName, object, "x-oss-object-acl:private#X-Oss-Meta-A:A", true, false, false, true, c)
+	c.Assert(int(setMetaCommand.skipCount), Equals, 1)
+
+	// update again,modify X-Oss-Meta-A to B
+	setMetaCommand.skipCount = 0
+	s.setObjectMeta(bucketName, object, "x-oss-object-acl:private#X-Oss-Meta-A:B", true, false, false, true, c)
+	c.Assert(int(setMetaCommand.skipCount), Equals, 0)
+
+	// update again,add X-Oss-Meta-C
+	setMetaCommand.skipCount = 0
+	s.setObjectMeta(bucketName, object, "X-Oss-Meta-C:C", true, false, false, true, c)
+	c.Assert(int(setMetaCommand.skipCount), Equals, 0)
+
+	objectStat = s.getStat(bucketName, object, c)
+	c.Assert(objectStat["X-Oss-Meta-A"], Equals, "B")
+	c.Assert(objectStat["X-Oss-Meta-C"], Equals, "C")
+	c.Assert(objectStat["Expires"], Equals, "Mon, 02 Jan 2006 15:04:05 GMT")
+
+	s.removeBucket(bucketName, true, c)
+}

@@ -421,6 +421,9 @@ var syncCommand = SyncCommand{
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
+			OptionSkipVerfiyCert,
+			OptionMaxDownSpeed,
+			OptionUserAgent,
 
 			// The following options are only supported by sc command, not supported by cp command
 			OptionDelete,
@@ -779,6 +782,10 @@ func (sc *SyncCommand) ReadLocalFileKeys(chFiles <-chan fileInfoType, chFinish c
 }
 
 func (sc *SyncCommand) GetAbsPath(strPath string) (string, error) {
+	if filepath.IsAbs(strPath) {
+		return strPath, nil
+	}
+
 	currentDir, err := os.Getwd()
 	if err != nil {
 		return "", err

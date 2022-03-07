@@ -62,6 +62,7 @@ type copyOptionType struct {
 	disableDirObject  bool
 	disableAllSymlink bool
 	tagging           string
+	opType            operationType
 	bSyncCommand      bool
 }
 
@@ -1287,6 +1288,9 @@ var copyCommand = CopyCommand{
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
+			OptionSkipVerfiyCert,
+			OptionMaxDownSpeed,
+			OptionUserAgent,
 		},
 	},
 }
@@ -1372,10 +1376,6 @@ func (cc *CopyCommand) RunCommand() error {
 
 	cc.cpOption.options = []oss.Option{}
 	if cc.cpOption.meta != "" {
-		if opType == operationTypeGet {
-			return fmt.Errorf("No need to set meta for download")
-		}
-
 		headers, err := cc.command.parseHeaders(cc.cpOption.meta, false)
 		if err != nil {
 			return err
@@ -1471,6 +1471,7 @@ func (cc *CopyCommand) RunCommand() error {
 	}
 
 	cc.monitor.init(opType)
+	cc.cpOption.opType = opType
 
 	chProgressSignal = make(chan chProgressSignalType, 10)
 	go cc.progressBar()
@@ -1628,11 +1629,16 @@ func (cc *CopyCommand) uploadFiles(srcURLList []StorageURLer, destURL CloudURL) 
 	}
 
 	completed := 0
+	var listError error = nil
 	for int64(completed) <= cc.cpOption.routines {
 		select {
 		case err := <-chListError:
 			if err != nil {
-				return err
+				if !cc.cpOption.ctnu {
+					return err
+				} else {
+					listError = err
+				}
 			}
 			completed++
 		case err := <-chError:
@@ -1649,7 +1655,7 @@ func (cc *CopyCommand) uploadFiles(srcURLList []StorageURLer, destURL CloudURL) 
 	}
 	cc.closeProgress()
 	fmt.Printf(cc.monitor.progressBar(true, normalExit))
-	return nil
+	return listError
 }
 
 func (cc *CopyCommand) adjustDestURLForUpload(srcURLList []StorageURLer, destURL CloudURL) (CloudURL, error) {
@@ -2665,7 +2671,7 @@ func (cc *CopyCommand) objectStatistic(bucket *oss.Bucket, cloudURL CloudURL) {
 			for _, object := range lor.Objects {
 				if doesSingleObjectMatchPatterns(object.Key, cc.cpOption.filters) {
 					if cc.cpOption.partitionIndex == 0 || (cc.cpOption.partitionIndex > 0 && matchHash(fnvIns, object.Key, cc.cpOption.partitionIndex-1, cc.cpOption.partitionCount)) {
-						if strings.ToLower(object.Type) == "symlink" {
+						if strings.ToLower(object.Type) == "symlink" && cc.cpOption.opType == operationTypeGet {
 							props, err := cc.command.ossGetObjectStatRetry(bucket, object.Key, cc.cpOption.payerOptions...)
 							if err != nil {
 								LogError("ossGetObjectStatRetry error info:%s\n", err.Error())
@@ -2797,7 +2803,7 @@ func (cc *CopyCommand) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chO
 
 			if doesSingleObjectMatchPatterns(object.Key, cc.cpOption.filters) {
 				if cc.cpOption.partitionIndex == 0 || (cc.cpOption.partitionIndex > 0 && matchHash(fnvIns, object.Key, cc.cpOption.partitionIndex-1, cc.cpOption.partitionCount)) {
-					if strings.ToLower(object.Type) == "symlink" {
+					if strings.ToLower(object.Type) == "symlink" && cc.cpOption.opType == operationTypeGet {
 						props, err := cc.command.ossGetObjectStatRetry(bucket, object.Key, cc.cpOption.payerOptions...)
 						if err != nil {
 							LogError("ossGetObjectStatRetry error info:%s\n", err.Error())
