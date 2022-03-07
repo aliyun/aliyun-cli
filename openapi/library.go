@@ -159,9 +159,15 @@ func printParameters(w io.Writer, params []meta.Parameter, prefix string) {
 		if param.Hidden {
 			continue
 		}
+
 		if param.Position == "Domain" {
 			continue
 		}
+
+		if param.Position == "Header" {
+			continue
+		}
+
 		if param.Type == "RepeatList" {
 			if len(param.SubParameters) > 0 {
 				printParameters(w, param.SubParameters, prefix+param.Name+".n.")
