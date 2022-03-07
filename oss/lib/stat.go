@@ -121,6 +121,8 @@ var statCommand = StatCommand{
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
+			OptionSkipVerfiyCert,
+			OptionUserAgent,
 		},
 	},
 }
@@ -178,26 +180,28 @@ func (sc *StatCommand) bucketStat(bucket *oss.Bucket, cloudURL CloudURL) error {
 		return err
 	}
 
-	fmt.Printf("%-18s: %s\n", StatName, gbar.BucketInfo.Name)
-	fmt.Printf("%-18s: %s\n", StatLocation, gbar.BucketInfo.Location)
-	fmt.Printf("%-18s: %s\n", StatCreationDate, utcToLocalTime(gbar.BucketInfo.CreationDate))
-	fmt.Printf("%-18s: %s\n", StatExtranetEndpoint, gbar.BucketInfo.ExtranetEndpoint)
-	fmt.Printf("%-18s: %s\n", StatIntranetEndpoint, gbar.BucketInfo.IntranetEndpoint)
-	fmt.Printf("%-18s: %s\n", StatACL, gbar.BucketInfo.ACL)
-	fmt.Printf("%-18s: %s\n", StatOwner, gbar.BucketInfo.Owner.ID)
-	fmt.Printf("%-18s: %s\n", StatStorageClass, gbar.BucketInfo.StorageClass)
+	fmt.Printf("%-22s: %s\n", StatName, gbar.BucketInfo.Name)
+	fmt.Printf("%-22s: %s\n", StatLocation, gbar.BucketInfo.Location)
+	fmt.Printf("%-22s: %s\n", StatCreationDate, utcToLocalTime(gbar.BucketInfo.CreationDate))
+	fmt.Printf("%-22s: %s\n", StatExtranetEndpoint, gbar.BucketInfo.ExtranetEndpoint)
+	fmt.Printf("%-22s: %s\n", StatIntranetEndpoint, gbar.BucketInfo.IntranetEndpoint)
+	fmt.Printf("%-22s: %s\n", StatACL, gbar.BucketInfo.ACL)
+	fmt.Printf("%-22s: %s\n", StatOwner, gbar.BucketInfo.Owner.ID)
+	fmt.Printf("%-22s: %s\n", StatStorageClass, gbar.BucketInfo.StorageClass)
 	if len(gbar.BucketInfo.RedundancyType) > 0 {
-		fmt.Printf("%-18s: %s\n", StatRedundancyType, gbar.BucketInfo.RedundancyType)
+		fmt.Printf("%-22s: %s\n", StatRedundancyType, gbar.BucketInfo.RedundancyType)
 	}
 	if len(gbar.BucketInfo.SseRule.SSEAlgorithm) > 0 {
-		fmt.Printf("%-18s: %s\n", StatSSEAlgorithm, gbar.BucketInfo.SseRule.SSEAlgorithm)
+		fmt.Printf("%-22s: %s\n", StatSSEAlgorithm, gbar.BucketInfo.SseRule.SSEAlgorithm)
 	}
 	if len(gbar.BucketInfo.SseRule.KMSMasterKeyID) > 0 {
-		fmt.Printf("%-18s: %s\n", StatKMSMasterKeyID, gbar.BucketInfo.SseRule.KMSMasterKeyID)
+		fmt.Printf("%-22s: %s\n", StatKMSMasterKeyID, gbar.BucketInfo.SseRule.KMSMasterKeyID)
 	}
 	if len(gbar.BucketInfo.SseRule.KMSDataEncryption) > 0 {
-		fmt.Printf("%-18s: %s\n", StatKMSDataEncryption, gbar.BucketInfo.SseRule.KMSDataEncryption)
+		fmt.Printf("%-22s: %s\n", StatKMSDataEncryption, gbar.BucketInfo.SseRule.KMSDataEncryption)
 	}
+	fmt.Printf("%-22s: %s\n", StatTransferAcceleration, gbar.BucketInfo.TransferAcceleration)
+	fmt.Printf("%-22s: %s\n", StatCrossRegionReplication, gbar.BucketInfo.CrossRegionReplication)
 
 	return nil
 }

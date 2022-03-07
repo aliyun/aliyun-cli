@@ -257,6 +257,8 @@ var setACLCommand = SetACLCommand{
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
+			OptionSkipVerfiyCert,
+			OptionUserAgent,
 		},
 	},
 }
@@ -332,11 +334,16 @@ func (sc *SetACLCommand) setBucketACL(client *oss.Client, cloudURL CloudURL, rec
 		return fmt.Errorf("set bucket acl do not support --recursive option, if you mean set object acl recursivlly, you should not use --bucket option")
 	}
 
+	// check bucket exist or not
+	_, err := client.GetBucketInfo(cloudURL.bucket)
+	if err != nil {
+	    return err
+	}
+
 	acl, err := sc.getACL(bucketACL, recursive)
 	if err != nil {
 		return err
 	}
-
 	return sc.ossSetBucketACLRetry(client, cloudURL.bucket, acl)
 }
 

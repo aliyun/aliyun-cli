@@ -139,6 +139,8 @@ var bucketRefererCommand = BucketRefererCommand{
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
+			OptionSkipVerfiyCert,
+			OptionUserAgent,
 		},
 	},
 }

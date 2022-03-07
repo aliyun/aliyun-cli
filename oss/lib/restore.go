@@ -189,6 +189,8 @@ var restoreCommand = RestoreCommand{
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
+			OptionSkipVerfiyCert,
+			OptionUserAgent,
 		},
 	},
 }

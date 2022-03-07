@@ -45,6 +45,8 @@ func (s *OssutilCommandSuite) TestGetBucketStat(c *C) {
 	c.Assert(bucketStat[StatIntranetEndpoint] != "", Equals, true)
 	c.Assert(bucketStat[StatACL], Equals, "private")
 	c.Assert(bucketStat[StatOwner] != "", Equals, true)
+	c.Assert(bucketStat[StatTransferAcceleration], Equals, "Disabled")
+	c.Assert(bucketStat[StatCrossRegionReplication], Equals, "Disabled")
 
 	s.removeBucket(bucketName, true, c)
 }
@@ -252,7 +254,6 @@ func (s *OssutilCommandSuite) TestStatVersioning(c *C) {
 	os.Remove(testFileName)
 	s.removeBucket(bucketName, true, c)
 }
-
 
 func (s *OssutilCommandSuite) TestStatObjectWithPayer(c *C) {
 	s.createFile(uploadFileName, content, c)

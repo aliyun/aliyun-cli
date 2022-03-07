@@ -69,7 +69,7 @@ var specEnglishBucketEncryption = SpecText{
 `,
 	detailHelpText: ` 
     bucket-encryption command can set, get and delete the encryption configuration of the oss bucket by set method option value to put, get, delete
-    The option --sse-algorithm value can only be KMS, AES256.
+    The option --sse-algorithm value can only be KMS, AES256, SM4.
     If the --sse-algorithm option value is AES256, you cannot input the option --kms-masterkey-id
     If the --sse-algorithm is kms, the value of --kms-data-encryption can be SM4, specifying that the KMS service uses SM4 encryption algorithm to encrypt
 Usage:
@@ -143,6 +143,8 @@ var bucketEncryptionCommand = BucketEncryptionCommand{
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
+			OptionSkipVerfiyCert,
+			OptionUserAgent,
 		},
 	},
 }

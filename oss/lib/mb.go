@@ -2,6 +2,8 @@ package lib
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
 	"strings"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
@@ -147,7 +149,7 @@ var makeBucketCommand = MakeBucketCommand{
 		name:        "mb",
 		nameAlias:   []string{"cb", "pb"},
 		minArgc:     1,
-		maxArgc:     1,
+		maxArgc:     2,
 		specChinese: specChineseMakeBucket,
 		specEnglish: specEnglishMakeBucket,
 		group:       GroupTypeNormalCommand,
@@ -175,6 +177,8 @@ var makeBucketCommand = MakeBucketCommand{
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
+			OptionSkipVerfiyCert,
+			OptionUserAgent,
 		},
 	},
 }
@@ -213,6 +217,10 @@ func (mc *MakeBucketCommand) RunCommand() error {
 		return err
 	}
 
+	if len(mc.command.args) >= 2 {
+        return mc.createBucketXmlFile(client, cloudURL.bucket, mc.command.args[1])
+	}
+
 	aclStr, _ := GetString(OptionACL, mc.command.options)
 	language, _ := GetString(OptionLanguage, mc.command.options)
 	language = strings.ToLower(language)
@@ -235,6 +243,20 @@ func (mc *MakeBucketCommand) RunCommand() error {
 	}
 
 	return mc.ossCreateBucketRetry(client, cloudURL.bucket, op...)
+}
+
+func (mc *MakeBucketCommand) createBucketXmlFile(client *oss.Client, bucketName string, fileName string) error {
+    // parsing the xml file
+	file, err := os.Open(fileName)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	text, err := ioutil.ReadAll(file)
+	if err != nil {
+		return err
+	}
+	return client.CreateBucketXml(bucketName, string(text))
 }
 
 func (mc *MakeBucketCommand) getACL(aclStr, language string) (oss.ACLType, error) {

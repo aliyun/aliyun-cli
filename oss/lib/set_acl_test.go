@@ -23,6 +23,13 @@ func (s *OssutilCommandSuite) TestSetBucketACL(c *C) {
 	s.removeBucket(bucketName, true, c)
 }
 
+func (s *OssutilCommandSuite) TestSetBucketACLBucketNotExist(c *C) {
+	bucketName := bucketNamePrefix + randLowStr(10)
+	acl := "private"
+	_, err := s.rawSetBucketACL(bucketName, acl, false)
+	c.Assert(err, NotNil)
+}
+
 func (s *OssutilCommandSuite) TestSetBucketErrorACL(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(10)
 	s.putBucket(bucketName, c)
@@ -45,12 +52,9 @@ func (s *OssutilCommandSuite) TestSetBucketErrorACL(c *C) {
 func (s *OssutilCommandSuite) TestSetNotExistBucketACL(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(10)
 
-	// set acl and create bucket
+	// set bucket acl will be invalid when bucket not exist 
 	showElapse, err := s.rawSetBucketACL(bucketName, "public-read", true)
-	c.Assert(err, IsNil)
-	c.Assert(showElapse, Equals, true)
-
-	s.removeBucket(bucketName, true, c)
+	c.Assert(err, NotNil)
 
 	// invalid bucket name
 	bucketName = "a"

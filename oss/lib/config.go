@@ -307,7 +307,6 @@ var configCommand = ConfigCommand{
 			OptionOutputDir,
 			OptionLanguage,
 			OptionLogLevel,
-			OptionRamRoleArn,
 		},
 	},
 }

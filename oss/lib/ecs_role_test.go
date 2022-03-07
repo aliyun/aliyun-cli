@@ -99,7 +99,7 @@ func (s *OssutilCommandSuite) TestEcsRoleSuccess(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(12)
 	s.putBucket(bucketName, c)
 
-	svr.Shutdown(nil)
+	svr.Close()
 
 	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
 	c.Assert(err, IsNil)
@@ -126,7 +126,7 @@ func (s *OssutilCommandSuite) TestEcsRoleAkTimeout(c *C) {
 	c.Assert(strKeyId1, Equals, strKeyId2)
 	c.Assert(Expiration1 == Expiration2, Equals, false)
 
-	svr.Shutdown(nil)
+	svr.Close()
 
 }
 
@@ -199,7 +199,7 @@ func (s *OssutilCommandSuite) TestEcsRoleAkEmptyError(c *C) {
 	_, err = cm.RunCommand(command, args, options)
 	c.Assert(err, NotNil)
 
-	svr.Shutdown(nil)
+	svr.Close()
 	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
 	c.Assert(err, IsNil)
 }
@@ -238,7 +238,7 @@ func (s *OssutilCommandSuite) TestEcsRoleCodeError(c *C) {
 	_, err = cm.RunCommand(command, args, options)
 	c.Assert(err, NotNil)
 
-	svr.Shutdown(nil)
+	svr.Close()
 	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
 	c.Assert(err, IsNil)
 }
@@ -277,7 +277,7 @@ func (s *OssutilCommandSuite) TestEcsRoleJsonError(c *C) {
 	_, err = cm.RunCommand(command, args, options)
 	c.Assert(err, NotNil)
 
-	svr.Shutdown(nil)
+	svr.Close()
 	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
 	c.Assert(err, IsNil)
 }
