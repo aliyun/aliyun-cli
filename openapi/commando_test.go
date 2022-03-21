@@ -313,6 +313,7 @@ func Test_complete(t *testing.T) {
 
 func TestCreateInvoker(t *testing.T) {
 	profile := config.NewProfile("test")
+	profile.Mode = config.AK
 	profile.AccessKeyId = "AccessKeyId"
 	profile.AccessKeySecret = "AccessKeySecret"
 	profile.RegionId = "cn-hangzhou"

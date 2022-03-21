@@ -53,6 +53,7 @@ func TestNewProfile(t *testing.T) {
 	exp := newProfile()
 	exp.Mode = AK
 	p := NewProfile("default")
+	p.Mode = AK
 	assert.Equal(t, exp, &p)
 }
 

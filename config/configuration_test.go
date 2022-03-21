@@ -46,7 +46,7 @@ func TestCFNewProfile(t *testing.T) {
 	assert.Len(t, cf.Profiles, 1)
 	exp := Profile{
 		Name:         "default",
-		Mode:         AK,
+		Mode:         "",
 		OutputFormat: "json",
 		Language:     "en",
 	}
@@ -60,7 +60,7 @@ func TestConfiguration(t *testing.T) {
 	assert.False(t, ok)
 	assert.Equal(t, Profile{Name: "hh"}, p)
 	p, ok = cf.GetProfile("default")
-	assert.Equal(t, Profile{Name: "default", Mode: AK, OutputFormat: "json", Language: "en"}, p)
+	assert.Equal(t, Profile{Name: "default", Mode: "", OutputFormat: "json", Language: "en"}, p)
 
 	//PutProfile
 	assert.Len(t, cf.Profiles, 1)
@@ -103,7 +103,7 @@ func TestConfiguration(t *testing.T) {
 	assert.Equal(t, Profile{Name: "test", Mode: StsToken, OutputFormat: "json", Language: "en"}, p)
 	os.Setenv("ALICLOUD_PROFILE", "")
 	p = cf.GetCurrentProfile(ctx)
-	assert.Equal(t, Profile{Name: "default", Mode: AK, OutputFormat: "json", Language: "en"}, p)
+	assert.Equal(t, Profile{Name: "default", Mode: "", OutputFormat: "json", Language: "en"}, p)
 }
 
 func TestLoadProfile(t *testing.T) {
@@ -242,7 +242,7 @@ func TestLoadConfiguration(t *testing.T) {
 	//testcase 1
 	cf, err := LoadConfiguration(GetConfigPath() + "/" + configFile)
 	assert.Nil(t, err)
-	assert.Equal(t, &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: "AK", OutputFormat: "json", Language: "en"}}}, cf)
+	assert.Equal(t, &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: "", OutputFormat: "json", Language: "en"}}}, cf)
 	conf := &Configuration{Profiles: []Profile{Profile{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}
 	err = SaveConfiguration(conf)
 	assert.Nil(t, err)
