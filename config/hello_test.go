@@ -32,6 +32,7 @@ func TestDoHello(t *testing.T) {
 	ctx := cli.NewCommandContext(w, stderr)
 	ctx.Flags().AddByName("skip-secure-verify")
 	profile := NewProfile("default")
+	profile.Mode = AK
 
 	exw := "-----------------------------------------------\n" +
 		"!!! Configure Failed please configure again !!!\n" +

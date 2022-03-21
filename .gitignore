@@ -20,3 +20,4 @@ resource/metas.go
 local-*
 coverage.txt
 oss/lib/ossutil_test*
+coverage.html

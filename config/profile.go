@@ -78,14 +78,13 @@ type Profile struct {
 func NewProfile(name string) Profile {
 	return Profile{
 		Name:         name,
-		Mode:         AK,
+		Mode:         "",
 		OutputFormat: "json",
 		Language:     "en",
 	}
 }
 
 func (cp *Profile) Validate() error {
-
 	if cp.RegionId == "" {
 		return fmt.Errorf("region can't be empty")
 	}
@@ -198,7 +197,14 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	}
 
 	if cp.StsToken == "" {
-		cp.StsToken = os.Getenv("SECURITY_TOKEN")
+		switch {
+		case os.Getenv("ALIBABACLOUD_SECURITY_TOKEN") != "":
+			cp.StsToken = os.Getenv("ALIBABACLOUD_SECURITY_TOKEN")
+		case os.Getenv("ALICLOUD_SECURITY_TOKEN") != "":
+			cp.StsToken = os.Getenv("ALICLOUD_SECURITY_TOKEN")
+		case os.Getenv("SECURITY_TOKEN") != "":
+			cp.StsToken = os.Getenv("SECURITY_TOKEN")
+		}
 	}
 
 	if cp.RegionId == "" {
@@ -211,6 +217,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 			cp.RegionId = os.Getenv("REGION")
 		}
 	}
+
 	AutoModeRecognition(cp)
 }
 
