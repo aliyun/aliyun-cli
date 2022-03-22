@@ -116,21 +116,26 @@ func LoadProfile(path string, name string) (Profile, error) {
 }
 
 func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
-	var currentPath string
-	if path, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
-		currentPath = path
+	if os.Getenv("ALIBABACLOUD_IGNORE_PROFILE") == "TRUE" {
+		profile = NewProfile("default")
+		profile.RegionId = "cn-hangzhou"
 	} else {
-		currentPath = GetConfigPath() + "/" + configFile
+		var currentPath string
+		if path, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
+			currentPath = path
+		} else {
+			currentPath = GetConfigPath() + "/" + configFile
+		}
+		if name, ok := ProfileFlag(ctx.Flags()).GetValue(); ok {
+			profile, err = LoadProfile(currentPath, name)
+		} else {
+			profile, err = LoadProfile(currentPath, "")
+		}
+		if err != nil {
+			return
+		}
 	}
-	if name, ok := ProfileFlag(ctx.Flags()).GetValue(); ok {
-		profile, err = LoadProfile(currentPath, name)
 
-	} else {
-		profile, err = LoadProfile(currentPath, "")
-	}
-	if err != nil {
-		return
-	}
 	//Load from flags
 	profile.OverwriteWithFlags(ctx)
 	err = profile.Validate()
