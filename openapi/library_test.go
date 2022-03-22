@@ -33,10 +33,6 @@ func (r *reader_test) ReadFrom(path string) ([]byte, error) {
 	return []byte(r.content), nil
 }
 
-func (r *reader_test) setcontent(contenth string) {
-	r.content = contenth
-}
-
 func TestLibrary_PrintProducts(t *testing.T) {
 	w := new(bytes.Buffer)
 	library := NewLibrary(w, "en")

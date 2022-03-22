@@ -49,7 +49,11 @@ func TestMigrateCredentials(t *testing.T) {
 
 	conf, err = MigrateCredentials("test.ini")
 	assert.Nil(t, err)
-	assert.Equal(t, &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, conf)
+	assert.Equal(t, &Configuration{
+		CurrentProfile: "default",
+		Profiles: []Profile{
+			{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
+			{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, conf)
 
 	defer func() {
 		if _, err := os.Stat("test.ini"); err == nil {
@@ -59,7 +63,9 @@ func TestMigrateCredentials(t *testing.T) {
 }
 
 func TestMigrateConfigure(t *testing.T) {
-	conf := &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}
+	conf := &Configuration{CurrentProfile: "default", Profiles: []Profile{
+		{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
+		{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}
 	err := MigrateConfigure("http://nici", conf)
 	if runtime.GOOS == "windows" {
 		assert.Equal(t, "parse failed: open http://nici: The filename, directory name, or volume label syntax is incorrect.\n", err.Error())
@@ -86,7 +92,11 @@ func TestMigrateConfigure(t *testing.T) {
 	test.Close()
 	err = MigrateConfigure("testconf.ini", conf)
 	assert.Nil(t, err)
-	assert.Equal(t, &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, conf)
+	assert.Equal(t, &Configuration{
+		CurrentProfile: "default",
+		Profiles: []Profile{
+			{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"},
+			{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, conf)
 
 	defer func() {
 		if _, err := os.Stat("testconf.ini"); err == nil {
