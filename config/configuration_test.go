@@ -59,7 +59,7 @@ func TestConfiguration(t *testing.T) {
 	p, ok := cf.GetProfile("hh")
 	assert.False(t, ok)
 	assert.Equal(t, Profile{Name: "hh"}, p)
-	p, ok = cf.GetProfile("default")
+	p, _ = cf.GetProfile("default")
 	assert.Equal(t, Profile{Name: "default", Mode: "", OutputFormat: "json", Language: "en"}, p)
 
 	//PutProfile
@@ -114,7 +114,7 @@ func TestLoadProfile(t *testing.T) {
 	}()
 	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
-			return &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+			return &Configuration{CurrentProfile: "default", Profiles: []Profile{{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, {Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
 	//testcase 1
@@ -198,7 +198,7 @@ func TestNewConfigFromBytes(t *testing.T) {
 
 	conf, err := NewConfigFromBytes([]byte(bytesConf))
 	assert.Nil(t, err)
-	assert.Equal(t, &Configuration{Profiles: []Profile{Profile{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}, conf)
+	assert.Equal(t, &Configuration{Profiles: []Profile{{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}, conf)
 }
 
 func TestSaveConfiguration(t *testing.T) {
@@ -212,7 +212,7 @@ func TestSaveConfiguration(t *testing.T) {
 			return "."
 		}
 	}
-	conf := &Configuration{Profiles: []Profile{Profile{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}
+	conf := &Configuration{Profiles: []Profile{{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}
 	bytes, err := json.MarshalIndent(conf, "", "\t")
 	assert.Nil(t, err)
 	err = SaveConfiguration(conf)
@@ -242,15 +242,15 @@ func TestLoadConfiguration(t *testing.T) {
 	//testcase 1
 	cf, err := LoadConfiguration(GetConfigPath() + "/" + configFile)
 	assert.Nil(t, err)
-	assert.Equal(t, &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: "", OutputFormat: "json", Language: "en"}}}, cf)
-	conf := &Configuration{Profiles: []Profile{Profile{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}
+	assert.Equal(t, &Configuration{CurrentProfile: "default", Profiles: []Profile{{Name: "default", Mode: "", OutputFormat: "json", Language: "en"}}}, cf)
+	conf := &Configuration{Profiles: []Profile{{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}
 	err = SaveConfiguration(conf)
 	assert.Nil(t, err)
 
 	//testcase 2
 	w.Reset()
 	cf, err = LoadConfiguration(GetConfigPath() + "/" + configFile)
-	assert.Equal(t, &Configuration{CurrentProfile: "", Profiles: []Profile{Profile{Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json", Language: "en"}}}, cf)
+	assert.Equal(t, &Configuration{CurrentProfile: "", Profiles: []Profile{{Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json", Language: "en"}}}, cf)
 	assert.Nil(t, err)
 
 }
@@ -262,7 +262,7 @@ func TestLoadProfileWithContext(t *testing.T) {
 	}()
 	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
-			return &Configuration{CurrentProfile: "default", Profiles: []Profile{Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, Profile{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+			return &Configuration{CurrentProfile: "default", Profiles: []Profile{{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, {Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
 	w := new(bytes.Buffer)

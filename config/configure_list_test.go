@@ -34,14 +34,14 @@ func TestDoConfigureList(t *testing.T) {
 			return &Configuration{
 				CurrentProfile: "default",
 				Profiles: []Profile{
-					Profile{
+					{
 						Name:            "default",
 						Mode:            AK,
 						AccessKeyId:     "default_aliyun_access_key_id",
 						AccessKeySecret: "default_aliyun_access_key_secret",
 						OutputFormat:    "json",
 					},
-					Profile{
+					{
 						Name:            "aaa",
 						Mode:            StsToken,
 						AccessKeyId:     "sdf",
@@ -49,7 +49,7 @@ func TestDoConfigureList(t *testing.T) {
 						OutputFormat:    "json",
 						StsToken:        "StsToken",
 					},
-					Profile{
+					{
 						Name:            "bbb",
 						Mode:            RamRoleArn,
 						AccessKeyId:     "sdf",
@@ -58,7 +58,7 @@ func TestDoConfigureList(t *testing.T) {
 						RamRoleArn:      "RamRoleArn",
 						RoleSessionName: "RoleSessionName",
 					},
-					Profile{
+					{
 						Name:            "ccc",
 						Mode:            EcsRamRole,
 						AccessKeyId:     "sdf",
@@ -66,7 +66,7 @@ func TestDoConfigureList(t *testing.T) {
 						OutputFormat:    "json",
 						RamRoleName:     "RamRoleName",
 					},
-					Profile{
+					{
 						Name:            "ddd",
 						Mode:            RsaKeyPair,
 						AccessKeyId:     "sdf",

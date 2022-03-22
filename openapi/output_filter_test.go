@@ -53,7 +53,7 @@ func TestNewTableOutputFilter(t *testing.T) {
 			Key: "cols",
 		},
 	}
-	str, err = tableout.FilterOutput(content)
+	_, err = tableout.FilterOutput(content)
 	assert.NotNil(t, `{"path":"/User"}`, err)
 	assert.Equal(t, "you need to assign col=col1,col2,... with --output", err.Error())
 
@@ -61,7 +61,7 @@ func TestNewTableOutputFilter(t *testing.T) {
 	OutputFlag(tableout.ctx.Flags()).SetAssigned(true)
 	OutputFlag(tableout.ctx.Flags()).Fields[0].SetAssigned(true)
 	OutputFlag(tableout.ctx.Flags()).Fields[1].SetAssigned(true)
-	str, err = tableout.FilterOutput(content)
+	_, err = tableout.FilterOutput(content)
 	assert.NotNil(t, `{"path":"/User"}`, err)
 	assert.Equal(t, "jmespath: 'RootFilter[0].' failed SyntaxError: Expected identifier, lbracket, or lbrace", err.Error())
 }
@@ -101,7 +101,6 @@ func TestTableOutputFilter_FormatTable(t *testing.T) {
 
 	ctx.Flags().Get("output").Fields[2].SetAssigned(true)
 	ctx.Flags().Get("output").Fields[2].SetValue("true")
-	out = NewTableOutputFilter(ctx)
 	str, err = tableout.FormatTable(rowpath, colNames, v)
 	assert.Equal(t, "Num | name  | type  | api\n--- | ----  | ----  | ---\n0   | <nil> | <nil> | <nil>\n1   | <nil> | <nil> | <nil>\n", str)
 	assert.Nil(t, err)
