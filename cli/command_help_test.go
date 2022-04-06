@@ -80,14 +80,14 @@ func TestCmdPrint(t *testing.T) {
 	stderr.Reset()
 	c.PrintFlags(ctx)
 	assert.Empty(t, w.String())
-	c.flags.flags = []*Flag{&Flag{Name: "output", Shorthand: 'o'}}
+	c.flags.flags = []*Flag{{Name: "output", Shorthand: 'o'}}
 	w.Reset()
 	stderr.Reset()
 	c.PrintFlags(ctx)
 	assert.Equal(t, "\nFlags:\n", w.String())
 	w.Reset()
 	stderr.Reset()
-	ctx.flags.flags = []*Flag{&Flag{Name: "output", Shorthand: 'o', Short: i18n.T("o test", "")}, &Flag{Name: "filter", Short: i18n.T("", "")}, &Flag{Name: "hidden", Hidden: true}}
+	ctx.flags.flags = []*Flag{{Name: "output", Shorthand: 'o', Short: i18n.T("o test", "")}, {Name: "filter", Short: i18n.T("", "")}, {Name: "hidden", Hidden: true}}
 	c.PrintFlags(ctx)
 	assert.Equal(t, "\nFlags:\n  --output,-o o test\n  --filter    \n", w.String())
 
