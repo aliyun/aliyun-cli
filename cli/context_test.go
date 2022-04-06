@@ -91,7 +91,7 @@ func TestCheckFlags(t *testing.T) {
 	ctx.flags.flags[0].Required = true
 	assert.EqualError(t, ctx.CheckFlags(), "missing flag --MrX")
 	ctx.flags.flags[0].assigned = true
-	ctx.flags.flags[0].Fields = []Field{Field{Key: "m", Required: true}}
+	ctx.flags.flags[0].Fields = []Field{{Key: "m", Required: true}}
 	assert.EqualError(t, ctx.CheckFlags(), "bad flag format --MrX with field m= required")
 	ctx.flags.flags[0].Fields[0].Required = false
 	ctx.flags.flags[0].ExcludeWith = []string{"MrX"}

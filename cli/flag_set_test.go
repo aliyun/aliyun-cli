@@ -43,7 +43,7 @@ func TestAdd(t *testing.T) {
 	fs := NewFlagSet()
 	f := &Flag{Name: "MrX"}
 	fs.Add(f)
-	assert.Subset(t, fs.flags, []*Flag{&Flag{Name: "MrX"}})
+	assert.Subset(t, fs.flags, []*Flag{{Name: "MrX"}})
 	assert.Len(t, fs.flags, 1)
 	fs.Add(f)
 }

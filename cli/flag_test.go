@@ -69,7 +69,7 @@ func TestFlag(t *testing.T) {
 	assert.Nil(t, field)
 	assert.False(t, ok)
 
-	f.Fields = []Field{Field{Key: "MrX"}, Field{Key: "你好"}}
+	f.Fields = []Field{{Key: "MrX"}, {Key: "你好"}}
 	field, ok = f.getField("MrX")
 	assert.NotNil(t, field)
 	assert.True(t, ok)
@@ -144,13 +144,13 @@ func TestFlag(t *testing.T) {
 	f = resetFlag()
 	assert.EqualError(t, f.assignField("I am MrX"), "--MrX can't assign with value")
 	assert.EqualError(t, f.assignField("MrX=Night556"), "--MrX can't assign with MrX=")
-	f.Fields = []Field{Field{Key: "MrX"}}
+	f.Fields = []Field{{Key: "MrX"}}
 	assert.Nil(t, f.assignField("MrX=Night556"))
 
 	//checkFields
 	f = resetFlag()
 	assert.Nil(t, f.checkFields())
-	f.Fields = []Field{Field{Key: "MrX"}}
+	f.Fields = []Field{{Key: "MrX"}}
 	assert.Nil(t, f.checkFields())
 	f.Fields[0].Required = true
 	assert.EqualError(t, f.checkFields(), "bad flag format --MrX with field MrX= required")

@@ -87,8 +87,8 @@ func TestCommand(t *testing.T) {
 	ctx.completion = new(Completion)
 	ctx.completion.Current = "--f"
 	ctx.flags.flags = append(ctx.flags.flags, []*Flag{
-		&Flag{Name: "ff1", Hidden: true},
-		&Flag{Name: "ff2"},
+		{Name: "ff1", Hidden: true},
+		{Name: "ff2"},
 	}...)
 	cmd.ExecuteComplete(ctx, []string{})
 	assert.Equal(t, "--ff2\n", w.String())
