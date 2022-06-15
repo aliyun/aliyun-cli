@@ -3,7 +3,7 @@ module github.com/aliyun/aliyun-cli
 go 1.16
 
 require (
-	github.com/alibabacloud-go/tea v1.1.17
+	github.com/alibabacloud-go/tea v1.1.18
 	github.com/aliyun/alibaba-cloud-sdk-go v1.61.1546
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.2+incompatible
 	github.com/aliyun/credentials-go v1.2.1
