@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/alibabacloud-go/tea v1.1.18
 	github.com/aliyun/alibaba-cloud-sdk-go v1.61.1639
-	github.com/aliyun/aliyun-oss-go-sdk v2.2.2+incompatible
+	github.com/aliyun/aliyun-oss-go-sdk v2.2.4+incompatible
 	github.com/aliyun/credentials-go v1.2.1
 	github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc
 	github.com/baiyubin/aliyun-sts-go-sdk v0.0.0-20180326062324-cfa1a18b161f // indirect
