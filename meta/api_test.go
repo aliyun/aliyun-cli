@@ -97,6 +97,11 @@ func TestApi_FindParameter(t *testing.T) {
 
 	api.Parameters = []Parameter{
 		{
+			SubParameters: []Parameter{
+				{
+					Name: "subparameters",
+				},
+			},
 			Type: "RepeatList",
 			Name: "paramter",
 		},
@@ -108,6 +113,18 @@ func TestApi_FindParameter(t *testing.T) {
 	parameterCount := api.FindParameter("paramtercount")
 	assert.NotNil(t, parameterCount)
 	assert.Equal(t, parameterCount.Name, "paramtercount")
+	parameterCount = api.FindParameter("subparameters_test")
+	assert.Nil(t, parameterCount)
+	parameterCount = api.FindParameter("subparameters")
+	assert.Nil(t, parameterCount)
+	parameter = api.FindParameter("paramter.1.10")
+	assert.Nil(t, parameter)
+	parameter = api.FindParameter("paramter.1.subparameters")
+	assert.NotNil(t, parameter)
+	parameter = api.FindParameter("paramter.10.subparameters")
+	assert.NotNil(t, parameter)
+	parameter = api.FindParameter("paramter.100.subparameters")
+	assert.NotNil(t, parameter)
 }
 
 func TestApi_ForeachParameters(t *testing.T) {
