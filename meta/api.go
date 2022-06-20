@@ -77,7 +77,7 @@ func findParameterInner(params []Parameter, name string) *Parameter {
 		if p.Name == name {
 			return &(params[i])
 		}
-		if len(p.SubParameters) > 0 && strings.HasPrefix(name, p.Name) {
+		if len(p.SubParameters) > 0 && strings.HasPrefix(name, p.Name+".") {
 			s := name[len(p.Name):]
 			// XXX.1.YYY
 			if len(s) >= 4 && s[0] == '.' && strings.Count(s, ".") >= 2 {
