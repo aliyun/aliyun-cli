@@ -16,7 +16,7 @@ require (
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.19.0
 	github.com/satori/go.uuid v1.2.1-0.20181028125025-b2ce2384e17b // indirect
-	github.com/stretchr/testify v1.7.5
+	github.com/stretchr/testify v1.8.0
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/crypto v0.0.0-20220331220935-ae2d96664a29
 	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65 // indirect
