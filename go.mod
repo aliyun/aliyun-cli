@@ -14,7 +14,7 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0
 	github.com/kr/text v0.2.0 // indirect
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.20.0
+	github.com/onsi/gomega v1.20.2
 	github.com/satori/go.uuid v1.2.1-0.20181028125025-b2ce2384e17b // indirect
 	github.com/stretchr/testify v1.8.0
 	github.com/syndtr/goleveldb v1.0.0
