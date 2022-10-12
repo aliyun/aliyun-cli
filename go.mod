@@ -13,7 +13,7 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0
 	github.com/kr/text v0.2.0 // indirect
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.21.1
+	github.com/onsi/gomega v1.22.1
 	github.com/stretchr/testify v1.8.0
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/crypto v0.0.0-20220331220935-ae2d96664a29
