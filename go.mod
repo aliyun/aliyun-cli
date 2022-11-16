@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/alibabacloud-go/tea v1.1.20
-	github.com/aliyun/alibaba-cloud-sdk-go v1.61.1732
+	github.com/aliyun/alibaba-cloud-sdk-go v1.62.11
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.5+incompatible
 	github.com/aliyun/credentials-go v1.2.4
 	github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc
@@ -31,6 +31,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
+	github.com/opentracing/opentracing-go v1.2.1-0.20220228012449-10b1cf09e00b // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/net v0.2.0 // indirect
 	golang.org/x/sys v0.2.0 // indirect
