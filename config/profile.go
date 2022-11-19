@@ -218,6 +218,10 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		}
 	}
 
+	if cp.CredentialsURI == "" {
+		cp.CredentialsURI = os.Getenv("ALIBABA_CLOUD_CREDENTIALS_URI")
+	}
+
 	AutoModeRecognition(cp)
 }
 
@@ -403,6 +407,15 @@ func (cp *Profile) GetClientByExternal(config *sdk.Config, ctx *cli.Context) (*s
 
 func (cp *Profile) GetClientByCredentialsURI(config *sdk.Config, ctx *cli.Context) (*sdk.Client, error) {
 	uri := cp.CredentialsURI
+
+	if uri == "" {
+		uri = os.Getenv("ALIBABA_CLOUD_CREDENTIALS_URI")
+	}
+
+	if uri == "" {
+		return nil, fmt.Errorf("invalid credentials uri")
+	}
+
 	res, err := http.Get(uri)
 	if err != nil {
 		return nil, err
