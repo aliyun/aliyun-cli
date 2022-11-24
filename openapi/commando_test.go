@@ -344,7 +344,7 @@ func TestCreateInvoker(t *testing.T) {
 	AddFlags(ctx.Flags())
 	ctx.Flags().Get("force").SetAssigned(false)
 	ctx.Flags().Get("version").SetAssigned(false)
-	invoker, err = commando.createInvoker(ctx, "cr", "Get", "/region")
+	invoker, err = commando.createInvoker(ctx, "cs", "Get", "/api/v1/clusters")
 	_, ok = invoker.(*RestfulInvoker)
 	assert.True(t, ok)
 	assert.Nil(t, err)
