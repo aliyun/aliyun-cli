@@ -3,8 +3,8 @@ github.com/alibabacloud-go/debug v0.0.0-20190504072949-9472017b5c68/go.mod h1:6p
 github.com/alibabacloud-go/tea v1.1.8/go.mod h1:/tmnEaQMyb4Ky1/5D+SE1BAsa5zj/KeGOFfwYm3N/p4=
 github.com/alibabacloud-go/tea v1.1.20 h1:wFK4xEbvGYMtzTyHhIju9D7ecWxvSUdoLO6y4vDLFik=
 github.com/alibabacloud-go/tea v1.1.20/go.mod h1:nXxjm6CIFkBhwW4FQkNrolwbfon8Svy6cujmKFUq98A=
-github.com/aliyun/alibaba-cloud-sdk-go v1.62.11 h1:Q1UAKWVxfdWP8vfc+MMrsZbNw7rwxG127lgV92CDkAU=
-github.com/aliyun/alibaba-cloud-sdk-go v1.62.11/go.mod h1:Api2AkmMgGaSUAhmk76oaFObkoeCPc/bKAqcyplPODs=
+github.com/aliyun/alibaba-cloud-sdk-go v1.62.77 h1:qibzE6j4xrBUDXQ+VZGguqYKQSAkd7z2y3UQz/RNvcc=
+github.com/aliyun/alibaba-cloud-sdk-go v1.62.77/go.mod h1:Api2AkmMgGaSUAhmk76oaFObkoeCPc/bKAqcyplPODs=
 github.com/aliyun/aliyun-oss-go-sdk v2.2.6+incompatible h1:KXeJoM1wo9I/6xPTyt6qCxoSZnmASiAjlrr0dyTUKt8=
 github.com/aliyun/aliyun-oss-go-sdk v2.2.6+incompatible/go.mod h1:T/Aws4fEfogEE9v+HPhhw+CntffsBHJ8nXQCwKr0/g8=
 github.com/aliyun/credentials-go v1.2.4 h1:qu8c21BCvbaPJArEcsSk7GbSdxYFiACCjYzkEKCoeLA=
