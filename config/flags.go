@@ -32,6 +32,7 @@ const (
 	PrivateKeyFlagName      = "private-key"
 	KeyPairNameFlagName     = "key-pair-name"
 	RegionFlagName          = "region"
+	RegionIdFlagName        = "RegionId"
 	LanguageFlagName        = "language"
 	ReadTimeoutFlagName     = "read-timeout"
 	ConnectTimeoutFlagName  = "connect-timeout"
@@ -47,6 +48,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewProfileFlag())
 	fs.Add(NewLanguageFlag())
 	fs.Add(NewRegionFlag())
+	fs.Add(NewRegionIdFlag())
 	fs.Add(NewConfigurePathFlag())
 	fs.Add(NewAccessKeyIdFlag())
 	fs.Add(NewAccessKeySecretFlag())
@@ -119,6 +121,10 @@ func KeyPairNameFlag(fs *cli.FlagSet) *cli.Flag {
 
 func RegionFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(RegionFlagName)
+}
+
+func RegionIdFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(RegionIdFlagName)
 }
 
 func LanguageFlag(fs *cli.FlagSet) *cli.Flag {
@@ -290,6 +296,14 @@ func NewRegionFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--region <regionId>` to assign region",
 			"使用 `--region <regionId>` 来指定访问大区")}
+}
+
+func NewRegionIdFlag() *cli.Flag {
+	return &cli.Flag{Category: "config",
+		Name:         RegionIdFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Hidden:       true,
+	}
 }
 
 func NewLanguageFlag() *cli.Flag {
