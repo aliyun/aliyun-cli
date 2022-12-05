@@ -17,10 +17,11 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/meta"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestBasicInvoker_Init(t *testing.T) {
@@ -42,6 +43,7 @@ func TestBasicInvoker_Init(t *testing.T) {
 	regionflag.SetAssigned(true)
 	regionflag.SetValue("cn-hangzhou")
 	ctx.Flags().Add(regionflag)
+	ctx.Flags().Add(config.NewRegionIdFlag())
 
 	endpointflag := NewEndpointFlag()
 	endpointflag.SetAssigned(true)

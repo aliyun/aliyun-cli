@@ -16,15 +16,15 @@ package openapi
 import (
 	"bytes"
 	"strings"
+	"testing"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/meta"
-	"github.com/stretchr/testify/assert"
-
-	"testing"
 )
 
 func Test_main(t *testing.T) {
@@ -341,6 +341,7 @@ func TestCreateInvoker(t *testing.T) {
 
 	ctx.EnterCommand(&cli.Command{})
 	ctx.Flags().Add(config.NewRegionFlag())
+	ctx.Flags().Add(config.NewRegionIdFlag())
 	AddFlags(ctx.Flags())
 	ctx.Flags().Get("force").SetAssigned(false)
 	ctx.Flags().Get("version").SetAssigned(false)

@@ -21,6 +21,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
+
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/meta"
@@ -83,6 +84,8 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 
 	a.request.RegionId = a.profile.RegionId
 	if v, ok := config.RegionFlag(ctx.Flags()).GetValue(); ok {
+		a.request.RegionId = v
+	} else if v, ok := config.RegionIdFlag(ctx.Flags()).GetValue(); ok {
 		a.request.RegionId = v
 	}
 
