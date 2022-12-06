@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -75,6 +75,11 @@ func TestZshInstaller(t *testing.T) {
 }
 
 func TestCompletionInstallers(t *testing.T) {
+	// Check if we are in CI env.
+	if _, ok := os.LookupEnv("CI"); !ok {
+		t.SkipNow()
+	}
+
 	i := completionInstallers()
 	if runtime.GOOS == "windows" {
 		assert.Empty(t, i)
@@ -99,6 +104,7 @@ func TestCompletionInstallers(t *testing.T) {
 	os.Remove(path)
 	os.Remove(path2)
 }
+
 func TestCompletion(t *testing.T) {
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
