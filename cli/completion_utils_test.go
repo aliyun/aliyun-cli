@@ -108,8 +108,8 @@ func TestCopyFile(t *testing.T) {
 }
 
 func TestFishConfigDir(t *testing.T) {
-	// Check if we are in github action env.
-	if _, ok := os.LookupEnv("GITHUB_ACTION"); !ok {
+	// Check if we are in CI env.
+	if _, ok := os.LookupEnv("CI"); !ok {
 		t.SkipNow()
 	}
 
