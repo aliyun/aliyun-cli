@@ -16,7 +16,6 @@ package cli
 import (
 	"bufio"
 	"os"
-	"os/user"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -107,25 +106,6 @@ func TestCopyFile(t *testing.T) {
 
 }
 
-func TestFishConfigDir(t *testing.T) {
-	// Check if we are in CI env.
-	if _, ok := os.LookupEnv("CI"); !ok {
-		t.SkipNow()
-	}
-
-	u := getConfigHomePath()
-	assert.NotNil(t, u)
-
-	path := fishConfigDir()
-	assert.Empty(t, path)
-
-	configdir := u + `/fish`
-	os.MkdirAll(configdir, os.ModePerm)
-	path = fishConfigDir()
-	assert.NotNil(t, path)
-	os.RemoveAll(u)
-}
-
 func TestGetBinaryPath(t *testing.T) {
 	bpath, err := getBinaryPath()
 	assert.Nil(t, err)
@@ -135,11 +115,10 @@ func TestGetBinaryPath(t *testing.T) {
 func TestRCFile(t *testing.T) {
 	path := rcFile("aa")
 	assert.Empty(t, path)
-	u, _ := user.Current()
-	name := u.HomeDir + "/hh"
+	name := getHomeDir() + "/hh"
 	file, err := os.Create(name)
+	defer file.Close()
 	assert.Nil(t, err)
-	file.Close()
 	path = rcFile("hh")
 	assert.NotNil(t, path)
 	os.Remove(name)

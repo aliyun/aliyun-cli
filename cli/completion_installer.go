@@ -15,6 +15,8 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"os/user"
 
 	"github.com/aliyun/aliyun-cli/i18n"
 )
@@ -22,6 +24,20 @@ import (
 var hookGetBinaryPath = func(fn func() (string, error)) func() (string, error) {
 	return fn
 }
+
+func getHomeDir() string {
+	homeDirFromEnv := os.Getenv("MOCK_USER_HOME_DIR")
+	if homeDirFromEnv != "" {
+		os.Mkdir(homeDirFromEnv, os.ModePerm)
+		return homeDirFromEnv
+	}
+	u, err := user.Current()
+	if err != nil {
+		return ""
+	}
+	return u.HomeDir
+}
+
 var uninstallFlag = &Flag{
 	Name:  "uninstall",
 	Short: i18n.T("uninstall auto completion", "卸载自动完成"),
