@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -107,19 +107,19 @@ func TestCopyFile(t *testing.T) {
 
 }
 
-func TestFishConfigDir(t *testing.T) {
-	u := getConfigHomePath()
-	assert.NotNil(t, u)
+// func TestFishConfigDir(t *testing.T) {
+// 	u := getConfigHomePath()
+// 	assert.NotNil(t, u)
 
-	path := fishConfigDir()
-	assert.Empty(t, path)
+// 	path := fishConfigDir()
+// 	assert.Empty(t, path)
 
-	configdir := u + `/fish`
-	os.MkdirAll(configdir, os.ModePerm)
-	path = fishConfigDir()
-	assert.NotNil(t, path)
-	os.RemoveAll(u)
-}
+// 	configdir := u + `/fish`
+// 	os.MkdirAll(configdir, os.ModePerm)
+// 	path = fishConfigDir()
+// 	assert.NotNil(t, path)
+// 	os.RemoveAll(u)
+// }
 
 func TestGetBinaryPath(t *testing.T) {
 	bpath, err := getBinaryPath()
