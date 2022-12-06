@@ -39,7 +39,7 @@ func TestCmdPrint(t *testing.T) {
 		flags:  NewFlagSet(),
 	}
 
-	//PrintHead
+	// PrintHead
 	c.PrintHead(ctx)
 	assert.Equal(t, "use `--profile <profileName>` to select profile\n", w.String())
 

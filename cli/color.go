@@ -117,16 +117,8 @@ func ProductListColor() string {
 	return productListColor
 }
 
-func SetProductListColor(color string) {
-	productListColor = color
-}
-
 func APIListColor() string {
 	return apiListColor
-}
-
-func SetAPIListColor(color string) {
-	apiListColor = color
 }
 
 func colorized(color string, a ...interface{}) string {
@@ -140,40 +132,16 @@ func PrintWithColor(w io.Writer, color string, a ...interface{}) (n int, err err
 	return Print(w, colorized(color, a...))
 }
 
-func Debug(w io.Writer, a ...interface{}) (n int, err error) {
-	return Print(w, colorized(DebugColor, a...))
-}
-
-func Info(w io.Writer, a ...interface{}) (n int, err error) {
-	return Print(w, colorized(InfoColor, a...))
-}
-
 func Notice(w io.Writer, a ...interface{}) (n int, err error) {
 	return Print(w, colorized(NoticeColor, a...))
-}
-
-func Warning(w io.Writer, a ...interface{}) (n int, err error) {
-	return Print(w, colorized(WarningColor, a...))
 }
 
 func Error(w io.Writer, a ...interface{}) (n int, err error) {
 	return Print(w, colorized(ErrorColor, a...))
 }
 
-func Debugf(w io.Writer, format string, args ...interface{}) (n int, err error) {
-	return Debug(w, fmt.Sprintf(format, args...))
-}
-
-func Infof(w io.Writer, format string, args ...interface{}) (n int, err error) {
-	return Info(w, fmt.Sprintf(format, args...))
-}
-
 func Noticef(w io.Writer, format string, args ...interface{}) (n int, err error) {
 	return Notice(w, fmt.Sprintf(format, args...))
-}
-
-func Warningf(w io.Writer, format string, args ...interface{}) (n int, err error) {
-	return Warning(w, fmt.Sprintf(format, args...))
 }
 
 func Errorf(w io.Writer, format string, args ...interface{}) (n int, err error) {
