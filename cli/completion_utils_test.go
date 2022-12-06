@@ -108,7 +108,10 @@ func TestCopyFile(t *testing.T) {
 }
 
 func TestFishConfigDir(t *testing.T) {
-	t.SkipNow()
+	// Check if we are in github action env.
+	if _, ok := os.LookupEnv("GITHUB_ACTION"); !ok {
+		t.SkipNow()
+	}
 
 	u := getConfigHomePath()
 	assert.NotNil(t, u)

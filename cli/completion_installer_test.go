@@ -75,7 +75,10 @@ func TestZshInstaller(t *testing.T) {
 }
 
 func TestCompletionInstallers(t *testing.T) {
-	t.SkipNow()
+	// Check if we are in github action env.
+	if _, ok := os.LookupEnv("GITHUB_ACTION"); !ok {
+		t.SkipNow()
+	}
 
 	i := completionInstallers()
 	if runtime.GOOS == "windows" {
