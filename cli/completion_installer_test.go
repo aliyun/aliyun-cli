@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"errors"
 	"os"
-	"os/user"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -26,9 +25,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-//  func TestNewAutoCompleteCommand(t *testing.T){
-
-//  }
+func init() {
+	wd, _ := os.Getwd()
+	homeDir := filepath.Join(wd, "mock_user")
+	os.Setenv("MOCK_USER_HOME_DIR", homeDir)
+	os.Remove(homeDir)
+}
 
 func TestBashInstaller(t *testing.T) {
 	var bi bashInstaller
@@ -75,28 +77,21 @@ func TestZshInstaller(t *testing.T) {
 }
 
 func TestCompletionInstallers(t *testing.T) {
-	// Check if we are in CI env.
-	if _, ok := os.LookupEnv("CI"); !ok {
-		t.SkipNow()
-	}
-
 	i := completionInstallers()
 	if runtime.GOOS == "windows" {
 		assert.Empty(t, i)
 	} else {
-		assert.NotNil(t, i)
+		assert.Nil(t, i)
 	}
 
-	u, err := user.Current()
-	assert.Nil(t, err)
-	path := filepath.Join(u.HomeDir, ".bashrc")
-	err = createFile(path, "ecs")
+	path := filepath.Join(getHomeDir(), ".bashrc")
+	err := createFile(path, "ecs")
 	assert.Nil(t, err)
 	i = completionInstallers()
 	if runtime.GOOS == "windows" {
 		assert.Len(t, i, 1)
 	}
-	path2 := filepath.Join(u.HomeDir, ".zshrc")
+	path2 := filepath.Join(getHomeDir(), ".zshrc")
 	err = createFile(path2, "ecs")
 	assert.Nil(t, err)
 	i = completionInstallers()
