@@ -17,6 +17,9 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"os/user"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/i18n"
@@ -71,31 +74,33 @@ func TestZshInstaller(t *testing.T) {
 	os.Remove("test.txt")
 }
 
-// func TestCompletionInstallers(t *testing.T) {
-// 	i := completionInstallers()
-// 	if runtime.GOOS == "windows" {
-// 		assert.Empty(t, i)
-// 	} else {
-// 		assert.NotNil(t, i)
-// 	}
+func TestCompletionInstallers(t *testing.T) {
+	t.SkipNow()
 
-// 	u, err := user.Current()
-// 	assert.Nil(t, err)
-// 	path := filepath.Join(u.HomeDir, ".bashrc")
-// 	err = createFile(path, "ecs")
-// 	assert.Nil(t, err)
-// 	i = completionInstallers()
-// 	if runtime.GOOS == "windows" {
-// 		assert.Len(t, i, 1)
-// 	}
-// 	path2 := filepath.Join(u.HomeDir, ".zshrc")
-// 	err = createFile(path2, "ecs")
-// 	assert.Nil(t, err)
-// 	i = completionInstallers()
-// 	assert.Len(t, i, 2)
-// 	os.Remove(path)
-// 	os.Remove(path2)
-// }
+	i := completionInstallers()
+	if runtime.GOOS == "windows" {
+		assert.Empty(t, i)
+	} else {
+		assert.NotNil(t, i)
+	}
+
+	u, err := user.Current()
+	assert.Nil(t, err)
+	path := filepath.Join(u.HomeDir, ".bashrc")
+	err = createFile(path, "ecs")
+	assert.Nil(t, err)
+	i = completionInstallers()
+	if runtime.GOOS == "windows" {
+		assert.Len(t, i, 1)
+	}
+	path2 := filepath.Join(u.HomeDir, ".zshrc")
+	err = createFile(path2, "ecs")
+	assert.Nil(t, err)
+	i = completionInstallers()
+	assert.Len(t, i, 2)
+	os.Remove(path)
+	os.Remove(path2)
+}
 
 func TestCompletion(t *testing.T) {
 	w := new(bytes.Buffer)
