@@ -30,7 +30,3 @@ func (a *Text) Get(lang string) string {
 	}
 	return s
 }
-
-func (a *Text) Put(lang string, txt string) {
-	a.dic[lang] = txt
-}

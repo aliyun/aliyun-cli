@@ -15,6 +15,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
@@ -24,7 +25,9 @@ import (
 )
 
 func main() {
-	cli.PlatformCompatible()
+	if runtime.GOOS == `windows` {
+		cli.DisableColor()
+	}
 	writer := cli.DefaultWriter()
 	stderr := cli.DefaultStderrWriter()
 
