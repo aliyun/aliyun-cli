@@ -6,7 +6,7 @@ require (
 	github.com/alibabacloud-go/tea v1.1.20
 	github.com/aliyun/alibaba-cloud-sdk-go v1.62.11
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.6+incompatible
-	github.com/aliyun/credentials-go v1.2.4
+	github.com/aliyun/credentials-go v1.2.5
 	github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc
 	github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1
 	github.com/jmespath/go-jmespath v0.4.0
