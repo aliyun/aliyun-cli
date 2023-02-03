@@ -116,7 +116,11 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 		return fmt.Errorf("config failed: %s", err.Error())
 	}
 
-	accessKeyID, accessSecret, stsToken, err := getSessionCredential(&profile)
+	proxyHost, ok := ctx.Flags().GetValue("proxy-host")
+	if !ok {
+		proxyHost = ""
+	}
+	accessKeyID, accessSecret, stsToken, err := getSessionCredential(&profile, tea.String(proxyHost))
 	if err != nil {
 		return fmt.Errorf("can't get credential %s", err)
 	}
@@ -169,7 +173,7 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 
 }
 
-func getSessionCredential(profile *config.Profile) (string, string, string, error) {
+func getSessionCredential(profile *config.Profile, proxyHost *string) (string, string, string, error) {
 	var conf *credentials.Config
 	switch profile.Mode {
 	case config.AK:
@@ -194,6 +198,7 @@ func getSessionCredential(profile *config.Profile) (string, string, string, erro
 			RoleSessionName:       &profile.RoleSessionName,
 			Policy:                tea.String(""),
 			RoleSessionExpiration: &profile.ExpiredSeconds,
+			Proxy:                 proxyHost,
 		}
 	case config.EcsRamRole:
 		conf = &credentials.Config{
@@ -217,7 +222,7 @@ func getSessionCredential(profile *config.Profile) (string, string, string, erro
 			fmt.Println(string(buf))
 			return "", "", "", err
 		}
-		return getSessionCredential(cp)
+		return getSessionCredential(cp, proxyHost)
 	}
 	credential, err := credentials.NewCredential(conf)
 	if err != nil {
