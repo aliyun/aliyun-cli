@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,9 +14,10 @@
 package openapi
 
 import (
+	"testing"
+
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestAFlags(t *testing.T) {
@@ -69,4 +70,8 @@ func TestAFlags(t *testing.T) {
 	outputflag := OutputFlag(flagset)
 	assert.Equal(t, "output", outputflag.Name)
 	assert.Equal(t, "use `--output cols=Field1,Field2 [rows=jmesPath]` to print output as table", outputflag.Short.Text())
+
+	methodflag := MethodFlag(flagset)
+	assert.Equal(t, "method", methodflag.Name)
+	assert.Equal(t, "add `--method {GET|POST}` to assign rpc call method.", methodflag.Short.Text())
 }
