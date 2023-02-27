@@ -19,7 +19,7 @@ import (
 )
 
 func NewConfigureDeleteCommand() *cli.Command {
-	cmd := &cli.Command{
+	return &cli.Command{
 		Name:  "delete",
 		Usage: "delete --profile <profileName>",
 		Short: i18n.T("delete the specified profile", "删除指定配置"),
@@ -34,7 +34,6 @@ func NewConfigureDeleteCommand() *cli.Command {
 			return nil
 		},
 	}
-	return cmd
 }
 
 func doConfigureDelete(ctx *cli.Context, profileName string) {
