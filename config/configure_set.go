@@ -20,36 +20,18 @@ import (
 	"github.com/aliyun/aliyun-cli/i18n"
 )
 
-const configureSetHelpEn = ``
-const configureSetHelpZh = ``
-
 func NewConfigureSetCommand() *cli.Command {
-
-	cmd := &cli.Command{
+	return &cli.Command{
 		Name: "set",
 		Short: i18n.T(
 			"set config in non interactive mode",
 			"使用非交互式方式进行配置"),
-		Long: i18n.T(
-			configureSetHelpEn,
-			configureSetHelpZh,
-		),
 		Usage: "set [--profile <profileName>] [--language {en|zh}] ...",
 		Run: func(c *cli.Context, args []string) error {
 			doConfigureSet(c.Writer(), c.Flags())
 			return nil
 		},
 	}
-
-	AddFlags(cmd.Flags())
-
-	//fs.Add(cli.Flag{Name: "output", AssignedMode: cli.AssignedOnce, Hidden: true,
-	//	Usage: i18n.T("* assign output format, only support json", "")})
-
-	//fs.Add(cli.Flag{Name: "site", AssignedMode: cli.AssignedOnce,
-	//	Usage: i18n.T("assign site, support china/international/japan", "")})
-
-	return cmd
 }
 
 func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
