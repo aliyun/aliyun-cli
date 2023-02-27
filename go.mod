@@ -14,7 +14,7 @@ require (
 	github.com/onsi/gomega v1.27.1
 	github.com/stretchr/testify v1.8.1
 	github.com/syndtr/goleveldb v1.0.0
-	golang.org/x/crypto v0.0.0-20220331220935-ae2d96664a29
+	golang.org/x/crypto v0.6.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 	gopkg.in/ini.v1 v1.67.0
 )
