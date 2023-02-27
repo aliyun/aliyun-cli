@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -33,6 +33,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewDryRunFlag())
 	fs.Add(NewQuietFlag())
 	fs.Add(NewRoaFlag())
+	fs.Add(NewMethodFlag())
 }
 
 const (
@@ -48,6 +49,7 @@ const (
 	DryRunFlagName   = "dryrun"
 	QuietFlagName    = "quiet"
 	OutputFlagName   = "output"
+	MethodFlagName   = "method"
 )
 
 func OutputFlag(fs *cli.FlagSet) *cli.Flag {
@@ -96,6 +98,10 @@ func DryRunFlag(fs *cli.FlagSet) *cli.Flag {
 
 func QuietFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(QuietFlagName)
+}
+
+func MethodFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(MethodFlagName)
 }
 
 // TODO next version
@@ -205,5 +211,16 @@ func NewQuietFlag() *cli.Flag {
 			"使用 `--quiet` 关闭正常输出",
 		),
 		ExcludeWith: []string{DryRunFlagName},
+	}
+}
+
+func NewMethodFlag() *cli.Flag {
+	return &cli.Flag{Category: "caller",
+		Name:         MethodFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"add `--method {GET|PUT|POST|DELETE}` to assign rpc call method.",
+			"使用 `--method` 来指定 RPC 请求的Method",
+		),
 	}
 }
