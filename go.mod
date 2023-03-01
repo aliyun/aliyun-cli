@@ -12,7 +12,7 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.27.2
-	github.com/stretchr/testify v1.8.1
+	github.com/stretchr/testify v1.8.2
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/crypto v0.6.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
