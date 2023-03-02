@@ -61,6 +61,12 @@ func (a *Library) GetProducts() []meta.Product {
 func (a *Library) PrintProducts() {
 	w := tabwriter.NewWriter(a.writer, 8, 0, 1, ' ', 0)
 	cli.PrintfWithColor(w, cli.ColorOff, "\nProducts:\n")
+
+	// sort products by code
+	sort.Slice(a.builtinRepo.Products, func(i, j int) bool {
+		return strings.ToLower(a.builtinRepo.Products[i].Code) < strings.ToLower(a.builtinRepo.Products[j].Code)
+	})
+
 	for _, product := range a.builtinRepo.Products {
 		cli.PrintfWithColor(w, cli.Cyan, "  %s\t%s\n", strings.ToLower(product.Code), product.Name[i18n.GetLanguage()])
 	}
