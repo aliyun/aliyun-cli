@@ -24,7 +24,11 @@ import (
 func DoHello(ctx *cli.Context, profile *Profile) {
 	w := ctx.Writer()
 
+	vpc := VpcFlag(ctx.Flags()).IsAssigned()
 	client, err := profile.GetClient(ctx)
+	if vpc {
+		client.Network = "vpc"
+	}
 
 	if err != nil {
 		cli.Println(w, "-----------------------------------------------")
@@ -36,6 +40,7 @@ func DoHello(ctx *cli.Context, profile *Profile) {
 		cli.Println(w, "-----------------------------------------------")
 		return
 	}
+
 	request := ecs.CreateDescribeRegionsRequest()
 	response := ecs.CreateDescribeRegionsResponse()
 	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {

@@ -50,9 +50,7 @@ func NewConfigureCommand() *cli.Command {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			profileName, _ := ProfileFlag(ctx.Flags()).GetValue()
-			mode, _ := ModeFlag(ctx.Flags()).GetValue()
-			return doConfigure(ctx, profileName, mode)
+			return doConfigure(ctx)
 		},
 	}
 
@@ -63,13 +61,16 @@ func NewConfigureCommand() *cli.Command {
 	return c
 }
 
-func doConfigure(ctx *cli.Context, profileName string, mode string) error {
+func doConfigure(ctx *cli.Context) error {
 	w := ctx.Writer()
 
 	conf, err := loadConfiguration()
 	if err != nil {
 		return err
 	}
+
+	profileName, _ := ProfileFlag(ctx.Flags()).GetValue()
+	mode, _ := ModeFlag(ctx.Flags()).GetValue()
 
 	if profileName == "" {
 		if conf.CurrentProfile == "" {

@@ -75,8 +75,6 @@ func (c *Command) Flags() *FlagSet {
 }
 
 func (c *Command) Execute(ctx *Context, args []string) {
-
-	//
 	// if completion
 	if ctx.completion != nil {
 		args = ctx.completion.GetArgs()
@@ -148,27 +146,23 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 }
 
 func (c *Command) executeInner(ctx *Context, args []string) error {
-	//
 	// fmt.Printf(">>> Execute Command: %s args=%v\n", c.Name, args)
 	parser := NewParser(args, ctx)
 
-	//
 	// get next arg
 	nextArg, _, err := parser.ReadNextArg()
 	if err != nil {
 		return err
 	}
-	//
+
 	// if next arg is help, run help
 	if nextArg == "help" {
 		ctx.help = true
 		return c.executeInner(ctx, parser.GetRemains())
 	}
 
-	//
 	// if next args is not empty, try find sub commands
 	if nextArg != "" {
-		//
 		// if has sub command, run it
 		subCommand := c.GetSubCommand(nextArg)
 		if subCommand != nil {
@@ -176,7 +170,6 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 			return subCommand.executeInner(ctx, parser.GetRemains())
 		}
 
-		//
 		// no sub command and command.Run == nil
 		// raise error
 		if c.Run == nil {
@@ -192,7 +185,6 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 		return fmt.Errorf("parse failed %s", err)
 	}
 
-	//
 	// check flags
 	err = ctx.CheckFlags()
 	if err != nil {

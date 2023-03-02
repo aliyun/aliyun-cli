@@ -22,7 +22,6 @@ import (
 
 //
 // default help flag
-
 func HelpFlag(fs *FlagSet) *Flag {
 	return fs.Get("help")
 }
