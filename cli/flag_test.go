@@ -27,7 +27,6 @@ func resetFlag() *Flag {
 		Name:         "MrX",
 		Shorthand:    'p',
 		DefaultValue: "default",
-		Persistent:   true,
 		Short: i18n.T(
 			"use `--profile <profileName>` to select profile",
 			"使用 `--profile <profileName>` 指定操作的配置集",

@@ -110,61 +110,6 @@ func (fs *FlagSet) GetValue(name string) (string, bool) {
 	return f.GetValue()
 }
 
-//
-//// get value by flag name, if not assigned return default value
-//func (a *FlagSet) GetStringOrDefault(name string, def string) string {
-//	v, ok := a.GetValue(name)
-//	if ok {
-//		return v
-//	} else {
-//		return def
-//	}
-//}
-
-//// put value
-//// return: if duplicated return error
-//func (a *FlagSet) PutValue(name string, value string) error {
-//	f := a.Get(name)
-//	if f != nil {
-//		return f.putValue(value)
-//	} else {
-//		f := Flag{
-//			Name:  name,
-//			value: value,
-//		}
-//		a.flags = append(a.flags, f)
-//		return nil
-//	}
-//}
-
-//func (fs *FlagSet) StringVar(p *string, name string, defaultValue string, usage *i18n.Text) *Flag {
-//	f := &Flag{
-//		Name:         name,
-//		Short:        usage,
-//		DefaultValue: defaultValue,
-//		Required:     false,
-//		AssignedMode: AssignedOnce,
-//		Persistent:   false,
-//		p:            p,
-//	}
-//	fs.Add(f)
-//	return f
-//}
-//
-//func (fs *FlagSet) PersistentStringVar(p *string, name string, defaultValue string, usage *i18n.Text) *Flag {
-//	f := &Flag{
-//		Name:         name,
-//		Short:        usage,
-//		DefaultValue: defaultValue,
-//		Required:     false,
-//		AssignedMode: AssignedOnce,
-//		Persistent:   true,
-//		p:            p,
-//	}
-//	fs.Add(f)
-//	return f
-//}
-
 // get assigned count for flags
 func (fs *FlagSet) assignedCount() int {
 	n := 0
@@ -178,7 +123,7 @@ func (fs *FlagSet) assignedCount() int {
 
 //
 // merge FlagSet with from
-func (fs *FlagSet) mergeWith(from *FlagSet, applier func(f *Flag) bool) *FlagSet {
+func (fs *FlagSet) mergeWith(from *FlagSet) *FlagSet {
 	if from == nil {
 		return fs
 	}
@@ -188,24 +133,6 @@ func (fs *FlagSet) mergeWith(from *FlagSet, applier func(f *Flag) bool) *FlagSet
 			r.Add(f)
 		}
 	}
-	for _, rv := range from.Flags() {
-		if applier(rv) {
-			r.put(rv)
-		}
-	}
+
 	return r
-}
-
-// put flag, replace old value if duplicated
-func (fs *FlagSet) put(f *Flag) {
-
-	for _, lv := range fs.flags {
-		if lv == f {
-			return
-		}
-	}
-	fs.flags = append(fs.flags, f)
-	for _, s := range f.GetFormations() {
-		fs.index[s] = f
-	}
 }

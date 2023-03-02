@@ -102,9 +102,7 @@ func (ctx *Context) EnterCommand(cmd *Command) {
 		ctx.unknownFlags = NewFlagSet()
 	}
 
-	ctx.flags = cmd.flags.mergeWith(ctx.flags, func(f *Flag) bool {
-		return f.Persistent
-	})
+	ctx.flags = cmd.flags.mergeWith(ctx.flags)
 	ctx.flags.Add(NewHelpFlag())
 }
 

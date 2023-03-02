@@ -104,29 +104,13 @@ func TestAssignedCount(t *testing.T) {
 	assert.Equal(t, 1, fs.assignedCount())
 }
 
-func TestPut(t *testing.T) {
-	fs := NewFlagSet()
-	fs.put(&Flag{Name: "profile", Shorthand: 'p'})
-	assert.Len(t, fs.flags, 1)
-	fs.put(&Flag{Name: "profile", Shorthand: 'r'})
-	assert.Len(t, fs.flags, 2)
-	assert.Equal(t, 'p', fs.flags[0].Shorthand)
-	fs.put(&Flag{Name: "profil", Shorthand: 'a'})
-	assert.Len(t, fs.flags, 3)
-}
-
 func TestMergeWith(t *testing.T) {
-	var a = func(f *Flag) bool {
-		//merge with the rule that you need
-		//in this case , I need merge all
-		return true
-	}
 	fs := NewFlagSet()
-	assert.True(t, reflect.DeepEqual(fs, fs.mergeWith(nil, a)))
+	assert.True(t, reflect.DeepEqual(fs, fs.mergeWith(nil)))
 	fs2 := NewFlagSet()
 	fs2.Add(&Flag{Name: "profile", Shorthand: 'p'})
 	fs2.Add(&Flag{Name: "mode", Shorthand: 'm'})
-	assert.Len(t, fs.mergeWith(fs2, a).flags, 2)
+	assert.Len(t, fs.mergeWith(fs2).flags, 2)
 	fs.Add(&Flag{Name: "AK", Shorthand: 'a'})
-	assert.Len(t, fs.mergeWith(fs2, a).flags, 3)
+	assert.Len(t, fs.mergeWith(fs2).flags, 3)
 }

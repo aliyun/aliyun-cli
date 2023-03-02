@@ -21,7 +21,7 @@ import (
 )
 
 func NewConfigureSetCommand() *cli.Command {
-	return &cli.Command{
+	cmd := &cli.Command{
 		Name: "set",
 		Short: i18n.T(
 			"set config in non interactive mode",
@@ -32,6 +32,10 @@ func NewConfigureSetCommand() *cli.Command {
 			return nil
 		},
 	}
+
+	AddFlags(cmd.Flags())
+
+	return cmd
 }
 
 func doConfigureSet(w io.Writer, flags *cli.FlagSet) {

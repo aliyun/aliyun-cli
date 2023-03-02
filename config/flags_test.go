@@ -28,7 +28,6 @@ func TestAddFlag(t *testing.T) {
 			Name:         ProfileFlagName,
 			Shorthand:    'p',
 			DefaultValue: "default",
-			Persistent:   true,
 			Short: i18n.T(
 				"use `--profile <profileName>` to select profile",
 				"使用 `--profile <profileName>` 指定操作的配置集",
@@ -46,7 +45,6 @@ func TestAddFlag(t *testing.T) {
 			Category:     "config",
 			Name:         ModeFlagName,
 			DefaultValue: "AK",
-			Persistent:   true,
 			Short: i18n.T(
 				"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName}` to assign authenticate mode",
 				"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName}` 指定认证方式"),
@@ -76,7 +74,6 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   false,
 		}
 		newAccessKeySecretFlag = &cli.Flag{
 			Category:     "config",
@@ -94,7 +91,6 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   false,
 		}
 		newStsTokenFlag = &cli.Flag{
 			Category:     "config",
@@ -112,13 +108,11 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   false,
 		}
 		newRamRoleNameFlag = &cli.Flag{
 			Category:     "config",
 			Name:         RamRoleNameFlagName,
 			AssignedMode: cli.AssignedOnce,
-			Persistent:   true,
 			Short: i18n.T(
 				"use `--ram-role-name <RamRoleName>` to assign RamRoleName",
 				"使用 `--ram-role-name <RamRoleName>` 指定RamRoleName"),
@@ -148,7 +142,6 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   false,
 		}
 		newRoleSessionNameFlag = &cli.Flag{
 			Category:     "config",
@@ -166,7 +159,6 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   false,
 		}
 		newPrivateKeyFlag = &cli.Flag{
 			Category:     "config",
@@ -184,7 +176,6 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   false,
 		}
 		newKeyPairNameFlag = &cli.Flag{
 			Category:     "config",
@@ -202,7 +193,6 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   false,
 		}
 		newProcessCommandFlag = &cli.Flag{
 			Category:     "config",
@@ -221,7 +211,6 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   false,
 		}
 		newRegionFlag = &cli.Flag{
 			Category:     "config",
@@ -239,7 +228,6 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   false,
 		}
 		newLanguageFlag = &cli.Flag{
 			Category:     "config",
@@ -257,7 +245,6 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   false,
 		}
 		newReadTimeoutFlag = &cli.Flag{
 			Category:     "caller",
@@ -275,7 +262,6 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   false,
 		}
 		newConnectTimeFlag = &cli.Flag{
 			Category:     "caller",
@@ -293,7 +279,6 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   false,
 		}
 		newRetryCountFlag = &cli.Flag{
 			Category:     "caller",
@@ -311,14 +296,12 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   false,
 		}
 		newSkipSecureVerify = &cli.Flag{
 			Category:     "caller",
 			Name:         SkipSecureVerifyName,
 			AssignedMode: cli.AssignedNone,
 			Hidden:       false,
-			Persistent:   true,
 			Short: i18n.T(
 				"use `--skip-secure-verify` to skip https certification validate [Not recommended]",
 				"使用 `--skip-secure-verify` 跳过https的证书校验 [不推荐使用]",
@@ -348,7 +331,6 @@ func TestAddFlag(t *testing.T) {
 			ExcludeWith:  nil,
 			Shorthand:    0,
 			DefaultValue: "",
-			Persistent:   false,
 		}
 	)
 	f := NewExpiredSecondsFlag()

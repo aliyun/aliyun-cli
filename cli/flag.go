@@ -59,9 +59,6 @@ type Flag struct {
 	// `AssignedRepeatable`: flag can appear multi times sample: `--flag1 [v1] [v2] [v3] [field1=value1]`, use with Fields
 	AssignedMode AssignedMode
 
-	// If Persistent is true, the flag can apply to child commands
-	Persistent bool
-
 	// If Hidden is true, it will not appear in --help mode
 	Hidden bool
 
