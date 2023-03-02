@@ -75,9 +75,6 @@ func (c *Command) Flags() *FlagSet {
 }
 
 func (c *Command) Execute(ctx *Context, args []string) {
-
-	//
-	// if completion
 	if ctx.completion != nil {
 		args = ctx.completion.GetArgs()
 	}
