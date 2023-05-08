@@ -304,10 +304,10 @@ The following two options are required when using the `--force` option:
 
 ### Special argument
 
-When you input some argument like "-PortRange -1/-1", will cause parse error.In this case, you could assign value like this:
---PortRange=-1/-1.
+When you input some argument like "-PortRange -1/-1", will cause parse error. In this case, you could assign value like this:
+`--PortRange=-1/-1`.
 
-## Support for environment variables
+## Supported environment variables
 
 We supported following environment variables:
 
