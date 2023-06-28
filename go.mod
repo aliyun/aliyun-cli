@@ -3,7 +3,7 @@ module github.com/aliyun/aliyun-cli
 go 1.18
 
 require (
-	github.com/alibabacloud-go/tea v1.2.0
+	github.com/alibabacloud-go/tea v1.2.1
 	github.com/aliyun/alibaba-cloud-sdk-go v1.62.191
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.7+incompatible
 	github.com/aliyun/credentials-go v1.3.0
@@ -33,7 +33,7 @@ require (
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/opentracing/opentracing-go v1.2.1-0.20220228012449-10b1cf09e00b // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	golang.org/x/net v0.10.0 // indirect
+	golang.org/x/net v0.11.0 // indirect
 	golang.org/x/sys v0.9.0 // indirect
 	golang.org/x/term v0.9.0 // indirect
 	golang.org/x/text v0.10.0 // indirect
