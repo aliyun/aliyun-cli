@@ -1,7 +1,6 @@
 package lib
 
 import (
-	"io/ioutil"
 	"os"
 
 	. "gopkg.in/check.v1"
@@ -40,6 +39,10 @@ func (s *OssutilCommandSuite) TestUserQosOptionsEmptyEndpoint(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(12)
 	s.putBucket(bucketName, c)
 
+	cfile := randStr(10)
+	data := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	s.createFile(cfile, data, c)
+
 	var str string
 	strMethod := "get"
 	options := OptionMapType{
@@ -47,26 +50,15 @@ func (s *OssutilCommandSuite) TestUserQosOptionsEmptyEndpoint(c *C) {
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
-		"configFile":      &configFile,
+		"configFile":      &cfile,
 		"method":          &strMethod,
 	}
 
-	// oss client error
-	// set endpoint emtpy
-	oldConfigStr, err := ioutil.ReadFile(configFile)
-	c.Assert(err, IsNil)
-	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
-	fd.WriteString(configStr)
-	fd.Close()
-
 	qosArgs := []string{}
-	_, err = cm.RunCommand("user-qos", qosArgs, options)
+	_, err := cm.RunCommand("user-qos", qosArgs, options)
 	c.Assert(err, NotNil)
 
-	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
-	c.Assert(err, IsNil)
-
+	os.Remove(cfile)
 	s.removeBucket(bucketName, true, c)
 }
 

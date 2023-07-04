@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"time"
+
 	. "gopkg.in/check.v1"
 )
 
@@ -264,7 +265,7 @@ func (s *OssutilCommandSuite) TestBucketReplicationDeleteSuccess(c *C) {
 	err = xml.Unmarshal(content, &result)
 	c.Assert(err, IsNil)
 
-	c.Assert(result.Rules[0].Status, Equals, "starting")
+	c.Assert(result.Rules[0].Status, NotNil) //maybe starting or doing
 	c.Assert(result.Rules[0].Destination.Location, Equals, "oss-cn-"+destinationRegion)
 	c.Assert(result.Rules[0].Destination.Bucket, Equals, destinationBucketName)
 	c.Assert(result.Rules[0].HistoricalObjectReplication, Equals, "enabled")
@@ -815,10 +816,38 @@ func (s *OssutilCommandSuite) TestBucketReplicationGetProgressWithRuleID(c *C) {
 	c.Assert(progressResult.Rules[0].Destination.Bucket, Equals, secondDestinationBucketName)
 	c.Assert(progressResult.Rules[0].HistoricalObjectReplication, Equals, "enabled")
 
+	// replication command and put rtc
+	rtcPutXml := `<?xml version="1.0" encoding="UTF-8"?>
+<ReplicationRule>
+    <RTC>
+        <Status>disabled</Status>
+    </RTC>
+    <ID>` + ruleID + `</ID>
+</ReplicationRule>`
+
+	rtcPutFileName := "test-putRtc-" + randLowStr(5)
+	s.createFile(rtcPutFileName, rtcPutXml, c)
+	strMethod = "put"
+	item = "rtc"
+	options = OptionMapType{
+		"endpoint":        &sourceEndpoint,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"stsToken":        &str,
+		"configFile":      &configFile,
+		"method":          &strMethod,
+		"item":            &item,
+	}
+
+	getArgs = []string{CloudURLToString(sourceBucketName, ""), rtcPutFileName}
+	_, err = cm.RunCommand("replication", getArgs, options)
+	c.Assert(err, IsNil)
+
 	os.Remove(firstPutFileName)
 	os.Remove(secondPutFileName)
 	os.Remove(getFileName)
 	os.Remove(getProgressFileName)
+	os.Remove(rtcPutFileName)
 
 	// use rm command to rm sourceBucket
 	ok := true

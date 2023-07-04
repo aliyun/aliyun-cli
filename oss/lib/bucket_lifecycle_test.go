@@ -2,8 +2,8 @@ package lib
 
 import (
 	"encoding/xml"
-	"io/ioutil"
 	"os"
+	"time"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	. "gopkg.in/check.v1"
@@ -179,6 +179,10 @@ func (s *OssutilCommandSuite) TestLifecycleOptionsEmptyEndpoint(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(12)
 	s.putBucket(bucketName, c)
 
+	cfile := randStr(10)
+	data := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	s.createFile(cfile, data, c)
+
 	var str string
 	strMethod := "get"
 	options := OptionMapType{
@@ -186,26 +190,15 @@ func (s *OssutilCommandSuite) TestLifecycleOptionsEmptyEndpoint(c *C) {
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
-		"configFile":      &configFile,
+		"configFile":      &cfile,
 		"method":          &strMethod,
 	}
 
-	// oss client error
-	//set endpoint emtpy
-	oldConfigStr, err := ioutil.ReadFile(configFile)
-	c.Assert(err, IsNil)
-	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
-	fd.WriteString(configStr)
-	fd.Close()
-
 	versioingArgs := []string{CloudURLToString(bucketName, "")}
-	_, err = cm.RunCommand("lifecycle", versioingArgs, options)
+	_, err := cm.RunCommand("lifecycle", versioingArgs, options)
 	c.Assert(err, NotNil)
 
-	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
-	c.Assert(err, IsNil)
-
+	os.Remove(cfile)
 	s.removeBucket(bucketName, true, c)
 }
 
@@ -311,6 +304,7 @@ func (s *OssutilCommandSuite) TestLifecycleDelete(c *C) {
 	lifecycleArgs := []string{CloudURLToString(bucketName, ""), lifecycleFileName}
 	_, err := cm.RunCommand("lifecycle", lifecycleArgs, options)
 	c.Assert(err, IsNil)
+	time.Sleep(3 * time.Second)
 
 	// get lifecycle
 	lifecycleDownName := lifecycleFileName + "-down"
@@ -338,6 +332,7 @@ func (s *OssutilCommandSuite) TestLifecycleDelete(c *C) {
 	lifecycleArgs = []string{CloudURLToString(bucketName, ""), lifecycleDownName}
 	_, err = cm.RunCommand("lifecycle", lifecycleArgs, options)
 	c.Assert(err, IsNil)
+	time.Sleep(3 * time.Second)
 
 	// get again
 	strMethod = "get"

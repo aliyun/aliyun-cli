@@ -2,6 +2,7 @@ package lib
 
 import (
 	"fmt"
+	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"os"
 	"strings"
 
@@ -139,10 +140,9 @@ func (s *OssutilCommandSuite) TestMakeBucketIDKey(c *C) {
 }
 
 func (s *OssutilCommandSuite) TestMakeBucketStorageClass(c *C) {
-	bucketName := bucketNamePrefix + randLowStr(10)
-
 	result := []string{StorageStandard, StorageIA, StorageArchive}
 	for i, class := range []string{StorageStandard, StorageIA, StorageArchive, strings.ToUpper(StorageStandard), strings.ToLower(StorageIA), "arCHIvE"} {
+		bucketName := bucketNamePrefix + randLowStr(10)
 		err := s.initPutBucketWithStorageClass([]string{CloudURLToString(bucketName, "")}, class)
 		c.Assert(err, IsNil)
 		err = makeBucketCommand.RunCommand()
@@ -169,6 +169,7 @@ func (s *OssutilCommandSuite) TestMakeBucketStorageClass(c *C) {
 	c.Assert(err, NotNil)
 
 	// test error make bucket
+	bucketName := bucketNamePrefix + randLowStr(10)
 	err = s.initPutBucketWithStorageClass([]string{CloudURLToString(bucketName, "abc")}, StorageStandard)
 	c.Assert(err, IsNil)
 	err = makeBucketCommand.RunCommand()
@@ -201,11 +202,15 @@ func (s *OssutilCommandSuite) TestMbCreateBucketWithRedundancy(c *C) {
 	s.removeBucket(bucketName, true, c)
 
 	// redundancyType is error
+	bucketName = bucketNamePrefix + randLowStr(10)
+	args = []string{CloudURLToString(bucketName, "")}
 	strRedundancy = "LLL"
 	_, err = cm.RunCommand(command, args, options)
 	c.Assert(err, NotNil)
 
 	// create without redundancyType
+	bucketName = bucketNamePrefix + randLowStr(10)
+	args = []string{CloudURLToString(bucketName, "")}
 	delete(options, "redundancyType")
 	_, err = cm.RunCommand(command, args, options)
 	c.Assert(err, IsNil)
@@ -220,7 +225,7 @@ func (s *OssutilCommandSuite) TestMbCreateBucketWithConfigFile(c *C) {
 	command := "mb"
 	args := []string{CloudURLToString(bucketName, ""), inputFile}
 	str := ""
-	retryCount:="1"
+	retryCount := "1"
 	options := OptionMapType{
 		"endpoint":        &str,
 		"accessKeyID":     &str,
@@ -242,6 +247,52 @@ func (s *OssutilCommandSuite) TestMbCreateBucketWithConfigFile(c *C) {
 
 	bucketStat := s.getStat(bucketName, "", c)
 	c.Assert(bucketStat["StorageClass"], Equals, "IA")
+	s.removeBucket(bucketName, true, c)
+	os.Remove(inputFile)
+}
+
+func (s *OssutilCommandSuite) TestMbCreateBucketWithServerEncryption(c *C) {
+	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
+	c.Assert(err, IsNil)
+
+	bucketName := bucketNamePrefix + randLowStr(10)
+	inputFile := "test-ossutil-file-" + randLowStr(5)
+	command := "mb"
+	xmlBody := `
+	<?xml version="1.0" encoding="UTF-8"?>
+	<CreateBucketConfiguration>
+		<StorageClass>IA</StorageClass>
+	</CreateBucketConfiguration>
+	`
+	s.createFile(inputFile, xmlBody, c)
+	args := []string{CloudURLToString(bucketName, ""), inputFile}
+	encryption := "X-Oss-Server-Side-Encryption:KMS#X-Oss-Server-Side-Encryption-Key-Id:kms-id#X-Oss-Server-Side-Data-Encryption:SM4"
+	options := OptionMapType{
+		"endpoint":        &endpoint,
+		"accessKeyID":     &accessKeyID,
+		"accessKeySecret": &accessKeySecret,
+		"meta":            &encryption,
+	}
+	_, err = cm.RunCommand(command, args, options)
+	c.Assert(err, IsNil)
+
+	rs, err := client.GetBucketEncryption(bucketName)
+	c.Assert(err, IsNil)
+	c.Assert(rs.SSEDefault.SSEAlgorithm, Equals, "KMS")
+	c.Assert(rs.SSEDefault.KMSMasterKeyID, Equals, "kms-id")
+	c.Assert(rs.SSEDefault.KMSDataEncryption, Equals, "SM4")
+	s.removeBucket(bucketName, true, c)
+	os.Remove(inputFile)
+
+	encryption1 := "X-Oss-Server-Side-Encryption:AES256"
+	options[OptionMeta] = &encryption1
+	args = []string{CloudURLToString(bucketName, "")}
+	_, err = cm.RunCommand(command, args, options)
+	c.Assert(err, IsNil)
+
+	rs, err = client.GetBucketEncryption(bucketName)
+	c.Assert(err, IsNil)
+	c.Assert(rs.SSEDefault.SSEAlgorithm, Equals, "AES256")
 	s.removeBucket(bucketName, true, c)
 	os.Remove(inputFile)
 }

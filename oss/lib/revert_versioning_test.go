@@ -357,6 +357,7 @@ func (s *OssutilCommandSuite) TestRevertEndTimeFilter(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(10)
 	s.putBucket(bucketName, c)
 	s.putBucketVersioning(bucketName, "enabled", c)
+	time.Sleep(3 * time.Second)
 
 	// create file
 	testFileName := "ossutil_test_file" + randStr(5)
@@ -547,7 +548,24 @@ func (s *OssutilCommandSuite) TestRevertStartAndEndTimeFilterError(c *C) {
 }
 
 func (s *OssutilCommandSuite) TestRevertPayer(c *C) {
-	bucketName := payerBucket
+	bucketName := payerBucket + randLowStr(10)
+	s.putBucket(bucketName, c)
+	s.putBucketVersioning(bucketName, "enabled", c)
+	policy := `
+	{
+		"Version":"1",
+		"Statement":[
+			{
+				"Action":[
+					"oss:*"
+				],
+				"Effect":"Allow",
+				"Principal":["` + payerAccountID + `"],
+				"Resource":["acs:oss:*:*:` + bucketName + `", "acs:oss:*:*:` + bucketName + `/*"]
+			}
+		]
+	}`
+	s.putBucketPolicy(bucketName, policy, c)
 
 	// create file
 	testFileName := "ossutil_test_file" + randStr(5)
@@ -572,7 +590,7 @@ func (s *OssutilCommandSuite) TestRevertPayer(c *C) {
 		"endpoint":        &payerBucketEndPoint,
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
-		"configFile":      &configFile,
+		"configFile":      &payerConfigFile,
 		"force":           &bForce,
 		"recursive":       &recursive,
 		"payer":           &requester,
@@ -589,7 +607,7 @@ func (s *OssutilCommandSuite) TestRevertPayer(c *C) {
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
-		"configFile":      &configFile,
+		"configFile":      &payerConfigFile,
 		"payer":           &requester,
 	}
 	_, err = cm.RunCommand(command, args, options)
@@ -603,7 +621,7 @@ func (s *OssutilCommandSuite) TestRevertPayer(c *C) {
 		"endpoint":        &payerBucketEndPoint,
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
-		"configFile":      &ConfigFile,
+		"configFile":      &payerConfigFile,
 		"recursive":       &recursive,
 		"payer":           &requester,
 	}
@@ -618,7 +636,7 @@ func (s *OssutilCommandSuite) TestRevertPayer(c *C) {
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
-		"configFile":      &configFile,
+		"configFile":      &payerConfigFile,
 		"payer":           &requester,
 	}
 	_, err = cm.RunCommand(command, args, options)
@@ -640,7 +658,7 @@ func (s *OssutilCommandSuite) TestRevertPayerError(c *C) {
 		"endpoint":        &payerBucketEndPoint,
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
-		"configFile":      &ConfigFile,
+		"configFile":      &payerConfigFile,
 		"recursive":       &recursive,
 		"payer":           &requester,
 	}

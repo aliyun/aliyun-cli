@@ -3,6 +3,7 @@ package lib
 import (
 	"encoding/xml"
 	"os"
+	"time"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	. "gopkg.in/check.v1"
@@ -31,6 +32,7 @@ func (s *OssutilCommandSuite) TestBucketLogPutSuccess(c *C) {
 	logArgs := []string{CloudURLToString(bucketName, ""), CloudURLToString(bucketLog, "")}
 	_, err := cm.RunCommand("logging", logArgs, options)
 	c.Assert(err, IsNil)
+	time.Sleep(time.Second * 3)
 
 	// check,get logging
 	logDownName := randLowStr(12) + "-log-down"

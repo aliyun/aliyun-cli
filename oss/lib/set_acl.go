@@ -257,8 +257,11 @@ var setACLCommand = SetACLCommand{
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
-			OptionSkipVerfiyCert,
+			OptionSkipVerifyCert,
 			OptionUserAgent,
+			OptionSignVersion,
+			OptionRegion,
+			OptionCloudBoxID,
 		},
 	},
 }
@@ -337,7 +340,7 @@ func (sc *SetACLCommand) setBucketACL(client *oss.Client, cloudURL CloudURL, rec
 	// check bucket exist or not
 	_, err := client.GetBucketInfo(cloudURL.bucket)
 	if err != nil {
-	    return err
+		return err
 	}
 
 	acl, err := sc.getACL(bucketACL, recursive)

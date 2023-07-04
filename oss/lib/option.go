@@ -17,6 +17,7 @@ const (
 	OptionTypeInt64
 	OptionTypeFlagTrue
 	OptionTypeAlternative
+	OptionTypeStrings
 )
 
 // Option describe the component of a option
@@ -256,15 +257,30 @@ var OptionMap = map[string]Option{
 	OptionSTSRegion: Option{"", "--sts-region", "", OptionTypeString, "", "",
 		"指定sts endpoint的地区，比如cn-shenzhen，其中，cn指代的是国家，shenzhen指代的是地区，用于构造sts endpoint，该选项缺省时，sts endpoint为sts.aliyuncs.com，主要用于RamRoleArn模式",
 		"specifies the region of sts endpoint, such as cn-shenzhen, in this case, cn refers to the country and shenzhen refers to the region, to construct sts endpoint, when this option defaults, the sts endpoint is sts.aliyuncs.com, primarily used in RamRoleArn mode."},
-	OptionSkipVerfiyCert: Option{"", "--skip-verify-cert", "", OptionTypeFlagTrue, "", "",
+	OptionSkipVerifyCert: Option{"", "--skip-verify-cert", "", OptionTypeFlagTrue, "", "",
 		"表示不校验服务端的数字证书",
 		"specifies that the oss server's digital certificate file will not be verified"},
 	OptionItem: Option{"", "--item", "", OptionTypeString, "", "",
 		"表示命令的功能类型，取值为LOCATION、PROGRESS等",
-		"specifies the command's function type. the values ​​are LOCATION, PROGRESS, etc"},
+		"specifies the command's function type. the values are LOCATION, PROGRESS, etc"},
 	OptionUserAgent: Option{"", "--ua", "", OptionTypeString, "", "",
 		"指定http请求中的user agent, 会在缺省值后面加上指定值",
 		"Specify the user agent in the http request, and the specified value will be added after the default value"},
+	OptionObjectFile: Option{"", "--object-file", "", OptionTypeString, "", "",
+		"表示所有待处理的objects，取值为一个存在的文件路径",
+		"Specify all the objects that need to be operated, and the specified value should be a exists file path"},
+	OptionSignVersion: Option{"", "--sign-version", "", OptionTypeString, "", "",
+		"http请求使用的签名算法版本, 缺省为空, 表示v1版本",
+		"The version of the signature algorithm used in the HTTP request. It is empty by default, indicating the V1 version"},
+	OptionRegion: Option{"", "--region", "", OptionTypeString, "", "",
+		"bucket所在的地区, 比如cn-hangzhou, 缺省值为空, 如果使用v4签名则必须传入",
+		"The region where the bucket is located, such as cn-hangzhou. The default value is empty. If V4 signature is used, it must be inputted"},
+	OptionCloudBoxID: Option{"", "--cloudbox-id", "", OptionTypeString, "", "",
+		"云盒的id，缺省值为空，适用于云盒场景",
+		"The ID of the cloud box. The default value is empty. It is applicable to cloud box scenarios"},
+	OptionQueryParam: Option{"", "--query-param", "", OptionTypeStrings, "", "",
+		"设置请求的query参数",
+		"Set the query parameters for the request"},
 }
 
 func (T *Option) getHelp(language string) string {
@@ -307,6 +323,9 @@ func initOption() OptionMapType {
 		case OptionTypeAlternative:
 			val, _ := stringOption(option)
 			m[name] = val
+		case OptionTypeStrings:
+			val, _ := stringsOption(option)
+			m[name] = val
 		default:
 			val, _ := stringOption(option)
 			m[name] = val
@@ -320,6 +339,14 @@ func stringOption(option Option) (*string, error) {
 	if err == nil {
 		// ignore option.def, set it to "", will assemble it after
 		return goopt.String(names, "", option.getHelp(DefaultLanguage)), nil
+	}
+	return nil, err
+}
+
+func stringsOption(option Option) (*[]string, error) {
+	names, err := makeNames(option)
+	if err == nil {
+		return goopt.Strings(names, "", option.getHelp(DefaultLanguage)), nil
 	}
 	return nil, err
 }
@@ -433,4 +460,15 @@ func GetString(name string, options OptionMapType) (string, error) {
 		return "", fmt.Errorf("Error: Option value of %s is not string", name)
 	}
 	return "", fmt.Errorf("Error: There is no option for %s", name)
+}
+
+// GetStrings is used to get slice option from option map parsed by ParseArgOptions
+func GetStrings(name string, options OptionMapType) ([]string, error) {
+	if option, ok := options[name]; ok {
+		if val, ook := option.(*[]string); ook {
+			return *val, nil
+		}
+		return nil, fmt.Errorf("Error: Option value of %s is not []string", name)
+	}
+	return nil, fmt.Errorf("Error: There is no option for %s", name)
 }

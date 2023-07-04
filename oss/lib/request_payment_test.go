@@ -1,7 +1,6 @@
 package lib
 
 import (
-	"io/ioutil"
 	"os"
 	"time"
 
@@ -49,6 +48,7 @@ func (s *OssutilCommandSuite) TestRequestPaymentPutSuccess(c *C) {
 	requestArgs = []string{CloudURLToString(bucketName, ""), "BucketOwner"}
 	_, err = cm.RunCommand("request-payment", requestArgs, options)
 	c.Assert(err, IsNil)
+	time.Sleep(5 * time.Second)
 
 	// check
 	strMethod = "get"
@@ -103,6 +103,10 @@ func (s *OssutilCommandSuite) TestRequestPaymentPutEmptyEndpoint(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(12)
 	s.putBucket(bucketName, c)
 
+	cfile := randStr(10)
+	data := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	s.createFile(cfile, data, c)
+
 	// request-payment command test
 	var str string
 	strMethod := "put"
@@ -111,32 +115,25 @@ func (s *OssutilCommandSuite) TestRequestPaymentPutEmptyEndpoint(c *C) {
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
-		"configFile":      &configFile,
+		"configFile":      &cfile,
 		"method":          &strMethod,
 	}
 
-	// oss client error
-	//set endpoint emtpy
-	oldConfigStr, err := ioutil.ReadFile(configFile)
-	c.Assert(err, IsNil)
-	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
-	fd.WriteString(configStr)
-	fd.Close()
-
 	requestArgs := []string{CloudURLToString(bucketName, ""), "Requester"}
-	_, err = cm.RunCommand("request-payment", requestArgs, options)
+	_, err := cm.RunCommand("request-payment", requestArgs, options)
 	c.Assert(err, NotNil)
 
-	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
-	c.Assert(err, IsNil)
-
+	os.Remove(cfile)
 	s.removeBucket(bucketName, true, c)
 }
 
 func (s *OssutilCommandSuite) TestRequestPaymentGetEmptyEndpoint(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(12)
 	s.putBucket(bucketName, c)
+
+	cfile := randStr(10)
+	data := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	s.createFile(cfile, data, c)
 
 	var str string
 	strMethod := "get"
@@ -145,26 +142,15 @@ func (s *OssutilCommandSuite) TestRequestPaymentGetEmptyEndpoint(c *C) {
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
-		"configFile":      &configFile,
+		"configFile":      &cfile,
 		"method":          &strMethod,
 	}
 
-	// oss client error
-	//set endpoint emtpy
-	oldConfigStr, err := ioutil.ReadFile(configFile)
-	c.Assert(err, IsNil)
-	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
-	fd.WriteString(configStr)
-	fd.Close()
-
 	versioingArgs := []string{CloudURLToString(bucketName, "")}
-	_, err = cm.RunCommand("request-payment", versioingArgs, options)
+	_, err := cm.RunCommand("request-payment", versioingArgs, options)
 	c.Assert(err, NotNil)
 
-	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
-	c.Assert(err, IsNil)
-
+	os.Remove(cfile)
 	s.removeBucket(bucketName, true, c)
 }
 

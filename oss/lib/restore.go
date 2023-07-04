@@ -1,17 +1,24 @@
 package lib
 
 import (
+	"bufio"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 type batchOptionType struct {
-	ctnu     bool
-	reporter *Reporter
+	ctnu         bool
+	reporter     *Reporter
+	snapshotPath string
+	snapshotldb  *leveldb.DB
 }
 
 var specChineseRestore = SpecText{
@@ -21,7 +28,7 @@ var specChineseRestore = SpecText{
 	paramText: "cloud_url [local_xml_file] [options]",
 
 	syntaxText: ` 
-    ossutil restore cloud_url [local_xml_file] [--encoding-type url] [-r] [-f] [--output-dir=odir] [--version-id versionId] [--payer requester] [-c file]
+    ossutil restore cloud_url [local_xml_file] [--encoding-type url] [-r] [-f] [--output-dir=odir] [--version-id versionId] [--payer requester] [-c file] [--object-file file] [--snapshot-path dir] [--disable-ignore-error]
 `,
 
 	detailHelpText: ` 
@@ -64,6 +71,18 @@ var specChineseRestore = SpecText{
             <Tier>Bulk</Tier>
         </JobParameters>
     </RestoreRequest>
+
+    3) ossutil restore oss://bucket --object-file file [--snapshot-path dir] [--disable-ignore-error] [--output-dir=odir] [local_xml_file]
+        该用法可批量恢复多个冷冻状态的objects为可读状态，与-r的区别在于，-r匹配所有符合
+    指定前缀的objects，而--object-file指定对某些object进行处理。ossutil会读取文件中
+    的objects，恢复它们为可读状态。当一个object操作出现错误时，会将出错object的错误信息
+    记录到report文件，并继续操作其他object，成功操作的object信息将不会被记录到report
+    文件中（更多信息见cp命令的帮助）。如果--force选项被指定，则不会进行询问提示。
+
+    上面的file是本地文件, 里面罗列了所有需要处理的object，之间以"\n"隔开, 举例如下
+    object1
+    object2
+    object3
 `,
 
 	sampleText: ` 
@@ -73,6 +92,8 @@ var specChineseRestore = SpecText{
     4) ossutil restore oss://bucket-restore/%e4%b8%ad%e6%96%87 --encoding-type url
     5) ossutil restore oss://bucket-restore/object-store --payer requester
     6) ossutil restore oss://bucket-restore/object-prefix -r -f local_xml_file
+    7) ossutil restore oss://bucket-restore --object-file file -f local_xml_file
+    8) ossutil restore oss://bucket-restore --object-file file --snapshot-path dir -f local_xml_file
 `,
 }
 
@@ -83,7 +104,7 @@ var specEnglishRestore = SpecText{
 	paramText: "cloud_url [local_xml_file] [options]",
 
 	syntaxText: ` 
-    ossutil restore cloud_url [local_xml_file] [--encoding-type url] [-r] [-f] [--output-dir=odir] [--version-id versionId] [--payer requester] [-c file]
+    ossutil restore cloud_url [local_xml_file] [--encoding-type url] [-r] [-f] [--output-dir=odir] [--version-id versionId] [--payer requester] [-c file] [--object-file file] [--snapshot-path dir] [--disable-ignore-error]
 `,
 
 	detailHelpText: ` 
@@ -130,6 +151,20 @@ Usage:
             <Tier>Bulk</Tier>
         </JobParameters>
     </RestoreRequest>
+
+    3) ossutil restore oss://bucket --object-file file [--snapshot-path dir] [--disable-ignore-error] [--output-dir=odir] [local_xml_file]
+        The usage restore the objects with the specified prefix and in frozen state to readable status. 
+    The difference with -r is that -r matches all objects that match the specified prefix, while 
+    --object-file specifies some objects to be restored. Ossutil reads the objects in the file and 
+    restores them to a readable state. When an error occurs when restore an object, ossutil will 
+    record the error message to report file, and ossutil will continue to attempt to set acl on the 
+    remaining objects(more information see help of cp command). If --force option is specified,
+    ossutil will not show prompt question. 
+
+    The file is a local file, which lists all the objects to be restored, separated by "\n". For example:
+    object1
+    object2
+    object3
 `,
 
 	sampleText: ` 
@@ -139,6 +174,8 @@ Usage:
     4) ossutil restore oss://bucket-restore/%e4%b8%ad%e6%96%87 --encoding-type url
     5) ossutil restore oss://bucket-restore/object-store --payer requester
     6) ossutil restore oss://bucket-restore/object-prefix -r -f local_xml_file
+    7) ossutil restore oss://bucket-restore --object-file file -f local_xml_file
+    8) ossutil restore oss://bucket-restore --object-file file --snapshot-path dir -f local_xml_file
 `,
 }
 
@@ -151,6 +188,8 @@ type RestoreCommand struct {
 	restoreConfig oss.RestoreConfiguration
 	hasConfig     bool
 	configXml     string
+	hasObjFile    bool
+	objFilePath   string
 }
 
 var restoreCommand = RestoreCommand{
@@ -189,8 +228,14 @@ var restoreCommand = RestoreCommand{
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
-			OptionSkipVerfiyCert,
+			OptionSkipVerifyCert,
 			OptionUserAgent,
+			OptionObjectFile,
+			OptionSnapshotPath,
+			OptionDisableIgnoreError,
+			OptionSignVersion,
+			OptionRegion,
+			OptionCloudBoxID,
 		},
 	},
 }
@@ -211,11 +256,13 @@ func (rc *RestoreCommand) Init(args []string, options OptionMapType) error {
 
 // RunCommand simulate inheritance, and polymorphism
 func (rc *RestoreCommand) RunCommand() error {
-	rc.monitor.init("Restored")
-
+	rc.monitor.init("Restore")
 	encodingType, _ := GetString(OptionEncodingType, rc.command.options)
 	recursive, _ := GetBool(OptionRecursion, rc.command.options)
 	versionid, _ := GetString(OptionVersionId, rc.command.options)
+	force, _ := GetBool(OptionForce, rc.command.options)
+	objFileXml, _ := GetString(OptionObjectFile, rc.command.options)
+	snapshotPath, _ := GetString(OptionSnapshotPath, rc.command.options)
 
 	payer, _ := GetString(OptionRequestPayer, rc.command.options)
 	if payer != "" {
@@ -225,78 +272,131 @@ func (rc *RestoreCommand) RunCommand() error {
 		rc.commonOptions = append(rc.commonOptions, oss.RequestPayer(oss.PayerType(payer)))
 	}
 
+	var err error
+	// load snapshot
+	rc.reOption.snapshotPath = snapshotPath
+	if rc.reOption.snapshotPath != "" {
+		if rc.reOption.snapshotldb, err = leveldb.OpenFile(rc.reOption.snapshotPath, nil); err != nil {
+			return fmt.Errorf("load snapshot error, reason: %s", err.Error())
+		}
+		defer rc.reOption.snapshotldb.Close()
+	}
+
 	cloudURL, err := CloudURLFromString(rc.command.args[0], encodingType)
 	if err != nil {
 		return err
 	}
-
-	if err = rc.checkArgs(cloudURL, recursive, versionid); err != nil {
+	if err = rc.checkOptions(cloudURL, recursive, force, versionid, objFileXml); err != nil {
 		return err
 	}
-
-	if len(rc.command.args) == 2 {
-		xmlFile := rc.command.args[1]
-		fileInfo, err := os.Stat(xmlFile)
-		if err != nil {
-			return err
-		}
-
-		if fileInfo.IsDir() {
-			return fmt.Errorf("%s is dir,not the expected file", xmlFile)
-		}
-
-		if fileInfo.Size() == 0 {
-			return fmt.Errorf("%s is empty file", xmlFile)
-		}
-
-		// parsing the xml file
-		file, err := os.Open(xmlFile)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-		text, err := ioutil.ReadAll(file)
-		if err != nil {
-			return err
-		}
-		rc.hasConfig = true
-		rc.configXml = string(text)
-	}
-
 	bucket, err := rc.command.ossBucket(cloudURL.bucket)
 	if err != nil {
 		return err
 	}
 
-	if !recursive {
-		return rc.ossRestoreObject(bucket, cloudURL.object, versionid)
+	// parse restore config
+	if len(rc.command.args) > 1 {
+		restoreConf := rc.command.args[1]
+		err := rc.parseRestoreConf(restoreConf)
+		if err != nil {
+			return err
+		}
+	} else {
+		rc.hasConfig = false
 	}
-	return rc.batchRestoreObjects(bucket, cloudURL)
+
+	if objFileXml != "" {
+		// check objFileXml and parse it
+		if err := rc.checkObjectFile(objFileXml); err != nil {
+			return err
+		}
+		recursive = true
+		return rc.batchRestoreObjects(bucket, cloudURL, recursive)
+	} else {
+		if !recursive {
+			return rc.ossRestoreObject(bucket, cloudURL.object, versionid, false)
+		}
+
+		return rc.batchRestoreObjects(bucket, cloudURL, recursive)
+	}
 }
 
-func (rc *RestoreCommand) checkArgs(cloudURL CloudURL, recursive bool, versionid string) error {
+func (rc *RestoreCommand) checkOptions(cloudURL CloudURL, recursive, force bool, versionid, objectFile string) error {
 	if cloudURL.bucket == "" {
-		return fmt.Errorf("invalid cloud url: %s, miss bucket", rc.command.args[0])
+		return fmt.Errorf("invalid cloud url: %s, miss bucket", cloudURL.urlStr)
 	}
-	if !recursive && cloudURL.object == "" {
-		return fmt.Errorf("restore object invalid cloud url: %s, object empty. Restore bucket is not supported, if you mean batch restore objects, please use --recursive", rc.command.args[0])
+	if cloudURL.object == "" {
+		if !recursive && objectFile == "" {
+			return fmt.Errorf("restore object invalid cloud url: %s, object empty. Restore bucket is not supported, if you mean batch restore objects, please use --recursive or --object-file", rc.command.args[0])
+		}
+	} else {
+		if objectFile != "" {
+			return fmt.Errorf("the first arg of `ossutil restore` only support oss://bucket when set option --object-file")
+		}
 	}
-	if recursive && len(versionid) > 0 {
+
+	if (recursive && len(versionid) > 0) || (objectFile != "" && len(versionid) > 0) {
 		return fmt.Errorf("restore bucket dose not support the --version-id=%s argument.", versionid)
 	}
+
+	if !force {
+		var val string
+		if !recursive && objectFile == "" {
+			return nil
+		}
+		fmt.Printf("Do you really mean to recursivlly restore objects of %s(y or N)? ", rc.command.args[0])
+		if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
+			fmt.Println("operation is canceled.")
+			return nil
+		}
+	}
+
 	return nil
 }
 
-func (rc *RestoreCommand) ossRestoreObject(bucket *oss.Bucket, object string, versionid string) error {
-	retryTimes, _ := GetInt(OptionRetryTimes, rc.command.options)
-	for i := 1; ; i++ {
-		var options []oss.Option
-		if len(versionid) > 0 {
-			options = append(options, oss.VersionId(versionid))
-		}
-		options = append(options, rc.commonOptions...)
+func (rc *RestoreCommand) ossRestoreObject(bucket *oss.Bucket, object, versionid string, batchOperate bool) error {
+	nowt := time.Now().Unix()
+	spath := ""
+	msg := "restore"
 
-		var err error
+	if batchOperate && rc.reOption.snapshotPath != "" {
+		spath = rc.formatSnapshotKey(bucket.BucketName, object, msg)
+		if skip := rc.skipRestore(spath); skip {
+			rc.updateSkip(1)
+			LogInfo("restore obj skip: %s\n", object)
+			return nil
+		}
+	}
+
+	var options []oss.Option
+	if len(versionid) > 0 {
+		options = append(options, oss.VersionId(versionid))
+	}
+	options = append(options, rc.commonOptions...)
+
+	err := rc.ossRestoreObjectRetry(bucket, object, options...)
+	if batchOperate && rc.reOption.snapshotPath != "" {
+		if err != nil {
+			_ = rc.updateSnapshot(err, spath, nowt)
+			return err
+		} else {
+			err = rc.updateSnapshot(err, spath, nowt)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		return err
+	}
+
+	return nil
+}
+
+func (rc *RestoreCommand) ossRestoreObjectRetry(bucket *oss.Bucket, object string, options ...oss.Option) error {
+	var err error
+	retryTimes, _ := GetInt(OptionRetryTimes, rc.command.options)
+
+	for i := 1; ; i++ {
 		if rc.hasConfig {
 			err = bucket.RestoreObjectXML(object, rc.configXml, options...)
 		} else {
@@ -304,7 +404,7 @@ func (rc *RestoreCommand) ossRestoreObject(bucket *oss.Bucket, object string, ve
 		}
 
 		if err == nil {
-			return err
+			return nil
 		}
 
 		switch err.(type) {
@@ -320,18 +420,12 @@ func (rc *RestoreCommand) ossRestoreObject(bucket *oss.Bucket, object string, ve
 	}
 }
 
-func (rc *RestoreCommand) batchRestoreObjects(bucket *oss.Bucket, cloudURL CloudURL) error {
-	force, _ := GetBool(OptionForce, rc.command.options)
-	if !force {
-		var val string
-		fmt.Printf("Do you really mean to recursivlly restore objects of %s(y or N)? ", rc.command.args[0])
-		if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
-			fmt.Println("operation is canceled.")
-			return nil
-		}
-	}
-
+func (rc *RestoreCommand) batchRestoreObjects(bucket *oss.Bucket, cloudURL CloudURL, recursive bool) error {
 	rc.reOption.ctnu = true
+	if recursive || rc.hasObjFile {
+		disableIgnoreError, _ := GetBool(OptionDisableIgnoreError, rc.command.options)
+		rc.reOption.ctnu = !disableIgnoreError
+	}
 	outputDir, _ := GetString(OptionOutputDir, rc.command.options)
 
 	// init reporter
@@ -341,12 +435,14 @@ func (rc *RestoreCommand) batchRestoreObjects(bucket *oss.Bucket, cloudURL Cloud
 	}
 	defer rc.reOption.reporter.Clear()
 
+	if rc.hasObjFile {
+		return rc.restoreObjectsFromFile(bucket, cloudURL, rc.objFilePath)
+	}
 	return rc.restoreObjects(bucket, cloudURL)
 }
 
 func (rc *RestoreCommand) restoreObjects(bucket *oss.Bucket, cloudURL CloudURL) error {
 	routines, _ := GetInt(OptionRoutines, rc.command.options)
-
 	chObjects := make(chan string, ChannelBuf)
 	chError := make(chan error, routines+1)
 	chListError := make(chan error, 1)
@@ -357,6 +453,75 @@ func (rc *RestoreCommand) restoreObjects(bucket *oss.Bucket, cloudURL CloudURL) 
 	}
 
 	return rc.waitRoutinueComplete(chError, chListError, routines)
+}
+
+func (rc *RestoreCommand) restoreObjectsFromFile(bucket *oss.Bucket, cloudURL CloudURL, objectFile string) error {
+	routines, _ := GetInt(OptionRoutines, rc.command.options)
+
+	chObjects := make(chan string, ChannelBuf)
+	chError := make(chan error, routines+1)
+	chListError := make(chan error, 1)
+	go rc.restoreStatistic(objectFile, &rc.monitor, []filterOptionType{}, rc.commonOptions...)
+	go rc.restoreProducer(objectFile, chObjects, chListError, []filterOptionType{}, rc.commonOptions...)
+	for i := 0; int64(i) < routines; i++ {
+		go rc.restoreConsumer(bucket, cloudURL, chObjects, chError)
+	}
+	return rc.waitRoutinueComplete(chError, chListError, routines)
+}
+
+func (rc *RestoreCommand) restoreStatistic(objectFile string, monitor Monitorer, filters []filterOptionType, options ...oss.Option) {
+	if monitor == nil {
+		return
+	}
+
+	file, err := os.Open(objectFile)
+	if err != nil {
+		monitor.setScanError(err)
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		object := scanner.Text()
+		object = strings.Trim(object, " ")
+		if object == "" {
+			monitor.setScanError(fmt.Errorf("object can't be '' in --object-file"))
+			return
+		}
+		monitor.updateScanNum(1)
+	}
+
+	monitor.setScanEnd()
+}
+
+func (rc *RestoreCommand) restoreProducer(objectFile string, chObjects chan<- string, chError chan<- error, filters []filterOptionType, options ...oss.Option) {
+	defer close(chObjects)
+	file, err := os.Open(objectFile)
+	if err != nil {
+		chError <- err
+		return
+	}
+	defer file.Close()
+	encodingType, _ := GetString(OptionEncodingType, rc.command.options)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		object := scanner.Text()
+		object = strings.Trim(object, " ")
+		if object == "" {
+			chError <- fmt.Errorf("object can't be '' in --object-file")
+			return
+		}
+		if encodingType == URLEncodingType {
+			oldObject := object
+			if object, err = url.QueryUnescape(oldObject); err != nil {
+				chError <- fmt.Errorf("invalid object url: %s, object name is not url encoded, %s", oldObject, err.Error())
+				return
+			}
+		}
+		chObjects <- object
+	}
+	chError <- nil
 }
 
 func (rc *RestoreCommand) restoreConsumer(bucket *oss.Bucket, cloudURL CloudURL, chObjects <-chan string, chError chan<- error) {
@@ -375,7 +540,7 @@ func (rc *RestoreCommand) restoreConsumer(bucket *oss.Bucket, cloudURL CloudURL,
 }
 
 func (rc *RestoreCommand) restoreObjectWithReport(bucket *oss.Bucket, object string) error {
-	err := rc.ossRestoreObject(bucket, object, "")
+	err := rc.ossRestoreObject(bucket, object, "", true)
 	rc.command.updateMonitor(err, &rc.monitor)
 	msg := fmt.Sprintf("restore %s", CloudURLToString(bucket.BucketName, object))
 	rc.command.report(msg, err, &rc.reOption)
@@ -413,4 +578,81 @@ func (rc *RestoreCommand) formatResultPrompt(err error) error {
 		return nil
 	}
 	return err
+}
+
+func (rc *RestoreCommand) parseRestoreConf(xmlFile string) error {
+	fileInfo, err := os.Stat(xmlFile)
+	if err != nil {
+		return err
+	}
+
+	if fileInfo.IsDir() {
+		return fmt.Errorf("%s is dir,not the expected file", xmlFile)
+	}
+
+	if fileInfo.Size() == 0 {
+		return fmt.Errorf("%s is empty file", xmlFile)
+	}
+
+	// parsing the xml file
+	file, err := os.Open(xmlFile)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	text, err := ioutil.ReadAll(file)
+	if err != nil {
+		return err
+	}
+
+	rc.hasConfig = true
+	rc.configXml = string(text)
+	return nil
+}
+
+func (rc *RestoreCommand) formatSnapshotKey(bucket, object, msg string) string {
+	return CloudURLToString(bucket, object) + SnapshotConnector + msg
+}
+
+func (rc *RestoreCommand) skipRestore(spath string) bool {
+	if rc.reOption.snapshotPath != "" {
+		_, err := rc.reOption.snapshotldb.Get([]byte(spath), nil)
+		if err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (rc *RestoreCommand) updateSnapshot(err error, spath string, srct int64) error {
+	if rc.reOption.snapshotPath != "" && err == nil {
+		srctstr := fmt.Sprintf("%d", srct)
+		err := rc.reOption.snapshotldb.Put([]byte(spath), []byte(srctstr), nil)
+		if err != nil {
+			return fmt.Errorf("dump snapshot error: %s", err.Error())
+		}
+	}
+	return nil
+}
+
+func (rc *RestoreCommand) checkObjectFile(objFileXml string) error {
+	// check file if exists
+	fileInfo, err := os.Stat(objFileXml)
+	if err != nil {
+		return err
+	}
+	if fileInfo.IsDir() {
+		return fmt.Errorf("%s is dir, not the expected file", objFileXml)
+	}
+	if fileInfo.Size() == 0 {
+		return fmt.Errorf("%s is empty file", objFileXml)
+	}
+
+	rc.hasObjFile = true
+	rc.objFilePath = objFileXml
+	return nil
+}
+
+func (rc *RestoreCommand) updateSkip(num int64) {
+	atomic.AddInt64(&rc.monitor.skipNum, num)
 }

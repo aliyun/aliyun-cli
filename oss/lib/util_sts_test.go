@@ -16,8 +16,8 @@ var _ = Suite(&StsTestSuite{})
 
 // Run once when the suite starts running
 func (s *StsTestSuite) SetUpSuite(c *C) {
-	accessKeyID = os.Getenv("OSS_TEST_STS_ID")
-	accessKeySecret = os.Getenv("OSS_TEST_STS_KEY")
+	stsAccessID = os.Getenv("OSS_TEST_STS_ID")
+	stsAccessKeySecret = os.Getenv("OSS_TEST_STS_KEY")
 	stsARN = os.Getenv("OSS_TEST_STS_ARN")
 }
 
@@ -67,7 +67,7 @@ func (s *StsTestSuite) TestHandleResponse(c *C) {
 
 func (s *StsTestSuite) TestAssumeRoleSuccess(c *C) {
 	now := time.Now()
-	client := NewClient(accessKeyID, accessKeySecret, stsARN, "sts_test")
+	client := NewClient(stsAccessID, stsAccessKeySecret, stsARN, "sts_test")
 
 	resp, err := client.AssumeRole(900, "")
 	if err != nil {
@@ -102,7 +102,7 @@ func (s *StsTestSuite) TestAssumeRoleNegative(c *C) {
 	log.Println("ServiceError:", srvErr)
 
 	// AccessKeySecret invalid
-	client = NewClient(accessKeyID, accessKeySecret+" ", stsARN, "sts_test")
+	client = NewClient(stsAccessID, stsAccessKeySecret+" ", stsARN, "sts_test")
 	resp, err = client.AssumeRole(900, "")
 	c.Assert(resp, IsNil)
 	c.Assert(err, NotNil)
@@ -114,7 +114,7 @@ func (s *StsTestSuite) TestAssumeRoleNegative(c *C) {
 	log.Println("ServiceError:", srvErr)
 
 	// SessionName invalid
-	client = NewClient(accessKeyID, accessKeySecret, stsARN, "x")
+	client = NewClient(stsAccessID, stsAccessKeySecret, stsARN, "x")
 
 	resp, err = client.AssumeRole(900, "")
 	c.Assert(resp, IsNil)

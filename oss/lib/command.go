@@ -146,6 +146,12 @@ func (cmd *Command) checkOptions() error {
 					return CommandError{cmd.name, msg}
 				}
 			}
+		case OptionTypeStrings:
+			if val, _ := GetStrings(name, cmd.options); len(val) > 0 {
+				if FindPos(name, cmd.validOptionNames) == -1 {
+					return CommandError{cmd.name, msg}
+				}
+			}
 		default:
 			if val, _ := GetString(name, cmd.options); val != "" {
 				if FindPos(name, cmd.validOptionNames) == -1 {
@@ -305,7 +311,10 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	ecsUrl := ""
 
 	localHost, _ := GetString(OptionLocalHost, cmd.options)
-	bSkipVerifyCert, _ := GetBool(OptionSkipVerfiyCert, cmd.options)
+	bSkipVerifyCert, _ := GetBool(OptionSkipVerifyCert, cmd.options)
+	region, _ := GetString(OptionRegion, cmd.options)
+	signVersion, _ := GetString(OptionSignVersion, cmd.options)
+	cloudBoxID, _ := GetString(OptionCloudBoxID, cmd.options)
 
 	bPassword, _ := GetBool(OptionPassword, cmd.options)
 
@@ -322,6 +331,22 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	}
 
 	options := []oss.ClientOption{}
+	if region != "" {
+		options = append(options, oss.Region(region))
+	}
+
+	if signVersion != "" {
+		if strings.EqualFold(signVersion, "v4") {
+			if region == "" {
+				return nil, fmt.Errorf("In the v4 signature scenario, please enter the region")
+			}
+		}
+		options = append(options, oss.AuthVersion(oss.AuthVersionType(signVersion)))
+	}
+
+	if cloudBoxID != "" {
+		options = append(options, oss.CloudBoxId(cloudBoxID))
+	}
 
 	if strings.EqualFold(mode, "AK") {
 		if err := cmd.checkCredentials(endpoint, accessKeyID, accessKeySecret); err != nil {
@@ -695,6 +720,7 @@ func (cmd *Command) objectStatistic(bucket *oss.Bucket, cloudURL CloudURL, monit
 }
 
 func (cmd *Command) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chObjects chan<- string, chError chan<- error, filters []filterOptionType, options ...oss.Option) {
+	defer close(chObjects)
 	pre := oss.Prefix(cloudURL.object)
 	marker := oss.Marker("")
 	for {
@@ -702,9 +728,8 @@ func (cmd *Command) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chObje
 		lor, err := cmd.ossListObjectsRetry(bucket, listOptions...)
 		if err != nil {
 			chError <- err
-			break
+			return
 		}
-
 		for _, object := range lor.Objects {
 			if doesSingleObjectMatchPatterns(object.Key, filters) {
 				chObjects <- object.Key
@@ -717,7 +742,6 @@ func (cmd *Command) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chObje
 			break
 		}
 	}
-	defer close(chObjects)
 	chError <- nil
 }
 
@@ -846,6 +870,7 @@ func GetAllCommands() []interface{} {
 		&bucketTagCommand,
 		&bucketEncryptionCommand,
 		&corsOptionsCommand,
+		&bucketStyleCommand,
 		&bucketLifeCycleCommand,
 		&bucketWebsiteCommand,
 		&bucketQosCommand,
@@ -862,5 +887,8 @@ func GetAllCommands() []interface{} {
 		&lrbCommand,
 		&replicationCommand,
 		&bucketCnameCommand,
+		&lcbCommand,
+		&bucketAccessMonitorCommand,
+		&bucketResourceGroupCommand,
 	}
 }

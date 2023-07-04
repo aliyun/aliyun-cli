@@ -2,7 +2,6 @@ package lib
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 
@@ -144,6 +143,10 @@ func (s *OssutilCommandSuite) TestListPartClientError(c *C) {
 	// object name
 	objectName := "test-ossutil-object-" + randLowStr(10)
 
+	cfile := randStr(10)
+	data := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	s.createFile(cfile, data, c)
+
 	// begin listpart
 	var str string
 	options := OptionMapType{
@@ -151,25 +154,14 @@ func (s *OssutilCommandSuite) TestListPartClientError(c *C) {
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
-		"configFile":      &configFile,
+		"configFile":      &cfile,
 	}
 
-	// oss client error
-	oldConfigStr, err := ioutil.ReadFile(configFile)
-	c.Assert(err, IsNil)
-
-	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
-	fd.WriteString(configStr)
-	fd.Close()
-
 	listArgs := []string{CloudURLToString(bucketName, objectName), "aaaaaaaaaa"}
-	_, err = cm.RunCommand("listpart", listArgs, options)
+	_, err := cm.RunCommand("listpart", listArgs, options)
 	c.Assert(err, NotNil)
 
-	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
-	c.Assert(err, IsNil)
-
+	os.Remove(cfile)
 	os.Remove(fileName)
 	s.removeBucket(bucketName, true, c)
 }

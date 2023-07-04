@@ -27,7 +27,7 @@ var specChineseMakeBucket = SpecText{
 	paramText: "cloud_url [options]",
 
 	syntaxText: ` 
-    ossutil mb oss://bucket [--acl acl] [--storage-class class] [-c file] 
+    ossutil mb oss://bucket [--acl acl] [--storage-class class] [-c file] [--meta meta]
 `,
 
 	detailHelpText: ` 
@@ -60,13 +60,14 @@ RedundancyType:
 
 用法：
 
-    ossutil mb oss://bucket [--acl=acl] [--storage-class class] [--redundancy-type type] [-c file]
+    ossutil mb oss://bucket [--acl=acl] [--storage-class class] [--redundancy-type type] [-c file] [--meta meta]
         当未指定--acl选项时，ossutil会在指定的身份凭证下创建指定bucket，所创建的bucket的acl
     为默认private。如果需要更改acl信息，可以使用set-acl命令。
         当未指定--storage-class选项时，ossutil创建的bucket的存储方式为默认存储方式：` + DefaultStorageClass + `。
         如果指定了--acl选项，ossutil会检查指定acl的合法性，如果acl非法，会进入交互模式，提
     示合法的acl输入，并询问acl信息。
         如果指定了--storage-class选项，ossutil会检查指定storage class的合法性。
+        如果输入--meta选项，可以设置bucket的header信息
 `,
 
 	sampleText: ` 
@@ -75,6 +76,7 @@ RedundancyType:
     3)ossutil mb oss://bucket1 --storage-class IA 
     4)ossutil mb oss://bucket1 --acl=public-read-write --storage-class IA
     5)ossutil mb oss://bucket1 --redundancy-type ZRS
+    6)ossutil mb oss://bucket1 --meta X-Oss-Server-Side-Encryption:KMS#X-Oss-Server-Side-Data-Encryption:SM4
 `,
 }
 
@@ -128,6 +130,7 @@ Usage:
     invalid, ossutil will enter interactive mode, prompt the valid acls and ask you for it. 
         If you create bucket with --storage-class option, ossutil will check the validity of 
     storage class. 
+        If you create bucket with --meta option, you can set the header information of the bucket.
 `,
 
 	sampleText: ` 
@@ -136,12 +139,18 @@ Usage:
     3)ossutil mb oss://bucket1 --storage-class IA 
     4)ossutil mb oss://bucket1 --acl=public-read-write --storage-class IA 
     5)ossutil mb oss://bucket1 --redundancy-type ZRS
+    6)ossutil mb oss://bucket1 --meta X-Oss-Server-Side-Encryption:KMS#X-Oss-Server-Side-Data-Encryption:SM4
 `,
 }
 
 // MakeBucketCommand is the command create bucket
 type MakeBucketCommand struct {
-	command Command
+	command  Command
+	mcOption bucketOptionType
+}
+
+type bucketOptionType struct {
+	ossMeta string
 }
 
 var makeBucketCommand = MakeBucketCommand{
@@ -170,6 +179,7 @@ var makeBucketCommand = MakeBucketCommand{
 			OptionRedundancyType,
 			OptionPassword,
 			OptionMode,
+			OptionMeta,
 			OptionECSRoleName,
 			OptionTokenTimeout,
 			OptionRamRoleArn,
@@ -177,8 +187,11 @@ var makeBucketCommand = MakeBucketCommand{
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
-			OptionSkipVerfiyCert,
+			OptionSkipVerifyCert,
 			OptionUserAgent,
+			OptionSignVersion,
+			OptionRegion,
+			OptionCloudBoxID,
 		},
 	},
 }
@@ -199,6 +212,7 @@ func (mc *MakeBucketCommand) Init(args []string, options OptionMapType) error {
 
 // RunCommand simulate inheritance, and polymorphism
 func (mc *MakeBucketCommand) RunCommand() error {
+
 	cloudURL, err := CloudURLFromString(mc.command.args[0], "")
 	if err != nil {
 		return err
@@ -216,16 +230,28 @@ func (mc *MakeBucketCommand) RunCommand() error {
 	if err != nil {
 		return err
 	}
-
+	var op []oss.Option
+	mc.mcOption.ossMeta, _ = GetString(OptionMeta, mc.command.options)
+	if mc.mcOption.ossMeta != "" {
+		metas, err := mc.command.parseHeaders(mc.mcOption.ossMeta, false)
+		if err != nil {
+			return err
+		}
+		options, err := mc.command.getOSSOptions(headerOptionMap, metas)
+		if err != nil {
+			return err
+		}
+		op = append(op, options...)
+	}
 	if len(mc.command.args) >= 2 {
-        return mc.createBucketXmlFile(client, cloudURL.bucket, mc.command.args[1])
+		return mc.createBucketXmlFile(client, cloudURL.bucket, mc.command.args[1], op)
 	}
 
 	aclStr, _ := GetString(OptionACL, mc.command.options)
 	language, _ := GetString(OptionLanguage, mc.command.options)
 	language = strings.ToLower(language)
 	strRedundancy, _ := GetString(OptionRedundancyType, mc.command.options)
-	var op []oss.Option
+
 	if aclStr != "" {
 		acl, err := mc.getACL(aclStr, language)
 		if err != nil {
@@ -245,8 +271,9 @@ func (mc *MakeBucketCommand) RunCommand() error {
 	return mc.ossCreateBucketRetry(client, cloudURL.bucket, op...)
 }
 
-func (mc *MakeBucketCommand) createBucketXmlFile(client *oss.Client, bucketName string, fileName string) error {
-    // parsing the xml file
+func (mc *MakeBucketCommand) createBucketXmlFile(client *oss.Client, bucketName string, fileName string, options []oss.Option) error {
+	var op []oss.Option
+	// parsing the xml file
 	file, err := os.Open(fileName)
 	if err != nil {
 		return err
@@ -256,7 +283,10 @@ func (mc *MakeBucketCommand) createBucketXmlFile(client *oss.Client, bucketName 
 	if err != nil {
 		return err
 	}
-	return client.CreateBucketXml(bucketName, string(text))
+	if len(options) > 0 {
+		op = append(op, options...)
+	}
+	return client.CreateBucketXml(bucketName, string(text), op...)
 }
 
 func (mc *MakeBucketCommand) getACL(aclStr, language string) (oss.ACLType, error) {

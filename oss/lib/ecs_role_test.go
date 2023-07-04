@@ -2,7 +2,6 @@ package lib
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"time"
@@ -78,32 +77,22 @@ func startHttpServer(handler func(http.ResponseWriter, *http.Request)) *http.Ser
 }
 
 func (s *OssutilCommandSuite) TestEcsRoleSuccess(c *C) {
-	accessKeyID = ""
-	accessKeySecret = ""
-	stsToken = ""
-
 	svr := startHttpServer(StsHttpHandlerOk)
 	time.Sleep(time.Duration(1) * time.Second)
 
 	//set endpoint emtpy
-	oldConfigStr, err := ioutil.ReadFile(configFile)
-	c.Assert(err, IsNil)
-	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
 	ecsAk := "http://127.0.0.1:32915/latest/meta-data/Ram/security-credentials/EcsRamRoleTesting"
 	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "endpoint= " + endpoint + "\n"
 	configStr = configStr + "[AkService]" + "\n" + "ecsAk=" + ecsAk
-
-	fd.WriteString(configStr)
-	fd.Close()
+	cfile := randStr(10)
+	s.createFile(cfile, configStr, c)
 
 	bucketName := bucketNamePrefix + randLowStr(12)
 	s.putBucket(bucketName, c)
 
 	svr.Close()
 
-	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
-	c.Assert(err, IsNil)
-
+	os.Remove(cfile)
 	s.removeBucket(bucketName, true, c)
 }
 
@@ -131,20 +120,12 @@ func (s *OssutilCommandSuite) TestEcsRoleAkTimeout(c *C) {
 }
 
 func (s *OssutilCommandSuite) TestEcsRoleNotHttpServerError(c *C) {
-	accessKeyID = ""
-	accessKeySecret = ""
-	stsToken = ""
-
 	//set endpoint emtpy
-	oldConfigStr, err := ioutil.ReadFile(configFile)
-	c.Assert(err, IsNil)
-	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
 	ecsAk := "http://127.0.0.1:32915/latest/meta-data/Ram/security-credentials/EcsRamRoleTesting"
 	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "endpoint= " + endpoint + "\n"
 	configStr = configStr + "[AkService]" + "\n" + "ecsAk=" + ecsAk
-
-	fd.WriteString(configStr)
-	fd.Close()
+	cfile := randStr(10)
+	s.createFile(cfile, configStr, c)
 
 	bucketName := bucketNamePrefix + randLowStr(12)
 
@@ -156,33 +137,24 @@ func (s *OssutilCommandSuite) TestEcsRoleNotHttpServerError(c *C) {
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
-		"configFile":      &configFile,
+		"configFile":      &cfile,
 	}
-	_, err = cm.RunCommand(command, args, options)
+	_, err := cm.RunCommand(command, args, options)
 	c.Assert(err, NotNil)
-
-	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
-	c.Assert(err, IsNil)
+	os.Remove(cfile)
 }
 
 func (s *OssutilCommandSuite) TestEcsRoleAkEmptyError(c *C) {
-	accessKeyID = ""
-	accessKeySecret = ""
-	stsToken = ""
 
 	svr := startHttpServer(StsHttpHandlerEmptyError)
 	time.Sleep(time.Duration(1) * time.Second)
 
 	//set endpoint emtpy
-	oldConfigStr, err := ioutil.ReadFile(configFile)
-	c.Assert(err, IsNil)
-	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
 	ecsAk := "http://127.0.0.1:32915/latest/meta-data/Ram/security-credentials/EcsRamRoleTesting"
 	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "endpoint= " + endpoint + "\n"
 	configStr = configStr + "[AkService]" + "\n" + "ecsAk=" + ecsAk
-
-	fd.WriteString(configStr)
-	fd.Close()
+	cfile := randStr(10)
+	s.createFile(cfile, configStr, c)
 
 	bucketName := bucketNamePrefix + randLowStr(12)
 
@@ -194,34 +166,25 @@ func (s *OssutilCommandSuite) TestEcsRoleAkEmptyError(c *C) {
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
-		"configFile":      &configFile,
+		"configFile":      &cfile,
 	}
-	_, err = cm.RunCommand(command, args, options)
+	_, err := cm.RunCommand(command, args, options)
 	c.Assert(err, NotNil)
 
 	svr.Close()
-	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
-	c.Assert(err, IsNil)
+	os.Remove(cfile)
 }
 
 func (s *OssutilCommandSuite) TestEcsRoleCodeError(c *C) {
-	accessKeyID = ""
-	accessKeySecret = ""
-	stsToken = ""
-
 	svr := startHttpServer(StsHttpHandlerCodeError)
 	time.Sleep(time.Duration(1) * time.Second)
 
 	//set endpoint emtpy
-	oldConfigStr, err := ioutil.ReadFile(configFile)
-	c.Assert(err, IsNil)
-	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
 	ecsAk := "http://127.0.0.1:32915/latest/meta-data/Ram/security-credentials/EcsRamRoleTesting"
 	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "endpoint= " + endpoint + "\n"
 	configStr = configStr + "[AkService]" + "\n" + "ecsAk=" + ecsAk
-
-	fd.WriteString(configStr)
-	fd.Close()
+	cfile := randStr(10)
+	s.createFile(cfile, configStr, c)
 
 	bucketName := bucketNamePrefix + randLowStr(12)
 
@@ -233,34 +196,25 @@ func (s *OssutilCommandSuite) TestEcsRoleCodeError(c *C) {
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
-		"configFile":      &configFile,
+		"configFile":      &cfile,
 	}
-	_, err = cm.RunCommand(command, args, options)
+	_, err := cm.RunCommand(command, args, options)
 	c.Assert(err, NotNil)
 
 	svr.Close()
-	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
-	c.Assert(err, IsNil)
+	os.Remove(cfile)
 }
 
 func (s *OssutilCommandSuite) TestEcsRoleJsonError(c *C) {
-	accessKeyID = ""
-	accessKeySecret = ""
-	stsToken = ""
-
 	svr := startHttpServer(StsHttpHandlerJsonError)
 	time.Sleep(time.Duration(1) * time.Second)
 
 	//set endpoint emtpy
-	oldConfigStr, err := ioutil.ReadFile(configFile)
-	c.Assert(err, IsNil)
-	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
 	ecsAk := "http://127.0.0.1:32915/latest/meta-data/Ram/security-credentials/EcsRamRoleTesting"
 	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "endpoint= " + endpoint + "\n"
 	configStr = configStr + "[AkService]" + "\n" + "ecsAk=" + ecsAk
-
-	fd.WriteString(configStr)
-	fd.Close()
+	cfile := randStr(10)
+	s.createFile(cfile, configStr, c)
 
 	bucketName := bucketNamePrefix + randLowStr(12)
 
@@ -272,12 +226,11 @@ func (s *OssutilCommandSuite) TestEcsRoleJsonError(c *C) {
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
-		"configFile":      &configFile,
+		"configFile":      &cfile,
 	}
-	_, err = cm.RunCommand(command, args, options)
+	_, err := cm.RunCommand(command, args, options)
 	c.Assert(err, NotNil)
 
 	svr.Close()
-	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
-	c.Assert(err, IsNil)
+	os.Remove(cfile)
 }

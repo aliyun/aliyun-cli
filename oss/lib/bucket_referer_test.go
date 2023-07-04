@@ -2,8 +2,8 @@ package lib
 
 import (
 	"encoding/xml"
-	"io/ioutil"
 	"os"
+	"time"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	. "gopkg.in/check.v1"
@@ -153,6 +153,7 @@ func (s *OssutilCommandSuite) TestBucketRefererGetConfirm(c *C) {
 	refererArgs := []string{CloudURLToString(bucketName, ""), refererDomainA, refererDomainB}
 	_, err := cm.RunCommand("referer", refererArgs, options)
 	c.Assert(err, IsNil)
+	time.Sleep(time.Second * 3)
 
 	// check,get referer
 	refererDownName := randLowStr(12) + "-referer-down"
@@ -217,6 +218,7 @@ func (s *OssutilCommandSuite) TestBucketRefererGetToStdout(c *C) {
 	refererArgs := []string{CloudURLToString(bucketName, ""), refererDomainA, refererDomainB}
 	_, err := cm.RunCommand("referer", refererArgs, options)
 	c.Assert(err, IsNil)
+	time.Sleep(3 * time.Second)
 
 	// output to file
 	fileName := "test-file-" + randLowStr(5)
@@ -302,6 +304,7 @@ func (s *OssutilCommandSuite) TestBucketRefererDeleteSuccess(c *C) {
 	refererArgs := []string{CloudURLToString(bucketName, ""), refererDomainA, refererDomainB}
 	_, err := cm.RunCommand("referer", refererArgs, options)
 	c.Assert(err, IsNil)
+	time.Sleep(3 * time.Second)
 
 	// check,get referer
 	refererDownName := randLowStr(12) + "-referer-down"
@@ -341,6 +344,7 @@ func (s *OssutilCommandSuite) TestBucketRefererDeleteSuccess(c *C) {
 	refererArgs = []string{CloudURLToString(bucketName, "")}
 	_, err = cm.RunCommand("referer", refererArgs, options)
 	c.Assert(err, IsNil)
+	time.Sleep(time.Second * 3)
 
 	// get again
 	os.Remove(refererDownName)
@@ -407,6 +411,10 @@ func (s *OssutilCommandSuite) TestBucketRefererPutEmptyEndpoint(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(12)
 	s.putBucket(bucketName, c)
 
+	cfile := randStr(10)
+	data := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	s.createFile(cfile, data, c)
+
 	// referer command test
 	var str string
 	strMethod := "put"
@@ -415,27 +423,17 @@ func (s *OssutilCommandSuite) TestBucketRefererPutEmptyEndpoint(c *C) {
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
-		"configFile":      &configFile,
+		"configFile":      &cfile,
 		"method":          &strMethod,
 	}
-
-	// oss client error
-	//set endpoint emtpy
-	oldConfigStr, err := ioutil.ReadFile(configFile)
-	c.Assert(err, IsNil)
-	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
-	fd.WriteString(configStr)
-	fd.Close()
 
 	refererDomainA := "sina.com"
 	refererDomainB := "baidu.com"
 	refererArgs := []string{CloudURLToString(bucketName, ""), refererDomainA, refererDomainB}
-	_, err = cm.RunCommand("referer", refererArgs, options)
+	_, err := cm.RunCommand("referer", refererArgs, options)
 	c.Assert(err, NotNil)
 
-	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
-	c.Assert(err, IsNil)
+	os.Remove(cfile)
 
 	s.removeBucket(bucketName, true, c)
 }
@@ -445,6 +443,10 @@ func (s *OssutilCommandSuite) TestBucketRefererGetEmptyEndpoint(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(12)
 	s.putBucket(bucketName, c)
 
+	cfile := randStr(10)
+	data := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	s.createFile(cfile, data, c)
+
 	// referer command test
 	var str string
 	strMethod := "get"
@@ -453,28 +455,17 @@ func (s *OssutilCommandSuite) TestBucketRefererGetEmptyEndpoint(c *C) {
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
-		"configFile":      &configFile,
+		"configFile":      &cfile,
 		"method":          &strMethod,
 	}
-
-	// oss client error
-	//set endpoint emtpy
-	oldConfigStr, err := ioutil.ReadFile(configFile)
-	c.Assert(err, IsNil)
-	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
-	fd.WriteString(configStr)
-	fd.Close()
 
 	refererDomainA := "sina.com"
 	refererDomainB := "baidu.com"
 	refererArgs := []string{CloudURLToString(bucketName, ""), refererDomainA, refererDomainB}
-	_, err = cm.RunCommand("referer", refererArgs, options)
+	_, err := cm.RunCommand("referer", refererArgs, options)
 	c.Assert(err, NotNil)
 
-	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
-	c.Assert(err, IsNil)
-
+	os.Remove(cfile)
 	s.removeBucket(bucketName, true, c)
 }
 
