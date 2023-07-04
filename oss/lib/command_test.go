@@ -29,21 +29,21 @@ var _ = Suite(&OssutilCommandSuite{})
 
 var (
 	// Update before running test
-	endpoint            = ""
-	accessKeyID         = ""
-	accessKeySecret     = ""
-	stsToken            = ""
-	payerBucket         = ""
-	payerBucketEndPoint = ""
-	proxyHost           = ""
-	proxyUser           = ""
-	proxyPwd            = ""
-	accountID           = ""
-	stsAccessID         = ""
-	stsAccessKeySecret  = ""
-	stsARN              = ""
-	ecsRoleName         = ""
-	stsRegion           = ""
+	endpoint             = ""
+	accessKeyID          = ""
+	accessKeySecret      = ""
+	proxyHost            = ""
+	proxyUser            = ""
+	proxyPwd             = ""
+	accountID            = ""
+	stsAccessID          = ""
+	stsAccessKeySecret   = ""
+	stsARN               = ""
+	ecsRoleName          = ""
+	stsRegion            = ""
+	payerAccessKeyID     = ""
+	payerAccessKeySecret = ""
+	payerAccountID       = ""
 )
 
 var (
@@ -58,6 +58,7 @@ var (
 	downloadFileName  = "ossutil_test.download_file" + randStr(5)
 	downloadDir       = "ossutil_test.download_dir" + randStr(5)
 	inputFileName     = "ossutil_test.input_file" + randStr(5)
+	objectFileName    = "ossutil_test.object_file" + randStr(5)
 	content           = "abc"
 	cm                = CommandManager{}
 	out               = os.Stdout
@@ -73,6 +74,12 @@ var (
 	bucketNameNotExist = "nodelete-ossutil-test-notexist"
 )
 
+var (
+	payerBucket         = bucketNamePrefix + "-payer"
+	payerConfigFile     = ConfigFile + "-payer"
+	payerBucketEndPoint = ""
+)
+
 // Run once when the suite starts running
 func (s *OssutilCommandSuite) SetUpSuite(c *C) {
 	fmt.Printf("set up OssutilCommandSuite\n")
@@ -85,6 +92,7 @@ func (s *OssutilCommandSuite) SetUpSuite(c *C) {
 	s.configNonInteractive(c)
 	s.createFile(uploadFileName, content, c)
 	s.SetUpBucketEnv(c)
+	s.SetUpPayerEnv(c)
 }
 
 func SetUpCredential() {
@@ -103,9 +111,6 @@ func SetUpCredential() {
 	if accessKeySecret == "" {
 		accessKeySecret = os.Getenv("OSS_TEST_ACCESS_KEY_SECRET")
 	}
-	if payerBucket == "" {
-		payerBucket = os.Getenv("OSS_TEST_PAYER_BUCKET")
-	}
 	if ue := os.Getenv("OSS_TEST_UPDATE_ENDPOINT"); ue != "" {
 		vUpdateEndpoint = ue
 	}
@@ -118,16 +123,6 @@ func SetUpCredential() {
 	if strings.HasPrefix(vUpdateEndpoint, "http://") {
 		vUpdateEndpoint = vUpdateEndpoint[7:]
 	}
-	if payerBucketEndPoint == "" {
-		payerBucketEndPoint = os.Getenv("OSS_TEST_PAYER_ENDPOINT")
-		if strings.HasPrefix(payerBucketEndPoint, "https://") {
-			payerBucketEndPoint = payerBucketEndPoint[8:]
-		}
-		if strings.HasPrefix(payerBucketEndPoint, "http://") {
-			payerBucketEndPoint = payerBucketEndPoint[7:]
-		}
-	}
-
 	if proxyHost == "" {
 		proxyHost = os.Getenv("OSS_TEST_PROXY_HOST")
 	}
@@ -139,9 +134,6 @@ func SetUpCredential() {
 	}
 	if accountID == "" {
 		accountID = os.Getenv("OSS_TEST_ACCOUNT_ID")
-	}
-	if stsToken == "" {
-		stsToken = os.Getenv("OSS_TEST_STS_TOKEN")
 	}
 	if stsAccessID == "" {
 		stsAccessID = os.Getenv("OSS_TEST_STS_ID")
@@ -158,12 +150,45 @@ func SetUpCredential() {
 	if stsRegion == "" {
 		stsRegion = os.Getenv("OSS_TEST_STS_REGION")
 	}
+	if payerAccessKeyID == "" {
+		payerAccessKeyID = os.Getenv("OSS_TEST_PAYER_ACCESS_KEY_ID")
+	}
+	if payerAccessKeySecret == "" {
+		payerAccessKeySecret = os.Getenv("OSS_TEST_PAYER_ACCESS_KEY_SECRET")
+	}
+	if payerAccountID == "" {
+		payerAccountID = os.Getenv("OSS_TEST_PAYER_UID")
+	}
 }
 
 func (s *OssutilCommandSuite) SetUpBucketEnv(c *C) {
 	s.removeBuckets(commonNamePrefix, c)
 	s.putBucket(bucketNameExist, c)
 	s.putBucket(bucketNameDest, c)
+}
+
+func (s *OssutilCommandSuite) SetUpPayerEnv(c *C) {
+	s.putBucket(payerBucket, c)
+	payerBucketEndPoint = endpoint
+	policy := `
+	{
+		"Version":"1",
+		"Statement":[
+			{
+				"Action":[
+					"oss:*"
+				],
+				"Effect":"Allow",
+				"Principal":["` + payerAccountID + `"],
+				"Resource":["acs:oss:*:*:` + payerBucket + `", "acs:oss:*:*:` + payerBucket + `/*"]
+			}
+		]
+	}`
+	s.putBucketPolicy(payerBucket, policy, c)
+
+	//set payerConfigfile
+	data := fmt.Sprintf("[Credentials]\nlanguage=EN\nendpoint=%s\naccessKeyID=%s\naccessKeySecret=%s\n", payerBucketEndPoint, payerAccessKeyID, payerAccessKeySecret)
+	s.createFile(payerConfigFile, data, c)
 }
 
 // Run before each test or benchmark starts running
@@ -180,6 +205,7 @@ func (s *OssutilCommandSuite) TearDownSuite(c *C) {
 	os.Remove(downloadFileName)
 	os.RemoveAll(downloadDir)
 	os.RemoveAll(DefaultOutputDir)
+	os.Remove(payerConfigFile)
 	os.Stdout = out
 	os.Stderr = errout
 }
@@ -737,6 +763,27 @@ func (s *OssutilCommandSuite) putBucketWithStorageClass(bucket string, storageCl
 	c.Assert(err, IsNil)
 	err = makeBucketCommand.RunCommand()
 	return err
+}
+
+func (s *OssutilCommandSuite) putBucketPolicy(bucket string, policyJson string, c *C) {
+	command := "bucket-policy"
+	policyFileName := randLowStr(12)
+	s.createFile(policyFileName, policyJson, c)
+	args := []string{CloudURLToString(bucket, ""), policyFileName}
+	str := ""
+	strMethod := "put"
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"stsToken":        &str,
+		"configFile":      &configFile,
+		"method":          &strMethod,
+	}
+	showElapse, err := cm.RunCommand(command, args, options)
+	c.Assert(err, IsNil)
+	c.Assert(showElapse, Equals, true)
+	os.Remove(policyFileName)
 }
 
 func (s *OssutilCommandSuite) initPutBucketWithStorageClass(args []string, storageClass string) error {
@@ -1415,6 +1462,16 @@ func (s *OssutilCommandSuite) initSetMetaWithArgs(args []string, cmdline string,
 		cmdline = cmdline[0:pos] + cmdline[pos+len("--delete"):]
 	}
 
+	var disableIgnoreError bool
+	if pos := strings.Index(cmdline, "--disable-ignore-error"); pos != -1 {
+		disableIgnoreError = true
+		cmdline = cmdline[0:pos] + cmdline[pos+len("--disable-ignore-error"):]
+	}
+
+	objectFile := ""
+	snapshotPath := ""
+	objectFile, snapshotPath, cmdline = s.handleObjectFileSnapshot(cmdline)
+
 	parameter := strings.Split(cmdline, "-")
 	r := false
 	f := false
@@ -1426,17 +1483,20 @@ func (s *OssutilCommandSuite) initSetMetaWithArgs(args []string, cmdline string,
 	str := ""
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
-		"endpoint":        &str,
-		"accessKeyID":     &str,
-		"accessKeySecret": &str,
-		"stsToken":        &str,
-		"configFile":      &configFile,
-		"update":          &update,
-		"delete":          &delete,
-		"recursive":       &r,
-		"force":           &f,
-		"routines":        &routines,
-		"encodingType":    &encodingType,
+		"endpoint":           &str,
+		"accessKeyID":        &str,
+		"accessKeySecret":    &str,
+		"stsToken":           &str,
+		"configFile":         &configFile,
+		"update":             &update,
+		"delete":             &delete,
+		"recursive":          &r,
+		"force":              &f,
+		"routines":           &routines,
+		"encodingType":       &encodingType,
+		"objectFile":         &objectFile,
+		"snapshotPath":       &snapshotPath,
+		"disableIgnoreError": &disableIgnoreError,
 	}
 	err := setMetaCommand.Init(args, options)
 	return err
@@ -1582,12 +1642,49 @@ func (s *OssutilCommandSuite) getFileList(dpath string) ([]string, error) {
 	return fileList, err
 }
 
+func (s *OssutilCommandSuite) handleObjectFileSnapshot(cmdline string) (objectFile, snapshotPath, newCmdline string) {
+	cmds := strings.Split(cmdline, " ")
+	for i := 0; i < len(cmds); i++ {
+		if cmds[i] == "--object-file" && !strings.HasPrefix(cmds[i+1], "-") {
+			objectFile = cmds[i+1]
+		} else {
+			continue
+		}
+		cmds = append(cmds[:i], cmds[i+2:]...)
+	}
+	for i := 0; i < len(cmds); i++ {
+		if cmds[i] == "--snapshot-path" && !strings.HasPrefix(cmds[i+1], "-") {
+			snapshotPath = cmds[i+1]
+		} else {
+			continue
+		}
+		cmds = append(cmds[:i], cmds[i+2:]...)
+	}
+
+	// remake cmdline
+	cmdline = ""
+	for i := 0; i < len(cmds); i++ {
+		cmdline = cmdline + " " + cmds[i]
+	}
+	return objectFile, snapshotPath, cmdline
+}
+
 func (s *OssutilCommandSuite) initRestoreObject(args []string, cmdline string, outputDir string) error {
 	encodingType := ""
 	if pos := strings.Index(cmdline, "--encoding-type url"); pos != -1 {
 		encodingType = URLEncodingType
 		cmdline = cmdline[0:pos] + cmdline[pos+len("--encoding-type url"):]
 	}
+
+	var disableIgnoreError bool
+	if pos := strings.Index(cmdline, "--disable-ignore-error"); pos != -1 {
+		disableIgnoreError = true
+		cmdline = cmdline[0:pos] + cmdline[pos+len("--disable-ignore-error"):]
+	}
+
+	objectFile := ""
+	snapshotPath := ""
+	objectFile, snapshotPath, cmdline = s.handleObjectFileSnapshot(cmdline)
 
 	parameter := strings.Split(cmdline, "-")
 	r := false
@@ -1600,16 +1697,19 @@ func (s *OssutilCommandSuite) initRestoreObject(args []string, cmdline string, o
 	str := ""
 	routines := strconv.Itoa(Routines)
 	options := OptionMapType{
-		"endpoint":        &str,
-		"accessKeyID":     &str,
-		"accessKeySecret": &str,
-		"stsToken":        &str,
-		"configFile":      &configFile,
-		"recursive":       &r,
-		"force":           &f,
-		"encodingType":    &encodingType,
-		"routines":        &routines,
-		"outputDir":       &outputDir,
+		"endpoint":           &str,
+		"accessKeyID":        &str,
+		"accessKeySecret":    &str,
+		"stsToken":           &str,
+		"configFile":         &configFile,
+		"recursive":          &r,
+		"force":              &f,
+		"encodingType":       &encodingType,
+		"routines":           &routines,
+		"outputDir":          &outputDir,
+		"objectFile":         &objectFile,
+		"snapshotPath":       &snapshotPath,
+		"disableIgnoreError": &disableIgnoreError,
 	}
 	err := restoreCommand.Init(args, options)
 	return err
@@ -2690,4 +2790,141 @@ func (s *OssutilCommandSuite) TestFilterObjectFromChanWithPatterns(c *C) {
 	dstObjects3 := make(chan objectInfoType, ChannelBuf)
 	filterObjectsFromChanWithPatterns(chObjects, fts, dstObjects3)
 	c.Assert(len(dstObjects3), Equals, 1)
+}
+
+func (s *OssutilCommandSuite) TestCommandLoglevel(c *C) {
+	cfile := "ossutil-config" + randLowStr(8)
+	level := "info"
+	data := "[Credentials]" + "\n" + "language=" + DefaultLanguage + "\n" + "accessKeyID=" + accessKeyID + "\n" + "accessKeySecret=" + accessKeySecret + "\n" + "endpoint=" +
+		endpoint + "\n" + "[Default]" + "\n" + "loglevel=" + level + "\n"
+	s.createFile(cfile, data, c)
+
+	f, err := os.Stat(cfile)
+	c.Assert(err, IsNil)
+	c.Assert(f.Size() > 0, Equals, true)
+	os.Args = []string{"ossutil", "ls", "oss://", "--config-file=" + cfile}
+	os.Remove(logName)
+	err = ParseAndRunCommand()
+	c.Assert(err, IsNil)
+	f, err = os.Stat(logName)
+	c.Assert(err, IsNil)
+	c.Assert(f.Size() > 0, Equals, true)
+	strContent := s.readFile(logName, c)
+	c.Assert(strings.Contains(strContent, "[info]"), Equals, true)
+
+	os.Remove(logName)
+	os.Remove(cfile)
+}
+
+func (s *OssutilCommandSuite) TestGetLoglevelFromOptions(c *C) {
+	level := "info"
+	level2 := "debug"
+	str := ""
+	data := "[Credentials]" + "\n" + "language=" + DefaultLanguage + "\n" + "accessKeyID=" + accessKeyID + "\n" + "accessKeySecret=" + accessKeySecret + "\n" + "endpoint=" +
+		endpoint + "\n" + "[Default]" + "\n" + "loglevel=" + level + "\n"
+	s.createFile(configFile, data, c)
+	options := OptionMapType{
+		"loglevel": &level,
+	}
+
+	strLevel, err := getLoglevelFromOptions(options)
+	c.Assert(err, IsNil)
+	c.Assert(strLevel, Equals, level)
+	testLogger.Print("loglevel 1" + strLevel)
+
+	options = OptionMapType{
+		"configFile": &configFile,
+		"loglevel":   &level,
+	}
+	strLevel, err = getLoglevelFromOptions(options)
+	c.Assert(err, IsNil)
+	c.Assert(strLevel, Equals, level)
+	testLogger.Print("loglevel 2" + strLevel)
+
+	options = OptionMapType{
+		"configFile": &configFile,
+		"loglevel":   &level2,
+	}
+	strLevel, err = getLoglevelFromOptions(options)
+	c.Assert(err, IsNil)
+	c.Assert(strLevel, Equals, level2)
+	testLogger.Print("loglevel 3" + strLevel)
+
+	options = OptionMapType{
+		"configFile": &configFile,
+		"loglevel":   &str,
+	}
+	strLevel, err = getLoglevelFromOptions(options)
+	c.Assert(err, IsNil)
+	c.Assert(strLevel, Equals, level)
+	testLogger.Print("loglevel 4" + strLevel)
+
+	os.Remove(configFile)
+	data = "[Credentials]" + "\n" + "language=" + DefaultLanguage + "\n" + "accessKeyID=" + accessKeyID + "\n" + "accessKeySecret=" + accessKeySecret + "\n" + "endpoint=" +
+		endpoint + "\n" + "loglevel=" + level2 + "\n" + "[Default]" + "\n" + "loglevel=" + level + "\n"
+	s.createFile(configFile, data, c)
+	options = OptionMapType{
+		"configFile": &configFile,
+		"loglevel":   &str,
+	}
+	strLevel, err = getLoglevelFromOptions(options)
+	c.Assert(err, IsNil)
+	c.Assert(strLevel, Equals, level2)
+	testLogger.Print("loglevel 5" + strLevel)
+
+	os.Remove(configFile)
+	data = "[Credentials]" + "\n" + "language=" + DefaultLanguage + "\n" + "accessKeyID=" + accessKeyID + "\n" + "accessKeySecret=" + accessKeySecret + "\n" + "endpoint=" +
+		endpoint + "\n" + "log-level=" + level2 + "\n" + "[Default]" + "\n" + "loglevel=" + level + "\n"
+	s.createFile(configFile, data, c)
+	options = OptionMapType{
+		"configFile": &configFile,
+		"loglevel":   &str,
+	}
+	strLevel, err = getLoglevelFromOptions(options)
+	c.Assert(err, IsNil)
+	c.Assert(strLevel, Equals, level2)
+	testLogger.Print("loglevel 5" + strLevel)
+}
+
+//test command objectProducer
+func (s *OssutilCommandSuite) TestCommandObjectProducer(c *C) {
+	chObjects := make(chan string, ChannelBuf)
+	chListError := make(chan error, 1)
+	cloudURL, err := CloudURLFromString(CloudURLToString(bucketNameNotExist, "demo.txt"), "")
+	c.Assert(err, IsNil)
+	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
+	c.Assert(err, IsNil)
+	bucket, err := client.Bucket(bucketNameNotExist)
+	c.Assert(err, IsNil)
+	var filters []filterOptionType
+	command := Command{}
+	command.objectProducer(bucket, cloudURL, chObjects, chListError, filters)
+	err = <-chListError
+	c.Assert(err, NotNil)
+	select {
+	case _, ok := <-chObjects:
+		testLogger.Printf("chObjects channel has closed")
+		c.Assert(ok, Equals, false)
+	default:
+		testLogger.Printf("chObjects no data")
+		c.Assert(true, Equals, false)
+	}
+
+	chObjects2 := make(chan string, ChannelBuf)
+	chListError2 := make(chan error, 1)
+	storageURL2, err := CloudURLFromString(CloudURLToString(bucketNameExist, ""), "")
+	c.Assert(err, IsNil)
+	bucket2, err := client.Bucket(bucketNameExist)
+	c.Assert(err, IsNil)
+	command.objectProducer(bucket2, storageURL2, chObjects2, chListError2, filters)
+	err = <-chListError2
+	c.Assert(err, IsNil)
+	select {
+	case _, ok := <-chObjects2:
+		testLogger.Printf("chObjects channel has closed")
+		c.Assert(ok, Equals, false)
+	default:
+		testLogger.Printf("chObjects no data")
+		c.Assert(true, Equals, false)
+	}
 }

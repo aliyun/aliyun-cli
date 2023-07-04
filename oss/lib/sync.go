@@ -3,12 +3,12 @@ package lib
 import (
 	"bytes"
 	"fmt"
+	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-
-	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
 /*
@@ -421,9 +421,12 @@ var syncCommand = SyncCommand{
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
-			OptionSkipVerfiyCert,
+			OptionSkipVerifyCert,
 			OptionMaxDownSpeed,
 			OptionUserAgent,
+			OptionSignVersion,
+			OptionRegion,
+			OptionCloudBoxID,
 
 			// The following options are only supported by sc command, not supported by cp command
 			OptionDelete,
@@ -937,9 +940,8 @@ func (sc *SyncCommand) readDirLimit(dirName string, limitCount int) ([]os.FileIn
 	}
 	return list, nil
 }
-
 func (sc *SyncCommand) movePath(srcName, destName string) error {
-	err := os.Rename(srcName, destName)
+	err := sc.moveFileToPath(srcName,destName)
 	if err != nil {
 		LogError("rename %s %s error,%s\n", srcName, destName, err.Error())
 	} else {
@@ -948,4 +950,30 @@ func (sc *SyncCommand) movePath(srcName, destName string) error {
 		LogInfo("rename success %s %s\n", srcName, destName)
 	}
 	return err
+}
+func (sc *SyncCommand)moveFileToPath(srcName, destName string) error {
+	err := os.Rename(srcName,destName)
+	if err == nil {
+		return nil
+	}else{
+		inputFile, err := os.Open(srcName)
+		defer inputFile.Close()
+		if err != nil {
+			return err
+		}
+		outputFile, err := os.Create(destName)
+		defer outputFile.Close()
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(outputFile, inputFile)
+		if err != nil {
+			return err
+		}
+		err = os.Remove(srcName)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 }

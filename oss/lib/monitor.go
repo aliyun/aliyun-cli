@@ -36,6 +36,7 @@ type Monitorer interface {
 type MonitorSnap struct {
 	okNum   int64
 	errNum  int64
+	skipNum int64
 	dealNum int64
 }
 
@@ -49,6 +50,7 @@ type Monitor struct {
 	totalNum       int64
 	okNum          int64
 	errNum         int64
+	skipNum        int64
 	seekAheadError error
 	seekAheadEnd   bool
 	finish         bool
@@ -62,6 +64,7 @@ func (m *Monitor) init(opStr string) {
 	m.seekAheadError = nil
 	m.okNum = 0
 	m.errNum = 0
+	m.skipNum = 0
 	m.finish = false
 }
 
@@ -90,6 +93,7 @@ func (m *Monitor) getSnapshot() *MonitorSnap {
 	var snap MonitorSnap
 	snap.okNum = m.okNum
 	snap.errNum = m.errNum
+	snap.skipNum = m.skipNum
 	snap.dealNum = snap.okNum + snap.errNum
 	return &snap
 }
@@ -141,24 +145,24 @@ func (m *Monitor) getWholeFinishBar() string {
 	snap := m.getSnapshot()
 	if m.seekAheadEnd && m.seekAheadError == nil {
 		if snap.errNum == 0 {
-			return getClearStr(fmt.Sprintf("Succeed: Total %d objects. %s %d objects.\n", m.totalNum, m.opStr, snap.okNum))
+			return getClearStr(fmt.Sprintf("Succeed: Total %d objects. %s %d objects(skip %d objects).\n", m.totalNum, m.opStr, snap.okNum, snap.skipNum))
 		}
-		return getClearStr(fmt.Sprintf("FinishWithError: Total %d objects. %s %d objects, Error %d objects.\n", m.totalNum, m.opStr, snap.okNum, snap.errNum))
+		return getClearStr(fmt.Sprintf("FinishWithError: Total %d objects. %s %d objects(skip %d objects), Error %d objects.\n", m.totalNum, m.opStr, snap.okNum, snap.skipNum, snap.errNum))
 	}
 	scanNum := max(m.totalNum, snap.dealNum)
 	if snap.errNum == 0 {
-		return getClearStr(fmt.Sprintf("Succeed: Total %d objects. %s %d objects.\n", scanNum, m.opStr, snap.okNum))
+		return getClearStr(fmt.Sprintf("Succeed: Total %d objects. %s %d objects(skip %d objects).\n", scanNum, m.opStr, snap.okNum, snap.skipNum))
 	}
-	return getClearStr(fmt.Sprintf("FinishWithError: Scanned %d objects. %s %d objects, Error %d objects.\n", scanNum, m.opStr, snap.okNum, snap.errNum))
+	return getClearStr(fmt.Sprintf("FinishWithError: Scanned %d objects. %s %d objects(skip %d objects), Error %d objects.\n", scanNum, m.opStr, snap.okNum, snap.skipNum, snap.errNum))
 }
 
 func (m *Monitor) getDefeatBar() string {
 	snap := m.getSnapshot()
 	if m.seekAheadEnd && m.seekAheadError == nil {
-		return getClearStr(fmt.Sprintf("Total %d objects. %s %d objects, when error happens.\n", m.totalNum, m.opStr, snap.okNum))
+		return getClearStr(fmt.Sprintf("Total %d objects. %s %d objects(skip %d objects), when error happens.\n", m.totalNum, m.opStr, snap.okNum, snap.skipNum))
 	}
 	scanNum := max(m.totalNum, snap.dealNum)
-	return getClearStr(fmt.Sprintf("Scanned %d objects. %s %d objects, when error happens.\n", scanNum, m.opStr, snap.okNum))
+	return getClearStr(fmt.Sprintf("Scanned %d objects. %s %d objects(skip %d objects), when error happens.\n", scanNum, m.opStr, snap.okNum, snap.skipNum))
 }
 
 // For rm

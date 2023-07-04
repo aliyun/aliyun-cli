@@ -319,15 +319,15 @@ func (s *OssutilCommandSuite) TestObjectTaggingError(c *C) {
 	strMethod = "put"
 	tagArgs = []string{CloudURLToString(bucketName, object), tagInfo}
 	_, err = cm.RunCommand("object-tagging", tagArgs, options)
-    c.Assert(err, NotNil)
-    
-    // tag value is error
-    tagInfo = "key1 value1"
-    delete(options,"payer")
-    strMethod = "put"
+	c.Assert(err, NotNil)
+
+	// tag value is error
+	tagInfo = "key1 value1"
+	delete(options, "payer")
+	strMethod = "put"
 	tagArgs = []string{CloudURLToString(bucketName, object), tagInfo}
 	_, err = cm.RunCommand("object-tagging", tagArgs, options)
-    c.Assert(err, NotNil)
+	c.Assert(err, NotNil)
 
 	os.Remove(fileName)
 	s.removeBucket(bucketName, true, c)
@@ -355,7 +355,7 @@ func (s *OssutilCommandSuite) TestObjectTaggingPayer(c *C) {
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
 		"stsToken":        &str,
-		"configFile":      &configFile,
+		"configFile":      &payerConfigFile,
 		"method":          &strMethod,
 		"payer":           &requester,
 	}

@@ -14,7 +14,7 @@ var specChineseSignurl = SpecText{
 	paramText: "cloud_url [meta] [options]",
 
 	syntaxText: ` 
-    ossutil sign cloud_url [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed] [--disable-encode-slash] [--payer requester]
+    ossutil sign cloud_url [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed] [--disable-encode-slash] [--payer requester] [--query-param key:value]
 `,
 
 	detailHelpText: ` 
@@ -24,7 +24,7 @@ var specChineseSignurl = SpecText{
 
 用法：
 
-    ossutil sign oss://bucket/object [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed] [--disable-encode-slash] [--payer requester]
+    ossutil sign oss://bucket/object [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed] [--disable-encode-slash] [--payer requester] [--query-param key:value]
 `,
 
 	sampleText: ` 
@@ -48,6 +48,9 @@ var specChineseSignurl = SpecText{
     
     ossutil sign oss://bucket1/object1  --payer requester
         生成oss://bucket1/dir/object1的签名url, 使用访问者付费模式
+
+    ossutil sign oss://bucket1/object1.jpg  --query-param x-oss-process:image/resize,m_fixed,w_100,h_100/rotate,90
+        生成处理过的图片 oss://bucket1/dir/object1.jpg的签名url 
 `,
 }
 
@@ -58,7 +61,7 @@ var specEnglishSignurl = SpecText{
 	paramText: "cloud_url [options]",
 
 	syntaxText: ` 
-    ossutil sign cloud_url [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed] [--disable-encode-slash] [--payer requester]
+    ossutil sign cloud_url [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed] [--disable-encode-slash] [--payer requester] [--query-param key:value]
 `,
 
 	detailHelpText: ` 
@@ -70,10 +73,11 @@ var specEnglishSignurl = SpecText{
     Use --trafic-limit to specify the trafic speed
     use --disable-encode-slash to specify not encoding of '/' in url path section
     use --payer to specify request payment
+    use --query-param to specify the query parameters, can be passed multiple times.
 
 Usage:
 
-    ossutil sign oss://bucket/object [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed] [--disable-encode-slash] [--payer requester]
+    ossutil sign oss://bucket/object [--timeout t] [--version-id versionId] [--trafic-limit limitSpeed] [--disable-encode-slash] [--payer requester] [--query-param key:value]
 `,
 
 	sampleText: ` 
@@ -97,6 +101,9 @@ Usage:
     
     ossutil sign oss://bucket1/object1  --payer requester
         Generate the signature of oss://bucket1/object1, use requester payment
+
+    ossutil sign oss://bucket1/object1.jpg  --query-param x-oss-process:image/resize,m_fixed,w_100,h_100/rotate,90
+		Generate the signature of processed picture oss://bucket1/dir/object1.jpg
 `,
 }
 
@@ -128,6 +135,16 @@ var signURLCommand = SignurlCommand{
 			OptionTrafficLimit,
 			OptionDisableEncodeSlash,
 			OptionRequestPayer,
+			//General options
+			OptionPassword,
+			OptionMode,
+			OptionECSRoleName,
+			OptionTokenTimeout,
+			OptionRamRoleArn,
+			OptionRoleSessionName,
+			OptionSTSRegion,
+			OptionUserAgent,
+			OptionQueryParam,
 		},
 	},
 }
@@ -165,6 +182,7 @@ func (sc *SignurlCommand) RunCommand() error {
 	if payer != "" && payer != strings.ToLower(string(oss.Requester)) {
 		return fmt.Errorf("invalid request payer: %s, please check", payer)
 	}
+	query, _ := GetStrings(OptionQueryParam, sc.command.options)
 
 	bucket, err := sc.command.ossBucket(cloudURL.bucket)
 	if err != nil {
@@ -182,6 +200,13 @@ func (sc *SignurlCommand) RunCommand() error {
 
 	if payer != "" {
 		options = append(options, oss.RequestPayerParam(oss.PayerType(payer)))
+	}
+
+	if len(query) > 0 {
+		options, err = AddStringsToOption(query, options)
+		if err != nil {
+			return err
+		}
 	}
 
 	str, err := sc.ossSign(bucket, cloudURL.object, timeout, options...)

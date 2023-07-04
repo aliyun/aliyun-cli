@@ -32,7 +32,7 @@ func ParseAndRunCommand() error {
 	}
 
 	var level = oss.LogOff
-	strLevel, err := GetString(OptionLogLevel, options)
+	strLevel, err := getLoglevelFromOptions(options)
 	if strLevel == "info" {
 		level = oss.Info
 	} else if strLevel == "debug" {
@@ -125,4 +125,23 @@ func (cm *CommandManager) RunCommand(commandName string, args []string, options 
 		return group == GroupTypeNormalCommand, nil
 	}
 	return false, fmt.Errorf("no such command: \"%s\", please try \"help\" for more information", commandName)
+}
+
+func getLoglevelFromOptions(options OptionMapType) (string, error) {
+	strLevel, err := GetString(OptionLogLevel, options)
+	if err != nil {
+		return "", err
+	}
+	if strLevel != "" {
+		return strLevel, nil
+	}
+
+	configFile, _ := GetString(OptionConfigFile, options)
+
+	strLevel, err = readLoglevelFromFile(configFile)
+	if err != nil {
+		return "", err
+	}
+
+	return strLevel, nil
 }

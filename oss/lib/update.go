@@ -291,8 +291,11 @@ func (uc *UpdateCommand) getBinaryName() string {
 	switch runtime.GOOS {
 	case "darwin":
 		object = updateBinaryMac64
-		if runtime.GOARCH == "386" {
+		switch runtime.GOARCH {
+		case "386":
 			object = updateBinaryMac32
+		case "arm64":
+			object = updateBinaryMacArm64
 		}
 	case "windows":
 		object = updateBinaryWindow64
@@ -301,8 +304,13 @@ func (uc *UpdateCommand) getBinaryName() string {
 		}
 	default:
 		object = updateBinaryLinux64
-		if runtime.GOARCH == "386" {
+		switch runtime.GOARCH {
+		case "386":
 			object = updateBinaryLinux32
+		case "arm":
+			object = updateBinaryLinuxArm32
+		case "arm64":
+			object = updateBinaryLinuxArm64
 		}
 	}
 	return object

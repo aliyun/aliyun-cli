@@ -1288,9 +1288,12 @@ var copyCommand = CopyCommand{
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
-			OptionSkipVerfiyCert,
+			OptionSkipVerifyCert,
 			OptionMaxDownSpeed,
 			OptionUserAgent,
+			OptionSignVersion,
+			OptionRegion,
+			OptionCloudBoxID,
 		},
 	},
 }
@@ -1824,6 +1827,7 @@ func (cc *CopyCommand) getFileListStatistic(dpath string) error {
 }
 
 func (cc *CopyCommand) fileProducer(srcURLList []StorageURLer, chFiles chan<- fileInfoType, chListError chan<- error) {
+	defer close(chFiles)
 	for _, url := range srcURLList {
 		name := url.ToString()
 		f, err := os.Stat(name)
@@ -1847,8 +1851,6 @@ func (cc *CopyCommand) fileProducer(srcURLList []StorageURLer, chFiles chan<- fi
 			chFiles <- fileInfoType{fname, dir}
 		}
 	}
-
-	defer close(chFiles)
 	chListError <- nil
 }
 
@@ -2672,19 +2674,11 @@ func (cc *CopyCommand) objectStatistic(bucket *oss.Bucket, cloudURL CloudURL) {
 				if doesSingleObjectMatchPatterns(object.Key, cc.cpOption.filters) {
 					if cc.cpOption.partitionIndex == 0 || (cc.cpOption.partitionIndex > 0 && matchHash(fnvIns, object.Key, cc.cpOption.partitionIndex-1, cc.cpOption.partitionCount)) {
 						if strings.ToLower(object.Type) == "symlink" && cc.cpOption.opType == operationTypeGet {
-							props, err := cc.command.ossGetObjectStatRetry(bucket, object.Key, cc.cpOption.payerOptions...)
-							if err != nil {
-								LogError("ossGetObjectStatRetry error info:%s\n", err.Error())
-								cc.monitor.setScanError(err)
-								return
-							}
+							props, _ := cc.command.ossGetObjectStatRetry(bucket, object.Key, cc.cpOption.payerOptions...)
 							size, err := strconv.ParseInt(props.Get(oss.HTTPHeaderContentLength), 10, 64)
-							if err != nil {
-								LogError("strconv.ParseInt error info:%s\n", err.Error())
-								cc.monitor.setScanError(err)
-								return
+							if err == nil {
+								object.Size = size
 							}
-							object.Size = size
 						}
 						cc.monitor.updateScanSizeNum(cc.getRangeSize(object.Size), 1)
 					}
@@ -2772,6 +2766,7 @@ func (cc *CopyCommand) parseRange(str string, size int64) (int64, error) {
 }
 
 func (cc *CopyCommand) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chObjects chan<- objectInfoType, chError chan<- error) {
+	defer close(chObjects)
 	pre := oss.Prefix(cloudURL.object)
 	marker := oss.Marker("")
 	//while the src object is end with "/", use object key as marker, exclude the object itself
@@ -2784,14 +2779,13 @@ func (cc *CopyCommand) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chO
 	}
 
 	listOptions := append(cc.cpOption.payerOptions, pre, marker, del)
+	fnvIns := fnv.New64()
 	for {
 		lor, err := cc.command.ossListObjectsRetry(bucket, listOptions...)
 		if err != nil {
 			chError <- err
-			break
+			return
 		}
-
-		fnvIns := fnv.New64()
 		for _, object := range lor.Objects {
 			prefix := ""
 			relativeKey := object.Key
@@ -2804,19 +2798,11 @@ func (cc *CopyCommand) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chO
 			if doesSingleObjectMatchPatterns(object.Key, cc.cpOption.filters) {
 				if cc.cpOption.partitionIndex == 0 || (cc.cpOption.partitionIndex > 0 && matchHash(fnvIns, object.Key, cc.cpOption.partitionIndex-1, cc.cpOption.partitionCount)) {
 					if strings.ToLower(object.Type) == "symlink" && cc.cpOption.opType == operationTypeGet {
-						props, err := cc.command.ossGetObjectStatRetry(bucket, object.Key, cc.cpOption.payerOptions...)
-						if err != nil {
-							LogError("ossGetObjectStatRetry error info:%s\n", err.Error())
-							chError <- err
-							break
-						}
+						props, _ := cc.command.ossGetObjectStatRetry(bucket, object.Key, cc.cpOption.payerOptions...)
 						size, err := strconv.ParseInt(props.Get(oss.HTTPHeaderContentLength), 10, 64)
-						if err != nil {
-							LogError("strconv.ParseInt error info:%s\n", err.Error())
-							chError <- err
-							break
+						if err == nil {
+							object.Size = size
 						}
-						object.Size = size
 					}
 					chObjects <- objectInfoType{prefix, relativeKey, int64(object.Size), object.LastModified}
 				}
@@ -2830,7 +2816,7 @@ func (cc *CopyCommand) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chO
 			break
 		}
 	}
-	defer close(chObjects)
+
 	chError <- nil
 }
 

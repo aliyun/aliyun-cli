@@ -121,8 +121,11 @@ var statCommand = StatCommand{
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
-			OptionSkipVerfiyCert,
+			OptionSkipVerifyCert,
 			OptionUserAgent,
+			OptionSignVersion,
+			OptionRegion,
+			OptionCloudBoxID,
 		},
 	},
 }
@@ -202,6 +205,9 @@ func (sc *StatCommand) bucketStat(bucket *oss.Bucket, cloudURL CloudURL) error {
 	}
 	fmt.Printf("%-22s: %s\n", StatTransferAcceleration, gbar.BucketInfo.TransferAcceleration)
 	fmt.Printf("%-22s: %s\n", StatCrossRegionReplication, gbar.BucketInfo.CrossRegionReplication)
+	if len(gbar.BucketInfo.AccessMonitor) > 0 {
+		fmt.Printf("%-22s: %s\n", StatAccessMonitor, gbar.BucketInfo.AccessMonitor)
+	}
 
 	return nil
 }

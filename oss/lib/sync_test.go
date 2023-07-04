@@ -1031,7 +1031,7 @@ func (s *OssutilCommandSuite) TestSyncWithPayerSucess(c *C) {
 		"endpoint":        &payerBucketEndPoint,
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
-		"configFile":      &configFile,
+		"configFile":      &payerConfigFile,
 		"checkpointDir":   &cpDir,
 		"routines":        &routines,
 		"force":           &bForce,
@@ -1613,6 +1613,21 @@ func (s *OssutilCommandSuite) TestSyncMovePathError(c *C) {
 	err := syncCommand.movePath(fileName, newFileName)
 	c.Assert(err, NotNil)
 	os.RemoveAll(fileName)
+}
+
+func (s *OssutilCommandSuite) TestSyncMoveFileToPath(c *C) {
+	fileName := "./testdir1-" + randLowStr(3)
+	s.createFile(fileName, "123", c)
+	newFileName := "." + string(os.PathSeparator) + "new.txt"
+	err := syncCommand.moveFileToPath(fileName, newFileName)
+	c.Assert(err, IsNil)
+
+	newFileName2 := "." + string(os.PathSeparator) + "root" + string(os.PathSeparator) + "new.txt"
+	err = syncCommand.movePath(fileName, newFileName2)
+	c.Assert(err, NotNil)
+	os.RemoveAll(fileName)
+	os.RemoveAll(newFileName)
+	os.RemoveAll(newFileName2)
 }
 
 func (s *OssutilCommandSuite) TestSyncReadDirLimitError(c *C) {

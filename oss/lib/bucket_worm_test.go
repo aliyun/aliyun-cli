@@ -1,6 +1,8 @@
 package lib
 
 import (
+	"time"
+
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	. "gopkg.in/check.v1"
 )
@@ -21,6 +23,7 @@ func (s *OssutilCommandSuite) TestWormInitiateBucketWormSuccess(c *C) {
 	wormArgs := []string{"init", CloudURLToString(bucketName, ""), "10"}
 	_, err := cm.RunCommand("worm", wormArgs, options)
 	c.Assert(err, IsNil)
+	time.Sleep(3 * time.Second)
 
 	wormArgs = []string{"get", CloudURLToString(bucketName, "")}
 	_, err = cm.RunCommand("worm", wormArgs, options)
@@ -131,6 +134,7 @@ func (s *OssutilCommandSuite) TestWormCompleteBucketWormSuccess(c *C) {
 	wormArgs = []string{"complete", CloudURLToString(bucketName, ""), wormCommand.wmOption.wormConfig.WormId}
 	_, err = cm.RunCommand("worm", wormArgs, options)
 	c.Assert(err, IsNil)
+	time.Sleep(time.Second * 3)
 
 	var wormConfig oss.WormConfiguration
 	wormCommand.wmOption.wormConfig = wormConfig

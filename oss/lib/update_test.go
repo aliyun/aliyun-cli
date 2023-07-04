@@ -3,6 +3,7 @@ package lib
 import (
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -152,6 +153,94 @@ func (s *OssutilCommandSuite) TestUpdateSuccess(c *C) {
 	os.Args = cmdline
 	err = updateCommand.updateVersion(lowVersion, "ch")
 	c.Assert(err, IsNil)
+	os.Remove(binaryName)
+	os.Remove(".temp_" + binaryName)
+}
+
+func (s *OssutilCommandSuite) TestUpdateWithLinuxArm(c *C) {
+	nowVersion, err := updateCommand.getLastestVersion()
+	c.Assert(err, IsNil)
+
+	// get a version below current
+	pSlice := strings.Split(nowVersion, ".")
+	for index := len(pSlice) - 1; index >= 0; index-- {
+		if pSlice[index] > "0" {
+			b, err := strconv.Atoi(pSlice[index])
+			c.Assert(err, IsNil)
+			pSlice[index] = strconv.Itoa(b - 1)
+			break
+		}
+	}
+
+	lowVersion := ""
+	for k, v := range pSlice {
+		if k == len(pSlice)-1 {
+			lowVersion = lowVersion + v
+		} else {
+			lowVersion = lowVersion + v + "."
+		}
+	}
+
+	// set path enviroment
+	oldPathValue := os.Getenv("PATH")
+	currentDiretory, _ := os.Getwd()
+	if runtime.GOOS == "windows" {
+		os.Setenv("PATH", currentDiretory+";"+oldPathValue)
+	} else {
+		os.Setenv("PATH", currentDiretory+":"+oldPathValue)
+	}
+
+	// binaryName file must be exist
+	binaryName := updateCommand.getBinaryName()
+	testLogger.Print("ossutil name:" + binaryName)
+	ioutil.WriteFile(binaryName, []byte("test-binary"), 0744)
+
+	cmdline := []string{binaryName, "update", "-f"}
+	os.Args = cmdline
+	err = updateCommand.updateVersion(lowVersion, "ch")
+	c.Assert(err, IsNil)
+
+	cmd := exec.Command(binaryName, "-h")
+	cmdOut, err := cmd.CombinedOutput()
+	c.Assert(err, IsNil)
+
+	testLogger.Print(string(cmdOut))
+
+	cmd = exec.Command("go", "version")
+	cmdOut, err = cmd.CombinedOutput()
+	c.Assert(err, IsNil)
+	if strings.Contains(string(cmdOut), "arm64") {
+		c.Assert(binaryName, Equals, updateBinaryLinuxArm64)
+	}
+
+	if strings.Contains(string(cmdOut), "arm") && !strings.Contains(string(cmdOut), "arm64") {
+		c.Assert(binaryName, Equals, updateBinaryLinuxArm32)
+	}
+
+	cmdline = []string{binaryName, "update", "-f"}
+	os.Args = cmdline
+	err = updateCommand.updateVersion(nowVersion, "ch")
+	c.Assert(err, IsNil)
+	if strings.Contains(string(cmdOut), "arm64") {
+		c.Assert(binaryName, Equals, updateBinaryLinuxArm64)
+	}
+
+	if strings.Contains(string(cmdOut), "arm") && !strings.Contains(string(cmdOut), "arm64") {
+		c.Assert(binaryName, Equals, updateBinaryLinuxArm32)
+	}
+
+	cmd = exec.Command(binaryName, "configggg")
+	cmdOut, err = cmd.CombinedOutput()
+	c.Assert(err, NotNil)
+
+	testLogger.Print(string(cmdOut))
+
+	cmd = exec.Command(binaryName, "-v")
+	cmdOut, err = cmd.CombinedOutput()
+	c.Assert(err, IsNil)
+
+	testLogger.Print(string(cmdOut))
+
 	os.Remove(binaryName)
 	os.Remove(".temp_" + binaryName)
 }

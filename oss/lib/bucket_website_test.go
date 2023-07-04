@@ -2,8 +2,8 @@ package lib
 
 import (
 	"encoding/xml"
-	"io/ioutil"
 	"os"
+	"time"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	. "gopkg.in/check.v1"
@@ -193,6 +193,10 @@ func (s *OssutilCommandSuite) TestWebsiteOptionsEmptyEndpoint(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(12)
 	s.putBucket(bucketName, c)
 
+	cfile := randStr(10)
+	data := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
+	s.createFile(cfile, data, c)
+
 	var str string
 	strMethod := "get"
 	options := OptionMapType{
@@ -204,22 +208,11 @@ func (s *OssutilCommandSuite) TestWebsiteOptionsEmptyEndpoint(c *C) {
 		"method":          &strMethod,
 	}
 
-	// oss client error
-	//set endpoint emtpy
-	oldConfigStr, err := ioutil.ReadFile(configFile)
-	c.Assert(err, IsNil)
-	fd, _ := os.OpenFile(configFile, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
-	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "accessKeyID=123" + "\n" + "accessKeySecret=456" + "\n" + "endpoint="
-	fd.WriteString(configStr)
-	fd.Close()
-
 	versioingArgs := []string{CloudURLToString(bucketName, "")}
-	_, err = cm.RunCommand("website", versioingArgs, options)
+	_, err := cm.RunCommand("website", versioingArgs, options)
 	c.Assert(err, NotNil)
 
-	err = ioutil.WriteFile(configFile, []byte(oldConfigStr), 0664)
-	c.Assert(err, IsNil)
-
+	os.Remove(cfile)
 	s.removeBucket(bucketName, true, c)
 }
 
@@ -351,6 +344,7 @@ func (s *OssutilCommandSuite) TestWebsiteDelete(c *C) {
 	websiteArgs := []string{CloudURLToString(bucketName, ""), websiteFileName}
 	_, err := cm.RunCommand("website", websiteArgs, options)
 	c.Assert(err, IsNil)
+	time.Sleep(3 * time.Second)
 
 	// get website
 	websiteDownName := websiteFileName + "-down"

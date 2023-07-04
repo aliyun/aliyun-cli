@@ -28,14 +28,16 @@ func init() {
 	sys_release = "-"
 	sys_machine = runtime.GOARCH
 
-	if out, err := exec.Command("uname", "-s").CombinedOutput(); err == nil {
-		sys_name = string(bytes.TrimSpace(out))
-	}
-	if out, err := exec.Command("uname", "-r").CombinedOutput(); err == nil {
-		sys_release = string(bytes.TrimSpace(out))
-	}
-	if out, err := exec.Command("uname", "-m").CombinedOutput(); err == nil {
-		sys_machine = string(bytes.TrimSpace(out))
+	if !strings.EqualFold(sys_name, "windows") {
+		if out, err := exec.Command("uname", "-s").CombinedOutput(); err == nil {
+			sys_name = string(bytes.TrimSpace(out))
+		}
+		if out, err := exec.Command("uname", "-r").CombinedOutput(); err == nil {
+			sys_release = string(bytes.TrimSpace(out))
+		}
+		if out, err := exec.Command("uname", "-m").CombinedOutput(); err == nil {
+			sys_machine = string(bytes.TrimSpace(out))
+		}
 	}
 }
 
@@ -90,9 +92,9 @@ func getSysInfo() sysInfo {
 func getUserAgent(ua string) string {
 	sys := getSysInfo()
 	if ua == "" {
-	    return fmt.Sprintf("aliyun-sdk-go/%s (%s/%s/%s;%s)/%s-%s", oss.Version, sys.name, sys.release, sys.machine, runtime.Version(), Package, Version)
+		return fmt.Sprintf("aliyun-sdk-go/%s (%s/%s/%s;%s)/%s-%s", oss.Version, sys.name, sys.release, sys.machine, runtime.Version(), Package, Version)
 	}
-	return fmt.Sprintf("aliyun-sdk-go/%s (%s/%s/%s;%s)/%s-%s/%s", oss.Version, sys.name, sys.release, sys.machine, runtime.Version(), Package, Version,ua)
+	return fmt.Sprintf("aliyun-sdk-go/%s (%s/%s/%s;%s)/%s-%s/%s", oss.Version, sys.name, sys.release, sys.machine, runtime.Version(), Package, Version, ua)
 }
 
 func utcToLocalTime(utc time.Time) time.Time {
@@ -712,4 +714,25 @@ func GetPassword(prompt string) ([]byte, error) {
 	}
 	fmt.Fprint(os.Stderr, prompt)
 	return terminal.ReadPassword(fd)
+}
+
+// AddStringsToOption add strings option to oss option
+func AddStringsToOption(params []string, options []oss.Option) ([]oss.Option, error) {
+	if params == nil {
+		return options, nil
+	}
+	paramsMap := map[string]string{}
+	for _, s := range params {
+		pair := strings.SplitN(s, ":", 2)
+		name := pair[0]
+		value := ""
+		if len(pair) > 1 {
+			value = pair[1]
+		}
+		paramsMap[name] = value
+	}
+	for key, value := range paramsMap {
+		options = append(options, oss.AddParam(key, value))
+	}
+	return options, nil
 }

@@ -695,7 +695,7 @@ func (s *OssutilCommandSuite) TestRmSpecialCharacterKey(c *C) {
 	s.removeBucket(bucketName, true, c)
 }
 
-//versions
+// versions
 func (s *OssutilCommandSuite) TestRemoveObjectInVersioningBucket(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(10)
 	s.putBucket(bucketName, c)
@@ -1066,7 +1066,7 @@ func (s *OssutilCommandSuite) TestRmObjectWithPayer(c *C) {
 		"endpoint":        &payerBucketEndPoint,
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
-		"configFile":      &configFile,
+		"configFile":      &payerConfigFile,
 		"force":           &bForce,
 		"payer":           &requester,
 	}
@@ -1099,7 +1099,7 @@ func (s *OssutilCommandSuite) TestRmBatchObjectWithPayer(c *C) {
 		"endpoint":        &payerBucketEndPoint,
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
-		"configFile":      &configFile,
+		"configFile":      &payerConfigFile,
 		"force":           &bForce,
 		"recursive":       &recursive,
 		"payer":           &requester,
@@ -1139,7 +1139,7 @@ func (s *OssutilCommandSuite) TestRmBatchPartsWithPayer(c *C) {
 		"endpoint":        &payerBucketEndPoint,
 		"accessKeyID":     &str,
 		"accessKeySecret": &str,
-		"configFile":      &configFile,
+		"configFile":      &payerConfigFile,
 		"force":           &bForce,
 		"recursive":       &recursive,
 		"allType":         &allType,
@@ -1147,4 +1147,44 @@ func (s *OssutilCommandSuite) TestRmBatchPartsWithPayer(c *C) {
 	}
 	_, err = cm.RunCommand("rm", rmArgs, rmOptions)
 	c.Assert(err, IsNil)
+}
+
+func (s *OssutilCommandSuite) TestMultipartUploadsProducer(c *C) {
+	chObjects := make(chan uploadIdInfoType, ChannelBuf)
+	chListError := make(chan error, 1)
+	cloudURL, err := CloudURLFromString(CloudURLToString(bucketNameNotExist, "demo.txt"), "")
+	c.Assert(err, IsNil)
+	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
+	c.Assert(err, IsNil)
+	bucket, err := client.Bucket(bucketNameNotExist)
+	c.Assert(err, IsNil)
+	removeCommand.multipartUploadsProducer(bucket, cloudURL, chObjects, chListError)
+	err = <-chListError
+	c.Assert(err, NotNil)
+	select {
+	case _, ok := <-chObjects:
+		testLogger.Printf("chObjects channel has closed")
+		c.Assert(ok, Equals, false)
+	default:
+		testLogger.Printf("chObjects no data")
+		c.Assert(true, Equals, false)
+	}
+
+	chObjects2 := make(chan uploadIdInfoType, ChannelBuf)
+	chListError2 := make(chan error, 1)
+	cloudURL2, err := CloudURLFromString(CloudURLToString(bucketNameExist, ""), "")
+	c.Assert(err, IsNil)
+	bucket2, err := client.Bucket(bucketNameExist)
+	c.Assert(err, IsNil)
+	removeCommand.multipartUploadsProducer(bucket2, cloudURL2, chObjects2, chListError2)
+	err = <-chListError2
+	c.Assert(err, IsNil)
+	select {
+	case _, ok := <-chObjects:
+		testLogger.Printf("chObjects channel has closed")
+		c.Assert(ok, Equals, false)
+	default:
+		testLogger.Printf("chObjects no data")
+		c.Assert(true, Equals, false)
+	}
 }
