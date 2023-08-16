@@ -16,6 +16,6 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: 1.20
+          go-version: '1.20'
       - run: GOOS=darwin GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${cat ./version}'" -o out/aliyun.amd64 main/main.go
       - run: GOOS=darwin GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${cat ./version}'" -o out/aliyun.amd64 main/main.go
