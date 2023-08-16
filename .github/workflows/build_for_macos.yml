@@ -1,0 +1,18 @@
+name: Build for MacOSX
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Build
+    runs-on: macos-12
+    env:
+      VERSION: ${{ github.ref }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - run: git branch
+      - run: GOOS=darwin GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${cat ./version}'" -o out/aliyun.amd64 main/main.go
