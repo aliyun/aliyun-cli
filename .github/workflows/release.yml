@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
-      VERSION: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -18,14 +17,13 @@ jobs:
           ref: ${{ github.ref }}
       - name: Create Release
         run: |
-          bash tools/create_release.sh $VERSION
+          bash tools/create_release.sh ${{ github.ref_name }}
   build_for_macosx:
     needs: [create_release]
     name: Build for MacOSX
     runs-on: macos-12
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
-      VERSION: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -37,6 +35,8 @@ jobs:
           go-version: '1.20'
       - name: Build
         run: |
+          TAG=${{ github.ref_name }}
+          VERSION=${TAG#v}
           GOOS=darwin GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun.amd64 main/main.go
           GOOS=darwin GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun.arm64 main/main.go
           lipo -output out/aliyun -create out/aliyun.amd64 out/aliyun.arm64
@@ -51,7 +51,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
-      VERSION: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -63,6 +62,8 @@ jobs:
           go-version: '1.20'
       - name: Build
         run: |
+          TAG=${{ github.ref_name }}
+          VERSION=${TAG#v}
           # build for Linux amd64
           GOOS=linux GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
           tar zcvf out/aliyun-cli-linux-${VERSION}-amd64.tgz -C out aliyun
@@ -77,7 +78,6 @@ jobs:
     runs-on: windows-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      VERSION: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -89,6 +89,8 @@ jobs:
           go-version: '1.20'
       - name: Build
         run: |
+          TAG=${{ github.ref_name }}
+          VERSION=${TAG#v}
           GOOS=windows GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o aliyun.exe main/main.go
           zip -r out/aliyun-cli-windows-${VERSION}-amd64.zip aliyun.exe
   finish_release:
