@@ -7,19 +7,9 @@ name: Create Release
 jobs:
   build:
     name: Create new release
-    runs-on: macos-12
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
       - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
+        run: bash tools/create_release.sh ${{ github.ref }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: |
-            TBD
-          draft: false
-          prerelease: true
