@@ -8,19 +8,24 @@ jobs:
   create_release:
     name: Create new release
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+      VERSION: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
           ref: ${{ github.ref }}
       - name: Create Release
-        run: bash tools/create_release.sh ${{ github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        run: |
+          bash tools/create_release.sh $VERSION
   build_for_macosx:
     needs: [create_release]
     name: Build for MacOSX
     runs-on: macos-12
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+      VERSION: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -30,18 +35,23 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: '1.20'
-      - run: |
-          export VERSION=$(cat ./version)
+      - name: Build
+        run: |
           GOOS=darwin GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun.amd64 main/main.go
           GOOS=darwin GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun.arm64 main/main.go
           lipo -output out/aliyun -create out/aliyun.amd64 out/aliyun.arm64
-          tar zcvf out/aliyun-cli-macosx-${VERSION}-amd64.tgz -C out aliyun
+          tar zcvf out/aliyun-cli-macosx-${VERSION}-universal.tgz -C out aliyun
           # generate out/aliyun-cli-${VERSION}.pkg
           sh tools/build_pkg.sh ${VERSION}
+          tools/upload_asset.sh v${VERSION} out/aliyun-cli-macosx-${VERSION}-universal.tgz
+          tools/upload_asset.sh v${VERSION} out/aliyun-cli-${VERSION}.pkg
   build_for_linux:
     needs: [create_release]
     name: Build for Linux
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+      VERSION: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -51,18 +61,23 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: '1.20'
-      - run: |
-          export VERSION=$(cat ./version)
+      - name: Build
+        run: |
           # build for Linux amd64
           GOOS=linux GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
           tar zcvf out/aliyun-cli-linux-${VERSION}-amd64.tgz -C out aliyun
+          tools/upload_assets.sh v${VERSION} out/aliyun-cli-linux-${VERSION}-amd64.tgz
           # build for Linux arm64
-          GOOS=linux GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go`, cliDir)
+          GOOS=linux GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
           tar zcvf out/aliyun-cli-linux-${VERSION}-arm64.tgz -C out aliyun
+          tools/upload_asset.sh v${VERSION} out/aliyun-cli-linux-${VERSION}-arm64.tgz
   build_for_windows:
     needs: [create_release]
     name: Build for Windows
     runs-on: windows-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ github.ref_name }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -72,13 +87,17 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: '1.20'
-      - run: |
+      - name: Build
+        run: |
           GOOS=windows GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o aliyun.exe main/main.go
           zip -r out/aliyun-cli-windows-${VERSION}-amd64.zip aliyun.exe
   finish_release:
     needs: [build_for_macosx, build_for_linux, build_for_windows]
-    name: Build for Windows
+    name: Finish the release
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ github.ref_name }}
     steps:
       - run: |
           echo "finished"
