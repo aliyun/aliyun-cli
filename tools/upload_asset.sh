@@ -3,12 +3,16 @@
 TAG=v$1
 ASSET=$2
 
-if [[ $ASSET == ".tgz" ]]
+if [[ $ASSET == *.tgz ]]
 then
     TYPE=application/x-compressed-tar
+elif [[ $ASSET == *.txt ]]
+then
+    TYPE=text/plain
 else
     TYPE=application/zip
 fi
+
 
 RELEASE_ID=$(curl -fsSL \
   -H "Accept: application/vnd.github+json" \
