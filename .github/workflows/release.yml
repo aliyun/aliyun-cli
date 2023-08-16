@@ -44,7 +44,7 @@ jobs:
           bash tools/upload_asset.sh v${VERSION} out/aliyun-cli-macosx-${VERSION}-universal.tgz
           # generate out/aliyun-cli-${VERSION}.pkg
           bash tools/build_pkg.sh ${VERSION}
-          bash tools/upload_asset.sh v${VERSION} out/aliyun-cli-${VERSION}.pkg
+          bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-${VERSION}.pkg
   build_for_linux:
     needs: [create_release]
     name: Build for Linux
@@ -66,11 +66,11 @@ jobs:
           # build for Linux amd64
           GOOS=linux GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
           tar zcvf out/aliyun-cli-linux-${VERSION}-amd64.tgz -C out aliyun
-          bash tools/upload_assets.sh v${VERSION} out/aliyun-cli-linux-${VERSION}-amd64.tgz
+          bash tools/upload_assets.sh ${VERSION} out/aliyun-cli-linux-${VERSION}-amd64.tgz
           # build for Linux arm64
           GOOS=linux GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
           tar zcvf out/aliyun-cli-linux-${VERSION}-arm64.tgz -C out aliyun
-          bash tools/upload_asset.sh v${VERSION} out/aliyun-cli-linux-${VERSION}-arm64.tgz
+          bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-linux-${VERSION}-arm64.tgz
   build_for_windows:
     needs: [create_release]
     name: Build for Windows
