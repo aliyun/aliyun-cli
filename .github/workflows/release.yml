@@ -9,7 +9,11 @@ jobs:
     name: Create new release
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+          ref: ${{ github.ref }}
       - name: Create Release
-        run: bash tools/create_release.sh ${{ github.ref }}
+        run: bash tools/create_release.sh ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token

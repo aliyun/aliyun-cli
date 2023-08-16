@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
 TAGNAME=$1
-RELEASE_NAME=$1
 
-DATA='{"tag_name":"'$TAGNAME'","name":"'$RELEASE_NAME'","body":"TBD","draft":true,"prerelease":true,"generate_release_notes":false}'
+DATA='{"tag_name":"'$TAGNAME'","name":"'$TAGNAME'","body":"TBD","draft":true,"prerelease":true,"generate_release_notes":false}'
 
 curl -L \
   -H "Accept: application/vnd.github+json" \
