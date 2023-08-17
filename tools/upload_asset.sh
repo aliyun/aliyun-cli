@@ -13,7 +13,6 @@ else
     TYPE=application/zip
 fi
 
-
 RELEASE_ID=$(curl -fsSL \
   -H "Accept: application/vnd.github+json" \
   -H "Authorization: Bearer $GITHUB_TOKEN" \
