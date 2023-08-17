@@ -2,7 +2,7 @@
 
 TAGNAME=$1
 
-DATA='{"tag_name":"'$TAGNAME'","name":"'$TAGNAME'","body":"TBD","draft":false,"prerelease":true,"generate_release_notes":false}'
+DATA='{"tag_name":"'$TAGNAME'","name":"'$TAGNAME'","draft":false,"prerelease":true,"generate_release_notes":true}'
 
 curl -fsSL \
   -H "Accept: application/vnd.github+json" \
