@@ -9,6 +9,8 @@ RELEASE_ID=$(curl -fsSL \
   https://api.github.com/repos/aliyun/aliyun-cli/releases/tags/v$VERSION | jq '.["id"]')
 
 LIST=(
+    "aliyun-cli-macosx-$VERSION-amd64.tgz"
+    "aliyun-cli-macosx-$VERSION-arm64.tgz"
     "aliyun-cli-$VERSION.pkg"
     "aliyun-cli-macosx-$VERSION-universal.tgz"
     "aliyun-cli-linux-$VERSION-amd64.tgz"

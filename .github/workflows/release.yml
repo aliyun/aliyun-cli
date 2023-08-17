@@ -37,8 +37,14 @@ jobs:
         run: |
           TAG=${{ github.ref_name }}
           VERSION=${TAG#v}
-          GOOS=darwin GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun.amd64 main/main.go
-          GOOS=darwin GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun.arm64 main/main.go
+          GOOS=darwin GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+          tar zcvf out/aliyun-cli-macosx-${VERSION}-amd64.tgz -C out aliyun
+          bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-macosx-${VERSION}-amd64.tgz
+          cp out/aliyun out/aliyun.amd64
+          GOOS=darwin GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+          tar zcvf out/aliyun-cli-macosx-${VERSION}-arm64.tgz -C out aliyun
+          bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-macosx-${VERSION}-arm64.tgz
+          cp out/aliyun out/aliyun.arm64
           lipo -output out/aliyun -create out/aliyun.amd64 out/aliyun.arm64
           tar zcvf out/aliyun-cli-macosx-${VERSION}-universal.tgz -C out aliyun
           bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-macosx-${VERSION}-universal.tgz
@@ -102,6 +108,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+      ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -113,3 +121,4 @@ jobs:
           VERSION=${TAG#v}
           bash tools/download_assets.sh ${VERSION}
           bash tools/upload_asset.sh ${VERSION} SHASUMS256.txt
+          bash tools/finish_release.sh ${VERSION}
