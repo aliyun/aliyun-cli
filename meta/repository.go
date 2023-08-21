@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,20 +27,18 @@ type Repository struct {
 	Products []Product
 	Names    []string
 
-	index  map[string]Product
-	reader Reader
+	index map[string]Product
 }
 
-func LoadRepository(reader Reader) *Repository {
+func LoadRepository() *Repository {
 	var e ProductSet
-	err := ReadJsonFrom(reader, "products.json", &e)
+	err := ReadJsonFrom("products.json", &e)
 	if err != nil {
 		panic(err)
 	}
 
 	r := Repository{
-		index:  make(map[string]Product),
-		reader: reader,
+		index: make(map[string]Product),
 	}
 	for _, product := range e.Products {
 		name := strings.ToLower(product.Code)
@@ -70,7 +68,7 @@ func (a *Repository) GetApi(productCode string, version string, apiName string) 
 		return result, false
 	}
 
-	err := ReadJsonFrom(a.reader, strings.ToLower(product.Code)+"/"+apiName+".json", &result)
+	err := ReadJsonFrom(strings.ToLower(product.Code)+"/"+apiName+".json", &result)
 	if err != nil {
 		return result, false
 	}
