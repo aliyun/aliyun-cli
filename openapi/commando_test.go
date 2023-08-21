@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -99,13 +99,6 @@ func Test_main(t *testing.T) {
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
 	assert.Equal(t, "'aos' is not a valid command or product. See `aliyun help`.", err.Error())
-
-	reader := &reader_test{}
-	reader.content = `{"products":[{"code":"aos","api_style":"restful"}]}`
-	command.library.builtinRepo = meta.LoadRepository(reader)
-	err = command.main(ctx, args)
-	assert.NotNil(t, err)
-	assert.Equal(t, "missing version for product aos", err.Error())
 
 	args = []string{"test", "test2", "test1"}
 	err = command.main(ctx, args)
@@ -281,9 +274,7 @@ func Test_complete(t *testing.T) {
 		RegionId:        "cn-hangzhou",
 	}
 	command := NewCommando(w, profile)
-	reader := &reader_test{}
-	reader.content = `{"products":[{"code":"ecs","api_style":"rpc","apis":["DescribeRegions","Copy"]},{"code":"aos","api_style":"restful"}]}`
-	command.library.builtinRepo = meta.LoadRepository(reader)
+	command.library.builtinRepo = meta.LoadRepository()
 	args := []string{}
 	str := command.complete(ctx, args)
 	assert.Equal(t, []string{}, str)

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,7 +28,7 @@ func (e *InvalidEndpointError) Error() string {
 	s := fmt.Sprintf("unknown endpoint for region %s", e.Region)
 	if e.Product != nil {
 		//	s = s + fmt", try add --endpoint %s", e.Suggestion
-		s = s + fmt.Sprintf("\n  you need to add --endpoint xxx.aliyuncs.com")
+		s = s + "\n  you need to add --endpoint xxx.aliyuncs.com"
 		if e.LocationError != nil {
 			s = s + fmt.Sprintf("\n  LC_Error: %s", e.LocationError.Error())
 		}

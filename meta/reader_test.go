@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,42 +14,30 @@
 package meta
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-type reader_test struct {
-	content string
-}
-
-func (r *reader_test) ReadFrom(path string) ([]byte, error) {
-	if path == "" || r.content == "" {
-		return nil, fmt.Errorf("Please insert a valid path.")
-	}
-	return []byte(r.content), nil
-}
-
-func (r *reader_test) setcontent(contenth string) {
-	r.content = contenth
-}
-
 func TestReadJsonFrom(t *testing.T) {
-	r := &reader_test{}
 	path := ""
-	err := ReadJsonFrom(r, path, nil)
+	err := ReadJsonFrom(path, nil)
 	assert.NotNil(t, err)
-	assert.Equal(t, "read json from  failed <nil>", err.Error())
+	assert.Equal(t, "read json from  failed", err.Error())
 
 	api := &Api{}
-	path = `{"name":"api""protocol":"http"}`
-	r.content = path
-	err = ReadJsonFrom(r, path, api)
-	assert.NotNil(t, err)
-	assert.Equal(t, "unmarshal json {\"name\":\"api\"\"protocol\":\"http\"} failed invalid character '\"' after object key:value pair", err.Error())
+	path = `invalid path`
 
-	r.content = `{"name":"api","protocol":"http"}`
-	err = ReadJsonFrom(r, path, api)
+	err = ReadJsonFrom(path, api)
+	assert.NotNil(t, err)
+	assert.Equal(t, "read json from invalid path failed", err.Error())
+
+	err = ReadJsonFrom("ecs/DescribeRegions.json", api)
+	assert.Equal(t, "DescribeRegions", api.Name)
 	assert.Nil(t, err)
+
+	str := ""
+	err = ReadJsonFrom("ecs/DescribeRegions.json", &str)
+	assert.NotNil(t, err)
+	assert.Equal(t, "unmarshal json ecs/DescribeRegions.json failed json: cannot unmarshal object into Go value of type string", err.Error())
 }

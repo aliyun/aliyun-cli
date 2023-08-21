@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -44,9 +44,8 @@ type Product struct {
 	GlobalEndpoint          string            `json:"global_endpoint"`
 	RegionalEndpointPattern string            `json:"regional_endpoint_patterns"`
 
-	ApiStyle string         `json:"api_style"`
-	ApiNames []string       `json:"apis"`
-	apis     map[string]Api `yaml:"-"`
+	ApiStyle string   `json:"api_style"`
+	ApiNames []string `json:"apis"`
 }
 
 func (a *Product) GetLowerCode() string {
@@ -102,11 +101,5 @@ func (a *Product) TryGetEndpoints(region string, client *sdk.Client) (endpoint s
 		}
 	}
 
-	//if strings.Contains(a.Domain, "[RegionId]") {
-	//	return "", fmt.Errorf("can't resolve endpoint for %s(%s):%s, use --endpoint xxx.aliyuncs.com parameter instead",
-	//		a.Name, a.LocationServiceCode, a.Domain)
-	//} else {
-	//	return "", nil
-	//}
 	return
 }

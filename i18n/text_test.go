@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,8 +19,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestText(t *testing.T) {
-	language = "en"
+func TestGet(t *testing.T) {
 	tx := T("hello", "你好")
 	assert.Equal(t, "hello", tx.Get("en"))
+	assert.Equal(t, "你好", tx.Get("zh"))
+	assert.Equal(t, "", tx.Get("jp"))
+}
+
+func TestText(t *testing.T) {
+	tx := T("hello", "你好")
+	language = "en"
+	assert.Equal(t, "hello", tx.Text())
+	language = "zh"
+	assert.Equal(t, "你好", tx.Text())
 }

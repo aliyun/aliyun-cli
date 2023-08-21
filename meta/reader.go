@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,16 +16,14 @@ package meta
 import (
 	"encoding/json"
 	"fmt"
+
+	aliyunopenapimeta "github.com/aliyun/aliyun-cli/aliyun-openapi-meta"
 )
 
-type Reader interface {
-	ReadFrom(path string) ([]byte, error)
-}
-
-func ReadJsonFrom(r Reader, path string, v interface{}) error {
-	buf, err := r.ReadFrom(path)
+func ReadJsonFrom(path string, v interface{}) error {
+	buf, err := aliyunopenapimeta.Metadatas.ReadFile("metadatas/" + path)
 	if err != nil {
-		return fmt.Errorf("read json from %s failed %v", path, v)
+		return fmt.Errorf("read json from %s failed", path)
 	}
 	err = json.Unmarshal(buf, v)
 	if err != nil {
