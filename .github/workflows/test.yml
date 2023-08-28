@@ -1,0 +1,36 @@
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  package:
+    runs-on: macos-12
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.20'
+      - uses: apple-actions/import-codesign-certs@v2
+        with: 
+          p12-file-base64: ${{ secrets.APPLE_CERT_DATA }}
+          p12-password: ${{ secrets.APPLE_CERT_PASSWORD }}
+      - uses: apple-actions/import-codesign-certs@v2
+        with: 
+          p12-file-base64: ${{ secrets.APPLE_DEVELPER_ID_APPLICATION_CERT_DATA }}
+          p12-password: ${{ secrets.APPLE_CERT_PASSWORD }}
+      - run: |
+          CGO_ENABLED=0 GOOS=darwin go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=3.0.0-beta'" -o out/aliyun main/main.go
+          codesign --sign "${{ secrets.APPLE_TEAM_ID }}" \
+            --entitlements tools/osx-entitlements.plist \
+            --options runtime \
+            --timestamp out/aliyun
+          codesign -d -vvvv out/aliyun
+
+          # generate out/aliyun-cli-3.0.0-beta.pkg
+          bash tools/build_pkg.sh 3.0.0-beta
+          productsign --sign "${{ secrets.APPLE_TEAM_ID }}" out/aliyun-cli-3.0.0-beta.pkg out/aliyun-cli-3.0.0-beta.pkg-SIGNED
