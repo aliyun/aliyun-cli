@@ -43,6 +43,7 @@ The release notes for the CLI can be found in the [CHANGELOG](./CHANGELOG.md)
 
   Download link: (<img src="https://img.shields.io/github/release/aliyun/aliyun-cli.svg" alt="Latest Stable Version" />)
 
+  - [Mac GUI Installer](https://aliyuncli.alicdn.com/aliyun-cli-latest.pkg)
   - [Mac (AMD64)](https://aliyuncli.alicdn.com/aliyun-cli-macosx-latest-amd64.tgz)
   - [Mac (ARM64)](https://aliyuncli.alicdn.com/aliyun-cli-macosx-latest-arm64.tgz)
   - [Linux (AMD64)](https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz)

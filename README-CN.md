@@ -45,6 +45,7 @@ CLI 版本更改说明请参考 [CHANGELOG](./CHANGELOG.md)
 
   下载链接如下 (<img src="https://img.shields.io/github/release/aliyun/aliyun-cli.svg" alt="Latest Stable Version" />)：
 
+  - [Mac 图形界面安装器](https://aliyuncli.alicdn.com/aliyun-cli-latest.pkg)
   - [Mac (AMD64)](https://aliyuncli.alicdn.com/aliyun-cli-macosx-latest-amd64.tgz)
   - [Mac (ARM64)](https://aliyuncli.alicdn.com/aliyun-cli-macosx-latest-arm64.tgz)
   - [Linux (AMD64)](https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz)

@@ -33,7 +33,7 @@ else
   ${ALIYUN} oss cp ./aliyun-cli-macosx-latest-arm64.tgz $FLAGS
 
   cp ./aliyun-cli-macosx-${VERSION}-universal.tgz ./aliyun-cli-macosx-latest-universal.tgz
-  ${ALIYUN} oss cp ./aliyun-cli-macosx-latest-arm64.tgz $FLAGS
+  ${ALIYUN} oss cp ./aliyun-cli-macosx-latest-universal.tgz $FLAGS
 
   cp ./aliyun-cli-${VERSION}.pkg ./aliyun-cli-latest.pkg
   ${ALIYUN} oss cp ./aliyun-cli-latest.pkg $FLAGS
