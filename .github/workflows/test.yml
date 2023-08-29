@@ -15,10 +15,10 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: '1.20'
-      - uses: apple-actions/import-codesign-certs@v2
-        with: 
-          p12-file-base64: ${{ secrets.APPLE_CERT_DATA }}
-          p12-password: ${{ secrets.APPLE_CERT_PASSWORD }}
+      # - uses: apple-actions/import-codesign-certs@v2
+      #   with: 
+      #     p12-file-base64: ${{ secrets.APPLE_CERT_DATA }}
+      #     p12-password: ${{ secrets.APPLE_CERT_PASSWORD }}
       - uses: apple-actions/import-codesign-certs@v2
         with: 
           p12-file-base64: ${{ secrets.APPLE_DEVELPER_ID_APPLICATION_CERT_DATA }}
