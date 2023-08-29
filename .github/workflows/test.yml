@@ -19,11 +19,13 @@ jobs:
         with: 
           p12-file-base64: ${{ secrets.APPLE_CERT_DATA }}
           p12-password: ${{ secrets.APPLE_CERT_PASSWORD }}
+          keychain-password: tmppassworkd
       - uses: apple-actions/import-codesign-certs@v2
         with: 
           p12-file-base64: ${{ secrets.APPLE_DEVELPER_ID_APPLICATION_CERT_DATA }}
           p12-password: ${{ secrets.APPLE_CERT_PASSWORD }}
           create-keychain: false
+          keychain-password: tmppassworkd
       - run: |
           CGO_ENABLED=0 GOOS=darwin go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=3.0.0-beta'" -o out/aliyun main/main.go
           codesign --sign "${{ secrets.APPLE_TEAM_ID }}" \
