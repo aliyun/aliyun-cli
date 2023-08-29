@@ -73,6 +73,12 @@ jobs:
           bash tools/build_pkg.sh ${VERSION}
           productsign --sign "${{ secrets.APPLE_TEAM_ID }}" out/aliyun-cli-${VERSION}.pkg out/aliyun-cli-${VERSION}.pkg.signed
           mv out/aliyun-cli-${VERSION}.pkg.signed out/aliyun-cli-${VERSION}.pkg
+          xcrun notarytool submit out/aliyun-cli-${VERSION}.pkg \
+            --team-id "${{ secrets.APPLE_TEAM_ID }}" \
+            --apple-id "${{ secrets.APPLE_ID }}" \
+            --password "${{ secrets.APPLE_APP_PASSWORD }}" \
+            --wait
+          xcrun stapler staple out/aliyun-cli-${VERSION}.pkg
           bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-${VERSION}.pkg
   build_for_linux:
     needs: [create_release]
