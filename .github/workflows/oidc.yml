@@ -1,0 +1,35 @@
+name: Test with configure-aliyun-credentials-action
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.20"
+
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Configure credentials
+        uses: aliyun/configure-aliyun-credentials-action@v1-beta
+        with:
+          role-to-assume: 'acs:ram::1325847523475998:role/github-action'
+          oidc-provider-arn: 'acs:ram::1325847523475998:oidc-provider/GitHub'
+
+      - name: Build
+        run: make build
+
+      - name: Who am I
+        run: out/aliyun sts GetCallerIdentity --region cn-hangzhou
