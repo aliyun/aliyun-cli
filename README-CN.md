@@ -31,6 +31,7 @@
 **注意**：阿里云 CLI 使用 OpenAPI 方式访问云产品，确保您已经开通了要使用的云产品并了解该产品的 OpenAPI 的使用。您可以在[阿里云 OpenAPI 开发者门户](https://next.api.aliyun.com/)查看产品 API 文档，了解 API 的使用方式及参数列表。
 
 ## 使用诊断
+
 [Troubleshoot](https://troubleshoot.api.aliyun.com/?source=github_sdk) 提供 OpenAPI 使用诊断服务，通过 `RequestID` 或 `报错信息` ，帮助开发者快速定位，为开发者提供解决方案。
 
 ## CLI Releases
@@ -46,8 +47,7 @@ CLI 版本更改说明请参考 [CHANGELOG](./CHANGELOG.md)
   下载链接如下 (<img src="https://img.shields.io/github/release/aliyun/aliyun-cli.svg" alt="Latest Stable Version" />)：
 
   - [Mac 图形界面安装器](https://aliyuncli.alicdn.com/aliyun-cli-latest.pkg)
-  - [Mac (AMD64)](https://aliyuncli.alicdn.com/aliyun-cli-macosx-latest-amd64.tgz)
-  - [Mac (ARM64)](https://aliyuncli.alicdn.com/aliyun-cli-macosx-latest-arm64.tgz)
+  - [Mac Universal](https://aliyuncli.alicdn.com/aliyun-cli-macosx-latest-universal.tgz)
   - [Linux (AMD64)](https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz)
   - [Linux (ARM64)](https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-arm64.tgz)
   - [Windows (64 bit)](https://aliyuncli.alicdn.com/aliyun-cli-windows-latest-amd64.zip)
@@ -99,14 +99,17 @@ Saving profile[akProfile] ...Done.
 您可以使用 `--mode External` 指定通过外部程序获取凭证数据，CLI 将会以执行该程序命令并其返回作为凭证来发起调用。
 
 约定：
+
 1. 外部程序输出位置为标准输出
 2. 输出为json结构字符串
 3. 输出包含关键字段以及凭证字段
 
 关键字段:
+
 - mode: 指定返回凭证类型
 
 各凭证返回结构示例:
+
 - AK
 
 ```json
@@ -149,7 +152,8 @@ Saving profile[akProfile] ...Done.
 }
 ```
 
-#### 示例：
+#### 示例
+
 ```shell
 $ aliyun configure --mode External --profile externalTest
 Configuring profile 'externalTest' in 'External' authenticate mode...
