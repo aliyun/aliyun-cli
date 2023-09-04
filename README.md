@@ -29,6 +29,7 @@ The Alibaba Cloud CLI is a tool to manage and use Alibaba Cloud resources throug
 > **Note**: Alibaba Cloud CLI access the Alibaba Cloud services through OpenAPI. Before using Alibaba Cloud CLI, make sure that you have activated the service to use and known how to use OpenAPI.
 
 ## Troubleshoot
+
 [Troubleshoot](https://troubleshoot.api.aliyun.com/?source=github_sdk) Provide OpenAPI diagnosis service to help developers locate quickly and provide solutions for developers through `RequestID` or `error message`.
 
 ## CLI Releases
@@ -44,8 +45,7 @@ The release notes for the CLI can be found in the [CHANGELOG](./CHANGELOG.md)
   Download link: (<img src="https://img.shields.io/github/release/aliyun/aliyun-cli.svg" alt="Latest Stable Version" />)
 
   - [Mac GUI Installer](https://aliyuncli.alicdn.com/aliyun-cli-latest.pkg)
-  - [Mac (AMD64)](https://aliyuncli.alicdn.com/aliyun-cli-macosx-latest-amd64.tgz)
-  - [Mac (ARM64)](https://aliyuncli.alicdn.com/aliyun-cli-macosx-latest-arm64.tgz)
+  - [Mac Universal](https://aliyuncli.alicdn.com/aliyun-cli-macosx-latest-universal.tgz)
   - [Linux (AMD64)](https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz)
   - [Linux (ARM64)](https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-arm64.tgz)
   - [Windows (64 bit)](https://aliyuncli.alicdn.com/aliyun-cli-windows-latest-amd64.zip)
@@ -96,15 +96,18 @@ The following are supported authentication methods:
 
 You can use `--mode External` to specify to obtain credential data through an external program, and CLI will execute the program command and return it as a credential to initiate the call.
 
-Agreement： 
+Agreement：
+
 1. The output location of the external program is standard output.
 2. The output format is json string.
 3. The output contains the key fields required by the CLI and credential fields
 
 Key field:
+
 - mode: Specify the type of credentials returned
 
 Example of the return of each credential type:
+
 - AK
 
 ```json
@@ -147,7 +150,8 @@ Example of the return of each credential type:
 }
 ```
 
-#### Example:
+#### Example
+
 ```shell
 $ aliyun configure --mode External --profile externalTest
 Configuring profile 'externalTest' in 'External' authenticate mode...
@@ -278,11 +282,11 @@ Alibaba Cloud CLI integrates API descriptions for some products, you can get hel
 
 - `aliyun help <product>`: get the API information of a specific product
 
-	For example, get help of ECS APIs: `$ aliyun help ecs`
+ For example, get help of ECS APIs: `$ aliyun help ecs`
 
 - `$ aliyun help <product> <apiName>`: get the detailed API information of a specific APU
 
-	For example, get the help information of the CreateInstance API: `aliyun help ecs CreateInstance`
+ For example, get the help information of the CreateInstance API: `aliyun help ecs CreateInstance`
 
 ### Use the `--force` option
 
