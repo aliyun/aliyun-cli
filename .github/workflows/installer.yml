@@ -1,0 +1,22 @@
+name: Installer test
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  installer:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macosx-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: true
+    - run: /bin/bash -c "$(cat install.sh)"
+    - run: |
+        which aliyun
+        aliyun version
