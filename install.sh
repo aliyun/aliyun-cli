@@ -1,3 +1,24 @@
+#!/usr/bin/env bash
+
+set -e +o pipefail
+
+show_help() {
+cat << EOF
+
+      Alibaba Cloud Command Line Interface Installer
+
+    -h          Display this help and exit
+
+    -V VERSION  Custom CLI version. Default is 'latest'
+
+EOF
+}
+
+abort() {
+  printf "%s\n" "$@" >&2
+  exit 1
+}
+
 # First check OS.
 OS="$(uname)"
 if [[ "${OS}" == "Linux" ]]
@@ -10,17 +31,41 @@ else
   abort "Currently is only supported on macOS and Linux."
 fi
 
-if [[ -n $0 ]]
-then
-VERSION="$0"
-else
 VERSION="latest"
+
+if [ $# != 0 ];
+then
+  while getopts "hV:-" o
+  do
+    case "$o" in
+      "h")
+        show_help
+        exit 0;
+        ;;
+      "V")
+        VERSION="$OPTARG"
+        ;;
+      *)
+        echo -e "${r}Unexpected flag not supported${x}"
+        exit 1
+        ;;
+    esac
+  done
 fi
 
-# if [[ -n "${CLI_ON_MACOS-}" ]] && [[ "${HAVE_SUDO_ACCESS}" -ne 0 ]]
-# then
-#   abort "Need sudo access on macOS (e.g. the user ${USER} needs to be an Administrator)!"
-# fi
+echo -e "
+..............888888888888888888888 ........=8888888888888888888D=..............
+...........88888888888888888888888 ..........D8888888888888888888888I...........
+.........,8888888888888ZI: ...........................=Z88D8888888888D..........
+.........+88888888 ..........................................88888888D..........
+.........+88888888 .......Welcome to use Alibaba Cloud.......O8888888D..........
+.........+88888888 ............. ************* ..............O8888888D..........
+.........+88888888 .... Command Line Interface(Reloaded) ....O8888888D..........
+.........+88888888...........................................88888888D..........
+..........D888888888888DO+. ..........................?ND888888888888D..........
+...........O8888888888888888888888...........D8888888888888888888888=...........
+............ .:D8888888888888888888.........78888888888888888888O ..............
+"
 
 if [[ -n "${CLI_ON_MACOS-}" ]]
 then
