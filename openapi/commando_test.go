@@ -90,7 +90,9 @@ func Test_main(t *testing.T) {
 	args = []string{"ecs", "DescribeRegions"}
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.True(t, strings.Contains(err.Error(), "SDK.ServerError\nErrorCode: InvalidAction.NotFound\nRecommend: https://api.aliyun.com/troubleshoot?q=InvalidAction.NotFound&product=Ecs\nRequestId:"))
+	assert.True(t, strings.Contains(err.Error(), "SDK.ServerError\nErrorCode: InvalidAction.NotFound\n"))
+	assert.True(t, strings.Contains(err.Error(), "Recommend: https://api.aliyun.com/troubleshoot?q=InvalidAction.NotFound&product=Ecs&requestId="))
+	assert.True(t, strings.Contains(err.Error(), "RequestId: "))
 
 	ctx.Flags().Get("force").SetAssigned(false)
 	ctx.Flags().Get("version").SetAssigned(false)
