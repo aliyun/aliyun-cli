@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -76,7 +76,7 @@ func (a *TableOutputFilter) FilterOutput(s string) (string, error) {
 		return s, fmt.Errorf("unmarshal output failed %s", err)
 	}
 
-	rowPath := detectArrayPath(v)
+	var rowPath string
 	if v, ok := OutputFlag(a.ctx.Flags()).GetFieldValue("rows"); ok {
 		rowPath = "RootFilter[0]." + v
 	} else {
@@ -128,10 +128,6 @@ func (a *TableOutputFilter) FormatTable(rowPath string, colNames []string, v int
 	fmt.Fprintln(w, separator)
 
 	for i, row := range rowsArray {
-		rowIntf, ok := row.(interface{})
-		if !ok {
-			// fmt.Errorf("parse row to interface failed")
-		}
 		r := make([]string, 0)
 		var s string
 		var index int
@@ -143,7 +139,7 @@ func (a *TableOutputFilter) FormatTable(rowPath string, colNames []string, v int
 			}
 		}
 		for _, colName := range colNames[index:] {
-			v, _ := jmespath.Search(colName, rowIntf)
+			v, _ := jmespath.Search(colName, row)
 			s = fmt.Sprintf("%v", v)
 			r = append(r, s)
 		}
