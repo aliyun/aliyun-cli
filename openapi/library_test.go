@@ -18,20 +18,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"bytes"
-	"fmt"
 	"testing"
 )
-
-type reader_test struct {
-	content string
-}
-
-func (r *reader_test) ReadFrom(path string) ([]byte, error) {
-	if path == "" || r.content == "" {
-		return nil, fmt.Errorf("Please insert a valid path.")
-	}
-	return []byte(r.content), nil
-}
 
 func TestLibrary_PrintProducts(t *testing.T) {
 	w := new(bytes.Buffer)
