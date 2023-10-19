@@ -1156,5 +1156,22 @@
 				"version": "2018-04-12"
 			}
 		]
+	},
+	{
+		"code": "waf-openapi",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2018-01-17"
+			},
+			{
+				"style": "RPC",
+				"version": "2019-09-10"
+			},
+			{
+				"style": "RPC",
+				"version": "2021-10-01"
+			}
+		]
 	}
 ]

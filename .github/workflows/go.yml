@@ -29,6 +29,6 @@ jobs:
 
     - name: Smoking Test
       run: go run ./main/main.go
-    - run:  make build
+    - run: make build
     - run: test -z $ACCESS_KEY_ID -a -z $ACCESS_KEY_SECRET || bash ./integration/ecs_test
     - run: bash <(curl -s https://codecov.io/bash)
