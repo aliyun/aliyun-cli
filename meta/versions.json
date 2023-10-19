@@ -1102,31 +1102,6 @@
 		]
 	},
 	{
-		"code": "waf",
-		"styles": [
-			{
-				"style": "RPC",
-				"version": "2018-04-26"
-			},
-			{
-				"style": "RPC",
-				"version": "2017-09-30"
-			},
-			{
-				"style": "RPC",
-				"version": "2017-09-28"
-			},
-			{
-				"style": "RPC",
-				"version": "2016-07-18"
-			},
-			{
-				"style": "RPC",
-				"version": "2016-03-10"
-			}
-		]
-		},
-	{
 		"code": "config",
 		"styles": [
 			{
