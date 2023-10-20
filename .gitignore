@@ -21,3 +21,4 @@ local-*
 coverage.txt
 oss/lib/ossutil_test*
 coverage.html
+integration/*.txt
