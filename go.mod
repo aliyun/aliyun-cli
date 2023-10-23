@@ -11,7 +11,7 @@ require (
 	github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1
 	github.com/jmespath/go-jmespath v0.4.0
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.28.0
+	github.com/onsi/gomega v1.28.1
 	github.com/stretchr/testify v1.8.4
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/crypto v0.14.0
@@ -24,7 +24,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/go-cmp v0.5.9 // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kr/pretty v0.2.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
