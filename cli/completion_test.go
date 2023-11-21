@@ -19,11 +19,19 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestParseCompletionForShell(t *testing.T) {
+	cp := ParseCompletionForShell()
+	assert.Nil(t, cp)
+}
+
 func TestParseCompletion(t *testing.T) {
 	cp := ParseCompletion("", "")
 	assert.Nil(t, cp)
 
 	cp = ParseCompletion("", "s")
+	assert.Nil(t, cp)
+
+	cp = ParseCompletion("line", "invalid number")
 	assert.Nil(t, cp)
 
 	cp = ParseCompletion("cdn ", "5")
