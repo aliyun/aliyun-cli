@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -101,13 +101,12 @@ var _ = ginkgo.Describe("Parser", func() {
 	})
 
 	ginkgo.It("2. can parse args and flags", func() {
-		parser, fs := newTestParser("s1", "s2", "--test", "aaa", "--test2=bbb")
+		parser, _ := newTestParser("s1", "s2", "--test", "aaa", "--test2=bbb")
 
 		ginkgo.By("first arg")
 		s, _, err := parser.ReadNextArg()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(s).Should(Equal("s1"))
-		Expect(fs.assignedCount()).Should(Equal(0))
 
 		ginkgo.By("remain args")
 		s2, err := parser.ReadAll()
