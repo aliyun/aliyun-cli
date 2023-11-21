@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -41,8 +41,7 @@ func TestParseCompletion(t *testing.T) {
 		assert.True(t, ok)
 		assert.EqualError(t, err, "unexcepted args [name] for line 'name'")
 	}()
-	cp = ParseCompletion("name", "5")
-
+	ParseCompletion("name", "5")
 }
 
 func TestParseLineForCompletion(t *testing.T) {
@@ -54,7 +53,7 @@ func TestParseLineForCompletion(t *testing.T) {
 		err := recover()
 		assert.NotNil(t, err)
 	}()
-	cl = parseLineForCompletion(`c\d'a'"hao" c\alok`, 20)
+	parseLineForCompletion(`c\d'a'"hao" c\alok`, 20)
 }
 func TestCompletionGet(t *testing.T) {
 	cp := ParseCompletion("name Mrx aa", "13")

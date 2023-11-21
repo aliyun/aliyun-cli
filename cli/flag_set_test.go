@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -68,7 +68,7 @@ func TestAddByName(t *testing.T) {
 func TestGet(t *testing.T) {
 	fs := NewFlagSet()
 	fs.AddByName("MrX")
-	assert.Equal(t, &Flag{Name: "MrX", formation: "--MrX"}, fs.Get("MrX"))
+	assert.Equal(t, &Flag{Name: "MrX"}, fs.Get("MrX"))
 	assert.Nil(t, fs.Get("MrX2"))
 }
 
@@ -76,7 +76,7 @@ func TestGetByShorthand(t *testing.T) {
 	fs := NewFlagSet()
 	assert.Nil(t, fs.GetByShorthand('X'))
 	fs.Add(&Flag{Name: "profile", Shorthand: 'p'})
-	exf := &Flag{Name: "profile", Shorthand: 'p', formation: "-p"}
+	exf := &Flag{Name: "profile", Shorthand: 'p'}
 	fs.GetByShorthand('p')
 	assert.Equal(t, exf, fs.GetByShorthand('p'))
 }
