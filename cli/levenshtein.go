@@ -131,7 +131,7 @@ func DistanceForMatrix(matrix [][]int) int {
 // RatioForStrings returns the Levenshtein ratio for the given strings. The
 // ratio is computed as follows:
 //
-//     (sourceLength + targetLength - distance) / (sourceLength + targetLength)
+//	(sourceLength + targetLength - distance) / (sourceLength + targetLength)
 func RatioForStrings(source []rune, target []rune, op Options) float64 {
 	matrix := MatrixForStrings(source, target, op)
 	return RatioForMatrix(matrix)
@@ -140,7 +140,7 @@ func RatioForStrings(source []rune, target []rune, op Options) float64 {
 // RatioForMatrix returns the Levenshtein ratio for the given matrix. The ratio
 // is computed as follows:
 //
-//     (sourceLength + targetLength - distance) / (sourceLength + targetLength)
+//	(sourceLength + targetLength - distance) / (sourceLength + targetLength)
 func RatioForMatrix(matrix [][]int) float64 {
 	sourcelength := len(matrix) - 1
 	targetlength := len(matrix[0]) - 1
@@ -257,13 +257,6 @@ func backtrace(i int, j int, matrix [][]int, op Options) EditScript {
 
 func min(a int, b int) int {
 	if b < a {
-		return b
-	}
-	return a
-}
-
-func max(a int, b int) int {
-	if b > a {
 		return b
 	}
 	return a

@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,13 +32,11 @@ func NewFlagSet() *FlagSet {
 	}
 }
 
-//
 // traverse all values
 func (fs *FlagSet) Flags() []*Flag {
 	return fs.flags
 }
 
-//
 // call from user program, if flag duplicated, panic!
 func (fs *FlagSet) Add(f *Flag) {
 	f.checkValid()
@@ -51,7 +49,6 @@ func (fs *FlagSet) Add(f *Flag) {
 	fs.flags = append(fs.flags, f)
 }
 
-//
 // add by name, not support add by shorthand
 func (fs *FlagSet) AddByName(name string) (*Flag, error) {
 	if _, ok := fs.index["--"+name]; ok {
@@ -67,27 +64,22 @@ func (fs *FlagSet) AddByName(name string) (*Flag, error) {
 	return f, nil
 }
 
-//
 // get flag by name, sample --name
 func (fs *FlagSet) Get(name string) *Flag {
 	if f, ok := fs.index["--"+name]; ok {
-		f.formation = "--" + name
 		return f
 	}
 	return nil
 }
 
-//
 // get flag by shorthand, sample -a
 func (fs *FlagSet) GetByShorthand(c rune) *Flag {
 	if f, ok := fs.index["-"+string(c)]; ok {
-		f.formation = "-" + string(c)
 		return f
 	}
 	return nil
 }
 
-//
 // get suggestions
 func (fs *FlagSet) GetSuggestions(name string, distance int) []string {
 	sr := NewSuggester(name, distance)
@@ -95,9 +87,8 @@ func (fs *FlagSet) GetSuggestions(name string, distance int) []string {
 		sr.Apply(k)
 	}
 	ss := make([]string, 0)
-	for _, s := range sr.GetResults() {
-		ss = append(ss, s)
-	}
+	ss = append(ss, sr.GetResults()...)
+
 	return ss
 }
 
@@ -121,7 +112,6 @@ func (fs *FlagSet) assignedCount() int {
 	return n
 }
 
-//
 // merge FlagSet with from
 func (fs *FlagSet) mergeWith(from *FlagSet, applier func(f *Flag) bool) *FlagSet {
 	if from == nil {

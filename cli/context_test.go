@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,7 +31,7 @@ func TestHelpFlag(t *testing.T) {
 	fs := NewFlagSet()
 	fs.Add(NewHelpFlag())
 	f := HelpFlag(fs)
-	assert.Equal(t, &Flag{Name: "help", Short: i18n.T("print help", "打印帮助信息"), AssignedMode: AssignedNone, formation: "--help"}, f)
+	assert.Equal(t, &Flag{Name: "help", Short: i18n.T("print help", "打印帮助信息"), AssignedMode: AssignedNone}, f)
 }
 
 func TestNewHelpFlag(t *testing.T) {
@@ -79,7 +79,7 @@ func TestCtx(t *testing.T) {
 	ctx.EnterCommand(cmd)
 	assert.Nil(t, ctx.unknownFlags)
 	ctx.EnterCommand(cmd)
-	assert.Equal(t, &Flag{Name: "help", Short: i18n.T("print help", "打印帮助信息"), AssignedMode: AssignedNone, formation: "--help"}, ctx.flags.Get("help"))
+	assert.Equal(t, &Flag{Name: "help", Short: i18n.T("print help", "打印帮助信息"), AssignedMode: AssignedNone}, ctx.flags.Get("help"))
 }
 
 func TestCheckFlags(t *testing.T) {
@@ -122,7 +122,7 @@ func TestDetectFlagByShorthand(t *testing.T) {
 	ctx := NewCommandContext(w, stderr)
 	ctx.flags.Add(&Flag{Name: "profile", Shorthand: 'p'})
 	f, err := ctx.detectFlagByShorthand('p')
-	assert.Equal(t, &Flag{Name: "profile", Shorthand: 'p', formation: "-p"}, f)
+	assert.Equal(t, &Flag{Name: "profile", Shorthand: 'p'}, f)
 	assert.Nil(t, err)
 	f, err = ctx.detectFlagByShorthand('c')
 	assert.Nil(t, f)
