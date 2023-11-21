@@ -125,11 +125,6 @@ var _ = ginkgo.Describe("Parser", func() {
 	})
 })
 
-func TestSpliString(t *testing.T) {
-	sli := SplitString("nihao-Mrx", "-")
-	assert.Len(t, sli, 2)
-}
-
 func TestUnquoteString(t *testing.T) {
 	str := UnquoteString(`"nicai"`)
 	assert.Equal(t, "nicai", str)

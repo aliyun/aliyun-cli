@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -157,7 +157,7 @@ func (p *Parser) parseCommandArg(s string) (flag *Flag, value string, err error)
 	return
 }
 
-//SplitStringWithPrefix TODO can use function string.SplitN to replace
+// SplitStringWithPrefix TODO can use function string.SplitN to replace
 func SplitStringWithPrefix(s string, splitters string) (string, string, bool) {
 	i := strings.IndexAny(s, splitters)
 	if i < 0 {
@@ -165,10 +165,6 @@ func SplitStringWithPrefix(s string, splitters string) (string, string, bool) {
 	}
 	return s[:i], s[i+1:], true
 
-}
-
-func SplitString(s string, sep string) []string {
-	return strings.Split(s, sep)
 }
 
 func UnquoteString(s string) string {
