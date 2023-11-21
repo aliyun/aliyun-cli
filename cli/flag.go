@@ -282,15 +282,3 @@ func (f *Flag) checkFields() error {
 	}
 	return nil
 }
-
-//func (f *Flag) useDefaultValue() bool {
-//	if f.DefaultValue != "" {
-//		f.value = f.DefaultValue
-//		if f.p != nil {
-//			*f.p = f.DefaultValue
-//		}
-//		return true
-//	} else {
-//		return false
-//	}
-//}

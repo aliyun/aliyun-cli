@@ -101,17 +101,6 @@ func (fs *FlagSet) GetValue(name string) (string, bool) {
 	return f.GetValue()
 }
 
-// get assigned count for flags
-func (fs *FlagSet) assignedCount() int {
-	n := 0
-	for _, f := range fs.flags {
-		if f.assigned {
-			n++
-		}
-	}
-	return n
-}
-
 // merge FlagSet with from
 func (fs *FlagSet) mergeWith(from *FlagSet, applier func(f *Flag) bool) *FlagSet {
 	if from == nil {

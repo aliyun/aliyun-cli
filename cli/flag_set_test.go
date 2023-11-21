@@ -96,14 +96,6 @@ func TestGetValue(t *testing.T) {
 	assert.Empty(t, str)
 }
 
-func TestAssignedCount(t *testing.T) {
-	fs := NewFlagSet()
-	fs.AddByName("MrX")
-	assert.Zero(t, fs.assignedCount())
-	fs.Flags()[0].assigned = true
-	assert.Equal(t, 1, fs.assignedCount())
-}
-
 func TestPut(t *testing.T) {
 	fs := NewFlagSet()
 	fs.put(&Flag{Name: "profile", Shorthand: 'p'})
