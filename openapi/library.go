@@ -28,14 +28,12 @@ import (
 type Library struct {
 	lang        string
 	builtinRepo *meta.Repository
-	extraRepo   *meta.Repository
 	writer      io.Writer
 }
 
 func NewLibrary(w io.Writer, lang string) *Library {
 	return &Library{
 		builtinRepo: meta.LoadRepository(),
-		extraRepo:   nil,
 		lang:        lang,
 		writer:      w,
 	}
