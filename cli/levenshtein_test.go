@@ -1,4 +1,3 @@
-//
 // Copyright (c) 2013 Kilian Evang and contributors
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,7 +19,6 @@
 // THE SOFTWARE.
 //
 // https://github.com/texttheater/golang-levenshtein
-//
 package cli
 
 import (

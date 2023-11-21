@@ -108,19 +108,7 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 			} else {
 				cli.PrintfWithColor(a.writer, cli.Green, "  %s\n", apiName)
 			}
-
 		}
-		// TODO some ApiName is too long, two column not seems good
-		//w := tabwriter.NewWriter(cli.GetOutputWriter(), 8, 0, 1, ' ', 0)
-		//for i := 0; i < len(product.ApiNames); i += 2 {
-		//	name1 := product.ApiNames[i]
-		//	name2 := ""
-		//	if i + 1 < len(product.ApiNames) {
-		//		name2 = product.ApiNames[i + 1]
-		//	}
-		//	fmt.Fprintf(w, "  %s\t%s\n", name1, name2)
-		//}
-		//w.Flush()
 	}
 
 	cli.Printf(a.writer, "\nRun `aliyun %s <ApiName> --help` to get more information about this API\n", product.GetLowerCode())
@@ -203,12 +191,3 @@ func getDescription(d map[string]string) string {
 	//	return ""
 	//}
 }
-
-//
-//func (a *Helper) printCompactList() {
-//	for _, s := range compactList {
-//		product, _ := c.products.GetProduct(s)
-//		c.PrintProduct(product)
-//	}
-//	cli.Printf("  ... ")
-//}
