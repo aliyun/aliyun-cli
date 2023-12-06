@@ -62,11 +62,11 @@ CLI 版本更改说明请参考 [CHANGELOG](./CHANGELOG.md)
   brew install aliyun-cli
   ```
 
-如果需要详细安装步骤或者编译安装步骤请访问官网文档 [安装 CLI](https://help.aliyun.com/document_detail/110343.html?spm=a2c4g.11186623.6.544.47ad1b18WHuF84)
+如果需要详细安装步骤或者编译安装步骤请访问官网文档 [安装 CLI](https://help.aliyun.com/document_detail/121988.html)
 
 ## 配置
 
-详细配置指引请访问官网 [配置 CLI](https://help.aliyun.com/document_detail/110341.html?spm=a2c4g.11186623.6.552.27f61b18o04a6s)
+详细配置指引请访问官网 [配置 CLI](https://help.aliyun.com/document_detail/110341.html)
 
 在使用阿里云 CLI 之前，您需要配置调用阿里云资源所需的凭证信息、地域、语言等。
 
@@ -225,7 +225,7 @@ Saving profile[externalTest] ...Done.
 
 ## 使用阿里云 CLI
 
-这里是基础使用指引，如需要详细使用手册，请访问 [这里](https://help.aliyun.com/document_detail/110344.html?spm=a2c4g.11186623.6.558.339122a6nSODBj)。
+这里是基础使用指引，如需要详细使用手册，请访问 [这里](https://help.aliyun.com/document_detail/110344.html)。
 
 阿里云云产品的 OpenAPI 有 RPC 和 RESTful 两种风格，大部分产品使用的是 RPC 风格。不同风格的 API 的调用方法也不同。
 
@@ -403,6 +403,6 @@ aliyun ecs DescribeInstances --InstanceIds '["i-12345678912345678123"]' --waiter
 
 我们使用 GitHub issues 追踪用户反馈的 bug 和功能请求。请访问以下站点获取帮助：
 
-- 基本使用方法请访问官网 [阿里云 CLI](https://help.aliyun.com/document_detail/110244.html?spm=a2c4g.11174283.6.542.553a474fAUytL0)
+- 基本使用方法请访问官网 [阿里云 CLI](https://help.aliyun.com/document_detail/110244.html)
 - 在 [Stack Overflow](https://stackoverflow.com/) 上提问并使用标签 [aliyun-cli](https://stackoverflow.com/questions/tagged/aliyun-cli)
 - 如果您发现了一个 BUG 或是希望新增一个特性，请[提交 issue](https://github.com/aliyun/aliyun-cli/issues/new/choose)。
