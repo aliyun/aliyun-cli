@@ -1,10 +1,11 @@
 name: Installer test
 
 on:
-  push:
-    branches: [ master ]
+  release:
+    types: [published]
   pull_request:
-    branches: [ master ]
+    paths:
+      - 'install.sh'
 
 jobs:
   installer:
@@ -19,4 +20,5 @@ jobs:
     - run: /bin/bash -c "$(cat install.sh)"
     - run: |
         which aliyun
-        aliyun version
+        echo "local version: $(cat ./version)"
+        echo "aliyun version: $(aliyun version)"
