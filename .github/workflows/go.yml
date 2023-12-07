@@ -9,7 +9,11 @@ on:
 jobs:
 
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-12, windows-latest]
+    runs-on: ${{ matrix.os }}
+    # environment: CI
     env:
       ACCESS_KEY_ID: ${{ secrets.ACCESS_KEY_ID }}
       ACCESS_KEY_SECRET: ${{ secrets.ACCESS_KEY_SECRET }}
@@ -26,10 +30,17 @@ jobs:
 
     - name: Unit Test
       run: make test
+    - name: Upload coverage infomartion
+      run: bash <(curl -s https://codecov.io/bash)
 
     - name: Smoking Test
       run: go run ./main/main.go
     - run: make build
-    - run: test -z $ACCESS_KEY_ID -a -z $ACCESS_KEY_SECRET || bash ./integration/ecs_test
+
+    - name: Install jq
+      uses: dcarbone/install-jq-action@v2.1.0
+      if: matrix.os == 'windows-latest'
+
+    - run: test -z $ACCESS_KEY_ID -a -z $ACCESS_KEY_SECRET || bash ./integration/ecs_test.sh
     - run: test -z $ACCESS_KEY_ID -a -z $ACCESS_KEY_SECRET || bash ./integration/oss_test.sh
-    - run: bash <(curl -s https://codecov.io/bash)
+
