@@ -11,7 +11,7 @@ do_command() {
 		return $g_error
 	fi
 
-	cmd="$1 --access-key-id $ACCESS_KEY_ID --access-key-secret $ACCESS_KEY_SECRET --region cn-hangzhou 2>&1"
+	cmd="$1 --access-key-id $ACCESS_KEY_ID --access-key-secret $ACCESS_KEY_SECRET --region $REGION_ID 2>&1"
 
 	echo "Command<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
 	echo $cmd
