@@ -31,13 +31,6 @@ func TestLibrary_PrintProducts(t *testing.T) {
 	products := library.GetProducts()
 	assert.NotNil(t, products)
 
-	product := meta.Product{
-		Code:    "ecs",
-		Version: "v1.0",
-		Name:    map[string]string{"zh": "test"},
-	}
-	library.printProduct(product)
-
 	library.builtinRepo.Products = []meta.Product{
 		{
 			Code: "ecs",

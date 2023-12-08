@@ -53,7 +53,7 @@ func TestProduct_GetEndpoint(t *testing.T) {
 	assert.Equal(t, endpoint, "arms.aliyuncs.com")
 
 	product.GlobalEndpoint = ""
-	endpoint, err = product.GetEndpoint("us-west-1", client)
+	_, err = product.GetEndpoint("us-west-1", client)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "us-west-1")
 }
