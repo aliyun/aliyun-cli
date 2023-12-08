@@ -31,7 +31,7 @@ jobs:
     - name: Unit Test
       run: make test
     - name: Upload coverage infomartion
-      run: bash <(curl -s https://codecov.io/bash)
+      uses: codecov/codecov-action@v3
 
     - name: Smoking Test
       run: go run ./main/main.go
@@ -41,6 +41,8 @@ jobs:
       uses: dcarbone/install-jq-action@v2.1.0
       if: matrix.os == 'windows-latest'
 
-    - run: test -z $ACCESS_KEY_ID -a -z $ACCESS_KEY_SECRET || bash ./integration/ecs_test.sh
-    - run: test -z $ACCESS_KEY_ID -a -z $ACCESS_KEY_SECRET || bash ./integration/oss_test.sh
+    - run: bash ./integration/ecs_test.sh
+      if: env.ACCESS_KEY_ID != '' && env.ACCESS_KEY_SECRET != ''
+    - run: bash ./integration/oss_test.sh
+      if: env.ACCESS_KEY_ID != '' && env.ACCESS_KEY_SECRET != ''
 
