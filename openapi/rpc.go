@@ -15,7 +15,7 @@ package openapi
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strings"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
@@ -102,7 +102,7 @@ func (a *RpcInvoker) Call() (*responses.CommonResponse, error) {
 
 func replaceValueWithFile(f *cli.Flag) {
 	value, _ := f.GetValue()
-	data, err := ioutil.ReadFile(value)
+	data, err := os.ReadFile(value)
 	if err != nil {
 		panic(err)
 	}

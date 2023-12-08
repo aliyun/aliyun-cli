@@ -70,10 +70,6 @@ func (a *Library) PrintProducts() {
 	w.Flush()
 }
 
-func (a *Library) printProduct(product meta.Product) {
-	cli.Printf(a.writer, "  %s(%s)\t%s\n", product.Code, product.Version, product.Name["zh"])
-}
-
 func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 	product, ok := a.GetProduct(productCode)
 	if !ok {

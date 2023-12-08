@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -52,7 +52,6 @@ func (c *Commando) InitWithCommand(cmd *cli.Command) {
 	cmd.AutoComplete = c.complete
 }
 
-//
 func (c *Commando) main(ctx *cli.Context, args []string) error {
 	//
 	// aliyun
@@ -210,7 +209,6 @@ func (c *Commando) invokeWithHelper(invoker Invoker) (resp string, err error, ok
 	return
 }
 
-//
 // create invoker for specific case
 // rpc: RpcInvoker, ForceRpcInvoker
 // restful: RestfulInvoker
@@ -334,7 +332,6 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 	}
 }
 
-//
 func (c *Commando) help(ctx *cli.Context, args []string) error {
 	cmd := ctx.Command()
 	//if err != nil {
@@ -362,7 +359,6 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 	}
 }
 
-//
 func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 	w := ctx.Writer()
 
