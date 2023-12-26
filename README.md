@@ -402,15 +402,15 @@ When you input some argument like "-PortRange -1/-1", will cause parse error. In
 
 ## Supported environment variables
 
-We supported following environment variables:
+We support the following environment variables:
 
-- `ALIBABACLOUD_PROFILE`/`ALIBABA_CLOUD_PROFILE`/`ALICLOUD_PROFILE`: When `--profile` flag is not specified, CLI use it.
-- `ALIBABACLOUD_IGNORE_PROFILE=TRUE`: When this variable is specified, CLI ignores any configuration files.
-- `ALIBABACLOUD_ACCESS_KEY_ID`/`ALICLOUD_ACCESS_KEY_ID`/`ACCESS_KEY_ID`: When no any specified Access Key Id, CLI use it.
-- `ALIBABACLOUD_ACCESS_KEY_SECRET`/`ALICLOUD_ACCESS_KEY_SECRET`/`ACCESS_KEY_SECRET`: When no any specified Access Key Secret, CLI use it.
-- `ALIBABACLOUD_SECURITY_TOKEN`/`ALICLOUD_SECURITY_TOKEN`/`SECURITY_TOKEN`: When no any specified Security Token, CLI use it.
-- `ALIBABACLOUD_REGION_ID`/`ALICLOUD_REGION_ID`/`REGION`: When no any specified Region Id, CLI use it.
-- `DEBUG=sdk`：Through this variable, CLI display http request information. It helpful for troubleshooting.
+- `ALIBABACLOUD_PROFILE`/`ALIBABA_CLOUD_PROFILE`/`ALICLOUD_PROFILE`: When the `--profile` flag is not specified, the CLI uses it.
+- `ALIBABACLOUD_IGNORE_PROFILE=TRUE`: When this variable is specified, the CLI ignores any configuration files.
+- `ALIBABACLOUD_ACCESS_KEY_ID`/`ALICLOUD_ACCESS_KEY_ID`/`ACCESS_KEY_ID`: When no Access Key Id is specified, the CLI uses it.
+- `ALIBABACLOUD_ACCESS_KEY_SECRET`/`ALICLOUD_ACCESS_KEY_SECRET`/`ACCESS_KEY_SECRET`: When no Access Key Secret is specified, the CLI uses it.
+- `ALIBABACLOUD_SECURITY_TOKEN`/`ALICLOUD_SECURITY_TOKEN`/`SECURITY_TOKEN`: When no Security Token is specified, the CLI uses it.
+- `ALIBABACLOUD_REGION_ID`/`ALICLOUD_REGION_ID`/`REGION`: When no Region Id is specified, the CLI uses it.
+- `DEBUG=sdk`：Through this variable, the CLI can display HTTP request information, which is helpful for troubleshooting.
 
 ## Getting Help
 
