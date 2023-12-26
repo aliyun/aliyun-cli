@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -66,5 +66,9 @@ func main() {
 	rootCmd.AddSubCommand(lib.NewOssCommand())
 	rootCmd.AddSubCommand(cli.NewVersionCommand())
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
-	rootCmd.Execute(ctx, os.Args[1:])
+	if os.Getenv("GENERATE_METADATA") == "YES" {
+		rootCmd.GetMetadata()
+	} else {
+		rootCmd.Execute(ctx, os.Args[1:])
+	}
 }
