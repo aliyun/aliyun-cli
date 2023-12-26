@@ -84,6 +84,59 @@ func (c *Command) Execute(ctx *Context, args []string) {
 	}
 }
 
+func (c *Command) getName() string {
+	if c.parent == nil {
+		return c.Name
+	}
+
+	return c.parent.getName() + " " + c.Name
+}
+
+type Option struct {
+	Name         string
+	Shorthand    string
+	DefaultValue string
+	Usage        string
+}
+
+type Manual struct {
+	Name          string
+	Synopsis      string
+	Description   string
+	Usage         string
+	Options       []Option
+	GlobalOptions []Option
+	Examples      string
+	SeeAlso       string
+}
+
+func (c *Command) GetMetadata() {
+	fmt.Println(c.getName())
+	fmt.Println(c.Short.Get("en"))
+	if c.Long != nil {
+		fmt.Println(c.Long.Get("en"))
+	}
+
+	fmt.Println(c.Usage)
+
+	fmt.Println(c.Sample)
+
+	fmt.Println("Flags:")
+	for _, flag := range c.Flags().Flags() {
+		fmt.Println("--" + flag.Name)
+		if flag.Short != nil {
+			fmt.Println(flag.Short.Text())
+		}
+
+	}
+
+	fmt.Println("===========================")
+
+	for _, cmd := range c.subCommands {
+		cmd.GetMetadata()
+	}
+}
+
 func (c *Command) GetSubCommand(s string) *Command {
 	for _, cmd := range c.subCommands {
 		if cmd.Name == s {
