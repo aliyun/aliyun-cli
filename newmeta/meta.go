@@ -41,12 +41,36 @@ type Product struct {
 }
 
 type Endpoint struct {
-	RegionId     string `json:"regionId"`
-	Name         string `json:"regionName"`
-	Version      string `json:"areaId"`
-	EndpointType string `json:"areaName"`
-	Public       string `json:"public"`
-	VPC          string `json:"vpc"`
+	RegionId string `json:"regionId"`
+	Name     string `json:"regionName"`
+	AreaId   string `json:"areaId"`
+	AreaName string `json:"areaName"`
+	Public   string `json:"public"`
+	VPC      string `json:"vpc"`
+}
+
+// {
+// 	"version": "2017-09-12",
+// 	"style": "rpc",
+// 	"apis": {
+// 	  "ActiveFlowLog": {
+// 		"title": "ActiveFlowLog",
+// 		"summary": "Enables a flow log. After the flow log is enabled, the system collects traffic information about a specified resource.",
+// 		"deprecated": false
+// 	  }
+// 	}
+// }
+
+type Version struct {
+	Version string         `json:"version"`
+	Style   string         `json:"style"`
+	APIs    map[string]API `json:"apis"`
+}
+
+type API struct {
+	Title      string `json:"title"`
+	Summary    string `json:"summary"`
+	Deprecated bool   `json:"deprecated"`
 }
 
 func GetProductName(language, code string) (name string, err error) {
@@ -63,6 +87,22 @@ func GetProductName(language, code string) (name string, err error) {
 			name = strings.TrimSpace(p.Name)
 			break
 		}
+	}
+
+	return
+}
+
+func GetAPI(language, code, name string) (api *API, err error) {
+	content, err := GetMetadata(language, "/"+strings.ToLower(code)+"/version.json")
+	if err != nil {
+		return
+	}
+
+	version := new(Version)
+	err = json.Unmarshal(content, &version)
+
+	if found, ok := version.APIs[name]; ok {
+		api = &found
 	}
 
 	return

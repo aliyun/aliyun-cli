@@ -79,13 +79,13 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 	}
 
 	if product.ApiStyle == "rpc" {
-		cli.Printf(a.writer, "\nUsage:\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ...\n", product.Code)
+		cli.Printf(a.writer, "\nUsage:\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ...\n", strings.ToLower(product.Code))
 	} else {
-		cli.Printf(a.writer, "\nUsage 1:\n  aliyun %s [GET|PUT|POST|DELETE] <PathPattern> --body \"...\" \n", product.Code)
-		cli.Printf(a.writer, "\nUsage 2 (For API with NO PARAMS in PathPattern only.):\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ... --body \"...\"\n", product.Code)
+		cli.Printf(a.writer, "\nUsage 1:\n  aliyun %s [GET|PUT|POST|DELETE] <PathPattern> --body \"...\" \n", strings.ToLower(product.Code))
+		cli.Printf(a.writer, "\nUsage 2 (For API with NO PARAMS in PathPattern only.):\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ... --body \"...\"\n", strings.ToLower(product.Code))
 	}
-
-	cli.Printf(a.writer, "\nProduct: %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
+	productName, _ := newmeta.GetProductName(i18n.GetLanguage(), product.Code)
+	cli.Printf(a.writer, "\nProduct: %s (%s)\n", product.Code, productName)
 	cli.Printf(a.writer, "Version: %s \n", product.Version)
 
 	if withApi {
@@ -104,7 +104,19 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 				ptn := fmt.Sprintf("  %%-%ds : %%s %%s\n", maxNameLen+1)
 				cli.PrintfWithColor(a.writer, cli.Green, ptn, apiName, api.Method, api.PathPattern)
 			} else {
-				cli.PrintfWithColor(a.writer, cli.Green, "  %s\n", apiName)
+				api, _ := newmeta.GetAPI(i18n.GetLanguage(), productCode, apiName)
+				if api != nil {
+					// use new api metadata
+					if api.Deprecated {
+						fmt := fmt.Sprintf("  %%-%ds [Deprecated]%%s\n", maxNameLen+1)
+						cli.PrintfWithColor(a.writer, cli.Green, fmt, apiName, api.Summary)
+					} else {
+						fmt := fmt.Sprintf("  %%-%ds %%s\n", maxNameLen+1)
+						cli.PrintfWithColor(a.writer, cli.Green, fmt, apiName, api.Summary)
+					}
+				} else {
+					cli.PrintfWithColor(a.writer, cli.Green, "  %s\n", apiName)
+				}
 			}
 		}
 	}
