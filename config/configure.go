@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,7 +17,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -246,7 +245,7 @@ func configureChainableRamRoleArn(w io.Writer, cp *Profile) error {
 func configureRsaKeyPair(w io.Writer, cp *Profile) error {
 	cli.Printf(w, "Rsa Private Key File: ")
 	keyFile := ReadInput("")
-	buf, err := ioutil.ReadFile(keyFile)
+	buf, err := os.ReadFile(keyFile)
 	if err != nil {
 		return fmt.Errorf("read key file %s failed %v", keyFile, err)
 	}

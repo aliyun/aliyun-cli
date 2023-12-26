@@ -23,6 +23,7 @@ import (
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/meta"
+	"github.com/aliyun/aliyun-cli/newmeta"
 )
 
 type Library struct {
@@ -65,7 +66,8 @@ func (a *Library) PrintProducts() {
 	})
 
 	for _, product := range a.builtinRepo.Products {
-		cli.PrintfWithColor(w, cli.Cyan, "  %s\t%s\n", strings.ToLower(product.Code), product.Name[i18n.GetLanguage()])
+		var productName, _ = newmeta.GetProductName(i18n.GetLanguage(), product.Code)
+		cli.PrintfWithColor(w, cli.Cyan, "  %-20s\t%s\n", strings.ToLower(product.Code), productName)
 	}
 	w.Flush()
 }
