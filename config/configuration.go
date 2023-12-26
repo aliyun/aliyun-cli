@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,7 +16,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"runtime"
 
@@ -162,7 +161,7 @@ func LoadConfiguration(path string) (conf *Configuration, err error) {
 		return
 	}
 
-	bytes, err := ioutil.ReadFile(path)
+	bytes, err := os.ReadFile(path)
 	if err != nil {
 		err = fmt.Errorf("reading config from '%s' failed %v", path, err)
 		return
@@ -179,7 +178,7 @@ func SaveConfiguration(config *Configuration) (err error) {
 		return
 	}
 	path := GetConfigPath() + "/" + configFile
-	err = ioutil.WriteFile(path, bytes, 0600)
+	err = os.WriteFile(path, bytes, 0600)
 	return
 }
 
