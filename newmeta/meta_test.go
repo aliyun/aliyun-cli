@@ -29,3 +29,11 @@ func TestGetAPI(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Nil(t, api2)
 }
+
+func TestGetAPIDetail(t *testing.T) {
+	api, err := GetAPIDetail("en", "ecs", "DescribeRegions")
+	assert.Nil(t, err)
+	assert.Equal(t, "DescribeRegions", api.Name)
+	assert.Equal(t, "GET|POST", api.Method)
+	assert.Equal(t, false, api.Deprecated)
+}
