@@ -121,7 +121,7 @@ func APIListColor() string {
 	return apiListColor
 }
 
-func colorized(color string, a ...interface{}) string {
+func Colorized(color string, a ...interface{}) string {
 	if withColor && color != "" {
 		return color + fmt.Sprint(a...) + ColorOff
 	}
@@ -129,15 +129,15 @@ func colorized(color string, a ...interface{}) string {
 }
 
 func PrintWithColor(w io.Writer, color string, a ...interface{}) (n int, err error) {
-	return Print(w, colorized(color, a...))
+	return Print(w, Colorized(color, a...))
 }
 
 func Notice(w io.Writer, a ...interface{}) (n int, err error) {
-	return Print(w, colorized(NoticeColor, a...))
+	return Print(w, Colorized(NoticeColor, a...))
 }
 
 func Error(w io.Writer, a ...interface{}) (n int, err error) {
-	return Print(w, colorized(ErrorColor, a...))
+	return Print(w, Colorized(ErrorColor, a...))
 }
 
 func Noticef(w io.Writer, format string, args ...interface{}) (n int, err error) {

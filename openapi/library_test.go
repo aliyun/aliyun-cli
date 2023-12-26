@@ -15,6 +15,7 @@ package openapi
 
 import (
 	"github.com/aliyun/aliyun-cli/meta"
+	"github.com/aliyun/aliyun-cli/newmeta"
 	"github.com/stretchr/testify/assert"
 
 	"bytes"
@@ -97,7 +98,7 @@ func Test_printParameters(t *testing.T) {
 			},
 		},
 	}
-	printParameters(w, params, "")
+	printParameters(w, params, "", &newmeta.APIDetail{})
 }
 
 func getRepository(content string) *meta.Repository {

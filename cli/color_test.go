@@ -30,9 +30,9 @@ func TestColor(t *testing.T) {
 	assert.Empty(t, ProductListColor())
 	assert.Empty(t, APIListColor())
 
-	assert.Equal(t, "a", colorized("", "a"))
+	assert.Equal(t, "a", Colorized("", "a"))
 	EnableColor()
-	assert.Equal(t, "reda\033[0m", colorized("red", "a"))
+	assert.Equal(t, "reda\033[0m", Colorized("red", "a"))
 }
 
 func TestCotainWriter(t *testing.T) {

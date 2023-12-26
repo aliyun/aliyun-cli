@@ -73,6 +73,40 @@ type API struct {
 	Deprecated bool   `json:"deprecated"`
 }
 
+// {
+// 	"name": "AddEntriesToAcl",
+// 	"deprecated": false,
+// 	"protocol": "HTTP|HTTPS",
+// 	"method": "GET|POST",
+// 	"pathPattern": "",
+// 	"parameters": [
+// 	  {
+// 		"name": "AclEntries",
+// 		"description": "The IP entries that you want to add. You can add up to 20 IP entries in each call.",
+// 		"position": "Query",
+// 		"type": "Array",
+// 		"required": true
+// 	  }
+// 	]
+//  }
+
+type APIDetail struct {
+	Name        string             `json:"name"`
+	Deprecated  bool               `json:"deprecated"`
+	Protocol    string             `json:"protocol"`
+	Method      string             `json:"method"`
+	PathPattern string             `json:"pathPattern"`
+	Parameters  []RequestParameter `json:"parameters"`
+}
+
+type RequestParameter struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Position    string `json:"position"`
+	Type        string `json:"type"`
+	Required    bool   `json:"required"`
+}
+
 func GetProductName(language, code string) (name string, err error) {
 	content, err := GetMetadata(language, "/products.json")
 	if err != nil {
@@ -81,6 +115,9 @@ func GetProductName(language, code string) (name string, err error) {
 
 	products := new(ProductSet)
 	err = json.Unmarshal(content, &products)
+	if err != nil {
+		return
+	}
 
 	for _, p := range products.Products {
 		if strings.EqualFold(p.Code, code) {
@@ -100,11 +137,30 @@ func GetAPI(language, code, name string) (api *API, err error) {
 
 	version := new(Version)
 	err = json.Unmarshal(content, &version)
+	if err != nil {
+		return
+	}
 
 	if found, ok := version.APIs[name]; ok {
 		api = &found
 	}
 
+	return
+}
+
+func GetAPIDetail(language, code, name string) (api *APIDetail, err error) {
+	content, err := GetMetadata(language, "/"+strings.ToLower(code)+"/"+name+".json")
+	if err != nil {
+		return
+	}
+
+	detail := new(APIDetail)
+	err = json.Unmarshal(content, &detail)
+	if err != nil {
+		return
+	}
+
+	api = detail
 	return
 }
 

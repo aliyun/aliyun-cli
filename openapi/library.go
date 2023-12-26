@@ -135,24 +135,27 @@ func (a *Library) PrintApiUsage(productCode string, apiName string) error {
 		return &InvalidApiError{Name: apiName, product: &product}
 	}
 
+	productName, _ := newmeta.GetProductName(i18n.GetLanguage(), productCode)
+
 	if product.ApiStyle == "restful" {
-		cli.Printf(a.writer, "\nProduct:     %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
+		cli.Printf(a.writer, "\nProduct:     %s (%s)\n", product.Code, productName)
 		cli.Printf(a.writer, "Method:      %s\n", api.Method)
 		cli.Printf(a.writer, "PathPattern: %s\n", api.PathPattern)
 	} else {
-		cli.Printf(a.writer, "\nProduct: %s (%s)\n", product.Code, product.Name[i18n.GetLanguage()])
+		cli.Printf(a.writer, "\nProduct: %s (%s)\n", product.Code, productName)
 	}
 
 	cli.Printf(a.writer, "\nParameters:\n")
 
 	w := tabwriter.NewWriter(a.writer, 8, 0, 1, ' ', 0)
-	printParameters(w, api.Parameters, "")
+	detail, _ := newmeta.GetAPIDetail(i18n.GetLanguage(), productCode, apiName)
+	printParameters(w, api.Parameters, "", detail)
 	w.Flush()
 
 	return nil
 }
 
-func printParameters(w io.Writer, params []meta.Parameter, prefix string) {
+func printParameters(w io.Writer, params []meta.Parameter, prefix string, detail *newmeta.APIDetail) {
 
 	sort.Sort(meta.ParameterSlice(params))
 
@@ -171,14 +174,24 @@ func printParameters(w io.Writer, params []meta.Parameter, prefix string) {
 
 		if param.Type == "RepeatList" {
 			if len(param.SubParameters) > 0 {
-				printParameters(w, param.SubParameters, prefix+param.Name+".n.")
+				printParameters(w, param.SubParameters, prefix+param.Name+".n.", detail)
 			} else {
-				fmt.Fprintf(w, "  --%s%s.n\t%s\t%s\t%s\n", prefix, param.Name, param.Type, required(param.Required), getDescription(param.Description))
+				fmt.Fprintf(w, "  --%s%s.n\t%s\t%s\n\n", cli.Colorized(cli.BBlack, prefix), cli.Colorized(cli.BBlack, param.Name), param.Type, required(param.Required))
+				displayDescription(w, getDescription(detail, param.Name))
 			}
 		} else {
-			fmt.Fprintf(w, "  --%s%s\t%s\t%s\t%s\n", prefix, param.Name, param.Type, required(param.Required), getDescription(param.Description))
+			fmt.Fprintf(w, "  --%s%s\t%s\t%s\n\n", cli.Colorized(cli.BBlack, prefix), cli.Colorized(cli.BBlack, param.Name), param.Type, required(param.Required))
+			displayDescription(w, getDescription(detail, param.Name))
 		}
 	}
+}
+
+func displayDescription(w io.Writer, desc string) {
+	lines := strings.Split(desc, "\n")
+	for _, v := range lines {
+		fmt.Fprintf(w, "  %s\n", v)
+	}
+	fmt.Fprintf(w, "\n")
 }
 
 func required(r bool) string {
@@ -189,15 +202,15 @@ func required(r bool) string {
 	}
 }
 
-func getDescription(d map[string]string) string {
+func getDescription(detail *newmeta.APIDetail, name string) string {
+	if detail == nil {
+		return ""
+	}
+	for _, p := range detail.Parameters {
+		if name == p.Name {
+			return strings.TrimSpace(p.Description)
+		}
+	}
+
 	return ""
-	// TODO: description too long, need optimize for display
-	//if d == nil {
-	//	return ""
-	//}
-	//if v, ok := d[i18n.GetLanguage()]; ok {
-	//	return v
-	//} else {
-	//	return ""
-	//}
 }
