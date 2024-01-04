@@ -75,7 +75,7 @@ func TestMigrateConfigure(t *testing.T) {
 
 	test, err := os.Create("testconf.ini")
 	assert.Nil(t, err)
-	_, err = test.WriteString(`
+	test.WriteString(`
 	[DEFAULT]
 	aliyun_access_key_id = DEFAULT_aliyun_access_key_id
 	aliyun_access_key_secret = DEFAULT_aliyun_access_key_secret
