@@ -422,7 +422,7 @@ func (cp *Profile) GetClientByCredentialsURI(config *sdk.Config, ctx *cli.Contex
 	}
 
 	if res.StatusCode != 200 {
-		return nil, fmt.Errorf("Get Credentials from %s failed, status code %d", uri, res.StatusCode)
+		return nil, fmt.Errorf("get credentials from %s failed, status code %d", uri, res.StatusCode)
 	}
 
 	body, err := io.ReadAll(res.Body)
@@ -441,11 +441,11 @@ func (cp *Profile) GetClientByCredentialsURI(config *sdk.Config, ctx *cli.Contex
 	var response Response
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		return nil, fmt.Errorf("Unmarshal credentials failed, the body %s", string(body))
+		return nil, fmt.Errorf("unmarshal credentials failed, the body %s", string(body))
 	}
 
 	if response.Code != "Success" {
-		return nil, fmt.Errorf("Get sts token err, Code is not Success")
+		return nil, fmt.Errorf("get sts token err, Code is not Success")
 	}
 
 	cred := credentials.NewStsTokenCredential(response.AccessKeyId, response.AccessKeySecret, response.SecurityToken)
