@@ -13,6 +13,17 @@
 // limitations under the License.
 package i18n
 
+func T(en string, zh string) *Text {
+	t := &Text{
+		dic: make(map[string]string),
+	}
+	t.dic["en"] = en
+	if zh != "" {
+		t.dic["zh"] = zh
+	}
+	return t
+}
+
 type Text struct {
 	dic map[string]string
 }
