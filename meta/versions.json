@@ -1152,5 +1152,14 @@
 				"version": "2021-10-01"
 			}
 		]
+	},
+	{
+		"code": "clickhouse",
+		"styles": [
+			{
+				"style": "RPC",
+				"version": "2019-11-11"
+			}
+		]
 	}
 ]
