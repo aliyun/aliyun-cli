@@ -83,7 +83,7 @@ func (a *Product) GetEndpoint(region string, client *sdk.Client) (string, error)
 }
 
 func (a *Product) TryGetEndpoints(region string, client *sdk.Client) (endpoint string, lcEndpoint string) {
-	endpoint, _ = a.RegionalEndpoints[region]
+	endpoint = a.RegionalEndpoints[region]
 
 	if a.LocationServiceCode != "" {
 		rp := endpoints.ResolveParam{

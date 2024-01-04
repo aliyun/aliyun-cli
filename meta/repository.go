@@ -19,8 +19,6 @@ import (
 	"strings"
 
 	_ "embed"
-
-	jmespath "github.com/jmespath/go-jmespath"
 )
 
 type Repository struct {
@@ -79,16 +77,44 @@ func (a *Repository) GetApi(productCode string, version string, apiName string) 
 //go:embed versions.json
 var versions []byte
 
+// [
+// 	{
+// 	"code": "aegis",
+// 	"styles": [
+// 		{
+// 			"style": "RPC",
+// 			"version": "2016-11-11"
+// 		}
+// 	]
+// }
+// ]
+
+type ProductStyle struct {
+	Code   string  `json:"code"`
+	Styles []Style `json:"styles"`
+}
+
+type Style struct {
+	Style   string `json:"style"`
+	Version string `json:"version"`
+}
+
 func (a *Repository) GetStyle(productCode, version string) (string, bool) {
-	v := new(interface{})
-	err := json.Unmarshal(versions, v)
+	productStyles := new([]ProductStyle)
+	err := json.Unmarshal(versions, &productStyles)
 	if err != nil {
 		return "", false
 	}
-	styles, _ := jmespath.Search("[?code=='"+productCode+"'].styles[]", *v)
-	style, _ := jmespath.Search("[?version=='"+version+"'].style", styles)
-	if len(style.([]interface{})) == 0 {
-		return "", false
+
+	for _, p := range *productStyles {
+		if p.Code == productCode {
+			for _, s := range p.Styles {
+				if s.Version == version {
+					return s.Style, true
+				}
+			}
+		}
 	}
-	return style.([]interface{})[0].(string), true
+
+	return "", false
 }
