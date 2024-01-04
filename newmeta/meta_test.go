@@ -18,6 +18,15 @@ func TestGetMetadata(t *testing.T) {
 	assert.Greater(t, len(content), 100)
 }
 
+func TestGetProductName(t *testing.T) {
+	name, err := GetProductName("en", "ecs")
+	assert.Nil(t, err)
+	assert.Equal(t, "Elastic Compute Service", name)
+	name, err = GetProductName("zh", "ecs")
+	assert.Nil(t, err)
+	assert.Equal(t, "云服务器 ECS", name)
+}
+
 func TestGetAPI(t *testing.T) {
 	api, err := GetAPI("en", "ecs", "DescribeRegions")
 	assert.Nil(t, err)
