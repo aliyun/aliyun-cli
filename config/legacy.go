@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -45,7 +45,7 @@ func MigrateCredentials(path string) (conf *Configuration, err error) {
 	conf = &Configuration{}
 	ini, err := ini.Load(path)
 	if err != nil {
-		err = fmt.Errorf(" parse failed: %v\n", err)
+		err = fmt.Errorf(" parse failed: %v", err)
 		return
 	}
 
@@ -81,7 +81,7 @@ func MigrateCredentials(path string) (conf *Configuration, err error) {
 func MigrateConfigure(path string, conf *Configuration) (err error) {
 	ini, err := ini.Load(path)
 	if err != nil {
-		err = fmt.Errorf("parse failed: %s\n", err)
+		err = fmt.Errorf("parse failed: %s", err)
 		return
 	}
 
