@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,7 +17,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 )
@@ -90,13 +89,12 @@ func removeFromFile(name string, content string) error {
 }
 
 func removeContentToTempFile(name, content string) (string, error) {
-
 	rf, err := os.Open(name)
 	if err != nil {
 		return "", err
 	}
 	defer rf.Close()
-	wf, err := ioutil.TempFile("", "complete-")
+	wf, err := os.CreateTemp("", "complete-")
 	if err != nil {
 		return "", err
 	}

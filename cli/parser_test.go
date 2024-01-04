@@ -18,9 +18,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 )
 
 type testContext struct {
@@ -60,70 +57,69 @@ func newTestParser(args ...string) (*Parser, *FlagSet) {
 	return parser, tc.fs
 }
 
-var _ = ginkgo.Describe("Parser", func() {
-	ginkgo.It("1. can parse command args", func() {
-		parser, _ := newTestParser()
+// 1. can parse command args
+func TestParser1(t *testing.T) {
+	parser, _ := newTestParser()
 
-		flag, v, err := parser.parseCommandArg("--test")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(flag.Name).Should(Equal("test"))
-		Expect(v).Should(Equal(""))
+	flag, v, err := parser.parseCommandArg("--test")
+	assert.Nil(t, err)
+	assert.Equal(t, "test", flag.Name)
+	assert.Equal(t, "", v)
 
-		flag, v, err = parser.parseCommandArg("-t")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(flag.Name).Should(Equal("test2"))
-		Expect(v).Should(Equal(""))
+	flag, v, err = parser.parseCommandArg("-t")
+	assert.Nil(t, err)
+	assert.Equal(t, "test2", flag.Name)
+	assert.Equal(t, "", v)
 
-		flag, v, err = parser.parseCommandArg("-t=ccc")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(flag.Name).Should(Equal("test2"))
-		Expect(v).Should(Equal("ccc"))
+	flag, v, err = parser.parseCommandArg("-t=ccc")
+	assert.Nil(t, err)
+	assert.Equal(t, "test2", flag.Name)
+	assert.Equal(t, "ccc", v)
 
-		flag, v, err = parser.parseCommandArg("-t:ccc")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(flag.Name).Should(Equal("test2"))
-		Expect(v).Should(Equal("ccc"))
+	flag, v, err = parser.parseCommandArg("-t:ccc")
+	assert.Nil(t, err)
+	assert.Equal(t, "test2", flag.Name)
+	assert.Equal(t, "ccc", v)
 
-		flag, v, err = parser.parseCommandArg("--test2:ccc")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(flag.Name).Should(Equal("test2"))
-		Expect(v).Should(Equal("ccc"))
+	flag, v, err = parser.parseCommandArg("--test2:ccc")
+	assert.Nil(t, err)
+	assert.Equal(t, "test2", flag.Name)
+	assert.Equal(t, "ccc", v)
 
-		flag, v, err = parser.parseCommandArg("ccc")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(flag).Should(BeNil())
-		Expect(v).Should(Equal("ccc"))
+	flag, v, err = parser.parseCommandArg("ccc")
+	assert.Nil(t, err)
+	assert.Nil(t, flag)
+	assert.Equal(t, "ccc", v)
 
-		flag, v, err = parser.parseCommandArg("ccc=aaa")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(flag).Should(BeNil())
-		Expect(v).Should(Equal("ccc=aaa"))
-	})
+	flag, v, err = parser.parseCommandArg("ccc=aaa")
+	assert.Nil(t, err)
+	assert.Nil(t, flag)
+	assert.Equal(t, "ccc=aaa", v)
+}
 
-	ginkgo.It("2. can parse args and flags", func() {
-		parser, _ := newTestParser("s1", "s2", "--test", "aaa", "--test2=bbb")
+// 2. can parse args and flags
+func TestParser2(t *testing.T) {
+	parser, _ := newTestParser("s1", "s2", "--test", "aaa", "--test2=bbb")
 
-		ginkgo.By("first arg")
-		s, _, err := parser.ReadNextArg()
-		Expect(err).NotTo(HaveOccurred())
-		Expect(s).Should(Equal("s1"))
+	s, _, err := parser.ReadNextArg()
+	assert.Nil(t, err)
+	assert.Equal(t, "s1", s)
 
-		ginkgo.By("remain args")
-		s2, err := parser.ReadAll()
-		Expect(err).NotTo(HaveOccurred())
-		Expect(len(s2)).Should(Equal(1))
-		Expect(s2[0]).Should(Equal("s2"))
-	})
+	s2, err := parser.ReadAll()
+	assert.Nil(t, err)
+	assert.Equal(t, 1, len(s2))
+	assert.Equal(t, "s2", s2[0])
+}
 
-	ginkgo.It("3. can read next arg skip prev flag", func() {
-		parser, fs := newTestParser("--prev", "s1", "s2")
-		s, _, err := parser.ReadNextArg()
+// 3. can read next arg skip prev flag
+func TestParser3(t *testing.T) {
+	parser, fs := newTestParser("--prev", "s1", "s2")
+	s, _, err := parser.ReadNextArg()
 
-		Expect(err).NotTo(HaveOccurred())
-		Expect(s).Should(Equal("s1"))
-		Expect(fs.Get("prev")).ShouldNot(Equal(nil))
-	})
-})
+	assert.Nil(t, err)
+	assert.Equal(t, "s1", s)
+	assert.NotNil(t, fs.Get("prev"))
+}
 
 func TestUnquoteString(t *testing.T) {
 	str := UnquoteString(`"nicai"`)
