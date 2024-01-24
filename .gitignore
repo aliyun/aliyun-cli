@@ -23,3 +23,4 @@ oss/lib/ossutil_test*
 coverage.html
 coverage/
 integration/*.txt
+cli-metadata/
