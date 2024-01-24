@@ -14,9 +14,15 @@
 package main
 
 import (
+	"embed"
+	"encoding/json"
+	"fmt"
 	"os"
+	"path"
 	"runtime"
+	"strings"
 
+	aliyunopenapimeta "github.com/aliyun/aliyun-cli/aliyun-openapi-meta"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/i18n"
@@ -67,8 +73,73 @@ func main() {
 	rootCmd.AddSubCommand(cli.NewVersionCommand())
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
 	if os.Getenv("GENERATE_METADATA") == "YES" {
-		rootCmd.GetMetadata()
+		generateMetadata(rootCmd)
 	} else {
 		rootCmd.Execute(ctx, os.Args[1:])
 	}
+}
+
+func dumpFiles(fs embed.FS, filePath string, outputDir string) {
+	filePath = strings.TrimPrefix(filePath, "./")
+
+	entries, err := fs.ReadDir(filePath)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	for _, entry := range entries {
+		entryPath := path.Join(filePath, entry.Name())
+		if entry.IsDir() {
+			dumpFiles(fs, entryPath, outputDir)
+		} else {
+			content, err := fs.ReadFile(entryPath)
+			if err != nil {
+				fmt.Println(err.Error())
+				return
+			}
+			targetPath := path.Join(outputDir, entryPath)
+			fmt.Println("copy file from " + entryPath + " to " + targetPath)
+			_, err = os.Stat(path.Dir(targetPath))
+			if os.IsNotExist(err) {
+				err = os.MkdirAll(path.Dir(targetPath), 0755)
+				if err != nil {
+					fmt.Println(err.Error())
+					return
+				}
+			}
+			err = os.WriteFile(targetPath, content, 0666)
+			if err != nil {
+				fmt.Println(err.Error())
+				return
+			}
+		}
+	}
+}
+
+func generateMetadata(rootCmd *cli.Command) {
+	metadata := make(map[string]*cli.Metadata)
+	rootCmd.GetMetadata(metadata)
+	b, _ := json.MarshalIndent(metadata, "", "  ")
+	cwd, _ := os.Getwd()
+	targetDir := cwd + "/cli-metadata"
+	_, err := os.Stat(targetDir)
+	if os.IsNotExist(err) {
+		err := os.Mkdir(targetDir, 0755)
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+	}
+
+	targetPath := targetDir + "/commands.json"
+	err = os.WriteFile(targetPath, b, 0666)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	versionPath := targetDir + "/version"
+	os.WriteFile(versionPath, []byte(cli.Version), 0666)
+
+	dumpFiles(aliyunopenapimeta.Metadatas, ".", targetDir)
 }

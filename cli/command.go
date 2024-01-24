@@ -92,48 +92,75 @@ func (c *Command) getName() string {
 	return c.parent.getName() + " " + c.Name
 }
 
-type Option struct {
-	Name         string
-	Shorthand    string
-	DefaultValue string
-	Usage        string
+type Metadata struct {
+	Name   string                   `json:"name"`
+	Short  map[string]string        `json:"short"`
+	Long   map[string]string        `json:"long"`
+	Usage  string                   `json:"usage"`
+	Sample string                   `json:"sample"`
+	Hidden bool                     `json:"hidden"`
+	Flags  map[string]*MetadataFlag `json:"flags"`
 }
 
-type Manual struct {
-	Name          string
-	Synopsis      string
-	Description   string
-	Usage         string
-	Options       []Option
-	GlobalOptions []Option
-	Examples      string
-	SeeAlso       string
+type MetadataFlag struct {
+	Name         string            `json:"name"`
+	Shorthand    rune              `json:"shorthand"`
+	Short        map[string]string `json:"short"`
+	Long         map[string]string `json:"long"`
+	DefaultValue string            `json:"default"`
+	Required     bool              `json:"required"`
+	Aliases      []string          `json:"aliases"`
+	AssignedMode int               `json:"assign_mode"`
+	Persistent   bool              `json:"persistent"`
+	Hidden       bool              `json:"hidden"`
+	Category     string            `json:"category"`
 }
 
-func (c *Command) GetMetadata() {
-	fmt.Println(c.getName())
-	fmt.Println(c.Short.Get("en"))
+func (c *Command) GetMetadata(metadata map[string]*Metadata) {
+	name := c.getName()
+
+	meta := &Metadata{}
+	meta.Name = name
+	meta.Short = c.Short.GetData()
 	if c.Long != nil {
-		fmt.Println(c.Long.Get("en"))
+		meta.Long = c.Long.GetData()
 	}
 
-	fmt.Println(c.Usage)
+	meta.Usage = c.Usage
+	meta.Sample = c.Sample
+	meta.Hidden = c.Hidden
 
-	fmt.Println(c.Sample)
-
-	fmt.Println("Flags:")
+	meta.Flags = make(map[string]*MetadataFlag)
 	for _, flag := range c.Flags().Flags() {
-		fmt.Println("--" + flag.Name)
+		f := &MetadataFlag{}
+		f.Name = flag.Name
+		f.Shorthand = flag.Shorthand
 		if flag.Short != nil {
-			fmt.Println(flag.Short.Text())
+			f.Short = flag.Short.GetData()
 		}
+		if flag.Long != nil {
+			f.Long = flag.Long.GetData()
+		}
+		f.DefaultValue = flag.DefaultValue
+		f.Required = flag.Required
+		f.Aliases = flag.Aliases
+		f.AssignedMode = int(flag.AssignedMode)
+		f.Persistent = flag.Persistent
+		f.Hidden = flag.Hidden
+		f.Category = flag.Category
 
+		// Flag can assigned with --flag field1=value1 field2=value2 value3 ...
+		// must used with AssignedMode=AssignedRepeatable
+		// Fields []Field
+
+		// Flag can't appear with other flags, use Flag.Name
+		// ExcludeWith []string
+
+		meta.Flags[flag.Name] = f
 	}
-
-	fmt.Println("===========================")
-
+	metadata[name] = meta
 	for _, cmd := range c.subCommands {
-		cmd.GetMetadata()
+		cmd.GetMetadata(metadata)
 	}
 }
 

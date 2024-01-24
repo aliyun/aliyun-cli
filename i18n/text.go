@@ -40,3 +40,7 @@ func (a *Text) Get(lang string) string {
 	}
 	return s
 }
+
+func (a *Text) GetData() map[string]string {
+	return a.dic
+}
