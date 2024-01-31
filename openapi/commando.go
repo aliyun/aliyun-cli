@@ -72,7 +72,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	i18n.SetLanguage(c.profile.Language)
 
 	// process following commands:
-	// 	 aliyun <productCode>
+	//   aliyun <productCode>
 	//   aliyun <productCode> <method> --param1 value1
 	//   aliyun <productCode> GET <path>
 	productName := args[0]
@@ -112,6 +112,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 }
 
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
+
 	// create specific invoker
 	invoker, err := c.createInvoker(ctx, productCode, apiOrMethod, path)
 	if err != nil {
@@ -351,11 +352,9 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 	} else if len(args) == 1 {
 		cmd.PrintHead(ctx)
 		return c.library.PrintProductUsage(args[0], true)
-		// c.PrintFlags() TODO add later
 	} else if len(args) == 2 {
 		cmd.PrintHead(ctx)
 		return c.library.PrintApiUsage(args[0], args[1])
-		// c.PrintFlags() TODO add later
 	} else {
 		return fmt.Errorf("too many arguments: %d", len(args))
 	}
