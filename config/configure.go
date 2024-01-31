@@ -142,7 +142,7 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 
 	cp.Language = ReadInput(cp.Language)
 	if cp.Language != "zh" && cp.Language != "en" {
-		cp.Language = "en"
+		cp.Language = i18n.GetLanguage()
 	}
 
 	//fmt.Printf("User site: [china|international|japan] %s", cp.Site)

@@ -53,7 +53,6 @@ func (c *Commando) InitWithCommand(cmd *cli.Command) {
 }
 
 func (c *Commando) main(ctx *cli.Context, args []string) error {
-	//
 	// aliyun
 	if len(args) == 0 {
 		c.printUsage(ctx)
@@ -238,6 +237,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 				}
 			}
 		}
+
 		if strings.ToLower(product.ApiStyle) == "rpc" {
 			//
 			// Rpc call
@@ -258,8 +258,8 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 				}, nil
 			}
 			return nil, &InvalidApiError{apiOrMethod, &product}
-
 		}
+
 		//
 		// Restful Call
 		// aliyun cs GET /clusters
@@ -268,10 +268,12 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 		if err != nil {
 			return nil, err
 		}
+
 		if !ok {
 			return nil, cli.NewErrorWithTip(fmt.Errorf("product '%s' need restful call", product.GetLowerCode()),
 				"Use `aliyun %s {GET|PUT|POST|DELETE} <path> ...`", product.GetLowerCode())
 		}
+
 		if api, ok := c.library.GetApi(product.Code, product.Version, ctx.Command().Name); ok {
 			return &RestfulInvoker{
 				basicInvoker,
@@ -281,6 +283,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 				&api,
 			}, nil
 		}
+
 		return &RestfulInvoker{
 			basicInvoker,
 			method,
@@ -288,7 +291,6 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			force,
 			nil,
 		}, nil
-
 	} else {
 		if !force {
 			return nil, &InvalidProductError{Code: productCode, library: c.library}
@@ -423,9 +425,5 @@ func (c *Commando) printUsage(ctx *cli.Context) {
 	cmd.PrintSubCommands(ctx)
 	cmd.PrintFlags(ctx)
 	cmd.PrintSample(ctx)
-	//if configError != nil {
-	//	cli.Printf("Configuration Invailed: %s\n", configError)
-	//	cli.Printf("Run `aliyun configure` first:\n  %s\n", configureCommand.Usage)
-	//}
 	cmd.PrintTail(ctx)
 }

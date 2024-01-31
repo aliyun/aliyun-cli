@@ -13,6 +13,11 @@
 // limitations under the License.
 package i18n
 
+import (
+	"os"
+	"strings"
+)
+
 type LanguageCode string
 
 const (
@@ -20,7 +25,16 @@ const (
 	En = LanguageCode("en")
 )
 
-var language = "en"
+func getLanguageFromEnv() string {
+	lang := os.Getenv("LANG")
+	if strings.HasPrefix(lang, "zh_CN") {
+		return "zh"
+	} else {
+		return "en"
+	}
+}
+
+var language = getLanguageFromEnv()
 
 func SetLanguage(lang string) {
 	language = lang
