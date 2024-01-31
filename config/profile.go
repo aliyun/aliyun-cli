@@ -32,6 +32,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
+	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 	jmespath "github.com/jmespath/go-jmespath"
 )
 
@@ -254,6 +255,177 @@ func (cp *Profile) ValidateAK() error {
 		return fmt.Errorf("invaild access_key_secret: %s", cp.AccessKeySecret)
 	}
 	return nil
+}
+
+func getSTSEndpoint(regionId string) string {
+	if regionId != "" {
+		return fmt.Sprintf("sts.%s.aliyuncs.com", regionId)
+	}
+	return "sts.aliyuncs.com"
+}
+
+func (cp *Profile) GetCredential(ctx *cli.Context) (cred credentialsv2.Credential, err error) {
+	config := new(credentialsv2.Config)
+	// The AK, StsToken are direct credential
+	// Others are indirect credential
+	switch cp.Mode {
+	case AK:
+		config.SetType("access_key").
+			SetAccessKeyId(cp.AccessKeyId).
+			SetAccessKeySecret(cp.AccessKeySecret)
+
+	case StsToken:
+		config.SetType("sts").
+			SetAccessKeyId(cp.AccessKeyId).
+			SetAccessKeySecret(cp.AccessKeySecret).
+			SetSecurityToken(cp.StsToken)
+
+	case RamRoleArn:
+		config.SetType("ram_role_arn").
+			SetAccessKeyId(cp.AccessKeyId).
+			SetAccessKeySecret(cp.AccessKeySecret).
+			SetRoleArn(cp.RamRoleArn).
+			SetRoleSessionName(cp.RoleSessionName).
+			SetRoleSessionExpiration(cp.ExpiredSeconds).
+			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+
+		if cp.StsToken != "" {
+			config.SetSecurityToken(cp.StsToken)
+		}
+
+	case EcsRamRole:
+		config.SetType("ecs_ram_role").
+			SetRoleName(cp.RamRoleName)
+
+	case RsaKeyPair:
+		config.SetType("rsa_key_pair").
+			SetPrivateKeyFile(cp.PrivateKey).
+			SetPublicKeyId(cp.KeyPairName).
+			SetSessionExpiration(cp.ExpiredSeconds).
+			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+
+	case RamRoleArnWithEcs:
+		config.SetType("ecs_ram_role").
+			SetRoleName(cp.RamRoleName)
+		client, err := credentialsv2.NewCredential(config)
+		if err != nil {
+			return nil, err
+		}
+		// 从 ECS RAM Role 获取中间 STS
+		model, err := client.GetCredential()
+		if err != nil {
+			return nil, err
+		}
+
+		// 扮演最终角色
+		config.SetType("ram_role_arn").
+			SetAccessKeyId(*model.AccessKeyId).
+			SetAccessKeySecret(*model.AccessKeySecret).
+			SetSecurityToken(*model.SecurityToken).
+			SetRoleArn(cp.RamRoleArn).
+			SetRoleSessionName(cp.RoleSessionName).
+			SetRoleSessionExpiration(cp.ExpiredSeconds).
+			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+
+	case ChainableRamRoleArn:
+		profileName := cp.SourceProfile
+
+		// 从 configuration 中重新获取 source profile
+		source, loaded := cp.parent.GetProfile(profileName)
+		if !loaded {
+			return nil, fmt.Errorf("can not load the source profile: " + profileName)
+		}
+
+		middle, err := source.GetCredential(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		// 从上游处获得中间 AK/STS
+		model, err := middle.GetCredential()
+
+		if err != nil {
+			return nil, err
+		}
+
+		// 扮演最终角色
+		config.SetType("ram_role_arn").
+			SetAccessKeyId(*model.AccessKeyId).
+			SetAccessKeySecret(*model.AccessKeySecret).
+			SetSecurityToken(*model.SecurityToken).
+			SetRoleArn(cp.RamRoleArn).
+			SetRoleSessionName(cp.RoleSessionName).
+			SetRoleSessionExpiration(cp.ExpiredSeconds).
+			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+
+	case External:
+		args := strings.Fields(cp.ProcessCommand)
+		cmd := exec.Command(args[0], args[1:]...)
+		buf, err := cmd.CombinedOutput()
+		if err != nil {
+			return nil, err
+		}
+		// 解析得到新的 profile 配置
+		err = json.Unmarshal(buf, cp)
+		if err != nil {
+			fmt.Println(cp.ProcessCommand)
+			fmt.Println(string(buf))
+			return nil, err
+		}
+		return cp.GetCredential(ctx)
+
+	case CredentialsURI:
+		uri := cp.CredentialsURI
+
+		if uri == "" {
+			uri = os.Getenv("ALIBABA_CLOUD_CREDENTIALS_URI")
+		}
+
+		if uri == "" {
+			return nil, fmt.Errorf("invalid credentials uri")
+		}
+
+		res, err := http.Get(uri)
+		if err != nil {
+			return nil, err
+		}
+
+		if res.StatusCode != 200 {
+			return nil, fmt.Errorf("get credentials from %s failed, status code %d", uri, res.StatusCode)
+		}
+
+		body, err := io.ReadAll(res.Body)
+		res.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		type Response struct {
+			Code            string
+			AccessKeyId     string
+			AccessKeySecret string
+			SecurityToken   string
+			Expiration      string
+		}
+		var response Response
+		err = json.Unmarshal(body, &response)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshal credentials failed, the body %s", string(body))
+		}
+
+		if response.Code != "Success" {
+			return nil, fmt.Errorf("get sts token err, Code is not Success")
+		}
+
+		config.SetType("sts").
+			SetAccessKeyId(response.AccessKeyId).
+			SetAccessKeySecret(response.AccessKeySecret).
+			SetSecurityToken(response.SecurityToken)
+	default:
+		return nil, fmt.Errorf("unexcepted certificate mode: %s", cp.Mode)
+	}
+
+	return credentialsv2.NewCredential(config)
 }
 
 func (cp *Profile) GetClient(ctx *cli.Context) (*sdk.Client, error) {

@@ -17,10 +17,12 @@ import (
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestAFlags(t *testing.T) {
+	i18n.SetLanguage("en")
 	flagset := cli.NewFlagSet()
 	AddFlags(flagset)
 	secureflag := SecureFlag(flagset)

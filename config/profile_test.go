@@ -388,6 +388,7 @@ func TestGetClient(t *testing.T) {
 	assert.Equal(t, float64(2), client.GetConnectTimeout().Seconds())
 	assert.True(t, client.GetHTTPSInsecure())
 }
+
 func TestGetClientByAK(t *testing.T) {
 	actual := newProfile()
 	config := sdk.NewConfig()
@@ -406,8 +407,8 @@ func TestGetClientByAK(t *testing.T) {
 	client, err = actual.GetClientByAK(config)
 	assert.Nil(t, err)
 	assert.NotNil(t, client)
-
 }
+
 func TestGetClientWithNoError(t *testing.T) {
 	actual := newProfile()
 	config := sdk.NewConfig()

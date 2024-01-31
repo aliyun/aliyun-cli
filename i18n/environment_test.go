@@ -20,6 +20,7 @@ import (
 )
 
 func TestEnvironment(t *testing.T) {
+	SetLanguage("en")
 	assert.Equal(t, "en", GetLanguage())
 	SetLanguage("zh")
 	assert.Equal(t, "zh", GetLanguage())

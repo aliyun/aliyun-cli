@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -37,7 +37,7 @@ func TestDoHello(t *testing.T) {
 	exw := "-----------------------------------------------\n" +
 		"!!! Configure Failed please configure again !!!\n" +
 		"-----------------------------------------------\n" +
-		"AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first\n" +
+		"AccessKeyId cannot be empty\n" +
 		"-----------------------------------------------\n" +
 		"!!! Configure Failed please configure again !!!\n" +
 		"-----------------------------------------------\n"
@@ -50,5 +50,7 @@ func TestDoHello(t *testing.T) {
 	profile.AccessKeySecret = "AccessKeySecret"
 	profile.RegionId = "cn-hangzhou"
 	DoHello(ctx, &profile)
-	assert.True(t, strings.Contains(w.String(), "-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------"))
+	assert.True(t, strings.Contains(w.String(), "-----------------------------------------------\n"+
+		"!!! Configure Failed please configure again !!!\n"+
+		"-----------------------------------------------"))
 }
