@@ -46,3 +46,12 @@ func TestGetAPIDetail(t *testing.T) {
 	assert.Equal(t, "GET|POST", api.Method)
 	assert.Equal(t, false, api.Deprecated)
 }
+
+func TestIsAnonymousAPI(t *testing.T) {
+	akapi, err := GetAPIDetail("en", "ecs", "DescribeRegions")
+	assert.Nil(t, err)
+	assert.False(t, akapi.IsAnonymousAPI())
+	api, err := GetAPIDetail("en", "sts", "AssumeRoleWithOIDC")
+	assert.Nil(t, err)
+	assert.True(t, api.IsAnonymousAPI())
+}

@@ -75,6 +75,9 @@ type API struct {
 
 // {
 // 	"name": "AddEntriesToAcl",
+// 	"security": [
+// 		"AK"
+// 	],
 // 	"deprecated": false,
 // 	"protocol": "HTTP|HTTPS",
 // 	"method": "GET|POST",
@@ -92,11 +95,21 @@ type API struct {
 
 type APIDetail struct {
 	Name        string             `json:"name"`
+	Auth        []string           `json:"security"`
 	Deprecated  bool               `json:"deprecated"`
 	Protocol    string             `json:"protocol"`
 	Method      string             `json:"method"`
 	PathPattern string             `json:"pathPattern"`
 	Parameters  []RequestParameter `json:"parameters"`
+}
+
+func (api *APIDetail) IsAnonymousAPI() bool {
+	for _, v := range api.Auth {
+		if v == "Anonymous" {
+			return true
+		}
+	}
+	return false
 }
 
 type RequestParameter struct {

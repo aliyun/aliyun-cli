@@ -106,9 +106,13 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 			} else {
 				api, _ := newmeta.GetAPI(i18n.GetLanguage(), productCode, apiName)
 				if api != nil {
+					apiDetail, _ := newmeta.GetAPIDetail(i18n.GetLanguage(), productCode, apiName)
 					// use new api metadata
 					if api.Deprecated {
 						fmt := fmt.Sprintf("  %%-%ds [Deprecated]%%s\n", maxNameLen+1)
+						cli.PrintfWithColor(a.writer, cli.Green, fmt, apiName, api.Summary)
+					} else if apiDetail.IsAnonymousAPI() {
+						fmt := fmt.Sprintf("  %%-%ds [Anonymous]%%s\n", maxNameLen+1)
 						cli.PrintfWithColor(a.writer, cli.Green, fmt, apiName, api.Summary)
 					} else {
 						fmt := fmt.Sprintf("  %%-%ds %%s\n", maxNameLen+1)
