@@ -20,9 +20,6 @@ import (
 
 func (c *Command) PrintHead(ctx *Context) {
 	Printf(ctx.Writer(), "%s\n", c.Short.Text())
-	//if c.Long != nil {
-	//	fmt.Printf("\n%s\n", c.Long.Text())
-	//}
 }
 
 func (c *Command) PrintUsage(ctx *Context) {

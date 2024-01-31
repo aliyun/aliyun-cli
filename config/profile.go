@@ -31,6 +31,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/i18n"
 	jmespath "github.com/jmespath/go-jmespath"
 )
 
@@ -80,7 +81,7 @@ func NewProfile(name string) Profile {
 		Name:         name,
 		Mode:         "",
 		OutputFormat: "json",
-		Language:     "en",
+		Language:     i18n.GetLanguage(),
 	}
 }
 
