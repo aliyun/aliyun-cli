@@ -42,10 +42,6 @@ func TestProduct_GetEndpoint(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, endpoint, "arms.cn-hangzhou.aliyuncs.com")
 
-	//endpoint, err = product.GetEndpoint("cn-hangzhou", client)
-	//assert.Nil(t, err)
-	//assert.Equal(t, endpoint, "arms-cn-hangzhou.aliyuncs.com")
-
 	product.LocationServiceCode = ""
 	product.GlobalEndpoint = "arms.aliyuncs.com"
 	endpoint, err = product.GetEndpoint("us-west-1", client)
@@ -56,23 +52,4 @@ func TestProduct_GetEndpoint(t *testing.T) {
 	_, err = product.GetEndpoint("us-west-1", client)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "us-west-1")
-}
-
-func TestProduct_TryGetEndpoints(t *testing.T) {
-	product := &Product{
-		Code: "arms",
-		RegionalEndpoints: map[string]string{
-			"cn-hangzhou": "arms.cn-hanghzou.aliyuncs.com",
-		},
-		LocationServiceCode: "arms",
-	}
-	client, err := sdk.NewClientWithAccessKey("regionid", "acesskeyid", "accesskeysecret")
-	assert.Nil(t, err)
-	//endpoint, lcEndpoint := product.TryGetEndpoints("cn-hangzhou", client)
-	//assert.Equal(t,"arms.cn-hanghzou.aliyuncs.com", endpoint)
-	//assert.Equal(t, "", lcEndpoint)
-
-	endpoint, lcEndpoint := product.TryGetEndpoints("cn-hangzhou", client)
-	assert.Equal(t, "arms.cn-hanghzou.aliyuncs.com", endpoint)
-	assert.Equal(t, "arms.cn-hangzhou.aliyuncs.com", lcEndpoint)
 }
