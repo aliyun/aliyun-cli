@@ -14,6 +14,7 @@
 package i18n
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -24,4 +25,13 @@ func TestEnvironment(t *testing.T) {
 	assert.Equal(t, "en", GetLanguage())
 	SetLanguage("zh")
 	assert.Equal(t, "zh", GetLanguage())
+}
+
+func TestGetLanguageFromEnv(t *testing.T) {
+	originLANG := os.Getenv("LANG")
+	defer os.Setenv("LANG", originLANG)
+	os.Setenv("LANG", "zh_CN.UTF-8")
+	assert.Equal(t, "zh", getLanguageFromEnv())
+	os.Setenv("LANG", "en_US.UTF-8")
+	assert.Equal(t, "en", getLanguageFromEnv())
 }
