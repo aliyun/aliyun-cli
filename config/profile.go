@@ -32,6 +32,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/aliyun/aliyun-cli/util"
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 	jmespath "github.com/jmespath/go-jmespath"
 )
@@ -177,47 +178,19 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.ProcessCommand = ProcessCommandFlag(ctx.Flags()).GetStringOrDefault(cp.ProcessCommand)
 
 	if cp.AccessKeyId == "" {
-		switch {
-		case os.Getenv("ALIBABACLOUD_ACCESS_KEY_ID") != "":
-			cp.AccessKeyId = os.Getenv("ALIBABACLOUD_ACCESS_KEY_ID")
-		case os.Getenv("ALICLOUD_ACCESS_KEY_ID") != "":
-			cp.AccessKeyId = os.Getenv("ALICLOUD_ACCESS_KEY_ID")
-		case os.Getenv("ACCESS_KEY_ID") != "":
-			cp.AccessKeyId = os.Getenv("ACCESS_KEY_ID")
-		}
+		cp.AccessKeyId = util.GetFromEnv("ALIBABACLOUD_ACCESS_KEY_ID", "ALICLOUD_ACCESS_KEY_ID", "ACCESS_KEY_ID")
 	}
 
 	if cp.AccessKeySecret == "" {
-		switch {
-		case os.Getenv("ALIBABACLOUD_ACCESS_KEY_SECRET") != "":
-			cp.AccessKeySecret = os.Getenv("ALIBABACLOUD_ACCESS_KEY_SECRET")
-		case os.Getenv("ALICLOUD_ACCESS_KEY_SECRET") != "":
-			cp.AccessKeySecret = os.Getenv("ALICLOUD_ACCESS_KEY_SECRET")
-		case os.Getenv("ACCESS_KEY_SECRET") != "":
-			cp.AccessKeySecret = os.Getenv("ACCESS_KEY_SECRET")
-		}
+		cp.AccessKeySecret = util.GetFromEnv("ALIBABACLOUD_ACCESS_KEY_SECRET", "ALICLOUD_ACCESS_KEY_SECRET", "ACCESS_KEY_SECRET")
 	}
 
 	if cp.StsToken == "" {
-		switch {
-		case os.Getenv("ALIBABACLOUD_SECURITY_TOKEN") != "":
-			cp.StsToken = os.Getenv("ALIBABACLOUD_SECURITY_TOKEN")
-		case os.Getenv("ALICLOUD_SECURITY_TOKEN") != "":
-			cp.StsToken = os.Getenv("ALICLOUD_SECURITY_TOKEN")
-		case os.Getenv("SECURITY_TOKEN") != "":
-			cp.StsToken = os.Getenv("SECURITY_TOKEN")
-		}
+		cp.StsToken = util.GetFromEnv("ALIBABACLOUD_SECURITY_TOKEN", "ALICLOUD_SECURITY_TOKEN", "SECURITY_TOKEN")
 	}
 
 	if cp.RegionId == "" {
-		switch {
-		case os.Getenv("ALIBABACLOUD_REGION_ID") != "":
-			cp.RegionId = os.Getenv("ALIBABACLOUD_REGION_ID")
-		case os.Getenv("ALICLOUD_REGION_ID") != "":
-			cp.RegionId = os.Getenv("ALICLOUD_REGION_ID")
-		case os.Getenv("REGION") != "":
-			cp.RegionId = os.Getenv("REGION")
-		}
+		cp.RegionId = util.GetFromEnv("ALIBABACLOUD_REGION_ID", "ALICLOUD_REGION_ID", "REGION")
 	}
 
 	if cp.CredentialsURI == "" {
