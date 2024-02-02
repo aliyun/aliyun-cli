@@ -20,6 +20,7 @@ import (
 	"runtime"
 
 	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/util"
 )
 
 const (
@@ -69,15 +70,11 @@ func (c *Configuration) GetProfile(pn string) (Profile, bool) {
 func (c *Configuration) GetCurrentProfile(ctx *cli.Context) Profile {
 	profileName := ProfileFlag(ctx.Flags()).GetStringOrDefault(c.CurrentProfile)
 	if profileName == "" || profileName == "default" {
-		switch {
-		case os.Getenv("ALIBABACLOUD_PROFILE") != "":
-			profileName = os.Getenv("ALIBABACLOUD_PROFILE")
-		case os.Getenv("ALIBABA_CLOUD_PROFILE") != "":
-			profileName = os.Getenv("ALIBABA_CLOUD_PROFILE")
-		case os.Getenv("ALICLOUD_PROFILE") != "":
-			profileName = os.Getenv("ALICLOUD_PROFILE")
+		if v := util.GetFromEnv("ALIBABACLOUD_PROFILE", "ALIBABA_CLOUD_PROFILE", "ALICLOUD_PROFILE"); v != "" {
+			profileName = v
 		}
 	}
+
 	p, _ := c.GetProfile(profileName)
 	p.OverwriteWithFlags(ctx)
 	return p
