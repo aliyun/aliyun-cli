@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/alibabacloud-go/darabonba-openapi/v2 v2.0.5
 	github.com/alibabacloud-go/tea v1.2.2
-	github.com/alibabacloud-go/tea-utils/v2 v2.0.4
+	github.com/alibabacloud-go/tea-utils/v2 v2.0.5
 	github.com/aliyun/alibaba-cloud-sdk-go v1.62.610
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.9+incompatible
 	github.com/aliyun/credentials-go v1.3.2
