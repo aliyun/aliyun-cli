@@ -1159,6 +1159,14 @@
 			{
 				"style": "RPC",
 				"version": "2019-11-11"
+			},
+			{
+				"style": "RPC",
+				"version": "2022-01-01"
+			},
+			{
+				"style": "RPC",
+				"version": "2023-05-22"
 			}
 		]
 	}
