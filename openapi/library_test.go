@@ -43,16 +43,14 @@ func TestLibrary_PrintProducts(t *testing.T) {
 func TestLibrary_PrintProductUsage(t *testing.T) {
 	w := new(bytes.Buffer)
 	library := NewLibrary(w, "en")
-	content := `{"products":[{"code":"ecs","api_style":"rpc","apis":["DescribeRegions"]}]}`
-	library.builtinRepo = getRepository(content)
+	library.builtinRepo = getRepository()
 	err := library.PrintProductUsage("aos", true)
 	assert.Equal(t, "'aos' is not a valid command or product. See `aliyun help`.", err.Error())
 
 	err = library.PrintProductUsage("ecs", true)
 	assert.Nil(t, err)
 
-	content = `{"products":[{"code":"ecs","api_style":"restful","apis":["DescribeRegions"]}]}`
-	library.builtinRepo = getRepository(content)
+	library.builtinRepo = getRepository()
 	err = library.PrintProductUsage("ecs", true)
 	assert.Nil(t, err)
 }
@@ -60,16 +58,14 @@ func TestLibrary_PrintProductUsage(t *testing.T) {
 func TestLibrary_PrintApiUsage(t *testing.T) {
 	w := new(bytes.Buffer)
 	library := NewLibrary(w, "en")
-	content := `{"products":[{"code":"ecs","api_style":"rpc","apis":["DescribeRegions"]}]}`
-	library.builtinRepo = getRepository(content)
+	library.builtinRepo = getRepository()
 	err := library.PrintApiUsage("aos", "DescribeRegions")
 	assert.Equal(t, "'aos' is not a valid command or product. See `aliyun help`.", err.Error())
 
 	err = library.PrintApiUsage("ecs", "DescribeRegions")
 	assert.Nil(t, err)
 
-	content = `{"products":[{"code":"ecs","api_style":"restful","apis":["DescribeRegions"]}]}`
-	library.builtinRepo = getRepository(content)
+	library.builtinRepo = getRepository()
 	err = library.PrintApiUsage("ecs", "DescribeRegions")
 	assert.Nil(t, err)
 }
@@ -101,7 +97,7 @@ func Test_printParameters(t *testing.T) {
 	printParameters(w, params, "", &newmeta.APIDetail{})
 }
 
-func getRepository(content string) *meta.Repository {
+func getRepository() *meta.Repository {
 	repository := meta.LoadRepository()
 	return repository
 }

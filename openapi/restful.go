@@ -63,6 +63,8 @@ func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
 		for _, f := range ctx.UnknownFlags().Flags() {
 			a.request.QueryParams[f.Name], _ = f.GetValue()
 		}
+		// default to https
+		a.request.Scheme = "https"
 	} else {
 		for _, f := range ctx.UnknownFlags().Flags() {
 			param := a.api.FindParameter(f.Name)
@@ -81,6 +83,12 @@ func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
 				return fmt.Errorf("unknown parameter position; %s is %s", param.Name, param.Position)
 			}
 		}
+
+		a.request.Scheme = a.api.GetProtocol()
+	}
+
+	if _, ok := InsecureFlag(ctx.Flags()).GetValue(); ok {
+		a.request.Scheme = "http"
 	}
 
 	if _, ok := SecureFlag(ctx.Flags()).GetValue(); ok {

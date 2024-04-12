@@ -45,6 +45,7 @@ func TestForceRpcInvoker_Prepare(t *testing.T) {
 	methodflag.SetAssigned(true)
 	methodflag.SetValue("POST")
 	ctx.Flags().Add(secureflag)
+	ctx.Flags().Add(NewInsecureFlag())
 	ctx.Flags().Add(methodflag)
 	ctx.UnknownFlags().Add(NewSecureFlag())
 	err := a.Prepare(ctx)

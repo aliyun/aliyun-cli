@@ -25,31 +25,41 @@ type ForceRpcInvoker struct {
 	method string
 }
 
-func (a *ForceRpcInvoker) Prepare(ctx *cli.Context) error {
+func (a *ForceRpcInvoker) Prepare(ctx *cli.Context) (err error) {
 	// assign api name
 	a.request.ApiName = a.method
+	// default to use https
+	a.request.Scheme = "https"
 
 	// assign parameters
 	for _, f := range ctx.UnknownFlags().Flags() {
 		a.request.QueryParams[f.Name], _ = f.GetValue()
 	}
 
+	// --insecure use http
+	if _, ok := InsecureFlag(ctx.Flags()).GetValue(); ok {
+		a.request.Scheme = "http"
+	}
+
 	// --secure use https
 	if _, ok := SecureFlag(ctx.Flags()).GetValue(); ok {
 		a.request.Scheme = "https"
 	}
+
 	// if '--method' assigned, reset method
 	if method, ok := MethodFlag(ctx.Flags()).GetValue(); ok {
 		if method == "GET" || method == "POST" {
 			a.request.Method = method
 		} else {
-			return fmt.Errorf("--method value %s is not supported, please set method in {GET|POST}", method)
+			err = fmt.Errorf("--method value %s is not supported, please set method in {GET|POST}", method)
+			return
 		}
 	}
-	return nil
+
+	return
 }
 
-func (a *ForceRpcInvoker) Call() (*responses.CommonResponse, error) {
-	resp, err := a.client.ProcessCommonRequest(a.request)
-	return resp, err
+func (a *ForceRpcInvoker) Call() (resp *responses.CommonResponse, err error) {
+	resp, err = a.client.ProcessCommonRequest(a.request)
+	return
 }

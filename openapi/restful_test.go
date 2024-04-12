@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -45,6 +45,7 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 	secureflag := NewSecureFlag()
 	secureflag.SetAssigned(true)
 	ctx.Flags().Add(secureflag)
+	ctx.Flags().Add(NewInsecureFlag())
 
 	bodyfile := NewBodyFileFlag()
 	bodyfile.SetAssigned(true)
@@ -86,6 +87,7 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 	ctx.SetUnknownFlags(cli.NewFlagSet())
 	ctx.Flags().Add(NewBodyFlag())
 	ctx.Flags().Add(NewSecureFlag())
+	ctx.Flags().Add(NewInsecureFlag())
 	ctx.Flags().Add(NewBodyFileFlag())
 	ctx.UnknownFlags().AddByName("ClusterId")
 	ctx.UnknownFlags().Get("ClusterId").SetValue("cluster_id")
