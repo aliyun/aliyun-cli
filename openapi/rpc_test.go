@@ -45,6 +45,7 @@ func TestRpcInvoker_Prepare(t *testing.T) {
 	secureflag := NewSecureFlag()
 	secureflag.SetAssigned(true)
 	ctx.Flags().Add(secureflag)
+	ctx.Flags().Add(NewInsecureFlag())
 	methodflag := NewMethodFlag()
 	methodflag.SetAssigned(true)
 	methodflag.SetValue("POST")

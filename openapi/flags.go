@@ -20,6 +20,7 @@ import (
 
 func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewSecureFlag())
+	fs.Add(NewInsecureFlag())
 	fs.Add(NewForceFlag())
 	fs.Add(NewEndpointFlag())
 	fs.Add(NewVersionFlag())
@@ -38,6 +39,7 @@ func AddFlags(fs *cli.FlagSet) {
 
 const (
 	SecureFlagName   = "secure"
+	InsecureFlagName = "insecure"
 	ForceFlagName    = "force"
 	EndpointFlagName = "endpoint"
 	VersionFlagName  = "version"
@@ -58,6 +60,10 @@ func OutputFlag(fs *cli.FlagSet) *cli.Flag {
 
 func SecureFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(SecureFlagName)
+}
+
+func InsecureFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(InsecureFlagName)
 }
 
 func ForceFlag(fs *cli.FlagSet) *cli.Flag {
@@ -116,72 +122,102 @@ func MethodFlag(fs *cli.FlagSet) *cli.Flag {
 //}
 
 func NewSecureFlag() *cli.Flag {
-	return &cli.Flag{Category: "caller",
-		Name: SecureFlagName, AssignedMode: cli.AssignedNone,
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         SecureFlagName,
+		AssignedMode: cli.AssignedNone,
 		Short: i18n.T(
 			"use `--secure` to force https",
 			"使用 `--secure` 开关强制使用https方式调用")}
 }
 
+func NewInsecureFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         InsecureFlagName,
+		AssignedMode: cli.AssignedNone,
+		Hidden:       true,
+		Short: i18n.T(
+			"use `--insecure` to force http(not recommend)",
+			"使用 `--insecure` 开关强制使用http方式调用（不推荐）")}
+}
+
 func NewForceFlag() *cli.Flag {
-	return &cli.Flag{Category: "caller",
-		Name: ForceFlagName, AssignedMode: cli.AssignedNone,
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         ForceFlagName,
+		AssignedMode: cli.AssignedNone,
 		Short: i18n.T(
 			"use `--force` to skip api and parameters check",
 			"添加 `--force` 开关可跳过API与参数的合法性检查")}
 }
 
 func NewEndpointFlag() *cli.Flag {
-	return &cli.Flag{Category: "caller",
-		Name: EndpointFlagName, AssignedMode: cli.AssignedOnce,
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         EndpointFlagName,
+		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--endpoint <endpoint>` to assign endpoint",
 			"使用 `--endpoint <endpoint>` 来指定接入点地址")}
 }
 
 func NewVersionFlag() *cli.Flag {
-	return &cli.Flag{Category: "caller",
-		Name: VersionFlagName, AssignedMode: cli.AssignedOnce,
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         VersionFlagName,
+		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--version <YYYY-MM-DD>` to assign product api version",
 			"使用 `--version <YYYY-MM-DD>` 来指定访问的API版本")}
 }
 
 func NewHeaderFlag() *cli.Flag {
-	return &cli.Flag{Category: "caller",
-		Name: HeaderFlagName, AssignedMode: cli.AssignedRepeatable,
+	return &cli.Flag{
+		Category: "caller",
+		Name:     HeaderFlagName, AssignedMode: cli.AssignedRepeatable,
 		Short: i18n.T(
 			"use `--header X-foo=bar` to add custom HTTP header, repeatable",
 			"使用 `--header X-foo=bar` 来添加特定的HTTP头, 可多次添加")}
 }
 
 func NewBodyFlag() *cli.Flag {
-	return &cli.Flag{Category: "caller",
-		Name: BodyFlagName, AssignedMode: cli.AssignedOnce,
+	return &cli.Flag{
+		Category: "caller",
+		Name:     BodyFlagName, AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--body $(cat foo.json)` to assign http body in RESTful call",
 			"使用 `--body $(cat foo.json)` 来指定在RESTful调用中的HTTP包体")}
 }
 
 func NewBodyFileFlag() *cli.Flag {
-	return &cli.Flag{Category: "caller",
-		Name: BodyFileFlagName, AssignedMode: cli.AssignedOnce, Hidden: true,
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         BodyFileFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Hidden:       true,
 		Short: i18n.T(
 			"assign http body in Restful call with local file",
 			"使用 `--body-file foo.json` 来指定输入包体")}
 }
 
 func NewAcceptFlag() *cli.Flag {
-	return &cli.Flag{Category: "caller",
-		Name: AcceptFlagName, AssignedMode: cli.AssignedOnce, Hidden: true,
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         AcceptFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Hidden:       true,
 		Short: i18n.T(
 			"add `--accept {json|xml}` to add Accept header",
 			"使用 `--accept {json|xml}` 来指定Accept头")}
 }
 
 func NewRoaFlag() *cli.Flag {
-	return &cli.Flag{Category: "caller",
-		Name: RoaFlagName, AssignedMode: cli.AssignedOnce, Hidden: true,
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         RoaFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Hidden:       true,
 		Short: i18n.T(
 			"use `--roa {GET|PUT|POST|DELETE}` to assign restful call.[DEPRECATED]",
 			"使用 `--roa {GET|PUT|POST|DELETE}` 使用restful方式调用[已过期]",
@@ -190,7 +226,8 @@ func NewRoaFlag() *cli.Flag {
 }
 
 func NewDryRunFlag() *cli.Flag {
-	return &cli.Flag{Category: "caller",
+	return &cli.Flag{
+		Category:     "caller",
 		Name:         DryRunFlagName,
 		AssignedMode: cli.AssignedNone,
 		Short: i18n.T(
@@ -202,7 +239,8 @@ func NewDryRunFlag() *cli.Flag {
 }
 
 func NewQuietFlag() *cli.Flag {
-	return &cli.Flag{Category: "caller",
+	return &cli.Flag{
+		Category:     "caller",
 		Name:         QuietFlagName,
 		Shorthand:    'q',
 		AssignedMode: cli.AssignedNone,
@@ -215,7 +253,8 @@ func NewQuietFlag() *cli.Flag {
 }
 
 func NewMethodFlag() *cli.Flag {
-	return &cli.Flag{Category: "caller",
+	return &cli.Flag{
+		Category:     "caller",
 		Name:         MethodFlagName,
 		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(

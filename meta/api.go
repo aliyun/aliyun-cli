@@ -40,12 +40,20 @@ func (a *Api) GetMethod() string {
 }
 
 func (a *Api) GetProtocol() string {
-	protocol := strings.ToLower(a.Protocol)
-	if strings.HasPrefix(protocol, "https") {
+	lowered := strings.ToLower(a.Protocol)
+
+	if strings.HasPrefix(lowered, "https") {
 		return "https"
-	} else {
-		return "http"
 	}
+
+	parts := strings.Split(lowered, "|")
+	for _, v := range parts {
+		if v == "https" {
+			return "https"
+		}
+	}
+
+	return "http"
 }
 
 func (a *Api) FindParameter(name string) *Parameter {
