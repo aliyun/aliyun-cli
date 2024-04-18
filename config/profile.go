@@ -24,10 +24,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
@@ -401,93 +399,6 @@ func (cp *Profile) GetCredential(ctx *cli.Context) (cred credentialsv2.Credentia
 	return credentialsv2.NewCredential(config)
 }
 
-func (cp *Profile) GetClient(ctx *cli.Context) (*sdk.Client, error) {
-	config := sdk.NewConfig()
-	// get UserAgent from env
-	config.UserAgent = os.Getenv("ALIYUN_USER_AGENT")
-
-	if cp.RetryCount > 0 {
-		// when use --retry-count, enable auto retry
-		config.WithAutoRetry(true)
-		config.WithMaxRetryTime(cp.RetryCount)
-	}
-	var client *sdk.Client
-	var err error
-	switch cp.Mode {
-	case AK:
-		client, err = cp.GetClientByAK(config)
-	case StsToken:
-		client, err = cp.GetClientBySts(config)
-	case RamRoleArn:
-		client, err = cp.GetClientByRoleArn(config)
-	case EcsRamRole:
-		client, err = cp.GetClientByEcsRamRole(config)
-	case RsaKeyPair:
-		client, err = cp.GetClientByPrivateKey(config)
-	case RamRoleArnWithEcs:
-		client, err = cp.GetClientByRamRoleArnWithEcs(config)
-	case ChainableRamRoleArn:
-		return cp.GetClientByChainableRamRoleArn(config, ctx)
-	case External:
-		return cp.GetClientByExternal(config, ctx)
-	case CredentialsURI:
-		return cp.GetClientByCredentialsURI(config, ctx)
-	default:
-		client, err = nil, fmt.Errorf("unexcepted certificate mode: %s", cp.Mode)
-	}
-
-	if client != nil {
-		if cp.ReadTimeout > 0 {
-			client.SetReadTimeout(time.Duration(cp.ReadTimeout) * time.Second)
-		}
-		if cp.ConnectTimeout > 0 {
-			client.SetConnectTimeout(time.Duration(cp.ConnectTimeout) * time.Second)
-		}
-		if SkipSecureVerify(ctx.Flags()).IsAssigned() {
-			client.SetHTTPSInsecure(true)
-		}
-	}
-	return client, err
-}
-
-func (cp *Profile) GetClientByAK(config *sdk.Config) (*sdk.Client, error) {
-	if cp.AccessKeyId == "" || cp.AccessKeySecret == "" {
-		return nil, fmt.Errorf("AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first")
-	}
-	if cp.RegionId == "" {
-		return nil, fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
-	}
-	cred := credentials.NewAccessKeyCredential(cp.AccessKeyId, cp.AccessKeySecret)
-	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
-	return client, err
-}
-
-func (cp *Profile) GetClientBySts(config *sdk.Config) (*sdk.Client, error) {
-	cred := credentials.NewStsTokenCredential(cp.AccessKeyId, cp.AccessKeySecret, cp.StsToken)
-	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
-	return client, err
-}
-
-func (cp *Profile) GetClientByRoleArn(config *sdk.Config) (*sdk.Client, error) {
-	cred := credentials.NewRamRoleArnCredential(cp.AccessKeyId, cp.AccessKeySecret, cp.RamRoleArn, cp.RoleSessionName, cp.ExpiredSeconds)
-	cred.StsRegion = cp.StsRegion
-	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
-	return client, err
-}
-
-func (cp *Profile) GetClientByRamRoleArnWithEcs(config *sdk.Config) (*sdk.Client, error) {
-	client, err := cp.GetClientByEcsRamRole(config)
-	if err != nil {
-		return nil, err
-	}
-	accessKeyID, accessKeySecret, StsToken, err := cp.GetSessionCredential(client)
-	if err != nil {
-		return nil, err
-	}
-	cred := credentials.NewStsTokenCredential(accessKeyID, accessKeySecret, StsToken)
-	return sdk.NewClientWithOptions(cp.RegionId, config, cred)
-}
-
 func (cp *Profile) GetSessionCredential(client *sdk.Client) (string, string, string, error) {
 	req := requests.NewCommonRequest()
 	rep := responses.NewCommonResponse()
@@ -521,102 +432,6 @@ func (cp *Profile) GetSessionCredential(client *sdk.Client) (string, string, str
 		return "", "", "", errors.New("get session credential failed")
 	}
 	return accessKeyID.(string), accessKeySecret.(string), StsToken.(string), nil
-}
-
-func (cp *Profile) GetClientByEcsRamRole(config *sdk.Config) (*sdk.Client, error) {
-	cred := credentials.NewEcsRamRoleCredential(cp.RamRoleName)
-	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
-	return client, err
-}
-
-func (cp *Profile) GetClientByPrivateKey(config *sdk.Config) (*sdk.Client, error) {
-	cred := credentials.NewRsaKeyPairCredential(cp.PrivateKey, cp.KeyPairName, cp.ExpiredSeconds)
-	client, err := sdk.NewClientWithOptions(cp.RegionId, config, cred)
-	return client, err
-}
-
-func (cp *Profile) GetClientByExternal(config *sdk.Config, ctx *cli.Context) (*sdk.Client, error) {
-	args := strings.Fields(cp.ProcessCommand)
-	cmd := exec.Command(args[0], args[1:]...)
-	buf, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(buf, cp)
-	if err != nil {
-		fmt.Println(cp.ProcessCommand)
-		fmt.Println(string(buf))
-		return nil, err
-	}
-	return cp.GetClient(ctx)
-}
-
-func (cp *Profile) GetClientByCredentialsURI(config *sdk.Config, ctx *cli.Context) (*sdk.Client, error) {
-	uri := cp.CredentialsURI
-
-	if uri == "" {
-		uri = os.Getenv("ALIBABA_CLOUD_CREDENTIALS_URI")
-	}
-
-	if uri == "" {
-		return nil, fmt.Errorf("invalid credentials uri")
-	}
-
-	res, err := http.Get(uri)
-	if err != nil {
-		return nil, err
-	}
-
-	if res.StatusCode != 200 {
-		return nil, fmt.Errorf("get credentials from %s failed, status code %d", uri, res.StatusCode)
-	}
-
-	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
-	if err != nil {
-		return nil, err
-	}
-
-	type Response struct {
-		Code            string
-		AccessKeyId     string
-		AccessKeySecret string
-		SecurityToken   string
-		Expiration      string
-	}
-	var response Response
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		return nil, fmt.Errorf("unmarshal credentials failed, the body %s", string(body))
-	}
-
-	if response.Code != "Success" {
-		return nil, fmt.Errorf("get sts token err, Code is not Success")
-	}
-
-	cred := credentials.NewStsTokenCredential(response.AccessKeyId, response.AccessKeySecret, response.SecurityToken)
-	return sdk.NewClientWithOptions(cp.RegionId, config, cred)
-}
-
-func (cp *Profile) GetClientByChainableRamRoleArn(config *sdk.Config, ctx *cli.Context) (*sdk.Client, error) {
-	profileName := cp.SourceProfile
-
-	// 从 configuration 中重新获取 source profile
-	source, loaded := cp.parent.GetProfile(profileName)
-	if !loaded {
-		return nil, fmt.Errorf("can not load the source profile: " + profileName)
-	}
-
-	client, err := source.GetClient(ctx)
-	if err != nil {
-		return nil, err
-	}
-	accessKeyID, accessKeySecret, StsToken, err := cp.GetSessionCredential(client)
-	if err != nil {
-		return nil, err
-	}
-	cred := credentials.NewStsTokenCredential(accessKeyID, accessKeySecret, StsToken)
-	return sdk.NewClientWithOptions(cp.RegionId, config, cred)
 }
 
 func IsRegion(region string) bool {
