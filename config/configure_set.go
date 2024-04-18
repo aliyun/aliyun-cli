@@ -104,7 +104,14 @@ func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
 		profile.KeyPairName = KeyPairNameFlag(flags).GetStringOrDefault(profile.KeyPairName)
 	case External:
 		profile.ProcessCommand = ProcessCommandFlag(flags).GetStringOrDefault(profile.ProcessCommand)
+	case OIDC:
+		profile.OIDCProviderARN = OIDCProviderARNFlag(flags).GetStringOrDefault(profile.OIDCProviderARN)
+		profile.OIDCTokenFile = OIDCTokenFileFlag(flags).GetStringOrDefault(profile.OIDCTokenFile)
+		profile.RamRoleArn = RamRoleArnFlag(flags).GetStringOrDefault(profile.RamRoleArn)
+		profile.RoleSessionName = RoleSessionNameFlag(flags).GetStringOrDefault(profile.RoleSessionName)
+		profile.ExpiredSeconds = ExpiredSecondsFlag(flags).GetIntegerOrDefault(profile.ExpiredSeconds)
 	}
+
 	profile.RegionId = RegionFlag(flags).GetStringOrDefault(profile.RegionId)
 	profile.Language = LanguageFlag(flags).GetStringOrDefault(profile.Language)
 	profile.OutputFormat = "json" // "output", profile.OutputFormat)

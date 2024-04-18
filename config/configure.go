@@ -122,6 +122,9 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 		case CredentialsURI:
 			cp.Mode = CredentialsURI
 			configureCredentialsURI(w, &cp)
+		case OIDC:
+			cp.Mode = OIDC
+			configureOIDC(w, &cp)
 		default:
 			return fmt.Errorf("unexcepted authenticate mode: %s", mode)
 		}
@@ -265,6 +268,19 @@ func configureExternal(w io.Writer, cp *Profile) error {
 func configureCredentialsURI(w io.Writer, cp *Profile) error {
 	cli.Printf(w, "Credentials URI [%s]: ", cp.CredentialsURI)
 	cp.CredentialsURI = ReadInput(cp.CredentialsURI)
+	return nil
+}
+
+func configureOIDC(w io.Writer, cp *Profile) error {
+	cli.Printf(w, "OIDC Provider ARN [%s]: ", cp.OIDCProviderARN)
+	cp.OIDCProviderARN = ReadInput(cp.OIDCProviderARN)
+	cli.Printf(w, "OIDC Token File [%s]: ", cp.OIDCTokenFile)
+	cp.OIDCTokenFile = ReadInput(cp.OIDCTokenFile)
+	cli.Printf(w, "RAM Role ARN [%s]: ", cp.RamRoleArn)
+	cp.RamRoleArn = ReadInput(cp.RamRoleArn)
+	cli.Printf(w, "Role Session Name [%s]: ", cp.RoleSessionName)
+	cp.RoleSessionName = ReadInput(cp.RoleSessionName)
+	cp.ExpiredSeconds = 3600
 	return nil
 }
 

@@ -41,6 +41,8 @@ const (
 	ConfigurePathFlagName   = "config-path"
 	ExpiredSecondsFlagName  = "expired-seconds"
 	ProcessCommandFlagName  = "process-command"
+	OIDCProviderARNFlagName = "oidc-provider-arn"
+	OIDCTokenFileFlagName   = "oidc-token-file"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -65,6 +67,8 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewSkipSecureVerify())
 	fs.Add(NewExpiredSecondsFlag())
 	fs.Add(NewProcessCommandFlag())
+	fs.Add(NewOIDCProviderARNFlag())
+	fs.Add(NewOIDCTokenFileFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -153,6 +157,14 @@ func ExpiredSecondsFlag(fs *cli.FlagSet) *cli.Flag {
 
 func ProcessCommandFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ProcessCommandFlagName)
+}
+
+func OIDCProviderARNFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(OIDCProviderARNFlagName)
+}
+
+func OIDCTokenFileFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(OIDCTokenFileFlagName)
 }
 
 func NewProfileFlag() *cli.Flag {
@@ -297,6 +309,28 @@ func NewProcessCommandFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--process-command <ProcessCommand>` to specify external program execution command",
 			"使用 `--process-command <ProcessCommand>` 指定外部程序运行命令"),
+	}
+}
+
+func NewOIDCProviderARNFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         OIDCProviderARNFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--oidc-provider-arn <OIDCProviderARN>` to assign OIDC provider ARN",
+			"使用 `--oidc-provider-arn <OIDCProviderARN>` 来指定 OIDC 提供者 ARN"),
+	}
+}
+
+func NewOIDCTokenFileFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         OIDCTokenFileFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--oidc-token-file <OIDCTokenFile>` to assign OIDC token file path",
+			"使用 `--oidc-token-file <OIDCTokenFile>` 来指定 OIDC Token 文件路径"),
 	}
 }
 

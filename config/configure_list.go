@@ -73,6 +73,8 @@ func doConfigureList(w io.Writer) {
 			cred = "ProcessCommand:" + pf.ProcessCommand
 		case CredentialsURI:
 			cred = "CredentialsURI:" + pf.CredentialsURI
+		case OIDC:
+			cred = "OIDC:" + "***" + GetLastChars(pf.OIDCProviderARN, 5) + "@***" + GetLastChars(pf.OIDCTokenFile, 5) + "@" + pf.RamRoleArn
 		}
 		fmt.Fprintf(tw, "%s\t| %s\t| %s\t| %s\t| %s\n", name, cred, valid, pf.RegionId, pf.Language)
 	}
