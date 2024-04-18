@@ -211,7 +211,7 @@ Saving profile[externalTest] ...Done.
   "AccessKeyId": "<ak id>",
   "AccessKeySecret": "<ak secret>",
   "SecurityToken": "<security token>",
-  "Expiration" "2006-01-02T15:04:05Z" // utc time
+  "Expiration": "2006-01-02T15:04:05Z" // utc time
 }
 ```
 
