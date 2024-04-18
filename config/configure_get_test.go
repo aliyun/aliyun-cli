@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -88,7 +88,7 @@ func TestDoConfigureGet(t *testing.T) {
 	ctx.Flags().Get("profile").SetAssigned(true)
 	ctx.Flags().Get("profile").SetValue("default")
 	doConfigureGet(ctx, []string{})
-	assert.Equal(t, "{\n\t\"name\": \"default\",\n\t\"mode\": \"AK\",\n\t\"access_key_id\": \"default_aliyun_access_key_id\",\n\t\"access_key_secret\": \"default_aliyun_access_key_secret\",\n\t\"sts_token\": \"\",\n\t\"sts_region\": \"\",\n\t\"ram_role_name\": \"\",\n\t\"ram_role_arn\": \"\",\n\t\"ram_session_name\": \"\",\n\t\"source_profile\": \"\",\n\t\"private_key\": \"\",\n\t\"key_pair_name\": \"\",\n\t\"expired_seconds\": 0,\n\t\"verified\": \"\",\n\t\"region_id\": \"\",\n\t\"output_format\": \"json\",\n\t\"language\": \"\",\n\t\"site\": \"\",\n\t\"retry_timeout\": 0,\n\t\"connect_timeout\": 0,\n\t\"retry_count\": 0,\n\t\"process_command\": \"\",\n\t\"credentials_uri\": \"\"\n}\n\n", w.String())
+	assert.Equal(t, "{\n\t\"name\": \"default\",\n\t\"mode\": \"AK\",\n\t\"access_key_id\": \"default_aliyun_access_key_id\",\n\t\"access_key_secret\": \"default_aliyun_access_key_secret\",\n\t\"sts_token\": \"\",\n\t\"sts_region\": \"\",\n\t\"ram_role_name\": \"\",\n\t\"ram_role_arn\": \"\",\n\t\"ram_session_name\": \"\",\n\t\"source_profile\": \"\",\n\t\"private_key\": \"\",\n\t\"key_pair_name\": \"\",\n\t\"expired_seconds\": 0,\n\t\"verified\": \"\",\n\t\"region_id\": \"\",\n\t\"output_format\": \"json\",\n\t\"language\": \"\",\n\t\"site\": \"\",\n\t\"retry_timeout\": 0,\n\t\"connect_timeout\": 0,\n\t\"retry_count\": 0,\n\t\"process_command\": \"\",\n\t\"credentials_uri\": \"\",\n\t\"oidc_provider_arn\": \"\",\n\t\"oidc_token_file\": \"\"\n}\n\n", w.String())
 
 	//testcase 5
 	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {

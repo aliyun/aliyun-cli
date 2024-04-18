@@ -41,6 +41,7 @@ const (
 	ChainableRamRoleArn = AuthenticateMode("ChainableRamRoleArn")
 	External            = AuthenticateMode("External")
 	CredentialsURI      = AuthenticateMode("CredentialsURI")
+	OIDC                = AuthenticateMode("OIDC")
 )
 
 type Profile struct {
@@ -67,6 +68,8 @@ type Profile struct {
 	RetryCount      int              `json:"retry_count"`
 	ProcessCommand  string           `json:"process_command"`
 	CredentialsURI  string           `json:"credentials_uri"`
+	OIDCProviderARN string           `json:"oidc_provider_arn"`
+	OIDCTokenFile   string           `json:"oidc_token_file"`
 	parent          *Configuration   //`json:"-"`
 }
 
@@ -129,6 +132,19 @@ func (cp *Profile) Validate() error {
 	case CredentialsURI:
 		if cp.CredentialsURI == "" {
 			return fmt.Errorf("invalid credentials_uri")
+		}
+	case OIDC:
+		if cp.OIDCProviderARN == "" {
+			return fmt.Errorf("invalid oidc_provider_arn")
+		}
+		if cp.OIDCTokenFile == "" {
+			return fmt.Errorf("invalid oidc_token_file")
+		}
+		if cp.RamRoleArn == "" {
+			return fmt.Errorf("invalid ram_role_arn")
+		}
+		if cp.RoleSessionName == "" {
+			return fmt.Errorf("invalid role_session_name")
 		}
 	case ChainableRamRoleArn:
 		if cp.SourceProfile == "" {
@@ -400,6 +416,17 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetAccessKeyId(response.AccessKeyId).
 			SetAccessKeySecret(response.AccessKeySecret).
 			SetSecurityToken(response.SecurityToken)
+
+	case OIDC:
+		config.SetType("oidc_role_arn").
+			SetOIDCProviderArn(cp.OIDCProviderARN).
+			SetOIDCTokenFilePath(cp.OIDCTokenFile).
+			SetRoleArn(cp.RamRoleArn).
+			SetRoleSessionName(cp.RoleSessionName).
+			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion)).
+			SetSessionExpiration(3600).
+			SetProxy(*proxyHost)
+
 	default:
 		return nil, fmt.Errorf("unexcepted certificate mode: %s", cp.Mode)
 	}
