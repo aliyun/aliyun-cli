@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,13 +26,15 @@ import (
 
 func TestBasicInvoker_Init(t *testing.T) {
 	cp := &config.Profile{
-		Mode: config.AuthenticateMode("AK"),
+		Mode:            config.AuthenticateMode("AK"),
+		AccessKeyId:     "akid",
+		AccessKeySecret: "aksecret",
 	}
-	invooker := NewBasicInvoker(cp)
-	client := invooker.getClient()
+	invoker := NewBasicInvoker(cp)
+	client := invoker.getClient()
 	assert.Nil(t, client)
 
-	req := invooker.getRequest()
+	req := invoker.getRequest()
 	assert.Nil(t, req)
 
 	w := new(bytes.Buffer)
@@ -62,13 +64,9 @@ func TestBasicInvoker_Init(t *testing.T) {
 	ctx.Flags().Add(config.NewSkipSecureVerify())
 
 	product := &meta.Product{}
-	invooker.profile.Mode = config.AuthenticateMode("DEFAULT")
-	err := invooker.Init(ctx, product)
-	assert.NotNil(t, err)
-	assert.Equal(t, "init client failed unexcepted certificate mode: DEFAULT", err.Error())
 
-	invooker.profile.Mode = config.AuthenticateMode("StsToken")
-	err = invooker.Init(ctx, product)
+	invoker.profile.Mode = config.AuthenticateMode("StsToken")
+	err := invoker.Init(ctx, product)
 	assert.NotNil(t, err)
 	assert.Equal(t, "invaild flag --header `testfail` use `--header HeaderName=Value`", err.Error())
 
@@ -76,22 +74,23 @@ func TestBasicInvoker_Init(t *testing.T) {
 	endpointflag.SetAssigned(false)
 	versionflag.SetAssigned(false)
 	headerflag.SetValues([]string{})
-	err = invooker.Init(ctx, product)
+	err = invoker.Init(ctx, product)
 	assert.NotNil(t, err)
 	assert.Equal(t, "missing version for product ", err.Error())
 
-	invooker.profile.Mode = config.AuthenticateMode("StsToken")
+	invoker.profile.Mode = config.AuthenticateMode("StsToken")
+	invoker.profile.StsToken = "ststoken"
 	product.Version = "v1.0"
-	err = invooker.Init(ctx, product)
+	err = invoker.Init(ctx, product)
 	assert.NotNil(t, err)
 	assert.Equal(t, "missing region for product ", err.Error())
 
-	invooker.profile.RegionId = "cn-hangzhou"
-	err = invooker.Init(ctx, product)
+	invoker.profile.RegionId = "cn-hangzhou"
+	err = invoker.Init(ctx, product)
 	assert.NotNil(t, err)
 	assert.Equal(t, "unknown endpoint for /cn-hangzhou! failed unknown endpoint for region cn-hangzhou\n  you need to add --endpoint xxx.aliyuncs.com", err.Error())
 
 	endpointflag.SetAssigned(true)
-	err = invooker.Init(ctx, product)
+	err = invoker.Init(ctx, product)
 	assert.Nil(t, err)
 }

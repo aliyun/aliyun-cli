@@ -18,12 +18,18 @@ import (
 	"os"
 	"testing"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-
 	"github.com/aliyun/aliyun-cli/cli"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func newCtx() *cli.Context {
+	buf := new(bytes.Buffer)
+	buf2 := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, buf2)
+	AddFlags(ctx.Flags())
+	return ctx
+}
 
 func newProfile() *Profile {
 	return &Profile{
@@ -49,6 +55,7 @@ func newProfile() *Profile {
 		RetryCount:      0,
 	}
 }
+
 func TestNewProfile(t *testing.T) {
 	exp := newProfile()
 	exp.Mode = AK
@@ -79,10 +86,32 @@ func TestValidate(t *testing.T) {
 	err = actual.Validate()
 	assert.Nil(t, err)
 
+	actual.Mode = External
+	err = actual.Validate()
+	assert.EqualError(t, err, "invalid process_command")
+
+	actual.Mode = CredentialsURI
+	err = actual.Validate()
+	assert.EqualError(t, err, "invalid credentials_uri")
+
+	actual.Mode = ChainableRamRoleArn
+	err = actual.Validate()
+	assert.EqualError(t, err, "invalid source_profile")
+
+	actual.SourceProfile = "source"
+	err = actual.Validate()
+	assert.EqualError(t, err, "invalid ram_role_arn")
+	actual.RamRoleArn = "arn"
+	err = actual.Validate()
+	assert.EqualError(t, err, "invalid role_session_name")
+	actual.RoleSessionName = "rsn"
+	err = actual.Validate()
+	assert.Nil(t, err)
+
+	// default
 	actual.Mode = AuthenticateMode("NoMode")
 	err = actual.Validate()
 	assert.EqualError(t, err, "invalid mode: NoMode")
-
 }
 
 func TestValidateWithAK(t *testing.T) {
@@ -337,111 +366,6 @@ func resetEnv() {
 	os.Setenv("REGION", "")
 }
 
-func TestGetClient(t *testing.T) {
-	actual := newProfile()
-	buf := new(bytes.Buffer)
-	buf2 := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(buf, buf2)
-	AddFlags(ctx.Flags())
-	actual.RetryCount = 2
-
-	actual.Mode = AK
-	client, err := actual.GetClient(ctx)
-	assert.Nil(t, client)
-	assert.NotNil(t, err)
-
-	actual.Mode = RamRoleArnWithEcs
-	client, err = actual.GetClient(ctx)
-	assert.Nil(t, client)
-	assert.NotNil(t, err)
-
-	actual.Mode = StsToken
-	client, err = actual.GetClient(ctx)
-	assert.Nil(t, err)
-	assert.NotNil(t, client)
-
-	actual.Mode = RamRoleArn
-	client, err = actual.GetClient(ctx)
-	assert.Nil(t, err)
-	assert.NotNil(t, client)
-
-	actual.Mode = EcsRamRole
-	client, err = actual.GetClient(ctx)
-	assert.Nil(t, err)
-	assert.NotNil(t, client)
-
-	actual.Mode = RsaKeyPair
-	client, err = actual.GetClient(ctx)
-	assert.Nil(t, err)
-	assert.NotNil(t, client)
-
-	// config to client
-	actual.Mode = StsToken
-	actual.ReadTimeout = 2
-	actual.ConnectTimeout = 2
-	SkipSecureVerify(ctx.Flags()).SetAssigned(true)
-	client, err = actual.GetClient(ctx)
-	assert.Nil(t, err)
-	assert.NotNil(t, client)
-	assert.Equal(t, 2, client.GetConfig().MaxRetryTime)
-	assert.Equal(t, float64(2), client.GetReadTimeout().Seconds())
-	assert.Equal(t, float64(2), client.GetConnectTimeout().Seconds())
-	assert.True(t, client.GetHTTPSInsecure())
-}
-
-func TestGetClientByAK(t *testing.T) {
-	actual := newProfile()
-	config := sdk.NewConfig()
-
-	actual.AccessKeyId = "accessKeyId"
-	client, err := actual.GetClientByAK(config)
-	assert.Nil(t, client)
-	assert.EqualError(t, err, "AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first")
-
-	actual.AccessKeySecret = "accessKeySecret"
-	client, err = actual.GetClientByAK(config)
-	assert.Nil(t, client)
-	assert.EqualError(t, err, "default RegionId is empty! run `aliyun configure` first")
-
-	actual.RegionId = "cn-hangzhou"
-	client, err = actual.GetClientByAK(config)
-	assert.Nil(t, err)
-	assert.NotNil(t, client)
-}
-
-func TestGetClientWithNoError(t *testing.T) {
-	actual := newProfile()
-	config := sdk.NewConfig()
-
-	// GetClientBySts
-	client, err := actual.GetClientBySts(config)
-	assert.Nil(t, err)
-	assert.NotNil(t, client)
-
-	// GetClientByRoleArn
-	client, err = actual.GetClientByRoleArn(config)
-	assert.Nil(t, err)
-	assert.NotNil(t, client)
-
-	// GetClientByEcsRamRole
-	client, err = actual.GetClientByEcsRamRole(config)
-	assert.Nil(t, err)
-	assert.NotNil(t, client)
-
-	// GetClientByPrivateKey
-	client, err = actual.GetClientByPrivateKey(config)
-	assert.Nil(t, err)
-	assert.NotNil(t, client)
-}
-
-func TestGetClientByRamRoleArnWithEcs(t *testing.T) {
-	actual := newProfile()
-	config := sdk.NewConfig()
-	client, err := actual.GetClientByRamRoleArnWithEcs(config)
-	assert.Nil(t, client)
-	assert.NotNil(t, err)
-}
-
 func TestValidateAk(t *testing.T) {
 	actual := newProfile()
 	err := actual.ValidateAK()
@@ -456,6 +380,11 @@ func TestValidateAk(t *testing.T) {
 func TestIsRegion(t *testing.T) {
 	assert.False(t, IsRegion("#$adf"))
 	assert.True(t, IsRegion("2kf"))
+}
+
+func TestGetStsEndpoint(t *testing.T) {
+	assert.Equal(t, "sts.aliyuncs.com", getSTSEndpoint(""))
+	assert.Equal(t, "sts.cn-hangzhou.aliyuncs.com", getSTSEndpoint("cn-hangzhou"))
 }
 
 func TestAutoModeRecognition(t *testing.T) {
@@ -485,4 +414,70 @@ func TestAutoModeRecognition(t *testing.T) {
 	AutoModeRecognition(p)
 	assert.Equal(t, AK, p.Mode)
 
+	p = &Profile{ProcessCommand: "external"}
+	AutoModeRecognition(p)
+	assert.Equal(t, External, p.Mode)
+
+}
+
+func TestGetCredentialByAK(t *testing.T) {
+	actual := newProfile()
+
+	actual.Mode = AK
+	actual.AccessKeyId = "accessKeyId"
+	credential, err := actual.GetCredential(newCtx())
+	assert.Nil(t, credential)
+	assert.EqualError(t, err, "AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first")
+
+	actual.AccessKeySecret = "accessKeySecret"
+	credential, err = actual.GetCredential(newCtx())
+	assert.Nil(t, credential)
+	assert.EqualError(t, err, "default RegionId is empty! run `aliyun configure` first")
+
+	actual.RegionId = "cn-hangzhou"
+	credential, err = actual.GetCredential(newCtx())
+	assert.Nil(t, err)
+	assert.NotNil(t, credential)
+
+	assert.Equal(t, "access_key", *credential.GetType())
+}
+
+func TestGetCredentialBySts(t *testing.T) {
+	actual := newProfile()
+
+	actual.Mode = StsToken
+	credential, err := actual.GetCredential(newCtx())
+	assert.Nil(t, credential)
+	assert.EqualError(t, err, "AccessKeyId cannot be empty")
+
+	actual.AccessKeyId = "akid"
+	credential, err = actual.GetCredential(newCtx())
+	assert.Nil(t, credential)
+	assert.EqualError(t, err, "AccessKeySecret cannot be empty")
+
+	actual.AccessKeySecret = "aksecret"
+	credential, err = actual.GetCredential(newCtx())
+	assert.Nil(t, credential)
+	assert.EqualError(t, err, "SecurityToken cannot be empty")
+
+	actual.StsToken = "ststoken"
+	credential, err = actual.GetCredential(newCtx())
+	assert.Nil(t, err)
+	assert.NotNil(t, credential)
+
+	assert.Equal(t, "sts", *credential.GetType())
+}
+
+func TestGetCredentialByRamRoleArn(t *testing.T) {
+	// p := newProfile()
+	// p.Mode = RamRoleArn
+
+	// credential, err := p.GetCredential(newCtx())
+	// assert.Nil(t, credential)
+	// assert.EqualError(t, err, "AccessKeyId cannot be empty")
+
+	// p.AccessKeyId = "akid"
+	// credential, err = p.GetCredential(newCtx())
+	// assert.Nil(t, credential)
+	// assert.EqualError(t, err, "AccessKeySecret cannot be empty")
 }
