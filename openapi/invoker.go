@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,8 +17,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 
@@ -27,7 +30,56 @@ import (
 	"github.com/aliyun/aliyun-cli/meta"
 )
 
-//
+func GetClient(cp *config.Profile, ctx *cli.Context) (client *sdk.Client, err error) {
+	credential, err := cp.GetCredential(ctx)
+	if err != nil {
+		return
+	}
+	model, err := credential.GetCredential()
+	if err != nil {
+		return
+	}
+
+	var cred auth.Credential
+	if model.SecurityToken != nil {
+		cred = credentials.NewStsTokenCredential(*model.AccessKeyId, *model.AccessKeySecret, *model.SecurityToken)
+	} else {
+		cred = credentials.NewAccessKeyCredential(*model.AccessKeyId, *model.AccessKeySecret)
+	}
+
+	if cp.RegionId == "" {
+		err = fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
+		return
+	}
+
+	conf := sdk.NewConfig()
+	client, err = sdk.NewClientWithOptions(cp.RegionId, conf, cred)
+	if err != nil {
+		return
+	}
+	// get UserAgent from env
+	conf.UserAgent = os.Getenv("ALIYUN_USER_AGENT")
+
+	if cp.RetryCount > 0 {
+		// when use --retry-count, enable auto retry
+		conf.WithAutoRetry(true)
+		conf.WithMaxRetryTime(cp.RetryCount)
+	}
+
+	if client != nil {
+		if cp.ReadTimeout > 0 {
+			client.SetReadTimeout(time.Duration(cp.ReadTimeout) * time.Second)
+		}
+		if cp.ConnectTimeout > 0 {
+			client.SetConnectTimeout(time.Duration(cp.ConnectTimeout) * time.Second)
+		}
+		if config.SkipSecureVerify(ctx.Flags()).IsAssigned() {
+			client.SetHTTPSInsecure(true)
+		}
+	}
+	return client, err
+}
+
 // implementations:
 // - RpcInvoker,
 // - RpcForceInvoker
@@ -39,7 +91,6 @@ type Invoker interface {
 	Call() (*responses.CommonResponse, error)
 }
 
-//
 // implementations
 // - Waiter
 // - Pager
@@ -47,7 +98,6 @@ type InvokeHelper interface {
 	CallWith(invoker Invoker) (string, error)
 }
 
-//
 // basic invoker to init common object and headers
 type BasicInvoker struct {
 	profile *config.Profile
@@ -71,14 +121,6 @@ func (a *BasicInvoker) getRequest() *requests.CommonRequest {
 func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
 	a.product = product
-	a.client, err = a.profile.GetClient(ctx)
-	if err != nil {
-		return fmt.Errorf("init client failed %s", err)
-	}
-	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
-		a.client.AppendUserAgent("vendor", vendorEnv)
-	}
-	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 	a.request = requests.NewCommonRequest()
 	a.request.Product = product.Code
 
@@ -130,6 +172,15 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 		return cli.NewErrorWithTip(fmt.Errorf("missing region for product %s", product.Code),
 			"Use flag --region <regionId> to assign region, "+hint)
 	}
+
+	a.client, err = GetClient(a.profile, ctx)
+	if err != nil {
+		return fmt.Errorf("init client failed %s", err)
+	}
+	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
+		a.client.AppendUserAgent("vendor", vendorEnv)
+	}
+	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 
 	if a.request.Domain == "" {
 		a.request.Domain, err = product.GetEndpoint(a.request.RegionId, a.client)

@@ -37,7 +37,7 @@ func TestDoHello(t *testing.T) {
 	exw := "-----------------------------------------------\n" +
 		"!!! Configure Failed please configure again !!!\n" +
 		"-----------------------------------------------\n" +
-		"AccessKeyId cannot be empty\n" +
+		"AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first\n" +
 		"-----------------------------------------------\n" +
 		"!!! Configure Failed please configure again !!!\n" +
 		"-----------------------------------------------\n"
