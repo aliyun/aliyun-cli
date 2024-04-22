@@ -15,24 +15,18 @@ package config
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
-	"strconv"
 	"strings"
 
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/i18n"
 	"github.com/aliyun/aliyun-cli/util"
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
-	jmespath "github.com/jmespath/go-jmespath"
 )
 
 type AuthenticateMode string
@@ -235,14 +229,13 @@ func getSTSEndpoint(regionId string) string {
 	return "sts.aliyuncs.com"
 }
 
-func (cp *Profile) GetCredential(ctx *cli.Context) (cred credentialsv2.Credential, err error) {
+func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred credentialsv2.Credential, err error) {
 	config := new(credentialsv2.Config)
 	// The AK, StsToken are direct credential
 	// Others are indirect credential
 	cp.Validate()
 	switch cp.Mode {
 	case AK:
-
 		if cp.AccessKeyId == "" || cp.AccessKeySecret == "" {
 			err = fmt.Errorf("AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first")
 			return
@@ -270,7 +263,8 @@ func (cp *Profile) GetCredential(ctx *cli.Context) (cred credentialsv2.Credentia
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion)).
+			SetProxy(*proxyHost)
 
 		if cp.StsToken != "" {
 			config.SetSecurityToken(cp.StsToken)
@@ -308,7 +302,8 @@ func (cp *Profile) GetCredential(ctx *cli.Context) (cred credentialsv2.Credentia
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion)).
+			SetProxy(*proxyHost)
 
 	case ChainableRamRoleArn:
 		profileName := cp.SourceProfile
@@ -319,7 +314,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context) (cred credentialsv2.Credentia
 			return nil, fmt.Errorf("can not load the source profile: " + profileName)
 		}
 
-		middle, err := source.GetCredential(ctx)
+		middle, err := source.GetCredential(ctx, proxyHost)
 		if err != nil {
 			return nil, err
 		}
@@ -339,7 +334,8 @@ func (cp *Profile) GetCredential(ctx *cli.Context) (cred credentialsv2.Credentia
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion)).
+			SetProxy(*proxyHost)
 
 	case External:
 		args := strings.Fields(cp.ProcessCommand)
@@ -355,7 +351,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context) (cred credentialsv2.Credentia
 			fmt.Println(string(buf))
 			return nil, err
 		}
-		return cp.GetCredential(ctx)
+		return cp.GetCredential(ctx, proxyHost)
 
 	case CredentialsURI:
 		uri := cp.CredentialsURI
@@ -409,41 +405,6 @@ func (cp *Profile) GetCredential(ctx *cli.Context) (cred credentialsv2.Credentia
 	}
 
 	return credentialsv2.NewCredential(config)
-}
-
-func (cp *Profile) GetSessionCredential(client *sdk.Client) (string, string, string, error) {
-	req := requests.NewCommonRequest()
-	rep := responses.NewCommonResponse()
-	req.Scheme = "HTTPS"
-	req.Product = "Sts"
-	req.RegionId = cp.RegionId
-	req.Version = "2015-04-01"
-	if cp.StsRegion != "" {
-		req.Domain = fmt.Sprintf("sts.%s.aliyuncs.com", cp.StsRegion)
-	} else {
-		req.Domain = "sts.aliyuncs.com"
-	}
-	req.ApiName = "AssumeRole"
-	req.QueryParams["RoleArn"] = cp.RamRoleArn
-	req.QueryParams["RoleSessionName"] = cp.RoleSessionName
-	req.QueryParams["DurationSeconds"] = strconv.Itoa(cp.ExpiredSeconds)
-	req.TransToAcsRequest()
-	err := client.DoAction(req, rep)
-	if err != nil {
-		return "", "", "", err
-	}
-	var v interface{}
-	err = json.Unmarshal(rep.GetHttpContentBytes(), &v)
-	if err != nil {
-		return "", "", "", err
-	}
-	accessKeyID, _ := jmespath.Search("Credentials.AccessKeyId", v)
-	accessKeySecret, _ := jmespath.Search("Credentials.AccessKeySecret", v)
-	StsToken, _ := jmespath.Search("Credentials.SecurityToken", v)
-	if accessKeyID == nil || accessKeySecret == nil || StsToken == nil {
-		return "", "", "", errors.New("get session credential failed")
-	}
-	return accessKeyID.(string), accessKeySecret.(string), StsToken.(string), nil
 }
 
 func IsRegion(region string) bool {

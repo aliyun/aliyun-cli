@@ -24,7 +24,7 @@ import (
 )
 
 func doHello(ctx *cli.Context, profile *Profile) (err error) {
-	credential, err := profile.GetCredential(ctx)
+	credential, err := profile.GetCredential(ctx, tea.String(""))
 	if err != nil {
 		return
 	}
