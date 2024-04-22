@@ -2,18 +2,23 @@
 
 BUCKET="sdk-oss-test"
 
+which aliyun
+
 # cleanup
-aliyun oss rm oss://$BUCKET/test.txt
-rm ./downloaded.txt
+aliyun oss rm oss://$BUCKET/test.txt --region cn-hangzhou
+
+if [ -f ./downloaded.txt ]; then
+    rm ./downloaded.txt
+fi
 
 # ready to go
 echo "version1" > ./test.txt
-aliyun oss cp ./test.txt oss://$BUCKET/test.txt
+aliyun oss cp ./test.txt oss://$BUCKET/test.txt --region cn-hangzhou
 
 echo "version2" > ./test.txt
-aliyun oss cp ./test.txt oss://$BUCKET/test.txt -f
+aliyun oss cp ./test.txt oss://$BUCKET/test.txt -f --region cn-hangzhou
 
-aliyun oss cp oss://$BUCKET/test.txt ./downloaded.txt
+aliyun oss cp oss://$BUCKET/test.txt ./downloaded.txt --region cn-hangzhou
 
 OUTPUT=$(cat ./downloaded.txt)
 

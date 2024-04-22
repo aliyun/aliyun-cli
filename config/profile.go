@@ -182,7 +182,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	}
 
 	if cp.RegionId == "" {
-		cp.RegionId = util.GetFromEnv("ALIBABACLOUD_REGION_ID", "ALICLOUD_REGION_ID", "REGION")
+		cp.RegionId = util.GetFromEnv("ALIBABACLOUD_REGION_ID", "ALICLOUD_REGION_ID", "REGION_ID", "REGION")
 	}
 
 	if cp.CredentialsURI == "" {

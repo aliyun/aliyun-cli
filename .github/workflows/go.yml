@@ -13,11 +13,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-12, windows-latest]
     runs-on: ${{ matrix.os }}
-    # environment: CI
-    env:
-      ACCESS_KEY_ID: ${{ secrets.ACCESS_KEY_ID }}
-      ACCESS_KEY_SECRET: ${{ secrets.ACCESS_KEY_SECRET }}
-      REGION_ID: ${{ secrets.REGION_ID }}
+    environment: CI
     steps:
     - uses: actions/checkout@v3
       with:
@@ -37,14 +33,14 @@ jobs:
 
     - name: Smoking Test
       run: go run ./main/main.go
-    - run: make build
 
-    - name: Install jq
-      uses: dcarbone/install-jq-action@v2.1.0
-      if: matrix.os == 'windows-latest'
-
-    - run: bash ./integration/ecs_test.sh
-      if: env.ACCESS_KEY_ID != '' && env.ACCESS_KEY_SECRET != ''
-    - run: bash ./integration/oss_test.sh
-      if: env.ACCESS_KEY_ID != '' && env.ACCESS_KEY_SECRET != ''
-
+    - run: |
+        make build
+        make install
+        bash ./integration/vpc_test.sh
+        bash ./integration/oss_test.sh
+      if: env.ACCESS_KEY_ID != '' && env.ACCESS_KEY_SECRET != '' && matrix.os != 'windows-latest'
+      env:
+        ACCESS_KEY_ID: ${{ secrets.ACCESS_KEY_ID }}
+        ACCESS_KEY_SECRET: ${{ secrets.ACCESS_KEY_SECRET }}
+        REGION_ID: ${{ secrets.REGION_ID }}
