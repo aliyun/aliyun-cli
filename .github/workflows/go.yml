@@ -31,7 +31,9 @@ jobs:
     - name: Unit Test
       run: make test
     - name: Upload coverage infomartion
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Smoking Test
       run: go run ./main/main.go
