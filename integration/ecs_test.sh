@@ -36,7 +36,7 @@ do_command() {
 }
 
 ecs_create_instance() {
-	do_command "aliyun ecs CreateInstance --ImageId ubuntu_18_04_64_20G_alibase_20190624.vhd --InstanceType ecs.xn4.small" $1
+	do_command "aliyun ecs CreateInstance --ImageId 'aliyun_2_1903_x64_20G_alibase_20231221.vhd' --InstanceType 'ecs.t5-lc1m1.small' --InstanceChargeType PostPaid" $1
 }
 
 ecs_start_instance() {
