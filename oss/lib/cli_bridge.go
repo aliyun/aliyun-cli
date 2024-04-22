@@ -1,18 +1,13 @@
 package lib
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
-	"strings"
 
 	"github.com/alibabacloud-go/tea/tea"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/aliyun-cli/cli"
 	"github.com/aliyun/aliyun-cli/config"
 	"github.com/aliyun/aliyun-cli/i18n"
-	"github.com/aliyun/credentials-go/credentials"
 )
 
 func NewOssCommand() *cli.Command {
@@ -120,15 +115,28 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	if !ok {
 		proxyHost = ""
 	}
-	accessKeyID, accessSecret, stsToken, err := getSessionCredential(&profile, tea.String(proxyHost))
+	credential, err := profile.GetCredential(ctx, tea.String(proxyHost))
+	if err != nil {
+		return fmt.Errorf("can't get credential %s", err)
+	}
+
+	model, err := credential.GetCredential()
 	if err != nil {
 		return fmt.Errorf("can't get credential %s", err)
 	}
 
 	configs := make(map[string]string, 0)
-	configs["access-key-id"] = accessKeyID
-	configs["access-key-secret"] = accessSecret
-	configs["sts-token"] = stsToken
+	if model.AccessKeyId != nil {
+		configs["access-key-id"] = *model.AccessKeyId
+	}
+
+	if model.AccessKeySecret != nil {
+		configs["access-key-secret"] = *model.AccessKeySecret
+	}
+
+	if model.SecurityToken != nil {
+		configs["sts-token"] = *model.SecurityToken
+	}
 
 	if ep, ok := ctx.Flags().GetValue("endpoint"); !ok {
 		configs["endpoint"] = "oss-" + profile.RegionId + ".aliyuncs.com"
@@ -144,9 +152,7 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 
 	a2 := []string{"aliyun", "oss"}
 	a2 = append(a2, ctx.Command().Name)
-	for _, a := range args {
-		a2 = append(a2, a)
-	}
+	a2 = append(a2, args...)
 	configFlagSet := cli.NewFlagSet()
 	config.AddFlags(configFlagSet)
 
@@ -170,79 +176,4 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	}
 	os.Args = a2[1:]
 	return ParseAndRunCommand()
-
-}
-
-func getSessionCredential(profile *config.Profile, proxyHost *string) (string, string, string, error) {
-	var conf *credentials.Config
-	switch profile.Mode {
-	case config.AK:
-		conf = &credentials.Config{
-			Type:            tea.String("access_key"),
-			AccessKeyId:     &profile.AccessKeyId,
-			AccessKeySecret: &profile.AccessKeySecret,
-		}
-	case config.StsToken:
-		conf = &credentials.Config{
-			Type:            tea.String("sts"),
-			AccessKeyId:     &profile.AccessKeyId,
-			AccessKeySecret: &profile.AccessKeySecret,
-			SecurityToken:   &profile.StsToken,
-		}
-	case config.RamRoleArn:
-		conf = &credentials.Config{
-			Type:                  tea.String("ram_role_arn"),
-			AccessKeyId:           &profile.AccessKeyId,
-			AccessKeySecret:       &profile.AccessKeySecret,
-			RoleArn:               &profile.RamRoleArn,
-			RoleSessionName:       &profile.RoleSessionName,
-			Policy:                tea.String(""),
-			RoleSessionExpiration: &profile.ExpiredSeconds,
-			Proxy:                 proxyHost,
-		}
-	case config.EcsRamRole:
-		conf = &credentials.Config{
-			Type:     tea.String("ecs_ram_role"),
-			RoleName: &profile.RamRoleName,
-		}
-	case config.RamRoleArnWithEcs:
-		client, _ := sdk.NewClientWithEcsRamRole(profile.RegionId, profile.RamRoleName)
-		return profile.GetSessionCredential(client)
-	case config.External:
-		args := strings.Fields(profile.ProcessCommand)
-		cmd := exec.Command(args[0], args[1:]...)
-		buf, err := cmd.CombinedOutput()
-		if err != nil {
-			return "", "", "", err
-		}
-		cp := &config.Profile{}
-		err = json.Unmarshal(buf, cp)
-		if err != nil {
-			fmt.Println(cp.ProcessCommand)
-			fmt.Println(string(buf))
-			return "", "", "", err
-		}
-		return getSessionCredential(cp, proxyHost)
-	}
-	credential, err := credentials.NewCredential(conf)
-	if err != nil {
-		return "", "", "", err
-	}
-	var lastErr error
-	accessKeyID, err := credential.GetAccessKeyId()
-	if err != nil {
-		lastErr = err
-	}
-	accessSecret, err := credential.GetAccessKeySecret()
-	if err != nil {
-		lastErr = err
-	}
-	stsToken, err := credential.GetSecurityToken()
-	if err != nil {
-		lastErr = err
-	}
-	if lastErr != nil {
-		return "", "", "", lastErr
-	}
-	return *accessKeyID, *accessSecret, *stsToken, nil
 }
