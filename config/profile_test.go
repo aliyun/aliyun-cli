@@ -482,3 +482,26 @@ func TestGetCredentialByRamRoleArn(t *testing.T) {
 	// assert.Nil(t, credential)
 	// assert.EqualError(t, err, "AccessKeySecret cannot be empty")
 }
+
+func TestGetProfileWithChainable(t *testing.T) {
+	cf := NewConfiguration()
+	sourceProfile := newProfile()
+	sourceProfile.Name = "source"
+	sourceProfile.Mode = AK
+	sourceProfile.AccessKeyId = "invalidAKID"
+	sourceProfile.AccessKeySecret = "invalidAKSecret"
+	sourceProfile.RegionId = "cn-hangzhou"
+	cf.PutProfile(*sourceProfile)
+
+	p := newProfile()
+	p.parent = cf
+	p.Mode = ChainableRamRoleArn
+	p.SourceProfile = "source"
+	p.RegionId = "cn-hangzhou"
+	p.RamRoleArn = "acs:ram::test:role/test"
+	p.RoleSessionName = "sessionname"
+
+	c, err := p.GetCredential(newCtx(), tea.String(""))
+	assert.NotNil(t, c)
+	assert.Nil(t, err)
+}

@@ -327,31 +327,37 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		// 从 configuration 中重新获取 source profile
 		source, loaded := cp.parent.GetProfile(profileName)
 		if !loaded {
-			return nil, fmt.Errorf("can not load the source profile: " + profileName)
+			err = fmt.Errorf("can not load the source profile: " + profileName)
+			return
 		}
 
-		middle, err := source.GetCredential(ctx, proxyHost)
-		if err != nil {
-			return nil, err
+		middle, err2 := source.GetCredential(ctx, proxyHost)
+		if err2 != nil {
+			err = err2
+			return
 		}
 
 		// 从上游处获得中间 AK/STS
-		model, err := middle.GetCredential()
+		model, err3 := middle.GetCredential()
 
-		if err != nil {
-			return nil, err
+		if err3 != nil {
+			err = err3
+			return
 		}
 
 		// 扮演最终角色
 		config.SetType("ram_role_arn").
 			SetAccessKeyId(*model.AccessKeyId).
 			SetAccessKeySecret(*model.AccessKeySecret).
-			SetSecurityToken(*model.SecurityToken).
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
 			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion)).
 			SetProxy(*proxyHost)
+
+		if model.SecurityToken != nil {
+			config.SetSecurityToken(*model.SecurityToken)
+		}
 
 	case External:
 		args := strings.Fields(cp.ProcessCommand)
