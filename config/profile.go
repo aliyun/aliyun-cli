@@ -279,8 +279,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion)).
-			SetProxy(*proxyHost)
+			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
 
 		if cp.StsToken != "" {
 			config.SetSecurityToken(cp.StsToken)
@@ -318,8 +317,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion)).
-			SetProxy(*proxyHost)
+			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
 
 	case ChainableRamRoleArn:
 		profileName := cp.SourceProfile
@@ -352,8 +350,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion)).
-			SetProxy(*proxyHost)
+			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
 
 		if model.SecurityToken != nil {
 			config.SetSecurityToken(*model.SecurityToken)
@@ -430,11 +427,19 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
 			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion)).
-			SetSessionExpiration(3600).
-			SetProxy(*proxyHost)
+			SetSessionExpiration(3600)
 
 	default:
 		return nil, fmt.Errorf("unexcepted certificate mode: %s", cp.Mode)
+	}
+
+	if proxyHost != nil {
+		config.SetProxy(*proxyHost)
+	} else {
+		proxy := util.GetFromEnv("HTTPS_PROXY", "https_proxy")
+		if proxy != "" {
+			config.SetProxy(proxy)
+		}
 	}
 
 	return credentialsv2.NewCredential(config)

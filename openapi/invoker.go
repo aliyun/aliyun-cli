@@ -19,7 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/auth/credentials"
@@ -32,10 +31,11 @@ import (
 )
 
 func GetClient(cp *config.Profile, ctx *cli.Context) (client *sdk.Client, err error) {
-	credential, err := cp.GetCredential(ctx, tea.String(""))
+	credential, err := cp.GetCredential(ctx, nil)
 	if err != nil {
 		return
 	}
+
 	model, err := credential.GetCredential()
 	if err != nil {
 		return
