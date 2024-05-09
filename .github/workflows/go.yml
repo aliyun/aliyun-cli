@@ -39,6 +39,7 @@ jobs:
         make install
         bash ./integration/vpc_test.sh
         bash ./integration/oss_test.sh
+        bash ./integration/https_proxy.sh
       if: env.ACCESS_KEY_ID != '' && env.ACCESS_KEY_SECRET != '' && matrix.os != 'windows-latest'
       env:
         ACCESS_KEY_ID: ${{ secrets.ACCESS_KEY_ID }}

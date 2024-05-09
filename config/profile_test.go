@@ -18,7 +18,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/cli"
 
 	"github.com/stretchr/testify/assert"
@@ -426,17 +425,17 @@ func TestGetCredentialByAK(t *testing.T) {
 
 	actual.Mode = AK
 	actual.AccessKeyId = "accessKeyId"
-	credential, err := actual.GetCredential(newCtx(), tea.String(""))
+	credential, err := actual.GetCredential(newCtx(), nil)
 	assert.Nil(t, credential)
 	assert.EqualError(t, err, "AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first")
 
 	actual.AccessKeySecret = "accessKeySecret"
-	credential, err = actual.GetCredential(newCtx(), tea.String(""))
+	credential, err = actual.GetCredential(newCtx(), nil)
 	assert.Nil(t, credential)
 	assert.EqualError(t, err, "default RegionId is empty! run `aliyun configure` first")
 
 	actual.RegionId = "cn-hangzhou"
-	credential, err = actual.GetCredential(newCtx(), tea.String(""))
+	credential, err = actual.GetCredential(newCtx(), nil)
 	assert.Nil(t, err)
 	assert.NotNil(t, credential)
 
@@ -447,22 +446,22 @@ func TestGetCredentialBySts(t *testing.T) {
 	actual := newProfile()
 
 	actual.Mode = StsToken
-	credential, err := actual.GetCredential(newCtx(), tea.String(""))
+	credential, err := actual.GetCredential(newCtx(), nil)
 	assert.Nil(t, credential)
 	assert.EqualError(t, err, "AccessKeyId cannot be empty")
 
 	actual.AccessKeyId = "akid"
-	credential, err = actual.GetCredential(newCtx(), tea.String(""))
+	credential, err = actual.GetCredential(newCtx(), nil)
 	assert.Nil(t, credential)
 	assert.EqualError(t, err, "AccessKeySecret cannot be empty")
 
 	actual.AccessKeySecret = "aksecret"
-	credential, err = actual.GetCredential(newCtx(), tea.String(""))
+	credential, err = actual.GetCredential(newCtx(), nil)
 	assert.Nil(t, credential)
 	assert.EqualError(t, err, "SecurityToken cannot be empty")
 
 	actual.StsToken = "ststoken"
-	credential, err = actual.GetCredential(newCtx(), tea.String(""))
+	credential, err = actual.GetCredential(newCtx(), nil)
 	assert.Nil(t, err)
 	assert.NotNil(t, credential)
 
@@ -501,7 +500,7 @@ func TestGetProfileWithChainable(t *testing.T) {
 	p.RamRoleArn = "acs:ram::test:role/test"
 	p.RoleSessionName = "sessionname"
 
-	c, err := p.GetCredential(newCtx(), tea.String(""))
+	c, err := p.GetCredential(newCtx(), nil)
 	assert.NotNil(t, c)
 	assert.Nil(t, err)
 }
