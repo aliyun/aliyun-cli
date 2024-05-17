@@ -269,6 +269,7 @@ func NewRoleSessionNameFlag() *cli.Flag {
 			"使用 `--role-session-name <RoleSessionName>` 指定RoleSessionName"),
 	}
 }
+
 func NewExpiredSecondsFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "config",
@@ -279,6 +280,7 @@ func NewExpiredSecondsFlag() *cli.Flag {
 			"使用 `--expired-seconds <seconds>` 指定凭证过期时间"),
 	}
 }
+
 func NewPrivateKeyFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "config",
@@ -364,6 +366,7 @@ func NewLanguageFlag() *cli.Flag {
 			"使用 `--language [en|zh]` 来指定语言"),
 	}
 }
+
 func NewConfigurePathFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "config",
@@ -375,6 +378,7 @@ func NewConfigurePathFlag() *cli.Flag {
 			"使用 `--config-path` 指定配置文件路径"),
 	}
 }
+
 func NewReadTimeoutFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "caller",

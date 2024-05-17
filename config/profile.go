@@ -205,6 +205,18 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		cp.CredentialsURI = os.Getenv("ALIBABA_CLOUD_CREDENTIALS_URI")
 	}
 
+	if cp.OIDCProviderARN == "" {
+		cp.OIDCProviderARN = util.GetFromEnv("ALIBABACLOUD_OIDC_PROVIDER_ARN", "ALIBABA_CLOUD_OIDC_PROVIDER_ARN")
+	}
+
+	if cp.OIDCTokenFile == "" {
+		cp.OIDCTokenFile = util.GetFromEnv("ALIBABACLOUD_OIDC_TOKEN_FILE", "ALIBABA_CLOUD_OIDC_TOKEN_FILE")
+	}
+
+	if cp.RamRoleArn == "" {
+		cp.RamRoleArn = util.GetFromEnv("ALIBABACLOUD_ROLE_ARN", "ALIBABA_CLOUD_ROLE_ARN")
+	}
+
 	AutoModeRecognition(cp)
 }
 
@@ -225,6 +237,8 @@ func AutoModeRecognition(cp *Profile) {
 		cp.Mode = EcsRamRole
 	} else if cp.ProcessCommand != "" {
 		cp.Mode = External
+	} else if cp.OIDCProviderARN != "" && cp.OIDCTokenFile != "" && cp.RamRoleArn != "" {
+		cp.Mode = OIDC
 	}
 }
 
