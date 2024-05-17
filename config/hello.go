@@ -24,6 +24,7 @@ import (
 )
 
 func doHello(ctx *cli.Context, profile *Profile) (err error) {
+	profile.OverwriteWithFlags(ctx)
 	credential, err := profile.GetCredential(ctx, nil)
 	if err != nil {
 		return

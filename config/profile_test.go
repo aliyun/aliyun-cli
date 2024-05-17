@@ -418,6 +418,9 @@ func TestAutoModeRecognition(t *testing.T) {
 	AutoModeRecognition(p)
 	assert.Equal(t, External, p.Mode)
 
+	p = &Profile{OIDCProviderARN: "oidc_provider_arn", OIDCTokenFile: "/path/to/tokenfile", RamRoleArn: "ram/role/arn"}
+	AutoModeRecognition(p)
+	assert.Equal(t, OIDC, p.Mode)
 }
 
 func TestGetCredentialByAK(t *testing.T) {
