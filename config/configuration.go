@@ -111,22 +111,33 @@ func LoadProfile(path string, name string) (Profile, error) {
 	return p, nil
 }
 
+func getConfigurePath(ctx *cli.Context) (currentPath string) {
+	if path, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
+		currentPath = path
+	} else {
+		currentPath = GetConfigPath() + "/" + configFile
+	}
+	return
+}
+
+func getProfileName(ctx *cli.Context) (name string) {
+	if name, ok := ProfileFlag(ctx.Flags()).GetValue(); ok {
+		return name
+	} else if profileNameInEnv := util.GetFromEnv("ALIBABACLOUD_PROFILE", "ALIBABA_CLOUD_PROFILE", "ALICLOUD_PROFILE"); profileNameInEnv != "" {
+		return profileNameInEnv
+	}
+
+	return ""
+}
+
 func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
 	if util.GetFromEnv("ALIBABA_CLOUD_IGNORE_PROFILE", "ALIBABACLOUD_IGNORE_PROFILE") == "TRUE" {
 		profile = NewProfile("default")
 		profile.RegionId = "cn-hangzhou"
 	} else {
-		var currentPath string
-		if path, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
-			currentPath = path
-		} else {
-			currentPath = GetConfigPath() + "/" + configFile
-		}
-		if name, ok := ProfileFlag(ctx.Flags()).GetValue(); ok {
-			profile, err = LoadProfile(currentPath, name)
-		} else {
-			profile, err = LoadProfile(currentPath, "")
-		}
+		currentPath := getConfigurePath(ctx)
+		profileName := getProfileName(ctx)
+		profile, err = LoadProfile(currentPath, profileName)
 		if err != nil {
 			return
 		}
