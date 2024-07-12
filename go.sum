@@ -30,8 +30,8 @@ github.com/aliyun/aliyun-oss-go-sdk v2.2.9+incompatible h1:Sg/2xHwDrioHpxTN6WMiw
 github.com/aliyun/aliyun-oss-go-sdk v2.2.9+incompatible/go.mod h1:T/Aws4fEfogEE9v+HPhhw+CntffsBHJ8nXQCwKr0/g8=
 github.com/aliyun/credentials-go v1.1.2/go.mod h1:ozcZaMR5kLM7pwtCMEpVmQ242suV6qTJya2bDq4X1Tw=
 github.com/aliyun/credentials-go v1.3.1/go.mod h1:8jKYhQuDawt8x2+fusqa1Y6mPxemTsBEN04dgcAcYz0=
-github.com/aliyun/credentials-go v1.3.4 h1:X5nse+8s7ft00ANpoG3+bFJIqZVpjHbOg7G9gWQshVY=
-github.com/aliyun/credentials-go v1.3.4/go.mod h1:1LxUuX7L5YrZUWzBrRyk0SwSdH4OmPrib8NVePL3fxM=
+github.com/aliyun/credentials-go v1.3.5 h1:KhB5hRibvCugCIcpQxLZjjkb9EuAcu+MZi3GBc+/mv0=
+github.com/aliyun/credentials-go v1.3.5/go.mod h1:1LxUuX7L5YrZUWzBrRyk0SwSdH4OmPrib8NVePL3fxM=
 github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc h1:eN2FUvn4J1A31pICABioDYukoh1Tmlei6L3ImZUin/I=
 github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc/go.mod h1:BYq/NZTroWuzkvsTPJgRBqSHGxKMHCz06gtlfY/W5RU=
 github.com/clbanning/mxj/v2 v2.5.5 h1:oT81vUeEiQQ/DcHbzSytRngP6Ky9O+L+0Bw0zSJag9E=
