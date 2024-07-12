@@ -390,12 +390,12 @@ aliyun ecs DescribeInstances --InstanceIds '["i-12345678912345678123"]' --waiter
 
 我们支持下面的环境变量：
 
-- `ALIBABACLOUD_PROFILE`/`ALIBABA_CLOUD_PROFILE`/`ALICLOUD_PROFILE`： 当 `--profile` 没有指定，CLI 将使用该环境变量。
-- `ALIBABACLOUD_IGNORE_PROFILE=TRUE`: 当这个变量被指定，CLI 忽略配置文件。
-- `ALIBABACLOUD_ACCESS_KEY_ID`/`ALICLOUD_ACCESS_KEY_ID`/`ACCESS_KEY_ID`： 当没有任何 Access Key Id 的指定，CLI 将使用该环境变量。
-- `ALIBABACLOUD_ACCESS_KEY_SECRET`/`ALICLOUD_ACCESS_KEY_SECRET`/`ACCESS_KEY_SECRET`： 当没有任何 Access Key Secret 的指定，CLI 将使用该环境变量。
-- `ALIBABACLOUD_SECURITY_TOKEN`/`ALICLOUD_SECURITY_TOKEN`/`SECURITY_TOKEN`： 当没有任何 Security Token 的指定，CLI 将使用该环境变量。
-- `ALIBABACLOUD_REGION_ID`/`ALICLOUD_REGION_ID`/`REGION`： 当没有任何 RegionId 的指定，CLI 将使用该环境变量。
+- `ALIBABA_CLOUD_PROFILE`： 当 `--profile` 没有指定，CLI 将使用该环境变量。
+- `ALIBABA_CLOUD_IGNORE_PROFILE=TRUE`: 当这个变量被指定，CLI 忽略配置文件。
+- `ALIBABA_CLOUD_ACCESS_KEY_ID`： 当没有任何 Access Key Id 的指定，CLI 将使用该环境变量。
+- `ALIBABA_CLOUD_ACCESS_KEY_SECRET`： 当没有任何 Access Key Secret 的指定，CLI 将使用该环境变量。
+- `ALIBABA_CLOUD_SECURITY_TOKEN`： 当没有任何 Security Token 的指定，CLI 将使用该环境变量。
+- `ALIBABA_CLOUD_REGION_ID`： 当没有任何 RegionId 的指定，CLI 将使用该环境变量。
 - `DEBUG=sdk`：通过该环境变量，CLI 将打印 HTTP 请求信息。这对于排查故障非常有用。
 
 ## 获取帮助

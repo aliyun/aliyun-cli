@@ -186,19 +186,19 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.ProcessCommand = ProcessCommandFlag(ctx.Flags()).GetStringOrDefault(cp.ProcessCommand)
 
 	if cp.AccessKeyId == "" {
-		cp.AccessKeyId = util.GetFromEnv("ALIBABACLOUD_ACCESS_KEY_ID", "ALICLOUD_ACCESS_KEY_ID", "ACCESS_KEY_ID")
+		cp.AccessKeyId = util.GetFromEnv("ALIBABA_CLOUD_ACCESS_KEY_ID", "ALIBABACLOUD_ACCESS_KEY_ID", "ALICLOUD_ACCESS_KEY_ID", "ACCESS_KEY_ID")
 	}
 
 	if cp.AccessKeySecret == "" {
-		cp.AccessKeySecret = util.GetFromEnv("ALIBABACLOUD_ACCESS_KEY_SECRET", "ALICLOUD_ACCESS_KEY_SECRET", "ACCESS_KEY_SECRET")
+		cp.AccessKeySecret = util.GetFromEnv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "ALIBABACLOUD_ACCESS_KEY_SECRET", "ALICLOUD_ACCESS_KEY_SECRET", "ACCESS_KEY_SECRET")
 	}
 
 	if cp.StsToken == "" {
-		cp.StsToken = util.GetFromEnv("ALIBABACLOUD_SECURITY_TOKEN", "ALICLOUD_SECURITY_TOKEN", "SECURITY_TOKEN")
+		cp.StsToken = util.GetFromEnv("ALIBABA_CLOUD_SECURITY_TOKEN", "ALIBABACLOUD_SECURITY_TOKEN", "ALICLOUD_SECURITY_TOKEN", "SECURITY_TOKEN")
 	}
 
 	if cp.RegionId == "" {
-		cp.RegionId = util.GetFromEnv("ALIBABACLOUD_REGION_ID", "ALICLOUD_REGION_ID", "REGION_ID", "REGION")
+		cp.RegionId = util.GetFromEnv("ALIBABA_CLOUD_REGION_ID", "ALIBABACLOUD_REGION_ID", "ALICLOUD_REGION_ID", "REGION_ID", "REGION")
 	}
 
 	if cp.CredentialsURI == "" {

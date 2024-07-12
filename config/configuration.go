@@ -112,7 +112,7 @@ func LoadProfile(path string, name string) (Profile, error) {
 }
 
 func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
-	if os.Getenv("ALIBABACLOUD_IGNORE_PROFILE") == "TRUE" {
+	if util.GetFromEnv("ALIBABA_CLOUD_IGNORE_PROFILE", "ALIBABACLOUD_IGNORE_PROFILE") == "TRUE" {
 		profile = NewProfile("default")
 		profile.RegionId = "cn-hangzhou"
 	} else {
