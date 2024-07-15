@@ -15,7 +15,7 @@ var specChineseBucketWebSite = SpecText{
 	syntaxText: ` 
 	ossutil website --method put oss://bucket local_xml_file [options]
     ossutil website --method get oss://bucket [local_file] [options]
-    ossuitl website --method delete oss://bucket [options]
+    ossutil website --method delete oss://bucket [options]
 `,
 	detailHelpText: ` 
     website命令通过设置method选项值为put、get、delete,可以设置、查询或者删除bucket的website配置
@@ -114,7 +114,7 @@ var specEnglishBucketWebSite = SpecText{
 	syntaxText: ` 
 	ossutil website --method put oss://bucket local_xml_file [options]
     ossutil website --method get oss://bucket [local_xml_file] [options]
-    ossuitl website --method delete oss://bucket [options]
+    ossutil website --method delete oss://bucket [options]
 `,
 	detailHelpText: ` 
     website command can set, get and delete the website configuration of the oss bucket by
@@ -251,6 +251,7 @@ var bucketWebsiteCommand = BucketWebSiteCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

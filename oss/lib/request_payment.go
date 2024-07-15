@@ -120,6 +120,7 @@ var requestPaymentCommand = RequestPaymentCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

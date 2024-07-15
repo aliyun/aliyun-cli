@@ -1253,7 +1253,7 @@ func (s *OssutilCommandSuite) TestRestoreObjectWithConfigError(c *C) {
 	s.removeBucket(bucketName, true, c)
 }
 
-//TestRestoreProducer test restoreProducer
+// TestRestoreProducer test restoreProducer
 func (s *OssutilCommandSuite) TestRestoreProducer(c *C) {
 	chObjects := make(chan string, ChannelBuf)
 	chListError := make(chan error, 1)

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	. "gopkg.in/check.v1"
@@ -16,8 +17,40 @@ const (
 	TIME_LAYOUT = "2006-01-02T15:04:05Z"
 )
 
+var requestCount int
+
 func StsHttpHandlerOk(w http.ResponseWriter, r *http.Request) {
 	akJson := &STSAkJson{}
+
+	if accessKeyID == "" {
+		accessKeyID = os.Getenv("OSS_TEST_ACCESS_KEY_ID")
+	}
+
+	if accessKeySecret == "" {
+		accessKeySecret = os.Getenv("OSS_TEST_ACCESS_KEY_SECRET")
+	}
+
+	akJson.AccessKeyId = accessKeyID
+	akJson.AccessKeySecret = accessKeySecret
+	akJson.SecurityToken = ""
+	nowLocalTime := time.Now()
+
+	expirationTime := nowLocalTime.Add(time.Second * time.Duration(AdvanceSeconds+TestEcsTimeout))
+	akJson.Expiration = expirationTime.UTC().Format(TIME_LAYOUT)
+
+	akJson.LastUpDated = nowLocalTime.UTC().Format(TIME_LAYOUT)
+	akJson.Code = "Success"
+	bs, _ := json.Marshal(akJson)
+	w.Write(bs)
+}
+
+func StsHttpHandlerProviderError(w http.ResponseWriter, r *http.Request) {
+	requestCount++
+	akJson := &STSAkJson{}
+
+	if requestCount <= 3 {
+		time.Sleep(15 * time.Second)
+	}
 
 	if accessKeyID == "" {
 		accessKeyID = os.Getenv("OSS_TEST_ACCESS_KEY_ID")
@@ -101,20 +134,23 @@ func (s *OssutilCommandSuite) TestEcsRoleAkTimeout(c *C) {
 	time.Sleep(time.Duration(1) * time.Second)
 
 	ecsRole := EcsRoleAKBuild{url: "http://127.0.0.1:32915/latest/meta-data/Ram/security-credentials/EcsRamRoleTesting"}
-	strKeyId1 := ecsRole.GetCredentials().GetAccessKeyID()
+	cred, err := ecsRole.GetCredentialsE()
+	c.Assert(err, IsNil)
+	strKeyId1 := cred.GetAccessKeyID()
 	c.Assert(strKeyId1 == "", Equals, false)
 	Expiration1 := ecsRole.Expiration
 
 	// wait Ak timeout
 	time.Sleep(time.Duration(1+TestEcsTimeout) * time.Second)
 
-	strKeyId2 := ecsRole.GetCredentials().GetAccessKeyID()
+	cred, err = ecsRole.GetCredentialsE()
+	c.Assert(err, IsNil)
+	strKeyId2 := cred.GetAccessKeyID()
 	c.Assert(strKeyId2 == "", Equals, false)
 	Expiration2 := ecsRole.Expiration
 
 	c.Assert(strKeyId1, Equals, strKeyId2)
 	c.Assert(Expiration1 == Expiration2, Equals, false)
-
 	svr.Close()
 
 }
@@ -230,6 +266,41 @@ func (s *OssutilCommandSuite) TestEcsRoleJsonError(c *C) {
 	}
 	_, err := cm.RunCommand(command, args, options)
 	c.Assert(err, NotNil)
+
+	svr.Close()
+	os.Remove(cfile)
+}
+
+func (s *OssutilCommandSuite) TestEcsRoleProviderError(c *C) {
+	svr := startHttpServer(StsHttpHandlerProviderError)
+	time.Sleep(time.Duration(1) * time.Second)
+
+	//set endpoint emtpy
+	ecsAk := "http://127.0.0.1:32915/latest/meta-data/Ram/security-credentials/EcsRamRoleTesting"
+	configStr := "[Credentials]" + "\n" + "language=CH" + "\n" + "endpoint= " + endpoint + "\n"
+	configStr = configStr + "[AkService]" + "\n" + "ecsAk=" + ecsAk
+	cfile := randStr(10)
+	s.createFile(cfile, configStr, c)
+
+	bucketName := bucketNamePrefix + randLowStr(12)
+	command := "mb"
+	args := []string{CloudURLToString(bucketName, "")}
+	str := ""
+	options := OptionMapType{
+		"endpoint":        &str,
+		"accessKeyID":     &str,
+		"accessKeySecret": &str,
+		"stsToken":        &str,
+		"configFile":      &cfile,
+	}
+	_, err := cm.RunCommand(command, args, options)
+	c.Assert(err, NotNil)
+	c.Assert(strings.Contains(err.Error(), "Client.Timeout exceeded while awaiting headers"), Equals, true)
+
+	options[OptionRetryTimes] = 3
+
+	_, err = cm.RunCommand(command, args, options)
+	c.Assert(err, IsNil)
 
 	svr.Close()
 	os.Remove(cfile)

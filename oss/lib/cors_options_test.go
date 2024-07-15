@@ -129,7 +129,6 @@ func (s *OssutilCommandSuite) TestCorsOptionsEmptyEndpoint(c *C) {
 		"acrMethod":       &strMethod,
 	}
 
-
 	versioingArgs := []string{CloudURLToString(bucketName, "")}
 	_, err := cm.RunCommand("cors-options", versioingArgs, options)
 	c.Assert(err, NotNil)

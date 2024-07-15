@@ -192,6 +192,7 @@ var makeBucketCommand = MakeBucketCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

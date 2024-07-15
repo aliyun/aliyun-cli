@@ -15,7 +15,7 @@ var specChineseBucketEncryption = SpecText{
 	syntaxText: ` 
     ossutil bucket-encryption --method put oss://bucket --sse-algorithm algorithmName [--kms-masterkey-id  keyid] [--kms-data-encryption SM4]
     ossutil bucket-encryption --method get oss://bucket 
-    ossuitl bucket-encryption --method delete oss://bucket
+    ossutil bucket-encryption --method delete oss://bucket
 `,
 	detailHelpText: ` 
     bucket-encryption命令通过设置method选项值为put、get、delete,可以设置、查询或者删除bucket的encryption配置
@@ -65,7 +65,7 @@ var specEnglishBucketEncryption = SpecText{
 	syntaxText: ` 
     ossutil bucket-encryption --method put oss://bucket --sse-algorithm algorithmName [--kms-masterkey-id  keyid] [--kms-data-encryption SM4]
     ossutil bucket-encryption --method get oss://bucket 
-    ossuitl bucket-encryption --method delete oss://bucket
+    ossutil bucket-encryption --method delete oss://bucket
 `,
 	detailHelpText: ` 
     bucket-encryption command can set, get and delete the encryption configuration of the oss bucket by set method option value to put, get, delete
@@ -148,6 +148,7 @@ var bucketEncryptionCommand = BucketEncryptionCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

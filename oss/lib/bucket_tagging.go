@@ -15,7 +15,7 @@ var specChineseBucketTag = SpecText{
 	syntaxText: ` 
     ossutil bucket-tagging --method put oss://bucket key#value
     ossutil bucket-tagging --method get oss://bucket 
-    ossuitl bucket-tagging --method delete oss://bucket
+    ossutil bucket-tagging --method delete oss://bucket
 `,
 	detailHelpText: ` 
     bucket-tagging命令通过设置method选项值为put、get、delete,可以设置、查询或者删除bucket的tag配置
@@ -56,7 +56,7 @@ var specEnglishBucketTag = SpecText{
 	syntaxText: ` 
     ossutil bucket-tagging --method put oss://bucket key#value
     ossutil bucket-tagging --method get oss://bucket 
-    ossuitl bucket-tagging --method delete oss://bucket
+    ossutil bucket-tagging --method delete oss://bucket
 `,
 	detailHelpText: ` 
     bucket-tagging command can set, get and delete the tag configuration of the oss bucket by set method option value to put, get, delete
@@ -128,6 +128,7 @@ var bucketTagCommand = BucketTagCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

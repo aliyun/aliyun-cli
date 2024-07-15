@@ -317,6 +317,7 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	cloudBoxID, _ := GetString(OptionCloudBoxID, cmd.options)
 
 	bPassword, _ := GetBool(OptionPassword, cmd.options)
+	bForcePathStyle, _ := GetBool(OptionForcePathStyle, cmd.options)
 
 	if bPassword {
 		if cmd.inputKeySecret == "" {
@@ -488,6 +489,11 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	if bSkipVerifyCert {
 		LogInfo("skip verify oss server's tls certificate\n")
 		options = append(options, oss.InsecureSkipVerify(true))
+	}
+
+	if bForcePathStyle {
+		LogInfo("use path-style access instead of virtual hosted-style access.\n")
+		options = append(options, oss.ForcePathStyle(true))
 	}
 
 	client, err := oss.New(endpoint, accessKeyID, accessKeySecret, options...)

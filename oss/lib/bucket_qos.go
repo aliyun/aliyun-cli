@@ -18,7 +18,7 @@ var specChineseBucketQos = SpecText{
 	syntaxText: ` 
 	ossutil bucket-qos --method put oss://bucket local_xml_file [options]
     ossutil bucket-qos --method get oss://bucket [local_file] [options]
-    ossuitl bucket-qos --method delete oss://bucket [options]
+    ossutil bucket-qos --method delete oss://bucket [options]
 `,
 	detailHelpText: ` 
     bucket-qos命令通过设置method选项值为put、get、delete,可以设置、查询或者删除bucket的qos配置
@@ -72,7 +72,7 @@ var specEnglishBucketQos = SpecText{
 	syntaxText: ` 
 	ossutil bucket-qos --method put oss://bucket local_xml_file [options]
     ossutil bucket-qos --method get oss://bucket [local_xml_file] [options]
-    ossuitl bucket-qos --method delete oss://bucket [options]
+    ossutil bucket-qos --method delete oss://bucket [options]
 `,
 	detailHelpText: ` 
     bucket-qos command can set, get and delete the qos configuration of the oss bucket by
@@ -164,6 +164,7 @@ var bucketQosCommand = BucketQosCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

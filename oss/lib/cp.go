@@ -64,6 +64,8 @@ type copyOptionType struct {
 	tagging           string
 	opType            operationType
 	bSyncCommand      bool
+	startTime         int64
+	endTime           int64
 }
 
 type filterOptionType struct {
@@ -350,6 +352,13 @@ var specChineseCopy = SpecText{
     和-r选项一起使用,表示只操作当前目录下的文件, 会忽略当前目录下的子目录, 如果是下载或者拷贝oss
     的目录，目录后面要加上反斜线/
 
+--start-time
+    时间戳, 既从1970年1月1日(UTC/GMT的午夜)开始所经过的秒数
+    如果输入这个选项, 文件的最后修改时间小于该时间戳将被忽略
+
+--end-time
+    时间戳, 既从1970年1月1日(UTC/GMT的午夜)开始所经过的秒数
+    如果输入这个选项, 文件的最后修改时间大于该时间戳将被忽略
 
 大文件断点续传：
 
@@ -893,20 +902,30 @@ Other Options:
 
 --enable-symlink-dir option
 
-   Allows transfer of files in the link subdirectory. If there is an infinite loop link file or directory, 
-   it will cause an error. 
-   It is recommended to use the probe command to detect the existence of an infinite loop link file or 
-   directory before use
+    Allows transfer of files in the link subdirectory. If there is an infinite loop link file or directory, 
+    it will cause an error. 
+    It is recommended to use the probe command to detect the existence of an infinite loop link file or 
+    directory before use
 
 --disable-all-symlink option
 
-  specifies that uploading of symlink files and symlink directories under the directory is not allowed
+    specifies that uploading of symlink files and symlink directories under the directory is not allowed
 
 --only-current-dir
     
-   Used with the -r option, it means that only the files in the current directory will be manipulated, 
-   and the subdirectories under the current directory will be ignored.
-   If you are downloading or copying the oss directory, add a backslash(/) after the directory.
+    Used with the -r option, it means that only the files in the current directory will be manipulated, 
+    and the subdirectories under the current directory will be ignored.
+    If you are downloading or copying the oss directory, add a backslash(/) after the directory.
+
+--start-time
+    
+    Timestamp, the number of seconds that elapsed from January 1, 1970 (midnight UTC/GMT).
+    If this option is set, do not transfer files that have last modified time less than this.
+
+--end-time
+
+    Timestamp, the number of seconds that elapsed from January 1, 1970 (midnight UTC/GMT).
+    If this option is set, do not transfer files that have last modified time greater than this.
 
 Resume copy of big file:
 
@@ -1294,6 +1313,9 @@ var copyCommand = CopyCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
+			OptionStartTime,
+			OptionEndTime,
 		},
 	},
 }
@@ -1356,6 +1378,12 @@ func (cc *CopyCommand) RunCommand() error {
 
 	for k, v := range cc.cpOption.filters {
 		LogInfo("filter %d,name:%s,pattern:%s\n", k, v.name, v.pattern)
+	}
+
+	cc.cpOption.startTime, _ = GetInt(OptionStartTime, cc.command.options)
+	cc.cpOption.endTime, _ = GetInt(OptionEndTime, cc.command.options)
+	if cc.cpOption.endTime > 0 && cc.cpOption.startTime > cc.cpOption.endTime {
+		return fmt.Errorf("start time %d is larger than end time %d", cc.cpOption.startTime, cc.cpOption.endTime)
 	}
 
 	//get file list
@@ -1600,7 +1628,7 @@ func (cc *CopyCommand) closeProgress() {
 	signalNum = -1
 }
 
-//function for upload files
+// function for upload files
 func (cc *CopyCommand) uploadFiles(srcURLList []StorageURLer, destURL CloudURL) error {
 	if err := destURL.checkObjectPrefix(); err != nil {
 		return err
@@ -2112,6 +2140,14 @@ func (cc *CopyCommand) makeObjectName(destURL CloudURL, file fileInfoType) strin
 }
 
 func (cc *CopyCommand) skipUpload(spath string, bucket *oss.Bucket, objectName string, destURL CloudURL, srcModifiedTime int64) (bool, error) {
+	if cc.cpOption.startTime > 0 && srcModifiedTime < cc.cpOption.startTime {
+		return true, nil
+	}
+
+	if cc.cpOption.endTime > 0 && srcModifiedTime > cc.cpOption.endTime {
+		return true, nil
+	}
+
 	if cc.cpOption.snapshotPath != "" || cc.cpOption.update {
 		if cc.cpOption.snapshotPath != "" {
 			tstr, err := cc.cpOption.snapshotldb.Get([]byte(spath), nil)
@@ -2338,7 +2374,7 @@ func (cc *CopyCommand) filterError(err error) bool {
 	return true
 }
 
-//function for download files
+// function for download files
 func (cc *CopyCommand) downloadFiles(srcURL CloudURL, destURL FileURL) error {
 	bucket, err := cc.command.ossBucket(srcURL.bucket)
 	if err != nil {
@@ -2521,6 +2557,14 @@ func (cc *CopyCommand) makeFileName(relativeObject, filePath string) string {
 }
 
 func (cc *CopyCommand) skipDownload(fileName string, srcModifiedTime time.Time, object string) bool {
+	if cc.cpOption.startTime > 0 && srcModifiedTime.Unix() < cc.cpOption.startTime {
+		return true
+	}
+
+	if cc.cpOption.endTime > 0 && srcModifiedTime.Unix() > cc.cpOption.endTime {
+		return true
+	}
+
 	if cc.cpOption.snapshotPath != "" || cc.cpOption.update {
 		if cc.cpOption.snapshotPath != "" {
 			tstr, err := cc.cpOption.snapshotldb.Get([]byte(object), nil)
@@ -2861,7 +2905,7 @@ func (cc *CopyCommand) waitRoutinueComplete(chError, chListError <-chan error, o
 	return cc.formatResultPrompt(ferr)
 }
 
-//function for copy objects
+// function for copy objects
 func (cc *CopyCommand) copyFiles(srcURL, destURL CloudURL) error {
 	bucket, err := cc.command.ossBucket(srcURL.bucket)
 	if err != nil {
@@ -2985,6 +3029,14 @@ func (cc *CopyCommand) makeCopyObjectName(srcRelativeObject, destObject string) 
 }
 
 func (cc *CopyCommand) skipCopy(destURL CloudURL, destObject string, srct time.Time) (bool, error) {
+	if cc.cpOption.startTime > 0 && srct.Unix() < cc.cpOption.startTime {
+		return true, nil
+	}
+
+	if cc.cpOption.endTime > 0 && srct.Unix() > cc.cpOption.endTime {
+		return true, nil
+	}
+
 	destBucket, err := cc.command.ossBucket(destURL.bucket)
 	if err != nil {
 		return false, err

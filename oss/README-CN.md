@@ -7,7 +7,7 @@
 ### [README of English](https://github.com/aliyun/ossutil/blob/master/README.md)
 
 ## 关于
-- 此工具采用go语言，基于OSS[阿里云对象存储服务](http://www.aliyun.com/product/oss/)官方GO SDK v2.2.7 构建。
+- 此工具采用go语言，基于OSS[阿里云对象存储服务](http://www.aliyun.com/product/oss/)官方GO SDK 构建。
 - 阿里云对象存储（Object Storage Service，简称OSS），是阿里云对外提供的海量，安全，低成本，高可靠的云存储服务。
 - OSS适合存放任意文件类型，适合各种网站、开发企业及开发者使用。
 - 该工具旨在为用户提供一个方便的，以命令行方式管理OSS数据的途径。
@@ -15,7 +15,7 @@
 - 当前版本未提供Bucket管理功能功能，相关功能会在后续版本中开发。
 
 ## 版本
-- 当前版本：v1.7.16
+- 当前版本：v1.7.19
 
 ## 运行环境
 - Linux

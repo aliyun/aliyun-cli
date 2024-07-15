@@ -129,6 +129,7 @@ var readSymlinkCommand = ReadSymlinkCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

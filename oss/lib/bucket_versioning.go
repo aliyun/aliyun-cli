@@ -120,6 +120,7 @@ var bucketVersioningCommand = BucketVersioningCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

@@ -2,10 +2,11 @@ package lib
 
 import (
 	"fmt"
-	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"io/ioutil"
 	"os"
 	"strings"
+
+	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
 var specChineseBucketResourceGroup = SpecText{
@@ -133,6 +134,7 @@ var bucketResourceGroupCommand = BucketResourceGroupCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

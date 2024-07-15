@@ -236,6 +236,7 @@ var restoreCommand = RestoreCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

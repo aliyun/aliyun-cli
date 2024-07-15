@@ -15,7 +15,7 @@ var specChineseBucketLog = SpecText{
 	syntaxText: ` 
 	ossutil logging --method put oss://bucket oss://target-bucket/[prefix]
     ossutil logging --method get oss://bucket [local_xml_file]
-    ossuitl logging --method delete oss://bucket
+    ossutil logging --method delete oss://bucket
 `,
 	detailHelpText: ` 
     logging命令通过设置method选项值为put、get、delete,可以设置、查询或者删除bucket的log配置
@@ -57,7 +57,7 @@ var specEnglishBucketLog = SpecText{
 	syntaxText: ` 
 	ossutil logging --method put oss://bucket oss://target-bucket/[prefix]
     ossutil logging --method get oss://bucket [local_xml_file]
-    ossuitl logging --method delete oss://bucket
+    ossutil logging --method delete oss://bucket
 `,
 	detailHelpText: ` 
     logging command can set、get and delete the log configuration of the oss bucket by
@@ -138,6 +138,7 @@ var bucketLogCommand = BucketLogCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

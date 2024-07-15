@@ -18,8 +18,8 @@ var specChineseBucketInventory = SpecText{
 	syntaxText: ` 
 	ossutil inventory --method put oss://bucket local_xml_file [options]
     ossutil inventory --method get oss://bucket id [local_file] [options]
-    ossuitl inventory --method delete oss://bucket id [options]
-    ossuitl inventory --method list oss://bucket [local_file] [--marker marker] [options]
+    ossutil inventory --method delete oss://bucket id [options]
+    ossutil inventory --method list oss://bucket [local_file] [--marker marker] [options]
 `,
 	detailHelpText: ` 
     inventory命令通过设置method选项值为put、get、delete、list,可以添加、查询、删除、列举bucket的清单配置
@@ -100,8 +100,8 @@ var specEnglishBucketInventory = SpecText{
 	syntaxText: ` 
 	ossutil inventory --method put oss://bucket local_xml_file [options]
     ossutil inventory --method get oss://bucket id [local_file] [options]
-    ossuitl inventory --method delete oss://bucket id [options]
-    ossuitl inventory --method list oss://bucket [local_file] [--marker marker] [options]
+    ossutil inventory --method delete oss://bucket id [options]
+    ossutil inventory --method list oss://bucket [local_file] [--marker marker] [options]
 `,
 	detailHelpText: ` 
     inventory command can add, get, delete or list the inventory configuration of the oss bucket by
@@ -221,6 +221,7 @@ var bucketInventoryCommand = BucketInventoryCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

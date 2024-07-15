@@ -15,7 +15,7 @@ var specChineseBucketReferer = SpecText{
 	syntaxText: ` 
 	ossutil referer --method put oss://bucket referer [options]
     ossutil referer --method get oss://bucket [local_file]
-    ossuitl referer --method delete oss://bucket
+    ossutil referer --method delete oss://bucket
 `,
 	detailHelpText: ` 
     referer命令通过设置method选项值为put、get、delete,可以设置、查询或者删除bucket的referer配置
@@ -60,7 +60,7 @@ var specEnglishBucketReferer = SpecText{
 	syntaxText: ` 
 	ossutil referer --method put oss://bucket referer [options]
     ossutil referer --method get oss://bucket [local_file]
-    ossuitl referer --method delete oss://bucket
+    ossutil referer --method delete oss://bucket
 `,
 	detailHelpText: ` 
     referer command can set、get and delete the referer configuration of the oss bucket by
@@ -144,6 +144,7 @@ var bucketRefererCommand = BucketRefererCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

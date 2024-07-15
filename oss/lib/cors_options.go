@@ -104,6 +104,7 @@ var corsOptionsCommand = OptionsCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

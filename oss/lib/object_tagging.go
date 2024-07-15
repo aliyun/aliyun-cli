@@ -16,7 +16,7 @@ var specChineseObjectTag = SpecText{
 	syntaxText: ` 
     ossutil object-tagging --method put oss://bucket[/prefix] key#value [--encoding-type url] [-r] [--payer requester] [--version-id versionId] [-c file] 
     ossutil object-tagging --method get oss://bucket[/prefix] [--encoding-type url] [-r]  [--payer requester] [--version-id versionId] [-c file] 
-    ossuitl object-tagging --method delete oss://bucket[/prefix] [--encoding-type url] [-r] [--payer requester] [--version-id versionId] [-c file] 
+    ossutil object-tagging --method delete oss://bucket[/prefix] [--encoding-type url] [-r] [--payer requester] [--version-id versionId] [-c file] 
 `,
 	detailHelpText: ` 
     object-tagging命令通过设置method选项值为put、get、delete,可以设置、查询或者删除object的tag配置
@@ -66,7 +66,7 @@ var specEnglishObjectTag = SpecText{
 	syntaxText: ` 
     ossutil object-tagging --method put oss://bucket[/prefix] key#value [--encoding-type url] [-r] [--payer requester] [--version-id versionId] [-c file] 
     ossutil object-tagging --method get oss://bucket[/prefix] [--encoding-type url] [-r]  [--payer requester] [--version-id versionId] [-c file] 
-    ossuitl object-tagging --method delete oss://bucket[/prefix] [--encoding-type url] [-r] [--payer requester] [--version-id versionId] [-c file] 
+    ossutil object-tagging --method delete oss://bucket[/prefix] [--encoding-type url] [-r] [--payer requester] [--version-id versionId] [-c file] 
 `,
 	detailHelpText: ` 
     object-tagging command can set, get and delete the tag configuration of the oss object by set method option value to put, get, delete
@@ -158,6 +158,7 @@ var objectTagCommand = ObjectTagCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }
