@@ -4,6 +4,10 @@ BUCKET="sdk-oss-test"
 
 which aliyun
 
+# sign v4
+aliyun oss ls --region cn-hangzhou --sign-version v4
+aliyun oss ls --region cn-beijing --sign-version v4
+
 # cleanup
 aliyun oss rm oss://$BUCKET/test.txt --region cn-hangzhou
 
