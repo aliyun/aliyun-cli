@@ -30,7 +30,6 @@ func (tc *testContext) detectFlag(name string) (*Flag, error) {
 		return f, nil
 	}
 	return nil, fmt.Errorf("unknown flag --%s", name)
-
 }
 
 func (tc *testContext) detectFlagByShorthand(ch rune) (*Flag, error) {
@@ -39,7 +38,6 @@ func (tc *testContext) detectFlagByShorthand(ch rune) (*Flag, error) {
 		return f, nil
 	}
 	return nil, fmt.Errorf("unknown flag -%c", ch)
-
 }
 
 func newTestContext() *testContext {
@@ -119,9 +117,4 @@ func TestParser3(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "s1", s)
 	assert.NotNil(t, fs.Get("prev"))
-}
-
-func TestUnquoteString(t *testing.T) {
-	str := UnquoteString(`"nicai"`)
-	assert.Equal(t, "nicai", str)
 }

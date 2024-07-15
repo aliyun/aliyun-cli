@@ -85,7 +85,7 @@ func (a *TableOutputFilter) FilterOutput(s string) (string, error) {
 
 	var colNames []string
 	if v, ok := OutputFlag(a.ctx.Flags()).GetFieldValue("cols"); ok {
-		v = cli.UnquoteString(v)
+		v = UnquoteString(v)
 		colNames = strings.Split(v, ",")
 	} else {
 		return s, fmt.Errorf("you need to assign col=col1,col2,... with --output")
@@ -157,4 +157,11 @@ func toIntfArray(stringArray []string) []interface{} {
 		intfArray = append(intfArray, elem)
 	}
 	return intfArray
+}
+
+func UnquoteString(s string) string {
+	if strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"") && len(s) >= 2 {
+		return s[1 : len(s)-1]
+	}
+	return s
 }

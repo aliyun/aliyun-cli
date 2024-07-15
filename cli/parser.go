@@ -166,10 +166,3 @@ func SplitStringWithPrefix(s string, splitters string) (string, string, bool) {
 	return s[:i], s[i+1:], true
 
 }
-
-func UnquoteString(s string) string {
-	if strings.HasPrefix(s, "\"") && strings.HasSuffix(s, "\"") && len(s) >= 2 {
-		return s[1 : len(s)-1]
-	}
-	return s
-}
