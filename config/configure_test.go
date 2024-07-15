@@ -192,6 +192,72 @@ func TestConfigureEcsRamRole(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestConfigureRamRoleArnWithEcs(t *testing.T) {
+	w := new(bytes.Buffer)
+	err := configureRamRoleArnWithEcs(w, &Profile{
+		Name:            "default",
+		Mode:            RamRoleArnWithEcs,
+		RamRoleName:     "RamRoleName",
+		RamRoleArn:      "rra",
+		StsRegion:       "cn-hangzhou",
+		RoleSessionName: "rsn",
+		RegionId:        "cn-hangzhou",
+		ExpiredSeconds:  3600,
+		OutputFormat:    "json",
+	})
+	assert.Equal(t, "Ecs Ram Role [RamRoleName]: Sts Region [cn-hangzhou]: Ram Role Arn [rra]: Role Session Name [rsn]: Expired Seconds [3600]: ", w.String())
+	assert.Nil(t, err)
+}
+
+func TestConfigureRamRoleArnWithEcsWhenZeroExpiredSeconds(t *testing.T) {
+	w := new(bytes.Buffer)
+	err := configureRamRoleArnWithEcs(w, &Profile{
+		Name:            "default",
+		Mode:            RamRoleArnWithEcs,
+		RamRoleName:     "RamRoleName",
+		RamRoleArn:      "rra",
+		StsRegion:       "cn-hangzhou",
+		RoleSessionName: "rsn",
+		RegionId:        "cn-hangzhou",
+		OutputFormat:    "json",
+	})
+	assert.Equal(t, "Ecs Ram Role [RamRoleName]: Sts Region [cn-hangzhou]: Ram Role Arn [rra]: Role Session Name [rsn]: Expired Seconds [900]: ", w.String())
+	assert.Nil(t, err)
+}
+
+func TestConfigureChainableRamRoleArn(t *testing.T) {
+	w := new(bytes.Buffer)
+	err := configureChainableRamRoleArn(w, &Profile{
+		Name:            "default",
+		Mode:            ChainableRamRoleArn,
+		SourceProfile:   "source",
+		RamRoleArn:      "rra",
+		StsRegion:       "cn-hangzhou",
+		RoleSessionName: "rsn",
+		RegionId:        "cn-hangzhou",
+		ExpiredSeconds:  3600,
+		OutputFormat:    "json",
+	})
+	assert.Equal(t, "Source Profile [source]: Sts Region [cn-hangzhou]: Ram Role Arn [rra]: Role Session Name [rsn]: Expired Seconds [3600]: ", w.String())
+	assert.Nil(t, err)
+}
+
+func TestConfigureChainableRamRoleArnWhenZeroExpiredSeconds(t *testing.T) {
+	w := new(bytes.Buffer)
+	err := configureChainableRamRoleArn(w, &Profile{
+		Name:            "default",
+		Mode:            ChainableRamRoleArn,
+		SourceProfile:   "source",
+		RamRoleArn:      "rra",
+		StsRegion:       "cn-hangzhou",
+		RoleSessionName: "rsn",
+		RegionId:        "cn-hangzhou",
+		OutputFormat:    "json",
+	})
+	assert.Equal(t, "Source Profile [source]: Sts Region [cn-hangzhou]: Ram Role Arn [rra]: Role Session Name [rsn]: Expired Seconds [900]: ", w.String())
+	assert.Nil(t, err)
+}
+
 func TestConfigureRsaKeyPair(t *testing.T) {
 	w := new(bytes.Buffer)
 	err := configureRsaKeyPair(w, &Profile{Name: "default", Mode: AK, RamRoleName: "RamRoleName", RegionId: "cn-hangzhou", OutputFormat: "json"})
@@ -207,6 +273,35 @@ func TestConfigureExternal(t *testing.T) {
 	w := new(bytes.Buffer)
 	err := configureExternal(w, &Profile{Name: "default", Mode: External, ProcessCommand: "process command", RegionId: "cn-hangzhou", OutputFormat: "json"})
 	assert.Equal(t, "Process Command [process command]: ", w.String())
+	assert.Nil(t, err)
+}
+
+func TestConfigureCredentialsURI(t *testing.T) {
+	w := new(bytes.Buffer)
+	err := configureCredentialsURI(w, &Profile{
+		Name:           "default",
+		Mode:           CredentialsURI,
+		CredentialsURI: "http://credentials.uri/",
+		RegionId:       "cn-hangzhou",
+		OutputFormat:   "json",
+	})
+	assert.Equal(t, "Credentials URI [http://credentials.uri/]: ", w.String())
+	assert.Nil(t, err)
+}
+
+func TestConfigureOIDC(t *testing.T) {
+	w := new(bytes.Buffer)
+	err := configureOIDC(w, &Profile{
+		Name:            "default",
+		Mode:            OIDC,
+		OIDCProviderARN: "oidcproviderarn",
+		OIDCTokenFile:   "/path/to/oidc/token/file",
+		RamRoleArn:      "rra",
+		RoleSessionName: "rsn",
+		RegionId:        "cn-hangzhou",
+		OutputFormat:    "json",
+	})
+	assert.Equal(t, "OIDC Provider ARN [oidcproviderarn]: OIDC Token File [/path/to/oidc/token/file]: RAM Role ARN [rra]: Role Session Name [rsn]: ", w.String())
 	assert.Nil(t, err)
 }
 
