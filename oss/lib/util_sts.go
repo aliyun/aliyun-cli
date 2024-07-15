@@ -150,7 +150,7 @@ func (c *Client) generateSignedURL(expiredTime uint) (string, error) {
 
 func (c *Client) sendRequest(url string) ([]byte, int, error) {
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{},
 	}
 	client := &http.Client{Transport: tr}
 
