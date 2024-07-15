@@ -175,11 +175,35 @@ func TestValidateWithStsToken(t *testing.T) {
 	err = actual.Validate()
 	assert.Nil(t, err)
 }
+
+func TestValidateWithOIDC(t *testing.T) {
+	actual := newProfile()
+	var err error
+	actual.Mode = OIDC
+	actual.RegionId = "cn-hangzhou"
+
+	err = actual.Validate()
+	assert.EqualError(t, err, "invalid oidc_provider_arn")
+	actual.OIDCProviderARN = "oidc_provider_arn"
+	err = actual.Validate()
+	assert.EqualError(t, err, "invalid oidc_token_file")
+	actual.OIDCTokenFile = "/path/to/oidc/token/file"
+	err = actual.Validate()
+	assert.EqualError(t, err, "invalid ram_role_arn")
+	actual.RamRoleArn = "ramrolearn"
+	err = actual.Validate()
+	assert.EqualError(t, err, "invalid role_session_name")
+	actual.RoleSessionName = "rsn"
+	err = actual.Validate()
+	assert.Nil(t, err)
+}
+
 func TestGetParent(t *testing.T) {
 	profile := newProfile()
 	p := profile.GetParent()
 	assert.Nil(t, p)
 }
+
 func TestOverwriteWithFlags(t *testing.T) {
 	buf := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
