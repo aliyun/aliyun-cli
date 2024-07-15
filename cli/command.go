@@ -261,11 +261,18 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 		}
 	}
 
+	var remainArgs []string
 	// cmd is find by args, try run cmd.Run
 	// parse remain args
-	remainArgs, err := parser.ReadAll()
-	if err != nil {
-		return fmt.Errorf("parse failed %s", err)
+	if nextArg != "" {
+		// aliyun sts GetCallerIdentity
+		remainArgs, err = parser.ReadAll()
+		if err != nil {
+			return fmt.Errorf("parse failed %s", err)
+		}
+	} else {
+		// aliyun oss ls --region cn-hangzhou
+		remainArgs = args
 	}
 
 	//
