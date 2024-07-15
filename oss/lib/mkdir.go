@@ -94,6 +94,7 @@ var mkdirCommand = MkdirCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

@@ -18,7 +18,7 @@ var specChineseCors = SpecText{
 	syntaxText: ` 
     ossutil cors --method put oss://bucket  local_xml_file
     ossutil cors --method get oss://bucket  [local_xml_file]
-    ossuitl cors --method delete oss://bucket
+    ossutil cors --method delete oss://bucket
 `,
 	detailHelpText: ` 
     cors命令通过设置method选项值为put、get、delete,可以设置、查询或者删除bucket的cors配置
@@ -69,7 +69,7 @@ var specEnglishCors = SpecText{
 	syntaxText: ` 
     ossutil cors --method put oss://bucket  local_xml_file
     ossutil cors --method get oss://bucket  [local_xml_file]
-    ossuitl cors --method delete oss://bucket
+    ossutil cors --method delete oss://bucket
 `,
 	detailHelpText: ` 
     cors command can set、get and delete the cors configuration of the oss bucket by
@@ -159,6 +159,7 @@ var corsCommand = CorsCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

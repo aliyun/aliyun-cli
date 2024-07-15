@@ -3,6 +3,7 @@ package lib
 import (
 	"bytes"
 	"container/list"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -111,8 +112,8 @@ var specChineseProbe = SpecText{
         如果输入--addr，工具会探测domain_name, 默认探测 www.aliyun.com
     
     4) ossutil probe --probe-item item_value --bucketname bucket-name [--object=object_name]
-       该功能通过选项--probe-item不同的取值,可以实现不同的探测功能,目前取值有cycle-symlink, upload-speed, download-speed
-    分别表示本地死链检测, 探测上传带宽, 探测下载带宽
+       该功能通过选项--probe-item不同的取值,可以实现不同的探测功能,目前取值有cycle-symlink, upload-speed, download-speed, download-time
+    分别表示本地死链检测, 探测上传带宽, 探测下载带宽, 探测下载时间
 `,
 
 	sampleText: ` 
@@ -250,8 +251,8 @@ Usage:
     
     4) ossutil probe --probe-item item_value --bucketname bucket-name [--object=object_name]
         You can implement different detection functions by using the value of the option --probe-item.
-    The current values ​​are cycle-symlink, upload-speed, download-speed which represents local dead link detection, 
-    probe upload bandwidth, and probe download bandwidth
+    The current values are cycle-symlink, upload-speed, download-speedh and download-time which represents local dead link detection,
+    probe upload bandwidth, probe download bandwidth and probe download time
 `,
 
 	sampleText: ` 
@@ -365,6 +366,10 @@ var probeCommand = ProbeCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
+			OptionParallel,
+			OptionPartSize,
+			OptionRuntime,
 		},
 	},
 }
@@ -497,6 +502,8 @@ func (pc *ProbeCommand) RunCommand() error {
 			}
 		} else if pc.pbOption.probeItem == "upload-speed" || pc.pbOption.probeItem == "download-speed" {
 			err = pc.DetectBandWidth()
+		} else if pc.pbOption.probeItem == "download-time" {
+			err = pc.DetectDownloadTime()
 		} else {
 			err = fmt.Errorf("not support %s", pc.pbOption.probeItem)
 		}
@@ -525,26 +532,35 @@ func (pc *ProbeCommand) RunCommand() error {
 	return err
 }
 
-func (pc *ProbeCommand) PutObject(bucket *oss.Bucket, st *StatBandWidth, reader io.Reader) {
-	var options []oss.Option
-	options = append(options, oss.Progress(st))
-	uniqKey := strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + randStr(10)
-	objectName := objectPrefex + uniqKey
-	err := bucket.PutObject(objectName, reader, options...)
-	if err != nil && !strings.Contains(err.Error(), "ossutil probe closed") {
-		fmt.Printf("%s\n", err.Error())
+func (pc *ProbeCommand) PutObjectWithContext(bucket *oss.Bucket, st *StatBandWidth, reader io.Reader, ctx context.Context) {
+	for {
+		var options []oss.Option
+		options = append(options, oss.Progress(st), oss.WithContext(ctx))
+		uniqKey := strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + randStr(10)
+		objectName := objectPrefex + uniqKey
+		err := bucket.PutObject(objectName, reader, options...)
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+		}
 	}
 }
 
-func (pc *ProbeCommand) GetObject(bucket *oss.Bucket, objectName string, st *StatBandWidth) {
+func (pc *ProbeCommand) GetObjectWithContext(bucket *oss.Bucket, objectName string, st *StatBandWidth, ctx context.Context) {
 	var options []oss.Option
-	options = append(options, oss.Progress(st))
+	options = append(options, oss.Progress(st), oss.WithContext(ctx))
 	options = append(options, oss.AcceptEncoding("identity"))
 	for {
 		result, err := bucket.DoGetObject(&oss.GetObjectRequest{ObjectKey: objectName}, options)
 		if err != nil {
-			fmt.Printf("GetObject error,%s", err.Error())
-			return
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 		}
 		io.Copy(ioutil.Discard, result.Response.Body)
 		result.Response.Close()
@@ -584,13 +600,15 @@ func (pc *ProbeCommand) DetectBandWidth() error {
 	if pc.pbOption.probeItem == "upload-speed" {
 		appendReader.RandText = []byte(strings.Repeat("1", 32*1024))
 	}
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
 
 	for i := 0; i < numCpu; i++ {
 		time.Sleep(time.Duration(50) * time.Millisecond)
 		if pc.pbOption.probeItem == "upload-speed" {
-			go pc.PutObject(bucket, &statBandwidth, &appendReader)
+			go pc.PutObjectWithContext(bucket, &statBandwidth, &appendReader, ctx)
 		} else if pc.pbOption.probeItem == "download-speed" {
-			go pc.GetObject(bucket, pc.pbOption.objectName, &statBandwidth)
+			go pc.GetObjectWithContext(bucket, pc.pbOption.objectName, &statBandwidth, ctx)
 		}
 	}
 
@@ -640,9 +658,9 @@ func (pc *ProbeCommand) DetectBandWidth() error {
 			for i := 0; i < addParallel; i++ {
 				time.Sleep(time.Duration(50) * time.Millisecond)
 				if pc.pbOption.probeItem == "upload-speed" {
-					go pc.PutObject(bucket, &statBandwidth, &appendReader)
+					go pc.PutObjectWithContext(bucket, &statBandwidth, &appendReader, ctx)
 				} else if pc.pbOption.probeItem == "download-speed" {
-					go pc.GetObject(bucket, pc.pbOption.objectName, &statBandwidth)
+					go pc.GetObjectWithContext(bucket, pc.pbOption.objectName, &statBandwidth, ctx)
 				}
 			}
 			fmt.Printf("\n")
@@ -654,6 +672,7 @@ func (pc *ProbeCommand) DetectBandWidth() error {
 		}
 	}
 
+	cancel()
 	appendReader.Close()
 
 	maxIndex := 0
@@ -666,6 +685,46 @@ func (pc *ProbeCommand) DetectBandWidth() error {
 	}
 
 	fmt.Printf("\nsuggest parallel is %d, max average speed is %.2f(KB/s)\n", averageList[maxIndex].Parallel, averageList[maxIndex].AveSpeed)
+
+	maxRuntime, _ := GetInt(OptionRuntime, pc.command.options)
+
+	if maxRuntime > 0 {
+		time.Sleep(time.Duration(5) * time.Second)
+		ctx = context.Background()
+		ctx, cancel = context.WithCancel(ctx)
+		addParallel = averageList[maxIndex].Parallel
+		statBandwidth.Reset(addParallel)
+		fmt.Printf("\nrun %s  %d seconds with parallel %d\n", pc.pbOption.probeItem, maxRuntime, addParallel)
+		for i := 0; i < addParallel; i++ {
+			if pc.pbOption.probeItem == "upload-speed" {
+				go pc.PutObjectWithContext(bucket, &statBandwidth, &appendReader, ctx)
+			} else if pc.pbOption.probeItem == "download-speed" {
+				go pc.GetObjectWithContext(bucket, pc.pbOption.objectName, &statBandwidth, ctx)
+			}
+		}
+
+		startT := time.Now().UnixNano() / 1000 / 1000 / 1000
+		for {
+			time.Sleep(time.Duration(1) * time.Second)
+			nowStat = statBandwidth.GetStat()
+			nowTick = time.Now().UnixNano() / 1000 / 1000
+
+			nowSpeed := float64(nowStat.TotalBytes-oldStat.TotalBytes) / 1024
+			averSpeed := float64(nowStat.TotalBytes/1024) / float64((nowTick-nowStat.StartTick)/1000)
+			maxSpeed := nowStat.MaxSpeed
+			if nowSpeed > maxSpeed {
+				maxSpeed = nowSpeed
+				statBandwidth.SetMaxSpeed(maxSpeed)
+			}
+			fmt.Printf("\rparallel:%d,average speed:%.2f(KB/s),current speed:%.2f(KB/s),max speed:%.2f(KB/s)", addParallel, averSpeed, nowSpeed, maxSpeed)
+			oldStat = nowStat
+			currT := time.Now().UnixNano() / 1000 / 1000 / 1000
+			if startT+maxRuntime < currT {
+				cancel()
+				break
+			}
+		}
+	}
 
 	return nil
 }
@@ -1314,5 +1373,181 @@ func (pc *ProbeCommand) probeUploadFileNormal(absFileName string, objectName str
 	if err != nil {
 		return fmt.Errorf("PutObjectFromFile error:%s", err.Error())
 	}
+	return nil
+}
+
+type downloadPart struct {
+	Index int   // Part number, starting from 0
+	Start int64 // Start index
+	End   int64 // End index
+}
+
+type downloadWorkerArg struct {
+	bucket *oss.Bucket
+	key    string
+}
+
+func getPartEnd(begin int64, total int64, per int64) int64 {
+	if begin+per > total {
+		return total - 1
+	}
+	return begin + per - 1
+}
+
+func downloadWorker(id int, arg downloadWorkerArg, jobs <-chan downloadPart, results chan<- downloadPart, failed chan<- error, die <-chan bool, st *StatBandWidth) {
+	for part := range jobs {
+		var options []oss.Option
+		r := oss.Range(part.Start, part.End)
+		options = append(options, r, oss.Progress(st))
+		options = append(options, oss.AcceptEncoding("identity"))
+		result, err := arg.bucket.DoGetObject(&oss.GetObjectRequest{ObjectKey: arg.key}, options)
+		if err != nil {
+			fmt.Printf("GetObject error,%s", err.Error())
+			return
+		}
+		_, err = io.Copy(ioutil.Discard, result.Response.Body)
+		result.Response.Close()
+
+		select {
+		case <-die:
+			return
+		default:
+		}
+
+		if err != nil {
+			failed <- err
+			break
+		}
+		results <- part
+	}
+}
+
+func downloadScheduler(jobs chan downloadPart, parts []downloadPart) {
+	for _, part := range parts {
+		jobs <- part
+	}
+	close(jobs)
+}
+
+func (pc *ProbeCommand) DetectDownloadTime() error {
+	if pc.pbOption.bucketName == "" {
+		return fmt.Errorf("--bucketname is empty")
+	}
+
+	bucket, err := pc.command.ossBucket(pc.pbOption.bucketName)
+	if err != nil {
+		return err
+	}
+
+	//if pc.pbOption.probeItem == "download-time" {
+	if pc.pbOption.objectName == "" {
+		return fmt.Errorf("--object is empty when probe-item is download-time")
+	}
+
+	bExist, err := bucket.IsObjectExist(pc.pbOption.objectName)
+	if err != nil {
+		return err
+	}
+
+	if !bExist {
+		return fmt.Errorf("oss object is not exist,%s", pc.pbOption.objectName)
+	}
+
+	meta, err := bucket.GetObjectDetailedMeta(pc.pbOption.objectName)
+	if err != nil {
+		return err
+	}
+
+	objectSize, err := strconv.ParseInt(meta.Get(oss.HTTPHeaderContentLength), 10, 64)
+	if err != nil {
+		return err
+	}
+	var offset int64
+	//var partSize int64
+	parts := []downloadPart{}
+	partSize, _ := GetInt(OptionPartSize, pc.command.options)
+	parallel, _ := GetInt(OptionParallel, pc.command.options)
+	if parallel <= 0 {
+		parallel = 1
+	}
+
+	if partSize > 0 {
+		i := 0
+		for offset = 0; offset < objectSize; offset += partSize {
+			part := downloadPart{}
+			part.Index = i
+			part.Start = offset
+			part.End = getPartEnd(offset, objectSize, partSize)
+			parts = append(parts, part)
+			i++
+		}
+	} else {
+		part := downloadPart{}
+		part.Index = 0
+		part.Start = 0
+		part.End = objectSize - 1
+		parts = append(parts, part)
+	}
+
+	//}
+	jobs := make(chan downloadPart, len(parts))
+	results := make(chan downloadPart, len(parts))
+	failed := make(chan error)
+	die := make(chan bool)
+	routines := int(parallel)
+	var statBandwidth StatBandWidth
+	statBandwidth.Reset(int(parallel))
+
+	//fmt.Printf("\nDetectDownloadTime, partSize :%v, objectSize:%v, parallel:%v\n", partSize, objectSize, parallel)
+
+	arg := downloadWorkerArg{bucket, pc.pbOption.objectName}
+	for w := 1; w <= routines; w++ {
+		go downloadWorker(w, arg, jobs, results, failed, die, &statBandwidth)
+	}
+
+	// Download parts concurrently
+	go downloadScheduler(jobs, parts)
+
+	go func() {
+		oldStat := statBandwidth.GetStat()
+		for {
+			time.Sleep(time.Duration(2) * time.Second)
+			nowStat := statBandwidth.GetStat()
+			nowTick := time.Now().UnixNano() / 1000 / 1000
+
+			nowSpeed := float64(nowStat.TotalBytes-oldStat.TotalBytes) / 1024
+			averSpeed := float64(nowStat.TotalBytes/1024) / float64((nowTick-nowStat.StartTick)/1000)
+			maxSpeed := nowStat.MaxSpeed
+			if nowSpeed > maxSpeed {
+				maxSpeed = nowSpeed
+				statBandwidth.SetMaxSpeed(maxSpeed)
+			}
+			oldStat = nowStat
+			fmt.Printf("\rdownloading average speed:%.2f(KB/s),current speed:%.2f(KB/s),max speed:%.2f(KB/s)", averSpeed, nowSpeed, maxSpeed)
+		}
+	}()
+
+	completed := 0
+	for completed < len(parts) {
+		select {
+		case part := <-results:
+			completed++
+			_ = (part.End - part.Start + 1)
+		case err := <-failed:
+			close(die)
+			return err
+		}
+		if completed >= len(parts) {
+			break
+		}
+	}
+
+	nowTick := time.Now().UnixNano() / 1000 / 1000
+	nowStat := statBandwidth.GetStat()
+	averSpeed := float64(nowStat.TotalBytes/1024) / float64((nowTick-nowStat.StartTick)/1000)
+	//total := float64(objectSize)
+
+	fmt.Printf("\ndownload-speed part-size:%v, parallel:%v total bytes:%v, cost:%.3f s, avg speed:%.2f(kB/s)\n", partSize, parallel, nowStat.TotalBytes, float64(nowTick-nowStat.StartTick)/1000, averSpeed)
+
 	return nil
 }

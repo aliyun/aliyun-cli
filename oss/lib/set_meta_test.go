@@ -1989,7 +1989,7 @@ func (s *OssutilCommandSuite) TestSetObjectMetaSkipUpdate(c *C) {
 	s.removeBucket(bucketName, true, c)
 }
 
-//TestSetObjectMetaProducer test setObjectMetaProducer
+// TestSetObjectMetaProducer test setObjectMetaProducer
 func (s *OssutilCommandSuite) TestSetObjectMetaProducer(c *C) {
 	chObjects := make(chan string, ChannelBuf)
 	chListError := make(chan error, 1)

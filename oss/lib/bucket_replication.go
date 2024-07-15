@@ -235,6 +235,7 @@ var replicationCommand = ReplicationCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

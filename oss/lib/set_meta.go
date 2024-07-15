@@ -366,6 +366,7 @@ var setMetaCommand = SetMetaCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

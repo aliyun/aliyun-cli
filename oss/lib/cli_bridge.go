@@ -59,6 +59,12 @@ func NewOssCommand() *cli.Command {
 		revertCommand.command,
 		syncCommand.command,
 		wormCommand.command,
+		lrbCommand.command,
+		replicationCommand.command,
+		bucketCnameCommand.command,
+		lcbCommand.command,
+		bucketAccessMonitorCommand.command,
+		bucketResourceGroupCommand.command,
 	}
 
 	for _, cmd := range cmds {

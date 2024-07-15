@@ -254,6 +254,7 @@ var bucketCnameCommand = BucketCnameCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

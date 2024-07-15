@@ -17,7 +17,7 @@ var specChineseBucketPolicy = SpecText{
 	syntaxText: ` 
 	ossutil bucket-policy --method put oss://bucket local_json_file [options]
     ossutil bucket-policy --method get oss://bucket [local_file] [options]
-    ossuitl bucket-policy --method delete oss://bucket [options]
+    ossutil bucket-policy --method delete oss://bucket [options]
 `,
 	detailHelpText: ` 
     bucket-policy命令通过设置method选项值为put、get、delete,可以设置、查询或者删除bucket的policy配置
@@ -77,7 +77,7 @@ var specEnglishBucketPolicy = SpecText{
 	syntaxText: ` 
 	ossutil bucket-policy --method put oss://bucket local_json_file [options]
     ossutil bucket-policy --method get oss://bucket [local_json_file] [options]
-    ossuitl bucket-policy --method delete oss://bucket [options]
+    ossutil bucket-policy --method delete oss://bucket [options]
 `,
 	detailHelpText: ` 
     bucket-policy command can set, get and delete the policy configuration of the oss bucket by
@@ -175,6 +175,7 @@ var bucketPolicyCommand = BucketPolicyCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

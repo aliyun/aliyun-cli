@@ -1,5 +1,6 @@
 // This is for Condition Compling, which means it will be built on all non-windows platform.
 
+//go:build !windows
 // +build !windows
 
 package lib

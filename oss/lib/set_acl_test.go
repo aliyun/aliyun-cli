@@ -52,7 +52,7 @@ func (s *OssutilCommandSuite) TestSetBucketErrorACL(c *C) {
 func (s *OssutilCommandSuite) TestSetNotExistBucketACL(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(10)
 
-	// set bucket acl will be invalid when bucket not exist 
+	// set bucket acl will be invalid when bucket not exist
 	showElapse, err := s.rawSetBucketACL(bucketName, "public-read", true)
 	c.Assert(err, NotNil)
 
@@ -1206,7 +1206,7 @@ func (s *OssutilCommandSuite) TestSetObjectAclWithInvalidIncExc(c *C) {
 func (s *OssutilCommandSuite) TestSetObjectAclWithVersion(c *C) {
 	bucketName := bucketNamePrefix + "-set-alc-" + randLowStr(10)
 	objectName := randStr(12)
-	
+
 	s.putBucket(bucketName, c)
 	s.putBucketVersioning(bucketName, "enabled", c)
 

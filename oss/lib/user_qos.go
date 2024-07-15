@@ -98,6 +98,7 @@ var userQosCommand = UserQosCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

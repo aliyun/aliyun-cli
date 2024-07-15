@@ -163,6 +163,7 @@ var appendFileCommand = AppendFileCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

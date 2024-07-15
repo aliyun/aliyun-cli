@@ -18,8 +18,8 @@ var specChineseBucketStyle = SpecText{
 	syntaxText: ` 
     ossutil style --method put oss://bucket style_name local_xml_file [options]
     ossutil style --method get oss://bucket style_name [local_file] [options]
-    ossuitl style --method delete oss://bucket style_name [options]
-    ossuitl style --method list oss://bucket [local_file] [options]
+    ossutil style --method delete oss://bucket style_name [options]
+    ossutil style --method list oss://bucket [local_file] [options]
 `,
 	detailHelpText: ` 
     style命令通过设置method选项值为put、get、delete、list,可以添加、查询、删除、列举bucket的图片样式
@@ -70,8 +70,8 @@ var specEnglishBucketStyle = SpecText{
 	syntaxText: ` 
     ossutil style --method put oss://bucket style_name local_xml_file [options]
     ossutil style --method get oss://bucket style_name [local_file] [options]
-    ossuitl style --method delete oss://bucket style_name [options]
-    ossuitl style --method list oss://bucket [local_file] [options]
+    ossutil style --method delete oss://bucket style_name [options]
+    ossutil style --method list oss://bucket [local_file] [options]
 `,
 	detailHelpText: ` 
     style command can add, get, delete or list the style configuration of the oss bucket by
@@ -160,6 +160,7 @@ var bucketStyleCommand = BucketStyleCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

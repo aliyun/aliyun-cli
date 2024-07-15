@@ -108,6 +108,7 @@ var listPartCommand = ListPartCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

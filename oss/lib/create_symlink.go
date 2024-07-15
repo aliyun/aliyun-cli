@@ -131,6 +131,7 @@ var createSymlinkCommand = CreateSymlinkCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

@@ -108,6 +108,7 @@ var allPartSizeCommand = AllPartSizeCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }

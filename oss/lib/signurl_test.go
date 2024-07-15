@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"strconv"
@@ -1020,6 +1021,62 @@ func (s *OssutilCommandSuite) TestSignUrlWithQueryProcess(c *C) {
 	err = bucket.GetObjectToFileWithURL(signURLCommand.signUrl, downFileName)
 	c.Assert(err, IsNil)
 	str = s.readFile(downFileName, c)
+	c.Assert(str != "", Equals, true)
+	os.Remove(downFileName)
+}
+
+func (s *OssutilCommandSuite) TestSignUrlWithSignV4(c *C) {
+	var err error
+	if region == "" {
+		err = fmt.Errorf("region can not be empty")
+	}
+	c.Assert(err, IsNil)
+	bucketName := bucketNamePrefix + randLowStr(10)
+	s.putBucket(bucketName, c)
+
+	data := randLowStr(1024)
+	uploadFileName := "ossutil-test-file-" + randLowStr(5)
+	s.createFile(uploadFileName, data, c)
+
+	object := randStr(10)
+	s.putObject(bucketName, object, uploadFileName, c)
+
+	command := "sign"
+	timeOut := strconv.FormatInt(600, 10)
+	authV4 := "v4"
+	options := OptionMapType{
+		"endpoint":        &endpoint,
+		"accessKeyID":     &accessKeyID,
+		"accessKeySecret": &accessKeySecret,
+		"timeout":         &timeOut,
+		OptionSignVersion: &authV4,
+	}
+	srcUrl := CloudURLToString(bucketName, object)
+	args := []string{srcUrl}
+	_, err = cm.RunCommand(command, args, options)
+	c.Assert(err, NotNil)
+	c.Assert(strings.Contains(err.Error(), "please enter the region"), Equals, true)
+
+	options[OptionRegion] = &region
+	_, err = cm.RunCommand(command, args, options)
+	c.Assert(err, IsNil)
+	signUrl, err := url.QueryUnescape(signURLCommand.signUrl)
+	c.Assert(err, IsNil)
+	c.Assert(strings.Contains(signUrl, object), Equals, true)
+	c.Assert(strings.Contains(signUrl, "x-oss-credential="), Equals, true)
+	c.Assert(strings.Contains(signUrl, "x-oss-date="), Equals, true)
+	c.Assert(strings.Contains(signUrl, "x-oss-signature="), Equals, true)
+	c.Assert(strings.Contains(signUrl, "x-oss-expires=600"), Equals, true)
+	c.Assert(strings.Contains(signUrl, "x-oss-signature-version=OSS4-HMAC-SHA256"), Equals, true)
+
+	bucket, err := signURLCommand.command.ossBucket(bucketName)
+	c.Assert(err, IsNil)
+
+	// get object with url
+	downFileName := "ossutil-test-file" + randStr(5) + ".txt"
+	err = bucket.GetObjectToFileWithURL(signURLCommand.signUrl, downFileName)
+	c.Assert(err, IsNil)
+	str := s.readFile(downFileName, c)
 	c.Assert(str != "", Equals, true)
 	os.Remove(downFileName)
 }

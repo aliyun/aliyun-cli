@@ -262,6 +262,7 @@ var setACLCommand = SetACLCommand{
 			OptionSignVersion,
 			OptionRegion,
 			OptionCloudBoxID,
+			OptionForcePathStyle,
 		},
 	},
 }
