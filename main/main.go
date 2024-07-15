@@ -30,7 +30,7 @@ import (
 	"github.com/aliyun/aliyun-cli/oss/lib"
 )
 
-func main() {
+func Main(args []string) {
 	if runtime.GOOS == `windows` {
 		cli.DisableColor()
 	}
@@ -75,8 +75,12 @@ func main() {
 	if os.Getenv("GENERATE_METADATA") == "YES" {
 		generateMetadata(rootCmd)
 	} else {
-		rootCmd.Execute(ctx, os.Args[1:])
+		rootCmd.Execute(ctx, args)
 	}
+}
+
+func main() {
+	Main(os.Args[1:])
 }
 
 func dumpFiles(fs embed.FS, filePath string, outputDir string) {
