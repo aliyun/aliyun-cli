@@ -223,7 +223,6 @@ func TestSaveConfiguration(t *testing.T) {
 	n, _ := file.Read(buf)
 	file.Close()
 	assert.Equal(t, string(bytes), string(buf[:n]))
-
 }
 
 func TestLoadConfiguration(t *testing.T) {

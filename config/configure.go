@@ -59,6 +59,7 @@ func NewConfigureCommand() *cli.Command {
 	c.AddSubCommand(NewConfigureSetCommand())
 	c.AddSubCommand(NewConfigureListCommand())
 	c.AddSubCommand(NewConfigureDeleteCommand())
+	c.AddSubCommand(NewConfigureSwitchCommand())
 	return c
 }
 
