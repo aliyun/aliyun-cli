@@ -59,6 +59,9 @@ type Command struct {
 	parent      *Command
 	subCommands []*Command
 	flags       *FlagSet
+
+	// Keep args
+	KeepArgs bool
 }
 
 func (c *Command) AddSubCommand(cmd *Command) {
@@ -227,6 +230,7 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 	// fmt.Printf(">>> Execute Command: %s args=%v\n", c.Name, args)
 	parser := NewParser(args, ctx)
 
+	var current = parser.GetCurrent()
 	// get next arg
 	nextArg, _, err := parser.ReadNextArg()
 	if err != nil {
@@ -257,20 +261,17 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 	}
 
 	var remainArgs []string
-	// cmd is find by args, try run cmd.Run
-	// parse remain args
-	if nextArg != "" {
-		// aliyun sts GetCallerIdentity
+	if !c.KeepArgs {
+		// cmd is find by args, try run cmd.Run
+		// parse remain args
 		remainArgs, err = parser.ReadAll()
 		if err != nil {
 			return fmt.Errorf("parse failed %s", err)
 		}
 	} else {
-		// aliyun oss ls --region cn-hangzhou
-		remainArgs = args
+		remainArgs = args[current:]
 	}
 
-	//
 	// check flags
 	err = ctx.CheckFlags()
 	if err != nil {
@@ -280,10 +281,14 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 	if HelpFlag(ctx.Flags()).IsAssigned() {
 		ctx.help = true
 	}
+
 	callArgs := make([]string, 0)
 	if nextArg != "" {
-		callArgs = append(callArgs, nextArg)
+		if !c.KeepArgs {
+			callArgs = append(callArgs, nextArg)
+		}
 	}
+
 	for _, s := range remainArgs {
 		if s != "help" {
 			callArgs = append(callArgs, s)

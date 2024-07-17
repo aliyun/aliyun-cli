@@ -93,6 +93,14 @@ func TestParser1(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Nil(t, flag)
 	assert.Equal(t, "ccc=aaa", v)
+
+	_, _, err = parser.parseCommandArg("--")
+	assert.NotNil(t, err)
+	assert.Equal(t, "not support '--' in command line", err.Error())
+
+	_, _, err = parser.parseCommandArg("-")
+	assert.NotNil(t, err)
+	assert.Equal(t, "not support flag form -", err.Error())
 }
 
 // 2. can parse args and flags
@@ -118,3 +126,32 @@ func TestParser3(t *testing.T) {
 	assert.Equal(t, "s1", s)
 	assert.NotNil(t, fs.Get("prev"))
 }
+
+func TestParser4(t *testing.T) {
+	parser, _ := newTestParser("oss", "ls")
+	s, f, err := parser.ReadNextArg()
+
+	assert.Nil(t, err)
+	assert.Equal(t, "oss", s)
+	assert.True(t, f)
+	remains := parser.GetRemains()
+	assert.Equal(t, []string{"ls"}, remains)
+
+	s, f, err = parser.ReadNextArg()
+	assert.Nil(t, err)
+	assert.Equal(t, "ls", s)
+	assert.True(t, f)
+	remains = parser.GetRemains()
+	assert.Equal(t, []string{}, remains)
+
+	s, f, err = parser.ReadNextArg()
+	assert.Nil(t, err)
+	assert.Equal(t, "", s)
+	assert.False(t, f)
+	remains = parser.GetRemains()
+	assert.Equal(t, []string{}, remains)
+}
+
+// aliyun oss cp -r oss-url local-path
+// aliyun oss cp -r local-path oss-url
+// aliyun oss -e oss-cn-beijing.aliyuncs.com ls oss://bucket-name

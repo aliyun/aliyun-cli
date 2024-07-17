@@ -58,6 +58,10 @@ func (p *Parser) GetRemains() []string {
 	return p.args[p.current:]
 }
 
+func (p *Parser) GetCurrent() int {
+	return p.current
+}
+
 func (p *Parser) ReadAll() ([]string, error) {
 	r := make([]string, 0)
 	for {

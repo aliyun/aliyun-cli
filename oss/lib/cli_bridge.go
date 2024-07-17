@@ -76,10 +76,11 @@ func NewOssCommand() *cli.Command {
 func NewCommandBridge(cmd Command) *cli.Command {
 
 	result := &cli.Command{
-		Name:  cmd.name,
-		Usage: cmd.specEnglish.syntaxText,
-		Short: i18n.T(cmd.specEnglish.synopsisText, cmd.specChinese.synopsisText),
-		Long:  i18n.T(cmd.specEnglish.detailHelpText, cmd.specChinese.detailHelpText),
+		Name:     cmd.name,
+		Usage:    cmd.specEnglish.syntaxText,
+		Short:    i18n.T(cmd.specEnglish.synopsisText, cmd.specChinese.synopsisText),
+		Long:     i18n.T(cmd.specEnglish.detailHelpText, cmd.specChinese.detailHelpText),
+		KeepArgs: true,
 		Run: func(ctx *cli.Context, args []string) error {
 			return ParseAndRunCommandFromCli(ctx, args)
 		},
@@ -112,6 +113,10 @@ func NewCommandBridge(cmd Command) *cli.Command {
 }
 
 func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
+	// 利用 parser 解析 flags，否则下文读不到
+	parser := cli.NewParser(args, ctx)
+	parser.ReadAll()
+
 	profile, err := config.LoadProfileWithContext(ctx)
 	if err != nil {
 		return fmt.Errorf("config failed: %s", err.Error())
@@ -149,12 +154,6 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	} else {
 		configs["endpoint"] = ep
 	}
-
-	//if i18n.GetLanguage() == "zh" {
-	//	configs[OptionLanguage] = "CH"
-	//} else {
-	//	configs[OptionLanguage] = "EN"
-	//}
 
 	a2 := []string{"aliyun", "oss"}
 	a2 = append(a2, ctx.Command().Name)
