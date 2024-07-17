@@ -57,10 +57,12 @@ func TestNewConfigureCommand(t *testing.T) {
 	configureSet := NewConfigureSetCommand()
 	configureList := NewConfigureListCommand()
 	configureDelete := NewConfigureDeleteCommand()
+	configureSwitch := NewConfigureSwitchCommand()
 	excmd.AddSubCommand(configureGet)
 	excmd.AddSubCommand(configureSet)
 	excmd.AddSubCommand(configureList)
 	excmd.AddSubCommand(configureDelete)
+	excmd.AddSubCommand(configureSwitch)
 
 	// testcase
 	w := new(bytes.Buffer)
@@ -91,6 +93,12 @@ func TestNewConfigureCommand(t *testing.T) {
 	err = configureDelete.Run(ctx, []string{"delete"})
 	assert.Nil(t, err)
 	assert.Equal(t, "\x1b[1;31mmissing --profile <profileName>\n\x1b[0m\x1b[1;33m\nusage:\n  aliyun configure delete --profile <profileName>\n\x1b[0m", stderr.String())
+
+	w.Reset()
+	stderr.Reset()
+	err = configureSwitch.Run(ctx, []string{"switch"})
+	assert.NotNil(t, err)
+	assert.Equal(t, "the --profile <profileName> is required", err.Error())
 
 	//testcase
 	cmd := NewConfigureCommand()
