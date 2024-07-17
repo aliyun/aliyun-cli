@@ -323,24 +323,16 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 				force,
 				nil,
 			}, nil
-			// return invoker, nil
-			// c.InvokeRestful(ctx, &product, method, path)
 		}
 		return &ForceRpcInvoker{
 			basicInvoker,
 			apiOrMethod,
 		}, nil
-		// c.InvokeRpcForce(ctx, &product, apiOrMethod)
-
 	}
 }
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {
 	cmd := ctx.Command()
-	//if err != nil {
-	//	cli.Errorf("ERROR: %s\n", err.Error())
-	//	printUsage(ctx.Command(), nil)
-	// } else {
 	if len(args) == 0 {
 		cmd.PrintHead(ctx)
 		cmd.PrintUsage(ctx)
