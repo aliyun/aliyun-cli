@@ -16,6 +16,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 )
 
 const (
@@ -99,30 +100,14 @@ const (
 	ErrorColor   = BRed
 )
 
-var (
-	withColor        = true
-	productListColor = ""
-	apiListColor     = ""
-)
-
-func EnableColor() {
-	withColor = true
-}
-
-func DisableColor() {
-	withColor = false
-}
-
-func ProductListColor() string {
-	return productListColor
-}
-
-func APIListColor() string {
-	return apiListColor
+func isNoColor() bool {
+	var isTTY = os.FileMode(0)&os.ModeDevice != 0
+	var NO_COLOR = os.Getenv("NO_COLOR")
+	return isTTY || NO_COLOR == "true" || NO_COLOR == "1"
 }
 
 func Colorized(color string, a ...interface{}) string {
-	if withColor && color != "" {
+	if !isNoColor() && color != "" {
 		return color + fmt.Sprint(a...) + ColorOff
 	}
 	return fmt.Sprint(a...)
