@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,14 +26,13 @@ type SuggestibleError interface {
 
 func PrintSuggestions(ctx *Context, lang string, ss []string) {
 	if len(ss) > 0 {
-		Noticef(ctx.Writer(), "\nDid you mean:\n")
+		Noticef(ctx.Stdout(), "\nDid you mean:\n")
 		for _, s := range ss {
-			Noticef(ctx.Writer(), "  %s\n", s)
+			Noticef(ctx.Stdout(), "  %s\n", s)
 		}
 	}
 }
 
-//
 // helper class for Suggester
 type Suggester struct {
 	suggestFor string

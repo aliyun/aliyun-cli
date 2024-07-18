@@ -64,7 +64,7 @@ func NewConfigureCommand() *cli.Command {
 }
 
 func doConfigure(ctx *cli.Context, profileName string, mode string) error {
-	w := ctx.Writer()
+	w := ctx.Stdout()
 
 	conf, err := loadConfiguration()
 	if err != nil {

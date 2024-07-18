@@ -28,7 +28,7 @@ func NewConfigureListCommand() *cli.Command {
 		Usage: "list",
 		Short: i18n.T("list all config profile", "列出所有配置集"),
 		Run: func(c *cli.Context, args []string) error {
-			doConfigureList(c.Writer())
+			doConfigureList(c.Stdout())
 			return nil
 		},
 	}

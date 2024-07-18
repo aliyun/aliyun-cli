@@ -35,7 +35,7 @@ func NewVersionCommand() *Command {
 		Short:  i18n.T("print current version", "打印当前版本号"),
 		Hidden: true,
 		Run: func(ctx *Context, args []string) error {
-			Printf(ctx.Writer(), "%s\n", Version)
+			Printf(ctx.Stdout(), "%s\n", Version)
 			return nil
 		},
 	}

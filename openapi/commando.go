@@ -127,7 +127,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	if DryRunFlag(ctx.Flags()).IsAssigned() {
 		invoker.getRequest().TransToAcsRequest()
 		invoker.getClient().BuildRequestWithSigner(invoker.getRequest(), nil)
-		cli.Printf(ctx.Writer(), "Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
+		cli.Printf(ctx.Stdout(), "Skip invoke in dry-run mode, request is:\n------------------------------------\n%s\n",
 			invoker.getRequest().String())
 		return nil
 	}
@@ -166,7 +166,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 
 	out = sortJSON(out)
 
-	cli.Println(ctx.Writer(), out)
+	cli.Println(ctx.Stdout(), out)
 	return nil
 }
 
@@ -353,7 +353,7 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 }
 
 func (c *Commando) complete(ctx *cli.Context, args []string) []string {
-	w := ctx.Writer()
+	w := ctx.Stdout()
 
 	r := make([]string, 0)
 	//
@@ -392,7 +392,7 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 
 		api.ForeachParameters(func(s string, p meta.Parameter) {
 			if strings.HasPrefix("--"+strings.ToLower(s), strings.ToLower(ctx.Completion().Current)) && !p.Hidden {
-				cli.Printf(ctx.Writer(), "--%s\n", s)
+				cli.Printf(ctx.Stdout(), "--%s\n", s)
 			}
 		})
 	} else if product.ApiStyle == "restful" {

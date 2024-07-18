@@ -228,7 +228,7 @@ func TestExecuteHelp(t *testing.T) {
 	buf2 := new(bytes.Buffer)
 	ctx := NewCommandContext(buf, buf2)
 	cmd.Help = func(ctx *Context, args []string) error {
-		fmt.Fprint(ctx.Writer(), "test execute help")
+		fmt.Fprint(ctx.Stdout(), "test execute help")
 		return nil
 	}
 	cmd.executeHelp(ctx, nil)

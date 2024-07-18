@@ -211,7 +211,7 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 			if !strings.HasPrefix("--"+f.Name, ctx.completion.Current) {
 				continue
 			}
-			Printf(ctx.Writer(), "--%s\n", f.Name)
+			Printf(ctx.Stdout(), "--%s\n", f.Name)
 		}
 	} else {
 		for _, sc := range c.subCommands {
@@ -221,7 +221,7 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 			if !strings.HasPrefix(sc.Name, ctx.completion.Current) {
 				continue
 			}
-			Printf(ctx.Writer(), "%s\n", sc.Name)
+			Printf(ctx.Stdout(), "%s\n", sc.Name)
 		}
 	}
 }
@@ -301,7 +301,7 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 		if c.AutoComplete != nil {
 			ss := c.AutoComplete(ctx, callArgs)
 			for _, s := range ss {
-				Printf(ctx.Writer(), "%s\n", s)
+				Printf(ctx.Stdout(), "%s\n", s)
 			}
 		} else {
 			c.ExecuteComplete(ctx, callArgs)
