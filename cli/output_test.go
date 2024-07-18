@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -44,20 +44,19 @@ func TestDefaultWriter(t *testing.T) {
 
 func TestOutput(t *testing.T) {
 	w := new(bytes.Buffer)
-	output := new(Output)
-	index, err := output.Print(w, "who are you")
+	index, err := Print(w, "who are you")
 	assert.Equal(t, 11, index)
 	assert.Nil(t, err)
 	assert.Equal(t, "who are you", w.String())
 
 	w.Reset()
-	index, err = output.Println(w, "I am MrX")
+	index, err = Println(w, "I am MrX")
 	assert.Equal(t, 9, index)
 	assert.Nil(t, err)
 	assert.Equal(t, "I am MrX\n", w.String())
 
 	w.Reset()
-	index, err = output.Printf(w, "and you%s", "?")
+	index, err = Printf(w, "and you%s", "?")
 	assert.Equal(t, 8, index)
 	assert.Nil(t, err)
 	assert.Equal(t, "and you?", w.String())
