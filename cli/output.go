@@ -24,7 +24,7 @@ var (
 	defaultStderrWriter = os.Stderr
 )
 
-func DefaultWriter() io.Writer {
+func DefaultStdoutWriter() io.Writer {
 	return defaultStdoutWriter
 }
 

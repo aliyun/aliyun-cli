@@ -28,7 +28,7 @@ func NewConfigureSetCommand() *cli.Command {
 			"使用非交互式方式进行配置"),
 		Usage: "set [--profile <profileName>] [--language {en|zh}] ...",
 		Run: func(c *cli.Context, args []string) error {
-			doConfigureSet(c.Writer(), c.Flags())
+			doConfigureSet(c.Stdout(), c.Flags())
 			return nil
 		},
 	}

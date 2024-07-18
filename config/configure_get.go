@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -61,41 +61,41 @@ func doConfigureGet(c *cli.Context, args []string) {
 			cli.Printf(c.Stderr(), "\n")
 			return
 		}
-		cli.Println(c.Writer(), string(data))
-		cli.Printf(c.Writer(), "\n")
+		cli.Println(c.Stdout(), string(data))
+		cli.Printf(c.Stdout(), "\n")
 		return
 	}
 
 	for _, arg := range args {
 		switch arg {
 		case ProfileFlagName:
-			cli.Printf(c.Writer(), "profile=%s\n", profile.Name)
+			cli.Printf(c.Stdout(), "profile=%s\n", profile.Name)
 		case ModeFlagName:
-			cli.Printf(c.Writer(), "mode=%s\n", profile.Mode)
+			cli.Printf(c.Stdout(), "mode=%s\n", profile.Mode)
 		case AccessKeyIdFlagName:
-			cli.Printf(c.Writer(), "access-key-id=%s\n", MosaicString(profile.AccessKeyId, 3))
+			cli.Printf(c.Stdout(), "access-key-id=%s\n", MosaicString(profile.AccessKeyId, 3))
 		case AccessKeySecretFlagName:
-			cli.Printf(c.Writer(), "access-key-secret=%s\n", MosaicString(profile.AccessKeySecret, 3))
+			cli.Printf(c.Stdout(), "access-key-secret=%s\n", MosaicString(profile.AccessKeySecret, 3))
 		case StsTokenFlagName:
-			cli.Printf(c.Writer(), "sts-token=%s\n", profile.StsToken)
+			cli.Printf(c.Stdout(), "sts-token=%s\n", profile.StsToken)
 		case StsRegionFlagName:
-			cli.Printf(c.Writer(), "sts-region=%s\n", profile.StsRegion)
+			cli.Printf(c.Stdout(), "sts-region=%s\n", profile.StsRegion)
 		case RamRoleNameFlagName:
-			cli.Printf(c.Writer(), "ram-role-name=%s\n", profile.RamRoleName)
+			cli.Printf(c.Stdout(), "ram-role-name=%s\n", profile.RamRoleName)
 		case RamRoleArnFlagName:
-			cli.Printf(c.Writer(), "ram-role-arn=%s\n", profile.RamRoleArn)
+			cli.Printf(c.Stdout(), "ram-role-arn=%s\n", profile.RamRoleArn)
 		case RoleSessionNameFlagName:
-			cli.Printf(c.Writer(), "role-session-name=%s\n", profile.RoleSessionName)
+			cli.Printf(c.Stdout(), "role-session-name=%s\n", profile.RoleSessionName)
 		case KeyPairNameFlagName:
-			cli.Printf(c.Writer(), "key-pair-name=%s\n", profile.KeyPairName)
+			cli.Printf(c.Stdout(), "key-pair-name=%s\n", profile.KeyPairName)
 		case PrivateKeyFlagName:
-			cli.Printf(c.Writer(), "private-key=%s\n", profile.PrivateKey)
+			cli.Printf(c.Stdout(), "private-key=%s\n", profile.PrivateKey)
 		case RegionFlagName:
-			cli.Printf(c.Writer(), profile.RegionId)
+			cli.Printf(c.Stdout(), profile.RegionId)
 		case LanguageFlagName:
-			cli.Printf(c.Writer(), "language=%s\n", profile.Language)
+			cli.Printf(c.Stdout(), "language=%s\n", profile.Language)
 		}
 	}
 
-	cli.Printf(c.Writer(), "\n")
+	cli.Printf(c.Stdout(), "\n")
 }

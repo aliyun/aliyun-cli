@@ -22,10 +22,10 @@ import (
 )
 
 func TestDefaultWriter(t *testing.T) {
-	w := DefaultWriter()
-	writer, ok := w.(*os.File)
+	w := DefaultStdoutWriter()
+	stderr, ok := w.(*os.File)
 	assert.True(t, ok)
-	assert.ObjectsAreEqual(os.Stdout, writer)
+	assert.ObjectsAreEqual(os.Stdout, stderr)
 
 	buf := new(bytes.Buffer)
 	n, err := Print(buf, "I am night")

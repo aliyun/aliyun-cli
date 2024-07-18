@@ -30,7 +30,7 @@ import (
 )
 
 func Main(args []string) {
-	writer := cli.DefaultWriter()
+	stdout := cli.DefaultStdoutWriter()
 	stderr := cli.DefaultStderrWriter()
 
 	// load current configuration
@@ -57,10 +57,10 @@ func Main(args []string) {
 	openapi.AddFlags(rootCmd.Flags())
 
 	// new open api commando to process rootCmd
-	commando := openapi.NewCommando(writer, profile)
+	commando := openapi.NewCommando(stdout, profile)
 	commando.InitWithCommand(rootCmd)
 
-	ctx := cli.NewCommandContext(writer, stderr)
+	ctx := cli.NewCommandContext(stdout, stderr)
 	ctx.EnterCommand(rootCmd)
 	ctx.SetCompletion(cli.ParseCompletionForShell())
 

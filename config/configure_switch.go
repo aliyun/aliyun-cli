@@ -27,7 +27,7 @@ func NewConfigureSwitchCommand() *cli.Command {
 		Usage: "switch [--profile <profileName>]",
 		Short: i18n.T("switch default profile", "切换默认配置"),
 		Run: func(c *cli.Context, args []string) error {
-			return doConfigureSwitch(c.Writer(), c.Flags())
+			return doConfigureSwitch(c.Stdout(), c.Flags())
 		},
 	}
 

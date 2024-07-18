@@ -54,7 +54,7 @@ func TestNewCommandContext(t *testing.T) {
 	assert.Equal(t, &Context{
 		flags:        NewFlagSet(),
 		unknownFlags: nil,
-		writer:       w,
+		stdout:       w,
 		stderr:       stderr,
 		help:         false,
 		command:      nil,
@@ -70,7 +70,7 @@ func TestCtx(t *testing.T) {
 	assert.Nil(t, ctx.Command())
 	assert.Nil(t, ctx.Completion())
 	assert.Equal(t, ctx.flags, ctx.Flags())
-	assert.Equal(t, w, ctx.Writer())
+	assert.Equal(t, w, ctx.Stdout())
 	assert.Nil(t, ctx.UnknownFlags())
 	ctx.SetCompletion(&Completion{Current: "M", Args: []string{"GOOD", "BAD"}, line: "MrX", point: 2})
 	assert.Equal(t, &Completion{Current: "M", Args: []string{"GOOD", "BAD"}, line: "MrX", point: 2}, ctx.Completion())

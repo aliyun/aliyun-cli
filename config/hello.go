@@ -73,7 +73,7 @@ func doHello(ctx *cli.Context, profile *Profile) (err error) {
 }
 
 func DoHello(ctx *cli.Context, profile *Profile) {
-	w := ctx.Writer()
+	w := ctx.Stdout()
 	err := doHello(ctx, profile)
 	if err != nil {
 		cli.Println(w, "-----------------------------------------------")
