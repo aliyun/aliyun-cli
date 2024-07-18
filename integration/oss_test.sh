@@ -6,7 +6,7 @@ which aliyun
 
 # sign v4
 aliyun oss cat oss://$BUCKET/123.txt --region cn-hangzhou --sign-version v4
-aliyun oss ls oss://$BUCKET//123.txt --region cn-beijing --sign-version v4
+aliyun oss ls oss://$BUCKET//123.txt --region cn-hangzhou --sign-version v4
 
 # cleanup
 aliyun oss rm oss://$BUCKET/test.txt --region cn-hangzhou
