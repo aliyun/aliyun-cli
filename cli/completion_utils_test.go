@@ -117,7 +117,10 @@ func TestRCFile(t *testing.T) {
 	assert.Empty(t, path)
 	name := getHomeDir() + "/hh"
 	file, err := os.Create(name)
-	defer file.Close()
+	defer func() {
+		err := file.Close()
+		assert.Nil(t, err)
+	}()
 	assert.Nil(t, err)
 	path = rcFile("hh")
 	assert.NotNil(t, path)

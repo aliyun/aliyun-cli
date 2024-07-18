@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"runtime"
 	"strings"
 
 	aliyunopenapimeta "github.com/aliyun/aliyun-cli/aliyun-openapi-meta"
@@ -31,9 +30,6 @@ import (
 )
 
 func Main(args []string) {
-	if runtime.GOOS == `windows` {
-		cli.DisableColor()
-	}
 	writer := cli.DefaultWriter()
 	stderr := cli.DefaultStderrWriter()
 

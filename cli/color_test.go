@@ -15,24 +15,27 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestColor(t *testing.T) {
-	assert.True(t, withColor)
-	DisableColor()
-	assert.False(t, withColor)
-	EnableColor()
-	assert.True(t, withColor)
-	DisableColor()
-	assert.Empty(t, ProductListColor())
-	assert.Empty(t, APIListColor())
+	assert.False(t, isNoColor())
+	os.Setenv("NO_COLOR", "1")
+	assert.True(t, isNoColor())
+	os.Setenv("NO_COLOR", "true")
+	assert.True(t, isNoColor())
+	os.Setenv("NO_COLOR", "")
+	assert.False(t, isNoColor())
+}
 
-	assert.Equal(t, "a", Colorized("", "a"))
-	EnableColor()
-	assert.Equal(t, "reda\033[0m", Colorized("red", "a"))
+func TestColorized(t *testing.T) {
+	assert.Equal(t, "\x1b[0;31mtext\x1b[0m", Colorized(Red, "text"))
+	os.Setenv("NO_COLOR", "1")
+	assert.Equal(t, "text", Colorized(Red, "text"))
+	os.Setenv("NO_COLOR", "")
 }
 
 func TestCotainWriter(t *testing.T) {
