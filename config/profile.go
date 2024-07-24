@@ -32,11 +32,14 @@ import (
 type AuthenticateMode string
 
 const (
-	AK                  = AuthenticateMode("AK")
-	StsToken            = AuthenticateMode("StsToken")
-	RamRoleArn          = AuthenticateMode("RamRoleArn")
-	EcsRamRole          = AuthenticateMode("EcsRamRole")
-	RsaKeyPair          = AuthenticateMode("RsaKeyPair")
+	AK = AuthenticateMode("AK")
+	// Deprecated: StsToken is deprecated
+	StsToken   = AuthenticateMode("StsToken")
+	RamRoleArn = AuthenticateMode("RamRoleArn")
+	EcsRamRole = AuthenticateMode("EcsRamRole")
+	// Deprecated: RsaKeyPair is deprecated
+	RsaKeyPair = AuthenticateMode("RsaKeyPair")
+	// Deprecated: RamRoleArnWithRoleName is deprecated, use ChainableRamRoleArn instead of
 	RamRoleArnWithEcs   = AuthenticateMode("RamRoleArnWithRoleName")
 	ChainableRamRoleArn = AuthenticateMode("ChainableRamRoleArn")
 	External            = AuthenticateMode("External")
