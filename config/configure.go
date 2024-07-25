@@ -34,7 +34,7 @@ var hookSaveConfiguration = func(fn func(config *Configuration) error) func(conf
 }
 
 func loadConfiguration() (*Configuration, error) {
-	return hookLoadConfiguration(LoadConfiguration)(GetConfigPath() + "/" + configFile)
+	return hookLoadConfiguration(LoadConfiguration)(GetConfigPath(GetHomePath()) + "/" + configFile)
 }
 
 func NewConfigureCommand() *cli.Command {

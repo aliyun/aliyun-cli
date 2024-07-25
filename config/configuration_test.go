@@ -118,13 +118,13 @@ func TestLoadProfile(t *testing.T) {
 		}
 	}
 	//testcase 1
-	p, err := LoadProfile(GetConfigPath()+"/"+configFile, "")
+	p, err := LoadProfile(GetConfigPath(".")+"/"+configFile, "")
 	assert.Nil(t, err)
 	p.parent = nil
 	assert.Equal(t, Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, p)
 
 	//testcase 2
-	_, err = LoadProfile(GetConfigPath()+"/"+configFile, "hello")
+	_, err = LoadProfile(GetConfigPath(".")+"/"+configFile, "hello")
 	assert.EqualError(t, err, "unknown profile hello, run configure to check")
 
 	//LoadCurrentProfile testcase
@@ -141,7 +141,7 @@ func TestLoadProfile(t *testing.T) {
 		}
 	}
 	w.Reset()
-	p, err = LoadProfile(GetConfigPath()+"/"+configFile, "")
+	p, err = LoadProfile(GetConfigPath(".")+"/"+configFile, "")
 	assert.Empty(t, p)
 	assert.EqualError(t, err, "init config failed error")
 }
@@ -155,17 +155,10 @@ func TestHomePath(t *testing.T) {
 }
 
 func TestGetConfigPath(t *testing.T) {
-	orighookGetHomePath := hookGetHomePath
 	defer func() {
 		os.RemoveAll("./.aliyun")
-		hookGetHomePath = orighookGetHomePath
 	}()
-	hookGetHomePath = func(fn func() string) func() string {
-		return func() string {
-			return "."
-		}
-	}
-	assert.Equal(t, "./.aliyun", GetConfigPath())
+	assert.Equal(t, "./.aliyun", GetConfigPath("."))
 }
 
 func TestNewConfigFromBytes(t *testing.T) {
@@ -202,22 +195,15 @@ func TestNewConfigFromBytes(t *testing.T) {
 }
 
 func TestSaveConfiguration(t *testing.T) {
-	orighookGetHomePath := hookGetHomePath
 	defer func() {
 		os.RemoveAll("./.aliyun")
-		hookGetHomePath = orighookGetHomePath
 	}()
-	hookGetHomePath = func(fn func() string) func() string {
-		return func() string {
-			return "."
-		}
-	}
 	conf := &Configuration{Profiles: []Profile{{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}
 	bytes, err := json.MarshalIndent(conf, "", "\t")
 	assert.Nil(t, err)
 	err = SaveConfiguration(conf)
 	assert.Nil(t, err)
-	file, err := os.Open(GetConfigPath() + "/" + configFile)
+	file, err := os.Open(GetConfigPath(".") + "/" + configFile)
 	assert.Nil(t, err)
 	buf := make([]byte, 1024)
 	n, _ := file.Read(buf)
@@ -226,20 +212,13 @@ func TestSaveConfiguration(t *testing.T) {
 }
 
 func TestLoadConfiguration(t *testing.T) {
-	orighookGetHomePath := hookGetHomePath
 	defer func() {
 		os.RemoveAll("./.aliyun")
-		hookGetHomePath = orighookGetHomePath
 	}()
-	hookGetHomePath = func(fn func() string) func() string {
-		return func() string {
-			return "."
-		}
-	}
 	w := new(bytes.Buffer)
 
 	//testcase 1
-	cf, err := LoadConfiguration(GetConfigPath() + "/" + configFile)
+	cf, err := LoadConfiguration(GetConfigPath(".") + "/" + configFile)
 	assert.Nil(t, err)
 	assert.Equal(t, &Configuration{CurrentProfile: "default", Profiles: []Profile{{Name: "default", Mode: "", OutputFormat: "json", Language: "en"}}}, cf)
 	conf := &Configuration{Profiles: []Profile{{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}
@@ -248,7 +227,7 @@ func TestLoadConfiguration(t *testing.T) {
 
 	//testcase 2
 	w.Reset()
-	cf, err = LoadConfiguration(GetConfigPath() + "/" + configFile)
+	cf, err = LoadConfiguration(GetConfigPath(".") + "/" + configFile)
 	assert.Equal(t, &Configuration{CurrentProfile: "", Profiles: []Profile{{Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json", Language: "en"}}}, cf)
 	assert.Nil(t, err)
 

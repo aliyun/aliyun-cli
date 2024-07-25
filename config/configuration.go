@@ -91,7 +91,7 @@ func (c *Configuration) PutProfile(profile Profile) {
 }
 
 func LoadCurrentProfile() (Profile, error) {
-	return LoadProfile(GetConfigPath()+"/"+configFile, "")
+	return LoadProfile(GetConfigPath(GetHomePath())+"/"+configFile, "")
 }
 
 func LoadProfile(path string, name string) (Profile, error) {
@@ -115,7 +115,7 @@ func getConfigurePath(ctx *cli.Context) (currentPath string) {
 	if path, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
 		currentPath = path
 	} else {
-		currentPath = GetConfigPath() + "/" + configFile
+		currentPath = GetConfigPath(GetHomePath()) + "/" + configFile
 	}
 	return
 }
@@ -185,7 +185,7 @@ func SaveConfiguration(config *Configuration) (err error) {
 	if err != nil {
 		return
 	}
-	path := GetConfigPath() + "/" + configFile
+	path := GetConfigPath(GetHomePath()) + "/" + configFile
 	err = os.WriteFile(path, bytes, 0600)
 	return
 }
@@ -196,8 +196,8 @@ func NewConfigFromBytes(bytes []byte) (conf *Configuration, err error) {
 	return
 }
 
-func GetConfigPath() string {
-	path := hookGetHomePath(GetHomePath)() + configPath
+func GetConfigPath(homePath string) string {
+	path := homePath + configPath
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		err = os.MkdirAll(path, 0755)
 		if err != nil {
