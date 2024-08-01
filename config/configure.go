@@ -33,12 +33,13 @@ var hookSaveConfiguration = func(fn func(config *Configuration) error) func(conf
 	return fn
 }
 
+var stdin io.Reader = os.Stdin
+
 func loadConfiguration() (*Configuration, error) {
 	return hookLoadConfiguration(LoadConfiguration)(GetConfigPath() + "/" + configFile)
 }
 
 func NewConfigureCommand() *cli.Command {
-
 	c := &cli.Command{
 		Name: "configure",
 		Short: i18n.T(
@@ -287,14 +288,14 @@ func configureOIDC(w io.Writer, cp *Profile) error {
 
 func ReadInput(defaultValue string) string {
 	var s string
-	scanner := bufio.NewScanner(os.Stdin)
+	scanner := bufio.NewScanner(stdin)
 	if scanner.Scan() {
 		s = scanner.Text()
 	}
 	if s == "" {
 		return defaultValue
 	}
-	return s
+	return strings.TrimSpace(s)
 }
 
 func MosaicString(s string, lastChars int) string {

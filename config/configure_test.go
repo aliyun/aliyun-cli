@@ -15,6 +15,7 @@ package config
 
 import (
 	"bytes"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -314,7 +315,19 @@ func TestConfigureOIDC(t *testing.T) {
 }
 
 func TestReadInput(t *testing.T) {
+	defer func() {
+		stdin = os.Stdin
+	}()
+	// read empty string, return default value
+	stdin = strings.NewReader("")
 	assert.Equal(t, "default", ReadInput("default"))
+	// read input, return input
+	stdin = strings.NewReader("input from stdion\n")
+	assert.Equal(t, "input from stdion", ReadInput("default"))
+
+	// read input with spaces
+	stdin = strings.NewReader("input from stdion  \n")
+	assert.Equal(t, "input from stdion", ReadInput("default"))
 }
 
 func TestMosaicString(t *testing.T) {
