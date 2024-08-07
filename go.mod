@@ -3,7 +3,7 @@ module github.com/aliyun/aliyun-cli
 go 1.18
 
 require (
-	github.com/alibabacloud-go/darabonba-openapi/v2 v2.0.8
+	github.com/alibabacloud-go/darabonba-openapi/v2 v2.0.9
 	github.com/alibabacloud-go/tea v1.2.2
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.6
 	github.com/aliyun/alibaba-cloud-sdk-go v1.62.719
