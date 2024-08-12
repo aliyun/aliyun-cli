@@ -37,7 +37,7 @@ jobs:
         uses: apple-actions/import-codesign-certs@v2
         with:
           p12-file-base64: ${{ secrets.APPLE_DEVELPER_ID_APPLICATION_CERT_DATA }}
-          p12-password: ${{ secrets.APPLE_CERT_PASSWORD }}
+          p12-password: ${{ secrets.APPLE_DEVELPER_ID_APPLICATION_CERT_PASSWORD }}
           keychain-password: tmppassworkd
       - name: Set up develper id installer cert
         uses: apple-actions/import-codesign-certs@v2
