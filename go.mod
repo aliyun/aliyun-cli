@@ -7,7 +7,7 @@ require (
 	github.com/alibabacloud-go/tea v1.2.2
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.6
 	github.com/aliyun/alibaba-cloud-sdk-go v1.63.0
-	github.com/aliyun/aliyun-oss-go-sdk v2.2.9+incompatible
+	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
 	github.com/aliyun/credentials-go v1.3.7
 	github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc
 	github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1
