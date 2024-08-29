@@ -475,17 +475,17 @@ func TestGetCredentialBySts(t *testing.T) {
 	actual.Mode = StsToken
 	credential, err := actual.GetCredential(newCtx(), nil)
 	assert.Nil(t, credential)
-	assert.EqualError(t, err, "AccessKeyId cannot be empty")
+	assert.EqualError(t, err, "the access key id is empty")
 
 	actual.AccessKeyId = "akid"
 	credential, err = actual.GetCredential(newCtx(), nil)
 	assert.Nil(t, credential)
-	assert.EqualError(t, err, "AccessKeySecret cannot be empty")
+	assert.EqualError(t, err, "the access key secret is empty")
 
 	actual.AccessKeySecret = "aksecret"
 	credential, err = actual.GetCredential(newCtx(), nil)
 	assert.Nil(t, credential)
-	assert.EqualError(t, err, "SecurityToken cannot be empty")
+	assert.EqualError(t, err, "the security token is empty")
 
 	actual.StsToken = "ststoken"
 	credential, err = actual.GetCredential(newCtx(), nil)
