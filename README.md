@@ -63,7 +63,7 @@ brew install aliyun-cli
 You can paste the following command in a macOS Terminal or Linux shell prompt.
 
 ```sh
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/aliyun/aliyun-cli/HEAD/install.sh)"
+/bin/bash -c "$(curl -fsSL https://aliyuncli.alicdn.com/install.sh)"
 ```
 
 If you need detailed installation steps or compile the installation steps, please visit [Installation Guide](https://www.alibabacloud.com/help/zh/doc-detail/121988.html).
