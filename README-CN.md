@@ -61,6 +61,14 @@ CLI 版本更改说明请参考 [CHANGELOG](./CHANGELOG.md)
   brew install aliyun-cli
   ```
 
+- **使用一键安装脚本**
+
+  你可以在 macOS 或 Linux 的命令行终端运行下面的命令：
+
+  ```sh
+  /bin/bash -c "$(curl -fsSL https://aliyuncli.alicdn.com/install.sh)"
+  ```
+
 如果需要详细安装步骤或者编译安装步骤请访问官网文档 [安装 CLI](https://help.aliyun.com/document_detail/121988.html)
 
 ## 配置
