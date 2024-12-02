@@ -123,6 +123,7 @@ var wormCommand = WormCommand{
 			OptionTokenTimeout,
 			OptionRamRoleArn,
 			OptionRoleSessionName,
+			OptionExternalId,
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,

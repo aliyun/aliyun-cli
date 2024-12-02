@@ -21,6 +21,7 @@ type Client struct {
 	AccessKeySecret string
 	RoleArn         string
 	SessionName     string
+	ExternalId      string
 }
 
 // ServiceError sts service error
@@ -62,12 +63,13 @@ func (e *ServiceError) Error() string {
 }
 
 // NewClient New STS Client
-func NewClient(accessKeyId, accessKeySecret, roleArn, sessionName string) *Client {
+func NewClient(accessKeyId, accessKeySecret, roleArn, sessionName, externalId string) *Client {
 	return &Client{
 		AccessKeyId:     accessKeyId,
 		AccessKeySecret: accessKeySecret,
 		RoleArn:         roleArn,
 		SessionName:     sessionName,
+		ExternalId:      externalId,
 	}
 }
 
@@ -127,6 +129,10 @@ func (c *Client) generateSignedURL(expiredTime uint) (string, error) {
 	queryStr += "&Action=AssumeRole"
 	queryStr += "&SignatureNonce=" + randId
 	queryStr += "&DurationSeconds=" + strconv.FormatUint((uint64)(expiredTime), 10)
+
+	if c.ExternalId != "" {
+		queryStr += "&ExternalId=" + c.ExternalId
+	}
 
 	// Sort query string
 	queryParams, err := url.ParseQuery(queryStr)
