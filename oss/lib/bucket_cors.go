@@ -151,6 +151,7 @@ var corsCommand = CorsCommand{
 			OptionTokenTimeout,
 			OptionRamRoleArn,
 			OptionRoleSessionName,
+			OptionExternalId,
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,

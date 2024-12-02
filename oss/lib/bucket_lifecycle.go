@@ -169,6 +169,7 @@ var bucketLifeCycleCommand = BucketLifeCycleCommand{
 			OptionTokenTimeout,
 			OptionRamRoleArn,
 			OptionRoleSessionName,
+			OptionExternalId,
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,

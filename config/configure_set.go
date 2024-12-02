@@ -86,6 +86,7 @@ func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
 		profile.AccessKeySecret = AccessKeySecretFlag(flags).GetStringOrDefault(profile.AccessKeySecret)
 		profile.RamRoleArn = RamRoleArnFlag(flags).GetStringOrDefault(profile.RamRoleArn)
 		profile.RoleSessionName = RoleSessionNameFlag(flags).GetStringOrDefault(profile.RoleSessionName)
+		profile.ExternalId = ExternalIdFlag(flags).GetStringOrDefault(profile.ExternalId)
 		profile.ExpiredSeconds = ExpiredSecondsFlag(flags).GetIntegerOrDefault(profile.ExpiredSeconds)
 	case EcsRamRole:
 		profile.RamRoleName = RamRoleNameFlag(flags).GetStringOrDefault(profile.RamRoleName)
@@ -98,6 +99,7 @@ func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
 		profile.SourceProfile = SourceProfileFlag(flags).GetStringOrDefault(profile.SourceProfile)
 		profile.RamRoleArn = RamRoleArnFlag(flags).GetStringOrDefault(profile.RamRoleArn)
 		profile.RoleSessionName = RoleSessionNameFlag(flags).GetStringOrDefault(profile.RoleSessionName)
+		profile.ExternalId = ExternalIdFlag(flags).GetStringOrDefault(profile.ExternalId)
 		profile.ExpiredSeconds = ExpiredSecondsFlag(flags).GetIntegerOrDefault(profile.ExpiredSeconds)
 	case RsaKeyPair:
 		profile.PrivateKey = PrivateKeyFlag(flags).GetStringOrDefault(profile.PrivateKey)

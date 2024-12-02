@@ -59,6 +59,16 @@ func TestDoConfigureList(t *testing.T) {
 						RoleSessionName: "RoleSessionName",
 					},
 					{
+						Name:            "bbbe",
+						Mode:            RamRoleArn,
+						AccessKeyId:     "sdf",
+						AccessKeySecret: "ddf",
+						OutputFormat:    "json",
+						RamRoleArn:      "RamRoleArn",
+						RoleSessionName: "RoleSessionName",
+						ExternalId:      "ExternalId",
+					},
+					{
 						Name:            "ccc",
 						Mode:            EcsRamRole,
 						AccessKeyId:     "sdf",
@@ -92,6 +102,7 @@ func TestDoConfigureList(t *testing.T) {
 		"default * | AK:***_id              | Invalid |                  | \n"+
 		"aaa       | StsToken:******        | Invalid |                  | \n"+
 		"bbb       | RamRoleArn:******      | Invalid |                  | \n"+
+		"bbbe      | RamRoleArn:******:lId  | Invalid |                  | \n"+
 		"ccc       | EcsRamRole:RamRoleName | Invalid |                  | \n"+
 		"ddd       | RsaKeyPair:KeyPairName | Invalid |                  | \n"+
 		"eee       | CloudSSO:a@b           | Invalid |                  | \n", w.String())

@@ -109,6 +109,7 @@ var catCommand = CatCommand{
 			OptionRamRoleArn,
 			OptionRoleSessionName,
 			OptionReadTimeout,
+			OptionExternalId,
 			OptionConnectTimeout,
 			OptionSTSRegion,
 			OptionSkipVerifyCert,

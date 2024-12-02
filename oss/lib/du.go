@@ -132,6 +132,7 @@ var duSizeCommand = DuCommand{
 			OptionECSRoleName,
 			OptionTokenTimeout,
 			OptionRamRoleArn,
+			OptionExternalId,
 			OptionRoleSessionName,
 			OptionReadTimeout,
 			OptionConnectTimeout,

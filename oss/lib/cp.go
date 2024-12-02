@@ -1303,6 +1303,7 @@ var copyCommand = CopyCommand{
 			OptionECSRoleName,
 			OptionTokenTimeout,
 			OptionRamRoleArn,
+			OptionExternalId,
 			OptionRoleSessionName,
 			OptionReadTimeout,
 			OptionConnectTimeout,

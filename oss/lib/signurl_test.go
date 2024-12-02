@@ -650,7 +650,7 @@ func (s *OssutilCommandSuite) TestSignWithModeStsToken(c *C) {
 	object := randLowStr(12)
 	s.putObject(bucketName, object, fileName, c)
 
-	client := NewClient(stsAccessID, stsAccessKeySecret, stsARN, "sts_test")
+	client := NewClient(stsAccessID, stsAccessKeySecret, stsARN, "sts_test", "")
 
 	resp, err := client.AssumeRole(3600, "https://sts.cn-hangzhou.aliyuncs.com")
 	c.Assert(err, IsNil)

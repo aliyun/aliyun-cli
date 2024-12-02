@@ -122,6 +122,7 @@ var createSymlinkCommand = CreateSymlinkCommand{
 			OptionECSRoleName,
 			OptionTokenTimeout,
 			OptionRamRoleArn,
+			OptionExternalId,
 			OptionRoleSessionName,
 			OptionReadTimeout,
 			OptionConnectTimeout,

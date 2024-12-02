@@ -72,8 +72,8 @@ func TestDoConfigureGet(t *testing.T) {
 	w.Reset()
 	stderr.Reset()
 	ctx.Flags().Flags()[1].SetAssigned(false)
-	doConfigureGet(ctx, []string{"profile", "mode", "access-key-id", "access-key-secret", "sts-token", "ram-role-name", "ram-role-arn", "role-session-name", "private-key", "key-pair-name", "region", "language"})
-	assert.Equal(t, "profile=default\nmode=AK\naccess-key-id=*************************_id\naccess-key-secret=*****************************ret\nsts-token=\nram-role-name=\nram-role-arn=\nrole-session-name=\nprivate-key=\nkey-pair-name=\nlanguage=\n\n", w.String())
+	doConfigureGet(ctx, []string{"profile", "mode", "access-key-id", "access-key-secret", "sts-token", "ram-role-name", "ram-role-arn", "role-session-name", "external-id", "private-key", "key-pair-name", "region", "language"})
+	assert.Equal(t, "profile=default\nmode=AK\naccess-key-id=*************************_id\naccess-key-secret=*****************************ret\nsts-token=\nram-role-name=\nram-role-arn=\nrole-session-name=\nexternal-id=\nprivate-key=\nkey-pair-name=\nlanguage=\n\n", w.String())
 
 	//TESTCASE 4
 	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {

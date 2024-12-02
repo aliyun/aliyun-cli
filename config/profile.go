@@ -63,6 +63,7 @@ type Profile struct {
 	RamRoleName               string           `json:"ram_role_name,omitempty"`
 	RamRoleArn                string           `json:"ram_role_arn,omitempty"`
 	RoleSessionName           string           `json:"ram_session_name,omitempty"`
+	ExternalId                string           `json:"external_id,omitempty"`
 	SourceProfile             string           `json:"source_profile,omitempty"`
 	PrivateKey                string           `json:"private_key,omitempty"`
 	KeyPairName               string           `json:"key_pair_name,omitempty"`
@@ -193,6 +194,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.StsRegion = StsRegionFlag(ctx.Flags()).GetStringOrDefault(cp.StsRegion)
 	cp.RamRoleName = RamRoleNameFlag(ctx.Flags()).GetStringOrDefault(cp.RamRoleName)
 	cp.RamRoleArn = RamRoleArnFlag(ctx.Flags()).GetStringOrDefault(cp.RamRoleArn)
+	cp.ExternalId = ExternalIdFlag(ctx.Flags()).GetStringOrDefault(cp.ExternalId)
 	cp.RoleSessionName = RoleSessionNameFlag(ctx.Flags()).GetStringOrDefault(cp.RoleSessionName)
 	cp.KeyPairName = KeyPairNameFlag(ctx.Flags()).GetStringOrDefault(cp.KeyPairName)
 	cp.PrivateKey = PrivateKeyFlag(ctx.Flags()).GetStringOrDefault(cp.PrivateKey)
@@ -239,6 +241,10 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 
 	if cp.RamRoleArn == "" {
 		cp.RamRoleArn = util.GetFromEnv("ALIBABACLOUD_ROLE_ARN", "ALIBABA_CLOUD_ROLE_ARN")
+	}
+
+	if cp.ExternalId == "" {
+		cp.ExternalId = util.GetFromEnv("ALIBABACLOUD_EXTERNAL_ID", "ALIBAB_ACLOUD_EXTERNAL_ID")
 	}
 
 	AutoModeRecognition(cp)
@@ -319,6 +325,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
+			SetExternalId(cp.ExternalId).
 			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
 
 		if cp.StsToken != "" {
@@ -392,6 +399,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
+			SetExternalId(cp.ExternalId).
 			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
 
 		if model.SecurityToken != nil {
