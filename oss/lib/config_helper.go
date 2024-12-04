@@ -30,6 +30,7 @@ const (
 // config items in section Credentials
 const (
 	ItemRamRoleArn string = "ramRoleArn"
+	ItemExternalId string = "externalId"
 )
 
 type configOption struct {
@@ -64,6 +65,7 @@ var CredOptionMap = map[string]configOption{
 	OptionMode:            configOption{[]string{"mode", "Mode"}, false, false, "", ""},
 	OptionRamRoleArn:      configOption{[]string{"ramRoleArn", "RamRoleArn", "ramrolearn", "ram_role_arn", "ram-role-arn"}, false, false, "", ""},
 	OptionRoleSessionName: configOption{[]string{"roleSessionName", "RoleSessionName", "rolesessionname", "role-session-name", "role_session_name"}, false, false, "", ""},
+	OptionExternalId:      configOption{[]string{"externalID", "externalId", "externalid", "external-id", "external_id"}, false, false, "", ""},
 	OptionTokenTimeout:    configOption{[]string{"tokenTimeOut", "tokenTimeout", "tokentimeout", "token_timeout", "token-timeout"}, false, false, "", ""},
 	OptionSTSRegion:       configOption{[]string{"stsRegion", "stsregion", "sts-region", "sts_region"}, false, false, "", ""},
 	OptionECSRoleName:     configOption{[]string{"ecsRoleName", "EcsRoleName", "ecsrolename", "ecs-role-name", "ecs_role_name"}, false, false, "", ""},

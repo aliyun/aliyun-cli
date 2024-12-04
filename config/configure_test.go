@@ -189,8 +189,8 @@ func TestConfigureStsToken(t *testing.T) {
 
 func TestConfigureRamRoleArn(t *testing.T) {
 	w := new(bytes.Buffer)
-	err := configureRamRoleArn(w, &Profile{Name: "default", Mode: AK, AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RamRoleArn: "RamRoleArn", RoleSessionName: "RoleSessionName", RegionId: "cn-hangzhou", OutputFormat: "json"})
-	assert.Equal(t, "Access Key Id [**********_id]: Access Key Secret [**************ret]: Sts Region []: Ram Role Arn [RamRoleArn]: Role Session Name [RoleSessionName]: Expired Seconds [900]: ", w.String())
+	err := configureRamRoleArn(w, &Profile{Name: "default", Mode: AK, AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RamRoleArn: "RamRoleArn", RoleSessionName: "RoleSessionName", ExternalId: "ExternalId", RegionId: "cn-hangzhou", OutputFormat: "json"})
+	assert.Equal(t, "Access Key Id [**********_id]: Access Key Secret [**************ret]: Sts Region []: Ram Role Arn [RamRoleArn]: Role Session Name [RoleSessionName]: External ID [ExternalId]: Expired Seconds [900]: ", w.String())
 	assert.Nil(t, err)
 }
 
@@ -243,11 +243,12 @@ func TestConfigureChainableRamRoleArn(t *testing.T) {
 		RamRoleArn:      "rra",
 		StsRegion:       "cn-hangzhou",
 		RoleSessionName: "rsn",
+		ExternalId:      "eid",
 		RegionId:        "cn-hangzhou",
 		ExpiredSeconds:  3600,
 		OutputFormat:    "json",
 	})
-	assert.Equal(t, "Source Profile [source]: Sts Region [cn-hangzhou]: Ram Role Arn [rra]: Role Session Name [rsn]: Expired Seconds [3600]: ", w.String())
+	assert.Equal(t, "Source Profile [source]: Sts Region [cn-hangzhou]: Ram Role Arn [rra]: Role Session Name [rsn]: External ID [eid]: Expired Seconds [3600]: ", w.String())
 	assert.Nil(t, err)
 }
 

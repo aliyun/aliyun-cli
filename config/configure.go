@@ -202,6 +202,8 @@ func configureRamRoleArn(w io.Writer, cp *Profile) error {
 	if cp.ExpiredSeconds == 0 {
 		cp.ExpiredSeconds = 900
 	}
+	cli.Printf(w, "External ID [%s]: ", cp.ExternalId)
+	cp.ExternalId = ReadInput(cp.ExternalId)
 	cli.Printf(w, "Expired Seconds [%v]: ", cp.ExpiredSeconds)
 	cp.ExpiredSeconds, _ = strconv.Atoi(ReadInput(strconv.Itoa(cp.ExpiredSeconds)))
 	return nil
@@ -242,6 +244,8 @@ func configureChainableRamRoleArn(w io.Writer, cp *Profile) error {
 	if cp.ExpiredSeconds == 0 {
 		cp.ExpiredSeconds = 900
 	}
+	cli.Printf(w, "External ID [%s]: ", cp.ExternalId)
+	cp.ExternalId = ReadInput(cp.ExternalId)
 	cli.Printf(w, "Expired Seconds [%v]: ", cp.ExpiredSeconds)
 	cp.ExpiredSeconds, _ = strconv.Atoi(ReadInput(strconv.Itoa(cp.ExpiredSeconds)))
 	return nil
