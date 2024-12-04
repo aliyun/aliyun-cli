@@ -21,7 +21,7 @@ jobs:
   build_for_macosx:
     needs: [create_release]
     name: Build for MacOSX
-    runs-on: macos-12
+    runs-on: macos-13
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
     steps:
