@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -97,7 +97,7 @@ func TestDoConfigureSet(t *testing.T) {
 			return &Configuration{
 				CurrentProfile: "default",
 				Profiles: []Profile{
-					{Name: "default", Mode: RamRoleArn, RoleSessionName: "RoleSessionName", RamRoleArn: "RamRoleArn", AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json", RegionId: "cn-hangzhou"},
+					{Name: "default", Mode: RamRoleArn, RoleSessionName: "RoleSessionName", RamRoleArn: "RamRoleArn", ExternalId: "ExternalId", AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json", RegionId: "cn-hangzhou"},
 					{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}

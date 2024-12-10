@@ -112,6 +112,7 @@ var bucketVersioningCommand = BucketVersioningCommand{
 			OptionTokenTimeout,
 			OptionRamRoleArn,
 			OptionRoleSessionName,
+			OptionExternalId,
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,
