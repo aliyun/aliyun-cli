@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -94,6 +96,11 @@ func (a *TableOutputFilter) FilterOutput(s string) (string, error) {
 	return a.FormatTable(rowPath, colNames, v)
 }
 
+func isArrayOrSlice(value interface{}) bool {
+	v := reflect.ValueOf(value)
+	return v.Kind() == reflect.Array || v.Kind() == reflect.Slice
+}
+
 func (a *TableOutputFilter) FormatTable(rowPath string, colNames []string, v interface{}) (string, error) {
 	// Add row number
 	if v, ok := OutputFlag(a.ctx.Flags()).GetFieldValue("num"); ok {
@@ -112,20 +119,80 @@ func (a *TableOutputFilter) FormatTable(rowPath string, colNames []string, v int
 		return "", fmt.Errorf("jmespath: '%s' failed Need Array Expr", rowPath)
 	}
 
+	// delete date type is struct
+	// 1 = object, 2 = array
+	dataType := 1
+	if len(rowsArray) > 0 {
+		_, ok := rowsArray[0].(map[string]interface{})
+		if !ok {
+			// check if it is an array
+			if isArrayOrSlice(rowsArray[0]) {
+				dataType = 2
+			}
+		}
+	}
+
+	colNamesArray := make([]string, 0)
+	colIndexArray := make([]int, 0)
+
+	if dataType == 2 {
+		// all colNames must be string:number format
+		for _, colName := range colNames {
+			// Num ignore
+			if colName == "Num" {
+				colNamesArray = append(colNamesArray, colName)
+				continue
+			}
+			if !strings.Contains(colName, ":") {
+				return "", fmt.Errorf("colNames: %s must be string:number format, like 'name:0', 0 is the array index", colName)
+			}
+			// split colName to name and number, must be two parts
+			parts := strings.Split(colName, ":")
+			if len(parts) != 2 {
+				return "", fmt.Errorf("colNames: %s must be string:number format, like 'name:0', 0 is the array index", colName)
+			}
+			// check if number is a number, use regex match
+			if !isNumber(parts[1]) {
+				return "", fmt.Errorf("colNames: %s must be string:number format, like 'name:0', 0 is the array index", colName)
+			}
+			colNamesArray = append(colNamesArray, parts[0])
+			num, err := strconv.Atoi(parts[1])
+			if err != nil {
+				return "", fmt.Errorf("colNames: %s must be string:number format, like 'name:0', 0 is the array index", colName)
+			}
+			colIndexArray = append(colIndexArray, num)
+		}
+	}
+
 	var buf bytes.Buffer
 	writer := bufio.NewWriter(&buf)
 	format := strings.Repeat("%v\t ", len(colNames)-1) + "%v"
 	w := tabwriter.NewWriter(writer, 0, 0, 1, ' ', tabwriter.Debug)
-	fmt.Fprintln(w, fmt.Sprintf(format, toIntfArray(colNames)...))
+	if dataType == 1 {
+		fmt.Fprintln(w, fmt.Sprintf(format, toIntfArray(colNames)...))
 
-	separator := ""
-	for i, colName := range colNames {
-		separator = separator + strings.Repeat("-", len(colName))
-		if i < len(colNames)-1 {
-			separator = separator + "\t "
+		separator := ""
+		for i, colName := range colNames {
+			separator = separator + strings.Repeat("-", len(colName))
+			if i < len(colNames)-1 {
+				separator = separator + "\t "
+			}
 		}
+
+		fmt.Fprintln(w, separator)
+	} else {
+		fmt.Fprintln(w, fmt.Sprintf(format, toIntfArray(colNamesArray)...))
+
+		separator := ""
+		for i, colNameArray := range colNamesArray {
+			separator = separator + strings.Repeat("-", len(colNameArray))
+			if i < len(colNamesArray)-1 {
+				separator = separator + "\t "
+			}
+		}
+
+		fmt.Fprintln(w, separator)
 	}
-	fmt.Fprintln(w, separator)
 
 	for i, row := range rowsArray {
 		r := make([]string, 0)
@@ -138,16 +205,34 @@ func (a *TableOutputFilter) FormatTable(rowPath string, colNames []string, v int
 				index = 1
 			}
 		}
-		for _, colName := range colNames[index:] {
-			v, _ := jmespath.Search(colName, row)
-			s = fmt.Sprintf("%v", v)
-			r = append(r, s)
+		if dataType == 1 {
+			for _, colName := range colNames[index:] {
+				v, _ := jmespath.Search(colName, row)
+				s = fmt.Sprintf("%v", v)
+				r = append(r, s)
+			}
+		} else {
+			for _, colIndex := range colIndexArray {
+				v, _ := jmespath.Search(fmt.Sprintf("[%d]", colIndex), row)
+				s = fmt.Sprintf("%v", v)
+				r = append(r, s)
+			}
 		}
 		fmt.Fprintln(w, fmt.Sprintf(format, toIntfArray(r)...))
 	}
 	w.Flush()
 	writer.Flush()
 	return buf.String(), nil
+}
+
+func isNumber(s string) bool {
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+
 }
 
 func toIntfArray(stringArray []string) []interface{} {
