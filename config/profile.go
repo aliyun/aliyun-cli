@@ -57,6 +57,7 @@ type Profile struct {
 	RamRoleName     string           `json:"ram_role_name,omitempty"`
 	RamRoleArn      string           `json:"ram_role_arn,omitempty"`
 	RoleSessionName string           `json:"ram_session_name,omitempty"`
+	ExternalId      string           `json:"external_id,omitempty"`
 	SourceProfile   string           `json:"source_profile,omitempty"`
 	PrivateKey      string           `json:"private_key,omitempty"`
 	KeyPairName     string           `json:"key_pair_name,omitempty"`
@@ -296,6 +297,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
+			SetExternalId(cp.ExternalId).
 			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
 
 		if cp.StsToken != "" {
@@ -367,6 +369,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
+			SetExternalId(cp.ExternalId).
 			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
 
 		if model.SecurityToken != nil {

@@ -28,6 +28,7 @@ const (
 	RamRoleNameFlagName     = "ram-role-name"
 	RamRoleArnFlagName      = "ram-role-arn"
 	RoleSessionNameFlagName = "role-session-name"
+	ExternalIdFlagName      = "external-id"
 	SourceProfileFlagName   = "source-profile"
 	PrivateKeyFlagName      = "private-key"
 	KeyPairNameFlagName     = "key-pair-name"
@@ -59,6 +60,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewRamRoleNameFlag())
 	fs.Add(NewRamRoleArnFlag())
 	fs.Add(NewRoleSessionNameFlag())
+	fs.Add(NewExternalIdFlag())
 	fs.Add(NewPrivateKeyFlag())
 	fs.Add(NewKeyPairNameFlag())
 	fs.Add(NewReadTimeoutFlag())
@@ -113,6 +115,10 @@ func SourceProfileFlag(fs *cli.FlagSet) *cli.Flag {
 
 func RoleSessionNameFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(RoleSessionNameFlagName)
+}
+
+func ExternalIdFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(ExternalIdFlagName)
 }
 
 func PrivateKeyFlag(fs *cli.FlagSet) *cli.Flag {
@@ -267,6 +273,17 @@ func NewRoleSessionNameFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--role-session-name <RoleSessionName>` to assign RoleSessionName",
 			"使用 `--role-session-name <RoleSessionName>` 指定RoleSessionName"),
+	}
+}
+
+func NewExternalIdFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         ExternalIdFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--external-id <ExternalId>` to assign ExternalId",
+			"使用 `--external-id <ExternalId>` 指定ExternalId"),
 	}
 }
 
