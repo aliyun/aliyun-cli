@@ -112,6 +112,40 @@ func NewCommandBridge(cmd Command) *cli.Command {
 	return result
 }
 
+// ParseAndGetEndpoint get oss endpoint from cli context
+func ParseAndGetEndpoint(ctx *cli.Context, args []string) (string, error) {
+	profile, err := config.LoadProfileWithContext(ctx)
+	if err != nil {
+		return "", fmt.Errorf("config failed: %s", err.Error())
+	}
+	// try fetch endpoint from args
+	if len(args) > 0 {
+		for i, arg := range args {
+			if arg == "--endpoint" {
+				if i+1 < len(args) {
+					return args[i+1], nil
+				}
+			}
+		}
+	}
+	// try fetch region from args
+	if len(args) > 0 {
+		for i, arg := range args {
+			if arg == "--region" {
+				if i+1 < len(args) {
+					return "oss-" + args[i+1] + ".aliyuncs.com", nil
+				}
+			}
+		}
+	}
+	// check endpoint from flags
+	if ep, ok := ctx.Flags().GetValue("endpoint"); !ok {
+		return "oss-" + profile.RegionId + ".aliyuncs.com", nil
+	} else {
+		return ep, nil
+	}
+}
+
 func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	// 利用 parser 解析 flags，否则下文读不到
 	parser := cli.NewParser(args, ctx)
@@ -149,11 +183,12 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 		configs["sts-token"] = *model.SecurityToken
 	}
 
-	if ep, ok := ctx.Flags().GetValue("endpoint"); !ok {
-		configs["endpoint"] = "oss-" + profile.RegionId + ".aliyuncs.com"
-	} else {
-		configs["endpoint"] = ep
+	// read endpoint from flags
+	endpoint, err := ParseAndGetEndpoint(ctx, args)
+	if err != nil {
+		return fmt.Errorf("parse endpoint failed: %s", err)
 	}
+	configs["endpoint"] = endpoint
 
 	a2 := []string{"aliyun", "oss"}
 	a2 = append(a2, ctx.Command().Name)

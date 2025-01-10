@@ -1,4 +1,4 @@
-// Copyright (c) 2009-present, Alibaba Cloud All rights reserved.
+// Package cli Copyright (c) 2009-present, Alibaba Cloud All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -64,8 +64,11 @@ func (fs *FlagSet) AddByName(name string) (*Flag, error) {
 	return f, nil
 }
 
-// get flag by name, sample --name
+// Get fetch flag by name, sample --name
 func (fs *FlagSet) Get(name string) *Flag {
+	if fs == nil || fs.index == nil {
+		return nil
+	}
 	if f, ok := fs.index["--"+name]; ok {
 		return f
 	}
