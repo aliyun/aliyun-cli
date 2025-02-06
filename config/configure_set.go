@@ -119,6 +119,7 @@ func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
 	profile.ReadTimeout = ReadTimeoutFlag(flags).GetIntegerOrDefault(profile.ReadTimeout)
 	profile.ConnectTimeout = ConnectTimeoutFlag(flags).GetIntegerOrDefault(profile.ConnectTimeout)
 	profile.RetryCount = RetryCountFlag(flags).GetIntegerOrDefault(profile.RetryCount)
+	profile.StsRegion = StsRegionFlag(flags).GetStringOrDefault(profile.StsRegion)
 
 	err = profile.Validate()
 	if err != nil {
