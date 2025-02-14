@@ -284,6 +284,7 @@ func TestLoadProfileWithContextWhenIGNORE_PROFILE(t *testing.T) {
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.SetInConfigureMode(true)
 	AddFlags(ctx.Flags())
 	ctx.Flags().Get("access-key-id").SetAssigned(true)
 	ctx.Flags().Get("access-key-id").SetValue("test-ak-id")

@@ -52,12 +52,71 @@ func (c *Commando) InitWithCommand(cmd *cli.Command) {
 	cmd.AutoComplete = c.complete
 }
 
+func DetectInConfigureMode(flags *cli.FlagSet) bool {
+	_, modeExist := flags.GetValue(config.ModeFlagName)
+	if !modeExist {
+		return true
+	}
+	// if mode exist, check if other flags exist
+	_, akExist := flags.GetValue(config.AccessKeyIdFlagName)
+	if akExist {
+		return true
+	}
+	_, skExist := flags.GetValue(config.AccessKeySecretFlagName)
+	if skExist {
+		return true
+	}
+	_, stsExist := flags.GetValue(config.StsTokenFlagName)
+	if stsExist {
+		return true
+	}
+	// RamRoleNameFlagName
+	_, ramRoleNameExist := flags.GetValue(config.RamRoleNameFlagName)
+	if ramRoleNameExist {
+		return true
+	}
+	// RamRoleArnFlagName
+	_, ramRoleArnExist := flags.GetValue(config.RamRoleArnFlagName)
+	if ramRoleArnExist {
+		return true
+	}
+	// RoleSessionNameFlagName
+	_, roleSessionNameExist := flags.GetValue(config.RoleSessionNameFlagName)
+	if roleSessionNameExist {
+		return true
+	}
+	// PrivateKeyFlagName
+	_, privateKeyExist := flags.GetValue(config.PrivateKeyFlagName)
+	if privateKeyExist {
+		return true
+	}
+	// KeyPairNameFlagName
+	_, keyPairNameExist := flags.GetValue(config.KeyPairNameFlagName)
+	if keyPairNameExist {
+		return true
+	}
+	// OIDCProviderARNFlagName
+	_, oidcProviderArnExist := flags.GetValue(config.OIDCProviderARNFlagName)
+	if oidcProviderArnExist {
+		return true
+	}
+	// OIDCTokenFileFlagName
+	_, oidcTokenFileExist := flags.GetValue(config.OIDCTokenFileFlagName)
+	if oidcTokenFileExist {
+		return true
+	}
+	return false
+}
+
 func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// aliyun
 	if len(args) == 0 {
 		c.printUsage(ctx)
 		return nil
 	}
+
+	// detect if in configure mode
+	ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
 
 	// update current `Profile` with flags
 	var err error
@@ -96,14 +155,27 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		}
 		if product.ApiStyle == "restful" {
 			api, _ := c.library.GetApi(product.Code, product.Version, args[1])
+			c.CheckApiParamWithBuildInArgs(ctx, api)
 			ctx.Command().Name = args[1]
 			return c.processInvoke(ctx, productName, api.Method, api.PathPattern)
+		} else {
+			// RPC need check API parameters too
+			api, _ := c.library.GetApi(product.Code, product.Version, args[1])
+			c.CheckApiParamWithBuildInArgs(ctx, api)
 		}
 
 		return c.processInvoke(ctx, productName, args[1], "")
 	} else if len(args) == 3 {
 		// restful call
 		// aliyun <productCode> {GET|PUT|POST|DELETE} <path> --
+		product, _ := c.library.GetProduct(productName)
+		api, find := c.library.GetApiByPath(product.Code, product.Version, args[1], args[2])
+		if !find {
+			// throw error, can not find api by path
+			return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
+				"Please confirm if the API path exists")
+		}
+		c.CheckApiParamWithBuildInArgs(ctx, api)
 		return c.processInvoke(ctx, productName, args[1], args[2])
 	} else {
 		return cli.NewErrorWithTip(fmt.Errorf("too many arguments"),
@@ -417,4 +489,21 @@ func (c *Commando) printUsage(ctx *cli.Context) {
 	cmd.PrintFlags(ctx)
 	cmd.PrintSample(ctx)
 	cmd.PrintTail(ctx)
+}
+
+func (c *Commando) CheckApiParamWithBuildInArgs(ctx *cli.Context, api meta.Api) {
+	for _, p := range api.Parameters {
+		// 如果参数中包含了known参数，且 known参数已经被赋值，则将 known 参数拷贝给 unknown 参数
+		if ep, ok := ctx.Flags().GetValue(p.Name); ok {
+			if p.Position != "Query" {
+				continue
+			}
+			var flagNew = &cli.Flag{
+				Name: p.Name,
+			}
+			flagNew.SetValue(ep)
+			flagNew.SetAssigned(true)
+			ctx.UnknownFlags().Add(flagNew)
+		}
+	}
 }

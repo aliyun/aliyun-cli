@@ -15,6 +15,7 @@ package meta
 
 import (
 	"encoding/json"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -74,6 +75,36 @@ func (a *Repository) GetApi(productCode string, version string, apiName string) 
 	return result, true
 }
 
+func (a *Repository) GetApiByPath(productCode string, version string, method string, path string) (Api, bool) {
+	var result Api
+	product, ok := a.GetProduct(productCode)
+	if !ok {
+		return result, false
+	}
+	// list all apis
+	for _, apiName := range product.ApiNames {
+		err := ReadJsonFrom(strings.ToLower(product.Code)+"/"+apiName+".json", &result)
+		if err != nil {
+			return result, false
+		}
+		// method not equal
+		if result.Method != method {
+			continue
+		}
+		// replace all [something] to *
+		// example /permissions/users/[uid]/update to /permissions/users/*/update
+		var pattern = ReplacePathPattern(result.PathPattern)
+		// match path
+		re := regexp.MustCompile("^" + pattern + "$")
+		if re.MatchString(path) {
+			result.Product = &product
+			return result, true
+		}
+	}
+	result = Api{}
+	return result, false
+}
+
 //go:embed versions.json
 var versions []byte
 
@@ -117,4 +148,9 @@ func (a *Repository) GetStyle(productCode, version string) (string, bool) {
 	}
 
 	return "", false
+}
+
+func ReplacePathPattern(pattern string) string {
+	re := regexp.MustCompile(`\[[^\]]+\]`)
+	return re.ReplaceAllString(pattern, "[0-9a-zA-Z_\\-\\.{}]+")
 }

@@ -37,13 +37,18 @@ func NewHelpFlag() *Flag {
 
 // CLI Command Context
 type Context struct {
-	help         bool
-	flags        *FlagSet
-	unknownFlags *FlagSet
-	command      *Command
-	completion   *Completion
-	stdout       io.Writer
-	stderr       io.Writer
+	help            bool
+	flags           *FlagSet
+	unknownFlags    *FlagSet
+	command         *Command
+	completion      *Completion
+	stdout          io.Writer
+	stderr          io.Writer
+	inConfigureMode bool
+}
+
+func (ctx *Context) InConfigureMode() bool {
+	return ctx.inConfigureMode
 }
 
 func NewCommandContext(stdout io.Writer, stderr io.Writer) *Context {
@@ -146,4 +151,8 @@ func (ctx *Context) detectFlagByShorthand(ch rune) (*Flag, error) {
 		return flag, nil
 	}
 	return nil, fmt.Errorf("unknown flag -%s", string(ch))
+}
+
+func (ctx *Context) SetInConfigureMode(mode bool) {
+	ctx.inConfigureMode = mode
 }
