@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -157,6 +157,24 @@ func TestAddFlag(t *testing.T) {
 			Short: i18n.T(
 				"use `--role-session-name <RoleSessionName>` to assign RoleSessionName",
 				"使用 `--role-session-name <RoleSessionName>` 指定RoleSessionName"),
+			Long:         nil,
+			Required:     false,
+			Aliases:      nil,
+			Hidden:       false,
+			Validate:     nil,
+			Fields:       nil,
+			ExcludeWith:  nil,
+			Shorthand:    0,
+			DefaultValue: "",
+			Persistent:   false,
+		}
+		newExternalIdFlag = &cli.Flag{
+			Category:     "config",
+			Name:         ExternalIdFlagName,
+			AssignedMode: cli.AssignedOnce,
+			Short: i18n.T(
+				"use `--external-id <ExternalId>` to assign ExternalId",
+				"使用 `--external-id <ExternalId>` 指定ExternalId"),
 			Long:         nil,
 			Required:     false,
 			Aliases:      nil,
@@ -377,6 +395,9 @@ func TestAddFlag(t *testing.T) {
 
 	f = NewRoleSessionNameFlag()
 	assert.Equal(t, newRoleSessionNameFlag, f)
+
+	f = NewExternalIdFlag()
+	assert.Equal(t, newExternalIdFlag, f)
 
 	f = NewPrivateKeyFlag()
 	assert.Equal(t, newPrivateKeyFlag, f)
