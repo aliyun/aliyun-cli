@@ -50,3 +50,117 @@ func TestGetStyle(t *testing.T) {
 	_, ok = repository.GetStyle("invalid_product", "2016-11-11")
 	assert.False(t, ok)
 }
+
+func TestReplacePathPattern(t *testing.T) {
+	type args struct {
+		pattern string
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "test1",
+			args: args{
+				pattern: "/permissions/users/[uid]/update",
+			},
+			want: "/permissions/users/[0-9a-zA-Z_\\-\\.{}]+/update",
+		},
+		{
+			name: "test2",
+			args: args{
+				pattern: "/permissions/users/[uid]/update/[id]",
+			},
+			want: "/permissions/users/[0-9a-zA-Z_\\-\\.{}]+/update/[0-9a-zA-Z_\\-\\.{}]+",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equalf(t, tt.want, ReplacePathPattern(tt.args.pattern), "ReplacePathPattern(%v)", tt.args.pattern)
+		})
+	}
+}
+
+func TestRepository_GetApiByPath(t *testing.T) {
+	type fields struct {
+		Products []Product
+		Names    []string
+		index    map[string]Product
+	}
+	type args struct {
+		productCode string
+		version     string
+		method      string
+		path        string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   Api
+		want1  bool
+	}{
+		{
+			name: "test1",
+			fields: fields{
+				Products: []Product{
+					{
+						Code:     "cs",
+						ApiNames: []string{"UpdateUserPermissions"},
+					},
+				},
+				Names: []string{"cs"},
+				index: map[string]Product{
+					"cs": {
+						Code:     "cs",
+						ApiNames: []string{"UpdateUserPermissions"},
+					},
+				},
+			},
+			args: args{
+				productCode: "cs",
+				version:     "2015-12-15",
+				method:      "POST",
+				path:        "/permissions/users/xx/update",
+			},
+			want1: true,
+		},
+		{
+			name: "test2",
+			fields: fields{
+				Products: []Product{
+					{
+						Code:     "cs",
+						ApiNames: []string{"UpdateUserPermissions"},
+					},
+				},
+				Names: []string{"cs"},
+				index: map[string]Product{
+					"cs": {
+						Code:     "cs",
+						ApiNames: []string{"UpdateUserPermissions"},
+					},
+				},
+			},
+			args: args{
+				productCode: "cs",
+				version:     "2015-12-15",
+				method:      "POST",
+				path:        "/permissions/users/xx/update2",
+			},
+			want1: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &Repository{
+				Products: tt.fields.Products,
+				Names:    tt.fields.Names,
+				index:    tt.fields.index,
+			}
+			_, got1 := a.GetApiByPath(tt.args.productCode, tt.args.version, tt.args.method, tt.args.path)
+			assert.Equalf(t, tt.want1, got1, "GetApiByPath(%v, %v, %v, %v)", tt.args.productCode, tt.args.version, tt.args.method, tt.args.path)
+		})
+	}
+}

@@ -144,7 +144,10 @@ func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
 	}
 
 	// Load from flags
-	profile.OverwriteWithFlags(ctx)
+	if ctx.InConfigureMode() {
+		// If not in configure mode, we will not overwrite the profile with flags
+		profile.OverwriteWithFlags(ctx)
+	}
 	err = profile.Validate()
 	return
 }
