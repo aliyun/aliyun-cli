@@ -6,7 +6,7 @@ require (
 	github.com/alibabacloud-go/darabonba-openapi/v2 v2.0.10
 	github.com/alibabacloud-go/tea v1.3.1
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.7
-	github.com/aliyun/alibaba-cloud-sdk-go v1.63.88
+	github.com/aliyun/alibaba-cloud-sdk-go v1.63.89
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.9+incompatible
 	github.com/aliyun/credentials-go v1.4.3
 	github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc
