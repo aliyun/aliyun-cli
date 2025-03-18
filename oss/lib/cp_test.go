@@ -5930,7 +5930,7 @@ func (s *OssutilCommandSuite) TestCPObjectUnderSTStokenmode(c *C) {
 	bucketName := bucketNamePrefix + randLowStr(12)
 	s.putBucket(bucketName, c)
 
-	client := NewClient(stsAccessID, stsAccessKeySecret, stsARN, "sts_test")
+	client := NewClient(stsAccessID, stsAccessKeySecret, stsARN, "sts_test", "")
 
 	resp, err := client.AssumeRole(900, "")
 	c.Assert(err, IsNil)
@@ -5991,7 +5991,7 @@ func (s *OssutilCommandSuite) TestCPObjectUnderSTSTokenmodeWithEmptySTSToken(c *
 	bucketName := bucketNamePrefix + randLowStr(12)
 	s.putBucket(bucketName, c)
 
-	client := NewClient(stsAccessID, stsAccessKeySecret, stsARN, "sts_test")
+	client := NewClient(stsAccessID, stsAccessKeySecret, stsARN, "sts_test", "")
 
 	resp, err := client.AssumeRole(900, "")
 	c.Assert(err, IsNil)

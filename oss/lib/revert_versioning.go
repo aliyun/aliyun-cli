@@ -146,6 +146,7 @@ var revertCommand = RevertCommand{
 			OptionTokenTimeout,
 			OptionRamRoleArn,
 			OptionRoleSessionName,
+			OptionExternalId,
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,

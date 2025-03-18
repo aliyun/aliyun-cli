@@ -99,6 +99,7 @@ var listPartCommand = ListPartCommand{
 			OptionECSRoleName,
 			OptionTokenTimeout,
 			OptionRamRoleArn,
+			OptionExternalId,
 			OptionRoleSessionName,
 			OptionReadTimeout,
 			OptionConnectTimeout,

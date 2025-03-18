@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -59,6 +59,16 @@ func TestDoConfigureList(t *testing.T) {
 						RoleSessionName: "RoleSessionName",
 					},
 					{
+						Name:            "bbbe",
+						Mode:            RamRoleArn,
+						AccessKeyId:     "sdf",
+						AccessKeySecret: "ddf",
+						OutputFormat:    "json",
+						RamRoleArn:      "RamRoleArn",
+						RoleSessionName: "RoleSessionName",
+						ExternalId:      "ExternalId",
+					},
+					{
 						Name:            "ccc",
 						Mode:            EcsRamRole,
 						AccessKeyId:     "sdf",
@@ -84,6 +94,7 @@ func TestDoConfigureList(t *testing.T) {
 		"default * | AK:***_id              | Invalid |                  | \n"+
 		"aaa       | StsToken:******        | Invalid |                  | \n"+
 		"bbb       | RamRoleArn:******      | Invalid |                  | \n"+
+		"bbbe      | RamRoleArn:******:lId  | Invalid |                  | \n"+
 		"ccc       | EcsRamRole:RamRoleName | Invalid |                  | \n"+
 		"ddd       | RsaKeyPair:KeyPairName | Invalid |                  | \n", w.String())
 
