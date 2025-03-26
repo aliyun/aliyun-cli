@@ -155,4 +155,18 @@ func TestDoConfigureSet(t *testing.T) {
 	w.Reset()
 	doConfigureSet(w, fs)
 	assert.Empty(t, w.String())
+	// OIDC
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{Name: "default", Mode: OIDC, OIDCProviderARN: "OIDCProviderARN", OIDCTokenFile: "OIDCTokenFile",
+						RoleSessionName: "RoleSessionName", RamRoleArn: "RamRoleArn", AccessKeyId: "default_aliyun_access_key_id",
+						AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json", RegionId: "cn-hangzhou", StsRegion: "eu-central-1"},
+					{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+		}
+	}
+	w.Reset()
+	doConfigureSet(w, fs)
 }

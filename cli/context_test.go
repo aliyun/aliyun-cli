@@ -128,3 +128,15 @@ func TestDetectFlagByShorthand(t *testing.T) {
 	assert.Nil(t, f)
 	assert.EqualError(t, err, "unknown flag -c")
 }
+
+func TestSetInConfigureMode(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
+
+	ctx.SetInConfigureMode(true)
+	assert.True(t, ctx.InConfigureMode())
+
+	ctx.SetInConfigureMode(false)
+	assert.False(t, ctx.InConfigureMode())
+}

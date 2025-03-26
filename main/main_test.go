@@ -2,6 +2,6 @@ package main
 
 import "testing"
 
-func TestMain(t *testing.T) {
+func TestMain(m *testing.M) {
 	Main([]string{})
 }

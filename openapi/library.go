@@ -46,6 +46,11 @@ func (a *Library) GetApi(productCode string, version string, apiName string) (me
 	return a.builtinRepo.GetApi(productCode, version, apiName)
 }
 
+func (a *Library) GetApiByPath(productCode string, version string, method string, path string) (meta.Api, bool) {
+	return a.builtinRepo.GetApiByPath(productCode, version, method, path)
+
+}
+
 func (a *Library) GetStyle(productCode string, version string) (string, bool) {
 	return a.builtinRepo.GetStyle(productCode, version)
 }

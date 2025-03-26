@@ -105,7 +105,7 @@ func Test_main(t *testing.T) {
 	args = []string{"test", "test2", "test1"}
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid command or product. See `aliyun help`.", err.Error())
+	assert.Equal(t, "can not find api by path test1", err.Error())
 
 	args = []string{"test", "test2", "test1", "test3"}
 	err = command.main(ctx, args)
@@ -343,4 +343,157 @@ func TestCreateInvoker(t *testing.T) {
 	assert.True(t, ok)
 	assert.Nil(t, err)
 
+}
+
+func TestCheckApiParamWithBuildInArgs(t *testing.T) {
+	// Initialize cli.Context
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	ctx.EnterCommand(cmd)
+
+	// Add known flags to context
+	knownFlag := &cli.Flag{
+		Name: "KnownParam",
+	}
+	knownFlag.SetValue("KnownValue")
+	knownFlag.SetAssigned(true)
+	ctx.Flags().Add(knownFlag)
+
+	// Initialize meta.Api with parameters
+	api := meta.Api{
+		Parameters: []meta.Parameter{
+			{
+				Name:     "KnownParam",
+				Position: "Query",
+			},
+			{
+				Name:     "UnknownParam",
+				Position: "Query",
+			},
+		},
+	}
+
+	// Create Commando instance
+	profile := config.Profile{
+		Language: "en",
+		RegionId: "cn-hangzhou",
+	}
+	commando := NewCommando(w, profile)
+
+	// Call CheckApiParamWithBuildInArgs
+	commando.CheckApiParamWithBuildInArgs(ctx, api)
+
+	// Verify unknown flags
+	unknownFlag, ok := ctx.UnknownFlags().GetValue("KnownParam")
+	assert.True(t, ok)
+	assert.Equal(t, "KnownValue", unknownFlag)
+}
+
+func TestDetectInConfigureMode(t *testing.T) {
+	// Test case 1: No flags set
+	flags := cli.NewFlagSet()
+	result := DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when no flags are set")
+
+	// Test case 2: Mode flag set
+	flags = cli.NewFlagSet()
+	modeFlag := &cli.Flag{Name: config.ModeFlagName}
+	modeFlag.SetAssigned(true)
+	flags.Add(modeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.False(t, result, "Expected false when mode flag is set")
+
+	// Test case 3: AccessKeyId flag set
+	flags = cli.NewFlagSet()
+	modeFlag.SetAssigned(true)
+	flags.Add(modeFlag)
+	akFlag := &cli.Flag{Name: config.AccessKeyIdFlagName}
+	akFlag.SetAssigned(true)
+	flags.Add(akFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when AccessKeyId flag is set")
+
+	// Test case 4: AccessKeySecret flag set
+	flags = cli.NewFlagSet()
+	skFlag := &cli.Flag{Name: config.AccessKeySecretFlagName}
+	skFlag.SetAssigned(true)
+	flags.Add(skFlag)
+	flags.Add(modeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when AccessKeySecret flag is set")
+
+	// Test case 5: StsToken flag set
+	flags = cli.NewFlagSet()
+	stsFlag := &cli.Flag{Name: config.StsTokenFlagName}
+	stsFlag.SetAssigned(true)
+	flags.Add(stsFlag)
+	flags.Add(modeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when StsToken flag is set")
+
+	// Test case 6: RamRoleName flag set
+	flags = cli.NewFlagSet()
+	ramRoleNameFlag := &cli.Flag{Name: config.RamRoleNameFlagName}
+	ramRoleNameFlag.SetAssigned(true)
+	flags.Add(ramRoleNameFlag)
+	flags.Add(modeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when RamRoleName flag is set")
+
+	// Test case 7: RamRoleArn flag set
+	flags = cli.NewFlagSet()
+	ramRoleArnFlag := &cli.Flag{Name: config.RamRoleArnFlagName}
+	ramRoleArnFlag.SetAssigned(true)
+	flags.Add(ramRoleArnFlag)
+	flags.Add(modeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when RamRoleArn flag is set")
+
+	// Test case 8: RoleSessionName flag set
+	flags = cli.NewFlagSet()
+	roleSessionNameFlag := &cli.Flag{Name: config.RoleSessionNameFlagName}
+	roleSessionNameFlag.SetAssigned(true)
+	flags.Add(roleSessionNameFlag)
+	flags.Add(modeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when RoleSessionName flag is set")
+
+	// Test case 9: PrivateKey flag set
+	flags = cli.NewFlagSet()
+	privateKeyFlag := &cli.Flag{Name: config.PrivateKeyFlagName}
+	privateKeyFlag.SetAssigned(true)
+	flags.Add(privateKeyFlag)
+	flags.Add(modeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when PrivateKey flag is set")
+
+	// Test case 10: KeyPairName flag set
+	flags = cli.NewFlagSet()
+	keyPairNameFlag := &cli.Flag{Name: config.KeyPairNameFlagName}
+	keyPairNameFlag.SetAssigned(true)
+	flags.Add(keyPairNameFlag)
+	flags.Add(modeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when KeyPairName flag is set")
+
+	// Test case 11: OIDCProviderARN flag set
+	flags = cli.NewFlagSet()
+	oidcProviderArnFlag := &cli.Flag{Name: config.OIDCProviderARNFlagName}
+	oidcProviderArnFlag.SetAssigned(true)
+	flags.Add(oidcProviderArnFlag)
+	flags.Add(modeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when OIDCProviderARN flag is set")
+
+	// Test case 12: OIDCTokenFile flag set
+	flags = cli.NewFlagSet()
+	oidcTokenFileFlag := &cli.Flag{Name: config.OIDCTokenFileFlagName}
+	oidcTokenFileFlag.SetAssigned(true)
+	flags.Add(oidcTokenFileFlag)
+	flags.Add(modeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when OIDCTokenFile flag is set")
 }
