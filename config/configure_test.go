@@ -263,8 +263,9 @@ func TestConfigureChainableRamRoleArnWhenZeroExpiredSeconds(t *testing.T) {
 		RoleSessionName: "rsn",
 		RegionId:        "cn-hangzhou",
 		OutputFormat:    "json",
+		ExternalId:      "eid",
 	})
-	assert.Equal(t, "Source Profile [source]: Sts Region [cn-hangzhou]: Ram Role Arn [rra]: Role Session Name [rsn]: Expired Seconds [900]: ", w.String())
+	assert.Equal(t, "Source Profile [source]: Sts Region [cn-hangzhou]: Ram Role Arn [rra]: Role Session Name [rsn]: External ID [eid]: Expired Seconds [900]: ", w.String())
 	assert.Nil(t, err)
 }
 
