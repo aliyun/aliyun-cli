@@ -63,6 +63,7 @@ func Main(args []string) {
 	ctx := cli.NewCommandContext(stdout, stderr)
 	ctx.EnterCommand(rootCmd)
 	ctx.SetCompletion(cli.ParseCompletionForShell())
+	ctx.SetInConfigureMode(openapi.DetectInConfigureMode(ctx.Flags()))
 
 	rootCmd.AddSubCommand(config.NewConfigureCommand())
 	rootCmd.AddSubCommand(lib.NewOssCommand())

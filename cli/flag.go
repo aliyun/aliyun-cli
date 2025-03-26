@@ -86,6 +86,9 @@ type Flag struct {
 
 // return true if flag appeared, either `--flag1` or `--flag1 value1`
 func (f *Flag) IsAssigned() bool {
+	if f == nil {
+		return false
+	}
 	return f.assigned
 }
 
@@ -101,6 +104,9 @@ func (f *Flag) SetValue(value string) {
 //
 //	for `AssignedMode == AssignedRepeatable`. Use GetValues() to get all values
 func (f *Flag) GetValue() (string, bool) {
+	if f == nil {
+		return "", false
+	}
 	if f.IsAssigned() {
 		return f.value, true
 	} else if f.Required {
