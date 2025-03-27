@@ -95,6 +95,7 @@ var corsOptionsCommand = OptionsCommand{
 			OptionECSRoleName,
 			OptionTokenTimeout,
 			OptionRamRoleArn,
+			OptionExternalId,
 			OptionRoleSessionName,
 			OptionReadTimeout,
 			OptionConnectTimeout,

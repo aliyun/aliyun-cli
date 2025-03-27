@@ -93,6 +93,7 @@ const (
 	OptionTokenTimeout               = "tokenTimeout"
 	OptionRamRoleArn                 = "ramRoleArn"
 	OptionRoleSessionName            = "roleSessionName"
+	OptionExternalId                 = "externalId"
 	OptionReadTimeout                = "readTimeOut"
 	OptionConnectTimeout             = "connectTimeOut"
 	OptionSTSRegion                  = "stsRegion"
