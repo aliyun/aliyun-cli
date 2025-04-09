@@ -45,6 +45,16 @@ type Context struct {
 	stdout          io.Writer
 	stderr          io.Writer
 	inConfigureMode bool
+	// use http instead of https
+	insecure bool
+}
+
+func (ctx *Context) Insecure() bool {
+	return ctx.insecure
+}
+
+func (ctx *Context) SetInsecure(insecure bool) {
+	ctx.insecure = insecure
 }
 
 func (ctx *Context) InConfigureMode() bool {
