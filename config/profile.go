@@ -347,6 +347,8 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			err = fmt.Errorf("can not load the source profile: " + profileName)
 			return
 		}
+		source.parent = cp.parent
+		source.parent.CurrentProfile = profileName
 
 		middle, err2 := source.GetCredential(ctx, proxyHost)
 		if err2 != nil {
