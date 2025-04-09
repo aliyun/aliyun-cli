@@ -32,7 +32,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.20'
+          go-version: '1.23'
       - name: Set up developer id application cert
         uses: apple-actions/import-codesign-certs@v2
         with:
@@ -94,7 +94,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.20'
+          go-version: '1.23'
       - name: Build
         run: |
           TAG=${{ github.ref_name }}
@@ -121,7 +121,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.20'
+          go-version: '1.23'
       - name: Build
         run: |
           $tag = "${{ github.ref_name }}"
