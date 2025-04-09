@@ -3,6 +3,7 @@ package lib
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/cli"
@@ -149,7 +150,10 @@ func ParseAndGetEndpoint(ctx *cli.Context, args []string) (string, error) {
 func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	// 利用 parser 解析 flags，否则下文读不到
 	parser := cli.NewParser(args, ctx)
-	parser.ReadAll()
+	_, err := parser.ReadAll()
+	if err != nil {
+		return err
+	}
 
 	profile, err := config.LoadProfileWithContext(ctx)
 	if err != nil {
@@ -187,6 +191,15 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	endpoint, err := ParseAndGetEndpoint(ctx, args)
 	if err != nil {
 		return fmt.Errorf("parse endpoint failed: %s", err)
+	}
+	// check use http force
+	forceUseHttp := ctx.Insecure()
+	if endpoint != "" && !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+		if forceUseHttp {
+			endpoint = "http://" + endpoint
+		} else {
+			endpoint = "https://" + endpoint
+		}
 	}
 	configs["endpoint"] = endpoint
 

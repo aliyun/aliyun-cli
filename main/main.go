@@ -64,6 +64,9 @@ func Main(args []string) {
 	ctx.EnterCommand(rootCmd)
 	ctx.SetCompletion(cli.ParseCompletionForShell())
 	ctx.SetInConfigureMode(openapi.DetectInConfigureMode(ctx.Flags()))
+	// use http force, current use in oss bridge
+	insecure, _ := ParseInSecure(args)
+	ctx.SetInsecure(insecure)
 
 	rootCmd.AddSubCommand(config.NewConfigureCommand())
 	rootCmd.AddSubCommand(lib.NewOssCommand())
@@ -74,6 +77,16 @@ func Main(args []string) {
 	} else {
 		rootCmd.Execute(ctx, args)
 	}
+}
+
+func ParseInSecure(args []string) (bool, interface{}) {
+	// check has insecure flag
+	for _, arg := range args {
+		if arg == "--insecure" {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func main() {
