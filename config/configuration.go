@@ -19,8 +19,8 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/util"
+	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 const (

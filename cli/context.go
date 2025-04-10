@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
 //

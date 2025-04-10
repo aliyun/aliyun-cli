@@ -21,7 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli"
 )
 
 func TestDoConfigureGet(t *testing.T) {

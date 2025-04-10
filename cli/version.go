@@ -16,7 +16,7 @@ package cli
 import (
 	"strings"
 
-	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
 // This variable is replaced in compile time
