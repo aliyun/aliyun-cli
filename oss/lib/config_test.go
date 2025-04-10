@@ -367,6 +367,7 @@ func (s *OssutilConfigSuite) TestConfigNonInteractiveWithCommonOption(c *C) {
 	tokenTimeout := "300"
 	ramRoleArn := "acs:ram::123*******123:role/ramosssts"
 	roleSessionName := "roleTest"
+	externalId := "externalId"
 	readTimeout := "10"
 	connectTimeOut := "10"
 	stsRegion = "sts.cn-qingdao.aliyuncs.com"
@@ -432,6 +433,7 @@ func (s *OssutilConfigSuite) TestConfigNonInteractiveWithCommonOption(c *C) {
 	ramRoleArn1 := "acs:ram::123*******123:role/ramosssts1"
 	roleSessionName1 := "roleTest1"
 	ecsRoleName1 := "ossTest1"
+	externalId1 := "externalId1"
 	stsRegion1 := "sts.cn-hangzhou.aliyuncs.com"
 	data = "[Credentials]" + "\n" +
 		"language=" + DefaultLanguage + "\n" +
@@ -443,6 +445,7 @@ func (s *OssutilConfigSuite) TestConfigNonInteractiveWithCommonOption(c *C) {
 		"tokenTimeout=" + tokenTimeout1 + "\n" +
 		"ramRoleArn=" + ramRoleArn1 + "\n" +
 		"roleSessionName=" + roleSessionName1 + "\n" +
+		"externalId=" + externalId1 + "\n" +
 		"mode=" + mode + "\n" +
 		"stsRegion=" + stsRegion1 + "\n" +
 		"signVersion=" + signVersion + "\n" +
@@ -458,6 +461,7 @@ func (s *OssutilConfigSuite) TestConfigNonInteractiveWithCommonOption(c *C) {
 		"tokenTimeout=" + tokenTimeout + "\n" +
 		"ramRoleArn=" + ramRoleArn + "\n" +
 		"roleSessionName=" + roleSessionName + "\n" +
+		"externalId=" + externalId + "\n" +
 		"readTimeOut=" + readTimeout + "\n" +
 		"connectTimeOut=" + connectTimeOut
 	s.createFile(cfile, data, c)
@@ -465,7 +469,7 @@ func (s *OssutilConfigSuite) TestConfigNonInteractiveWithCommonOption(c *C) {
 	opts, err = LoadConfig(cfile)
 	testLogger.Print(opts)
 	c.Assert(err, IsNil)
-	c.Assert(len(opts), Equals, 21)
+	c.Assert(len(opts), Equals, 22)
 	c.Assert(opts[OptionLanguage], Equals, DefaultLanguage)
 	c.Assert(opts[OptionEndpoint], Equals, endpoint)
 	c.Assert(opts[OptionAccessKeyID], Equals, accessKeyID)
@@ -485,6 +489,7 @@ func (s *OssutilConfigSuite) TestConfigNonInteractiveWithCommonOption(c *C) {
 	c.Assert(opts[OptionRamRoleArn], Equals, ramRoleArn1)
 	c.Assert(opts[OptionTokenTimeout], Equals, tokenTimeout1)
 	c.Assert(opts[OptionRoleSessionName], Equals, roleSessionName1)
+	c.Assert(opts[OptionExternalId], Equals, externalId1)
 	c.Assert(opts[OptionSTSRegion], Equals, stsRegion1)
 	c.Assert(opts[OptionECSRoleName], Equals, ecsRoleName1)
 	c.Assert(opts[OptionSignVersion], Equals, signVersion)
