@@ -14,8 +14,8 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/meta"
-	"github.com/aliyun/aliyun-cli/newmeta"
+	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/newmeta"
 	"github.com/stretchr/testify/assert"
 
 	"bytes"

@@ -21,7 +21,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli"
 
 	"github.com/stretchr/testify/assert"
 )
