@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/alibabacloud-go/tea/tea"
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/config"
-	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
 func NewOssCommand() *cli.Command {

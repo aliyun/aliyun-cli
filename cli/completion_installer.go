@@ -18,7 +18,7 @@ import (
 	"os"
 	"os/user"
 
-	"github.com/aliyun/aliyun-cli/i18n"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
 var hookGetBinaryPath = func(fn func() (string, error)) func() (string, error) {

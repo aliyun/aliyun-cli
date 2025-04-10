@@ -1,4 +1,4 @@
-module github.com/aliyun/aliyun-cli
+module github.com/aliyun/aliyun-cli/v3
 
 go 1.23.0
 

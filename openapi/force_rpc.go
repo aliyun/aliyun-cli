@@ -17,7 +17,7 @@ import (
 	"fmt"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
-	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli"
 )
 
 type ForceRpcInvoker struct {

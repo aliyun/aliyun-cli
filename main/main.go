@@ -21,12 +21,12 @@ import (
 	"path"
 	"strings"
 
-	aliyunopenapimeta "github.com/aliyun/aliyun-cli/aliyun-openapi-meta"
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/config"
-	"github.com/aliyun/aliyun-cli/i18n"
-	"github.com/aliyun/aliyun-cli/openapi"
-	"github.com/aliyun/aliyun-cli/oss/lib"
+	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
+	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/openapi"
+	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 )
 
 func Main(args []string) {

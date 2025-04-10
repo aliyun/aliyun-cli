@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	aliyunopenapimeta "github.com/aliyun/aliyun-cli/aliyun-openapi-meta"
+	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 )
 
 // {

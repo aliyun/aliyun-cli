@@ -17,10 +17,10 @@ import (
 	"bytes"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/config"
-	"github.com/aliyun/aliyun-cli/i18n"
-	"github.com/aliyun/aliyun-cli/meta"
+	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/meta"
 
 	"encoding/json"
 	"fmt"

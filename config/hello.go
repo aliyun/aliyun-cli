@@ -20,7 +20,7 @@ import (
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	util "github.com/alibabacloud-go/tea-utils/v2/service"
 	"github.com/alibabacloud-go/tea/tea"
-	"github.com/aliyun/aliyun-cli/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli"
 )
 
 func doHello(ctx *cli.Context, profile *Profile) (err error) {

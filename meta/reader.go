@@ -17,7 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	aliyunopenapimeta "github.com/aliyun/aliyun-cli/aliyun-openapi-meta"
+	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 )
 
 func ReadJsonFrom(path string, v interface{}) error {

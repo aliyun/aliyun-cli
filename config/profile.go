@@ -23,9 +23,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/aliyun/aliyun-cli/cli"
-	"github.com/aliyun/aliyun-cli/i18n"
-	"github.com/aliyun/aliyun-cli/util"
+	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/util"
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 )
 
