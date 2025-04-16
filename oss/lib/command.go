@@ -302,6 +302,7 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	strTokenTimeout, _ := GetString(OptionTokenTimeout, cmd.options)
 	ramRoleArn, _ := GetString(OptionRamRoleArn, cmd.options)
 	roleSessionName, _ := GetString(OptionRoleSessionName, cmd.options)
+	externalId, _ := GetString(OptionExternalId, cmd.options)
 
 	strReadTimeout, _ := GetString(OptionReadTimeout, cmd.options)
 	strConnectTimeout, _ := GetString(OptionConnectTimeout, cmd.options)
@@ -376,8 +377,11 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 		if roleSessionName == "" {
 			roleSessionName = "SessNameRand" + randStr(5)
 		}
+		if externalId == "" {
+			externalId, _ = cmd.getExternalId()
+		}
 
-		stsClient := NewClient(accessKeyID, accessKeySecret, ramRoleArn, roleSessionName)
+		stsClient := NewClient(accessKeyID, accessKeySecret, ramRoleArn, roleSessionName, externalId)
 
 		if strTokenTimeout == "" {
 			strTokenTimeout = "3600"
@@ -563,6 +567,19 @@ func (cmd *Command) getRamRoleArn() (string, bool) {
 		if strArn, ok := arnMap.(map[string]string)[ItemRamRoleArn]; ok {
 			if strArn != "" {
 				return strArn, true
+			} else {
+				return "", false
+			}
+		}
+	}
+	return "", false
+}
+
+func (cmd *Command) getExternalId() (string, bool) {
+	if idMap, ok := cmd.configOptions[CREDSection]; ok {
+		if strId, ok := idMap.(map[string]string)[ItemExternalId]; ok {
+			if strId != "" {
+				return strId, true
 			} else {
 				return "", false
 			}

@@ -61,12 +61,18 @@ func doConfigureList(w io.Writer) {
 			cred = "StsToken:" + "***" + GetLastChars(pf.AccessKeyId, 3)
 		case RamRoleArn:
 			cred = "RamRoleArn:" + "***" + GetLastChars(pf.AccessKeyId, 3)
+			if pf.ExternalId != "" {
+				cred = cred + ":" + GetLastChars(pf.ExternalId, 3)
+			}
 		case EcsRamRole:
 			cred = "EcsRamRole:" + pf.RamRoleName
 		case RamRoleArnWithEcs:
 			cred = "arn:" + "***" + GetLastChars(pf.AccessKeyId, 3)
 		case ChainableRamRoleArn:
 			cred = "ChainableRamRoleArn:" + pf.SourceProfile + ":" + pf.RamRoleArn
+			if pf.ExternalId != "" {
+				cred = cred + ":" + GetLastChars(pf.ExternalId, 3)
+			}
 		case RsaKeyPair:
 			cred = "RsaKeyPair:" + pf.KeyPairName
 		case External:

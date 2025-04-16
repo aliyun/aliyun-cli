@@ -84,6 +84,8 @@ func doConfigureGet(c *cli.Context, args []string) {
 			cli.Printf(c.Stdout(), "ram-role-name=%s\n", profile.RamRoleName)
 		case RamRoleArnFlagName:
 			cli.Printf(c.Stdout(), "ram-role-arn=%s\n", profile.RamRoleArn)
+		case ExternalIdFlagName:
+			cli.Printf(c.Stdout(), "external-id=%s\n", profile.ExternalId)
 		case RoleSessionNameFlagName:
 			cli.Printf(c.Stdout(), "role-session-name=%s\n", profile.RoleSessionName)
 		case KeyPairNameFlagName:
