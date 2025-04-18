@@ -558,6 +558,11 @@ func TestGetProfileWithCloudSSO(t *testing.T) {
 	p.CloudSSOSignInUrl = "333"
 	cf.PutProfile(*p)
 
+	saveConfigurationFunc = func(config *Configuration) (err error) {
+		// 模拟保存配置成功
+		return nil
+	}
+
 	c, err := p.GetCredential(newCtx(), nil)
 	assert.Nil(t, c)
 	// err != nil and contain CloudSSO access token is expired
@@ -578,6 +583,11 @@ func TestGetCredentialWithCloudSSOMockSuccess(t *testing.T) {
 			SecurityToken:   "mock-security-token",
 			ExpirationInt64: time.Now().Unix() + 3600,
 		}, nil
+	}
+
+	saveConfigurationFunc = func(config *Configuration) (err error) {
+		// 模拟保存配置成功
+		return nil
 	}
 
 	// 准备测试数据

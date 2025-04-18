@@ -531,7 +531,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 					break
 				}
 			}
-			err = SaveConfiguration(conf)
+			err = saveConfigurationFunc(conf)
 			if err != nil {
 				return nil, err
 			}
@@ -556,6 +556,8 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 
 	return credentialsv2.NewCredential(config)
 }
+
+var saveConfigurationFunc = SaveConfiguration
 
 func IsRegion(region string) bool {
 	if match, _ := regexp.MatchString("^[a-zA-Z0-9-]*$", region); !match {
