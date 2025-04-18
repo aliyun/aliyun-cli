@@ -42,17 +42,20 @@ func newProfile() *Profile {
 		StsToken:        "",
 		RamRoleName:     "",
 
-		RamRoleArn:      "",
-		RoleSessionName: "",
-		PrivateKey:      "",
-		KeyPairName:     "",
-		ExpiredSeconds:  0,
-		Verified:        "",
-		RegionId:        "",
-		Site:            "",
-		ReadTimeout:     0,
-		ConnectTimeout:  0,
-		RetryCount:      0,
+		RamRoleArn:           "",
+		RoleSessionName:      "",
+		PrivateKey:           "",
+		KeyPairName:          "",
+		ExpiredSeconds:       0,
+		Verified:             "",
+		RegionId:             "",
+		Site:                 "",
+		ReadTimeout:          0,
+		ConnectTimeout:       0,
+		RetryCount:           0,
+		CloudSSOAccessConfig: "",
+		CloudSSOAccountId:    "",
+		CloudSSOSignInUrl:    "",
 	}
 }
 
@@ -242,27 +245,34 @@ func TestOverwriteWithFlags(t *testing.T) {
 	RetryCountFlag(ctx.Flags()).SetValue("3")
 	ExpiredSecondsFlag(ctx.Flags()).SetAssigned(true)
 	ExpiredSecondsFlag(ctx.Flags()).SetValue("4")
+	CloudSSOSignInUrlFlag(ctx.Flags()).SetAssigned(true)
+	CloudSSOAccountIdFlag(ctx.Flags()).SetValue("111")
+	CloudSSOAccountIdFlag(ctx.Flags()).SetAssigned(true)
+	CloudSSOAccessConfigFlag(ctx.Flags()).SetValue("222")
+	CloudSSOAccessConfigFlag(ctx.Flags()).SetAssigned(true)
 
 	exp := &Profile{
-		Name:            "default",
-		Mode:            AuthenticateMode("ModeFlag"),
-		OutputFormat:    "json",
-		Language:        "LanguageFlag",
-		AccessKeyId:     "AccessKeyIdFlag",
-		AccessKeySecret: "AccessKeySecretFlag",
-		StsToken:        "StsTokenFlag",
-		RamRoleName:     "RamRoleNameFlag",
-		RamRoleArn:      "RamRoleArnFlag",
-		RoleSessionName: "RoleSessionNameFlag",
-		PrivateKey:      "PrivateKeyFlag",
-		KeyPairName:     "KeyPairNameFlag",
-		ExpiredSeconds:  4,
-		Verified:        "",
-		RegionId:        "RegionFlag",
-		Site:            "",
-		ReadTimeout:     1,
-		ConnectTimeout:  2,
-		RetryCount:      3,
+		Name:                 "default",
+		Mode:                 AuthenticateMode("ModeFlag"),
+		OutputFormat:         "json",
+		Language:             "LanguageFlag",
+		AccessKeyId:          "AccessKeyIdFlag",
+		AccessKeySecret:      "AccessKeySecretFlag",
+		StsToken:             "StsTokenFlag",
+		RamRoleName:          "RamRoleNameFlag",
+		RamRoleArn:           "RamRoleArnFlag",
+		RoleSessionName:      "RoleSessionNameFlag",
+		PrivateKey:           "PrivateKeyFlag",
+		KeyPairName:          "KeyPairNameFlag",
+		ExpiredSeconds:       4,
+		Verified:             "",
+		RegionId:             "RegionFlag",
+		Site:                 "",
+		ReadTimeout:          1,
+		ConnectTimeout:       2,
+		RetryCount:           3,
+		CloudSSOAccountId:    "111",
+		CloudSSOAccessConfig: "222",
 	}
 
 	actual.OverwriteWithFlags(ctx)
@@ -530,4 +540,19 @@ func TestGetProfileWithChainable(t *testing.T) {
 	c, err := p.GetCredential(newCtx(), nil)
 	assert.NotNil(t, c)
 	assert.Nil(t, err)
+}
+
+func TestGetProfileWithCloudSSO(t *testing.T) {
+	cf := NewConfiguration()
+	p := newProfile()
+	p.Mode = CloudSSO
+	p.CloudSSOAccountId = "111"
+	p.CloudSSOAccessConfig = "222"
+	p.CloudSSOSignInUrl = "333"
+	cf.PutProfile(*p)
+
+	c, err := p.GetCredential(newCtx(), nil)
+	assert.Nil(t, c)
+	// err != nil and contain CloudSSO access token is expired
+	assert.EqualError(t, err, "CloudSSO access token is expired, please re-login with command: aliyun configure --profile default")
 }

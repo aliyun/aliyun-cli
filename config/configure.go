@@ -149,7 +149,20 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 			configureOIDC(w, &cp)
 		case CloudSSO:
 			cp.Mode = CloudSSO
-			configureCloudSSO(w, &cp)
+			// parameter from command has higher priority, use it directly
+			if CloudSSOSignInUrlFlag(ctx.Flags()).IsAssigned() {
+				cp.CloudSSOSignInUrl, _ = CloudSSOSignInUrlFlag(ctx.Flags()).GetValue()
+			}
+			if CloudSSOAccountIdFlag(ctx.Flags()).IsAssigned() {
+				cp.CloudSSOAccountId, _ = CloudSSOAccountIdFlag(ctx.Flags()).GetValue()
+			}
+			if CloudSSOAccessConfigFlag(ctx.Flags()).IsAssigned() {
+				cp.CloudSSOAccessConfig, _ = CloudSSOAccessConfigFlag(ctx.Flags()).GetValue()
+			}
+			err := configureCloudSSO(w, &cp)
+			if err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("unexcepted authenticate mode: %s", mode)
 		}
@@ -426,7 +439,7 @@ func configureCloudSSO(w io.Writer, cp *Profile) error {
 	acHistory := cp.CloudSSOAccessConfig
 	if acHistory != "" {
 		// 判断是否存在
-		var exist bool = false
+		var exist = false
 		for _, accessConfiguration := range accessConfigurations {
 			if accessConfiguration.AccessConfigurationId == acHistory {
 				exist = true

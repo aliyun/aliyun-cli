@@ -286,10 +286,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 	config := new(credentialsv2.Config)
 	// The AK, StsToken are direct credential
 	// Others are indirect credential
-	err = cp.Validate()
-	if err != nil {
-		return nil, err
-	}
+	cp.Validate()
 	switch cp.Mode {
 	case AK:
 		if cp.AccessKeyId == "" || cp.AccessKeySecret == "" {

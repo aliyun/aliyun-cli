@@ -314,6 +314,28 @@ func TestConfigureOIDC(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestConfigureCloudSSO(t *testing.T) {
+	// 保存原始 stdin 以便后续恢复
+	originalStdin := stdin
+	defer func() {
+		stdin = originalStdin
+	}()
+
+	w := new(bytes.Buffer)
+
+	// Case 1: 测试未输入 CloudSSOSignInUrl 的情况
+	stdin = strings.NewReader("")
+	profile := &Profile{
+		Name:         "default",
+		Mode:         CloudSSO,
+		RegionId:     "cn-hangzhou",
+		OutputFormat: "json",
+	}
+	err := configureCloudSSO(w, profile)
+	assert.EqualError(t, err, "CloudSSOSignInUrl is required")
+	assert.Equal(t, "CloudSSO Sign In Url []: ", w.String())
+}
+
 func TestReadInput(t *testing.T) {
 	defer func() {
 		stdin = os.Stdin
