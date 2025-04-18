@@ -31,6 +31,8 @@ import (
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 )
 
+var tryRefreshStsTokenFunc = cloudsso.TryRefreshStsToken
+
 type AuthenticateMode string
 
 const (
@@ -497,7 +499,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		}
 		if stsExpiration == 0 || stsExpiration <= currentUnixTime ||
 			cp.AccessKeyId == "" || cp.AccessKeySecret == "" || cp.StsToken == "" {
-			token, err := cloudsso.TryRefreshStsToken(&cp.CloudSSOSignInUrl,
+			token, err := tryRefreshStsTokenFunc(&cp.CloudSSOSignInUrl,
 				&cp.AccessToken, &cp.CloudSSOAccessConfig, &cp.CloudSSOAccountId, httpClient)
 			if err != nil {
 				println(i18n.T("Create STS from CloudSSO failed", "从 CloudSSO 接口创建STS凭证失败，请重试或检查配置是否错误").GetMessage())

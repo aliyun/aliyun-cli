@@ -20,6 +20,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cloudsso"
 	"github.com/aliyun/aliyun-cli/v3/util"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"strconv"
@@ -39,6 +40,23 @@ var hookSaveConfiguration = func(fn func(config *Configuration) error) func(conf
 }
 
 var stdin io.Reader = os.Stdin
+
+// 为了方便 mock 的函数变量
+var cloudssoGetAccessToken = func(ssoLogin *cloudsso.SsoLogin) (*cloudsso.AccessTokenResponse, error) {
+	return ssoLogin.GetAccessToken()
+}
+
+var cloudssoListAllUsers = func(userParam *cloudsso.ListUserParameter) ([]cloudsso.AccountDetailResponse, error) {
+	return userParam.ListAllUsers()
+}
+
+var cloudssoListAllAccessConfigurations = func(accessParam *cloudsso.AccessConfigurationsParameter, req cloudsso.AccessConfigurationsRequest) ([]cloudsso.AccessConfiguration, error) {
+	return accessParam.ListAllAccessConfigurations(req)
+}
+
+var cloudssoTryRefreshStsToken = func(signInUrl, accessToken, accessConfig, accountId *string, httpClient *http.Client) (*cloudsso.CloudCredentialResponse, error) {
+	return cloudsso.TryRefreshStsToken(signInUrl, accessToken, accessConfig, accountId, httpClient)
+}
 
 func loadConfiguration() (*Configuration, error) {
 	return hookLoadConfiguration(LoadConfiguration)(GetConfigPath() + "/" + configFile)
@@ -330,7 +348,7 @@ func configureOIDC(w io.Writer, cp *Profile) error {
 func configureCloudSSO(w io.Writer, cp *Profile) error {
 	cli.Printf(w, "CloudSSO Sign In Url [%s]: ", cp.CloudSSOSignInUrl)
 	userInputCloudSSOSignInUrl := ReadInput(cp.CloudSSOSignInUrl)
-	if userInputCloudSSOSignInUrl != cp.CloudSSOSignInUrl {
+	if userInputCloudSSOSignInUrl != cp.CloudSSOSignInUrl && cp.CloudSSOSignInUrl != "" {
 		// 需要清空其他的字段，完整的走登录
 		cp.AccessKeyId = ""
 		cp.AccessKeySecret = ""
@@ -355,7 +373,7 @@ func configureCloudSSO(w io.Writer, cp *Profile) error {
 		ExpireTime: 0,
 		HttpClient: httpClient,
 	}
-	accessToken, err := ssoLogin.GetAccessToken()
+	accessToken, err := cloudssoGetAccessToken(&ssoLogin)
 	if err != nil {
 		return fmt.Errorf("get access token failed: %s", err)
 	}
@@ -369,7 +387,7 @@ func configureCloudSSO(w io.Writer, cp *Profile) error {
 		BaseUrl:     baseUrl.Scheme + "://" + baseUrl.Host,
 		HttpClient:  httpClient,
 	}
-	allUser, err := userParameter.ListAllUsers()
+	allUser, err := cloudssoListAllUsers(&userParameter)
 	if err != nil {
 		return fmt.Errorf("list account failed: %s", err)
 	}
@@ -388,7 +406,7 @@ func configureCloudSSO(w io.Writer, cp *Profile) error {
 			}
 		}
 		if !exist {
-			fmt.Printf("Account %s not found, please choose again\n", accountIdHistory)
+			cli.Printf(w, "Account %s not found, please choose again\n", accountIdHistory)
 			// clear history
 			cp.CloudSSOAccountId = ""
 		}
@@ -398,14 +416,14 @@ func configureCloudSSO(w io.Writer, cp *Profile) error {
 		// if allUser has only one account, use it directly
 		if len(allUser) == 1 {
 			cp.CloudSSOAccountId = allUser[0].AccountId
-			fmt.Printf("Account: %s\n", allUser[0].DisplayName)
+			cli.Printf(w, "Account: %s\n", allUser[0].DisplayName)
 		} else {
 			// print all user id
-			fmt.Println("Please choose an account:")
+			cli.Println(w, "Please choose an account:")
 			for i, user := range allUser {
 				fmt.Printf("%d. %s\n", i+1, user.DisplayName)
 			}
-			fmt.Printf("Please input the account number: ")
+			cli.Printf(w, "Please input the account number: ")
 			var accountNumber int
 			// read input
 			input := ReadInput("1")
@@ -427,7 +445,7 @@ func configureCloudSSO(w io.Writer, cp *Profile) error {
 		HttpClient:  httpClient,
 		AccountId:   cp.CloudSSOAccountId,
 	}
-	accessConfigurations, err := accessConfigurationParameter.ListAllAccessConfigurations(cloudsso.AccessConfigurationsRequest{
+	accessConfigurations, err := cloudssoListAllAccessConfigurations(&accessConfigurationParameter, cloudsso.AccessConfigurationsRequest{
 		AccountId: cp.CloudSSOAccountId,
 	})
 	if err != nil {
@@ -447,7 +465,7 @@ func configureCloudSSO(w io.Writer, cp *Profile) error {
 			}
 		}
 		if !exist {
-			fmt.Printf("Access Configuration %s not found, please choose again\n", acHistory)
+			cli.Printf(w, "Access Configuration %s not found, please choose again\n", acHistory)
 			// clear history
 			cp.CloudSSOAccessConfig = ""
 		}
@@ -456,14 +474,14 @@ func configureCloudSSO(w io.Writer, cp *Profile) error {
 		// if accessConfigurations has only one access configuration, use it directly
 		if len(accessConfigurations) == 1 {
 			cp.CloudSSOAccessConfig = accessConfigurations[0].AccessConfigurationId
-			fmt.Printf("Access Configuration: %s\n", accessConfigurations[0].AccessConfigurationId)
+			cli.Printf(w, "Access Configuration: %s\n", accessConfigurations[0].AccessConfigurationId)
 		} else {
 			// print all access configuration id
-			fmt.Println("Please choose an access configuration:")
+			cli.Println(w, "Please choose an access configuration:")
 			for i, accessConfiguration := range accessConfigurations {
-				fmt.Printf("%d. %s\n", i+1, accessConfiguration.AccessConfigurationName)
+				cli.Printf(w, "%d. %s\n", i+1, accessConfiguration.AccessConfigurationName)
 			}
-			fmt.Printf("Please input the access configuration number: ")
+			cli.Printf(w, "Please input the access configuration number: ")
 			var accessConfigurationNumber int
 			// read input
 			input := ReadInput("1")
@@ -479,7 +497,7 @@ func configureCloudSSO(w io.Writer, cp *Profile) error {
 		}
 	}
 	// create sts token
-	stsInfo, err := cloudsso.TryRefreshStsToken(&cp.CloudSSOSignInUrl, &cp.AccessToken, &cp.CloudSSOAccessConfig,
+	stsInfo, err := cloudssoTryRefreshStsToken(&cp.CloudSSOSignInUrl, &cp.AccessToken, &cp.CloudSSOAccessConfig,
 		&cp.CloudSSOAccountId, httpClient)
 	if err != nil {
 		return fmt.Errorf("create sts token failed: %s", err)

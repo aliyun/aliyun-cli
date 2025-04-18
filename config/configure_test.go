@@ -15,6 +15,7 @@ package config
 
 import (
 	"bytes"
+	"net/http"
 	"os"
 	"runtime"
 	"strings"
@@ -23,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cloudsso"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
@@ -334,6 +336,646 @@ func TestConfigureCloudSSO(t *testing.T) {
 	err := configureCloudSSO(w, profile)
 	assert.EqualError(t, err, "CloudSSOSignInUrl is required")
 	assert.Equal(t, "CloudSSO Sign In Url []: ", w.String())
+}
+
+func TestConfigureCloudSSOWithMock(t *testing.T) {
+	// 保存原始 stdin 和函数以便后续恢复
+	originalStdin := stdin
+	originalGetAccessToken := cloudssoGetAccessToken
+	originalListAllUsers := cloudssoListAllUsers
+	originalListAllAccessConfigurations := cloudssoListAllAccessConfigurations
+	originalTryRefreshStsToken := cloudssoTryRefreshStsToken
+
+	defer func() {
+		stdin = originalStdin
+		cloudssoGetAccessToken = originalGetAccessToken
+		cloudssoListAllUsers = originalListAllUsers
+		cloudssoListAllAccessConfigurations = originalListAllAccessConfigurations
+		cloudssoTryRefreshStsToken = originalTryRefreshStsToken
+	}()
+
+	// Mock stdin 输入
+	stdin = strings.NewReader("https://sso.example.com\n1\n1\n")
+	w := new(bytes.Buffer)
+
+	// Mock 所有 cloudsso 函数
+	cloudssoGetAccessToken = func(ssoLogin *cloudsso.SsoLogin) (*cloudsso.AccessTokenResponse, error) {
+		return &cloudsso.AccessTokenResponse{
+			AccessToken: "mock-access-token",
+			ExpiresIn:   3600,
+		}, nil
+	}
+
+	cloudssoListAllUsers = func(userParam *cloudsso.ListUserParameter) ([]cloudsso.AccountDetailResponse, error) {
+		return []cloudsso.AccountDetailResponse{
+			{
+				AccountId:   "account123",
+				DisplayName: "Test Account",
+			},
+		}, nil
+	}
+
+	cloudssoListAllAccessConfigurations = func(accessParam *cloudsso.AccessConfigurationsParameter, req cloudsso.AccessConfigurationsRequest) ([]cloudsso.AccessConfiguration, error) {
+		return []cloudsso.AccessConfiguration{
+			{
+				AccessConfigurationId:   "config123",
+				AccessConfigurationName: "Test Config",
+			},
+		}, nil
+	}
+
+	cloudssoTryRefreshStsToken = func(signInUrl, accessToken, accessConfig, accountId *string, httpClient *http.Client) (*cloudsso.CloudCredentialResponse, error) {
+		return &cloudsso.CloudCredentialResponse{
+			AccessKeyId:     "mock-ak-id",
+			AccessKeySecret: "mock-ak-secret",
+			SecurityToken:   "mock-security-token",
+			Expiration:      "2099-01-01T00:00:00Z",
+		}, nil
+	}
+
+	// 测试用例
+	profile := &Profile{
+		Name:         "default",
+		Mode:         CloudSSO,
+		RegionId:     "cn-hangzhou",
+		OutputFormat: "json",
+	}
+
+	err := configureCloudSSO(w, profile)
+	assert.Nil(t, err)
+
+	// 验证结果
+	assert.Equal(t, "https://sso.example.com", profile.CloudSSOSignInUrl)
+	assert.Equal(t, "mock-access-token", profile.AccessToken)
+	assert.Equal(t, "account123", profile.CloudSSOAccountId)
+	assert.Equal(t, "config123", profile.CloudSSOAccessConfig)
+	assert.Equal(t, "mock-ak-id", profile.AccessKeyId)
+	assert.Equal(t, "mock-ak-secret", profile.AccessKeySecret)
+	assert.Equal(t, "mock-security-token", profile.StsToken)
+}
+
+func TestDoConfigureWithCloudSSO(t *testing.T) {
+	originhook := hookLoadConfiguration
+	originhookSave := hookSaveConfiguration
+	originalGetAccessToken := cloudssoGetAccessToken
+	originalListAllUsers := cloudssoListAllUsers
+	originalListAllAccessConfigurations := cloudssoListAllAccessConfigurations
+	originalTryRefreshStsToken := cloudssoTryRefreshStsToken
+	originalStdin := stdin
+
+	defer func() {
+		hookLoadConfiguration = originhook
+		hookSaveConfiguration = originhookSave
+		cloudssoGetAccessToken = originalGetAccessToken
+		cloudssoListAllUsers = originalListAllUsers
+		cloudssoListAllAccessConfigurations = originalListAllAccessConfigurations
+		cloudssoTryRefreshStsToken = originalTryRefreshStsToken
+		stdin = originalStdin
+	}()
+
+	// Mock 配置加载和保存
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name:         "default",
+						Mode:         AK,
+						AccessKeyId:  "default_ak",
+						OutputFormat: "json",
+					},
+				},
+			}, nil
+		}
+	}
+
+	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
+		return func(config *Configuration) error {
+			return nil
+		}
+	}
+
+	// Mock stdin 输入
+	stdin = strings.NewReader("https://sso.example.com\ncn-beijing\njson\nen\n")
+
+	// Mock 所有 cloudsso 函数
+	cloudssoGetAccessToken = func(ssoLogin *cloudsso.SsoLogin) (*cloudsso.AccessTokenResponse, error) {
+		return &cloudsso.AccessTokenResponse{
+			AccessToken: "mock-access-token",
+			ExpiresIn:   3600,
+		}, nil
+	}
+
+	cloudssoListAllUsers = func(userParam *cloudsso.ListUserParameter) ([]cloudsso.AccountDetailResponse, error) {
+		return []cloudsso.AccountDetailResponse{
+			{
+				AccountId:   "account123",
+				DisplayName: "Test Account",
+			},
+		}, nil
+	}
+
+	cloudssoListAllAccessConfigurations = func(accessParam *cloudsso.AccessConfigurationsParameter, req cloudsso.AccessConfigurationsRequest) ([]cloudsso.AccessConfiguration, error) {
+		return []cloudsso.AccessConfiguration{
+			{
+				AccessConfigurationId:   "config123",
+				AccessConfigurationName: "Test Config",
+			},
+		}, nil
+	}
+
+	cloudssoTryRefreshStsToken = func(signInUrl, accessToken, accessConfig, accountId *string, httpClient *http.Client) (*cloudsso.CloudCredentialResponse, error) {
+		return &cloudsso.CloudCredentialResponse{
+			AccessKeyId:     "mock-ak-id",
+			AccessKeySecret: "mock-ak-secret",
+			SecurityToken:   "mock-security-token",
+			Expiration:      "2099-01-01T00:00:00Z",
+		}, nil
+	}
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	AddFlags(ctx.Flags())
+
+	// 测试 doConfigure 对 CloudSSO 模式的处理
+	err := doConfigure(ctx, "cloud-sso-profile", "CloudSSO")
+	assert.Nil(t, err)
+
+	// 验证输出包含配置 CloudSSO 的信息
+	output := w.String()
+	assert.Contains(t, output, "Configuring profile 'cloud-sso-profile' in 'CloudSSO' authenticate mode...")
+	assert.Contains(t, output, "Saving profile[cloud-sso-profile]")
+	assert.Contains(t, output, "Done.")
+}
+
+func TestDoConfigureWithCloudSSOWhenSpecifyAccountNotExist(t *testing.T) {
+	originhook := hookLoadConfiguration
+	originhookSave := hookSaveConfiguration
+	originalGetAccessToken := cloudssoGetAccessToken
+	originalListAllUsers := cloudssoListAllUsers
+	originalListAllAccessConfigurations := cloudssoListAllAccessConfigurations
+	originalTryRefreshStsToken := cloudssoTryRefreshStsToken
+	originalStdin := stdin
+
+	defer func() {
+		hookLoadConfiguration = originhook
+		hookSaveConfiguration = originhookSave
+		cloudssoGetAccessToken = originalGetAccessToken
+		cloudssoListAllUsers = originalListAllUsers
+		cloudssoListAllAccessConfigurations = originalListAllAccessConfigurations
+		cloudssoTryRefreshStsToken = originalTryRefreshStsToken
+		stdin = originalStdin
+	}()
+
+	// Mock 配置加载和保存
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name:         "default",
+						Mode:         AK,
+						AccessKeyId:  "default_ak",
+						OutputFormat: "json",
+					},
+				},
+			}, nil
+		}
+	}
+
+	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
+		return func(config *Configuration) error {
+			return nil
+		}
+	}
+
+	// Mock stdin 输入
+	stdin = strings.NewReader("https://sso.example.com\ncn-beijing\njson\nen\n")
+
+	// Mock 所有 cloudsso 函数
+	cloudssoGetAccessToken = func(ssoLogin *cloudsso.SsoLogin) (*cloudsso.AccessTokenResponse, error) {
+		return &cloudsso.AccessTokenResponse{
+			AccessToken: "mock-access-token",
+			ExpiresIn:   3600,
+		}, nil
+	}
+
+	cloudssoListAllUsers = func(userParam *cloudsso.ListUserParameter) ([]cloudsso.AccountDetailResponse, error) {
+		return []cloudsso.AccountDetailResponse{
+			{
+				AccountId:   "account123",
+				DisplayName: "Test Account",
+			},
+		}, nil
+	}
+
+	cloudssoListAllAccessConfigurations = func(accessParam *cloudsso.AccessConfigurationsParameter, req cloudsso.AccessConfigurationsRequest) ([]cloudsso.AccessConfiguration, error) {
+		return []cloudsso.AccessConfiguration{
+			{
+				AccessConfigurationId:   "config123",
+				AccessConfigurationName: "Test Config",
+			},
+		}, nil
+	}
+
+	cloudssoTryRefreshStsToken = func(signInUrl, accessToken, accessConfig, accountId *string, httpClient *http.Client) (*cloudsso.CloudCredentialResponse, error) {
+		return &cloudsso.CloudCredentialResponse{
+			AccessKeyId:     "mock-ak-id",
+			AccessKeySecret: "mock-ak-secret",
+			SecurityToken:   "mock-security-token",
+			Expiration:      "2099-01-01T00:00:00Z",
+		}, nil
+	}
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	// 加一个参数，指定 CloudSSOAccountId
+	var accountIdFlag = NewCloudSSOAccountIdFlag()
+	accountIdFlag.SetValue("account2")
+	accountIdFlag.SetAssigned(true)
+	ctx.Flags().Add(accountIdFlag)
+
+	// 测试 doConfigure 对 CloudSSO 模式的处理
+	err := doConfigure(ctx, "cloud-sso-profile", "CloudSSO")
+	assert.Nil(t, err)
+
+	// 验证输出包含配置 CloudSSO 的信息
+	output := w.String()
+	assert.Contains(t, output, "Account account2 not found, please choose again")
+	assert.Contains(t, output, "Saving profile[cloud-sso-profile]")
+	assert.Contains(t, output, "Done.")
+}
+
+// 返回多个账户的测试用例，需要主动输入一个数字选择
+func TestDoConfigureWithCloudSSOReturnMultiAccount(t *testing.T) {
+	originhook := hookLoadConfiguration
+	originhookSave := hookSaveConfiguration
+	originalGetAccessToken := cloudssoGetAccessToken
+	originalListAllUsers := cloudssoListAllUsers
+	originalListAllAccessConfigurations := cloudssoListAllAccessConfigurations
+	originalTryRefreshStsToken := cloudssoTryRefreshStsToken
+	originalStdin := stdin
+
+	defer func() {
+		hookLoadConfiguration = originhook
+		hookSaveConfiguration = originhookSave
+		cloudssoGetAccessToken = originalGetAccessToken
+		cloudssoListAllUsers = originalListAllUsers
+		cloudssoListAllAccessConfigurations = originalListAllAccessConfigurations
+		cloudssoTryRefreshStsToken = originalTryRefreshStsToken
+		stdin = originalStdin
+	}()
+
+	// Mock 配置加载和保存
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name:         "default",
+						Mode:         AK,
+						AccessKeyId:  "default_ak",
+						OutputFormat: "json",
+					},
+				},
+			}, nil
+		}
+	}
+
+	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
+		return func(config *Configuration) error {
+			return nil
+		}
+	}
+
+	// Mock stdin 输入
+	stdin = strings.NewReader("https://sso.example.com\ncn-beijing\njson\nen\n")
+
+	// Mock 所有 cloudsso 函数
+	cloudssoGetAccessToken = func(ssoLogin *cloudsso.SsoLogin) (*cloudsso.AccessTokenResponse, error) {
+		return &cloudsso.AccessTokenResponse{
+			AccessToken: "mock-access-token",
+			ExpiresIn:   3600,
+		}, nil
+	}
+
+	cloudssoListAllUsers = func(userParam *cloudsso.ListUserParameter) ([]cloudsso.AccountDetailResponse, error) {
+		return []cloudsso.AccountDetailResponse{
+			{
+				AccountId:   "account123",
+				DisplayName: "Test Account",
+			},
+			{
+				AccountId:   "account456",
+				DisplayName: "Test Account 2",
+			},
+		}, nil
+	}
+
+	cloudssoListAllAccessConfigurations = func(accessParam *cloudsso.AccessConfigurationsParameter, req cloudsso.AccessConfigurationsRequest) ([]cloudsso.AccessConfiguration, error) {
+		return []cloudsso.AccessConfiguration{
+			{
+				AccessConfigurationId:   "config123",
+				AccessConfigurationName: "Test Config",
+			},
+		}, nil
+	}
+
+	cloudssoTryRefreshStsToken = func(signInUrl, accessToken, accessConfig, accountId *string, httpClient *http.Client) (*cloudsso.CloudCredentialResponse, error) {
+		return &cloudsso.CloudCredentialResponse{
+			AccessKeyId:     "mock-ak-id",
+			AccessKeySecret: "mock-ak-secret",
+			SecurityToken:   "mock-security-token",
+			Expiration:      "2099-01-01T00:00:00Z",
+		}, nil
+	}
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+
+	// 测试 doConfigure 对 CloudSSO 模式的处理
+	err := doConfigure(ctx, "cloud-sso-profile", "CloudSSO")
+	assert.Nil(t, err)
+
+	// 验证输出包含配置 CloudSSO 的信息
+	output := w.String()
+	assert.Contains(t, output, "Please input the account number")
+	assert.Contains(t, output, "Saving profile[cloud-sso-profile]")
+	assert.Contains(t, output, "Done.")
+}
+
+// 通过 flag 指定accessConfigId，不存在的情况
+func TestDoConfigureWithCloudSSOWhenSpecifyAccessConfigNotExist(t *testing.T) {
+	originhook := hookLoadConfiguration
+	originhookSave := hookSaveConfiguration
+	originalGetAccessToken := cloudssoGetAccessToken
+	originalListAllUsers := cloudssoListAllUsers
+	originalListAllAccessConfigurations := cloudssoListAllAccessConfigurations
+	originalTryRefreshStsToken := cloudssoTryRefreshStsToken
+	originalStdin := stdin
+
+	defer func() {
+		hookLoadConfiguration = originhook
+		hookSaveConfiguration = originhookSave
+		cloudssoGetAccessToken = originalGetAccessToken
+		cloudssoListAllUsers = originalListAllUsers
+		cloudssoListAllAccessConfigurations = originalListAllAccessConfigurations
+		cloudssoTryRefreshStsToken = originalTryRefreshStsToken
+		stdin = originalStdin
+	}()
+
+	// Mock 配置加载和保存
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name:         "default",
+						Mode:         AK,
+						AccessKeyId:  "default_ak",
+						OutputFormat: "json",
+					},
+				},
+			}, nil
+		}
+	}
+
+	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
+		return func(config *Configuration) error {
+			return nil
+		}
+	}
+
+	// Mock stdin 输入
+	stdin = strings.NewReader("https://sso.example.com\ncn-beijing\njson\nen\n")
+
+	// Mock 所有 cloudsso 函数
+	cloudssoGetAccessToken = func(ssoLogin *cloudsso.SsoLogin) (*cloudsso.AccessTokenResponse, error) {
+		return &cloudsso.AccessTokenResponse{
+			AccessToken: "mock-access-token",
+			ExpiresIn:   3600,
+		}, nil
+	}
+
+	cloudssoListAllUsers = func(userParam *cloudsso.ListUserParameter) ([]cloudsso.AccountDetailResponse, error) {
+		return []cloudsso.AccountDetailResponse{
+			{
+				AccountId:   "account123",
+				DisplayName: "Test Account",
+			},
+			{
+				AccountId:   "account456",
+				DisplayName: "Test Account 2",
+			},
+		}, nil
+	}
+
+	cloudssoListAllAccessConfigurations = func(accessParam *cloudsso.AccessConfigurationsParameter, req cloudsso.AccessConfigurationsRequest) ([]cloudsso.AccessConfiguration, error) {
+		return []cloudsso.AccessConfiguration{
+			{
+				AccessConfigurationId:   "config123",
+				AccessConfigurationName: "Test Config",
+			},
+		}, nil
+	}
+
+	cloudssoTryRefreshStsToken = func(signInUrl, accessToken, accessConfig, accountId *string, httpClient *http.Client) (*cloudsso.CloudCredentialResponse, error) {
+		return &cloudsso.CloudCredentialResponse{
+			AccessKeyId:     "mock-ak-id",
+			AccessKeySecret: "mock-ak-secret",
+			SecurityToken:   "mock-security-token",
+			Expiration:      "2099-01-01T00:00:00Z",
+		}, nil
+	}
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	var f = NewCloudSSOAccessConfigFlag()
+	f.SetAssigned(true)
+	f.SetValue("xx")
+	ctx.Flags().Add(f)
+
+	// 测试 doConfigure 对 CloudSSO 模式的处理
+	err := doConfigure(ctx, "cloud-sso-profile", "CloudSSO")
+	assert.Nil(t, err)
+
+	// 验证输出包含配置 CloudSSO 的信息
+	output := w.String()
+	assert.Contains(t, output, "Access Configuration xx not found, please choose again")
+}
+
+// 返回多个 access config的测试用例，需要主动输入一个数字选择
+func TestDoConfigureWithCloudSSOWithMultiAccessConfig(t *testing.T) {
+	originhook := hookLoadConfiguration
+	originhookSave := hookSaveConfiguration
+	originalGetAccessToken := cloudssoGetAccessToken
+	originalListAllUsers := cloudssoListAllUsers
+	originalListAllAccessConfigurations := cloudssoListAllAccessConfigurations
+	originalTryRefreshStsToken := cloudssoTryRefreshStsToken
+	originalStdin := stdin
+
+	defer func() {
+		hookLoadConfiguration = originhook
+		hookSaveConfiguration = originhookSave
+		cloudssoGetAccessToken = originalGetAccessToken
+		cloudssoListAllUsers = originalListAllUsers
+		cloudssoListAllAccessConfigurations = originalListAllAccessConfigurations
+		cloudssoTryRefreshStsToken = originalTryRefreshStsToken
+		stdin = originalStdin
+	}()
+
+	// Mock 配置加载和保存
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name:         "default",
+						Mode:         AK,
+						AccessKeyId:  "default_ak",
+						OutputFormat: "json",
+					},
+				},
+			}, nil
+		}
+	}
+
+	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
+		return func(config *Configuration) error {
+			return nil
+		}
+	}
+
+	// Mock stdin 输入
+	stdin = strings.NewReader("https://sso.example.com\ncn-beijing\njson\nen\n")
+
+	// Mock 所有 cloudsso 函数
+	cloudssoGetAccessToken = func(ssoLogin *cloudsso.SsoLogin) (*cloudsso.AccessTokenResponse, error) {
+		return &cloudsso.AccessTokenResponse{
+			AccessToken: "mock-access-token",
+			ExpiresIn:   3600,
+		}, nil
+	}
+
+	cloudssoListAllUsers = func(userParam *cloudsso.ListUserParameter) ([]cloudsso.AccountDetailResponse, error) {
+		return []cloudsso.AccountDetailResponse{
+			{
+				AccountId:   "account123",
+				DisplayName: "Test Account",
+			},
+			{
+				AccountId:   "account456",
+				DisplayName: "Test Account 2",
+			},
+		}, nil
+	}
+
+	cloudssoListAllAccessConfigurations = func(accessParam *cloudsso.AccessConfigurationsParameter, req cloudsso.AccessConfigurationsRequest) ([]cloudsso.AccessConfiguration, error) {
+		return []cloudsso.AccessConfiguration{
+			{
+				AccessConfigurationId:   "config123",
+				AccessConfigurationName: "Test Config",
+			},
+			{
+				AccessConfigurationId:   "config345",
+				AccessConfigurationName: "Test Config2",
+			},
+		}, nil
+	}
+
+	cloudssoTryRefreshStsToken = func(signInUrl, accessToken, accessConfig, accountId *string, httpClient *http.Client) (*cloudsso.CloudCredentialResponse, error) {
+		return &cloudsso.CloudCredentialResponse{
+			AccessKeyId:     "mock-ak-id",
+			AccessKeySecret: "mock-ak-secret",
+			SecurityToken:   "mock-security-token",
+			Expiration:      "2099-01-01T00:00:00Z",
+		}, nil
+	}
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+
+	// 测试 doConfigure 对 CloudSSO 模式的处理
+	err := doConfigure(ctx, "cloud-sso-profile", "CloudSSO")
+	assert.Nil(t, err)
+
+	// 验证输出包含配置 CloudSSO 的信息
+	output := w.String()
+	assert.Contains(t, output, "Please input the access configuration number")
+}
+
+// 原始的CloudSSOSignInUrl不为空，新输入为空
+func TestDoConfigureWithCloudSSOWhenCloudSSOSignInUrlNotEmpty(t *testing.T) {
+	originhook := hookLoadConfiguration
+	originhookSave := hookSaveConfiguration
+	originalGetAccessToken := cloudssoGetAccessToken
+	originalListAllUsers := cloudssoListAllUsers
+	originalListAllAccessConfigurations := cloudssoListAllAccessConfigurations
+	originalTryRefreshStsToken := cloudssoTryRefreshStsToken
+	originalStdin := stdin
+
+	defer func() {
+		hookLoadConfiguration = originhook
+		hookSaveConfiguration = originhookSave
+		cloudssoGetAccessToken = originalGetAccessToken
+		cloudssoListAllUsers = originalListAllUsers
+		cloudssoListAllAccessConfigurations = originalListAllAccessConfigurations
+		cloudssoTryRefreshStsToken = originalTryRefreshStsToken
+		stdin = originalStdin
+	}()
+
+	// Mock 配置加载和保存
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name:         "default",
+						Mode:         AK,
+						AccessKeyId:  "default_ak",
+						OutputFormat: "json",
+					},
+				},
+			}, nil
+		}
+	}
+
+	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
+		return func(config *Configuration) error {
+			return nil
+		}
+	}
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	var f = NewCloudSSOSignInUrlFlag()
+	f.SetAssigned(true)
+	f.SetValue("xxx")
+	ctx.Flags().Add(f)
+
+	profile := &Profile{
+		Name:         "default",
+		Mode:         CloudSSO,
+		OutputFormat: "json",
+	}
+
+	stdin = strings.NewReader("yyy")
+	err := doConfigure(ctx, profile.Name, string(AuthenticateMode("CloudSSO")))
+	// stdin write empty
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "missing protocol")
 }
 
 func TestReadInput(t *testing.T) {

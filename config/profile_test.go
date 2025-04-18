@@ -15,10 +15,14 @@ package config
 
 import (
 	"bytes"
+	"fmt"
+	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cloudsso"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -555,4 +559,79 @@ func TestGetProfileWithCloudSSO(t *testing.T) {
 	assert.Nil(t, c)
 	// err != nil and contain CloudSSO access token is expired
 	assert.EqualError(t, err, "CloudSSO access token is expired, please re-login with command: aliyun configure --profile default")
+}
+
+func TestGetCredentialWithCloudSSOMockSuccess(t *testing.T) {
+	// 保存原始函数并在测试后恢复
+	originalFunc := tryRefreshStsTokenFunc
+	defer func() { tryRefreshStsTokenFunc = originalFunc }()
+
+	// 创建mock函数
+	tryRefreshStsTokenFunc = func(signInUrl, accessToken, accessConfig, accountId *string, client *http.Client) (*cloudsso.CloudCredentialResponse, error) {
+		// 返回模拟数据
+		return &cloudsso.CloudCredentialResponse{
+			AccessKeyId:     "mock-ak-id",
+			AccessKeySecret: "mock-ak-secret",
+			SecurityToken:   "mock-security-token",
+			ExpirationInt64: time.Now().Unix() + 3600,
+		}, nil
+	}
+
+	// 准备测试数据
+	cf := NewConfiguration()
+	p := newProfile()
+	p.Name = "cloudsso-profile"
+	p.Mode = CloudSSO
+	p.RegionId = "cn-hangzhou"
+	p.CloudSSOAccountId = "test-account-id"
+	p.CloudSSOAccessConfig = "test-access-config"
+	p.CloudSSOSignInUrl = "https://cloudsso.example.com"
+	p.AccessToken = "test-access-token"
+	p.CloudSSOAccessTokenExpire = time.Now().Unix() + 7200 // 确保令牌未过期
+	cf.PutProfile(*p)
+	p.parent = cf
+
+	// 执行测试
+	cred, err := p.GetCredential(newCtx(), nil)
+
+	// 验证结果
+	assert.Nil(t, err)
+	assert.NotNil(t, cred)
+	assert.Equal(t, "sts", *cred.GetType())
+	assert.Equal(t, "mock-ak-id", p.AccessKeyId)
+	assert.Equal(t, "mock-ak-secret", p.AccessKeySecret)
+	assert.Equal(t, "mock-security-token", p.StsToken)
+}
+
+func TestGetCredentialWithCloudSSOMockError(t *testing.T) {
+	// 保存原始函数并在测试后恢复
+	originalFunc := tryRefreshStsTokenFunc
+	defer func() { tryRefreshStsTokenFunc = originalFunc }()
+
+	// 创建mock函数模拟错误情况
+	tryRefreshStsTokenFunc = func(signInUrl, accessToken, accessConfig, accountId *string, client *http.Client) (*cloudsso.CloudCredentialResponse, error) {
+		return nil, fmt.Errorf("mock cloudsso error")
+	}
+
+	// 准备测试数据
+	cf := NewConfiguration()
+	p := newProfile()
+	p.Name = "cloudsso-profile"
+	p.Mode = CloudSSO
+	p.RegionId = "cn-hangzhou"
+	p.CloudSSOAccountId = "test-account-id"
+	p.CloudSSOAccessConfig = "test-access-config"
+	p.CloudSSOSignInUrl = "https://cloudsso.example.com"
+	p.AccessToken = "test-access-token"
+	p.CloudSSOAccessTokenExpire = time.Now().Unix() + 7200 // 确保令牌未过期
+	cf.PutProfile(*p)
+	p.parent = cf
+
+	// 执行测试
+	cred, err := p.GetCredential(newCtx(), nil)
+
+	// 验证结果
+	assert.NotNil(t, err)
+	assert.Nil(t, cred)
+	assert.EqualError(t, err, "mock cloudsso error")
 }
