@@ -15,6 +15,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/aliyun/aliyun-cli/v3/cloudsso"
@@ -400,10 +401,24 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 	case External:
 		args := strings.Fields(cp.ProcessCommand)
 		cmd := exec.Command(args[0], args[1:]...)
-		buf, err := cmd.CombinedOutput()
+
+		// 创建一个buffer来捕获标准输出
+		var stdoutBuf bytes.Buffer
+		cmd.Stdout = &stdoutBuf
+
+		// 将标准错误输出直接传递到终端
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+
+		// 执行命令
+		err = cmd.Run()
 		if err != nil {
 			return nil, err
 		}
+
+		// 只解析标准输出
+		buf := stdoutBuf.Bytes()
+
 		// 解析得到新的 profile 配置
 		err = json.Unmarshal(buf, cp)
 		if err != nil {
@@ -485,17 +500,11 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		if cp.CloudSSOAccessTokenExpire == 0 || cp.CloudSSOAccessTokenExpire <= currentUnixTime {
 			// not support refresh access token yet, need to re-login
 			var reLoginCommand string
-			if cp.CloudSSOSignInUrl == "" {
-				reLoginCommand = fmt.Sprintf("aliyun configure --profile %s --mode CloudSSO", cp.Name)
-				return nil, fmt.Errorf(i18n.T(
-					"CloudSSO sign in url is empty, please configure with command: %s",
-					"CloudSSO登录链接无效，请通过命令：%s 重新完成配置").GetMessage(), reLoginCommand)
-			} else {
-				reLoginCommand = fmt.Sprintf("aliyun configure --profile %s", cp.Name)
-				return nil, fmt.Errorf(i18n.T(
-					"CloudSSO access token is expired, please re-login with command: %s",
-					"CloudSSO访问令牌已过期，请通过命令：%s 重新登录").GetMessage(), reLoginCommand)
-			}
+			reLoginCommand = fmt.Sprintf("aliyun configure --profile %s", cp.Name)
+			return nil, fmt.Errorf(i18n.T(
+				"CloudSSO access token is expired, please re-login with command: %s",
+				"CloudSSO访问令牌已过期，请���过命令：%s 重新登录").GetMessage(), reLoginCommand)
+
 		}
 		if stsExpiration == 0 || stsExpiration <= currentUnixTime ||
 			cp.AccessKeyId == "" || cp.AccessKeySecret == "" || cp.StsToken == "" {

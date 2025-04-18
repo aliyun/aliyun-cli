@@ -15,6 +15,7 @@ package config
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"os"
 	"runtime"
@@ -1002,4 +1003,180 @@ func TestMosaicString(t *testing.T) {
 func TestGetLastChars(t *testing.T) {
 	assert.Equal(t, "rX", GetLastChars("IamMrX", 2))
 	assert.Equal(t, "******", GetLastChars("IamMrX", 10))
+}
+
+func TestNewConfigureCommandRun(t *testing.T) {
+
+	testCases := []struct {
+		name            string
+		args            []string
+		flags           map[string]string
+		configuration   *Configuration
+		loadConfigErr   error
+		expectedProfile string
+		expectedMode    string
+		expectError     bool
+	}{
+		{
+			// 场景1: mode为空，使用default profile的模式
+			name:  "空mode时，使用default profile的模式",
+			args:  []string{},
+			flags: map[string]string{},
+			configuration: &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name: "default",
+						Mode: AK,
+					},
+				},
+			},
+			loadConfigErr:   nil,
+			expectedProfile: "default",
+			expectedMode:    "AK",
+			expectError:     false,
+		},
+		{
+			// 场景2: mode为空，指定存在的profile
+			name:  "空mode时，指定存在的profile",
+			args:  []string{},
+			flags: map[string]string{"profile": "test-profile"},
+			configuration: &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name: "default",
+						Mode: AK,
+					},
+					{
+						Name: "test-profile",
+						Mode: StsToken,
+					},
+				},
+			},
+			loadConfigErr:   nil,
+			expectedProfile: "test-profile",
+			expectedMode:    "StsToken",
+			expectError:     false,
+		},
+		{
+			// 场景3: mode不为空，覆盖profile的模式
+			name:  "非空mode时，覆盖profile的模式",
+			args:  []string{},
+			flags: map[string]string{"profile": "test-profile", "mode": "RamRoleArn"},
+			configuration: &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name: "test-profile",
+						Mode: StsToken,
+					},
+				},
+			},
+			loadConfigErr:   nil,
+			expectedProfile: "test-profile",
+			expectedMode:    "RamRoleArn",
+			expectError:     false,
+		},
+		{
+			// 场景4: 配置加载失败时，mode保持为空
+			name:            "配置加载失败时，mode为空",
+			args:            []string{},
+			flags:           map[string]string{"profile": "test-profile"},
+			configuration:   nil,
+			loadConfigErr:   fmt.Errorf("load configuration failed"),
+			expectedProfile: "test-profile",
+			expectedMode:    "",
+			expectError:     false,
+		},
+		{
+			// 场景5: profile为空且CurrentProfile为空，mode为空
+			name:  "profile和CurrentProfile都为空，mode为空",
+			args:  []string{},
+			flags: map[string]string{},
+			configuration: &Configuration{
+				CurrentProfile: "",
+				Profiles:       []Profile{},
+			},
+			loadConfigErr:   nil,
+			expectedProfile: "",
+			expectedMode:    "",
+			expectError:     false,
+		},
+		{
+			// 场景6: 有额外参数时应当返回错误
+			name:            "有额外参数时返回错误",
+			args:            []string{"extra-arg"},
+			flags:           map[string]string{},
+			configuration:   nil,
+			loadConfigErr:   nil,
+			expectedProfile: "",
+			expectedMode:    "",
+			expectError:     true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// 重置捕获的参数
+			var capturedProfileName, capturedMode string
+			var doConfigureCalled bool
+
+			// Mock loadConfiguration 函数
+			hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+				return func(path string) (*Configuration, error) {
+					return tc.configuration, tc.loadConfigErr
+				}
+			}
+
+			// Mock doConfigure 函数
+			doConfigureProxy = func(ctx *cli.Context, profileName string, mode string) error {
+				doConfigureCalled = true
+				capturedProfileName = profileName
+				capturedMode = mode
+				return nil
+			}
+
+			// 准备CLI上下文
+			buffer := new(bytes.Buffer)
+			buffer2 := new(bytes.Buffer)
+			ctx := cli.NewCommandContext(buffer, buffer2)
+			AddFlags(ctx.Flags())
+			for k, v := range tc.flags {
+				ctx.Flags().Get(k).SetAssigned(true)
+				ctx.Flags().Get(k).SetValue(v)
+			}
+
+			// 执行测试
+			cmd := NewConfigureCommand()
+			err := cmd.Run(ctx, tc.args)
+
+			// 验证结果
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("期望返回错误，但得到nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("期望无错误，但得到: %v", err)
+			}
+
+			if !doConfigureCalled {
+				if !tc.expectError {
+					t.Errorf("期望调用doConfigure，但未调用")
+				}
+				return
+			}
+
+			if capturedProfileName != tc.expectedProfile {
+				t.Errorf("期望profile名称为 %s，但得到 %s", tc.expectedProfile, capturedProfileName)
+			}
+
+			if capturedMode != tc.expectedMode {
+				t.Errorf("期望mode为 %s，但得到 %s", tc.expectedMode, capturedMode)
+			}
+		})
+	}
 }

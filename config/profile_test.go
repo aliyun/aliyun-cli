@@ -16,8 +16,11 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -591,6 +594,15 @@ func TestGetCredentialWithCloudSSOMockSuccess(t *testing.T) {
 	cf.PutProfile(*p)
 	p.parent = cf
 
+	// hook loadConfiguration
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{CurrentProfile: "default", Profiles: []Profile{
+				{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
+				{Name: "bbb", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+		}
+	}
+
 	// 执行测试
 	cred, err := p.GetCredential(newCtx(), nil)
 
@@ -634,4 +646,340 @@ func TestGetCredentialWithCloudSSOMockError(t *testing.T) {
 	assert.NotNil(t, err)
 	assert.Nil(t, cred)
 	assert.EqualError(t, err, "mock cloudsso error")
+}
+
+// when mode is CloudSSO, but CloudSSOSignInUrl is empty, should return error
+func TestGetCredentialWithCloudSSOEmptySignInUrl(t *testing.T) {
+	cf := NewConfiguration()
+	p := newProfile()
+	p.Name = "cloudsso-profile"
+	p.Mode = CloudSSO
+	p.RegionId = "cn-hangzhou"
+	p.CloudSSOAccountId = "test-account-id"
+	p.CloudSSOAccessConfig = "test-access-config"
+	p.CloudSSOSignInUrl = ""
+	p.AccessToken = "test-access-token"
+	p.CloudSSOAccessTokenExpire = time.Now().Unix() + 7200 // 确保令牌未过期
+	cf.PutProfile(*p)
+	p.parent = cf
+
+	cred, err := p.GetCredential(newCtx(), nil)
+
+	assert.NotNil(t, err)
+	assert.Nil(t, cred)
+	assert.Contains(t, err.Error(), "CloudSSO sign in url or account id")
+}
+
+// GetCredential not support mode test
+func TestGetCredentialWithMode(t *testing.T) {
+	cf := NewConfiguration()
+	p := newProfile()
+	p.Name = "test-profile"
+	p.Mode = AuthenticateMode("NoMode")
+	cf.PutProfile(*p)
+	p.parent = cf
+
+	cred, err := p.GetCredential(newCtx(), nil)
+
+	assert.NotNil(t, err)
+	assert.Nil(t, cred)
+	assert.EqualError(t, err, "unexcepted certificate mode: NoMode")
+}
+
+// test RamRoleArn
+func TestGetCredentialWithRamRoleArn(t *testing.T) {
+	actual := newProfile()
+
+	actual.Mode = RamRoleArn
+	actual.AccessKeyId = "akid"
+	actual.AccessKeySecret = "skid"
+	actual.RamRoleArn = "ramRoleArn"
+	actual.RoleSessionName = "roleSessionName"
+	actual.ExpiredSeconds = 3600
+	actual.StsRegion = "cn-hangzhou"
+	credential, err := actual.GetCredential(newCtx(), nil)
+	assert.NotNil(t, credential)
+	assert.Nil(t, err)
+	assert.Equal(t, "ram_role_arn", *credential.GetType())
+}
+
+// TestGetCredentialWithCredentialsURI tests credential retrieval using CredentialsURI mode
+func TestGetCredentialWithCredentialsURI(t *testing.T) {
+	// 创建测试HTTP服务器 - 成功情况
+	successServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"Code": "Success",
+			"AccessKeyId": "mock-access-key-id",
+			"AccessKeySecret": "mock-access-key-secret", 
+			"SecurityToken": "mock-security-token",
+			"Expiration": "2023-01-01T00:00:00Z"
+		}`))
+	}))
+	defer successServer.Close()
+
+	// 创建测试HTTP服务器 - 错误状态码
+	errorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer errorServer.Close()
+
+	// 创建测试HTTP服务器 - 无效JSON
+	invalidJsonServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`invalid json`))
+	}))
+	defer invalidJsonServer.Close()
+
+	// 创建测试HTTP服务器 - 非Success响应
+	notSuccessServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"Code": "Failed",
+			"AccessKeyId": "mock-access-key-id",
+			"AccessKeySecret": "mock-access-key-secret",
+			"SecurityToken": "mock-security-token",
+			"Expiration": "2023-01-01T00:00:00Z"
+		}`))
+	}))
+	defer notSuccessServer.Close()
+
+	// 测试成功情况
+	actual := newProfile()
+	actual.Mode = CredentialsURI
+	actual.CredentialsURI = successServer.URL
+	actual.RegionId = "cn-hangzhou"
+
+	credential, err := actual.GetCredential(newCtx(), nil)
+	assert.NotNil(t, credential)
+	assert.Nil(t, err)
+	assert.Equal(t, "sts", *credential.GetType())
+
+	// 测试URI为空的情况
+	actual.CredentialsURI = ""
+	credential, err = actual.GetCredential(newCtx(), nil)
+	assert.Nil(t, credential)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "invalid credentials uri")
+
+	// 测试服务器返回错误状态码
+	actual.CredentialsURI = errorServer.URL
+	credential, err = actual.GetCredential(newCtx(), nil)
+	assert.Nil(t, credential)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "status code 500")
+
+	// 测试服务器返回无效JSON
+	actual.CredentialsURI = invalidJsonServer.URL
+	credential, err = actual.GetCredential(newCtx(), nil)
+	assert.Nil(t, credential)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "unmarshal")
+
+	// 测试服务器返回非Success响应
+	actual.CredentialsURI = notSuccessServer.URL
+	credential, err = actual.GetCredential(newCtx(), nil)
+	assert.Nil(t, credential)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "Code is not Success")
+}
+
+func TestProfile_GetCredential_External(t *testing.T) {
+	// 创建临时目录用于存放测试脚本
+	tempDir, err := ioutil.TempDir("", "external_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// 1. 成功场景：正确的JSON输出
+	successScript := filepath.Join(tempDir, "success.sh")
+	err = ioutil.WriteFile(successScript, []byte(`#!/bin/bash
+echo '{"Mode":"AK", "access_key_id":"test-ak", "access_key_secret":"test-secret", "region_id": "cn-hangzhou"}'
+`), 0755)
+	if err != nil {
+		t.Fatalf("Failed to create success script: %v", err)
+	}
+
+	// 2. 错误场景：命令执行失败
+	failScript := filepath.Join(tempDir, "fail.sh")
+	err = ioutil.WriteFile(failScript, []byte(`#!/bin/bash
+echo "Error message" >&2
+exit 1
+`), 0755)
+	if err != nil {
+		t.Fatalf("Failed to create fail script: %v", err)
+	}
+
+	// 3. 使用stdin的场景
+	stdinScript := filepath.Join(tempDir, "stdin.sh")
+	err = ioutil.WriteFile(stdinScript, []byte(`#!/bin/bash
+read input
+if [ "$input" = "test-input" ]; then
+  echo '{"Mode":"AK", "access_key_id":"stdin-ak", "access_key_secret":"stdin-secret", "region_id": "cn-hangzhou"}'
+else
+  echo "Invalid input" >&2
+  exit 1
+fi
+`), 0755)
+	if err != nil {
+		t.Fatalf("Failed to create stdin script: %v", err)
+	}
+
+	// 4. 混合stdout和stderr的场景
+	mixedScript := filepath.Join(tempDir, "mixed.sh")
+	err = ioutil.WriteFile(mixedScript, []byte(`#!/bin/bash
+echo "Warning: using default values" >&2
+echo '{"Mode":"AK", "access_key_id":"mixed-ak", "access_key_secret":"mixed-secret", "region_id": "cn-hangzhou"}'
+`), 0755)
+	if err != nil {
+		t.Fatalf("Failed to create mixed script: %v", err)
+	}
+
+	// 5. 无效JSON输出的场景
+	invalidJsonScript := filepath.Join(tempDir, "invalid.sh")
+	err = ioutil.WriteFile(invalidJsonScript, []byte(`#!/bin/bash
+echo 'This is not a valid JSON'
+`), 0755)
+	if err != nil {
+		t.Fatalf("Failed to create invalid JSON script: %v", err)
+	}
+
+	tests := []struct {
+		name           string
+		profile        Profile
+		expectError    bool
+		expectAkId     string
+		expectAkSecret string
+		setupStdin     func() (*os.File, *os.File, error)
+		cleanupStdin   func(*os.File, *os.File)
+	}{
+		{
+			name: "success",
+			profile: Profile{
+				Name:           "success",
+				Mode:           External,
+				ProcessCommand: successScript,
+			},
+			expectError:    false,
+			expectAkId:     "test-ak",
+			expectAkSecret: "test-secret",
+		},
+		{
+			name: "command_failure",
+			profile: Profile{
+				Name:           "fail",
+				Mode:           External,
+				ProcessCommand: failScript,
+			},
+			expectError: true,
+		},
+		{
+			name: "with_stdin",
+			profile: Profile{
+				Name:           "stdin",
+				Mode:           External,
+				ProcessCommand: stdinScript,
+			},
+			expectError:    false,
+			expectAkId:     "stdin-ak",
+			expectAkSecret: "stdin-secret",
+			setupStdin: func() (*os.File, *os.File, error) {
+				// 保存原始stdin
+				oldStdin := os.Stdin
+				// 创建管道
+				r, w, err := os.Pipe()
+				if err != nil {
+					return nil, nil, err
+				}
+				// 将管道的读取端设置为stdin
+				os.Stdin = r
+				// 写入测试输入
+				_, err = w.WriteString("test-input\n")
+				if err != nil {
+					return nil, nil, err
+				}
+				return oldStdin, w, nil
+			},
+			cleanupStdin: func(oldStdin *os.File, w *os.File) {
+				// 关闭管道写入端
+				w.Close()
+				// 恢复原始stdin
+				os.Stdin = oldStdin
+			},
+		},
+		{
+			name: "mixed_output",
+			profile: Profile{
+				Name:           "mixed",
+				Mode:           External,
+				ProcessCommand: mixedScript,
+			},
+			expectError:    false,
+			expectAkId:     "mixed-ak",
+			expectAkSecret: "mixed-secret",
+		},
+		{
+			name: "invalid_json",
+			profile: Profile{
+				Name:           "invalid",
+				Mode:           External,
+				ProcessCommand: invalidJsonScript,
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 设置测试的stdin(如果需要)
+			if tt.setupStdin != nil {
+				oldStdin, w, err := tt.setupStdin()
+				if err != nil {
+					t.Fatalf("Failed to setup stdin: %v", err)
+				}
+				defer tt.cleanupStdin(oldStdin, w)
+			}
+
+			// 创建配置并设置当前测试的profile
+			config := &Configuration{
+				CurrentProfile: tt.profile.Name,
+				Profiles:       []Profile{tt.profile},
+			}
+			tt.profile.parent = config
+
+			// 调用GetCredential方法
+			buf := new(bytes.Buffer)
+			buf2 := new(bytes.Buffer)
+			ctx := cli.NewCommandContext(buf, buf2)
+			cred, err := tt.profile.GetCredential(ctx, nil)
+
+			// 检查结果
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+					return
+				}
+
+				// 验证凭证
+				credential, err := cred.GetCredential()
+				if err != nil {
+					t.Errorf("Failed to get credential: %v", err)
+					return
+				}
+
+				if *credential.AccessKeyId != tt.expectAkId {
+					t.Errorf("AccessKeyId mismatch, expected %s but got %s", tt.expectAkId, *credential.AccessKeyId)
+				}
+
+				if *credential.AccessKeySecret != tt.expectAkSecret {
+					t.Errorf("AccessKeySecret mismatch, expected %s but got %s", tt.expectAkSecret, *credential.AccessKeySecret)
+				}
+			}
+		})
+	}
 }

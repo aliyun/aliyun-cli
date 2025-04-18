@@ -58,6 +58,10 @@ var cloudssoTryRefreshStsToken = func(signInUrl, accessToken, accessConfig, acco
 	return cloudsso.TryRefreshStsToken(signInUrl, accessToken, accessConfig, accountId, httpClient)
 }
 
+var doConfigureProxy = func(ctx *cli.Context, profileName string, mode string) error {
+	return doConfigure(ctx, profileName, mode)
+}
+
 func loadConfiguration() (*Configuration, error) {
 	return hookLoadConfiguration(LoadConfiguration)(GetConfigPath() + "/" + configFile)
 }
@@ -90,7 +94,7 @@ func NewConfigureCommand() *cli.Command {
 					}
 				}
 			}
-			return doConfigure(ctx, profileName, mode)
+			return doConfigureProxy(ctx, profileName, mode)
 		},
 	}
 
