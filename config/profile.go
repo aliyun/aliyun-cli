@@ -503,7 +503,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			reLoginCommand = fmt.Sprintf("aliyun configure --profile %s", cp.Name)
 			return nil, fmt.Errorf(i18n.T(
 				"CloudSSO access token is expired, please re-login with command: %s",
-				"CloudSSO访问令牌已过期，请���过命令：%s 重新登录").GetMessage(), reLoginCommand)
+				"CloudSSO访问令牌已过期，请通过命令：%s 重新登录").GetMessage(), reLoginCommand)
 
 		}
 		if stsExpiration == 0 || stsExpiration <= currentUnixTime ||
