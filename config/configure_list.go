@@ -75,6 +75,8 @@ func doConfigureList(w io.Writer) {
 			cred = "CredentialsURI:" + pf.CredentialsURI
 		case OIDC:
 			cred = "OIDC:" + "***" + GetLastChars(pf.OIDCProviderARN, 5) + "@***" + GetLastChars(pf.OIDCTokenFile, 5) + "@" + pf.RamRoleArn
+		case CloudSSO:
+			cred = "CloudSSO:" + pf.CloudSSOAccountId + "@" + pf.CloudSSOAccessConfig
 		}
 		fmt.Fprintf(tw, "%s\t| %s\t| %s\t| %s\t| %s\n", name, cred, valid, pf.RegionId, pf.Language)
 	}

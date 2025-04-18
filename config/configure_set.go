@@ -110,6 +110,10 @@ func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
 		profile.RamRoleArn = RamRoleArnFlag(flags).GetStringOrDefault(profile.RamRoleArn)
 		profile.RoleSessionName = RoleSessionNameFlag(flags).GetStringOrDefault(profile.RoleSessionName)
 		profile.ExpiredSeconds = ExpiredSecondsFlag(flags).GetIntegerOrDefault(profile.ExpiredSeconds)
+	case CloudSSO:
+		profile.CloudSSOAccessConfig = CloudSSOAccessConfigFlag(flags).GetStringOrDefault(profile.CloudSSOAccessConfig)
+		profile.CloudSSOAccountId = CloudSSOAccountIdFlag(flags).GetStringOrDefault(profile.CloudSSOAccountId)
+		profile.CloudSSOSignInUrl = CloudSSOSignInUrlFlag(flags).GetStringOrDefault(profile.CloudSSOSignInUrl)
 	}
 
 	profile.RegionId = RegionFlag(flags).GetStringOrDefault(profile.RegionId)

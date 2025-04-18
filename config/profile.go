@@ -11,11 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package config
 
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/aliyun/aliyun-cli/v3/cloudsso"
 	"io"
 	"net/http"
 	"os"
@@ -45,35 +47,42 @@ const (
 	External            = AuthenticateMode("External")
 	CredentialsURI      = AuthenticateMode("CredentialsURI")
 	OIDC                = AuthenticateMode("OIDC")
+	CloudSSO            = AuthenticateMode("CloudSSO")
 )
 
 type Profile struct {
-	Name            string           `json:"name"`
-	Mode            AuthenticateMode `json:"mode"`
-	AccessKeyId     string           `json:"access_key_id,omitempty"`
-	AccessKeySecret string           `json:"access_key_secret,omitempty"`
-	StsToken        string           `json:"sts_token,omitempty"`
-	StsRegion       string           `json:"sts_region,omitempty"`
-	RamRoleName     string           `json:"ram_role_name,omitempty"`
-	RamRoleArn      string           `json:"ram_role_arn,omitempty"`
-	RoleSessionName string           `json:"ram_session_name,omitempty"`
-	SourceProfile   string           `json:"source_profile,omitempty"`
-	PrivateKey      string           `json:"private_key,omitempty"`
-	KeyPairName     string           `json:"key_pair_name,omitempty"`
-	ExpiredSeconds  int              `json:"expired_seconds,omitempty"`
-	Verified        string           `json:"verified,omitempty"`
-	RegionId        string           `json:"region_id,omitempty"`
-	OutputFormat    string           `json:"output_format,omitempty"`
-	Language        string           `json:"language,omitempty"`
-	Site            string           `json:"site,omitempty"`
-	ReadTimeout     int              `json:"retry_timeout,omitempty"`
-	ConnectTimeout  int              `json:"connect_timeout,omitempty"`
-	RetryCount      int              `json:"retry_count,omitempty"`
-	ProcessCommand  string           `json:"process_command,omitempty"`
-	CredentialsURI  string           `json:"credentials_uri,omitempty"`
-	OIDCProviderARN string           `json:"oidc_provider_arn,omitempty"`
-	OIDCTokenFile   string           `json:"oidc_token_file,omitempty"`
-	parent          *Configuration   //`json:"-"`
+	Name                      string           `json:"name"`
+	Mode                      AuthenticateMode `json:"mode"`
+	AccessKeyId               string           `json:"access_key_id,omitempty"`
+	AccessKeySecret           string           `json:"access_key_secret,omitempty"`
+	StsToken                  string           `json:"sts_token,omitempty"`
+	StsRegion                 string           `json:"sts_region,omitempty"`
+	RamRoleName               string           `json:"ram_role_name,omitempty"`
+	RamRoleArn                string           `json:"ram_role_arn,omitempty"`
+	RoleSessionName           string           `json:"ram_session_name,omitempty"`
+	SourceProfile             string           `json:"source_profile,omitempty"`
+	PrivateKey                string           `json:"private_key,omitempty"`
+	KeyPairName               string           `json:"key_pair_name,omitempty"`
+	ExpiredSeconds            int              `json:"expired_seconds,omitempty"`
+	Verified                  string           `json:"verified,omitempty"`
+	RegionId                  string           `json:"region_id,omitempty"`
+	OutputFormat              string           `json:"output_format,omitempty"`
+	Language                  string           `json:"language,omitempty"`
+	Site                      string           `json:"site,omitempty"`
+	ReadTimeout               int              `json:"retry_timeout,omitempty"`
+	ConnectTimeout            int              `json:"connect_timeout,omitempty"`
+	RetryCount                int              `json:"retry_count,omitempty"`
+	ProcessCommand            string           `json:"process_command,omitempty"`
+	CredentialsURI            string           `json:"credentials_uri,omitempty"`
+	OIDCProviderARN           string           `json:"oidc_provider_arn,omitempty"`
+	OIDCTokenFile             string           `json:"oidc_token_file,omitempty"`
+	CloudSSOSignInUrl         string           `json:"cloud_sso_sign_in_url,omitempty"`
+	AccessToken               string           `json:"access_token,omitempty"`                  // for CloudSSO, read only
+	CloudSSOAccessTokenExpire int64            `json:"cloud_sso_access_token_expire,omitempty"` // for CloudSSO, read only
+	StsExpiration             int64            `json:"sts_expiration,omitempty"`                // for CloudSSO, read only
+	CloudSSOAccessConfig      string           `json:"cloud_sso_access_config,omitempty"`       // for CloudSSO
+	CloudSSOAccountId         string           `json:"cloud_sso_account_id,omitempty"`          // for CloudSSO, read only
+	parent                    *Configuration   //`json:"-"`
 }
 
 func NewProfile(name string) Profile {
@@ -159,6 +168,10 @@ func (cp *Profile) Validate() error {
 		if cp.RoleSessionName == "" {
 			return fmt.Errorf("invalid role_session_name")
 		}
+	case CloudSSO:
+		if cp.CloudSSOSignInUrl == "" {
+			return fmt.Errorf("invalid cloud_sso_sign_in_url")
+		}
 	default:
 		return fmt.Errorf("invalid mode: %s", cp.Mode)
 	}
@@ -189,6 +202,9 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.ProcessCommand = ProcessCommandFlag(ctx.Flags()).GetStringOrDefault(cp.ProcessCommand)
 	cp.OIDCProviderARN = OIDCProviderARNFlag(ctx.Flags()).GetStringOrDefault(cp.OIDCProviderARN)
 	cp.OIDCTokenFile = OIDCTokenFileFlag(ctx.Flags()).GetStringOrDefault(cp.OIDCTokenFile)
+	cp.CloudSSOSignInUrl = CloudSSOSignInUrlFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOSignInUrl)
+	cp.CloudSSOAccessConfig = CloudSSOAccessConfigFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOAccessConfig)
+	cp.CloudSSOAccountId = CloudSSOAccountIdFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOAccountId)
 
 	if cp.AccessKeyId == "" {
 		cp.AccessKeyId = util.GetFromEnv("ALIBABA_CLOUD_ACCESS_KEY_ID", "ALIBABACLOUD_ACCESS_KEY_ID", "ALICLOUD_ACCESS_KEY_ID", "ACCESS_KEY_ID")
@@ -244,6 +260,8 @@ func AutoModeRecognition(cp *Profile) {
 		cp.Mode = External
 	} else if cp.OIDCProviderARN != "" && cp.OIDCTokenFile != "" && cp.RamRoleArn != "" {
 		cp.Mode = OIDC
+	} else if cp.CloudSSOSignInUrl != "" {
+		cp.Mode = CloudSSO
 	}
 }
 
@@ -268,7 +286,10 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 	config := new(credentialsv2.Config)
 	// The AK, StsToken are direct credential
 	// Others are indirect credential
-	cp.Validate()
+	err = cp.Validate()
+	if err != nil {
+		return nil, err
+	}
 	switch cp.Mode {
 	case AK:
 		if cp.AccessKeyId == "" || cp.AccessKeySecret == "" {
@@ -449,6 +470,68 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleSessionName(cp.RoleSessionName).
 			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion)).
 			SetSessionExpiration(3600)
+
+	case CloudSSO:
+		// check sts expiration
+		stsExpiration := cp.StsExpiration
+		currentUnixTime := util.GetCurrentUnixTime()
+		httpClient := util.NewHttpClient()
+		// check access token expiration
+		if cp.CloudSSOSignInUrl == "" || cp.CloudSSOAccountId == "" || cp.CloudSSOAccessConfig == "" {
+			reLoginCommand := fmt.Sprintf("aliyun configure --profile %s --mode CloudSSO", cp.Name)
+			return nil, fmt.Errorf(i18n.T(
+				"CloudSSO sign in url or account id or access config is empty, please configure with command: %s",
+				"CloudSSO登录链接或账号ID或访问配置无效，请通过命令：%s 重新完成配置").GetMessage(), reLoginCommand)
+		}
+		if cp.CloudSSOAccessTokenExpire == 0 || cp.CloudSSOAccessTokenExpire <= currentUnixTime {
+			// not support refresh access token yet, need to re-login
+			var reLoginCommand string
+			if cp.CloudSSOSignInUrl == "" {
+				reLoginCommand = fmt.Sprintf("aliyun configure --profile %s --mode CloudSSO", cp.Name)
+				return nil, fmt.Errorf(i18n.T(
+					"CloudSSO sign in url is empty, please configure with command: %s",
+					"CloudSSO登录链接无效，请通过命令：%s 重新完成配置").GetMessage(), reLoginCommand)
+			} else {
+				reLoginCommand = fmt.Sprintf("aliyun configure --profile %s", cp.Name)
+				return nil, fmt.Errorf(i18n.T(
+					"CloudSSO access token is expired, please re-login with command: %s",
+					"CloudSSO访问令牌已过期，请通过命令：%s 重新登录").GetMessage(), reLoginCommand)
+			}
+		}
+		if stsExpiration == 0 || stsExpiration <= currentUnixTime ||
+			cp.AccessKeyId == "" || cp.AccessKeySecret == "" || cp.StsToken == "" {
+			token, err := cloudsso.TryRefreshStsToken(&cp.CloudSSOSignInUrl,
+				&cp.AccessToken, &cp.CloudSSOAccessConfig, &cp.CloudSSOAccountId, httpClient)
+			if err != nil {
+				println(i18n.T("Create STS from CloudSSO failed", "从 CloudSSO 接口创建STS凭证失败，请重试或检查配置是否错误").GetMessage())
+				return nil, err
+			}
+			// update
+			cp.AccessKeyId = token.AccessKeyId
+			cp.AccessKeySecret = token.AccessKeySecret
+			cp.StsToken = token.SecurityToken
+			// update expiration
+			cp.StsExpiration = token.ExpirationInt64 - 5
+			// flush back
+			conf, err := loadConfiguration()
+			if err != nil {
+				return nil, err
+			}
+			for i, profile := range conf.Profiles {
+				if profile.Name == cp.Name {
+					conf.Profiles[i] = *cp
+					break
+				}
+			}
+			err = SaveConfiguration(conf)
+			if err != nil {
+				return nil, err
+			}
+		}
+		config.SetType("sts").
+			SetAccessKeyId(cp.AccessKeyId).
+			SetAccessKeySecret(cp.AccessKeySecret).
+			SetSecurityToken(cp.StsToken)
 
 	default:
 		return nil, fmt.Errorf("unexcepted certificate mode: %s", cp.Mode)
