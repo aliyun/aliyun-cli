@@ -14,6 +14,7 @@
 package i18n
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -55,4 +56,48 @@ func TestLibrary(t *testing.T) {
 	text = T("hello", "")
 	assert.Equal(t, "hello", text.dic["en"])
 	assert.Equal(t, "", text.dic["zh"])
+}
+
+// 临时保存原始的GetLanguage函数
+var originalGetLanguage func() string
+
+// 创建mock语言设置函数
+func mockGetLanguage(lang string) {
+	// set env LANG = "zh_CN.UTF-8"
+	switch lang {
+	case "zh":
+		os.Setenv("LANG", "zh_CN.UTF-8")
+	case "en":
+		os.Setenv("LANG", "en_US.UTF-8")
+	case "fr":
+		os.Setenv("LANG", "fr_FR.UTF-8")
+	}
+	language = lang
+}
+
+func TestText_GetMessage(t *testing.T) {
+	// 测试数据
+	testEn := "Hello World"
+	testZh := "你好，世界"
+
+	// 创建Text实例
+	text := T(testEn, testZh)
+
+	// 测试英文环境
+	mockGetLanguage("en")
+	if msg := text.GetMessage(); msg != testEn {
+		t.Errorf("Expected English message to be %q, got %q", testEn, msg)
+	}
+
+	// 测试中文环境
+	mockGetLanguage("zh")
+	if msg := text.GetMessage(); msg != testZh {
+		t.Errorf("Expected Chinese message to be %q, got %q", testZh, msg)
+	}
+
+	// 测试不支持的语言
+	mockGetLanguage("fr")
+	if msg := text.GetMessage(); msg != "" {
+		t.Errorf("Expected unsupported language message to be empty, got %q", msg)
+	}
 }

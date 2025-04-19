@@ -11,15 +11,21 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package config
 
 import (
 	"bufio"
 	"fmt"
+	"github.com/aliyun/aliyun-cli/v3/cloudsso"
+	"github.com/aliyun/aliyun-cli/v3/util"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -35,6 +41,27 @@ var hookSaveConfiguration = func(fn func(config *Configuration) error) func(conf
 
 var stdin io.Reader = os.Stdin
 
+// 为了方便 mock 的函数变量
+var cloudssoGetAccessToken = func(ssoLogin *cloudsso.SsoLogin) (*cloudsso.AccessTokenResponse, error) {
+	return ssoLogin.GetAccessToken()
+}
+
+var cloudssoListAllUsers = func(userParam *cloudsso.ListUserParameter) ([]cloudsso.AccountDetailResponse, error) {
+	return userParam.ListAllUsers()
+}
+
+var cloudssoListAllAccessConfigurations = func(accessParam *cloudsso.AccessConfigurationsParameter, req cloudsso.AccessConfigurationsRequest) ([]cloudsso.AccessConfiguration, error) {
+	return accessParam.ListAllAccessConfigurations(req)
+}
+
+var cloudssoTryRefreshStsToken = func(signInUrl, accessToken, accessConfig, accountId *string, httpClient *http.Client) (*cloudsso.CloudCredentialResponse, error) {
+	return cloudsso.TryRefreshStsToken(signInUrl, accessToken, accessConfig, accountId, httpClient)
+}
+
+var doConfigureProxy = func(ctx *cli.Context, profileName string, mode string) error {
+	return doConfigure(ctx, profileName, mode)
+}
+
 func loadConfiguration() (*Configuration, error) {
 	return hookLoadConfiguration(LoadConfiguration)(GetConfigPath() + "/" + configFile)
 }
@@ -45,14 +72,29 @@ func NewConfigureCommand() *cli.Command {
 		Short: i18n.T(
 			"configure credential and settings",
 			"配置身份认证和其他信息"),
-		Usage: "configure --mode {AK|RamRoleArn|EcsRamRole|OIDC|External|CredentialsURI|ChainableRamRoleArn} --profile <profileName>",
+		Usage: "configure --mode {AK|RamRoleArn|EcsRamRole|OIDC|External|CredentialsURI|ChainableRamRoleArn|CloudSSO} --profile <profileName>",
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
 			profileName, _ := ProfileFlag(ctx.Flags()).GetValue()
 			mode, _ := ModeFlag(ctx.Flags()).GetValue()
-			return doConfigure(ctx, profileName, mode)
+			if mode == "" {
+				// 检查 profileName 是否存在
+				conf, err := loadConfiguration()
+				if err == nil {
+					if profileName == "" {
+						profileName = conf.CurrentProfile
+					}
+					if profileName != "" {
+						p, ok := conf.GetProfile(profileName)
+						if ok {
+							mode = string(p.Mode)
+						}
+					}
+				}
+			}
+			return doConfigureProxy(ctx, profileName, mode)
 		},
 	}
 
@@ -127,6 +169,22 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 		case OIDC:
 			cp.Mode = OIDC
 			configureOIDC(w, &cp)
+		case CloudSSO:
+			cp.Mode = CloudSSO
+			// parameter from command has higher priority, use it directly
+			if CloudSSOSignInUrlFlag(ctx.Flags()).IsAssigned() {
+				cp.CloudSSOSignInUrl, _ = CloudSSOSignInUrlFlag(ctx.Flags()).GetValue()
+			}
+			if CloudSSOAccountIdFlag(ctx.Flags()).IsAssigned() {
+				cp.CloudSSOAccountId, _ = CloudSSOAccountIdFlag(ctx.Flags()).GetValue()
+			}
+			if CloudSSOAccessConfigFlag(ctx.Flags()).IsAssigned() {
+				cp.CloudSSOAccessConfig, _ = CloudSSOAccessConfigFlag(ctx.Flags()).GetValue()
+			}
+			err := configureCloudSSO(w, &cp)
+			if err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("unexcepted authenticate mode: %s", mode)
 		}
@@ -134,20 +192,25 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 		configureAK(w, &cp)
 	}
 
-	//
 	// configure common
-	cli.Printf(w, "Default Region Id [%s]: ", cp.RegionId)
-	cp.RegionId = ReadInput(cp.RegionId)
-	cli.Printf(w, "Default Output Format [%s]: json (Only support json)\n", cp.OutputFormat)
+	if cp.Mode != CloudSSO || cp.RegionId == "" {
+		cli.Printf(w, "Default Region Id [%s]: ", cp.RegionId)
+		cp.RegionId = ReadInput(cp.RegionId)
+	}
 
-	// cp.OutputFormat = ReadInput(cp.OutputFormat)
-	cp.OutputFormat = "json"
+	if cp.Mode != CloudSSO || cp.OutputFormat == "" {
+		cli.Printf(w, "Default Output Format [%s]: json (Only support json)\n", cp.OutputFormat)
+		// cp.OutputFormat = ReadInput(cp.OutputFormat)
+		cp.OutputFormat = "json"
+	}
 
-	cli.Printf(w, "Default Language [zh|en] %s: ", cp.Language)
+	if cp.Mode != CloudSSO || cp.Language == "" {
+		cli.Printf(w, "Default Language [zh|en] %s: ", cp.Language)
 
-	cp.Language = ReadInput(cp.Language)
-	if cp.Language != "zh" && cp.Language != "en" {
-		cp.Language = i18n.GetLanguage()
+		cp.Language = ReadInput(cp.Language)
+		if cp.Language != "zh" && cp.Language != "en" {
+			cp.Language = i18n.GetLanguage()
+		}
 	}
 
 	//fmt.Printf("User site: [china|international|japan] %s", cp.Site)
@@ -283,6 +346,179 @@ func configureOIDC(w io.Writer, cp *Profile) error {
 	cli.Printf(w, "Role Session Name [%s]: ", cp.RoleSessionName)
 	cp.RoleSessionName = ReadInput(cp.RoleSessionName)
 	cp.ExpiredSeconds = 3600
+	return nil
+}
+
+func configureCloudSSO(w io.Writer, cp *Profile) error {
+	cli.Printf(w, "CloudSSO Sign In Url [%s]: ", cp.CloudSSOSignInUrl)
+	userInputCloudSSOSignInUrl := ReadInput(cp.CloudSSOSignInUrl)
+	if userInputCloudSSOSignInUrl != cp.CloudSSOSignInUrl && cp.CloudSSOSignInUrl != "" {
+		// 需要清空其他的字段，完整的走登录
+		cp.AccessKeyId = ""
+		cp.AccessKeySecret = ""
+		cp.StsToken = ""
+		cp.CloudSSOAccessConfig = ""
+		cp.CloudSSOAccountId = ""
+		cp.CloudSSOSignInUrl = userInputCloudSSOSignInUrl
+		cp.AccessToken = ""
+		cp.StsExpiration = 0
+		cp.CloudSSOAccessTokenExpire = 0
+	} else {
+		cp.CloudSSOSignInUrl = userInputCloudSSOSignInUrl
+	}
+	if cp.CloudSSOSignInUrl == "" {
+		return fmt.Errorf("CloudSSOSignInUrl is required")
+	}
+	// start login in, get access token, then list account for choose
+	httpClient := util.NewHttpClient()
+	ssoLogin := cloudsso.SsoLogin{
+		SignInUrl: cp.CloudSSOSignInUrl,
+		// force login
+		ExpireTime: 0,
+		HttpClient: httpClient,
+	}
+	accessToken, err := cloudssoGetAccessToken(&ssoLogin)
+	if err != nil {
+		return fmt.Errorf("get access token failed: %s", err)
+	}
+	cp.AccessToken = accessToken.AccessToken
+	cp.CloudSSOAccessTokenExpire = util.GetCurrentUnixTime() + int64(accessToken.ExpiresIn)
+	// parse base url
+	baseUrl, err := url.Parse(ssoLogin.SignInUrl)
+	// list account for choose
+	userParameter := cloudsso.ListUserParameter{
+		AccessToken: cp.AccessToken,
+		BaseUrl:     baseUrl.Scheme + "://" + baseUrl.Host,
+		HttpClient:  httpClient,
+	}
+	allUser, err := cloudssoListAllUsers(&userParameter)
+	if err != nil {
+		return fmt.Errorf("list account failed: %s", err)
+	}
+	// if allUser is empty, return error
+	if len(allUser) == 0 {
+		return fmt.Errorf("no account found")
+	}
+	accountIdHistory := cp.CloudSSOAccountId
+	if accountIdHistory != "" {
+		// 已经指定了账号，检查是否存在，如果不存在需要继续指定
+		var exist = false
+		for _, user := range allUser {
+			if user.AccountId == accountIdHistory {
+				exist = true
+				break
+			}
+		}
+		if !exist {
+			cli.Printf(w, "Account %s not found, please choose again\n", accountIdHistory)
+			// clear history
+			cp.CloudSSOAccountId = ""
+		}
+	}
+	if cp.CloudSSOAccountId == "" {
+		// 只有当账户不存在时才需要重新选择
+		// if allUser has only one account, use it directly
+		if len(allUser) == 1 {
+			cp.CloudSSOAccountId = allUser[0].AccountId
+			cli.Printf(w, "Account: %s\n", allUser[0].DisplayName)
+		} else {
+			// print all user id
+			cli.Println(w, "Please choose an account:")
+			for i, user := range allUser {
+				fmt.Printf("%d. %s\n", i+1, user.DisplayName)
+			}
+			cli.Printf(w, "Please input the account number: ")
+			var accountNumber int
+			// read input
+			input := ReadInput("1")
+			// parse input to int
+			accountNumber, err = strconv.Atoi(input)
+			if err != nil {
+				return fmt.Errorf("invalid account number: %s", err)
+			}
+			if accountNumber < 1 || accountNumber > len(allUser) {
+				return fmt.Errorf("invalid account number")
+			}
+			cp.CloudSSOAccountId = allUser[accountNumber-1].AccountId
+		}
+	}
+	// get access configuration
+	accessConfigurationParameter := cloudsso.AccessConfigurationsParameter{
+		AccessToken: cp.AccessToken,
+		UrlPrefix:   baseUrl.Scheme + "://" + baseUrl.Host,
+		HttpClient:  httpClient,
+		AccountId:   cp.CloudSSOAccountId,
+	}
+	accessConfigurations, err := cloudssoListAllAccessConfigurations(&accessConfigurationParameter, cloudsso.AccessConfigurationsRequest{
+		AccountId: cp.CloudSSOAccountId,
+	})
+	if err != nil {
+		return fmt.Errorf("list access configuration failed: %s", err)
+	}
+	if len(accessConfigurations) == 0 {
+		return fmt.Errorf("no access configuration found")
+	}
+	acHistory := cp.CloudSSOAccessConfig
+	if acHistory != "" {
+		// 判断是否存在
+		var exist = false
+		for _, accessConfiguration := range accessConfigurations {
+			if accessConfiguration.AccessConfigurationId == acHistory {
+				exist = true
+				break
+			}
+		}
+		if !exist {
+			cli.Printf(w, "Access Configuration %s not found, please choose again\n", acHistory)
+			// clear history
+			cp.CloudSSOAccessConfig = ""
+		}
+	}
+	if cp.CloudSSOAccessConfig == "" {
+		// if accessConfigurations has only one access configuration, use it directly
+		if len(accessConfigurations) == 1 {
+			cp.CloudSSOAccessConfig = accessConfigurations[0].AccessConfigurationId
+			cli.Printf(w, "Access Configuration: %s\n", accessConfigurations[0].AccessConfigurationId)
+		} else {
+			// print all access configuration id
+			cli.Println(w, "Please choose an access configuration:")
+			for i, accessConfiguration := range accessConfigurations {
+				cli.Printf(w, "%d. %s\n", i+1, accessConfiguration.AccessConfigurationName)
+			}
+			cli.Printf(w, "Please input the access configuration number: ")
+			var accessConfigurationNumber int
+			// read input
+			input := ReadInput("1")
+			// parse input to int
+			accessConfigurationNumber, err = strconv.Atoi(input)
+			if err != nil {
+				return fmt.Errorf("invalid access configuration number: %s", err)
+			}
+			if accessConfigurationNumber < 1 || accessConfigurationNumber > len(accessConfigurations) {
+				return fmt.Errorf("invalid access configuration number")
+			}
+			cp.CloudSSOAccessConfig = accessConfigurations[accessConfigurationNumber-1].AccessConfigurationId
+		}
+	}
+	// create sts token
+	stsInfo, err := cloudssoTryRefreshStsToken(&cp.CloudSSOSignInUrl, &cp.AccessToken, &cp.CloudSSOAccessConfig,
+		&cp.CloudSSOAccountId, httpClient)
+	if err != nil {
+		return fmt.Errorf("create sts token failed: %s", err)
+	}
+	cp.AccessKeyId = stsInfo.AccessKeyId
+	cp.AccessKeySecret = stsInfo.AccessKeySecret
+	cp.StsToken = stsInfo.SecurityToken
+	// Expiration is UTC time, 2015-04-09T11:52:19Z, convert to int
+	// Parse the time string
+	parsedTime, err := time.Parse(time.RFC3339, stsInfo.Expiration)
+	if err != nil {
+		return fmt.Errorf("parse expiration time failed: %s", err)
+	}
+
+	// Convert to Unix time (int64)
+	unixTime := parsedTime.Unix()
+	cp.StsExpiration = unixTime - 5
 	return nil
 }
 

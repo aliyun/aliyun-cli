@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package config
 
 import (
@@ -19,30 +20,33 @@ import (
 )
 
 const (
-	ProfileFlagName         = "profile"
-	ModeFlagName            = "mode"
-	AccessKeyIdFlagName     = "access-key-id"
-	AccessKeySecretFlagName = "access-key-secret"
-	StsTokenFlagName        = "sts-token"
-	StsRegionFlagName       = "sts-region"
-	RamRoleNameFlagName     = "ram-role-name"
-	RamRoleArnFlagName      = "ram-role-arn"
-	RoleSessionNameFlagName = "role-session-name"
-	SourceProfileFlagName   = "source-profile"
-	PrivateKeyFlagName      = "private-key"
-	KeyPairNameFlagName     = "key-pair-name"
-	RegionFlagName          = "region"
-	RegionIdFlagName        = "RegionId"
-	LanguageFlagName        = "language"
-	ReadTimeoutFlagName     = "read-timeout"
-	ConnectTimeoutFlagName  = "connect-timeout"
-	RetryCountFlagName      = "retry-count"
-	SkipSecureVerifyName    = "skip-secure-verify"
-	ConfigurePathFlagName   = "config-path"
-	ExpiredSecondsFlagName  = "expired-seconds"
-	ProcessCommandFlagName  = "process-command"
-	OIDCProviderARNFlagName = "oidc-provider-arn"
-	OIDCTokenFileFlagName   = "oidc-token-file"
+	ProfileFlagName              = "profile"
+	ModeFlagName                 = "mode"
+	AccessKeyIdFlagName          = "access-key-id"
+	AccessKeySecretFlagName      = "access-key-secret"
+	StsTokenFlagName             = "sts-token"
+	StsRegionFlagName            = "sts-region"
+	RamRoleNameFlagName          = "ram-role-name"
+	RamRoleArnFlagName           = "ram-role-arn"
+	RoleSessionNameFlagName      = "role-session-name"
+	SourceProfileFlagName        = "source-profile"
+	PrivateKeyFlagName           = "private-key"
+	KeyPairNameFlagName          = "key-pair-name"
+	RegionFlagName               = "region"
+	RegionIdFlagName             = "RegionId"
+	LanguageFlagName             = "language"
+	ReadTimeoutFlagName          = "read-timeout"
+	ConnectTimeoutFlagName       = "connect-timeout"
+	RetryCountFlagName           = "retry-count"
+	SkipSecureVerifyName         = "skip-secure-verify"
+	ConfigurePathFlagName        = "config-path"
+	ExpiredSecondsFlagName       = "expired-seconds"
+	ProcessCommandFlagName       = "process-command"
+	OIDCProviderARNFlagName      = "oidc-provider-arn"
+	OIDCTokenFileFlagName        = "oidc-token-file"
+	CloudSSOSignInUrlFlagName    = "cloud-sso-sign-in-url"
+	CloudSSOAccessConfigFlagName = "cloud-sso-access-config"
+	CloudSSOAccountIdFlagName    = "cloud-sso-account-id"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -69,6 +73,9 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewProcessCommandFlag())
 	fs.Add(NewOIDCProviderARNFlag())
 	fs.Add(NewOIDCTokenFileFlag())
+	fs.Add(NewCloudSSOSignInUrlFlag())
+	fs.Add(NewCloudSSOAccessConfigFlag())
+	fs.Add(NewCloudSSOAccountIdFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -165,6 +172,21 @@ func OIDCProviderARNFlag(fs *cli.FlagSet) *cli.Flag {
 
 func OIDCTokenFileFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(OIDCTokenFileFlagName)
+}
+
+// CloudSSOSignInUrlFlag returns the flag for cloud sso sign in url
+func CloudSSOSignInUrlFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CloudSSOSignInUrlFlagName)
+}
+
+// CloudSSOAccessConfigFlag returns the flag for cloud sso access config
+func CloudSSOAccessConfigFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CloudSSOAccessConfigFlagName)
+}
+
+// CloudSSOAccountIdFlag returns the flag for cloud sso account id
+func CloudSSOAccountIdFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CloudSSOAccountIdFlagName)
 }
 
 func NewProfileFlag() *cli.Flag {
@@ -422,5 +444,41 @@ func NewSkipSecureVerify() *cli.Flag {
 		Short: i18n.T(
 			"use `--skip-secure-verify` to skip https certification validate [Not recommended]",
 			"使用 `--skip-secure-verify` 跳过https的证书校验 [不推荐使用]"),
+	}
+}
+
+func NewCloudSSOSignInUrlFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         CloudSSOSignInUrlFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--cloud-sso-sign-in-url` to specify the cloud sso sign in url",
+			"使用 `--cloud-sso-sign-in-url` 指定云SSO登录地址"),
+	}
+}
+
+func NewCloudSSOAccessConfigFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         CloudSSOAccessConfigFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--cloud-sso-access-config` to specify the cloud sso access config",
+			"使用 `--cloud-sso-access-config` 指定云SSO访问配置"),
+	}
+}
+
+func NewCloudSSOAccountIdFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         CloudSSOAccountIdFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--cloud-sso-account-id` to specify the cloud sso account id",
+			"使用 `--cloud-sso-account-id` 指定云SSO账号ID"),
 	}
 }

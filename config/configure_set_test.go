@@ -169,4 +169,22 @@ func TestDoConfigureSet(t *testing.T) {
 	}
 	w.Reset()
 	doConfigureSet(w, fs)
+
+	// CloudSSO
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{Name: "default", Mode: CloudSSO,
+						CloudSSOAccessConfig: "CloudSSOAccessConfig",
+						CloudSSOAccountId:    "CloudSSOAccountId",
+						CloudSSOSignInUrl:    "CloudSSOSignInUrl",
+						OutputFormat:         "json", RegionId: "cn-hangzhou"},
+					{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+		}
+	}
+	w.Reset()
+	doConfigureSet(w, fs)
+	assert.Empty(t, w.String())
 }

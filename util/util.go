@@ -1,6 +1,10 @@
 package util
 
-import "os"
+import (
+	"net/http"
+	"os"
+	"time"
+)
 
 func GetFromEnv(args ...string) string {
 	for _, key := range args {
@@ -10,4 +14,14 @@ func GetFromEnv(args ...string) string {
 	}
 
 	return ""
+}
+
+func GetCurrentUnixTime() int64 {
+	return time.Now().Unix()
+}
+
+func NewHttpClient() *http.Client {
+	return &http.Client{
+		Timeout: time.Second * 10,
+	}
 }
