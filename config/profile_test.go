@@ -21,6 +21,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -795,6 +796,11 @@ func TestGetCredentialWithCredentialsURI(t *testing.T) {
 }
 
 func TestProfile_GetCredential_External(t *testing.T) {
+	// if is windows, ignore
+	s := runtime.GOOS
+	if s == "windows" {
+		t.Skip("Skip external test on Windows")
+	}
 	// 创建临时目录用于存放测试脚本
 	tempDir, err := ioutil.TempDir("", "external_test")
 	if err != nil {
