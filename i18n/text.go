@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package i18n
 
 func T(en string, zh string) *Text {
@@ -43,4 +44,10 @@ func (a *Text) Get(lang string) string {
 
 func (a *Text) GetData() map[string]string {
 	return a.dic
+}
+
+func (a *Text) GetMessage() string {
+	// determine language
+	lang := GetLanguage()
+	return a.Get(lang)
 }

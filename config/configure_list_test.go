@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -74,6 +74,14 @@ func TestDoConfigureList(t *testing.T) {
 						OutputFormat:    "json",
 						KeyPairName:     "KeyPairName",
 					},
+					{
+						Name:                 "eee",
+						Mode:                 CloudSSO,
+						AccessKeyId:          "sdf",
+						CloudSSOAccountId:    "a",
+						CloudSSOAccessConfig: "b",
+						CloudSSOSignInUrl:    "c",
+					},
 				},
 			}, nil
 		}
@@ -85,7 +93,8 @@ func TestDoConfigureList(t *testing.T) {
 		"aaa       | StsToken:******        | Invalid |                  | \n"+
 		"bbb       | RamRoleArn:******      | Invalid |                  | \n"+
 		"ccc       | EcsRamRole:RamRoleName | Invalid |                  | \n"+
-		"ddd       | RsaKeyPair:KeyPairName | Invalid |                  | \n", w.String())
+		"ddd       | RsaKeyPair:KeyPairName | Invalid |                  | \n"+
+		"eee       | CloudSSO:a@b           | Invalid |                  | \n", w.String())
 
 	//testcase 2
 	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {

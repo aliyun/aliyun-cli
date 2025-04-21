@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package config
 
 import (
@@ -94,6 +95,12 @@ func doConfigureGet(c *cli.Context, args []string) {
 			cli.Printf(c.Stdout(), profile.RegionId)
 		case LanguageFlagName:
 			cli.Printf(c.Stdout(), "language=%s\n", profile.Language)
+		case CloudSSOSignInUrlFlagName:
+			cli.Printf(c.Stdout(), "cloud-sso-sign-in-url=%s\n", profile.CloudSSOSignInUrl)
+		case CloudSSOAccessConfigFlagName:
+			cli.Printf(c.Stdout(), "cloud-sso-access-config=%s\n", profile.CloudSSOAccessConfig)
+		case CloudSSOAccountIdFlagName:
+			cli.Printf(c.Stdout(), "cloud-sso-account-id=%s\n", profile.CloudSSOAccountId)
 		}
 	}
 

@@ -105,3 +105,60 @@ func TestDoConfigureGet(t *testing.T) {
 	doConfigureGet(ctx, []string{"mode", "profile", "access-key-id", "language"})
 	assert.Equal(t, "mode=AK\nprofile=default\naccess-key-id=*************************_id\nlanguage=\n\n", w.String())
 }
+
+func TestDoConfigureGetCloudSSO(t *testing.T) {
+	// 设置测试环境
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	AddFlags(ctx.Flags())
+	originhook := hookLoadConfiguration
+	defer func() {
+		hookLoadConfiguration = originhook
+	}()
+
+	// 创建包含 CloudSSO 相关配置的 Profile
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name:                 "default",
+						Mode:                 AK,
+						CloudSSOSignInUrl:    "https://signin.example.com",
+						CloudSSOAccessConfig: "access-config-example",
+						CloudSSOAccountId:    "account-123456",
+					},
+				},
+			}, nil
+		}
+	}
+
+	// 测试 CloudSSOSignInUrlFlagName
+	w.Reset()
+	stderr.Reset()
+	doConfigureGet(ctx, []string{CloudSSOSignInUrlFlagName})
+	assert.Equal(t, "cloud-sso-sign-in-url=https://signin.example.com\n\n", w.String())
+
+	// 测试 CloudSSOAccessConfigFlagName
+	w.Reset()
+	stderr.Reset()
+	doConfigureGet(ctx, []string{CloudSSOAccessConfigFlagName})
+	assert.Equal(t, "cloud-sso-access-config=access-config-example\n\n", w.String())
+
+	// 测试 CloudSSOAccountIdFlagName
+	w.Reset()
+	stderr.Reset()
+	doConfigureGet(ctx, []string{CloudSSOAccountIdFlagName})
+	assert.Equal(t, "cloud-sso-account-id=account-123456\n\n", w.String())
+
+	// 测试同时获取所有 CloudSSO 相关配置
+	w.Reset()
+	stderr.Reset()
+	doConfigureGet(ctx, []string{CloudSSOSignInUrlFlagName, CloudSSOAccessConfigFlagName, CloudSSOAccountIdFlagName})
+	expected := "cloud-sso-sign-in-url=https://signin.example.com\n" +
+		"cloud-sso-access-config=access-config-example\n" +
+		"cloud-sso-account-id=account-123456\n\n"
+	assert.Equal(t, expected, w.String())
+}

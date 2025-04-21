@@ -101,6 +101,7 @@ The following are supported authentication methods:
 | External               | Use external processes to provide access credentials        |
 | CredentialsURI         | Use external services to provide access credentials         |
 | ChainableRamRoleArn    | Use chainable role assumption to provide access credentials |
+| CloudSSO               | Use CloudSSO to provide access credentials                  |
 
 If the --mode is not specified during configuration, the AK mode will be used by default.
 
@@ -226,7 +227,7 @@ The Credentials URI must be response with status code 200, and following body:
 }
 ```
 
-Otherwise, CLI treate as failure case.
+Otherwise, CLI treat as failure case.
 
 ### Use OIDC to get credentials
 
@@ -245,7 +246,20 @@ Default Language [zh|en] en:
 Saving profile[oidc_p] ...Done.
 ```
 
-### Enable bash/zsh auto completion
+### Use CloudSSO to get credentials
+
+You can use the `--mode CloudSSO` to obtain credentials through CloudSSO. An example is as follows:
+
+```shell
+$ aliyun configure --mode CloudSSO --profile cloud_sso
+Configuring profile 'cloudsso-test' in 'CloudSSO' authenticate mode...
+CloudSSO Sign In Url [https://signin-cn-shanghai.alibabacloudsso.com/start/login]:
+# CloudSSO Sign In Url is required, please input it.
+# then follow the instructions to sign in.
+```
+
+
+### Enable bash/zsh auto-completion
 
 - Use `aliyun auto-completion` command to enable auto completion in zsh/bash
 - Use `aliyun auto-completion --uninstall` command to disable auto completion.
@@ -431,6 +445,7 @@ We support the following environment variables:
 - `ALIBABA_CLOUD_ACCESS_KEY_SECRET`: When no Access Key Secret is specified, the CLI uses it.
 - `ALIBABA_CLOUD_SECURITY_TOKEN`: When no Security Token is specified, the CLI uses it.
 - `ALIBABA_CLOUD_REGION_ID`: When no Region Id is specified, the CLI uses it.
+- `ALIBABA_CLOUD_SSO_CLIENT_ID`: Use this variable to override the client ID of the SSO application.
 - `DEBUG=sdk`：Through this variable, the CLI can display HTTP request information, which is helpful for troubleshooting.
 
 ## Getting Help
