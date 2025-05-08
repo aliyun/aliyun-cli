@@ -168,6 +168,24 @@ func TestAddFlag(t *testing.T) {
 			DefaultValue: "",
 			Persistent:   false,
 		}
+		newExternalIdFlag = &cli.Flag{
+			Category:     "config",
+			Name:         ExternalIdFlagName,
+			AssignedMode: cli.AssignedOnce,
+			Short: i18n.T(
+				"use `--external-id <ExternalId>` to assign ExternalId",
+				"使用 `--external-id <ExternalId>` 指定ExternalId"),
+			Long:         nil,
+			Required:     false,
+			Aliases:      nil,
+			Hidden:       false,
+			Validate:     nil,
+			Fields:       nil,
+			ExcludeWith:  nil,
+			Shorthand:    0,
+			DefaultValue: "",
+			Persistent:   false,
+		}
 		newPrivateKeyFlag = &cli.Flag{
 			Category:     "config",
 			Name:         PrivateKeyFlagName,
@@ -377,6 +395,9 @@ func TestAddFlag(t *testing.T) {
 
 	f = NewRoleSessionNameFlag()
 	assert.Equal(t, newRoleSessionNameFlag, f)
+
+	f = NewExternalIdFlag()
+	assert.Equal(t, newExternalIdFlag, f)
 
 	f = NewPrivateKeyFlag()
 	assert.Equal(t, newPrivateKeyFlag, f)

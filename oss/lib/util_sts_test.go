@@ -26,7 +26,7 @@ func (s *StsTestSuite) TearDownSuite(c *C) {
 }
 
 func (s *StsTestSuite) TestSendRequest(c *C) {
-	client := NewClient("", "", "", "")
+	client := NewClient("", "", "", "", "")
 	_, _, err := client.sendRequest(StsHost)
 	c.Assert(err, IsNil)
 
@@ -36,7 +36,7 @@ func (s *StsTestSuite) TestSendRequest(c *C) {
 }
 
 func (s *StsTestSuite) TestHandleResponse(c *C) {
-	client := NewClient("", "", "", "")
+	client := NewClient("", "", "", "", "")
 
 	body := "{\"RequestId\":\"784B99C1-895F-426C-8E1F-008955D418FB\"," +
 		"\"HostId\":\"sts.aliyuncs.com\"," +
@@ -67,7 +67,7 @@ func (s *StsTestSuite) TestHandleResponse(c *C) {
 
 func (s *StsTestSuite) TestAssumeRoleSuccess(c *C) {
 	now := time.Now()
-	client := NewClient(stsAccessID, stsAccessKeySecret, stsARN, "sts_test")
+	client := NewClient(stsAccessID, stsAccessKeySecret, stsARN, "sts_test", "")
 
 	resp, err := client.AssumeRole(900, "")
 	if err != nil {
@@ -90,7 +90,7 @@ func (s *StsTestSuite) TestAssumeRoleSuccess(c *C) {
 
 func (s *StsTestSuite) TestAssumeRoleNegative(c *C) {
 	// AccessKeyID invalid
-	client := NewClient("", accessKeySecret, stsARN, "sts_test")
+	client := NewClient("", accessKeySecret, stsARN, "sts_test", "")
 	resp, err := client.AssumeRole(900, "")
 	c.Assert(resp, IsNil)
 	c.Assert(err, NotNil)
@@ -102,7 +102,7 @@ func (s *StsTestSuite) TestAssumeRoleNegative(c *C) {
 	log.Println("ServiceError:", srvErr)
 
 	// AccessKeySecret invalid
-	client = NewClient(stsAccessID, stsAccessKeySecret+" ", stsARN, "sts_test")
+	client = NewClient(stsAccessID, stsAccessKeySecret+" ", stsARN, "sts_test", "")
 	resp, err = client.AssumeRole(900, "")
 	c.Assert(resp, IsNil)
 	c.Assert(err, NotNil)
@@ -114,7 +114,7 @@ func (s *StsTestSuite) TestAssumeRoleNegative(c *C) {
 	log.Println("ServiceError:", srvErr)
 
 	// SessionName invalid
-	client = NewClient(stsAccessID, stsAccessKeySecret, stsARN, "x")
+	client = NewClient(stsAccessID, stsAccessKeySecret, stsARN, "x", "")
 
 	resp, err = client.AssumeRole(900, "")
 	c.Assert(resp, IsNil)

@@ -126,6 +126,7 @@ var bucketAccessMonitorCommand = BucketAccessMonitorCommand{
 			OptionTokenTimeout,
 			OptionRamRoleArn,
 			OptionRoleSessionName,
+			OptionExternalId,
 			OptionReadTimeout,
 			OptionConnectTimeout,
 			OptionSTSRegion,

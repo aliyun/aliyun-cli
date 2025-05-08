@@ -142,6 +142,7 @@ var signURLCommand = SignurlCommand{
 			OptionTokenTimeout,
 			OptionRamRoleArn,
 			OptionRoleSessionName,
+			OptionExternalId,
 			OptionSTSRegion,
 			OptionUserAgent,
 			OptionQueryParam,
