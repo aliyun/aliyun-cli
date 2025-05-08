@@ -304,7 +304,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 					style, _ := ctx.Flags().Get("style").GetValue()
 					if style == "" {
 						return nil, cli.NewErrorWithTip(fmt.Errorf("uncheked version %s", version),
-							"Please use --style to speicify API sytle, rpc or restful.")
+							"Please use --style to specify API style, rpc or restful.")
 					}
 					product.ApiStyle = style
 				}
