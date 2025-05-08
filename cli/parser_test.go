@@ -101,6 +101,16 @@ func TestParser1(t *testing.T) {
 	_, _, err = parser.parseCommandArg("-")
 	assert.NotNil(t, err)
 	assert.Equal(t, "not support flag form -", err.Error())
+
+	// more than two dashes, treat as value
+	_, v, err = parser.parseCommandArg("---a")
+	assert.Nil(t, err)
+	assert.Equal(t, "---a", v)
+
+	// contain ==
+	_, v, err = parser.parseCommandArg("----a==2")
+	assert.Nil(t, err)
+	assert.Equal(t, "----a==2", v)
 }
 
 // 2. can parse args and flags
