@@ -143,14 +143,20 @@ func (p *Parser) parseCommandArg(s string) (flag *Flag, value string, err error)
 		value = v
 	}
 
-	if strings.HasPrefix(prefix, "--") {
-		if len(prefix) > 2 {
-			flag, err = p.detector.detectFlag(prefix[2:])
-		} else {
-			err = fmt.Errorf("not support '--' in command line")
-		}
-	} else if strings.HasPrefix(prefix, "-") {
-		if len(prefix) == 2 {
+	if strings.HasPrefix(prefix, "-") {
+		// 特殊处理 SSL 证书等以多个连字符开头的情况
+		if strings.HasPrefix(prefix, "---") {
+			// 对于以三个或更多连字符开头的参数，视为值而非 flag
+			value = s
+		} else if strings.HasPrefix(prefix, "--") {
+			// 恰好以两个连字符开头的处理为长格式 flag
+			if len(prefix) > 2 {
+				flag, err = p.detector.detectFlag(prefix[2:])
+			} else {
+				err = fmt.Errorf("not support '--' in command line")
+			}
+		} else if len(prefix) == 2 {
+			// 对于 -x 格式的短 flag
 			flag, err = p.detector.detectFlagByShorthand(rune(prefix[1]))
 		} else {
 			err = fmt.Errorf("not support flag form %s", prefix)
