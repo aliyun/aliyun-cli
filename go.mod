@@ -6,7 +6,7 @@ toolchain go1.23.8
 
 require (
 	github.com/alibabacloud-go/darabonba-openapi/v2 v2.1.7
-	github.com/alibabacloud-go/tea v1.3.8
+	github.com/alibabacloud-go/tea v1.3.9
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.7
 	github.com/aliyun/alibaba-cloud-sdk-go v1.63.104
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
