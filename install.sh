@@ -76,7 +76,7 @@ fi
 
 if [[ -n "${CLI_ON_LINUX-}" ]]
 then
-  UNAME_MACHINE="$(/usr/bin/uname -m)"
+  UNAME_MACHINE="$(uname -m)"
   if [[ "${UNAME_MACHINE}" == "arm64" || "${UNAME_MACHINE}" == "aarch64" ]]
   then
     curl -O -fsSL https://aliyuncli.alicdn.com/aliyun-cli-linux-"$VERSION"-arm64.tgz
