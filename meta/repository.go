@@ -87,8 +87,8 @@ func (a *Repository) GetApiByPath(productCode string, version string, method str
 		if err != nil {
 			return result, false
 		}
-		// method not equal
-		if result.Method != method {
+		// method not allowed
+		if !strings.Contains(result.Method, method) {
 			continue
 		}
 		// replace all [something] to *

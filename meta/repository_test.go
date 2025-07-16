@@ -151,6 +151,81 @@ func TestRepository_GetApiByPath(t *testing.T) {
 			},
 			want1: false,
 		},
+		{
+			name: "test3",
+			fields: fields{
+				Products: []Product{
+					{
+						Code:     "cs",
+						ApiNames: []string{"DeleteClusterNodes"},
+					},
+				},
+				Names: []string{"cs"},
+				index: map[string]Product{
+					"cs": {
+						Code:     "cs",
+						ApiNames: []string{"DeleteClusterNodes"},
+					},
+				},
+			},
+			args: args{
+				productCode: "cs",
+				version:     "2015-12-15",
+				method:      "POST",
+				path:        "/clusters/clusterId/nodes",
+			},
+			want1: true,
+		},
+		{
+			name: "test4",
+			fields: fields{
+				Products: []Product{
+					{
+						Code:     "cs",
+						ApiNames: []string{"DeleteClusterNodes"},
+					},
+				},
+				Names: []string{"cs"},
+				index: map[string]Product{
+					"cs": {
+						Code:     "cs",
+						ApiNames: []string{"DeleteClusterNodes"},
+					},
+				},
+			},
+			args: args{
+				productCode: "cs",
+				version:     "2015-12-15",
+				method:      "DELETE",
+				path:        "/clusters/clusterId/nodes",
+			},
+			want1: true,
+		},
+		{
+			name: "test5",
+			fields: fields{
+				Products: []Product{
+					{
+						Code:     "cs",
+						ApiNames: []string{"CreateTemplate"},
+					},
+				},
+				Names: []string{"cs"},
+				index: map[string]Product{
+					"cs": {
+						Code:     "cs",
+						ApiNames: []string{"CreateTemplate"},
+					},
+				},
+			},
+			args: args{
+				productCode: "cs",
+				version:     "2015-12-15",
+				method:      "POST",
+				path:        "/templates",
+			},
+			want1: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
