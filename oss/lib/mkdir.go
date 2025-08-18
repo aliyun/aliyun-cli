@@ -96,6 +96,7 @@ var mkdirCommand = MkdirCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

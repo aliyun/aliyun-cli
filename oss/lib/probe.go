@@ -371,6 +371,7 @@ var probeCommand = ProbeCommand{
 			OptionParallel,
 			OptionPartSize,
 			OptionRuntime,
+			OptionInsecure,
 		},
 	},
 }

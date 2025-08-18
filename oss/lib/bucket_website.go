@@ -253,6 +253,7 @@ var bucketWebsiteCommand = BucketWebSiteCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

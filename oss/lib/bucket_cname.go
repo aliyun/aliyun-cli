@@ -256,6 +256,7 @@ var bucketCnameCommand = BucketCnameCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

@@ -140,6 +140,7 @@ var bucketLogCommand = BucketLogCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

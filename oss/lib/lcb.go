@@ -87,6 +87,7 @@ var lcbCommand = LcbCommand{
 			OptionMarker,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

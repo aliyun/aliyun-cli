@@ -264,6 +264,7 @@ var setACLCommand = SetACLCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

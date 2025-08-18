@@ -136,6 +136,7 @@ var bucketResourceGroupCommand = BucketResourceGroupCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

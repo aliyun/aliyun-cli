@@ -368,6 +368,7 @@ var setMetaCommand = SetMetaCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }
