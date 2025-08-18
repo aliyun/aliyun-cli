@@ -434,6 +434,7 @@ var syncCommand = SyncCommand{
 			// The following options are only supported by sc command, not supported by cp command
 			OptionDelete,
 			OptionBackupDir,
+			OptionInsecure,
 		},
 	},
 }

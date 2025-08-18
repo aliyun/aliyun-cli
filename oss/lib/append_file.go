@@ -165,6 +165,7 @@ var appendFileCommand = AppendFileCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

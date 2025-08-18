@@ -237,6 +237,7 @@ var replicationCommand = ReplicationCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

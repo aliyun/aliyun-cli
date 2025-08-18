@@ -290,6 +290,9 @@ var OptionMap = map[string]Option{
 	OptionRuntime: Option{"", "--runtime", "", OptionTypeInt64, "", "",
 		"设置命令的持续的运行时间",
 		"specifies the max running time of the command."},
+	OptionInsecure: Option{"", "--insecure", "", OptionTypeFlagTrue, "", "",
+		"表示不校验服务端的数字证书",
+		"specifies that the oss server's digital certificate file will not be verified."},
 }
 
 func (T *Option) getHelp(language string) string {
