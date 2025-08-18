@@ -122,6 +122,7 @@ var bucketVersioningCommand = BucketVersioningCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

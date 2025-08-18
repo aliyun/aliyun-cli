@@ -107,6 +107,7 @@ const (
 	OptionQueryParam                 = "queryParam"
 	OptionForcePathStyle             = "forcePathStyle"
 	OptionRuntime                    = "runtime"
+	OptionInsecure                   = "insecure"
 )
 
 // the elements show in stat object

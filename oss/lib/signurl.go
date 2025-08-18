@@ -150,6 +150,7 @@ var signURLCommand = SignurlCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

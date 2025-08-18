@@ -110,6 +110,7 @@ var allPartSizeCommand = AllPartSizeCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

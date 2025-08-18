@@ -100,6 +100,7 @@ var userQosCommand = UserQosCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

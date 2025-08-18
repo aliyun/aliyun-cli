@@ -146,6 +146,7 @@ var bucketRefererCommand = BucketRefererCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

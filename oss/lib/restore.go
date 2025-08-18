@@ -238,6 +238,7 @@ var restoreCommand = RestoreCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

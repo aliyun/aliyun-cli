@@ -1317,6 +1317,7 @@ var copyCommand = CopyCommand{
 			OptionForcePathStyle,
 			OptionStartTime,
 			OptionEndTime,
+			OptionInsecure,
 		},
 	},
 }
