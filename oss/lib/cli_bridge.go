@@ -231,8 +231,6 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	a2 = append(a2, args...)
 	configFlagSet := cli.NewFlagSet()
 	config.AddFlags(configFlagSet)
-	// read oss support flags
-	ossOptionsMap := OptionMap
 
 	for _, f := range ctx.Flags().Flags() {
 		if configFlagSet.Get(f.Name) != nil {
@@ -244,10 +242,6 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 			if v, ok := configs[f.Name]; ok && v != "" {
 				continue
 			}
-		}
-		// if oss options map not support, ignore
-		if _, ok := ossOptionsMap["--"+f.Name]; !ok {
-			continue
 		}
 		if f.IsAssigned() {
 			flagName := "--" + f.Name
