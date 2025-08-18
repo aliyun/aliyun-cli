@@ -83,6 +83,7 @@ var updateCommand = UpdateCommand{
 			OptionProxyUser,
 			OptionProxyPwd,
 			OptionLogLevel,
+			OptionInsecure,
 		},
 	},
 }

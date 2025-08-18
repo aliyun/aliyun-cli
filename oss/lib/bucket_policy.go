@@ -177,6 +177,7 @@ var bucketPolicyCommand = BucketPolicyCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

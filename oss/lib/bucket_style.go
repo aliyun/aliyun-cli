@@ -162,6 +162,7 @@ var bucketStyleCommand = BucketStyleCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

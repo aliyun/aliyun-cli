@@ -136,6 +136,7 @@ var bucketAccessMonitorCommand = BucketAccessMonitorCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

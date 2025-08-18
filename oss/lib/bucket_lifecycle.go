@@ -179,6 +179,7 @@ var bucketLifeCycleCommand = BucketLifeCycleCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

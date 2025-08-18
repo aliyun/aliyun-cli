@@ -137,6 +137,7 @@ func NewInsecureFlag() *cli.Flag {
 		Name:         InsecureFlagName,
 		AssignedMode: cli.AssignedNone,
 		Hidden:       true,
+		Persistent:   true,
 		Short: i18n.T(
 			"use `--insecure` to force http(not recommend)",
 			"使用 `--insecure` 开关强制使用http方式调用（不推荐）")}

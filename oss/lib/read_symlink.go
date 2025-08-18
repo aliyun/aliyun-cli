@@ -131,6 +131,7 @@ var readSymlinkCommand = ReadSymlinkCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

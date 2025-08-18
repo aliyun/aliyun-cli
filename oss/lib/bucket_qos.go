@@ -166,6 +166,7 @@ var bucketQosCommand = BucketQosCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

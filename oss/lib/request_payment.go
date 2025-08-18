@@ -122,6 +122,7 @@ var requestPaymentCommand = RequestPaymentCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

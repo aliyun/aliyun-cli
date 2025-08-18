@@ -11,6 +11,12 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
+// ParseAndRunCommandFunc 定义ParseAndRunCommand函数类型
+type ParseAndRunCommandFunc func() error
+
+// parseAndRunCommandImpl 是真正的ParseAndRunCommand实现，可以被测试代码替换
+var parseAndRunCommandImpl ParseAndRunCommandFunc = ParseAndRunCommand
+
 func NewOssCommand() *cli.Command {
 	result := &cli.Command{
 		Name:   "oss",
@@ -148,6 +154,12 @@ func ParseAndGetEndpoint(ctx *cli.Context, args []string) (string, error) {
 }
 
 func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
+	// 修改 ctx flag的标记，允许所以flag 可以重复
+	if ctx.Flags() != nil && ctx.Flags().Flags() != nil {
+		for _, f := range ctx.Flags().Flags() {
+			f.AssignedMode = cli.AssignedRepeatable
+		}
+	}
 	// 利用 parser 解析 flags，否则下文读不到
 	parser := cli.NewParser(args, ctx)
 	_, err := parser.ReadAll()
@@ -202,19 +214,63 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 		}
 	}
 	configs["endpoint"] = endpoint
+	// if args has --endpoint, remove it and next arg
+	if endpoint != "" {
+		for i, arg := range args {
+			if arg == "--endpoint" {
+				if i+1 < len(args) {
+					args = append(args[:i], args[i+2:]...)
+					break
+				}
+			}
+		}
+	}
 
 	a2 := []string{"aliyun", "oss"}
 	a2 = append(a2, ctx.Command().Name)
 	a2 = append(a2, args...)
 	configFlagSet := cli.NewFlagSet()
 	config.AddFlags(configFlagSet)
+	// read oss support flags
+	ossOptionsMap := OptionMap
 
 	for _, f := range ctx.Flags().Flags() {
 		if configFlagSet.Get(f.Name) != nil {
 			continue
 		}
+		if configs != nil {
+			// 如果 flag 的值在 configs 中已经存在，则跳过
+			// 因为后续会重新 set
+			if v, ok := configs[f.Name]; ok && v != "" {
+				continue
+			}
+		}
+		// if oss options map not support, ignore
+		if _, ok := ossOptionsMap["--"+f.Name]; !ok {
+			continue
+		}
 		if f.IsAssigned() {
+			flagName := "--" + f.Name
+			// if already in args, skip
+			containFlag := false
+			for _, a := range args {
+				if strings.EqualFold(a, flagName) {
+					containFlag = true
+					break
+				}
+			}
+			if containFlag {
+				continue
+			}
 			a2 = append(a2, "--"+f.Name)
+			// if f.getValues is not nil and more than one value, we need to append all values
+			// otherwise, just append f.value
+			if f.GetValues() != nil && len(f.GetValues()) > 0 {
+				for _, v := range f.GetValues() {
+					a2 = append(a2, v)
+				}
+				continue
+			}
 			if s2, ok := f.GetValue(); ok && s2 != "" {
 				a2 = append(a2, s2)
 			}
@@ -228,5 +284,5 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 		}
 	}
 	os.Args = a2[1:]
-	return ParseAndRunCommand()
+	return parseAndRunCommandImpl()
 }

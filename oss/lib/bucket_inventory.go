@@ -223,6 +223,7 @@ var bucketInventoryCommand = BucketInventoryCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }
