@@ -130,6 +130,7 @@ var bucketTagCommand = BucketTagCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

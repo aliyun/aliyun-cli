@@ -133,6 +133,7 @@ var wormCommand = WormCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

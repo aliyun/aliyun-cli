@@ -100,6 +100,7 @@ var lrbCommand = LrbCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

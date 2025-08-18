@@ -150,6 +150,7 @@ var bucketEncryptionCommand = BucketEncryptionCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

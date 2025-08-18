@@ -344,6 +344,7 @@ var removeCommand = RemoveCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }

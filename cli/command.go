@@ -227,7 +227,7 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 }
 
 func (c *Command) executeInner(ctx *Context, args []string) error {
-	// fmt.Printf(">>> Execute Command: %s args=%v\n", c.Name, args)
+	//fmt.Printf(">>> Execute Command: %s args=%v\n", c.Name, args)
 	parser := NewParser(args, ctx)
 
 	var current = parser.GetCurrent()

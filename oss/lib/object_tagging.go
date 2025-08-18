@@ -160,6 +160,7 @@ var objectTagCommand = ObjectTagCommand{
 			OptionRegion,
 			OptionCloudBoxID,
 			OptionForcePathStyle,
+			OptionInsecure,
 		},
 	},
 }
