@@ -150,6 +150,24 @@ func TestAddFlag(t *testing.T) {
 			DefaultValue: "",
 			Persistent:   false,
 		}
+		newSourceProfileFlag = &cli.Flag{
+			Category:     "config",
+			Name:         SourceProfileFlagName,
+			AssignedMode: cli.AssignedOnce,
+			Short: i18n.T(
+				"use `--source-profile <SourceProfile>` to assign SourceProfile",
+				"使用 `--source-profile <SourceProfile>` 指定SourceProfile"),
+			Long:         nil,
+			Required:     false,
+			Aliases:      nil,
+			Hidden:       false,
+			Validate:     nil,
+			Fields:       nil,
+			ExcludeWith:  nil,
+			Shorthand:    0,
+			DefaultValue: "",
+			Persistent:   false,
+		}
 		newRoleSessionNameFlag = &cli.Flag{
 			Category:     "config",
 			Name:         RoleSessionNameFlagName,
@@ -392,6 +410,9 @@ func TestAddFlag(t *testing.T) {
 
 	f = NewRamRoleArnFlag()
 	assert.Equal(t, newRamRoleArnFlag, f)
+
+	f = NewSourceProfileFlag()
+	assert.Equal(t, newSourceProfileFlag, f)
 
 	f = NewRoleSessionNameFlag()
 	assert.Equal(t, newRoleSessionNameFlag, f)

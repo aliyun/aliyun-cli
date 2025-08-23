@@ -63,6 +63,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewStsRegionFlag())
 	fs.Add(NewRamRoleNameFlag())
 	fs.Add(NewRamRoleArnFlag())
+	fs.Add(NewSourceProfileFlag())
 	fs.Add(NewRoleSessionNameFlag())
 	fs.Add(NewExternalIdFlag())
 	fs.Add(NewPrivateKeyFlag())
@@ -284,6 +285,17 @@ func NewRamRoleArnFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--ram-role-arn <RamRoleArn>` to assign RamRoleArn",
 			"使用 `--ram-role-arn <RamRoleArn>` 指定RamRoleArn"),
+	}
+}
+
+func NewSourceProfileFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         SourceProfileFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--source-profile <SourceProfile>` to assign SourceProfile",
+			"使用 `--source-profile <SourceProfile>` 指定SourceProfile"),
 	}
 }
 
