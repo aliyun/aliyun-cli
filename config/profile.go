@@ -258,7 +258,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	}
 
 	if cp.ExternalId == "" {
-		cp.ExternalId = util.GetFromEnv("ALIBABACLOUD_EXTERNAL_ID", "ALIBAB_ACLOUD_EXTERNAL_ID")
+		cp.ExternalId = util.GetFromEnv("ALIBABACLOUD_EXTERNAL_ID", "ALIBABA_CLOUD_EXTERNAL_ID")
 	}
 
 	AutoModeRecognition(cp)
