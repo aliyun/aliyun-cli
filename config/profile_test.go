@@ -16,6 +16,7 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -998,4 +999,289 @@ echo 'This is not a valid JSON'
 			}
 		})
 	}
+}
+
+// TestGetCredentialWithOAuthStsExpired 测试OAuth模式中STS过期时的刷新逻辑
+func TestGetCredentialWithOAuthStsExpired(t *testing.T) {
+	// 保存原始函数并在测试后恢复
+	originalSaveConfigurationFunc := saveConfigurationFunc
+	originalHookLoadConfiguration := hookLoadConfiguration
+	originalExchangeFromOAuthFunc := exchangeFromOAuthFunc
+	defer func() {
+		saveConfigurationFunc = originalSaveConfigurationFunc
+		hookLoadConfiguration = originalHookLoadConfiguration
+		exchangeFromOAuthFunc = originalExchangeFromOAuthFunc
+	}()
+
+	// Mock保存配置函数
+	saveConfigurationFunc = func(config *Configuration) error {
+		return nil
+	}
+
+	// Mock hookLoadConfiguration函数
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "oauth-test",
+				Profiles: []Profile{
+					{
+						Name:                   "oauth-test",
+						Mode:                   OAuth,
+						RegionId:               "cn-hangzhou",
+						OAuthSiteType:          "CN",
+						OAuthAccessToken:       "mock-access-token",
+						OAuthRefreshToken:      "mock-refresh-token",
+						OAuthAccessTokenExpire: time.Now().Unix() + 3600,
+						AccessKeyId:            "mock-ak-id",
+						AccessKeySecret:        "mock-ak-secret",
+						StsToken:               "mock-sts-token",
+						StsExpiration:          time.Now().Unix() + 1800,
+					},
+				},
+			}, nil
+		}
+	}
+
+	// Mock exchangeFromOAuth函数
+	exchangeFromOAuthFunc = func(w io.Writer, cp *Profile) error {
+		// 模拟OAuth刷新成功，更新STS凭证
+		cp.AccessKeyId = "refreshed-ak-id"
+		cp.AccessKeySecret = "refreshed-ak-secret"
+		cp.StsToken = "refreshed-sts-token"
+		cp.StsExpiration = time.Now().Unix() + 3600
+		return nil
+	}
+
+	// 创建测试Profile，设置STS已过期
+	cf := NewConfiguration()
+	p := newProfile()
+	p.Name = "oauth-test"
+	p.Mode = OAuth
+	p.RegionId = "cn-hangzhou"
+	p.OAuthSiteType = "CN"
+	p.OAuthAccessToken = "mock-access-token"
+	p.OAuthRefreshToken = "mock-refresh-token"
+	p.OAuthAccessTokenExpire = time.Now().Unix() + 3600 // Access token未过期
+	p.AccessKeyId = "old-ak-id"
+	p.AccessKeySecret = "old-ak-secret"
+	p.StsToken = "old-sts-token"
+	p.StsExpiration = time.Now().Unix() - 300 // STS已过期（5分钟前）
+	cf.PutProfile(*p)
+	p.parent = cf
+
+	// 执行测试
+	cred, err := p.GetCredential(newCtx(), nil)
+
+	// 验证结果
+	assert.Nil(t, err)
+	assert.NotNil(t, cred)
+	assert.Equal(t, "sts", *cred.GetType())
+
+	// 验证STS凭证已被刷新
+	assert.Equal(t, "refreshed-ak-id", p.AccessKeyId)
+	assert.Equal(t, "refreshed-ak-secret", p.AccessKeySecret)
+	assert.Equal(t, "refreshed-sts-token", p.StsToken)
+	assert.True(t, p.StsExpiration > time.Now().Unix()) // 确保过期时间已更新
+}
+
+// TestGetCredentialWithOAuthStsNotExpired 测试OAuth模式中STS未过期时直接使用现有凭证
+func TestGetCredentialWithOAuthStsNotExpired(t *testing.T) {
+	// 创建测试Profile，设置STS未过期
+	cf := NewConfiguration()
+	p := newProfile()
+	p.Name = "oauth-test"
+	p.Mode = OAuth
+	p.RegionId = "cn-hangzhou"
+	p.OAuthSiteType = "CN"
+	p.OAuthAccessToken = "mock-access-token"
+	p.OAuthRefreshToken = "mock-refresh-token"
+	p.OAuthAccessTokenExpire = time.Now().Unix() + 3600
+	p.AccessKeyId = "valid-ak-id"
+	p.AccessKeySecret = "valid-ak-secret"
+	p.StsToken = "valid-sts-token"
+	p.StsExpiration = time.Now().Unix() + 1800 // STS未过期（30分钟后）
+	cf.PutProfile(*p)
+	p.parent = cf
+
+	// 执行测试
+	cred, err := p.GetCredential(newCtx(), nil)
+
+	// 验证结果
+	assert.Nil(t, err)
+	assert.NotNil(t, cred)
+	assert.Equal(t, "sts", *cred.GetType())
+
+	// 验证使用的是原有凭证（未被刷新）
+	assert.Equal(t, "valid-ak-id", p.AccessKeyId)
+	assert.Equal(t, "valid-ak-secret", p.AccessKeySecret)
+	assert.Equal(t, "valid-sts-token", p.StsToken)
+}
+
+// TestGetCredentialWithOAuthRefreshError 测试OAuth刷新失败的情况
+func TestGetCredentialWithOAuthRefreshError(t *testing.T) {
+	// 保存原始函数并在测试后恢复
+	originalSaveConfigurationFunc := saveConfigurationFunc
+	originalHookLoadConfiguration := hookLoadConfiguration
+	originalExchangeFromOAuthFunc := exchangeFromOAuthFunc
+	defer func() {
+		saveConfigurationFunc = originalSaveConfigurationFunc
+		hookLoadConfiguration = originalHookLoadConfiguration
+		exchangeFromOAuthFunc = originalExchangeFromOAuthFunc
+	}()
+
+	// Mock保存配置函数
+	saveConfigurationFunc = func(config *Configuration) error {
+		return nil
+	}
+
+	// Mock hookLoadConfiguration函数
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "oauth-test",
+				Profiles: []Profile{
+					{
+						Name:          "oauth-test",
+						Mode:          OAuth,
+						RegionId:      "cn-hangzhou",
+						OAuthSiteType: "CN",
+					},
+				},
+			}, nil
+		}
+	}
+
+	// Mock exchangeFromOAuth函数返回错误
+	exchangeFromOAuthFunc = func(w io.Writer, cp *Profile) error {
+		return fmt.Errorf("mock refresh error: invalid token")
+	}
+
+	// 创建测试Profile，设置STS已过期
+	cf := NewConfiguration()
+	p := newProfile()
+	p.Name = "oauth-test"
+	p.Mode = OAuth
+	p.RegionId = "cn-hangzhou"
+	p.OAuthSiteType = "CN"
+	p.OAuthAccessToken = "mock-access-token"
+	p.OAuthRefreshToken = "mock-refresh-token"
+	p.OAuthAccessTokenExpire = time.Now().Unix() + 3600
+	p.AccessKeyId = "old-ak-id"
+	p.AccessKeySecret = "old-ak-secret"
+	p.StsToken = "old-sts-token"
+	p.StsExpiration = time.Now().Unix() - 300 // STS已过期
+	cf.PutProfile(*p)
+	p.parent = cf
+
+	// 执行测试
+	cred, err := p.GetCredential(newCtx(), nil)
+
+	// 验证结果
+	assert.NotNil(t, err)
+	assert.Nil(t, cred)
+	assert.Contains(t, err.Error(), "mock refresh error: invalid token")
+}
+
+// TestGetCredentialWithOAuthInvalidSiteType 测试OAuth模式中无效的站点类型
+func TestGetCredentialWithOAuthInvalidSiteType(t *testing.T) {
+	// 创建测试Profile，设置无效的OAuthSiteType
+	cf := NewConfiguration()
+	p := newProfile()
+	p.Name = "oauth-test"
+	p.Mode = OAuth
+	p.RegionId = "cn-hangzhou"
+	p.OAuthSiteType = "INVALID" // 无效的站点类型
+	p.OAuthAccessToken = "mock-access-token"
+	p.OAuthRefreshToken = "mock-refresh-token"
+	p.OAuthAccessTokenExpire = time.Now().Unix() + 3600
+	p.AccessKeyId = "ak-id"
+	p.AccessKeySecret = "ak-secret"
+	p.StsToken = "sts-token"
+	p.StsExpiration = time.Now().Unix() - 300 // STS已过��，触发刷新
+	cf.PutProfile(*p)
+	p.parent = cf
+
+	// 执行测试
+	cred, err := p.GetCredential(newCtx(), nil)
+
+	// 验证结果 - 应该在验证阶段就失败
+	assert.NotNil(t, err)
+	assert.Nil(t, cred)
+	assert.Contains(t, err.Error(), "invalid OAuth site type")
+}
+
+// TestGetCredentialWithOAuthMissingCredentials 测试OAuth模式中STS凭证为空的情况
+func TestGetCredentialWithOAuthMissingCredentials(t *testing.T) {
+	// 保存原始函数并在测试后恢复
+	originalSaveConfigurationFunc := saveConfigurationFunc
+	originalHookLoadConfiguration := hookLoadConfiguration
+	originalExchangeFromOAuthFunc := exchangeFromOAuthFunc
+	defer func() {
+		saveConfigurationFunc = originalSaveConfigurationFunc
+		hookLoadConfiguration = originalHookLoadConfiguration
+		exchangeFromOAuthFunc = originalExchangeFromOAuthFunc
+	}()
+
+	// Mock保存配置函数
+	saveConfigurationFunc = func(config *Configuration) error {
+		return nil
+	}
+
+	// Mock hookLoadConfiguration函数
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "oauth-test",
+				Profiles: []Profile{
+					{
+						Name:          "oauth-test",
+						Mode:          OAuth,
+						RegionId:      "cn-hangzhou",
+						OAuthSiteType: "CN",
+					},
+				},
+			}, nil
+		}
+	}
+
+	// Mock exchangeFromOAuth函数
+	exchangeFromOAuthFunc = func(w io.Writer, cp *Profile) error {
+		// 模拟OAuth刷新成功，更新STS凭证
+		cp.AccessKeyId = "new-ak-id"
+		cp.AccessKeySecret = "new-ak-secret"
+		cp.StsToken = "new-sts-token"
+		cp.StsExpiration = time.Now().Unix() + 3600
+		return nil
+	}
+
+	// 创建测试Profile，设置STS凭证为空
+	cf := NewConfiguration()
+	p := newProfile()
+	p.Name = "oauth-test"
+	p.Mode = OAuth
+	p.RegionId = "cn-hangzhou"
+	p.OAuthSiteType = "CN"
+	p.OAuthAccessToken = "mock-access-token"
+	p.OAuthRefreshToken = "mock-refresh-token"
+	p.OAuthAccessTokenExpire = time.Now().Unix() + 3600
+	p.AccessKeyId = ""     // 空的AK
+	p.AccessKeySecret = "" // 空的Secret
+	p.StsToken = ""        // 空的STS Token
+	p.StsExpiration = 0    // 过期时间为0
+	cf.PutProfile(*p)
+	p.parent = cf
+
+	// 执行测试
+	cred, err := p.GetCredential(newCtx(), nil)
+
+	// 验证结果
+	assert.Nil(t, err)
+	assert.NotNil(t, cred)
+	assert.Equal(t, "sts", *cred.GetType())
+
+	// 验证STS凭证已被刷新
+	assert.Equal(t, "new-ak-id", p.AccessKeyId)
+	assert.Equal(t, "new-ak-secret", p.AccessKeySecret)
+	assert.Equal(t, "new-sts-token", p.StsToken)
+	assert.True(t, p.StsExpiration > time.Now().Unix())
 }

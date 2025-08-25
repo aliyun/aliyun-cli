@@ -116,6 +116,8 @@ func doConfigureSet(w io.Writer, flags *cli.FlagSet) {
 		profile.CloudSSOAccessConfig = CloudSSOAccessConfigFlag(flags).GetStringOrDefault(profile.CloudSSOAccessConfig)
 		profile.CloudSSOAccountId = CloudSSOAccountIdFlag(flags).GetStringOrDefault(profile.CloudSSOAccountId)
 		profile.CloudSSOSignInUrl = CloudSSOSignInUrlFlag(flags).GetStringOrDefault(profile.CloudSSOSignInUrl)
+	case OAuth:
+		profile.OAuthSiteType = OAuthSiteTypeFlag(flags).GetStringOrDefault(profile.OAuthSiteType)
 	}
 
 	profile.RegionId = RegionFlag(flags).GetStringOrDefault(profile.RegionId)

@@ -246,6 +246,27 @@ Default Language [zh|en] en:
 Saving profile[oidc_p] ...Done.
 ```
 
+
+### Use OAuth to get credentials
+
+You can use the `--mode OAuth` to obtain credentials through OAuth-based SSO role assumption. An example is as follows:
+
+```shell
+$ aliyun configure --mode OAuth --profile oauth_p
+Configuring profile 'oauth-intl' in 'OAuth' authenticate mode...
+OAuth Site Type (CN: 0 or INTL: 1, default: CN): 
+1
+Please open the following URL in your browser to authorize:
+https://signin.alibabacloud.com/oauth2/v1/auth?response_type=code&client_id=xxxx
+如果浏览器没有自动打开，请使用以下URL完成登录过程:
+
+登录URL: https://signin.alibabacloud.com/oauth2/v1/auth?response_type=code&client_id=xxxx
+
+现在您可以在浏览器中使用OAuth配置登录您的账户。
+OAuth configuration completed. The temporary Access Key Id and Access Key Secret have been set in the profile.
+Default Region Id []: 
+```
+
 ### Use CloudSSO to get credentials
 
 You can use the `--mode CloudSSO` to obtain credentials through CloudSSO. An example is as follows:
