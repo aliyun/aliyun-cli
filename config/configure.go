@@ -16,10 +16,14 @@ package config
 
 import (
 	"bufio"
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/aliyun/aliyun-cli/v3/cloudsso"
-	"github.com/aliyun/aliyun-cli/v3/util"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,9 +31,27 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aliyun/aliyun-cli/v3/cloudsso"
+	"github.com/aliyun/aliyun-cli/v3/util"
+
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
+
+var oauthClientMap = map[string]string{
+	"CN":   "4038181954557748008",
+	"INTL": "4103531455503354461",
+}
+
+var oauthBaseUrlMap = map[string]string{
+	"CN":   "https://oauth.aliyun.com",
+	"INTL": "https://oauth.alibabacloud.com",
+}
+
+var signInMap = map[string]string{
+	"CN":   "https://signin.aliyun.com",
+	"INTL": "https://signin.alibabacloud.com",
+}
 
 var hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 	return fn
@@ -56,6 +78,32 @@ var cloudssoListAllAccessConfigurations = func(accessParam *cloudsso.AccessConfi
 
 var cloudssoTryRefreshStsToken = func(signInUrl, accessToken, accessConfig, accountId *string, httpClient *http.Client) (*cloudsso.CloudCredentialResponse, error) {
 	return cloudsso.TryRefreshStsToken(signInUrl, accessToken, accessConfig, accountId, httpClient)
+}
+
+// OAuth 相关的 mock 变量
+var oauthStartOauthFlow = func(w io.Writer, cp *Profile) error {
+	return startOauthFlow(w, cp)
+}
+
+var oauthExchangeFromOAuth = func(w io.Writer, cp *Profile) error {
+	return exchangeFromOAuth(w, cp)
+}
+
+var oauthTryRefreshOauthToken = func(w io.Writer, cp *Profile) error {
+	return tryRefreshOauthToken(w, cp)
+}
+
+// Util函数的mock变量，用于测试
+var utilOpenBrowser = func(url string) error {
+	return util.OpenBrowser(url)
+}
+
+var utilNewHttpClient = func() *http.Client {
+	return util.NewHttpClient()
+}
+
+var utilGetCurrentUnixTime = func() int64 {
+	return util.GetCurrentUnixTime()
 }
 
 var doConfigureProxy = func(ctx *cli.Context, profileName string, mode string) error {
@@ -185,6 +233,15 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 			if err != nil {
 				return err
 			}
+		case OAuth:
+			// only siteType is supported now
+			cp.Mode = OAuth
+			// restart oauth flow
+			err := configureOAuth(w, &cp)
+			if err != nil {
+				return err
+			}
+			cli.Printf(w, "OAuth configuration completed. The temporary Access Key Id and Access Key Secret have been set in the profile.\n")
 		default:
 			return fmt.Errorf("unexcepted authenticate mode: %s", mode)
 		}
@@ -231,6 +288,369 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 
 	DoHello(ctx, &cp)
 	return nil
+}
+
+func configureOAuth(w io.Writer, cp *Profile) error {
+	var oauthSiteType = cp.OAuthSiteType
+	startChooseSiteType := false
+	if oauthSiteType != "CN" && oauthSiteType != "INTL" {
+		startChooseSiteType = true
+	}
+	if startChooseSiteType {
+		cli.Println(w, "OAuth Site Type (CN: 0 or INTL: 1, default: CN): ")
+		oauthSiteTypeNum := ReadInput("0")
+		if oauthSiteTypeNum == "0" || strings.EqualFold(oauthSiteTypeNum, "CN") {
+			oauthSiteType = "CN"
+		}
+		if oauthSiteTypeNum == "1" || strings.EqualFold(oauthSiteTypeNum, "INTL") {
+			oauthSiteType = "INTL"
+		}
+	}
+	// only support CN or INTL
+	if oauthSiteType != "CN" && oauthSiteType != "INTL" {
+		// throw error
+		_, err := cli.Printf(w, "Invalid OAuth site type: %s, only support CN or INTL\n", oauthSiteType)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("invalid OAuth site type: %s, only support CN or INTL", oauthSiteType)
+	}
+	cp.OAuthSiteType = oauthSiteType
+	// start oauth flow
+	err := oauthStartOauthFlow(w, cp)
+	if err != nil {
+		return err
+	}
+	// exchange tmp ak and set
+	err = oauthExchangeFromOAuth(w, cp)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// exchange tmp ak from oauth token
+func exchangeFromOAuth(w io.Writer, cp *Profile) error {
+	oauthSiteType := cp.OAuthSiteType
+	if oauthSiteType != "CN" && oauthSiteType != "INTL" {
+		return fmt.Errorf("invalid OAuth site type: %s, only support CN or INTL", oauthSiteType)
+	}
+	// 检查 refresh token 是否过期
+	refreshToken := cp.OAuthRefreshToken
+	accessTokenExpire := cp.OAuthAccessTokenExpire
+	if accessTokenExpire == 0 || accessTokenExpire < util.GetCurrentUnixTime() {
+		if refreshToken == "" {
+			return fmt.Errorf("both access token and refresh token are empty, please re-authenticate, cmd: " + buildReLoginOauthCommand(cp))
+		}
+		// refresh token
+		err := oauthTryRefreshOauthToken(w, cp)
+		if err != nil {
+			return err
+		}
+	}
+	baseUrl := oauthBaseUrlMap[oauthSiteType]
+	exchangeUrl := fmt.Sprintf("%s/v1/exchange", baseUrl)
+	accessToken := cp.OAuthAccessToken
+	if accessToken == "" {
+		return fmt.Errorf("access token is empty, please re-authenticate, cmd: " + buildReLoginOauthCommand(cp))
+	}
+
+	// 构造请求
+	req, err := http.NewRequest("POST", exchangeUrl, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "aliyun-cli")
+
+	client := utilNewHttpClient()
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("exchange failed, status code: %d", resp.StatusCode)
+	}
+
+	var result struct {
+		RequestId       string `json:"requestId"`
+		AccessKeyId     string `json:"accessKeyId"`
+		AccessKeySecret string `json:"accessKeySecret"`
+		Expiration      string `json:"expiration"`
+		SecurityToken   string `json:"securityToken"`
+	}
+	// {
+	//  "error" : "expired_token",
+	//  "error_description": "The access token is expired.",
+	//  "requestId": "xxxxx"
+	//}
+	var resultError struct {
+		Error            string `json:"error"`
+		ErrorDescription string `json:"error_description"`
+		RequestId        string `json:"requestId"`
+	}
+	// check status code
+	if resp.StatusCode != http.StatusOK {
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		err = json.Unmarshal(data, &resultError)
+		if err != nil {
+			return fmt.Errorf("exchange failed, status code: %d", resp.StatusCode)
+		}
+		return fmt.Errorf("exchange failed, error: %s, description: %s, requestId: %s",
+			resultError.Error, resultError.ErrorDescription, resultError.RequestId)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal(data, &result)
+	if err != nil {
+		return err
+	}
+	// 写入 cp
+	cp.AccessKeyId = result.AccessKeyId
+	cp.AccessKeySecret = result.AccessKeySecret
+	cp.StsToken = result.SecurityToken
+	parsedTime, err := time.Parse(time.RFC3339, result.Expiration)
+	if err == nil {
+		cp.StsExpiration = parsedTime.Unix()
+	}
+	return nil
+}
+
+// 构建 Oauth 应用重新登录的命令
+func buildReLoginOauthCommand(cp *Profile) string {
+	var sb strings.Builder
+	sb.WriteString("aliyun configure --mode OAuth")
+	if cp.OAuthSiteType != "" {
+		sb.WriteString(" --oauth-site-type ")
+		sb.WriteString(cp.OAuthSiteType)
+	}
+	if cp.Name != "" && cp.Name != "default" {
+		sb.WriteString(" --profile ")
+		sb.WriteString(cp.Name)
+	}
+	return sb.String()
+}
+
+func tryRefreshOauthToken(w io.Writer, cp *Profile) error {
+	refreshToken := cp.OAuthRefreshToken
+	if refreshToken == "" {
+		return fmt.Errorf("refresh token is empty, please re-authenticate, cmd: " + buildReLoginOauthCommand(cp))
+	}
+	currentOauthSiteType := cp.OAuthSiteType
+	if currentOauthSiteType != "CN" && currentOauthSiteType != "INTL" {
+		return fmt.Errorf("invalid OAuth site type: %s, only support CN or INTL", currentOauthSiteType)
+	}
+	oauthClientId := oauthClientMap[cp.OAuthSiteType]
+	oauthBaseUrl := oauthBaseUrlMap[cp.OAuthSiteType]
+	tokenUrl := fmt.Sprintf("%s/v1/token", oauthBaseUrl)
+	data := url.Values{}
+	data.Set("grant_type", "refresh_token")
+	data.Set("refresh_token", refreshToken)
+	data.Set("client_id", oauthClientId)
+	req, err := http.NewRequest("POST", tokenUrl, strings.NewReader(data.Encode()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	httpClient := utilNewHttpClient()
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to refresh token, status code: %d", resp.StatusCode)
+	}
+	var tokenResp struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int64  `json:"expires_in"`
+		TokenType    string `json:"token_type"`
+	}
+	err = util.UnmarshalJsonFromReader(resp.Body, &tokenResp)
+	if err != nil {
+		return err
+	}
+	if tokenResp.AccessToken == "" {
+		return fmt.Errorf("access token not found in response")
+	}
+	cp.OAuthAccessToken = tokenResp.AccessToken
+	cp.OAuthRefreshToken = tokenResp.RefreshToken
+	cp.OAuthAccessTokenExpire = utilGetCurrentUnixTime() + tokenResp.ExpiresIn
+	return nil
+}
+
+func startOauthFlow(w io.Writer, cp *Profile) error {
+	currentOauthSiteType := cp.OAuthSiteType
+	if currentOauthSiteType != "CN" && currentOauthSiteType != "INTL" {
+		return fmt.Errorf("invalid OAuth site type: %s, only support CN or INTL", currentOauthSiteType)
+	}
+	oauthClientId := oauthClientMap[cp.OAuthSiteType]
+	oauthBaseUrl := oauthBaseUrlMap[cp.OAuthSiteType]
+	signInUrl := signInMap[cp.OAuthSiteType]
+	// start port and listen to callback
+	// port range 12345 - 12349
+	port, err := detectPortUse(12345, 12349)
+	if err != nil {
+		return err
+	}
+	// start http server
+	redirectUri := fmt.Sprintf("http://127.0.0.1:%s/cli/callback", strconv.Itoa(port))
+	state := util.RandStringBytesMaskImprSrc(16)
+	codeVerifier := generateCodeVerifier()
+	codeChallenge := generateCodeChallenge(codeVerifier)
+	oauthUrl := fmt.Sprintf("%s/oauth2/v1/auth?response_type=code&client_id=%s&redirect_uri=%s&state=%s&code_challenge=%s&code_challenge_method=S256",
+		signInUrl, oauthClientId, url.QueryEscape(redirectUri), state, codeChallenge)
+	_, err = cli.Printf(w, "Please open the following URL in your browser to authorize:\n%s\n", oauthUrl)
+	if err != nil {
+		return err
+	}
+	// open browser
+	_ = utilOpenBrowser(oauthUrl)
+	fmt.Println(i18n.T("If the browser does not open automatically, use the following URL to complete the login process:",
+		"如果浏览器没有自动打开，请使用以下URL完成登录过程:").GetMessage())
+	fmt.Println()
+	fmt.Printf("%s: %s\n", i18n.T("SignIn url", "登录URL").GetMessage(), oauthUrl)
+	fmt.Println()
+	fmt.Println(i18n.T("Now you can login to your account with OAuth configuration in the browser.", "现在您可以在浏览器中使用OAuth配置登录您的账户。").GetMessage())
+
+	codeCh := make(chan string)
+	errCh := make(chan error)
+
+	// Create a new ServeMux to avoid conflicts with global handlers
+	mux := http.NewServeMux()
+	mux.HandleFunc("/cli/callback", func(w http.ResponseWriter, r *http.Request) {
+		err := r.ParseForm()
+		if err != nil {
+			return
+		}
+		if r.FormValue("state") != state {
+			errCh <- fmt.Errorf("invalid state")
+			http.Error(w, "Invalid state", http.StatusBadRequest)
+			return
+		}
+		code := r.FormValue("code")
+		if code == "" {
+			errCh <- fmt.Errorf("code not found")
+			http.Error(w, "Code not found", http.StatusBadRequest)
+			return
+		}
+		_, err = fmt.Fprintf(w, "Authorization successful. You can close this window.")
+		if err != nil {
+			return
+		}
+		codeCh <- code
+	})
+
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: mux,
+	}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+	}()
+	// wait for code or error
+	var code string
+	select {
+	case code = <-codeCh:
+	case err = <-errCh:
+	}
+	// shutdown server
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if srv != nil {
+		_ = srv.Shutdown(shutdownCtx)
+	}
+	if err != nil {
+		return err
+	}
+	if code == "" {
+		return fmt.Errorf("code not found")
+	}
+	// exchange code for token with PKCE
+	tokenUrl := fmt.Sprintf("%s/v1/token", oauthBaseUrl)
+	data := url.Values{}
+	data.Set("grant_type", "authorization_code")
+	data.Set("code", code)
+	data.Set("client_id", oauthClientId)
+	data.Set("redirect_uri", redirectUri)
+	data.Set("code_verifier", codeVerifier)
+	req, err := http.NewRequest("POST", tokenUrl, strings.NewReader(data.Encode()))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	httpClient := utilNewHttpClient()
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	var tokenRespErr struct {
+		Error            string `json:"error"`
+		ErrorDescription string `json:"error_description"`
+		RequestId        string `json:"requestId"`
+	}
+	if resp.StatusCode != http.StatusOK {
+		d, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		err = json.Unmarshal(d, &tokenRespErr)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("failed to get token, status code: %d, detail: %v", resp.StatusCode, tokenRespErr)
+	}
+	var tokenResp struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		ExpiresIn    int64  `json:"expires_in"`
+		TokenType    string `json:"token_type"`
+	}
+	err = util.UnmarshalJsonFromReader(resp.Body, &tokenResp)
+	if err != nil {
+		return err
+	}
+	if tokenResp.AccessToken == "" {
+		return fmt.Errorf("access token not found in response")
+	}
+	cp.OAuthAccessToken = tokenResp.AccessToken
+	cp.OAuthRefreshToken = tokenResp.RefreshToken
+	cp.OAuthAccessTokenExpire = utilGetCurrentUnixTime() + tokenResp.ExpiresIn
+	return nil
+}
+
+// PKCE 辅助函数
+func generateCodeVerifier() string {
+	// 生成 43-128 个字符的随机字符串，这里使用 128 个字符
+	return util.RandStringBytesMaskImprSrc(128).(string)
+}
+
+func generateCodeChallenge(codeVerifier string) string {
+	// 使用 SHA256 哈希 code_verifier
+	h := sha256.Sum256([]byte(codeVerifier))
+	// 使用 base64url 编码（无填充）
+	return base64.RawURLEncoding.EncodeToString(h[:])
+}
+
+func detectPortUse(start int, end int) (int, error) {
+	for port := start; port <= end; port++ {
+		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		if err == nil {
+			_ = ln.Close()
+			return port, nil
+		}
+	}
+	return 0, fmt.Errorf("no available port found in range %d-%d", start, end)
 }
 
 func configureAK(w io.Writer, cp *Profile) error {
@@ -374,7 +794,7 @@ func configureCloudSSO(w io.Writer, cp *Profile) error {
 		return fmt.Errorf("CloudSSOSignInUrl is required")
 	}
 	// start login in, get access token, then list account for choose
-	httpClient := util.NewHttpClient()
+	httpClient := utilNewHttpClient()
 	ssoLogin := cloudsso.SsoLogin{
 		SignInUrl: cp.CloudSSOSignInUrl,
 		// force login
@@ -386,7 +806,7 @@ func configureCloudSSO(w io.Writer, cp *Profile) error {
 		return fmt.Errorf("get access token failed: %s", err)
 	}
 	cp.AccessToken = accessToken.AccessToken
-	cp.CloudSSOAccessTokenExpire = util.GetCurrentUnixTime() + int64(accessToken.ExpiresIn)
+	cp.CloudSSOAccessTokenExpire = utilGetCurrentUnixTime() + int64(accessToken.ExpiresIn)
 	// parse base url
 	baseUrl, err := url.Parse(ssoLogin.SignInUrl)
 	// list account for choose

@@ -448,3 +448,16 @@ func TestAddFlag(t *testing.T) {
 	assert.Equal(t, newSkipSecureVerify, f)
 
 }
+
+func TestNewOAuthSiteTypeFlag(t *testing.T) {
+	var a = NewOAuthSiteTypeFlag()
+	assert.Equal(t, OAuthSiteTypeName, a.Name)
+	assert.Equal(t, "config", a.Category)
+}
+
+func TestAddFlags(t *testing.T) {
+	flagSet := cli.NewFlagSet()
+	AddFlags(flagSet)
+	// 结果包含OAuthSiteTypeName
+	assert.NotNil(t, flagSet.Get(OAuthSiteTypeName))
+}

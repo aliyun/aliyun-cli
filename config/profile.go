@@ -18,13 +18,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/aliyun/aliyun-cli/v3/cloudsso"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/aliyun/aliyun-cli/v3/cloudsso"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -33,6 +34,9 @@ import (
 )
 
 var tryRefreshStsTokenFunc = cloudsso.TryRefreshStsToken
+
+// 添加可以在测试中mock的exchangeFromOAuth函数变量
+var exchangeFromOAuthFunc = exchangeFromOAuth
 
 type AuthenticateMode string
 
@@ -51,6 +55,7 @@ const (
 	CredentialsURI      = AuthenticateMode("CredentialsURI")
 	OIDC                = AuthenticateMode("OIDC")
 	CloudSSO            = AuthenticateMode("CloudSSO")
+	OAuth               = AuthenticateMode("OAuth")
 )
 
 type Profile struct {
@@ -83,9 +88,14 @@ type Profile struct {
 	CloudSSOSignInUrl         string           `json:"cloud_sso_sign_in_url,omitempty"`
 	AccessToken               string           `json:"access_token,omitempty"`                  // for CloudSSO, read only
 	CloudSSOAccessTokenExpire int64            `json:"cloud_sso_access_token_expire,omitempty"` // for CloudSSO, read only
-	StsExpiration             int64            `json:"sts_expiration,omitempty"`                // for CloudSSO, read only
+	StsExpiration             int64            `json:"sts_expiration,omitempty"`                // for CloudSSO or OAuth, read only
 	CloudSSOAccessConfig      string           `json:"cloud_sso_access_config,omitempty"`       // for CloudSSO
 	CloudSSOAccountId         string           `json:"cloud_sso_account_id,omitempty"`          // for CloudSSO, read only
+	OAuthAccessToken          string           `json:"oauth_access_token,omitempty"`
+	OAuthRefreshToken         string           `json:"oauth_refresh_token,omitempty"`
+	OAuthAccessTokenExpire    int64            `json:"oauth_access_token_expire,omitempty"`
+	OAuthRefreshTokenExpire   int64            `json:"oauth_refresh_token_expire,omitempty"`
+	OAuthSiteType             string           `json:"oauth_site_type,omitempty"` // CN or INTL
 	parent                    *Configuration   //`json:"-"`
 }
 
@@ -176,6 +186,10 @@ func (cp *Profile) Validate() error {
 		if cp.CloudSSOSignInUrl == "" {
 			return fmt.Errorf("invalid cloud_sso_sign_in_url")
 		}
+	case OAuth:
+		if cp.OAuthSiteType != "CN" && cp.OAuthSiteType != "INTL" {
+			return fmt.Errorf("invalid oauth_site_type, should be CN or INTL")
+		}
 	default:
 		return fmt.Errorf("invalid mode: %s", cp.Mode)
 	}
@@ -244,7 +258,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	}
 
 	if cp.ExternalId == "" {
-		cp.ExternalId = util.GetFromEnv("ALIBABACLOUD_EXTERNAL_ID", "ALIBAB_ACLOUD_EXTERNAL_ID")
+		cp.ExternalId = util.GetFromEnv("ALIBABACLOUD_EXTERNAL_ID", "ALIBABA_CLOUD_EXTERNAL_ID")
 	}
 
 	AutoModeRecognition(cp)
@@ -548,6 +562,42 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetAccessKeyId(cp.AccessKeyId).
 			SetAccessKeySecret(cp.AccessKeySecret).
 			SetSecurityToken(cp.StsToken)
+	case OAuth:
+		// check sts expiration
+		stsExpiration := cp.StsExpiration
+		currentUnixTime := util.GetCurrentUnixTime()
+		// if sts not expired, and all sts info not empty, just return
+		if stsExpiration > currentUnixTime &&
+			cp.AccessKeyId != "" && cp.AccessKeySecret != "" && cp.StsToken != "" {
+			config.SetType("sts").
+				SetAccessKeyId(cp.AccessKeyId).
+				SetAccessKeySecret(cp.AccessKeySecret).
+				SetSecurityToken(cp.StsToken)
+		} else {
+			// 尝试刷新
+			err := exchangeFromOAuthFunc(ctx.Stdout(), cp)
+			if err != nil {
+				return nil, err
+			}
+			conf, err := loadConfiguration()
+			if err != nil {
+				return nil, err
+			}
+			for i, profile := range conf.Profiles {
+				if profile.Name == cp.Name {
+					conf.Profiles[i] = *cp
+					break
+				}
+			}
+			err = saveConfigurationFunc(conf)
+			if err != nil {
+				return nil, err
+			}
+			config.SetType("sts").
+				SetAccessKeyId(cp.AccessKeyId).
+				SetAccessKeySecret(cp.AccessKeySecret).
+				SetSecurityToken(cp.StsToken)
+		}
 
 	default:
 		return nil, fmt.Errorf("unexcepted certificate mode: %s", cp.Mode)
