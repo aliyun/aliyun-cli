@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -34,13 +35,39 @@ var (
 	mockBrowserURL     string
 	mockHttpClientFunc func() *http.Client
 	mockCurrentTime    int64
+	mockMutex          sync.RWMutex // 添加读写锁来保护并发访问
 )
 
 // Mock util.OpenBrowser
 func mockOpenBrowser(url string) error {
+	mockMutex.Lock()
+	defer mockMutex.Unlock()
 	mockBrowserOpened = true
 	mockBrowserURL = url
 	return nil
+}
+
+// 安全地读取 mockBrowserOpened
+func getMockBrowserOpened() bool {
+	mockMutex.RLock()
+	defer mockMutex.RUnlock()
+	return mockBrowserOpened
+}
+
+// 安全地读取 mockBrowserURL
+func getMockBrowserURL() string {
+	mockMutex.RLock()
+	defer mockMutex.RUnlock()
+	return mockBrowserURL
+}
+
+// 安全地重置 mock 变量
+func resetMockVariables() {
+	mockMutex.Lock()
+	defer mockMutex.Unlock()
+	mockBrowserOpened = false
+	mockBrowserURL = ""
+	mockCurrentTime = 0
 }
 
 // Mock util.NewHttpClient
@@ -53,10 +80,19 @@ func mockNewHttpClient() *http.Client {
 
 // Mock util.GetCurrentUnixTime
 func mockGetCurrentUnixTime() int64 {
+	mockMutex.RLock()
+	defer mockMutex.RUnlock()
 	if mockCurrentTime > 0 {
 		return mockCurrentTime
 	}
 	return 1640995200 // Default: 2022-01-01 00:00:00 UTC
+}
+
+// 安全地设置 mockCurrentTime
+func setMockCurrentTime(time int64) {
+	mockMutex.Lock()
+	defer mockMutex.Unlock()
+	mockCurrentTime = time
 }
 
 func TestStartOauthFlow_Success_CN_SiteType(t *testing.T) {
@@ -69,16 +105,14 @@ func TestStartOauthFlow_Success_CN_SiteType(t *testing.T) {
 		utilOpenBrowser = originalUtilOpenBrowser
 		utilNewHttpClient = originalUtilNewHttpClient
 		utilGetCurrentUnixTime = originalUtilGetCurrentUnixTime
-		mockBrowserOpened = false
-		mockBrowserURL = ""
-		mockCurrentTime = 0
+		resetMockVariables()
 	}()
 
 	// Set up mocks
 	utilOpenBrowser = mockOpenBrowser
 	utilNewHttpClient = mockNewHttpClient
 	utilGetCurrentUnixTime = mockGetCurrentUnixTime
-	mockCurrentTime = 1640995200
+	setMockCurrentTime(1640995200)
 
 	// Create a test server to mock OAuth token endpoint
 	tokenServer := createMockOAuthTokenServer(t, http.StatusOK, map[string]interface{}{
@@ -117,7 +151,7 @@ func TestStartOauthFlow_Success_CN_SiteType(t *testing.T) {
 	go func() {
 		time.Sleep(200 * time.Millisecond)
 		// We need to extract the state from the URL that was "opened" in browser
-		parsedURL, err := url.Parse(mockBrowserURL)
+		parsedURL, err := url.Parse(getMockBrowserURL())
 		if err != nil {
 			t.Errorf("Failed to parse browser URL: %v", err)
 			return
@@ -139,10 +173,10 @@ func TestStartOauthFlow_Success_CN_SiteType(t *testing.T) {
 	}
 
 	// Verify browser was called
-	assert.True(t, mockBrowserOpened, "Browser should have been called")
-	assert.Contains(t, mockBrowserURL, "https://signin.aliyun.com/oauth2/v1/auth")
-	assert.Contains(t, mockBrowserURL, "client_id=4038181954557748008")
-	assert.Contains(t, mockBrowserURL, "code_challenge_method=S256")
+	assert.True(t, getMockBrowserOpened(), "Browser should have been called")
+	assert.Contains(t, getMockBrowserURL(), "https://signin.aliyun.com/oauth2/v1/auth")
+	assert.Contains(t, getMockBrowserURL(), "client_id=4038181954557748008")
+	assert.Contains(t, getMockBrowserURL(), "code_challenge_method=S256")
 
 	// Verify profile was updated with tokens
 	assert.Equal(t, "test_access_token", cp.OAuthAccessToken)
@@ -165,15 +199,13 @@ func TestStartOauthFlow_Success_INTL_SiteType(t *testing.T) {
 		utilOpenBrowser = originalUtilOpenBrowser
 		utilNewHttpClient = originalUtilNewHttpClient
 		utilGetCurrentUnixTime = originalUtilGetCurrentUnixTime
-		mockBrowserOpened = false
-		mockBrowserURL = ""
-		mockCurrentTime = 0
+		resetMockVariables()
 	}()
 
 	utilOpenBrowser = mockOpenBrowser
 	utilNewHttpClient = mockNewHttpClient
 	utilGetCurrentUnixTime = mockGetCurrentUnixTime
-	mockCurrentTime = 1640995200
+	setMockCurrentTime(1640995200)
 
 	// Create a test server to mock OAuth token endpoint
 	tokenServer := createMockOAuthTokenServer(t, http.StatusOK, map[string]interface{}{
@@ -210,7 +242,7 @@ func TestStartOauthFlow_Success_INTL_SiteType(t *testing.T) {
 	// Simulate OAuth callback
 	go func() {
 		time.Sleep(200 * time.Millisecond)
-		parsedURL, err := url.Parse(mockBrowserURL)
+		parsedURL, err := url.Parse(getMockBrowserURL())
 		if err != nil {
 			t.Errorf("Failed to parse browser URL: %v", err)
 			return
@@ -230,9 +262,9 @@ func TestStartOauthFlow_Success_INTL_SiteType(t *testing.T) {
 		t.Fatal("Test timeout")
 	}
 
-	assert.True(t, mockBrowserOpened)
-	assert.Contains(t, mockBrowserURL, "https://signin.alibabacloud.com/oauth2/v1/auth")
-	assert.Contains(t, mockBrowserURL, "client_id=4103531455503354461")
+	assert.True(t, getMockBrowserOpened())
+	assert.Contains(t, getMockBrowserURL(), "https://signin.alibabacloud.com/oauth2/v1/auth")
+	assert.Contains(t, getMockBrowserURL(), "client_id=4103531455503354461")
 	assert.Equal(t, "test_access_token_intl", cp.OAuthAccessToken)
 	assert.Equal(t, "test_refresh_token_intl", cp.OAuthRefreshToken)
 	assert.Equal(t, int64(1641002400), cp.OAuthAccessTokenExpire) // current time + 7200
@@ -258,8 +290,7 @@ func TestStartOauthFlow_CallbackError_InvalidState(t *testing.T) {
 	defer func() {
 		utilOpenBrowser = originalUtilOpenBrowser
 		utilNewHttpClient = originalUtilNewHttpClient
-		mockBrowserOpened = false
-		mockBrowserURL = ""
+		resetMockVariables()
 	}()
 
 	utilOpenBrowser = mockOpenBrowser
@@ -305,8 +336,7 @@ func TestStartOauthFlow_CallbackError_NoCode(t *testing.T) {
 	defer func() {
 		utilOpenBrowser = originalUtilOpenBrowser
 		utilNewHttpClient = originalUtilNewHttpClient
-		mockBrowserOpened = false
-		mockBrowserURL = ""
+		resetMockVariables()
 	}()
 
 	utilOpenBrowser = mockOpenBrowser
@@ -329,7 +359,7 @@ func TestStartOauthFlow_CallbackError_NoCode(t *testing.T) {
 	// Simulate callback without code
 	go func() {
 		time.Sleep(200 * time.Millisecond)
-		parsedURL, err := url.Parse(mockBrowserURL)
+		parsedURL, err := url.Parse(getMockBrowserURL())
 		if err != nil {
 			t.Errorf("Failed to parse browser URL: %v", err)
 			return
@@ -361,15 +391,13 @@ func TestStartOauthFlow_TokenExchangeError(t *testing.T) {
 		utilOpenBrowser = originalUtilOpenBrowser
 		utilNewHttpClient = originalUtilNewHttpClient
 		utilGetCurrentUnixTime = originalUtilGetCurrentUnixTime
-		mockBrowserOpened = false
-		mockBrowserURL = ""
-		mockCurrentTime = 0
+		resetMockVariables()
 	}()
 
 	utilOpenBrowser = mockOpenBrowser
 	utilNewHttpClient = mockNewHttpClient
 	utilGetCurrentUnixTime = mockGetCurrentUnixTime
-	mockCurrentTime = 1640995200
+	setMockCurrentTime(1640995200)
 
 	// Create a test server that returns error
 	tokenServer := createMockOAuthTokenServer(t, http.StatusBadRequest, map[string]interface{}{
@@ -403,7 +431,7 @@ func TestStartOauthFlow_TokenExchangeError(t *testing.T) {
 	// Simulate OAuth callback
 	go func() {
 		time.Sleep(200 * time.Millisecond)
-		parsedURL, err := url.Parse(mockBrowserURL)
+		parsedURL, err := url.Parse(getMockBrowserURL())
 		if err != nil {
 			t.Errorf("Failed to parse browser URL: %v", err)
 			return
@@ -436,15 +464,13 @@ func TestStartOauthFlow_TokenExchangeSuccess_NoAccessToken(t *testing.T) {
 		utilOpenBrowser = originalUtilOpenBrowser
 		utilNewHttpClient = originalUtilNewHttpClient
 		utilGetCurrentUnixTime = originalUtilGetCurrentUnixTime
-		mockBrowserOpened = false
-		mockBrowserURL = ""
-		mockCurrentTime = 0
+		resetMockVariables()
 	}()
 
 	utilOpenBrowser = mockOpenBrowser
 	utilNewHttpClient = mockNewHttpClient
 	utilGetCurrentUnixTime = mockGetCurrentUnixTime
-	mockCurrentTime = 1640995200
+	setMockCurrentTime(1640995200)
 
 	// Create a test server that returns success but no access token
 	tokenServer := createMockOAuthTokenServer(t, http.StatusOK, map[string]interface{}{
@@ -479,7 +505,7 @@ func TestStartOauthFlow_TokenExchangeSuccess_NoAccessToken(t *testing.T) {
 	// Simulate OAuth callback
 	go func() {
 		time.Sleep(200 * time.Millisecond)
-		parsedURL, err := url.Parse(mockBrowserURL)
+		parsedURL, err := url.Parse(getMockBrowserURL())
 		if err != nil {
 			t.Errorf("Failed to parse browser URL: %v", err)
 			return
