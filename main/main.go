@@ -24,9 +24,11 @@ import (
 	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
+	"github.com/aliyun/aliyun-cli/v3/ossutil"
 )
 
 func Main(args []string) {
@@ -69,9 +71,14 @@ func Main(args []string) {
 	ctx.SetInsecure(insecure)
 
 	rootCmd.AddSubCommand(config.NewConfigureCommand())
+	// oss old version, duplicate with ossutil, will remove in future
 	rootCmd.AddSubCommand(lib.NewOssCommand())
 	rootCmd.AddSubCommand(cli.NewVersionCommand())
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
+	// go v1 to v2 migrate command
+	rootCmd.AddSubCommand(go_migrate.NewGoMigrateCommand())
+	// new oss command
+	rootCmd.AddSubCommand(ossutil.NewOssutilCommand())
 	if os.Getenv("GENERATE_METADATA") == "YES" {
 		generateMetadata(rootCmd)
 	} else {

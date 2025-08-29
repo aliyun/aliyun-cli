@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package cli
 
 import (
@@ -24,19 +25,25 @@ type flagDetector interface {
 }
 
 type Parser struct {
-	current     int
-	args        []string
-	detector    flagDetector
-	currentFlag *Flag
+	current      int
+	args         []string
+	detector     flagDetector
+	currentFlag  *Flag
+	allowUnknown bool
 }
 
 func NewParser(args []string, detector flagDetector) *Parser {
 	return &Parser{
-		args:        args,
-		current:     0,
-		detector:    detector,
-		currentFlag: nil,
+		args:         args,
+		current:      0,
+		detector:     detector,
+		currentFlag:  nil,
+		allowUnknown: false,
 	}
+}
+
+func (p *Parser) SetAllowUnknown(allow bool) {
+	p.allowUnknown = allow
 }
 
 func (p *Parser) ReadNextArg() (arg string, more bool, err error) {
@@ -159,7 +166,10 @@ func (p *Parser) parseCommandArg(s string) (flag *Flag, value string, err error)
 			// 对于 -x 格式的短 flag
 			flag, err = p.detector.detectFlagByShorthand(rune(prefix[1]))
 		} else {
-			err = fmt.Errorf("not support flag form %s", prefix)
+			// 只有当不允许不认识的 flag 时才报错
+			if !p.allowUnknown {
+				err = fmt.Errorf("not support flag form %s", prefix)
+			}
 		}
 	} else {
 		value = s
