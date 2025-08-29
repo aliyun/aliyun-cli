@@ -38,6 +38,21 @@ var getConfigurePathFunc = func() string {
 	return config.GetConfigPath()
 }
 
+// 可替换的函数变量, 便于单元测试 mock
+var (
+	getLatestOssUtilVersionFunc = GetLatestOssUtilVersion
+	downloadAndUnzipFunc        = DownloadAndUnzip
+	execCommandFunc             = exec.Command
+	httpGetFunc                 = http.Get
+	timeNowFunc                 = time.Now
+	// runtime hooks for test
+	runtimeGOOSFunc   = func() string { return runtime.GOOS }
+	runtimeGOARCHFunc = func() string { return runtime.GOARCH }
+)
+
+// 提供可替换的版本文件 URL，测试中可指向本地 httptest.Server
+var latestVersionURL = "https://gosspublic.alicdn.com/ossutil/v2/version.txt"
+
 var VersionCheckTTL = 86400 // 1 day, in seconds
 
 func NewContext(originContext *cli.Context) *Context {
@@ -75,7 +90,7 @@ func (c *Context) Run(args []string) error {
 		return fmt.Errorf("your os type %s and arch %s is not supported now", c.osType, c.osArch)
 	}
 	if !c.installed {
-		latestVersionRemote, err := GetLatestOssUtilVersion()
+		latestVersionRemote, err := getLatestOssUtilVersionFunc()
 		if err != nil {
 			return err
 		}
@@ -92,7 +107,7 @@ func (c *Context) Run(args []string) error {
 	} else {
 		needCheckVersion := c.NeedCheckVersion()
 		if needCheckVersion {
-			latestVersionRemote, err := GetLatestOssUtilVersion()
+			latestVersionRemote, err := getLatestOssUtilVersionFunc()
 			if err != nil {
 				return err
 			}
@@ -129,7 +144,7 @@ func (c *Context) Run(args []string) error {
 		return err
 	}
 	// run ossutil with newArgs
-	cmd := exec.Command(c.execFilePath, newArgs...)
+	cmd := execCommandFunc(c.execFilePath, newArgs...)
 	// set env
 	envs := os.Environ()
 	for k, v := range c.envMap {
@@ -149,8 +164,8 @@ func (c *Context) Run(args []string) error {
 }
 
 func (c *Context) CheckOsTypeAndArch() {
-	c.osType = runtime.GOOS
-	c.osArch = runtime.GOARCH
+	c.osType = runtimeGOOSFunc()
+	c.osArch = runtimeGOARCHFunc()
 	// support linux/darwin/windows
 	if c.osType == "linux" || c.osType == "darwin" || c.osType == "windows" {
 		switch c.osType {
@@ -250,7 +265,7 @@ func (c *Context) Install() error {
 	}
 	// ossutil-2.1.2-mac-arm64
 	extractCenterDir := fmt.Sprintf("ossutil-%s-%s", c.versionRemote, strings.TrimSuffix(c.downloadPathSuffix, ".zip"))
-	err := DownloadAndUnzip(url, tmpFile, c.execFilePath, extractCenterDir)
+	err := downloadAndUnzipFunc(url, tmpFile, c.execFilePath, extractCenterDir)
 	if err != nil {
 		return fmt.Errorf("failed to download and unzip ossutil from %s: %v", url, err)
 	}
@@ -259,7 +274,7 @@ func (c *Context) Install() error {
 
 func DownloadAndUnzip(url string, destFile string, exeFilePath string, extractCenterDir string) error {
 	// download file
-	resp, err := http.Get(url)
+	resp, err := httpGetFunc(url)
 	if err != nil {
 		return fmt.Errorf("failed to download %s: %v", url, err)
 	}
@@ -360,7 +375,6 @@ func unzip(src, dest string) error {
 			continue
 		}
 
-		// 确保��录存在
 		if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
 			return err
 		}
@@ -402,7 +416,7 @@ func (c *Context) GetLocalVersion() error {
 		c.versionLocal = ""
 		return fmt.Errorf("ossutil not installed")
 	}
-	cmd := exec.Command(c.execFilePath, "version")
+	cmd := execCommandFunc(c.execFilePath, "version")
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to execute %s %s: %v", c.execFilePath, "version", err)
@@ -412,7 +426,7 @@ func (c *Context) GetLocalVersion() error {
 }
 
 func (c *Context) UpdateCheckCacheTime() error {
-	currentTime := time.Now().Unix()
+	currentTime := timeNowFunc().Unix()
 	data := fmt.Sprintf("%d", currentTime)
 	err := os.WriteFile(c.checkVersionCacheFilePath, []byte(data), 0644)
 	if err != nil {
@@ -485,7 +499,7 @@ func (c *Context) PrepareEnv() error {
 
 // RemoveFlagsForMainCli 移除主程序使用的 flag，避免传递给 ossutil 出错
 func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
-	// 如果类别是 config 的 flag，如果已经赋值了，从原始的 args 中移除
+	// 如果类��是 config 的 flag，如果已经赋值了，从原始的 args 中移除
 	argsNew := make([]string, 0, len(args))
 	argsNew = args
 	if c.originCtx.Flags() != nil && c.originCtx.Flags().Flags() != nil {
@@ -537,7 +551,7 @@ func fileExists(path string) bool {
 }
 
 func GetLatestOssUtilVersion() (string, error) {
-	url := "https://gosspublic.alicdn.com/ossutil/v2/version.txt"
+	url := latestVersionURL
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
