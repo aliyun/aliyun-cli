@@ -1,5 +1,6 @@
 export VERSION=3.0.0-beta
 export RELEASE_PATH="releases/aliyun-cli-${VERSION}"
+ARCH        ?= $(shell uname -m)
 
 all: build
 publish: build build_mac build_linux build_windows build_linux_arm64 gen_version
@@ -14,7 +15,12 @@ build: deps
 	go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
 
 install: build
-	cp out/aliyun /usr/local/bin
+	@if [ "$(ARCH)" = "riscv64" ]; then \
+		install -d "$(HOME)/.local/bin"; \
+		install -m755 out/aliyun "$(HOME)/.local/bin/aliyun"; \
+	else \
+		install -Dm755 out/aliyun /usr/local/bin/aliyun; \
+	fi
 
 build_mac:
 	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
