@@ -120,7 +120,7 @@ func NewConfigureCommand() *cli.Command {
 		Short: i18n.T(
 			"configure credential and settings",
 			"配置身份认证和其他信息"),
-		Usage: "configure --mode {AK|RamRoleArn|EcsRamRole|OIDC|External|CredentialsURI|ChainableRamRoleArn|CloudSSO} --profile <profileName>",
+		Usage: "configure --mode {AK|RamRoleArn|EcsRamRole|OIDC|External|CredentialsURI|ChainableRamRoleArn|CloudSSO|OAuth} --profile <profileName>",
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)

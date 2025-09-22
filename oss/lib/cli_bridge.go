@@ -22,7 +22,7 @@ func NewOssCommand() *cli.Command {
 		Name:   "oss",
 		Usage:  "oss [command] [args...] [options...]",
 		Hidden: false,
-		Short:  i18n.T("Object Storage Service", "阿里云OSS对象存储"),
+		Short:  i18n.T("Object Storage Service(deprecated, use aliyun ossutil instead)", "阿里云OSS对象存储（废弃，请使用aliyun ossutil）"),
 	}
 
 	cmds := []Command{

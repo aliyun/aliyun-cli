@@ -71,12 +71,20 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 
 		if param.Position == "Query" {
 			request.QueryParams[f.Name], _ = f.GetValue()
-		} else if param.Position == "Body" {
+		} else if param.Position == "Body" || param.Position == "FormData" {
+			// new add FormData
 			request.FormParams[f.Name], _ = f.GetValue()
 		} else if param.Position == "Domain" {
 			continue
 		} else {
 			return fmt.Errorf("unknown parameter position; %s is %s", param.Name, param.Position)
+		}
+	}
+	// check api support Body
+	bodyParam := api.FindParameter("body")
+	if bodyParam != nil && bodyParam.Position == "Body" {
+		if v, ok := BodyFlag(ctx.Flags()).GetValue(); ok {
+			a.request.SetContent([]byte(v))
 		}
 	}
 
