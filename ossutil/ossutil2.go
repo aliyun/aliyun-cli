@@ -365,6 +365,10 @@ func unzip(src, dest string) error {
 
 	// 遍历 zip 中的每个文件/目录
 	for _, file := range r.File {
+		p, _ := filepath.Abs(file.Name)
+		if strings.Contains(p, "..") {
+			return fmt.Errorf("invalid file path in zip: %s", file.Name)
+		}
 		// 构造目标路径
 		filePath := filepath.Join(dest, file.Name)
 

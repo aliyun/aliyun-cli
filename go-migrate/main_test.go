@@ -13,7 +13,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 )
 
-// helper 创建一个��执行脚本(仅 *nix) 输出给定版本
+// helper 创建一个可执行脚本(仅 *nix) 输出给定版本
 func createExecScript(t *testing.T, dir, name, version string) string {
 	path := filepath.Join(dir, name)
 	content := "#!/bin/sh\necho " + version + "\n"
