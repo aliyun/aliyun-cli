@@ -17,6 +17,8 @@ import (
 
 var cdnBaseUrl = "https://aliyuncli.alicdn.com"
 
+//var cdnBaseUrl = "https://aliyun-cli-demo.oss-cn-beijing.aliyuncs.com"
+
 // 为测试注入可替换的函数
 var fetchRemoteContentFunc = fetchRemoteContent
 var downloadGoMigrateFunc = DownloadGoMigrate

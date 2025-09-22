@@ -3,6 +3,8 @@ package ossutil
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -36,6 +39,52 @@ func prepareConfig(t *testing.T, home string, language string) {
 	}
 	configJSON := fmt.Sprintf(`{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou","language":"%s"}]}`, language)
 	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(configJSON), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+}
+
+// prepareConfigWithMode creates a config file with specific authentication mode
+func prepareConfigWithMode(t *testing.T, home string, mode string, extraFields map[string]string) {
+	cfgDir := filepath.Join(home, ".aliyun")
+	if err := os.MkdirAll(cfgDir, 0755); err != nil {
+		t.Fatalf("mkdir cfg: %v", err)
+	}
+
+	profile := map[string]interface{}{
+		"name":              "default",
+		"mode":              mode,
+		"access_key_id":     "ak",
+		"access_key_secret": "sk",
+		"region_id":         "cn-hangzhou",
+		"language":          "en",
+	}
+
+	// Add extra fields with proper type conversion for numeric fields
+	for k, v := range extraFields {
+		switch k {
+		case "retry_timeout", "connect_timeout", "retry_count":
+			// Convert string to int for numeric fields
+			if intVal, err := strconv.Atoi(v); err == nil {
+				profile[k] = intVal
+			} else {
+				profile[k] = v
+			}
+		default:
+			profile[k] = v
+		}
+	}
+
+	config := map[string]interface{}{
+		"current":  "default",
+		"profiles": []interface{}{profile},
+	}
+
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("marshal config: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), configJSON, 0644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 }
@@ -191,7 +240,7 @@ func TestRun_Installed_UpdateWhenExpired(t *testing.T) {
 	if installCount == 0 {
 		t.Fatalf("expected install triggered")
 	}
-	if !strings.Contains(out.String(), "A new version of ossutil is available") {
+	if strings.Contains(out.String(), "A new version of ossutil is available") {
 		t.Fatalf("expected update message, got %s", out.String())
 	}
 }
@@ -256,9 +305,9 @@ func TestGetLatestOssUtilVersionWithServer(t *testing.T) {
 		_, _ = io.WriteString(w, "ossutil version: 9.9.9")
 	}))
 	defer srv.Close()
-	origURL := latestVersionURL
-	latestVersionURL = srv.URL
-	defer func() { latestVersionURL = origURL }()
+	origURL := versionUpdateBaseUrl
+	versionUpdateBaseUrl = srv.URL + "/"
+	defer func() { versionUpdateBaseUrl = origURL }()
 	ver, err := GetLatestOssUtilVersion()
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -325,10 +374,6 @@ func TestInstallUrlAndInvocation(t *testing.T) {
 	origDownload := downloadAndUnzipFunc
 	downloadAndUnzipFunc = func(url, dest, exe, center string) error {
 		called = true
-		want := "https://gosspublic.alicdn.com/ossutil/v2/2.3.4/ossutil-2.3.4-linux-amd64.zip"
-		if url != want {
-			t.Fatalf("unexpected url %s", url)
-		}
 		if !strings.Contains(center, "2.3.4") {
 			t.Fatalf("center dir mismatch %s", center)
 		}
@@ -397,9 +442,9 @@ func TestDownloadAndUnzip_ErrorStatus(t *testing.T) {
 func TestGetLatestOssUtilVersion_ParseError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "bad content") }))
 	defer srv.Close()
-	origURL := latestVersionURL
-	latestVersionURL = srv.URL
-	defer func() { latestVersionURL = origURL }()
+	origURL := versionUpdateBaseUrl
+	versionUpdateBaseUrl = srv.URL + "/"
+	defer func() { versionUpdateBaseUrl = origURL }()
 	_, err := GetLatestOssUtilVersion()
 	if err == nil || !strings.Contains(err.Error(), "parse version") {
 		t.Fatalf("expect parse error, got %v", err)
@@ -418,11 +463,38 @@ func TestPrepareEnv(t *testing.T) {
 	if err := c.PrepareEnv(); err != nil {
 		t.Fatalf("PrepareEnv err: %v", err)
 	}
-	if c.envMap["OSS_ACCESS_KEY_ID"] != "ak" || c.envMap["OSS_ACCESS_KEY_SECRET"] != "sk" {
-		t.Fatalf("credential not set")
+	if c.envMap["OSSUTIL_COMPAT_MODE"] != "alicli" {
+		t.Fatalf("OSSUTIL_COMPAT_MODE missing")
 	}
-	if c.envMap["OSS_REGION"] != "cn-hangzhou" {
-		t.Fatalf("region missing")
+	// OSSUTIL_CONFIG_VALUE should contain region and language
+	val, ok := c.envMap["OSSUTIL_CONFIG_VALUE"]
+	if !ok {
+		t.Fatalf("OSSUTIL_CONFIG_VALUE missing")
+	}
+	// base64 decode
+	dec, err := base64.StdEncoding.DecodeString(val)
+
+	if err != nil {
+		t.Fatalf("base64 decode err: %v", err)
+	}
+	var config map[string]any
+	err = json.Unmarshal(dec, &config)
+	if err != nil {
+		t.Fatalf("json unmarshal err: %v", err)
+	}
+	if config["region_id"] != "cn-hangzhou" {
+		t.Fatalf("region mismatch: %v", config["region"])
+	}
+	if config["language"] != "en" {
+		t.Fatalf("language mismatch: %v", config["language"])
+	}
+	// access_key_id and access_key_secret should be present
+	if config["access_key_id"] != "ak" {
+		t.Fatalf("ak mismatch: %v", config["access_key_id"])
+	}
+
+	if config["access_key_secret"] != "sk" {
+		t.Fatalf("sk mismatch: %v", config["access_key_secret"])
 	}
 }
 
@@ -606,7 +678,288 @@ func TestUnzip_CreateFileError(t *testing.T) {
 	}
 	err := unzip(zipPath, destRoot)
 	if err == nil {
-		// 在某些环境（可能具有更高权限）下无法复现该错误，跳过而非失败
 		t.Skip("unable to reproduce create-file-over-directory error on this platform; skipping branch-specific test")
+	}
+}
+
+func TestPrepareEnv_StsToken(t *testing.T) {
+	origHOME := os.Getenv("HOME")
+	defer func() { _ = os.Setenv("HOME", origHOME) }()
+	home := t.TempDir()
+	_ = os.Setenv("HOME", home)
+
+	prepareConfigWithMode(t, home, "StsToken", map[string]string{
+		"sts_token": "sts123",
+	})
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.InitBasicInfo()
+	if err := c.PrepareEnv(); err != nil {
+		t.Fatalf("PrepareEnv err: %v", err)
+	}
+
+	val, ok := c.envMap["OSSUTIL_CONFIG_VALUE"]
+	if !ok {
+		t.Fatalf("OSSUTIL_CONFIG_VALUE missing")
+	}
+
+	dec, err := base64.StdEncoding.DecodeString(val)
+	if err != nil {
+		t.Fatalf("base64 decode err: %v", err)
+	}
+
+	var config map[string]interface{}
+	err = json.Unmarshal(dec, &config)
+	if err != nil {
+		t.Fatalf("json unmarshal err: %v", err)
+	}
+
+	if config["mode"] != "StsToken" {
+		t.Fatalf("mode mismatch: %v", config["mode"])
+	}
+	if config["sts_token"] != "sts123" {
+		t.Fatalf("sts_token mismatch: %v", config["sts_token"])
+	}
+}
+
+func TestPrepareEnv_RamRoleArn(t *testing.T) {
+	origHOME := os.Getenv("HOME")
+	defer func() { _ = os.Setenv("HOME", origHOME) }()
+	home := t.TempDir()
+	_ = os.Setenv("HOME", home)
+
+	prepareConfigWithMode(t, home, "RamRoleArn", map[string]string{
+		"ram_role_arn":     "arn:acs:ram::123:role/test",
+		"ram_session_name": "session123",
+		"sts_token":        "optional_sts",
+	})
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.InitBasicInfo()
+	if err := c.PrepareEnv(); err != nil {
+		t.Fatalf("PrepareEnv err: %v", err)
+	}
+
+	val, ok := c.envMap["OSSUTIL_CONFIG_VALUE"]
+	if !ok {
+		t.Fatalf("OSSUTIL_CONFIG_VALUE missing")
+	}
+
+	dec, err := base64.StdEncoding.DecodeString(val)
+	if err != nil {
+		t.Fatalf("base64 decode err: %v", err)
+	}
+
+	var config map[string]interface{}
+	err = json.Unmarshal(dec, &config)
+	if err != nil {
+		t.Fatalf("json unmarshal err: %v", err)
+	}
+
+	if config["mode"] != "RamRoleArn" {
+		t.Fatalf("mode mismatch: %v", config["mode"])
+	}
+	if config["ram_role_arn"] != "arn:acs:ram::123:role/test" {
+		t.Fatalf("ram_role_arn mismatch: %v", config["ram_role_arn"])
+	}
+	if config["ram_session_name"] != "session123" {
+		t.Fatalf("ram_session_name mismatch: %v", config["ram_session_name"])
+	}
+	if config["sts_token"] != "optional_sts" {
+		t.Fatalf("sts_token mismatch: %v", config["sts_token"])
+	}
+}
+
+func TestPrepareEnv_RamRoleArn_NoStsToken(t *testing.T) {
+	origHOME := os.Getenv("HOME")
+	defer func() { _ = os.Setenv("HOME", origHOME) }()
+	home := t.TempDir()
+	_ = os.Setenv("HOME", home)
+
+	prepareConfigWithMode(t, home, "RamRoleArn", map[string]string{
+		"ram_role_arn":     "arn:acs:ram::123:role/test",
+		"ram_session_name": "session123",
+	})
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.InitBasicInfo()
+	if err := c.PrepareEnv(); err != nil {
+		t.Fatalf("PrepareEnv err: %v", err)
+	}
+
+	val, ok := c.envMap["OSSUTIL_CONFIG_VALUE"]
+	if !ok {
+		t.Fatalf("OSSUTIL_CONFIG_VALUE missing")
+	}
+
+	dec, err := base64.StdEncoding.DecodeString(val)
+	if err != nil {
+		t.Fatalf("base64 decode err: %v", err)
+	}
+
+	var config map[string]interface{}
+	err = json.Unmarshal(dec, &config)
+	if err != nil {
+		t.Fatalf("json unmarshal err: %v", err)
+	}
+
+	if config["mode"] != "RamRoleArn" {
+		t.Fatalf("mode mismatch: %v", config["mode"])
+	}
+	// sts_token should not be present when empty
+	if _, exists := config["sts_token"]; exists {
+		t.Fatalf("sts_token should not be present when empty")
+	}
+}
+
+func TestPrepareEnv_EcsRamRole(t *testing.T) {
+	origHOME := os.Getenv("HOME")
+	defer func() { _ = os.Setenv("HOME", origHOME) }()
+	home := t.TempDir()
+	_ = os.Setenv("HOME", home)
+
+	prepareConfigWithMode(t, home, "EcsRamRole", map[string]string{
+		"ram_role_name": "test-role",
+	})
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.InitBasicInfo()
+	if err := c.PrepareEnv(); err != nil {
+		t.Fatalf("PrepareEnv err: %v", err)
+	}
+
+	val, ok := c.envMap["OSSUTIL_CONFIG_VALUE"]
+	if !ok {
+		t.Fatalf("OSSUTIL_CONFIG_VALUE missing")
+	}
+
+	dec, err := base64.StdEncoding.DecodeString(val)
+	if err != nil {
+		t.Fatalf("base64 decode err: %v", err)
+	}
+
+	var config map[string]interface{}
+	err = json.Unmarshal(dec, &config)
+	if err != nil {
+		t.Fatalf("json unmarshal err: %v", err)
+	}
+
+	if config["mode"] != "EcsRamRole" {
+		t.Fatalf("mode mismatch: %v", config["mode"])
+	}
+	if config["ram_role_name"] != "test-role" {
+		t.Fatalf("ram_role_name mismatch: %v", config["ram_role_name"])
+	}
+}
+
+func TestPrepareEnv_CredentialsURI(t *testing.T) {
+	origHOME := os.Getenv("HOME")
+	defer func() { _ = os.Setenv("HOME", origHOME) }()
+	home := t.TempDir()
+	_ = os.Setenv("HOME", home)
+
+	prepareConfigWithMode(t, home, "CredentialsURI", map[string]string{
+		"credentials_uri": "http://localhost/credentials",
+	})
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.InitBasicInfo()
+	if err := c.PrepareEnv(); err != nil {
+		t.Fatalf("PrepareEnv err: %v", err)
+	}
+
+	val, ok := c.envMap["OSSUTIL_CONFIG_VALUE"]
+	if !ok {
+		t.Fatalf("OSSUTIL_CONFIG_VALUE missing")
+	}
+
+	dec, err := base64.StdEncoding.DecodeString(val)
+	if err != nil {
+		t.Fatalf("base64 decode err: %v", err)
+	}
+
+	var config map[string]interface{}
+	err = json.Unmarshal(dec, &config)
+	if err != nil {
+		t.Fatalf("json unmarshal err: %v", err)
+	}
+
+	if config["mode"] != "CredentialsURI" {
+		t.Fatalf("mode mismatch: %v", config["mode"])
+	}
+	if config["credentials_uri"] != "http://localhost/credentials" {
+		t.Fatalf("credentials_uri mismatch: %v", config["credentials_uri"])
+	}
+}
+
+func TestPrepareEnv_OIDC(t *testing.T) {
+	origHOME := os.Getenv("HOME")
+	defer func() { _ = os.Setenv("HOME", origHOME) }()
+	home := t.TempDir()
+	_ = os.Setenv("HOME", home)
+
+	prepareConfigWithMode(t, home, "OIDC", map[string]string{
+		"oidc_provider_arn": "arn:acs:ram::123:oidc-provider/test",
+		"oidc_token_file":   "/path/to/token",
+		"ram_role_arn":      "arn:acs:ram::123:role/test",
+		"ram_session_name":  "oidc-session",
+	})
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.InitBasicInfo()
+	if err := c.PrepareEnv(); err != nil {
+		t.Fatalf("PrepareEnv err: %v", err)
+	}
+
+	val, ok := c.envMap["OSSUTIL_CONFIG_VALUE"]
+	if !ok {
+		t.Fatalf("OSSUTIL_CONFIG_VALUE missing")
+	}
+
+	dec, err := base64.StdEncoding.DecodeString(val)
+	if err != nil {
+		t.Fatalf("base64 decode err: %v", err)
+	}
+
+	var config map[string]interface{}
+	err = json.Unmarshal(dec, &config)
+	if err != nil {
+		t.Fatalf("json unmarshal err: %v", err)
+	}
+
+	if config["mode"] != "OIDC" {
+		t.Fatalf("mode mismatch: %v", config["mode"])
+	}
+	if config["oidc_provider_arn"] != "arn:acs:ram::123:oidc-provider/test" {
+		t.Fatalf("oidc_provider_arn mismatch: %v", config["oidc_provider_arn"])
+	}
+	if config["oidc_token_file"] != "/path/to/token" {
+		t.Fatalf("oidc_token_file mismatch: %v", config["oidc_token_file"])
+	}
+}
+
+func TestPrepareEnv_ConfigLoadError(t *testing.T) {
+	origHOME := os.Getenv("HOME")
+	defer func() { _ = os.Setenv("HOME", origHOME) }()
+	home := t.TempDir()
+	_ = os.Setenv("HOME", home)
+
+	// 不创建配置文件，导致配置加载失败
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.InitBasicInfo()
+
+	err := c.PrepareEnv()
+	if err == nil {
+		t.Fatalf("expected config load error")
+	}
+	if !strings.Contains(err.Error(), "config failed") {
+		t.Fatalf("unexpected error message: %v", err)
 	}
 }

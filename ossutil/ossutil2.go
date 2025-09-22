@@ -2,6 +2,8 @@ package ossutil
 
 import (
 	"archive/zip"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -51,7 +53,9 @@ var (
 )
 
 // 提供可替换的版本文件 URL，测试中可指向本地 httptest.Server
-var latestVersionURL = "https://gosspublic.alicdn.com/ossutil/v2/version.txt"
+var versionUpdateBaseUrl = "https://gosspublic.alicdn.com/ossutil/v2/"
+
+// var versionUpdateBaseUrl = "https://gosspublic.alicdn.com/ossutil/v2-beta/"
 
 var VersionCheckTTL = 86400 // 1 day, in seconds
 
@@ -117,8 +121,6 @@ func (c *Context) Run(args []string) error {
 				return err
 			}
 			if c.versionLocal != c.versionRemote {
-				c.info(fmt.Sprintf("A new version of ossutil is available: %s (currently installed: %s)", c.versionRemote, c.versionLocal))
-				c.info("update automatically...")
 				err := c.Install()
 				if err != nil {
 					return err
@@ -252,7 +254,7 @@ func (c *Context) NeedCheckVersion() bool {
 // Install latest ossutil
 func (c *Context) Install() error {
 	// like https://gosspublic.alicdn.com/ossutil/v2/2.1.2/ossutil-2.1.2-linux-386.zip
-	url := fmt.Sprintf("https://gosspublic.alicdn.com/ossutil/v2/%s/ossutil-%s-%s", c.versionRemote, c.versionRemote, c.downloadPathSuffix)
+	url := fmt.Sprintf("%s%s/ossutil-%s-%s", versionUpdateBaseUrl, c.versionRemote, c.versionRemote, c.downloadPathSuffix)
 	// download then unzip
 	// download to /tmp/ossutil.zip then unzip to c.execFilePath
 	tmpDir := os.TempDir()
@@ -395,7 +397,6 @@ func unzip(src, dest string) error {
 			return err
 		}
 
-		// 复��数据
 		_, err = io.Copy(outFile, rc)
 
 		// 关闭资源
@@ -435,71 +436,128 @@ func (c *Context) UpdateCheckCacheTime() error {
 	return nil
 }
 
+// 将 map 序列化为 JSON 后做 base64 编码
+func EncodeMapBase64(m map[string]any) (string, error) {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "", fmt.Errorf("json marshal failed: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(b), nil
+}
+
 // PrepareEnv 准备用户身份的环境变量
 func (c *Context) PrepareEnv() error {
 	// 获取原始的所有的 env
 	envs := os.Environ()
-	envMap := make(map[string]string)
-	for _, env := range envs {
-		parts := strings.SplitN(env, "=", 2)
-		if len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
-		}
-	}
+	envMap := make(map[string]any)
 	// 从 originCtx 获取用户身份信息
 	profile, err := config.LoadProfileWithContext(c.originCtx)
 	if err != nil {
 		return fmt.Errorf("config failed: %s", err.Error())
 	}
+	mode := profile.Mode
+	switch mode {
+	case config.AK:
+		envMap["mode"] = "AK"
+		envMap["access_key_id"] = profile.AccessKeyId
+		envMap["access_key_secret"] = profile.AccessKeySecret
+		break
+	case config.StsToken:
+		envMap["mode"] = "StsToken"
+		envMap["access_key_id"] = profile.AccessKeyId
+		envMap["access_key_secret"] = profile.AccessKeySecret
+		envMap["sts_token"] = profile.StsToken
+		break
+	case config.RamRoleArn:
+		envMap["mode"] = "RamRoleArn"
+		envMap["access_key_id"] = profile.AccessKeyId
+		envMap["access_key_secret"] = profile.AccessKeySecret
+		if profile.StsToken != "" {
+			envMap["sts_token"] = profile.StsToken
+		}
+		envMap["ram_role_arn"] = profile.RamRoleArn
+		envMap["ram_session_name"] = profile.RoleSessionName
+		break
+	case config.EcsRamRole:
+		envMap["mode"] = "EcsRamRole"
+		envMap["ram_role_name"] = profile.RamRoleName
+		break
+	case config.CredentialsURI:
+		envMap["mode"] = "CredentialsURI"
+		envMap["credentials_uri"] = profile.CredentialsURI
+		break
+	case config.OIDC:
+		envMap["mode"] = "OIDC"
+		envMap["oidc_provider_arn"] = profile.OIDCProviderARN
+		envMap["oidc_token_file"] = profile.OIDCTokenFile
+		envMap["ram_role_arn"] = profile.RamRoleArn
+		envMap["ram_session_name"] = profile.RoleSessionName
+		break
+	default:
+		// need use get credential local, then pass as sts token
+		proxyHost, ok := c.originCtx.Flags().GetValue("proxy-host")
+		if !ok {
+			proxyHost = ""
+		}
+		credential, err := profile.GetCredential(c.originCtx, tea.String(proxyHost))
+		if err != nil {
+			return fmt.Errorf("can't get credential %s", err)
+		}
 
-	proxyHost, ok := c.originCtx.Flags().GetValue("proxy-host")
-	if !ok {
-		proxyHost = ""
+		model, err := credential.GetCredential()
+		if err != nil {
+			return fmt.Errorf("can't get credential %s", err)
+		}
+		envMap["access_key_id"] = *model.AccessKeyId
+		envMap["access_key_secret"] = *model.AccessKeySecret
+		if model.SecurityToken != nil {
+			envMap["sts_token"] = *model.SecurityToken
+		}
+		envMap["mode"] = "StsToken"
 	}
-	credential, err := profile.GetCredential(c.originCtx, tea.String(proxyHost))
+	// common part
+	if profile.RegionId != "" {
+		envMap["region_id"] = profile.RegionId
+	}
+	// retry_timeout
+	if profile.ReadTimeout != 0 {
+		envMap["retry_timeout"] = profile.ReadTimeout
+	}
+	// connect_timeout
+	if profile.ConnectTimeout != 0 {
+		envMap["connect_timeout"] = profile.ConnectTimeout
+	}
+	// retry_count
+	if profile.RetryCount != 0 {
+		envMap["retry_count"] = profile.RetryCount
+	}
+	// language
+	if profile.Language != "" {
+		envMap["language"] = profile.Language
+	}
+	// base64 encode the credential info to pass to ossutil
+	// start generate OSSUTIL_CONFIG_VALUE env, json format and encode to base64
+	// set to OSSUTIL_CONFIG_VALUE
+	base64Result, err := EncodeMapBase64(envMap)
 	if err != nil {
-		return fmt.Errorf("can't get credential %s", err)
+		return fmt.Errorf("failed to encode env map to base64: %v", err)
 	}
-
-	model, err := credential.GetCredential()
-	if err != nil {
-		return fmt.Errorf("can't get credential %s", err)
-	}
-
-	// reset envMap with credential
-	if model.AccessKeyId != nil {
-		envMap["OSS_ACCESS_KEY_ID"] = *model.AccessKeyId
-	}
-
-	if model.AccessKeySecret != nil {
-		envMap["OSS_ACCESS_KEY_SECRET"] = *model.AccessKeySecret
-	}
-
-	if model.SecurityToken != nil {
-		envMap["OSS_SESSION_TOKEN"] = *model.SecurityToken
-	}
-	// check is region id and language in profile
-	// default exist
-	envExistRegion := false
-	if data, ok := envMap["OSS_REGION"]; ok {
-		if data != "" {
-			envExistRegion = true
+	envMapNew := make(map[string]string)
+	for _, env := range envs {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			envMapNew[parts[0]] = parts[1]
 		}
 	}
-	// only set when not exist
-	if profile.RegionId != "" && !envExistRegion {
-		envMap["OSS_REGION"] = profile.RegionId
-	}
-	if profile.Language != "" {
-		c.defaultLanguage = profile.Language
-	}
-	c.envMap = envMap
+	// use cap mode call oss
+	envMapNew["OSSUTIL_COMPAT_MODE"] = "alicli"
+	envMapNew["OSSUTIL_CONFIG_VALUE"] = base64Result
+	c.envMap = envMapNew
 	return nil
 }
 
 // RemoveFlagsForMainCli 移除主程序使用的 flag，避免传递给 ossutil 出错
 func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
-	// 如果类��是 config 的 flag，如果已经赋值了，从原始的 args 中移除
 	argsNew := make([]string, 0, len(args))
 	argsNew = args
 	if c.originCtx.Flags() != nil && c.originCtx.Flags().Flags() != nil {
@@ -514,7 +572,7 @@ func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 						argsNew = append(argsNew[:i], argsNew[i+1:]...)
 						// check if next arg is value
 						if i < len(argsNew) {
-							// 检��当前 flag 的赋值模式，如果不是AssignedNone，则下一个一定是值，忽略掉
+							// 检测当前 flag 的赋值模式，如果不是AssignedNone，则下一个一定是值，忽略掉
 							if f.AssignedMode != cli.AssignedNone {
 								// next arg is value, remove it
 								argsNew = append(argsNew[:i], argsNew[i+1:]...)
@@ -551,7 +609,7 @@ func fileExists(path string) bool {
 }
 
 func GetLatestOssUtilVersion() (string, error) {
-	url := latestVersionURL
+	url := versionUpdateBaseUrl + "version.txt"
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 	}
