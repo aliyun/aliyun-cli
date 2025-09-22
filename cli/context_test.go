@@ -140,3 +140,15 @@ func TestSetInConfigureMode(t *testing.T) {
 	ctx.SetInConfigureMode(false)
 	assert.False(t, ctx.InConfigureMode())
 }
+
+func TestDetectFlagByShorthandEnableUnknown(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
+	ctx.command = newTestCmd()
+	ctx.command.EnableUnknownFlag = true
+	ctx.unknownFlags = NewFlagSet()
+	f, err := ctx.detectFlagByShorthand('c')
+	assert.NotNil(t, f)
+	assert.Nil(t, err)
+}

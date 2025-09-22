@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package cli
 
 import (
@@ -62,6 +63,8 @@ type Command struct {
 
 	// Keep args
 	KeepArgs bool
+	// skip main process help
+	SkipDefaultHelp bool
 }
 
 func (c *Command) AddSubCommand(cmd *Command) {
@@ -229,6 +232,8 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 func (c *Command) executeInner(ctx *Context, args []string) error {
 	//fmt.Printf(">>> Execute Command: %s args=%v\n", c.Name, args)
 	parser := NewParser(args, ctx)
+	// allow unknown flags
+	parser.SetAllowUnknown(c.EnableUnknownFlag)
 
 	var current = parser.GetCurrent()
 	// get next arg
@@ -238,7 +243,7 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 	}
 
 	// if next arg is help, run help
-	if nextArg == "help" {
+	if nextArg == "help" && !c.SkipDefaultHelp {
 		ctx.help = true
 		return c.executeInner(ctx, parser.GetRemains())
 	}
@@ -310,8 +315,10 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 	}
 
 	if ctx.help {
-		c.executeHelp(ctx, callArgs)
-		return nil
+		if !c.SkipDefaultHelp {
+			c.executeHelp(ctx, callArgs)
+			return nil
+		}
 	} else if c.Run == nil {
 		c.executeHelp(ctx, callArgs)
 		return nil

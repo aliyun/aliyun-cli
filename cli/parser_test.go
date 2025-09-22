@@ -162,6 +162,13 @@ func TestParser4(t *testing.T) {
 	assert.Equal(t, []string{}, remains)
 }
 
+func TestParserSetAllowUnknown(t *testing.T) {
+	parser, _ := newTestParser("oss", "ls", "--unknown", "value")
+	parser.SetAllowUnknown(true)
+
+	assert.Equal(t, parser.allowUnknown, true)
+}
+
 // aliyun oss cp -r oss-url local-path
 // aliyun oss cp -r local-path oss-url
 // aliyun oss -e oss-cn-beijing.aliyuncs.com ls oss://bucket-name

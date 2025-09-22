@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package cli
 
 import (
@@ -159,6 +160,9 @@ func (ctx *Context) detectFlagByShorthand(ch rune) (*Flag, error) {
 	flag := ctx.flags.GetByShorthand(ch)
 	if flag != nil {
 		return flag, nil
+	}
+	if ctx.command != nil && ctx.command.EnableUnknownFlag && ctx.unknownFlags != nil {
+		return ctx.unknownFlags.AddByName(string(ch))
 	}
 	return nil, fmt.Errorf("unknown flag -%s", string(ch))
 }
