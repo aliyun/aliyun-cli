@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"runtime"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -144,14 +143,6 @@ func TestLoadProfile(t *testing.T) {
 	p, err = LoadProfile(GetConfigPath()+"/"+configFile, "")
 	assert.Empty(t, p)
 	assert.EqualError(t, err, "init config failed error")
-}
-
-func TestHomePath(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		assert.Equal(t, os.Getenv("USERPROFILE"), GetHomePath())
-	} else {
-		assert.Equal(t, os.Getenv("HOME"), GetHomePath())
-	}
 }
 
 func TestGetConfigPath(t *testing.T) {
