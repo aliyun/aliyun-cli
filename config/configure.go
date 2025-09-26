@@ -111,7 +111,7 @@ var doConfigureProxy = func(ctx *cli.Context, profileName string, mode string) e
 }
 
 func loadConfiguration() (*Configuration, error) {
-	return hookLoadConfiguration(LoadConfiguration)(GetConfigPath() + "/" + configFile)
+	return hookLoadConfiguration(LoadConfiguration)(GetConfigPath(GetHomePath()) + "/" + configFile)
 }
 
 func NewConfigureCommand() *cli.Command {
