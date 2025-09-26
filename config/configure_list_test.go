@@ -18,11 +18,15 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestDoConfigureList(t *testing.T) {
 	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	AddFlags(ctx.Flags())
 	originhook := hookLoadConfiguration
 	defer func() {
 		hookLoadConfiguration = originhook
@@ -96,7 +100,7 @@ func TestDoConfigureList(t *testing.T) {
 			}, nil
 		}
 	}
-	doConfigureList(w)
+	doConfigureList(ctx)
 	assert.Equal(t, "Profile   | Credential             | Valid   | Region           | Language\n"+
 		"--------- | ------------------     | ------- | ---------------- | --------\n"+
 		"default * | AK:***_id              | Invalid |                  | \n"+
@@ -114,6 +118,59 @@ func TestDoConfigureList(t *testing.T) {
 		}
 	}
 	w.Reset()
-	doConfigureList(w)
-	assert.Equal(t, "\x1b[1;31mERROR: load configure failed: error\n\x1b[0mProfile   | Credential         | Valid   | Region           | Language\n--------- | ------------------ | ------- | ---------------- | --------\n", w.String())
+	doConfigureList(ctx)
+	assert.Equal(t, "\x1b[1;31mERROR: load configure failed: error\n\x1b[0m", stderr.String())
+}
+
+func TestDoConfigureListWithConfigPath(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	AddFlags(ctx.Flags())
+	originhook := hookLoadConfiguration
+	defer func() {
+		hookLoadConfiguration = originhook
+	}()
+
+	//testcase 1
+	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			// Verify that the custom config path is being used
+			if path == "/custom/config/path.json" {
+				return &Configuration{
+					CurrentProfile: "custom1",
+					Profiles: []Profile{
+						{
+							Name:            "custom1",
+							Mode:            AK,
+							AccessKeyId:     "custom_access_key_id1",
+							AccessKeySecret: "custom_access_key_secret1",
+							OutputFormat:    "json",
+							RegionId:        "cn-hangzhou",
+						},
+						{
+							Name:            "custom2",
+							Mode:            AK,
+							AccessKeyId:     "custom_access_key_id2",
+							AccessKeySecret: "custom_access_key_secret2",
+							OutputFormat:    "json",
+							RegionId:        "cn-beijing",
+						},
+					},
+				}, nil
+			}
+			return &Configuration{}, errors.New("unexpected config path")
+		}
+	}
+	// Set custom config-path flag
+	ctx.Flags().Get("config-path").SetAssigned(true)
+	ctx.Flags().Get("config-path").SetValue("/custom/config/path.json")
+	doConfigureList(ctx)
+	assert.Equal(t,
+		"Profile   | Credential         | Valid   | Region           | Language\n"+
+			"--------- | ------------------ | ------- | ---------------- | --------\n"+
+			"custom1 * | AK:***id1          | Valid   | cn-hangzhou      | \n"+
+			"custom2   | AK:***id2          | Valid   | cn-beijing       | \n", w.String())
+	assert.Equal(t, "", stderr.String())
+
 }

@@ -15,7 +15,6 @@ package config
 
 import (
 	"fmt"
-	"io"
 	"text/tabwriter"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -25,21 +24,23 @@ import (
 func NewConfigureListCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "list",
-		Usage: "list",
+		Usage: "list [--config-path <configPath>]",
 		Short: i18n.T("list all config profile", "列出所有配置集"),
 		Run: func(c *cli.Context, args []string) error {
-			doConfigureList(c.Stdout())
+			doConfigureList(c)
 			return nil
 		},
 	}
 }
 
-func doConfigureList(w io.Writer) {
-	conf, err := loadConfiguration()
+func doConfigureList(ctx *cli.Context) {
+	configPath := getConfigurePath(ctx)
+	conf, err := hookLoadConfiguration(LoadConfiguration)(configPath)
 	if err != nil {
-		cli.Errorf(w, "ERROR: load configure failed: %v\n", err)
+		cli.Errorf(ctx.Stderr(), "ERROR: load configure failed: %v\n", err)
+		return
 	}
-	tw := tabwriter.NewWriter(w, 8, 0, 1, ' ', 0)
+	tw := tabwriter.NewWriter(ctx.Stdout(), 8, 0, 1, ' ', 0)
 	fmt.Fprint(tw, "Profile\t| Credential \t| Valid\t| Region\t| Language\n")
 	fmt.Fprint(tw, "---------\t| ------------------\t| -------\t| ----------------\t| --------\n")
 	for _, pf := range conf.Profiles {
