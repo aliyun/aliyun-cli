@@ -61,6 +61,10 @@ var hookSaveConfiguration = func(fn func(config *Configuration) error) func(conf
 	return fn
 }
 
+var hookFileStat = func(fn func(name string) (os.FileInfo, error)) func(name string) (os.FileInfo, error) {
+	return fn
+}
+
 var stdin io.Reader = os.Stdin
 
 // 为了方便 mock 的函数变量

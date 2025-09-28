@@ -15,6 +15,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"text/tabwriter"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -27,18 +28,21 @@ func NewConfigureListCommand() *cli.Command {
 		Usage: "list [--config-path <configPath>]",
 		Short: i18n.T("list all config profile", "列出所有配置集"),
 		Run: func(c *cli.Context, args []string) error {
-			doConfigureList(c)
-			return nil
+			return doConfigureList(c)
 		},
 	}
 }
 
-func doConfigureList(ctx *cli.Context) {
+func doConfigureList(ctx *cli.Context) error {
+	if customPath, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
+		if _, err := hookFileStat(os.Stat)(customPath); os.IsNotExist(err) {
+			return fmt.Errorf("config path file does not exist: %s", customPath)
+		}
+	}
 	configPath := getConfigurePath(ctx)
 	conf, err := hookLoadConfiguration(LoadConfiguration)(configPath)
 	if err != nil {
-		cli.Errorf(ctx.Stderr(), "ERROR: load configure failed: %v\n", err)
-		return
+		return fmt.Errorf("load configure failed: %v", err)
 	}
 	tw := tabwriter.NewWriter(ctx.Stdout(), 8, 0, 1, ' ', 0)
 	fmt.Fprint(tw, "Profile\t| Credential \t| Valid\t| Region\t| Language\n")
@@ -90,4 +94,5 @@ func doConfigureList(ctx *cli.Context) {
 		fmt.Fprintf(tw, "%s\t| %s\t| %s\t| %s\t| %s\n", name, cred, valid, pf.RegionId, pf.Language)
 	}
 	tw.Flush()
+	return nil
 }
