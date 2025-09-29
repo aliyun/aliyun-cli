@@ -183,6 +183,43 @@ func LoadConfiguration(path string) (conf *Configuration, err error) {
 	return
 }
 
+func LoadConfigurationWithContext(ctx *cli.Context) (conf *Configuration, err error) {
+	confPath := hookGetHomePath(GetHomePath)() + configPath + "/" + configFile
+	if customPath, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
+		if _, err := hookFileStat(os.Stat)(customPath); os.IsNotExist(err) {
+			// invalid config path from user input should be blocked
+			return nil, fmt.Errorf("config path input does not exist: %s", customPath)
+		}
+		confPath = customPath
+	}
+	_, statErr := os.Stat(confPath)
+	if os.IsNotExist(statErr) {
+		// legacy config migration check and save without valid config from user or by default
+		conf, err = MigrateLegacyConfiguration()
+		if err != nil {
+			return nil, fmt.Errorf("no valid config file found")
+		}
+
+		if conf != nil {
+			err = SaveConfiguration(conf)
+			if err != nil {
+				err = fmt.Errorf("save legacy config file failed %v", err)
+				return nil, err
+			}
+			return conf, nil
+		}
+	}
+
+	bytes, err := os.ReadFile(confPath)
+	if err != nil {
+		err = fmt.Errorf("reading config from '%s' failed %v", confPath, err)
+		return nil, err
+	}
+
+	conf, err = NewConfigFromBytes(bytes)
+	return conf, err
+}
+
 func SaveConfiguration(config *Configuration) (err error) {
 	// fmt.Printf("conf %v\n", config)
 	bytes, err := json.MarshalIndent(config, "", "\t")
@@ -191,6 +228,26 @@ func SaveConfiguration(config *Configuration) (err error) {
 	}
 	path := GetConfigPath() + "/" + configFile
 	err = os.WriteFile(path, bytes, 0600)
+	return
+}
+
+func SaveConfigurationWithContext(ctx *cli.Context, config *Configuration) (err error) {
+	// fmt.Printf("conf %v\n", config)
+	bytes, err := json.MarshalIndent(config, "", "\t")
+	if err != nil {
+		return
+	}
+	confPath := hookGetHomePath(GetHomePath)() + configPath + "/" + configFile
+	if customPath, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
+		confPath = customPath
+	}
+	if _, err := os.Stat(confPath); os.IsNotExist(err) {
+		err = os.MkdirAll(confPath, 0755)
+		if err != nil {
+			panic(err)
+		}
+	}
+	err = os.WriteFile(confPath, bytes, 0600)
 	return
 }
 

@@ -28,14 +28,14 @@ func TestDoConfigureList(t *testing.T) {
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w, stderr)
 	AddFlags(ctx.Flags())
-	originhook := hookLoadConfiguration
+	originhook := hookLoadConfigurationWithContext
 	defer func() {
-		hookLoadConfiguration = originhook
+		hookLoadConfigurationWithContext = originhook
 	}()
 
 	//testcase 1
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
 				Profiles: []Profile{
@@ -114,8 +114,8 @@ func TestDoConfigureList(t *testing.T) {
 		"eee       | CloudSSO:a@b           | Invalid |                  | \n", w.String())
 
 	//testcase 2
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{}, errors.New("error")
 		}
 	}
@@ -133,10 +133,10 @@ func TestDoConfigureListWithConfigPath(t *testing.T) {
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(stdout, stderr)
 	AddFlags(ctx.Flags())
-	originhook := hookLoadConfiguration
+	originhook := hookLoadConfigurationWithContext
 	originhookFileStat := hookFileStat
 	defer func() {
-		hookLoadConfiguration = originhook
+		hookLoadConfigurationWithContext = originhook
 		hookFileStat = originhookFileStat
 	}()
 
@@ -150,10 +150,10 @@ func TestDoConfigureListWithConfigPath(t *testing.T) {
 	}
 
 	//testcase 1
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			// Verify that the custom config path is being used
-			if path == "/custom/config/path.json" {
+			if configPath, _ := ctx.Flags().Get("config-path").GetValue(); configPath == "/custom/config/path.json" {
 				return &Configuration{
 					CurrentProfile: "custom1",
 					Profiles: []Profile{
@@ -203,11 +203,17 @@ func TestDoConfigureListWithConfigPath(t *testing.T) {
 			return fn(name) // Call original function for other paths
 		}
 	}
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
+			return fn(ctx)
+		}
+	}
 	// Set a non-existent config path
+	ctx.Flags().Get("config-path").SetAssigned(true)
 	ctx.Flags().Get("config-path").SetValue("/non/existent/path.json")
 	err = doConfigureList(ctx)
 	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "config path file does not exist: /non/existent/path.json")
+	assert.Contains(t, err.Error(), "config path input does not exist: /non/existent/path.json")
 	assert.Equal(t, "", stdout.String()) // No output on error
 	assert.Equal(t, "", stderr.String()) // No stderr output since error is returned
 

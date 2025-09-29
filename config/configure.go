@@ -61,6 +61,14 @@ var hookSaveConfiguration = func(fn func(config *Configuration) error) func(conf
 	return fn
 }
 
+var hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+	return fn
+}
+
+var hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+	return fn
+}
+
 var hookFileStat = func(fn func(name string) (os.FileInfo, error)) func(name string) (os.FileInfo, error) {
 	return fn
 }

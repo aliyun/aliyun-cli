@@ -15,7 +15,6 @@ package config
 
 import (
 	"fmt"
-	"os"
 	"text/tabwriter"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -34,13 +33,7 @@ func NewConfigureListCommand() *cli.Command {
 }
 
 func doConfigureList(ctx *cli.Context) error {
-	if customPath, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
-		if _, err := hookFileStat(os.Stat)(customPath); os.IsNotExist(err) {
-			return fmt.Errorf("config path file does not exist: %s", customPath)
-		}
-	}
-	configPath := getConfigurePath(ctx)
-	conf, err := hookLoadConfiguration(LoadConfiguration)(configPath)
+	conf, err := hookLoadConfigurationWithContext(LoadConfigurationWithContext)(ctx)
 	if err != nil {
 		return fmt.Errorf("load configure failed: %v", err)
 	}

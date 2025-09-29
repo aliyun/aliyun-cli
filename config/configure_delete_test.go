@@ -23,67 +23,72 @@ import (
 )
 
 func TestDoConfigureDelete(t *testing.T) {
-	w := new(bytes.Buffer)
+	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w, stderr)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
 
-	originhook := hookLoadConfiguration
-	originhookSave := hookSaveConfiguration
+	originhook := hookLoadConfigurationWithContext
+	originhookSave := hookSaveConfigurationWithContext
 	defer func() {
-		hookLoadConfiguration = originhook
-		hookSaveConfiguration = originhookSave
+		hookLoadConfigurationWithContext = originhook
+		hookSaveConfigurationWithContext = originhookSave
 	}()
 
 	//testcase 1
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{CurrentProfile: "default", Profiles: []Profile{
 				{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
 				{Name: "bbb", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
-		return func(config *Configuration) error {
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
 			return nil
 		}
 	}
 
-	doConfigureDelete(ctx, "bbb")
-	assert.Empty(t, w.String())
+	err := doConfigureDelete(ctx, "bbb")
+	assert.Empty(t, stdout.String())
+	assert.Nil(t, err)
 
 	//testcase 2
-	w.Reset()
+	stdout.Reset()
 	stderr.Reset()
-	doConfigureDelete(ctx, "aaa")
-	assert.Equal(t, "\x1b[1;31mError: configuration profile `aaa` not found\n\x1b[0m", stderr.String())
+	err = doConfigureDelete(ctx, "aaa")
+	assert.NotNil(t, err)
+	assert.Equal(t, "error: configuration profile `aaa` not found", err.Error())
 
 	//testcase 3
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{}, errors.New("error")
 		}
 	}
 
-	w.Reset()
+	stdout.Reset()
 	stderr.Reset()
-	doConfigureDelete(ctx, "bbb")
-	assert.Equal(t, "\x1b[1;31mERROR: load configure failed: error\n\x1b[0m\x1b[1;31mError: configuration profile `bbb` not found\n\x1b[0m", stderr.String())
+	err = doConfigureDelete(ctx, "bbb")
+	assert.NotNil(t, err)
+	assert.Equal(t, "ERROR: load configure failed: error", err.Error())
 
 	//testcase 4
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{CurrentProfile: "default", Profiles: []Profile{
 				{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
 				{Name: "bbb", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
-		return func(config *Configuration) error {
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
 			return errors.New("save error")
 		}
 	}
-	w.Reset()
+	stdout.Reset()
 	stderr.Reset()
-	doConfigureDelete(ctx, "bbb")
-	assert.Equal(t, "\x1b[1;31mError: save configuration failed save error\n\x1b[0m", stderr.String())
+	err = doConfigureDelete(ctx, "bbb")
+	assert.NotNil(t, err)
+	assert.Equal(t, "error: save configuration failed save error", err.Error())
 }

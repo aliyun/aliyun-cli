@@ -24,26 +24,29 @@ import (
 )
 
 func TestDoConfigureSet(t *testing.T) {
-	fs := cli.NewFlagSet()
-	w := new(bytes.Buffer)
-	AddFlags(fs)
-	originhook := hookLoadConfiguration
-	originhookSave := hookSaveConfiguration
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
+
+	originhook := hookLoadConfigurationWithContext
+	originhookSave := hookSaveConfigurationWithContext
 	defer func() {
-		hookLoadConfiguration = originhook
-		hookSaveConfiguration = originhookSave
+		hookLoadConfigurationWithContext = originhook
+		hookSaveConfigurationWithContext = originhookSave
 	}()
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{}, errors.New("error")
 		}
 	}
-	doConfigureSet(w, fs)
-	assert.Equal(t, "\x1b[1;31mload configuration failed error\x1b[0m", w.String())
+	err := doConfigureSet(ctx)
+	assert.NotNil(t, err)
+	assert.Equal(t, "load configuration failed error", err.Error())
 
 	//testcase2
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{CurrentProfile: "default", Profiles: []Profile{
 				{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
 				{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
@@ -51,19 +54,21 @@ func TestDoConfigureSet(t *testing.T) {
 	}
 
 	//ERROR
-	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
-		return func(config *Configuration) error {
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
 			return nil
 		}
 	}
 
-	w.Reset()
-	doConfigureSet(w, fs)
-	assert.Equal(t, "\x1b[1;31mfail to set configuration: region can't be empty\x1b[0m", w.String())
+	stdout.Reset()
+	stderr.Reset()
+	err = doConfigureSet(ctx)
+	assert.NotNil(t, err)
+	assert.Equal(t, "fail to set configuration: region can't be empty", err.Error())
 
 	//AK
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
 				Profiles: []Profile{
@@ -73,13 +78,14 @@ func TestDoConfigureSet(t *testing.T) {
 			}, nil
 		}
 	}
-	w.Reset()
-	doConfigureSet(w, fs)
-	assert.Empty(t, w.String())
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureSet(ctx)
+	assert.Empty(t, stdout.String())
 
 	//StsToken
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
 				Profiles: []Profile{
@@ -87,13 +93,14 @@ func TestDoConfigureSet(t *testing.T) {
 					{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	w.Reset()
-	doConfigureSet(w, fs)
-	assert.Empty(t, w.String())
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureSet(ctx)
+	assert.Empty(t, stdout.String())
 
 	//RamRoleArn
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
 				Profiles: []Profile{
@@ -101,23 +108,25 @@ func TestDoConfigureSet(t *testing.T) {
 					{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	w.Reset()
-	doConfigureSet(w, fs)
-	assert.Empty(t, w.String())
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureSet(ctx)
+	assert.Empty(t, stdout.String())
 
 	//EcsRamRole
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{CurrentProfile: "default", Profiles: []Profile{{Name: "default", Mode: EcsRamRole, RamRoleName: "RamRoleName", AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json", RegionId: "cn-hangzhou"}, {Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	w.Reset()
-	doConfigureSet(w, fs)
-	assert.Empty(t, w.String())
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureSet(ctx)
+	assert.Empty(t, stdout.String())
 
 	// RamRoleArnWithEcs
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
 				Profiles: []Profile{
@@ -125,26 +134,28 @@ func TestDoConfigureSet(t *testing.T) {
 					{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	w.Reset()
-	doConfigureSet(w, fs)
-	assert.Empty(t, w.String())
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureSet(ctx)
+	assert.Empty(t, stdout.String())
 
 	// RsaKeyPair
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default", Profiles: []Profile{
 					{Name: "default", Mode: RsaKeyPair, KeyPairName: "KeyPairName", PrivateKey: "PrivateKey", AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json", RegionId: "cn-hangzhou"},
 					{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	w.Reset()
-	doConfigureSet(w, fs)
-	assert.Empty(t, w.String())
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureSet(ctx)
+	assert.Empty(t, stdout.String())
 
 	// External
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
 				Profiles: []Profile{
@@ -152,12 +163,13 @@ func TestDoConfigureSet(t *testing.T) {
 					{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	w.Reset()
-	doConfigureSet(w, fs)
-	assert.Empty(t, w.String())
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureSet(ctx)
+	assert.Empty(t, stdout.String())
 	// OIDC
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
 				Profiles: []Profile{
@@ -167,12 +179,14 @@ func TestDoConfigureSet(t *testing.T) {
 					{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	w.Reset()
-	doConfigureSet(w, fs)
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureSet(ctx)
+	assert.Empty(t, stdout.String())
 
 	// CloudSSO
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
 				Profiles: []Profile{
@@ -184,7 +198,8 @@ func TestDoConfigureSet(t *testing.T) {
 					{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	w.Reset()
-	doConfigureSet(w, fs)
-	assert.Empty(t, w.String())
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureSet(ctx)
+	assert.Empty(t, stdout.String())
 }

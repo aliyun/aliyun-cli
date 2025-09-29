@@ -15,6 +15,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
@@ -22,25 +24,23 @@ import (
 func NewConfigureDeleteCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "delete",
-		Usage: "delete --profile <profileName>",
+		Usage: "delete --profile <profileName> [--config-path <configPath>]",
 		Short: i18n.T("delete the specified profile", "删除指定配置"),
 		Run: func(c *cli.Context, args []string) error {
 			profileName, ok := ProfileFlag(c.Flags()).GetValue()
 			if !ok {
-				cli.Errorf(c.Stderr(), "missing --profile <profileName>\n")
-				cli.Noticef(c.Stderr(), "\nusage:\n  aliyun configure delete --profile <profileName>\n")
-				return nil
+				cli.Noticef(c.Stderr(), "\nusage:\n  aliyun configure delete --profile <profileName> [--config-path <configPath>]\n")
+				return fmt.Errorf("missing --profile <profileName>")
 			}
-			doConfigureDelete(c, profileName)
-			return nil
+			return doConfigureDelete(c, profileName)
 		},
 	}
 }
 
-func doConfigureDelete(ctx *cli.Context, profileName string) {
-	conf, err := loadConfiguration()
+func doConfigureDelete(ctx *cli.Context, profileName string) error {
+	conf, err := hookLoadConfigurationWithContext(LoadConfigurationWithContext)(ctx)
 	if err != nil {
-		cli.Errorf(ctx.Stderr(), "ERROR: load configure failed: %v\n", err)
+		return fmt.Errorf("ERROR: load configure failed: %v", err)
 	}
 	deleted := false
 	r := make([]Profile, 0)
@@ -53,8 +53,7 @@ func doConfigureDelete(ctx *cli.Context, profileName string) {
 	}
 
 	if !deleted {
-		cli.Errorf(ctx.Stderr(), "Error: configuration profile `%s` not found\n", profileName)
-		return
+		return fmt.Errorf("error: configuration profile `%s` not found", profileName)
 	}
 
 	conf.Profiles = r
@@ -66,8 +65,9 @@ func doConfigureDelete(ctx *cli.Context, profileName string) {
 		}
 	}
 
-	err = hookSaveConfiguration(SaveConfiguration)(conf)
+	err = hookSaveConfigurationWithContext(SaveConfigurationWithContext)(ctx, conf)
 	if err != nil {
-		cli.Errorf(ctx.Stderr(), "Error: save configuration failed %s\n", err)
+		return fmt.Errorf("error: save configuration failed %v", err)
 	}
+	return nil
 }

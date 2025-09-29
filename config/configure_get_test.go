@@ -25,101 +25,102 @@ import (
 )
 
 func TestDoConfigureGet(t *testing.T) {
-	w := new(bytes.Buffer)
+	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w, stderr)
+	ctx := cli.NewCommandContext(stdout, stderr)
 	AddFlags(ctx.Flags())
-	originhook := hookLoadConfiguration
+	originhook := hookLoadConfigurationWithContext
 	defer func() {
-		hookLoadConfiguration = originhook
+		hookLoadConfigurationWithContext = originhook
 	}()
 
 	//testcase 1
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{}, errors.New("error")
 		}
 	}
 
 	os.Setenv("ACCESS_KEY_ID", "")
 	os.Setenv("ACCESS_KEY_SECRET", "")
-	doConfigureGet(ctx, []string{})
-	assert.Equal(t, "\x1b[1;31mload configuration failed error\x1b[0m\n", stderr.String())
+	err := doConfigureGet(ctx, []string{})
+	assert.Equal(t, "load configuration failed error", err.Error())
 
 	//testcase 2
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{CurrentProfile: "default", Profiles: []Profile{
 				{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
 				{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	w.Reset()
+	stdout.Reset()
 	stderr.Reset()
 	ctx.Flags().Get("profile").SetAssigned(true)
-	ctx.Flags().Get("profile").SetValue("")
-	doConfigureGet(ctx, []string{})
-	assert.Equal(t, "\x1b[1;31mprofile  not found!\x1b[0m\n", stderr.String())
+	ctx.Flags().Get("profile").SetValue("ddd")
+	err = doConfigureGet(ctx, []string{})
+	assert.Equal(t, "profile ddd not found", err.Error())
 
 	//testcase 3
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{CurrentProfile: "default", Profiles: []Profile{
 				{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
 				{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	w.Reset()
+	stdout.Reset()
 	stderr.Reset()
 	ctx.Flags().Flags()[1].SetAssigned(false)
-	doConfigureGet(ctx, []string{"profile", "mode", "access-key-id", "access-key-secret", "sts-token", "ram-role-name", "ram-role-arn", "role-session-name", "external-id", "private-key", "key-pair-name", "region", "language"})
-	assert.Equal(t, "profile=default\nmode=AK\naccess-key-id=*************************_id\naccess-key-secret=*****************************ret\nsts-token=\nram-role-name=\nram-role-arn=\nrole-session-name=\nexternal-id=\nprivate-key=\nkey-pair-name=\nlanguage=\n\n", w.String())
+	err = doConfigureGet(ctx, []string{"profile", "mode", "access-key-id", "access-key-secret", "sts-token", "ram-role-name", "ram-role-arn", "role-session-name", "external-id", "private-key", "key-pair-name", "region", "language"})
+	assert.Nil(t, err)
+	assert.Equal(t, "profile=default\nmode=AK\naccess-key-id=*************************_id\naccess-key-secret=*****************************ret\nsts-token=\nram-role-name=\nram-role-arn=\nrole-session-name=\nexternal-id=\nprivate-key=\nkey-pair-name=\nlanguage=\n\n", stdout.String())
 
 	//TESTCASE 4
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{CurrentProfile: "default", Profiles: []Profile{
 				{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
 				{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	w.Reset()
+	stdout.Reset()
 	stderr.Reset()
 	ctx.Flags().Get("profile").SetAssigned(true)
 	ctx.Flags().Get("profile").SetValue("default")
 	doConfigureGet(ctx, []string{})
-	assert.Equal(t, "{\n\t\"name\": \"default\",\n\t\"mode\": \"AK\",\n\t\"access_key_id\": \"default_aliyun_access_key_id\",\n\t\"access_key_secret\": \"default_aliyun_access_key_secret\",\n\t\"output_format\": \"json\"\n}\n\n", w.String())
+	assert.Equal(t, "{\n\t\"name\": \"default\",\n\t\"mode\": \"AK\",\n\t\"access_key_id\": \"default_aliyun_access_key_id\",\n\t\"access_key_secret\": \"default_aliyun_access_key_secret\",\n\t\"output_format\": \"json\"\n}\n\n", stdout.String())
 
 	//testcase 5
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{CurrentProfile: "default", Profiles: []Profile{
 				{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
 				{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
 	}
-	w.Reset()
+	stdout.Reset()
 	stderr.Reset()
 	ctx.Flags().Get("profile").SetAssigned(true)
 	ctx.Flags().Get("profile").SetValue("default")
 	doConfigureGet(ctx, []string{"mode", "profile", "access-key-id", "language"})
-	assert.Equal(t, "mode=AK\nprofile=default\naccess-key-id=*************************_id\nlanguage=\n\n", w.String())
+	assert.Equal(t, "mode=AK\nprofile=default\naccess-key-id=*************************_id\nlanguage=\n\n", stdout.String())
 }
 
 func TestDoConfigureGetCloudSSO(t *testing.T) {
 	// 设置测试环境
-	w := new(bytes.Buffer)
+	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(w, stderr)
+	ctx := cli.NewCommandContext(stdout, stderr)
 	AddFlags(ctx.Flags())
-	originhook := hookLoadConfiguration
+	originhook := hookLoadConfigurationWithContext
 	defer func() {
-		hookLoadConfiguration = originhook
+		hookLoadConfigurationWithContext = originhook
 	}()
 
 	// 创建包含 CloudSSO 相关配置的 Profile
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
 				Profiles: []Profile{
@@ -136,29 +137,29 @@ func TestDoConfigureGetCloudSSO(t *testing.T) {
 	}
 
 	// 测试 CloudSSOSignInUrlFlagName
-	w.Reset()
+	stdout.Reset()
 	stderr.Reset()
 	doConfigureGet(ctx, []string{CloudSSOSignInUrlFlagName})
-	assert.Equal(t, "cloud-sso-sign-in-url=https://signin.example.com\n\n", w.String())
+	assert.Equal(t, "cloud-sso-sign-in-url=https://signin.example.com\n\n", stdout.String())
 
 	// 测试 CloudSSOAccessConfigFlagName
-	w.Reset()
+	stdout.Reset()
 	stderr.Reset()
 	doConfigureGet(ctx, []string{CloudSSOAccessConfigFlagName})
-	assert.Equal(t, "cloud-sso-access-config=access-config-example\n\n", w.String())
+	assert.Equal(t, "cloud-sso-access-config=access-config-example\n\n", stdout.String())
 
 	// 测试 CloudSSOAccountIdFlagName
-	w.Reset()
+	stdout.Reset()
 	stderr.Reset()
 	doConfigureGet(ctx, []string{CloudSSOAccountIdFlagName})
-	assert.Equal(t, "cloud-sso-account-id=account-123456\n\n", w.String())
+	assert.Equal(t, "cloud-sso-account-id=account-123456\n\n", stdout.String())
 
 	// 测试同时获取所有 CloudSSO 相关配置
-	w.Reset()
+	stdout.Reset()
 	stderr.Reset()
 	doConfigureGet(ctx, []string{CloudSSOSignInUrlFlagName, CloudSSOAccessConfigFlagName, CloudSSOAccountIdFlagName})
 	expected := "cloud-sso-sign-in-url=https://signin.example.com\n" +
 		"cloud-sso-access-config=access-config-example\n" +
 		"cloud-sso-account-id=account-123456\n\n"
-	assert.Equal(t, expected, w.String())
+	assert.Equal(t, expected, stdout.String())
 }
