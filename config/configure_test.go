@@ -31,13 +31,13 @@ import (
 )
 
 func TestNewConfigureCommand(t *testing.T) {
-	originhook := hookLoadConfiguration
-	originhookSave := hookSaveConfiguration
+	originhook := hookLoadOrCreateConfiguration
+	originhookSave := hookSaveConfigurationWithContext
 	defer func() {
-		hookLoadConfiguration = originhook
-		hookSaveConfiguration = originhookSave
+		hookLoadOrCreateConfiguration = originhook
+		hookSaveConfigurationWithContext = originhookSave
 	}()
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{CurrentProfile: "default", Profiles: []Profile{
 				{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
@@ -45,8 +45,8 @@ func TestNewConfigureCommand(t *testing.T) {
 		}
 	}
 
-	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
-		return func(config *Configuration) error {
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
 			return nil
 		}
 	}
@@ -119,13 +119,13 @@ func TestNewConfigureCommand(t *testing.T) {
 }
 
 func TestDoConfigure(t *testing.T) {
-	originhook := hookLoadConfiguration
-	originhookSave := hookSaveConfiguration
+	originhook := hookLoadOrCreateConfiguration
+	originhookSave := hookSaveConfigurationWithContext
 	defer func() {
-		hookLoadConfiguration = originhook
-		hookSaveConfiguration = originhookSave
+		hookLoadOrCreateConfiguration = originhook
+		hookSaveConfigurationWithContext = originhookSave
 	}()
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
@@ -148,8 +148,8 @@ func TestDoConfigure(t *testing.T) {
 			}, nil
 		}
 	}
-	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
-		return func(config *Configuration) error {
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
 			return nil
 		}
 	}
@@ -419,7 +419,7 @@ func TestConfigureCloudSSOWithMock(t *testing.T) {
 }
 
 func TestDoConfigureWithCloudSSO(t *testing.T) {
-	originhook := hookLoadConfiguration
+	originhook := hookLoadOrCreateConfiguration
 	originhookSave := hookSaveConfiguration
 	originalGetAccessToken := cloudssoGetAccessToken
 	originalListAllUsers := cloudssoListAllUsers
@@ -428,7 +428,7 @@ func TestDoConfigureWithCloudSSO(t *testing.T) {
 	originalStdin := stdin
 
 	defer func() {
-		hookLoadConfiguration = originhook
+		hookLoadOrCreateConfiguration = originhook
 		hookSaveConfiguration = originhookSave
 		cloudssoGetAccessToken = originalGetAccessToken
 		cloudssoListAllUsers = originalListAllUsers
@@ -438,7 +438,7 @@ func TestDoConfigureWithCloudSSO(t *testing.T) {
 	}()
 
 	// Mock 配置加载和保存
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
@@ -515,7 +515,7 @@ func TestDoConfigureWithCloudSSO(t *testing.T) {
 }
 
 func TestDoConfigureWithCloudSSOWhenSpecifyAccountNotExist(t *testing.T) {
-	originhook := hookLoadConfiguration
+	originhook := hookLoadOrCreateConfiguration
 	originhookSave := hookSaveConfiguration
 	originalGetAccessToken := cloudssoGetAccessToken
 	originalListAllUsers := cloudssoListAllUsers
@@ -524,7 +524,7 @@ func TestDoConfigureWithCloudSSOWhenSpecifyAccountNotExist(t *testing.T) {
 	originalStdin := stdin
 
 	defer func() {
-		hookLoadConfiguration = originhook
+		hookLoadOrCreateConfiguration = originhook
 		hookSaveConfiguration = originhookSave
 		cloudssoGetAccessToken = originalGetAccessToken
 		cloudssoListAllUsers = originalListAllUsers
@@ -534,7 +534,7 @@ func TestDoConfigureWithCloudSSOWhenSpecifyAccountNotExist(t *testing.T) {
 	}()
 
 	// Mock 配置加载和保存
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
@@ -616,7 +616,7 @@ func TestDoConfigureWithCloudSSOWhenSpecifyAccountNotExist(t *testing.T) {
 
 // 返回多个账户的测试用例，需要主动输入一个数字选择
 func TestDoConfigureWithCloudSSOReturnMultiAccount(t *testing.T) {
-	originhook := hookLoadConfiguration
+	originhook := hookLoadOrCreateConfiguration
 	originhookSave := hookSaveConfiguration
 	originalGetAccessToken := cloudssoGetAccessToken
 	originalListAllUsers := cloudssoListAllUsers
@@ -625,7 +625,7 @@ func TestDoConfigureWithCloudSSOReturnMultiAccount(t *testing.T) {
 	originalStdin := stdin
 
 	defer func() {
-		hookLoadConfiguration = originhook
+		hookLoadOrCreateConfiguration = originhook
 		hookSaveConfiguration = originhookSave
 		cloudssoGetAccessToken = originalGetAccessToken
 		cloudssoListAllUsers = originalListAllUsers
@@ -635,7 +635,7 @@ func TestDoConfigureWithCloudSSOReturnMultiAccount(t *testing.T) {
 	}()
 
 	// Mock 配置加载和保存
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
@@ -716,7 +716,7 @@ func TestDoConfigureWithCloudSSOReturnMultiAccount(t *testing.T) {
 
 // 通过 flag 指定accessConfigId，不存在的情况
 func TestDoConfigureWithCloudSSOWhenSpecifyAccessConfigNotExist(t *testing.T) {
-	originhook := hookLoadConfiguration
+	originhook := hookLoadOrCreateConfiguration
 	originhookSave := hookSaveConfiguration
 	originalGetAccessToken := cloudssoGetAccessToken
 	originalListAllUsers := cloudssoListAllUsers
@@ -725,7 +725,7 @@ func TestDoConfigureWithCloudSSOWhenSpecifyAccessConfigNotExist(t *testing.T) {
 	originalStdin := stdin
 
 	defer func() {
-		hookLoadConfiguration = originhook
+		hookLoadOrCreateConfiguration = originhook
 		hookSaveConfiguration = originhookSave
 		cloudssoGetAccessToken = originalGetAccessToken
 		cloudssoListAllUsers = originalListAllUsers
@@ -735,7 +735,7 @@ func TestDoConfigureWithCloudSSOWhenSpecifyAccessConfigNotExist(t *testing.T) {
 	}()
 
 	// Mock 配置加载和保存
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
@@ -818,7 +818,7 @@ func TestDoConfigureWithCloudSSOWhenSpecifyAccessConfigNotExist(t *testing.T) {
 
 // 返回多个 access config的测试用例，需要主动输入一个数字选择
 func TestDoConfigureWithCloudSSOWithMultiAccessConfig(t *testing.T) {
-	originhook := hookLoadConfiguration
+	originhook := hookLoadOrCreateConfiguration
 	originhookSave := hookSaveConfiguration
 	originalGetAccessToken := cloudssoGetAccessToken
 	originalListAllUsers := cloudssoListAllUsers
@@ -827,7 +827,7 @@ func TestDoConfigureWithCloudSSOWithMultiAccessConfig(t *testing.T) {
 	originalStdin := stdin
 
 	defer func() {
-		hookLoadConfiguration = originhook
+		hookLoadOrCreateConfiguration = originhook
 		hookSaveConfiguration = originhookSave
 		cloudssoGetAccessToken = originalGetAccessToken
 		cloudssoListAllUsers = originalListAllUsers
@@ -837,7 +837,7 @@ func TestDoConfigureWithCloudSSOWithMultiAccessConfig(t *testing.T) {
 	}()
 
 	// Mock 配置加载和保存
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
@@ -920,7 +920,7 @@ func TestDoConfigureWithCloudSSOWithMultiAccessConfig(t *testing.T) {
 
 // 原始的CloudSSOSignInUrl不为空，新输入为空
 func TestDoConfigureWithCloudSSOWhenCloudSSOSignInUrlNotEmpty(t *testing.T) {
-	originhook := hookLoadConfiguration
+	originhook := hookLoadOrCreateConfiguration
 	originhookSave := hookSaveConfiguration
 	originalGetAccessToken := cloudssoGetAccessToken
 	originalListAllUsers := cloudssoListAllUsers
@@ -929,7 +929,7 @@ func TestDoConfigureWithCloudSSOWhenCloudSSOSignInUrlNotEmpty(t *testing.T) {
 	originalStdin := stdin
 
 	defer func() {
-		hookLoadConfiguration = originhook
+		hookLoadOrCreateConfiguration = originhook
 		hookSaveConfiguration = originhookSave
 		cloudssoGetAccessToken = originalGetAccessToken
 		cloudssoListAllUsers = originalListAllUsers
@@ -939,7 +939,7 @@ func TestDoConfigureWithCloudSSOWhenCloudSSOSignInUrlNotEmpty(t *testing.T) {
 	}()
 
 	// Mock 配置加载和保存
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
@@ -1126,7 +1126,7 @@ func TestNewConfigureCommandRun(t *testing.T) {
 			var doConfigureCalled bool
 
 			// Mock loadConfiguration 函数
-			hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+			hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 				return func(path string) (*Configuration, error) {
 					return tc.configuration, tc.loadConfigErr
 				}

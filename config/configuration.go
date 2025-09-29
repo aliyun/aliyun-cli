@@ -91,13 +91,13 @@ func (c *Configuration) PutProfile(profile Profile) {
 	c.Profiles = append(c.Profiles, profile)
 }
 
-func LoadCurrentProfile() (Profile, error) {
+func LoadOrCreateCurrentProfile() (Profile, error) {
 	return LoadProfile(GetConfigPath()+"/"+configFile, "")
 }
 
 func LoadProfile(path string, name string) (Profile, error) {
 	var p Profile
-	config, err := hookLoadConfiguration(LoadConfiguration)(path)
+	config, err := hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(path)
 	if err != nil {
 		return p, fmt.Errorf("init config failed %v", err)
 	}
@@ -153,7 +153,7 @@ func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
 	return
 }
 
-func LoadConfiguration(path string) (conf *Configuration, err error) {
+func LoadOrCreateConfiguration(path string) (conf *Configuration, err error) {
 	_, statErr := os.Stat(path)
 	if os.IsNotExist(statErr) {
 		conf, err = MigrateLegacyConfiguration()
@@ -183,6 +183,17 @@ func LoadConfiguration(path string) (conf *Configuration, err error) {
 	return
 }
 
+func LoadCustomConfiguration(customPath string) (conf *Configuration, err error) {
+	bytes, err := os.ReadFile(customPath)
+	if err != nil {
+		err = fmt.Errorf("reading config from '%s' failed %v", customPath, err)
+		return nil, err
+	}
+
+	conf, err = NewConfigFromBytes(bytes)
+	return
+}
+
 func LoadConfigurationWithContext(ctx *cli.Context) (conf *Configuration, err error) {
 	confPath := hookGetHomePath(GetHomePath)() + configPath + "/" + configFile
 	if customPath, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
@@ -194,20 +205,7 @@ func LoadConfigurationWithContext(ctx *cli.Context) (conf *Configuration, err er
 	}
 	_, statErr := os.Stat(confPath)
 	if os.IsNotExist(statErr) {
-		// legacy config migration check and save without valid config from user or by default
-		conf, err = MigrateLegacyConfiguration()
-		if err != nil {
-			return nil, fmt.Errorf("no valid config file found")
-		}
-
-		if conf != nil {
-			err = SaveConfiguration(conf)
-			if err != nil {
-				err = fmt.Errorf("save legacy config file failed %v", err)
-				return nil, err
-			}
-			return conf, nil
-		}
+		return nil, statErr
 	}
 
 	bytes, err := os.ReadFile(confPath)
@@ -232,7 +230,6 @@ func SaveConfiguration(config *Configuration) (err error) {
 }
 
 func SaveConfigurationWithContext(ctx *cli.Context, config *Configuration) (err error) {
-	// fmt.Printf("conf %v\n", config)
 	bytes, err := json.MarshalIndent(config, "", "\t")
 	if err != nil {
 		return

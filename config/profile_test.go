@@ -607,7 +607,7 @@ func TestGetCredentialWithCloudSSOMockSuccess(t *testing.T) {
 	p.parent = cf
 
 	// hook loadConfiguration
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{CurrentProfile: "default", Profiles: []Profile{
 				{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
@@ -1005,11 +1005,11 @@ echo 'This is not a valid JSON'
 func TestGetCredentialWithOAuthStsExpired(t *testing.T) {
 	// 保存原始函数并在测试后恢复
 	originalSaveConfigurationFunc := saveConfigurationFunc
-	originalHookLoadConfiguration := hookLoadConfiguration
+	originalHookLoadConfiguration := hookLoadOrCreateConfiguration
 	originalExchangeFromOAuthFunc := exchangeFromOAuthFunc
 	defer func() {
 		saveConfigurationFunc = originalSaveConfigurationFunc
-		hookLoadConfiguration = originalHookLoadConfiguration
+		hookLoadOrCreateConfiguration = originalHookLoadConfiguration
 		exchangeFromOAuthFunc = originalExchangeFromOAuthFunc
 	}()
 
@@ -1019,7 +1019,7 @@ func TestGetCredentialWithOAuthStsExpired(t *testing.T) {
 	}
 
 	// Mock hookLoadConfiguration函数
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "oauth-test",
@@ -1121,11 +1121,11 @@ func TestGetCredentialWithOAuthStsNotExpired(t *testing.T) {
 func TestGetCredentialWithOAuthRefreshError(t *testing.T) {
 	// 保存原始函数并在测试后恢复
 	originalSaveConfigurationFunc := saveConfigurationFunc
-	originalHookLoadConfiguration := hookLoadConfiguration
+	originalHookLoadConfiguration := hookLoadOrCreateConfiguration
 	originalExchangeFromOAuthFunc := exchangeFromOAuthFunc
 	defer func() {
 		saveConfigurationFunc = originalSaveConfigurationFunc
-		hookLoadConfiguration = originalHookLoadConfiguration
+		hookLoadOrCreateConfiguration = originalHookLoadConfiguration
 		exchangeFromOAuthFunc = originalExchangeFromOAuthFunc
 	}()
 
@@ -1135,7 +1135,7 @@ func TestGetCredentialWithOAuthRefreshError(t *testing.T) {
 	}
 
 	// Mock hookLoadConfiguration函数
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "oauth-test",
@@ -1214,11 +1214,11 @@ func TestGetCredentialWithOAuthInvalidSiteType(t *testing.T) {
 func TestGetCredentialWithOAuthMissingCredentials(t *testing.T) {
 	// 保存原始函数并在测试后恢复
 	originalSaveConfigurationFunc := saveConfigurationFunc
-	originalHookLoadConfiguration := hookLoadConfiguration
+	originalHookLoadConfiguration := hookLoadOrCreateConfiguration
 	originalExchangeFromOAuthFunc := exchangeFromOAuthFunc
 	defer func() {
 		saveConfigurationFunc = originalSaveConfigurationFunc
-		hookLoadConfiguration = originalHookLoadConfiguration
+		hookLoadOrCreateConfiguration = originalHookLoadConfiguration
 		exchangeFromOAuthFunc = originalExchangeFromOAuthFunc
 	}()
 
@@ -1228,7 +1228,7 @@ func TestGetCredentialWithOAuthMissingCredentials(t *testing.T) {
 	}
 
 	// Mock hookLoadConfiguration函数
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "oauth-test",
