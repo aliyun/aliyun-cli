@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -227,17 +228,18 @@ func SaveConfigurationWithContext(ctx *cli.Context, config *Configuration) (err 
 	if err != nil {
 		return
 	}
-	confPath := hookGetHomePath(GetHomePath)() + configPath + "/" + configFile
+	confFilePath := hookGetHomePath(GetHomePath)() + configPath + "/" + configFile
 	if customPath, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
-		confPath = customPath
+		confFilePath = customPath
 	}
-	if _, err := os.Stat(confPath); os.IsNotExist(err) {
-		err = os.MkdirAll(confPath, 0755)
-		if err != nil {
-			panic(err)
+
+	dir := filepath.Dir(confFilePath)
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			panic(fmt.Errorf("failed to create config directory %q: %w", dir, err))
 		}
 	}
-	err = os.WriteFile(confPath, bytes, 0600)
+	err = os.WriteFile(confFilePath, bytes, 0600)
 	return
 }
 
