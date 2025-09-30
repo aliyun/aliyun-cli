@@ -23,7 +23,7 @@ import (
 func NewConfigureSwitchCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "switch",
-		Usage: "switch [--profile <profileName>] [--config-path <configPath>]",
+		Usage: "switch --profile <profileName> [--config-path <configPath>]",
 		Short: i18n.T("switch default profile", "切换默认配置"),
 		Run: func(c *cli.Context, args []string) error {
 			return doConfigureSwitch(c)

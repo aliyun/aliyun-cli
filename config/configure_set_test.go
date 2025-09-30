@@ -42,7 +42,7 @@ func TestDoConfigureSet(t *testing.T) {
 	}
 	err := doConfigureSet(ctx)
 	assert.NotNil(t, err)
-	assert.Equal(t, "load configuration failed error", err.Error())
+	assert.Equal(t, "fail to set configuration: region can't be empty", err.Error())
 
 	//testcase2
 	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {

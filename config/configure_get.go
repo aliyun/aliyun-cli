@@ -39,7 +39,7 @@ func NewConfigureGetCommand() *cli.Command {
 func doConfigureGet(c *cli.Context, args []string) error {
 	config, err := hookLoadConfigurationWithContext(LoadConfigurationWithContext)(c)
 	if err != nil {
-		return fmt.Errorf("load configuration failed %v", err)
+		return fmt.Errorf("load configuration failed. Run `aliyun configure` to set up")
 	}
 
 	profile := config.GetCurrentProfile(c)

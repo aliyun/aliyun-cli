@@ -44,7 +44,7 @@ func TestDoConfigureGet(t *testing.T) {
 	os.Setenv("ACCESS_KEY_ID", "")
 	os.Setenv("ACCESS_KEY_SECRET", "")
 	err := doConfigureGet(ctx, []string{})
-	assert.Equal(t, "load configuration failed error", err.Error())
+	assert.Equal(t, "load configuration failed. Run `aliyun configure` to set up", err.Error())
 
 	//testcase 2
 	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {

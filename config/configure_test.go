@@ -32,9 +32,11 @@ import (
 
 func TestNewConfigureCommand(t *testing.T) {
 	originhook := hookLoadOrCreateConfiguration
+	originhookLoad := hookLoadConfigurationWithContext
 	originhookSave := hookSaveConfigurationWithContext
 	defer func() {
 		hookLoadOrCreateConfiguration = originhook
+		hookLoadConfigurationWithContext = originhookLoad
 		hookSaveConfigurationWithContext = originhookSave
 	}()
 	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
@@ -77,15 +79,22 @@ func TestNewConfigureCommand(t *testing.T) {
 
 	// testcase
 	err := configureGet.Run(ctx, []string{"get"})
-	assert.Nil(t, err)
-	assert.Equal(t, "\n", w.String())
+	assert.NotNil(t, err)
+	assert.Equal(t, "load configuration failed. Run `aliyun configure` to set up", err.Error())
 
 	// testcase
 	w.Reset()
 	err = configureSet.Run(ctx, []string{"set"})
-	assert.Nil(t, err)
-	assert.Equal(t, "\x1b[1;31mfail to set configuration: region can't be empty\x1b[0m", w.String())
+	assert.NotNil(t, err)
+	assert.Equal(t, "fail to set configuration: region can't be empty", err.Error())
 
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
+			return &Configuration{CurrentProfile: "default", Profiles: []Profile{
+				{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"},
+				{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+		}
+	}
 	// testcase
 	w.Reset()
 	err = configureList.Run(ctx, []string{"list"})
@@ -96,8 +105,9 @@ func TestNewConfigureCommand(t *testing.T) {
 	w.Reset()
 	stderr.Reset()
 	err = configureDelete.Run(ctx, []string{"delete"})
-	assert.Nil(t, err)
-	assert.Equal(t, "\x1b[1;31mmissing --profile <profileName>\n\x1b[0m\x1b[1;33m\nusage:\n  aliyun configure delete --profile <profileName>\n\x1b[0m", stderr.String())
+	assert.NotNil(t, err)
+	assert.Equal(t, "\x1b[1;33m\nusage:\n  aliyun configure delete --profile <profileName> [--config-path <configPath>]\n\x1b[0m", stderr.String())
+	assert.Equal(t, "missing --profile <profileName>", err.Error())
 
 	w.Reset()
 	stderr.Reset()

@@ -38,7 +38,7 @@ func NewConfigureSetCommand() *cli.Command {
 }
 
 func doConfigureSet(ctx *cli.Context) error {
-	config, err := hookLoadConfigurationWithContext(LoadConfigurationWithContext)(ctx)
+	config, err := loadOrCreateConfiguration()
 	if err != nil {
 		return fmt.Errorf("load configuration failed %v", err)
 	}
