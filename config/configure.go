@@ -140,7 +140,7 @@ func NewConfigureCommand() *cli.Command {
 				var conf *Configuration
 				if customPath, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
 					if _, err := hookFileStat(os.Stat)(customPath); !os.IsNotExist(err) {
-						conf, _ = LoadCustomConfiguration(customPath)
+						conf, _ = LoadConfigurationFromFile(customPath)
 						if err != nil {
 							return err
 						}
@@ -181,7 +181,7 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 	var conf *Configuration
 	if customPath, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
 		if _, err := hookFileStat(os.Stat)(customPath); !os.IsNotExist(err) {
-			conf, err = LoadCustomConfiguration(customPath)
+			conf, err = LoadConfigurationFromFile(customPath)
 			if err != nil {
 				return err
 			}

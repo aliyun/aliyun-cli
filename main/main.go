@@ -36,7 +36,7 @@ func Main(args []string) {
 	stderr := cli.DefaultStderrWriter()
 
 	// load current configuration
-	profile, err := config.LoadOrCreateCurrentProfile()
+	profile, err := config.LoadOrCreateDefaultProfile()
 	if err != nil {
 		cli.Errorf(stderr, "ERROR: load current configuration failed %s", err)
 		return

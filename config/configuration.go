@@ -91,7 +91,7 @@ func (c *Configuration) PutProfile(profile Profile) {
 	c.Profiles = append(c.Profiles, profile)
 }
 
-func LoadOrCreateCurrentProfile() (Profile, error) {
+func LoadOrCreateDefaultProfile() (Profile, error) {
 	return LoadProfile(GetConfigPath()+"/"+configFile, "")
 }
 
@@ -183,10 +183,10 @@ func LoadOrCreateConfiguration(path string) (conf *Configuration, err error) {
 	return
 }
 
-func LoadCustomConfiguration(customPath string) (conf *Configuration, err error) {
-	bytes, err := os.ReadFile(customPath)
+func LoadConfigurationFromFile(filePath string) (conf *Configuration, err error) {
+	bytes, err := os.ReadFile(filePath)
 	if err != nil {
-		err = fmt.Errorf("reading config from '%s' failed %v", customPath, err)
+		err = fmt.Errorf("reading config from '%s' failed %v", filePath, err)
 		return nil, err
 	}
 
@@ -208,14 +208,7 @@ func LoadConfigurationWithContext(ctx *cli.Context) (conf *Configuration, err er
 		return nil, statErr
 	}
 
-	bytes, err := os.ReadFile(confPath)
-	if err != nil {
-		err = fmt.Errorf("reading config from '%s' failed %v", confPath, err)
-		return nil, err
-	}
-
-	conf, err = NewConfigFromBytes(bytes)
-	return conf, err
+	return LoadConfigurationFromFile(confPath)
 }
 
 func SaveConfiguration(config *Configuration) (err error) {

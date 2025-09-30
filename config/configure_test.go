@@ -420,7 +420,7 @@ func TestConfigureCloudSSOWithMock(t *testing.T) {
 
 func TestDoConfigureWithCloudSSO(t *testing.T) {
 	originhook := hookLoadOrCreateConfiguration
-	originhookSave := hookSaveConfiguration
+	originhookSave := hookSaveConfigurationWithContext
 	originalGetAccessToken := cloudssoGetAccessToken
 	originalListAllUsers := cloudssoListAllUsers
 	originalListAllAccessConfigurations := cloudssoListAllAccessConfigurations
@@ -429,7 +429,7 @@ func TestDoConfigureWithCloudSSO(t *testing.T) {
 
 	defer func() {
 		hookLoadOrCreateConfiguration = originhook
-		hookSaveConfiguration = originhookSave
+		hookSaveConfigurationWithContext = originhookSave
 		cloudssoGetAccessToken = originalGetAccessToken
 		cloudssoListAllUsers = originalListAllUsers
 		cloudssoListAllAccessConfigurations = originalListAllAccessConfigurations
@@ -454,8 +454,8 @@ func TestDoConfigureWithCloudSSO(t *testing.T) {
 		}
 	}
 
-	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
-		return func(config *Configuration) error {
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
 			return nil
 		}
 	}
@@ -516,7 +516,7 @@ func TestDoConfigureWithCloudSSO(t *testing.T) {
 
 func TestDoConfigureWithCloudSSOWhenSpecifyAccountNotExist(t *testing.T) {
 	originhook := hookLoadOrCreateConfiguration
-	originhookSave := hookSaveConfiguration
+	originhookSave := hookSaveConfigurationWithContext
 	originalGetAccessToken := cloudssoGetAccessToken
 	originalListAllUsers := cloudssoListAllUsers
 	originalListAllAccessConfigurations := cloudssoListAllAccessConfigurations
@@ -525,7 +525,7 @@ func TestDoConfigureWithCloudSSOWhenSpecifyAccountNotExist(t *testing.T) {
 
 	defer func() {
 		hookLoadOrCreateConfiguration = originhook
-		hookSaveConfiguration = originhookSave
+		hookSaveConfigurationWithContext = originhookSave
 		cloudssoGetAccessToken = originalGetAccessToken
 		cloudssoListAllUsers = originalListAllUsers
 		cloudssoListAllAccessConfigurations = originalListAllAccessConfigurations
@@ -550,8 +550,8 @@ func TestDoConfigureWithCloudSSOWhenSpecifyAccountNotExist(t *testing.T) {
 		}
 	}
 
-	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
-		return func(config *Configuration) error {
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
 			return nil
 		}
 	}
@@ -617,7 +617,7 @@ func TestDoConfigureWithCloudSSOWhenSpecifyAccountNotExist(t *testing.T) {
 // 返回多个账户的测试用例，需要主动输入一个数字选择
 func TestDoConfigureWithCloudSSOReturnMultiAccount(t *testing.T) {
 	originhook := hookLoadOrCreateConfiguration
-	originhookSave := hookSaveConfiguration
+	originhookSave := hookSaveConfigurationWithContext
 	originalGetAccessToken := cloudssoGetAccessToken
 	originalListAllUsers := cloudssoListAllUsers
 	originalListAllAccessConfigurations := cloudssoListAllAccessConfigurations
@@ -626,7 +626,7 @@ func TestDoConfigureWithCloudSSOReturnMultiAccount(t *testing.T) {
 
 	defer func() {
 		hookLoadOrCreateConfiguration = originhook
-		hookSaveConfiguration = originhookSave
+		hookSaveConfigurationWithContext = originhookSave
 		cloudssoGetAccessToken = originalGetAccessToken
 		cloudssoListAllUsers = originalListAllUsers
 		cloudssoListAllAccessConfigurations = originalListAllAccessConfigurations
@@ -651,8 +651,8 @@ func TestDoConfigureWithCloudSSOReturnMultiAccount(t *testing.T) {
 		}
 	}
 
-	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
-		return func(config *Configuration) error {
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
 			return nil
 		}
 	}
@@ -717,7 +717,7 @@ func TestDoConfigureWithCloudSSOReturnMultiAccount(t *testing.T) {
 // 通过 flag 指定accessConfigId，不存在的情况
 func TestDoConfigureWithCloudSSOWhenSpecifyAccessConfigNotExist(t *testing.T) {
 	originhook := hookLoadOrCreateConfiguration
-	originhookSave := hookSaveConfiguration
+	originhookSave := hookSaveConfigurationWithContext
 	originalGetAccessToken := cloudssoGetAccessToken
 	originalListAllUsers := cloudssoListAllUsers
 	originalListAllAccessConfigurations := cloudssoListAllAccessConfigurations
@@ -726,7 +726,7 @@ func TestDoConfigureWithCloudSSOWhenSpecifyAccessConfigNotExist(t *testing.T) {
 
 	defer func() {
 		hookLoadOrCreateConfiguration = originhook
-		hookSaveConfiguration = originhookSave
+		hookSaveConfigurationWithContext = originhookSave
 		cloudssoGetAccessToken = originalGetAccessToken
 		cloudssoListAllUsers = originalListAllUsers
 		cloudssoListAllAccessConfigurations = originalListAllAccessConfigurations
@@ -751,8 +751,8 @@ func TestDoConfigureWithCloudSSOWhenSpecifyAccessConfigNotExist(t *testing.T) {
 		}
 	}
 
-	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
-		return func(config *Configuration) error {
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
 			return nil
 		}
 	}
@@ -819,7 +819,7 @@ func TestDoConfigureWithCloudSSOWhenSpecifyAccessConfigNotExist(t *testing.T) {
 // 返回多个 access config的测试用例，需要主动输入一个数字选择
 func TestDoConfigureWithCloudSSOWithMultiAccessConfig(t *testing.T) {
 	originhook := hookLoadOrCreateConfiguration
-	originhookSave := hookSaveConfiguration
+	originhookSave := hookSaveConfigurationWithContext
 	originalGetAccessToken := cloudssoGetAccessToken
 	originalListAllUsers := cloudssoListAllUsers
 	originalListAllAccessConfigurations := cloudssoListAllAccessConfigurations
@@ -828,7 +828,7 @@ func TestDoConfigureWithCloudSSOWithMultiAccessConfig(t *testing.T) {
 
 	defer func() {
 		hookLoadOrCreateConfiguration = originhook
-		hookSaveConfiguration = originhookSave
+		hookSaveConfigurationWithContext = originhookSave
 		cloudssoGetAccessToken = originalGetAccessToken
 		cloudssoListAllUsers = originalListAllUsers
 		cloudssoListAllAccessConfigurations = originalListAllAccessConfigurations
@@ -853,8 +853,8 @@ func TestDoConfigureWithCloudSSOWithMultiAccessConfig(t *testing.T) {
 		}
 	}
 
-	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
-		return func(config *Configuration) error {
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
 			return nil
 		}
 	}
@@ -921,7 +921,7 @@ func TestDoConfigureWithCloudSSOWithMultiAccessConfig(t *testing.T) {
 // 原始的CloudSSOSignInUrl不为空，新输入为空
 func TestDoConfigureWithCloudSSOWhenCloudSSOSignInUrlNotEmpty(t *testing.T) {
 	originhook := hookLoadOrCreateConfiguration
-	originhookSave := hookSaveConfiguration
+	originhookSave := hookSaveConfigurationWithContext
 	originalGetAccessToken := cloudssoGetAccessToken
 	originalListAllUsers := cloudssoListAllUsers
 	originalListAllAccessConfigurations := cloudssoListAllAccessConfigurations
@@ -930,7 +930,7 @@ func TestDoConfigureWithCloudSSOWhenCloudSSOSignInUrlNotEmpty(t *testing.T) {
 
 	defer func() {
 		hookLoadOrCreateConfiguration = originhook
-		hookSaveConfiguration = originhookSave
+		hookSaveConfigurationWithContext = originhookSave
 		cloudssoGetAccessToken = originalGetAccessToken
 		cloudssoListAllUsers = originalListAllUsers
 		cloudssoListAllAccessConfigurations = originalListAllAccessConfigurations
@@ -955,8 +955,8 @@ func TestDoConfigureWithCloudSSOWhenCloudSSOSignInUrlNotEmpty(t *testing.T) {
 		}
 	}
 
-	hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
-		return func(config *Configuration) error {
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
 			return nil
 		}
 	}

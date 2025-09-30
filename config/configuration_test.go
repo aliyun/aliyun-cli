@@ -129,7 +129,7 @@ func TestLoadProfile(t *testing.T) {
 
 	//LoadCurrentProfile testcase
 	w.Reset()
-	p, err = LoadOrCreateCurrentProfile()
+	p, err = LoadOrCreateDefaultProfile()
 	assert.Nil(t, err)
 	p.parent = nil
 	assert.Equal(t, Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, p)
