@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -91,13 +92,13 @@ func (c *Configuration) PutProfile(profile Profile) {
 	c.Profiles = append(c.Profiles, profile)
 }
 
-func LoadCurrentProfile() (Profile, error) {
+func LoadOrCreateDefaultProfile() (Profile, error) {
 	return LoadProfile(GetConfigPath()+"/"+configFile, "")
 }
 
 func LoadProfile(path string, name string) (Profile, error) {
 	var p Profile
-	config, err := hookLoadConfiguration(LoadConfiguration)(path)
+	config, err := hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(path)
 	if err != nil {
 		return p, fmt.Errorf("init config failed %v", err)
 	}
@@ -153,7 +154,7 @@ func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
 	return
 }
 
-func LoadConfiguration(path string) (conf *Configuration, err error) {
+func LoadOrCreateConfiguration(path string) (conf *Configuration, err error) {
 	_, statErr := os.Stat(path)
 	if os.IsNotExist(statErr) {
 		conf, err = MigrateLegacyConfiguration()
@@ -183,6 +184,34 @@ func LoadConfiguration(path string) (conf *Configuration, err error) {
 	return
 }
 
+func LoadConfigurationFromFile(filePath string) (conf *Configuration, err error) {
+	bytes, err := os.ReadFile(filePath)
+	if err != nil {
+		err = fmt.Errorf("reading config from '%s' failed %v", filePath, err)
+		return nil, err
+	}
+
+	conf, err = NewConfigFromBytes(bytes)
+	return
+}
+
+func LoadConfigurationWithContext(ctx *cli.Context) (conf *Configuration, err error) {
+	confPath := hookGetHomePath(GetHomePath)() + configPath + "/" + configFile
+	if customPath, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
+		if _, err := hookFileStat(os.Stat)(customPath); os.IsNotExist(err) {
+			// invalid config path from user input should be blocked
+			return nil, fmt.Errorf("config path input does not exist: %s", customPath)
+		}
+		confPath = customPath
+	}
+	_, statErr := os.Stat(confPath)
+	if os.IsNotExist(statErr) {
+		return nil, statErr
+	}
+
+	return LoadConfigurationFromFile(confPath)
+}
+
 func SaveConfiguration(config *Configuration) (err error) {
 	// fmt.Printf("conf %v\n", config)
 	bytes, err := json.MarshalIndent(config, "", "\t")
@@ -191,6 +220,26 @@ func SaveConfiguration(config *Configuration) (err error) {
 	}
 	path := GetConfigPath() + "/" + configFile
 	err = os.WriteFile(path, bytes, 0600)
+	return
+}
+
+func SaveConfigurationWithContext(ctx *cli.Context, config *Configuration) (err error) {
+	bytes, err := json.MarshalIndent(config, "", "\t")
+	if err != nil {
+		return
+	}
+	confFilePath := hookGetHomePath(GetHomePath)() + configPath + "/" + configFile
+	if customPath, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
+		confFilePath = customPath
+	}
+
+	dir := filepath.Dir(confFilePath)
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			panic(fmt.Errorf("failed to create config directory %q: %w", dir, err))
+		}
+	}
+	err = os.WriteFile(confFilePath, bytes, 0600)
 	return
 }
 

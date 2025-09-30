@@ -16,21 +16,26 @@ package config
 import (
 	"bytes"
 	"errors"
+	"os"
 	"testing"
 
+	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestDoConfigureList(t *testing.T) {
 	w := new(bytes.Buffer)
-	originhook := hookLoadConfiguration
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	AddFlags(ctx.Flags())
+	originhook := hookLoadConfigurationWithContext
 	defer func() {
-		hookLoadConfiguration = originhook
+		hookLoadConfigurationWithContext = originhook
 	}()
 
 	//testcase 1
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{
 				CurrentProfile: "default",
 				Profiles: []Profile{
@@ -96,7 +101,8 @@ func TestDoConfigureList(t *testing.T) {
 			}, nil
 		}
 	}
-	doConfigureList(w)
+	err := doConfigureList(ctx)
+	assert.Nil(t, err)
 	assert.Equal(t, "Profile   | Credential             | Valid   | Region           | Language\n"+
 		"--------- | ------------------     | ------- | ---------------- | --------\n"+
 		"default * | AK:***_id              | Invalid |                  | \n"+
@@ -108,12 +114,107 @@ func TestDoConfigureList(t *testing.T) {
 		"eee       | CloudSSO:a@b           | Invalid |                  | \n", w.String())
 
 	//testcase 2
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-		return func(path string) (*Configuration, error) {
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
 			return &Configuration{}, errors.New("error")
 		}
 	}
 	w.Reset()
-	doConfigureList(w)
-	assert.Equal(t, "\x1b[1;31mERROR: load configure failed: error\n\x1b[0mProfile   | Credential         | Valid   | Region           | Language\n--------- | ------------------ | ------- | ---------------- | --------\n", w.String())
+	stderr.Reset()
+	err = doConfigureList(ctx)
+	assert.NotNil(t, err)
+	assert.Equal(t, "load configure failed: error", err.Error())
+	assert.Equal(t, "", w.String())      // No output on error
+	assert.Equal(t, "", stderr.String()) // No stderr output since error is returned
+}
+
+func TestDoConfigureListWithConfigPath(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
+	originhook := hookLoadConfigurationWithContext
+	originhookFileStat := hookFileStat
+	defer func() {
+		hookLoadConfigurationWithContext = originhook
+		hookFileStat = originhookFileStat
+	}()
+
+	hookFileStat = func(fn func(name string) (os.FileInfo, error)) func(name string) (os.FileInfo, error) {
+		return func(name string) (os.FileInfo, error) {
+			if name == "/custom/config/path.json" {
+				return nil, nil
+			}
+			return fn(name)
+		}
+	}
+
+	//testcase 1
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
+			// Verify that the custom config path is being used
+			if configPath, _ := ctx.Flags().Get("config-path").GetValue(); configPath == "/custom/config/path.json" {
+				return &Configuration{
+					CurrentProfile: "custom1",
+					Profiles: []Profile{
+						{
+							Name:            "custom1",
+							Mode:            AK,
+							AccessKeyId:     "custom_access_key_id1",
+							AccessKeySecret: "custom_access_key_secret1",
+							OutputFormat:    "json",
+							RegionId:        "cn-hangzhou",
+						},
+						{
+							Name:            "custom2",
+							Mode:            AK,
+							AccessKeyId:     "custom_access_key_id2",
+							AccessKeySecret: "custom_access_key_secret2",
+							OutputFormat:    "json",
+							RegionId:        "cn-beijing",
+						},
+					},
+				}, nil
+			}
+			return &Configuration{}, errors.New("unexpected config path")
+		}
+	}
+	// Set custom config-path flag
+	ctx.Flags().Get("config-path").SetAssigned(true)
+	ctx.Flags().Get("config-path").SetValue("/custom/config/path.json")
+	err := doConfigureList(ctx)
+	assert.Nil(t, err)
+	assert.Equal(t,
+		"Profile   | Credential         | Valid   | Region           | Language\n"+
+			"--------- | ------------------ | ------- | ---------------- | --------\n"+
+			"custom1 * | AK:***id1          | Valid   | cn-hangzhou      | \n"+
+			"custom2   | AK:***id2          | Valid   | cn-beijing       | \n", stdout.String())
+	assert.Equal(t, "", stderr.String())
+
+	//testcase 2: error case - config file does not exist
+	stdout.Reset()
+	stderr.Reset()
+	// Mock file existence check to simulate file not found
+	hookFileStat = func(fn func(name string) (os.FileInfo, error)) func(name string) (os.FileInfo, error) {
+		return func(name string) (os.FileInfo, error) {
+			if name == "/non/existent/path.json" {
+				return nil, os.ErrNotExist
+			}
+			return fn(name) // Call original function for other paths
+		}
+	}
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
+			return fn(ctx)
+		}
+	}
+	// Set a non-existent config path
+	ctx.Flags().Get("config-path").SetAssigned(true)
+	ctx.Flags().Get("config-path").SetValue("/non/existent/path.json")
+	err = doConfigureList(ctx)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "config path input does not exist: /non/existent/path.json")
+	assert.Equal(t, "", stdout.String()) // No output on error
+	assert.Equal(t, "", stderr.String()) // No stderr output since error is returned
+
 }

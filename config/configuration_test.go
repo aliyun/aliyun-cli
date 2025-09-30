@@ -107,12 +107,12 @@ func TestConfiguration(t *testing.T) {
 }
 
 func TestLoadProfile(t *testing.T) {
-	originhook := hookLoadConfiguration
+	originhook := hookLoadOrCreateConfiguration
 	w := new(bytes.Buffer)
 	defer func() {
-		hookLoadConfiguration = originhook
+		hookLoadOrCreateConfiguration = originhook
 	}()
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{CurrentProfile: "default", Profiles: []Profile{{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, {Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}
@@ -129,13 +129,13 @@ func TestLoadProfile(t *testing.T) {
 
 	//LoadCurrentProfile testcase
 	w.Reset()
-	p, err = LoadCurrentProfile()
+	p, err = LoadOrCreateDefaultProfile()
 	assert.Nil(t, err)
 	p.parent = nil
 	assert.Equal(t, Profile{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, p)
 
 	//testcase 3
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{}, errors.New("error")
 		}
@@ -225,7 +225,7 @@ func TestSaveConfiguration(t *testing.T) {
 	assert.Equal(t, string(bytes), string(buf[:n]))
 }
 
-func TestLoadConfiguration(t *testing.T) {
+func TestLoadOrCreateConfiguration(t *testing.T) {
 	orighookGetHomePath := hookGetHomePath
 	defer func() {
 		os.RemoveAll("./.aliyun")
@@ -239,7 +239,7 @@ func TestLoadConfiguration(t *testing.T) {
 	w := new(bytes.Buffer)
 
 	//testcase 1
-	cf, err := LoadConfiguration(GetConfigPath() + "/" + configFile)
+	cf, err := LoadOrCreateConfiguration(GetConfigPath() + "/" + configFile)
 	assert.Nil(t, err)
 	assert.Equal(t, &Configuration{CurrentProfile: "default", Profiles: []Profile{{Name: "default", Mode: "", OutputFormat: "json", Language: "en"}}}, cf)
 	conf := &Configuration{Profiles: []Profile{{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}}}
@@ -248,18 +248,18 @@ func TestLoadConfiguration(t *testing.T) {
 
 	//testcase 2
 	w.Reset()
-	cf, err = LoadConfiguration(GetConfigPath() + "/" + configFile)
+	cf, err = LoadOrCreateConfiguration(GetConfigPath() + "/" + configFile)
 	assert.Equal(t, &Configuration{CurrentProfile: "", Profiles: []Profile{{Name: "default", Mode: "AK", AccessKeyId: "access_key_id", AccessKeySecret: "access_key_secret", RegionId: "cn-hangzhou", OutputFormat: "json", Language: "en"}}}, cf)
 	assert.Nil(t, err)
 
 }
 
 func TestLoadProfileWithContext(t *testing.T) {
-	originhook := hookLoadConfiguration
+	originhook := hookLoadOrCreateConfiguration
 	defer func() {
-		hookLoadConfiguration = originhook
+		hookLoadOrCreateConfiguration = originhook
 	}()
-	hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 		return func(path string) (*Configuration, error) {
 			return &Configuration{CurrentProfile: "default", Profiles: []Profile{{Name: "default", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json"}, {Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
 		}

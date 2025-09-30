@@ -16,6 +16,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -28,20 +29,17 @@ func NewConfigureGetCommand() *cli.Command {
 		Short: i18n.T(
 			"print configuration values",
 			"打印配置信息"),
-		Usage: "get [profile] [language] ...",
+		Usage: "get [profile] [language] [--config-path <configPath>]...",
 		Run: func(c *cli.Context, args []string) error {
-			doConfigureGet(c, args)
-			return nil
+			return doConfigureGet(c, args)
 		},
 	}
 }
 
-func doConfigureGet(c *cli.Context, args []string) {
-	config, err := loadConfiguration()
+func doConfigureGet(c *cli.Context, args []string) error {
+	config, err := hookLoadConfigurationWithContext(LoadConfigurationWithContext)(c)
 	if err != nil {
-		cli.Errorf(c.Stderr(), "load configuration failed %s", err)
-		cli.Printf(c.Stderr(), "\n")
-		return
+		return fmt.Errorf("load configuration failed. Run `aliyun configure` to set up")
 	}
 
 	profile := config.GetCurrentProfile(c)
@@ -49,22 +47,18 @@ func doConfigureGet(c *cli.Context, args []string) {
 	if pn, ok := ProfileFlag(c.Flags()).GetValue(); ok {
 		profile, ok = config.GetProfile(pn)
 		if !ok {
-			cli.Errorf(c.Stderr(), "profile %s not found!", pn)
-			cli.Printf(c.Stderr(), "\n")
-			return
+			return fmt.Errorf("profile %s not found", pn)
 		}
 	}
 
 	if len(args) == 0 && !reflect.DeepEqual(profile, Profile{}) {
 		data, err := json.MarshalIndent(profile, "", "\t")
 		if err != nil {
-			cli.Printf(c.Stderr(), "ERROR:"+err.Error())
-			cli.Printf(c.Stderr(), "\n")
-			return
+			return fmt.Errorf("ERROR:" + err.Error())
 		}
 		cli.Println(c.Stdout(), string(data))
 		cli.Printf(c.Stdout(), "\n")
-		return
+		return nil
 	}
 
 	for _, arg := range args {
@@ -109,4 +103,5 @@ func doConfigureGet(c *cli.Context, args []string) {
 	}
 
 	cli.Printf(c.Stdout(), "\n")
+	return nil
 }

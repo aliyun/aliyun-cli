@@ -53,11 +53,19 @@ var signInMap = map[string]string{
 	"INTL": "https://signin.alibabacloud.com",
 }
 
-var hookLoadConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+var hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
 	return fn
 }
 
-var hookSaveConfiguration = func(fn func(config *Configuration) error) func(config *Configuration) error {
+var hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+	return fn
+}
+
+var hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+	return fn
+}
+
+var hookFileStat = func(fn func(name string) (os.FileInfo, error)) func(name string) (os.FileInfo, error) {
 	return fn
 }
 
@@ -110,8 +118,8 @@ var doConfigureProxy = func(ctx *cli.Context, profileName string, mode string) e
 	return doConfigure(ctx, profileName, mode)
 }
 
-func loadConfiguration() (*Configuration, error) {
-	return hookLoadConfiguration(LoadConfiguration)(GetConfigPath() + "/" + configFile)
+func loadOrCreateConfiguration() (*Configuration, error) {
+	return hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(GetConfigPath() + "/" + configFile)
 }
 
 func NewConfigureCommand() *cli.Command {
@@ -120,7 +128,7 @@ func NewConfigureCommand() *cli.Command {
 		Short: i18n.T(
 			"configure credential and settings",
 			"配置身份认证和其他信息"),
-		Usage: "configure --mode {AK|RamRoleArn|EcsRamRole|OIDC|External|CredentialsURI|ChainableRamRoleArn|CloudSSO|OAuth} --profile <profileName>",
+		Usage: "configure --mode {AK|RamRoleArn|EcsRamRole|OIDC|External|CredentialsURI|ChainableRamRoleArn|CloudSSO|OAuth} --profile <profileName> [--config-path <configPath>]",
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
@@ -128,8 +136,20 @@ func NewConfigureCommand() *cli.Command {
 			profileName, _ := ProfileFlag(ctx.Flags()).GetValue()
 			mode, _ := ModeFlag(ctx.Flags()).GetValue()
 			if mode == "" {
+				var err error
+				var conf *Configuration
+				if customPath, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
+					if _, err := hookFileStat(os.Stat)(customPath); !os.IsNotExist(err) {
+						conf, _ = LoadConfigurationFromFile(customPath)
+						if err != nil {
+							return err
+						}
+					}
+				}
+				if conf == nil {
+					conf, err = loadOrCreateConfiguration()
+				}
 				// 检查 profileName 是否存在
-				conf, err := loadConfiguration()
 				if err == nil {
 					if profileName == "" {
 						profileName = conf.CurrentProfile
@@ -157,7 +177,19 @@ func NewConfigureCommand() *cli.Command {
 func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 	w := ctx.Stdout()
 
-	conf, err := loadConfiguration()
+	var err error
+	var conf *Configuration
+	if customPath, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
+		if _, err := hookFileStat(os.Stat)(customPath); !os.IsNotExist(err) {
+			conf, err = LoadConfigurationFromFile(customPath)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if conf == nil {
+		conf, err = loadOrCreateConfiguration()
+	}
 	if err != nil {
 		return err
 	}
@@ -277,7 +309,7 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 
 	conf.PutProfile(cp)
 	conf.CurrentProfile = cp.Name
-	err = hookSaveConfiguration(SaveConfiguration)(conf)
+	err = hookSaveConfigurationWithContext(SaveConfigurationWithContext)(ctx, conf)
 	// cp 要在下文的 DoHello 中使用，所以 需要建立 parent 的关系
 	cp.parent = conf
 

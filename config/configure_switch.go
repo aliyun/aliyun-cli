@@ -15,7 +15,6 @@ package config
 
 import (
 	"fmt"
-	"io"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -24,10 +23,10 @@ import (
 func NewConfigureSwitchCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "switch",
-		Usage: "switch [--profile <profileName>]",
+		Usage: "switch --profile <profileName> [--config-path <configPath>]",
 		Short: i18n.T("switch default profile", "切换默认配置"),
 		Run: func(c *cli.Context, args []string) error {
-			return doConfigureSwitch(c.Stdout(), c.Flags())
+			return doConfigureSwitch(c)
 		},
 	}
 
@@ -35,13 +34,13 @@ func NewConfigureSwitchCommand() *cli.Command {
 	return cmd
 }
 
-func doConfigureSwitch(stdout io.Writer, flags *cli.FlagSet) error {
-	config, err := loadConfiguration()
+func doConfigureSwitch(ctx *cli.Context) error {
+	config, err := hookLoadConfigurationWithContext(LoadConfigurationWithContext)(ctx)
 	if err != nil {
-		return fmt.Errorf("load configuration failed: %s", err)
+		return fmt.Errorf("load configuration failed %v", err)
 	}
 
-	profileName, ok := ProfileFlag(flags).GetValue()
+	profileName, ok := ProfileFlag(ctx.Flags()).GetValue()
 	if !ok {
 		return fmt.Errorf("the --profile <profileName> is required")
 	}
@@ -52,11 +51,11 @@ func doConfigureSwitch(stdout io.Writer, flags *cli.FlagSet) error {
 	}
 
 	config.CurrentProfile = profileName
-	err = hookSaveConfiguration(SaveConfiguration)(config)
+	err = hookSaveConfigurationWithContext(SaveConfigurationWithContext)(ctx, config)
 	if err != nil {
 		return fmt.Errorf("save configuration failed: %s", err)
 	}
 
-	cli.Println(stdout, fmt.Sprintf("The default profile is `%s` now.", profileName))
+	cli.Println(ctx.Stdout(), fmt.Sprintf("The default profile is `%s` now.", profileName))
 	return nil
 }
