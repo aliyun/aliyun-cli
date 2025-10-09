@@ -28,6 +28,7 @@ import (
 	slsgateway "github.com/alibabacloud-go/alibabacloud-gateway-sls/client"
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
+	openapiTeaUtils "github.com/alibabacloud-go/tea-utils/v2/service"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -97,15 +98,7 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	if product.Code == "Sls" {
 		conf.Endpoint = tea.String(cp.RegionId + ".log.aliyuncs.com")
 	}
-	// get UserAgent from env
-	// conf.UserAgent = tea.String(os.Getenv("ALIYUN_USER_AGENT"))
-
-	// if cp.ReadTimeout > 0 {
-	// 	conf.ReadTimeout = tea.Int(int(time.Duration(cp.ReadTimeout) * time.Second))
-	// }
-	// if cp.ConnectTimeout > 0 {
-	// 	conf.ConnectTimeout = tea.Int(int(time.Duration(cp.ConnectTimeout) * time.Second))
-	// }
+	conf.RegionId = tea.String(cp.RegionId)
 
 	client, err = openapiClient.NewClient(&conf)
 	if err != nil {
@@ -143,6 +136,7 @@ type BasicInvoker struct {
 	request        *requests.CommonRequest
 	openapiClient  *openapiClient.Client
 	openapiRequest *openapiutil.OpenApiRequest
+	openapiRuntime *openapiTeaUtils.RuntimeOptions
 	product        *meta.Product
 }
 
@@ -166,6 +160,7 @@ func (a *BasicInvoker) InitOpenapiContext(ctx *cli.Context, product *meta.Produc
 		HostMap: map[string]*string{},
 	}
 	a.openapiRequest.Headers["x-acs-region-id"] = tea.String(a.profile.RegionId)
+	a.openapiRuntime = &openapiTeaUtils.RuntimeOptions{}
 
 	a.openapiClient, err = GetOpenapiClient(a.profile, ctx, product) // Temporarily keep the original line for reference
 	if err != nil {

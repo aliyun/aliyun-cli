@@ -23,7 +23,6 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/meta"
 
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
-	openapiUtil "github.com/alibabacloud-go/tea-utils/v2/service"
 
 	"encoding/json"
 	"fmt"
@@ -374,7 +373,6 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 					path,
 					&api,
 					&openapiClient.Params{},
-					&openapiUtil.RuntimeOptions{},
 				}, nil
 			}
 			return &RestfulInvoker{
