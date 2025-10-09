@@ -22,6 +22,9 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 
+	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
+	openapiUtil "github.com/alibabacloud-go/tea-utils/v2/service"
+
 	"encoding/json"
 	"fmt"
 	"io"
@@ -195,6 +198,21 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		return err
 	}
 
+	if productCode == "Sls" {
+		// if productCode is sls, use openapi client
+		if openapiInvoker, ok := invoker.(*OpenapiInvoker); ok {
+			resp, err := openapiInvoker.Execute()
+			if err != nil {
+				return err
+			}
+			fmt.Println(resp)
+			return nil
+		}
+		fmt.Printf("openapi invoker %v failed \n", invoker)
+		return cli.NewErrorWithTip(fmt.Errorf("unsupported invoker"),
+			"Please contact the customer support to get more info about API version")
+	}
+
 	// process --dryrun
 	if DryRunFlag(ctx.Flags()).IsAssigned() {
 		invoker.getRequest().TransToAcsRequest()
@@ -348,6 +366,17 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 		}
 
 		if api, ok := c.library.GetApi(product.Code, product.Version, ctx.Command().Name); ok {
+			if productCode == "Sls" {
+				// if productCode is sls, use openapi client
+				return &OpenapiInvoker{
+					basicInvoker,
+					method,
+					path,
+					&api,
+					&openapiClient.Params{},
+					&openapiUtil.RuntimeOptions{},
+				}, nil
+			}
 			return &RestfulInvoker{
 				basicInvoker,
 				method,
