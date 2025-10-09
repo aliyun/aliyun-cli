@@ -20,7 +20,6 @@ import (
 	"time"
 
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
-	openapiUtil "github.com/alibabacloud-go/tea-utils/v2/service"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -29,11 +28,10 @@ import (
 
 type OpenapiInvoker struct {
 	*BasicInvoker
-	method  string
-	path    string
-	api     *meta.Api
-	params  *openapiClient.Params
-	runtime *openapiUtil.RuntimeOptions
+	method string
+	path   string
+	api    *meta.Api
+	params *openapiClient.Params
 }
 
 func (a *OpenapiInvoker) Prepare(ctx *cli.Context) error {
@@ -109,7 +107,7 @@ func (a *OpenapiInvoker) Prepare(ctx *cli.Context) error {
 }
 
 func (a *OpenapiInvoker) Execute() (*map[string]interface{}, error) {
-	resp, err := a.openapiClient.Execute(a.params, a.openapiRequest, a.runtime)
+	resp, err := a.openapiClient.Execute(a.params, a.openapiRequest, a.openapiRuntime)
 	return &resp, err
 }
 
