@@ -159,7 +159,6 @@ func (a *BasicInvoker) InitOpenapiContext(ctx *cli.Context, product *meta.Produc
 		Headers: map[string]*string{},
 		HostMap: map[string]*string{},
 	}
-	a.openapiRequest.Headers["x-acs-region-id"] = tea.String(a.profile.RegionId)
 	a.openapiRuntime = &openapiTeaUtils.RuntimeOptions{}
 
 	a.openapiClient, err = GetOpenapiClient(a.profile, ctx, product) // Temporarily keep the original line for reference
