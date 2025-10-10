@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	"github.com/alibabacloud-go/tea/tea"
@@ -35,16 +34,11 @@ type OpenapiInvoker struct {
 }
 
 func (a *OpenapiInvoker) Prepare(ctx *cli.Context) error {
-
-	a.openapiRequest.Headers["Date"] = tea.String(time.Now().Format(time.RFC1123Z))
-	a.openapiRequest.Headers["Content-Type"] = tea.String("application/json")
-
 	a.params.Action = tea.String(a.api.Name)
 	a.params.Version = &a.api.Product.Version
 	a.params.Method = &a.method
 	a.params.AuthType = tea.String("AK")
 	a.params.Style = tea.String("ROA")
-	a.params.Pathname = &a.path
 	a.params.ReqBodyType = tea.String("json")
 	a.params.BodyType = tea.String("json")
 
@@ -56,6 +50,7 @@ func (a *OpenapiInvoker) Prepare(ctx *cli.Context) error {
 		buf, _ := os.ReadFile(v)
 		a.openapiRequest.SetBody(buf)
 	}
+	pathParams := make(map[string]string)
 	// assign parameters
 	if a.api == nil {
 		for _, f := range ctx.UnknownFlags().Flags() {
@@ -86,7 +81,7 @@ func (a *OpenapiInvoker) Prepare(ctx *cli.Context) error {
 			} else if param.Position == "Domain" {
 				continue
 			} else if param.Position == "Path" {
-				continue
+				pathParams[strings.ToLower(f.Name)] = value
 			} else {
 				return fmt.Errorf("unknown parameter position; %s is %s", param.Name, param.Position)
 			}
@@ -94,6 +89,15 @@ func (a *OpenapiInvoker) Prepare(ctx *cli.Context) error {
 
 		a.params.Protocol = tea.String(a.api.GetProtocol())
 	}
+	pathname := a.path
+	if len(pathParams) > 0 {
+		// Replace {param} with actual values
+		for key, value := range pathParams {
+			placeholder := "{" + key + "}"
+			pathname = strings.ReplaceAll(pathname, placeholder, value)
+		}
+	}
+	a.params.Pathname = &pathname
 
 	if _, ok := InsecureFlag(ctx.Flags()).GetValue(); ok {
 		a.params.Protocol = tea.String("http")
