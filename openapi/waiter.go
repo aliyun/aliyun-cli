@@ -112,3 +112,56 @@ func (a *Waiter) CallWith(invoker Invoker) (string, error) {
 		time.Sleep(interval)
 	}
 }
+
+func (a *Waiter) ApiCallWith(apiInvoker ApiInvoker) (string, error) {
+	//
+	// timeout is 1-600 seconds, default is 180
+	timeout := time.Duration(time.Second * 180)
+	if s, ok := WaiterFlag.GetFieldValue("timeout"); ok {
+		if n, err := strconv.Atoi(s); err == nil {
+			if n <= 0 && n > 600 {
+				return "", fmt.Errorf("--waiter timeout=%s must between 1-600 (seconds)", s)
+			}
+			timeout = time.Duration(time.Second * time.Duration(n))
+		} else {
+			return "", fmt.Errorf("--waiter timeout=%s must be integer", s)
+		}
+	}
+	//
+	// interval is 2-10 seconds, default is 5
+	interval := time.Duration(time.Second * 5)
+	if s, ok := WaiterFlag.GetFieldValue("interval"); ok {
+		if n, err := strconv.Atoi(s); err == nil {
+			if n <= 1 && n > 10 {
+				return "", fmt.Errorf("--waiter interval=%s must between 2-10 (seconds)", s)
+			}
+			interval = time.Duration(time.Second * time.Duration(n))
+		} else {
+			return "", fmt.Errorf("--waiter interval=%s must be integer", s)
+		}
+	}
+
+	begin := time.Now()
+	for {
+		resp, err := apiInvoker.Call()
+		if err != nil {
+			return "", err
+		}
+		responseBody := resp["body"]
+
+		v, err := evaluateExpr([]byte(responseBody.(string)), a.expr)
+		if err != nil {
+			return "", err
+		}
+
+		if v == a.to {
+			return responseBody.(string), nil
+		}
+		duration := time.Since(begin)
+		if duration > timeout {
+			return "", fmt.Errorf("wait '%s' to '%s' timeout(%dseconds), last='%s'",
+				a.expr, a.to, timeout/time.Second, v)
+		}
+		time.Sleep(interval)
+	}
+}

@@ -22,8 +22,6 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 
-	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
-
 	"encoding/json"
 	"fmt"
 	"io"
@@ -186,7 +184,10 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 }
 
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
-
+	product, _ := c.library.GetProduct(productCode)
+	if ShouldUseOpenapi(ctx, &product) {
+		return c.processApiInvoke(ctx, productCode, apiOrMethod, path)
+	}
 	// create specific invoker
 	invoker, err := c.createInvoker(ctx, productCode, apiOrMethod, path)
 	if err != nil {
@@ -195,21 +196,6 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	err = invoker.Prepare(ctx)
 	if err != nil {
 		return err
-	}
-
-	if productCode == "Sls" {
-		// if productCode is sls, use openapi client
-		if openapiInvoker, ok := invoker.(*OpenapiInvoker); ok {
-			resp, err := openapiInvoker.Execute()
-			if err != nil {
-				return err
-			}
-			fmt.Println(resp)
-			return nil
-		}
-		fmt.Printf("openapi invoker %v failed \n", invoker)
-		return cli.NewErrorWithTip(fmt.Errorf("unsupported invoker"),
-			"Please contact the customer support to get more info about API version")
 	}
 
 	// process --dryrun
@@ -259,6 +245,63 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	return nil
 }
 
+func (c *Commando) processApiInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
+	product, product_find := c.library.GetProduct(productCode)
+	if !product_find {
+		return &InvalidProductError{Code: productCode, library: c.library}
+	}
+	apiContext, err := c.createHttpContext(ctx, &product, apiOrMethod, path)
+	if err != nil {
+		return err
+	}
+	err = apiContext.Prepare(ctx)
+	if err != nil {
+		return err
+	}
+
+	out, err, ok := c.invokeOpenApiWithHelper(apiContext)
+
+	if ok {
+		if err != nil {
+			return err
+		}
+	} else {
+		resp, err := apiContext.Call()
+		if err != nil {
+			if !strings.Contains(strings.ToLower(err.Error()), "unmarshal") {
+				return err
+			}
+		}
+		responseBody := resp["body"]
+		switch v := responseBody.(type) {
+		case string:
+			out = v
+		case map[string]interface{}:
+			jsonData, _ := json.Marshal(v)
+			out = string(jsonData)
+		case []byte:
+			out = string(v)
+		default:
+			out = fmt.Sprintf("%v", v)
+		}
+	}
+
+	// if `--quiet` assigned. do not print anything
+	if QuietFlag(ctx.Flags()).IsAssigned() {
+		return nil
+	}
+
+	if filter := GetOutputFilter(ctx); filter != nil {
+		out, err = filter.FilterOutput(out)
+		if err != nil {
+			return err
+		}
+	}
+	out = sortJSON(out)
+	cli.Println(ctx.Stdout(), out)
+	return nil
+}
+
 func sortJSON(content string) string {
 	var v interface{}
 	dec := json.NewDecoder(bytes.NewReader([]byte(content)))
@@ -290,6 +333,23 @@ func (c *Commando) invokeWithHelper(invoker Invoker) (resp string, err error, ok
 	if waiter := GetWaiter(); waiter != nil {
 		// cli.Printf("call with waiter")
 		resp, err = waiter.CallWith(invoker)
+		ok = true
+		return
+	}
+
+	ok = false
+	return
+}
+
+func (c *Commando) invokeOpenApiWithHelper(apiInvoker ApiInvoker) (resp string, err error, ok bool) {
+	if pager := GetPager(); pager != nil {
+		resp, err = pager.ApiCallWith(apiInvoker)
+		ok = true
+		return
+	}
+
+	if waiter := GetWaiter(); waiter != nil {
+		resp, err = waiter.ApiCallWith(apiInvoker)
 		ok = true
 		return
 	}
@@ -365,16 +425,6 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 		}
 
 		if api, ok := c.library.GetApi(product.Code, product.Version, ctx.Command().Name); ok {
-			if productCode == "Sls" {
-				// if productCode is sls, use openapi client
-				return &OpenapiInvoker{
-					basicInvoker,
-					method,
-					path,
-					&api,
-					&openapiClient.Params{},
-				}, nil
-			}
 			return &RestfulInvoker{
 				basicInvoker,
 				method,
@@ -428,6 +478,49 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			apiOrMethod,
 		}, nil
 	}
+}
+
+// openapi context
+func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, apiOrMethod string, path string) (ApiInvoker, error) {
+	if product == nil {
+		return nil, fmt.Errorf("invalid product, please check product code")
+	}
+	force := ForceFlag(ctx.Flags()).IsAssigned()
+	apiContext := NewApiContext(&c.profile)
+	// get product info
+	err := apiContext.Init(ctx, product)
+	if err != nil {
+		return nil, err
+	}
+	if force {
+		if version, _ := ctx.Flags().Get("version").GetValue(); version != "" {
+			if style, ok := c.library.GetStyle(product.Code, version); ok {
+				product.ApiStyle = style
+			} else {
+				// 没有在 versions.json 中配置的版本可以通过 --style 自行指定
+				style, _ := ctx.Flags().Get("style").GetValue()
+				if style == "" {
+					return nil, cli.NewErrorWithTip(fmt.Errorf("uncheked version %s", version),
+						"Please use --style to specify API style, rpc or restful.")
+				}
+				product.ApiStyle = style
+			}
+		}
+	}
+
+	if strings.ToLower(product.ApiStyle) == "rpc" || !ShouldUseOpenapi(ctx, product) {
+		return nil, cli.NewErrorWithTip(fmt.Errorf("uncheked api style %s", product.ApiStyle),
+			"Upsupported api style or product.")
+	}
+	api, ok := c.library.GetApi(product.Code, product.Version, ctx.Command().Name)
+	if !ok {
+		return nil, &InvalidApiError{Name: ctx.Command().Name, product: product}
+	}
+	ok, method, path, err := checkRestfulMethod(ctx, apiOrMethod, path)
+	if err != nil {
+		return nil, err
+	}
+	return &OpenapiContext{apiContext, method, path, &api}, nil
 }
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {

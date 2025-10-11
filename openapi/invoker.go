@@ -25,11 +25,6 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 
-	slsgateway "github.com/alibabacloud-go/alibabacloud-gateway-sls/client"
-	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
-	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
-	openapiTeaUtils "github.com/alibabacloud-go/tea-utils/v2/service"
-	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -86,35 +81,10 @@ func GetClient(cp *config.Profile, ctx *cli.Context) (client *sdk.Client, err er
 	return client, err
 }
 
-func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Product) (client *openapiClient.Client, err error) {
-	if cp.RegionId == "" {
-		err = fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
-		return
-	}
-	conf := openapiClient.Config{
-		AccessKeyId:     &cp.AccessKeyId,
-		AccessKeySecret: &cp.AccessKeySecret,
-	}
-	if product.Code == "Sls" {
-		conf.Endpoint = tea.String(cp.RegionId + ".log.aliyuncs.com")
-	}
-	conf.RegionId = tea.String(cp.RegionId)
-
-	client, err = openapiClient.NewClient(&conf)
-	if err != nil {
-		return
-	}
-	if product.Code == "Sls" {
-		client.Spi = &slsgateway.Client{}
-	}
-	return client, err
-}
-
 // implementations:
 // - RpcInvoker,
 // - RpcForceInvoker
 // - RestfulInvoker
-// - OpenApiInvoker
 type Invoker interface {
 	getClient() *sdk.Client
 	getRequest() *requests.CommonRequest
@@ -131,13 +101,10 @@ type InvokeHelper interface {
 
 // basic invoker to init common object and headers
 type BasicInvoker struct {
-	profile        *config.Profile
-	client         *sdk.Client
-	request        *requests.CommonRequest
-	openapiClient  *openapiClient.Client
-	openapiRequest *openapiutil.OpenApiRequest
-	openapiRuntime *openapiTeaUtils.RuntimeOptions
-	product        *meta.Product
+	profile *config.Profile
+	client  *sdk.Client
+	request *requests.CommonRequest
+	product *meta.Product
 }
 
 func NewBasicInvoker(cp *config.Profile) *BasicInvoker {
@@ -152,28 +119,9 @@ func (a *BasicInvoker) getRequest() *requests.CommonRequest {
 	return a.request
 }
 
-func (a *BasicInvoker) InitOpenapiContext(ctx *cli.Context, product *meta.Product) error {
-	var err error
-	a.openapiRequest = &openapiutil.OpenApiRequest{
-		Query:   map[string]*string{},
-		Headers: map[string]*string{},
-		HostMap: map[string]*string{},
-	}
-	a.openapiRuntime = &openapiTeaUtils.RuntimeOptions{}
-
-	a.openapiClient, err = GetOpenapiClient(a.profile, ctx, product) // Temporarily keep the original line for reference
-	if err != nil {
-		return fmt.Errorf("init openapi client failed %s", err)
-	}
-	return nil
-}
-
 func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
 	a.product = product
-	if product.Code == "Sls" {
-		return a.InitOpenapiContext(ctx, product)
-	}
 	a.request = requests.NewCommonRequest()
 	a.request.Product = product.Code
 
