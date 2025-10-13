@@ -193,7 +193,44 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	}
 }
 
+func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api *meta.Api, method string, path string) error {
+	if product == nil {
+		return fmt.Errorf("invalid product, please check product code")
+	}
+
+	apiContext, err := c.createHttpContext(ctx, product, api, method, path)
+	if err != nil {
+		return err
+	}
+	err = apiContext.Prepare(ctx)
+	if err != nil {
+		return err
+	}
+
+	resp, err := apiContext.Call()
+	if err != nil {
+		return err
+	}
+	out := GetContentFromApiResponse(resp)
+
+	// if `--quiet` assigned. do not print anything
+	if QuietFlag(ctx.Flags()).IsAssigned() {
+		return nil
+	}
+
+	if filter := GetOutputFilter(ctx); filter != nil {
+		out, err = filter.FilterOutput(out)
+		if err != nil {
+			return err
+		}
+	}
+	out = sortJSON(out)
+	cli.Println(ctx.Stdout(), out)
+	return nil
+}
+
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
+
 	// create specific invoker
 	invoker, err := c.createInvoker(ctx, productCode, apiOrMethod, path)
 	if err != nil {
@@ -247,42 +284,6 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 
 	out = sortJSON(out)
 
-	cli.Println(ctx.Stdout(), out)
-	return nil
-}
-
-func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api *meta.Api, method string, path string) error {
-	if product == nil {
-		return fmt.Errorf("invalid product, please check product code")
-	}
-
-	apiContext, err := c.createHttpContext(ctx, product, api, method, path)
-	if err != nil {
-		return err
-	}
-	err = apiContext.Prepare(ctx)
-	if err != nil {
-		return err
-	}
-
-	resp, err := apiContext.Call()
-	if err != nil {
-		return err
-	}
-	out := GetContentFromApiResponse(resp)
-
-	// if `--quiet` assigned. do not print anything
-	if QuietFlag(ctx.Flags()).IsAssigned() {
-		return nil
-	}
-
-	if filter := GetOutputFilter(ctx); filter != nil {
-		out, err = filter.FilterOutput(out)
-		if err != nil {
-			return err
-		}
-	}
-	out = sortJSON(out)
 	cli.Println(ctx.Stdout(), out)
 	return nil
 }
@@ -401,6 +402,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 				&api,
 			}, nil
 		}
+
 		return &RestfulInvoker{
 			basicInvoker,
 			method,
