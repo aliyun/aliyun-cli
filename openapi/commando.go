@@ -186,7 +186,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
 	product, _ := c.library.GetProduct(productCode)
 	if ShouldUseOpenapi(ctx, &product) {
-		return c.processApiInvoke(ctx, productCode, apiOrMethod, path)
+		return c.processApiInvoke(ctx, &product, apiOrMethod, path)
 	}
 	// create specific invoker
 	invoker, err := c.createInvoker(ctx, productCode, apiOrMethod, path)
@@ -245,12 +245,11 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	return nil
 }
 
-func (c *Commando) processApiInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
-	product, product_find := c.library.GetProduct(productCode)
-	if !product_find {
-		return &InvalidProductError{Code: productCode, library: c.library}
+func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, apiOrMethod string, path string) error {
+	if product == nil {
+		return fmt.Errorf("invalid product, please check product code")
 	}
-	apiContext, err := c.createHttpContext(ctx, &product, apiOrMethod, path)
+	apiContext, err := c.createHttpContext(ctx, product, apiOrMethod, path)
 	if err != nil {
 		return err
 	}
@@ -259,32 +258,11 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, productCode string, apiOrM
 		return err
 	}
 
-	out, err, ok := c.invokeOpenApiWithHelper(apiContext)
-
-	if ok {
-		if err != nil {
-			return err
-		}
-	} else {
-		resp, err := apiContext.Call()
-		if err != nil {
-			if !strings.Contains(strings.ToLower(err.Error()), "unmarshal") {
-				return err
-			}
-		}
-		responseBody := resp["body"]
-		switch v := responseBody.(type) {
-		case string:
-			out = v
-		case map[string]interface{}:
-			jsonData, _ := json.Marshal(v)
-			out = string(jsonData)
-		case []byte:
-			out = string(v)
-		default:
-			out = fmt.Sprintf("%v", v)
-		}
+	resp, err := apiContext.Call()
+	if err != nil {
+		return err
 	}
+	out := GetContentFromApiResponse(resp)
 
 	// if `--quiet` assigned. do not print anything
 	if QuietFlag(ctx.Flags()).IsAssigned() {
@@ -333,23 +311,6 @@ func (c *Commando) invokeWithHelper(invoker Invoker) (resp string, err error, ok
 	if waiter := GetWaiter(); waiter != nil {
 		// cli.Printf("call with waiter")
 		resp, err = waiter.CallWith(invoker)
-		ok = true
-		return
-	}
-
-	ok = false
-	return
-}
-
-func (c *Commando) invokeOpenApiWithHelper(apiInvoker ApiInvoker) (resp string, err error, ok bool) {
-	if pager := GetPager(); pager != nil {
-		resp, err = pager.ApiCallWith(apiInvoker)
-		ok = true
-		return
-	}
-
-	if waiter := GetWaiter(); waiter != nil {
-		resp, err = waiter.ApiCallWith(apiInvoker)
 		ok = true
 		return
 	}

@@ -14,6 +14,7 @@
 package openapi
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -194,4 +195,21 @@ func (a *OpenapiContext) Prepare(ctx *cli.Context) error {
 func (a *OpenapiContext) Call() (map[string]any, error) {
 	resp, err := a.openapiClient.Execute(a.openapiParams, a.openapiRequest, a.openapiRuntime)
 	return resp, err
+}
+
+func GetContentFromApiResponse(response map[string]any) string {
+	out := ""
+	responseBody := response["body"]
+	switch v := responseBody.(type) {
+	case string:
+		out = v
+	case map[string]interface{}:
+		jsonData, _ := json.Marshal(v)
+		out = string(jsonData)
+	case []byte:
+		out = string(v)
+	default:
+		out = fmt.Sprintf("%v", v)
+	}
+	return out
 }
