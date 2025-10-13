@@ -163,7 +163,7 @@ func (a *OpenapiContext) Prepare(ctx *cli.Context) error {
 			} else if param.Position == "Domain" {
 				continue
 			} else if param.Position == "Path" {
-				pathParams[strings.ToLower(f.Name)] = value
+				pathParams[f.Name] = value
 			} else {
 				return fmt.Errorf("unknown parameter position; %s is %s", param.Name, param.Position)
 			}
@@ -175,7 +175,7 @@ func (a *OpenapiContext) Prepare(ctx *cli.Context) error {
 	if len(pathParams) > 0 {
 		// Replace {param} with actual values
 		for key, value := range pathParams {
-			placeholder := "{" + key + "}"
+			placeholder := "[" + key + "]"
 			pathname = strings.ReplaceAll(pathname, placeholder, value)
 		}
 	}
@@ -200,6 +200,9 @@ func (a *OpenapiContext) Call() (map[string]any, error) {
 func GetContentFromApiResponse(response map[string]any) string {
 	out := ""
 	responseBody := response["body"]
+	if responseBody == nil {
+		return out
+	}
 	switch v := responseBody.(type) {
 	case string:
 		out = v

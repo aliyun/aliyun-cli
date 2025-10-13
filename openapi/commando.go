@@ -212,6 +212,9 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		return err
 	}
 	out := GetContentFromApiResponse(resp)
+	if out == "" {
+		return nil
+	}
 
 	// if `--quiet` assigned. do not print anything
 	if QuietFlag(ctx.Flags()).IsAssigned() {
@@ -457,7 +460,6 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 
 	force := ForceFlag(ctx.Flags()).IsAssigned()
 	apiContext := NewApiContext(&c.profile)
-	// get product info
 	err := apiContext.Init(ctx, product)
 	if err != nil {
 		return nil, err
