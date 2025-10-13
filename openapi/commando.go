@@ -157,6 +157,9 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			api, _ := c.library.GetApi(product.Code, product.Version, args[1])
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 			ctx.Command().Name = args[1]
+			if ShouldUseOpenapi(ctx, &product) {
+				return c.processApiInvoke(ctx, &product, &api, api.Method, api.PathPattern)
+			}
 			return c.processInvoke(ctx, productName, api.Method, api.PathPattern)
 		} else {
 			// RPC need check API parameters too
@@ -176,6 +179,13 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				"Please confirm if the API path exists")
 		}
 		c.CheckApiParamWithBuildInArgs(ctx, api)
+		if ShouldUseOpenapi(ctx, &product) {
+			if args[2] == "/" {
+				return cli.NewErrorWithTip(fmt.Errorf("too broad path: %s for method: %s, please use specific ApiName instead",
+					args[2], args[1]), "Please confirm the API path")
+			}
+			return c.processApiInvoke(ctx, &product, &api, args[1], args[2])
+		}
 		return c.processInvoke(ctx, productName, args[1], args[2])
 	} else {
 		return cli.NewErrorWithTip(fmt.Errorf("too many arguments"),
@@ -184,10 +194,6 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 }
 
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
-	product, _ := c.library.GetProduct(productCode)
-	if ShouldUseOpenapi(ctx, &product) {
-		return c.processApiInvoke(ctx, &product, apiOrMethod, path)
-	}
 	// create specific invoker
 	invoker, err := c.createInvoker(ctx, productCode, apiOrMethod, path)
 	if err != nil {
@@ -245,11 +251,12 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	return nil
 }
 
-func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, apiOrMethod string, path string) error {
+func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api *meta.Api, method string, path string) error {
 	if product == nil {
 		return fmt.Errorf("invalid product, please check product code")
 	}
-	apiContext, err := c.createHttpContext(ctx, product, apiOrMethod, path)
+
+	apiContext, err := c.createHttpContext(ctx, product, api, method, path)
 	if err != nil {
 		return err
 	}
@@ -394,7 +401,6 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 				&api,
 			}, nil
 		}
-
 		return &RestfulInvoker{
 			basicInvoker,
 			method,
@@ -442,10 +448,11 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 }
 
 // openapi context
-func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, apiOrMethod string, path string) (ApiInvoker, error) {
+func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, api *meta.Api, method string, path string) (ApiInvoker, error) {
 	if product == nil {
 		return nil, fmt.Errorf("invalid product, please check product code")
 	}
+
 	force := ForceFlag(ctx.Flags()).IsAssigned()
 	apiContext := NewApiContext(&c.profile)
 	// get product info
@@ -473,15 +480,18 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 		return nil, cli.NewErrorWithTip(fmt.Errorf("uncheked api style %s", product.ApiStyle),
 			"Upsupported api style or product.")
 	}
-	api, ok := c.library.GetApi(product.Code, product.Version, ctx.Command().Name)
-	if !ok {
-		return nil, &InvalidApiError{Name: ctx.Command().Name, product: product}
-	}
-	ok, method, path, err := checkRestfulMethod(ctx, apiOrMethod, path)
+	ok, method, path, err := checkRestfulMethod(ctx, method, path)
 	if err != nil {
 		return nil, err
 	}
-	return &OpenapiContext{apiContext, method, path, &api}, nil
+	if !ok {
+		return nil, cli.NewErrorWithTip(fmt.Errorf("product '%s' need proper restful call with ApiName or {GET|PUT|POST|DELETE} <path>",
+			product.GetLowerCode()),
+			"Use `aliyun %s <ApiName> ...` or `aliyun %s {GET|PUT|POST|DELETE} <path> ...`",
+			product.GetLowerCode(),
+			product.GetLowerCode())
+	}
+	return &OpenapiContext{apiContext, method, path, api}, nil
 }
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {
