@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -249,29 +248,4 @@ func (a *Pager) detectArrayPath(d interface{}) string {
 		}
 	}
 	return ""
-}
-
-func (a *Pager) ApiCallWith(apiInvoker ApiInvoker) (string, error) {
-	for {
-		resp, err := apiInvoker.Call()
-		if err != nil {
-			return "", err
-		}
-		responseBody := resp["body"]
-		err = a.FeedResponse(responseBody.(string))
-		if err != nil {
-			return "", fmt.Errorf("call failed %s", err)
-		}
-		if !a.HasMore() {
-			break
-		}
-		request := apiInvoker.getRequest()
-		if a.nextTokenMode {
-			request.Query[a.NextTokenFlag] = tea.String(a.nextToken)
-		} else {
-			a.currentPageNumber = a.currentPageNumber + 1
-			request.Query[a.PageNumberFlag] = tea.String(strconv.Itoa(a.currentPageNumber))
-		}
-	}
-	return a.GetResponseCollection(), nil
 }
