@@ -5,6 +5,7 @@ go 1.23.0
 toolchain go1.23.8
 
 require (
+	github.com/alibabacloud-go/alibabacloud-gateway-sls v0.3.0
 	github.com/alibabacloud-go/darabonba-openapi/v2 v2.1.12
 	github.com/alibabacloud-go/tea v1.3.12
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.7
@@ -13,7 +14,9 @@ require (
 	github.com/aliyun/credentials-go v1.4.7
 	github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc
 	github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1
+	github.com/gogo/protobuf v1.3.2
 	github.com/jmespath/go-jmespath v0.4.0
+	github.com/pierrec/lz4 v2.6.0+incompatible
 	github.com/stretchr/testify v1.10.0
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/crypto v0.41.0
@@ -22,7 +25,6 @@ require (
 )
 
 require (
-	github.com/alibabacloud-go/alibabacloud-gateway-sls v0.3.0 // indirect
 	github.com/alibabacloud-go/alibabacloud-gateway-sls-util v0.3.0 // indirect
 	github.com/alibabacloud-go/alibabacloud-gateway-spi v0.0.5 // indirect
 	github.com/alibabacloud-go/darabonba-array v0.1.0 // indirect
@@ -45,7 +47,6 @@ require (
 	github.com/onsi/ginkgo v1.16.5 // indirect
 	github.com/onsi/gomega v1.30.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.1-0.20220228012449-10b1cf09e00b // indirect
-	github.com/pierrec/lz4 v2.6.0+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect

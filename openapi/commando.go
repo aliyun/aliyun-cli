@@ -207,11 +207,14 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		return err
 	}
 
-	resp, err := apiContext.Call()
+	_, err = apiContext.Call()
 	if err != nil {
 		return err
 	}
-	out := GetContentFromApiResponse(resp)
+	out, err := apiContext.GetResponse()
+	if err != nil {
+		return err
+	}
 	if out == "" {
 		return nil
 	}
