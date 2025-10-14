@@ -1,0 +1,25 @@
+{
+    "Topic": "cli-logs",
+    "Source": "333.333.333.333",
+    "LogTags": [
+        {
+            "Key": "env",
+            "Value": "ccccc"
+        }
+    ],
+    "Logs": [
+        {
+            "Time": 1760361897,
+            "Contents": [
+                {
+                    "Key": "level",
+                    "Value": "info"
+                },
+                {
+                    "Key": "aaaaaaaa",
+                    "Value": "info"
+                }
+            ]
+        }
+    ]
+}

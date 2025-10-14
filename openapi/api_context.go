@@ -14,9 +14,11 @@
 package openapi
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	slsgateway "github.com/alibabacloud-go/alibabacloud-gateway-sls/client"
@@ -27,6 +29,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	slsUtils "github.com/aliyun/aliyun-cli/v3/sls"
 )
 
 func ShouldUseOpenapi(ctx *cli.Context, product *meta.Product) bool {
@@ -58,10 +61,31 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	return client, err
 }
 
+func GetContentFromApiResponse(response map[string]any) string {
+	out := ""
+	responseBody := response["body"]
+	if responseBody == nil {
+		return out
+	}
+	switch v := responseBody.(type) {
+	case string:
+		out = v
+	case map[string]any:
+		jsonData, _ := json.Marshal(v)
+		out = string(jsonData)
+	case []byte:
+		out = string(v)
+	default:
+		out = fmt.Sprintf("%v", v)
+	}
+	return out
+}
+
 type ApiInvoker interface {
 	getRequest() *openapiutil.OpenApiRequest
 	Prepare(ctx *cli.Context) error
 	Call() (map[string]any, error)
+	GetResponse() (string, error)
 }
 
 // implementations
@@ -72,12 +96,13 @@ type ApiInvokeHelper interface {
 }
 
 type ApiContext struct {
-	profile        *config.Profile
-	openapiClient  *openapiClient.Client
-	openapiRequest *openapiutil.OpenApiRequest
-	openapiRuntime *openapiTeaUtils.RuntimeOptions
-	openapiParams  *openapiClient.Params
-	product        *meta.Product
+	profile         *config.Profile
+	openapiClient   *openapiClient.Client
+	openapiRequest  *openapiutil.OpenApiRequest
+	openapiRuntime  *openapiTeaUtils.RuntimeOptions
+	openapiParams   *openapiClient.Params
+	openapiResponse *map[string]any
+	product         *meta.Product
 }
 
 func NewApiContext(cp *config.Profile) *ApiContext {
@@ -90,6 +115,7 @@ func (a *ApiContext) getRequest() *openapiutil.OpenApiRequest {
 
 func (a *ApiContext) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
+	a.openapiResponse = &map[string]any{}
 	a.product = product
 	a.openapiRequest = &openapiutil.OpenApiRequest{
 		Query:   map[string]*string{},
@@ -111,6 +137,17 @@ func (a *ApiContext) Init(ctx *cli.Context, product *meta.Product) error {
 	return nil
 }
 
+func (a *ApiContext) Call() (map[string]any, error) {
+	resp, err := a.openapiClient.Execute(a.openapiParams, a.openapiRequest, a.openapiRuntime)
+	a.openapiResponse = &resp
+	return resp, err
+}
+
+func (a *ApiContext) GetResponse() (string, error) {
+	out := GetContentFromApiResponse(*a.openapiResponse)
+	return out, nil
+}
+
 type OpenapiContext struct {
 	*ApiContext
 	method string
@@ -118,12 +155,66 @@ type OpenapiContext struct {
 	api    *meta.Api
 }
 
-func (a *OpenapiContext) Prepare(ctx *cli.Context) error {
-	oaParams := a.openapiParams
-	oaParams.Action = tea.String(a.api.Name)
-	oaParams.Version = &a.api.Product.Version
-	oaParams.Method = &a.method
+func (a *OpenapiContext) ProcessHeaders(ctx *cli.Context) error {
+	for _, f := range ctx.UnknownFlags().Flags() {
+		param := a.api.FindParameter(f.Name)
+		if param == nil {
+			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+		}
+		if param.Position != "header" {
+			continue
+		}
+		value, _ := f.GetValue()
+		if param.Required && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		}
+		a.openapiRequest.Headers[f.Name] = &value
+	}
+	if a.api.Name == "PullLogs" {
+		a.openapiRequest.Headers["Accept-Encoding"] = tea.String("lz4")
+		a.openapiRequest.Headers["accept"] = tea.String("application/x-protobuf")
+		a.openapiParams.BodyType = tea.String("byte")
 
+	}
+	return nil
+}
+
+func (a *OpenapiContext) ProcessPutLogsBody(ctx *cli.Context) error {
+	var body []byte
+	if v, ok := BodyFlag(ctx.Flags()).GetValue(); ok {
+		body = []byte(v)
+	}
+
+	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok {
+		buf, err := os.ReadFile(v)
+		if err != nil {
+			return err
+		}
+		body = buf
+
+	}
+	if body == nil {
+		return fmt.Errorf("no logs provided, please check the input")
+	}
+	compressedData, rawSize, err := slsUtils.PreparePutLogsData(body)
+	if err != nil {
+		return err
+	}
+	if len(compressedData) > 10*1024*1024 {
+		return fmt.Errorf("log group size is too large, exceed 10MB")
+	}
+	a.openapiRequest.Headers["content-type"] = tea.String("application/x-protobuf")
+	a.openapiRequest.Headers["x-log-bodyrawsize"] = tea.String(strconv.Itoa(rawSize))
+	a.openapiRequest.Headers["x-log-compresstype"] = tea.String("lz4")
+	a.openapiParams.ReqBodyType = tea.String("binary")
+	a.openapiRequest.SetBody(compressedData)
+	return nil
+}
+
+func (a *OpenapiContext) ProcessBody(ctx *cli.Context) error {
+	if a.product.GetLowerCode() == "sls" && a.api.Name == "PutLogs" {
+		return a.ProcessPutLogsBody(ctx)
+	}
 	if v, ok := BodyFlag(ctx.Flags()).GetValue(); ok {
 		a.openapiRequest.SetBody([]byte(v))
 	}
@@ -132,55 +223,102 @@ func (a *OpenapiContext) Prepare(ctx *cli.Context) error {
 		buf, _ := os.ReadFile(v)
 		a.openapiRequest.SetBody(buf)
 	}
-	pathParams := make(map[string]string)
-	// assign parameters
-	if a.api == nil {
-		for _, f := range ctx.UnknownFlags().Flags() {
-			value, _ := f.GetValue()
-			a.openapiRequest.Query[f.Name] = &value
-		}
-	} else {
-		for _, f := range ctx.UnknownFlags().Flags() {
-			param := a.api.FindParameter(f.Name)
-			if param == nil {
-				return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
-			}
-			value, _ := f.GetValue()
-			if param.Required && value == "" {
-				return fmt.Errorf("required parameter missing; %s is required", param.Name)
-			}
-			if param.Position == "Query" {
-				a.openapiRequest.Query[f.Name] = &value
-			} else if param.Position == "Body" {
-				body := map[string]interface{}{}
-				body[f.Name] = value
-				a.openapiRequest.Body = body
-			} else if param.Position == "Header" {
-				a.openapiRequest.Headers[f.Name] = &value
-				continue
-			} else if param.Position == "Host" {
-				a.openapiRequest.HostMap[strings.ToLower(f.Name)] = tea.String(value)
-			} else if param.Position == "Domain" {
-				continue
-			} else if param.Position == "Path" {
-				pathParams[f.Name] = value
-			} else {
-				return fmt.Errorf("unknown parameter position; %s is %s", param.Name, param.Position)
-			}
-		}
 
-		oaParams.Protocol = tea.String(a.api.GetProtocol())
+	for _, f := range ctx.UnknownFlags().Flags() {
+		param := a.api.FindParameter(f.Name)
+		if param == nil {
+			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+		}
+		if param.Position == "Body" {
+			continue
+		}
+		value, _ := f.GetValue()
+		if param.Required && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		}
+		body := map[string]interface{}{}
+		body[f.Name] = value
+		a.openapiRequest.Body = body
+	}
+
+	return nil
+}
+
+func (a *OpenapiContext) ProcessPath(ctx *cli.Context) error {
+	pathParams := make(map[string]string)
+	for _, f := range ctx.UnknownFlags().Flags() {
+		param := a.api.FindParameter(f.Name)
+		if param == nil {
+			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+		}
+		if param.Position != "Path" {
+			continue
+		}
+		value, _ := f.GetValue()
+		if param.Required && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		}
+		pathParams[f.Name] = value
 	}
 	pathname := a.path
 	if len(pathParams) > 0 {
-		// Replace {param} with actual values
 		for key, value := range pathParams {
 			placeholder := "[" + key + "]"
 			pathname = strings.ReplaceAll(pathname, placeholder, value)
 		}
 	}
-	oaParams.Pathname = &pathname
+	a.openapiParams.Pathname = &pathname
+	return nil
+}
 
+func (a *OpenapiContext) ProcessHost(ctx *cli.Context) error {
+	for _, f := range ctx.UnknownFlags().Flags() {
+		param := a.api.FindParameter(f.Name)
+		if param == nil {
+			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+		}
+		if param.Position != "Host" {
+			continue
+		}
+		value, _ := f.GetValue()
+		if param.Required && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		}
+		a.openapiRequest.HostMap[strings.ToLower(f.Name)] = tea.String(value)
+	}
+	return nil
+}
+
+func (a *OpenapiContext) ProcessQuery(ctx *cli.Context) error {
+	for _, f := range ctx.UnknownFlags().Flags() {
+		param := a.api.FindParameter(f.Name)
+		if param == nil {
+			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+		}
+		if param.Position != "Query" {
+			continue
+		}
+		value, _ := f.GetValue()
+		if param.Required && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		}
+		a.openapiRequest.Query[f.Name] = &value
+	}
+	return nil
+}
+
+type Processor func(ctx *cli.Context) error
+
+func (a *OpenapiContext) Prepare(ctx *cli.Context) error {
+	oaParams := a.openapiParams
+	oaParams.Action = tea.String(a.api.Name)
+	oaParams.Version = &a.api.Product.Version
+	oaParams.Method = &a.method
+
+	if a.api == nil {
+		return fmt.Errorf("api not found, should not happen")
+	}
+	oaParams.Protocol = tea.String(a.api.GetProtocol())
 	if _, ok := InsecureFlag(ctx.Flags()).GetValue(); ok {
 		oaParams.Protocol = tea.String("http")
 	}
@@ -189,30 +327,49 @@ func (a *OpenapiContext) Prepare(ctx *cli.Context) error {
 		oaParams.Protocol = tea.String("https")
 	}
 
+	return a.RequestProcessors(ctx)
+}
+
+func (a *OpenapiContext) RequestProcessors(ctx *cli.Context) error {
+	processors := []Processor{
+		a.ProcessHeaders,
+		a.ProcessBody,
+		a.ProcessPath,
+		a.ProcessHost,
+		a.ProcessQuery,
+	}
+
+	for _, p := range processors {
+		if err := p(ctx); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func (a *OpenapiContext) Call() (map[string]any, error) {
-	resp, err := a.openapiClient.Execute(a.openapiParams, a.openapiRequest, a.openapiRuntime)
-	return resp, err
+func (a *OpenapiContext) CheckResponseForPullLogs(response map[string]any) (string, error) {
+	responseBody := response["body"]
+	bodyStr, ok := responseBody.(string)
+	if !ok {
+		return "", fmt.Errorf("invalid response body for pulllogs parsing, please check")
+	}
+
+	bodyBytes, err := base64.StdEncoding.DecodeString(bodyStr)
+	if err != nil {
+		return "", err
+	}
+	result, err := slsUtils.ProcessPullLogsResponse(bodyBytes)
+	if err != nil {
+		return "", err
+	}
+	return result, nil
 }
 
-func GetContentFromApiResponse(response map[string]any) string {
-	out := ""
-	responseBody := response["body"]
-	if responseBody == nil {
-		return out
+func (a *OpenapiContext) GetResponse() (string, error) {
+	if a.api.Name == "PullLogs" {
+		return a.CheckResponseForPullLogs(*a.openapiResponse)
 	}
-	switch v := responseBody.(type) {
-	case string:
-		out = v
-	case map[string]interface{}:
-		jsonData, _ := json.Marshal(v)
-		out = string(jsonData)
-	case []byte:
-		out = string(v)
-	default:
-		out = fmt.Sprintf("%v", v)
-	}
-	return out
+	out := GetContentFromApiResponse(*a.openapiResponse)
+
+	return out, nil
 }
