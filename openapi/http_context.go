@@ -55,9 +55,12 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	if strings.ToLower(product.Code) == "sls" {
 		conf.Endpoint = tea.String(cp.RegionId + ".log.aliyuncs.com") // should apply product template
 	}
-	if os.Getenv("ALIYUN_USER_AGENT") != "" {
-		conf.SetUserAgent(os.Getenv("ALIYUN_USER_AGENT"))
+
+	ua := "Aliyun-CLI/" + cli.GetVersion()
+	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
+		ua += " vendor/" + vendorEnv
 	}
+	conf.SetUserAgent(ua)
 
 	if cp.ReadTimeout > 0 {
 		conf.SetReadTimeout(cp.ReadTimeout * 1000)
