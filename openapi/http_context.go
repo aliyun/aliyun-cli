@@ -42,14 +42,25 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		err = fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
 		return
 	}
+	credential, err := cp.GetCredential(ctx, nil)
+	if err != nil {
+		return
+	}
 	conf := openapiClient.Config{
-		AccessKeyId:     &cp.AccessKeyId,
-		AccessKeySecret: &cp.AccessKeySecret,
+		Credential: credential,
+		RegionId:   tea.String(cp.RegionId),
 	}
 	if strings.ToLower(product.Code) == "sls" {
 		conf.Endpoint = tea.String(cp.RegionId + ".log.aliyuncs.com") // should apply product template
 	}
-	conf.RegionId = tea.String(cp.RegionId)
+	conf.SetUserAgent(os.Getenv("ALIYUN_USER_AGENT"))
+
+	if cp.ReadTimeout > 0 {
+		conf.SetReadTimeout(cp.ReadTimeout * 1000)
+	}
+	if cp.ConnectTimeout > 0 {
+		conf.SetConnectTimeout(cp.ConnectTimeout * 1000)
+	}
 
 	client, err = openapiClient.NewClient(&conf)
 	if err != nil {
@@ -119,13 +130,35 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	a.openapiParams.Style = tea.String("ROA")
 	a.openapiParams.ReqBodyType = tea.String("json")
 	a.openapiParams.BodyType = tea.String("json")
+	a.openapiParams.Protocol = tea.String("HTTPS")
 
 	a.openapiRuntime = &openapiTeaUtils.RuntimeOptions{}
+	if config.SkipSecureVerify(ctx.Flags()).IsAssigned() {
+		a.openapiRuntime.SetIgnoreSSL(true)
+	}
+
+	if a.profile.RetryCount > 0 {
+		// when use --retry-count, enable auto retry
+		a.openapiRuntime.SetAutoretry(true)
+		a.openapiRuntime.SetMaxAttempts(a.profile.RetryCount)
+	}
+	if v, ok := EndpointFlag(ctx.Flags()).GetValue(); ok {
+		a.openapiRequest.EndpointOverride = tea.String(v)
+	}
+
+	for _, s := range HeaderFlag(ctx.Flags()).GetValues() {
+		if k, v, ok := cli.SplitStringWithPrefix(s, "="); ok {
+			a.openapiRequest.Headers[k] = tea.String(v)
+		} else {
+			return fmt.Errorf("invaild flag --header `%s` use `--header HeaderName=Value`", s)
+		}
+	}
 
 	a.openapiClient, err = GetOpenapiClient(a.profile, ctx, product)
 	if err != nil {
 		return fmt.Errorf("init openapi client failed %s", err)
 	}
+	a.openapiRequest.Headers["x-acs-region-id"] = tea.String(a.profile.RegionId)
 	return nil
 }
 
