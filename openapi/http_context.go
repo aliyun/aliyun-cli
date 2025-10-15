@@ -49,11 +49,15 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	conf := openapiClient.Config{
 		Credential: credential,
 		RegionId:   tea.String(cp.RegionId),
+		// AccessKeyId:     tea.String(cp.AccessKeyId),
+		// AccessKeySecret: tea.String(cp.AccessKeySecret),
 	}
 	if strings.ToLower(product.Code) == "sls" {
 		conf.Endpoint = tea.String(cp.RegionId + ".log.aliyuncs.com") // should apply product template
 	}
-	conf.SetUserAgent(os.Getenv("ALIYUN_USER_AGENT"))
+	if os.Getenv("ALIYUN_USER_AGENT") != "" {
+		conf.SetUserAgent(os.Getenv("ALIYUN_USER_AGENT"))
+	}
 
 	if cp.ReadTimeout > 0 {
 		conf.SetReadTimeout(cp.ReadTimeout * 1000)
@@ -159,7 +163,7 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	if err != nil {
 		return fmt.Errorf("init openapi client failed %s", err)
 	}
-	a.openapiRequest.Headers["x-acs-region-id"] = tea.String(a.profile.RegionId)
+	// a.openapiRequest.Headers["x-acs-region-id"] = tea.String(a.profile.RegionId)
 	return nil
 }
 
