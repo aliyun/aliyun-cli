@@ -81,21 +81,14 @@ func GetContentFromApiResponse(response map[string]any) string {
 	return out
 }
 
-type ApiInvoker interface {
+type HttpInvoker interface {
 	getRequest() *openapiutil.OpenApiRequest
 	Prepare(ctx *cli.Context) error
 	Call() (map[string]any, error)
 	GetResponse() (string, error)
 }
 
-// implementations
-// - Waiter
-// - Pager
-type ApiInvokeHelper interface {
-	ApiCallWith(apiInvoker ApiInvoker) (string, error)
-}
-
-type ApiContext struct {
+type HttpContext struct {
 	profile         *config.Profile
 	openapiClient   *openapiClient.Client
 	openapiRequest  *openapiutil.OpenApiRequest
@@ -105,15 +98,15 @@ type ApiContext struct {
 	product         *meta.Product
 }
 
-func NewApiContext(cp *config.Profile) *ApiContext {
-	return &ApiContext{profile: cp}
+func NewApiContext(cp *config.Profile) *HttpContext {
+	return &HttpContext{profile: cp}
 }
 
-func (a *ApiContext) getRequest() *openapiutil.OpenApiRequest {
+func (a *HttpContext) getRequest() *openapiutil.OpenApiRequest {
 	return a.openapiRequest
 }
 
-func (a *ApiContext) Init(ctx *cli.Context, product *meta.Product) error {
+func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
 	a.openapiResponse = &map[string]any{}
 	a.product = product
@@ -137,22 +130,28 @@ func (a *ApiContext) Init(ctx *cli.Context, product *meta.Product) error {
 	return nil
 }
 
-func (a *ApiContext) Call() (map[string]any, error) {
+func (a *HttpContext) Call() (map[string]any, error) {
 	resp, err := a.openapiClient.Execute(a.openapiParams, a.openapiRequest, a.openapiRuntime)
 	a.openapiResponse = &resp
 	return resp, err
 }
 
-func (a *ApiContext) GetResponse() (string, error) {
+func (a *HttpContext) GetResponse() (string, error) {
 	out := GetContentFromApiResponse(*a.openapiResponse)
 	return out, nil
 }
 
 type OpenapiContext struct {
-	*ApiContext
+	*HttpContext
 	method string
 	path   string
 	api    *meta.Api
+}
+
+func (a *OpenapiContext) ProcessPullLogsHeaders(ctx *cli.Context) {
+	a.openapiRequest.Headers["Accept-Encoding"] = tea.String("lz4")
+	a.openapiRequest.Headers["accept"] = tea.String("application/x-protobuf")
+	a.openapiParams.BodyType = tea.String("byte")
 }
 
 func (a *OpenapiContext) ProcessHeaders(ctx *cli.Context) error {
@@ -170,11 +169,8 @@ func (a *OpenapiContext) ProcessHeaders(ctx *cli.Context) error {
 		}
 		a.openapiRequest.Headers[f.Name] = &value
 	}
-	if a.api.Name == "PullLogs" {
-		a.openapiRequest.Headers["Accept-Encoding"] = tea.String("lz4")
-		a.openapiRequest.Headers["accept"] = tea.String("application/x-protobuf")
-		a.openapiParams.BodyType = tea.String("byte")
-
+	if a.product.GetLowerCode() == "sls" && a.api.Name == "PullLogs" {
+		a.ProcessPullLogsHeaders(ctx)
 	}
 	return nil
 }
@@ -229,7 +225,7 @@ func (a *OpenapiContext) ProcessBody(ctx *cli.Context) error {
 		if param == nil {
 			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
 		}
-		if param.Position == "Body" {
+		if param.Position != "Body" {
 			continue
 		}
 		value, _ := f.GetValue()
@@ -358,15 +354,23 @@ func (a *OpenapiContext) CheckResponseForPullLogs(response map[string]any) (stri
 	if err != nil {
 		return "", err
 	}
+	if len(bodyBytes) == 0 {
+		return "", nil
+	}
 	result, err := slsUtils.ProcessPullLogsResponse(bodyBytes)
 	if err != nil {
 		return "", err
 	}
-	return result, nil
+	// extract count and next cursor from headers
+	responseHeaders := response["headers"].(map[string]any)
+	fmt.Printf("count: %s\n", responseHeaders["x-log-count"])
+	fmt.Printf("next_cursor: %s\n", responseHeaders["x-log-cursor"])
+
+	return string(result), nil
 }
 
 func (a *OpenapiContext) GetResponse() (string, error) {
-	if a.api.Name == "PullLogs" {
+	if a.product.GetLowerCode() == "sls" && a.api.Name == "PullLogs" {
 		return a.CheckResponseForPullLogs(*a.openapiResponse)
 	}
 	out := GetContentFromApiResponse(*a.openapiResponse)
