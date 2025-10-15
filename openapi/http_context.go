@@ -145,12 +145,13 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	if v, ok := EndpointFlag(ctx.Flags()).GetValue(); ok {
 		a.openapiRequest.EndpointOverride = tea.String(v)
 	}
-
-	for _, s := range HeaderFlag(ctx.Flags()).GetValues() {
-		if k, v, ok := cli.SplitStringWithPrefix(s, "="); ok {
-			a.openapiRequest.Headers[k] = tea.String(v)
-		} else {
-			return fmt.Errorf("invaild flag --header `%s` use `--header HeaderName=Value`", s)
+	if ctx.Flags() != nil && HeaderFlag(ctx.Flags()) != nil {
+		for _, s := range HeaderFlag(ctx.Flags()).GetValues() {
+			if k, v, ok := cli.SplitStringWithPrefix(s, "="); ok {
+				a.openapiRequest.Headers[k] = tea.String(v)
+			} else {
+				return fmt.Errorf("invaild flag --header `%s` use `--header HeaderName=Value`", s)
+			}
 		}
 	}
 
