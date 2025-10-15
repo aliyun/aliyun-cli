@@ -98,7 +98,7 @@ type HttpContext struct {
 	product         *meta.Product
 }
 
-func NewApiContext(cp *config.Profile) *HttpContext {
+func NewHttpContext(cp *config.Profile) *HttpContext {
 	return &HttpContext{profile: cp}
 }
 
@@ -108,7 +108,6 @@ func (a *HttpContext) getRequest() *openapiutil.OpenApiRequest {
 
 func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
-	a.openapiResponse = &map[string]any{}
 	a.product = product
 	a.openapiRequest = &openapiutil.OpenApiRequest{
 		Query:   map[string]*string{},

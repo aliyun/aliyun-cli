@@ -462,7 +462,7 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 	}
 
 	force := ForceFlag(ctx.Flags()).IsAssigned()
-	apiContext := NewApiContext(&c.profile)
+	apiContext := NewHttpContext(&c.profile)
 	err := apiContext.Init(ctx, product)
 	if err != nil {
 		return nil, err
