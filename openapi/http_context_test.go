@@ -139,7 +139,12 @@ func TestHttpContext(t *testing.T) {
 	})
 
 	t.Run("Init", func(t *testing.T) {
-		profile := &config.Profile{RegionId: "cn-hangzhou"}
+		profile := &config.Profile{
+			Mode:            "AK",
+			AccessKeyId:     "test-access-key-id",
+			AccessKeySecret: "test-access-key-secret",
+			RegionId:        "cn-hangzhou",
+		}
 		context := &HttpContext{profile: profile}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
