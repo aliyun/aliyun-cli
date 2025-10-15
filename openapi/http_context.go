@@ -321,6 +321,9 @@ func (a *OpenapiContext) Prepare(ctx *cli.Context) error {
 	if _, ok := SecureFlag(ctx.Flags()).GetValue(); ok {
 		oaParams.Protocol = tea.String("https")
 	}
+	if ctx.UnknownFlags() == nil {
+		return fmt.Errorf("no parameters provided, please check")
+	}
 
 	return a.RequestProcessors(ctx)
 }

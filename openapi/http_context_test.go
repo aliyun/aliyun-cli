@@ -171,16 +171,22 @@ func TestOpenapiContext(t *testing.T) {
 	})
 
 	t.Run("ProcessPutLogsBodyWithBodyFlag", func(t *testing.T) {
-		// Create a mock LogGroup for testing
-		logGroup := &sls.LogGroup{
-			Logs: []*sls.Log{{
-				Time: proto.Uint32(1234567890),
-			}},
-		}
-
-		// Marshal to JSON for the body flag
-		bodyBytes, err := proto.Marshal(logGroup)
-		assert.NoError(t, err)
+		jsonData := `{
+			"Logs": [
+				{
+					"Time": 1712345678,
+					"Contents": [
+						{ "Key": "method", "Value": "POST" },
+						{ "Key": "path", "Value": "/api/login" }
+					]
+				}
+			],
+			"Topic": "web-logs",
+			"Source": "192.168.1.100",
+			"LogTags": [
+				{ "Key": "env", "Value": "prod" }
+			]
+		}`
 
 		httpContext := &HttpContext{}
 		context := &OpenapiContext{HttpContext: httpContext}
@@ -192,10 +198,11 @@ func TestOpenapiContext(t *testing.T) {
 		context.api = &meta.Api{Name: "PutLogs"}
 
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		AddFlags(ctx.Flags())
 		BodyFlag(ctx.Flags()).SetAssigned(true)
-		BodyFlag(ctx.Flags()).SetValue(string(bodyBytes))
+		BodyFlag(ctx.Flags()).SetValue(string(jsonData))
 
-		err = context.ProcessPutLogsBody(ctx)
+		err := context.ProcessPutLogsBody(ctx)
 		if err != nil {
 			assert.Contains(t, err.Error(), "no logs provided")
 		}
@@ -270,7 +277,7 @@ func TestOpenapiContext(t *testing.T) {
 	t.Run("GetResponseForNonPullLogs", func(t *testing.T) {
 		httpContext := &HttpContext{}
 		context := &OpenapiContext{HttpContext: httpContext}
-		*context.openapiResponse = map[string]any{
+		context.openapiResponse = &map[string]any{
 			"body": "test response",
 		}
 		context.product = &meta.Product{Code: "ecs"}
@@ -300,7 +307,7 @@ func TestRequestProcessors(t *testing.T) {
 				{
 					Name:     "TestParam",
 					Position: "Query",
-					Required: false,
+					Required: true,
 				},
 			},
 		}
@@ -308,7 +315,10 @@ func TestRequestProcessors(t *testing.T) {
 		context.path = "/instances"
 
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-
+		ctx.SetUnknownFlags(cli.NewFlagSet())
+		ctx.UnknownFlags().AddByName("TestParam")
+		ctx.UnknownFlags().Get("TestParam").SetAssigned(true)
+		ctx.UnknownFlags().Get("TestParam").SetValue("test_value")
 		err := context.RequestProcessors(ctx)
 		assert.NoError(t, err)
 	})
@@ -324,14 +334,15 @@ func TestRequestProcessors(t *testing.T) {
 		context.openapiParams = &openapiClient.Params{}
 		context.product = &meta.Product{Code: "ecs"}
 		context.api = &meta.Api{
-			Name:    "DescribeInstances",
-			Product: &meta.Product{Version: "2014-05-26"},
+			Name:     "DescribeInstances",
+			Product:  &meta.Product{Version: "2014-05-26"},
+			Protocol: "HTTPS",
 		}
 		context.method = "GET"
 		context.path = "/instances"
 
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-
+		ctx.SetUnknownFlags(cli.NewFlagSet())
 		err := context.Prepare(ctx)
 		assert.NoError(t, err)
 		assert.Equal(t, "DescribeInstances", *context.openapiParams.Action)
