@@ -456,7 +456,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 }
 
 // openapi context
-func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, api *meta.Api, method string, path string) (ApiInvoker, error) {
+func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, api *meta.Api, method string, path string) (HttpInvoker, error) {
 	if product == nil {
 		return nil, fmt.Errorf("invalid product, please check product code")
 	}

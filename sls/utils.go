@@ -10,7 +10,7 @@ import (
 
 func ParseProtobufList(data []byte) ([]*LogGroup, error) {
 	if len(data) == 0 {
-		return nil, fmt.Errorf("empty data")
+		return nil, nil
 	}
 
 	logGroupList := &LogGroupList{}
@@ -21,21 +21,21 @@ func ParseProtobufList(data []byte) ([]*LogGroup, error) {
 	return nil, fmt.Errorf("cannot parse proto data: no LogGroup or LogGroupList")
 }
 
-func ProcessPullLogsResponse(bodyBytes []byte) (string, error) {
+func ProcessPullLogsResponse(bodyBytes []byte) ([]byte, error) {
 	logGroups, err := ParseProtobufList(bodyBytes)
 	if err != nil {
-		return "", fmt.Errorf("parse proto object failed: %v", err)
+		return nil, fmt.Errorf("parse proto object failed: %v", err)
 	}
 	logGroupList := &LogGroupList{
 		LogGroups: logGroups,
 	}
 
-	jsonData, err := json.MarshalIndent(logGroupList, "", "  ")
+	jsonData, err := json.Marshal(logGroupList)
 	if err != nil {
-		return "", fmt.Errorf("serilization failed: %v", err)
+		return nil, fmt.Errorf("serilization failed: %v", err)
 	}
 
-	return string(jsonData), nil
+	return jsonData, nil
 }
 
 func CompressLZ4(data []byte) ([]byte, error) {
