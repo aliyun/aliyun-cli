@@ -15,6 +15,7 @@ package openapi
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -496,4 +497,565 @@ func TestDetectInConfigureMode(t *testing.T) {
 	flags.Add(modeFlag)
 	result = DetectInConfigureMode(flags)
 	assert.True(t, result, "Expected true when OIDCTokenFile flag is set")
+}
+
+func TestProcessApiInvoke(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+	}
+	command := NewCommando(w, profile)
+
+	t.Run("NilProduct", func(t *testing.T) {
+		err := command.processApiInvoke(ctx, nil, nil, "GET", "/test")
+		assert.Error(t, err)
+		assert.Equal(t, "invalid product, please check product code", err.Error())
+	})
+
+	t.Run("CreateHttpContextError", func(t *testing.T) {
+		product := &meta.Product{
+			Code: "test",
+		}
+		err := command.processApiInvoke(ctx, product, nil, "INVALID", "/test")
+		assert.Error(t, err)
+	})
+
+	t.Run("QuietFlagAssigned", func(t *testing.T) {
+		product := &meta.Product{
+			Code: "sls",
+		}
+		api := &meta.Api{
+			Name: "TestApi",
+			Product: &meta.Product{
+				Version: "2017-08-01",
+			},
+		}
+		QuietFlag(ctx.Flags()).SetAssigned(true)
+
+		originCallHook := hookHttpContextCall
+		originhook := hookHttpContextGetResponse
+		defer func() {
+			hookHttpContextGetResponse = originhook
+			hookHttpContextCall = originCallHook
+		}()
+		hookHttpContextCall = func(fn func() error) func() error {
+			return func() error {
+				return nil
+			}
+		}
+		hookHttpContextGetResponse = func(fn func() (string, error)) func() (string, error) {
+			return func() (string, error) {
+				return "test bytes", nil
+			}
+		}
+
+		err := command.processApiInvoke(ctx, product, api, "GET", "/test")
+		assert.NoError(t, err)
+		assert.Empty(t, w.String())
+	})
+
+	t.Run("SuccessWithOutput", func(t *testing.T) {
+		product := &meta.Product{
+			Code: "sls",
+		}
+		api := &meta.Api{
+			Name: "TestApi",
+			Product: &meta.Product{
+				Version: "2017-08-01",
+			},
+		}
+
+		originCallHook := hookHttpContextCall
+		originhook := hookHttpContextGetResponse
+		defer func() {
+			hookHttpContextGetResponse = originhook
+			hookHttpContextCall = originCallHook
+		}()
+		hookHttpContextCall = func(fn func() error) func() error {
+			return func() error {
+				return nil
+			}
+		}
+		hookHttpContextGetResponse = func(fn func() (string, error)) func() (string, error) {
+			return func() (string, error) {
+				return "test", nil
+			}
+		}
+		err := command.processApiInvoke(ctx, product, api, "GET", "/test")
+		assert.NoError(t, err)
+	})
+
+	t.Run("ProcessApiInvokeFail", func(t *testing.T) {
+		product := &meta.Product{
+			Code: "sls",
+		}
+		api := &meta.Api{
+			Name: "PullLogs",
+			Product: &meta.Product{
+				Version: "2017-08-01",
+			},
+		}
+
+		originCallHook := hookHttpContextCall
+		defer func() {
+			hookHttpContextCall = originCallHook
+		}()
+		hookHttpContextCall = func(fn func() error) func() error {
+			return func() error {
+				return errors.New("test error")
+			}
+		}
+		err := command.processApiInvoke(ctx, product, api, "GET", "/PullLogs")
+		assert.Equal(t, "test error", err.Error())
+	})
+
+	t.Run("ProcessApiInvokeNoOutput", func(t *testing.T) {
+		product := &meta.Product{
+			Code: "sls",
+		}
+		api := &meta.Api{
+			Name: "PutLogs",
+			Product: &meta.Product{
+				Version: "2017-08-01",
+			},
+		}
+
+		originCallHook := hookHttpContextCall
+		originhook := hookHttpContextGetResponse
+		defer func() {
+			hookHttpContextGetResponse = originhook
+			hookHttpContextCall = originCallHook
+		}()
+		hookHttpContextCall = func(fn func() error) func() error {
+			return func() error {
+				return nil
+			}
+		}
+		hookHttpContextGetResponse = func(fn func() (string, error)) func() (string, error) {
+			return func() (string, error) {
+				return "", nil
+			}
+		}
+		jsonData := `{
+			"Logs": [
+				{
+					"Time": 1712345678,
+					"Contents": [
+						{ "Key": "method", "Value": "POST" },
+						{ "Key": "path", "Value": "/api/login" }
+					]
+				}
+			],
+			"Topic": "web-logs",
+			"Source": "192.168.1.100",
+			"LogTags": [
+				{ "Key": "env", "Value": "prod" }
+			]
+		}`
+		BodyFlag(ctx.Flags()).SetAssigned(true)
+		BodyFlag(ctx.Flags()).SetValue(string(jsonData))
+		err := command.processApiInvoke(ctx, product, api, "GET", "/PutLogs")
+		assert.NoError(t, err)
+	})
+
+	t.Run("ProcessApiInvokeGetResponseFail", func(t *testing.T) {
+		product := &meta.Product{
+			Code: "sls",
+		}
+		api := &meta.Api{
+			Name: "PullLogs",
+			Product: &meta.Product{
+				Version: "2017-08-01",
+			},
+		}
+
+		originCallHook := hookHttpContextCall
+		originhook := hookHttpContextGetResponse
+		defer func() {
+			hookHttpContextGetResponse = originhook
+			hookHttpContextCall = originCallHook
+		}()
+		hookHttpContextCall = func(fn func() error) func() error {
+			return func() error {
+				return nil
+			}
+		}
+		hookHttpContextGetResponse = func(fn func() (string, error)) func() (string, error) {
+			return func() (string, error) {
+				return "", errors.New("test error")
+			}
+		}
+		err := command.processApiInvoke(ctx, product, api, "GET", "/PullLogs")
+		assert.Equal(t, "test error", err.Error())
+	})
+}
+
+func TestProcessApiInvokeFilterError(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+	}
+	command := NewCommando(w, profile)
+	product := &meta.Product{
+		Code: "sls",
+	}
+	api := &meta.Api{
+		Name: "TestApi",
+		Product: &meta.Product{
+			Version: "2017-08-01",
+		},
+	}
+
+	originCallHook := hookHttpContextCall
+	originhook := hookHttpContextGetResponse
+	defer func() {
+		hookHttpContextGetResponse = originhook
+		hookHttpContextCall = originCallHook
+	}()
+	hookHttpContextCall = func(fn func() error) func() error {
+		return func() error {
+			return nil
+		}
+	}
+	hookHttpContextGetResponse = func(fn func() (string, error)) func() (string, error) {
+		return func() (string, error) {
+			return `{"Instances":{"Instance":[{"InstanceId":"i-123","InstanceName":"test-instance"}]}}`, nil
+		}
+	}
+	OutputFlag(ctx.Flags()).SetAssigned(true)
+	err := command.processApiInvoke(ctx, product, api, "GET", "/test")
+	assert.Contains(t, err.Error(), "you need to assign col=col1,col2")
+}
+
+func TestCreateHttpContext(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+	}
+	command := NewCommando(w, profile)
+
+	t.Run("NilProduct", func(t *testing.T) {
+		invoker, err := command.createHttpContext(ctx, nil, nil, "GET", "/test")
+		assert.Error(t, err)
+		assert.Nil(t, invoker)
+		assert.Equal(t, "invalid product, please check product code", err.Error())
+	})
+
+	t.Run("InvalidApiStyle", func(t *testing.T) {
+		product := &meta.Product{
+			Code:     "test",
+			ApiStyle: "invalid",
+		}
+		invoker, err := command.createHttpContext(ctx, product, nil, "GET", "/test")
+		assert.Error(t, err)
+		assert.Nil(t, invoker)
+		assert.Contains(t, err.Error(), "unchecked api style: invalid")
+	})
+
+	t.Run("ForceFlagWithUncheckedVersion", func(t *testing.T) {
+		product := &meta.Product{
+			Code:     "test",
+			ApiStyle: "restful",
+		}
+		ForceFlag(ctx.Flags()).SetAssigned(true)
+		VersionFlag(ctx.Flags()).SetAssigned(true)
+		VersionFlag(ctx.Flags()).SetValue("2022-01-01")
+		defer func() {
+			ForceFlag(ctx.Flags()).SetAssigned(false)
+			VersionFlag(ctx.Flags()).SetAssigned(false)
+		}()
+
+		invoker, err := command.createHttpContext(ctx, product, nil, "GET", "/test")
+		assert.Error(t, err)
+		assert.Nil(t, invoker)
+		assert.Contains(t, err.Error(), "unchecked version 2022-01-01")
+	})
+
+	t.Run("ForceFlagWithStyleFlag", func(t *testing.T) {
+		product := &meta.Product{
+			Code:     "test",
+			ApiStyle: "restful",
+		}
+		ForceFlag(ctx.Flags()).SetAssigned(true)
+		VersionFlag(ctx.Flags()).SetAssigned(true)
+		VersionFlag(ctx.Flags()).SetValue("2022-01-01")
+		unknownFlag := &cli.Flag{
+			Name: "style",
+		}
+		unknownFlag.SetValue("restful")
+		unknownFlag.SetAssigned(true)
+		ctx.Flags().Add(unknownFlag)
+		defer func() {
+			ForceFlag(ctx.Flags()).SetAssigned(false)
+			VersionFlag(ctx.Flags()).SetAssigned(false)
+		}()
+
+		invoker, err := command.createHttpContext(ctx, product, nil, "test", "/test")
+		assert.Error(t, err)
+		assert.Nil(t, invoker)
+		assert.Contains(t, err.Error(), "unchecked api style: restful or product: test")
+	})
+
+	t.Run("Success", func(t *testing.T) {
+		product := &meta.Product{
+			Code:     "sls",
+			ApiStyle: "restful",
+			Version:  "2017-08-01",
+		}
+		api := &meta.Api{
+			Name: "TestApi",
+		}
+
+		invoker, err := command.createHttpContext(ctx, product, api, "GET", "/test")
+		if err == nil {
+			assert.NotNil(t, invoker)
+			openapiCtx, ok := invoker.(*OpenapiContext)
+			assert.True(t, ok)
+			assert.Equal(t, "GET", openapiCtx.method)
+			assert.Equal(t, "/test", openapiCtx.path)
+			assert.Equal(t, api, openapiCtx.api)
+		}
+	})
+}
+
+func TestMainForSlsProduct(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	profile := config.Profile{
+		Language: "en",
+		RegionId: "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+	assert.NotNil(t, command)
+
+	cmd := &cli.Command{}
+	AddFlags(cmd.Flags())
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+
+	t.Run("SLSProductWithOpenApi", func(t *testing.T) {
+		originalFunc := meta.HookGetApi
+		defer func() {
+			meta.HookGetApi = originalFunc
+		}()
+		slsProduct := meta.Product{
+			Code:     "sls",
+			Version:  "2020-03-20",
+			ApiStyle: "restful",
+			ApiNames: []string{"TestApi"},
+		}
+		mockRepo, _ := meta.MockLoadRepository([]meta.Product{slsProduct})
+
+		mockLibrary := &Library{
+			builtinRepo: mockRepo,
+		}
+		command.library = mockLibrary
+
+		meta.HookGetApi = func(fn func(productCode string, version string, apiName string) (meta.Api, bool)) func(productCode string, version string, apiName string) (meta.Api, bool) {
+			return func(productCode string, version string, apiName string) (meta.Api, bool) {
+				if productCode == "sls" && version == "2020-03-20" && apiName == "TestApi" {
+					slsApi := meta.Api{
+						Name:    "GetProject",
+						Product: &meta.Product{Version: "2020-03-20"},
+						Parameters: []meta.Parameter{
+							{
+								Name:     "TestHost",
+								Position: "Host",
+								Required: true,
+							},
+						},
+					}
+					return slsApi, true
+				}
+				return meta.Api{}, false
+			}
+		}
+
+		stdout.Reset()
+		ctx = cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+
+		// Add required flags for SLS
+		regionflag := config.NewRegionFlag()
+		regionflag.SetAssigned(true)
+		regionflag.SetValue("cn-hangzhou")
+		ctx.Flags().Add(regionflag)
+
+		accessKeyIDFlag := config.NewAccessKeyIdFlag()
+		accessKeyIDFlag.SetAssigned(true)
+		accessKeyIDFlag.SetValue("test-access-key-id")
+		ctx.Flags().Add(accessKeyIDFlag)
+
+		accessKeySecretFlag := config.NewAccessKeySecretFlag()
+		accessKeySecretFlag.SetAssigned(true)
+		accessKeySecretFlag.SetValue("test-access-key-secret")
+		ctx.Flags().Add(accessKeySecretFlag)
+
+		// Test the SLS product call that should use OpenAPI
+		args := []string{"sls", "TestApi"}
+		err := command.main(ctx, args)
+		assert.Equal(t, err.Error(), "product 'sls' need proper restful call with ApiName or {GET|PUT|POST|DELETE} <path>")
+	})
+
+	t.Run("SLSProductInvalidRestCall", func(t *testing.T) {
+		originalFunc := meta.HookGetApiByPath
+		defer func() {
+			meta.HookGetApiByPath = originalFunc
+		}()
+		slsProduct := meta.Product{
+			Code:     "sls",
+			Version:  "2020-03-20",
+			ApiStyle: "restful",
+			ApiNames: []string{"TestApi"},
+		}
+		mockRepo, _ := meta.MockLoadRepository([]meta.Product{slsProduct})
+
+		mockLibrary := &Library{
+			builtinRepo: mockRepo,
+		}
+		command.library = mockLibrary
+
+		meta.HookGetApiByPath = func(fn func(productCode string, version string, method string, path string) (meta.Api, bool)) func(productCode string, version string, method string, path string) (meta.Api, bool) {
+			return func(productCode string, version string, method string, path string) (meta.Api, bool) {
+				if productCode == "sls" && version == "2020-03-20" && method == "Get" && path == "/" {
+					slsApi := meta.Api{
+						Name:    "GetProject",
+						Product: &meta.Product{Version: "2020-03-20"},
+						Parameters: []meta.Parameter{
+							{
+								Name:     "TestParam",
+								Position: "Query",
+								Required: false,
+							},
+						},
+					}
+					return slsApi, true
+				}
+				return meta.Api{}, false
+			}
+		}
+
+		// Set up context for SLS product call
+		stdout.Reset()
+		ctx = cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+
+		// Add required flags for SLS
+		regionflag := config.NewRegionFlag()
+		regionflag.SetAssigned(true)
+		regionflag.SetValue("cn-hangzhou")
+		ctx.Flags().Add(regionflag)
+
+		accessKeyIDFlag := config.NewAccessKeyIdFlag()
+		accessKeyIDFlag.SetAssigned(true)
+		accessKeyIDFlag.SetValue("test-access-key-id")
+		ctx.Flags().Add(accessKeyIDFlag)
+
+		accessKeySecretFlag := config.NewAccessKeySecretFlag()
+		accessKeySecretFlag.SetAssigned(true)
+		accessKeySecretFlag.SetValue("test-access-key-secret")
+		ctx.Flags().Add(accessKeySecretFlag)
+
+		args := []string{"sls", "Get", "/"}
+		err := command.main(ctx, args)
+		assert.Contains(t, err.Error(), "too broad path: / for method: Get, please use specific ApiName instead")
+	})
+
+	t.Run("SLSProductWithRestCall", func(t *testing.T) {
+		originalFunc := meta.HookGetApiByPath
+		defer func() {
+			meta.HookGetApiByPath = originalFunc
+		}()
+		slsProduct := meta.Product{
+			Code:     "sls",
+			Version:  "2020-03-20",
+			ApiStyle: "restful",
+			ApiNames: []string{"TestApi"},
+		}
+		mockRepo, _ := meta.MockLoadRepository([]meta.Product{slsProduct})
+
+		mockLibrary := &Library{
+			builtinRepo: mockRepo,
+		}
+		command.library = mockLibrary
+
+		meta.HookGetApiByPath = func(fn func(productCode string, version string, method string, path string) (meta.Api, bool)) func(productCode string, version string, method string, path string) (meta.Api, bool) {
+			return func(productCode string, version string, method string, path string) (meta.Api, bool) {
+				if productCode == "sls" && version == "2020-03-20" && method == "Gets" && path == "/abc" {
+					slsApi := meta.Api{
+						Name: "GetProject",
+						Parameters: []meta.Parameter{
+							{
+								Name:     "TestParam",
+								Position: "Query",
+								Required: false,
+							},
+						},
+					}
+					return slsApi, true
+				}
+				return meta.Api{}, false
+			}
+		}
+
+		// Set up context for SLS product call
+		stdout.Reset()
+		ctx = cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+
+		// Add required flags for SLS
+		regionflag := config.NewRegionFlag()
+		regionflag.SetAssigned(true)
+		regionflag.SetValue("cn-hangzhou")
+		ctx.Flags().Add(regionflag)
+
+		accessKeyIDFlag := config.NewAccessKeyIdFlag()
+		accessKeyIDFlag.SetAssigned(true)
+		accessKeyIDFlag.SetValue("test-access-key-id")
+		ctx.Flags().Add(accessKeyIDFlag)
+
+		accessKeySecretFlag := config.NewAccessKeySecretFlag()
+		accessKeySecretFlag.SetAssigned(true)
+		accessKeySecretFlag.SetValue("test-access-key-secret")
+		ctx.Flags().Add(accessKeySecretFlag)
+
+		args := []string{"sls", "Gets", "/abc"}
+		err := command.main(ctx, args)
+		assert.Contains(t, err.Error(), "product 'sls' need proper restful call with ApiName or {GET|PUT|POST|DELETE} <path>")
+	})
+
 }

@@ -154,7 +154,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			}
 		}
 		if product.ApiStyle == "restful" {
-			api, _ := c.library.GetApi(product.Code, product.Version, args[1])
+			api, _ := meta.HookGetApi(c.library.GetApi)(product.Code, product.Version, args[1])
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 			ctx.Command().Name = args[1]
 			if ShouldUseOpenapi(ctx, &product) {
@@ -172,7 +172,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		// restful call
 		// aliyun <productCode> {GET|PUT|POST|DELETE} <path> --
 		product, _ := c.library.GetProduct(productName)
-		api, find := c.library.GetApiByPath(product.Code, product.Version, args[1], args[2])
+		api, find := meta.HookGetApiByPath(c.library.GetApiByPath)(product.Code, product.Version, args[1], args[2])
 		if !find {
 			// throw error, can not find api by path
 			return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
@@ -207,11 +207,11 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		return err
 	}
 
-	_, err = apiContext.Call()
+	err = hookHttpContextCall(apiContext.Call)()
 	if err != nil {
 		return err
 	}
-	out, err := apiContext.GetResponse()
+	out, err := hookHttpContextGetResponse(apiContext.GetResponse)()
 	if err != nil {
 		return err
 	}
@@ -475,7 +475,7 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 				// 没有在 versions.json 中配置的版本可以通过 --style 自行指定
 				style, _ := ctx.Flags().Get("style").GetValue()
 				if style == "" {
-					return nil, cli.NewErrorWithTip(fmt.Errorf("uncheked version %s", version),
+					return nil, cli.NewErrorWithTip(fmt.Errorf("unchecked version %s", version),
 						"Please use --style to specify API style, rpc or restful.")
 				}
 				product.ApiStyle = style
@@ -484,8 +484,8 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 	}
 
 	if strings.ToLower(product.ApiStyle) == "rpc" || !ShouldUseOpenapi(ctx, product) {
-		return nil, cli.NewErrorWithTip(fmt.Errorf("uncheked api style %s", product.ApiStyle),
-			"Upsupported api style or product.")
+		return nil, cli.NewErrorWithTip(fmt.Errorf("unchecked api style: %s or product: %s", product.ApiStyle, product.Code),
+			"Unsupported api style or product")
 	}
 	ok, method, path, err := checkRestfulMethod(ctx, method, path)
 	if err != nil {

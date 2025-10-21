@@ -37,6 +37,14 @@ func ShouldUseOpenapi(ctx *cli.Context, product *meta.Product) bool {
 	return strings.ToLower(product.Code) == "sls"
 }
 
+var hookHttpContextCall = func(fn func() error) func() error {
+	return fn
+}
+
+var hookHttpContextGetResponse = func(fn func() (string, error)) func() (string, error) {
+	return fn
+}
+
 func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Product) (client *openapiClient.Client, err error) {
 	if cp.RegionId == "" {
 		err = fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
@@ -102,7 +110,7 @@ func GetContentFromApiResponse(response map[string]any) string {
 type HttpInvoker interface {
 	getRequest() *openapiutil.OpenApiRequest
 	Prepare(ctx *cli.Context) error
-	Call() (map[string]any, error)
+	Call() error
 	GetResponse() (string, error)
 }
 
@@ -112,7 +120,7 @@ type HttpContext struct {
 	openapiRequest  *openapiutil.OpenApiRequest
 	openapiRuntime  *openapiTeaUtils.RuntimeOptions
 	openapiParams   *openapiClient.Params
-	openapiResponse *map[string]any
+	openapiResponse map[string]any
 	product         *meta.Product
 }
 
@@ -164,21 +172,16 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 
 	a.openapiClient, err = GetOpenapiClient(a.profile, ctx, product)
 	if err != nil {
-		return fmt.Errorf("init openapi client failed %s", err)
+		return fmt.Errorf("init openapi client failed, %s", err)
 	}
 	// a.openapiRequest.Headers["x-acs-region-id"] = tea.String(a.profile.RegionId)
 	return nil
 }
 
-func (a *HttpContext) Call() (map[string]any, error) {
+func (a *HttpContext) Call() error {
 	resp, err := a.openapiClient.Execute(a.openapiParams, a.openapiRequest, a.openapiRuntime)
-	a.openapiResponse = &resp
-	return resp, err
-}
-
-func (a *HttpContext) GetResponse() (string, error) {
-	out := GetContentFromApiResponse(*a.openapiResponse)
-	return out, nil
+	a.openapiResponse = resp
+	return err
 }
 
 type OpenapiContext struct {
@@ -222,10 +225,7 @@ func (a *OpenapiContext) ProcessPutLogsBody(ctx *cli.Context) error {
 	}
 
 	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok {
-		buf, err := os.ReadFile(v)
-		if err != nil {
-			return err
-		}
+		buf, _ := os.ReadFile(v)
 		body = buf
 
 	}
@@ -303,7 +303,7 @@ func (a *OpenapiContext) ProcessPath(ctx *cli.Context) error {
 			pathname = strings.ReplaceAll(pathname, placeholder, value)
 		}
 	}
-	a.openapiParams.Pathname = &pathname
+	a.openapiParams.Pathname = tea.String(pathname)
 	return nil
 }
 
@@ -346,14 +346,14 @@ func (a *OpenapiContext) ProcessQuery(ctx *cli.Context) error {
 type Processor func(ctx *cli.Context) error
 
 func (a *OpenapiContext) Prepare(ctx *cli.Context) error {
+	if a.api == nil {
+		return fmt.Errorf("api not found, should not happen")
+	}
 	oaParams := a.openapiParams
 	oaParams.Action = tea.String(a.api.Name)
 	oaParams.Version = &a.api.Product.Version
 	oaParams.Method = &a.method
 
-	if a.api == nil {
-		return fmt.Errorf("api not found, should not happen")
-	}
 	oaParams.Protocol = tea.String(a.api.GetProtocol())
 	if _, ok := InsecureFlag(ctx.Flags()).GetValue(); ok {
 		oaParams.Protocol = tea.String("http")
@@ -414,9 +414,9 @@ func (a *OpenapiContext) CheckResponseForPullLogs(response map[string]any) (stri
 
 func (a *OpenapiContext) GetResponse() (string, error) {
 	if a.product.GetLowerCode() == "sls" && a.api.Name == "PullLogs" {
-		return a.CheckResponseForPullLogs(*a.openapiResponse)
+		return a.CheckResponseForPullLogs(a.openapiResponse)
 	}
-	out := GetContentFromApiResponse(*a.openapiResponse)
+	out := GetContentFromApiResponse(a.openapiResponse)
 
 	return out, nil
 }

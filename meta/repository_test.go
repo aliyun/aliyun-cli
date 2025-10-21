@@ -27,6 +27,34 @@ func TestLoadRepository(t *testing.T) {
 	assert.Contains(t, repository.Names, "Ecs")
 }
 
+func TestMockLoadRepository(t *testing.T) {
+	products := []Product{
+		{
+			Code:     "cs",
+			ApiNames: []string{"UpdateUserPermissions"},
+		},
+	}
+	repository, _ := MockLoadRepository(products)
+	assert.NotNil(t, repository)
+	assert.Contains(t, repository.Names, "cs")
+}
+
+func TestMockLoadRepositoryWithProductSet(t *testing.T) {
+	products := []Product{
+		{
+			Code:     "cs",
+			ApiNames: []string{"UpdateUserPermissions"},
+		},
+		{
+			Code:     "cs",
+			ApiNames: []string{"UpdateUserPermissions"},
+		},
+	}
+	repository, err := MockLoadRepository(products)
+	assert.Nil(t, repository)
+	assert.Equal(t, "Duplicated Name: cs", err.Error())
+}
+
 func TestGetApi(t *testing.T) {
 	repository := LoadRepository()
 	assert.NotNil(t, repository)

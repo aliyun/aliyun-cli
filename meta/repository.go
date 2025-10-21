@@ -15,6 +15,7 @@ package meta
 
 import (
 	"encoding/json"
+	"errors"
 	"regexp"
 	"sort"
 	"strings"
@@ -27,6 +28,35 @@ type Repository struct {
 	Names    []string
 
 	index map[string]Product
+}
+
+// For test mock data only
+func MockLoadRepository(Products []Product) (*Repository, error) {
+	r := Repository{
+		index: make(map[string]Product),
+	}
+	for _, product := range Products {
+		name := strings.ToLower(product.Code)
+		_, ok := r.index[name]
+		if !ok {
+			r.Names = append(r.Names, product.Code)
+			r.index[name] = product
+		} else {
+			return nil, errors.New("Duplicated Name: " + product.Code)
+		}
+		sort.Strings(product.ApiNames)
+		r.Products = append(r.Products, product)
+	}
+	sort.Strings(r.Names)
+	return &r, nil
+}
+
+var HookGetApi = func(fn func(productCode string, version string, apiName string) (Api, bool)) func(productCode string, version string, apiName string) (Api, bool) {
+	return fn
+}
+
+var HookGetApiByPath = func(fn func(productCode string, version string, method string, path string) (Api, bool)) func(productCode string, version string, method string, path string) (Api, bool) {
+	return fn
 }
 
 func LoadRepository() *Repository {
