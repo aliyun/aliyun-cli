@@ -839,16 +839,74 @@ func TestCreateHttpContext(t *testing.T) {
 			Name: "TestApi",
 		}
 
-		invoker, err := command.createHttpContext(ctx, product, api, "GET", "/test")
-		if err == nil {
-			assert.NotNil(t, invoker)
-			openapiCtx, ok := invoker.(*OpenapiContext)
-			assert.True(t, ok)
-			assert.Equal(t, "GET", openapiCtx.method)
-			assert.Equal(t, "/test", openapiCtx.path)
-			assert.Equal(t, api, openapiCtx.api)
-		}
+		invoker, _ := command.createHttpContext(ctx, product, api, "GET", "/test")
+		assert.NotNil(t, invoker)
+		openapiCtx, ok := invoker.(*OpenapiContext)
+		assert.True(t, ok)
+		assert.Equal(t, "GET", openapiCtx.method)
+		assert.Equal(t, "/test", openapiCtx.path)
+		assert.Equal(t, api, openapiCtx.api)
 	})
+}
+
+func TestCreateHttpContextInitFail(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+	}
+	command := NewCommando(stdout, profile)
+	product := &meta.Product{
+		Code:     "sls",
+		ApiStyle: "restful",
+		Version:  "2017-08-01",
+	}
+	api := &meta.Api{
+		Name: "TestApi",
+	}
+
+	_, err := command.createHttpContext(ctx, product, api, "GET", "/test")
+	assert.Contains(t, err.Error(), "init openapi client failed")
+}
+
+func TestCreateHttpContextRestCheckFail(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+	product := &meta.Product{
+		Code:     "sls",
+		ApiStyle: "restful",
+		Version:  "2017-08-01",
+	}
+	api := &meta.Api{
+		Name: "TestApi",
+	}
+
+	_, err := command.createHttpContext(ctx, product, api, "GET", "aaa/test")
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "bad restful path aaa/test")
 }
 
 func TestMainForSlsProduct(t *testing.T) {
@@ -1057,5 +1115,155 @@ func TestMainForSlsProduct(t *testing.T) {
 		err := command.main(ctx, args)
 		assert.Contains(t, err.Error(), "product 'sls' need proper restful call with ApiName or {GET|PUT|POST|DELETE} <path>")
 	})
+}
 
+func TestMainForNonSlsProductApi(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	profile := config.Profile{
+		Language: "en",
+		RegionId: "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+	assert.NotNil(t, command)
+
+	cmd := &cli.Command{}
+	AddFlags(cmd.Flags())
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+	originalFunc := meta.HookGetApi
+	defer func() {
+		meta.HookGetApi = originalFunc
+	}()
+	ecsProduct := meta.Product{
+		Code:     "ecs",
+		Version:  "2020-03-20",
+		ApiStyle: "restful",
+		ApiNames: []string{"TestApi"},
+	}
+	mockRepo, _ := meta.MockLoadRepository([]meta.Product{ecsProduct})
+
+	mockLibrary := &Library{
+		builtinRepo: mockRepo,
+	}
+	command.library = mockLibrary
+
+	meta.HookGetApi = func(fn func(productCode string, version string, apiName string) (meta.Api, bool)) func(productCode string, version string, apiName string) (meta.Api, bool) {
+		return func(productCode string, version string, apiName string) (meta.Api, bool) {
+			if productCode == "ecs" {
+				ecsApi := meta.Api{
+					Name:    "GetProject",
+					Product: &meta.Product{Version: "2020-03-20"},
+					Parameters: []meta.Parameter{
+						{
+							Name:     "TestHost",
+							Position: "Host",
+							Required: true,
+						},
+					},
+				}
+				return ecsApi, true
+			}
+			return meta.Api{}, false
+		}
+	}
+
+	stdout.Reset()
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	regionflag := config.NewRegionFlag()
+	regionflag.SetAssigned(true)
+	regionflag.SetValue("cn-hangzhou")
+	ctx.Flags().Add(regionflag)
+
+	accessKeyIDFlag := config.NewAccessKeyIdFlag()
+	accessKeyIDFlag.SetAssigned(true)
+	accessKeyIDFlag.SetValue("test-access-key-id")
+	ctx.Flags().Add(accessKeyIDFlag)
+
+	accessKeySecretFlag := config.NewAccessKeySecretFlag()
+	accessKeySecretFlag.SetAssigned(true)
+	accessKeySecretFlag.SetValue("test-access-key-secret")
+	ctx.Flags().Add(accessKeySecretFlag)
+
+	args := []string{"ecs", "TestApi"}
+	err := command.main(ctx, args)
+	assert.NotNil(t, err)
+}
+
+func TestMainForNonSlsProductApiWithRestCall(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	profile := config.Profile{
+		Language: "en",
+		RegionId: "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+
+	cmd := &cli.Command{}
+	AddFlags(cmd.Flags())
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+
+	originalFunc := meta.HookGetApiByPath
+	defer func() {
+		meta.HookGetApiByPath = originalFunc
+	}()
+	ecsProduct := meta.Product{
+		Code:     "ecs",
+		Version:  "2020-03-20",
+		ApiStyle: "restful",
+		ApiNames: []string{"TestApi"},
+	}
+	mockRepo, _ := meta.MockLoadRepository([]meta.Product{ecsProduct})
+
+	mockLibrary := &Library{
+		builtinRepo: mockRepo,
+	}
+	command.library = mockLibrary
+
+	meta.HookGetApiByPath = func(fn func(productCode string, version string, method string, path string) (meta.Api, bool)) func(productCode string, version string, method string, path string) (meta.Api, bool) {
+		return func(productCode string, version string, method string, path string) (meta.Api, bool) {
+			if productCode == "ecs" {
+				ecsApi := meta.Api{
+					Name: "GetProject",
+					Parameters: []meta.Parameter{
+						{
+							Name:     "TestParam",
+							Position: "Query",
+							Required: false,
+						},
+					},
+				}
+				return ecsApi, true
+			}
+			return meta.Api{}, false
+		}
+	}
+
+	// Set up context for SLS product call
+	stdout.Reset()
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	// Add required flags for SLS
+	regionflag := config.NewRegionFlag()
+	regionflag.SetAssigned(true)
+	regionflag.SetValue("cn-hangzhou")
+	ctx.Flags().Add(regionflag)
+
+	accessKeyIDFlag := config.NewAccessKeyIdFlag()
+	accessKeyIDFlag.SetAssigned(true)
+	accessKeyIDFlag.SetValue("test-access-key-id")
+	ctx.Flags().Add(accessKeyIDFlag)
+
+	accessKeySecretFlag := config.NewAccessKeySecretFlag()
+	accessKeySecretFlag.SetAssigned(true)
+	accessKeySecretFlag.SetValue("test-access-key-secret")
+	ctx.Flags().Add(accessKeySecretFlag)
+
+	args := []string{"ecs", "Gets", "/abc"}
+	err := command.main(ctx, args)
+	assert.NotNil(t, err)
 }

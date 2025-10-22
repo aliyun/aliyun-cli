@@ -430,6 +430,37 @@ func TestOpenapiContext(t *testing.T) {
 		assert.Contains(t, err.Error(), "invalid response body for pulllogs parsing, please check")
 	})
 
+	t.Run("CheckResponseForPullLogsDecodeFail", func(t *testing.T) {
+		logGroup := &sls.LogGroup{
+			Logs: []*sls.Log{{
+				Time: proto.Uint32(1234567890),
+			}},
+			Topic: proto.String("test-topic"),
+		}
+
+		logGroupList := &sls.LogGroupList{
+			LogGroups: []*sls.LogGroup{logGroup},
+		}
+
+		bodyBytes, err := proto.Marshal(logGroupList)
+		assert.NoError(t, err)
+
+		httpContext := &HttpContext{}
+		context := &OpenapiContext{HttpContext: httpContext}
+		context.openapiResponse = map[string]any{
+			"body": string(bodyBytes),
+			"headers": map[string]any{
+				"x-log-count":  "1",
+				"x-log-cursor": "test-cursor",
+			},
+		}
+		context.product = &meta.Product{Code: "sls"}
+		context.api = &meta.Api{Name: "PullLogs"}
+
+		_, err = context.CheckResponseForPullLogs(context.openapiResponse)
+		assert.Contains(t, err.Error(), "illegal base64 data")
+	})
+
 	t.Run("CheckResponseForPullLogsEmpty", func(t *testing.T) {
 		httpContext := &HttpContext{}
 		context := &OpenapiContext{HttpContext: httpContext}
@@ -512,6 +543,45 @@ func TestProcessPutLogsBodyDataFail(t *testing.T) {
 
 	err := context.ProcessPutLogsBody(ctx)
 	assert.Contains(t, err.Error(), "parse json failed")
+}
+
+func TestProcessPutLogsBodyFile(t *testing.T) {
+	httpContext := &HttpContext{}
+	context := &OpenapiContext{HttpContext: httpContext}
+	context.openapiRequest = &openapiutil.OpenApiRequest{
+		Headers: map[string]*string{},
+	}
+	context.openapiParams = &openapiClient.Params{}
+	context.product = &meta.Product{Code: "sls"}
+	context.api = &meta.Api{Name: "PutLogs"}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	AddFlags(ctx.Flags())
+	BodyFileFlag(ctx.Flags()).SetAssigned(true)
+	BodyFileFlag(ctx.Flags()).SetValue("../integration/logexample.json")
+
+	err := context.ProcessPutLogsBody(ctx)
+	assert.Nil(t, err)
+}
+
+func TestProcessRegularBodyFile(t *testing.T) {
+	httpContext := &HttpContext{}
+	context := &OpenapiContext{HttpContext: httpContext}
+	context.openapiRequest = &openapiutil.OpenApiRequest{
+		Headers: map[string]*string{},
+	}
+	context.openapiParams = &openapiClient.Params{}
+	context.product = &meta.Product{Code: "ecs"}
+	context.api = &meta.Api{Name: "TestApi"}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	AddFlags(ctx.Flags())
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	BodyFileFlag(ctx.Flags()).SetAssigned(true)
+	BodyFileFlag(ctx.Flags()).SetValue("../integration/logexample.json")
+
+	err := context.ProcessBody(ctx)
+	assert.Nil(t, err)
 }
 
 func TestRequestProcessors(t *testing.T) {
@@ -864,6 +934,38 @@ func TestProcessQueryWithValidParameter(t *testing.T) {
 	err := context.ProcessQuery(ctx)
 	assert.NoError(t, err)
 	assert.Equal(t, "test-value", *context.openapiRequest.Query["TestQueryParam"])
+}
+
+func TestProcessQueryWithOtherParameter(t *testing.T) {
+	httpContext := &HttpContext{}
+	context := &OpenapiContext{HttpContext: httpContext}
+	context.openapiRequest = &openapiutil.OpenApiRequest{
+		Query: map[string]*string{},
+	}
+	context.product = &meta.Product{Code: "ecs"}
+	context.api = &meta.Api{
+		Name:    "DescribeInstances",
+		Product: &meta.Product{Version: "2014-05-26"},
+		Parameters: []meta.Parameter{
+			{
+				Name:     "TestQueryParam",
+				Position: "Query",
+			},
+			{
+				Name:     "aaa",
+				Position: "Path",
+			},
+		},
+	}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	ctx.UnknownFlags().AddByName("aaa")
+	ctx.UnknownFlags().Get("aaa").SetAssigned(true)
+	ctx.UnknownFlags().Get("aaa").SetValue("test-value")
+
+	err := context.ProcessQuery(ctx)
+	assert.Nil(t, err)
 }
 
 func TestProcessHostWithValidParameter(t *testing.T) {

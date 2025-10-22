@@ -227,7 +227,6 @@ func (a *OpenapiContext) ProcessPutLogsBody(ctx *cli.Context) error {
 	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok {
 		buf, _ := os.ReadFile(v)
 		body = buf
-
 	}
 	if body == nil {
 		return fmt.Errorf("no logs provided, please check the input")
