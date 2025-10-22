@@ -154,9 +154,12 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			}
 		}
 		if product.ApiStyle == "restful" {
-			api, _ := c.library.GetApi(product.Code, product.Version, args[1])
+			api, _ := meta.HookGetApi(c.library.GetApi)(product.Code, product.Version, args[1])
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 			ctx.Command().Name = args[1]
+			if ShouldUseOpenapi(ctx, &product) {
+				return c.processApiInvoke(ctx, &product, &api, api.Method, api.PathPattern)
+			}
 			return c.processInvoke(ctx, productName, api.Method, api.PathPattern)
 		} else {
 			// RPC need check API parameters too
@@ -169,18 +172,67 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		// restful call
 		// aliyun <productCode> {GET|PUT|POST|DELETE} <path> --
 		product, _ := c.library.GetProduct(productName)
-		api, find := c.library.GetApiByPath(product.Code, product.Version, args[1], args[2])
+		api, find := meta.HookGetApiByPath(c.library.GetApiByPath)(product.Code, product.Version, args[1], args[2])
 		if !find {
 			// throw error, can not find api by path
 			return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
 				"Please confirm if the API path exists")
 		}
 		c.CheckApiParamWithBuildInArgs(ctx, api)
+		if ShouldUseOpenapi(ctx, &product) {
+			if args[2] == "/" {
+				return cli.NewErrorWithTip(fmt.Errorf("too broad path: %s for method: %s, please use specific ApiName instead",
+					args[2], args[1]), "Please confirm the API path")
+			}
+			return c.processApiInvoke(ctx, &product, &api, args[1], args[2])
+		}
 		return c.processInvoke(ctx, productName, args[1], args[2])
 	} else {
 		return cli.NewErrorWithTip(fmt.Errorf("too many arguments"),
 			"Use `aliyun --help` to show usage")
 	}
+}
+
+func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api *meta.Api, method string, path string) error {
+	if product == nil {
+		return fmt.Errorf("invalid product, please check product code")
+	}
+
+	apiContext, err := c.createHttpContext(ctx, product, api, method, path)
+	if err != nil {
+		return err
+	}
+	err = apiContext.Prepare(ctx)
+	if err != nil {
+		return err
+	}
+
+	err = hookHttpContextCall(apiContext.Call)()
+	if err != nil {
+		return err
+	}
+	out, err := hookHttpContextGetResponse(apiContext.GetResponse)()
+	if err != nil {
+		return err
+	}
+	if out == "" {
+		return nil
+	}
+
+	// if `--quiet` assigned. do not print anything
+	if QuietFlag(ctx.Flags()).IsAssigned() {
+		return nil
+	}
+
+	if filter := GetOutputFilter(ctx); filter != nil {
+		out, err = filter.FilterOutput(out)
+		if err != nil {
+			return err
+		}
+	}
+	out = sortJSON(out)
+	cli.Println(ctx.Stdout(), out)
+	return nil
 }
 
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
@@ -401,6 +453,52 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			apiOrMethod,
 		}, nil
 	}
+}
+
+// openapi context
+func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, api *meta.Api, method string, path string) (HttpInvoker, error) {
+	if product == nil {
+		return nil, fmt.Errorf("invalid product, please check product code")
+	}
+
+	force := ForceFlag(ctx.Flags()).IsAssigned()
+	apiContext := NewHttpContext(&c.profile)
+	err := apiContext.Init(ctx, product)
+	if err != nil {
+		return nil, err
+	}
+	if force {
+		if version, _ := ctx.Flags().Get("version").GetValue(); version != "" {
+			if style, ok := c.library.GetStyle(product.Code, version); ok {
+				product.ApiStyle = style
+			} else {
+				// 没有在 versions.json 中配置的版本可以通过 --style 自行指定
+				style, _ := ctx.Flags().Get("style").GetValue()
+				if style == "" {
+					return nil, cli.NewErrorWithTip(fmt.Errorf("unchecked version %s", version),
+						"Please use --style to specify API style, rpc or restful.")
+				}
+				product.ApiStyle = style
+			}
+		}
+	}
+
+	if strings.ToLower(product.ApiStyle) == "rpc" || !ShouldUseOpenapi(ctx, product) {
+		return nil, cli.NewErrorWithTip(fmt.Errorf("unchecked api style: %s or product: %s", product.ApiStyle, product.Code),
+			"Unsupported api style or product")
+	}
+	ok, method, path, err := checkRestfulMethod(ctx, method, path)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, cli.NewErrorWithTip(fmt.Errorf("product '%s' need proper restful call with ApiName or {GET|PUT|POST|DELETE} <path>",
+			product.GetLowerCode()),
+			"Use `aliyun %s <ApiName> ...` or `aliyun %s {GET|PUT|POST|DELETE} <path> ...`",
+			product.GetLowerCode(),
+			product.GetLowerCode())
+	}
+	return &OpenapiContext{apiContext, method, path, api}, nil
 }
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {
