@@ -132,7 +132,6 @@ func (c *Context) Run(args []string) error {
 	return nil
 }
 
-// InitializeAndValidatePlatform 初始化基础信息并验证平台支持
 func (c *Context) InitializeAndValidatePlatform() error {
 	c.InitBasicInfo()
 	c.CheckOsTypeAndArch()
@@ -155,7 +154,7 @@ func (c *Context) ExecuteTablestoreCli(args []string) error {
 	cmd.Stderr = c.originCtx.Stderr()
 	cmd.Stdin = os.Stdin
 	// 设置工作目录为 aliyun 配置目录，以便 tablestore CLI 能找到 .tablestore_config 文件
-	cmd.Dir = c.configPath
+	// cmd.Dir = c.configPath
 
 	err := cmd.Run()
 	if err != nil {
@@ -168,13 +167,11 @@ func (c *Context) ExecuteTablestoreCli(args []string) error {
 // 如果未安装则安装，如果已安装则检查并更新到最新版本
 func (c *Context) EnsureInstalledAndUpdated() error {
 	if !c.installed {
-		// 未安装时，设置版本并安装
 		c.versionRemote = currentVersion
 		err := c.Install()
 		if err != nil {
 			return err
 		}
-		// 更新版本检查时间
 		err = c.UpdateCheckCacheTime()
 		if err != nil {
 			return err
@@ -208,10 +205,8 @@ func (c *Context) CheckOsTypeAndArch() {
 	c.osType = runtimeGOOSFunc()
 	c.osArch = runtimeGOARCHFunc()
 
-	// 构建平台标识符
 	platformKey := c.osType + "-" + c.osArch
 
-	// 检查是否支持该平台
 	if _, exists := platformPaths[platformKey]; exists {
 		c.osSupport = true
 		c.downloadPathSuffix = platformKey
@@ -414,6 +409,8 @@ type tablestoreConfig struct {
 	AccessKeySecret      string `json:"AccessKeySecret"`
 	AccessKeySecretToken string `json:"AccessKeySecretToken,omitempty"`
 	Instance             string `json:"Instance,omitempty"`
+	RegionId             string `json:"RegionId,omitempty"`
+	ProfileMode          string `json:"ProfileMode,omitempty"`
 }
 
 // PrepareEnv 准备用户身份环境变量并创建配置文件
@@ -441,27 +438,7 @@ func (c *Context) PrepareEnv() error {
 		if profile.StsToken != "" {
 			stsToken = profile.StsToken
 		}
-	case config.EcsRamRole, config.CredentialsURI, config.OIDC:
-		// 这些模式需要先获取临时凭证
-		proxyHost, ok := c.originCtx.Flags().GetValue("proxy-host")
-		if !ok {
-			proxyHost = ""
-		}
-		credential, err := profile.GetCredential(c.originCtx, tea.String(proxyHost))
-		if err != nil {
-			return fmt.Errorf("can't get credential %s", err)
-		}
-		model, err := credential.GetCredential()
-		if err != nil {
-			return fmt.Errorf("can't get credential %s", err)
-		}
-		accessKeyId = *model.AccessKeyId
-		accessKeySecret = *model.AccessKeySecret
-		if model.SecurityToken != nil {
-			stsToken = *model.SecurityToken
-		}
 	default:
-		// 其他模式，获取临时凭证
 		proxyHost, ok := c.originCtx.Flags().GetValue("proxy-host")
 		if !ok {
 			proxyHost = ""
@@ -481,75 +458,92 @@ func (c *Context) PrepareEnv() error {
 		}
 	}
 
-	// 创建 tablestore CLI 配置文件
+	if accessKeyId == "" || accessKeySecret == "" {
+		return fmt.Errorf("access key id or access key secret is empty, please run `aliyun configure` first")
+	}
+
 	tsConfig := tablestoreConfig{
-		Endpoint:             "", // 将从命令行参数获取
+		Endpoint:             "",
 		AccessKeyId:          accessKeyId,
 		AccessKeySecret:      accessKeySecret,
 		AccessKeySecretToken: stsToken,
-		Instance:             "", // 将从命令行参数获取
+		Instance:             "",
 	}
 
-	// 将配置写入 aliyun 配置目录下的 .tablestore_config 文件
-	// tablestore CLI 会从其工作目录读取配置
-	configPath := filepath.Join(c.configPath, ".tablestore_config")
+	wd, _ := os.Getwd()
+	configPath := filepath.Join(wd, ".tablestore_config")
+
+	if fileExists(configPath) {
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to read config file: %v", err)
+		}
+		var existing tablestoreConfig
+		if err := json.Unmarshal(data, &existing); err != nil {
+			return fmt.Errorf("failed to unmarshal existing config: %v", err)
+		}
+		existing.AccessKeyId = accessKeyId
+		existing.AccessKeySecret = accessKeySecret
+		existing.AccessKeySecretToken = stsToken
+		updatedJSON, err := json.MarshalIndent(existing, "", "    ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal updated config: %v", err)
+		}
+		if err := os.WriteFile(configPath, updatedJSON, 0600); err != nil {
+			return fmt.Errorf("failed to write updated config file: %v", err)
+		}
+		return nil
+	}
+
 	configJSON, err := json.MarshalIndent(tsConfig, "", "    ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %v", err)
 	}
-
-	err = os.WriteFile(configPath, configJSON, 0600)
-	if err != nil {
+	if err := os.WriteFile(configPath, configJSON, 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %v", err)
-	}
-
-	// 初始化并设置环境变量 map
-	if c.envMap == nil {
-		c.envMap = make(map[string]string)
-	}
-	c.envMap["ALIBABA_CLOUD_ACCESS_KEY_ID"] = accessKeyId
-	c.envMap["ALIBABA_CLOUD_ACCESS_KEY_SECRET"] = accessKeySecret
-	if stsToken != "" {
-		c.envMap["ALIBABA_CLOUD_SECURITY_TOKEN"] = stsToken
 	}
 
 	return nil
 }
 
-// RemoveFlagsForMainCli 移除主程序使用的 flag，避免传递给 otsutil 出错
 func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
-	argsNew := make([]string, len(args))
-	copy(argsNew, args)
-	if c.originCtx.Flags() != nil && c.originCtx.Flags().Flags() != nil {
-		for _, f := range c.originCtx.Flags().Flags() {
-			if f.IsAssigned() && f.Category == "config" {
-				for i, arg := range argsNew {
-					if arg == "--"+f.Name || (f.Shorthand != 0 && arg == "-"+string(f.Shorthand)) {
-						argsNew = append(argsNew[:i], argsNew[i+1:]...)
-						if i < len(argsNew) {
-							if f.AssignedMode != cli.AssignedNone {
-								argsNew = append(argsNew[:i], argsNew[i+1:]...)
-							}
-						}
-						break
-					}
-				}
-			}
+	if c.originCtx.Flags() == nil || c.originCtx.Flags().Flags() == nil {
+		return append([]string(nil), args...), nil
+	}
+	longNeedsValue := make(map[string]bool)  // key: --name
+	shortNeedsValue := make(map[string]bool) // key: -x
+	for _, f := range c.originCtx.Flags().Flags() {
+		if !f.IsAssigned() || f.Category != "config" {
+			continue
+		}
+		needsValue := f.AssignedMode != cli.AssignedNone
+		if f.Name != "" {
+			longNeedsValue["--"+f.Name] = needsValue
+		}
+		if f.Shorthand != 0 {
+			shortNeedsValue["-"+string(f.Shorthand)] = needsValue
 		}
 	}
-	if c.defaultLanguage != "" {
-		languageFlagExists := false
-		for _, arg := range argsNew {
-			if arg == "--language" {
-				languageFlagExists = true
-				break
+
+	// single pass: copy args we want to keep
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if needs, ok := longNeedsValue[a]; ok {
+			if needs && i+1 < len(args) { // skip value
+				i++
 			}
+			continue
 		}
-		if !languageFlagExists {
-			argsNew = append(argsNew, "--language", c.defaultLanguage)
+		if needs, ok := shortNeedsValue[a]; ok {
+			if needs && i+1 < len(args) { // skip value
+				i++
+			}
+			continue
 		}
+		out = append(out, a)
 	}
-	return argsNew, nil
+	return out, nil
 }
 
 func fileExists(path string) bool {

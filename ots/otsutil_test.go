@@ -126,8 +126,8 @@ func TestCheckOsTypeAndArch(t *testing.T) {
 		{"windows", "amd64", true},
 		{"freebsd", "amd64", false},
 		{"linux", "ppc64le", false},
-		{"linux", "386", false}, // 官方不支持
-		{"linux", "arm", false}, // 官方不支持
+		{"linux", "386", false},   // 官方不支持
+		{"linux", "arm", false},   // 官方不支持
 		{"windows", "386", false}, // 官方不支持
 	}
 
@@ -273,6 +273,12 @@ func TestPrepareEnv(t *testing.T) {
 		t.Fatalf("load profile: %v", err)
 	}
 
+	// 切换工作目录到一个可控的临时目录，便于校验写入位置
+	wd := t.TempDir()
+	oldWd, _ := os.Getwd()
+	_ = os.Chdir(wd)
+	defer func() { _ = os.Chdir(oldWd) }()
+
 	ctx, _, _ := newOriginCtx()
 	c := NewContext(ctx)
 	c.configPath = filepath.Join(tmpHome, ".aliyun")
@@ -281,30 +287,8 @@ func TestPrepareEnv(t *testing.T) {
 		t.Fatalf("PrepareEnv failed: %v", err)
 	}
 
-	if c.envMap == nil {
-		t.Fatalf("envMap is nil")
-	}
-
-	// 检查环境变量是否设置
-	accessKeyId := c.envMap["ALIBABA_CLOUD_ACCESS_KEY_ID"]
-	if accessKeyId == "" {
-		t.Errorf("ALIBABA_CLOUD_ACCESS_KEY_ID not set")
-	}
-	if accessKeyId != profile.AccessKeyId {
-		t.Errorf("ALIBABA_CLOUD_ACCESS_KEY_ID mismatch: got %s, want %s", accessKeyId, profile.AccessKeyId)
-	}
-
-	accessKeySecret := c.envMap["ALIBABA_CLOUD_ACCESS_KEY_SECRET"]
-	if accessKeySecret == "" {
-		t.Errorf("ALIBABA_CLOUD_ACCESS_KEY_SECRET not set")
-	}
-	if accessKeySecret != profile.AccessKeySecret {
-		t.Errorf("ALIBABA_CLOUD_ACCESS_KEY_SECRET mismatch")
-	}
-
-	// 检查配置文件是否创建在 aliyun 配置目录
-	aliyunConfigDir := filepath.Join(tmpHome, ".aliyun")
-	configPath := filepath.Join(aliyunConfigDir, ".tablestore_config")
+	// 检查配置文件是否创建在当前工作目录
+	configPath := filepath.Join(wd, ".tablestore_config")
 	if !fileExists(configPath) {
 		t.Errorf("config file %s not created", configPath)
 	}
@@ -416,18 +400,18 @@ func TestInfo(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	mockCtx := cli.NewCommandContext(&stdout, &stderr)
-	
+
 	c := &Context{
 		originCtx: mockCtx,
 	}
-	
+
 	// Test with format string
 	format := "Hello %s\n"
 	c.info(format, "World")
 	if stdout.String() != "Hello World\n" {
 		t.Errorf("Expected 'Hello World\\n', got '%s'", stdout.String())
 	}
-	
+
 	// Test with println
 	stdout.Reset()
 	c.info("Test")
@@ -440,11 +424,11 @@ func TestErrorf(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	mockCtx := cli.NewCommandContext(&stdout, &stderr)
-	
+
 	c := &Context{
 		originCtx: mockCtx,
 	}
-	
+
 	c.errorf("Error: %s\n", "test error")
 	if stderr.String() != "Error: test error\n" {
 		t.Errorf("Expected 'Error: test error\\n', got '%s'", stderr.String())
@@ -453,7 +437,7 @@ func TestErrorf(t *testing.T) {
 
 func TestNeedCheckVersion(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	tests := []struct {
 		name           string
 		installed      bool
@@ -497,23 +481,23 @@ func TestNeedCheckVersion(t *testing.T) {
 			expectedResult: false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cacheFile := filepath.Join(tmpDir, ".tsutil_version_check_"+tt.name)
-			
+
 			c := &Context{
 				installed:                 tt.installed,
 				checkVersionCacheFilePath: cacheFile,
 			}
-			
+
 			if tt.cacheExists {
 				err := os.WriteFile(cacheFile, []byte(tt.cacheContent), 0644)
 				if err != nil {
 					t.Fatalf("Failed to write cache file: %v", err)
 				}
 			}
-			
+
 			if tt.currentTime > 0 {
 				oldTimeNowFunc := timeNowFunc
 				timeNowFunc = func() time.Time {
@@ -521,7 +505,7 @@ func TestNeedCheckVersion(t *testing.T) {
 				}
 				defer func() { timeNowFunc = oldTimeNowFunc }()
 			}
-			
+
 			result := c.NeedCheckVersion()
 			if result != tt.expectedResult {
 				t.Errorf("Expected %v, got %v", tt.expectedResult, result)
@@ -547,13 +531,13 @@ func TestGetLocalVersion(t *testing.T) {
 			expectError: false,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Context{
 				installed: tt.installed,
 			}
-			
+
 			err := c.GetLocalVersion()
 			if tt.expectError {
 				if err == nil {
@@ -574,32 +558,31 @@ func TestGetLocalVersion(t *testing.T) {
 func TestUpdateCheckCacheTime(t *testing.T) {
 	tmpDir := t.TempDir()
 	cacheFile := filepath.Join(tmpDir, ".tsutil_version_check")
-	
+
 	fixedTime := time.Unix(1234567890, 0)
 	oldTimeNowFunc := timeNowFunc
 	timeNowFunc = func() time.Time {
 		return fixedTime
 	}
 	defer func() { timeNowFunc = oldTimeNowFunc }()
-	
+
 	c := &Context{
 		checkVersionCacheFilePath: cacheFile,
 	}
-	
+
 	err := c.UpdateCheckCacheTime()
 	if err != nil {
 		t.Fatalf("UpdateCheckCacheTime failed: %v", err)
 	}
-	
+
 	// Verify cache file content
 	content, err := os.ReadFile(cacheFile)
 	if err != nil {
 		t.Fatalf("Failed to read cache file: %v", err)
 	}
-	
+
 	expectedContent := fmt.Sprintf("%d", fixedTime.Unix())
 	if string(content) != expectedContent {
 		t.Errorf("Expected cache content '%s', got '%s'", expectedContent, string(content))
 	}
 }
-
