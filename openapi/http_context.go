@@ -295,7 +295,6 @@ func (a *OpenapiContext) ProcessPath(ctx *cli.Context) error {
 		}
 		pathParams[f.Name] = value
 	}
-
 	pathname := a.path
 	if len(pathParams) > 0 {
 		for key, value := range pathParams {
@@ -322,7 +321,6 @@ func (a *OpenapiContext) ProcessHost(ctx *cli.Context) error {
 		}
 		a.openapiRequest.HostMap[strings.ToLower(f.Name)] = tea.String(value)
 	}
-
 	return nil
 }
 
@@ -444,7 +442,6 @@ func (a *OpenapiContext) RequestProcessors(ctx *cli.Context) error {
 			return err
 		}
 	}
-
 	return a.checkRequiredParameters(ctx)
 }
 
