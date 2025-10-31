@@ -181,12 +181,70 @@ func TestGetContentFromApiResponse(t *testing.T) {
 		assert.Equal(t, "test bytes", result)
 	})
 
+	t.Run("ArrayResponseBody", func(t *testing.T) {
+		response := map[string]any{
+			"body": []any{"item1", "item2", 123},
+		}
+		result := GetContentFromApiResponse(response)
+		// JSON 序列化结果
+		assert.Equal(t, `["item1","item2",123]`, result)
+	})
+
+	t.Run("ComplexMapResponseBody", func(t *testing.T) {
+		response := map[string]any{
+			"body": map[string]any{
+				"name":   "test",
+				"value":  123,
+				"nested": map[string]any{"key": "value"},
+				"items":  []any{1, 2, 3},
+			},
+		}
+		result := GetContentFromApiResponse(response)
+		// 验证是有效的 JSON（虽然顺序可能不同，但应该包含所有字段）
+		assert.Contains(t, result, `"name":"test"`)
+		assert.Contains(t, result, `"value":123`)
+		assert.Contains(t, result, `"key":"value"`)
+		assert.Contains(t, result, `"items":[1,2,3]`)
+	})
+
+	t.Run("EmptyMapResponseBody", func(t *testing.T) {
+		response := map[string]any{
+			"body": map[string]any{},
+		}
+		result := GetContentFromApiResponse(response)
+		assert.Equal(t, `{}`, result)
+	})
+
+	t.Run("EmptyArrayResponseBody", func(t *testing.T) {
+		response := map[string]any{
+			"body": []any{},
+		}
+		result := GetContentFromApiResponse(response)
+		assert.Equal(t, `[]`, result)
+	})
+
 	t.Run("OtherTypeResponseBody", func(t *testing.T) {
 		response := map[string]any{
 			"body": 123,
 		}
 		result := GetContentFromApiResponse(response)
 		assert.Equal(t, "123", result)
+	})
+
+	t.Run("FloatTypeResponseBody", func(t *testing.T) {
+		response := map[string]any{
+			"body": 123.456,
+		}
+		result := GetContentFromApiResponse(response)
+		assert.Contains(t, result, "123.456")
+	})
+
+	t.Run("BoolTypeResponseBody", func(t *testing.T) {
+		response := map[string]any{
+			"body": true,
+		}
+		result := GetContentFromApiResponse(response)
+		assert.Equal(t, "true", result)
 	})
 }
 
@@ -1050,6 +1108,129 @@ func TestProcessHostMissingRequiredParameter(t *testing.T) {
 	assert.Contains(t, err.Error(), "required parameter missing")
 }
 
+func TestProcessHostMissingRequiredParameterNotProvided(t *testing.T) {
+	httpContext := &HttpContext{}
+	context := &OpenapiContext{HttpContext: httpContext}
+	context.openapiRequest = &openapiutil.OpenApiRequest{
+		HostMap: map[string]*string{},
+	}
+	context.product = &meta.Product{Code: "ecs"}
+	context.api = &meta.Api{
+		Name:    "DescribeInstances",
+		Product: &meta.Product{Version: "2014-05-26"},
+		Parameters: []meta.Parameter{
+			{
+				Name:     "TestHost",
+				Position: "Host",
+				Required: true,
+			},
+		},
+	}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	// 不传入 TestHost 参数，应该报错
+	err := context.ProcessHost(ctx)
+	assert.NoError(t, err) // ProcessHost 不再立即报错
+	// 统一检查时应该报错
+	err = context.checkRequiredParameters(ctx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "required parameters missing")
+	assert.Contains(t, err.Error(), "host parameter --TestHost")
+}
+
+func TestProcessHostMultipleRequiredParametersMissing(t *testing.T) {
+	httpContext := &HttpContext{}
+	context := &OpenapiContext{HttpContext: httpContext}
+	context.openapiRequest = &openapiutil.OpenApiRequest{
+		HostMap: map[string]*string{},
+	}
+	context.product = &meta.Product{Code: "ecs"}
+	context.api = &meta.Api{
+		Name:    "DescribeInstances",
+		Product: &meta.Product{Version: "2014-05-26"},
+		Parameters: []meta.Parameter{
+			{
+				Name:     "Host1",
+				Position: "Host",
+				Required: true,
+			},
+			{
+				Name:     "Host2",
+				Position: "Host",
+				Required: true,
+			},
+			{
+				Name:     "Host3",
+				Position: "Host",
+				Required: false, // 非必需参数
+			},
+		},
+	}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	// 只传入 Host1，缺少 Host2
+	ctx.UnknownFlags().AddByName("Host1")
+	ctx.UnknownFlags().Get("Host1").SetAssigned(true)
+	ctx.UnknownFlags().Get("Host1").SetValue("host1.example.com")
+
+	err := context.ProcessHost(ctx)
+	assert.NoError(t, err) // ProcessHost 不再立即报错
+	// 统一检查时应该报错
+	err = context.checkRequiredParameters(ctx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "required parameters missing")
+	assert.Contains(t, err.Error(), "host parameter --Host2")
+	// Host1 不应该在错误信息中（因为已经提供了）
+	assert.NotContains(t, err.Error(), "host parameter --Host1")
+}
+
+func TestProcessHostAllRequiredParametersProvided(t *testing.T) {
+	httpContext := &HttpContext{}
+	context := &OpenapiContext{HttpContext: httpContext}
+	context.openapiRequest = &openapiutil.OpenApiRequest{
+		HostMap: map[string]*string{},
+	}
+	context.product = &meta.Product{Code: "ecs"}
+	context.api = &meta.Api{
+		Name:    "DescribeInstances",
+		Product: &meta.Product{Version: "2014-05-26"},
+		Parameters: []meta.Parameter{
+			{
+				Name:     "Host1",
+				Position: "Host",
+				Required: true,
+			},
+			{
+				Name:     "Host2",
+				Position: "Host",
+				Required: true,
+			},
+			{
+				Name:     "Host3",
+				Position: "Host",
+				Required: false,
+			},
+		},
+	}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	// 传入所有 required 参数
+	ctx.UnknownFlags().AddByName("Host1")
+	ctx.UnknownFlags().Get("Host1").SetAssigned(true)
+	ctx.UnknownFlags().Get("Host1").SetValue("host1.example.com")
+	ctx.UnknownFlags().AddByName("Host2")
+	ctx.UnknownFlags().Get("Host2").SetAssigned(true)
+	ctx.UnknownFlags().Get("Host2").SetValue("host2.example.com")
+
+	err := context.ProcessHost(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "host1.example.com", *context.openapiRequest.HostMap["host1"])
+	assert.Equal(t, "host2.example.com", *context.openapiRequest.HostMap["host2"])
+}
+
 func TestProcessPathWithValidParameter(t *testing.T) {
 	httpContext := &HttpContext{}
 	context := &OpenapiContext{HttpContext: httpContext}
@@ -1129,6 +1310,230 @@ func TestProcessPathMissingRequiredParameter(t *testing.T) {
 
 	err := context.ProcessPath(ctx)
 	assert.Contains(t, err.Error(), "required parameter missing")
+}
+
+func TestProcessPathMissingRequiredParameterNotProvided(t *testing.T) {
+	httpContext := &HttpContext{}
+	context := &OpenapiContext{HttpContext: httpContext}
+	context.path = "/instances/[InstanceId]"
+	context.openapiParams = &openapiClient.Params{}
+	context.product = &meta.Product{Code: "ecs"}
+	context.api = &meta.Api{
+		Name:    "DescribeInstances",
+		Product: &meta.Product{Version: "2014-05-26"},
+		Parameters: []meta.Parameter{
+			{
+				Name:     "InstanceId",
+				Position: "Path",
+				Required: true,
+			},
+		},
+	}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	// 不传入 InstanceId 参数，应该报错
+	err := context.ProcessPath(ctx)
+	assert.NoError(t, err) // ProcessPath 不再立即报错
+	// 统一检查时应该报错
+	err = context.checkRequiredParameters(ctx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "required parameters missing")
+	assert.Contains(t, err.Error(), "path parameter --InstanceId")
+}
+
+func TestProcessPathMultipleRequiredParametersMissing(t *testing.T) {
+	httpContext := &HttpContext{}
+	context := &OpenapiContext{HttpContext: httpContext}
+	context.path = "/instances/[InstanceId]/volumes/[VolumeId]"
+	context.openapiParams = &openapiClient.Params{}
+	context.product = &meta.Product{Code: "ecs"}
+	context.api = &meta.Api{
+		Name:    "DescribeInstances",
+		Product: &meta.Product{Version: "2014-05-26"},
+		Parameters: []meta.Parameter{
+			{
+				Name:     "InstanceId",
+				Position: "Path",
+				Required: true,
+			},
+			{
+				Name:     "VolumeId",
+				Position: "Path",
+				Required: true,
+			},
+			{
+				Name:     "RegionId",
+				Position: "Path",
+				Required: false, // 非必需参数
+			},
+		},
+	}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	// 只传入 InstanceId，缺少 VolumeId
+	ctx.UnknownFlags().AddByName("InstanceId")
+	ctx.UnknownFlags().Get("InstanceId").SetAssigned(true)
+	ctx.UnknownFlags().Get("InstanceId").SetValue("i-test123")
+
+	err := context.ProcessPath(ctx)
+	assert.NoError(t, err) // ProcessPath 不再立即报错
+	// 统一检查时应该报错
+	err = context.checkRequiredParameters(ctx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "required parameters missing")
+	assert.Contains(t, err.Error(), "path parameter --VolumeId")
+	// InstanceId 不应该在错误信息中（因为已经提供了）
+	assert.NotContains(t, err.Error(), "path parameter --InstanceId")
+}
+
+func TestProcessPathAllRequiredParametersProvided(t *testing.T) {
+	httpContext := &HttpContext{}
+	context := &OpenapiContext{HttpContext: httpContext}
+	context.path = "/instances/[InstanceId]/volumes/[VolumeId]"
+	context.openapiParams = &openapiClient.Params{}
+	context.product = &meta.Product{Code: "ecs"}
+	context.api = &meta.Api{
+		Name:    "DescribeInstances",
+		Product: &meta.Product{Version: "2014-05-26"},
+		Parameters: []meta.Parameter{
+			{
+				Name:     "InstanceId",
+				Position: "Path",
+				Required: true,
+			},
+			{
+				Name:     "VolumeId",
+				Position: "Path",
+				Required: true,
+			},
+			{
+				Name:     "RegionId",
+				Position: "Path",
+				Required: false,
+			},
+		},
+	}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	// 传入所有 required 参数
+	ctx.UnknownFlags().AddByName("InstanceId")
+	ctx.UnknownFlags().Get("InstanceId").SetAssigned(true)
+	ctx.UnknownFlags().Get("InstanceId").SetValue("i-test123")
+	ctx.UnknownFlags().AddByName("VolumeId")
+	ctx.UnknownFlags().Get("VolumeId").SetAssigned(true)
+	ctx.UnknownFlags().Get("VolumeId").SetValue("v-test456")
+
+	err := context.ProcessPath(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "/instances/i-test123/volumes/v-test456", *context.openapiParams.Pathname)
+}
+
+func TestProcessPathAndHostMissingParametersUnified(t *testing.T) {
+	httpContext := &HttpContext{}
+	context := &OpenapiContext{HttpContext: httpContext}
+	context.path = "/instances/[InstanceId]"
+	context.openapiParams = &openapiClient.Params{}
+	context.openapiRequest = &openapiutil.OpenApiRequest{
+		HostMap: map[string]*string{},
+	}
+	context.product = &meta.Product{Code: "ecs"}
+	context.api = &meta.Api{
+		Name:    "DescribeInstances",
+		Product: &meta.Product{Version: "2014-05-26"},
+		Parameters: []meta.Parameter{
+			{
+				Name:     "InstanceId",
+				Position: "Path",
+				Required: true,
+			},
+			{
+				Name:     "HostName",
+				Position: "Host",
+				Required: true,
+			},
+		},
+	}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	// 不传入任何 required 参数
+
+	// 先调用 ProcessPath 和 ProcessHost
+	err := context.ProcessPath(ctx)
+	assert.NoError(t, err)
+	err = context.ProcessHost(ctx)
+	assert.NoError(t, err)
+
+	// 统一检查时应该报错，同时包含 Path 和 Host 的缺失参数
+	err = context.checkRequiredParameters(ctx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "required parameters missing")
+	assert.Contains(t, err.Error(), "path parameter --InstanceId")
+	assert.Contains(t, err.Error(), "host parameter --HostName")
+}
+
+func TestProcessPathSingleCharParameter(t *testing.T) {
+	httpContext := &HttpContext{}
+	context := &OpenapiContext{HttpContext: httpContext}
+	context.path = "/instances/[I]"
+	context.openapiParams = &openapiClient.Params{}
+	context.product = &meta.Product{Code: "ecs"}
+	context.api = &meta.Api{
+		Name:    "DescribeInstances",
+		Product: &meta.Product{Version: "2014-05-26"},
+		Parameters: []meta.Parameter{
+			{
+				Name:     "I",
+				Position: "Path",
+				Required: true,
+			},
+		},
+	}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	// 不传入参数，应该报错
+	err := context.ProcessPath(ctx)
+	assert.NoError(t, err)
+	err = context.checkRequiredParameters(ctx)
+	assert.Error(t, err)
+	// 单个字符参数应该使用单个 - 前缀
+	assert.Contains(t, err.Error(), "path parameter -I")
+	assert.NotContains(t, err.Error(), "path parameter --I")
+}
+
+func TestProcessHostSingleCharParameter(t *testing.T) {
+	httpContext := &HttpContext{}
+	context := &OpenapiContext{HttpContext: httpContext}
+	context.openapiRequest = &openapiutil.OpenApiRequest{
+		HostMap: map[string]*string{},
+	}
+	context.product = &meta.Product{Code: "ecs"}
+	context.api = &meta.Api{
+		Name:    "DescribeInstances",
+		Product: &meta.Product{Version: "2014-05-26"},
+		Parameters: []meta.Parameter{
+			{
+				Name:     "H",
+				Position: "Host",
+				Required: true,
+			},
+		},
+	}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	// 不传入参数，应该报错
+	err := context.ProcessHost(ctx)
+	assert.NoError(t, err)
+	err = context.checkRequiredParameters(ctx)
+	assert.Error(t, err)
+	// 单个字符参数应该使用单个 - 前缀
+	assert.Contains(t, err.Error(), "host parameter -H")
+	assert.NotContains(t, err.Error(), "host parameter --H")
 }
 
 func TestProcessBodyWithValidParameter(t *testing.T) {
