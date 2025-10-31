@@ -96,7 +96,7 @@ func GetContentFromApiResponse(response map[string]any) string {
 	switch v := responseBody.(type) {
 	case string:
 		out = v
-	case map[string]any:
+	case map[string]any, []any:
 		jsonData, _ := json.Marshal(v)
 		out = string(jsonData)
 	case []byte:
@@ -295,6 +295,7 @@ func (a *OpenapiContext) ProcessPath(ctx *cli.Context) error {
 		}
 		pathParams[f.Name] = value
 	}
+
 	pathname := a.path
 	if len(pathParams) > 0 {
 		for key, value := range pathParams {
@@ -321,6 +322,7 @@ func (a *OpenapiContext) ProcessHost(ctx *cli.Context) error {
 		}
 		a.openapiRequest.HostMap[strings.ToLower(f.Name)] = tea.String(value)
 	}
+
 	return nil
 }
 
@@ -368,6 +370,66 @@ func (a *OpenapiContext) Prepare(ctx *cli.Context) error {
 	return a.RequestProcessors(ctx)
 }
 
+func (a *OpenapiContext) checkRequiredParameters(ctx *cli.Context) error {
+	// 收集所有 required 的 Path 和 Host 参数
+	requiredPathParams := make(map[string]bool)
+	requiredHostParams := make(map[string]bool)
+
+	for _, param := range a.api.Parameters {
+		if param.Position == "Host" && param.Required {
+			requiredHostParams[param.Name] = false
+		}
+		if param.Position == "Path" && param.Required {
+			requiredPathParams[param.Name] = false
+		}
+	}
+
+	for _, f := range ctx.UnknownFlags().Flags() {
+		param := a.api.FindParameter(f.Name)
+		if param == nil {
+			continue
+		}
+		if param.Position == "Host" && param.Required {
+			value, _ := f.GetValue()
+			if value != "" {
+				requiredHostParams[param.Name] = true
+			}
+		}
+		if param.Position == "Path" && param.Required {
+			value, _ := f.GetValue()
+			if value != "" {
+				requiredPathParams[param.Name] = true
+			}
+		}
+	}
+
+	allMissing := make([]string, 0)
+	for paramName, filled := range requiredHostParams {
+		if !filled {
+			prefix := "--"
+			if len(paramName) == 1 {
+				prefix = "-"
+			}
+			allMissing = append(allMissing, fmt.Sprintf("host parameter %s%s", prefix, paramName))
+		}
+	}
+	for paramName, filled := range requiredPathParams {
+		if !filled {
+			prefix := "--"
+			if len(paramName) == 1 {
+				prefix = "-"
+			}
+			allMissing = append(allMissing, fmt.Sprintf("path parameter %s%s", prefix, paramName))
+		}
+	}
+
+	if len(allMissing) > 0 {
+		return fmt.Errorf("required parameters missing: %s", strings.Join(allMissing, ", "))
+	}
+
+	return nil
+}
+
 func (a *OpenapiContext) RequestProcessors(ctx *cli.Context) error {
 	processors := []Processor{
 		a.ProcessHeaders,
@@ -382,7 +444,8 @@ func (a *OpenapiContext) RequestProcessors(ctx *cli.Context) error {
 			return err
 		}
 	}
-	return nil
+
+	return a.checkRequiredParameters(ctx)
 }
 
 func (a *OpenapiContext) CheckResponseForPullLogs(response map[string]any) (string, error) {
