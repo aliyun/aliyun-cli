@@ -107,6 +107,29 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun main/main.go
           tar zcvf out/aliyun-cli-linux-${VERSION}-arm64.tgz -C out aliyun
           bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-linux-${VERSION}-arm64.tgz
+  build_for_linux_riscv64:
+   needs: [create_release]
+   name: Native RISC-V Build
+   runs-on: self-hosted
+   env:
+     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+   steps:
+     - uses: actions/checkout@v4
+       with:
+         submodules: true
+         ref: ${{ github.ref }}
+     - name: Set up Go
+       uses: actions/setup-go@v5
+       with:
+         go-version: '1.23'
+     - name: Build
+       run: |
+         TAG=${{ github.ref_name }}
+         VERSION=${TAG#v}
+         # build for Linux riscv64 (native)
+         CGO_ENABLED=0 GOOS=linux GOARCH=riscv64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+         tar zcvf out/aliyun-cli-linux-${VERSION}-riscv64.tgz -C out aliyun
+         bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-linux-${VERSION}-riscv64.tgz
   build_for_windows:
     needs: [create_release]
     name: Build for Windows
