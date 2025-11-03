@@ -1,9 +1,8 @@
-package ots
+package otsutil
 
 import (
 	"archive/zip"
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,23 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 )
-
-// helper to create a fake executable script
-func writeExecutable(t *testing.T, path string, content string) {
-	if err := os.WriteFile(path, []byte(content), 0755); err != nil {
-		t.Fatalf("write exec failed: %v", err)
-	}
-	if runtime.GOOS == "windows" {
-		// skip
-	}
-}
 
 func prepareConfig(t *testing.T, home string, language string) {
 	cfgDir := filepath.Join(home, ".aliyun")
@@ -36,52 +24,6 @@ func prepareConfig(t *testing.T, home string, language string) {
 	}
 	configJSON := fmt.Sprintf(`{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou","language":"%s"}]}`, language)
 	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(configJSON), 0644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-}
-
-// prepareConfigWithMode creates a config file with specific authentication mode
-func prepareConfigWithMode(t *testing.T, home string, mode string, extraFields map[string]string) {
-	cfgDir := filepath.Join(home, ".aliyun")
-	if err := os.MkdirAll(cfgDir, 0755); err != nil {
-		t.Fatalf("mkdir cfg: %v", err)
-	}
-
-	profile := map[string]interface{}{
-		"name":              "default",
-		"mode":              mode,
-		"access_key_id":     "ak",
-		"access_key_secret": "sk",
-		"region_id":         "cn-hangzhou",
-		"language":          "en",
-	}
-
-	// Add extra fields with proper type conversion for numeric fields
-	for k, v := range extraFields {
-		switch k {
-		case "retry_timeout", "connect_timeout", "retry_count":
-			// Convert string to int for numeric fields
-			if intVal, err := strconv.Atoi(v); err == nil {
-				profile[k] = intVal
-			} else {
-				profile[k] = v
-			}
-		default:
-			profile[k] = v
-		}
-	}
-
-	config := map[string]interface{}{
-		"current":  "default",
-		"profiles": []interface{}{profile},
-	}
-
-	configJSON, err := json.Marshal(config)
-	if err != nil {
-		t.Fatalf("marshal config: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), configJSON, 0644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 }
@@ -126,9 +68,9 @@ func TestCheckOsTypeAndArch(t *testing.T) {
 		{"windows", "amd64", true},
 		{"freebsd", "amd64", false},
 		{"linux", "ppc64le", false},
-		{"linux", "386", false},   // 官方不支持
-		{"linux", "arm", false},   // 官方不支持
-		{"windows", "386", false}, // 官方不支持
+		{"linux", "386", false},
+		{"linux", "arm", false},
+		{"windows", "386", false},
 	}
 
 	oldGOOS := runtimeGOOSFunc
@@ -230,32 +172,6 @@ func TestDownloadAndUnzip(t *testing.T) {
 	}
 }
 
-func TestEncodeMapBase64(t *testing.T) {
-	m := map[string]any{
-		"mode":              "AK",
-		"access_key_id":     "test_ak",
-		"access_key_secret": "test_sk",
-	}
-	encoded, err := EncodeMapBase64(m)
-	if err != nil {
-		t.Fatalf("EncodeMapBase64 failed: %v", err)
-	}
-	decoded, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		t.Fatalf("decode base64: %v", err)
-	}
-	var result map[string]any
-	if err := json.Unmarshal(decoded, &result); err != nil {
-		t.Fatalf("json unmarshal: %v", err)
-	}
-	if result["mode"] != "AK" {
-		t.Errorf("mode mismatch")
-	}
-	if result["access_key_id"] != "test_ak" {
-		t.Errorf("access_key_id mismatch")
-	}
-}
-
 func TestPrepareEnv(t *testing.T) {
 	tmpHome := t.TempDir()
 	prepareConfig(t, tmpHome, "en")
@@ -273,28 +189,23 @@ func TestPrepareEnv(t *testing.T) {
 		t.Fatalf("load profile: %v", err)
 	}
 
-	// 切换工作目录到一个可控的临时目录，便于校验写入位置
-	wd := t.TempDir()
-	oldWd, _ := os.Getwd()
-	_ = os.Chdir(wd)
-	defer func() { _ = os.Chdir(oldWd) }()
-
 	ctx, _, _ := newOriginCtx()
 	c := NewContext(ctx)
-	c.configPath = filepath.Join(tmpHome, ".aliyun")
+	configPath := filepath.Join(tmpHome, ".aliyun")
+	c.configPath = configPath
 	err = c.PrepareEnv()
 	if err != nil {
 		t.Fatalf("PrepareEnv failed: %v", err)
 	}
 
-	// 检查配置文件是否创建在当前工作目录
-	configPath := filepath.Join(wd, ".tablestore_config")
-	if !fileExists(configPath) {
-		t.Errorf("config file %s not created", configPath)
+	// 检查配置文件是否创建在 configPath 目录
+	tablestoreConfigPath := filepath.Join(configPath, ".tablestore_config")
+	if !fileExists(tablestoreConfigPath) {
+		t.Errorf("config file %s not created", tablestoreConfigPath)
 	}
 
 	// 读取并验证配置文件内容
-	configData, err := os.ReadFile(configPath)
+	configData, err := os.ReadFile(tablestoreConfigPath)
 	if err != nil {
 		t.Fatalf("failed to read config file: %v", err)
 	}
@@ -396,45 +307,6 @@ func TestUnzip(t *testing.T) {
 	}
 }
 
-func TestInfo(t *testing.T) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	mockCtx := cli.NewCommandContext(&stdout, &stderr)
-
-	c := &Context{
-		originCtx: mockCtx,
-	}
-
-	// Test with format string
-	format := "Hello %s\n"
-	c.info(format, "World")
-	if stdout.String() != "Hello World\n" {
-		t.Errorf("Expected 'Hello World\\n', got '%s'", stdout.String())
-	}
-
-	// Test with println
-	stdout.Reset()
-	c.info("Test")
-	if stdout.String() != "Test\n" {
-		t.Errorf("Expected 'Test\\n', got '%s'", stdout.String())
-	}
-}
-
-func TestErrorf(t *testing.T) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	mockCtx := cli.NewCommandContext(&stdout, &stderr)
-
-	c := &Context{
-		originCtx: mockCtx,
-	}
-
-	c.errorf("Error: %s\n", "test error")
-	if stderr.String() != "Error: test error\n" {
-		t.Errorf("Expected 'Error: test error\\n', got '%s'", stderr.String())
-	}
-}
-
 func TestNeedCheckVersion(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -484,7 +356,7 @@ func TestNeedCheckVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cacheFile := filepath.Join(tmpDir, ".tsutil_version_check_"+tt.name)
+			cacheFile := filepath.Join(tmpDir, ".otsutil_version_check_"+tt.name)
 
 			c := &Context{
 				installed:                 tt.installed,
@@ -515,10 +387,14 @@ func TestNeedCheckVersion(t *testing.T) {
 }
 
 func TestGetLocalVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+
 	tests := []struct {
-		name        string
-		installed   bool
-		expectError bool
+		name          string
+		installed     bool
+		versionFile   string
+		expectError   bool
+		expectedValue string
 	}{
 		{
 			name:        "not installed",
@@ -526,16 +402,46 @@ func TestGetLocalVersion(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:        "installed",
+			name:          "version file exists",
+			installed:     true,
+			versionFile:   "1.2.3",
+			expectError:   false,
+			expectedValue: "1.2.3",
+		},
+		{
+			name:          "version file with whitespace",
+			installed:     true,
+			versionFile:   "  1.2.3  \n",
+			expectError:   false,
+			expectedValue: "1.2.3",
+		},
+		{
+			name:        "version file empty after trim",
 			installed:   true,
-			expectError: false,
+			versionFile: "   \n\t  ",
+			expectError: true,
+		},
+		{
+			name:          "version file not exists",
+			installed:     true,
+			expectError:   false,
+			expectedValue: "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			versionFile := filepath.Join(tmpDir, ".otsutil_version_"+tt.name)
 			c := &Context{
-				installed: tt.installed,
+				installed:       tt.installed,
+				versionFilePath: versionFile,
+			}
+
+			if tt.versionFile != "" || tt.name == "version file empty after trim" {
+				err := os.WriteFile(versionFile, []byte(tt.versionFile), 0644)
+				if err != nil {
+					t.Fatalf("Failed to write version file: %v", err)
+				}
 			}
 
 			err := c.GetLocalVersion()
@@ -547,8 +453,8 @@ func TestGetLocalVersion(t *testing.T) {
 				if err != nil {
 					t.Errorf("Expected no error, got %v", err)
 				}
-				if c.versionLocal != currentVersion {
-					t.Errorf("Expected version %s, got %s", currentVersion, c.versionLocal)
+				if c.versionLocal != tt.expectedValue {
+					t.Errorf("Expected version '%s', got '%s'", tt.expectedValue, c.versionLocal)
 				}
 			}
 		})
@@ -557,7 +463,7 @@ func TestGetLocalVersion(t *testing.T) {
 
 func TestUpdateCheckCacheTime(t *testing.T) {
 	tmpDir := t.TempDir()
-	cacheFile := filepath.Join(tmpDir, ".tsutil_version_check")
+	cacheFile := filepath.Join(tmpDir, ".otsutil_version_check")
 
 	fixedTime := time.Unix(1234567890, 0)
 	oldTimeNowFunc := timeNowFunc
@@ -584,5 +490,98 @@ func TestUpdateCheckCacheTime(t *testing.T) {
 	expectedContent := fmt.Sprintf("%d", fixedTime.Unix())
 	if string(content) != expectedContent {
 		t.Errorf("Expected cache content '%s', got '%s'", expectedContent, string(content))
+	}
+}
+
+func TestSaveLocalVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+	versionFile := filepath.Join(tmpDir, ".otsutil_version")
+
+	c := &Context{
+		versionFilePath: versionFile,
+		versionLocal:    "1.2.3",
+	}
+
+	err := c.SaveLocalVersion()
+	if err != nil {
+		t.Fatalf("SaveLocalVersion failed: %v", err)
+	}
+
+	// Verify version file exists
+	if !fileExists(versionFile) {
+		t.Errorf("Version file not created")
+	}
+
+	// Verify version file content
+	content, err := os.ReadFile(versionFile)
+	if err != nil {
+		t.Fatalf("Failed to read version file: %v", err)
+	}
+
+	expectedContent := "1.2.3"
+	if string(content) != expectedContent {
+		t.Errorf("Expected version content '%s', got '%s'", expectedContent, string(content))
+	}
+}
+
+func TestGetDownloadURL(t *testing.T) {
+	tests := []struct {
+		name        string
+		platform    string
+		version     string
+		expectError bool
+		expectedURL string
+	}{
+		{
+			name:        "valid platform linux-amd64",
+			platform:    "linux-amd64",
+			version:     "1.2.3",
+			expectError: false,
+			expectedURL: "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/otsutil/downloads/aliyun-tablestore-cli-linux-amd64-1.2.3.zip",
+		},
+		{
+			name:        "valid platform darwin-arm64",
+			platform:    "darwin-arm64",
+			version:     "2023-10-08",
+			expectError: false,
+			expectedURL: "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/otsutil/downloads/aliyun-tablestore-cli-darwin-arm64-2023-10-08.zip",
+		},
+		{
+			name:        "valid platform windows-amd64",
+			platform:    "windows-amd64",
+			version:     "1.0.0",
+			expectError: false,
+			expectedURL: "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/otsutil/downloads/aliyun-tablestore-cli-windows-amd64-1.0.0.zip",
+		},
+		{
+			name:        "unsupported platform",
+			platform:    "freebsd-amd64",
+			version:     "1.2.3",
+			expectError: true,
+		},
+		{
+			name:        "invalid platform",
+			platform:    "unknown-platform",
+			version:     "1.2.3",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			url, err := getDownloadURL(tt.platform, tt.version)
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, got %v", err)
+				}
+				if url != tt.expectedURL {
+					t.Errorf("Expected URL '%s', got '%s'", tt.expectedURL, url)
+				}
+			}
+		})
 	}
 }

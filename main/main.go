@@ -29,7 +29,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 	"github.com/aliyun/aliyun-cli/v3/ossutil"
-	"github.com/aliyun/aliyun-cli/v3/ots"
+	"github.com/aliyun/aliyun-cli/v3/otsutil"
 )
 
 func Main(args []string) {
@@ -81,7 +81,7 @@ func Main(args []string) {
 	// new oss command
 	rootCmd.AddSubCommand(ossutil.NewOssutilCommand())
 	// tablestore command
-	rootCmd.AddSubCommand(ots.NewOtsCommand())
+	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
 	if os.Getenv("GENERATE_METADATA") == "YES" {
 		generateMetadata(rootCmd)
 	} else {

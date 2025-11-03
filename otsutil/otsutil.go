@@ -1,8 +1,7 @@
-package ots
+package otsutil
 
 import (
 	"archive/zip"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,12 +16,14 @@ import (
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 type Context struct {
 	originCtx                 *cli.Context
 	configPath                string // aliyun config path, all bin and cache file store in the same dir
 	checkVersionCacheFilePath string // cache file path to store last check version time, unix timestamp
+	versionFilePath           string // file path to store current installed version
 	execFilePath              string // tablestore CLI exec file path
 	installed                 bool   // whether tablestore CLI is installed
 	versionLocal              string
@@ -31,8 +32,6 @@ type Context struct {
 	osArch                    string
 	osSupport                 bool
 	downloadPathSuffix        string
-	envMap                    map[string]string
-	defaultLanguage           string
 }
 
 var getConfigurePathFunc = func() string {
@@ -40,67 +39,46 @@ var getConfigurePathFunc = func() string {
 }
 
 var (
-	downloadAndUnzipFunc = DownloadAndUnzip
-	execCommandFunc      = exec.Command
-	httpGetFunc          = http.Get
-	timeNowFunc          = time.Now
-	runtimeGOOSFunc      = func() string { return runtime.GOOS }
-	runtimeGOARCHFunc    = func() string { return runtime.GOARCH }
+	getLatestOtsUtilVersionFunc = GetLatestOtsUtilVersion
+	downloadAndUnzipFunc        = DownloadAndUnzip
+	execCommandFunc             = exec.Command
+	httpGetFunc                 = http.Get
+	timeNowFunc                 = time.Now
+	runtimeGOOSFunc             = func() string { return runtime.GOOS }
+	runtimeGOARCHFunc           = func() string { return runtime.GOARCH }
 )
 
-// 阿里云官方 Tablestore CLI 下载地址配置
+// 阿里云CLI官方 Tablestore CLI 下载地址配置
+// https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/otsutil/downloads
 // 参考: https://help.aliyun.com/zh/tablestore/developer-reference/download-the-tablestore-cli
 const (
-	tablestoreCliBaseUrl = "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20231225"
-	currentVersion       = "2023-10-08-8612e96"
+	tablestoreCliBaseUrl = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/otsutil/downloads/"
 )
 
 var VersionCheckTTL = 86400 // 1 day, in seconds
 
 // 平台对应的下载路径标识
-var platformPaths = map[string]string{
-	"linux-amd64":   "yhst",
-	"linux-arm64":   "jrob",
-	"darwin-amd64":  "hgpd",
-	"darwin-arm64":  "ahhl",
-	"windows-amd64": "phfd",
+var platformPaths = map[string]struct{}{
+	"linux-amd64":   {},
+	"linux-arm64":   {},
+	"darwin-amd64":  {},
+	"darwin-arm64":  {},
+	"windows-amd64": {},
 }
 
 // getDownloadURL 根据平台生成下载地址
-func getDownloadURL(platform string) (string, error) {
-	pathID, exists := platformPaths[platform]
+func getDownloadURL(platform string, version string) (string, error) {
+	_, exists := platformPaths[platform]
 	if !exists {
 		return "", fmt.Errorf("unsupported platform: %s", platform)
 	}
-	// 格式: {baseUrl}/{pathID}/aliyun-tablestore-cli-{platform}-{version}.zip
-	return fmt.Sprintf("%s/%s/aliyun-tablestore-cli-%s-%s.zip",
-		tablestoreCliBaseUrl, pathID, platform, currentVersion), nil
+	// 格式: {baseUrl}aliyun-tablestore-cli-{platform}-{version}.zip
+	return fmt.Sprintf("%saliyun-tablestore-cli-%s-%s.zip", tablestoreCliBaseUrl, platform, version), nil
 }
 
 func NewContext(originContext *cli.Context) *Context {
 	return &Context{
 		originCtx: originContext,
-	}
-}
-
-func (c *Context) info(a ...interface{}) {
-	if c == nil || c.originCtx == nil {
-		return
-	}
-	if len(a) == 0 {
-		return
-	}
-	if format, ok := a[0].(string); ok && strings.Contains(format, "%") {
-		_, _ = fmt.Fprintf(c.originCtx.Stdout(), format, a[1:]...)
-		return
-	}
-	_, _ = fmt.Fprintln(c.originCtx.Stdout(), a...)
-}
-
-func (c *Context) errorf(format string, a ...interface{}) {
-	_, err := fmt.Fprintf(c.originCtx.Stderr(), format, a...)
-	if err != nil {
-		return
 	}
 }
 
@@ -119,7 +97,6 @@ func (c *Context) Run(args []string) error {
 	if err != nil {
 		return err
 	}
-
 	newArgs, err := c.RemoveFlagsForMainCli(args)
 	if err != nil {
 		return err
@@ -141,34 +118,52 @@ func (c *Context) InitializeAndValidatePlatform() error {
 	return nil
 }
 
-// ExecuteTablestoreCli 执行 Tablestore CLI 命令
-func (c *Context) ExecuteTablestoreCli(args []string) error {
-	cmd := execCommandFunc(c.execFilePath, args...)
-	// set env
-	envs := os.Environ()
-	for k, v := range c.envMap {
-		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
+func GetLatestOtsUtilVersion() (string, error) {
+	url := tablestoreCliBaseUrl + "version.txt"
+	client := &http.Client{
+		Timeout: 30 * time.Second,
 	}
-	cmd.Env = envs
-	cmd.Stdout = c.originCtx.Stdout()
-	cmd.Stderr = c.originCtx.Stderr()
-	cmd.Stdin = os.Stdin
-	// 设置工作目录为 aliyun 配置目录，以便 tablestore CLI 能找到 .tablestore_config 文件
-	// cmd.Dir = c.configPath
 
-	err := cmd.Run()
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return fmt.Errorf("failed to execute %s %v: %v", c.execFilePath, args, err)
+		return "", fmt.Errorf("failed to create request for %s: %v", url, err)
 	}
-	return nil
+
+	req.Header.Set("User-Agent", "aliyun-cli/"+cli.Version)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch content from %s: %v", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("HTTP request failed with status code %d from %s", resp.StatusCode, url)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body from %s: %v", url, err)
+	}
+
+	data := string(body)
+	version := strings.TrimSpace(data)
+	if version == "" {
+		return "", fmt.Errorf("failed to get version from response body: empty version")
+	}
+	return version, nil
 }
 
 // EnsureInstalledAndUpdated 确保 Tablestore CLI 已安装且为最新版本
 // 如果未安装则安装，如果已安装则检查并更新到最新版本
 func (c *Context) EnsureInstalledAndUpdated() error {
 	if !c.installed {
-		c.versionRemote = currentVersion
-		err := c.Install()
+		latestVersionRemote, err := getLatestOtsUtilVersionFunc()
+		if err != nil {
+			return err
+		}
+		c.versionRemote = latestVersionRemote
+		err = c.Install()
 		if err != nil {
 			return err
 		}
@@ -180,8 +175,12 @@ func (c *Context) EnsureInstalledAndUpdated() error {
 		// 已安装时，检查是否需要更新版本
 		needCheckVersion := c.NeedCheckVersion()
 		if needCheckVersion {
-			c.versionRemote = currentVersion
-			err := c.GetLocalVersion()
+			latestVersionRemote, err := getLatestOtsUtilVersionFunc()
+			if err != nil {
+				return err
+			}
+			c.versionRemote = latestVersionRemote
+			err = c.GetLocalVersion()
 			if err != nil {
 				return err
 			}
@@ -217,7 +216,8 @@ func (c *Context) CheckOsTypeAndArch() {
 
 func (c *Context) InitBasicInfo() {
 	c.configPath = getConfigurePathFunc()
-	c.checkVersionCacheFilePath = filepath.Join(c.configPath, ".tsutil_version_check")
+	c.checkVersionCacheFilePath = filepath.Join(c.configPath, ".otsutil_version_check")
+	c.versionFilePath = filepath.Join(c.configPath, ".otsutil_version")
 	c.execFilePath = filepath.Join(c.configPath, "ts")
 	if runtime.GOOS == "windows" {
 		c.execFilePath += ".exe"
@@ -229,7 +229,7 @@ func (c *Context) InitBasicInfo() {
 // Install latest tablestore CLI
 func (c *Context) Install() error {
 	// 生成下载地址
-	url, err := getDownloadURL(c.downloadPathSuffix)
+	url, err := getDownloadURL(c.downloadPathSuffix, c.versionRemote)
 	if err != nil {
 		return err
 	}
@@ -248,6 +248,14 @@ func (c *Context) Install() error {
 	if err != nil {
 		return fmt.Errorf("failed to download and unzip tablestore CLI from %s: %v", url, err)
 	}
+	c.versionLocal = c.versionRemote
+	c.installed = true
+
+	err = c.SaveLocalVersion()
+	if err != nil {
+		return fmt.Errorf("failed to save installed version: %v", err)
+	}
+
 	return nil
 }
 
@@ -308,9 +316,10 @@ func DownloadAndUnzip(url string, destFile string, exeFilePath string, extractCe
 			return fmt.Errorf("failed to remove existing file %s: %v", exeFilePath, err)
 		}
 	}
-	err = os.Rename(sourceFile, exeFilePath)
+	// copy file from source to destination
+	err = util.CopyFileAndRemoveSource(sourceFile, exeFilePath)
 	if err != nil {
-		return fmt.Errorf("failed to move file from %s to %s: %v", sourceFile, exeFilePath, err)
+		return err
 	}
 	// set exec permission
 	if runtime.GOOS != "windows" {
@@ -393,15 +402,6 @@ func unzip(src, dest string) error {
 	return nil
 }
 
-// EncodeMapBase64 将 map 序列化为 JSON 后做 base64 编码
-func EncodeMapBase64(m map[string]any) (string, error) {
-	b, err := json.Marshal(m)
-	if err != nil {
-		return "", fmt.Errorf("json marshal failed: %w", err)
-	}
-	return base64.StdEncoding.EncodeToString(b), nil
-}
-
 // tablestoreConfig 表格存储 CLI 的配置结构
 type tablestoreConfig struct {
 	Endpoint             string `json:"Endpoint"`
@@ -409,8 +409,6 @@ type tablestoreConfig struct {
 	AccessKeySecret      string `json:"AccessKeySecret"`
 	AccessKeySecretToken string `json:"AccessKeySecretToken,omitempty"`
 	Instance             string `json:"Instance,omitempty"`
-	RegionId             string `json:"RegionId,omitempty"`
-	ProfileMode          string `json:"ProfileMode,omitempty"`
 }
 
 // PrepareEnv 准备用户身份环境变量并创建配置文件
@@ -470,8 +468,7 @@ func (c *Context) PrepareEnv() error {
 		Instance:             "",
 	}
 
-	wd, _ := os.Getwd()
-	configPath := filepath.Join(wd, ".tablestore_config")
+	configPath := filepath.Join(c.configPath, ".tablestore_config")
 
 	if fileExists(configPath) {
 		data, err := os.ReadFile(configPath)
@@ -579,7 +576,26 @@ func (c *Context) GetLocalVersion() error {
 		c.versionLocal = ""
 		return fmt.Errorf("tablestore CLI not installed")
 	}
-	c.versionLocal = currentVersion
+
+	if fileExists(c.versionFilePath) {
+		data, err := os.ReadFile(c.versionFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to read version file %s: %v", c.versionFilePath, err)
+		}
+		c.versionLocal = strings.TrimSpace(string(data))
+		if c.versionLocal == "" {
+			return fmt.Errorf("version file %s is empty", c.versionFilePath)
+		}
+		return nil
+	}
+	return nil
+}
+
+func (c *Context) SaveLocalVersion() error {
+	err := os.WriteFile(c.versionFilePath, []byte(c.versionLocal), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write version file %s: %v", c.versionFilePath, err)
+	}
 	return nil
 }
 
@@ -589,6 +605,23 @@ func (c *Context) UpdateCheckCacheTime() error {
 	err := os.WriteFile(c.checkVersionCacheFilePath, []byte(data), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write cache file %s: %v", c.checkVersionCacheFilePath, err)
+	}
+	return nil
+}
+
+func (c *Context) ExecuteTablestoreCli(args []string) error {
+	cmd := execCommandFunc(c.execFilePath, args...)
+	envs := os.Environ()
+	cmd.Env = envs
+	cmd.Stdout = c.originCtx.Stdout()
+	cmd.Stderr = c.originCtx.Stderr()
+	cmd.Stdin = os.Stdin
+	// 设置工作目录为 aliyun 配置目录，以便 tablestore CLI 能找到 .tablestore_config 文件
+	cmd.Dir = c.configPath
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to execute %s %v: %v", c.execFilePath, args, err)
 	}
 	return nil
 }
