@@ -26,6 +26,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 	"github.com/aliyun/aliyun-cli/v3/ossutil"
@@ -76,6 +77,8 @@ func Main(args []string) {
 	rootCmd.AddSubCommand(lib.NewOssCommand())
 	rootCmd.AddSubCommand(cli.NewVersionCommand())
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
+	// mcp proxy command
+	rootCmd.AddSubCommand(mcpproxy.NewMCPProxyCommand())
 	// go v1 to v2 migrate command
 	rootCmd.AddSubCommand(go_migrate.NewGoMigrateCommand())
 	// new oss command
