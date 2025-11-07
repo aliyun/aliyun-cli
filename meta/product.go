@@ -52,7 +52,7 @@ func (a *Product) GetEndpointWithType(region string, client *sdk.Client, endpoin
 
 	// If endpoint_type is "vpc", prioritize RegionalVpcEndpoints and skip location service
 	// because location service returns public endpoints which are not suitable for VPC
-	if endpointType == "vpc" && a.RegionalVpcEndpoints != nil {
+	if strings.ToLower(endpointType) == "vpc" && a.RegionalVpcEndpoints != nil && len(a.RegionalVpcEndpoints) > 0 {
 		ep, ok := a.RegionalVpcEndpoints[region]
 		if ok {
 			return ep, nil
