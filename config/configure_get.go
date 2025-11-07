@@ -99,6 +99,8 @@ func doConfigureGet(c *cli.Context, args []string) error {
 			cli.Printf(c.Stdout(), "cloud-sso-account-id=%s\n", profile.CloudSSOAccountId)
 		case OAuthSiteTypeName:
 			cli.Printf(c.Stdout(), "oauth-site-type=%s\n", profile.OAuthSiteType)
+		case EndpointTypeFlagName:
+			cli.Printf(c.Stdout(), "endpoint-type=%s\n", profile.EndpointType)
 		}
 	}
 

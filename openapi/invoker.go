@@ -184,7 +184,8 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 
 	if a.request.Domain == "" {
-		a.request.Domain, err = product.GetEndpoint(a.request.RegionId, a.client)
+		endpointType := a.profile.EndpointType
+		a.request.Domain, err = product.GetEndpointWithType(a.request.RegionId, a.client, endpointType)
 		if err != nil {
 			return cli.NewErrorWithTip(
 				fmt.Errorf("unknown endpoint for %s/%s! failed %s", product.GetLowerCode(), a.request.RegionId, err),

@@ -126,6 +126,7 @@ func doConfigureSet(ctx *cli.Context) error {
 	profile.ConnectTimeout = ConnectTimeoutFlag(flags).GetIntegerOrDefault(profile.ConnectTimeout)
 	profile.RetryCount = RetryCountFlag(flags).GetIntegerOrDefault(profile.RetryCount)
 	profile.StsRegion = StsRegionFlag(flags).GetStringOrDefault(profile.StsRegion)
+	profile.EndpointType = EndpointTypeFlag(flags).GetStringOrDefault(profile.EndpointType)
 
 	err = profile.Validate()
 	if err != nil {

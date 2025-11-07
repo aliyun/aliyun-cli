@@ -96,6 +96,7 @@ type Profile struct {
 	OAuthAccessTokenExpire    int64            `json:"oauth_access_token_expire,omitempty"`
 	OAuthRefreshTokenExpire   int64            `json:"oauth_refresh_token_expire,omitempty"`
 	OAuthSiteType             string           `json:"oauth_site_type,omitempty"` // CN or INTL
+	EndpointType              string           `json:"endpoint_type,omitempty"`   // vpc or empty (default public)
 	parent                    *Configuration   //`json:"-"`
 }
 
@@ -224,6 +225,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.CloudSSOSignInUrl = CloudSSOSignInUrlFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOSignInUrl)
 	cp.CloudSSOAccessConfig = CloudSSOAccessConfigFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOAccessConfig)
 	cp.CloudSSOAccountId = CloudSSOAccountIdFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOAccountId)
+	cp.EndpointType = EndpointTypeFlag(ctx.Flags()).GetStringOrDefault(cp.EndpointType)
 
 	if cp.AccessKeyId == "" {
 		cp.AccessKeyId = util.GetFromEnv("ALIBABA_CLOUD_ACCESS_KEY_ID", "ALIBABACLOUD_ACCESS_KEY_ID", "ALICLOUD_ACCESS_KEY_ID", "ACCESS_KEY_ID")
@@ -239,6 +241,10 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 
 	if cp.RegionId == "" {
 		cp.RegionId = util.GetFromEnv("ALIBABA_CLOUD_REGION_ID", "ALIBABACLOUD_REGION_ID", "ALICLOUD_REGION_ID", "REGION_ID", "REGION")
+	}
+
+	if cp.EndpointType == "" {
+		cp.EndpointType = util.GetFromEnv("ALIBABA_CLOUD_ENDPOINT_TYPE", "ALIBABACLOUD_ENDPOINT_TYPE", "ALICLOUD_ENDPOINT_TYPE", "ENDPOINT_TYPE")
 	}
 
 	if cp.CredentialsURI == "" {
