@@ -60,7 +60,7 @@ func (a *Product) GetEndpointWithType(region string, client *sdk.Client, endpoin
 		// If VPC endpoint not found for the region, fall through to try other options
 	}
 
-	if a.LocationServiceCode != "" && endpointType != "vpc" {
+	if a.LocationServiceCode != "" && strings.ToLower(endpointType) != "vpc" {
 		// resolve endpoint from location service
 		rp := endpoints.ResolveParam{
 			Product:              a.Code,
