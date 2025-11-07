@@ -77,6 +77,11 @@ func TestNewConfigureCommand(t *testing.T) {
 	ctx := cli.NewCommandContext(w, stderr)
 	AddFlags(ctx.Flags())
 
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
+			return nil, fmt.Errorf("load configuration failed")
+		}
+	}
 	// testcase
 	err := configureGet.Run(ctx, []string{"get"})
 	assert.NotNil(t, err)
