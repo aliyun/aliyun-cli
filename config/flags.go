@@ -49,6 +49,7 @@ const (
 	CloudSSOAccessConfigFlagName = "cloud-sso-access-config"
 	CloudSSOAccountIdFlagName    = "cloud-sso-account-id"
 	OAuthSiteTypeName            = "oauth-site-type"
+	EndpointTypeFlagName         = "endpoint-type"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -81,6 +82,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewCloudSSOAccessConfigFlag())
 	fs.Add(NewCloudSSOAccountIdFlag())
 	fs.Add(NewOAuthSiteTypeFlag())
+	fs.Add(NewEndpointTypeFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -527,5 +529,21 @@ func NewOAuthSiteTypeFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--oauth-site-type` to specify the oauth site type, support CN|INTL",
 			"使用 `--oauth-site-type` 指定 OAuth 站点类型, 支持 CN|INTL"),
+	}
+}
+
+func EndpointTypeFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(EndpointTypeFlagName)
+}
+
+func NewEndpointTypeFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         EndpointTypeFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--endpoint-type` to specify the endpoint type, support vpc or empty (default public)",
+			"使用 `--endpoint-type` 指定 endpoint 类型, 支持 vpc 或空值(默认公网)"),
 	}
 }

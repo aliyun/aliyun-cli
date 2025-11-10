@@ -259,6 +259,8 @@ func TestOverwriteWithFlags(t *testing.T) {
 	CloudSSOAccountIdFlag(ctx.Flags()).SetAssigned(true)
 	CloudSSOAccessConfigFlag(ctx.Flags()).SetValue("222")
 	CloudSSOAccessConfigFlag(ctx.Flags()).SetAssigned(true)
+	EndpointTypeFlag(ctx.Flags()).SetAssigned(true)
+	EndpointTypeFlag(ctx.Flags()).SetValue("vpc")
 
 	exp := &Profile{
 		Name:                 "default",
@@ -282,6 +284,7 @@ func TestOverwriteWithFlags(t *testing.T) {
 		RetryCount:           3,
 		CloudSSOAccountId:    "111",
 		CloudSSOAccessConfig: "222",
+		EndpointType:         "vpc",
 	}
 
 	actual.OverwriteWithFlags(ctx)
@@ -407,6 +410,46 @@ func resetEnv() {
 	os.Setenv("ALIBABACLOUD_REGION_ID", "")
 	os.Setenv("ALICLOUD_REGION_ID", "")
 	os.Setenv("REGION", "")
+	os.Setenv("ALIBABA_CLOUD_ENDPOINT_TYPE", "")
+	os.Setenv("ALIBABACLOUD_ENDPOINT_TYPE", "")
+	os.Setenv("ALICLOUD_ENDPOINT_TYPE", "")
+	os.Setenv("ENDPOINT_TYPE", "")
+}
+
+func TestOverwriteWithFlagsWithEndpointTypeEnv(t *testing.T) {
+	buf := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, stderr)
+	AddFlags(ctx.Flags())
+
+	resetEnv()
+	actual := newProfile()
+	exp := newProfile()
+	actual.OverwriteWithFlags(ctx)
+	assert.Equal(t, exp, actual)
+
+	os.Setenv("ENDPOINT_TYPE", "vpc")
+	actual.OverwriteWithFlags(ctx)
+	exp.EndpointType = "vpc"
+	assert.Equal(t, exp, actual)
+
+	actual = newProfile()
+	os.Setenv("ALICLOUD_ENDPOINT_TYPE", "vpc")
+	actual.OverwriteWithFlags(ctx)
+	exp.EndpointType = "vpc"
+	assert.Equal(t, exp, actual)
+
+	actual = newProfile()
+	os.Setenv("ALIBABACLOUD_ENDPOINT_TYPE", "vpc")
+	actual.OverwriteWithFlags(ctx)
+	exp.EndpointType = "vpc"
+	assert.Equal(t, exp, actual)
+
+	actual = newProfile()
+	os.Setenv("ALIBABA_CLOUD_ENDPOINT_TYPE", "vpc")
+	actual.OverwriteWithFlags(ctx)
+	exp.EndpointType = "vpc"
+	assert.Equal(t, exp, actual)
 }
 
 func TestValidateAk(t *testing.T) {

@@ -53,3 +53,144 @@ func TestProduct_GetEndpoint(t *testing.T) {
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "us-west-1")
 }
+
+func TestProduct_GetEndpointWithType(t *testing.T) {
+	client, err := sdk.NewClientWithAccessKey("regionid", "acesskeyid", "accesskeysecret")
+	assert.Nil(t, err)
+
+	t.Run("VPC endpoint type with RegionalVpcEndpoints", func(t *testing.T) {
+		product := &Product{
+			Code: "ecs",
+			RegionalVpcEndpoints: map[string]string{
+				"cn-hangzhou": "ecs-vpc.cn-hangzhou.aliyuncs.com",
+			},
+			RegionalEndpoints: map[string]string{
+				"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com",
+			},
+			LocationServiceCode: "ecs",
+		}
+		endpoint, err := product.GetEndpointWithType("cn-hangzhou", client, "vpc")
+		assert.Nil(t, err)
+		assert.Equal(t, "ecs-vpc.cn-hangzhou.aliyuncs.com", endpoint)
+	})
+
+	t.Run("VPC endpoint type skips location service", func(t *testing.T) {
+		product := &Product{
+			Code: "ecs",
+			RegionalVpcEndpoints: map[string]string{
+				"cn-hangzhou": "ecs-vpc.cn-hangzhou.aliyuncs.com",
+			},
+			LocationServiceCode: "ecs", // Should be skipped for VPC
+		}
+		endpoint, err := product.GetEndpointWithType("cn-hangzhou", client, "vpc")
+		assert.Nil(t, err)
+		assert.Equal(t, "ecs-vpc.cn-hangzhou.aliyuncs.com", endpoint)
+	})
+
+	t.Run("VPC endpoint type falls back to RegionalEndpoints when VPC endpoint not found", func(t *testing.T) {
+		product := &Product{
+			Code: "ecs",
+			RegionalVpcEndpoints: map[string]string{
+				"cn-beijing": "ecs-vpc.cn-beijing.aliyuncs.com",
+			},
+			RegionalEndpoints: map[string]string{
+				"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com",
+			},
+			LocationServiceCode: "ecs",
+		}
+		endpoint, err := product.GetEndpointWithType("cn-hangzhou", client, "vpc")
+		assert.Nil(t, err)
+		assert.Equal(t, "ecs.cn-hangzhou.aliyuncs.com", endpoint)
+	})
+
+	t.Run("VPC endpoint type falls back to GlobalEndpoint when VPC and regional endpoints not found", func(t *testing.T) {
+		product := &Product{
+			Code: "ecs",
+			RegionalVpcEndpoints: map[string]string{
+				"cn-beijing": "ecs-vpc.cn-beijing.aliyuncs.com",
+			},
+			GlobalEndpoint: "ecs.aliyuncs.com",
+		}
+		endpoint, err := product.GetEndpointWithType("us-west-1", client, "vpc")
+		assert.Nil(t, err)
+		assert.Equal(t, "ecs.aliyuncs.com", endpoint)
+	})
+
+	t.Run("Non-VPC endpoint type uses location service when available", func(t *testing.T) {
+		product := &Product{
+			Code: "arms",
+			RegionalEndpoints: map[string]string{
+				"cn-hangzhou": "arms.cn-hangzhou.aliyuncs.com",
+			},
+			LocationServiceCode: "arms",
+		}
+		// Note: This test may actually use RegionalEndpoints if location service fails
+		// The important thing is that location service is attempted
+		endpoint, err := product.GetEndpointWithType("cn-hangzhou", client, "")
+		assert.Nil(t, err)
+		assert.NotEmpty(t, endpoint)
+	})
+
+	t.Run("Non-VPC endpoint type uses RegionalEndpoints when location service not available", func(t *testing.T) {
+		product := &Product{
+			Code: "test",
+			RegionalEndpoints: map[string]string{
+				"cn-hangzhou": "test.cn-hangzhou.aliyuncs.com",
+			},
+			LocationServiceCode: "",
+		}
+		endpoint, err := product.GetEndpointWithType("cn-hangzhou", client, "")
+		assert.Nil(t, err)
+		assert.Equal(t, "test.cn-hangzhou.aliyuncs.com", endpoint)
+	})
+
+	t.Run("Non-VPC endpoint type uses GlobalEndpoint as fallback", func(t *testing.T) {
+		product := &Product{
+			Code:                "test",
+			GlobalEndpoint:      "test.aliyuncs.com",
+			LocationServiceCode: "",
+		}
+		endpoint, err := product.GetEndpointWithType("us-west-1", client, "")
+		assert.Nil(t, err)
+		assert.Equal(t, "test.aliyuncs.com", endpoint)
+	})
+
+	t.Run("VPC endpoint type returns error when no endpoints available", func(t *testing.T) {
+		product := &Product{
+			Code:                "test",
+			LocationServiceCode: "",
+		}
+		_, err := product.GetEndpointWithType("us-west-1", client, "vpc")
+		assert.NotNil(t, err)
+		assert.Contains(t, err.Error(), "us-west-1")
+	})
+
+	t.Run("Empty endpoint type behaves like non-VPC", func(t *testing.T) {
+		product := &Product{
+			Code: "test",
+			RegionalEndpoints: map[string]string{
+				"cn-hangzhou": "test.cn-hangzhou.aliyuncs.com",
+			},
+			RegionalVpcEndpoints: map[string]string{
+				"cn-hangzhou": "test-vpc.cn-hangzhou.aliyuncs.com",
+			},
+			LocationServiceCode: "",
+		}
+		endpoint, err := product.GetEndpointWithType("cn-hangzhou", client, "")
+		assert.Nil(t, err)
+		assert.Equal(t, "test.cn-hangzhou.aliyuncs.com", endpoint)
+	})
+
+	t.Run("VPC endpoint type with nil RegionalVpcEndpoints falls back to RegionalEndpoints", func(t *testing.T) {
+		product := &Product{
+			Code:                 "test",
+			RegionalVpcEndpoints: nil,
+			RegionalEndpoints: map[string]string{
+				"cn-hangzhou": "test.cn-hangzhou.aliyuncs.com",
+			},
+		}
+		endpoint, err := product.GetEndpointWithType("cn-hangzhou", client, "vpc")
+		assert.Nil(t, err)
+		assert.Equal(t, "test.cn-hangzhou.aliyuncs.com", endpoint)
+	})
+}

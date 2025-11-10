@@ -32,6 +32,7 @@ type Product struct {
 	Name                    map[string]string `json:"name"`
 	LocationServiceCode     string            `json:"location_service_code"`
 	RegionalEndpoints       map[string]string `json:"regional_endpoints"`
+	RegionalVpcEndpoints    map[string]string `json:"regional_vpc_endpoints"`
 	GlobalEndpoint          string            `json:"global_endpoint"`
 	RegionalEndpointPattern string            `json:"regional_endpoint_patterns"`
 	ApiStyle                string            `json:"api_style"`
@@ -43,8 +44,23 @@ func (a *Product) GetLowerCode() string {
 }
 
 func (a *Product) GetEndpoint(region string, client *sdk.Client) (endpoint string, err error) {
+	return a.GetEndpointWithType(region, client, "")
+}
+
+func (a *Product) GetEndpointWithType(region string, client *sdk.Client, endpointType string) (endpoint string, err error) {
 	var le error
-	if a.LocationServiceCode != "" {
+
+	// If endpoint_type is "vpc", prioritize RegionalVpcEndpoints and skip location service
+	// because location service returns public endpoints which are not suitable for VPC
+	if strings.ToLower(endpointType) == "vpc" && a.RegionalVpcEndpoints != nil && len(a.RegionalVpcEndpoints) > 0 {
+		ep, ok := a.RegionalVpcEndpoints[region]
+		if ok {
+			return ep, nil
+		}
+		// If VPC endpoint not found for the region, fall through to try other options
+	}
+
+	if a.LocationServiceCode != "" && strings.ToLower(endpointType) != "vpc" {
 		// resolve endpoint from location service
 		rp := endpoints.ResolveParam{
 			Product:              a.Code,

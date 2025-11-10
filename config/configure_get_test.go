@@ -163,3 +163,54 @@ func TestDoConfigureGetCloudSSO(t *testing.T) {
 		"cloud-sso-account-id=account-123456\n\n"
 	assert.Equal(t, expected, stdout.String())
 }
+
+func TestDoConfigureGetEndpointType(t *testing.T) {
+	// 设置测试环境
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
+	originhook := hookLoadConfigurationWithContext
+	defer func() {
+		hookLoadConfigurationWithContext = originhook
+	}()
+
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name:         "default",
+						Mode:         AK,
+						EndpointType: "vpc",
+					},
+				},
+			}, nil
+		}
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureGet(ctx, []string{EndpointTypeFlagName})
+	assert.Equal(t, "endpoint-type=vpc\n\n", stdout.String())
+
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name:         "default",
+						Mode:         AK,
+						EndpointType: "",
+					},
+				},
+			}, nil
+		}
+	}
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureGet(ctx, []string{EndpointTypeFlagName})
+	assert.Equal(t, "endpoint-type=\n\n", stdout.String())
+}
