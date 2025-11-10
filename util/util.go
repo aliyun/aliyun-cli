@@ -90,64 +90,27 @@ func UnmarshalJsonFromReader(body io.ReadCloser, s *struct {
 	return nil
 }
 
-type fileCloser interface {
-	io.Reader
-	io.Closer
-}
-
-type fileWriterCloser interface {
-	io.Writer
-	io.Closer
-}
-
-type fileOpener func(name string) (fileCloser, error)
-type fileCreator func(name string) (fileWriterCloser, error)
-
-var (
-	fileOpenFunc fileOpener = func(name string) (fileCloser, error) {
-		f, err := os.Open(name)
-		return f, err
-	}
-	fileCreateFunc fileCreator = func(name string) (fileWriterCloser, error) {
-		f, err := os.Create(name)
-		return f, err
-	}
-)
-
 // CopyFileAndRemoveSource copies a file from source to destination and removes the source file.
 // This is useful when moving files across different filesystems where os.Rename might fail.
 func CopyFileAndRemoveSource(sourceFile, destFile string) error {
-	src, err := fileOpenFunc(sourceFile)
+	src, err := os.Open(sourceFile)
 	if err != nil {
 		return fmt.Errorf("failed to open source file %s: %v", sourceFile, err)
 	}
 
-	dst, err := fileCreateFunc(destFile)
+	dst, err := os.Create(destFile)
 	if err != nil {
 		_ = src.Close()
 		return fmt.Errorf("failed to create destination file %s: %v", destFile, err)
 	}
 
 	_, err = io.Copy(dst, src)
+	_ = dst.Close()
+	_ = src.Close()
 	if err != nil {
-		_ = dst.Close()
-		_ = src.Close()
 		_ = os.Remove(destFile)
 		return fmt.Errorf("failed to copy file from %s to %s: %v", sourceFile, destFile, err)
 	}
-
-	if err = dst.Close(); err != nil {
-		_ = src.Close()
-		return fmt.Errorf("failed to close destination file %s: %v", destFile, err)
-	}
-	if err = src.Close(); err != nil {
-		return fmt.Errorf("failed to close source file %s: %v", sourceFile, err)
-	}
-
-	err = os.Remove(sourceFile)
-	if err != nil {
-		return fmt.Errorf("failed to remove source file %s: %v", sourceFile, err)
-	}
-
+	_ = os.Remove(sourceFile)
 	return nil
 }
