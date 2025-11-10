@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"runtime"
@@ -455,4 +456,194 @@ func TestCopyFileAndRemoveSource(t *testing.T) {
 		_, err = os.Stat(sourceFile)
 		assert.NoError(t, err, "source file should still exist after failed copy")
 	})
+
+	t.Run("error handling when io.Copy fails - destination file cleanup", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("io.Copy failure simulation skipped on Windows")
+		}
+
+		tmpDir := t.TempDir()
+		destDir := tmpDir + "/readonly"
+		err := os.MkdirAll(destDir, 0755)
+		assert.NoError(t, err)
+
+		sourceFile := tmpDir + "/source.txt"
+		destFile := destDir + "/dest.txt"
+
+		content := "test content"
+		err = os.WriteFile(sourceFile, []byte(content), 0644)
+		assert.NoError(t, err)
+
+		// Make destination directory read-only
+		err = os.Chmod(destDir, 0555)
+		assert.NoError(t, err)
+		defer func() {
+			_ = os.Chmod(destDir, 0755) // restore for cleanup
+		}()
+
+		// This will fail at os.Create (not io.Copy), but demonstrates error handling
+		err = CopyFileAndRemoveSource(sourceFile, destFile)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create destination file")
+
+		_, err = os.Stat(sourceFile)
+		assert.NoError(t, err, "source file should still exist after failed copy")
+
+		_, err = os.Stat(destFile)
+		assert.True(t, os.IsNotExist(err), "destination file should not exist after failed copy")
+	})
+
+	t.Run("error handling when src.Close fails", func(t *testing.T) {
+		// This test verifies the error handling when src.Close() fails (lines 127-129).
+		// Expected behavior:
+		// 1. Error is returned with message: "failed to close source file %s: %v" (line 128)
+		// 2. Source file remains (not removed)
+		// 3. Destination file exists (copy was successful)
+
+		tmpDir := t.TempDir()
+		sourceFile := tmpDir + "/source.txt"
+		destFile := tmpDir + "/dest.txt"
+
+		content := "test content"
+		err := os.WriteFile(sourceFile, []byte(content), 0644)
+		assert.NoError(t, err)
+
+		// Save original functions
+		oldOpenFunc := fileOpenFunc
+		oldCreateFunc := fileCreateFunc
+		defer func() {
+			fileOpenFunc = oldOpenFunc
+			fileCreateFunc = oldCreateFunc
+		}()
+
+		// Create a mock file that fails on Close
+		mockCloseError := fmt.Errorf("mock close error")
+
+		// Mock fileOpenFunc to return a file that will fail on Close
+		fileOpenFunc = func(name string) (fileCloser, error) {
+			// Open the real file to get a valid file handle
+			realFile, err := os.Open(name)
+			if err != nil {
+				return nil, err
+			}
+			// Wrap it in a mock file that fails on Close
+			return &mockFileCloser{
+				file:     realFile,
+				closeErr: mockCloseError,
+			}, nil
+		}
+
+		// Call the function - it should fail when trying to close the source file
+		err = CopyFileAndRemoveSource(sourceFile, destFile)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to close source file")
+		assert.Contains(t, err.Error(), sourceFile)
+		assert.Contains(t, err.Error(), "mock close error")
+
+		// Verify source file still exists (not removed due to error)
+		_, err = os.Stat(sourceFile)
+		assert.NoError(t, err, "source file should still exist after failed close")
+
+		// Verify destination file exists (copy was successful before close failed)
+		_, err = os.Stat(destFile)
+		assert.NoError(t, err, "destination file should exist after successful copy")
+	})
+
+	t.Run("error handling when dst.Close fails", func(t *testing.T) {
+		// This test verifies the error handling when dst.Close() fails (lines 123-126).
+		// Expected behavior:
+		// 1. Source file is closed (line 124: _ = src.Close())
+		// 2. Error is returned with message: "failed to close destination file %s: %v" (line 125)
+		// 3. Source file remains (not removed)
+
+		tmpDir := t.TempDir()
+		sourceFile := tmpDir + "/source.txt"
+		destFile := tmpDir + "/dest.txt"
+
+		content := "test content"
+		err := os.WriteFile(sourceFile, []byte(content), 0644)
+		assert.NoError(t, err)
+
+		// Save original functions
+		oldOpenFunc := fileOpenFunc
+		oldCreateFunc := fileCreateFunc
+		defer func() {
+			fileOpenFunc = oldOpenFunc
+			fileCreateFunc = oldCreateFunc
+		}()
+
+		// Create a mock file that fails on Close
+		mockCloseError := fmt.Errorf("mock destination close error")
+
+		// Mock fileCreateFunc to return a file that will fail on Close
+		fileCreateFunc = func(name string) (fileWriterCloser, error) {
+			// Create the real file to get a valid file handle
+			realFile, err := os.Create(name)
+			if err != nil {
+				return nil, err
+			}
+			// Wrap it in a mock file that fails on Close
+			return &mockFileWriterCloser{
+				file:     realFile,
+				closeErr: mockCloseError,
+			}, nil
+		}
+
+		// Call the function - it should fail when trying to close the destination file
+		err = CopyFileAndRemoveSource(sourceFile, destFile)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to close destination file")
+		assert.Contains(t, err.Error(), destFile)
+		assert.Contains(t, err.Error(), "mock destination close error")
+
+		// Verify source file still exists (not removed due to error)
+		_, err = os.Stat(sourceFile)
+		assert.NoError(t, err, "source file should still exist after failed close")
+	})
+}
+
+// mockFileCloser is a mock file that implements fileCloser interface
+type mockFileCloser struct {
+	file     *os.File
+	closeErr error
+}
+
+func (m *mockFileCloser) Read(p []byte) (n int, err error) {
+	if m.file != nil {
+		return m.file.Read(p)
+	}
+	return 0, io.EOF
+}
+
+func (m *mockFileCloser) Close() error {
+	if m.closeErr != nil {
+		return m.closeErr
+	}
+	if m.file != nil {
+		return m.file.Close()
+	}
+	return nil
+}
+
+// mockFileWriterCloser is a mock file that implements fileWriterCloser interface
+type mockFileWriterCloser struct {
+	file     *os.File
+	closeErr error
+}
+
+func (m *mockFileWriterCloser) Write(p []byte) (n int, err error) {
+	if m.file != nil {
+		return m.file.Write(p)
+	}
+	return 0, fmt.Errorf("file not available")
+}
+
+func (m *mockFileWriterCloser) Close() error {
+	if m.closeErr != nil {
+		return m.closeErr
+	}
+	if m.file != nil {
+		return m.file.Close()
+	}
+	return nil
 }
