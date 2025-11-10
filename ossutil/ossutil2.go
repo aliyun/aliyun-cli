@@ -17,6 +17,7 @@ import (
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 type Context struct {
@@ -327,9 +328,9 @@ func DownloadAndUnzip(url string, destFile string, exeFilePath string, extractCe
 			return fmt.Errorf("failed to remove existing file %s: %v", exeFilePath, err)
 		}
 	}
-	err = os.Rename(sourceFile, exeFilePath)
+	err = util.CopyFileAndRemoveSource(sourceFile, exeFilePath)
 	if err != nil {
-		return fmt.Errorf("failed to move file from %s to %s: %v", sourceFile, exeFilePath, err)
+		return err
 	}
 	// set exec permission
 	if runtime.GOOS != "windows" {

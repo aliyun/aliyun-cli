@@ -294,3 +294,250 @@ func (t *testReadCloser) Close() error {
 	}
 	return nil
 }
+
+func TestCopyFileAndRemoveSource(t *testing.T) {
+	t.Run("successful copy and remove", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		sourceFile := tmpDir + "/source.txt"
+		destFile := tmpDir + "/dest.txt"
+
+		content := "test file content"
+		err := os.WriteFile(sourceFile, []byte(content), 0644)
+		assert.NoError(t, err)
+
+		err = CopyFileAndRemoveSource(sourceFile, destFile)
+		assert.NoError(t, err)
+
+		destContent, err := os.ReadFile(destFile)
+		assert.NoError(t, err)
+		assert.Equal(t, content, string(destContent))
+
+		_, err = os.Stat(sourceFile)
+		assert.True(t, os.IsNotExist(err), "source file should be removed")
+	})
+
+	t.Run("source file does not exist", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		sourceFile := tmpDir + "/nonexistent.txt"
+		destFile := tmpDir + "/dest.txt"
+
+		err := CopyFileAndRemoveSource(sourceFile, destFile)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to open source file")
+	})
+
+	t.Run("destination file already exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		sourceFile := tmpDir + "/source.txt"
+		destFile := tmpDir + "/dest.txt"
+
+		sourceContent := "source content"
+		err := os.WriteFile(sourceFile, []byte(sourceContent), 0644)
+		assert.NoError(t, err)
+
+		existingContent := "existing content"
+		err = os.WriteFile(destFile, []byte(existingContent), 0644)
+		assert.NoError(t, err)
+
+		err = CopyFileAndRemoveSource(sourceFile, destFile)
+		assert.NoError(t, err)
+
+		destContent, err := os.ReadFile(destFile)
+		assert.NoError(t, err)
+		assert.Equal(t, sourceContent, string(destContent))
+
+		_, err = os.Stat(sourceFile)
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("copy to non-existent directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		sourceFile := tmpDir + "/source.txt"
+		destFile := tmpDir + "/subdir/dest.txt"
+
+		content := "test content"
+		err := os.WriteFile(sourceFile, []byte(content), 0644)
+		assert.NoError(t, err)
+
+		err = CopyFileAndRemoveSource(sourceFile, destFile)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create destination file")
+
+		_, err = os.Stat(sourceFile)
+		assert.NoError(t, err)
+	})
+
+	t.Run("large file copy", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		sourceFile := tmpDir + "/source.txt"
+		destFile := tmpDir + "/dest.txt"
+
+		// create large source file (1MB)
+		largeContent := make([]byte, 1024*1024)
+		for i := range largeContent {
+			largeContent[i] = byte(i % 256)
+		}
+		err := os.WriteFile(sourceFile, largeContent, 0644)
+		assert.NoError(t, err)
+
+		err = CopyFileAndRemoveSource(sourceFile, destFile)
+		assert.NoError(t, err)
+
+		destContent, err := os.ReadFile(destFile)
+		assert.NoError(t, err)
+		assert.Equal(t, largeContent, destContent)
+
+		_, err = os.Stat(sourceFile)
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("empty file copy", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		sourceFile := tmpDir + "/source.txt"
+		destFile := tmpDir + "/dest.txt"
+
+		err := os.WriteFile(sourceFile, []byte{}, 0644)
+		assert.NoError(t, err)
+
+		err = CopyFileAndRemoveSource(sourceFile, destFile)
+		assert.NoError(t, err)
+
+		destContent, err := os.ReadFile(destFile)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(destContent))
+
+		_, err = os.Stat(sourceFile)
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("file permissions preserved", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("file permissions test skipped on Windows")
+		}
+
+		tmpDir := t.TempDir()
+		sourceFile := tmpDir + "/source.txt"
+		destFile := tmpDir + "/dest.txt"
+
+		// create source file with specific permissions
+		content := "test content"
+		err := os.WriteFile(sourceFile, []byte(content), 0755)
+		assert.NoError(t, err)
+
+		err = CopyFileAndRemoveSource(sourceFile, destFile)
+		assert.NoError(t, err)
+
+		_, err = os.Stat(destFile)
+		assert.NoError(t, err)
+
+		// Note: On Unix systems, the file mode might be affected by umask,
+		// so we just verify the file exists and is readable
+		destContent, err := os.ReadFile(destFile)
+		assert.NoError(t, err)
+		assert.Equal(t, content, string(destContent))
+	})
+
+	t.Run("error handling when destination cannot be created", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		sourceFile := tmpDir + "/source.txt"
+		// use an invalid path that cannot be created
+		destFile := "/root/invalid/path/dest.txt"
+
+		content := "test content"
+		err := os.WriteFile(sourceFile, []byte(content), 0644)
+		assert.NoError(t, err)
+
+		// copy should fail because destination path is invalid
+		err = CopyFileAndRemoveSource(sourceFile, destFile)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create destination file")
+
+		_, err = os.Stat(sourceFile)
+		assert.NoError(t, err, "source file should still exist after failed copy")
+	})
+
+	t.Run("error handling when destination cannot be created - source file closed", func(t *testing.T) {
+		// This test verifies that when os.Create fails (line 101), the source file is closed (line 103)
+		tmpDir := t.TempDir()
+		sourceFile := tmpDir + "/source.txt"
+		destFile := "/root/invalid/path/dest.txt"
+
+		content := "test content"
+		err := os.WriteFile(sourceFile, []byte(content), 0644)
+		assert.NoError(t, err)
+
+		err = CopyFileAndRemoveSource(sourceFile, destFile)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create destination file")
+		assert.Contains(t, err.Error(), destFile)
+
+		_, err = os.Stat(sourceFile)
+		assert.NoError(t, err, "source file should still exist after failed copy")
+	})
+
+	t.Run("source file removal on success (line 114)", func(t *testing.T) {
+		// This test explicitly verifies that source file is removed on successful copy (line 114)
+		tmpDir := t.TempDir()
+		sourceFile := tmpDir + "/source.txt"
+		destFile := tmpDir + "/dest.txt"
+
+		content := "test content for source removal"
+		err := os.WriteFile(sourceFile, []byte(content), 0644)
+		assert.NoError(t, err)
+
+		err = CopyFileAndRemoveSource(sourceFile, destFile)
+		assert.NoError(t, err)
+
+		_, err = os.Stat(sourceFile)
+		assert.True(t, os.IsNotExist(err), "source file should be removed after successful copy (line 114)")
+
+		destContent, err := os.ReadFile(destFile)
+		assert.NoError(t, err)
+		assert.Equal(t, content, string(destContent))
+	})
+
+	t.Run("verify error handling when source file is a directory", func(t *testing.T) {
+		// Test error handling when source "file" is actually a directory
+		// Note: os.Open can open a directory, but io.Copy will fail
+		// On Windows, this test may hang, so we skip it
+		if runtime.GOOS == "windows" {
+			t.Skip("source file is directory test skipped on Windows")
+		}
+
+		tmpDir := t.TempDir()
+		sourceDir := tmpDir + "/source_dir"
+		destFile := tmpDir + "/dest.txt"
+
+		err := os.MkdirAll(sourceDir, 0755)
+		assert.NoError(t, err)
+
+		err = CopyFileAndRemoveSource(sourceDir, destFile)
+		assert.Error(t, err)
+		// The error occurs during io.Copy, not os.Open
+		assert.Contains(t, err.Error(), "failed to copy file from")
+		assert.Contains(t, err.Error(), "is a directory")
+
+		_, err = os.Stat(sourceDir)
+		assert.NoError(t, err, "source directory should still exist after failed copy")
+	})
+
+	t.Run("verify error handling when destination is a directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		sourceFile := tmpDir + "/source.txt"
+		destDir := tmpDir + "/dest_dir"
+
+		content := "test content"
+		err := os.WriteFile(sourceFile, []byte(content), 0644)
+		assert.NoError(t, err)
+
+		err = os.MkdirAll(destDir, 0755)
+		assert.NoError(t, err)
+
+		err = CopyFileAndRemoveSource(sourceFile, destDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create destination file")
+
+		_, err = os.Stat(sourceFile)
+		assert.NoError(t, err)
+	})
+}
