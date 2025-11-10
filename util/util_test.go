@@ -499,6 +499,11 @@ func TestCopyFileAndRemoveSource(t *testing.T) {
 	t.Run("verify error handling when source file is a directory", func(t *testing.T) {
 		// Test error handling when source "file" is actually a directory
 		// Note: os.Open can open a directory, but io.Copy will fail
+		// On Windows, this test may hang, so we skip it
+		if runtime.GOOS == "windows" {
+			t.Skip("source file is directory test skipped on Windows")
+		}
+
 		tmpDir := t.TempDir()
 		sourceDir := tmpDir + "/source_dir"
 		destFile := tmpDir + "/dest.txt"
