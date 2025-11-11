@@ -95,7 +95,6 @@ type MCPProxy struct {
 	Host            string
 	Port            int
 	Region          RegionType
-	BearerToken     string
 	McpProfile      *McpProfile
 	Server          *http.Server
 	McpServers      []MCPServerInfo
@@ -104,12 +103,11 @@ type MCPProxy struct {
 	stopCh          chan struct{}
 }
 
-func NewMCPProxy(host string, port int, region RegionType, bearerToken string, mcpProfile *McpProfile, servers []MCPServerInfo, manager *OAuthCallbackManager) *MCPProxy {
+func NewMCPProxy(host string, port int, region RegionType, mcpProfile *McpProfile, servers []MCPServerInfo, manager *OAuthCallbackManager) *MCPProxy {
 	return &MCPProxy{
 		Host:            host,
 		Port:            port,
 		Region:          region,
-		BearerToken:     bearerToken,
 		McpProfile:      mcpProfile,
 		McpServers:      servers,
 		CallbackManager: manager,
@@ -181,9 +179,7 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isSSE := p.isSSERequest(r)
-
-	upstreamReq, err := p.buildUpstreamRequest(r, accessToken, isSSE)
+	upstreamReq, err := p.buildUpstreamRequest(r, accessToken)
 	if err != nil {
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 		return
@@ -191,11 +187,11 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	log.Println("Upstream Request", upstreamReq.URL.String())
 	// 排除 Authorization 和 User-Agent 头
-	for k, v := range upstreamReq.Header {
-		if strings.ToLower(k) != "authorization" && strings.ToLower(k) != "user-agent" {
-			log.Println("Upstream Request Header", k, v)
-		}
-	}
+	// for k, v := range upstreamReq.Header {
+	// 	if strings.ToLower(k) != "authorization" && strings.ToLower(k) != "user-agent" {
+	// 		log.Println("Upstream Request Header", k, v)
+	// 	}
+	// }
 	// 打印 Upstream Request Body 内容
 	if upstreamReq.Body != nil {
 		bodyBytes, err := io.ReadAll(upstreamReq.Body)
@@ -209,12 +205,31 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		log.Println("Upstream Request Body <nil>")
 	}
-
-	if isSSE {
-		p.handleSSE(w, upstreamReq)
-	} else {
-		p.handleHTTP(w, upstreamReq)
+	client := &http.Client{Timeout: 0}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		log.Println("MCP Proxy gets mcp server response error", err.Error())
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
 	}
+	defer resp.Body.Close()
+
+	// 如果响应状态码为 401，则重新授权
+	if resp.StatusCode == http.StatusUnauthorized {
+		if err := p.Refresher.reauthorizeWithProxy(); err != nil {
+			log.Println("MCP Proxy gets mcp server response error from http request when reauthorize with proxy", err.Error())
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+	}
+	contentType := resp.Header.Get("Content-Type")
+	if strings.Contains(strings.ToLower(contentType), "text/event-stream") {
+		p.handleSSE(w, resp)
+		return
+	}
+
+	p.handleHTTP(w, resp)
+
 }
 
 func (p *MCPProxy) getMCPAccessToken() (string, error) {
@@ -229,7 +244,7 @@ func (p *MCPProxy) getMCPAccessToken() (string, error) {
 	return p.McpProfile.MCPOAuthAccessToken, nil
 }
 
-func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string, isSSE bool) (*http.Request, error) {
+func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string) (*http.Request, error) {
 	upstreamBaseURL := "https://openapi-mcp.cn-hangzhou.aliyuncs.com"
 
 	upstreamURL, err := url.Parse(upstreamBaseURL)
@@ -246,10 +261,6 @@ func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string, isS
 
 	method := r.Method
 	var body io.ReadCloser = r.Body
-	if isSSE {
-		method = http.MethodGet
-		body = nil
-	}
 
 	upstreamReq, err := http.NewRequest(method, newURL.String(), body)
 	if err != nil {
@@ -258,9 +269,6 @@ func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string, isS
 
 	for k, v := range r.Header {
 		if strings.ToLower(k) != "host" && strings.ToLower(k) != "authorization" {
-			if isSSE && (strings.ToLower(k) == "content-length" || strings.ToLower(k) == "content-type") {
-				continue
-			}
 			upstreamReq.Header[k] = v
 		}
 	}
@@ -271,13 +279,8 @@ func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string, isS
 	return upstreamReq, nil
 }
 
-func (p *MCPProxy) isSSERequest(r *http.Request) bool {
-	accept := r.Header.Get("Accept")
-	return strings.TrimSpace(accept) == "text/event-stream"
-}
-
-func (p *MCPProxy) handleSSE(w http.ResponseWriter, upstreamReq *http.Request) {
-	log.Println("SSE Upstream Request", upstreamReq.URL.String())
+func (p *MCPProxy) handleSSE(w http.ResponseWriter, resp *http.Response) {
+	log.Println("SSE Upstream Request", resp.Request.URL.String())
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -290,29 +293,16 @@ func (p *MCPProxy) handleSSE(w http.ResponseWriter, upstreamReq *http.Request) {
 		return
 	}
 
-	client := &http.Client{Timeout: 0}
-
-	resp, err := client.Do(upstreamReq)
-	if err != nil {
-		http.Error(w, "Bad Gateway", http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
 	log.Println("SSE Upstream Response", resp.StatusCode)
 
-	// 如果响应状态码为 401，则重新授权
-	if resp.StatusCode == http.StatusUnauthorized {
-		if err := p.Refresher.reauthorizeWithProxy(); err != nil {
-			log.Println("MCP Proxy gets mcp server response error from sse request when reauthorize with proxy", err.Error())
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
-		}
-	}
-
 	for k, v := range resp.Header {
-		if strings.ToLower(k) != "content-length" {
-			w.Header()[k] = v
+		if strings.ToLower(k) == "content-length" {
+			continue
 		}
+		w.Header()[k] = v
+	}
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "text/event-stream")
 	}
 
 	w.WriteHeader(resp.StatusCode)
@@ -341,19 +331,9 @@ func (p *MCPProxy) handleSSE(w http.ResponseWriter, upstreamReq *http.Request) {
 	}
 }
 
-func (p *MCPProxy) handleHTTP(w http.ResponseWriter, upstreamReq *http.Request) {
-	log.Println("HTTP Upstream Request", upstreamReq.URL.String())
-
-	client := &http.Client{Timeout: 60 * time.Second}
-
-	resp, err := client.Do(upstreamReq)
-	if err != nil {
-		log.Println("MCP Proxy gets mcp server response error from http request", err.Error())
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
+func (p *MCPProxy) handleHTTP(w http.ResponseWriter, resp *http.Response) {
+	log.Println("HTTP Upstream Request", resp.Request.URL.String())
+	log.Println("HTTP Upstream Response", resp.StatusCode)
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		http.Error(w, "Failed to read response body", http.StatusInternalServerError)
@@ -378,15 +358,6 @@ func (p *MCPProxy) handleHTTP(w http.ResponseWriter, upstreamReq *http.Request) 
 	w.Write(bodyBytes)
 
 	log.Println("MCP Proxy gets mcp server response successfully from http request", resp.StatusCode)
-
-	// 如果响应状态码为 401，则重新授权
-	if resp.StatusCode == http.StatusUnauthorized {
-		if err := p.Refresher.reauthorizeWithProxy(); err != nil {
-			log.Println("MCP Proxy gets mcp server response error from http request when reauthorize with proxy", err.Error())
-			http.Error(w, err.Error(), http.StatusUnauthorized)
-			return
-		}
-	}
 }
 
 const (
@@ -463,7 +434,6 @@ func (r *TokenRefresher) refreshAccessToken() error {
 	r.profile.MCPOAuthAccessToken = newTokens.AccessToken
 	r.profile.MCPOAuthRefreshToken = newTokens.RefreshToken
 	r.profile.MCPOAuthAccessTokenExpire = currentTime + newTokens.ExpiresIn
-	r.profile.MCPOAuthRefreshTokenExpire = currentTime + newTokens.RefreshExpiresIn
 
 	if err = r.atomicSaveProfile(); err != nil {
 		r.saveFailures++
