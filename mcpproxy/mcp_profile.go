@@ -45,7 +45,7 @@ func NewMcpProfile(name string) *McpProfile {
 }
 
 func NewMcpProfileFromBytes(bytes []byte) (profile *McpProfile, err error) {
-	profile = &McpProfile{Name: DefaultMcpProfileName}
+	profile = NewMcpProfile(DefaultMcpProfileName)
 	err = json.Unmarshal(bytes, profile)
 	return
 }
@@ -66,7 +66,7 @@ func saveMcpProfile(profile *McpProfile) error {
 	return os.Rename(tempFile, mcpConfigPath)
 }
 
-func getOrCreateMCPProfile(ctx *cli.Context, mcpProfileName string, region RegionType, host string, port int) (*McpProfile, error) {
+func getOrCreateMCPProfile(ctx *cli.Context, region RegionType, host string, port int) (*McpProfile, error) {
 	profile, err := config.LoadProfileWithContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load profile: %w", err)
@@ -74,7 +74,7 @@ func getOrCreateMCPProfile(ctx *cli.Context, mcpProfileName string, region Regio
 	mcpConfigPath := getMCPConfigPath()
 	if bytes, err := os.ReadFile(mcpConfigPath); err == nil {
 		if mcpProfile, err := NewMcpProfileFromBytes(bytes); err == nil {
-			log.Println("MCP Profile loaded from file", mcpProfileName, "app id", mcpProfile.MCPOAuthAppId)
+			log.Println("MCP Profile loaded from file", mcpProfile.Name, "app id", mcpProfile.MCPOAuthAppId)
 			err = findExistingMCPOauthApplicationById(ctx, profile, mcpProfile, region)
 			if err == nil {
 				return mcpProfile, nil
@@ -89,12 +89,12 @@ func getOrCreateMCPProfile(ctx *cli.Context, mcpProfileName string, region Regio
 		return nil, fmt.Errorf("failed to get or create OAuth application: %w", err)
 	}
 
-	cli.Printf(ctx.Stdout(), "Setting up MCPOAuth profile '%s'...\n", mcpProfileName)
+	cli.Printf(ctx.Stdout(), "Setting up MCPOAuth profile '%s'...\n", DefaultMcpProfileName)
 
-	mcpProfile := NewMcpProfile(mcpProfileName)
+	mcpProfile := NewMcpProfile(DefaultMcpProfileName)
 	mcpProfile.MCPOAuthSiteType = string(region)
 	mcpProfile.MCPOAuthAppId = app.ApplicationId
-	// refresh token 不在刷新接口返回，所以直接在这里设置
+	// 刷新 token 接口不返回 refresh token 有效期，所以直接在这里设置
 	currentTime := util.GetCurrentUnixTime()
 	mcpProfile.MCPOAuthRefreshTokenValidity = app.RefreshTokenValidity
 	mcpProfile.MCPOAuthRefreshTokenExpire = currentTime + int64(app.RefreshTokenValidity)
@@ -107,7 +107,7 @@ func getOrCreateMCPProfile(ctx *cli.Context, mcpProfileName string, region Regio
 		return nil, fmt.Errorf("failed to save mcp profile: %w", err)
 	}
 
-	cli.Printf(ctx.Stdout(), "MCP Profile '%s' configured successfully!\n", mcpProfileName)
+	cli.Printf(ctx.Stdout(), "MCP Profile '%s' configured successfully!\n", mcpProfile.Name)
 
 	return mcpProfile, nil
 }

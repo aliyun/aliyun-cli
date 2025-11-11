@@ -367,7 +367,6 @@ const (
 type EndpointConfig struct {
 	SignIn    string
 	OAuth     string
-	IMS       string
 	IMSDomain string
 	MCP       string
 }
@@ -377,14 +376,12 @@ var EndpointMap = map[RegionType]EndpointConfig{
 	RegionCN: {
 		SignIn:    "https://signin.aliyun.com",
 		OAuth:     "https://oauth.aliyun.com",
-		IMS:       "https://ims.aliyuncs.com",
 		IMSDomain: "ims.aliyuncs.com",
 		MCP:       "openapi-mcp.cn-hangzhou.aliyuncs.com",
 	},
 	RegionINTL: {
 		SignIn:    "https://signin.alibabacloud.com",
 		OAuth:     "https://oauth.alibabacloud.com",
-		IMS:       "https://ims.ap-southeast-1.aliyuncs.com",
 		IMSDomain: "ims.ap-southeast-1.aliyuncs.com",
 		MCP:       "openapi-mcp.ap-southeast-1.aliyuncs.com",
 	},

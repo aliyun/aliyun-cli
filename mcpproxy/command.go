@@ -39,21 +39,12 @@ func NewMCPProxyCommand() *cli.Command {
 				"代理自动处理 OAuth 认证，"+
 				"允许 MCP 客户端无需管理凭证即可连接。",
 		),
-		Usage:  "aliyun mcp-proxy [--mcp-profile PROFILE] [--port PORT] [--host HOST] [--region REGION] [--bearer-token TOKEN]",
+		Usage:  "aliyun mcp-proxy [--port PORT] [--host HOST] [--region REGION]",
 		Sample: "aliyun mcp-proxy --region CN --port 8088",
 		Run: func(ctx *cli.Context, args []string) error {
 			return runMCPProxy(ctx)
 		},
 	}
-
-	cmd.Flags().Add(&cli.Flag{
-		Name:         "mcp-profile",
-		DefaultValue: "default-mcp",
-		Short: i18n.T(
-			"MCP profile name for MCP OAuth",
-			"MCP OAuth 配置名称 (default-mcp)",
-		),
-	})
 
 	cmd.Flags().Add(&cli.Flag{
 		Name:         "port",
@@ -82,23 +73,13 @@ func NewMCPProxyCommand() *cli.Command {
 		),
 	})
 
-	cmd.Flags().Add(&cli.Flag{
-		Name: "bearer-token",
-		Short: i18n.T(
-			"Optional static bearer token for client authentication",
-			"可选的静态 Bearer Token 用于客户端认证",
-		),
-	})
-
 	return cmd
 }
 
 func runMCPProxy(ctx *cli.Context) error {
-	mcpProfileName := ctx.Flags().Get("mcp-profile").GetStringOrDefault("default-mcp")
 	portStr := ctx.Flags().Get("port").GetStringOrDefault("8088")
 	host := ctx.Flags().Get("host").GetStringOrDefault("127.0.0.1")
 	regionStr := ctx.Flags().Get("region").GetStringOrDefault("CN")
-	bearerToken := ctx.Flags().Get("bearer-token").GetStringOrDefault("")
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		return fmt.Errorf("invalid port: %s", portStr)
@@ -113,15 +94,15 @@ func runMCPProxy(ctx *cli.Context) error {
 		return fmt.Errorf("invalid region: %s, must be CN or INTL", regionStr)
 	}
 
-	mcpProfile, err := getOrCreateMCPProfile(ctx, mcpProfileName, region, host, port)
+	mcpProfile, err := getOrCreateMCPProfile(ctx, region, host, port)
 	if err != nil {
 		return err
 	}
 
-	return startMCPProxy(ctx, mcpProfile, region, host, port, bearerToken)
+	return startMCPProxy(ctx, mcpProfile, region, host, port)
 }
 
-func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, region RegionType, host string, port int, bearerToken string) error {
+func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, region RegionType, host string, port int) error {
 	servers, err := ListMCPServers(ctx, region)
 	if err != nil {
 		return fmt.Errorf("failed to list MCP servers: %w", err)
@@ -133,7 +114,7 @@ func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, region RegionType, 
 
 	manager := NewOAuthCallbackManager()
 
-	proxy := NewMCPProxy(host, port, region, bearerToken, mcpProfile, servers, manager)
+	proxy := NewMCPProxy(host, port, region, mcpProfile, servers, manager)
 	go proxy.Refresher.Start()
 
 	printProxyInfo(ctx, proxy)
@@ -173,10 +154,6 @@ func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, region RegionType, 
 func printProxyInfo(ctx *cli.Context, proxy *MCPProxy) {
 	cli.Printf(ctx.Stdout(), "\nMCP Proxy Server Started\nListen: %s:%d\nRegion: %s\n",
 		proxy.Host, proxy.Port, proxy.Region)
-
-	if proxy.BearerToken != "" {
-		cli.Println(ctx.Stdout(), "Bearer token: Enabled")
-	}
 
 	cli.Println(ctx.Stdout(), "\nAvailable Servers:")
 	for _, server := range proxy.McpServers {
