@@ -39,8 +39,8 @@ func NewMCPProxyCommand() *cli.Command {
 				"代理自动处理 OAuth 认证，"+
 				"允许 MCP 客户端无需管理凭证即可连接。",
 		),
-		Usage:  "aliyun mcp-proxy [--port PORT] [--host HOST] [--region REGION]",
-		Sample: "aliyun mcp-proxy --region CN --port 8088",
+		Usage:  "aliyun mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE]",
+		Sample: "aliyun mcp-proxy --region-type CN --port 8088",
 		Run: func(ctx *cli.Context, args []string) error {
 			return runMCPProxy(ctx)
 		},
@@ -65,7 +65,7 @@ func NewMCPProxyCommand() *cli.Command {
 	})
 
 	cmd.Flags().Add(&cli.Flag{
-		Name:         "region",
+		Name:         "region-type",
 		DefaultValue: "CN",
 		Short: i18n.T(
 			"Region type: CN or INTL",
@@ -79,31 +79,31 @@ func NewMCPProxyCommand() *cli.Command {
 func runMCPProxy(ctx *cli.Context) error {
 	portStr := ctx.Flags().Get("port").GetStringOrDefault("8088")
 	host := ctx.Flags().Get("host").GetStringOrDefault("127.0.0.1")
-	regionStr := ctx.Flags().Get("region").GetStringOrDefault("CN")
+	regionStr := ctx.Flags().Get("region-type").GetStringOrDefault("CN")
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		return fmt.Errorf("invalid port: %s", portStr)
 	}
-	var region RegionType
+	var regionType RegionType
 	switch regionStr {
 	case "CN":
-		region = RegionCN
+		regionType = RegionCN
 	case "INTL":
-		region = RegionINTL
+		regionType = RegionINTL
 	default:
-		return fmt.Errorf("invalid region: %s, must be CN or INTL", regionStr)
+		return fmt.Errorf("invalid region type: %s, must be CN or INTL", regionStr)
 	}
 
-	mcpProfile, err := getOrCreateMCPProfile(ctx, region, host, port)
+	mcpProfile, err := getOrCreateMCPProfile(ctx, regionType, host, port)
 	if err != nil {
 		return err
 	}
 
-	return startMCPProxy(ctx, mcpProfile, region, host, port)
+	return startMCPProxy(ctx, mcpProfile, regionType, host, port)
 }
 
-func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, region RegionType, host string, port int) error {
-	servers, err := ListMCPServers(ctx, region)
+func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, regionType RegionType, host string, port int) error {
+	servers, err := ListMCPServers(ctx, regionType)
 	if err != nil {
 		return fmt.Errorf("failed to list MCP servers: %w", err)
 	}
@@ -114,7 +114,7 @@ func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, region RegionType, 
 
 	manager := NewOAuthCallbackManager()
 
-	proxy := NewMCPProxy(host, port, region, mcpProfile, servers, manager)
+	proxy := NewMCPProxy(host, port, regionType, mcpProfile, servers, manager)
 	go proxy.Refresher.Start()
 
 	printProxyInfo(ctx, proxy)
@@ -153,7 +153,7 @@ func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, region RegionType, 
 
 func printProxyInfo(ctx *cli.Context, proxy *MCPProxy) {
 	cli.Printf(ctx.Stdout(), "\nMCP Proxy Server Started\nListen: %s:%d\nRegion: %s\n",
-		proxy.Host, proxy.Port, proxy.Region)
+		proxy.Host, proxy.Port, proxy.RegionType)
 
 	cli.Println(ctx.Stdout(), "\nAvailable Servers:")
 	for _, server := range proxy.McpServers {

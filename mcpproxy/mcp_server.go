@@ -23,13 +23,11 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
-// MCP Info Urls 结构
 type MCPInfoUrls struct {
 	SSE string `json:"sse"`
 	MCP string `json:"mcp"`
 }
 
-// MCP Server 信息
 type MCPServerInfo struct {
 	Id         string      `json:"id"`
 	Name       string      `json:"name"`
@@ -38,13 +36,11 @@ type MCPServerInfo struct {
 	Urls       MCPInfoUrls `json:"urls"`
 }
 
-// 列举 MCP Server 响应
 type ListMCPServersResponse struct {
 	ApiMcpServers []MCPServerInfo `json:"apiMcpServers"`
 }
 
-// 列举 MCP Servers
-func ListMCPServers(ctx *cli.Context, region RegionType) ([]MCPServerInfo, error) {
+func ListMCPServers(ctx *cli.Context, regionType RegionType) ([]MCPServerInfo, error) {
 	profile, err := config.LoadProfileWithContext(ctx)
 	if err != nil {
 		return nil, err
@@ -56,7 +52,7 @@ func ListMCPServers(ctx *cli.Context, region RegionType) ([]MCPServerInfo, error
 	conf := &openapiClient.Config{
 		Credential: credential,
 		RegionId:   tea.String(profile.RegionId),
-		Endpoint:   tea.String(EndpointMap[region].MCP),
+		Endpoint:   tea.String(EndpointMap[regionType].MCP),
 	}
 	client, err := openapiClient.NewClient(conf)
 	if err != nil {
@@ -90,34 +86,30 @@ func ListMCPServers(ctx *cli.Context, region RegionType) ([]MCPServerInfo, error
 	return responseList.ApiMcpServers, nil
 }
 
-// MCP 代理服务
 type MCPProxy struct {
-	Host            string
-	Port            int
-	Region          RegionType
-	McpProfile      *McpProfile
-	Server          *http.Server
-	McpServers      []MCPServerInfo
-	Refresher       *TokenRefresher
-	CallbackManager *OAuthCallbackManager
-	stopCh          chan struct{}
+	Host           string
+	Port           int
+	RegionType     RegionType
+	Server         *http.Server // 只会在 Start() 中赋值一次，如果程序改变执行流，则需要加锁保护
+	McpServers     []MCPServerInfo
+	TokenRefresher *TokenRefresher
+	stopCh         chan struct{}
 }
 
-func NewMCPProxy(host string, port int, region RegionType, mcpProfile *McpProfile, servers []MCPServerInfo, manager *OAuthCallbackManager) *MCPProxy {
+func NewMCPProxy(host string, port int, regionType RegionType, mcpProfile *McpProfile, servers []MCPServerInfo, manager *OAuthCallbackManager) *MCPProxy {
 	return &MCPProxy{
-		Host:            host,
-		Port:            port,
-		Region:          region,
-		McpProfile:      mcpProfile,
-		McpServers:      servers,
-		CallbackManager: manager,
-		Refresher: &TokenRefresher{
+		Host:       host,
+		Port:       port,
+		RegionType: regionType,
+		McpServers: servers,
+		TokenRefresher: &TokenRefresher{
 			profile:         mcpProfile,
-			region:          region,
+			regionType:      regionType,
 			callbackManager: manager,
 			host:            host,
 			port:            port,
 			stopCh:          make(chan struct{}),
+			tokenCh:         make(chan TokenInfo, 1), // 带缓冲的 channel，存储最新的 token
 		},
 		stopCh: make(chan struct{}),
 	}
@@ -169,7 +161,7 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 	}
 
-	if handleOAuthCallbackRequest(w, r, p.CallbackManager.HandleCallback) {
+	if handleOAuthCallbackRequest(w, r, p.TokenRefresher.callbackManager.HandleCallback) {
 		return
 	}
 
@@ -216,7 +208,7 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// 如果响应状态码为 401，则重新授权
 	if resp.StatusCode == http.StatusUnauthorized {
-		if err := p.Refresher.reauthorizeWithProxy(); err != nil {
+		if err := p.TokenRefresher.reauthorizeWithProxy(); err != nil {
 			log.Println("MCP Proxy gets mcp server response error from http request when reauthorize with proxy", err.Error())
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
@@ -233,15 +225,41 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *MCPProxy) getMCPAccessToken() (string, error) {
-	if p.McpProfile.MCPOAuthAccessTokenExpire > util.GetCurrentUnixTime() {
-		return p.McpProfile.MCPOAuthAccessToken, nil
+	var tokenInfo TokenInfo
+	select {
+	case tokenInfo = <-p.TokenRefresher.tokenCh:
+	default:
+		// channel 为空，从 profile 读取（加锁保护）
+		p.TokenRefresher.mu.Lock()
+		tokenInfo = TokenInfo{
+			Token:     p.TokenRefresher.profile.MCPOAuthAccessToken,
+			ExpiresAt: p.TokenRefresher.profile.MCPOAuthAccessTokenExpire,
+		}
+		p.TokenRefresher.mu.Unlock()
 	}
 
-	if err := p.Refresher.ForceRefresh(); err != nil {
+	currentTime := util.GetCurrentUnixTime()
+	// 检查 token 是否过期
+	if tokenInfo.ExpiresAt > currentTime {
+		// Token 有效，将 token 放回 channel（供其他 goroutine 使用）
+		select {
+		case p.TokenRefresher.tokenCh <- tokenInfo:
+		default:
+			// channel 已满，忽略（说明已经有最新的 token 在 channel 中）
+		}
+		return tokenInfo.Token, nil
+	}
+
+	if err := p.TokenRefresher.ForceRefresh(); err != nil {
 		return "", fmt.Errorf("failed to refresh access token: %w", err)
 	}
 
-	return p.McpProfile.MCPOAuthAccessToken, nil
+	select {
+	case tokenInfo = <-p.TokenRefresher.tokenCh:
+		return tokenInfo.Token, nil
+	case <-time.After(5 * time.Second):
+		return "", fmt.Errorf("timeout waiting for refreshed token")
+	}
 }
 
 func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string) (*http.Request, error) {
@@ -361,19 +379,29 @@ func (p *MCPProxy) handleHTTP(w http.ResponseWriter, resp *http.Response) {
 }
 
 const (
-	MaxSaveFailures = 3
-	CheckInterval   = 30 * time.Second
-	RefreshWindow   = 5 * time.Minute
+	MaxSaveFailures               = 3
+	CheckInterval                 = 30 * time.Second
+	RefreshWindow                 = 5 * time.Minute
+	WaitForRefreshTimeout         = 5 * time.Second
+	WaitForReauthorizationTimeout = 120 * time.Second
 )
+
+type TokenInfo struct {
+	Token     string
+	ExpiresAt int64
+}
 
 type TokenRefresher struct {
 	profile         *McpProfile
-	region          RegionType
+	host            string // 代理主机
+	port            int    // 代理端口
+	regionType      RegionType
 	callbackManager *OAuthCallbackManager // OAuth 回调管理器（用于代理运行时的重新授权）
-	host            string                // 代理主机
-	port            int                   // 代理端口
-	mu              sync.RWMutex
+	mu              sync.Mutex            // 保护刷新操作的互斥锁
+	refreshing      bool                  // 标记是否正在刷新，防止重复刷新
+	reauthorizing   bool                  // 标记是否正在重新授权，防止重复重新授权
 	stopCh          chan struct{}
+	tokenCh         chan TokenInfo // 用于传递 token 的 channel
 	ticker          *time.Ticker
 	saveFailures    int // 连续保存失败次数
 }
@@ -384,6 +412,7 @@ func (r *TokenRefresher) Start() {
 
 	log.Println("Token refresher started")
 
+	r.sendToken()
 	for {
 		select {
 		case <-r.ticker.C:
@@ -394,23 +423,50 @@ func (r *TokenRefresher) Start() {
 	}
 }
 
+func (r *TokenRefresher) sendToken() {
+	r.mu.Lock()
+	token := r.profile.MCPOAuthAccessToken
+	expiresAt := r.profile.MCPOAuthAccessTokenExpire
+	r.mu.Unlock()
+
+	select {
+	case r.tokenCh <- TokenInfo{Token: token, ExpiresAt: expiresAt}:
+		// 成功发送
+	default:
+		// channel 已满，清空旧值后发送新值
+		select {
+		case <-r.tokenCh:
+		default:
+		}
+		r.tokenCh <- TokenInfo{Token: token, ExpiresAt: expiresAt}
+	}
+}
+
 func (r *TokenRefresher) Stop() {
 	close(r.stopCh)
 }
 
 func (r *TokenRefresher) checkAndRefresh() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	currentTime := util.GetCurrentUnixTime()
+	needRefresh := false
+	needReauth := false
+
 	// 如果 refresh token 过期，则重新授权
 	if r.profile.MCPOAuthRefreshTokenExpire-currentTime < int64(RefreshWindow.Seconds()) {
-		if err := r.reauthorizeWithProxy(); err != nil {
-			log.Fatalf("Re-authorization failed: %v. Please restart aliyun mcp-proxy.", err)
-		}
+		needReauth = true
 	}
 	// 如果 access token 过期，则刷新 access token
 	if r.profile.MCPOAuthAccessTokenExpire-currentTime < int64(RefreshWindow.Seconds()) {
+		needRefresh = true
+	}
+	r.mu.Unlock()
+
+	if needReauth {
+		if err := r.reauthorizeWithProxy(); err != nil {
+			log.Fatalf("Re-authorization failed: %v. Please restart aliyun mcp-proxy.", err)
+		}
+	} else if needRefresh {
 		if err := r.refreshAccessToken(); err != nil {
 			log.Fatalf("Refresh token invalid. Please restart aliyun mcp-proxy.")
 		}
@@ -418,43 +474,102 @@ func (r *TokenRefresher) checkAndRefresh() {
 }
 
 func (r *TokenRefresher) refreshAccessToken() error {
-	endpoint := EndpointMap[r.region].OAuth
+	r.mu.Lock()
 
-	data := url.Values{}
-	data.Set("grant_type", "refresh_token")
-	data.Set("client_id", r.profile.MCPOAuthAppId)
-	data.Set("refresh_token", r.profile.MCPOAuthRefreshToken)
-
-	newTokens, err := oauthRefresh(endpoint, data)
-	if err != nil {
-		return fmt.Errorf("oauth refresh failed: %w", err)
+	if r.refreshing {
+		currentExpiresAt := r.profile.MCPOAuthAccessTokenExpire
+		r.mu.Unlock()
+		return r.waitForRefresh(currentExpiresAt)
 	}
 
 	currentTime := util.GetCurrentUnixTime()
+	if r.profile.MCPOAuthAccessTokenExpire > currentTime {
+		r.mu.Unlock()
+		return nil
+	}
+
+	r.refreshing = true
+	endpoint := EndpointMap[r.regionType].OAuth
+	clientId := r.profile.MCPOAuthAppId
+	refreshToken := r.profile.MCPOAuthRefreshToken
+	r.mu.Unlock()
+
+	// 执行网络请求（不持有锁，避免阻塞）
+	data := url.Values{}
+	data.Set("grant_type", "refresh_token")
+	data.Set("client_id", clientId)
+	data.Set("refresh_token", refreshToken)
+
+	newTokens, err := oauthRefresh(endpoint, data)
+	if err != nil {
+		r.mu.Lock()
+		r.refreshing = false
+		r.mu.Unlock()
+		return fmt.Errorf("oauth refresh failed: %w", err)
+	}
+
+	r.mu.Lock()
+	currentTime = util.GetCurrentUnixTime()
 	r.profile.MCPOAuthAccessToken = newTokens.AccessToken
 	r.profile.MCPOAuthRefreshToken = newTokens.RefreshToken
 	r.profile.MCPOAuthAccessTokenExpire = currentTime + newTokens.ExpiresIn
+	r.refreshing = false
 
 	if err = r.atomicSaveProfile(); err != nil {
 		r.saveFailures++
 		if r.saveFailures >= MaxSaveFailures {
+			r.mu.Unlock()
 			log.Fatalf("Critical: Failed to save refreshed tokens after %d attempts. "+
 				"Please re-login with: aliyun configure --mode MCPOAuth", MaxSaveFailures)
 		}
+		r.mu.Unlock()
 		return fmt.Errorf("failed to save profile (attempt %d/%d): %w",
 			r.saveFailures, MaxSaveFailures, err)
 	}
 
 	r.saveFailures = 0
+	r.mu.Unlock()
 
 	log.Println("Token refreshed successfully")
+
+	// 发送 token（sendToken 内部会加锁）
+	r.sendToken()
 	return nil
 }
 
-func (r *TokenRefresher) ForceRefresh() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (r *TokenRefresher) waitForRefresh(currentExpiresAt int64) error {
+	deadline := time.Now().Add(WaitForRefreshTimeout)
+	for time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
 
+		r.mu.Lock()
+		if !r.refreshing && r.profile.MCPOAuthAccessTokenExpire > currentExpiresAt {
+			r.mu.Unlock()
+			return nil
+		}
+		r.mu.Unlock()
+	}
+
+	return fmt.Errorf("timeout waiting for token refresh")
+}
+
+func (r *TokenRefresher) waitForReauthorization(currentRefreshTokenExpire int64) error {
+	deadline := time.Now().Add(WaitForReauthorizationTimeout)
+	for time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
+
+		r.mu.Lock()
+		if !r.reauthorizing && r.profile.MCPOAuthRefreshTokenExpire > currentRefreshTokenExpire {
+			r.mu.Unlock()
+			return nil
+		}
+		r.mu.Unlock()
+	}
+
+	return fmt.Errorf("timeout waiting for reauthorization")
+}
+
+func (r *TokenRefresher) ForceRefresh() error {
 	return r.refreshAccessToken()
 }
 
@@ -463,18 +578,39 @@ func (r *TokenRefresher) atomicSaveProfile() error {
 }
 
 func (r *TokenRefresher) reauthorizeWithProxy() error {
-	if err := executeOAuthFlow(r.profile, r.region, r.callbackManager, r.host, r.port, func(authURL string) {
+	r.mu.Lock()
+
+	if r.reauthorizing {
+		currentRefreshTokenExpire := r.profile.MCPOAuthRefreshTokenExpire
+		r.mu.Unlock()
+		return r.waitForReauthorization(currentRefreshTokenExpire)
+	}
+
+	r.reauthorizing = true
+	profile := r.profile
+	r.mu.Unlock()
+
+	// 执行 OAuth 流程（不持有锁，避免阻塞）
+	if err := executeOAuthFlow(profile, r.regionType, r.callbackManager, r.host, r.port, func(authURL string) {
 		log.Printf("OAuth Re-authorization Required. Please visit: %s\n", authURL)
 	}); err != nil {
+		r.mu.Lock()
+		r.reauthorizing = false
+		r.mu.Unlock()
 		return err
 	}
 
-	// 重新授权后，更新 refresh token 过期时间
+	r.mu.Lock()
 	currentTime := util.GetCurrentUnixTime()
 	r.profile.MCPOAuthRefreshTokenExpire = currentTime + int64(r.profile.MCPOAuthRefreshTokenValidity)
+	r.reauthorizing = false
+
 	if err := r.atomicSaveProfile(); err != nil {
+		r.mu.Unlock()
 		return fmt.Errorf("failed to save profile: %w", err)
 	}
+	r.mu.Unlock()
 
+	r.sendToken()
 	return nil
 }
