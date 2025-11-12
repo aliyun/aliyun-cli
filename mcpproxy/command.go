@@ -115,7 +115,7 @@ func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, regionType RegionTy
 	manager := NewOAuthCallbackManager()
 
 	proxy := NewMCPProxy(host, port, regionType, mcpProfile, servers, manager)
-	go proxy.Refresher.Start()
+	go proxy.TokenRefresher.Start()
 
 	printProxyInfo(ctx, proxy)
 
@@ -136,8 +136,8 @@ func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, regionType RegionTy
 	case sig := <-sigChan:
 		cli.Printf(ctx.Stdout(), "\nReceived signal: %v, shutting down gracefully...\n", sig)
 		// 停止 token refresher
-		if proxy.Refresher != nil {
-			proxy.Refresher.Stop()
+		if proxy.TokenRefresher != nil {
+			proxy.TokenRefresher.Stop()
 		}
 		// 停止代理服务器
 		if err := proxy.Stop(); err != nil {
