@@ -40,7 +40,9 @@ import (
 )
 
 const (
-	OAuthTimeout = 5 * time.Minute
+	OAuthTimeout            = 5 * time.Minute
+	AccessTokenValiditySec  = 10800    // 3 hours
+	RefreshTokenValiditySec = 31536000 // 365 days (1 year)
 )
 
 type OAuthCallbackManager struct {
@@ -551,8 +553,8 @@ func createMCPOauthApplication(ctx *cli.Context, profile config.Profile, region 
 			"ProtocolVersion":      tea.String("2.1"),
 			"GrantTypes.1":         tea.String("authorization_code"),
 			"GrantTypes.2":         tea.String("refresh_token"),
-			"AccessTokenValidity":  tea.String("10800"),    // 3hours
-			"RefreshTokenValidity": tea.String("31536000"), // 365days
+			"AccessTokenValidity":  tea.String(fmt.Sprintf("%d", AccessTokenValiditySec)),
+			"RefreshTokenValidity": tea.String(fmt.Sprintf("%d", RefreshTokenValiditySec)),
 			"RedirectUris":         tea.String(redirectUri),
 		},
 	}
