@@ -131,15 +131,13 @@ func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, regionType RegionTy
 		}
 	}()
 
-	// 等待信号或服务器错误
+	// 等待信号、服务器错误或致命错误
 	select {
 	case sig := <-sigChan:
 		cli.Printf(ctx.Stdout(), "\nReceived signal: %v, shutting down gracefully...\n", sig)
-		// 停止 token refresher
 		if proxy.TokenRefresher != nil {
 			proxy.TokenRefresher.Stop()
 		}
-		// 停止代理服务器
 		if err := proxy.Stop(); err != nil {
 			// 如果是超时错误，记录日志但不返回错误，因为服务器已经关闭
 			cli.Printf(ctx.Stderr(), "Warning: %v\n", err)
@@ -148,6 +146,16 @@ func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, regionType RegionTy
 		return nil
 	case err := <-serverErrChan:
 		return err
+	case fatalErr := <-proxy.TokenRefresher.fatalErrCh:
+		cli.Printf(ctx.Stderr(), "\nFatal error: %v\n", fatalErr)
+		cli.Printf(ctx.Stdout(), "Shutting down gracefully...\n")
+		if proxy.TokenRefresher != nil {
+			proxy.TokenRefresher.Stop()
+		}
+		if err := proxy.Stop(); err != nil {
+			cli.Printf(ctx.Stderr(), "Warning: %v\n", err)
+		}
+		return fatalErr
 	}
 }
 
