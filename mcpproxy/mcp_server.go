@@ -229,13 +229,13 @@ func (p *MCPProxy) getMCPAccessToken() (string, error) {
 	select {
 	case tokenInfo = <-p.TokenRefresher.tokenCh:
 	default:
-		// channel 为空，从 profile 读取（加锁保护）
-		p.TokenRefresher.mu.Lock()
+		// channel 为空，从 profile 读取（加读锁保护）
+		p.TokenRefresher.mu.RLock()
 		tokenInfo = TokenInfo{
 			Token:     p.TokenRefresher.profile.MCPOAuthAccessToken,
 			ExpiresAt: p.TokenRefresher.profile.MCPOAuthAccessTokenExpire,
 		}
-		p.TokenRefresher.mu.Unlock()
+		p.TokenRefresher.mu.RUnlock()
 	}
 
 	currentTime := util.GetCurrentUnixTime()
@@ -381,7 +381,8 @@ func (p *MCPProxy) handleHTTP(w http.ResponseWriter, resp *http.Response) {
 const (
 	MaxSaveFailures               = 3
 	CheckInterval                 = 30 * time.Second
-	RefreshWindow                 = 5 * time.Minute
+	AccessTokenRefreshWindow      = 5 * time.Minute  // Access token 提前刷新窗口
+	RefreshTokenRefreshWindow     = 10 * time.Minute // Refresh token 提前重新授权窗口
 	WaitForRefreshTimeout         = 5 * time.Second
 	WaitForReauthorizationTimeout = 120 * time.Second
 )
@@ -396,10 +397,10 @@ type TokenRefresher struct {
 	host            string // 代理主机
 	port            int    // 代理端口
 	regionType      RegionType
-	callbackManager *OAuthCallbackManager // OAuth 回调管理器（用于代理运行时的重新授权）
-	mu              sync.Mutex            // 保护刷新操作的互斥锁
-	refreshing      bool                  // 标记是否正在刷新，防止重复刷新
-	reauthorizing   bool                  // 标记是否正在重新授权，防止重复重新授权
+	callbackManager *OAuthCallbackManager
+	mu              sync.RWMutex // 保护刷新操作的读写锁（允许多个读操作并发）
+	refreshing      bool         // 标记是否正在刷新，防止重复刷新
+	reauthorizing   bool         // 标记是否正在重新授权，防止重复重新授权
 	stopCh          chan struct{}
 	tokenCh         chan TokenInfo // 用于传递 token 的 channel
 	ticker          *time.Ticker
@@ -424,10 +425,10 @@ func (r *TokenRefresher) Start() {
 }
 
 func (r *TokenRefresher) sendToken() {
-	r.mu.Lock()
+	r.mu.RLock()
 	token := r.profile.MCPOAuthAccessToken
 	expiresAt := r.profile.MCPOAuthAccessTokenExpire
-	r.mu.Unlock()
+	r.mu.RUnlock()
 
 	select {
 	case r.tokenCh <- TokenInfo{Token: token, ExpiresAt: expiresAt}:
@@ -447,20 +448,20 @@ func (r *TokenRefresher) Stop() {
 }
 
 func (r *TokenRefresher) checkAndRefresh() {
-	r.mu.Lock()
+	r.mu.RLock()
 	currentTime := util.GetCurrentUnixTime()
 	needRefresh := false
 	needReauth := false
 
 	// 如果 refresh token 过期，则重新授权
-	if r.profile.MCPOAuthRefreshTokenExpire-currentTime < int64(RefreshWindow.Seconds()) {
+	if r.profile.MCPOAuthRefreshTokenExpire-currentTime < int64(RefreshTokenRefreshWindow.Seconds()) {
 		needReauth = true
 	}
 	// 如果 access token 过期，则刷新 access token
-	if r.profile.MCPOAuthAccessTokenExpire-currentTime < int64(RefreshWindow.Seconds()) {
+	if r.profile.MCPOAuthAccessTokenExpire-currentTime < int64(AccessTokenRefreshWindow.Seconds()) {
 		needRefresh = true
 	}
-	r.mu.Unlock()
+	r.mu.RUnlock()
 
 	if needReauth {
 		if err := r.reauthorizeWithProxy(); err != nil {
@@ -477,7 +478,13 @@ func (r *TokenRefresher) refreshAccessToken() error {
 	r.mu.Lock()
 
 	if r.refreshing {
+		currentTime := util.GetCurrentUnixTime()
 		currentExpiresAt := r.profile.MCPOAuthAccessTokenExpire
+		if currentExpiresAt > currentTime {
+			r.mu.Unlock()
+			return nil
+		}
+		// Token 已过期，必须等待刷新完成
 		r.mu.Unlock()
 		return r.waitForRefresh(currentExpiresAt)
 	}
@@ -542,12 +549,12 @@ func (r *TokenRefresher) waitForRefresh(currentExpiresAt int64) error {
 	for time.Now().Before(deadline) {
 		time.Sleep(100 * time.Millisecond)
 
-		r.mu.Lock()
+		r.mu.RLock()
 		if !r.refreshing && r.profile.MCPOAuthAccessTokenExpire > currentExpiresAt {
-			r.mu.Unlock()
+			r.mu.RUnlock()
 			return nil
 		}
-		r.mu.Unlock()
+		r.mu.RUnlock()
 	}
 
 	return fmt.Errorf("timeout waiting for token refresh")
@@ -558,12 +565,12 @@ func (r *TokenRefresher) waitForReauthorization(currentRefreshTokenExpire int64)
 	for time.Now().Before(deadline) {
 		time.Sleep(100 * time.Millisecond)
 
-		r.mu.Lock()
+		r.mu.RLock()
 		if !r.reauthorizing && r.profile.MCPOAuthRefreshTokenExpire > currentRefreshTokenExpire {
-			r.mu.Unlock()
+			r.mu.RUnlock()
 			return nil
 		}
-		r.mu.Unlock()
+		r.mu.RUnlock()
 	}
 
 	return fmt.Errorf("timeout waiting for reauthorization")
@@ -581,7 +588,13 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 	r.mu.Lock()
 
 	if r.reauthorizing {
+		currentTime := util.GetCurrentUnixTime()
 		currentRefreshTokenExpire := r.profile.MCPOAuthRefreshTokenExpire
+		if currentRefreshTokenExpire > currentTime {
+			r.mu.Unlock()
+			return nil
+		}
+		// Refresh token 已过期，必须等待重新授权完成
 		r.mu.Unlock()
 		return r.waitForReauthorization(currentRefreshTokenExpire)
 	}
