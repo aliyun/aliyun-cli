@@ -110,6 +110,7 @@ func NewMCPProxy(host string, port int, regionType RegionType, mcpProfile *McpPr
 			port:            port,
 			stopCh:          make(chan struct{}),
 			tokenCh:         make(chan TokenInfo, 1), // 带缓冲的 channel，存储最新的 token
+			fatalErrCh:      make(chan error, 1),
 		},
 		stopCh: make(chan struct{}),
 	}
@@ -398,13 +399,13 @@ type TokenRefresher struct {
 	port            int    // 代理端口
 	regionType      RegionType
 	callbackManager *OAuthCallbackManager
-	mu              sync.RWMutex // 保护刷新操作的读写锁（允许多个读操作并发）
+	mu              sync.RWMutex // 保护刷新操作的读写锁
 	refreshing      bool         // 标记是否正在刷新，防止重复刷新
 	reauthorizing   bool         // 标记是否正在重新授权，防止重复重新授权
 	stopCh          chan struct{}
 	tokenCh         chan TokenInfo // 用于传递 token 的 channel
 	ticker          *time.Ticker
-	saveFailures    int // 连续保存失败次数
+	fatalErrCh      chan error // 用于通知致命错误的 channel
 }
 
 func (r *TokenRefresher) Start() {
@@ -465,11 +466,13 @@ func (r *TokenRefresher) checkAndRefresh() {
 
 	if needReauth {
 		if err := r.reauthorizeWithProxy(); err != nil {
-			log.Fatalf("Re-authorization failed: %v. Please restart aliyun mcp-proxy.", err)
+			r.reportFatalError(fmt.Errorf("re-authorization failed: %v. Please restart aliyun mcp-proxy", err))
+			return
 		}
 	} else if needRefresh {
 		if err := r.refreshAccessToken(); err != nil {
-			log.Fatalf("Refresh token invalid. Please restart aliyun mcp-proxy.")
+			r.reportFatalError(fmt.Errorf("refresh token invalid. Please restart aliyun mcp-proxy"))
+			return
 		}
 	}
 }
@@ -522,24 +525,19 @@ func (r *TokenRefresher) refreshAccessToken() error {
 	r.profile.MCPOAuthAccessTokenExpire = currentTime + newTokens.ExpiresIn
 	r.refreshing = false
 
-	if err = r.atomicSaveProfile(); err != nil {
-		r.saveFailures++
-		if r.saveFailures >= MaxSaveFailures {
+	retrySaveProfile(
+		r.atomicSaveProfile,
+		MaxSaveFailures,
+		func() {
 			r.mu.Unlock()
-			log.Fatalf("Critical: Failed to save refreshed tokens after %d attempts. "+
-				"Please re-login with: aliyun configure --mode MCPOAuth", MaxSaveFailures)
-		}
-		r.mu.Unlock()
-		return fmt.Errorf("failed to save profile (attempt %d/%d): %w",
-			r.saveFailures, MaxSaveFailures, err)
-	}
-
-	r.saveFailures = 0
+			r.reportFatalError(fmt.Errorf("critical: failed to save refreshed tokens after %d attempts. "+
+				"Please re-login with: aliyun configure and run 'aliyun mcp-proxy' again", MaxSaveFailures))
+		},
+	)
 	r.mu.Unlock()
 
 	log.Println("Token refreshed successfully")
 
-	// 发送 token（sendToken 内部会加锁）
 	r.sendToken()
 	return nil
 }
@@ -584,6 +582,26 @@ func (r *TokenRefresher) atomicSaveProfile() error {
 	return saveMcpProfile(r.profile)
 }
 
+// reportFatalError 向 fatalErrCh 发送致命错误，用于优雅退出
+func (r *TokenRefresher) reportFatalError(err error) {
+	select {
+	case r.fatalErrCh <- err:
+	default:
+		// channel 已满，说明已经有错误在等待处理，忽略新的错误
+	}
+}
+
+func retrySaveProfile(saveFn func() error, maxAttempts int, onMaxFailures func()) {
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if err := saveFn(); err == nil {
+			return
+		}
+		if attempt == maxAttempts {
+			onMaxFailures()
+		}
+	}
+}
+
 func (r *TokenRefresher) reauthorizeWithProxy() error {
 	r.mu.Lock()
 
@@ -618,10 +636,15 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 	r.profile.MCPOAuthRefreshTokenExpire = currentTime + int64(r.profile.MCPOAuthRefreshTokenValidity)
 	r.reauthorizing = false
 
-	if err := r.atomicSaveProfile(); err != nil {
-		r.mu.Unlock()
-		return fmt.Errorf("failed to save profile: %w", err)
-	}
+	retrySaveProfile(
+		r.atomicSaveProfile,
+		MaxSaveFailures,
+		func() {
+			r.mu.Unlock()
+			r.reportFatalError(fmt.Errorf("critical: failed to save reauthorized tokens after %d attempts. "+
+				"Please re-login with: aliyun configure and run 'aliyun mcp-proxy' again", MaxSaveFailures))
+		},
+	)
 	r.mu.Unlock()
 
 	r.sendToken()
