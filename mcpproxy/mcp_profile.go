@@ -66,7 +66,7 @@ func saveMcpProfile(profile *McpProfile) error {
 	return os.Rename(tempFile, mcpConfigPath)
 }
 
-func getOrCreateMCPProfile(ctx *cli.Context, region RegionType, host string, port int) (*McpProfile, error) {
+func getOrCreateMCPProfile(ctx *cli.Context, region RegionType, host string, port int, noBrowser bool) (*McpProfile, error) {
 	profile, err := config.LoadProfileWithContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load profile: %w", err)
@@ -99,7 +99,10 @@ func getOrCreateMCPProfile(ctx *cli.Context, region RegionType, host string, por
 	mcpProfile.MCPOAuthRefreshTokenValidity = app.RefreshTokenValidity
 	mcpProfile.MCPOAuthRefreshTokenExpire = currentTime + int64(app.RefreshTokenValidity)
 
-	if err = startMCPOAuthFlow(ctx, mcpProfile, region, host, port); err != nil {
+	// noBrowser=true 表示禁用自动打开浏览器，autoOpenBrowser=false
+	// noBrowser=false 表示启用自动打开浏览器，autoOpenBrowser=true
+	autoOpenBrowser := !noBrowser
+	if err = startMCPOAuthFlow(ctx, mcpProfile, region, host, port, autoOpenBrowser); err != nil {
 		return nil, fmt.Errorf("OAuth login failed: %w", err)
 	}
 
