@@ -73,6 +73,14 @@ func NewMCPProxyCommand() *cli.Command {
 		),
 	})
 
+	cmd.Flags().Add(&cli.Flag{
+		Name: "no-browser",
+		Short: i18n.T(
+			"Disable automatic browser opening. Use manual code input mode instead",
+			"使用手动输入授权码模式，不自动打开浏览器",
+		),
+	})
+
 	return cmd
 }
 
@@ -94,15 +102,17 @@ func runMCPProxy(ctx *cli.Context) error {
 		return fmt.Errorf("invalid region type: %s, must be CN or INTL", regionStr)
 	}
 
-	mcpProfile, err := getOrCreateMCPProfile(ctx, regionType, host, port)
+	noBrowser := ctx.Flags().Get("no-browser").IsAssigned()
+
+	mcpProfile, err := getOrCreateMCPProfile(ctx, regionType, host, port, noBrowser)
 	if err != nil {
 		return err
 	}
 
-	return startMCPProxy(ctx, mcpProfile, regionType, host, port)
+	return startMCPProxy(ctx, mcpProfile, regionType, host, port, noBrowser)
 }
 
-func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, regionType RegionType, host string, port int) error {
+func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, regionType RegionType, host string, port int, noBrowser bool) error {
 	servers, err := ListMCPServers(ctx, regionType)
 	if err != nil {
 		return fmt.Errorf("failed to list MCP servers: %w", err)
@@ -114,7 +124,10 @@ func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, regionType RegionTy
 
 	manager := NewOAuthCallbackManager()
 
-	proxy := NewMCPProxy(host, port, regionType, mcpProfile, servers, manager)
+	// noBrowser=true 表示禁用自动打开浏览器，autoOpenBrowser=false
+	// noBrowser=false 表示启用自动打开浏览器，autoOpenBrowser=true
+	autoOpenBrowser := !noBrowser
+	proxy := NewMCPProxy(host, port, regionType, mcpProfile, servers, manager, autoOpenBrowser)
 	go proxy.TokenRefresher.Start()
 
 	printProxyInfo(ctx, proxy)

@@ -96,7 +96,7 @@ type MCPProxy struct {
 	stopCh         chan struct{}
 }
 
-func NewMCPProxy(host string, port int, regionType RegionType, mcpProfile *McpProfile, servers []MCPServerInfo, manager *OAuthCallbackManager) *MCPProxy {
+func NewMCPProxy(host string, port int, regionType RegionType, mcpProfile *McpProfile, servers []MCPServerInfo, manager *OAuthCallbackManager, autoOpenBrowser bool) *MCPProxy {
 	return &MCPProxy{
 		Host:       host,
 		Port:       port,
@@ -108,6 +108,7 @@ func NewMCPProxy(host string, port int, regionType RegionType, mcpProfile *McpPr
 			callbackManager: manager,
 			host:            host,
 			port:            port,
+			autoOpenBrowser: autoOpenBrowser,
 			stopCh:          make(chan struct{}),
 			tokenCh:         make(chan TokenInfo, 1), // 带缓冲的 channel，存储最新的 token
 			fatalErrCh:      make(chan error, 1),
@@ -118,6 +119,7 @@ func NewMCPProxy(host string, port int, regionType RegionType, mcpProfile *McpPr
 
 func (p *MCPProxy) Start() error {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/callback", p.handleOAuthCallback)
 	mux.HandleFunc("/", p.ServeHTTP)
 
 	p.Server = &http.Server{
@@ -153,6 +155,11 @@ func (p *MCPProxy) Stop() error {
 	return nil
 }
 
+func (p *MCPProxy) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	showCode := !p.TokenRefresher.autoOpenBrowser
+	handleOAuthCallbackRequest(w, r, p.TokenRefresher.callbackManager.HandleCallback, showCode)
+}
+
 func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 检查是否正在关闭
 	select {
@@ -160,10 +167,6 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Server is shutting down", http.StatusServiceUnavailable)
 		return
 	default:
-	}
-
-	if handleOAuthCallbackRequest(w, r, p.TokenRefresher.callbackManager.HandleCallback) {
-		return
 	}
 
 	accessToken, err := p.getMCPAccessToken()
@@ -402,6 +405,7 @@ type TokenRefresher struct {
 	mu              sync.RWMutex // 保护刷新操作的读写锁
 	refreshing      bool         // 标记是否正在刷新，防止重复刷新
 	reauthorizing   bool         // 标记是否正在重新授权，防止重复重新授权
+	autoOpenBrowser bool         // 是否自动打开浏览器（false 表示手动输入 code 模式）
 	stopCh          chan struct{}
 	tokenCh         chan TokenInfo // 用于传递 token 的 channel
 	ticker          *time.Ticker
@@ -622,9 +626,10 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 	r.mu.Unlock()
 
 	// 执行 OAuth 流程（不持有锁，避免阻塞）
-	if err := executeOAuthFlow(profile, r.regionType, r.callbackManager, r.host, r.port, func(authURL string) {
+	// 使用配置的 autoOpenBrowser 设置
+	if err := executeOAuthFlow(nil, profile, r.regionType, r.callbackManager, r.host, r.port, func(authURL string) {
 		log.Printf("OAuth Re-authorization Required. Please visit: %s\n", authURL)
-	}); err != nil {
+	}, r.autoOpenBrowser); err != nil {
 		r.mu.Lock()
 		r.reauthorizing = false
 		r.mu.Unlock()
