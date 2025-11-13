@@ -483,7 +483,7 @@ func buildOAuthURL(profile *McpProfile, region RegionType, host string, port int
 func executeOAuthFlow(ctx *cli.Context, profile *McpProfile, region RegionType, manager *OAuthCallbackManager,
 	host string, port int, logAuthURL func(string), autoOpenBrowser bool) error {
 	endpoints := EndpointMap[region]
-	stderr := getStderrWriter(ctx) // 用于交互式提示，确保即使 stdout 被重定向也能看到
+	stderr := getStderrWriter(ctx)
 	codeVerifier, err := generateCodeVerifier()
 	if err != nil {
 		return fmt.Errorf("failed to generate code verifier: %w", err)
@@ -552,13 +552,14 @@ func executeOAuthFlow(ctx *cli.Context, profile *McpProfile, region RegionType, 
 
 func startMCPOAuthFlowWithManager(ctx *cli.Context, profile *McpProfile, region RegionType,
 	manager *OAuthCallbackManager, host string, port int, autoOpenBrowser bool) error {
+	stderr := getStderrWriter(ctx)
 	if err := executeOAuthFlow(ctx, profile, region, manager, host, port, func(authURL string) {
-		cli.Printf(ctx.Stdout(), "Opening browser for OAuth login...\nURL: %s\n\n", authURL)
+		cli.Printf(stderr, "Opening browser for OAuth login...\nURL: %s\n\n", authURL)
 	}, autoOpenBrowser); err != nil {
 		return err
 	}
 
-	cli.Println(ctx.Stdout(), "OAuth login successful!")
+	cli.Println(stderr, "OAuth login successful!")
 	return nil
 }
 

@@ -10,8 +10,10 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
@@ -86,6 +88,19 @@ func ListMCPServers(ctx *cli.Context, regionType RegionType) ([]MCPServerInfo, e
 	return responseList.ApiMcpServers, nil
 }
 
+type RuntimeStats struct {
+	StartTime time.Time
+
+	TotalRequests   int64
+	SuccessRequests int64
+	ErrorRequests   int64
+	ActiveRequests  int64
+
+	TokenRefreshes     int64
+	TokenRefreshErrors int64
+	LastTokenRefresh   time.Time
+}
+
 type MCPProxy struct {
 	Host           string
 	Port           int
@@ -94,9 +109,13 @@ type MCPProxy struct {
 	McpServers     []MCPServerInfo
 	TokenRefresher *TokenRefresher
 	stopCh         chan struct{}
+	stats          *RuntimeStats
 }
 
 func NewMCPProxy(host string, port int, regionType RegionType, mcpProfile *McpProfile, servers []MCPServerInfo, manager *OAuthCallbackManager, autoOpenBrowser bool) *MCPProxy {
+	stats := &RuntimeStats{
+		StartTime: time.Now(),
+	}
 	return &MCPProxy{
 		Host:       host,
 		Port:       port,
@@ -112,14 +131,17 @@ func NewMCPProxy(host string, port int, regionType RegionType, mcpProfile *McpPr
 			stopCh:          make(chan struct{}),
 			tokenCh:         make(chan TokenInfo, 1), // 带缓冲的 channel，存储最新的 token
 			fatalErrCh:      make(chan error, 1),
+			stats:           stats,
 		},
 		stopCh: make(chan struct{}),
+		stats:  stats,
 	}
 }
 
 func (p *MCPProxy) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/callback", p.handleOAuthCallback)
+	mux.HandleFunc("/health", p.handleHealth)
 	mux.HandleFunc("/", p.ServeHTTP)
 
 	p.Server = &http.Server{
@@ -160,10 +182,99 @@ func (p *MCPProxy) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	handleOAuthCallbackRequest(w, r, p.TokenRefresher.callbackManager.HandleCallback, showCode)
 }
 
+func (p *MCPProxy) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// 检查基本健康状态
+	now := time.Now()
+	health := map[string]any{
+		"status":         "healthy",
+		"timestamp":      now.Unix(),
+		"timestamp_iso":  now.Format(time.RFC3339),
+		"uptime":         time.Since(p.stats.StartTime).String(),
+		"uptime_seconds": time.Since(p.stats.StartTime).Seconds(),
+	}
+
+	p.TokenRefresher.mu.RLock()
+	currentTime := util.GetCurrentUnixTime()
+	tokenExpired := p.TokenRefresher.profile.MCPOAuthAccessTokenExpire <= currentTime
+	tokenExpiresIn := p.TokenRefresher.profile.MCPOAuthAccessTokenExpire - currentTime
+	refreshTokenExpired := p.TokenRefresher.profile.MCPOAuthRefreshTokenExpire <= currentTime
+	refreshTokenExpiresIn := p.TokenRefresher.profile.MCPOAuthRefreshTokenExpire - currentTime
+	p.TokenRefresher.mu.RUnlock()
+
+	if tokenExpired {
+		health["status"] = "degraded"
+		health["token_status"] = "expired"
+	} else {
+		health["token_status"] = "valid"
+		health["token_expires_in"] = tokenExpiresIn
+		health["token_expires_in_readable"] = time.Duration(tokenExpiresIn * int64(time.Second)).String()
+	}
+
+	if refreshTokenExpired {
+		health["status"] = "degraded"
+		health["refresh_token_status"] = "expired"
+	} else {
+		health["refresh_token_status"] = "valid"
+		health["refresh_token_expires_in"] = refreshTokenExpiresIn
+		health["refresh_token_expires_in_readable"] = time.Duration(refreshTokenExpiresIn * int64(time.Second)).String()
+	}
+
+	// 检查内存
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	health["memory"] = map[string]interface{}{
+		"alloc_mb":      m.Alloc / 1024 / 1024,
+		"sys_mb":        m.Sys / 1024 / 1024,
+		"heap_alloc_mb": m.HeapAlloc / 1024 / 1024,
+		"heap_inuse_mb": m.HeapInuse / 1024 / 1024,
+		"num_gc":        m.NumGC,
+	}
+
+	// 内存使用超过 500MB 警告
+	if m.Alloc > 500*1024*1024 {
+		health["status"] = "degraded"
+		health["memory_warning"] = "high memory usage"
+	}
+
+	health["goroutines"] = runtime.NumGoroutine()
+
+	health["requests"] = map[string]interface{}{
+		"total":   atomic.LoadInt64(&p.stats.TotalRequests),
+		"success": atomic.LoadInt64(&p.stats.SuccessRequests),
+		"error":   atomic.LoadInt64(&p.stats.ErrorRequests),
+		"active":  atomic.LoadInt64(&p.stats.ActiveRequests),
+	}
+
+	tokenRefreshes := map[string]interface{}{
+		"total":  atomic.LoadInt64(&p.stats.TokenRefreshes),
+		"errors": atomic.LoadInt64(&p.stats.TokenRefreshErrors),
+	}
+	if !p.stats.LastTokenRefresh.IsZero() {
+		tokenRefreshes["last_refresh"] = p.stats.LastTokenRefresh.Unix()
+	}
+	health["token_refreshes"] = tokenRefreshes
+
+	statusCode := http.StatusOK
+	if health["status"] == "degraded" {
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(health)
+}
+
 func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	atomic.AddInt64(&p.stats.TotalRequests, 1)
+	atomic.AddInt64(&p.stats.ActiveRequests, 1)
+	defer atomic.AddInt64(&p.stats.ActiveRequests, -1)
+
 	// 检查是否正在关闭
 	select {
 	case <-p.stopCh:
+		atomic.AddInt64(&p.stats.ErrorRequests, 1)
 		http.Error(w, "Server is shutting down", http.StatusServiceUnavailable)
 		return
 	default:
@@ -171,12 +282,14 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	accessToken, err := p.getMCPAccessToken()
 	if err != nil {
+		atomic.AddInt64(&p.stats.ErrorRequests, 1)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	upstreamReq, err := p.buildUpstreamRequest(r, accessToken)
 	if err != nil {
+		atomic.AddInt64(&p.stats.ErrorRequests, 1)
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 		return
 	}
@@ -205,6 +318,7 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := client.Do(upstreamReq)
 	if err != nil {
 		log.Println("MCP Proxy gets mcp server response error", err.Error())
+		atomic.AddInt64(&p.stats.ErrorRequests, 1)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -214,6 +328,7 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if resp.StatusCode == http.StatusUnauthorized {
 		if err := p.TokenRefresher.reauthorizeWithProxy(); err != nil {
 			log.Println("MCP Proxy gets mcp server response error from http request when reauthorize with proxy", err.Error())
+			atomic.AddInt64(&p.stats.ErrorRequests, 1)
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
@@ -221,10 +336,20 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	contentType := resp.Header.Get("Content-Type")
 	if strings.Contains(strings.ToLower(contentType), "text/event-stream") {
 		p.handleSSE(w, resp)
+		if resp.StatusCode < 400 {
+			atomic.AddInt64(&p.stats.SuccessRequests, 1)
+		} else {
+			atomic.AddInt64(&p.stats.ErrorRequests, 1)
+		}
 		return
 	}
 
 	p.handleHTTP(w, resp)
+	if resp.StatusCode < 400 {
+		atomic.AddInt64(&p.stats.SuccessRequests, 1)
+	} else {
+		atomic.AddInt64(&p.stats.ErrorRequests, 1)
+	}
 
 }
 
@@ -409,7 +534,8 @@ type TokenRefresher struct {
 	stopCh          chan struct{}
 	tokenCh         chan TokenInfo // 用于传递 token 的 channel
 	ticker          *time.Ticker
-	fatalErrCh      chan error // 用于通知致命错误的 channel
+	fatalErrCh      chan error    // 用于通知致命错误的 channel
+	stats           *RuntimeStats // 运行时统计信息（可选，用于更新 token 刷新统计）
 }
 
 func (r *TokenRefresher) Start() {
@@ -519,6 +645,9 @@ func (r *TokenRefresher) refreshAccessToken() error {
 		r.mu.Lock()
 		r.refreshing = false
 		r.mu.Unlock()
+		if r.stats != nil {
+			atomic.AddInt64(&r.stats.TokenRefreshErrors, 1)
+		}
 		return fmt.Errorf("oauth refresh failed: %w", err)
 	}
 
@@ -541,6 +670,11 @@ func (r *TokenRefresher) refreshAccessToken() error {
 	r.mu.Unlock()
 
 	log.Println("Token refreshed successfully")
+
+	if r.stats != nil {
+		atomic.AddInt64(&r.stats.TokenRefreshes, 1)
+		r.stats.LastTokenRefresh = time.Now()
+	}
 
 	r.sendToken()
 	return nil
@@ -586,7 +720,6 @@ func (r *TokenRefresher) atomicSaveProfile() error {
 	return saveMcpProfile(r.profile)
 }
 
-// reportFatalError 向 fatalErrCh 发送致命错误，用于优雅退出
 func (r *TokenRefresher) reportFatalError(err error) {
 	select {
 	case r.fatalErrCh <- err:
@@ -626,13 +759,16 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 	r.mu.Unlock()
 
 	// 执行 OAuth 流程（不持有锁，避免阻塞）
-	// 使用配置的 autoOpenBrowser 设置
+	stderr := getStderrWriter(nil)
 	if err := executeOAuthFlow(nil, profile, r.regionType, r.callbackManager, r.host, r.port, func(authURL string) {
-		log.Printf("OAuth Re-authorization Required. Please visit: %s\n", authURL)
+		cli.Printf(stderr, "OAuth Re-authorization Required. Please visit: %s\n", authURL)
 	}, r.autoOpenBrowser); err != nil {
 		r.mu.Lock()
 		r.reauthorizing = false
 		r.mu.Unlock()
+		if r.stats != nil {
+			atomic.AddInt64(&r.stats.TokenRefreshErrors, 1)
+		}
 		return err
 	}
 
@@ -651,6 +787,11 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 		},
 	)
 	r.mu.Unlock()
+
+	if r.stats != nil {
+		atomic.AddInt64(&r.stats.TokenRefreshes, 1)
+		r.stats.LastTokenRefresh = time.Now()
+	}
 
 	r.sendToken()
 	return nil
