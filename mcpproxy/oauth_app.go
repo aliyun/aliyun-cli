@@ -42,6 +42,37 @@ import (
 	"github.com/alibabacloud-go/tea/tea"
 )
 
+type RegionType string
+
+const (
+	RegionCN              RegionType = "CN"
+	RegionINTL            RegionType = "INTL"
+	DefaultMcpProfileName            = "default-mcp"
+)
+
+type EndpointConfig struct {
+	SignIn string
+	OAuth  string
+	IMS    string
+	MCP    string
+}
+
+// 国内/国际站端点映射
+var EndpointMap = map[RegionType]EndpointConfig{
+	RegionCN: {
+		SignIn: "https://signin.aliyun.com",
+		OAuth:  "https://oauth.aliyun.com",
+		IMS:    "ims.aliyuncs.com",
+		MCP:    "openapi-mcp.cn-hangzhou.aliyuncs.com",
+	},
+	RegionINTL: {
+		SignIn: "https://signin.alibabacloud.com",
+		OAuth:  "https://oauth.alibabacloud.com",
+		IMS:    "ims.aliyuncs.com",
+		MCP:    "openapi-mcp.ap-southeast-1.aliyuncs.com",
+	},
+}
+
 const (
 	OAuthTimeout            = 5 * time.Minute
 	AccessTokenValiditySec  = 10800    // 3 hours
@@ -471,18 +502,16 @@ func exchangeCodeForTokenWithPKCE(profile *McpProfile, code, codeVerifier, redir
 	return nil
 }
 
-func buildOAuthURL(profile *McpProfile, region RegionType, host string, port int, codeChallenge string) string {
-	endpoints := EndpointMap[region]
+func buildOAuthURL(profile *McpProfile, region RegionType, host string, port int, codeChallenge string, scope string) string {
 	redirectURI := buildRedirectUri(host, port)
-	return fmt.Sprintf("%s/oauth2/v1/auth?client_id=%s&response_type=code&scope=/acs/mcp-server&redirect_uri=%s&code_challenge=%s&code_challenge_method=S256",
-		endpoints.SignIn, profile.MCPOAuthAppId, redirectURI, codeChallenge)
+	return fmt.Sprintf("%s/oauth2/v1/auth?client_id=%s&response_type=code&scope=%s&redirect_uri=%s&code_challenge=%s&code_challenge_method=S256",
+		EndpointMap[region].SignIn, profile.MCPOAuthAppId, url.QueryEscape(scope), redirectURI, codeChallenge)
 }
 
 // 执行完整的 OAuth 授权流程
 // autoOpenBrowser: true 表示自动打开浏览器（等待回调），false 表示手动输入 code
-func executeOAuthFlow(ctx *cli.Context, profile *McpProfile, region RegionType, manager *OAuthCallbackManager,
-	host string, port int, logAuthURL func(string), autoOpenBrowser bool) error {
-	endpoints := EndpointMap[region]
+func executeOAuthFlow(ctx *cli.Context, profile *McpProfile, regionType RegionType, manager *OAuthCallbackManager,
+	host string, port int, autoOpenBrowser bool, scope string, logAuthURL func(string)) error {
 	stderr := getStderrWriter(ctx)
 	codeVerifier, err := generateCodeVerifier()
 	if err != nil {
@@ -490,7 +519,7 @@ func executeOAuthFlow(ctx *cli.Context, profile *McpProfile, region RegionType, 
 	}
 	codeChallenge := generateCodeChallenge(codeVerifier)
 
-	authURL := buildOAuthURL(profile, region, host, port, codeChallenge)
+	authURL := buildOAuthURL(profile, regionType, host, port, codeChallenge, scope)
 
 	if logAuthURL != nil {
 		logAuthURL(authURL)
@@ -543,7 +572,7 @@ func executeOAuthFlow(ctx *cli.Context, profile *McpProfile, region RegionType, 
 	}
 
 	redirectURI := buildRedirectUri(host, port)
-	if err = exchangeCodeForTokenWithPKCE(profile, code, codeVerifier, redirectURI, endpoints.OAuth); err != nil {
+	if err = exchangeCodeForTokenWithPKCE(profile, code, codeVerifier, redirectURI, EndpointMap[regionType].OAuth); err != nil {
 		return fmt.Errorf("failed to exchange token: %w", err)
 	}
 
@@ -551,11 +580,11 @@ func executeOAuthFlow(ctx *cli.Context, profile *McpProfile, region RegionType, 
 }
 
 func startMCPOAuthFlowWithManager(ctx *cli.Context, profile *McpProfile, region RegionType,
-	manager *OAuthCallbackManager, host string, port int, autoOpenBrowser bool) error {
+	manager *OAuthCallbackManager, host string, port int, autoOpenBrowser bool, scope string) error {
 	stderr := getStderrWriter(ctx)
-	if err := executeOAuthFlow(ctx, profile, region, manager, host, port, func(authURL string) {
+	if err := executeOAuthFlow(ctx, profile, region, manager, host, port, autoOpenBrowser, scope, func(authURL string) {
 		cli.Printf(stderr, "Opening browser for OAuth login...\nURL: %s\n\n", authURL)
-	}, autoOpenBrowser); err != nil {
+	}); err != nil {
 		return err
 	}
 
@@ -563,7 +592,7 @@ func startMCPOAuthFlowWithManager(ctx *cli.Context, profile *McpProfile, region 
 	return nil
 }
 
-func startMCPOAuthFlow(ctx *cli.Context, profile *McpProfile, region RegionType, host string, port int, autoOpenBrowser bool) error {
+func startMCPOAuthFlow(ctx *cli.Context, profile *McpProfile, region RegionType, host string, port int, autoOpenBrowser bool, scope string) error {
 	manager := NewOAuthCallbackManager()
 
 	server := &http.Server{Addr: fmt.Sprintf("%s:%d", host, port)}
@@ -581,7 +610,7 @@ func startMCPOAuthFlow(ctx *cli.Context, profile *McpProfile, region RegionType,
 
 	defer server.Close()
 
-	return startMCPOAuthFlowWithManager(ctx, profile, region, manager, host, port, autoOpenBrowser)
+	return startMCPOAuthFlowWithManager(ctx, profile, region, manager, host, port, autoOpenBrowser, scope)
 }
 
 func isStderrRedirected() bool {
@@ -697,7 +726,6 @@ type OAuthApplication struct {
 	AppType              string   `json:"AppType"`
 	RedirectUris         []string `json:"RedirectUris"`
 	Scopes               []string `json:"Scopes"`
-	GrantTypes           []string `json:"GrantTypes"`
 	AccessTokenValidity  int      `json:"AccessTokenValidity"`
 	RefreshTokenValidity int      `json:"RefreshTokenValidity"`
 }
@@ -735,38 +763,8 @@ type ListApplicationsResponse struct {
 type GetApplicationResponse struct {
 	Application IMSApplication `json:"Application"`
 }
-type RegionType string
 
-const (
-	RegionCN              RegionType = "CN"
-	RegionINTL            RegionType = "INTL"
-	DefaultMcpProfileName            = "default-mcp"
-)
-
-type EndpointConfig struct {
-	SignIn    string
-	OAuth     string
-	IMSDomain string
-	MCP       string
-}
-
-// 国内/国际站端点映射
-var EndpointMap = map[RegionType]EndpointConfig{
-	RegionCN: {
-		SignIn:    "https://signin.aliyun.com",
-		OAuth:     "https://oauth.aliyun.com",
-		IMSDomain: "ims.aliyuncs.com",
-		MCP:       "openapi-mcp.cn-hangzhou.aliyuncs.com",
-	},
-	RegionINTL: {
-		SignIn:    "https://signin.alibabacloud.com",
-		OAuth:     "https://oauth.alibabacloud.com",
-		IMSDomain: "ims.ap-southeast-1.aliyuncs.com",
-		MCP:       "openapi-mcp.ap-southeast-1.aliyuncs.com",
-	},
-}
-
-func getOrCreateMCPOAuthApplication(ctx *cli.Context, profile config.Profile, region RegionType, host string, port int) (*OAuthApplication, error) {
+func getOrCreateMCPOAuthApplication(ctx *cli.Context, profile config.Profile, region RegionType, host string, port int, scope string) (*OAuthApplication, error) {
 	app, err := findExistingMCPOauthApplication(ctx, profile, region)
 	if err != nil {
 		return nil, err
@@ -776,7 +774,7 @@ func getOrCreateMCPOAuthApplication(ctx *cli.Context, profile config.Profile, re
 		return app, nil
 	}
 
-	return createMCPOauthApplication(ctx, profile, region, host, port)
+	return createMCPOauthApplication(ctx, profile, region, host, port, scope)
 }
 
 func findExistingMCPOauthApplicationById(ctx *cli.Context, profile config.Profile, mcpProfile *McpProfile, region RegionType) error {
@@ -787,7 +785,7 @@ func findExistingMCPOauthApplicationById(ctx *cli.Context, profile config.Profil
 	conf := &openapiClient.Config{
 		Credential: credential,
 		RegionId:   tea.String(profile.RegionId),
-		Endpoint:   tea.String(EndpointMap[region].IMSDomain),
+		Endpoint:   tea.String(EndpointMap[region].IMS),
 	}
 	client, err := openapiClient.NewClient(conf)
 	if err != nil {
@@ -831,7 +829,7 @@ func findExistingMCPOauthApplication(ctx *cli.Context, profile config.Profile, r
 	conf := &openapiClient.Config{
 		Credential: credential,
 		RegionId:   tea.String(profile.RegionId),
-		Endpoint:   tea.String(EndpointMap[region].IMSDomain),
+		Endpoint:   tea.String(EndpointMap[region].IMS),
 	}
 	client, err := openapiClient.NewClient(conf)
 	if err != nil {
@@ -877,7 +875,6 @@ func findExistingMCPOauthApplication(ctx *cli.Context, profile config.Profile, r
 				AppType:              app.AppType,
 				RedirectUris:         app.RedirectUris.RedirectUri,
 				Scopes:               scopes,
-				GrantTypes:           []string{"authorization_code", "refresh_token"},
 				AccessTokenValidity:  app.AccessTokenValidity,
 				RefreshTokenValidity: app.RefreshTokenValidity,
 			}, nil
@@ -890,7 +887,7 @@ func buildRedirectUri(host string, port int) string {
 	return fmt.Sprintf("http://%s:%d/callback", host, port)
 }
 
-func createMCPOauthApplication(ctx *cli.Context, profile config.Profile, region RegionType, host string, port int) (*OAuthApplication, error) {
+func createMCPOauthApplication(ctx *cli.Context, profile config.Profile, region RegionType, host string, port int, scope string) (*OAuthApplication, error) {
 	credential, err := profile.GetCredential(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get credential: %w", err)
@@ -901,7 +898,7 @@ func createMCPOauthApplication(ctx *cli.Context, profile config.Profile, region 
 	conf := &openapiClient.Config{
 		Credential: credential,
 		RegionId:   tea.String(profile.RegionId),
-		Endpoint:   tea.String(EndpointMap[region].IMSDomain),
+		Endpoint:   tea.String(EndpointMap[region].IMS),
 	}
 	client, err := openapiClient.NewClient(conf)
 	if err != nil {
@@ -925,11 +922,8 @@ func createMCPOauthApplication(ctx *cli.Context, profile config.Profile, region 
 			"AppName":              tea.String(MCPOAuthAppName),
 			"AppType":              tea.String("NativeApp"),
 			"DisplayName":          tea.String(MCPOAuthDisplayName),
-			"SecretRequired":       tea.String("false"),
-			"PredefinedScopes":     tea.String("/acs/mcp-server"),
+			"PredefinedScopes":     tea.String(scope),
 			"ProtocolVersion":      tea.String("2.1"),
-			"GrantTypes.1":         tea.String("authorization_code"),
-			"GrantTypes.2":         tea.String("refresh_token"),
 			"AccessTokenValidity":  tea.String(fmt.Sprintf("%d", AccessTokenValiditySec)),
 			"RefreshTokenValidity": tea.String(fmt.Sprintf("%d", RefreshTokenValiditySec)),
 			"RedirectUris":         tea.String(redirectUri),
@@ -964,7 +958,6 @@ func createMCPOauthApplication(ctx *cli.Context, profile config.Profile, region 
 		AppType:              responseCreate.Application.AppType,
 		RedirectUris:         responseCreate.Application.RedirectUris.RedirectUri,
 		Scopes:               scopes,
-		GrantTypes:           []string{"authorization_code", "refresh_token"},
 		AccessTokenValidity:  responseCreate.Application.AccessTokenValidity,
 		RefreshTokenValidity: responseCreate.Application.RefreshTokenValidity,
 	}, nil
