@@ -81,7 +81,7 @@ func saveMcpProfile(profile *McpProfile) error {
 	return nil
 }
 
-func getOrCreateMCPProfile(ctx *cli.Context, region RegionType, host string, port int, noBrowser bool, scope string) (*McpProfile, error) {
+func getOrCreateMCPProfile(ctx *cli.Context, regionType RegionType, host string, port int, noBrowser bool, scope string) (*McpProfile, error) {
 	profile, err := config.LoadProfileWithContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load profile: %w", err)
@@ -90,16 +90,27 @@ func getOrCreateMCPProfile(ctx *cli.Context, region RegionType, host string, por
 	if bytes, err := os.ReadFile(mcpConfigPath); err == nil {
 		if mcpProfile, err := NewMcpProfileFromBytes(bytes); err == nil {
 			log.Println("MCP Profile loaded from file", mcpProfile.Name, "app id", mcpProfile.MCPOAuthAppId)
-			err = findExistingMCPOauthApplicationById(ctx, profile, mcpProfile, region)
-			if err == nil {
-				return mcpProfile, nil
+
+			// 检查 region type 是否匹配，因为国内和国际站的 OAuth 地址不同, Region type 不匹配则重新创建 profile
+			if mcpProfile.MCPOAuthSiteType == "" || mcpProfile.MCPOAuthSiteType != string(regionType) {
+				if mcpProfile.MCPOAuthSiteType != "" {
+					log.Printf("Region type mismatch: saved=%s, requested=%s, recreating profile",
+						mcpProfile.MCPOAuthSiteType, string(regionType))
+				} else {
+					log.Printf("Region type is empty in saved profile, recreating profile for region=%s", string(regionType))
+				}
 			} else {
-				log.Println("Failed to find existing OAuth application", err.Error())
+				err = findExistingMCPOauthApplicationById(ctx, profile, mcpProfile, regionType)
+				if err == nil {
+					return mcpProfile, nil
+				} else {
+					log.Println("Failed to find existing OAuth application", err.Error())
+				}
 			}
 		}
 	}
 
-	app, err := getOrCreateMCPOAuthApplication(ctx, profile, region, host, port, scope)
+	app, err := getOrCreateMCPOAuthApplication(ctx, profile, regionType, host, port, scope)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get or create OAuth application: %w", err)
 	}
@@ -107,7 +118,7 @@ func getOrCreateMCPProfile(ctx *cli.Context, region RegionType, host string, por
 	cli.Printf(ctx.Stdout(), "Setting up MCPOAuth profile '%s'...\n", DefaultMcpProfileName)
 
 	mcpProfile := NewMcpProfile(DefaultMcpProfileName)
-	mcpProfile.MCPOAuthSiteType = string(region)
+	mcpProfile.MCPOAuthSiteType = string(regionType)
 	mcpProfile.MCPOAuthAppId = app.ApplicationId
 	// 刷新 token 接口不返回 refresh token 有效期，所以直接在这里设置
 	currentTime := util.GetCurrentUnixTime()
@@ -117,7 +128,7 @@ func getOrCreateMCPProfile(ctx *cli.Context, region RegionType, host string, por
 	// noBrowser=true 表示禁用自动打开浏览器，autoOpenBrowser=false
 	// noBrowser=false 表示启用自动打开浏览器，autoOpenBrowser=true
 	autoOpenBrowser := !noBrowser
-	if err = startMCPOAuthFlow(ctx, mcpProfile, region, host, port, autoOpenBrowser, scope); err != nil {
+	if err = startMCPOAuthFlow(ctx, mcpProfile, regionType, host, port, autoOpenBrowser, scope); err != nil {
 		return nil, fmt.Errorf("OAuth login failed: %w", err)
 	}
 

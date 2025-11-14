@@ -172,6 +172,90 @@ func TestSaveMcpProfile(t *testing.T) {
 	assert.Equal(t, profile.MCPOAuthSiteType, loadedProfile.MCPOAuthSiteType)
 }
 
+func TestMcpProfileRegionType(t *testing.T) {
+	t.Run("region type is saved and loaded", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalHome := os.Getenv("HOME")
+		defer func() {
+			if originalHome != "" {
+				os.Setenv("HOME", originalHome)
+			} else {
+				os.Unsetenv("HOME")
+			}
+		}()
+
+		os.Setenv("HOME", tmpDir)
+
+		profile := NewMcpProfile("test-profile")
+		profile.MCPOAuthSiteType = string(RegionCN)
+		profile.MCPOAuthAppId = "test-app-id"
+
+		err := saveMcpProfile(profile)
+		assert.NoError(t, err)
+
+		configPath := getMCPConfigPath()
+		bytes, err := os.ReadFile(configPath)
+		assert.NoError(t, err)
+
+		var loadedProfile McpProfile
+		err = json.Unmarshal(bytes, &loadedProfile)
+		assert.NoError(t, err)
+		assert.Equal(t, string(RegionCN), loadedProfile.MCPOAuthSiteType)
+	})
+
+	t.Run("region type comparison", func(t *testing.T) {
+		tests := []struct {
+			name            string
+			savedRegion     string
+			requestedRegion RegionType
+			shouldMatch     bool
+		}{
+			{
+				name:            "CN matches CN",
+				savedRegion:     "CN",
+				requestedRegion: RegionCN,
+				shouldMatch:     true,
+			},
+			{
+				name:            "INTL matches INTL",
+				savedRegion:     "INTL",
+				requestedRegion: RegionINTL,
+				shouldMatch:     true,
+			},
+			{
+				name:            "CN does not match INTL",
+				savedRegion:     "CN",
+				requestedRegion: RegionINTL,
+				shouldMatch:     false,
+			},
+			{
+				name:            "INTL does not match CN",
+				savedRegion:     "INTL",
+				requestedRegion: RegionCN,
+				shouldMatch:     false,
+			},
+			{
+				name:            "empty does not match",
+				savedRegion:     "",
+				requestedRegion: RegionCN,
+				shouldMatch:     false,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				profile := &McpProfile{
+					MCPOAuthSiteType: tt.savedRegion,
+				}
+
+				// 模拟对比逻辑：region type 必须存在且匹配
+				matches := profile.MCPOAuthSiteType != "" && profile.MCPOAuthSiteType == string(tt.requestedRegion)
+				assert.Equal(t, tt.shouldMatch, matches)
+			})
+		}
+	})
+}
+
 func TestMcpProfileJSONSerialization(t *testing.T) {
 	profile := &McpProfile{
 		Name:                         "test-profile",
