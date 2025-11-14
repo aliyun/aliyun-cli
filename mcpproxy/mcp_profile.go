@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -45,25 +46,39 @@ func NewMcpProfile(name string) *McpProfile {
 }
 
 func NewMcpProfileFromBytes(bytes []byte) (profile *McpProfile, err error) {
-	profile = NewMcpProfile(DefaultMcpProfileName)
+	profile = &McpProfile{}
 	err = json.Unmarshal(bytes, profile)
-	return
+	if err != nil {
+		return nil, err
+	}
+	return profile, nil
 }
 
 func saveMcpProfile(profile *McpProfile) error {
 	mcpConfigPath := getMCPConfigPath()
+	dir := filepath.Dir(mcpConfigPath)
+
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory %q: %w", dir, err)
+	}
+
 	tempFile := mcpConfigPath + ".tmp"
 
 	bytes, err := json.MarshalIndent(profile, "", "\t")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal profile: %w", err)
 	}
 
-	if err = os.WriteFile(tempFile, bytes, 0600); err != nil {
-		return err
+	if err := os.WriteFile(tempFile, bytes, 0600); err != nil {
+		return fmt.Errorf("failed to write temp file %q: %w", tempFile, err)
 	}
 
-	return os.Rename(tempFile, mcpConfigPath)
+	// 原子性地重命名临时文件为目标文件， 避免因各种系统异常直接损坏原文件
+	if err := os.Rename(tempFile, mcpConfigPath); err != nil {
+		_ = os.Remove(tempFile)
+		return fmt.Errorf("failed to rename temp file to %q: %w", mcpConfigPath, err)
+	}
+	return nil
 }
 
 func getOrCreateMCPProfile(ctx *cli.Context, region RegionType, host string, port int, noBrowser bool, scope string) (*McpProfile, error) {

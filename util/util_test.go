@@ -541,3 +541,93 @@ func TestCopyFileAndRemoveSource(t *testing.T) {
 		assert.NoError(t, err)
 	})
 }
+
+func TestGetAliyunCliUserAgent(t *testing.T) {
+	// 保存原始环境变量
+	originalVendor := os.Getenv("ALIBABA_CLOUD_VENDOR")
+	defer func() {
+		if originalVendor != "" {
+			os.Setenv("ALIBABA_CLOUD_VENDOR", originalVendor)
+		} else {
+			os.Unsetenv("ALIBABA_CLOUD_VENDOR")
+		}
+	}()
+
+	t.Run("without vendor environment variable", func(t *testing.T) {
+		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
+
+		ua := GetAliyunCliUserAgent()
+
+		assert.NotEmpty(t, ua)
+		assert.Contains(t, ua, "Aliyun-CLI/")
+		assert.NotContains(t, ua, "vendor/")
+	})
+
+	t.Run("with vendor environment variable", func(t *testing.T) {
+		testVendor := "test-vendor"
+		os.Setenv("ALIBABA_CLOUD_VENDOR", testVendor)
+
+		ua := GetAliyunCliUserAgent()
+
+		assert.NotEmpty(t, ua)
+		assert.Contains(t, ua, "Aliyun-CLI/")
+		assert.Contains(t, ua, "vendor/")
+		assert.Contains(t, ua, testVendor)
+		assert.True(t, strings.HasSuffix(ua, "vendor/"+testVendor))
+	})
+
+	t.Run("with empty vendor environment variable", func(t *testing.T) {
+		os.Setenv("ALIBABA_CLOUD_VENDOR", "")
+
+		ua := GetAliyunCliUserAgent()
+
+		assert.NotEmpty(t, ua)
+		assert.Contains(t, ua, "Aliyun-CLI/")
+		// os.LookupEnv 返回 ok=true 即使值为空字符串，所以会包含 vendor/
+		assert.Contains(t, ua, "vendor/")
+		assert.True(t, strings.HasSuffix(ua, "vendor/"))
+	})
+
+	t.Run("with different vendor values", func(t *testing.T) {
+		testCases := []string{
+			"alibaba-cloud",
+			"aliyun",
+			"custom-vendor-123",
+			"vendor-with-special-chars-!@#",
+		}
+
+		for _, vendor := range testCases {
+			t.Run("vendor_"+vendor, func(t *testing.T) {
+				os.Setenv("ALIBABA_CLOUD_VENDOR", vendor)
+
+				ua := GetAliyunCliUserAgent()
+
+				assert.Contains(t, ua, "Aliyun-CLI/")
+				assert.Contains(t, ua, "vendor/")
+				assert.Contains(t, ua, vendor)
+				assert.True(t, strings.HasSuffix(ua, "vendor/"+vendor))
+			})
+		}
+	})
+
+	t.Run("format consistency", func(t *testing.T) {
+		os.Setenv("ALIBABA_CLOUD_VENDOR", "test-vendor")
+
+		ua := GetAliyunCliUserAgent()
+
+		// 验证格式：Aliyun-CLI/<version> vendor/<vendor>
+		parts := strings.Split(ua, " ")
+		assert.Len(t, parts, 2)
+		assert.True(t, strings.HasPrefix(parts[0], "Aliyun-CLI/"))
+		assert.Equal(t, "vendor/test-vendor", parts[1])
+	})
+
+	t.Run("multiple calls return consistent result", func(t *testing.T) {
+		os.Setenv("ALIBABA_CLOUD_VENDOR", "consistent-vendor")
+
+		ua1 := GetAliyunCliUserAgent()
+		ua2 := GetAliyunCliUserAgent()
+
+		assert.Equal(t, ua1, ua2)
+	})
+}
