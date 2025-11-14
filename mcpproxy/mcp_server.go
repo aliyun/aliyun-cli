@@ -47,16 +47,7 @@ func ListMCPServers(ctx *cli.Context, regionType RegionType) ([]MCPServerInfo, e
 	if err != nil {
 		return nil, err
 	}
-	credential, err := profile.GetCredential(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	conf := &openapiClient.Config{
-		Credential: credential,
-		RegionId:   tea.String(profile.RegionId),
-		Endpoint:   tea.String(EndpointMap[regionType].MCP),
-	}
-	client, err := openapiClient.NewClient(conf)
+	client, err := newOpenAPIClient(ctx, profile, EndpointMap[regionType].MCP)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +201,7 @@ func (p *MCPProxy) handleHealth(w http.ResponseWriter, r *http.Request) {
 	} else {
 		health["token_status"] = "valid"
 		health["token_expires_in"] = tokenExpiresIn
-		health["token_expires_in_readable"] = time.Duration(tokenExpiresIn * int64(time.Second)).String()
+		health["token_expires_inh"] = time.Duration(tokenExpiresIn * int64(time.Second)).String()
 	}
 
 	if refreshTokenExpired {
@@ -219,7 +210,7 @@ func (p *MCPProxy) handleHealth(w http.ResponseWriter, r *http.Request) {
 	} else {
 		health["refresh_token_status"] = "valid"
 		health["refresh_token_expires_in"] = refreshTokenExpiresIn
-		health["refresh_token_expires_in_readable"] = time.Duration(refreshTokenExpiresIn * int64(time.Second)).String()
+		health["refresh_token_expires_inh"] = time.Duration(refreshTokenExpiresIn * int64(time.Second)).String()
 	}
 
 	// 检查内存
@@ -393,7 +384,7 @@ func (p *MCPProxy) getMCPAccessToken() (string, error) {
 }
 
 func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string) (*http.Request, error) {
-	upstreamBaseURL := "https://openapi-mcp.cn-hangzhou.aliyuncs.com"
+	upstreamBaseURL := fmt.Sprintf("https://%s", EndpointMap[p.RegionType].MCP)
 
 	upstreamURL, err := url.Parse(upstreamBaseURL)
 	if err != nil {
@@ -422,13 +413,14 @@ func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string) (*h
 	}
 
 	upstreamReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
-	upstreamReq.Header.Set("User-Agent", "aliyun-cli-mcp-proxy")
+	upstreamReq.Header.Set("User-Agent", fmt.Sprintf("%s/aliyun-cli-mcp-proxy", util.GetAliyunCliUserAgent()))
 
 	return upstreamReq, nil
 }
 
 func (p *MCPProxy) handleSSE(w http.ResponseWriter, resp *http.Response) {
 	log.Println("SSE Upstream Request", resp.Request.URL.String())
+	log.Println("SSE Upstream Response", resp.StatusCode)
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -440,8 +432,6 @@ func (p *MCPProxy) handleSSE(w http.ResponseWriter, resp *http.Response) {
 		http.Error(w, "SSE not supported", http.StatusInternalServerError)
 		return
 	}
-
-	log.Println("SSE Upstream Response", resp.StatusCode)
 
 	for k, v := range resp.Header {
 		if strings.ToLower(k) == "content-length" {
