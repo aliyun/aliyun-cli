@@ -81,6 +81,15 @@ func NewMCPProxyCommand() *cli.Command {
 		),
 	})
 
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "scope",
+		DefaultValue: "/acs/mcp-server",
+		Short: i18n.T(
+			"OAuth predefined scope (default: /acs/mcp-server)",
+			"OAuth 预定义权限范围（默认: /acs/mcp-server）",
+		),
+	})
+
 	return cmd
 }
 
@@ -103,16 +112,17 @@ func runMCPProxy(ctx *cli.Context) error {
 	}
 
 	noBrowser := ctx.Flags().Get("no-browser").IsAssigned()
+	scope := ctx.Flags().Get("scope").GetStringOrDefault("/acs/mcp-server")
 
-	mcpProfile, err := getOrCreateMCPProfile(ctx, regionType, host, port, noBrowser)
+	mcpProfile, err := getOrCreateMCPProfile(ctx, regionType, host, port, noBrowser, scope)
 	if err != nil {
 		return err
 	}
 
-	return startMCPProxy(ctx, mcpProfile, regionType, host, port, noBrowser)
+	return startMCPProxy(ctx, mcpProfile, regionType, host, port, noBrowser, scope)
 }
 
-func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, regionType RegionType, host string, port int, noBrowser bool) error {
+func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, regionType RegionType, host string, port int, noBrowser bool, scope string) error {
 	servers, err := ListMCPServers(ctx, regionType)
 	if err != nil {
 		return fmt.Errorf("failed to list MCP servers: %w", err)
@@ -127,7 +137,7 @@ func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, regionType RegionTy
 	// noBrowser=true 表示禁用自动打开浏览器，autoOpenBrowser=false
 	// noBrowser=false 表示启用自动打开浏览器，autoOpenBrowser=true
 	autoOpenBrowser := !noBrowser
-	proxy := NewMCPProxy(host, port, regionType, mcpProfile, servers, manager, autoOpenBrowser)
+	proxy := NewMCPProxy(host, port, regionType, scope, mcpProfile, servers, manager, autoOpenBrowser)
 	go proxy.TokenRefresher.Start()
 
 	printProxyInfo(ctx, proxy)

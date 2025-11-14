@@ -66,7 +66,7 @@ func saveMcpProfile(profile *McpProfile) error {
 	return os.Rename(tempFile, mcpConfigPath)
 }
 
-func getOrCreateMCPProfile(ctx *cli.Context, region RegionType, host string, port int, noBrowser bool) (*McpProfile, error) {
+func getOrCreateMCPProfile(ctx *cli.Context, region RegionType, host string, port int, noBrowser bool, scope string) (*McpProfile, error) {
 	profile, err := config.LoadProfileWithContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load profile: %w", err)
@@ -84,7 +84,7 @@ func getOrCreateMCPProfile(ctx *cli.Context, region RegionType, host string, por
 		}
 	}
 
-	app, err := getOrCreateMCPOAuthApplication(ctx, profile, region, host, port)
+	app, err := getOrCreateMCPOAuthApplication(ctx, profile, region, host, port, scope)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get or create OAuth application: %w", err)
 	}
@@ -102,7 +102,7 @@ func getOrCreateMCPProfile(ctx *cli.Context, region RegionType, host string, por
 	// noBrowser=true 表示禁用自动打开浏览器，autoOpenBrowser=false
 	// noBrowser=false 表示启用自动打开浏览器，autoOpenBrowser=true
 	autoOpenBrowser := !noBrowser
-	if err = startMCPOAuthFlow(ctx, mcpProfile, region, host, port, autoOpenBrowser); err != nil {
+	if err = startMCPOAuthFlow(ctx, mcpProfile, region, host, port, autoOpenBrowser, scope); err != nil {
 		return nil, fmt.Errorf("OAuth login failed: %w", err)
 	}
 

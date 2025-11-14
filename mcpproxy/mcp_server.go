@@ -112,7 +112,7 @@ type MCPProxy struct {
 	stats          *RuntimeStats
 }
 
-func NewMCPProxy(host string, port int, regionType RegionType, mcpProfile *McpProfile, servers []MCPServerInfo, manager *OAuthCallbackManager, autoOpenBrowser bool) *MCPProxy {
+func NewMCPProxy(host string, port int, regionType RegionType, scope string, mcpProfile *McpProfile, servers []MCPServerInfo, manager *OAuthCallbackManager, autoOpenBrowser bool) *MCPProxy {
 	stats := &RuntimeStats{
 		StartTime: time.Now(),
 	}
@@ -127,6 +127,7 @@ func NewMCPProxy(host string, port int, regionType RegionType, mcpProfile *McpPr
 			callbackManager: manager,
 			host:            host,
 			port:            port,
+			scope:           scope,
 			autoOpenBrowser: autoOpenBrowser,
 			stopCh:          make(chan struct{}),
 			tokenCh:         make(chan TokenInfo, 1), // 带缓冲的 channel，存储最新的 token
@@ -510,8 +511,8 @@ func (p *MCPProxy) handleHTTP(w http.ResponseWriter, resp *http.Response) {
 const (
 	MaxSaveFailures               = 3
 	CheckInterval                 = 30 * time.Second
-	AccessTokenRefreshWindow      = 5 * time.Minute  // Access token 提前刷新窗口
-	RefreshTokenRefreshWindow     = 10 * time.Minute // Refresh token 提前重新授权窗口
+	AccessTokenRefreshWindow      = 7 * time.Minute  // Access token 提前刷新窗口
+	RefreshTokenRefreshWindow     = 13 * time.Minute // Refresh token 提前重新授权窗口
 	WaitForRefreshTimeout         = 5 * time.Second
 	WaitForReauthorizationTimeout = 120 * time.Second
 )
@@ -526,6 +527,7 @@ type TokenRefresher struct {
 	host            string // 代理主机
 	port            int    // 代理端口
 	regionType      RegionType
+	scope           string // OAuth scope
 	callbackManager *OAuthCallbackManager
 	mu              sync.RWMutex // 保护刷新操作的读写锁
 	refreshing      bool         // 标记是否正在刷新，防止重复刷新
@@ -759,10 +761,14 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 	r.mu.Unlock()
 
 	// 执行 OAuth 流程（不持有锁，避免阻塞）
+	oauthScope := r.scope
+	if oauthScope == "" {
+		oauthScope = "/acs/mcp-server"
+	}
 	stderr := getStderrWriter(nil)
-	if err := executeOAuthFlow(nil, profile, r.regionType, r.callbackManager, r.host, r.port, func(authURL string) {
+	if err := executeOAuthFlow(nil, profile, r.regionType, r.callbackManager, r.host, r.port, r.autoOpenBrowser, oauthScope, func(authURL string) {
 		cli.Printf(stderr, "OAuth Re-authorization Required. Please visit: %s\n", authURL)
-	}, r.autoOpenBrowser); err != nil {
+	}); err != nil {
 		r.mu.Lock()
 		r.reauthorizing = false
 		r.mu.Unlock()
