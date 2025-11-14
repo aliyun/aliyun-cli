@@ -104,6 +104,8 @@ const (
 	ManualModeCloseDelayMs   = 3000 // 手动模式自动关闭延迟（毫秒）
 )
 
+var oauthTimeout = OAuthTimeout
+
 const (
 	oauthErrorPageHTML = `<!DOCTYPE html>
 <html>
@@ -410,7 +412,7 @@ func (m *OAuthCallbackManager) WaitForCode() (string, error) {
 		return code, nil
 	case err := <-m.errorCh:
 		return "", err
-	case <-time.After(OAuthTimeout):
+	case <-time.After(oauthTimeout):
 		return "", fmt.Errorf("timeout waiting for authorization")
 	}
 }
