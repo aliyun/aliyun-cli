@@ -73,6 +73,27 @@ var EndpointMap = map[RegionType]EndpointConfig{
 	},
 }
 
+func newOpenAPIClient(ctx *cli.Context, profile config.Profile, endpoint string) (*openapiClient.Client, error) {
+	credential, err := profile.GetCredential(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get credential: %w", err)
+	}
+
+	conf := &openapiClient.Config{
+		Credential: credential,
+		RegionId:   tea.String(profile.RegionId),
+		Endpoint:   tea.String(endpoint),
+		UserAgent:  tea.String(util.GetAliyunCliUserAgent()),
+	}
+
+	client, err := openapiClient.NewClient(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
 const (
 	OAuthTimeout            = 5 * time.Minute
 	AccessTokenValiditySec  = 10800    // 3 hours
@@ -778,16 +799,7 @@ func getOrCreateMCPOAuthApplication(ctx *cli.Context, profile config.Profile, re
 }
 
 func findExistingMCPOauthApplicationById(ctx *cli.Context, profile config.Profile, mcpProfile *McpProfile, region RegionType) error {
-	credential, err := profile.GetCredential(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to get credential: %w", err)
-	}
-	conf := &openapiClient.Config{
-		Credential: credential,
-		RegionId:   tea.String(profile.RegionId),
-		Endpoint:   tea.String(EndpointMap[region].IMS),
-	}
-	client, err := openapiClient.NewClient(conf)
+	client, err := newOpenAPIClient(ctx, profile, EndpointMap[region].IMS)
 	if err != nil {
 		return err
 	}
@@ -822,16 +834,7 @@ func findExistingMCPOauthApplicationById(ctx *cli.Context, profile config.Profil
 }
 
 func findExistingMCPOauthApplication(ctx *cli.Context, profile config.Profile, region RegionType) (*OAuthApplication, error) {
-	credential, err := profile.GetCredential(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get credential: %w", err)
-	}
-	conf := &openapiClient.Config{
-		Credential: credential,
-		RegionId:   tea.String(profile.RegionId),
-		Endpoint:   tea.String(EndpointMap[region].IMS),
-	}
-	client, err := openapiClient.NewClient(conf)
+	client, err := newOpenAPIClient(ctx, profile, EndpointMap[region].IMS)
 	if err != nil {
 		return nil, err
 	}
@@ -888,22 +891,12 @@ func buildRedirectUri(host string, port int) string {
 }
 
 func createMCPOauthApplication(ctx *cli.Context, profile config.Profile, region RegionType, host string, port int, scope string) (*OAuthApplication, error) {
-	credential, err := profile.GetCredential(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get credential: %w", err)
-	}
-
-	redirectUri := buildRedirectUri(host, port)
-
-	conf := &openapiClient.Config{
-		Credential: credential,
-		RegionId:   tea.String(profile.RegionId),
-		Endpoint:   tea.String(EndpointMap[region].IMS),
-	}
-	client, err := openapiClient.NewClient(conf)
+	client, err := newOpenAPIClient(ctx, profile, EndpointMap[region].IMS)
 	if err != nil {
 		return nil, err
 	}
+
+	redirectUri := buildRedirectUri(host, port)
 
 	params := &openapiClient.Params{
 		Action:      tea.String("CreateApplication"),
