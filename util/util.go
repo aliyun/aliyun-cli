@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
@@ -113,4 +114,12 @@ func CopyFileAndRemoveSource(sourceFile, destFile string) error {
 	}
 	_ = os.Remove(sourceFile)
 	return nil
+}
+
+func GetAliyunCliUserAgent() string {
+	ua := "Aliyun-CLI/" + cli.GetVersion()
+	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
+		ua += " vendor/" + vendorEnv
+	}
+	return ua
 }
