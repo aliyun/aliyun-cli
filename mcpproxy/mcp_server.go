@@ -676,12 +676,6 @@ func (r *TokenRefresher) refreshAccessToken() error {
 		return r.waitForRefresh(currentExpiresAt)
 	}
 
-	currentTime := util.GetCurrentUnixTime()
-	if r.profile.MCPOAuthAccessTokenExpire > currentTime {
-		r.mu.Unlock()
-		return nil
-	}
-
 	r.refreshing = true
 	endpoint := EndpointMap[r.regionType].OAuth
 	clientId := r.profile.MCPOAuthAppId
@@ -706,9 +700,8 @@ func (r *TokenRefresher) refreshAccessToken() error {
 	}
 
 	r.mu.Lock()
-	currentTime = util.GetCurrentUnixTime()
+	currentTime := util.GetCurrentUnixTime()
 	r.profile.MCPOAuthAccessToken = newTokens.AccessToken
-	r.profile.MCPOAuthRefreshToken = newTokens.RefreshToken
 	r.profile.MCPOAuthAccessTokenExpire = currentTime + newTokens.ExpiresIn
 	r.refreshing = false
 
@@ -821,7 +814,8 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 	}
 
 	r.reauthorizing = true
-	profile := r.profile
+	clientId := r.profile.MCPOAuthAppId
+	refreshTokenValidity := r.profile.MCPOAuthRefreshTokenValidity
 	r.mu.Unlock()
 
 	// 执行 OAuth 流程（不持有锁，避免阻塞）
@@ -830,9 +824,10 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 		oauthScope = "/acs/mcp-server"
 	}
 	stderr := getStderrWriter(nil)
-	if err := executeOAuthFlow(nil, profile, r.regionType, r.callbackManager, r.host, r.port, r.autoOpenBrowser, oauthScope, func(authURL string) {
+	tokenResult, err := executeOAuthFlowResult(clientId, r.regionType, r.callbackManager, r.host, r.port, r.autoOpenBrowser, oauthScope, func(authURL string) {
 		cli.Printf(stderr, "OAuth Re-authorization Required. Please visit: %s\n", authURL)
-	}); err != nil {
+	})
+	if err != nil {
 		r.mu.Lock()
 		r.reauthorizing = false
 		r.mu.Unlock()
@@ -844,7 +839,10 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 
 	r.mu.Lock()
 	currentTime := util.GetCurrentUnixTime()
-	r.profile.MCPOAuthRefreshTokenExpire = currentTime + int64(r.profile.MCPOAuthRefreshTokenValidity)
+	r.profile.MCPOAuthAccessToken = tokenResult.AccessToken
+	r.profile.MCPOAuthRefreshToken = tokenResult.RefreshToken
+	r.profile.MCPOAuthAccessTokenExpire = tokenResult.AccessTokenExpire
+	r.profile.MCPOAuthRefreshTokenExpire = currentTime + int64(refreshTokenValidity)
 	r.reauthorizing = false
 
 	retrySaveProfile(

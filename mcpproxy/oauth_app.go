@@ -485,45 +485,49 @@ func oauthRefresh(endpoint string, data url.Values) (*OAuthTokenResponse, error)
 	return &tokenResp, nil
 }
 
-func exchangeCodeForTokenWithPKCE(profile *McpProfile, code, codeVerifier, redirectURI, oauthEndpoint string) error {
+type OAuthTokenResult struct {
+	AccessToken       string
+	RefreshToken      string
+	AccessTokenExpire int64
+}
+
+func exchangeCodeForTokenWithPKCE(clientId, code, codeVerifier, redirectURI, oauthEndpoint string) (*OAuthTokenResult, error) {
 	data := url.Values{}
 	data.Set("grant_type", "authorization_code")
 	data.Set("code", code)
-	data.Set("client_id", profile.MCPOAuthAppId)
+	data.Set("client_id", clientId)
 	data.Set("redirect_uri", redirectURI)
 	data.Set("code_verifier", codeVerifier)
 
 	tokenResp, err := oauthRefresh(oauthEndpoint, data)
 	if err != nil {
-		return fmt.Errorf("oauth refresh failed: %w", err)
+		return nil, fmt.Errorf("oauth refresh failed: %w", err)
 	}
 
 	currentTime := util.GetCurrentUnixTime()
-	profile.MCPOAuthAccessToken = tokenResp.AccessToken
-	profile.MCPOAuthRefreshToken = tokenResp.RefreshToken
-	profile.MCPOAuthAccessTokenExpire = currentTime + tokenResp.ExpiresIn
-
-	return nil
+	return &OAuthTokenResult{
+		AccessToken:       tokenResp.AccessToken,
+		RefreshToken:      tokenResp.RefreshToken,
+		AccessTokenExpire: currentTime + tokenResp.ExpiresIn,
+	}, nil
 }
 
-func buildOAuthURL(profile *McpProfile, region RegionType, host string, port int, codeChallenge string, scope string) string {
+func buildOAuthURL(clientId string, region RegionType, host string, port int, codeChallenge string, scope string) string {
 	redirectURI := buildRedirectUri(host, port)
 	return fmt.Sprintf("%s/oauth2/v1/auth?client_id=%s&response_type=code&scope=%s&redirect_uri=%s&code_challenge=%s&code_challenge_method=S256",
-		EndpointMap[region].SignIn, profile.MCPOAuthAppId, url.QueryEscape(scope), redirectURI, codeChallenge)
+		EndpointMap[region].SignIn, clientId, url.QueryEscape(scope), redirectURI, codeChallenge)
 }
 
-// 执行完整的 OAuth 授权流程
-// autoOpenBrowser: true 表示自动打开浏览器（等待回调），false 表示手动输入 code
-func executeOAuthFlow(ctx *cli.Context, profile *McpProfile, regionType RegionType, manager *OAuthCallbackManager,
-	host string, port int, autoOpenBrowser bool, scope string, logAuthURL func(string)) error {
-	stderr := getStderrWriter(ctx)
+func executeOAuthFlowResult(clientId string, regionType RegionType, manager *OAuthCallbackManager,
+	host string, port int, autoOpenBrowser bool, scope string, logAuthURL func(string)) (*OAuthTokenResult, error) {
 	codeVerifier, err := generateCodeVerifier()
 	if err != nil {
-		return fmt.Errorf("failed to generate code verifier: %w", err)
+		return nil, fmt.Errorf("failed to generate code verifier: %w", err)
 	}
 	codeChallenge := generateCodeChallenge(codeVerifier)
 
-	authURL := buildOAuthURL(profile, regionType, host, port, codeChallenge, scope)
+	redirectURI := buildRedirectUri(host, port)
+	authURL := buildOAuthURL(clientId, regionType, host, port, codeChallenge, scope)
 
 	if logAuthURL != nil {
 		logAuthURL(authURL)
@@ -541,62 +545,47 @@ func executeOAuthFlow(ctx *cli.Context, profile *McpProfile, regionType RegionTy
 
 	if autoOpenBrowser {
 		if err := OpenBrowser(authURL); err != nil {
-			// 错误信息输出到 stderr，确保用户能看到
-			cli.Printf(stderr, "Failed to open browser automatically: %v\n", err)
-			cli.Printf(stderr, "Falling back to manual code input mode...\n")
-			if !isInteractiveInput() {
-				return fmt.Errorf("manual authorization required but standard input is not interactive")
-			}
-			reader := bufio.NewReader(os.Stdin)
-			code, err = promptAuthorizationCode(stderr, reader)
-			if err != nil {
-				return fmt.Errorf("failed to read authorization code: %w", err)
-			}
-		} else {
-			manager.StartWaiting()
-			waitStarted = true
-			code, err = manager.WaitForCode()
-			if err != nil {
-				return fmt.Errorf("failed to get authorization code: %w", err)
-			}
+			return nil, fmt.Errorf("failed to open browser: %w", err)
+		}
+		manager.StartWaiting()
+		waitStarted = true
+		code, err = manager.WaitForCode()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get authorization code: %w", err)
 		}
 	} else {
 		if !isInteractiveInput() {
-			return fmt.Errorf("manual authorization required but standard input is not interactive")
+			return nil, fmt.Errorf("manual authorization required but standard input is not interactive")
 		}
 		reader := bufio.NewReader(os.Stdin)
-		code, err = promptAuthorizationCode(stderr, reader)
+		code, err = promptAuthorizationCode(nil, reader)
 		if err != nil {
-			return fmt.Errorf("failed to read authorization code: %w", err)
+			return nil, fmt.Errorf("failed to read authorization code: %w", err)
 		}
 	}
 
 	if code == "" {
-		return fmt.Errorf("authorization code is empty")
+		return nil, fmt.Errorf("authorization code is empty")
 	}
 
-	redirectURI := buildRedirectUri(host, port)
-	if err = exchangeCodeForTokenWithPKCE(profile, code, codeVerifier, redirectURI, EndpointMap[regionType].OAuth); err != nil {
-		return fmt.Errorf("failed to exchange token: %w", err)
-	}
-
-	return nil
+	return exchangeCodeForTokenWithPKCE(clientId, code, codeVerifier, redirectURI, EndpointMap[regionType].OAuth)
 }
 
-func startMCPOAuthFlowWithManager(ctx *cli.Context, profile *McpProfile, region RegionType,
-	manager *OAuthCallbackManager, host string, port int, autoOpenBrowser bool, scope string) error {
+func startMCPOAuthFlowWithManager(ctx *cli.Context, clientId string, region RegionType,
+	manager *OAuthCallbackManager, host string, port int, autoOpenBrowser bool, scope string) (*OAuthTokenResult, error) {
 	stderr := getStderrWriter(ctx)
-	if err := executeOAuthFlow(ctx, profile, region, manager, host, port, autoOpenBrowser, scope, func(authURL string) {
+	tokenResult, err := executeOAuthFlowResult(clientId, region, manager, host, port, autoOpenBrowser, scope, func(authURL string) {
 		cli.Printf(stderr, "Opening browser for OAuth login...\nURL: %s\n\n", authURL)
-	}); err != nil {
-		return err
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	cli.Println(stderr, "OAuth login successful!")
-	return nil
+	return tokenResult, nil
 }
 
-func startMCPOAuthFlow(ctx *cli.Context, profile *McpProfile, region RegionType, host string, port int, autoOpenBrowser bool, scope string) error {
+func startMCPOAuthFlow(ctx *cli.Context, clientId string, region RegionType, host string, port int, autoOpenBrowser bool, scope string) (*OAuthTokenResult, error) {
 	manager := NewOAuthCallbackManager()
 
 	server := &http.Server{Addr: fmt.Sprintf("%s:%d", host, port)}
@@ -614,7 +603,7 @@ func startMCPOAuthFlow(ctx *cli.Context, profile *McpProfile, region RegionType,
 
 	defer server.Close()
 
-	return startMCPOAuthFlowWithManager(ctx, profile, region, manager, host, port, autoOpenBrowser, scope)
+	return startMCPOAuthFlowWithManager(ctx, clientId, region, manager, host, port, autoOpenBrowser, scope)
 }
 
 func isStderrRedirected() bool {

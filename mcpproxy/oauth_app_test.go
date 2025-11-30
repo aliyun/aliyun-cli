@@ -228,17 +228,13 @@ func TestBuildRedirectUri(t *testing.T) {
 }
 
 func TestBuildOAuthURL(t *testing.T) {
-	profile := &McpProfile{
-		MCPOAuthAppId: "test-app-id",
-	}
-
 	host := "127.0.0.1"
 	port := 8088
 	codeChallenge := "test-challenge"
 	scope := "/acs/mcp-server"
 
 	// 测试CN区域
-	urlCN := buildOAuthURL(profile, RegionCN, host, port, codeChallenge, scope)
+	urlCN := buildOAuthURL("test-app-id", RegionCN, host, port, codeChallenge, scope)
 	assert.Contains(t, urlCN, EndpointMap[RegionCN].SignIn)
 	assert.Contains(t, urlCN, "test-app-id")
 	assert.Contains(t, urlCN, "test-challenge")
@@ -246,7 +242,7 @@ func TestBuildOAuthURL(t *testing.T) {
 	assert.Contains(t, urlCN, "response_type=code")
 
 	// 测试INTL区域
-	urlINTL := buildOAuthURL(profile, RegionINTL, host, port, codeChallenge, scope)
+	urlINTL := buildOAuthURL("test-app-id", RegionINTL, host, port, codeChallenge, scope)
 	assert.Contains(t, urlINTL, EndpointMap[RegionINTL].SignIn)
 
 	// 验证URL可以解析
@@ -417,15 +413,11 @@ func TestExchangeCodeForTokenWithPKCE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	profile := &McpProfile{
-		MCPOAuthAppId: "test-app-id",
-	}
-
-	err := exchangeCodeForTokenWithPKCE(profile, "test-code", "test-verifier", "http://127.0.0.1:8088/callback", server.URL)
+	tokenResult, err := exchangeCodeForTokenWithPKCE("test-app-id", "test-code", "test-verifier", "http://127.0.0.1:8088/callback", server.URL)
 	assert.NoError(t, err)
-	assert.Equal(t, "access-token", profile.MCPOAuthAccessToken)
-	assert.Equal(t, "refresh-token", profile.MCPOAuthRefreshToken)
-	assert.NotZero(t, profile.MCPOAuthAccessTokenExpire)
+	assert.Equal(t, "access-token", tokenResult.AccessToken)
+	assert.Equal(t, "refresh-token", tokenResult.RefreshToken)
+	assert.NotZero(t, tokenResult.AccessTokenExpire)
 }
 
 func TestRegionTypeConstants(t *testing.T) {

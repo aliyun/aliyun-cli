@@ -29,14 +29,14 @@ import (
 type McpProfile struct {
 	Name                         string `json:"name"`
 	MCPOAuthAppName              string `json:"mcp_oauth_app_name,omitempty"`
+	MCPOAuthAppId                string `json:"mcp_oauth_app_id,omitempty"`
+	MCPOAuthSiteType             string `json:"mcp_oauth_site_type,omitempty"` // CN or INTL
 	MCPOAuthAccessToken          string `json:"mcp_oauth_access_token,omitempty"`
 	MCPOAuthRefreshToken         string `json:"mcp_oauth_refresh_token,omitempty"`
 	MCPOAuthAccessTokenValidity  int    `json:"mcp_oauth_access_token_validity,omitempty"`
 	MCPOAuthAccessTokenExpire    int64  `json:"mcp_oauth_access_token_expire,omitempty"`
 	MCPOAuthRefreshTokenValidity int    `json:"mcp_oauth_refresh_token_validity,omitempty"`
 	MCPOAuthRefreshTokenExpire   int64  `json:"mcp_oauth_refresh_token_expire,omitempty"`
-	MCPOAuthSiteType             string `json:"mcp_oauth_site_type,omitempty"` // CN or INTL
-	MCPOAuthAppId                string `json:"mcp_oauth_app_id,omitempty"`
 }
 
 func getMCPConfigPath() string {
@@ -146,13 +146,17 @@ func getOrCreateMCPProfile(ctx *cli.Context, opts ProxyConfig) (*McpProfile, err
 	currentTime := util.GetCurrentUnixTime()
 	mcpProfile.MCPOAuthAccessTokenValidity = validatedApp.AccessTokenValidity
 	mcpProfile.MCPOAuthRefreshTokenValidity = validatedApp.RefreshTokenValidity
-	mcpProfile.MCPOAuthRefreshTokenExpire = currentTime + int64(validatedApp.RefreshTokenValidity)
 
 	// noBrowser=true 表示禁用自动打开浏览器，autoOpenBrowser=false
 	// noBrowser=false 表示启用自动打开浏览器，autoOpenBrowser=true
-	if err = startMCPOAuthFlow(ctx, mcpProfile, opts.RegionType, opts.Host, opts.Port, opts.AutoOpenBrowser, opts.Scope); err != nil {
+	tokenResult, err := startMCPOAuthFlow(ctx, mcpProfile.MCPOAuthAppId, opts.RegionType, opts.Host, opts.Port, opts.AutoOpenBrowser, opts.Scope)
+	if err != nil {
 		return nil, fmt.Errorf("OAuth login failed: %w", err)
 	}
+	mcpProfile.MCPOAuthAccessToken = tokenResult.AccessToken
+	mcpProfile.MCPOAuthRefreshToken = tokenResult.RefreshToken
+	mcpProfile.MCPOAuthAccessTokenExpire = tokenResult.AccessTokenExpire
+	mcpProfile.MCPOAuthRefreshTokenExpire = currentTime + int64(validatedApp.RefreshTokenValidity)
 
 	if err = saveMcpProfile(mcpProfile); err != nil {
 		return nil, fmt.Errorf("failed to save mcp profile: %w", err)
