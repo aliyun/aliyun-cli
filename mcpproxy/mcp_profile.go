@@ -28,8 +28,10 @@ import (
 
 type McpProfile struct {
 	Name                         string `json:"name"`
+	MCPOAuthAppName              string `json:"mcp_oauth_app_name,omitempty"`
 	MCPOAuthAccessToken          string `json:"mcp_oauth_access_token,omitempty"`
 	MCPOAuthRefreshToken         string `json:"mcp_oauth_refresh_token,omitempty"`
+	MCPOAuthAccessTokenValidity  int    `json:"mcp_oauth_access_token_validity,omitempty"`
 	MCPOAuthAccessTokenExpire    int64  `json:"mcp_oauth_access_token_expire,omitempty"`
 	MCPOAuthRefreshTokenValidity int    `json:"mcp_oauth_refresh_token_validity,omitempty"`
 	MCPOAuthRefreshTokenExpire   int64  `json:"mcp_oauth_refresh_token_expire,omitempty"`
@@ -52,15 +54,6 @@ func NewMcpProfileFromBytes(bytes []byte) (profile *McpProfile, err error) {
 		return nil, err
 	}
 	return profile, nil
-}
-
-type GetOrCreateMCPProfileOptions struct {
-	RegionType   RegionType
-	Host         string
-	Port         int
-	NoBrowser    bool
-	Scope        string
-	OAuthAppName string
 }
 
 func saveMcpProfile(profile *McpProfile) error {
@@ -90,13 +83,14 @@ func saveMcpProfile(profile *McpProfile) error {
 	return nil
 }
 
-func getOrCreateMCPProfile(ctx *cli.Context, opts GetOrCreateMCPProfileOptions) (*McpProfile, error) {
+func getOrCreateMCPProfile(ctx *cli.Context, opts ProxyConfig) (*McpProfile, error) {
 	profile, err := config.LoadProfileWithContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load profile: %w", err)
 	}
 
 	// 如果传入了 oauth-app-name，先验证该应用是否存在且合法
+	// 如果已经验证过 oauth-app-name，直接使用验证过的 app；否则查找或创建默认的 OAuth 应用
 	var validatedApp *OAuthApplication
 	if opts.OAuthAppName != "" {
 		app, err := findOAuthApplicationByName(ctx, profile, opts.RegionType, opts.OAuthAppName)
@@ -115,59 +109,48 @@ func getOrCreateMCPProfile(ctx *cli.Context, opts GetOrCreateMCPProfileOptions) 
 
 		validatedApp = app
 		cli.Printf(ctx.Stdout(), "Using existing OAuth application '%s' (AppId: %s)\n", app.AppName, app.ApplicationId)
-	}
+	} else {
+		// 查找或创建默认的 OAuth 应用
+		mcpConfigPath := getMCPConfigPath()
+		if bytes, err := os.ReadFile(mcpConfigPath); err == nil {
+			if mcpProfile, err := NewMcpProfileFromBytes(bytes); err == nil {
+				log.Println("MCP Profile loaded from file", mcpProfile.Name, "app id", mcpProfile.MCPOAuthAppId)
 
-	// 查找或创建默认的 OAuth 应用
-	mcpConfigPath := getMCPConfigPath()
-	if bytes, err := os.ReadFile(mcpConfigPath); err == nil {
-		if mcpProfile, err := NewMcpProfileFromBytes(bytes); err == nil {
-			log.Println("MCP Profile loaded from file", mcpProfile.Name, "app id", mcpProfile.MCPOAuthAppId)
-
-			// 检查 region type 是否匹配，因为国内和国际站的 OAuth 地址不同, Region type 不匹配则重新创建 profile
-			if mcpProfile.MCPOAuthSiteType == "" || mcpProfile.MCPOAuthSiteType != string(opts.RegionType) {
-				if mcpProfile.MCPOAuthSiteType != "" {
-					log.Printf("Region type mismatch: saved=%s, requested=%s, recreating profile",
-						mcpProfile.MCPOAuthSiteType, string(opts.RegionType))
+				// 检查 region type 是否匹配，因为国内和国际站的 OAuth 地址不同, Region type 不匹配则重新创建 profile
+				if mcpProfile.MCPOAuthSiteType != string(opts.RegionType) {
+					log.Printf("Region type mismatch: saved=%s, requested=%s, recreating profile", mcpProfile.MCPOAuthSiteType, string(opts.RegionType))
 				} else {
-					log.Printf("Region type is empty in saved profile, recreating profile for region=%s", string(opts.RegionType))
-				}
-			} else {
-				err = findExistingMCPOauthApplicationById(ctx, profile, mcpProfile, opts.RegionType)
-				if err == nil {
-					return mcpProfile, nil
-				} else {
-					log.Println("Failed to find existing OAuth application", err.Error())
+					err = findOAuthApplicationById(ctx, profile, mcpProfile, opts.RegionType)
+					if err == nil {
+						return mcpProfile, nil
+					} else {
+						log.Println("Failed to find existing OAuth application", err.Error())
+					}
 				}
 			}
 		}
-	}
-
-	// 如果已经验证过 oauth-app-name，直接使用验证过的 app；否则查找或创建默认的 OAuth 应用
-	var app *OAuthApplication
-	if validatedApp != nil {
-		app = validatedApp
-	} else {
-		var err error
-		app, err = getOrCreateMCPOAuthApplication(ctx, profile, opts.RegionType, opts.Host, opts.Port, opts.Scope)
+		app, err := getOrCreateMCPOAuthApplication(ctx, profile, opts.RegionType, opts.Host, opts.Port, opts.Scope)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get or create OAuth application: %w", err)
 		}
+		validatedApp = app
 	}
 
 	cli.Printf(ctx.Stdout(), "Setting up MCPOAuth profile '%s'...\n", DefaultMcpProfileName)
 
 	mcpProfile := NewMcpProfile(DefaultMcpProfileName)
 	mcpProfile.MCPOAuthSiteType = string(opts.RegionType)
-	mcpProfile.MCPOAuthAppId = app.ApplicationId
+	mcpProfile.MCPOAuthAppId = validatedApp.ApplicationId
+	mcpProfile.MCPOAuthAppName = validatedApp.AppName
 	// 刷新 token 接口不返回 refresh token 有效期，所以直接在这里设置
 	currentTime := util.GetCurrentUnixTime()
-	mcpProfile.MCPOAuthRefreshTokenValidity = app.RefreshTokenValidity
-	mcpProfile.MCPOAuthRefreshTokenExpire = currentTime + int64(app.RefreshTokenValidity)
+	mcpProfile.MCPOAuthAccessTokenValidity = validatedApp.AccessTokenValidity
+	mcpProfile.MCPOAuthRefreshTokenValidity = validatedApp.RefreshTokenValidity
+	mcpProfile.MCPOAuthRefreshTokenExpire = currentTime + int64(validatedApp.RefreshTokenValidity)
 
 	// noBrowser=true 表示禁用自动打开浏览器，autoOpenBrowser=false
 	// noBrowser=false 表示启用自动打开浏览器，autoOpenBrowser=true
-	autoOpenBrowser := !opts.NoBrowser
-	if err = startMCPOAuthFlow(ctx, mcpProfile, opts.RegionType, opts.Host, opts.Port, autoOpenBrowser, opts.Scope); err != nil {
+	if err = startMCPOAuthFlow(ctx, mcpProfile, opts.RegionType, opts.Host, opts.Port, opts.AutoOpenBrowser, opts.Scope); err != nil {
 		return nil, fmt.Errorf("OAuth login failed: %w", err)
 	}
 
@@ -175,7 +158,7 @@ func getOrCreateMCPProfile(ctx *cli.Context, opts GetOrCreateMCPProfileOptions) 
 		return nil, fmt.Errorf("failed to save mcp profile: %w", err)
 	}
 
-	cli.Printf(ctx.Stdout(), "MCP Profile '%s' configured successfully!\n", mcpProfile.Name)
+	cli.Printf(ctx.Stdout(), "MCP Profile '%s' configured for oauth app '%s' successfully!\n", mcpProfile.Name, mcpProfile.MCPOAuthAppName)
 
 	return mcpProfile, nil
 }

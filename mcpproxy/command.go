@@ -109,7 +109,7 @@ func NewMCPProxyCommand() *cli.Command {
 	return cmd
 }
 
-// StartProxyConfig 封装了启动 MCP Proxy 所需的所有配置参数
+// ProxyConfig 封装了启动 MCP Proxy 所需的所有配置参数
 type StartProxyConfig struct {
 	McpProfile  *McpProfile
 	RegionType  RegionType
@@ -143,32 +143,25 @@ func runMCPProxy(ctx *cli.Context) error {
 	upstreamURL := ctx.Flags().Get("upstream-url").GetStringOrDefault("")
 	oauthAppName := ctx.Flags().Get("oauth-app-name").GetStringOrDefault("")
 
-	mcpProfile, err := getOrCreateMCPProfile(ctx, GetOrCreateMCPProfileOptions{
-		RegionType:   regionType,
-		Host:         host,
-		Port:         port,
-		NoBrowser:    noBrowser,
-		Scope:        scope,
-		OAuthAppName: oauthAppName,
-	})
+	proxyConfig := ProxyConfig{
+		Host:            host,
+		Port:            port,
+		RegionType:      regionType,
+		Scope:           scope,
+		AutoOpenBrowser: !noBrowser,
+		UpstreamBaseURL: upstreamURL,
+		OAuthAppName:    oauthAppName,
+	}
+
+	mcpProfile, err := getOrCreateMCPProfile(ctx, proxyConfig)
 	if err != nil {
 		return err
 	}
-
-	config := StartProxyConfig{
-		McpProfile:  mcpProfile,
-		RegionType:  regionType,
-		Host:        host,
-		Port:        port,
-		NoBrowser:   noBrowser,
-		Scope:       scope,
-		UpstreamURL: upstreamURL,
-	}
-
-	return startMCPProxy(ctx, config)
+	proxyConfig.McpProfile = mcpProfile
+	return startMCPProxy(ctx, proxyConfig)
 }
 
-func startMCPProxy(ctx *cli.Context, config StartProxyConfig) error {
+func startMCPProxy(ctx *cli.Context, config ProxyConfig) error {
 	servers, err := ListMCPServers(ctx, config.RegionType)
 	if err != nil {
 		return fmt.Errorf("failed to list MCP servers: %w", err)
@@ -178,23 +171,10 @@ func startMCPProxy(ctx *cli.Context, config StartProxyConfig) error {
 		return fmt.Errorf("no MCP servers found")
 	}
 
-	manager := NewOAuthCallbackManager()
+	config.CallbackManager = NewOAuthCallbackManager()
+	config.ExistMcpServers = servers
 
-	// noBrowser=true 表示禁用自动打开浏览器，autoOpenBrowser=false
-	// noBrowser=false 表示启用自动打开浏览器，autoOpenBrowser=true
-	autoOpenBrowser := !config.NoBrowser
-	proxyConfig := ProxyConfig{
-		Host:            config.Host,
-		Port:            config.Port,
-		RegionType:      config.RegionType,
-		Scope:           config.Scope,
-		McpProfile:      config.McpProfile,
-		Servers:         servers,
-		CallbackManager: manager,
-		AutoOpenBrowser: autoOpenBrowser,
-		UpstreamBaseURL: config.UpstreamURL,
-	}
-	proxy := NewMCPProxy(proxyConfig)
+	proxy := NewMCPProxy(config)
 	go proxy.TokenRefresher.Start()
 
 	printProxyInfo(ctx, proxy)
@@ -244,7 +224,7 @@ func printProxyInfo(ctx *cli.Context, proxy *MCPProxy) {
 		proxy.Host, proxy.Port, proxy.RegionType)
 
 	cli.Println(ctx.Stdout(), "\nAvailable Servers:")
-	for _, server := range proxy.McpServers {
+	for _, server := range proxy.ExistMcpServers {
 		cli.Printf(ctx.Stdout(), "  - %s\n", server.Name)
 		if server.Urls.MCP != "" {
 			if upstreamURL, err := url.Parse(server.Urls.MCP); err == nil {

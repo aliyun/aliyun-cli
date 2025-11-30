@@ -19,8 +19,9 @@ import (
 
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
-	openapiTeaUtils "github.com/alibabacloud-go/tea-utils/v2/service"
+	"github.com/alibabacloud-go/tea/dara"
 	"github.com/alibabacloud-go/tea/tea"
+
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/util"
@@ -63,7 +64,7 @@ func ListMCPServers(ctx *cli.Context, regionType RegionType) ([]MCPServerInfo, e
 		ReqBodyType: tea.String("json"),
 		BodyType:    tea.String("json"),
 	}
-	runtime := &openapiTeaUtils.RuntimeOptions{}
+	runtime := &dara.RuntimeOptions{}
 	request := &openapiutil.OpenApiRequest{}
 	response, err := client.CallApi(params, request, runtime)
 	if err != nil {
@@ -91,6 +92,9 @@ type RuntimeStats struct {
 	TokenRefreshes     int64
 	TokenRefreshErrors int64
 	LastTokenRefresh   time.Time
+
+	// 启动时的内存状态
+	InitialMemStats runtime.MemStats
 }
 
 type ProxyConfig struct {
@@ -99,10 +103,11 @@ type ProxyConfig struct {
 	RegionType      RegionType
 	Scope           string
 	McpProfile      *McpProfile
-	Servers         []MCPServerInfo
+	ExistMcpServers []MCPServerInfo
 	CallbackManager *OAuthCallbackManager
 	AutoOpenBrowser bool
 	UpstreamBaseURL string // 用户自定义的上游服务器地址，如果为空则使用 EndpointMap 配置
+	OAuthAppName    string // 用户自定义的 OAuth 应用名称，如果为空则使用默认的 OAuth 应用
 }
 
 type MCPProxy struct {
@@ -110,22 +115,57 @@ type MCPProxy struct {
 	Port            int
 	RegionType      RegionType
 	Server          *http.Server // 只会在 Start() 中赋值一次，如果程序改变执行流，则需要加锁保护
-	McpServers      []MCPServerInfo
+	ExistMcpServers []MCPServerInfo
 	TokenRefresher  *TokenRefresher
 	stopCh          chan struct{}
 	stats           *RuntimeStats
 	UpstreamBaseURL string // 用户自定义的上游服务器地址，如果为空则使用 EndpointMap 配置
 }
 
+const (
+	MaxSaveFailures               = 3
+	CheckInterval                 = 30 * time.Second
+	AccessTokenRefreshWindow      = 7 * time.Minute  // Access token 提前刷新窗口
+	RefreshTokenRefreshWindow     = 13 * time.Minute // Refresh token 提前重新授权窗口
+	WaitForRefreshTimeout         = 5 * time.Second
+	WaitForReauthorizationTimeout = 120 * time.Second
+)
+
+type TokenInfo struct {
+	Token     string
+	ExpiresAt int64
+}
+
+type TokenRefresher struct {
+	profile         *McpProfile
+	host            string // 代理主机
+	port            int    // 代理端口
+	regionType      RegionType
+	scope           string // OAuth scope
+	callbackManager *OAuthCallbackManager
+	mu              sync.RWMutex // 保护刷新操作的读写锁
+	refreshing      bool         // 标记是否正在刷新，防止重复刷新
+	reauthorizing   bool         // 标记是否正在重新授权，防止重复重新授权
+	autoOpenBrowser bool         // 是否自动打开浏览器（false 表示手动输入 code 模式）
+	stopCh          chan struct{}
+	tokenCh         chan TokenInfo // 用于传递 token 的 channel
+	ticker          *time.Ticker
+	fatalErrCh      chan error    // 用于通知致命错误的 channel
+	stats           *RuntimeStats // 运行时统计信息（可选，用于更新 token 刷新统计）
+}
+
 func NewMCPProxy(config ProxyConfig) *MCPProxy {
 	stats := &RuntimeStats{
 		StartTime: time.Now(),
 	}
+	// 记录启动时的内存状态
+	runtime.ReadMemStats(&stats.InitialMemStats)
+
 	return &MCPProxy{
-		Host:       config.Host,
-		Port:       config.Port,
-		RegionType: config.RegionType,
-		McpServers: config.Servers,
+		Host:            config.Host,
+		Port:            config.Port,
+		RegionType:      config.RegionType,
+		ExistMcpServers: config.ExistMcpServers,
 		TokenRefresher: &TokenRefresher{
 			profile:         config.McpProfile,
 			regionType:      config.RegionType,
@@ -232,12 +272,23 @@ func (p *MCPProxy) handleHealth(w http.ResponseWriter, r *http.Request) {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
+	// 计算从启动到现在的内存增量
+	initialMem := p.stats.InitialMemStats
+	allocDelta := int64(m.Alloc) - int64(initialMem.Alloc)
+	sysDelta := int64(m.Sys) - int64(initialMem.Sys)
+	heapAllocDelta := int64(m.HeapAlloc) - int64(initialMem.HeapAlloc)
+	heapInuseDelta := int64(m.HeapInuse) - int64(initialMem.HeapInuse)
+
 	health["memory"] = map[string]interface{}{
-		"alloc_mb":      m.Alloc / 1024 / 1024,
-		"sys_mb":        m.Sys / 1024 / 1024,
-		"heap_alloc_mb": m.HeapAlloc / 1024 / 1024,
-		"heap_inuse_mb": m.HeapInuse / 1024 / 1024,
-		"num_gc":        m.NumGC,
+		"alloc_mb":            m.Alloc / 1024 / 1024,
+		"sys_mb":              m.Sys / 1024 / 1024,
+		"heap_alloc_mb":       m.HeapAlloc / 1024 / 1024,
+		"heap_inuse_mb":       m.HeapInuse / 1024 / 1024,
+		"num_gc":              m.NumGC,
+		"alloc_delta_mb":      allocDelta / 1024 / 1024,
+		"sys_delta_mb":        sysDelta / 1024 / 1024,
+		"heap_alloc_delta_mb": heapAllocDelta / 1024 / 1024,
+		"heap_inuse_delta_mb": heapInuseDelta / 1024 / 1024,
 	}
 
 	// 内存使用超过 500MB 警告
@@ -334,8 +385,11 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 如果响应状态码为 401，先尝试刷新 token，如果 refresh token 已过期则重新授权
 	if resp.StatusCode == http.StatusUnauthorized {
 		var err error
+		p.TokenRefresher.mu.RLock()
+		MCPOAuthRefreshTokenExpire := p.TokenRefresher.profile.MCPOAuthRefreshTokenExpire
 		currentTime := util.GetCurrentUnixTime()
-		if p.TokenRefresher.profile.MCPOAuthRefreshTokenExpire > currentTime {
+		p.TokenRefresher.mu.RUnlock()
+		if MCPOAuthRefreshTokenExpire > currentTime {
 			// refresh token 未过期，尝试刷新 access token
 			log.Println("Received 401, attempting to refresh access token using refresh token")
 			err = p.TokenRefresher.refreshAccessToken()
@@ -536,38 +590,6 @@ func (p *MCPProxy) handleHTTP(w http.ResponseWriter, resp *http.Response) {
 	w.Write(bodyBytes)
 
 	log.Println("MCP Proxy gets mcp server response successfully from http request", resp.StatusCode)
-}
-
-const (
-	MaxSaveFailures               = 3
-	CheckInterval                 = 30 * time.Second
-	AccessTokenRefreshWindow      = 7 * time.Minute  // Access token 提前刷新窗口
-	RefreshTokenRefreshWindow     = 13 * time.Minute // Refresh token 提前重新授权窗口
-	WaitForRefreshTimeout         = 5 * time.Second
-	WaitForReauthorizationTimeout = 120 * time.Second
-)
-
-type TokenInfo struct {
-	Token     string
-	ExpiresAt int64
-}
-
-type TokenRefresher struct {
-	profile         *McpProfile
-	host            string // 代理主机
-	port            int    // 代理端口
-	regionType      RegionType
-	scope           string // OAuth scope
-	callbackManager *OAuthCallbackManager
-	mu              sync.RWMutex // 保护刷新操作的读写锁
-	refreshing      bool         // 标记是否正在刷新，防止重复刷新
-	reauthorizing   bool         // 标记是否正在重新授权，防止重复重新授权
-	autoOpenBrowser bool         // 是否自动打开浏览器（false 表示手动输入 code 模式）
-	stopCh          chan struct{}
-	tokenCh         chan TokenInfo // 用于传递 token 的 channel
-	ticker          *time.Ticker
-	fatalErrCh      chan error    // 用于通知致命错误的 channel
-	stats           *RuntimeStats // 运行时统计信息（可选，用于更新 token 刷新统计）
 }
 
 func (r *TokenRefresher) Start() {

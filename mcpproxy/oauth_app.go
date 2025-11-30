@@ -38,7 +38,7 @@ import (
 
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
-	openapiTeaUtils "github.com/alibabacloud-go/tea-utils/v2/service"
+	"github.com/alibabacloud-go/tea/dara"
 	"github.com/alibabacloud-go/tea/tea"
 )
 
@@ -48,6 +48,8 @@ const (
 	RegionCN              RegionType = "CN"
 	RegionINTL            RegionType = "INTL"
 	DefaultMcpProfileName            = "default-mcp"
+	MCPOAuthAppName                  = "aliyun-cli-mcp-proxy"
+	MCPOAuthDisplayName              = "AliyunCLI-MCP-Proxy"
 )
 
 type EndpointConfig struct {
@@ -71,27 +73,6 @@ var EndpointMap = map[RegionType]EndpointConfig{
 		IMS:    "ims.aliyuncs.com",
 		MCP:    "openapi-mcp.ap-southeast-1.aliyuncs.com",
 	},
-}
-
-func newOpenAPIClient(ctx *cli.Context, profile config.Profile, endpoint string) (*openapiClient.Client, error) {
-	credential, err := profile.GetCredential(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get credential: %w", err)
-	}
-
-	conf := &openapiClient.Config{
-		Credential: credential,
-		RegionId:   tea.String(profile.RegionId),
-		Endpoint:   tea.String(endpoint),
-		UserAgent:  tea.String(util.GetAliyunCliUserAgent()),
-	}
-
-	client, err := openapiClient.NewClient(conf)
-	if err != nil {
-		return nil, err
-	}
-
-	return client, nil
 }
 
 const (
@@ -737,11 +718,6 @@ func OpenBrowser(url string) error {
 	return cmd.Start()
 }
 
-const (
-	MCPOAuthAppName     = "aliyun-cli-mcp-proxy"
-	MCPOAuthDisplayName = "AliyunCLI-MCP-Proxy"
-)
-
 type OAuthApplication struct {
 	ApplicationId        string   `json:"ApplicationId"`
 	AppName              string   `json:"AppName"`
@@ -787,6 +763,27 @@ type GetApplicationResponse struct {
 	Application IMSApplication `json:"Application"`
 }
 
+func newOpenAPIClient(ctx *cli.Context, profile config.Profile, endpoint string) (*openapiClient.Client, error) {
+	credential, err := profile.GetCredential(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get credential: %w", err)
+	}
+
+	conf := &openapiClient.Config{
+		Credential: credential,
+		RegionId:   tea.String(profile.RegionId),
+		Endpoint:   tea.String(endpoint),
+		UserAgent:  tea.String(util.GetAliyunCliUserAgent()),
+	}
+
+	client, err := openapiClient.NewClient(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
 func getOrCreateMCPOAuthApplication(ctx *cli.Context, profile config.Profile, region RegionType, host string, port int, scope string) (*OAuthApplication, error) {
 	app, err := findOAuthApplicationByName(ctx, profile, region, MCPOAuthAppName)
 	if err != nil {
@@ -800,7 +797,7 @@ func getOrCreateMCPOAuthApplication(ctx *cli.Context, profile config.Profile, re
 	return createMCPOauthApplication(ctx, profile, region, host, port, scope)
 }
 
-func findExistingMCPOauthApplicationById(ctx *cli.Context, profile config.Profile, mcpProfile *McpProfile, region RegionType) error {
+func findOAuthApplicationById(ctx *cli.Context, profile config.Profile, mcpProfile *McpProfile, region RegionType) error {
 	client, err := newOpenAPIClient(ctx, profile, EndpointMap[region].IMS)
 	if err != nil {
 		return err
@@ -814,7 +811,7 @@ func findExistingMCPOauthApplicationById(ctx *cli.Context, profile config.Profil
 		Style:    tea.String("RPC"),
 		Pathname: tea.String("/"),
 	}
-	runtime := &openapiTeaUtils.RuntimeOptions{}
+	runtime := &dara.RuntimeOptions{}
 	request := &openapiutil.OpenApiRequest{
 		Query: map[string]*string{
 			"AppId": tea.String(mcpProfile.MCPOAuthAppId),
@@ -851,7 +848,7 @@ func findOAuthApplicationByName(ctx *cli.Context, profile config.Profile, region
 		ReqBodyType: tea.String("json"),
 		BodyType:    tea.String("json"),
 	}
-	runtime := &openapiTeaUtils.RuntimeOptions{}
+	runtime := &dara.RuntimeOptions{}
 	request := &openapiutil.OpenApiRequest{}
 	response, err := client.CallApi(params, request, runtime)
 	if err != nil {
@@ -960,7 +957,7 @@ func createMCPOauthApplication(ctx *cli.Context, profile config.Profile, region 
 		},
 	}
 
-	runtime := &openapiTeaUtils.RuntimeOptions{}
+	runtime := &dara.RuntimeOptions{}
 	response, err := client.CallApi(params, request, runtime)
 	if err != nil {
 		return nil, fmt.Errorf("create application failed: %w", err)

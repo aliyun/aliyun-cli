@@ -48,13 +48,24 @@ func TestNewMCPProxy(t *testing.T) {
 	manager := NewOAuthCallbackManager()
 	autoOpenBrowser := true
 
-	proxy := NewMCPProxy(host, port, regionType, scope, mcpProfile, servers, manager, autoOpenBrowser)
+	config := ProxyConfig{
+		Host:            host,
+		Port:            port,
+		RegionType:      regionType,
+		Scope:           scope,
+		McpProfile:      mcpProfile,
+		ExistMcpServers: servers,
+		CallbackManager: manager,
+		AutoOpenBrowser: autoOpenBrowser,
+		UpstreamBaseURL: "",
+	}
+	proxy := NewMCPProxy(config)
 
 	assert.NotNil(t, proxy)
 	assert.Equal(t, host, proxy.Host)
 	assert.Equal(t, port, proxy.Port)
 	assert.Equal(t, regionType, proxy.RegionType)
-	assert.Equal(t, servers, proxy.McpServers)
+	assert.Equal(t, servers, proxy.ExistMcpServers)
 	assert.NotNil(t, proxy.TokenRefresher)
 	assert.NotNil(t, proxy.stopCh)
 	assert.NotNil(t, proxy.stats)
@@ -68,7 +79,18 @@ func TestNewMCPProxy(t *testing.T) {
 }
 
 func TestMCPProxy_Stop(t *testing.T) {
-	proxy := NewMCPProxy("127.0.0.1", 0, RegionCN, "/acs/mcp-server", NewMcpProfile("test"), nil, NewOAuthCallbackManager(), false)
+	config := ProxyConfig{
+		Host:            "127.0.0.1",
+		Port:            0,
+		RegionType:      RegionCN,
+		Scope:           "/acs/mcp-server",
+		McpProfile:      NewMcpProfile("test"),
+		ExistMcpServers: nil,
+		CallbackManager: NewOAuthCallbackManager(),
+		AutoOpenBrowser: false,
+		UpstreamBaseURL: "",
+	}
+	proxy := NewMCPProxy(config)
 
 	err := proxy.Stop()
 	assert.NoError(t, err)
@@ -89,7 +111,18 @@ func TestMCPProxy_handleHealth(t *testing.T) {
 	profile.MCPOAuthRefreshToken = "refresh-token"
 	profile.MCPOAuthRefreshTokenExpire = currentTime + 86400
 
-	proxy := NewMCPProxy("127.0.0.1", 8088, RegionCN, "/acs/mcp-server", profile, nil, NewOAuthCallbackManager(), false)
+	config := ProxyConfig{
+		Host:            "127.0.0.1",
+		Port:            8088,
+		RegionType:      RegionCN,
+		Scope:           "/acs/mcp-server",
+		McpProfile:      profile,
+		ExistMcpServers: nil,
+		CallbackManager: NewOAuthCallbackManager(),
+		AutoOpenBrowser: false,
+		UpstreamBaseURL: "",
+	}
+	proxy := NewMCPProxy(config)
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
@@ -118,7 +151,18 @@ func TestMCPProxy_handleHealth_ExpiredToken(t *testing.T) {
 	profile.MCPOAuthRefreshToken = "refresh-token"
 	profile.MCPOAuthRefreshTokenExpire = time.Now().Unix() + 86400
 
-	proxy := NewMCPProxy("127.0.0.1", 8088, RegionCN, "/acs/mcp-server", profile, nil, NewOAuthCallbackManager(), false)
+	config := ProxyConfig{
+		Host:            "127.0.0.1",
+		Port:            8088,
+		RegionType:      RegionCN,
+		Scope:           "/acs/mcp-server",
+		McpProfile:      profile,
+		ExistMcpServers: nil,
+		CallbackManager: NewOAuthCallbackManager(),
+		AutoOpenBrowser: false,
+		UpstreamBaseURL: "",
+	}
+	proxy := NewMCPProxy(config)
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
@@ -135,7 +179,18 @@ func TestMCPProxy_handleHealth_ExpiredToken(t *testing.T) {
 }
 
 func TestMCPProxy_ServeHTTP_ShuttingDown(t *testing.T) {
-	proxy := NewMCPProxy("127.0.0.1", 8088, RegionCN, "/acs/mcp-server", NewMcpProfile("test"), nil, NewOAuthCallbackManager(), false)
+	config := ProxyConfig{
+		Host:            "127.0.0.1",
+		Port:            8088,
+		RegionType:      RegionCN,
+		Scope:           "/acs/mcp-server",
+		McpProfile:      NewMcpProfile("test"),
+		ExistMcpServers: nil,
+		CallbackManager: NewOAuthCallbackManager(),
+		AutoOpenBrowser: false,
+		UpstreamBaseURL: "",
+	}
+	proxy := NewMCPProxy(config)
 
 	// 关闭 stopCh 模拟正在关闭
 	close(proxy.stopCh)
@@ -155,7 +210,18 @@ func TestMCPProxy_buildUpstreamRequest(t *testing.T) {
 	profile.MCPOAuthAccessToken = "test-access-token"
 	profile.MCPOAuthAccessTokenExpire = time.Now().Unix() + 3600
 
-	proxy := NewMCPProxy("127.0.0.1", 8088, RegionCN, "/acs/mcp-server", profile, nil, NewOAuthCallbackManager(), false)
+	config := ProxyConfig{
+		Host:            "127.0.0.1",
+		Port:            8088,
+		RegionType:      RegionCN,
+		Scope:           "/acs/mcp-server",
+		McpProfile:      profile,
+		ExistMcpServers: nil,
+		CallbackManager: NewOAuthCallbackManager(),
+		AutoOpenBrowser: false,
+		UpstreamBaseURL: "",
+	}
+	proxy := NewMCPProxy(config)
 
 	body := bytes.NewBufferString("test body")
 	req := httptest.NewRequest("POST", "/test/path?query=value", body)
@@ -174,6 +240,71 @@ func TestMCPProxy_buildUpstreamRequest(t *testing.T) {
 	assert.Equal(t, "Bearer new-access-token", upstreamReq.Header.Get("Authorization"))
 	assert.Equal(t, "application/json", upstreamReq.Header.Get("Content-Type"))
 	assert.NotEqual(t, "localhost", upstreamReq.Header.Get("Host"))
+}
+
+func TestMCPProxy_buildUpstreamRequest_WithCustomURL(t *testing.T) {
+	profile := NewMcpProfile("test-profile")
+	profile.MCPOAuthAccessToken = "test-access-token"
+	profile.MCPOAuthAccessTokenExpire = time.Now().Unix() + 3600
+
+	// 测试使用自定义的 upstream URL
+	customURL := "https://custom-mcp.example.com"
+	config := ProxyConfig{
+		Host:            "127.0.0.1",
+		Port:            8088,
+		RegionType:      RegionCN,
+		Scope:           "/acs/mcp-server",
+		McpProfile:      profile,
+		ExistMcpServers: nil,
+		CallbackManager: NewOAuthCallbackManager(),
+		AutoOpenBrowser: false,
+		UpstreamBaseURL: customURL,
+	}
+	proxy := NewMCPProxy(config)
+
+	body := bytes.NewBufferString("test body")
+	req := httptest.NewRequest("POST", "/test/path?query=value", body)
+	req.Header.Set("Content-Type", "application/json")
+
+	upstreamReq, err := proxy.buildUpstreamRequest(req, "new-access-token")
+	assert.NoError(t, err)
+	assert.NotNil(t, upstreamReq)
+
+	assert.Equal(t, "POST", upstreamReq.Method)
+	assert.Contains(t, upstreamReq.URL.String(), "custom-mcp.example.com")
+	assert.Contains(t, upstreamReq.URL.Path, "/test/path")
+	assert.Equal(t, "Bearer new-access-token", upstreamReq.Header.Get("Authorization"))
+}
+
+func TestMCPProxy_buildUpstreamRequest_WithCustomURL_NoProtocol(t *testing.T) {
+	profile := NewMcpProfile("test-profile")
+	profile.MCPOAuthAccessToken = "test-access-token"
+	profile.MCPOAuthAccessTokenExpire = time.Now().Unix() + 3600
+
+	// 测试使用自定义的 upstream URL（没有协议前缀）
+	customURL := "custom-mcp.example.com"
+	config := ProxyConfig{
+		Host:            "127.0.0.1",
+		Port:            8088,
+		RegionType:      RegionCN,
+		Scope:           "/acs/mcp-server",
+		McpProfile:      profile,
+		ExistMcpServers: nil,
+		CallbackManager: NewOAuthCallbackManager(),
+		AutoOpenBrowser: false,
+		UpstreamBaseURL: customURL,
+	}
+	proxy := NewMCPProxy(config)
+
+	body := bytes.NewBufferString("test body")
+	req := httptest.NewRequest("POST", "/test/path", body)
+
+	upstreamReq, err := proxy.buildUpstreamRequest(req, "new-access-token")
+	assert.NoError(t, err)
+	assert.NotNil(t, upstreamReq)
+
+	// 应该自动添加 https:// 前缀
+	assert.Contains(t, upstreamReq.URL.String(), "https://custom-mcp.example.com")
 }
 
 func TestTokenRefresher_Stop(t *testing.T) {
