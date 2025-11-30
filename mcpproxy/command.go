@@ -39,7 +39,7 @@ func NewMCPProxyCommand() *cli.Command {
 				"代理自动处理 OAuth 认证，"+
 				"允许 MCP 客户端无需管理凭证即可连接。",
 		),
-		Usage:  "aliyun mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE]",
+		Usage:  "aliyun mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME]",
 		Sample: "aliyun mcp-proxy --region-type CN --port 8088",
 		Run: func(ctx *cli.Context, args []string) error {
 			return runMCPProxy(ctx)
@@ -90,7 +90,34 @@ func NewMCPProxyCommand() *cli.Command {
 		),
 	})
 
+	cmd.Flags().Add(&cli.Flag{
+		Name: "upstream-url",
+		Short: i18n.T(
+			"Custom upstream MCP server URL (overrides EndpointMap configuration)",
+			"自定义上游 MCP 服务器地址（覆盖 EndpointMap 配置）",
+		),
+	})
+
+	cmd.Flags().Add(&cli.Flag{
+		Name: "oauth-app-name",
+		Short: i18n.T(
+			"Use existing OAuth application by name (for users without create permission)",
+			"使用已存在的 OAuth 应用名称（适用于没有创建权限的用户）",
+		),
+	})
+
 	return cmd
+}
+
+// StartProxyConfig 封装了启动 MCP Proxy 所需的所有配置参数
+type StartProxyConfig struct {
+	McpProfile  *McpProfile
+	RegionType  RegionType
+	Host        string
+	Port        int
+	NoBrowser   bool
+	Scope       string
+	UpstreamURL string
 }
 
 func runMCPProxy(ctx *cli.Context) error {
@@ -113,17 +140,36 @@ func runMCPProxy(ctx *cli.Context) error {
 
 	noBrowser := ctx.Flags().Get("no-browser").IsAssigned()
 	scope := ctx.Flags().Get("scope").GetStringOrDefault("/acs/mcp-server")
+	upstreamURL := ctx.Flags().Get("upstream-url").GetStringOrDefault("")
+	oauthAppName := ctx.Flags().Get("oauth-app-name").GetStringOrDefault("")
 
-	mcpProfile, err := getOrCreateMCPProfile(ctx, regionType, host, port, noBrowser, scope)
+	mcpProfile, err := getOrCreateMCPProfile(ctx, GetOrCreateMCPProfileOptions{
+		RegionType:   regionType,
+		Host:         host,
+		Port:         port,
+		NoBrowser:    noBrowser,
+		Scope:        scope,
+		OAuthAppName: oauthAppName,
+	})
 	if err != nil {
 		return err
 	}
 
-	return startMCPProxy(ctx, mcpProfile, regionType, host, port, noBrowser, scope)
+	config := StartProxyConfig{
+		McpProfile:  mcpProfile,
+		RegionType:  regionType,
+		Host:        host,
+		Port:        port,
+		NoBrowser:   noBrowser,
+		Scope:       scope,
+		UpstreamURL: upstreamURL,
+	}
+
+	return startMCPProxy(ctx, config)
 }
 
-func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, regionType RegionType, host string, port int, noBrowser bool, scope string) error {
-	servers, err := ListMCPServers(ctx, regionType)
+func startMCPProxy(ctx *cli.Context, config StartProxyConfig) error {
+	servers, err := ListMCPServers(ctx, config.RegionType)
 	if err != nil {
 		return fmt.Errorf("failed to list MCP servers: %w", err)
 	}
@@ -136,8 +182,19 @@ func startMCPProxy(ctx *cli.Context, mcpProfile *McpProfile, regionType RegionTy
 
 	// noBrowser=true 表示禁用自动打开浏览器，autoOpenBrowser=false
 	// noBrowser=false 表示启用自动打开浏览器，autoOpenBrowser=true
-	autoOpenBrowser := !noBrowser
-	proxy := NewMCPProxy(host, port, regionType, scope, mcpProfile, servers, manager, autoOpenBrowser)
+	autoOpenBrowser := !config.NoBrowser
+	proxyConfig := ProxyConfig{
+		Host:            config.Host,
+		Port:            config.Port,
+		RegionType:      config.RegionType,
+		Scope:           config.Scope,
+		McpProfile:      config.McpProfile,
+		Servers:         servers,
+		CallbackManager: manager,
+		AutoOpenBrowser: autoOpenBrowser,
+		UpstreamBaseURL: config.UpstreamURL,
+	}
+	proxy := NewMCPProxy(proxyConfig)
 	go proxy.TokenRefresher.Start()
 
 	printProxyInfo(ctx, proxy)

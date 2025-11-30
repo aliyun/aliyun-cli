@@ -788,7 +788,7 @@ type GetApplicationResponse struct {
 }
 
 func getOrCreateMCPOAuthApplication(ctx *cli.Context, profile config.Profile, region RegionType, host string, port int, scope string) (*OAuthApplication, error) {
-	app, err := findExistingMCPOauthApplication(ctx, profile, region)
+	app, err := findOAuthApplicationByName(ctx, profile, region, MCPOAuthAppName)
 	if err != nil {
 		return nil, err
 	}
@@ -835,7 +835,7 @@ func findExistingMCPOauthApplicationById(ctx *cli.Context, profile config.Profil
 	return nil
 }
 
-func findExistingMCPOauthApplication(ctx *cli.Context, profile config.Profile, region RegionType) (*OAuthApplication, error) {
+func findOAuthApplicationByName(ctx *cli.Context, profile config.Profile, region RegionType, appName string) (*OAuthApplication, error) {
 	client, err := newOpenAPIClient(ctx, profile, EndpointMap[region].IMS)
 	if err != nil {
 		return nil, err
@@ -867,7 +867,7 @@ func findExistingMCPOauthApplication(ctx *cli.Context, profile config.Profile, r
 	}
 
 	for _, app := range responseList.Applications.Application {
-		if app.AppName == MCPOAuthAppName {
+		if app.AppName == appName {
 			scopes := make([]string, 0, len(app.DelegatedScope.PredefinedScopes.PredefinedScope))
 			for _, s := range app.DelegatedScope.PredefinedScopes.PredefinedScope {
 				scopes = append(scopes, s.Name)
@@ -886,6 +886,41 @@ func findExistingMCPOauthApplication(ctx *cli.Context, profile config.Profile, r
 		}
 	}
 	return nil, nil
+}
+
+// validateOAuthApplication 验证 OAuth 应用的 Scopes 和 Callback URI 是否符合要求
+func validateOAuthApplication(app *OAuthApplication, requiredScope string, requiredRedirectURI string) error {
+	if app == nil {
+		return fmt.Errorf("OAuth application is nil")
+	}
+
+	// 验证 Scopes
+	scopeFound := false
+	for _, scope := range app.Scopes {
+		if scope == requiredScope {
+			scopeFound = true
+			break
+		}
+	}
+	if !scopeFound {
+		return fmt.Errorf("OAuth application '%s' does not have required scope '%s'. Available scopes: %v",
+			app.AppName, requiredScope, app.Scopes)
+	}
+
+	// 验证 Callback URI
+	redirectURIFound := false
+	for _, uri := range app.RedirectUris {
+		if uri == requiredRedirectURI {
+			redirectURIFound = true
+			break
+		}
+	}
+	if !redirectURIFound {
+		return fmt.Errorf("OAuth application '%s' does not have required redirect URI '%s'. Available redirect URIs: %v",
+			app.AppName, requiredRedirectURI, app.RedirectUris)
+	}
+
+	return nil
 }
 
 func buildRedirectUri(host string, port int) string {

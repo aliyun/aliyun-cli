@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -92,41 +93,55 @@ type RuntimeStats struct {
 	LastTokenRefresh   time.Time
 }
 
-type MCPProxy struct {
-	Host           string
-	Port           int
-	RegionType     RegionType
-	Server         *http.Server // 只会在 Start() 中赋值一次，如果程序改变执行流，则需要加锁保护
-	McpServers     []MCPServerInfo
-	TokenRefresher *TokenRefresher
-	stopCh         chan struct{}
-	stats          *RuntimeStats
+type ProxyConfig struct {
+	Host            string
+	Port            int
+	RegionType      RegionType
+	Scope           string
+	McpProfile      *McpProfile
+	Servers         []MCPServerInfo
+	CallbackManager *OAuthCallbackManager
+	AutoOpenBrowser bool
+	UpstreamBaseURL string // 用户自定义的上游服务器地址，如果为空则使用 EndpointMap 配置
 }
 
-func NewMCPProxy(host string, port int, regionType RegionType, scope string, mcpProfile *McpProfile, servers []MCPServerInfo, manager *OAuthCallbackManager, autoOpenBrowser bool) *MCPProxy {
+type MCPProxy struct {
+	Host            string
+	Port            int
+	RegionType      RegionType
+	Server          *http.Server // 只会在 Start() 中赋值一次，如果程序改变执行流，则需要加锁保护
+	McpServers      []MCPServerInfo
+	TokenRefresher  *TokenRefresher
+	stopCh          chan struct{}
+	stats           *RuntimeStats
+	UpstreamBaseURL string // 用户自定义的上游服务器地址，如果为空则使用 EndpointMap 配置
+}
+
+func NewMCPProxy(config ProxyConfig) *MCPProxy {
 	stats := &RuntimeStats{
 		StartTime: time.Now(),
 	}
 	return &MCPProxy{
-		Host:       host,
-		Port:       port,
-		RegionType: regionType,
-		McpServers: servers,
+		Host:       config.Host,
+		Port:       config.Port,
+		RegionType: config.RegionType,
+		McpServers: config.Servers,
 		TokenRefresher: &TokenRefresher{
-			profile:         mcpProfile,
-			regionType:      regionType,
-			callbackManager: manager,
-			host:            host,
-			port:            port,
-			scope:           scope,
-			autoOpenBrowser: autoOpenBrowser,
+			profile:         config.McpProfile,
+			regionType:      config.RegionType,
+			callbackManager: config.CallbackManager,
+			host:            config.Host,
+			port:            config.Port,
+			scope:           config.Scope,
+			autoOpenBrowser: config.AutoOpenBrowser,
 			stopCh:          make(chan struct{}),
 			tokenCh:         make(chan TokenInfo, 1), // 带缓冲的 channel，存储最新的 token
 			fatalErrCh:      make(chan error, 1),
 			stats:           stats,
 		},
-		stopCh: make(chan struct{}),
-		stats:  stats,
+		stopCh:          make(chan struct{}),
+		stats:           stats,
+		UpstreamBaseURL: config.UpstreamBaseURL,
 	}
 }
 
@@ -316,14 +331,28 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// 如果响应状态码为 401，则重新授权
+	// 如果响应状态码为 401，先尝试刷新 token，如果 refresh token 已过期则重新授权
 	if resp.StatusCode == http.StatusUnauthorized {
-		if err := p.TokenRefresher.reauthorizeWithProxy(); err != nil {
-			log.Println("MCP Proxy gets mcp server response error from http request when reauthorize with proxy", err.Error())
+		var err error
+		currentTime := util.GetCurrentUnixTime()
+		if p.TokenRefresher.profile.MCPOAuthRefreshTokenExpire > currentTime {
+			// refresh token 未过期，尝试刷新 access token
+			log.Println("Received 401, attempting to refresh access token using refresh token")
+			err = p.TokenRefresher.refreshAccessToken()
+		} else {
+			// refresh token 已过期，需要重新授权
+			log.Println("Received 401, refresh token expired, reauthorizing")
+			err = p.TokenRefresher.reauthorizeWithProxy()
+		}
+
+		if err != nil {
+			log.Printf("Failed to handle 401: %v", err)
 			atomic.AddInt64(&p.stats.ErrorRequests, 1)
-			http.Error(w, err.Error(), http.StatusUnauthorized)
+			http.Error(w, fmt.Sprintf("Authentication failed: %v", err), http.StatusUnauthorized)
 			return
 		}
+
+		log.Println("Token refreshed/reauthorized successfully, client should retry the request")
 	}
 	contentType := resp.Header.Get("Content-Type")
 	if strings.Contains(strings.ToLower(contentType), "text/event-stream") {
@@ -384,7 +413,18 @@ func (p *MCPProxy) getMCPAccessToken() (string, error) {
 }
 
 func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string) (*http.Request, error) {
-	upstreamBaseURL := fmt.Sprintf("https://%s", EndpointMap[p.RegionType].MCP)
+	var upstreamBaseURL string
+	if p.UpstreamBaseURL != "" {
+		// 如果用户传入了自定义的上游地址，使用用户传入的
+		upstreamBaseURL = p.UpstreamBaseURL
+		// 如果用户传入的地址没有协议前缀，添加 https://
+		if !strings.HasPrefix(upstreamBaseURL, "http://") && !strings.HasPrefix(upstreamBaseURL, "https://") {
+			upstreamBaseURL = fmt.Sprintf("https://%s", upstreamBaseURL)
+		}
+	} else {
+		// 否则使用 EndpointMap 配置的地址
+		upstreamBaseURL = fmt.Sprintf("https://%s", EndpointMap[p.RegionType].MCP)
+	}
 
 	upstreamURL, err := url.Parse(upstreamBaseURL)
 	if err != nil {
@@ -712,7 +752,19 @@ func (r *TokenRefresher) atomicSaveProfile() error {
 	return saveMcpProfile(r.profile)
 }
 
+func deleteMcpConfigFile() {
+	configPath := getMCPConfigPath()
+	if err := os.Remove(configPath); err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("Failed to delete mcp config file %q: %v", configPath, err)
+		}
+	} else {
+		log.Printf("Deleted mcp config file: %q", configPath)
+	}
+}
+
 func (r *TokenRefresher) reportFatalError(err error) {
+	deleteMcpConfigFile()
 	select {
 	case r.fatalErrCh <- err:
 	default:
