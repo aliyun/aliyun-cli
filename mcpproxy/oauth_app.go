@@ -518,8 +518,9 @@ func buildOAuthURL(clientId string, region RegionType, host string, port int, co
 		EndpointMap[region].SignIn, clientId, url.QueryEscape(scope), redirectURI, codeChallenge)
 }
 
-func executeOAuthFlowResult(clientId string, regionType RegionType, manager *OAuthCallbackManager,
+func executeOAuthFlowResult(ctx *cli.Context, clientId string, regionType RegionType, manager *OAuthCallbackManager,
 	host string, port int, autoOpenBrowser bool, scope string, logAuthURL func(string)) (*OAuthTokenResult, error) {
+	stderr := getStderrWriter(ctx)
 	codeVerifier, err := generateCodeVerifier()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate code verifier: %w", err)
@@ -545,20 +546,31 @@ func executeOAuthFlowResult(clientId string, regionType RegionType, manager *OAu
 
 	if autoOpenBrowser {
 		if err := OpenBrowser(authURL); err != nil {
-			return nil, fmt.Errorf("failed to open browser: %w", err)
-		}
-		manager.StartWaiting()
-		waitStarted = true
-		code, err = manager.WaitForCode()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get authorization code: %w", err)
+			// 错误信息输出到 stderr，确保用户能看到
+			cli.Printf(stderr, "Failed to open browser automatically: %v\n", err)
+			cli.Printf(stderr, "Falling back to manual code input mode...\n")
+			if !isInteractiveInput() {
+				return nil, fmt.Errorf("manual authorization required but standard input is not interactive")
+			}
+			reader := bufio.NewReader(os.Stdin)
+			code, err = promptAuthorizationCode(stderr, reader)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read authorization code: %w", err)
+			}
+		} else {
+			manager.StartWaiting()
+			waitStarted = true
+			code, err = manager.WaitForCode()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get authorization code: %w", err)
+			}
 		}
 	} else {
 		if !isInteractiveInput() {
 			return nil, fmt.Errorf("manual authorization required but standard input is not interactive")
 		}
 		reader := bufio.NewReader(os.Stdin)
-		code, err = promptAuthorizationCode(nil, reader)
+		code, err = promptAuthorizationCode(stderr, reader)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read authorization code: %w", err)
 		}
@@ -574,7 +586,7 @@ func executeOAuthFlowResult(clientId string, regionType RegionType, manager *OAu
 func startMCPOAuthFlowWithManager(ctx *cli.Context, clientId string, region RegionType,
 	manager *OAuthCallbackManager, host string, port int, autoOpenBrowser bool, scope string) (*OAuthTokenResult, error) {
 	stderr := getStderrWriter(ctx)
-	tokenResult, err := executeOAuthFlowResult(clientId, region, manager, host, port, autoOpenBrowser, scope, func(authURL string) {
+	tokenResult, err := executeOAuthFlowResult(ctx, clientId, region, manager, host, port, autoOpenBrowser, scope, func(authURL string) {
 		cli.Printf(stderr, "Opening browser for OAuth login...\nURL: %s\n\n", authURL)
 	})
 	if err != nil {

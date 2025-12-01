@@ -824,7 +824,7 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 		oauthScope = "/acs/mcp-server"
 	}
 	stderr := getStderrWriter(nil)
-	tokenResult, err := executeOAuthFlowResult(clientId, r.regionType, r.callbackManager, r.host, r.port, r.autoOpenBrowser, oauthScope, func(authURL string) {
+	tokenResult, err := executeOAuthFlowResult(nil, clientId, r.regionType, r.callbackManager, r.host, r.port, r.autoOpenBrowser, oauthScope, func(authURL string) {
 		cli.Printf(stderr, "OAuth Re-authorization Required. Please visit: %s\n", authURL)
 	})
 	if err != nil {
