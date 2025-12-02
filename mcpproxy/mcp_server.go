@@ -189,7 +189,7 @@ func (p *MCPProxy) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/callback", p.handleOAuthCallback)
 	mux.HandleFunc("/health", p.handleHealth)
-	mux.HandleFunc("/", p.ServeHTTP)
+	mux.HandleFunc("/", p.ServeMCPProxyRequest)
 
 	p.Server = &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", p.Host, p.Port),
@@ -324,10 +324,17 @@ func (p *MCPProxy) handleHealth(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(health)
 }
 
-func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) {
 	atomic.AddInt64(&p.stats.TotalRequests, 1)
 	atomic.AddInt64(&p.stats.ActiveRequests, 1)
 	defer atomic.AddInt64(&p.stats.ActiveRequests, -1)
+
+	// 过滤常见的浏览器请求，直接返回 404，不代理到上游
+	path := r.URL.Path
+	if path == "/favicon.ico" || path == "/robots.txt" || path == "/apple-touch-icon.png" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 
 	// 检查是否正在关闭
 	select {
@@ -345,6 +352,8 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Println("MCP Proxy received request url", r.URL.String())
+
 	upstreamReq, err := p.buildUpstreamRequest(r, accessToken)
 	if err != nil {
 		atomic.AddInt64(&p.stats.ErrorRequests, 1)
@@ -352,7 +361,7 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println("Upstream Request", upstreamReq.URL.String())
+	log.Println("MCP Proxy build upstream request url", upstreamReq.URL.String())
 	// 排除 Authorization 和 User-Agent 头
 	// for k, v := range upstreamReq.Header {
 	// 	if strings.ToLower(k) != "authorization" && strings.ToLower(k) != "user-agent" {
@@ -363,14 +372,14 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if upstreamReq.Body != nil {
 		bodyBytes, err := io.ReadAll(upstreamReq.Body)
 		if err != nil {
-			log.Println("Upstream Request Body Error", err.Error())
+			log.Println("MCP Proxy upstream request Body Error", err.Error())
 		} else {
-			log.Println("Upstream Request Body", string(bodyBytes))
+			log.Println("MCP Proxy upstream request Body", string(bodyBytes))
 			_ = upstreamReq.Body.Close()
 			upstreamReq.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		}
 	} else {
-		log.Println("Upstream Request Body <nil>")
+		log.Println("MCP Proxy upstream request body <nil>")
 	}
 	client := &http.Client{Timeout: 0}
 	resp, err := client.Do(upstreamReq)
@@ -381,6 +390,8 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
+
+	log.Println("MCP Proxy gets mcp server response status code", resp.StatusCode)
 
 	// 如果响应状态码为 401，先尝试刷新 token，如果 refresh token 已过期则重新授权
 	if resp.StatusCode == http.StatusUnauthorized {
@@ -408,6 +419,8 @@ func (p *MCPProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		log.Println("Token refreshed/reauthorized successfully, client should retry the request")
 	}
+
+	log.Println("MCP Proxy gets mcp server response content type", resp.Header.Get("Content-Type"))
 	contentType := resp.Header.Get("Content-Type")
 	if strings.Contains(strings.ToLower(contentType), "text/event-stream") {
 		p.handleSSE(w, resp)
@@ -513,8 +526,7 @@ func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string) (*h
 }
 
 func (p *MCPProxy) handleSSE(w http.ResponseWriter, resp *http.Response) {
-	log.Println("SSE Upstream Request", resp.Request.URL.String())
-	log.Println("SSE Upstream Response", resp.StatusCode)
+	log.Println("MCP Proxy handle SSE response from upstream request url", resp.Request.URL.String())
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -544,7 +556,7 @@ func (p *MCPProxy) handleSSE(w http.ResponseWriter, resp *http.Response) {
 		// 检查是否正在关闭
 		select {
 		case <-p.stopCh:
-			log.Println("SSE connection closed due to server shutdown")
+			log.Println("MCP Proxy handle SSE connection closed due to server shutdown")
 			return
 		default:
 		}
@@ -557,19 +569,18 @@ func (p *MCPProxy) handleSSE(w http.ResponseWriter, resp *http.Response) {
 		if _, err = w.Write(line); err != nil {
 			break
 		}
-		log.Println("SSE Upstream Response Line", string(line))
+		log.Println("MCP Proxy handle SSE response line", string(line))
 
 		flusher.Flush()
 	}
 }
 
 func (p *MCPProxy) handleHTTP(w http.ResponseWriter, resp *http.Response) {
-	log.Println("HTTP Upstream Request", resp.Request.URL.String())
-	log.Println("HTTP Upstream Response", resp.StatusCode)
+	log.Println("MCP Proxy handle HTTP response from upstream request url", resp.Request.URL.String())
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		http.Error(w, "Failed to read response body", http.StatusInternalServerError)
-		log.Println("MCP Proxy gets mcp server response error from http request", err.Error())
+		log.Println("MCP Proxy gets mcp server http response error from http request", err.Error())
 
 		return
 	}
@@ -588,15 +599,13 @@ func (p *MCPProxy) handleHTTP(w http.ResponseWriter, resp *http.Response) {
 
 	w.WriteHeader(resp.StatusCode)
 	w.Write(bodyBytes)
-
-	log.Println("MCP Proxy gets mcp server response successfully from http request", resp.StatusCode)
 }
 
 func (r *TokenRefresher) Start() {
 	r.ticker = time.NewTicker(CheckInterval)
 	defer r.ticker.Stop()
 
-	log.Println("Token refresher started")
+	log.Println("MCP Proxy token refresher started")
 
 	r.sendToken()
 	for {
@@ -697,11 +706,11 @@ func (r *TokenRefresher) refreshAccessToken() error {
 		r.mu.Lock()
 		r.refreshing = false
 		r.mu.Unlock()
-		if r.stats != nil {
-			atomic.AddInt64(&r.stats.TokenRefreshErrors, 1)
-		}
+		atomic.AddInt64(&r.stats.TokenRefreshErrors, 1)
 		return fmt.Errorf("oauth refresh failed: %w", err)
 	}
+
+	log.Println("Access token refresh request successfully")
 
 	r.mu.Lock()
 	currentTime := util.GetCurrentUnixTime()
@@ -721,12 +730,10 @@ func (r *TokenRefresher) refreshAccessToken() error {
 	)
 	r.mu.Unlock()
 
-	log.Println("Token refreshed successfully")
+	log.Println("Access token refresh process completed successfully")
 
-	if r.stats != nil {
-		atomic.AddInt64(&r.stats.TokenRefreshes, 1)
-		r.stats.LastTokenRefresh = time.Now()
-	}
+	atomic.AddInt64(&r.stats.TokenRefreshes, 1)
+	r.stats.LastTokenRefresh = time.Now()
 
 	r.sendToken()
 	return nil
@@ -873,18 +880,17 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 		oauthScope = "/acs/mcp-server"
 	}
 	stderr := getStderrWriter(nil)
-	tokenResult, err := executeOAuthFlowResult(nil, clientId, r.regionType, r.callbackManager, r.host, r.port, r.autoOpenBrowser, oauthScope, func(authURL string) {
+	tokenResult, err := executeOAuthFlow(nil, clientId, r.regionType, r.callbackManager, r.host, r.port, r.autoOpenBrowser, oauthScope, func(authURL string) {
 		cli.Printf(stderr, "OAuth Re-authorization Required. Please visit: %s\n", authURL)
 	})
 	if err != nil {
 		r.mu.Lock()
 		r.reauthorizing = false
 		r.mu.Unlock()
-		if r.stats != nil {
-			atomic.AddInt64(&r.stats.TokenRefreshErrors, 1)
-		}
+		atomic.AddInt64(&r.stats.TokenRefreshErrors, 1)
 		return err
 	}
+	log.Println("OAuth re-authorization request successfully")
 
 	r.mu.Lock()
 	currentTime := util.GetCurrentUnixTime()
@@ -904,11 +910,10 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 		},
 	)
 	r.mu.Unlock()
+	log.Println("OAuth re-authorization process completed successfully")
 
-	if r.stats != nil {
-		atomic.AddInt64(&r.stats.TokenRefreshes, 1)
-		r.stats.LastTokenRefresh = time.Now()
-	}
+	atomic.AddInt64(&r.stats.TokenRefreshes, 1)
+	r.stats.LastTokenRefresh = time.Now()
 
 	r.sendToken()
 	return nil

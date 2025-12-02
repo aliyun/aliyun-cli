@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -492,6 +493,7 @@ type OAuthTokenResult struct {
 }
 
 func exchangeCodeForTokenWithPKCE(clientId, code, codeVerifier, redirectURI, oauthEndpoint string) (*OAuthTokenResult, error) {
+	log.Println("Start to exchange code for token with PKCE")
 	data := url.Values{}
 	data.Set("grant_type", "authorization_code")
 	data.Set("code", code)
@@ -501,8 +503,10 @@ func exchangeCodeForTokenWithPKCE(clientId, code, codeVerifier, redirectURI, oau
 
 	tokenResp, err := oauthRefresh(oauthEndpoint, data)
 	if err != nil {
+		log.Println("Exchange code for token with PKCE failed:", err)
 		return nil, fmt.Errorf("oauth refresh failed: %w", err)
 	}
+	log.Println("Exchange code for token with PKCE successfully")
 
 	currentTime := util.GetCurrentUnixTime()
 	return &OAuthTokenResult{
@@ -518,7 +522,7 @@ func buildOAuthURL(clientId string, region RegionType, host string, port int, co
 		EndpointMap[region].SignIn, clientId, url.QueryEscape(scope), redirectURI, codeChallenge)
 }
 
-func executeOAuthFlowResult(ctx *cli.Context, clientId string, regionType RegionType, manager *OAuthCallbackManager,
+func executeOAuthFlow(ctx *cli.Context, clientId string, regionType RegionType, manager *OAuthCallbackManager,
 	host string, port int, autoOpenBrowser bool, scope string, logAuthURL func(string)) (*OAuthTokenResult, error) {
 	stderr := getStderrWriter(ctx)
 	codeVerifier, err := generateCodeVerifier()
@@ -579,6 +583,7 @@ func executeOAuthFlowResult(ctx *cli.Context, clientId string, regionType Region
 	if code == "" {
 		return nil, fmt.Errorf("authorization code is empty")
 	}
+	log.Println("Oauth authorization successfully, code received:", code)
 
 	return exchangeCodeForTokenWithPKCE(clientId, code, codeVerifier, redirectURI, EndpointMap[regionType].OAuth)
 }
@@ -586,10 +591,11 @@ func executeOAuthFlowResult(ctx *cli.Context, clientId string, regionType Region
 func startMCPOAuthFlowWithManager(ctx *cli.Context, clientId string, region RegionType,
 	manager *OAuthCallbackManager, host string, port int, autoOpenBrowser bool, scope string) (*OAuthTokenResult, error) {
 	stderr := getStderrWriter(ctx)
-	tokenResult, err := executeOAuthFlowResult(ctx, clientId, region, manager, host, port, autoOpenBrowser, scope, func(authURL string) {
+	tokenResult, err := executeOAuthFlow(ctx, clientId, region, manager, host, port, autoOpenBrowser, scope, func(authURL string) {
 		cli.Printf(stderr, "Opening browser for OAuth login...\nURL: %s\n\n", authURL)
 	})
 	if err != nil {
+		log.Println("Execute OAuth flow failed:", err)
 		return nil, err
 	}
 

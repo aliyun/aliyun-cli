@@ -198,7 +198,7 @@ func TestMCPProxy_ServeHTTP_ShuttingDown(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
 
-	proxy.ServeHTTP(w, req)
+	proxy.ServeMCPProxyRequest(w, req)
 
 	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
 	assert.Contains(t, w.Body.String(), "Server is shutting down")
