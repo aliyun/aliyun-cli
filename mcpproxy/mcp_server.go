@@ -655,7 +655,7 @@ func (r *TokenRefresher) checkAndRefresh() {
 		}
 	} else if needRefresh {
 		if err := r.refreshAccessToken(); err != nil {
-			r.reportFatalError(fmt.Errorf("refresh token invalid. Please restart aliyun mcp-proxy"))
+			r.reportFatalError(fmt.Errorf("refresh access token failed. Please restart aliyun mcp-proxy"))
 			return
 		}
 	}
@@ -687,6 +687,10 @@ func (r *TokenRefresher) refreshAccessToken() error {
 	data.Set("grant_type", "refresh_token")
 	data.Set("client_id", clientId)
 	data.Set("refresh_token", refreshToken)
+	// fmt.Println("refresh access token data", data.Encode())
+	// fmt.Println("refresh access token endpoint", endpoint)
+	// fmt.Println("refresh access token clientId", clientId)
+	// fmt.Println("refresh access token refreshToken", refreshToken)
 
 	newTokens, err := oauthRefresh(endpoint, data)
 	if err != nil {
@@ -702,6 +706,7 @@ func (r *TokenRefresher) refreshAccessToken() error {
 	r.mu.Lock()
 	currentTime := util.GetCurrentUnixTime()
 	r.profile.MCPOAuthAccessToken = newTokens.AccessToken
+	r.profile.MCPOAuthRefreshToken = newTokens.RefreshToken
 	r.profile.MCPOAuthAccessTokenExpire = currentTime + newTokens.ExpiresIn
 	r.refreshing = false
 
@@ -769,6 +774,50 @@ func (r *TokenRefresher) atomicSaveProfile() error {
 
 func deleteMcpConfigFile() {
 	configPath := getMCPConfigPath()
+	if bytes, err := os.ReadFile(configPath); err == nil {
+		if profile, err := NewMcpProfileFromBytes(bytes); err == nil {
+			log.Printf("MCP Config with issue:")
+			log.Printf("  Profile Name: %s", profile.Name)
+			log.Printf("  OAuth App Name: %s", profile.MCPOAuthAppName)
+			log.Printf("  OAuth App ID: %s", profile.MCPOAuthAppId)
+			log.Printf("  OAuth Site Type: %s", profile.MCPOAuthSiteType)
+			log.Printf("  Access Token Validity: %d seconds", profile.MCPOAuthAccessTokenValidity)
+			log.Printf("  Access Token Expire: %d", profile.MCPOAuthAccessTokenExpire)
+			log.Printf("  Refresh Token Validity: %d seconds", profile.MCPOAuthRefreshTokenValidity)
+			log.Printf("  Refresh Token Expire: %d", profile.MCPOAuthRefreshTokenExpire)
+
+			// 打印脱敏后的 token
+			maskToken := func(token string) string {
+				if len(token) <= 8 {
+					return "***"
+				}
+				return token[:4] + "..." + token[len(token)-4:]
+			}
+			if len(profile.MCPOAuthAccessToken) > 0 {
+				log.Printf("  Access Token: %s", maskToken(profile.MCPOAuthAccessToken))
+			}
+			if len(profile.MCPOAuthRefreshToken) > 0 {
+				log.Printf("  Refresh Token: %s", maskToken(profile.MCPOAuthRefreshToken))
+			}
+
+			currentTime := util.GetCurrentUnixTime()
+			if profile.MCPOAuthAccessTokenExpire > 0 {
+				accessTokenRemaining := profile.MCPOAuthAccessTokenExpire - currentTime
+				log.Printf("  Access Token remaining: %d seconds (%.1f minutes)",
+					accessTokenRemaining, float64(accessTokenRemaining)/60)
+			}
+			if profile.MCPOAuthRefreshTokenExpire > 0 {
+				refreshTokenRemaining := profile.MCPOAuthRefreshTokenExpire - currentTime
+				log.Printf("  Refresh Token remaining: %d seconds (%.1f hours)",
+					refreshTokenRemaining, float64(refreshTokenRemaining)/3600)
+			}
+		} else {
+			log.Printf("Failed to parse mcp config before close: %v", err)
+		}
+	} else if !os.IsNotExist(err) {
+		log.Printf("Failed to read mcp config before close: %v", err)
+	}
+
 	if err := os.Remove(configPath); err != nil {
 		if !os.IsNotExist(err) {
 			log.Printf("Failed to delete mcp config file %q: %v", configPath, err)
