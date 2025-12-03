@@ -271,7 +271,7 @@ func TestMCPProxy_buildUpstreamRequest_WithCustomURL(t *testing.T) {
 	assert.NotNil(t, upstreamReq)
 
 	assert.Equal(t, "POST", upstreamReq.Method)
-	assert.Contains(t, upstreamReq.URL.String(), "custom-mcp.example.com")
+	assert.Contains(t, upstreamReq.URL.String(), "https://custom-mcp.example.com")
 	assert.Contains(t, upstreamReq.URL.Path, "/test/path")
 	assert.Equal(t, "Bearer new-access-token", upstreamReq.Header.Get("Authorization"))
 }
@@ -310,6 +310,9 @@ func TestMCPProxy_buildUpstreamRequest_WithCustomURL_NoProtocol(t *testing.T) {
 func TestTokenRefresher_Stop(t *testing.T) {
 	refresher := &TokenRefresher{
 		stopCh: make(chan struct{}),
+		stats: &RuntimeStats{
+			StartTime: time.Now(),
+		},
 	}
 
 	refresher.Stop()
@@ -330,6 +333,9 @@ func TestTokenRefresher_sendToken(t *testing.T) {
 	refresher := &TokenRefresher{
 		profile: profile,
 		tokenCh: make(chan TokenInfo, 1),
+		stats: &RuntimeStats{
+			StartTime: time.Now(),
+		},
 	}
 
 	refresher.sendToken()
@@ -355,6 +361,9 @@ func TestTokenRefresher_atomicSaveProfile(t *testing.T) {
 
 	refresher := &TokenRefresher{
 		profile: profile,
+		stats: &RuntimeStats{
+			StartTime: time.Now(),
+		},
 	}
 
 	err := refresher.atomicSaveProfile()

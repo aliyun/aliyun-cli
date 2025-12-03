@@ -109,7 +109,7 @@ func TestOAuthCallbackManager_HandleCallback(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			manager := NewOAuthCallbackManager()
 			tt.setup(manager)
-
+			// 有error 或者 有code, 即handled，否则均为非handled
 			handled := manager.HandleCallback(tt.code, tt.err)
 			assert.Equal(t, tt.expectHandled, handled)
 		})
@@ -338,7 +338,6 @@ func TestOAuthRefresh(t *testing.T) {
 				"access_token": "new-access-token",
 				"refresh_token": "new-refresh-token",
 				"expires_in": 3600,
-				"refresh_expires_in": 86400,
 				"token_type": "Bearer"
 			}`))
 		}))
@@ -347,6 +346,7 @@ func TestOAuthRefresh(t *testing.T) {
 		data := url.Values{}
 		data.Set("grant_type", "refresh_token")
 		data.Set("refresh_token", "old-refresh-token")
+		data.Set("client_id", "test-app-id")
 
 		tokenResp, err := oauthRefresh(server.URL, data)
 		assert.NoError(t, err)
@@ -354,7 +354,6 @@ func TestOAuthRefresh(t *testing.T) {
 		assert.Equal(t, "new-access-token", tokenResp.AccessToken)
 		assert.Equal(t, "new-refresh-token", tokenResp.RefreshToken)
 		assert.Equal(t, int64(3600), tokenResp.ExpiresIn)
-		assert.Equal(t, int64(86400), tokenResp.RefreshExpiresIn)
 		assert.Equal(t, "Bearer", tokenResp.TokenType)
 	})
 
@@ -371,6 +370,7 @@ func TestOAuthRefresh(t *testing.T) {
 
 		data := url.Values{}
 		data.Set("grant_type", "refresh_token")
+		data.Set("client_id", "test-app-id")
 		data.Set("refresh_token", "expired-token")
 
 		tokenResp, err := oauthRefresh(server.URL, data)

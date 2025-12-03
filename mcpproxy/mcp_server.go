@@ -91,7 +91,7 @@ type RuntimeStats struct {
 
 	TokenRefreshes     int64
 	TokenRefreshErrors int64
-	LastTokenRefresh   time.Time
+	LastTokenRefresh   int64
 
 	// 启动时的内存状态
 	InitialMemStats runtime.MemStats
@@ -151,7 +151,7 @@ type TokenRefresher struct {
 	tokenCh         chan TokenInfo // 用于传递 token 的 channel
 	ticker          *time.Ticker
 	fatalErrCh      chan error    // 用于通知致命错误的 channel
-	stats           *RuntimeStats // 运行时统计信息（可选，用于更新 token 刷新统计）
+	stats           *RuntimeStats // 运行时统计信息（用于更新 token 刷新统计）
 }
 
 func NewMCPProxy(config ProxyConfig) *MCPProxy {
@@ -310,8 +310,9 @@ func (p *MCPProxy) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"total":  atomic.LoadInt64(&p.stats.TokenRefreshes),
 		"errors": atomic.LoadInt64(&p.stats.TokenRefreshErrors),
 	}
-	if !p.stats.LastTokenRefresh.IsZero() {
-		tokenRefreshes["last_refresh"] = p.stats.LastTokenRefresh.Unix()
+	lastRefresh := atomic.LoadInt64(&p.stats.LastTokenRefresh)
+	if lastRefresh > 0 {
+		tokenRefreshes["last_refresh"] = lastRefresh
 	}
 	health["token_refreshes"] = tokenRefreshes
 
@@ -354,37 +355,48 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 
 	log.Println("MCP Proxy received request url", r.URL.String())
 
-	upstreamReq, err := p.buildUpstreamRequest(r, accessToken)
-	if err != nil {
-		atomic.AddInt64(&p.stats.ErrorRequests, 1)
-		http.Error(w, "Bad Gateway", http.StatusBadGateway)
-		return
-	}
-
-	log.Println("MCP Proxy build upstream request url", upstreamReq.URL.String())
-	// 排除 Authorization 和 User-Agent 头
-	// for k, v := range upstreamReq.Header {
-	// 	if strings.ToLower(k) != "authorization" && strings.ToLower(k) != "user-agent" {
-	// 		log.Println("Upstream Request Header", k, v)
-	// 	}
-	// }
-	// 打印 Upstream Request Body 内容
-	if upstreamReq.Body != nil {
-		bodyBytes, err := io.ReadAll(upstreamReq.Body)
+	// 读取并保存请求 Body，以便在需要重试时使用
+	var bodyBytes []byte
+	if r.Body != nil {
+		var err error
+		bodyBytes, err = io.ReadAll(r.Body)
 		if err != nil {
-			log.Println("MCP Proxy upstream request Body Error", err.Error())
-		} else {
-			log.Println("MCP Proxy upstream request Body", string(bodyBytes))
-			_ = upstreamReq.Body.Close()
-			upstreamReq.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			log.Println("MCP Proxy upstream request body read error", err.Error())
+			atomic.AddInt64(&p.stats.ErrorRequests, 1)
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
 		}
+		_ = r.Body.Close()
+		log.Println("MCP Proxy upstream request body content", string(bodyBytes))
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	} else {
 		log.Println("MCP Proxy upstream request body <nil>")
 	}
-	client := &http.Client{Timeout: 0}
-	resp, err := client.Do(upstreamReq)
+
+	sendRequest := func(token string) (*http.Response, error) {
+		upstreamReq, err := p.buildUpstreamRequest(r, token)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build upstream request: %w", err)
+		}
+
+		log.Println("MCP Proxy build upstream request url", upstreamReq.URL.String())
+
+		if len(bodyBytes) > 0 {
+			upstreamReq.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		}
+
+		client := &http.Client{Timeout: 0}
+		resp, err := client.Do(upstreamReq)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send request: %w", err)
+		}
+		return resp, nil
+	}
+
+	// 第一次发送请求
+	resp, err := sendRequest(accessToken)
 	if err != nil {
-		log.Println("MCP Proxy gets mcp server response error", err.Error())
+		log.Println("MCP Proxy sends upstream request error", err.Error())
 		atomic.AddInt64(&p.stats.ErrorRequests, 1)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -393,9 +405,10 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 
 	log.Println("MCP Proxy gets mcp server response status code", resp.StatusCode)
 
-	// 如果响应状态码为 401，先尝试刷新 token，如果 refresh token 已过期则重新授权
+	// 如果响应状态码为 401，先尝试刷新 token，然后重试请求
 	if resp.StatusCode == http.StatusUnauthorized {
-		var err error
+		log.Println("MCP Proxy gets mcp server response status code 401, attempting to refresh token")
+		var refreshErr error
 		p.TokenRefresher.mu.RLock()
 		MCPOAuthRefreshTokenExpire := p.TokenRefresher.profile.MCPOAuthRefreshTokenExpire
 		currentTime := util.GetCurrentUnixTime()
@@ -403,21 +416,47 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 		if MCPOAuthRefreshTokenExpire > currentTime {
 			// refresh token 未过期，尝试刷新 access token
 			log.Println("Received 401, attempting to refresh access token using refresh token")
-			err = p.TokenRefresher.refreshAccessToken()
+			refreshErr = p.TokenRefresher.refreshAccessToken()
 		} else {
 			// refresh token 已过期，需要重新授权
 			log.Println("Received 401, refresh token expired, reauthorizing")
-			err = p.TokenRefresher.reauthorizeWithProxy()
+			refreshErr = p.TokenRefresher.reauthorizeWithProxy()
 		}
 
-		if err != nil {
-			log.Printf("Failed to handle 401: %v", err)
+		if refreshErr != nil {
+			log.Printf("Failed to handle 401: %v", refreshErr)
 			atomic.AddInt64(&p.stats.ErrorRequests, 1)
-			http.Error(w, fmt.Sprintf("Authentication failed: %v", err), http.StatusUnauthorized)
+			http.Error(w, fmt.Sprintf("Authentication failed: %v", refreshErr), http.StatusUnauthorized)
 			return
 		}
 
-		log.Println("Token refreshed/reauthorized successfully, client should retry the request")
+		log.Println("Token refreshed/reauthorized successfully, retrying request with new token")
+
+		// 关闭第一次请求的响应
+		resp.Body.Close()
+
+		if len(bodyBytes) > 0 {
+			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		}
+
+		newAccessToken, err := p.getMCPAccessToken()
+		if err != nil {
+			log.Printf("Failed to get new access token after refresh: %v", err)
+			atomic.AddInt64(&p.stats.ErrorRequests, 1)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		resp, err = sendRequest(newAccessToken)
+		if err != nil {
+			log.Printf("MCP Proxy retry request after token refresh error: %v", err)
+			atomic.AddInt64(&p.stats.ErrorRequests, 1)
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+
+		log.Println("MCP Proxy retry request after token refresh gets mcp server response status code", resp.StatusCode)
 	}
 
 	log.Println("MCP Proxy gets mcp server response content type", resp.Header.Get("Content-Type"))
@@ -733,7 +772,7 @@ func (r *TokenRefresher) refreshAccessToken() error {
 	log.Println("Access token refresh process completed successfully")
 
 	atomic.AddInt64(&r.stats.TokenRefreshes, 1)
-	r.stats.LastTokenRefresh = time.Now()
+	atomic.StoreInt64(&r.stats.LastTokenRefresh, time.Now().Unix())
 
 	r.sendToken()
 	return nil
@@ -913,7 +952,7 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 	log.Println("OAuth re-authorization process completed successfully")
 
 	atomic.AddInt64(&r.stats.TokenRefreshes, 1)
-	r.stats.LastTokenRefresh = time.Now()
+	atomic.StoreInt64(&r.stats.LastTokenRefresh, time.Now().Unix())
 
 	r.sendToken()
 	return nil

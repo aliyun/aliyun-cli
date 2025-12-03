@@ -259,13 +259,15 @@ func TestMcpProfileRegionType(t *testing.T) {
 func TestMcpProfileJSONSerialization(t *testing.T) {
 	profile := &McpProfile{
 		Name:                         "test-profile",
+		MCPOAuthSiteType:             "CN",
+		MCPOAuthAppId:                "app-id",
+		MCPOAuthAppName:              "app-name",
 		MCPOAuthAccessToken:          "access-token",
 		MCPOAuthRefreshToken:         "refresh-token",
 		MCPOAuthAccessTokenExpire:    1234567890,
+		MCPOAuthAccessTokenValidity:  10800,
 		MCPOAuthRefreshTokenValidity: 31536000,
 		MCPOAuthRefreshTokenExpire:   1234567890,
-		MCPOAuthSiteType:             "CN",
-		MCPOAuthAppId:                "app-id",
 	}
 
 	jsonBytes, err := json.Marshal(profile)
@@ -276,6 +278,8 @@ func TestMcpProfileJSONSerialization(t *testing.T) {
 	err = json.Unmarshal(jsonBytes, &loadedProfile)
 	assert.NoError(t, err)
 	assert.Equal(t, profile.Name, loadedProfile.Name)
+	assert.Equal(t, profile.MCPOAuthAppName, loadedProfile.MCPOAuthAppName)
+	assert.Equal(t, profile.MCPOAuthAccessTokenValidity, loadedProfile.MCPOAuthAccessTokenValidity)
 	assert.Equal(t, profile.MCPOAuthAccessToken, loadedProfile.MCPOAuthAccessToken)
 	assert.Equal(t, profile.MCPOAuthRefreshToken, loadedProfile.MCPOAuthRefreshToken)
 	assert.Equal(t, profile.MCPOAuthAccessTokenExpire, loadedProfile.MCPOAuthAccessTokenExpire)
