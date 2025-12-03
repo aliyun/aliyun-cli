@@ -457,6 +457,14 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 		defer resp.Body.Close()
 
 		log.Println("MCP Proxy retry request after token refresh gets mcp server response status code", resp.StatusCode)
+
+		// 如果重试后还是 401，说明 token 刷新失败或服务器持续拒绝，不再重试
+		if resp.StatusCode == http.StatusUnauthorized {
+			log.Printf("MCP Proxy retry request still returns 401, authentication failed")
+			atomic.AddInt64(&p.stats.ErrorRequests, 1)
+			http.Error(w, "Authentication failed after token refresh", http.StatusUnauthorized)
+			return
+		}
 	}
 
 	log.Println("MCP Proxy gets mcp server response content type", resp.Header.Get("Content-Type"))
