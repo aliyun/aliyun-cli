@@ -43,6 +43,24 @@ import (
 	"github.com/alibabacloud-go/tea/tea"
 )
 
+// OAuthPermanentError 表示不可重试的 OAuth 错误（如 refresh token 失效、应用被删除等）
+type OAuthPermanentError struct {
+	StatusCode int
+	ErrorCode  string
+	Message    string
+	Body       string
+}
+
+func (e *OAuthPermanentError) Error() string {
+	return e.Message
+}
+
+// IsPermanentError 检查是否是永久性错误
+func IsPermanentError(err error) bool {
+	_, ok := err.(*OAuthPermanentError)
+	return ok
+}
+
 type RegionType string
 
 const (
@@ -453,36 +471,65 @@ func generateCodeChallenge(verifier string) string {
 }
 
 func oauthRefresh(endpoint string, data url.Values) (*OAuthTokenResponse, error) {
-	req, err := http.NewRequest("POST", endpoint+"/v1/token", strings.NewReader(data.Encode()))
+	fullURL := endpoint + "/v1/token"
+	log.Printf("OAuth refresh: attempting to refresh token at %s", fullURL)
+
+	req, err := http.NewRequest("POST", fullURL, strings.NewReader(data.Encode()))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
+	startTime := time.Now()
 	resp, err := util.NewHttpClient().Do(req)
+	duration := time.Since(startTime)
+
 	if err != nil {
-		return nil, err
+		log.Printf("OAuth refresh: HTTP request to %s failed after %v: %v", fullURL, duration, err)
+		return nil, fmt.Errorf("http request to %s failed after %v: %w", fullURL, duration, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("refresh failed: status %d", resp.StatusCode)
+		log.Printf("OAuth refresh: received non-OK status %d after %v, body: %s", resp.StatusCode, duration, string(body))
+
+		// 检查是否是 OAuth 认证错误（不可重试的错误）
+		if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnauthorized {
+			var errorResp map[string]interface{}
+			if json.Unmarshal(body, &errorResp) == nil {
+				if errorCode, ok := errorResp["error"].(string); ok {
+					// 永久性错误，不应该重试
+					if errorCode == "invalid_grant" || errorCode == "invalid_client" ||
+						errorCode == "unauthorized_client" || errorCode == "invalid_token" {
+						return nil, &OAuthPermanentError{
+							StatusCode: resp.StatusCode,
+							ErrorCode:  errorCode,
+							Message:    fmt.Sprintf("OAuth permanent error: %s (status %d)", errorCode, resp.StatusCode),
+							Body:       string(body),
+						}
+					}
+				}
+			}
+		}
+
+		return nil, fmt.Errorf("refresh failed: status %d, body: %s", resp.StatusCode, string(body))
 	}
 
 	var tokenResp OAuthTokenResponse
 	if err := json.Unmarshal(body, &tokenResp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse response JSON: %w", err)
 	}
 
 	if tokenResp.Error != "" {
-		return nil, fmt.Errorf("%s: %s", tokenResp.Error, tokenResp.ErrorDescription)
+		return nil, fmt.Errorf("oauth error: %s: %s", tokenResp.Error, tokenResp.ErrorDescription)
 	}
 
+	log.Printf("OAuth refresh: token refreshed successfully in %v", duration)
 	return &tokenResp, nil
 }
 
@@ -508,12 +555,21 @@ func exchangeCodeForTokenWithPKCE(clientId, code, codeVerifier, redirectURI, oau
 	}
 	log.Println("Exchange code for token with PKCE successfully")
 
+	log.Printf("OAuth token response for authorization code exchange: AccessToken length=%d, RefreshToken length=%d, ExpiresIn=%d",
+		len(tokenResp.AccessToken), len(tokenResp.RefreshToken), tokenResp.ExpiresIn)
+	if tokenResp.RefreshToken == "" {
+		log.Printf("WARNING: OAuth response has empty RefreshToken! TokenType=%s, Error=%s",
+			tokenResp.TokenType, tokenResp.Error)
+	}
+
 	currentTime := util.GetCurrentUnixTime()
-	return &OAuthTokenResult{
+	tokenResult := &OAuthTokenResult{
 		AccessToken:       tokenResp.AccessToken,
 		RefreshToken:      tokenResp.RefreshToken,
 		AccessTokenExpire: currentTime + tokenResp.ExpiresIn,
-	}, nil
+	}
+
+	return tokenResult, nil
 }
 
 func buildOAuthURL(clientId string, region RegionType, host string, port int, codeChallenge string, scope string) string {
@@ -791,23 +847,11 @@ func newOpenAPIClient(ctx *cli.Context, profile config.Profile, endpoint string)
 	return client, nil
 }
 
-func getOrCreateMCPOAuthApplication(ctx *cli.Context, profile config.Profile, region RegionType, host string, port int, scope string) (*OAuthApplication, error) {
-	app, err := findOAuthApplicationByName(ctx, profile, region, MCPOAuthAppName)
-	if err != nil {
-		return nil, err
-	}
-
-	if app != nil {
-		return app, nil
-	}
-
-	return createMCPOauthApplication(ctx, profile, region, host, port, scope)
-}
-
-func findOAuthApplicationById(ctx *cli.Context, profile config.Profile, mcpProfile *McpProfile, region RegionType) error {
+// err means process error, application not found is not error, whether app exists based on the first return value
+func findOAuthApplicationById(ctx *cli.Context, profile config.Profile, appId string, region RegionType) (*OAuthApplication, error) {
 	client, err := newOpenAPIClient(ctx, profile, EndpointMap[region].IMS)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	params := &openapiClient.Params{
 		Action:   tea.String("GetApplication"),
@@ -821,24 +865,41 @@ func findOAuthApplicationById(ctx *cli.Context, profile config.Profile, mcpProfi
 	runtime := &dara.RuntimeOptions{}
 	request := &openapiutil.OpenApiRequest{
 		Query: map[string]*string{
-			"AppId": tea.String(mcpProfile.MCPOAuthAppId),
+			"AppId": tea.String(appId),
 		},
 	}
 	response, err := client.CallApi(params, request, runtime)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	bodyBytes, err := GetContentFromApiResponse(response)
 	if err != nil {
-		return fmt.Errorf("failed to get content from api response: %w", err)
+		return nil, fmt.Errorf("failed to get content from api response: %w", err)
 	}
 	var responseGet GetApplicationResponse
 	if err := json.Unmarshal(bodyBytes, &responseGet); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+
+	app := responseGet.Application
+	scopes := make([]string, 0, len(app.DelegatedScope.PredefinedScopes.PredefinedScope))
+	for _, s := range app.DelegatedScope.PredefinedScopes.PredefinedScope {
+		scopes = append(scopes, s.Name)
+	}
+
+	return &OAuthApplication{
+		ApplicationId:        app.AppId,
+		AppName:              app.AppName,
+		DisplayName:          app.DisplayName,
+		AppType:              app.AppType,
+		RedirectUris:         app.RedirectUris.RedirectUri,
+		Scopes:               scopes,
+		AccessTokenValidity:  app.AccessTokenValidity,
+		RefreshTokenValidity: app.RefreshTokenValidity,
+	}, nil
 }
 
+// err means process error, application not found is not error, whether app exists based on the first return value
 func findOAuthApplicationByName(ctx *cli.Context, profile config.Profile, region RegionType, appName string) (*OAuthApplication, error) {
 	client, err := newOpenAPIClient(ctx, profile, EndpointMap[region].IMS)
 	if err != nil {
@@ -892,10 +953,20 @@ func findOAuthApplicationByName(ctx *cli.Context, profile config.Profile, region
 	return nil, nil
 }
 
-// validateOAuthApplication 验证 OAuth 应用的 Scopes 和 Callback URI 是否符合要求
-func validateOAuthApplication(app *OAuthApplication, requiredScope string, requiredRedirectURI string) error {
+// validateOAuthApplication 验证 OAuth 应用的 Scopes, AppType 和 Callback URI 是否符合要求
+func validateOAuthApplication(app *OAuthApplication, requiredScope string, host string, port int) error {
 	if app == nil {
 		return fmt.Errorf("OAuth application is nil")
+	}
+
+	log.Printf("Validating OAuth application: Name=%s, AppType=%s, AccessTokenValidity=%d, RefreshTokenValidity=%d",
+		app.AppName, app.AppType, app.AccessTokenValidity, app.RefreshTokenValidity)
+
+	if app.AppType != "NativeApp" {
+		log.Printf("WARNING: OAuth application type is '%s', not 'NativeApp', refresh token is not supported!",
+			app.AppType)
+		return fmt.Errorf("OAuth application type is '%s', must be 'NativeApp' to get refresh token. "+
+			"Please delete this application and let the system create a new NativeApp, or manually create a NativeApp", app.AppType)
 	}
 
 	// 验证 Scopes
@@ -911,7 +982,7 @@ func validateOAuthApplication(app *OAuthApplication, requiredScope string, requi
 			app.AppName, requiredScope, app.Scopes)
 	}
 
-	// 验证 Callback URI
+	requiredRedirectURI := buildRedirectUri(host, port)
 	redirectURIFound := false
 	for _, uri := range app.RedirectUris {
 		if uri == requiredRedirectURI {
@@ -931,7 +1002,7 @@ func buildRedirectUri(host string, port int) string {
 	return fmt.Sprintf("http://%s:%d/callback", host, port)
 }
 
-func createMCPOauthApplication(ctx *cli.Context, profile config.Profile, region RegionType, host string, port int, scope string) (*OAuthApplication, error) {
+func createDefaultMCPOauthApplication(ctx *cli.Context, profile config.Profile, region RegionType, host string, port int, scope string) (*OAuthApplication, error) {
 	client, err := newOpenAPIClient(ctx, profile, EndpointMap[region].IMS)
 	if err != nil {
 		return nil, err
