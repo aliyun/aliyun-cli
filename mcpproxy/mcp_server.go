@@ -1019,7 +1019,7 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 		r.mu.Unlock()
 		atomic.AddInt64(&r.stats.TokenRefreshErrors, 1)
 		log.Printf("OAuth re-authorization request failed: %v", err)
-		return err
+		return fmt.Errorf("OAuth re-authorization failed: %w", err)
 	}
 	log.Printf("OAuth re-authorization request successfully: AccessToken length=%d, RefreshToken length=%d, ExpiresIn=%d",
 		len(tokenResult.AccessToken), len(tokenResult.RefreshToken), refreshTokenValidity)
