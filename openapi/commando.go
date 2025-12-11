@@ -18,6 +18,7 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -25,6 +26,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	jmespath "github.com/jmespath/go-jmespath"
@@ -111,15 +113,65 @@ func DetectInConfigureMode(flags *cli.FlagSet) bool {
 }
 
 func (c *Commando) main(ctx *cli.Context, args []string) error {
-	// aliyun
-	if len(args) == 0 {
-		c.printUsage(ctx)
-		return nil
+	// Strategy: Plugin Execution
+	// 1. Try built-in first.
+	// 2. If built-in product/api not found, fallback to plugin
+
+	if len(args) > 0 {
+		shouldFallback := false
+		productName := args[0]
+		product, ok := c.library.GetProduct(productName)
+
+		if !ok {
+			// Product not found in built-in library
+			shouldFallback = true
+		} else if len(args) > 1 {
+			// Product exists, check if API/Method exists
+			apiOrMethod := args[1]
+			// Check if it looks like a REST method
+			isRestMethod := strings.ToUpper(apiOrMethod) == "GET" ||
+				strings.ToUpper(apiOrMethod) == "POST" ||
+				strings.ToUpper(apiOrMethod) == "PUT" ||
+				strings.ToUpper(apiOrMethod) == "DELETE"
+
+			if !isRestMethod {
+				// Check if it is a known RPC API
+				// Note: This check relies on local metadata.
+				if _, ok := c.library.GetApi(product.Code, product.Version, apiOrMethod); !ok {
+					shouldFallback = true
+				}
+			}
+		}
+
+		if shouldFallback {
+			// 从 os.Args 中提取完整的插件参数
+			var pluginArgs []string
+			cmdIndex := -1
+			for i, arg := range os.Args {
+				if arg == args[0] {
+					cmdIndex = i
+					break
+				}
+			}
+			if cmdIndex != -1 && cmdIndex < len(os.Args)-1 {
+				pluginArgs = os.Args[cmdIndex+1:]
+			}
+
+			ok, err := plugin.ExecutePlugin(args[0], pluginArgs)
+			if err != nil {
+				return err
+			}
+			if ok {
+				return nil
+			}
+		}
 	}
 
-	// detect if in configure mode
-	ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
+	if cli.HelpFlag(ctx.Flags()).IsAssigned() {
+		return c.help(ctx, args)
+	}
 
+	ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
 	// update current `Profile` with flags
 	var err error
 	c.profile, err = config.LoadProfileWithContext(ctx)
@@ -130,6 +182,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	if err != nil {
 		return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it.")
 	}
+
 	i18n.SetLanguage(c.profile.Language)
 
 	// process following commands:
