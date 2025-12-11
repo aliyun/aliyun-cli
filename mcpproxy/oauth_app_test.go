@@ -445,3 +445,117 @@ func TestEndpointMap(t *testing.T) {
 	assert.True(t, strings.HasPrefix(EndpointMap[RegionINTL].SignIn, "https://"))
 	assert.True(t, strings.HasPrefix(EndpointMap[RegionINTL].OAuth, "https://"))
 }
+
+func TestOAuthPermanentError(t *testing.T) {
+	t.Run("error message", func(t *testing.T) {
+		err := &OAuthPermanentError{
+			StatusCode: 400,
+			ErrorCode:  "invalid_grant",
+			Message:    "OAuth permanent error: invalid_grant (status 400)",
+			Body:       `{"error":"invalid_grant"}`,
+		}
+		assert.Equal(t, "OAuth permanent error: invalid_grant (status 400)", err.Error())
+	})
+
+	t.Run("IsPermanentError with OAuthPermanentError", func(t *testing.T) {
+		err := &OAuthPermanentError{
+			StatusCode: 400,
+			ErrorCode:  "invalid_grant",
+			Message:    "test error",
+		}
+		assert.True(t, IsPermanentError(err))
+	})
+
+	t.Run("IsPermanentError with regular error", func(t *testing.T) {
+		err := assert.AnError
+		assert.False(t, IsPermanentError(err))
+	})
+
+	t.Run("IsPermanentError with nil", func(t *testing.T) {
+		assert.False(t, IsPermanentError(nil))
+	})
+
+	t.Run("IsPermanentError with wrapped error", func(t *testing.T) {
+		permanentErr := &OAuthPermanentError{
+			StatusCode: 400,
+			ErrorCode:  "invalid_client",
+			Message:    "test error",
+		}
+		wrappedErr := assert.AnError
+		assert.False(t, IsPermanentError(wrappedErr))
+		assert.True(t, IsPermanentError(permanentErr))
+	})
+}
+
+func TestOAuthRefresh_PermanentErrors(t *testing.T) {
+	permanentErrorCodes := []string{"invalid_grant", "invalid_client", "unauthorized_client", "invalid_token"}
+
+	for _, errorCode := range permanentErrorCodes {
+		t.Run("permanent error: "+errorCode, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{
+					"error": "` + errorCode + `",
+					"error_description": "Test error"
+				}`))
+			}))
+			defer server.Close()
+
+			data := url.Values{}
+			data.Set("grant_type", "refresh_token")
+			data.Set("client_id", "test-app-id")
+			data.Set("refresh_token", "test-token")
+
+			tokenResp, err := oauthRefresh(server.URL, data)
+			assert.Error(t, err)
+			assert.Nil(t, tokenResp)
+			assert.True(t, IsPermanentError(err), "error should be permanent: %v", err)
+
+			permanentErr, ok := err.(*OAuthPermanentError)
+			assert.True(t, ok)
+			assert.Equal(t, http.StatusBadRequest, permanentErr.StatusCode)
+			assert.Equal(t, errorCode, permanentErr.ErrorCode)
+		})
+	}
+
+	t.Run("temporary error (500)", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Internal Server Error"))
+		}))
+		defer server.Close()
+
+		data := url.Values{}
+		data.Set("grant_type", "refresh_token")
+		data.Set("client_id", "test-app-id")
+		data.Set("refresh_token", "test-token")
+
+		tokenResp, err := oauthRefresh(server.URL, data)
+		assert.Error(t, err)
+		assert.Nil(t, tokenResp)
+		assert.False(t, IsPermanentError(err), "500 error should not be permanent")
+	})
+
+	t.Run("non-permanent 400 error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{
+				"error": "invalid_request",
+				"error_description": "Missing parameter"
+			}`))
+		}))
+		defer server.Close()
+
+		data := url.Values{}
+		data.Set("grant_type", "refresh_token")
+		data.Set("client_id", "test-app-id")
+		data.Set("refresh_token", "test-token")
+
+		tokenResp, err := oauthRefresh(server.URL, data)
+		assert.Error(t, err)
+		assert.Nil(t, tokenResp)
+		assert.False(t, IsPermanentError(err), "invalid_request should not be permanent")
+	})
+}

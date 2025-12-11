@@ -15,11 +15,16 @@
 package mcpproxy
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -287,4 +292,395 @@ func TestMcpProfileJSONSerialization(t *testing.T) {
 	assert.Equal(t, profile.MCPOAuthRefreshTokenExpire, loadedProfile.MCPOAuthRefreshTokenExpire)
 	assert.Equal(t, profile.MCPOAuthSiteType, loadedProfile.MCPOAuthSiteType)
 	assert.Equal(t, profile.MCPOAuthAppId, loadedProfile.MCPOAuthAppId)
+}
+
+func TestLoadExistingMCPProfile(t *testing.T) {
+	t.Run("config file not exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalHome := os.Getenv("HOME")
+		defer func() {
+			if originalHome != "" {
+				os.Setenv("HOME", originalHome)
+			} else {
+				os.Unsetenv("HOME")
+			}
+		}()
+		os.Setenv("HOME", tmpDir)
+
+		ctx := cli.NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
+		profile := config.NewProfile("test")
+		opts := ProxyConfig{
+			RegionType: RegionCN,
+			Host:       "127.0.0.1",
+			Port:       8088,
+			Scope:      "/acs/mcp-server",
+		}
+
+		result := loadExistingMCPProfile(ctx, profile, opts, "default-mcp")
+		assert.Nil(t, result, "should return nil when config file does not exist")
+	})
+
+	t.Run("invalid json in config file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalHome := os.Getenv("HOME")
+		defer func() {
+			if originalHome != "" {
+				os.Setenv("HOME", originalHome)
+			} else {
+				os.Unsetenv("HOME")
+			}
+		}()
+		os.Setenv("HOME", tmpDir)
+
+		// 创建无效的配置文件
+		configPath := getMCPConfigPath()
+		err := os.MkdirAll(filepath.Dir(configPath), 0755)
+		assert.NoError(t, err)
+		err = os.WriteFile(configPath, []byte("{invalid json}"), 0644)
+		assert.NoError(t, err)
+
+		ctx := cli.NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
+		profile := config.NewProfile("test")
+		opts := ProxyConfig{
+			RegionType: RegionCN,
+			Host:       "127.0.0.1",
+			Port:       8088,
+			Scope:      "/acs/mcp-server",
+		}
+
+		result := loadExistingMCPProfile(ctx, profile, opts, "default-mcp")
+		assert.Nil(t, result, "should return nil when config file has invalid JSON")
+	})
+
+	t.Run("region type mismatch", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalHome := os.Getenv("HOME")
+		defer func() {
+			if originalHome != "" {
+				os.Setenv("HOME", originalHome)
+			} else {
+				os.Unsetenv("HOME")
+			}
+		}()
+		os.Setenv("HOME", tmpDir)
+
+		// 创建配置文件，region type 为 CN
+		profile := NewMcpProfile("test-profile")
+		profile.MCPOAuthSiteType = "CN"
+		profile.MCPOAuthAppName = "default-mcp"
+		profile.MCPOAuthAppId = "test-app-id"
+		profile.MCPOAuthRefreshToken = "test-refresh-token"
+		profile.MCPOAuthRefreshTokenExpire = time.Now().Unix() + 3600
+		err := saveMcpProfile(profile)
+		assert.NoError(t, err)
+
+		ctx := cli.NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
+		configProfile := config.NewProfile("test")
+		opts := ProxyConfig{
+			RegionType: RegionINTL, // 请求 INTL，但保存的是 CN
+			Host:       "127.0.0.1",
+			Port:       8088,
+			Scope:      "/acs/mcp-server",
+		}
+
+		result := loadExistingMCPProfile(ctx, configProfile, opts, "default-mcp")
+		assert.Nil(t, result, "should return nil when region type mismatch")
+	})
+
+	t.Run("app name mismatch", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalHome := os.Getenv("HOME")
+		defer func() {
+			if originalHome != "" {
+				os.Setenv("HOME", originalHome)
+			} else {
+				os.Unsetenv("HOME")
+			}
+		}()
+		os.Setenv("HOME", tmpDir)
+
+		// 创建配置文件，app name 为 "default-mcp"
+		profile := NewMcpProfile("test-profile")
+		profile.MCPOAuthSiteType = "CN"
+		profile.MCPOAuthAppName = "default-mcp"
+		profile.MCPOAuthAppId = "test-app-id"
+		profile.MCPOAuthRefreshToken = "test-refresh-token"
+		profile.MCPOAuthRefreshTokenExpire = time.Now().Unix() + 3600
+		err := saveMcpProfile(profile)
+		assert.NoError(t, err)
+
+		ctx := cli.NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
+		configProfile := config.NewProfile("test")
+		opts := ProxyConfig{
+			RegionType:   RegionCN,
+			Host:         "127.0.0.1",
+			Port:         8088,
+			Scope:        "/acs/mcp-server",
+			OAuthAppName: "different-app", // 请求不同的 app name
+		}
+
+		result := loadExistingMCPProfile(ctx, configProfile, opts, "different-app")
+		assert.Nil(t, result, "should return nil when app name mismatch")
+	})
+
+	t.Run("empty AppId", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalHome := os.Getenv("HOME")
+		defer func() {
+			if originalHome != "" {
+				os.Setenv("HOME", originalHome)
+			} else {
+				os.Unsetenv("HOME")
+			}
+		}()
+		os.Setenv("HOME", tmpDir)
+
+		// 创建配置文件，AppId 为空
+		profile := NewMcpProfile("test-profile")
+		profile.MCPOAuthSiteType = "CN"
+		profile.MCPOAuthAppName = "default-mcp"
+		profile.MCPOAuthAppId = "" // 空的 AppId
+		profile.MCPOAuthRefreshToken = "test-refresh-token"
+		profile.MCPOAuthRefreshTokenExpire = time.Now().Unix() + 3600
+		err := saveMcpProfile(profile)
+		assert.NoError(t, err)
+
+		ctx := cli.NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
+		configProfile := config.NewProfile("test")
+		opts := ProxyConfig{
+			RegionType: RegionCN,
+			Host:       "127.0.0.1",
+			Port:       8088,
+			Scope:      "/acs/mcp-server",
+		}
+
+		result := loadExistingMCPProfile(ctx, configProfile, opts, "default-mcp")
+		assert.Nil(t, result, "should return nil when AppId is empty")
+	})
+
+	t.Run("empty RefreshToken", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalHome := os.Getenv("HOME")
+		defer func() {
+			if originalHome != "" {
+				os.Setenv("HOME", originalHome)
+			} else {
+				os.Unsetenv("HOME")
+			}
+		}()
+		os.Setenv("HOME", tmpDir)
+
+		// 创建配置文件，RefreshToken 为空
+		profile := NewMcpProfile("test-profile")
+		profile.MCPOAuthSiteType = "CN"
+		profile.MCPOAuthAppName = "default-mcp"
+		profile.MCPOAuthAppId = "test-app-id"
+		profile.MCPOAuthRefreshToken = "" // 空的 RefreshToken
+		profile.MCPOAuthRefreshTokenExpire = time.Now().Unix() + 3600
+		err := saveMcpProfile(profile)
+		assert.NoError(t, err)
+
+		ctx := cli.NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
+		configProfile := config.NewProfile("test")
+		opts := ProxyConfig{
+			RegionType: RegionCN,
+			Host:       "127.0.0.1",
+			Port:       8088,
+			Scope:      "/acs/mcp-server",
+		}
+
+		result := loadExistingMCPProfile(ctx, configProfile, opts, "default-mcp")
+		assert.Nil(t, result, "should return nil when RefreshToken is empty")
+	})
+
+	t.Run("expired RefreshToken", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalHome := os.Getenv("HOME")
+		defer func() {
+			if originalHome != "" {
+				os.Setenv("HOME", originalHome)
+			} else {
+				os.Unsetenv("HOME")
+			}
+		}()
+		os.Setenv("HOME", tmpDir)
+
+		// 创建配置文件，RefreshToken 已过期
+		profile := NewMcpProfile("test-profile")
+		profile.MCPOAuthSiteType = "CN"
+		profile.MCPOAuthAppName = "default-mcp"
+		profile.MCPOAuthAppId = "test-app-id"
+		profile.MCPOAuthRefreshToken = "test-refresh-token"
+		profile.MCPOAuthRefreshTokenExpire = time.Now().Unix() - 100 // 已过期
+		err := saveMcpProfile(profile)
+		assert.NoError(t, err)
+
+		ctx := cli.NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
+		configProfile := config.NewProfile("test")
+		opts := ProxyConfig{
+			RegionType: RegionCN,
+			Host:       "127.0.0.1",
+			Port:       8088,
+			Scope:      "/acs/mcp-server",
+		}
+
+		result := loadExistingMCPProfile(ctx, configProfile, opts, "default-mcp")
+		assert.Nil(t, result, "should return nil when RefreshToken is expired")
+	})
+
+	t.Run("valid profile but missing required fields", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		originalHome := os.Getenv("HOME")
+		defer func() {
+			if originalHome != "" {
+				os.Setenv("HOME", originalHome)
+			} else {
+				os.Unsetenv("HOME")
+			}
+		}()
+		os.Setenv("HOME", tmpDir)
+
+		// 创建最小化的配置文件（缺少必要字段）
+		profile := NewMcpProfile("test-profile")
+		profile.MCPOAuthSiteType = "CN"
+		profile.MCPOAuthAppName = "default-mcp"
+		// 缺少 AppId 和 RefreshToken
+		err := saveMcpProfile(profile)
+		assert.NoError(t, err)
+
+		ctx := cli.NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
+		configProfile := config.NewProfile("test")
+		opts := ProxyConfig{
+			RegionType: RegionCN,
+			Host:       "127.0.0.1",
+			Port:       8088,
+			Scope:      "/acs/mcp-server",
+		}
+
+		result := loadExistingMCPProfile(ctx, configProfile, opts, "default-mcp")
+		assert.Nil(t, result, "should return nil when required fields are missing")
+	})
+}
+
+func TestGetOrCreateMCPProfile_FindOAuthApplicationLogic(t *testing.T) {
+
+	t.Run("validateOAuthApplication with nil app", func(t *testing.T) {
+		err := validateOAuthApplication(nil, "/acs/mcp-server", "127.0.0.1", 8088)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "OAuth application is nil")
+	})
+
+	t.Run("validateOAuthApplication with wrong AppType", func(t *testing.T) {
+		app := &OAuthApplication{
+			AppName:              "test-app",
+			ApplicationId:        "app-id",
+			AppType:              "WebApp", // 错误的类型
+			Scopes:               []string{"/acs/mcp-server"},
+			RedirectUris:         []string{"http://127.0.0.1:8088/callback"},
+			AccessTokenValidity:  10800,
+			RefreshTokenValidity: 31536000,
+		}
+
+		err := validateOAuthApplication(app, "/acs/mcp-server", "127.0.0.1", 8088)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "must be 'NativeApp'")
+		assert.Contains(t, err.Error(), "WebApp")
+	})
+
+	t.Run("validateOAuthApplication with missing scope", func(t *testing.T) {
+		app := &OAuthApplication{
+			AppName:              "test-app",
+			ApplicationId:        "app-id",
+			AppType:              "NativeApp",
+			Scopes:               []string{"/other/scope"}, // 缺少 required scope
+			RedirectUris:         []string{"http://127.0.0.1:8088/callback"},
+			AccessTokenValidity:  10800,
+			RefreshTokenValidity: 31536000,
+		}
+
+		err := validateOAuthApplication(app, "/acs/mcp-server", "127.0.0.1", 8088)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "does not have required scope")
+		assert.Contains(t, err.Error(), "/acs/mcp-server")
+	})
+
+	t.Run("validateOAuthApplication with wrong redirect URI", func(t *testing.T) {
+		app := &OAuthApplication{
+			AppName:              "test-app",
+			ApplicationId:        "app-id",
+			AppType:              "NativeApp",
+			Scopes:               []string{"/acs/mcp-server"},
+			RedirectUris:         []string{"http://127.0.0.1:9999/callback"}, // 错误的端口
+			AccessTokenValidity:  10800,
+			RefreshTokenValidity: 31536000,
+		}
+
+		err := validateOAuthApplication(app, "/acs/mcp-server", "127.0.0.1", 8088)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "does not have required redirect URI")
+		assert.Contains(t, err.Error(), "http://127.0.0.1:8088/callback")
+	})
+
+	t.Run("validateOAuthApplication with valid app", func(t *testing.T) {
+		app := &OAuthApplication{
+			AppName:              "test-app",
+			ApplicationId:        "app-id",
+			AppType:              "NativeApp",
+			Scopes:               []string{"/acs/mcp-server"},
+			RedirectUris:         []string{"http://127.0.0.1:8088/callback"},
+			AccessTokenValidity:  10800,
+			RefreshTokenValidity: 31536000,
+		}
+
+		err := validateOAuthApplication(app, "/acs/mcp-server", "127.0.0.1", 8088)
+		assert.NoError(t, err)
+	})
+
+	t.Run("validateOAuthApplication with multiple scopes", func(t *testing.T) {
+		app := &OAuthApplication{
+			AppName:              "test-app",
+			ApplicationId:        "app-id",
+			AppType:              "NativeApp",
+			Scopes:               []string{"/other/scope", "/acs/mcp-server", "/another/scope"},
+			RedirectUris:         []string{"http://127.0.0.1:8088/callback"},
+			AccessTokenValidity:  10800,
+			RefreshTokenValidity: 31536000,
+		}
+
+		err := validateOAuthApplication(app, "/acs/mcp-server", "127.0.0.1", 8088)
+		assert.NoError(t, err, "should pass validation when required scope is present among multiple scopes")
+	})
+
+	t.Run("validateOAuthApplication with multiple redirect URIs", func(t *testing.T) {
+		app := &OAuthApplication{
+			AppName:              "test-app",
+			ApplicationId:        "app-id",
+			AppType:              "NativeApp",
+			Scopes:               []string{"/acs/mcp-server"},
+			RedirectUris:         []string{"http://0.0.0.0:8088/callback", "http://127.0.0.1:8088/callback"},
+			AccessTokenValidity:  10800,
+			RefreshTokenValidity: 31536000,
+		}
+
+		err := validateOAuthApplication(app, "/acs/mcp-server", "127.0.0.1", 8088)
+		assert.NoError(t, err, "should pass validation when required redirect URI is present among multiple URIs")
+	})
+
+	t.Run("validateOAuthApplication error message format", func(t *testing.T) {
+		app := &OAuthApplication{
+			AppName:              "test-app",
+			ApplicationId:        "app-id",
+			AppType:              "WebApp",
+			Scopes:               []string{"/other/scope"},
+			RedirectUris:         []string{"http://127.0.0.1:9999/callback"},
+			AccessTokenValidity:  10800,
+			RefreshTokenValidity: 31536000,
+		}
+
+		err := validateOAuthApplication(app, "/acs/mcp-server", "127.0.0.1", 8088)
+		assert.Error(t, err)
+		wrappedErr := fmt.Errorf("OAuth application validation failed: %w", err)
+		assert.Contains(t, wrappedErr.Error(), "validation failed")
+		assert.Contains(t, wrappedErr.Error(), "must be 'NativeApp'")
+	})
 }

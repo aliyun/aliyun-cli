@@ -89,9 +89,11 @@ type RuntimeStats struct {
 	ErrorRequests   int64
 	ActiveRequests  int64
 
-	TokenRefreshes     int64
-	TokenRefreshErrors int64
-	LastTokenRefresh   int64
+	TokenRefreshes      int64
+	TokenRefreshErrors  int64
+	LastTokenRefresh    int64
+	HealthCheckCounter  int64 // 用于定期输出健康检查日志
+	LastHealthCheckTime int64
 
 	// 启动时的内存状态
 	InitialMemStats runtime.MemStats
@@ -691,6 +693,8 @@ func (r *TokenRefresher) Stop() {
 func (r *TokenRefresher) checkAndRefresh() {
 	r.mu.RLock()
 	currentTime := util.GetCurrentUnixTime()
+	accessTokenRemaining := r.profile.MCPOAuthAccessTokenExpire - currentTime
+	refreshTokenRemaining := r.profile.MCPOAuthRefreshTokenExpire - currentTime
 	needRefresh := false
 	needReauth := false
 
@@ -704,14 +708,32 @@ func (r *TokenRefresher) checkAndRefresh() {
 	}
 	r.mu.RUnlock()
 
+	// 定期输出健康检查日志（每 120 次检查，即每小时）
+	checkCount := atomic.AddInt64(&r.stats.HealthCheckCounter, 1)
+	if checkCount%120 == 0 {
+		log.Printf("Token health check #%d: access_token_remaining=%dm (%.1fh), refresh_token_remaining=%dh (%.1fd), need_refresh=%v, need_reauth=%v",
+			checkCount,
+			accessTokenRemaining/60,
+			float64(accessTokenRemaining)/3600,
+			refreshTokenRemaining/3600,
+			float64(refreshTokenRemaining)/86400,
+			needRefresh,
+			needReauth)
+		atomic.StoreInt64(&r.stats.LastHealthCheckTime, currentTime)
+	}
+
 	if needReauth {
+		log.Printf("Token check: refresh token expiring soon (remaining: %dm), triggering re-authorization", refreshTokenRemaining/60)
 		if err := r.reauthorizeWithProxy(); err != nil {
-			r.reportFatalError(fmt.Errorf("re-authorization failed: %v. Please restart aliyun mcp-proxy", err))
+			log.Printf("MCP Proxy token refresher re-authorization failed: %v", err)
+			r.reportFatalError(fmt.Errorf("re-authorization failed: %w", err))
 			return
 		}
 	} else if needRefresh {
+		log.Printf("Token check: access token expiring soon (remaining: %dm), triggering refresh access token", accessTokenRemaining/60)
 		if err := r.refreshAccessToken(); err != nil {
-			r.reportFatalError(fmt.Errorf("refresh access token failed. Please restart aliyun mcp-proxy"))
+			log.Printf("MCP Proxy token refresher refresh access token failed: %v", err)
+			r.reportFatalError(fmt.Errorf("refresh access token failed: %w", err))
 			return
 		}
 	}
@@ -736,6 +758,7 @@ func (r *TokenRefresher) refreshAccessToken() error {
 	endpoint := EndpointMap[r.regionType].OAuth
 	clientId := r.profile.MCPOAuthAppId
 	refreshToken := r.profile.MCPOAuthRefreshToken
+	accessTokenExpire := r.profile.MCPOAuthAccessTokenExpire
 	r.mu.Unlock()
 
 	// 执行网络请求（不持有锁，避免阻塞）
@@ -743,21 +766,81 @@ func (r *TokenRefresher) refreshAccessToken() error {
 	data.Set("grant_type", "refresh_token")
 	data.Set("client_id", clientId)
 	data.Set("refresh_token", refreshToken)
-	// fmt.Println("refresh access token data", data.Encode())
-	// fmt.Println("refresh access token endpoint", endpoint)
-	// fmt.Println("refresh access token clientId", clientId)
-	// fmt.Println("refresh access token refreshToken", refreshToken)
 
-	newTokens, err := oauthRefresh(endpoint, data)
+	// 重试逻辑：最多重试 3 次，使用指数退避，避免因为临时网络问题导致服务直接关闭
+	var newTokens *OAuthTokenResponse
+	var err error
+	maxRetries := 3
+	successAttempt := 0
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if attempt > 1 {
+			backoffDuration := time.Duration(1<<uint(attempt-1)) * time.Second
+			log.Printf("OAuth refresh retry attempt %d/%d after %v backoff", attempt, maxRetries, backoffDuration)
+			time.Sleep(backoffDuration)
+		}
+
+		newTokens, err = oauthRefresh(endpoint, data)
+		if err == nil {
+			successAttempt = attempt
+			break
+		}
+
+		log.Printf("OAuth refresh attempt %d/%d failed: %v", attempt, maxRetries, err)
+
+		// 检查是否是永久性错误（不可重试）
+		if IsPermanentError(err) {
+			log.Printf("Detected permanent OAuth error, stopping retry immediately")
+			break
+		}
+
+		// 如果还没达到最大重试次数，记录日志并继续
+		if attempt < maxRetries {
+			currentTime := util.GetCurrentUnixTime()
+			accessTimeRemaining := accessTokenExpire - currentTime
+			log.Printf("Temporary error, will retry (access_token_remaining: %ds)", accessTimeRemaining)
+		}
+	}
+
 	if err != nil {
 		r.mu.Lock()
 		r.refreshing = false
+		currentAccessTokenExpire := r.profile.MCPOAuthAccessTokenExpire
+		currentRefreshTokenExpire := r.profile.MCPOAuthRefreshTokenExpire
 		r.mu.Unlock()
+
 		atomic.AddInt64(&r.stats.TokenRefreshErrors, 1)
-		return fmt.Errorf("oauth refresh failed: %w", err)
+
+		currentTime := util.GetCurrentUnixTime()
+		accessTimeRemaining := currentAccessTokenExpire - currentTime
+		refreshTimeRemaining := currentRefreshTokenExpire - currentTime
+
+		log.Printf("OAuth refresh failed after %d attempts at %s: %v (access_token_remaining: %ds, refresh_token_remaining: %dh)",
+			maxRetries, time.Now().Format(time.RFC3339), err,
+			accessTimeRemaining, refreshTimeRemaining/3600)
+
+		// 检查是否是永久性错误（如 refresh token 失效、OAuth 应用被删除等）
+		if IsPermanentError(err) {
+			log.Printf("Detected permanent OAuth error (invalid_grant/invalid_client), refresh token is no longer valid")
+			log.Printf("This typically means: 1) OAuth app was deleted, 2) Refresh token was revoked, 3) App credentials changed")
+			log.Printf("Reporting fatal error - service requires re-authorization")
+			return fmt.Errorf("oauth permanent error, re-authorization required: %w", err)
+		}
+
+		// 如果 access token 还有效（提前刷新失败），继续使用当前 token
+		if accessTimeRemaining > 0 {
+			log.Printf("Temporary refresh failure, access token still valid for %ds, continuing to use current token (will retry on next check in 30s)", accessTimeRemaining)
+			return nil
+		}
+
+		// Access token 已经失效，报告致命错误
+		log.Printf("Access token expired and refresh failed, service is unavailable")
+		log.Printf("Reporting fatal error - service requires restart or re-authorization")
+		return fmt.Errorf("oauth refresh failed and access token expired: %w", err)
 	}
 
-	log.Println("Access token refresh request successfully")
+	log.Printf("Access token refresh request successfully after %d attempt(s), access token length=%d, refresh token length=%d, new access token expires in %d seconds",
+		successAttempt, len(newTokens.AccessToken), len(newTokens.RefreshToken), newTokens.ExpiresIn)
 
 	r.mu.Lock()
 	currentTime := util.GetCurrentUnixTime()
@@ -935,9 +1018,11 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 		r.reauthorizing = false
 		r.mu.Unlock()
 		atomic.AddInt64(&r.stats.TokenRefreshErrors, 1)
-		return err
+		log.Printf("OAuth re-authorization request failed: %v", err)
+		return fmt.Errorf("OAuth re-authorization failed: %w", err)
 	}
-	log.Println("OAuth re-authorization request successfully")
+	log.Printf("OAuth re-authorization request successfully: AccessToken length=%d, RefreshToken length=%d, ExpiresIn=%d",
+		len(tokenResult.AccessToken), len(tokenResult.RefreshToken), refreshTokenValidity)
 
 	r.mu.Lock()
 	currentTime := util.GetCurrentUnixTime()

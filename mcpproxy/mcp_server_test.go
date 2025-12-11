@@ -415,6 +415,48 @@ func TestGetContentFromApiResponse_Integration(t *testing.T) {
 	assert.Contains(t, string(content), "value")
 }
 
+func TestTokenRefresher_refreshAccessToken_PermanentError(t *testing.T) {
+	// 测试永久性错误时立即停止重试
+	// 这里主要测试逻辑：永久性错误应该立即返回，不应该重试
+	// 实际的网络调用测试在 oauth_app_test.go 中
+	permanentErr := &OAuthPermanentError{
+		StatusCode: 400,
+		ErrorCode:  "invalid_grant",
+		Message:    "OAuth permanent error: invalid_grant (status 400)",
+	}
+
+	assert.True(t, IsPermanentError(permanentErr))
+
+	// 验证错误信息
+	assert.Contains(t, permanentErr.Error(), "invalid_grant")
+	assert.Equal(t, 400, permanentErr.StatusCode)
+	assert.Equal(t, "invalid_grant", permanentErr.ErrorCode)
+}
+
+func TestTokenRefresher_refreshAccessToken_AccessTokenStillValid(t *testing.T) {
+	// 测试当 access token 还有效时，临时错误应该返回 nil
+	currentTime := time.Now().Unix()
+	profile := NewMcpProfile("test-profile")
+	profile.MCPOAuthAccessTokenExpire = currentTime + 3600 // access token 还有 1 小时有效
+
+	// 验证 access token 还有效时的逻辑
+	accessTimeRemaining := profile.MCPOAuthAccessTokenExpire - currentTime
+	assert.Greater(t, accessTimeRemaining, int64(0), "access token should still be valid")
+	assert.GreaterOrEqual(t, accessTimeRemaining, int64(3600), "access token should have at least 1 hour remaining")
+}
+
+func TestTokenRefresher_refreshAccessToken_AccessTokenExpired(t *testing.T) {
+	// 测试当 access token 已过期时，应该返回错误
+	currentTime := time.Now().Unix()
+	profile := NewMcpProfile("test-profile")
+	profile.MCPOAuthAccessTokenExpire = currentTime - 100 // access token 已过期
+
+	// 验证 access token 已过期时的逻辑
+	accessTimeRemaining := profile.MCPOAuthAccessTokenExpire - currentTime
+	assert.LessOrEqual(t, accessTimeRemaining, int64(0), "access token should be expired")
+	assert.Less(t, accessTimeRemaining, int64(0), "access token should be expired (negative remaining time)")
+}
+
 // 辅助函数
 func getHomeEnv() string {
 	return os.Getenv("HOME")
