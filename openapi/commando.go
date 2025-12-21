@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	jmespath "github.com/jmespath/go-jmespath"
 )
 
 // main entrance of aliyun cli
@@ -224,6 +226,14 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		return nil
 	}
 
+	// apply --query JMESPath filter first (before --output, since --output returns table format)
+	if QueryFlag(ctx.Flags()).IsAssigned() {
+		out, err = ApplyQueryFilter(ctx, out)
+		if err != nil {
+			return err
+		}
+	}
+
 	if filter := GetOutputFilter(ctx); filter != nil {
 		out, err = filter.FilterOutput(out)
 		if err != nil {
@@ -278,6 +288,14 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	// if `--quiet` assigned. do not print anything
 	if QuietFlag(ctx.Flags()).IsAssigned() {
 		return nil
+	}
+
+	// apply --query JMESPath filter first (before --output, since --output returns table format)
+	if QueryFlag(ctx.Flags()).IsAssigned() {
+		out, err = ApplyQueryFilter(ctx, out)
+		if err != nil {
+			return err
+		}
 	}
 
 	// process `--output ...`
@@ -453,6 +471,42 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			apiOrMethod,
 		}, nil
 	}
+}
+
+// ApplyQueryFilter applies JMESPath query filter to the output
+func ApplyQueryFilter(ctx *cli.Context, output string) (string, error) {
+	queryExpr, ok := QueryFlag(ctx.Flags()).GetValue()
+	if !ok || queryExpr == "" {
+		return output, nil
+	}
+
+	// Handle empty output
+	if output == "" {
+		return output, nil
+	}
+
+	// Parse JSON response
+	var v interface{}
+	decoder := json.NewDecoder(bytes.NewBufferString(output))
+	decoder.UseNumber()
+	err := decoder.Decode(&v)
+	if err != nil {
+		return output, fmt.Errorf("failed to parse JSON response: %w", err)
+	}
+
+	// Apply JMESPath query
+	result, err := jmespath.Search(queryExpr, v)
+	if err != nil {
+		return output, fmt.Errorf("JMESPath query failed: %w", err)
+	}
+
+	// Convert result back to JSON
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		return output, fmt.Errorf("failed to marshal query result: %w", err)
+	}
+
+	return string(resultBytes), nil
 }
 
 // openapi context
