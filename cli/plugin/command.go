@@ -20,6 +20,7 @@ func NewPluginCommand() *cli.Command {
 
 	cmd.AddSubCommand(newListCommand())
 	cmd.AddSubCommand(newInstallCommand())
+	cmd.AddSubCommand(newInstallAllCommand())
 	cmd.AddSubCommand(newUninstallCommand())
 	cmd.AddSubCommand(newUpdateCommand())
 	// cmd.AddSubCommand(newSearchCommand())
@@ -42,7 +43,7 @@ func newListCommand() *cli.Command {
 				return err
 			}
 
-			w := tabwriter.NewWriter(cli.DefaultStdoutWriter(), 8, 0, 1, ' ', 0)
+			w := tabwriter.NewWriter(cli.DefaultStdoutWriter(), 20, 0, 3, ' ', 0)
 			fmt.Fprintln(w, "Name\tVersion\tDescription")
 			fmt.Fprintln(w, "----\t-------\t-----------")
 
@@ -56,18 +57,19 @@ func newListCommand() *cli.Command {
 }
 
 func newInstallCommand() *cli.Command {
-	return &cli.Command{
+	cmd := &cli.Command{
 		Name:  "install",
 		Short: i18n.T("Install a plugin", "安装插件"),
-		Usage: "plugin install <plugin_name> [version]",
+		Usage: "plugin install <plugin_name> [--version <version>]",
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) < 1 {
 				return fmt.Errorf("plugin name required")
 			}
 			name := args[0]
+
 			version := ""
-			if len(args) > 1 {
-				version = args[1]
+			if v, ok := ctx.Flags().GetValue("version"); ok {
+				version = v
 			}
 
 			mgr, err := NewManager()
@@ -76,6 +78,31 @@ func newInstallCommand() *cli.Command {
 			}
 
 			return mgr.Install(name, version)
+		},
+	}
+
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "version",
+		Short:        i18n.T("Specify plugin version", "指定插件版本"),
+		AssignedMode: cli.AssignedOnce,
+		DefaultValue: "",
+	})
+
+	return cmd
+}
+
+func newInstallAllCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "install-all",
+		Short: i18n.T("Install all available plugins", "安装所有可用的插件"),
+		Usage: "plugin install-all",
+		Run: func(ctx *cli.Context, args []string) error {
+			mgr, err := NewManager()
+			if err != nil {
+				return err
+			}
+
+			return mgr.InstallAll()
 		},
 	}
 }

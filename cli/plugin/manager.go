@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"golang.org/x/mod/semver"
 )
 
 const (
@@ -51,6 +54,64 @@ func (m *Manager) GetIndex() (*Index, error) {
 		return nil, fmt.Errorf("failed to decode plugin index: %w", err)
 	}
 	return &index, nil
+}
+
+func matchPluginName(pluginName, userInput string) bool {
+	// Case-insensitive exact match
+	if strings.EqualFold(pluginName, userInput) {
+		return true
+	}
+
+	// short name match: "fc" or "FC" -> "aliyun-cli-fc"
+	if strings.EqualFold(pluginName, "aliyun-cli-"+userInput) {
+		return true
+	}
+
+	// alternative prefix: "aliyun-fc" or "ALIYUN-FC" -> "aliyun-cli-fc"
+	alternativeName := strings.Replace(strings.ToLower(userInput), "aliyun-", "aliyun-cli-", 1)
+	if strings.EqualFold(pluginName, alternativeName) {
+		return true
+	}
+
+	return false
+}
+
+func isDevVersion(version string) bool {
+	if strings.HasPrefix(version, "0.0.") || version == "0.0.1" {
+		return true
+	}
+
+	lowerVersion := strings.ToLower(version)
+	return strings.Contains(lowerVersion, "-dev") || strings.Contains(lowerVersion, "dev")
+}
+
+// compareVersion compares two semantic version strings using the official semver library
+// Returns: 1 if v1 > v2, -1 if v1 < v2, 0 if v1 == v2
+func compareVersion(v1, v2 string) int {
+	// Ensure versions have 'v' prefix for semver library
+	if !strings.HasPrefix(v1, "v") {
+		v1 = "v" + v1
+	}
+	if !strings.HasPrefix(v2, "v") {
+		v2 = "v" + v2
+	}
+
+	return semver.Compare(v1, v2)
+}
+
+func (m *Manager) findLocalPlugin(userInput string) (string, *LocalPlugin, error) {
+	localManifest, err := m.GetLocalManifest()
+	if err != nil {
+		return "", nil, err
+	}
+
+	for pluginName, plugin := range localManifest.Plugins {
+		if matchPluginName(pluginName, userInput) {
+			return pluginName, &plugin, nil
+		}
+	}
+
+	return "", nil, fmt.Errorf("plugin %s not installed", userInput)
 }
 
 func (m *Manager) GetLocalManifest() (*LocalManifest, error) {
@@ -96,7 +157,7 @@ func (m *Manager) Install(pluginName, version string) error {
 
 	var targetPlugin *PluginInfo
 	for _, p := range index.Plugins {
-		if p.Name == pluginName {
+		if matchPluginName(p.Name, pluginName) {
 			targetPlugin = &p
 			break
 		}
@@ -105,25 +166,50 @@ func (m *Manager) Install(pluginName, version string) error {
 		return fmt.Errorf("plugin %s not found", pluginName)
 	}
 
+	actualPluginName := targetPlugin.Name
+
 	if version == "" {
 		version = targetPlugin.LatestVersion
 	}
 
-	verInfoMap, ok := targetPlugin.Versions[version]
+	verInfo, ok := targetPlugin.Versions[version]
 	if !ok {
-		return fmt.Errorf("version %s not found for plugin %s", version, pluginName)
+		return fmt.Errorf("version %s not found for plugin %s", version, actualPluginName)
+	}
+
+	// Check minimum CLI version requirement from plugin-index.json metadata
+	if verInfo.Metadata != nil && verInfo.Metadata.MinCliVersion != "" {
+		currentVersion := cli.GetVersion()
+
+		// Skip version check in development mode
+		if isDevVersion(currentVersion) {
+			cli.Printf(cli.DefaultStdoutWriter(),
+				"Running in development mode (version: %s), skipping version check\n"+
+					"   Plugin requires CLI version %s or higher\n",
+				currentVersion, verInfo.Metadata.MinCliVersion)
+		} else if compareVersion(currentVersion, verInfo.Metadata.MinCliVersion) < 0 {
+			return fmt.Errorf(
+				"plugin %s version %s requires CLI version %s or higher, but you have %s\n"+
+					"Please upgrade the CLI by running: brew upgrade aliyun-cli\n"+
+					"Or download the latest version from: https://github.com/aliyun/aliyun-cli/releases",
+				actualPluginName,
+				version,
+				verInfo.Metadata.MinCliVersion,
+				currentVersion,
+			)
+		}
 	}
 
 	platform := GetCurrentPlatform()
-	platInfo, ok := verInfoMap[platform]
+	platInfo, ok := verInfo.Platforms[platform]
 	if !ok {
-		return fmt.Errorf("plugin %s version %s not supported on %s", pluginName, version, platform)
+		return fmt.Errorf("plugin %s version %s not supported on %s", actualPluginName, version, platform)
 	}
 
 	downloadURL := platInfo.URL
 
 	// 下载并解压
-	cli.Printf(cli.DefaultStdoutWriter(), "Downloading %s %s...\n", pluginName, version)
+	cli.Printf(cli.DefaultStdoutWriter(), "Downloading %s %s...\n", actualPluginName, version)
 
 	tmpDir, err := os.MkdirTemp("", "aliyun-plugin-")
 	if err != nil {
@@ -136,7 +222,23 @@ func (m *Manager) Install(pluginName, version string) error {
 		return err
 	}
 
-	extractDir := filepath.Join(m.rootDir, pluginName)
+	actualChecksum, err := calculateSHA256(archivePath)
+	if err != nil {
+		return fmt.Errorf("failed to calculate checksum: %w", err)
+	}
+
+	expectedChecksum := platInfo.Checksum
+	if actualChecksum != expectedChecksum {
+		return fmt.Errorf(
+			"checksum verification failed for plugin %s version %s\n"+
+				"Expected: %s\n"+
+				"Actual:   %s\n"+
+				"The downloaded file may be corrupted or tampered with",
+			actualPluginName, version, expectedChecksum, actualChecksum,
+		)
+	}
+
+	extractDir := filepath.Join(m.rootDir, actualPluginName)
 	if err := os.RemoveAll(extractDir); err != nil {
 		return err
 	}
@@ -171,8 +273,8 @@ func (m *Manager) Install(pluginName, version string) error {
 		return err
 	}
 
-	localManifest.Plugins[pluginName] = LocalPlugin{
-		Name:        pluginName,
+	localManifest.Plugins[actualPluginName] = LocalPlugin{
+		Name:        actualPluginName,
 		Version:     version,
 		Path:        extractDir,
 		Command:     pManifest.Command,
@@ -183,19 +285,14 @@ func (m *Manager) Install(pluginName, version string) error {
 		return err
 	}
 
-	cli.Printf(cli.DefaultStdoutWriter(), "Plugin %s %s installed successfully!\n", pluginName, version)
+	cli.Printf(cli.DefaultStdoutWriter(), "Plugin %s %s installed successfully!\n", actualPluginName, version)
 	return nil
 }
 
 func (m *Manager) Upgrade(pluginName string) error {
-	localManifest, err := m.GetLocalManifest()
+	actualPluginName, localPlugin, err := m.findLocalPlugin(pluginName)
 	if err != nil {
 		return err
-	}
-
-	localPlugin, ok := localManifest.Plugins[pluginName]
-	if !ok {
-		return fmt.Errorf("plugin %s not installed", pluginName)
 	}
 
 	index, err := m.GetIndex()
@@ -205,7 +302,7 @@ func (m *Manager) Upgrade(pluginName string) error {
 
 	var targetPlugin *PluginInfo
 	for _, p := range index.Plugins {
-		if p.Name == pluginName {
+		if matchPluginName(p.Name, pluginName) {
 			targetPlugin = &p
 			break
 		}
@@ -215,35 +312,35 @@ func (m *Manager) Upgrade(pluginName string) error {
 	}
 
 	if localPlugin.Version == targetPlugin.LatestVersion {
-		cli.Printf(cli.DefaultStdoutWriter(), "Plugin %s is already up to date (version %s).\n", pluginName, localPlugin.Version)
+		cli.Printf(cli.DefaultStdoutWriter(), "Plugin %s is already up to date (version %s).\n", actualPluginName, localPlugin.Version)
 		return nil
 	}
 
-	cli.Printf(cli.DefaultStdoutWriter(), "Upgrading plugin %s from %s to %s...\n", pluginName, localPlugin.Version, targetPlugin.LatestVersion)
-	return m.Install(pluginName, targetPlugin.LatestVersion)
+	cli.Printf(cli.DefaultStdoutWriter(), "Upgrading plugin %s from %s to %s...\n", actualPluginName, localPlugin.Version, targetPlugin.LatestVersion)
+	return m.Install(actualPluginName, targetPlugin.LatestVersion)
 }
 
 func (m *Manager) Uninstall(pluginName string) error {
-	localManifest, err := m.GetLocalManifest()
+	actualPluginName, plugin, err := m.findLocalPlugin(pluginName)
 	if err != nil {
 		return err
-	}
-
-	plugin, ok := localManifest.Plugins[pluginName]
-	if !ok {
-		return fmt.Errorf("plugin %s not installed", pluginName)
 	}
 
 	if err := os.RemoveAll(plugin.Path); err != nil {
 		return fmt.Errorf("failed to remove plugin files: %w", err)
 	}
 
-	delete(localManifest.Plugins, pluginName)
+	localManifest, err := m.GetLocalManifest()
+	if err != nil {
+		return err
+	}
+
+	delete(localManifest.Plugins, actualPluginName)
 	if err := m.saveLocalManifest(localManifest); err != nil {
 		return err
 	}
 
-	cli.Printf(cli.DefaultStdoutWriter(), "Plugin %s uninstalled.\n", pluginName)
+	cli.Printf(cli.DefaultStdoutWriter(), "Plugin %s uninstalled.\n", actualPluginName)
 	return nil
 }
 
@@ -351,5 +448,65 @@ func unzip(src, dest string) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func calculateSHA256(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func (m *Manager) InstallAll() error {
+	index, err := m.GetIndex()
+	if err != nil {
+		return fmt.Errorf("failed to get plugin index: %w", err)
+	}
+
+	localManifest, err := m.GetLocalManifest()
+	if err != nil {
+		return fmt.Errorf("failed to get local manifest: %w", err)
+	}
+
+	cli.Printf(cli.DefaultStdoutWriter(), "Found %d plugins in index\n", len(index.Plugins))
+
+	var installed, skipped, failed int
+	for _, plugin := range index.Plugins {
+		pluginName := plugin.Name
+
+		if _, exists := localManifest.Plugins[pluginName]; exists {
+			cli.Printf(cli.DefaultStdoutWriter(), "Skipping %s (already installed)\n", pluginName)
+			skipped++
+			continue
+		}
+
+		cli.Printf(cli.DefaultStdoutWriter(), "Installing %s...\n", pluginName)
+
+		if err := m.Install(pluginName, ""); err != nil {
+			cli.Printf(cli.DefaultStdoutWriter(), "Failed to install %s: %v\n", pluginName, err)
+			failed++
+			continue
+		}
+
+		installed++
+	}
+
+	cli.Printf(cli.DefaultStdoutWriter(), "\n=== Summary ===\n")
+	cli.Printf(cli.DefaultStdoutWriter(), "Installed: %d\n", installed)
+	cli.Printf(cli.DefaultStdoutWriter(), "Skipped: %d\n", skipped)
+	if failed > 0 {
+		cli.Printf(cli.DefaultStdoutWriter(), "Failed: %d\n", failed)
+		return fmt.Errorf("%d plugin(s) failed to install", failed)
+	}
+
 	return nil
 }
