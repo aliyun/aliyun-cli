@@ -1,8 +1,8 @@
 module github.com/aliyun/aliyun-cli/v3
 
-go 1.24.0
+go 1.23.0
 
-toolchain go1.24.11
+toolchain go1.23.8
 
 require (
 	github.com/alibabacloud-go/alibabacloud-gateway-sls v0.3.0
@@ -20,7 +20,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/crypto v0.41.0
-	golang.org/x/mod v0.31.0
+	golang.org/x/mod v0.17.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
 	gopkg.in/ini.v1 v1.67.0
 )
