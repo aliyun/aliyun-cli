@@ -389,7 +389,23 @@ func untar(src, dest string) error {
 			return err
 		}
 
+		// check if the path is absolute or contains suspicious patterns
+		if filepath.IsAbs(header.Name) {
+			return fmt.Errorf("illegal absolute path in archive: %s", header.Name)
+		}
+		if strings.Contains(header.Name, "..") {
+			return fmt.Errorf("illegal path with '..' in archive: %s", header.Name)
+		}
+
 		target := filepath.Join(dest, header.Name)
+		target = filepath.Clean(target)
+
+		// Double-check: ensure the target path is within the destination directory
+		destPath := filepath.Clean(dest) + string(os.PathSeparator)
+		if !strings.HasPrefix(target, destPath) {
+			return fmt.Errorf("illegal file path in archive: %s", header.Name)
+		}
+
 		switch header.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, 0755); err != nil {
@@ -418,7 +434,23 @@ func unzip(src, dest string) error {
 	defer r.Close()
 
 	for _, f := range r.File {
+		// check if the path is absolute or contains suspicious patterns
+		if filepath.IsAbs(f.Name) {
+			return fmt.Errorf("illegal absolute path in archive: %s", f.Name)
+		}
+		if strings.Contains(f.Name, "..") {
+			return fmt.Errorf("illegal path with '..' in archive: %s", f.Name)
+		}
+
 		fpath := filepath.Join(dest, f.Name)
+		fpath = filepath.Clean(fpath)
+
+		// Double-check: ensure the target path is within the destination directory
+		destPath := filepath.Clean(dest) + string(os.PathSeparator)
+		if !strings.HasPrefix(fpath, destPath) {
+			return fmt.Errorf("illegal file path in archive: %s", f.Name)
+		}
+
 		if f.FileInfo().IsDir() {
 			os.MkdirAll(fpath, os.ModePerm)
 			continue
