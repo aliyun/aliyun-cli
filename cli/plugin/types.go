@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"encoding/json"
 	"runtime"
 )
 
@@ -13,10 +14,64 @@ type PluginInfo struct {
 	LatestVersion string                 `json:"latestVersion"`
 	Description   string                 `json:"description"`
 	Homepage      string                 `json:"homepage"`
-	Versions      map[string]VersionInfo `json:"versions"` // version -> platform -> info
+	Versions      map[string]VersionInfo `json:"versions"` // version -> VersionInfo
 }
 
-type VersionInfo map[string]PlatformInfo
+type VersionInfo struct {
+	Metadata  *VersionMetadata        `json:"metadata,omitempty"` // Version metadata (minCliVersion, etc.)
+	Platforms map[string]PlatformInfo `json:"-"`                  // For internal use during unmarshaling
+}
+
+// UnmarshalJSON custom unmarshaler to handle the mixed structure
+func (v *VersionInfo) UnmarshalJSON(data []byte) error {
+	// First, unmarshal into a map to separate metadata from platforms
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	v.Platforms = make(map[string]PlatformInfo)
+
+	for key, value := range raw {
+		if key == "metadata" {
+			var meta VersionMetadata
+			if err := json.Unmarshal(value, &meta); err != nil {
+				return err
+			}
+			v.Metadata = &meta
+		} else {
+			// It's a platform entry
+			var platform PlatformInfo
+			if err := json.Unmarshal(value, &platform); err != nil {
+				return err
+			}
+			v.Platforms[key] = platform
+		}
+	}
+
+	return nil
+}
+
+// MarshalJSON custom marshaler to flatten the structure
+func (v VersionInfo) MarshalJSON() ([]byte, error) {
+	result := make(map[string]interface{})
+
+	// Add metadata if present
+	if v.Metadata != nil {
+		result["metadata"] = v.Metadata
+	}
+
+	// Add all platforms
+	for key, value := range v.Platforms {
+		result[key] = value
+	}
+
+	return json.Marshal(result)
+}
+
+type VersionMetadata struct {
+	MinCliVersion string `json:"minCliVersion,omitempty"`
+}
 
 type PlatformInfo struct {
 	URL      string `json:"url"`
