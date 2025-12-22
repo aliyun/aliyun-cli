@@ -290,7 +290,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		return nil
 	}
 
-	// apply --query JMESPath filter first (before --output, since --output returns table format)
+	// apply --query JMESPath filter first (before --output, --output returns table format)
 	if QueryFlag(ctx.Flags()).IsAssigned() {
 		out, err = ApplyQueryFilter(ctx, out)
 		if err != nil {
@@ -473,19 +473,16 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 	}
 }
 
-// ApplyQueryFilter applies JMESPath query filter to the output
 func ApplyQueryFilter(ctx *cli.Context, output string) (string, error) {
 	queryExpr, ok := QueryFlag(ctx.Flags()).GetValue()
 	if !ok || queryExpr == "" {
 		return output, nil
 	}
 
-	// Handle empty output
 	if output == "" {
 		return output, nil
 	}
 
-	// Parse JSON response
 	var v interface{}
 	decoder := json.NewDecoder(bytes.NewBufferString(output))
 	decoder.UseNumber()
@@ -494,13 +491,11 @@ func ApplyQueryFilter(ctx *cli.Context, output string) (string, error) {
 		return output, fmt.Errorf("failed to parse JSON response: %w", err)
 	}
 
-	// Apply JMESPath query
 	result, err := jmespath.Search(queryExpr, v)
 	if err != nil {
 		return output, fmt.Errorf("JMESPath query failed: %w", err)
 	}
 
-	// Convert result back to JSON
 	resultBytes, err := json.Marshal(result)
 	if err != nil {
 		return output, fmt.Errorf("failed to marshal query result: %w", err)

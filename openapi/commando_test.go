@@ -1267,3 +1267,191 @@ func TestMainForNonSlsProductApiWithRestCall(t *testing.T) {
 	err := command.main(ctx, args)
 	assert.NotNil(t, err)
 }
+
+func TestApplyQueryFilter(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	AddFlags(ctx.Flags())
+
+	t.Run("QueryFlagNotAssigned", func(t *testing.T) {
+		output := `{"key": "value"}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, output, result)
+	})
+
+	t.Run("QueryFlagEmpty", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("")
+		output := `{"key": "value"}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, output, result)
+	})
+
+	t.Run("EmptyOutput", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("key")
+		output := ""
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, output, result)
+	})
+
+	t.Run("InvalidJSON", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("key")
+		output := `invalid json`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse JSON response")
+		assert.Equal(t, output, result)
+	})
+
+	t.Run("ValidQuerySimpleField", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("key")
+		output := `{"key": "value"}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, `"value"`, result)
+	})
+
+	t.Run("ValidQueryNestedField", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("nested.field")
+		output := `{"nested": {"field": "value"}}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, `"value"`, result)
+	})
+
+	t.Run("ValidQueryArray", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("items[*].name")
+		output := `{"items": [{"name": "item1"}, {"name": "item2"}]}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		// Result should be JSON array
+		assert.Contains(t, result, "item1")
+		assert.Contains(t, result, "item2")
+	})
+
+	t.Run("ValidQueryArrayOfArrays", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("instances[*].[instanceId,status]")
+		output := `{"instances": [{"instanceId": "i-xxx", "status": "Running"}, {"instanceId": "i-yyy", "status": "Stopped"}]}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		// Result should be array of arrays
+		assert.Contains(t, result, "i-xxx")
+		assert.Contains(t, result, "Running")
+		assert.Contains(t, result, "i-yyy")
+		assert.Contains(t, result, "Stopped")
+	})
+
+	t.Run("ValidQueryObjectArray", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("instances[*].{id: instanceId, name: instanceName}")
+		output := `{"instances": [{"instanceId": "i-xxx", "instanceName": "test"}, {"instanceId": "i-yyy", "instanceName": "prod"}]}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		// Result should be array of objects
+		assert.Contains(t, result, "i-xxx")
+		assert.Contains(t, result, "test")
+		assert.Contains(t, result, "i-yyy")
+		assert.Contains(t, result, "prod")
+	})
+
+	t.Run("InvalidJMESPath", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("invalid[")
+		output := `{"key": "value"}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "JMESPath query failed")
+		assert.Equal(t, output, result)
+	})
+
+	t.Run("QueryReturnsNull", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("nonexistent")
+		output := `{"key": "value"}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, "null", result)
+	})
+
+	t.Run("QueryReturnsNumber", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("count")
+		output := `{"count": 42}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, "42", result)
+	})
+
+	t.Run("QueryReturnsBoolean", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("enabled")
+		output := `{"enabled": true}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, "true", result)
+	})
+
+	t.Run("QueryReturnsArray", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("items")
+		output := `{"items": [1, 2, 3]}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, "[1,2,3]", result)
+	})
+
+	t.Run("QueryReturnsObject", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("metadata")
+		output := `{"metadata": {"key": "value"}}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Contains(t, result, "key")
+		assert.Contains(t, result, "value")
+	})
+
+	t.Run("ComplexNestedQuery", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("data.items[0].name")
+		output := `{"data": {"items": [{"name": "first"}, {"name": "second"}]}}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, `"first"`, result)
+	})
+
+	t.Run("QueryWithFilter", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("items[?status=='active'].name")
+		output := `{"items": [{"name": "item1", "status": "active"}, {"name": "item2", "status": "inactive"}]}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Contains(t, result, "item1")
+		assert.NotContains(t, result, "item2")
+	})
+}
