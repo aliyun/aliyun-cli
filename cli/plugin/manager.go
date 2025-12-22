@@ -396,6 +396,10 @@ func untar(src, dest string) error {
 		if strings.Contains(header.Name, "..") {
 			return fmt.Errorf("illegal path with '..' in archive: %s", header.Name)
 		}
+		// Reject paths starting with / or \ for cross-platform security
+		if strings.HasPrefix(header.Name, "/") || strings.HasPrefix(header.Name, "\\") {
+			return fmt.Errorf("illegal path starting with separator in archive: %s", header.Name)
+		}
 
 		target := filepath.Join(dest, header.Name)
 		target = filepath.Clean(target)
@@ -440,6 +444,10 @@ func unzip(src, dest string) error {
 		}
 		if strings.Contains(f.Name, "..") {
 			return fmt.Errorf("illegal path with '..' in archive: %s", f.Name)
+		}
+		// Reject paths starting with / or \ for cross-platform security
+		if strings.HasPrefix(f.Name, "/") || strings.HasPrefix(f.Name, "\\") {
+			return fmt.Errorf("illegal path starting with separator in archive: %s", f.Name)
 		}
 
 		fpath := filepath.Join(dest, f.Name)

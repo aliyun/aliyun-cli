@@ -58,6 +58,9 @@ func TestZipSlipProtection(t *testing.T) {
 				isValid = false
 			} else if strings.Contains(tt.archPath, "..") {
 				isValid = false
+			} else if strings.HasPrefix(tt.archPath, "/") || strings.HasPrefix(tt.archPath, "\\") {
+				// Reject paths starting with / or \ (cross-platform security)
+				isValid = false
 			} else {
 				// Step 2: Check if the final path is within dest
 				target := filepath.Join(dest, tt.archPath)
