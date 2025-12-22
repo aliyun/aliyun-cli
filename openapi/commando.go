@@ -171,6 +171,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		return c.help(ctx, args)
 	}
 
+	// detect if in configure mode
 	ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
 	// update current `Profile` with flags
 	var err error
