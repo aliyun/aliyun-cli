@@ -113,6 +113,11 @@ func DetectInConfigureMode(flags *cli.FlagSet) bool {
 }
 
 func (c *Commando) main(ctx *cli.Context, args []string) error {
+	// aliyun
+	if len(args) == 0 {
+		c.printUsage(ctx)
+		return nil
+	}
 	// Strategy: Plugin Execution
 	// 1. Try built-in first.
 	// 2. If built-in product/api not found, fallback to plugin
@@ -173,6 +178,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 
 	// detect if in configure mode
 	ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
+
 	// update current `Profile` with flags
 	var err error
 	c.profile, err = config.LoadProfileWithContext(ctx)
@@ -183,7 +189,6 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	if err != nil {
 		return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it.")
 	}
-
 	i18n.SetLanguage(c.profile.Language)
 
 	// process following commands:
