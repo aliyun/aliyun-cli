@@ -119,37 +119,13 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		return nil
 	}
 	// Strategy: Plugin Execution
-	// 1. Try built-in first.
-	// 2. If built-in product/api not found, fallback to plugin
-
-	if len(args) > 0 {
-		shouldFallback := false
-		productName := args[0]
-		product, ok := c.library.GetProduct(productName)
-
-		if !ok {
-			// Product not found in built-in library
-			shouldFallback = true
-		} else if len(args) > 1 {
-			// Product exists, check if API/Method exists
-			apiOrMethod := args[1]
-			// Check if it looks like a REST method
-			isRestMethod := strings.ToUpper(apiOrMethod) == "GET" ||
-				strings.ToUpper(apiOrMethod) == "POST" ||
-				strings.ToUpper(apiOrMethod) == "PUT" ||
-				strings.ToUpper(apiOrMethod) == "DELETE"
-
-			if !isRestMethod {
-				// Check if it is a known RPC API
-				// Note: This check relies on local metadata.
-				if _, ok := c.library.GetApi(product.Code, product.Version, apiOrMethod); !ok {
-					shouldFallback = true
-				}
-			}
-		}
-
-		if shouldFallback {
-			// 从 os.Args 中提取完整的插件参数
+	// If the second argument (API name) is kebab-case (contains '-'), try plugin first.
+	// fmt.Println("args", args)
+	if len(args) > 1 {
+		apiOrMethod := args[1]
+		// Check if it's kebab-case (plugin format)
+		if strings.Contains(apiOrMethod, "-") {
+			// Extract plugin arguments from os.Args
 			var pluginArgs []string
 			cmdIndex := -1
 			for i, arg := range os.Args {
@@ -162,13 +138,14 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				pluginArgs = os.Args[cmdIndex+1:]
 			}
 
-			ok, err := plugin.ExecutePlugin(args[0], pluginArgs)
+			ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
 			if err != nil {
 				return err
 			}
-			if ok {
-				return nil
+			if !ok {
+				return fmt.Errorf("plugin %s not found", args[0])
 			}
+			return nil
 		}
 	}
 

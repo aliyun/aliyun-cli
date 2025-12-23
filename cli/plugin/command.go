@@ -43,7 +43,7 @@ func newListCommand() *cli.Command {
 				return err
 			}
 
-			w := tabwriter.NewWriter(cli.DefaultStdoutWriter(), 20, 0, 3, ' ', 0)
+			w := tabwriter.NewWriter(ctx.Stdout(), 20, 0, 3, ' ', 0)
 			fmt.Fprintln(w, "Name\tVersion\tDescription")
 			fmt.Fprintln(w, "----\t-------\t-----------")
 
@@ -66,6 +66,9 @@ func newInstallCommand() *cli.Command {
 			if v, ok := ctx.Flags().GetValue("name"); ok {
 				name = v
 			}
+			if name == "" {
+				return fmt.Errorf("name flag is required")
+			}
 
 			version := ""
 			if v, ok := ctx.Flags().GetValue("version"); ok {
@@ -77,7 +80,7 @@ func newInstallCommand() *cli.Command {
 				return err
 			}
 
-			return mgr.Install(name, version)
+			return mgr.Install(ctx, name, version)
 		},
 	}
 
@@ -109,7 +112,7 @@ func newInstallAllCommand() *cli.Command {
 				return err
 			}
 
-			return mgr.InstallAll()
+			return mgr.InstallAll(ctx)
 		},
 	}
 }
@@ -130,7 +133,7 @@ func newUninstallCommand() *cli.Command {
 				return err
 			}
 
-			return mgr.Uninstall(name)
+			return mgr.Uninstall(ctx, name)
 		},
 	}
 
@@ -161,10 +164,10 @@ func newUpdateCommand() *cli.Command {
 			}
 
 			if name == "" {
-				return mgr.UpdateAll()
+				return mgr.UpdateAll(ctx)
 			}
 
-			return mgr.Upgrade(name)
+			return mgr.Upgrade(ctx, name)
 		},
 	}
 
