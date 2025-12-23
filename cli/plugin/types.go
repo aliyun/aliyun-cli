@@ -86,7 +86,7 @@ type LocalPlugin struct {
 	Name        string `json:"name"`
 	Version     string `json:"version"`
 	Path        string `json:"path"`    // 插件目录路径
-	Command     string `json:"command"` // 触发命令，如 "fc"
+	Command     string `json:"command"` // 触发命令，not used for now
 	Description string `json:"description"`
 }
 
