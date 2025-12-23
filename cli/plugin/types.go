@@ -22,9 +22,7 @@ type VersionInfo struct {
 	Platforms map[string]PlatformInfo `json:"-"`                  // For internal use during unmarshaling
 }
 
-// UnmarshalJSON custom unmarshaler to handle the mixed structure
 func (v *VersionInfo) UnmarshalJSON(data []byte) error {
-	// First, unmarshal into a map to separate metadata from platforms
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -52,16 +50,13 @@ func (v *VersionInfo) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// MarshalJSON custom marshaler to flatten the structure
 func (v VersionInfo) MarshalJSON() ([]byte, error) {
 	result := make(map[string]interface{})
 
-	// Add metadata if present
 	if v.Metadata != nil {
 		result["metadata"] = v.Metadata
 	}
 
-	// Add all platforms
 	for key, value := range v.Platforms {
 		result[key] = value
 	}

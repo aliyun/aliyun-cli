@@ -1,12 +1,305 @@
 package plugin
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/stretchr/testify/assert"
 )
+
+func newTestContext() *cli.Context {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	return cli.NewCommandContext(stdout, stderr)
+}
+
+func TestNewManager(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		// Save original environment variables
+		originalHome := os.Getenv("HOME")
+		originalUserProfile := os.Getenv("USERPROFILE")
+		defer func() {
+			if originalHome != "" {
+				os.Setenv("HOME", originalHome)
+			} else {
+				os.Unsetenv("HOME")
+			}
+			if runtime.GOOS == "windows" {
+				if originalUserProfile != "" {
+					os.Setenv("USERPROFILE", originalUserProfile)
+				} else {
+					os.Unsetenv("USERPROFILE")
+				}
+			}
+		}()
+
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+		if runtime.GOOS == "windows" {
+			os.Setenv("USERPROFILE", testHome)
+		}
+
+		mgr, err := NewManager()
+		assert.NoError(t, err)
+		assert.NotNil(t, mgr)
+		assert.NotEmpty(t, mgr.rootDir)
+
+		if _, err := os.Stat(mgr.rootDir); os.IsNotExist(err) {
+			t.Errorf("NewManager() did not create directory: %s", mgr.rootDir)
+		}
+
+		expectedDir := filepath.Join(testHome, ".aliyun", "plugins")
+		assert.Equal(t, expectedDir, mgr.rootDir)
+	})
+
+	t.Run("Creates correct directory structure", func(t *testing.T) {
+		originalHome := os.Getenv("HOME")
+		originalUserProfile := os.Getenv("USERPROFILE")
+		defer func() {
+			if originalHome != "" {
+				os.Setenv("HOME", originalHome)
+			} else {
+				os.Unsetenv("HOME")
+			}
+			if runtime.GOOS == "windows" {
+				if originalUserProfile != "" {
+					os.Setenv("USERPROFILE", originalUserProfile)
+				} else {
+					os.Unsetenv("USERPROFILE")
+				}
+			}
+		}()
+
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+		if runtime.GOOS == "windows" {
+			os.Setenv("USERPROFILE", testHome)
+		}
+
+		mgr, err := NewManager()
+		assert.NoError(t, err)
+		assert.NotNil(t, mgr)
+
+		expectedDir := filepath.Join(testHome, ".aliyun", "plugins")
+		assert.Equal(t, expectedDir, mgr.rootDir)
+	})
+
+	t.Run("Home directory not found", func(t *testing.T) {
+		originalHome := os.Getenv("HOME")
+		defer os.Setenv("HOME", originalHome)
+
+		os.Unsetenv("HOME")
+		if runtime.GOOS != "windows" {
+			mgr, err := NewManager()
+			assert.Nil(t, mgr)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "home directory not found")
+		}
+	})
+}
+
+func TestManager_GetIndex(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		validIndex := Index{
+			Plugins: []PluginInfo{
+				{
+					Name:          "aliyun-cli-fc",
+					LatestVersion: "1.0.0",
+					Description:   "FC plugin",
+				},
+			},
+		}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(validIndex)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{
+			rootDir:  t.TempDir(),
+			indexURL: server.URL,
+		}
+		index, err := mgr.GetIndex()
+		assert.NoError(t, err)
+		assert.NotNil(t, index)
+		assert.Equal(t, 1, len(index.Plugins))
+		assert.Equal(t, "aliyun-cli-fc", index.Plugins[0].Name)
+	})
+
+	t.Run("Network error", func(t *testing.T) {
+		mgr := &Manager{
+			rootDir:  t.TempDir(),
+			indexURL: "http://invalid-url-that-does-not-exist.local/plugins/index.json",
+		}
+		_, err := mgr.GetIndex()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to fetch plugin index")
+	})
+
+	t.Run("Non-200 status code", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{
+			rootDir:  t.TempDir(),
+			indexURL: server.URL,
+		}
+		_, err := mgr.GetIndex()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "status 404")
+	})
+
+	t.Run("Invalid JSON", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte("invalid json"))
+		}))
+		defer server.Close()
+
+		mgr := &Manager{
+			rootDir:  t.TempDir(),
+			indexURL: server.URL,
+		}
+		_, err := mgr.GetIndex()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to decode plugin index")
+	})
+}
+
+func TestManager_findPluginInIndex(t *testing.T) {
+	t.Run("Success - exact match", func(t *testing.T) {
+		validIndex := Index{
+			Plugins: []PluginInfo{
+				{
+					Name:          "aliyun-cli-fc",
+					LatestVersion: "1.0.0",
+					Description:   "FC plugin",
+				},
+				{
+					Name:          "aliyun-cli-ecs",
+					LatestVersion: "2.0.0",
+					Description:   "ECS plugin",
+				},
+			},
+		}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(validIndex)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{
+			rootDir:  t.TempDir(),
+			indexURL: server.URL,
+		}
+
+		plugin, err := mgr.findPluginInIndex("aliyun-cli-fc")
+		assert.NoError(t, err)
+		assert.NotNil(t, plugin)
+		assert.Equal(t, "aliyun-cli-fc", plugin.Name)
+		assert.Equal(t, "1.0.0", plugin.LatestVersion)
+	})
+
+	t.Run("Success - short name match", func(t *testing.T) {
+		validIndex := Index{
+			Plugins: []PluginInfo{
+				{
+					Name:          "aliyun-cli-fc",
+					LatestVersion: "1.0.0",
+					Description:   "FC plugin",
+				},
+			},
+		}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(validIndex)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{
+			rootDir:  t.TempDir(),
+			indexURL: server.URL,
+		}
+
+		plugin, err := mgr.findPluginInIndex("fc")
+		assert.NoError(t, err)
+		assert.NotNil(t, plugin)
+		assert.Equal(t, "aliyun-cli-fc", plugin.Name)
+	})
+
+	t.Run("Plugin not found", func(t *testing.T) {
+		validIndex := Index{
+			Plugins: []PluginInfo{
+				{
+					Name:          "aliyun-cli-fc",
+					LatestVersion: "1.0.0",
+					Description:   "FC plugin",
+				},
+			},
+		}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(validIndex)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{
+			rootDir:  t.TempDir(),
+			indexURL: server.URL,
+		}
+
+		_, err := mgr.findPluginInIndex("nonexistent-plugin")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "plugin nonexistent-plugin not found")
+	})
+
+	t.Run("GetIndex error", func(t *testing.T) {
+		mgr := &Manager{
+			rootDir:  t.TempDir(),
+			indexURL: "http://invalid-url-that-does-not-exist.local/plugins/index.json",
+		}
+
+		_, err := mgr.findPluginInIndex("aliyun-cli-fc")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to fetch plugin index")
+	})
+
+	t.Run("Empty index", func(t *testing.T) {
+		emptyIndex := Index{
+			Plugins: []PluginInfo{},
+		}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(emptyIndex)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{
+			rootDir:  t.TempDir(),
+			indexURL: server.URL,
+		}
+
+		_, err := mgr.findPluginInIndex("aliyun-cli-fc")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "plugin aliyun-cli-fc not found")
+	})
+}
 
 func TestZipSlipProtection(t *testing.T) {
 	// This test verifies that the untar and unzip functions
@@ -532,7 +825,8 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			platInfo, err := mgr.validateVersionAndPlatform(tt.targetPlugin, tt.version, tt.pluginName)
+			ctx := newTestContext()
+			platInfo, err := mgr.validateVersionAndPlatform(ctx, tt.targetPlugin, tt.version, tt.pluginName)
 
 			if tt.wantErr {
 				if err == nil {
@@ -555,6 +849,216 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateVersionAndPlatform_VersionCheck(t *testing.T) {
+	tmpDir := t.TempDir()
+	mgr := &Manager{rootDir: tmpDir}
+	currentPlatform := GetCurrentPlatform()
+
+	originalVersion := cli.Version
+	defer func() {
+		cli.Version = originalVersion
+	}()
+
+	t.Run("Success - no metadata", func(t *testing.T) {
+		targetPlugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Platforms: map[string]PlatformInfo{
+						currentPlatform: {
+							URL:      "http://example.com/plugin.tar.gz",
+							Checksum: "abc123",
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		platInfo, err := mgr.validateVersionAndPlatform(ctx, targetPlugin, "1.0.0", "test-plugin")
+		if err != nil {
+			t.Errorf("validateVersionAndPlatform() unexpected error: %v", err)
+		}
+		if platInfo == nil {
+			t.Error("validateVersionAndPlatform() expected PlatformInfo, got nil")
+		}
+	})
+
+	t.Run("Success - metadata with empty MinCliVersion", func(t *testing.T) {
+		targetPlugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Metadata: &VersionMetadata{
+						MinCliVersion: "",
+					},
+					Platforms: map[string]PlatformInfo{
+						currentPlatform: {
+							URL:      "http://example.com/plugin.tar.gz",
+							Checksum: "abc123",
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		platInfo, err := mgr.validateVersionAndPlatform(ctx, targetPlugin, "1.0.0", "test-plugin")
+		if err != nil {
+			t.Errorf("validateVersionAndPlatform() unexpected error: %v", err)
+		}
+		if platInfo == nil {
+			t.Error("validateVersionAndPlatform() expected PlatformInfo, got nil")
+		}
+	})
+
+	t.Run("Success - dev version skips check", func(t *testing.T) {
+		cli.Version = "0.0.1"
+		targetPlugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Metadata: &VersionMetadata{
+						MinCliVersion: "3.2.0",
+					},
+					Platforms: map[string]PlatformInfo{
+						currentPlatform: {
+							URL:      "http://example.com/plugin.tar.gz",
+							Checksum: "abc123",
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		platInfo, err := mgr.validateVersionAndPlatform(ctx, targetPlugin, "1.0.0", "test-plugin")
+		if err != nil {
+			t.Errorf("validateVersionAndPlatform() unexpected error: %v", err)
+		}
+		if platInfo == nil {
+			t.Error("validateVersionAndPlatform() expected PlatformInfo, got nil")
+		}
+	})
+
+	t.Run("Success - dev version with -dev suffix skips check", func(t *testing.T) {
+		cli.Version = "3.2.0-dev"
+		targetPlugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Metadata: &VersionMetadata{
+						MinCliVersion: "3.2.0",
+					},
+					Platforms: map[string]PlatformInfo{
+						currentPlatform: {
+							URL:      "http://example.com/plugin.tar.gz",
+							Checksum: "abc123",
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		platInfo, err := mgr.validateVersionAndPlatform(ctx, targetPlugin, "1.0.0", "test-plugin")
+		if err != nil {
+			t.Errorf("validateVersionAndPlatform() unexpected error: %v", err)
+		}
+		if platInfo == nil {
+			t.Error("validateVersionAndPlatform() expected PlatformInfo, got nil")
+		}
+	})
+
+	t.Run("Error - current version lower than required", func(t *testing.T) {
+		cli.Version = "3.1.0"
+		targetPlugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Metadata: &VersionMetadata{
+						MinCliVersion: "3.2.0",
+					},
+					Platforms: map[string]PlatformInfo{
+						currentPlatform: {
+							URL:      "http://example.com/plugin.tar.gz",
+							Checksum: "abc123",
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		platInfo, err := mgr.validateVersionAndPlatform(ctx, targetPlugin, "1.0.0", "test-plugin")
+		assert.NotNil(t, err)
+		assert.Nil(t, platInfo)
+		assert.Contains(t, err.Error(), "requires CLI version")
+		assert.Contains(t, err.Error(), "3.2.0")
+		assert.Contains(t, err.Error(), "3.1.0")
+		assert.Contains(t, err.Error(), "brew upgrade")
+		assert.Contains(t, err.Error(), "github.com/aliyun/aliyun-cli/releases")
+	})
+
+	t.Run("Success - current version equal to required", func(t *testing.T) {
+		cli.Version = "3.2.0"
+		targetPlugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Metadata: &VersionMetadata{
+						MinCliVersion: "3.2.0",
+					},
+					Platforms: map[string]PlatformInfo{
+						currentPlatform: {
+							URL:      "http://example.com/plugin.tar.gz",
+							Checksum: "abc123",
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		platInfo, err := mgr.validateVersionAndPlatform(ctx, targetPlugin, "1.0.0", "test-plugin")
+		if err != nil {
+			t.Errorf("validateVersionAndPlatform() unexpected error: %v", err)
+		}
+		if platInfo == nil {
+			t.Error("validateVersionAndPlatform() expected PlatformInfo, got nil")
+		}
+	})
+
+	t.Run("Success - current version higher than required", func(t *testing.T) {
+		cli.Version = "3.3.0"
+		targetPlugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Metadata: &VersionMetadata{
+						MinCliVersion: "3.2.0",
+					},
+					Platforms: map[string]PlatformInfo{
+						currentPlatform: {
+							URL:      "http://example.com/plugin.tar.gz",
+							Checksum: "abc123",
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		platInfo, err := mgr.validateVersionAndPlatform(ctx, targetPlugin, "1.0.0", "test-plugin")
+		if err != nil {
+			t.Errorf("validateVersionAndPlatform() unexpected error: %v", err)
+		}
+		if platInfo == nil {
+			t.Error("validateVersionAndPlatform() expected PlatformInfo, got nil")
+		}
+	})
 }
 
 func TestLoadAndValidatePluginManifest(t *testing.T) {
@@ -681,40 +1185,1681 @@ func TestSavePluginToManifest(t *testing.T) {
 		ShortDescription: "Test plugin description",
 	}
 
-	// Create extract directory
 	if err := os.MkdirAll(extractDir, 0755); err != nil {
 		t.Fatalf("Failed to create extract directory: %v", err)
 	}
 
-	// Save plugin to manifest
 	if err := mgr.savePluginToManifest(pluginName, version, extractDir, pManifest); err != nil {
 		t.Fatalf("savePluginToManifest() error = %v", err)
 	}
 
-	// Verify the plugin was saved
 	localManifest, err := mgr.GetLocalManifest()
-	if err != nil {
-		t.Fatalf("GetLocalManifest() error = %v", err)
-	}
+	assert.NotNil(t, localManifest)
+	assert.NoError(t, err)
 
 	plugin, exists := localManifest.Plugins[pluginName]
-	if !exists {
-		t.Fatalf("Plugin %s not found in manifest", pluginName)
+	assert.True(t, exists)
+	assert.Equal(t, pluginName, plugin.Name)
+	assert.Equal(t, version, plugin.Version)
+	assert.Equal(t, extractDir, plugin.Path)
+	assert.Equal(t, pManifest.Command, plugin.Command)
+	assert.Equal(t, pManifest.ShortDescription, plugin.Description)
+}
+
+func TestManager_downloadAndVerifyPlugin(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		testContent := []byte("test plugin content")
+		expectedChecksum, err := calculateSHA256FromBytes(testContent)
+		assert.NoError(t, err)
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(testContent)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: t.TempDir()}
+		platInfo := &PlatformInfo{
+			URL:      server.URL,
+			Checksum: expectedChecksum,
+		}
+
+		ctx := newTestContext()
+		archivePath, err := mgr.downloadAndVerifyPlugin(ctx, platInfo, "test-plugin", "1.0.0")
+		assert.NoError(t, err)
+		assert.NotEmpty(t, archivePath)
+		assert.FileExists(t, archivePath)
+		content, err := os.ReadFile(archivePath)
+		assert.NoError(t, err)
+		assert.Equal(t, string(testContent), string(content))
+		os.RemoveAll(filepath.Dir(archivePath))
+	})
+
+	t.Run("Download failure - network error", func(t *testing.T) {
+		mgr := &Manager{rootDir: t.TempDir()}
+		platInfo := &PlatformInfo{
+			URL:      "http://invalid-url-that-does-not-exist.local/plugin.tar.gz",
+			Checksum: "abc123",
+		}
+
+		ctx := newTestContext()
+		_, err := mgr.downloadAndVerifyPlugin(ctx, platInfo, "test-plugin", "1.0.0")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid-url-that-does-not-exist.local")
+	})
+
+	t.Run("Checksum mismatch", func(t *testing.T) {
+		testContent := []byte("test plugin content")
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(testContent)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: t.TempDir()}
+		platInfo := &PlatformInfo{
+			URL:      server.URL,
+			Checksum: "wrong-checksum",
+		}
+
+		ctx := newTestContext()
+		archivePath, err := mgr.downloadAndVerifyPlugin(ctx, platInfo, "test-plugin", "1.0.0")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "checksum verification failed")
+		assert.Contains(t, err.Error(), "Expected: wrong-checksum")
+		assert.Empty(t, archivePath)
+	})
+
+	t.Run("Non-200 status code", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: t.TempDir()}
+		platInfo := &PlatformInfo{
+			URL:      server.URL,
+			Checksum: "abc123",
+		}
+
+		ctx := newTestContext()
+		_, err := mgr.downloadAndVerifyPlugin(ctx, platInfo, "test-plugin", "1.0.0")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "download failed: 404")
+	})
+}
+
+// Helper function to calculate SHA256 from bytes (for test setup)
+func calculateSHA256FromBytes(data []byte) (string, error) {
+	hash := sha256.New()
+	if _, err := hash.Write(data); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func TestUntar(t *testing.T) {
+	t.Run("Success - extract files and directories", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		archivePath := filepath.Join(tmpDir, "test.tar.gz")
+		destDir := filepath.Join(tmpDir, "extract")
+
+		if err := os.MkdirAll(destDir, 0755); err != nil {
+			t.Fatalf("Failed to create dest dir: %v", err)
+		}
+
+		// Create a test tar.gz archive
+		if err := createTestTarGz(archivePath, []testFile{
+			{name: "plugin/", content: "", isDir: true},
+			{name: "plugin/binary", content: "binary content", isDir: false},
+			{name: "plugin/config.txt", content: "config content", isDir: false},
+			{name: "plugin/subdir/", content: "", isDir: true},
+			{name: "plugin/subdir/file.txt", content: "file content", isDir: false},
+		}); err != nil {
+			t.Fatalf("Failed to create test archive: %v", err)
+		}
+
+		err := untar(archivePath, destDir)
+		assert.NoError(t, err)
+		binaryPath := filepath.Join(destDir, "plugin", "binary")
+		content, err := os.ReadFile(binaryPath)
+		assert.NoError(t, err)
+		assert.Equal(t, "binary content", string(content))
+
+		configPath := filepath.Join(destDir, "plugin", "config.txt")
+		content, err = os.ReadFile(configPath)
+		assert.NoError(t, err)
+		assert.Equal(t, "config content", string(content))
+
+		subdirPath := filepath.Join(destDir, "plugin", "subdir", "file.txt")
+		content, err = os.ReadFile(subdirPath)
+		assert.NoError(t, err)
+		assert.Equal(t, "file content", string(content))
+	})
+
+	t.Run("Error - source file not found", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		destDir := filepath.Join(tmpDir, "extract")
+
+		err := untar("/nonexistent/file.tar.gz", destDir)
+		assert.Error(t, err)
+	})
+
+	t.Run("Error - invalid gzip file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		archivePath := filepath.Join(tmpDir, "invalid.tar.gz")
+		destDir := filepath.Join(tmpDir, "extract")
+
+		// Create invalid gzip file
+		os.WriteFile(archivePath, []byte("not a gzip file"), 0644)
+
+		err := untar(archivePath, destDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "gzip: invalid")
+	})
+
+	t.Run("Error - absolute path in archive", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("untar test skipped on Windows")
+		}
+
+		tmpDir := t.TempDir()
+		archivePath := filepath.Join(tmpDir, "test.tar.gz")
+		destDir := filepath.Join(tmpDir, "extract")
+
+		// Create archive with absolute path
+		if err := createTestTarGz(archivePath, []testFile{
+			{name: "/etc/passwd", content: "malicious", isDir: false},
+		}); err != nil {
+			t.Fatalf("Failed to create test archive: %v", err)
+		}
+
+		err := untar(archivePath, destDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "illegal absolute path")
+	})
+
+	t.Run("Error - path with .. in archive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		archivePath := filepath.Join(tmpDir, "test.tar.gz")
+		destDir := filepath.Join(tmpDir, "extract")
+
+		// Create archive with .. path
+		if err := createTestTarGz(archivePath, []testFile{
+			{name: "../etc/passwd", content: "malicious", isDir: false},
+		}); err != nil {
+			t.Fatalf("Failed to create test archive: %v", err)
+		}
+
+		err := untar(archivePath, destDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "illegal path with '..'")
+	})
+
+	t.Run("Error - path starting with /", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		archivePath := filepath.Join(tmpDir, "test.tar.gz")
+		destDir := filepath.Join(tmpDir, "extract")
+
+		// Create archive with path starting with /
+		if err := createTestTarGz(archivePath, []testFile{
+			{name: "/plugin/binary", content: "content", isDir: false},
+		}); err != nil {
+			t.Fatalf("Failed to create test archive: %v", err)
+		}
+
+		err := untar(archivePath, destDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "illegal")
+	})
+
+	t.Run("Error - path starting with \\", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		archivePath := filepath.Join(tmpDir, "test.tar.gz")
+		destDir := filepath.Join(tmpDir, "extract")
+
+		// Create archive with path starting with \
+		if err := createTestTarGz(archivePath, []testFile{
+			{name: "\\plugin\\binary", content: "content", isDir: false},
+		}); err != nil {
+			t.Fatalf("Failed to create test archive: %v", err)
+		}
+
+		err := untar(archivePath, destDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "illegal path starting with separator")
+	})
+}
+
+func TestUnzip(t *testing.T) {
+	t.Run("Success - extract files and directories", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("unzip test skipped on Windows")
+		}
+
+		tmpDir := t.TempDir()
+		archivePath := filepath.Join(tmpDir, "test.zip")
+		destDir := filepath.Join(tmpDir, "extract")
+
+		if err := createTestZip(archivePath, []testFile{
+			{name: "plugin/binary", content: "binary content", isDir: false},
+			{name: "plugin/config.txt", content: "config content", isDir: false},
+			{name: "plugin/subdir/", content: "", isDir: true},
+			{name: "plugin/subdir/file.txt", content: "file content", isDir: false},
+		}); err != nil {
+			t.Fatalf("Failed to create test archive: %v", err)
+		}
+
+		err := unzip(archivePath, destDir)
+		assert.NoError(t, err)
+
+		binaryPath := filepath.Join(destDir, "plugin", "binary")
+		content, err := os.ReadFile(binaryPath)
+		assert.NoError(t, err)
+		assert.Equal(t, "binary content", string(content))
+
+		configPath := filepath.Join(destDir, "plugin", "config.txt")
+		content, err = os.ReadFile(configPath)
+		assert.NoError(t, err)
+		assert.Equal(t, "config content", string(content))
+
+		subdirPath := filepath.Join(destDir, "plugin", "subdir", "file.txt")
+		content, err = os.ReadFile(subdirPath)
+		assert.NoError(t, err)
+		assert.Equal(t, "file content", string(content))
+	})
+
+	t.Run("Error - source file not found", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		destDir := filepath.Join(tmpDir, "extract")
+
+		err := unzip("/nonexistent/file.zip", destDir)
+		assert.Error(t, err)
+	})
+
+	t.Run("Error - invalid zip file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		archivePath := filepath.Join(tmpDir, "invalid.zip")
+		destDir := filepath.Join(tmpDir, "extract")
+
+		// Create invalid zip file
+		os.WriteFile(archivePath, []byte("not a zip file"), 0644)
+
+		err := unzip(archivePath, destDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "not a valid zip file")
+	})
+
+	t.Run("Error - absolute path in archive", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("unzip test skipped on Windows")
+		}
+
+		tmpDir := t.TempDir()
+		archivePath := filepath.Join(tmpDir, "test.zip")
+		destDir := filepath.Join(tmpDir, "extract")
+
+		// Create archive with absolute path
+		if err := createTestZip(archivePath, []testFile{
+			{name: "/etc/passwd", content: "malicious", isDir: false},
+		}); err != nil {
+			t.Fatalf("Failed to create test archive: %v", err)
+		}
+
+		err := unzip(archivePath, destDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "illegal absolute path")
+	})
+
+	t.Run("Error - path with .. in archive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		archivePath := filepath.Join(tmpDir, "test.zip")
+		destDir := filepath.Join(tmpDir, "extract")
+
+		// Create archive with .. path
+		if err := createTestZip(archivePath, []testFile{
+			{name: "../etc/passwd", content: "malicious", isDir: false},
+		}); err != nil {
+			t.Fatalf("Failed to create test archive: %v", err)
+		}
+
+		err := unzip(archivePath, destDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "illegal path with '..'")
+	})
+
+	t.Run("Error - path starting with /", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		archivePath := filepath.Join(tmpDir, "test.zip")
+		destDir := filepath.Join(tmpDir, "extract")
+
+		// Create archive with path starting with /
+		if err := createTestZip(archivePath, []testFile{
+			{name: "/plugin/binary", content: "content", isDir: false},
+		}); err != nil {
+			t.Fatalf("Failed to create test archive: %v", err)
+		}
+
+		err := unzip(archivePath, destDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "illegal")
+	})
+
+	t.Run("Error - path starting with \\", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		archivePath := filepath.Join(tmpDir, "test.zip")
+		destDir := filepath.Join(tmpDir, "extract")
+
+		// Create archive with path starting with \
+		if err := createTestZip(archivePath, []testFile{
+			{name: "\\plugin\\binary", content: "content", isDir: false},
+		}); err != nil {
+			t.Fatalf("Failed to create test archive: %v", err)
+		}
+
+		err := unzip(archivePath, destDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "illegal path starting with separator")
+	})
+}
+
+type testFile struct {
+	name    string
+	content string
+	isDir   bool
+}
+
+func createTestTarGz(archivePath string, files []testFile) error {
+	f, err := os.Create(archivePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	gzw := gzip.NewWriter(f)
+	defer gzw.Close()
+
+	tw := tar.NewWriter(gzw)
+	defer tw.Close()
+
+	for _, file := range files {
+		var hdr *tar.Header
+		if file.isDir {
+			hdr = &tar.Header{
+				Name:     file.name,
+				Typeflag: tar.TypeDir,
+				Mode:     0755,
+			}
+		} else {
+			hdr = &tar.Header{
+				Name:     file.name,
+				Typeflag: tar.TypeReg,
+				Size:     int64(len(file.content)),
+				Mode:     0644,
+			}
+		}
+
+		if err := tw.WriteHeader(hdr); err != nil {
+			return err
+		}
+
+		if !file.isDir {
+			if _, err := tw.Write([]byte(file.content)); err != nil {
+				return err
+			}
+		}
 	}
 
-	if plugin.Name != pluginName {
-		t.Errorf("Plugin name = %q, want %q", plugin.Name, pluginName)
+	return nil
+}
+
+func createTestZip(archivePath string, files []testFile) error {
+	f, err := os.Create(archivePath)
+	if err != nil {
+		return err
 	}
-	if plugin.Version != version {
-		t.Errorf("Plugin version = %q, want %q", plugin.Version, version)
+	defer f.Close()
+
+	zw := zip.NewWriter(f)
+	defer zw.Close()
+
+	for _, file := range files {
+		var w io.Writer
+		if file.isDir {
+			// Create directory entry
+			hdr := &zip.FileHeader{
+				Name:   file.name,
+				Method: zip.Store,
+			}
+			hdr.SetMode(os.ModeDir | 0755)
+			w, err = zw.CreateHeader(hdr)
+			if err != nil {
+				return err
+			}
+		} else {
+			w, err = zw.Create(file.name)
+			if err != nil {
+				return err
+			}
+			if _, err := w.Write([]byte(file.content)); err != nil {
+				return err
+			}
+		}
 	}
-	if plugin.Path != extractDir {
-		t.Errorf("Plugin path = %q, want %q", plugin.Path, extractDir)
+
+	return nil
+}
+
+func TestManager_installPlugin(t *testing.T) {
+	t.Run("Success - install plugin with specified version", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		archiveContent := createTestPluginArchive(t, "test-plugin", "1.0.0", "test")
+		expectedChecksum, err := calculateSHA256FromBytes(archiveContent)
+		if err != nil {
+			t.Fatalf("Failed to calculate checksum: %v", err)
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archiveContent)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		targetPlugin := &PluginInfo{
+			Name:          "test-plugin",
+			LatestVersion: "1.0.0",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Platforms: map[string]PlatformInfo{
+						platform: {
+							URL:      server.URL,
+							Checksum: expectedChecksum,
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0")
+		assert.NoError(t, err)
+
+		localManifest, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+
+		plugin, exists := localManifest.Plugins["test-plugin"]
+		assert.True(t, exists)
+		assert.Equal(t, "test-plugin", plugin.Name)
+		assert.Equal(t, "1.0.0", plugin.Version)
+		assert.Equal(t, "test", plugin.Command)
+
+		pluginDir := filepath.Join(tmpDir, "test-plugin")
+		assert.DirExists(t, pluginDir)
+
+		manifestPath := filepath.Join(pluginDir, "manifest.json")
+		assert.FileExists(t, manifestPath)
+	})
+
+	t.Run("Success - install plugin with empty version (use latest)", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		archiveContent := createTestPluginArchive(t, "test-plugin", "2.0.0", "test")
+		expectedChecksum, err := calculateSHA256FromBytes(archiveContent)
+		if err != nil {
+			t.Fatalf("Failed to calculate checksum: %v", err)
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archiveContent)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		targetPlugin := &PluginInfo{
+			Name:          "test-plugin",
+			LatestVersion: "2.0.0",
+			Versions: map[string]VersionInfo{
+				"2.0.0": {
+					Platforms: map[string]PlatformInfo{
+						platform: {
+							URL:      server.URL,
+							Checksum: expectedChecksum,
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		err = mgr.installPlugin(ctx, targetPlugin, "")
+		assert.NoError(t, err)
+
+		localManifest, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+
+		plugin, exists := localManifest.Plugins["test-plugin"]
+		assert.True(t, exists)
+		assert.Equal(t, "2.0.0", plugin.Version)
+	})
+
+	t.Run("Error - version validation fails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		targetPlugin := &PluginInfo{
+			Name:          "test-plugin",
+			LatestVersion: "1.0.0",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Platforms: map[string]PlatformInfo{},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		err := mgr.installPlugin(ctx, targetPlugin, "999.0.0")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "version 999.0.0 not found")
+	})
+
+	t.Run("Error - platform validation fails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		platform := GetCurrentPlatform()
+		targetPlugin := &PluginInfo{
+			Name:          "test-plugin",
+			LatestVersion: "1.0.0",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Platforms: map[string]PlatformInfo{
+						"unsupported-platform": {
+							URL:      "http://example.com/plugin.tar.gz",
+							Checksum: "abc123",
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "plugin test-plugin version 1.0.0 not supported on "+platform)
+	})
+
+	t.Run("Error - download fails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		platform := GetCurrentPlatform()
+		targetPlugin := &PluginInfo{
+			Name:          "test-plugin",
+			LatestVersion: "1.0.0",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Platforms: map[string]PlatformInfo{
+						platform: {
+							URL:      "http://invalid-url-that-does-not-exist.local/plugin.tar.gz",
+							Checksum: "abc123",
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid-url-that-does-not-exist.local")
+	})
+
+	t.Run("Error - checksum verification fails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		archiveContent := createTestPluginArchive(t, "test-plugin", "1.0.0", "test")
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archiveContent)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		targetPlugin := &PluginInfo{
+			Name:          "test-plugin",
+			LatestVersion: "1.0.0",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Platforms: map[string]PlatformInfo{
+						platform: {
+							URL:      server.URL,
+							Checksum: "wrong-checksum",
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "checksum verification failed")
+		assert.Contains(t, err.Error(), "Expected: wrong-checksum")
+	})
+
+	t.Run("Error - manifest not found in archive", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		archiveContent := createTestPluginArchiveWithoutManifest(t)
+		expectedChecksum, err := calculateSHA256FromBytes(archiveContent)
+		if err != nil {
+			t.Fatalf("Failed to calculate checksum: %v", err)
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archiveContent)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		targetPlugin := &PluginInfo{
+			Name:          "test-plugin",
+			LatestVersion: "1.0.0",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Platforms: map[string]PlatformInfo{
+						platform: {
+							URL:      server.URL,
+							Checksum: expectedChecksum,
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "manifest.json not found")
+	})
+
+	t.Run("Error - manifest name mismatch", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		archiveContent := createTestPluginArchive(t, "wrong-plugin-name", "1.0.0", "test")
+		expectedChecksum, err := calculateSHA256FromBytes(archiveContent)
+		if err != nil {
+			t.Fatalf("Failed to calculate checksum: %v", err)
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archiveContent)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		targetPlugin := &PluginInfo{
+			Name:          "test-plugin",
+			LatestVersion: "1.0.0",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Platforms: map[string]PlatformInfo{
+						platform: {
+							URL:      server.URL,
+							Checksum: expectedChecksum,
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "plugin manifest name wrong-plugin-name does not match expected name test-plugin")
+	})
+}
+
+func createTestPluginArchive(t *testing.T, pluginName, version, command string) []byte {
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "plugin.tar.gz")
+
+	manifest := PluginManifest{
+		Name:             pluginName,
+		Version:          version,
+		Command:          command,
+		ShortDescription: "Test plugin",
+		Description:      "Test plugin description",
 	}
-	if plugin.Command != pManifest.Command {
-		t.Errorf("Plugin command = %q, want %q", plugin.Command, pManifest.Command)
+	manifestJSON, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatalf("Failed to marshal manifest: %v", err)
 	}
-	if plugin.Description != pManifest.ShortDescription {
-		t.Errorf("Plugin description = %q, want %q", plugin.Description, pManifest.ShortDescription)
+
+	if err := createTestTarGz(archivePath, []testFile{
+		{name: "manifest.json", content: string(manifestJSON), isDir: false},
+		{name: "binary", content: "binary content", isDir: false},
+	}); err != nil {
+		t.Fatalf("Failed to create test archive: %v", err)
+	}
+
+	content, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("Failed to read archive: %v", err)
+	}
+
+	return content
+}
+
+func createTestPluginArchiveWithoutManifest(t *testing.T) []byte {
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "plugin.tar.gz")
+
+	if err := createTestTarGz(archivePath, []testFile{
+		{name: "binary", content: "binary content", isDir: false},
+	}); err != nil {
+		t.Fatalf("Failed to create test archive: %v", err)
+	}
+
+	content, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("Failed to read archive: %v", err)
+	}
+
+	return content
+}
+
+func TestManager_Upgrade(t *testing.T) {
+	t.Run("Success - upgrade plugin to latest version", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		pluginDir := filepath.Join(tmpDir, "test-plugin")
+		os.MkdirAll(pluginDir, 0755)
+		localManifest := &LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"test-plugin": {
+					Name:    "test-plugin",
+					Version: "1.0.0",
+					Path:    pluginDir,
+					Command: "test",
+				},
+			},
+		}
+		mgr.saveLocalManifest(localManifest)
+
+		archiveContent := createTestPluginArchive(t, "test-plugin", "2.0.0", "test")
+		expectedChecksum, err := calculateSHA256FromBytes(archiveContent)
+		if err != nil {
+			t.Fatalf("Failed to calculate checksum: %v", err)
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archiveContent)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "test-plugin",
+					"latestVersion": "2.0.0",
+					"versions": {
+						"2.0.0": {
+							"` + platform + `": {
+								"url": "` + server.URL + `",
+								"checksum": "` + expectedChecksum + `"
+							}
+						}
+					}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err = mgr.Upgrade(ctx, "test-plugin")
+		assert.NoError(t, err)
+
+		localManifest, err = mgr.GetLocalManifest()
+		assert.NoError(t, err)
+
+		plugin, exists := localManifest.Plugins["test-plugin"]
+		assert.True(t, exists)
+		assert.Equal(t, "2.0.0", plugin.Version)
+	})
+
+	t.Run("Error - plugin not found locally", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		ctx := newTestContext()
+		err := mgr.Upgrade(ctx, "nonexistent-plugin")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "plugin nonexistent-plugin not installed")
+	})
+
+	t.Run("Error - plugin not found in repository", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		pluginDir := filepath.Join(tmpDir, "test-plugin")
+		os.MkdirAll(pluginDir, 0755)
+		localManifest := &LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"test-plugin": {
+					Name:    "test-plugin",
+					Version: "1.0.0",
+					Path:    pluginDir,
+				},
+			},
+		}
+		mgr.saveLocalManifest(localManifest)
+
+		indexJSON := `{"plugins": []}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.Upgrade(ctx, "test-plugin")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "plugin test-plugin not found in repository")
+	})
+
+	t.Run("Success - plugin already up to date", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		pluginDir := filepath.Join(tmpDir, "test-plugin")
+		os.MkdirAll(pluginDir, 0755)
+		localManifest := &LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"test-plugin": {
+					Name:    "test-plugin",
+					Version: "2.0.0",
+					Path:    pluginDir,
+				},
+			},
+		}
+		mgr.saveLocalManifest(localManifest)
+
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "test-plugin",
+					"latestVersion": "2.0.0",
+					"versions": {}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.Upgrade(ctx, "test-plugin")
+		assert.NoError(t, err)
+
+		localManifest, err = mgr.GetLocalManifest()
+		assert.NoError(t, err)
+
+		plugin, exists := localManifest.Plugins["test-plugin"]
+		assert.True(t, exists)
+		assert.Equal(t, "2.0.0", plugin.Version)
+	})
+}
+
+func TestManager_Uninstall(t *testing.T) {
+	t.Run("Success - uninstall plugin", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		pluginDir := filepath.Join(tmpDir, "test-plugin")
+		os.MkdirAll(pluginDir, 0755)
+		os.WriteFile(filepath.Join(pluginDir, "binary"), []byte("binary content"), 0755)
+		os.WriteFile(filepath.Join(pluginDir, "manifest.json"), []byte(`{"name":"test-plugin"}`), 0644)
+
+		localManifest := &LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"test-plugin": {
+					Name:    "test-plugin",
+					Version: "1.0.0",
+					Path:    pluginDir,
+					Command: "test",
+				},
+			},
+		}
+		mgr.saveLocalManifest(localManifest)
+
+		ctx := newTestContext()
+		err := mgr.Uninstall(ctx, "test-plugin")
+		assert.NoError(t, err)
+
+		localManifest, err = mgr.GetLocalManifest()
+		assert.NoError(t, err)
+
+		if _, exists := localManifest.Plugins["test-plugin"]; exists {
+			t.Error("Plugin was not removed from manifest")
+		}
+	})
+
+	t.Run("Error - plugin not found", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		ctx := newTestContext()
+		err := mgr.Uninstall(ctx, "nonexistent-plugin")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "plugin nonexistent-plugin not installed")
+	})
+
+	t.Run("Success - uninstall with short name", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		pluginDir := filepath.Join(tmpDir, "aliyun-cli-fc")
+		os.MkdirAll(pluginDir, 0755)
+
+		localManifest := &LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"aliyun-cli-fc": {
+					Name:    "aliyun-cli-fc",
+					Version: "1.0.0",
+					Path:    pluginDir,
+				},
+			},
+		}
+		mgr.saveLocalManifest(localManifest)
+
+		ctx := newTestContext()
+		err := mgr.Uninstall(ctx, "fc")
+		assert.NoError(t, err)
+
+		localManifest, err = mgr.GetLocalManifest()
+		assert.NoError(t, err)
+
+		_, exists := localManifest.Plugins["aliyun-cli-fc"]
+		assert.False(t, exists)
+	})
+}
+
+func TestManager_UpdateAll(t *testing.T) {
+	t.Run("Success - no plugins installed", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+		ctx := newTestContext()
+		err := mgr.UpdateAll(ctx)
+		assert.NoError(t, err)
+	})
+
+	t.Run("Success - all plugins up to date", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		plugin1Dir := filepath.Join(tmpDir, "plugin1")
+		plugin2Dir := filepath.Join(tmpDir, "plugin2")
+		os.MkdirAll(plugin1Dir, 0755)
+		os.MkdirAll(plugin2Dir, 0755)
+
+		localManifest := &LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"plugin1": {
+					Name:    "plugin1",
+					Version: "2.0.0",
+					Path:    plugin1Dir,
+				},
+				"plugin2": {
+					Name:    "plugin2",
+					Version: "2.0.0",
+					Path:    plugin2Dir,
+				},
+			},
+		}
+		mgr.saveLocalManifest(localManifest)
+
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "plugin1",
+					"latestVersion": "2.0.0",
+					"versions": {}
+				},
+				{
+					"name": "plugin2",
+					"latestVersion": "2.0.0",
+					"versions": {}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.UpdateAll(ctx)
+		assert.NoError(t, err)
+
+		localManifest, err = mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(localManifest.Plugins))
+		assert.Equal(t, "2.0.0", localManifest.Plugins["plugin1"].Version)
+		assert.Equal(t, "2.0.0", localManifest.Plugins["plugin2"].Version)
+	})
+
+	t.Run("Success - update some plugins", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		plugin1Dir := filepath.Join(tmpDir, "plugin1")
+		plugin2Dir := filepath.Join(tmpDir, "plugin2")
+		os.MkdirAll(plugin1Dir, 0755)
+		os.MkdirAll(plugin2Dir, 0755)
+
+		localManifest := &LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"plugin1": {
+					Name:    "plugin1",
+					Version: "1.0.0",
+					Path:    plugin1Dir,
+				},
+				"plugin2": {
+					Name:    "plugin2",
+					Version: "2.0.0",
+					Path:    plugin2Dir,
+				},
+			},
+		}
+		mgr.saveLocalManifest(localManifest)
+
+		archive1Content := createTestPluginArchive(t, "plugin1", "2.0.0", "plugin1")
+		checksum1, _ := calculateSHA256FromBytes(archive1Content)
+
+		server1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive1Content)
+		}))
+		defer server1.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "plugin1",
+					"latestVersion": "2.0.0",
+					"versions": {
+						"2.0.0": {
+							"` + platform + `": {
+								"url": "` + server1.URL + `",
+								"checksum": "` + checksum1 + `"
+							}
+						}
+					}
+				},
+				{
+					"name": "plugin2",
+					"latestVersion": "2.0.0",
+					"versions": {}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.UpdateAll(ctx)
+		assert.NoError(t, err)
+
+		localManifest, err = mgr.GetLocalManifest()
+		assert.NoError(t, err)
+
+		plugin1, exists := localManifest.Plugins["plugin1"]
+		assert.True(t, exists)
+		assert.Equal(t, "2.0.0", plugin1.Version)
+	})
+
+	t.Run("Success - plugin not found in repository", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		pluginDir := filepath.Join(tmpDir, "local-only-plugin")
+		os.MkdirAll(pluginDir, 0755)
+
+		localManifest := &LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"local-only-plugin": {
+					Name:    "local-only-plugin",
+					Version: "1.0.0",
+					Path:    pluginDir,
+				},
+			},
+		}
+		mgr.saveLocalManifest(localManifest)
+
+		indexJSON := `{"plugins": []}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.UpdateAll(ctx)
+		assert.NoError(t, err)
+
+		localManifest, err = mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(localManifest.Plugins))
+		assert.Equal(t, "1.0.0", localManifest.Plugins["local-only-plugin"].Version)
+	})
+
+	t.Run("Error - index fetch fails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		pluginDir := filepath.Join(tmpDir, "test-plugin")
+		os.MkdirAll(pluginDir, 0755)
+		localManifest := &LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"test-plugin": {
+					Name:    "test-plugin",
+					Version: "1.0.0",
+					Path:    pluginDir,
+				},
+			},
+		}
+		mgr.saveLocalManifest(localManifest)
+
+		mgr.indexURL = "http://invalid-url-that-does-not-exist.local/index.json"
+
+		ctx := newTestContext()
+		err := mgr.UpdateAll(ctx)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get plugin index")
+	})
+
+	t.Run("Error - installPlugin fails during update", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		plugin1Dir := filepath.Join(tmpDir, "plugin1")
+		plugin2Dir := filepath.Join(tmpDir, "plugin2")
+		os.MkdirAll(plugin1Dir, 0755)
+		os.MkdirAll(plugin2Dir, 0755)
+
+		localManifest := &LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"plugin1": {
+					Name:    "plugin1",
+					Version: "1.0.0",
+					Path:    plugin1Dir,
+				},
+				"plugin2": {
+					Name:    "plugin2",
+					Version: "1.0.0",
+					Path:    plugin2Dir,
+				},
+			},
+		}
+		mgr.saveLocalManifest(localManifest)
+
+		platform := GetCurrentPlatform()
+		// Create index with plugin1 having invalid URL (will cause installPlugin to fail)
+		// and plugin2 having valid archive (will succeed)
+		archive2Content := createTestPluginArchive(t, "plugin2", "2.0.0", "plugin2")
+		checksum2, _ := calculateSHA256FromBytes(archive2Content)
+
+		server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive2Content)
+		}))
+		defer server2.Close()
+
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "plugin1",
+					"latestVersion": "2.0.0",
+					"versions": {
+						"2.0.0": {
+							"` + platform + `": {
+								"url": "http://invalid-url-that-does-not-exist.local/plugin1.tar.gz",
+								"checksum": "abc123"
+							}
+						}
+					}
+				},
+				{
+					"name": "plugin2",
+					"latestVersion": "2.0.0",
+					"versions": {
+						"2.0.0": {
+							"` + platform + `": {
+								"url": "` + server2.URL + `",
+								"checksum": "` + checksum2 + `"
+							}
+						}
+					}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.UpdateAll(ctx)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "1 plugin(s) failed to update")
+
+		// Verify plugin2 was updated successfully despite plugin1 failure
+		localManifest, err = mgr.GetLocalManifest()
+		assert.NoError(t, err)
+
+		plugin2, exists := localManifest.Plugins["plugin2"]
+		assert.True(t, exists)
+		assert.Equal(t, "2.0.0", plugin2.Version)
+
+		// Verify plugin1 version remains unchanged (update failed)
+		plugin1, exists := localManifest.Plugins["plugin1"]
+		assert.True(t, exists)
+		assert.Equal(t, "1.0.0", plugin1.Version)
+	})
+}
+
+func TestManager_InstallAll(t *testing.T) {
+	t.Run("Success - install all plugins from index", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		archive1Content := createTestPluginArchive(t, "plugin1", "1.0.0", "plugin1")
+		archive2Content := createTestPluginArchive(t, "plugin2", "1.0.0", "plugin2")
+		checksum1, _ := calculateSHA256FromBytes(archive1Content)
+		checksum2, _ := calculateSHA256FromBytes(archive2Content)
+
+		server1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive1Content)
+		}))
+		defer server1.Close()
+
+		server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive2Content)
+		}))
+		defer server2.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "plugin1",
+					"latestVersion": "1.0.0",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "` + server1.URL + `",
+								"checksum": "` + checksum1 + `"
+							}
+						}
+					}
+				},
+				{
+					"name": "plugin2",
+					"latestVersion": "1.0.0",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "` + server2.URL + `",
+								"checksum": "` + checksum2 + `"
+							}
+						}
+					}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.InstallAll(ctx)
+		assert.NoError(t, err)
+
+		localManifest, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+
+		plugin1, exists := localManifest.Plugins["plugin1"]
+		assert.True(t, exists)
+		assert.Equal(t, "1.0.0", plugin1.Version)
+		plugin2, exists := localManifest.Plugins["plugin2"]
+		assert.True(t, exists)
+		assert.Equal(t, "1.0.0", plugin2.Version)
+	})
+
+	t.Run("Success - skip already installed plugins", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		plugin1Dir := filepath.Join(tmpDir, "plugin1")
+		os.MkdirAll(plugin1Dir, 0755)
+
+		localManifest := &LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"plugin1": {
+					Name:    "plugin1",
+					Version: "1.0.0",
+					Path:    plugin1Dir,
+				},
+			},
+		}
+		mgr.saveLocalManifest(localManifest)
+
+		archive2Content := createTestPluginArchive(t, "plugin2", "1.0.0", "plugin2")
+		checksum2, _ := calculateSHA256FromBytes(archive2Content)
+
+		server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive2Content)
+		}))
+		defer server2.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "plugin1",
+					"latestVersion": "1.0.0",
+					"versions": {}
+				},
+				{
+					"name": "plugin2",
+					"latestVersion": "1.0.0",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "` + server2.URL + `",
+								"checksum": "` + checksum2 + `"
+							}
+						}
+					}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.InstallAll(ctx)
+		assert.NoError(t, err)
+
+		localManifest, err = mgr.GetLocalManifest()
+		assert.NoError(t, err)
+
+		plugin2, exists := localManifest.Plugins["plugin2"]
+		assert.True(t, exists)
+		assert.Equal(t, "1.0.0", plugin2.Version)
+	})
+
+	t.Run("Success - empty index", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		indexJSON := `{"plugins": []}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.InstallAll(ctx)
+		assert.NoError(t, err)
+
+		localManifest, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(localManifest.Plugins))
+	})
+
+	t.Run("Error - index fetch fails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		mgr.indexURL = "http://invalid-url-that-does-not-exist.local/index.json"
+
+		ctx := newTestContext()
+		err := mgr.InstallAll(ctx)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get plugin index")
+	})
+
+	t.Run("Error - installPlugin fails during install", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		platform := GetCurrentPlatform()
+		// Create index with plugin1 having invalid URL (will cause installPlugin to fail)
+		// and plugin2 having valid archive (will succeed)
+		archive2Content := createTestPluginArchive(t, "plugin2", "1.0.0", "plugin2")
+		checksum2, _ := calculateSHA256FromBytes(archive2Content)
+
+		server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive2Content)
+		}))
+		defer server2.Close()
+
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "plugin1",
+					"latestVersion": "1.0.0",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "http://invalid-url-that-does-not-exist.local/plugin1.tar.gz",
+								"checksum": "abc123"
+							}
+						}
+					}
+				},
+				{
+					"name": "plugin2",
+					"latestVersion": "1.0.0",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "` + server2.URL + `",
+								"checksum": "` + checksum2 + `"
+							}
+						}
+					}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.InstallAll(ctx)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "1 plugin(s) failed to install")
+
+		// Verify plugin2 was installed successfully despite plugin1 failure
+		localManifest, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+
+		plugin2, exists := localManifest.Plugins["plugin2"]
+		assert.True(t, exists)
+		assert.Equal(t, "1.0.0", plugin2.Version)
+
+		// Verify plugin1 was not installed (install failed)
+		_, exists = localManifest.Plugins["plugin1"]
+		assert.False(t, exists)
+	})
+}
+
+func TestCompareVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		v1       string
+		v2       string
+		expected int // 1: v1 > v2, -1: v1 < v2, 0: v1 == v2
+	}{
+		// Basic comparisons
+		{
+			name:     "Equal versions",
+			v1:       "3.2.0",
+			v2:       "3.2.0",
+			expected: 0,
+		},
+		{
+			name:     "v1 greater than v2 (major)",
+			v1:       "4.0.0",
+			v2:       "3.2.0",
+			expected: 1,
+		},
+		{
+			name:     "v1 less than v2 (major)",
+			v1:       "2.0.0",
+			v2:       "3.2.0",
+			expected: -1,
+		},
+		{
+			name:     "v1 greater than v2 (minor)",
+			v1:       "3.3.0",
+			v2:       "3.2.0",
+			expected: 1,
+		},
+		{
+			name:     "v1 less than v2 (minor)",
+			v1:       "3.1.0",
+			v2:       "3.2.0",
+			expected: -1,
+		},
+		{
+			name:     "v1 greater than v2 (patch)",
+			v1:       "3.2.1",
+			v2:       "3.2.0",
+			expected: 1,
+		},
+		{
+			name:     "v1 less than v2 (patch)",
+			v1:       "3.2.0",
+			v2:       "3.2.1",
+			expected: -1,
+		},
+
+		// With 'v' prefix
+		{
+			name:     "With v prefix - equal",
+			v1:       "v3.2.0",
+			v2:       "v3.2.0",
+			expected: 0,
+		},
+		{
+			name:     "With v prefix - v1 greater",
+			v1:       "v3.3.0",
+			v2:       "v3.2.0",
+			expected: 1,
+		},
+		{
+			name:     "Mixed prefix",
+			v1:       "v3.2.0",
+			v2:       "3.2.0",
+			expected: 0,
+		},
+
+		// Pre-release versions (semver: pre-release < release)
+		{
+			name:     "Beta version vs stable",
+			v1:       "3.2.0-beta.1",
+			v2:       "3.2.0",
+			expected: -1, // In semver, pre-release versions are LESS than the release version
+		},
+		{
+			name:     "Different beta versions",
+			v1:       "3.2.1-beta.1",
+			v2:       "3.2.0",
+			expected: 1,
+		},
+
+		// Real-world scenarios
+		{
+			name:     "Current CLI 3.2.2 vs Min 3.2.0",
+			v1:       "3.2.2",
+			v2:       "3.2.0",
+			expected: 1,
+		},
+		{
+			name:     "Current CLI 3.1.9 vs Min 3.2.0",
+			v1:       "3.1.9",
+			v2:       "3.2.0",
+			expected: -1,
+		},
+		{
+			name:     "Current CLI 4.0.0 vs Min 3.2.0",
+			v1:       "4.0.0",
+			v2:       "3.2.0",
+			expected: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := compareVersion(tt.v1, tt.v2)
+			if result != tt.expected {
+				t.Errorf("compareVersion(%q, %q) = %d, want %d",
+					tt.v1, tt.v2, result, tt.expected)
+			}
+		})
 	}
 }
