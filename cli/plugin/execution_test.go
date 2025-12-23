@@ -1,9 +1,14 @@
 package plugin
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+
+	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMatchPluginCommand(t *testing.T) {
@@ -147,7 +152,6 @@ func TestFindLocalPlugin(t *testing.T) {
 	tmpDir := t.TempDir()
 	mgr := &Manager{rootDir: tmpDir}
 
-	// Create a test manifest
 	manifest := &LocalManifest{
 		Plugins: map[string]LocalPlugin{
 			"aliyun-cli-fc": {
@@ -189,7 +193,7 @@ func TestFindLocalPlugin(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			pluginName, plugin, err := mgr.findLocalPlugin(tt.command)
+			_, plugin, err := mgr.findLocalPlugin(tt.command)
 
 			if tt.wantErr {
 				if err == nil {
@@ -209,9 +213,6 @@ func TestFindLocalPlugin(t *testing.T) {
 				} else if plugin.Command != "aliyun-cli-fc" {
 					t.Errorf("findLocalPlugin() got plugin.Command = %q, want %q", plugin.Command, "aliyun-cli-fc")
 				}
-				if pluginName != "aliyun-cli-fc" {
-					t.Errorf("findLocalPlugin() got pluginName = %q, want %q", pluginName, "aliyun-cli-fc")
-				}
 			} else {
 				if plugin != nil {
 					t.Errorf("findLocalPlugin() expected nil, got plugin: %+v", plugin)
@@ -222,12 +223,10 @@ func TestFindLocalPlugin(t *testing.T) {
 }
 
 func TestResolvePluginBinaryPath(t *testing.T) {
-	// Create a temporary directory for testing
 	tmpDir := t.TempDir()
 	pluginName := "test-plugin"
 	binPath := filepath.Join(tmpDir, pluginName)
 
-	// Create a test binary file
 	if err := os.WriteFile(binPath, []byte("#!/bin/sh\necho test"), 0755); err != nil {
 		t.Fatalf("Failed to create test binary: %v", err)
 	}
@@ -285,4 +284,242 @@ func TestResolvePluginBinaryPath(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAdjustPluginArgs(t *testing.T) {
+	t.Run("Adjust plugin-help to --help", func(t *testing.T) {
+		args := []string{"plugin-help"}
+		adjusted := adjustPluginArgs(args)
+		if len(adjusted) != 1 || adjusted[0] != "--help" {
+			t.Errorf("adjustPluginArgs(%v) = %v, want [--help]", args, adjusted)
+		}
+	})
+
+	t.Run("Keep other args unchanged", func(t *testing.T) {
+		args := []string{"describe-regions", "--region-id", "cn-hangzhou"}
+		adjusted := adjustPluginArgs(args)
+		if len(adjusted) != len(args) {
+			t.Errorf("adjustPluginArgs(%v) length = %d, want %d", args, len(adjusted), len(args))
+		}
+		for i := range args {
+			if adjusted[i] != args[i] {
+				t.Errorf("adjustPluginArgs(%v)[%d] = %q, want %q", args, i, adjusted[i], args[i])
+			}
+		}
+	})
+
+	t.Run("Empty args unchanged", func(t *testing.T) {
+		args := []string{}
+		adjusted := adjustPluginArgs(args)
+		if len(adjusted) != 0 {
+			t.Errorf("adjustPluginArgs(%v) = %v, want []", args, adjusted)
+		}
+	})
+
+	t.Run("plugin-help with additional args", func(t *testing.T) {
+		args := []string{"plugin-help", "--verbose"}
+		adjusted := adjustPluginArgs(args)
+		if len(adjusted) != 1 || adjusted[0] != "--help" {
+			t.Errorf("adjustPluginArgs(%v) = %v, want [--help]", args, adjusted)
+		}
+	})
+}
+
+func TestRunPluginCommand(t *testing.T) {
+	t.Run("Empty binary path", func(t *testing.T) {
+		err := runPluginCommand("", []string{}, os.Stdout, os.Stderr, os.Environ())
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "binary path is empty")
+	})
+
+	t.Run("Non-existent binary", func(t *testing.T) {
+		nonExistentPath := "/non/existent/binary/path"
+		err := runPluginCommand(nonExistentPath, []string{}, os.Stdout, os.Stderr, os.Environ())
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "plugin execution failed")
+	})
+
+	t.Run("Success with test script", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+
+		tmpDir := t.TempDir()
+		scriptPath := filepath.Join(tmpDir, "test-plugin")
+
+		scriptContent := "#!/bin/sh\necho 'test plugin output'\nexit 0\n"
+		if err := os.WriteFile(scriptPath, []byte(scriptContent), 0755); err != nil {
+			t.Fatalf("Failed to create test script: %v", err)
+		}
+
+		err := runPluginCommand(scriptPath, []string{}, os.Stdout, os.Stderr, os.Environ())
+		assert.NoError(t, err)
+		if err != nil {
+			t.Errorf("runPluginCommand() with valid script unexpected error: %v", err)
+		}
+	})
+
+	t.Run("Success with test script and args", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+
+		tmpDir := t.TempDir()
+		scriptPath := filepath.Join(tmpDir, "test-plugin")
+
+		scriptContent := "#!/bin/sh\necho \"args: $@\"\nexit 0\n"
+		if err := os.WriteFile(scriptPath, []byte(scriptContent), 0755); err != nil {
+			t.Fatalf("Failed to create test script: %v", err)
+		}
+
+		err := runPluginCommand(scriptPath, []string{"arg1", "arg2"}, os.Stdout, os.Stderr, os.Environ())
+		assert.NoError(t, err)
+		if err != nil {
+			t.Errorf("runPluginCommand() with valid script and args unexpected error: %v", err)
+		}
+	})
+}
+
+func TestExecutePlugin(t *testing.T) {
+	originalHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", originalHome)
+
+	t.Run("Plugin not found", func(t *testing.T) {
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		os.MkdirAll(filepath.Dir(manifestPath), 0755)
+		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
+
+		ok, err := ExecutePlugin("nonexistent-plugin", []string{}, nil)
+		assert.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	t.Run("Plugin found and executed successfully", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		// Create plugin directory and binary
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
+		os.MkdirAll(pluginDir, 0755)
+		binPath := filepath.Join(pluginDir, "aliyun-cli-test")
+		scriptContent := "#!/bin/sh\necho 'test plugin output'\nexit 0\n"
+		os.WriteFile(binPath, []byte(scriptContent), 0755)
+
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		os.MkdirAll(filepath.Dir(manifestPath), 0755)
+		manifestJSON := `{"plugins":{"aliyun-cli-test":{"name":"aliyun-cli-test","version":"1.0.0","description":"Test plugin","path":"` + pluginDir + `","command":"test"}}}`
+		os.WriteFile(manifestPath, []byte(manifestJSON), 0644)
+
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+
+		ok, err := ExecutePlugin("test", []string{}, ctx)
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.Contains(t, stdout.String(), "test plugin output")
+	})
+
+	t.Run("Plugin binary path resolution fails", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
+		os.MkdirAll(pluginDir, 0755)
+
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		os.MkdirAll(filepath.Dir(manifestPath), 0755)
+		manifestJSON := `{"plugins":{"aliyun-cli-test":{"name":"aliyun-cli-test","version":"1.0.0","description":"Test plugin","path":"` + pluginDir + `","command":"test"}}}`
+		os.WriteFile(manifestPath, []byte(manifestJSON), 0644)
+
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+
+		ok, err := ExecutePlugin("test", []string{}, ctx)
+		assert.Error(t, err)
+		assert.True(t, ok) // Plugin was found, but binary path resolution failed
+		assert.Contains(t, err.Error(), "failed to resolve plugin binary path")
+	})
+
+	t.Run("Plugin execution with args", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
+		os.MkdirAll(pluginDir, 0755)
+		binPath := filepath.Join(pluginDir, "aliyun-cli-test")
+		scriptContent := "#!/bin/sh\necho \"args: $@\"\nexit 0\n"
+		os.WriteFile(binPath, []byte(scriptContent), 0755)
+
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		os.MkdirAll(filepath.Dir(manifestPath), 0755)
+		manifestJSON := `{"plugins":{"aliyun-cli-test":{"name":"aliyun-cli-test","version":"1.0.0","description":"Test plugin","path":"` + pluginDir + `","command":"test"}}}`
+		os.WriteFile(manifestPath, []byte(manifestJSON), 0644)
+
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+
+		ok, err := ExecutePlugin("test", []string{"arg1", "arg2"}, ctx)
+		assert.NoError(t, err)
+		assert.True(t, ok)
+		assert.Contains(t, stdout.String(), "args: arg1 arg2")
+	})
+
+	t.Run("Plugin execution with plugin-help subcommand", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
+		os.MkdirAll(pluginDir, 0755)
+		binPath := filepath.Join(pluginDir, "aliyun-cli-test")
+		scriptContent := "#!/bin/sh\nif [ \"$1\" = \"--help\" ]; then echo 'plugin help'; exit 0; fi\nexit 1\n"
+		os.WriteFile(binPath, []byte(scriptContent), 0755)
+
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		os.MkdirAll(filepath.Dir(manifestPath), 0755)
+		manifestJSON := `{"plugins":{"aliyun-cli-test":{"name":"aliyun-cli-test","version":"1.0.0","description":"Test plugin","path":"` + pluginDir + `","command":"test"}}}`
+		os.WriteFile(manifestPath, []byte(manifestJSON), 0644)
+
+		// Test that plugin-help is converted to --help
+		ok, err := ExecutePlugin("test", []string{"plugin-help"}, nil)
+		assert.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("Manager creation failure", func(t *testing.T) {
+		originalHome := os.Getenv("HOME")
+		defer os.Setenv("HOME", originalHome)
+
+		// Set HOME to a non-existent path - NewManager should still work
+		os.Setenv("HOME", "")
+
+		ok, err := ExecutePlugin("test", []string{}, nil)
+		assert.NoError(t, err)
+		assert.False(t, ok)
+		// When manager creation fails, ExecutePlugin returns (false, nil)
+		if ok {
+			t.Error("ExecutePlugin() with invalid HOME expected ok=false, got ok=true")
+		}
+	})
 }

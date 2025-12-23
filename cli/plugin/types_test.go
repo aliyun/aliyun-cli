@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -180,10 +181,11 @@ func TestVersionInfo_MarshalJSON(t *testing.T) {
 				return
 			}
 
-			gotStr, _ := json.Marshal(got)
-			wantStr, _ := json.Marshal(want)
-
-			if string(gotStr) != string(wantStr) {
+			// Use reflect.DeepEqual instead of string comparison
+			// because json.Marshal doesn't guarantee key order for maps
+			if !reflect.DeepEqual(got, want) {
+				gotStr, _ := json.Marshal(got)
+				wantStr, _ := json.Marshal(want)
 				t.Errorf("MarshalJSON() = %s, want %s", gotStr, wantStr)
 			}
 		})
