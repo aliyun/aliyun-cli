@@ -60,12 +60,12 @@ func newInstallCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "install",
 		Short: i18n.T("Install a plugin", "安装插件"),
-		Usage: "plugin install <plugin_name> [--version <version>]",
+		Usage: "plugin install --name <plugin_name> [--version <version>]",
 		Run: func(ctx *cli.Context, args []string) error {
-			if len(args) < 1 {
-				return fmt.Errorf("plugin name required")
+			name := ""
+			if v, ok := ctx.Flags().GetValue("name"); ok {
+				name = v
 			}
-			name := args[0]
 
 			version := ""
 			if v, ok := ctx.Flags().GetValue("version"); ok {
@@ -80,6 +80,13 @@ func newInstallCommand() *cli.Command {
 			return mgr.Install(name, version)
 		},
 	}
+
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "name",
+		Short:        i18n.T("Plugin name to install", "要安装的插件名称"),
+		AssignedMode: cli.AssignedOnce,
+		Required:     true,
+	})
 
 	cmd.Flags().Add(&cli.Flag{
 		Name:         "version",
@@ -108,15 +115,15 @@ func newInstallAllCommand() *cli.Command {
 }
 
 func newUninstallCommand() *cli.Command {
-	return &cli.Command{
+	cmd := &cli.Command{
 		Name:  "uninstall",
 		Short: i18n.T("Uninstall a plugin", "卸载插件"),
-		Usage: "plugin uninstall <plugin_name>",
+		Usage: "plugin uninstall --name <plugin_name>",
 		Run: func(ctx *cli.Context, args []string) error {
-			if len(args) < 1 {
-				return fmt.Errorf("plugin name required")
+			name := ""
+			if v, ok := ctx.Flags().GetValue("name"); ok {
+				name = v
 			}
-			name := args[0]
 
 			mgr, err := NewManager()
 			if err != nil {
@@ -126,25 +133,47 @@ func newUninstallCommand() *cli.Command {
 			return mgr.Uninstall(name)
 		},
 	}
+
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "name",
+		Short:        i18n.T("Plugin name to uninstall", "要卸载的插件名称"),
+		AssignedMode: cli.AssignedOnce,
+		Required:     true,
+	})
+
+	return cmd
 }
 
 func newUpdateCommand() *cli.Command {
-	return &cli.Command{
+	cmd := &cli.Command{
 		Name:  "update",
-		Short: i18n.T("Update a plugin", "更新插件"),
-		Usage: "plugin update <plugin_name>",
+		Short: i18n.T("Update plugin(s)", "更新插件"),
+		Usage: "plugin update [--name <plugin_name>]",
 		Run: func(ctx *cli.Context, args []string) error {
-			if len(args) < 1 {
-				return fmt.Errorf("plugin name required")
-			}
-			name := args[0]
-
 			mgr, err := NewManager()
 			if err != nil {
 				return err
 			}
 
+			name := ""
+			if v, ok := ctx.Flags().GetValue("name"); ok {
+				name = v
+			}
+
+			if name == "" {
+				return mgr.UpdateAll()
+			}
+
 			return mgr.Upgrade(name)
 		},
 	}
+
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "name",
+		Short:        i18n.T("Plugin name to update (optional, update all if not specified)", "要更新的插件名称（可选，不指定则更新所有）"),
+		AssignedMode: cli.AssignedOnce,
+		Required:     false,
+	})
+
+	return cmd
 }

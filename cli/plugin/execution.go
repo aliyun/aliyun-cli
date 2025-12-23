@@ -7,63 +7,69 @@ import (
 	"path/filepath"
 )
 
+// Returns (true, nil) if plugin was found and executed successfully.
+// Returns (false, nil) if plugin was not found (not an error).
+// Returns (true, error) if plugin execution failed.
 func ExecutePlugin(command string, args []string) (bool, error) {
 	mgr, err := NewManager()
 	if err != nil {
 		return false, nil
 	}
 
-	manifest, err := mgr.GetLocalManifest()
+	_, plugin, err := mgr.findLocalPlugin(command)
 	if err != nil {
+		// Plugin not found, not an error
 		return false, nil
 	}
 
-	var targetPlugin *LocalPlugin
-	for _, p := range manifest.Plugins {
-		if p.Command == command {
-			targetPlugin = &p
-			break
-		}
+	binPath, err := resolvePluginBinaryPath(plugin)
+	if err != nil {
+		return true, fmt.Errorf("failed to resolve plugin binary path: %w", err)
 	}
 
-	// 尝试匹配 aliyun-cli-<command> 格式的插件
-	if targetPlugin == nil {
-		altCommand := "aliyun-cli-" + command
-		for _, p := range manifest.Plugins {
-			if p.Command == altCommand {
-				targetPlugin = &p
-				break
-			}
-		}
+	if err := runPluginCommand(binPath, args); err != nil {
+		return true, err
 	}
 
-	if targetPlugin == nil {
-		return false, nil
+	return true, nil
+}
+
+func resolvePluginBinaryPath(plugin *LocalPlugin) (string, error) {
+	if plugin == nil {
+		return "", fmt.Errorf("plugin is nil")
 	}
 
-	// pluginManifestPath := filepath.Join(targetPlugin.Path, "manifest.json")
-	// TODO: 缓存 bin path 到 LocalManifest，避免每次读取
+	binPath := filepath.Join(plugin.Path, plugin.Name)
 
-	binPath := filepath.Join(targetPlugin.Path, targetPlugin.Name) // 默认二进制名
-	// Windows 处理
+	// Windows handling: check for .exe extension
 	if _, err := os.Stat(binPath + ".exe"); err == nil {
 		binPath += ".exe"
 	}
 
-	// fmt.Printf("Executing plugin: %s %v\n", binPath, args)
+	if _, err := os.Stat(binPath); err != nil {
+		return "", fmt.Errorf("plugin binary not found at %s: %w", binPath, err)
+	}
+
+	return binPath, nil
+}
+
+func runPluginCommand(binPath string, args []string) error {
+	if binPath == "" {
+		return fmt.Errorf("binary path is empty")
+	}
+
 	cmd := exec.Command(binPath, args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-
 	cmd.Env = os.Environ()
 
 	if err := cmd.Run(); err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			os.Exit(exitError.ExitCode())
 		}
-		return true, fmt.Errorf("plugin execution failed: %w", err)
+		return fmt.Errorf("plugin execution failed: %w", err)
 	}
 
-	return true, nil
+	return nil
 }

@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -188,20 +189,6 @@ func TestMatchPluginName(t *testing.T) {
 			expected:   true,
 		},
 
-		// Alternative prefix tests
-		{
-			name:       "Alternative prefix - aliyun-fc",
-			pluginName: "aliyun-cli-fc",
-			userInput:  "aliyun-fc",
-			expected:   true,
-		},
-		{
-			name:       "Alternative prefix - aliyun-ecs",
-			pluginName: "aliyun-cli-ecs",
-			userInput:  "aliyun-ecs",
-			expected:   true,
-		},
-
 		// Negative tests - should not match
 		{
 			name:       "Different plugin",
@@ -219,6 +206,18 @@ func TestMatchPluginName(t *testing.T) {
 			name:       "Wrong prefix",
 			pluginName: "aliyun-cli-fc",
 			userInput:  "alibaba-fc",
+			expected:   false,
+		},
+		{
+			name:       "Alternative prefix - aliyun-fc (not supported)",
+			pluginName: "aliyun-cli-fc",
+			userInput:  "aliyun-fc",
+			expected:   false,
+		},
+		{
+			name:       "Alternative prefix - aliyun-ecs (not supported)",
+			pluginName: "aliyun-cli-ecs",
+			userInput:  "aliyun-ecs",
 			expected:   false,
 		},
 		{
@@ -254,16 +253,16 @@ func TestMatchPluginName(t *testing.T) {
 			expected:   true,
 		},
 		{
-			name:       "Case insensitive - uppercase alternative prefix",
+			name:       "Case insensitive - uppercase alternative prefix (not supported)",
 			pluginName: "aliyun-cli-ecs",
 			userInput:  "ALIYUN-ECS",
-			expected:   true,
+			expected:   false,
 		},
 		{
-			name:       "Case insensitive - mixed case alternative prefix",
+			name:       "Case insensitive - mixed case alternative prefix (not supported)",
 			pluginName: "aliyun-cli-ecs",
 			userInput:  "Aliyun-Ecs",
-			expected:   true,
+			expected:   false,
 		},
 		{
 			name:       "Case insensitive - ECS uppercase",
@@ -307,12 +306,6 @@ func TestMatchPluginName_RealWorldScenarios(t *testing.T) {
 			description: "User installs FC plugin with full name",
 			pluginName:  "aliyun-cli-fc",
 			userInputs:  []string{"aliyun-cli-fc"},
-			shouldMatch: true,
-		},
-		{
-			description: "User installs FC plugin with alternative prefix",
-			pluginName:  "aliyun-cli-fc",
-			userInputs:  []string{"aliyun-fc"},
 			shouldMatch: true,
 		},
 		{
@@ -460,5 +453,268 @@ func TestCalculateSHA256_Consistency(t *testing.T) {
 
 	if hash1 != hash2 {
 		t.Errorf("calculateSHA256() not consistent: first=%v, second=%v", hash1, hash2)
+	}
+}
+
+func TestValidateVersionAndPlatform(t *testing.T) {
+	tmpDir := t.TempDir()
+	mgr := &Manager{rootDir: tmpDir}
+	currentPlatform := GetCurrentPlatform()
+
+	tests := []struct {
+		name         string
+		targetPlugin *PluginInfo
+		version      string
+		pluginName   string
+		wantErr      bool
+		errContains  string
+	}{
+		{
+			name: "Valid version and platform",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							currentPlatform: {
+								URL:      "http://example.com/plugin.tar.gz",
+								Checksum: "abc123",
+							},
+						},
+					},
+				},
+			},
+			version:    "1.0.0",
+			pluginName: "test-plugin",
+			wantErr:    false,
+		},
+		{
+			name: "Version not found",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							currentPlatform: {
+								URL:      "http://example.com/plugin.tar.gz",
+								Checksum: "abc123",
+							},
+						},
+					},
+				},
+			},
+			version:     "2.0.0",
+			pluginName:  "test-plugin",
+			wantErr:     true,
+			errContains: "version 2.0.0 not found",
+		},
+		{
+			name: "Platform not supported",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							"unsupported-platform": {
+								URL:      "http://example.com/plugin.tar.gz",
+								Checksum: "abc123",
+							},
+						},
+					},
+				},
+			},
+			version:     "1.0.0",
+			pluginName:  "test-plugin",
+			wantErr:     true,
+			errContains: "not supported on",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			platInfo, err := mgr.validateVersionAndPlatform(tt.targetPlugin, tt.version, tt.pluginName)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("validateVersionAndPlatform() expected error, got nil")
+					return
+				}
+				if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("validateVersionAndPlatform() error = %v, want error containing %q", err, tt.errContains)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("validateVersionAndPlatform() unexpected error: %v", err)
+				return
+			}
+
+			if platInfo == nil {
+				t.Errorf("validateVersionAndPlatform() expected PlatformInfo, got nil")
+			}
+		})
+	}
+}
+
+func TestLoadAndValidatePluginManifest(t *testing.T) {
+	tmpDir := t.TempDir()
+	mgr := &Manager{rootDir: tmpDir}
+
+	tests := []struct {
+		name         string
+		setupFunc    func(string) error
+		expectedName string
+		wantErr      bool
+		errContains  string
+	}{
+		{
+			name: "Valid manifest",
+			setupFunc: func(dir string) error {
+				manifest := PluginManifest{
+					Name:             "test-plugin",
+					Command:          "test",
+					ShortDescription: "Test plugin",
+				}
+				manifestPath := filepath.Join(dir, "manifest.json")
+				data, err := json.Marshal(manifest)
+				if err != nil {
+					return err
+				}
+				return os.WriteFile(manifestPath, data, 0644)
+			},
+			expectedName: "test-plugin",
+			wantErr:      false,
+		},
+		{
+			name: "Manifest file not found",
+			setupFunc: func(dir string) error {
+				// Don't create manifest.json
+				return nil
+			},
+			expectedName: "test-plugin",
+			wantErr:      true,
+			errContains:  "manifest.json not found",
+		},
+		{
+			name: "Invalid JSON",
+			setupFunc: func(dir string) error {
+				manifestPath := filepath.Join(dir, "manifest.json")
+				return os.WriteFile(manifestPath, []byte("invalid json"), 0644)
+			},
+			expectedName: "test-plugin",
+			wantErr:      true,
+			errContains:  "invalid plugin manifest",
+		},
+		{
+			name: "Name mismatch",
+			setupFunc: func(dir string) error {
+				manifest := PluginManifest{
+					Name:             "wrong-name",
+					Command:          "test",
+					ShortDescription: "Test plugin",
+				}
+				manifestPath := filepath.Join(dir, "manifest.json")
+				data, err := json.Marshal(manifest)
+				if err != nil {
+					return err
+				}
+				return os.WriteFile(manifestPath, data, 0644)
+			},
+			expectedName: "test-plugin",
+			wantErr:      true,
+			errContains:  "does not match expected name",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testDir := filepath.Join(tmpDir, tt.name)
+			if err := os.MkdirAll(testDir, 0755); err != nil {
+				t.Fatalf("Failed to create test directory: %v", err)
+			}
+
+			if err := tt.setupFunc(testDir); err != nil {
+				t.Fatalf("Setup failed: %v", err)
+			}
+
+			manifest, err := mgr.loadAndValidatePluginManifest(testDir, tt.expectedName)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("loadAndValidatePluginManifest() expected error, got nil")
+					return
+				}
+				if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("loadAndValidatePluginManifest() error = %v, want error containing %q", err, tt.errContains)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("loadAndValidatePluginManifest() unexpected error: %v", err)
+				return
+			}
+
+			if manifest == nil {
+				t.Errorf("loadAndValidatePluginManifest() expected manifest, got nil")
+				return
+			}
+
+			if manifest.Name != tt.expectedName {
+				t.Errorf("loadAndValidatePluginManifest() got name = %q, want %q", manifest.Name, tt.expectedName)
+			}
+		})
+	}
+}
+
+func TestSavePluginToManifest(t *testing.T) {
+	tmpDir := t.TempDir()
+	mgr := &Manager{rootDir: tmpDir}
+
+	pluginName := "test-plugin"
+	version := "1.0.0"
+	extractDir := filepath.Join(tmpDir, "extracted")
+	pManifest := &PluginManifest{
+		Name:             pluginName,
+		Command:          "test",
+		ShortDescription: "Test plugin description",
+	}
+
+	// Create extract directory
+	if err := os.MkdirAll(extractDir, 0755); err != nil {
+		t.Fatalf("Failed to create extract directory: %v", err)
+	}
+
+	// Save plugin to manifest
+	if err := mgr.savePluginToManifest(pluginName, version, extractDir, pManifest); err != nil {
+		t.Fatalf("savePluginToManifest() error = %v", err)
+	}
+
+	// Verify the plugin was saved
+	localManifest, err := mgr.GetLocalManifest()
+	if err != nil {
+		t.Fatalf("GetLocalManifest() error = %v", err)
+	}
+
+	plugin, exists := localManifest.Plugins[pluginName]
+	if !exists {
+		t.Fatalf("Plugin %s not found in manifest", pluginName)
+	}
+
+	if plugin.Name != pluginName {
+		t.Errorf("Plugin name = %q, want %q", plugin.Name, pluginName)
+	}
+	if plugin.Version != version {
+		t.Errorf("Plugin version = %q, want %q", plugin.Version, version)
+	}
+	if plugin.Path != extractDir {
+		t.Errorf("Plugin path = %q, want %q", plugin.Path, extractDir)
+	}
+	if plugin.Command != pManifest.Command {
+		t.Errorf("Plugin command = %q, want %q", plugin.Command, pManifest.Command)
+	}
+	if plugin.Description != pManifest.ShortDescription {
+		t.Errorf("Plugin description = %q, want %q", plugin.Description, pManifest.ShortDescription)
 	}
 }
