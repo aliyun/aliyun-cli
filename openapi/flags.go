@@ -33,6 +33,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(WaiterFlag)
 	fs.Add(NewDryRunFlag())
 	fs.Add(NewQuietFlag())
+	fs.Add(NewQueryFlag())
 	fs.Add(NewRoaFlag())
 	fs.Add(NewMethodFlag())
 }
@@ -50,6 +51,7 @@ const (
 	RoaFlagName      = "roa"
 	DryRunFlagName   = "dryrun"
 	QuietFlagName    = "quiet"
+	QueryFlagName    = "cli-query"
 	OutputFlagName   = "output"
 	MethodFlagName   = "method"
 )
@@ -108,6 +110,10 @@ func QuietFlag(fs *cli.FlagSet) *cli.Flag {
 
 func MethodFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(MethodFlagName)
+}
+
+func QueryFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(QueryFlagName)
 }
 
 // TODO next version
@@ -260,6 +266,18 @@ func NewMethodFlag() *cli.Flag {
 		Short: i18n.T(
 			"add `--method {GET|POST}` to assign rpc call method.",
 			"使用 `--method {GET|POST}` 来指定 RPC 请求的 Method",
+		),
+	}
+}
+
+func NewQueryFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         QueryFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--cli-query <jmespath>` to filter output with JMESPath expression",
+			"使用 `--cli-query <jmespath>` 通过 JMESPath 表达式过滤输出结果",
 		),
 	}
 }
