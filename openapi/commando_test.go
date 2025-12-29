@@ -1778,7 +1778,7 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		DryRunFlag(ctx.Flags()).SetAssigned(true)
 		args := []string{"ecs", "GET", "/nonexistent"}
 		err := command.main(ctx, args)
-		assert.NoError(t, err) // Should succeed with force flag
+		assert.NoError(t, err) // succeed with force flag
 	})
 
 	t.Run("ApiFoundCallsCheckApiParamWithBuildInArgs", func(t *testing.T) {
@@ -2019,7 +2019,7 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		accessKeySecretFlag.SetAssigned(true)
 		accessKeySecretFlag.SetValue("test-access-key-secret")
 		ctx.Flags().Add(accessKeySecretFlag)
-		ForceFlag(ctx.Flags()).SetAssigned(false)
+		ForceFlag(ctx.Flags()).SetAssigned(true) // force flag to true
 
 		args := []string{"sls", "GET", "/nonexistent"}
 		err := command.main(ctx, args)
