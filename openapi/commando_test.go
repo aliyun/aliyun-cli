@@ -211,6 +211,81 @@ func Test_processInvoke(t *testing.T) {
 	out = sortJSON(out)
 	assert.Equal(t, "{\n\t\"downloadlink\": \"aaa&bbb\"\n}", out)
 }
+
+func TestProcessInvokeQueryFlag(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	skipflag := config.NewSkipSecureVerify()
+	skipflag.SetAssigned(true)
+	ctx.Flags().Add(skipflag)
+
+	regionflag := config.NewRegionFlag()
+	regionflag.SetAssigned(true)
+	regionflag.SetValue("cn-hangzhou")
+	ctx.Flags().Add(regionflag)
+
+	EndpointFlag(ctx.Flags()).SetAssigned(true)
+	EndpointFlag(ctx.Flags()).SetValue("ecs.cn-hangzhou.aliyuncs")
+
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("v1.0")
+
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+
+	productCode := "test"
+	apiOrMethod := "get"
+	path := "/user"
+	ForceFlag(ctx.Flags()).SetAssigned(true)
+
+	originalHookdo := hookdo
+	defer func() {
+		hookdo = originalHookdo
+	}()
+
+	t.Run("QueryFlagAssignedWithInvalidQuery", func(t *testing.T) {
+		PagerFlag.SetAssigned(false)
+		hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
+			return func() (*responses.CommonResponse, error) {
+				resp := responses.NewCommonResponse()
+				return resp, nil
+			}
+		}
+
+		QueryFlag(ctx.Flags()).SetAssigned(true)
+		QueryFlag(ctx.Flags()).SetValue("invalid[")
+
+		stdout.Reset()
+		err := command.processInvoke(ctx, productCode, apiOrMethod, path)
+		assert.NoError(t, err)
+	})
+
+	t.Run("QueryFlagNotAssigned", func(t *testing.T) {
+		hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
+			return func() (*responses.CommonResponse, error) {
+				resp := responses.NewCommonResponse()
+				return resp, nil
+			}
+		}
+		QueryFlag(ctx.Flags()).SetAssigned(false)
+
+		stdout.Reset()
+		err := command.processInvoke(ctx, productCode, apiOrMethod, path)
+		assert.NoError(t, err)
+	})
+}
 func Test_sortJSON(t *testing.T) {
 	out := `{"Id":1000000000000000010241024}`
 	out = sortJSON(out)
