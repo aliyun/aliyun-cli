@@ -184,7 +184,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		if find {
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 		}
-		if find && ShouldUseOpenapi(ctx, &product) {
+		if ShouldUseOpenapi(ctx, &product) {
+			if !find {
+				return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
+					"Please confirm if the API path exists")
+			}
 			if args[2] == "/" {
 				return cli.NewErrorWithTip(fmt.Errorf("too broad path: %s for method: %s, please use specific ApiName instead",
 					args[2], args[1]), "Please confirm the API path")

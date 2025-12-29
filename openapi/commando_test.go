@@ -1657,3 +1657,277 @@ func TestApplyQueryFilter(t *testing.T) {
 		assert.Equal(t, `[{"key":"name","value":"item1"},{"key":"status","value":"active"}]`, result)
 	})
 }
+
+func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "test-access-key-id",
+		AccessKeySecret: "test-access-key-secret",
+		RegionId:        "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+
+	cmd := &cli.Command{}
+	AddFlags(cmd.Flags())
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+
+	// Mock product
+	ecsProduct := meta.Product{
+		Code:     "ecs",
+		Version:  "2014-05-26",
+		ApiStyle: "restful",
+		ApiNames: []string{"DescribeInstances"},
+	}
+	mockRepo, _ := meta.MockLoadRepository([]meta.Product{ecsProduct})
+	mockLibrary := &Library{
+		builtinRepo: mockRepo,
+	}
+	command.library = mockLibrary
+
+	originalHook := meta.HookGetApiByPath
+	defer func() {
+		meta.HookGetApiByPath = originalHook
+	}()
+
+	t.Run("ApiNotFoundWithoutForce", func(t *testing.T) {
+		meta.HookGetApiByPath = func(fn func(productCode string, version string, method string, path string) (meta.Api, bool)) func(productCode string, version string, method string, path string) (meta.Api, bool) {
+			return func(productCode string, version string, method string, path string) (meta.Api, bool) {
+				return meta.Api{}, false // API not found
+			}
+		}
+
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		regionflag := config.NewRegionFlag()
+		regionflag.SetAssigned(true)
+		regionflag.SetValue("cn-hangzhou")
+		ctx.Flags().Add(regionflag)
+		ForceFlag(ctx.Flags()).SetAssigned(false) // No force flag
+
+		args := []string{"ecs", "GET", "/nonexistent"}
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "can not find api by path")
+		assert.Contains(t, err.Error(), "/nonexistent")
+	})
+
+	t.Run("ApiNotFoundWithForce", func(t *testing.T) {
+		meta.HookGetApiByPath = func(fn func(productCode string, version string, method string, path string) (meta.Api, bool)) func(productCode string, version string, method string, path string) (meta.Api, bool) {
+			return func(productCode string, version string, method string, path string) (meta.Api, bool) {
+				return meta.Api{}, false // API not found
+			}
+		}
+
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		regionflag := config.NewRegionFlag()
+		regionflag.SetAssigned(true)
+		regionflag.SetValue("cn-hangzhou")
+		ctx.Flags().Add(regionflag)
+		skipflag := config.NewSkipSecureVerify()
+		skipflag.SetAssigned(true)
+		ctx.Flags().Add(skipflag)
+		EndpointFlag(ctx.Flags()).SetAssigned(true)
+		EndpointFlag(ctx.Flags()).SetValue("ecs.cn-hangzhou.aliyuncs.com")
+		ForceFlag(ctx.Flags()).SetAssigned(true) // Force flag enabled
+
+		originalHookdo := hookdo
+		defer func() {
+			hookdo = originalHookdo
+		}()
+		hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
+			return func() (*responses.CommonResponse, error) {
+				resp := responses.NewCommonResponse()
+				return resp, nil
+			}
+		}
+
+		DryRunFlag(ctx.Flags()).SetAssigned(true)
+		args := []string{"ecs", "GET", "/nonexistent"}
+		err := command.main(ctx, args)
+		assert.NoError(t, err) // Should succeed with force flag
+	})
+
+	t.Run("ApiFoundCallsCheckApiParamWithBuildInArgs", func(t *testing.T) {
+		meta.HookGetApiByPath = func(fn func(productCode string, version string, method string, path string) (meta.Api, bool)) func(productCode string, version string, method string, path string) (meta.Api, bool) {
+			return func(productCode string, version string, method string, path string) (meta.Api, bool) {
+				if productCode == "ecs" && method == "GET" && path == "/instances" {
+					return meta.Api{
+						Name: "DescribeInstances",
+						Product: &meta.Product{
+							Code:    "ecs",
+							Version: "2014-05-26",
+						},
+						Parameters: []meta.Parameter{
+							{
+								Name:     "RegionId",
+								Position: "Query",
+								Required: true,
+							},
+						},
+					}, true
+				}
+				return meta.Api{}, false
+			}
+		}
+
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		regionflag := config.NewRegionFlag()
+		regionflag.SetAssigned(true)
+		regionflag.SetValue("cn-hangzhou")
+		ctx.Flags().Add(regionflag)
+		skipflag := config.NewSkipSecureVerify()
+		skipflag.SetAssigned(true)
+		ctx.Flags().Add(skipflag)
+		EndpointFlag(ctx.Flags()).SetAssigned(true)
+		EndpointFlag(ctx.Flags()).SetValue("ecs.cn-hangzhou.aliyuncs.com")
+
+		// Add RegionId as a known flag to test CheckApiParamWithBuildInArgs
+		regionIdFlag := &cli.Flag{Name: "RegionId"}
+		regionIdFlag.SetValue("cn-hangzhou")
+		regionIdFlag.SetAssigned(true)
+		ctx.Flags().Add(regionIdFlag)
+
+		originalHookdo := hookdo
+		defer func() {
+			hookdo = originalHookdo
+		}()
+		hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
+			return func() (*responses.CommonResponse, error) {
+				resp := responses.NewCommonResponse()
+				return resp, nil
+			}
+		}
+
+		DryRunFlag(ctx.Flags()).SetAssigned(true)
+		args := []string{"ecs", "GET", "/instances"}
+		err := command.main(ctx, args)
+		assert.NoError(t, err)
+
+		unknownFlag, ok := ctx.UnknownFlags().GetValue("RegionId")
+		assert.True(t, ok, "RegionId should be copied to UnknownFlags by CheckApiParamWithBuildInArgs")
+		assert.Equal(t, "cn-hangzhou", unknownFlag)
+	})
+
+	t.Run("ApiFoundWithShouldUseOpenapi", func(t *testing.T) {
+		slsProduct := meta.Product{
+			Code:     "sls",
+			Version:  "2020-03-20",
+			ApiStyle: "restful",
+			ApiNames: []string{"GetProject"},
+		}
+		mockRepo, _ := meta.MockLoadRepository([]meta.Product{slsProduct})
+		mockLibrary := &Library{
+			builtinRepo: mockRepo,
+		}
+		command.library = mockLibrary
+
+		processApiInvokeCalled := false
+		meta.HookGetApiByPath = func(fn func(productCode string, version string, method string, path string) (meta.Api, bool)) func(productCode string, version string, method string, path string) (meta.Api, bool) {
+			return func(productCode string, version string, method string, path string) (meta.Api, bool) {
+				if productCode == "sls" && method == "GET" && path == "/projects" {
+					return meta.Api{
+						Name: "GetProject",
+						Product: &meta.Product{
+							Code:    "sls",
+							Version: "2020-03-20",
+						},
+					}, true
+				}
+				return meta.Api{}, false
+			}
+		}
+
+		originalHookCall := hookHttpContextCall
+		originalHookGetResponse := hookHttpContextGetResponse
+		defer func() {
+			hookHttpContextCall = originalHookCall
+			hookHttpContextGetResponse = originalHookGetResponse
+		}()
+		hookHttpContextCall = func(fn func() error) func() error {
+			processApiInvokeCalled = true
+			return func() error {
+				return nil
+			}
+		}
+		hookHttpContextGetResponse = func(fn func() (string, error)) func() (string, error) {
+			return func() (string, error) {
+				return "{}", nil
+			}
+		}
+
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		regionflag := config.NewRegionFlag()
+		regionflag.SetAssigned(true)
+		regionflag.SetValue("cn-hangzhou")
+		ctx.Flags().Add(regionflag)
+
+		args := []string{"sls", "GET", "/projects"}
+		err := command.main(ctx, args)
+		assert.NoError(t, err)
+		assert.True(t, processApiInvokeCalled, "processApiInvoke should be called for SLS product")
+	})
+
+	t.Run("ApiFoundWithoutShouldUseOpenapi", func(t *testing.T) {
+		ecsProduct := meta.Product{
+			Code:     "ecs",
+			Version:  "2014-05-26",
+			ApiStyle: "restful",
+			ApiNames: []string{"DescribeInstances"},
+		}
+		mockRepo, _ := meta.MockLoadRepository([]meta.Product{ecsProduct})
+		mockLibrary := &Library{
+			builtinRepo: mockRepo,
+		}
+		command.library = mockLibrary
+
+		meta.HookGetApiByPath = func(fn func(productCode string, version string, method string, path string) (meta.Api, bool)) func(productCode string, version string, method string, path string) (meta.Api, bool) {
+			return func(productCode string, version string, method string, path string) (meta.Api, bool) {
+				if productCode == "ecs" && method == "GET" && path == "/instances" {
+					return meta.Api{
+						Name: "DescribeInstances",
+						Product: &meta.Product{
+							Code:    "ecs",
+							Version: "2014-05-26",
+						},
+					}, true
+				}
+				return meta.Api{}, false
+			}
+		}
+
+		originalHookdo := hookdo
+		defer func() {
+			hookdo = originalHookdo
+		}()
+		hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
+			return func() (*responses.CommonResponse, error) {
+				resp := responses.NewCommonResponse()
+				return resp, nil
+			}
+		}
+
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		regionflag := config.NewRegionFlag()
+		regionflag.SetAssigned(true)
+		regionflag.SetValue("cn-hangzhou")
+		ctx.Flags().Add(regionflag)
+		skipflag := config.NewSkipSecureVerify()
+		skipflag.SetAssigned(true)
+		ctx.Flags().Add(skipflag)
+		EndpointFlag(ctx.Flags()).SetAssigned(true)
+		EndpointFlag(ctx.Flags()).SetValue("ecs.cn-hangzhou.aliyuncs.com")
+
+		DryRunFlag(ctx.Flags()).SetAssigned(true)
+		args := []string{"ecs", "GET", "/instances"}
+		err := command.main(ctx, args)
+		assert.NoError(t, err)
+	})
+}
