@@ -175,13 +175,16 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		// aliyun <productCode> {GET|PUT|POST|DELETE} <path> --
 		product, _ := c.library.GetProduct(productName)
 		api, find := meta.HookGetApiByPath(c.library.GetApiByPath)(product.Code, product.Version, args[1], args[2])
-		if !find {
+		force := ForceFlag(ctx.Flags()).IsAssigned()
+		if !find && !force {
 			// throw error, can not find api by path
 			return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
 				"Please confirm if the API path exists")
 		}
-		c.CheckApiParamWithBuildInArgs(ctx, api)
-		if ShouldUseOpenapi(ctx, &product) {
+		if find {
+			c.CheckApiParamWithBuildInArgs(ctx, api)
+		}
+		if find && ShouldUseOpenapi(ctx, &product) {
 			if args[2] == "/" {
 				return cli.NewErrorWithTip(fmt.Errorf("too broad path: %s for method: %s, please use specific ApiName instead",
 					args[2], args[1]), "Please confirm the API path")
