@@ -16,6 +16,7 @@ package openapi
 import (
 	"bytes"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -1688,6 +1689,18 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 	}
 	command.library = mockLibrary
 
+	// Set environment variable to skip profile file loading
+	// This allows LoadProfileWithContext to use flags directly instead of loading from file
+	originalIgnoreProfile := os.Getenv("ALIBABA_CLOUD_IGNORE_PROFILE")
+	os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
+	defer func() {
+		if originalIgnoreProfile == "" {
+			os.Unsetenv("ALIBABA_CLOUD_IGNORE_PROFILE")
+		} else {
+			os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", originalIgnoreProfile)
+		}
+	}()
+
 	originalHook := meta.HookGetApiByPath
 	defer func() {
 		meta.HookGetApiByPath = originalHook
@@ -1706,6 +1719,14 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		regionflag.SetAssigned(true)
 		regionflag.SetValue("cn-hangzhou")
 		ctx.Flags().Add(regionflag)
+		accessKeyIDFlag := config.NewAccessKeyIdFlag()
+		accessKeyIDFlag.SetAssigned(true)
+		accessKeyIDFlag.SetValue("test-access-key-id")
+		ctx.Flags().Add(accessKeyIDFlag)
+		accessKeySecretFlag := config.NewAccessKeySecretFlag()
+		accessKeySecretFlag.SetAssigned(true)
+		accessKeySecretFlag.SetValue("test-access-key-secret")
+		ctx.Flags().Add(accessKeySecretFlag)
 		ForceFlag(ctx.Flags()).SetAssigned(false) // No force flag
 
 		args := []string{"ecs", "GET", "/nonexistent"}
@@ -1728,6 +1749,14 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		regionflag.SetAssigned(true)
 		regionflag.SetValue("cn-hangzhou")
 		ctx.Flags().Add(regionflag)
+		accessKeyIDFlag := config.NewAccessKeyIdFlag()
+		accessKeyIDFlag.SetAssigned(true)
+		accessKeyIDFlag.SetValue("test-access-key-id")
+		ctx.Flags().Add(accessKeyIDFlag)
+		accessKeySecretFlag := config.NewAccessKeySecretFlag()
+		accessKeySecretFlag.SetAssigned(true)
+		accessKeySecretFlag.SetValue("test-access-key-secret")
+		ctx.Flags().Add(accessKeySecretFlag)
 		skipflag := config.NewSkipSecureVerify()
 		skipflag.SetAssigned(true)
 		ctx.Flags().Add(skipflag)
@@ -1781,6 +1810,14 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		regionflag.SetAssigned(true)
 		regionflag.SetValue("cn-hangzhou")
 		ctx.Flags().Add(regionflag)
+		accessKeyIDFlag := config.NewAccessKeyIdFlag()
+		accessKeyIDFlag.SetAssigned(true)
+		accessKeyIDFlag.SetValue("test-access-key-id")
+		ctx.Flags().Add(accessKeyIDFlag)
+		accessKeySecretFlag := config.NewAccessKeySecretFlag()
+		accessKeySecretFlag.SetAssigned(true)
+		accessKeySecretFlag.SetValue("test-access-key-secret")
+		ctx.Flags().Add(accessKeySecretFlag)
 		skipflag := config.NewSkipSecureVerify()
 		skipflag.SetAssigned(true)
 		ctx.Flags().Add(skipflag)
@@ -1867,6 +1904,14 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		regionflag.SetAssigned(true)
 		regionflag.SetValue("cn-hangzhou")
 		ctx.Flags().Add(regionflag)
+		accessKeyIDFlag := config.NewAccessKeyIdFlag()
+		accessKeyIDFlag.SetAssigned(true)
+		accessKeyIDFlag.SetValue("test-access-key-id")
+		ctx.Flags().Add(accessKeyIDFlag)
+		accessKeySecretFlag := config.NewAccessKeySecretFlag()
+		accessKeySecretFlag.SetAssigned(true)
+		accessKeySecretFlag.SetValue("test-access-key-secret")
+		ctx.Flags().Add(accessKeySecretFlag)
 
 		args := []string{"sls", "GET", "/projects"}
 		err := command.main(ctx, args)
@@ -1919,6 +1964,14 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		regionflag.SetAssigned(true)
 		regionflag.SetValue("cn-hangzhou")
 		ctx.Flags().Add(regionflag)
+		accessKeyIDFlag := config.NewAccessKeyIdFlag()
+		accessKeyIDFlag.SetAssigned(true)
+		accessKeyIDFlag.SetValue("test-access-key-id")
+		ctx.Flags().Add(accessKeyIDFlag)
+		accessKeySecretFlag := config.NewAccessKeySecretFlag()
+		accessKeySecretFlag.SetAssigned(true)
+		accessKeySecretFlag.SetValue("test-access-key-secret")
+		ctx.Flags().Add(accessKeySecretFlag)
 		skipflag := config.NewSkipSecureVerify()
 		skipflag.SetAssigned(true)
 		ctx.Flags().Add(skipflag)
