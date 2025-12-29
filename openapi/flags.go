@@ -51,7 +51,7 @@ const (
 	RoaFlagName      = "roa"
 	DryRunFlagName   = "dryrun"
 	QuietFlagName    = "quiet"
-	QueryFlagName = "query"
+	QueryFlagName    = "cli-query"
 	OutputFlagName   = "output"
 	MethodFlagName   = "method"
 )
@@ -276,8 +276,8 @@ func NewQueryFlag() *cli.Flag {
 		Name:         QueryFlagName,
 		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
-			"use `--query <jmespath>` to filter output with JMESPath expression",
-			"使用 `--query <jmespath>` 通过 JMESPath 表达式过滤输出结果",
+			"use `--cli-query <jmespath>` to filter output with JMESPath expression",
+			"使用 `--cli-query <jmespath>` 通过 JMESPath 表达式过滤输出结果",
 		),
 	}
 }
