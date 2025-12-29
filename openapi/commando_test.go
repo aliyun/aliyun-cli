@@ -1983,4 +1983,53 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		err := command.main(ctx, args)
 		assert.NoError(t, err)
 	})
+
+	t.Run("ApiNotFoundWithShouldUseOpenapi", func(t *testing.T) {
+		// Test the specific error path at lines 188-190
+		// This happens when ShouldUseOpenapi is true (SLS product) and API is not found
+		slsProduct := meta.Product{
+			Code:     "sls",
+			Version:  "2020-03-20",
+			ApiStyle: "restful",
+			ApiNames: []string{"GetProject"},
+		}
+		mockRepo, _ := meta.MockLoadRepository([]meta.Product{slsProduct})
+		mockLibrary := &Library{
+			builtinRepo: mockRepo,
+		}
+		command.library = mockLibrary
+
+		meta.HookGetApiByPath = func(fn func(productCode string, version string, method string, path string) (meta.Api, bool)) func(productCode string, version string, method string, path string) (meta.Api, bool) {
+			return func(productCode string, version string, method string, path string) (meta.Api, bool) {
+				return meta.Api{}, false // API not found
+			}
+		}
+
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		regionflag := config.NewRegionFlag()
+		regionflag.SetAssigned(true)
+		regionflag.SetValue("cn-hangzhou")
+		ctx.Flags().Add(regionflag)
+		accessKeyIDFlag := config.NewAccessKeyIdFlag()
+		accessKeyIDFlag.SetAssigned(true)
+		accessKeyIDFlag.SetValue("test-access-key-id")
+		ctx.Flags().Add(accessKeyIDFlag)
+		accessKeySecretFlag := config.NewAccessKeySecretFlag()
+		accessKeySecretFlag.SetAssigned(true)
+		accessKeySecretFlag.SetValue("test-access-key-secret")
+		ctx.Flags().Add(accessKeySecretFlag)
+		ForceFlag(ctx.Flags()).SetAssigned(false)
+
+		args := []string{"sls", "GET", "/nonexistent"}
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "can not find api by path")
+		assert.Contains(t, err.Error(), "/nonexistent")
+		if errorWithTip, ok := err.(cli.ErrorWithTip); ok {
+			assert.Contains(t, errorWithTip.GetTip("en"), "Please confirm if the API path exists")
+		} else {
+			t.Fatalf("Expected ErrorWithTip, got %T", err)
+		}
+	})
 }
