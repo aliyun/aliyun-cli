@@ -57,5 +57,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-// should be removed after related pr released in jmespath/go-jmespath
+// should be removed after related pr merged in upstream jmespath/go-jmespath
 replace github.com/jmespath/go-jmespath => github.com/alibabacloud-go/go-jmespath v0.4.0-aliyun
