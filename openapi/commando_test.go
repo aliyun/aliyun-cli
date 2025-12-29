@@ -699,6 +699,123 @@ func TestProcessApiInvoke(t *testing.T) {
 		err := command.processApiInvoke(ctx, product, api, "GET", "/PullLogs")
 		assert.Equal(t, "test error", err.Error())
 	})
+
+	t.Run("QueryFlagAssignedWithValidQuery", func(t *testing.T) {
+		product := &meta.Product{
+			Code: "sls",
+		}
+		api := &meta.Api{
+			Name: "TestApi",
+			Product: &meta.Product{
+				Version: "2017-08-01",
+			},
+		}
+
+		// Reset flags
+		QuietFlag(ctx.Flags()).SetAssigned(false)
+		QueryFlag(ctx.Flags()).SetAssigned(true)
+		QueryFlag(ctx.Flags()).SetValue("key")
+
+		originCallHook := hookHttpContextCall
+		originhook := hookHttpContextGetResponse
+		defer func() {
+			hookHttpContextGetResponse = originhook
+			hookHttpContextCall = originCallHook
+			QueryFlag(ctx.Flags()).SetAssigned(false)
+		}()
+		hookHttpContextCall = func(fn func() error) func() error {
+			return func() error {
+				return nil
+			}
+		}
+		hookHttpContextGetResponse = func(fn func() (string, error)) func() (string, error) {
+			return func() (string, error) {
+				return `{"key": "value"}`, nil
+			}
+		}
+
+		w.Reset()
+		err := command.processApiInvoke(ctx, product, api, "GET", "/test")
+		assert.NoError(t, err)
+		assert.Contains(t, w.String(), "value")
+		assert.NotContains(t, w.String(), "key")
+	})
+
+	t.Run("QueryFlagAssignedWithQueryError", func(t *testing.T) {
+		product := &meta.Product{
+			Code: "sls",
+		}
+		api := &meta.Api{
+			Name: "TestApi",
+			Product: &meta.Product{
+				Version: "2017-08-01",
+			},
+		}
+
+		// Reset flags
+		QuietFlag(ctx.Flags()).SetAssigned(false)
+		QueryFlag(ctx.Flags()).SetAssigned(true)
+		QueryFlag(ctx.Flags()).SetValue("invalid[")
+
+		originCallHook := hookHttpContextCall
+		originhook := hookHttpContextGetResponse
+		defer func() {
+			hookHttpContextGetResponse = originhook
+			hookHttpContextCall = originCallHook
+			QueryFlag(ctx.Flags()).SetAssigned(false)
+		}()
+		hookHttpContextCall = func(fn func() error) func() error {
+			return func() error {
+				return nil
+			}
+		}
+		hookHttpContextGetResponse = func(fn func() (string, error)) func() (string, error) {
+			return func() (string, error) {
+				return `{"key": "value"}`, nil
+			}
+		}
+
+		err := command.processApiInvoke(ctx, product, api, "GET", "/test")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "JMESPath query failed")
+	})
+
+	t.Run("QueryFlagNotAssigned", func(t *testing.T) {
+		product := &meta.Product{
+			Code: "sls",
+		}
+		api := &meta.Api{
+			Name: "TestApi",
+			Product: &meta.Product{
+				Version: "2017-08-01",
+			},
+		}
+
+		QuietFlag(ctx.Flags()).SetAssigned(false)
+
+		originCallHook := hookHttpContextCall
+		originhook := hookHttpContextGetResponse
+		defer func() {
+			hookHttpContextGetResponse = originhook
+			hookHttpContextCall = originCallHook
+		}()
+		hookHttpContextCall = func(fn func() error) func() error {
+			return func() error {
+				return nil
+			}
+		}
+		hookHttpContextGetResponse = func(fn func() (string, error)) func() (string, error) {
+			return func() (string, error) {
+				return `{"key": "value"}`, nil
+			}
+		}
+
+		w.Reset()
+		err := command.processApiInvoke(ctx, product, api, "GET", "/test")
+		assert.NoError(t, err)
+		assert.Contains(t, w.String(), "key")
+		assert.Contains(t, w.String(), "value")
+	})
 }
 
 func TestProcessApiInvokeFilterError(t *testing.T) {
