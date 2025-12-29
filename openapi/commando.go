@@ -226,7 +226,6 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		return nil
 	}
 
-	// apply --query JMESPath filter first (before --output, since --output returns table format)
 	if QueryFlag(ctx.Flags()).IsAssigned() {
 		out, err = ApplyQueryFilter(ctx, out)
 		if err != nil {
@@ -290,7 +289,6 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		return nil
 	}
 
-	// apply --query JMESPath filter first (before --output, --output returns table format)
 	if QueryFlag(ctx.Flags()).IsAssigned() {
 		out, err = ApplyQueryFilter(ctx, out)
 		if err != nil {

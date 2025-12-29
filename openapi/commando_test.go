@@ -1454,4 +1454,14 @@ func TestApplyQueryFilter(t *testing.T) {
 		assert.Contains(t, result, "item1")
 		assert.NotContains(t, result, "item2")
 	})
+
+	t.Run("QueryToEntriesWithFilter", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		queryFlag.SetValue("to_entries(items)")
+		output := `{"items": {"name": "item1", "status": "active"}}`
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, `[{"key":"name","value":"item1"},{"key":"status","value":"active"}]`, result)
+	})
 }
