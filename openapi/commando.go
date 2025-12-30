@@ -18,6 +18,7 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -25,6 +26,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	jmespath "github.com/jmespath/go-jmespath"
@@ -115,6 +117,40 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	if len(args) == 0 {
 		c.printUsage(ctx)
 		return nil
+	}
+	// Strategy: Plugin Execution
+	// If the second argument (API name) is kebab-case (contains '-'), try plugin first.
+	// fmt.Println("args", args)
+	if len(args) > 1 {
+		apiOrMethod := args[1]
+		// Check if it's kebab-case (plugin format)
+		if strings.Contains(apiOrMethod, "-") {
+			// Extract plugin arguments from os.Args
+			var pluginArgs []string
+			cmdIndex := -1
+			for i, arg := range os.Args {
+				if arg == args[0] {
+					cmdIndex = i
+					break
+				}
+			}
+			if cmdIndex != -1 && cmdIndex < len(os.Args)-1 {
+				pluginArgs = os.Args[cmdIndex+1:]
+			}
+
+			ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("plugin %s not found", args[0])
+			}
+			return nil
+		}
+	}
+
+	if cli.HelpFlag(ctx.Flags()).IsAssigned() {
+		return c.help(ctx, args)
 	}
 
 	// detect if in configure mode
