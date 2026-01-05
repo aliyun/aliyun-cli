@@ -121,10 +121,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// Strategy: Plugin Execution
 	// If the second argument (API name) is kebab-case (contains '-'), try plugin first.
 	// fmt.Println("args", args)
+	// fmt.Println("os.Args", os.Args)
 	if len(args) > 1 {
 		apiOrMethod := args[1]
 		// Check if it's kebab-case (plugin format)
-		if strings.Contains(apiOrMethod, "-") {
+		if strings.Contains(apiOrMethod, "-") || apiOrMethod == "version" {
 			// Extract plugin arguments from os.Args
 			var pluginArgs []string
 			cmdIndex := -1
@@ -135,7 +136,15 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 			}
 			if cmdIndex != -1 && cmdIndex < len(os.Args)-1 {
-				pluginArgs = os.Args[cmdIndex+1:]
+				pluginArgs = os.Args[cmdIndex:]
+			}
+
+			installed, pluginName, err := plugin.IsPluginInstalled(args[0])
+			if err != nil {
+				return fmt.Errorf("failed to check plugin status: %w", err)
+			}
+			if !installed {
+				return fmt.Errorf("plugin '%s' not found. Install it with: aliyun plugin install %s", args[0], args[0])
 			}
 
 			ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
@@ -143,7 +152,22 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				return err
 			}
 			if !ok {
-				return fmt.Errorf("plugin %s not found", args[0])
+				return fmt.Errorf("plugin %s not found", pluginName)
+			}
+			return nil
+		}
+	} else if len(args) == 1 {
+		installed, pluginName, err := plugin.IsPluginInstalled(args[0])
+		if err != nil {
+			return fmt.Errorf("failed to check plugin status: %w", err)
+		}
+		if installed {
+			ok, err := plugin.ExecutePlugin(args[0], args, ctx)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("plugin %s not found", pluginName)
 			}
 			return nil
 		}

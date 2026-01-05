@@ -10,6 +10,25 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 )
 
+// IsPluginInstalled checks if a plugin is installed locally.
+// Returns (true, pluginName, nil) if plugin is installed.
+// Returns (false, "", nil) if plugin is not installed.
+// Returns (false, "", error) if there's an error checking.
+func IsPluginInstalled(command string) (bool, string, error) {
+	mgr, err := NewManager()
+	if err != nil {
+		return false, "", err
+	}
+
+	pluginName, _, err := mgr.findLocalPlugin(command)
+	if err != nil {
+		// Plugin not found
+		return false, "", nil
+	}
+
+	return true, pluginName, nil
+}
+
 // Returns (true, nil) if plugin was found and executed successfully.
 // Returns (false, nil) if plugin was not found (not an error).
 // Returns (true, error) if plugin execution failed.
@@ -42,6 +61,8 @@ func ExecutePlugin(command string, args []string, ctx *cli.Context) (bool, error
 		stdout = os.Stdout
 		stderr = os.Stderr
 	}
+	// fmt.Println("binPath", binPath)
+	// fmt.Println("adjustedArgs", adjustedArgs)
 
 	envs := os.Environ()
 
@@ -53,14 +74,14 @@ func ExecutePlugin(command string, args []string, ctx *cli.Context) (bool, error
 }
 
 func adjustPluginArgs(args []string) []string {
-	if len(args) == 0 {
+	if len(args) <= 1 {
 		return args
 	}
 
 	// Check if first argument is "plugin-help"
-	if args[0] == "plugin-help" {
+	if args[1] == "plugin-help" {
 		// Replace plugin-help with --help and drop the rest of the arguments
-		return []string{"--help"}
+		return []string{args[0], "--help"}
 	}
 
 	return args
