@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"fmt"
+	"sort"
 	"text/tabwriter"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -19,11 +20,12 @@ func NewPluginCommand() *cli.Command {
 	}
 
 	cmd.AddSubCommand(newListCommand())
+	cmd.AddSubCommand(newListRemoteCommand())
+	cmd.AddSubCommand(newSearchCommand())
 	cmd.AddSubCommand(newInstallCommand())
 	cmd.AddSubCommand(newInstallAllCommand())
 	cmd.AddSubCommand(newUninstallCommand())
 	cmd.AddSubCommand(newUpdateCommand())
-	// cmd.AddSubCommand(newSearchCommand())
 
 	return cmd
 }
@@ -52,6 +54,62 @@ func newListCommand() *cli.Command {
 			}
 			w.Flush()
 			return nil
+		},
+	}
+}
+
+func newListRemoteCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "list-remote",
+		Short: i18n.T("List available plugins from remote index", "列出远程索引中可用的插件"),
+		Usage: "plugin list-remote",
+		Run: func(ctx *cli.Context, args []string) error {
+			mgr, err := NewManager()
+			if err != nil {
+				return err
+			}
+
+			index, err := mgr.GetIndex()
+			if err != nil {
+				return fmt.Errorf("failed to fetch remote plugin index: %w", err)
+			}
+
+			localManifest, err := mgr.GetLocalManifest()
+			if err != nil {
+				return err
+			}
+
+			return displayRemotePlugins(ctx, index, localManifest)
+		},
+	}
+}
+
+func newSearchCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "search",
+		Short: i18n.T("Search plugin by command name", "根据命令名搜索插件"),
+		Usage: "plugin search <command-name>",
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("command name is required")
+			}
+
+			commandName := args[0]
+			if commandName == "" {
+				return fmt.Errorf("command name cannot be empty")
+			}
+
+			mgr, err := NewManager()
+			if err != nil {
+				return err
+			}
+
+			pluginName, err := mgr.FindPluginByCommand(commandName)
+			if err != nil {
+				return err
+			}
+
+			return displaySearchResult(ctx, mgr, commandName, pluginName)
 		},
 	}
 }
@@ -257,6 +315,106 @@ func installMultiplePlugins(ctx *cli.Context, mgr *Manager, pluginNames []string
 	if failed > 0 {
 		cli.Printf(ctx.Stdout(), "Failed: %d\n", failed)
 		return fmt.Errorf("%d plugin(s) failed to install", failed)
+	}
+
+	return nil
+}
+
+func displayRemotePlugins(ctx *cli.Context, index *Index, localManifest *LocalManifest) error {
+	totalPlugins := len(index.Plugins)
+	cli.Printf(ctx.Stdout(), "Total plugins available: %d\n\n", totalPlugins)
+
+	if totalPlugins == 0 {
+		cli.Printf(ctx.Stdout(), "No plugins available in remote index.\n")
+		return nil
+	}
+
+	type pluginWithStatus struct {
+		plugin      PluginInfo
+		isInstalled bool
+		localPlugin LocalPlugin
+	}
+
+	plugins := make([]pluginWithStatus, 0, totalPlugins)
+	var installedCount int
+
+	for _, plugin := range index.Plugins {
+		localPlugin, isInstalled := localManifest.Plugins[plugin.Name]
+		if isInstalled {
+			installedCount++
+		}
+		plugins = append(plugins, pluginWithStatus{
+			plugin:      plugin,
+			isInstalled: isInstalled,
+			localPlugin: localPlugin,
+		})
+	}
+
+	sort.Slice(plugins, func(i, j int) bool {
+		if plugins[i].isInstalled != plugins[j].isInstalled {
+			return plugins[i].isInstalled // installed first
+		}
+		return plugins[i].plugin.Name < plugins[j].plugin.Name
+	})
+
+	w := tabwriter.NewWriter(ctx.Stdout(), 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "Name\tLatest Version\tStatus\tLocal Version\tDescription")
+	fmt.Fprintln(w, "----\t--------------\t------\t-------------\t-----------")
+
+	for _, p := range plugins {
+		status := "Not installed"
+		localVersion := "-"
+		if p.isInstalled {
+			status = "Installed"
+			localVersion = p.localPlugin.Version
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+			p.plugin.Name,
+			p.plugin.LatestVersion,
+			status,
+			localVersion,
+			p.plugin.Description)
+	}
+	w.Flush()
+
+	return nil
+}
+
+func displaySearchResult(ctx *cli.Context, mgr *Manager, commandName, pluginName string) error {
+	cli.Printf(ctx.Stdout(), "Command: %s\n", commandName)
+	cli.Printf(ctx.Stdout(), "Plugin: %s\n\n", pluginName)
+
+	// Check if plugin is installed locally
+	localManifest, err := mgr.GetLocalManifest()
+	if err != nil {
+		return err
+	}
+
+	localPlugin, isInstalled := localManifest.Plugins[pluginName]
+	if isInstalled {
+		cli.Printf(ctx.Stdout(), "Status: Installed\n")
+		cli.Printf(ctx.Stdout(), "Local Version: %s\n", localPlugin.Version)
+		if localPlugin.Description != "" {
+			cli.Printf(ctx.Stdout(), "Description: %s\n", localPlugin.Description)
+		}
+	} else {
+		cli.Printf(ctx.Stdout(), "Status: Not installed\n")
+
+		// Get remote plugin info
+		index, err := mgr.GetIndex()
+		if err == nil {
+			for _, plugin := range index.Plugins {
+				if plugin.Name == pluginName {
+					cli.Printf(ctx.Stdout(), "Latest Version: %s\n", plugin.LatestVersion)
+					if plugin.Description != "" {
+						cli.Printf(ctx.Stdout(), "Description: %s\n", plugin.Description)
+					}
+					cli.Printf(ctx.Stdout(), "\nTo install: aliyun plugin install --name %s\n", pluginName)
+					break
+				}
+			}
+		}
 	}
 
 	return nil

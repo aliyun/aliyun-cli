@@ -96,6 +96,11 @@ type PluginManifest struct {
 	} `json:"bin"`
 }
 
+// CommandIndex is an inverted index mapping command names to plugin names
+// Key: kebab-case command name (e.g., "fc create-alias")
+// Value: plugin name (e.g., "aliyun-cli-fc")
+type CommandIndex map[string]string
+
 func GetCurrentPlatform() string {
 	return runtime.GOOS + "/" + runtime.GOARCH
 }

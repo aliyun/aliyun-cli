@@ -21,7 +21,9 @@ import (
 )
 
 const (
-	IndexURL = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/plugin-index.json" // 默认索引地址
+	IndexURL          = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/plugin-index.json"  // 默认索引地址
+	CommandIndexURL   = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/command-index.json" // 命令倒排索引地址
+	LocalCommandIndex = "command-index.json"                                                             // 本地命令索引文件名
 )
 
 type Manager struct {
@@ -91,6 +93,43 @@ func (m *Manager) GetIndex() (*Index, error) {
 		return nil, fmt.Errorf("failed to decode plugin index: %w", err)
 	}
 	return &index, nil
+}
+
+func (m *Manager) GetCommandIndex() (*CommandIndex, error) {
+
+	client := &http.Client{
+		Timeout: 60 * time.Second,
+	}
+	resp, err := client.Get(CommandIndexURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch command index: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch command index: status %d", resp.StatusCode)
+	}
+
+	var index CommandIndex
+	if err := json.NewDecoder(resp.Body).Decode(&index); err != nil {
+		return nil, fmt.Errorf("failed to decode command index: %w", err)
+	}
+	return &index, nil
+}
+
+func (m *Manager) FindPluginByCommand(commandName string) (string, error) {
+	index, err := m.GetCommandIndex()
+	if err != nil {
+		return "", err
+	}
+
+	normalizedCmd := strings.ToLower(strings.TrimSpace(commandName))
+
+	if pluginName, found := (*index)[normalizedCmd]; found {
+		return pluginName, nil
+	}
+
+	return "", fmt.Errorf("no plugin found for command: %s", commandName)
 }
 
 func matchPluginName(pluginName, userInput string) bool {
