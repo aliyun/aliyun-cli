@@ -50,6 +50,7 @@ const (
 	CloudSSOAccountIdFlagName    = "cloud-sso-account-id"
 	OAuthSiteTypeName            = "oauth-site-type"
 	EndpointTypeFlagName         = "endpoint-type"
+	AutoPluginInstallFlagName    = "auto-plugin-install"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -83,6 +84,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewCloudSSOAccountIdFlag())
 	fs.Add(NewOAuthSiteTypeFlag())
 	fs.Add(NewEndpointTypeFlag())
+	fs.Add(NewAutoPluginInstallFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -545,5 +547,21 @@ func NewEndpointTypeFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--endpoint-type` to specify the endpoint type, support vpc or empty (default public)",
 			"使用 `--endpoint-type` 指定 endpoint 类型, 支持 vpc 或空值(默认公网)"),
+	}
+}
+
+func AutoPluginInstallFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(AutoPluginInstallFlagName)
+}
+
+func NewAutoPluginInstallFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         AutoPluginInstallFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--auto-plugin-install {true|false}` to enable/disable automatic plugin installation",
+			"使用 `--auto-plugin-install {true|false}` 启用/禁用自动安装插件"),
 	}
 }
