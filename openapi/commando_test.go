@@ -2068,12 +2068,17 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
 		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
 
-		os.Args = []string{"aliyun", "fc", "describe-regions"}
-		args := []string{"fc", "describe-regions"}
+		os.Args = []string{"aliyun", "qqq", "describe-regions"}
+		args := []string{"qqq", "describe-regions"}
+
+		// Mock isInteractiveInput to false for CI/CD
+		oldInteractive := isInteractiveInput
+		isInteractiveInput = func() bool { return false }
+		defer func() { isInteractiveInput = oldInteractive }()
 
 		err := command.main(ctx, args)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "plugin fc not found")
+		assert.Contains(t, err.Error(), "plugin 'qqq' not found")
 	})
 
 	t.Run("Kebab-case API name with multiple arguments extracts all args", func(t *testing.T) {
@@ -2087,12 +2092,12 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
 		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
 
-		os.Args = []string{"aliyun", "fc", "describe-regions", "--region", "cn-hangzhou"}
-		args := []string{"fc", "describe-regions"}
+		os.Args = []string{"aliyun", "qqq", "describe-regions", "--region", "cn-hangzhou"}
+		args := []string{"qqq", "describe-regions"}
 
 		err := command.main(ctx, args)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "plugin fc not found")
+		assert.Contains(t, err.Error(), "plugin 'qqq' not found")
 	})
 
 	t.Run("Non-kebab-case API name does not trigger plugin", func(t *testing.T) {
@@ -2151,8 +2156,13 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		os.Args = []string{"aliyun", "other-command"}
 		args := []string{"fc", "describe-regions"}
 
+		// Mock isInteractiveInput to false for CI/CD
+		oldInteractive := isInteractiveInput
+		isInteractiveInput = func() bool { return false }
+		defer func() { isInteractiveInput = oldInteractive }()
+
 		err := command.main(ctx, args)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "plugin fc not found")
+		assert.Contains(t, err.Error(), "plugin 'fc' not found")
 	})
 }
