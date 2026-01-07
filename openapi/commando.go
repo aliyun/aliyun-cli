@@ -113,6 +113,14 @@ func DetectInConfigureMode(flags *cli.FlagSet) bool {
 	return false
 }
 
+var isInteractiveInput = func() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
+}
+
 func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// aliyun
 	if len(args) == 0 {
@@ -792,12 +800,4 @@ func (c *Commando) findAndInstallPlugin(ctx *cli.Context, commandName, productCo
 	}
 
 	return pluginName, nil
-}
-
-func isInteractiveInput() bool {
-	info, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return (info.Mode() & os.ModeCharDevice) != 0
 }
