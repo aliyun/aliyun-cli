@@ -493,7 +493,7 @@ func TestExecutePlugin(t *testing.T) {
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
 		os.MkdirAll(pluginDir, 0755)
 		binPath := filepath.Join(pluginDir, "aliyun-cli-test")
-		scriptContent := "#!/bin/sh\nif [ \"$1\" = \"--help\" ]; then echo 'plugin help'; exit 0; fi\nexit 1\n"
+		scriptContent := "#!/bin/sh\nif [ \"$2\" = \"--help\" ]; then echo 'plugin help'; exit 0; fi\nexit 1\n"
 		os.WriteFile(binPath, []byte(scriptContent), 0755)
 
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
@@ -502,7 +502,7 @@ func TestExecutePlugin(t *testing.T) {
 		os.WriteFile(manifestPath, []byte(manifestJSON), 0644)
 
 		// Test that plugin-help is converted to --help
-		ok, err := ExecutePlugin("test", []string{"plugin-help"}, nil)
+		ok, err := ExecutePlugin("test", []string{"test", "plugin-help"}, nil)
 		assert.NoError(t, err)
 		assert.True(t, ok)
 	})
