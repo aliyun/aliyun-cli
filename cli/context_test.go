@@ -31,12 +31,12 @@ func TestHelpFlag(t *testing.T) {
 	fs := NewFlagSet()
 	fs.Add(NewHelpFlag())
 	f := HelpFlag(fs)
-	assert.Equal(t, &Flag{Name: "help", Short: i18n.T("print help", "打印帮助信息"), AssignedMode: AssignedNone}, f)
+	assert.Equal(t, &Flag{Name: "help", Shorthand: 'h', Short: i18n.T("print help", "打印帮助信息"), AssignedMode: AssignedNone}, f)
 }
 
 func TestNewHelpFlag(t *testing.T) {
 	f := NewHelpFlag()
-	assert.Equal(t, &Flag{Name: "help", Short: i18n.T("print help", "打印帮助信息"), AssignedMode: AssignedNone}, f)
+	assert.Equal(t, &Flag{Name: "help", Shorthand: 'h', Short: i18n.T("print help", "打印帮助信息"), AssignedMode: AssignedNone}, f)
 }
 
 func TestContext_SetUnknownFlags(t *testing.T) {
@@ -79,7 +79,7 @@ func TestCtx(t *testing.T) {
 	ctx.EnterCommand(cmd)
 	assert.Nil(t, ctx.unknownFlags)
 	ctx.EnterCommand(cmd)
-	assert.Equal(t, &Flag{Name: "help", Short: i18n.T("print help", "打印帮助信息"), AssignedMode: AssignedNone}, ctx.flags.Get("help"))
+	assert.Equal(t, &Flag{Name: "help", Shorthand: 'h', Short: i18n.T("print help", "打印帮助信息"), AssignedMode: AssignedNone}, ctx.flags.Get("help"))
 }
 
 func TestCheckFlags(t *testing.T) {

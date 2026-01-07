@@ -65,6 +65,9 @@ type Command struct {
 	KeepArgs bool
 	// skip main process help
 	SkipDefaultHelp bool
+
+	// DisablePersistentFlags skip persistent flags from parent
+	DisablePersistentFlags bool
 }
 
 func (c *Command) AddSubCommand(cmd *Command) {

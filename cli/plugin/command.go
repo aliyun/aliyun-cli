@@ -11,9 +11,10 @@ import (
 
 func NewPluginCommand() *cli.Command {
 	cmd := &cli.Command{
-		Name:  "plugin",
-		Short: i18n.T("Manage plugins", "管理插件"),
-		Usage: "plugin <command> [args]",
+		Name:                   "plugin",
+		Short:                  i18n.T("Manage plugins", "管理插件"),
+		Usage:                  "plugin <command> [args]",
+		DisablePersistentFlags: true,
 		Run: func(ctx *cli.Context, args []string) error {
 			return cli.NewErrorWithTip(fmt.Errorf("command missing"), "Use `aliyun plugin --help` for more information.")
 		},
@@ -34,6 +35,7 @@ func newListCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "list",
 		Short: i18n.T("List installed plugins", "列出已安装的插件"),
+		Usage: "list",
 		Run: func(ctx *cli.Context, args []string) error {
 			mgr, err := NewManager()
 			if err != nil {
@@ -62,7 +64,7 @@ func newListRemoteCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "list-remote",
 		Short: i18n.T("List available plugins from remote index", "列出远程索引中可用的插件"),
-		Usage: "plugin list-remote",
+		Usage: "list-remote",
 		Run: func(ctx *cli.Context, args []string) error {
 			mgr, err := NewManager()
 			if err != nil {
@@ -88,7 +90,7 @@ func newSearchCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "search",
 		Short: i18n.T("Search plugin by command name", "根据命令名搜索插件"),
-		Usage: "plugin search <command-name>",
+		Usage: "search <command-name>",
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) == 0 {
 				return fmt.Errorf("command name is required")
@@ -118,37 +120,26 @@ func newInstallCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "install",
 		Short: i18n.T("Install a plugin", "安装插件"),
-		Usage: "plugin install --name <plugin_name> [--version <version>] OR plugin install --names <plugin1> <plugin2> ... [--version <version>]",
+		Usage: "install --names <plugin_name> [<plugin2> ...] [--version <version>]",
 		Run: func(ctx *cli.Context, args []string) error {
-			name, names, version, err := parseInstallArgs(ctx)
+			names, version, err := parseInstallArgs(ctx)
 			if err != nil {
 				return err
 			}
 
-			validatedNames, err := validateInstallArgs(name, names)
+			validatedNames, err := validateInstallArgs(names)
 			if err != nil {
 				return err
 			}
 
-			return executeInstall(ctx, name, validatedNames, version)
+			return executeInstall(ctx, validatedNames, version)
 		},
 	}
 
-	nameFlag := &cli.Flag{
-		Name:         "name",
-		Short:        i18n.T("Plugin name to install", "要安装的插件名称"),
-		AssignedMode: cli.AssignedOnce,
-		Required:     false,
-		ExcludeWith:  []string{"names"},
-	}
-	cmd.Flags().Add(nameFlag)
-
 	namesFlag := &cli.Flag{
 		Name:         "names",
-		Short:        i18n.T("Plugin names to install (can specify multiple)", "要安装的插件名称（可指定多个）"),
+		Short:        i18n.T("Plugin name(s) to install (can specify one or multiple)", "要安装的插件名称（可指定一个或多个）"),
 		AssignedMode: cli.AssignedRepeatable,
-		Required:     false,
-		ExcludeWith:  []string{"name"},
 	}
 	cmd.Flags().Add(namesFlag)
 
@@ -164,9 +155,10 @@ func newInstallCommand() *cli.Command {
 
 func newInstallAllCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "install-all",
-		Short: i18n.T("Install all available plugins", "安装所有可用的插件"),
-		Usage: "plugin install-all",
+		Name:   "install-all",
+		Short:  i18n.T("Install all available plugins", "安装所有可用的插件"),
+		Usage:  "install-all",
+		Hidden: true, // 安装所有可用插件，不推荐使用
 		Run: func(ctx *cli.Context, args []string) error {
 			mgr, err := NewManager()
 			if err != nil {
@@ -182,11 +174,15 @@ func newUninstallCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "uninstall",
 		Short: i18n.T("Uninstall a plugin", "卸载插件"),
-		Usage: "plugin uninstall --name <plugin_name>",
+		Usage: "uninstall --name <plugin_name>",
 		Run: func(ctx *cli.Context, args []string) error {
 			name := ""
 			if v, ok := ctx.Flags().GetValue("name"); ok {
 				name = v
+			}
+
+			if name == "" {
+				return fmt.Errorf("plugin name is required")
 			}
 
 			mgr, err := NewManager()
@@ -202,7 +198,6 @@ func newUninstallCommand() *cli.Command {
 		Name:         "name",
 		Short:        i18n.T("Plugin name to uninstall", "要卸载的插件名称"),
 		AssignedMode: cli.AssignedOnce,
-		Required:     true,
 	})
 
 	return cmd
@@ -242,11 +237,7 @@ func newUpdateCommand() *cli.Command {
 	return cmd
 }
 
-func parseInstallArgs(ctx *cli.Context) (name string, names []string, version string, err error) {
-	if v, ok := ctx.Flags().GetValue("name"); ok {
-		name = v
-	}
-
+func parseInstallArgs(ctx *cli.Context) (names []string, version string, err error) {
 	if namesFlag := ctx.Flags().Get("names"); namesFlag != nil && namesFlag.IsAssigned() {
 		names = namesFlag.GetValues()
 	}
@@ -255,69 +246,37 @@ func parseInstallArgs(ctx *cli.Context) (name string, names []string, version st
 		version = v
 	}
 
-	return name, names, version, nil
+	return names, version, nil
 }
 
-func validateInstallArgs(name string, names []string) ([]string, error) {
-	if name == "" && len(names) == 0 {
-		return nil, fmt.Errorf("either --name or --names flag is required")
+func validateInstallArgs(names []string) ([]string, error) {
+	if len(names) == 0 {
+		return nil, fmt.Errorf("--names flag is required")
 	}
 
-	if name != "" && len(names) > 0 {
-		return nil, fmt.Errorf("flags --name and --names are mutually exclusive")
-	}
-
-	if len(names) > 0 {
-		validNames := []string{}
-		for _, n := range names {
-			if n != "" {
-				validNames = append(validNames, n)
-			}
+	validNames := []string{}
+	for _, n := range names {
+		if n != "" {
+			validNames = append(validNames, n)
 		}
-		if len(validNames) == 0 {
-			return nil, fmt.Errorf("--names requires at least one plugin name")
-		}
-		return validNames, nil
 	}
-
-	return names, nil
+	if len(validNames) == 0 {
+		return nil, fmt.Errorf("--names requires at least one plugin name")
+	}
+	return validNames, nil
 }
 
-func executeInstall(ctx *cli.Context, name string, names []string, version string) error {
+func executeInstall(ctx *cli.Context, names []string, version string) error {
 	mgr, err := NewManager()
 	if err != nil {
 		return err
 	}
 
-	if name != "" {
-		return mgr.Install(ctx, name, version)
+	if len(names) == 1 {
+		return mgr.Install(ctx, names[0], version)
 	}
 
-	return installMultiplePlugins(ctx, mgr, names, version)
-}
-
-func installMultiplePlugins(ctx *cli.Context, mgr *Manager, pluginNames []string, version string) error {
-	var installed, failed int
-
-	for _, pluginName := range pluginNames {
-		cli.Printf(ctx.Stdout(), "Installing %s...\n", pluginName)
-		if err := mgr.Install(ctx, pluginName, version); err != nil {
-			cli.Printf(ctx.Stderr(), "Failed to install %s: %v\n", pluginName, err)
-			failed++
-			continue
-		}
-		installed++
-	}
-
-	if installed > 0 {
-		cli.Printf(ctx.Stdout(), "Installed: %d\n", installed)
-	}
-	if failed > 0 {
-		cli.Printf(ctx.Stdout(), "Failed: %d\n", failed)
-		return fmt.Errorf("%d plugin(s) failed to install", failed)
-	}
-
-	return nil
+	return mgr.InstallMultiple(ctx, names, version)
 }
 
 func displayRemotePlugins(ctx *cli.Context, index *Index, localManifest *LocalManifest) error {
@@ -385,7 +344,6 @@ func displaySearchResult(ctx *cli.Context, mgr *Manager, commandName, pluginName
 	cli.Printf(ctx.Stdout(), "Command: %s\n", commandName)
 	cli.Printf(ctx.Stdout(), "Plugin: %s\n\n", pluginName)
 
-	// Check if plugin is installed locally
 	localManifest, err := mgr.GetLocalManifest()
 	if err != nil {
 		return err
@@ -401,7 +359,6 @@ func displaySearchResult(ctx *cli.Context, mgr *Manager, commandName, pluginName
 	} else {
 		cli.Printf(ctx.Stdout(), "Status: Not installed\n")
 
-		// Get remote plugin info
 		index, err := mgr.GetIndex()
 		if err == nil {
 			for _, plugin := range index.Plugins {
@@ -410,7 +367,7 @@ func displaySearchResult(ctx *cli.Context, mgr *Manager, commandName, pluginName
 					if plugin.Description != "" {
 						cli.Printf(ctx.Stdout(), "Description: %s\n", plugin.Description)
 					}
-					cli.Printf(ctx.Stdout(), "\nTo install: aliyun plugin install --name %s\n", pluginName)
+					cli.Printf(ctx.Stdout(), "\nTo install: aliyun plugin install --names %s\n", pluginName)
 					break
 				}
 			}

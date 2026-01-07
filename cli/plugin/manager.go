@@ -675,6 +675,30 @@ func (m *Manager) UpdateAll(ctx *cli.Context) error {
 	return nil
 }
 
+func (m *Manager) InstallMultiple(ctx *cli.Context, pluginNames []string, version string) error {
+	var installed, failed int
+
+	for _, pluginName := range pluginNames {
+		cli.Printf(ctx.Stdout(), "Installing %s...\n", pluginName)
+		if err := m.Install(ctx, pluginName, version); err != nil {
+			cli.Printf(ctx.Stderr(), "Failed to install %s: %v\n", pluginName, err)
+			failed++
+			continue
+		}
+		installed++
+	}
+
+	if installed > 0 {
+		cli.Printf(ctx.Stdout(), "Installed: %d\n", installed)
+	}
+	if failed > 0 {
+		cli.Printf(ctx.Stdout(), "Failed: %d\n", failed)
+		return fmt.Errorf("%d plugin(s) failed to install", failed)
+	}
+
+	return nil
+}
+
 func (m *Manager) InstallAll(ctx *cli.Context) error {
 	index, err := m.GetIndex()
 	if err != nil {
