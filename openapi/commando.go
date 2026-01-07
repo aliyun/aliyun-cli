@@ -766,7 +766,7 @@ func (c *Commando) findAndInstallPlugin(ctx *cli.Context, commandName, productCo
 
 	if !isInteractiveInput() {
 		cli.Printf(ctx.Stderr(), "Plugin '%s' is required for command '%s' but not installed.\n", pluginName, commandName)
-		cli.Printf(ctx.Stderr(), "Install it with: aliyun plugin install --name %s\n", pluginName)
+		cli.Printf(ctx.Stderr(), "Install it with: aliyun plugin install --names %s\n", pluginName)
 		return "", nil
 	}
 

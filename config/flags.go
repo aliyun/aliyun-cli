@@ -559,7 +559,6 @@ func NewAutoPluginInstallFlag() *cli.Flag {
 		Category:     "config",
 		Name:         AutoPluginInstallFlagName,
 		AssignedMode: cli.AssignedOnce,
-		Persistent:   true,
 		Short: i18n.T(
 			"use `--auto-plugin-install {true|false}` to enable/disable automatic plugin installation",
 			"使用 `--auto-plugin-install {true|false}` 启用/禁用自动安装插件"),
