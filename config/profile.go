@@ -95,8 +95,9 @@ type Profile struct {
 	OAuthRefreshToken         string           `json:"oauth_refresh_token,omitempty"`
 	OAuthAccessTokenExpire    int64            `json:"oauth_access_token_expire,omitempty"`
 	OAuthRefreshTokenExpire   int64            `json:"oauth_refresh_token_expire,omitempty"`
-	OAuthSiteType             string           `json:"oauth_site_type,omitempty"` // CN or INTL
-	EndpointType              string           `json:"endpoint_type,omitempty"`   // vpc or empty (default public)
+	OAuthSiteType             string           `json:"oauth_site_type,omitempty"`     // CN or INTL
+	EndpointType              string           `json:"endpoint_type,omitempty"`       // vpc or empty (default public)
+	AutoPluginInstall         bool             `json:"auto_plugin_install,omitempty"` // automatically install plugins when not found
 	parent                    *Configuration   //`json:"-"`
 }
 

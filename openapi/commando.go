@@ -14,10 +14,12 @@
 package openapi
 
 import (
+	"bufio"
 	"bytes"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -25,6 +27,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	jmespath "github.com/jmespath/go-jmespath"
@@ -110,11 +113,88 @@ func DetectInConfigureMode(flags *cli.FlagSet) bool {
 	return false
 }
 
+var isInteractiveInput = func() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
+}
+
 func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// aliyun
 	if len(args) == 0 {
 		c.printUsage(ctx)
 		return nil
+	}
+	// Strategy: Plugin Execution
+	// If the second argument (API name) is kebab-case (contains '-'), try plugin first.
+	// fmt.Println("args", args)
+	// fmt.Println("os.Args", os.Args)
+	if len(args) > 1 {
+		apiOrMethod := args[1]
+		// Check if it's kebab-case (plugin format)
+		if strings.Contains(apiOrMethod, "-") || apiOrMethod == "version" {
+			// Extract plugin arguments from os.Args
+			var pluginArgs []string
+			cmdIndex := -1
+			for i, arg := range os.Args {
+				if arg == args[0] {
+					cmdIndex = i
+					break
+				}
+			}
+			if cmdIndex != -1 && cmdIndex < len(os.Args)-1 {
+				pluginArgs = os.Args[cmdIndex:]
+			}
+
+			installed, pluginName, err := plugin.IsPluginInstalled(args[0])
+			if err != nil {
+				return fmt.Errorf("failed to check plugin status: %w", err)
+			}
+			if !installed {
+				if profile, err := config.LoadProfileWithContext(ctx); err == nil {
+					c.profile = profile
+				}
+				commandName := buildCommandName(args)
+				foundPluginName, err := c.findAndInstallPlugin(ctx, commandName, args[0])
+				if err != nil {
+					return err
+				}
+				if foundPluginName == "" {
+					return fmt.Errorf("plugin '%s' not found. Install it with: aliyun plugin install %s", args[0], args[0])
+				}
+				pluginName = foundPluginName
+			}
+
+			ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("plugin %s not found", pluginName)
+			}
+			return nil
+		}
+	} else if len(args) == 1 {
+		installed, pluginName, err := plugin.IsPluginInstalled(args[0])
+		if err != nil {
+			return fmt.Errorf("failed to check plugin status: %w", err)
+		}
+		if installed {
+			ok, err := plugin.ExecutePlugin(args[0], args, ctx)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("plugin %s not found", pluginName)
+			}
+			return nil
+		}
+	}
+
+	if cli.HelpFlag(ctx.Flags()).IsAssigned() {
+		return c.help(ctx, args)
 	}
 
 	// detect if in configure mode
@@ -658,4 +738,66 @@ func (c *Commando) CheckApiParamWithBuildInArgs(ctx *cli.Context, api meta.Api) 
 			ctx.UnknownFlags().Add(flagNew)
 		}
 	}
+}
+
+// ["fc", "create-alias"] -> "fc create-alias"
+func buildCommandName(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	if len(args) == 1 {
+		return args[0]
+	}
+	return strings.Join(args[:2], " ")
+}
+
+func (c *Commando) findAndInstallPlugin(ctx *cli.Context, commandName, productCode string) (string, error) {
+	mgr, err := plugin.NewManager()
+	if err != nil {
+		return "", err
+	}
+
+	pluginName, err := mgr.FindPluginByCommand(commandName)
+	if err != nil {
+		return "", nil
+	}
+
+	// Check if auto-plugin-install is enabled
+	if c.profile.AutoPluginInstall {
+		cli.Printf(ctx.Stderr(), "Plugin '%s' is required for command '%s' but not installed.\n", pluginName, commandName)
+		cli.Printf(ctx.Stderr(), "Auto-installing plugin '%s'...\n", pluginName)
+		if err := mgr.Install(ctx, pluginName, ""); err != nil {
+			return "", fmt.Errorf("failed to install plugin '%s': %w", pluginName, err)
+		}
+		return pluginName, nil
+	}
+
+	if !isInteractiveInput() {
+		cli.Printf(ctx.Stderr(), "Plugin '%s' is required for command '%s' but not installed.\n", pluginName, commandName)
+		cli.Printf(ctx.Stderr(), "Install it with: aliyun plugin install --names %s\n", pluginName)
+		return "", nil
+	}
+
+	cli.Printf(ctx.Stderr(), "Plugin '%s' is required for command '%s' but not installed.\n", pluginName, commandName)
+	cli.Printf(ctx.Stderr(), "Tip: Run 'aliyun configure set --auto-plugin-install true' to skip this prompt.\n")
+	cli.Printf(ctx.Stderr(), "Do you want to install it? [Y/n]: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return "", fmt.Errorf("failed to read user input: %w", err)
+	}
+
+	response = strings.TrimSpace(strings.ToLower(response))
+	if response != "" && response != "y" && response != "yes" {
+		cli.Printf(ctx.Stderr(), "Installation cancelled.\n")
+		return "", nil
+	}
+
+	cli.Printf(ctx.Stderr(), "Installing plugin '%s'...\n", pluginName)
+	if err := mgr.Install(ctx, pluginName, ""); err != nil {
+		return "", fmt.Errorf("failed to install plugin '%s': %w", pluginName, err)
+	}
+
+	return pluginName, nil
 }

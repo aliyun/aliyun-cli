@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -2031,5 +2032,137 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		} else {
 			t.Fatalf("Expected ErrorWithTip, got %T", err)
 		}
+	})
+}
+
+func TestMain_PluginExecution_KebabCase(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	profile := config.Profile{
+		Language: "en",
+		RegionId: "cn-hangzhou",
+	}
+	command := NewCommando(w, profile)
+
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	originalArgs := os.Args
+	defer func() {
+		os.Args = originalArgs
+	}()
+
+	t.Run("Kebab-case API name triggers plugin execution - plugin not found", func(t *testing.T) {
+		originalHome := os.Getenv("HOME")
+		defer os.Setenv("HOME", originalHome)
+
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		os.MkdirAll(filepath.Dir(manifestPath), 0755)
+		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
+
+		os.Args = []string{"aliyun", "qqq", "describe-regions"}
+		args := []string{"qqq", "describe-regions"}
+
+		// Mock isInteractiveInput to false for CI/CD
+		oldInteractive := isInteractiveInput
+		isInteractiveInput = func() bool { return false }
+		defer func() { isInteractiveInput = oldInteractive }()
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "plugin 'qqq' not found")
+	})
+
+	t.Run("Kebab-case API name with multiple arguments extracts all args", func(t *testing.T) {
+		originalHome := os.Getenv("HOME")
+		defer os.Setenv("HOME", originalHome)
+
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		os.MkdirAll(filepath.Dir(manifestPath), 0755)
+		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
+
+		os.Args = []string{"aliyun", "qqq", "describe-regions", "--region", "cn-hangzhou"}
+		args := []string{"qqq", "describe-regions"}
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "plugin 'qqq' not found")
+	})
+
+	t.Run("Non-kebab-case API name does not trigger plugin", func(t *testing.T) {
+		originalHome := os.Getenv("HOME")
+		defer os.Setenv("HOME", originalHome)
+
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		os.MkdirAll(filepath.Dir(manifestPath), 0755)
+		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
+
+		os.Args = []string{"aliyun", "ecs", "DescribeRegions"}
+		args := []string{"ecs", "DescribeRegions"}
+
+		// Execute main - should NOT trigger plugin execution
+		// Instead, it should continue with normal product/API lookup
+		err := command.main(ctx, args)
+		if err != nil {
+			assert.NotContains(t, err.Error(), "plugin")
+		}
+	})
+
+	t.Run("Single argument does not trigger plugin check", func(t *testing.T) {
+		originalHome := os.Getenv("HOME")
+		defer os.Setenv("HOME", originalHome)
+
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		os.MkdirAll(filepath.Dir(manifestPath), 0755)
+		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
+
+		os.Args = []string{"aliyun", "fc"}
+		args := []string{"fc"}
+
+		err := command.main(ctx, args)
+		if err != nil {
+			assert.NotContains(t, err.Error(), "plugin")
+		}
+	})
+
+	t.Run("Kebab-case with command not in os.Args", func(t *testing.T) {
+		originalHome := os.Getenv("HOME")
+		defer os.Setenv("HOME", originalHome)
+
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		os.MkdirAll(filepath.Dir(manifestPath), 0755)
+		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
+
+		os.Args = []string{"aliyun", "other-command"}
+		args := []string{"fc", "describe-regions"}
+
+		// Mock isInteractiveInput to false for CI/CD
+		oldInteractive := isInteractiveInput
+		isInteractiveInput = func() bool { return false }
+		defer func() { isInteractiveInput = oldInteractive }()
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "plugin 'fc' not found")
 	})
 }
