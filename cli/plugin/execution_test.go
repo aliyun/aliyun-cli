@@ -288,9 +288,9 @@ func TestResolvePluginBinaryPath(t *testing.T) {
 
 func TestAdjustPluginArgs(t *testing.T) {
 	t.Run("Adjust plugin-help to --help", func(t *testing.T) {
-		args := []string{"plugin-help"}
+		args := []string{"fc", "plugin-help"}
 		adjusted := adjustPluginArgs(args)
-		if len(adjusted) != 1 || adjusted[0] != "--help" {
+		if len(adjusted) != 2 || adjusted[1] != "--help" {
 			t.Errorf("adjustPluginArgs(%v) = %v, want [--help]", args, adjusted)
 		}
 	})
@@ -317,9 +317,9 @@ func TestAdjustPluginArgs(t *testing.T) {
 	})
 
 	t.Run("plugin-help with additional args", func(t *testing.T) {
-		args := []string{"plugin-help", "--verbose"}
+		args := []string{"fc", "plugin-help", "--verbose"}
 		adjusted := adjustPluginArgs(args)
-		if len(adjusted) != 1 || adjusted[0] != "--help" {
+		if len(adjusted) != 2 || adjusted[1] != "--help" {
 			t.Errorf("adjustPluginArgs(%v) = %v, want [--help]", args, adjusted)
 		}
 	})

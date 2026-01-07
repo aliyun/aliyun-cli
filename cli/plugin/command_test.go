@@ -142,9 +142,9 @@ func TestNewInstallCommand(t *testing.T) {
 	assert.NotEmpty(t, cmd.Usage)
 
 	flags := cmd.Flags()
-	nameFlag := flags.Get("name")
-	assert.NotNil(t, nameFlag)
-	assert.True(t, nameFlag.Required)
+	namesFlag := flags.Get("names")
+	assert.NotNil(t, namesFlag)
+	assert.False(t, namesFlag.Required)
 
 	versionFlag := flags.Get("version")
 	assert.NotNil(t, versionFlag)
@@ -169,7 +169,7 @@ func TestNewInstallCommand_Run(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestNewInstallCommand_Run_WithNameFlag(t *testing.T) {
+func TestNewInstallCommand_Run_WithNamesFlag(t *testing.T) {
 	cmd := newInstallCommand()
 
 	originalHome := os.Getenv("HOME")
@@ -183,17 +183,17 @@ func TestNewInstallCommand_Run_WithNameFlag(t *testing.T) {
 	ctx := cli.NewCommandContext(stdout, stderr)
 	ctx.EnterCommand(cmd)
 
-	nameFlag := ctx.Flags().Get("name")
-	assert.NotNil(t, nameFlag)
-	nameFlag.SetAssigned(true)
-	nameFlag.SetValue("nonexistent-plugin-xyz-123")
+	namesFlag := ctx.Flags().Get("names")
+	assert.NotNil(t, namesFlag)
+	namesFlag.SetAssigned(true)
+	namesFlag.SetValues([]string{"nonexistent-plugin-xyz-123"})
 
 	err := cmd.Run(ctx, []string{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "nonexistent-plugin-xyz-123 not found")
 }
 
-func TestNewInstallCommand_Run_WithNameAndVersionFlags(t *testing.T) {
+func TestNewInstallCommand_Run_WithNamesAndVersionFlags(t *testing.T) {
 	cmd := newInstallCommand()
 
 	originalHome := os.Getenv("HOME")
@@ -207,10 +207,10 @@ func TestNewInstallCommand_Run_WithNameAndVersionFlags(t *testing.T) {
 	ctx := cli.NewCommandContext(stdout, stderr)
 	ctx.EnterCommand(cmd)
 
-	nameFlag := ctx.Flags().Get("name")
-	assert.NotNil(t, nameFlag)
-	nameFlag.SetAssigned(true)
-	nameFlag.SetValue("nonexistent-plugin-xyz-123")
+	namesFlag := ctx.Flags().Get("names")
+	assert.NotNil(t, namesFlag)
+	namesFlag.SetAssigned(true)
+	namesFlag.SetValues([]string{"nonexistent-plugin-xyz-123"})
 
 	versionFlag := ctx.Flags().Get("version")
 	assert.NotNil(t, versionFlag)
@@ -243,7 +243,7 @@ func TestNewInstallCommand_Run_WithVersionFlagOnly(t *testing.T) {
 
 	err := cmd.Run(ctx, []string{})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "name flag is required")
+	assert.Contains(t, err.Error(), "names flag is required")
 }
 
 func TestNewInstallCommand_Run_FlagValueAssignment(t *testing.T) {
@@ -255,19 +255,21 @@ func TestNewInstallCommand_Run_FlagValueAssignment(t *testing.T) {
 	testHome := t.TempDir()
 	os.Setenv("HOME", testHome)
 
-	t.Run("Name flag value assignment", func(t *testing.T) {
+	t.Run("Names flag value assignment", func(t *testing.T) {
 		stdout := new(bytes.Buffer)
 		stderr := new(bytes.Buffer)
 		ctx := cli.NewCommandContext(stdout, stderr)
 		ctx.EnterCommand(cmd)
 
-		nameFlag := ctx.Flags().Get("name")
-		nameFlag.SetAssigned(true)
-		nameFlag.SetValue("test-plugin-name")
+		namesFlag := ctx.Flags().Get("names")
+		namesFlag.SetAssigned(true)
+		namesFlag.SetValues([]string{"test-plugin-name"})
 
-		v, ok := ctx.Flags().GetValue("name")
-		assert.True(t, ok, "name flag should be retrievable")
-		assert.Equal(t, "test-plugin-name", v, "name flag value should match")
+		namesFlag2 := ctx.Flags().Get("names")
+		values := namesFlag2.GetValues()
+		assert.NotNil(t, values, "names flag should be retrievable")
+		assert.Len(t, values, 1, "names flag should have one value")
+		assert.Equal(t, "test-plugin-name", values[0], "names flag value should match")
 	})
 
 	t.Run("Version flag value assignment", func(t *testing.T) {
@@ -291,17 +293,19 @@ func TestNewInstallCommand_Run_FlagValueAssignment(t *testing.T) {
 		ctx := cli.NewCommandContext(stdout, stderr)
 		ctx.EnterCommand(cmd)
 
-		nameFlag := ctx.Flags().Get("name")
-		nameFlag.SetAssigned(true)
-		nameFlag.SetValue("another-plugin")
+		namesFlag := ctx.Flags().Get("names")
+		namesFlag.SetAssigned(true)
+		namesFlag.SetValues([]string{"another-plugin"})
 
 		versionFlag := ctx.Flags().Get("version")
 		versionFlag.SetAssigned(true)
 		versionFlag.SetValue("3.0.0")
 
-		name, nameOk := ctx.Flags().GetValue("name")
-		assert.True(t, nameOk)
-		assert.Equal(t, "another-plugin", name)
+		namesFlag2 := ctx.Flags().Get("names")
+		values := namesFlag2.GetValues()
+		assert.NotNil(t, values)
+		assert.Len(t, values, 1)
+		assert.Equal(t, "another-plugin", values[0])
 
 		version, versionOk := ctx.Flags().GetValue("version")
 		assert.True(t, versionOk)
@@ -328,7 +332,7 @@ func TestNewUninstallCommand(t *testing.T) {
 	flags := cmd.Flags()
 	nameFlag := flags.Get("name")
 	assert.NotNil(t, nameFlag)
-	assert.True(t, nameFlag.Required)
+	assert.False(t, nameFlag.Required)
 }
 
 func TestNewUpdateCommand(t *testing.T) {
