@@ -349,13 +349,11 @@ func displayRemotePlugins(ctx *cli.Context, index *Index, localManifest *LocalMa
 			localVersion = p.localPlugin.Version
 		}
 
-		// Get latest version (including pre-release)
 		latestVersion, err := getLatestVersion(&p.plugin, true)
 		if err != nil {
 			latestVersion = "N/A"
 		}
 
-		// Check if the latest version is a pre-release
 		preview := "No"
 		if latestVersion != "N/A" && isPrerelease(latestVersion) {
 			preview = "Yes"
@@ -397,15 +395,23 @@ func displaySearchResult(ctx *cli.Context, mgr *Manager, commandName, pluginName
 		if err == nil {
 			for _, plugin := range index.Plugins {
 				if plugin.Name == pluginName {
-					// Get latest stable version
-					latestVersion, err := getLatestVersion(&plugin, false)
+					latestVersion, err := getLatestVersion(&plugin, true)
 					if err == nil {
 						cli.Printf(ctx.Stdout(), "Latest Version: %s\n", latestVersion)
+
+						if isPrerelease(latestVersion) {
+							cli.Printf(ctx.Stdout(), "Note: This is a pre-release version\n")
+						}
 					}
 					if plugin.Description != "" {
 						cli.Printf(ctx.Stdout(), "Description: %s\n", plugin.Description)
 					}
-					cli.Printf(ctx.Stdout(), "\nTo install: aliyun plugin install --names %s\n", pluginName)
+
+					if latestVersion != "" && isPrerelease(latestVersion) {
+						cli.Printf(ctx.Stdout(), "\nTo install: aliyun plugin install --names %s --enable-pre\n", pluginName)
+					} else {
+						cli.Printf(ctx.Stdout(), "\nTo install: aliyun plugin install --names %s\n", pluginName)
+					}
 					break
 				}
 			}
