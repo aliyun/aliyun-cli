@@ -18,6 +18,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -2164,5 +2166,600 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		err := command.main(ctx, args)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin 'fc' not found")
+	})
+}
+
+func TestPluginExecutionLogic(t *testing.T) {
+	// Setup test environment
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	profile := config.Profile{
+		Language: "en",
+		RegionId: "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	regionflag := config.NewRegionFlag()
+	regionflag.SetAssigned(true)
+	regionflag.SetValue("cn-hangzhou")
+	ctx.Flags().Add(regionflag)
+	accessKeyIDFlag := config.NewAccessKeyIdFlag()
+	accessKeyIDFlag.SetAssigned(true)
+	accessKeyIDFlag.SetValue("test-access-key-id")
+	ctx.Flags().Add(accessKeyIDFlag)
+	accessKeySecretFlag := config.NewAccessKeySecretFlag()
+	accessKeySecretFlag.SetAssigned(true)
+	accessKeySecretFlag.SetValue("test-access-key-secret")
+	ctx.Flags().Add(accessKeySecretFlag)
+
+	ctx.Command().Short = &i18n.Text{}
+
+	originalArgs := os.Args
+	defer func() {
+		os.Args = originalArgs
+	}()
+
+	// Set up plugin environment
+	originalHome := os.Getenv("HOME")
+	defer func() {
+		if originalHome == "" {
+			os.Unsetenv("HOME")
+		} else {
+			os.Setenv("HOME", originalHome)
+		}
+	}()
+
+	testHome := t.TempDir()
+	os.Setenv("HOME", testHome)
+
+	originalIgnoreProfile := os.Getenv("ALIBABA_CLOUD_IGNORE_PROFILE")
+	os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
+	defer func() {
+		if originalIgnoreProfile == "" {
+			os.Unsetenv("ALIBABA_CLOUD_IGNORE_PROFILE")
+		} else {
+			os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", originalIgnoreProfile)
+		}
+	}()
+
+	pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+	manifestPath := filepath.Join(pluginDir, "manifest.json")
+	err := os.MkdirAll(pluginDir, 0755)
+	assert.NoError(t, err)
+
+	t.Run("Plugin execution with valid executable", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+		testPluginManifest := `{
+			"plugins": {
+				"testplugin": {
+					"name": "testplugin",
+					"version": "1.0.0",
+					"path": "` + filepath.Join(pluginDir, "testplugin") + `"
+				}
+			}
+		}`
+		err := os.WriteFile(manifestPath, []byte(testPluginManifest), 0644)
+		assert.NoError(t, err)
+
+		// Create mock plugin executable that succeeds
+		pluginPath := filepath.Join(pluginDir, "testplugin", "testplugin")
+		err = os.MkdirAll(filepath.Dir(pluginPath), 0755)
+		assert.NoError(t, err)
+
+		mockPluginScript := `#!/bin/bash
+echo "Plugin executed successfully"
+exit 0
+`
+		err = os.WriteFile(pluginPath, []byte(mockPluginScript), 0755)
+		assert.NoError(t, err)
+
+		os.Args = []string{"aliyun", "testplugin", "test-command"}
+		args := []string{"testplugin", "test-command"}
+
+		err = command.main(ctx, args)
+		assert.NoError(t, err)
+		assert.Contains(t, stdout.String(), "Plugin executed successfully")
+	})
+
+	t.Run("Plugin binary not found after installation check", func(t *testing.T) {
+		// Test case where plugin is in manifest but binary doesn't exist
+		// This tests the (ok=false, err=nil) path from ExecutePlugin
+		testPluginManifest := `{
+			"plugins": {
+				"missingplugin": {
+					"name": "missingplugin",
+					"version": "1.0.0",
+					"path": "` + filepath.Join(pluginDir, "missingplugin") + `",
+					"command": "missing-cmd"
+				}
+			}
+		}`
+		err := os.WriteFile(manifestPath, []byte(testPluginManifest), 0644)
+		assert.NoError(t, err)
+
+		// Create directory but don't create the binary
+		err = os.MkdirAll(filepath.Join(pluginDir, "missingplugin"), 0755)
+		assert.NoError(t, err)
+
+		os.Args = []string{"aliyun", "missingplugin", "missing-cmd"}
+		args := []string{"missingplugin", "missing-cmd"}
+
+		err = command.main(ctx, args)
+		// Should get "plugin not found" error
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to resolve plugin binary path")
+		assert.Contains(t, err.Error(), "plugin")
+		assert.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("Environment variable ALIYUN_ORIGINAL_PRODUCT_HELP skips plugin for single arg", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+		// Set environment variable
+		originalEnv := os.Getenv("ALIYUN_ORIGINAL_PRODUCT_HELP")
+		os.Setenv("ALIYUN_ORIGINAL_PRODUCT_HELP", "true")
+		defer func() {
+			if originalEnv == "" {
+				os.Unsetenv("ALIYUN_ORIGINAL_PRODUCT_HELP")
+			} else {
+				os.Setenv("ALIYUN_ORIGINAL_PRODUCT_HELP", originalEnv)
+			}
+		}()
+
+		// Create a plugin that exists
+		testPluginManifest := `{
+			"plugins": {
+				"envtest": {
+					"name": "envtest",
+					"version": "1.0.0",
+					"path": "` + filepath.Join(pluginDir, "envtest") + `",
+					"command": "envtest"
+				}
+			}
+		}`
+		err := os.WriteFile(manifestPath, []byte(testPluginManifest), 0644)
+		assert.NoError(t, err)
+
+		// Create the plugin binary so it could be executed
+		pluginPath := filepath.Join(pluginDir, "envtest", "envtest")
+		err = os.MkdirAll(filepath.Dir(pluginPath), 0755)
+		assert.NoError(t, err)
+
+		mockPluginScript := `#!/bin/bash
+echo "Plugin should not execute"
+exit 0
+`
+		err = os.WriteFile(pluginPath, []byte(mockPluginScript), 0755)
+		assert.NoError(t, err)
+
+		// Test with single argument (product-level help scenario)
+		os.Args = []string{"aliyun", "envtest"}
+		args := []string{"envtest"}
+
+		stdout.Reset()
+		err = command.main(ctx, args)
+
+		// With ALIYUN_ORIGINAL_PRODUCT_HELP=true and single arg,
+		// plugin execution is skipped
+		assert.NotNil(t, err)
+		assert.Contains(t, err.Error(), "not a valid command or product")
+		assert.NotContains(t, stdout.String(), "Plugin should not execute")
+
+	})
+
+	t.Run("Kebab-case command triggers plugin execution", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+		// Verify that kebab-case in second argument triggers plugin execution
+		testPluginManifest := `{
+			"plugins": {
+				"kebabtest": {
+					"name": "kebabtest",
+					"version": "1.0.0",
+					"path": "` + filepath.Join(pluginDir, "kebabtest") + `",
+					"command": "kebabtest"
+				}
+			}
+		}`
+		err := os.WriteFile(manifestPath, []byte(testPluginManifest), 0644)
+		assert.NoError(t, err)
+
+		pluginPath := filepath.Join(pluginDir, "kebabtest", "kebabtest")
+		err = os.MkdirAll(filepath.Dir(pluginPath), 0755)
+		assert.NoError(t, err)
+
+		mockPluginScript := `#!/bin/bash
+echo "Kebab-case command executed"
+exit 0
+`
+		err = os.WriteFile(pluginPath, []byte(mockPluginScript), 0755)
+		assert.NoError(t, err)
+
+		os.Args = []string{"aliyun", "kebabtest", "list-resources"}
+		args := []string{"kebabtest", "list-resources"}
+
+		stdout.Reset()
+		err = command.main(ctx, args)
+
+		// Should execute plugin due to kebab-case in args[1]
+		assert.NoError(t, err)
+		assert.Contains(t, stdout.String(), "Kebab-case command executed")
+	})
+}
+
+func TestSingleProductPluginExecution(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	profile := config.Profile{
+		Language: "en",
+		RegionId: "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	regionflag := config.NewRegionFlag()
+	regionflag.SetAssigned(true)
+	regionflag.SetValue("cn-hangzhou")
+	ctx.Flags().Add(regionflag)
+	accessKeyIDFlag := config.NewAccessKeyIdFlag()
+	accessKeyIDFlag.SetAssigned(true)
+	accessKeyIDFlag.SetValue("test-access-key-id")
+	ctx.Flags().Add(accessKeyIDFlag)
+	accessKeySecretFlag := config.NewAccessKeySecretFlag()
+	accessKeySecretFlag.SetAssigned(true)
+	accessKeySecretFlag.SetValue("test-access-key-secret")
+	ctx.Flags().Add(accessKeySecretFlag)
+
+	ctx.Command().Short = &i18n.Text{}
+
+	originalArgs := os.Args
+	defer func() {
+		os.Args = originalArgs
+	}()
+
+	originalHome := os.Getenv("HOME")
+	defer func() {
+		if originalHome == "" {
+			os.Unsetenv("HOME")
+		} else {
+			os.Setenv("HOME", originalHome)
+		}
+	}()
+
+	testHome := t.TempDir()
+	os.Setenv("HOME", testHome)
+
+	originalIgnoreProfile := os.Getenv("ALIBABA_CLOUD_IGNORE_PROFILE")
+	os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
+	defer func() {
+		if originalIgnoreProfile == "" {
+			os.Unsetenv("ALIBABA_CLOUD_IGNORE_PROFILE")
+		} else {
+			os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", originalIgnoreProfile)
+		}
+	}()
+
+	pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+	manifestPath := filepath.Join(pluginDir, "manifest.json")
+	err := os.MkdirAll(pluginDir, 0755)
+	assert.NoError(t, err)
+
+	t.Run("Single arg - plugin installed and executes successfully", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+		// installed=true, ok=true, err=nil -> return nil
+		testPluginManifest := `{
+			"plugins": {
+				"singletest": {
+					"name": "singletest",
+					"version": "1.0.0",
+					"path": "` + filepath.Join(pluginDir, "singletest") + `",
+					"command": "singletest"
+				}
+			}
+		}`
+		err := os.WriteFile(manifestPath, []byte(testPluginManifest), 0644)
+		assert.NoError(t, err)
+
+		pluginPath := filepath.Join(pluginDir, "singletest", "singletest")
+		err = os.MkdirAll(filepath.Dir(pluginPath), 0755)
+		assert.NoError(t, err)
+
+		mockPluginScript := `#!/bin/bash
+echo "Single product plugin executed"
+exit 0
+`
+		err = os.WriteFile(pluginPath, []byte(mockPluginScript), 0755)
+		assert.NoError(t, err)
+
+		os.Args = []string{"aliyun", "singletest"}
+		args := []string{"singletest"}
+
+		stdout.Reset()
+		err = command.main(ctx, args)
+
+		assert.NoError(t, err)
+		assert.Contains(t, stdout.String(), "Single product plugin executed")
+	})
+
+	t.Run("Single arg - plugin installed but binary not found", func(t *testing.T) {
+		// installed=true, ok=false -> return error
+		testPluginManifest := `{
+			"plugins": {
+				"missingbin": {
+					"name": "missingbin",
+					"version": "1.0.0",
+					"path": "` + filepath.Join(pluginDir, "missingbin") + `",
+					"command": "missingbin"
+				}
+			}
+		}`
+		err := os.WriteFile(manifestPath, []byte(testPluginManifest), 0644)
+		assert.NoError(t, err)
+
+		// Create directory but don't create the binary
+		err = os.MkdirAll(filepath.Join(pluginDir, "missingbin"), 0755)
+		assert.NoError(t, err)
+
+		os.Args = []string{"aliyun", "missingbin"}
+		args := []string{"missingbin"}
+
+		stdout.Reset()
+		err = command.main(ctx, args)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "plugin")
+		assert.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("Single arg - plugin not installed", func(t *testing.T) {
+		// installed=false -> continue to normal flow
+		testPluginManifest := `{
+			"plugins": {}
+		}`
+		err := os.WriteFile(manifestPath, []byte(testPluginManifest), 0644)
+		assert.NoError(t, err)
+
+		os.Args = []string{"aliyun", "notinstalled"}
+		args := []string{"notinstalled"}
+
+		stdout.Reset()
+		err = command.main(ctx, args)
+
+		// Plugin not installed, should continue to normal product lookup
+		assert.Error(t, err)
+		assert.NotContains(t, err.Error(), "plugin notinstalled not found")
+	})
+
+	t.Run("Single arg - IsPluginInstalled returns error", func(t *testing.T) {
+		// err != nil from IsPluginInstalled
+
+		// Write invalid JSON to manifest
+		err := os.WriteFile(manifestPath, []byte(`{invalid json`), 0644)
+		assert.NoError(t, err)
+
+		os.Args = []string{"aliyun", "testprod"}
+		args := []string{"testprod"}
+
+		stdout.Reset()
+		err = command.main(ctx, args)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to check plugin status")
+	})
+
+	t.Run("Single arg - with ALIYUN_ORIGINAL_PRODUCT_HELP=true", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+		// Test that environment variable skips the entire plugin check block
+		originalEnv := os.Getenv("ALIYUN_ORIGINAL_PRODUCT_HELP")
+		os.Setenv("ALIYUN_ORIGINAL_PRODUCT_HELP", "true")
+		defer func() {
+			if originalEnv == "" {
+				os.Unsetenv("ALIYUN_ORIGINAL_PRODUCT_HELP")
+			} else {
+				os.Setenv("ALIYUN_ORIGINAL_PRODUCT_HELP", originalEnv)
+			}
+		}()
+
+		testPluginManifest := `{
+			"plugins": {
+				"envskip": {
+					"name": "envskip",
+					"version": "1.0.0",
+					"path": "` + filepath.Join(pluginDir, "envskip") + `",
+					"command": "envskip"
+				}
+			}
+		}`
+		err := os.WriteFile(manifestPath, []byte(testPluginManifest), 0644)
+		assert.NoError(t, err)
+
+		pluginPath := filepath.Join(pluginDir, "envskip", "envskip")
+		err = os.MkdirAll(filepath.Dir(pluginPath), 0755)
+		assert.NoError(t, err)
+
+		mockPluginScript := `#!/bin/bash
+echo "Should not execute"
+exit 0
+`
+		err = os.WriteFile(pluginPath, []byte(mockPluginScript), 0755)
+		assert.NoError(t, err)
+
+		os.Args = []string{"aliyun", "envskip"}
+		args := []string{"envskip"}
+
+		stdout.Reset()
+		err = command.main(ctx, args)
+
+		// With ALIYUN_ORIGINAL_PRODUCT_HELP=true, the entire if block (line 187-203) is skipped
+		// Plugin should NOT be executed
+		assert.NotContains(t, stdout.String(), "Should not execute")
+
+		// Should try to process as normal product command
+		assert.Error(t, err)
+	})
+}
+
+// TestAutoInstallPlugin tests the autoInstallPlugin function
+func TestAutoInstallPlugin(t *testing.T) {
+	originalHome := os.Getenv("HOME")
+	defer func() {
+		if originalHome == "" {
+			os.Unsetenv("HOME")
+		} else {
+			os.Setenv("HOME", originalHome)
+		}
+	}()
+
+	t.Run("Install_fails_-_plugin_not_in_index", func(t *testing.T) {
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		// Create minimal plugin infrastructure
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		os.MkdirAll(pluginDir, 0755)
+
+		// Create empty manifest
+		manifestPath := filepath.Join(pluginDir, "manifest.json")
+		manifestJSON := `{"plugins":{}}`
+		os.WriteFile(manifestPath, []byte(manifestJSON), 0644)
+
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		profile := config.Profile{
+			Language: "en",
+			RegionId: "cn-hangzhou",
+		}
+		command := NewCommando(stdout, profile)
+
+		mgr, err := plugin.NewManager()
+		assert.NoError(t, err)
+
+		pluginName, err := command.autoInstallPlugin(ctx, mgr, "nonexistent-plugin", "some-command", false)
+
+		assert.Error(t, err, "Should fail when plugin is not in index")
+		assert.Empty(t, pluginName, "Plugin name should be empty on failure")
+		assert.Contains(t, err.Error(), "failed to install plugin")
+
+		// Verify stderr output
+		stderrOutput := stderr.String()
+		assert.Contains(t, stderrOutput, "Plugin 'nonexistent-plugin' is required for command 'some-command'")
+		assert.Contains(t, stderrOutput, "Auto-installing plugin 'nonexistent-plugin'...")
+		assert.NotContains(t, stderrOutput, "including pre-release versions", "Should not mention pre-release when enablePre=false")
+	})
+
+	t.Run("Install_fails_-_plugin_not_in_index_with_enablePre", func(t *testing.T) {
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		os.MkdirAll(pluginDir, 0755)
+
+		manifestPath := filepath.Join(pluginDir, "manifest.json")
+		manifestJSON := `{"plugins":{}}`
+		os.WriteFile(manifestPath, []byte(manifestJSON), 0644)
+
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		profile := config.Profile{
+			Language: "en",
+			RegionId: "cn-hangzhou",
+		}
+		command := NewCommando(stdout, profile)
+
+		mgr, err := plugin.NewManager()
+		assert.NoError(t, err)
+
+		pluginName, err := command.autoInstallPlugin(ctx, mgr, "nonexistent-plugin", "some-command", true)
+
+		assert.Error(t, err, "Should fail when plugin is not in index")
+		assert.Empty(t, pluginName, "Plugin name should be empty on failure")
+
+		stderrOutput := stderr.String()
+		assert.Contains(t, stderrOutput, "Plugin 'nonexistent-plugin' is required for command 'some-command'")
+		assert.Contains(t, stderrOutput, "Auto-installing plugin 'nonexistent-plugin' (including pre-release versions)...")
+	})
+
+	t.Run("Output_format_verification", func(t *testing.T) {
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		os.MkdirAll(pluginDir, 0755)
+
+		manifestPath := filepath.Join(pluginDir, "manifest.json")
+		manifestJSON := `{"plugins":{}}`
+		os.WriteFile(manifestPath, []byte(manifestJSON), 0644)
+
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		profile := config.Profile{
+			Language: "en",
+			RegionId: "cn-hangzhou",
+		}
+		command := NewCommando(stdout, profile)
+
+		mgr, err := plugin.NewManager()
+		assert.NoError(t, err)
+
+		command.autoInstallPlugin(ctx, mgr, "test-plugin", "test-command", false)
+
+		stderrOutput := stderr.String()
+		assert.Contains(t, stderrOutput, "Plugin 'test-plugin' is required for command 'test-command' but not installed.")
+		assert.Contains(t, stderrOutput, "Auto-installing plugin 'test-plugin'...")
+
+		stderr.Reset()
+
+		command.autoInstallPlugin(ctx, mgr, "test-plugin", "test-command", true)
+
+		stderrOutput = stderr.String()
+		assert.Contains(t, stderrOutput, "Plugin 'test-plugin' is required for command 'test-command' but not installed.")
+		assert.Contains(t, stderrOutput, "Auto-installing plugin 'test-plugin' (including pre-release versions)...")
+	})
+
+	t.Run("Manager_creation_validation", func(t *testing.T) {
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		os.MkdirAll(pluginDir, 0755)
+
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		profile := config.Profile{
+			Language: "en",
+			RegionId: "cn-hangzhou",
+		}
+		command := NewCommando(stdout, profile)
+
+		mgr, err := plugin.NewManager()
+		assert.NoError(t, err)
+		assert.NotNil(t, mgr, "Manager should be created successfully")
+
+		_, err = command.autoInstallPlugin(ctx, mgr, "test-plugin", "test-command", false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to install plugin")
 	})
 }

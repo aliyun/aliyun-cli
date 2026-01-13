@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -22,16 +23,21 @@ func IsPluginInstalled(command string) (bool, string, error) {
 
 	pluginName, _, err := mgr.findLocalPlugin(command)
 	if err != nil {
-		// Plugin not found
-		return false, "", nil
+		// Check if it's a "plugin not found" error (expected) vs a real error
+		var notFoundErr *ErrPluginNotFound
+		if errors.As(err, &notFoundErr) {
+			return false, "", nil
+		}
+		return false, "", err
 	}
 
 	return true, pluginName, nil
 }
 
 // Returns (true, nil) if plugin was found and executed successfully.
-// Returns (false, nil) if plugin was not found (not an error).
 // Returns (true, error) if plugin execution failed.
+// Returns (false, nil) if plugin was not found (not an error).
+// Returns (false, error) if there's an error finding the plugin or resolving the plugin binary path.
 // If ctx is nil, uses os.Stdout and os.Stderr.
 func ExecutePlugin(command string, args []string, ctx *cli.Context) (bool, error) {
 	mgr, err := NewManager()
@@ -41,8 +47,12 @@ func ExecutePlugin(command string, args []string, ctx *cli.Context) (bool, error
 
 	_, plugin, err := mgr.findLocalPlugin(command)
 	if err != nil {
-		// Plugin not found, not an error
-		return false, nil
+		var notFoundErr *ErrPluginNotFound
+		if errors.As(err, &notFoundErr) {
+			return false, nil
+		}
+		// Real error (e.g., manifest file corrupted)
+		return false, err
 	}
 
 	binPath, err := resolvePluginBinaryPath(plugin)
