@@ -120,9 +120,9 @@ func newInstallCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "install",
 		Short: i18n.T("Install a plugin", "安装插件"),
-		Usage: "install --names <plugin_name> [<plugin2> ...] [--version <version>]",
+		Usage: "install --names <plugin_name> [<plugin2> ...] [--version <version>] [--enable-pre]",
 		Run: func(ctx *cli.Context, args []string) error {
-			names, version, err := parseInstallArgs(ctx)
+			names, version, enablePre, err := parseInstallArgs(ctx)
 			if err != nil {
 				return err
 			}
@@ -132,7 +132,7 @@ func newInstallCommand() *cli.Command {
 				return err
 			}
 
-			return executeInstall(ctx, validatedNames, version)
+			return executeInstall(ctx, validatedNames, version, enablePre)
 		},
 	}
 
@@ -148,6 +148,12 @@ func newInstallCommand() *cli.Command {
 		Short:        i18n.T("Specify plugin version", "指定插件版本"),
 		AssignedMode: cli.AssignedOnce,
 		DefaultValue: "",
+	})
+
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "enable-pre",
+		Short:        i18n.T("Allow installing pre-release versions", "允许安装预发布版本"),
+		AssignedMode: cli.AssignedNone,
 	})
 
 	return cmd
@@ -207,7 +213,7 @@ func newUpdateCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "update",
 		Short: i18n.T("Update plugin(s)", "更新插件"),
-		Usage: "plugin update [--name <plugin_name>]",
+		Usage: "plugin update [--name <plugin_name>] [--enable-pre]",
 		Run: func(ctx *cli.Context, args []string) error {
 			mgr, err := NewManager()
 			if err != nil {
@@ -219,11 +225,16 @@ func newUpdateCommand() *cli.Command {
 				name = v
 			}
 
-			if name == "" {
-				return mgr.UpdateAll(ctx)
+			enablePre := false
+			if enablePreFlag := ctx.Flags().Get("enable-pre"); enablePreFlag != nil && enablePreFlag.IsAssigned() {
+				enablePre = true
 			}
 
-			return mgr.Upgrade(ctx, name)
+			if name == "" {
+				return mgr.UpdateAll(ctx, enablePre)
+			}
+
+			return mgr.Upgrade(ctx, name, enablePre)
 		},
 	}
 
@@ -234,10 +245,16 @@ func newUpdateCommand() *cli.Command {
 		Required:     false,
 	})
 
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "enable-pre",
+		Short:        i18n.T("Allow updating to pre-release versions", "允许更新到预发布版本"),
+		AssignedMode: cli.AssignedNone,
+	})
+
 	return cmd
 }
 
-func parseInstallArgs(ctx *cli.Context) (names []string, version string, err error) {
+func parseInstallArgs(ctx *cli.Context) (names []string, version string, enablePre bool, err error) {
 	if namesFlag := ctx.Flags().Get("names"); namesFlag != nil && namesFlag.IsAssigned() {
 		names = namesFlag.GetValues()
 	}
@@ -246,7 +263,11 @@ func parseInstallArgs(ctx *cli.Context) (names []string, version string, err err
 		version = v
 	}
 
-	return names, version, nil
+	if enablePreFlag := ctx.Flags().Get("enable-pre"); enablePreFlag != nil && enablePreFlag.IsAssigned() {
+		enablePre = true
+	}
+
+	return names, version, enablePre, nil
 }
 
 func validateInstallArgs(names []string) ([]string, error) {
@@ -266,17 +287,17 @@ func validateInstallArgs(names []string) ([]string, error) {
 	return validNames, nil
 }
 
-func executeInstall(ctx *cli.Context, names []string, version string) error {
+func executeInstall(ctx *cli.Context, names []string, version string, enablePre bool) error {
 	mgr, err := NewManager()
 	if err != nil {
 		return err
 	}
 
 	if len(names) == 1 {
-		return mgr.Install(ctx, names[0], version)
+		return mgr.Install(ctx, names[0], version, enablePre)
 	}
 
-	return mgr.InstallMultiple(ctx, names, version)
+	return mgr.InstallMultiple(ctx, names, version, enablePre)
 }
 
 func displayRemotePlugins(ctx *cli.Context, index *Index, localManifest *LocalManifest) error {
@@ -317,8 +338,8 @@ func displayRemotePlugins(ctx *cli.Context, index *Index, localManifest *LocalMa
 	})
 
 	w := tabwriter.NewWriter(ctx.Stdout(), 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "Name\tLatest Version\tStatus\tLocal Version\tDescription")
-	fmt.Fprintln(w, "----\t--------------\t------\t-------------\t-----------")
+	fmt.Fprintln(w, "Name\tLatest Version\tPreview\tStatus\tLocal Version\tDescription")
+	fmt.Fprintln(w, "----\t--------------\t-------\t------\t-------------\t-----------")
 
 	for _, p := range plugins {
 		status := "Not installed"
@@ -328,9 +349,22 @@ func displayRemotePlugins(ctx *cli.Context, index *Index, localManifest *LocalMa
 			localVersion = p.localPlugin.Version
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+		// Get latest version (including pre-release)
+		latestVersion, err := getLatestVersion(&p.plugin, true)
+		if err != nil {
+			latestVersion = "N/A"
+		}
+
+		// Check if the latest version is a pre-release
+		preview := "No"
+		if latestVersion != "N/A" && isPrerelease(latestVersion) {
+			preview = "Yes"
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			p.plugin.Name,
-			p.plugin.LatestVersion,
+			latestVersion,
+			preview,
 			status,
 			localVersion,
 			p.plugin.Description)
@@ -363,7 +397,11 @@ func displaySearchResult(ctx *cli.Context, mgr *Manager, commandName, pluginName
 		if err == nil {
 			for _, plugin := range index.Plugins {
 				if plugin.Name == pluginName {
-					cli.Printf(ctx.Stdout(), "Latest Version: %s\n", plugin.LatestVersion)
+					// Get latest stable version
+					latestVersion, err := getLatestVersion(&plugin, false)
+					if err == nil {
+						cli.Printf(ctx.Stdout(), "Latest Version: %s\n", latestVersion)
+					}
 					if plugin.Description != "" {
 						cli.Printf(ctx.Stdout(), "Description: %s\n", plugin.Description)
 					}

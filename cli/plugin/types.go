@@ -10,11 +10,10 @@ type Index struct {
 }
 
 type PluginInfo struct {
-	Name          string                 `json:"name"`
-	LatestVersion string                 `json:"latestVersion"`
-	Description   string                 `json:"description"`
-	Homepage      string                 `json:"homepage"`
-	Versions      map[string]VersionInfo `json:"versions"` // version -> VersionInfo
+	Name        string                 `json:"name"`
+	Description string                 `json:"description"`
+	Homepage    string                 `json:"homepage"`
+	Versions    map[string]VersionInfo `json:"versions"` // version -> VersionInfo
 }
 
 type VersionInfo struct {

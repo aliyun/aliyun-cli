@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -166,6 +167,57 @@ func compareVersion(v1, v2 string) int {
 	}
 
 	return semver.Compare(v1, v2)
+}
+
+// Pre-release versions contain hyphens (e.g., 1.0.0-alpha, 1.0.0-beta, 1.0.0-rc.1).
+func isPrerelease(version string) bool {
+	v := version
+	if !strings.HasPrefix(v, "v") {
+		v = "v" + v
+	}
+	return semver.Prerelease(v) != ""
+}
+
+func getLatestVersion(plugin *PluginInfo, enablePre bool) (string, error) {
+	if len(plugin.Versions) == 0 {
+		return "", fmt.Errorf("no versions available for plugin %s", plugin.Name)
+	}
+
+	versions := make([]string, 0, len(plugin.Versions))
+	for version := range plugin.Versions {
+		versions = append(versions, version)
+	}
+
+	// Sort versions in descending order (newest first) using semver
+	sort.Slice(versions, func(i, j int) bool {
+		return compareVersion(versions[i], versions[j]) > 0
+	})
+
+	var latestPreRelease string
+
+	for _, version := range versions {
+		if enablePre {
+			// Return the first version (newest)
+			return version, nil
+		}
+		// Only return stable versions
+		if !isPrerelease(version) {
+			return version, nil
+		}
+		if latestPreRelease == "" {
+			latestPreRelease = version
+		}
+	}
+
+	if !enablePre {
+		if latestPreRelease != "" {
+			// Show the latest pre-release version
+			return "", fmt.Errorf("no stable version available for plugin %s. Latest pre-release version: %s. Use --enable-pre to install pre-release versions", plugin.Name, latestPreRelease)
+		}
+		return "", fmt.Errorf("no stable version available for plugin %s (use --enable-pre to install pre-release versions)", plugin.Name)
+	}
+
+	return "", fmt.Errorf("no suitable version found for plugin %s", plugin.Name)
 }
 
 func (m *Manager) findLocalPlugin(userInput string) (string, *LocalPlugin, error) {
@@ -518,11 +570,19 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 	return m.saveLocalManifest(localManifest)
 }
 
-func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, version string) error {
+func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, version string, enablePre bool) error {
 	actualPluginName := targetPlugin.Name
 
 	if version == "" {
-		version = targetPlugin.LatestVersion
+		// Auto-select version based on enablePre flag
+		selectedVersion, err := getLatestVersion(targetPlugin, enablePre)
+		if err != nil {
+			return err
+		}
+		version = selectedVersion
+		if enablePre && isPrerelease(version) {
+			cli.Printf(ctx.Stdout(), "Installing pre-release version %s of plugin %s...\n", version, actualPluginName)
+		}
 	}
 
 	platInfo, err := m.validateVersionAndPlatform(ctx, targetPlugin, version, actualPluginName)
@@ -554,16 +614,16 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 	return nil
 }
 
-func (m *Manager) Install(ctx *cli.Context, pluginName, version string) error {
+func (m *Manager) Install(ctx *cli.Context, pluginName, version string, enablePre bool) error {
 	targetPlugin, err := m.findPluginInIndex(pluginName)
 	if err != nil {
 		return err
 	}
 
-	return m.installPlugin(ctx, targetPlugin, version)
+	return m.installPlugin(ctx, targetPlugin, version, enablePre)
 }
 
-func (m *Manager) Upgrade(ctx *cli.Context, pluginName string) error {
+func (m *Manager) Upgrade(ctx *cli.Context, pluginName string, enablePre bool) error {
 	actualPluginName, localPlugin, err := m.findLocalPlugin(pluginName)
 	if err != nil {
 		return err
@@ -574,13 +634,22 @@ func (m *Manager) Upgrade(ctx *cli.Context, pluginName string) error {
 		return fmt.Errorf("plugin %s not found in repository", pluginName)
 	}
 
-	if compareVersion(localPlugin.Version, targetPlugin.LatestVersion) >= 0 {
+	latestVersion, err := getLatestVersion(targetPlugin, enablePre)
+	if err != nil {
+		return err
+	}
+
+	if compareVersion(localPlugin.Version, latestVersion) >= 0 {
 		cli.Printf(ctx.Stdout(), "Plugin %s is already up to date (version %s).\n", actualPluginName, localPlugin.Version)
 		return nil
 	}
 
-	cli.Printf(ctx.Stdout(), "Upgrading plugin %s from %s to %s...\n", actualPluginName, localPlugin.Version, targetPlugin.LatestVersion)
-	return m.installPlugin(ctx, targetPlugin, targetPlugin.LatestVersion)
+	if enablePre && isPrerelease(latestVersion) {
+		cli.Printf(ctx.Stdout(), "Upgrading plugin %s from %s to %s (pre-release)...\n", actualPluginName, localPlugin.Version, latestVersion)
+	} else {
+		cli.Printf(ctx.Stdout(), "Upgrading plugin %s from %s to %s...\n", actualPluginName, localPlugin.Version, latestVersion)
+	}
+	return m.installPlugin(ctx, targetPlugin, latestVersion, enablePre)
 }
 
 func (m *Manager) Uninstall(ctx *cli.Context, pluginName string) error {
@@ -607,7 +676,7 @@ func (m *Manager) Uninstall(ctx *cli.Context, pluginName string) error {
 	return nil
 }
 
-func (m *Manager) UpdateAll(ctx *cli.Context) error {
+func (m *Manager) UpdateAll(ctx *cli.Context, enablePre bool) error {
 	localManifest, err := m.GetLocalManifest()
 	if err != nil {
 		return fmt.Errorf("failed to get local manifest: %w", err)
@@ -640,15 +709,26 @@ func (m *Manager) UpdateAll(ctx *cli.Context) error {
 			continue
 		}
 
-		if compareVersion(localPlugin.Version, targetPlugin.LatestVersion) >= 0 {
+		latestVersion, err := getLatestVersion(targetPlugin, enablePre)
+		if err != nil {
+			cli.Printf(ctx.Stdout(), "Skipping %s: %v\n", pluginName, err)
+			failed++
+			continue
+		}
+
+		if compareVersion(localPlugin.Version, latestVersion) >= 0 {
 			cli.Printf(ctx.Stdout(), "Skipping %s (already up to date: %s)\n", pluginName, localPlugin.Version)
 			upToDate++
 			continue
 		}
 
-		cli.Printf(ctx.Stdout(), "Updating %s from %s to %s...\n", pluginName, localPlugin.Version, targetPlugin.LatestVersion)
+		if enablePre && isPrerelease(latestVersion) {
+			cli.Printf(ctx.Stdout(), "Updating %s from %s to %s (pre-release)...\n", pluginName, localPlugin.Version, latestVersion)
+		} else {
+			cli.Printf(ctx.Stdout(), "Updating %s from %s to %s...\n", pluginName, localPlugin.Version, latestVersion)
+		}
 
-		if err := m.installPlugin(ctx, targetPlugin, targetPlugin.LatestVersion); err != nil {
+		if err := m.installPlugin(ctx, targetPlugin, latestVersion, enablePre); err != nil {
 			cli.Printf(ctx.Stdout(), "Failed to update %s: %v\n", pluginName, err)
 			failed++
 			continue
@@ -675,12 +755,12 @@ func (m *Manager) UpdateAll(ctx *cli.Context) error {
 	return nil
 }
 
-func (m *Manager) InstallMultiple(ctx *cli.Context, pluginNames []string, version string) error {
+func (m *Manager) InstallMultiple(ctx *cli.Context, pluginNames []string, version string, enablePre bool) error {
 	var installed, failed int
 
 	for _, pluginName := range pluginNames {
 		cli.Printf(ctx.Stdout(), "Installing %s...\n", pluginName)
-		if err := m.Install(ctx, pluginName, version); err != nil {
+		if err := m.Install(ctx, pluginName, version, enablePre); err != nil {
 			cli.Printf(ctx.Stderr(), "Failed to install %s: %v\n", pluginName, err)
 			failed++
 			continue
@@ -724,7 +804,7 @@ func (m *Manager) InstallAll(ctx *cli.Context) error {
 
 		cli.Printf(ctx.Stdout(), "Installing %s...\n", pluginName)
 
-		if err := m.installPlugin(ctx, &plugin, ""); err != nil {
+		if err := m.installPlugin(ctx, &plugin, "", false); err != nil {
 			cli.Printf(ctx.Stdout(), "Failed to install %s: %v\n", pluginName, err)
 			failed++
 			continue

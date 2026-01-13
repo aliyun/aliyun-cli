@@ -20,37 +20,38 @@ import (
 )
 
 const (
-	ProfileFlagName              = "profile"
-	ModeFlagName                 = "mode"
-	AccessKeyIdFlagName          = "access-key-id"
-	AccessKeySecretFlagName      = "access-key-secret"
-	StsTokenFlagName             = "sts-token"
-	StsRegionFlagName            = "sts-region"
-	RamRoleNameFlagName          = "ram-role-name"
-	RamRoleArnFlagName           = "ram-role-arn"
-	RoleSessionNameFlagName      = "role-session-name"
-	ExternalIdFlagName           = "external-id"
-	SourceProfileFlagName        = "source-profile"
-	PrivateKeyFlagName           = "private-key"
-	KeyPairNameFlagName          = "key-pair-name"
-	RegionFlagName               = "region"
-	RegionIdFlagName             = "RegionId"
-	LanguageFlagName             = "language"
-	ReadTimeoutFlagName          = "read-timeout"
-	ConnectTimeoutFlagName       = "connect-timeout"
-	RetryCountFlagName           = "retry-count"
-	SkipSecureVerifyName         = "skip-secure-verify"
-	ConfigurePathFlagName        = "config-path"
-	ExpiredSecondsFlagName       = "expired-seconds"
-	ProcessCommandFlagName       = "process-command"
-	OIDCProviderARNFlagName      = "oidc-provider-arn"
-	OIDCTokenFileFlagName        = "oidc-token-file"
-	CloudSSOSignInUrlFlagName    = "cloud-sso-sign-in-url"
-	CloudSSOAccessConfigFlagName = "cloud-sso-access-config"
-	CloudSSOAccountIdFlagName    = "cloud-sso-account-id"
-	OAuthSiteTypeName            = "oauth-site-type"
-	EndpointTypeFlagName         = "endpoint-type"
-	AutoPluginInstallFlagName    = "auto-plugin-install"
+	ProfileFlagName                    = "profile"
+	ModeFlagName                       = "mode"
+	AccessKeyIdFlagName                = "access-key-id"
+	AccessKeySecretFlagName            = "access-key-secret"
+	StsTokenFlagName                   = "sts-token"
+	StsRegionFlagName                  = "sts-region"
+	RamRoleNameFlagName                = "ram-role-name"
+	RamRoleArnFlagName                 = "ram-role-arn"
+	RoleSessionNameFlagName            = "role-session-name"
+	ExternalIdFlagName                 = "external-id"
+	SourceProfileFlagName              = "source-profile"
+	PrivateKeyFlagName                 = "private-key"
+	KeyPairNameFlagName                = "key-pair-name"
+	RegionFlagName                     = "region"
+	RegionIdFlagName                   = "RegionId"
+	LanguageFlagName                   = "language"
+	ReadTimeoutFlagName                = "read-timeout"
+	ConnectTimeoutFlagName             = "connect-timeout"
+	RetryCountFlagName                 = "retry-count"
+	SkipSecureVerifyName               = "skip-secure-verify"
+	ConfigurePathFlagName              = "config-path"
+	ExpiredSecondsFlagName             = "expired-seconds"
+	ProcessCommandFlagName             = "process-command"
+	OIDCProviderARNFlagName            = "oidc-provider-arn"
+	OIDCTokenFileFlagName              = "oidc-token-file"
+	CloudSSOSignInUrlFlagName          = "cloud-sso-sign-in-url"
+	CloudSSOAccessConfigFlagName       = "cloud-sso-access-config"
+	CloudSSOAccountIdFlagName          = "cloud-sso-account-id"
+	OAuthSiteTypeName                  = "oauth-site-type"
+	EndpointTypeFlagName               = "endpoint-type"
+	AutoPluginInstallFlagName          = "auto-plugin-install"
+	AutoPluginInstallEnablePreFlagName = "auto-plugin-install-enable-pre"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -85,6 +86,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewOAuthSiteTypeFlag())
 	fs.Add(NewEndpointTypeFlag())
 	fs.Add(NewAutoPluginInstallFlag())
+	fs.Add(NewAutoPluginInstallEnablePreFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -562,5 +564,20 @@ func NewAutoPluginInstallFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--auto-plugin-install {true|false}` to enable/disable automatic plugin installation",
 			"使用 `--auto-plugin-install {true|false}` 启用/禁用自动安装插件"),
+	}
+}
+
+func AutoPluginInstallEnablePreFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(AutoPluginInstallEnablePreFlagName)
+}
+
+func NewAutoPluginInstallEnablePreFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         AutoPluginInstallEnablePreFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--auto-plugin-install-enable-pre {true|false}` to install latest version (including pre-release)",
+			"使用 `--auto-plugin-install-enable-pre {true|false}` 安装最新版本（包括预览版本）"),
 	}
 }
