@@ -117,9 +117,8 @@ func TestManager_GetIndex(t *testing.T) {
 		validIndex := Index{
 			Plugins: []PluginInfo{
 				{
-					Name:          "aliyun-cli-fc",
-					LatestVersion: "1.0.0",
-					Description:   "FC plugin",
+					Name:        "aliyun-cli-fc",
+					Description: "FC plugin",
 				},
 			},
 		}
@@ -187,14 +186,12 @@ func TestManager_findPluginInIndex(t *testing.T) {
 		validIndex := Index{
 			Plugins: []PluginInfo{
 				{
-					Name:          "aliyun-cli-fc",
-					LatestVersion: "1.0.0",
-					Description:   "FC plugin",
+					Name:        "aliyun-cli-fc",
+					Description: "FC plugin",
 				},
 				{
-					Name:          "aliyun-cli-ecs",
-					LatestVersion: "2.0.0",
-					Description:   "ECS plugin",
+					Name:        "aliyun-cli-ecs",
+					Description: "ECS plugin",
 				},
 			},
 		}
@@ -213,16 +210,14 @@ func TestManager_findPluginInIndex(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, plugin)
 		assert.Equal(t, "aliyun-cli-fc", plugin.Name)
-		assert.Equal(t, "1.0.0", plugin.LatestVersion)
 	})
 
 	t.Run("Success - short name match", func(t *testing.T) {
 		validIndex := Index{
 			Plugins: []PluginInfo{
 				{
-					Name:          "aliyun-cli-fc",
-					LatestVersion: "1.0.0",
-					Description:   "FC plugin",
+					Name:        "aliyun-cli-fc",
+					Description: "FC plugin",
 				},
 			},
 		}
@@ -247,9 +242,8 @@ func TestManager_findPluginInIndex(t *testing.T) {
 		validIndex := Index{
 			Plugins: []PluginInfo{
 				{
-					Name:          "aliyun-cli-fc",
-					LatestVersion: "1.0.0",
-					Description:   "FC plugin",
+					Name:        "aliyun-cli-fc",
+					Description: "FC plugin",
 				},
 			},
 		}
@@ -1670,8 +1664,7 @@ func TestManager_installPlugin(t *testing.T) {
 
 		platform := GetCurrentPlatform()
 		targetPlugin := &PluginInfo{
-			Name:          "test-plugin",
-			LatestVersion: "1.0.0",
+			Name: "test-plugin",
 			Versions: map[string]VersionInfo{
 				"1.0.0": {
 					Platforms: map[string]PlatformInfo{
@@ -1685,7 +1678,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0")
+		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
 		assert.NoError(t, err)
 
 		localManifest, err := mgr.GetLocalManifest()
@@ -1722,8 +1715,7 @@ func TestManager_installPlugin(t *testing.T) {
 
 		platform := GetCurrentPlatform()
 		targetPlugin := &PluginInfo{
-			Name:          "test-plugin",
-			LatestVersion: "2.0.0",
+			Name: "test-plugin",
 			Versions: map[string]VersionInfo{
 				"2.0.0": {
 					Platforms: map[string]PlatformInfo{
@@ -1737,7 +1729,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err = mgr.installPlugin(ctx, targetPlugin, "")
+		err = mgr.installPlugin(ctx, targetPlugin, "", false)
 		assert.NoError(t, err)
 
 		localManifest, err := mgr.GetLocalManifest()
@@ -1753,8 +1745,7 @@ func TestManager_installPlugin(t *testing.T) {
 		mgr := &Manager{rootDir: tmpDir}
 
 		targetPlugin := &PluginInfo{
-			Name:          "test-plugin",
-			LatestVersion: "1.0.0",
+			Name: "test-plugin",
 			Versions: map[string]VersionInfo{
 				"1.0.0": {
 					Platforms: map[string]PlatformInfo{},
@@ -1763,7 +1754,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err := mgr.installPlugin(ctx, targetPlugin, "999.0.0")
+		err := mgr.installPlugin(ctx, targetPlugin, "999.0.0", false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "version 999.0.0 not found")
 	})
@@ -1774,8 +1765,7 @@ func TestManager_installPlugin(t *testing.T) {
 
 		platform := GetCurrentPlatform()
 		targetPlugin := &PluginInfo{
-			Name:          "test-plugin",
-			LatestVersion: "1.0.0",
+			Name: "test-plugin",
 			Versions: map[string]VersionInfo{
 				"1.0.0": {
 					Platforms: map[string]PlatformInfo{
@@ -1789,7 +1779,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0")
+		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin test-plugin version 1.0.0 not supported on "+platform)
 	})
@@ -1800,8 +1790,7 @@ func TestManager_installPlugin(t *testing.T) {
 
 		platform := GetCurrentPlatform()
 		targetPlugin := &PluginInfo{
-			Name:          "test-plugin",
-			LatestVersion: "1.0.0",
+			Name: "test-plugin",
 			Versions: map[string]VersionInfo{
 				"1.0.0": {
 					Platforms: map[string]PlatformInfo{
@@ -1815,7 +1804,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0")
+		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid-url-that-does-not-exist.local")
 	})
@@ -1834,8 +1823,7 @@ func TestManager_installPlugin(t *testing.T) {
 
 		platform := GetCurrentPlatform()
 		targetPlugin := &PluginInfo{
-			Name:          "test-plugin",
-			LatestVersion: "1.0.0",
+			Name: "test-plugin",
 			Versions: map[string]VersionInfo{
 				"1.0.0": {
 					Platforms: map[string]PlatformInfo{
@@ -1849,7 +1837,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0")
+		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "checksum verification failed")
 		assert.Contains(t, err.Error(), "Expected: wrong-checksum")
@@ -1873,8 +1861,7 @@ func TestManager_installPlugin(t *testing.T) {
 
 		platform := GetCurrentPlatform()
 		targetPlugin := &PluginInfo{
-			Name:          "test-plugin",
-			LatestVersion: "1.0.0",
+			Name: "test-plugin",
 			Versions: map[string]VersionInfo{
 				"1.0.0": {
 					Platforms: map[string]PlatformInfo{
@@ -1888,7 +1875,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0")
+		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "manifest.json not found")
 	})
@@ -1911,8 +1898,7 @@ func TestManager_installPlugin(t *testing.T) {
 
 		platform := GetCurrentPlatform()
 		targetPlugin := &PluginInfo{
-			Name:          "test-plugin",
-			LatestVersion: "1.0.0",
+			Name: "test-plugin",
 			Versions: map[string]VersionInfo{
 				"1.0.0": {
 					Platforms: map[string]PlatformInfo{
@@ -1926,7 +1912,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0")
+		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin manifest name wrong-plugin-name does not match expected name test-plugin")
 	})
@@ -2017,7 +2003,6 @@ func TestManager_Upgrade(t *testing.T) {
 			"plugins": [
 				{
 					"name": "test-plugin",
-					"latestVersion": "2.0.0",
 					"versions": {
 						"2.0.0": {
 							"` + platform + `": {
@@ -2037,7 +2022,7 @@ func TestManager_Upgrade(t *testing.T) {
 		mgr.indexURL = indexServer.URL
 
 		ctx := newTestContext()
-		err = mgr.Upgrade(ctx, "test-plugin")
+		err = mgr.Upgrade(ctx, "test-plugin", false)
 		assert.NoError(t, err)
 
 		localManifest, err = mgr.GetLocalManifest()
@@ -2053,7 +2038,7 @@ func TestManager_Upgrade(t *testing.T) {
 		mgr := &Manager{rootDir: tmpDir}
 
 		ctx := newTestContext()
-		err := mgr.Upgrade(ctx, "nonexistent-plugin")
+		err := mgr.Upgrade(ctx, "nonexistent-plugin", false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin nonexistent-plugin not installed")
 	})
@@ -2084,7 +2069,7 @@ func TestManager_Upgrade(t *testing.T) {
 		mgr.indexURL = indexServer.URL
 
 		ctx := newTestContext()
-		err := mgr.Upgrade(ctx, "test-plugin")
+		err := mgr.Upgrade(ctx, "test-plugin", false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin test-plugin not found in repository")
 	})
@@ -2110,8 +2095,9 @@ func TestManager_Upgrade(t *testing.T) {
 			"plugins": [
 				{
 					"name": "test-plugin",
-					"latestVersion": "2.0.0",
-					"versions": {}
+					"versions": {
+						"2.0.0": {}
+					}
 				}
 			]
 		}`
@@ -2123,7 +2109,7 @@ func TestManager_Upgrade(t *testing.T) {
 		mgr.indexURL = indexServer.URL
 
 		ctx := newTestContext()
-		err := mgr.Upgrade(ctx, "test-plugin")
+		err := mgr.Upgrade(ctx, "test-plugin", false)
 		assert.NoError(t, err)
 
 		localManifest, err = mgr.GetLocalManifest()
@@ -2214,7 +2200,7 @@ func TestManager_UpdateAll(t *testing.T) {
 		tmpDir := t.TempDir()
 		mgr := &Manager{rootDir: tmpDir}
 		ctx := newTestContext()
-		err := mgr.UpdateAll(ctx)
+		err := mgr.UpdateAll(ctx, false)
 		assert.NoError(t, err)
 	})
 
@@ -2247,13 +2233,15 @@ func TestManager_UpdateAll(t *testing.T) {
 			"plugins": [
 				{
 					"name": "plugin1",
-					"latestVersion": "2.0.0",
-					"versions": {}
+					"versions": {
+						"2.0.0": {}
+					}
 				},
 				{
 					"name": "plugin2",
-					"latestVersion": "2.0.0",
-					"versions": {}
+					"versions": {
+						"2.0.0": {}
+					}
 				}
 			]
 		}`
@@ -2265,7 +2253,7 @@ func TestManager_UpdateAll(t *testing.T) {
 		mgr.indexURL = indexServer.URL
 
 		ctx := newTestContext()
-		err := mgr.UpdateAll(ctx)
+		err := mgr.UpdateAll(ctx, false)
 		assert.NoError(t, err)
 
 		localManifest, err = mgr.GetLocalManifest()
@@ -2314,7 +2302,6 @@ func TestManager_UpdateAll(t *testing.T) {
 			"plugins": [
 				{
 					"name": "plugin1",
-					"latestVersion": "2.0.0",
 					"versions": {
 						"2.0.0": {
 							"` + platform + `": {
@@ -2326,8 +2313,9 @@ func TestManager_UpdateAll(t *testing.T) {
 				},
 				{
 					"name": "plugin2",
-					"latestVersion": "2.0.0",
-					"versions": {}
+					"versions": {
+						"2.0.0": {}
+					}
 				}
 			]
 		}`
@@ -2339,7 +2327,7 @@ func TestManager_UpdateAll(t *testing.T) {
 		mgr.indexURL = indexServer.URL
 
 		ctx := newTestContext()
-		err := mgr.UpdateAll(ctx)
+		err := mgr.UpdateAll(ctx, false)
 		assert.NoError(t, err)
 
 		localManifest, err = mgr.GetLocalManifest()
@@ -2377,7 +2365,7 @@ func TestManager_UpdateAll(t *testing.T) {
 		mgr.indexURL = indexServer.URL
 
 		ctx := newTestContext()
-		err := mgr.UpdateAll(ctx)
+		err := mgr.UpdateAll(ctx, false)
 		assert.NoError(t, err)
 
 		localManifest, err = mgr.GetLocalManifest()
@@ -2406,7 +2394,7 @@ func TestManager_UpdateAll(t *testing.T) {
 		mgr.indexURL = "http://invalid-url-that-does-not-exist.local/index.json"
 
 		ctx := newTestContext()
-		err := mgr.UpdateAll(ctx)
+		err := mgr.UpdateAll(ctx, false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to get plugin index")
 	})
@@ -2452,7 +2440,6 @@ func TestManager_UpdateAll(t *testing.T) {
 			"plugins": [
 				{
 					"name": "plugin1",
-					"latestVersion": "2.0.0",
 					"versions": {
 						"2.0.0": {
 							"` + platform + `": {
@@ -2464,7 +2451,6 @@ func TestManager_UpdateAll(t *testing.T) {
 				},
 				{
 					"name": "plugin2",
-					"latestVersion": "2.0.0",
 					"versions": {
 						"2.0.0": {
 							"` + platform + `": {
@@ -2484,7 +2470,7 @@ func TestManager_UpdateAll(t *testing.T) {
 		mgr.indexURL = indexServer.URL
 
 		ctx := newTestContext()
-		err := mgr.UpdateAll(ctx)
+		err := mgr.UpdateAll(ctx, false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "1 plugin(s) failed to update")
 
@@ -2530,7 +2516,6 @@ func TestManager_InstallAll(t *testing.T) {
 			"plugins": [
 				{
 					"name": "plugin1",
-					"latestVersion": "1.0.0",
 					"versions": {
 						"1.0.0": {
 							"` + platform + `": {
@@ -2542,7 +2527,6 @@ func TestManager_InstallAll(t *testing.T) {
 				},
 				{
 					"name": "plugin2",
-					"latestVersion": "1.0.0",
 					"versions": {
 						"1.0.0": {
 							"` + platform + `": {
@@ -2608,12 +2592,12 @@ func TestManager_InstallAll(t *testing.T) {
 			"plugins": [
 				{
 					"name": "plugin1",
-					"latestVersion": "1.0.0",
-					"versions": {}
+					"versions": {
+						"1.0.0": {}
+					}
 				},
 				{
 					"name": "plugin2",
-					"latestVersion": "1.0.0",
 					"versions": {
 						"1.0.0": {
 							"` + platform + `": {
@@ -2697,7 +2681,6 @@ func TestManager_InstallAll(t *testing.T) {
 			"plugins": [
 				{
 					"name": "plugin1",
-					"latestVersion": "1.0.0",
 					"versions": {
 						"1.0.0": {
 							"` + platform + `": {
@@ -2709,7 +2692,6 @@ func TestManager_InstallAll(t *testing.T) {
 				},
 				{
 					"name": "plugin2",
-					"latestVersion": "1.0.0",
 					"versions": {
 						"1.0.0": {
 							"` + platform + `": {

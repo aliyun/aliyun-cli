@@ -135,6 +135,12 @@ func doConfigureSet(ctx *cli.Context) error {
 		}
 	}
 
+	if autoPluginInstallEnablePreFlag := AutoPluginInstallEnablePreFlag(flags); autoPluginInstallEnablePreFlag != nil && autoPluginInstallEnablePreFlag.IsAssigned() {
+		if val, ok := autoPluginInstallEnablePreFlag.GetValue(); ok {
+			profile.AutoPluginInstallEnablePre = strings.ToLower(val) == "true"
+		}
+	}
+
 	err = profile.Validate()
 	if err != nil {
 		return fmt.Errorf("fail to set configuration: %v", err)

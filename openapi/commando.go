@@ -762,22 +762,45 @@ func (c *Commando) findAndInstallPlugin(ctx *cli.Context, commandName, productCo
 		return "", nil
 	}
 
-	// Check if auto-plugin-install is enabled
+	// Get enablePre from profile configuration
+	enablePre := c.profile.AutoPluginInstallEnablePre
+
+	// Auto-install mode
 	if c.profile.AutoPluginInstall {
 		cli.Printf(ctx.Stderr(), "Plugin '%s' is required for command '%s' but not installed.\n", pluginName, commandName)
-		cli.Printf(ctx.Stderr(), "Auto-installing plugin '%s'...\n", pluginName)
-		if err := mgr.Install(ctx, pluginName, ""); err != nil {
+
+		if enablePre {
+			cli.Printf(ctx.Stderr(), "Auto-installing plugin '%s' (including pre-release versions)...\n", pluginName)
+		} else {
+			cli.Printf(ctx.Stderr(), "Auto-installing plugin '%s'...\n", pluginName)
+		}
+
+		err := mgr.Install(ctx, pluginName, "", enablePre)
+		if err != nil {
+			// If "no stable version available" error and enablePre is false
+			if strings.Contains(err.Error(), "no stable version available") && !enablePre {
+				cli.Printf(ctx.Stderr(), "%s\n\n", err.Error())
+				cli.Printf(ctx.Stderr(), "Tip: This command may require a pre-release version. Enable automatic installation with:\n")
+				cli.Printf(ctx.Stderr(), "  aliyun configure set --auto-plugin-install-enable-pre true\n\n")
+				cli.Printf(ctx.Stderr(), "Or install manually with:\n")
+				cli.Printf(ctx.Stderr(), "  aliyun plugin install --names %s --enable-pre\n", pluginName)
+			}
 			return "", fmt.Errorf("failed to install plugin '%s': %w", pluginName, err)
 		}
+
 		return pluginName, nil
 	}
 
+	// Non-interactive mode
 	if !isInteractiveInput() {
 		cli.Printf(ctx.Stderr(), "Plugin '%s' is required for command '%s' but not installed.\n", pluginName, commandName)
 		cli.Printf(ctx.Stderr(), "Install it with: aliyun plugin install --names %s\n", pluginName)
+		cli.Printf(ctx.Stderr(), "Note: If the above fails (no stable version available), try with pre-release versions:\n")
+		cli.Printf(ctx.Stderr(), "  aliyun plugin install --names %s --enable-pre\n", pluginName)
 		return "", nil
 	}
 
+	// Interactive mode
 	cli.Printf(ctx.Stderr(), "Plugin '%s' is required for command '%s' but not installed.\n", pluginName, commandName)
 	cli.Printf(ctx.Stderr(), "Tip: Run 'aliyun configure set --auto-plugin-install true' to skip this prompt.\n")
 	cli.Printf(ctx.Stderr(), "Do you want to install it? [Y/n]: ")
@@ -794,8 +817,22 @@ func (c *Commando) findAndInstallPlugin(ctx *cli.Context, commandName, productCo
 		return "", nil
 	}
 
-	cli.Printf(ctx.Stderr(), "Installing plugin '%s'...\n", pluginName)
-	if err := mgr.Install(ctx, pluginName, ""); err != nil {
+	if enablePre {
+		cli.Printf(ctx.Stderr(), "Installing plugin '%s' (including pre-release versions)...\n", pluginName)
+	} else {
+		cli.Printf(ctx.Stderr(), "Installing plugin '%s'...\n", pluginName)
+	}
+
+	err = mgr.Install(ctx, pluginName, "", enablePre)
+	if err != nil {
+		// If "no stable version available" error and enablePre is false
+		if strings.Contains(err.Error(), "no stable version available") && !enablePre {
+			cli.Printf(ctx.Stderr(), "%s\n\n", err.Error())
+			cli.Printf(ctx.Stderr(), "Tip: This command may require a pre-release version. Enable automatic installation with:\n")
+			cli.Printf(ctx.Stderr(), "  aliyun configure set --auto-plugin-install-enable-pre true\n\n")
+			cli.Printf(ctx.Stderr(), "Or install manually with:\n")
+			cli.Printf(ctx.Stderr(), "  aliyun plugin install --names %s --enable-pre\n", pluginName)
+		}
 		return "", fmt.Errorf("failed to install plugin '%s': %w", pluginName, err)
 	}
 

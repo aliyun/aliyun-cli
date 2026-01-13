@@ -59,46 +59,47 @@ const (
 )
 
 type Profile struct {
-	Name                      string           `json:"name"`
-	Mode                      AuthenticateMode `json:"mode"`
-	AccessKeyId               string           `json:"access_key_id,omitempty"`
-	AccessKeySecret           string           `json:"access_key_secret,omitempty"`
-	StsToken                  string           `json:"sts_token,omitempty"`
-	StsRegion                 string           `json:"sts_region,omitempty"`
-	RamRoleName               string           `json:"ram_role_name,omitempty"`
-	RamRoleArn                string           `json:"ram_role_arn,omitempty"`
-	RoleSessionName           string           `json:"ram_session_name,omitempty"`
-	ExternalId                string           `json:"external_id,omitempty"`
-	SourceProfile             string           `json:"source_profile,omitempty"`
-	PrivateKey                string           `json:"private_key,omitempty"`
-	KeyPairName               string           `json:"key_pair_name,omitempty"`
-	ExpiredSeconds            int              `json:"expired_seconds,omitempty"`
-	Verified                  string           `json:"verified,omitempty"`
-	RegionId                  string           `json:"region_id,omitempty"`
-	OutputFormat              string           `json:"output_format,omitempty"`
-	Language                  string           `json:"language,omitempty"`
-	Site                      string           `json:"site,omitempty"`
-	ReadTimeout               int              `json:"retry_timeout,omitempty"`
-	ConnectTimeout            int              `json:"connect_timeout,omitempty"`
-	RetryCount                int              `json:"retry_count,omitempty"`
-	ProcessCommand            string           `json:"process_command,omitempty"`
-	CredentialsURI            string           `json:"credentials_uri,omitempty"`
-	OIDCProviderARN           string           `json:"oidc_provider_arn,omitempty"`
-	OIDCTokenFile             string           `json:"oidc_token_file,omitempty"`
-	CloudSSOSignInUrl         string           `json:"cloud_sso_sign_in_url,omitempty"`
-	AccessToken               string           `json:"access_token,omitempty"`                  // for CloudSSO, read only
-	CloudSSOAccessTokenExpire int64            `json:"cloud_sso_access_token_expire,omitempty"` // for CloudSSO, read only
-	StsExpiration             int64            `json:"sts_expiration,omitempty"`                // for CloudSSO or OAuth, read only
-	CloudSSOAccessConfig      string           `json:"cloud_sso_access_config,omitempty"`       // for CloudSSO
-	CloudSSOAccountId         string           `json:"cloud_sso_account_id,omitempty"`          // for CloudSSO, read only
-	OAuthAccessToken          string           `json:"oauth_access_token,omitempty"`
-	OAuthRefreshToken         string           `json:"oauth_refresh_token,omitempty"`
-	OAuthAccessTokenExpire    int64            `json:"oauth_access_token_expire,omitempty"`
-	OAuthRefreshTokenExpire   int64            `json:"oauth_refresh_token_expire,omitempty"`
-	OAuthSiteType             string           `json:"oauth_site_type,omitempty"`     // CN or INTL
-	EndpointType              string           `json:"endpoint_type,omitempty"`       // vpc or empty (default public)
-	AutoPluginInstall         bool             `json:"auto_plugin_install,omitempty"` // automatically install plugins when not found
-	parent                    *Configuration   //`json:"-"`
+	Name                       string           `json:"name"`
+	Mode                       AuthenticateMode `json:"mode"`
+	AccessKeyId                string           `json:"access_key_id,omitempty"`
+	AccessKeySecret            string           `json:"access_key_secret,omitempty"`
+	StsToken                   string           `json:"sts_token,omitempty"`
+	StsRegion                  string           `json:"sts_region,omitempty"`
+	RamRoleName                string           `json:"ram_role_name,omitempty"`
+	RamRoleArn                 string           `json:"ram_role_arn,omitempty"`
+	RoleSessionName            string           `json:"ram_session_name,omitempty"`
+	ExternalId                 string           `json:"external_id,omitempty"`
+	SourceProfile              string           `json:"source_profile,omitempty"`
+	PrivateKey                 string           `json:"private_key,omitempty"`
+	KeyPairName                string           `json:"key_pair_name,omitempty"`
+	ExpiredSeconds             int              `json:"expired_seconds,omitempty"`
+	Verified                   string           `json:"verified,omitempty"`
+	RegionId                   string           `json:"region_id,omitempty"`
+	OutputFormat               string           `json:"output_format,omitempty"`
+	Language                   string           `json:"language,omitempty"`
+	Site                       string           `json:"site,omitempty"`
+	ReadTimeout                int              `json:"retry_timeout,omitempty"`
+	ConnectTimeout             int              `json:"connect_timeout,omitempty"`
+	RetryCount                 int              `json:"retry_count,omitempty"`
+	ProcessCommand             string           `json:"process_command,omitempty"`
+	CredentialsURI             string           `json:"credentials_uri,omitempty"`
+	OIDCProviderARN            string           `json:"oidc_provider_arn,omitempty"`
+	OIDCTokenFile              string           `json:"oidc_token_file,omitempty"`
+	CloudSSOSignInUrl          string           `json:"cloud_sso_sign_in_url,omitempty"`
+	AccessToken                string           `json:"access_token,omitempty"`                  // for CloudSSO, read only
+	CloudSSOAccessTokenExpire  int64            `json:"cloud_sso_access_token_expire,omitempty"` // for CloudSSO, read only
+	StsExpiration              int64            `json:"sts_expiration,omitempty"`                // for CloudSSO or OAuth, read only
+	CloudSSOAccessConfig       string           `json:"cloud_sso_access_config,omitempty"`       // for CloudSSO
+	CloudSSOAccountId          string           `json:"cloud_sso_account_id,omitempty"`          // for CloudSSO, read only
+	OAuthAccessToken           string           `json:"oauth_access_token,omitempty"`
+	OAuthRefreshToken          string           `json:"oauth_refresh_token,omitempty"`
+	OAuthAccessTokenExpire     int64            `json:"oauth_access_token_expire,omitempty"`
+	OAuthRefreshTokenExpire    int64            `json:"oauth_refresh_token_expire,omitempty"`
+	OAuthSiteType              string           `json:"oauth_site_type,omitempty"`                // CN or INTL
+	EndpointType               string           `json:"endpoint_type,omitempty"`                  // vpc or empty (default public)
+	AutoPluginInstall          bool             `json:"auto_plugin_install,omitempty"`            // automatically install plugins when not found
+	AutoPluginInstallEnablePre bool             `json:"auto_plugin_install_enable_pre,omitempty"` // install latest version (including pre-release) when true
+	parent                     *Configuration   //`json:"-"`
 }
 
 func NewProfile(name string) Profile {
