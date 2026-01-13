@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -2040,7 +2041,7 @@ func TestManager_Upgrade(t *testing.T) {
 		ctx := newTestContext()
 		err := mgr.Upgrade(ctx, "nonexistent-plugin", false)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "plugin nonexistent-plugin not installed")
+		assert.Contains(t, err.Error(), "plugin nonexistent-plugin not found in local manifest")
 	})
 
 	t.Run("Error - plugin not found in repository", func(t *testing.T) {
@@ -2162,7 +2163,7 @@ func TestManager_Uninstall(t *testing.T) {
 		ctx := newTestContext()
 		err := mgr.Uninstall(ctx, "nonexistent-plugin")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "plugin nonexistent-plugin not installed")
+		assert.Contains(t, err.Error(), "plugin nonexistent-plugin not found in local manifest")
 	})
 
 	t.Run("Success - uninstall with short name", func(t *testing.T) {
@@ -2844,4 +2845,739 @@ func TestCompareVersion(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestManager_InstallMultiple(t *testing.T) {
+	t.Run("Success - install multiple plugins", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		// Create plugin archives
+		archive1Content := createTestPluginArchive(t, "aliyun-cli-plugin1", "1.0.0", "plugin1")
+		checksum1, _ := calculateSHA256FromBytes(archive1Content)
+		archive2Content := createTestPluginArchive(t, "aliyun-cli-plugin2", "1.0.0", "plugin2")
+		checksum2, _ := calculateSHA256FromBytes(archive2Content)
+
+		server1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive1Content)
+		}))
+		defer server1.Close()
+
+		server2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive2Content)
+		}))
+		defer server2.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := fmt.Sprintf(`{
+			"plugins": [
+				{
+					"name": "aliyun-cli-plugin1",
+					"description": "Plugin 1",
+					"homepage": "https://example.com",
+					"versions": {
+						"1.0.0": {
+							"%s": {
+								"url": "%s",
+								"checksum": "%s"
+							}
+						}
+					}
+				},
+				{
+					"name": "aliyun-cli-plugin2",
+					"description": "Plugin 2",
+					"homepage": "https://example.com",
+					"versions": {
+						"1.0.0": {
+							"%s": {
+								"url": "%s",
+								"checksum": "%s"
+							}
+						}
+					}
+				}
+			]
+		}`, platform, server1.URL, checksum1,
+			platform, server2.URL, checksum2)
+
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.InstallMultiple(ctx, []string{"plugin1", "plugin2"}, "", false)
+
+		assert.NoError(t, err)
+
+		stdout := ctx.Stdout().(*bytes.Buffer).String()
+		assert.Contains(t, stdout, "Installing plugin1...")
+		assert.Contains(t, stdout, "Installing plugin2...")
+		assert.Contains(t, stdout, "Installed: 2")
+		assert.NotContains(t, stdout, "Failed:")
+	})
+
+	t.Run("Error - all plugins fail to install", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		// Create mock server with empty index
+		indexJSON := `{"plugins": []}`
+
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.InstallMultiple(ctx, []string{"nonexistent1", "nonexistent2"}, "", false)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "2 plugin(s) failed to install")
+
+		// Verify output
+		stdout := ctx.Stdout().(*bytes.Buffer).String()
+		stderr := ctx.Stderr().(*bytes.Buffer).String()
+
+		assert.Contains(t, stdout, "Installing nonexistent1...")
+		assert.Contains(t, stdout, "Installing nonexistent2...")
+		assert.Contains(t, stdout, "Failed: 2")
+		assert.NotContains(t, stdout, "Installed:")
+
+		assert.Contains(t, stderr, "Failed to install nonexistent1:")
+		assert.Contains(t, stderr, "Failed to install nonexistent2:")
+	})
+
+	t.Run("Partial success - some plugins install, some fail", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		// Create plugin archive for plugin1
+		archive1Content := createTestPluginArchive(t, "aliyun-cli-plugin1", "1.0.0", "plugin1")
+		checksum1, _ := calculateSHA256FromBytes(archive1Content)
+
+		server1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive1Content)
+		}))
+		defer server1.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := fmt.Sprintf(`{
+			"plugins": [
+				{
+					"name": "aliyun-cli-plugin1",
+					"description": "Plugin 1",
+					"homepage": "https://example.com",
+					"versions": {
+						"1.0.0": {
+							"%s": {
+								"url": "%s",
+								"checksum": "%s"
+							}
+						}
+					}
+				}
+			]
+		}`, platform, server1.URL, checksum1)
+
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		// Install one valid plugin and one invalid plugin
+		err := mgr.InstallMultiple(ctx, []string{"plugin1", "nonexistent"}, "", false)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "1 plugin(s) failed to install")
+
+		// Verify output
+		stdout := ctx.Stdout().(*bytes.Buffer).String()
+		stderr := ctx.Stderr().(*bytes.Buffer).String()
+
+		assert.Contains(t, stdout, "Installing plugin1...")
+		assert.Contains(t, stdout, "Installing nonexistent...")
+		assert.Contains(t, stdout, "Installed: 1")
+		assert.Contains(t, stdout, "Failed: 1")
+
+		assert.Contains(t, stderr, "Failed to install nonexistent:")
+	})
+
+	t.Run("Empty plugin list", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		ctx := newTestContext()
+		err := mgr.InstallMultiple(ctx, []string{}, "", false)
+
+		assert.NoError(t, err)
+
+		// Verify no output about installation counts
+		stdout := ctx.Stdout().(*bytes.Buffer).String()
+		assert.NotContains(t, stdout, "Installed:")
+		assert.NotContains(t, stdout, "Failed:")
+	})
+
+	t.Run("With version parameter", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		// Create plugin archive
+		archiveContent := createTestPluginArchive(t, "aliyun-cli-plugin1", "1.0.0", "plugin1")
+		checksum, _ := calculateSHA256FromBytes(archiveContent)
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archiveContent)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := fmt.Sprintf(`{
+			"plugins": [
+				{
+					"name": "aliyun-cli-plugin1",
+					"description": "Plugin 1",
+					"homepage": "https://example.com",
+					"versions": {
+						"1.0.0": {
+							"%s": {
+								"url": "%s",
+								"checksum": "%s"
+							}
+						},
+						"2.0.0": {
+							"%s": {
+								"url": "https://example.com/plugin1-2.0.0.tar.gz",
+								"checksum": "def456"
+							}
+						}
+					}
+				}
+			]
+		}`, platform, server.URL, checksum,
+			platform)
+
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		// Install specific version
+		err := mgr.InstallMultiple(ctx, []string{"plugin1"}, "1.0.0", false)
+
+		assert.NoError(t, err)
+
+		// Verify output
+		stdout := ctx.Stdout().(*bytes.Buffer).String()
+		assert.Contains(t, stdout, "Installing plugin1...")
+		assert.Contains(t, stdout, "Installed: 1")
+	})
+
+	t.Run("With enablePre parameter", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		// Create plugin archive
+		archiveContent := createTestPluginArchive(t, "aliyun-cli-plugin1", "1.0.0-beta.1", "plugin1")
+		checksum, _ := calculateSHA256FromBytes(archiveContent)
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archiveContent)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := fmt.Sprintf(`{
+			"plugins": [
+				{
+					"name": "aliyun-cli-plugin1",
+					"description": "Plugin 1",
+					"homepage": "https://example.com",
+					"versions": {
+						"1.0.0-beta.1": {
+							"%s": {
+								"url": "%s",
+								"checksum": "%s"
+							}
+						}
+					}
+				}
+			]
+		}`, platform, server.URL, checksum)
+
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		// Install with enablePre=true
+		err := mgr.InstallMultiple(ctx, []string{"plugin1"}, "", true)
+
+		assert.NoError(t, err)
+
+		// Verify output
+		stdout := ctx.Stdout().(*bytes.Buffer).String()
+		assert.Contains(t, stdout, "Installing plugin1...")
+		assert.Contains(t, stdout, "Installed: 1")
+	})
+}
+
+func TestGetLatestVersion(t *testing.T) {
+	t.Run("No versions available", func(t *testing.T) {
+		plugin := &PluginInfo{
+			Name:     "test-plugin",
+			Versions: map[string]VersionInfo{},
+		}
+
+		_, err := getLatestVersion(plugin, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "no versions available for plugin test-plugin")
+	})
+
+	t.Run("Only stable versions - enablePre=false", func(t *testing.T) {
+		plugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {},
+				"1.2.0": {},
+				"1.1.0": {},
+				"2.0.0": {},
+			},
+		}
+
+		version, err := getLatestVersion(plugin, false)
+		assert.NoError(t, err)
+		assert.Equal(t, "2.0.0", version, "Should return the newest stable version")
+	})
+
+	t.Run("Only stable versions - enablePre=true", func(t *testing.T) {
+		plugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {},
+				"1.2.0": {},
+				"2.0.0": {},
+			},
+		}
+
+		version, err := getLatestVersion(plugin, true)
+		assert.NoError(t, err)
+		assert.Equal(t, "2.0.0", version, "Should return the newest version")
+	})
+
+	t.Run("Only pre-release versions - enablePre=false", func(t *testing.T) {
+		plugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0-alpha":  {},
+				"1.0.0-beta":   {},
+				"1.0.0-beta.2": {},
+			},
+		}
+
+		_, err := getLatestVersion(plugin, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "no stable version available for plugin test-plugin")
+		assert.Contains(t, err.Error(), "Latest pre-release version: 1.0.0-beta.2")
+		assert.Contains(t, err.Error(), "Use --enable-pre to install pre-release versions")
+	})
+
+	t.Run("Only pre-release versions - enablePre=true", func(t *testing.T) {
+		plugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0-alpha": {},
+				"1.0.0-beta":  {},
+				"1.0.0-rc.1":  {},
+			},
+		}
+
+		version, err := getLatestVersion(plugin, true)
+		assert.NoError(t, err)
+		assert.Equal(t, "1.0.0-rc.1", version, "Should return the newest pre-release version")
+	})
+
+	t.Run("Mixed stable and pre-release - enablePre=false", func(t *testing.T) {
+		plugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0":       {},
+				"1.1.0":       {},
+				"2.0.0-beta":  {},
+				"2.0.0-rc.1":  {},
+				"1.2.0":       {},
+				"1.5.0-alpha": {},
+			},
+		}
+
+		version, err := getLatestVersion(plugin, false)
+		assert.NoError(t, err)
+		assert.Equal(t, "1.2.0", version, "Should return the newest stable version, ignoring pre-releases")
+	})
+
+	t.Run("Mixed stable and pre-release - enablePre=true", func(t *testing.T) {
+		plugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0":      {},
+				"1.1.0":      {},
+				"2.0.0-beta": {},
+				"2.0.0-rc.1": {},
+				"1.2.0":      {},
+			},
+		}
+
+		version, err := getLatestVersion(plugin, true)
+		assert.NoError(t, err)
+		assert.Equal(t, "2.0.0-rc.1", version, "Should return the newest version including pre-releases")
+	})
+
+	t.Run("Semantic version sorting", func(t *testing.T) {
+		plugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0":   {},
+				"1.10.0":  {},
+				"1.2.0":   {},
+				"1.9.0":   {},
+				"2.0.0":   {},
+				"10.0.0":  {},
+				"1.10.10": {},
+			},
+		}
+
+		version, err := getLatestVersion(plugin, false)
+		assert.NoError(t, err)
+		assert.Equal(t, "10.0.0", version, "Should correctly sort versions semantically")
+	})
+
+	t.Run("Pre-release version sorting", func(t *testing.T) {
+		plugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0-alpha":   {},
+				"1.0.0-alpha.1": {},
+				"1.0.0-beta":    {},
+				"1.0.0-beta.2":  {},
+				"1.0.0-rc.1":    {},
+			},
+		}
+
+		version, err := getLatestVersion(plugin, true)
+		assert.NoError(t, err)
+		assert.Equal(t, "1.0.0-rc.1", version, "Should correctly sort pre-release versions")
+	})
+
+	t.Run("Complex version mix", func(t *testing.T) {
+		plugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"0.1.0":        {},
+				"1.0.0":        {},
+				"1.0.1":        {},
+				"1.1.0-alpha":  {},
+				"1.1.0-beta":   {},
+				"1.1.0":        {},
+				"2.0.0-alpha":  {},
+				"2.0.0-beta.1": {},
+				"2.0.0-beta.2": {},
+				"2.0.0-rc.1":   {},
+			},
+		}
+
+		version, err := getLatestVersion(plugin, false)
+		assert.NoError(t, err)
+		assert.Equal(t, "1.1.0", version, "Should return latest stable version")
+
+		version, err = getLatestVersion(plugin, true)
+		assert.NoError(t, err)
+		assert.Equal(t, "2.0.0-rc.1", version, "Should return latest version including pre-releases")
+	})
+
+	t.Run("Single version", func(t *testing.T) {
+		plugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {},
+			},
+		}
+
+		version, err := getLatestVersion(plugin, false)
+		assert.NoError(t, err)
+		assert.Equal(t, "1.0.0", version)
+	})
+
+	t.Run("Single pre-release version with enablePre=false", func(t *testing.T) {
+		plugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0-beta": {},
+			},
+		}
+
+		_, err := getLatestVersion(plugin, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "no stable version available")
+		assert.Contains(t, err.Error(), "Latest pre-release version: 1.0.0-beta")
+	})
+
+	t.Run("Pre-release newer than stable - enablePre=false", func(t *testing.T) {
+		plugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0":      {},
+				"1.1.0":      {},
+				"2.0.0-beta": {}, // Newer than stable versions
+			},
+		}
+
+		version, err := getLatestVersion(plugin, false)
+		assert.NoError(t, err)
+		assert.Equal(t, "1.1.0", version, "Should ignore pre-release and return latest stable")
+	})
+
+	t.Run("Multiple pre-releases for same version", func(t *testing.T) {
+		plugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0-alpha.1":  {},
+				"1.0.0-alpha.2":  {},
+				"1.0.0-alpha.10": {},
+				"1.0.0-beta.1":   {},
+			},
+		}
+
+		version, err := getLatestVersion(plugin, true)
+		assert.NoError(t, err)
+		assert.Equal(t, "1.0.0-beta.1", version, "Should return the latest pre-release")
+	})
+}
+
+func TestManager_GetCommandIndex(t *testing.T) {
+	t.Run("Success - fetch valid command index", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		indexJSON := `{
+			"fc": "aliyun-cli-fc",
+			"oss": "aliyun-cli-oss",
+			"ecs": "aliyun-cli-ecs"
+		}`
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: tmpDir, commandIndexURL: server.URL}
+
+		index, err := mgr.GetCommandIndex()
+		assert.NoError(t, err)
+		assert.NotNil(t, index)
+		assert.Equal(t, 3, len(*index))
+		assert.Equal(t, "aliyun-cli-fc", (*index)["fc"])
+		assert.Equal(t, "aliyun-cli-oss", (*index)["oss"])
+		assert.Equal(t, "aliyun-cli-ecs", (*index)["ecs"])
+	})
+
+	t.Run("Error - network error", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir, commandIndexURL: "http://invalid-url-that-does-not-exist.local:9999"}
+
+		_, err := mgr.GetCommandIndex()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to fetch command index")
+	})
+
+	t.Run("Error - non-200 status code", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: tmpDir, commandIndexURL: server.URL}
+
+		_, err := mgr.GetCommandIndex()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to fetch command index: status 404")
+	})
+
+	t.Run("Error - invalid JSON", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte("invalid json"))
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: tmpDir, commandIndexURL: server.URL}
+
+		_, err := mgr.GetCommandIndex()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to decode command index")
+	})
+
+	t.Run("Success - empty command index", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		indexJSON := `{}`
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: tmpDir, commandIndexURL: server.URL}
+
+		index, err := mgr.GetCommandIndex()
+		assert.NoError(t, err)
+		assert.NotNil(t, index)
+		assert.Equal(t, 0, len(*index))
+	})
+}
+
+func TestManager_FindPluginByCommand(t *testing.T) {
+	t.Run("Success - find plugin by exact command name", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		indexJSON := `{
+			"fc": "aliyun-cli-fc",
+			"oss": "aliyun-cli-oss",
+			"ecs": "aliyun-cli-ecs"
+		}`
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: tmpDir, commandIndexURL: server.URL}
+
+		pluginName, err := mgr.FindPluginByCommand("fc")
+		assert.NoError(t, err)
+		assert.Equal(t, "aliyun-cli-fc", pluginName)
+	})
+
+	t.Run("Success - case insensitive search", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		indexJSON := `{
+			"fc": "aliyun-cli-fc",
+			"oss": "aliyun-cli-oss"
+		}`
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: tmpDir, commandIndexURL: server.URL}
+
+		pluginName, err := mgr.FindPluginByCommand("FC")
+		assert.NoError(t, err)
+		assert.Equal(t, "aliyun-cli-fc", pluginName)
+
+		pluginName, err = mgr.FindPluginByCommand("Fc")
+		assert.NoError(t, err)
+		assert.Equal(t, "aliyun-cli-fc", pluginName)
+	})
+
+	t.Run("Success - trim whitespace", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		indexJSON := `{
+			"fc": "aliyun-cli-fc"
+		}`
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: tmpDir, commandIndexURL: server.URL}
+
+		// Test with leading/trailing spaces
+		pluginName, err := mgr.FindPluginByCommand("  fc  ")
+		assert.NoError(t, err)
+		assert.Equal(t, "aliyun-cli-fc", pluginName)
+	})
+
+	t.Run("Error - command not found", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		indexJSON := `{
+			"fc": "aliyun-cli-fc",
+			"oss": "aliyun-cli-oss"
+		}`
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: tmpDir, commandIndexURL: server.URL}
+
+		_, err := mgr.FindPluginByCommand("nonexistent")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "no plugin found for command: nonexistent")
+	})
+
+	t.Run("Error - GetCommandIndex fails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir, commandIndexURL: "http://invalid-url-that-does-not-exist.local:9999"}
+
+		_, err := mgr.FindPluginByCommand("fc")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to fetch command index")
+	})
+
+	t.Run("Success - empty index returns error", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		indexJSON := `{}`
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: tmpDir, commandIndexURL: server.URL}
+
+		_, err := mgr.FindPluginByCommand("fc")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "no plugin found for command: fc")
+	})
 }

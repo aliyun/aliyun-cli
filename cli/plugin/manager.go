@@ -27,9 +27,18 @@ const (
 	LocalCommandIndex = "command-index.json"                                                             // 本地命令索引文件名
 )
 
+type ErrPluginNotFound struct {
+	PluginName string
+}
+
+func (e *ErrPluginNotFound) Error() string {
+	return fmt.Sprintf("plugin %s not found in local manifest (not installed)", e.PluginName)
+}
+
 type Manager struct {
-	rootDir  string
-	indexURL string // For testing: allows overriding IndexURL
+	rootDir         string
+	indexURL        string // For testing: allows overriding IndexURL
+	commandIndexURL string // For testing: allows overriding CommandIndexURL
 }
 
 func getHomePath() string {
@@ -97,11 +106,15 @@ func (m *Manager) GetIndex() (*Index, error) {
 }
 
 func (m *Manager) GetCommandIndex() (*CommandIndex, error) {
+	commandIndexURL := CommandIndexURL
+	if m.commandIndexURL != "" {
+		commandIndexURL = m.commandIndexURL
+	}
 
 	client := &http.Client{
 		Timeout: 60 * time.Second,
 	}
-	resp, err := client.Get(CommandIndexURL)
+	resp, err := client.Get(commandIndexURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch command index: %w", err)
 	}
@@ -223,7 +236,7 @@ func getLatestVersion(plugin *PluginInfo, enablePre bool) (string, error) {
 func (m *Manager) findLocalPlugin(userInput string) (string, *LocalPlugin, error) {
 	localManifest, err := m.GetLocalManifest()
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("failed to read local plugin manifest: %w", err)
 	}
 
 	for pluginName, plugin := range localManifest.Plugins {
@@ -232,7 +245,7 @@ func (m *Manager) findLocalPlugin(userInput string) (string, *LocalPlugin, error
 		}
 	}
 
-	return "", nil, fmt.Errorf("plugin %s not installed", userInput)
+	return "", nil, &ErrPluginNotFound{PluginName: userInput}
 }
 
 func (m *Manager) GetLocalManifest() (*LocalManifest, error) {

@@ -133,7 +133,10 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	showOriginalProductHelp := envShowOriginalHelp == "true" || envShowOriginalHelp == "1"
 
 	// Strategy: Plugin Execution
-	// If the second argument (API name) is kebab-case (contains '-'), try plugin first.
+	// If the second argument (API name) is kebab-case (contains '-'), use plugin.
+	// If only one arg and corresponding plugin is installed, use plugin, unless showOriginalProductHelp is true.
+	// If only one arg and corresponding plugin is not installed, show original product help.
+
 	// fmt.Println("args", args)
 	// fmt.Println("os.Args", os.Args)
 	if len(args) > 1 {
@@ -194,6 +197,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				return err
 			}
 			if !ok {
+				// should not happen here cause installed is checked before
 				return fmt.Errorf("plugin %s not found", pluginName)
 			}
 			return nil

@@ -523,3 +523,80 @@ func TestExecutePlugin(t *testing.T) {
 		}
 	})
 }
+
+func TestManifestCorruptionHandling(t *testing.T) {
+	originalHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", originalHome)
+
+	t.Run("IsPluginInstalled with corrupted manifest", func(t *testing.T) {
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		os.MkdirAll(pluginDir, 0755)
+
+		// Write corrupted JSON to manifest
+		manifestPath := filepath.Join(pluginDir, "manifest.json")
+		corruptedJSON := `{"plugins": {invalid json`
+		os.WriteFile(manifestPath, []byte(corruptedJSON), 0644)
+
+		installed, pluginName, err := IsPluginInstalled("fc")
+		assert.Error(t, err, "Expected error when manifest is corrupted")
+		assert.False(t, installed, "Plugin should not be considered installed when manifest is corrupted")
+		assert.Empty(t, pluginName, "Plugin name should be empty when manifest is corrupted")
+		assert.Contains(t, err.Error(), "failed to read local plugin manifest", "Error should indicate manifest read failure")
+	})
+
+	t.Run("ExecutePlugin with corrupted manifest", func(t *testing.T) {
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		os.MkdirAll(pluginDir, 0755)
+
+		// Write corrupted JSON to manifest
+		manifestPath := filepath.Join(pluginDir, "manifest.json")
+		corruptedJSON := `{"plugins": {invalid json`
+		os.WriteFile(manifestPath, []byte(corruptedJSON), 0644)
+
+		ok, err := ExecutePlugin("fc", []string{"fc", "list-functions"}, nil)
+		assert.Error(t, err, "Expected error when manifest is corrupted")
+		assert.False(t, ok, "Plugin execution should fail when manifest is corrupted")
+		assert.Contains(t, err.Error(), "failed to read local plugin manifest", "Error should indicate resolution failure")
+	})
+
+	t.Run("IsPluginInstalled with missing plugin in valid manifest", func(t *testing.T) {
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		os.MkdirAll(pluginDir, 0755)
+
+		// Write valid but empty manifest
+		manifestPath := filepath.Join(pluginDir, "manifest.json")
+		validJSON := `{"plugins": {}}`
+		os.WriteFile(manifestPath, []byte(validJSON), 0644)
+
+		installed, pluginName, err := IsPluginInstalled("fc")
+		assert.NoError(t, err, "Should not return error when plugin is simply not found in valid manifest")
+		assert.False(t, installed, "Plugin should not be installed")
+		assert.Empty(t, pluginName, "Plugin name should be empty")
+	})
+
+	t.Run("ExecutePlugin with missing plugin in valid manifest", func(t *testing.T) {
+		testHome := t.TempDir()
+		os.Setenv("HOME", testHome)
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		os.MkdirAll(pluginDir, 0755)
+
+		// Write valid but empty manifest
+		manifestPath := filepath.Join(pluginDir, "manifest.json")
+		validJSON := `{"plugins": {}}`
+		os.WriteFile(manifestPath, []byte(validJSON), 0644)
+
+		ok, err := ExecutePlugin("fc", []string{"fc", "list-functions"}, nil)
+		assert.NoError(t, err, "Should not return error when plugin is simply not found in valid manifest")
+		assert.False(t, ok, "Plugin should not be executed")
+	})
+}

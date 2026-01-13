@@ -393,6 +393,7 @@ func displaySearchResult(ctx *cli.Context, mgr *Manager, commandName, pluginName
 
 		index, err := mgr.GetIndex()
 		if err == nil {
+			// Only show remote info if we can successfully fetch the index
 			for _, plugin := range index.Plugins {
 				if plugin.Name == pluginName {
 					latestVersion, err := getLatestVersion(&plugin, true)
