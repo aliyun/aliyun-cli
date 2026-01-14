@@ -381,12 +381,10 @@ func TestRunPluginCommand(t *testing.T) {
 }
 
 func TestExecutePlugin(t *testing.T) {
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-
 	t.Run("Plugin not found", func(t *testing.T) {
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
@@ -403,7 +401,8 @@ func TestExecutePlugin(t *testing.T) {
 		}
 
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		// Create plugin directory and binary
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
@@ -433,7 +432,8 @@ func TestExecutePlugin(t *testing.T) {
 		}
 
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
 		os.MkdirAll(pluginDir, 0755)
@@ -459,7 +459,8 @@ func TestExecutePlugin(t *testing.T) {
 		}
 
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
 		os.MkdirAll(pluginDir, 0755)
@@ -488,7 +489,8 @@ func TestExecutePlugin(t *testing.T) {
 		}
 
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
 		os.MkdirAll(pluginDir, 0755)
@@ -508,11 +510,15 @@ func TestExecutePlugin(t *testing.T) {
 	})
 
 	t.Run("Manager creation failure", func(t *testing.T) {
+		// Set HOME and USERPROFILE to empty - NewManager should still work by falling back to os.UserHomeDir()
 		originalHome := os.Getenv("HOME")
-		defer os.Setenv("HOME", originalHome)
-
-		// Set HOME to a non-existent path - NewManager should still work
+		originalUserProfile := os.Getenv("USERPROFILE")
 		os.Setenv("HOME", "")
+		os.Setenv("USERPROFILE", "")
+		defer func() {
+			os.Setenv("HOME", originalHome)
+			os.Setenv("USERPROFILE", originalUserProfile)
+		}()
 
 		ok, err := ExecutePlugin("test", []string{}, nil)
 		assert.NoError(t, err)
@@ -525,12 +531,10 @@ func TestExecutePlugin(t *testing.T) {
 }
 
 func TestManifestCorruptionHandling(t *testing.T) {
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-
 	t.Run("IsPluginInstalled with corrupted manifest", func(t *testing.T) {
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
 		os.MkdirAll(pluginDir, 0755)
@@ -549,7 +553,8 @@ func TestManifestCorruptionHandling(t *testing.T) {
 
 	t.Run("ExecutePlugin with corrupted manifest", func(t *testing.T) {
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
 		os.MkdirAll(pluginDir, 0755)
@@ -567,7 +572,8 @@ func TestManifestCorruptionHandling(t *testing.T) {
 
 	t.Run("IsPluginInstalled with missing plugin in valid manifest", func(t *testing.T) {
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
 		os.MkdirAll(pluginDir, 0755)
@@ -585,7 +591,8 @@ func TestManifestCorruptionHandling(t *testing.T) {
 
 	t.Run("ExecutePlugin with missing plugin in valid manifest", func(t *testing.T) {
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
 		os.MkdirAll(pluginDir, 0755)

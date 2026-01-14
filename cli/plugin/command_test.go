@@ -7,39 +7,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/stretchr/testify/assert"
 )
-
-// setTestHomeDir sets the test home directory for cross-platform testing.
-// Returns a cleanup function that restores the original environment variables.
-func setTestHomeDir(t *testing.T, testHome string) func() {
-	originalHome := os.Getenv("HOME")
-	originalUserProfile := os.Getenv("USERPROFILE")
-
-	os.Setenv("HOME", testHome)
-	if runtime.GOOS == "windows" {
-		os.Setenv("USERPROFILE", testHome)
-	}
-
-	return func() {
-		if originalHome != "" {
-			os.Setenv("HOME", originalHome)
-		} else {
-			os.Unsetenv("HOME")
-		}
-		if runtime.GOOS == "windows" {
-			if originalUserProfile != "" {
-				os.Setenv("USERPROFILE", originalUserProfile)
-			} else {
-				os.Unsetenv("USERPROFILE")
-			}
-		}
-	}
-}
 
 func TestNewPluginCommand(t *testing.T) {
 	cmd := NewPluginCommand()
@@ -78,11 +50,9 @@ func TestNewListCommand(t *testing.T) {
 	ctx := cli.NewCommandContext(stdout, stderr)
 	ctx.EnterCommand(cmd)
 
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-
 	testHome := t.TempDir()
-	os.Setenv("HOME", testHome)
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
 
 	err := cmd.Run(ctx, []string{})
 	assert.NoError(t, err)
@@ -156,11 +126,9 @@ func TestNewInstallCommand(t *testing.T) {
 func TestNewInstallCommand_Run(t *testing.T) {
 	cmd := newInstallCommand()
 
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-
 	testHome := t.TempDir()
-	os.Setenv("HOME", testHome)
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
 
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
