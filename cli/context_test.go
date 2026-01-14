@@ -152,3 +152,81 @@ func TestDetectFlagByShorthandEnableUnknown(t *testing.T) {
 	assert.NotNil(t, f)
 	assert.Nil(t, err)
 }
+
+func TestContext_EnterCommand_DisablePersistentFlags(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
+
+	ctx.flags.Add(&Flag{Name: "persistent", Persistent: true})
+
+	// Subcommand with DisablePersistentFlags = true
+	subCmd := &Command{
+		Name:                   "sub",
+		DisablePersistentFlags: true,
+	}
+
+	ctx.EnterCommand(subCmd)
+
+	assert.Nil(t, ctx.flags.Get("persistent"))
+	assert.NotNil(t, ctx.flags.Get("help"))
+}
+
+func TestContext_EnterCommand_EnablePersistentFlags(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
+
+	ctx.flags.Add(&Flag{Name: "persistent", Persistent: true})
+	ctx.flags.Add(&Flag{Name: "local", Persistent: false})
+
+	// Subcommand with DisablePersistentFlags = false (default)
+	subCmd := &Command{
+		Name:                   "sub",
+		DisablePersistentFlags: false,
+	}
+
+	ctx.EnterCommand(subCmd)
+
+	assert.NotNil(t, ctx.flags.Get("persistent"))
+	assert.Nil(t, ctx.flags.Get("local"))
+}
+
+func TestContext_SetCommand_DisablePersistentFlags(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
+
+	ctx.flags.Add(&Flag{Name: "persistent", Persistent: true})
+
+	// Command with DisablePersistentFlags = true
+	cmd := &Command{
+		Name:                   "test",
+		DisablePersistentFlags: true,
+	}
+
+	ctx.SetCommand(cmd)
+
+	assert.Nil(t, ctx.flags.Get("persistent"))
+	assert.NotNil(t, ctx.flags.Get("help"))
+}
+
+func TestContext_SetCommand_EnablePersistentFlags(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
+
+	ctx.flags.Add(&Flag{Name: "persistent", Persistent: true})
+	ctx.flags.Add(&Flag{Name: "local", Persistent: false})
+
+	// Command with DisablePersistentFlags = false (default)
+	cmd := &Command{
+		Name:                   "test",
+		DisablePersistentFlags: false,
+	}
+
+	ctx.SetCommand(cmd)
+
+	assert.NotNil(t, ctx.flags.Get("persistent"))
+	assert.Nil(t, ctx.flags.Get("local"))
+}
