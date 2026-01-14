@@ -2823,7 +2823,7 @@ func TestInteractiveInstallPlugin(t *testing.T) {
 	t.Run("User accepts installation", func(t *testing.T) {
 		stderr.Reset()
 		stdin = strings.NewReader("y\n")
-		// We expect this to fail eventually because the plugin doesn't exist in index,
+		// expect this to fail eventually because the plugin doesn't exist in index,
 		// but we want to check if it processed the "y" correctly.
 		pluginName, err := command.interactiveInstallPlugin(ctx, mgr, "test-plugin", "test-command", false)
 
