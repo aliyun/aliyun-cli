@@ -121,6 +121,8 @@ var isInteractiveInput = func() bool {
 	return (info.Mode() & os.ModeCharDevice) != 0
 }
 
+var stdin io.Reader = os.Stdin
+
 func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// aliyun
 	if len(args) == 0 {
@@ -817,7 +819,7 @@ func (c *Commando) interactiveInstallPlugin(ctx *cli.Context, mgr *plugin.Manage
 	cli.Printf(ctx.Stderr(), "Tip: Run 'aliyun configure set --auto-plugin-install true' to skip this prompt.\n")
 	cli.Printf(ctx.Stderr(), "Do you want to install it? [Y/n]: ")
 
-	reader := bufio.NewReader(os.Stdin)
+	reader := bufio.NewReader(stdin)
 	response, err := reader.ReadString('\n')
 	if err != nil {
 		return "", fmt.Errorf("failed to read user input: %w", err)

@@ -16,6 +16,7 @@ package openapi
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -2278,6 +2279,9 @@ exit 0
 	})
 
 	t.Run("Plugin binary not found after installation check", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
 		// Test case where plugin is in manifest but binary doesn't exist
 		// This tests the (ok=false, err=nil) path from ExecutePlugin
 		testPluginManifest := `{
@@ -2756,5 +2760,108 @@ func TestAutoInstallPlugin(t *testing.T) {
 		_, err = command.autoInstallPlugin(ctx, mgr, "test-plugin", "test-command", false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to install plugin")
+	})
+}
+
+func TestHandleInstallError(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	profile := config.Profile{
+		Language: "en",
+	}
+	command := NewCommando(stdout, profile)
+
+	t.Run("Stable version not available error", func(t *testing.T) {
+		stderr.Reset()
+		err := fmt.Errorf("no stable version available for plugin test-plugin")
+		command.handleInstallError(ctx, err, "test-plugin", false)
+
+		output := stderr.String()
+		assert.Contains(t, output, "no stable version available for plugin test-plugin")
+		assert.Contains(t, output, "Tip: This command may require a pre-release version")
+		assert.Contains(t, output, "aliyun configure set --auto-plugin-install-enable-pre true")
+		assert.Contains(t, output, "aliyun plugin install --names test-plugin --enable-pre")
+	})
+
+	t.Run("Stable version not available error with enablePre=true", func(t *testing.T) {
+		stderr.Reset()
+		err := fmt.Errorf("no stable version available for plugin test-plugin")
+		command.handleInstallError(ctx, err, "test-plugin", true)
+
+		output := stderr.String()
+		assert.Empty(t, output, "Should not print tip when enablePre is already true")
+	})
+
+	t.Run("Other error", func(t *testing.T) {
+		stderr.Reset()
+		err := fmt.Errorf("some other error")
+		command.handleInstallError(ctx, err, "test-plugin", false)
+
+		output := stderr.String()
+		assert.Empty(t, output, "Should not print tip for unrelated errors")
+	})
+}
+
+func TestInteractiveInstallPlugin(t *testing.T) {
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	profile := config.Profile{Language: "en"}
+	command := NewCommando(stdout, profile)
+
+	mgr, err := plugin.NewManager()
+	assert.NoError(t, err)
+
+	originalStdin := stdin
+	defer func() { stdin = originalStdin }()
+
+	t.Run("User accepts installation", func(t *testing.T) {
+		stderr.Reset()
+		stdin = strings.NewReader("y\n")
+		// We expect this to fail eventually because the plugin doesn't exist in index,
+		// but we want to check if it processed the "y" correctly.
+		pluginName, err := command.interactiveInstallPlugin(ctx, mgr, "test-plugin", "test-command", false)
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to install plugin 'test-plugin'")
+		assert.Empty(t, pluginName)
+
+		output := stderr.String()
+		assert.Contains(t, output, "Do you want to install it? [Y/n]:")
+		assert.Contains(t, output, "Installing plugin 'test-plugin'...")
+	})
+
+	t.Run("User cancels installation", func(t *testing.T) {
+		stderr.Reset()
+		stdin = strings.NewReader("n\n")
+		pluginName, err := command.interactiveInstallPlugin(ctx, mgr, "test-plugin", "test-command", false)
+
+		assert.NoError(t, err)
+		assert.Empty(t, pluginName)
+
+		output := stderr.String()
+		assert.Contains(t, output, "Do you want to install it? [Y/n]:")
+		assert.Contains(t, output, "Installation cancelled.")
+	})
+
+	t.Run("User accepts with 'yes'", func(t *testing.T) {
+		stderr.Reset()
+		stdin = strings.NewReader("YES\n")
+		_, err := command.interactiveInstallPlugin(ctx, mgr, "test-plugin", "test-command", false)
+		assert.Error(t, err) // Should proceed to install and fail
+		assert.Contains(t, stderr.String(), "Installing plugin 'test-plugin'...")
+	})
+
+	t.Run("Default to yes on empty input", func(t *testing.T) {
+		stderr.Reset()
+		stdin = strings.NewReader("\n")
+		_, err := command.interactiveInstallPlugin(ctx, mgr, "test-plugin", "test-command", false)
+		assert.Error(t, err) // Should proceed to install and fail
+		assert.Contains(t, stderr.String(), "Installing plugin 'test-plugin'...")
 	})
 }
