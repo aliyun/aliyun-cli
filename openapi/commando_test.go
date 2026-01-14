@@ -32,6 +32,32 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/meta"
 )
 
+// setTestHomeDir sets the test home directory for cross-platform testing.
+// Returns a cleanup function that restores the original environment variables.
+func setTestHomeDir(t *testing.T, testHome string) func() {
+	originalHome := os.Getenv("HOME")
+	originalUserProfile := os.Getenv("USERPROFILE")
+	originalHomeDrive := os.Getenv("HOMEDRIVE")
+	originalHomePath := os.Getenv("HOMEPATH")
+
+	os.Setenv("HOME", testHome)
+	if runtime.GOOS == "windows" {
+		os.Setenv("USERPROFILE", testHome)
+		// Clear HOMEDRIVE and HOMEPATH to ensure USERPROFILE or HOME is used
+		os.Unsetenv("HOMEDRIVE")
+		os.Unsetenv("HOMEPATH")
+	}
+
+	return func() {
+		os.Setenv("HOME", originalHome)
+		if runtime.GOOS == "windows" {
+			os.Setenv("USERPROFILE", originalUserProfile)
+			os.Setenv("HOMEDRIVE", originalHomeDrive)
+			os.Setenv("HOMEPATH", originalHomePath)
+		}
+	}
+}
+
 func Test_main(t *testing.T) {
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -2060,11 +2086,9 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 	}()
 
 	t.Run("Kebab-case API name triggers plugin execution - plugin not found", func(t *testing.T) {
-		originalHome := os.Getenv("HOME")
-		defer os.Setenv("HOME", originalHome)
-
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
@@ -2084,11 +2108,9 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 	})
 
 	t.Run("Kebab-case API name with multiple arguments extracts all args", func(t *testing.T) {
-		originalHome := os.Getenv("HOME")
-		defer os.Setenv("HOME", originalHome)
-
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
@@ -2103,11 +2125,9 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 	})
 
 	t.Run("Non-kebab-case API name does not trigger plugin", func(t *testing.T) {
-		originalHome := os.Getenv("HOME")
-		defer os.Setenv("HOME", originalHome)
-
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
@@ -2125,11 +2145,9 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 	})
 
 	t.Run("Single argument does not trigger plugin check", func(t *testing.T) {
-		originalHome := os.Getenv("HOME")
-		defer os.Setenv("HOME", originalHome)
-
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
@@ -2145,11 +2163,9 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 	})
 
 	t.Run("Kebab-case with command not in os.Args", func(t *testing.T) {
-		originalHome := os.Getenv("HOME")
-		defer os.Setenv("HOME", originalHome)
-
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
@@ -2206,17 +2222,9 @@ func TestPluginExecutionLogic(t *testing.T) {
 	}()
 
 	// Set up plugin environment
-	originalHome := os.Getenv("HOME")
-	defer func() {
-		if originalHome == "" {
-			os.Unsetenv("HOME")
-		} else {
-			os.Setenv("HOME", originalHome)
-		}
-	}()
-
 	testHome := t.TempDir()
-	os.Setenv("HOME", testHome)
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
 
 	originalIgnoreProfile := os.Getenv("ALIBABA_CLOUD_IGNORE_PROFILE")
 	os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
@@ -2433,17 +2441,9 @@ func TestSingleProductPluginExecution(t *testing.T) {
 		os.Args = originalArgs
 	}()
 
-	originalHome := os.Getenv("HOME")
-	defer func() {
-		if originalHome == "" {
-			os.Unsetenv("HOME")
-		} else {
-			os.Setenv("HOME", originalHome)
-		}
-	}()
-
 	testHome := t.TempDir()
-	os.Setenv("HOME", testHome)
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
 
 	originalIgnoreProfile := os.Getenv("ALIBABA_CLOUD_IGNORE_PROFILE")
 	os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
@@ -2620,18 +2620,10 @@ exit 0
 
 // TestAutoInstallPlugin tests the autoInstallPlugin function
 func TestAutoInstallPlugin(t *testing.T) {
-	originalHome := os.Getenv("HOME")
-	defer func() {
-		if originalHome == "" {
-			os.Unsetenv("HOME")
-		} else {
-			os.Setenv("HOME", originalHome)
-		}
-	}()
-
 	t.Run("Install_fails_-_plugin_not_in_index", func(t *testing.T) {
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		// Create minimal plugin infrastructure
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
@@ -2669,7 +2661,8 @@ func TestAutoInstallPlugin(t *testing.T) {
 
 	t.Run("Install_fails_-_plugin_not_in_index_with_enablePre", func(t *testing.T) {
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
 		os.MkdirAll(pluginDir, 0755)
@@ -2702,7 +2695,8 @@ func TestAutoInstallPlugin(t *testing.T) {
 
 	t.Run("Output_format_verification", func(t *testing.T) {
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
 		os.MkdirAll(pluginDir, 0755)
@@ -2740,7 +2734,8 @@ func TestAutoInstallPlugin(t *testing.T) {
 
 	t.Run("Manager_creation_validation", func(t *testing.T) {
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
 		os.MkdirAll(pluginDir, 0755)
