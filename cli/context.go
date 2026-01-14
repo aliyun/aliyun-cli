@@ -118,7 +118,7 @@ func (ctx *Context) EnterCommand(cmd *Command) {
 	}
 
 	if cmd.DisablePersistentFlags {
-		ctx.flags = cmd.Flags().mergeWith(nil, nil)
+		ctx.flags = cmd.Flags().mergeWith(nil, nil) // disable persistent flags from parent, for plugin command
 	} else {
 		ctx.flags = cmd.Flags().mergeWith(ctx.flags, func(f *Flag) bool {
 			return f.Persistent
@@ -182,7 +182,7 @@ func (ctx *Context) SetCommand(cmd *Command) {
 		ctx.flags = NewFlagSet()
 	} else {
 		if cmd.DisablePersistentFlags {
-			ctx.flags = cmd.Flags().mergeWith(nil, nil)
+			ctx.flags = cmd.Flags().mergeWith(nil, nil) // disable persistent flags from parent, for plugin command
 		} else {
 			ctx.flags = ctx.command.Flags().mergeWith(ctx.flags, func(f *Flag) bool {
 				return f.Persistent

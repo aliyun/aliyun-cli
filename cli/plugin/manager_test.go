@@ -30,29 +30,9 @@ func newTestContext() *cli.Context {
 
 func TestNewManager(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
-		// Save original environment variables
-		originalHome := os.Getenv("HOME")
-		originalUserProfile := os.Getenv("USERPROFILE")
-		defer func() {
-			if originalHome != "" {
-				os.Setenv("HOME", originalHome)
-			} else {
-				os.Unsetenv("HOME")
-			}
-			if runtime.GOOS == "windows" {
-				if originalUserProfile != "" {
-					os.Setenv("USERPROFILE", originalUserProfile)
-				} else {
-					os.Unsetenv("USERPROFILE")
-				}
-			}
-		}()
-
 		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
-		if runtime.GOOS == "windows" {
-			os.Setenv("USERPROFILE", testHome)
-		}
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
 
 		mgr, err := NewManager()
 		assert.NoError(t, err)
@@ -68,8 +48,24 @@ func TestNewManager(t *testing.T) {
 	})
 
 	t.Run("Creates correct directory structure", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		mgr, err := NewManager()
+		assert.NoError(t, err)
+		assert.NotNil(t, mgr)
+
+		expectedDir := filepath.Join(testHome, ".aliyun", "plugins")
+		assert.Equal(t, expectedDir, mgr.rootDir)
+	})
+
+	t.Run("Home directory not found", func(t *testing.T) {
 		originalHome := os.Getenv("HOME")
 		originalUserProfile := os.Getenv("USERPROFILE")
+		originalHomeDrive := os.Getenv("HOMEDRIVE")
+		originalHomePath := os.Getenv("HOMEPATH")
+
 		defer func() {
 			if originalHome != "" {
 				os.Setenv("HOME", originalHome)
@@ -82,34 +78,30 @@ func TestNewManager(t *testing.T) {
 				} else {
 					os.Unsetenv("USERPROFILE")
 				}
+				if originalHomeDrive != "" {
+					os.Setenv("HOMEDRIVE", originalHomeDrive)
+				} else {
+					os.Unsetenv("HOMEDRIVE")
+				}
+				if originalHomePath != "" {
+					os.Setenv("HOMEPATH", originalHomePath)
+				} else {
+					os.Unsetenv("HOMEPATH")
+				}
 			}
 		}()
 
-		testHome := t.TempDir()
-		os.Setenv("HOME", testHome)
+		os.Unsetenv("HOME")
 		if runtime.GOOS == "windows" {
-			os.Setenv("USERPROFILE", testHome)
+			os.Unsetenv("USERPROFILE")
+			os.Unsetenv("HOMEDRIVE")
+			os.Unsetenv("HOMEPATH")
 		}
 
 		mgr, err := NewManager()
-		assert.NoError(t, err)
-		assert.NotNil(t, mgr)
-
-		expectedDir := filepath.Join(testHome, ".aliyun", "plugins")
-		assert.Equal(t, expectedDir, mgr.rootDir)
-	})
-
-	t.Run("Home directory not found", func(t *testing.T) {
-		originalHome := os.Getenv("HOME")
-		defer os.Setenv("HOME", originalHome)
-
-		os.Unsetenv("HOME")
-		if runtime.GOOS != "windows" {
-			mgr, err := NewManager()
-			assert.Nil(t, mgr)
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "home directory not found")
-		}
+		assert.Nil(t, mgr)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "home directory not found")
 	})
 }
 

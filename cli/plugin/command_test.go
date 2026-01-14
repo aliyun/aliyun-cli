@@ -142,11 +142,9 @@ func TestNewInstallCommand_Run(t *testing.T) {
 func TestNewInstallCommand_Run_WithNamesFlag(t *testing.T) {
 	cmd := newInstallCommand()
 
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-
 	testHome := t.TempDir()
-	os.Setenv("HOME", testHome)
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
 
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -166,11 +164,9 @@ func TestNewInstallCommand_Run_WithNamesFlag(t *testing.T) {
 func TestNewInstallCommand_Run_WithNamesAndVersionFlags(t *testing.T) {
 	cmd := newInstallCommand()
 
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-
 	testHome := t.TempDir()
-	os.Setenv("HOME", testHome)
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
 
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -195,11 +191,9 @@ func TestNewInstallCommand_Run_WithNamesAndVersionFlags(t *testing.T) {
 func TestNewInstallCommand_Run_WithVersionFlagOnly(t *testing.T) {
 	cmd := newInstallCommand()
 
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-
 	testHome := t.TempDir()
-	os.Setenv("HOME", testHome)
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
 
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -216,14 +210,38 @@ func TestNewInstallCommand_Run_WithVersionFlagOnly(t *testing.T) {
 	assert.Contains(t, err.Error(), "names flag is required")
 }
 
+func TestNewInstallCommand_Run_WithNamesAndEnablePreFlags(t *testing.T) {
+	cmd := newInstallCommand()
+
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	namesFlag := ctx.Flags().Get("names")
+	assert.NotNil(t, namesFlag)
+	namesFlag.SetAssigned(true)
+	namesFlag.SetValues([]string{"nonexistent-plugin-xyz-123"})
+
+	enablePreFlag := ctx.Flags().Get("enable-pre")
+	assert.NotNil(t, enablePreFlag)
+	enablePreFlag.SetAssigned(true)
+
+	err := cmd.Run(ctx, []string{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "nonexistent-plugin-xyz-123 not found")
+}
+
 func TestNewInstallCommand_Run_FlagValueAssignment(t *testing.T) {
 	cmd := newInstallCommand()
 
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-
 	testHome := t.TempDir()
-	os.Setenv("HOME", testHome)
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
 
 	t.Run("Names flag value assignment", func(t *testing.T) {
 		stdout := new(bytes.Buffer)
@@ -282,6 +300,20 @@ func TestNewInstallCommand_Run_FlagValueAssignment(t *testing.T) {
 		assert.Equal(t, "3.0.0", version)
 	})
 
+	t.Run("Enable pre flag value assignment", func(t *testing.T) {
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+
+		enablePreFlag := ctx.Flags().Get("enable-pre")
+		enablePreFlag.SetAssigned(true)
+
+		enablePreFlag2 := ctx.Flags().Get("enable-pre")
+		assert.NotNil(t, enablePreFlag2) // enable-pre flag should be retrievable
+		assert.True(t, enablePreFlag2.IsAssigned(), "enable-pre flag should be assigned")
+	})
+
 }
 
 func TestNewInstallAllCommand(t *testing.T) {
@@ -321,11 +353,9 @@ func TestNewUpdateCommand(t *testing.T) {
 func TestNewUpdateCommand_Run_WithoutName(t *testing.T) {
 	cmd := newUpdateCommand()
 
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-
 	testHome := t.TempDir()
-	os.Setenv("HOME", testHome)
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
 
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -339,11 +369,9 @@ func TestNewUpdateCommand_Run_WithoutName(t *testing.T) {
 func TestNewUpdateCommand_Run_WithName(t *testing.T) {
 	cmd := newUpdateCommand()
 
-	originalHome := os.Getenv("HOME")
-	defer os.Setenv("HOME", originalHome)
-
 	testHome := t.TempDir()
-	os.Setenv("HOME", testHome)
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
 
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)

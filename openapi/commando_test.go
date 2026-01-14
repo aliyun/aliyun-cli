@@ -2279,9 +2279,6 @@ exit 0
 	})
 
 	t.Run("Plugin binary not found after installation check", func(t *testing.T) {
-		if runtime.GOOS == "windows" {
-			t.Skip("shell script test skipped on Windows")
-		}
 		// Test case where plugin is in manifest but binary doesn't exist
 		// This tests the (ok=false, err=nil) path from ExecutePlugin
 		testPluginManifest := `{
@@ -2289,7 +2286,7 @@ exit 0
 				"missingplugin": {
 					"name": "missingplugin",
 					"version": "1.0.0",
-					"path": "` + filepath.Join(pluginDir, "missingplugin") + `",
+					"path": "` + filepath.ToSlash(filepath.Join(pluginDir, "missingplugin")) + `",
 					"command": "missing-cmd"
 				}
 			}
@@ -2510,7 +2507,7 @@ exit 0
 				"missingbin": {
 					"name": "missingbin",
 					"version": "1.0.0",
-					"path": "` + filepath.Join(pluginDir, "missingbin") + `",
+					"path": "` + filepath.ToSlash(filepath.Join(pluginDir, "missingbin")) + `",
 					"command": "missingbin"
 				}
 			}
