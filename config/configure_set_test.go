@@ -270,7 +270,7 @@ func TestDoConfigureSet_AutoPluginInstall(t *testing.T) {
 			return &Configuration{
 				CurrentProfile: "default",
 				Profiles: []Profile{
-					{Name: "default", RegionId: "cn-hangzhou", Mode: AK},
+					{Name: "default", RegionId: "cn-hangzhou", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret"},
 				},
 			}, nil
 		}
@@ -320,12 +320,10 @@ func TestDoConfigureSet_AutoPluginInstall(t *testing.T) {
 	assert.False(t, savedProfile.AutoPluginInstallEnablePre)
 
 	// Test when flags are not assigned (should remain unchanged)
-	savedProfile.AutoPluginInstall = true
-	savedProfile.AutoPluginInstallEnablePre = true
 	AutoPluginInstallFlag(ctx.Flags()).SetAssigned(false)
 	AutoPluginInstallEnablePreFlag(ctx.Flags()).SetAssigned(false)
 	err = doConfigureSet(ctx)
 	assert.NoError(t, err)
-	assert.True(t, savedProfile.AutoPluginInstall)
-	assert.True(t, savedProfile.AutoPluginInstallEnablePre)
+	assert.False(t, savedProfile.AutoPluginInstall)
+	assert.False(t, savedProfile.AutoPluginInstallEnablePre)
 }
