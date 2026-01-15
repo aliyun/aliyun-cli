@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 )
@@ -75,12 +77,53 @@ func ExecutePlugin(command string, args []string, ctx *cli.Context) (bool, error
 	// fmt.Println("adjustedArgs", adjustedArgs)
 
 	envs := os.Environ()
+	if ctx != nil {
+		envs = mergeEnvs(envs, ctx.GetRuntimeEnvs())
+	}
 
 	if err := runPluginCommand(binPath, adjustedArgs, stdout, stderr, envs); err != nil {
 		return true, err
 	}
 
 	return true, nil
+}
+
+func mergeEnvs(base []string, overrides map[string]string) []string {
+	if len(overrides) == 0 {
+		return base
+	}
+
+	envMap := make(map[string]string)
+	// 记录原始 Key，避免 Windows 下转大写后丢失原始 Key 的风格
+	actualKeyMap := make(map[string]string)
+
+	for _, e := range base {
+		kv := strings.SplitN(e, "=", 2)
+		if len(kv) == 2 {
+			k, v := kv[0], kv[1]
+			lookupKey := k
+			if runtime.GOOS == "windows" {
+				lookupKey = strings.ToUpper(k)
+			}
+			envMap[lookupKey] = v
+			actualKeyMap[lookupKey] = k
+		}
+	}
+
+	for k, v := range overrides {
+		lookupKey := k
+		if runtime.GOOS == "windows" {
+			lookupKey = strings.ToUpper(k)
+		}
+		envMap[lookupKey] = v
+		actualKeyMap[lookupKey] = k
+	}
+
+	result := make([]string, 0, len(envMap))
+	for lookupKey, v := range envMap {
+		result = append(result, actualKeyMap[lookupKey]+"="+v)
+	}
+	return result
 }
 
 func adjustPluginArgs(args []string) []string {

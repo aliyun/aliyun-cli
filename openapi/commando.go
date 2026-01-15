@@ -177,6 +177,26 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				pluginName = foundPluginName
 			}
 
+			// Prepare config related env for plugin
+			// Only prepare credentials if it's NOT a version command AND NOT a help request
+			// AND it has more than 2 arguments (product + api + more)
+			isHelp := cli.HelpFlag(ctx.Flags()).IsAssigned()
+			isVersion := (apiOrMethod == "version")
+
+			if !isHelp && !isVersion && len(pluginArgs) > 2 {
+				if c.profile.Name == "" {
+					if profile, err := config.LoadProfileWithContext(ctx); err == nil {
+						c.profile = profile
+					}
+				}
+
+				if c.profile.Name != "" {
+					if envs, err := c.profile.GetRuntimeEnv(ctx); err == nil {
+						ctx.SetRuntimeEnvs(envs)
+					}
+				}
+			}
+
 			ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
 			if err != nil {
 				return err
