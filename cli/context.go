@@ -48,7 +48,8 @@ type Context struct {
 	stderr          io.Writer
 	inConfigureMode bool
 	// use http instead of https
-	insecure bool
+	insecure    bool
+	runtimeEnvs map[string]string
 }
 
 func (ctx *Context) Insecure() bool {
@@ -57,6 +58,14 @@ func (ctx *Context) Insecure() bool {
 
 func (ctx *Context) SetInsecure(insecure bool) {
 	ctx.insecure = insecure
+}
+
+func (ctx *Context) SetRuntimeEnvs(envs map[string]string) {
+	ctx.runtimeEnvs = envs
+}
+
+func (ctx *Context) GetRuntimeEnvs() map[string]string {
+	return ctx.runtimeEnvs
 }
 
 func (ctx *Context) InConfigureMode() bool {
@@ -69,6 +78,7 @@ func NewCommandContext(stdout io.Writer, stderr io.Writer) *Context {
 		unknownFlags: nil,
 		stdout:       stdout,
 		stderr:       stderr,
+		runtimeEnvs:  make(map[string]string),
 	}
 }
 

@@ -23,6 +23,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cloudsso"
@@ -624,6 +625,48 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 }
 
 var saveConfigurationFunc = SaveConfiguration
+
+func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
+	cred, err := cp.GetCredential(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	m, err := cred.GetCredential()
+	if err != nil {
+		return nil, err
+	}
+
+	envs := map[string]string{
+		"ALIBABA_CLOUD_ACCESS_KEY_ID":     *m.AccessKeyId,
+		"ALIBABA_CLOUD_ACCESS_KEY_SECRET": *m.AccessKeySecret,
+		"ALIBABA_CLOUD_REGION_ID":         cp.RegionId,
+	}
+	if m.SecurityToken != nil {
+		envs["ALIBABA_CLOUD_SECURITY_TOKEN"] = *m.SecurityToken
+	}
+
+	// 添加 API 调用配置
+	if cp.Language != "" {
+		envs["ALIBABA_CLOUD_LANGUAGE"] = cp.Language
+	}
+	if cp.RegionId != "" {
+		envs["ALIBABA_CLOUD_REGION_ID"] = cp.RegionId
+	}
+	if cp.EndpointType != "" {
+		envs["ALIBABA_CLOUD_ENDPOINT_TYPE"] = cp.EndpointType
+	}
+	if cp.ReadTimeout > 0 {
+		envs["ALIBABA_CLOUD_READ_TIMEOUT"] = strconv.Itoa(cp.ReadTimeout)
+	}
+	if cp.ConnectTimeout > 0 {
+		envs["ALIBABA_CLOUD_CONNECT_TIMEOUT"] = strconv.Itoa(cp.ConnectTimeout)
+	}
+	if cp.RetryCount > 0 {
+		envs["ALIBABA_CLOUD_RETRY_COUNT"] = strconv.Itoa(cp.RetryCount)
+	}
+	return envs, nil
+}
 
 func IsRegion(region string) bool {
 	if match, _ := regexp.MatchString("^[a-zA-Z0-9-]*$", region); !match {
