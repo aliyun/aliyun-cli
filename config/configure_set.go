@@ -15,6 +15,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -127,6 +128,18 @@ func doConfigureSet(ctx *cli.Context) error {
 	profile.RetryCount = RetryCountFlag(flags).GetIntegerOrDefault(profile.RetryCount)
 	profile.StsRegion = StsRegionFlag(flags).GetStringOrDefault(profile.StsRegion)
 	profile.EndpointType = EndpointTypeFlag(flags).GetStringOrDefault(profile.EndpointType)
+
+	if autoPluginInstallFlag := AutoPluginInstallFlag(flags); autoPluginInstallFlag != nil && autoPluginInstallFlag.IsAssigned() {
+		if val, ok := autoPluginInstallFlag.GetValue(); ok {
+			profile.AutoPluginInstall = strings.ToLower(val) == "true"
+		}
+	}
+
+	if autoPluginInstallEnablePreFlag := AutoPluginInstallEnablePreFlag(flags); autoPluginInstallEnablePreFlag != nil && autoPluginInstallEnablePreFlag.IsAssigned() {
+		if val, ok := autoPluginInstallEnablePreFlag.GetValue(); ok {
+			profile.AutoPluginInstallEnablePre = strings.ToLower(val) == "true"
+		}
+	}
 
 	err = profile.Validate()
 	if err != nil {
