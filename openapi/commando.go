@@ -143,8 +143,10 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// fmt.Println("os.Args", os.Args)
 	if len(args) > 1 {
 		apiOrMethod := args[1]
-		// Check if it's kebab-case (plugin format)
-		if strings.Contains(apiOrMethod, "-") || apiOrMethod == "version" {
+		// Check if it's all lowercase (plugin format) and not an HTTP method
+		upperMethod := strings.ToUpper(apiOrMethod)
+		isHttpMethod := upperMethod == "GET" || upperMethod == "POST" || upperMethod == "PUT" || upperMethod == "DELETE"
+		if strings.ToLower(apiOrMethod) == apiOrMethod && !isHttpMethod {
 			// Extract plugin arguments from os.Args
 			var pluginArgs []string
 			cmdIndex := -1
