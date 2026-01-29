@@ -14,10 +14,12 @@
 package openapi
 
 import (
+	"bufio"
 	"bytes"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -25,6 +27,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	jmespath "github.com/jmespath/go-jmespath"
@@ -110,11 +113,123 @@ func DetectInConfigureMode(flags *cli.FlagSet) bool {
 	return false
 }
 
+var isInteractiveInput = func() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
+}
+
+var stdin io.Reader = os.Stdin
+
 func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// aliyun
 	if len(args) == 0 {
 		c.printUsage(ctx)
 		return nil
+	}
+
+	// Check if we should show original product help instead of plugin help, only and need to be appliec in product level
+	envShowOriginalHelp := os.Getenv("ALIYUN_ORIGINAL_PRODUCT_HELP")
+	showOriginalProductHelp := envShowOriginalHelp == "true" || envShowOriginalHelp == "1"
+
+	// Strategy: Plugin Execution
+	// If the second argument (API name) is kebab-case (contains '-'), use plugin.
+	// If only one arg and corresponding plugin is installed, use plugin, unless showOriginalProductHelp is true.
+	// If only one arg and corresponding plugin is not installed, show original product help.
+
+	// fmt.Println("args", args)
+	// fmt.Println("os.Args", os.Args)
+	if len(args) > 1 {
+		apiOrMethod := args[1]
+		// Check if it's all lowercase (plugin format) and not an HTTP method
+		upperMethod := strings.ToUpper(apiOrMethod)
+		isHttpMethod := upperMethod == "GET" || upperMethod == "POST" || upperMethod == "PUT" || upperMethod == "DELETE"
+		if strings.ToLower(apiOrMethod) == apiOrMethod && !isHttpMethod {
+			// Extract plugin arguments from os.Args
+			var pluginArgs []string
+			cmdIndex := -1
+			for i, arg := range os.Args {
+				if arg == args[0] {
+					cmdIndex = i
+					break
+				}
+			}
+			if cmdIndex != -1 && cmdIndex < len(os.Args)-1 {
+				pluginArgs = os.Args[cmdIndex:]
+			}
+
+			installed, pluginName, err := plugin.IsPluginInstalled(args[0])
+			if err != nil {
+				return fmt.Errorf("failed to check plugin status: %w", err)
+			}
+			if !installed {
+				if profile, err := config.LoadProfileWithContext(ctx); err == nil {
+					c.profile = profile
+				}
+				commandName := buildCommandName(args)
+				foundPluginName, err := c.findAndInstallPlugin(ctx, commandName, args[0])
+				if err != nil {
+					return err
+				}
+				if foundPluginName == "" {
+					return fmt.Errorf("plugin '%s' not found. Install it with: aliyun plugin install %s", args[0], args[0])
+				}
+				pluginName = foundPluginName
+			}
+
+			// Prepare config related env for plugin
+			// Only prepare credentials if it's NOT a version command AND NOT a help request
+			// AND it has more than 2 arguments (product + api + more)
+			isHelp := cli.HelpFlag(ctx.Flags()).IsAssigned()
+			isVersion := (apiOrMethod == "version")
+
+			if !isHelp && !isVersion && len(pluginArgs) > 2 {
+				if c.profile.Name == "" {
+					if profile, err := config.LoadProfileWithContext(ctx); err == nil {
+						c.profile = profile
+					}
+				}
+
+				if c.profile.Name != "" {
+					if envs, err := c.profile.GetRuntimeEnv(ctx); err == nil {
+						ctx.SetRuntimeEnvs(envs)
+					}
+				}
+			}
+
+			ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("plugin %s not found", pluginName)
+			}
+			return nil
+		}
+	} else if len(args) == 1 && !showOriginalProductHelp {
+		// 单产品输入，无论是否添加--help，都先由安装的插件运行，插件未安装则执行下面的运行逻辑
+		// 使用 ALIYUN_ORIGINAL_PRODUCT_HELP 环境变量可以显示原始产品的 help 信息，而不是插件 help
+		installed, pluginName, err := plugin.IsPluginInstalled(args[0])
+		if err != nil {
+			return fmt.Errorf("failed to check plugin status: %w", err)
+		}
+		if installed {
+			ok, err := plugin.ExecutePlugin(args[0], args, ctx)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				// should not happen here cause installed is checked before
+				return fmt.Errorf("plugin %s not found", pluginName)
+			}
+			return nil
+		}
+	}
+
+	if cli.HelpFlag(ctx.Flags()).IsAssigned() {
+		return c.help(ctx, args)
 	}
 
 	// detect if in configure mode
@@ -657,5 +772,109 @@ func (c *Commando) CheckApiParamWithBuildInArgs(ctx *cli.Context, api meta.Api) 
 			flagNew.SetAssigned(true)
 			ctx.UnknownFlags().Add(flagNew)
 		}
+	}
+}
+
+// ["fc", "create-alias"] -> "fc create-alias"
+func buildCommandName(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	if len(args) == 1 {
+		return args[0]
+	}
+	return strings.Join(args[:2], " ")
+}
+
+func (c *Commando) findAndInstallPlugin(ctx *cli.Context, commandName, productCode string) (string, error) {
+	mgr, err := plugin.NewManager()
+	if err != nil {
+		return "", err
+	}
+
+	pluginName, err := mgr.FindPluginByCommand(commandName)
+	if err != nil {
+		return "", nil
+	}
+
+	enablePre := c.profile.AutoPluginInstallEnablePre
+
+	if c.profile.AutoPluginInstall {
+		return c.autoInstallPlugin(ctx, mgr, pluginName, commandName, enablePre)
+	}
+
+	if !isInteractiveInput() {
+		return c.promptInstallInNonInteractiveMode(ctx, pluginName, commandName)
+	}
+
+	return c.interactiveInstallPlugin(ctx, mgr, pluginName, commandName, enablePre)
+}
+
+func (c *Commando) autoInstallPlugin(ctx *cli.Context, mgr *plugin.Manager, pluginName, commandName string, enablePre bool) (string, error) {
+	cli.Printf(ctx.Stderr(), "Plugin '%s' is required for command '%s' but not installed.\n", pluginName, commandName)
+
+	if enablePre {
+		cli.Printf(ctx.Stderr(), "Auto-installing plugin '%s' (including pre-release versions)...\n", pluginName)
+	} else {
+		cli.Printf(ctx.Stderr(), "Auto-installing plugin '%s'...\n", pluginName)
+	}
+
+	err := mgr.Install(ctx, pluginName, "", enablePre)
+	if err != nil {
+		c.handleInstallError(ctx, err, pluginName, enablePre)
+		return "", fmt.Errorf("failed to install plugin '%s': %w", pluginName, err)
+	}
+
+	return pluginName, nil
+}
+
+func (c *Commando) promptInstallInNonInteractiveMode(ctx *cli.Context, pluginName, commandName string) (string, error) {
+	cli.Printf(ctx.Stderr(), "Plugin '%s' is required for command '%s' but not installed.\n", pluginName, commandName)
+	cli.Printf(ctx.Stderr(), "Install it with: aliyun plugin install --names %s\n", pluginName)
+	cli.Printf(ctx.Stderr(), "Note: If the above fails (no stable version available), try with pre-release versions:\n")
+	cli.Printf(ctx.Stderr(), "  aliyun plugin install --names %s --enable-pre\n", pluginName)
+	return "", nil
+}
+
+func (c *Commando) interactiveInstallPlugin(ctx *cli.Context, mgr *plugin.Manager, pluginName, commandName string, enablePre bool) (string, error) {
+	cli.Printf(ctx.Stderr(), "Plugin '%s' is required for command '%s' but not installed.\n", pluginName, commandName)
+	cli.Printf(ctx.Stderr(), "Tip: Run 'aliyun configure set --auto-plugin-install true' to skip this prompt.\n")
+	cli.Printf(ctx.Stderr(), "Do you want to install it? [Y/n]: ")
+
+	reader := bufio.NewReader(stdin)
+	response, err := reader.ReadString('\n')
+	if err != nil {
+		return "", fmt.Errorf("failed to read user input: %w", err)
+	}
+
+	response = strings.TrimSpace(strings.ToLower(response))
+	if response != "" && response != "y" && response != "yes" {
+		cli.Printf(ctx.Stderr(), "Installation cancelled.\n")
+		return "", nil
+	}
+
+	if enablePre {
+		cli.Printf(ctx.Stderr(), "Installing plugin '%s' (including pre-release versions)...\n", pluginName)
+	} else {
+		cli.Printf(ctx.Stderr(), "Installing plugin '%s'...\n", pluginName)
+	}
+
+	err = mgr.Install(ctx, pluginName, "", enablePre)
+	if err != nil {
+		c.handleInstallError(ctx, err, pluginName, enablePre)
+		return "", fmt.Errorf("failed to install plugin '%s': %w", pluginName, err)
+	}
+
+	return pluginName, nil
+}
+
+func (c *Commando) handleInstallError(ctx *cli.Context, err error, pluginName string, enablePre bool) {
+	// If "no stable version available" error and enablePre is false
+	if strings.Contains(err.Error(), "no stable version available") && !enablePre {
+		cli.Printf(ctx.Stderr(), "%s\n\n", err.Error())
+		cli.Printf(ctx.Stderr(), "Tip: This command may require a pre-release version. Enable automatic installation with:\n")
+		cli.Printf(ctx.Stderr(), "  aliyun configure set --auto-plugin-install-enable-pre true\n\n")
+		cli.Printf(ctx.Stderr(), "Or install manually with:\n")
+		cli.Printf(ctx.Stderr(), "  aliyun plugin install --names %s --enable-pre\n", pluginName)
 	}
 }
