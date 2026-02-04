@@ -131,7 +131,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	}
 
 	// Check if we should show original product help instead of plugin help, only and need to be appliec in product level
-	envShowOriginalHelp := os.Getenv("ALIYUN_ORIGINAL_PRODUCT_HELP")
+	envShowOriginalHelp := os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP")
 	showOriginalProductHelp := envShowOriginalHelp == "true" || envShowOriginalHelp == "1"
 
 	// Strategy: Plugin Execution
@@ -146,7 +146,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		// Check if it's all lowercase (plugin format) and not an HTTP method
 		upperMethod := strings.ToUpper(apiOrMethod)
 		isHttpMethod := upperMethod == "GET" || upperMethod == "POST" || upperMethod == "PUT" || upperMethod == "DELETE"
-		if strings.ToLower(apiOrMethod) == apiOrMethod && !isHttpMethod {
+		if strings.ToLower(apiOrMethod) == apiOrMethod && !isHttpMethod && args[0] != "help" {
 			// Extract plugin arguments from os.Args
 			var pluginArgs []string
 			cmdIndex := -1
@@ -168,6 +168,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				if profile, err := config.LoadProfileWithContext(ctx); err == nil {
 					c.profile = profile
 				}
+				// 需要判断是否plugin auto install enabled
 				commandName := buildCommandName(args)
 				foundPluginName, err := c.findAndInstallPlugin(ctx, commandName, args[0])
 				if err != nil {
@@ -186,17 +187,19 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			isVersion := (apiOrMethod == "version")
 
 			if !isHelp && !isVersion && len(pluginArgs) > 2 {
+				ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
+				if profile, err := config.LoadProfileWithContext(ctx); err == nil {
+					c.profile = profile
+				}
 				if c.profile.Name == "" {
-					if profile, err := config.LoadProfileWithContext(ctx); err == nil {
-						c.profile = profile
-					}
+					return fmt.Errorf("profile not found, use `aliyun configure` to configure it")
 				}
 
-				if c.profile.Name != "" {
-					if envs, err := c.profile.GetRuntimeEnv(ctx); err == nil {
-						ctx.SetRuntimeEnvs(envs)
-					}
+				if envs, err := c.profile.GetRuntimeEnv(ctx); err == nil {
+					ctx.SetRuntimeEnvs(envs)
 				}
+			} else if isHelp {
+				c.setLangEnv(ctx)
 			}
 
 			ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
@@ -216,6 +219,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			return fmt.Errorf("failed to check plugin status: %w", err)
 		}
 		if installed {
+			c.setLangEnv(ctx)
 			ok, err := plugin.ExecutePlugin(args[0], args, ctx)
 			if err != nil {
 				return err
@@ -877,4 +881,33 @@ func (c *Commando) handleInstallError(ctx *cli.Context, err error, pluginName st
 		cli.Printf(ctx.Stderr(), "Or install manually with:\n")
 		cli.Printf(ctx.Stderr(), "  aliyun plugin install --names %s --enable-pre\n", pluginName)
 	}
+}
+
+func (c *Commando) setLangEnv(ctx *cli.Context) {
+	if ctx == nil {
+		return
+	}
+
+	lang := c.profile.Language
+	if lang == "" {
+		lang = i18n.GetLanguage()
+	}
+
+	var langEnv string
+	switch lang {
+	case "zh":
+		langEnv = "zh_CN.UTF-8"
+	case "en":
+		langEnv = "en_US.UTF-8"
+	default:
+		// Default to en_US.UTF-8 if language is not recognized
+		langEnv = "en_US.UTF-8"
+	}
+
+	envs := ctx.GetRuntimeEnvs()
+	if envs == nil {
+		envs = make(map[string]string)
+	}
+	envs["LANG"] = langEnv
+	ctx.SetRuntimeEnvs(envs)
 }
