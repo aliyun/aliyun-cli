@@ -12,6 +12,7 @@ type Index struct {
 type PluginInfo struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`
+	ProductName map[string]string      `json:"productName"` // en, zh
 	Homepage    string                 `json:"homepage"`
 	Versions    map[string]VersionInfo `json:"versions"` // version -> VersionInfo
 }
@@ -100,5 +101,5 @@ type PluginManifest struct {
 type CommandIndex map[string]string
 
 func GetCurrentPlatform() string {
-	return runtime.GOOS + "/" + runtime.GOARCH
+	return runtime.GOOS + "-" + runtime.GOARCH
 }

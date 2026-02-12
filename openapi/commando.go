@@ -124,13 +124,14 @@ var isInteractiveInput = func() bool {
 var stdin io.Reader = os.Stdin
 
 func (c *Commando) main(ctx *cli.Context, args []string) error {
+	fmt.Println("commando main", args)
 	// aliyun
 	if len(args) == 0 {
 		c.printUsage(ctx)
 		return nil
 	}
 
-	// Check if we should show original product help instead of plugin help, only and need to be appliec in product level
+	// Check if we should show original product help instead of plugin help, only and need to be applied in product level
 	envShowOriginalHelp := os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP")
 	showOriginalProductHelp := envShowOriginalHelp == "true" || envShowOriginalHelp == "1"
 
@@ -220,15 +221,30 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		}
 		if installed {
 			c.setLangEnv(ctx)
-			ok, err := plugin.ExecutePlugin(args[0], args, ctx)
-			if err != nil {
-				return err
+			// Check if help is requested
+			isHelp := false
+			if cli.HelpFlag(ctx.Flags()).IsAssigned() {
+				isHelp = true
 			}
-			if !ok {
-				// should not happen here cause installed is checked before
-				return fmt.Errorf("plugin %s not found", pluginName)
+
+			// If help is requested and user wants original help, skip plugin execution
+			if isHelp && os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP") == "true" {
+				// Fall through to built-in help
+			} else {
+				ok, err := plugin.ExecutePlugin(args[0], args, ctx)
+				if err != nil {
+					return err
+				}
+				// If executed successfully (meaning it was handled by plugin)
+				if ok {
+					if isHelp {
+						// Only print help hints if it was a help command
+						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\nNote: This help message is provided by the installed plugin '%s'.\n", pluginName)
+						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "To view the legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true environment variable.\n")
+					}
+					return nil
+				}
 			}
-			return nil
 		}
 	}
 
@@ -675,6 +691,7 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 }
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {
+	fmt.Println("help", args)
 	cmd := ctx.Command()
 	if len(args) == 0 {
 		cmd.PrintHead(ctx)
@@ -760,6 +777,7 @@ func (c *Commando) printUsage(ctx *cli.Context) {
 	cmd.PrintFlags(ctx)
 	cmd.PrintSample(ctx)
 	cmd.PrintTail(ctx)
+	fmt.Println("printUsage", cmd.Name)
 }
 
 func (c *Commando) CheckApiParamWithBuildInArgs(ctx *cli.Context, api meta.Api) {

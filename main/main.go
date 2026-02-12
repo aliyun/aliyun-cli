@@ -55,7 +55,6 @@ func Main(args []string) {
 		Usage:             "aliyun <product> <operation> [--parameter1 value1 --parameter2 value2 ...]",
 		Sample:            "aliyun ecs DescribeRegions",
 		EnableUnknownFlag: true,
-		SkipDefaultHelp:   true,
 	}
 
 	// add default flags
