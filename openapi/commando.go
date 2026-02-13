@@ -124,7 +124,7 @@ var isInteractiveInput = func() bool {
 var stdin io.Reader = os.Stdin
 
 func (c *Commando) main(ctx *cli.Context, args []string) error {
-	fmt.Println("commando main", args)
+	// fmt.Println("commando main", args)
 	// aliyun
 	if len(args) == 0 {
 		c.printUsage(ctx)
@@ -136,13 +136,52 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	showOriginalProductHelp := envShowOriginalHelp == "true" || envShowOriginalHelp == "1"
 
 	// Strategy: Plugin Execution
-	// If the second argument (API name) is kebab-case (contains '-'), use plugin.
+	// If the second argument (API name) is all lowercase or version, use plugin.
 	// If only one arg and corresponding plugin is installed, use plugin, unless showOriginalProductHelp is true.
 	// If only one arg and corresponding plugin is not installed, show original product help.
 
 	// fmt.Println("args", args)
 	// fmt.Println("os.Args", os.Args)
-	if len(args) > 1 {
+	if len(args) == 1 && !showOriginalProductHelp {
+		// 单产品输入，无论是否添加--help，都先由安装的插件运行，插件未安装则执行下面的运行逻辑
+		// 使用 ALIYUN_ORIGINAL_PRODUCT_HELP 环境变量可以显示原始产品的 help 信息，而不是插件 help
+		// 单产品运行就是--help
+		installed, pluginName, err := plugin.IsPluginInstalled(args[0])
+		if err != nil {
+			return fmt.Errorf("failed to check plugin status: %w", err)
+		}
+		if installed {
+			c.setLangEnv(ctx)
+			if os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP") == "true" {
+				// Fall through to built-in help
+			} else {
+				// Extract arguments from os.Args to preserve flags for plugin help
+				var pluginArgs []string
+				cmdIndex := -1
+				for i, arg := range os.Args {
+					if arg == args[0] {
+						cmdIndex = i
+						break
+					}
+				}
+				if cmdIndex != -1 && cmdIndex < len(os.Args) {
+					pluginArgs = os.Args[cmdIndex:]
+				} else {
+					pluginArgs = args
+				}
+
+				ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
+				if err != nil {
+					return err
+				}
+				if ok {
+					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\nNote: This help message is provided by the installed plugin '%s'.\n", pluginName)
+					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "To view the legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true environment variable.\n")
+					return nil
+				}
+			}
+		}
+	} else if len(args) > 1 {
 		apiOrMethod := args[1]
 		// Check if it's all lowercase (plugin format) and not an HTTP method
 		upperMethod := strings.ToUpper(apiOrMethod)
@@ -157,8 +196,10 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					break
 				}
 			}
-			if cmdIndex != -1 && cmdIndex < len(os.Args)-1 {
+			if cmdIndex != -1 && cmdIndex < len(os.Args) {
 				pluginArgs = os.Args[cmdIndex:]
+			} else {
+				pluginArgs = args
 			}
 
 			installed, pluginName, err := plugin.IsPluginInstalled(args[0])
@@ -171,12 +212,14 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 				// 需要判断是否plugin auto install enabled
 				commandName := buildCommandName(args)
+				// fmt.Println("commandName", commandName, pluginArgs)
+
 				foundPluginName, err := c.findAndInstallPlugin(ctx, commandName, args[0])
 				if err != nil {
 					return err
 				}
 				if foundPluginName == "" {
-					return fmt.Errorf("plugin '%s' not found. Install it with: aliyun plugin install %s", args[0], args[0])
+					return fmt.Errorf("plugin '%s' not found. Install it with: aliyun plugin install --names %s", args[0], args[0])
 				}
 				pluginName = foundPluginName
 			}
@@ -211,40 +254,6 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				return fmt.Errorf("plugin %s not found", pluginName)
 			}
 			return nil
-		}
-	} else if len(args) == 1 && !showOriginalProductHelp {
-		// 单产品输入，无论是否添加--help，都先由安装的插件运行，插件未安装则执行下面的运行逻辑
-		// 使用 ALIYUN_ORIGINAL_PRODUCT_HELP 环境变量可以显示原始产品的 help 信息，而不是插件 help
-		installed, pluginName, err := plugin.IsPluginInstalled(args[0])
-		if err != nil {
-			return fmt.Errorf("failed to check plugin status: %w", err)
-		}
-		if installed {
-			c.setLangEnv(ctx)
-			// Check if help is requested
-			isHelp := false
-			if cli.HelpFlag(ctx.Flags()).IsAssigned() {
-				isHelp = true
-			}
-
-			// If help is requested and user wants original help, skip plugin execution
-			if isHelp && os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP") == "true" {
-				// Fall through to built-in help
-			} else {
-				ok, err := plugin.ExecutePlugin(args[0], args, ctx)
-				if err != nil {
-					return err
-				}
-				// If executed successfully (meaning it was handled by plugin)
-				if ok {
-					if isHelp {
-						// Only print help hints if it was a help command
-						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\nNote: This help message is provided by the installed plugin '%s'.\n", pluginName)
-						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "To view the legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true environment variable.\n")
-					}
-					return nil
-				}
-			}
 		}
 	}
 
@@ -691,7 +700,7 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 }
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {
-	fmt.Println("help", args)
+	// fmt.Println("help", args)
 	cmd := ctx.Command()
 	if len(args) == 0 {
 		cmd.PrintHead(ctx)
@@ -777,7 +786,7 @@ func (c *Commando) printUsage(ctx *cli.Context) {
 	cmd.PrintFlags(ctx)
 	cmd.PrintSample(ctx)
 	cmd.PrintTail(ctx)
-	fmt.Println("printUsage", cmd.Name)
+	// fmt.Println("printUsage", cmd.Name)
 }
 
 func (c *Commando) CheckApiParamWithBuildInArgs(ctx *cli.Context, api meta.Api) {
@@ -820,7 +829,6 @@ func (c *Commando) findAndInstallPlugin(ctx *cli.Context, commandName, productCo
 	}
 
 	enablePre := c.profile.AutoPluginInstallEnablePre
-
 	if c.profile.AutoPluginInstall {
 		return c.autoInstallPlugin(ctx, mgr, pluginName, commandName, enablePre)
 	}
