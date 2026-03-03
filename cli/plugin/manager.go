@@ -22,9 +22,8 @@ import (
 )
 
 const (
-	IndexURL          = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/plugin-index.json"  // 默认索引地址
-	CommandIndexURL   = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/command-index.json" // 命令倒排索引地址
-	LocalCommandIndex = "command-index.json"                                                             // 本地命令索引文件名
+	IndexURL        = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/plugin_pkg_index.json"    // 默认索引地址
+	CommandIndexURL = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/plugin_search_index.json" // 命令倒排索引地址
 )
 
 type ErrPluginNotFound struct {
@@ -144,6 +143,24 @@ func (m *Manager) FindPluginByCommand(commandName string) (string, error) {
 	}
 
 	return "", fmt.Errorf("no plugin found for command: %s", commandName)
+}
+
+func (m *Manager) SearchPluginsByCommandPrefix(commandPrefix string) (map[string][]string, error) {
+	index, err := m.GetCommandIndex()
+	if err != nil {
+		return nil, err
+	}
+
+	normalizedPrefix := strings.ToLower(strings.TrimSpace(commandPrefix))
+	results := make(map[string][]string)
+
+	for cmd, pluginName := range *index {
+		if strings.HasPrefix(cmd, normalizedPrefix) {
+			results[pluginName] = append(results[pluginName], cmd)
+		}
+	}
+
+	return results, nil
 }
 
 func matchPluginName(pluginName, userInput string) bool {

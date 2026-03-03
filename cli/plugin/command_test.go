@@ -594,7 +594,7 @@ func TestDisplayRemotePlugins(t *testing.T) {
 	})
 }
 
-func TestDisplaySearchResult(t *testing.T) {
+func TestDisplaySearchResults(t *testing.T) {
 	t.Run("Display installed plugin", func(t *testing.T) {
 		testHome := t.TempDir()
 		cleanup := setTestHomeDir(t, testHome)
@@ -625,18 +625,47 @@ func TestDisplaySearchResult(t *testing.T) {
 		stderr := new(bytes.Buffer)
 		ctx := cli.NewCommandContext(stdout, stderr)
 
-		err = displaySearchResult(ctx, mgr, "ecs", "aliyun-cli-ecs")
+		results := map[string][]string{
+			"aliyun-cli-ecs": {"ecs"},
+		}
+
+		// Setup mock index for test
+		index := &Index{
+			Plugins: []PluginInfo{
+				{
+					Name:        "aliyun-cli-ecs",
+					Description: "ECS plugin for testing",
+					Versions: map[string]VersionInfo{
+						"1.0.0": {},
+					},
+				},
+			},
+		}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(index)
+		}))
+		defer server.Close()
+		mgr.indexURL = server.URL
+
+		err = displaySearchResults(ctx, mgr, "ecs", results)
 		assert.NoError(t, err)
 
 		output := stdout.String()
-		assert.Contains(t, output, "Command: ecs")
-		assert.Contains(t, output, "Plugin: aliyun-cli-ecs")
-		assert.Contains(t, output, "Status: Installed")
-		assert.Contains(t, output, "Local Version: 1.0.0")
-		assert.Contains(t, output, "Description: ECS plugin for testing")
+		assert.Contains(t, output, "Plugin")
+		assert.NotContains(t, output, "Command(s)")
+		assert.Contains(t, output, "Status")
+		assert.Contains(t, output, "Latest Version")
+		assert.Contains(t, output, "Preview")
+		assert.Contains(t, output, "Local Version")
+		assert.Contains(t, output, "Description")
+
+		assert.Contains(t, output, "aliyun-cli-ecs")
+		assert.Contains(t, output, "Installed")
+		assert.Contains(t, output, "1.0.0")
 	})
 
-	t.Run("Display not installed plugin with stable version", func(t *testing.T) {
+	t.Run("Display not installed plugin", func(t *testing.T) {
 		testHome := t.TempDir()
 		cleanup := setTestHomeDir(t, testHome)
 		defer cleanup()
@@ -649,7 +678,19 @@ func TestDisplaySearchResult(t *testing.T) {
 		assert.NoError(t, err)
 		os.WriteFile(manifestPath, manifestJSON, 0644)
 
-		// Create a mock HTTP server for the plugin index
+		mgr, err := NewManager()
+		assert.NoError(t, err)
+		mgr.rootDir = filepath.Join(testHome, ".aliyun", "plugins")
+
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+
+		results := map[string][]string{
+			"aliyun-cli-fc": {"fc"},
+		}
+
+		// Setup mock index for test
 		index := &Index{
 			Plugins: []PluginInfo{
 				{
@@ -666,47 +707,66 @@ func TestDisplaySearchResult(t *testing.T) {
 			json.NewEncoder(w).Encode(index)
 		}))
 		defer server.Close()
+		mgr.indexURL = server.URL
 
-		mgr := &Manager{rootDir: filepath.Join(testHome, ".aliyun"), indexURL: server.URL}
+		err = displaySearchResults(ctx, mgr, "fc", results)
+		assert.NoError(t, err)
+
+		output := stdout.String()
+		assert.Contains(t, output, "aliyun-cli-fc")
+		assert.Contains(t, output, "Not installed")
+		assert.Contains(t, output, "1.0.0")
+		assert.Contains(t, output, "FC plugin")
+	})
+
+	t.Run("Display multiple plugins", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		// Create local manifest with one installed
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		os.MkdirAll(filepath.Dir(manifestPath), 0755)
+		localManifest := LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"aliyun-cli-ecs": {
+					Name:    "aliyun-cli-ecs",
+					Version: "1.0.0",
+				},
+			},
+		}
+		manifestJSON, err := json.Marshal(localManifest)
+		assert.NoError(t, err)
+		os.WriteFile(manifestPath, manifestJSON, 0644)
+
+		mgr, err := NewManager()
+		assert.NoError(t, err)
+		mgr.rootDir = filepath.Join(testHome, ".aliyun", "plugins")
 
 		stdout := new(bytes.Buffer)
 		stderr := new(bytes.Buffer)
 		ctx := cli.NewCommandContext(stdout, stderr)
 
-		err = displaySearchResult(ctx, mgr, "fc", "aliyun-cli-fc")
-		assert.NoError(t, err)
+		results := map[string][]string{
+			"aliyun-cli-ecs": {"ecs"},
+			"aliyun-cli-ecr": {"ecr"},
+		}
 
-		output := stdout.String()
-		assert.Contains(t, output, "Command: fc")
-		assert.Contains(t, output, "Plugin: aliyun-cli-fc")
-		assert.Contains(t, output, "Status: Not installed")
-		assert.Contains(t, output, "Latest Version: 1.0.0")
-		assert.Contains(t, output, "Description: FC plugin")
-		assert.Contains(t, output, "To install: aliyun plugin install --names aliyun-cli-fc")
-		assert.NotContains(t, output, "--enable-pre") // Should not suggest --enable-pre for stable version
-	})
-
-	t.Run("Display not installed plugin with pre-release version", func(t *testing.T) {
-		testHome := t.TempDir()
-		cleanup := setTestHomeDir(t, testHome)
-		defer cleanup()
-
-		// Create empty local manifest
-		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
-		os.MkdirAll(filepath.Dir(manifestPath), 0755)
-		emptyManifest := LocalManifest{Plugins: map[string]LocalPlugin{}}
-		manifestJSON, err := json.Marshal(emptyManifest)
-		assert.NoError(t, err)
-		os.WriteFile(manifestPath, manifestJSON, 0644)
-
-		// Create a mock HTTP server for the plugin index with pre-release version
+		// Setup mock index for test
 		index := &Index{
 			Plugins: []PluginInfo{
 				{
-					Name:        "aliyun-cli-preview",
-					Description: "Preview plugin",
+					Name:        "aliyun-cli-ecs",
+					Description: "ECS plugin",
 					Versions: map[string]VersionInfo{
-						"2.0.0-beta": {},
+						"1.0.0": {},
+					},
+				},
+				{
+					Name:        "aliyun-cli-ecr",
+					Description: "ECR plugin",
+					Versions: map[string]VersionInfo{
+						"2.0.0": {},
 					},
 				},
 			},
@@ -716,95 +776,17 @@ func TestDisplaySearchResult(t *testing.T) {
 			json.NewEncoder(w).Encode(index)
 		}))
 		defer server.Close()
+		mgr.indexURL = server.URL
 
-		mgr := &Manager{rootDir: filepath.Join(testHome, ".aliyun"), indexURL: server.URL}
-
-		stdout := new(bytes.Buffer)
-		stderr := new(bytes.Buffer)
-		ctx := cli.NewCommandContext(stdout, stderr)
-
-		err = displaySearchResult(ctx, mgr, "preview", "aliyun-cli-preview")
+		err = displaySearchResults(ctx, mgr, "ec", results)
 		assert.NoError(t, err)
 
 		output := stdout.String()
-		assert.Contains(t, output, "Command: preview")
-		assert.Contains(t, output, "Plugin: aliyun-cli-preview")
-		assert.Contains(t, output, "Status: Not installed")
-		assert.Contains(t, output, "Latest Version: 2.0.0-beta")
-		assert.Contains(t, output, "Note: This is a pre-release version")
-		assert.Contains(t, output, "Description: Preview plugin")
-		assert.Contains(t, output, "To install: aliyun plugin install --names aliyun-cli-preview --enable-pre")
-	})
-
-	t.Run("Plugin not in index", func(t *testing.T) {
-		testHome := t.TempDir()
-		cleanup := setTestHomeDir(t, testHome)
-		defer cleanup()
-
-		// Create empty local manifest
-		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
-		os.MkdirAll(filepath.Dir(manifestPath), 0755)
-		emptyManifest := LocalManifest{Plugins: map[string]LocalPlugin{}}
-		manifestJSON, err := json.Marshal(emptyManifest)
-		assert.NoError(t, err)
-		os.WriteFile(manifestPath, manifestJSON, 0644)
-
-		// Create a mock HTTP server with empty index
-		index := &Index{
-			Plugins: []PluginInfo{},
-		}
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(index)
-		}))
-		defer server.Close()
-
-		mgr := &Manager{rootDir: filepath.Join(testHome, ".aliyun"), indexURL: server.URL}
-
-		stdout := new(bytes.Buffer)
-		stderr := new(bytes.Buffer)
-		ctx := cli.NewCommandContext(stdout, stderr)
-
-		err = displaySearchResult(ctx, mgr, "nonexistent", "aliyun-cli-nonexistent")
-		assert.NoError(t, err)
-
-		output := stdout.String()
-		assert.Contains(t, output, "Command: nonexistent")
-		assert.Contains(t, output, "Plugin: aliyun-cli-nonexistent")
-		assert.Contains(t, output, "Status: Not installed")
-		// Should not show version or install instructions since plugin not in index
-		assert.NotContains(t, output, "Latest Version:")
-		assert.NotContains(t, output, "To install:")
-	})
-
-	t.Run("GetIndex error - still displays basic info", func(t *testing.T) {
-		testHome := t.TempDir()
-		cleanup := setTestHomeDir(t, testHome)
-		defer cleanup()
-
-		// Create empty local manifest
-		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
-		os.MkdirAll(filepath.Dir(manifestPath), 0755)
-		emptyManifest := LocalManifest{Plugins: map[string]LocalPlugin{}}
-		manifestJSON, err := json.Marshal(emptyManifest)
-		assert.NoError(t, err)
-		os.WriteFile(manifestPath, manifestJSON, 0644)
-
-		// Use invalid URL to trigger error
-		mgr := &Manager{rootDir: filepath.Join(testHome, ".aliyun"), indexURL: "http://localhost:12345"}
-
-		stdout := new(bytes.Buffer)
-		stderr := new(bytes.Buffer)
-		ctx := cli.NewCommandContext(stdout, stderr)
-
-		err = displaySearchResult(ctx, mgr, "test", "aliyun-cli-test")
-		assert.NoError(t, err) // Function should not return error even if GetIndex fails
-
-		output := stdout.String()
-		assert.Contains(t, output, "Command: test")
-		assert.Contains(t, output, "Plugin: aliyun-cli-test")
-		assert.Contains(t, output, "Status: Not installed")
-		// Should not show remote info since GetIndex failed
-		assert.NotContains(t, output, "Latest Version:")
+		assert.Contains(t, output, "aliyun-cli-ecs")
+		assert.Contains(t, output, "Installed")
+		// assert.NotContains(t, output, "ecr") // Cannot assert this as 'ecr' is part of 'aliyun-cli-ecr'
+		assert.Contains(t, output, "aliyun-cli-ecr")
+		assert.Contains(t, output, "Not installed")
+		assert.Contains(t, output, "2.0.0")
 	})
 }

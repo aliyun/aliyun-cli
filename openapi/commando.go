@@ -35,8 +35,11 @@ import (
 
 // main entrance of aliyun cli
 type Commando struct {
-	profile config.Profile
-	library *Library
+	profile       config.Profile
+	library       *Library
+	pluginIndex   *plugin.Index
+	localManifest *plugin.LocalManifest
+	pluginLoaded  bool
 }
 
 var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
@@ -49,6 +52,19 @@ func NewCommando(w io.Writer, profile config.Profile) *Commando {
 	}
 	r.library = NewLibrary(w, profile.Language) //TODO: load from local repository
 	return r
+}
+
+func (c *Commando) loadPlugins() {
+	if c.pluginLoaded {
+		return
+	}
+	c.pluginLoaded = true
+	mgr, err := plugin.NewManager()
+	if err == nil {
+		// Try to fetch remote index (might fail if offline, that's ok)
+		c.pluginIndex, _ = mgr.GetIndex()
+		c.localManifest, _ = mgr.GetLocalManifest()
+	}
 }
 
 func (c *Commando) InitWithCommand(cmd *cli.Command) {
@@ -155,7 +171,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			if os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP") == "true" {
 				// Fall through to built-in help
 			} else {
-				// Extract arguments from os.Args to preserve flags for plugin help
+				// Extract arguments from os.Args to preserve flags for plugin help, like --api-version
 				var pluginArgs []string
 				cmdIndex := -1
 				for i, arg := range os.Args {
@@ -175,8 +191,8 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					return err
 				}
 				if ok {
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\nNote: This help message is provided by the installed plugin '%s'.\n", pluginName)
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "To view the legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true environment variable.\n")
+					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\nNote: The help information for product '%s' is provided by the installed plugin '%s'.\n", args[0], pluginName)
+					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "To view the legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true\n")
 					return nil
 				}
 			}
@@ -700,22 +716,22 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 }
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {
-	// fmt.Println("help", args)
+	c.loadPlugins()
 	cmd := ctx.Command()
 	if len(args) == 0 {
 		cmd.PrintHead(ctx)
 		cmd.PrintUsage(ctx)
 		cmd.PrintFlags(ctx)
 		cmd.PrintSample(ctx)
-		c.library.PrintProducts()
+		c.printProducts(ctx)
 		cmd.PrintTail(ctx)
 		return nil
 	} else if len(args) == 1 {
 		cmd.PrintHead(ctx)
-		return c.library.PrintProductUsage(args[0], true)
+		return c.printProductUsage(ctx, args[0])
 	} else if len(args) == 2 {
 		cmd.PrintHead(ctx)
-		return c.library.PrintApiUsage(args[0], args[1])
+		return c.printApiUsage(ctx, args[0], args[1])
 	} else {
 		return fmt.Errorf("too many arguments: %d", len(args))
 	}

@@ -62,7 +62,7 @@ func ExecutePlugin(command string, args []string, ctx *cli.Context) (bool, error
 		return true, fmt.Errorf("failed to resolve plugin binary path: %w", err)
 	}
 
-	// Handle plugin-help subcommand: convert to --help
+	// Handle plugin-help subcommand: convert to --help, and trans first argument to lowercase for plugin system
 	adjustedArgs := adjustPluginArgs(args)
 
 	var stdout, stderr io.Writer
@@ -127,6 +127,10 @@ func mergeEnvs(base []string, overrides map[string]string) []string {
 }
 
 func adjustPluginArgs(args []string) []string {
+	if len(args) > 0 {
+		args[0] = strings.ToLower(args[0])
+	}
+
 	if len(args) <= 1 {
 		return args
 	}

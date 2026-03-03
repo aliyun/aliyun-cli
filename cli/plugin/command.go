@@ -24,7 +24,6 @@ func NewPluginCommand() *cli.Command {
 	cmd.AddSubCommand(newListRemoteCommand())
 	cmd.AddSubCommand(newSearchCommand())
 	cmd.AddSubCommand(newInstallCommand())
-	cmd.AddSubCommand(newInstallAllCommand())
 	cmd.AddSubCommand(newUninstallCommand())
 	cmd.AddSubCommand(newUpdateCommand())
 
@@ -92,28 +91,36 @@ func newSearchCommand() *cli.Command {
 		Short: i18n.T("Search plugin by command name", "根据命令名搜索插件"),
 		Usage: "search <command-name>",
 		Run: func(ctx *cli.Context, args []string) error {
-			if len(args) == 0 {
-				return fmt.Errorf("command name is required")
-			}
-
-			commandName := args[0]
-			if commandName == "" {
-				return fmt.Errorf("command name cannot be empty")
-			}
-
-			mgr, err := NewManager()
-			if err != nil {
-				return err
-			}
-
-			pluginName, err := mgr.FindPluginByCommand(commandName)
-			if err != nil {
-				return err
-			}
-
-			return displaySearchResult(ctx, mgr, commandName, pluginName)
+			return runSearch(ctx, args)
 		},
 	}
+}
+
+func runSearch(ctx *cli.Context, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("command name is required")
+	}
+
+	commandName := args[0]
+	if commandName == "" {
+		return fmt.Errorf("command name cannot be empty")
+	}
+
+	mgr, err := NewManager()
+	if err != nil {
+		return err
+	}
+
+	results, err := mgr.SearchPluginsByCommandPrefix(commandName)
+	if err != nil {
+		return err
+	}
+
+	if len(results) == 0 {
+		return fmt.Errorf("no plugin found for command prefix: %s", commandName)
+	}
+
+	return displaySearchResults(ctx, mgr, commandName, results)
 }
 
 func newInstallCommand() *cli.Command {
@@ -372,52 +379,72 @@ func displayRemotePlugins(ctx *cli.Context, index *Index, localManifest *LocalMa
 	return nil
 }
 
-func displaySearchResult(ctx *cli.Context, mgr *Manager, commandName, pluginName string) error {
-	cli.Printf(ctx.Stdout(), "Command: %s\n", commandName)
-	cli.Printf(ctx.Stdout(), "Plugin: %s\n\n", pluginName)
+func displaySearchResults(ctx *cli.Context, mgr *Manager, prefix string, results map[string][]string) error {
+	keys := make([]string, 0, len(results))
+	for k := range results {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	index, err := mgr.GetIndex()
+	if err != nil {
+		// If remote index fails, we can't show latest version/description for uninstalled plugins
+		// but we can still show installed status
+		cli.Printf(ctx.Stderr(), "Warning: Failed to fetch remote index: %v\n", err)
+		index = &Index{Plugins: []PluginInfo{}}
+	}
 
 	localManifest, err := mgr.GetLocalManifest()
 	if err != nil {
 		return err
 	}
 
-	localPlugin, isInstalled := localManifest.Plugins[pluginName]
-	if isInstalled {
-		cli.Printf(ctx.Stdout(), "Status: Installed\n")
-		cli.Printf(ctx.Stdout(), "Local Version: %s\n", localPlugin.Version)
-		if localPlugin.Description != "" {
-			cli.Printf(ctx.Stdout(), "Description: %s\n", localPlugin.Description)
+	w := tabwriter.NewWriter(ctx.Stdout(), 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "Plugin\tLatest Version\tPreview\tStatus\tLocal Version\tDescription")
+	fmt.Fprintln(w, "------\t--------------\t-------\t------\t-------------\t-----------")
+
+	for _, pluginName := range keys {
+		status := "Not installed"
+		localVersion := "-"
+
+		if localPlugin, ok := localManifest.Plugins[pluginName]; ok {
+			status = "Installed"
+			localVersion = localPlugin.Version
 		}
-	} else {
-		cli.Printf(ctx.Stdout(), "Status: Not installed\n")
 
-		index, err := mgr.GetIndex()
-		if err == nil {
-			// Only show remote info if we can successfully fetch the index
-			for _, plugin := range index.Plugins {
-				if plugin.Name == pluginName {
-					latestVersion, err := getLatestVersion(&plugin, true)
-					if err == nil {
-						cli.Printf(ctx.Stdout(), "Latest Version: %s\n", latestVersion)
-
-						if isPrerelease(latestVersion) {
-							cli.Printf(ctx.Stdout(), "Note: This is a pre-release version\n")
-						}
-					}
-					if plugin.Description != "" {
-						cli.Printf(ctx.Stdout(), "Description: %s\n", plugin.Description)
-					}
-
-					if latestVersion != "" && isPrerelease(latestVersion) {
-						cli.Printf(ctx.Stdout(), "\nTo install: aliyun plugin install --names %s --enable-pre\n", pluginName)
-					} else {
-						cli.Printf(ctx.Stdout(), "\nTo install: aliyun plugin install --names %s\n", pluginName)
-					}
-					break
-				}
+		var targetPlugin *PluginInfo
+		for _, p := range index.Plugins {
+			if p.Name == pluginName {
+				targetPlugin = &p
+				break
 			}
 		}
-	}
 
+		latestVersion := "N/A"
+		preview := "No"
+		description := ""
+
+		if targetPlugin != nil {
+			description = targetPlugin.Description
+			if v, err := getLatestVersion(targetPlugin, true); err == nil {
+				latestVersion = v
+				if isPrerelease(v) {
+					preview = "Yes"
+				}
+			}
+		} else if localPlugin, ok := localManifest.Plugins[pluginName]; ok {
+			// Fallback to local description if not in remote index
+			description = localPlugin.Description
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			pluginName,
+			latestVersion,
+			preview,
+			status,
+			localVersion,
+			description)
+	}
+	w.Flush()
 	return nil
 }

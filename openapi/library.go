@@ -16,13 +16,11 @@ package openapi
 import (
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
-	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/newmeta"
@@ -31,10 +29,6 @@ import (
 type Library struct {
 	builtinRepo *meta.Repository
 	writer      io.Writer
-	// Cache for plugin info
-	pluginIndex   *plugin.Index
-	localManifest *plugin.LocalManifest
-	pluginLoaded  bool
 }
 
 func NewLibrary(w io.Writer, lang string) *Library {
@@ -42,48 +36,6 @@ func NewLibrary(w io.Writer, lang string) *Library {
 		builtinRepo: meta.LoadRepository(),
 		writer:      w,
 	}
-}
-
-func (a *Library) loadPlugins() {
-	if a.pluginLoaded {
-		return
-	}
-	a.pluginLoaded = true
-
-	mgr, err := plugin.NewManager()
-	if err == nil {
-		// Try to fetch remote index (might fail if offline, that's ok)
-		a.pluginIndex, _ = mgr.GetIndex()
-		// Try to get local manifest
-		a.localManifest, _ = mgr.GetLocalManifest()
-	}
-}
-
-func getPluginArgs(productCode string) []string {
-	cmdIndex := -1
-	for i, arg := range os.Args {
-		if arg == productCode {
-			cmdIndex = i
-			break
-		}
-	}
-	if cmdIndex != -1 && cmdIndex < len(os.Args) {
-		args := os.Args[cmdIndex:]
-		// Check if --help is already in args
-		hasHelp := false
-		for _, arg := range args {
-			if arg == "--help" || arg == "-h" {
-				hasHelp = true
-				break
-			}
-		}
-		if !hasHelp {
-			args = append(args, "--help")
-		}
-		return args
-	}
-	// Fallback if not found in os.Args (e.g. tests)
-	return []string{productCode, "--help"}
 }
 
 func (a *Library) GetProduct(productCode string) (meta.Product, bool) {
@@ -111,168 +63,22 @@ func (a *Library) PrintProducts() {
 	w := tabwriter.NewWriter(a.writer, 8, 0, 1, ' ', 0)
 	cli.PrintfWithColor(w, cli.ColorOff, "\nProducts:\n")
 
-	type displayProduct struct {
-		Code        string
-		Name        string
-		IsPlugin    bool
-		IsInstalled bool
-		PluginName  string
-	}
-
-	// 1. Fetch plugin information first
-	a.loadPlugins()
-
-	var uninstalledPlugins []string
-
-	displayProducts := make([]displayProduct, 0)
-	seen := make(map[string]bool)
-
-	if a.pluginIndex != nil {
-		for _, pInfo := range a.pluginIndex.Plugins {
-			pluginName := pInfo.Name
-			// Simple heuristic: aliyun-cli-<product>
-			productCode := strings.TrimPrefix(pluginName, "aliyun-cli-")
-			lowerCode := strings.ToLower(productCode)
-
-			// Check if installed
-			isInstalled := false
-			if a.localManifest != nil {
-				_, isInstalled = a.localManifest.Plugins[pluginName]
-			}
-
-			if !seen[lowerCode] {
-				seen[lowerCode] = true
-
-				desc := pInfo.Description
-				// Use ProductName map if available for better description
-				if pInfo.ProductName != nil {
-					lang := i18n.GetLanguage()
-					if name, ok := pInfo.ProductName[lang]; ok && name != "" {
-						desc = name
-					} else {
-						if name, ok := pInfo.ProductName["en"]; ok && name != "" {
-							desc = name
-						} else if name, ok := pInfo.ProductName["zh"]; ok && name != "" {
-							desc = name
-						}
-					}
-				}
-
-				if desc == "" {
-					desc = productCode
-				}
-
-				displayProducts = append(displayProducts, displayProduct{
-					Code:        productCode,
-					Name:        desc,
-					IsPlugin:    true,
-					IsInstalled: isInstalled,
-					PluginName:  pluginName,
-				})
-
-				if !isInstalled {
-					uninstalledPlugins = append(uninstalledPlugins, pluginName)
-				}
-			}
-		}
-	}
-
-	// 2. Add built-in products only if not already added by plugins
-	for _, product := range a.builtinRepo.Products {
-		lowerCode := strings.ToLower(product.Code)
-		if seen[lowerCode] {
-			continue
-		}
-		seen[lowerCode] = true
-		productName, _ := newmeta.GetProductName(i18n.GetLanguage(), product.Code)
-		displayProducts = append(displayProducts, displayProduct{
-			Code:        product.Code,
-			Name:        productName,
-			IsPlugin:    false,
-			IsInstalled: true,
-		})
-	}
-
-	// 3. Sort products by code
-	sort.Slice(displayProducts, func(i, j int) bool {
-		return strings.ToLower(displayProducts[i].Code) < strings.ToLower(displayProducts[j].Code)
+	// sort products by code
+	sort.Slice(a.builtinRepo.Products, func(i, j int) bool {
+		return strings.ToLower(a.builtinRepo.Products[i].Code) < strings.ToLower(a.builtinRepo.Products[j].Code)
 	})
 
-	// 4. Print products
-	for _, p := range displayProducts {
-		displayName := p.Name
-		if p.IsPlugin && !p.IsInstalled {
-			displayName = fmt.Sprintf("%s (Plugin: %s, Not Installed)", displayName, p.PluginName)
-		}
-		cli.PrintfWithColor(w, cli.Cyan, "  %-20s\t%s\n", strings.ToLower(p.Code), displayName)
+	for _, product := range a.builtinRepo.Products {
+		var productName, _ = newmeta.GetProductName(i18n.GetLanguage(), product.Code)
+		cli.PrintfWithColor(w, cli.Cyan, "  %-20s\t%s\n", strings.ToLower(product.Code), productName)
 	}
 	w.Flush()
-
-	// 5. Print installation hint for uninstalled plugins
-	if len(uninstalledPlugins) > 0 {
-		cli.PrintfWithColor(a.writer, cli.ColorOff, "\nTo install plugins for uninstalled products, run:\n")
-		cli.PrintfWithColor(a.writer, cli.Green, "  aliyun plugin install --names <plugin_name> [--enable-pre]\n")
-	}
 }
 
 func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
-	a.loadPlugins()
-
-	// 1. Check if it's a plugin product
-	var pluginName string
-	var isInstalled bool
-	lowerProductCode := strings.ToLower(productCode)
-
-	if a.pluginIndex != nil {
-		for _, pInfo := range a.pluginIndex.Plugins {
-			name := pInfo.Name
-			// Simple heuristic: aliyun-cli-<product>
-			pCode := strings.TrimPrefix(name, "aliyun-cli-")
-			if strings.ToLower(pCode) == lowerProductCode {
-				pluginName = name
-				break
-			}
-		}
-	}
-
-	// 2. Fallback to built-in product logic
 	product, ok := a.GetProduct(productCode)
 	if !ok {
-		// If not a built-in product, but is a valid plugin product
-		if pluginName != "" {
-			if a.localManifest != nil {
-				_, isInstalled = a.localManifest.Plugins[pluginName]
-			}
-			if isInstalled {
-				cli.Printf(a.writer, "Product '%s' is provided by plugin '%s'.\n", productCode, pluginName)
-				plugin.ExecutePlugin(productCode, getPluginArgs(productCode), nil)
-				return nil
-			} else {
-				return fmt.Errorf("'%s' is not a valid command.\nDid you mean to install correspondingplugin?\n  aliyun plugin install --names %s", productCode, pluginName)
-			}
-		}
 		return &InvalidProductError{Code: productCode, library: a}
-	}
-
-	if pluginName != "" {
-		if a.localManifest != nil {
-			_, isInstalled = a.localManifest.Plugins[pluginName]
-		}
-
-		if isInstalled {
-			// Built-in product AND installed plugin
-			if os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP") == "true" {
-				// Show built-in help (fall through)
-			} else {
-				cli.Printf(a.writer, "Note: An installed plugin '%s' is available for product '%s'.\n", pluginName, productCode)
-				cli.Printf(a.writer, "To force viewing legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true.\n")
-				plugin.ExecutePlugin(productCode, getPluginArgs(productCode), nil)
-				return nil
-			}
-		} else {
-			cli.Printf(a.writer, "\n[Suggestion] A dedicated plugin is available for '%s'.\n", productCode)
-			cli.Printf(a.writer, "Run 'aliyun plugin install --names %s' to install it for enhanced features.\n\n", pluginName)
-		}
 	}
 
 	if product.ApiStyle == "rpc" {
@@ -327,65 +133,12 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 }
 
 func (a *Library) PrintApiUsage(productCode string, apiName string) error {
-	a.loadPlugins()
-
-	// 0. Check if it's a plugin product
-	var pluginName string
-	var isInstalled bool
-	lowerProductCode := strings.ToLower(productCode)
-
-	if a.pluginIndex != nil {
-		for _, pInfo := range a.pluginIndex.Plugins {
-			name := pInfo.Name
-			pCode := strings.TrimPrefix(name, "aliyun-cli-")
-			if strings.ToLower(pCode) == lowerProductCode {
-				pluginName = name
-				break
-			}
-		}
-	}
-
-	if pluginName != "" {
-		if a.localManifest != nil {
-			_, isInstalled = a.localManifest.Plugins[pluginName]
-		}
-	}
-
-	// 1. Try to get built-in product info
 	product, ok := a.builtinRepo.GetProduct(productCode)
-
-	// Case A: Not a built-in product
 	if !ok {
-		if pluginName != "" {
-			if isInstalled {
-				cli.Printf(a.writer, "Command '%s %s' is provided by plugin '%s'.\n", productCode, apiName, pluginName)
-				plugin.ExecutePlugin(productCode, getPluginArgs(productCode), nil)
-				return nil
-			} else {
-				return fmt.Errorf("'%s' is not a valid command.\nDid you mean to install the plugin?\n  aliyun plugin install --names %s", productCode, pluginName)
-			}
-		}
-		// Neither built-in nor plugin
 		return &InvalidProductError{Code: productCode, library: a}
 	}
-
-	// Case B: Built-in product exists
 	api, ok := a.builtinRepo.GetApi(productCode, product.Version, apiName)
 	if !ok {
-		// API not found in built-in metadata. api in plugin is different from api from built-in
-		if pluginName != "" {
-			if isInstalled {
-				plugin.ExecutePlugin(productCode, getPluginArgs(productCode), nil)
-				return nil
-			} else {
-				// Plugin available but not installed.
-				if apiName == strings.ToLower(apiName) {
-					return fmt.Errorf("'%s' is not a valid built-in command.\nIt looks like a plugin command.\nRun 'aliyun plugin install --names %s' to install the plugin '%s'.", apiName, pluginName, pluginName)
-				}
-				// Otherwise, standard error but with hint
-				return fmt.Errorf("'%s' is not a valid command.\nA plugin '%s' is available which might support this command.\nRun 'aliyun plugin install --names %s' to install it.", apiName, pluginName, pluginName)
-			}
-		}
 		return &InvalidApiError{Name: apiName, product: &product}
 	}
 
