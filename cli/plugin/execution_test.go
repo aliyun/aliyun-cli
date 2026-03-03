@@ -323,6 +323,14 @@ func TestAdjustPluginArgs(t *testing.T) {
 			t.Errorf("adjustPluginArgs(%v) = %v, want [--help]", args, adjusted)
 		}
 	})
+
+	t.Run("First arg to lower case", func(t *testing.T) {
+		args := []string{"FC", "help"}
+		adjusted := adjustPluginArgs(args)
+		if adjusted[0] != "fc" {
+			t.Errorf("adjustPluginArgs(%v)[0] = %q, want %q", args, adjusted[0], "fc")
+		}
+	})
 }
 
 func TestRunPluginCommand(t *testing.T) {
