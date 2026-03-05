@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 )
 
@@ -77,5 +78,26 @@ func (e *InvalidParameterError) GetSuggestions() []string {
 	for _, f := range e.flags.Flags() {
 		sr.Apply(f.Name)
 	}
+	return sr.GetResults()
+}
+
+type InvalidProductOrPluginError struct {
+	Code    string
+	library *Library
+	plugins []plugin.PluginInfo
+}
+
+func (e *InvalidProductOrPluginError) Error() string {
+	return fmt.Sprintf("'%s' is not a valid product. See `aliyun help`.", e.Code)
+}
+
+func (e *InvalidProductOrPluginError) GetSuggestions() []string {
+	sr := cli.NewSuggester(strings.ToLower(e.Code), 2)
+	for _, p := range e.plugins {
+		sr.Apply(strings.ToLower(p.ProductCode))
+	}
+	// for _, p := range e.library.GetProducts() {
+	// 	sr.Apply(strings.ToLower(p.Code))
+	// }
 	return sr.GetResults()
 }

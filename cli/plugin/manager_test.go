@@ -65,8 +65,14 @@ func TestNewManager(t *testing.T) {
 		originalUserProfile := os.Getenv("USERPROFILE")
 		originalHomeDrive := os.Getenv("HOMEDRIVE")
 		originalHomePath := os.Getenv("HOMEPATH")
+		originalPluginsDir := os.Getenv(EnvPluginsDir)
 
 		defer func() {
+			if originalPluginsDir != "" {
+				os.Setenv(EnvPluginsDir, originalPluginsDir)
+			} else {
+				os.Unsetenv(EnvPluginsDir)
+			}
 			if originalHome != "" {
 				os.Setenv("HOME", originalHome)
 			} else {
@@ -91,6 +97,7 @@ func TestNewManager(t *testing.T) {
 			}
 		}()
 
+		os.Unsetenv(EnvPluginsDir)
 		os.Unsetenv("HOME")
 		if runtime.GOOS == "windows" {
 			os.Unsetenv("USERPROFILE")
@@ -102,6 +109,45 @@ func TestNewManager(t *testing.T) {
 		assert.Nil(t, mgr)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "home directory not found")
+	})
+
+	t.Run("Uses ALIBABA_CLI_PLUGINS_DIR env var", func(t *testing.T) {
+		customDir := filepath.Join(t.TempDir(), "custom-plugins")
+		originalPluginsDir := os.Getenv(EnvPluginsDir)
+		defer func() {
+			if originalPluginsDir != "" {
+				os.Setenv(EnvPluginsDir, originalPluginsDir)
+			} else {
+				os.Unsetenv(EnvPluginsDir)
+			}
+		}()
+
+		os.Setenv(EnvPluginsDir, customDir)
+
+		mgr, err := NewManager()
+		assert.NoError(t, err)
+		assert.NotNil(t, mgr)
+		assert.Equal(t, customDir, mgr.rootDir)
+
+		_, err = os.Stat(customDir)
+		assert.NoError(t, err, "directory should be created")
+	})
+
+	t.Run("ALIBABA_CLI_PLUGINS_DIR takes precedence over HOME", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		customDir := filepath.Join(t.TempDir(), "override-plugins")
+		os.Setenv(EnvPluginsDir, customDir)
+
+		mgr, err := NewManager()
+		assert.NoError(t, err)
+		assert.NotNil(t, mgr)
+		assert.Equal(t, customDir, mgr.rootDir)
+
+		defaultDir := filepath.Join(testHome, ".aliyun", "plugins")
+		assert.NotEqual(t, defaultDir, mgr.rootDir)
 	})
 }
 
@@ -2539,7 +2585,7 @@ func TestManager_InstallAll(t *testing.T) {
 		mgr.indexURL = indexServer.URL
 
 		ctx := newTestContext()
-		err := mgr.InstallAll(ctx)
+		err := mgr.InstallAll(ctx, false)
 		assert.NoError(t, err)
 
 		localManifest, err := mgr.GetLocalManifest()
@@ -2610,7 +2656,7 @@ func TestManager_InstallAll(t *testing.T) {
 		mgr.indexURL = indexServer.URL
 
 		ctx := newTestContext()
-		err := mgr.InstallAll(ctx)
+		err := mgr.InstallAll(ctx, false)
 		assert.NoError(t, err)
 
 		localManifest, err = mgr.GetLocalManifest()
@@ -2634,7 +2680,7 @@ func TestManager_InstallAll(t *testing.T) {
 		mgr.indexURL = indexServer.URL
 
 		ctx := newTestContext()
-		err := mgr.InstallAll(ctx)
+		err := mgr.InstallAll(ctx, false)
 		assert.NoError(t, err)
 
 		localManifest, err := mgr.GetLocalManifest()
@@ -2649,7 +2695,7 @@ func TestManager_InstallAll(t *testing.T) {
 		mgr.indexURL = "http://invalid-url-that-does-not-exist.local/index.json"
 
 		ctx := newTestContext()
-		err := mgr.InstallAll(ctx)
+		err := mgr.InstallAll(ctx, false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to get plugin index")
 	})
@@ -2704,7 +2750,7 @@ func TestManager_InstallAll(t *testing.T) {
 		mgr.indexURL = indexServer.URL
 
 		ctx := newTestContext()
-		err := mgr.InstallAll(ctx)
+		err := mgr.InstallAll(ctx, false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "1 plugin(s) failed to install")
 

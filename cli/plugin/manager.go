@@ -24,6 +24,7 @@ import (
 const (
 	IndexURL        = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/plugin_pkg_index.json"    // 默认索引地址
 	CommandIndexURL = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/plugin_search_index.json" // 命令倒排索引地址
+	EnvPluginsDir   = "ALIBABA_CLI_PLUGINS_DIR"
 )
 
 type ErrPluginNotFound struct {
@@ -68,11 +69,14 @@ func getHomePath() string {
 }
 
 func NewManager() (*Manager, error) {
-	home := getHomePath()
-	if home == "" {
-		return nil, fmt.Errorf("home directory not found")
+	rootDir := os.Getenv(EnvPluginsDir)
+	if rootDir == "" {
+		home := getHomePath()
+		if home == "" {
+			return nil, fmt.Errorf("home directory not found")
+		}
+		rootDir = filepath.Join(home, ".aliyun", "plugins")
 	}
-	rootDir := filepath.Join(home, ".aliyun", "plugins")
 	if err := os.MkdirAll(rootDir, 0755); err != nil {
 		return nil, err
 	}
@@ -590,11 +594,13 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 	}
 
 	localManifest.Plugins[actualPluginName] = LocalPlugin{
-		Name:        actualPluginName,
-		Version:     version,
-		Path:        extractDir,
-		Command:     pManifest.Command,
-		Description: pManifest.ShortDescription,
+		Name:             actualPluginName,
+		Version:          version,
+		Path:             extractDir,
+		Command:          pManifest.Command,
+		ShortDescription: pManifest.ShortDescription,
+		Description:      pManifest.Description,
+		CmdNames:         pManifest.CmdNames,
 	}
 
 	return m.saveLocalManifest(localManifest)
@@ -809,7 +815,7 @@ func (m *Manager) InstallMultiple(ctx *cli.Context, pluginNames []string, versio
 	return nil
 }
 
-func (m *Manager) InstallAll(ctx *cli.Context) error {
+func (m *Manager) InstallAll(ctx *cli.Context, enablePre bool) error {
 	index, err := m.GetIndex()
 	if err != nil {
 		return fmt.Errorf("failed to get plugin index: %w", err)
@@ -834,7 +840,7 @@ func (m *Manager) InstallAll(ctx *cli.Context) error {
 
 		cli.Printf(ctx.Stdout(), "Installing %s...\n", pluginName)
 
-		if err := m.installPlugin(ctx, &plugin, "", false); err != nil {
+		if err := m.installPlugin(ctx, &plugin, "", enablePre); err != nil {
 			cli.Printf(ctx.Stdout(), "Failed to install %s: %v\n", pluginName, err)
 			failed++
 			continue

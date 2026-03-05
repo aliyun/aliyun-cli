@@ -13,6 +13,7 @@ type PluginInfo struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`
 	ProductName map[string]string      `json:"productName"` // en, zh
+	ProductCode string                 `json:"productCode"`
 	Homepage    string                 `json:"homepage"`
 	Versions    map[string]VersionInfo `json:"versions"` // version -> VersionInfo
 }
@@ -78,11 +79,13 @@ type LocalManifest struct {
 }
 
 type LocalPlugin struct {
-	Name        string `json:"name"`
-	Version     string `json:"version"`
-	Path        string `json:"path"`    // 插件目录路径
-	Command     string `json:"command"` // 触发命令，not used for now
-	Description string `json:"description"`
+	Name             string   `json:"name"`
+	Version          string   `json:"version"`
+	Path             string   `json:"path"`    // 插件目录路径
+	Command          string   `json:"command"` // 触发命令，not used for now
+	CmdNames         []string `json:"cmdNames"`
+	ShortDescription string   `json:"shortDescription"`
+	Description      string   `json:"description"`
 }
 
 type PluginManifest struct {
@@ -94,6 +97,7 @@ type PluginManifest struct {
 	Bin              struct {
 		Path string `json:"path"` // 二进制文件相对路径
 	} `json:"bin"`
+	CmdNames []string `json:"cmdNames"`
 }
 
 // Key: kebab-case command name (e.g., "fc create-alias")

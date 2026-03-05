@@ -13,16 +13,22 @@ func setTestHomeDir(t *testing.T, testHome string) func() {
 	originalUserProfile := os.Getenv("USERPROFILE")
 	originalHomeDrive := os.Getenv("HOMEDRIVE")
 	originalHomePath := os.Getenv("HOMEPATH")
+	originalPluginsDir := os.Getenv(EnvPluginsDir)
 
+	os.Unsetenv(EnvPluginsDir)
 	os.Setenv("HOME", testHome)
 	if runtime.GOOS == "windows" {
 		os.Setenv("USERPROFILE", testHome)
-		// Clear HOMEDRIVE and HOMEPATH to ensure USERPROFILE or HOME is used
 		os.Unsetenv("HOMEDRIVE")
 		os.Unsetenv("HOMEPATH")
 	}
 
 	return func() {
+		if originalPluginsDir != "" {
+			os.Setenv(EnvPluginsDir, originalPluginsDir)
+		} else {
+			os.Unsetenv(EnvPluginsDir)
+		}
 		os.Setenv("HOME", originalHome)
 		if runtime.GOOS == "windows" {
 			os.Setenv("USERPROFILE", originalUserProfile)
