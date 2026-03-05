@@ -24,6 +24,7 @@ func NewPluginCommand() *cli.Command {
 	cmd.AddSubCommand(newListRemoteCommand())
 	cmd.AddSubCommand(newSearchCommand())
 	cmd.AddSubCommand(newInstallCommand())
+	cmd.AddSubCommand(newInstallAllCommand())
 	cmd.AddSubCommand(newUninstallCommand())
 	cmd.AddSubCommand(newUpdateCommand())
 
@@ -167,20 +168,33 @@ func newInstallCommand() *cli.Command {
 }
 
 func newInstallAllCommand() *cli.Command {
-	return &cli.Command{
+	cmd := &cli.Command{
 		Name:   "install-all",
 		Short:  i18n.T("Install all available plugins", "安装所有可用的插件"),
-		Usage:  "install-all",
-		Hidden: true, // 安装所有可用插件，不推荐使用
+		Usage:  "install-all [--enable-pre]",
+		Hidden: true, // 不推荐使用
 		Run: func(ctx *cli.Context, args []string) error {
 			mgr, err := NewManager()
 			if err != nil {
 				return err
 			}
 
-			return mgr.InstallAll(ctx)
+			enablePre := false
+			if enablePreFlag := ctx.Flags().Get("enable-pre"); enablePreFlag != nil && enablePreFlag.IsAssigned() {
+				enablePre = true
+			}
+
+			return mgr.InstallAll(ctx, enablePre)
 		},
 	}
+
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "enable-pre",
+		Short:        i18n.T("Allow installing pre-release versions", "允许安装预发布版本"),
+		AssignedMode: cli.AssignedNone,
+	})
+
+	return cmd
 }
 
 func newUninstallCommand() *cli.Command {
