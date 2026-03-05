@@ -101,3 +101,39 @@ func (e *InvalidProductOrPluginError) GetSuggestions() []string {
 	// }
 	return sr.GetResults()
 }
+
+type InvalidUnifiedApiError struct {
+	Name    string
+	product *meta.Product
+	lPlugin plugin.LocalPlugin
+}
+
+func (e *InvalidUnifiedApiError) Error() string {
+	return fmt.Sprintf("'%s' is not a valid api. See `aliyun help %s`.", e.Name, e.product.GetLowerCode())
+}
+
+func (e *InvalidUnifiedApiError) GetSuggestions() []string {
+	sr := cli.NewSuggester(e.Name, 2)
+	for _, s := range e.product.ApiNames {
+		sr.Apply(s)
+	}
+	for _, s := range e.lPlugin.CmdNames {
+		sr.UnifyApply(s)
+	}
+	results := removeDuplicates(sr.GetResults())
+	return results
+}
+
+func removeDuplicates(slice []string) []string {
+	seen := make(map[string]bool)
+	result := []string{}
+
+	for _, item := range slice {
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
+		}
+	}
+
+	return result
+}

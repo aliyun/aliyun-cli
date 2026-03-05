@@ -202,7 +202,8 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		// Check if it's all lowercase (plugin format) and not an HTTP method
 		upperMethod := strings.ToUpper(apiOrMethod)
 		isHttpMethod := upperMethod == "GET" || upperMethod == "POST" || upperMethod == "PUT" || upperMethod == "DELETE"
-		if strings.ToLower(apiOrMethod) == apiOrMethod && !isHttpMethod && args[0] != "help" {
+		forceApplied := ForceFlag(ctx.Flags()).IsAssigned()
+		if strings.ToLower(apiOrMethod) == apiOrMethod && !isHttpMethod && !forceApplied {
 			// Extract plugin arguments from os.Args
 			var pluginArgs []string
 			cmdIndex := -1
@@ -243,7 +244,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			// Prepare config related env for plugin
 			// Only prepare credentials if it's NOT a version command AND NOT a help request
 			// AND it has more than 2 arguments (product + api + more)
-			isHelp := cli.HelpFlag(ctx.Flags()).IsAssigned()
+			isHelp := cli.HelpFlag(ctx.Flags()).IsAssigned() // this should not be true cause help is captured in parent level
 			isVersion := (apiOrMethod == "version")
 
 			if !isHelp && !isVersion && len(pluginArgs) > 2 {
@@ -258,7 +259,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				if envs, err := c.profile.GetRuntimeEnv(ctx); err == nil {
 					ctx.SetRuntimeEnvs(envs)
 				}
-			} else if isHelp {
+			} else if isHelp || isVersion {
 				c.setLangEnv(ctx)
 			}
 
@@ -565,6 +566,14 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 					&api,
 				}, nil
 			}
+			c.loadPlugins()
+			if c.localManifest != nil {
+				pluginName := "aliyun-cli-" + strings.ToLower(product.Code)
+				localPlugin, isInstalled := c.localManifest.Plugins[pluginName]
+				if isInstalled {
+					return nil, &InvalidUnifiedApiError{Name: apiOrMethod, product: &product, lPlugin: localPlugin}
+				}
+			}
 			return nil, &InvalidApiError{apiOrMethod, &product}
 		}
 
@@ -716,6 +725,7 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 }
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {
+	// fmt.Println("commando help", args)
 	c.loadPlugins()
 	cmd := ctx.Command()
 	if len(args) == 0 {
