@@ -202,8 +202,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		// Check if it's all lowercase (plugin format) and not an HTTP method
 		upperMethod := strings.ToUpper(apiOrMethod)
 		isHttpMethod := upperMethod == "GET" || upperMethod == "POST" || upperMethod == "PUT" || upperMethod == "DELETE"
-		forceApplied := ForceFlag(ctx.Flags()).IsAssigned()
-		if strings.ToLower(apiOrMethod) == apiOrMethod && !isHttpMethod && !forceApplied {
+		if strings.ToLower(apiOrMethod) == apiOrMethod && !isHttpMethod {
 			// Extract plugin arguments from os.Args
 			var pluginArgs []string
 			cmdIndex := -1
