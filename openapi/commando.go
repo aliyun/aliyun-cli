@@ -235,7 +235,12 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					return err
 				}
 				if foundPluginName == "" {
-					return fmt.Errorf("plugin '%s' not found. Install it with: aliyun plugin install --names %s", args[0], args[0])
+					c.loadPlugins()
+					var plugins []plugin.PluginInfo
+					if c.pluginIndex != nil {
+						plugins = c.pluginIndex.Plugins
+					}
+					return &InvalidProductOrPluginError{Code: args[0], library: c.library, plugins: plugins}
 				}
 				pluginName = foundPluginName
 			}
