@@ -236,6 +236,13 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 				if foundPluginName == "" {
 					c.loadPlugins()
+					if c.pluginIndex != nil {
+						for _, pInfo := range c.pluginIndex.Plugins {
+							if strings.EqualFold(pInfo.ProductCode, args[0]) {
+								return fmt.Errorf("'%s' is not a valid built-in product.\nA plugin '%s' is available which supports this product.\nRun 'aliyun plugin install --names %s' to install it.", args[0], pInfo.Name, pInfo.Name)
+							}
+						}
+					}
 					var plugins []plugin.PluginInfo
 					if c.pluginIndex != nil {
 						plugins = c.pluginIndex.Plugins
