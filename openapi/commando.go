@@ -160,7 +160,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// fmt.Println("os.Args", os.Args)
 	if len(args) == 1 && !showOriginalProductHelp {
 		// 单产品输入，无论是否添加--help，都先由安装的插件运行，插件未安装则执行下面的运行逻辑
-		// 使用 ALIYUN_ORIGINAL_PRODUCT_HELP 环境变量可以显示原始产品的 help 信息，而不是插件 help
+		// 使用 ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP 环境变量可以显示原始产品的 help 信息，而不是插件 help
 		// 单产品运行就是--help
 		installed, pluginName, err := plugin.IsPluginInstalled(args[0])
 		if err != nil {
@@ -196,7 +196,19 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					return nil
 				}
 			}
+		} else {
+			c.loadPlugins()
+			if c.pluginIndex != nil {
+				for _, pInfo := range c.pluginIndex.Plugins {
+					if strings.EqualFold(pInfo.ProductCode, args[0]) {
+						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\n[Suggestion] A dedicated product plugin '%s' is available for '%s'.\n", pInfo.Name, args[0])
+						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "Run 'aliyun plugin install --names %s' to install it for enhanced features.\n\n", pInfo.Name)
+						break
+					}
+				}
+			}
 		}
+
 	} else if len(args) > 1 {
 		apiOrMethod := args[1]
 		// Check if it's all lowercase (plugin format) and not an HTTP method

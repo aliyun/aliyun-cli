@@ -24,7 +24,13 @@ import (
 const (
 	IndexURL        = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/plugin_pkg_index.json"    // 默认索引地址
 	CommandIndexURL = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/plugin_search_index.json" // 命令倒排索引地址
-	EnvPluginsDir   = "ALIBABA_CLI_PLUGINS_DIR"
+	EnvPluginsDir   = "ALIBABA_CLOUD_CLI_PLUGINS_DIR"
+	EnvNoCache      = "ALIBABA_CLOUD_CLI_PLUGIN_NO_CACHE"
+
+	indexCacheFile   = "plugin_pkg_index_cache.json"
+	commandCacheFile = "plugin_search_index_cache.json"
+	cacheTTL         = 1 * time.Hour
+	fetchTimeout     = 10 * time.Second
 )
 
 type ErrPluginNotFound struct {
@@ -83,27 +89,86 @@ func NewManager() (*Manager, error) {
 	return &Manager{rootDir: rootDir}, nil
 }
 
+func (m *Manager) readCache(cacheFile string, ttl time.Duration, result interface{}) (hit bool, staleAvailable bool) {
+	info, err := os.Stat(cacheFile)
+	if err != nil {
+		return false, false
+	}
+	data, err := os.ReadFile(cacheFile)
+	if err != nil {
+		return false, false
+	}
+	if err := json.Unmarshal(data, result); err != nil {
+		return false, false
+	}
+	if time.Since(info.ModTime()) <= ttl {
+		return true, true
+	}
+	return false, true
+}
+
+func (m *Manager) writeCache(cacheFile string, data []byte) {
+	_ = os.WriteFile(cacheFile, data, 0644)
+}
+
+func (m *Manager) fetchRemote(url string) ([]byte, error) {
+	client := &http.Client{Timeout: fetchTimeout}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+func noCacheEnabled() bool {
+	v := os.Getenv(EnvNoCache)
+	return v == "true" || v == "1"
+}
+
+func (m *Manager) fetchWithCache(url, cacheFile string, result interface{}) error {
+	if noCacheEnabled() {
+		data, err := m.fetchRemote(url)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal(data, result)
+	}
+
+	hit, staleAvailable := m.readCache(cacheFile, cacheTTL, result)
+	if hit {
+		return nil
+	}
+
+	data, fetchErr := m.fetchRemote(url)
+	if fetchErr == nil {
+		if decErr := json.Unmarshal(data, result); decErr == nil {
+			m.writeCache(cacheFile, data)
+			return nil
+		} else {
+			fetchErr = fmt.Errorf("failed to decode: %w", decErr)
+		}
+	}
+
+	// Remote failed or decode failed — use stale cache if available
+	if staleAvailable {
+		return nil
+	}
+	return fetchErr
+}
+
 func (m *Manager) GetIndex() (*Index, error) {
 	indexURL := IndexURL
 	if m.indexURL != "" {
 		indexURL = m.indexURL
 	}
-	client := &http.Client{
-		Timeout: 60 * time.Second,
-	}
-	resp, err := client.Get(indexURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch plugin index: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch plugin index: status %d", resp.StatusCode)
-	}
-
+	cacheFile := filepath.Join(m.rootDir, indexCacheFile)
 	var index Index
-	if err := json.NewDecoder(resp.Body).Decode(&index); err != nil {
-		return nil, fmt.Errorf("failed to decode plugin index: %w", err)
+	if err := m.fetchWithCache(indexURL, cacheFile, &index); err != nil {
+		return nil, fmt.Errorf("failed to fetch plugin index: %w", err)
 	}
 	return &index, nil
 }
@@ -113,23 +178,10 @@ func (m *Manager) GetCommandIndex() (*CommandIndex, error) {
 	if m.commandIndexURL != "" {
 		commandIndexURL = m.commandIndexURL
 	}
-
-	client := &http.Client{
-		Timeout: 60 * time.Second,
-	}
-	resp, err := client.Get(commandIndexURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch command index: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch command index: status %d", resp.StatusCode)
-	}
-
+	cacheFile := filepath.Join(m.rootDir, commandCacheFile)
 	var index CommandIndex
-	if err := json.NewDecoder(resp.Body).Decode(&index); err != nil {
-		return nil, fmt.Errorf("failed to decode command index: %w", err)
+	if err := m.fetchWithCache(commandIndexURL, cacheFile, &index); err != nil {
+		return nil, fmt.Errorf("failed to fetch command index: %w", err)
 	}
 	return &index, nil
 }

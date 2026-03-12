@@ -47,11 +47,18 @@ func newListCommand() *cli.Command {
 				return err
 			}
 
+			names := make([]string, 0, len(manifest.Plugins))
+			for name := range manifest.Plugins {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+
 			w := tabwriter.NewWriter(ctx.Stdout(), 20, 0, 3, ' ', 0)
 			fmt.Fprintln(w, "Name\tVersion\tDescription")
 			fmt.Fprintln(w, "----\t-------\t-----------")
 
-			for _, p := range manifest.Plugins {
+			for _, name := range names {
+				p := manifest.Plugins[name]
 				fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, p.Version, p.Description)
 			}
 			w.Flush()

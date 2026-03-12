@@ -16,7 +16,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/stretchr/testify/assert"
@@ -111,7 +113,7 @@ func TestNewManager(t *testing.T) {
 		assert.Contains(t, err.Error(), "home directory not found")
 	})
 
-	t.Run("Uses ALIBABA_CLI_PLUGINS_DIR env var", func(t *testing.T) {
+	t.Run("Uses ALIBABA_CLOUD_CLI_PLUGINS_DIR env var", func(t *testing.T) {
 		customDir := filepath.Join(t.TempDir(), "custom-plugins")
 		originalPluginsDir := os.Getenv(EnvPluginsDir)
 		defer func() {
@@ -133,7 +135,7 @@ func TestNewManager(t *testing.T) {
 		assert.NoError(t, err, "directory should be created")
 	})
 
-	t.Run("ALIBABA_CLI_PLUGINS_DIR takes precedence over HOME", func(t *testing.T) {
+	t.Run("ALIBABA_CLOUD_CLI_PLUGINS_DIR takes precedence over HOME", func(t *testing.T) {
 		testHome := t.TempDir()
 		cleanup := setTestHomeDir(t, testHome)
 		defer cleanup()
@@ -216,7 +218,130 @@ func TestManager_GetIndex(t *testing.T) {
 		}
 		_, err := mgr.GetIndex()
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to decode plugin index")
+		assert.Contains(t, err.Error(), "failed to decode")
+	})
+}
+
+func TestManager_GetIndex_Cache(t *testing.T) {
+	validIndex := Index{
+		Plugins: []PluginInfo{
+			{Name: "aliyun-cli-fc", Description: "FC plugin"},
+		},
+	}
+	validJSON, _ := json.Marshal(validIndex)
+
+	t.Run("Cache hit - no remote request", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		var requestCount int32
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			atomic.AddInt32(&requestCount, 1)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(validJSON)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: tmpDir, indexURL: server.URL}
+
+		// First call: fetches from remote and caches
+		idx1, err := mgr.GetIndex()
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(idx1.Plugins))
+		assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
+
+		// Second call: should use cache, no new request
+		idx2, err := mgr.GetIndex()
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(idx2.Plugins))
+		assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
+	})
+
+	t.Run("Stale cache - remote success updates cache", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		updatedIndex := Index{
+			Plugins: []PluginInfo{
+				{Name: "aliyun-cli-fc", Description: "FC plugin"},
+				{Name: "aliyun-cli-ecs", Description: "ECS plugin"},
+			},
+		}
+		updatedJSON, _ := json.Marshal(updatedIndex)
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(updatedJSON)
+		}))
+		defer server.Close()
+
+		// Write an old cache file with modtime in the past
+		cacheFile := filepath.Join(tmpDir, indexCacheFile)
+		os.WriteFile(cacheFile, validJSON, 0644)
+		past := time.Now().Add(-2 * time.Hour)
+		os.Chtimes(cacheFile, past, past)
+
+		mgr := &Manager{rootDir: tmpDir, indexURL: server.URL}
+		idx, err := mgr.GetIndex()
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(idx.Plugins))
+	})
+
+	t.Run("Stale cache - remote fails returns stale data", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		cacheFile := filepath.Join(tmpDir, indexCacheFile)
+		os.WriteFile(cacheFile, validJSON, 0644)
+		past := time.Now().Add(-2 * time.Hour)
+		os.Chtimes(cacheFile, past, past)
+
+		mgr := &Manager{rootDir: tmpDir, indexURL: server.URL}
+		idx, err := mgr.GetIndex()
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(idx.Plugins))
+		assert.Equal(t, "aliyun-cli-fc", idx.Plugins[0].Name)
+	})
+
+	t.Run("No cache - remote fails returns error", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: tmpDir, indexURL: server.URL}
+		_, err := mgr.GetIndex()
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "status 500")
+	})
+
+	t.Run("ALIBABA_CLOUD_CLI_PLUGIN_NO_CACHE bypasses cache", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		var requestCount int32
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			atomic.AddInt32(&requestCount, 1)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(validJSON)
+		}))
+		defer server.Close()
+
+		// Pre-populate a fresh cache
+		cacheFile := filepath.Join(tmpDir, indexCacheFile)
+		os.WriteFile(cacheFile, validJSON, 0644)
+
+		t.Setenv(EnvNoCache, "true")
+
+		mgr := &Manager{rootDir: tmpDir, indexURL: server.URL}
+		idx, err := mgr.GetIndex()
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(idx.Plugins))
+		// Should have hit remote despite fresh cache
+		assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
 	})
 }
 
@@ -3479,7 +3604,7 @@ func TestManager_GetCommandIndex(t *testing.T) {
 
 		_, err := mgr.GetCommandIndex()
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to decode command index")
+		assert.Contains(t, err.Error(), "failed to decode")
 	})
 
 	t.Run("Success - empty command index", func(t *testing.T) {
