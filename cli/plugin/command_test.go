@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -104,6 +105,145 @@ func TestNewListCommand_WithPlugins(t *testing.T) {
 	assert.Contains(t, output, "aliyun-cli-fc")
 	assert.Contains(t, output, "1.0.0")
 	assert.Contains(t, output, "FC plugin")
+}
+
+func TestNewListRemoteCommand(t *testing.T) {
+	cmd := newListRemoteCommand()
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "list-remote", cmd.Name)
+	assert.NotEmpty(t, cmd.Short)
+}
+
+func TestNewListRemoteCommand_Run(t *testing.T) {
+	cmd := newListRemoteCommand()
+
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+
+	manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+	os.MkdirAll(filepath.Dir(manifestPath), 0755)
+	manifest := LocalManifest{Plugins: map[string]LocalPlugin{}}
+	manifestJSON, _ := json.Marshal(manifest)
+	os.WriteFile(manifestPath, manifestJSON, 0644)
+
+	index := &Index{
+		Plugins: []PluginInfo{
+			{
+				Name:        "aliyun-cli-fc",
+				Description: "FC plugin",
+				Versions:    map[string]VersionInfo{"1.0.0": {}},
+			},
+		},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(index)
+	}))
+	defer server.Close()
+
+	// Override the index URL via cache: write the index to the cache file
+	cacheFile := filepath.Join(testHome, ".aliyun", "plugins", indexCacheFile)
+	indexJSON, _ := json.Marshal(index)
+	os.WriteFile(cacheFile, indexJSON, 0644)
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	err := cmd.Run(ctx, []string{})
+	assert.NoError(t, err)
+
+	output := stdout.String()
+	assert.Contains(t, output, "aliyun-cli-fc")
+	assert.Contains(t, output, "Not installed")
+}
+
+func TestDisplayRemotePlugins_Empty(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+
+	index := &Index{}
+	manifest := &LocalManifest{Plugins: map[string]LocalPlugin{}}
+
+	err := displayRemotePlugins(ctx, index, manifest)
+	assert.NoError(t, err)
+
+	output := stdout.String()
+	assert.Contains(t, output, "Total plugins available: 0")
+	assert.Contains(t, output, "No plugins available")
+}
+
+func TestDisplayRemotePlugins_MixedStatus(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+
+	index := &Index{
+		Plugins: []PluginInfo{
+			{
+				Name:        "aliyun-cli-fc",
+				Description: "FC plugin",
+				Versions:    map[string]VersionInfo{"1.2.0": {}},
+			},
+			{
+				Name:        "aliyun-cli-oss",
+				Description: "OSS plugin",
+				Versions:    map[string]VersionInfo{"2.0.0": {}},
+			},
+		},
+	}
+	manifest := &LocalManifest{
+		Plugins: map[string]LocalPlugin{
+			"aliyun-cli-fc": {
+				Name:    "aliyun-cli-fc",
+				Version: "1.0.0",
+			},
+		},
+	}
+
+	err := displayRemotePlugins(ctx, index, manifest)
+	assert.NoError(t, err)
+
+	output := stdout.String()
+	assert.Contains(t, output, "Total plugins available: 2")
+	assert.Contains(t, output, "aliyun-cli-fc")
+	assert.Contains(t, output, "aliyun-cli-oss")
+	assert.Contains(t, output, "Installed")
+	assert.Contains(t, output, "Not installed")
+	assert.Contains(t, output, "1.0.0")
+}
+
+func TestDisplayRemotePlugins_SortOrder(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+
+	index := &Index{
+		Plugins: []PluginInfo{
+			{Name: "aliyun-cli-zzz", Description: "Z plugin", Versions: map[string]VersionInfo{"1.0.0": {}}},
+			{Name: "aliyun-cli-aaa", Description: "A plugin", Versions: map[string]VersionInfo{"1.0.0": {}}},
+			{Name: "aliyun-cli-bbb", Description: "B plugin", Versions: map[string]VersionInfo{"1.0.0": {}}},
+		},
+	}
+	manifest := &LocalManifest{
+		Plugins: map[string]LocalPlugin{
+			"aliyun-cli-zzz": {Name: "aliyun-cli-zzz", Version: "1.0.0"},
+		},
+	}
+
+	err := displayRemotePlugins(ctx, index, manifest)
+	assert.NoError(t, err)
+
+	output := stdout.String()
+	// Installed plugins should come first, then sorted alphabetically
+	zzzIdx := strings.Index(output, "aliyun-cli-zzz")
+	aaaIdx := strings.Index(output, "aliyun-cli-aaa")
+	bbbIdx := strings.Index(output, "aliyun-cli-bbb")
+	assert.Less(t, zzzIdx, aaaIdx, "installed plugin zzz should appear before uninstalled aaa")
+	assert.Less(t, aaaIdx, bbbIdx, "uninstalled plugins should be sorted alphabetically")
 }
 
 func TestNewInstallCommand(t *testing.T) {
@@ -789,4 +929,112 @@ func TestDisplaySearchResults(t *testing.T) {
 		assert.Contains(t, output, "Not installed")
 		assert.Contains(t, output, "2.0.0")
 	})
+}
+
+func TestRunSearch(t *testing.T) {
+	t.Run("No args", func(t *testing.T) {
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+
+		err := runSearch(ctx, []string{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "command name is required")
+	})
+
+	t.Run("Empty command name", func(t *testing.T) {
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+
+		err := runSearch(ctx, []string{""})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "command name cannot be empty")
+	})
+
+	t.Run("No match found", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		pluginsDir := filepath.Join(testHome, ".aliyun", "plugins")
+		os.MkdirAll(pluginsDir, 0755)
+
+		commandIndex := map[string]string{
+			"ecs": "aliyun-cli-ecs",
+		}
+		commandIndexJSON, _ := json.Marshal(commandIndex)
+		os.WriteFile(filepath.Join(pluginsDir, commandCacheFile), commandIndexJSON, 0644)
+
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+
+		err := runSearch(ctx, []string{"nonexistent-xyz"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "no plugin found for command prefix")
+	})
+
+	t.Run("Match found", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		pluginsDir := filepath.Join(testHome, ".aliyun", "plugins")
+		os.MkdirAll(pluginsDir, 0755)
+
+		// Prepare command index cache
+		commandIndex := map[string]string{
+			"ecs":              "aliyun-cli-ecs",
+			"ecs list-regions": "aliyun-cli-ecs",
+			"fc":               "aliyun-cli-fc",
+		}
+		commandIndexJSON, _ := json.Marshal(commandIndex)
+		os.WriteFile(filepath.Join(pluginsDir, commandCacheFile), commandIndexJSON, 0644)
+
+		// Prepare plugin index cache
+		pluginIndex := &Index{
+			Plugins: []PluginInfo{
+				{
+					Name:        "aliyun-cli-ecs",
+					Description: "ECS plugin",
+					Versions:    map[string]VersionInfo{"1.0.0": {}},
+				},
+			},
+		}
+		pluginIndexJSON, _ := json.Marshal(pluginIndex)
+		os.WriteFile(filepath.Join(pluginsDir, indexCacheFile), pluginIndexJSON, 0644)
+
+		// Prepare local manifest (no plugins installed)
+		manifest := LocalManifest{Plugins: map[string]LocalPlugin{}}
+		manifestJSON, _ := json.Marshal(manifest)
+		os.WriteFile(filepath.Join(pluginsDir, "manifest.json"), manifestJSON, 0644)
+
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+
+		err := runSearch(ctx, []string{"ecs"})
+		assert.NoError(t, err)
+
+		output := stdout.String()
+		assert.Contains(t, output, "aliyun-cli-ecs")
+		assert.Contains(t, output, "Not installed")
+	})
+}
+
+func TestNewSearchCommand_Integration(t *testing.T) {
+	cmd := newSearchCommand()
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "search", cmd.Name)
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	// No args should error
+	err := cmd.Run(ctx, []string{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "command name is required")
 }
