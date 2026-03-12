@@ -59,6 +59,7 @@ func TestNewCommandContext(t *testing.T) {
 		help:         false,
 		command:      nil,
 		completion:   nil,
+		runtimeEnvs:  map[string]string{},
 	}, ctx)
 }
 
