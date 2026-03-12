@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -614,4 +615,91 @@ func TestManifestCorruptionHandling(t *testing.T) {
 		assert.NoError(t, err, "Should not return error when plugin is simply not found in valid manifest")
 		assert.False(t, ok, "Plugin should not be executed")
 	})
+}
+
+func TestMergeEnvs(t *testing.T) {
+	t.Run("Empty overrides returns base unchanged", func(t *testing.T) {
+		base := []string{"FOO=bar", "BAZ=qux"}
+		result := mergeEnvs(base, nil)
+		assert.Equal(t, base, result)
+
+		result = mergeEnvs(base, map[string]string{})
+		assert.Equal(t, base, result)
+	})
+
+	t.Run("Override existing key", func(t *testing.T) {
+		base := []string{"FOO=old", "BAR=keep"}
+		overrides := map[string]string{"FOO": "new"}
+		result := mergeEnvs(base, overrides)
+
+		envMap := envSliceToMap(result)
+		assert.Equal(t, "new", envMap["FOO"])
+		assert.Equal(t, "keep", envMap["BAR"])
+	})
+
+	t.Run("Add new key", func(t *testing.T) {
+		base := []string{"FOO=bar"}
+		overrides := map[string]string{"NEW_KEY": "new_val"}
+		result := mergeEnvs(base, overrides)
+
+		envMap := envSliceToMap(result)
+		assert.Equal(t, "bar", envMap["FOO"])
+		assert.Equal(t, "new_val", envMap["NEW_KEY"])
+		assert.Equal(t, 2, len(result))
+	})
+
+	t.Run("Value contains equals sign", func(t *testing.T) {
+		base := []string{"CONN=host=localhost;port=5432"}
+		overrides := map[string]string{"TOKEN": "abc=def"}
+		result := mergeEnvs(base, overrides)
+
+		envMap := envSliceToMap(result)
+		assert.Equal(t, "host=localhost;port=5432", envMap["CONN"])
+		assert.Equal(t, "abc=def", envMap["TOKEN"])
+	})
+
+	t.Run("Empty base with overrides", func(t *testing.T) {
+		result := mergeEnvs(nil, map[string]string{"A": "1", "B": "2"})
+
+		envMap := envSliceToMap(result)
+		assert.Equal(t, "1", envMap["A"])
+		assert.Equal(t, "2", envMap["B"])
+		assert.Equal(t, 2, len(result))
+	})
+
+	t.Run("Malformed base entry is skipped", func(t *testing.T) {
+		base := []string{"GOOD=val", "MALFORMED_NO_EQUALS", "OK=yes"}
+		overrides := map[string]string{"NEW": "x"}
+		result := mergeEnvs(base, overrides)
+
+		envMap := envSliceToMap(result)
+		assert.Equal(t, "val", envMap["GOOD"])
+		assert.Equal(t, "yes", envMap["OK"])
+		assert.Equal(t, "x", envMap["NEW"])
+		_, hasMalformed := envMap["MALFORMED_NO_EQUALS"]
+		assert.False(t, hasMalformed)
+	})
+
+	if runtime.GOOS == "windows" {
+		t.Run("Windows case insensitive override", func(t *testing.T) {
+			base := []string{"Path=C:\\old"}
+			overrides := map[string]string{"PATH": "C:\\new"}
+			result := mergeEnvs(base, overrides)
+
+			assert.Equal(t, 1, len(result))
+			envMap := envSliceToMap(result)
+			assert.Equal(t, "C:\\new", envMap["PATH"])
+		})
+	}
+}
+
+func envSliceToMap(envs []string) map[string]string {
+	m := make(map[string]string)
+	for _, e := range envs {
+		kv := strings.SplitN(e, "=", 2)
+		if len(kv) == 2 {
+			m[kv[0]] = kv[1]
+		}
+	}
+	return m
 }

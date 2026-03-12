@@ -2,7 +2,9 @@ package openapi
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -277,4 +279,104 @@ func TestGetPluginArgsForHelp(t *testing.T) {
 		args := getPluginArgsForHelp("ecs")
 		assert.Equal(t, []string{"ecs", "--api-version", "2014-05-26", "--help"}, args)
 	})
+}
+
+func setupInstalledPlugin(t *testing.T, pluginName string) {
+	t.Helper()
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	t.Cleanup(cleanup)
+
+	pluginsDir := filepath.Join(testHome, ".aliyun", "plugins")
+	os.MkdirAll(pluginsDir, 0755)
+
+	manifest := plugin.LocalManifest{
+		Plugins: map[string]plugin.LocalPlugin{
+			pluginName: {
+				Name:    pluginName,
+				Version: "1.0.0",
+				Path:    filepath.Join(pluginsDir, pluginName),
+			},
+		},
+	}
+	data, _ := json.Marshal(manifest)
+	os.WriteFile(filepath.Join(pluginsDir, "manifest.json"), data, 0644)
+}
+
+func TestPrintProductUsage_NonBuiltinProduct_PluginInstalled(t *testing.T) {
+	setupInstalledPlugin(t, "aliyun-cli-fc")
+
+	c, w, stderr := newTestCommando()
+	ctx := newTestContext(w, stderr)
+
+	repo, _ := meta.MockLoadRepository([]meta.Product{})
+	c.library.builtinRepo = repo
+	c.pluginIndex = &plugin.Index{
+		Plugins: []plugin.PluginInfo{
+			{Name: "aliyun-cli-fc", ProductCode: "fc"},
+		},
+	}
+	c.localManifest = &plugin.LocalManifest{
+		Plugins: map[string]plugin.LocalPlugin{
+			"aliyun-cli-fc": {Name: "aliyun-cli-fc", Version: "1.0.0"},
+		},
+	}
+
+	err := c.printProductUsage(ctx, "fc")
+	assert.NoError(t, err)
+
+	output := w.String()
+	assert.Contains(t, output, "Product 'fc' is provided by plugin 'aliyun-cli-fc'")
+}
+
+func TestPrintProductUsage_BuiltinProduct_PluginInstalled(t *testing.T) {
+	setupInstalledPlugin(t, "aliyun-cli-ecs")
+	t.Setenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP", "")
+
+	c, w, stderr := newTestCommando()
+	ctx := newTestContext(w, stderr)
+	c.library.builtinRepo = getRepository()
+	c.pluginIndex = &plugin.Index{
+		Plugins: []plugin.PluginInfo{
+			{Name: "aliyun-cli-ecs", ProductCode: "ecs"},
+		},
+	}
+	c.localManifest = &plugin.LocalManifest{
+		Plugins: map[string]plugin.LocalPlugin{
+			"aliyun-cli-ecs": {Name: "aliyun-cli-ecs", Version: "1.0.0"},
+		},
+	}
+
+	err := c.printProductUsage(ctx, "ecs")
+	assert.NoError(t, err)
+
+	output := w.String()
+	assert.Contains(t, output, "Note: The help information for product 'ecs' is provided by the installed plugin 'aliyun-cli-ecs'")
+	assert.Contains(t, output, "ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true")
+}
+
+func TestPrintApiUsage_NonBuiltinProduct_PluginInstalled(t *testing.T) {
+	setupInstalledPlugin(t, "aliyun-cli-fc")
+
+	c, w, stderr := newTestCommando()
+	ctx := newTestContext(w, stderr)
+
+	repo, _ := meta.MockLoadRepository([]meta.Product{})
+	c.library.builtinRepo = repo
+	c.pluginIndex = &plugin.Index{
+		Plugins: []plugin.PluginInfo{
+			{Name: "aliyun-cli-fc", ProductCode: "fc"},
+		},
+	}
+	c.localManifest = &plugin.LocalManifest{
+		Plugins: map[string]plugin.LocalPlugin{
+			"aliyun-cli-fc": {Name: "aliyun-cli-fc", Version: "1.0.0"},
+		},
+	}
+
+	err := c.printApiUsage(ctx, "fc", "deploy")
+	assert.NoError(t, err)
+
+	output := w.String()
+	assert.Contains(t, output, "Command 'fc deploy' is provided by plugin 'aliyun-cli-fc'")
 }
