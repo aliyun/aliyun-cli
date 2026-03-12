@@ -2,6 +2,7 @@ package openapi
 
 import (
 	"bytes"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -237,7 +238,43 @@ func TestPrintApiUsage_NonBuiltinProduct_PluginNotInstalled(t *testing.T) {
 	assert.Contains(t, err.Error(), "aliyun plugin install --names aliyun-cli-fc")
 }
 
-func TestGetPluginArgsForHelp_NoMatch(t *testing.T) {
-	args := getPluginArgsForHelp("nonexistent-product-xyz")
-	assert.Equal(t, []string{"nonexistent-product-xyz", "--help"}, args)
+func TestGetPluginArgsForHelp(t *testing.T) {
+	origArgs := os.Args
+	defer func() { os.Args = origArgs }()
+
+	t.Run("NoMatch - fallback", func(t *testing.T) {
+		os.Args = []string{"aliyun", "other"}
+		args := getPluginArgsForHelp("nonexistent-product-xyz")
+		assert.Equal(t, []string{"nonexistent-product-xyz", "--help"}, args)
+	})
+
+	t.Run("Match - appends help", func(t *testing.T) {
+		os.Args = []string{"aliyun", "ecs"}
+		args := getPluginArgsForHelp("ecs")
+		assert.Equal(t, []string{"ecs", "--help"}, args)
+	})
+
+	t.Run("Match case insensitive", func(t *testing.T) {
+		os.Args = []string{"aliyun", "ECS", "--region", "cn-hangzhou"}
+		args := getPluginArgsForHelp("ecs")
+		assert.Equal(t, []string{"ECS", "--region", "cn-hangzhou", "--help"}, args)
+	})
+
+	t.Run("Match - already has --help", func(t *testing.T) {
+		os.Args = []string{"aliyun", "ecs", "--help"}
+		args := getPluginArgsForHelp("ecs")
+		assert.Equal(t, []string{"ecs", "--help"}, args)
+	})
+
+	t.Run("Match - already has -h", func(t *testing.T) {
+		os.Args = []string{"aliyun", "ecs", "-h"}
+		args := getPluginArgsForHelp("ecs")
+		assert.Equal(t, []string{"ecs", "-h"}, args)
+	})
+
+	t.Run("Match with extra flags", func(t *testing.T) {
+		os.Args = []string{"aliyun", "ecs", "--api-version", "2014-05-26"}
+		args := getPluginArgsForHelp("ecs")
+		assert.Equal(t, []string{"ecs", "--api-version", "2014-05-26", "--help"}, args)
+	})
 }
