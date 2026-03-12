@@ -270,6 +270,14 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		cp.ExternalId = util.GetFromEnv("ALIBABACLOUD_EXTERNAL_ID", "ALIBABA_CLOUD_EXTERNAL_ID")
 	}
 
+	if cp.AutoPluginInstall == false {
+		cp.AutoPluginInstall = os.Getenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL") == "true"
+	}
+
+	if cp.AutoPluginInstallEnablePre == false {
+		cp.AutoPluginInstallEnablePre = os.Getenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL_ENABLE_PRE") == "true"
+	}
+
 	AutoModeRecognition(cp)
 }
 

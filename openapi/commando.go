@@ -235,10 +235,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				return fmt.Errorf("failed to check plugin status: %w", err)
 			}
 			if !installed {
+				ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
 				if profile, err := config.LoadProfileWithContext(ctx); err == nil {
 					c.profile = profile
 				}
-				// 需要判断是否plugin auto install enabled
+				// 需要判断是否plugin auto install enabled, 且支持环境变量
 				commandName := buildCommandName(args)
 				// fmt.Println("commandName", commandName, pluginArgs)
 
@@ -269,8 +270,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			// AND it has more than 2 arguments (product + api + more)
 			isHelp := cli.HelpFlag(ctx.Flags()).IsAssigned() // this should not be true cause help is captured in parent level
 			isVersion := (apiOrMethod == "version")
-
-			if !isHelp && !isVersion && len(pluginArgs) > 2 {
+			if !isHelp && !isVersion && len(pluginArgs) >= 2 {
 				ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
 				if profile, err := config.LoadProfileWithContext(ctx); err == nil {
 					c.profile = profile
@@ -283,6 +283,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					ctx.SetRuntimeEnvs(envs)
 				}
 			} else if isHelp || isVersion {
+				// language 仅从profile 获取，不需要merge 环境变量和flag
 				c.setLangEnv(ctx)
 			}
 
