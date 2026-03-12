@@ -1213,9 +1213,9 @@ func TestSavePluginToManifest(t *testing.T) {
 	version := "1.0.0"
 	extractDir := filepath.Join(tmpDir, "extracted")
 	pManifest := &PluginManifest{
-		Name:             pluginName,
-		Command:          "test",
-		ShortDescription: "Test plugin description",
+		Name:        pluginName,
+		Command:     "test",
+		Description: "Test plugin description",
 	}
 
 	if err := os.MkdirAll(extractDir, 0755); err != nil {
@@ -1236,7 +1236,7 @@ func TestSavePluginToManifest(t *testing.T) {
 	assert.Equal(t, version, plugin.Version)
 	assert.Equal(t, extractDir, plugin.Path)
 	assert.Equal(t, pManifest.Command, plugin.Command)
-	assert.Equal(t, pManifest.ShortDescription, plugin.Description)
+	assert.Equal(t, pManifest.Description, plugin.Description)
 }
 
 func TestManager_downloadAndVerifyPlugin(t *testing.T) {

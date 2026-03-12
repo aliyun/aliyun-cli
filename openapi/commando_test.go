@@ -132,14 +132,14 @@ func Test_main(t *testing.T) {
 	args = []string{"aos", "test2"}
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'aos' is not a valid command or product. See `aliyun help`.", err.Error())
+	assert.Equal(t, "'aos' is not a valid product. See `aliyun help`.", err.Error())
 
 	args = []string{"test", "test2", "test1"}
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "can not find api by path test1", err.Error())
+	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
 
-	args = []string{"test", "test2", "test1", "test3"}
+	args = []string{"test", "Test2", "test1", "test3"}
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
 	assert.Equal(t, "too many arguments", err.Error())
@@ -348,12 +348,12 @@ func Test_help(t *testing.T) {
 	args = []string{"test"}
 	err = command.help(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid command or product. See `aliyun help`.", err.Error())
+	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
 
 	args = []string{"test", "test0"}
 	err = command.help(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid command or product. See `aliyun help`.", err.Error())
+	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
 
 	args = []string{"test", "test0", "test1"}
 	err = command.help(ctx, args)
@@ -2105,7 +2105,7 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 
 		err := command.main(ctx, args)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "plugin 'qqq' not found")
+		assert.Contains(t, err.Error(), "'qqq' is not a valid product")
 	})
 
 	t.Run("Kebab-case API name with multiple arguments extracts all args", func(t *testing.T) {
@@ -2122,7 +2122,7 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 
 		err := command.main(ctx, args)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "plugin 'qqq' not found")
+		assert.Contains(t, err.Error(), "'qqq' is not a valid product")
 	})
 
 	t.Run("Non-kebab-case API name does not trigger plugin", func(t *testing.T) {
@@ -2182,7 +2182,7 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 
 		err := command.main(ctx, args)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "plugin 'fc' not found")
+		assert.Contains(t, err.Error(), "'fc' is not a valid built-in product")
 	})
 }
 
@@ -2309,18 +2309,18 @@ exit 0
 		assert.Contains(t, err.Error(), "not found")
 	})
 
-	t.Run("Environment variable ALIYUN_ORIGINAL_PRODUCT_HELP skips plugin for single arg", func(t *testing.T) {
+	t.Run("Environment variable ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP skips plugin for single arg", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("shell script test skipped on Windows")
 		}
 		// Set environment variable
-		originalEnv := os.Getenv("ALIYUN_ORIGINAL_PRODUCT_HELP")
-		os.Setenv("ALIYUN_ORIGINAL_PRODUCT_HELP", "true")
+		originalEnv := os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP")
+		os.Setenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP", "true")
 		defer func() {
 			if originalEnv == "" {
-				os.Unsetenv("ALIYUN_ORIGINAL_PRODUCT_HELP")
+				os.Unsetenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP")
 			} else {
-				os.Setenv("ALIYUN_ORIGINAL_PRODUCT_HELP", originalEnv)
+				os.Setenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP", originalEnv)
 			}
 		}()
 
@@ -2357,7 +2357,7 @@ exit 0
 		stdout.Reset()
 		err = command.main(ctx, args)
 
-		// With ALIYUN_ORIGINAL_PRODUCT_HELP=true and single arg,
+		// With ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true and single arg,
 		// plugin execution is skipped
 		assert.NotNil(t, err)
 		assert.Contains(t, err.Error(), "not a valid command or product")
@@ -2565,18 +2565,18 @@ exit 0
 		assert.Contains(t, err.Error(), "failed to check plugin status")
 	})
 
-	t.Run("Single arg - with ALIYUN_ORIGINAL_PRODUCT_HELP=true", func(t *testing.T) {
+	t.Run("Single arg - with ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("shell script test skipped on Windows")
 		}
 		// Test that environment variable skips the entire plugin check block
-		originalEnv := os.Getenv("ALIYUN_ORIGINAL_PRODUCT_HELP")
-		os.Setenv("ALIYUN_ORIGINAL_PRODUCT_HELP", "true")
+		originalEnv := os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP")
+		os.Setenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP", "true")
 		defer func() {
 			if originalEnv == "" {
-				os.Unsetenv("ALIYUN_ORIGINAL_PRODUCT_HELP")
+				os.Unsetenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP")
 			} else {
-				os.Setenv("ALIYUN_ORIGINAL_PRODUCT_HELP", originalEnv)
+				os.Setenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP", originalEnv)
 			}
 		}()
 
@@ -2610,7 +2610,7 @@ exit 0
 		stdout.Reset()
 		err = command.main(ctx, args)
 
-		// With ALIYUN_ORIGINAL_PRODUCT_HELP=true, the entire if block (line 187-203) is skipped
+		// With ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true, the entire if block is skipped
 		// Plugin should NOT be executed
 		assert.NotContains(t, stdout.String(), "Should not execute")
 
