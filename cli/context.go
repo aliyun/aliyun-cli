@@ -31,6 +31,7 @@ func HelpFlag(fs *FlagSet) *Flag {
 func NewHelpFlag() *Flag {
 	return &Flag{
 		Name:         "help",
+		Shorthand:    'h',
 		Short:        i18n.T("print help", "打印帮助信息"),
 		AssignedMode: AssignedNone,
 	}
@@ -47,7 +48,8 @@ type Context struct {
 	stderr          io.Writer
 	inConfigureMode bool
 	// use http instead of https
-	insecure bool
+	insecure    bool
+	runtimeEnvs map[string]string
 }
 
 func (ctx *Context) Insecure() bool {
@@ -56,6 +58,14 @@ func (ctx *Context) Insecure() bool {
 
 func (ctx *Context) SetInsecure(insecure bool) {
 	ctx.insecure = insecure
+}
+
+func (ctx *Context) SetRuntimeEnvs(envs map[string]string) {
+	ctx.runtimeEnvs = envs
+}
+
+func (ctx *Context) GetRuntimeEnvs() map[string]string {
+	return ctx.runtimeEnvs
 }
 
 func (ctx *Context) InConfigureMode() bool {
@@ -68,6 +78,7 @@ func NewCommandContext(stdout io.Writer, stderr io.Writer) *Context {
 		unknownFlags: nil,
 		stdout:       stdout,
 		stderr:       stderr,
+		runtimeEnvs:  make(map[string]string),
 	}
 }
 
@@ -116,9 +127,13 @@ func (ctx *Context) EnterCommand(cmd *Command) {
 		ctx.unknownFlags = NewFlagSet()
 	}
 
-	ctx.flags = cmd.flags.mergeWith(ctx.flags, func(f *Flag) bool {
-		return f.Persistent
-	})
+	if cmd.DisablePersistentFlags {
+		ctx.flags = cmd.Flags().mergeWith(nil, nil) // disable persistent flags from parent, for plugin command
+	} else {
+		ctx.flags = cmd.Flags().mergeWith(ctx.flags, func(f *Flag) bool {
+			return f.Persistent
+		})
+	}
 	ctx.flags.Add(NewHelpFlag())
 }
 
@@ -176,9 +191,13 @@ func (ctx *Context) SetCommand(cmd *Command) {
 	if ctx.command == nil {
 		ctx.flags = NewFlagSet()
 	} else {
-		ctx.flags = ctx.command.flags.mergeWith(ctx.flags, func(f *Flag) bool {
-			return f.Persistent
-		})
+		if cmd.DisablePersistentFlags {
+			ctx.flags = cmd.Flags().mergeWith(nil, nil) // disable persistent flags from parent, for plugin command
+		} else {
+			ctx.flags = ctx.command.Flags().mergeWith(ctx.flags, func(f *Flag) bool {
+				return f.Persistent
+			})
+		}
 		ctx.flags.Add(NewHelpFlag())
 	}
 	if !ctx.command.EnableUnknownFlag {

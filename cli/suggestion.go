@@ -13,6 +13,11 @@
 // limitations under the License.
 package cli
 
+import (
+	"strings"
+	"unicode"
+)
+
 const DefaultSuggestDistance = 2
 
 func CalculateStringDistance(source string, target string) int {
@@ -49,6 +54,29 @@ func NewSuggester(v string, distance int) *Suggester {
 
 func (a *Suggester) Apply(s string) {
 	d := CalculateStringDistance(a.suggestFor, s)
+	if d <= a.distance {
+		if d < a.distance {
+			a.distance = d
+			a.results = make([]string, 0)
+		}
+		a.results = append(a.results, s)
+	}
+}
+
+func stripNonAlphanumeric(s string) string {
+	result := make([]rune, 0, len(s))
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			result = append(result, r)
+		}
+	}
+	return string(result)
+}
+
+func (a *Suggester) UnifyApply(s string) {
+	cleanedSuggestFor := stripNonAlphanumeric(a.suggestFor)
+	cleanedS := stripNonAlphanumeric(s)
+	d := CalculateStringDistance(strings.ToLower(cleanedSuggestFor), strings.ToLower(cleanedS))
 	if d <= a.distance {
 		if d < a.distance {
 			a.distance = d

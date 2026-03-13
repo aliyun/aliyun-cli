@@ -1328,3 +1328,93 @@ func TestGetCredentialWithOAuthMissingCredentials(t *testing.T) {
 	assert.Equal(t, "new-sts-token", p.StsToken)
 	assert.True(t, p.StsExpiration > time.Now().Unix())
 }
+
+func TestGetRuntimeEnv_AK(t *testing.T) {
+	p := newProfile()
+	p.Mode = AK
+	p.AccessKeyId = "test-ak-id"
+	p.AccessKeySecret = "test-ak-secret"
+	p.RegionId = "cn-hangzhou"
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.NotNil(t, envs)
+
+	assert.Equal(t, "test-ak-id", envs["ALIBABA_CLOUD_ACCESS_KEY_ID"])
+	assert.Equal(t, "test-ak-secret", envs["ALIBABA_CLOUD_ACCESS_KEY_SECRET"])
+	assert.Equal(t, "cn-hangzhou", envs["ALIBABA_CLOUD_REGION_ID"])
+}
+
+func TestGetRuntimeEnv_StsToken(t *testing.T) {
+	p := newProfile()
+	p.Mode = StsToken
+	p.AccessKeyId = "test-ak-id"
+	p.AccessKeySecret = "test-ak-secret"
+	p.StsToken = "test-sts-token"
+	p.RegionId = "cn-hangzhou"
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.Equal(t, "test-sts-token", envs["ALIBABA_CLOUD_SECURITY_TOKEN"])
+}
+
+func TestGetRuntimeEnv_OptionalFields(t *testing.T) {
+	p := newProfile()
+	p.Mode = AK
+	p.AccessKeyId = "ak"
+	p.AccessKeySecret = "sk"
+	p.RegionId = "cn-hangzhou"
+	p.Language = "zh"
+	p.EndpointType = "vpc"
+	p.ReadTimeout = 30
+	p.ConnectTimeout = 10
+	p.RetryCount = 3
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+
+	assert.Equal(t, "zh", envs["ALIBABA_CLOUD_LANGUAGE"])
+	assert.Equal(t, "vpc", envs["ALIBABA_CLOUD_ENDPOINT_TYPE"])
+	assert.Equal(t, "30", envs["ALIBABA_CLOUD_READ_TIMEOUT"])
+	assert.Equal(t, "10", envs["ALIBABA_CLOUD_CONNECT_TIMEOUT"])
+	assert.Equal(t, "3", envs["ALIBABA_CLOUD_RETRY_COUNT"])
+}
+
+func TestGetRuntimeEnv_OptionalFieldsOmitted(t *testing.T) {
+	p := newProfile()
+	p.Mode = AK
+	p.AccessKeyId = "ak"
+	p.AccessKeySecret = "sk"
+	p.RegionId = "cn-hangzhou"
+	p.Language = ""
+	p.EndpointType = ""
+	p.ReadTimeout = 0
+	p.ConnectTimeout = 0
+	p.RetryCount = 0
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+
+	_, hasLang := envs["ALIBABA_CLOUD_LANGUAGE"]
+	assert.False(t, hasLang)
+	_, hasEndpoint := envs["ALIBABA_CLOUD_ENDPOINT_TYPE"]
+	assert.False(t, hasEndpoint)
+	_, hasReadTimeout := envs["ALIBABA_CLOUD_READ_TIMEOUT"]
+	assert.False(t, hasReadTimeout)
+	_, hasConnTimeout := envs["ALIBABA_CLOUD_CONNECT_TIMEOUT"]
+	assert.False(t, hasConnTimeout)
+	_, hasRetry := envs["ALIBABA_CLOUD_RETRY_COUNT"]
+	assert.False(t, hasRetry)
+}
+
+func TestGetRuntimeEnv_CredentialError(t *testing.T) {
+	p := newProfile()
+	p.Mode = AK
+	p.AccessKeyId = ""
+	p.AccessKeySecret = ""
+	p.RegionId = ""
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.Error(t, err)
+	assert.Nil(t, envs)
+}

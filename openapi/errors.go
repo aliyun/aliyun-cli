@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 )
 
@@ -78,4 +79,61 @@ func (e *InvalidParameterError) GetSuggestions() []string {
 		sr.Apply(f.Name)
 	}
 	return sr.GetResults()
+}
+
+type InvalidProductOrPluginError struct {
+	Code    string
+	library *Library
+	plugins []plugin.PluginInfo
+}
+
+func (e *InvalidProductOrPluginError) Error() string {
+	return fmt.Sprintf("'%s' is not a valid product. See `aliyun help`.", e.Code)
+}
+
+func (e *InvalidProductOrPluginError) GetSuggestions() []string {
+	sr := cli.NewSuggester(strings.ToLower(e.Code), 2)
+	for _, p := range e.plugins {
+		sr.Apply(strings.ToLower(p.ProductCode))
+	}
+	// for _, p := range e.library.GetProducts() {
+	// 	sr.Apply(strings.ToLower(p.Code))
+	// }
+	return sr.GetResults()
+}
+
+type InvalidUnifiedApiError struct {
+	Name    string
+	product *meta.Product
+	lPlugin plugin.LocalPlugin
+}
+
+func (e *InvalidUnifiedApiError) Error() string {
+	return fmt.Sprintf("'%s' is not a valid api. See `aliyun help %s`.", e.Name, e.product.GetLowerCode())
+}
+
+func (e *InvalidUnifiedApiError) GetSuggestions() []string {
+	sr := cli.NewSuggester(e.Name, 2)
+	for _, s := range e.product.ApiNames {
+		sr.Apply(s)
+	}
+	for _, s := range e.lPlugin.CmdNames {
+		sr.UnifyApply(s)
+	}
+	results := removeDuplicates(sr.GetResults())
+	return results
+}
+
+func removeDuplicates(slice []string) []string {
+	seen := make(map[string]bool)
+	result := []string{}
+
+	for _, item := range slice {
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
+		}
+	}
+
+	return result
 }

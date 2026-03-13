@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/stretchr/testify/assert"
 )
@@ -104,4 +105,136 @@ func TestInvalidParameterError_GetSuggestions(t *testing.T) {
 	arrstr := err.GetSuggestions()
 	str := strings.Join(arrstr, ",")
 	assert.Contains(t, str, "secure")
+}
+
+func TestInvalidProductOrPluginError_Error(t *testing.T) {
+	err := &InvalidProductOrPluginError{
+		Code: "fcc",
+	}
+	assert.Equal(t, "'fcc' is not a valid product. See `aliyun help`.", err.Error())
+}
+
+func TestInvalidProductOrPluginError_GetSuggestions(t *testing.T) {
+	t.Run("Has close match", func(t *testing.T) {
+		err := &InvalidProductOrPluginError{
+			Code: "ec",
+			plugins: []plugin.PluginInfo{
+				{Name: "aliyun-cli-ecs", ProductCode: "ecs"},
+				{Name: "aliyun-cli-fc", ProductCode: "fc"},
+			},
+		}
+		suggestions := err.GetSuggestions()
+		str := strings.Join(suggestions, ",")
+		assert.Contains(t, str, "ecs")
+	})
+
+	t.Run("No match", func(t *testing.T) {
+		err := &InvalidProductOrPluginError{
+			Code: "zzzzzzz",
+			plugins: []plugin.PluginInfo{
+				{Name: "aliyun-cli-ecs", ProductCode: "ecs"},
+			},
+		}
+		suggestions := err.GetSuggestions()
+		assert.Empty(t, suggestions)
+	})
+
+	t.Run("Empty plugins", func(t *testing.T) {
+		err := &InvalidProductOrPluginError{
+			Code:    "ecs",
+			plugins: nil,
+		}
+		suggestions := err.GetSuggestions()
+		assert.Empty(t, suggestions)
+	})
+}
+
+func TestInvalidUnifiedApiError_Error(t *testing.T) {
+	err := &InvalidUnifiedApiError{
+		Name: "describreregions",
+		product: &meta.Product{
+			Code: "ecs",
+		},
+	}
+	assert.Equal(t, "'describreregions' is not a valid api. See `aliyun help ecs`.", err.Error())
+}
+
+func TestInvalidUnifiedApiError_GetSuggestions(t *testing.T) {
+	t.Run("Combines builtin APIs and plugin commands", func(t *testing.T) {
+		err := &InvalidUnifiedApiError{
+			Name: "describe-region",
+			product: &meta.Product{
+				Code:     "ecs",
+				ApiNames: []string{"DescribeRegions", "DescribeInstances"},
+			},
+			lPlugin: plugin.LocalPlugin{
+				CmdNames: []string{"describe-regions", "list-instances"},
+			},
+		}
+		suggestions := err.GetSuggestions()
+		assert.NotEmpty(t, suggestions)
+	})
+
+	t.Run("Deduplicates results", func(t *testing.T) {
+		err := &InvalidUnifiedApiError{
+			Name: "DescribeRegions",
+			product: &meta.Product{
+				Code:     "ecs",
+				ApiNames: []string{"DescribeRegions"},
+			},
+			lPlugin: plugin.LocalPlugin{
+				CmdNames: []string{"DescribeRegions"},
+			},
+		}
+		suggestions := err.GetSuggestions()
+		count := 0
+		for _, s := range suggestions {
+			if s == "DescribeRegions" {
+				count++
+			}
+		}
+		assert.LessOrEqual(t, count, 1)
+	})
+
+	t.Run("Empty both", func(t *testing.T) {
+		err := &InvalidUnifiedApiError{
+			Name: "nonexistent",
+			product: &meta.Product{
+				Code:     "ecs",
+				ApiNames: []string{},
+			},
+			lPlugin: plugin.LocalPlugin{
+				CmdNames: []string{},
+			},
+		}
+		suggestions := err.GetSuggestions()
+		assert.Empty(t, suggestions)
+	})
+}
+
+func TestRemoveDuplicates(t *testing.T) {
+	t.Run("No duplicates", func(t *testing.T) {
+		result := removeDuplicates([]string{"a", "b", "c"})
+		assert.Equal(t, []string{"a", "b", "c"}, result)
+	})
+
+	t.Run("With duplicates", func(t *testing.T) {
+		result := removeDuplicates([]string{"a", "b", "a", "c", "b"})
+		assert.Equal(t, []string{"a", "b", "c"}, result)
+	})
+
+	t.Run("All same", func(t *testing.T) {
+		result := removeDuplicates([]string{"x", "x", "x"})
+		assert.Equal(t, []string{"x"}, result)
+	})
+
+	t.Run("Empty", func(t *testing.T) {
+		result := removeDuplicates([]string{})
+		assert.Empty(t, result)
+	})
+
+	t.Run("Nil", func(t *testing.T) {
+		result := removeDuplicates(nil)
+		assert.Empty(t, result)
+	})
 }

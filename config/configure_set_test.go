@@ -242,3 +242,88 @@ func TestDoConfigureSetWithMock(t *testing.T) {
 	doConfigureSet(ctx)
 	assert.Empty(t, stdout.String())
 }
+
+func TestDoConfigureSet_AutoPluginInstall(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
+
+	originhook := hookLoadOrCreateConfiguration
+	originhookSave := hookSaveConfigurationWithContext
+	defer func() {
+		hookLoadOrCreateConfiguration = originhook
+		hookSaveConfigurationWithContext = originhookSave
+	}()
+
+	var savedProfile Profile
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
+			p, _ := config.GetProfile(config.CurrentProfile)
+			savedProfile = p
+			return nil
+		}
+	}
+
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{Name: "default", RegionId: "cn-hangzhou", Mode: AK, AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret"},
+				},
+			}, nil
+		}
+	}
+
+	// Test AutoPluginInstall = true, AutoPluginInstallEnablePre = true
+	AutoPluginInstallFlag(ctx.Flags()).SetAssigned(true)
+	AutoPluginInstallFlag(ctx.Flags()).SetValue("true")
+	AutoPluginInstallEnablePreFlag(ctx.Flags()).SetAssigned(true)
+	AutoPluginInstallEnablePreFlag(ctx.Flags()).SetValue("true")
+
+	err := doConfigureSet(ctx)
+	assert.NoError(t, err)
+	assert.True(t, savedProfile.AutoPluginInstall)
+	assert.True(t, savedProfile.AutoPluginInstallEnablePre)
+
+	// Test AutoPluginInstall = false, AutoPluginInstallEnablePre = false
+	AutoPluginInstallFlag(ctx.Flags()).SetValue("false")
+	AutoPluginInstallEnablePreFlag(ctx.Flags()).SetValue("false")
+	err = doConfigureSet(ctx)
+	assert.NoError(t, err)
+	assert.False(t, savedProfile.AutoPluginInstall)
+	assert.False(t, savedProfile.AutoPluginInstallEnablePre)
+
+	// Test mixed cases
+	AutoPluginInstallFlag(ctx.Flags()).SetValue("true")
+	AutoPluginInstallEnablePreFlag(ctx.Flags()).SetValue("false")
+	err = doConfigureSet(ctx)
+	assert.NoError(t, err)
+	assert.True(t, savedProfile.AutoPluginInstall)
+	assert.False(t, savedProfile.AutoPluginInstallEnablePre)
+
+	// Test case-insensitivity
+	AutoPluginInstallFlag(ctx.Flags()).SetValue("TRUE")
+	AutoPluginInstallEnablePreFlag(ctx.Flags()).SetValue("TrUe")
+	err = doConfigureSet(ctx)
+	assert.NoError(t, err)
+	assert.True(t, savedProfile.AutoPluginInstall)
+	assert.True(t, savedProfile.AutoPluginInstallEnablePre)
+
+	// Test non-true values
+	AutoPluginInstallFlag(ctx.Flags()).SetValue("yes")
+	AutoPluginInstallEnablePreFlag(ctx.Flags()).SetValue("1")
+	err = doConfigureSet(ctx)
+	assert.NoError(t, err)
+	assert.False(t, savedProfile.AutoPluginInstall)
+	assert.False(t, savedProfile.AutoPluginInstallEnablePre)
+
+	// Test when flags are not assigned (should remain unchanged)
+	AutoPluginInstallFlag(ctx.Flags()).SetAssigned(false)
+	AutoPluginInstallEnablePreFlag(ctx.Flags()).SetAssigned(false)
+	err = doConfigureSet(ctx)
+	assert.NoError(t, err)
+	assert.False(t, savedProfile.AutoPluginInstall)
+	assert.False(t, savedProfile.AutoPluginInstallEnablePre)
+}
