@@ -673,6 +673,9 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 	if cp.RetryCount > 0 {
 		envs["ALIBABA_CLOUD_RETRY_COUNT"] = strconv.Itoa(cp.RetryCount)
 	}
+
+	envs["ALIBABA_CLOUD_CLI_VERSION"] = cli.GetVersion()
+
 	return envs, nil
 }
 
