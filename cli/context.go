@@ -41,14 +41,16 @@ func NewHelpFlag() *Flag {
 
 // CLI Command Context
 type Context struct {
-	help            bool
-	flags           *FlagSet
-	unknownFlags    *FlagSet
-	command         *Command
-	completion      *Completion
-	stdout          io.Writer
-	stderr          io.Writer
-	inConfigureMode bool
+	help               bool
+	flags              *FlagSet
+	unknownFlags       *FlagSet
+	command            *Command
+	completion         *Completion
+	stdout             io.Writer
+	stderr             io.Writer
+	inConfigureMode    bool
+	hasPluginSubCmd    bool
+	hasPluginSubCmdSet bool
 	// use http instead of https
 	insecure    bool
 	runtimeEnvs map[string]string
@@ -167,14 +169,13 @@ func (ctx *Context) detectFlag(name string) (*Flag, error) {
 	if flag != nil {
 		return flag, nil
 	}
-	if isPluginCommand() {
-		return nil, nil
-	}
 	if ctx.unknownFlags != nil {
+		if ctx.HasPluginSubCommand() {
+			return nil, nil
+		}
 		return ctx.unknownFlags.AddByName(name)
-	} else {
-		return nil, NewInvalidFlagError(name, ctx)
 	}
+	return nil, NewInvalidFlagError(name, ctx)
 }
 
 func (ctx *Context) detectFlagByShorthand(ch rune) (*Flag, error) {
@@ -182,24 +183,35 @@ func (ctx *Context) detectFlagByShorthand(ch rune) (*Flag, error) {
 	if flag != nil {
 		return flag, nil
 	}
-	if isPluginCommand() {
-		return nil, nil
-	}
 	if ctx.command != nil && ctx.command.EnableUnknownFlag && ctx.unknownFlags != nil {
+		if ctx.HasPluginSubCommand() {
+			return nil, nil
+		}
 		return ctx.unknownFlags.AddByName(string(ch))
 	}
 	return nil, fmt.Errorf("unknown flag -%s", string(ch))
 }
 
-// checks os.Args to determine if the current invocation is a plugin command.
+// HasPluginSubCommand checks whether the current invocation targets a plugin subcommand.
+// The result is computed once from os.Args and cached.
+// Plugin subcommands are all lowercase (e.g. "list-tag-resources"),
+// as opposed to OpenAPI PascalCase (e.g. "DescribeInstances").
 // Pattern: aliyun [help] <product> <subcommand> [flags...]
-// Plugin subcommands are all lowercase and not HTTP methods.
-func isPluginCommand() bool {
+func (ctx *Context) HasPluginSubCommand() bool {
+	if ctx.hasPluginSubCmdSet {
+		return ctx.hasPluginSubCmd
+	}
+	ctx.hasPluginSubCmdSet = true
+	ctx.hasPluginSubCmd = detectPluginSubCommand()
+	return ctx.hasPluginSubCmd
+}
+
+func detectPluginSubCommand() bool {
 	args := os.Args[1:]
 	if len(args) > 0 && args[0] == "help" {
 		args = args[1:]
 	}
-	if len(args) < 2 { // single product, should not have dup args, ignore
+	if len(args) < 2 {
 		return false
 	}
 	if strings.HasPrefix(args[0], "-") {
