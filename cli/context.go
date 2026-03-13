@@ -17,6 +17,8 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
+	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
@@ -164,7 +166,11 @@ func (ctx *Context) detectFlag(name string) (*Flag, error) {
 
 	if flag != nil {
 		return flag, nil
-	} else if ctx.unknownFlags != nil {
+	}
+	if isPluginCommand() {
+		return nil, nil
+	}
+	if ctx.unknownFlags != nil {
 		return ctx.unknownFlags.AddByName(name)
 	} else {
 		return nil, NewInvalidFlagError(name, ctx)
@@ -176,10 +182,38 @@ func (ctx *Context) detectFlagByShorthand(ch rune) (*Flag, error) {
 	if flag != nil {
 		return flag, nil
 	}
+	if isPluginCommand() {
+		return nil, nil
+	}
 	if ctx.command != nil && ctx.command.EnableUnknownFlag && ctx.unknownFlags != nil {
 		return ctx.unknownFlags.AddByName(string(ch))
 	}
 	return nil, fmt.Errorf("unknown flag -%s", string(ch))
+}
+
+// checks os.Args to determine if the current invocation is a plugin command.
+// Pattern: aliyun [help] <product> <subcommand> [flags...]
+// Plugin subcommands are all lowercase and not HTTP methods.
+func isPluginCommand() bool {
+	args := os.Args[1:]
+	if len(args) > 0 && args[0] == "help" {
+		args = args[1:]
+	}
+	if len(args) < 2 { // single product, should not have dup args, ignore
+		return false
+	}
+	if strings.HasPrefix(args[0], "-") {
+		return false
+	}
+	subCmd := args[1]
+	if strings.HasPrefix(subCmd, "-") {
+		return false
+	}
+	if strings.ToLower(subCmd) != subCmd {
+		return false
+	}
+	upper := strings.ToUpper(subCmd)
+	return upper != "GET" && upper != "POST" && upper != "PUT" && upper != "DELETE"
 }
 
 func (ctx *Context) SetInConfigureMode(mode bool) {
