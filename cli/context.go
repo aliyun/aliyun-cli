@@ -207,7 +207,10 @@ func (ctx *Context) HasPluginSubCommand() bool {
 }
 
 func detectPluginSubCommand() bool {
-	args := os.Args[1:]
+	return isPluginSubCommandArgs(os.Args[1:])
+}
+
+func isPluginSubCommandArgs(args []string) bool {
 	if len(args) > 0 && args[0] == "help" {
 		args = args[1:]
 	}

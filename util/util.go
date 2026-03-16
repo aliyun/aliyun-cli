@@ -137,7 +137,7 @@ func GetAliyunCliUserAgent() string {
 	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
 		ua += " vendor/" + vendorEnv
 	}
-	if custom := GetFromEnv("ALIBABA_CLOUD_CLI_USER_AGENT"); custom != "" {
+	if custom := GetFromEnv("ALIBABA_CLOUD_USER_AGENT"); custom != "" {
 		ua += " " + SanitizeUserAgent(custom)
 	}
 	return ua

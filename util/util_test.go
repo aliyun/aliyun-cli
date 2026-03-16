@@ -596,7 +596,7 @@ func TestSanitizeUserAgent(t *testing.T) {
 
 func TestGetAliyunCliUserAgent(t *testing.T) {
 	originalVendor := os.Getenv("ALIBABA_CLOUD_VENDOR")
-	originalCustom := os.Getenv("ALIBABA_CLOUD_CLI_USER_AGENT")
+	originalCustom := os.Getenv("ALIBABA_CLOUD_USER_AGENT")
 	defer func() {
 		if originalVendor != "" {
 			os.Setenv("ALIBABA_CLOUD_VENDOR", originalVendor)
@@ -604,15 +604,15 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 			os.Unsetenv("ALIBABA_CLOUD_VENDOR")
 		}
 		if originalCustom != "" {
-			os.Setenv("ALIBABA_CLOUD_CLI_USER_AGENT", originalCustom)
+			os.Setenv("ALIBABA_CLOUD_USER_AGENT", originalCustom)
 		} else {
-			os.Unsetenv("ALIBABA_CLOUD_CLI_USER_AGENT")
+			os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
 		}
 	}()
 
 	t.Run("without vendor environment variable", func(t *testing.T) {
 		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
-		os.Unsetenv("ALIBABA_CLOUD_CLI_USER_AGENT")
+		os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
 
 		ua := GetAliyunCliUserAgent()
 
@@ -624,7 +624,7 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 	t.Run("with vendor environment variable", func(t *testing.T) {
 		testVendor := "test-vendor"
 		os.Setenv("ALIBABA_CLOUD_VENDOR", testVendor)
-		os.Unsetenv("ALIBABA_CLOUD_CLI_USER_AGENT")
+		os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
 
 		ua := GetAliyunCliUserAgent()
 
@@ -635,7 +635,7 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 
 	t.Run("with empty vendor environment variable", func(t *testing.T) {
 		os.Setenv("ALIBABA_CLOUD_VENDOR", "")
-		os.Unsetenv("ALIBABA_CLOUD_CLI_USER_AGENT")
+		os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
 
 		ua := GetAliyunCliUserAgent()
 
@@ -646,7 +646,7 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 
 	t.Run("with custom user agent env", func(t *testing.T) {
 		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
-		os.Setenv("ALIBABA_CLOUD_CLI_USER_AGENT", "skill/my-skill-name")
+		os.Setenv("ALIBABA_CLOUD_USER_AGENT", "skill/my-skill-name")
 
 		ua := GetAliyunCliUserAgent()
 
@@ -656,7 +656,7 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 
 	t.Run("with both vendor and custom user agent", func(t *testing.T) {
 		os.Setenv("ALIBABA_CLOUD_VENDOR", "test-vendor")
-		os.Setenv("ALIBABA_CLOUD_CLI_USER_AGENT", "skill/demo")
+		os.Setenv("ALIBABA_CLOUD_USER_AGENT", "skill/demo")
 
 		ua := GetAliyunCliUserAgent()
 
@@ -667,7 +667,7 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 
 	t.Run("custom user agent is sanitized", func(t *testing.T) {
 		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
-		os.Setenv("ALIBABA_CLOUD_CLI_USER_AGENT", "skill/bad\r\nX-Inject: yes")
+		os.Setenv("ALIBABA_CLOUD_USER_AGENT", "skill/bad\r\nX-Inject: yes")
 
 		ua := GetAliyunCliUserAgent()
 
@@ -678,7 +678,7 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 
 	t.Run("custom user agent truncated when too long", func(t *testing.T) {
 		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
-		os.Setenv("ALIBABA_CLOUD_CLI_USER_AGENT", strings.Repeat("x", 300))
+		os.Setenv("ALIBABA_CLOUD_USER_AGENT", strings.Repeat("x", 300))
 
 		ua := GetAliyunCliUserAgent()
 
@@ -692,7 +692,7 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 
 	t.Run("empty custom user agent ignored", func(t *testing.T) {
 		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
-		os.Setenv("ALIBABA_CLOUD_CLI_USER_AGENT", "")
+		os.Setenv("ALIBABA_CLOUD_USER_AGENT", "")
 
 		ua := GetAliyunCliUserAgent()
 
@@ -703,7 +703,7 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 
 	t.Run("multiple calls return consistent result", func(t *testing.T) {
 		os.Setenv("ALIBABA_CLOUD_VENDOR", "consistent-vendor")
-		os.Setenv("ALIBABA_CLOUD_CLI_USER_AGENT", "skill/test")
+		os.Setenv("ALIBABA_CLOUD_USER_AGENT", "skill/test")
 
 		ua1 := GetAliyunCliUserAgent()
 		ua2 := GetAliyunCliUserAgent()

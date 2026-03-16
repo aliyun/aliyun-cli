@@ -184,7 +184,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	}
 	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 
-	customUA := util.GetFromEnv("ALIBABA_CLOUD_CLI_USER_AGENT")
+	customUA := util.GetFromEnv("ALIBABA_CLOUD_USER_AGENT")
 	if v, ok := UserAgentFlag(ctx.Flags()).GetValue(); ok {
 		customUA = v
 	}
