@@ -94,3 +94,25 @@ func TestBasicInvoker_Init(t *testing.T) {
 	err = invoker.Init(ctx, product)
 	assert.Nil(t, err)
 }
+
+func TestParseCustomUserAgentSegments(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		expect [][2]string
+	}{
+		{"empty", "", nil},
+		{"key_value", "skill/my-skill", [][2]string{{"skill", "my-skill"}}},
+		{"plain_token", "plain-token", [][2]string{{"plain-token", ""}}},
+		{"multiple", "skill/foo extra/bar", [][2]string{{"skill", "foo"}, {"extra", "bar"}}},
+		{"value_with_slash", "key/val/ue", [][2]string{{"key", "val/ue"}}},
+		{"spaces_between", "a/1  b/2  c", [][2]string{{"a", "1"}, {"b", "2"}, {"c", ""}}},
+		{"whitespace_only", "  \t  ", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseCustomUserAgentSegments(tt.input)
+			assert.Equal(t, tt.expect, got)
+		})
+	}
+}

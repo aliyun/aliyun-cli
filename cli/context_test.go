@@ -231,3 +231,52 @@ func TestContext_SetCommand_EnablePersistentFlags(t *testing.T) {
 	assert.NotNil(t, ctx.flags.Get("persistent"))
 	assert.Nil(t, ctx.flags.Get("local"))
 }
+
+func TestIsPluginSubCommandArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		// plugin commands (all-lowercase subcommand)
+		{"fc list-tag-resources", []string{"fc", "list-tag-resources", "--resource-id", "a"}, true},
+		{"ecs describe-instances", []string{"ecs", "describe-instances"}, true},
+		{"cs get-cluster", []string{"cs", "get-cluster"}, true},
+		{"fc version", []string{"fc", "version"}, true},
+
+		// with help prefix
+		{"help fc list-tag-resources", []string{"help", "fc", "list-tag-resources"}, true},
+
+		// OpenAPI PascalCase commands — NOT plugin
+		{"ecs DescribeInstances", []string{"ecs", "DescribeInstances"}, false},
+		{"vpc CreateVpc", []string{"vpc", "CreateVpc"}, false},
+		{"rds DescribeDBInstances", []string{"rds", "DescribeDBInstances"}, false},
+
+		// HTTP method subcommands — NOT plugin
+		{"ecs GET", []string{"ecs", "GET"}, false},
+		{"sls POST", []string{"sls", "POST"}, false},
+		{"ecs put", []string{"ecs", "put"}, false},
+		{"ecs delete", []string{"ecs", "delete"}, false},
+		{"ecs get", []string{"ecs", "get"}, false},
+
+		// first arg starts with dash (global flag before product)
+		{"--profile before product", []string{"--profile", "default", "fc", "list-tag-resources"}, false},
+		{"--region before product", []string{"--region", "cn-hangzhou", "ecs", "describe-instances"}, false},
+
+		// subcommand starts with dash
+		{"product then flag", []string{"fc", "--help"}, false},
+
+		// too few args
+		{"only product", []string{"fc"}, false},
+		{"empty args", []string{}, false},
+		{"only help", []string{"help"}, false},
+		{"help with one arg", []string{"help", "fc"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isPluginSubCommandArgs(tt.args)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

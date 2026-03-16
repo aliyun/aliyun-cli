@@ -116,10 +116,29 @@ func CopyFileAndRemoveSource(sourceFile, destFile string) error {
 	return nil
 }
 
+const maxUserAgentLen = 256
+
+func SanitizeUserAgent(raw string) string {
+	if len(raw) > maxUserAgentLen {
+		raw = raw[:maxUserAgentLen]
+	}
+	buf := make([]byte, 0, len(raw))
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		if c >= 0x20 && c <= 0x7E {
+			buf = append(buf, c)
+		}
+	}
+	return string(buf)
+}
+
 func GetAliyunCliUserAgent() string {
 	ua := "Aliyun-CLI/" + cli.GetVersion()
 	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
 		ua += " vendor/" + vendorEnv
+	}
+	if custom := GetFromEnv("ALIBABA_CLOUD_USER_AGENT"); custom != "" {
+		ua += " " + SanitizeUserAgent(custom)
 	}
 	return ua
 }

@@ -36,24 +36,26 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewQueryFlag())
 	fs.Add(NewRoaFlag())
 	fs.Add(NewMethodFlag())
+	fs.Add(NewUserAgentFlag())
 }
 
 const (
-	SecureFlagName   = "secure"
-	InsecureFlagName = "insecure"
-	ForceFlagName    = "force"
-	EndpointFlagName = "endpoint"
-	VersionFlagName  = "version"
-	HeaderFlagName   = "header"
-	BodyFlagName     = "body"
-	BodyFileFlagName = "body-file"
-	AcceptFlagName   = "accept"
-	RoaFlagName      = "roa"
-	DryRunFlagName   = "dryrun"
-	QuietFlagName    = "quiet"
-	QueryFlagName    = "cli-query"
-	OutputFlagName   = "output"
-	MethodFlagName   = "method"
+	SecureFlagName    = "secure"
+	InsecureFlagName  = "insecure"
+	ForceFlagName     = "force"
+	EndpointFlagName  = "endpoint"
+	VersionFlagName   = "version"
+	HeaderFlagName    = "header"
+	BodyFlagName      = "body"
+	BodyFileFlagName  = "body-file"
+	AcceptFlagName    = "accept"
+	RoaFlagName       = "roa"
+	DryRunFlagName    = "dryrun"
+	QuietFlagName     = "quiet"
+	QueryFlagName     = "cli-query"
+	OutputFlagName    = "output"
+	MethodFlagName    = "method"
+	UserAgentFlagName = "user-agent"
 )
 
 func OutputFlag(fs *cli.FlagSet) *cli.Flag {
@@ -280,4 +282,21 @@ func NewQueryFlag() *cli.Flag {
 			"使用 `--cli-query <jmespath>` 通过 JMESPath 表达式过滤输出结果",
 		),
 	}
+}
+
+func NewUserAgentFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         UserAgentFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Hidden:       true,
+		Short: i18n.T(
+			"use `--user-agent <value>` to append custom User-Agent identifier",
+			"使用 `--user-agent <value>` 追加自定义 User-Agent 标识",
+		),
+	}
+}
+
+func UserAgentFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(UserAgentFlagName)
 }

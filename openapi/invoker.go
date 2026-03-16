@@ -28,6 +28,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 func GetClient(cp *config.Profile, ctx *cli.Context) (client *sdk.Client, err error) {
@@ -119,6 +120,19 @@ func (a *BasicInvoker) getRequest() *requests.CommonRequest {
 	return a.request
 }
 
+func parseCustomUserAgentSegments(s string) [][2]string {
+	var out [][2]string
+	for _, segment := range strings.Fields(s) {
+		parts := strings.SplitN(segment, "/", 2)
+		if len(parts) == 2 {
+			out = append(out, [2]string{parts[0], parts[1]})
+		} else {
+			out = append(out, [2]string{segment, ""})
+		}
+	}
+	return out
+}
+
 func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
 	a.product = product
@@ -182,6 +196,17 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 		a.client.AppendUserAgent("vendor", vendorEnv)
 	}
 	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
+
+	customUA := util.GetFromEnv("ALIBABA_CLOUD_USER_AGENT")
+	if v, ok := UserAgentFlag(ctx.Flags()).GetValue(); ok {
+		customUA = v
+	}
+	if customUA != "" {
+		customUA = util.SanitizeUserAgent(customUA)
+		for _, pair := range parseCustomUserAgentSegments(customUA) {
+			a.client.AppendUserAgent(pair[0], pair[1])
+		}
+	}
 
 	if a.request.Domain == "" {
 		endpointType := a.profile.EndpointType

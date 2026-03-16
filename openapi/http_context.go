@@ -30,6 +30,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	slsUtils "github.com/aliyun/aliyun-cli/v3/sls"
+	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 func ShouldUseOpenapi(ctx *cli.Context, product *meta.Product) bool {
@@ -64,9 +65,9 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		conf.Endpoint = tea.String(cp.RegionId + ".log.aliyuncs.com") // should apply product template
 	}
 
-	ua := "Aliyun-CLI/" + cli.GetVersion()
-	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
-		ua += " vendor/" + vendorEnv
+	ua := util.GetAliyunCliUserAgent()
+	if v, ok := UserAgentFlag(ctx.Flags()).GetValue(); ok {
+		ua += " " + util.SanitizeUserAgent(v)
 	}
 	conf.SetUserAgent(ua)
 
