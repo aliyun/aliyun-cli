@@ -120,6 +120,19 @@ func (a *BasicInvoker) getRequest() *requests.CommonRequest {
 	return a.request
 }
 
+func parseCustomUserAgentSegments(s string) [][2]string {
+	var out [][2]string
+	for _, segment := range strings.Fields(s) {
+		parts := strings.SplitN(segment, "/", 2)
+		if len(parts) == 2 {
+			out = append(out, [2]string{parts[0], parts[1]})
+		} else {
+			out = append(out, [2]string{segment, ""})
+		}
+	}
+	return out
+}
+
 func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
 	a.product = product
@@ -190,13 +203,8 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	}
 	if customUA != "" {
 		customUA = util.SanitizeUserAgent(customUA)
-		for _, segment := range strings.Fields(customUA) {
-			parts := strings.SplitN(segment, "/", 2)
-			if len(parts) == 2 {
-				a.client.AppendUserAgent(parts[0], parts[1])
-			} else {
-				a.client.AppendUserAgent(segment, "")
-			}
+		for _, pair := range parseCustomUserAgentSegments(customUA) {
+			a.client.AppendUserAgent(pair[0], pair[1])
 		}
 	}
 
