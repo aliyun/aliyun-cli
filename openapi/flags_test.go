@@ -76,4 +76,10 @@ func TestAFlags(t *testing.T) {
 	methodflag := MethodFlag(flagset)
 	assert.Equal(t, "method", methodflag.Name)
 	assert.Equal(t, "add `--method {GET|POST}` to assign rpc call method.", methodflag.Short.Text())
+
+	useragentflag := UserAgentFlag(flagset)
+	assert.Equal(t, "user-agent", useragentflag.Name)
+	assert.Equal(t, cli.AssignedOnce, useragentflag.AssignedMode)
+	assert.True(t, useragentflag.Hidden)
+	assert.Equal(t, "use `--user-agent <value>` to append custom User-Agent identifier", useragentflag.Short.Text())
 }

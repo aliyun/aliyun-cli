@@ -28,6 +28,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 func GetClient(cp *config.Profile, ctx *cli.Context) (client *sdk.Client, err error) {
@@ -182,6 +183,22 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 		a.client.AppendUserAgent("vendor", vendorEnv)
 	}
 	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
+
+	customUA := util.GetFromEnv("ALIBABA_CLOUD_CLI_USER_AGENT")
+	if v, ok := UserAgentFlag(ctx.Flags()).GetValue(); ok {
+		customUA = v
+	}
+	if customUA != "" {
+		customUA = util.SanitizeUserAgent(customUA)
+		for _, segment := range strings.Fields(customUA) {
+			parts := strings.SplitN(segment, "/", 2)
+			if len(parts) == 2 {
+				a.client.AppendUserAgent(parts[0], parts[1])
+			} else {
+				a.client.AppendUserAgent(segment, "")
+			}
+		}
+	}
 
 	if a.request.Domain == "" {
 		endpointType := a.profile.EndpointType

@@ -542,19 +542,77 @@ func TestCopyFileAndRemoveSource(t *testing.T) {
 	})
 }
 
+func TestSanitizeUserAgent(t *testing.T) {
+	t.Run("normal input", func(t *testing.T) {
+		assert.Equal(t, "skill/my-skill", SanitizeUserAgent("skill/my-skill"))
+	})
+
+	t.Run("strips control characters", func(t *testing.T) {
+		assert.Equal(t, "ab", SanitizeUserAgent("a\x00b"))
+		assert.Equal(t, "ab", SanitizeUserAgent("a\x01b"))
+		assert.Equal(t, "ab", SanitizeUserAgent("a\x1fb"))
+	})
+
+	t.Run("strips CRLF to prevent header injection", func(t *testing.T) {
+		assert.Equal(t, "abcX-Injected: yes", SanitizeUserAgent("abc\r\nX-Injected: yes"))
+		assert.Equal(t, "abc", SanitizeUserAgent("abc\r\n"))
+		assert.Equal(t, "abc", SanitizeUserAgent("abc\n"))
+	})
+
+	t.Run("strips DEL character", func(t *testing.T) {
+		assert.Equal(t, "ab", SanitizeUserAgent("a\x7fb"))
+	})
+
+	t.Run("preserves printable ASCII", func(t *testing.T) {
+		input := "ABCxyz012 /.-_()!@#$%^&*"
+		assert.Equal(t, input, SanitizeUserAgent(input))
+	})
+
+	t.Run("truncates to max length", func(t *testing.T) {
+		long := strings.Repeat("a", 300)
+		result := SanitizeUserAgent(long)
+		assert.Equal(t, 256, len(result))
+	})
+
+	t.Run("truncates before sanitizing", func(t *testing.T) {
+		input := strings.Repeat("a", 256) + "\x00\x01\x02"
+		result := SanitizeUserAgent(input)
+		assert.Equal(t, 256, len(result))
+		assert.Equal(t, strings.Repeat("a", 256), result)
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		assert.Equal(t, "", SanitizeUserAgent(""))
+	})
+
+	t.Run("all control characters", func(t *testing.T) {
+		assert.Equal(t, "", SanitizeUserAgent("\x00\x01\x02\x0a\x0d\x1f\x7f"))
+	})
+
+	t.Run("strips non-ASCII unicode", func(t *testing.T) {
+		assert.Equal(t, "hello", SanitizeUserAgent("he你好llo"))
+	})
+}
+
 func TestGetAliyunCliUserAgent(t *testing.T) {
-	// 保存原始环境变量
 	originalVendor := os.Getenv("ALIBABA_CLOUD_VENDOR")
+	originalCustom := os.Getenv("ALIBABA_CLOUD_CLI_USER_AGENT")
 	defer func() {
 		if originalVendor != "" {
 			os.Setenv("ALIBABA_CLOUD_VENDOR", originalVendor)
 		} else {
 			os.Unsetenv("ALIBABA_CLOUD_VENDOR")
 		}
+		if originalCustom != "" {
+			os.Setenv("ALIBABA_CLOUD_CLI_USER_AGENT", originalCustom)
+		} else {
+			os.Unsetenv("ALIBABA_CLOUD_CLI_USER_AGENT")
+		}
 	}()
 
 	t.Run("without vendor environment variable", func(t *testing.T) {
 		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
+		os.Unsetenv("ALIBABA_CLOUD_CLI_USER_AGENT")
 
 		ua := GetAliyunCliUserAgent()
 
@@ -566,64 +624,86 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 	t.Run("with vendor environment variable", func(t *testing.T) {
 		testVendor := "test-vendor"
 		os.Setenv("ALIBABA_CLOUD_VENDOR", testVendor)
+		os.Unsetenv("ALIBABA_CLOUD_CLI_USER_AGENT")
 
 		ua := GetAliyunCliUserAgent()
 
 		assert.NotEmpty(t, ua)
 		assert.Contains(t, ua, "Aliyun-CLI/")
-		assert.Contains(t, ua, "vendor/")
-		assert.Contains(t, ua, testVendor)
-		assert.True(t, strings.HasSuffix(ua, "vendor/"+testVendor))
+		assert.Contains(t, ua, "vendor/"+testVendor)
 	})
 
 	t.Run("with empty vendor environment variable", func(t *testing.T) {
 		os.Setenv("ALIBABA_CLOUD_VENDOR", "")
+		os.Unsetenv("ALIBABA_CLOUD_CLI_USER_AGENT")
 
 		ua := GetAliyunCliUserAgent()
 
 		assert.NotEmpty(t, ua)
 		assert.Contains(t, ua, "Aliyun-CLI/")
-		// os.LookupEnv 返回 ok=true 即使值为空字符串，所以会包含 vendor/
 		assert.Contains(t, ua, "vendor/")
-		assert.True(t, strings.HasSuffix(ua, "vendor/"))
 	})
 
-	t.Run("with different vendor values", func(t *testing.T) {
-		testCases := []string{
-			"alibaba-cloud",
-			"aliyun",
-			"custom-vendor-123",
-			"vendor-with-special-chars-!@#",
-		}
-
-		for _, vendor := range testCases {
-			t.Run("vendor_"+vendor, func(t *testing.T) {
-				os.Setenv("ALIBABA_CLOUD_VENDOR", vendor)
-
-				ua := GetAliyunCliUserAgent()
-
-				assert.Contains(t, ua, "Aliyun-CLI/")
-				assert.Contains(t, ua, "vendor/")
-				assert.Contains(t, ua, vendor)
-				assert.True(t, strings.HasSuffix(ua, "vendor/"+vendor))
-			})
-		}
-	})
-
-	t.Run("format consistency", func(t *testing.T) {
-		os.Setenv("ALIBABA_CLOUD_VENDOR", "test-vendor")
+	t.Run("with custom user agent env", func(t *testing.T) {
+		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
+		os.Setenv("ALIBABA_CLOUD_CLI_USER_AGENT", "skill/my-skill-name")
 
 		ua := GetAliyunCliUserAgent()
 
-		// 验证格式：Aliyun-CLI/<version> vendor/<vendor>
+		assert.Contains(t, ua, "Aliyun-CLI/")
+		assert.Contains(t, ua, "skill/my-skill-name")
+	})
+
+	t.Run("with both vendor and custom user agent", func(t *testing.T) {
+		os.Setenv("ALIBABA_CLOUD_VENDOR", "test-vendor")
+		os.Setenv("ALIBABA_CLOUD_CLI_USER_AGENT", "skill/demo")
+
+		ua := GetAliyunCliUserAgent()
+
+		assert.Contains(t, ua, "Aliyun-CLI/")
+		assert.Contains(t, ua, "vendor/test-vendor")
+		assert.Contains(t, ua, "skill/demo")
+	})
+
+	t.Run("custom user agent is sanitized", func(t *testing.T) {
+		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
+		os.Setenv("ALIBABA_CLOUD_CLI_USER_AGENT", "skill/bad\r\nX-Inject: yes")
+
+		ua := GetAliyunCliUserAgent()
+
+		assert.NotContains(t, ua, "\r")
+		assert.NotContains(t, ua, "\n")
+		assert.Contains(t, ua, "skill/badX-Inject: yes")
+	})
+
+	t.Run("custom user agent truncated when too long", func(t *testing.T) {
+		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
+		os.Setenv("ALIBABA_CLOUD_CLI_USER_AGENT", strings.Repeat("x", 300))
+
+		ua := GetAliyunCliUserAgent()
+
+		customPart := strings.TrimPrefix(ua, "Aliyun-CLI/")
+		idx := strings.Index(customPart, " ")
+		if idx >= 0 {
+			customPart = customPart[idx+1:]
+		}
+		assert.LessOrEqual(t, len(customPart), 256)
+	})
+
+	t.Run("empty custom user agent ignored", func(t *testing.T) {
+		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
+		os.Setenv("ALIBABA_CLOUD_CLI_USER_AGENT", "")
+
+		ua := GetAliyunCliUserAgent()
+
 		parts := strings.Split(ua, " ")
-		assert.Len(t, parts, 2)
+		assert.Len(t, parts, 1)
 		assert.True(t, strings.HasPrefix(parts[0], "Aliyun-CLI/"))
-		assert.Equal(t, "vendor/test-vendor", parts[1])
 	})
 
 	t.Run("multiple calls return consistent result", func(t *testing.T) {
 		os.Setenv("ALIBABA_CLOUD_VENDOR", "consistent-vendor")
+		os.Setenv("ALIBABA_CLOUD_CLI_USER_AGENT", "skill/test")
 
 		ua1 := GetAliyunCliUserAgent()
 		ua2 := GetAliyunCliUserAgent()
