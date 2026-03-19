@@ -379,22 +379,8 @@ func (m *Manager) validateVersionAndPlatform(ctx *cli.Context, targetPlugin *Plu
 
 	// Check minimum CLI version requirement
 	if verInfo.Metadata != nil && verInfo.Metadata.MinCliVersion != "" {
-		currentVersion := cli.GetVersion()
-
-		if isDevVersion(currentVersion) {
-			cli.Printf(ctx.Stdout(),
-				"Skipping version check, plugin requires CLI version %s or higher\n",
-				verInfo.Metadata.MinCliVersion)
-		} else if compareVersion(currentVersion, verInfo.Metadata.MinCliVersion) < 0 {
-			return nil, fmt.Errorf(
-				"plugin %s version %s requires CLI version %s or higher, but you have %s\n"+
-					"Please upgrade the CLI by running: brew upgrade aliyun-cli\n"+
-					"Or download the latest version from: https://github.com/aliyun/aliyun-cli/releases",
-				actualPluginName,
-				version,
-				verInfo.Metadata.MinCliVersion,
-				currentVersion,
-			)
+		if err := m.validateMinCliVersion(ctx, actualPluginName, version, verInfo.Metadata.MinCliVersion); err != nil {
+			return nil, err
 		}
 	}
 
@@ -405,6 +391,28 @@ func (m *Manager) validateVersionAndPlatform(ctx *cli.Context, targetPlugin *Plu
 	}
 
 	return &platInfo, nil
+}
+
+func (m *Manager) validateMinCliVersion(ctx *cli.Context, actualPluginName, pluginVersion, minCliVersion string) error {
+	currentCliVersion := cli.GetVersion()
+	if isDevVersion(currentCliVersion) {
+		cli.Printf(ctx.Stdout(),
+			"Skipping version check, plugin requires CLI version %s or higher\n",
+			minCliVersion)
+		return nil
+	}
+	if compareVersion(currentCliVersion, minCliVersion) < 0 {
+		return fmt.Errorf(
+			"plugin %s version %s requires CLI version %s or higher, but you have %s\n"+
+				"Please upgrade the CLI by running: brew upgrade aliyun-cli\n"+
+				"Or download the latest version from: https://github.com/aliyun/aliyun-cli/releases",
+			actualPluginName,
+			pluginVersion,
+			minCliVersion,
+			currentCliVersion,
+		)
+	}
+	return nil
 }
 
 func downloadFile(url, dest string) error {
@@ -632,7 +640,7 @@ func (m *Manager) loadAndValidatePluginManifest(extractDir, expectedName string)
 		return nil, fmt.Errorf("invalid plugin manifest: %w", err)
 	}
 
-	if pManifest.Name != expectedName {
+	if pManifest.Name != expectedName && expectedName != "" {
 		return nil, fmt.Errorf("plugin manifest name %s does not match expected name %s", pManifest.Name, expectedName)
 	}
 
@@ -913,4 +921,53 @@ func (m *Manager) InstallAll(ctx *cli.Context, enablePre bool) error {
 	}
 
 	return nil
+}
+
+func (m *Manager) InstallLocal(ctx *cli.Context, tarballPath string) error {
+	if !fileExists(tarballPath) {
+		return fmt.Errorf("tarball file not found: %s", tarballPath)
+	}
+
+	cli.Printf(ctx.Stdout(), "Installing plugin from local tarball...\n")
+
+	tmpDir, err := os.MkdirTemp("", "aliyun-plugin-local-")
+	if err != nil {
+		return fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+	if err := m.extractPlugin(tarballPath, tmpDir, ""); err != nil {
+		return fmt.Errorf("failed to extract plugin: %w", err)
+	}
+
+	pManifest, err := m.loadAndValidatePluginManifest(tmpDir, "")
+	if err != nil {
+		return err
+	}
+	if pManifest.Name == "" {
+		return fmt.Errorf("invalid plugin manifest: name field is required")
+	}
+	if err := m.validateMinCliVersion(ctx, pManifest.Name, pManifest.Version, pManifest.MinCliVersion); err != nil {
+		return err
+	}
+
+	extractDir := filepath.Join(m.rootDir, pManifest.Name)
+	if fileExists(extractDir) {
+		return fmt.Errorf("plugin %s already installed", pManifest.Name)
+	}
+	if err := os.Rename(tmpDir, extractDir); err != nil {
+		return fmt.Errorf("failed to move plugin to final location: %w", err)
+	}
+	if err := m.savePluginToManifest(pManifest.Name, pManifest.Version, extractDir, pManifest); err != nil {
+		os.RemoveAll(extractDir)
+		return err
+	}
+	cli.Printf(ctx.Stdout(), "Plugin %s %s installed successfully!\n", pManifest.Name, pManifest.Version)
+	return nil
+}
+
+func fileExists(path string) bool {
+	if _, err := os.Stat(path); err == nil {
+		return true
+	}
+	return false
 }
