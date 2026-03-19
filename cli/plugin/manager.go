@@ -925,7 +925,7 @@ func (m *Manager) InstallAll(ctx *cli.Context, enablePre bool) error {
 
 func (m *Manager) InstallLocal(ctx *cli.Context, tarballPath string) error {
 	if !fileExists(tarballPath) {
-		return fmt.Errorf("the plugin tarball file path %s does not exist", tarballPath)
+		return fmt.Errorf("tarball file not found: %s", tarballPath)
 	}
 
 	cli.Printf(ctx.Stdout(), "Installing plugin from local tarball...\n")
@@ -952,7 +952,7 @@ func (m *Manager) InstallLocal(ctx *cli.Context, tarballPath string) error {
 
 	extractDir := filepath.Join(m.rootDir, pManifest.Name)
 	if fileExists(extractDir) {
-		return fmt.Errorf("the plugin %s already installed, please uninstall it first if you want to overwrite it", pManifest.Name)
+		return fmt.Errorf("plugin %s already installed", pManifest.Name)
 	}
 	if err := os.Rename(tmpDir, extractDir); err != nil {
 		return fmt.Errorf("failed to move plugin to final location: %w", err)

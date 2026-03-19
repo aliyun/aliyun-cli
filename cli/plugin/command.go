@@ -408,7 +408,7 @@ func newLocalInstallCommand() *cli.Command {
 		Usage: "local-install <path-to-tarball>",
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) == 0 {
-				return fmt.Errorf("a plugin tarball file path is required")
+				return fmt.Errorf("plugin tarball file path is required")
 			}
 
 			filePath := args[0]
