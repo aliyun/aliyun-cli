@@ -24,6 +24,7 @@ func NewPluginCommand() *cli.Command {
 	cmd.AddSubCommand(newListRemoteCommand())
 	cmd.AddSubCommand(newSearchCommand())
 	cmd.AddSubCommand(newInstallCommand())
+	cmd.AddSubCommand(newLocalInstallCommand())
 	cmd.AddSubCommand(newInstallAllCommand())
 	cmd.AddSubCommand(newUninstallCommand())
 	cmd.AddSubCommand(newUpdateCommand())
@@ -398,6 +399,29 @@ func displayRemotePlugins(ctx *cli.Context, index *Index, localManifest *LocalMa
 	w.Flush()
 
 	return nil
+}
+
+func newLocalInstallCommand() *cli.Command {
+	cmd := &cli.Command{
+		Name:  "local-install",
+		Short: i18n.T("Install plugin from local tarball", "从本地压缩包安装插件"),
+		Usage: "local-install <path-to-tarball>",
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("a plugin tarball file path is required")
+			}
+
+			filePath := args[0]
+
+			mgr, err := NewManager()
+			if err != nil {
+				return err
+			}
+			return mgr.InstallLocal(ctx, filePath)
+		},
+	}
+
+	return cmd
 }
 
 func displaySearchResults(ctx *cli.Context, mgr *Manager, prefix string, results map[string][]string) error {

@@ -97,7 +97,8 @@ type PluginManifest struct {
 	Bin              struct {
 		Path string `json:"path"` // 二进制文件相对路径
 	} `json:"bin"`
-	CmdNames []string `json:"cmdNames"`
+	CmdNames      []string `json:"cmdNames"`
+	MinCliVersion string   `json:"minCliVersion"`
 }
 
 // Key: kebab-case command name (e.g., "fc create-alias")
