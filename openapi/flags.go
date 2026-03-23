@@ -33,6 +33,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(WaiterFlag)
 	fs.Add(NewDryRunFlag())
 	fs.Add(NewQuietFlag())
+	fs.Add(NewYesFlag())
 	fs.Add(NewQueryFlag())
 	fs.Add(NewRoaFlag())
 	fs.Add(NewMethodFlag())
@@ -52,6 +53,7 @@ const (
 	RoaFlagName       = "roa"
 	DryRunFlagName    = "dryrun"
 	QuietFlagName     = "quiet"
+	YesFlagName       = "yes"
 	QueryFlagName     = "cli-query"
 	OutputFlagName    = "output"
 	MethodFlagName    = "method"
@@ -116,6 +118,23 @@ func MethodFlag(fs *cli.FlagSet) *cli.Flag {
 
 func QueryFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(QueryFlagName)
+}
+
+func YesFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(YesFlagName)
+}
+
+func NewYesFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         YesFlagName,
+		Shorthand:    'y',
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			"skip safety policy confirmation prompt (for non-interactive/agent use)",
+			"跳过安全策略的确认提示（用于非交互式/Agent 场景）",
+		),
+	}
 }
 
 // TODO next version

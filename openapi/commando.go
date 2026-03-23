@@ -23,6 +23,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/safety"
 
 	"encoding/json"
 	"fmt"
@@ -287,6 +288,13 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				c.setLangEnv(ctx)
 			}
 
+			// Safety policy check for plugin execution (before spawning plugin process)
+			if !isHelp && !isVersion {
+				if err := c.checkSafetyPolicy(ctx, args[0], apiOrMethod, ""); err != nil {
+					return err
+				}
+			}
+
 			ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
 			if err != nil {
 				return err
@@ -392,6 +400,11 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		return fmt.Errorf("invalid product, please check product code")
 	}
 
+	// Safety policy check
+	if err := c.checkSafetyPolicy(ctx, product.Code, method, path); err != nil {
+		return err
+	}
+
 	apiContext, err := c.createHttpContext(ctx, product, api, method, path)
 	if err != nil {
 		return err
@@ -437,6 +450,10 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 }
 
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
+	// Safety policy check
+	if err := c.checkSafetyPolicy(ctx, productCode, apiOrMethod, path); err != nil {
+		return err
+	}
 
 	// create specific invoker
 	invoker, err := c.createInvoker(ctx, productCode, apiOrMethod, path)
@@ -957,6 +974,25 @@ func (c *Commando) handleInstallError(ctx *cli.Context, err error, pluginName st
 		cli.Printf(ctx.Stderr(), "Or install manually with:\n")
 		cli.Printf(ctx.Stderr(), "  aliyun plugin install --names %s --enable-pre\n", pluginName)
 	}
+}
+
+func (c *Commando) checkSafetyPolicy(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
+	configDir := config.GetConfigDir(ctx)
+	policy, err := safety.LoadPolicy(configDir)
+	if err != nil {
+		// Failed to load - skip policy check (fail open)
+		return nil
+	}
+	cmd := safety.CommandInfo{
+		Product:     productCode,
+		ApiOrMethod: apiOrMethod,
+		Path:        path,
+	}
+	// --yes / -y or ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM=1: skip confirm prompt for agent/non-interactive
+	skipConfirm := YesFlag(ctx.Flags()).IsAssigned() ||
+		os.Getenv("ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM") == "1" ||
+		strings.EqualFold(os.Getenv("ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM"), "true")
+	return safety.CheckAndConfirm(ctx, policy, cmd, skipConfirm)
 }
 
 func (c *Commando) setLangEnv(ctx *cli.Context) {
