@@ -122,6 +122,10 @@ func getConfigurePath(ctx *cli.Context) (currentPath string) {
 	return
 }
 
+func GetConfigDir(ctx *cli.Context) string {
+	return filepath.Dir(getConfigurePath(ctx))
+}
+
 func getProfileName(ctx *cli.Context) (name string) {
 	if name, ok := ProfileFlag(ctx.Flags()).GetValue(); ok {
 		return name
