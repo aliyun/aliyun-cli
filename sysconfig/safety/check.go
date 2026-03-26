@@ -67,9 +67,12 @@ func CheckAndConfirm(ctx *cli.Context, policy *Policy, cmd CommandInfo, skipConf
 		}
 		if !IsInteractive() {
 			return fmt.Errorf(i18n.T(
-				"operation requires human confirmation but running in non-interactive mode. Aborted by safety policy.",
-				"此操作需要人工确认，但当前处于非交互模式。已被安全策略中止。",
-			).GetMessage())
+				"Safety policy requires confirmation for: %s %s\n"+
+					"This operation cannot run in non-interactive mode without explicit approval. "+
+					"If you are an agent, ask the user whether this operation is allowed; after they confirm (e.g. reply yes or 确认), re-run the same command with --yes.",
+				"安全策略要求确认以下操作：%s %s\n"+
+					"当前为非交互环境，无法自动确认。若调用方为智能体，请先向用户说明并征得同意；用户同意后（可在对话中回复 yes 或「确认」），再使用 --yes 重新执行同一命令。",
+			).GetMessage(), cmd.Product, cmd.ApiOrMethod)
 		}
 		prompt := fmt.Sprintf(i18n.T(
 			"Safety policy requires confirmation for: %s %s\nType 'yes' to proceed, anything else to cancel: ",

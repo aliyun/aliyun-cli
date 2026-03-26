@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 )
 
 // helper to create a fake executable script
@@ -555,7 +555,7 @@ func TestPrepareEnv_AiModeOssutilInPayload(t *testing.T) {
 	}
 }
 
-func TestPrepareEnv_ProfileOssutilAndAiModeOssutilBoth(t *testing.T) {
+func TestPrepareEnv_ProfileOssutilInConfigIgnored(t *testing.T) {
 	origHOME := os.Getenv("HOME")
 	defer func() { _ = os.Setenv("HOME", origHOME) }()
 	home := t.TempDir()
@@ -564,6 +564,7 @@ func TestPrepareEnv_ProfileOssutilAndAiModeOssutilBoth(t *testing.T) {
 	if err := os.MkdirAll(cfgDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
+	// legacy profile "ossutil" in config.json is not loaded into Profile and must not appear in payload
 	configJSON := `{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou","language":"en","ossutil":{"from_profile":"yes"}}]}`
 	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(configJSON), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -587,9 +588,8 @@ func TestPrepareEnv_ProfileOssutilAndAiModeOssutilBoth(t *testing.T) {
 	if err := json.Unmarshal(dec, &payload); err != nil {
 		t.Fatalf("json: %v", err)
 	}
-	po, ok := payload["ossutil"].(map[string]any)
-	if !ok || po["from_profile"] != "yes" {
-		t.Fatalf("profile ossutil: %v", payload["ossutil"])
+	if _, has := payload["ossutil"]; has {
+		t.Fatalf("profile ossutil in config.json must not be merged into OSSUTIL_CONFIG_VALUE, got %v", payload["ossutil"])
 	}
 	aiPart, ok := payload[aimode.OssutilConfigAIModeOssutilKey].(map[string]any)
 	if !ok || aiPart["from_ai_mode"] != "yes" {

@@ -314,8 +314,8 @@ func NewUserAgentFlag() *cli.Flag {
 		AssignedMode: cli.AssignedOnce,
 		Hidden:       true,
 		Short: i18n.T(
-			"use `--user-agent <value>` to append custom User-Agent (after env ALIBABA_CLOUD_USER_AGENT)",
-			"使用 `--user-agent <value>` 追加自定义 User-Agent（在环境变量 ALIBABA_CLOUD_USER_AGENT 之后）",
+			"use `--user-agent <value>` to append custom User-Agent identifier",
+			"使用 `--user-agent <value>` 追加自定义 User-Agent 标识",
 		),
 	}
 }

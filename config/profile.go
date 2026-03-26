@@ -100,7 +100,6 @@ type Profile struct {
 	EndpointType               string           `json:"endpoint_type,omitempty"`                  // vpc or empty (default public)
 	AutoPluginInstall          bool             `json:"auto_plugin_install,omitempty"`            // automatically install plugins when not found
 	AutoPluginInstallEnablePre bool             `json:"auto_plugin_install_enable_pre,omitempty"` // install latest version (including pre-release) when true
-	PluginSpecialOSSUTIL       any              `json:"ossutil,omitempty"`                        // for ossutil
 	parent                     *Configuration   //`json:"-"`
 }
 

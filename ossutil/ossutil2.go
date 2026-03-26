@@ -544,9 +544,6 @@ func (c *Context) PrepareEnv() error {
 	}
 
 	configDir := config.GetConfigDir(c.originCtx)
-	if profile.PluginSpecialOSSUTIL != nil {
-		envMap["ossutil"] = profile.PluginSpecialOSSUTIL
-	}
 	forceOn, forceOff := openapi.CliAIOverrides(c.originCtx.Flags())
 	aimode.MergeAiModeIntoOssutilPayload(configDir, envMap, forceOn, forceOff)
 
