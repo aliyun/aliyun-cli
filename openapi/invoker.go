@@ -25,6 +25,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -120,6 +121,16 @@ func (a *BasicInvoker) getRequest() *requests.CommonRequest {
 	return a.request
 }
 
+func aiModeSuffixForContext(ctx *cli.Context) string {
+	configDir := config.GetConfigDir(ctx)
+	aiCfg, err := aimode.Load(configDir)
+	if err != nil {
+		aiCfg = aimode.DefaultAiConfig()
+	}
+	forceOn, forceOff := CliAIOverrides(ctx.Flags())
+	return aimode.RequestUserAgentSuffixForCommand(aiCfg, forceOn, forceOff)
+}
+
 func parseCustomUserAgentSegments(s string) [][2]string {
 	var out [][2]string
 	for _, segment := range strings.Fields(s) {
@@ -197,13 +208,21 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	}
 	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 
-	customUA := util.GetFromEnv("ALIBABA_CLOUD_USER_AGENT")
-	if v, ok := UserAgentFlag(ctx.Flags()).GetValue(); ok {
-		customUA = v
+	if envUA := util.GetFromEnv("ALIBABA_CLOUD_USER_AGENT"); envUA != "" {
+		envUA = util.SanitizeUserAgent(envUA)
+		for _, pair := range parseCustomUserAgentSegments(envUA) {
+			a.client.AppendUserAgent(pair[0], pair[1])
+		}
 	}
-	if customUA != "" {
-		customUA = util.SanitizeUserAgent(customUA)
-		for _, pair := range parseCustomUserAgentSegments(customUA) {
+	if v, ok := UserAgentFlag(ctx.Flags()).GetValue(); ok && v != "" {
+		v = util.SanitizeUserAgent(v)
+		for _, pair := range parseCustomUserAgentSegments(v) {
+			a.client.AppendUserAgent(pair[0], pair[1])
+		}
+	}
+
+	if suf := aiModeSuffixForContext(ctx); suf != "" {
+		for _, pair := range parseCustomUserAgentSegments(suf) {
 			a.client.AppendUserAgent(pair[0], pair[1])
 		}
 	}

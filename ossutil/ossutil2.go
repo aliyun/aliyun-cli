@@ -17,6 +17,8 @@ import (
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/openapi"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -540,6 +542,11 @@ func (c *Context) PrepareEnv() error {
 	if profile.Language != "" {
 		envMap["language"] = profile.Language
 	}
+
+	configDir := config.GetConfigDir(c.originCtx)
+	forceOn, forceOff := openapi.CliAIOverrides(c.originCtx.Flags())
+	aimode.MergeAiModeIntoOssutilPayload(configDir, envMap, forceOn, forceOff)
+
 	// base64 encode the credential info to pass to ossutil
 	// start generate OSSUTIL_CONFIG_VALUE env, json format and encode to base64
 	// set to OSSUTIL_CONFIG_VALUE
@@ -557,6 +564,7 @@ func (c *Context) PrepareEnv() error {
 	// use cap mode call oss
 	envMapNew["OSSUTIL_COMPAT_MODE"] = "alicli"
 	envMapNew["OSSUTIL_CONFIG_VALUE"] = base64Result
+
 	c.envMap = envMapNew
 	return nil
 }
@@ -589,6 +597,11 @@ func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 			}
 		}
 	}
+	// AI override flags are applied only via OSSUTIL_CONFIG_VALUE in PrepareEnv; ossutil binary must not see them.
+	argsNew = stripArgsEqual(argsNew,
+		"--"+openapi.CliAIModeFlagName,
+		"--"+openapi.CliNoAIModeFlagName,
+	)
 	if c.defaultLanguage != "" {
 		// check if --language or -L already in argsNew
 		languageFlagExists := false
@@ -604,6 +617,25 @@ func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 		}
 	}
 	return argsNew, nil
+}
+
+// stripArgsEqual returns a copy of args with any element equal to one of drops omitted.
+func stripArgsEqual(args []string, drops ...string) []string {
+	if len(args) == 0 || len(drops) == 0 {
+		return args
+	}
+	drop := make(map[string]struct{}, len(drops))
+	for _, d := range drops {
+		drop[d] = struct{}{}
+	}
+	out := make([]string, 0, len(args))
+	for _, a := range args {
+		if _, ok := drop[a]; ok {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 func fileExists(path string) bool {

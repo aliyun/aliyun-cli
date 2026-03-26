@@ -193,7 +193,7 @@ func runMCPProxy(ctx *cli.Context) error {
 		UpstreamBaseURL: upstreamURL,
 		OAuthAppName:    oauthAppName,
 		AllowedServers:  allowedServers,
-		BlockedServers:  blockedServers,
+		BlockedServers: blockedServers,
 	}
 
 	mcpProfile, err := getOrCreateMCPProfile(ctx, proxyConfig)
