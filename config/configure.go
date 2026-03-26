@@ -172,6 +172,7 @@ func NewConfigureCommand() *cli.Command {
 	c.AddSubCommand(NewConfigureDeleteCommand())
 	c.AddSubCommand(NewConfigureSwitchCommand())
 	c.AddSubCommand(NewConfigureSafetyPolicyCommand())
+	c.AddSubCommand(NewConfigureAiModeCommand())
 	return c
 }
 

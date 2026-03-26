@@ -38,26 +38,30 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewRoaFlag())
 	fs.Add(NewMethodFlag())
 	fs.Add(NewUserAgentFlag())
+	fs.Add(NewCliAIModeFlag())
+	fs.Add(NewCliNoAIModeFlag())
 }
 
 const (
-	SecureFlagName    = "secure"
-	InsecureFlagName  = "insecure"
-	ForceFlagName     = "force"
-	EndpointFlagName  = "endpoint"
-	VersionFlagName   = "version"
-	HeaderFlagName    = "header"
-	BodyFlagName      = "body"
-	BodyFileFlagName  = "body-file"
-	AcceptFlagName    = "accept"
-	RoaFlagName       = "roa"
-	DryRunFlagName    = "dryrun"
-	QuietFlagName     = "quiet"
-	YesFlagName       = "yes"
-	QueryFlagName     = "cli-query"
-	OutputFlagName    = "output"
-	MethodFlagName    = "method"
-	UserAgentFlagName = "user-agent"
+	SecureFlagName      = "secure"
+	InsecureFlagName    = "insecure"
+	ForceFlagName       = "force"
+	EndpointFlagName    = "endpoint"
+	VersionFlagName     = "version"
+	HeaderFlagName      = "header"
+	BodyFlagName        = "body"
+	BodyFileFlagName    = "body-file"
+	AcceptFlagName      = "accept"
+	RoaFlagName         = "roa"
+	DryRunFlagName      = "dryrun"
+	QuietFlagName       = "quiet"
+	YesFlagName         = "yes"
+	QueryFlagName       = "cli-query"
+	OutputFlagName      = "output"
+	MethodFlagName      = "method"
+	UserAgentFlagName   = "user-agent"
+	CliAIModeFlagName   = "cli-ai-mode"
+	CliNoAIModeFlagName = "no-cli-ai-mode"
 )
 
 func OutputFlag(fs *cli.FlagSet) *cli.Flag {
@@ -310,12 +314,59 @@ func NewUserAgentFlag() *cli.Flag {
 		AssignedMode: cli.AssignedOnce,
 		Hidden:       true,
 		Short: i18n.T(
-			"use `--user-agent <value>` to append custom User-Agent identifier",
-			"使用 `--user-agent <value>` 追加自定义 User-Agent 标识",
+			"use `--user-agent <value>` to append custom User-Agent (after env ALIBABA_CLOUD_USER_AGENT)",
+			"使用 `--user-agent <value>` 追加自定义 User-Agent（在环境变量 ALIBABA_CLOUD_USER_AGENT 之后）",
 		),
 	}
 }
 
 func UserAgentFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(UserAgentFlagName)
+}
+
+func NewCliAIModeFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         CliAIModeFlagName,
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			"for this command only, append AI-mode User-Agent segment (skills from configure ai-mode) even if global ai-mode is off",
+			"仅本次命令追加 AI 模式 UA 段（skills 来自 configure ai-mode），即使全局 ai-mode 未开启",
+		),
+	}
+}
+
+func NewCliNoAIModeFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         CliNoAIModeFlagName,
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			"for this command only, do not append AI-mode User-Agent segment even if global ai-mode is on",
+			"仅本次命令不追加 AI 模式 UA 段，即使全局 ai-mode 已开启",
+		),
+	}
+}
+
+func CliAIModeFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CliAIModeFlagName)
+}
+
+func CliNoAIModeFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CliNoAIModeFlagName)
+}
+
+// CliAIOverrides returns per-command AI User-Agent behavior from root flags.
+// If both --no-cli-ai-mode and --cli-ai-mode are present, --no-cli-ai-mode wins.
+func CliAIOverrides(fs *cli.FlagSet) (forceOn bool, forceOff bool) {
+	if fs == nil {
+		return false, false
+	}
+	if CliNoAIModeFlag(fs) != nil && CliNoAIModeFlag(fs).IsAssigned() {
+		return false, true
+	}
+	if CliAIModeFlag(fs) != nil && CliAIModeFlag(fs).IsAssigned() {
+		return true, false
+	}
+	return false, false
 }

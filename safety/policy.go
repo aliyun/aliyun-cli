@@ -205,6 +205,24 @@ func LoadPolicy(configDir string) (*Policy, error) {
 	return &p, nil
 }
 
+// EnvSafetyPolicyFile names the environment variable set for subprocesses (plugins, ossutil)
+// to the absolute path of safety-policy.json (same file as configure safety-policy).
+const EnvSafetyPolicyFile = "ALIBABA_CLOUD_CLI_SAFETY_POLICY_FILE"
+
+// MergeSafetyPolicyPathIntoEnvs sets EnvSafetyPolicyFile to the absolute path of the global
+// safety policy file under configDir. Subprocesses may load and enforce policy themselves;
+// the main CLI still enforces policy before plugin API execution when applicable.
+func MergeSafetyPolicyPathIntoEnvs(configDir string, envs map[string]string) {
+	if envs == nil || configDir == "" {
+		return
+	}
+	p := GetPolicyFilePath(configDir)
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	envs[EnvSafetyPolicyFile] = p
+}
+
 // SavePolicy writes the safety policy to the config directory.
 func SavePolicy(configDir string, policy *Policy) error {
 	if policy == nil {

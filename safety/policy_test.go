@@ -15,6 +15,7 @@
 package safety
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -132,4 +133,20 @@ func TestMatchPattern(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestMergeSafetyPolicyPathIntoEnvs(t *testing.T) {
+	dir := t.TempDir()
+	m := map[string]string{}
+	MergeSafetyPolicyPathIntoEnvs(dir, m)
+	want, err := filepath.Abs(filepath.Join(dir, SafetyPolicyFileName))
+	assert.NoError(t, err)
+	assert.Equal(t, want, m[EnvSafetyPolicyFile])
+}
+
+func TestMergeSafetyPolicyPathIntoEnvs_nilOrEmpty(t *testing.T) {
+	MergeSafetyPolicyPathIntoEnvs("", map[string]string{"a": "b"}) // no panic
+	m := map[string]string{}
+	MergeSafetyPolicyPathIntoEnvs("/tmp", nil) // no panic
+	assert.Empty(t, m)
 }

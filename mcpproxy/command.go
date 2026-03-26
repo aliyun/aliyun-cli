@@ -26,6 +26,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 func NewMCPProxyCommand() *cli.Command {
@@ -123,6 +124,16 @@ func NewMCPProxyCommand() *cli.Command {
 		),
 	})
 
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "user-agent",
+		AssignedMode: cli.AssignedOnce,
+		Hidden:       true,
+		Short: i18n.T(
+			"Append to upstream User-Agent (after env ALIBABA_CLOUD_USER_AGENT in base UA)",
+			"追加到上游 User-Agent（在基础 UA 所含 ALIBABA_CLOUD_USER_AGENT 之后）",
+		),
+	})
+
 	return cmd
 }
 
@@ -184,6 +195,11 @@ func runMCPProxy(ctx *cli.Context) error {
 		}
 	}
 
+	var extraUserAgent string
+	if v, ok := ctx.Flags().Get("user-agent").GetValue(); ok && strings.TrimSpace(v) != "" {
+		extraUserAgent = util.SanitizeUserAgent(strings.TrimSpace(v))
+	}
+
 	proxyConfig := ProxyConfig{
 		Host:            host,
 		Port:            port,
@@ -194,6 +210,7 @@ func runMCPProxy(ctx *cli.Context) error {
 		OAuthAppName:    oauthAppName,
 		AllowedServers:  allowedServers,
 		BlockedServers:  blockedServers,
+		ExtraUserAgent:  extraUserAgent,
 	}
 
 	mcpProfile, err := getOrCreateMCPProfile(ctx, proxyConfig)

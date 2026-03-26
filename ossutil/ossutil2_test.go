@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aliyun/aliyun-cli/v3/aimode"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 )
@@ -495,6 +496,48 @@ func TestPrepareEnv(t *testing.T) {
 
 	if config["access_key_secret"] != "sk" {
 		t.Fatalf("sk mismatch: %v", config["access_key_secret"])
+	}
+	// ai-mode off by default: no cli_ai_* inside payload
+	if _, ok := config[aimode.OssutilConfigKeyAIMode]; ok {
+		t.Fatalf("unexpected %s when ai-mode off", aimode.OssutilConfigKeyAIMode)
+	}
+}
+
+func TestPrepareEnv_AIModeInOssutilConfigValue(t *testing.T) {
+	origHOME := os.Getenv("HOME")
+	defer func() { _ = os.Setenv("HOME", origHOME) }()
+	home := t.TempDir()
+	_ = os.Setenv("HOME", home)
+	prepareConfig(t, home, "en")
+	cfgDir := filepath.Join(home, ".aliyun")
+	aiJSON := `{"enabled":true,"user_agent":"OssSkill/1"}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "ai-mode.json"), []byte(aiJSON), 0600); err != nil {
+		t.Fatalf("write ai-mode: %v", err)
+	}
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.InitBasicInfo()
+	if err := c.PrepareEnv(); err != nil {
+		t.Fatalf("PrepareEnv err: %v", err)
+	}
+	if _, ok := c.envMap[aimode.EnvAIMode]; ok {
+		t.Fatalf("ossutil should not set %s env; use OSSUTIL_CONFIG_VALUE", aimode.EnvAIMode)
+	}
+	val := c.envMap["OSSUTIL_CONFIG_VALUE"]
+	dec, err := base64.StdEncoding.DecodeString(val)
+	if err != nil {
+		t.Fatalf("base64: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(dec, &payload); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if payload[aimode.OssutilConfigKeyAIMode] != "1" {
+		t.Fatalf("cli_ai_mode: %v", payload[aimode.OssutilConfigKeyAIMode])
+	}
+	s, _ := payload[aimode.OssutilConfigKeyAIUserAgent].(string)
+	if !strings.Contains(s, aimode.UserAgentEnabledMarker) || !strings.Contains(s, "OssSkill/1") {
+		t.Fatalf("cli_ai_user_agent: %q", s)
 	}
 }
 

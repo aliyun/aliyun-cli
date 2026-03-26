@@ -18,6 +18,7 @@ import (
 	"bytes"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
+	"github.com/aliyun/aliyun-cli/v3/aimode"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -281,6 +282,10 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 
 				if envs, err := c.profile.GetRuntimeEnv(ctx); err == nil {
+					configDir := config.GetConfigDir(ctx)
+					forceOn, forceOff := CliAIOverrides(ctx.Flags())
+					aimode.MergeUserAgentIntoPluginEnvs(configDir, envs, forceOn, forceOff)
+					safety.MergeSafetyPolicyPathIntoEnvs(configDir, envs)
 					ctx.SetRuntimeEnvs(envs)
 				}
 			} else if isHelp || isVersion {

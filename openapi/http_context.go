@@ -69,6 +69,9 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	if v, ok := UserAgentFlag(ctx.Flags()).GetValue(); ok {
 		ua += " " + util.SanitizeUserAgent(v)
 	}
+	if suf := aiModeSuffixForContext(ctx); suf != "" {
+		ua += " " + suf
+	}
 	conf.SetUserAgent(ua)
 
 	if cp.ReadTimeout > 0 {

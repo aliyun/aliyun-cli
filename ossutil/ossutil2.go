@@ -15,8 +15,11 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
+	"github.com/aliyun/aliyun-cli/v3/aimode"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/openapi"
+	"github.com/aliyun/aliyun-cli/v3/safety"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -540,6 +543,11 @@ func (c *Context) PrepareEnv() error {
 	if profile.Language != "" {
 		envMap["language"] = profile.Language
 	}
+	// ai-mode: same JSON blob as region_id (OSSUTIL_CONFIG_VALUE), not separate ALIBABA_CLOUD_CLI_AI_* env.
+	configDir := config.GetConfigDir(c.originCtx)
+	forceOn, forceOff := openapi.CliAIOverrides(c.originCtx.Flags())
+	aimode.MergeIntoOssutilConfigPayload(configDir, envMap, forceOn, forceOff)
+
 	// base64 encode the credential info to pass to ossutil
 	// start generate OSSUTIL_CONFIG_VALUE env, json format and encode to base64
 	// set to OSSUTIL_CONFIG_VALUE
@@ -557,6 +565,10 @@ func (c *Context) PrepareEnv() error {
 	// use cap mode call oss
 	envMapNew["OSSUTIL_COMPAT_MODE"] = "alicli"
 	envMapNew["OSSUTIL_CONFIG_VALUE"] = base64Result
+
+	// safety-policy path: same subprocess env as plugins (ai-mode is in OSSUTIL_CONFIG_VALUE above).
+	safety.MergeSafetyPolicyPathIntoEnvs(configDir, envMapNew)
+
 	c.envMap = envMapNew
 	return nil
 }
