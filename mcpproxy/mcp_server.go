@@ -729,6 +729,7 @@ func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string) (*h
 		}
 	}
 
+	upstreamReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 	upstreamReq.Header.Set("User-Agent", fmt.Sprintf("%s/aliyun-cli-mcp-proxy", util.GetAliyunCliUserAgent()))
 
 	return upstreamReq, nil

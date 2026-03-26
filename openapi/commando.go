@@ -454,7 +454,6 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 }
 
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
-	// Safety policy check
 	if err := c.checkSafetyPolicy(ctx, productCode, apiOrMethod, path); err != nil {
 		return err
 	}
