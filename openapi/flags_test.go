@@ -82,14 +82,14 @@ func TestAFlags(t *testing.T) {
 	assert.Equal(t, cli.AssignedOnce, useragentflag.AssignedMode)
 	assert.False(t, useragentflag.Persistent)
 	assert.True(t, useragentflag.Hidden)
-	assert.Equal(t, "use `--user-agent <value>` to append custom User-Agent (after env ALIBABA_CLOUD_USER_AGENT)", useragentflag.Short.Text())
+	assert.Equal(t, "use `--user-agent <value>` to append custom User-Agent identifier", useragentflag.Short.Text())
 
 	aiFlag := CliAIModeFlag(flagset)
 	assert.Equal(t, CliAIModeFlagName, aiFlag.Name)
 	assert.False(t, aiFlag.Hidden)
 	noAiFlag := CliNoAIModeFlag(flagset)
 	assert.Equal(t, CliNoAIModeFlagName, noAiFlag.Name)
-	assert.False(t, noAiFlag.Hidden)
+	assert.True(t, noAiFlag.Hidden)
 
 	on, off := CliAIOverrides(flagset)
 	assert.False(t, on)
