@@ -23,7 +23,6 @@ import (
 	"strings"
 )
 
-// Action defines the policy action for a matched command
 type Action string
 
 const (
@@ -38,7 +37,6 @@ const (
 	ActionForbid Action = "forbid"
 )
 
-// Rule defines a safety policy rule with command pattern and action
 type Rule struct {
 	// Pattern: "product:ApiName" or "product:METHOD" or "product:METHOD/path"
 	// Supports wildcard: * matches any. Examples:
@@ -53,9 +51,8 @@ type Rule struct {
 
 // Policy holds the safety policy configuration
 type Policy struct {
-	Enabled              bool   `json:"enabled"`
-	Rules                []Rule `json:"rules"`
-	PluginSpecialOSSUTIL any    `json:"ossutil,omitempty"`
+	Enabled bool   `json:"enabled"`
+	Rules   []Rule `json:"rules"`
 }
 
 // DefaultPolicy returns a policy with safety disabled (no restrictions)
@@ -175,10 +172,6 @@ func InferOperationFromHttpMethod(method string) string {
 		return ""
 	}
 }
-
-// OssutilConfigPolicyOssutilKey is the JSON key under OSSUTIL_CONFIG_VALUE for Policy.PluginSpecialOSSUTIL
-// (JSON field "ossutil" in safety-policy.json). Separate from profile "ossutil"; both may be present.
-const OssutilConfigPolicyOssutilKey = "policy-ossutil"
 
 // SafetyPolicyFileName is the name of the standalone safety policy file
 const SafetyPolicyFileName = "safety-policy.json"

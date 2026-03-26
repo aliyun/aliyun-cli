@@ -10,17 +10,17 @@ import (
 
 func TestEffectiveUserAgent(t *testing.T) {
 	assert.Equal(t, DefaultUserAgent, EffectiveUserAgent(nil))
-	assert.Equal(t, DefaultUserAgent, EffectiveUserAgent(DefaultConfig()))
-	assert.Equal(t, "CustomAgent/1", EffectiveUserAgent(&Config{UserAgent: "CustomAgent/1"}))
+	assert.Equal(t, DefaultUserAgent, EffectiveUserAgent(DefaultAiConfig()))
+	assert.Equal(t, "CustomAgent/1", EffectiveUserAgent(&AiConfig{UserAgent: "CustomAgent/1"}))
 }
 
 func TestRequestUserAgentSuffix(t *testing.T) {
 	assert.Equal(t, "", RequestUserAgentSuffix(nil))
-	assert.Equal(t, "", RequestUserAgentSuffix(&Config{Enabled: false}))
-	s := RequestUserAgentSuffix(&Config{Enabled: true, UserAgent: ""})
+	assert.Equal(t, "", RequestUserAgentSuffix(&AiConfig{Enabled: false}))
+	s := RequestUserAgentSuffix(&AiConfig{Enabled: true, UserAgent: ""})
 	assert.Contains(t, s, UserAgentEnabledMarker)
 	assert.Contains(t, s, DefaultUserAgent)
-	assert.Equal(t, UserAgentEnabledMarker+" CustomAgent/1", RequestUserAgentSuffix(&Config{Enabled: true, UserAgent: "CustomAgent/1"}))
+	assert.Equal(t, UserAgentEnabledMarker+" CustomAgent/1", RequestUserAgentSuffix(&AiConfig{Enabled: true, UserAgent: "CustomAgent/1"}))
 }
 
 func TestLoadSaveRoundTrip(t *testing.T) {
@@ -37,12 +37,12 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, loaded.Enabled)
 	assert.Equal(t, "my-agent", loaded.UserAgent)
-	assert.Equal(t, filepath.Join(dir, ConfigFileName), GetConfigFilePath(dir))
+	assert.Equal(t, filepath.Join(dir, AiConfigFileName), GetConfigFilePath(dir))
 }
 
 func TestMergeUserAgentIntoPluginEnvs(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, Save(dir, &Config{Enabled: true, UserAgent: "my-ai-ua"}))
+	require.NoError(t, Save(dir, &AiConfig{Enabled: true, UserAgent: "my-ai-ua"}))
 
 	envs := map[string]string{"ALIBABA_CLOUD_REGION_ID": "cn-hangzhou"}
 	MergeUserAgentIntoPluginEnvs(dir, envs, false, false)
@@ -53,7 +53,7 @@ func TestMergeUserAgentIntoPluginEnvs(t *testing.T) {
 
 	t.Run("disabledNoInject", func(t *testing.T) {
 		offDir := t.TempDir()
-		require.NoError(t, Save(offDir, &Config{Enabled: false}))
+		require.NoError(t, Save(offDir, &AiConfig{Enabled: false}))
 		e := map[string]string{"FOO": "bar"}
 		MergeUserAgentIntoPluginEnvs(offDir, e, false, false)
 		assert.NotContains(t, e, EnvAIMode)
@@ -62,7 +62,7 @@ func TestMergeUserAgentIntoPluginEnvs(t *testing.T) {
 
 	t.Run("forceOnWhenGlobalOff", func(t *testing.T) {
 		offDir := t.TempDir()
-		require.NoError(t, Save(offDir, &Config{Enabled: false, UserAgent: "inline"}))
+		require.NoError(t, Save(offDir, &AiConfig{Enabled: false, UserAgent: "inline"}))
 		e := map[string]string{}
 		MergeUserAgentIntoPluginEnvs(offDir, e, true, false)
 		assert.Equal(t, "1", e[EnvAIMode])
@@ -71,7 +71,7 @@ func TestMergeUserAgentIntoPluginEnvs(t *testing.T) {
 
 	t.Run("forceOffClears", func(t *testing.T) {
 		onDir := t.TempDir()
-		require.NoError(t, Save(onDir, &Config{Enabled: true}))
+		require.NoError(t, Save(onDir, &AiConfig{Enabled: true}))
 		e := map[string]string{EnvAIMode: "1", EnvAIUserAgent: "x"}
 		MergeUserAgentIntoPluginEnvs(onDir, e, false, true)
 		assert.Equal(t, "", e[EnvAIMode])
@@ -79,29 +79,46 @@ func TestMergeUserAgentIntoPluginEnvs(t *testing.T) {
 	})
 }
 
-func TestMergeIntoOssutilConfigPayload(t *testing.T) {
+func TestMergeAiModeIntoOssutilPayload(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, Save(dir, &Config{Enabled: true, UserAgent: "my-ai-ua"}))
+	require.NoError(t, Save(dir, &AiConfig{Enabled: true, UserAgent: "my-ai-ua"}))
 	m := map[string]any{"region_id": "cn-hangzhou"}
-	MergeIntoOssutilConfigPayload(dir, m, false, false)
+	MergeAiModeIntoOssutilPayload(dir, m, false, false)
 	assert.Equal(t, "1", m[OssutilConfigKeyAIMode])
 	assert.Contains(t, m[OssutilConfigKeyAIUserAgent], UserAgentEnabledMarker)
 	assert.Contains(t, m[OssutilConfigKeyAIUserAgent], "my-ai-ua")
 
 	offDir := t.TempDir()
-	require.NoError(t, Save(offDir, &Config{Enabled: false}))
+	require.NoError(t, Save(offDir, &AiConfig{Enabled: false}))
 	m2 := map[string]any{"x": 1}
-	MergeIntoOssutilConfigPayload(offDir, m2, false, false)
+	MergeAiModeIntoOssutilPayload(offDir, m2, false, false)
 	assert.NotContains(t, m2, OssutilConfigKeyAIMode)
 
 	m3 := map[string]any{}
-	MergeIntoOssutilConfigPayload(offDir, m3, true, false)
+	MergeAiModeIntoOssutilPayload(offDir, m3, true, false)
 	assert.Equal(t, "1", m3[OssutilConfigKeyAIMode])
+
+	pluginDir := t.TempDir()
+	require.NoError(t, Save(pluginDir, &AiConfig{PluginSpecialOSSUTIL: map[string]any{"k": "v"}}))
+	mp := map[string]any{"region_id": "r"}
+	MergeAiModeIntoOssutilPayload(pluginDir, mp, false, false)
+	raw, ok := mp[OssutilConfigAIModeOssutilKey].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "v", raw["k"])
+
+	bothDir := t.TempDir()
+	require.NoError(t, Save(bothDir, &AiConfig{Enabled: true, UserAgent: "x", PluginSpecialOSSUTIL: map[string]any{"o": 1}}))
+	mb := map[string]any{}
+	MergeAiModeIntoOssutilPayload(bothDir, mb, false, false)
+	assert.Equal(t, "1", mb[OssutilConfigKeyAIMode])
+	blob, ok := mb[OssutilConfigAIModeOssutilKey].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, float64(1), blob["o"]) // JSON number decode
 }
 
 func TestRequestUserAgentSuffixForCommand(t *testing.T) {
-	cfg := &Config{Enabled: true, UserAgent: "s"}
+	cfg := &AiConfig{Enabled: true, UserAgent: "s"}
 	assert.Equal(t, "", RequestUserAgentSuffixForCommand(cfg, false, true))
-	assert.Contains(t, RequestUserAgentSuffixForCommand(&Config{Enabled: false, UserAgent: "s"}, true, false), "s")
-	assert.Equal(t, "", RequestUserAgentSuffixForCommand(&Config{Enabled: false}, false, false))
+	assert.Contains(t, RequestUserAgentSuffixForCommand(&AiConfig{Enabled: false, UserAgent: "s"}, true, false), "s")
+	assert.Equal(t, "", RequestUserAgentSuffixForCommand(&AiConfig{Enabled: false}, false, false))
 }

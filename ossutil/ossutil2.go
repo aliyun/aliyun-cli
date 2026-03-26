@@ -15,11 +15,11 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
-	"github.com/aliyun/aliyun-cli/v3/aimode"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
-	"github.com/aliyun/aliyun-cli/v3/safety"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -548,13 +548,8 @@ func (c *Context) PrepareEnv() error {
 	if profile.PluginSpecialOSSUTIL != nil {
 		envMap["ossutil"] = profile.PluginSpecialOSSUTIL
 	}
-	if pol, err := safety.LoadPolicy(configDir); err == nil && pol.PluginSpecialOSSUTIL != nil {
-		envMap[safety.OssutilConfigPolicyOssutilKey] = pol.PluginSpecialOSSUTIL
-	}
-
-	// ai-mode: same JSON blob as region_id (OSSUTIL_CONFIG_VALUE)
 	forceOn, forceOff := openapi.CliAIOverrides(c.originCtx.Flags())
-	aimode.MergeIntoOssutilConfigPayload(configDir, envMap, forceOn, forceOff)
+	aimode.MergeAiModeIntoOssutilPayload(configDir, envMap, forceOn, forceOff)
 
 	// base64 encode the credential info to pass to ossutil
 	// start generate OSSUTIL_CONFIG_VALUE env, json format and encode to base64

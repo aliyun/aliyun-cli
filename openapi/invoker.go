@@ -25,7 +25,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 
-	"github.com/aliyun/aliyun-cli/v3/aimode"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -125,7 +125,7 @@ func aiModeSuffixForContext(ctx *cli.Context) string {
 	configDir := config.GetConfigDir(ctx)
 	aiCfg, err := aimode.Load(configDir)
 	if err != nil {
-		aiCfg = aimode.DefaultConfig()
+		aiCfg = aimode.DefaultAiConfig()
 	}
 	forceOn, forceOff := CliAIOverrides(ctx.Flags())
 	return aimode.RequestUserAgentSuffixForCommand(aiCfg, forceOn, forceOff)

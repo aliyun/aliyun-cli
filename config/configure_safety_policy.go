@@ -20,7 +20,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
-	"github.com/aliyun/aliyun-cli/v3/safety"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 )
 
 func NewConfigureSafetyPolicyCommand() *cli.Command {

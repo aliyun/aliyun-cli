@@ -18,10 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aliyun/aliyun-cli/v3/aimode"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
-	"github.com/aliyun/aliyun-cli/v3/safety"
 )
 
 // helper to create a fake executable script
@@ -521,16 +520,16 @@ func TestPrepareEnv(t *testing.T) {
 	}
 }
 
-func TestPrepareEnv_SafetyPolicyOssutilInPayload(t *testing.T) {
+func TestPrepareEnv_AiModeOssutilInPayload(t *testing.T) {
 	origHOME := os.Getenv("HOME")
 	defer func() { _ = os.Setenv("HOME", origHOME) }()
 	home := t.TempDir()
 	_ = os.Setenv("HOME", home)
 	prepareConfig(t, home, "en")
 	cfgDir := filepath.Join(home, ".aliyun")
-	sp := `{"enabled":false,"rules":[],"ossutil":{"from_policy":"yes"}}`
-	if err := os.WriteFile(filepath.Join(cfgDir, "safety-policy.json"), []byte(sp), 0600); err != nil {
-		t.Fatalf("write policy: %v", err)
+	ai := `{"enabled":false,"ossutil":{"from_ai_mode":"yes"}}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "ai-mode.json"), []byte(ai), 0600); err != nil {
+		t.Fatalf("write ai-mode: %v", err)
 	}
 	ctx, _, _ := newOriginCtx()
 	c := NewContext(ctx)
@@ -547,16 +546,16 @@ func TestPrepareEnv_SafetyPolicyOssutilInPayload(t *testing.T) {
 	if err := json.Unmarshal(dec, &payload); err != nil {
 		t.Fatalf("json: %v", err)
 	}
-	ou, ok := payload[safety.OssutilConfigPolicyOssutilKey].(map[string]any)
-	if !ok || ou["from_policy"] != "yes" {
-		t.Fatalf("expected policy block at %s, got %v", safety.OssutilConfigPolicyOssutilKey, payload[safety.OssutilConfigPolicyOssutilKey])
+	ou, ok := payload[aimode.OssutilConfigAIModeOssutilKey].(map[string]any)
+	if !ok || ou["from_ai_mode"] != "yes" {
+		t.Fatalf("expected ai-ossutil block at %s, got %v", aimode.OssutilConfigAIModeOssutilKey, payload[aimode.OssutilConfigAIModeOssutilKey])
 	}
 	if _, hasProfile := payload["ossutil"]; hasProfile {
 		t.Fatalf("profile ossutil should be absent unless set in profile")
 	}
 }
 
-func TestPrepareEnv_ProfileOssutilAndPolicyOssutilBoth(t *testing.T) {
+func TestPrepareEnv_ProfileOssutilAndAiModeOssutilBoth(t *testing.T) {
 	origHOME := os.Getenv("HOME")
 	defer func() { _ = os.Setenv("HOME", origHOME) }()
 	home := t.TempDir()
@@ -569,9 +568,9 @@ func TestPrepareEnv_ProfileOssutilAndPolicyOssutilBoth(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(configJSON), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	sp := `{"enabled":false,"rules":[],"ossutil":{"from_policy":"yes"}}`
-	if err := os.WriteFile(filepath.Join(cfgDir, "safety-policy.json"), []byte(sp), 0600); err != nil {
-		t.Fatalf("write policy: %v", err)
+	ai := `{"enabled":false,"ossutil":{"from_ai_mode":"yes"}}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "ai-mode.json"), []byte(ai), 0600); err != nil {
+		t.Fatalf("write ai-mode: %v", err)
 	}
 	ctx, _, _ := newOriginCtx()
 	c := NewContext(ctx)
@@ -592,9 +591,9 @@ func TestPrepareEnv_ProfileOssutilAndPolicyOssutilBoth(t *testing.T) {
 	if !ok || po["from_profile"] != "yes" {
 		t.Fatalf("profile ossutil: %v", payload["ossutil"])
 	}
-	policyPart, ok := payload[safety.OssutilConfigPolicyOssutilKey].(map[string]any)
-	if !ok || policyPart["from_policy"] != "yes" {
-		t.Fatalf("policy-ossutil: %v", payload[safety.OssutilConfigPolicyOssutilKey])
+	aiPart, ok := payload[aimode.OssutilConfigAIModeOssutilKey].(map[string]any)
+	if !ok || aiPart["from_ai_mode"] != "yes" {
+		t.Fatalf("ai-ossutil: %v", payload[aimode.OssutilConfigAIModeOssutilKey])
 	}
 }
 

@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/aliyun/aliyun-cli/v3/aimode"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
@@ -96,16 +96,18 @@ func doConfigureAiMode(ctx *cli.Context, args []string) error {
 	}
 }
 
-func doAiModeShow(ctx *cli.Context, configDir string, cfg *aimode.Config) error {
+func doAiModeShow(ctx *cli.Context, configDir string, cfg *aimode.AiConfig) error {
 	out := struct {
 		Enabled                bool   `json:"enabled"`
 		UserAgent              string `json:"user_agent,omitempty"`
+		Ossutil                any    `json:"ossutil,omitempty"`
 		EffectiveUserAgent     string `json:"effective_user_agent"`
 		RequestUserAgentSuffix string `json:"request_user_agent_suffix,omitempty"`
 		ConfigFile             string `json:"config_file"`
 	}{
 		Enabled:                cfg.Enabled,
 		UserAgent:              cfg.UserAgent,
+		Ossutil:                cfg.PluginSpecialOSSUTIL,
 		EffectiveUserAgent:     aimode.EffectiveUserAgent(cfg),
 		RequestUserAgentSuffix: aimode.RequestUserAgentSuffix(cfg),
 		ConfigFile:             aimode.GetConfigFilePath(configDir),
@@ -118,17 +120,17 @@ func doAiModeShow(ctx *cli.Context, configDir string, cfg *aimode.Config) error 
 	return nil
 }
 
-func doAiModeEnable(ctx *cli.Context, configDir string, cfg *aimode.Config) error {
+func doAiModeEnable(ctx *cli.Context, configDir string, cfg *aimode.AiConfig) error {
 	cfg.Enabled = true
 	return aimode.Save(configDir, cfg)
 }
 
-func doAiModeDisable(ctx *cli.Context, configDir string, cfg *aimode.Config) error {
+func doAiModeDisable(ctx *cli.Context, configDir string, cfg *aimode.AiConfig) error {
 	cfg.Enabled = false
 	return aimode.Save(configDir, cfg)
 }
 
-func doAiModeSetUserAgent(ctx *cli.Context, configDir string, cfg *aimode.Config) error {
+func doAiModeSetUserAgent(ctx *cli.Context, configDir string, cfg *aimode.AiConfig) error {
 	v, ok := ctx.Flags().Get("user-agent").GetValue()
 	if !ok || v == "" {
 		return fmt.Errorf("--user-agent is required for set-user-agent")
@@ -137,7 +139,7 @@ func doAiModeSetUserAgent(ctx *cli.Context, configDir string, cfg *aimode.Config
 	return aimode.Save(configDir, cfg)
 }
 
-func doAiModeResetUserAgent(ctx *cli.Context, configDir string, cfg *aimode.Config) error {
+func doAiModeResetUserAgent(ctx *cli.Context, configDir string, cfg *aimode.AiConfig) error {
 	cfg.UserAgent = ""
 	return aimode.Save(configDir, cfg)
 }
