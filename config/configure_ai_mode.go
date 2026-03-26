@@ -28,8 +28,8 @@ func NewConfigureAiModeCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name: "ai-mode",
 		Short: i18n.T(
-			"manage global AI mode and User-Agent for API calls (not profile-scoped)",
-			"管理全局 AI 模式及 API 调用的 User-Agent（不按 profile 区分）"),
+			"manage global AI mode and User-Agent for API calls",
+			"管理全局 AI 模式及 API 调用的 User-Agent"),
 		Usage: "ai-mode [command] [--config-path <configPath>]",
 		Long: i18n.T(
 			`Configure global AI mode. When enabled, all CLI API requests append the configured User-Agent segment (default: AlibabaCloud-Agent-Skills), in addition to the normal Aliyun CLI UA.`,
