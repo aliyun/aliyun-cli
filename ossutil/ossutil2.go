@@ -543,8 +543,16 @@ func (c *Context) PrepareEnv() error {
 	if profile.Language != "" {
 		envMap["language"] = profile.Language
 	}
-	// ai-mode: same JSON blob as region_id (OSSUTIL_CONFIG_VALUE), not separate ALIBABA_CLOUD_CLI_AI_* env.
+
 	configDir := config.GetConfigDir(c.originCtx)
+	if profile.PluginSpecialOSSUTIL != nil {
+		envMap["ossutil"] = profile.PluginSpecialOSSUTIL
+	}
+	if pol, err := safety.LoadPolicy(configDir); err == nil && pol.PluginSpecialOSSUTIL != nil {
+		envMap[safety.OssutilConfigPolicyOssutilKey] = pol.PluginSpecialOSSUTIL
+	}
+
+	// ai-mode: same JSON blob as region_id (OSSUTIL_CONFIG_VALUE)
 	forceOn, forceOff := openapi.CliAIOverrides(c.originCtx.Flags())
 	aimode.MergeIntoOssutilConfigPayload(configDir, envMap, forceOn, forceOff)
 
@@ -601,6 +609,11 @@ func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 			}
 		}
 	}
+	// AI override flags are applied only via OSSUTIL_CONFIG_VALUE in PrepareEnv; ossutil binary must not see them.
+	argsNew = stripArgsEqual(argsNew,
+		"--"+openapi.CliAIModeFlagName,
+		"--"+openapi.CliNoAIModeFlagName,
+	)
 	if c.defaultLanguage != "" {
 		// check if --language or -L already in argsNew
 		languageFlagExists := false
@@ -616,6 +629,25 @@ func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 		}
 	}
 	return argsNew, nil
+}
+
+// stripArgsEqual returns a copy of args with any element equal to one of drops omitted.
+func stripArgsEqual(args []string, drops ...string) []string {
+	if len(args) == 0 || len(drops) == 0 {
+		return args
+	}
+	drop := make(map[string]struct{}, len(drops))
+	for _, d := range drops {
+		drop[d] = struct{}{}
+	}
+	out := make([]string, 0, len(args))
+	for _, a := range args {
+		if _, ok := drop[a]; ok {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 func fileExists(path string) bool {

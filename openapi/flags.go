@@ -341,6 +341,7 @@ func NewCliNoAIModeFlag() *cli.Flag {
 		Category:     "caller",
 		Name:         CliNoAIModeFlagName,
 		AssignedMode: cli.AssignedNone,
+		Hidden:       true,
 		Short: i18n.T(
 			"for this command only, do not append AI-mode User-Agent segment even if global ai-mode is on",
 			"仅本次命令不追加 AI 模式 UA 段，即使全局 ai-mode 已开启",
