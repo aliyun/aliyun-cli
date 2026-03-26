@@ -15,11 +15,10 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
-	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
-	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -568,9 +567,6 @@ func (c *Context) PrepareEnv() error {
 	// use cap mode call oss
 	envMapNew["OSSUTIL_COMPAT_MODE"] = "alicli"
 	envMapNew["OSSUTIL_CONFIG_VALUE"] = base64Result
-
-	// safety-policy path: same subprocess env as plugins (ai-mode is in OSSUTIL_CONFIG_VALUE above).
-	safety.MergeSafetyPolicyPathIntoEnvs(configDir, envMapNew)
 
 	c.envMap = envMapNew
 	return nil

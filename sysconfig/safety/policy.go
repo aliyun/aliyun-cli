@@ -49,13 +49,11 @@ type Rule struct {
 	Action Action `json:"action"`
 }
 
-// Policy holds the safety policy configuration
 type Policy struct {
 	Enabled bool   `json:"enabled"`
 	Rules   []Rule `json:"rules"`
 }
 
-// DefaultPolicy returns a policy with safety disabled (no restrictions)
 func DefaultPolicy() *Policy {
 	return &Policy{
 		Enabled: false,
@@ -63,14 +61,12 @@ func DefaultPolicy() *Policy {
 	}
 }
 
-// CheckResult is the result of policy check
 type CheckResult struct {
 	Action  Action
 	Matched bool
 	Rule    *Rule
 }
 
-// CommandInfo describes the command being executed for policy matching
 type CommandInfo struct {
 	Product string // e.g., "ecs", "cs"
 	// For RPC: ApiName like "DeleteInstance", "UpdateInstance"
@@ -80,7 +76,6 @@ type CommandInfo struct {
 	Path string
 }
 
-// Check evaluates the policy against the given command and returns the applicable action
 func (p *Policy) Check(cmd CommandInfo) CheckResult {
 	if !p.Enabled || len(p.Rules) == 0 {
 		return CheckResult{Action: ActionAllow, Matched: false}
@@ -122,8 +117,6 @@ func buildCommandPattern(cmd CommandInfo) string {
 	return fmt.Sprintf("%s:%s", product, cmd.ApiOrMethod)
 }
 
-// matchPattern checks if the command matches the rule pattern
-// Pattern supports * as wildcard. Pattern format: "product:apiOrMethod" or "product:apiOrMethod/path"
 func matchPattern(pattern, cmd string) bool {
 	if pattern == "" {
 		return false
@@ -144,7 +137,6 @@ func matchPattern(pattern, cmd string) bool {
 	return re.MatchString(cmd)
 }
 
-// InferOperationFromApiName returns delete, update, create or "" from API name
 func InferOperationFromApiName(apiName string) string {
 	apiLower := strings.ToLower(apiName)
 	if strings.HasPrefix(apiLower, "delete") {
@@ -159,31 +151,12 @@ func InferOperationFromApiName(apiName string) string {
 	return ""
 }
 
-// InferOperationFromHttpMethod maps HTTP method to operation type
-func InferOperationFromHttpMethod(method string) string {
-	switch strings.ToUpper(method) {
-	case "DELETE":
-		return "delete"
-	case "PUT", "PATCH":
-		return "update"
-	case "POST":
-		return "create" // or update, POST is ambiguous
-	default:
-		return ""
-	}
-}
-
-// SafetyPolicyFileName is the name of the standalone safety policy file
 const SafetyPolicyFileName = "safety-policy.json"
 
-// GetPolicyFilePath returns the path to safety policy file in the given config directory.
-// Policy is stored in a separate file (e.g. ~/.aliyun/safety-policy.json) as a global config.
 func GetPolicyFilePath(configDir string) string {
 	return filepath.Join(configDir, SafetyPolicyFileName)
 }
 
-// LoadPolicy loads the safety policy from the config directory.
-// Returns DefaultPolicy() if file does not exist or is invalid.
 func LoadPolicy(configDir string) (*Policy, error) {
 	path := GetPolicyFilePath(configDir)
 	data, err := os.ReadFile(path)
@@ -203,13 +176,8 @@ func LoadPolicy(configDir string) (*Policy, error) {
 	return &p, nil
 }
 
-// EnvSafetyPolicyFile names the environment variable set for subprocesses (plugins, ossutil)
-// to the absolute path of safety-policy.json (same file as configure safety-policy).
 const EnvSafetyPolicyFile = "ALIBABA_CLOUD_CLI_SAFETY_POLICY_FILE"
 
-// MergeSafetyPolicyPathIntoEnvs sets EnvSafetyPolicyFile to the absolute path of the global
-// safety policy file under configDir. Subprocesses may load and enforce policy themselves;
-// the main CLI still enforces policy before plugin API execution when applicable.
 func MergeSafetyPolicyPathIntoEnvs(configDir string, envs map[string]string) {
 	if envs == nil || configDir == "" {
 		return
@@ -221,7 +189,6 @@ func MergeSafetyPolicyPathIntoEnvs(configDir string, envs map[string]string) {
 	envs[EnvSafetyPolicyFile] = p
 }
 
-// SavePolicy writes the safety policy to the config directory.
 func SavePolicy(configDir string, policy *Policy) error {
 	if policy == nil {
 		policy = DefaultPolicy()

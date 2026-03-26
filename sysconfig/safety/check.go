@@ -15,15 +15,39 @@
 package safety
 
 import (
+	"bufio"
 	"fmt"
+	"io"
+	"os"
+	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
-// CheckAndConfirm loads the safety policy, checks the command against it,
-// and handles deny/confirm actions. Returns nil if the operation is allowed to proceed.
-// When skipConfirm is true (e.g. from --yes flag), confirm actions are treated as already approved.
+var stdinReader io.Reader = os.Stdin
+
+func PromptConfirm(w io.Writer, prompt string) bool {
+	_, _ = fmt.Fprint(w, prompt)
+
+	reader := bufio.NewReader(stdinReader)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return false
+	}
+
+	answer := strings.TrimSpace(strings.ToLower(line))
+	return answer == "y" || answer == "yes"
+}
+
+func IsInteractive() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
+}
+
 func CheckAndConfirm(ctx *cli.Context, policy *Policy, cmd CommandInfo, skipConfirm bool) error {
 	if policy == nil {
 		policy = DefaultPolicy()

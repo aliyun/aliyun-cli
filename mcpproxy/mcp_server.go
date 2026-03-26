@@ -22,7 +22,6 @@ import (
 	"github.com/alibabacloud-go/tea/dara"
 	"github.com/alibabacloud-go/tea/tea"
 
-	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/util"
@@ -738,11 +737,6 @@ func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string) (*h
 	ua := fmt.Sprintf("%s/aliyun-cli-mcp-proxy", util.GetAliyunCliUserAgent())
 	if s := strings.TrimSpace(p.extraUserAgent); s != "" {
 		ua += " " + s
-	}
-	if aiCfg, err := aimode.Load(config.GetConfigPath()); err == nil {
-		if suf := aimode.RequestUserAgentSuffix(aiCfg); suf != "" {
-			ua += " " + suf
-		}
 	}
 	upstreamReq.Header.Set("User-Agent", ua)
 
