@@ -112,7 +112,7 @@ type ProxyConfig struct {
 	OAuthAppName    string   // 用户自定义的 OAuth 应用名称，如果为空则使用默认的 OAuth 应用
 	AllowedServers  []string // 允许访问的服务器列表（服务器名称、ID 或路径前缀），如果为空则允许所有服务器
 	BlockedServers  []string // 禁止访问的服务器列表（服务器名称、ID 或路径前缀），黑名单优先级高于白名单
-	// ExtraUserAgent is optional --user-agent from aliyun mcp-proxy (appended after GetAliyunCliUserAgent, before AI suffix).
+	// ExtraUserAgent reserved; mcp-proxy subcommand does not expose --user-agent for now.
 	ExtraUserAgent string
 }
 
@@ -129,7 +129,7 @@ type MCPProxy struct {
 	AllowedServers  []string            // 允许访问的服务器列表（服务器名称、ID 或路径前缀），如果为空则允许所有服务器
 	BlockedServers  []string            // 禁止访问的服务器列表（服务器名称、ID 或路径前缀），黑名单优先级高于白名单
 	serverPaths     map[string][]string // 服务器名称/ID -> 路径列表的映射，启动时构建，避免重复解析
-	extraUserAgent  string              // from global --user-agent (sanitized)
+	extraUserAgent  string              // from ProxyConfig.ExtraUserAgent (unused while CLI flag disabled)
 }
 
 const (
