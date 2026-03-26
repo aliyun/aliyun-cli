@@ -82,7 +82,27 @@ func Load(configDir string) (*AiConfig, error) {
 	if err := json.Unmarshal(data, &c); err != nil {
 		return DefaultAiConfig(), nil
 	}
+	c.PluginSpecialOSSUTIL = normalizePluginSpecialOSSUTIL(c.PluginSpecialOSSUTIL)
 	return &c, nil
+}
+
+func normalizePluginSpecialOSSUTIL(v any) any {
+	if v == nil {
+		return nil
+	}
+	s, ok := v.(string)
+	if !ok {
+		return v
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	var out any
+	if err := json.Unmarshal([]byte(s), &out); err != nil {
+		return v
+	}
+	return out
 }
 
 func Save(configDir string, c *AiConfig) error {

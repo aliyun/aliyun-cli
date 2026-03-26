@@ -1,6 +1,7 @@
 package aimode
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -38,6 +39,30 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 	assert.True(t, loaded.Enabled)
 	assert.Equal(t, "my-agent", loaded.UserAgent)
 	assert.Equal(t, filepath.Join(dir, AiConfigFileName), GetConfigFilePath(dir))
+}
+
+func TestLoad_OssutilStringJSONDecodesToAny(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, AiConfigFileName)
+	// ossutil written as a JSON string (escaped object) — common when piping string values
+	require.NoError(t, os.WriteFile(path, []byte(`{"enabled":false,"ossutil":"{\"k\":\"v\",\"n\":1}"}`), 0600))
+	c, err := Load(dir)
+	require.NoError(t, err)
+	m, ok := c.PluginSpecialOSSUTIL.(map[string]any)
+	require.True(t, ok, "got %T", c.PluginSpecialOSSUTIL)
+	assert.Equal(t, "v", m["k"])
+	assert.Equal(t, float64(1), m["n"])
+}
+
+func TestNormalizePluginSpecialOSSUTIL(t *testing.T) {
+	assert.Nil(t, normalizePluginSpecialOSSUTIL(nil))
+	assert.Nil(t, normalizePluginSpecialOSSUTIL("   "))
+	m := map[string]any{"a": 1}
+	assert.Equal(t, m, normalizePluginSpecialOSSUTIL(m))
+	assert.Equal(t, float64(42), normalizePluginSpecialOSSUTIL(float64(42)))
+	// invalid JSON string stays as-is
+	raw := "not-json"
+	assert.Equal(t, raw, normalizePluginSpecialOSSUTIL(raw))
 }
 
 func TestMergeUserAgentIntoPluginEnvs(t *testing.T) {

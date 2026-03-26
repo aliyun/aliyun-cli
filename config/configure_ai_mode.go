@@ -17,10 +17,11 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
-	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 )
 
 func NewConfigureAiModeCommand() *cli.Command {
@@ -29,30 +30,19 @@ func NewConfigureAiModeCommand() *cli.Command {
 		Short: i18n.T(
 			"manage global AI mode and User-Agent for API calls (not profile-scoped)",
 			"管理全局 AI 模式及 API 调用的 User-Agent（不按 profile 区分）"),
-		Usage: "ai-mode [show|enable|disable|set-user-agent|reset-user-agent]",
+		Usage: "ai-mode [command] [--config-path <configPath>]",
 		Long: i18n.T(
-			`Configure global AI mode. When enabled, all CLI API requests append the configured User-Agent segment (default: AlibabaCloud-Agent-Skills), in addition to the normal Aliyun CLI UA.
-
-Stored in a standalone file (e.g. ~/.aliyun/ai-mode.json), same pattern as safety-policy — not part of profile config.
-
-Commands:
-  show               - Display current AI mode config (default)
-  enable             - Turn on AI mode (append UA on every API call)
-  disable            - Turn off AI mode
-  set-user-agent     - Set custom UA segment: --user-agent <value>
-  reset-user-agent   - Clear custom UA; use default AlibabaCloud-Agent-Skills when AI mode is on`,
-			`配置全局 AI 模式。启用后，所有 CLI API 请求会在常规 Aliyun CLI UA 之外追加配置的 User-Agent 段（默认：AlibabaCloud-Agent-Skills）。
-
-配置保存在独立文件（如 ~/.aliyun/ai-mode.json），与 safety-policy 相同方式 — 不属于 profile。
-
-命令:
-  show               - 显示当前 AI 模式配置（默认）
-  enable             - 开启 AI 模式（每次 API 调用追加 UA）
-  disable            - 关闭 AI 模式
-  set-user-agent     - 设置自定义 UA 段: --user-agent <值>
-  reset-user-agent   - 清除自定义 UA；启用 AI 模式时使用默认 AlibabaCloud-Agent-Skills`),
+			`Configure global AI mode. When enabled, all CLI API requests append the configured User-Agent segment (default: AlibabaCloud-Agent-Skills), in addition to the normal Aliyun CLI UA.`,
+			`配置全局 AI 模式。启用后，所有 CLI API 请求会在常规 Aliyun CLI UA 之外追加配置的 User-Agent 段（默认：AlibabaCloud-Agent-Skills）。`),
 		Run: func(ctx *cli.Context, args []string) error {
-			return doConfigureAiMode(ctx, args)
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, cfg, err := loadAiModeConfig(ctx)
+			if err != nil {
+				return err
+			}
+			return doAiModeShow(ctx, configDir, cfg)
 		},
 	}
 
@@ -60,39 +50,164 @@ Commands:
 		Category:     "ai-mode",
 		Name:         "user-agent",
 		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
 		Short: i18n.T(
 			"User-Agent segment for set-user-agent (not the product-call flag under aliyun <product>)",
 			"用于 set-user-agent 的 UA 段（与 aliyun <product> 下的 --user-agent 无关）"),
 	})
+	cmd.Flags().Add(&cli.Flag{
+		Category:     "ai-mode",
+		Name:         "ossutil",
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"JSON text for set-ossutil (decoded to object/array/value; stored as ossutil in ai-mode.json)",
+			"用于 set-ossutil 的 JSON 文本（解析为对象/数组/值；写入 ai-mode.json 的 ossutil）"),
+	})
 	AddFlags(cmd.Flags())
+
+	cmd.AddSubCommand(newConfigureAiModeShowCommand())
+	cmd.AddSubCommand(newConfigureAiModeEnableCommand())
+	cmd.AddSubCommand(newConfigureAiModeDisableCommand())
+	cmd.AddSubCommand(newConfigureAiModeSetUserAgentCommand())
+	cmd.AddSubCommand(newConfigureAiModeResetUserAgentCommand())
+	cmd.AddSubCommand(newConfigureAiModeSetOssutilCommand())
+	cmd.AddSubCommand(newConfigureAiModeResetOssutilCommand())
 	return cmd
 }
 
-func doConfigureAiMode(ctx *cli.Context, args []string) error {
-	configDir := GetConfigDir(ctx)
-	cfg, err := aimode.Load(configDir)
+func loadAiModeConfig(ctx *cli.Context) (configDir string, cfg *aimode.AiConfig, err error) {
+	configDir = GetConfigDir(ctx)
+	cfg, err = aimode.Load(configDir)
 	if err != nil {
-		return fmt.Errorf("load ai-mode config failed: %w", err)
+		return "", nil, fmt.Errorf("load ai-mode config failed: %w", err)
 	}
+	return configDir, cfg, nil
+}
 
-	subcmd := "show"
-	if len(args) > 0 {
-		subcmd = args[0]
+func newConfigureAiModeShowCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "show",
+		Usage: "show [--config-path <configPath>]",
+		Short: i18n.T("display current AI mode config", "显示当前 AI 模式配置"),
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, cfg, err := loadAiModeConfig(ctx)
+			if err != nil {
+				return err
+			}
+			return doAiModeShow(ctx, configDir, cfg)
+		},
 	}
+}
 
-	switch subcmd {
-	case "show":
-		return doAiModeShow(ctx, configDir, cfg)
-	case "enable":
-		return doAiModeEnable(ctx, configDir, cfg)
-	case "disable":
-		return doAiModeDisable(ctx, configDir, cfg)
-	case "set-user-agent":
-		return doAiModeSetUserAgent(ctx, configDir, cfg)
-	case "reset-user-agent":
-		return doAiModeResetUserAgent(ctx, configDir, cfg)
-	default:
-		return fmt.Errorf("unknown subcommand: %s. Use show, enable, disable, set-user-agent, or reset-user-agent", subcmd)
+func newConfigureAiModeEnableCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "enable",
+		Usage: "enable [--config-path <configPath>]",
+		Short: i18n.T("turn on AI mode", "开启 AI 模式"),
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, cfg, err := loadAiModeConfig(ctx)
+			if err != nil {
+				return err
+			}
+			return doAiModeEnable(ctx, configDir, cfg)
+		},
+	}
+}
+
+func newConfigureAiModeDisableCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "disable",
+		Usage: "disable [--config-path <configPath>]",
+		Short: i18n.T("turn off AI mode", "关闭 AI 模式"),
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, cfg, err := loadAiModeConfig(ctx)
+			if err != nil {
+				return err
+			}
+			return doAiModeDisable(ctx, configDir, cfg)
+		},
+	}
+}
+
+func newConfigureAiModeSetUserAgentCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "set-user-agent",
+		Usage: "set-user-agent --user-agent <value> [--config-path <configPath>]",
+		Short: i18n.T("set custom User-Agent segment for AI mode", "设置 AI 模式的自定义 User-Agent 段"),
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, cfg, err := loadAiModeConfig(ctx)
+			if err != nil {
+				return err
+			}
+			return doAiModeSetUserAgent(ctx, configDir, cfg)
+		},
+	}
+}
+
+func newConfigureAiModeResetUserAgentCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "reset-user-agent",
+		Usage: "reset-user-agent [--config-path <configPath>]",
+		Short: i18n.T("clear custom User-Agent segment (use default when AI mode is on)", "清除自定义 UA 段（启用 AI 模式时使用默认值）"),
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, cfg, err := loadAiModeConfig(ctx)
+			if err != nil {
+				return err
+			}
+			return doAiModeResetUserAgent(ctx, configDir, cfg)
+		},
+	}
+}
+
+func newConfigureAiModeSetOssutilCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "set-ossutil",
+		Usage: "set-ossutil --ossutil '<json>' [--config-path <configPath>]",
+		Short: i18n.T("set ossutil JSON for cli_ai_ossutil (OSSUTIL_CONFIG_VALUE)", "设置 cli_ai_ossutil 的 ossutil JSON（写入 OSSUTIL_CONFIG_VALUE）"),
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, cfg, err := loadAiModeConfig(ctx)
+			if err != nil {
+				return err
+			}
+			return doAiModeSetOssutil(ctx, configDir, cfg)
+		},
+	}
+}
+
+func newConfigureAiModeResetOssutilCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "reset-ossutil",
+		Usage: "reset-ossutil [--config-path <configPath>]",
+		Short: i18n.T("clear ossutil / cli_ai_ossutil blob", "清除 ossutil / cli_ai_ossutil 段"),
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, cfg, err := loadAiModeConfig(ctx)
+			if err != nil {
+				return err
+			}
+			return doAiModeResetOssutil(ctx, configDir, cfg)
+		},
 	}
 }
 
@@ -141,5 +256,23 @@ func doAiModeSetUserAgent(ctx *cli.Context, configDir string, cfg *aimode.AiConf
 
 func doAiModeResetUserAgent(ctx *cli.Context, configDir string, cfg *aimode.AiConfig) error {
 	cfg.UserAgent = ""
+	return aimode.Save(configDir, cfg)
+}
+
+func doAiModeSetOssutil(ctx *cli.Context, configDir string, cfg *aimode.AiConfig) error {
+	v, ok := ctx.Flags().Get("ossutil").GetValue()
+	if !ok || strings.TrimSpace(v) == "" {
+		return fmt.Errorf("--ossutil is required for set-ossutil (JSON text, e.g. '{\"k\":1}')")
+	}
+	var parsed any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(v)), &parsed); err != nil {
+		return fmt.Errorf("invalid JSON for --ossutil: %w", err)
+	}
+	cfg.PluginSpecialOSSUTIL = parsed
+	return aimode.Save(configDir, cfg)
+}
+
+func doAiModeResetOssutil(ctx *cli.Context, configDir string, cfg *aimode.AiConfig) error {
+	cfg.PluginSpecialOSSUTIL = nil
 	return aimode.Save(configDir, cfg)
 }

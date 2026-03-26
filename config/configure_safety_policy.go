@@ -29,48 +29,19 @@ func NewConfigureSafetyPolicyCommand() *cli.Command {
 		Short: i18n.T(
 			"manage safety policy and human-in-the-loop rules",
 			"管理安全策略和人工确认规则"),
-		Usage: "safety-policy [show|enable|disable|add|remove|list]",
+		Usage: "safety-policy [command] [--config-path <configPath>]",
 		Long: i18n.T(
-			`Configure safety policy to deny or require confirmation for destructive operations.
-
-Commands:
-  show      - Display current safety policy (default)
-  enable    - Enable safety policy
-  disable   - Disable safety policy
-  add       - Add a rule: --pattern "product:ApiName" --action [deny|confirm]
-  remove    - Remove a rule by pattern: --pattern "product:ApiName"
-  list      - List all rules
-
-Pattern format (supports * wildcard):
-  *:Delete*       - Match all delete operations (built-in API + plugins)
-  ecs:Delete*     - Match delete operations on ECS
-  fc:delete-*     - Match plugin fc delete commands (e.g. fc delete-function)
-  *:DELETE        - Match REST DELETE HTTP method
-
-Actions:
-  deny    - Block the operation completely
-  confirm - Require human confirmation (forbid auto execution)`,
-			`配置安全策略，用于拒绝或要求确认破坏性操作。
-
-命令:
-  show      - 显示当前安全策略（默认）
-  enable    - 启用安全策略
-  disable   - 禁用安全策略
-  add       - 添加规则: --pattern "product:ApiName" --action [deny|confirm]
-  remove    - 按模式删除规则: --pattern "product:ApiName"
-  list      - 列出所有规则
-
-模式格式（支持 * 通配符）:
-  *:Delete*       - 匹配所有删除操作（内置 API + 插件）
-  ecs:Delete*     - 匹配 ECS 的删除操作
-  fc:delete-*     - 匹配插件 fc 的 delete 命令
-  *:DELETE        - 匹配 REST DELETE HTTP 方法
-
-动作:
-  deny    - 完全阻止操作
-  confirm - 需要人工确认（禁止自动执行）`),
+			`Configure safety policy to deny or require confirmation for destructive operations.`,
+			`配置安全策略，用于拒绝或要求确认破坏性操作。`),
 		Run: func(ctx *cli.Context, args []string) error {
-			return doConfigureSafetyPolicy(ctx, args)
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, policy, err := loadSafetyPolicy(ctx)
+			if err != nil {
+				return err
+			}
+			return doSafetyPolicyShow(ctx, configDir, policy)
 		},
 	}
 
@@ -78,6 +49,7 @@ Actions:
 		Category:     "safety",
 		Name:         "pattern",
 		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
 		Short: i18n.T(
 			"command pattern for rule (e.g. *:Delete* or ecs:UpdateInstance)",
 			"规则的命令模式 (如 *:Delete* 或 ecs:UpdateInstance)"),
@@ -86,42 +58,137 @@ Actions:
 		Category:     "safety",
 		Name:         "action",
 		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
 		Short: i18n.T(
 			"action for rule: deny or confirm",
 			"规则动作: deny 或 confirm"),
 	})
 
 	AddFlags(cmd.Flags())
+
+	cmd.AddSubCommand(newConfigureSafetyPolicyShowCommand())
+	cmd.AddSubCommand(newConfigureSafetyPolicyEnableCommand())
+	cmd.AddSubCommand(newConfigureSafetyPolicyDisableCommand())
+	cmd.AddSubCommand(newConfigureSafetyPolicyAddCommand())
+	cmd.AddSubCommand(newConfigureSafetyPolicyRemoveCommand())
+	cmd.AddSubCommand(newConfigureSafetyPolicyListCommand())
 	return cmd
 }
 
-func doConfigureSafetyPolicy(ctx *cli.Context, args []string) error {
-	configDir := GetConfigDir(ctx)
-	policy, err := safety.LoadPolicy(configDir)
+func loadSafetyPolicy(ctx *cli.Context) (configDir string, policy *safety.Policy, err error) {
+	configDir = GetConfigDir(ctx)
+	policy, err = safety.LoadPolicy(configDir)
 	if err != nil {
-		return fmt.Errorf("load safety policy failed: %w", err)
+		return "", nil, fmt.Errorf("load safety policy failed: %w", err)
 	}
+	return configDir, policy, nil
+}
 
-	subcmd := "show"
-	if len(args) > 0 {
-		subcmd = args[0]
+func newConfigureSafetyPolicyShowCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "show",
+		Usage: "show [--config-path <configPath>]",
+		Short: i18n.T("display current safety policy", "显示当前安全策略"),
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, policy, err := loadSafetyPolicy(ctx)
+			if err != nil {
+				return err
+			}
+			return doSafetyPolicyShow(ctx, configDir, policy)
+		},
 	}
+}
 
-	switch subcmd {
-	case "show":
-		return doSafetyPolicyShow(ctx, configDir, policy)
-	case "enable":
-		return doSafetyPolicyEnable(ctx, configDir, policy)
-	case "disable":
-		return doSafetyPolicyDisable(ctx, configDir, policy)
-	case "add":
-		return doSafetyPolicyAdd(ctx, configDir, policy)
-	case "remove":
-		return doSafetyPolicyRemove(ctx, configDir, policy)
-	case "list":
-		return doSafetyPolicyList(ctx, configDir, policy)
-	default:
-		return fmt.Errorf("unknown subcommand: %s. Use show, enable, disable, add, remove, or list", subcmd)
+func newConfigureSafetyPolicyEnableCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "enable",
+		Usage: "enable [--config-path <configPath>]",
+		Short: i18n.T("enable safety policy", "启用安全策略"),
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, policy, err := loadSafetyPolicy(ctx)
+			if err != nil {
+				return err
+			}
+			return doSafetyPolicyEnable(ctx, configDir, policy)
+		},
+	}
+}
+
+func newConfigureSafetyPolicyDisableCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "disable",
+		Usage: "disable [--config-path <configPath>]",
+		Short: i18n.T("disable safety policy", "禁用安全策略"),
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, policy, err := loadSafetyPolicy(ctx)
+			if err != nil {
+				return err
+			}
+			return doSafetyPolicyDisable(ctx, configDir, policy)
+		},
+	}
+}
+
+func newConfigureSafetyPolicyAddCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "add",
+		Usage: "add --pattern <pattern> --action <deny|confirm|forbid> [--config-path <configPath>]",
+		Short: i18n.T("add or update a safety rule", "添加或更新安全规则"),
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, policy, err := loadSafetyPolicy(ctx)
+			if err != nil {
+				return err
+			}
+			return doSafetyPolicyAdd(ctx, configDir, policy)
+		},
+	}
+}
+
+func newConfigureSafetyPolicyRemoveCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "remove",
+		Usage: "remove --pattern <pattern> [--config-path <configPath>]",
+		Short: i18n.T("remove a safety rule by pattern", "按模式删除安全规则"),
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, policy, err := loadSafetyPolicy(ctx)
+			if err != nil {
+				return err
+			}
+			return doSafetyPolicyRemove(ctx, configDir, policy)
+		},
+	}
+}
+
+func newConfigureSafetyPolicyListCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "list",
+		Usage: "list [--config-path <configPath>]",
+		Short: i18n.T("list all safety rules", "列出所有安全规则"),
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, policy, err := loadSafetyPolicy(ctx)
+			if err != nil {
+				return err
+			}
+			return doSafetyPolicyList(ctx, configDir, policy)
+		},
 	}
 }
 
