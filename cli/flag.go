@@ -79,6 +79,11 @@ type Flag struct {
 	// Flag can't appear with other flags, use Flag.Name
 	ExcludeWith []string
 
+	// allowRepeatedUnknown is set for dynamically added unknown flags when the invocation
+	// looks like a plugin subcommand (product + lowercase action). Plugins may repeat the
+	// same parameter; each new --flag starts a fresh value from the next argv token.
+	allowRepeatedUnknown bool
+
 	assigned bool
 	value    string
 	values   []string
@@ -201,6 +206,12 @@ func (f *Flag) setIsAssigned() error {
 		f.assigned = true
 	} else {
 		if f.AssignedMode != AssignedRepeatable {
+			if f.allowRepeatedUnknown {
+				// Next argv token will supply the value for this repeated unknown flag.
+				f.value = ""
+				f.values = nil
+				return nil
+			}
 			return fmt.Errorf("--%s duplicated", f.Name)
 		}
 	}

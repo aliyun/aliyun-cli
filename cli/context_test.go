@@ -15,6 +15,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -279,4 +280,89 @@ func TestIsPluginSubCommandArgs(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// Plugin-style invocations (product + lowercase subcommand) must still register unknown
+// long flags so the following token is consumed as the flag value, not as a third positional.
+func TestPluginSubcommand_unknownLongFlagValueNotPositional(t *testing.T) {
+	orig := os.Args
+	defer func() { os.Args = orig }()
+	os.Args = []string{"aliyun", "config", "create-compliance-pack", "--api-version", "2020-09-07"}
+
+	var gotArgs []string
+	cmdRoot := &Command{
+		Name:              "aliyun",
+		EnableUnknownFlag: true,
+		Run: func(ctx *Context, args []string) error {
+			gotArgs = append([]string(nil), args...)
+			return nil
+		},
+	}
+	ctx := NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
+	ctx.EnterCommand(cmdRoot)
+	cmdRoot.Execute(ctx, []string{"config", "create-compliance-pack", "--api-version", "2020-09-07"})
+
+	assert.Equal(t, []string{"config", "create-compliance-pack"}, gotArgs)
+	uf := ctx.UnknownFlags().Get("api-version")
+	assert.NotNil(t, uf)
+	v, ok := uf.GetValue()
+	assert.True(t, ok)
+	assert.Equal(t, "2020-09-07", v)
+	assert.True(t, uf.allowRepeatedUnknown)
+}
+
+// Flags may appear between product and lowercase subcommand (os.Args[1] is not the subcommand),
+// so HasPluginSubCommand is false; unknown long flags must still consume the next argv as value.
+func TestPluginSubcommand_unknownFlagBetweenProductAndSubcommand(t *testing.T) {
+	orig := os.Args
+	defer func() { os.Args = orig }()
+	os.Args = []string{"aliyun", "config", "--api-version", "2020-09-07", "create-compliance-pack"}
+
+	var gotArgs []string
+	cmdRoot := &Command{
+		Name:              "aliyun",
+		EnableUnknownFlag: true,
+		Run: func(ctx *Context, args []string) error {
+			gotArgs = append([]string(nil), args...)
+			return nil
+		},
+	}
+	ctx := NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
+	ctx.EnterCommand(cmdRoot)
+	cmdRoot.Execute(ctx, []string{"config", "--api-version", "2020-09-07", "create-compliance-pack"})
+
+	assert.Equal(t, []string{"config", "create-compliance-pack"}, gotArgs)
+	assert.False(t, ctx.HasPluginSubCommand())
+	uf := ctx.UnknownFlags().Get("api-version")
+	assert.NotNil(t, uf)
+	v, ok := uf.GetValue()
+	assert.True(t, ok)
+	assert.Equal(t, "2020-09-07", v)
+	assert.False(t, uf.allowRepeatedUnknown)
+}
+
+func TestPluginSubcommand_repeatedUnknownFlagValues(t *testing.T) {
+	orig := os.Args
+	defer func() { os.Args = orig }()
+	os.Args = []string{"aliyun", "fc", "list-tag-resources", "--foo", "a", "--foo", "b"}
+
+	var gotArgs []string
+	cmdRoot := &Command{
+		Name:              "aliyun",
+		EnableUnknownFlag: true,
+		Run: func(ctx *Context, args []string) error {
+			gotArgs = append([]string(nil), args...)
+			return nil
+		},
+	}
+	ctx := NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
+	ctx.EnterCommand(cmdRoot)
+	cmdRoot.Execute(ctx, []string{"fc", "list-tag-resources", "--foo", "a", "--foo", "b"})
+
+	assert.Equal(t, []string{"fc", "list-tag-resources"}, gotArgs)
+	uf := ctx.UnknownFlags().Get("foo")
+	assert.NotNil(t, uf)
+	v, ok := uf.GetValue()
+	assert.True(t, ok)
+	assert.Equal(t, "b", v)
 }
