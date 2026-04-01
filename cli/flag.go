@@ -208,6 +208,9 @@ func (f *Flag) setIsAssigned() error {
 		if f.AssignedMode != AssignedRepeatable {
 			if f.allowRepeatedUnknown {
 				// Next argv token will supply the value for this repeated unknown flag.
+				// this is for plugin subcommand positional arg parsing, value doesn't take impact here,
+				// but corresponding value need to be checked in case they are taken by the parser as positional value
+				// the rest non-positional args will be dealed in plugin code
 				f.value = ""
 				f.values = nil
 				return nil
