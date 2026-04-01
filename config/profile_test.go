@@ -261,6 +261,8 @@ func TestOverwriteWithFlags(t *testing.T) {
 	CloudSSOAccessConfigFlag(ctx.Flags()).SetAssigned(true)
 	EndpointTypeFlag(ctx.Flags()).SetAssigned(true)
 	EndpointTypeFlag(ctx.Flags()).SetValue("vpc")
+	EndpointFlag(ctx.Flags()).SetAssigned(true)
+	EndpointFlag(ctx.Flags()).SetValue("custom.endpoint.aliyuncs.com")
 
 	exp := &Profile{
 		Name:                 "default",
@@ -285,6 +287,7 @@ func TestOverwriteWithFlags(t *testing.T) {
 		CloudSSOAccountId:    "111",
 		CloudSSOAccessConfig: "222",
 		EndpointType:         "vpc",
+		Endpoint:             "custom.endpoint.aliyuncs.com",
 	}
 
 	actual.OverwriteWithFlags(ctx)
@@ -414,6 +417,10 @@ func resetEnv() {
 	os.Setenv("ALIBABACLOUD_ENDPOINT_TYPE", "")
 	os.Setenv("ALICLOUD_ENDPOINT_TYPE", "")
 	os.Setenv("ENDPOINT_TYPE", "")
+	os.Setenv("ALIBABA_CLOUD_ENDPOINT", "")
+	os.Setenv("ALIBABACLOUD_ENDPOINT", "")
+	os.Setenv("ALICLOUD_ENDPOINT", "")
+	os.Setenv("ENDPOINT", "")
 }
 
 func TestOverwriteWithFlagsWithEndpointTypeEnv(t *testing.T) {
@@ -450,6 +457,44 @@ func TestOverwriteWithFlagsWithEndpointTypeEnv(t *testing.T) {
 	actual.OverwriteWithFlags(ctx)
 	exp.EndpointType = "vpc"
 	assert.Equal(t, exp, actual)
+}
+
+func TestOverwriteWithFlagsWithEndpointEnv(t *testing.T) {
+	buf := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, stderr)
+	AddFlags(ctx.Flags())
+
+	resetEnv()
+	actual := newProfile()
+	exp := newProfile()
+	actual.OverwriteWithFlags(ctx)
+	assert.Equal(t, exp, actual)
+
+	os.Setenv("ENDPOINT", "endpoint1.aliyuncs.com")
+	actual.OverwriteWithFlags(ctx)
+	exp.Endpoint = "endpoint1.aliyuncs.com"
+	assert.Equal(t, exp, actual)
+
+	actual = newProfile()
+	os.Setenv("ALICLOUD_ENDPOINT", "endpoint2.aliyuncs.com")
+	actual.OverwriteWithFlags(ctx)
+	exp.Endpoint = "endpoint2.aliyuncs.com"
+	assert.Equal(t, exp, actual)
+
+	actual = newProfile()
+	os.Setenv("ALIBABACLOUD_ENDPOINT", "endpoint3.aliyuncs.com")
+	actual.OverwriteWithFlags(ctx)
+	exp.Endpoint = "endpoint3.aliyuncs.com"
+	assert.Equal(t, exp, actual)
+
+	actual = newProfile()
+	os.Setenv("ALIBABA_CLOUD_ENDPOINT", "endpoint4.aliyuncs.com")
+	actual.OverwriteWithFlags(ctx)
+	exp.Endpoint = "endpoint4.aliyuncs.com"
+	assert.Equal(t, exp, actual)
+
+	resetEnv()
 }
 
 func TestValidateAk(t *testing.T) {
@@ -1366,6 +1411,7 @@ func TestGetRuntimeEnv_OptionalFields(t *testing.T) {
 	p.RegionId = "cn-hangzhou"
 	p.Language = "zh"
 	p.EndpointType = "vpc"
+	p.Endpoint = "custom.endpoint.aliyuncs.com"
 	p.ReadTimeout = 30
 	p.ConnectTimeout = 10
 	p.RetryCount = 3
@@ -1375,6 +1421,7 @@ func TestGetRuntimeEnv_OptionalFields(t *testing.T) {
 
 	assert.Equal(t, "zh", envs["ALIBABA_CLOUD_LANGUAGE"])
 	assert.Equal(t, "vpc", envs["ALIBABA_CLOUD_ENDPOINT_TYPE"])
+	assert.Equal(t, "custom.endpoint.aliyuncs.com", envs["ALIBABA_CLOUD_ENDPOINT"])
 	assert.Equal(t, "30", envs["ALIBABA_CLOUD_READ_TIMEOUT"])
 	assert.Equal(t, "10", envs["ALIBABA_CLOUD_CONNECT_TIMEOUT"])
 	assert.Equal(t, "3", envs["ALIBABA_CLOUD_RETRY_COUNT"])
@@ -1388,6 +1435,7 @@ func TestGetRuntimeEnv_OptionalFieldsOmitted(t *testing.T) {
 	p.RegionId = "cn-hangzhou"
 	p.Language = ""
 	p.EndpointType = ""
+	p.Endpoint = ""
 	p.ReadTimeout = 0
 	p.ConnectTimeout = 0
 	p.RetryCount = 0
@@ -1399,6 +1447,8 @@ func TestGetRuntimeEnv_OptionalFieldsOmitted(t *testing.T) {
 	assert.False(t, hasLang)
 	_, hasEndpoint := envs["ALIBABA_CLOUD_ENDPOINT_TYPE"]
 	assert.False(t, hasEndpoint)
+	_, hasEndpointVal := envs["ALIBABA_CLOUD_ENDPOINT"]
+	assert.False(t, hasEndpointVal)
 	_, hasReadTimeout := envs["ALIBABA_CLOUD_READ_TIMEOUT"]
 	assert.False(t, hasReadTimeout)
 	_, hasConnTimeout := envs["ALIBABA_CLOUD_CONNECT_TIMEOUT"]

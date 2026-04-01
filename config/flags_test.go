@@ -462,6 +462,8 @@ func TestAddFlags(t *testing.T) {
 	assert.NotNil(t, flagSet.Get(OAuthSiteTypeName))
 	// 结果包含EndpointTypeFlagName
 	assert.NotNil(t, flagSet.Get(EndpointTypeFlagName))
+	// 结果包含EndpointFlagName
+	assert.NotNil(t, flagSet.Get(EndpointFlagName))
 }
 
 func TestNewEndpointTypeFlag(t *testing.T) {
@@ -478,4 +480,20 @@ func TestEndpointTypeFlag(t *testing.T) {
 	flag := EndpointTypeFlag(flagSet)
 	assert.NotNil(t, flag)
 	assert.Equal(t, EndpointTypeFlagName, flag.Name)
+}
+
+func TestNewEndpointFlag(t *testing.T) {
+	var a = NewEndpointFlag()
+	assert.Equal(t, EndpointFlagName, a.Name)
+	assert.Equal(t, "config", a.Category)
+	assert.True(t, a.Persistent)
+	assert.Equal(t, cli.AssignedOnce, a.AssignedMode)
+}
+
+func TestEndpointFlag(t *testing.T) {
+	flagSet := cli.NewFlagSet()
+	AddFlags(flagSet)
+	flag := EndpointFlag(flagSet)
+	assert.NotNil(t, flag)
+	assert.Equal(t, EndpointFlagName, flag.Name)
 }

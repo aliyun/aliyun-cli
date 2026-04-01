@@ -176,7 +176,7 @@ func TestDoConfigure(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "Configuring profile 'profile' in 'AK' authenticate mode...\n"+
 		"Access Key Id []: Access Key Secret []: Default Region Id []: Default Output Format [json]: json (Only support json)\n"+
-		"Default Language [zh|en] en: Saving profile[profile] ...Done.\n"+
+		"Default Language [zh|en] en: Default Endpoint []: Saving profile[profile] ...Done.\n"+
 		"-----------------------------------------------\n"+
 		"!!! Configure Failed please configure again !!!\n"+
 		"-----------------------------------------------\n"+
@@ -188,7 +188,7 @@ func TestDoConfigure(t *testing.T) {
 
 	err = doConfigure(ctx, "", "StsToken")
 	assert.Nil(t, err)
-	assert.True(t, strings.Contains(w.String(), "Warning: You are changing the authentication type of profile 'default' from 'AK' to 'StsToken'\nConfiguring profile 'default' in 'StsToken' authenticate mode...\nAccess Key Id [*************************_id]: Access Key Secret [*****************************ret]: Sts Token []: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] : Saving profile[default] ...Done.\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\n"))
+	assert.True(t, strings.Contains(w.String(), "Warning: You are changing the authentication type of profile 'default' from 'AK' to 'StsToken'\nConfiguring profile 'default' in 'StsToken' authenticate mode...\nAccess Key Id [*************************_id]: Access Key Secret [*****************************ret]: Sts Token []: Default Region Id []: Default Output Format [json]: json (Only support json)\nDefault Language [zh|en] : Default Endpoint []: Saving profile[default] ...Done.\n-----------------------------------------------\n!!! Configure Failed please configure again !!!\n-----------------------------------------------\n"))
 	w.Reset()
 }
 

@@ -214,3 +214,53 @@ func TestDoConfigureGetEndpointType(t *testing.T) {
 	doConfigureGet(ctx, []string{EndpointTypeFlagName})
 	assert.Equal(t, "endpoint-type=\n\n", stdout.String())
 }
+
+func TestDoConfigureGetEndpoint(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
+	originhook := hookLoadConfigurationWithContext
+	defer func() {
+		hookLoadConfigurationWithContext = originhook
+	}()
+
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name:     "default",
+						Mode:     AK,
+						Endpoint: "myendpoint.aliyuncs.com",
+					},
+				},
+			}, nil
+		}
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureGet(ctx, []string{EndpointFlagName})
+	assert.Equal(t, "endpoint=myendpoint.aliyuncs.com\n\n", stdout.String())
+
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name:     "default",
+						Mode:     AK,
+						Endpoint: "",
+					},
+				},
+			}, nil
+		}
+	}
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureGet(ctx, []string{EndpointFlagName})
+	assert.Equal(t, "endpoint=\n\n", stdout.String())
+}

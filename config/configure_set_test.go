@@ -241,6 +241,26 @@ func TestDoConfigureSetWithMock(t *testing.T) {
 	stderr.Reset()
 	doConfigureSet(ctx)
 	assert.Empty(t, stdout.String())
+
+	// Endpoint
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{Name: "default", Mode: AK, Endpoint: "myendpoint.aliyuncs.com", AccessKeyId: "default_aliyun_access_key_id", AccessKeySecret: "default_aliyun_access_key_secret", OutputFormat: "json", RegionId: "cn-hangzhou"},
+					{Name: "aaa", Mode: AK, AccessKeyId: "sdf", AccessKeySecret: "ddf", OutputFormat: "json"}}}, nil
+		}
+	}
+	endpointFlag := EndpointFlag(ctx.Flags())
+	if endpointFlag != nil {
+		endpointFlag.SetAssigned(true)
+		endpointFlag.SetValue("testabc.aliyuncs.com")
+	}
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureSet(ctx)
+	assert.Empty(t, stdout.String())
 }
 
 func TestDoConfigureSet_AutoPluginInstall(t *testing.T) {

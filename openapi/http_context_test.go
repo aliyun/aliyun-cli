@@ -329,7 +329,7 @@ func TestHttpContext(t *testing.T) {
 		context := &HttpContext{profile: profile}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
-		endpointflag := NewEndpointFlag()
+		endpointflag := config.NewEndpointFlag()
 		endpointflag.SetAssigned(true)
 		endpointflag.SetValue("ecs.cn-hangzhou.aliyuncs")
 		ctx.Flags().Add(endpointflag)
