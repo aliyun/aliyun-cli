@@ -61,7 +61,9 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		// AccessKeyId:     tea.String(cp.AccessKeyId),
 		// AccessKeySecret: tea.String(cp.AccessKeySecret),
 	}
-	if strings.ToLower(product.Code) == "sls" {
+	if cp.Endpoint != "" {
+		conf.Endpoint = tea.String(cp.Endpoint)
+	} else if strings.ToLower(product.Code) == "sls" {
 		conf.Endpoint = tea.String(cp.RegionId + ".log.aliyuncs.com") // should apply product template
 	}
 
@@ -161,7 +163,7 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 		a.openapiRuntime.SetAutoretry(true)
 		a.openapiRuntime.SetMaxAttempts(a.profile.RetryCount)
 	}
-	if v, ok := EndpointFlag(ctx.Flags()).GetValue(); ok {
+	if v, ok := config.EndpointFlag(ctx.Flags()).GetValue(); ok {
 		a.openapiRequest.EndpointOverride = tea.String(v)
 	}
 	if ctx.Flags() != nil && HeaderFlag(ctx.Flags()) != nil {
