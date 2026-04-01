@@ -171,7 +171,15 @@ func (ctx *Context) detectFlag(name string) (*Flag, error) {
 	}
 	if ctx.unknownFlags != nil {
 		if ctx.HasPluginSubCommand() {
-			return nil, nil
+			if f := ctx.unknownFlags.Get(name); f != nil {
+				return f, nil
+			}
+			f, err := ctx.unknownFlags.AddByName(name)
+			if err != nil {
+				return nil, err
+			}
+			f.allowRepeatedUnknown = true
+			return f, nil
 		}
 		return ctx.unknownFlags.AddByName(name)
 	}
@@ -184,10 +192,19 @@ func (ctx *Context) detectFlagByShorthand(ch rune) (*Flag, error) {
 		return flag, nil
 	}
 	if ctx.command != nil && ctx.command.EnableUnknownFlag && ctx.unknownFlags != nil {
+		shName := string(ch)
 		if ctx.HasPluginSubCommand() {
-			return nil, nil
+			if f := ctx.unknownFlags.Get(shName); f != nil {
+				return f, nil
+			}
+			f, err := ctx.unknownFlags.AddByName(shName)
+			if err != nil {
+				return nil, err
+			}
+			f.allowRepeatedUnknown = true
+			return f, nil
 		}
-		return ctx.unknownFlags.AddByName(string(ch))
+		return ctx.unknownFlags.AddByName(shName)
 	}
 	return nil, fmt.Errorf("unknown flag -%s", string(ch))
 }
