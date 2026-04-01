@@ -341,6 +341,39 @@ func TestPluginSubcommand_unknownFlagBetweenProductAndSubcommand(t *testing.T) {
 	assert.False(t, uf.allowRepeatedUnknown)
 }
 
+func TestDetectFlagByShorthand_unknownPluginSubcommand(t *testing.T) {
+	orig := os.Args
+	defer func() { os.Args = orig }()
+	os.Args = []string{"aliyun", "fc", "list-tag-resources", "-x", "a"}
+
+	ctx := NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
+	cmdRoot := &Command{Name: "aliyun", EnableUnknownFlag: true}
+	ctx.EnterCommand(cmdRoot)
+
+	assert.True(t, ctx.HasPluginSubCommand())
+
+	f1, err := ctx.detectFlagByShorthand('x')
+	assert.NoError(t, err)
+	assert.NotNil(t, f1)
+	assert.Equal(t, "x", f1.Name)
+	assert.True(t, f1.allowRepeatedUnknown, "plugin unknown shorthand should allow repeat")
+
+	f2, err := ctx.detectFlagByShorthand('x')
+	assert.NoError(t, err)
+	assert.Equal(t, f1, f2, "second -x should reuse same Flag via Get")
+
+	// Non-plugin shape: second argv token is not the lowercase subcommand
+	os.Args = []string{"aliyun", "ecs", "DescribeInstances"}
+	ctx2 := NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
+	ctx2.EnterCommand(cmdRoot)
+	assert.False(t, ctx2.HasPluginSubCommand())
+
+	fy, err := ctx2.detectFlagByShorthand('y')
+	assert.NoError(t, err)
+	assert.NotNil(t, fy)
+	assert.False(t, fy.allowRepeatedUnknown)
+}
+
 func TestPluginSubcommand_repeatedUnknownFlagValues(t *testing.T) {
 	orig := os.Args
 	defer func() { os.Args = orig }()
