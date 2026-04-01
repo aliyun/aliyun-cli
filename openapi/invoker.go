@@ -25,10 +25,10 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 
-	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -162,8 +162,10 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 		a.request.Version = v
 	}
 
-	if v, ok := EndpointFlag(ctx.Flags()).GetValue(); ok {
+	if v, ok := config.EndpointFlag(ctx.Flags()).GetValue(); ok {
 		a.request.Domain = v
+	} else if a.profile.Endpoint != "" {
+		a.request.Domain = a.profile.Endpoint
 	}
 
 	for _, s := range HeaderFlag(ctx.Flags()).GetValues() {

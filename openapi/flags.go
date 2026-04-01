@@ -22,7 +22,6 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewSecureFlag())
 	fs.Add(NewInsecureFlag())
 	fs.Add(NewForceFlag())
-	fs.Add(NewEndpointFlag())
 	fs.Add(NewVersionFlag())
 	fs.Add(NewHeaderFlag())
 	fs.Add(NewBodyFlag())
@@ -46,7 +45,6 @@ const (
 	SecureFlagName      = "secure"
 	InsecureFlagName    = "insecure"
 	ForceFlagName       = "force"
-	EndpointFlagName    = "endpoint"
 	VersionFlagName     = "version"
 	HeaderFlagName      = "header"
 	BodyFlagName        = "body"
@@ -78,10 +76,6 @@ func InsecureFlag(fs *cli.FlagSet) *cli.Flag {
 
 func ForceFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ForceFlagName)
-}
-
-func EndpointFlag(fs *cli.FlagSet) *cli.Flag {
-	return fs.Get(EndpointFlagName)
 }
 
 func VersionFlag(fs *cli.FlagSet) *cli.Flag {
@@ -181,16 +175,6 @@ func NewForceFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--force` to skip api and parameters check",
 			"添加 `--force` 开关可跳过API与参数的合法性检查")}
-}
-
-func NewEndpointFlag() *cli.Flag {
-	return &cli.Flag{
-		Category:     "caller",
-		Name:         EndpointFlagName,
-		AssignedMode: cli.AssignedOnce,
-		Short: i18n.T(
-			"use `--endpoint <endpoint>` to assign endpoint",
-			"使用 `--endpoint <endpoint>` 来指定接入点地址")}
 }
 
 func NewVersionFlag() *cli.Flag {
