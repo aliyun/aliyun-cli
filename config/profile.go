@@ -230,6 +230,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.CloudSSOAccessConfig = CloudSSOAccessConfigFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOAccessConfig)
 	cp.CloudSSOAccountId = CloudSSOAccountIdFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOAccountId)
 	cp.EndpointType = EndpointTypeFlag(ctx.Flags()).GetStringOrDefault(cp.EndpointType)
+	cp.Endpoint = EndpointFlag(ctx.Flags()).GetStringOrDefault(cp.Endpoint)
 
 	if cp.AccessKeyId == "" {
 		cp.AccessKeyId = util.GetFromEnv("ALIBABA_CLOUD_ACCESS_KEY_ID", "ALIBABACLOUD_ACCESS_KEY_ID", "ALICLOUD_ACCESS_KEY_ID", "ACCESS_KEY_ID")
@@ -249,6 +250,10 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 
 	if cp.EndpointType == "" {
 		cp.EndpointType = util.GetFromEnv("ALIBABA_CLOUD_ENDPOINT_TYPE", "ALIBABACLOUD_ENDPOINT_TYPE", "ALICLOUD_ENDPOINT_TYPE", "ENDPOINT_TYPE")
+	}
+
+	if cp.Endpoint == "" {
+		cp.Endpoint = util.GetFromEnv("ALIBABA_CLOUD_ENDPOINT", "ALIBABACLOUD_ENDPOINT", "ALICLOUD_ENDPOINT", "ENDPOINT")
 	}
 
 	if cp.CredentialsURI == "" {
