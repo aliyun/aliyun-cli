@@ -670,6 +670,9 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 	if cp.EndpointType != "" {
 		envs["ALIBABA_CLOUD_ENDPOINT_TYPE"] = cp.EndpointType
 	}
+	if cp.Endpoint != "" {
+		envs["ALIBABA_CLOUD_ENDPOINT"] = cp.Endpoint
+	}
 	if cp.ReadTimeout > 0 {
 		envs["ALIBABA_CLOUD_READ_TIMEOUT"] = strconv.Itoa(cp.ReadTimeout)
 	}
