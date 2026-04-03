@@ -16,7 +16,7 @@ require (
 	github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1
 	github.com/gogo/protobuf v1.3.2
 	github.com/jmespath/go-jmespath v0.4.0
-	github.com/pierrec/lz4 v2.6.0+incompatible
+	github.com/pierrec/lz4 v2.6.1+incompatible
 	github.com/stretchr/testify v1.10.0
 	github.com/syndtr/goleveldb v1.0.0
 	golang.org/x/crypto v0.41.0
