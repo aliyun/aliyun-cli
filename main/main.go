@@ -32,6 +32,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 	"github.com/aliyun/aliyun-cli/v3/ossutil"
 	"github.com/aliyun/aliyun-cli/v3/otsutil"
+	"github.com/aliyun/aliyun-cli/v3/cli/upgrade"
 )
 
 func Main(args []string) {
@@ -88,6 +89,8 @@ func Main(args []string) {
 	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
 	// plugin command
 	rootCmd.AddSubCommand(plugin.NewPluginCommand())
+	// upgrade command
+	rootCmd.AddSubCommand(upgrade.NewUpgradeCommand())
 	if os.Getenv("GENERATE_METADATA") == "YES" {
 		generateMetadata(rootCmd)
 	} else {
