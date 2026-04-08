@@ -19,7 +19,6 @@ import (
 	"archive/zip"
 	"bufio"
 	"compress/gzip"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,36 +43,21 @@ const (
 )
 
 const (
-	ossBaseURL       = "https://aliyun-cli.oss-cn-hangzhou.aliyuncs.com"
-	ossVersionURL    = ossBaseURL + "/version"
-	githubReleaseURL = "https://api.github.com/repos/aliyun/aliyun-cli/releases/latest"
+	ossBaseURL    = "https://aliyun-cli.oss-accelerate.aliyuncs.com"
+	ossVersionURL = ossBaseURL + "/version"
 )
 
 var (
-	httpClient     = &http.Client{Timeout: 60 * time.Second}
-	stdin          io.Reader = os.Stdin
-	execCommand            = exec.Command // mockable for tests
-	detectInstallerFunc    = detectInstaller
+	httpClient                    = &http.Client{Timeout: 60 * time.Second}
+	stdin               io.Reader = os.Stdin
+	execCommand                   = exec.Command // mockable for tests
+	detectInstallerFunc           = detectInstaller
 )
 
-// upgradeSource holds the resolved version and download info.
 type upgradeSource struct {
 	latestVersion string
 	downloadURL   string
 	assetName     string
-	assetSize     int64 // 0 if unknown (e.g. OSS path without Content-Length)
-}
-
-type githubRelease struct {
-	TagName string        `json:"tag_name"`
-	Name    string        `json:"name"`
-	Assets  []githubAsset `json:"assets"`
-}
-
-type githubAsset struct {
-	Name               string `json:"name"`
-	BrowserDownloadURL string `json:"browser_download_url"`
-	Size               int64  `json:"size"`
 }
 
 func NewUpgradeCommand() *cli.Command {
@@ -123,7 +107,6 @@ func doUpgrade(ctx *cli.Context) error {
 	}
 }
 
-// upgradeViaBrew delegates the upgrade to Homebrew / Linuxbrew.
 func upgradeViaBrew(ctx *cli.Context) error {
 	w := ctx.Stdout()
 	cli.Printf(w, "Detected Homebrew installation, delegating to brew...\n\n")
@@ -148,7 +131,6 @@ func upgradeViaBrew(ctx *cli.Context) error {
 	return nil
 }
 
-// upgradeViaDirect downloads the binary from OSS and replaces it in-place.
 func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 	w := ctx.Stdout()
 
@@ -178,11 +160,7 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 		}
 	}
 
-	sizeHint := ""
-	if source.assetSize > 0 {
-		sizeHint = " (" + formatSize(source.assetSize) + ")"
-	}
-	cli.Printf(w, "Downloading %s%s...\n", source.assetName, sizeHint)
+	cli.Printf(w, "Downloading %s...\n", source.assetName)
 	cli.Printf(w, "  From: %s\n", source.downloadURL)
 
 	tmpDir, err := os.MkdirTemp("", "aliyun-cli-upgrade-*")
@@ -192,7 +170,7 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 	defer os.RemoveAll(tmpDir)
 
 	archivePath := filepath.Join(tmpDir, source.assetName)
-	err = downloadFile(w, source.downloadURL, archivePath, source.assetSize)
+	err = downloadFile(w, source.downloadURL, archivePath)
 	if err != nil {
 		return fmt.Errorf("download failed: %s", err)
 	}
@@ -227,27 +205,7 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// Version resolution: OSS primary, GitHub fallback
-// ---------------------------------------------------------------------------
-
 func resolveUpgradeSource() (*upgradeSource, error) {
-	source, ossErr := resolveFromOSS()
-	if ossErr == nil {
-		return source, nil
-	}
-
-	source, ghErr := resolveFromGitHub()
-	if ghErr == nil {
-		return source, nil
-	}
-
-	return nil, fmt.Errorf("OSS: %s; GitHub: %s", ossErr, ghErr)
-}
-
-// resolveFromOSS fetches the latest version from the OSS version file and
-// constructs a deterministic download URL based on OS/arch.
-func resolveFromOSS() (*upgradeSource, error) {
 	version, err := fetchVersionFromOSS()
 	if err != nil {
 		return nil, err
@@ -264,33 +222,6 @@ func resolveFromOSS() (*upgradeSource, error) {
 		assetName:     assetName,
 	}, nil
 }
-
-// resolveFromGitHub queries the GitHub Releases API and still uses the OSS
-// mirror for the actual download (the asset name is identical on both).
-func resolveFromGitHub() (*upgradeSource, error) {
-	release, err := fetchLatestRelease()
-	if err != nil {
-		return nil, err
-	}
-
-	latestVersion := normalizeVersion(release.TagName)
-
-	asset, err := findMatchingAsset(release.Assets)
-	if err != nil {
-		return nil, err
-	}
-
-	return &upgradeSource{
-		latestVersion: latestVersion,
-		downloadURL:   ossBaseURL + "/" + asset.Name,
-		assetName:     asset.Name,
-		assetSize:     asset.Size,
-	}, nil
-}
-
-// ---------------------------------------------------------------------------
-// OSS helpers
-// ---------------------------------------------------------------------------
 
 func fetchVersionFromOSS() (string, error) {
 	resp, err := httpClient.Get(ossVersionURL)
@@ -315,10 +246,6 @@ func fetchVersionFromOSS() (string, error) {
 	return version, nil
 }
 
-// buildAssetName constructs the expected release archive name for the current
-// platform, following the naming convention in local_build.sh:
-//
-//	aliyun-cli-{os}-{version}-{arch}.{tgz|zip}
 func buildAssetName(version string) (string, error) {
 	archName := runtime.GOARCH
 
@@ -334,85 +261,7 @@ func buildAssetName(version string) (string, error) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// GitHub helpers
-// ---------------------------------------------------------------------------
-
-func fetchLatestRelease() (*githubRelease, error) {
-	req, err := http.NewRequest("GET", githubReleaseURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("User-Agent", "aliyun-cli/"+cli.GetVersion())
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("network error: %s", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, fmt.Errorf("GitHub API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var release githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return nil, fmt.Errorf("failed to parse release info: %s", err)
-	}
-	if release.TagName == "" {
-		return nil, fmt.Errorf("no release tag found")
-	}
-
-	return &release, nil
-}
-
-func findMatchingAsset(assets []githubAsset) (*githubAsset, error) {
-	osName := runtime.GOOS
-	archName := runtime.GOARCH
-
-	osKeywords := map[string][]string{
-		"darwin":  {"macosx", "darwin"},
-		"linux":   {"linux"},
-		"windows": {"windows"},
-	}
-
-	keywords, ok := osKeywords[osName]
-	if !ok {
-		return nil, fmt.Errorf("unsupported operating system: %s", osName)
-	}
-
-	for _, keyword := range keywords {
-		for i := range assets {
-			name := strings.ToLower(assets[i].Name)
-			if strings.Contains(name, keyword) && strings.Contains(name, archName) {
-				return &assets[i], nil
-			}
-		}
-	}
-
-	if osName == "darwin" {
-		for i := range assets {
-			name := strings.ToLower(assets[i].Name)
-			for _, keyword := range keywords {
-				if strings.Contains(name, keyword) && strings.Contains(name, "universal") {
-					return &assets[i], nil
-				}
-			}
-		}
-	}
-
-	return nil, fmt.Errorf(
-		"no compatible binary found for %s/%s.\nAvailable assets: %s",
-		osName, archName, listAssetNames(assets))
-}
-
-// ---------------------------------------------------------------------------
-// Download, extract, replace
-// ---------------------------------------------------------------------------
-
-func downloadFile(w io.Writer, url, destPath string, totalSize int64) error {
+func downloadFile(w io.Writer, url, destPath string) error {
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return err
@@ -423,9 +272,7 @@ func downloadFile(w io.Writer, url, destPath string, totalSize int64) error {
 		return fmt.Errorf("download returned status %d for %s", resp.StatusCode, url)
 	}
 
-	if totalSize == 0 && resp.ContentLength > 0 {
-		totalSize = resp.ContentLength
-	}
+	totalSize := resp.ContentLength
 
 	out, err := os.Create(destPath)
 	if err != nil {
@@ -595,10 +442,6 @@ func copyFile(src, dst string, perm os.FileMode) error {
 	return err
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 func detectInstaller() installerType {
 	execPath, err := os.Executable()
 	if err != nil {
@@ -614,10 +457,6 @@ func detectInstaller() installerType {
 		return installerHomebrew
 	}
 	return installerDirect
-}
-
-func normalizeVersion(tag string) string {
-	return strings.TrimPrefix(tag, "v")
 }
 
 func ensureVPrefix(version string) string {
@@ -650,12 +489,4 @@ func formatSize(bytes int64) string {
 	default:
 		return fmt.Sprintf("%d B", bytes)
 	}
-}
-
-func listAssetNames(assets []githubAsset) string {
-	names := make([]string, len(assets))
-	for i, a := range assets {
-		names[i] = a.Name
-	}
-	return strings.Join(names, ", ")
 }

@@ -5,7 +5,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -22,12 +21,6 @@ import (
 // ---------------------------------------------------------------------------
 // Version helpers
 // ---------------------------------------------------------------------------
-
-func TestNormalizeVersion(t *testing.T) {
-	assert.Equal(t, "3.0.1", normalizeVersion("v3.0.1"))
-	assert.Equal(t, "3.0.1", normalizeVersion("3.0.1"))
-	assert.Equal(t, "3.0.1-beta", normalizeVersion("v3.0.1-beta"))
-}
 
 func TestEnsureVPrefix(t *testing.T) {
 	assert.Equal(t, "v3.0.1", ensureVPrefix("3.0.1"))
@@ -232,7 +225,7 @@ func TestFetchVersionFromOSS(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// resolveFromOSS / resolveFromGitHub integration
+// OSS resolution
 // ---------------------------------------------------------------------------
 
 func TestResolveFromOSS_BuildsCorrectURL(t *testing.T) {
@@ -241,119 +234,8 @@ func TestResolveFromOSS_BuildsCorrectURL(t *testing.T) {
 	assert.NoError(t, err)
 
 	expectedURL := ossBaseURL + "/" + assetName
-	assert.True(t, strings.HasPrefix(expectedURL, "https://aliyun-cli.oss-cn-hangzhou.aliyuncs.com/aliyun-cli-"))
+	assert.True(t, strings.HasPrefix(expectedURL, "https://aliyun-cli.oss-accelerate.aliyuncs.com/aliyun-cli-"))
 	assert.Contains(t, expectedURL, version)
-}
-
-func TestResolveFromGitHub_UsesOSSDownloadURL(t *testing.T) {
-	release := githubRelease{
-		TagName: "v3.3.4",
-		Assets: []githubAsset{
-			{Name: "aliyun-cli-linux-3.3.4-amd64.tgz", BrowserDownloadURL: "https://github.com/download/linux.tgz", Size: 20000000},
-			{Name: "aliyun-cli-linux-3.3.4-arm64.tgz", BrowserDownloadURL: "https://github.com/download/linux-arm.tgz", Size: 19000000},
-			{Name: "aliyun-cli-macosx-3.3.4-arm64.tgz", BrowserDownloadURL: "https://github.com/download/mac-arm.tgz", Size: 22000000},
-			{Name: "aliyun-cli-macosx-3.3.4-amd64.tgz", BrowserDownloadURL: "https://github.com/download/mac-amd.tgz", Size: 22000000},
-			{Name: "aliyun-cli-macosx-3.3.4-universal.tgz", BrowserDownloadURL: "https://github.com/download/mac-uni.tgz", Size: 44000000},
-			{Name: "aliyun-cli-windows-3.3.4-amd64.zip", BrowserDownloadURL: "https://github.com/download/win.zip", Size: 21000000},
-		},
-	}
-
-	asset, err := findMatchingAsset(release.Assets)
-	assert.NoError(t, err)
-
-	downloadURL := ossBaseURL + "/" + asset.Name
-	assert.True(t, strings.HasPrefix(downloadURL, ossBaseURL))
-	assert.NotContains(t, downloadURL, "github.com")
-}
-
-// ---------------------------------------------------------------------------
-// Asset matching (GitHub fallback path)
-// ---------------------------------------------------------------------------
-
-func TestFindMatchingAsset(t *testing.T) {
-	assets := []githubAsset{
-		{Name: "aliyun-cli-linux-3.0.1-amd64.tgz", Size: 1000},
-		{Name: "aliyun-cli-linux-3.0.1-arm64.tgz", Size: 1000},
-		{Name: "aliyun-cli-macosx-3.0.1-amd64.tgz", Size: 1000},
-		{Name: "aliyun-cli-macosx-3.0.1-arm64.tgz", Size: 1000},
-		{Name: "aliyun-cli-macosx-3.0.1-universal.tgz", Size: 1000},
-		{Name: "aliyun-cli-windows-3.0.1-amd64.zip", Size: 1000},
-	}
-
-	asset, err := findMatchingAsset(assets)
-	assert.NoError(t, err)
-	assert.NotNil(t, asset)
-
-	name := strings.ToLower(asset.Name)
-	switch runtime.GOOS {
-	case "darwin":
-		assert.True(t, strings.Contains(name, "macosx") || strings.Contains(name, "darwin"))
-		assert.True(t, strings.Contains(name, runtime.GOARCH) || strings.Contains(name, "universal"))
-	default:
-		assert.Contains(t, name, runtime.GOOS)
-		assert.Contains(t, name, runtime.GOARCH)
-	}
-}
-
-func TestFindMatchingAsset_UniversalFallback(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("macOS-only test")
-	}
-
-	assets := []githubAsset{
-		{Name: "aliyun-cli-macosx-3.0.1-universal.tgz", Size: 1000},
-		{Name: "aliyun-cli-linux-3.0.1-amd64.tgz", Size: 1000},
-	}
-
-	asset, err := findMatchingAsset(assets)
-	assert.NoError(t, err)
-	assert.Contains(t, asset.Name, "universal")
-}
-
-func TestFindMatchingAsset_NoMatch(t *testing.T) {
-	assets := []githubAsset{
-		{Name: "aliyun-cli-freebsd-3.0.1-amd64.tgz", Size: 1000},
-	}
-
-	if runtime.GOOS != "freebsd" {
-		_, err := findMatchingAsset(assets)
-		assert.Error(t, err)
-	}
-}
-
-func TestListAssetNames(t *testing.T) {
-	assets := []githubAsset{{Name: "a.tgz"}, {Name: "b.zip"}}
-	assert.Equal(t, "a.tgz, b.zip", listAssetNames(assets))
-}
-
-// ---------------------------------------------------------------------------
-// GitHub release parsing
-// ---------------------------------------------------------------------------
-
-func TestGitHubReleaseParsing(t *testing.T) {
-	release := githubRelease{
-		TagName: "v3.1.0",
-		Name:    "Release 3.1.0",
-		Assets: []githubAsset{
-			{Name: "aliyun-cli-linux-3.1.0-amd64.tgz", BrowserDownloadURL: "https://github.com/download/x", Size: 5000},
-		},
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(release)
-	}))
-	defer server.Close()
-
-	resp, err := http.Get(server.URL)
-	assert.NoError(t, err)
-	defer resp.Body.Close()
-
-	var got githubRelease
-	err = json.NewDecoder(resp.Body).Decode(&got)
-	assert.NoError(t, err)
-	assert.Equal(t, "v3.1.0", got.TagName)
-	assert.Len(t, got.Assets, 1)
 }
 
 // ---------------------------------------------------------------------------
@@ -484,31 +366,11 @@ func TestDownloadFile(t *testing.T) {
 	destPath := filepath.Join(tmpDir, "download.tgz")
 
 	var buf bytes.Buffer
-	err := downloadFile(&buf, server.URL+"/test.tgz", destPath, 1024)
+	err := downloadFile(&buf, server.URL+"/test.tgz", destPath)
 	assert.NoError(t, err)
 
 	got, _ := os.ReadFile(destPath)
 	assert.Equal(t, content, got)
-}
-
-func TestDownloadFile_UsesContentLength(t *testing.T) {
-	content := bytes.Repeat([]byte("y"), 2048)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Length", "2048")
-		w.Write(content)
-	}))
-	defer server.Close()
-
-	origClient := httpClient
-	httpClient = server.Client()
-	defer func() { httpClient = origClient }()
-
-	tmpDir := t.TempDir()
-	destPath := filepath.Join(tmpDir, "download.tgz")
-
-	var buf bytes.Buffer
-	err := downloadFile(&buf, server.URL+"/test.tgz", destPath, 0)
-	assert.NoError(t, err)
 	assert.Contains(t, buf.String(), "Download complete")
 }
 
