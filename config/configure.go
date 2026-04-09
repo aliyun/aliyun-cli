@@ -304,9 +304,6 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 		}
 	}
 
-	cli.Printf(w, "Default Endpoint [%s]: ", cp.Endpoint)
-	cp.Endpoint = ReadInput(cp.Endpoint)
-
 	//fmt.Printf("User site: [china|international|japan] %s", cp.Site)
 	//cp.Site = ReadInput(cp.Site)
 
