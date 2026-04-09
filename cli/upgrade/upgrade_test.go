@@ -257,8 +257,10 @@ func TestExtractFromTarGz(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, binaryContent, got)
 
-	info, _ := os.Stat(destPath)
-	assert.True(t, info.Mode()&0100 != 0, "binary should be executable")
+	if runtime.GOOS != "windows" {
+		info, _ := os.Stat(destPath)
+		assert.True(t, info.Mode()&0100 != 0, "binary should be executable")
+	}
 }
 
 func TestExtractFromTarGz_NotFound(t *testing.T) {
@@ -342,8 +344,10 @@ func TestCopyFile(t *testing.T) {
 	got, _ := os.ReadFile(dstPath)
 	assert.Equal(t, content, got)
 
-	info, _ := os.Stat(dstPath)
-	assert.Equal(t, os.FileMode(0755), info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		info, _ := os.Stat(dstPath)
+		assert.Equal(t, os.FileMode(0755), info.Mode().Perm())
+	}
 }
 
 // ---------------------------------------------------------------------------
