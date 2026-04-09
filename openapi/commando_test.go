@@ -167,8 +167,10 @@ func Test_processInvoke(t *testing.T) {
 	regionflag.SetValue("cn-hangzhou")
 	ctx.Flags().Add(regionflag)
 
-	EndpointFlag(ctx.Flags()).SetAssigned(true)
-	EndpointFlag(ctx.Flags()).SetValue("ecs.cn-hangzhou.aliyuncs")
+	endpointflag := config.NewEndpointFlag()
+	endpointflag.SetAssigned(true)
+	endpointflag.SetValue("ecs.cn-hangzhou.aliyuncs")
+	ctx.Flags().Add(endpointflag)
 
 	VersionFlag(ctx.Flags()).SetAssigned(true)
 	VersionFlag(ctx.Flags()).SetValue("v1.0")
@@ -261,8 +263,10 @@ func TestProcessInvokeQueryFlag(t *testing.T) {
 	regionflag.SetValue("cn-hangzhou")
 	ctx.Flags().Add(regionflag)
 
-	EndpointFlag(ctx.Flags()).SetAssigned(true)
-	EndpointFlag(ctx.Flags()).SetValue("ecs.cn-hangzhou.aliyuncs")
+	endpointflag := config.NewEndpointFlag()
+	endpointflag.SetAssigned(true)
+	endpointflag.SetValue("ecs.cn-hangzhou.aliyuncs")
+	ctx.Flags().Add(endpointflag)
 
 	VersionFlag(ctx.Flags()).SetAssigned(true)
 	VersionFlag(ctx.Flags()).SetValue("v1.0")
@@ -1790,8 +1794,10 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		skipflag := config.NewSkipSecureVerify()
 		skipflag.SetAssigned(true)
 		ctx.Flags().Add(skipflag)
-		EndpointFlag(ctx.Flags()).SetAssigned(true)
-		EndpointFlag(ctx.Flags()).SetValue("ecs.cn-hangzhou.aliyuncs.com")
+		endpointflag := config.NewEndpointFlag()
+		endpointflag.SetAssigned(true)
+		endpointflag.SetValue("ecs.cn-hangzhou.aliyuncs.com")
+		ctx.Flags().Add(endpointflag)
 		ForceFlag(ctx.Flags()).SetAssigned(true) // Force flag enabled
 
 		originalHookdo := hookdo
@@ -1851,8 +1857,10 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		skipflag := config.NewSkipSecureVerify()
 		skipflag.SetAssigned(true)
 		ctx.Flags().Add(skipflag)
-		EndpointFlag(ctx.Flags()).SetAssigned(true)
-		EndpointFlag(ctx.Flags()).SetValue("ecs.cn-hangzhou.aliyuncs.com")
+		endpointflag := config.NewEndpointFlag()
+		endpointflag.SetAssigned(true)
+		endpointflag.SetValue("ecs.cn-hangzhou.aliyuncs.com")
+		ctx.Flags().Add(endpointflag)
 
 		// Add RegionId as a known flag to test CheckApiParamWithBuildInArgs
 		regionIdFlag := &cli.Flag{Name: "RegionId"}
@@ -2005,8 +2013,10 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		skipflag := config.NewSkipSecureVerify()
 		skipflag.SetAssigned(true)
 		ctx.Flags().Add(skipflag)
-		EndpointFlag(ctx.Flags()).SetAssigned(true)
-		EndpointFlag(ctx.Flags()).SetValue("ecs.cn-hangzhou.aliyuncs.com")
+		endpointflag := config.NewEndpointFlag()
+		endpointflag.SetAssigned(true)
+		endpointflag.SetValue("ecs.cn-hangzhou.aliyuncs.com")
+		ctx.Flags().Add(endpointflag)
 
 		DryRunFlag(ctx.Flags()).SetAssigned(true)
 		args := []string{"ecs", "GET", "/instances"}

@@ -96,8 +96,9 @@ type Profile struct {
 	OAuthRefreshToken          string           `json:"oauth_refresh_token,omitempty"`
 	OAuthAccessTokenExpire     int64            `json:"oauth_access_token_expire,omitempty"`
 	OAuthRefreshTokenExpire    int64            `json:"oauth_refresh_token_expire,omitempty"`
-	OAuthSiteType              string           `json:"oauth_site_type,omitempty"`                // CN or INTL
-	EndpointType               string           `json:"endpoint_type,omitempty"`                  // vpc or empty (default public)
+	OAuthSiteType              string           `json:"oauth_site_type,omitempty"` // CN or INTL
+	EndpointType               string           `json:"endpoint_type,omitempty"`   // vpc or empty (default public)
+	Endpoint                   string           `json:"endpoint,omitempty"`
 	AutoPluginInstall          bool             `json:"auto_plugin_install,omitempty"`            // automatically install plugins when not found
 	AutoPluginInstallEnablePre bool             `json:"auto_plugin_install_enable_pre,omitempty"` // install latest version (including pre-release) when true
 	parent                     *Configuration   //`json:"-"`
@@ -229,6 +230,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.CloudSSOAccessConfig = CloudSSOAccessConfigFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOAccessConfig)
 	cp.CloudSSOAccountId = CloudSSOAccountIdFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOAccountId)
 	cp.EndpointType = EndpointTypeFlag(ctx.Flags()).GetStringOrDefault(cp.EndpointType)
+	cp.Endpoint = EndpointFlag(ctx.Flags()).GetStringOrDefault(cp.Endpoint)
 
 	if cp.AccessKeyId == "" {
 		cp.AccessKeyId = util.GetFromEnv("ALIBABA_CLOUD_ACCESS_KEY_ID", "ALIBABACLOUD_ACCESS_KEY_ID", "ALICLOUD_ACCESS_KEY_ID", "ACCESS_KEY_ID")
@@ -248,6 +250,10 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 
 	if cp.EndpointType == "" {
 		cp.EndpointType = util.GetFromEnv("ALIBABA_CLOUD_ENDPOINT_TYPE", "ALIBABACLOUD_ENDPOINT_TYPE", "ALICLOUD_ENDPOINT_TYPE", "ENDPOINT_TYPE")
+	}
+
+	if cp.Endpoint == "" {
+		cp.Endpoint = util.GetFromEnv("ALIBABA_CLOUD_ENDPOINT", "ALIBABACLOUD_ENDPOINT", "ALICLOUD_ENDPOINT", "ENDPOINT")
 	}
 
 	if cp.CredentialsURI == "" {
@@ -663,6 +669,9 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 	}
 	if cp.EndpointType != "" {
 		envs["ALIBABA_CLOUD_ENDPOINT_TYPE"] = cp.EndpointType
+	}
+	if cp.Endpoint != "" {
+		envs["ALIBABA_CLOUD_ENDPOINT"] = cp.Endpoint
 	}
 	if cp.ReadTimeout > 0 {
 		envs["ALIBABA_CLOUD_READ_TIMEOUT"] = strconv.Itoa(cp.ReadTimeout)

@@ -50,6 +50,7 @@ const (
 	CloudSSOAccountIdFlagName          = "cloud-sso-account-id"
 	OAuthSiteTypeName                  = "oauth-site-type"
 	EndpointTypeFlagName               = "endpoint-type"
+	EndpointFlagName                   = "endpoint"
 	AutoPluginInstallFlagName          = "auto-plugin-install"
 	AutoPluginInstallEnablePreFlagName = "auto-plugin-install-enable-pre"
 )
@@ -85,6 +86,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewCloudSSOAccountIdFlag())
 	fs.Add(NewOAuthSiteTypeFlag())
 	fs.Add(NewEndpointTypeFlag())
+	fs.Add(NewEndpointFlag())
 	fs.Add(NewAutoPluginInstallFlag())
 	fs.Add(NewAutoPluginInstallEnablePreFlag())
 }
@@ -538,6 +540,22 @@ func NewOAuthSiteTypeFlag() *cli.Flag {
 
 func EndpointTypeFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(EndpointTypeFlagName)
+}
+
+func EndpointFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(EndpointFlagName)
+}
+
+func NewEndpointFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         EndpointFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--endpoint <endpoint>` to assign endpoint",
+			"使用 `--endpoint <endpoint>` 来指定接入点地址"),
+	}
 }
 
 func NewEndpointTypeFlag() *cli.Flag {

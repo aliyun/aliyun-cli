@@ -47,7 +47,7 @@ func TestBasicInvoker_Init(t *testing.T) {
 	ctx.Flags().Add(regionflag)
 	ctx.Flags().Add(config.NewRegionIdFlag())
 
-	endpointflag := NewEndpointFlag()
+	endpointflag := config.NewEndpointFlag()
 	endpointflag.SetAssigned(true)
 	endpointflag.SetValue("ecs.cn-hangzhou.aliyuncs")
 	ctx.Flags().Add(endpointflag)
@@ -93,6 +93,49 @@ func TestBasicInvoker_Init(t *testing.T) {
 	endpointflag.SetAssigned(true)
 	err = invoker.Init(ctx, product)
 	assert.Nil(t, err)
+}
+
+func TestBasicInvoker_Init_ProfileEndpoint(t *testing.T) {
+	cp := &config.Profile{
+		Mode:            config.AuthenticateMode("StsToken"),
+		AccessKeyId:     "akid",
+		AccessKeySecret: "aksecret",
+		StsToken:        "ststoken",
+		RegionId:        "cn-hangzhou",
+		Endpoint:        "custom.endpoint.aliyuncs.com",
+	}
+	invoker := NewBasicInvoker(cp)
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+
+	ctx.Flags().Add(config.NewRegionFlag())
+	ctx.Flags().Add(config.NewRegionIdFlag())
+
+	endpointflag := config.NewEndpointFlag()
+	ctx.Flags().Add(endpointflag)
+
+	versionflag := NewVersionFlag()
+	ctx.Flags().Add(versionflag)
+
+	ctx.Flags().Add(NewHeaderFlag())
+	ctx.Flags().Add(config.NewSkipSecureVerify())
+
+	product := &meta.Product{Version: "v1.0"}
+
+	// When profile.Endpoint is set and no cmd --endpoint flag: should use profile endpoint
+	err := invoker.Init(ctx, product)
+	assert.Nil(t, err)
+	assert.Equal(t, "custom.endpoint.aliyuncs.com", invoker.getRequest().Domain)
+
+	// When both profile.Endpoint and cmd --endpoint flag: cmd flag should win
+	endpointflag.SetAssigned(true)
+	endpointflag.SetValue("cmd.endpoint.aliyuncs.com")
+	invoker2 := NewBasicInvoker(cp)
+	err = invoker2.Init(ctx, product)
+	assert.Nil(t, err)
+	assert.Equal(t, "cmd.endpoint.aliyuncs.com", invoker2.getRequest().Domain)
 }
 
 func TestParseCustomUserAgentSegments(t *testing.T) {

@@ -101,6 +101,8 @@ func doConfigureGet(c *cli.Context, args []string) error {
 			cli.Printf(c.Stdout(), "oauth-site-type=%s\n", profile.OAuthSiteType)
 		case EndpointTypeFlagName:
 			cli.Printf(c.Stdout(), "endpoint-type=%s\n", profile.EndpointType)
+		case EndpointFlagName:
+			cli.Printf(c.Stdout(), "endpoint=%s\n", profile.Endpoint)
 		}
 	}
 

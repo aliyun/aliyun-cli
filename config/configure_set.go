@@ -128,6 +128,7 @@ func doConfigureSet(ctx *cli.Context) error {
 	profile.RetryCount = RetryCountFlag(flags).GetIntegerOrDefault(profile.RetryCount)
 	profile.StsRegion = StsRegionFlag(flags).GetStringOrDefault(profile.StsRegion)
 	profile.EndpointType = EndpointTypeFlag(flags).GetStringOrDefault(profile.EndpointType)
+	profile.Endpoint = EndpointFlag(flags).GetStringOrDefault(profile.Endpoint)
 
 	if autoPluginInstallFlag := AutoPluginInstallFlag(flags); autoPluginInstallFlag != nil && autoPluginInstallFlag.IsAssigned() {
 		if val, ok := autoPluginInstallFlag.GetValue(); ok {

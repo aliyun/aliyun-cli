@@ -33,10 +33,6 @@ func TestAFlags(t *testing.T) {
 	assert.Equal(t, "force", forceflag.Name)
 	assert.Equal(t, "use `--force` to skip api and parameters check", forceflag.Short.Text())
 
-	endpointflag := EndpointFlag(flagset)
-	assert.Equal(t, "endpoint", endpointflag.Name)
-	assert.Equal(t, "use `--endpoint <endpoint>` to assign endpoint", endpointflag.Short.Text())
-
 	versionflag := VersionFlag(flagset)
 	assert.Equal(t, "version", versionflag.Name)
 	assert.Equal(t, "use `--version <YYYY-MM-DD>` to assign product api version", versionflag.Short.Text())
