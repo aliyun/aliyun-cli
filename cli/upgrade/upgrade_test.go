@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -177,6 +178,121 @@ func TestDoUpgrade_DirectWhenNotBrew(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// confirmUpgrade
+// ---------------------------------------------------------------------------
+
+func TestConfirmUpgrade_YesFlag(t *testing.T) {
+	ctx := newTestContext()
+	ctx.Flags().Get("yes").SetAssigned(true)
+
+	assert.True(t, confirmUpgrade(ctx, "3.0.0", "3.1.0"))
+}
+
+func TestConfirmUpgrade_StdinYes(t *testing.T) {
+	origStdin := stdin
+	defer func() { stdin = origStdin }()
+	stdin = strings.NewReader("y\n")
+
+	ctx := newTestContext()
+	assert.True(t, confirmUpgrade(ctx, "3.0.0", "3.1.0"))
+}
+
+func TestConfirmUpgrade_StdinNo(t *testing.T) {
+	origStdin := stdin
+	defer func() { stdin = origStdin }()
+	stdin = strings.NewReader("n\n")
+
+	ctx := newTestContext()
+	assert.False(t, confirmUpgrade(ctx, "3.0.0", "3.1.0"))
+}
+
+func TestConfirmUpgrade_StdinEmpty(t *testing.T) {
+	origStdin := stdin
+	defer func() { stdin = origStdin }()
+	stdin = strings.NewReader("\n")
+
+	ctx := newTestContext()
+	assert.False(t, confirmUpgrade(ctx, "3.0.0", "3.1.0"))
+}
+
+// ---------------------------------------------------------------------------
+// downloadAndExtract
+// ---------------------------------------------------------------------------
+
+func TestDownloadAndExtract_Success(t *testing.T) {
+	binaryContent := []byte("#!/bin/sh\necho upgraded\n")
+	archiveBuf := createTarGzInMemory(t, "aliyun", binaryContent)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", archiveBuf.Len()))
+		w.Write(archiveBuf.Bytes())
+	}))
+	defer server.Close()
+
+	origClient := httpClient
+	httpClient = server.Client()
+	defer func() { httpClient = origClient }()
+
+	var out bytes.Buffer
+	binaryPath, cleanup, err := downloadAndExtract(&out, server.URL+"/aliyun-cli-linux-3.4.0-amd64.tgz", "aliyun-cli-linux-3.4.0-amd64.tgz")
+	assert.NoError(t, err)
+	assert.NotNil(t, cleanup)
+	defer cleanup()
+
+	got, err := os.ReadFile(binaryPath)
+	assert.NoError(t, err)
+	assert.Equal(t, binaryContent, got)
+}
+
+func TestDownloadAndExtract_DownloadFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	origClient := httpClient
+	httpClient = server.Client()
+	defer func() { httpClient = origClient }()
+
+	var out bytes.Buffer
+	_, cleanup, err := downloadAndExtract(&out, server.URL+"/missing.tgz", "missing.tgz")
+	assert.Error(t, err)
+	assert.Nil(t, cleanup)
+	assert.Contains(t, err.Error(), "download failed")
+}
+
+func TestDownloadAndExtract_ExtractFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("not a valid archive"))
+	}))
+	defer server.Close()
+
+	origClient := httpClient
+	httpClient = server.Client()
+	defer func() { httpClient = origClient }()
+
+	var out bytes.Buffer
+	_, cleanup, err := downloadAndExtract(&out, server.URL+"/bad.tgz", "bad.tgz")
+	assert.Error(t, err)
+	assert.Nil(t, cleanup)
+	assert.Contains(t, err.Error(), "extraction failed")
+}
+
+// ---------------------------------------------------------------------------
+// resolveExecPath
+// ---------------------------------------------------------------------------
+
+func TestResolveExecPath(t *testing.T) {
+	p, err := resolveExecPath()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, p)
+
+	info, err := os.Stat(p)
+	assert.NoError(t, err)
+	assert.False(t, info.IsDir())
+}
+
+// ---------------------------------------------------------------------------
 // Build asset name (OSS path)
 // ---------------------------------------------------------------------------
 
@@ -234,7 +350,7 @@ func TestResolveFromOSS_BuildsCorrectURL(t *testing.T) {
 	assert.NoError(t, err)
 
 	expectedURL := ossBaseURL + "/" + assetName
-	assert.True(t, strings.HasPrefix(expectedURL, "https://aliyun-cli.oss-accelerate.aliyuncs.com/aliyun-cli-"))
+	assert.True(t, strings.HasPrefix(expectedURL, ossBaseURL+"/aliyun-cli-"))
 	assert.Contains(t, expectedURL, version)
 }
 
@@ -435,4 +551,18 @@ func createTestZip(t *testing.T, archivePath, fileName string, content []byte) {
 
 	w, _ := zw.Create(fileName)
 	w.Write(content)
+}
+
+func createTarGzInMemory(t *testing.T, fileName string, content []byte) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+	tw.WriteHeader(&tar.Header{
+		Name: fileName, Size: int64(len(content)), Mode: 0755, Typeflag: tar.TypeReg,
+	})
+	tw.Write(content)
+	tw.Close()
+	gw.Close()
+	return &buf
 }

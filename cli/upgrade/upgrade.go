@@ -43,7 +43,7 @@ const (
 )
 
 const (
-	ossBaseURL    = "https://aliyun-cli.oss-accelerate.aliyuncs.com"
+	ossBaseURL    = "https://aliyuncli.alicdn.com"
 	ossVersionURL = ossBaseURL + "/version"
 )
 
@@ -135,12 +135,10 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 	w := ctx.Stdout()
 
 	cli.Printf(w, "Checking for latest version...\n")
-
 	source, err := resolveUpgradeSource()
 	if err != nil {
 		return fmt.Errorf("failed to check for updates: %s", err)
 	}
-
 	cli.Printf(w, "Latest version:  %s\n\n", source.latestVersion)
 
 	if !isNewer(currentVersion, source.latestVersion) {
@@ -148,31 +146,58 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 		return nil
 	}
 
-	yesFlag := ctx.Flags().Get("yes")
-	if yesFlag == nil || !yesFlag.IsAssigned() {
-		cli.Printf(w, "Upgrade from %s to %s? (y/N): ", currentVersion, source.latestVersion)
-		reader := bufio.NewReader(stdin)
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(strings.ToLower(input))
-		if input != "y" && input != "yes" {
-			cli.Printf(w, "Upgrade cancelled.\n")
-			return nil
-		}
+	if !confirmUpgrade(ctx, currentVersion, source.latestVersion) {
+		cli.Printf(w, "Upgrade cancelled.\n")
+		return nil
 	}
 
-	cli.Printf(w, "Downloading %s...\n", source.assetName)
-	cli.Printf(w, "  From: %s\n", source.downloadURL)
+	cli.Printf(w, "Downloading %s...\n  From: %s\n", source.assetName, source.downloadURL)
+	extractedBinary, cleanup, err := downloadAndExtract(w, source.downloadURL, source.assetName)
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if err != nil {
+		return err
+	}
 
+	execPath, err := resolveExecPath()
+	if err != nil {
+		return err
+	}
+	cli.Printf(w, "Installing new version to %s ...\n", execPath)
+	if err := replaceBinary(extractedBinary, execPath); err != nil {
+		return fmt.Errorf("installation failed: %s\nYou may need to run with elevated privileges (sudo)", err)
+	}
+
+	cli.PrintfWithColor(w, cli.Green,
+		"\nSuccessfully upgraded Alibaba Cloud CLI from %s to %s!\n", currentVersion, source.latestVersion)
+	return nil
+}
+
+func confirmUpgrade(ctx *cli.Context, currentVersion, latestVersion string) bool {
+	yesFlag := ctx.Flags().Get("yes")
+	if yesFlag != nil && yesFlag.IsAssigned() {
+		return true
+	}
+	w := ctx.Stdout()
+	cli.Printf(w, "Upgrade from %s to %s? (y/N): ", currentVersion, latestVersion)
+	reader := bufio.NewReader(stdin)
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(strings.ToLower(input))
+	return input == "y" || input == "yes"
+}
+
+func downloadAndExtract(w io.Writer, downloadURL, assetName string) (binaryPath string, cleanup func(), err error) {
 	tmpDir, err := os.MkdirTemp("", "aliyun-cli-upgrade-*")
 	if err != nil {
-		return fmt.Errorf("failed to create temp directory: %s", err)
+		return "", nil, fmt.Errorf("failed to create temp directory: %s", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	cleanup = func() { os.RemoveAll(tmpDir) }
 
-	archivePath := filepath.Join(tmpDir, source.assetName)
-	err = downloadFile(w, source.downloadURL, archivePath)
-	if err != nil {
-		return fmt.Errorf("download failed: %s", err)
+	archivePath := filepath.Join(tmpDir, assetName)
+	if err := downloadFile(w, downloadURL, archivePath); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("download failed: %s", err)
 	}
 
 	binaryName := "aliyun"
@@ -180,29 +205,24 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 		binaryName = "aliyun.exe"
 	}
 	extractedPath := filepath.Join(tmpDir, binaryName)
-	err = extractBinary(archivePath, extractedPath, binaryName)
-	if err != nil {
-		return fmt.Errorf("extraction failed: %s", err)
+	if err := extractBinary(archivePath, extractedPath, binaryName); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("extraction failed: %s", err)
 	}
 
+	return extractedPath, cleanup, nil
+}
+
+func resolveExecPath() (string, error) {
 	execPath, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("failed to get executable path: %s", err)
+		return "", fmt.Errorf("failed to get executable path: %s", err)
 	}
 	execPath, err = filepath.EvalSymlinks(execPath)
 	if err != nil {
-		return fmt.Errorf("failed to resolve executable path: %s", err)
+		return "", fmt.Errorf("failed to resolve executable path: %s", err)
 	}
-
-	cli.Printf(w, "Installing new version to %s ...\n", execPath)
-	err = replaceBinary(extractedPath, execPath)
-	if err != nil {
-		return fmt.Errorf("installation failed: %s\nYou may need to run with elevated privileges (sudo)", err)
-	}
-
-	cli.PrintfWithColor(w, cli.Green,
-		"\nSuccessfully upgraded Alibaba Cloud CLI from %s to %s!\n", currentVersion, source.latestVersion)
-	return nil
+	return execPath, nil
 }
 
 func resolveUpgradeSource() (*upgradeSource, error) {
@@ -281,7 +301,8 @@ func downloadFile(w io.Writer, url, destPath string) error {
 	defer out.Close()
 
 	var downloaded int64
-	buf := make([]byte, 32*1024)
+	var lastPct int64 = -1
+	buf := make([]byte, 256*1024)
 	for {
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
@@ -290,8 +311,11 @@ func downloadFile(w io.Writer, url, destPath string) error {
 			}
 			downloaded += int64(n)
 			if totalSize > 0 {
-				pct := float64(downloaded) / float64(totalSize) * 100
-				cli.Printf(w, "\r  Progress: %.1f%% (%s / %s)", pct, formatSize(downloaded), formatSize(totalSize))
+				pct := downloaded * 100 / totalSize
+				if pct != lastPct {
+					lastPct = pct
+					cli.Printf(w, "\r  Progress: %d%% (%s / %s)", pct, formatSize(downloaded), formatSize(totalSize))
+				}
 			}
 		}
 		if readErr != nil {
