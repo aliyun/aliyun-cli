@@ -559,6 +559,52 @@ func TestReplaceBinary(t *testing.T) {
 	assert.Equal(t, newContent, got)
 }
 
+func TestReplaceBinary_CurrentMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	current := filepath.Join(tmpDir, "missing-binary")
+	newPath := filepath.Join(tmpDir, "new")
+	os.WriteFile(newPath, []byte("x"), 0644)
+
+	err := replaceBinary(newPath, current)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to stat current binary")
+}
+
+func TestReplaceBinary_NewMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	current := filepath.Join(tmpDir, "aliyun")
+	os.WriteFile(current, []byte("old"), 0755)
+	newPath := filepath.Join(tmpDir, "does-not-exist")
+
+	err := replaceBinary(newPath, current)
+	assert.Error(t, err)
+
+	got, errRead := os.ReadFile(current)
+	assert.NoError(t, errRead)
+	assert.Equal(t, []byte("old"), got, "current binary should be unchanged on failure")
+}
+
+func TestReplaceBinary_Unix_NoStaleTempFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("non-Windows replace path uses .aliyun.upgrade.tmp")
+	}
+	tmpDir := t.TempDir()
+	current := filepath.Join(tmpDir, "aliyun")
+	newPath := filepath.Join(tmpDir, "aliyun.new")
+	want := []byte("replaced")
+	os.WriteFile(current, []byte("before"), 0755)
+	os.WriteFile(newPath, want, 0755)
+
+	tmpArtifact := filepath.Join(tmpDir, ".aliyun.upgrade.tmp")
+	assert.NoError(t, replaceBinary(newPath, current))
+
+	_, err := os.Stat(tmpArtifact)
+	assert.True(t, os.IsNotExist(err), "temp swap file should be removed after success")
+
+	got, _ := os.ReadFile(current)
+	assert.Equal(t, want, got)
+}
+
 func TestCopyFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
