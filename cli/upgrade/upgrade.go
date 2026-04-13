@@ -54,6 +54,9 @@ var (
 	execCommand         = exec.Command
 	detectInstallerFunc = detectInstaller
 	resolveExecPathFunc = resolveExecPath
+
+	osExecutable = os.Executable
+	evalSymlinks = filepath.EvalSymlinks
 )
 
 type upgradeSource struct {
@@ -216,11 +219,11 @@ func downloadAndExtract(w io.Writer, downloadURL, assetName string) (binaryPath 
 }
 
 func resolveExecPath() (string, error) {
-	execPath, err := os.Executable()
+	execPath, err := osExecutable()
 	if err != nil {
 		return "", fmt.Errorf("failed to get executable path: %s", err)
 	}
-	execPath, err = filepath.EvalSymlinks(execPath)
+	execPath, err = evalSymlinks(execPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve executable path: %s", err)
 	}
@@ -479,11 +482,11 @@ func installerTypeFromExecPathLower(lower string) installerType {
 }
 
 func detectInstaller() installerType {
-	execPath, err := os.Executable()
+	execPath, err := osExecutable()
 	if err != nil {
 		return installerDirect
 	}
-	execPath, _ = filepath.EvalSymlinks(execPath)
+	execPath, _ = evalSymlinks(execPath)
 	return installerTypeFromExecPathLower(strings.ToLower(execPath))
 }
 

@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -223,6 +224,9 @@ func TestDoUpgrade_DirectWhenNotBrew(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestUpgradeViaDirect_FullFlow(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("skipping test on non-linux platform")
+	}
 	binaryContent := []byte("#!/bin/sh\necho upgraded\n")
 	archive := createTarGzInMemory(t, "aliyun", binaryContent)
 
@@ -447,6 +451,38 @@ func TestResolveExecPath(t *testing.T) {
 	assert.False(t, info.IsDir())
 }
 
+func TestResolveExecPath_ExecutableError(t *testing.T) {
+	orig := osExecutable
+	defer func() { osExecutable = orig }()
+	osExecutable = func() (string, error) { return "", fmt.Errorf("no executable") }
+
+	_, err := resolveExecPath()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get executable path")
+}
+
+func TestResolveExecPath_EvalSymlinksError(t *testing.T) {
+	origExe, origEval := osExecutable, evalSymlinks
+	defer func() {
+		osExecutable = origExe
+		evalSymlinks = origEval
+	}()
+	osExecutable = func() (string, error) { return "/fake/aliyun", nil }
+	evalSymlinks = func(string) (string, error) { return "", fmt.Errorf("symlink error") }
+
+	_, err := resolveExecPath()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to resolve executable path")
+}
+
+func TestDetectInstaller_ExecutableError(t *testing.T) {
+	orig := osExecutable
+	defer func() { osExecutable = orig }()
+	osExecutable = func() (string, error) { return "", fmt.Errorf("no executable") }
+
+	assert.Equal(t, installerDirect, detectInstaller())
+}
+
 // ---------------------------------------------------------------------------
 // Build asset name (OSS path)
 // ---------------------------------------------------------------------------
@@ -493,6 +529,82 @@ func TestFetchVersionFromOSS(t *testing.T) {
 	n, _ := resp.Body.Read(buf)
 	version := strings.TrimSpace(string(buf[:n]))
 	assert.Equal(t, "3.3.4", version)
+}
+
+func TestFetchVersionFromOSS_HTTPGetFails(t *testing.T) {
+	origClient, origURL := httpClient, ossVersionURL
+	defer func() {
+		httpClient = origClient
+		ossVersionURL = origURL
+	}()
+
+	httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return nil, fmt.Errorf("connection refused")
+	})}
+	ossVersionURL = "http://127.0.0.1:9/version"
+
+	_, err := fetchVersionFromOSS()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to reach OSS")
+}
+
+func TestFetchVersionFromOSS_StatusNotOK(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	origClient, origURL := httpClient, ossVersionURL
+	defer func() {
+		httpClient = origClient
+		ossVersionURL = origURL
+	}()
+	httpClient = server.Client()
+	ossVersionURL = server.URL + "/version"
+
+	_, err := fetchVersionFromOSS()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "503")
+}
+
+func TestFetchVersionFromOSS_EmptyBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	origClient, origURL := httpClient, ossVersionURL
+	defer func() {
+		httpClient = origClient
+		ossVersionURL = origURL
+	}()
+	httpClient = server.Client()
+	ossVersionURL = server.URL + "/version"
+
+	_, err := fetchVersionFromOSS()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "empty version from OSS")
+}
+
+func TestFetchVersionFromOSS_ReadBodyFails(t *testing.T) {
+	origClient, origURL := httpClient, ossVersionURL
+	defer func() {
+		httpClient = origClient
+		ossVersionURL = origURL
+	}()
+
+	httpClient = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(failingReader{}),
+			Request:    &http.Request{},
+		}, nil
+	})}
+	ossVersionURL = "http://unused.example/version"
+
+	_, err := fetchVersionFromOSS()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "simulated body read failure")
 }
 
 // ---------------------------------------------------------------------------
@@ -695,6 +807,44 @@ func TestDownloadFile(t *testing.T) {
 	assert.Contains(t, buf.String(), "Download complete")
 }
 
+func TestDownloadFile_NonOKStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	origClient := httpClient
+	httpClient = server.Client()
+	defer func() { httpClient = origClient }()
+
+	tmpDir := t.TempDir()
+	destPath := filepath.Join(tmpDir, "missing.tgz")
+	var buf bytes.Buffer
+
+	err := downloadFile(&buf, server.URL+"/missing.tgz", destPath)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "404")
+}
+
+func TestDownloadFile_CreateFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("x"))
+	}))
+	defer server.Close()
+
+	origClient := httpClient
+	httpClient = server.Client()
+	defer func() { httpClient = origClient }()
+
+	tmpDir := t.TempDir()
+	destPath := tmpDir
+
+	var buf bytes.Buffer
+	err := downloadFile(&buf, server.URL+"/file.tgz", destPath)
+	assert.Error(t, err)
+}
+
 // ---------------------------------------------------------------------------
 // Command struct
 // ---------------------------------------------------------------------------
@@ -767,3 +917,13 @@ func createTarGzInMemory(t *testing.T, fileName string, content []byte) *bytes.B
 	gw.Close()
 	return &buf
 }
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) { return 0, fmt.Errorf("simulated body read failure") }
