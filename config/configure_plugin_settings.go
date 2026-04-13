@@ -27,7 +27,8 @@ import (
 
 func NewConfigurePluginSettingsCommand() *cli.Command {
 	cmd := &cli.Command{
-		Name: "plugin-settings",
+		Name:                   "plugin-settings",
+		DisablePersistentFlags: true,
 		Short: i18n.T(
 			"manage global plugin system settings",
 			"管理插件系统全局设置"),
@@ -46,16 +47,6 @@ func NewConfigurePluginSettingsCommand() *cli.Command {
 			return doPluginSettingsShow(ctx, configDir, cfg)
 		},
 	}
-
-	cmd.Flags().Add(&cli.Flag{
-		Category:     "plugin-settings",
-		Name:         "source-base",
-		AssignedMode: cli.AssignedOnce,
-		Persistent:   true,
-		Short: i18n.T(
-			"plugins tree base URL for set (e.g. https://example.com/plugins)",
-			"set 命令使用的插件源 URL（例如 https://example.com/plugins）"),
-	})
 
 	cmd.AddSubCommand(newPluginSettingsShowCommand())
 	cmd.AddSubCommand(newPluginSettingsSetCommand())
@@ -91,7 +82,7 @@ func newPluginSettingsShowCommand() *cli.Command {
 }
 
 func newPluginSettingsSetCommand() *cli.Command {
-	return &cli.Command{
+	cmd := &cli.Command{
 		Name:  "set",
 		Usage: "set --source-base <url>",
 		Short: i18n.T("set plugins tree source base URL", "设置插件源根地址"),
@@ -119,11 +110,18 @@ func newPluginSettingsSetCommand() *cli.Command {
 			if err := pluginsettings.Save(configDir, cfg); err != nil {
 				return err
 			}
-			w := ctx.Stdout()
-			cli.Printf(w, "Saved plugin settings to %s\n", pluginsettings.GetConfigFilePath(configDir))
 			return doPluginSettingsShow(ctx, configDir, cfg)
 		},
 	}
+	cmd.Flags().Add(&cli.Flag{
+		Category:     "plugin-settings",
+		Name:         "source-base",
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"plugins tree base URL for set (e.g. https://example.com/plugins)",
+			"set 命令使用的插件源 URL（例如 https://example.com/plugins）"),
+	})
+	return cmd
 }
 
 func newPluginSettingsClearCommand() *cli.Command {
@@ -143,7 +141,6 @@ func newPluginSettingsClearCommand() *cli.Command {
 			if err := pluginsettings.Save(configDir, cfg); err != nil {
 				return err
 			}
-			cli.Printf(ctx.Stdout(), "Cleared plugin settings in %s\n", pluginsettings.GetConfigFilePath(configDir))
 			return doPluginSettingsShow(ctx, configDir, cfg)
 		},
 	}
@@ -155,9 +152,8 @@ func doPluginSettingsShow(ctx *cli.Context, configDir string, cfg *pluginsetting
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(map[string]any{
-		"config_dir":            configDir,
 		"config_file":           pluginsettings.GetConfigFilePath(configDir),
-		"source_base_file":      strings.TrimSpace(cfg.SourceBase),
+		"source_base":           strings.TrimSpace(cfg.SourceBase),
 		"source_base_effective": effective,
 		"env_override":          strings.TrimSpace(os.Getenv(pluginsettings.EnvSourceBase)),
 	})
