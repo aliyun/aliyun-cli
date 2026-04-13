@@ -654,10 +654,150 @@ func (m *Manager) extractPlugin(archivePath, extractDir, downloadURL string) err
 		return err
 	}
 
-	if strings.HasSuffix(downloadURL, ".zip") {
+	if strings.HasSuffix(strings.ToLower(downloadURL), ".zip") {
 		return unzip(archivePath, extractDir)
 	}
 	return untar(archivePath, extractDir)
+}
+
+func expandPluginSourcePath(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("source path is empty")
+	}
+	if strings.HasPrefix(raw, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home directory: %w", err)
+		}
+		raw = filepath.Join(home, raw[2:])
+	}
+	abs, err := filepath.Abs(raw)
+	if err != nil {
+		return "", fmt.Errorf("resolve source path: %w", err)
+	}
+	return abs, nil
+}
+
+func isPluginArchivePath(absPath string) bool {
+	lower := strings.ToLower(absPath)
+	return strings.HasSuffix(lower, ".zip") ||
+		strings.HasSuffix(lower, ".tar.gz") ||
+		strings.HasSuffix(lower, ".tgz")
+}
+
+func readPluginManifestFromDir(extractDir string) (*PluginManifest, error) {
+	pluginManifestPath := filepath.Join(extractDir, "manifest.json")
+	pluginManifestFile, err := os.Open(pluginManifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid plugin package: manifest.json not found")
+	}
+	defer pluginManifestFile.Close()
+
+	var pManifest PluginManifest
+	if err := json.NewDecoder(pluginManifestFile).Decode(&pManifest); err != nil {
+		return nil, fmt.Errorf("invalid plugin manifest: %w", err)
+	}
+	if strings.TrimSpace(pManifest.Name) == "" {
+		return nil, fmt.Errorf("invalid plugin manifest: name is empty")
+	}
+	if strings.TrimSpace(pManifest.Version) == "" {
+		return nil, fmt.Errorf("invalid plugin manifest: version is empty")
+	}
+	return &pManifest, nil
+}
+
+func copyDirTree(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode().Perm())
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, info.Mode().Perm())
+	})
+}
+
+func (m *Manager) promoteExtractedPlugin(tmpExtract, pluginName string) (string, error) {
+	finalDir := filepath.Join(m.rootDir, pluginName)
+	if err := os.RemoveAll(finalDir); err != nil {
+		return "", fmt.Errorf("failed to remove existing plugin directory: %w", err)
+	}
+	if err := os.Rename(tmpExtract, finalDir); err == nil {
+		return finalDir, nil
+	}
+	if err := copyDirTree(tmpExtract, finalDir); err != nil {
+		return "", fmt.Errorf("failed to copy plugin files: %w", err)
+	}
+	if err := os.RemoveAll(tmpExtract); err != nil {
+		return "", fmt.Errorf("failed to remove temporary extract directory: %w", err)
+	}
+	return finalDir, nil
+}
+
+// InstallFromLocalFile installs a plugin from a local .zip or .tar.gz package (used by `plugin install --source`).
+// version, if non-empty, must equal the version declared in manifest.json.
+func (m *Manager) InstallFromLocalFile(ctx *cli.Context, sourcePath, version string) error {
+	absPath, err := expandPluginSourcePath(sourcePath)
+	if err != nil {
+		return err
+	}
+	st, err := os.Stat(absPath)
+	if err != nil {
+		return fmt.Errorf("source file: %w", err)
+	}
+	if st.IsDir() {
+		return fmt.Errorf("source must be a plugin archive file (.zip, .tar.gz, .tgz), not a directory")
+	}
+	if !isPluginArchivePath(absPath) {
+		return fmt.Errorf("unsupported archive format (use .zip, .tar.gz, or .tgz): %s", absPath)
+	}
+
+	cli.Printf(ctx.Stdout(), "Installing plugin from %s...\n", absPath)
+
+	tmpParent, err := os.MkdirTemp("", "aliyun-plugin-local-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpParent)
+
+	tmpExtract := filepath.Join(tmpParent, "extract")
+	if err := m.extractPlugin(absPath, tmpExtract, absPath); err != nil {
+		return fmt.Errorf("failed to extract plugin package: %w", err)
+	}
+
+	pManifest, err := readPluginManifestFromDir(tmpExtract)
+	if err != nil {
+		return err
+	}
+	if version != "" && version != pManifest.Version {
+		return fmt.Errorf("specified version %q does not match package manifest version %q", version, pManifest.Version)
+	}
+
+	finalDir, err := m.promoteExtractedPlugin(tmpExtract, pManifest.Name)
+	if err != nil {
+		return err
+	}
+
+	if err := m.savePluginToManifest(pManifest.Name, pManifest.Version, finalDir, pManifest); err != nil {
+		return err
+	}
+
+	cli.Printf(ctx.Stdout(), "Plugin %s %s installed successfully!\n", pManifest.Name, pManifest.Version)
+	return nil
 }
 
 func (m *Manager) loadAndValidatePluginManifest(extractDir, expectedName string) (*PluginManifest, error) {
@@ -690,10 +830,12 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 		Name:             actualPluginName,
 		Version:          version,
 		Path:             extractDir,
+		ProductCode:      pManifest.ProductCode,
 		Command:          pManifest.Command,
 		ShortDescription: pManifest.ShortDescription,
 		Description:      pManifest.Description,
 		CmdNames:         pManifest.CmdNames,
+		Inner:            pManifest.Inner,
 	}
 
 	return m.saveLocalManifest(localManifest)

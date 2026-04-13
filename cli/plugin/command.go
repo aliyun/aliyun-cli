@@ -1,8 +1,13 @@
 package plugin
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -23,6 +28,7 @@ func NewPluginCommand() *cli.Command {
 	cmd.AddSubCommand(newListCommand())
 	cmd.AddSubCommand(newListRemoteCommand())
 	cmd.AddSubCommand(newSearchCommand())
+	cmd.AddSubCommand(newShowCommand())
 	cmd.AddSubCommand(newInstallCommand())
 	cmd.AddSubCommand(newInstallAllCommand())
 	cmd.AddSubCommand(newUninstallCommand())
@@ -131,23 +137,117 @@ func runSearch(ctx *cli.Context, args []string) error {
 	return displaySearchResults(ctx, mgr, commandName, results)
 }
 
+func newShowCommand() *cli.Command {
+	cmd := &cli.Command{
+		Name:  "show",
+		Short: i18n.T("Show details of an installed plugin", "显示已安装插件的详细信息"),
+		Usage: "show --name <plugin_name>",
+		Run: func(ctx *cli.Context, args []string) error {
+			name := ""
+			if v, ok := ctx.Flags().GetValue("name"); ok {
+				name = v
+			}
+			if strings.TrimSpace(name) == "" {
+				return fmt.Errorf("plugin name is required (use --name)")
+			}
+
+			mgr, err := NewManager()
+			if err != nil {
+				return err
+			}
+
+			actualName, p, err := mgr.findLocalPlugin(name)
+			if err != nil {
+				return err
+			}
+
+			return displayInstalledPluginDetails(ctx, actualName, p)
+		},
+	}
+
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "name",
+		Short:        i18n.T("Installed plugin name", "已安装的插件名称"),
+		AssignedMode: cli.AssignedOnce,
+	})
+
+	return cmd
+}
+
+func displayInstalledPluginDetails(ctx *cli.Context, canonicalName string, p *LocalPlugin) error {
+	out := ctx.Stdout()
+	fmt.Fprintf(out, "Name:\t%s\n", canonicalName)
+	fmt.Fprintf(out, "Version:\t%s\n", p.Version)
+	if pc := strings.TrimSpace(p.ProductCode); pc != "" {
+		fmt.Fprintf(out, "Product code:\t%s\n", pc)
+	}
+	// fmt.Fprintf(out, "Path:\t%s\n", p.Path)
+	if p.Command != "" {
+		fmt.Fprintf(out, "Command:\t%s\n", p.Command)
+	}
+	if p.ShortDescription != "" {
+		fmt.Fprintf(out, "Short description:\t%s\n", p.ShortDescription)
+	}
+	if p.Description != "" {
+		fmt.Fprintf(out, "Description:\t%s\n", p.Description)
+	}
+	if av, err := readPluginAPIVersionsFromDir(p.Path); err == nil && apiVersionsPresent(av) {
+		writePluginAPIVersionsSection(out, av)
+	}
+	if p.Inner {
+		fmt.Fprintf(out, "Inner:\t%v\n", p.Inner)
+	}
+	return nil
+}
+
+func readPluginAPIVersionsFromDir(pluginDir string) (*PluginAPIVersions, error) {
+	path := filepath.Join(pluginDir, "manifest.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var wrapper struct {
+		APIVersions *PluginAPIVersions `json:"apiVersions"`
+	}
+	if err := json.Unmarshal(data, &wrapper); err != nil {
+		return nil, err
+	}
+	return wrapper.APIVersions, nil
+}
+
+func apiVersionsPresent(v *PluginAPIVersions) bool {
+	if v == nil {
+		return false
+	}
+	return v.Default != "" || len(v.Supported) > 0
+}
+
+func writePluginAPIVersionsSection(out io.Writer, v *PluginAPIVersions) {
+	if v.Default != "" {
+		fmt.Fprintf(out, "API default:\t%s\n", v.Default)
+	}
+	if len(v.Supported) > 0 {
+		fmt.Fprintf(out, "API supported:\t%s\n", strings.Join(v.Supported, ", "))
+	}
+}
+
 func newInstallCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "install",
-		Short: i18n.T("Install a plugin", "安装插件"),
-		Usage: "install --names <plugin_name> [<plugin2> ...] [--version <version>] [--enable-pre]",
+		Short: i18n.T("Install a plugin (from remote index or local archive)", "安装插件（远程索引或本地包）"),
+		Usage: "install --names <plugin_name> [<plugin2> ...] [--version <version>] [--enable-pre] | install --source <path-to-archive> [--version <version>]",
 		Run: func(ctx *cli.Context, args []string) error {
-			names, version, enablePre, err := parseInstallArgs(ctx)
+			names, source, version, enablePre, err := parseInstallArgs(ctx)
 			if err != nil {
 				return err
 			}
 
-			validatedNames, err := validateInstallArgs(names)
+			validatedNames, err := validateInstallArgs(names, source)
 			if err != nil {
 				return err
 			}
 
-			return executeInstall(ctx, validatedNames, version, enablePre)
+			return executeInstall(ctx, validatedNames, source, version, enablePre)
 		},
 	}
 
@@ -160,7 +260,7 @@ func newInstallCommand() *cli.Command {
 
 	cmd.Flags().Add(&cli.Flag{
 		Name:         "version",
-		Short:        i18n.T("Specify plugin version", "指定插件版本"),
+		Short:        i18n.T("Specify plugin version (remote) or must match manifest when using --source", "指定插件版本（远程）；与 --source 连用时须与 manifest 一致"),
 		AssignedMode: cli.AssignedOnce,
 		DefaultValue: "",
 	})
@@ -169,6 +269,13 @@ func newInstallCommand() *cli.Command {
 		Name:         "enable-pre",
 		Short:        i18n.T("Allow installing pre-release versions", "允许安装预发布版本"),
 		AssignedMode: cli.AssignedNone,
+	})
+
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "source",
+		Short:        i18n.T("Install from a local plugin archive (.zip, .tar.gz, .tgz)", "从本地插件包安装（.zip、.tar.gz、.tgz）"),
+		AssignedMode: cli.AssignedOnce,
+		DefaultValue: "",
 	})
 
 	return cmd
@@ -282,9 +389,13 @@ func newUpdateCommand() *cli.Command {
 	return cmd
 }
 
-func parseInstallArgs(ctx *cli.Context) (names []string, version string, enablePre bool, err error) {
+func parseInstallArgs(ctx *cli.Context) (names []string, source string, version string, enablePre bool, err error) {
 	if namesFlag := ctx.Flags().Get("names"); namesFlag != nil && namesFlag.IsAssigned() {
 		names = namesFlag.GetValues()
+	}
+
+	if v, ok := ctx.Flags().GetValue("source"); ok {
+		source = v
 	}
 
 	if v, ok := ctx.Flags().GetValue("version"); ok {
@@ -295,12 +406,19 @@ func parseInstallArgs(ctx *cli.Context) (names []string, version string, enableP
 		enablePre = true
 	}
 
-	return names, version, enablePre, nil
+	return names, source, version, enablePre, nil
 }
 
-func validateInstallArgs(names []string) ([]string, error) {
+func validateInstallArgs(names []string, source string) ([]string, error) {
+	if strings.TrimSpace(source) != "" {
+		if len(names) > 0 {
+			return nil, fmt.Errorf("--names cannot be used together with --source")
+		}
+		return nil, nil
+	}
+
 	if len(names) == 0 {
-		return nil, fmt.Errorf("--names flag is required")
+		return nil, fmt.Errorf("either --names or --source is required")
 	}
 
 	validNames := []string{}
@@ -315,10 +433,14 @@ func validateInstallArgs(names []string) ([]string, error) {
 	return validNames, nil
 }
 
-func executeInstall(ctx *cli.Context, names []string, version string, enablePre bool) error {
+func executeInstall(ctx *cli.Context, names []string, source, version string, enablePre bool) error {
 	mgr, err := NewManager()
 	if err != nil {
 		return err
+	}
+
+	if strings.TrimSpace(source) != "" {
+		return mgr.InstallFromLocalFile(ctx, source, version)
 	}
 
 	if len(names) == 1 {

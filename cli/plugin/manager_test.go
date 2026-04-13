@@ -2112,6 +2112,54 @@ func TestManager_installPlugin(t *testing.T) {
 	})
 }
 
+func TestManager_InstallFromLocalFile(t *testing.T) {
+	t.Run("Success from tar.gz", func(t *testing.T) {
+		pluginRoot := t.TempDir()
+		mgr := &Manager{rootDir: pluginRoot}
+
+		archiveBody := createTestPluginArchive(t, "local-test-plugin", "2.1.0", "local")
+		archivePath := filepath.Join(t.TempDir(), "plugin.tar.gz")
+		assert.NoError(t, os.WriteFile(archivePath, archiveBody, 0644))
+
+		ctx := newTestContext()
+		err := mgr.InstallFromLocalFile(ctx, archivePath, "")
+		assert.NoError(t, err)
+
+		manifest, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		p, ok := manifest.Plugins["local-test-plugin"]
+		assert.True(t, ok)
+		assert.Equal(t, "2.1.0", p.Version)
+		assert.Contains(t, ctx.Stdout().(*bytes.Buffer).String(), "Installing plugin from")
+	})
+
+	t.Run("Version flag must match manifest", func(t *testing.T) {
+		pluginRoot := t.TempDir()
+		mgr := &Manager{rootDir: pluginRoot}
+
+		archiveBody := createTestPluginArchive(t, "local-test-plugin", "2.1.0", "local")
+		archivePath := filepath.Join(t.TempDir(), "plugin.tar.gz")
+		assert.NoError(t, os.WriteFile(archivePath, archiveBody, 0644))
+
+		ctx := newTestContext()
+		err := mgr.InstallFromLocalFile(ctx, archivePath, "9.9.9")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "does not match package manifest version")
+	})
+
+	t.Run("Unsupported extension", func(t *testing.T) {
+		pluginRoot := t.TempDir()
+		mgr := &Manager{rootDir: pluginRoot}
+		badPath := filepath.Join(t.TempDir(), "plugin.txt")
+		assert.NoError(t, os.WriteFile(badPath, []byte("x"), 0644))
+
+		ctx := newTestContext()
+		err := mgr.InstallFromLocalFile(ctx, badPath, "")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported archive format")
+	})
+}
+
 func createTestPluginArchive(t *testing.T, pluginName, version, command string) []byte {
 	tmpDir := t.TempDir()
 	archivePath := filepath.Join(tmpDir, "plugin.tar.gz")
