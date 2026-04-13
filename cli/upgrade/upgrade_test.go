@@ -51,6 +51,26 @@ func TestIsNewer(t *testing.T) {
 	}
 }
 
+func TestIsNewer_InvalidSemverStringFallback(t *testing.T) {
+	tests := []struct {
+		current, latest string
+		want            bool
+	}{
+		{"custom-build-1", "custom-build-2", true},
+		{"custom-build-1", "custom-build-1", false},
+		{"same-opaque", "same-opaque", false},
+		{"3.0.0", "dev-channel", true},
+		{"dev", "3.0.0", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.current+"_vs_"+tt.latest, func(t *testing.T) {
+			assert.Equal(t, tt.want, isNewer(tt.current, tt.latest),
+				"non-semver path should use raw string inequality")
+		})
+	}
+}
+
 func TestFormatSize(t *testing.T) {
 	assert.Equal(t, "0 B", formatSize(0))
 	assert.Equal(t, "512 B", formatSize(512))
@@ -68,6 +88,27 @@ func TestDetectInstaller_Default(t *testing.T) {
 	result := detectInstaller()
 	// In a test environment the binary is in a temp dir, not Homebrew
 	assert.Equal(t, installerDirect, result)
+}
+
+func TestInstallerTypeFromExecPathLower(t *testing.T) {
+	tests := []struct {
+		path string
+		want installerType
+	}{
+		{"/opt/homebrew/opt/aliyun-cli/bin/aliyun", installerHomebrew},
+		{"/usr/local/homebrew/bin/aliyun", installerHomebrew},
+		{"/usr/local/Cellar/aliyun-cli/3.0.0/bin/aliyun", installerHomebrew},
+		{"/home/linuxbrew/.linuxbrew/bin/aliyun", installerLinuxbrew},
+		{"/tmp/aliyun", installerDirect},
+		{"/linuxbrew/prefix/homebrew/name", installerLinuxbrew},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			lower := strings.ToLower(tt.path)
+			assert.Equal(t, tt.want, installerTypeFromExecPathLower(lower))
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------

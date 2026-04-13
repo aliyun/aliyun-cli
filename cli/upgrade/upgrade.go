@@ -468,14 +468,7 @@ func copyFile(src, dst string, perm os.FileMode) error {
 	return err
 }
 
-func detectInstaller() installerType {
-	execPath, err := os.Executable()
-	if err != nil {
-		return installerDirect
-	}
-	execPath, _ = filepath.EvalSymlinks(execPath)
-	lower := strings.ToLower(execPath)
-
+func installerTypeFromExecPathLower(lower string) installerType {
 	if strings.Contains(lower, "linuxbrew") {
 		return installerLinuxbrew
 	}
@@ -483,6 +476,15 @@ func detectInstaller() installerType {
 		return installerHomebrew
 	}
 	return installerDirect
+}
+
+func detectInstaller() installerType {
+	execPath, err := os.Executable()
+	if err != nil {
+		return installerDirect
+	}
+	execPath, _ = filepath.EvalSymlinks(execPath)
+	return installerTypeFromExecPathLower(strings.ToLower(execPath))
 }
 
 func ensureVPrefix(version string) string {
