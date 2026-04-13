@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -18,12 +20,13 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
 	"golang.org/x/mod/semver"
 )
 
 const (
-	IndexURL        = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/plugin_pkg_index.json"    // 默认索引地址
-	CommandIndexURL = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/plugin_search_index.json" // 命令倒排索引地址
+	IndexURL        = "https://aliyuncli.alicdn.com/plugins/plugin_pkg_index.json"    // 默认索引地址
+	CommandIndexURL = "https://aliyuncli.alicdn.com/plugins/plugin_search_index.json" // 命令倒排索引地址
 	EnvPluginsDir   = "ALIBABA_CLOUD_CLI_PLUGINS_DIR"
 	EnvNoCache      = "ALIBABA_CLOUD_CLI_PLUGIN_NO_CACHE"
 
@@ -43,8 +46,9 @@ func (e *ErrPluginNotFound) Error() string {
 
 type Manager struct {
 	rootDir         string
-	indexURL        string // For testing: allows overriding IndexURL
-	commandIndexURL string // For testing: allows overriding CommandIndexURL
+	sourceBase      string // from plugin-settings.json / env; empty = use built-in index URLs
+	indexURL        string // For testing: allows overriding resolved package index URL
+	commandIndexURL string // For testing: allows overriding resolved command index URL
 }
 
 func getHomePath() string {
@@ -86,7 +90,50 @@ func NewManager() (*Manager, error) {
 	if err := os.MkdirAll(rootDir, 0755); err != nil {
 		return nil, err
 	}
-	return &Manager{rootDir: rootDir}, nil
+	sysDir := filepath.Join(getHomePath(), ".aliyun")
+	settings, err := pluginsettings.Load(sysDir)
+	if err != nil {
+		settings = pluginsettings.Default()
+	}
+	base := pluginsettings.EffectiveSourceBase(settings)
+	return &Manager{rootDir: rootDir, sourceBase: base}, nil
+}
+
+func (m *Manager) resolvedPkgIndexURL() string {
+	if m.indexURL != "" {
+		return m.indexURL
+	}
+	if b := strings.TrimRight(strings.TrimSpace(m.sourceBase), "/"); b != "" {
+		return b + "/plugin_pkg_index.json"
+	}
+	return IndexURL
+}
+
+func (m *Manager) resolvedCommandIndexURL() string {
+	if m.commandIndexURL != "" {
+		return m.commandIndexURL
+	}
+	if b := strings.TrimRight(strings.TrimSpace(m.sourceBase), "/"); b != "" {
+		return b + "/plugin_search_index.json"
+	}
+	return CommandIndexURL
+}
+
+// common layout: .../pkgs/{name}/{version}/{basename}.
+func (m *Manager) resolvePackageDownloadURL(origURL, pluginName, version string) string {
+	if strings.TrimSpace(m.sourceBase) == "" {
+		return origURL
+	}
+	u, err := url.Parse(origURL)
+	if err != nil {
+		return origURL
+	}
+	baseName := path.Base(u.Path)
+	if baseName == "" || baseName == "." || baseName == "/" {
+		return origURL
+	}
+	b := strings.TrimRight(strings.TrimSpace(m.sourceBase), "/")
+	return fmt.Sprintf("%s/pkgs/%s/%s/%s", b, pluginName, version, baseName)
 }
 
 func (m *Manager) readCache(cacheFile string, ttl time.Duration, result interface{}) (hit bool, staleAvailable bool) {
@@ -161,10 +208,7 @@ func (m *Manager) fetchWithCache(url, cacheFile string, result interface{}) erro
 }
 
 func (m *Manager) GetIndex() (*Index, error) {
-	indexURL := IndexURL
-	if m.indexURL != "" {
-		indexURL = m.indexURL
-	}
+	indexURL := m.resolvedPkgIndexURL()
 	cacheFile := filepath.Join(m.rootDir, indexCacheFile)
 	var index Index
 	if err := m.fetchWithCache(indexURL, cacheFile, &index); err != nil {
@@ -174,10 +218,7 @@ func (m *Manager) GetIndex() (*Index, error) {
 }
 
 func (m *Manager) GetCommandIndex() (*CommandIndex, error) {
-	commandIndexURL := CommandIndexURL
-	if m.commandIndexURL != "" {
-		commandIndexURL = m.commandIndexURL
-	}
+	commandIndexURL := m.resolvedCommandIndexURL()
 	cacheFile := filepath.Join(m.rootDir, commandCacheFile)
 	var index CommandIndex
 	if err := m.fetchWithCache(commandIndexURL, cacheFile, &index); err != nil {
@@ -678,14 +719,18 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 		return err
 	}
 
-	archivePath, err := m.downloadAndVerifyPlugin(ctx, platInfo, actualPluginName, version)
+	downloadURL := m.resolvePackageDownloadURL(platInfo.URL, actualPluginName, version)
+	platForDownload := *platInfo
+	platForDownload.URL = downloadURL
+
+	archivePath, err := m.downloadAndVerifyPlugin(ctx, &platForDownload, actualPluginName, version)
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(filepath.Dir(archivePath))
 
 	extractDir := filepath.Join(m.rootDir, actualPluginName)
-	if err := m.extractPlugin(archivePath, extractDir, platInfo.URL); err != nil {
+	if err := m.extractPlugin(archivePath, extractDir, downloadURL); err != nil {
 		return err
 	}
 

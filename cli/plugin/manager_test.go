@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -28,6 +29,35 @@ func newTestContext() *cli.Context {
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	return cli.NewCommandContext(stdout, stderr)
+}
+
+func TestManager_resolvedIndexURLsWithSourceBase(t *testing.T) {
+	m := &Manager{sourceBase: "https://mirror.example.com/plugins"}
+	assert.Equal(t, "https://mirror.example.com/plugins/plugin_pkg_index.json", m.resolvedPkgIndexURL())
+	assert.Equal(t, "https://mirror.example.com/plugins/plugin_search_index.json", m.resolvedCommandIndexURL())
+}
+
+func TestManager_resolvePackageDownloadURL(t *testing.T) {
+	orig := "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/pkgs/aliyun-cli-acc/0.2.0/aliyun-cli-acc-linux-amd64.tar.gz"
+	m := &Manager{sourceBase: "https://mirror.example.com/plugins"}
+	got := m.resolvePackageDownloadURL(orig, "aliyun-cli-acc", "0.2.0")
+	assert.Equal(t, "https://mirror.example.com/plugins/pkgs/aliyun-cli-acc/0.2.0/aliyun-cli-acc-linux-amd64.tar.gz", got)
+
+	m2 := &Manager{}
+	assert.Equal(t, orig, m2.resolvePackageDownloadURL(orig, "x", "1.0.0"))
+}
+
+func TestNewManager_LoadsSourceBaseFromFile(t *testing.T) {
+	home := t.TempDir()
+	cleanup := setTestHomeDir(t, home)
+	defer cleanup()
+	confDir := filepath.Join(home, ".aliyun")
+	assert.NoError(t, os.MkdirAll(confDir, 0755))
+	data := []byte(`{"source_base":"https://x.example/plugins"}`)
+	assert.NoError(t, os.WriteFile(filepath.Join(confDir, pluginsettings.ConfigFileName), data, 0600))
+	mgr, err := NewManager()
+	assert.NoError(t, err)
+	assert.Equal(t, "https://x.example/plugins", mgr.sourceBase)
 }
 
 func TestNewManager(t *testing.T) {
