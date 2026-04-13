@@ -328,6 +328,20 @@ func getSTSEndpoint(regionId string) string {
 	return "sts.aliyuncs.com"
 }
 
+// mergeProfileAfterCredentialRefresh persists STS / OAuth token fields from the in-memory profile onto the on-disk profile.
+// in-memory profile may include one-off CLI overrides(e.g. --endpoint) merged via OverwriteWithFlags; those must not overwrite stored settings.
+func mergeProfileAfterCredentialRefresh(disk Profile, cp *Profile) Profile {
+	out := disk
+	out.AccessKeyId = cp.AccessKeyId
+	out.AccessKeySecret = cp.AccessKeySecret
+	out.StsToken = cp.StsToken
+	out.StsExpiration = cp.StsExpiration
+	out.OAuthAccessToken = cp.OAuthAccessToken
+	out.OAuthRefreshToken = cp.OAuthRefreshToken
+	out.OAuthAccessTokenExpire = cp.OAuthAccessTokenExpire
+	return out
+}
+
 func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred credentialsv2.Credential, err error) {
 	config := new(credentialsv2.Config)
 	// The AK, StsToken are direct credential
@@ -572,7 +586,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			}
 			for i, profile := range conf.Profiles {
 				if profile.Name == cp.Name {
-					conf.Profiles[i] = *cp
+					conf.Profiles[i] = mergeProfileAfterCredentialRefresh(profile, cp)
 					break
 				}
 			}
@@ -608,7 +622,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			}
 			for i, profile := range conf.Profiles {
 				if profile.Name == cp.Name {
-					conf.Profiles[i] = *cp
+					conf.Profiles[i] = mergeProfileAfterCredentialRefresh(profile, cp)
 					break
 				}
 			}

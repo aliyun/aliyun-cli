@@ -216,6 +216,34 @@ func TestGetParent(t *testing.T) {
 	assert.Nil(t, p)
 }
 
+func TestMergeProfileAfterCredentialRefresh_KeepsStoredNonCredentialFields(t *testing.T) {
+	disk := Profile{
+		Name:     "p",
+		Mode:     CloudSSO,
+		RegionId: "cn-hangzhou",
+		Endpoint: "https://from-file.example.com",
+	}
+	cp := disk
+	cp.Endpoint = "https://from-cli.example.com"
+	cp.AccessKeyId = "sts-ak"
+	cp.AccessKeySecret = "sts-sk"
+	cp.StsToken = "sts-token"
+	cp.StsExpiration = 999999
+	cp.OAuthAccessToken = "oat"
+	cp.OAuthRefreshToken = "ort"
+	cp.OAuthAccessTokenExpire = 8888
+
+	got := mergeProfileAfterCredentialRefresh(disk, &cp)
+	assert.Equal(t, "https://from-file.example.com", got.Endpoint)
+	assert.Equal(t, "sts-ak", got.AccessKeyId)
+	assert.Equal(t, "sts-sk", got.AccessKeySecret)
+	assert.Equal(t, "sts-token", got.StsToken)
+	assert.Equal(t, int64(999999), got.StsExpiration)
+	assert.Equal(t, "oat", got.OAuthAccessToken)
+	assert.Equal(t, "ort", got.OAuthRefreshToken)
+	assert.Equal(t, int64(8888), got.OAuthAccessTokenExpire)
+}
+
 func TestOverwriteWithFlags(t *testing.T) {
 	buf := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
