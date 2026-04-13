@@ -331,6 +331,9 @@ func TestConfirmUpgrade_StdinEmpty(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDownloadAndExtract_Success(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("skipping test on non-linux platform")
+	}
 	binaryContent := []byte("#!/bin/sh\necho upgraded\n")
 	archiveBuf := createTarGzInMemory(t, "aliyun", binaryContent)
 
