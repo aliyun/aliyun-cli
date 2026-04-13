@@ -178,6 +178,117 @@ func TestDoUpgrade_DirectWhenNotBrew(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// upgradeViaDirect end-to-end
+// ---------------------------------------------------------------------------
+
+func TestUpgradeViaDirect_FullFlow(t *testing.T) {
+	binaryContent := []byte("#!/bin/sh\necho upgraded\n")
+	archive := createTarGzInMemory(t, "aliyun", binaryContent)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("99.0.0\n"))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", archive.Len()))
+		w.Write(archive.Bytes())
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	origClient := httpClient
+	origOSSBase := ossBaseURL
+	origOSSVer := ossVersionURL
+	origStdin := stdin
+	origResolve := resolveExecPathFunc
+	defer func() {
+		httpClient = origClient
+		ossBaseURL = origOSSBase
+		ossVersionURL = origOSSVer
+		stdin = origStdin
+		resolveExecPathFunc = origResolve
+	}()
+
+	httpClient = server.Client()
+	ossBaseURL = server.URL
+	ossVersionURL = server.URL + "/version"
+	stdin = strings.NewReader("y\n")
+
+	targetBinary := filepath.Join(t.TempDir(), "aliyun")
+	os.WriteFile(targetBinary, []byte("old"), 0755)
+	resolveExecPathFunc = func() (string, error) { return targetBinary, nil }
+
+	ctx := newTestContext()
+	err := upgradeViaDirect(ctx, "3.0.0")
+	assert.NoError(t, err)
+
+	got, err := os.ReadFile(targetBinary)
+	assert.NoError(t, err)
+	assert.Equal(t, binaryContent, got, "binary should be replaced with new content")
+}
+
+func TestUpgradeViaDirect_AlreadyLatest(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("3.0.0\n"))
+	}))
+	defer server.Close()
+
+	origClient := httpClient
+	origOSSBase := ossBaseURL
+	origOSSVer := ossVersionURL
+	defer func() {
+		httpClient = origClient
+		ossBaseURL = origOSSBase
+		ossVersionURL = origOSSVer
+	}()
+
+	httpClient = server.Client()
+	ossBaseURL = server.URL
+	ossVersionURL = server.URL + "/version"
+
+	ctx := newTestContext()
+	var stdout bytes.Buffer
+	ctx = cli.NewCommandContext(&stdout, &bytes.Buffer{})
+	ctx.EnterCommand(NewUpgradeCommand())
+
+	err := upgradeViaDirect(ctx, "3.0.0")
+	assert.NoError(t, err)
+	assert.Contains(t, stdout.String(), "already using the latest version")
+}
+
+func TestUpgradeViaDirect_UserCancels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("99.0.0\n"))
+	}))
+	defer server.Close()
+
+	origClient := httpClient
+	origOSSBase := ossBaseURL
+	origOSSVer := ossVersionURL
+	origStdin := stdin
+	defer func() {
+		httpClient = origClient
+		ossBaseURL = origOSSBase
+		ossVersionURL = origOSSVer
+		stdin = origStdin
+	}()
+
+	httpClient = server.Client()
+	ossBaseURL = server.URL
+	ossVersionURL = server.URL + "/version"
+	stdin = strings.NewReader("n\n")
+
+	ctx := newTestContext()
+	var stdout bytes.Buffer
+	ctx = cli.NewCommandContext(&stdout, &bytes.Buffer{})
+	ctx.EnterCommand(NewUpgradeCommand())
+
+	err := upgradeViaDirect(ctx, "3.0.0")
+	assert.NoError(t, err)
+	assert.Contains(t, stdout.String(), "Upgrade cancelled")
+}
+
+// ---------------------------------------------------------------------------
 // confirmUpgrade
 // ---------------------------------------------------------------------------
 

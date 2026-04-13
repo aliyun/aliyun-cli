@@ -775,6 +775,7 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 	if len(args) == 0 {
 		cmd.PrintHead(ctx)
 		cmd.PrintUsage(ctx)
+		cmd.PrintSubCommands(ctx)
 		cmd.PrintFlags(ctx)
 		cmd.PrintSample(ctx)
 		c.printProducts(ctx)

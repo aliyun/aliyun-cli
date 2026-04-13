@@ -42,16 +42,18 @@ const (
 	installerLinuxbrew                      // Linuxbrew
 )
 
-const (
+var (
 	ossBaseURL    = "https://aliyuncli.alicdn.com"
 	ossVersionURL = ossBaseURL + "/version"
 )
 
 var (
-	httpClient                    = &http.Client{Timeout: 60 * time.Second}
-	stdin               io.Reader = os.Stdin
-	execCommand                   = exec.Command // mockable for tests
-	detectInstallerFunc           = detectInstaller
+	httpClient          = &http.Client{Timeout: 60 * time.Second}
+	stdin     io.Reader = os.Stdin
+
+	execCommand         = exec.Command
+	detectInstallerFunc = detectInstaller
+	resolveExecPathFunc = resolveExecPath
 )
 
 type upgradeSource struct {
@@ -160,7 +162,7 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 		return err
 	}
 
-	execPath, err := resolveExecPath()
+	execPath, err := resolveExecPathFunc()
 	if err != nil {
 		return err
 	}
