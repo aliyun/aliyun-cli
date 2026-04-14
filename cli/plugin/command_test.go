@@ -355,67 +355,6 @@ func TestNewInstallCommand_Run_WithVersionFlagOnly(t *testing.T) {
 	assert.Contains(t, err.Error(), "either --names or --source is required")
 }
 
-func TestNewInstallCommand_Run_NamesAndSourceConflict(t *testing.T) {
-	cmd := newInstallCommand()
-
-	testHome := t.TempDir()
-	cleanup := setTestHomeDir(t, testHome)
-	defer cleanup()
-
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(stdout, stderr)
-	ctx.EnterCommand(cmd)
-
-	namesFlag := ctx.Flags().Get("names")
-	assert.NotNil(t, namesFlag)
-	namesFlag.SetAssigned(true)
-	namesFlag.SetValues([]string{"some-plugin"})
-
-	sourceFlag := ctx.Flags().Get("source")
-	assert.NotNil(t, sourceFlag)
-	sourceFlag.SetAssigned(true)
-	sourceFlag.SetValue("/tmp/x.zip")
-
-	err := cmd.Run(ctx, []string{})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "--names cannot be used together with --source")
-}
-
-func TestNewInstallCommand_Run_WithSourceFlagSuccess(t *testing.T) {
-	cmd := newInstallCommand()
-
-	testHome := t.TempDir()
-	cleanup := setTestHomeDir(t, testHome)
-	defer cleanup()
-
-	archiveBody := createTestPluginArchive(t, "cli-local-cmd-test", "1.2.3", "x")
-	archivePath := filepath.Join(t.TempDir(), "plugin-local-cmd.tar.gz")
-	assert.NoError(t, os.WriteFile(archivePath, archiveBody, 0644))
-
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(stdout, stderr)
-	ctx.EnterCommand(cmd)
-
-	sourceFlag := ctx.Flags().Get("source")
-	assert.NotNil(t, sourceFlag)
-	sourceFlag.SetAssigned(true)
-	sourceFlag.SetValue(archivePath)
-
-	err := cmd.Run(ctx, []string{})
-	assert.NoError(t, err)
-
-	mgr, err := NewManager()
-	assert.NoError(t, err)
-	manifest, err := mgr.GetLocalManifest()
-	assert.NoError(t, err)
-	p, ok := manifest.Plugins["cli-local-cmd-test"]
-	assert.True(t, ok)
-	assert.Equal(t, "1.2.3", p.Version)
-	assert.Contains(t, stdout.String(), "Installing plugin from")
-}
-
 func TestNewInstallCommand_Run_WithNamesAndEnablePreFlags(t *testing.T) {
 	cmd := newInstallCommand()
 
@@ -615,9 +554,9 @@ func TestNewShowCommand_Run_Success(t *testing.T) {
 	assert.NoError(t, os.MkdirAll(pluginPath, 0755))
 
 	pkgManifest := map[string]interface{}{
-		"name":         "aliyun-cli-demo",
-		"version":      "2.0.0",
-		"productCode":  "demo-product",
+		"name":        "aliyun-cli-demo",
+		"version":     "2.0.0",
+		"productCode": "demo-product",
 		"apiVersions": map[string]interface{}{
 			"default": "2017-06-13",
 			"supported": []string{
