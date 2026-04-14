@@ -550,11 +550,12 @@ func NewEndpointFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "config",
 		Name:         EndpointFlagName,
+		Shorthand:    'e',
 		AssignedMode: cli.AssignedOnce,
 		Persistent:   true,
 		Short: i18n.T(
-			"use `--endpoint <endpoint>` to assign endpoint",
-			"使用 `--endpoint <endpoint>` 来指定接入点地址"),
+			"use `--endpoint`/`-e <endpoint>` to assign endpoint",
+			"使用 `--endpoint`/`-e <endpoint>` 来指定接入点地址"),
 	}
 }
 
