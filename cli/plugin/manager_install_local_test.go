@@ -203,3 +203,39 @@ func TestFindInstalledPluginInManifest(t *testing.T) {
 	_, _, ok = FindInstalledPluginInManifest(nil, "x")
 	assert.False(t, ok)
 }
+
+func TestExpandPluginSourcePath(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		_, err := expandPluginSourcePath("")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "empty")
+	})
+	t.Run("whitespace_only", func(t *testing.T) {
+		_, err := expandPluginSourcePath("   \t  ")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "empty")
+	})
+	t.Run("tilde_prefix", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		wantFile := filepath.Join(testHome, "my-plugin.tgz")
+		require.NoError(t, os.WriteFile(wantFile, []byte("x"), 0644))
+
+		got, err := expandPluginSourcePath("~/my-plugin.tgz")
+		require.NoError(t, err)
+		want, err := filepath.Abs(wantFile)
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
+	})
+	t.Run("trim_then_abs", func(t *testing.T) {
+		p := filepath.Join(t.TempDir(), "a.zip")
+		require.NoError(t, os.WriteFile(p, []byte("z"), 0644))
+		want, err := filepath.Abs(p)
+		require.NoError(t, err)
+		got, err := expandPluginSourcePath("  " + p + "  ")
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
+	})
+}

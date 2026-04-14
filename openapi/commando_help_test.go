@@ -489,5 +489,7 @@ func TestPrintHelpContextHints_AiModeConfigEnabled(t *testing.T) {
 	c.pluginLoaded = true
 	c.printHelpContextHints(ctx)
 
-	assert.Contains(t, stderr.String(), "configure ai-mode")
+	out := stderr.String()
+	assert.Contains(t, out, "configure ai-mode")
+	assert.Contains(t, out, "disable")
 }

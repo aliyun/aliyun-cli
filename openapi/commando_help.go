@@ -43,8 +43,8 @@ func (c *Commando) printAiModeHelpHint(ctx *cli.Context) {
 		return
 	}
 	msg := i18n.T(
-		"Note: CLI AI mode is enabled in configuration (`aliyun configure ai-mode`); API requests include the AI User-Agent segment.",
-		"提示：已在配置中开启 CLI AI 模式（`aliyun configure ai-mode`），API 请求会带上 AI UA。",
+		"Note: CLI AI mode is enabled in configuration; API requests include the AI User-Agent segment. If you do not want this, run `aliyun configure ai-mode disable`.",
+		"提示：已在配置中开启 CLI AI 模式，API 请求会带上 AI UA。若不需要，请执行 `aliyun configure ai-mode disable` 关闭。",
 	).Text()
 	cli.PrintfWithColor(ctx.Stderr(), cli.Yellow, "%s\n", msg)
 }
