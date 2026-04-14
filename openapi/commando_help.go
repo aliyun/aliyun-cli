@@ -22,9 +22,37 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
+	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/newmeta"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 )
+
+func (c *Commando) printPluginIndexLoadHint(ctx *cli.Context) {
+	if c.pluginIndexErr == nil {
+		return
+	}
+	cli.PrintfWithColor(ctx.Stderr(), cli.Yellow, "%s\n",
+		i18n.T("Note: Could not load the remote plugin catalog (network or server). Install-related hints may be incomplete; installed plugins still work.",
+			"提示：未能加载远程插件目录（网络或服务器原因），与安装插件相关的提示可能不完整；已安装的插件不受影响。").Text())
+}
+
+func (c *Commando) printAiModeHelpHint(ctx *cli.Context) {
+	cfg, err := aimode.Load(config.GetConfigDir(ctx))
+	if err != nil || !cfg.Enabled {
+		return
+	}
+	msg := i18n.T(
+		"Note: CLI AI mode is enabled in configuration (`aliyun configure ai-mode`); API requests include the AI User-Agent segment.",
+		"提示：已在配置中开启 CLI AI 模式（`aliyun configure ai-mode`），API 请求会带上 AI UA。",
+	).Text()
+	cli.PrintfWithColor(ctx.Stderr(), cli.Yellow, "%s\n", msg)
+}
+
+func (c *Commando) printHelpContextHints(ctx *cli.Context) {
+	c.printPluginIndexLoadHint(ctx)
+	c.printAiModeHelpHint(ctx)
+}
 
 func getPluginArgsForHelp(productCode string) []string {
 	cmdIndex := -1
@@ -151,9 +179,11 @@ func (c *Commando) printProducts(ctx *cli.Context) {
 		cli.PrintfWithColor(ctx.Stdout(), cli.ColorOff, "\nTo install plugins for uninstalled products, run:\n")
 		cli.PrintfWithColor(ctx.Stdout(), cli.Green, "  aliyun plugin install --names <plugin_name> [--enable-pre]\n")
 	}
+	c.printHelpContextHints(ctx)
 }
 
 func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error {
+	c.printHelpContextHints(ctx)
 	// 1. Check if it's a plugin product
 	var pluginName string
 	var isInstalled bool
@@ -169,6 +199,12 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 			}
 		}
 	}
+	// Locally installed plugin (e.g. plugin install --source) not in remote index
+	if pluginName == "" && c.localManifest != nil {
+		if n, _, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode); ok {
+			pluginName = n
+		}
+	}
 
 	// 2. Check if it's a built-in product
 	product, ok := c.library.GetProduct(productCode)
@@ -181,13 +217,17 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 			if isInstalled {
 				cli.Printf(ctx.Stdout(), "Product '%s' is provided by plugin '%s'\n", productCode, pluginName)
 				c.setLangEnv(ctx)
-				plugin.ExecutePlugin(productCode, getPluginArgsForHelp(productCode), nil)
+				plugin.ExecutePlugin(productCode, getPluginArgsForHelp(productCode), ctx)
 				return nil
 			} else {
 				return fmt.Errorf("'%s' is not a valid product.\nDid you mean to install corresponding product plugin?\n  aliyun plugin install --names %s", productCode, pluginName)
 			}
 		}
-		return &InvalidProductOrPluginError{Code: productCode, library: c.library, plugins: c.pluginIndex.Plugins}
+		var plugList []plugin.PluginInfo
+		if c.pluginIndex != nil {
+			plugList = c.pluginIndex.Plugins
+		}
+		return &InvalidProductOrPluginError{Code: productCode, library: c.library, plugins: plugList}
 	}
 
 	if pluginName != "" {
@@ -265,6 +305,7 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 }
 
 func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName string) error {
+	c.printHelpContextHints(ctx)
 	// 0. Check if it's a plugin product
 	var pluginName string
 	var isInstalled bool
@@ -280,10 +321,16 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 			}
 		}
 	}
+	if pluginName == "" && c.localManifest != nil {
+		if n, _, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode); ok {
+			pluginName = n
+		}
+	}
 
-	if pluginName != "" {
-		if c.localManifest != nil {
-			localPlugin, isInstalled = c.localManifest.Plugins[pluginName]
+	if pluginName != "" && c.localManifest != nil {
+		if lp, ok := c.localManifest.Plugins[pluginName]; ok {
+			localPlugin = lp
+			isInstalled = true
 		}
 	}
 
@@ -303,7 +350,11 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 			}
 		}
 		// Not a built-in product and not a plugin product, like fuzzy cmd input
-		return &InvalidProductOrPluginError{Code: productCode, library: c.library, plugins: c.pluginIndex.Plugins}
+		var plugList []plugin.PluginInfo
+		if c.pluginIndex != nil {
+			plugList = c.pluginIndex.Plugins
+		}
+		return &InvalidProductOrPluginError{Code: productCode, library: c.library, plugins: plugList}
 	}
 
 	shouldTryPlugin := false

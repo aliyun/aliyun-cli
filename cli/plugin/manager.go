@@ -274,6 +274,22 @@ func matchPluginName(pluginName, userInput string) bool {
 	return false
 }
 
+// FindInstalledPluginInManifest finds an installed plugin when user input
+// matches the plugin package name or the short form (user input equals the package name with the "aliyun-cli-" prefix removed, e.g. fc -> aliyun-cli-fc).
+// Used for plugins installed from a local archive (--source) that are not listed in the remote plugin index.
+func FindInstalledPluginInManifest(manifest *LocalManifest, userInput string) (pluginName string, lp *LocalPlugin, ok bool) {
+	if manifest == nil || manifest.Plugins == nil {
+		return "", nil, false
+	}
+	for name, p := range manifest.Plugins {
+		if matchPluginName(name, userInput) {
+			pl := p
+			return name, &pl, true
+		}
+	}
+	return "", nil, false
+}
+
 func isDevVersion(version string) bool {
 	if strings.HasPrefix(version, "0.0.") || version == "0.0.1" {
 		return true
@@ -353,10 +369,8 @@ func (m *Manager) findLocalPlugin(userInput string) (string, *LocalPlugin, error
 		return "", nil, fmt.Errorf("failed to read local plugin manifest: %w", err)
 	}
 
-	for pluginName, plugin := range localManifest.Plugins {
-		if matchPluginName(pluginName, userInput) {
-			return pluginName, &plugin, nil
-		}
+	if name, lp, ok := FindInstalledPluginInManifest(localManifest, userInput); ok {
+		return name, lp, nil
 	}
 
 	return "", nil, &ErrPluginNotFound{PluginName: userInput}

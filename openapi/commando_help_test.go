@@ -3,8 +3,10 @@ package openapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -379,4 +381,113 @@ func TestPrintApiUsage_NonBuiltinProduct_PluginInstalled(t *testing.T) {
 
 	output := w.String()
 	assert.Contains(t, output, "Command 'fc deploy' is provided by plugin 'aliyun-cli-fc'")
+}
+
+func setupLocalPluginShellBinary(t *testing.T, pluginName string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("plugin fixture uses a Unix shell shebang")
+	}
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	t.Cleanup(cleanup)
+
+	pluginsDir := filepath.Join(testHome, ".aliyun", "plugins")
+	pluginDir := filepath.Join(pluginsDir, pluginName)
+	assert.NoError(t, os.MkdirAll(pluginDir, 0755))
+
+	binPath := filepath.Join(pluginDir, pluginName)
+	script := "#!/bin/sh\necho HELP_FROM_LOCAL_PLUGIN\nexit 0\n"
+	assert.NoError(t, os.WriteFile(binPath, []byte(script), 0755))
+
+	manifest := plugin.LocalManifest{
+		Plugins: map[string]plugin.LocalPlugin{
+			pluginName: {
+				Name:    pluginName,
+				Version: "1.0.0",
+				Path:    pluginDir,
+			},
+		},
+	}
+	data, err := json.Marshal(manifest)
+	assert.NoError(t, err)
+	assert.NoError(t, os.WriteFile(filepath.Join(pluginsDir, "manifest.json"), data, 0644))
+}
+
+func TestPrintProductUsage_LocalPluginNotInRemoteIndex(t *testing.T) {
+	setupLocalPluginShellBinary(t, "aliyun-cli-localonly")
+
+	c, w, stderr := newTestCommando()
+	ctx := newTestContext(w, stderr)
+
+	repo, _ := meta.MockLoadRepository([]meta.Product{})
+	c.library.builtinRepo = repo
+	c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{}}
+
+	mgr, err := plugin.NewManager()
+	assert.NoError(t, err)
+	lm, err := mgr.GetLocalManifest()
+	assert.NoError(t, err)
+	c.localManifest = lm
+
+	err = c.printProductUsage(ctx, "localonly")
+	assert.NoError(t, err)
+	out := w.String()
+	assert.Contains(t, out, "Product 'localonly' is provided by plugin 'aliyun-cli-localonly'")
+	assert.Contains(t, out, "HELP_FROM_LOCAL_PLUGIN")
+}
+
+func TestPrintApiUsage_LocalPluginNotInRemoteIndex(t *testing.T) {
+	setupLocalPluginShellBinary(t, "aliyun-cli-localonly2")
+
+	c, w, stderr := newTestCommando()
+	ctx := newTestContext(w, stderr)
+
+	repo, _ := meta.MockLoadRepository([]meta.Product{})
+	c.library.builtinRepo = repo
+	c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{}}
+
+	mgr, err := plugin.NewManager()
+	assert.NoError(t, err)
+	lm, err := mgr.GetLocalManifest()
+	assert.NoError(t, err)
+	c.localManifest = lm
+
+	err = c.printApiUsage(ctx, "localonly2", "SomeApi")
+	assert.NoError(t, err)
+	assert.Contains(t, w.String(), "Command 'localonly2 SomeApi' is provided by plugin 'aliyun-cli-localonly2'")
+}
+
+func TestPrintProducts_PluginIndexLoadHint(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	c.library.builtinRepo = getRepository()
+	c.pluginLoaded = true
+	c.pluginIndexErr = fmt.Errorf("failed to fetch plugin index")
+	c.pluginIndex = nil
+
+	c.printProducts(ctx)
+
+	assert.Contains(t, stderr.String(), "plugin catalog")
+}
+
+func TestPrintHelpContextHints_AiModeConfigEnabled(t *testing.T) {
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	t.Cleanup(cleanup)
+
+	confDir := filepath.Join(testHome, ".aliyun")
+	assert.NoError(t, os.MkdirAll(confDir, 0755))
+	assert.NoError(t, os.WriteFile(filepath.Join(confDir, "ai-mode.json"), []byte(`{"enabled":true}`), 0600))
+
+	c, w, stderr := newTestCommando()
+	cmd := &cli.Command{}
+	AddFlags(cmd.Flags())
+	ctx := cli.NewCommandContext(w, stderr)
+	ctx.EnterCommand(cmd)
+
+	c.pluginLoaded = true
+	c.printHelpContextHints(ctx)
+
+	assert.Contains(t, stderr.String(), "configure ai-mode")
 }

@@ -211,8 +211,8 @@ func TestFindLocalPlugin(t *testing.T) {
 			if tt.wantFound {
 				if plugin == nil {
 					t.Errorf("findLocalPlugin() expected plugin, got nil")
-				} else if plugin.Command != "aliyun-cli-fc" {
-					t.Errorf("findLocalPlugin() got plugin.Command = %q, want %q", plugin.Command, "aliyun-cli-fc")
+				} else if plugin.Name != "aliyun-cli-fc" {
+					t.Errorf("findLocalPlugin() got plugin.Name = %q, want %q", plugin.Name, "aliyun-cli-fc")
 				}
 			} else {
 				if plugin != nil {

@@ -37,11 +37,12 @@ import (
 
 // main entrance of aliyun cli
 type Commando struct {
-	profile       config.Profile
-	library       *Library
-	pluginIndex   *plugin.Index
-	localManifest *plugin.LocalManifest
-	pluginLoaded  bool
+	profile        config.Profile
+	library        *Library
+	pluginIndex    *plugin.Index
+	pluginIndexErr error // set when remote plugin index could not be loaded (shown once in help paths)
+	localManifest  *plugin.LocalManifest
+	pluginLoaded   bool
 }
 
 var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
@@ -62,11 +63,13 @@ func (c *Commando) loadPlugins() {
 	}
 	c.pluginLoaded = true
 	mgr, err := plugin.NewManager()
-	if err == nil {
-		// Try to fetch remote index (might fail if offline, that's ok)
-		c.pluginIndex, _ = mgr.GetIndex()
-		c.localManifest, _ = mgr.GetLocalManifest()
+	if err != nil {
+		c.pluginIndexErr = err
+		return
 	}
+	// Remote index may fail offline; local manifest still loads for installed plugins.
+	c.pluginIndex, c.pluginIndexErr = mgr.GetIndex()
+	c.localManifest, _ = mgr.GetLocalManifest()
 }
 
 func (c *Commando) InitWithCommand(cmd *cli.Command) {

@@ -184,3 +184,22 @@ func TestNewInstallCommand_Run_WithSourceFlagSuccess(t *testing.T) {
 	assert.Equal(t, "1.2.3", p.Version)
 	assert.Contains(t, stdout.String(), "Installing plugin from")
 }
+
+func TestFindInstalledPluginInManifest(t *testing.T) {
+	m := &LocalManifest{Plugins: map[string]LocalPlugin{
+		"aliyun-cli-x": {Name: "aliyun-cli-x"},
+	}}
+	n, lp, ok := FindInstalledPluginInManifest(m, "aliyun-cli-x")
+	require.True(t, ok)
+	assert.Equal(t, "aliyun-cli-x", n)
+	assert.Equal(t, "aliyun-cli-x", lp.Name)
+
+	n, _, ok = FindInstalledPluginInManifest(m, "x")
+	require.True(t, ok)
+	assert.Equal(t, "aliyun-cli-x", n)
+
+	_, _, ok = FindInstalledPluginInManifest(m, "nosuch")
+	assert.False(t, ok)
+	_, _, ok = FindInstalledPluginInManifest(nil, "x")
+	assert.False(t, ok)
+}
