@@ -485,6 +485,7 @@ func TestEndpointTypeFlag(t *testing.T) {
 func TestNewEndpointFlag(t *testing.T) {
 	var a = NewEndpointFlag()
 	assert.Equal(t, EndpointFlagName, a.Name)
+	assert.Equal(t, 'e', a.Shorthand)
 	assert.Equal(t, "config", a.Category)
 	assert.True(t, a.Persistent)
 	assert.Equal(t, cli.AssignedOnce, a.AssignedMode)
