@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -233,6 +234,58 @@ func TestManager_installFromRemotePackageURL_invalidSchemeAndPath(t *testing.T) 
 	err = mgr.installFromRemotePackageURL(ctx, "https://example.com/not-an-archive", "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "package URL path must end with .zip, .tar.gz, or .tgz")
+}
+
+func TestManager_installFromRemotePackageURL_downloadErrors(t *testing.T) {
+	mgr := &Manager{rootDir: t.TempDir()}
+	ctx := newTestContext()
+
+	t.Run("http get fails", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte("ok"))
+		}))
+		base := srv.URL
+		srv.Close()
+		err := mgr.installFromRemotePackageURL(ctx, base+"/plugin.tgz", "")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "download plugin package:")
+	})
+
+	t.Run("non-OK status", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.NotFound(w, r)
+		}))
+		defer srv.Close()
+		err := mgr.installFromRemotePackageURL(ctx, srv.URL+"/missing.tgz", "")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "download plugin package: status 404")
+	})
+}
+
+func TestInstallFromPackageFile_saveLocalManifestFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("read-only manifest.json via chmod is not reliable on Windows")
+	}
+	root := t.TempDir()
+	mani := filepath.Join(root, "manifest.json")
+	require.NoError(t, os.WriteFile(mani, []byte(`{"plugins":{}}`), 0644))
+	require.NoError(t, os.Chmod(mani, 0444))
+	defer func() { _ = os.Chmod(mani, 0644) }()
+
+	mgr := &Manager{rootDir: root}
+	archiveBody := createTestPluginArchive(t, "save-fail-pl", "2.0.0", "x")
+	archivePath := filepath.Join(t.TempDir(), "save-fail.tgz")
+	require.NoError(t, os.WriteFile(archivePath, archiveBody, 0644))
+
+	ctx := newTestContext()
+	err := mgr.installFromPackageFile(ctx, archivePath, "", archivePath)
+	require.Error(t, err)
+	lowered := strings.ToLower(err.Error())
+	require.True(t,
+		strings.Contains(lowered, "permission denied") ||
+			strings.Contains(lowered, "operation not permitted"),
+		"unexpected error from saveLocalManifest: %v", err,
+	)
 }
 
 func TestFindInstalledPluginInManifest(t *testing.T) {
