@@ -60,6 +60,16 @@ func TestNewManager_LoadsSourceBaseFromFile(t *testing.T) {
 	assert.Equal(t, "https://x.example/plugins", mgr.sourceBase)
 }
 
+func TestManager_ApplySourceBaseOverride(t *testing.T) {
+	m := &Manager{}
+	assert.ErrorContains(t, m.ApplySourceBaseOverride(""), "must not be empty")
+	assert.ErrorContains(t, m.ApplySourceBaseOverride("   "), "must not be empty")
+	assert.ErrorContains(t, m.ApplySourceBaseOverride("ftp://x.example/plugins"), "http://")
+	assert.NoError(t, m.ApplySourceBaseOverride("  https://mirror.example/plugins/  "))
+	assert.Equal(t, "https://mirror.example/plugins/plugin_pkg_index.json", m.resolvedPkgIndexURL())
+	assert.Equal(t, "https://mirror.example/plugins/plugin_search_index.json", m.resolvedCommandIndexURL())
+}
+
 func TestNewManager(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		testHome := t.TempDir()

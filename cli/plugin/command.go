@@ -14,6 +14,34 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
+func addPluginSourceBaseFlag(cmd *cli.Command) {
+	cmd.Flags().Add(&cli.Flag{
+		Category: "remote",
+		Name:     "source-base",
+		Short: i18n.T(
+			"Override plugins tree base URL for this command only (e.g. https://example.com/plugins)",
+			"仅本次命令覆盖插件源根地址（例如 https://example.com/plugins）"),
+		AssignedMode: cli.AssignedOnce,
+		DefaultValue: "",
+	})
+}
+
+func newManagerWithOptionalSourceBase(ctx *cli.Context) (*Manager, error) {
+	mgr, err := NewManager()
+	if err != nil {
+		return nil, err
+	}
+	f := ctx.Flags().Get("source-base")
+	if f == nil || !f.IsAssigned() {
+		return mgr, nil
+	}
+	v, _ := f.GetValue()
+	if err := mgr.ApplySourceBaseOverride(v); err != nil {
+		return nil, err
+	}
+	return mgr, nil
+}
+
 func NewPluginCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:                   "plugin",
@@ -74,12 +102,12 @@ func newListCommand() *cli.Command {
 }
 
 func newListRemoteCommand() *cli.Command {
-	return &cli.Command{
+	cmd := &cli.Command{
 		Name:  "list-remote",
 		Short: i18n.T("List available plugins from remote index", "列出远程索引中可用的插件"),
-		Usage: "list-remote",
+		Usage: "list-remote [--source-base <url>]",
 		Run: func(ctx *cli.Context, args []string) error {
-			mgr, err := NewManager()
+			mgr, err := newManagerWithOptionalSourceBase(ctx)
 			if err != nil {
 				return err
 			}
@@ -97,17 +125,21 @@ func newListRemoteCommand() *cli.Command {
 			return displayRemotePlugins(ctx, index, localManifest)
 		},
 	}
+	addPluginSourceBaseFlag(cmd)
+	return cmd
 }
 
 func newSearchCommand() *cli.Command {
-	return &cli.Command{
+	cmd := &cli.Command{
 		Name:  "search",
 		Short: i18n.T("Search plugin by command name", "根据命令名搜索插件"),
-		Usage: "search <command-name>",
+		Usage: "search [--source-base <url>] <command-name>",
 		Run: func(ctx *cli.Context, args []string) error {
 			return runSearch(ctx, args)
 		},
 	}
+	addPluginSourceBaseFlag(cmd)
+	return cmd
 }
 
 func runSearch(ctx *cli.Context, args []string) error {
@@ -120,7 +152,7 @@ func runSearch(ctx *cli.Context, args []string) error {
 		return fmt.Errorf("command name cannot be empty")
 	}
 
-	mgr, err := NewManager()
+	mgr, err := newManagerWithOptionalSourceBase(ctx)
 	if err != nil {
 		return err
 	}
@@ -235,7 +267,7 @@ func newInstallCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "install",
 		Short: i18n.T("Install a plugin (from remote index or local archive)", "安装插件（远程索引或本地包）"),
-		Usage: "install --names <plugin_name> [<plugin2> ...] [--version <version>] [--enable-pre] | install --source <path-to-archive> [--version <version>]",
+		Usage: "install [--source-base <url>] --names <plugin_name> [<plugin2> ...] [--version <version>] [--enable-pre] | install [--source-base <url>] --source <path-to-archive> [--version <version>]",
 		Run: func(ctx *cli.Context, args []string) error {
 			names, source, version, enablePre, err := parseInstallArgs(ctx)
 			if err != nil {
@@ -278,6 +310,7 @@ func newInstallCommand() *cli.Command {
 		DefaultValue: "",
 	})
 
+	addPluginSourceBaseFlag(cmd)
 	return cmd
 }
 
@@ -285,10 +318,10 @@ func newInstallAllCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:   "install-all",
 		Short:  i18n.T("Install all available plugins", "安装所有可用的插件"),
-		Usage:  "install-all [--enable-pre]",
+		Usage:  "install-all [--source-base <url>] [--enable-pre]",
 		Hidden: true, // 不推荐使用
 		Run: func(ctx *cli.Context, args []string) error {
-			mgr, err := NewManager()
+			mgr, err := newManagerWithOptionalSourceBase(ctx)
 			if err != nil {
 				return err
 			}
@@ -308,6 +341,7 @@ func newInstallAllCommand() *cli.Command {
 		AssignedMode: cli.AssignedNone,
 	})
 
+	addPluginSourceBaseFlag(cmd)
 	return cmd
 }
 
@@ -348,9 +382,9 @@ func newUpdateCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "update",
 		Short: i18n.T("Update plugin(s)", "更新插件"),
-		Usage: "plugin update [--name <plugin_name>] [--enable-pre]",
+		Usage: "update [--source-base <url>] [--name <plugin_name>] [--enable-pre]",
 		Run: func(ctx *cli.Context, args []string) error {
-			mgr, err := NewManager()
+			mgr, err := newManagerWithOptionalSourceBase(ctx)
 			if err != nil {
 				return err
 			}
@@ -386,6 +420,7 @@ func newUpdateCommand() *cli.Command {
 		AssignedMode: cli.AssignedNone,
 	})
 
+	addPluginSourceBaseFlag(cmd)
 	return cmd
 }
 
@@ -434,7 +469,7 @@ func validateInstallArgs(names []string, source string) ([]string, error) {
 }
 
 func executeInstall(ctx *cli.Context, names []string, source, version string, enablePre bool) error {
-	mgr, err := NewManager()
+	mgr, err := newManagerWithOptionalSourceBase(ctx)
 	if err != nil {
 		return err
 	}

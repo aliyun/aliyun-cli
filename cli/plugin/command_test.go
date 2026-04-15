@@ -113,6 +113,7 @@ func TestNewListRemoteCommand(t *testing.T) {
 	assert.NotNil(t, cmd)
 	assert.Equal(t, "list-remote", cmd.Name)
 	assert.NotEmpty(t, cmd.Short)
+	assert.NotNil(t, cmd.Flags().Get("source-base"))
 }
 
 func TestNewListRemoteCommand_Run(t *testing.T) {
@@ -266,6 +267,10 @@ func TestNewInstallCommand(t *testing.T) {
 	sourceFlag := flags.Get("source")
 	assert.NotNil(t, sourceFlag)
 	assert.False(t, sourceFlag.Required)
+
+	sourceBaseFlag := flags.Get("source-base")
+	assert.NotNil(t, sourceBaseFlag)
+	assert.False(t, sourceBaseFlag.Required)
 }
 
 func TestNewInstallCommand_Run(t *testing.T) {
@@ -467,6 +472,7 @@ func TestNewInstallAllCommand(t *testing.T) {
 	assert.Equal(t, "install-all", cmd.Name)
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Usage)
+	assert.NotNil(t, cmd.Flags().Get("source-base"))
 }
 
 func TestNewUninstallCommand(t *testing.T) {
@@ -631,6 +637,8 @@ func TestNewUpdateCommand(t *testing.T) {
 	nameFlag := flags.Get("name")
 	assert.NotNil(t, nameFlag)
 	assert.False(t, nameFlag.Required) // name is optional for update
+
+	assert.NotNil(t, flags.Get("source-base"))
 }
 
 func TestNewUpdateCommand_Run_WithoutName(t *testing.T) {
@@ -1170,6 +1178,7 @@ func TestNewSearchCommand_Integration(t *testing.T) {
 	cmd := newSearchCommand()
 	assert.NotNil(t, cmd)
 	assert.Equal(t, "search", cmd.Name)
+	assert.NotNil(t, cmd.Flags().Get("source-base"))
 
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)

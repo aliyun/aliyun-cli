@@ -99,6 +99,19 @@ func NewManager() (*Manager, error) {
 	return &Manager{rootDir: rootDir, sourceBase: base}, nil
 }
 
+func (m *Manager) ApplySourceBaseOverride(raw string) error {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return fmt.Errorf("source-base must not be empty")
+	}
+	lower := strings.ToLower(v)
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		return fmt.Errorf("source-base must start with http:// or https://")
+	}
+	m.sourceBase = strings.TrimRight(v, "/")
+	return nil
+}
+
 func (m *Manager) resolvedPkgIndexURL() string {
 	if m.indexURL != "" {
 		return m.indexURL
