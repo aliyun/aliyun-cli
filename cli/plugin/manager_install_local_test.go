@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -221,6 +222,19 @@ func TestManager_InstallFromPackage_RemoteURLBadSuffix(t *testing.T) {
 	assert.Contains(t, err.Error(), "package URL path must end")
 }
 
+func TestManager_installFromRemotePackageURL_invalidSchemeAndPath(t *testing.T) {
+	mgr := &Manager{rootDir: t.TempDir()}
+	ctx := newTestContext()
+
+	err := mgr.installFromRemotePackageURL(ctx, "ftp://example.com/pkg.tgz", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "package URL must use http or https")
+
+	err = mgr.installFromRemotePackageURL(ctx, "https://example.com/not-an-archive", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "package URL path must end with .zip, .tar.gz, or .tgz")
+}
+
 func TestFindInstalledPluginInManifest(t *testing.T) {
 	m := &LocalManifest{Plugins: map[string]LocalPlugin{
 		"aliyun-cli-x": {Name: "aliyun-cli-x"},
@@ -238,6 +252,85 @@ func TestFindInstalledPluginInManifest(t *testing.T) {
 	assert.False(t, ok)
 	_, _, ok = FindInstalledPluginInManifest(nil, "x")
 	assert.False(t, ok)
+}
+
+func TestIsRemotePluginPackageRef(t *testing.T) {
+	cases := []struct {
+		ref  string
+		want bool
+	}{
+		{"/local/path/plugin.tgz", false},
+		{"file:///tmp/a.tgz", false},
+		{"ftp://example.com/a.tgz", false},
+		{"https://example.com/pkgs/foo.tgz", true},
+		{"HTTP://EXAMPLE.COM/X.ZIP", true},
+		{"https://example.com/nosuffix", false},
+		{"https://example.com/foo.tar.gz", true},
+		{"  https://mirror.example/x.tgz  ", true},
+		{"https:///x.tgz", false},
+	}
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("%q", tc.ref), func(t *testing.T) {
+			assert.Equal(t, tc.want, isRemotePluginPackageRef(tc.ref), "ref=%q", tc.ref)
+		})
+	}
+}
+
+func TestReadPluginManifestFromDir(t *testing.T) {
+	t.Run("missing manifest", func(t *testing.T) {
+		d := t.TempDir()
+		_, err := readPluginManifestFromDir(d)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid plugin package: manifest.json not found")
+	})
+	t.Run("invalid json", func(t *testing.T) {
+		d := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(d, "manifest.json"), []byte("{"), 0644))
+		_, err := readPluginManifestFromDir(d)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid plugin manifest")
+	})
+	t.Run("empty name", func(t *testing.T) {
+		d := t.TempDir()
+		raw := `{"name":"  \t  ","version":"1.0.0"}`
+		require.NoError(t, os.WriteFile(filepath.Join(d, "manifest.json"), []byte(raw), 0644))
+		_, err := readPluginManifestFromDir(d)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid plugin manifest: name is empty")
+	})
+	t.Run("empty version", func(t *testing.T) {
+		d := t.TempDir()
+		raw := `{"name":"aliyun-cli-test","version":"  "}`
+		require.NoError(t, os.WriteFile(filepath.Join(d, "manifest.json"), []byte(raw), 0644))
+		_, err := readPluginManifestFromDir(d)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid plugin manifest: version is empty")
+	})
+	t.Run("missing name field", func(t *testing.T) {
+		d := t.TempDir()
+		raw := `{"version":"1.0.0"}`
+		require.NoError(t, os.WriteFile(filepath.Join(d, "manifest.json"), []byte(raw), 0644))
+		_, err := readPluginManifestFromDir(d)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid plugin manifest: name is empty")
+	})
+	t.Run("missing version field", func(t *testing.T) {
+		d := t.TempDir()
+		raw := `{"name":"aliyun-cli-test"}`
+		require.NoError(t, os.WriteFile(filepath.Join(d, "manifest.json"), []byte(raw), 0644))
+		_, err := readPluginManifestFromDir(d)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid plugin manifest: version is empty")
+	})
+	t.Run("success", func(t *testing.T) {
+		d := t.TempDir()
+		raw := `{"name":"aliyun-cli-test","version":"1.0.0","command":"test"}`
+		require.NoError(t, os.WriteFile(filepath.Join(d, "manifest.json"), []byte(raw), 0644))
+		pm, err := readPluginManifestFromDir(d)
+		require.NoError(t, err)
+		assert.Equal(t, "aliyun-cli-test", pm.Name)
+		assert.Equal(t, "1.0.0", pm.Version)
+	})
 }
 
 func TestExpandPluginSourcePath(t *testing.T) {

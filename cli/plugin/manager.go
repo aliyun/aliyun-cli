@@ -30,11 +30,11 @@ const (
 	EnvPluginsDir   = "ALIBABA_CLOUD_CLI_PLUGINS_DIR"
 	EnvNoCache      = "ALIBABA_CLOUD_CLI_PLUGIN_NO_CACHE"
 
-	indexCacheFile   = "plugin_pkg_index_cache.json"
-	commandCacheFile = "plugin_search_index_cache.json"
+	indexCacheFile         = "plugin_pkg_index_cache.json"
+	commandCacheFile       = "plugin_search_index_cache.json"
 	cacheTTL               = 1 * time.Hour
 	fetchTimeout           = 10 * time.Second
-	pluginArchiveDLTimeout = 15 * time.Minute
+	pluginArchiveDLTimeout = 5 * time.Minute
 )
 
 type ErrPluginNotFound struct {
@@ -789,8 +789,6 @@ func (m *Manager) promoteExtractedPlugin(tmpExtract, pluginName string) (string,
 	return finalDir, nil
 }
 
-// InstallFromPackage installs a plugin from a local package path or from an http(s) URL to a .zip / .tar.gz / .tgz file.
-// version, if non-empty, must equal the version declared in manifest.json.
 func (m *Manager) InstallFromPackage(ctx *cli.Context, ref, version string) error {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
@@ -806,8 +804,6 @@ func (m *Manager) InstallFromPackage(ctx *cli.Context, ref, version string) erro
 	return m.InstallFromLocalFile(ctx, ref, version)
 }
 
-// InstallFromLocalFile installs a plugin from a local .zip or .tar.gz package (used by `plugin install --package`).
-// version, if non-empty, must equal the version declared in manifest.json.
 func (m *Manager) InstallFromLocalFile(ctx *cli.Context, sourcePath, version string) error {
 	absPath, err := expandPluginSourcePath(sourcePath)
 	if err != nil {
@@ -873,7 +869,6 @@ func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL, version 
 	return m.installFromPackageFile(ctx, dest, version, rawURL)
 }
 
-// installFromPackageFile extracts and installs from a local filesystem path; userFacing is shown in logs (path or URL).
 func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, version, userFacing string) error {
 	if !isPluginArchivePath(absPath) {
 		return fmt.Errorf("unsupported package format (use .zip, .tar.gz, or .tgz): %s", absPath)

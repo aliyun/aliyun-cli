@@ -641,6 +641,69 @@ func TestNewUpdateCommand(t *testing.T) {
 	assert.NotNil(t, flags.Get("source-base"))
 }
 
+func TestNewManagerWithOptionalSourceBase(t *testing.T) {
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+
+	t.Run("no override when source-base unset", func(t *testing.T) {
+		cmd := newUpdateCommand()
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		mgr, err := newManagerWithOptionalSourceBase(ctx)
+		assert.NoError(t, err)
+		assert.NotNil(t, mgr)
+	})
+
+	t.Run("valid override applies trim and trailing slash", func(t *testing.T) {
+		cmd := newUpdateCommand()
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		f := ctx.Flags().Get("source-base")
+		assert.NotNil(t, f)
+		f.SetAssigned(true)
+		f.SetValue("  https://mirror.example/plugins/  ")
+		mgr, err := newManagerWithOptionalSourceBase(ctx)
+		assert.NoError(t, err)
+		assert.NotNil(t, mgr)
+		assert.Equal(t, "https://mirror.example/plugins", mgr.sourceBase)
+	})
+
+	t.Run("invalid scheme returns ApplySourceBaseOverride error", func(t *testing.T) {
+		cmd := newUpdateCommand()
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		f := ctx.Flags().Get("source-base")
+		f.SetAssigned(true)
+		f.SetValue("ftp://mirror.example/plugins")
+		mgr, err := newManagerWithOptionalSourceBase(ctx)
+		assert.Error(t, err)
+		assert.Nil(t, mgr)
+		assert.Contains(t, err.Error(), "source-base must start with http:// or https://")
+	})
+
+	t.Run("whitespace only value returns error", func(t *testing.T) {
+		cmd := newUpdateCommand()
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		f := ctx.Flags().Get("source-base")
+		f.SetAssigned(true)
+		f.SetValue("   \t  ")
+		mgr, err := newManagerWithOptionalSourceBase(ctx)
+		assert.Error(t, err)
+		assert.Nil(t, mgr)
+		assert.Contains(t, err.Error(), "source-base must not be empty")
+	})
+}
+
 func TestNewUpdateCommand_Run_WithoutName(t *testing.T) {
 	cmd := newUpdateCommand()
 

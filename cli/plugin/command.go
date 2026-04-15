@@ -16,8 +16,7 @@ import (
 
 func addPluginSourceBaseFlag(cmd *cli.Command) {
 	cmd.Flags().Add(&cli.Flag{
-		Category: "remote",
-		Name:     "source-base",
+		Name: "source-base",
 		Short: i18n.T(
 			"Override plugins tree base URL for this command only (e.g. https://example.com/plugins)",
 			"仅本次命令覆盖插件源根地址（例如 https://example.com/plugins）"),
