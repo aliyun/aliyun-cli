@@ -32,8 +32,9 @@ const (
 
 	indexCacheFile   = "plugin_pkg_index_cache.json"
 	commandCacheFile = "plugin_search_index_cache.json"
-	cacheTTL         = 1 * time.Hour
-	fetchTimeout     = 10 * time.Second
+	cacheTTL               = 1 * time.Hour
+	fetchTimeout           = 10 * time.Second
+	pluginArchiveDLTimeout = 15 * time.Minute
 )
 
 type ErrPluginNotFound struct {
@@ -289,7 +290,7 @@ func matchPluginName(pluginName, userInput string) bool {
 
 // FindInstalledPluginInManifest finds an installed plugin when user input
 // matches the plugin package name or the short form (user input equals the package name with the "aliyun-cli-" prefix removed, e.g. fc -> aliyun-cli-fc).
-// Used for plugins installed from a local archive (--source) that are not listed in the remote plugin index.
+// Used for plugins installed from a local path or package URL (--package) that are not listed in the remote plugin index.
 func FindInstalledPluginInManifest(manifest *LocalManifest, userInput string) (pluginName string, lp *LocalPlugin, ok bool) {
 	if manifest == nil || manifest.Plugins == nil {
 		return "", nil, false
@@ -713,6 +714,19 @@ func isPluginArchivePath(absPath string) bool {
 		strings.HasSuffix(lower, ".tgz")
 }
 
+func isRemotePluginPackageRef(ref string) bool {
+	ref = strings.TrimSpace(ref)
+	lower := strings.ToLower(ref)
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		return false
+	}
+	u, err := url.Parse(ref)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	return isPluginArchivePath(u.Path)
+}
+
 func readPluginManifestFromDir(extractDir string) (*PluginManifest, error) {
 	pluginManifestPath := filepath.Join(extractDir, "manifest.json")
 	pluginManifestFile, err := os.Open(pluginManifestPath)
@@ -775,7 +789,24 @@ func (m *Manager) promoteExtractedPlugin(tmpExtract, pluginName string) (string,
 	return finalDir, nil
 }
 
-// InstallFromLocalFile installs a plugin from a local .zip or .tar.gz package (used by `plugin install --source`).
+// InstallFromPackage installs a plugin from a local package path or from an http(s) URL to a .zip / .tar.gz / .tgz file.
+// version, if non-empty, must equal the version declared in manifest.json.
+func (m *Manager) InstallFromPackage(ctx *cli.Context, ref, version string) error {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return fmt.Errorf("package path or URL is empty")
+	}
+	lower := strings.ToLower(ref)
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		if !isRemotePluginPackageRef(ref) {
+			return fmt.Errorf("package URL path must end with .zip, .tar.gz, or .tgz")
+		}
+		return m.installFromRemotePackageURL(ctx, ref, version)
+	}
+	return m.InstallFromLocalFile(ctx, ref, version)
+}
+
+// InstallFromLocalFile installs a plugin from a local .zip or .tar.gz package (used by `plugin install --package`).
 // version, if non-empty, must equal the version declared in manifest.json.
 func (m *Manager) InstallFromLocalFile(ctx *cli.Context, sourcePath, version string) error {
 	absPath, err := expandPluginSourcePath(sourcePath)
@@ -784,16 +815,71 @@ func (m *Manager) InstallFromLocalFile(ctx *cli.Context, sourcePath, version str
 	}
 	st, err := os.Stat(absPath)
 	if err != nil {
-		return fmt.Errorf("source file: %w", err)
+		return fmt.Errorf("package file: %w", err)
 	}
 	if st.IsDir() {
-		return fmt.Errorf("source must be a plugin archive file (.zip, .tar.gz, .tgz), not a directory")
+		return fmt.Errorf("package must be a plugin archive file (.zip, .tar.gz, .tgz), not a directory")
 	}
-	if !isPluginArchivePath(absPath) {
-		return fmt.Errorf("unsupported archive format (use .zip, .tar.gz, or .tgz): %s", absPath)
+	return m.installFromPackageFile(ctx, absPath, version, absPath)
+}
+
+func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL, version string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid package URL: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("package URL must use http or https")
+	}
+	if !isPluginArchivePath(u.Path) {
+		return fmt.Errorf("package URL path must end with .zip, .tar.gz, or .tgz")
 	}
 
-	cli.Printf(ctx.Stdout(), "Installing plugin from %s...\n", absPath)
+	cli.Printf(ctx.Stdout(), "Downloading plugin package from %s...\n", rawURL)
+
+	client := &http.Client{Timeout: pluginArchiveDLTimeout}
+	resp, err := client.Get(rawURL)
+	if err != nil {
+		return fmt.Errorf("download plugin package: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download plugin package: status %d", resp.StatusCode)
+	}
+
+	tmpParent, err := os.MkdirTemp("", "aliyun-plugin-dl-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpParent)
+
+	base := path.Base(u.Path)
+	if base == "." || base == "/" {
+		base = "plugin.tgz"
+	}
+	dest := filepath.Join(tmpParent, base)
+	out, err := os.Create(dest)
+	if err != nil {
+		return fmt.Errorf("create temp package file: %w", err)
+	}
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		out.Close()
+		return fmt.Errorf("write plugin package: %w", err)
+	}
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("write plugin package: %w", err)
+	}
+
+	return m.installFromPackageFile(ctx, dest, version, rawURL)
+}
+
+// installFromPackageFile extracts and installs from a local filesystem path; userFacing is shown in logs (path or URL).
+func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, version, userFacing string) error {
+	if !isPluginArchivePath(absPath) {
+		return fmt.Errorf("unsupported package format (use .zip, .tar.gz, or .tgz): %s", absPath)
+	}
+
+	cli.Printf(ctx.Stdout(), "Installing plugin from %s...\n", userFacing)
 
 	tmpParent, err := os.MkdirTemp("", "aliyun-plugin-local-*")
 	if err != nil {

@@ -266,20 +266,20 @@ func writePluginAPIVersionsSection(out io.Writer, v *PluginAPIVersions) {
 func newInstallCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "install",
-		Short: i18n.T("Install a plugin (from remote index or local archive)", "安装插件（远程索引或本地包）"),
-		Usage: "install [--source-base <url>] --names <plugin_name> [<plugin2> ...] [--version <version>] [--enable-pre] | install [--source-base <url>] --source <path-to-archive> [--version <version>]",
+		Short: i18n.T("Install a plugin (from remote index or package file/URL)", "安装插件（远程索引或指定包文件/URL）"),
+		Usage: "install [--source-base <url>] --names <plugin_name> [<plugin2> ...] [--version <version>] [--enable-pre] | install [--source-base <url>] --package <path-or-url> [--version <version>]",
 		Run: func(ctx *cli.Context, args []string) error {
-			names, source, version, enablePre, err := parseInstallArgs(ctx)
+			names, pkgRef, version, enablePre, err := parseInstallArgs(ctx)
 			if err != nil {
 				return err
 			}
 
-			validatedNames, err := validateInstallArgs(names, source)
+			validatedNames, err := validateInstallArgs(names, pkgRef)
 			if err != nil {
 				return err
 			}
 
-			return executeInstall(ctx, validatedNames, source, version, enablePre)
+			return executeInstall(ctx, validatedNames, pkgRef, version, enablePre)
 		},
 	}
 
@@ -292,7 +292,7 @@ func newInstallCommand() *cli.Command {
 
 	cmd.Flags().Add(&cli.Flag{
 		Name:         "version",
-		Short:        i18n.T("Specify plugin version (remote) or must match manifest when using --source", "指定插件版本（远程）；与 --source 连用时须与 manifest 一致"),
+		Short:        i18n.T("Specify plugin version (remote) or must match manifest when using --package", "指定插件版本（远程）；与 --package 连用时须与 manifest 一致"),
 		AssignedMode: cli.AssignedOnce,
 		DefaultValue: "",
 	})
@@ -304,8 +304,8 @@ func newInstallCommand() *cli.Command {
 	})
 
 	cmd.Flags().Add(&cli.Flag{
-		Name:         "source",
-		Short:        i18n.T("Install from a local plugin archive (.zip, .tar.gz, .tgz)", "从本地插件包安装（.zip、.tar.gz、.tgz）"),
+		Name:         "package",
+		Short:        i18n.T("Path or http(s) URL of the plugin package file (.zip, .tar.gz, .tgz)", "插件包文件的路径或 http(s) URL（.zip、.tar.gz、.tgz）"),
 		AssignedMode: cli.AssignedOnce,
 		DefaultValue: "",
 	})
@@ -424,13 +424,15 @@ func newUpdateCommand() *cli.Command {
 	return cmd
 }
 
-func parseInstallArgs(ctx *cli.Context) (names []string, source string, version string, enablePre bool, err error) {
+func parseInstallArgs(ctx *cli.Context) (names []string, pkgRef string, version string, enablePre bool, err error) {
 	if namesFlag := ctx.Flags().Get("names"); namesFlag != nil && namesFlag.IsAssigned() {
 		names = namesFlag.GetValues()
 	}
 
-	if v, ok := ctx.Flags().GetValue("source"); ok {
-		source = v
+	if f := ctx.Flags().Get("package"); f != nil && f.IsAssigned() {
+		if v, ok := f.GetValue(); ok {
+			pkgRef = strings.TrimSpace(v)
+		}
 	}
 
 	if v, ok := ctx.Flags().GetValue("version"); ok {
@@ -441,19 +443,19 @@ func parseInstallArgs(ctx *cli.Context) (names []string, source string, version 
 		enablePre = true
 	}
 
-	return names, source, version, enablePre, nil
+	return names, pkgRef, version, enablePre, nil
 }
 
-func validateInstallArgs(names []string, source string) ([]string, error) {
-	if strings.TrimSpace(source) != "" {
+func validateInstallArgs(names []string, pkgRef string) ([]string, error) {
+	if strings.TrimSpace(pkgRef) != "" {
 		if len(names) > 0 {
-			return nil, fmt.Errorf("--names cannot be used together with --source")
+			return nil, fmt.Errorf("--names cannot be used together with --package")
 		}
 		return nil, nil
 	}
 
 	if len(names) == 0 {
-		return nil, fmt.Errorf("either --names or --source is required")
+		return nil, fmt.Errorf("either --names or --package is required")
 	}
 
 	validNames := []string{}
@@ -468,14 +470,14 @@ func validateInstallArgs(names []string, source string) ([]string, error) {
 	return validNames, nil
 }
 
-func executeInstall(ctx *cli.Context, names []string, source, version string, enablePre bool) error {
+func executeInstall(ctx *cli.Context, names []string, pkgRef, version string, enablePre bool) error {
 	mgr, err := newManagerWithOptionalSourceBase(ctx)
 	if err != nil {
 		return err
 	}
 
-	if strings.TrimSpace(source) != "" {
-		return mgr.InstallFromLocalFile(ctx, source, version)
+	if strings.TrimSpace(pkgRef) != "" {
+		return mgr.InstallFromPackage(ctx, pkgRef, version)
 	}
 
 	if len(names) == 1 {

@@ -2,6 +2,8 @@ package plugin
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -120,7 +122,7 @@ func TestManager_InstallFromLocalFile(t *testing.T) {
 		ctx := newTestContext()
 		err := mgr.InstallFromLocalFile(ctx, badPath, "")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unsupported archive format")
+		assert.Contains(t, err.Error(), "unsupported package format")
 	})
 }
 
@@ -141,25 +143,25 @@ func TestNewInstallCommand_Run_NamesAndSourceConflict(t *testing.T) {
 	namesFlag.SetAssigned(true)
 	namesFlag.SetValues([]string{"some-plugin"})
 
-	sourceFlag := ctx.Flags().Get("source")
-	assert.NotNil(t, sourceFlag)
-	sourceFlag.SetAssigned(true)
-	sourceFlag.SetValue("/tmp/x.zip")
+	pkgFlag := ctx.Flags().Get("package")
+	assert.NotNil(t, pkgFlag)
+	pkgFlag.SetAssigned(true)
+	pkgFlag.SetValue("/tmp/x.zip")
 
 	err := cmd.Run(ctx, []string{})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "--names cannot be used together with --source")
+	assert.Contains(t, err.Error(), "--names cannot be used together with --package")
 }
 
-func TestNewInstallCommand_Run_WithSourceFlagSuccess(t *testing.T) {
+func TestNewInstallCommand_Run_WithPackageFlagSuccess(t *testing.T) {
 	cmd := newInstallCommand()
 
 	testHome := t.TempDir()
 	cleanup := setTestHomeDir(t, testHome)
 	defer cleanup()
 
-	archiveBody := createTestPluginArchive(t, "cli-local-cmd-test", "1.2.3", "x")
-	archivePath := filepath.Join(t.TempDir(), "plugin-local-cmd.tar.gz")
+	archiveBody := createTestPluginArchive(t, "cli-package-flag-test", "4.5.6", "x")
+	archivePath := filepath.Join(t.TempDir(), "plugin-package-cmd.tar.gz")
 	assert.NoError(t, os.WriteFile(archivePath, archiveBody, 0644))
 
 	stdout := new(bytes.Buffer)
@@ -167,10 +169,10 @@ func TestNewInstallCommand_Run_WithSourceFlagSuccess(t *testing.T) {
 	ctx := cli.NewCommandContext(stdout, stderr)
 	ctx.EnterCommand(cmd)
 
-	sourceFlag := ctx.Flags().Get("source")
-	assert.NotNil(t, sourceFlag)
-	sourceFlag.SetAssigned(true)
-	sourceFlag.SetValue(archivePath)
+	pkgFlag := ctx.Flags().Get("package")
+	assert.NotNil(t, pkgFlag)
+	pkgFlag.SetAssigned(true)
+	pkgFlag.SetValue(archivePath)
 
 	err := cmd.Run(ctx, []string{})
 	assert.NoError(t, err)
@@ -179,10 +181,44 @@ func TestNewInstallCommand_Run_WithSourceFlagSuccess(t *testing.T) {
 	assert.NoError(t, err)
 	manifest, err := mgr.GetLocalManifest()
 	assert.NoError(t, err)
-	p, ok := manifest.Plugins["cli-local-cmd-test"]
+	p, ok := manifest.Plugins["cli-package-flag-test"]
 	assert.True(t, ok)
-	assert.Equal(t, "1.2.3", p.Version)
+	assert.Equal(t, "4.5.6", p.Version)
 	assert.Contains(t, stdout.String(), "Installing plugin from")
+}
+
+func TestManager_InstallFromPackage_RemoteURL(t *testing.T) {
+	pluginRoot := t.TempDir()
+	mgr := &Manager{rootDir: pluginRoot}
+	archiveBody := createTestPluginArchive(t, "remote-url-plugin", "7.8.9", "x")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(archiveBody)
+	}))
+	defer srv.Close()
+	archiveURL := srv.URL + "/pkgs/remote-url-plugin/7.8.9/plugin.tgz"
+
+	ctx := newTestContext()
+	err := mgr.InstallFromPackage(ctx, archiveURL, "")
+	require.NoError(t, err)
+
+	manifest, err := mgr.GetLocalManifest()
+	require.NoError(t, err)
+	p, ok := manifest.Plugins["remote-url-plugin"]
+	require.True(t, ok)
+	assert.Equal(t, "7.8.9", p.Version)
+	out := ctx.Stdout().(*bytes.Buffer).String()
+	assert.Contains(t, out, "Downloading plugin package from")
+	assert.Contains(t, out, "Installing plugin from")
+}
+
+func TestManager_InstallFromPackage_RemoteURLBadSuffix(t *testing.T) {
+	mgr := &Manager{rootDir: t.TempDir()}
+	ctx := newTestContext()
+	err := mgr.InstallFromPackage(ctx, "https://example.com/plugins/nosuffix", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "package URL path must end")
 }
 
 func TestFindInstalledPluginInManifest(t *testing.T) {

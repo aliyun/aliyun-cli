@@ -264,9 +264,9 @@ func TestNewInstallCommand(t *testing.T) {
 	assert.NotNil(t, versionFlag)
 	assert.False(t, versionFlag.Required)
 
-	sourceFlag := flags.Get("source")
-	assert.NotNil(t, sourceFlag)
-	assert.False(t, sourceFlag.Required)
+	packageFlag := flags.Get("package")
+	assert.NotNil(t, packageFlag)
+	assert.False(t, packageFlag.Required)
 
 	sourceBaseFlag := flags.Get("source-base")
 	assert.NotNil(t, sourceBaseFlag)
@@ -357,7 +357,7 @@ func TestNewInstallCommand_Run_WithVersionFlagOnly(t *testing.T) {
 
 	err := cmd.Run(ctx, []string{})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "either --names or --source is required")
+	assert.Contains(t, err.Error(), "either --names or --package is required")
 }
 
 func TestNewInstallCommand_Run_WithNamesAndEnablePreFlags(t *testing.T) {
