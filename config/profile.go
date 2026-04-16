@@ -253,7 +253,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	}
 
 	if cp.Endpoint == "" {
-		cp.Endpoint = util.GetFromEnv("ALIBABA_CLOUD_ENDPOINT", "ALIBABACLOUD_ENDPOINT", "ALICLOUD_ENDPOINT", "ENDPOINT")
+		cp.Endpoint = util.GetFromEnv("ALIBABA_CLOUD_ENDPOINT")
 	}
 
 	if cp.CredentialsURI == "" {
