@@ -499,21 +499,23 @@ func TestOverwriteWithFlagsWithEndpointEnv(t *testing.T) {
 	actual.OverwriteWithFlags(ctx)
 	assert.Equal(t, exp, actual)
 
+	actual = newProfile()
 	os.Setenv("ENDPOINT", "endpoint1.aliyuncs.com")
 	actual.OverwriteWithFlags(ctx)
-	exp.Endpoint = "endpoint1.aliyuncs.com"
+	// endpoint env is intentionally narrowed to ALIBABA_CLOUD_ENDPOINT only
+	exp.Endpoint = ""
 	assert.Equal(t, exp, actual)
 
 	actual = newProfile()
 	os.Setenv("ALICLOUD_ENDPOINT", "endpoint2.aliyuncs.com")
 	actual.OverwriteWithFlags(ctx)
-	exp.Endpoint = "endpoint2.aliyuncs.com"
+	exp.Endpoint = ""
 	assert.Equal(t, exp, actual)
 
 	actual = newProfile()
 	os.Setenv("ALIBABACLOUD_ENDPOINT", "endpoint3.aliyuncs.com")
 	actual.OverwriteWithFlags(ctx)
-	exp.Endpoint = "endpoint3.aliyuncs.com"
+	exp.Endpoint = ""
 	assert.Equal(t, exp, actual)
 
 	actual = newProfile()
