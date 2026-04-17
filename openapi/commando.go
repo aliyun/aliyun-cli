@@ -72,6 +72,15 @@ func (c *Commando) loadPlugins() {
 	c.localManifest, _ = mgr.GetLocalManifest()
 }
 
+func (c *Commando) printPluginIndexLoadFailureNote(ctx *cli.Context) {
+	if c.pluginIndexErr == nil {
+		return
+	}
+	cli.PrintfWithColor(ctx.Stderr(), cli.Yellow, "%s: %v\n",
+		i18n.T("Note: Could not load the remote plugin catalog", "提示：未能加载远程插件目录").Text(),
+		c.pluginIndexErr)
+}
+
 func (c *Commando) InitWithCommand(cmd *cli.Command) {
 	cmd.Run = c.main
 	cmd.Help = c.help
@@ -211,6 +220,8 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 						break
 					}
 				}
+			} else if c.pluginIndexErr != nil {
+				c.printPluginIndexLoadFailureNote(ctx)
 			}
 		}
 
@@ -260,6 +271,8 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 								return fmt.Errorf("'%s' is not a valid built-in product.\nA plugin '%s' is available which supports this product.\nRun 'aliyun plugin install --names %s' to install it.", args[0], pInfo.Name, pInfo.Name)
 							}
 						}
+					} else if c.pluginIndexErr != nil {
+						c.printPluginIndexLoadFailureNote(ctx)
 					}
 					var plugins []plugin.PluginInfo
 					if c.pluginIndex != nil {

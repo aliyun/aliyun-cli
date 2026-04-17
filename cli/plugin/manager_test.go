@@ -383,6 +383,51 @@ func TestManager_GetIndex_Cache(t *testing.T) {
 		// Should have hit remote despite fresh cache
 		assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
 	})
+
+	t.Run("CLI --source-base via ApplySourceBaseOverride skips index cache", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		var requestCount int32
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			atomic.AddInt32(&requestCount, 1)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(validJSON)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: tmpDir, indexURL: server.URL}
+		assert.NoError(t, mgr.ApplySourceBaseOverride("https://mirror.example/plugins"))
+
+		_, err := mgr.GetIndex()
+		assert.NoError(t, err)
+		_, err = mgr.GetIndex()
+		assert.NoError(t, err)
+		assert.Equal(t, int32(2), atomic.LoadInt32(&requestCount))
+	})
+
+	t.Run("Persistent source base without CLI override still uses index cache", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		var requestCount int32
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			atomic.AddInt32(&requestCount, 1)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(validJSON)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{
+			rootDir:    tmpDir,
+			sourceBase: "https://mirror.example/plugins",
+			indexURL:   server.URL,
+		}
+
+		_, err := mgr.GetIndex()
+		assert.NoError(t, err)
+		_, err = mgr.GetIndex()
+		assert.NoError(t, err)
+		assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
+	})
 }
 
 func TestManager_findPluginInIndex(t *testing.T) {

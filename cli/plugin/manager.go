@@ -50,6 +50,8 @@ type Manager struct {
 	sourceBase      string // from plugin-settings.json / env; empty = use built-in index URLs
 	indexURL        string // For testing: allows overriding resolved package index URL
 	commandIndexURL string // For testing: allows overriding resolved command index URL
+	// skipPluginIndexCacheForCLI is set when --source-base is used on this command only.
+	skipPluginIndexCacheForCLI bool
 }
 
 func getHomePath() string {
@@ -110,6 +112,7 @@ func (m *Manager) ApplySourceBaseOverride(raw string) error {
 		return fmt.Errorf("source-base must start with http:// or https://")
 	}
 	m.sourceBase = strings.TrimRight(v, "/")
+	m.skipPluginIndexCacheForCLI = true
 	return nil
 }
 
@@ -190,8 +193,13 @@ func noCacheEnabled() bool {
 	return v == "true" || v == "1"
 }
 
+// CLI override avoids stale cross-mirror cache files.
+func (m *Manager) skipPluginIndexCache() bool {
+	return m.skipPluginIndexCacheForCLI
+}
+
 func (m *Manager) fetchWithCache(url, cacheFile string, result interface{}) error {
-	if noCacheEnabled() {
+	if noCacheEnabled() || m.skipPluginIndexCache() {
 		data, err := m.fetchRemote(url)
 		if err != nil {
 			return err
