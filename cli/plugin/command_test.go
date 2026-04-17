@@ -618,7 +618,6 @@ func TestNewShowCommand_Run_Success(t *testing.T) {
 	assert.Contains(t, out, "Name:\taliyun-cli-demo")
 	assert.Contains(t, out, "Version:\t2.0.0")
 	assert.Contains(t, out, "Product code:\tdemo-product\n")
-	assert.Contains(t, out, "Command:\tdemo")
 	assert.Contains(t, out, "Short description:\tshort")
 	assert.Contains(t, out, "Description:\tfull description")
 	assert.Contains(t, out, "API default:\t2017-06-13\n")

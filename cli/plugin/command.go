@@ -212,10 +212,6 @@ func displayInstalledPluginDetails(ctx *cli.Context, canonicalName string, p *Lo
 	if pc := strings.TrimSpace(p.ProductCode); pc != "" {
 		fmt.Fprintf(out, "Product code:\t%s\n", pc)
 	}
-	// fmt.Fprintf(out, "Path:\t%s\n", p.Path)
-	if p.Command != "" {
-		fmt.Fprintf(out, "Command:\t%s\n", p.Command)
-	}
 	if p.ShortDescription != "" {
 		fmt.Fprintf(out, "Short description:\t%s\n", p.ShortDescription)
 	}
