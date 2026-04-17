@@ -14,6 +14,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 )
 
@@ -30,6 +31,50 @@ func newTestCommando() (*Commando, *bytes.Buffer, *bytes.Buffer) {
 
 func newTestContext(w, stderr *bytes.Buffer) *cli.Context {
 	return cli.NewCommandContext(w, stderr)
+}
+
+func TestPrintPluginIndexLoadFailureNote_NoError(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+
+	c.printPluginIndexLoadFailureNote(ctx)
+
+	assert.Empty(t, stderr.String())
+}
+
+func TestPrintPluginIndexLoadFailureNote_WithError_English(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	prevLang := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(prevLang) })
+	i18n.SetLanguage("en")
+
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	c.pluginIndexErr = fmt.Errorf("remote catalog unavailable")
+
+	c.printPluginIndexLoadFailureNote(ctx)
+
+	out := stderr.String()
+	assert.Contains(t, out, "Note: Could not load the remote plugin catalog")
+	assert.Contains(t, out, "remote catalog unavailable")
+}
+
+func TestPrintPluginIndexLoadFailureNote_WithError_Chinese(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	prevLang := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(prevLang) })
+	i18n.SetLanguage("zh")
+
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	c.pluginIndexErr = fmt.Errorf("网络错误")
+
+	c.printPluginIndexLoadFailureNote(ctx)
+
+	out := stderr.String()
+	assert.Contains(t, out, "提示：未能加载远程插件目录")
+	assert.Contains(t, out, "网络错误")
 }
 
 func TestPrintProductUsage_BuiltinProduct(t *testing.T) {
