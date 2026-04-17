@@ -25,6 +25,7 @@ func TestNewPluginCommand(t *testing.T) {
 	assert.NotNil(t, cmd.GetSubCommand("install"), "Should have install subcommand")
 	assert.NotNil(t, cmd.GetSubCommand("install-all"), "Should have install-all subcommand")
 	assert.NotNil(t, cmd.GetSubCommand("uninstall"), "Should have uninstall subcommand")
+	assert.NotNil(t, cmd.GetSubCommand("show"), "Should have show subcommand")
 	assert.NotNil(t, cmd.GetSubCommand("update"), "Should have update subcommand")
 }
 
@@ -112,6 +113,7 @@ func TestNewListRemoteCommand(t *testing.T) {
 	assert.NotNil(t, cmd)
 	assert.Equal(t, "list-remote", cmd.Name)
 	assert.NotEmpty(t, cmd.Short)
+	assert.NotNil(t, cmd.Flags().Get("source-base"))
 }
 
 func TestNewListRemoteCommand_Run(t *testing.T) {
@@ -261,6 +263,14 @@ func TestNewInstallCommand(t *testing.T) {
 	versionFlag := flags.Get("version")
 	assert.NotNil(t, versionFlag)
 	assert.False(t, versionFlag.Required)
+
+	packageFlag := flags.Get("package")
+	assert.NotNil(t, packageFlag)
+	assert.False(t, packageFlag.Required)
+
+	sourceBaseFlag := flags.Get("source-base")
+	assert.NotNil(t, sourceBaseFlag)
+	assert.False(t, sourceBaseFlag.Required)
 }
 
 func TestNewInstallCommand_Run(t *testing.T) {
@@ -347,7 +357,7 @@ func TestNewInstallCommand_Run_WithVersionFlagOnly(t *testing.T) {
 
 	err := cmd.Run(ctx, []string{})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "names flag is required")
+	assert.Contains(t, err.Error(), "either --names or --package is required")
 }
 
 func TestNewInstallCommand_Run_WithNamesAndEnablePreFlags(t *testing.T) {
@@ -462,6 +472,7 @@ func TestNewInstallAllCommand(t *testing.T) {
 	assert.Equal(t, "install-all", cmd.Name)
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Usage)
+	assert.NotNil(t, cmd.Flags().Get("source-base"))
 }
 
 func TestNewUninstallCommand(t *testing.T) {
@@ -477,6 +488,143 @@ func TestNewUninstallCommand(t *testing.T) {
 	assert.False(t, nameFlag.Required)
 }
 
+func TestNewShowCommand(t *testing.T) {
+	cmd := newShowCommand()
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "show", cmd.Name)
+	assert.NotEmpty(t, cmd.Short)
+	assert.NotEmpty(t, cmd.Usage)
+
+	flags := cmd.Flags()
+	nameFlag := flags.Get("name")
+	assert.NotNil(t, nameFlag)
+	assert.False(t, nameFlag.Required)
+}
+
+func TestNewShowCommand_Run_MissingName(t *testing.T) {
+	cmd := newShowCommand()
+
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	err := cmd.Run(ctx, []string{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "--name")
+}
+
+func TestNewShowCommand_Run_NotInstalled(t *testing.T) {
+	cmd := newShowCommand()
+
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+
+	manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+	assert.NoError(t, os.MkdirAll(filepath.Dir(manifestPath), 0755))
+	manifest := LocalManifest{Plugins: map[string]LocalPlugin{}}
+	manifestJSON, err := json.Marshal(manifest)
+	assert.NoError(t, err)
+	assert.NoError(t, os.WriteFile(manifestPath, manifestJSON, 0644))
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	nameFlag := ctx.Flags().Get("name")
+	assert.NotNil(t, nameFlag)
+	nameFlag.SetAssigned(true)
+	nameFlag.SetValue("missing-plugin")
+
+	err = cmd.Run(ctx, []string{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not installed")
+}
+
+func TestNewShowCommand_Run_Success(t *testing.T) {
+	cmd := newShowCommand()
+
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+
+	manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+	assert.NoError(t, os.MkdirAll(filepath.Dir(manifestPath), 0755))
+	pluginPath := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-demo")
+	assert.NoError(t, os.MkdirAll(pluginPath, 0755))
+
+	pkgManifest := map[string]interface{}{
+		"name":        "aliyun-cli-demo",
+		"version":     "2.0.0",
+		"productCode": "demo-product",
+		"apiVersions": map[string]interface{}{
+			"default": "2017-06-13",
+			"supported": []string{
+				"2019-08-16",
+				"2017-06-13",
+			},
+			"versionInfo": map[string]interface{}{
+				"2017-06-13": map[string]interface{}{
+					"deprecated": false, "recommended": true, "description": "stable line",
+				},
+				"2019-08-16": map[string]interface{}{
+					"deprecated": false, "recommended": false, "description": "newer line",
+				},
+			},
+		},
+	}
+	pkgJSON, err := json.Marshal(pkgManifest)
+	assert.NoError(t, err)
+	assert.NoError(t, os.WriteFile(filepath.Join(pluginPath, "manifest.json"), pkgJSON, 0644))
+
+	manifest := LocalManifest{
+		Plugins: map[string]LocalPlugin{
+			"aliyun-cli-demo": {
+				Name:             "aliyun-cli-demo",
+				Version:          "2.0.0",
+				Path:             pluginPath,
+				ProductCode:      "demo-product",
+				Command:          "demo",
+				ShortDescription: "short",
+				Description:      "full description",
+				Inner:            true,
+			},
+		},
+	}
+	manifestJSON, err := json.Marshal(manifest)
+	assert.NoError(t, err)
+	assert.NoError(t, os.WriteFile(manifestPath, manifestJSON, 0644))
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	nameFlag := ctx.Flags().Get("name")
+	assert.NotNil(t, nameFlag)
+	nameFlag.SetAssigned(true)
+	nameFlag.SetValue("aliyun-cli-demo")
+
+	err = cmd.Run(ctx, []string{})
+	assert.NoError(t, err)
+
+	out := stdout.String()
+	assert.Contains(t, out, "Name:\taliyun-cli-demo")
+	assert.Contains(t, out, "Version:\t2.0.0")
+	assert.Contains(t, out, "Product code:\tdemo-product\n")
+	assert.Contains(t, out, "Short description:\tshort")
+	assert.Contains(t, out, "Description:\tfull description")
+	assert.Contains(t, out, "API default:\t2017-06-13\n")
+	assert.Contains(t, out, "API supported:\t2019-08-16, 2017-06-13\n")
+	assert.Contains(t, out, "Inner:\ttrue")
+}
+
 func TestNewUpdateCommand(t *testing.T) {
 	cmd := newUpdateCommand()
 	assert.NotNil(t, cmd)
@@ -488,6 +636,71 @@ func TestNewUpdateCommand(t *testing.T) {
 	nameFlag := flags.Get("name")
 	assert.NotNil(t, nameFlag)
 	assert.False(t, nameFlag.Required) // name is optional for update
+
+	assert.NotNil(t, flags.Get("source-base"))
+}
+
+func TestNewManagerWithOptionalSourceBase(t *testing.T) {
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+
+	t.Run("no override when source-base unset", func(t *testing.T) {
+		cmd := newUpdateCommand()
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		mgr, err := newManagerWithOptionalSourceBase(ctx)
+		assert.NoError(t, err)
+		assert.NotNil(t, mgr)
+	})
+
+	t.Run("valid override applies trim and trailing slash", func(t *testing.T) {
+		cmd := newUpdateCommand()
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		f := ctx.Flags().Get("source-base")
+		assert.NotNil(t, f)
+		f.SetAssigned(true)
+		f.SetValue("  https://mirror.example/plugins/  ")
+		mgr, err := newManagerWithOptionalSourceBase(ctx)
+		assert.NoError(t, err)
+		assert.NotNil(t, mgr)
+		assert.Equal(t, "https://mirror.example/plugins", mgr.sourceBase)
+	})
+
+	t.Run("invalid scheme returns ApplySourceBaseOverride error", func(t *testing.T) {
+		cmd := newUpdateCommand()
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		f := ctx.Flags().Get("source-base")
+		f.SetAssigned(true)
+		f.SetValue("ftp://mirror.example/plugins")
+		mgr, err := newManagerWithOptionalSourceBase(ctx)
+		assert.Error(t, err)
+		assert.Nil(t, mgr)
+		assert.Contains(t, err.Error(), "source-base must start with http:// or https://")
+	})
+
+	t.Run("whitespace only value returns error", func(t *testing.T) {
+		cmd := newUpdateCommand()
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		f := ctx.Flags().Get("source-base")
+		f.SetAssigned(true)
+		f.SetValue("   \t  ")
+		mgr, err := newManagerWithOptionalSourceBase(ctx)
+		assert.Error(t, err)
+		assert.Nil(t, mgr)
+		assert.Contains(t, err.Error(), "source-base must not be empty")
+	})
 }
 
 func TestNewUpdateCommand_Run_WithoutName(t *testing.T) {
@@ -1027,6 +1240,7 @@ func TestNewSearchCommand_Integration(t *testing.T) {
 	cmd := newSearchCommand()
 	assert.NotNil(t, cmd)
 	assert.Equal(t, "search", cmd.Name)
+	assert.NotNil(t, cmd.Flags().Get("source-base"))
 
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)

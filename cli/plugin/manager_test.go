@@ -60,6 +60,16 @@ func TestNewManager_LoadsSourceBaseFromFile(t *testing.T) {
 	assert.Equal(t, "https://x.example/plugins", mgr.sourceBase)
 }
 
+func TestManager_ApplySourceBaseOverride(t *testing.T) {
+	m := &Manager{}
+	assert.ErrorContains(t, m.ApplySourceBaseOverride(""), "must not be empty")
+	assert.ErrorContains(t, m.ApplySourceBaseOverride("   "), "must not be empty")
+	assert.ErrorContains(t, m.ApplySourceBaseOverride("ftp://x.example/plugins"), "http://")
+	assert.NoError(t, m.ApplySourceBaseOverride("  https://mirror.example/plugins/  "))
+	assert.Equal(t, "https://mirror.example/plugins/plugin_pkg_index.json", m.resolvedPkgIndexURL())
+	assert.Equal(t, "https://mirror.example/plugins/plugin_search_index.json", m.resolvedCommandIndexURL())
+}
+
 func TestNewManager(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		testHome := t.TempDir()
@@ -371,6 +381,51 @@ func TestManager_GetIndex_Cache(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 1, len(idx.Plugins))
 		// Should have hit remote despite fresh cache
+		assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
+	})
+
+	t.Run("CLI --source-base via ApplySourceBaseOverride skips index cache", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		var requestCount int32
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			atomic.AddInt32(&requestCount, 1)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(validJSON)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{rootDir: tmpDir, indexURL: server.URL}
+		assert.NoError(t, mgr.ApplySourceBaseOverride("https://mirror.example/plugins"))
+
+		_, err := mgr.GetIndex()
+		assert.NoError(t, err)
+		_, err = mgr.GetIndex()
+		assert.NoError(t, err)
+		assert.Equal(t, int32(2), atomic.LoadInt32(&requestCount))
+	})
+
+	t.Run("Persistent source base without CLI override still uses index cache", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		var requestCount int32
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			atomic.AddInt32(&requestCount, 1)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(validJSON)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{
+			rootDir:    tmpDir,
+			sourceBase: "https://mirror.example/plugins",
+			indexURL:   server.URL,
+		}
+
+		_, err := mgr.GetIndex()
+		assert.NoError(t, err)
+		_, err = mgr.GetIndex()
+		assert.NoError(t, err)
 		assert.Equal(t, int32(1), atomic.LoadInt32(&requestCount))
 	})
 }
@@ -1872,7 +1927,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
+		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true)
 		assert.NoError(t, err)
 
 		localManifest, err := mgr.GetLocalManifest()
@@ -1889,6 +1944,46 @@ func TestManager_installPlugin(t *testing.T) {
 
 		manifestPath := filepath.Join(pluginDir, "manifest.json")
 		assert.FileExists(t, manifestPath)
+	})
+
+	t.Run("Overwrite note when reinstalling indexed plugin", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		archiveContent := createTestPluginArchive(t, "reinstall-note", "1.0.0", "test")
+		expectedChecksum, err := calculateSHA256FromBytes(archiveContent)
+		if err != nil {
+			t.Fatalf("Failed to calculate checksum: %v", err)
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(archiveContent)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		targetPlugin := &PluginInfo{
+			Name: "reinstall-note",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Platforms: map[string]PlatformInfo{
+						platform: {
+							URL:      server.URL,
+							Checksum: expectedChecksum,
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		assert.NoError(t, mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true))
+		assert.NoError(t, mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true))
+
+		out := ctx.Stdout().(*bytes.Buffer).String()
+		assert.Contains(t, out, `plugin "reinstall-note" is already installed`)
+		assert.Contains(t, out, "continuing will replace it with version 1.0.0")
 	})
 
 	t.Run("Success - install plugin with empty version (use latest)", func(t *testing.T) {
@@ -1923,7 +2018,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err = mgr.installPlugin(ctx, targetPlugin, "", false)
+		err = mgr.installPlugin(ctx, targetPlugin, "", false, true)
 		assert.NoError(t, err)
 
 		localManifest, err := mgr.GetLocalManifest()
@@ -1948,7 +2043,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err := mgr.installPlugin(ctx, targetPlugin, "999.0.0", false)
+		err := mgr.installPlugin(ctx, targetPlugin, "999.0.0", false, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "version 999.0.0 not found")
 	})
@@ -1973,7 +2068,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
+		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin test-plugin version 1.0.0 not supported on "+platform)
 	})
@@ -1998,7 +2093,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
+		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid-url-that-does-not-exist.local")
 	})
@@ -2031,7 +2126,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
+		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "checksum verification failed")
 		assert.Contains(t, err.Error(), "Expected: wrong-checksum")
@@ -2069,7 +2164,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
+		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "manifest.json not found")
 	})
@@ -2106,7 +2201,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
+		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin manifest name wrong-plugin-name does not match expected name test-plugin")
 	})

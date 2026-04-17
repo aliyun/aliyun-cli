@@ -1,13 +1,45 @@
 package plugin
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
+
+func addPluginSourceBaseFlag(cmd *cli.Command) {
+	cmd.Flags().Add(&cli.Flag{
+		Name: "source-base",
+		Short: i18n.T(
+			"Override plugins tree base URL for this command only (e.g. https://example.com/plugins)",
+			"仅本次命令覆盖插件源根地址（例如 https://example.com/plugins）"),
+		AssignedMode: cli.AssignedOnce,
+		DefaultValue: "",
+	})
+}
+
+func newManagerWithOptionalSourceBase(ctx *cli.Context) (*Manager, error) {
+	mgr, err := NewManager()
+	if err != nil {
+		return nil, err
+	}
+	f := ctx.Flags().Get("source-base")
+	if f == nil || !f.IsAssigned() {
+		return mgr, nil
+	}
+	v, _ := f.GetValue()
+	if err := mgr.ApplySourceBaseOverride(v); err != nil {
+		return nil, err
+	}
+	return mgr, nil
+}
 
 func NewPluginCommand() *cli.Command {
 	cmd := &cli.Command{
@@ -23,6 +55,7 @@ func NewPluginCommand() *cli.Command {
 	cmd.AddSubCommand(newListCommand())
 	cmd.AddSubCommand(newListRemoteCommand())
 	cmd.AddSubCommand(newSearchCommand())
+	cmd.AddSubCommand(newShowCommand())
 	cmd.AddSubCommand(newInstallCommand())
 	cmd.AddSubCommand(newInstallAllCommand())
 	cmd.AddSubCommand(newUninstallCommand())
@@ -68,12 +101,12 @@ func newListCommand() *cli.Command {
 }
 
 func newListRemoteCommand() *cli.Command {
-	return &cli.Command{
+	cmd := &cli.Command{
 		Name:  "list-remote",
 		Short: i18n.T("List available plugins from remote index", "列出远程索引中可用的插件"),
-		Usage: "list-remote",
+		Usage: "list-remote [--source-base <url>]",
 		Run: func(ctx *cli.Context, args []string) error {
-			mgr, err := NewManager()
+			mgr, err := newManagerWithOptionalSourceBase(ctx)
 			if err != nil {
 				return err
 			}
@@ -91,17 +124,21 @@ func newListRemoteCommand() *cli.Command {
 			return displayRemotePlugins(ctx, index, localManifest)
 		},
 	}
+	addPluginSourceBaseFlag(cmd)
+	return cmd
 }
 
 func newSearchCommand() *cli.Command {
-	return &cli.Command{
+	cmd := &cli.Command{
 		Name:  "search",
 		Short: i18n.T("Search plugin by command name", "根据命令名搜索插件"),
-		Usage: "search <command-name>",
+		Usage: "search [--source-base <url>] <command-name>",
 		Run: func(ctx *cli.Context, args []string) error {
 			return runSearch(ctx, args)
 		},
 	}
+	addPluginSourceBaseFlag(cmd)
+	return cmd
 }
 
 func runSearch(ctx *cli.Context, args []string) error {
@@ -114,7 +151,7 @@ func runSearch(ctx *cli.Context, args []string) error {
 		return fmt.Errorf("command name cannot be empty")
 	}
 
-	mgr, err := NewManager()
+	mgr, err := newManagerWithOptionalSourceBase(ctx)
 	if err != nil {
 		return err
 	}
@@ -131,23 +168,113 @@ func runSearch(ctx *cli.Context, args []string) error {
 	return displaySearchResults(ctx, mgr, commandName, results)
 }
 
+func newShowCommand() *cli.Command {
+	cmd := &cli.Command{
+		Name:  "show",
+		Short: i18n.T("Show details of an installed plugin", "显示已安装插件的详细信息"),
+		Usage: "show --name <plugin_name>",
+		Run: func(ctx *cli.Context, args []string) error {
+			name := ""
+			if v, ok := ctx.Flags().GetValue("name"); ok {
+				name = v
+			}
+			if strings.TrimSpace(name) == "" {
+				return fmt.Errorf("plugin name is required (use --name)")
+			}
+
+			mgr, err := NewManager()
+			if err != nil {
+				return err
+			}
+
+			actualName, p, err := mgr.findLocalPlugin(name)
+			if err != nil {
+				return err
+			}
+
+			return displayInstalledPluginDetails(ctx, actualName, p)
+		},
+	}
+
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "name",
+		Short:        i18n.T("Installed plugin name", "已安装的插件名称"),
+		AssignedMode: cli.AssignedOnce,
+	})
+
+	return cmd
+}
+
+func displayInstalledPluginDetails(ctx *cli.Context, canonicalName string, p *LocalPlugin) error {
+	out := ctx.Stdout()
+	fmt.Fprintf(out, "Name:\t%s\n", canonicalName)
+	fmt.Fprintf(out, "Version:\t%s\n", p.Version)
+	if pc := strings.TrimSpace(p.ProductCode); pc != "" {
+		fmt.Fprintf(out, "Product code:\t%s\n", pc)
+	}
+	if p.ShortDescription != "" {
+		fmt.Fprintf(out, "Short description:\t%s\n", p.ShortDescription)
+	}
+	if p.Description != "" {
+		fmt.Fprintf(out, "Description:\t%s\n", p.Description)
+	}
+	if av, err := readPluginAPIVersionsFromDir(p.Path); err == nil && apiVersionsPresent(av) {
+		writePluginAPIVersionsSection(out, av)
+	}
+	if p.Inner {
+		fmt.Fprintf(out, "Inner:\t%v\n", p.Inner)
+	}
+	return nil
+}
+
+func readPluginAPIVersionsFromDir(pluginDir string) (*PluginAPIVersions, error) {
+	path := filepath.Join(pluginDir, "manifest.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var wrapper struct {
+		APIVersions *PluginAPIVersions `json:"apiVersions"`
+	}
+	if err := json.Unmarshal(data, &wrapper); err != nil {
+		return nil, err
+	}
+	return wrapper.APIVersions, nil
+}
+
+func apiVersionsPresent(v *PluginAPIVersions) bool {
+	if v == nil {
+		return false
+	}
+	return v.Default != "" || len(v.Supported) > 0
+}
+
+func writePluginAPIVersionsSection(out io.Writer, v *PluginAPIVersions) {
+	if v.Default != "" {
+		fmt.Fprintf(out, "API default:\t%s\n", v.Default)
+	}
+	if len(v.Supported) > 0 {
+		fmt.Fprintf(out, "API supported:\t%s\n", strings.Join(v.Supported, ", "))
+	}
+}
+
 func newInstallCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "install",
-		Short: i18n.T("Install a plugin", "安装插件"),
-		Usage: "install --names <plugin_name> [<plugin2> ...] [--version <version>] [--enable-pre]",
+		Short: i18n.T("Install a plugin (from remote index or package file/URL)", "安装插件（远程索引或指定包文件/URL）"),
+		Usage: "install [--source-base <url>] --names <plugin_name> [<plugin2> ...] [--version <version>] [--enable-pre] | install --package <path-or-url>",
 		Run: func(ctx *cli.Context, args []string) error {
-			names, version, enablePre, err := parseInstallArgs(ctx)
+			names, pkgRef, version, enablePre, err := parseInstallArgs(ctx)
 			if err != nil {
 				return err
 			}
 
-			validatedNames, err := validateInstallArgs(names)
+			validatedNames, err := validateInstallArgs(names, pkgRef)
 			if err != nil {
 				return err
 			}
 
-			return executeInstall(ctx, validatedNames, version, enablePre)
+			return executeInstall(ctx, validatedNames, pkgRef, version, enablePre)
 		},
 	}
 
@@ -160,7 +287,7 @@ func newInstallCommand() *cli.Command {
 
 	cmd.Flags().Add(&cli.Flag{
 		Name:         "version",
-		Short:        i18n.T("Specify plugin version", "指定插件版本"),
+		Short:        i18n.T("Specify plugin version when installing from the remote index (--names)", "使用 --names 从远程索引安装时指定插件版本"),
 		AssignedMode: cli.AssignedOnce,
 		DefaultValue: "",
 	})
@@ -171,6 +298,14 @@ func newInstallCommand() *cli.Command {
 		AssignedMode: cli.AssignedNone,
 	})
 
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "package",
+		Short:        i18n.T("Path or http(s) URL of the plugin package file (.zip, .tar.gz, .tgz)", "插件包文件的路径或 http(s) URL（.zip、.tar.gz、.tgz）"),
+		AssignedMode: cli.AssignedOnce,
+		DefaultValue: "",
+	})
+
+	addPluginSourceBaseFlag(cmd)
 	return cmd
 }
 
@@ -178,10 +313,10 @@ func newInstallAllCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:   "install-all",
 		Short:  i18n.T("Install all available plugins", "安装所有可用的插件"),
-		Usage:  "install-all [--enable-pre]",
+		Usage:  "install-all [--source-base <url>] [--enable-pre]",
 		Hidden: true, // 不推荐使用
 		Run: func(ctx *cli.Context, args []string) error {
-			mgr, err := NewManager()
+			mgr, err := newManagerWithOptionalSourceBase(ctx)
 			if err != nil {
 				return err
 			}
@@ -201,6 +336,7 @@ func newInstallAllCommand() *cli.Command {
 		AssignedMode: cli.AssignedNone,
 	})
 
+	addPluginSourceBaseFlag(cmd)
 	return cmd
 }
 
@@ -241,9 +377,9 @@ func newUpdateCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "update",
 		Short: i18n.T("Update plugin(s)", "更新插件"),
-		Usage: "plugin update [--name <plugin_name>] [--enable-pre]",
+		Usage: "update [--source-base <url>] [--name <plugin_name>] [--enable-pre]",
 		Run: func(ctx *cli.Context, args []string) error {
-			mgr, err := NewManager()
+			mgr, err := newManagerWithOptionalSourceBase(ctx)
 			if err != nil {
 				return err
 			}
@@ -279,12 +415,19 @@ func newUpdateCommand() *cli.Command {
 		AssignedMode: cli.AssignedNone,
 	})
 
+	addPluginSourceBaseFlag(cmd)
 	return cmd
 }
 
-func parseInstallArgs(ctx *cli.Context) (names []string, version string, enablePre bool, err error) {
+func parseInstallArgs(ctx *cli.Context) (names []string, pkgRef string, version string, enablePre bool, err error) {
 	if namesFlag := ctx.Flags().Get("names"); namesFlag != nil && namesFlag.IsAssigned() {
 		names = namesFlag.GetValues()
+	}
+
+	if f := ctx.Flags().Get("package"); f != nil && f.IsAssigned() {
+		if v, ok := f.GetValue(); ok {
+			pkgRef = strings.TrimSpace(v)
+		}
 	}
 
 	if v, ok := ctx.Flags().GetValue("version"); ok {
@@ -295,12 +438,19 @@ func parseInstallArgs(ctx *cli.Context) (names []string, version string, enableP
 		enablePre = true
 	}
 
-	return names, version, enablePre, nil
+	return names, pkgRef, version, enablePre, nil
 }
 
-func validateInstallArgs(names []string) ([]string, error) {
+func validateInstallArgs(names []string, pkgRef string) ([]string, error) {
+	if strings.TrimSpace(pkgRef) != "" {
+		if len(names) > 0 {
+			return nil, fmt.Errorf("--names cannot be used together with --package")
+		}
+		return nil, nil
+	}
+
 	if len(names) == 0 {
-		return nil, fmt.Errorf("--names flag is required")
+		return nil, fmt.Errorf("either --names or --package is required")
 	}
 
 	validNames := []string{}
@@ -315,10 +465,14 @@ func validateInstallArgs(names []string) ([]string, error) {
 	return validNames, nil
 }
 
-func executeInstall(ctx *cli.Context, names []string, version string, enablePre bool) error {
-	mgr, err := NewManager()
+func executeInstall(ctx *cli.Context, names []string, pkgRef, version string, enablePre bool) error {
+	mgr, err := newManagerWithOptionalSourceBase(ctx)
 	if err != nil {
 		return err
+	}
+
+	if strings.TrimSpace(pkgRef) != "" {
+		return mgr.InstallFromPackage(ctx, pkgRef)
 	}
 
 	if len(names) == 1 {

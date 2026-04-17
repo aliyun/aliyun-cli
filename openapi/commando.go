@@ -37,11 +37,12 @@ import (
 
 // main entrance of aliyun cli
 type Commando struct {
-	profile       config.Profile
-	library       *Library
-	pluginIndex   *plugin.Index
-	localManifest *plugin.LocalManifest
-	pluginLoaded  bool
+	profile        config.Profile
+	library        *Library
+	pluginIndex    *plugin.Index
+	pluginIndexErr error // set when remote plugin index could not be loaded
+	localManifest  *plugin.LocalManifest
+	pluginLoaded   bool
 }
 
 var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
@@ -62,11 +63,22 @@ func (c *Commando) loadPlugins() {
 	}
 	c.pluginLoaded = true
 	mgr, err := plugin.NewManager()
-	if err == nil {
-		// Try to fetch remote index (might fail if offline, that's ok)
-		c.pluginIndex, _ = mgr.GetIndex()
-		c.localManifest, _ = mgr.GetLocalManifest()
+	if err != nil {
+		c.pluginIndexErr = err
+		return
 	}
+	// Remote index may fail offline; local manifest still loads for installed plugins.
+	c.pluginIndex, c.pluginIndexErr = mgr.GetIndex()
+	c.localManifest, _ = mgr.GetLocalManifest()
+}
+
+func (c *Commando) printPluginIndexLoadFailureNote(ctx *cli.Context) {
+	if c.pluginIndexErr == nil {
+		return
+	}
+	cli.PrintfWithColor(ctx.Stderr(), cli.Yellow, "%s: %v\n",
+		i18n.T("Note: Could not load the remote plugin catalog", "提示：未能加载远程插件目录").Text(),
+		c.pluginIndexErr)
 }
 
 func (c *Commando) InitWithCommand(cmd *cli.Command) {
@@ -208,6 +220,8 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 						break
 					}
 				}
+			} else if c.pluginIndexErr != nil {
+				c.printPluginIndexLoadFailureNote(ctx)
 			}
 		}
 
@@ -257,6 +271,8 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 								return fmt.Errorf("'%s' is not a valid built-in product.\nA plugin '%s' is available which supports this product.\nRun 'aliyun plugin install --names %s' to install it.", args[0], pInfo.Name, pInfo.Name)
 							}
 						}
+					} else if c.pluginIndexErr != nil {
+						c.printPluginIndexLoadFailureNote(ctx)
 					}
 					var plugins []plugin.PluginInfo
 					if c.pluginIndex != nil {

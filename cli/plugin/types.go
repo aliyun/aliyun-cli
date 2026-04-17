@@ -81,19 +81,36 @@ type LocalManifest struct {
 type LocalPlugin struct {
 	Name             string   `json:"name"`
 	Version          string   `json:"version"`
-	Path             string   `json:"path"`    // 插件目录路径
+	Path             string   `json:"path"` // 插件目录路径
+	ProductCode      string   `json:"productCode,omitempty"`
 	Command          string   `json:"command"` // 触发命令，not used for now
 	CmdNames         []string `json:"cmdNames"`
 	ShortDescription string   `json:"shortDescription"`
 	Description      string   `json:"description"`
+	Inner            bool     `json:"inner,omitempty"` // 内置/产品侧插件（manifest.json inner）
+}
+
+type PluginAPIVersions struct {
+	Default     string                          `json:"default,omitempty"`
+	Supported   []string                        `json:"supported,omitempty"`
+	VersionInfo map[string]PluginAPIVersionInfo `json:"versionInfo,omitempty"`
+}
+
+type PluginAPIVersionInfo struct {
+	Deprecated  bool   `json:"deprecated"`
+	Description string `json:"description,omitempty"`
+	Recommended bool   `json:"recommended"`
 }
 
 type PluginManifest struct {
-	Name             string `json:"name"`
-	Version          string `json:"version"`
-	Command          string `json:"command"`
-	ShortDescription string `json:"shortDescription"`
-	Description      string `json:"description"`
+	Name             string             `json:"name"`
+	Version          string             `json:"version"`
+	ProductCode      string             `json:"productCode,omitempty"`
+	Command          string             `json:"command"`
+	ShortDescription string             `json:"shortDescription"`
+	Description      string             `json:"description"`
+	Inner            bool               `json:"inner,omitempty"`
+	APIVersions      *PluginAPIVersions `json:"apiVersions,omitempty"`
 	Bin              struct {
 		Path string `json:"path"` // 二进制文件相对路径
 	} `json:"bin"`

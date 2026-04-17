@@ -30,10 +30,11 @@ const (
 	EnvPluginsDir   = "ALIBABA_CLOUD_CLI_PLUGINS_DIR"
 	EnvNoCache      = "ALIBABA_CLOUD_CLI_PLUGIN_NO_CACHE"
 
-	indexCacheFile   = "plugin_pkg_index_cache.json"
-	commandCacheFile = "plugin_search_index_cache.json"
-	cacheTTL         = 1 * time.Hour
-	fetchTimeout     = 10 * time.Second
+	indexCacheFile         = "plugin_pkg_index_cache.json"
+	commandCacheFile       = "plugin_search_index_cache.json"
+	cacheTTL               = 1 * time.Hour
+	fetchTimeout           = 10 * time.Second
+	pluginArchiveDLTimeout = 5 * time.Minute
 )
 
 type ErrPluginNotFound struct {
@@ -49,6 +50,8 @@ type Manager struct {
 	sourceBase      string // from plugin-settings.json / env; empty = use built-in index URLs
 	indexURL        string // For testing: allows overriding resolved package index URL
 	commandIndexURL string // For testing: allows overriding resolved command index URL
+	// skipPluginIndexCacheForCLI is set when --source-base is used on this command only.
+	skipPluginIndexCacheForCLI bool
 }
 
 func getHomePath() string {
@@ -97,6 +100,20 @@ func NewManager() (*Manager, error) {
 	}
 	base := pluginsettings.EffectiveSourceBase(settings)
 	return &Manager{rootDir: rootDir, sourceBase: base}, nil
+}
+
+func (m *Manager) ApplySourceBaseOverride(raw string) error {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return fmt.Errorf("source-base must not be empty")
+	}
+	lower := strings.ToLower(v)
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		return fmt.Errorf("source-base must start with http:// or https://")
+	}
+	m.sourceBase = strings.TrimRight(v, "/")
+	m.skipPluginIndexCacheForCLI = true
+	return nil
 }
 
 func (m *Manager) resolvedPkgIndexURL() string {
@@ -176,8 +193,13 @@ func noCacheEnabled() bool {
 	return v == "true" || v == "1"
 }
 
+// CLI override avoids stale cross-mirror cache files.
+func (m *Manager) skipPluginIndexCache() bool {
+	return m.skipPluginIndexCacheForCLI
+}
+
 func (m *Manager) fetchWithCache(url, cacheFile string, result interface{}) error {
-	if noCacheEnabled() {
+	if noCacheEnabled() || m.skipPluginIndexCache() {
 		data, err := m.fetchRemote(url)
 		if err != nil {
 			return err
@@ -274,6 +296,19 @@ func matchPluginName(pluginName, userInput string) bool {
 	return false
 }
 
+func FindInstalledPluginInManifest(manifest *LocalManifest, userInput string) (pluginName string, lp *LocalPlugin, ok bool) {
+	if manifest == nil || manifest.Plugins == nil {
+		return "", nil, false
+	}
+	for name, p := range manifest.Plugins {
+		if matchPluginName(name, userInput) {
+			pl := p
+			return name, &pl, true
+		}
+	}
+	return "", nil, false
+}
+
 func isDevVersion(version string) bool {
 	if strings.HasPrefix(version, "0.0.") || version == "0.0.1" {
 		return true
@@ -353,10 +388,8 @@ func (m *Manager) findLocalPlugin(userInput string) (string, *LocalPlugin, error
 		return "", nil, fmt.Errorf("failed to read local plugin manifest: %w", err)
 	}
 
-	for pluginName, plugin := range localManifest.Plugins {
-		if matchPluginName(pluginName, userInput) {
-			return pluginName, &plugin, nil
-		}
+	if name, lp, ok := FindInstalledPluginInManifest(localManifest, userInput); ok {
+		return name, lp, nil
 	}
 
 	return "", nil, &ErrPluginNotFound{PluginName: userInput}
@@ -654,10 +687,247 @@ func (m *Manager) extractPlugin(archivePath, extractDir, downloadURL string) err
 		return err
 	}
 
-	if strings.HasSuffix(downloadURL, ".zip") {
+	if strings.HasSuffix(strings.ToLower(downloadURL), ".zip") {
 		return unzip(archivePath, extractDir)
 	}
 	return untar(archivePath, extractDir)
+}
+
+func expandPluginSourcePath(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("source path is empty")
+	}
+	if strings.HasPrefix(raw, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve home directory: %w", err)
+		}
+		raw = filepath.Join(home, raw[2:])
+	}
+	abs, err := filepath.Abs(raw)
+	if err != nil {
+		return "", fmt.Errorf("resolve source path: %w", err)
+	}
+	return abs, nil
+}
+
+func isPluginArchivePath(absPath string) bool {
+	lower := strings.ToLower(absPath)
+	return strings.HasSuffix(lower, ".zip") ||
+		strings.HasSuffix(lower, ".tar.gz") ||
+		strings.HasSuffix(lower, ".tgz")
+}
+
+func isRemotePluginPackageRef(ref string) bool {
+	ref = strings.TrimSpace(ref)
+	lower := strings.ToLower(ref)
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		return false
+	}
+	u, err := url.Parse(ref)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	return isPluginArchivePath(u.Path)
+}
+
+func readPluginManifestFromDir(extractDir string) (*PluginManifest, error) {
+	pluginManifestPath := filepath.Join(extractDir, "manifest.json")
+	pluginManifestFile, err := os.Open(pluginManifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid plugin package: manifest.json not found")
+	}
+	defer pluginManifestFile.Close()
+
+	var pManifest PluginManifest
+	if err := json.NewDecoder(pluginManifestFile).Decode(&pManifest); err != nil {
+		return nil, fmt.Errorf("invalid plugin manifest: %w", err)
+	}
+	if strings.TrimSpace(pManifest.Name) == "" {
+		return nil, fmt.Errorf("invalid plugin manifest: name is empty")
+	}
+	if strings.TrimSpace(pManifest.Version) == "" {
+		return nil, fmt.Errorf("invalid plugin manifest: version is empty")
+	}
+	return &pManifest, nil
+}
+
+func copyDirTree(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode().Perm())
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, info.Mode().Perm())
+	})
+}
+
+func (m *Manager) promoteExtractedPlugin(tmpExtract, pluginName string) (string, error) {
+	finalDir := filepath.Join(m.rootDir, pluginName)
+	if err := os.RemoveAll(finalDir); err != nil {
+		return "", fmt.Errorf("failed to remove existing plugin directory: %w", err)
+	}
+	if err := os.Rename(tmpExtract, finalDir); err == nil {
+		return finalDir, nil
+	}
+	if err := copyDirTree(tmpExtract, finalDir); err != nil {
+		return "", fmt.Errorf("failed to copy plugin files: %w", err)
+	}
+	if err := os.RemoveAll(tmpExtract); err != nil {
+		return "", fmt.Errorf("failed to remove temporary extract directory: %w", err)
+	}
+	return finalDir, nil
+}
+
+func (m *Manager) printOverwriteIfPluginInstalled(ctx *cli.Context, pluginName, incomingVersion string) {
+	localManifest, err := m.GetLocalManifest()
+	if err != nil {
+		return
+	}
+	existing, ok := localManifest.Plugins[pluginName]
+	if !ok {
+		return
+	}
+	oldVer := strings.TrimSpace(existing.Version)
+	if oldVer == "" {
+		oldVer = "unknown"
+	}
+	cli.Printf(ctx.Stdout(),
+		"Note: plugin %q is already installed (version %s); continuing will replace it with version %s.\n",
+		pluginName, oldVer, incomingVersion)
+}
+
+func (m *Manager) InstallFromPackage(ctx *cli.Context, ref string) error {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return fmt.Errorf("package path or URL is empty")
+	}
+	lower := strings.ToLower(ref)
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
+		if !isRemotePluginPackageRef(ref) {
+			return fmt.Errorf("package URL path must end with .zip, .tar.gz, or .tgz")
+		}
+		return m.installFromRemotePackageURL(ctx, ref)
+	}
+	return m.InstallFromLocalFile(ctx, ref)
+}
+
+func (m *Manager) InstallFromLocalFile(ctx *cli.Context, sourcePath string) error {
+	absPath, err := expandPluginSourcePath(sourcePath)
+	if err != nil {
+		return err
+	}
+	st, err := os.Stat(absPath)
+	if err != nil {
+		return fmt.Errorf("package file: %w", err)
+	}
+	if st.IsDir() {
+		return fmt.Errorf("package must be a plugin archive file (.zip, .tar.gz, .tgz), not a directory")
+	}
+	return m.installFromPackageFile(ctx, absPath, absPath)
+}
+
+func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid package URL: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("package URL must use http or https")
+	}
+	if !isPluginArchivePath(u.Path) {
+		return fmt.Errorf("package URL path must end with .zip, .tar.gz, or .tgz")
+	}
+
+	cli.Printf(ctx.Stdout(), "Downloading plugin package from %s...\n", rawURL)
+
+	client := &http.Client{Timeout: pluginArchiveDLTimeout}
+	resp, err := client.Get(rawURL)
+	if err != nil {
+		return fmt.Errorf("download plugin package: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download plugin package: status %d", resp.StatusCode)
+	}
+
+	tmpParent, err := os.MkdirTemp("", "aliyun-plugin-dl-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpParent)
+
+	base := path.Base(u.Path)
+	if base == "." || base == "/" {
+		base = "plugin.tgz"
+	}
+	dest := filepath.Join(tmpParent, base)
+	out, err := os.Create(dest)
+	if err != nil {
+		return fmt.Errorf("create temp package file: %w", err)
+	}
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		out.Close()
+		return fmt.Errorf("write plugin package: %w", err)
+	}
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("write plugin package: %w", err)
+	}
+
+	return m.installFromPackageFile(ctx, dest, rawURL)
+}
+
+func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, userFacing string) error {
+	if !isPluginArchivePath(absPath) {
+		return fmt.Errorf("unsupported package format (use .zip, .tar.gz, or .tgz): %s", absPath)
+	}
+
+	cli.Printf(ctx.Stdout(), "Installing plugin from %s...\n", userFacing)
+
+	tmpParent, err := os.MkdirTemp("", "aliyun-plugin-local-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpParent)
+
+	tmpExtract := filepath.Join(tmpParent, "extract")
+	if err := m.extractPlugin(absPath, tmpExtract, absPath); err != nil {
+		return fmt.Errorf("failed to extract plugin package: %w", err)
+	}
+
+	pManifest, err := readPluginManifestFromDir(tmpExtract)
+	if err != nil {
+		return err
+	}
+
+	m.printOverwriteIfPluginInstalled(ctx, pManifest.Name, pManifest.Version)
+
+	finalDir, err := m.promoteExtractedPlugin(tmpExtract, pManifest.Name)
+	if err != nil {
+		return err
+	}
+
+	if err := m.savePluginToManifest(pManifest.Name, pManifest.Version, finalDir, pManifest); err != nil {
+		return err
+	}
+
+	cli.Printf(ctx.Stdout(), "Plugin %s %s installed successfully!\n", pManifest.Name, pManifest.Version)
+	return nil
 }
 
 func (m *Manager) loadAndValidatePluginManifest(extractDir, expectedName string) (*PluginManifest, error) {
@@ -690,16 +960,18 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 		Name:             actualPluginName,
 		Version:          version,
 		Path:             extractDir,
+		ProductCode:      pManifest.ProductCode,
 		Command:          pManifest.Command,
 		ShortDescription: pManifest.ShortDescription,
 		Description:      pManifest.Description,
 		CmdNames:         pManifest.CmdNames,
+		Inner:            pManifest.Inner,
 	}
 
 	return m.saveLocalManifest(localManifest)
 }
 
-func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, version string, enablePre bool) error {
+func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, version string, enablePre bool, warnIfAlreadyInstalled bool) error {
 	actualPluginName := targetPlugin.Name
 
 	if version == "" {
@@ -729,6 +1001,10 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 	}
 	defer os.RemoveAll(filepath.Dir(archivePath))
 
+	if warnIfAlreadyInstalled {
+		m.printOverwriteIfPluginInstalled(ctx, actualPluginName, version)
+	}
+
 	extractDir := filepath.Join(m.rootDir, actualPluginName)
 	if err := m.extractPlugin(archivePath, extractDir, downloadURL); err != nil {
 		return err
@@ -753,7 +1029,7 @@ func (m *Manager) Install(ctx *cli.Context, pluginName, version string, enablePr
 		return err
 	}
 
-	return m.installPlugin(ctx, targetPlugin, version, enablePre)
+	return m.installPlugin(ctx, targetPlugin, version, enablePre, true)
 }
 
 func (m *Manager) Upgrade(ctx *cli.Context, pluginName string, enablePre bool) error {
@@ -782,7 +1058,7 @@ func (m *Manager) Upgrade(ctx *cli.Context, pluginName string, enablePre bool) e
 	} else {
 		cli.Printf(ctx.Stdout(), "Upgrading plugin %s from %s to %s...\n", actualPluginName, localPlugin.Version, latestVersion)
 	}
-	return m.installPlugin(ctx, targetPlugin, latestVersion, enablePre)
+	return m.installPlugin(ctx, targetPlugin, latestVersion, enablePre, false)
 }
 
 func (m *Manager) Uninstall(ctx *cli.Context, pluginName string) error {
@@ -861,7 +1137,7 @@ func (m *Manager) UpdateAll(ctx *cli.Context, enablePre bool) error {
 			cli.Printf(ctx.Stdout(), "Updating %s from %s to %s...\n", pluginName, localPlugin.Version, latestVersion)
 		}
 
-		if err := m.installPlugin(ctx, targetPlugin, latestVersion, enablePre); err != nil {
+		if err := m.installPlugin(ctx, targetPlugin, latestVersion, enablePre, false); err != nil {
 			cli.Printf(ctx.Stdout(), "Failed to update %s: %v\n", pluginName, err)
 			failed++
 			continue
@@ -937,7 +1213,7 @@ func (m *Manager) InstallAll(ctx *cli.Context, enablePre bool) error {
 
 		cli.Printf(ctx.Stdout(), "Installing %s...\n", pluginName)
 
-		if err := m.installPlugin(ctx, &plugin, "", enablePre); err != nil {
+		if err := m.installPlugin(ctx, &plugin, "", enablePre, false); err != nil {
 			cli.Printf(ctx.Stdout(), "Failed to install %s: %v\n", pluginName, err)
 			failed++
 			continue
