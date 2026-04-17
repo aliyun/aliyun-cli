@@ -287,7 +287,7 @@ func newInstallCommand() *cli.Command {
 
 	cmd.Flags().Add(&cli.Flag{
 		Name:         "version",
-		Short:        i18n.T("Specify plugin version (remote) or must match manifest when using --package", "指定插件版本（远程）；与 --package 连用时须与 manifest 一致"),
+		Short:        i18n.T("Specify plugin version when installing from the remote index (--names)", "使用 --names 从远程索引安装时指定插件版本"),
 		AssignedMode: cli.AssignedOnce,
 		DefaultValue: "",
 	})

@@ -40,7 +40,7 @@ type Commando struct {
 	profile        config.Profile
 	library        *Library
 	pluginIndex    *plugin.Index
-	pluginIndexErr error // set when remote plugin index could not be loaded (shown once in help paths)
+	pluginIndexErr error // set when remote plugin index could not be loaded
 	localManifest  *plugin.LocalManifest
 	pluginLoaded   bool
 }

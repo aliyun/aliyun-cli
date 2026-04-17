@@ -296,9 +296,6 @@ func matchPluginName(pluginName, userInput string) bool {
 	return false
 }
 
-// FindInstalledPluginInManifest finds an installed plugin when user input
-// matches the plugin package name or the short form (user input equals the package name with the "aliyun-cli-" prefix removed, e.g. fc -> aliyun-cli-fc).
-// Used for plugins installed from a local path or package URL (--package) that are not listed in the remote plugin index.
 func FindInstalledPluginInManifest(manifest *LocalManifest, userInput string) (pluginName string, lp *LocalPlugin, ok bool) {
 	if manifest == nil || manifest.Plugins == nil {
 		return "", nil, false
