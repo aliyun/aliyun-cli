@@ -266,7 +266,7 @@ func newInstallCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "install",
 		Short: i18n.T("Install a plugin (from remote index or package file/URL)", "安装插件（远程索引或指定包文件/URL）"),
-		Usage: "install [--source-base <url>] --names <plugin_name> [<plugin2> ...] [--version <version>] [--enable-pre] | install [--source-base <url>] --package <path-or-url> [--version <version>]",
+		Usage: "install [--source-base <url>] --names <plugin_name> [<plugin2> ...] [--version <version>] [--enable-pre] | install --package <path-or-url>",
 		Run: func(ctx *cli.Context, args []string) error {
 			names, pkgRef, version, enablePre, err := parseInstallArgs(ctx)
 			if err != nil {
@@ -476,7 +476,7 @@ func executeInstall(ctx *cli.Context, names []string, pkgRef, version string, en
 	}
 
 	if strings.TrimSpace(pkgRef) != "" {
-		return mgr.InstallFromPackage(ctx, pkgRef, version)
+		return mgr.InstallFromPackage(ctx, pkgRef)
 	}
 
 	if len(names) == 1 {

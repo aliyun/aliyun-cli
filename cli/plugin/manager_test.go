@@ -1882,7 +1882,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
+		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true)
 		assert.NoError(t, err)
 
 		localManifest, err := mgr.GetLocalManifest()
@@ -1899,6 +1899,46 @@ func TestManager_installPlugin(t *testing.T) {
 
 		manifestPath := filepath.Join(pluginDir, "manifest.json")
 		assert.FileExists(t, manifestPath)
+	})
+
+	t.Run("Overwrite note when reinstalling indexed plugin", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		archiveContent := createTestPluginArchive(t, "reinstall-note", "1.0.0", "test")
+		expectedChecksum, err := calculateSHA256FromBytes(archiveContent)
+		if err != nil {
+			t.Fatalf("Failed to calculate checksum: %v", err)
+		}
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(archiveContent)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		targetPlugin := &PluginInfo{
+			Name: "reinstall-note",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Platforms: map[string]PlatformInfo{
+						platform: {
+							URL:      server.URL,
+							Checksum: expectedChecksum,
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		assert.NoError(t, mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true))
+		assert.NoError(t, mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true))
+
+		out := ctx.Stdout().(*bytes.Buffer).String()
+		assert.Contains(t, out, `plugin "reinstall-note" is already installed`)
+		assert.Contains(t, out, "continuing will replace it with version 1.0.0")
 	})
 
 	t.Run("Success - install plugin with empty version (use latest)", func(t *testing.T) {
@@ -1933,7 +1973,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err = mgr.installPlugin(ctx, targetPlugin, "", false)
+		err = mgr.installPlugin(ctx, targetPlugin, "", false, true)
 		assert.NoError(t, err)
 
 		localManifest, err := mgr.GetLocalManifest()
@@ -1958,7 +1998,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err := mgr.installPlugin(ctx, targetPlugin, "999.0.0", false)
+		err := mgr.installPlugin(ctx, targetPlugin, "999.0.0", false, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "version 999.0.0 not found")
 	})
@@ -1983,7 +2023,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
+		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin test-plugin version 1.0.0 not supported on "+platform)
 	})
@@ -2008,7 +2048,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
+		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid-url-that-does-not-exist.local")
 	})
@@ -2041,7 +2081,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
+		err := mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "checksum verification failed")
 		assert.Contains(t, err.Error(), "Expected: wrong-checksum")
@@ -2079,7 +2119,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
+		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "manifest.json not found")
 	})
@@ -2116,7 +2156,7 @@ func TestManager_installPlugin(t *testing.T) {
 		}
 
 		ctx := newTestContext()
-		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false)
+		err = mgr.installPlugin(ctx, targetPlugin, "1.0.0", false, true)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin manifest name wrong-plugin-name does not match expected name test-plugin")
 	})

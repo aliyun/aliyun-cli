@@ -789,7 +789,25 @@ func (m *Manager) promoteExtractedPlugin(tmpExtract, pluginName string) (string,
 	return finalDir, nil
 }
 
-func (m *Manager) InstallFromPackage(ctx *cli.Context, ref, version string) error {
+func (m *Manager) printOverwriteIfPluginInstalled(ctx *cli.Context, pluginName, incomingVersion string) {
+	localManifest, err := m.GetLocalManifest()
+	if err != nil {
+		return
+	}
+	existing, ok := localManifest.Plugins[pluginName]
+	if !ok {
+		return
+	}
+	oldVer := strings.TrimSpace(existing.Version)
+	if oldVer == "" {
+		oldVer = "unknown"
+	}
+	cli.Printf(ctx.Stdout(),
+		"Note: plugin %q is already installed (version %s); continuing will replace it with version %s.\n",
+		pluginName, oldVer, incomingVersion)
+}
+
+func (m *Manager) InstallFromPackage(ctx *cli.Context, ref string) error {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return fmt.Errorf("package path or URL is empty")
@@ -799,12 +817,12 @@ func (m *Manager) InstallFromPackage(ctx *cli.Context, ref, version string) erro
 		if !isRemotePluginPackageRef(ref) {
 			return fmt.Errorf("package URL path must end with .zip, .tar.gz, or .tgz")
 		}
-		return m.installFromRemotePackageURL(ctx, ref, version)
+		return m.installFromRemotePackageURL(ctx, ref)
 	}
-	return m.InstallFromLocalFile(ctx, ref, version)
+	return m.InstallFromLocalFile(ctx, ref)
 }
 
-func (m *Manager) InstallFromLocalFile(ctx *cli.Context, sourcePath, version string) error {
+func (m *Manager) InstallFromLocalFile(ctx *cli.Context, sourcePath string) error {
 	absPath, err := expandPluginSourcePath(sourcePath)
 	if err != nil {
 		return err
@@ -816,10 +834,10 @@ func (m *Manager) InstallFromLocalFile(ctx *cli.Context, sourcePath, version str
 	if st.IsDir() {
 		return fmt.Errorf("package must be a plugin archive file (.zip, .tar.gz, .tgz), not a directory")
 	}
-	return m.installFromPackageFile(ctx, absPath, version, absPath)
+	return m.installFromPackageFile(ctx, absPath, absPath)
 }
 
-func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL, version string) error {
+func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL string) error {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid package URL: %w", err)
@@ -866,10 +884,10 @@ func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL, version 
 		return fmt.Errorf("write plugin package: %w", err)
 	}
 
-	return m.installFromPackageFile(ctx, dest, version, rawURL)
+	return m.installFromPackageFile(ctx, dest, rawURL)
 }
 
-func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, version, userFacing string) error {
+func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, userFacing string) error {
 	if !isPluginArchivePath(absPath) {
 		return fmt.Errorf("unsupported package format (use .zip, .tar.gz, or .tgz): %s", absPath)
 	}
@@ -891,9 +909,8 @@ func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, version, use
 	if err != nil {
 		return err
 	}
-	if version != "" && version != pManifest.Version {
-		return fmt.Errorf("specified version %q does not match package manifest version %q", version, pManifest.Version)
-	}
+
+	m.printOverwriteIfPluginInstalled(ctx, pManifest.Name, pManifest.Version)
 
 	finalDir, err := m.promoteExtractedPlugin(tmpExtract, pManifest.Name)
 	if err != nil {
@@ -949,7 +966,7 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 	return m.saveLocalManifest(localManifest)
 }
 
-func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, version string, enablePre bool) error {
+func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, version string, enablePre bool, warnIfAlreadyInstalled bool) error {
 	actualPluginName := targetPlugin.Name
 
 	if version == "" {
@@ -979,6 +996,10 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 	}
 	defer os.RemoveAll(filepath.Dir(archivePath))
 
+	if warnIfAlreadyInstalled {
+		m.printOverwriteIfPluginInstalled(ctx, actualPluginName, version)
+	}
+
 	extractDir := filepath.Join(m.rootDir, actualPluginName)
 	if err := m.extractPlugin(archivePath, extractDir, downloadURL); err != nil {
 		return err
@@ -1003,7 +1024,7 @@ func (m *Manager) Install(ctx *cli.Context, pluginName, version string, enablePr
 		return err
 	}
 
-	return m.installPlugin(ctx, targetPlugin, version, enablePre)
+	return m.installPlugin(ctx, targetPlugin, version, enablePre, true)
 }
 
 func (m *Manager) Upgrade(ctx *cli.Context, pluginName string, enablePre bool) error {
@@ -1032,7 +1053,7 @@ func (m *Manager) Upgrade(ctx *cli.Context, pluginName string, enablePre bool) e
 	} else {
 		cli.Printf(ctx.Stdout(), "Upgrading plugin %s from %s to %s...\n", actualPluginName, localPlugin.Version, latestVersion)
 	}
-	return m.installPlugin(ctx, targetPlugin, latestVersion, enablePre)
+	return m.installPlugin(ctx, targetPlugin, latestVersion, enablePre, false)
 }
 
 func (m *Manager) Uninstall(ctx *cli.Context, pluginName string) error {
@@ -1111,7 +1132,7 @@ func (m *Manager) UpdateAll(ctx *cli.Context, enablePre bool) error {
 			cli.Printf(ctx.Stdout(), "Updating %s from %s to %s...\n", pluginName, localPlugin.Version, latestVersion)
 		}
 
-		if err := m.installPlugin(ctx, targetPlugin, latestVersion, enablePre); err != nil {
+		if err := m.installPlugin(ctx, targetPlugin, latestVersion, enablePre, false); err != nil {
 			cli.Printf(ctx.Stdout(), "Failed to update %s: %v\n", pluginName, err)
 			failed++
 			continue
@@ -1187,7 +1208,7 @@ func (m *Manager) InstallAll(ctx *cli.Context, enablePre bool) error {
 
 		cli.Printf(ctx.Stdout(), "Installing %s...\n", pluginName)
 
-		if err := m.installPlugin(ctx, &plugin, "", enablePre); err != nil {
+		if err := m.installPlugin(ctx, &plugin, "", enablePre, false); err != nil {
 			cli.Printf(ctx.Stdout(), "Failed to install %s: %v\n", pluginName, err)
 			failed++
 			continue

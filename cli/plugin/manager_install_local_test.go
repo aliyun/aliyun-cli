@@ -90,7 +90,7 @@ func TestManager_InstallFromLocalFile(t *testing.T) {
 		assert.NoError(t, os.WriteFile(archivePath, archiveBody, 0644))
 
 		ctx := newTestContext()
-		err := mgr.InstallFromLocalFile(ctx, archivePath, "")
+		err := mgr.InstallFromLocalFile(ctx, archivePath)
 		assert.NoError(t, err)
 
 		manifest, err := mgr.GetLocalManifest()
@@ -101,20 +101,6 @@ func TestManager_InstallFromLocalFile(t *testing.T) {
 		assert.Contains(t, ctx.Stdout().(*bytes.Buffer).String(), "Installing plugin from")
 	})
 
-	t.Run("Version flag must match manifest", func(t *testing.T) {
-		pluginRoot := t.TempDir()
-		mgr := &Manager{rootDir: pluginRoot}
-
-		archiveBody := createTestPluginArchive(t, "local-test-plugin", "2.1.0", "local")
-		archivePath := filepath.Join(t.TempDir(), "plugin.tar.gz")
-		assert.NoError(t, os.WriteFile(archivePath, archiveBody, 0644))
-
-		ctx := newTestContext()
-		err := mgr.InstallFromLocalFile(ctx, archivePath, "9.9.9")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "does not match package manifest version")
-	})
-
 	t.Run("Unsupported extension", func(t *testing.T) {
 		pluginRoot := t.TempDir()
 		mgr := &Manager{rootDir: pluginRoot}
@@ -122,9 +108,29 @@ func TestManager_InstallFromLocalFile(t *testing.T) {
 		assert.NoError(t, os.WriteFile(badPath, []byte("x"), 0644))
 
 		ctx := newTestContext()
-		err := mgr.InstallFromLocalFile(ctx, badPath, "")
+		err := mgr.InstallFromLocalFile(ctx, badPath)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported package format")
+	})
+
+	t.Run("Overwrite prints note when same plugin name exists", func(t *testing.T) {
+		pluginRoot := t.TempDir()
+		mgr := &Manager{rootDir: pluginRoot}
+		ctx := newTestContext()
+
+		v1 := createTestPluginArchive(t, "overwrite-test", "1.0.0", "x")
+		p1 := filepath.Join(t.TempDir(), "overwrite-a.tgz")
+		require.NoError(t, os.WriteFile(p1, v1, 0644))
+		require.NoError(t, mgr.InstallFromLocalFile(ctx, p1))
+
+		v2 := createTestPluginArchive(t, "overwrite-test", "2.0.0", "x")
+		p2 := filepath.Join(t.TempDir(), "overwrite-b.tgz")
+		require.NoError(t, os.WriteFile(p2, v2, 0644))
+		require.NoError(t, mgr.InstallFromLocalFile(ctx, p2))
+
+		out := ctx.Stdout().(*bytes.Buffer).String()
+		assert.Contains(t, out, `plugin "overwrite-test" is already installed`)
+		assert.Contains(t, out, "continuing will replace it with version 2.0.0")
 	})
 }
 
@@ -202,7 +208,7 @@ func TestManager_InstallFromPackage_RemoteURL(t *testing.T) {
 	archiveURL := srv.URL + "/pkgs/remote-url-plugin/7.8.9/plugin.tgz"
 
 	ctx := newTestContext()
-	err := mgr.InstallFromPackage(ctx, archiveURL, "")
+	err := mgr.InstallFromPackage(ctx, archiveURL)
 	require.NoError(t, err)
 
 	manifest, err := mgr.GetLocalManifest()
@@ -218,7 +224,7 @@ func TestManager_InstallFromPackage_RemoteURL(t *testing.T) {
 func TestManager_InstallFromPackage_RemoteURLBadSuffix(t *testing.T) {
 	mgr := &Manager{rootDir: t.TempDir()}
 	ctx := newTestContext()
-	err := mgr.InstallFromPackage(ctx, "https://example.com/plugins/nosuffix", "")
+	err := mgr.InstallFromPackage(ctx, "https://example.com/plugins/nosuffix")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "package URL path must end")
 }
@@ -227,11 +233,11 @@ func TestManager_installFromRemotePackageURL_invalidSchemeAndPath(t *testing.T) 
 	mgr := &Manager{rootDir: t.TempDir()}
 	ctx := newTestContext()
 
-	err := mgr.installFromRemotePackageURL(ctx, "ftp://example.com/pkg.tgz", "")
+	err := mgr.installFromRemotePackageURL(ctx, "ftp://example.com/pkg.tgz")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "package URL must use http or https")
 
-	err = mgr.installFromRemotePackageURL(ctx, "https://example.com/not-an-archive", "")
+	err = mgr.installFromRemotePackageURL(ctx, "https://example.com/not-an-archive")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "package URL path must end with .zip, .tar.gz, or .tgz")
 }
@@ -246,7 +252,7 @@ func TestManager_installFromRemotePackageURL_downloadErrors(t *testing.T) {
 		}))
 		base := srv.URL
 		srv.Close()
-		err := mgr.installFromRemotePackageURL(ctx, base+"/plugin.tgz", "")
+		err := mgr.installFromRemotePackageURL(ctx, base+"/plugin.tgz")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "download plugin package:")
 	})
@@ -256,7 +262,7 @@ func TestManager_installFromRemotePackageURL_downloadErrors(t *testing.T) {
 			http.NotFound(w, r)
 		}))
 		defer srv.Close()
-		err := mgr.installFromRemotePackageURL(ctx, srv.URL+"/missing.tgz", "")
+		err := mgr.installFromRemotePackageURL(ctx, srv.URL+"/missing.tgz")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "download plugin package: status 404")
 	})
@@ -278,7 +284,7 @@ func TestInstallFromPackageFile_saveLocalManifestFails(t *testing.T) {
 	require.NoError(t, os.WriteFile(archivePath, archiveBody, 0644))
 
 	ctx := newTestContext()
-	err := mgr.installFromPackageFile(ctx, archivePath, "", archivePath)
+	err := mgr.installFromPackageFile(ctx, archivePath, archivePath)
 	require.Error(t, err)
 	lowered := strings.ToLower(err.Error())
 	require.True(t,
