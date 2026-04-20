@@ -437,7 +437,7 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 	if DryRunJsonFlag(ctx.Flags()).IsAssigned() {
 		oc, ok := apiContext.(*OpenapiContext)
 		if !ok {
-			return fmt.Errorf("--dryrun-json is only supported for OpenAPI invoke path")
+			return fmt.Errorf("--cli-dry-run-json is only supported for OpenAPI invoke path")
 		}
 		line, err := marshalDryRunOpenapiMeta(ctx, oc)
 		if err != nil {

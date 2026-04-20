@@ -43,25 +43,25 @@ func AddFlags(fs *cli.FlagSet) {
 }
 
 const (
-	SecureFlagName      = "secure"
-	InsecureFlagName    = "insecure"
-	ForceFlagName       = "force"
-	VersionFlagName     = "version"
-	HeaderFlagName      = "header"
-	BodyFlagName        = "body"
-	BodyFileFlagName    = "body-file"
-	AcceptFlagName      = "accept"
-	RoaFlagName         = "roa"
-	DryRunFlagName      = "dryrun"
-	DryRunJsonFlagName  = "dryrun-json"
-	QuietFlagName       = "quiet"
-	YesFlagName         = "yes"
-	QueryFlagName       = "cli-query"
-	OutputFlagName      = "output"
-	MethodFlagName      = "method"
-	UserAgentFlagName   = "user-agent"
-	CliAIModeFlagName   = "cli-ai-mode"
-	CliNoAIModeFlagName = "no-cli-ai-mode"
+	SecureFlagName        = "secure"
+	InsecureFlagName      = "insecure"
+	ForceFlagName         = "force"
+	VersionFlagName       = "version"
+	HeaderFlagName        = "header"
+	BodyFlagName          = "body"
+	BodyFileFlagName      = "body-file"
+	AcceptFlagName        = "accept"
+	RoaFlagName           = "roa"
+	DryRunFlagName        = "dryrun"
+	CliDryRunJsonFlagName = "cli-dry-run-json"
+	QuietFlagName         = "quiet"
+	YesFlagName           = "yes"
+	QueryFlagName         = "cli-query"
+	OutputFlagName        = "output"
+	MethodFlagName        = "method"
+	UserAgentFlagName     = "user-agent"
+	CliAIModeFlagName     = "cli-ai-mode"
+	CliNoAIModeFlagName   = "no-cli-ai-mode"
 )
 
 func OutputFlag(fs *cli.FlagSet) *cli.Flag {
@@ -109,7 +109,7 @@ func DryRunFlag(fs *cli.FlagSet) *cli.Flag {
 }
 
 func DryRunJsonFlag(fs *cli.FlagSet) *cli.Flag {
-	return fs.Get(DryRunJsonFlagName)
+	return fs.Get(CliDryRunJsonFlagName)
 }
 
 func QuietFlag(fs *cli.FlagSet) *cli.Flag {
@@ -255,18 +255,19 @@ func NewDryRunFlag() *cli.Flag {
 			"add `--dryrun` to validate and print request without running.",
 			"使用 `--dryrun` 在执行校验后打印请求包体，跳过实际运行",
 		),
-		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, DryRunJsonFlagName},
+		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, CliDryRunJsonFlagName},
 	}
 }
 
 func NewDryRunJsonFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "caller",
-		Name:         DryRunJsonFlagName,
+		Name:         CliDryRunJsonFlagName,
 		AssignedMode: cli.AssignedNone,
+		Hidden:       true,
 		Short: i18n.T(
-			"add `--dryrun-json` to validate and print product/version/api/region/endpoint as JSON without running.",
-			"使用 `--dryrun-json` 在执行校验后输出包含 product、version、api、region、endpoint 的一行 JSON，跳过实际运行",
+			"add `--cli-dry-run-json` to validate and print product/version/api/region/endpoint as JSON without running.",
+			"使用 `--cli-dry-run-json` 在执行校验后输出包含 product、version、api、region、endpoint 的一行 JSON，跳过实际运行",
 		),
 		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, DryRunFlagName},
 	}
@@ -282,7 +283,7 @@ func NewQuietFlag() *cli.Flag {
 			"add `--quiet` to hide normal output",
 			"使用 `--quiet` 关闭正常输出",
 		),
-		ExcludeWith: []string{DryRunFlagName, DryRunJsonFlagName},
+		ExcludeWith: []string{DryRunFlagName, CliDryRunJsonFlagName},
 	}
 }
 

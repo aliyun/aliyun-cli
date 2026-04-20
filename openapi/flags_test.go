@@ -59,11 +59,13 @@ func TestAFlags(t *testing.T) {
 
 	dryrunflag := DryRunFlag(flagset)
 	assert.Equal(t, "dryrun", dryrunflag.Name)
+	assert.True(t, dryrunflag.Hidden)
 	assert.Equal(t, "add `--dryrun` to validate and print request without running.", dryrunflag.Short.Text())
 
 	dryrunJSONFlag := DryRunJsonFlag(flagset)
-	assert.Equal(t, "dryrun-json", dryrunJSONFlag.Name)
-	assert.Equal(t, "add `--dryrun-json` to validate and print product/version/api/region/endpoint as JSON without running.", dryrunJSONFlag.Short.Text())
+	assert.Equal(t, "cli-dry-run-json", dryrunJSONFlag.Name)
+	assert.True(t, dryrunJSONFlag.Hidden)
+	assert.Equal(t, "add `--cli-dry-run-json` to validate and print product/version/api/region/endpoint as JSON without running.", dryrunJSONFlag.Short.Text())
 
 	quietflag := QuietFlag(flagset)
 	assert.Equal(t, "quiet", quietflag.Name)
