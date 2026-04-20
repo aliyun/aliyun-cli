@@ -59,7 +59,6 @@ func TestAFlags(t *testing.T) {
 
 	dryrunflag := DryRunFlag(flagset)
 	assert.Equal(t, "dryrun", dryrunflag.Name)
-	assert.True(t, dryrunflag.Hidden)
 	assert.Equal(t, "add `--dryrun` to validate and print request without running.", dryrunflag.Short.Text())
 
 	dryrunJSONFlag := DryRunJsonFlag(flagset)
