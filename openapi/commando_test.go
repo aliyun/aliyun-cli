@@ -200,6 +200,11 @@ func Test_processInvoke(t *testing.T) {
 	assert.Nil(t, err)
 
 	DryRunFlag(ctx.Flags()).SetAssigned(false)
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+	err = command.processInvoke(ctx, productCode, apiOrMethod, path)
+	assert.Nil(t, err)
+
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(false)
 	PagerFlag.SetAssigned(true)
 	err = command.processInvoke(ctx, productCode, apiOrMethod, path)
 	assert.NotNil(t, err)

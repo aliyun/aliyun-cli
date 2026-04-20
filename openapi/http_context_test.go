@@ -40,6 +40,40 @@ func TestShouldUseOpenapi(t *testing.T) {
 	})
 }
 
+func TestBuildDryRunOpenapiMeta(t *testing.T) {
+	prof := &config.Profile{RegionId: "cn-hangzhou"}
+	sls := &meta.Product{Code: "sls", Version: "2020-03-31"}
+	api := &meta.Api{Name: "GetProject", Product: sls}
+	h := NewHttpContext(prof)
+	h.product = sls
+	h.openapiRequest = &openapiutil.OpenApiRequest{
+		Query:   map[string]*string{},
+		Headers: map[string]*string{},
+		HostMap: map[string]*string{},
+	}
+	o := &OpenapiContext{HttpContext: h, method: "GET", path: "/projects/foo", api: api}
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+
+	m := buildDryRunOpenapiMeta(ctx, o)
+	assert.Equal(t, "sls", m.Product)
+	assert.Equal(t, "2020-03-31", m.Version)
+	assert.Equal(t, "GetProject", m.API)
+	assert.Equal(t, "cn-hangzhou", m.Region)
+	assert.Equal(t, "cn-hangzhou.log.aliyuncs.com", m.Endpoint)
+
+	h2 := NewHttpContext(prof)
+	h2.product = sls
+	h2.openapiRequest = &openapiutil.OpenApiRequest{
+		EndpointOverride: tea.String("custom.log.aliyuncs.com"),
+		Query:            map[string]*string{},
+		Headers:          map[string]*string{},
+		HostMap:          map[string]*string{},
+	}
+	o2 := &OpenapiContext{HttpContext: h2, method: "GET", path: "/", api: api}
+	m2 := buildDryRunOpenapiMeta(ctx, o2)
+	assert.Equal(t, "custom.log.aliyuncs.com", m2.Endpoint)
+}
+
 func TestGetOpenapiClient(t *testing.T) {
 	t.Run("EmptyRegionId", func(t *testing.T) {
 		profile := &config.Profile{RegionId: ""}

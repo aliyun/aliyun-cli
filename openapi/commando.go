@@ -434,6 +434,19 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		return err
 	}
 
+	if DryRunJsonFlag(ctx.Flags()).IsAssigned() {
+		oc, ok := apiContext.(*OpenapiContext)
+		if !ok {
+			return fmt.Errorf("--dryrun-json is only supported for OpenAPI invoke path")
+		}
+		line, err := marshalDryRunOpenapiMeta(ctx, oc)
+		if err != nil {
+			return err
+		}
+		cli.Println(ctx.Stdout(), line)
+		return nil
+	}
+
 	err = hookHttpContextCall(apiContext.Call)()
 	if err != nil {
 		return err
@@ -484,6 +497,14 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		return err
 	}
 
+	if DryRunJsonFlag(ctx.Flags()).IsAssigned() {
+		line, err := marshalDryRunInvokeMeta(invoker)
+		if err != nil {
+			return err
+		}
+		cli.Println(ctx.Stdout(), line)
+		return nil
+	}
 	// process --dryrun
 	if DryRunFlag(ctx.Flags()).IsAssigned() {
 		invoker.getRequest().TransToAcsRequest()
@@ -555,6 +576,97 @@ func sortJSON(content string) string {
 		return content
 	}
 	return strings.TrimSuffix(buf.String(), "\n")
+}
+
+type dryRunInvokeMeta struct {
+	Product  string `json:"product"`
+	Version  string `json:"version"`
+	API      string `json:"api"`
+	Region   string `json:"region,omitempty"`
+	Endpoint string `json:"endpoint,omitempty"`
+}
+
+func effectiveDryRunRegion(ctx *cli.Context, profile *config.Profile) string {
+	if ctx != nil && ctx.Flags() != nil {
+		if v, ok := config.RegionFlag(ctx.Flags()).GetValue(); ok && v != "" {
+			return v
+		}
+		if v, ok := config.RegionIdFlag(ctx.Flags()).GetValue(); ok && v != "" {
+			return v
+		}
+	}
+	if profile != nil {
+		return profile.RegionId
+	}
+	return ""
+}
+
+func dryRunOpenapiEndpoint(ctx *cli.Context, o *OpenapiContext) string {
+	h := o.HttpContext
+	if h.openapiRequest != nil && h.openapiRequest.EndpointOverride != nil {
+		if v := *h.openapiRequest.EndpointOverride; v != "" {
+			return v
+		}
+	}
+	if h.profile != nil && h.profile.Endpoint != "" {
+		return h.profile.Endpoint
+	}
+	if h.product != nil && strings.ToLower(h.product.Code) == "sls" {
+		rid := effectiveDryRunRegion(ctx, h.profile)
+		if rid != "" {
+			return rid + ".log.aliyuncs.com"
+		}
+	}
+	return ""
+}
+
+func buildDryRunOpenapiMeta(ctx *cli.Context, o *OpenapiContext) dryRunInvokeMeta {
+	region := effectiveDryRunRegion(ctx, o.profile)
+	return dryRunInvokeMeta{
+		Product:  o.product.Code,
+		Version:  o.product.Version,
+		API:      o.api.Name,
+		Region:   region,
+		Endpoint: dryRunOpenapiEndpoint(ctx, o),
+	}
+}
+
+func marshalDryRunOpenapiMeta(ctx *cli.Context, o *OpenapiContext) (string, error) {
+	b, err := json.Marshal(buildDryRunOpenapiMeta(ctx, o))
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func buildDryRunInvokeMeta(inv Invoker) dryRunInvokeMeta {
+	req := inv.getRequest()
+	out := dryRunInvokeMeta{
+		Product:  req.Product,
+		Version:  req.Version,
+		Region:   req.RegionId,
+		API:      req.ApiName,
+		Endpoint: req.Domain,
+	}
+	if out.API != "" {
+		return out
+	}
+	if r, ok := inv.(*RestfulInvoker); ok {
+		if r.api != nil {
+			out.API = r.api.Name
+		} else {
+			out.API = strings.TrimSpace(r.method + " " + r.path)
+		}
+	}
+	return out
+}
+
+func marshalDryRunInvokeMeta(inv Invoker) (string, error) {
+	b, err := json.Marshal(buildDryRunInvokeMeta(inv))
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // invoke with helper
