@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -176,6 +177,110 @@ func LoadPolicy(configDir string) (*Policy, error) {
 	return &p, nil
 }
 
+const EnvSafetyPolicyEnabled = "ALIBABA_CLOUD_SAFETY_POLICY_ENABLED"
+
+// Comma-separated entries, each entry is pattern=action (first '=' separates pattern and action).
+// Example: *:Delete*=deny,ecs:Update*=confirm
+const EnvSafetyPolicyRules = "ALIBABA_CLOUD_SAFETY_POLICY_RULES"
+
+func actionFromEnvToken(s string) (Action, bool) {
+	a := Action(strings.ToLower(strings.TrimSpace(s)))
+	switch a {
+	case ActionAllow, ActionDeny, ActionConfirm, ActionForbid:
+		return a, true
+	default:
+		return "", false
+	}
+}
+
+func parseEnvRulesList(raw string) ([]Rule, bool) {
+	var out []Rule
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		pattern, actionStr, found := strings.Cut(part, "=")
+		if !found {
+			continue
+		}
+		pattern = strings.TrimSpace(pattern)
+		actionStr = strings.TrimSpace(actionStr)
+		if pattern == "" || actionStr == "" {
+			continue
+		}
+		act, ok := actionFromEnvToken(actionStr)
+		if !ok {
+			continue
+		}
+		out = append(out, Rule{Pattern: pattern, Action: act})
+	}
+	if len(out) == 0 {
+		return nil, false
+	}
+	return out, true
+}
+
+func copyPolicyRules(rules []Rule) []Rule {
+	if len(rules) == 0 {
+		return []Rule{}
+	}
+	return append([]Rule(nil), rules...)
+}
+
+func serializeRulesForEnv(rules []Rule) string {
+	if len(rules) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(rules))
+	for _, r := range rules {
+		pat := strings.TrimSpace(r.Pattern)
+		act := strings.ToLower(strings.TrimSpace(string(r.Action)))
+		if pat == "" || act == "" {
+			continue
+		}
+		parts = append(parts, pat+"="+act)
+	}
+	return strings.Join(parts, ",")
+}
+
+func MergePolicyFromEnv(base *Policy) *Policy {
+	if base == nil {
+		base = DefaultPolicy()
+	}
+
+	enabled := base.Enabled
+	if v, ok := os.LookupEnv(EnvSafetyPolicyEnabled); ok {
+		if parsed, err := strconv.ParseBool(strings.TrimSpace(v)); err == nil {
+			enabled = parsed
+		}
+	}
+
+	var rules []Rule
+	if raw0, ok := os.LookupEnv(EnvSafetyPolicyRules); ok {
+		raw := strings.TrimSpace(raw0)
+		if raw == "" {
+			rules = []Rule{}
+		} else if r, parsed := parseEnvRulesList(raw); parsed {
+			rules = r
+		} else {
+			rules = copyPolicyRules(base.Rules)
+		}
+	} else {
+		rules = copyPolicyRules(base.Rules)
+	}
+
+	return &Policy{Enabled: enabled, Rules: rules}
+}
+
+func LoadEffectivePolicy(configDir string) (*Policy, error) {
+	p, err := LoadPolicy(configDir)
+	if err != nil {
+		return nil, err
+	}
+	return MergePolicyFromEnv(p), nil
+}
+
 const EnvSafetyPolicyFile = "ALIBABA_CLOUD_CLI_SAFETY_POLICY_FILE"
 
 func MergeSafetyPolicyPathIntoEnvs(configDir string, envs map[string]string) {
@@ -187,6 +292,13 @@ func MergeSafetyPolicyPathIntoEnvs(configDir string, envs map[string]string) {
 		p = abs
 	}
 	envs[EnvSafetyPolicyFile] = p
+
+	ef, err := LoadEffectivePolicy(configDir)
+	if err != nil {
+		return
+	}
+	envs[EnvSafetyPolicyEnabled] = strconv.FormatBool(ef.Enabled)
+	envs[EnvSafetyPolicyRules] = serializeRulesForEnv(ef.Rules)
 }
 
 func SavePolicy(configDir string, policy *Policy) error {
