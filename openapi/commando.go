@@ -998,7 +998,7 @@ func (c *Commando) handleInstallError(ctx *cli.Context, err error, pluginName st
 
 func (c *Commando) checkSafetyPolicy(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
 	configDir := config.GetConfigDir(ctx)
-	policy, err := safety.LoadPolicy(configDir)
+	policy, err := safety.LoadEffectivePolicy(configDir)
 	if err != nil {
 		// Failed to load - skip policy check (fail open)
 		return nil
