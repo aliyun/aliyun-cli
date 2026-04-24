@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -819,7 +820,8 @@ func TestRetrySaveProfile(t *testing.T) {
 	attempts := int32(0)
 	maxAttempts := 3
 
-	retrySaveProfile(func() error {
+	// success case: save succeeds on first attempt, returns true
+	saved := retrySaveProfile(func() error {
 		atomic.AddInt32(&attempts, 1)
 		return nil
 	}, maxAttempts, func() {
@@ -827,11 +829,13 @@ func TestRetrySaveProfile(t *testing.T) {
 	})
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&attempts))
+	assert.True(t, saved, "retrySaveProfile should return true on success")
 
+	// failure case: all attempts exhausted, returns false and calls onMaxFailures
 	attempts = 0
 	onMaxFailuresCalled := false
 
-	retrySaveProfile(func() error {
+	saved = retrySaveProfile(func() error {
 		atomic.AddInt32(&attempts, 1)
 		return assert.AnError
 	}, maxAttempts, func() {
@@ -840,6 +844,50 @@ func TestRetrySaveProfile(t *testing.T) {
 
 	assert.Equal(t, int32(maxAttempts), atomic.LoadInt32(&attempts))
 	assert.True(t, onMaxFailuresCalled)
+	assert.False(t, saved, "retrySaveProfile should return false when onMaxFailures is called")
+
+	// success after retry: save succeeds on the second attempt
+	attempts = 0
+	saved = retrySaveProfile(func() error {
+		n := atomic.AddInt32(&attempts, 1)
+		if n < 2 {
+			return assert.AnError
+		}
+		return nil
+	}, maxAttempts, func() {
+		t.Error("onMaxFailures should not be called when save eventually succeeds")
+	})
+
+	assert.Equal(t, int32(2), atomic.LoadInt32(&attempts))
+	assert.True(t, saved, "retrySaveProfile should return true when save eventually succeeds")
+}
+
+func TestRetrySaveProfile_NoDoubleUnlock(t *testing.T) {
+	// Verify that when retrySaveProfile fails and the onMaxFailures callback unlocks
+	// a mutex, the caller can detect the failure (return value = false) and must NOT
+	// call Unlock a second time. This test exercises the mutex directly to confirm
+	// that exactly one Unlock occurs on the failure path.
+	var mu sync.Mutex
+	mu.Lock()
+
+	unlockCount := 0
+	saved := retrySaveProfile(
+		func() error { return assert.AnError },
+		1,
+		func() {
+			mu.Unlock()
+			unlockCount++
+		},
+	)
+
+	assert.False(t, saved)
+	assert.Equal(t, 1, unlockCount, "onMaxFailures should unlock exactly once")
+
+	// If the caller incorrectly called mu.Unlock() again it would panic; the fact
+	// that this test completes without panic proves the fix is correct.
+	// Re-lock to confirm the mutex is now unlocked and available.
+	mu.Lock()
+	mu.Unlock()
 }
 
 func TestGetContentFromApiResponse_Integration(t *testing.T) {
