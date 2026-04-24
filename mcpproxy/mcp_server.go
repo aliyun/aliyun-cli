@@ -1010,7 +1010,7 @@ func (r *TokenRefresher) refreshAccessToken() error {
 	r.profile.MCPOAuthAccessTokenExpire = currentTime + newTokens.ExpiresIn
 	r.refreshing = false
 
-	retrySaveProfile(
+	if !retrySaveProfile(
 		r.atomicSaveProfile,
 		MaxSaveFailures,
 		func() {
@@ -1018,7 +1018,9 @@ func (r *TokenRefresher) refreshAccessToken() error {
 			r.reportFatalError(fmt.Errorf("critical: failed to save refreshed tokens after %d attempts. "+
 				"Please re-login with: aliyun configure and run 'aliyun mcp-proxy' again", MaxSaveFailures))
 		},
-	)
+	) {
+		return fmt.Errorf("critical: failed to save refreshed tokens after %d attempts", MaxSaveFailures)
+	}
 	r.mu.Unlock()
 
 	log.Println("Access token refresh process completed successfully")
@@ -1134,15 +1136,20 @@ func (r *TokenRefresher) reportFatalError(err error) {
 	}
 }
 
-func retrySaveProfile(saveFn func() error, maxAttempts int, onMaxFailures func()) {
+// retrySaveProfile tries to save the profile up to maxAttempts times.
+// Returns true if the profile was saved successfully, false if all attempts
+// failed and onMaxFailures was called.
+func retrySaveProfile(saveFn func() error, maxAttempts int, onMaxFailures func()) bool {
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		if err := saveFn(); err == nil {
-			return
+			return true
 		}
 		if attempt == maxAttempts {
 			onMaxFailures()
+			return false
 		}
 	}
+	return true
 }
 
 func (r *TokenRefresher) reauthorizeWithProxy() error {
@@ -1193,7 +1200,7 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 	r.profile.MCPOAuthRefreshTokenExpire = currentTime + int64(refreshTokenValidity)
 	r.reauthorizing = false
 
-	retrySaveProfile(
+	if !retrySaveProfile(
 		r.atomicSaveProfile,
 		MaxSaveFailures,
 		func() {
@@ -1201,7 +1208,9 @@ func (r *TokenRefresher) reauthorizeWithProxy() error {
 			r.reportFatalError(fmt.Errorf("critical: failed to save reauthorized tokens after %d attempts. "+
 				"Please re-login with: aliyun configure and run 'aliyun mcp-proxy' again", MaxSaveFailures))
 		},
-	)
+	) {
+		return fmt.Errorf("critical: failed to save reauthorized tokens after %d attempts", MaxSaveFailures)
+	}
 	r.mu.Unlock()
 	log.Println("OAuth re-authorization process completed successfully")
 
