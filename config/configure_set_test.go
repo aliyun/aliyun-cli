@@ -263,6 +263,49 @@ func TestDoConfigureSetWithMock(t *testing.T) {
 	assert.Empty(t, stdout.String())
 }
 
+func TestDoConfigureSet_ExternalAccountType(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
+
+	originhook := hookLoadOrCreateConfiguration
+	originhookSave := hookSaveConfigurationWithContext
+	defer func() {
+		hookLoadOrCreateConfiguration = originhook
+		hookSaveConfigurationWithContext = originhookSave
+	}()
+
+	var savedProfile Profile
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
+			p, _ := config.GetProfile(config.CurrentProfile)
+			savedProfile = p
+			return nil
+		}
+	}
+
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{Name: "default", RegionId: "cn-hangzhou", Mode: AK, AccessKeyId: "ak", AccessKeySecret: "sk"},
+				},
+			}, nil
+		}
+	}
+
+	flag := ExternalAccountTypeFlag(ctx.Flags())
+	assert.NotNil(t, flag)
+	flag.SetAssigned(true)
+	flag.SetValue("buc")
+
+	err := doConfigureSet(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "buc", savedProfile.ExternalAccountType)
+}
+
 func TestDoConfigureSet_AutoPluginInstall(t *testing.T) {
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)

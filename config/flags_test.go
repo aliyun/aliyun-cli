@@ -464,6 +464,8 @@ func TestAddFlags(t *testing.T) {
 	assert.NotNil(t, flagSet.Get(EndpointTypeFlagName))
 	// 结果包含EndpointFlagName
 	assert.NotNil(t, flagSet.Get(EndpointFlagName))
+	// 结果包含ExternalAccountTypeFlagName
+	assert.NotNil(t, flagSet.Get(ExternalAccountTypeFlagName))
 }
 
 func TestNewEndpointTypeFlag(t *testing.T) {
@@ -497,4 +499,20 @@ func TestEndpointFlag(t *testing.T) {
 	flag := EndpointFlag(flagSet)
 	assert.NotNil(t, flag)
 	assert.Equal(t, EndpointFlagName, flag.Name)
+}
+
+func TestNewExternalAccountTypeFlag(t *testing.T) {
+	var a = NewExternalAccountTypeFlag()
+	assert.Equal(t, ExternalAccountTypeFlagName, a.Name)
+	assert.Equal(t, "config", a.Category)
+	assert.False(t, a.Persistent)
+	assert.Equal(t, cli.AssignedOnce, a.AssignedMode)
+}
+
+func TestExternalAccountTypeFlag(t *testing.T) {
+	flagSet := cli.NewFlagSet()
+	AddFlags(flagSet)
+	flag := ExternalAccountTypeFlag(flagSet)
+	assert.NotNil(t, flag)
+	assert.Equal(t, ExternalAccountTypeFlagName, flag.Name)
 }

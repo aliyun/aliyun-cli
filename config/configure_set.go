@@ -129,6 +129,7 @@ func doConfigureSet(ctx *cli.Context) error {
 	profile.StsRegion = StsRegionFlag(flags).GetStringOrDefault(profile.StsRegion)
 	profile.EndpointType = EndpointTypeFlag(flags).GetStringOrDefault(profile.EndpointType)
 	profile.Endpoint = EndpointFlag(flags).GetStringOrDefault(profile.Endpoint)
+	profile.ExternalAccountType = ExternalAccountTypeFlag(flags).GetStringOrDefault(profile.ExternalAccountType)
 
 	if autoPluginInstallFlag := AutoPluginInstallFlag(flags); autoPluginInstallFlag != nil && autoPluginInstallFlag.IsAssigned() {
 		if val, ok := autoPluginInstallFlag.GetValue(); ok {

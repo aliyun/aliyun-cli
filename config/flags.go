@@ -51,6 +51,7 @@ const (
 	OAuthSiteTypeName                  = "oauth-site-type"
 	EndpointTypeFlagName               = "endpoint-type"
 	EndpointFlagName                   = "endpoint"
+	ExternalAccountTypeFlagName        = "external-account-type"
 	AutoPluginInstallFlagName          = "auto-plugin-install"
 	AutoPluginInstallEnablePreFlagName = "auto-plugin-install-enable-pre"
 )
@@ -87,6 +88,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewOAuthSiteTypeFlag())
 	fs.Add(NewEndpointTypeFlag())
 	fs.Add(NewEndpointFlag())
+	fs.Add(NewExternalAccountTypeFlag())
 	fs.Add(NewAutoPluginInstallFlag())
 	fs.Add(NewAutoPluginInstallEnablePreFlag())
 }
@@ -568,6 +570,21 @@ func NewEndpointTypeFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--endpoint-type` to specify the endpoint type, support vpc or empty (default public)",
 			"使用 `--endpoint-type` 指定 endpoint 类型, 支持 vpc 或空值(默认公网)"),
+	}
+}
+
+func ExternalAccountTypeFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(ExternalAccountTypeFlagName)
+}
+
+func NewExternalAccountTypeFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         ExternalAccountTypeFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--external-account-type <type>` to assign external account type",
+			"使用 `--external-account-type <type>` 来指定外部账号类型"),
 	}
 }
 
