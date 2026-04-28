@@ -99,6 +99,7 @@ type Profile struct {
 	OAuthSiteType              string           `json:"oauth_site_type,omitempty"` // CN or INTL
 	EndpointType               string           `json:"endpoint_type,omitempty"`   // vpc or empty (default public)
 	Endpoint                   string           `json:"endpoint,omitempty"`
+	ExternalAccountType        string           `json:"external_account_type,omitempty"`
 	AutoPluginInstall          bool             `json:"auto_plugin_install,omitempty"`            // automatically install plugins when not found
 	AutoPluginInstallEnablePre bool             `json:"auto_plugin_install_enable_pre,omitempty"` // install latest version (including pre-release) when true
 	parent                     *Configuration   //`json:"-"`
@@ -231,6 +232,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.CloudSSOAccountId = CloudSSOAccountIdFlag(ctx.Flags()).GetStringOrDefault(cp.CloudSSOAccountId)
 	cp.EndpointType = EndpointTypeFlag(ctx.Flags()).GetStringOrDefault(cp.EndpointType)
 	cp.Endpoint = EndpointFlag(ctx.Flags()).GetStringOrDefault(cp.Endpoint)
+	cp.ExternalAccountType = ExternalAccountTypeFlag(ctx.Flags()).GetStringOrDefault(cp.ExternalAccountType)
 
 	if cp.AccessKeyId == "" {
 		cp.AccessKeyId = util.GetFromEnv("ALIBABA_CLOUD_ACCESS_KEY_ID", "ALIBABACLOUD_ACCESS_KEY_ID", "ALICLOUD_ACCESS_KEY_ID", "ACCESS_KEY_ID")
@@ -254,6 +256,10 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 
 	if cp.Endpoint == "" {
 		cp.Endpoint = util.GetFromEnv("ALIBABA_CLOUD_ENDPOINT")
+	}
+
+	if cp.ExternalAccountType == "" {
+		cp.ExternalAccountType = util.GetFromEnv("ALIBABA_CLOUD_EXTERNAL_ACCOUNT_TYPE")
 	}
 
 	if cp.CredentialsURI == "" {
@@ -686,6 +692,9 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 	}
 	if cp.Endpoint != "" {
 		envs["ALIBABA_CLOUD_ENDPOINT"] = cp.Endpoint
+	}
+	if cp.ExternalAccountType != "" {
+		envs["ALIBABA_CLOUD_EXTERNAL_ACCOUNT_TYPE"] = cp.ExternalAccountType
 	}
 	if cp.ReadTimeout > 0 {
 		envs["ALIBABA_CLOUD_READ_TIMEOUT"] = strconv.Itoa(cp.ReadTimeout)
