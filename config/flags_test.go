@@ -505,7 +505,7 @@ func TestNewExternalAccountTypeFlag(t *testing.T) {
 	var a = NewExternalAccountTypeFlag()
 	assert.Equal(t, ExternalAccountTypeFlagName, a.Name)
 	assert.Equal(t, "config", a.Category)
-	assert.True(t, a.Persistent)
+	assert.False(t, a.Persistent)
 	assert.Equal(t, cli.AssignedOnce, a.AssignedMode)
 }
 
