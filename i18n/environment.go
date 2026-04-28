@@ -38,7 +38,12 @@ func getLanguageFromEnv() string {
 var language = getLanguageFromEnv()
 
 func SetLanguage(lang string) {
-	language = lang
+	switch lang {
+	case string(Zh), string(En):
+		language = lang
+	default:
+		language = getLanguageFromEnv()
+	}
 }
 
 func GetLanguage() string {
