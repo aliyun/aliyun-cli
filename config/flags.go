@@ -582,7 +582,6 @@ func NewExternalAccountTypeFlag() *cli.Flag {
 		Category:     "config",
 		Name:         ExternalAccountTypeFlagName,
 		AssignedMode: cli.AssignedOnce,
-		Persistent:   true,
 		Short: i18n.T(
 			"use `--external-account-type <type>` to assign external account type",
 			"使用 `--external-account-type <type>` 来指定外部账号类型"),
