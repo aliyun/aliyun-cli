@@ -37,7 +37,7 @@ func (a *Text) Text() string {
 func (a *Text) Get(lang string) string {
 	s, ok := a.dic[lang]
 	if !ok {
-		return ""
+		return a.dic[string(En)]
 	}
 	return s
 }

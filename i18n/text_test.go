@@ -24,7 +24,7 @@ func TestGet(t *testing.T) {
 	tx := T("hello", "你好")
 	assert.Equal(t, "hello", tx.Get("en"))
 	assert.Equal(t, "你好", tx.Get("zh"))
-	assert.Equal(t, "", tx.Get("jp"))
+	assert.Equal(t, "hello", tx.Get("jp"))
 }
 
 func TestText(t *testing.T) {
@@ -97,7 +97,7 @@ func TestText_GetMessage(t *testing.T) {
 
 	// 测试不支持的语言
 	mockGetLanguage("fr")
-	if msg := text.GetMessage(); msg != "" {
-		t.Errorf("Expected unsupported language message to be empty, got %q", msg)
+	if msg := text.GetMessage(); msg != testEn {
+		t.Errorf("Expected unsupported language message to fallback to English %q, got %q", testEn, msg)
 	}
 }

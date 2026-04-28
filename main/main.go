@@ -21,9 +21,11 @@ import (
 	"path"
 	"strings"
 
+	"github.com/aliyun/aliyun-cli/v3/agentbay"
 	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
+	"github.com/aliyun/aliyun-cli/v3/cli/upgrade"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -32,7 +34,6 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 	"github.com/aliyun/aliyun-cli/v3/ossutil"
 	"github.com/aliyun/aliyun-cli/v3/otsutil"
-	"github.com/aliyun/aliyun-cli/v3/cli/upgrade"
 )
 
 func Main(args []string) {
@@ -85,6 +86,8 @@ func Main(args []string) {
 	rootCmd.AddSubCommand(go_migrate.NewGoMigrateCommand())
 	// new oss command
 	rootCmd.AddSubCommand(ossutil.NewOssutilCommand())
+	// AgentBay command
+	rootCmd.AddSubCommand(agentbay.NewAgentBayCommand())
 	// tablestore command
 	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
 	// plugin command
