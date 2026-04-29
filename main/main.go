@@ -17,6 +17,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"strings"
@@ -30,15 +31,36 @@ import (
 	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
+	"github.com/aliyun/aliyun-cli/v3/mock"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 	"github.com/aliyun/aliyun-cli/v3/ossutil"
 	"github.com/aliyun/aliyun-cli/v3/otsutil"
+	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
+)
+
+var (
+	newStdoutWriter = cli.DefaultStdoutWriter
+	newStderrWriter = cli.DefaultStderrWriter
+	exit            = cli.Exit
 )
 
 func Main(args []string) {
-	stdout := cli.DefaultStdoutWriter()
-	stderr := cli.DefaultStderrWriter()
+	stdout := newStdoutWriter()
+	stderr := newStderrWriter()
+
+	if sysmock.FirstCommandToken(args) != "mock" {
+		result := sysmock.Intercept(sysmock.Options{
+			Args:     args,
+			Stdout:   stdout,
+			Stderr:   stderr,
+			MockPath: sysmock.ResolvePath(config.GetConfigPath),
+		})
+		if result.Handled {
+			exit(result.ExitCode)
+			return
+		}
+	}
 
 	// load current configuration
 	profile, err := config.LoadOrCreateDefaultProfile()
@@ -50,6 +72,24 @@ func Main(args []string) {
 	// set language with current profile
 	i18n.SetLanguage(profile.Language)
 
+	rootCmd := newRootCommand(profile, stdout)
+
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(rootCmd)
+	ctx.SetCompletion(cli.ParseCompletionForShell())
+	ctx.SetInConfigureMode(openapi.DetectInConfigureMode(ctx.Flags()))
+	// use http force, current use in oss bridge
+	insecure, _ := ParseInSecure(args)
+	ctx.SetInsecure(insecure)
+
+	if os.Getenv("GENERATE_METADATA") == "YES" {
+		generateMetadata(rootCmd)
+	} else {
+		rootCmd.Execute(ctx, args)
+	}
+}
+
+func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	// create root command
 	rootCmd := &cli.Command{
 		Name:              "aliyun",
@@ -66,14 +106,6 @@ func Main(args []string) {
 	// new open api commando to process rootCmd
 	commando := openapi.NewCommando(stdout, profile)
 	commando.InitWithCommand(rootCmd)
-
-	ctx := cli.NewCommandContext(stdout, stderr)
-	ctx.EnterCommand(rootCmd)
-	ctx.SetCompletion(cli.ParseCompletionForShell())
-	ctx.SetInConfigureMode(openapi.DetectInConfigureMode(ctx.Flags()))
-	// use http force, current use in oss bridge
-	insecure, _ := ParseInSecure(args)
-	ctx.SetInsecure(insecure)
 
 	rootCmd.AddSubCommand(config.NewConfigureCommand())
 	// oss old version, duplicate with ossutil, will remove in future
@@ -94,11 +126,10 @@ func Main(args []string) {
 	rootCmd.AddSubCommand(plugin.NewPluginCommand())
 	// upgrade command
 	rootCmd.AddSubCommand(upgrade.NewUpgradeCommand())
-	if os.Getenv("GENERATE_METADATA") == "YES" {
-		generateMetadata(rootCmd)
-	} else {
-		rootCmd.Execute(ctx, args)
-	}
+	// mock command
+	rootCmd.AddSubCommand(mock.NewMockCommand(config.GetConfigPath))
+
+	return rootCmd
 }
 
 func ParseInSecure(args []string) (bool, interface{}) {
