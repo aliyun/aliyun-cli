@@ -723,7 +723,7 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 		ua := GetAliyunCliUserAgent()
 
 		assert.Contains(t, ua, "Aliyun-CLI/")
-		assert.Contains(t, ua, "agent/cursor")
+		assert.Contains(t, ua, "Agent/cursor")
 	})
 
 	t.Run("agent segment placed between vendor and custom UA", func(t *testing.T) {
@@ -735,9 +735,9 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 		ua := GetAliyunCliUserAgent()
 
 		idxVendor := strings.Index(ua, "vendor/")
-		idxAgent := strings.Index(ua, "agent/")
+		idxAgent := strings.Index(ua, "Agent/")
 		idxSkill := strings.Index(ua, "skill/")
 		assert.True(t, idxVendor >= 0 && idxAgent > idxVendor && idxSkill > idxAgent,
-			"顺序应为 vendor/ → agent/ → skill/，实际：%s", ua)
+			"顺序应为 vendor/ → Agent/ → skill/，实际：%s", ua)
 	})
 }
