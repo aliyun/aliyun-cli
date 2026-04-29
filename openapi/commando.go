@@ -25,6 +25,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
+	"github.com/aliyun/aliyun-cli/v3/util"
 
 	"encoding/json"
 	"fmt"
@@ -301,6 +302,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					configDir := config.GetConfigDir(ctx)
 					forceOn, forceOff := CliAIOverrides(ctx.Flags())
 					aimode.MergeUserAgentIntoPluginEnvs(configDir, envs, forceOn, forceOff)
+					util.MergeAgentSegmentIntoPluginEnvs(envs)
 					safety.MergeSafetyPolicyPathIntoEnvs(configDir, envs)
 					ctx.SetRuntimeEnvs(envs)
 				}
