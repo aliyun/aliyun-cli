@@ -25,3 +25,4 @@ coverage/
 integration/*.txt
 cli-metadata/
 __debug_bin*
+docs/superpowers/
