@@ -318,6 +318,21 @@ func isDevVersion(version string) bool {
 	return strings.Contains(lowerVersion, "-dev") || strings.Contains(lowerVersion, "dev")
 }
 
+// cliSelfUpgradeMinVersion 是 `aliyun upgrade` 子命令首次可用的 CLI 版本。
+// 低于该版本的 CLI 不存在自升级能力，需要回退到 brew/官方下载页面提示。
+const cliSelfUpgradeMinVersion = "3.3.5"
+
+// 当 currentVersion >= 3.3.5 时优先推荐 `aliyun upgrade` 一键升级，
+// 否则保留原 brew / GitHub Releases 的兜底说明。
+func buildCliUpgradeTip(currentVersion string) string {
+	if !isDevVersion(currentVersion) && compareVersion(currentVersion, cliSelfUpgradeMinVersion) >= 0 {
+		return "Please upgrade the CLI by running: aliyun upgrade\n" +
+			"Or download the latest version from: https://github.com/aliyun/aliyun-cli/releases"
+	}
+	return "Please upgrade the CLI by running: brew upgrade aliyun-cli\n" +
+		"Or download the latest version from: https://github.com/aliyun/aliyun-cli/releases"
+}
+
 // Returns: 1 if v1 > v2, -1 if v1 < v2, 0 if v1 == v2
 func compareVersion(v1, v2 string) int {
 	// Ensure versions have 'v' prefix for semver library
@@ -461,13 +476,12 @@ func (m *Manager) validateVersionAndPlatform(ctx *cli.Context, targetPlugin *Plu
 				verInfo.Metadata.MinCliVersion)
 		} else if compareVersion(currentVersion, verInfo.Metadata.MinCliVersion) < 0 {
 			return nil, fmt.Errorf(
-				"plugin %s version %s requires CLI version %s or higher, but you have %s\n"+
-					"Please upgrade the CLI by running: brew upgrade aliyun-cli\n"+
-					"Or download the latest version from: https://github.com/aliyun/aliyun-cli/releases",
+				"plugin %s version %s requires CLI version %s or higher, but you have %s\n%s",
 				actualPluginName,
 				version,
 				verInfo.Metadata.MinCliVersion,
 				currentVersion,
+				buildCliUpgradeTip(currentVersion),
 			)
 		}
 	}
