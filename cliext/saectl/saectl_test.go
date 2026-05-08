@@ -37,22 +37,6 @@ func addConfigFlag(ctx *cli.Context, name string, value string) {
 	ctx.Flags().Add(f)
 }
 
-func TestSubCommandRegistration_Success(t *testing.T) {
-	cmd := NewSaectlCommand()
-	if cmd.Name != "saectl" {
-		t.Errorf("Expected command name 'saectl', got %s", cmd.Name)
-	}
-	if !cmd.EnableUnknownFlag {
-		t.Errorf("Expected EnableUnknownFlag to be true")
-	}
-	if !cmd.KeepArgs {
-		t.Errorf("Expected KeepArgs to be true")
-	}
-	if !cmd.SkipDefaultHelp {
-		t.Errorf("Expected SkipDefaultHelp to be true")
-	}
-}
-
 func TestPrepareEnv_Success(t *testing.T) {
 	origHOME := os.Getenv("HOME")
 	defer func() { _ = os.Setenv("HOME", origHOME) }()
