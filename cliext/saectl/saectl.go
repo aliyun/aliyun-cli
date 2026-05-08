@@ -52,7 +52,6 @@ var (
 	runtimeGOARCHFunc          = func() string { return runtime.GOARCH }
 )
 
-// TODO: 占位符，待确认下载基地址
 var saectlBaseUrl = "https://sae-component-software.oss-cn-hangzhou.aliyuncs.com/saectl/"
 
 var VersionCheckTTL = 86400 // 1 day, in seconds
