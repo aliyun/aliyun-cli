@@ -4,8 +4,6 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"compress/gzip"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,7 +18,6 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
-	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -453,16 +450,7 @@ func (c *Context) UpdateCheckCacheTime() error {
 	return nil
 }
 
-func EncodeMapBase64(m map[string]any) (string, error) {
-	b, err := json.Marshal(m)
-	if err != nil {
-		return "", fmt.Errorf("json marshal failed: %w", err)
-	}
-	return base64.StdEncoding.EncodeToString(b), nil
-}
-
 func (c *Context) PrepareEnv() error {
-	envMap := make(map[string]any)
 	profile, err := config.LoadProfileWithContext(c.originCtx)
 	if err != nil {
 		return fmt.Errorf("config failed: %s", err.Error())
@@ -506,28 +494,16 @@ func (c *Context) PrepareEnv() error {
 		}
 	}
 
-	envMap["access_key_id"] = accessKeyId
-	envMap["access_key_secret"] = accessKeySecret
-	if stsToken != "" {
-		envMap["sts_token"] = stsToken
-	}
-
-	if profile.RegionId != "" {
-		envMap["region"] = profile.RegionId
-	}
-	
-	configDir := config.GetConfigDir(c.originCtx)
-	forceOn, forceOff := openapi.CliAIOverrides(c.originCtx.Flags())
-	aimode.MergeAiModeIntoOssutilPayload(configDir, envMap, forceOn, forceOff)
-
-	base64Result, err := EncodeMapBase64(envMap)
-	if err != nil {
-		return fmt.Errorf("failed to encode env map to base64: %v", err)
-	}
-	
 	envMapNew := make(map[string]string)
-	envMapNew["SAECTL_COMPAT_MODE"] = "alicli"
-	envMapNew["SAECTL_CONFIG_VALUE"] = base64Result
+	if accessKeyId != "" {
+		envMapNew["ALICLOUD_ACCESS_KEY"] = accessKeyId
+	}
+	if accessKeySecret != "" {
+		envMapNew["ALICLOUD_SECRET_KEY"] = accessKeySecret
+	}
+	if profile.RegionId != "" {
+		envMapNew["ALICLOUD_REGION"] = profile.RegionId
+	}
 
 	c.envMap = envMapNew
 	return nil

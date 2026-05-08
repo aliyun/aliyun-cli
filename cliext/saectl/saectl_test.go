@@ -2,8 +2,6 @@ package saectl
 
 import (
 	"bytes"
-	"encoding/base64"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,34 +49,14 @@ func TestPrepareEnv_Success(t *testing.T) {
 		t.Fatalf("PrepareEnv err: %v", err)
 	}
 	
-	if c.envMap["SAECTL_COMPAT_MODE"] != "alicli" {
-		t.Fatalf("SAECTL_COMPAT_MODE missing")
+	if c.envMap["ALICLOUD_REGION"] != "cn-hangzhou" {
+		t.Fatalf("region mismatch: %v", c.envMap["ALICLOUD_REGION"])
 	}
-	
-	val, ok := c.envMap["SAECTL_CONFIG_VALUE"]
-	if !ok {
-		t.Fatalf("SAECTL_CONFIG_VALUE missing")
+	if c.envMap["ALICLOUD_ACCESS_KEY"] != "ak" {
+		t.Fatalf("ak mismatch: %v", c.envMap["ALICLOUD_ACCESS_KEY"])
 	}
-	
-	dec, err := base64.StdEncoding.DecodeString(val)
-	if err != nil {
-		t.Fatalf("base64 decode err: %v", err)
-	}
-	
-	var config map[string]any
-	err = json.Unmarshal(dec, &config)
-	if err != nil {
-		t.Fatalf("json unmarshal err: %v", err)
-	}
-	
-	if config["region"] != "cn-hangzhou" {
-		t.Fatalf("region mismatch: %v", config["region"])
-	}
-	if config["access_key_id"] != "ak" {
-		t.Fatalf("ak mismatch: %v", config["access_key_id"])
-	}
-	if config["access_key_secret"] != "sk" {
-		t.Fatalf("sk mismatch: %v", config["access_key_secret"])
+	if c.envMap["ALICLOUD_SECRET_KEY"] != "sk" {
+		t.Fatalf("sk mismatch: %v", c.envMap["ALICLOUD_SECRET_KEY"])
 	}
 }
 

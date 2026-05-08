@@ -128,6 +128,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(saectl.NewSaectlCommand())
 	// appmanager command
 	rootCmd.AddSubCommand(appmanagerutil.NewAppManagerCommand())
+	// sae command
+	rootCmd.AddSubCommand(saectl.NewSaectlCommand())
 	// plugin command
 	rootCmd.AddSubCommand(plugin.NewPluginCommand())
 	// upgrade command
