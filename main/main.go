@@ -36,6 +36,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 	"github.com/aliyun/aliyun-cli/v3/ossutil"
 	"github.com/aliyun/aliyun-cli/v3/otsutil"
+	"github.com/aliyun/aliyun-cli/v3/saectl"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 )
 
@@ -122,6 +123,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(agentbay.NewAgentBayCommand())
 	// tablestore command
 	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
+	// sae command
+	rootCmd.AddSubCommand(saectl.NewSaectlCommand())
 	// plugin command
 	rootCmd.AddSubCommand(plugin.NewPluginCommand())
 	// upgrade command
