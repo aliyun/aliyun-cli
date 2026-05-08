@@ -503,7 +503,9 @@ func (c *Context) PrepareEnv() error {
 	if profile.RegionId != "" {
 		envMapNew["ALICLOUD_REGION"] = profile.RegionId
 	}
-
+	if stsToken != "" {
+		envMapNew["ALICLOUD_STS_TOKEN"] = stsToken
+	}
 	c.envMap = envMapNew
 	return nil
 }
