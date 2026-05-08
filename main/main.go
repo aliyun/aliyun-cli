@@ -37,6 +37,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/ossutil"
 	"github.com/aliyun/aliyun-cli/v3/otsutil"
 	"github.com/aliyun/aliyun-cli/v3/saectl"
+	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 )
 
@@ -125,6 +126,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
 	// sae command
 	rootCmd.AddSubCommand(saectl.NewSaectlCommand())
+	// appmanager command
+	rootCmd.AddSubCommand(appmanagerutil.NewAppManagerCommand())
 	// plugin command
 	rootCmd.AddSubCommand(plugin.NewPluginCommand())
 	// upgrade command
