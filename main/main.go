@@ -36,7 +36,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 	"github.com/aliyun/aliyun-cli/v3/ossutil"
 	"github.com/aliyun/aliyun-cli/v3/otsutil"
-	"github.com/aliyun/aliyun-cli/v3/saectl"
+	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
 	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 )
