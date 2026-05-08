@@ -158,7 +158,11 @@ func TestRun_NotInstalled_FreshInstallAndExecute(t *testing.T) {
 		return nil
 	}
 	execCommandFunc = func(name string, args ...string) *exec.Cmd {
-		return exec.Command("bash", "-c", "exit 0")
+		// 跨平台的 mock 实现，不依赖 bash
+		if runtime.GOOS == "windows" {
+			return exec.Command("cmd", "/c", "exit 0")
+		}
+		return exec.Command("true")
 	}
 	t.Cleanup(func() {
 		downloadBinaryFunc = origDownload
@@ -196,7 +200,7 @@ func TestRun_Installed_SkipDownload(t *testing.T) {
 	origExec := execCommandFunc
 	installCount := 0
 	downloadBinaryFunc = func(url, exe string) error { installCount++; return nil }
-	execCommandFunc = func(name string, args ...string) *exec.Cmd { return exec.Command("bash", "-c", "exit 0") }
+	execCommandFunc = func(name string, args ...string) *exec.Cmd { return exec.Command("true") }
 	t.Cleanup(func() {
 		downloadBinaryFunc = origDownload
 		execCommandFunc = origExec
@@ -290,6 +294,12 @@ func TestDownloadBinary(t *testing.T) {
 	}
 	defer func() { httpGetFunc = oldHTTPGet }()
 
+	// 临时替换 httpClient 为测试服务器
+	oldClient := httpClient
+	httpClient = server.Client()
+	httpClient.Transport = server.Client().Transport
+	defer func() { httpClient = oldClient }()
+
 	tmpDir := t.TempDir()
 	execPath := filepath.Join(tmpDir, "acr-skill")
 
@@ -312,24 +322,27 @@ func TestDownloadBinary(t *testing.T) {
 }
 
 func TestDownloadBinary_ErrorStatus(t *testing.T) {
-	origHTTP := httpGetFunc
-	httpGetFunc = func(url string) (*http.Response, error) {
-		return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
-	}
-	defer func() { httpGetFunc = origHTTP }()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	oldClient := httpClient
+	httpClient = server.Client()
+	httpClient.Transport = server.Client().Transport
+	defer func() { httpClient = oldClient }()
+
 	tmp := t.TempDir()
-	err := DownloadBinary("http://x", filepath.Join(tmp, "acr-skill"))
+	err := DownloadBinary(server.URL, filepath.Join(tmp, "acr-skill"))
 	if err == nil || !strings.Contains(err.Error(), "status code") {
 		t.Fatalf("expect status code error, got %v", err)
 	}
 }
 
 func TestDownloadBinary_HttpError(t *testing.T) {
-	origHTTP := httpGetFunc
-	httpGetFunc = func(url string) (*http.Response, error) { return nil, fmt.Errorf("net") }
-	defer func() { httpGetFunc = origHTTP }()
+	// 使用一个无效的 URL 来触发网络错误
 	tmp := t.TempDir()
-	err := DownloadBinary("http://x", filepath.Join(tmp, "acr-skill"))
+	err := DownloadBinary("http://invalid-host-that-does-not-exist-12345.com", filepath.Join(tmp, "acr-skill"))
 	if err == nil || !strings.Contains(err.Error(), "failed to download") {
 		t.Fatalf("expected download error")
 	}
@@ -347,6 +360,12 @@ func TestDownloadBinary_OverwriteExisting(t *testing.T) {
 		return http.Get(server.URL)
 	}
 	defer func() { httpGetFunc = oldHTTPGet }()
+
+	// 临时替换 httpClient 为测试服务器
+	oldClient := httpClient
+	httpClient = server.Client()
+	httpClient.Transport = server.Client().Transport
+	defer func() { httpClient = oldClient }()
 
 	tmpDir := t.TempDir()
 	execPath := filepath.Join(tmpDir, "acr-skill")
@@ -560,7 +579,11 @@ func TestExecuteAcrSkill(t *testing.T) {
 func TestExecuteAcrSkill_Failure(t *testing.T) {
 	origExec := execCommandFunc
 	execCommandFunc = func(name string, args ...string) *exec.Cmd {
-		return exec.Command("bash", "-c", "exit 1")
+		// 跨平台的 mock 实现，模拟失败
+		if runtime.GOOS == "windows" {
+			return exec.Command("cmd", "/c", "exit 1")
+		}
+		return exec.Command("false")
 	}
 	defer func() { execCommandFunc = origExec }()
 

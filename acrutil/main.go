@@ -10,14 +10,15 @@ import (
 
 func NewAcrutilCommand() *cli.Command {
 	cmd := &cli.Command{
-		Name:   "acrutil",
-		Short:  i18n.T("Alibaba Cloud ACR Enterprise Edition Instance CLI Tool", "阿里云ACR企业版实例CLI工具"),
-		Usage:  "acrutil <command> [args...]",
-		Hidden: false,
+		Name:                   "acrutil",
+		Short:                  i18n.T("Alibaba Cloud ACR Enterprise Edition Instance CLI Tool", "阿里云ACR企业版实例CLI工具"),
+		Usage:                  "acrutil <command> [args...]",
+		Hidden:                 false,
+		DisablePersistentFlags: true,
 		Run: func(ctx *cli.Context, args []string) error {
 			return cli.NewErrorWithTip(
 				fmt.Errorf("command missing"),
-				"Use `aliyun acrutil --help` for more information.",
+				"Available commands: skill. Use 'aliyun acrutil --help' for more information.",
 			)
 		},
 	}

@@ -1,14 +1,17 @@
 package skill
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -61,7 +64,12 @@ var (
 // 阿里云 ACR Skill CLI 下载地址配置
 const (
 	acrSkillBaseUrl = "https://acr-public-asset.oss-cn-hangzhou.aliyuncs.com/acr-skill/"
+	// 下载文件大小限制：50MB
+	maxDownloadSize = 50 * 1024 * 1024
 )
+
+// 包级别的 HTTP client，带超时设置
+var httpClient = &http.Client{Timeout: 5 * time.Minute}
 
 // 平台对应的下载路径标识（仅提供 linux-amd64 和 darwin-arm64）
 var platformPaths = map[string]struct{}{
@@ -159,7 +167,13 @@ func (c *SkillContext) Install() error {
 
 // DownloadBinary 直接下载二进制文件到目标路径
 func DownloadBinary(url string, exeFilePath string) error {
-	resp, err := httpGetFunc(url)
+	// 使用带超时的 HTTP client
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request for %s: %v", url, err)
+	}
+
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to download %s: %v", url, err)
 	}
@@ -174,7 +188,9 @@ func DownloadBinary(url string, exeFilePath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %v", tmpFile, err)
 	}
-	_, err = io.Copy(out, resp.Body)
+
+	// 使用 LimitReader 限制下载大小，防止磁盘空间耗尽
+	_, err = io.Copy(out, io.LimitReader(resp.Body, maxDownloadSize))
 	if err != nil {
 		_ = out.Close()
 		_ = os.Remove(tmpFile)
@@ -202,7 +218,7 @@ func DownloadBinary(url string, exeFilePath string) error {
 	}
 
 	// 设置执行权限
-	if runtime.GOOS != "windows" {
+	if runtimeGOOSFunc() != "windows" {
 		err = os.Chmod(exeFilePath, 0755)
 		if err != nil {
 			return fmt.Errorf("failed to set exec permission for file %s: %v", exeFilePath, err)
@@ -249,14 +265,20 @@ func (c *SkillContext) RemoveFlagsForMainCli(args []string) ([]string, error) {
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if needs, ok := longNeedsValue[a]; ok {
-			if needs && i+1 < len(args) {
-				i++
+			if needs {
+				// 当 flag 需要值时，检查下一个参数是否存在且不是另一个 flag
+				if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+					i++
+				}
 			}
 			continue
 		}
 		if needs, ok := shortNeedsValue[a]; ok {
-			if needs && i+1 < len(args) {
-				i++
+			if needs {
+				// 当 flag 需要值时，检查下一个参数是否存在且不是另一个 flag
+				if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+					i++
+				}
 			}
 			continue
 		}
@@ -274,7 +296,8 @@ func (c *SkillContext) ExecuteAcrSkill(args []string, envMap map[string]string) 
 	finalArgs := append([]string(nil), args...)
 
 	cmd := execCommandFunc(c.execFilePath, finalArgs...)
-	envs := make([]string, 0, len(envMap))
+	// 使用追加模式：继承父进程环境变量，并添加自定义变量
+	envs := os.Environ()
 	for k, v := range envMap {
 		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
 	}
@@ -290,8 +313,9 @@ func (c *SkillContext) ExecuteAcrSkill(args []string, envMap map[string]string) 
 }
 
 func fileExists(path string) bool {
-	if _, err := os.Stat(path); err == nil {
-		return true
+	_, err := os.Stat(path)
+	if err != nil {
+		return !errors.Is(err, fs.ErrNotExist)
 	}
-	return false
+	return true
 }
