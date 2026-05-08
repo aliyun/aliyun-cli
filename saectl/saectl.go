@@ -55,7 +55,7 @@ var (
 	runtimeGOARCHFunc          = func() string { return runtime.GOARCH }
 )
 
-// saectlBaseUrl is the base url for saectl download
+// TODO: 占位符，待确认下载基地址
 var saectlBaseUrl = "https://sae-component-software.oss-cn-hangzhou.aliyuncs.com/saectl/"
 
 var VersionCheckTTL = 86400 // 1 day, in seconds
@@ -162,7 +162,7 @@ func (c *Context) CheckOsTypeAndArch() {
 		case "windows":
 			if c.osArch == "amd64" || c.osArch == "arm64" {
 				c.osSupport = true
-				c.downloadPathSuffix = c.osType + "-" + c.osArch + ".tar.gz"
+				c.downloadPathSuffix = c.osType + "-" + c.osArch + ".zip"
 			} else {
 				c.osSupport = false
 			}
@@ -205,7 +205,6 @@ func (c *Context) NeedCheckVersion() bool {
 }
 
 func (c *Context) Install() error {
-	// TODO: 占位符，待确认具体的包命名规则和下载路径
 	url := fmt.Sprintf("%s%s/saectl-%s-%s", saectlBaseUrl, c.versionRemote, c.versionRemote, c.downloadPathSuffix)
 	
 	tmpDir := os.TempDir()
@@ -267,7 +266,7 @@ func DownloadAndExtract(url string, destFile string, exeFilePath string, extract
 	} else if strings.HasSuffix(destFile, ".tar.gz") {
 		err = extractTarGz(destFile, destDirUse)
 	} else {
-		return fmt.Errorf("unsupported file extension for extraction: %s", destFile)
+		return fmt.Errorf("unsupported archive format for %s", destFile)
 	}
 	
 	if err != nil {
@@ -313,6 +312,66 @@ func DownloadAndExtract(url string, destFile string, exeFilePath string, extract
 	err = os.RemoveAll(destDirUse)
 	if err != nil {
 		return fmt.Errorf("failed to remove temp dir %s: %v", destDirUse, err)
+	}
+	return nil
+}
+
+func extractTarGz(src, dest string) error {
+	f, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	gr, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gr.Close()
+
+	tr := tar.NewReader(gr)
+
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		p, _ := filepath.Abs(hdr.Name)
+		if strings.Contains(p, "..") {
+			return fmt.Errorf("invalid file path in tar.gz: %s", hdr.Name)
+		}
+		filePath := filepath.Join(dest, hdr.Name)
+
+		if hdr.FileInfo().IsDir() {
+			if err := os.MkdirAll(filePath, os.ModePerm); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
+			return err
+		}
+
+		outFile, err := os.Create(filePath)
+		if err != nil {
+			return err
+		}
+
+		if _, err := io.Copy(outFile, tr); err != nil {
+			outFile.Close()
+			return err
+		}
+		
+		outFile.Close()
+		
+		if err := os.Chmod(filePath, os.FileMode(hdr.Mode)); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -365,63 +424,6 @@ func unzip(src, dest string) error {
 		err = outFile.Close()
 		if err != nil {
 			return err
-		}
-	}
-	return nil
-}
-
-func extractTarGz(src, dest string) error {
-	file, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func(file *os.File) {
-		_ = file.Close()
-	}(file)
-
-	gzr, err := gzip.NewReader(file)
-	if err != nil {
-		return err
-	}
-	defer func(gzr *gzip.Reader) {
-		_ = gzr.Close()
-	}(gzr)
-
-	tr := tar.NewReader(gzr)
-
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		if strings.Contains(header.Name, "..") {
-			return fmt.Errorf("invalid file path in tar: %s", header.Name)
-		}
-
-		target := filepath.Join(dest, header.Name)
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-				return err
-			}
-			outFile, err := os.Create(target)
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(outFile, tr); err != nil {
-				_ = outFile.Close()
-				return err
-			}
-			_ = outFile.Close()
 		}
 	}
 	return nil
