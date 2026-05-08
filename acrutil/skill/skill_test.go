@@ -1,4 +1,4 @@
-package acrskill
+package skill
 
 import (
 	"bytes"
@@ -57,11 +57,11 @@ func addConfigFlag(ctx *cli.Context, name string, value string) {
 	ctx.Flags().Add(f)
 }
 
-func TestNewContext(t *testing.T) {
+func TestNewSkillContext(t *testing.T) {
 	ctx, _, _ := newOriginCtx()
-	c := NewContext(ctx)
+	c := NewSkillContext(ctx)
 	if c == nil {
-		t.Fatalf("NewContext returned nil")
+		t.Fatalf("NewSkillContext returned nil")
 	}
 	if c.originCtx != ctx {
 		t.Errorf("originCtx mismatch")
@@ -70,7 +70,7 @@ func TestNewContext(t *testing.T) {
 
 func TestCheckOsTypeAndArch(t *testing.T) {
 	ctx, _, _ := newOriginCtx()
-	c := NewContext(ctx)
+	c := NewSkillContext(ctx)
 
 	tests := []struct {
 		osType, osArch string
@@ -112,7 +112,7 @@ func TestInitBasicInfo(t *testing.T) {
 	defer func() { getConfigurePathFunc = old }()
 
 	ctx, _, _ := newOriginCtx()
-	c := NewContext(ctx)
+	c := NewSkillContext(ctx)
 	c.InitBasicInfo()
 
 	if c.configPath != tmpDir {
@@ -130,7 +130,7 @@ func TestInitBasicInfo(t *testing.T) {
 		t.Fatalf("write fake exec: %v", err)
 	}
 
-	c2 := NewContext(ctx)
+	c2 := NewSkillContext(ctx)
 	c2.InitBasicInfo()
 	if !c2.installed {
 		t.Errorf("should be installed now")
@@ -168,7 +168,7 @@ func TestRun_NotInstalled_FreshInstallAndExecute(t *testing.T) {
 	ctx, _, _ := newOriginCtx()
 	addConfigFlag(ctx, "region", "cn-hangzhou")
 
-	c := NewContext(ctx)
+	c := NewSkillContext(ctx)
 
 	if err := c.Run([]string{"acr-skill", "validate", "--region", "cn-hangzhou"}); err != nil {
 		t.Fatalf("Run failed: %v", err)
@@ -203,7 +203,7 @@ func TestRun_Installed_SkipDownload(t *testing.T) {
 	})
 
 	ctx, _, _ := newOriginCtx()
-	c := NewContext(ctx)
+	c := NewSkillContext(ctx)
 	if err := c.Run([]string{"acr-skill", "list"}); err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -369,7 +369,7 @@ func TestDownloadBinary_OverwriteExisting(t *testing.T) {
 	}
 }
 
-func TestPrepareEnv_AK(t *testing.T) {
+func TestCopySystemEnv_AK(t *testing.T) {
 	origHOME := os.Getenv("HOME")
 	defer func() { _ = os.Setenv("HOME", origHOME) }()
 	home := t.TempDir()
@@ -377,22 +377,24 @@ func TestPrepareEnv_AK(t *testing.T) {
 	prepareConfig(t, home, "en")
 
 	ctx, _, _ := newOriginCtx()
-	c := NewContext(ctx)
+	c := NewSkillContext(ctx)
 	c.InitBasicInfo()
 
-	envMap, err := c.PrepareEnv()
+	// CopySystemEnv 不再包含凭证，只返回系统环境变量
+	envMap, err := c.CopySystemEnv()
 	if err != nil {
-		t.Fatalf("PrepareEnv err: %v", err)
+		t.Fatalf("CopySystemEnv err: %v", err)
 	}
-	if envMap["REGISTRY_USERNAME"] != "ak" {
-		t.Fatalf("REGISTRY_USERNAME mismatch: %v", envMap["REGISTRY_USERNAME"])
+	// 验证不包含 REGISTRY_USERNAME/PASSWORD
+	if _, exists := envMap["REGISTRY_USERNAME"]; exists {
+		t.Fatalf("REGISTRY_USERNAME should not be in envMap")
 	}
-	if envMap["REGISTRY_PASSWORD"] != "sk" {
-		t.Fatalf("REGISTRY_PASSWORD mismatch: %v", envMap["REGISTRY_PASSWORD"])
+	if _, exists := envMap["REGISTRY_PASSWORD"]; exists {
+		t.Fatalf("REGISTRY_PASSWORD should not be in envMap")
 	}
 }
 
-func TestPrepareEnv_StsToken(t *testing.T) {
+func TestCopySystemEnv_StsToken(t *testing.T) {
 	origHOME := os.Getenv("HOME")
 	defer func() { _ = os.Setenv("HOME", origHOME) }()
 	home := t.TempDir()
@@ -402,22 +404,23 @@ func TestPrepareEnv_StsToken(t *testing.T) {
 	})
 
 	ctx, _, _ := newOriginCtx()
-	c := NewContext(ctx)
+	c := NewSkillContext(ctx)
 	c.InitBasicInfo()
 
-	envMap, err := c.PrepareEnv()
+	// CopySystemEnv 不再包含凭证
+	envMap, err := c.CopySystemEnv()
 	if err != nil {
-		t.Fatalf("PrepareEnv err: %v", err)
+		t.Fatalf("CopySystemEnv err: %v", err)
 	}
-	if envMap["REGISTRY_USERNAME"] != "ak" {
-		t.Fatalf("REGISTRY_USERNAME mismatch: %v", envMap["REGISTRY_USERNAME"])
+	if _, exists := envMap["REGISTRY_USERNAME"]; exists {
+		t.Fatalf("REGISTRY_USERNAME should not be in envMap")
 	}
-	if envMap["REGISTRY_PASSWORD"] != "sk" {
-		t.Fatalf("REGISTRY_PASSWORD mismatch: %v", envMap["REGISTRY_PASSWORD"])
+	if _, exists := envMap["REGISTRY_PASSWORD"]; exists {
+		t.Fatalf("REGISTRY_PASSWORD should not be in envMap")
 	}
 }
 
-func TestPrepareEnv_RamRoleArn(t *testing.T) {
+func TestCopySystemEnv_RamRoleArn(t *testing.T) {
 	origHOME := os.Getenv("HOME")
 	defer func() { _ = os.Setenv("HOME", origHOME) }()
 	home := t.TempDir()
@@ -428,37 +431,39 @@ func TestPrepareEnv_RamRoleArn(t *testing.T) {
 	})
 
 	ctx, _, _ := newOriginCtx()
-	c := NewContext(ctx)
+	c := NewSkillContext(ctx)
 	c.InitBasicInfo()
 
-	envMap, err := c.PrepareEnv()
+	// CopySystemEnv 不再包含凭证
+	envMap, err := c.CopySystemEnv()
 	if err != nil {
-		t.Fatalf("PrepareEnv err: %v", err)
+		t.Fatalf("CopySystemEnv err: %v", err)
 	}
-	if envMap["REGISTRY_USERNAME"] != "ak" {
-		t.Fatalf("REGISTRY_USERNAME mismatch: %v", envMap["REGISTRY_USERNAME"])
+	if _, exists := envMap["REGISTRY_USERNAME"]; exists {
+		t.Fatalf("REGISTRY_USERNAME should not be in envMap")
 	}
-	if envMap["REGISTRY_PASSWORD"] != "sk" {
-		t.Fatalf("REGISTRY_PASSWORD mismatch: %v", envMap["REGISTRY_PASSWORD"])
+	if _, exists := envMap["REGISTRY_PASSWORD"]; exists {
+		t.Fatalf("REGISTRY_PASSWORD should not be in envMap")
 	}
 }
 
-func TestPrepareEnv_ConfigLoadError(t *testing.T) {
+func TestCopySystemEnv_ConfigLoadError(t *testing.T) {
 	origHOME := os.Getenv("HOME")
 	defer func() { _ = os.Setenv("HOME", origHOME) }()
 	home := t.TempDir()
 	_ = os.Setenv("HOME", home)
 
 	ctx, _, _ := newOriginCtx()
-	c := NewContext(ctx)
+	c := NewSkillContext(ctx)
 	c.InitBasicInfo()
 
-	_, err := c.PrepareEnv()
-	if err == nil {
-		t.Fatalf("expected config load error")
+	// CopySystemEnv 不再加载配置，不会报错
+	envMap, err := c.CopySystemEnv()
+	if err != nil {
+		t.Fatalf("CopySystemEnv should not error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "config failed") {
-		t.Fatalf("unexpected error message: %v", err)
+	if envMap == nil {
+		t.Fatalf("envMap should not be nil")
 	}
 }
 
@@ -467,7 +472,7 @@ func TestRemoveFlagsForMainCli(t *testing.T) {
 	addConfigFlag(ctx, "region", "cn-hangzhou")
 	addConfigFlag(ctx, "profile", "test")
 
-	c := NewContext(ctx)
+	c := NewSkillContext(ctx)
 	args := []string{"validate", "--region", "cn-hangzhou", "--profile", "test", "-d", "./my-skill"}
 	newArgs, err := c.RemoveFlagsForMainCli(args)
 	if err != nil {
@@ -507,7 +512,7 @@ func TestFileExists(t *testing.T) {
 }
 
 func TestInstallUrlAndInvocation(t *testing.T) {
-	c := &Context{
+	c := &SkillContext{
 		downloadPathSuffix: "linux-amd64",
 	}
 	called := false
@@ -539,7 +544,7 @@ func TestExecuteAcrSkill(t *testing.T) {
 	defer func() { execCommandFunc = origExec }()
 
 	ctx, _, _ := newOriginCtx()
-	c := NewContext(ctx)
+	c := NewSkillContext(ctx)
 	c.execFilePath = "/any/path/acr-skill"
 
 	envMap := map[string]string{
@@ -560,7 +565,7 @@ func TestExecuteAcrSkill_Failure(t *testing.T) {
 	defer func() { execCommandFunc = origExec }()
 
 	ctx, _, _ := newOriginCtx()
-	c := NewContext(ctx)
+	c := NewSkillContext(ctx)
 	c.execFilePath = "/any/path/acr-skill"
 
 	envMap := map[string]string{}

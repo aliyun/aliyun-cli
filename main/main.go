@@ -21,7 +21,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/aliyun/aliyun-cli/v3/acrskill"
+	"github.com/aliyun/aliyun-cli/v3/acrutil"
 	"github.com/aliyun/aliyun-cli/v3/agentbay"
 	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -91,8 +91,8 @@ func Main(args []string) {
 	rootCmd.AddSubCommand(agentbay.NewAgentBayCommand())
 	// tablestore command
 	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
-	// acr-skill command
-	rootCmd.AddSubCommand(acrskill.NewAcrSkillCommand())
+	// acrutil command
+	rootCmd.AddSubCommand(acrutil.NewAcrutilCommand())
 	// plugin command
 	rootCmd.AddSubCommand(plugin.NewPluginCommand())
 	// upgrade command

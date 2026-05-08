@@ -1,4 +1,4 @@
-package acrskill
+package skill
 
 import (
 	"fmt"
@@ -10,12 +10,31 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
-type Context struct {
+// NewSkillCommand 创建 skill 子命令
+func NewSkillCommand() *cli.Command {
+	return &cli.Command{
+		Name:   "skill",
+		Short:  i18n.T("ACR Skill Management", "ACR Skill管理"),
+		Usage:  "acrutil skill <command> [args...]",
+		Hidden: false,
+		Run: func(ctx *cli.Context, args []string) error {
+			options := NewSkillContext(ctx)
+			return options.Run(args)
+		},
+		// allow unknown args
+		EnableUnknownFlag: true,
+		KeepArgs:          true,
+		SkipDefaultHelp:   true,
+	}
+}
+
+// SkillContext 管理 acr-skill 二进制的下载、安装和执行
+type SkillContext struct {
 	originCtx          *cli.Context
 	configPath         string // aliyun config path, all bin and cache file store in the same dir
 	execFilePath       string // acr-skill exec file path
@@ -60,13 +79,13 @@ func getDownloadURL(platform string) (string, error) {
 	return fmt.Sprintf("%sacr-skill-%s", acrSkillBaseUrl, platform), nil
 }
 
-func NewContext(originContext *cli.Context) *Context {
-	return &Context{
+func NewSkillContext(originContext *cli.Context) *SkillContext {
+	return &SkillContext{
 		originCtx: originContext,
 	}
 }
 
-func (c *Context) Run(args []string) error {
+func (c *SkillContext) Run(args []string) error {
 	err := c.InitializeAndValidatePlatform()
 	if err != nil {
 		return err
@@ -79,7 +98,7 @@ func (c *Context) Run(args []string) error {
 		}
 	}
 
-	envMap, err := c.PrepareEnv()
+	envMap, err := c.CopySystemEnv()
 	if err != nil {
 		return err
 	}
@@ -92,7 +111,7 @@ func (c *Context) Run(args []string) error {
 	return c.ExecuteAcrSkill(newArgs, envMap)
 }
 
-func (c *Context) InitializeAndValidatePlatform() error {
+func (c *SkillContext) InitializeAndValidatePlatform() error {
 	c.InitBasicInfo()
 	c.CheckOsTypeAndArch()
 	if !c.osSupport {
@@ -101,17 +120,14 @@ func (c *Context) InitializeAndValidatePlatform() error {
 	return nil
 }
 
-func (c *Context) InitBasicInfo() {
+func (c *SkillContext) InitBasicInfo() {
 	c.configPath = getConfigurePathFunc()
 	c.execFilePath = filepath.Join(c.configPath, "acr-skill")
-	if runtime.GOOS == "windows" {
-		c.execFilePath += ".exe"
-	}
 	// check if already installed
 	c.installed = fileExists(c.execFilePath)
 }
 
-func (c *Context) CheckOsTypeAndArch() {
+func (c *SkillContext) CheckOsTypeAndArch() {
 	c.osType = runtimeGOOSFunc()
 	c.osArch = runtimeGOARCHFunc()
 
@@ -126,7 +142,7 @@ func (c *Context) CheckOsTypeAndArch() {
 }
 
 // Install 下载 acr-skill 二进制文件
-func (c *Context) Install() error {
+func (c *SkillContext) Install() error {
 	url, err := getDownloadURL(c.downloadPathSuffix)
 	if err != nil {
 		return err
@@ -196,47 +212,8 @@ func DownloadBinary(url string, exeFilePath string) error {
 	return nil
 }
 
-// PrepareEnv 准备用户身份环境变量, 通过 REGISTRY_USERNAME/REGISTRY_PASSWORD 传递给 acr-skill
-func (c *Context) PrepareEnv() (map[string]string, error) {
-	profile, err := config.LoadProfileWithContext(c.originCtx)
-	if err != nil {
-		return nil, fmt.Errorf("config failed: %s", err.Error())
-	}
-
-	var accessKeyId, accessKeySecret string
-
-	mode := profile.Mode
-	switch mode {
-	case config.AK:
-		accessKeyId = profile.AccessKeyId
-		accessKeySecret = profile.AccessKeySecret
-	case config.StsToken:
-		accessKeyId = profile.AccessKeyId
-		accessKeySecret = profile.AccessKeySecret
-	case config.RamRoleArn:
-		accessKeyId = profile.AccessKeyId
-		accessKeySecret = profile.AccessKeySecret
-	default:
-		proxyHost, ok := c.originCtx.Flags().GetValue("proxy-host")
-		if !ok {
-			proxyHost = ""
-		}
-		credential, err := profile.GetCredential(c.originCtx, tea.String(proxyHost))
-		if err != nil {
-			return nil, fmt.Errorf("can't get credential %s", err)
-		}
-		model, err := credential.GetCredential()
-		if err != nil {
-			return nil, fmt.Errorf("can't get credential %s", err)
-		}
-		accessKeyId = *model.AccessKeyId
-		accessKeySecret = *model.AccessKeySecret
-	}
-
-	if accessKeyId == "" || accessKeySecret == "" {
-		return nil, fmt.Errorf("access key id or access key secret is empty, please run `aliyun configure` first")
-	}
-
+// CopySystemEnv 复制系统环境变量
+func (c *SkillContext) CopySystemEnv() (map[string]string, error) {
 	envMap := make(map[string]string)
 	for _, env := range os.Environ() {
 		parts := strings.SplitN(env, "=", 2)
@@ -245,15 +222,11 @@ func (c *Context) PrepareEnv() (map[string]string, error) {
 		}
 	}
 
-	// 通过环境变量传递 ACR 注册凭证
-	envMap["REGISTRY_USERNAME"] = accessKeyId
-	envMap["REGISTRY_PASSWORD"] = accessKeySecret
-
 	return envMap, nil
 }
 
 // RemoveFlagsForMainCli 移除主程序使用的 flag，避免传递给 acr-skill 出错
-func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
+func (c *SkillContext) RemoveFlagsForMainCli(args []string) ([]string, error) {
 	if c.originCtx.Flags() == nil || c.originCtx.Flags().Flags() == nil {
 		return append([]string(nil), args...), nil
 	}
@@ -293,8 +266,14 @@ func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 }
 
 // ExecuteAcrSkill 执行 acr-skill 命令
-func (c *Context) ExecuteAcrSkill(args []string, envMap map[string]string) error {
-	cmd := execCommandFunc(c.execFilePath, args...)
+// acr-skill-cli 的 -u/-p 仅支持 ACR Registry 固定密码认证，不支持 AK/SK。
+// acrutil 封装层不注入凭证，用户需通过以下方式提供 registry 认证：
+//  1. 命令行 -u/-p flag
+//  2. 环境变量 REGISTRY_USERNAME/REGISTRY_PASSWORD
+func (c *SkillContext) ExecuteAcrSkill(args []string, envMap map[string]string) error {
+	finalArgs := append([]string(nil), args...)
+
+	cmd := execCommandFunc(c.execFilePath, finalArgs...)
 	envs := make([]string, 0, len(envMap))
 	for k, v := range envMap {
 		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
@@ -304,9 +283,8 @@ func (c *Context) ExecuteAcrSkill(args []string, envMap map[string]string) error
 	cmd.Stderr = c.originCtx.Stderr()
 	cmd.Stdin = os.Stdin
 
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to execute %s %v: %v", c.execFilePath, args, err)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to execute %s: %v", c.execFilePath, err)
 	}
 	return nil
 }
