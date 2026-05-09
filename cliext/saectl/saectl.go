@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -326,6 +327,7 @@ func extractTarGz(src, dest string) error {
 	defer gr.Close()
 
 	tr := tar.NewReader(gr)
+	var extractedDest string
 
 	for {
 		hdr, err := tr.Next()
@@ -336,37 +338,62 @@ func extractTarGz(src, dest string) error {
 			return err
 		}
 
-		p, _ := filepath.Abs(hdr.Name)
-		if strings.Contains(p, "..") {
-			return fmt.Errorf("invalid file path in tar.gz: %s", hdr.Name)
+		cleanName, err := sanitizeArchivePath(hdr.Name)
+		if err != nil {
+			// Skip non-conformant entries.
+			continue
 		}
-		filePath := filepath.Join(dest, hdr.Name)
-
-		if hdr.FileInfo().IsDir() {
-			if err := os.MkdirAll(filePath, os.ModePerm); err != nil {
-				return err
-			}
+		if cleanName == "" {
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
-			return err
-		}
+		// SAE specific policy: only extract the saectl binary; skip everything else.
+		switch hdr.Typeflag {
+		case tar.TypeSymlink, tar.TypeLink:
+			// Skip symlink/hardlink entries to avoid path traversal via link target.
+			continue
+		case tar.TypeDir:
+			// Skip directory entries; we create directories only as needed for the binary.
+			continue
+		case tar.TypeReg, tar.TypeRegA:
+			if !isWantedSaectlEntry(cleanName) {
+				continue
+			}
+			if hdr.Size < 0 || hdr.Size > saectlMaxExtractSize {
+				// Skip oversized file.
+				continue
+			}
 
-		outFile, err := os.Create(filePath)
-		if err != nil {
-			return err
-		}
+			filePath, err := safeJoinUnderDir(dest, cleanName)
+			if err != nil {
+				// Skip illegal path.
+				continue
+			}
+			if extractedDest != "" && extractedDest != filePath {
+				// Keep the first one; skip duplicates.
+				continue
+			}
+			extractedDest = filePath
 
-		if _, err := io.Copy(outFile, tr); err != nil {
-			outFile.Close()
-			return err
-		}
-		
-		outFile.Close()
-		
-		if err := os.Chmod(filePath, os.FileMode(hdr.Mode)); err != nil {
-			return err
+			if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+				return err
+			}
+
+			outFile, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+			if err != nil {
+				return err
+			}
+			if _, err := io.CopyN(outFile, tr, hdr.Size); err != nil {
+				outFile.Close()
+				return err
+			}
+			if err := outFile.Close(); err != nil {
+				return err
+			}
+			// Don't preserve archive mode; final binary permissions are set after moving to exeFilePath.
+		default:
+			// Skip all other entry types (pax headers, device files, etc).
+			continue
 		}
 	}
 	return nil
@@ -377,26 +404,51 @@ func unzip(src, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer func(r *zip.ReadCloser) {
-		_ = r.Close()
-	}(r)
+	defer r.Close()
+	var extractedDest string
 
 	for _, file := range r.File {
-		p, _ := filepath.Abs(file.Name)
-		if strings.Contains(p, "..") {
-			return fmt.Errorf("invalid file path in zip: %s", file.Name)
+		cleanName, err := sanitizeArchivePath(file.Name)
+		if err != nil {
+			// Skip non-conformant entries.
+			continue
 		}
-		filePath := filepath.Join(dest, file.Name)
-
-		if file.FileInfo().IsDir() {
-			err := os.MkdirAll(filePath, os.ModePerm)
-			if err != nil {
-				return err
-			}
+		if cleanName == "" {
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
+		if file.FileInfo().IsDir() {
+			continue
+		}
+
+		// Refuse symlink entry (Zip doesn't have a dedicated typeflag; it's encoded in mode).
+		if file.Mode()&os.ModeSymlink != 0 {
+			// Skip symlink entries to avoid writing links pointing outside.
+			continue
+		}
+
+		// SAE specific policy: only extract the saectl binary.
+		if !isWantedSaectlEntry(cleanName) {
+			continue
+		}
+
+		if file.UncompressedSize64 > uint64(saectlMaxExtractSize) {
+			// Skip oversized file.
+			continue
+		}
+
+		filePath, err := safeJoinUnderDir(dest, cleanName)
+		if err != nil {
+			// Skip illegal path.
+			continue
+		}
+		if extractedDest != "" && extractedDest != filePath {
+			// Keep the first one; skip duplicates.
+			continue
+		}
+		extractedDest = filePath
+
+		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
 			return err
 		}
 
@@ -405,24 +457,92 @@ func unzip(src, dest string) error {
 			return err
 		}
 
-		outFile, err := os.Create(filePath)
+		outFile, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 		if err != nil {
 			_ = rc.Close()
 			return err
 		}
 
-		_, err = io.Copy(outFile, rc)
-		
-		err = rc.Close()
-		if err != nil {
-			return err
+		limit := int64(saectlMaxExtractSize) + 1
+		written, copyErr := io.Copy(outFile, io.LimitReader(rc, limit))
+
+		rcErr := rc.Close()
+		outErr := outFile.Close()
+
+		if written > int64(saectlMaxExtractSize) {
+			// Oversized in practice: clean up and skip.
+			_ = os.Remove(filePath)
+			continue
 		}
-		err = outFile.Close()
-		if err != nil {
-			return err
+		if copyErr != nil {
+			return copyErr
+		}
+		if rcErr != nil {
+			return rcErr
+		}
+		if outErr != nil {
+			return outErr
 		}
 	}
 	return nil
+}
+
+const saectlMaxExtractSize int64 = 200 << 20 // 200MiB, defensive upper bound
+
+func isWantedSaectlEntry(cleanName string) bool {
+	base := path.Base(cleanName)
+	if runtime.GOOS == "windows" {
+		return base == "saectl.exe"
+	}
+	return base == "saectl"
+}
+
+// sanitizeArchivePath normalizes an archive entry name into a clean, relative, forward-slash path.
+// It rejects absolute paths, parent traversal, and Windows drive/UNC styles.
+func sanitizeArchivePath(name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("empty entry name")
+	}
+	if strings.ContainsRune(name, '\x00') {
+		return "", fmt.Errorf("NUL byte in entry name")
+	}
+
+	// Normalize to forward slashes before cleaning.
+	name = strings.ReplaceAll(name, "\\", "/")
+	for strings.HasPrefix(name, "./") {
+		name = strings.TrimPrefix(name, "./")
+	}
+	if strings.HasPrefix(name, "/") || strings.HasPrefix(name, "//") {
+		return "", fmt.Errorf("absolute/UNC path is not allowed")
+	}
+	if len(name) >= 2 && isASCIIAlpha(name[0]) && name[1] == ':' {
+		return "", fmt.Errorf("windows drive path is not allowed")
+	}
+
+	clean := path.Clean(name)
+	if clean == "." {
+		return "", nil
+	}
+	if clean == ".." || strings.HasPrefix(clean, "../") {
+		return "", fmt.Errorf("path traversal is not allowed")
+	}
+	return clean, nil
+}
+
+func safeJoinUnderDir(destDir, cleanRel string) (string, error) {
+	destClean := filepath.Clean(destDir)
+	joined := filepath.Join(destClean, filepath.FromSlash(cleanRel))
+	joined = filepath.Clean(joined)
+
+	destPrefix := destClean + string(os.PathSeparator)
+	if joined != destClean && !strings.HasPrefix(joined, destPrefix) {
+		return "", fmt.Errorf("path escapes destination directory")
+	}
+	return joined, nil
+}
+
+func isASCIIAlpha(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
 func (c *Context) GetLocalVersion() error {
@@ -466,12 +586,6 @@ func (c *Context) PrepareEnv() error {
 		accessKeyId = profile.AccessKeyId
 		accessKeySecret = profile.AccessKeySecret
 		stsToken = profile.StsToken
-	case config.RamRoleArn:
-		accessKeyId = profile.AccessKeyId
-		accessKeySecret = profile.AccessKeySecret
-		if profile.StsToken != "" {
-			stsToken = profile.StsToken
-		}
 	default:
 		proxyHost, ok := c.originCtx.Flags().GetValue("proxy-host")
 		if !ok {
