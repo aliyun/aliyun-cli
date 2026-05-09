@@ -158,7 +158,7 @@ func TestNewInstallCommand_Run_NamesAndSourceConflict(t *testing.T) {
 
 	err := cmd.Run(ctx, []string{})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "--names cannot be used together with --package")
+	assert.Contains(t, err.Error(), "--name/--names cannot be used together with --package")
 }
 
 func TestNewInstallCommand_Run_WithPackageFlagSuccess(t *testing.T) {
