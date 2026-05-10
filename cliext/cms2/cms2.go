@@ -372,6 +372,13 @@ func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 }
 
 func (c *Context) Execute(childArgs []string) error {
+	// Drain idle HTTP connections from the default transport so that no
+	// lingering sockets are inherited by the child process.  On macOS
+	// there is a race window between socket() and fcntl(FD_CLOEXEC)
+	// that can cause the child to inherit a half-ready fd, leading to
+	// "connect: bad file descriptor" errors.
+	http.DefaultClient.CloseIdleConnections()
+
 	cmd := execCommandFunc(c.execFilePath, childArgs...)
 
 	envs := filterEnv(os.Environ(), c.envMap)
