@@ -1215,14 +1215,14 @@ func TestValidateVersionAndPlatform_VersionCheck(t *testing.T) {
 		}
 	})
 
-	t.Run("Error - current version lower than required", func(t *testing.T) {
+	t.Run("Error - current version lower than required (legacy CLI suggests brew)", func(t *testing.T) {
 		cli.Version = "3.1.0"
 		targetPlugin := &PluginInfo{
 			Name: "test-plugin",
 			Versions: map[string]VersionInfo{
 				"1.0.0": {
 					Metadata: &VersionMetadata{
-						MinCliVersion: "3.2.0",
+						MinCliVersion: "3.4.0",
 					},
 					Platforms: map[string]PlatformInfo{
 						currentPlatform: {
@@ -1239,9 +1239,41 @@ func TestValidateVersionAndPlatform_VersionCheck(t *testing.T) {
 		assert.NotNil(t, err)
 		assert.Nil(t, platInfo)
 		assert.Contains(t, err.Error(), "requires CLI version")
-		assert.Contains(t, err.Error(), "3.2.0")
+		assert.Contains(t, err.Error(), "3.4.0")
 		assert.Contains(t, err.Error(), "3.1.0")
-		assert.Contains(t, err.Error(), "brew upgrade")
+		assert.Contains(t, err.Error(), "brew upgrade aliyun-cli")
+		assert.NotContains(t, err.Error(), "aliyun upgrade\n")
+		assert.Contains(t, err.Error(), "github.com/aliyun/aliyun-cli/releases")
+	})
+
+	t.Run("Error - current version >= 3.3.5 suggests aliyun upgrade", func(t *testing.T) {
+		cli.Version = "3.3.5"
+		targetPlugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Metadata: &VersionMetadata{
+						MinCliVersion: "3.4.0",
+					},
+					Platforms: map[string]PlatformInfo{
+						currentPlatform: {
+							URL:      "http://example.com/plugin.tar.gz",
+							Checksum: "abc123",
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		platInfo, err := mgr.validateVersionAndPlatform(ctx, targetPlugin, "1.0.0", "test-plugin")
+		assert.NotNil(t, err)
+		assert.Nil(t, platInfo)
+		assert.Contains(t, err.Error(), "requires CLI version")
+		assert.Contains(t, err.Error(), "3.4.0")
+		assert.Contains(t, err.Error(), "3.3.5")
+		assert.Contains(t, err.Error(), "aliyun upgrade")
+		assert.NotContains(t, err.Error(), "brew upgrade")
 		assert.Contains(t, err.Error(), "github.com/aliyun/aliyun-cli/releases")
 	})
 

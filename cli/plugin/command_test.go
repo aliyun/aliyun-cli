@@ -256,6 +256,10 @@ func TestNewInstallCommand(t *testing.T) {
 	assert.NotEmpty(t, cmd.Usage)
 
 	flags := cmd.Flags()
+	nameFlag := flags.Get("name")
+	assert.NotNil(t, nameFlag)
+	assert.False(t, nameFlag.Required)
+
 	namesFlag := flags.Get("names")
 	assert.NotNil(t, namesFlag)
 	assert.False(t, namesFlag.Required)
@@ -311,6 +315,82 @@ func TestNewInstallCommand_Run_WithNamesFlag(t *testing.T) {
 	assert.Contains(t, err.Error(), "nonexistent-plugin-xyz-123 not found")
 }
 
+func TestNewInstallCommand_Run_WithNameFlag(t *testing.T) {
+	cmd := newInstallCommand()
+
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	nameFlag := ctx.Flags().Get("name")
+	assert.NotNil(t, nameFlag)
+	nameFlag.SetAssigned(true)
+	nameFlag.SetValue("nonexistent-plugin-xyz-456")
+
+	err := cmd.Run(ctx, []string{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "nonexistent-plugin-xyz-456 not found")
+}
+
+func TestNewInstallCommand_Run_NameAndNamesConflict(t *testing.T) {
+	cmd := newInstallCommand()
+
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	nameFlag := ctx.Flags().Get("name")
+	assert.NotNil(t, nameFlag)
+	nameFlag.SetAssigned(true)
+	nameFlag.SetValue("plugin-from-name")
+
+	namesFlag := ctx.Flags().Get("names")
+	assert.NotNil(t, namesFlag)
+	namesFlag.SetAssigned(true)
+	namesFlag.SetValues([]string{"plugin-from-names-1", "plugin-from-names-2"})
+
+	err := cmd.Run(ctx, []string{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "--name and --names cannot be used together")
+}
+
+func TestNewInstallCommand_Run_NameAndPackageConflict(t *testing.T) {
+	cmd := newInstallCommand()
+
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	nameFlag := ctx.Flags().Get("name")
+	assert.NotNil(t, nameFlag)
+	nameFlag.SetAssigned(true)
+	nameFlag.SetValue("some-plugin")
+
+	pkgFlag := ctx.Flags().Get("package")
+	assert.NotNil(t, pkgFlag)
+	pkgFlag.SetAssigned(true)
+	pkgFlag.SetValue("/tmp/x.zip")
+
+	err := cmd.Run(ctx, []string{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "--name/--names cannot be used together with --package")
+}
+
 func TestNewInstallCommand_Run_WithNamesAndVersionFlags(t *testing.T) {
 	cmd := newInstallCommand()
 
@@ -357,7 +437,7 @@ func TestNewInstallCommand_Run_WithVersionFlagOnly(t *testing.T) {
 
 	err := cmd.Run(ctx, []string{})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "either --names or --package is required")
+	assert.Contains(t, err.Error(), "either --name/--names or --package is required")
 }
 
 func TestNewInstallCommand_Run_WithNamesAndEnablePreFlags(t *testing.T) {

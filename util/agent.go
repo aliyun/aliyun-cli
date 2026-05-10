@@ -36,14 +36,14 @@ var knownAgentEnv = []struct {
 
 // Agent 标识（小写、固定枚举或 sanitize 后的 AGENT 值）；
 func DetectAgentName() string {
-	if v := strings.TrimSpace(os.Getenv(agentEnvProposal)); v != "" {
-		if s := sanitizeAgentName(v); s != "" {
-			return s
-		}
-	}
 	for _, item := range knownAgentEnv {
 		if os.Getenv(item.env) != "" {
 			return item.name
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv(agentEnvProposal)); v != "" {
+		if s := sanitizeAgentName(v); s != "" {
+			return s
 		}
 	}
 	return ""

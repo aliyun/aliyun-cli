@@ -60,10 +60,17 @@ func TestDetectAgentName_EmptyValueIgnored(t *testing.T) {
 	assert.Equal(t, "", DetectAgentName())
 }
 
-func TestDetectAgentName_ProposalAgentEnvWins(t *testing.T) {
+func TestDetectAgentName_SpecificEnvWinsOverProposal(t *testing.T) {
+	snapshotAndUnsetAgentEnvs(t)
+	_ = os.Setenv(agentEnvProposal, "goose")
+	_ = os.Setenv("CURSOR_AGENT", "1")
+	assert.Equal(t, "cursor", DetectAgentName(),
+		"专有变量应优先于 AGENT 提案变量（避免类似 OpenCode 同时设两者时丢失具体名）")
+}
+
+func TestDetectAgentName_ProposalUsedWhenNoSpecific(t *testing.T) {
 	snapshotAndUnsetAgentEnvs(t)
 	_ = os.Setenv(agentEnvProposal, "Goose")
-	_ = os.Setenv("CURSOR_AGENT", "1")
 	assert.Equal(t, "goose", DetectAgentName())
 }
 
@@ -73,12 +80,11 @@ func TestDetectAgentName_ProposalSanitize(t *testing.T) {
 	assert.Equal(t, "my-agent.v1_x", DetectAgentName())
 }
 
-func TestDetectAgentName_ProposalRejectsAllInvalidChars(t *testing.T) {
+func TestDetectAgentName_ProposalAllInvalidCharsReturnsEmpty(t *testing.T) {
 	snapshotAndUnsetAgentEnvs(t)
 	_ = os.Setenv(agentEnvProposal, "$$$ ###")
-	_ = os.Setenv("CURSOR_AGENT", "1")
-	assert.Equal(t, "cursor", DetectAgentName(),
-		"完全无效的 AGENT 值应回退到专有变量")
+	assert.Equal(t, "", DetectAgentName(),
+		"完全无效的 AGENT 值经 sanitize 后为空；无专有变量兜底时返回空")
 }
 
 func TestDetectAgentName_ProposalTruncated(t *testing.T) {
