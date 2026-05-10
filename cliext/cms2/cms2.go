@@ -303,6 +303,7 @@ func (c *Context) PrepareEnv() error {
 	c.envMap = map[string]string{
 		"ALIYUN_CMS_CLI_ACCESS_KEY_ID":     accessKeyId,
 		"ALIYUN_CMS_CLI_ACCESS_KEY_SECRET": accessKeySecret,
+		"ALIYUN_CMS_CLI_CALLER":            "aliyun-cms2",
 	}
 	if stsToken != "" {
 		c.envMap["ALIYUN_CMS_CLI_SECURITY_TOKEN"] = stsToken
