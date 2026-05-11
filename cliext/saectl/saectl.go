@@ -328,6 +328,8 @@ func extractTarGz(src, dest string) error {
 
 	tr := tar.NewReader(gr)
 	var extractedDest string
+	destClean := filepath.Clean(dest)
+	destPrefix := destClean + string(os.PathSeparator)
 
 	for {
 		hdr, err := tr.Next()
@@ -364,8 +366,8 @@ func extractTarGz(src, dest string) error {
 				continue
 			}
 
-			filePath, err := safeJoinUnderDir(dest, cleanName)
-			if err != nil {
+			filePath := filepath.Clean(filepath.Join(destClean, filepath.FromSlash(cleanName)))
+			if filePath != destClean && !strings.HasPrefix(filePath, destPrefix) {
 				// Skip illegal path.
 				continue
 			}
@@ -406,6 +408,8 @@ func unzip(src, dest string) error {
 	}
 	defer r.Close()
 	var extractedDest string
+	destClean := filepath.Clean(dest)
+	destPrefix := destClean + string(os.PathSeparator)
 
 	for _, file := range r.File {
 		cleanName, err := sanitizeArchivePath(file.Name)
@@ -437,8 +441,8 @@ func unzip(src, dest string) error {
 			continue
 		}
 
-		filePath, err := safeJoinUnderDir(dest, cleanName)
-		if err != nil {
+		filePath := filepath.Clean(filepath.Join(destClean, filepath.FromSlash(cleanName)))
+		if filePath != destClean && !strings.HasPrefix(filePath, destPrefix) {
 			// Skip illegal path.
 			continue
 		}
