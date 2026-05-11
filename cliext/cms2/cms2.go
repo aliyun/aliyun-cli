@@ -100,7 +100,7 @@ func (c *Context) Run(args []string) error {
 	}
 
 	if !c.installed {
-		return fmt.Errorf("cms2 binary not found at %s, please install manually or set ALIYUN_CMS2_EXEC_PATH", c.execFilePath)
+		return fmt.Errorf("cms2 binary not found at %s, please install manually or set ALIBABA_CLOUD_CMS2_EXEC_PATH", c.execFilePath)
 	}
 
 	if err := c.PrepareEnv(); err != nil {
@@ -120,7 +120,7 @@ func (c *Context) InitBasicInfo() {
 		c.execFilePath += ".exe"
 	}
 
-	if envPath := os.Getenv("ALIYUN_CMS2_EXEC_PATH"); envPath != "" {
+	if envPath := os.Getenv("ALIBABA_CLOUD_CMS2_EXEC_PATH"); envPath != "" {
 		c.execFilePath = envPath
 	}
 
@@ -139,7 +139,7 @@ func (c *Context) CheckOsTypeAndArch() {
 }
 
 func (c *Context) EnsureInstalledAndUpdated() error {
-	if os.Getenv("ALIYUN_CMS2_EXEC_PATH") != "" {
+	if os.Getenv("ALIBABA_CLOUD_CMS2_EXEC_PATH") != "" {
 		return nil
 	}
 

@@ -100,7 +100,7 @@ func TestInitBasicInfo_EnvOverride(t *testing.T) {
 	writeExec(t, customPath)
 	getConfigurePathFunc = func() string { return tmpDir }
 	runtimeGOOSFunc = func() string { return "linux" }
-	t.Setenv("ALIYUN_CMS2_EXEC_PATH", customPath)
+	t.Setenv("ALIBABA_CLOUD_CMS2_EXEC_PATH", customPath)
 
 	ctx, _, _ := newTestCtx()
 	c := NewContext(ctx)
@@ -287,7 +287,7 @@ func TestEnsureInstalledAndUpdated_SkipWhenEnvOverride(t *testing.T) {
 	tmpDir := t.TempDir()
 	customPath := filepath.Join(tmpDir, "my-cms")
 	writeExec(t, customPath)
-	t.Setenv("ALIYUN_CMS2_EXEC_PATH", customPath)
+	t.Setenv("ALIBABA_CLOUD_CMS2_EXEC_PATH", customPath)
 	getConfigurePathFunc = func() string { return tmpDir }
 	runtimeGOOSFunc = func() string { return "linux" }
 
@@ -592,10 +592,10 @@ func TestExecute_EnvNoConflict(t *testing.T) {
 
 	t.Setenv("ALIBABA_CLOUD_CMS_ACCESS_KEY_ID", "old-ak")
 
-	var capturedEnv []string
+	var capturedCmd *exec.Cmd
 	execCommandFunc = func(name string, args ...string) *exec.Cmd {
-		cmd := exec.Command("bash", "-c", "exit 0")
-		return cmd
+		capturedCmd = exec.Command("bash", "-c", "exit 0")
+		return capturedCmd
 	}
 
 	ctx, _, _ := newTestCtx()
@@ -605,14 +605,12 @@ func TestExecute_EnvNoConflict(t *testing.T) {
 		"ALIBABA_CLOUD_CMS_ACCESS_KEY_ID": "new-ak",
 	}
 
-	envs := filterEnv(os.Environ(), c.envMap)
-	for k, v := range c.envMap {
-		envs = append(envs, k+"="+v)
+	if err := c.Execute([]string{"version"}); err != nil {
+		t.Fatalf("Execute: %v", err)
 	}
-	capturedEnv = envs
 
 	akCount := 0
-	for _, item := range capturedEnv {
+	for _, item := range capturedCmd.Env {
 		if strings.HasPrefix(item, "ALIBABA_CLOUD_CMS_ACCESS_KEY_ID=") {
 			akCount++
 			if !strings.Contains(item, "new-ak") {
@@ -651,18 +649,11 @@ func TestRun_FullFlow(t *testing.T) {
 	cpFlag.SetValue(configPath)
 
 	var capturedArgs []string
-	var capturedEnv []string
+	var capturedCmd *exec.Cmd
 	execCommandFunc = func(name string, args ...string) *exec.Cmd {
 		capturedArgs = args
-		cmd := exec.Command("bash", "-c", "exit 0")
-		return cmd
-	}
-
-	origExec := execCommandFunc
-	execCommandFunc = func(name string, args ...string) *exec.Cmd {
-		capturedArgs = args
-		cmd := origExec(name, args...)
-		return cmd
+		capturedCmd = exec.Command("bash", "-c", "exit 0")
+		return capturedCmd
 	}
 
 	c := NewContext(ctx)
@@ -670,8 +661,27 @@ func TestRun_FullFlow(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
-	_ = capturedArgs
-	_ = capturedEnv
+	if !contains(capturedArgs, "integration-policy") || !contains(capturedArgs, "list") {
+		t.Errorf("expected subcommand args forwarded, got %v", capturedArgs)
+	}
+
+	envHas := func(key, val string) bool {
+		for _, item := range capturedCmd.Env {
+			if strings.HasPrefix(item, key+"=") && strings.Contains(item, val) {
+				return true
+			}
+		}
+		return false
+	}
+	if !envHas("ALIBABA_CLOUD_CMS_ACCESS_KEY_ID", "test-ak") {
+		t.Errorf("subprocess env missing correct ACCESS_KEY_ID")
+	}
+	if !envHas("ALIBABA_CLOUD_CMS_ACCESS_KEY_SECRET", "test-sk") {
+		t.Errorf("subprocess env missing correct ACCESS_KEY_SECRET")
+	}
+	if !envHas("ALIBABA_CLOUD_CMS_REGION", "cn-hangzhou") {
+		t.Errorf("subprocess env missing correct REGION")
+	}
 
 	if c.envMap["ALIBABA_CLOUD_CMS_ACCESS_KEY_ID"] != "test-ak" {
 		t.Errorf("access key mismatch: %s", c.envMap["ALIBABA_CLOUD_CMS_ACCESS_KEY_ID"])
