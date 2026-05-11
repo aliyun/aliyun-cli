@@ -28,6 +28,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/otel"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
@@ -242,6 +243,8 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 				"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, "+hint)
 		}
 	}
+
+	otel.InjectHeaders(a.request.Headers)
 
 	return nil
 }
