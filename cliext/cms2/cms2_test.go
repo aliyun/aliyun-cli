@@ -335,30 +335,17 @@ func TestFilterEnv(t *testing.T) {
 
 func TestRemoveFlagsForMainCli(t *testing.T) {
 	ctx, _, _ := newTestCtx()
-	config.AddFlags(ctx.Flags())
-
-	profileFlag := ctx.Flags().Get("profile")
-	if profileFlag == nil {
-		t.Fatalf("profile flag not found")
-	}
-	profileFlag.SetAssigned(true)
-	profileFlag.SetValue("test-profile")
-
 	c := NewContext(ctx)
 	args := []string{"--profile", "test-profile", "integration-policy", "list", "--region", "cn-hangzhou"}
-	result, err := c.RemoveFlagsForMainCli(args)
-	if err != nil {
-		t.Fatalf("RemoveFlagsForMainCli: %v", err)
-	}
+	result := c.RemoveFlagsForMainCli(args)
 
 	for _, a := range result {
 		if a == "--profile" || a == "test-profile" {
 			t.Errorf("--profile and its value should be removed, got %v", result)
 		}
-	}
-
-	if !contains(result, "--region") || !contains(result, "cn-hangzhou") {
-		t.Errorf("--region should be preserved: %v", result)
+		if a == "--region" || a == "cn-hangzhou" {
+			t.Errorf("--region and its value should be removed (passed via env), got %v", result)
+		}
 	}
 	if !contains(result, "integration-policy") || !contains(result, "list") {
 		t.Errorf("subcommand args should be preserved: %v", result)
@@ -367,22 +354,6 @@ func TestRemoveFlagsForMainCli(t *testing.T) {
 
 func TestRemoveFlagsForMainCli_AssignedWithEquals(t *testing.T) {
 	ctx, _, _ := newTestCtx()
-	config.AddFlags(ctx.Flags())
-
-	profileFlag := ctx.Flags().Get("profile")
-	if profileFlag == nil {
-		t.Fatalf("profile flag not found")
-	}
-	profileFlag.SetAssigned(true)
-	profileFlag.SetValue("test-profile")
-
-	endpointFlag := ctx.Flags().Get("endpoint")
-	if endpointFlag == nil {
-		t.Fatalf("endpoint flag not found")
-	}
-	endpointFlag.SetAssigned(true)
-	endpointFlag.SetValue("https://cms.example.com")
-
 	c := NewContext(ctx)
 	args := []string{
 		"-p:test-profile",
@@ -391,48 +362,28 @@ func TestRemoveFlagsForMainCli_AssignedWithEquals(t *testing.T) {
 		"--endpoint:https://cms.example.com",
 		"--region=cn-hangzhou",
 	}
-	result, err := c.RemoveFlagsForMainCli(args)
-	if err != nil {
-		t.Fatalf("RemoveFlagsForMainCli: %v", err)
-	}
+	result := c.RemoveFlagsForMainCli(args)
 
 	for _, a := range result {
-		if strings.HasPrefix(a, "--profile") || strings.HasPrefix(a, "-p") || strings.HasPrefix(a, "--endpoint") {
-			t.Fatalf("config flags with inline values should be removed, got %v", result)
+		if strings.HasPrefix(a, "--profile") || strings.HasPrefix(a, "-p") ||
+			strings.HasPrefix(a, "--endpoint") || strings.HasPrefix(a, "--region") {
+			t.Fatalf("main CLI flags with inline values should be removed, got %v", result)
 		}
 	}
-	if !contains(result, "integration-policy") || !contains(result, "list") || !contains(result, "--region=cn-hangzhou") {
+	if !contains(result, "integration-policy") || !contains(result, "list") {
 		t.Fatalf("downstream args should be preserved: %v", result)
 	}
 }
 
 func TestRemoveFlagsForMainCli_StripsCliAIModeFlags(t *testing.T) {
 	ctx, _, _ := newTestCtx()
-	config.AddFlags(ctx.Flags())
-	openapi.AddFlags(ctx.Flags())
-
-	aiFlag := ctx.Flags().Get(openapi.CliAIModeFlagName)
-	if aiFlag == nil {
-		t.Fatalf("cli-ai-mode flag not found")
-	}
-	aiFlag.SetAssigned(true)
-
-	noAIFlag := ctx.Flags().Get(openapi.CliNoAIModeFlagName)
-	if noAIFlag == nil {
-		t.Fatalf("no-cli-ai-mode flag not found")
-	}
-	noAIFlag.SetAssigned(true)
-
 	c := NewContext(ctx)
 	args := []string{
 		"--" + openapi.CliAIModeFlagName,
 		"--" + openapi.CliNoAIModeFlagName,
 		"version",
 	}
-	result, err := c.RemoveFlagsForMainCli(args)
-	if err != nil {
-		t.Fatalf("RemoveFlagsForMainCli: %v", err)
-	}
+	result := c.RemoveFlagsForMainCli(args)
 
 	if contains(result, "--"+openapi.CliAIModeFlagName) || contains(result, "--"+openapi.CliNoAIModeFlagName) {
 		t.Fatalf("wrapper-only AI flags should be removed, got %v", result)
@@ -442,14 +393,66 @@ func TestRemoveFlagsForMainCli_StripsCliAIModeFlags(t *testing.T) {
 	}
 }
 
+func TestRemoveFlagsForMainCli_CallerCategoryFlags(t *testing.T) {
+	ctx, _, _ := newTestCtx()
+	c := NewContext(ctx)
+
+	t.Run("long form --quiet", func(t *testing.T) {
+		result := c.RemoveFlagsForMainCli([]string{"--quiet", "integration-policy", "list"})
+		if contains(result, "--quiet") {
+			t.Errorf("--quiet should be removed, got %v", result)
+		}
+		if !contains(result, "integration-policy") || !contains(result, "list") {
+			t.Errorf("subcommand args should be preserved: %v", result)
+		}
+	})
+
+	t.Run("short form -q", func(t *testing.T) {
+		result := c.RemoveFlagsForMainCli([]string{"-q", "integration-policy", "list"})
+		if contains(result, "-q") {
+			t.Errorf("-q should be removed, got %v", result)
+		}
+		if !contains(result, "integration-policy") || !contains(result, "list") {
+			t.Errorf("subcommand args should be preserved: %v", result)
+		}
+	})
+}
+
+func TestRemoveFlagsForMainCli_Alias(t *testing.T) {
+	ctx, _, _ := newTestCtx()
+	c := NewContext(ctx)
+	args := []string{"--retry-timeout", "30", "integration-policy", "list"}
+	result := c.RemoveFlagsForMainCli(args)
+
+	for _, a := range result {
+		if a == "--retry-timeout" || a == "30" {
+			t.Errorf("--retry-timeout (alias of --read-timeout) and its value should be removed, got %v", result)
+		}
+	}
+	if !contains(result, "integration-policy") || !contains(result, "list") {
+		t.Errorf("subcommand args should be preserved: %v", result)
+	}
+}
+
+func TestRemoveFlagsForMainCli_FlagAtEnd(t *testing.T) {
+	ctx, _, _ := newTestCtx()
+	c := NewContext(ctx)
+	args := []string{"list", "--region"}
+	result := c.RemoveFlagsForMainCli(args)
+
+	if contains(result, "--region") {
+		t.Errorf("--region at end should be removed, got %v", result)
+	}
+	if !contains(result, "list") {
+		t.Errorf("subcommand args should be preserved: %v", result)
+	}
+}
+
 func TestRemoveFlagsForMainCli_NilFlags(t *testing.T) {
 	ctx, _, _ := newTestCtx()
 	c := NewContext(ctx)
 	args := []string{"version"}
-	result, err := c.RemoveFlagsForMainCli(args)
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
+	result := c.RemoveFlagsForMainCli(args)
 	if len(result) != 1 || result[0] != "version" {
 		t.Errorf("args should pass through: %v", result)
 	}

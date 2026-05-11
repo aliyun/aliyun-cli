@@ -107,11 +107,7 @@ func (c *Context) Run(args []string) error {
 		return err
 	}
 
-	childArgs, err := c.RemoveFlagsForMainCli(args)
-	if err != nil {
-		return err
-	}
-
+	childArgs := c.RemoveFlagsForMainCli(args)
 	return c.Execute(childArgs)
 }
 
@@ -322,20 +318,25 @@ func (c *Context) PrepareEnv() error {
 	return nil
 }
 
-func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
-	if c.originCtx.Flags() == nil || c.originCtx.Flags().Flags() == nil {
-		return stripWrapperOnlyArgs(append([]string(nil), args...)), nil
-	}
+// RemoveFlagsForMainCli strips all flags registered by the parent CLI
+// (config.AddFlags + openapi.AddFlags) from args before forwarding to the
+// cms2 subprocess.  Values for these flags are passed via environment
+// variables in PrepareEnv.  If a new global flag source is added to the
+// main CLI, it must be registered here as well.
+func (c *Context) RemoveFlagsForMainCli(args []string) []string {
+	allFlags := cli.NewFlagSet()
+	config.AddFlags(allFlags)
+	openapi.AddFlags(allFlags)
 
 	longNeedsValue := make(map[string]bool)
 	shortNeedsValue := make(map[string]bool)
-	for _, f := range c.originCtx.Flags().Flags() {
-		if !f.IsAssigned() || f.Category != "config" {
-			continue
-		}
+	for _, f := range allFlags.Flags() {
 		needsValue := f.AssignedMode != cli.AssignedNone
 		if f.Name != "" {
 			longNeedsValue["--"+f.Name] = needsValue
+		}
+		for _, alias := range f.Aliases {
+			longNeedsValue["--"+alias] = needsValue
 		}
 		if f.Shorthand != 0 {
 			shortNeedsValue["-"+string(f.Shorthand)] = needsValue
@@ -352,24 +353,20 @@ func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 			hasInlineValue = true
 		}
 		if needs, ok := longNeedsValue[argName]; ok {
-			if needs && i+1 < len(args) {
-				if !hasInlineValue {
-					i++
-				}
+			if needs && !hasInlineValue && i+1 < len(args) {
+				i++
 			}
 			continue
 		}
 		if needs, ok := shortNeedsValue[argName]; ok {
-			if needs && i+1 < len(args) {
-				if !hasInlineValue {
-					i++
-				}
+			if needs && !hasInlineValue && i+1 < len(args) {
+				i++
 			}
 			continue
 		}
 		out = append(out, a)
 	}
-	return stripWrapperOnlyArgs(out), nil
+	return out
 }
 
 func (c *Context) Execute(childArgs []string) error {
@@ -495,32 +492,3 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-func stripWrapperOnlyArgs(args []string) []string {
-	return stripArgsByPrefix(args,
-		"--"+openapi.CliAIModeFlagName,
-		"--"+openapi.CliNoAIModeFlagName,
-	)
-}
-
-func stripArgsByPrefix(args []string, drops ...string) []string {
-	if len(args) == 0 || len(drops) == 0 {
-		return args
-	}
-	drop := make(map[string]struct{}, len(drops))
-	for _, d := range drops {
-		drop[d] = struct{}{}
-	}
-
-	out := make([]string, 0, len(args))
-	for _, arg := range args {
-		prefix := arg
-		if p, _, ok := cli.SplitStringWithPrefix(arg, "=:"); ok {
-			prefix = p
-		}
-		if _, ok := drop[prefix]; ok {
-			continue
-		}
-		out = append(out, arg)
-	}
-	return out
-}
