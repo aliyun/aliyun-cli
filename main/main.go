@@ -37,6 +37,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 	"github.com/aliyun/aliyun-cli/v3/ossutil"
 	"github.com/aliyun/aliyun-cli/v3/otsutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
 	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 )
@@ -124,6 +125,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(agentbay.NewAgentBayCommand())
 	// tablestore command
 	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
+	// sae command
+	rootCmd.AddSubCommand(saectl.NewSaectlCommand())
 	// appmanager command
 	rootCmd.AddSubCommand(appmanagerutil.NewAppManagerCommand())
 	// cms2 command
