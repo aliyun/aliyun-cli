@@ -297,22 +297,22 @@ func (c *Context) PrepareEnv() error {
 	}
 
 	c.envMap = map[string]string{
-		"ALIYUN_CMS_CLI_ACCESS_KEY_ID":     accessKeyId,
-		"ALIYUN_CMS_CLI_ACCESS_KEY_SECRET": accessKeySecret,
-		"ALIYUN_CMS_CLI_CALLER":            "aliyun-cms2",
+		"ALIBABA_CLOUD_CMS_ACCESS_KEY_ID":     accessKeyId,
+		"ALIBABA_CLOUD_CMS_ACCESS_KEY_SECRET": accessKeySecret,
+		"ALIBABA_CLOUD_CMS_CALLER":            "aliyun-cms2",
 	}
 	if stsToken != "" {
-		c.envMap["ALIYUN_CMS_CLI_SECURITY_TOKEN"] = stsToken
+		c.envMap["ALIBABA_CLOUD_CMS_SECURITY_TOKEN"] = stsToken
 	}
 
 	if region := flagStringValue(c.originCtx, "region"); region != "" {
-		c.envMap["ALIYUN_CMS_CLI_REGION"] = region
+		c.envMap["ALIBABA_CLOUD_CMS_REGION"] = region
 	} else if profile.RegionId != "" {
-		c.envMap["ALIYUN_CMS_CLI_REGION"] = profile.RegionId
+		c.envMap["ALIBABA_CLOUD_CMS_REGION"] = profile.RegionId
 	}
 
 	if endpoint := flagStringValue(c.originCtx, "endpoint"); endpoint != "" {
-		c.envMap["ALIYUN_CMS_CLI_ENDPOINT"] = endpoint
+		c.envMap["ALIBABA_CLOUD_CMS_ENDPOINT"] = endpoint
 	}
 
 	return nil

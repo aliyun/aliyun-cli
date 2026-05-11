@@ -311,18 +311,18 @@ func TestEnsureInstalledAndUpdated_SkipWhenEnvOverride(t *testing.T) {
 func TestFilterEnv(t *testing.T) {
 	base := []string{
 		"HOME=/home/user",
-		"ALIYUN_CMS_CLI_ACCESS_KEY_ID=old-ak",
+		"ALIBABA_CLOUD_CMS_ACCESS_KEY_ID=old-ak",
 		"PATH=/usr/bin",
-		"ALIYUN_CMS_CLI_REGION=cn-hangzhou",
+		"ALIBABA_CLOUD_CMS_REGION=cn-hangzhou",
 	}
 	overrides := map[string]string{
-		"ALIYUN_CMS_CLI_ACCESS_KEY_ID": "new-ak",
-		"ALIYUN_CMS_CLI_REGION":        "cn-shanghai",
+		"ALIBABA_CLOUD_CMS_ACCESS_KEY_ID": "new-ak",
+		"ALIBABA_CLOUD_CMS_REGION":        "cn-shanghai",
 	}
 	result := filterEnv(base, overrides)
 	for _, item := range result {
 		key, _, _ := strings.Cut(item, "=")
-		if key == "ALIYUN_CMS_CLI_ACCESS_KEY_ID" || key == "ALIYUN_CMS_CLI_REGION" {
+		if key == "ALIBABA_CLOUD_CMS_ACCESS_KEY_ID" || key == "ALIBABA_CLOUD_CMS_REGION" {
 			t.Errorf("conflicting key %s should be filtered", key)
 		}
 	}
@@ -556,7 +556,7 @@ func TestExecute_Success(t *testing.T) {
 	ctx, _, _ := newTestCtx()
 	c := NewContext(ctx)
 	c.execFilePath = "/any/path"
-	c.envMap = map[string]string{"ALIYUN_CMS_CLI_ACCESS_KEY_ID": "ak"}
+	c.envMap = map[string]string{"ALIBABA_CLOUD_CMS_ACCESS_KEY_ID": "ak"}
 
 	if err := c.Execute([]string{"version"}); err != nil {
 		t.Fatalf("Execute should succeed: %v", err)
@@ -590,7 +590,7 @@ func TestExecute_ExitCode(t *testing.T) {
 func TestExecute_EnvNoConflict(t *testing.T) {
 	saveAndRestore(t)
 
-	t.Setenv("ALIYUN_CMS_CLI_ACCESS_KEY_ID", "old-ak")
+	t.Setenv("ALIBABA_CLOUD_CMS_ACCESS_KEY_ID", "old-ak")
 
 	var capturedEnv []string
 	execCommandFunc = func(name string, args ...string) *exec.Cmd {
@@ -602,7 +602,7 @@ func TestExecute_EnvNoConflict(t *testing.T) {
 	c := NewContext(ctx)
 	c.execFilePath = "/any/path"
 	c.envMap = map[string]string{
-		"ALIYUN_CMS_CLI_ACCESS_KEY_ID": "new-ak",
+		"ALIBABA_CLOUD_CMS_ACCESS_KEY_ID": "new-ak",
 	}
 
 	envs := filterEnv(os.Environ(), c.envMap)
@@ -613,7 +613,7 @@ func TestExecute_EnvNoConflict(t *testing.T) {
 
 	akCount := 0
 	for _, item := range capturedEnv {
-		if strings.HasPrefix(item, "ALIYUN_CMS_CLI_ACCESS_KEY_ID=") {
+		if strings.HasPrefix(item, "ALIBABA_CLOUD_CMS_ACCESS_KEY_ID=") {
 			akCount++
 			if !strings.Contains(item, "new-ak") {
 				t.Errorf("expected new-ak, got %s", item)
@@ -621,7 +621,7 @@ func TestExecute_EnvNoConflict(t *testing.T) {
 		}
 	}
 	if akCount != 1 {
-		t.Errorf("ALIYUN_CMS_CLI_ACCESS_KEY_ID should appear exactly once, got %d", akCount)
+		t.Errorf("ALIBABA_CLOUD_CMS_ACCESS_KEY_ID should appear exactly once, got %d", akCount)
 	}
 }
 
@@ -673,14 +673,14 @@ func TestRun_FullFlow(t *testing.T) {
 	_ = capturedArgs
 	_ = capturedEnv
 
-	if c.envMap["ALIYUN_CMS_CLI_ACCESS_KEY_ID"] != "test-ak" {
-		t.Errorf("access key mismatch: %s", c.envMap["ALIYUN_CMS_CLI_ACCESS_KEY_ID"])
+	if c.envMap["ALIBABA_CLOUD_CMS_ACCESS_KEY_ID"] != "test-ak" {
+		t.Errorf("access key mismatch: %s", c.envMap["ALIBABA_CLOUD_CMS_ACCESS_KEY_ID"])
 	}
-	if c.envMap["ALIYUN_CMS_CLI_ACCESS_KEY_SECRET"] != "test-sk" {
-		t.Errorf("secret key mismatch: %s", c.envMap["ALIYUN_CMS_CLI_ACCESS_KEY_SECRET"])
+	if c.envMap["ALIBABA_CLOUD_CMS_ACCESS_KEY_SECRET"] != "test-sk" {
+		t.Errorf("secret key mismatch: %s", c.envMap["ALIBABA_CLOUD_CMS_ACCESS_KEY_SECRET"])
 	}
-	if c.envMap["ALIYUN_CMS_CLI_REGION"] != "cn-hangzhou" {
-		t.Errorf("region mismatch: %s", c.envMap["ALIYUN_CMS_CLI_REGION"])
+	if c.envMap["ALIBABA_CLOUD_CMS_REGION"] != "cn-hangzhou" {
+		t.Errorf("region mismatch: %s", c.envMap["ALIBABA_CLOUD_CMS_REGION"])
 	}
 }
 
