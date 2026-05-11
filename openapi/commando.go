@@ -23,8 +23,8 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
-	"github.com/aliyun/aliyun-cli/v3/otel"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/headers"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 	"github.com/aliyun/aliyun-cli/v3/util"
 
@@ -305,7 +305,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					aimode.MergeUserAgentIntoPluginEnvs(configDir, envs, forceOn, forceOff)
 					util.MergeAgentSegmentIntoPluginEnvs(envs)
 					safety.MergeSafetyPolicyPathIntoEnvs(configDir, envs)
-					otel.MergeOtelEnvs(envs)
+					headers.MergeIntoPluginEnvs(envs)
 					ctx.SetRuntimeEnvs(envs)
 				}
 			} else if isHelp || isVersion {
