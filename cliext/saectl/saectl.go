@@ -329,7 +329,6 @@ func extractTarGz(src, dest string) error {
 	tr := tar.NewReader(gr)
 	var extractedDest string
 	destClean := filepath.Clean(dest)
-	destPrefix := destClean + string(os.PathSeparator)
 
 	for {
 		hdr, err := tr.Next()
@@ -366,8 +365,8 @@ func extractTarGz(src, dest string) error {
 				continue
 			}
 
-			filePath := filepath.Clean(filepath.Join(destClean, filepath.FromSlash(cleanName)))
-			if filePath != destClean && !strings.HasPrefix(filePath, destPrefix) {
+			filePath, err := safeJoinUnderDir(destClean, cleanName)
+			if err != nil {
 				// Skip illegal path.
 				continue
 			}
@@ -409,7 +408,6 @@ func unzip(src, dest string) error {
 	defer r.Close()
 	var extractedDest string
 	destClean := filepath.Clean(dest)
-	destPrefix := destClean + string(os.PathSeparator)
 
 	for _, file := range r.File {
 		cleanName, err := sanitizeArchivePath(file.Name)
@@ -441,8 +439,8 @@ func unzip(src, dest string) error {
 			continue
 		}
 
-		filePath := filepath.Clean(filepath.Join(destClean, filepath.FromSlash(cleanName)))
-		if filePath != destClean && !strings.HasPrefix(filePath, destPrefix) {
+		filePath, err := safeJoinUnderDir(destClean, cleanName)
+		if err != nil {
 			// Skip illegal path.
 			continue
 		}
@@ -536,10 +534,11 @@ func sanitizeArchivePath(name string) (string, error) {
 func safeJoinUnderDir(destDir, cleanRel string) (string, error) {
 	destClean := filepath.Clean(destDir)
 	joined := filepath.Join(destClean, filepath.FromSlash(cleanRel))
-	joined = filepath.Clean(joined)
-
-	destPrefix := destClean + string(os.PathSeparator)
-	if joined != destClean && !strings.HasPrefix(joined, destPrefix) {
+	rel, err := filepath.Rel(destClean, joined)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 		return "", fmt.Errorf("path escapes destination directory")
 	}
 	return joined, nil
