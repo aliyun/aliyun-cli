@@ -23,7 +23,7 @@ import (
 )
 
 // EnvPluginHeaders 是父 CLI 透传给插件进程的 env key。值为 base64( json.Marshal( map[string]string ) )。
-const EnvPluginHeaders = "ALIBABA_CLOUD_HEADERS"
+const EnvPluginHeaders = "ALIBABA_CLOUD_CLI_INNER_HEADERS"
 
 // Collect 汇总父 CLI 这一侧所有"自动注入"的 header。
 func Collect() map[string]string {
