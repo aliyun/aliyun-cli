@@ -297,9 +297,10 @@ func (c *Context) PrepareEnv() error {
 	}
 
 	c.envMap = map[string]string{
-		"ALIBABA_CLOUD_CMS_ACCESS_KEY_ID":     accessKeyId,
-		"ALIBABA_CLOUD_CMS_ACCESS_KEY_SECRET": accessKeySecret,
-		"ALIBABA_CLOUD_CMS_CALLER":            "aliyun-cms2",
+		"ALIBABA_CLOUD_CMS_ACCESS_KEY_ID":      accessKeyId,
+		"ALIBABA_CLOUD_CMS_ACCESS_KEY_SECRET":  accessKeySecret,
+		"ALIBABA_CLOUD_CMS_CALLER":             "aliyun-cms2",
+		"ALIBABA_CLOUD_CMS_COMMAND_PREFIX":     "aliyun cms2",
 	}
 	if stsToken != "" {
 		c.envMap["ALIBABA_CLOUD_CMS_SECURITY_TOKEN"] = stsToken
