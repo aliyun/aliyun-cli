@@ -15,10 +15,12 @@
 package headers
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 )
@@ -68,7 +70,7 @@ func TestMergeIntoPluginEnvs_DisabledViaEnabledFalse(t *testing.T) {
 	assert.False(t, ok, "OTel disabled => header env must NOT be set")
 }
 
-func TestMergeIntoPluginEnvs_WritesJSON(t *testing.T) {
+func TestMergeIntoPluginEnvs_WritesBase64JSON(t *testing.T) {
 	clearOtelEnvs(t)
 	t.Setenv(otel.EnvTraceparent, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
 	t.Setenv(otel.EnvBaggage, "sessionId=abc-123,userId=user-001")
@@ -77,13 +79,43 @@ func TestMergeIntoPluginEnvs_WritesJSON(t *testing.T) {
 	MergeIntoPluginEnvs(envs)
 
 	raw, ok := envs[EnvPluginHeaders]
-	assert.True(t, ok)
+	require.True(t, ok)
+
+	decoded, err := base64.StdEncoding.DecodeString(raw)
+	require.NoError(t, err, "transmission value must be valid base64")
 
 	var got map[string]string
-	require := assert.NoError
-	require(t, json.Unmarshal([]byte(raw), &got))
+	require.NoError(t, json.Unmarshal(decoded, &got))
 	assert.Equal(t, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", got[otel.HeaderTraceparent])
 	assert.Equal(t, "sessionId=abc-123,userId=user-001", got[otel.HeaderBaggage])
+}
+
+// 校验 base64 之后的 payload 字符集只包含 [A-Za-z0-9+/=]，
+// 不会带 " \ $ 等容易被传输层误伤的字符。
+func TestMergeIntoPluginEnvs_TransportSafeCharset(t *testing.T) {
+	clearOtelEnvs(t)
+	t.Setenv(otel.EnvTraceparent, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	t.Setenv(otel.EnvBaggage, `k="v",x=$y,z=<a&b>`) // 故意塞各种 shell / json 敏感字符
+
+	envs := map[string]string{}
+	MergeIntoPluginEnvs(envs)
+
+	raw := envs[EnvPluginHeaders]
+	require.NotEmpty(t, raw)
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		ok := (c >= 'A' && c <= 'Z') ||
+			(c >= 'a' && c <= 'z') ||
+			(c >= '0' && c <= '9') ||
+			c == '+' || c == '/' || c == '='
+		assert.True(t, ok, "unexpected byte %q at %d", c, i)
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(raw)
+	require.NoError(t, err)
+	var got map[string]string
+	require.NoError(t, json.Unmarshal(decoded, &got))
+	assert.Equal(t, `k="v",x=$y,z=<a&b>`, got[otel.HeaderBaggage], "value must round-trip losslessly")
 }
 
 func TestMergeIntoPluginEnvs_NilMapIsNoop(t *testing.T) {
