@@ -15,6 +15,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
+	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 func newTestCtx() (*cli.Context, *bytes.Buffer, *bytes.Buffer) {
@@ -343,9 +344,9 @@ func TestRemoveFlagsForMainCli(t *testing.T) {
 		if a == "--profile" || a == "test-profile" {
 			t.Errorf("--profile and its value should be removed, got %v", result)
 		}
-		if a == "--region" || a == "cn-hangzhou" {
-			t.Errorf("--region and its value should be removed (passed via env), got %v", result)
-		}
+	}
+	if !contains(result, "--region") || !contains(result, "cn-hangzhou") {
+		t.Errorf("--region should be preserved (passthrough flag), got %v", result)
 	}
 	if !contains(result, "integration-policy") || !contains(result, "list") {
 		t.Errorf("subcommand args should be preserved: %v", result)
@@ -365,10 +366,15 @@ func TestRemoveFlagsForMainCli_AssignedWithEquals(t *testing.T) {
 	result := c.RemoveFlagsForMainCli(args)
 
 	for _, a := range result {
-		if strings.HasPrefix(a, "--profile") || strings.HasPrefix(a, "-p") ||
-			strings.HasPrefix(a, "--endpoint") || strings.HasPrefix(a, "--region") {
+		if strings.HasPrefix(a, "--profile") || strings.HasPrefix(a, "-p") {
 			t.Fatalf("main CLI flags with inline values should be removed, got %v", result)
 		}
+	}
+	if !contains(result, "--endpoint:https://cms.example.com") {
+		t.Fatalf("--endpoint should be preserved (passthrough), got %v", result)
+	}
+	if !contains(result, "--region=cn-hangzhou") {
+		t.Fatalf("--region should be preserved (passthrough), got %v", result)
 	}
 	if !contains(result, "integration-policy") || !contains(result, "list") {
 		t.Fatalf("downstream args should be preserved: %v", result)
@@ -437,15 +443,108 @@ func TestRemoveFlagsForMainCli_Alias(t *testing.T) {
 func TestRemoveFlagsForMainCli_FlagAtEnd(t *testing.T) {
 	ctx, _, _ := newTestCtx()
 	c := NewContext(ctx)
-	args := []string{"list", "--region"}
-	result := c.RemoveFlagsForMainCli(args)
 
-	if contains(result, "--region") {
-		t.Errorf("--region at end should be removed, got %v", result)
-	}
-	if !contains(result, "list") {
-		t.Errorf("subcommand args should be preserved: %v", result)
-	}
+	t.Run("stripped flag at end", func(t *testing.T) {
+		result := c.RemoveFlagsForMainCli([]string{"list", "--profile"})
+		if contains(result, "--profile") {
+			t.Errorf("--profile at end should be removed, got %v", result)
+		}
+		if !contains(result, "list") {
+			t.Errorf("subcommand args should be preserved: %v", result)
+		}
+	})
+
+	t.Run("passthrough flag at end", func(t *testing.T) {
+		result := c.RemoveFlagsForMainCli([]string{"list", "--region"})
+		if !contains(result, "--region") {
+			t.Errorf("--region at end should be preserved (passthrough), got %v", result)
+		}
+	})
+}
+
+func TestRemoveFlagsForMainCli_PassthroughFlags(t *testing.T) {
+	ctx, _, _ := newTestCtx()
+	c := NewContext(ctx)
+
+	t.Run("short form -o json", func(t *testing.T) {
+		result := c.RemoveFlagsForMainCli([]string{"prometheus-instance", "list", "-o", "json"})
+		if !contains(result, "-o") || !contains(result, "json") {
+			t.Errorf("-o json should be preserved for cms2 subprocess, got %v", result)
+		}
+	})
+
+	t.Run("long form --output json", func(t *testing.T) {
+		result := c.RemoveFlagsForMainCli([]string{"prometheus-instance", "list", "--output", "json"})
+		if !contains(result, "--output") || !contains(result, "json") {
+			t.Errorf("--output json should be preserved for cms2 subprocess, got %v", result)
+		}
+	})
+
+	t.Run("inline value --output=csv", func(t *testing.T) {
+		result := c.RemoveFlagsForMainCli([]string{"prometheus-instance", "list", "--output=csv"})
+		if !contains(result, "--output=csv") {
+			t.Errorf("--output=csv should be preserved for cms2 subprocess, got %v", result)
+		}
+	})
+
+	t.Run("--region is passed through", func(t *testing.T) {
+		result := c.RemoveFlagsForMainCli([]string{"prometheus-instance", "list", "--region", "cn-chengdu", "-o", "json"})
+		if !contains(result, "--region") || !contains(result, "cn-chengdu") {
+			t.Errorf("--region should be preserved for cms2 subprocess, got %v", result)
+		}
+		if !contains(result, "-o") || !contains(result, "json") {
+			t.Errorf("-o json should also be preserved, got %v", result)
+		}
+	})
+
+	t.Run("--region inline value", func(t *testing.T) {
+		result := c.RemoveFlagsForMainCli([]string{"prometheus-instance", "list", "--region=cn-chengdu"})
+		if !contains(result, "--region=cn-chengdu") {
+			t.Errorf("--region=cn-chengdu should be preserved for cms2 subprocess, got %v", result)
+		}
+	})
+
+	t.Run("auth, endpoint, version, and body flags passed through", func(t *testing.T) {
+		result := c.RemoveFlagsForMainCli([]string{
+			"integration-policy", "create",
+			"--access-key-id", "AKID_TEST",
+			"--access-key-secret", "SECRET_TEST",
+			"--sts-token", "TOKEN_TEST",
+			"--endpoint", "cms.cn-chengdu.aliyuncs.com",
+			"--version", "V1",
+			"--body", `{"policyType":"Cloud"}`,
+		})
+		for _, flag := range []string{"--access-key-id", "AKID_TEST",
+			"--access-key-secret", "SECRET_TEST",
+			"--sts-token", "TOKEN_TEST",
+			"--endpoint", "cms.cn-chengdu.aliyuncs.com",
+			"--version", "V1",
+			"--body", `{"policyType":"Cloud"}`} {
+			if !contains(result, flag) {
+				t.Errorf("%s should be preserved, got %v", flag, result)
+			}
+		}
+	})
+
+	t.Run("other main CLI flags still stripped", func(t *testing.T) {
+		result := c.RemoveFlagsForMainCli([]string{
+			"--profile", "test-profile",
+			"prometheus-instance", "list",
+			"--region", "cn-chengdu",
+			"-o", "json",
+		})
+		for _, a := range result {
+			if a == "--profile" || a == "test-profile" {
+				t.Errorf("--profile should still be stripped, got %v", result)
+			}
+		}
+		if !contains(result, "--region") || !contains(result, "cn-chengdu") {
+			t.Errorf("--region should be preserved, got %v", result)
+		}
+		if !contains(result, "-o") || !contains(result, "json") {
+			t.Errorf("-o json should be preserved, got %v", result)
+		}
+	})
 }
 
 func TestRemoveFlagsForMainCli_NilFlags(t *testing.T) {
@@ -800,6 +899,56 @@ func TestDownloadFile_ErrorPaths(t *testing.T) {
 	}
 	if err := downloadFile("http://x", filepath.Join(t.TempDir(), "missing", "f")); err == nil || !strings.Contains(err.Error(), "failed to create file") {
 		t.Fatalf("expected create file error, got %v", err)
+	}
+}
+
+// --- PrepareEnv UserAgent ---
+
+// clearAgentEnvs unsets all known agent environment variables so that
+// DetectAgentName() returns "" in tests that don't want agent detection.
+func clearAgentEnvs(t *testing.T) {
+	t.Helper()
+	for _, name := range []string{
+		"CURSOR_AGENT", "CLAUDECODE", "CLAUDE_CODE", "GEMINI_CLI",
+		"AUGMENT_AGENT", "OPENCODE", "OPENCODE_CLIENT", "CLINE_ACTIVE",
+		"CODEX_SANDBOX", "QODER_AGENT", "QODER_CLI", "AGENT",
+	} {
+		t.Setenv(name, "")
+	}
+}
+
+func TestPrepareEnv_SetsUserAgent(t *testing.T) {
+	saveAndRestore(t)
+	clearAgentEnvs(t)
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	_ = os.WriteFile(configPath, []byte(`{
+		"current":"default",
+		"profiles":[{"name":"default","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou"}]
+	}`), 0644)
+
+	ctx, _, _ := newTestCtx()
+	config.AddFlags(ctx.Flags())
+	cpFlag := ctx.Flags().Get(config.ConfigurePathFlagName)
+	cpFlag.SetAssigned(true)
+	cpFlag.SetValue(configPath)
+
+	c := NewContext(ctx)
+	if err := c.PrepareEnv(); err != nil {
+		t.Fatalf("PrepareEnv: %v", err)
+	}
+
+	ua, ok := c.envMap["ALIBABA_CLOUD_CMS_USER_AGENT"]
+	if !ok {
+		t.Fatalf("ALIBABA_CLOUD_CMS_USER_AGENT should be set")
+	}
+	expected := util.GetAliyunCliUserAgent()
+	if ua != expected {
+		t.Errorf("expected %q, got %q", expected, ua)
+	}
+	if !strings.HasPrefix(ua, "Aliyun-CLI/") {
+		t.Errorf("UA should start with Aliyun-CLI/, got %q", ua)
 	}
 }
 

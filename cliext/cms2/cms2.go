@@ -297,10 +297,9 @@ func (c *Context) PrepareEnv() error {
 	}
 
 	c.envMap = map[string]string{
-		"ALIBABA_CLOUD_CMS_ACCESS_KEY_ID":      accessKeyId,
-		"ALIBABA_CLOUD_CMS_ACCESS_KEY_SECRET":  accessKeySecret,
-		"ALIBABA_CLOUD_CMS_CALLER":             "aliyun-cms2",
-		"ALIBABA_CLOUD_CMS_COMMAND_PREFIX":     "aliyun cms2",
+		"ALIBABA_CLOUD_CMS_ACCESS_KEY_ID":     accessKeyId,
+		"ALIBABA_CLOUD_CMS_ACCESS_KEY_SECRET": accessKeySecret,
+		"ALIBABA_CLOUD_CMS_COMPAT_MODE":       "aliyun cms2",
 	}
 	if stsToken != "" {
 		c.envMap["ALIBABA_CLOUD_CMS_SECURITY_TOKEN"] = stsToken
@@ -316,14 +315,76 @@ func (c *Context) PrepareEnv() error {
 		c.envMap["ALIBABA_CLOUD_CMS_ENDPOINT"] = endpoint
 	}
 
+	c.envMap["ALIBABA_CLOUD_CMS_USER_AGENT"] = util.GetAliyunCliUserAgent()
+
 	return nil
 }
 
-// RemoveFlagsForMainCli strips all flags registered by the parent CLI
-// (config.AddFlags + openapi.AddFlags) from args before forwarding to the
-// cms2 subprocess.  Values for these flags are passed via environment
-// variables in PrepareEnv.  If a new global flag source is added to the
-// main CLI, it must be registered here as well.
+// stripFlags lists parent-CLI flag names that are only meaningful to the
+// main CLI and should be removed before forwarding args to the cms2
+// subprocess.  These are auth/config/caller flags whose values are
+// already passed via environment variables in PrepareEnv, or have no
+// meaning in the subprocess context.
+//
+// All other flags (including those that happen to share a name with the
+// parent CLI, such as --region, --output, --version, --endpoint) are
+// passed through so the subprocess can handle them with its own semantics.
+var stripFlags = map[string]bool{
+	// config: auth & credential
+	"profile":                        true,
+	"mode":                           true,
+	"sts-region":                     true,
+	"ram-role-name":                  true,
+	"ram-role-arn":                   true,
+	"role-session-name":              true,
+	"external-id":                    true,
+	"source-profile":                 true,
+	"private-key":                    true,
+	"key-pair-name":                  true,
+	"expired-seconds":                true,
+	"process-command":                true,
+	"oidc-provider-arn":              true,
+	"oidc-token-file":                true,
+	"cloud-sso-sign-in-url":          true,
+	"cloud-sso-access-config":        true,
+	"cloud-sso-account-id":           true,
+	"oauth-site-type":                true,
+	"external-account-type":          true,
+	"auto-plugin-install":            true,
+	"auto-plugin-install-enable-pre": true,
+
+	// config: connection & runtime
+	"config-path":        true,
+	"read-timeout":       true,
+	"connect-timeout":    true,
+	"retry-count":        true,
+	"skip-secure-verify": true,
+	"endpoint-type":      true,
+	"RegionId":           true,
+
+	// openapi: caller-side-only
+	"secure":         true,
+	"insecure":       true,
+	"header":         true,
+	"pager":          true,
+	"accept":         true,
+	"waiter":         true,
+	"dryrun":         true,
+	"quiet":          true,
+	"yes":            true,
+	"cli-query":      true,
+	"roa":            true,
+	"method":         true,
+	"user-agent":     true,
+	"cli-ai-mode":    true,
+	"no-cli-ai-mode": true,
+}
+
+// RemoveFlagsForMainCli strips only the parent-CLI-only flags listed in
+// stripFlags from args before forwarding to the cms2 subprocess.  All
+// other args (including flags that the subprocess handles, such as
+// --region, --output, --version, --endpoint, --access-key-id, etc.)
+// are preserved.
 func (c *Context) RemoveFlagsForMainCli(args []string) []string {
 	allFlags := cli.NewFlagSet()
 	config.AddFlags(allFlags)
@@ -332,6 +393,9 @@ func (c *Context) RemoveFlagsForMainCli(args []string) []string {
 	longNeedsValue := make(map[string]bool)
 	shortNeedsValue := make(map[string]bool)
 	for _, f := range allFlags.Flags() {
+		if !stripFlags[f.Name] {
+			continue
+		}
 		needsValue := f.AssignedMode != cli.AssignedNone
 		if f.Name != "" {
 			longNeedsValue["--"+f.Name] = needsValue
@@ -492,4 +556,3 @@ func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
-
