@@ -377,7 +377,8 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			api, found := meta.HookGetApi(c.library.GetApi)(product.Code, product.Version, args[1])
 			// For restful products, the 2-arg form `aliyun <product> <ApiName>` requires a valid ApiName so we can resolve the underlying Method + PathPattern from metadata.
 			// Otherwise we'd fall through with empty Method/PathPattern and surface the confusing "product 'xxx' need restful call" error from checkRestfulMethod.
-			if !found && !ForceFlag(ctx.Flags()).IsAssigned() {
+			force := ForceFlag(ctx.Flags()).IsAssigned()
+			if !found && !force {
 				return &InvalidApiError{Name: args[1], product: &product}
 			}
 			c.CheckApiParamWithBuildInArgs(ctx, api)
