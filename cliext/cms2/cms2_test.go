@@ -917,7 +917,120 @@ func clearAgentEnvs(t *testing.T) {
 	}
 }
 
-func TestPrepareEnv_SetsUserAgent(t *testing.T) {
+func TestPrepareEnv_SetsAIUserAgent(t *testing.T) {
+	saveAndRestore(t)
+	clearAgentEnvs(t)
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	_ = os.WriteFile(configPath, []byte(`{
+		"current":"default",
+		"profiles":[{"name":"default","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou"}]
+	}`), 0644)
+
+	// Write an ai-mode.json with enabled=true so the UA suffix is produced.
+	aiCfgDir := filepath.Dir(configPath)
+	_ = os.WriteFile(filepath.Join(aiCfgDir, "ai-mode.json"), []byte(`{"enabled":true}`), 0644)
+
+	ctx, _, _ := newTestCtx()
+	config.AddFlags(ctx.Flags())
+	cpFlag := ctx.Flags().Get(config.ConfigurePathFlagName)
+	cpFlag.SetAssigned(true)
+	cpFlag.SetValue(configPath)
+
+	c := NewContext(ctx)
+	if err := c.PrepareEnv(nil); err != nil {
+		t.Fatalf("PrepareEnv: %v", err)
+	}
+
+	// ALIBABA_CLOUD_CMS_USER_AGENT should always be set
+	baseUA, ok := c.envMap["ALIBABA_CLOUD_CMS_USER_AGENT"]
+	if !ok {
+		t.Fatalf("ALIBABA_CLOUD_CMS_USER_AGENT should be set")
+	}
+	if expected := util.GetAliyunCliUserAgent(); baseUA != expected {
+		t.Errorf("expected %q, got %q", expected, baseUA)
+	}
+
+	// ALIBABA_CLOUD_CMS_AI_USER_AGENT should be set when ai-mode is enabled
+	aiUA, ok := c.envMap["ALIBABA_CLOUD_CMS_AI_USER_AGENT"]
+	if !ok {
+		t.Fatalf("ALIBABA_CLOUD_CMS_AI_USER_AGENT should be set when ai-mode is enabled")
+	}
+	if !strings.Contains(aiUA, "AlibabaCloud-AIMode/enabled") {
+		t.Errorf("AI UA should contain AlibabaCloud-AIMode/enabled, got %q", aiUA)
+	}
+}
+
+// TestPrepareEnv_AIUserAgentFromArgs verifies that --cli-ai-mode in raw args
+// (cms2 has KeepArgs:true so the cli parser does not consume the flag) still
+// triggers the AI UA segment.
+func TestPrepareEnv_AIUserAgentFromArgs(t *testing.T) {
+	saveAndRestore(t)
+	clearAgentEnvs(t)
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	_ = os.WriteFile(configPath, []byte(`{
+		"current":"default",
+		"profiles":[{"name":"default","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou"}]
+	}`), 0644)
+
+	// ai-mode.json is intentionally absent so DefaultAiConfig() (Enabled=false) is used.
+	// The AI UA suffix should be produced solely because of --cli-ai-mode in args.
+
+	ctx, _, _ := newTestCtx()
+	config.AddFlags(ctx.Flags())
+	cpFlag := ctx.Flags().Get(config.ConfigurePathFlagName)
+	cpFlag.SetAssigned(true)
+	cpFlag.SetValue(configPath)
+
+	c := NewContext(ctx)
+	if err := c.PrepareEnv([]string{"prometheus-instance", "list", "--cli-ai-mode"}); err != nil {
+		t.Fatalf("PrepareEnv: %v", err)
+	}
+
+	aiUA, ok := c.envMap["ALIBABA_CLOUD_CMS_AI_USER_AGENT"]
+	if !ok {
+		t.Fatalf("ALIBABA_CLOUD_CMS_AI_USER_AGENT should be set when --cli-ai-mode is in args")
+	}
+	if !strings.Contains(aiUA, "AlibabaCloud-AIMode/enabled") {
+		t.Errorf("AI UA should contain AlibabaCloud-AIMode/enabled, got %q", aiUA)
+	}
+}
+
+// TestPrepareEnv_NoAIUserAgentFromArgsOff verifies --no-cli-ai-mode in args
+// suppresses the AI UA segment even when ai-mode.json enables it.
+func TestPrepareEnv_NoAIUserAgentFromArgsOff(t *testing.T) {
+	saveAndRestore(t)
+	clearAgentEnvs(t)
+
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	_ = os.WriteFile(configPath, []byte(`{
+		"current":"default",
+		"profiles":[{"name":"default","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou"}]
+	}`), 0644)
+	_ = os.WriteFile(filepath.Join(filepath.Dir(configPath), "ai-mode.json"),
+		[]byte(`{"enabled":true}`), 0644)
+
+	ctx, _, _ := newTestCtx()
+	config.AddFlags(ctx.Flags())
+	cpFlag := ctx.Flags().Get(config.ConfigurePathFlagName)
+	cpFlag.SetAssigned(true)
+	cpFlag.SetValue(configPath)
+
+	c := NewContext(ctx)
+	if err := c.PrepareEnv([]string{"prometheus-instance", "list", "--no-cli-ai-mode"}); err != nil {
+		t.Fatalf("PrepareEnv: %v", err)
+	}
+
+	if _, ok := c.envMap["ALIBABA_CLOUD_CMS_AI_USER_AGENT"]; ok {
+		t.Fatalf("ALIBABA_CLOUD_CMS_AI_USER_AGENT should not be set when --no-cli-ai-mode is in args")
+	}
+}
+
+func TestPrepareEnv_NoAIUserAgentWhenDisabled(t *testing.T) {
 	saveAndRestore(t)
 	clearAgentEnvs(t)
 
@@ -935,20 +1048,22 @@ func TestPrepareEnv_SetsUserAgent(t *testing.T) {
 	cpFlag.SetValue(configPath)
 
 	c := NewContext(ctx)
-	if err := c.PrepareEnv(); err != nil {
+	if err := c.PrepareEnv(nil); err != nil {
 		t.Fatalf("PrepareEnv: %v", err)
 	}
 
-	ua, ok := c.envMap["ALIBABA_CLOUD_CMS_USER_AGENT"]
+	// ALIBABA_CLOUD_CMS_USER_AGENT should always be set regardless of ai-mode
+	baseUA, ok := c.envMap["ALIBABA_CLOUD_CMS_USER_AGENT"]
 	if !ok {
 		t.Fatalf("ALIBABA_CLOUD_CMS_USER_AGENT should be set")
 	}
-	expected := util.GetAliyunCliUserAgent()
-	if ua != expected {
-		t.Errorf("expected %q, got %q", expected, ua)
+	if expected := util.GetAliyunCliUserAgent(); baseUA != expected {
+		t.Errorf("expected %q, got %q", expected, baseUA)
 	}
-	if !strings.HasPrefix(ua, "Aliyun-CLI/") {
-		t.Errorf("UA should start with Aliyun-CLI/, got %q", ua)
+
+	// ALIBABA_CLOUD_CMS_AI_USER_AGENT should NOT be set when ai-mode is disabled
+	if _, ok := c.envMap["ALIBABA_CLOUD_CMS_AI_USER_AGENT"]; ok {
+		t.Fatalf("ALIBABA_CLOUD_CMS_AI_USER_AGENT should not be set when ai-mode is disabled")
 	}
 }
 

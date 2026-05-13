@@ -14,6 +14,8 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -103,7 +105,7 @@ func (c *Context) Run(args []string) error {
 		return fmt.Errorf("cms2 binary not found at %s, please install manually or set ALIBABA_CLOUD_CMS2_EXEC_PATH", c.execFilePath)
 	}
 
-	if err := c.PrepareEnv(); err != nil {
+	if err := c.PrepareEnv(args); err != nil {
 		return err
 	}
 
@@ -260,7 +262,7 @@ func (c *Context) Install() error {
 	return c.SaveLocalVersion()
 }
 
-func (c *Context) PrepareEnv() error {
+func (c *Context) PrepareEnv(args []string) error {
 	profile, err := config.LoadProfileWithContext(c.originCtx)
 	if err != nil {
 		return fmt.Errorf("config failed: %s", err.Error())
@@ -316,6 +318,18 @@ func (c *Context) PrepareEnv() error {
 	}
 
 	c.envMap["ALIBABA_CLOUD_CMS_USER_AGENT"] = util.GetAliyunCliUserAgent()
+
+	configDir := config.GetConfigDir(c.originCtx)
+	forceOn, forceOff := cliAIOverridesFromArgs(args)
+	cfg, err := aimode.Load(configDir)
+	if err != nil {
+		cfg = aimode.DefaultAiConfig()
+	}
+	if suf := aimode.RequestUserAgentSuffixForCommand(cfg, forceOn, forceOff); suf != "" {
+		c.envMap["ALIBABA_CLOUD_CMS_AI_USER_AGENT"] = suf
+	}
+
+	otel.MergeOtelEnvs(c.envMap)
 
 	return nil
 }
@@ -529,6 +543,28 @@ func filterEnv(base []string, overrides map[string]string) []string {
 		result = append(result, item)
 	}
 	return result
+}
+
+// cliAIOverridesFromArgs returns (forceOn, forceOff) by scanning raw args for
+// --cli-ai-mode / --no-cli-ai-mode. cms2 sets KeepArgs:true, so the cli parser
+// never consumes these flags into Flags() or UnknownFlags() — they are passed
+// through verbatim. --no-cli-ai-mode wins if both appear.
+func cliAIOverridesFromArgs(args []string) (forceOn, forceOff bool) {
+	onTok := "--" + openapi.CliAIModeFlagName
+	offTok := "--" + openapi.CliNoAIModeFlagName
+	sawOn, sawOff := false, false
+	for _, a := range args {
+		switch a {
+		case offTok:
+			sawOff = true
+		case onTok:
+			sawOn = true
+		}
+	}
+	if sawOff {
+		return false, true
+	}
+	return sawOn, false
 }
 
 func flagStringValue(ctx *cli.Context, name string) string {
