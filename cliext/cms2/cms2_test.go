@@ -71,7 +71,7 @@ func TestInitBasicInfo(t *testing.T) {
 	if c.configPath != tmpDir {
 		t.Errorf("configPath: got %s, want %s", c.configPath, tmpDir)
 	}
-	if c.execFilePath != filepath.Join(tmpDir, "aliyuncms") {
+	if c.execFilePath != filepath.Join(tmpDir, "aliyuncms2") {
 		t.Errorf("execFilePath: got %s", c.execFilePath)
 	}
 	if c.installed {
@@ -97,7 +97,7 @@ func TestInitBasicInfo_Windows(t *testing.T) {
 func TestInitBasicInfo_EnvOverride(t *testing.T) {
 	saveAndRestore(t)
 	tmpDir := t.TempDir()
-	customPath := filepath.Join(tmpDir, "my-aliyuncms")
+	customPath := filepath.Join(tmpDir, "my-aliyuncms2")
 	writeExec(t, customPath)
 	getConfigurePathFunc = func() string { return tmpDir }
 	runtimeGOOSFunc = func() string { return "linux" }
@@ -166,7 +166,7 @@ func TestNeedCheckVersion(t *testing.T) {
 		t.Fatalf("not installed should return false")
 	}
 
-	writeExec(t, filepath.Join(tmpDir, "aliyuncms"))
+	writeExec(t, filepath.Join(tmpDir, "aliyuncms2"))
 	c.InitBasicInfo()
 	if !c.NeedCheckVersion() {
 		t.Fatalf("installed no cache => true")
@@ -245,7 +245,7 @@ func TestEnsureInstalledAndUpdated_Installed_NoUpdate(t *testing.T) {
 	getConfigurePathFunc = func() string { return tmpDir }
 	runtimeGOOSFunc = func() string { return "linux" }
 
-	writeExec(t, filepath.Join(tmpDir, "aliyuncms"))
+	writeExec(t, filepath.Join(tmpDir, "aliyuncms2"))
 	_ = os.WriteFile(filepath.Join(tmpDir, ".cms2_version_check"),
 		[]byte(fmt.Sprintf("%d", time.Now().Unix())), 0644)
 
@@ -270,7 +270,7 @@ func TestEnsureInstalledAndUpdated_Installed_VersionCheckFails(t *testing.T) {
 	getConfigurePathFunc = func() string { return tmpDir }
 	runtimeGOOSFunc = func() string { return "linux" }
 
-	writeExec(t, filepath.Join(tmpDir, "aliyuncms"))
+	writeExec(t, filepath.Join(tmpDir, "aliyuncms2"))
 
 	getLatestCms2VersionFunc = func() (string, error) { return "", fmt.Errorf("network error") }
 
@@ -731,7 +731,7 @@ func TestRun_FullFlow(t *testing.T) {
 	runtimeGOOSFunc = func() string { return "linux" }
 	runtimeGOARCHFunc = func() string { return "amd64" }
 
-	writeExec(t, filepath.Join(tmpDir, "aliyuncms"))
+	writeExec(t, filepath.Join(tmpDir, "aliyuncms2"))
 	_ = os.WriteFile(filepath.Join(tmpDir, ".cms2_version_check"),
 		[]byte(fmt.Sprintf("%d", time.Now().Unix())), 0644)
 

@@ -67,7 +67,7 @@ var (
 	runtimeGOARCHFunc = func() string { return runtime.GOARCH }
 )
 
-var downloadBaseURL = "https://o11y-addon-hangzhou-public.oss-cn-hangzhou.aliyuncs.com/share/aliyuncms/"
+var downloadBaseURL = "https://o11y-addon-hangzhou-public.oss-cn-hangzhou.aliyuncs.com/share/aliyuncms2/"
 
 var VersionCheckTTL = 86400
 
@@ -117,7 +117,7 @@ func (c *Context) InitBasicInfo() {
 	c.configPath = getConfigurePathFunc()
 	c.checkVersionCacheFilePath = filepath.Join(c.configPath, ".cms2_version_check")
 	c.versionFilePath = filepath.Join(c.configPath, ".cms2_version")
-	c.execFilePath = filepath.Join(c.configPath, "aliyuncms")
+	c.execFilePath = filepath.Join(c.configPath, "aliyuncms2")
 	if runtimeGOOSFunc() == "windows" {
 		c.execFilePath += ".exe"
 	}
@@ -233,7 +233,7 @@ func (c *Context) Install() error {
 	if runtimeGOOSFunc() == "windows" {
 		suffix += ".exe"
 	}
-	url := fmt.Sprintf("%s%s/aliyuncms-%s", downloadBaseURL, c.versionRemote, suffix)
+	url := fmt.Sprintf("%s%s/aliyuncms2-%s", downloadBaseURL, c.versionRemote, suffix)
 
 	tmpFile := c.execFilePath + ".tmp"
 	if err := downloadFileFunc(url, tmpFile); err != nil {
