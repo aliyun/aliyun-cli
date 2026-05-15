@@ -100,22 +100,22 @@ func TestValidate(t *testing.T) {
 
 	actual.Mode = External
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid process_command")
+	assert.EqualError(t, err, "process_command is not configured for profile 'default'. Run `aliyun configure --profile default --mode External` to set it")
 
 	actual.Mode = CredentialsURI
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid credentials_uri")
+	assert.EqualError(t, err, "credentials_uri is not configured for profile 'default'. Run `aliyun configure --profile default --mode CredentialsURI` or set ALIBABA_CLOUD_CREDENTIALS_URI environment variable")
 
 	actual.Mode = ChainableRamRoleArn
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid source_profile")
+	assert.EqualError(t, err, "source_profile is not configured for profile 'default'. Run `aliyun configure --profile default --mode ChainableRamRoleArn` to set it")
 
 	actual.SourceProfile = "source"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid ram_role_arn")
+	assert.EqualError(t, err, "ram_role_arn is not configured for profile 'default'. Run `aliyun configure --profile default --mode ChainableRamRoleArn` to set it")
 	actual.RamRoleArn = "arn"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid role_session_name")
+	assert.EqualError(t, err, "role_session_name is not configured for profile 'default'. Run `aliyun configure --profile default --mode ChainableRamRoleArn` to set it")
 	actual.RoleSessionName = "rsn"
 	err = actual.Validate()
 	assert.Nil(t, err)
@@ -144,10 +144,10 @@ func TestValidateWithRsaKeyPair(t *testing.T) {
 	actual.RegionId = "cn-hangzhou"
 	actual.Mode = RsaKeyPair
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid private_key")
+	assert.EqualError(t, err, "private_key is not configured for profile 'default'. Run `aliyun configure --profile default --mode RsaKeyPair` to set it")
 	actual.PrivateKey = "privateKey"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid key_pair_name")
+	assert.EqualError(t, err, "key_pair_name is not configured for profile 'default'. Run `aliyun configure --profile default --mode RsaKeyPair` to set it")
 	actual.KeyPairName = "keyPairName"
 	err = actual.Validate()
 	assert.Nil(t, err)
@@ -162,10 +162,10 @@ func TestValidateWithRamRoleArn(t *testing.T) {
 	actual.AccessKeyId = "accessKeyId"
 	actual.AccessKeySecret = "accessKeySecret"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid ram_role_arn")
+	assert.EqualError(t, err, "ram_role_arn is not configured for profile 'default'. Run `aliyun configure --profile default --mode RamRoleArn` to set it")
 	actual.RamRoleArn = "ramRoleArn"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid role_session_name")
+	assert.EqualError(t, err, "role_session_name is not configured for profile 'default'. Run `aliyun configure --profile default --mode RamRoleArn` to set it")
 	actual.RoleSessionName = "roleSessionName"
 	err = actual.Validate()
 	assert.Nil(t, err)
@@ -182,7 +182,7 @@ func TestValidateWithStsToken(t *testing.T) {
 	actual.AccessKeyId = "accessKeyId"
 	actual.AccessKeySecret = "accessKeySecret"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid sts_token")
+	assert.EqualError(t, err, "sts_token is not configured for profile 'default'. Run `aliyun configure --profile default --mode StsToken` to set it")
 	actual.StsToken = "stsToken"
 	err = actual.Validate()
 	assert.Nil(t, err)
@@ -195,16 +195,16 @@ func TestValidateWithOIDC(t *testing.T) {
 	actual.RegionId = "cn-hangzhou"
 
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid oidc_provider_arn")
+	assert.EqualError(t, err, "oidc_provider_arn is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
 	actual.OIDCProviderARN = "oidc_provider_arn"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid oidc_token_file")
+	assert.EqualError(t, err, "oidc_token_file is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
 	actual.OIDCTokenFile = "/path/to/oidc/token/file"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid ram_role_arn")
+	assert.EqualError(t, err, "ram_role_arn is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
 	actual.RamRoleArn = "ramrolearn"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid role_session_name")
+	assert.EqualError(t, err, "role_session_name is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
 	actual.RoleSessionName = "rsn"
 	err = actual.Validate()
 	assert.Nil(t, err)
@@ -555,10 +555,10 @@ func TestOverwriteWithFlagsWithExternalAccountTypeEnv(t *testing.T) {
 func TestValidateAk(t *testing.T) {
 	actual := newProfile()
 	err := actual.ValidateAK()
-	assert.EqualError(t, err, "invalid access_key_id: ")
+	assert.EqualError(t, err, "access_key_id is not configured for profile 'default'. Run `aliyun configure --profile default --mode ` to set it")
 	actual.AccessKeyId = "accessKeyId"
 	err = actual.ValidateAK()
-	assert.EqualError(t, err, "invaild access_key_secret: ")
+	assert.EqualError(t, err, "access_key_secret is not configured for profile 'default'. Run `aliyun configure --profile default --mode ` to set it")
 	actual.AccessKeySecret = "accessKeySecret"
 	err = actual.ValidateAK()
 	assert.Nil(t, err)
@@ -571,6 +571,24 @@ func TestIsRegion(t *testing.T) {
 func TestGetStsEndpoint(t *testing.T) {
 	assert.Equal(t, "sts.aliyuncs.com", getSTSEndpoint(""))
 	assert.Equal(t, "sts.cn-hangzhou.aliyuncs.com", getSTSEndpoint("cn-hangzhou"))
+}
+
+func TestNormalizeMode(t *testing.T) {
+	assert.Equal(t, OAuth, NormalizeMode("oauth"))
+	assert.Equal(t, OAuth, NormalizeMode("OAuth"))
+	assert.Equal(t, OAuth, NormalizeMode("OAUTH"))
+	assert.Equal(t, CloudSSO, NormalizeMode("cloudsso"))
+	assert.Equal(t, CloudSSO, NormalizeMode("CloudSSO"))
+	assert.Equal(t, AK, NormalizeMode("ak"))
+	assert.Equal(t, AK, NormalizeMode("AK"))
+	assert.Equal(t, StsToken, NormalizeMode("ststoken"))
+	assert.Equal(t, RamRoleArn, NormalizeMode("ramrolearn"))
+	assert.Equal(t, EcsRamRole, NormalizeMode("ecsramrole"))
+	assert.Equal(t, ChainableRamRoleArn, NormalizeMode("chainableramrolearn"))
+	assert.Equal(t, OIDC, NormalizeMode("oidc"))
+	assert.Equal(t, External, NormalizeMode("external"))
+	assert.Equal(t, CredentialsURI, NormalizeMode("credentialsuri"))
+	assert.Equal(t, AuthenticateMode("UnknownMode"), NormalizeMode("UnknownMode"))
 }
 
 func TestAutoModeRecognition(t *testing.T) {
@@ -822,7 +840,7 @@ func TestGetCredentialWithCloudSSOEmptySignInUrl(t *testing.T) {
 
 	assert.NotNil(t, err)
 	assert.Nil(t, cred)
-	assert.Contains(t, err.Error(), "CloudSSO sign in url or account id")
+	assert.Contains(t, err.Error(), "aliyun configure --profile cloudsso-profile --mode CloudSSO")
 }
 
 // GetCredential not support mode test

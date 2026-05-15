@@ -128,7 +128,8 @@ func NewConfigureCommand() *cli.Command {
 		Short: i18n.T(
 			"configure credential and settings",
 			"配置身份认证和其他信息"),
-		Usage: "configure --mode {AK|RamRoleArn|EcsRamRole|OIDC|External|CredentialsURI|ChainableRamRoleArn|CloudSSO|OAuth} --profile <profileName> [--config-path <configPath>]",
+		Usage:  "configure --mode {AK|RamRoleArn|EcsRamRole|OIDC|External|CredentialsURI|ChainableRamRoleArn|CloudSSO|OAuth} --profile <profileName> [--config-path <configPath>]",
+		Sample: "aliyun configure --mode OAuth  (Recommended)",
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
@@ -218,10 +219,11 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 		cp = conf.NewProfile(profileName)
 	}
 
-	cli.Printf(w, "Configuring profile '%s' in '%s' authenticate mode...\n", profileName, mode)
+	normalizedMode := NormalizeMode(mode)
+	cli.Printf(w, "Configuring profile '%s' in '%s' authenticate mode...\n", profileName, normalizedMode)
 
 	if mode != "" {
-		switch AuthenticateMode(mode) {
+		switch normalizedMode {
 		case AK:
 			cp.Mode = AK
 			configureAK(w, &cp)

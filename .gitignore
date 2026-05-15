@@ -25,3 +25,5 @@ coverage/
 integration/*.txt
 cli-metadata/
 __debug_bin*
+.qoder
+docs/superpowers/

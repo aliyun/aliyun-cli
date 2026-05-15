@@ -262,7 +262,7 @@ func newInstallCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "install",
 		Short: i18n.T("Install a plugin (from remote index or package file/URL)", "安装插件（远程索引或指定包文件/URL）"),
-		Usage: "install [--source-base <url>] --names <plugin_name> [<plugin2> ...] [--version <version>] [--enable-pre] | install --package <path-or-url>",
+		Usage: "install [--source-base <url>] (--name <plugin_name> | --names <plugin1> [<plugin2> ...]) [--version <version>] [--enable-pre] | install --package <path-or-url>",
 		Run: func(ctx *cli.Context, args []string) error {
 			names, pkgRef, version, enablePre, err := parseInstallArgs(ctx)
 			if err != nil {
@@ -278,6 +278,12 @@ func newInstallCommand() *cli.Command {
 		},
 	}
 
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "name",
+		Short:        i18n.T("Plugin name to install (single plugin)", "要安装的单个插件名称"),
+		AssignedMode: cli.AssignedOnce,
+	})
+
 	namesFlag := &cli.Flag{
 		Name:         "names",
 		Short:        i18n.T("Plugin name(s) to install (can specify one or multiple)", "要安装的插件名称（可指定一个或多个）"),
@@ -287,7 +293,7 @@ func newInstallCommand() *cli.Command {
 
 	cmd.Flags().Add(&cli.Flag{
 		Name:         "version",
-		Short:        i18n.T("Specify plugin version when installing from the remote index (--names)", "使用 --names 从远程索引安装时指定插件版本"),
+		Short:        i18n.T("Specify plugin version when installing from the remote index (--name/--names)", "使用 --name/--names 从远程索引安装时指定插件版本"),
 		AssignedMode: cli.AssignedOnce,
 		DefaultValue: "",
 	})
@@ -420,8 +426,23 @@ func newUpdateCommand() *cli.Command {
 }
 
 func parseInstallArgs(ctx *cli.Context) (names []string, pkgRef string, version string, enablePre bool, err error) {
-	if namesFlag := ctx.Flags().Get("names"); namesFlag != nil && namesFlag.IsAssigned() {
-		names = namesFlag.GetValues()
+	nameFlag := ctx.Flags().Get("name")
+	namesFlag := ctx.Flags().Get("names")
+	nameAssigned := nameFlag != nil && nameFlag.IsAssigned()
+	namesAssigned := namesFlag != nil && namesFlag.IsAssigned()
+
+	if nameAssigned && namesAssigned {
+		return nil, "", "", false, fmt.Errorf("--name and --names cannot be used together")
+	}
+
+	if nameAssigned {
+		if v, ok := nameFlag.GetValue(); ok {
+			names = append(names, v)
+		}
+	}
+
+	if namesAssigned {
+		names = append(names, namesFlag.GetValues()...)
 	}
 
 	if f := ctx.Flags().Get("package"); f != nil && f.IsAssigned() {
@@ -444,13 +465,13 @@ func parseInstallArgs(ctx *cli.Context) (names []string, pkgRef string, version 
 func validateInstallArgs(names []string, pkgRef string) ([]string, error) {
 	if strings.TrimSpace(pkgRef) != "" {
 		if len(names) > 0 {
-			return nil, fmt.Errorf("--names cannot be used together with --package")
+			return nil, fmt.Errorf("--name/--names cannot be used together with --package")
 		}
 		return nil, nil
 	}
 
 	if len(names) == 0 {
-		return nil, fmt.Errorf("either --names or --package is required")
+		return nil, fmt.Errorf("either --name/--names or --package is required")
 	}
 
 	validNames := []string{}
@@ -460,7 +481,7 @@ func validateInstallArgs(names []string, pkgRef string) ([]string, error) {
 		}
 	}
 	if len(validNames) == 0 {
-		return nil, fmt.Errorf("--names requires at least one plugin name")
+		return nil, fmt.Errorf("--name/--names requires at least one plugin name")
 	}
 	return validNames, nil
 }
