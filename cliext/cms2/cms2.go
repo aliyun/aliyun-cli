@@ -14,6 +14,8 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -65,7 +67,7 @@ var (
 	runtimeGOARCHFunc = func() string { return runtime.GOARCH }
 )
 
-var downloadBaseURL = "https://o11y-addon-hangzhou-public.oss-cn-hangzhou.aliyuncs.com/share/aliyuncms/"
+var downloadBaseURL = "https://o11y-addon-hangzhou-public.oss-cn-hangzhou.aliyuncs.com/share/aliyuncms2/"
 
 var VersionCheckTTL = 86400
 
@@ -103,7 +105,7 @@ func (c *Context) Run(args []string) error {
 		return fmt.Errorf("cms2 binary not found at %s, please install manually or set ALIBABA_CLOUD_CMS2_EXEC_PATH", c.execFilePath)
 	}
 
-	if err := c.PrepareEnv(); err != nil {
+	if err := c.PrepareEnv(args); err != nil {
 		return err
 	}
 
@@ -115,7 +117,7 @@ func (c *Context) InitBasicInfo() {
 	c.configPath = getConfigurePathFunc()
 	c.checkVersionCacheFilePath = filepath.Join(c.configPath, ".cms2_version_check")
 	c.versionFilePath = filepath.Join(c.configPath, ".cms2_version")
-	c.execFilePath = filepath.Join(c.configPath, "aliyuncms")
+	c.execFilePath = filepath.Join(c.configPath, "aliyuncms2")
 	if runtimeGOOSFunc() == "windows" {
 		c.execFilePath += ".exe"
 	}
@@ -231,7 +233,7 @@ func (c *Context) Install() error {
 	if runtimeGOOSFunc() == "windows" {
 		suffix += ".exe"
 	}
-	url := fmt.Sprintf("%s%s/aliyuncms-%s", downloadBaseURL, c.versionRemote, suffix)
+	url := fmt.Sprintf("%s%s/aliyuncms2-%s", downloadBaseURL, c.versionRemote, suffix)
 
 	tmpFile := c.execFilePath + ".tmp"
 	if err := downloadFileFunc(url, tmpFile); err != nil {
@@ -260,7 +262,7 @@ func (c *Context) Install() error {
 	return c.SaveLocalVersion()
 }
 
-func (c *Context) PrepareEnv() error {
+func (c *Context) PrepareEnv(args []string) error {
 	profile, err := config.LoadProfileWithContext(c.originCtx)
 	if err != nil {
 		return fmt.Errorf("config failed: %s", err.Error())
@@ -299,7 +301,7 @@ func (c *Context) PrepareEnv() error {
 	c.envMap = map[string]string{
 		"ALIBABA_CLOUD_CMS_ACCESS_KEY_ID":     accessKeyId,
 		"ALIBABA_CLOUD_CMS_ACCESS_KEY_SECRET": accessKeySecret,
-		"ALIBABA_CLOUD_CMS_CALLER":            "aliyun-cms2",
+		"ALIBABA_CLOUD_CMS_COMPAT_MODE":       "aliyun cms2",
 	}
 	if stsToken != "" {
 		c.envMap["ALIBABA_CLOUD_CMS_SECURITY_TOKEN"] = stsToken
@@ -315,14 +317,88 @@ func (c *Context) PrepareEnv() error {
 		c.envMap["ALIBABA_CLOUD_CMS_ENDPOINT"] = endpoint
 	}
 
+	c.envMap["ALIBABA_CLOUD_CMS_USER_AGENT"] = util.GetAliyunCliUserAgent()
+
+	configDir := config.GetConfigDir(c.originCtx)
+	forceOn, forceOff := cliAIOverridesFromArgs(args)
+	cfg, err := aimode.Load(configDir)
+	if err != nil {
+		cfg = aimode.DefaultAiConfig()
+	}
+	if suf := aimode.RequestUserAgentSuffixForCommand(cfg, forceOn, forceOff); suf != "" {
+		c.envMap["ALIBABA_CLOUD_CMS_AI_USER_AGENT"] = suf
+	}
+
+	otel.MergeOtelEnvs(c.envMap)
+
 	return nil
 }
 
-// RemoveFlagsForMainCli strips all flags registered by the parent CLI
-// (config.AddFlags + openapi.AddFlags) from args before forwarding to the
-// cms2 subprocess.  Values for these flags are passed via environment
-// variables in PrepareEnv.  If a new global flag source is added to the
-// main CLI, it must be registered here as well.
+// stripFlags lists parent-CLI flag names that are only meaningful to the
+// main CLI and should be removed before forwarding args to the cms2
+// subprocess.  These are auth/config/caller flags whose values are
+// already passed via environment variables in PrepareEnv, or have no
+// meaning in the subprocess context.
+//
+// All other flags (including those that happen to share a name with the
+// parent CLI, such as --region, --output, --version, --endpoint) are
+// passed through so the subprocess can handle them with its own semantics.
+var stripFlags = map[string]bool{
+	// config: auth & credential
+	"profile":                        true,
+	"mode":                           true,
+	"sts-region":                     true,
+	"ram-role-name":                  true,
+	"ram-role-arn":                   true,
+	"role-session-name":              true,
+	"external-id":                    true,
+	"source-profile":                 true,
+	"private-key":                    true,
+	"key-pair-name":                  true,
+	"expired-seconds":                true,
+	"process-command":                true,
+	"oidc-provider-arn":              true,
+	"oidc-token-file":                true,
+	"cloud-sso-sign-in-url":          true,
+	"cloud-sso-access-config":        true,
+	"cloud-sso-account-id":           true,
+	"oauth-site-type":                true,
+	"external-account-type":          true,
+	"auto-plugin-install":            true,
+	"auto-plugin-install-enable-pre": true,
+
+	// config: connection & runtime
+	"config-path":        true,
+	"read-timeout":       true,
+	"connect-timeout":    true,
+	"retry-count":        true,
+	"skip-secure-verify": true,
+	"endpoint-type":      true,
+	"RegionId":           true,
+
+	// openapi: caller-side-only
+	"secure":         true,
+	"insecure":       true,
+	"header":         true,
+	"pager":          true,
+	"accept":         true,
+	"waiter":         true,
+	"dryrun":         true,
+	"quiet":          true,
+	"yes":            true,
+	"cli-query":      true,
+	"roa":            true,
+	"method":         true,
+	"user-agent":     true,
+	"cli-ai-mode":    true,
+	"no-cli-ai-mode": true,
+}
+
+// RemoveFlagsForMainCli strips only the parent-CLI-only flags listed in
+// stripFlags from args before forwarding to the cms2 subprocess.  All
+// other args (including flags that the subprocess handles, such as
+// --region, --output, --version, --endpoint, --access-key-id, etc.)
+// are preserved.
 func (c *Context) RemoveFlagsForMainCli(args []string) []string {
 	allFlags := cli.NewFlagSet()
 	config.AddFlags(allFlags)
@@ -331,6 +407,9 @@ func (c *Context) RemoveFlagsForMainCli(args []string) []string {
 	longNeedsValue := make(map[string]bool)
 	shortNeedsValue := make(map[string]bool)
 	for _, f := range allFlags.Flags() {
+		if !stripFlags[f.Name] {
+			continue
+		}
 		needsValue := f.AssignedMode != cli.AssignedNone
 		if f.Name != "" {
 			longNeedsValue["--"+f.Name] = needsValue
@@ -466,6 +545,28 @@ func filterEnv(base []string, overrides map[string]string) []string {
 	return result
 }
 
+// cliAIOverridesFromArgs returns (forceOn, forceOff) by scanning raw args for
+// --cli-ai-mode / --no-cli-ai-mode. cms2 sets KeepArgs:true, so the cli parser
+// never consumes these flags into Flags() or UnknownFlags() — they are passed
+// through verbatim. --no-cli-ai-mode wins if both appear.
+func cliAIOverridesFromArgs(args []string) (forceOn, forceOff bool) {
+	onTok := "--" + openapi.CliAIModeFlagName
+	offTok := "--" + openapi.CliNoAIModeFlagName
+	sawOn, sawOff := false, false
+	for _, a := range args {
+		switch a {
+		case offTok:
+			sawOff = true
+		case onTok:
+			sawOn = true
+		}
+	}
+	if sawOff {
+		return false, true
+	}
+	return sawOn, false
+}
+
 func flagStringValue(ctx *cli.Context, name string) string {
 	if ctx == nil {
 		return ""
@@ -491,4 +592,3 @@ func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
-

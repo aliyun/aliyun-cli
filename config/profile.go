@@ -59,6 +59,21 @@ const (
 	OAuth               = AuthenticateMode("OAuth")
 )
 
+var knownModes = []AuthenticateMode{
+	AK, StsToken, RamRoleArn, EcsRamRole, RsaKeyPair,
+	RamRoleArnWithEcs, ChainableRamRoleArn, External,
+	CredentialsURI, OIDC, CloudSSO, OAuth,
+}
+
+func NormalizeMode(mode string) AuthenticateMode {
+	for _, m := range knownModes {
+		if strings.EqualFold(mode, string(m)) {
+			return m
+		}
+	}
+	return AuthenticateMode(mode)
+}
+
 type Profile struct {
 	Name                       string           `json:"name"`
 	Mode                       AuthenticateMode `json:"mode"`
@@ -136,7 +151,8 @@ func (cp *Profile) Validate() error {
 			return err
 		}
 		if cp.StsToken == "" {
-			return fmt.Errorf("invalid sts_token")
+			return fmt.Errorf("sts_token is not configured for profile '%s'. Run `aliyun configure --profile %s --mode StsToken` to set it",
+				cp.Name, cp.Name)
 		}
 	case RamRoleArn:
 		err := cp.ValidateAK()
@@ -144,57 +160,72 @@ func (cp *Profile) Validate() error {
 			return err
 		}
 		if cp.RamRoleArn == "" {
-			return fmt.Errorf("invalid ram_role_arn")
+			return fmt.Errorf("ram_role_arn is not configured for profile '%s'. Run `aliyun configure --profile %s --mode RamRoleArn` to set it",
+				cp.Name, cp.Name)
 		}
 		if cp.RoleSessionName == "" {
-			return fmt.Errorf("invalid role_session_name")
+			return fmt.Errorf("role_session_name is not configured for profile '%s'. Run `aliyun configure --profile %s --mode RamRoleArn` to set it",
+				cp.Name, cp.Name)
 		}
 	case EcsRamRole, RamRoleArnWithEcs:
 	case RsaKeyPair:
 		if cp.PrivateKey == "" {
-			return fmt.Errorf("invalid private_key")
+			return fmt.Errorf("private_key is not configured for profile '%s'. Run `aliyun configure --profile %s --mode RsaKeyPair` to set it",
+				cp.Name, cp.Name)
 		}
 		if cp.KeyPairName == "" {
-			return fmt.Errorf("invalid key_pair_name")
+			return fmt.Errorf("key_pair_name is not configured for profile '%s'. Run `aliyun configure --profile %s --mode RsaKeyPair` to set it",
+				cp.Name, cp.Name)
 		}
 	case External:
 		if cp.ProcessCommand == "" {
-			return fmt.Errorf("invalid process_command")
+			return fmt.Errorf("process_command is not configured for profile '%s'. Run `aliyun configure --profile %s --mode External` to set it",
+				cp.Name, cp.Name)
 		}
 	case CredentialsURI:
 		if cp.CredentialsURI == "" {
-			return fmt.Errorf("invalid credentials_uri")
+			return fmt.Errorf("credentials_uri is not configured for profile '%s'. Run `aliyun configure --profile %s --mode CredentialsURI` or set ALIBABA_CLOUD_CREDENTIALS_URI environment variable",
+				cp.Name, cp.Name)
 		}
 	case OIDC:
 		if cp.OIDCProviderARN == "" {
-			return fmt.Errorf("invalid oidc_provider_arn")
+			return fmt.Errorf("oidc_provider_arn is not configured for profile '%s'. Run `aliyun configure --profile %s --mode OIDC` to set it",
+				cp.Name, cp.Name)
 		}
 		if cp.OIDCTokenFile == "" {
-			return fmt.Errorf("invalid oidc_token_file")
+			return fmt.Errorf("oidc_token_file is not configured for profile '%s'. Run `aliyun configure --profile %s --mode OIDC` to set it",
+				cp.Name, cp.Name)
 		}
 		if cp.RamRoleArn == "" {
-			return fmt.Errorf("invalid ram_role_arn")
+			return fmt.Errorf("ram_role_arn is not configured for profile '%s'. Run `aliyun configure --profile %s --mode OIDC` to set it",
+				cp.Name, cp.Name)
 		}
 		if cp.RoleSessionName == "" {
-			return fmt.Errorf("invalid role_session_name")
+			return fmt.Errorf("role_session_name is not configured for profile '%s'. Run `aliyun configure --profile %s --mode OIDC` to set it",
+				cp.Name, cp.Name)
 		}
 	case ChainableRamRoleArn:
 		if cp.SourceProfile == "" {
-			return fmt.Errorf("invalid source_profile")
+			return fmt.Errorf("source_profile is not configured for profile '%s'. Run `aliyun configure --profile %s --mode ChainableRamRoleArn` to set it",
+				cp.Name, cp.Name)
 		}
 		if cp.RamRoleArn == "" {
-			return fmt.Errorf("invalid ram_role_arn")
+			return fmt.Errorf("ram_role_arn is not configured for profile '%s'. Run `aliyun configure --profile %s --mode ChainableRamRoleArn` to set it",
+				cp.Name, cp.Name)
 		}
 		if cp.RoleSessionName == "" {
-			return fmt.Errorf("invalid role_session_name")
+			return fmt.Errorf("role_session_name is not configured for profile '%s'. Run `aliyun configure --profile %s --mode ChainableRamRoleArn` to set it",
+				cp.Name, cp.Name)
 		}
 	case CloudSSO:
 		if cp.CloudSSOSignInUrl == "" {
-			return fmt.Errorf("invalid cloud_sso_sign_in_url")
+			return fmt.Errorf("cloud_sso_sign_in_url is not configured for profile '%s'. Run `aliyun configure --profile %s --mode CloudSSO` to set it",
+				cp.Name, cp.Name)
 		}
 	case OAuth:
 		if cp.OAuthSiteType != "CN" && cp.OAuthSiteType != "INTL" {
-			return fmt.Errorf("invalid oauth_site_type, should be CN or INTL")
+			return fmt.Errorf("invalid oauth_site_type '%s' for profile '%s', should be CN or INTL. Run `aliyun configure --profile %s --mode OAuth` to set it",
+				cp.OAuthSiteType, cp.Name, cp.Name)
 		}
 	default:
 		return fmt.Errorf("invalid mode: %s", cp.Mode)
@@ -207,7 +238,7 @@ func (cp *Profile) GetParent() *Configuration {
 }
 
 func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
-	cp.Mode = AuthenticateMode(ModeFlag(ctx.Flags()).GetStringOrDefault(string(cp.Mode)))
+	cp.Mode = NormalizeMode(ModeFlag(ctx.Flags()).GetStringOrDefault(string(cp.Mode)))
 	cp.AccessKeyId = AccessKeyIdFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeyId)
 	cp.AccessKeySecret = AccessKeySecretFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeySecret)
 	cp.StsToken = StsTokenFlag(ctx.Flags()).GetStringOrDefault(cp.StsToken)
@@ -319,10 +350,12 @@ func AutoModeRecognition(cp *Profile) {
 
 func (cp *Profile) ValidateAK() error {
 	if len(cp.AccessKeyId) == 0 {
-		return fmt.Errorf("invalid access_key_id: %s", cp.AccessKeyId)
+		return fmt.Errorf("access_key_id is not configured for profile '%s'. Run `aliyun configure --profile %s --mode %s` to set it",
+			cp.Name, cp.Name, cp.Mode)
 	}
 	if len(cp.AccessKeySecret) == 0 {
-		return fmt.Errorf("invaild access_key_secret: %s", cp.AccessKeySecret)
+		return fmt.Errorf("access_key_secret is not configured for profile '%s'. Run `aliyun configure --profile %s --mode %s` to set it",
+			cp.Name, cp.Name, cp.Mode)
 	}
 	return nil
 }
