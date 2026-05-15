@@ -356,6 +356,7 @@ func (c *Command) executeHelp(ctx *Context, args []string) {
 
 	c.PrintHead(ctx)
 	c.PrintUsage(ctx)
+	c.PrintSample(ctx)
 	c.PrintSubCommands(ctx)
 	c.PrintFlags(ctx)
 	c.PrintTail(ctx)
