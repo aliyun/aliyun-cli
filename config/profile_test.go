@@ -573,6 +573,24 @@ func TestGetStsEndpoint(t *testing.T) {
 	assert.Equal(t, "sts.cn-hangzhou.aliyuncs.com", getSTSEndpoint("cn-hangzhou"))
 }
 
+func TestNormalizeMode(t *testing.T) {
+	assert.Equal(t, OAuth, NormalizeMode("oauth"))
+	assert.Equal(t, OAuth, NormalizeMode("OAuth"))
+	assert.Equal(t, OAuth, NormalizeMode("OAUTH"))
+	assert.Equal(t, CloudSSO, NormalizeMode("cloudsso"))
+	assert.Equal(t, CloudSSO, NormalizeMode("CloudSSO"))
+	assert.Equal(t, AK, NormalizeMode("ak"))
+	assert.Equal(t, AK, NormalizeMode("AK"))
+	assert.Equal(t, StsToken, NormalizeMode("ststoken"))
+	assert.Equal(t, RamRoleArn, NormalizeMode("ramrolearn"))
+	assert.Equal(t, EcsRamRole, NormalizeMode("ecsramrole"))
+	assert.Equal(t, ChainableRamRoleArn, NormalizeMode("chainableramrolearn"))
+	assert.Equal(t, OIDC, NormalizeMode("oidc"))
+	assert.Equal(t, External, NormalizeMode("external"))
+	assert.Equal(t, CredentialsURI, NormalizeMode("credentialsuri"))
+	assert.Equal(t, AuthenticateMode("UnknownMode"), NormalizeMode("UnknownMode"))
+}
+
 func TestAutoModeRecognition(t *testing.T) {
 
 	p := &Profile{AccessKeyId: "accessKeyID", AccessKeySecret: "accessKeySecret"}

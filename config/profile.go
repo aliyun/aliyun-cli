@@ -59,6 +59,21 @@ const (
 	OAuth               = AuthenticateMode("OAuth")
 )
 
+var knownModes = []AuthenticateMode{
+	AK, StsToken, RamRoleArn, EcsRamRole, RsaKeyPair,
+	RamRoleArnWithEcs, ChainableRamRoleArn, External,
+	CredentialsURI, OIDC, CloudSSO, OAuth,
+}
+
+func NormalizeMode(mode string) AuthenticateMode {
+	for _, m := range knownModes {
+		if strings.EqualFold(mode, string(m)) {
+			return m
+		}
+	}
+	return AuthenticateMode(mode)
+}
+
 type Profile struct {
 	Name                       string           `json:"name"`
 	Mode                       AuthenticateMode `json:"mode"`
@@ -223,7 +238,7 @@ func (cp *Profile) GetParent() *Configuration {
 }
 
 func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
-	cp.Mode = AuthenticateMode(ModeFlag(ctx.Flags()).GetStringOrDefault(string(cp.Mode)))
+	cp.Mode = NormalizeMode(ModeFlag(ctx.Flags()).GetStringOrDefault(string(cp.Mode)))
 	cp.AccessKeyId = AccessKeyIdFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeyId)
 	cp.AccessKeySecret = AccessKeySecretFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeySecret)
 	cp.StsToken = StsTokenFlag(ctx.Flags()).GetStringOrDefault(cp.StsToken)

@@ -65,7 +65,7 @@ func doConfigureSet(ctx *cli.Context) error {
 
 	mode, ok := ModeFlag(flags).GetValue()
 	if ok {
-		profile.Mode = AuthenticateMode(mode)
+		profile.Mode = NormalizeMode(mode)
 	} else {
 		if profile.Mode == "" {
 			profile.Mode = AK
