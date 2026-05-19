@@ -309,7 +309,6 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					ctx.SetRuntimeEnvs(envs)
 				}
 			} else if isHelp || isVersion {
-				// language 仅从profile 获取，不需要merge 环境变量和flag
 				c.setLangEnv(ctx)
 			}
 
@@ -1030,7 +1029,8 @@ func (c *Commando) setLangEnv(ctx *cli.Context) {
 		return
 	}
 
-	lang := c.profile.Language
+	// 优先级：--language flag > profile.Language > i18n 全局兜底
+	lang := config.LanguageFlag(ctx.Flags()).GetStringOrDefault(c.profile.Language)
 	if lang == "" {
 		lang = i18n.GetLanguage()
 	}

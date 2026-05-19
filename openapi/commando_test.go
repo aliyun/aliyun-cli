@@ -2938,3 +2938,85 @@ func TestInteractiveInstallPlugin(t *testing.T) {
 		assert.Contains(t, stderr.String(), "Installing plugin 'test-plugin'...")
 	})
 }
+
+// newCtxWithLangFlag 构造一个带 --language flag 注册的 ctx，便于测试 setLangEnv 在不同 flag / profile 组合下选用哪个语言。
+// 注意：ctx.EnterCommand 必须在 AddFlags 之前调用，否则 ctx.Flags() 返回的是命令级
+// 子 FlagSet，root 上注册的 language flag 读不到。
+func newCtxWithLangFlag(t *testing.T, langFlag string, flagAssigned bool) *cli.Context {
+	t.Helper()
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	ctx.EnterCommand(&cli.Command{})
+	config.AddFlags(ctx.Flags())
+	if flagAssigned {
+		config.LanguageFlag(ctx.Flags()).SetAssigned(true)
+		config.LanguageFlag(ctx.Flags()).SetValue(langFlag)
+	}
+	return ctx
+}
+
+func TestSetLangEnv(t *testing.T) {
+	t.Run("nil ctx is noop", func(t *testing.T) {
+		c := &Commando{}
+		assert.NotPanics(t, func() { c.setLangEnv(nil) })
+	})
+
+	t.Run("--language flag wins over profile", func(t *testing.T) {
+		ctx := newCtxWithLangFlag(t, "en", true)
+		c := &Commando{}
+		c.profile.Language = "zh" // profile 说 zh，flag 说 en
+		c.setLangEnv(ctx)
+		assert.Equal(t, "en_US.UTF-8", ctx.GetRuntimeEnvs()["LANG"])
+	})
+
+	t.Run("--language flag wins when profile empty", func(t *testing.T) {
+		ctx := newCtxWithLangFlag(t, "en", true)
+		c := &Commando{} // profile.Language == ""
+		c.setLangEnv(ctx)
+		assert.Equal(t, "en_US.UTF-8", ctx.GetRuntimeEnvs()["LANG"])
+	})
+
+	t.Run("--language flag zh", func(t *testing.T) {
+		ctx := newCtxWithLangFlag(t, "zh", true)
+		c := &Commando{}
+		c.setLangEnv(ctx)
+		assert.Equal(t, "zh_CN.UTF-8", ctx.GetRuntimeEnvs()["LANG"])
+	})
+
+	t.Run("falls back to profile when flag not assigned", func(t *testing.T) {
+		ctx := newCtxWithLangFlag(t, "", false)
+		c := &Commando{}
+		c.profile.Language = "zh"
+		c.setLangEnv(ctx)
+		assert.Equal(t, "zh_CN.UTF-8", ctx.GetRuntimeEnvs()["LANG"])
+	})
+
+	t.Run("falls back to i18n.GetLanguage when both empty", func(t *testing.T) {
+		prev := i18n.GetLanguage()
+		t.Cleanup(func() { i18n.SetLanguage(prev) })
+		i18n.SetLanguage("en")
+
+		ctx := newCtxWithLangFlag(t, "", false)
+		c := &Commando{} // profile.Language == ""
+		c.setLangEnv(ctx)
+		assert.Equal(t, "en_US.UTF-8", ctx.GetRuntimeEnvs()["LANG"])
+	})
+
+	t.Run("unknown language defaults to en_US.UTF-8", func(t *testing.T) {
+		ctx := newCtxWithLangFlag(t, "fr", true)
+		c := &Commando{}
+		c.setLangEnv(ctx)
+		assert.Equal(t, "en_US.UTF-8", ctx.GetRuntimeEnvs()["LANG"])
+	})
+
+	t.Run("preserves existing runtime envs", func(t *testing.T) {
+		ctx := newCtxWithLangFlag(t, "en", true)
+		ctx.SetRuntimeEnvs(map[string]string{"FOO": "bar"})
+		c := &Commando{}
+		c.setLangEnv(ctx)
+		envs := ctx.GetRuntimeEnvs()
+		assert.Equal(t, "en_US.UTF-8", envs["LANG"])
+		assert.Equal(t, "bar", envs["FOO"], "existing entries must be kept")
+	})
+}
