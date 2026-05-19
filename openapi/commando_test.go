@@ -2167,6 +2167,7 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		cleanup := setTestHomeDir(t, testHome)
 		defer cleanup()
 
+		writeMinimalConfigJSON(t, testHome)
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
 		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
@@ -2189,6 +2190,7 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		cleanup := setTestHomeDir(t, testHome)
 		defer cleanup()
 
+		writeMinimalConfigJSON(t, testHome)
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
 		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
@@ -2244,6 +2246,7 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		cleanup := setTestHomeDir(t, testHome)
 		defer cleanup()
 
+		writeMinimalConfigJSON(t, testHome)
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
 		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
@@ -2259,6 +2262,71 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		err := command.main(ctx, args)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "'fc' is not a valid built-in product")
+	})
+}
+
+// TestMain_PluginExecution_ProfileFailFast 验证 plugin 路径下 profile 校验失败时必须 fail-fast，不能 silent 吞错回退到默认 profile。
+// 回归保护：历史上 commando.main 的 `if profile, err := LoadProfileWithContext(ctx); err == nil` 会把 err 吞掉，导致 `--profile xxx` 指向坏 profile 时悄悄换回默认 profile。
+func TestMain_PluginExecution_ProfileFailFast(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	bootProfile := config.Profile{
+		Name:     "AkProfile", // 模拟 main.go 启动时已经加载的 default profile
+		Language: "en",
+		RegionId: "cn-hangzhou",
+	}
+	command := NewCommando(w, bootProfile)
+
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	config.AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+
+	t.Run("auto-install path: invalid --profile fails fast (does not silently fall back)", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		// config.json: current=AkProfile（合法 AK），bad-oauth profile（OAuth 但缺 site_type）
+		dir := filepath.Join(testHome, ".aliyun")
+		os.MkdirAll(dir, 0755)
+		os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{
+  "current": "AkProfile",
+  "profiles": [
+    {"name":"AkProfile","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou"},
+    {"name":"bad-oauth","mode":"OAuth","region_id":"cn-hangzhou"}
+  ]
+}`), 0644)
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		os.MkdirAll(filepath.Dir(manifestPath), 0755)
+		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
+
+		// 模拟 --profile bad-oauth
+		config.ProfileFlag(ctx.Flags()).SetAssigned(true)
+		config.ProfileFlag(ctx.Flags()).SetValue("bad-oauth")
+		defer func() { config.ProfileFlag(ctx.Flags()).SetAssigned(false) }()
+
+		os.Args = []string{"aliyun", "qqq", "describe-regions", "--profile", "bad-oauth"}
+		args := []string{"qqq", "describe-regions"}
+
+		oldInteractive := isInteractiveInput
+		isInteractiveInput = func() bool { return false }
+		defer func() { isInteractiveInput = oldInteractive }()
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		// 关键：应当报 profile 校验错误，而不是 silent 回到 AkProfile 后再报"插件没找到"
+		assert.Contains(t, err.Error(), "oauth_site_type",
+			"profile 校验错误必须暴露出来，不能 silent 吞掉 / 回退到 default profile")
+		assert.NotContains(t, err.Error(), "is not a valid product",
+			"fail-fast 应当在 profile 校验阶段就触发，不能继续走到 plugin 检查")
 	})
 }
 
@@ -2939,7 +3007,34 @@ func TestInteractiveInstallPlugin(t *testing.T) {
 	})
 }
 
-// newCtxWithLangFlag 构造一个带 --language flag 注册的 ctx，便于测试 setLangEnv 在不同 flag / profile 组合下选用哪个语言。
+// writeMinimalConfigJSON 在 testHome 里写入一份最小合法 config.json，让
+// LoadProfileWithContext / profile.Validate 能正常通过，便于测试聚焦在 plugin
+// 路径本身的行为（不让"region/mode 缺失"的校验错误把测试干扰掉）。
+func writeMinimalConfigJSON(t *testing.T, testHome string) {
+	t.Helper()
+	dir := filepath.Join(testHome, ".aliyun")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("mkdir %s: %v", dir, err)
+	}
+	content := `{
+  "current": "default",
+  "profiles": [
+    {
+      "name": "default",
+      "mode": "AK",
+      "access_key_id": "test-ak",
+      "access_key_secret": "test-sk",
+      "region_id": "cn-hangzhou",
+      "language": "en"
+    }
+  ]
+}`
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(content), 0644); err != nil {
+		t.Fatalf("write config.json: %v", err)
+	}
+}
+
+// 构造一个带 --language flag 注册的 ctx，便于测试 setLangEnv 在不同 flag / profile 组合下选用哪个语言。
 // 注意：ctx.EnterCommand 必须在 AddFlags 之前调用，否则 ctx.Flags() 返回的是命令级
 // 子 FlagSet，root 上注册的 language flag 读不到。
 func newCtxWithLangFlag(t *testing.T, langFlag string, flagAssigned bool) *cli.Context {
