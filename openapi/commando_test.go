@@ -1419,6 +1419,72 @@ func TestMainForNonSlsProductApi(t *testing.T) {
 	assert.NotNil(t, err)
 }
 
+// Regression test: for a restful product, when the user provides an API name that does not exist in metadata (e.g. `aliyun apig GetPlugin`), the error should be `InvalidApiError` with suggestions,
+// NOT the confusing `product 'xxx' need restful call` produced by checkRestfulMethod.
+func TestMainRestfulProductWithInvalidApiName(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	profile := config.Profile{
+		Language: "en",
+		RegionId: "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+	assert.NotNil(t, command)
+
+	cmd := &cli.Command{}
+	AddFlags(cmd.Flags())
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+
+	originalFunc := meta.HookGetApi
+	defer func() {
+		meta.HookGetApi = originalFunc
+	}()
+
+	apigProduct := meta.Product{
+		Code:     "APIG",
+		Version:  "2024-03-27",
+		ApiStyle: "restful",
+		ApiNames: []string{"ListPlugins", "GetPluginAttachment", "InstallPlugin"},
+	}
+	mockRepo, _ := meta.MockLoadRepository([]meta.Product{apigProduct})
+	command.library = &Library{builtinRepo: mockRepo}
+
+	meta.HookGetApi = func(fn func(productCode string, version string, apiName string) (meta.Api, bool)) func(productCode string, version string, apiName string) (meta.Api, bool) {
+		return func(productCode string, version string, apiName string) (meta.Api, bool) {
+			return meta.Api{}, false
+		}
+	}
+
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	regionflag := config.NewRegionFlag()
+	regionflag.SetAssigned(true)
+	regionflag.SetValue("cn-hangzhou")
+	ctx.Flags().Add(regionflag)
+
+	accessKeyIDFlag := config.NewAccessKeyIdFlag()
+	accessKeyIDFlag.SetAssigned(true)
+	accessKeyIDFlag.SetValue("test-access-key-id")
+	ctx.Flags().Add(accessKeyIDFlag)
+
+	accessKeySecretFlag := config.NewAccessKeySecretFlag()
+	accessKeySecretFlag.SetAssigned(true)
+	accessKeySecretFlag.SetValue("test-access-key-secret")
+	ctx.Flags().Add(accessKeySecretFlag)
+
+	args := []string{"apig", "GetPlugin"}
+	err := command.main(ctx, args)
+	assert.NotNil(t, err)
+	// Must be InvalidApiError, not the generic "need restful call" message.
+	invalidApiErr, ok := err.(*InvalidApiError)
+	assert.True(t, ok, "expected *InvalidApiError, got %T: %v", err, err)
+	assert.Equal(t, "GetPlugin", invalidApiErr.Name)
+	assert.Contains(t, err.Error(), "'GetPlugin' is not a valid api")
+	assert.NotContains(t, err.Error(), "need restful call")
+}
+
 func TestMainForNonSlsProductApiWithRestCall(t *testing.T) {
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
