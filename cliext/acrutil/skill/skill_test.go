@@ -27,22 +27,6 @@ func prepareConfig(t *testing.T, home string, language string) {
 	}
 }
 
-func prepareConfigWithMode(t *testing.T, home string, mode string, extraFields map[string]string) {
-	cfgDir := filepath.Join(home, ".aliyun")
-	if err := os.MkdirAll(cfgDir, 0755); err != nil {
-		t.Fatalf("mkdir cfg: %v", err)
-	}
-
-	fields := fmt.Sprintf(`"name":"default","mode":"%s","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou","language":"en"`, mode)
-	for k, v := range extraFields {
-		fields += fmt.Sprintf(`,"%s":"%s"`, k, v)
-	}
-	configJSON := fmt.Sprintf(`{"current":"default","profiles":[{%s}]}`, fields)
-	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(configJSON), 0644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-}
-
 func newOriginCtx() (*cli.Context, *bytes.Buffer, *bytes.Buffer) {
 	out := &bytes.Buffer{}
 	errOut := &bytes.Buffer{}
@@ -288,12 +272,6 @@ func TestDownloadBinary(t *testing.T) {
 	}))
 	defer server.Close()
 
-	oldHTTPGet := httpGetFunc
-	httpGetFunc = func(url string) (*http.Response, error) {
-		return http.Get(server.URL)
-	}
-	defer func() { httpGetFunc = oldHTTPGet }()
-
 	// 临时替换 httpClient 为测试服务器
 	oldClient := httpClient
 	httpClient = server.Client()
@@ -355,12 +333,6 @@ func TestDownloadBinary_OverwriteExisting(t *testing.T) {
 	}))
 	defer server.Close()
 
-	oldHTTPGet := httpGetFunc
-	httpGetFunc = func(url string) (*http.Response, error) {
-		return http.Get(server.URL)
-	}
-	defer func() { httpGetFunc = oldHTTPGet }()
-
 	// 临时替换 httpClient 为测试服务器
 	oldClient := httpClient
 	httpClient = server.Client()
@@ -385,104 +357,6 @@ func TestDownloadBinary_OverwriteExisting(t *testing.T) {
 	}
 	if string(content) != "new binary" {
 		t.Errorf("exec content should be updated, got %q", string(content))
-	}
-}
-
-func TestCopySystemEnv_AK(t *testing.T) {
-	origHOME := os.Getenv("HOME")
-	defer func() { _ = os.Setenv("HOME", origHOME) }()
-	home := t.TempDir()
-	_ = os.Setenv("HOME", home)
-	prepareConfig(t, home, "en")
-
-	ctx, _, _ := newOriginCtx()
-	c := NewSkillContext(ctx)
-	c.InitBasicInfo()
-
-	// CopySystemEnv 不再包含凭证，只返回系统环境变量
-	envMap, err := c.CopySystemEnv()
-	if err != nil {
-		t.Fatalf("CopySystemEnv err: %v", err)
-	}
-	// 验证不包含 REGISTRY_USERNAME/PASSWORD
-	if _, exists := envMap["REGISTRY_USERNAME"]; exists {
-		t.Fatalf("REGISTRY_USERNAME should not be in envMap")
-	}
-	if _, exists := envMap["REGISTRY_PASSWORD"]; exists {
-		t.Fatalf("REGISTRY_PASSWORD should not be in envMap")
-	}
-}
-
-func TestCopySystemEnv_StsToken(t *testing.T) {
-	origHOME := os.Getenv("HOME")
-	defer func() { _ = os.Setenv("HOME", origHOME) }()
-	home := t.TempDir()
-	_ = os.Setenv("HOME", home)
-	prepareConfigWithMode(t, home, "StsToken", map[string]string{
-		"sts_token": "sts123",
-	})
-
-	ctx, _, _ := newOriginCtx()
-	c := NewSkillContext(ctx)
-	c.InitBasicInfo()
-
-	// CopySystemEnv 不再包含凭证
-	envMap, err := c.CopySystemEnv()
-	if err != nil {
-		t.Fatalf("CopySystemEnv err: %v", err)
-	}
-	if _, exists := envMap["REGISTRY_USERNAME"]; exists {
-		t.Fatalf("REGISTRY_USERNAME should not be in envMap")
-	}
-	if _, exists := envMap["REGISTRY_PASSWORD"]; exists {
-		t.Fatalf("REGISTRY_PASSWORD should not be in envMap")
-	}
-}
-
-func TestCopySystemEnv_RamRoleArn(t *testing.T) {
-	origHOME := os.Getenv("HOME")
-	defer func() { _ = os.Setenv("HOME", origHOME) }()
-	home := t.TempDir()
-	_ = os.Setenv("HOME", home)
-	prepareConfigWithMode(t, home, "RamRoleArn", map[string]string{
-		"ram_role_arn":     "arn:acs:ram::123:role/test",
-		"ram_session_name": "session123",
-	})
-
-	ctx, _, _ := newOriginCtx()
-	c := NewSkillContext(ctx)
-	c.InitBasicInfo()
-
-	// CopySystemEnv 不再包含凭证
-	envMap, err := c.CopySystemEnv()
-	if err != nil {
-		t.Fatalf("CopySystemEnv err: %v", err)
-	}
-	if _, exists := envMap["REGISTRY_USERNAME"]; exists {
-		t.Fatalf("REGISTRY_USERNAME should not be in envMap")
-	}
-	if _, exists := envMap["REGISTRY_PASSWORD"]; exists {
-		t.Fatalf("REGISTRY_PASSWORD should not be in envMap")
-	}
-}
-
-func TestCopySystemEnv_ConfigLoadError(t *testing.T) {
-	origHOME := os.Getenv("HOME")
-	defer func() { _ = os.Setenv("HOME", origHOME) }()
-	home := t.TempDir()
-	_ = os.Setenv("HOME", home)
-
-	ctx, _, _ := newOriginCtx()
-	c := NewSkillContext(ctx)
-	c.InitBasicInfo()
-
-	// CopySystemEnv 不再加载配置，不会报错
-	envMap, err := c.CopySystemEnv()
-	if err != nil {
-		t.Fatalf("CopySystemEnv should not error: %v", err)
-	}
-	if envMap == nil {
-		t.Fatalf("envMap should not be nil")
 	}
 }
 
@@ -566,11 +440,7 @@ func TestExecuteAcrSkill(t *testing.T) {
 	c := NewSkillContext(ctx)
 	c.execFilePath = "/any/path/acr-skill"
 
-	envMap := map[string]string{
-		"REGISTRY_USERNAME": "test_ak",
-		"REGISTRY_PASSWORD": "test_sk",
-	}
-	err := c.ExecuteAcrSkill([]string{"validate", "-d", "./my-skill"}, envMap)
+	err := c.ExecuteAcrSkill([]string{"validate", "-d", "./my-skill"})
 	if err != nil {
 		t.Fatalf("ExecuteAcrSkill failed: %v", err)
 	}
@@ -591,8 +461,7 @@ func TestExecuteAcrSkill_Failure(t *testing.T) {
 	c := NewSkillContext(ctx)
 	c.execFilePath = "/any/path/acr-skill"
 
-	envMap := map[string]string{}
-	err := c.ExecuteAcrSkill([]string{"validate"}, envMap)
+	err := c.ExecuteAcrSkill([]string{"validate"})
 	if err == nil {
 		t.Fatalf("expected execution error")
 	}

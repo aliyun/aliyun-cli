@@ -3,8 +3,8 @@ package acrutil
 import (
 	"fmt"
 
-	"github.com/aliyun/aliyun-cli/v3/acrutil/skill"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cliext/acrutil/skill"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 

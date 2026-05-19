@@ -56,7 +56,6 @@ var getConfigurePathFunc = func() string {
 var (
 	downloadBinaryFunc = DownloadBinary
 	execCommandFunc    = exec.Command
-	httpGetFunc        = http.Get
 	runtimeGOOSFunc    = func() string { return runtime.GOOS }
 	runtimeGOARCHFunc  = func() string { return runtime.GOARCH }
 )
@@ -106,17 +105,12 @@ func (c *SkillContext) Run(args []string) error {
 		}
 	}
 
-	envMap, err := c.CopySystemEnv()
-	if err != nil {
-		return err
-	}
-
 	newArgs, err := c.RemoveFlagsForMainCli(args)
 	if err != nil {
 		return err
 	}
 
-	return c.ExecuteAcrSkill(newArgs, envMap)
+	return c.ExecuteAcrSkill(newArgs)
 }
 
 func (c *SkillContext) InitializeAndValidatePlatform() error {
@@ -190,11 +184,17 @@ func DownloadBinary(url string, exeFilePath string) error {
 	}
 
 	// 使用 LimitReader 限制下载大小，防止磁盘空间耗尽
-	_, err = io.Copy(out, io.LimitReader(resp.Body, maxDownloadSize))
+	// 多读 1 字节用于检测是否超出限制：若实际写入字节数 > maxDownloadSize，说明响应体超限
+	written, err := io.Copy(out, io.LimitReader(resp.Body, maxDownloadSize+1))
 	if err != nil {
 		_ = out.Close()
 		_ = os.Remove(tmpFile)
 		return fmt.Errorf("failed to write to file %s: %v", tmpFile, err)
+	}
+	if written > maxDownloadSize {
+		_ = out.Close()
+		_ = os.Remove(tmpFile)
+		return fmt.Errorf("download size exceeds limit of %d bytes", maxDownloadSize)
 	}
 	if err = out.Close(); err != nil {
 		_ = os.Remove(tmpFile)
@@ -226,19 +226,6 @@ func DownloadBinary(url string, exeFilePath string) error {
 	}
 
 	return nil
-}
-
-// CopySystemEnv 复制系统环境变量
-func (c *SkillContext) CopySystemEnv() (map[string]string, error) {
-	envMap := make(map[string]string)
-	for _, env := range os.Environ() {
-		parts := strings.SplitN(env, "=", 2)
-		if len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
-		}
-	}
-
-	return envMap, nil
 }
 
 // RemoveFlagsForMainCli 移除主程序使用的 flag，避免传递给 acr-skill 出错
@@ -292,16 +279,10 @@ func (c *SkillContext) RemoveFlagsForMainCli(args []string) ([]string, error) {
 // acrutil 封装层不注入凭证，用户需通过以下方式提供 registry 认证：
 //  1. 命令行 -u/-p flag
 //  2. 环境变量 REGISTRY_USERNAME/REGISTRY_PASSWORD
-func (c *SkillContext) ExecuteAcrSkill(args []string, envMap map[string]string) error {
+func (c *SkillContext) ExecuteAcrSkill(args []string) error {
 	finalArgs := append([]string(nil), args...)
 
 	cmd := execCommandFunc(c.execFilePath, finalArgs...)
-	// 使用追加模式：继承父进程环境变量，并添加自定义变量
-	envs := os.Environ()
-	for k, v := range envMap {
-		envs = append(envs, fmt.Sprintf("%s=%s", k, v))
-	}
-	cmd.Env = envs
 	cmd.Stdout = c.originCtx.Stdout()
 	cmd.Stderr = c.originCtx.Stderr()
 	cmd.Stdin = os.Stdin
