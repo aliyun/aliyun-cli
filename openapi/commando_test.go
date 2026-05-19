@@ -2328,6 +2328,56 @@ func TestMain_PluginExecution_ProfileFailFast(t *testing.T) {
 		assert.NotContains(t, err.Error(), "is not a valid product",
 			"fail-fast 应当在 profile 校验阶段就触发，不能继续走到 plugin 检查")
 	})
+
+	t.Run("execution prep path: invalid --profile fails fast when plugin already installed", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		dir := filepath.Join(testHome, ".aliyun")
+		os.MkdirAll(dir, 0755)
+		os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{
+  "current": "AkProfile",
+  "profiles": [
+    {"name":"AkProfile","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou"},
+    {"name":"bad-oauth","mode":"OAuth","region_id":"cn-hangzhou"}
+  ]
+}`), 0644)
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		pluginPath := filepath.Join(pluginDir, "qqq")
+		os.MkdirAll(pluginPath, 0755)
+		manifestPath := filepath.Join(pluginDir, "manifest.json")
+		manifest := fmt.Sprintf(`{
+  "plugins": {
+    "qqq": {
+      "name": "qqq",
+      "version": "1.0.0",
+      "path": %q
+    }
+  }
+}`, pluginPath)
+		os.WriteFile(manifestPath, []byte(manifest), 0644)
+
+		config.ProfileFlag(ctx.Flags()).SetAssigned(true)
+		config.ProfileFlag(ctx.Flags()).SetValue("bad-oauth")
+		defer func() { config.ProfileFlag(ctx.Flags()).SetAssigned(false) }()
+
+		os.Args = []string{"aliyun", "qqq", "describe-regions", "--profile", "bad-oauth"}
+		args := []string{"qqq", "describe-regions"}
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "oauth_site_type",
+			"执行前 LoadProfileWithContext 必须 fail-fast，不能保留启动时的 AkProfile")
+		assert.NotContains(t, err.Error(), "failed to resolve plugin binary",
+			"profile 错误应早于 ExecutePlugin，不应尝试拉起插件进程")
+		_, ok := err.(cli.ErrorWithTip)
+		assert.True(t, ok, "应返回 ErrorWithTip，与 legacy 路径一致")
+		if ok {
+			assert.Contains(t, err.(cli.ErrorWithTip).GetTip("en"), "aliyun configure")
+		}
+	})
 }
 
 func TestPluginExecutionLogic(t *testing.T) {

@@ -254,7 +254,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			}
 			if !installed {
 				ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
-				// LoadProfileWithContext 失败不要 silent 吞错 —— 否则 c.profile 会停留在main.go 启动时的默认 profile，--profile xxx 的语义丢失，用户毫无感知。
+				// profile 加载 / 校验失败必须 fail-fast，不要 silent 吞错。否则会停留在main.go 启动时的默认 profile，--profile xxx 的语义丢失，用户毫无感知。
 				profile, err := config.LoadProfileWithContext(ctx)
 				if err != nil {
 					return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it")
