@@ -2,13 +2,16 @@ package maxc
 
 import (
 	"fmt"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/openapi"
 )
 
 // Context holds per-invocation state for the maxc launcher. Mirrors the
@@ -46,6 +49,7 @@ var (
 	getConfigurePathFunc = func() string { return config.GetConfigPath() }
 	runtimeGOOSFunc      = func() string { return runtime.GOOS }
 	runtimeGOARCHFunc    = func() string { return runtime.GOARCH }
+	execCommandFunc      = exec.Command
 )
 
 // The six platforms the maxc release pipeline produces, matching the OSS
@@ -145,4 +149,161 @@ func (c *Context) readLocalVersion() string {
 		return ""
 	}
 	return strings.TrimSpace(string(b))
+}
+
+// stripFlags lists parent-CLI flag names that are only meaningful to the
+// aliyun root command and must NOT leak into the maxc child process.
+// These are auth/config flags whose values are already exported via
+// envMap (see InjectAliyunCredentials), or runtime knobs that have no
+// equivalent in the maxc-cli vocabulary.
+//
+// Anything not listed here passes through, so legitimate maxc flags
+// (e.g. --sql, --project, --output) keep their child-side meaning even
+// if the parent CLI happens to define a flag of the same name.
+var stripFlags = map[string]bool{
+	// config: auth & credential
+	"profile":                        true,
+	"mode":                           true,
+	"sts-region":                     true,
+	"ram-role-name":                  true,
+	"ram-role-arn":                   true,
+	"role-session-name":              true,
+	"external-id":                    true,
+	"source-profile":                 true,
+	"private-key":                    true,
+	"key-pair-name":                  true,
+	"expired-seconds":                true,
+	"process-command":                true,
+	"oidc-provider-arn":              true,
+	"oidc-token-file":                true,
+	"cloud-sso-sign-in-url":          true,
+	"cloud-sso-access-config":        true,
+	"cloud-sso-account-id":           true,
+	"oauth-site-type":                true,
+	"external-account-type":          true,
+	"auto-plugin-install":            true,
+	"auto-plugin-install-enable-pre": true,
+
+	// config: connection & runtime
+	"config-path":        true,
+	"read-timeout":       true,
+	"connect-timeout":    true,
+	"retry-count":        true,
+	"skip-secure-verify": true,
+	"endpoint-type":      true,
+	"RegionId":           true,
+
+	// openapi: caller-side-only
+	"secure":         true,
+	"insecure":       true,
+	"header":         true,
+	"pager":          true,
+	"accept":         true,
+	"waiter":         true,
+	"dryrun":         true,
+	"quiet":          true,
+	"yes":            true,
+	"cli-query":      true,
+	"roa":            true,
+	"method":         true,
+	"user-agent":     true,
+	"cli-ai-mode":    true,
+	"no-cli-ai-mode": true,
+}
+
+// RemoveFlagsForMainCli walks args and drops every parent-CLI-only flag
+// listed in stripFlags (handling both `--flag value` and `--flag=value`
+// forms, plus shorthand `-x value`). Identical strategy to cliext/cms2 —
+// kept verbatim so behaviour stays consistent across cliext launchers.
+func (c *Context) RemoveFlagsForMainCli(args []string) []string {
+	allFlags := cli.NewFlagSet()
+	config.AddFlags(allFlags)
+	openapi.AddFlags(allFlags)
+
+	longNeedsValue := make(map[string]bool)
+	shortNeedsValue := make(map[string]bool)
+	for _, f := range allFlags.Flags() {
+		if !stripFlags[f.Name] {
+			continue
+		}
+		needsValue := f.AssignedMode != cli.AssignedNone
+		if f.Name != "" {
+			longNeedsValue["--"+f.Name] = needsValue
+		}
+		for _, alias := range f.Aliases {
+			longNeedsValue["--"+alias] = needsValue
+		}
+		if f.Shorthand != 0 {
+			shortNeedsValue["-"+string(f.Shorthand)] = needsValue
+		}
+	}
+
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		argName := a
+		hasInlineValue := false
+		if prefix, _, ok := cli.SplitStringWithPrefix(a, "=:"); ok {
+			argName = prefix
+			hasInlineValue = true
+		}
+		if needs, ok := longNeedsValue[argName]; ok {
+			if needs && !hasInlineValue && i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		if needs, ok := shortNeedsValue[argName]; ok {
+			if needs && !hasInlineValue && i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
+// Execute spawns c.execFilePath with childArgs, wiring stdio through and
+// merging c.envMap on top of the inherited environment. Non-zero exit codes
+// surface as *ExitError so the caller can propagate without calling os.Exit
+// directly (which would skip deferred cleanup).
+func (c *Context) Execute(childArgs []string) error {
+	// Close idle HTTP connections before fork — on macOS there's a race
+	// between socket() and the FD_CLOEXEC flag where a child can inherit
+	// a half-ready fd and then fail with "bad file descriptor". cms2
+	// hit this in production; we copy the workaround.
+	http.DefaultClient.CloseIdleConnections()
+
+	cmd := execCommandFunc(c.execFilePath, childArgs...)
+	cmd.Env = mergeEnv(os.Environ(), c.envMap)
+	cmd.Stdout = c.originCtx.Stdout()
+	cmd.Stderr = c.originCtx.Stderr()
+	cmd.Stdin = os.Stdin
+
+	if err := cmd.Run(); err != nil {
+		if ee, ok := err.(*exec.ExitError); ok {
+			return &ExitError{Code: ee.ExitCode()}
+		}
+		return fmt.Errorf("execute %s %v: %w", c.execFilePath, childArgs, err)
+	}
+	return nil
+}
+
+// mergeEnv returns base with any keys present in overrides removed, then
+// appends "k=v" pairs for every override. Ensures the override map wins
+// even when the parent already had the same variable set.
+func mergeEnv(base []string, overrides map[string]string) []string {
+	out := make([]string, 0, len(base)+len(overrides))
+	for _, item := range base {
+		key, _, _ := strings.Cut(item, "=")
+		if _, conflict := overrides[key]; conflict {
+			continue
+		}
+		out = append(out, item)
+	}
+	for k, v := range overrides {
+		out = append(out, k+"="+v)
+	}
+	return out
 }
