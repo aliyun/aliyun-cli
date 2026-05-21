@@ -104,15 +104,27 @@ func (c *Context) CheckOsTypeAndArch() {
 }
 
 // Run is the top-level entrypoint invoked by main.go's NewMaxcCommand.
-// Task 3.3+ will fill in EnsureInstalledAndUpdated / PrepareEnv / Execute;
-// for the skeleton it errors out so callers don't silently no-op.
+// Sequence: derive paths → check platform → install/update if needed →
+// inject aliyun credentials into env → strip parent-only flags → exec.
+// On a soft update-check failure when something is already installed we
+// continue (with a stderr warning) rather than blocking the user.
 func (c *Context) Run(args []string) error {
 	c.InitBasicInfo()
 	c.CheckOsTypeAndArch()
 	if !c.osSupport {
 		return fmt.Errorf("your os type %s and arch %s is not supported", c.osType, c.osArch)
 	}
-	return fmt.Errorf("maxc launcher: download/exec not implemented yet (Task 3.3+)")
+	if err := c.EnsureInstalledAndUpdated(); err != nil {
+		if !c.installed {
+			return err
+		}
+		fmt.Fprintf(c.originCtx.Stderr(), "Warning: maxc update check failed: %v\n", err)
+	}
+	if err := c.InjectAliyunCredentials(args); err != nil {
+		return err
+	}
+	childArgs := c.RemoveFlagsForMainCli(args)
+	return c.Execute(childArgs)
 }
 
 func fileExists(p string) bool {
