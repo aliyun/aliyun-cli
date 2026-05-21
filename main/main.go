@@ -28,6 +28,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/cli/upgrade"
 	"github.com/aliyun/aliyun-cli/v3/cliext/cms2"
+	"github.com/aliyun/aliyun-cli/v3/cliext/maxc"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -131,6 +132,9 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(appmanagerutil.NewAppManagerCommand())
 	// cms2 command
 	rootCmd.AddSubCommand(cms2.NewCms2Command())
+	// maxc command (MaxCompute CLI for AI agents — PyInstaller onedir bundle
+	// fetched on demand from public OSS; see cliext/maxc/README or spec).
+	rootCmd.AddSubCommand(maxc.NewMaxcCommand())
 	// plugin command
 	rootCmd.AddSubCommand(plugin.NewPluginCommand())
 	// upgrade command
