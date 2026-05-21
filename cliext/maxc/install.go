@@ -22,7 +22,8 @@ var (
 	httpDoFunc  = func(req *http.Request) (*http.Response, error) {
 		return (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	}
-	timeNowFunc = func() time.Time { return time.Now() }
+	timeNowFunc          = func() time.Time { return time.Now() }
+	getLatestVersionFunc = func(c *Context) (string, error) { return c.GetLatestVersion() }
 )
 
 // effectiveBaseURL returns the env override (ALIBABA_CLOUD_MAXC_DOWNLOAD_BASE_URL)
@@ -46,6 +47,71 @@ func (c *Context) tarballShaURL(version string) string {
 
 func (c *Context) latestVersionURL() string {
 	return c.effectiveBaseURL() + "/versions/latest"
+}
+
+// GetLatestVersion fetches the public `versions/latest` pointer and returns
+// its trimmed content. Wrapped by getLatestVersionFunc so tests can stub it
+// without needing httptest for the cache-only paths.
+func (c *Context) GetLatestVersion() (string, error) {
+	resp, err := httpGetFunc(c.latestVersionURL())
+	if err != nil {
+		return "", fmt.Errorf("GET latest: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("GET latest: status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	v := strings.TrimSpace(string(body))
+	if v == "" {
+		return "", fmt.Errorf("empty latest pointer at %s", c.latestVersionURL())
+	}
+	return v, nil
+}
+
+// EnsureInstalledAndUpdated is the gatekeeper called by Run before exec.
+// Honors two env shortcuts (per spec § 5):
+//   - ALIBABA_CLOUD_MAXC_EXEC_PATH: caller is BYO-binary, do nothing
+//   - ALIBABA_CLOUD_MAXC_NO_UPDATE_CHECK=1: skip the network round-trip
+//
+// Otherwise: install if absent, else hit the latest pointer at most once per
+// TTL window; a failed remote check is logged-and-ignored when something is
+// already installed (don't break offline users).
+func (c *Context) EnsureInstalledAndUpdated() error {
+	if os.Getenv("ALIBABA_CLOUD_MAXC_EXEC_PATH") != "" {
+		return nil
+	}
+	if os.Getenv("ALIBABA_CLOUD_MAXC_NO_UPDATE_CHECK") == "1" {
+		return nil
+	}
+
+	if !c.installed {
+		latest, err := getLatestVersionFunc(c)
+		if err != nil {
+			return fmt.Errorf("resolve latest maxc version: %w", err)
+		}
+		return c.downloadAndInstall(latest)
+	}
+
+	if !c.cacheStale() {
+		return nil
+	}
+	latest, err := getLatestVersionFunc(c)
+	if err != nil {
+		// Soft-fail: leave the user on whatever they've already got and try
+		// again next TTL window. Stderr so it surfaces in `aliyun maxc -v`.
+		fmt.Fprintf(os.Stderr, "maxc: update check failed: %v\n", err)
+		_ = c.touchCache()
+		return nil
+	}
+	_ = c.touchCache()
+	if latest == c.readLocalVersion() {
+		return nil
+	}
+	return c.downloadAndInstall(latest)
 }
 
 // downloadAndInstall is the orchestrator: GET tarball + .sha256, verify, extract

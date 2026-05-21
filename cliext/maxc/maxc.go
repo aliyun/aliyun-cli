@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -113,4 +114,35 @@ func (c *Context) Run(args []string) error {
 func fileExists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
+}
+
+// cacheStale returns true when the version-check sentinel is missing or older
+// than VersionCheckTTL seconds. Mirrors cms2's once-per-day throttle policy.
+func (c *Context) cacheStale() bool {
+	fi, err := os.Stat(c.versionCachePath)
+	if err != nil {
+		return true
+	}
+	return timeNowFunc().Sub(fi.ModTime()).Seconds() > float64(VersionCheckTTL)
+}
+
+// touchCache writes (or rewrites) the version-check sentinel so cacheStale
+// reports false for the next TTL window. The file content is irrelevant —
+// only its mtime matters.
+func (c *Context) touchCache() error {
+	if err := os.MkdirAll(filepath.Dir(c.versionCachePath), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(c.versionCachePath, []byte(timeNowFunc().Format("2006-01-02T15:04:05Z07:00")), 0o644)
+}
+
+// readLocalVersion returns the trimmed .version file contents, or "" if
+// unreadable. Used to decide whether a remote latest pointer actually means
+// "upgrade" or "already on it".
+func (c *Context) readLocalVersion() string {
+	b, err := os.ReadFile(c.versionFilePath)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
 }
