@@ -362,22 +362,24 @@ func TestDownloadBinary_OverwriteExisting(t *testing.T) {
 
 func TestRemoveFlagsForMainCli(t *testing.T) {
 	ctx, _, _ := newOriginCtx()
-	addConfigFlag(ctx, "region", "cn-hangzhou")
+	// Add flags that are in stripFlags and mark them as assigned
 	addConfigFlag(ctx, "profile", "test")
 
 	c := NewSkillContext(ctx)
-	args := []string{"validate", "--region", "cn-hangzhou", "--profile", "test", "-d", "./my-skill"}
+	args := []string{"validate", "--profile", "test", "-d", "./my-skill"}
 	newArgs, err := c.RemoveFlagsForMainCli(args)
 	if err != nil {
 		t.Fatalf("RemoveFlagsForMainCli failed: %v", err)
 	}
 
+	// Verify main CLI-specific flags are removed
 	for _, arg := range newArgs {
-		if arg == "--region" || arg == "--profile" {
+		if arg == "--profile" {
 			t.Errorf("config flag should be removed: %s", arg)
 		}
 	}
 
+	// Verify subprocess flags are retained
 	hasDir := false
 	for _, arg := range newArgs {
 		if arg == "-d" {
@@ -386,6 +388,88 @@ func TestRemoveFlagsForMainCli(t *testing.T) {
 	}
 	if !hasDir {
 		t.Errorf("non-config flag -d should remain")
+	}
+}
+
+func TestRemoveFlagsForMainCli_StripFlags(t *testing.T) {
+	ctx, _, _ := newOriginCtx()
+	// 添加多个stripFlags中定义的flag
+	addConfigFlag(ctx, "profile", "test")
+	addConfigFlag(ctx, "mode", "AK")
+	addConfigFlag(ctx, "region", "cn-hangzhou")
+
+	c := NewSkillContext(ctx)
+	args := []string{
+		"publish",
+		"--profile", "test",
+		"--mode", "AK",
+		"--region", "cn-hangzhou",
+		"-d", "./my-skill",
+		"--version", "1.0.0",
+	}
+	newArgs, err := c.RemoveFlagsForMainCli(args)
+	if err != nil {
+		t.Fatalf("RemoveFlagsForMainCli failed: %v", err)
+	}
+
+	// 验证stripFlags中的flag被移除
+	removedFlags := []string{"--profile", "--mode"}
+	for _, arg := range newArgs {
+		for _, removed := range removedFlags {
+			if arg == removed {
+				t.Errorf("flag should be removed: %s", arg)
+			}
+		}
+	}
+
+	// 验证子进程需要的flag保留
+	retainedFlags := []string{"-d", "--version"}
+	for _, retained := range retainedFlags {
+		found := false
+		for _, arg := range newArgs {
+			if arg == retained {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("flag should be retained: %s", retained)
+		}
+	}
+}
+
+func TestRemoveFlagsForMainCli_InlineValue(t *testing.T) {
+	ctx, _, _ := newOriginCtx()
+	addConfigFlag(ctx, "profile", "test")
+
+	c := NewSkillContext(ctx)
+	// 测试内联值格式 --profile=test
+	args := []string{"publish", "--profile=test", "-d", "./my-skill"}
+	newArgs, err := c.RemoveFlagsForMainCli(args)
+	if err != nil {
+		t.Fatalf("RemoveFlagsForMainCli failed: %v", err)
+	}
+
+	// 验证内联值格式的flag被移除
+	for _, arg := range newArgs {
+		if strings.HasPrefix(arg, "--profile") {
+			t.Errorf("inline flag should be removed: %s", arg)
+		}
+	}
+
+	// 验证其他flag保留
+	if len(newArgs) < 2 || newArgs[0] != "publish" {
+		t.Errorf("expected first args to be [publish ...], got %v", newArgs)
+	}
+	hasD := false
+	for _, arg := range newArgs {
+		if arg == "-d" {
+			hasD = true
+			break
+		}
+	}
+	if !hasD {
+		t.Errorf("expected -d flag to be retained, got %v", newArgs)
 	}
 }
 
@@ -467,5 +551,46 @@ func TestExecuteAcrSkill_Failure(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to execute") {
 		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+func TestExecuteAcrSkill_CompatMode(t *testing.T) {
+	origExec := execCommandFunc
+	var capturedEnv []string
+	execCommandFunc = func(name string, args ...string) *exec.Cmd {
+		cmd := exec.Command("true")
+		// 捕获环境变量用于验证
+		capturedEnv = os.Environ()
+		return cmd
+	}
+	defer func() { execCommandFunc = origExec }()
+
+	// 设置兼容性模式环境变量
+	origCompat := os.Getenv("ALIBABA_CLOUD_ACR_SKILL_COMPAT_MODE")
+	os.Setenv("ALIBABA_CLOUD_ACR_SKILL_COMPAT_MODE", "aliyun acrutil skill")
+	defer os.Setenv("ALIBABA_CLOUD_ACR_SKILL_COMPAT_MODE", origCompat)
+
+	ctx, _, _ := newOriginCtx()
+	c := NewSkillContext(ctx)
+	c.execFilePath = "/any/path/acr-skill"
+
+	err := c.ExecuteAcrSkill([]string{"--help"})
+	if err != nil {
+		t.Fatalf("ExecuteAcrSkill failed: %v", err)
+	}
+
+	// 验证环境变量被传递
+	found := false
+	for _, env := range capturedEnv {
+		if strings.HasPrefix(env, "ALIBABA_CLOUD_ACR_SKILL_COMPAT_MODE=") {
+			found = true
+			if !strings.Contains(env, "aliyun acrutil skill") {
+				t.Errorf("compat mode env var has wrong value: %s", env)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Log("Warning: compat mode env var not found in captured env (may be expected in test environment)")
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/openapi"
 )
 
 // NewSkillCommand 创建 skill 子命令
@@ -228,22 +229,124 @@ func DownloadBinary(url string, exeFilePath string) error {
 	return nil
 }
 
-// RemoveFlagsForMainCli 移除主程序使用的 flag，避免传递给 acr-skill 出错
+// stripFlags lists parent-CLI flag names that are only meaningful to the
+// main CLI and should be removed before forwarding args to the acr-skill
+// subprocess.  These are auth/config/caller flags whose values are
+// already passed via environment variables in PrepareEnv, or have no
+// meaning in the subprocess context.
+//
+// All other flags (including those that happen to share a name with the
+// parent CLI, such as --region, --output, --version, --endpoint) are
+// passed through so the subprocess can handle them with its own semantics.
+var stripFlags = map[string]bool{
+	// config: auth & credential
+	"profile":                        true,
+	"mode":                           true,
+	"sts-region":                     true,
+	"ram-role-name":                  true,
+	"ram-role-arn":                   true,
+	"role-session-name":              true,
+	"external-id":                    true,
+	"source-profile":                 true,
+	"private-key":                    true,
+	"key-pair-name":                  true,
+	"expired-seconds":                true,
+	"process-command":                true,
+	"oidc-provider-arn":              true,
+	"oidc-token-file":                true,
+	"cloud-sso-sign-in-url":          true,
+	"cloud-sso-access-config":        true,
+	"cloud-sso-account-id":           true,
+	"oauth-site-type":                true,
+	"external-account-type":          true,
+	"auto-plugin-install":            true,
+	"auto-plugin-install-enable-pre": true,
+
+	// config: connection & runtime
+	"config-path":        true,
+	"read-timeout":       true,
+	"connect-timeout":    true,
+	"retry-count":        true,
+	"skip-secure-verify": true,
+	"endpoint-type":      true,
+	"RegionId":           true,
+
+	// openapi: caller-side-only
+	"secure":         true,
+	"insecure":       true,
+	"header":         true,
+	"pager":          true,
+	"accept":         true,
+	"waiter":         true,
+	"dryrun":         true,
+	"quiet":          true,
+	"yes":            true,
+	"cli-query":      true,
+	"roa":            true,
+	"method":         true,
+	"user-agent":     true,
+	"cli-ai-mode":    true,
+	"no-cli-ai-mode": true,
+}
+
+// shortFlagsToStrip lists short flags that should be stripped.
+// This is used to avoid conflicts where a short flag is used by both
+// the parent CLI and the child CLI (e.g., -p for --profile vs --password).
+// Only include short flags that are unique to the parent CLI.
+var shortFlagsToStrip = map[string]bool{
+	// Currently empty - we avoid stripping short flags to prevent conflicts
+}
+
+// RemoveFlagsForMainCli strips only the parent-CLI-only flags listed in
+// stripFlags from args before forwarding to the acr-skill subprocess.
+// All other args (including flags that the subprocess handles, such as
+// --region, --output, --version, --endpoint, etc.) are preserved.
 func (c *SkillContext) RemoveFlagsForMainCli(args []string) ([]string, error) {
-	if c.originCtx.Flags() == nil || c.originCtx.Flags().Flags() == nil {
-		return append([]string(nil), args...), nil
+	// Build a set of flags to strip by parsing args
+	// Only strip flags that are actually present in args AND are in stripFlags
+	argsFlagSet := make(map[string]bool) // tracks which flags appear in args
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if strings.HasPrefix(a, "--") {
+			// Long flag: --flag or --flag=value
+			flagName := a[2:]
+			if idx := strings.Index(flagName, "="); idx != -1 {
+				flagName = flagName[:idx]
+			}
+			argsFlagSet[flagName] = true
+		} else if strings.HasPrefix(a, "-") && len(a) == 2 {
+			// Short flag: -f
+			argsFlagSet[a] = true
+		}
 	}
-	longNeedsValue := make(map[string]bool)  // key: --name
-	shortNeedsValue := make(map[string]bool) // key: -x
-	for _, f := range c.originCtx.Flags().Flags() {
-		if !f.IsAssigned() || f.Category != "config" {
+
+	// Now build the removal set: only flags that are both in stripFlags AND in args
+	allFlags := cli.NewFlagSet()
+	config.AddFlags(allFlags)
+	openapi.AddFlags(allFlags)
+
+	longNeedsValue := make(map[string]bool)
+	shortNeedsValue := make(map[string]bool)
+	for _, f := range allFlags.Flags() {
+		if !stripFlags[f.Name] {
+			continue
+		}
+		// Check if this flag actually appears in args
+		hasLongFlag := argsFlagSet[f.Name]
+		// Only strip short flags if they're explicitly in shortFlagsToStrip
+		// This avoids conflicts where the same shorthand is used by both CLIs
+		hasShortFlag := shortFlagsToStrip[string(f.Shorthand)] && argsFlagSet["-"+string(f.Shorthand)]
+		if !hasLongFlag && !hasShortFlag {
 			continue
 		}
 		needsValue := f.AssignedMode != cli.AssignedNone
 		if f.Name != "" {
 			longNeedsValue["--"+f.Name] = needsValue
 		}
-		if f.Shorthand != 0 {
+		for _, alias := range f.Aliases {
+			longNeedsValue["--"+alias] = needsValue
+		}
+		if shortFlagsToStrip[string(f.Shorthand)] && f.Shorthand != 0 {
 			shortNeedsValue["-"+string(f.Shorthand)] = needsValue
 		}
 	}
@@ -251,21 +354,21 @@ func (c *SkillContext) RemoveFlagsForMainCli(args []string) ([]string, error) {
 	out := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		a := args[i]
-		if needs, ok := longNeedsValue[a]; ok {
-			if needs {
-				// 当 flag 需要值时，检查下一个参数是否存在且不是另一个 flag
-				if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-					i++
-				}
+		argName := a
+		hasInlineValue := false
+		if prefix, _, ok := cli.SplitStringWithPrefix(a, "=:"); ok {
+			argName = prefix
+			hasInlineValue = true
+		}
+		if needs, ok := longNeedsValue[argName]; ok {
+			if needs && !hasInlineValue && i+1 < len(args) {
+				i++
 			}
 			continue
 		}
-		if needs, ok := shortNeedsValue[a]; ok {
-			if needs {
-				// 当 flag 需要值时，检查下一个参数是否存在且不是另一个 flag
-				if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
-					i++
-				}
+		if needs, ok := shortNeedsValue[argName]; ok {
+			if needs && !hasInlineValue && i+1 < len(args) {
+				i++
 			}
 			continue
 		}
@@ -287,10 +390,32 @@ func (c *SkillContext) ExecuteAcrSkill(args []string) error {
 	cmd.Stderr = c.originCtx.Stderr()
 	cmd.Stdin = os.Stdin
 
+	envMap := make(map[string]string)
+	envMap["ALIBABA_CLOUD_ACR_SKILL_COMPAT_MODE"] = "aliyun acrutil skill"
+	if len(envMap) > 0 {
+		envs := filterEnv(os.Environ(), envMap)
+		for k, v := range envMap {
+			envs = append(envs, k+"="+v)
+		}
+		cmd.Env = envs
+	}
+
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to execute %s: %v", c.execFilePath, err)
 	}
 	return nil
+}
+
+func filterEnv(base []string, overrides map[string]string) []string {
+	result := make([]string, 0, len(base))
+	for _, item := range base {
+		key, _, _ := strings.Cut(item, "=")
+		if _, conflict := overrides[key]; conflict {
+			continue
+		}
+		result = append(result, item)
+	}
+	return result
 }
 
 func fileExists(path string) bool {
