@@ -56,7 +56,6 @@ const (
 	AutoPluginInstallEnablePreFlagName = "auto-plugin-install-enable-pre"
 	BearerTokenFlagName                = "bearer-token"
 	BearerTokenHeaderKeyFlagName       = "bearer-token-header-key"
-	SkipConfigureVerifyFlagName        = "skip-configure-verify"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -96,7 +95,6 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewAutoPluginInstallEnablePreFlag())
 	fs.Add(NewBearerTokenFlag())
 	fs.Add(NewBearerTokenHeaderKeyFlag())
-	fs.Add(NewSkipConfigureVerifyFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -591,10 +589,6 @@ func BearerTokenHeaderKeyFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(BearerTokenHeaderKeyFlagName)
 }
 
-func SkipConfigureVerifyFlag(fs *cli.FlagSet) *cli.Flag {
-	return fs.Get(SkipConfigureVerifyFlagName)
-}
-
 func NewExternalAccountTypeFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "config",
@@ -657,16 +651,5 @@ func NewBearerTokenHeaderKeyFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--bearer-token-header-key <key>` to assign custom auth header key, e.g. x-custom-token",
 			"使用 `--bearer-token-header-key <key>` 指定自定义认证 Header 名称，例如 x-custom-token"),
-	}
-}
-
-func NewSkipConfigureVerifyFlag() *cli.Flag {
-	return &cli.Flag{
-		Category:     "config",
-		Name:         SkipConfigureVerifyFlagName,
-		AssignedMode: cli.AssignedOnce,
-		Short: i18n.T(
-			"use `--skip-configure-verify` to skip profile check after configure (save config only)",
-			"使用 `--skip-configure-verify` 在 configure 完成后跳过 profile 凭证校验（仅保存配置）"),
 	}
 }

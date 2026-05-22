@@ -146,12 +146,6 @@ func doConfigureSet(ctx *cli.Context) error {
 		}
 	}
 
-	if skipVerifyFlag := SkipConfigureVerifyFlag(flags); skipVerifyFlag != nil && skipVerifyFlag.IsAssigned() {
-		if val, ok := skipVerifyFlag.GetValue(); ok {
-			profile.SkipConfigureVerify = strings.ToLower(val) == "true"
-		}
-	}
-
 	err = profile.Validate()
 	if err != nil {
 		return fmt.Errorf("fail to set configuration: %v", err)

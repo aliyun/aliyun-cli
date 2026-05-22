@@ -316,12 +316,6 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 	//fmt.Printf("User site: [china|international|japan] %s", cp.Site)
 	//cp.Site = ReadInput(cp.Site)
 
-	if skipVerifyFlag := SkipConfigureVerifyFlag(ctx.Flags()); skipVerifyFlag != nil && skipVerifyFlag.IsAssigned() {
-		if val, ok := skipVerifyFlag.GetValue(); ok {
-			cp.SkipConfigureVerify = strings.ToLower(val) == "true"
-		}
-	}
-
 	cli.Printf(w, "Saving profile[%s] ...", profileName)
 
 	conf.PutProfile(cp)

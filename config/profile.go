@@ -124,7 +124,6 @@ type Profile struct {
 	AutoPluginInstallEnablePre bool             `json:"auto_plugin_install_enable_pre,omitempty"` // install latest version (including pre-release) when true
 	BearerTokenValue           string           `json:"bearer_token,omitempty"`
 	BearerTokenHeaderKey       string           `json:"bearer_token_header_key,omitempty"`
-	SkipConfigureVerify        bool             `json:"skip_configure_verify,omitempty"` // skip DoHello (GetCallerIdentity) after configure
 	parent                     *Configuration   //`json:"-"`
 }
 
@@ -323,12 +322,6 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		cp.BearerTokenHeaderKey = util.GetFromEnv("ALIBABA_CLOUD_BEARER_TOKEN_HEADER_KEY")
 	}
 
-	if skipVerifyFlag := SkipConfigureVerifyFlag(ctx.Flags()); skipVerifyFlag != nil && skipVerifyFlag.IsAssigned() {
-		if val, ok := skipVerifyFlag.GetValue(); ok {
-			cp.SkipConfigureVerify = strings.ToLower(val) == "true"
-		}
-	}
-
 	if cp.OIDCProviderARN == "" {
 		cp.OIDCProviderARN = util.GetFromEnv("ALIBABACLOUD_OIDC_PROVIDER_ARN", "ALIBABA_CLOUD_OIDC_PROVIDER_ARN")
 	}
@@ -351,10 +344,6 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 
 	if cp.AutoPluginInstallEnablePre == false {
 		cp.AutoPluginInstallEnablePre = os.Getenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL_ENABLE_PRE") == "true"
-	}
-
-	if !cp.SkipConfigureVerify {
-		cp.SkipConfigureVerify = os.Getenv("ALIBABA_CLOUD_SKIP_CONFIGURE_VERIFY") == "true"
 	}
 
 	AutoModeRecognition(cp)
