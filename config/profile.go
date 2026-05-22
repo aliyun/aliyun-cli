@@ -25,9 +25,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/aliyun/aliyun-cli/v3/cloudsso"
 
+	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/util"
@@ -42,8 +44,7 @@ var exchangeFromOAuthFunc = exchangeFromOAuth
 type AuthenticateMode string
 
 const (
-	AK = AuthenticateMode("AK")
-	// Deprecated: StsToken is deprecated
+	AK         = AuthenticateMode("AK")
 	StsToken   = AuthenticateMode("StsToken")
 	RamRoleArn = AuthenticateMode("RamRoleArn")
 	EcsRamRole = AuthenticateMode("EcsRamRole")
@@ -57,12 +58,16 @@ const (
 	OIDC                = AuthenticateMode("OIDC")
 	CloudSSO            = AuthenticateMode("CloudSSO")
 	OAuth               = AuthenticateMode("OAuth")
+	BearerToken         = AuthenticateMode("BearerToken")
 )
+
+// standard OpenAPI bearer token header used by darabonba-openapi.
+const DefaultBearerTokenHeaderKey = "x-acs-bearer-token"
 
 var knownModes = []AuthenticateMode{
 	AK, StsToken, RamRoleArn, EcsRamRole, RsaKeyPair,
 	RamRoleArnWithEcs, ChainableRamRoleArn, External,
-	CredentialsURI, OIDC, CloudSSO, OAuth,
+	CredentialsURI, OIDC, CloudSSO, OAuth, BearerToken,
 }
 
 func NormalizeMode(mode string) AuthenticateMode {
@@ -117,6 +122,9 @@ type Profile struct {
 	ExternalAccountType        string           `json:"external_account_type,omitempty"`
 	AutoPluginInstall          bool             `json:"auto_plugin_install,omitempty"`            // automatically install plugins when not found
 	AutoPluginInstallEnablePre bool             `json:"auto_plugin_install_enable_pre,omitempty"` // install latest version (including pre-release) when true
+	BearerTokenValue           string           `json:"bearer_token,omitempty"`
+	BearerTokenHeaderKey       string           `json:"bearer_token_header_key,omitempty"`
+	SkipConfigureVerify        bool             `json:"skip_configure_verify,omitempty"` // skip DoHello (GetCallerIdentity) after configure
 	parent                     *Configuration   //`json:"-"`
 }
 
@@ -227,6 +235,14 @@ func (cp *Profile) Validate() error {
 			return fmt.Errorf("invalid oauth_site_type '%s' for profile '%s', should be CN or INTL. Run `aliyun configure --profile %s --mode OAuth` to set it",
 				cp.OAuthSiteType, cp.Name, cp.Name)
 		}
+	case BearerToken:
+		if err := cp.normalizeBearerTokenFields(); err != nil {
+			return err
+		}
+		if cp.BearerTokenValue == "" {
+			return fmt.Errorf("bearer_token is not configured for profile '%s'. Run `aliyun configure --profile %s --mode BearerToken` to set it",
+				cp.Name, cp.Name)
+		}
 	default:
 		return fmt.Errorf("invalid mode: %s", cp.Mode)
 	}
@@ -264,6 +280,8 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.EndpointType = EndpointTypeFlag(ctx.Flags()).GetStringOrDefault(cp.EndpointType)
 	cp.Endpoint = EndpointFlag(ctx.Flags()).GetStringOrDefault(cp.Endpoint)
 	cp.ExternalAccountType = ExternalAccountTypeFlag(ctx.Flags()).GetStringOrDefault(cp.ExternalAccountType)
+	cp.BearerTokenValue = BearerTokenFlag(ctx.Flags()).GetStringOrDefault(cp.BearerTokenValue)
+	cp.BearerTokenHeaderKey = BearerTokenHeaderKeyFlag(ctx.Flags()).GetStringOrDefault(cp.BearerTokenHeaderKey)
 
 	if cp.AccessKeyId == "" {
 		cp.AccessKeyId = util.GetFromEnv("ALIBABA_CLOUD_ACCESS_KEY_ID", "ALIBABACLOUD_ACCESS_KEY_ID", "ALICLOUD_ACCESS_KEY_ID", "ACCESS_KEY_ID")
@@ -297,6 +315,20 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		cp.CredentialsURI = os.Getenv("ALIBABA_CLOUD_CREDENTIALS_URI")
 	}
 
+	if cp.BearerTokenValue == "" {
+		cp.BearerTokenValue = util.GetFromEnv("ALIBABA_CLOUD_BEARER_TOKEN")
+	}
+
+	if cp.BearerTokenHeaderKey == "" {
+		cp.BearerTokenHeaderKey = util.GetFromEnv("ALIBABA_CLOUD_BEARER_TOKEN_HEADER_KEY")
+	}
+
+	if skipVerifyFlag := SkipConfigureVerifyFlag(ctx.Flags()); skipVerifyFlag != nil && skipVerifyFlag.IsAssigned() {
+		if val, ok := skipVerifyFlag.GetValue(); ok {
+			cp.SkipConfigureVerify = strings.ToLower(val) == "true"
+		}
+	}
+
 	if cp.OIDCProviderARN == "" {
 		cp.OIDCProviderARN = util.GetFromEnv("ALIBABACLOUD_OIDC_PROVIDER_ARN", "ALIBABA_CLOUD_OIDC_PROVIDER_ARN")
 	}
@@ -319,6 +351,10 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 
 	if cp.AutoPluginInstallEnablePre == false {
 		cp.AutoPluginInstallEnablePre = os.Getenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL_ENABLE_PRE") == "true"
+	}
+
+	if !cp.SkipConfigureVerify {
+		cp.SkipConfigureVerify = os.Getenv("ALIBABA_CLOUD_SKIP_CONFIGURE_VERIFY") == "true"
 	}
 
 	AutoModeRecognition(cp)
@@ -345,6 +381,8 @@ func AutoModeRecognition(cp *Profile) {
 		cp.Mode = OIDC
 	} else if cp.CloudSSOSignInUrl != "" {
 		cp.Mode = CloudSSO
+	} else if cp.BearerTokenValue != "" {
+		cp.Mode = BearerToken
 	}
 }
 
@@ -638,6 +676,10 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetAccessKeyId(cp.AccessKeyId).
 			SetAccessKeySecret(cp.AccessKeySecret).
 			SetSecurityToken(cp.StsToken)
+	case BearerToken:
+		config.SetType("bearer").
+			SetBearerToken(cp.BearerTokenValue)
+
 	case OAuth:
 		// check sts expiration
 		stsExpiration := cp.StsExpiration
@@ -705,12 +747,19 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 	}
 
 	envs := map[string]string{
-		"ALIBABA_CLOUD_ACCESS_KEY_ID":     *m.AccessKeyId,
-		"ALIBABA_CLOUD_ACCESS_KEY_SECRET": *m.AccessKeySecret,
-		"ALIBABA_CLOUD_REGION_ID":         cp.RegionId,
+		"ALIBABA_CLOUD_REGION_ID": cp.RegionId,
 	}
-	if m.SecurityToken != nil {
-		envs["ALIBABA_CLOUD_SECURITY_TOKEN"] = *m.SecurityToken
+	if cp.Mode == BearerToken {
+		envs["ALIBABA_CLOUD_BEARER_TOKEN"] = cp.BearerTokenValue
+		if cp.BearerTokenHeaderKey != "" {
+			envs["ALIBABA_CLOUD_BEARER_TOKEN_HEADER_KEY"] = cp.BearerTokenHeaderKey
+		}
+	} else {
+		envs["ALIBABA_CLOUD_ACCESS_KEY_ID"] = *m.AccessKeyId
+		envs["ALIBABA_CLOUD_ACCESS_KEY_SECRET"] = *m.AccessKeySecret
+		if m.SecurityToken != nil {
+			envs["ALIBABA_CLOUD_SECURITY_TOKEN"] = *m.SecurityToken
+		}
 	}
 
 	// 添加 API 调用配置
@@ -749,4 +798,91 @@ func IsRegion(region string) bool {
 		return false
 	}
 	return true
+}
+
+func ErrBearerTokenRequiresPlugin(productCode string) error {
+	code := strings.ToLower(strings.TrimSpace(productCode))
+	if code != "" {
+		return fmt.Errorf(
+			"profile uses BearerToken mode: built-in product %q is not supported; use the product plugin instead, e.g. `aliyun %s <ApiName> ...` (install with `aliyun plugin install %s` if needed)",
+			code, code, code)
+	}
+	return fmt.Errorf(
+		"profile uses BearerToken mode: built-in OpenAPI metadata (legacy SDK) does not support this authentication; use the corresponding product plugin, e.g. `aliyun devops <CmdName> ...`")
+}
+
+func NormalizeBearerTokenHeaderKey(key string) (string, error) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "", nil
+	}
+	if strings.ContainsAny(key, "\r\n\x00") {
+		return "", fmt.Errorf("bearer_token_header_key contains invalid control characters")
+	}
+	if strings.ContainsAny(key, " \t:") {
+		return "", fmt.Errorf("bearer_token_header_key must not contain space, tab, or colon")
+	}
+	for _, r := range key {
+		if r > unicode.MaxASCII || !unicode.IsPrint(r) {
+			return "", fmt.Errorf("bearer_token_header_key must be printable ASCII only")
+		}
+	}
+	return key, nil
+}
+
+func SanitizeBearerTokenValue(raw string) string {
+	if raw == "" {
+		return raw
+	}
+	var b strings.Builder
+	b.Grow(len(raw))
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		if c != '\r' && c != '\n' && c != 0 {
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}
+
+func (cp *Profile) normalizeBearerTokenFields() error {
+	if cp.BearerTokenHeaderKey != "" {
+		normalized, err := NormalizeBearerTokenHeaderKey(cp.BearerTokenHeaderKey)
+		if err != nil {
+			return err
+		}
+		cp.BearerTokenHeaderKey = normalized
+	}
+	cp.BearerTokenValue = SanitizeBearerTokenValue(cp.BearerTokenValue)
+	return nil
+}
+
+func (cp *Profile) OpenAPIAuthType() string {
+	if cp.Mode == BearerToken && cp.BearerTokenHeaderKey != "" {
+		return "Anonymous"
+	}
+	if cp.Mode == BearerToken {
+		return "bearer"
+	}
+	return "AK"
+}
+
+func (cp *Profile) InjectBearerTokenHeader(headers map[string]*string) {
+	if cp.Mode != BearerToken || cp.BearerTokenValue == "" || cp.BearerTokenHeaderKey == "" {
+		return
+	}
+	if headers == nil {
+		return
+	}
+	headers[cp.BearerTokenHeaderKey] = tea.String(SanitizeBearerTokenValue(cp.BearerTokenValue))
+}
+
+func (cp *Profile) InjectBearerTokenHeaderString(headers map[string]string) {
+	if cp.Mode != BearerToken || cp.BearerTokenValue == "" || cp.BearerTokenHeaderKey == "" {
+		return
+	}
+	if headers == nil {
+		return
+	}
+	headers[cp.BearerTokenHeaderKey] = SanitizeBearerTokenValue(cp.BearerTokenValue)
 }

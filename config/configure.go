@@ -128,7 +128,7 @@ func NewConfigureCommand() *cli.Command {
 		Short: i18n.T(
 			"configure credential and settings",
 			"配置身份认证和其他信息"),
-		Usage:  "configure --mode {AK|RamRoleArn|EcsRamRole|OIDC|External|CredentialsURI|ChainableRamRoleArn|CloudSSO|OAuth} --profile <profileName> [--config-path <configPath>]",
+		Usage:  "configure --mode {AK|RamRoleArn|EcsRamRole|OIDC|External|CredentialsURI|ChainableRamRoleArn|CloudSSO|OAuth|BearerToken} --profile <profileName> [--config-path <configPath>]",
 		Sample: "aliyun configure --mode OAuth  (Recommended)",
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
@@ -279,6 +279,12 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 				return err
 			}
 			cli.Printf(w, "OAuth configuration completed. The temporary Access Key Id and Access Key Secret have been set in the profile.\n")
+		case BearerToken:
+			cp.Mode = BearerToken
+			err := configureBearerToken(w, &cp)
+			if err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("unexcepted authenticate mode: %s", mode)
 		}
@@ -309,6 +315,12 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 
 	//fmt.Printf("User site: [china|international|japan] %s", cp.Site)
 	//cp.Site = ReadInput(cp.Site)
+
+	if skipVerifyFlag := SkipConfigureVerifyFlag(ctx.Flags()); skipVerifyFlag != nil && skipVerifyFlag.IsAssigned() {
+		if val, ok := skipVerifyFlag.GetValue(); ok {
+			cp.SkipConfigureVerify = strings.ToLower(val) == "true"
+		}
+	}
 
 	cli.Printf(w, "Saving profile[%s] ...", profileName)
 
@@ -688,6 +700,15 @@ func detectPortUse(start int, end int) (int, error) {
 		}
 	}
 	return 0, fmt.Errorf("no available port found in range %d-%d", start, end)
+}
+
+func configureBearerToken(w io.Writer, cp *Profile) error {
+	cli.Printf(w, "Bearer Token [%s]: ", MosaicString(cp.BearerTokenValue, 3))
+	cp.BearerTokenValue = ReadInput(cp.BearerTokenValue)
+	cli.Printf(w, "Bearer Token Header Key [%s] (optional, e.g. x-yunxiao-token; leave empty for %s): ",
+		cp.BearerTokenHeaderKey, DefaultBearerTokenHeaderKey)
+	cp.BearerTokenHeaderKey = ReadInput(cp.BearerTokenHeaderKey)
+	return nil
 }
 
 func configureAK(w io.Writer, cp *Profile) error {

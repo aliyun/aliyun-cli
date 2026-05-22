@@ -54,3 +54,34 @@ func TestDoHello(t *testing.T) {
 		"!!! Configure Failed please configure again !!!\n"+
 		"-----------------------------------------------"))
 }
+
+func TestShouldSkipConfigureVerify(t *testing.T) {
+	ctx := cli.NewCommandContext(bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+
+	p := &Profile{Mode: BearerToken}
+	assert.True(t, p.ShouldSkipConfigureVerify(ctx))
+
+	p = &Profile{Mode: AK, SkipConfigureVerify: true}
+	assert.True(t, p.ShouldSkipConfigureVerify(ctx))
+
+	p = &Profile{Mode: AK}
+	assert.False(t, p.ShouldSkipConfigureVerify(ctx))
+
+	os.Setenv("ALIBABA_CLOUD_SKIP_CONFIGURE_VERIFY", "true")
+	defer os.Unsetenv("ALIBABA_CLOUD_SKIP_CONFIGURE_VERIFY")
+	assert.True(t, p.ShouldSkipConfigureVerify(ctx))
+}
+
+func TestDoHello_SkipsForBearerToken(t *testing.T) {
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, bytes.NewBuffer(nil))
+	profile := &Profile{
+		Mode:             BearerToken,
+		BearerTokenValue: "token",
+		RegionId:         "cn-hangzhou",
+	}
+
+	DoHello(ctx, profile)
+	assert.Contains(t, w.String(), "Configure Done!!!")
+	assert.NotContains(t, w.String(), "Configure Failed")
+}

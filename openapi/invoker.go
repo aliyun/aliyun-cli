@@ -28,12 +28,16 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
-	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 func GetClient(cp *config.Profile, ctx *cli.Context) (client *sdk.Client, err error) {
+	if cp.Mode == config.BearerToken {
+		return nil, config.ErrBearerTokenRequiresPlugin("")
+	}
+
 	credential, err := cp.GetCredential(ctx, nil)
 	if err != nil {
 		return
@@ -148,6 +152,15 @@ func parseCustomUserAgentSegments(s string) [][2]string {
 func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
 	a.product = product
+
+	if a.profile.Mode == config.BearerToken {
+		code := product.GetLowerCode()
+		return cli.NewErrorWithTip(
+			config.ErrBearerTokenRequiresPlugin(code),
+			"Install the plugin if needed: `aliyun plugin install --name %s`",
+			code)
+	}
+
 	a.request = requests.NewCommonRequest()
 	a.request.Product = product.Code
 

@@ -16,12 +16,34 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	util "github.com/alibabacloud-go/tea-utils/v2/service"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	cliutil "github.com/aliyun/aliyun-cli/v3/util"
 )
+
+func (cp *Profile) ShouldSkipConfigureVerify(ctx *cli.Context) bool {
+	if cp.Mode == BearerToken {
+		return true
+	}
+	if cp.SkipConfigureVerify {
+		return true
+	}
+	if cliutil.GetFromEnv("ALIBABA_CLOUD_SKIP_CONFIGURE_VERIFY") == "true" {
+		return true
+	}
+	if ctx != nil {
+		if f := SkipConfigureVerifyFlag(ctx.Flags()); f != nil && f.IsAssigned() {
+			if val, ok := f.GetValue(); ok && strings.ToLower(val) == "true" {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 func doHello(ctx *cli.Context, profile *Profile) (err error) {
 	profile.OverwriteWithFlags(ctx)
@@ -74,6 +96,10 @@ func doHello(ctx *cli.Context, profile *Profile) (err error) {
 
 func DoHello(ctx *cli.Context, profile *Profile) {
 	w := ctx.Stdout()
+	if profile.ShouldSkipConfigureVerify(ctx) {
+		fmt.Fprintln(w, icon)
+		return
+	}
 	err := doHello(ctx, profile)
 	if err != nil {
 		cli.Println(w, "-----------------------------------------------")
