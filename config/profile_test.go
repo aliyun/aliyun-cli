@@ -638,9 +638,9 @@ func TestValidateBearerToken(t *testing.T) {
 	p.BearerTokenValue = "token"
 	assert.Nil(t, p.Validate())
 
-	p.BearerTokenHeaderKey = "x-yunxiao-token"
+	p.BearerTokenHeaderKey = "x-custom-token"
 	assert.Nil(t, p.Validate())
-	assert.Equal(t, "x-yunxiao-token", p.BearerTokenHeaderKey)
+	assert.Equal(t, "x-custom-token", p.BearerTokenHeaderKey)
 
 	p.BearerTokenHeaderKey = "bad\r\nkey"
 	assert.Error(t, p.Validate())
@@ -1586,7 +1586,7 @@ func TestOpenAPIAuthType(t *testing.T) {
 	assert.Equal(t, "bearer", (&Profile{Mode: BearerToken}).OpenAPIAuthType())
 	assert.Equal(t, "Anonymous", (&Profile{
 		Mode:                 BearerToken,
-		BearerTokenHeaderKey: "x-yunxiao-token",
+		BearerTokenHeaderKey: "x-custom-token",
 	}).OpenAPIAuthType())
 }
 
@@ -1598,15 +1598,15 @@ func TestInjectBearerTokenHeader(t *testing.T) {
 	(&Profile{
 		Mode:                 BearerToken,
 		BearerTokenValue:     "secret",
-		BearerTokenHeaderKey: "x-yunxiao-token",
+		BearerTokenHeaderKey: "x-custom-token",
 	}).InjectBearerTokenHeader(headers)
-	assert.Equal(t, "secret", *headers["x-yunxiao-token"])
+	assert.Equal(t, "secret", *headers["x-custom-token"])
 }
 
 func TestNormalizeBearerTokenHeaderKey(t *testing.T) {
-	key, err := NormalizeBearerTokenHeaderKey("  x-yunxiao-token  ")
+	key, err := NormalizeBearerTokenHeaderKey("  x-custom-token  ")
 	assert.Nil(t, err)
-	assert.Equal(t, "x-yunxiao-token", key)
+	assert.Equal(t, "x-custom-token", key)
 
 	_, err = NormalizeBearerTokenHeaderKey("x-bad\r\nInjected: 1")
 	assert.Error(t, err)
@@ -1638,7 +1638,7 @@ func TestInjectBearerTokenHeaderString(t *testing.T) {
 	(&Profile{
 		Mode:                 BearerToken,
 		BearerTokenValue:     "secret",
-		BearerTokenHeaderKey: "x-yunxiao-token",
+		BearerTokenHeaderKey: "x-custom-token",
 	}).InjectBearerTokenHeaderString(headers)
-	assert.Equal(t, "secret", headers["x-yunxiao-token"])
+	assert.Equal(t, "secret", headers["x-custom-token"])
 }

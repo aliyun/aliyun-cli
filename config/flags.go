@@ -655,8 +655,8 @@ func NewBearerTokenHeaderKeyFlag() *cli.Flag {
 		AssignedMode: cli.AssignedOnce,
 		Persistent:   true,
 		Short: i18n.T(
-			"use `--bearer-token-header-key <key>` to assign custom auth header key, e.g. x-yunxiao-token",
-			"使用 `--bearer-token-header-key <key>` 指定自定义认证 Header 名称，例如 x-yunxiao-token"),
+			"use `--bearer-token-header-key <key>` to assign custom auth header key, e.g. x-custom-token",
+			"使用 `--bearer-token-header-key <key>` 指定自定义认证 Header 名称，例如 x-custom-token"),
 	}
 }
 
@@ -666,7 +666,7 @@ func NewSkipConfigureVerifyFlag() *cli.Flag {
 		Name:         SkipConfigureVerifyFlagName,
 		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
-			"use `--skip-configure-verify` to skip GetCallerIdentity check after configure (save config only)",
-			"使用 `--skip-configure-verify` 在 configure 完成后跳过 GetCallerIdentity 凭证校验（仅保存配置）"),
+			"use `--skip-configure-verify` to skip profile check after configure (save config only)",
+			"使用 `--skip-configure-verify` 在 configure 完成后跳过 profile 凭证校验（仅保存配置）"),
 	}
 }

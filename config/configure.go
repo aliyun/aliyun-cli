@@ -705,7 +705,7 @@ func detectPortUse(start int, end int) (int, error) {
 func configureBearerToken(w io.Writer, cp *Profile) error {
 	cli.Printf(w, "Bearer Token [%s]: ", MosaicString(cp.BearerTokenValue, 3))
 	cp.BearerTokenValue = ReadInput(cp.BearerTokenValue)
-	cli.Printf(w, "Bearer Token Header Key [%s] (optional, e.g. x-yunxiao-token; leave empty for %s): ",
+	cli.Printf(w, "Bearer Token Header Key [%s] (optional, e.g. x-custom-token; leave empty for %s): ",
 		cp.BearerTokenHeaderKey, DefaultBearerTokenHeaderKey)
 	cp.BearerTokenHeaderKey = ReadInput(cp.BearerTokenHeaderKey)
 	return nil
