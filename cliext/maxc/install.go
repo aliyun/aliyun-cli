@@ -252,9 +252,11 @@ func computeFileSha256(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// extractTarGz extracts src (a .tar.gz) into destDir. Rejects entries with
-// absolute paths or `..` traversal. Supports regular files, dirs, and
-// symlinks; file modes are preserved.
+// extractTarGz extracts src (a .tar.gz) into destDir. Both the entry's path
+// and any symlink target must resolve to a path under destDir; symlinks are
+// created only after every regular file/dir is in place, so a malicious tar
+// can't replace a real directory with a symlink mid-extract and trick a
+// later MkdirAll/OpenFile into walking outside destDir.
 func extractTarGz(src, destDir string) error {
 	f, err := os.Open(src)
 	if err != nil {
@@ -268,22 +270,28 @@ func extractTarGz(src, destDir string) error {
 	}
 	defer func() { _ = gz.Close() }()
 
+	absDest, err := filepath.Abs(destDir)
+	if err != nil {
+		return fmt.Errorf("abs destDir: %w", err)
+	}
+
+	type pendingSymlink struct{ target, linkname string }
+	var symlinks []pendingSymlink
+
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
-			return nil
+			break
 		}
 		if err != nil {
 			return fmt.Errorf("tar next: %w", err)
 		}
 
-		cleaned := filepath.Clean(hdr.Name)
-		if filepath.IsAbs(cleaned) || strings.HasPrefix(cleaned, "..") ||
-			strings.Contains(cleaned, string(filepath.Separator)+".."+string(filepath.Separator)) {
-			return fmt.Errorf("tar entry has unsafe path: %s", hdr.Name)
+		target := filepath.Join(absDest, hdr.Name)
+		if !pathInside(absDest, target) {
+			return fmt.Errorf("tar entry escapes destDir: %s", hdr.Name)
 		}
-		target := filepath.Join(destDir, cleaned)
 
 		switch hdr.Typeflag {
 		case tar.TypeDir:
@@ -306,17 +314,44 @@ func extractTarGz(src, destDir string) error {
 				return err
 			}
 		case tar.TypeSymlink:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
+			// Resolve the link target relative to the symlink's parent dir
+			// (absolute targets always escape staging), then ensure the
+			// resolved path stays inside destDir.
+			resolved := hdr.Linkname
+			if !filepath.IsAbs(resolved) {
+				resolved = filepath.Join(filepath.Dir(target), resolved)
 			}
-			// Best-effort: if the link already exists (e.g. partial earlier
-			// extract), remove it before creating.
-			_ = os.Remove(target)
-			if err := os.Symlink(hdr.Linkname, target); err != nil {
-				return err
+			if !pathInside(absDest, resolved) {
+				return fmt.Errorf("symlink %q escapes destDir: -> %s", hdr.Name, hdr.Linkname)
 			}
+			symlinks = append(symlinks, pendingSymlink{target: target, linkname: hdr.Linkname})
 		default:
 			// Skip hardlinks, fifos, char/block devices.
 		}
 	}
+
+	for _, s := range symlinks {
+		if err := os.MkdirAll(filepath.Dir(s.target), 0o755); err != nil {
+			return err
+		}
+		_ = os.Remove(s.target)
+		if err := os.Symlink(s.linkname, s.target); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// pathInside reports whether p resolves to absRoot itself or somewhere
+// underneath it. absRoot must already be absolute.
+func pathInside(absRoot, p string) bool {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(absRoot, abs)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

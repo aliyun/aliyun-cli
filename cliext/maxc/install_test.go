@@ -287,10 +287,58 @@ func TestExtractTarGz_RejectsTraversalPath(t *testing.T) {
 
 	err := extractTarGz(tarPath, dest)
 	if err == nil {
-		t.Fatal("expected unsafe-path error, got nil")
+		t.Fatal("expected escape error, got nil")
 	}
-	if !strings.Contains(err.Error(), "unsafe path") {
-		t.Errorf("error = %v, want 'unsafe path'", err)
+	if !strings.Contains(err.Error(), "escapes destDir") {
+		t.Errorf("error = %v, want 'escapes destDir'", err)
+	}
+}
+
+func TestExtractTarGz_RejectsSymlinkAbsoluteTarget(t *testing.T) {
+	tarBytes := buildTarGz(t, []tarEntry{
+		{Name: "pkg/", Mode: 0o755},
+		{Name: "pkg/badlink", Linkname: "/etc/passwd"},
+	})
+	tmp := t.TempDir()
+	tarPath := filepath.Join(tmp, "evil.tar.gz")
+	if err := os.WriteFile(tarPath, tarBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(tmp, "out")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := extractTarGz(tarPath, dest)
+	if err == nil {
+		t.Fatal("expected symlink-escape error, got nil")
+	}
+	if !strings.Contains(err.Error(), "escapes destDir") {
+		t.Errorf("error = %v, want 'escapes destDir'", err)
+	}
+}
+
+func TestExtractTarGz_RejectsSymlinkRelativeTraversal(t *testing.T) {
+	tarBytes := buildTarGz(t, []tarEntry{
+		{Name: "pkg/", Mode: 0o755},
+		{Name: "pkg/badlink", Linkname: "../../../etc/passwd"},
+	})
+	tmp := t.TempDir()
+	tarPath := filepath.Join(tmp, "evil.tar.gz")
+	if err := os.WriteFile(tarPath, tarBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(tmp, "out")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err := extractTarGz(tarPath, dest)
+	if err == nil {
+		t.Fatal("expected symlink-escape error, got nil")
+	}
+	if !strings.Contains(err.Error(), "escapes destDir") {
+		t.Errorf("error = %v, want 'escapes destDir'", err)
 	}
 }
 
