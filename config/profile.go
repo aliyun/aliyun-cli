@@ -795,11 +795,11 @@ func ErrBearerTokenRequiresPlugin(productCode string) error {
 	code := strings.ToLower(strings.TrimSpace(productCode))
 	if code != "" {
 		return fmt.Errorf(
-			"profile uses BearerToken mode: built-in product %q is not supported; use the product plugin instead, e.g. `aliyun %s <ApiName> ...` (install with `aliyun plugin install %s` if needed)",
+			"profile uses BearerToken mode: built-in product %q is not supported; use the product plugin instead, e.g. `aliyun %s <cmd-name> ...` (install with `aliyun plugin install --name %s` if needed)",
 			code, code, code)
 	}
 	return fmt.Errorf(
-		"profile uses BearerToken mode: built-in OpenAPI metadata (legacy SDK) does not support this authentication; use the corresponding product plugin, e.g. `aliyun devops <CmdName> ...`")
+		"profile uses BearerToken mode: built-in OpenAPI metadata (legacy SDK) does not support this authentication; use the corresponding product plugin, e.g. `aliyun devops <cmd-name> ...`")
 }
 
 func NormalizeBearerTokenHeaderKey(key string) (string, error) {
