@@ -23,8 +23,8 @@ func TestNewAcrutilCommand(t *testing.T) {
 	if zh := cmd.Short.Get("zh"); zh != "阿里云ACR企业版实例CLI工具" {
 		t.Errorf("Short zh expected '阿里云ACR企业版实例CLI工具', got %s", zh)
 	}
-	if cmd.Usage != "acrutil <command> [args...]" {
-		t.Errorf("Usage expected 'acrutil <command> [args...]', got %s", cmd.Usage)
+	if cmd.Usage != "aliyun acrutil <command> [args...]" {
+		t.Errorf("Usage expected 'aliyun acrutil <command> [args...]', got %s", cmd.Usage)
 	}
 	if cmd.Hidden {
 		t.Errorf("Hidden expected false")
