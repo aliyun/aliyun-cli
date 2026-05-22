@@ -736,25 +736,27 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 var saveConfigurationFunc = SaveConfiguration
 
 func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
-	cred, err := cp.GetCredential(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	m, err := cred.GetCredential()
-	if err != nil {
-		return nil, err
-	}
-
 	envs := map[string]string{
 		"ALIBABA_CLOUD_REGION_ID": cp.RegionId,
 	}
+
 	if cp.Mode == BearerToken {
+		if err := cp.Validate(); err != nil {
+			return nil, err
+		}
 		envs["ALIBABA_CLOUD_BEARER_TOKEN"] = cp.BearerTokenValue
 		if cp.BearerTokenHeaderKey != "" {
 			envs["ALIBABA_CLOUD_BEARER_TOKEN_HEADER_KEY"] = cp.BearerTokenHeaderKey
 		}
 	} else {
+		cred, err := cp.GetCredential(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		m, err := cred.GetCredential()
+		if err != nil {
+			return nil, err
+		}
 		envs["ALIBABA_CLOUD_ACCESS_KEY_ID"] = *m.AccessKeyId
 		envs["ALIBABA_CLOUD_ACCESS_KEY_SECRET"] = *m.AccessKeySecret
 		if m.SecurityToken != nil {
@@ -875,14 +877,4 @@ func (cp *Profile) InjectBearerTokenHeader(headers map[string]*string) {
 		return
 	}
 	headers[cp.BearerTokenHeaderKey] = tea.String(SanitizeBearerTokenValue(cp.BearerTokenValue))
-}
-
-func (cp *Profile) InjectBearerTokenHeaderString(headers map[string]string) {
-	if cp.Mode != BearerToken || cp.BearerTokenValue == "" || cp.BearerTokenHeaderKey == "" {
-		return
-	}
-	if headers == nil {
-		return
-	}
-	headers[cp.BearerTokenHeaderKey] = SanitizeBearerTokenValue(cp.BearerTokenValue)
 }

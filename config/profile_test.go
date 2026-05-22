@@ -1510,6 +1510,29 @@ func TestGetRuntimeEnv_StsToken(t *testing.T) {
 	assert.Equal(t, "test-sts-token", envs["ALIBABA_CLOUD_SECURITY_TOKEN"])
 }
 
+func TestGetRuntimeEnv_BearerToken(t *testing.T) {
+	p := &Profile{
+		Name:                 "default",
+		Mode:                 BearerToken,
+		BearerTokenValue:     "my-bearer-token",
+		BearerTokenHeaderKey: "x-custom-token",
+		RegionId:             "cn-hangzhou",
+	}
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.Equal(t, "my-bearer-token", envs["ALIBABA_CLOUD_BEARER_TOKEN"])
+	assert.Equal(t, "x-custom-token", envs["ALIBABA_CLOUD_BEARER_TOKEN_HEADER_KEY"])
+	assert.Equal(t, "cn-hangzhou", envs["ALIBABA_CLOUD_REGION_ID"])
+	_, hasAK := envs["ALIBABA_CLOUD_ACCESS_KEY_ID"]
+	assert.False(t, hasAK)
+
+	p.BearerTokenValue = ""
+	envs, err = p.GetRuntimeEnv(newCtx())
+	assert.Error(t, err)
+	assert.Nil(t, envs)
+}
+
 func TestGetRuntimeEnv_OptionalFields(t *testing.T) {
 	p := newProfile()
 	p.Mode = AK
@@ -1633,12 +1656,3 @@ func TestErrBearerTokenRequiresPlugin(t *testing.T) {
 	assert.Contains(t, err.Error(), "product plugin")
 }
 
-func TestInjectBearerTokenHeaderString(t *testing.T) {
-	headers := map[string]string{}
-	(&Profile{
-		Mode:                 BearerToken,
-		BearerTokenValue:     "secret",
-		BearerTokenHeaderKey: "x-custom-token",
-	}).InjectBearerTokenHeaderString(headers)
-	assert.Equal(t, "secret", headers["x-custom-token"])
-}

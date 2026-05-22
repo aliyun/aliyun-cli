@@ -29,8 +29,8 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
-	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	slsUtils "github.com/aliyun/aliyun-cli/v3/sls"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
