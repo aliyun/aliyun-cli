@@ -58,18 +58,13 @@ func TestDoHello(t *testing.T) {
 func TestShouldSkipConfigureVerify(t *testing.T) {
 	ctx := cli.NewCommandContext(bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 
-	p := &Profile{Mode: BearerToken}
-	assert.True(t, p.ShouldSkipConfigureVerify(ctx))
-
-	p = &Profile{Mode: AK, SkipConfigureVerify: true}
-	assert.True(t, p.ShouldSkipConfigureVerify(ctx))
-
-	p = &Profile{Mode: AK}
-	assert.False(t, p.ShouldSkipConfigureVerify(ctx))
+	assert.True(t, (&Profile{Mode: BearerToken}).ShouldSkipConfigureVerify(ctx))
+	assert.True(t, (&Profile{Mode: AK, SkipConfigureVerify: true}).ShouldSkipConfigureVerify(ctx))
+	assert.False(t, (&Profile{Mode: AK}).ShouldSkipConfigureVerify(ctx))
 
 	os.Setenv("ALIBABA_CLOUD_SKIP_CONFIGURE_VERIFY", "true")
 	defer os.Unsetenv("ALIBABA_CLOUD_SKIP_CONFIGURE_VERIFY")
-	assert.True(t, p.ShouldSkipConfigureVerify(ctx))
+	assert.True(t, (&Profile{Mode: AK}).ShouldSkipConfigureVerify(ctx))
 }
 
 func TestDoHello_SkipsForBearerToken(t *testing.T) {

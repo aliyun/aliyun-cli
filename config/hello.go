@@ -22,17 +22,13 @@ import (
 	util "github.com/alibabacloud-go/tea-utils/v2/service"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/cli"
-	cliutil "github.com/aliyun/aliyun-cli/v3/util"
 )
 
 func (cp *Profile) ShouldSkipConfigureVerify(ctx *cli.Context) bool {
-	if cp.Mode == BearerToken {
+	if cp.Mode == BearerToken || cp.SkipConfigureVerify {
 		return true
 	}
-	if cp.SkipConfigureVerify {
-		return true
-	}
-	if cliutil.GetFromEnv("ALIBABA_CLOUD_SKIP_CONFIGURE_VERIFY") == "true" {
+	if os.Getenv("ALIBABA_CLOUD_SKIP_CONFIGURE_VERIFY") == "true" {
 		return true
 	}
 	if ctx != nil {
