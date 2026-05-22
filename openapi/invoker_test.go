@@ -138,6 +138,29 @@ func TestBasicInvoker_Init_ProfileEndpoint(t *testing.T) {
 	assert.Equal(t, "cmd.endpoint.aliyuncs.com", invoker2.getRequest().Domain)
 }
 
+func TestBasicInvoker_Init_BearerToken(t *testing.T) {
+	cp := &config.Profile{
+		Mode:             config.BearerToken,
+		BearerTokenValue: "secret-token",
+		RegionId:         "cn-hangzhou",
+	}
+	invoker := NewBasicInvoker(cp)
+	ctx := cli.NewCommandContext(bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	product := &meta.Product{Code: "DevOps", Version: "2021-06-25"}
+
+	err := invoker.Init(ctx, product)
+	assert.NotNil(t, err)
+	assert.Nil(t, invoker.getClient())
+	assert.Nil(t, invoker.getRequest())
+
+	wantErr := config.ErrBearerTokenRequiresPlugin("devops")
+	assert.Equal(t, wantErr.Error(), err.Error())
+
+	tipErr, ok := err.(cli.ErrorWithTip)
+	assert.True(t, ok)
+	assert.Equal(t, "Install the plugin if needed: `aliyun plugin install --name devops`", tipErr.GetTip("en"))
+}
+
 func TestBasicInvoker_Init_OtelHeaders(t *testing.T) {
 	cp := &config.Profile{
 		Mode:            config.AuthenticateMode("StsToken"),
