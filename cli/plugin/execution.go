@@ -13,8 +13,6 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 )
 
-const EnvCliEmbeddedPlugin = "ALIBABA_CLOUD_CLI_EMBEDDED_PLUGIN"
-
 // IsPluginInstalled checks if a plugin is installed locally.
 // Returns (true, pluginName, nil) if plugin is installed.
 // Returns (false, "", nil) if plugin is not installed.
@@ -82,7 +80,6 @@ func ExecutePlugin(command string, args []string, ctx *cli.Context) (bool, error
 	if ctx != nil {
 		envs = mergeEnvs(envs, ctx.GetRuntimeEnvs())
 	}
-	envs = append(envs, EnvCliEmbeddedPlugin+"=1")
 
 	if err := runPluginCommand(binPath, adjustedArgs, stdout, stderr, envs); err != nil {
 		return true, err
