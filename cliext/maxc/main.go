@@ -7,10 +7,10 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
-// NewMaxcCommand wires the `aliyun maxc` cliext entrypoint. The parent
-// renders aliyun-style help on `--help` / `-h` / bare `help`; everything
-// else (including `--help` attached to a maxc subcommand) is forwarded to
-// the child process verbatim so the child's argparse can answer.
+// NewMaxcCommand wires the `aliyun maxc` entrypoint. The parent renders
+// aliyun-style help on `--help` / `-h` / bare `help`; everything else
+// (including `--help` attached to a subcommand) is forwarded to the child
+// process verbatim.
 func NewMaxcCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name: "maxc",
@@ -41,9 +41,8 @@ func NewMaxcCommand() *cli.Command {
 	return cmd
 }
 
-// maxc command groups are owned by the Python child (cli.py); we mirror
-// them here so `aliyun maxc --help` shows the same surface without
-// shelling out. Keep in sync with src/maxc_cli/cli.py:build_parser.
+// maxcCommandGroups mirrors the child's top-level command groups so
+// `aliyun maxc --help` can render without shelling out.
 var maxcCommandGroups = []struct{ name, desc string }{
 	{"query", i18n.T("Execute SQL queries (sync/async), estimate cost, explain plans.", "执行 SQL（同步/异步）、估算成本、查看执行计划。").Text()},
 	{"job", i18n.T("Manage jobs: status, wait, fetch results, cancel, diagnose.", "作业管理：状态、等待、取数、取消、诊断。").Text()},

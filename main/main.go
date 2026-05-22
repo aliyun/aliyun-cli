@@ -132,8 +132,7 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(appmanagerutil.NewAppManagerCommand())
 	// cms2 command
 	rootCmd.AddSubCommand(cms2.NewCms2Command())
-	// maxc command (MaxCompute CLI for AI agents — PyInstaller onedir bundle
-	// fetched on demand from public OSS; see cliext/maxc/README or spec).
+	// maxc command
 	rootCmd.AddSubCommand(maxc.NewMaxcCommand())
 	// plugin command
 	rootCmd.AddSubCommand(plugin.NewPluginCommand())

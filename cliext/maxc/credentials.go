@@ -7,18 +7,16 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 )
 
-// loadProfileFunc is the seam tests use to inject a synthetic profile or a
-// profile-load failure. Defaults to the same accessor cliext/cms2 uses, so
-// the active config (from --profile flag or env) flows through unchanged.
+// loadProfileFunc is the test seam for injecting a synthetic profile or
+// profile-load failure.
 var loadProfileFunc = func(ctx *cli.Context) (config.Profile, error) {
 	return config.LoadProfileWithContext(ctx)
 }
 
 // InjectAliyunCredentials reads the active aliyun profile and populates
-// c.envMap with the ALIBABA_CLOUD_* credential triple (+ optional region)
-// that maxc-cli's config chain already knows how to pick up (see CLAUDE.md
-// "ODPS Environment Variables"). On profile-missing the child process is
-// left to its own discovery (spec § 2 step 5) — no error is surfaced.
+// c.envMap with the ALIBABA_CLOUD_* credential triple (+ optional region).
+// On profile-missing the child is left to resolve its own config — no error
+// is surfaced.
 //
 // AK and StsToken modes read the profile fields directly; anything else
 // (RamRoleArn, EcsRamRole, OIDC, CloudSSO, …) goes through Profile.GetCredential
@@ -31,7 +29,6 @@ func (c *Context) InjectAliyunCredentials(args []string) error {
 
 	profile, err := loadProfileFunc(c.originCtx)
 	if err != nil {
-		// Spec § 2: silent fallback — let the child resolve its own config.
 		return nil
 	}
 
@@ -55,8 +52,6 @@ func (c *Context) InjectAliyunCredentials(args []string) error {
 	return nil
 }
 
-// extractCredentials returns (id, secret, stsToken) for the given profile.
-// Split out so tests can exercise it without going through a *cli.Context.
 func extractCredentials(ctx *cli.Context, p config.Profile) (string, string, string, error) {
 	switch p.Mode {
 	case config.AK:

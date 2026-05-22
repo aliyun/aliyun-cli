@@ -72,8 +72,7 @@ func buildTarGz(t *testing.T, entries []tarEntry) []byte {
 	return buf.Bytes()
 }
 
-// sha256Hex returns the hex digest of b. Matches what scripts/build_release.sh
-// writes to maxc.tar.gz.sha256.
+// sha256Hex returns the hex digest of b.
 func sha256Hex(b []byte) string {
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
@@ -188,7 +187,6 @@ func TestDownloadAndInstall_HappyPath(t *testing.T) {
 		t.Fatalf("downloadAndInstall: %v", err)
 	}
 
-	// Spec § 3: extracted onedir lands at installDir with maxc binary inside.
 	if !fileExists(c.execFilePath) {
 		t.Errorf("execFilePath %s should exist after install", c.execFilePath)
 	}

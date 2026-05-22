@@ -11,7 +11,7 @@ func TestPlatformWhitelist(t *testing.T) {
 		"darwin-amd64":  true,
 		"darwin-arm64":  true,
 		"windows-amd64": true,
-		"windows-arm64": true,
+		"windows-arm64": false,
 		"freebsd-amd64": false,
 		"linux-386":     false,
 	}
@@ -70,7 +70,8 @@ func TestCheckOsTypeAndArch_SetsSupportFlag(t *testing.T) {
 	}{
 		{"linux", "amd64", true},
 		{"darwin", "arm64", true},
-		{"windows", "arm64", true},
+		{"windows", "amd64", true},
+		{"windows", "arm64", false},
 		{"freebsd", "amd64", false},
 		{"linux", "386", false},
 	}

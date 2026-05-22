@@ -14,17 +14,16 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 )
 
-// Context holds per-invocation state for the maxc launcher. Mirrors the
-// shape of cliext/cms2.Context but adapted for an onedir bundle (the maxc
-// "binary" is actually a directory tree extracted from maxc.tar.gz, and
-// the runtime entry point is installDir/maxc[.exe]).
+// Context holds per-invocation state for the maxc launcher. The maxc
+// "binary" is an onedir bundle extracted into installDir; the runtime entry
+// point is installDir/maxc[.exe].
 type Context struct {
 	originCtx        *cli.Context
 	configPath       string
-	installDir       string // <configPath>/maxc, contains the extracted onedir
-	execFilePath     string // <installDir>/maxc[.exe]
-	versionCachePath string // <installDir>/.version_check
-	versionFilePath  string // <installDir>/.version
+	installDir       string
+	execFilePath     string
+	versionCachePath string
+	versionFilePath  string
 	installed        bool
 	versionLocal     string
 	versionRemote    string
@@ -36,15 +35,12 @@ type Context struct {
 }
 
 // ExitError carries the child process exit code so the caller can propagate
-// it without calling os.Exit directly (which would skip deferred cleanup).
+// it without calling os.Exit directly.
 type ExitError struct{ Code int }
 
 func (e *ExitError) Error() string { return fmt.Sprintf("subprocess exited with code %d", e.Code) }
 func (e *ExitError) ExitCode() int { return e.Code }
 
-// Package-level function vars are the cms2 testability pattern — every
-// external dependency is monkey-patchable from tests. Add more as later
-// tasks introduce them (httpGetFunc, httpDoFunc, downloadFileFunc, etc).
 var (
 	getConfigurePathFunc = func() string { return config.GetConfigPath() }
 	runtimeGOOSFunc      = func() string { return runtime.GOOS }
@@ -52,25 +48,18 @@ var (
 	execCommandFunc      = exec.Command
 )
 
-// The six platforms the maxc release pipeline produces, matching the OSS
-// directory layout under maxc-cli/{version}/{platform}/maxc.tar.gz.
-// Tarball platform names use Go's GOOS/GOARCH-style strings.
 var platformPaths = map[string]struct{}{
 	"linux-amd64":   {},
 	"linux-arm64":   {},
 	"darwin-amd64":  {},
 	"darwin-arm64":  {},
 	"windows-amd64": {},
-	"windows-arm64": {},
 }
 
-// downloadBaseURL is the canonical public bucket prefix. Overridable at
-// runtime via ALIBABA_CLOUD_MAXC_DOWNLOAD_BASE_URL (see Task 3.3 for the
-// env-override accessor). Trailing slash is significant — keep it off.
+// downloadBaseURL is overridable at runtime via
+// ALIBABA_CLOUD_MAXC_DOWNLOAD_BASE_URL. No trailing slash.
 var downloadBaseURL = "https://maxcompute-repo.oss-cn-hangzhou.aliyuncs.com/maxc-cli"
 
-// VersionCheckTTL throttles the "is there a newer maxc?" HTTP call to once
-// per day. Matches cms2's TTL — there's no reason to be more aggressive.
 const VersionCheckTTL = 86400
 
 func NewContext(origin *cli.Context) *Context {
@@ -103,11 +92,6 @@ func (c *Context) CheckOsTypeAndArch() {
 	}
 }
 
-// Run is the top-level entrypoint invoked by main.go's NewMaxcCommand.
-// Sequence: derive paths → check platform → install/update if needed →
-// inject aliyun credentials into env → strip parent-only flags → exec.
-// On a soft update-check failure when something is already installed we
-// continue (with a stderr warning) rather than blocking the user.
 func (c *Context) Run(args []string) error {
 	c.InitBasicInfo()
 	c.CheckOsTypeAndArch()
@@ -132,8 +116,6 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
-// cacheStale returns true when the version-check sentinel is missing or older
-// than VersionCheckTTL seconds. Mirrors cms2's once-per-day throttle policy.
 func (c *Context) cacheStale() bool {
 	fi, err := os.Stat(c.versionCachePath)
 	if err != nil {
@@ -142,9 +124,8 @@ func (c *Context) cacheStale() bool {
 	return timeNowFunc().Sub(fi.ModTime()).Seconds() > float64(VersionCheckTTL)
 }
 
-// touchCache writes (or rewrites) the version-check sentinel so cacheStale
-// reports false for the next TTL window. The file content is irrelevant —
-// only its mtime matters.
+// touchCache rewrites the sentinel so cacheStale returns false for the next
+// TTL window. Only mtime matters; the file body is for human inspection.
 func (c *Context) touchCache() error {
 	if err := os.MkdirAll(filepath.Dir(c.versionCachePath), 0o755); err != nil {
 		return err
@@ -152,9 +133,6 @@ func (c *Context) touchCache() error {
 	return os.WriteFile(c.versionCachePath, []byte(timeNowFunc().Format("2006-01-02T15:04:05Z07:00")), 0o644)
 }
 
-// readLocalVersion returns the trimmed .version file contents, or "" if
-// unreadable. Used to decide whether a remote latest pointer actually means
-// "upgrade" or "already on it".
 func (c *Context) readLocalVersion() string {
 	b, err := os.ReadFile(c.versionFilePath)
 	if err != nil {
@@ -164,14 +142,11 @@ func (c *Context) readLocalVersion() string {
 }
 
 // stripFlags lists parent-CLI flag names that are only meaningful to the
-// aliyun root command and must NOT leak into the maxc child process.
-// These are auth/config flags whose values are already exported via
-// envMap (see InjectAliyunCredentials), or runtime knobs that have no
-// equivalent in the maxc-cli vocabulary.
-//
-// Anything not listed here passes through, so legitimate maxc flags
-// (e.g. --sql, --project, --output) keep their child-side meaning even
-// if the parent CLI happens to define a flag of the same name.
+// aliyun root command and must NOT leak into the maxc child process. Auth
+// and credential flags are already exported via envMap by
+// InjectAliyunCredentials; everything else here is caller-side runtime that
+// has no meaning to the child. Flags not listed here pass through so the
+// child handles them with its own semantics.
 var stripFlags = map[string]bool{
 	// config: auth & credential
 	"profile":                        true,
@@ -223,10 +198,9 @@ var stripFlags = map[string]bool{
 	"no-cli-ai-mode": true,
 }
 
-// RemoveFlagsForMainCli walks args and drops every parent-CLI-only flag
-// listed in stripFlags (handling both `--flag value` and `--flag=value`
-// forms, plus shorthand `-x value`). Identical strategy to cliext/cms2 —
-// kept verbatim so behaviour stays consistent across cliext launchers.
+// RemoveFlagsForMainCli drops every parent-CLI-only flag listed in
+// stripFlags from args (handles `--flag value`, `--flag=value`, and
+// shorthand `-x value`).
 func (c *Context) RemoveFlagsForMainCli(args []string) []string {
 	allFlags := cli.NewFlagSet()
 	config.AddFlags(allFlags)
@@ -279,12 +253,11 @@ func (c *Context) RemoveFlagsForMainCli(args []string) []string {
 // Execute spawns c.execFilePath with childArgs, wiring stdio through and
 // merging c.envMap on top of the inherited environment. Non-zero exit codes
 // surface as *ExitError so the caller can propagate without calling os.Exit
-// directly (which would skip deferred cleanup).
+// directly.
 func (c *Context) Execute(childArgs []string) error {
-	// Close idle HTTP connections before fork — on macOS there's a race
-	// between socket() and the FD_CLOEXEC flag where a child can inherit
-	// a half-ready fd and then fail with "bad file descriptor". cms2
-	// hit this in production; we copy the workaround.
+	// Avoid handing a half-ready socket to the child: on macOS there's a
+	// race between socket() and FD_CLOEXEC that lets a forked process
+	// inherit an fd which then fails with "bad file descriptor".
 	http.DefaultClient.CloseIdleConnections()
 
 	cmd := execCommandFunc(c.execFilePath, childArgs...)
@@ -302,9 +275,8 @@ func (c *Context) Execute(childArgs []string) error {
 	return nil
 }
 
-// mergeEnv returns base with any keys present in overrides removed, then
-// appends "k=v" pairs for every override. Ensures the override map wins
-// even when the parent already had the same variable set.
+// mergeEnv returns base with keys present in overrides removed, then
+// appends "k=v" pairs for every override so the override wins.
 func mergeEnv(base []string, overrides map[string]string) []string {
 	out := make([]string, 0, len(base)+len(overrides))
 	for _, item := range base {

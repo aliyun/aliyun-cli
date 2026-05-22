@@ -131,9 +131,8 @@ func TestRemoveFlagsForMainCli_StripsInlineProfile(t *testing.T) {
 
 func TestRemoveFlagsForMainCli_PreservesUnknownAndChildFlags(t *testing.T) {
 	c := &Context{}
-	// --sql is a maxc-side flag, --region is shared but NOT in stripFlags
-	// (cms2's note: shared names like region pass through so the child can
-	// handle them with its own semantics).
+	// --sql is a maxc-side flag, --region is shared but NOT in stripFlags so
+	// the child can handle it with its own semantics.
 	in := []string{"query", "--sql", "show tables", "--region", "cn-hangzhou", "--output", "json"}
 	got := c.RemoveFlagsForMainCli(in)
 	if !reflect.DeepEqual(got, in) {

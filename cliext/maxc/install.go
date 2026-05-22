@@ -14,9 +14,8 @@ import (
 	"time"
 )
 
-// Function vars for HTTP — patched by tests with httptest server URLs.
-// See cliext/cms2/cms2.go for the canonical pattern; we copy it because the
-// installer must work offline in CI (zero real network access in unit tests).
+// Function vars stubbed by tests with httptest server URLs so the installer
+// runs offline in CI.
 var (
 	httpGetFunc = http.Get
 	httpDoFunc  = func(req *http.Request) (*http.Response, error) {
@@ -26,10 +25,11 @@ var (
 	getLatestVersionFunc = func(c *Context) (string, error) { return c.GetLatestVersion() }
 )
 
-// effectiveBaseURL returns the env override (ALIBABA_CLOUD_MAXC_DOWNLOAD_BASE_URL)
-// if set, otherwise the package-level downloadBaseURL constant. Spec § 4: the
-// override replaces the bucket root entirely — every subsequent URL (latest
-// pointer, tarballs, sha files) is built from this single base.
+// effectiveBaseURL returns the override URL from
+// ALIBABA_CLOUD_MAXC_DOWNLOAD_BASE_URL (with trailing slash trimmed) when
+// set, else downloadBaseURL. The override replaces the bucket root entirely
+// — every subsequent URL (latest pointer, tarballs, sha files) is built
+// from this single base.
 func (c *Context) effectiveBaseURL() string {
 	if u := os.Getenv("ALIBABA_CLOUD_MAXC_DOWNLOAD_BASE_URL"); u != "" {
 		return strings.TrimRight(u, "/")
@@ -49,9 +49,8 @@ func (c *Context) latestVersionURL() string {
 	return c.effectiveBaseURL() + "/versions/latest"
 }
 
-// GetLatestVersion fetches the public `versions/latest` pointer and returns
-// its trimmed content. Wrapped by getLatestVersionFunc so tests can stub it
-// without needing httptest for the cache-only paths.
+// GetLatestVersion fetches the public versions/latest pointer and returns
+// its trimmed content.
 func (c *Context) GetLatestVersion() (string, error) {
 	resp, err := httpGetFunc(c.latestVersionURL())
 	if err != nil {
@@ -72,14 +71,14 @@ func (c *Context) GetLatestVersion() (string, error) {
 	return v, nil
 }
 
-// EnsureInstalledAndUpdated is the gatekeeper called by Run before exec.
-// Honors two env shortcuts (per spec § 5):
-//   - ALIBABA_CLOUD_MAXC_EXEC_PATH: caller is BYO-binary, do nothing
-//   - ALIBABA_CLOUD_MAXC_NO_UPDATE_CHECK=1: skip the network round-trip
+// EnsureInstalledAndUpdated installs maxc if missing, otherwise checks for
+// a newer version at most once per VersionCheckTTL window. Two env shortcuts
+// suppress all network traffic:
+//   - ALIBABA_CLOUD_MAXC_EXEC_PATH: caller is BYO-binary, skip everything
+//   - ALIBABA_CLOUD_MAXC_NO_UPDATE_CHECK=1: keep whatever is installed
 //
-// Otherwise: install if absent, else hit the latest pointer at most once per
-// TTL window; a failed remote check is logged-and-ignored when something is
-// already installed (don't break offline users).
+// A failed remote check is logged-and-ignored when something is already
+// installed so offline users don't get blocked.
 func (c *Context) EnsureInstalledAndUpdated() error {
 	if os.Getenv("ALIBABA_CLOUD_MAXC_EXEC_PATH") != "" {
 		return nil
@@ -102,7 +101,7 @@ func (c *Context) EnsureInstalledAndUpdated() error {
 	latest, err := getLatestVersionFunc(c)
 	if err != nil {
 		// Soft-fail: leave the user on whatever they've already got and try
-		// again next TTL window. Stderr so it surfaces in `aliyun maxc -v`.
+		// again next TTL window.
 		fmt.Fprintf(os.Stderr, "maxc: update check failed: %v\n", err)
 		_ = c.touchCache()
 		return nil
@@ -114,9 +113,9 @@ func (c *Context) EnsureInstalledAndUpdated() error {
 	return c.downloadAndInstall(latest)
 }
 
-// downloadAndInstall is the orchestrator: GET tarball + .sha256, verify, extract
-// into a staging dir, atomically swap with installDir, persist .version.
-// On any failure before the swap, installDir is untouched.
+// downloadAndInstall fetches the tarball and its .sha256, verifies, then
+// hands off to installFromTarball. On any failure before the swap, installDir
+// is untouched.
 func (c *Context) downloadAndInstall(version string) error {
 	parent := filepath.Dir(c.installDir)
 	if err := os.MkdirAll(parent, 0o755); err != nil {
@@ -146,10 +145,9 @@ func (c *Context) downloadAndInstall(version string) error {
 	return c.installFromTarball(tarPath)
 }
 
-// installFromTarball extracts tarPath into a staging dir, then atomically
-// swaps it into installDir. Old install (if any) is preserved as
-// installDir.old.<ts> until the swap succeeds, then RemoveAll'd. On rename
-// failure the old dir is restored.
+// installFromTarball extracts into a staging dir, then atomically renames it
+// into installDir. Any prior install is moved aside first and only deleted
+// after the swap succeeds; on rename failure it is restored.
 func (c *Context) installFromTarball(tarPath string) error {
 	parent := filepath.Dir(c.installDir)
 	ts := timeNowFunc().UnixNano()
@@ -163,7 +161,6 @@ func (c *Context) installFromTarball(tarPath string) error {
 		return fmt.Errorf("extract: %w", err)
 	}
 
-	// Tarball contract (spec § 3): top-level directory is `maxc/`.
 	extractedRoot := filepath.Join(stagingDir, "maxc")
 	if _, err := os.Stat(extractedRoot); err != nil {
 		return fmt.Errorf("tarball missing top-level maxc/ directory: %w", err)
@@ -195,9 +192,6 @@ func (c *Context) installFromTarball(tarPath string) error {
 	return c.SaveLocalVersion()
 }
 
-// SaveLocalVersion writes c.versionRemote (which is now installed) into
-// .version so subsequent runs can compare against the latest pointer without
-// invoking maxc itself.
 func (c *Context) SaveLocalVersion() error {
 	return os.WriteFile(c.versionFilePath, []byte(c.versionRemote), 0o644)
 }
@@ -223,9 +217,8 @@ func httpGetToFile(url, dest string) error {
 	return out.Close()
 }
 
-// fetchExpectedSha downloads a .sha256 file and returns its content trimmed.
-// The maxc release pipeline (scripts/build_release.sh) writes a single hex
-// digest per file: `shasum -a 256 maxc.tar.gz | awk '{print $1}'`.
+// fetchExpectedSha downloads a .sha256 sidecar file and returns its trimmed
+// content (a single hex digest).
 func fetchExpectedSha(url string) (string, error) {
 	resp, err := httpGetFunc(url)
 	if err != nil {
@@ -259,10 +252,9 @@ func computeFileSha256(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// extractTarGz extracts src (a .tar.gz) into destDir. Rejects tar entries
-// with absolute paths or `..` traversal. Supports regular files, dirs, and
-// symlinks (PyInstaller onedir bundles on macOS contain framework symlinks).
-// File modes are preserved so the maxc binary stays executable.
+// extractTarGz extracts src (a .tar.gz) into destDir. Rejects entries with
+// absolute paths or `..` traversal. Supports regular files, dirs, and
+// symlinks; file modes are preserved.
 func extractTarGz(src, destDir string) error {
 	f, err := os.Open(src)
 	if err != nil {
@@ -324,8 +316,7 @@ func extractTarGz(src, destDir string) error {
 				return err
 			}
 		default:
-			// Skip hardlinks, fifos, char/block devices — PyInstaller output
-			// has none of these and supporting them is a security footgun.
+			// Skip hardlinks, fifos, char/block devices.
 		}
 	}
 }
