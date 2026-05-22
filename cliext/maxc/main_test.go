@@ -1,7 +1,11 @@
 package maxc
 
 import (
+	"bytes"
+	"strings"
 	"testing"
+
+	"github.com/aliyun/aliyun-cli/v3/cli"
 )
 
 func TestNewMaxcCommand_BasicShape(t *testing.T) {
@@ -21,7 +25,7 @@ func TestNewMaxcCommand_BasicShape(t *testing.T) {
 	if cmd.Short.Get("zh") == "" {
 		t.Error("Short zh is empty")
 	}
-	if cmd.Usage != "aliyun maxc <command> [args...] [options...]" {
+	if cmd.Usage != "maxc <command> [args...] [options...]" {
 		t.Errorf("Usage mismatch: %s", cmd.Usage)
 	}
 	if cmd.Hidden {
@@ -33,10 +37,45 @@ func TestNewMaxcCommand_BasicShape(t *testing.T) {
 	if !cmd.KeepArgs {
 		t.Error("KeepArgs must be true")
 	}
-	if !cmd.SkipDefaultHelp {
-		t.Error("SkipDefaultHelp must be true")
+	if cmd.SkipDefaultHelp {
+		t.Error("SkipDefaultHelp must be false so framework auto-renders aliyun-style help on --help")
 	}
 	if cmd.Run == nil {
 		t.Fatal("Run function should not be nil")
+	}
+	if cmd.Help == nil {
+		t.Fatal("Help function should not be nil — we render a custom command-group + env-var section")
+	}
+}
+
+func TestNewMaxcCommand_HelpOutput(t *testing.T) {
+	// Attach to a parent so GetUsageWithParent emits "aliyun maxc ...".
+	root := &cli.Command{Name: "aliyun"}
+	cmd := NewMaxcCommand()
+	root.AddSubCommand(cmd)
+
+	stdout := &bytes.Buffer{}
+	ctx := cli.NewCommandContext(stdout, &bytes.Buffer{})
+	ctx.EnterCommand(cmd)
+
+	if err := cmd.Help(ctx, nil); err != nil {
+		t.Fatalf("Help returned error: %v", err)
+	}
+	out := stdout.String()
+
+	for _, want := range []string{
+		"MaxCompute CLI",                                   // PrintHead
+		"Usage:",                                           // PrintUsage
+		"aliyun maxc <command>",                            // usage body (parent path prepended by framework)
+		"Sample:",                                          // PrintSample
+		"Commands:",                                        // our custom groups
+		"query",                                            // one group from the table
+		"auth",                                             // another group
+		"ALIBABA_CLOUD_MAXC_NO_UPDATE_CHECK",               // env var section
+		"Use `maxc --help` for more information.",          // PrintTail
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("help output missing %q\nfull output:\n%s", want, out)
+		}
 	}
 }
