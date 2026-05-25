@@ -27,7 +27,10 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/cli/upgrade"
+	"github.com/aliyun/aliyun-cli/v3/cliext/acrutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/cms2"
+	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -37,8 +40,6 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 	"github.com/aliyun/aliyun-cli/v3/ossutil"
 	"github.com/aliyun/aliyun-cli/v3/otsutil"
-	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
-	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 )
 
@@ -125,6 +126,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(agentbay.NewAgentBayCommand())
 	// tablestore command
 	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
+	// acr command
+	rootCmd.AddSubCommand(acrutil.NewAcrutilCommand())
 	// sae command
 	rootCmd.AddSubCommand(saectl.NewSaectlCommand())
 	// appmanager command

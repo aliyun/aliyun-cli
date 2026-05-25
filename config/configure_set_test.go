@@ -390,3 +390,79 @@ func TestDoConfigureSet_AutoPluginInstall(t *testing.T) {
 	assert.False(t, savedProfile.AutoPluginInstall)
 	assert.False(t, savedProfile.AutoPluginInstallEnablePre)
 }
+
+func TestDoConfigureSet_BearerToken(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
+
+	originhook := hookLoadOrCreateConfiguration
+	originhookSave := hookSaveConfigurationWithContext
+	defer func() {
+		hookLoadOrCreateConfiguration = originhook
+		hookSaveConfigurationWithContext = originhookSave
+	}()
+
+	configState := &Configuration{
+		CurrentProfile: "default",
+		Profiles: []Profile{
+			{
+				Name:                 "default",
+				Mode:                 BearerToken,
+				BearerTokenValue:     "old-token",
+				BearerTokenHeaderKey: "x-old-header",
+				RegionId:             "cn-hangzhou",
+			},
+		},
+	}
+
+	var savedProfile Profile
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return configState, nil
+		}
+	}
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
+			configState = config
+			p, _ := config.GetProfile(config.CurrentProfile)
+			savedProfile = p
+			return nil
+		}
+	}
+
+	modeFlag := ModeFlag(ctx.Flags())
+	modeFlag.SetAssigned(true)
+	modeFlag.SetValue("BearerToken")
+
+	bearerFlag := BearerTokenFlag(ctx.Flags())
+	bearerFlag.SetAssigned(true)
+	bearerFlag.SetValue("new-bearer-token")
+
+	headerFlag := BearerTokenHeaderKeyFlag(ctx.Flags())
+	headerFlag.SetAssigned(true)
+	headerFlag.SetValue("x-custom-token")
+
+	err := doConfigureSet(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, BearerToken, savedProfile.Mode)
+	assert.Equal(t, "new-bearer-token", savedProfile.BearerTokenValue)
+	assert.Equal(t, "x-custom-token", savedProfile.BearerTokenHeaderKey)
+
+	// Unassigned flags keep existing profile values (GetStringOrDefault).
+	bearerFlag.SetAssigned(false)
+	headerFlag.SetAssigned(false)
+	err = doConfigureSet(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "new-bearer-token", savedProfile.BearerTokenValue)
+	assert.Equal(t, "x-custom-token", savedProfile.BearerTokenHeaderKey)
+
+	// Only bearer-token flag assigned: update token, preserve header key.
+	bearerFlag.SetAssigned(true)
+	bearerFlag.SetValue("updated-token")
+	err = doConfigureSet(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "updated-token", savedProfile.BearerTokenValue)
+	assert.Equal(t, "x-custom-token", savedProfile.BearerTokenHeaderKey)
+}
