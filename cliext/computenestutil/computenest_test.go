@@ -1,4 +1,4 @@
-package appmanagerutil
+package computenestutil
 
 import (
 	"archive/tar"
@@ -82,7 +82,7 @@ func TestInitBasicInfo(t *testing.T) {
 	if c.venvPath != expectedVenv {
 		t.Errorf("venvPath expected %s, got %s", expectedVenv, c.venvPath)
 	}
-	expectedExec := filepath.Join(expectedVenv, "bin", "appmanager")
+	expectedExec := filepath.Join(expectedVenv, "bin", "computenest-cli")
 	if c.execFilePath != expectedExec {
 		t.Errorf("execFilePath expected %s, got %s", expectedExec, c.execFilePath)
 	}
@@ -110,7 +110,7 @@ func TestInitBasicInfoWindows(t *testing.T) {
 		t.Fatalf("InitBasicInfo failed: %v", err)
 	}
 
-	expectedExec := filepath.Join(tmpDir, venvDirName, "Scripts", "appmanager.exe")
+	expectedExec := filepath.Join(tmpDir, venvDirName, "Scripts", "computenest-cli.exe")
 	if c.execFilePath != expectedExec {
 		t.Errorf("execFilePath expected %s, got %s", expectedExec, c.execFilePath)
 	}
@@ -127,7 +127,7 @@ func TestInitBasicInfoInstalled(t *testing.T) {
 	defer func() { runtimeGOOSFunc = oldGOOS }()
 
 	// Create fake entry point
-	execPath := filepath.Join(tmpDir, venvDirName, "bin", "appmanager")
+	execPath := filepath.Join(tmpDir, venvDirName, "bin", "computenest-cli")
 	if err := os.MkdirAll(filepath.Dir(execPath), 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestEnsurePythonAvailable(t *testing.T) {
 	c := NewContext(ctx)
 	c.osType = runtime.GOOS
 	c.osArch = runtime.GOARCH
-	c.embeddedPythonDir = filepath.Join(tmpDir, "python-embedded")
+	c.embeddedPythonDir = filepath.Join(tmpDir, "python-embedded-computenest")
 	err = c.EnsurePythonAvailable()
 	if err != nil {
 		t.Errorf("EnsurePythonAvailable failed: %v", err)
@@ -205,7 +205,7 @@ func TestEnsurePythonAvailableUsesEmbedded(t *testing.T) {
 	c := NewContext(ctx)
 	c.osType = "linux"
 	c.osArch = "amd64"
-	c.embeddedPythonDir = filepath.Join(tmpDir, "python-embedded")
+	c.embeddedPythonDir = filepath.Join(tmpDir, "python-embedded-computenest")
 
 	// Create fake embedded python binary at expected path
 	embeddedPython := filepath.Join(c.embeddedPythonDir, "python", "bin", "python3")
@@ -352,26 +352,17 @@ func TestRemoveFlagsForMainCli(t *testing.T) {
 		t.Fatalf("RemoveFlagsForMainCli failed: %v", err)
 	}
 
-	// --profile is credential/auth related and should be removed
 	for _, arg := range newArgs {
-		if arg == "--profile" {
+		if arg == "--region" || arg == "--profile" {
 			t.Errorf("config flag should be removed: %s", arg)
 		}
 	}
 
-	// --region is in passthrough whitelist and should remain for subprocess
-	hasRegion := false
 	hasKey := false
 	for _, arg := range newArgs {
-		if arg == "--region" {
-			hasRegion = true
-		}
 		if arg == "--key" {
 			hasKey = true
 		}
-	}
-	if !hasRegion {
-		t.Errorf("passthrough flag --region should remain")
 	}
 	if !hasKey {
 		t.Errorf("non-config flag --key should remain")
@@ -381,7 +372,7 @@ func TestRemoveFlagsForMainCli(t *testing.T) {
 func TestRemoveFlagsForMainCli_UserAgentPassthrough(t *testing.T) {
 	ctx, _, _ := newOriginCtx()
 	c := NewContext(ctx)
-	args := []string{"app", "deploy", "--user-agent", "AlibabaCloud-Agent-Skills/alibabacloud-ecs-code-deploy"}
+	args := []string{"deploy", "--user-agent", "AlibabaCloud-Agent-Skills/alibabacloud-ecs-code-deploy"}
 	newArgs, err := c.RemoveFlagsForMainCli(args)
 	if err != nil {
 		t.Fatalf("RemoveFlagsForMainCli failed: %v", err)
@@ -398,7 +389,7 @@ func TestRemoveFlagsForMainCli_UserAgentPassthrough(t *testing.T) {
 		}
 	}
 	if !hasUA {
-		t.Errorf("--user-agent should be passed through to appmanager cli, got: %v", newArgs)
+		t.Errorf("--user-agent should be passed through to computenest cli, got: %v", newArgs)
 	}
 	if !hasUAValue {
 		t.Errorf("--user-agent value should be passed through, got: %v", newArgs)
@@ -409,11 +400,9 @@ func TestPrepareEnv_AIModeUserAgentInjected(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	t.Setenv("ALIBABA_CLOUD_USER_AGENT", "")
 	os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
 	prepareConfig(t, home, "en")
 
-	// 写入 ai-mode.json，仅设置 user_agent
 	cfgDir := filepath.Join(home, ".aliyun")
 	aiJSON := `{"enabled":false,"user_agent":"AlibabaCloud-Agent-Skills/alibabacloud-ecs-code-deploy"}`
 	if err := os.WriteFile(filepath.Join(cfgDir, "ai-mode.json"), []byte(aiJSON), 0600); err != nil {
@@ -460,7 +449,6 @@ func TestPrepareEnv_AIModeUserAgentNotOverrideExportedEnv(t *testing.T) {
 		t.Fatalf("PrepareEnv failed: %v", err)
 	}
 
-	// 不应再 append 一个 FromAiMode/2 的 ALIBABA_CLOUD_USER_AGENT
 	for _, e := range envs {
 		if e == "ALIBABA_CLOUD_USER_AGENT=FromAiMode/2" {
 			t.Errorf("ai-mode UA should not override user-exported ALIBABA_CLOUD_USER_AGENT, got envs: %v", filterUA(envs))
@@ -475,7 +463,6 @@ func TestPrepareEnv_AIModeUserAgentEmptyNotInjected(t *testing.T) {
 	os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
 	prepareConfig(t, home, "en")
 
-	// 不写 ai-mode.json
 	ctx, _, _ := newOriginCtx()
 	c := NewContext(ctx)
 	envs, err := c.PrepareEnv()
@@ -491,8 +478,6 @@ func TestPrepareEnv_AIModeUserAgentEmptyNotInjected(t *testing.T) {
 }
 
 func TestPrepareEnv_RamRoleArnNoStaticAKLeak(t *testing.T) {
-	// RamRoleArn 模式下，如果 GetCredential 失败（例如无效的 RoleArn），
-	// 应该 fallback 到 os.Environ() 而不是泄漏静态母凭证。
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -502,7 +487,6 @@ func TestPrepareEnv_RamRoleArnNoStaticAKLeak(t *testing.T) {
 	if err := os.MkdirAll(cfgDir, 0755); err != nil {
 		t.Fatalf("mkdir cfg: %v", err)
 	}
-	// 配置一个 RamRoleArn profile，但 role_arn 和 session_name 不为空以通过 Validate
 	configJSON := `{"current":"default","profiles":[{"name":"default","mode":"RamRoleArn","access_key_id":"STATIC_AK","access_key_secret":"STATIC_SK","ram_role_arn":"acs:ram::123:role/fake","ram_session_name":"test","region_id":"cn-hangzhou"}]}`
 	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(configJSON), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -515,7 +499,6 @@ func TestPrepareEnv_RamRoleArnNoStaticAKLeak(t *testing.T) {
 		t.Fatalf("PrepareEnv failed: %v", err)
 	}
 
-	// 不应包含静态母凭证 STATIC_AK / STATIC_SK
 	for _, e := range envs {
 		if strings.Contains(e, "STATIC_AK") {
 			t.Errorf("should NOT leak static parent AK in RamRoleArn mode, got: %s", e)
@@ -600,7 +583,7 @@ func TestNeedCheckVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cacheFile := filepath.Join(tmpDir, ".appmanager_version_check_"+tt.name)
+			cacheFile := filepath.Join(tmpDir, ".computenest_cli_version_check_"+tt.name)
 
 			c := &Context{
 				installed:                 tt.installed,
@@ -632,7 +615,7 @@ func TestNeedCheckVersion(t *testing.T) {
 
 func TestUpdateCheckCacheTime(t *testing.T) {
 	tmpDir := t.TempDir()
-	cacheFile := filepath.Join(tmpDir, ".appmanager_version_check")
+	cacheFile := filepath.Join(tmpDir, ".computenest_cli_version_check")
 
 	fixedTime := time.Unix(1234567890, 0)
 	oldTimeNowFunc := timeNowFunc

@@ -1,4 +1,4 @@
-package appmanagerutil
+package computenestutil
 
 import (
 	"archive/tar"
@@ -28,9 +28,9 @@ type Context struct {
 	pythonPath                string // detected python3 path (system or embedded)
 	venvPythonPath            string // python inside venv
 	venvPipPath               string // pip inside venv
-	execFilePath              string // appmanager entry point inside venv
+	execFilePath              string // computenest-cli entry point inside venv
 	embeddedPythonDir         string // embedded python install directory
-	installed                 bool   // whether appmanager-cli is installed in venv
+	installed                 bool   // whether computenest-cli is installed in venv
 	versionLocal              string
 	osType                    string
 	osArch                    string
@@ -41,27 +41,27 @@ var getConfigurePathFunc = func() string {
 }
 
 var (
-	execCommandFunc    = exec.Command
-	timeNowFunc        = time.Now
-	runtimeGOOSFunc    = func() string { return runtime.GOOS }
-	runtimeGOARCHFunc  = func() string { return runtime.GOARCH }
+	execCommandFunc   = exec.Command
+	timeNowFunc       = time.Now
+	runtimeGOOSFunc   = func() string { return runtime.GOOS }
+	runtimeGOARCHFunc = func() string { return runtime.GOARCH }
 )
 
 const (
 	// PyPI 包名
-	pypiPackageName = "appmanager-cli"
+	pypiPackageName = "computenest-cli"
 	// pip 包名（下划线形式，用于 whl 文件名）
-	pipPackageNameUnderscore = "appmanager_cli"
+	pipPackageNameUnderscore = "computenest_cli"
 	// venv 目录名
-	venvDirName = "appmanager-venv"
-	// 嵌入式 Python 目录名
-	embeddedPythonDirName = "python-embedded"
+	venvDirName = "computenest-venv"
+	// 嵌入式 Python 目录名（与 appmanager 独立，避免共享）
+	embeddedPythonDirName = "python-embedded-computenest"
 	// 最低 Python 版本要求
 	minPythonVersion = "3.10"
 	// 嵌入式 Python 版本（python-build-standalone）
 	embeddedPythonVersion = "3.12"
 	// 下载基础 URL
-	downloadBaseURL = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/cli-ext/appmanager-cli/downloads"
+	downloadBaseURL = "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/cli-ext/computenest-cli/downloads"
 )
 
 var VersionCheckTTL = 86400 // 1 day, in seconds
@@ -98,7 +98,7 @@ func (c *Context) Run(args []string) error {
 		return err
 	}
 
-	err = c.ExecuteAppManagerCli(newArgs)
+	err = c.ExecuteComputenest(newArgs)
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func (c *Context) Run(args []string) error {
 
 // applyMainCliFlagsFromArgs 扫描 args，将 aliyun 主程序 config 类 flag 的值
 // 同步到 c.originCtx.Flags()，使后续 LoadProfileWithContext 能拿到命令行覆盖值。
-// 仅处理已注册在 ctx.Flags() 中的 flag（即通过 NewAppManagerCommand 中的
+// 仅处理已注册在 ctx.Flags() 中的 flag（即通过 NewComputenestCommand 中的
 // config.AddFlags(cmd.Flags()) 注册的 flag），不会污染未知 flag。
 func (c *Context) applyMainCliFlagsFromArgs(args []string) {
 	if c.originCtx == nil || c.originCtx.Flags() == nil {
@@ -154,18 +154,18 @@ func (c *Context) InitBasicInfo() error {
 	c.osType = runtimeGOOSFunc()
 	c.osArch = runtimeGOARCHFunc()
 	c.configPath = getConfigurePathFunc()
-	c.checkVersionCacheFilePath = filepath.Join(c.configPath, ".appmanager_version_check")
+	c.checkVersionCacheFilePath = filepath.Join(c.configPath, ".computenest_version_check")
 	c.venvPath = filepath.Join(c.configPath, venvDirName)
 	c.embeddedPythonDir = filepath.Join(c.configPath, embeddedPythonDirName)
 
 	if c.osType == "windows" {
 		c.venvPythonPath = filepath.Join(c.venvPath, "Scripts", "python.exe")
 		c.venvPipPath = filepath.Join(c.venvPath, "Scripts", "pip.exe")
-		c.execFilePath = filepath.Join(c.venvPath, "Scripts", "appmanager.exe")
+		c.execFilePath = filepath.Join(c.venvPath, "Scripts", "computenest-cli.exe")
 	} else {
 		c.venvPythonPath = filepath.Join(c.venvPath, "bin", "python3")
 		c.venvPipPath = filepath.Join(c.venvPath, "bin", "pip3")
-		c.execFilePath = filepath.Join(c.venvPath, "bin", "appmanager")
+		c.execFilePath = filepath.Join(c.venvPath, "bin", "computenest-cli")
 	}
 
 	// check if venv and entry point exist
@@ -444,11 +444,11 @@ func (c *Context) isPythonVersionSufficient(version string) bool {
 	return false
 }
 
-// EnsureVenvAndPackage creates venv if needed and installs/upgrades appmanager-cli
+// EnsureVenvAndPackage creates venv if needed and installs/upgrades computenest-cli
 func (c *Context) EnsureVenvAndPackage() error {
 	// Create venv if it doesn't exist
 	if !fileExists(c.venvPythonPath) {
-		fmt.Fprintf(c.originCtx.Stderr(), "Setting up appmanager environment...\n")
+		fmt.Fprintf(c.originCtx.Stderr(), "Setting up computenest-cli environment...\n")
 		cmd := execCommandFunc(c.pythonPath, "-m", "venv", c.venvPath)
 		cmd.Stdout = c.originCtx.Stderr()
 		cmd.Stderr = c.originCtx.Stderr()
@@ -460,7 +460,7 @@ func (c *Context) EnsureVenvAndPackage() error {
 	// Install or upgrade package
 	if !c.installed {
 		// First install
-		fmt.Fprintf(c.originCtx.Stderr(), "Installing appmanager-cli...\n")
+		fmt.Fprintf(c.originCtx.Stderr(), "Installing computenest-cli...\n")
 		err := c.pipInstall(false)
 		if err != nil {
 			return err
@@ -541,7 +541,7 @@ func (c *Context) downloadWhlFromOSS() (string, error) {
 		return "", fmt.Errorf("version.txt is empty")
 	}
 
-	// Download whl: appmanager_cli-{version}-py3-none-any.whl
+	// Download whl: computenest_cli-{version}-py3-none-any.whl
 	whlName := fmt.Sprintf("%s-%s-py3-none-any.whl", pipPackageNameUnderscore, version)
 	whlURL := fmt.Sprintf("%s/%s", downloadBaseURL, whlName)
 
@@ -556,7 +556,7 @@ func (c *Context) downloadWhlFromOSS() (string, error) {
 	}
 
 	// Save to temp dir with correct whl filename (pip validates filename)
-	tmpDir, err := os.MkdirTemp("", "appmanager-cli-download")
+	tmpDir, err := os.MkdirTemp("", "computenest-cli-download")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp dir: %v", err)
 	}
@@ -575,28 +575,17 @@ func (c *Context) downloadWhlFromOSS() (string, error) {
 	return whlPath, nil
 }
 
-
 func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 	longNeedsValue := make(map[string]bool)  // key: --name
 	shortNeedsValue := make(map[string]bool) // key: -x
 
-	// 1) 收集 aliyun 主程序需要剥离的 config 类 flag（如 --access-key-id），
+	// 1) 收集 aliyun 主程序所有 config 类 flag（如 --access-key-id），
 	//    这些 flag 在子命令 ctx.flags 中不一定可见（多数 config flag 未 Persistent），
 	//    因此直接通过 config.AddFlags 列出权威名单。
-	//    注意：--region 等子进程也需要的 flag 不剥离，通过 passthrough 白名单豁免。
-	passthrough := map[string]bool{
-		"region":   true,
-		"RegionId": true,
-		"language": true,
-		"endpoint": true,
-	}
 	mainCliFs := cli.NewFlagSet()
 	config.AddFlags(mainCliFs)
 	for _, f := range mainCliFs.Flags() {
 		if f.Category != "config" {
-			continue
-		}
-		if passthrough[f.Name] {
 			continue
 		}
 		needsValue := f.AssignedMode != cli.AssignedNone
@@ -612,9 +601,6 @@ func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 	if c.originCtx != nil && c.originCtx.Flags() != nil && c.originCtx.Flags().Flags() != nil {
 		for _, f := range c.originCtx.Flags().Flags() {
 			if !f.IsAssigned() || f.Category != "config" {
-				continue
-			}
-			if passthrough[f.Name] {
 				continue
 			}
 			needsValue := f.AssignedMode != cli.AssignedNone
@@ -693,7 +679,7 @@ func (c *Context) UpdateCheckCacheTime() error {
 	return nil
 }
 
-// PrepareEnv 从 aliyun CLI 配置中提取凭证，通过环境变量透传给 appmanager-cli 子进程
+// PrepareEnv 从 aliyun CLI 配置中提取凭证，通过环境变量透传给 computenest-cli 子进程
 // 支持 AK 和 StsToken 两种认证模式
 func (c *Context) PrepareEnv() ([]string, error) {
 	profile, err := config.LoadProfileWithContext(c.originCtx)
@@ -704,7 +690,7 @@ func (c *Context) PrepareEnv() ([]string, error) {
 
 	// LoadProfileWithContext 仅在 InConfigureMode 时才合并命令行 flag，
 	// 子命令默认不在 ConfigureMode，这里显式合并一次以支持
-	// `aliyun appmanager <cmd> --access-key-id ... --region ...` 这类命令行覆盖。
+	// `aliyun computenest <cmd> --access-key-id ... --region ...` 这类命令行覆盖。
 	if c.originCtx != nil && c.originCtx.Flags() != nil {
 		profile.OverwriteWithFlags(c.originCtx)
 	}
@@ -759,8 +745,8 @@ func (c *Context) PrepareEnv() ([]string, error) {
 		envs = append(envs, "ALIBABA_CLOUD_REGION_ID="+profile.RegionId)
 	}
 
-	// 标识调用方，让子进程能识别自己是被 aliyun appmanager 调起的
-	envs = append(envs, "ALIBABA_CLOUD_APPMANAGER_COMPAT_MODE=aliyun appmanager")
+	// 标识调用方，让子进程能识别自己是被 aliyun computenest-cli 调起的
+	envs = append(envs, "ALIBABA_CLOUD_COMPUTENEST_COMPAT_MODE=aliyun computenest-cli")
 
 	// 注入 ai-mode.json 中的 user_agent 给 Python SDK（Python SDK 只认 ALIBABA_CLOUD_USER_AGENT）。
 	// 父进程已 export ALIBABA_CLOUD_USER_AGENT 时不覆盖，尊重用户显式设置。
@@ -776,7 +762,7 @@ func (c *Context) PrepareEnv() ([]string, error) {
 	return envs, nil
 }
 
-func (c *Context) ExecuteAppManagerCli(args []string) error {
+func (c *Context) ExecuteComputenest(args []string) error {
 	cmd := execCommandFunc(c.execFilePath, args...)
 	envs, _ := c.PrepareEnv()
 	cmd.Env = envs

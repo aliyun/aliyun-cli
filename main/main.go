@@ -30,6 +30,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cliext/acrutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/cms2"
+	"github.com/aliyun/aliyun-cli/v3/cliext/computenestutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
@@ -132,6 +133,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(saectl.NewSaectlCommand())
 	// appmanager command
 	rootCmd.AddSubCommand(appmanagerutil.NewAppManagerCommand())
+	// computenest command
+	rootCmd.AddSubCommand(computenestutil.NewComputenestCommand())
 	// cms2 command
 	rootCmd.AddSubCommand(cms2.NewCms2Command())
 	// plugin command
