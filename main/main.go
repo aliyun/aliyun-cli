@@ -30,6 +30,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cliext/acrutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/cms2"
+	"github.com/aliyun/aliyun-cli/v3/cliext/codeup"
 	"github.com/aliyun/aliyun-cli/v3/cliext/computenestutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -129,6 +130,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
 	// acr command
 	rootCmd.AddSubCommand(acrutil.NewAcrutilCommand())
+	// codeup command
+	rootCmd.AddSubCommand(codeup.NewCodeupCliCommand())
 	// sae command
 	rootCmd.AddSubCommand(saectl.NewSaectlCommand())
 	// appmanager command
