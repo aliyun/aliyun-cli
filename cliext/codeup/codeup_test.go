@@ -148,6 +148,45 @@ func TestRemoveFlagsForMainCli(t *testing.T) {
 	}
 }
 
+func TestBuildSubprocessEnv(t *testing.T) {
+	base := []string{
+		"PATH=/usr/bin",
+		"ALIBABA_CLOUD_CODEUP_INTEGRATION_MODE=stale",
+		"HOME=/home/u",
+	}
+	overrides := map[string]string{
+		"ALIBABA_CLOUD_CODEUP_INTEGRATION_MODE": "aliyun codeup-cli",
+	}
+
+	got := buildSubprocessEnv(base, overrides)
+
+	seenIntegration := 0
+	seenPath := false
+	seenHome := false
+	var integrationValue string
+	for _, item := range got {
+		switch {
+		case item == "PATH=/usr/bin":
+			seenPath = true
+		case item == "HOME=/home/u":
+			seenHome = true
+		case len(item) > len("ALIBABA_CLOUD_CODEUP_INTEGRATION_MODE=") &&
+			item[:len("ALIBABA_CLOUD_CODEUP_INTEGRATION_MODE=")] == "ALIBABA_CLOUD_CODEUP_INTEGRATION_MODE=":
+			seenIntegration++
+			integrationValue = item[len("ALIBABA_CLOUD_CODEUP_INTEGRATION_MODE="):]
+		}
+	}
+	if !seenPath || !seenHome {
+		t.Errorf("expected PATH and HOME to be preserved, got %v", got)
+	}
+	if seenIntegration != 1 {
+		t.Errorf("expected exactly one integration mode entry, got %d", seenIntegration)
+	}
+	if integrationValue != "aliyun codeup-cli" {
+		t.Errorf("integration mode = %q, want %q", integrationValue, "aliyun codeup-cli")
+	}
+}
+
 func TestFileExists(t *testing.T) {
 	tmpDir := t.TempDir()
 

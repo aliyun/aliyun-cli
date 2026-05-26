@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -334,11 +335,29 @@ func (c *Context) ExecuteCodeupCli(args []string) error {
 	cmd.Stdout = c.originCtx.Stdout()
 	cmd.Stderr = c.originCtx.Stderr()
 	cmd.Stdin = os.Stdin
+	cmd.Env = buildSubprocessEnv(os.Environ(), map[string]string{
+		"ALIBABA_CLOUD_CODEUP_INTEGRATION_MODE": "aliyun codeup-cli",
+	})
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to execute %s: %v", c.execFilePath, err)
 	}
 	return nil
+}
+
+func buildSubprocessEnv(base []string, overrides map[string]string) []string {
+	result := make([]string, 0, len(base)+len(overrides))
+	for _, item := range base {
+		key, _, _ := strings.Cut(item, "=")
+		if _, conflict := overrides[key]; conflict {
+			continue
+		}
+		result = append(result, item)
+	}
+	for k, v := range overrides {
+		result = append(result, k+"="+v)
+	}
+	return result
 }
 
 func fileExists(path string) bool {
