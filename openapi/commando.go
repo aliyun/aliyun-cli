@@ -254,9 +254,12 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			}
 			if !installed {
 				ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
-				if profile, err := config.LoadProfileWithContext(ctx); err == nil {
-					c.profile = profile
+				// profile 加载 / 校验失败必须 fail-fast，不要 silent 吞错。否则会停留在main.go 启动时的默认 profile，--profile xxx 的语义丢失，用户毫无感知。
+				profile, err := config.LoadProfileWithContext(ctx)
+				if err != nil {
+					return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it")
 				}
+				c.profile = profile
 				// 需要判断是否plugin auto install enabled, 且支持环境变量
 				commandName := buildCommandName(args)
 				// fmt.Println("commandName", commandName, pluginArgs)
@@ -292,24 +295,29 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			isVersion := (apiOrMethod == "version")
 			if !isHelp && !isVersion && len(pluginArgs) >= 2 {
 				ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
-				if profile, err := config.LoadProfileWithContext(ctx); err == nil {
-					c.profile = profile
+				profile, err := config.LoadProfileWithContext(ctx)
+				if err != nil {
+					return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it")
 				}
+				c.profile = profile
 				if c.profile.Name == "" {
 					return fmt.Errorf("profile not found, use `aliyun configure` to configure it")
 				}
 
-				if envs, err := c.profile.GetRuntimeEnv(ctx); err == nil {
-					configDir := config.GetConfigDir(ctx)
-					forceOn, forceOff := CliAIOverrides(ctx.Flags())
-					aimode.MergeUserAgentIntoPluginEnvs(configDir, envs, forceOn, forceOff)
-					util.MergeAgentSegmentIntoPluginEnvs(envs)
-					safety.MergeSafetyPolicyPathIntoEnvs(configDir, envs)
-					headers.MergeIntoPluginEnvs(envs)
-					ctx.SetRuntimeEnvs(envs)
+				// 凭证获取失败（OIDC / STS / RamRoleArn 远程换证等）同样 fail-fast
+				envs, err := c.profile.GetRuntimeEnv(ctx)
+				if err != nil {
+					return cli.NewErrorWithTip(err,
+						fmt.Sprintf("profile %q: failed to resolve credentials", c.profile.Name))
 				}
+				configDir := config.GetConfigDir(ctx)
+				forceOn, forceOff := CliAIOverrides(ctx.Flags())
+				aimode.MergeUserAgentIntoPluginEnvs(configDir, envs, forceOn, forceOff)
+				util.MergeAgentSegmentIntoPluginEnvs(envs)
+				safety.MergeSafetyPolicyPathIntoEnvs(configDir, envs)
+				headers.MergeIntoPluginEnvs(envs)
+				ctx.SetRuntimeEnvs(envs)
 			} else if isHelp || isVersion {
-				// language 仅从profile 获取，不需要merge 环境变量和flag
 				c.setLangEnv(ctx)
 			}
 
@@ -1030,7 +1038,8 @@ func (c *Commando) setLangEnv(ctx *cli.Context) {
 		return
 	}
 
-	lang := c.profile.Language
+	// 优先级：--language flag > profile.Language > i18n 全局兜底
+	lang := config.LanguageFlag(ctx.Flags()).GetStringOrDefault(c.profile.Language)
 	if lang == "" {
 		lang = i18n.GetLanguage()
 	}
