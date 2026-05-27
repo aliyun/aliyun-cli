@@ -1,22 +1,25 @@
 package maxc
 
 import (
+	"archive/tar"
+	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 )
 
-// Context holds per-invocation state for the maxc launcher. The maxc
-// "binary" is an onedir bundle extracted into installDir; the runtime entry
-// point is installDir/maxc[.exe].
 type Context struct {
 	originCtx        *cli.Context
 	configPath       string
@@ -34,8 +37,6 @@ type Context struct {
 	envMap           map[string]string
 }
 
-// ExitError carries the child process exit code so the caller can propagate
-// it without calling os.Exit directly.
 type ExitError struct{ Code int }
 
 func (e *ExitError) Error() string { return fmt.Sprintf("subprocess exited with code %d", e.Code) }
@@ -46,6 +47,12 @@ var (
 	runtimeGOOSFunc      = func() string { return runtime.GOOS }
 	runtimeGOARCHFunc    = func() string { return runtime.GOARCH }
 	execCommandFunc      = exec.Command
+	httpGetFunc          = http.Get
+	timeNowFunc          = func() time.Time { return time.Now() }
+	getLatestVersionFunc = func(c *Context) (string, error) { return c.GetLatestVersion() }
+	loadProfileFunc      = func(ctx *cli.Context) (config.Profile, error) {
+		return config.LoadProfileWithContext(ctx)
+	}
 )
 
 var platformPaths = map[string]struct{}{
@@ -56,8 +63,6 @@ var platformPaths = map[string]struct{}{
 	"windows-amd64": {},
 }
 
-// downloadBaseURL is overridable at runtime via
-// ALIBABA_CLOUD_MAXC_DOWNLOAD_BASE_URL. No trailing slash.
 var downloadBaseURL = "https://maxcompute-repo.oss-cn-hangzhou.aliyuncs.com/maxc-cli"
 
 const VersionCheckTTL = 86400
@@ -111,9 +116,303 @@ func (c *Context) Run(args []string) error {
 	return c.Execute(childArgs)
 }
 
-func fileExists(p string) bool {
-	_, err := os.Stat(p)
-	return err == nil
+// --- install / update -------------------------------------------------------
+
+func (c *Context) effectiveBaseURL() string {
+	if u := os.Getenv("ALIBABA_CLOUD_MAXC_DOWNLOAD_BASE_URL"); u != "" {
+		return strings.TrimRight(u, "/")
+	}
+	return downloadBaseURL
+}
+
+func (c *Context) tarballURL(version string) string {
+	return fmt.Sprintf("%s/%s/%s/maxc.tar.gz", c.effectiveBaseURL(), version, c.platformKey)
+}
+
+func (c *Context) tarballShaURL(version string) string {
+	return c.tarballURL(version) + ".sha256"
+}
+
+func (c *Context) latestVersionURL() string {
+	return c.effectiveBaseURL() + "/versions/latest"
+}
+
+func (c *Context) GetLatestVersion() (string, error) {
+	resp, err := httpGetFunc(c.latestVersionURL())
+	if err != nil {
+		return "", fmt.Errorf("GET latest: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("GET latest: status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	v := strings.TrimSpace(string(body))
+	if v == "" {
+		return "", fmt.Errorf("empty latest pointer at %s", c.latestVersionURL())
+	}
+	return v, nil
+}
+
+func (c *Context) EnsureInstalledAndUpdated() error {
+	if os.Getenv("ALIBABA_CLOUD_MAXC_EXEC_PATH") != "" {
+		return nil
+	}
+	if os.Getenv("ALIBABA_CLOUD_MAXC_NO_UPDATE_CHECK") == "1" {
+		return nil
+	}
+
+	if !c.installed {
+		latest, err := getLatestVersionFunc(c)
+		if err != nil {
+			return fmt.Errorf("resolve latest maxc version: %w", err)
+		}
+		return c.downloadAndInstall(latest)
+	}
+
+	if !c.cacheStale() {
+		return nil
+	}
+	latest, err := getLatestVersionFunc(c)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "maxc: update check failed: %v\n", err)
+		_ = c.touchCache()
+		return nil
+	}
+	_ = c.touchCache()
+	if latest == c.readLocalVersion() {
+		return nil
+	}
+	return c.downloadAndInstall(latest)
+}
+
+func (c *Context) downloadAndInstall(version string) error {
+	parent := filepath.Dir(c.installDir)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return fmt.Errorf("mkdir parent: %w", err)
+	}
+
+	tarPath := filepath.Join(parent, fmt.Sprintf(".maxc-dl-%d.tar.gz", timeNowFunc().UnixNano()))
+	defer os.Remove(tarPath)
+
+	if err := httpGetToFile(c.tarballURL(version), tarPath); err != nil {
+		return fmt.Errorf("download tarball: %w", err)
+	}
+
+	expectedSha, err := fetchExpectedSha(c.tarballShaURL(version))
+	if err != nil {
+		return fmt.Errorf("fetch sha256: %w", err)
+	}
+	actualSha, err := computeFileSha256(tarPath)
+	if err != nil {
+		return fmt.Errorf("compute sha256: %w", err)
+	}
+	if !strings.EqualFold(strings.TrimSpace(actualSha), strings.TrimSpace(expectedSha)) {
+		return fmt.Errorf("sha256 mismatch: expected=%s actual=%s", expectedSha, actualSha)
+	}
+
+	c.versionRemote = version
+	return c.installFromTarball(tarPath)
+}
+
+func (c *Context) installFromTarball(tarPath string) error {
+	parent := filepath.Dir(c.installDir)
+	ts := timeNowFunc().UnixNano()
+	stagingDir := filepath.Join(parent, fmt.Sprintf(".maxc-staging-%d", ts))
+	if err := os.MkdirAll(stagingDir, 0o755); err != nil {
+		return fmt.Errorf("mkdir staging: %w", err)
+	}
+	defer os.RemoveAll(stagingDir)
+
+	if err := extractTarGz(tarPath, stagingDir); err != nil {
+		return fmt.Errorf("extract: %w", err)
+	}
+
+	extractedRoot := filepath.Join(stagingDir, "maxc")
+	if _, err := os.Stat(extractedRoot); err != nil {
+		return fmt.Errorf("tarball missing top-level maxc/ directory: %w", err)
+	}
+
+	var oldDir string
+	if fileExists(c.installDir) {
+		oldDir = fmt.Sprintf("%s.old.%d", c.installDir, ts)
+		if err := os.Rename(c.installDir, oldDir); err != nil {
+			return fmt.Errorf("rename old install aside: %w", err)
+		}
+	}
+
+	if err := os.Rename(extractedRoot, c.installDir); err != nil {
+		if oldDir != "" {
+			_ = os.Rename(oldDir, c.installDir)
+		}
+		return fmt.Errorf("rename staging into place: %w", err)
+	}
+
+	if oldDir != "" {
+		_ = os.RemoveAll(oldDir)
+	}
+
+	c.installed = true
+	c.versionLocal = c.versionRemote
+	return c.SaveLocalVersion()
+}
+
+func (c *Context) SaveLocalVersion() error {
+	return os.WriteFile(c.versionFilePath, []byte(c.versionRemote), 0o644)
+}
+
+func httpGetToFile(url, dest string) error {
+	resp, err := httpGetFunc(url)
+	if err != nil {
+		return fmt.Errorf("GET %s: %w", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("GET %s: status %d", url, resp.StatusCode)
+	}
+	out, err := os.Create(dest)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", dest, err)
+	}
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		_ = out.Close()
+		return fmt.Errorf("write %s: %w", dest, err)
+	}
+	return out.Close()
+}
+
+func fetchExpectedSha(url string) (string, error) {
+	resp, err := httpGetFunc(url)
+	if err != nil {
+		return "", fmt.Errorf("GET %s: %w", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("GET %s: status %d", url, resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	sha := strings.TrimSpace(string(body))
+	if sha == "" {
+		return "", fmt.Errorf("empty sha256 from %s", url)
+	}
+	return sha, nil
+}
+
+func computeFileSha256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func extractTarGz(src, destDir string) error {
+	f, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return fmt.Errorf("gunzip: %w", err)
+	}
+	defer func() { _ = gz.Close() }()
+
+	absDest, err := filepath.Abs(destDir)
+	if err != nil {
+		return fmt.Errorf("abs destDir: %w", err)
+	}
+
+	type pendingSymlink struct{ path, target string }
+	var symlinks []pendingSymlink
+
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("tar next: %w", err)
+		}
+
+		if filepath.IsAbs(hdr.Name) || strings.Contains(hdr.Name, "..") {
+			return fmt.Errorf("tar entry escapes destDir: %s", hdr.Name)
+		}
+
+		target := filepath.Join(absDest, hdr.Name)
+		if !pathInside(absDest, target) {
+			return fmt.Errorf("tar entry escapes destDir: %s", hdr.Name)
+		}
+
+		switch hdr.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, os.FileMode(hdr.Mode)|0o700); err != nil {
+				return err
+			}
+		case tar.TypeReg, tar.TypeRegA:
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return err
+			}
+			out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(hdr.Mode))
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(out, tr); err != nil {
+				_ = out.Close()
+				return err
+			}
+			if err := out.Close(); err != nil {
+				return err
+			}
+		case tar.TypeSymlink:
+			resolved := hdr.Linkname
+			if !filepath.IsAbs(resolved) {
+				resolved = filepath.Join(filepath.Dir(target), resolved)
+			}
+			if !pathInside(absDest, resolved) {
+				return fmt.Errorf("symlink %q escapes destDir: -> %s", hdr.Name, hdr.Linkname)
+			}
+			symlinks = append(symlinks, pendingSymlink{path: target, target: hdr.Linkname})
+		default:
+			// Skip hardlinks, device files, etc.
+		}
+	}
+
+	for _, s := range symlinks {
+		if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+			return err
+		}
+		_ = os.Remove(s.path)
+		if err := os.Symlink(s.target, s.path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func pathInside(absRoot, p string) bool {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(absRoot, abs)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func (c *Context) cacheStale() bool {
@@ -124,8 +423,6 @@ func (c *Context) cacheStale() bool {
 	return timeNowFunc().Sub(fi.ModTime()).Seconds() > float64(VersionCheckTTL)
 }
 
-// touchCache rewrites the sentinel so cacheStale returns false for the next
-// TTL window. Only mtime matters; the file body is for human inspection.
 func (c *Context) touchCache() error {
 	if err := os.MkdirAll(filepath.Dir(c.versionCachePath), 0o755); err != nil {
 		return err
@@ -141,88 +438,83 @@ func (c *Context) readLocalVersion() string {
 	return strings.TrimSpace(string(b))
 }
 
-// stripFlags lists parent-CLI flag names that are only meaningful to the
-// aliyun root command and must NOT leak into the maxc child process. Auth
-// and credential flags are already exported via envMap by
-// InjectAliyunCredentials; everything else here is caller-side runtime that
-// has no meaning to the child. Flags not listed here pass through so the
-// child handles them with its own semantics.
-var stripFlags = map[string]bool{
-	// config: auth & credential
-	"profile":                        true,
-	"mode":                           true,
-	"sts-region":                     true,
-	"ram-role-name":                  true,
-	"ram-role-arn":                   true,
-	"role-session-name":              true,
-	"external-id":                    true,
-	"source-profile":                 true,
-	"private-key":                    true,
-	"key-pair-name":                  true,
-	"expired-seconds":                true,
-	"process-command":                true,
-	"oidc-provider-arn":              true,
-	"oidc-token-file":                true,
-	"cloud-sso-sign-in-url":          true,
-	"cloud-sso-access-config":        true,
-	"cloud-sso-account-id":           true,
-	"oauth-site-type":                true,
-	"external-account-type":          true,
-	"auto-plugin-install":            true,
-	"auto-plugin-install-enable-pre": true,
+// --- credentials ------------------------------------------------------------
 
-	// config: connection & runtime
-	"config-path":        true,
-	"read-timeout":       true,
-	"connect-timeout":    true,
-	"retry-count":        true,
-	"skip-secure-verify": true,
-	"endpoint-type":      true,
-	"RegionId":           true,
+func (c *Context) InjectAliyunCredentials(args []string) error {
+	if c.envMap == nil {
+		c.envMap = map[string]string{}
+	}
 
-	// openapi: caller-side-only
-	"secure":         true,
-	"insecure":       true,
-	"header":         true,
-	"pager":          true,
-	"accept":         true,
-	"waiter":         true,
-	"dryrun":         true,
-	"quiet":          true,
-	"yes":            true,
-	"cli-query":      true,
-	"roa":            true,
-	"method":         true,
-	"user-agent":     true,
-	"cli-ai-mode":    true,
-	"no-cli-ai-mode": true,
+	profile, err := loadProfileFunc(c.originCtx)
+	if err != nil {
+		return nil
+	}
+
+	id, secret, token, err := extractCredentials(c.originCtx, profile)
+	if err != nil {
+		return fmt.Errorf("resolve credentials for profile %q: %w", profile.Name, err)
+	}
+
+	if id != "" {
+		c.envMap["ALIBABA_CLOUD_ACCESS_KEY_ID"] = id
+	}
+	if secret != "" {
+		c.envMap["ALIBABA_CLOUD_ACCESS_KEY_SECRET"] = secret
+	}
+	if token != "" {
+		c.envMap["ALIBABA_CLOUD_SECURITY_TOKEN"] = token
+	}
+	if profile.RegionId != "" {
+		c.envMap["MAXCOMPUTE_REGION"] = profile.RegionId
+	}
+	return nil
 }
 
-// RemoveFlagsForMainCli drops every parent-CLI-only flag listed in
-// stripFlags from args (handles `--flag value`, `--flag=value`, and
-// shorthand `-x value`).
+func extractCredentials(ctx *cli.Context, p config.Profile) (string, string, string, error) {
+	switch p.Mode {
+	case config.AK:
+		return p.AccessKeyId, p.AccessKeySecret, "", nil
+	case config.StsToken:
+		return p.AccessKeyId, p.AccessKeySecret, p.StsToken, nil
+	default:
+		cred, err := p.GetCredential(ctx, nil)
+		if err != nil {
+			return "", "", "", err
+		}
+		model, err := cred.GetCredential()
+		if err != nil {
+			return "", "", "", err
+		}
+		var id, secret, token string
+		if model.AccessKeyId != nil {
+			id = *model.AccessKeyId
+		}
+		if model.AccessKeySecret != nil {
+			secret = *model.AccessKeySecret
+		}
+		if model.SecurityToken != nil {
+			token = *model.SecurityToken
+		}
+		return id, secret, token, nil
+	}
+}
+
+// --- flag stripping & execute -----------------------------------------------
+
+// passthrough lists flags that exist in config/openapi but should NOT be
+// stripped — the child process may define its own with the same name.
+var passthrough = map[string]struct{}{
+	"output":    {},
+	"force":     {},
+	"version":   {},
+	"body":      {},
+	"body-file": {},
+}
+
 func (c *Context) RemoveFlagsForMainCli(args []string) []string {
 	allFlags := cli.NewFlagSet()
 	config.AddFlags(allFlags)
 	openapi.AddFlags(allFlags)
-
-	longNeedsValue := make(map[string]bool)
-	shortNeedsValue := make(map[string]bool)
-	for _, f := range allFlags.Flags() {
-		if !stripFlags[f.Name] {
-			continue
-		}
-		needsValue := f.AssignedMode != cli.AssignedNone
-		if f.Name != "" {
-			longNeedsValue["--"+f.Name] = needsValue
-		}
-		for _, alias := range f.Aliases {
-			longNeedsValue["--"+alias] = needsValue
-		}
-		if f.Shorthand != 0 {
-			shortNeedsValue["-"+string(f.Shorthand)] = needsValue
-		}
-	}
 
 	out := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
@@ -233,31 +525,32 @@ func (c *Context) RemoveFlagsForMainCli(args []string) []string {
 			argName = prefix
 			hasInlineValue = true
 		}
-		if needs, ok := longNeedsValue[argName]; ok {
-			if needs && !hasInlineValue && i+1 < len(args) {
+
+		var f *cli.Flag
+		if strings.HasPrefix(argName, "--") {
+			f = allFlags.Get(strings.TrimPrefix(argName, "--"))
+		} else if strings.HasPrefix(argName, "-") && len(argName) == 2 {
+			f = allFlags.GetByShorthand(rune(argName[1]))
+		}
+
+		if f != nil {
+			if _, keep := passthrough[f.Name]; keep {
+				out = append(out, a)
+				continue
+			}
+			needsValue := f.AssignedMode != cli.AssignedNone
+			if needsValue && !hasInlineValue && i+1 < len(args) {
 				i++
 			}
 			continue
 		}
-		if needs, ok := shortNeedsValue[argName]; ok {
-			if needs && !hasInlineValue && i+1 < len(args) {
-				i++
-			}
-			continue
-		}
+
 		out = append(out, a)
 	}
 	return out
 }
 
-// Execute spawns c.execFilePath with childArgs, wiring stdio through and
-// merging c.envMap on top of the inherited environment. Non-zero exit codes
-// surface as *ExitError so the caller can propagate without calling os.Exit
-// directly.
 func (c *Context) Execute(childArgs []string) error {
-	// Avoid handing a half-ready socket to the child: on macOS there's a
-	// race between socket() and FD_CLOEXEC that lets a forked process
-	// inherit an fd which then fails with "bad file descriptor".
 	http.DefaultClient.CloseIdleConnections()
 
 	cmd := execCommandFunc(c.execFilePath, childArgs...)
@@ -275,8 +568,6 @@ func (c *Context) Execute(childArgs []string) error {
 	return nil
 }
 
-// mergeEnv returns base with keys present in overrides removed, then
-// appends "k=v" pairs for every override so the override wins.
 func mergeEnv(base []string, overrides map[string]string) []string {
 	out := make([]string, 0, len(base)+len(overrides))
 	for _, item := range base {
@@ -290,4 +581,9 @@ func mergeEnv(base []string, overrides map[string]string) []string {
 		out = append(out, k+"="+v)
 	}
 	return out
+}
+
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
