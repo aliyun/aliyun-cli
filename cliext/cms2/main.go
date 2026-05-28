@@ -9,8 +9,8 @@ func NewCms2Command() *cli.Command {
 	return &cli.Command{
 		Name: "cms2",
 		Short: i18n.T(
-			"Alibaba Cloud CloudMonitor (CMS) CLI — manage monitoring integrations, Prometheus, alert rules, and PromQL.",
-			"阿里云云监控 CLI — 管理监控集成、Prometheus 实例、告警规则和 PromQL 查询。"),
+			"Alibaba Cloud CloudMonitor (CMS) CLI — manage the full lifecycle of monitoring integrations, including APM, RUM, Prometheus Service, Synthetics, Alert Center, Event Center, and more.",
+			"阿里云云监控 CLI — 管理云监控的接入/集成的全生命周期，包括应用监控（APM）、前端监控（RUM）、Prometheus 服务、云拔测（Synthetics）、告警中心、事件中心等。"),
 		Usage:             "aliyun cms2 <command> [args...] [options...]",
 		Hidden:            false,
 		EnableUnknownFlag: true,
@@ -34,7 +34,19 @@ func NewCms2Command() *cli.Command {
 				}
 			}
 			c := NewContext(ctx)
-			return c.Run(args)
+			if err := c.Run(args); err != nil {
+				if exitErr, ok := err.(*ExitError); ok {
+					// The subprocess already wrote its own output (JSON
+					// success/error envelope) to the connected stdout/stderr.
+					// Propagate the exit code directly instead of returning
+					// an error — returning an error causes the CLI framework
+					// to print an ANSI-colored "ERROR: ..." line on stdout,
+					// which corrupts the subprocess's JSON stream.
+					cli.Exit(exitErr.Code)
+				}
+				return err
+			}
+			return nil
 		},
 	}
 }
