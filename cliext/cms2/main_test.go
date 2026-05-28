@@ -23,10 +23,10 @@ func TestNewCms2Command(t *testing.T) {
 	if cmd.Short == nil {
 		t.Fatalf("Short i18n text nil")
 	}
-	if en := cmd.Short.Get("en"); en != "Alibaba Cloud CloudMonitor (CMS) CLI — manage monitoring integrations, Prometheus, alert rules, and PromQL." {
+	if en := cmd.Short.Get("en"); en != "Alibaba Cloud CloudMonitor (CMS) CLI — manage the full lifecycle of monitoring integrations, including APM, RUM, Prometheus Service, Synthetics, Alert Center, Event Center, and more." {
 		t.Errorf("Short en mismatch: %s", en)
 	}
-	if zh := cmd.Short.Get("zh"); zh != "阿里云云监控 CLI — 管理监控集成、Prometheus 实例、告警规则和 PromQL 查询。" {
+	if zh := cmd.Short.Get("zh"); zh != "阿里云云监控 CLI — 管理云监控的接入/集成的全生命周期，包括应用监控（APM）、前端监控（RUM）、Prometheus 服务、云拔测（Synthetics）、告警中心、事件中心等。" {
 		t.Errorf("Short zh mismatch: %s", zh)
 	}
 	if cmd.Usage != "aliyun cms2 <command> [args...] [options...]" {
