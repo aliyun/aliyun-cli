@@ -43,7 +43,6 @@ func NewCms2Command() *cli.Command {
 					// to print an ANSI-colored "ERROR: ..." line on stdout,
 					// which corrupts the subprocess's JSON stream.
 					cli.Exit(exitErr.Code)
-					return nil
 				}
 				return err
 			}
