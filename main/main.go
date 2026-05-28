@@ -36,6 +36,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/kmscli"
 	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
 	"github.com/aliyun/aliyun-cli/v3/mock"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
@@ -128,6 +129,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(agentbay.NewAgentBayCommand())
 	// tablestore command
 	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
+	// kmscli command
+	rootCmd.AddSubCommand(kmscli.NewKmscliCommand())
 	// acr command
 	rootCmd.AddSubCommand(acrutil.NewAcrutilCommand())
 	// codeup command
