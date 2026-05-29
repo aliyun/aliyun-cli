@@ -17,6 +17,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"github.com/aliyun/aliyun-cli/v3/cliext/kmscli"
 	"io"
 	"os"
 	"path"
@@ -129,6 +130,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(agentbay.NewAgentBayCommand())
 	// tablestore command
 	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
+	// kmscli command
+	rootCmd.AddSubCommand(kmscli.NewKmscliCommand())
 	// acr command
 	rootCmd.AddSubCommand(acrutil.NewAcrutilCommand())
 	// codeup command
