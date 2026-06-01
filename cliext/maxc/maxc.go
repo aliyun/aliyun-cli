@@ -112,6 +112,7 @@ func (c *Context) Run(args []string) error {
 	if err := c.InjectAliyunCredentials(args); err != nil {
 		return err
 	}
+	c.envMap["MAXC_CLI_NAME"] = "aliyun maxc"
 	childArgs := c.RemoveFlagsForMainCli(args)
 	return c.Execute(childArgs)
 }

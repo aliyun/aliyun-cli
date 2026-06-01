@@ -991,6 +991,7 @@ func TestRun_FullChain_Mocked(t *testing.T) {
 		"ALIBABA_CLOUD_ACCESS_KEY_ID=test-id",
 		"ALIBABA_CLOUD_ACCESS_KEY_SECRET=test-secret",
 		"MAXCOMPUTE_REGION=cn-hangzhou",
+		"MAXC_CLI_NAME=aliyun maxc",
 	} {
 		if !strings.Contains(envStr, want) {
 			t.Errorf("env missing %q\nfull env:\n%s", want, envStr)
