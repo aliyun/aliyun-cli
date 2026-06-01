@@ -17,6 +17,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"github.com/aliyun/aliyun-cli/v3/cliext/kmscli"
 	"io"
 	"os"
 	"path"
@@ -27,8 +28,14 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/cli/upgrade"
+	"github.com/aliyun/aliyun-cli/v3/cliext/acrutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/cms2"
+	"github.com/aliyun/aliyun-cli/v3/cliext/codeup"
+	"github.com/aliyun/aliyun-cli/v3/cliext/computenestutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/iact3"
 	"github.com/aliyun/aliyun-cli/v3/cliext/maxc"
+	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -38,8 +45,6 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 	"github.com/aliyun/aliyun-cli/v3/ossutil"
 	"github.com/aliyun/aliyun-cli/v3/otsutil"
-	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
-	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 )
 
@@ -126,14 +131,24 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(agentbay.NewAgentBayCommand())
 	// tablestore command
 	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
+	// kmscli command
+	rootCmd.AddSubCommand(kmscli.NewKmscliCommand())
+	// acr command
+	rootCmd.AddSubCommand(acrutil.NewAcrutilCommand())
+	// codeup command
+	rootCmd.AddSubCommand(codeup.NewCodeupCliCommand())
 	// sae command
 	rootCmd.AddSubCommand(saectl.NewSaectlCommand())
 	// appmanager command
 	rootCmd.AddSubCommand(appmanagerutil.NewAppManagerCommand())
+	// computenest command
+	rootCmd.AddSubCommand(computenestutil.NewComputenestCommand())
 	// cms2 command
 	rootCmd.AddSubCommand(cms2.NewCms2Command())
 	// maxc command
 	rootCmd.AddSubCommand(maxc.NewMaxcCommand())
+	// iact3 command
+	rootCmd.AddSubCommand(iact3.NewIact3Command())
 	// plugin command
 	rootCmd.AddSubCommand(plugin.NewPluginCommand())
 	// upgrade command

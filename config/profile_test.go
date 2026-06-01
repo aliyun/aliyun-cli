@@ -625,6 +625,40 @@ func TestAutoModeRecognition(t *testing.T) {
 	p = &Profile{OIDCProviderARN: "oidc_provider_arn", OIDCTokenFile: "/path/to/tokenfile", RamRoleArn: "ram/role/arn"}
 	AutoModeRecognition(p)
 	assert.Equal(t, OIDC, p.Mode)
+
+	p = &Profile{BearerTokenValue: "my-token"}
+	AutoModeRecognition(p)
+	assert.Equal(t, BearerToken, p.Mode)
+}
+
+func TestValidateBearerToken(t *testing.T) {
+	p := &Profile{Name: "default", Mode: BearerToken, RegionId: "cn-hangzhou"}
+	assert.EqualError(t, p.Validate(), "bearer_token is not configured for profile 'default'. Run `aliyun configure --profile default --mode BearerToken` to set it")
+
+	p.BearerTokenValue = "token"
+	assert.Nil(t, p.Validate())
+
+	p.BearerTokenHeaderKey = "x-custom-token"
+	assert.Nil(t, p.Validate())
+	assert.Equal(t, "x-custom-token", p.BearerTokenHeaderKey)
+
+	p.BearerTokenHeaderKey = "bad\r\nkey"
+	assert.Error(t, p.Validate())
+}
+
+func TestGetCredentialByBearerToken(t *testing.T) {
+	actual := newProfile()
+	actual.Mode = BearerToken
+	actual.BearerTokenValue = "my-bearer-token"
+	actual.RegionId = "cn-hangzhou"
+
+	credential, err := actual.GetCredential(newCtx(), nil)
+	assert.Nil(t, err)
+	assert.NotNil(t, credential)
+	assert.Equal(t, "bearer", *credential.GetType())
+	model, err := credential.GetCredential()
+	assert.Nil(t, err)
+	assert.Equal(t, "my-bearer-token", *model.BearerToken)
 }
 
 func TestGetCredentialByAK(t *testing.T) {
@@ -1476,6 +1510,29 @@ func TestGetRuntimeEnv_StsToken(t *testing.T) {
 	assert.Equal(t, "test-sts-token", envs["ALIBABA_CLOUD_SECURITY_TOKEN"])
 }
 
+func TestGetRuntimeEnv_BearerToken(t *testing.T) {
+	p := &Profile{
+		Name:                 "default",
+		Mode:                 BearerToken,
+		BearerTokenValue:     "my-bearer-token",
+		BearerTokenHeaderKey: "x-custom-token",
+		RegionId:             "cn-hangzhou",
+	}
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.Equal(t, "my-bearer-token", envs["ALIBABA_CLOUD_BEARER_TOKEN"])
+	assert.Equal(t, "x-custom-token", envs["ALIBABA_CLOUD_BEARER_TOKEN_HEADER_KEY"])
+	assert.Equal(t, "cn-hangzhou", envs["ALIBABA_CLOUD_REGION_ID"])
+	_, hasAK := envs["ALIBABA_CLOUD_ACCESS_KEY_ID"]
+	assert.False(t, hasAK)
+
+	p.BearerTokenValue = ""
+	envs, err = p.GetRuntimeEnv(newCtx())
+	assert.Error(t, err)
+	assert.Nil(t, envs)
+}
+
 func TestGetRuntimeEnv_OptionalFields(t *testing.T) {
 	p := newProfile()
 	p.Mode = AK
@@ -1546,3 +1603,56 @@ func TestGetRuntimeEnv_CredentialError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, envs)
 }
+
+func TestOpenAPIAuthType(t *testing.T) {
+	assert.Equal(t, "AK", (&Profile{Mode: AK}).OpenAPIAuthType())
+	assert.Equal(t, "bearer", (&Profile{Mode: BearerToken}).OpenAPIAuthType())
+	assert.Equal(t, "Anonymous", (&Profile{
+		Mode:                 BearerToken,
+		BearerTokenHeaderKey: "x-custom-token",
+	}).OpenAPIAuthType())
+}
+
+func TestInjectBearerTokenHeader(t *testing.T) {
+	headers := map[string]*string{}
+	(&Profile{Mode: AK, BearerTokenValue: "t"}).InjectBearerTokenHeader(headers)
+	assert.Empty(t, headers)
+
+	(&Profile{
+		Mode:                 BearerToken,
+		BearerTokenValue:     "secret",
+		BearerTokenHeaderKey: "x-custom-token",
+	}).InjectBearerTokenHeader(headers)
+	assert.Equal(t, "secret", *headers["x-custom-token"])
+}
+
+func TestNormalizeBearerTokenHeaderKey(t *testing.T) {
+	key, err := NormalizeBearerTokenHeaderKey("  x-custom-token  ")
+	assert.Nil(t, err)
+	assert.Equal(t, "x-custom-token", key)
+
+	_, err = NormalizeBearerTokenHeaderKey("x-bad\r\nInjected: 1")
+	assert.Error(t, err)
+
+	_, err = NormalizeBearerTokenHeaderKey("x bad")
+	assert.Error(t, err)
+
+	key, err = NormalizeBearerTokenHeaderKey("")
+	assert.Nil(t, err)
+	assert.Equal(t, "", key)
+}
+
+func TestSanitizeBearerTokenValue(t *testing.T) {
+	assert.Equal(t, "abcX-Injected: yes", SanitizeBearerTokenValue("abc\r\nX-Injected: yes"))
+	assert.Equal(t, "token", SanitizeBearerTokenValue("token"))
+}
+
+func TestErrBearerTokenRequiresPlugin(t *testing.T) {
+	err := ErrBearerTokenRequiresPlugin("devops")
+	assert.Contains(t, err.Error(), "devops")
+	assert.Contains(t, err.Error(), "aliyun devops")
+
+	err = ErrBearerTokenRequiresPlugin("")
+	assert.Contains(t, err.Error(), "product plugin")
+}
+

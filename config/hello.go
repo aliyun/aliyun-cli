@@ -74,6 +74,10 @@ func doHello(ctx *cli.Context, profile *Profile) (err error) {
 
 func DoHello(ctx *cli.Context, profile *Profile) {
 	w := ctx.Stdout()
+	if profile.Mode == BearerToken {
+		fmt.Fprintln(w, icon)
+		return
+	}
 	err := doHello(ctx, profile)
 	if err != nil {
 		cli.Println(w, "-----------------------------------------------")

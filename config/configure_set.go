@@ -117,6 +117,9 @@ func doConfigureSet(ctx *cli.Context) error {
 		profile.CloudSSOSignInUrl = CloudSSOSignInUrlFlag(flags).GetStringOrDefault(profile.CloudSSOSignInUrl)
 	case OAuth:
 		profile.OAuthSiteType = OAuthSiteTypeFlag(flags).GetStringOrDefault(profile.OAuthSiteType)
+	case BearerToken:
+		profile.BearerTokenValue = BearerTokenFlag(flags).GetStringOrDefault(profile.BearerTokenValue)
+		profile.BearerTokenHeaderKey = BearerTokenHeaderKeyFlag(flags).GetStringOrDefault(profile.BearerTokenHeaderKey)
 	}
 
 	profile.RegionId = RegionFlag(flags).GetStringOrDefault(profile.RegionId)

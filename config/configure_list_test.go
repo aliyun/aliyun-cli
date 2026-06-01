@@ -218,3 +218,40 @@ func TestDoConfigureListWithConfigPath(t *testing.T) {
 	assert.Equal(t, "", stderr.String()) // No stderr output since error is returned
 
 }
+
+func TestDoConfigureList_BearerToken(t *testing.T) {
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, bytes.NewBuffer(nil))
+	AddFlags(ctx.Flags())
+
+	originhook := hookLoadConfigurationWithContext
+	defer func() {
+		hookLoadConfigurationWithContext = originhook
+	}()
+
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "devops",
+				Profiles: []Profile{
+					{
+						Name:                 "devops",
+						Mode:                 BearerToken,
+						BearerTokenValue:     "my-secret-token",
+						BearerTokenHeaderKey: "x-custom-token",
+						RegionId:             "cn-hangzhou",
+						Language:             "en",
+					},
+				},
+			}, nil
+		}
+	}
+
+	err := doConfigureList(ctx)
+	assert.NoError(t, err)
+	out := w.String()
+	assert.Contains(t, out, "devops *")
+	assert.Contains(t, out, "BearerToken:***ken@x-custom-token")
+	assert.Contains(t, out, "Valid")
+	assert.Contains(t, out, "cn-hangzhou")
+}
