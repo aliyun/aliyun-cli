@@ -526,6 +526,160 @@ func TestPrepareEnv_RamRoleArnNoStaticAKLeak(t *testing.T) {
 	}
 }
 
+func TestPrepareEnv_OAuthModeInjectsTempSTS(t *testing.T) {
+	// OAuth 模式：STS 未过期时，GetCredential 直接复用 profile 中存储的临时 STS，
+	// PrepareEnv 应把这套临时 STS 三元组注入子进程（无需网络请求）。
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
+
+	cfgDir := filepath.Join(home, ".aliyun")
+	if err := os.MkdirAll(cfgDir, 0755); err != nil {
+		t.Fatalf("mkdir cfg: %v", err)
+	}
+	// OAuth profile，STS 远未过期 → 直接复用存储的临时 STS，不触发网络刷新
+	configJSON := `{"current":"default","profiles":[{"name":"default","mode":"OAuth","oauth_site_type":"CN","oauth_access_token":"tok","access_key_id":"OAUTH_TMP_AK","access_key_secret":"OAUTH_TMP_SK","sts_token":"OAUTH_STS_TOKEN","sts_expiration":9999999999,"region_id":"cn-hangzhou"}]}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(configJSON), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	envs, err := c.PrepareEnv()
+	if err != nil {
+		t.Fatalf("PrepareEnv failed: %v", err)
+	}
+
+	var foundAK, foundSK, foundToken bool
+	for _, e := range envs {
+		switch e {
+		case "ALIBABA_CLOUD_ACCESS_KEY_ID=OAUTH_TMP_AK":
+			foundAK = true
+		case "ALIBABA_CLOUD_ACCESS_KEY_SECRET=OAUTH_TMP_SK":
+			foundSK = true
+		case "ALIBABA_CLOUD_SECURITY_TOKEN=OAUTH_STS_TOKEN":
+			foundToken = true
+		}
+	}
+	if !foundAK || !foundSK || !foundToken {
+		t.Errorf("OAuth mode should inject temp STS creds, envs: %v", filterUA(envs))
+	}
+}
+
+func TestPrepareEnv_AKModeInjectsStaticAK(t *testing.T) {
+	// AK 模式：静态 AK/SK 直接注入，且不应出现 STS Token。
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
+
+	cfgDir := filepath.Join(home, ".aliyun")
+	if err := os.MkdirAll(cfgDir, 0755); err != nil {
+		t.Fatalf("mkdir cfg: %v", err)
+	}
+	configJSON := `{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"AK_ID","access_key_secret":"AK_SECRET","region_id":"cn-hangzhou"}]}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(configJSON), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	envs, err := c.PrepareEnv()
+	if err != nil {
+		t.Fatalf("PrepareEnv failed: %v", err)
+	}
+
+	var foundAK, foundSK bool
+	for _, e := range envs {
+		switch e {
+		case "ALIBABA_CLOUD_ACCESS_KEY_ID=AK_ID":
+			foundAK = true
+		case "ALIBABA_CLOUD_ACCESS_KEY_SECRET=AK_SECRET":
+			foundSK = true
+		}
+	}
+	if !foundAK || !foundSK {
+		t.Errorf("AK mode should inject static AK/SK, envs: %v", filterUA(envs))
+	}
+}
+
+func TestPrepareEnv_StsTokenModeInjectsTriple(t *testing.T) {
+	// StsToken 模式：AK/SK + STS Token 三元组直接注入。
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
+
+	cfgDir := filepath.Join(home, ".aliyun")
+	if err := os.MkdirAll(cfgDir, 0755); err != nil {
+		t.Fatalf("mkdir cfg: %v", err)
+	}
+	configJSON := `{"current":"default","profiles":[{"name":"default","mode":"StsToken","access_key_id":"STS_AK","access_key_secret":"STS_SK","sts_token":"STS_TOKEN","region_id":"cn-hangzhou"}]}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(configJSON), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	envs, err := c.PrepareEnv()
+	if err != nil {
+		t.Fatalf("PrepareEnv failed: %v", err)
+	}
+
+	var foundAK, foundSK, foundToken bool
+	for _, e := range envs {
+		switch e {
+		case "ALIBABA_CLOUD_ACCESS_KEY_ID=STS_AK":
+			foundAK = true
+		case "ALIBABA_CLOUD_ACCESS_KEY_SECRET=STS_SK":
+			foundSK = true
+		case "ALIBABA_CLOUD_SECURITY_TOKEN=STS_TOKEN":
+			foundToken = true
+		}
+	}
+	if !foundAK || !foundSK || !foundToken {
+		t.Errorf("StsToken mode should inject AK/SK/STS triple, envs: %v", filterUA(envs))
+	}
+}
+
+func TestPrepareEnv_BearerTokenModeInjectsBearer(t *testing.T) {
+	// BearerToken 模式：注入 bearer token 及 header key，不走 STS 凭证链。
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
+
+	cfgDir := filepath.Join(home, ".aliyun")
+	if err := os.MkdirAll(cfgDir, 0755); err != nil {
+		t.Fatalf("mkdir cfg: %v", err)
+	}
+	configJSON := `{"current":"default","profiles":[{"name":"default","mode":"BearerToken","bearer_token":"BEARER_VAL","bearer_token_header_key":"x-acs-bearer-token","region_id":"cn-hangzhou"}]}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(configJSON), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	envs, err := c.PrepareEnv()
+	if err != nil {
+		t.Fatalf("PrepareEnv failed: %v", err)
+	}
+
+	var foundBearer, foundHeader bool
+	for _, e := range envs {
+		switch e {
+		case "ALIBABA_CLOUD_BEARER_TOKEN=BEARER_VAL":
+			foundBearer = true
+		case "ALIBABA_CLOUD_BEARER_TOKEN_HEADER_KEY=x-acs-bearer-token":
+			foundHeader = true
+		}
+	}
+	if !foundBearer || !foundHeader {
+		t.Errorf("BearerToken mode should inject bearer token + header key, envs: %v", filterUA(envs))
+	}
+}
+
 func filterUA(envs []string) []string {
 	out := make([]string, 0)
 	for _, e := range envs {
