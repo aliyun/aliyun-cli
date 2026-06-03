@@ -51,6 +51,11 @@ var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*respons
 	return fn
 }
 
+var (
+	helpDelegateIsInstalled = plugin.IsPluginInstalled
+	helpDelegateExecute     = plugin.ExecutePlugin
+)
+
 func NewCommando(w io.Writer, profile config.Profile) *Commando {
 	r := &Commando{
 		profile: profile,
@@ -987,7 +992,7 @@ func (c *Commando) tryDelegatePluginHelp(ctx *cli.Context, args []string) (bool,
 		return false, nil
 	}
 
-	installed, _, err := plugin.IsPluginInstalled(args[0])
+	installed, _, err := helpDelegateIsInstalled(args[0])
 	if err != nil || !installed {
 		return false, nil
 	}
@@ -995,10 +1000,11 @@ func (c *Commando) tryDelegatePluginHelp(ctx *cli.Context, args []string) (bool,
 	pluginArgs := getPluginArgsForHelp(args[0])
 
 	c.setLangEnv(ctx)
-	ok, perr := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
+	ok, perr := helpDelegateExecute(args[0], pluginArgs, ctx)
 	if !ok {
-		// Manifest said installed but the binary vanished between checks; 
-		// fall through to the original error rather than surface a confusing "plugin not found" at help time.
+		// Manifest said installed but the binary vanished between checks;
+		// fall through to the original error rather than surface a confusing
+		// "plugin not found" at help time.
 		return false, nil
 	}
 	return true, perr

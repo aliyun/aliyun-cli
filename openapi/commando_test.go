@@ -529,6 +529,107 @@ func Test_tryDelegatePluginHelp_RefusesHTTPMethod(t *testing.T) {
 	}
 }
 
+// Test_tryDelegatePluginHelp_PluginPath covers the three branches reached
+// after the gating checks pass: (1) plugin manifest lookup returns an error
+// → caller falls through, (2) manifest hit → ExecutePlugin succeeds and the
+// plugin's exit error is returned, (3) manifest said installed but the
+// binary vanished (ExecutePlugin returns ok=false) → caller falls through
+// to the legacy error so the user sees the original "too many arguments"
+// rather than a confusing "plugin not found" at help time.
+//
+// `helpDelegateIsInstalled` / `helpDelegateExecute` are package-level test
+// seams declared in commando.go right next to `hookdo`; production code
+// outside `tryDelegatePluginHelp` still calls plugin.* directly.
+func Test_tryDelegatePluginHelp_PluginPath(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	profile := config.Profile{Language: "en", Mode: "AK", AccessKeyId: "x", AccessKeySecret: "y", RegionId: "cn-hangzhou"}
+	c := NewCommando(w, profile)
+
+	origIsInstalled := helpDelegateIsInstalled
+	origExecute := helpDelegateExecute
+	t.Cleanup(func() {
+		helpDelegateIsInstalled = origIsInstalled
+		helpDelegateExecute = origExecute
+	})
+
+	t.Run("IsInstalled error → fall through", func(t *testing.T) {
+		helpDelegateIsInstalled = func(string) (bool, string, error) {
+			return false, "", fmt.Errorf("manifest corrupted")
+		}
+		helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
+			t.Fatal("ExecutePlugin must not be called when IsInstalled errors")
+			return false, nil
+		}
+		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"hologram", "config", "set"})
+		assert.False(t, delegated)
+		assert.NoError(t, err, "inspection errors must never bubble up at help time")
+	})
+
+	t.Run("not installed → fall through", func(t *testing.T) {
+		helpDelegateIsInstalled = func(string) (bool, string, error) { return false, "", nil }
+		helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
+			t.Fatal("ExecutePlugin must not be called when plugin not installed")
+			return false, nil
+		}
+		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"hologram", "config", "set"})
+		assert.False(t, delegated)
+		assert.NoError(t, err)
+	})
+
+	t.Run("installed + execute succeeds → delegated", func(t *testing.T) {
+		var capturedName string
+		var capturedArgs []string
+		helpDelegateIsInstalled = func(name string) (bool, string, error) {
+			return true, "aliyun-cli-" + name, nil
+		}
+		helpDelegateExecute = func(name string, args []string, _ *cli.Context) (bool, error) {
+			capturedName = name
+			capturedArgs = args
+			return true, nil
+		}
+		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"hologram", "config", "set"})
+		assert.True(t, delegated, "must report delegation so caller skips the legacy error")
+		assert.NoError(t, err)
+		assert.Equal(t, "hologram", capturedName)
+		// getPluginArgsForHelp rebuilds argv from os.Args; the test binary's
+		// argv doesn't contain "hologram", so the helper returns its
+		// no-match fallback `[productCode, "--help"]`. The shape is what
+		// matters: the plugin name leads and --help is present.
+		assert.Equal(t, []string{"hologram", "--help"}, capturedArgs)
+	})
+
+	t.Run("installed + execute returns ok=false (binary vanished) → fall through", func(t *testing.T) {
+		helpDelegateIsInstalled = func(string) (bool, string, error) {
+			return true, "aliyun-cli-hologram", nil
+		}
+		helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
+			return false, nil // simulate manifest-says-installed-but-binary-missing
+		}
+		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"hologram", "config", "set"})
+		assert.False(t, delegated, "ok=false must surface as fall-through, not as delegated")
+		assert.NoError(t, err)
+	})
+
+	t.Run("installed + plugin exits with error → delegated, error propagates", func(t *testing.T) {
+		pluginErr := fmt.Errorf("plugin exited with status 2")
+		helpDelegateIsInstalled = func(string) (bool, string, error) { return true, "x", nil }
+		helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
+			return true, pluginErr
+		}
+		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"hologram", "config", "set"})
+		assert.True(t, delegated)
+		assert.Equal(t, pluginErr, err, "plugin's exit error must reach the user verbatim")
+	})
+}
+
 func Test_complete(t *testing.T) {
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
