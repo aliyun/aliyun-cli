@@ -365,6 +365,31 @@ func Test_help(t *testing.T) {
 	assert.Equal(t, "too many arguments: 3", err.Error())
 }
 
+// The "plugin not installed → don't delegate, fall through to original
+// error" path is implicitly covered by Test_help's last case
+// (args=["test","test0","test1"] still reports "too many arguments: 3").
+func Test_tryDelegatePluginHelp_RefusesHTTPMethod(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	profile := config.Profile{Language: "en", Mode: "AK", AccessKeyId: "x", AccessKeySecret: "y", RegionId: "cn-hangzhou"}
+	c := NewCommando(w, profile)
+
+	for _, method := range []string{"GET", "POST", "PUT", "DELETE"} {
+		t.Run("HTTP method "+method, func(t *testing.T) {
+			delegated, err := c.tryDelegatePluginHelp(ctx, []string{"ecs", method, "/path"})
+			assert.False(t, delegated, "RESTful shape must not be delegated to plugin")
+			assert.NoError(t, err)
+		})
+	}
+}
+
 func Test_complete(t *testing.T) {
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
