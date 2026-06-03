@@ -88,6 +88,8 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 		}
 	}
 
+	applyCallContextRPC(request.QueryParams)
+
 	err := a.api.CheckRequiredParameters(func(s string) bool {
 		switch s {
 		case "RegionId":
