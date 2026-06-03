@@ -183,6 +183,7 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	}
 	a.profile.InjectBearerTokenHeader(a.openapiRequest.Headers)
 	otel.InjectTeaHeaders(a.openapiRequest.Headers)
+	applyCallContextTeaHeaders(a.openapiRequest.Headers)
 
 	// a.openapiRequest.Headers["x-acs-region-id"] = tea.String(a.profile.RegionId)
 	return nil

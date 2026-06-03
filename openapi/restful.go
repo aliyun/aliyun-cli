@@ -95,6 +95,8 @@ func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
 		a.request.Scheme = "https"
 	}
 
+	applyCallContextROA(a.request.Headers)
+
 	return nil
 }
 
