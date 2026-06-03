@@ -41,10 +41,10 @@ var getConfigurePathFunc = func() string {
 }
 
 var (
-	execCommandFunc    = exec.Command
-	timeNowFunc        = time.Now
-	runtimeGOOSFunc    = func() string { return runtime.GOOS }
-	runtimeGOARCHFunc  = func() string { return runtime.GOARCH }
+	execCommandFunc   = exec.Command
+	timeNowFunc       = time.Now
+	runtimeGOOSFunc   = func() string { return runtime.GOOS }
+	runtimeGOARCHFunc = func() string { return runtime.GOARCH }
 )
 
 const (
@@ -575,7 +575,6 @@ func (c *Context) downloadWhlFromOSS() (string, error) {
 	return whlPath, nil
 }
 
-
 func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 	longNeedsValue := make(map[string]bool)  // key: --name
 	shortNeedsValue := make(map[string]bool) // key: -x
@@ -709,20 +708,29 @@ func (c *Context) PrepareEnv() ([]string, error) {
 		profile.OverwriteWithFlags(c.originCtx)
 	}
 
-	var accessKeyId, accessKeySecret, stsToken string
+	var accessKeyId, accessKeySecret, stsToken, bearerToken, bearerTokenHeaderKey string
 
 	mode := profile.Mode
 	switch mode {
 	case config.AK:
+		// 直接凭证：静态 AK/SK
 		accessKeyId = profile.AccessKeyId
 		accessKeySecret = profile.AccessKeySecret
 	case config.StsToken:
+		// 直接凭证：AK/SK + STS Token
 		accessKeyId = profile.AccessKeyId
 		accessKeySecret = profile.AccessKeySecret
 		stsToken = profile.StsToken
-	case config.RamRoleArn:
-		// RamRoleArn 模式：profile 中的 AK/SK 是静态母凭证，不能直接用于访问 API。
-		// 需要通过 AssumeRole 获取临时 STS 凭证（credentials-go SDK 自动处理）。
+	case config.BearerToken:
+		// Bearer Token 模式：直接注入 bearer token，不走 STS 凭证链
+		bearerToken = profile.BearerTokenValue
+		bearerTokenHeaderKey = profile.BearerTokenHeaderKey
+	default:
+		// 间接凭证模式（RamRoleArn/OAuth/CloudSSO/OIDC/EcsRamRole/
+		// ChainableRamRoleArn/RsaKeyPair/CredentialsURI/External 等）：
+		// 统一通过 GetCredential() 获取最终可用的临时 STS 凭证。
+		// 其中 OAuth/CloudSSO 会自动用 token 换临时 STS 并处理过期刷新，子进程无感；
+		// RamRoleArn 的静态母凭证只用于换取临时 STS，不会泄漏给子进程。
 		cred, err := profile.GetCredential(c.originCtx, nil)
 		if err != nil {
 			return os.Environ(), nil
@@ -740,9 +748,6 @@ func (c *Context) PrepareEnv() ([]string, error) {
 		if model.SecurityToken != nil {
 			stsToken = *model.SecurityToken
 		}
-	default:
-		// 其他认证模式暂不支持自动透传，仅继承父进程环境变量
-		return os.Environ(), nil
 	}
 
 	envs := os.Environ()
@@ -754,6 +759,12 @@ func (c *Context) PrepareEnv() ([]string, error) {
 	}
 	if stsToken != "" {
 		envs = append(envs, "ALIBABA_CLOUD_SECURITY_TOKEN="+stsToken)
+	}
+	if bearerToken != "" {
+		envs = append(envs, "ALIBABA_CLOUD_BEARER_TOKEN="+bearerToken)
+	}
+	if bearerTokenHeaderKey != "" {
+		envs = append(envs, "ALIBABA_CLOUD_BEARER_TOKEN_HEADER_KEY="+bearerTokenHeaderKey)
 	}
 	if profile.RegionId != "" {
 		envs = append(envs, "ALIBABA_CLOUD_REGION_ID="+profile.RegionId)
