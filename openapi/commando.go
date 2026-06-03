@@ -968,8 +968,40 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 		cmd.PrintHead(ctx)
 		return c.printApiUsage(ctx, args[0], args[1])
 	} else {
+		// Layer 3: plugin sub-command help (3+ levels deep).
+		if delegated, derr := c.tryDelegatePluginHelp(ctx, args); delegated {
+			return derr
+		}
 		return fmt.Errorf("too many arguments: %d", len(args))
 	}
+}
+
+func (c *Commando) tryDelegatePluginHelp(ctx *cli.Context, args []string) (bool, error) {
+	// Caller invariant: this is only reachable from `len(args) > 2`
+	if len(args) < 2 {
+		return false, nil
+	}
+
+	upper := strings.ToUpper(args[1])
+	if upper == "GET" || upper == "POST" || upper == "PUT" || upper == "DELETE" {
+		return false, nil
+	}
+
+	installed, _, err := plugin.IsPluginInstalled(args[0])
+	if err != nil || !installed {
+		return false, nil
+	}
+
+	pluginArgs := getPluginArgsForHelp(args[0])
+
+	c.setLangEnv(ctx)
+	ok, perr := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
+	if !ok {
+		// Manifest said installed but the binary vanished between checks; 
+		// fall through to the original error rather than surface a confusing "plugin not found" at help time.
+		return false, nil
+	}
+	return true, perr
 }
 
 func (c *Commando) complete(ctx *cli.Context, args []string) []string {
