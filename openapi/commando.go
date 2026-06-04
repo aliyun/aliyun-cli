@@ -321,9 +321,17 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				c.setLangEnv(ctx)
 			}
 
-			// Safety policy check for plugin execution (before spawning plugin process)
+			// Safety policy check for plugin execution (before spawning plugin process).
+			// Plugins can be N-level (e.g. `aliyun fc function create`), so the
+			// command identifier joins every positional segment with ':' to stay
+			// consistent with how `product:command` itself is separated:
+			//   aliyun fc create-function       -> fc:create-function
+			//   aliyun fc function create       -> fc:function:create
+			//   aliyun fc invoke my-fn          -> fc:invoke:my-fn
+			// Users can still match coarsely with wildcards like `fc:function:*` or `fc:function*`.
 			if !isHelp && !isVersion {
-				if err := c.checkSafetyPolicy(ctx, args[0], apiOrMethod, ""); err != nil {
+				cmdName := strings.Join(args[1:], ":")
+				if err := c.checkSafetyPolicy(ctx, args[0], cmdName, ""); err != nil {
 					return err
 				}
 			}
@@ -381,6 +389,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 			}
 		}
+		// Safety policy is keyed on what the user actually typed, so a rule like `sls:ListProject` matches `aliyun sls ListProject` 
+		// regardless of how the cli later dispatches it (REST GET /, RPC, etc.).
+		if err := c.checkSafetyPolicy(ctx, product.Code, args[1], ""); err != nil {
+			return err
+		}
 		if product.ApiStyle == "restful" {
 			api, found := meta.HookGetApi(c.library.GetApi)(product.Code, product.Version, args[1])
 			// For restful products, the 2-arg form `aliyun <product> <ApiName>` requires a valid ApiName so we can resolve the underlying Method + PathPattern from metadata.
@@ -416,6 +429,9 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		if find {
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 		}
+		if err := c.checkSafetyPolicy(ctx, product.Code, args[1], args[2]); err != nil {
+			return err
+		}
 		if ShouldUseOpenapi(ctx, &product) {
 			if !find {
 				return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
@@ -437,10 +453,6 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api *meta.Api, method string, path string) error {
 	if product == nil {
 		return fmt.Errorf("invalid product, please check product code")
-	}
-
-	if err := c.checkSafetyPolicy(ctx, product.Code, method, path); err != nil {
-		return err
 	}
 
 	apiContext, err := c.createHttpContext(ctx, product, api, method, path)
@@ -488,10 +500,6 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 }
 
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
-	if err := c.checkSafetyPolicy(ctx, productCode, apiOrMethod, path); err != nil {
-		return err
-	}
-
 	// create specific invoker
 	invoker, err := c.createInvoker(ctx, productCode, apiOrMethod, path)
 	if err != nil {
