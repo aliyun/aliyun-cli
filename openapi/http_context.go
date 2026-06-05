@@ -183,7 +183,8 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	}
 	a.profile.InjectBearerTokenHeader(a.openapiRequest.Headers)
 	otel.InjectTeaHeaders(a.openapiRequest.Headers)
-	applyCallContextTeaHeaders(a.openapiRequest.Headers)
+	// 注：sls 等自建网关产品已在 selfBuiltGatewayProducts 中，下面的调用对它会直接跳过。
+	applyCallContextTeaHeaders(product.Code, a.openapiRequest.Headers)
 
 	// a.openapiRequest.Headers["x-acs-region-id"] = tea.String(a.profile.RegionId)
 	return nil

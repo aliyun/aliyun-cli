@@ -88,7 +88,7 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 		}
 	}
 
-	applyCallContextRPC(request.QueryParams)
+	applyCallContextRPC(a.productCode(), request.QueryParams)
 
 	err := a.api.CheckRequiredParameters(func(s string) bool {
 		switch s {

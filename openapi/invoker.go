@@ -126,6 +126,13 @@ func (a *BasicInvoker) getRequest() *requests.CommonRequest {
 	return a.request
 }
 
+func (a *BasicInvoker) productCode() string {
+	if a.product == nil {
+		return ""
+	}
+	return a.product.Code
+}
+
 func aiModeSuffixForContext(ctx *cli.Context) string {
 	configDir := config.GetConfigDir(ctx)
 	aiCfg, err := aimode.Load(configDir)
