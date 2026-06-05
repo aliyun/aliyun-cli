@@ -88,6 +88,19 @@ type LocalPlugin struct {
 	ShortDescription string   `json:"shortDescription"`
 	Description      string   `json:"description"`
 	Inner            bool     `json:"inner,omitempty"` // 内置/产品侧插件（manifest.json inner）
+	// ProfileRequired controls whether the host CLI requires a valid configured profile before spawning this plugin. 
+	// Defaults to true (legacy behavior) when unset. 
+	// Set to false for plugins whose APIs may not need a profile (e.g. token-backed gateways, hybrid auth). 
+	// The plugin remains responsible for per-API auth validation. 
+	// Use a pointer so an absent field in legacy manifests is reliably distinguishable from an explicit `false`.
+	ProfileRequired *bool `json:"profileRequired,omitempty"`
+}
+
+func (lp *LocalPlugin) IsProfileRequired() bool {
+	if lp == nil || lp.ProfileRequired == nil {
+		return true
+	}
+	return *lp.ProfileRequired
 }
 
 type PluginAPIVersions struct {
@@ -115,6 +128,7 @@ type PluginManifest struct {
 		Path string `json:"path"` // 二进制文件相对路径
 	} `json:"bin"`
 	CmdNames []string `json:"cmdNames"`
+	ProfileRequired *bool `json:"profileRequired,omitempty"`
 }
 
 // Key: kebab-case command name (e.g., "fc create-alias")

@@ -2381,6 +2381,130 @@ func TestMain_PluginExecution_ProfileFailFast(t *testing.T) {
 	})
 }
 
+// TestMain_PluginExecution_LenientProfile mirrors ProfileFailFast but for
+// plugins that opt out via `profileRequired: false`. The contract:
+//   - bad / missing profile must NOT abort the call before the plugin runs;
+//     instead the plugin process is invoked with a baseline env.
+//   - we still surface plugin-level errors (e.g. missing binary), so we
+//     assert the failure point shifted from profile-validation to plugin
+//     execution.
+func TestMain_PluginExecution_LenientProfile(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	bootProfile := config.Profile{
+		Name:     "AkProfile",
+		Language: "en",
+		RegionId: "cn-hangzhou",
+	}
+	command := NewCommando(w, bootProfile)
+
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	config.AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+
+	// Plugin manifest declares profileRequired=false. The bad-oauth profile
+	// would normally fail Profile.Validate; lenient mode must swallow that
+	// and still attempt to spawn the plugin (which then fails with a binary
+	// resolution error because we don't actually drop a real binary).
+	t.Run("invalid profile is bypassed when plugin opts out via profileRequired=false", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		dir := filepath.Join(testHome, ".aliyun")
+		os.MkdirAll(dir, 0755)
+		os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{
+  "current": "AkProfile",
+  "profiles": [
+    {"name":"AkProfile","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou"},
+    {"name":"bad-oauth","mode":"OAuth","region_id":"cn-hangzhou"}
+  ]
+}`), 0644)
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		pluginPath := filepath.Join(pluginDir, "rdc")
+		os.MkdirAll(pluginPath, 0755)
+		manifestPath := filepath.Join(pluginDir, "manifest.json")
+		manifest := fmt.Sprintf(`{
+  "plugins": {
+    "rdc": {
+      "name": "rdc",
+      "version": "1.0.0",
+      "path": %q,
+      "profileRequired": false
+    }
+  }
+}`, pluginPath)
+		os.WriteFile(manifestPath, []byte(manifest), 0644)
+
+		config.ProfileFlag(ctx.Flags()).SetAssigned(true)
+		config.ProfileFlag(ctx.Flags()).SetValue("bad-oauth")
+		defer func() { config.ProfileFlag(ctx.Flags()).SetAssigned(false) }()
+
+		os.Args = []string{"aliyun", "rdc", "list", "--profile", "bad-oauth"}
+		args := []string{"rdc", "list"}
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.NotContains(t, err.Error(), "oauth_site_type",
+			"profileRequired=false 的插件不应被 profile 校验阻塞")
+		assert.Contains(t, err.Error(), "failed to resolve plugin binary",
+			"宽松路径下应继续到 ExecutePlugin，错误来自 binary 解析阶段")
+	})
+
+	// Even when no profile exists at all (no config.json on disk),
+	// profileRequired=false plugins must still execute end-to-end up to the
+	// plugin binary stage.
+	t.Run("missing profile config does not block opted-out plugin", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		// Reset profile flag possibly set by previous subtests.
+		config.ProfileFlag(ctx.Flags()).SetAssigned(false)
+		config.ProfileFlag(ctx.Flags()).SetValue("")
+
+		// Intentionally do NOT write config.json — profile loading will
+		// either return an empty profile or fail; either way, lenient mode
+		// must keep going.
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		pluginPath := filepath.Join(pluginDir, "rdc")
+		os.MkdirAll(pluginPath, 0755)
+		manifestPath := filepath.Join(pluginDir, "manifest.json")
+		manifest := fmt.Sprintf(`{
+  "plugins": {
+    "rdc": {
+      "name": "rdc",
+      "version": "1.0.0",
+      "path": %q,
+      "profileRequired": false
+    }
+  }
+}`, pluginPath)
+		os.WriteFile(manifestPath, []byte(manifest), 0644)
+
+		os.Args = []string{"aliyun", "rdc", "list"}
+		args := []string{"rdc", "list"}
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.NotContains(t, err.Error(), "profile not found",
+			"profileRequired=false 不应触发 'profile not found' 报错")
+		assert.NotContains(t, err.Error(), "Configuration failed",
+			"profileRequired=false 不应触发 Configuration failed 报错")
+		assert.Contains(t, err.Error(), "failed to resolve plugin binary",
+			"宽松路径下错误应来自 binary 解析阶段")
+	})
+}
+
 func TestPluginExecutionLogic(t *testing.T) {
 	// Setup test environment
 	stdout := new(bytes.Buffer)

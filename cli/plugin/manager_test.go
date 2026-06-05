@@ -1479,6 +1479,45 @@ func TestSavePluginToManifest(t *testing.T) {
 	assert.Equal(t, extractDir, plugin.Path)
 	assert.Equal(t, pManifest.Command, plugin.Command)
 	assert.Equal(t, pManifest.Description, plugin.Description)
+	assert.Nil(t, plugin.ProfileRequired, "absent in manifest should stay nil")
+
+	t.Run("propagates explicit profileRequired=false", func(t *testing.T) {
+		nameOptOut := "test-plugin-opt-out"
+		ff := false
+		pm := &PluginManifest{
+			Name:            nameOptOut,
+			Command:         "opt-out",
+			Description:     "opt-out",
+			ProfileRequired: &ff,
+		}
+		assert.NoError(t, mgr.savePluginToManifest(nameOptOut, version, extractDir, pm))
+		lm, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		got, ok := lm.Plugins[nameOptOut]
+		assert.True(t, ok)
+		assert.NotNil(t, got.ProfileRequired)
+		assert.False(t, *got.ProfileRequired)
+		assert.False(t, got.IsProfileRequired())
+	})
+
+	t.Run("propagates explicit profileRequired=true", func(t *testing.T) {
+		nameStrict := "test-plugin-strict"
+		tt := true
+		pm := &PluginManifest{
+			Name:            nameStrict,
+			Command:         "strict",
+			Description:     "strict",
+			ProfileRequired: &tt,
+		}
+		assert.NoError(t, mgr.savePluginToManifest(nameStrict, version, extractDir, pm))
+		lm, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		got, ok := lm.Plugins[nameStrict]
+		assert.True(t, ok)
+		assert.NotNil(t, got.ProfileRequired)
+		assert.True(t, *got.ProfileRequired)
+		assert.True(t, got.IsProfileRequired())
+	})
 }
 
 func TestManager_downloadAndVerifyPlugin(t *testing.T) {

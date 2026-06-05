@@ -980,6 +980,7 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 		Description:      pManifest.Description,
 		CmdNames:         pManifest.CmdNames,
 		Inner:            pManifest.Inner,
+		ProfileRequired:  pManifest.ProfileRequired,
 	}
 
 	return m.saveLocalManifest(localManifest)
