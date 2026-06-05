@@ -28,13 +28,38 @@ const (
 	EnvSourceIP = "ALIBABA_CLOUD_SOURCE_IP"
 	// EnvSecureTransport 调用方是否走安全传输。仅在为非空字符串时注入；值原样透传，由网关自行解析。
 	EnvSecureTransport = "ALIBABA_CLOUD_SECURE_TRANSPORT"
+	// EnvCallContextSkipProducts 自建网关产品扩展跳过列表（逗号分隔，大小写不敏感，附加到默认列表）。
+	EnvCallContextSkipProducts = "ALIBABA_CLOUD_CALL_CONTEXT_SKIP_PRODUCTS"
 
-	headerSourceIP        = "x-acs-source-ip"
-	headerSecureTransport = "x-acs-secure-transport"
-	queryKeySourceIP      = "SourceIp"
+	headerSourceIP          = "x-acs-source-ip"
+	headerSecureTransport   = "x-acs-secure-transport"
+	queryKeySourceIP        = "SourceIp"
 	queryKeySecureTransport = "SecureTransport"
 )
 
+// 已知使用自建网关 / 专属签名规则的产品
+var selfBuiltGatewayProducts = map[string]struct{}{
+	"sls": {},
+	"pds": {},
+}
+
+func shouldSkipCallContext(productCode string) bool {
+	code := strings.ToLower(strings.TrimSpace(productCode))
+	if code == "" {
+		return false
+	}
+	if _, ok := selfBuiltGatewayProducts[code]; ok {
+		return true
+	}
+	if extra := strings.TrimSpace(os.Getenv(EnvCallContextSkipProducts)); extra != "" {
+		for _, p := range strings.Split(extra, ",") {
+			if strings.ToLower(strings.TrimSpace(p)) == code {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 func callContextEnv() (sourceIP string, secureTransport string) {
 	sourceIP = strings.TrimSpace(os.Getenv(EnvSourceIP))
@@ -42,8 +67,8 @@ func callContextEnv() (sourceIP string, secureTransport string) {
 	return
 }
 
-func applyCallContextRPC(queryParams map[string]string) {
-	if queryParams == nil {
+func applyCallContextRPC(productCode string, queryParams map[string]string) {
+	if queryParams == nil || shouldSkipCallContext(productCode) {
 		return
 	}
 	sourceIP, secureTransport := callContextEnv()
@@ -59,8 +84,8 @@ func applyCallContextRPC(queryParams map[string]string) {
 	}
 }
 
-func applyCallContextROA(headers map[string]string) {
-	if headers == nil {
+func applyCallContextROA(productCode string, headers map[string]string) {
+	if headers == nil || shouldSkipCallContext(productCode) {
 		return
 	}
 	sourceIP, secureTransport := callContextEnv()
@@ -76,8 +101,11 @@ func applyCallContextROA(headers map[string]string) {
 	}
 }
 
-func applyCallContextTeaHeaders(headers map[string]*string) {
-	if headers == nil {
+// 用于 darabonba-openapi 风格请求（OpenapiContext / HttpContext）。
+// 该路径下 headers 为 map[string]*string，单独提供一个版本以避免重复装箱逻辑泄露给调用方。
+// 注意：当前主仓走该路径的产品（sls）本身就在跳过列表里。这里做产品判断只是为了让 helper 语义保持一致，便于后续接入新的 darabonba 产品时不踩坑。
+func applyCallContextTeaHeaders(productCode string, headers map[string]*string) {
+	if headers == nil || shouldSkipCallContext(productCode) {
 		return
 	}
 	sourceIP, secureTransport := callContextEnv()

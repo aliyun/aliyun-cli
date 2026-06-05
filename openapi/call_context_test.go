@@ -25,7 +25,7 @@ func TestApplyCallContextRPC(t *testing.T) {
 		t.Setenv(EnvSourceIP, "1.2.3.4")
 		t.Setenv(EnvSecureTransport, "true")
 		q := map[string]string{}
-		applyCallContextRPC(q)
+		applyCallContextRPC("ecs", q)
 		assert.Equal(t, "1.2.3.4", q[queryKeySourceIP])
 		assert.Equal(t, "true", q[queryKeySecureTransport])
 	})
@@ -34,7 +34,7 @@ func TestApplyCallContextRPC(t *testing.T) {
 		t.Setenv(EnvSourceIP, "10.0.0.1")
 		t.Setenv(EnvSecureTransport, "")
 		q := map[string]string{}
-		applyCallContextRPC(q)
+		applyCallContextRPC("ecs", q)
 		assert.Equal(t, "10.0.0.1", q[queryKeySourceIP])
 		_, ok := q[queryKeySecureTransport]
 		assert.False(t, ok)
@@ -44,7 +44,7 @@ func TestApplyCallContextRPC(t *testing.T) {
 		t.Setenv(EnvSourceIP, "")
 		t.Setenv(EnvSecureTransport, "false")
 		q := map[string]string{}
-		applyCallContextRPC(q)
+		applyCallContextRPC("ecs", q)
 		_, ok := q[queryKeySourceIP]
 		assert.False(t, ok)
 		assert.Equal(t, "false", q[queryKeySecureTransport])
@@ -54,7 +54,7 @@ func TestApplyCallContextRPC(t *testing.T) {
 		t.Setenv(EnvSourceIP, "")
 		t.Setenv(EnvSecureTransport, "")
 		q := map[string]string{}
-		applyCallContextRPC(q)
+		applyCallContextRPC("ecs", q)
 		assert.Empty(t, q)
 	})
 
@@ -65,7 +65,7 @@ func TestApplyCallContextRPC(t *testing.T) {
 			queryKeySourceIP:        "user-set",
 			queryKeySecureTransport: "user-set",
 		}
-		applyCallContextRPC(q)
+		applyCallContextRPC("ecs", q)
 		assert.Equal(t, "user-set", q[queryKeySourceIP])
 		assert.Equal(t, "user-set", q[queryKeySecureTransport])
 	})
@@ -73,7 +73,7 @@ func TestApplyCallContextRPC(t *testing.T) {
 	t.Run("nil map no panic", func(t *testing.T) {
 		t.Setenv(EnvSourceIP, "1.2.3.4")
 		assert.NotPanics(t, func() {
-			applyCallContextRPC(nil)
+			applyCallContextRPC("ecs", nil)
 		})
 	})
 
@@ -81,9 +81,34 @@ func TestApplyCallContextRPC(t *testing.T) {
 		t.Setenv(EnvSourceIP, "  1.2.3.4  ")
 		t.Setenv(EnvSecureTransport, "  true  ")
 		q := map[string]string{}
-		applyCallContextRPC(q)
+		applyCallContextRPC("ecs", q)
 		assert.Equal(t, "1.2.3.4", q[queryKeySourceIP])
 		assert.Equal(t, "true", q[queryKeySecureTransport])
+	})
+
+	t.Run("self-built gateway products are skipped", func(t *testing.T) {
+		t.Setenv(EnvSourceIP, "1.2.3.4")
+		t.Setenv(EnvSecureTransport, "true")
+		for _, code := range []string{"sls", "SLS", "pds", "PDS"} {
+			q := map[string]string{}
+			applyCallContextRPC(code, q)
+			assert.Empty(t, q, "expected %s to be skipped", code)
+		}
+	})
+
+	t.Run("env additive skip list", func(t *testing.T) {
+		t.Setenv(EnvSourceIP, "1.2.3.4")
+		t.Setenv(EnvSecureTransport, "true")
+		t.Setenv(EnvCallContextSkipProducts, "  Foo , bar ")
+		for _, code := range []string{"foo", "FOO", "Bar"} {
+			q := map[string]string{}
+			applyCallContextRPC(code, q)
+			assert.Empty(t, q, "expected %s to be skipped via env", code)
+		}
+		// Non-listed product still gets injected.
+		q := map[string]string{}
+		applyCallContextRPC("ecs", q)
+		assert.Equal(t, "1.2.3.4", q[queryKeySourceIP])
 	})
 }
 
@@ -92,7 +117,7 @@ func TestApplyCallContextROA(t *testing.T) {
 		t.Setenv(EnvSourceIP, "1.2.3.4")
 		t.Setenv(EnvSecureTransport, "true")
 		h := map[string]string{}
-		applyCallContextROA(h)
+		applyCallContextROA("cs", h)
 		assert.Equal(t, "1.2.3.4", h[headerSourceIP])
 		assert.Equal(t, "true", h[headerSecureTransport])
 	})
@@ -104,7 +129,7 @@ func TestApplyCallContextROA(t *testing.T) {
 			headerSourceIP:        "user-set",
 			headerSecureTransport: "user-set",
 		}
-		applyCallContextROA(h)
+		applyCallContextROA("cs", h)
 		assert.Equal(t, "user-set", h[headerSourceIP])
 		assert.Equal(t, "user-set", h[headerSecureTransport])
 	})
@@ -113,15 +138,25 @@ func TestApplyCallContextROA(t *testing.T) {
 		t.Setenv(EnvSourceIP, "")
 		t.Setenv(EnvSecureTransport, "")
 		h := map[string]string{}
-		applyCallContextROA(h)
+		applyCallContextROA("cs", h)
 		assert.Empty(t, h)
 	})
 
 	t.Run("nil map no panic", func(t *testing.T) {
 		t.Setenv(EnvSourceIP, "1.2.3.4")
 		assert.NotPanics(t, func() {
-			applyCallContextROA(nil)
+			applyCallContextROA("cs", nil)
 		})
+	})
+
+	t.Run("self-built gateway products are skipped", func(t *testing.T) {
+		t.Setenv(EnvSourceIP, "1.2.3.4")
+		t.Setenv(EnvSecureTransport, "true")
+		for _, code := range []string{"sls", "pds"} {
+			h := map[string]string{}
+			applyCallContextROA(code, h)
+			assert.Empty(t, h, "expected %s to be skipped", code)
+		}
 	})
 }
 
@@ -130,7 +165,7 @@ func TestApplyCallContextTeaHeaders(t *testing.T) {
 		t.Setenv(EnvSourceIP, "1.2.3.4")
 		t.Setenv(EnvSecureTransport, "true")
 		h := map[string]*string{}
-		applyCallContextTeaHeaders(h)
+		applyCallContextTeaHeaders("foo", h)
 		assert.Equal(t, "1.2.3.4", tea.StringValue(h[headerSourceIP]))
 		assert.Equal(t, "true", tea.StringValue(h[headerSecureTransport]))
 	})
@@ -141,7 +176,7 @@ func TestApplyCallContextTeaHeaders(t *testing.T) {
 		h := map[string]*string{
 			headerSourceIP: tea.String("user-set"),
 		}
-		applyCallContextTeaHeaders(h)
+		applyCallContextTeaHeaders("foo", h)
 		assert.Equal(t, "user-set", tea.StringValue(h[headerSourceIP]))
 		assert.Equal(t, "true", tea.StringValue(h[headerSecureTransport]))
 	})
@@ -149,7 +184,35 @@ func TestApplyCallContextTeaHeaders(t *testing.T) {
 	t.Run("nil map no panic", func(t *testing.T) {
 		t.Setenv(EnvSourceIP, "1.2.3.4")
 		assert.NotPanics(t, func() {
-			applyCallContextTeaHeaders(nil)
+			applyCallContextTeaHeaders("foo", nil)
 		})
+	})
+
+	t.Run("sls is skipped", func(t *testing.T) {
+		t.Setenv(EnvSourceIP, "1.2.3.4")
+		t.Setenv(EnvSecureTransport, "true")
+		h := map[string]*string{}
+		applyCallContextTeaHeaders("sls", h)
+		assert.Empty(t, h)
+	})
+}
+
+func TestShouldSkipCallContext(t *testing.T) {
+	t.Run("default skip list", func(t *testing.T) {
+		t.Setenv(EnvCallContextSkipProducts, "")
+		assert.True(t, shouldSkipCallContext("sls"))
+		assert.True(t, shouldSkipCallContext("SLS"))
+		assert.True(t, shouldSkipCallContext("  Pds "))
+		assert.False(t, shouldSkipCallContext("ecs"))
+		assert.False(t, shouldSkipCallContext(""))
+	})
+
+	t.Run("env extends defaults", func(t *testing.T) {
+		t.Setenv(EnvCallContextSkipProducts, "foo,bar, BAZ ")
+		assert.True(t, shouldSkipCallContext("sls"))
+		assert.True(t, shouldSkipCallContext("foo"))
+		assert.True(t, shouldSkipCallContext("BAR"))
+		assert.True(t, shouldSkipCallContext(" baz"))
+		assert.False(t, shouldSkipCallContext("ecs"))
 	})
 }
