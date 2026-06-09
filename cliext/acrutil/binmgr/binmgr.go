@@ -8,10 +8,8 @@ package binmgr
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -587,10 +585,7 @@ func filterEnv(base []string, overrides map[string]string) []string {
 
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
-	if err != nil {
-		return !errors.Is(err, fs.ErrNotExist)
-	}
-	return true
+	return err == nil
 }
 
 // BaseStripFlags returns the standard set of parent-CLI long flag names that
