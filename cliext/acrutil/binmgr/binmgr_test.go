@@ -472,6 +472,7 @@ func TestNeedCheckVersion(t *testing.T) {
 	tmp := t.TempDir()
 	ctx, _, _ := newOriginCtx()
 	m := New(testConfig(), ctx)
+	m.versionFilePath = filepath.Join(tmp, ".test-bin_version")
 	m.checkVersionCacheFilePath = filepath.Join(tmp, ".test-bin_version_check")
 	m.installed = false
 
@@ -480,6 +481,16 @@ func TestNeedCheckVersion(t *testing.T) {
 		t.Errorf("not installed should return false")
 	}
 	m.installed = true
+
+	// no version file (legacy install) → true regardless of cache
+	if !m.NeedCheckVersion() {
+		t.Errorf("missing version file should return true (legacy install)")
+	}
+
+	// Create version file so subsequent tests exercise the cache logic.
+	if err := os.WriteFile(m.versionFilePath, []byte("v1.0.0\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	// no cache file → true
 	if !m.NeedCheckVersion() {
@@ -540,6 +551,14 @@ func TestNeedCheckVersion(t *testing.T) {
 	m.timeNowFn = func() time.Time { return time.Unix(1000+int64(VersionCheckTTL.Seconds())-1, 0) }
 	if m.NeedCheckVersion() {
 		t.Errorf("within TTL should return false")
+	}
+
+	// missing version file overrides fresh cache → true (legacy binary upgrade)
+	m.timeNowFn = time.Now
+	mustWrite(fmt.Sprintf("%d", time.Now().Unix()))
+	_ = os.Remove(m.versionFilePath)
+	if !m.NeedCheckVersion() {
+		t.Errorf("missing version file with fresh cache should still return true")
 	}
 }
 
@@ -941,6 +960,10 @@ func TestRun_Installed_SkipDownload(t *testing.T) {
 	if err := os.WriteFile(execFile, []byte("#!/bin/sh\n"), 0755); err != nil {
 		t.Fatalf("write exec: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(cfgDir, ".test-bin_version"),
+		[]byte("v1.0.0\n"), 0644); err != nil {
+		t.Fatalf("write version: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(cfgDir, ".test-bin_version_check"),
 		[]byte(fmt.Sprintf("%d", time.Now().Unix())), 0644); err != nil {
 		t.Fatalf("write cache: %v", err)
@@ -1136,12 +1159,12 @@ func TestParseVersionParts(t *testing.T) {
 		{"v0.1.0-a1b2c3d", "v0.1.0", "a1b2c3d", true},
 		{"v1.2.3-abcdef1234567", "v1.2.3", "abcdef1234567", true},
 		{"v0.1.0-ABCDEF1", "v0.1.0", "ABCDEF1", true},
-		{"abc1234", "", "abc1234", false},              // 无 semver 前缀
-		{"v0.1.0", "", "v0.1.0", false},                  // 无 commit 后缀
-		{"v0.1.0-short", "", "v0.1.0-short", false},       // commit 太短（不是 hex）
-		{"v0.1.0-xyz1234", "", "v0.1.0-xyz1234", false},   // 非 hex 字符
+		{"abc1234", "", "abc1234", false},               // 无 semver 前缀
+		{"v0.1.0", "", "v0.1.0", false},                 // 无 commit 后缀
+		{"v0.1.0-short", "", "v0.1.0-short", false},     // commit 太短（不是 hex）
+		{"v0.1.0-xyz1234", "", "v0.1.0-xyz1234", false}, // 非 hex 字符
 		{"", "", "", false},
-		{"-a1b2c3d", "", "-a1b2c3d", false},                // 空 semver 部分
+		{"-a1b2c3d", "", "-a1b2c3d", false}, // 空 semver 部分
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {

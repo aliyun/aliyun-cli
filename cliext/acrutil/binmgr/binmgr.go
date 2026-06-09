@@ -277,9 +277,15 @@ func (m *Manager) EnsureInstalledAndUpdated(ctx context.Context) error {
 
 // NeedCheckVersion returns true if the cached check timestamp is stale,
 // missing, corrupted, or in the future (clock skew protection).
+// It also returns true when the version file is absent — this covers legacy
+// installs (e.g. an old acr-skill without version tracking) that must be
+// upgraded to a version-aware build.
 func (m *Manager) NeedCheckVersion() bool {
 	if !m.installed {
 		return false
+	}
+	if !fileExists(m.versionFilePath) {
+		return true
 	}
 	if !fileExists(m.checkVersionCacheFilePath) {
 		return true
