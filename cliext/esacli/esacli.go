@@ -376,7 +376,7 @@ func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 func (c *Context) PrepareEnv() ([]string, error) {
 	profile, err := config.LoadProfileWithContext(c.originCtx)
 	if err != nil {
-		return os.Environ(), nil
+		return nil, fmt.Errorf("config failed: %s", err.Error())
 	}
 	if c.originCtx != nil && c.originCtx.Flags() != nil {
 		profile.OverwriteWithFlags(c.originCtx)
@@ -392,26 +392,20 @@ func (c *Context) PrepareEnv() ([]string, error) {
 		accessKeyId = profile.AccessKeyId
 		accessKeySecret = profile.AccessKeySecret
 		stsToken = profile.StsToken
-	case config.RamRoleArn:
-		cred, err := profile.GetCredential(c.originCtx, nil)
+	default:
+		credential, err := profile.GetCredential(c.originCtx, nil)
 		if err != nil {
-			return os.Environ(), nil
+			return nil, fmt.Errorf("can't get credential: %s", err)
 		}
-		model, err := cred.GetCredential()
+		model, err := credential.GetCredential()
 		if err != nil {
-			return os.Environ(), nil
+			return nil, fmt.Errorf("can't get credential: %s", err)
 		}
-		if model.AccessKeyId != nil {
-			accessKeyId = *model.AccessKeyId
-		}
-		if model.AccessKeySecret != nil {
-			accessKeySecret = *model.AccessKeySecret
-		}
+		accessKeyId = *model.AccessKeyId
+		accessKeySecret = *model.AccessKeySecret
 		if model.SecurityToken != nil {
 			stsToken = *model.SecurityToken
 		}
-	default:
-		return os.Environ(), nil
 	}
 
 	envs := os.Environ()
@@ -447,7 +441,10 @@ func (c *Context) PrepareEnv() ([]string, error) {
 // child to see real TTY fds, not io.Writer adapters).
 func (c *Context) ExecuteEsacli(args []string) error {
 	cmd := execCommandFunc(c.execFilePath, args...)
-	envs, _ := c.PrepareEnv()
+	envs, err := c.PrepareEnv()
+	if err != nil {
+		return err
+	}
 	cmd.Env = envs
 	cmd.Stdout = c.originCtx.Stdout()
 	cmd.Stderr = c.originCtx.Stderr()
