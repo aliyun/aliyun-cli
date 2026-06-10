@@ -268,3 +268,48 @@ func TestPluginIndex_ParseRealWorld(t *testing.T) {
 		t.Errorf("Version 0.0.9 should have 1 platform, got %d", len(ver009.Platforms))
 	}
 }
+
+func TestLocalPlugin_IsProfileRequired(t *testing.T) {
+	tt := true
+	ff := false
+	tests := []struct {
+		name string
+		lp   *LocalPlugin
+		want bool
+	}{
+		{name: "nil receiver defaults to required", lp: nil, want: true},
+		{name: "absent field defaults to required", lp: &LocalPlugin{Name: "x"}, want: true},
+		{name: "explicit true is required", lp: &LocalPlugin{Name: "x", ProfileRequired: &tt}, want: true},
+		{name: "explicit false opts out", lp: &LocalPlugin{Name: "x", ProfileRequired: &ff}, want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.lp.IsProfileRequired(); got != tc.want {
+				t.Fatalf("IsProfileRequired() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPluginManifest_ProfileRequiredJSONRoundTrip(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want *bool
+	}{
+		{name: "absent", raw: `{"name":"x","version":"1","command":"x","bin":{"path":"x"}}`, want: nil},
+		{name: "explicit_true", raw: `{"name":"x","version":"1","command":"x","bin":{"path":"x"},"profileRequired":true}`, want: func() *bool { b := true; return &b }()},
+		{name: "explicit_false", raw: `{"name":"x","version":"1","command":"x","bin":{"path":"x"},"profileRequired":false}`, want: func() *bool { b := false; return &b }()},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var m PluginManifest
+			if err := json.Unmarshal([]byte(tc.raw), &m); err != nil {
+				t.Fatalf("Unmarshal: %v", err)
+			}
+			if !reflect.DeepEqual(m.ProfileRequired, tc.want) {
+				t.Fatalf("ProfileRequired = %v, want %v", m.ProfileRequired, tc.want)
+			}
+		})
+	}
+}

@@ -129,6 +129,150 @@ func TestPolicy_Check_Plugin(t *testing.T) {
 	assert.Equal(t, ActionDeny, result.Action)
 }
 
+// Multi-segment plugin commands (`aliyun fc function create`) are joined with
+// ':' by the dispatcher so the hierarchy separator stays consistent with the
+// `product:command` convention. Rules can target either the exact path or use
+// wildcards.
+func TestPolicy_Check_MultiSegmentPlugin(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		cmd     CommandInfo
+		match   bool
+	}{
+		{
+			name:    "exact multi-segment match",
+			pattern: "fc:function:create",
+			cmd:     CommandInfo{Product: "fc", ApiOrMethod: "function:create"},
+			match:   true,
+		},
+		{
+			name:    "wildcard on first segment",
+			pattern: "fc:function:*",
+			cmd:     CommandInfo{Product: "fc", ApiOrMethod: "function:delete"},
+			match:   true,
+		},
+		{
+			name:    "wildcard catches trailing positional value",
+			pattern: "fc:invoke:*",
+			cmd:     CommandInfo{Product: "fc", ApiOrMethod: "invoke:my-function"},
+			match:   true,
+		},
+		{
+			name:    "loose star also works",
+			pattern: "fc:function*",
+			cmd:     CommandInfo{Product: "fc", ApiOrMethod: "function:create:my-fn"},
+			match:   true,
+		},
+		{
+			name:    "non-matching pattern stays allowed",
+			pattern: "fc:function:create",
+			cmd:     CommandInfo{Product: "fc", ApiOrMethod: "function:update"},
+			match:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			policy := &Policy{
+				Enabled: true,
+				Rules:   []Rule{{Pattern: tt.pattern, Action: ActionDeny}},
+			}
+			result := policy.Check(tt.cmd)
+			assert.Equal(t, tt.match, result.Matched)
+			if tt.match {
+				assert.Equal(t, ActionDeny, result.Action)
+			}
+		})
+	}
+}
+
+// User configures a rule using the OpenAPI ApiName they actually typed
+// (`aliyun sls ListProject`). Safety must treat the user-typed ApiOrMethod as
+// the canonical command identifier, regardless of how the cli later
+// dispatches it (REST GET / under the hood).
+func TestPolicy_Check_RESTByApiName(t *testing.T) {
+	policy := &Policy{
+		Enabled: true,
+		Rules: []Rule{
+			{Pattern: "sls:ListProject", Action: ActionDeny},
+		},
+	}
+	cmd := CommandInfo{Product: "sls", ApiOrMethod: "ListProject"}
+	result := policy.Check(cmd)
+	assert.True(t, result.Matched)
+	assert.Equal(t, ActionDeny, result.Action)
+	assert.Equal(t, "sls:ListProject", result.Rule.Pattern)
+}
+
+// Three-segment REST commands (`aliyun cs DELETE /clusters`) are matched as
+// product:METHOD/path; the `*:DELETE*` wildcard pattern keeps working.
+func TestPolicy_Check_RESTByMethodPath(t *testing.T) {
+	policy := &Policy{
+		Enabled: true,
+		Rules: []Rule{
+			{Pattern: "cs:DELETE/*", Action: ActionDeny},
+		},
+	}
+	cmd := CommandInfo{Product: "cs", ApiOrMethod: "DELETE", Path: "/clusters/abc"}
+	result := policy.Check(cmd)
+	assert.True(t, result.Matched)
+	assert.Equal(t, ActionDeny, result.Action)
+}
+
+// `*:DELETE*` should match both two-segment REST `aliyun sls DELETE /...` and
+// classic RPC delete-style API names.
+func TestPolicy_Check_DeleteWildcardCoversBothStyles(t *testing.T) {
+	policy := &Policy{
+		Enabled: true,
+		Rules: []Rule{
+			{Pattern: "*:Delete*", Action: ActionDeny},
+		},
+	}
+
+	rest := policy.Check(CommandInfo{Product: "cs", ApiOrMethod: "DELETE", Path: "/clusters"})
+	assert.True(t, rest.Matched)
+	assert.Equal(t, ActionDeny, rest.Action)
+
+	rpc := policy.Check(CommandInfo{Product: "ecs", ApiOrMethod: "DeleteInstance"})
+	assert.True(t, rpc.Matched)
+	assert.Equal(t, ActionDeny, rpc.Action)
+}
+
+func TestBuildCommandPattern(t *testing.T) {
+	tests := []struct {
+		name string
+		cmd  CommandInfo
+		want string
+	}{
+		{
+			name: "RPC two-segment",
+			cmd:  CommandInfo{Product: "ECS", ApiOrMethod: "DeleteInstance"},
+			want: "ecs:DeleteInstance",
+		},
+		{
+			name: "REST two-segment by ApiName",
+			cmd:  CommandInfo{Product: "sls", ApiOrMethod: "ListProject"},
+			want: "sls:ListProject",
+		},
+		{
+			name: "REST three-segment by method+path",
+			cmd:  CommandInfo{Product: "cs", ApiOrMethod: "delete", Path: "/clusters"},
+			want: "cs:DELETE/clusters",
+		},
+		{
+			name: "plugin sub-command",
+			cmd:  CommandInfo{Product: "fc", ApiOrMethod: "delete-function"},
+			want: "fc:delete-function",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildCommandPattern(tt.cmd)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestMatchPattern(t *testing.T) {
 	tests := []struct {
 		pattern string

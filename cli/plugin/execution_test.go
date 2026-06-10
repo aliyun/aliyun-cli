@@ -703,3 +703,58 @@ func envSliceToMap(envs []string) map[string]string {
 	}
 	return m
 }
+
+func TestIsProfileRequiredForCommand(t *testing.T) {
+	writeManifest := func(t *testing.T, testHome, body string) {
+		t.Helper()
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		assert.NoError(t, os.MkdirAll(filepath.Dir(manifestPath), 0755))
+		assert.NoError(t, os.WriteFile(manifestPath, []byte(body), 0644))
+	}
+
+	t.Run("plugin not installed defaults to required", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+		writeManifest(t, testHome, `{"plugins":{}}`)
+
+		assert.True(t, IsProfileRequiredForCommand("rdc"))
+	})
+
+	t.Run("manifest entry without profileRequired defaults to required", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+		writeManifest(t, testHome, `{"plugins":{"aliyun-cli-rdc":{"name":"aliyun-cli-rdc","version":"1.0.0","path":"/x","command":"rdc"}}}`)
+
+		assert.True(t, IsProfileRequiredForCommand("rdc"))
+	})
+
+	t.Run("explicit profileRequired=false opts the command out", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+		writeManifest(t, testHome, `{"plugins":{"aliyun-cli-rdc":{"name":"aliyun-cli-rdc","version":"1.0.0","path":"/x","command":"rdc","profileRequired":false}}}`)
+
+		assert.False(t, IsProfileRequiredForCommand("rdc"))
+	})
+
+	t.Run("explicit profileRequired=true keeps strict enforcement", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+		writeManifest(t, testHome, `{"plugins":{"aliyun-cli-rdc":{"name":"aliyun-cli-rdc","version":"1.0.0","path":"/x","command":"rdc","profileRequired":true}}}`)
+
+		assert.True(t, IsProfileRequiredForCommand("rdc"))
+	})
+
+	t.Run("short-name and case-insensitive lookup honors the flag", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+		writeManifest(t, testHome, `{"plugins":{"aliyun-cli-rdc":{"name":"aliyun-cli-rdc","version":"1.0.0","path":"/x","command":"rdc","profileRequired":false}}}`)
+
+		assert.False(t, IsProfileRequiredForCommand("RDC"))
+		assert.False(t, IsProfileRequiredForCommand("aliyun-cli-rdc"))
+	})
+}

@@ -31,6 +31,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 )
 
 // setTestHomeDir sets the test home directory for cross-platform testing.
@@ -2380,6 +2381,130 @@ func TestMain_PluginExecution_ProfileFailFast(t *testing.T) {
 	})
 }
 
+// TestMain_PluginExecution_LenientProfile mirrors ProfileFailFast but for
+// plugins that opt out via `profileRequired: false`. The contract:
+//   - bad / missing profile must NOT abort the call before the plugin runs;
+//     instead the plugin process is invoked with a baseline env.
+//   - we still surface plugin-level errors (e.g. missing binary), so we
+//     assert the failure point shifted from profile-validation to plugin
+//     execution.
+func TestMain_PluginExecution_LenientProfile(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	bootProfile := config.Profile{
+		Name:     "AkProfile",
+		Language: "en",
+		RegionId: "cn-hangzhou",
+	}
+	command := NewCommando(w, bootProfile)
+
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	config.AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+
+	// Plugin manifest declares profileRequired=false. The bad-oauth profile
+	// would normally fail Profile.Validate; lenient mode must swallow that
+	// and still attempt to spawn the plugin (which then fails with a binary
+	// resolution error because we don't actually drop a real binary).
+	t.Run("invalid profile is bypassed when plugin opts out via profileRequired=false", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		dir := filepath.Join(testHome, ".aliyun")
+		os.MkdirAll(dir, 0755)
+		os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{
+  "current": "AkProfile",
+  "profiles": [
+    {"name":"AkProfile","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou"},
+    {"name":"bad-oauth","mode":"OAuth","region_id":"cn-hangzhou"}
+  ]
+}`), 0644)
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		pluginPath := filepath.Join(pluginDir, "rdc")
+		os.MkdirAll(pluginPath, 0755)
+		manifestPath := filepath.Join(pluginDir, "manifest.json")
+		manifest := fmt.Sprintf(`{
+  "plugins": {
+    "rdc": {
+      "name": "rdc",
+      "version": "1.0.0",
+      "path": %q,
+      "profileRequired": false
+    }
+  }
+}`, pluginPath)
+		os.WriteFile(manifestPath, []byte(manifest), 0644)
+
+		config.ProfileFlag(ctx.Flags()).SetAssigned(true)
+		config.ProfileFlag(ctx.Flags()).SetValue("bad-oauth")
+		defer func() { config.ProfileFlag(ctx.Flags()).SetAssigned(false) }()
+
+		os.Args = []string{"aliyun", "rdc", "list", "--profile", "bad-oauth"}
+		args := []string{"rdc", "list"}
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.NotContains(t, err.Error(), "oauth_site_type",
+			"profileRequired=false 的插件不应被 profile 校验阻塞")
+		assert.Contains(t, err.Error(), "failed to resolve plugin binary",
+			"宽松路径下应继续到 ExecutePlugin，错误来自 binary 解析阶段")
+	})
+
+	// Even when no profile exists at all (no config.json on disk),
+	// profileRequired=false plugins must still execute end-to-end up to the
+	// plugin binary stage.
+	t.Run("missing profile config does not block opted-out plugin", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		// Reset profile flag possibly set by previous subtests.
+		config.ProfileFlag(ctx.Flags()).SetAssigned(false)
+		config.ProfileFlag(ctx.Flags()).SetValue("")
+
+		// Intentionally do NOT write config.json — profile loading will
+		// either return an empty profile or fail; either way, lenient mode
+		// must keep going.
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		pluginPath := filepath.Join(pluginDir, "rdc")
+		os.MkdirAll(pluginPath, 0755)
+		manifestPath := filepath.Join(pluginDir, "manifest.json")
+		manifest := fmt.Sprintf(`{
+  "plugins": {
+    "rdc": {
+      "name": "rdc",
+      "version": "1.0.0",
+      "path": %q,
+      "profileRequired": false
+    }
+  }
+}`, pluginPath)
+		os.WriteFile(manifestPath, []byte(manifest), 0644)
+
+		os.Args = []string{"aliyun", "rdc", "list"}
+		args := []string{"rdc", "list"}
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.NotContains(t, err.Error(), "profile not found",
+			"profileRequired=false 不应触发 'profile not found' 报错")
+		assert.NotContains(t, err.Error(), "Configuration failed",
+			"profileRequired=false 不应触发 Configuration failed 报错")
+		assert.Contains(t, err.Error(), "failed to resolve plugin binary",
+			"宽松路径下错误应来自 binary 解析阶段")
+	})
+}
+
 func TestPluginExecutionLogic(t *testing.T) {
 	// Setup test environment
 	stdout := new(bytes.Buffer)
@@ -3163,5 +3288,210 @@ func TestSetLangEnv(t *testing.T) {
 		envs := ctx.GetRuntimeEnvs()
 		assert.Equal(t, "en_US.UTF-8", envs["LANG"])
 		assert.Equal(t, "bar", envs["FOO"], "existing entries must be kept")
+	})
+}
+
+// writeSafetyPolicy writes a safety-policy.json under ~/.aliyun in testHome and
+// makes sure no leftover env override is present, so the policy on disk is the
+// one that actually takes effect during the test.
+func writeSafetyPolicy(t *testing.T, testHome string, rules []safety.Rule) {
+	t.Helper()
+
+	for _, k := range []string{safety.EnvSafetyPolicyEnabled, safety.EnvSafetyPolicyRules} {
+		prev, had := os.LookupEnv(k)
+		os.Unsetenv(k)
+		t.Cleanup(func() {
+			if had {
+				os.Setenv(k, prev)
+			} else {
+				os.Unsetenv(k)
+			}
+		})
+	}
+
+	dir := filepath.Join(testHome, ".aliyun")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("mkdir %s: %v", dir, err)
+	}
+	if err := safety.SavePolicy(dir, &safety.Policy{Enabled: true, Rules: rules}); err != nil {
+		t.Fatalf("save safety policy: %v", err)
+	}
+}
+
+// newSafetyCommandoTestCtx builds a ctx + commando wired with the standard
+// flags so command.main can run end-to-end. Mirrors the setup used by other
+// integration tests in this file.
+func newSafetyCommandoTestCtx(t *testing.T) (*cli.Context, *Commando) {
+	t.Helper()
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "test-ak",
+		AccessKeySecret: "test-sk",
+		RegionId:        "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	config.AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+	return ctx, command
+}
+
+// TestMain_SafetyPolicyEnforcement guards the three safety-policy call sites
+// in commando.main: the plugin dispatch path, the 2-arg RPC/REST-by-ApiName
+// path and the 3-arg REST-by-method/path path. Each subtest writes a deny
+// rule shaped exactly like what users type and asserts that command.main
+// short-circuits with the canonical "blocked by safety policy" error before
+// any actual API / plugin execution kicks in.
+func TestMain_SafetyPolicyEnforcement(t *testing.T) {
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+
+	t.Run("2-arg RPC: rule on ApiName blocks the call", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+		writeMinimalConfigJSON(t, testHome)
+		writeSafetyPolicy(t, testHome, []safety.Rule{
+			{Pattern: "ecs:DeleteInstance", Action: safety.ActionDeny},
+		})
+
+		ctx, command := newSafetyCommandoTestCtx(t)
+		os.Args = []string{"aliyun", "ecs", "DeleteInstance"}
+		args := []string{"ecs", "DeleteInstance"}
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "blocked by safety policy")
+		assert.Contains(t, err.Error(), "ecs:DeleteInstance",
+			"matched rule pattern should be reported back")
+	})
+
+	t.Run("2-arg ROA invoked by ApiName: rule on ApiName blocks the call", func(t *testing.T) {
+		// Regression for the original bug: `aliyun sls ListProject` is
+		// dispatched as REST GET / under the hood, but a rule keyed on the
+		// ApiName the user actually typed must still match.
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+		writeMinimalConfigJSON(t, testHome)
+		writeSafetyPolicy(t, testHome, []safety.Rule{
+			{Pattern: "sls:ListProject", Action: safety.ActionDeny},
+		})
+
+		ctx, command := newSafetyCommandoTestCtx(t)
+		os.Args = []string{"aliyun", "sls", "ListProject"}
+		args := []string{"sls", "ListProject"}
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "blocked by safety policy")
+		assert.Contains(t, err.Error(), "sls:ListProject")
+	})
+
+	t.Run("3-arg REST: rule on METHOD/path blocks the call", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+		writeMinimalConfigJSON(t, testHome)
+		writeSafetyPolicy(t, testHome, []safety.Rule{
+			{Pattern: "cs:DELETE/*", Action: safety.ActionDeny},
+		})
+
+		ctx, command := newSafetyCommandoTestCtx(t)
+		ForceFlag(ctx.Flags()).SetAssigned(true) // skip metadata lookup for path
+		os.Args = []string{"aliyun", "cs", "DELETE", "/clusters/abc"}
+		args := []string{"cs", "DELETE", "/clusters/abc"}
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "blocked by safety policy")
+		assert.Contains(t, err.Error(), "cs:DELETE/*")
+	})
+
+	t.Run("plugin multi-segment: colon-joined rule blocks the call", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+		writeMinimalConfigJSON(t, testHome)
+		writeSafetyPolicy(t, testHome, []safety.Rule{
+			{Pattern: "fc:function:create", Action: safety.ActionDeny},
+		})
+
+		// Pretend the plugin is installed so commando.main proceeds past the
+		// "is plugin installed?" gate and reaches the safety check.
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		pluginPath := filepath.Join(pluginDir, "fc")
+		if err := os.MkdirAll(pluginPath, 0755); err != nil {
+			t.Fatalf("mkdir plugin dir: %v", err)
+		}
+		manifest := fmt.Sprintf(`{
+  "plugins": {
+    "fc": {
+      "name": "fc",
+      "version": "1.0.0",
+      "path": %q
+    }
+  }
+}`, pluginPath)
+		if err := os.WriteFile(filepath.Join(pluginDir, "manifest.json"), []byte(manifest), 0644); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+
+		ctx, command := newSafetyCommandoTestCtx(t)
+		os.Args = []string{"aliyun", "fc", "function", "create"}
+		args := []string{"fc", "function", "create"}
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "blocked by safety policy")
+		assert.Contains(t, err.Error(), "fc:function:create")
+	})
+
+	t.Run("plugin single-segment: rule on sub-command blocks the call", func(t *testing.T) {
+		// Single-segment plugins (`aliyun fc create-function`) must keep
+		// matching the historical `product:sub-command` form.
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+		writeMinimalConfigJSON(t, testHome)
+		writeSafetyPolicy(t, testHome, []safety.Rule{
+			{Pattern: "fc:create-function", Action: safety.ActionDeny},
+		})
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		pluginPath := filepath.Join(pluginDir, "fc")
+		if err := os.MkdirAll(pluginPath, 0755); err != nil {
+			t.Fatalf("mkdir plugin dir: %v", err)
+		}
+		manifest := fmt.Sprintf(`{
+  "plugins": {
+    "fc": {
+      "name": "fc",
+      "version": "1.0.0",
+      "path": %q
+    }
+  }
+}`, pluginPath)
+		if err := os.WriteFile(filepath.Join(pluginDir, "manifest.json"), []byte(manifest), 0644); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+
+		ctx, command := newSafetyCommandoTestCtx(t)
+		os.Args = []string{"aliyun", "fc", "create-function"}
+		args := []string{"fc", "create-function"}
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "blocked by safety policy")
+		assert.Contains(t, err.Error(), "fc:create-function")
 	})
 }

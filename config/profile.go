@@ -784,6 +784,31 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 	return envs, nil
 }
 
+// Intentionally NOT included (compare with GetRuntimeEnv above):
+//   - access keys, STS tokens, bearer tokens — host-side credentials must never be silently forwarded; the plugin is expected to resolve auth itself (registered CredentialResolver, ALIBABA_CLOUD_BEARER_TOKEN, ...)
+//   - any field that would only exist on a Profile (endpoint type, timeouts, retry count, external account type).
+func BuildBaselineEnv(ctx *cli.Context) map[string]string {
+	envs := map[string]string{
+		"ALIBABA_CLOUD_CLI_VERSION": cli.GetVersion(),
+	}
+	if region, ok := RegionFlag(ctx.Flags()).GetValue(); ok && region != "" {
+		envs["ALIBABA_CLOUD_REGION_ID"] = region
+	} else if v := util.GetFromEnv("ALIBABA_CLOUD_REGION_ID"); v != "" {
+		envs["ALIBABA_CLOUD_REGION_ID"] = v
+	}
+	if endpoint, ok := EndpointFlag(ctx.Flags()).GetValue(); ok && endpoint != "" {
+		envs["ALIBABA_CLOUD_ENDPOINT"] = endpoint
+	} else if v := util.GetFromEnv("ALIBABA_CLOUD_ENDPOINT"); v != "" {
+		envs["ALIBABA_CLOUD_ENDPOINT"] = v
+	}
+	if lang, ok := LanguageFlag(ctx.Flags()).GetValue(); ok && lang != "" {
+		envs["ALIBABA_CLOUD_LANGUAGE"] = lang
+	} else if v := util.GetFromEnv("ALIBABA_CLOUD_LANGUAGE"); v != "" {
+		envs["ALIBABA_CLOUD_LANGUAGE"] = v
+	}
+	return envs
+}
+
 func IsRegion(region string) bool {
 	if match, _ := regexp.MatchString("^[a-zA-Z0-9-]*$", region); !match {
 		return false

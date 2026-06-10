@@ -69,11 +69,22 @@ type CheckResult struct {
 }
 
 type CommandInfo struct {
-	Product string // e.g., "ecs", "cs"
-	// For RPC: ApiName like "DeleteInstance", "UpdateInstance"
-	// For REST: HTTP method like "DELETE", "PUT", "POST"
+	Product string // e.g., "ecs", "cs", "sls"
+	// ApiOrMethod is whatever the user typed as the second positional arg
+	// (and any trailing positionals for plugins). Examples:
+	//   RPC                              -> ApiName            (e.g. "DeleteInstance")
+	//   RESTful invoked by ApiName       -> ApiName            (e.g. "ListProject")
+	//   RESTful invoked by HTTP method   -> METHOD             (e.g. "GET", "DELETE")
+	//   plugin (single segment)          -> sub-command        (e.g. "delete-function")
+	//   plugin (multi segment)           -> "<sub>:<sub>:..."  (e.g. "function:create", "invoke:my-fn")
+	// In other words, safety always sees the command exactly as the user typed it,
+	// with ':' acting as the canonical hierarchy separator (the same one used between
+	// product and the command), so a rule like `sls:ListProject` matches
+	// `aliyun sls ListProject`, `*:DELETE` matches `aliyun cs DELETE /clusters`,
+	// and `fc:function:*` matches `aliyun fc function create ...`.
 	ApiOrMethod string
-	// For REST only: path like "/clusters"
+	// Path is only set for REST style invocations that supply a path
+	// (e.g. `aliyun cs DELETE /clusters` -> Path = "/clusters").
 	Path string
 }
 
@@ -82,9 +93,6 @@ func (p *Policy) Check(cmd CommandInfo) CheckResult {
 		return CheckResult{Action: ActionAllow, Matched: false}
 	}
 
-	// Build command identifier for matching
-	// RPC: product:ApiName (e.g., ecs:DeleteInstance)
-	// REST: product:METHOD or product:METHOD/path (e.g., cs:DELETE, cs:DELETE/clusters)
 	cmdPattern := buildCommandPattern(cmd)
 
 	// Rules are evaluated in order; first match wins
@@ -109,12 +117,19 @@ func (p *Policy) Check(cmd CommandInfo) CheckResult {
 	return CheckResult{Action: ActionAllow, Matched: false}
 }
 
+// buildCommandPattern renders the user-typed command as a single identifier:
+//
+//	product:ApiOrMethod          (two-segment commands: RPC, REST-by-ApiName, plugin)
+//	product:METHOD/path          (three-segment REST commands)
+//
+// Product is always lowercased; 
+// HTTP methods are upper-cased so rules like `*:DELETE` work regardless of how the user typed the verb. 
+// ApiOrMethod preserves the original casing because matching itself is case-insensitive.
 func buildCommandPattern(cmd CommandInfo) string {
 	product := strings.ToLower(cmd.Product)
 	if cmd.Path != "" {
 		return fmt.Sprintf("%s:%s%s", product, strings.ToUpper(cmd.ApiOrMethod), cmd.Path)
 	}
-	// RPC: product:ApiName (preserve case for API names like DeleteInstance)
 	return fmt.Sprintf("%s:%s", product, cmd.ApiOrMethod)
 }
 
