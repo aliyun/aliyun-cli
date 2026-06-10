@@ -3940,3 +3940,20 @@ func TestManager_FindPluginByCommand(t *testing.T) {
 		assert.Contains(t, err.Error(), "no plugin found for command: fc")
 	})
 }
+
+func TestHttpGet_AcceptEncodingIdentity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "identity", r.Header.Get("Accept-Encoding"))
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	resp, err := httpGet(server.URL, 5*time.Second)
+	assert.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, "ok", string(body))
+}
