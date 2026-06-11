@@ -7,7 +7,7 @@ import (
 )
 
 var diagnosisConfig = binmgr.Config{
-	Name:             "diagnosis",
+	Name:             "acr-diagnosis",
 	BaseURL:          "https://acr-public-asset.oss-cn-hangzhou.aliyuncs.com/cr-diagnosis/",
 	EnvCompatMode:    "ALIBABA_CLOUD_CR_DIAG_COMPAT_MODE",
 	EnvCompatModeVal: "aliyun acrutil diagnosis",

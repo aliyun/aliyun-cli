@@ -84,7 +84,7 @@ func TestDiagnosisExecute_UserAgentEnvPassed(t *testing.T) {
 }
 
 func TestDiagnosisConfig(t *testing.T) {
-	if diagnosisConfig.Name != "diagnosis" {
+	if diagnosisConfig.Name != "acr-diagnosis" {
 		t.Errorf("Name: got %s", diagnosisConfig.Name)
 	}
 	if diagnosisConfig.BaseURL != "https://acr-public-asset.oss-cn-hangzhou.aliyuncs.com/cr-diagnosis/" {
