@@ -844,6 +844,10 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 		cmd.PrintHead(ctx)
 		return c.printApiUsage(ctx, args[0], args[1])
 	} else {
+		// Layer 3: plugin sub-command help (3+ levels deep).
+		if delegated, derr := c.tryDelegatePluginHelp(ctx, args); delegated {
+			return derr
+		}
 		return fmt.Errorf("too many arguments: %d", len(args))
 	}
 }

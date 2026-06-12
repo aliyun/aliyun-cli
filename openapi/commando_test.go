@@ -363,7 +363,14 @@ func Test_help(t *testing.T) {
 	args = []string{"test", "test0", "test1"}
 	err = command.help(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "too many arguments: 3", err.Error())
+	// tryDelegatePluginHelp's tier-3 diagnostic now intercepts this case
+	// (args[0]="test" is neither an installed plugin nor a built-in
+	// product) and surfaces a far more actionable error than the legacy
+	// "too many arguments: 3" — which previously pointed at the wrong
+	// problem (the user's real issue is the unknown product name). See
+	// Test_tryDelegatePluginHelp_* in commando_help_test.go for the full
+	// tier-by-tier coverage.
+	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
 }
 
 func Test_complete(t *testing.T) {
