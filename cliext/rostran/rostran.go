@@ -46,6 +46,7 @@ var (
 	downloadAndExtractFunc      = DownloadAndExtract
 	execCommandFunc             = exec.Command
 	httpGetFunc                 = downloadHTTPGet
+	moveDirFunc                 = moveDir
 	runtimeGOOSFunc             = func() string { return runtime.GOOS }
 	runtimeGOARCHFunc           = func() string { return runtime.GOARCH }
 	timeNowFunc                 = func() time.Time { return time.Now() }
@@ -220,18 +221,58 @@ func DownloadAndExtract(url string, destFile string, installDir string) error {
 		return err
 	}
 
-	if fileExists(installDir) {
-		if err := os.RemoveAll(installDir); err != nil {
-			return fmt.Errorf("failed to remove existing dir %s: %v", installDir, err)
-		}
-	}
-	if err := moveDir(sourceDir, installDir); err != nil {
+	if err := replaceInstallDir(sourceDir, installDir); err != nil {
 		return err
 	}
 
 	_ = os.Remove(destFile)
 	_ = os.RemoveAll(extractDir)
 	return nil
+}
+
+func replaceInstallDir(sourceDir, installDir string) error {
+	if err := os.MkdirAll(filepath.Dir(installDir), 0755); err != nil {
+		return fmt.Errorf("failed to create parent dir for %s: %v", installDir, err)
+	}
+
+	stagedDir := installSiblingPath(installDir, "new")
+	backupDir := installSiblingPath(installDir, "old")
+	_ = os.RemoveAll(stagedDir)
+	_ = os.RemoveAll(backupDir)
+
+	if err := moveDirFunc(sourceDir, stagedDir); err != nil {
+		_ = os.RemoveAll(stagedDir)
+		return fmt.Errorf("failed to stage new rostran dir %s: %v", stagedDir, err)
+	}
+
+	hasExisting := fileExists(installDir)
+	if hasExisting {
+		if err := os.Rename(installDir, backupDir); err != nil {
+			_ = os.RemoveAll(stagedDir)
+			return fmt.Errorf("failed to backup existing dir %s: %v", installDir, err)
+		}
+	}
+
+	if err := os.Rename(stagedDir, installDir); err != nil {
+		_ = os.RemoveAll(installDir)
+		if hasExisting {
+			if restoreErr := os.Rename(backupDir, installDir); restoreErr != nil {
+				_ = os.RemoveAll(stagedDir)
+				return fmt.Errorf("failed to activate new dir %s: %v; failed to restore previous dir: %v", installDir, err, restoreErr)
+			}
+		}
+		_ = os.RemoveAll(stagedDir)
+		return fmt.Errorf("failed to activate new dir %s: %v", installDir, err)
+	}
+
+	if hasExisting {
+		_ = os.RemoveAll(backupDir)
+	}
+	return nil
+}
+
+func installSiblingPath(installDir, label string) string {
+	return fmt.Sprintf("%s.%s.%d.%d", installDir, label, os.Getpid(), timeNowFunc().UnixNano())
 }
 
 func extractTarGz(src, dest string) error {

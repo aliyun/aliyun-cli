@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -285,6 +286,47 @@ func TestDownloadAndExtract_RejectsArchivePathTraversal(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(tmpDir, "escape")); !os.IsNotExist(err) {
 		t.Fatalf("path traversal entry should not be written outside install dir, err=%v", err)
+	}
+}
+
+func TestDownloadAndExtract_KeepsExistingInstallWhenStagingFails(t *testing.T) {
+	archiveBytes := buildTarGz(t, map[string]string{
+		"rostran/rostran": "#!/bin/sh\necho rostran\n",
+	})
+
+	oldHTTPGet := httpGetFunc
+	httpGetFunc = func(url string) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(archiveBytes)),
+		}, nil
+	}
+	defer func() { httpGetFunc = oldHTTPGet }()
+
+	oldMoveDir := moveDirFunc
+	moveDirFunc = func(src, dst string) error {
+		return errors.New("disk full")
+	}
+	defer func() { moveDirFunc = oldMoveDir }()
+
+	tmpDir := t.TempDir()
+	installDir := filepath.Join(tmpDir, "rostran")
+	if err := os.MkdirAll(installDir, 0755); err != nil {
+		t.Fatalf("mkdir install dir: %v", err)
+	}
+	oldMarker := filepath.Join(installDir, "old-version")
+	if err := os.WriteFile(oldMarker, []byte("old"), 0600); err != nil {
+		t.Fatalf("write old marker: %v", err)
+	}
+
+	err := DownloadAndExtract("https://example.com/rostran.tar.gz", filepath.Join(tmpDir, "rostran.tar.gz"), installDir)
+	if err == nil {
+		t.Fatal("DownloadAndExtract should fail when staging new install dir fails")
+	}
+
+	data, readErr := os.ReadFile(oldMarker)
+	if readErr != nil || string(data) != "old" {
+		t.Fatalf("old install should remain intact, data=%q err=%v", string(data), readErr)
 	}
 }
 
