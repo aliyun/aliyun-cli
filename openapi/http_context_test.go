@@ -76,6 +76,54 @@ func TestBuildDryRunOpenapiMeta(t *testing.T) {
 	assert.Equal(t, "custom.log.aliyuncs.com", m2.Endpoint)
 }
 
+func TestEffectiveDryRunRegion(t *testing.T) {
+	profile := &config.Profile{RegionId: "cn-hangzhou"}
+
+	t.Run("RegionFlag", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		regionFlag := config.NewRegionFlag()
+		regionFlag.SetAssigned(true)
+		regionFlag.SetValue("cn-shanghai")
+		ctx.Flags().Add(regionFlag)
+
+		assert.Equal(t, "cn-shanghai", effectiveDryRunRegion(ctx, profile))
+	})
+
+	t.Run("RegionIdFlag", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		regionIDFlag := config.NewRegionIdFlag()
+		regionIDFlag.SetAssigned(true)
+		regionIDFlag.SetValue("cn-beijing")
+		ctx.Flags().Add(regionIDFlag)
+
+		assert.Equal(t, "cn-beijing", effectiveDryRunRegion(ctx, profile))
+	})
+
+	t.Run("RegionFlagPrecedence", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		regionFlag := config.NewRegionFlag()
+		regionFlag.SetAssigned(true)
+		regionFlag.SetValue("cn-shanghai")
+		ctx.Flags().Add(regionFlag)
+		regionIDFlag := config.NewRegionIdFlag()
+		regionIDFlag.SetAssigned(true)
+		regionIDFlag.SetValue("cn-beijing")
+		ctx.Flags().Add(regionIDFlag)
+
+		assert.Equal(t, "cn-shanghai", effectiveDryRunRegion(ctx, profile))
+	})
+
+	t.Run("ProfileFallback", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		assert.Equal(t, "cn-hangzhou", effectiveDryRunRegion(ctx, profile))
+	})
+
+	t.Run("NilProfile", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		assert.Equal(t, "", effectiveDryRunRegion(ctx, nil))
+	})
+}
+
 func TestMarshalDryRunOpenapiMeta(t *testing.T) {
 	prof := &config.Profile{RegionId: "cn-hangzhou"}
 	sls := &meta.Product{Code: "sls", Version: "2020-03-31"}
