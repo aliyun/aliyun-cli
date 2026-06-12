@@ -538,7 +538,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	}
 
 	if DryRunJsonFlag(ctx.Flags()).IsAssigned() {
-		line, err := marshalDryRunInvokeMeta(invoker)
+		line, err := marshalDryRunInvokeMeta(c.library, invoker)
 		if err != nil {
 			return err
 		}
@@ -679,7 +679,19 @@ func marshalDryRunOpenapiMeta(ctx *cli.Context, o *OpenapiContext) (string, erro
 	return string(b), nil
 }
 
-func buildDryRunInvokeMeta(inv Invoker) dryRunInvokeMeta {
+func dryRunRestfulAPIByPath(library *Library, productCode, version, method, path string) string {
+	fallback := strings.TrimSpace(method + " " + path)
+	if library == nil || productCode == "" || method == "" || path == "" {
+		return fallback
+	}
+	api, ok := meta.HookGetApiByPath(library.GetApiByPath)(productCode, version, method, path)
+	if ok && api.Name != "" {
+		return api.Name
+	}
+	return fallback
+}
+
+func buildDryRunInvokeMeta(library *Library, inv Invoker) dryRunInvokeMeta {
 	req := inv.getRequest()
 	out := dryRunInvokeMeta{
 		Product:  req.Product,
@@ -695,14 +707,14 @@ func buildDryRunInvokeMeta(inv Invoker) dryRunInvokeMeta {
 		if r.api != nil {
 			out.API = r.api.Name
 		} else {
-			out.API = strings.TrimSpace(r.method + " " + r.path)
+			out.API = dryRunRestfulAPIByPath(library, req.Product, req.Version, r.method, r.path)
 		}
 	}
 	return out
 }
 
-func marshalDryRunInvokeMeta(inv Invoker) (string, error) {
-	b, err := json.Marshal(buildDryRunInvokeMeta(inv))
+func marshalDryRunInvokeMeta(library *Library, inv Invoker) (string, error) {
+	b, err := json.Marshal(buildDryRunInvokeMeta(library, inv))
 	if err != nil {
 		return "", err
 	}

@@ -263,7 +263,7 @@ func TestBuildDryRunInvokeMeta(t *testing.T) {
 		BasicInvoker: &BasicInvoker{request: req},
 		api:          &meta.Api{Name: "CreateAlias"},
 	}
-	m := buildDryRunInvokeMeta(inv)
+	m := buildDryRunInvokeMeta(nil, inv)
 	assert.Equal(t, "fc", m.Product)
 	assert.Equal(t, "2023-03-30", m.Version)
 	assert.Equal(t, "cn-hangzhou", m.Region)
@@ -281,7 +281,7 @@ func TestBuildDryRunInvokeMeta(t *testing.T) {
 		path:         "/2023-03-30/services/foo/functions/bar/aliases",
 		api:          &meta.Api{Name: "CreateAlias"},
 	}
-	m2 := buildDryRunInvokeMeta(rest)
+	m2 := buildDryRunInvokeMeta(nil, rest)
 	assert.Equal(t, "CreateAlias", m2.API)
 
 	rest2 := &RestfulInvoker{
@@ -292,6 +292,18 @@ func TestBuildDryRunInvokeMeta(t *testing.T) {
 	}
 	rest2.request.Product = "cs"
 	rest2.request.Version = "v1"
-	m3 := buildDryRunInvokeMeta(rest2)
+	m3 := buildDryRunInvokeMeta(nil, rest2)
 	assert.Equal(t, "GET /clusters", m3.API)
+
+	library := NewLibrary(nil, "en")
+	rest3 := &RestfulInvoker{
+		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
+		method:       "GET",
+		path:         "/2023-03-30/functions/function-test4/aliases/alias2",
+		api:          nil,
+	}
+	rest3.request.Product = "fc"
+	rest3.request.Version = "2023-03-30"
+	m4 := buildDryRunInvokeMeta(library, rest3)
+	assert.Equal(t, "GetAlias", m4.API)
 }

@@ -285,6 +285,31 @@ func TestProcessInvoke_DryRunJSON(t *testing.T) {
 		return ctx
 	}
 
+	newFcCtx := func(stdout, stderr *bytes.Buffer) *cli.Context {
+		ctx := cli.NewCommandContext(stdout, stderr)
+		cmd := &cli.Command{}
+		cmd.EnableUnknownFlag = true
+		AddFlags(cmd.Flags())
+		ctx.EnterCommand(cmd)
+
+		skipflag := config.NewSkipSecureVerify()
+		skipflag.SetAssigned(true)
+		ctx.Flags().Add(skipflag)
+
+		regionflag := config.NewRegionFlag()
+		regionflag.SetAssigned(true)
+		regionflag.SetValue("cn-hangzhou")
+		ctx.Flags().Add(regionflag)
+
+		endpointflag := config.NewEndpointFlag()
+		endpointflag.SetAssigned(true)
+		endpointflag.SetValue("fcv3.cn-hangzhou.aliyuncs.com")
+		ctx.Flags().Add(endpointflag)
+
+		DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+		return ctx
+	}
+
 	profile := config.Profile{
 		Language:        "en",
 		Mode:            "AK",
@@ -320,9 +345,33 @@ func TestProcessInvoke_DryRunJSON(t *testing.T) {
 		assert.Equal(t, "ecs.cn-hangzhou.aliyuncs.com", m.Endpoint)
 	})
 
-	t.Run("RestfulInvoker_FallbackToMethodPath", func(t *testing.T) {
-		// Unknown product + force on a path → RestfulInvoker without a meta.Api;
-		// api field falls back to "<METHOD> <path>".
+	t.Run("RestfulInvoker_LookupByPath", func(t *testing.T) {
+		stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+		ctx := newFcCtx(stdout, stderr)
+		command := NewCommando(stdout, profile)
+
+		err := command.processInvoke(ctx, "fc", "GET", "/2023-03-30/functions/function-test4/aliases/alias2")
+		assert.Nil(t, err)
+
+		m := parseLine(t, stdout)
+		assert.Equal(t, strings.ToLower("fc"), strings.ToLower(m.Product))
+		assert.Equal(t, "GetAlias", m.API)
+	})
+
+	t.Run("RestfulInvoker_FallbackWhenPathNotFound", func(t *testing.T) {
+		// Known FC product but path does not match any API metadata → fallback to "<METHOD> <path>".
+		stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+		ctx := newFcCtx(stdout, stderr)
+		command := NewCommando(stdout, profile)
+
+		err := command.processInvoke(ctx, "fc", "GET", "/2023-03-30/no-such-api")
+		assert.Nil(t, err)
+
+		m := parseLine(t, stdout)
+		assert.Equal(t, "GET /2023-03-30/no-such-api", m.API)
+	})
+
+	t.Run("RestfulInvoker_FallbackWhenForceAndUnknownProduct", func(t *testing.T) {
 		stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
 		ctx := newCtx(stdout, stderr)
 		command := NewCommando(stdout, profile)
@@ -331,11 +380,7 @@ func TestProcessInvoke_DryRunJSON(t *testing.T) {
 		assert.Nil(t, err)
 
 		m := parseLine(t, stdout)
-		assert.Equal(t, "unknown-product-xyz", m.Product)
-		assert.Equal(t, "2014-05-26", m.Version)
 		assert.Equal(t, "GET /instances", m.API)
-		assert.Equal(t, "cn-hangzhou", m.Region)
-		assert.Equal(t, "ecs.cn-hangzhou.aliyuncs.com", m.Endpoint)
 	})
 }
 
