@@ -69,6 +69,38 @@ func TestNewAcrutilCommandHasSkillSubCommand(t *testing.T) {
 	}
 }
 
+func TestNewAcrutilCommandHasDiagnosisSubCommand(t *testing.T) {
+	cmd := NewAcrutilCommand()
+	diagCmd := cmd.GetSubCommand("diagnosis")
+	if diagCmd == nil {
+		t.Fatalf("diagnosis subcommand not found")
+	}
+	if diagCmd.Name != "diagnosis" {
+		t.Errorf("diagnosis subcommand Name expected 'diagnosis', got %s", diagCmd.Name)
+	}
+	if diagCmd.Short == nil {
+		t.Fatalf("diagnosis Short i18n text nil")
+	}
+	if en := diagCmd.Short.Get("en"); en != "ACR Instance Diagnosis" {
+		t.Errorf("diagnosis Short en expected 'ACR Instance Diagnosis', got %s", en)
+	}
+	if zh := diagCmd.Short.Get("zh"); zh != "ACR 实例诊断" {
+		t.Errorf("diagnosis Short zh expected 'ACR 实例诊断', got %s", zh)
+	}
+	if !diagCmd.EnableUnknownFlag {
+		t.Errorf("diagnosis EnableUnknownFlag expected true")
+	}
+	if !diagCmd.KeepArgs {
+		t.Errorf("diagnosis KeepArgs expected true")
+	}
+	if !diagCmd.SkipDefaultHelp {
+		t.Errorf("diagnosis SkipDefaultHelp expected true")
+	}
+	if diagCmd.Run == nil {
+		t.Errorf("diagnosis Run function should not be nil")
+	}
+}
+
 func TestNewAcrutilCommandMetadata(t *testing.T) {
 	cmd := NewAcrutilCommand()
 	metaMap := map[string]*cli.Metadata{}

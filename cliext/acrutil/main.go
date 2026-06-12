@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cliext/acrutil/diagnosis"
 	"github.com/aliyun/aliyun-cli/v3/cliext/acrutil/skill"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
@@ -19,6 +20,9 @@ func NewAcrutilCommand() *cli.Command {
 		KeepArgs:               true,
 		SkipDefaultHelp:        true,
 	}
+
+	skillCmd := skill.NewSkillCommand()
+	diagCmd := diagnosis.NewDiagnosisCommand()
 
 	cmd.Run = func(ctx *cli.Context, args []string) error {
 		// Handle help flag: convert --help to help subcommand
@@ -41,17 +45,15 @@ func NewAcrutilCommand() *cli.Command {
 
 		// If no arguments or just "help", show available commands
 		if len(args) == 0 || (len(args) == 1 && args[0] == "help") {
-			// Print help header
 			cli.Printf(ctx.Stdout(), "%s\n\n", cmd.Short.Text())
 			cli.Printf(ctx.Stdout(), "Usage:\n")
 			cli.Printf(ctx.Stdout(), "  %s\n\n", cmd.Usage)
 
-			// Print subcommands
 			cli.Printf(ctx.Stdout(), "Available Commands:\n")
-			cli.Printf(ctx.Stdout(), "  %-20s %s\n", "skill", "ACR Skill Management")
+			cli.Printf(ctx.Stdout(), "  %-20s %s\n", skillCmd.Name, skillCmd.Short.Text())
+			cli.Printf(ctx.Stdout(), "  %-20s %s\n", diagCmd.Name, diagCmd.Short.Text())
 			cli.Printf(ctx.Stdout(), "\n")
 
-			// Print tail with correct command path
 			cli.Printf(ctx.Stdout(), "Use `aliyun acrutil <command> --help` for more information.\n")
 			return nil
 		}
@@ -63,7 +65,8 @@ func NewAcrutilCommand() *cli.Command {
 		)
 	}
 
-	cmd.AddSubCommand(skill.NewSkillCommand())
+	cmd.AddSubCommand(skillCmd)
+	cmd.AddSubCommand(diagCmd)
 
 	return cmd
 }
