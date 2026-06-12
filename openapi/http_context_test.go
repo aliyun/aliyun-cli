@@ -3,7 +3,9 @@ package openapi
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
@@ -72,6 +74,29 @@ func TestBuildDryRunOpenapiMeta(t *testing.T) {
 	o2 := &OpenapiContext{HttpContext: h2, method: "GET", path: "/", api: api}
 	m2 := buildDryRunOpenapiMeta(ctx, o2)
 	assert.Equal(t, "custom.log.aliyuncs.com", m2.Endpoint)
+}
+
+func TestMarshalDryRunOpenapiMeta(t *testing.T) {
+	prof := &config.Profile{RegionId: "cn-hangzhou"}
+	sls := &meta.Product{Code: "sls", Version: "2020-03-31"}
+	api := &meta.Api{Name: "GetProject", Product: sls}
+	h := NewHttpContext(prof)
+	h.product = sls
+	h.openapiRequest = &openapiutil.OpenApiRequest{
+		Query:   map[string]*string{},
+		Headers: map[string]*string{},
+		HostMap: map[string]*string{},
+	}
+	o := &OpenapiContext{HttpContext: h, method: "GET", path: "/projects/foo", api: api}
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+
+	line, err := marshalDryRunOpenapiMeta(ctx, o)
+	assert.NoError(t, err)
+	assert.False(t, strings.Contains(line, "\n"), "expected compact single-line JSON, got: %q", line)
+
+	var parsed dryRunInvokeMeta
+	assert.NoError(t, json.Unmarshal([]byte(line), &parsed))
+	assert.Equal(t, buildDryRunOpenapiMeta(ctx, o), parsed)
 }
 
 func TestGetOpenapiClient(t *testing.T) {

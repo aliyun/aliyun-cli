@@ -1070,6 +1070,68 @@ func TestProcessApiInvokeFilterError(t *testing.T) {
 	assert.Contains(t, err.Error(), "you need to assign col=col1,col2")
 }
 
+func TestProcessApiInvoke_DryRunJSON(t *testing.T) {
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+	}
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+
+	command := NewCommando(stdout, profile)
+	product := &meta.Product{Code: "sls", Version: "2020-03-31"}
+	api := &meta.Api{
+		Name:    "GetProject",
+		Product: product,
+	}
+
+	originCallHook := hookHttpContextCall
+	originRespHook := hookHttpContextGetResponse
+	defer func() {
+		hookHttpContextCall = originCallHook
+		hookHttpContextGetResponse = originRespHook
+	}()
+	// If dry-run short-circuits correctly, these hooks must never be invoked.
+	hookHttpContextCall = func(fn func() error) func() error {
+		return func() error {
+			t.Fatal("apiContext.Call must not be invoked when --cli-dry-run-json is set")
+			return nil
+		}
+	}
+	hookHttpContextGetResponse = func(fn func() (string, error)) func() (string, error) {
+		return func() (string, error) {
+			t.Fatal("apiContext.GetResponse must not be invoked when --cli-dry-run-json is set")
+			return "", nil
+		}
+	}
+
+	err := command.processApiInvoke(ctx, product, api, "GET", "/projects/foo")
+	assert.NoError(t, err)
+
+	line := strings.TrimSpace(stdout.String())
+	assert.NotEmpty(t, line)
+	assert.False(t, strings.Contains(line, "\n"), "expected single-line JSON, got: %q", line)
+
+	var m dryRunInvokeMeta
+	assert.Nil(t, json.Unmarshal([]byte(line), &m), "stdout must be valid JSON: %q", line)
+	assert.Equal(t, "sls", m.Product)
+	assert.Equal(t, "2020-03-31", m.Version)
+	assert.Equal(t, "GetProject", m.API)
+	assert.Equal(t, "cn-hangzhou", m.Region)
+	// SLS without --endpoint / profile.Endpoint falls back to {region}.log.aliyuncs.com.
+	assert.Equal(t, "cn-hangzhou.log.aliyuncs.com", m.Endpoint)
+}
+
 func TestCreateHttpContext(t *testing.T) {
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
