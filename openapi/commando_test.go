@@ -15,6 +15,7 @@ package openapi
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -201,6 +202,11 @@ func Test_processInvoke(t *testing.T) {
 	assert.Nil(t, err)
 
 	DryRunFlag(ctx.Flags()).SetAssigned(false)
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+	err = command.processInvoke(ctx, productCode, apiOrMethod, path)
+	assert.Nil(t, err)
+
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(false)
 	PagerFlag.SetAssigned(true)
 	err = command.processInvoke(ctx, productCode, apiOrMethod, path)
 	assert.NotNil(t, err)
@@ -244,6 +250,138 @@ func Test_processInvoke(t *testing.T) {
 	out = `{"downloadlink":"aaa&bbb"}`
 	out = sortJSON(out)
 	assert.Equal(t, "{\n\t\"downloadlink\": \"aaa&bbb\"\n}", out)
+}
+
+// TestProcessInvoke_DryRunJSON focuses on the --cli-dry-run-json branch of
+// processInvoke: a single compact JSON line on stdout with the expected
+// product/version/api/region/endpoint fields.
+func TestProcessInvoke_DryRunJSON(t *testing.T) {
+	newCtx := func(stdout, stderr *bytes.Buffer) *cli.Context {
+		ctx := cli.NewCommandContext(stdout, stderr)
+		cmd := &cli.Command{}
+		cmd.EnableUnknownFlag = true
+		AddFlags(cmd.Flags())
+		ctx.EnterCommand(cmd)
+
+		skipflag := config.NewSkipSecureVerify()
+		skipflag.SetAssigned(true)
+		ctx.Flags().Add(skipflag)
+
+		regionflag := config.NewRegionFlag()
+		regionflag.SetAssigned(true)
+		regionflag.SetValue("cn-hangzhou")
+		ctx.Flags().Add(regionflag)
+
+		endpointflag := config.NewEndpointFlag()
+		endpointflag.SetAssigned(true)
+		endpointflag.SetValue("ecs.cn-hangzhou.aliyuncs.com")
+		ctx.Flags().Add(endpointflag)
+
+		VersionFlag(ctx.Flags()).SetAssigned(true)
+		VersionFlag(ctx.Flags()).SetValue("2014-05-26")
+
+		ForceFlag(ctx.Flags()).SetAssigned(true)
+		DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+		return ctx
+	}
+
+	newFcCtx := func(stdout, stderr *bytes.Buffer) *cli.Context {
+		ctx := cli.NewCommandContext(stdout, stderr)
+		cmd := &cli.Command{}
+		cmd.EnableUnknownFlag = true
+		AddFlags(cmd.Flags())
+		ctx.EnterCommand(cmd)
+
+		skipflag := config.NewSkipSecureVerify()
+		skipflag.SetAssigned(true)
+		ctx.Flags().Add(skipflag)
+
+		regionflag := config.NewRegionFlag()
+		regionflag.SetAssigned(true)
+		regionflag.SetValue("cn-hangzhou")
+		ctx.Flags().Add(regionflag)
+
+		endpointflag := config.NewEndpointFlag()
+		endpointflag.SetAssigned(true)
+		endpointflag.SetValue("fcv3.cn-hangzhou.aliyuncs.com")
+		ctx.Flags().Add(endpointflag)
+
+		DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+		return ctx
+	}
+
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+	}
+
+	parseLine := func(t *testing.T, stdout *bytes.Buffer) dryRunInvokeMeta {
+		t.Helper()
+		line := strings.TrimSpace(stdout.String())
+		assert.NotEmpty(t, line, "stdout must not be empty")
+		assert.False(t, strings.Contains(line, "\n"), "expected single-line JSON, got: %q", line)
+		var m dryRunInvokeMeta
+		assert.Nil(t, json.Unmarshal([]byte(line), &m), "stdout must be valid JSON: %q", line)
+		return m
+	}
+
+	t.Run("ForceRpcInvoker", func(t *testing.T) {
+		stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+		ctx := newCtx(stdout, stderr)
+		command := NewCommando(stdout, profile)
+
+		err := command.processInvoke(ctx, "ecs", "DescribeRegions", "")
+		assert.Nil(t, err)
+
+		m := parseLine(t, stdout)
+		// product code comes from library and may be canonicalized (e.g. "Ecs"); compare case-insensitively.
+		assert.Equal(t, "ecs", strings.ToLower(m.Product))
+		assert.Equal(t, "2014-05-26", m.Version)
+		assert.Equal(t, "DescribeRegions", m.API)
+		assert.Equal(t, "cn-hangzhou", m.Region)
+		assert.Equal(t, "ecs.cn-hangzhou.aliyuncs.com", m.Endpoint)
+	})
+
+	t.Run("RestfulInvoker_LookupByPath", func(t *testing.T) {
+		stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+		ctx := newFcCtx(stdout, stderr)
+		command := NewCommando(stdout, profile)
+
+		err := command.processInvoke(ctx, "fc", "GET", "/2023-03-30/functions/function-test4/aliases/alias2")
+		assert.Nil(t, err)
+
+		m := parseLine(t, stdout)
+		assert.Equal(t, strings.ToLower("fc"), strings.ToLower(m.Product))
+		assert.Equal(t, "GetAlias", m.API)
+	})
+
+	t.Run("RestfulInvoker_FallbackWhenPathNotFound", func(t *testing.T) {
+		// Known FC product but path does not match any API metadata → fallback to "<METHOD> <path>".
+		stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+		ctx := newFcCtx(stdout, stderr)
+		command := NewCommando(stdout, profile)
+
+		err := command.processInvoke(ctx, "fc", "GET", "/2023-03-30/no-such-api")
+		assert.Nil(t, err)
+
+		m := parseLine(t, stdout)
+		assert.Equal(t, "GET /2023-03-30/no-such-api", m.API)
+	})
+
+	t.Run("RestfulInvoker_FallbackWhenForceAndUnknownProduct", func(t *testing.T) {
+		stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+		ctx := newCtx(stdout, stderr)
+		command := NewCommando(stdout, profile)
+
+		err := command.processInvoke(ctx, "unknown-product-xyz", "GET", "/instances")
+		assert.Nil(t, err)
+
+		m := parseLine(t, stdout)
+		assert.Equal(t, "GET /instances", m.API)
+	})
 }
 
 func TestProcessInvokeQueryFlag(t *testing.T) {
@@ -975,6 +1113,68 @@ func TestProcessApiInvokeFilterError(t *testing.T) {
 	OutputFlag(ctx.Flags()).SetAssigned(true)
 	err := command.processApiInvoke(ctx, product, api, "GET", "/test")
 	assert.Contains(t, err.Error(), "you need to assign col=col1,col2")
+}
+
+func TestProcessApiInvoke_DryRunJSON(t *testing.T) {
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+	}
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+
+	command := NewCommando(stdout, profile)
+	product := &meta.Product{Code: "sls", Version: "2020-03-31"}
+	api := &meta.Api{
+		Name:    "GetProject",
+		Product: product,
+	}
+
+	originCallHook := hookHttpContextCall
+	originRespHook := hookHttpContextGetResponse
+	defer func() {
+		hookHttpContextCall = originCallHook
+		hookHttpContextGetResponse = originRespHook
+	}()
+	// If dry-run short-circuits correctly, these hooks must never be invoked.
+	hookHttpContextCall = func(fn func() error) func() error {
+		return func() error {
+			t.Fatal("apiContext.Call must not be invoked when --cli-dry-run-json is set")
+			return nil
+		}
+	}
+	hookHttpContextGetResponse = func(fn func() (string, error)) func() (string, error) {
+		return func() (string, error) {
+			t.Fatal("apiContext.GetResponse must not be invoked when --cli-dry-run-json is set")
+			return "", nil
+		}
+	}
+
+	err := command.processApiInvoke(ctx, product, api, "GET", "/projects/foo")
+	assert.NoError(t, err)
+
+	line := strings.TrimSpace(stdout.String())
+	assert.NotEmpty(t, line)
+	assert.False(t, strings.Contains(line, "\n"), "expected single-line JSON, got: %q", line)
+
+	var m dryRunInvokeMeta
+	assert.Nil(t, json.Unmarshal([]byte(line), &m), "stdout must be valid JSON: %q", line)
+	assert.Equal(t, "sls", m.Product)
+	assert.Equal(t, "2020-03-31", m.Version)
+	assert.Equal(t, "GetProject", m.API)
+	assert.Equal(t, "cn-hangzhou", m.Region)
+	// SLS without --endpoint / profile.Endpoint falls back to {region}.log.aliyuncs.com.
+	assert.Equal(t, "cn-hangzhou.log.aliyuncs.com", m.Endpoint)
 }
 
 func TestCreateHttpContext(t *testing.T) {

@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -249,4 +250,60 @@ func TestParseCustomUserAgentSegments(t *testing.T) {
 			assert.Equal(t, tt.expect, got)
 		})
 	}
+}
+
+func TestBuildDryRunInvokeMeta(t *testing.T) {
+	req := requests.NewCommonRequest()
+	req.Product = "fc"
+	req.Version = "2023-03-30"
+	req.RegionId = "cn-hangzhou"
+	req.ApiName = "CreateAlias"
+	req.Domain = "fc.cn-hangzhou.aliyuncs.com"
+	inv := &RpcInvoker{
+		BasicInvoker: &BasicInvoker{request: req},
+		api:          &meta.Api{Name: "CreateAlias"},
+	}
+	m := buildDryRunInvokeMeta(nil, inv)
+	assert.Equal(t, "fc", m.Product)
+	assert.Equal(t, "2023-03-30", m.Version)
+	assert.Equal(t, "cn-hangzhou", m.Region)
+	assert.Equal(t, "CreateAlias", m.API)
+	assert.Equal(t, "fc.cn-hangzhou.aliyuncs.com", m.Endpoint)
+
+	req2 := requests.NewCommonRequest()
+	req2.Product = "fc"
+	req2.Version = "2023-03-30"
+	req2.RegionId = "cn-shanghai"
+	req2.ApiName = ""
+	rest := &RestfulInvoker{
+		BasicInvoker: &BasicInvoker{request: req2},
+		method:       "POST",
+		path:         "/2023-03-30/services/foo/functions/bar/aliases",
+		api:          &meta.Api{Name: "CreateAlias"},
+	}
+	m2 := buildDryRunInvokeMeta(nil, rest)
+	assert.Equal(t, "CreateAlias", m2.API)
+
+	rest2 := &RestfulInvoker{
+		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
+		method:       "GET",
+		path:         "/clusters",
+		api:          nil,
+	}
+	rest2.request.Product = "cs"
+	rest2.request.Version = "v1"
+	m3 := buildDryRunInvokeMeta(nil, rest2)
+	assert.Equal(t, "GET /clusters", m3.API)
+
+	library := NewLibrary(nil, "en")
+	rest3 := &RestfulInvoker{
+		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
+		method:       "GET",
+		path:         "/2023-03-30/functions/function-test4/aliases/alias2",
+		api:          nil,
+	}
+	rest3.request.Product = "fc"
+	rest3.request.Version = "2023-03-30"
+	m4 := buildDryRunInvokeMeta(library, rest3)
+	assert.Equal(t, "GetAlias", m4.API)
 }
