@@ -175,9 +175,18 @@ func (m *Manager) writeCache(cacheFile string, data []byte) {
 	_ = os.WriteFile(cacheFile, data, 0644)
 }
 
+func httpGet(url string, timeout time.Duration) (*http.Response, error) {
+	client := &http.Client{Timeout: timeout}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept-Encoding", "identity")
+	return client.Do(req)
+}
+
 func (m *Manager) fetchRemote(url string) ([]byte, error) {
-	client := &http.Client{Timeout: fetchTimeout}
-	resp, err := client.Get(url)
+	resp, err := httpGet(url, fetchTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -496,10 +505,7 @@ func (m *Manager) validateVersionAndPlatform(ctx *cli.Context, targetPlugin *Plu
 }
 
 func downloadFile(url, dest string) error {
-	client := &http.Client{
-		Timeout: 300 * time.Second,
-	}
-	resp, err := client.Get(url)
+	resp, err := httpGet(url, pluginArchiveDLTimeout)
 	if err != nil {
 		return err
 	}
@@ -870,8 +876,7 @@ func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL string) e
 
 	cli.Printf(ctx.Stdout(), "Downloading plugin package from %s...\n", rawURL)
 
-	client := &http.Client{Timeout: pluginArchiveDLTimeout}
-	resp, err := client.Get(rawURL)
+	resp, err := httpGet(rawURL, pluginArchiveDLTimeout)
 	if err != nil {
 		return fmt.Errorf("download plugin package: %w", err)
 	}
@@ -980,6 +985,7 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 		Description:      pManifest.Description,
 		CmdNames:         pManifest.CmdNames,
 		Inner:            pManifest.Inner,
+		ProfileRequired:  pManifest.ProfileRequired,
 	}
 
 	return m.saveLocalManifest(localManifest)

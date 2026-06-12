@@ -1479,6 +1479,45 @@ func TestSavePluginToManifest(t *testing.T) {
 	assert.Equal(t, extractDir, plugin.Path)
 	assert.Equal(t, pManifest.Command, plugin.Command)
 	assert.Equal(t, pManifest.Description, plugin.Description)
+	assert.Nil(t, plugin.ProfileRequired, "absent in manifest should stay nil")
+
+	t.Run("propagates explicit profileRequired=false", func(t *testing.T) {
+		nameOptOut := "test-plugin-opt-out"
+		ff := false
+		pm := &PluginManifest{
+			Name:            nameOptOut,
+			Command:         "opt-out",
+			Description:     "opt-out",
+			ProfileRequired: &ff,
+		}
+		assert.NoError(t, mgr.savePluginToManifest(nameOptOut, version, extractDir, pm))
+		lm, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		got, ok := lm.Plugins[nameOptOut]
+		assert.True(t, ok)
+		assert.NotNil(t, got.ProfileRequired)
+		assert.False(t, *got.ProfileRequired)
+		assert.False(t, got.IsProfileRequired())
+	})
+
+	t.Run("propagates explicit profileRequired=true", func(t *testing.T) {
+		nameStrict := "test-plugin-strict"
+		tt := true
+		pm := &PluginManifest{
+			Name:            nameStrict,
+			Command:         "strict",
+			Description:     "strict",
+			ProfileRequired: &tt,
+		}
+		assert.NoError(t, mgr.savePluginToManifest(nameStrict, version, extractDir, pm))
+		lm, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		got, ok := lm.Plugins[nameStrict]
+		assert.True(t, ok)
+		assert.NotNil(t, got.ProfileRequired)
+		assert.True(t, *got.ProfileRequired)
+		assert.True(t, got.IsProfileRequired())
+	})
 }
 
 func TestManager_downloadAndVerifyPlugin(t *testing.T) {
@@ -3900,4 +3939,21 @@ func TestManager_FindPluginByCommand(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "no plugin found for command: fc")
 	})
+}
+
+func TestHttpGet_AcceptEncodingIdentity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "identity", r.Header.Get("Accept-Encoding"))
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	resp, err := httpGet(server.URL, 5*time.Second)
+	assert.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, "ok", string(body))
 }

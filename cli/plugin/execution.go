@@ -36,6 +36,19 @@ func IsPluginInstalled(command string) (bool, string, error) {
 	return true, pluginName, nil
 }
 
+// Plugins explicitly opt out of host profile enforcement by setting `"profileRequired": false` in their manifest.json. 
+func IsProfileRequiredForCommand(command string) bool {
+	mgr, err := NewManager()
+	if err != nil {
+		return true
+	}
+	_, lp, err := mgr.findLocalPlugin(command)
+	if err != nil || lp == nil {
+		return true
+	}
+	return lp.IsProfileRequired()
+}
+
 // Returns (true, nil) if plugin was found and executed successfully.
 // Returns (true, error) if plugin execution failed.
 // Returns (false, nil) if plugin was not found (not an error).

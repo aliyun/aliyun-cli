@@ -2,595 +2,100 @@ package skill
 
 import (
 	"bytes"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"os"
+	"context"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
-	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/cliext/acrutil/binmgr"
 )
 
-func prepareConfig(t *testing.T, home string, language string) {
-	cfgDir := filepath.Join(home, ".aliyun")
-	if err := os.MkdirAll(cfgDir, 0755); err != nil {
-		t.Fatalf("mkdir cfg: %v", err)
+func TestNewSkillCommand(t *testing.T) {
+	cmd := NewSkillCommand()
+	if cmd == nil {
+		t.Fatalf("NewSkillCommand returned nil")
 	}
-	configJSON := fmt.Sprintf(`{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou","language":"%s"}]}`, language)
-	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(configJSON), 0644); err != nil {
-		t.Fatalf("write config: %v", err)
+	if cmd.Name != "skill" {
+		t.Errorf("Name: got %s", cmd.Name)
+	}
+	if cmd.Short == nil {
+		t.Fatalf("Short i18n text nil")
+	}
+	if en := cmd.Short.Get("en"); en != "ACR Skill Management" {
+		t.Errorf("Short en: got %s", en)
+	}
+	if zh := cmd.Short.Get("zh"); zh != "ACR Skill管理" {
+		t.Errorf("Short zh: got %s", zh)
+	}
+	if cmd.Usage != "acrutil skill <command> [args...]" {
+		t.Errorf("Usage: got %s", cmd.Usage)
+	}
+	if !cmd.EnableUnknownFlag {
+		t.Errorf("EnableUnknownFlag should be true")
+	}
+	if !cmd.KeepArgs {
+		t.Errorf("KeepArgs should be true")
+	}
+	if !cmd.SkipDefaultHelp {
+		t.Errorf("SkipDefaultHelp should be true")
+	}
+	if cmd.Run == nil {
+		t.Errorf("Run should not be nil")
 	}
 }
 
-func newOriginCtx() (*cli.Context, *bytes.Buffer, *bytes.Buffer) {
+// TestSkillExecute_UserAgentEnvPassed verifies the full chain from the skill
+// subcommand config through binmgr.Execute, ensuring the correct User-Agent
+// and compat-mode environment variables are injected into the subprocess.
+func TestSkillExecute_UserAgentEnvPassed(t *testing.T) {
 	out := &bytes.Buffer{}
 	errOut := &bytes.Buffer{}
 	ctx := cli.NewCommandContext(out, errOut)
-	return ctx, out, errOut
-}
 
-func addConfigFlag(ctx *cli.Context, name string, value string) {
-	f := &cli.Flag{Name: name, AssignedMode: cli.AssignedOnce, Category: "config"}
-	f.SetAssigned(true)
-	f.SetValue(value)
-	ctx.Flags().Add(f)
-}
-
-func TestNewSkillContext(t *testing.T) {
-	ctx, _, _ := newOriginCtx()
-	c := NewSkillContext(ctx)
-	if c == nil {
-		t.Fatalf("NewSkillContext returned nil")
-	}
-	if c.originCtx != ctx {
-		t.Errorf("originCtx mismatch")
-	}
-}
-
-func TestCheckOsTypeAndArch(t *testing.T) {
-	ctx, _, _ := newOriginCtx()
-	c := NewSkillContext(ctx)
-
-	tests := []struct {
-		osType, osArch string
-		wantSupport    bool
-	}{
-		{"linux", "amd64", true},
-		{"darwin", "arm64", true},
-		{"linux", "arm64", false},
-		{"darwin", "amd64", false},
-		{"windows", "amd64", false},
-		{"freebsd", "amd64", false},
-		{"linux", "ppc64le", false},
-		{"linux", "386", false},
-		{"linux", "arm", false},
-		{"windows", "386", false},
-	}
-
-	oldGOOS := runtimeGOOSFunc
-	oldGOARCH := runtimeGOARCHFunc
-	defer func() {
-		runtimeGOOSFunc = oldGOOS
-		runtimeGOARCHFunc = oldGOARCH
-	}()
-
-	for _, tt := range tests {
-		runtimeGOOSFunc = func() string { return tt.osType }
-		runtimeGOARCHFunc = func() string { return tt.osArch }
-		c.CheckOsTypeAndArch()
-		if c.osSupport != tt.wantSupport {
-			t.Errorf("os=%s arch=%s support expected %v, got %v", tt.osType, tt.osArch, tt.wantSupport, c.osSupport)
-		}
-	}
-}
-
-func TestInitBasicInfo(t *testing.T) {
-	tmpDir := t.TempDir()
-	old := getConfigurePathFunc
-	getConfigurePathFunc = func() string { return tmpDir }
-	defer func() { getConfigurePathFunc = old }()
-
-	ctx, _, _ := newOriginCtx()
-	c := NewSkillContext(ctx)
-	c.InitBasicInfo()
-
-	if c.configPath != tmpDir {
-		t.Errorf("configPath expected %s, got %s", tmpDir, c.configPath)
-	}
-	if c.installed {
-		t.Errorf("should not be installed initially")
-	}
-
-	execPath := filepath.Join(tmpDir, "acr-skill")
-	if runtime.GOOS == "windows" {
-		execPath += ".exe"
-	}
-	if err := os.WriteFile(execPath, []byte("fake"), 0755); err != nil {
-		t.Fatalf("write fake exec: %v", err)
-	}
-
-	c2 := NewSkillContext(ctx)
-	c2.InitBasicInfo()
-	if !c2.installed {
-		t.Errorf("should be installed now")
-	}
-}
-
-func TestRun_NotInstalled_FreshInstallAndExecute(t *testing.T) {
-	origHOME := os.Getenv("HOME")
-	t.Cleanup(func() { _ = os.Setenv("HOME", origHOME) })
-
-	home := t.TempDir()
-	if err := os.Setenv("HOME", home); err != nil {
-		t.Fatalf("set HOME: %v", err)
-	}
-	prepareConfig(t, home, "zh")
-
-	origDownload := downloadBinaryFunc
-	origExec := execCommandFunc
-	installCount := 0
-	downloadBinaryFunc = func(url, exe string) error {
-		installCount++
-		if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0755); err != nil {
-			t.Fatalf("write fake exec: %v", err)
-		}
-		return nil
-	}
-	execCommandFunc = func(name string, args ...string) *exec.Cmd {
-		// 跨平台的 mock 实现，不依赖 bash
+	m := binmgr.New(skillConfig, ctx)
+	m.SetExecFilePathForTest("/no/op")
+	m.SetExecCommandForTest(func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		if runtime.GOOS == "windows" {
-			return exec.Command("cmd", "/c", "exit 0")
+			return exec.CommandContext(ctx, "cmd", "/c", "set")
 		}
-		return exec.Command("true")
-	}
-	t.Cleanup(func() {
-		downloadBinaryFunc = origDownload
-		execCommandFunc = origExec
+		return exec.CommandContext(ctx, "env")
 	})
 
-	ctx, _, _ := newOriginCtx()
-	addConfigFlag(ctx, "region", "cn-hangzhou")
-
-	c := NewSkillContext(ctx)
-
-	if err := c.Run([]string{"acr-skill", "validate", "--region", "cn-hangzhou"}); err != nil {
-		t.Fatalf("Run failed: %v", err)
-	}
-	if installCount != 1 {
-		t.Fatalf("expected install once, got %d", installCount)
-	}
-}
-
-func TestRun_Installed_SkipDownload(t *testing.T) {
-	origHOME := os.Getenv("HOME")
-	t.Cleanup(func() { _ = os.Setenv("HOME", origHOME) })
-	home := t.TempDir()
-	if err := os.Setenv("HOME", home); err != nil {
-		t.Fatalf("set HOME: %v", err)
-	}
-	prepareConfig(t, home, "en")
-
-	execPath := filepath.Join(config.GetConfigPath(), "acr-skill")
-	if err := os.WriteFile(execPath, []byte("#!/bin/sh\n"), 0755); err != nil {
-		t.Fatalf("write exec: %v", err)
+	if err := m.Execute(context.Background(), nil); err != nil {
+		t.Fatalf("Execute: %v", err)
 	}
 
-	origDownload := downloadBinaryFunc
-	origExec := execCommandFunc
-	installCount := 0
-	downloadBinaryFunc = func(url, exe string) error { installCount++; return nil }
-	execCommandFunc = func(name string, args ...string) *exec.Cmd { return exec.Command("true") }
-	t.Cleanup(func() {
-		downloadBinaryFunc = origDownload
-		execCommandFunc = origExec
-	})
+	output := out.String()
 
-	ctx, _, _ := newOriginCtx()
-	c := NewSkillContext(ctx)
-	if err := c.Run([]string{"acr-skill", "list"}); err != nil {
-		t.Fatalf("run: %v", err)
+	// Verify ALIBABA_CLOUD_ACR_SKILL is set correctly.
+	expectedUA := "ALIBABA_CLOUD_ACR_SKILL=aliyun-cli/" + cli.Version
+	if !strings.Contains(output, expectedUA) {
+		t.Errorf("expected env %q in subprocess output, got:\n%s", expectedUA, output)
 	}
-	if installCount != 0 {
-		t.Fatalf("expected no download when already installed, got %d", installCount)
+
+	// Verify ALIBABA_CLOUD_ACR_SKILL_COMPAT_MODE is set correctly.
+	expectedCompat := "ALIBABA_CLOUD_ACR_SKILL_COMPAT_MODE=aliyun acrutil skill"
+	if !strings.Contains(output, expectedCompat) {
+		t.Errorf("expected env %q in subprocess output, got:\n%s", expectedCompat, output)
 	}
 }
 
-func TestGetDownloadURL(t *testing.T) {
-	tests := []struct {
-		name        string
-		platform    string
-		expectError bool
-		expectedURL string
-	}{
-		{
-			name:        "valid platform linux-amd64",
-			platform:    "linux-amd64",
-			expectError: false,
-			expectedURL: "https://acr-public-asset.oss-cn-hangzhou.aliyuncs.com/acr-skill/acr-skill-linux-amd64",
-		},
-		{
-			name:        "valid platform darwin-arm64",
-			platform:    "darwin-arm64",
-			expectError: false,
-			expectedURL: "https://acr-public-asset.oss-cn-hangzhou.aliyuncs.com/acr-skill/acr-skill-darwin-arm64",
-		},
-		{
-			name:        "unsupported platform linux-arm64",
-			platform:    "linux-arm64",
-			expectError: true,
-		},
-		{
-			name:        "unsupported platform darwin-amd64",
-			platform:    "darwin-amd64",
-			expectError: true,
-		},
-		{
-			name:        "unsupported platform windows-amd64",
-			platform:    "windows-amd64",
-			expectError: true,
-		},
-		{
-			name:        "unsupported platform freebsd-amd64",
-			platform:    "freebsd-amd64",
-			expectError: true,
-		},
-		{
-			name:        "invalid platform",
-			platform:    "unknown-platform",
-			expectError: true,
-		},
+func TestSkillConfig(t *testing.T) {
+	if skillConfig.Name != "acr-skill" {
+		t.Errorf("Name: got %s", skillConfig.Name)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			url, err := getDownloadURL(tt.platform)
-			if tt.expectError {
-				if err == nil {
-					t.Error("Expected error, got nil")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Expected no error, got %v", err)
-				}
-				if url != tt.expectedURL {
-					t.Errorf("Expected URL '%s', got '%s'", tt.expectedURL, url)
-				}
-			}
-		})
+	if skillConfig.BaseURL != "https://acr-public-asset.oss-cn-hangzhou.aliyuncs.com/acr-skill/" {
+		t.Errorf("BaseURL: got %s", skillConfig.BaseURL)
 	}
-}
-
-func TestDownloadBinary(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("fake binary content"))
-	}))
-	defer server.Close()
-
-	// 临时替换 httpClient 为测试服务器
-	oldClient := httpClient
-	httpClient = server.Client()
-	httpClient.Transport = server.Client().Transport
-	defer func() { httpClient = oldClient }()
-
-	tmpDir := t.TempDir()
-	execPath := filepath.Join(tmpDir, "acr-skill")
-
-	err := DownloadBinary(server.URL, execPath)
-	if err != nil {
-		t.Fatalf("DownloadBinary failed: %v", err)
+	if skillConfig.EnvCompatMode != "ALIBABA_CLOUD_ACR_SKILL_COMPAT_MODE" {
+		t.Errorf("EnvCompatMode: got %s", skillConfig.EnvCompatMode)
 	}
-
-	if !fileExists(execPath) {
-		t.Errorf("exec file not created")
+	if skillConfig.EnvCompatModeVal != "aliyun acrutil skill" {
+		t.Errorf("EnvCompatModeVal: got %s", skillConfig.EnvCompatModeVal)
 	}
-
-	content, err := os.ReadFile(execPath)
-	if err != nil {
-		t.Fatalf("read exec: %v", err)
-	}
-	if string(content) != "fake binary content" {
-		t.Errorf("exec content mismatch: got %q", string(content))
-	}
-}
-
-func TestDownloadBinary_ErrorStatus(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	oldClient := httpClient
-	httpClient = server.Client()
-	httpClient.Transport = server.Client().Transport
-	defer func() { httpClient = oldClient }()
-
-	tmp := t.TempDir()
-	err := DownloadBinary(server.URL, filepath.Join(tmp, "acr-skill"))
-	if err == nil || !strings.Contains(err.Error(), "status code") {
-		t.Fatalf("expect status code error, got %v", err)
-	}
-}
-
-func TestDownloadBinary_HttpError(t *testing.T) {
-	// 使用一个无效的 URL 来触发网络错误
-	tmp := t.TempDir()
-	err := DownloadBinary("http://invalid-host-that-does-not-exist-12345.com", filepath.Join(tmp, "acr-skill"))
-	if err == nil || !strings.Contains(err.Error(), "failed to download") {
-		t.Fatalf("expected download error")
-	}
-}
-
-func TestDownloadBinary_OverwriteExisting(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("new binary"))
-	}))
-	defer server.Close()
-
-	// 临时替换 httpClient 为测试服务器
-	oldClient := httpClient
-	httpClient = server.Client()
-	httpClient.Transport = server.Client().Transport
-	defer func() { httpClient = oldClient }()
-
-	tmpDir := t.TempDir()
-	execPath := filepath.Join(tmpDir, "acr-skill")
-	// 先创建一个旧文件
-	if err := os.WriteFile(execPath, []byte("old binary"), 0755); err != nil {
-		t.Fatalf("write old exec: %v", err)
-	}
-
-	err := DownloadBinary(server.URL, execPath)
-	if err != nil {
-		t.Fatalf("DownloadBinary failed: %v", err)
-	}
-
-	content, err := os.ReadFile(execPath)
-	if err != nil {
-		t.Fatalf("read exec: %v", err)
-	}
-	if string(content) != "new binary" {
-		t.Errorf("exec content should be updated, got %q", string(content))
-	}
-}
-
-func TestRemoveFlagsForMainCli(t *testing.T) {
-	ctx, _, _ := newOriginCtx()
-	// Add flags that are in stripFlags and mark them as assigned
-	addConfigFlag(ctx, "profile", "test")
-
-	c := NewSkillContext(ctx)
-	args := []string{"validate", "--profile", "test", "-d", "./my-skill"}
-	newArgs, err := c.RemoveFlagsForMainCli(args)
-	if err != nil {
-		t.Fatalf("RemoveFlagsForMainCli failed: %v", err)
-	}
-
-	// Verify main CLI-specific flags are removed
-	for _, arg := range newArgs {
-		if arg == "--profile" {
-			t.Errorf("config flag should be removed: %s", arg)
-		}
-	}
-
-	// Verify subprocess flags are retained
-	hasDir := false
-	for _, arg := range newArgs {
-		if arg == "-d" {
-			hasDir = true
-		}
-	}
-	if !hasDir {
-		t.Errorf("non-config flag -d should remain")
-	}
-}
-
-func TestRemoveFlagsForMainCli_StripFlags(t *testing.T) {
-	ctx, _, _ := newOriginCtx()
-	// 添加多个stripFlags中定义的flag
-	addConfigFlag(ctx, "profile", "test")
-	addConfigFlag(ctx, "mode", "AK")
-	addConfigFlag(ctx, "region", "cn-hangzhou")
-
-	c := NewSkillContext(ctx)
-	args := []string{
-		"publish",
-		"--profile", "test",
-		"--mode", "AK",
-		"--region", "cn-hangzhou",
-		"-d", "./my-skill",
-		"--version", "1.0.0",
-	}
-	newArgs, err := c.RemoveFlagsForMainCli(args)
-	if err != nil {
-		t.Fatalf("RemoveFlagsForMainCli failed: %v", err)
-	}
-
-	// 验证stripFlags中的flag被移除
-	removedFlags := []string{"--profile", "--mode"}
-	for _, arg := range newArgs {
-		for _, removed := range removedFlags {
-			if arg == removed {
-				t.Errorf("flag should be removed: %s", arg)
-			}
-		}
-	}
-
-	// 验证子进程需要的flag保留
-	retainedFlags := []string{"-d", "--version"}
-	for _, retained := range retainedFlags {
-		found := false
-		for _, arg := range newArgs {
-			if arg == retained {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("flag should be retained: %s", retained)
-		}
-	}
-}
-
-func TestRemoveFlagsForMainCli_InlineValue(t *testing.T) {
-	ctx, _, _ := newOriginCtx()
-	addConfigFlag(ctx, "profile", "test")
-
-	c := NewSkillContext(ctx)
-	// 测试内联值格式 --profile=test
-	args := []string{"publish", "--profile=test", "-d", "./my-skill"}
-	newArgs, err := c.RemoveFlagsForMainCli(args)
-	if err != nil {
-		t.Fatalf("RemoveFlagsForMainCli failed: %v", err)
-	}
-
-	// 验证内联值格式的flag被移除
-	for _, arg := range newArgs {
-		if strings.HasPrefix(arg, "--profile") {
-			t.Errorf("inline flag should be removed: %s", arg)
-		}
-	}
-
-	// 验证其他flag保留
-	if len(newArgs) < 2 || newArgs[0] != "publish" {
-		t.Errorf("expected first args to be [publish ...], got %v", newArgs)
-	}
-	hasD := false
-	for _, arg := range newArgs {
-		if arg == "-d" {
-			hasD = true
-			break
-		}
-	}
-	if !hasD {
-		t.Errorf("expected -d flag to be retained, got %v", newArgs)
-	}
-}
-
-func TestFileExists(t *testing.T) {
-	tmpFile := filepath.Join(t.TempDir(), "test.txt")
-	if fileExists(tmpFile) {
-		t.Errorf("file should not exist")
-	}
-
-	if err := os.WriteFile(tmpFile, []byte("test"), 0644); err != nil {
-		t.Fatalf("write file: %v", err)
-	}
-
-	if !fileExists(tmpFile) {
-		t.Errorf("file should exist")
-	}
-}
-
-func TestInstallUrlAndInvocation(t *testing.T) {
-	c := &SkillContext{
-		downloadPathSuffix: "linux-amd64",
-	}
-	called := false
-	origDownload := downloadBinaryFunc
-	downloadBinaryFunc = func(url, exe string) error {
-		called = true
-		if !strings.Contains(url, "acr-skill-linux-amd64") {
-			t.Fatalf("url should contain platform suffix, got %s", url)
-		}
-		return nil
-	}
-	defer func() { downloadBinaryFunc = origDownload }()
-	if err := c.Install(); err != nil {
-		t.Fatalf("Install err: %v", err)
-	}
-	if !called {
-		t.Fatalf("download not called")
-	}
-	if !c.installed {
-		t.Fatalf("installed should be true after Install()")
-	}
-}
-
-func TestExecuteAcrSkill(t *testing.T) {
-	origExec := execCommandFunc
-	execCommandFunc = func(name string, args ...string) *exec.Cmd {
-		return exec.Command("bash", "-c", "exit 0")
-	}
-	defer func() { execCommandFunc = origExec }()
-
-	ctx, _, _ := newOriginCtx()
-	c := NewSkillContext(ctx)
-	c.execFilePath = "/any/path/acr-skill"
-
-	err := c.ExecuteAcrSkill([]string{"validate", "-d", "./my-skill"})
-	if err != nil {
-		t.Fatalf("ExecuteAcrSkill failed: %v", err)
-	}
-}
-
-func TestExecuteAcrSkill_Failure(t *testing.T) {
-	origExec := execCommandFunc
-	execCommandFunc = func(name string, args ...string) *exec.Cmd {
-		// 跨平台的 mock 实现，模拟失败
-		if runtime.GOOS == "windows" {
-			return exec.Command("cmd", "/c", "exit 1")
-		}
-		return exec.Command("false")
-	}
-	defer func() { execCommandFunc = origExec }()
-
-	ctx, _, _ := newOriginCtx()
-	c := NewSkillContext(ctx)
-	c.execFilePath = "/any/path/acr-skill"
-
-	err := c.ExecuteAcrSkill([]string{"validate"})
-	if err == nil {
-		t.Fatalf("expected execution error")
-	}
-	if !strings.Contains(err.Error(), "failed to execute") {
-		t.Fatalf("unexpected error message: %v", err)
-	}
-}
-
-func TestExecuteAcrSkill_CompatMode(t *testing.T) {
-	origExec := execCommandFunc
-	var capturedEnv []string
-	execCommandFunc = func(name string, args ...string) *exec.Cmd {
-		cmd := exec.Command("true")
-		// 捕获环境变量用于验证
-		capturedEnv = os.Environ()
-		return cmd
-	}
-	defer func() { execCommandFunc = origExec }()
-
-	// 设置兼容性模式环境变量
-	origCompat := os.Getenv("ALIBABA_CLOUD_ACR_SKILL_COMPAT_MODE")
-	os.Setenv("ALIBABA_CLOUD_ACR_SKILL_COMPAT_MODE", "aliyun acrutil skill")
-	defer os.Setenv("ALIBABA_CLOUD_ACR_SKILL_COMPAT_MODE", origCompat)
-
-	ctx, _, _ := newOriginCtx()
-	c := NewSkillContext(ctx)
-	c.execFilePath = "/any/path/acr-skill"
-
-	err := c.ExecuteAcrSkill([]string{"--help"})
-	if err != nil {
-		t.Fatalf("ExecuteAcrSkill failed: %v", err)
-	}
-
-	// 验证环境变量被传递
-	found := false
-	for _, env := range capturedEnv {
-		if strings.HasPrefix(env, "ALIBABA_CLOUD_ACR_SKILL_COMPAT_MODE=") {
-			found = true
-			if !strings.Contains(env, "aliyun acrutil skill") {
-				t.Errorf("compat mode env var has wrong value: %s", env)
-			}
-			break
-		}
-	}
-	if !found {
-		t.Log("Warning: compat mode env var not found in captured env (may be expected in test environment)")
+	if skillConfig.EnvUserAgent != "ALIBABA_CLOUD_ACR_SKILL" {
+		t.Errorf("EnvUserAgent: got %s", skillConfig.EnvUserAgent)
 	}
 }
