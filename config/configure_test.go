@@ -335,6 +335,140 @@ func TestConfigureOIDC(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestConfigureBearerToken(t *testing.T) {
+	originalStdin := stdin
+	defer func() {
+		stdin = originalStdin
+	}()
+
+	w := new(bytes.Buffer)
+	profile := &Profile{
+		Name:                 "default",
+		Mode:                 BearerToken,
+		BearerTokenValue:     "my-secret-token",
+		BearerTokenHeaderKey: "x-custom-token",
+		RegionId:             "cn-hangzhou",
+	}
+	err := configureBearerToken(w, profile)
+	assert.Nil(t, err)
+	assert.Equal(t, "Bearer Token [************ken]: Bearer Token Header Key [x-custom-token] (optional, e.g. x-custom-token; leave empty for x-acs-bearer-token): ", w.String())
+	assert.Equal(t, "my-secret-token", profile.BearerTokenValue)
+	assert.Equal(t, "x-custom-token", profile.BearerTokenHeaderKey)
+}
+
+func TestDoConfigureWithBearerToken(t *testing.T) {
+	originhook := hookLoadOrCreateConfiguration
+	originhookSave := hookSaveConfigurationWithContext
+	var savedConfig *Configuration
+
+	defer func() {
+		hookLoadOrCreateConfiguration = originhook
+		hookSaveConfigurationWithContext = originhookSave
+	}()
+
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name:            "default",
+						Mode:            AK,
+						AccessKeyId:     "default_ak",
+						AccessKeySecret: "default_sk",
+						OutputFormat:    "json",
+					},
+					{
+						Name:                 "bearer-profile",
+						Mode:                 BearerToken,
+						BearerTokenValue:     "bearer-secret",
+						BearerTokenHeaderKey: "x-custom-token",
+						RegionId:             "cn-hangzhou",
+						Language:             "en",
+						OutputFormat:         "json",
+					},
+				},
+			}, nil
+		}
+	}
+
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
+			savedConfig = config
+			return nil
+		}
+	}
+
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, bytes.NewBuffer(nil))
+	AddFlags(ctx.Flags())
+
+	err := doConfigure(ctx, "bearer-profile", "BearerToken")
+	assert.Nil(t, err)
+
+	output := w.String()
+	assert.Contains(t, output, "Configuring profile 'bearer-profile' in 'BearerToken' authenticate mode...")
+	assert.Contains(t, output, "Bearer Token [**********ret]:")
+	assert.Contains(t, output, "Bearer Token Header Key [x-custom-token]")
+	assert.Contains(t, output, "Saving profile[bearer-profile]")
+	assert.Contains(t, output, "Done.")
+	assert.Contains(t, output, "Configure Done!!!")
+	assert.NotContains(t, output, "Configure Failed")
+
+	assert.NotNil(t, savedConfig)
+	p, ok := savedConfig.GetProfile("bearer-profile")
+	assert.True(t, ok)
+	assert.Equal(t, BearerToken, p.Mode)
+	assert.Equal(t, "bearer-secret", p.BearerTokenValue)
+	assert.Equal(t, "x-custom-token", p.BearerTokenHeaderKey)
+	assert.Equal(t, "cn-hangzhou", p.RegionId)
+}
+
+func TestDoConfigureWithBearerTokenNewProfile(t *testing.T) {
+	originhook := hookLoadOrCreateConfiguration
+	originhookSave := hookSaveConfigurationWithContext
+	var savedConfig *Configuration
+
+	defer func() {
+		hookLoadOrCreateConfiguration = originhook
+		hookSaveConfigurationWithContext = originhookSave
+	}()
+
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{Name: "default", Mode: AK, AccessKeyId: "ak", OutputFormat: "json"},
+				},
+			}, nil
+		}
+	}
+
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
+			savedConfig = config
+			return nil
+		}
+	}
+
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, bytes.NewBuffer(nil))
+	AddFlags(ctx.Flags())
+
+	err := doConfigure(ctx, "bearer-profile", "BearerToken")
+	assert.Nil(t, err)
+
+	output := w.String()
+	assert.Contains(t, output, "Configuring profile 'bearer-profile' in 'BearerToken' authenticate mode...")
+	assert.Contains(t, output, "Configure Done!!!")
+	assert.NotContains(t, output, "Configure Failed")
+
+	p, ok := savedConfig.GetProfile("bearer-profile")
+	assert.True(t, ok)
+	assert.Equal(t, BearerToken, p.Mode)
+}
+
 func TestConfigureCloudSSO(t *testing.T) {
 	// 保存原始 stdin 以便后续恢复
 	originalStdin := stdin

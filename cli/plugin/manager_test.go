@@ -1215,14 +1215,14 @@ func TestValidateVersionAndPlatform_VersionCheck(t *testing.T) {
 		}
 	})
 
-	t.Run("Error - current version lower than required", func(t *testing.T) {
+	t.Run("Error - current version lower than required (legacy CLI suggests brew)", func(t *testing.T) {
 		cli.Version = "3.1.0"
 		targetPlugin := &PluginInfo{
 			Name: "test-plugin",
 			Versions: map[string]VersionInfo{
 				"1.0.0": {
 					Metadata: &VersionMetadata{
-						MinCliVersion: "3.2.0",
+						MinCliVersion: "3.4.0",
 					},
 					Platforms: map[string]PlatformInfo{
 						currentPlatform: {
@@ -1239,9 +1239,41 @@ func TestValidateVersionAndPlatform_VersionCheck(t *testing.T) {
 		assert.NotNil(t, err)
 		assert.Nil(t, platInfo)
 		assert.Contains(t, err.Error(), "requires CLI version")
-		assert.Contains(t, err.Error(), "3.2.0")
+		assert.Contains(t, err.Error(), "3.4.0")
 		assert.Contains(t, err.Error(), "3.1.0")
-		assert.Contains(t, err.Error(), "brew upgrade")
+		assert.Contains(t, err.Error(), "brew upgrade aliyun-cli")
+		assert.NotContains(t, err.Error(), "aliyun upgrade\n")
+		assert.Contains(t, err.Error(), "github.com/aliyun/aliyun-cli/releases")
+	})
+
+	t.Run("Error - current version >= 3.3.5 suggests aliyun upgrade", func(t *testing.T) {
+		cli.Version = "3.3.5"
+		targetPlugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"1.0.0": {
+					Metadata: &VersionMetadata{
+						MinCliVersion: "3.4.0",
+					},
+					Platforms: map[string]PlatformInfo{
+						currentPlatform: {
+							URL:      "http://example.com/plugin.tar.gz",
+							Checksum: "abc123",
+						},
+					},
+				},
+			},
+		}
+
+		ctx := newTestContext()
+		platInfo, err := mgr.validateVersionAndPlatform(ctx, targetPlugin, "1.0.0", "test-plugin")
+		assert.NotNil(t, err)
+		assert.Nil(t, platInfo)
+		assert.Contains(t, err.Error(), "requires CLI version")
+		assert.Contains(t, err.Error(), "3.4.0")
+		assert.Contains(t, err.Error(), "3.3.5")
+		assert.Contains(t, err.Error(), "aliyun upgrade")
+		assert.NotContains(t, err.Error(), "brew upgrade")
 		assert.Contains(t, err.Error(), "github.com/aliyun/aliyun-cli/releases")
 	})
 
@@ -1447,6 +1479,45 @@ func TestSavePluginToManifest(t *testing.T) {
 	assert.Equal(t, extractDir, plugin.Path)
 	assert.Equal(t, pManifest.Command, plugin.Command)
 	assert.Equal(t, pManifest.Description, plugin.Description)
+	assert.Nil(t, plugin.ProfileRequired, "absent in manifest should stay nil")
+
+	t.Run("propagates explicit profileRequired=false", func(t *testing.T) {
+		nameOptOut := "test-plugin-opt-out"
+		ff := false
+		pm := &PluginManifest{
+			Name:            nameOptOut,
+			Command:         "opt-out",
+			Description:     "opt-out",
+			ProfileRequired: &ff,
+		}
+		assert.NoError(t, mgr.savePluginToManifest(nameOptOut, version, extractDir, pm))
+		lm, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		got, ok := lm.Plugins[nameOptOut]
+		assert.True(t, ok)
+		assert.NotNil(t, got.ProfileRequired)
+		assert.False(t, *got.ProfileRequired)
+		assert.False(t, got.IsProfileRequired())
+	})
+
+	t.Run("propagates explicit profileRequired=true", func(t *testing.T) {
+		nameStrict := "test-plugin-strict"
+		tt := true
+		pm := &PluginManifest{
+			Name:            nameStrict,
+			Command:         "strict",
+			Description:     "strict",
+			ProfileRequired: &tt,
+		}
+		assert.NoError(t, mgr.savePluginToManifest(nameStrict, version, extractDir, pm))
+		lm, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		got, ok := lm.Plugins[nameStrict]
+		assert.True(t, ok)
+		assert.NotNil(t, got.ProfileRequired)
+		assert.True(t, *got.ProfileRequired)
+		assert.True(t, got.IsProfileRequired())
+	})
 }
 
 func TestManager_downloadAndVerifyPlugin(t *testing.T) {
@@ -3868,4 +3939,21 @@ func TestManager_FindPluginByCommand(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "no plugin found for command: fc")
 	})
+}
+
+func TestHttpGet_AcceptEncodingIdentity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "identity", r.Header.Get("Accept-Encoding"))
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+
+	resp, err := httpGet(server.URL, 5*time.Second)
+	assert.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, "ok", string(body))
 }

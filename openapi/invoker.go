@@ -29,10 +29,15 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 func GetClient(cp *config.Profile, ctx *cli.Context) (client *sdk.Client, err error) {
+	if cp.Mode == config.BearerToken {
+		return nil, config.ErrBearerTokenRequiresPlugin("")
+	}
+
 	credential, err := cp.GetCredential(ctx, nil)
 	if err != nil {
 		return
@@ -121,6 +126,13 @@ func (a *BasicInvoker) getRequest() *requests.CommonRequest {
 	return a.request
 }
 
+func (a *BasicInvoker) productCode() string {
+	if a.product == nil {
+		return ""
+	}
+	return a.product.Code
+}
+
 func aiModeSuffixForContext(ctx *cli.Context) string {
 	configDir := config.GetConfigDir(ctx)
 	aiCfg, err := aimode.Load(configDir)
@@ -147,6 +159,15 @@ func parseCustomUserAgentSegments(s string) [][2]string {
 func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
 	a.product = product
+
+	if a.profile.Mode == config.BearerToken {
+		code := product.GetLowerCode()
+		return cli.NewErrorWithTip(
+			config.ErrBearerTokenRequiresPlugin(code),
+			"Install the plugin if needed: `aliyun plugin install --name %s`",
+			code)
+	}
+
 	a.request = requests.NewCommonRequest()
 	a.request.Product = product.Code
 
@@ -210,6 +231,10 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	}
 	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 
+	if name := util.DetectAgentName(); name != "" {
+		a.client.AppendUserAgent("Agent", name)
+	}
+
 	if envUA := util.GetFromEnv("ALIBABA_CLOUD_USER_AGENT"); envUA != "" {
 		envUA = util.SanitizeUserAgent(envUA)
 		for _, pair := range parseCustomUserAgentSegments(envUA) {
@@ -238,6 +263,8 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 				"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, "+hint)
 		}
 	}
+
+	otel.InjectHeaders(a.request.Headers)
 
 	return nil
 }

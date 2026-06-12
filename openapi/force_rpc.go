@@ -56,6 +56,8 @@ func (a *ForceRpcInvoker) Prepare(ctx *cli.Context) (err error) {
 		}
 	}
 
+	applyCallContextRPC(a.productCode(), a.request.QueryParams)
+
 	return
 }
 

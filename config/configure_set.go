@@ -65,7 +65,7 @@ func doConfigureSet(ctx *cli.Context) error {
 
 	mode, ok := ModeFlag(flags).GetValue()
 	if ok {
-		profile.Mode = AuthenticateMode(mode)
+		profile.Mode = NormalizeMode(mode)
 	} else {
 		if profile.Mode == "" {
 			profile.Mode = AK
@@ -117,6 +117,9 @@ func doConfigureSet(ctx *cli.Context) error {
 		profile.CloudSSOSignInUrl = CloudSSOSignInUrlFlag(flags).GetStringOrDefault(profile.CloudSSOSignInUrl)
 	case OAuth:
 		profile.OAuthSiteType = OAuthSiteTypeFlag(flags).GetStringOrDefault(profile.OAuthSiteType)
+	case BearerToken:
+		profile.BearerTokenValue = BearerTokenFlag(flags).GetStringOrDefault(profile.BearerTokenValue)
+		profile.BearerTokenHeaderKey = BearerTokenHeaderKeyFlag(flags).GetStringOrDefault(profile.BearerTokenHeaderKey)
 	}
 
 	profile.RegionId = RegionFlag(flags).GetStringOrDefault(profile.RegionId)
@@ -129,6 +132,7 @@ func doConfigureSet(ctx *cli.Context) error {
 	profile.StsRegion = StsRegionFlag(flags).GetStringOrDefault(profile.StsRegion)
 	profile.EndpointType = EndpointTypeFlag(flags).GetStringOrDefault(profile.EndpointType)
 	profile.Endpoint = EndpointFlag(flags).GetStringOrDefault(profile.Endpoint)
+	profile.ExternalAccountType = ExternalAccountTypeFlag(flags).GetStringOrDefault(profile.ExternalAccountType)
 
 	if autoPluginInstallFlag := AutoPluginInstallFlag(flags); autoPluginInstallFlag != nil && autoPluginInstallFlag.IsAssigned() {
 		if val, ok := autoPluginInstallFlag.GetValue(); ok {

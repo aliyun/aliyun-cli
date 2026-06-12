@@ -54,3 +54,17 @@ func TestDoHello(t *testing.T) {
 		"!!! Configure Failed please configure again !!!\n"+
 		"-----------------------------------------------"))
 }
+
+func TestDoHello_SkipsForBearerToken(t *testing.T) {
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, bytes.NewBuffer(nil))
+	profile := &Profile{
+		Mode:             BearerToken,
+		BearerTokenValue: "token",
+		RegionId:         "cn-hangzhou",
+	}
+
+	DoHello(ctx, profile)
+	assert.Contains(t, w.String(), "Configure Done!!!")
+	assert.NotContains(t, w.String(), "Configure Failed")
+}

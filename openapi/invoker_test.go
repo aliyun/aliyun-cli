@@ -139,6 +139,97 @@ func TestBasicInvoker_Init_ProfileEndpoint(t *testing.T) {
 	assert.Equal(t, "cmd.endpoint.aliyuncs.com", invoker2.getRequest().Domain)
 }
 
+func TestBasicInvoker_Init_BearerToken(t *testing.T) {
+	cp := &config.Profile{
+		Mode:             config.BearerToken,
+		BearerTokenValue: "secret-token",
+		RegionId:         "cn-hangzhou",
+	}
+	invoker := NewBasicInvoker(cp)
+	ctx := cli.NewCommandContext(bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+	product := &meta.Product{Code: "DevOps", Version: "2021-06-25"}
+
+	err := invoker.Init(ctx, product)
+	assert.NotNil(t, err)
+	assert.Nil(t, invoker.getClient())
+	assert.Nil(t, invoker.getRequest())
+
+	wantErr := config.ErrBearerTokenRequiresPlugin("devops")
+	assert.Equal(t, wantErr.Error(), err.Error())
+
+	tipErr, ok := err.(cli.ErrorWithTip)
+	assert.True(t, ok)
+	assert.Equal(t, "Install the plugin if needed: `aliyun plugin install --name devops`", tipErr.GetTip("en"))
+}
+
+func TestBasicInvoker_Init_OtelHeaders(t *testing.T) {
+	cp := &config.Profile{
+		Mode:            config.AuthenticateMode("StsToken"),
+		AccessKeyId:     "akid",
+		AccessKeySecret: "aksecret",
+		StsToken:        "ststoken",
+		RegionId:        "cn-hangzhou",
+	}
+
+	setupCtx := func(t *testing.T) *cli.Context {
+		t.Helper()
+		w := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(w, stderr)
+		ctx.Flags().Add(config.NewRegionFlag())
+		ctx.Flags().Add(config.NewRegionIdFlag())
+		endpointflag := config.NewEndpointFlag()
+		endpointflag.SetAssigned(true)
+		endpointflag.SetValue("ecs.cn-hangzhou.aliyuncs.com")
+		ctx.Flags().Add(endpointflag)
+		versionflag := NewVersionFlag()
+		ctx.Flags().Add(versionflag)
+		ctx.Flags().Add(NewHeaderFlag())
+		ctx.Flags().Add(config.NewSkipSecureVerify())
+		return ctx
+	}
+
+	t.Run("injects traceparent and baggage", func(t *testing.T) {
+		t.Setenv("ALIBABA_CLOUD_OTEL_TRACEPARENT", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+		t.Setenv("ALIBABA_CLOUD_OTEL_BAGGAGE", "sessionId=abc-123")
+
+		invoker := NewBasicInvoker(cp)
+		ctx := setupCtx(t)
+		product := &meta.Product{Version: "v1.0"}
+		err := invoker.Init(ctx, product)
+		assert.Nil(t, err)
+		assert.Equal(t, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", invoker.getRequest().Headers["traceparent"])
+		assert.Equal(t, "sessionId=abc-123", invoker.getRequest().Headers["baggage"])
+	})
+
+	t.Run("no headers when disabled", func(t *testing.T) {
+		t.Setenv("ALIBABA_CLOUD_OTEL_ENABLED", "false")
+		t.Setenv("ALIBABA_CLOUD_OTEL_TRACEPARENT", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+
+		invoker := NewBasicInvoker(cp)
+		ctx := setupCtx(t)
+		product := &meta.Product{Version: "v1.0"}
+		err := invoker.Init(ctx, product)
+		assert.Nil(t, err)
+		assert.Empty(t, invoker.getRequest().Headers["traceparent"])
+		assert.Empty(t, invoker.getRequest().Headers["baggage"])
+	})
+
+	t.Run("no headers when env vars not set", func(t *testing.T) {
+		t.Setenv("ALIBABA_CLOUD_OTEL_TRACEPARENT", "")
+		t.Setenv("ALIBABA_CLOUD_OTEL_BAGGAGE", "")
+		t.Setenv("ALIBABA_CLOUD_OTEL_ENABLED", "")
+
+		invoker := NewBasicInvoker(cp)
+		ctx := setupCtx(t)
+		product := &meta.Product{Version: "v1.0"}
+		err := invoker.Init(ctx, product)
+		assert.Nil(t, err)
+		assert.Empty(t, invoker.getRequest().Headers["traceparent"])
+		assert.Empty(t, invoker.getRequest().Headers["baggage"])
+	})
+}
+
 func TestParseCustomUserAgentSegments(t *testing.T) {
 	tests := []struct {
 		name   string

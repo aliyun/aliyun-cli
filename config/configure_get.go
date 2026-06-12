@@ -103,6 +103,8 @@ func doConfigureGet(c *cli.Context, args []string) error {
 			cli.Printf(c.Stdout(), "endpoint-type=%s\n", profile.EndpointType)
 		case EndpointFlagName:
 			cli.Printf(c.Stdout(), "endpoint=%s\n", profile.Endpoint)
+		case ExternalAccountTypeFlagName:
+			cli.Printf(c.Stdout(), "external-account-type=%s\n", profile.ExternalAccountType)
 		}
 	}
 

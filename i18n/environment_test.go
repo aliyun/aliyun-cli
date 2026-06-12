@@ -21,9 +21,20 @@ import (
 )
 
 func TestEnvironment(t *testing.T) {
+	originLANG := os.Getenv("LANG")
+	defer os.Setenv("LANG", originLANG)
+
 	SetLanguage("en")
 	assert.Equal(t, "en", GetLanguage())
 	SetLanguage("zh")
+	assert.Equal(t, "zh", GetLanguage())
+
+	os.Setenv("LANG", "en_US.UTF-8")
+	SetLanguage("")
+	assert.Equal(t, "en", GetLanguage())
+
+	os.Setenv("LANG", "zh_CN.UTF-8")
+	SetLanguage("zh_CN.UTF-8")
 	assert.Equal(t, "zh", GetLanguage())
 }
 

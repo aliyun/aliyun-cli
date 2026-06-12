@@ -610,6 +610,9 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 		}
 	}()
 
+	// 隔离 Agent 检测相关 env，避免运行环境（如 CURSOR_AGENT=1）影响断言。
+	snapshotAndUnsetAgentEnvs(t)
+
 	t.Run("without vendor environment variable", func(t *testing.T) {
 		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
 		os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
@@ -709,5 +712,32 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 		ua2 := GetAliyunCliUserAgent()
 
 		assert.Equal(t, ua1, ua2)
+	})
+
+	t.Run("with agent env appends agent segment", func(t *testing.T) {
+		snapshotAndUnsetAgentEnvs(t)
+		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
+		os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
+		os.Setenv("CURSOR_AGENT", "1")
+
+		ua := GetAliyunCliUserAgent()
+
+		assert.Contains(t, ua, "Aliyun-CLI/")
+		assert.Contains(t, ua, "Agent/cursor")
+	})
+
+	t.Run("agent segment placed between vendor and custom UA", func(t *testing.T) {
+		snapshotAndUnsetAgentEnvs(t)
+		os.Setenv("ALIBABA_CLOUD_VENDOR", "v1")
+		os.Setenv("ALIBABA_CLOUD_USER_AGENT", "skill/x")
+		os.Setenv("CURSOR_AGENT", "1")
+
+		ua := GetAliyunCliUserAgent()
+
+		idxVendor := strings.Index(ua, "vendor/")
+		idxAgent := strings.Index(ua, "Agent/")
+		idxSkill := strings.Index(ua, "skill/")
+		assert.True(t, idxVendor >= 0 && idxAgent > idxVendor && idxSkill > idxAgent,
+			"顺序应为 vendor/ → Agent/ → skill/，实际：%s", ua)
 	})
 }

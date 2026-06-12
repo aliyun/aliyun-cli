@@ -51,8 +51,11 @@ const (
 	OAuthSiteTypeName                  = "oauth-site-type"
 	EndpointTypeFlagName               = "endpoint-type"
 	EndpointFlagName                   = "endpoint"
+	ExternalAccountTypeFlagName        = "external-account-type"
 	AutoPluginInstallFlagName          = "auto-plugin-install"
 	AutoPluginInstallEnablePreFlagName = "auto-plugin-install-enable-pre"
+	BearerTokenFlagName                = "bearer-token"
+	BearerTokenHeaderKeyFlagName       = "bearer-token-header-key"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -87,8 +90,11 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewOAuthSiteTypeFlag())
 	fs.Add(NewEndpointTypeFlag())
 	fs.Add(NewEndpointFlag())
+	fs.Add(NewExternalAccountTypeFlag())
 	fs.Add(NewAutoPluginInstallFlag())
 	fs.Add(NewAutoPluginInstallEnablePreFlag())
+	fs.Add(NewBearerTokenFlag())
+	fs.Add(NewBearerTokenHeaderKeyFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -230,8 +236,8 @@ func NewModeFlag() *cli.Flag {
 		DefaultValue: "AK",
 		Persistent:   true,
 		Short: i18n.T(
-			"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth}` to assign authenticate mode",
-			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth}` 指定认证方式"),
+			"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth|BearerToken}` to assign authenticate mode",
+			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth|BearerToken}` 指定认证方式"),
 	}
 }
 
@@ -571,6 +577,29 @@ func NewEndpointTypeFlag() *cli.Flag {
 	}
 }
 
+func ExternalAccountTypeFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(ExternalAccountTypeFlagName)
+}
+
+func BearerTokenFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(BearerTokenFlagName)
+}
+
+func BearerTokenHeaderKeyFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(BearerTokenHeaderKeyFlagName)
+}
+
+func NewExternalAccountTypeFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         ExternalAccountTypeFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--external-account-type <type>` to assign external account type",
+			"使用 `--external-account-type <type>` 来指定外部账号类型"),
+	}
+}
+
 func AutoPluginInstallFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(AutoPluginInstallFlagName)
 }
@@ -598,5 +627,29 @@ func NewAutoPluginInstallEnablePreFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--auto-plugin-install-enable-pre {true|false}` to install latest version (including pre-release)",
 			"使用 `--auto-plugin-install-enable-pre {true|false}` 安装最新版本（包括预览版本）"),
+	}
+}
+
+func NewBearerTokenFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         BearerTokenFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--bearer-token <token>` to assign bearer token (BearerToken mode)",
+			"使用 `--bearer-token <token>` 指定 Bearer Token（BearerToken 认证模式）"),
+	}
+}
+
+func NewBearerTokenHeaderKeyFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         BearerTokenHeaderKeyFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--bearer-token-header-key <key>` to assign custom auth header key, e.g. x-custom-token",
+			"使用 `--bearer-token-header-key <key>` 指定自定义认证 Header 名称，例如 x-custom-token"),
 	}
 }

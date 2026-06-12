@@ -100,22 +100,22 @@ func TestValidate(t *testing.T) {
 
 	actual.Mode = External
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid process_command")
+	assert.EqualError(t, err, "process_command is not configured for profile 'default'. Run `aliyun configure --profile default --mode External` to set it")
 
 	actual.Mode = CredentialsURI
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid credentials_uri")
+	assert.EqualError(t, err, "credentials_uri is not configured for profile 'default'. Run `aliyun configure --profile default --mode CredentialsURI` or set ALIBABA_CLOUD_CREDENTIALS_URI environment variable")
 
 	actual.Mode = ChainableRamRoleArn
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid source_profile")
+	assert.EqualError(t, err, "source_profile is not configured for profile 'default'. Run `aliyun configure --profile default --mode ChainableRamRoleArn` to set it")
 
 	actual.SourceProfile = "source"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid ram_role_arn")
+	assert.EqualError(t, err, "ram_role_arn is not configured for profile 'default'. Run `aliyun configure --profile default --mode ChainableRamRoleArn` to set it")
 	actual.RamRoleArn = "arn"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid role_session_name")
+	assert.EqualError(t, err, "role_session_name is not configured for profile 'default'. Run `aliyun configure --profile default --mode ChainableRamRoleArn` to set it")
 	actual.RoleSessionName = "rsn"
 	err = actual.Validate()
 	assert.Nil(t, err)
@@ -144,10 +144,10 @@ func TestValidateWithRsaKeyPair(t *testing.T) {
 	actual.RegionId = "cn-hangzhou"
 	actual.Mode = RsaKeyPair
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid private_key")
+	assert.EqualError(t, err, "private_key is not configured for profile 'default'. Run `aliyun configure --profile default --mode RsaKeyPair` to set it")
 	actual.PrivateKey = "privateKey"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid key_pair_name")
+	assert.EqualError(t, err, "key_pair_name is not configured for profile 'default'. Run `aliyun configure --profile default --mode RsaKeyPair` to set it")
 	actual.KeyPairName = "keyPairName"
 	err = actual.Validate()
 	assert.Nil(t, err)
@@ -162,10 +162,10 @@ func TestValidateWithRamRoleArn(t *testing.T) {
 	actual.AccessKeyId = "accessKeyId"
 	actual.AccessKeySecret = "accessKeySecret"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid ram_role_arn")
+	assert.EqualError(t, err, "ram_role_arn is not configured for profile 'default'. Run `aliyun configure --profile default --mode RamRoleArn` to set it")
 	actual.RamRoleArn = "ramRoleArn"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid role_session_name")
+	assert.EqualError(t, err, "role_session_name is not configured for profile 'default'. Run `aliyun configure --profile default --mode RamRoleArn` to set it")
 	actual.RoleSessionName = "roleSessionName"
 	err = actual.Validate()
 	assert.Nil(t, err)
@@ -182,7 +182,7 @@ func TestValidateWithStsToken(t *testing.T) {
 	actual.AccessKeyId = "accessKeyId"
 	actual.AccessKeySecret = "accessKeySecret"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid sts_token")
+	assert.EqualError(t, err, "sts_token is not configured for profile 'default'. Run `aliyun configure --profile default --mode StsToken` to set it")
 	actual.StsToken = "stsToken"
 	err = actual.Validate()
 	assert.Nil(t, err)
@@ -195,16 +195,16 @@ func TestValidateWithOIDC(t *testing.T) {
 	actual.RegionId = "cn-hangzhou"
 
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid oidc_provider_arn")
+	assert.EqualError(t, err, "oidc_provider_arn is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
 	actual.OIDCProviderARN = "oidc_provider_arn"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid oidc_token_file")
+	assert.EqualError(t, err, "oidc_token_file is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
 	actual.OIDCTokenFile = "/path/to/oidc/token/file"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid ram_role_arn")
+	assert.EqualError(t, err, "ram_role_arn is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
 	actual.RamRoleArn = "ramrolearn"
 	err = actual.Validate()
-	assert.EqualError(t, err, "invalid role_session_name")
+	assert.EqualError(t, err, "role_session_name is not configured for profile 'default'. Run `aliyun configure --profile default --mode OIDC` to set it")
 	actual.RoleSessionName = "rsn"
 	err = actual.Validate()
 	assert.Nil(t, err)
@@ -291,6 +291,8 @@ func TestOverwriteWithFlags(t *testing.T) {
 	EndpointTypeFlag(ctx.Flags()).SetValue("vpc")
 	EndpointFlag(ctx.Flags()).SetAssigned(true)
 	EndpointFlag(ctx.Flags()).SetValue("custom.endpoint.aliyuncs.com")
+	ExternalAccountTypeFlag(ctx.Flags()).SetAssigned(true)
+	ExternalAccountTypeFlag(ctx.Flags()).SetValue("buc")
 
 	exp := &Profile{
 		Name:                 "default",
@@ -316,6 +318,7 @@ func TestOverwriteWithFlags(t *testing.T) {
 		CloudSSOAccessConfig: "222",
 		EndpointType:         "vpc",
 		Endpoint:             "custom.endpoint.aliyuncs.com",
+		ExternalAccountType:  "buc",
 	}
 
 	actual.OverwriteWithFlags(ctx)
@@ -449,6 +452,7 @@ func resetEnv() {
 	os.Setenv("ALIBABACLOUD_ENDPOINT", "")
 	os.Setenv("ALICLOUD_ENDPOINT", "")
 	os.Setenv("ENDPOINT", "")
+	os.Setenv("ALIBABA_CLOUD_EXTERNAL_ACCOUNT_TYPE", "")
 }
 
 func TestOverwriteWithFlagsWithEndpointTypeEnv(t *testing.T) {
@@ -527,13 +531,34 @@ func TestOverwriteWithFlagsWithEndpointEnv(t *testing.T) {
 	resetEnv()
 }
 
+func TestOverwriteWithFlagsWithExternalAccountTypeEnv(t *testing.T) {
+	buf := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, stderr)
+	AddFlags(ctx.Flags())
+
+	resetEnv()
+	actual := newProfile()
+	exp := newProfile()
+	actual.OverwriteWithFlags(ctx)
+	assert.Equal(t, exp, actual)
+
+	actual = newProfile()
+	os.Setenv("ALIBABA_CLOUD_EXTERNAL_ACCOUNT_TYPE", "buc")
+	actual.OverwriteWithFlags(ctx)
+	exp.ExternalAccountType = "buc"
+	assert.Equal(t, exp, actual)
+
+	resetEnv()
+}
+
 func TestValidateAk(t *testing.T) {
 	actual := newProfile()
 	err := actual.ValidateAK()
-	assert.EqualError(t, err, "invalid access_key_id: ")
+	assert.EqualError(t, err, "access_key_id is not configured for profile 'default'. Run `aliyun configure --profile default --mode ` to set it")
 	actual.AccessKeyId = "accessKeyId"
 	err = actual.ValidateAK()
-	assert.EqualError(t, err, "invaild access_key_secret: ")
+	assert.EqualError(t, err, "access_key_secret is not configured for profile 'default'. Run `aliyun configure --profile default --mode ` to set it")
 	actual.AccessKeySecret = "accessKeySecret"
 	err = actual.ValidateAK()
 	assert.Nil(t, err)
@@ -546,6 +571,24 @@ func TestIsRegion(t *testing.T) {
 func TestGetStsEndpoint(t *testing.T) {
 	assert.Equal(t, "sts.aliyuncs.com", getSTSEndpoint(""))
 	assert.Equal(t, "sts.cn-hangzhou.aliyuncs.com", getSTSEndpoint("cn-hangzhou"))
+}
+
+func TestNormalizeMode(t *testing.T) {
+	assert.Equal(t, OAuth, NormalizeMode("oauth"))
+	assert.Equal(t, OAuth, NormalizeMode("OAuth"))
+	assert.Equal(t, OAuth, NormalizeMode("OAUTH"))
+	assert.Equal(t, CloudSSO, NormalizeMode("cloudsso"))
+	assert.Equal(t, CloudSSO, NormalizeMode("CloudSSO"))
+	assert.Equal(t, AK, NormalizeMode("ak"))
+	assert.Equal(t, AK, NormalizeMode("AK"))
+	assert.Equal(t, StsToken, NormalizeMode("ststoken"))
+	assert.Equal(t, RamRoleArn, NormalizeMode("ramrolearn"))
+	assert.Equal(t, EcsRamRole, NormalizeMode("ecsramrole"))
+	assert.Equal(t, ChainableRamRoleArn, NormalizeMode("chainableramrolearn"))
+	assert.Equal(t, OIDC, NormalizeMode("oidc"))
+	assert.Equal(t, External, NormalizeMode("external"))
+	assert.Equal(t, CredentialsURI, NormalizeMode("credentialsuri"))
+	assert.Equal(t, AuthenticateMode("UnknownMode"), NormalizeMode("UnknownMode"))
 }
 
 func TestAutoModeRecognition(t *testing.T) {
@@ -582,6 +625,40 @@ func TestAutoModeRecognition(t *testing.T) {
 	p = &Profile{OIDCProviderARN: "oidc_provider_arn", OIDCTokenFile: "/path/to/tokenfile", RamRoleArn: "ram/role/arn"}
 	AutoModeRecognition(p)
 	assert.Equal(t, OIDC, p.Mode)
+
+	p = &Profile{BearerTokenValue: "my-token"}
+	AutoModeRecognition(p)
+	assert.Equal(t, BearerToken, p.Mode)
+}
+
+func TestValidateBearerToken(t *testing.T) {
+	p := &Profile{Name: "default", Mode: BearerToken, RegionId: "cn-hangzhou"}
+	assert.EqualError(t, p.Validate(), "bearer_token is not configured for profile 'default'. Run `aliyun configure --profile default --mode BearerToken` to set it")
+
+	p.BearerTokenValue = "token"
+	assert.Nil(t, p.Validate())
+
+	p.BearerTokenHeaderKey = "x-custom-token"
+	assert.Nil(t, p.Validate())
+	assert.Equal(t, "x-custom-token", p.BearerTokenHeaderKey)
+
+	p.BearerTokenHeaderKey = "bad\r\nkey"
+	assert.Error(t, p.Validate())
+}
+
+func TestGetCredentialByBearerToken(t *testing.T) {
+	actual := newProfile()
+	actual.Mode = BearerToken
+	actual.BearerTokenValue = "my-bearer-token"
+	actual.RegionId = "cn-hangzhou"
+
+	credential, err := actual.GetCredential(newCtx(), nil)
+	assert.Nil(t, err)
+	assert.NotNil(t, credential)
+	assert.Equal(t, "bearer", *credential.GetType())
+	model, err := credential.GetCredential()
+	assert.Nil(t, err)
+	assert.Equal(t, "my-bearer-token", *model.BearerToken)
 }
 
 func TestGetCredentialByAK(t *testing.T) {
@@ -797,7 +874,7 @@ func TestGetCredentialWithCloudSSOEmptySignInUrl(t *testing.T) {
 
 	assert.NotNil(t, err)
 	assert.Nil(t, cred)
-	assert.Contains(t, err.Error(), "CloudSSO sign in url or account id")
+	assert.Contains(t, err.Error(), "aliyun configure --profile cloudsso-profile --mode CloudSSO")
 }
 
 // GetCredential not support mode test
@@ -1433,6 +1510,29 @@ func TestGetRuntimeEnv_StsToken(t *testing.T) {
 	assert.Equal(t, "test-sts-token", envs["ALIBABA_CLOUD_SECURITY_TOKEN"])
 }
 
+func TestGetRuntimeEnv_BearerToken(t *testing.T) {
+	p := &Profile{
+		Name:                 "default",
+		Mode:                 BearerToken,
+		BearerTokenValue:     "my-bearer-token",
+		BearerTokenHeaderKey: "x-custom-token",
+		RegionId:             "cn-hangzhou",
+	}
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.Equal(t, "my-bearer-token", envs["ALIBABA_CLOUD_BEARER_TOKEN"])
+	assert.Equal(t, "x-custom-token", envs["ALIBABA_CLOUD_BEARER_TOKEN_HEADER_KEY"])
+	assert.Equal(t, "cn-hangzhou", envs["ALIBABA_CLOUD_REGION_ID"])
+	_, hasAK := envs["ALIBABA_CLOUD_ACCESS_KEY_ID"]
+	assert.False(t, hasAK)
+
+	p.BearerTokenValue = ""
+	envs, err = p.GetRuntimeEnv(newCtx())
+	assert.Error(t, err)
+	assert.Nil(t, envs)
+}
+
 func TestGetRuntimeEnv_OptionalFields(t *testing.T) {
 	p := newProfile()
 	p.Mode = AK
@@ -1442,6 +1542,7 @@ func TestGetRuntimeEnv_OptionalFields(t *testing.T) {
 	p.Language = "zh"
 	p.EndpointType = "vpc"
 	p.Endpoint = "custom.endpoint.aliyuncs.com"
+	p.ExternalAccountType = "buc"
 	p.ReadTimeout = 30
 	p.ConnectTimeout = 10
 	p.RetryCount = 3
@@ -1452,6 +1553,7 @@ func TestGetRuntimeEnv_OptionalFields(t *testing.T) {
 	assert.Equal(t, "zh", envs["ALIBABA_CLOUD_LANGUAGE"])
 	assert.Equal(t, "vpc", envs["ALIBABA_CLOUD_ENDPOINT_TYPE"])
 	assert.Equal(t, "custom.endpoint.aliyuncs.com", envs["ALIBABA_CLOUD_ENDPOINT"])
+	assert.Equal(t, "buc", envs["ALIBABA_CLOUD_EXTERNAL_ACCOUNT_TYPE"])
 	assert.Equal(t, "30", envs["ALIBABA_CLOUD_READ_TIMEOUT"])
 	assert.Equal(t, "10", envs["ALIBABA_CLOUD_CONNECT_TIMEOUT"])
 	assert.Equal(t, "3", envs["ALIBABA_CLOUD_RETRY_COUNT"])
@@ -1466,6 +1568,7 @@ func TestGetRuntimeEnv_OptionalFieldsOmitted(t *testing.T) {
 	p.Language = ""
 	p.EndpointType = ""
 	p.Endpoint = ""
+	p.ExternalAccountType = ""
 	p.ReadTimeout = 0
 	p.ConnectTimeout = 0
 	p.RetryCount = 0
@@ -1479,6 +1582,8 @@ func TestGetRuntimeEnv_OptionalFieldsOmitted(t *testing.T) {
 	assert.False(t, hasEndpoint)
 	_, hasEndpointVal := envs["ALIBABA_CLOUD_ENDPOINT"]
 	assert.False(t, hasEndpointVal)
+	_, hasExternalAcct := envs["ALIBABA_CLOUD_EXTERNAL_ACCOUNT_TYPE"]
+	assert.False(t, hasExternalAcct)
 	_, hasReadTimeout := envs["ALIBABA_CLOUD_READ_TIMEOUT"]
 	assert.False(t, hasReadTimeout)
 	_, hasConnTimeout := envs["ALIBABA_CLOUD_CONNECT_TIMEOUT"]
@@ -1498,3 +1603,56 @@ func TestGetRuntimeEnv_CredentialError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, envs)
 }
+
+func TestOpenAPIAuthType(t *testing.T) {
+	assert.Equal(t, "AK", (&Profile{Mode: AK}).OpenAPIAuthType())
+	assert.Equal(t, "bearer", (&Profile{Mode: BearerToken}).OpenAPIAuthType())
+	assert.Equal(t, "Anonymous", (&Profile{
+		Mode:                 BearerToken,
+		BearerTokenHeaderKey: "x-custom-token",
+	}).OpenAPIAuthType())
+}
+
+func TestInjectBearerTokenHeader(t *testing.T) {
+	headers := map[string]*string{}
+	(&Profile{Mode: AK, BearerTokenValue: "t"}).InjectBearerTokenHeader(headers)
+	assert.Empty(t, headers)
+
+	(&Profile{
+		Mode:                 BearerToken,
+		BearerTokenValue:     "secret",
+		BearerTokenHeaderKey: "x-custom-token",
+	}).InjectBearerTokenHeader(headers)
+	assert.Equal(t, "secret", *headers["x-custom-token"])
+}
+
+func TestNormalizeBearerTokenHeaderKey(t *testing.T) {
+	key, err := NormalizeBearerTokenHeaderKey("  x-custom-token  ")
+	assert.Nil(t, err)
+	assert.Equal(t, "x-custom-token", key)
+
+	_, err = NormalizeBearerTokenHeaderKey("x-bad\r\nInjected: 1")
+	assert.Error(t, err)
+
+	_, err = NormalizeBearerTokenHeaderKey("x bad")
+	assert.Error(t, err)
+
+	key, err = NormalizeBearerTokenHeaderKey("")
+	assert.Nil(t, err)
+	assert.Equal(t, "", key)
+}
+
+func TestSanitizeBearerTokenValue(t *testing.T) {
+	assert.Equal(t, "abcX-Injected: yes", SanitizeBearerTokenValue("abc\r\nX-Injected: yes"))
+	assert.Equal(t, "token", SanitizeBearerTokenValue("token"))
+}
+
+func TestErrBearerTokenRequiresPlugin(t *testing.T) {
+	err := ErrBearerTokenRequiresPlugin("devops")
+	assert.Contains(t, err.Error(), "devops")
+	assert.Contains(t, err.Error(), "aliyun devops")
+
+	err = ErrBearerTokenRequiresPlugin("")
+	assert.Contains(t, err.Error(), "product plugin")
+}
+

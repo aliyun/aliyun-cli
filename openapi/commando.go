@@ -24,7 +24,9 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/headers"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
+	"github.com/aliyun/aliyun-cli/v3/util"
 
 	"encoding/json"
 	"fmt"
@@ -252,9 +254,12 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			}
 			if !installed {
 				ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
-				if profile, err := config.LoadProfileWithContext(ctx); err == nil {
-					c.profile = profile
+				// profile 加载 / 校验失败必须 fail-fast，不要 silent 吞错。否则会停留在main.go 启动时的默认 profile，--profile xxx 的语义丢失，用户毫无感知。
+				profile, err := config.LoadProfileWithContext(ctx)
+				if err != nil {
+					return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it")
 				}
+				c.profile = profile
 				// 需要判断是否plugin auto install enabled, 且支持环境变量
 				commandName := buildCommandName(args)
 				// fmt.Println("commandName", commandName, pluginArgs)
@@ -290,28 +295,57 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			isVersion := (apiOrMethod == "version")
 			if !isHelp && !isVersion && len(pluginArgs) >= 2 {
 				ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
-				if profile, err := config.LoadProfileWithContext(ctx); err == nil {
+				// Plugins may opt out of host-side profile enforcement by setting `profileRequired: false` in their manifest.
+				// When opted out, profile resolution is best-effort: we still try to load and forward the profile's env if it works, 
+				// but we never block the plugin on host-side credential failures — the plugin is expected to resolve auth itself.
+				profileRequired := plugin.IsProfileRequiredForCommand(args[0])
+
+				profile, profileErr := config.LoadProfileWithContext(ctx)
+
+				var envs map[string]string
+				if profileErr == nil && profile.Name != "" {
 					c.profile = profile
-				}
-				if c.profile.Name == "" {
-					return fmt.Errorf("profile not found, use `aliyun configure` to configure it")
+					var rtErr error
+					envs, rtErr = c.profile.GetRuntimeEnv(ctx)
+					if rtErr != nil {
+						if profileRequired {
+							return cli.NewErrorWithTip(rtErr,
+								fmt.Sprintf("profile %q: failed to resolve credentials", c.profile.Name))
+						}
+						envs = config.BuildBaselineEnv(ctx)
+					}
+				} else {
+					if profileRequired {
+						if profileErr != nil {
+							return cli.NewErrorWithTip(profileErr, "Configuration failed, use `aliyun configure` to configure it")
+						}
+						return fmt.Errorf("profile not found, use `aliyun configure` to configure it")
+					}
+					envs = config.BuildBaselineEnv(ctx)
 				}
 
-				if envs, err := c.profile.GetRuntimeEnv(ctx); err == nil {
-					configDir := config.GetConfigDir(ctx)
-					forceOn, forceOff := CliAIOverrides(ctx.Flags())
-					aimode.MergeUserAgentIntoPluginEnvs(configDir, envs, forceOn, forceOff)
-					safety.MergeSafetyPolicyPathIntoEnvs(configDir, envs)
-					ctx.SetRuntimeEnvs(envs)
-				}
+				configDir := config.GetConfigDir(ctx)
+				forceOn, forceOff := CliAIOverrides(ctx.Flags())
+				aimode.MergeUserAgentIntoPluginEnvs(configDir, envs, forceOn, forceOff)
+				util.MergeAgentSegmentIntoPluginEnvs(envs)
+				safety.MergeSafetyPolicyPathIntoEnvs(configDir, envs)
+				headers.MergeIntoPluginEnvs(envs)
+				ctx.SetRuntimeEnvs(envs)
 			} else if isHelp || isVersion {
-				// language 仅从profile 获取，不需要merge 环境变量和flag
 				c.setLangEnv(ctx)
 			}
 
-			// Safety policy check for plugin execution (before spawning plugin process)
+			// Safety policy check for plugin execution (before spawning plugin process).
+			// Plugins can be N-level (e.g. `aliyun fc function create`), so the
+			// command identifier joins every positional segment with ':' to stay
+			// consistent with how `product:command` itself is separated:
+			//   aliyun fc create-function       -> fc:create-function
+			//   aliyun fc function create       -> fc:function:create
+			//   aliyun fc invoke my-fn          -> fc:invoke:my-fn
+			// Users can still match coarsely with wildcards like `fc:function:*` or `fc:function*`.
 			if !isHelp && !isVersion {
-				if err := c.checkSafetyPolicy(ctx, args[0], apiOrMethod, ""); err != nil {
+				cmdName := strings.Join(args[1:], ":")
+				if err := c.checkSafetyPolicy(ctx, args[0], cmdName, ""); err != nil {
 					return err
 				}
 			}
@@ -369,8 +403,19 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 			}
 		}
+		// Safety policy is keyed on what the user actually typed, so a rule like `sls:ListProject` matches `aliyun sls ListProject` 
+		// regardless of how the cli later dispatches it (REST GET /, RPC, etc.).
+		if err := c.checkSafetyPolicy(ctx, product.Code, args[1], ""); err != nil {
+			return err
+		}
 		if product.ApiStyle == "restful" {
-			api, _ := meta.HookGetApi(c.library.GetApi)(product.Code, product.Version, args[1])
+			api, found := meta.HookGetApi(c.library.GetApi)(product.Code, product.Version, args[1])
+			// For restful products, the 2-arg form `aliyun <product> <ApiName>` requires a valid ApiName so we can resolve the underlying Method + PathPattern from metadata.
+			// Otherwise we'd fall through with empty Method/PathPattern and surface the confusing "product 'xxx' need restful call" error from checkRestfulMethod.
+			force := ForceFlag(ctx.Flags()).IsAssigned()
+			if !found && !force {
+				return &InvalidApiError{Name: args[1], product: &product}
+			}
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 			ctx.Command().Name = args[1]
 			if ShouldUseOpenapi(ctx, &product) {
@@ -398,6 +443,9 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		if find {
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 		}
+		if err := c.checkSafetyPolicy(ctx, product.Code, args[1], args[2]); err != nil {
+			return err
+		}
 		if ShouldUseOpenapi(ctx, &product) {
 			if !find {
 				return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
@@ -419,10 +467,6 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api *meta.Api, method string, path string) error {
 	if product == nil {
 		return fmt.Errorf("invalid product, please check product code")
-	}
-
-	if err := c.checkSafetyPolicy(ctx, product.Code, method, path); err != nil {
-		return err
 	}
 
 	apiContext, err := c.createHttpContext(ctx, product, api, method, path)
@@ -483,10 +527,6 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 }
 
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
-	if err := c.checkSafetyPolicy(ctx, productCode, apiOrMethod, path); err != nil {
-		return err
-	}
-
 	// create specific invoker
 	invoker, err := c.createInvoker(ctx, productCode, apiOrMethod, path)
 	if err != nil {
@@ -1110,7 +1150,7 @@ func (c *Commando) handleInstallError(ctx *cli.Context, err error, pluginName st
 
 func (c *Commando) checkSafetyPolicy(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
 	configDir := config.GetConfigDir(ctx)
-	policy, err := safety.LoadPolicy(configDir)
+	policy, err := safety.LoadEffectivePolicy(configDir)
 	if err != nil {
 		// Failed to load - skip policy check (fail open)
 		return nil
@@ -1132,7 +1172,8 @@ func (c *Commando) setLangEnv(ctx *cli.Context) {
 		return
 	}
 
-	lang := c.profile.Language
+	// 优先级：--language flag > profile.Language > i18n 全局兜底
+	lang := config.LanguageFlag(ctx.Flags()).GetStringOrDefault(c.profile.Language)
 	if lang == "" {
 		lang = i18n.GetLanguage()
 	}

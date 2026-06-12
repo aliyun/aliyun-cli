@@ -434,6 +434,47 @@ func TestHttpContext(t *testing.T) {
 		assert.Contains(t, err.Error(), "init openapi client failed")
 	})
 
+	t.Run("InitWithOtelHeaders", func(t *testing.T) {
+		t.Setenv("ALIBABA_CLOUD_OTEL_TRACEPARENT", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+		t.Setenv("ALIBABA_CLOUD_OTEL_BAGGAGE", "sessionId=abc-123")
+
+		profile := &config.Profile{
+			Mode:            "AK",
+			AccessKeyId:     "test-access-key-id",
+			AccessKeySecret: "test-access-key-secret",
+			RegionId:        "cn-hangzhou",
+		}
+		context := &HttpContext{profile: profile}
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
+
+		err := context.Init(ctx, product)
+		assert.NoError(t, err)
+		assert.Equal(t, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", *context.openapiRequest.Headers["traceparent"])
+		assert.Equal(t, "sessionId=abc-123", *context.openapiRequest.Headers["baggage"])
+	})
+
+	t.Run("InitWithOtelDisabled", func(t *testing.T) {
+		t.Setenv("ALIBABA_CLOUD_OTEL_ENABLED", "false")
+		t.Setenv("ALIBABA_CLOUD_OTEL_TRACEPARENT", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+		t.Setenv("ALIBABA_CLOUD_OTEL_BAGGAGE", "")
+
+		profile := &config.Profile{
+			Mode:            "AK",
+			AccessKeyId:     "test-access-key-id",
+			AccessKeySecret: "test-access-key-secret",
+			RegionId:        "cn-hangzhou",
+		}
+		context := &HttpContext{profile: profile}
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
+
+		err := context.Init(ctx, product)
+		assert.NoError(t, err)
+		assert.Nil(t, context.openapiRequest.Headers["traceparent"])
+		assert.Nil(t, context.openapiRequest.Headers["baggage"])
+	})
+
 }
 
 func TestOpenapiContext(t *testing.T) {

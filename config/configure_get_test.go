@@ -264,3 +264,52 @@ func TestDoConfigureGetEndpoint(t *testing.T) {
 	doConfigureGet(ctx, []string{EndpointFlagName})
 	assert.Equal(t, "endpoint=\n\n", stdout.String())
 }
+
+func TestDoConfigureGetExternalAccountType(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
+	originhook := hookLoadConfigurationWithContext
+	defer func() {
+		hookLoadConfigurationWithContext = originhook
+	}()
+
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name:                "default",
+						Mode:                AK,
+						ExternalAccountType: "buc",
+					},
+				},
+			}, nil
+		}
+	}
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureGet(ctx, []string{ExternalAccountTypeFlagName})
+	assert.Equal(t, "external-account-type=buc\n\n", stdout.String())
+
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{
+						Name:                "default",
+						Mode:                AK,
+						ExternalAccountType: "",
+					},
+				},
+			}, nil
+		}
+	}
+	stdout.Reset()
+	stderr.Reset()
+	doConfigureGet(ctx, []string{ExternalAccountTypeFlagName})
+	assert.Equal(t, "external-account-type=\n\n", stdout.String())
+}

@@ -30,6 +30,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	slsUtils "github.com/aliyun/aliyun-cli/v3/sls"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -147,7 +148,7 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 		HostMap: map[string]*string{},
 	}
 	a.openapiParams = &openapiClient.Params{}
-	a.openapiParams.AuthType = tea.String("AK")
+	a.openapiParams.AuthType = tea.String(a.profile.OpenAPIAuthType())
 	a.openapiParams.Style = tea.String("ROA")
 	a.openapiParams.ReqBodyType = tea.String("json")
 	a.openapiParams.BodyType = tea.String("json")
@@ -180,6 +181,11 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	if err != nil {
 		return fmt.Errorf("init openapi client failed, %s", err)
 	}
+	a.profile.InjectBearerTokenHeader(a.openapiRequest.Headers)
+	otel.InjectTeaHeaders(a.openapiRequest.Headers)
+	// 注：sls 等自建网关产品已在 selfBuiltGatewayProducts 中，下面的调用对它会直接跳过。
+	applyCallContextTeaHeaders(product.Code, a.openapiRequest.Headers)
+
 	// a.openapiRequest.Headers["x-acs-region-id"] = tea.String(a.profile.RegionId)
 	return nil
 }

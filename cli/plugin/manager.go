@@ -175,9 +175,18 @@ func (m *Manager) writeCache(cacheFile string, data []byte) {
 	_ = os.WriteFile(cacheFile, data, 0644)
 }
 
+func httpGet(url string, timeout time.Duration) (*http.Response, error) {
+	client := &http.Client{Timeout: timeout}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept-Encoding", "identity")
+	return client.Do(req)
+}
+
 func (m *Manager) fetchRemote(url string) ([]byte, error) {
-	client := &http.Client{Timeout: fetchTimeout}
-	resp, err := client.Get(url)
+	resp, err := httpGet(url, fetchTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -316,6 +325,21 @@ func isDevVersion(version string) bool {
 
 	lowerVersion := strings.ToLower(version)
 	return strings.Contains(lowerVersion, "-dev") || strings.Contains(lowerVersion, "dev")
+}
+
+// cliSelfUpgradeMinVersion 是 `aliyun upgrade` 子命令首次可用的 CLI 版本。
+// 低于该版本的 CLI 不存在自升级能力，需要回退到 brew/官方下载页面提示。
+const cliSelfUpgradeMinVersion = "3.3.5"
+
+// 当 currentVersion >= 3.3.5 时优先推荐 `aliyun upgrade` 一键升级，
+// 否则保留原 brew / GitHub Releases 的兜底说明。
+func buildCliUpgradeTip(currentVersion string) string {
+	if !isDevVersion(currentVersion) && compareVersion(currentVersion, cliSelfUpgradeMinVersion) >= 0 {
+		return "Please upgrade the CLI by running: aliyun upgrade\n" +
+			"Or download the latest version from: https://github.com/aliyun/aliyun-cli/releases"
+	}
+	return "Please upgrade the CLI by running: brew upgrade aliyun-cli\n" +
+		"Or download the latest version from: https://github.com/aliyun/aliyun-cli/releases"
 }
 
 // Returns: 1 if v1 > v2, -1 if v1 < v2, 0 if v1 == v2
@@ -461,13 +485,12 @@ func (m *Manager) validateVersionAndPlatform(ctx *cli.Context, targetPlugin *Plu
 				verInfo.Metadata.MinCliVersion)
 		} else if compareVersion(currentVersion, verInfo.Metadata.MinCliVersion) < 0 {
 			return nil, fmt.Errorf(
-				"plugin %s version %s requires CLI version %s or higher, but you have %s\n"+
-					"Please upgrade the CLI by running: brew upgrade aliyun-cli\n"+
-					"Or download the latest version from: https://github.com/aliyun/aliyun-cli/releases",
+				"plugin %s version %s requires CLI version %s or higher, but you have %s\n%s",
 				actualPluginName,
 				version,
 				verInfo.Metadata.MinCliVersion,
 				currentVersion,
+				buildCliUpgradeTip(currentVersion),
 			)
 		}
 	}
@@ -482,10 +505,7 @@ func (m *Manager) validateVersionAndPlatform(ctx *cli.Context, targetPlugin *Plu
 }
 
 func downloadFile(url, dest string) error {
-	client := &http.Client{
-		Timeout: 300 * time.Second,
-	}
-	resp, err := client.Get(url)
+	resp, err := httpGet(url, pluginArchiveDLTimeout)
 	if err != nil {
 		return err
 	}
@@ -856,8 +876,7 @@ func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL string) e
 
 	cli.Printf(ctx.Stdout(), "Downloading plugin package from %s...\n", rawURL)
 
-	client := &http.Client{Timeout: pluginArchiveDLTimeout}
-	resp, err := client.Get(rawURL)
+	resp, err := httpGet(rawURL, pluginArchiveDLTimeout)
 	if err != nil {
 		return fmt.Errorf("download plugin package: %w", err)
 	}
@@ -966,6 +985,7 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 		Description:      pManifest.Description,
 		CmdNames:         pManifest.CmdNames,
 		Inner:            pManifest.Inner,
+		ProfileRequired:  pManifest.ProfileRequired,
 	}
 
 	return m.saveLocalManifest(localManifest)

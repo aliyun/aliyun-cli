@@ -59,7 +59,7 @@ func CheckAndConfirm(ctx *cli.Context, policy *Policy, cmd CommandInfo, skipConf
 		return fmt.Errorf(i18n.T(
 			"operation blocked by safety policy: %s %s (rule: %s)",
 			"操作被安全策略拒绝: %s %s (规则: %s)",
-		).GetMessage(), cmd.Product, cmd.ApiOrMethod, result.Rule.Pattern)
+		).GetMessage(), cmd.Product, displayCommand(cmd), result.Rule.Pattern)
 	case ActionConfirm:
 		if skipConfirm {
 			// --yes or env: treat as already confirmed
@@ -72,12 +72,12 @@ func CheckAndConfirm(ctx *cli.Context, policy *Policy, cmd CommandInfo, skipConf
 					"If you are an agent, ask the user whether this operation is allowed; after they confirm (e.g. reply yes or 确认), re-run the same command with --yes.",
 				"安全策略要求确认以下操作：%s %s\n"+
 					"当前为非交互环境，无法自动确认。若调用方为智能体，请先向用户说明并征得同意；用户同意后（可在对话中回复 yes 或「确认」），再使用 --yes 重新执行同一命令。",
-			).GetMessage(), cmd.Product, cmd.ApiOrMethod)
+			).GetMessage(), cmd.Product, displayCommand(cmd))
 		}
 		prompt := fmt.Sprintf(i18n.T(
 			"Safety policy requires confirmation for: %s %s\nType 'yes' to proceed, anything else to cancel: ",
 			"安全策略要求确认以下操作: %s %s\n输入 'yes' 继续，其他任意输入取消: ",
-		).GetMessage(), cmd.Product, cmd.ApiOrMethod)
+		).GetMessage(), cmd.Product, displayCommand(cmd))
 		if !PromptConfirm(ctx.Stderr(), prompt) {
 			return fmt.Errorf(i18n.T(
 				"operation cancelled by user",
@@ -89,4 +89,11 @@ func CheckAndConfirm(ctx *cli.Context, policy *Policy, cmd CommandInfo, skipConf
 		// No restriction
 	}
 	return nil
+}
+
+func displayCommand(cmd CommandInfo) string {
+	if cmd.Path != "" {
+		return strings.ToUpper(cmd.ApiOrMethod) + " " + cmd.Path
+	}
+	return cmd.ApiOrMethod
 }
