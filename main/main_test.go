@@ -123,6 +123,15 @@ func TestRootCommandRegistersMock(t *testing.T) {
 	}
 }
 
+func TestRootCommandRegistersRostran(t *testing.T) {
+	var stdout bytes.Buffer
+	rootCmd := newRootCommand(config.NewProfile("default"), &stdout)
+
+	if rootCmd.GetSubCommand("rostran") == nil {
+		t.Fatalf("rostran subcommand is not registered")
+	}
+}
+
 func TestMainMockDisabledFallsThrough(t *testing.T) {
 	mockPath := filepath.Join(t.TempDir(), "mocks.json")
 	if err := sysmock.Save(mockPath, []sysmock.Record{{
