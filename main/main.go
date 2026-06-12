@@ -35,6 +35,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cliext/computenestutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/iact3"
 	"github.com/aliyun/aliyun-cli/v3/cliext/maxc"
+	"github.com/aliyun/aliyun-cli/v3/cliext/rostran"
 	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
@@ -149,6 +150,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(maxc.NewMaxcCommand())
 	// iact3 command
 	rootCmd.AddSubCommand(iact3.NewIact3Command())
+	// rostran command
+	rootCmd.AddSubCommand(rostran.NewRostranCommand())
 	// plugin command
 	rootCmd.AddSubCommand(plugin.NewPluginCommand())
 	// upgrade command
