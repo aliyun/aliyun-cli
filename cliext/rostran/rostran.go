@@ -250,6 +250,7 @@ func extractTarGz(src, dest string) error {
 	tr := tar.NewReader(gr)
 	destClean := filepath.Clean(dest)
 	var totalSize int64
+	var symlinks []archiveSymlink
 
 	for {
 		hdr, err := tr.Next()
@@ -267,28 +268,23 @@ func extractTarGz(src, dest string) error {
 		if cleanName == "" {
 			continue
 		}
+		localName, err := archiveLocalPath(cleanName)
+		if err != nil {
+			continue
+		}
 
 		switch hdr.Typeflag {
 		case tar.TypeSymlink:
-			if !isSafeSymlink(cleanName, hdr.Linkname) {
-				continue
-			}
-			filePath, err := safeJoinUnderDir(destClean, cleanName)
+			linkName, err := sanitizeSymlinkTarget(cleanName, hdr.Linkname)
 			if err != nil {
 				continue
 			}
-			if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
-				return err
-			}
-			_ = os.Remove(filePath)
-			if err := os.Symlink(hdr.Linkname, filePath); err != nil {
-				return err
-			}
+			symlinks = append(symlinks, archiveSymlink{entryPath: localName, linkName: linkName})
 			continue
 		case tar.TypeLink:
 			continue
 		case tar.TypeDir:
-			filePath, err := safeJoinUnderDir(destClean, cleanName)
+			filePath, err := safeJoinLocalUnderDir(destClean, localName)
 			if err != nil {
 				continue
 			}
@@ -309,7 +305,7 @@ func extractTarGz(src, dest string) error {
 			return fmt.Errorf("archive exceeds maximum extracted size")
 		}
 
-		filePath, err := safeJoinUnderDir(destClean, cleanName)
+		filePath, err := safeJoinLocalUnderDir(destClean, localName)
 		if err != nil {
 			continue
 		}
@@ -338,11 +334,31 @@ func extractTarGz(src, dest string) error {
 			return fmt.Errorf("archive entry %s exceeds maximum extracted size", cleanName)
 		}
 	}
+	for _, link := range symlinks {
+		filePath, err := safeJoinLocalUnderDir(destClean, link.entryPath)
+		if err != nil {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+			return err
+		}
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			continue
+		}
+		if err := os.Symlink(link.linkName, filePath); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 const maxExtractSize int64 = 200 << 20
 const maxExtractTotalSize int64 = 500 << 20
+
+type archiveSymlink struct {
+	entryPath string
+	linkName  string
+}
 
 func packageRootDir(extractDir string) (string, error) {
 	entries, err := os.ReadDir(extractDir)
@@ -394,7 +410,8 @@ func copyDir(src, dst string) error {
 				return err
 			}
 			cleanRel := filepath.ToSlash(rel)
-			if !isSafeSymlink(cleanRel, linkName) {
+			linkName, err = sanitizeSymlinkTarget(cleanRel, linkName)
+			if err != nil {
 				return nil
 			}
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
@@ -477,9 +494,23 @@ func sanitizeArchivePath(name string) (string, error) {
 	return clean, nil
 }
 
-func safeJoinUnderDir(destDir, cleanRel string) (string, error) {
+func archiveLocalPath(cleanRel string) (string, error) {
+	localRel, err := filepath.Localize(cleanRel)
+	if err != nil {
+		return "", err
+	}
+	if !filepath.IsLocal(localRel) {
+		return "", fmt.Errorf("path is not local")
+	}
+	return localRel, nil
+}
+
+func safeJoinLocalUnderDir(destDir, localRel string) (string, error) {
+	if !filepath.IsLocal(localRel) {
+		return "", fmt.Errorf("path is not local")
+	}
 	destClean := filepath.Clean(destDir)
-	joined := filepath.Join(destClean, filepath.FromSlash(cleanRel))
+	joined := filepath.Join(destClean, localRel)
 	rel, err := filepath.Rel(destClean, joined)
 	if err != nil {
 		return "", err
@@ -494,19 +525,25 @@ func isASCIIAlpha(b byte) bool {
 	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
+func sanitizeSymlinkTarget(cleanName, linkName string) (string, error) {
+	cleanLinkName, err := sanitizeArchivePath(linkName)
+	if err != nil {
+		return "", err
+	}
+	if cleanLinkName == "" {
+		return "", fmt.Errorf("empty symlink target")
+	}
+	localLinkName, err := archiveLocalPath(cleanLinkName)
+	if err != nil {
+		return "", err
+	}
+	if !isSafeSymlink(cleanName, filepath.ToSlash(localLinkName)) {
+		return "", fmt.Errorf("symlink target escapes archive root")
+	}
+	return localLinkName, nil
+}
+
 func isSafeSymlink(cleanName, linkName string) bool {
-	if linkName == "" || strings.ContainsRune(linkName, '\x00') {
-		return false
-	}
-
-	linkName = strings.ReplaceAll(linkName, "\\", "/")
-	if strings.HasPrefix(linkName, "/") || strings.HasPrefix(linkName, "//") {
-		return false
-	}
-	if len(linkName) >= 2 && isASCIIAlpha(linkName[0]) && linkName[1] == ':' {
-		return false
-	}
-
 	linkTarget := path.Clean(path.Join(path.Dir(cleanName), linkName))
 	if linkTarget == ".." || strings.HasPrefix(linkTarget, "../") {
 		return false

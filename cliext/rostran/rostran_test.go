@@ -336,6 +336,49 @@ func TestDownloadAndExtract_PreservesSafeSymlinks(t *testing.T) {
 	}
 }
 
+func TestDownloadAndExtract_DelaysSymlinkCreationUntilAfterFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires extra privileges on Windows")
+	}
+
+	archiveBytes := buildTarGzInOrder(t, []tarTestEntry{
+		{name: "rostran/link", symlink: true, target: "_internal"},
+		{name: "rostran/link/through-link.txt", body: "through link"},
+		{name: "rostran/_internal/real.txt", body: "real"},
+		{name: "rostran/rostran", body: "#!/bin/sh\necho rostran\n"},
+	})
+
+	oldHTTPGet := httpGetFunc
+	httpGetFunc = func(url string) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewReader(archiveBytes)),
+		}, nil
+	}
+	defer func() { httpGetFunc = oldHTTPGet }()
+
+	tmpDir := t.TempDir()
+	installDir := filepath.Join(tmpDir, "rostran")
+	if err := DownloadAndExtract("https://example.com/rostran.tar.gz", filepath.Join(tmpDir, "rostran.tar.gz"), installDir); err != nil {
+		t.Fatalf("DownloadAndExtract err: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(installDir, "_internal", "through-link.txt")); !os.IsNotExist(err) {
+		t.Fatalf("file must not be written through delayed symlink target, err=%v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(installDir, "link", "through-link.txt"))
+	if err != nil || string(data) != "through link" {
+		t.Fatalf("expected file under real directory, data=%q err=%v", string(data), err)
+	}
+	info, err := os.Lstat(filepath.Join(installDir, "link"))
+	if err != nil {
+		t.Fatalf("lstat link path: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("link path should remain a directory when archive writes files below it")
+	}
+}
+
 func TestCopyDirPreservesSafeSymlinks(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink creation requires extra privileges on Windows")
@@ -571,6 +614,55 @@ func buildTarGzWithSymlinks(t *testing.T, files map[string]string, symlinks map[
 		}
 		if err := tw.WriteHeader(hdr); err != nil {
 			t.Fatalf("write tar symlink header: %v", err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	if err := gw.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+	return buf.Bytes()
+}
+
+type tarTestEntry struct {
+	name    string
+	body    string
+	symlink bool
+	target  string
+}
+
+func buildTarGzInOrder(t *testing.T, entries []tarTestEntry) []byte {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	gw := gzip.NewWriter(buf)
+	tw := tar.NewWriter(gw)
+	for _, entry := range entries {
+		if entry.symlink {
+			hdr := &tar.Header{
+				Name:     entry.name,
+				Mode:     0777,
+				Typeflag: tar.TypeSymlink,
+				Linkname: entry.target,
+			}
+			if err := tw.WriteHeader(hdr); err != nil {
+				t.Fatalf("write tar symlink header: %v", err)
+			}
+			continue
+		}
+		hdr := &tar.Header{
+			Name: entry.name,
+			Mode: 0600,
+			Size: int64(len(entry.body)),
+		}
+		if filepath.Base(entry.name) == "rostran" {
+			hdr.Mode = 0755
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			t.Fatalf("write tar header: %v", err)
+		}
+		if _, err := tw.Write([]byte(entry.body)); err != nil {
+			t.Fatalf("write tar entry: %v", err)
 		}
 	}
 	if err := tw.Close(); err != nil {
