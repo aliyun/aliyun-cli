@@ -540,7 +540,7 @@ func TestPrintHelpContextHints_AiModeConfigEnabled(t *testing.T) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  tryDelegatePluginHelp (commando_help.go) — gating + tier-by-tier coverage
+//  tryDelegatePluginHelp (commando_help.go) — gating + step-by-step coverage
 // ─────────────────────────────────────────────────────────────────────────────
 
 func Test_tryDelegatePluginHelp_RefusesHTTPMethod(t *testing.T) {
@@ -565,18 +565,50 @@ func Test_tryDelegatePluginHelp_RefusesHTTPMethod(t *testing.T) {
 	}
 }
 
-// Test_tryDelegatePluginHelp_PluginPath covers every tier reached after the
-// HTTP-method gate passes:
-//
-//	tier-0: plugin installed → ExecutePlugin (success / vanished-binary / exit-error)
-//	tier-1: not installed + remote index match → install guidance
-//	tier-2: not installed + builtin product → InvalidUnifiedApiError or fall-through
-//	tier-3: not installed + neither plugin nor product → InvalidProductOrPluginError
-//
-// `helpDelegateIsInstalled` / `helpDelegateExecute` are package-level test
-// seams declared in commando_help.go next to tryDelegatePluginHelp;
-// production code outside the helper still calls plugin.* directly.
-func Test_tryDelegatePluginHelp_PluginPath(t *testing.T) {
+// Test_tryDelegatePluginHelp_RefusesUppercaseSubcommand exercises Gate-2:
+// any uppercase character in args[1] flags the input as a legacy-mode
+// (typically PascalCase OpenAPI APIName) shape, so the helper falls
+// through to the historical "too many arguments" wording rather than
+// inventing a plugin-flavoured diagnostic that would point at the
+// wrong problem. Examples drawn from real OpenAPI invocations.
+func Test_tryDelegatePluginHelp_RefusesUppercaseSubcommand(t *testing.T) {
+	c, ctx := newTryDelegateHarness(t)
+	// Even with a fully populated index we must NOT treat these as
+	// plugin commands — the gate is purely syntactic on args[1].
+	c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{
+		{Name: "aliyun-cli-hologram", ProductCode: "hologram"},
+		{Name: "aliyun-cli-ecs", ProductCode: "ecs"}, // hypothetical plugin homonym
+	}}
+	helpDelegateIsInstalled = func(string) (bool, string, error) {
+		t.Fatal("Gate-2 must short-circuit before any I/O")
+		return false, "", nil
+	}
+
+	cases := [][]string{
+		{"ecs", "DescribeRegions", "extra"}, // canonical PascalCase API
+		{"hologram", "DescribeFoo", "bar"},  // PascalCase even on a real plugin name
+		{"vpc", "describeVpcs", "x"},        // camelCase — first letter lower but Vpcs uppercased
+		{"fc-open", "InvokeFunction", "y"},  // hyphenated product + PascalCase API
+		{"hologram", "Config", "set"},       // user accidentally TitleCase'd a plugin sub-command
+	}
+	for _, args := range cases {
+		t.Run(args[0]+"/"+args[1], func(t *testing.T) {
+			delegated, err := c.tryDelegatePluginHelp(ctx, args)
+			assert.False(t, delegated, "uppercase args[1] must fall through (legacy shape)")
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// newTryDelegateHarness wires a Commando + Context with the framework
+// state tryDelegatePluginHelp needs (cmd flags + i18n short text), and
+// also stashes/restores the package-level test seams so each subtest
+// can swap helpDelegateIsInstalled / helpDelegateExecute freely. The
+// seam wiring is the whole reason these tests live at help-test scope:
+// production code calls plugin.IsPluginInstalled / plugin.ExecutePlugin
+// directly, which would otherwise need a real plugin binary on disk.
+func newTryDelegateHarness(t *testing.T) (*Commando, *cli.Context) {
+	t.Helper()
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w, stderr)
@@ -595,134 +627,29 @@ func Test_tryDelegatePluginHelp_PluginPath(t *testing.T) {
 		helpDelegateIsInstalled = origIsInstalled
 		helpDelegateExecute = origExecute
 	})
+	return c, ctx
+}
 
-	t.Run("IsInstalled error → fall through", func(t *testing.T) {
-		helpDelegateIsInstalled = func(string) (bool, string, error) {
-			return false, "", fmt.Errorf("manifest corrupted")
-		}
-		helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
-			t.Fatal("ExecutePlugin must not be called when IsInstalled errors")
-			return false, nil
-		}
-		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"hologram", "config", "set"})
-		assert.False(t, delegated)
-		assert.NoError(t, err, "inspection errors must never bubble up at help time")
-	})
+// Test_tryDelegatePluginHelp_PluginPath covers every step the helper can
+// take after the gates pass (Gate-1 HTTP method, Gate-2 uppercase in
+// args[1]). Layout mirrors the decision tree in commando_help.go:
+//
+//	Step 2 — index hit + installed:    forward (success / exit-err / vanished)
+//	Step 2 — index hit + not installed: install guidance
+//	Step 2 — index hit + manifest err: treated as not installed → install guidance
+//	Step 2 — index hit case-insensitive
+//	Step 3 — index miss + installed:   forward (dev side-load)
+//	Step 4 — neither plugin nor product: InvalidProductOrPluginError + fuzzy
+//	Step 4 — index fetch failed:       fetch-note + InvalidProductOrPluginError
+//
+// Helpers are toggled per-subtest so each path is exercised in isolation.
+func Test_tryDelegatePluginHelp_PluginPath(t *testing.T) {
+	t.Run("step-2 index hit + installed → forward succeeds", func(t *testing.T) {
+		c, ctx := newTryDelegateHarness(t)
+		c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{
+			{Name: "aliyun-cli-hologram", ProductCode: "hologram"},
+		}}
 
-	t.Run("not installed + no remote index → tier-3 InvalidProductOrPluginError", func(t *testing.T) {
-		// pluginIndex stays nil (default), args[0] not a built-in product.
-		// Tier-3 diagnostic kicks in: report it as an unknown product /
-		// plugin rather than falling through to "too many arguments",
-		// which would point at the wrong problem.
-		helpDelegateIsInstalled = func(string) (bool, string, error) { return false, "", nil }
-		helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
-			t.Fatal("ExecutePlugin must not be called when plugin not installed")
-			return false, nil
-		}
-		c.pluginIndex = nil
-		c.pluginIndexErr = nil
-		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"zzzunknown", "foo", "bar"})
-		assert.True(t, delegated, "tier-3 must short-circuit the legacy 'too many arguments'")
-		var ipErr *InvalidProductOrPluginError
-		assert.ErrorAs(t, err, &ipErr)
-		assert.Equal(t, "zzzunknown", ipErr.Code)
-	})
-
-	t.Run("not installed + remote index has match → tier-1 install guidance", func(t *testing.T) {
-		// User typed `aliyun hologram dt list --help` but hologram plugin
-		// was never installed. The remote catalog knows it → we MUST tell
-		// them how to install instead of dumping "too many arguments: N".
-		// This mirrors printProductUsage's behaviour for `aliyun hologram --help`.
-		helpDelegateIsInstalled = func(string) (bool, string, error) { return false, "", nil }
-		helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
-			t.Fatal("ExecutePlugin must not be called when plugin not installed")
-			return false, nil
-		}
-		c.pluginIndex = &plugin.Index{
-			Plugins: []plugin.PluginInfo{
-				{Name: "aliyun-cli-hologram", ProductCode: "hologram"},
-				{Name: "aliyun-cli-pds", ProductCode: "pds"},
-			},
-		}
-		c.pluginIndexErr = nil
-		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"hologram", "dt", "list"})
-		assert.True(t, delegated, "guided error must short-circuit the legacy 'too many arguments'")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "aliyun plugin install --names aliyun-cli-hologram",
-			"the error must point the user at the exact install command")
-		assert.Contains(t, err.Error(), "'hologram'",
-			"the error must name the offending command")
-	})
-
-	t.Run("not installed + remote match is case-insensitive", func(t *testing.T) {
-		// `aliyun help Hologram dt list` — user typed mixed case; the index
-		// stores canonical lowercase. EqualFold must still find a match so
-		// the install guidance is consistent with how printProductUsage matches.
-		helpDelegateIsInstalled = func(string) (bool, string, error) { return false, "", nil }
-		c.pluginIndex = &plugin.Index{
-			Plugins: []plugin.PluginInfo{{Name: "aliyun-cli-hologram", ProductCode: "hologram"}},
-		}
-		c.pluginIndexErr = nil
-		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"Hologram", "dt", "list"})
-		assert.True(t, delegated)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "aliyun-cli-hologram")
-	})
-
-	t.Run("not installed + remote index has no match → tier-3 InvalidProductOrPluginError", func(t *testing.T) {
-		// Remote index loaded successfully but doesn't know args[0], and
-		// args[0] isn't a built-in product either. Tier-3 surfaces it as
-		// an unknown product / plugin (with typo suggestions populated
-		// from the remote index for the SuggestibleError protocol).
-		helpDelegateIsInstalled = func(string) (bool, string, error) { return false, "", nil }
-		c.pluginIndex = &plugin.Index{
-			Plugins: []plugin.PluginInfo{
-				{Name: "aliyun-cli-pds", ProductCode: "pds"},
-				{Name: "aliyun-cli-fc", ProductCode: "fc"},
-			},
-		}
-		c.pluginIndexErr = nil
-		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"zzzunknownproduct", "foo", "bar"})
-		assert.True(t, delegated)
-		var ipErr *InvalidProductOrPluginError
-		assert.ErrorAs(t, err, &ipErr)
-		assert.Equal(t, "zzzunknownproduct", ipErr.Code)
-	})
-
-	t.Run("tier-2: builtin product + unknown API → InvalidUnifiedApiError with suggestions", func(t *testing.T) {
-		// args[0]=ecs is a real OpenAPI built-in product, args[1] is a
-		// typo of a real API. Surface the API-name problem (with typo
-		// suggestions from product.ApiNames) instead of the misleading
-		// "too many arguments", which would imply the wrong fix.
-		c.library.builtinRepo = meta.LoadRepository()
-		helpDelegateIsInstalled = func(string) (bool, string, error) { return false, "", nil }
-		c.pluginIndex = nil // bypass tier-1
-		c.pluginIndexErr = nil
-		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"ecs", "DescribeXyzTypo", "extra"})
-		assert.True(t, delegated, "tier-2 must short-circuit so user sees the actionable API error")
-		var apiErr *InvalidUnifiedApiError
-		assert.ErrorAs(t, err, &apiErr)
-		assert.Equal(t, "DescribeXyzTypo", apiErr.Name)
-		assert.Contains(t, apiErr.Error(), "ecs",
-			"error message must reference the product so the user knows where to look")
-	})
-
-	t.Run("tier-2: builtin product + valid API but extra args → fall through to legacy", func(t *testing.T) {
-		// args[0]=ecs + a valid API (DescribeRegions is universally
-		// present) + extra junk. This IS a structural arg-count problem
-		// (API help is two-levels deep), so we deliberately fall back to
-		// the legacy "too many arguments" wording rather than fabricating
-		// a more elaborate error.
-		c.library.builtinRepo = meta.LoadRepository()
-		helpDelegateIsInstalled = func(string) (bool, string, error) { return false, "", nil }
-		c.pluginIndex = nil
-		c.pluginIndexErr = nil
-		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"ecs", "DescribeRegions", "extra"})
-		assert.False(t, delegated, "valid product+API must fall through; len>2 here is genuinely structural")
-		assert.NoError(t, err)
-	})
-
-	t.Run("installed + execute succeeds → delegated", func(t *testing.T) {
 		var capturedName string
 		var capturedArgs []string
 		helpDelegateIsInstalled = func(name string) (bool, string, error) {
@@ -733,30 +660,23 @@ func Test_tryDelegatePluginHelp_PluginPath(t *testing.T) {
 			capturedArgs = args
 			return true, nil
 		}
+
 		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"hologram", "config", "set"})
 		assert.True(t, delegated, "must report delegation so caller skips the legacy error")
 		assert.NoError(t, err)
 		assert.Equal(t, "hologram", capturedName)
-		// getPluginArgsForHelp rebuilds argv from os.Args; the test binary's
-		// argv doesn't contain "hologram", so the helper returns its
-		// no-match fallback `[productCode, "--help"]`. The shape is what
-		// matters: the plugin name leads and --help is present.
+		// getPluginArgsForHelp rebuilds argv from os.Args; the test
+		// binary's argv doesn't contain "hologram", so the helper falls
+		// back to `[productCode, "--help"]`. The shape is what matters:
+		// the plugin name leads and --help is present.
 		assert.Equal(t, []string{"hologram", "--help"}, capturedArgs)
 	})
 
-	t.Run("installed + execute returns ok=false (binary vanished) → fall through", func(t *testing.T) {
-		helpDelegateIsInstalled = func(string) (bool, string, error) {
-			return true, "aliyun-cli-hologram", nil
-		}
-		helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
-			return false, nil // simulate manifest-says-installed-but-binary-missing
-		}
-		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"hologram", "config", "set"})
-		assert.False(t, delegated, "ok=false must surface as fall-through, not as delegated")
-		assert.NoError(t, err)
-	})
-
-	t.Run("installed + plugin exits with error → delegated, error propagates", func(t *testing.T) {
+	t.Run("step-2 index hit + installed → plugin exit error propagates verbatim", func(t *testing.T) {
+		c, ctx := newTryDelegateHarness(t)
+		c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{
+			{Name: "aliyun-cli-hologram", ProductCode: "hologram"},
+		}}
 		pluginErr := fmt.Errorf("plugin exited with status 2")
 		helpDelegateIsInstalled = func(string) (bool, string, error) { return true, "x", nil }
 		helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
@@ -765,5 +685,231 @@ func Test_tryDelegatePluginHelp_PluginPath(t *testing.T) {
 		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"hologram", "config", "set"})
 		assert.True(t, delegated)
 		assert.Equal(t, pluginErr, err, "plugin's exit error must reach the user verbatim")
+	})
+
+	t.Run("step-2 index hit + binary vanished → reinstall guidance (no fall-through)", func(t *testing.T) {
+		// Manifest says installed but ExecutePlugin returns ok=false
+		// (binary missing). New behaviour: surface a one-line reinstall
+		// hint instead of the legacy `too many arguments` fall-through,
+		// which would have left the user stranded.
+		c, ctx := newTryDelegateHarness(t)
+		c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{
+			{Name: "aliyun-cli-hologram", ProductCode: "hologram"},
+		}}
+		helpDelegateIsInstalled = func(string) (bool, string, error) { return true, "aliyun-cli-hologram", nil }
+		helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
+			return false, nil // simulate manifest-says-installed-but-binary-missing
+		}
+		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"hologram", "config", "set"})
+		assert.True(t, delegated, "vanished-binary case must produce a final answer, not fall through")
+		assert.Error(t, err)
+		// Hallmark phrases of the new copy — locked in so a future
+		// refactor that drifts the wording trips a test instead of
+		// silently changing user-visible diagnostics.
+		assert.Contains(t, err.Error(), "looks like a plugin command",
+			"reinstall guidance must share the plugin-cmd preamble with install guidance")
+		assert.Contains(t, err.Error(), "registered as installed")
+		assert.Contains(t, err.Error(), "binary cannot be located")
+		assert.Contains(t, err.Error(), "to reinstall it and try again",
+			"the reinstall variant must end with the reinstall-and-retry prompt")
+		assert.Contains(t, err.Error(), "aliyun plugin install --name aliyun-cli-hologram",
+			"reinstall hint must reference the canonical plugin name")
+		assert.Contains(t, err.Error(), "'aliyun hologram config set'",
+			"error must echo the user's full logical command, not just the plugin code")
+	})
+
+	t.Run("step-2 index hit + not installed → install guidance", func(t *testing.T) {
+		c, ctx := newTryDelegateHarness(t)
+		c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{
+			{Name: "aliyun-cli-hologram", ProductCode: "hologram"},
+			{Name: "aliyun-cli-pds", ProductCode: "pds"},
+		}}
+		helpDelegateIsInstalled = func(string) (bool, string, error) { return false, "", nil }
+		helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
+			t.Fatal("ExecutePlugin must not be called when plugin not installed")
+			return false, nil
+		}
+		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"hologram", "dt", "list"})
+		assert.True(t, delegated, "guided error must short-circuit the legacy 'too many arguments'")
+		assert.Error(t, err)
+		// Hallmark phrases of the new copy — see the matching block in
+		// the binary-vanished subtest for rationale.
+		assert.Contains(t, err.Error(), "looks like a plugin command",
+			"install guidance must lead with the plugin-cmd preamble")
+		assert.Contains(t, err.Error(), "is not installed",
+			"diagnose the install state explicitly")
+		assert.Contains(t, err.Error(), "to install it and try again",
+			"the install variant must end with the install-and-retry prompt")
+		assert.Contains(t, err.Error(), "aliyun plugin install --name aliyun-cli-hologram",
+			"the error must point the user at the exact install command")
+		assert.Contains(t, err.Error(), "plugin 'hologram'",
+			"the error must name the offending plugin")
+		assert.Contains(t, err.Error(), "'aliyun hologram dt list'",
+			"error must echo the user's full logical command for long chains")
+	})
+
+	t.Run("step-2 index hit + manifest unreadable → treated as not installed", func(t *testing.T) {
+		// Corrupted manifest used to silently fall through to the
+		// legacy "too many arguments" — masking both the real bug and
+		// the install guidance. New behaviour: index says it's a known
+		// plugin, so guide the user to (re)install regardless of the
+		// manifest hiccup; reinstall would fix a corrupted manifest too.
+		c, ctx := newTryDelegateHarness(t)
+		c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{
+			{Name: "aliyun-cli-hologram", ProductCode: "hologram"},
+		}}
+		helpDelegateIsInstalled = func(string) (bool, string, error) {
+			return false, "", fmt.Errorf("manifest corrupted")
+		}
+		helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
+			t.Fatal("ExecutePlugin must not be called when manifest unreadable")
+			return false, nil
+		}
+		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"hologram", "config", "set"})
+		assert.True(t, delegated, "manifest errors must NOT silently fall through any more")
+		assert.Error(t, err)
+		// Manifest-error path must produce the SAME diagnostic as the
+		// genuine "not installed" path — re-running install repairs
+		// both, so users shouldn't have to distinguish them.
+		assert.Contains(t, err.Error(), "is not installed")
+		assert.Contains(t, err.Error(), "to install it and try again")
+		assert.Contains(t, err.Error(), "aliyun plugin install --name aliyun-cli-hologram")
+		assert.Contains(t, err.Error(), "'aliyun hologram config set'")
+	})
+
+	t.Run("step-2 index hit case-insensitive → canonical Name in guidance", func(t *testing.T) {
+		// `aliyun help Hologram dt list` — user typed mixed case; the
+		// index stores canonical lowercase. EqualFold must still find
+		// a match so the install guidance uses the canonical Name from
+		// the index (consistent with printProductUsage's matching).
+		c, ctx := newTryDelegateHarness(t)
+		c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{
+			{Name: "aliyun-cli-hologram", ProductCode: "hologram"},
+		}}
+		helpDelegateIsInstalled = func(string) (bool, string, error) { return false, "", nil }
+		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"Hologram", "dt", "list"})
+		assert.True(t, delegated)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "aliyun-cli-hologram")
+	})
+
+	t.Run("step-3 index miss + installed → forward (dev side-load)", func(t *testing.T) {
+		// Internal plugin distributed before it hits the public
+		// catalog. Index doesn't know it but the binary is on disk.
+		// We must still forward, otherwise these users would get
+		// "'myplugin' is not a valid product" — a regression vs the
+		// old fall-through behaviour.
+		c, ctx := newTryDelegateHarness(t)
+		c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{
+			// Plugins exist but none matches args[0]
+			{Name: "aliyun-cli-pds", ProductCode: "pds"},
+		}}
+		var capturedName string
+		var capturedArgs []string
+		helpDelegateIsInstalled = func(name string) (bool, string, error) {
+			return true, "aliyun-cli-" + name, nil
+		}
+		helpDelegateExecute = func(name string, args []string, _ *cli.Context) (bool, error) {
+			capturedName = name
+			capturedArgs = args
+			return true, nil
+		}
+		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"sideloaded", "sub", "cmd"})
+		assert.True(t, delegated, "side-loaded plugins must still get to render their own help")
+		assert.NoError(t, err)
+		assert.Equal(t, "sideloaded", capturedName)
+		assert.Equal(t, []string{"sideloaded", "--help"}, capturedArgs)
+	})
+
+	t.Run("step-4 unknown args[0] + remote index has no match → InvalidProductOrPluginError", func(t *testing.T) {
+		// Remote index loaded successfully but doesn't know args[0]
+		// and the plugin isn't installed locally. Step-4 surfaces it
+		// as an unknown product / plugin (with typo suggestions
+		// populated from the remote index for the SuggestibleError
+		// protocol).
+		c, ctx := newTryDelegateHarness(t)
+		c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{
+			{Name: "aliyun-cli-pds", ProductCode: "pds"},
+			{Name: "aliyun-cli-fc", ProductCode: "fc"},
+		}}
+		helpDelegateIsInstalled = func(string) (bool, string, error) { return false, "", nil }
+
+		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"zzzunknownproduct", "foo", "bar"})
+		assert.True(t, delegated)
+		var ipErr *InvalidProductOrPluginError
+		assert.ErrorAs(t, err, &ipErr)
+		assert.Equal(t, "zzzunknownproduct", ipErr.Code)
+		// Hint must surface the OpenAPI legacy form so users who
+		// landed here via mistyped APIName (e.g. `aliyun ecs
+		// describeregions extra`) see the right syntax instead of
+		// just "not a valid product".
+		assert.NotEmpty(t, ipErr.Hint, "step-4 must always set Hint so users understand WHY they landed on the diagnostic")
+		assert.Contains(t, err.Error(), "OpenAPI built-in call",
+			"hint must explain the OpenAPI alternative")
+		assert.Contains(t, err.Error(), "PascalCase",
+			"hint must call out APIName casing convention — that's the typical lesson here")
+		assert.Contains(t, err.Error(), "DescribeRegions",
+			"a concrete PascalCase example anchors the explanation")
+	})
+
+	t.Run("step-4 unknown args[0] + no remote index → InvalidProductOrPluginError", func(t *testing.T) {
+		// pluginIndex stays nil (default), nothing installed. Step-4
+		// still kicks in: never fall through to "too many arguments"
+		// once we've decided the shape is plugin-cmd.
+		c, ctx := newTryDelegateHarness(t)
+		c.pluginIndex = nil
+		c.pluginIndexErr = nil
+		helpDelegateIsInstalled = func(string) (bool, string, error) { return false, "", nil }
+
+		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"zzzunknown", "foo", "bar"})
+		assert.True(t, delegated, "step-4 must short-circuit the legacy 'too many arguments'")
+		var ipErr *InvalidProductOrPluginError
+		assert.ErrorAs(t, err, &ipErr)
+		assert.Equal(t, "zzzunknown", ipErr.Code)
+		// Hint is independent of the remote index — it only depends
+		// on having reached step-4. Lock that in.
+		assert.Contains(t, err.Error(), "OpenAPI built-in call")
+	})
+
+	t.Run("step-4 index fetch failed → fetch-note printed + InvalidProductOrPluginError", func(t *testing.T) {
+		// Offline / catalog-load failure. We still produce a final
+		// answer, plus we surface a fetch-failure note so the user
+		// understands why fuzzy suggestions might be sparse.
+		c, ctx := newTryDelegateHarness(t)
+		c.pluginIndex = nil
+		c.pluginIndexErr = fmt.Errorf("network unreachable")
+		helpDelegateIsInstalled = func(string) (bool, string, error) { return false, "", nil }
+
+		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"unknown", "x", "y"})
+		assert.True(t, delegated)
+		var ipErr *InvalidProductOrPluginError
+		assert.ErrorAs(t, err, &ipErr)
+		assert.Contains(t, err.Error(), "OpenAPI built-in call",
+			"hint must be present even when the remote catalog couldn't load")
+		// printPluginIndexLoadFailureNote writes to ctx.Stderr; assert
+		// the side-effect happened so users actually get the heads-up.
+		stderrBuf := ctx.Stderr().(*bytes.Buffer)
+		assert.NotEmpty(t, stderrBuf.String(),
+			"fetch-failure note must be visible to the user when the index can't be loaded")
+	})
+
+	t.Run("PascalCase args[1] never reaches step-1 (regression guard)", func(t *testing.T) {
+		// Defensive duplicate of Test_tryDelegatePluginHelp_RefusesUppercaseSubcommand,
+		// kept here so anyone reading PluginPath in isolation sees that
+		// `ecs DescribeRegions extra` does NOT reach step-1, even when
+		// the index, library, and local manifest are all populated.
+		// Without this guard a future refactor could regress Gate-2 and
+		// silently misroute legacy OpenAPI shapes into plugin diagnostics.
+		c, ctx := newTryDelegateHarness(t)
+		c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{
+			{Name: "aliyun-cli-ecs", ProductCode: "ecs"}, // tempt step-1
+		}}
+		helpDelegateIsInstalled = func(string) (bool, string, error) {
+			t.Fatal("plugin-cmd predicate must reject PascalCase before any I/O")
+			return false, "", nil
+		}
+		delegated, err := c.tryDelegatePluginHelp(ctx, []string{"ecs", "DescribeRegions", "extra"})
+		assert.False(t, delegated, "PascalCase args[1] must fall through; legacy 'too many arguments' is the right error here")
+		assert.NoError(t, err)
 	})
 }

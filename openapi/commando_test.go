@@ -501,14 +501,13 @@ func Test_help(t *testing.T) {
 	args = []string{"test", "test0", "test1"}
 	err = command.help(ctx, args)
 	assert.NotNil(t, err)
-	// tryDelegatePluginHelp's tier-3 diagnostic now intercepts this case
-	// (args[0]="test" is neither an installed plugin nor a built-in
-	// product) and surfaces a far more actionable error than the legacy
-	// "too many arguments: 3" — which previously pointed at the wrong
-	// problem (the user's real issue is the unknown product name). See
-	// Test_tryDelegatePluginHelp_* in commando_help_test.go for the full
-	// tier-by-tier coverage.
-	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
+	// tryDelegatePluginHelp now intercepts every 3+ arg shape and produces an actionable diagnostic instead of the legacy "too many arguments: 3"
+	// — which used to imply args[0] was a valid product even when (as here) it wasn't.
+	// For args[0]="test", neither an installed plugin nor a built-in OpenAPI product,
+	// the helper falls all the way through to step-4 (fuzzy suggestion via InvalidProductOrPluginError, plus a Hint explaining the OpenAPI alternative form).
+	assert.Contains(t, err.Error(), "'test' is not a valid product. See `aliyun help`.")
+	assert.Contains(t, err.Error(), "OpenAPI built-in call",
+		"step-4 must surface the OpenAPI alternative as a Hint")
 }
 
 func Test_complete(t *testing.T) {

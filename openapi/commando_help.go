@@ -407,12 +407,6 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 	return nil
 }
 
-// Test seams for tryDelegatePluginHelp. Production code outside that
-// function should keep calling plugin.IsPluginInstalled /
-// plugin.ExecutePlugin directly — these indirections exist only so the
-// deep-help delegation path (manifest hit → ExecutePlugin success /
-// vanished-binary fallback) is exercisable without spawning real plugin
-// binaries from /Users/.../.aliyun.
 var (
 	helpDelegateIsInstalled = plugin.IsPluginInstalled
 	helpDelegateExecute     = plugin.ExecutePlugin
@@ -423,116 +417,133 @@ var (
 //	len(args)==1 → printProductUsage      (this file)
 //	len(args)==2 → printApiUsage          (this file)
 //	len(args)>2  → tryDelegatePluginHelp  (this file)
+
+// OpenAPI APIs are conventionally PascalCase (DescribeRegions, GetAlias)
+// and RESTful invocations carry an uppercase HTTP method in args[1].
+// A fully-lowercase args[1] is therefore the strongest cheap signal
+// that we're inside a plugin sub-tree (config, dt, list, …).
+// Anything else is treated as legacy-mode and falls through to the historical `too many arguments` error so we don't shadow OpenAPI semantics.
 //
-// It is invoked from commando.go's Commando.help when args run deeper
-// than the OpenAPI product → API hierarchy can model. For example
-// `aliyun hologram config set --help` or `aliyun help hologram dt list`.
+// Decision tree (caller has already ensured len(args) > 2):
 //
-// The cli framework dispatches `--help` directly to cmd.Help, bypassing
-// cmd.Run, so Commando.main's plugin routing never gets a chance to
-// forward these requests. Without this helper, every 3+ level help
-// invocation would just return the legacy `too many arguments: N`,
-// which points at the wrong problem.
+//	Gate-1  args[1] in {GET,POST,PUT,DELETE} → fall through
+//	        (RESTful OpenAPI invocation shape — not a plugin command)
 //
-// Returns (true, perr) when the helper produced a final answer (plugin
-// delegated or a tier-1/2/3 diagnostic error was raised). Returns
-// (false, nil) when no tier matched and the caller should fall back to
-// the legacy error. The single early-exit gate is `args[1] ∈ {GET, POST,
-// PUT, DELETE}` — a RESTful OpenAPI invocation shape that must not be
-// misrouted to a plugin (the plugin would not recognise it).
+//	Gate-2  args[1] contains any uppercase character → fall through
+//	        (PascalCase OpenAPI APIName or other legacy shape)
+//
+//	Step 1  Look up args[0] in the remote plugin catalog
+//	        (case-insensitive) and remember the canonical PluginInfo.
+//
+//	Step 2  Plugin is known to the index. Locally installed?
+//	        YES → forward to plugin --help (let it self-render).
+//	              Binary vanished → reinstall guidance (no fall-through).
+//	        NO  → install guidance (uses canonical Name from index).
+//
+//	Step 3  Index miss but locally installed (dev side-load case)?
+//	        YES → forward to plugin --help anyway.
+//	        NO  → continue.
+//
+//	Step 4  Neither plugin nor product → InvalidProductOrPluginError
+//	        with fuzzy suggestions sourced from the plugin index.
+//
+// Beyond the two gates this function NEVER returns (false, nil):
+// once we've decided the shape IS a plugin command,
+// the legacy "too many arguments" error would actively mislead the user,
+// so every reachable path produces an actionable plugin-flavoured diagnostic.
 func (c *Commando) tryDelegatePluginHelp(ctx *cli.Context, args []string) (bool, error) {
-	// Caller invariant: only reachable from `len(args) > 2`.
+	// Defensive caller-invariant: production callers guarantee len > 2.
 	if len(args) < 2 {
 		return false, nil
 	}
 
+	// Gate-1: RESTful HTTP method in args[1] is the legacy `aliyun <product> <METHOD> <path>` shape.
 	upper := strings.ToUpper(args[1])
 	if upper == "GET" || upper == "POST" || upper == "PUT" || upper == "DELETE" {
 		return false, nil
 	}
 
-	installed, _, err := helpDelegateIsInstalled(args[0])
-	if err != nil {
-		// Treat inspection errors (corrupted manifest etc.) as "not a
-		// plugin". Falling through to the legacy error is always safe
-		// and we don't want to mask the real issue with a confusing
-		// "plugin check failed" stack trace at help time.
+	// Gate-2: any uppercase character in args[1] strongly suggests an OpenAPI APIName (PascalCase by convention).
+	// Treat it as legacy mode so users typing `aliyun ecs DescribeRegions extra` keep
+	// seeing the historical "too many arguments" wording instead of a plugin-flavoured error that would point at the wrong problem.
+	if strings.ToLower(args[1]) != args[1] {
 		return false, nil
 	}
 
-	// Tier 0: plugin already installed → forward.
-	if installed {
-		// Reuse getPluginArgsForHelp so we inherit two things a naive
-		// os.Args[i:] slice would miss: case-insensitive plugin-name
-		// matching in os.Args, and auto-appending `--help` for the
-		// `aliyun help <plugin> <sub> ...` entry shape (where no
-		// `--help` flag is present in argv).
-		pluginArgs := getPluginArgsForHelp(args[0])
+	productCode := args[0]
 
-		c.setLangEnv(ctx)
-		ok, perr := helpDelegateExecute(args[0], pluginArgs, ctx)
-		if !ok {
-			// Manifest said installed but the binary vanished between
-			// checks; fall through to the original error rather than
-			// surface a confusing "plugin not found" at help time.
-			return false, nil
-		}
-		return true, perr
-	}
-
-	// Tier 1: not installed locally, but the remote plugin index knows
-	// args[0] → guide the user to install it. Wording mirrors
-	// printProductUsage's "aliyun plugin install --names <plugin>" so
-	// users see a consistent install command across L1 and L3 help.
+	// Step 1: look up args[0] in the remote plugin catalog. We hold the canonical PluginInfo (Name, ProductCode) so install guidance can
+	// reference the exact `aliyun plugin install --names <name>` form.
+	var indexHit *plugin.PluginInfo
 	if c.pluginIndex != nil {
-		for _, pInfo := range c.pluginIndex.Plugins {
-			if strings.EqualFold(pInfo.ProductCode, args[0]) {
-				return true, fmt.Errorf(
-					"'%s' looks like a plugin command but the plugin is not installed.\n"+
-						"Run 'aliyun plugin install --names %s' to install it.",
-					args[0], pInfo.Name,
-				)
-			}
-		}
-	} else if c.pluginIndexErr != nil {
-		// Remote catalog fetch failed (offline / network issue). Surface
-		// it so the user knows install guidance might be missing, then
-		// continue with tier-2 / tier-3 diagnostics below.
-		c.printPluginIndexLoadFailureNote(ctx)
-	}
-
-	// Tier 2: args[0] is a known OpenAPI built-in product → diagnose
-	// args[1] before complaining about arg count. If args[1] isn't a
-	// valid API for this product, report THAT — it's far more
-	// actionable than "too many arguments" (the user usually just
-	// typo'd the API). InvalidUnifiedApiError implements
-	// SuggestibleError so the cli framework prints "Did you mean ..."
-	// automatically.
-	if product, ok := c.library.GetProduct(args[0]); ok {
-		apiValid := false
-		for _, n := range product.ApiNames {
-			if strings.EqualFold(n, args[1]) {
-				apiValid = true
+		for i := range c.pluginIndex.Plugins {
+			if strings.EqualFold(c.pluginIndex.Plugins[i].ProductCode, productCode) {
+				indexHit = &c.pluginIndex.Plugins[i]
 				break
 			}
 		}
-		if !apiValid {
-			return true, &InvalidUnifiedApiError{Name: args[1], product: &product}
-		}
-		// args[0] is a real product AND args[1] is a real API but
-		// extras remain: this IS a genuine arg-count problem (OpenAPI
-		// API help is two levels max). Fall through to the legacy
-		// error so its pre-existing wording is preserved.
-		return false, nil
+	} else if c.pluginIndexErr != nil {
+		// Remote catalog unavailable (offline / network).
+		// Print the fetch-failure note so the user knows install guidance and fuzzy suggestions may be incomplete, then continue.
+		c.printPluginIndexLoadFailureNote(ctx)
 	}
 
-	// Tier 3: args[0] is neither an installed plugin nor a built-in
-	// product. Surface it as an invalid product / plugin name (with
-	// typo suggestions via the error's GetSuggestions) instead of a
-	// misleading "too many arguments" that points at the wrong problem.
+	userCmd := "aliyun " + strings.Join(args, " ")
+
+	// Step 2: known plugin → branch on local install state.
+	if indexHit != nil {
+		installed, _, ierr := helpDelegateIsInstalled(productCode)
+		if ierr != nil || !installed {
+			// Manifest unreadable is treated as "not installed" — the install guidance is the right next step in either case
+			// (re-running install will repair a corrupted manifest).
+			return true, fmt.Errorf(
+				"'%s' looks like a plugin command but plugin '%s' is not installed.\n"+
+					"Run 'aliyun plugin install --name %s' to install it and try again.",
+				userCmd, productCode, indexHit.Name,
+			)
+		}
+		// Installed → forward to plugin --help.
+		pluginArgs := getPluginArgsForHelp(productCode)
+		c.setLangEnv(ctx)
+		if ok, perr := helpDelegateExecute(productCode, pluginArgs, ctx); ok {
+			return true, perr
+		}
+		// Manifest said installed but the binary vanished between checks.
+		// Don't fall through to the legacy error — surface reinstall guidance so the user gets a one-line fix.
+		return true, fmt.Errorf(
+			"'%s' looks like a plugin command and plugin '%s' is registered as installed but its binary cannot be located.\n"+
+				"Run 'aliyun plugin install --name %s' to reinstall it and try again.",
+			userCmd, productCode, indexHit.Name,
+		)
+	}
+
+	// Step 3: index miss but locally installed (dev side-load case — internal plugins distributed before they hit the public catalog).
+	// Forward anyway so these users still get plugin-rendered help.
+	if installed, _, ierr := helpDelegateIsInstalled(productCode); ierr == nil && installed {
+		pluginArgs := getPluginArgsForHelp(productCode)
+		c.setLangEnv(ctx)
+		if ok, perr := helpDelegateExecute(productCode, pluginArgs, ctx); ok {
+			return true, perr
+		}
+		// Binary vanished and we have no canonical Name to suggest a reinstall command — fall through to step 4 fuzzy diagnostics.
+	}
+
+	// Step 4: completely unknown plugin name — fuzzy-suggest from the
+	// remote index via InvalidProductOrPluginError.GetSuggestions.
+	//
+	// Note: built-in OpenAPI products technically can't reach this
+	// step (Gate-2 filters out PascalCase APINames), but a user who types an all-lowercase product name like `ecs foo bar` lands here as if they'd typo'd a plugin.
+	// The Hint surfaces the product-vs-plugin distinction so OpenAPI users who took the "wrong" path get the right syntax instead of a misleading "'ecs' is not a valid product" with no further context.
+	// The fuzzy suggester is still loaded with plugin names so genuine plugin typos see "Did you mean ..." underneath.
 	var plugList []plugin.PluginInfo
 	if c.pluginIndex != nil {
 		plugList = c.pluginIndex.Plugins
 	}
-	return true, &InvalidProductOrPluginError{Code: args[0], library: c.library, plugins: plugList}
+	return true, &InvalidProductOrPluginError{
+		Code:    productCode,
+		library: c.library,
+		plugins: plugList,
+		Hint: "If you meant an OpenAPI built-in call, the form is " +
+			"'aliyun <product> <APIName>' (API names are PascalCase, e.g. 'DescribeRegions').",
+	}
 }
