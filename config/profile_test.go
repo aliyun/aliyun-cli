@@ -1611,6 +1611,35 @@ func TestOpenAPIAuthType(t *testing.T) {
 		Mode:                 BearerToken,
 		BearerTokenHeaderKey: "x-custom-token",
 	}).OpenAPIAuthType())
+	assert.Equal(t, "Anonymous", (&Profile{Mode: Anonymous}).OpenAPIAuthType())
+}
+
+func TestAnonymousFromFlag(t *testing.T) {
+	ctx := newCtx()
+	CliCredFlag(ctx.Flags()).SetAssigned(true)
+	CliCredFlag(ctx.Flags()).SetValue("Anonymous")
+	p := &Profile{Name: "default", RegionId: "cn-hangzhou"}
+	p.OverwriteWithFlags(ctx)
+	assert.Equal(t, Anonymous, p.Mode)
+	assert.NoError(t, p.Validate())
+	cred, err := p.GetCredential(ctx, nil)
+	assert.NoError(t, err)
+	assert.Nil(t, cred)
+}
+
+func TestAnonymousFromEnv(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_CLI_CRED", "anonymous")
+	ctx := newCtx()
+	p := &Profile{Name: "default", RegionId: "cn-hangzhou"}
+	p.OverwriteWithFlags(ctx)
+	assert.Equal(t, Anonymous, p.Mode)
+	assert.NoError(t, p.Validate())
+	cred, err := p.GetCredential(ctx, nil)
+	assert.NoError(t, err)
+	assert.Nil(t, cred)
+	envs, err := p.GetRuntimeEnv(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "Anonymous", envs["ALIBABA_CLOUD_CLI_CRED"])
 }
 
 func TestInjectBearerTokenHeader(t *testing.T) {

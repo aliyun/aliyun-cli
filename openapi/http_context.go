@@ -32,11 +32,22 @@ import (
 	slsUtils "github.com/aliyun/aliyun-cli/v3/sls"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 )
 
 func ShouldUseOpenapi(ctx *cli.Context, product *meta.Product) bool {
 	// sls use openapi, should be applied to all products later
 	return strings.ToLower(product.Code) == "sls"
+}
+
+// ShouldUseOpenapiForProfile returns true if the request should be routed to the
+// darabonba-openapi path. Anonymous mode must always go through this path because
+// the legacy alibaba-cloud-sdk-go path cannot disable signing.
+func ShouldUseOpenapiForProfile(ctx *cli.Context, product *meta.Product, cp *config.Profile) bool {
+	if cp != nil && cp.Mode == config.Anonymous {
+		return true
+	}
+	return ShouldUseOpenapi(ctx, product)
 }
 
 var hookHttpContextCall = func(fn func() error) func() error {
@@ -52,9 +63,12 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		err = fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
 		return
 	}
-	credential, err := cp.GetCredential(ctx, nil)
-	if err != nil {
-		return
+	var credential credentialsv2.Credential
+	if cp.Mode != config.Anonymous {
+		credential, err = cp.GetCredential(ctx, nil)
+		if err != nil {
+			return
+		}
 	}
 	conf := openapiClient.Config{
 		Credential: credential,

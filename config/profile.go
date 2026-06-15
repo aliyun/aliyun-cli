@@ -59,6 +59,8 @@ const (
 	CloudSSO            = AuthenticateMode("CloudSSO")
 	OAuth               = AuthenticateMode("OAuth")
 	BearerToken         = AuthenticateMode("BearerToken")
+	// Anonymous mode skips AK/SK and accesses POP gateway anonymous APIs.
+	Anonymous = AuthenticateMode("Anonymous")
 )
 
 // standard OpenAPI bearer token header used by darabonba-openapi.
@@ -67,7 +69,7 @@ const DefaultBearerTokenHeaderKey = "x-acs-bearer-token"
 var knownModes = []AuthenticateMode{
 	AK, StsToken, RamRoleArn, EcsRamRole, RsaKeyPair,
 	RamRoleArnWithEcs, ChainableRamRoleArn, External,
-	CredentialsURI, OIDC, CloudSSO, OAuth, BearerToken,
+	CredentialsURI, OIDC, CloudSSO, OAuth, BearerToken, Anonymous,
 }
 
 func NormalizeMode(mode string) AuthenticateMode {
@@ -124,6 +126,7 @@ type Profile struct {
 	AutoPluginInstallEnablePre bool             `json:"auto_plugin_install_enable_pre,omitempty"` // install latest version (including pre-release) when true
 	BearerTokenValue           string           `json:"bearer_token,omitempty"`
 	BearerTokenHeaderKey       string           `json:"bearer_token_header_key,omitempty"`
+	CliCred                    string           `json:"-"` // from --cli-cred flag or ALIBABA_CLOUD_CLI_CRED env, never persisted
 	parent                     *Configuration   //`json:"-"`
 }
 
@@ -242,6 +245,9 @@ func (cp *Profile) Validate() error {
 			return fmt.Errorf("bearer_token is not configured for profile '%s'. Run `aliyun configure --profile %s --mode BearerToken` to set it",
 				cp.Name, cp.Name)
 		}
+	case Anonymous:
+		// Anonymous mode only requires region; no credential validation.
+		return nil
 	default:
 		return fmt.Errorf("invalid mode: %s", cp.Mode)
 	}
@@ -346,6 +352,14 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		cp.AutoPluginInstallEnablePre = os.Getenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL_ENABLE_PRE") == "true"
 	}
 
+	// --cli-cred / ALIBABA_CLOUD_CLI_CRED takes precedence over --mode
+	if cp.CliCred == "" {
+		cp.CliCred = CliCredFlag(ctx.Flags()).GetStringOrDefault(util.GetFromEnv("ALIBABA_CLOUD_CLI_CRED"))
+	}
+	if strings.EqualFold(cp.CliCred, string(Anonymous)) {
+		cp.Mode = Anonymous
+	}
+
 	AutoModeRecognition(cp)
 }
 
@@ -414,6 +428,9 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 	// Others are indirect credential
 	cp.Validate()
 	switch cp.Mode {
+	case Anonymous:
+		// darabonba-openapi skips Credential when AuthType="Anonymous".
+		return nil, nil
 	case AK:
 		if cp.AccessKeyId == "" || cp.AccessKeySecret == "" {
 			err = fmt.Errorf("AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first")
@@ -729,7 +746,10 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 		"ALIBABA_CLOUD_REGION_ID": cp.RegionId,
 	}
 
-	if cp.Mode == BearerToken {
+	if cp.Mode == Anonymous {
+		// Anonymous mode: do not resolve any credential; just propagate the switch to plugin subprocesses.
+		envs["ALIBABA_CLOUD_CLI_CRED"] = "Anonymous"
+	} else if cp.Mode == BearerToken {
 		if err := cp.Validate(); err != nil {
 			return nil, err
 		}
@@ -874,6 +894,9 @@ func (cp *Profile) normalizeBearerTokenFields() error {
 }
 
 func (cp *Profile) OpenAPIAuthType() string {
+	if cp.Mode == Anonymous {
+		return "Anonymous"
+	}
 	if cp.Mode == BearerToken && cp.BearerTokenHeaderKey != "" {
 		return "Anonymous"
 	}

@@ -299,6 +299,25 @@ func TestLoadProfileWithContextWhenIGNORE_PROFILE(t *testing.T) {
 	os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "")
 }
 
+func TestLoadProfileWithContext_Anonymous(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
+	CliCredFlag(ctx.Flags()).SetAssigned(true)
+	CliCredFlag(ctx.Flags()).SetValue("Anonymous")
+	ctx.Flags().Get("region").SetAssigned(true)
+	ctx.Flags().Get("region").SetValue("cn-hangzhou")
+	p, err := LoadProfileWithContext(ctx)
+	assert.Nil(t, err)
+	assert.Equal(t, Anonymous, p.Mode)
+	assert.Equal(t, "cn-hangzhou", p.RegionId)
+	assert.Equal(t, "Anonymous", p.OpenAPIAuthType())
+	cred, err := p.GetCredential(ctx, nil)
+	assert.NoError(t, err)
+	assert.Nil(t, cred)
+}
+
 func TestGetHomePath(t *testing.T) {
 	home := GetHomePath()
 	assert.NotEqual(t, "", home)

@@ -418,7 +418,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			}
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 			ctx.Command().Name = args[1]
-			if ShouldUseOpenapi(ctx, &product) {
+			if ShouldUseOpenapiForProfile(ctx, &product, &c.profile) {
 				return c.processApiInvoke(ctx, &product, &api, api.Method, api.PathPattern)
 			}
 			return c.processInvoke(ctx, productName, api.Method, api.PathPattern)
@@ -446,7 +446,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		if err := c.checkSafetyPolicy(ctx, product.Code, args[1], args[2]); err != nil {
 			return err
 		}
-		if ShouldUseOpenapi(ctx, &product) {
+		if ShouldUseOpenapiForProfile(ctx, &product, &c.profile) {
 			if !find {
 				return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
 					"Please confirm if the API path exists")
@@ -930,7 +930,7 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 		}
 	}
 
-	if strings.ToLower(product.ApiStyle) == "rpc" || !ShouldUseOpenapi(ctx, product) {
+	if strings.ToLower(product.ApiStyle) == "rpc" || !ShouldUseOpenapiForProfile(ctx, product, &c.profile) {
 		return nil, cli.NewErrorWithTip(fmt.Errorf("unchecked api style: %s or product: %s", product.ApiStyle, product.Code),
 			"Unsupported api style or product")
 	}
