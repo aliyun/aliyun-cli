@@ -110,7 +110,7 @@ func Test_main(t *testing.T) {
 	profileflag.SetAssigned(false)
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid built-in product or external product plugin. See `aliyun help`.", err.Error())
+	assert.Equal(t, "'test' is not a valid built-in product or external product plugin. See `aliyun --help`.", err.Error())
 
 	ctx.Flags().Get("force").SetAssigned(true)
 	ctx.Flags().Get("version").SetAssigned(true)
@@ -134,12 +134,12 @@ func Test_main(t *testing.T) {
 	args = []string{"aos", "test2"}
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'aos' is not a valid built-in product or external product plugin. See `aliyun help`.", err.Error())
+	assert.Equal(t, "'aos' is not a valid built-in product or external product plugin. See `aliyun --help`.", err.Error())
 
 	args = []string{"test", "test2", "test1"}
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid built-in product or external product plugin. See `aliyun help`.", err.Error())
+	assert.Equal(t, "'test' is not a valid built-in product or external product plugin. See `aliyun --help`.", err.Error())
 
 	args = []string{"test", "Test2", "test1", "test3"}
 	err = command.main(ctx, args)
@@ -491,12 +491,12 @@ func Test_help(t *testing.T) {
 	args = []string{"test"}
 	err = command.help(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid built-in product or external product plugin. See `aliyun help`.", err.Error())
+	assert.Equal(t, "'test' is not a valid built-in product or external product plugin. See `aliyun --help`.", err.Error())
 
 	args = []string{"test", "test0"}
 	err = command.help(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid built-in product or external product plugin. See `aliyun help`.", err.Error())
+	assert.Equal(t, "'test' is not a valid built-in product or external product plugin. See `aliyun --help`.", err.Error())
 
 	args = []string{"test", "test0", "test1"}
 	err = command.help(ctx, args)
@@ -505,7 +505,7 @@ func Test_help(t *testing.T) {
 	// — which used to imply args[0] was a valid product even when (as here) it wasn't.
 	// For args[0]="test", neither an installed plugin nor a built-in OpenAPI product,
 	// the helper falls all the way through to step-4 (fuzzy suggestion via InvalidProductOrPluginError, plus a Hint explaining the OpenAPI alternative form).
-	assert.Contains(t, err.Error(), "'test' is not a valid built-in product or external product plugin. See `aliyun help`.")
+	assert.Contains(t, err.Error(), "'test' is not a valid built-in product or external product plugin. See `aliyun --help`.")
 	assert.Contains(t, err.Error(), "OpenAPI built-in call",
 		"step-4 must surface the OpenAPI alternative as a Hint")
 }
@@ -1626,7 +1626,7 @@ func TestMainForNonSlsProductApi(t *testing.T) {
 	assert.NotNil(t, err)
 }
 
-// Regression test: for a restful product, when the user provides an API name that does not exist in metadata (e.g. `aliyun apig GetPlugin`), the error should be `InvalidApiError` with suggestions,
+// Regression test: for a restful product, when the user provides an API name that does not exist in metadata (e.g. `aliyun apig GetPlugin`), the error should be unified api/cmd guidance,
 // NOT the confusing `product 'xxx' need restful call` produced by checkRestfulMethod.
 func TestMainRestfulProductWithInvalidApiName(t *testing.T) {
 	stdout := new(bytes.Buffer)
@@ -1684,11 +1684,11 @@ func TestMainRestfulProductWithInvalidApiName(t *testing.T) {
 	args := []string{"apig", "GetPlugin"}
 	err := command.main(ctx, args)
 	assert.NotNil(t, err)
-	// Must be InvalidApiError, not the generic "need restful call" message.
-	invalidApiErr, ok := err.(*InvalidApiError)
-	assert.True(t, ok, "expected *InvalidApiError, got %T: %v", err, err)
+	invalidApiErr, ok := err.(*InvalidApiOrCmdNotFoundError)
+	assert.True(t, ok, "expected *InvalidApiOrCmdNotFoundError, got %T: %v", err, err)
 	assert.Equal(t, "GetPlugin", invalidApiErr.Name)
-	assert.Contains(t, err.Error(), "'GetPlugin' is not a valid api")
+	assert.Contains(t, err.Error(), "api/command")
+	assert.Contains(t, err.Error(), "CamelCase")
 	assert.NotContains(t, err.Error(), "need restful call")
 }
 
@@ -2448,6 +2448,36 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		}
 	})
 
+	t.Run("Builtin product lowercase cmd uses three-way scan", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		writeMinimalConfigJSON(t, testHome)
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		os.MkdirAll(filepath.Dir(manifestPath), 0755)
+		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
+
+		os.Args = []string{"aliyun", "sts", "getcalleridentity"}
+		args := []string{"sts", "getcalleridentity"}
+
+		oldInteractive := isInteractiveInput
+		isInteractiveInput = func() bool { return false }
+		defer func() { isInteractiveInput = oldInteractive }()
+
+		_, ok := command.library.GetProduct("sts")
+		if !ok {
+			t.Skip("sts not in builtin repository")
+		}
+
+		err := command.main(ctx, args)
+		assert.Error(t, err)
+		assert.IsType(t, &InvalidApiOrCmdNotFoundError{}, err)
+		assert.Contains(t, err.Error(), "getcalleridentity")
+		assert.Contains(t, err.Error(), "CamelCase")
+		assert.NotContains(t, err.Error(), "not a valid built-in product")
+	})
+
 	t.Run("Kebab-case with command not in os.Args", func(t *testing.T) {
 		testHome := t.TempDir()
 		cleanup := setTestHomeDir(t, testHome)
@@ -2468,7 +2498,9 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 
 		err := command.main(ctx, args)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "'fc' is not a valid built-in product")
+		assert.IsType(t, &InvalidApiOrCmdNotFoundError{}, err)
+		assert.Contains(t, err.Error(), "describe-regions")
+		assert.NotContains(t, err.Error(), "not a valid built-in product")
 	})
 }
 

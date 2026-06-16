@@ -63,9 +63,20 @@ func (c *Commando) lookupPluginForProduct(productCode string) (pluginName string
 	return "", false
 }
 
+func (c *Commando) getInstalledLocalPlugin(productCode string) *plugin.LocalPlugin {
+	_, lp, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode)
+	if !ok {
+		return nil
+	}
+	return lp
+}
+
 func (c *Commando) isPluginInstalledForProduct(productCode string) bool {
-	_, _, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode)
-	return ok
+	return c.getInstalledLocalPlugin(productCode) != nil
+}
+
+func productHasBuiltinApis(product meta.Product) bool {
+	return len(product.ApiNames) > 0
 }
 
 func (c *Commando) planProductLevelHelp(productCode string) (productHelpPlan, meta.Product, string, bool) {
@@ -90,8 +101,8 @@ func (c *Commando) planProductLevelHelp(productCode string) (productHelpPlan, me
 			return plan, product, pluginName, false
 		}
 		plan.abortErr = fmt.Errorf(
-			"'%s' is not a built-in product and requires an external product plugin.\n  aliyun plugin install --name %s",
-			productCode, pluginName)
+			"'%s' is not a built-in product and requires an external product plugin.\n  aliyun plugin install --name %s\n  After installation, run `aliyun %s --help` to view product help.",
+			productCode, pluginName, strings.ToLower(productCode))
 		return plan, product, pluginName, false
 	}
 
@@ -139,14 +150,15 @@ func (c *Commando) printBuiltInProductUsage(ctx *cli.Context, product meta.Produ
 	cli.Printf(ctx.Stdout(), "Version: %s \n", product.Version)
 	cli.Printf(ctx.Stdout(), "\n")
 
-	if len(product.ApiNames) == 0 {
-		return nil
-	}
 	if product.ApiStyle == "rpc" {
 		cli.Printf(ctx.Stdout(), "\nUsage:\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ...\n", strings.ToLower(product.Code))
 	} else {
 		cli.Printf(ctx.Stdout(), "\nUsage 1:\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ... --body \"...\"\n", strings.ToLower(product.Code))
 		cli.Printf(ctx.Stdout(), "\nUsage 2:\n  aliyun %s [GET|PUT|POST|DELETE] <PathPattern> --body \"...\" \n", strings.ToLower(product.Code))
+	}
+
+	if len(product.ApiNames) == 0 {
+		return nil
 	}
 
 	cli.PrintfWithColor(ctx.Stdout(), cli.ColorOff, "\nAvailable Api List: \n")

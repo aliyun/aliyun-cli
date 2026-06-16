@@ -209,8 +209,9 @@ func TestPrintApiUsage_UnknownApi_NoPlugin(t *testing.T) {
 
 	err := c.printApiUsage(ctx, "ecs", "NonExistentApi")
 	assert.Error(t, err)
-	assert.IsType(t, &InvalidApiError{}, err)
+	assert.IsType(t, &InvalidApiOrCmdNotFoundError{}, err)
 	assert.Contains(t, err.Error(), "NonExistentApi")
+	assert.Contains(t, err.Error(), "CamelCase")
 }
 
 func TestPrintApiUsage_UnknownProduct_NoPlugin(t *testing.T) {
@@ -237,11 +238,13 @@ func TestPrintApiUsage_UnknownApi_PluginAvailableNotInstalled_Lowercase(t *testi
 		Plugins: map[string]plugin.LocalPlugin{},
 	}
 
-	// Lowercase API name triggers shouldTryPlugin=true, uninstalled plugin -> install hint
+	// Lowercase unknown API → three-way scan error + install hint in error body (no auto plugin route)
 	err := c.printApiUsage(ctx, "ecs", "describeinstances")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "aliyun-cli-ecs")
-	assert.Contains(t, err.Error(), "aliyun plugin install --names")
+	assert.IsType(t, &InvalidApiOrCmdNotFoundError{}, err)
+	assert.Contains(t, err.Error(), "CamelCase")
+	assert.Contains(t, err.Error(), "aliyun plugin install --name aliyun-cli-ecs")
+	assert.Empty(t, stdout.String())
 }
 
 func TestPrintApiUsage_UnknownApi_PluginHint_NonLowercase(t *testing.T) {
@@ -257,14 +260,12 @@ func TestPrintApiUsage_UnknownApi_PluginHint_NonLowercase(t *testing.T) {
 		Plugins: map[string]plugin.LocalPlugin{},
 	}
 
-	// Non-lowercase (e.g. "BadApiName") -> prints suggestion, then returns InvalidApiError
+	// Non-lowercase unknown API → three-way scan; install hint lives in error body when plugin not installed
 	err := c.printApiUsage(ctx, "ecs", "BadApiName")
 	assert.Error(t, err)
-	assert.IsType(t, &InvalidApiError{}, err)
-
-	output := stdout.String()
-	assert.Contains(t, output, "[Suggestion]")
-	assert.Contains(t, output, "aliyun-cli-ecs")
+	assert.IsType(t, &InvalidApiOrCmdNotFoundError{}, err)
+	assert.Contains(t, err.Error(), "aliyun plugin install --name")
+	assert.Empty(t, stdout.String())
 }
 
 func TestPrintApiUsage_NonBuiltinProduct_PluginNotInstalled(t *testing.T) {
@@ -284,7 +285,8 @@ func TestPrintApiUsage_NonBuiltinProduct_PluginNotInstalled(t *testing.T) {
 
 	err := c.printApiUsage(ctx, "fc", "somecmd")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "aliyun plugin install --names aliyun-cli-fc")
+	assert.Contains(t, err.Error(), "aliyun plugin install --name aliyun-cli-fc")
+	assert.Contains(t, err.Error(), "aliyun fc somecmd --help")
 }
 
 func TestGetPluginArgsForHelp(t *testing.T) {
@@ -326,6 +328,11 @@ func TestGetPluginArgsForHelp(t *testing.T) {
 		args := getPluginArgsForHelp("ecs")
 		assert.Equal(t, []string{"ecs", "--api-version", "2014-05-26", "--help"}, args)
 	})
+}
+
+func TestGetPluginArgsForApiHelp(t *testing.T) {
+	args := getPluginArgsForApiHelp("fc", "list-functions")
+	assert.Equal(t, []string{"fc", "list-functions", "--help"}, args)
 }
 
 func setupInstalledPlugin(t *testing.T, pluginName string) {
@@ -402,6 +409,31 @@ func TestPrintProductUsage_BuiltinProduct_PluginInstalled(t *testing.T) {
 	assert.Contains(t, output, "ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true")
 }
 
+func TestPrintApiUsage_BuiltinShellProduct_PluginInstalled(t *testing.T) {
+	setupInstalledPlugin(t, "aliyun-cli-cs")
+
+	c, w, stderr := newTestCommando()
+	ctx := newTestContext(w, stderr)
+
+	repo, _ := meta.MockLoadRepository([]meta.Product{
+		{Code: "CS", Version: "2015-12-15", ApiStyle: "restful", ApiNames: []string{}},
+	})
+	c.library.builtinRepo = repo
+	c.pluginIndex = &plugin.Index{
+		Plugins: []plugin.PluginInfo{
+			{Name: "aliyun-cli-cs", ProductCode: "cs"},
+		},
+	}
+	c.localManifest = &plugin.LocalManifest{
+		Plugins: map[string]plugin.LocalPlugin{
+			"aliyun-cli-cs": {Name: "aliyun-cli-cs", Version: "1.0.0"},
+		},
+	}
+
+	err := c.printApiUsage(ctx, "cs", "list-clusters")
+	assert.NoError(t, err)
+}
+
 func TestPrintApiUsage_NonBuiltinProduct_PluginInstalled(t *testing.T) {
 	setupInstalledPlugin(t, "aliyun-cli-fc")
 
@@ -423,9 +455,6 @@ func TestPrintApiUsage_NonBuiltinProduct_PluginInstalled(t *testing.T) {
 
 	err := c.printApiUsage(ctx, "fc", "deploy")
 	assert.NoError(t, err)
-
-	output := w.String()
-	assert.Contains(t, output, "Command 'fc deploy' is provided by plugin 'aliyun-cli-fc'")
 }
 
 func setupLocalPluginShellBinary(t *testing.T, pluginName string) {
@@ -500,7 +529,7 @@ func TestPrintApiUsage_LocalPluginNotInRemoteIndex(t *testing.T) {
 
 	err = c.printApiUsage(ctx, "localonly2", "SomeApi")
 	assert.NoError(t, err)
-	assert.Contains(t, w.String(), "Command 'localonly2 SomeApi' is provided by plugin 'aliyun-cli-localonly2'")
+	assert.Contains(t, w.String(), "HELP_FROM_LOCAL_PLUGIN")
 }
 
 func TestPrintProducts_PluginIndexLoadHint(t *testing.T) {

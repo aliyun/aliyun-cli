@@ -112,7 +112,7 @@ func TestInvalidProductOrPluginError_Error(t *testing.T) {
 		err := &InvalidProductOrPluginError{
 			Code: "fcc",
 		}
-		assert.Equal(t, "'fcc' is not a valid built-in product or external product plugin. See `aliyun help`.", err.Error())
+		assert.Equal(t, "'fcc' is not a valid built-in product or external product plugin. See `aliyun --help`.", err.Error())
 	})
 
 	t.Run("hint is appended on its own line", func(t *testing.T) {
@@ -123,7 +123,7 @@ func TestInvalidProductOrPluginError_Error(t *testing.T) {
 			Hint: "If you meant an OpenAPI built-in call, the form is 'aliyun <product> <APIName>'.",
 		}
 		assert.Equal(t,
-			"'ecs' is not a valid built-in product or external product plugin. See `aliyun help`.\n"+
+			"'ecs' is not a valid built-in product or external product plugin. See `aliyun --help`.\n"+
 				"If you meant an OpenAPI built-in call, the form is 'aliyun <product> <APIName>'.",
 			err.Error(),
 			"hint must follow the legacy line on its own line — single-line legacy users keep their format")
@@ -248,6 +248,42 @@ func TestInvalidUnifiedApiError_GetSuggestions(t *testing.T) {
 		suggestions := err.GetSuggestions()
 		assert.Empty(t, suggestions)
 	})
+}
+
+func TestInvalidApiOrCmdNotFoundError_GetSuggestions(t *testing.T) {
+	product := &meta.Product{
+		Code:     "ecs",
+		ApiNames: []string{"DescribeInstances", "DescribeRegions"},
+	}
+	lp := &plugin.LocalPlugin{
+		CmdNames: []string{"describe-instances", "list-images"},
+	}
+
+	t.Run("plugin installed", func(t *testing.T) {
+		err := newApiOrCmdNotFoundError(product, "describeinstances", lp, "aliyun-cli-ecs")
+		assert.Contains(t, err.Error(), "CamelCase")
+		assert.Contains(t, err.Error(), "kebab-case")
+		assert.NotContains(t, err.Error(), "aliyun plugin install --name")
+		assert.NotContains(t, err.Error(), "must be installed")
+
+		suggestions := err.GetSuggestions()
+		joined := strings.Join(suggestions, "\n")
+		assert.Contains(t, joined, "DescribeInstances")
+		assert.Contains(t, joined, "[built-in OpenAPI]")
+	})
+
+	t.Run("plugin not installed", func(t *testing.T) {
+		err := newApiOrCmdNotFoundError(product, "describeinstances", nil, "aliyun-cli-ecs")
+		assert.Contains(t, err.Error(), "aliyun plugin install --name aliyun-cli-ecs")
+		assert.Contains(t, err.Error(), "must be installed")
+	})
+}
+
+func TestPluginCmdMatches(t *testing.T) {
+	lp := &plugin.LocalPlugin{CmdNames: []string{"list-functions"}}
+	assert.True(t, pluginCmdMatches("list-functions", lp))
+	assert.False(t, pluginCmdMatches("List-Functions", lp))
+	assert.False(t, pluginCmdMatches("DescribeRegions", lp))
 }
 
 func TestInvalidRestfulPathError(t *testing.T) {

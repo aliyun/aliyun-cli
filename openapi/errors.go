@@ -94,7 +94,7 @@ type InvalidProductOrPluginError struct {
 }
 
 func (e *InvalidProductOrPluginError) Error() string {
-	msg := fmt.Sprintf("'%s' is not a valid built-in product or external product plugin. See `aliyun help`.", e.Code)
+	msg := fmt.Sprintf("'%s' is not a valid built-in product or external product plugin. See `aliyun --help`.", e.Code)
 	if e.Hint != "" {
 		msg += "\n" + e.Hint
 	}
@@ -134,6 +134,117 @@ func (e *InvalidUnifiedApiError) GetSuggestions() []string {
 	}
 	results := removeDuplicates(sr.GetResults())
 	return results
+}
+
+const apiNamingRulesHintKebabSuffix = "plugin command of external product plugins"
+
+func apiNamingRulesHint(pluginInstalled bool, pluginName string) string {
+	kebabLine := apiNamingRulesHintKebabSuffix
+	if !pluginInstalled && pluginName != "" {
+		kebabLine = fmt.Sprintf("%s (run aliyun plugin install --name %s first)", apiNamingRulesHintKebabSuffix, pluginName)
+	}
+	return fmt.Sprintf(`Naming rules in Aliyun CLI:
+  · CamelCase     → OpenAPI API name of built-in products
+  · kebab-case    → %s
+  · METHOD + path → REST shortcut for built-in restful products`, kebabLine)
+}
+
+// GetSuggestions scans built-in ApiNames and installed plugin CmdNames (three-way scan subset).
+type InvalidApiOrCmdNotFoundError struct {
+	Name         string
+	product      *meta.Product
+	pluginName   string
+	localPlugin  *plugin.LocalPlugin
+	builtinNames map[string]struct{}
+	pluginCmds   map[string]struct{}
+}
+
+func newApiOrCmdNotFoundError(
+	product *meta.Product,
+	name string,
+	localPlugin *plugin.LocalPlugin,
+	pluginName string,
+) *InvalidApiOrCmdNotFoundError {
+	e := &InvalidApiOrCmdNotFoundError{
+		Name:         name,
+		product:      product,
+		pluginName:   pluginName,
+		localPlugin:  localPlugin,
+		builtinNames: make(map[string]struct{}),
+		pluginCmds:   make(map[string]struct{}),
+	}
+	for _, apiName := range product.ApiNames {
+		e.builtinNames[apiName] = struct{}{}
+	}
+	if localPlugin != nil {
+		for _, cmd := range localPlugin.CmdNames {
+			e.pluginCmds[cmd] = struct{}{}
+		}
+	}
+	return e
+}
+
+func (e *InvalidApiOrCmdNotFoundError) Error() string {
+	msg := fmt.Sprintf("'%s' is not a valid api/command for product '%s'.",
+		e.Name, e.product.GetLowerCode())
+	pluginInstalled := e.localPlugin != nil
+	msg += "\n\n" + apiNamingRulesHint(pluginInstalled, e.pluginName)
+	if !pluginInstalled && e.pluginName != "" {
+		msg += fmt.Sprintf(
+			"\n\nExternal product plugins must be installed before kebab-case commands work:\n"+
+				"  aliyun plugin install --name %s\n",
+			e.pluginName)
+	}
+	msg += fmt.Sprintf("\nTo see parameters of a plugin command:\n  aliyun %s <kebab-cmd> --help",
+		e.product.GetLowerCode())
+	return msg
+}
+
+func (e *InvalidApiOrCmdNotFoundError) GetSuggestions() []string {
+	sr := cli.NewSuggester(e.Name, 2)
+	lowerProduct := e.product.GetLowerCode()
+
+	for apiName := range e.builtinNames {
+		sr.UnifyApply(apiName)
+	}
+	for cmd := range e.pluginCmds {
+		sr.UnifyApply(cmd)
+	}
+
+	seen := make(map[string]struct{})
+	suggestions := make([]string, 0)
+	for _, candidate := range sr.GetResults() {
+		if _, ok := e.builtinNames[candidate]; ok {
+			line := fmt.Sprintf("aliyun %s %s  [built-in OpenAPI]", lowerProduct, candidate)
+			if _, dup := seen[line]; dup {
+				continue
+			}
+			seen[line] = struct{}{}
+			suggestions = append(suggestions, line)
+			continue
+		}
+		if _, ok := e.pluginCmds[candidate]; ok {
+			line := fmt.Sprintf("aliyun %s %s  [plugin]", lowerProduct, candidate)
+			if _, dup := seen[line]; dup {
+				continue
+			}
+			seen[line] = struct{}{}
+			suggestions = append(suggestions, line)
+		}
+	}
+	return suggestions
+}
+
+func pluginCmdMatches(apiName string, lp *plugin.LocalPlugin) bool {
+	if lp == nil {
+		return false
+	}
+	for _, cmd := range lp.CmdNames {
+		if cmd == apiName {
+			return true
+		}
+	}
+	return false
 }
 
 // InvalidRestfulPathError is returned when aliyun <product> <METHOD> <path> cannot be resolved.

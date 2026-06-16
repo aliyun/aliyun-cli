@@ -165,106 +165,7 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 }
 
 func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName string) error {
-	c.printHelpContextHints(ctx)
-	// 0. Check if it's a plugin product
-	var pluginName string
-	var isInstalled bool
-	var localPlugin plugin.LocalPlugin
-
-	if c.pluginIndex != nil {
-		for _, pInfo := range c.pluginIndex.Plugins {
-			name := pInfo.Name
-			pCode := pInfo.ProductCode
-			if strings.EqualFold(pCode, productCode) {
-				pluginName = name
-				break
-			}
-		}
-	}
-	if pluginName == "" && c.localManifest != nil {
-		if n, _, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode); ok {
-			pluginName = n
-		}
-	}
-
-	if pluginName != "" && c.localManifest != nil {
-		if lp, ok := c.localManifest.Plugins[pluginName]; ok {
-			localPlugin = lp
-			isInstalled = true
-		}
-	}
-
-	// 1. Try to get built-in product info
-	product, ok := c.library.builtinRepo.GetProduct(productCode)
-
-	// Case A: Not a built-in product
-	if !ok {
-		if pluginName != "" { // should not happen, might be true in the future when plugin product has more than built-in product
-			if isInstalled {
-				cli.Printf(ctx.Stdout(), "Command '%s %s' is provided by plugin '%s'.\n", productCode, apiName, pluginName)
-				c.setLangEnv(ctx)
-				plugin.ExecutePlugin(productCode, getPluginArgsForHelp(productCode), ctx)
-				return nil
-			} else {
-				return fmt.Errorf("'%s' is not a built-in product and requires an external product plugin.\n  aliyun plugin install --names %s", productCode, pluginName)
-			}
-		}
-		// Not a built-in product and not a plugin product, like fuzzy cmd input
-		var plugList []plugin.PluginInfo
-		if c.pluginIndex != nil {
-			plugList = c.pluginIndex.Plugins
-		}
-		return &InvalidProductOrPluginError{Code: productCode, library: c.library, plugins: plugList}
-	}
-
-	shouldTryPlugin := false
-	if apiName == strings.ToLower(apiName) { // fuzzy cmd input should apply different logic for build-in and plugin product
-		shouldTryPlugin = true
-	}
-
-	// Case B: Built-in product exists
-	api, ok := c.library.builtinRepo.GetApi(productCode, product.Version, apiName)
-	if !ok {
-		// API not found in built-in metadata. api in plugin is different from api from built-in
-		if pluginName != "" {
-			if shouldTryPlugin { // 全小写进入插件执行及智能纠错系统， 未安装则提示安装
-				if isInstalled {
-					c.setLangEnv(ctx)
-					plugin.ExecutePlugin(productCode, getPluginArgsForHelp(productCode), ctx)
-					return nil
-				} else {
-					return fmt.Errorf("'%s' is not a valid built-in command.\nA plugin '%s' is available which might support this command.\nRun 'aliyun plugin install --names %s' to install it.", apiName, pluginName, pluginName)
-				}
-			} else { // 非插件命令形式，如果本地插件安装了，则返回插件帮助; 如果未安装，则打印插件提示信息，并继续原有api纠错系统
-				if isInstalled {
-					return &InvalidUnifiedApiError{Name: apiName, product: &product, lPlugin: localPlugin}
-				} else {
-					cli.Printf(ctx.Stdout(), "\n[Suggestion] A dedicated product plugin is available for '%s'.\n", productCode)
-					cli.Printf(ctx.Stdout(), "Run 'aliyun plugin install --names %s' to install it for enhanced features.\n\n", pluginName)
-				}
-			}
-		}
-		return &InvalidApiError{Name: apiName, product: &product}
-	}
-
-	productName, _ := newmeta.GetProductName(i18n.GetLanguage(), productCode)
-
-	if product.ApiStyle == "restful" {
-		cli.Printf(ctx.Stdout(), "\nProduct:     %s (%s)\n", product.Code, productName)
-		cli.Printf(ctx.Stdout(), "Method:      %s\n", api.Method)
-		cli.Printf(ctx.Stdout(), "PathPattern: %s\n", api.PathPattern)
-	} else {
-		cli.Printf(ctx.Stdout(), "\nProduct: %s (%s)\n", product.Code, productName)
-	}
-
-	cli.Printf(ctx.Stdout(), "\nParameters:\n")
-
-	w := tabwriter.NewWriter(ctx.Stdout(), 8, 0, 1, ' ', 0)
-	detail, _ := newmeta.GetAPIDetail(i18n.GetLanguage(), productCode, apiName)
-	printParameters(w, api.Parameters, "", detail)
-	w.Flush()
-
-	return nil
+	return c.renderApiLevelHelp(ctx, productCode, apiName, getPluginArgsForApiHelp(productCode, apiName))
 }
 
 var (
@@ -274,9 +175,9 @@ var (
 
 // tryDelegatePluginHelp is layer-3 of the help hierarchy:
 //
-//	len(args)==1 → printProductUsage      (this file)
-//	len(args)==2 → printApiUsage          (this file)
-//	len(args)>2  → tryDelegatePluginHelp  (this file)
+//	len(args)==1 → renderProductLevelHelp   (product_help.go)
+//	len(args)==2 → renderApiLevelHelp       (api_help.go)
+//	len(args)>2  → tryDelegatePluginHelp    (this file)
 
 // OpenAPI APIs are conventionally PascalCase (DescribeRegions, GetAlias)
 // and RESTful invocations carry an uppercase HTTP method in args[1].
