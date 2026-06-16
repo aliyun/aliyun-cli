@@ -467,6 +467,7 @@ We support the following environment variables:
 - `ALIBABA_CLOUD_SECURITY_TOKEN`: When no Security Token is specified, the CLI uses it.
 - `ALIBABA_CLOUD_REGION_ID`: When no Region Id is specified, the CLI uses it.
 - `ALIBABA_CLOUD_SSO_CLIENT_ID`: Use this variable to override the client ID of the SSO application.
+- `ALIBABA_CLOUD_CLI_CRED=Anonymous`： Use this variable to enable the client to directly call anonymous openapi under anonymous mode.
 - `DEBUG=sdk`：Through this variable, the CLI can display HTTP request information, which is helpful for troubleshooting.
 
 ## Getting Help
