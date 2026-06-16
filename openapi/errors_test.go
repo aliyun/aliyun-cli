@@ -112,7 +112,7 @@ func TestInvalidProductOrPluginError_Error(t *testing.T) {
 		err := &InvalidProductOrPluginError{
 			Code: "fcc",
 		}
-		assert.Equal(t, "'fcc' is not a valid product. See `aliyun help`.", err.Error())
+		assert.Equal(t, "'fcc' is not a valid built-in product or external product plugin. See `aliyun help`.", err.Error())
 	})
 
 	t.Run("hint is appended on its own line", func(t *testing.T) {
@@ -123,7 +123,7 @@ func TestInvalidProductOrPluginError_Error(t *testing.T) {
 			Hint: "If you meant an OpenAPI built-in call, the form is 'aliyun <product> <APIName>'.",
 		}
 		assert.Equal(t,
-			"'ecs' is not a valid product. See `aliyun help`.\n"+
+			"'ecs' is not a valid built-in product or external product plugin. See `aliyun help`.\n"+
 				"If you meant an OpenAPI built-in call, the form is 'aliyun <product> <APIName>'.",
 			err.Error(),
 			"hint must follow the legacy line on its own line — single-line legacy users keep their format")
@@ -138,10 +138,32 @@ func TestInvalidProductOrPluginError_GetSuggestions(t *testing.T) {
 				{Name: "aliyun-cli-ecs", ProductCode: "ecs"},
 				{Name: "aliyun-cli-fc", ProductCode: "fc"},
 			},
+			library: &Library{
+				builtinRepo: &meta.Repository{
+					Products: []meta.Product{{Code: "ecs"}},
+				},
+			},
 		}
 		suggestions := err.GetSuggestions()
 		str := strings.Join(suggestions, ",")
 		assert.Contains(t, str, "ecs")
+	})
+
+	t.Run("Dedupes plugin and built-in product codes", func(t *testing.T) {
+		err := &InvalidProductOrPluginError{
+			Code: "ec",
+			plugins: []plugin.PluginInfo{
+				{Name: "aliyun-cli-ecs", ProductCode: "ecs"},
+			},
+			library: &Library{
+				builtinRepo: &meta.Repository{
+					Products: []meta.Product{{Code: "ecs"}},
+				},
+			},
+		}
+		suggestions := err.GetSuggestions()
+		assert.Equal(t, 1, len(suggestions))
+		assert.Equal(t, "ecs", suggestions[0])
 	})
 
 	t.Run("No match", func(t *testing.T) {
@@ -225,6 +247,46 @@ func TestInvalidUnifiedApiError_GetSuggestions(t *testing.T) {
 		}
 		suggestions := err.GetSuggestions()
 		assert.Empty(t, suggestions)
+	})
+}
+
+func TestInvalidRestfulPathError(t *testing.T) {
+	t.Run("path exists wrong method", func(t *testing.T) {
+		repo, err := meta.MockLoadRepository([]meta.Product{{
+			Code:     "cs",
+			Version:  "2015-12-15",
+			ApiNames: []string{"DescribeClusters", "CreateCluster"},
+		}})
+		assert.NoError(t, err)
+		lib := &Library{builtinRepo: repo}
+		product, ok := lib.GetProduct("cs")
+		assert.True(t, ok)
+
+		errObj := newInvalidRestfulPathError(lib, &product, "PUT", "/clusters")
+		rpe, ok := errObj.(*InvalidRestfulPathError)
+		assert.True(t, ok)
+		assert.Contains(t, rpe.Error(), "with method PUT")
+		suggestions := rpe.GetSuggestions()
+		assert.Contains(t, strings.Join(suggestions, "\n"), "GET /clusters (DescribeClusters)")
+		assert.Contains(t, strings.Join(suggestions, "\n"), "POST /clusters (CreateCluster)")
+	})
+
+	t.Run("path not found", func(t *testing.T) {
+		repo, err := meta.MockLoadRepository([]meta.Product{{
+			Code:     "cs",
+			Version:  "2015-12-15",
+			ApiNames: []string{"DescribeClusters"},
+		}})
+		assert.NoError(t, err)
+		lib := &Library{builtinRepo: repo}
+		product, ok := lib.GetProduct("cs")
+		assert.True(t, ok)
+
+		errObj := newInvalidRestfulPathError(lib, &product, "PUT", "/no-such-path")
+		assert.NotNil(t, errObj)
+		_, ok = errObj.(*InvalidRestfulPathError)
+		assert.False(t, ok)
+		assert.Contains(t, errObj.Error(), "can not find api by path /no-such-path")
 	})
 }
 

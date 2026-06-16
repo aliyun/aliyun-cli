@@ -135,6 +135,27 @@ func (a *Repository) GetApiByPath(productCode string, version string, method str
 	return result, false
 }
 
+func (a *Repository) FindApisByPath(productCode string, version string, path string) []Api {
+	product, ok := a.GetProduct(productCode)
+	if !ok {
+		return nil
+	}
+	var matches []Api
+	for _, apiName := range product.ApiNames {
+		var api Api
+		if err := ReadJsonFrom(strings.ToLower(product.Code)+"/"+apiName+".json", &api); err != nil {
+			continue
+		}
+		pattern := ReplacePathPattern(api.PathPattern)
+		re := regexp.MustCompile("^" + pattern + "$")
+		if re.MatchString(path) {
+			api.Product = &product
+			matches = append(matches, api)
+		}
+	}
+	return matches
+}
+
 //go:embed versions.json
 var versions []byte
 

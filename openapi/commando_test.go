@@ -110,7 +110,7 @@ func Test_main(t *testing.T) {
 	profileflag.SetAssigned(false)
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid command or product. See `aliyun help`.", err.Error())
+	assert.Equal(t, "'test' is not a valid built-in product or external product plugin. See `aliyun help`.", err.Error())
 
 	ctx.Flags().Get("force").SetAssigned(true)
 	ctx.Flags().Get("version").SetAssigned(true)
@@ -134,12 +134,12 @@ func Test_main(t *testing.T) {
 	args = []string{"aos", "test2"}
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'aos' is not a valid product. See `aliyun help`.", err.Error())
+	assert.Equal(t, "'aos' is not a valid built-in product or external product plugin. See `aliyun help`.", err.Error())
 
 	args = []string{"test", "test2", "test1"}
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
+	assert.Equal(t, "'test' is not a valid built-in product or external product plugin. See `aliyun help`.", err.Error())
 
 	args = []string{"test", "Test2", "test1", "test3"}
 	err = command.main(ctx, args)
@@ -491,12 +491,12 @@ func Test_help(t *testing.T) {
 	args = []string{"test"}
 	err = command.help(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
+	assert.Equal(t, "'test' is not a valid built-in product or external product plugin. See `aliyun help`.", err.Error())
 
 	args = []string{"test", "test0"}
 	err = command.help(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
+	assert.Equal(t, "'test' is not a valid built-in product or external product plugin. See `aliyun help`.", err.Error())
 
 	args = []string{"test", "test0", "test1"}
 	err = command.help(ctx, args)
@@ -505,7 +505,7 @@ func Test_help(t *testing.T) {
 	// — which used to imply args[0] was a valid product even when (as here) it wasn't.
 	// For args[0]="test", neither an installed plugin nor a built-in OpenAPI product,
 	// the helper falls all the way through to step-4 (fuzzy suggestion via InvalidProductOrPluginError, plus a Hint explaining the OpenAPI alternative form).
-	assert.Contains(t, err.Error(), "'test' is not a valid product. See `aliyun help`.")
+	assert.Contains(t, err.Error(), "'test' is not a valid built-in product or external product plugin. See `aliyun help`.")
 	assert.Contains(t, err.Error(), "OpenAPI built-in call",
 		"step-4 must surface the OpenAPI alternative as a Hint")
 }
@@ -2389,7 +2389,7 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 
 		err := command.main(ctx, args)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "'qqq' is not a valid product")
+		assert.Contains(t, err.Error(), "'qqq' is not a valid built-in product or external product plugin")
 	})
 
 	t.Run("Kebab-case API name with multiple arguments extracts all args", func(t *testing.T) {
@@ -2407,7 +2407,7 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 
 		err := command.main(ctx, args)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "'qqq' is not a valid product")
+		assert.Contains(t, err.Error(), "'qqq' is not a valid built-in product or external product plugin")
 	})
 
 	t.Run("Non-kebab-case API name does not trigger plugin", func(t *testing.T) {
@@ -2838,7 +2838,6 @@ exit 0
 		if runtime.GOOS == "windows" {
 			t.Skip("shell script test skipped on Windows")
 		}
-		// Set environment variable
 		originalEnv := os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP")
 		os.Setenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP", "true")
 		defer func() {
@@ -2849,22 +2848,21 @@ exit 0
 			}
 		}()
 
-		// Create a plugin that exists
+		// Built-in ecs + installed ecs plugin: showOriginal must render legacy built-in help, not plugin.
 		testPluginManifest := `{
 			"plugins": {
-				"envtest": {
-					"name": "envtest",
+				"aliyun-cli-ecs": {
+					"name": "aliyun-cli-ecs",
 					"version": "1.0.0",
-					"path": "` + filepath.Join(pluginDir, "envtest") + `",
-					"command": "envtest"
+					"path": "` + filepath.Join(pluginDir, "aliyun-cli-ecs") + `",
+					"command": "ecs"
 				}
 			}
 		}`
 		err := os.WriteFile(manifestPath, []byte(testPluginManifest), 0644)
 		assert.NoError(t, err)
 
-		// Create the plugin binary so it could be executed
-		pluginPath := filepath.Join(pluginDir, "envtest", "envtest")
+		pluginPath := filepath.Join(pluginDir, "aliyun-cli-ecs", "aliyun-cli-ecs")
 		err = os.MkdirAll(filepath.Dir(pluginPath), 0755)
 		assert.NoError(t, err)
 
@@ -2875,19 +2873,19 @@ exit 0
 		err = os.WriteFile(pluginPath, []byte(mockPluginScript), 0755)
 		assert.NoError(t, err)
 
-		// Test with single argument (product-level help scenario)
-		os.Args = []string{"aliyun", "envtest"}
-		args := []string{"envtest"}
+		command.pluginLoaded = false
+		command.localManifest = nil
+		command.pluginIndex = nil
+
+		os.Args = []string{"aliyun", "ecs"}
+		args := []string{"ecs"}
 
 		stdout.Reset()
 		err = command.main(ctx, args)
 
-		// With ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true and single arg,
-		// plugin execution is skipped
-		assert.NotNil(t, err)
-		assert.Contains(t, err.Error(), "not a valid command or product")
+		assert.NoError(t, err)
+		assert.Contains(t, stdout.String(), "Available Api List")
 		assert.NotContains(t, stdout.String(), "Plugin should not execute")
-
 	})
 
 	t.Run("Kebab-case command triggers plugin execution", func(t *testing.T) {
@@ -2986,6 +2984,12 @@ func TestSingleProductPluginExecution(t *testing.T) {
 	err := os.MkdirAll(pluginDir, 0755)
 	assert.NoError(t, err)
 
+	resetPluginCache := func() {
+		command.pluginLoaded = false
+		command.localManifest = nil
+		command.pluginIndex = nil
+	}
+
 	t.Run("Single arg - plugin installed and executes successfully", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("shell script test skipped on Windows")
@@ -3015,6 +3019,7 @@ exit 0
 		err = os.WriteFile(pluginPath, []byte(mockPluginScript), 0755)
 		assert.NoError(t, err)
 
+		resetPluginCache()
 		os.Args = []string{"aliyun", "singletest"}
 		args := []string{"singletest"}
 
@@ -3044,15 +3049,14 @@ exit 0
 		err = os.MkdirAll(filepath.Join(pluginDir, "missingbin"), 0755)
 		assert.NoError(t, err)
 
+		resetPluginCache()
 		os.Args = []string{"aliyun", "missingbin"}
 		args := []string{"missingbin"}
 
 		stdout.Reset()
 		err = command.main(ctx, args)
 
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "plugin")
-		assert.Contains(t, err.Error(), "not found")
+		assert.NoError(t, err)
 	})
 
 	t.Run("Single arg - plugin not installed", func(t *testing.T) {
@@ -3063,6 +3067,7 @@ exit 0
 		err := os.WriteFile(manifestPath, []byte(testPluginManifest), 0644)
 		assert.NoError(t, err)
 
+		resetPluginCache()
 		os.Args = []string{"aliyun", "notinstalled"}
 		args := []string{"notinstalled"}
 
@@ -3074,12 +3079,11 @@ exit 0
 		assert.NotContains(t, err.Error(), "plugin notinstalled not found")
 	})
 
-	t.Run("Single arg - IsPluginInstalled returns error", func(t *testing.T) {
-		// err != nil from IsPluginInstalled
-
-		// Write invalid JSON to manifest
+	t.Run("Single arg - corrupt local manifest", func(t *testing.T) {
 		err := os.WriteFile(manifestPath, []byte(`{invalid json`), 0644)
 		assert.NoError(t, err)
+
+		resetPluginCache()
 
 		os.Args = []string{"aliyun", "testprod"}
 		args := []string{"testprod"}
@@ -3087,14 +3091,13 @@ exit 0
 		stdout.Reset()
 		err = command.main(ctx, args)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to check plugin status")
+		assert.Contains(t, err.Error(), "not a valid built-in product or external product plugin")
 	})
 
 	t.Run("Single arg - with ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("shell script test skipped on Windows")
 		}
-		// Test that environment variable skips the entire plugin check block
 		originalEnv := os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP")
 		os.Setenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP", "true")
 		defer func() {
@@ -3107,18 +3110,18 @@ exit 0
 
 		testPluginManifest := `{
 			"plugins": {
-				"envskip": {
-					"name": "envskip",
+				"aliyun-cli-ecs": {
+					"name": "aliyun-cli-ecs",
 					"version": "1.0.0",
-					"path": "` + filepath.Join(pluginDir, "envskip") + `",
-					"command": "envskip"
+					"path": "` + filepath.Join(pluginDir, "aliyun-cli-ecs") + `",
+					"command": "ecs"
 				}
 			}
 		}`
 		err := os.WriteFile(manifestPath, []byte(testPluginManifest), 0644)
 		assert.NoError(t, err)
 
-		pluginPath := filepath.Join(pluginDir, "envskip", "envskip")
+		pluginPath := filepath.Join(pluginDir, "aliyun-cli-ecs", "aliyun-cli-ecs")
 		err = os.MkdirAll(filepath.Dir(pluginPath), 0755)
 		assert.NoError(t, err)
 
@@ -3129,18 +3132,17 @@ exit 0
 		err = os.WriteFile(pluginPath, []byte(mockPluginScript), 0755)
 		assert.NoError(t, err)
 
-		os.Args = []string{"aliyun", "envskip"}
-		args := []string{"envskip"}
+		resetPluginCache()
+
+		os.Args = []string{"aliyun", "ecs"}
+		args := []string{"ecs"}
 
 		stdout.Reset()
 		err = command.main(ctx, args)
 
-		// With ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true, the entire if block is skipped
-		// Plugin should NOT be executed
+		assert.NoError(t, err)
+		assert.Contains(t, stdout.String(), "Available Api List")
 		assert.NotContains(t, stdout.String(), "Should not execute")
-
-		// Should try to process as normal product command
-		assert.Error(t, err)
 	})
 }
 

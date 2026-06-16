@@ -141,7 +141,7 @@ func TestPrintProductUsage_NonBuiltinProduct_PluginNotInstalled(t *testing.T) {
 
 	err := c.printProductUsage(ctx, "fc")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "aliyun plugin install --names aliyun-cli-fc")
+	assert.Contains(t, err.Error(), "aliyun plugin install --name aliyun-cli-fc")
 }
 
 func TestPrintProductUsage_NonBuiltinProduct_NoPlugin(t *testing.T) {

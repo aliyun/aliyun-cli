@@ -94,7 +94,7 @@ type InvalidProductOrPluginError struct {
 }
 
 func (e *InvalidProductOrPluginError) Error() string {
-	msg := fmt.Sprintf("'%s' is not a valid product. See `aliyun help`.", e.Code)
+	msg := fmt.Sprintf("'%s' is not a valid built-in product or external product plugin. See `aliyun help`.", e.Code)
 	if e.Hint != "" {
 		msg += "\n" + e.Hint
 	}
@@ -106,10 +106,12 @@ func (e *InvalidProductOrPluginError) GetSuggestions() []string {
 	for _, p := range e.plugins {
 		sr.Apply(strings.ToLower(p.ProductCode))
 	}
-	// for _, p := range e.library.GetProducts() {
-	// 	sr.Apply(strings.ToLower(p.Code))
-	// }
-	return sr.GetResults()
+	if e.library != nil {
+		for _, p := range e.library.GetProducts() {
+			sr.Apply(strings.ToLower(p.Code))
+		}
+	}
+	return removeDuplicates(sr.GetResults())
 }
 
 type InvalidUnifiedApiError struct {
@@ -132,6 +134,42 @@ func (e *InvalidUnifiedApiError) GetSuggestions() []string {
 	}
 	results := removeDuplicates(sr.GetResults())
 	return results
+}
+
+// InvalidRestfulPathError is returned when aliyun <product> <METHOD> <path> cannot be resolved.
+// If the path exists for other HTTP methods, GetSuggestions lists them.
+type InvalidRestfulPathError struct {
+	Method  string
+	Path    string
+	Product *meta.Product
+	matches []meta.Api
+}
+
+func newInvalidRestfulPathError(library *Library, product *meta.Product, method, path string) error {
+	matches := library.FindApisByPath(product.Code, product.Version, path)
+	if len(matches) == 0 {
+		return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", path),
+			"Please confirm if the API path exists")
+	}
+	return &InvalidRestfulPathError{
+		Method:  method,
+		Path:    path,
+		Product: product,
+		matches: matches,
+	}
+}
+
+func (e *InvalidRestfulPathError) Error() string {
+	return fmt.Sprintf("can not find api by path %s with method %s", e.Path, strings.ToUpper(e.Method))
+}
+
+func (e *InvalidRestfulPathError) GetSuggestions() []string {
+	suggestions := make([]string, 0, len(e.matches))
+	for _, api := range e.matches {
+		suggestions = append(suggestions, fmt.Sprintf("%s %s (%s)",
+			strings.ToUpper(api.Method), api.PathPattern, api.Name))
+	}
+	return suggestions
 }
 
 func removeDuplicates(slice []string) []string {

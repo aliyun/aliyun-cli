@@ -59,6 +59,15 @@ func NewCommando(w io.Writer, profile config.Profile) *Commando {
 	return r
 }
 
+func (c *Commando) ensurePluginState() {
+	if c.pluginIndex == nil {
+		c.pluginIndex = &plugin.Index{}
+	}
+	if c.localManifest == nil {
+		c.localManifest = &plugin.LocalManifest{Plugins: make(map[string]plugin.LocalPlugin)}
+	}
+}
+
 func (c *Commando) loadPlugins() {
 	if c.pluginLoaded {
 		return
@@ -67,11 +76,17 @@ func (c *Commando) loadPlugins() {
 	mgr, err := plugin.NewManager()
 	if err != nil {
 		c.pluginIndexErr = err
+		c.ensurePluginState()
 		return
 	}
 	// Remote index may fail offline; local manifest still loads for installed plugins.
-	c.pluginIndex, c.pluginIndexErr = mgr.GetIndex()
-	c.localManifest, _ = mgr.GetLocalManifest()
+	if c.pluginIndex == nil {
+		c.pluginIndex, c.pluginIndexErr = mgr.GetIndex()
+	}
+	if c.localManifest == nil {
+		c.localManifest, _ = mgr.GetLocalManifest()
+	}
+	c.ensurePluginState()
 }
 
 func (c *Commando) printPluginIndexLoadFailureNote(ctx *cli.Context) {
@@ -163,71 +178,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		return nil
 	}
 
-	// Check if we should show original product help instead of plugin help, only and need to be applied in product level
-	envShowOriginalHelp := os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP")
-	showOriginalProductHelp := envShowOriginalHelp == "true" || envShowOriginalHelp == "1"
-
 	// Strategy: Plugin Execution
 	// If the second argument (API name) is all lowercase or version, use plugin.
-	// If only one arg and corresponding plugin is installed, use plugin, unless showOriginalProductHelp is true.
-	// If only one arg and corresponding plugin is not installed, show original product help.
+	// Product-level help (`aliyun <product>` / `--help`) is handled by renderProductLevelHelp.
 
-	// fmt.Println("args", args)
-	// fmt.Println("os.Args", os.Args)
-	if len(args) == 1 && !showOriginalProductHelp {
-		// 单产品输入，无论是否添加--help，都先由安装的插件运行，插件未安装则执行下面的运行逻辑
-		// 使用 ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP 环境变量可以显示原始产品的 help 信息，而不是插件 help
-		// 单产品运行就是--help
-		installed, pluginName, err := plugin.IsPluginInstalled(args[0])
-		if err != nil {
-			return fmt.Errorf("failed to check plugin status: %w", err)
-		}
-		if installed {
-			c.setLangEnv(ctx)
-			if os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP") == "true" {
-				// Fall through to built-in help
-			} else {
-				// Extract arguments from os.Args to preserve flags for plugin help, like --api-version
-				var pluginArgs []string
-				cmdIndex := -1
-				for i, arg := range os.Args {
-					if arg == args[0] {
-						cmdIndex = i
-						break
-					}
-				}
-				if cmdIndex != -1 && cmdIndex < len(os.Args) {
-					pluginArgs = os.Args[cmdIndex:]
-				} else {
-					pluginArgs = args
-				}
-
-				ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
-				if err != nil {
-					return err
-				}
-				if ok {
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\nNote: The help information for product '%s' is provided by the installed plugin '%s'.\n", args[0], pluginName)
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "To view the legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true\n")
-					return nil
-				}
-			}
-		} else {
-			c.loadPlugins()
-			if c.pluginIndex != nil {
-				for _, pInfo := range c.pluginIndex.Plugins {
-					if strings.EqualFold(pInfo.ProductCode, args[0]) {
-						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\n[Suggestion] A dedicated product plugin '%s' is available for '%s'.\n", pInfo.Name, args[0])
-						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "Run 'aliyun plugin install --names %s' to install it for enhanced features.\n\n", pInfo.Name)
-						break
-					}
-				}
-			} else if c.pluginIndexErr != nil {
-				c.printPluginIndexLoadFailureNote(ctx)
-			}
-		}
-
-	} else if len(args) > 1 {
+	if len(args) > 1 {
 		apiOrMethod := args[1]
 		// Check if it's all lowercase (plugin format) and not an HTTP method
 		upperMethod := strings.ToUpper(apiOrMethod)
@@ -296,7 +251,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			if !isHelp && !isVersion && len(pluginArgs) >= 2 {
 				ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
 				// Plugins may opt out of host-side profile enforcement by setting `profileRequired: false` in their manifest.
-				// When opted out, profile resolution is best-effort: we still try to load and forward the profile's env if it works, 
+				// When opted out, profile resolution is best-effort: we still try to load and forward the profile's env if it works,
 				// but we never block the plugin on host-side credential failures — the plugin is expected to resolve auth itself.
 				profileRequired := plugin.IsProfileRequiredForCommand(args[0])
 
@@ -385,11 +340,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	//   aliyun <productCode> <method> --param1 value1
 	//   aliyun <productCode> GET <path>
 	productName := args[0]
+	// 单产品运行就是 --help（`aliyun <product>` / `aliyun help <product>` / `aliyun <product> --help`）
 	if len(args) == 1 {
-		// aliyun <productCode>
-		// TODO: aliyun pluginName ...
-		return c.library.PrintProductUsage(productName, true)
-	} else if len(args) == 2 {
+		return c.renderProductLevelHelp(ctx, productName, pluginArgsFromOS(productName, args))
+	}
+	if len(args) == 2 {
 		// rpc or restful call
 		// aliyun <productCode> <method> --param1 value1
 		product, _ := c.library.GetProduct(args[0])
@@ -403,7 +358,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 			}
 		}
-		// Safety policy is keyed on what the user actually typed, so a rule like `sls:ListProject` matches `aliyun sls ListProject` 
+		// Safety policy is keyed on what the user actually typed, so a rule like `sls:ListProject` matches `aliyun sls ListProject`
 		// regardless of how the cli later dispatches it (REST GET /, RPC, etc.).
 		if err := c.checkSafetyPolicy(ctx, product.Code, args[1], ""); err != nil {
 			return err
@@ -432,13 +387,15 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	} else if len(args) == 3 {
 		// restful call
 		// aliyun <productCode> {GET|PUT|POST|DELETE} <path> --
-		product, _ := c.library.GetProduct(productName)
-		api, find := meta.HookGetApiByPath(c.library.GetApiByPath)(product.Code, product.Version, args[1], args[2])
 		force := ForceFlag(ctx.Flags()).IsAssigned()
+		product, productFound := c.library.GetProduct(productName)
+		if !productFound && !force {
+			return cli.NewErrorWithTip(fmt.Errorf("product %s not found", productName),
+				"Please confirm if the product exists")
+		}
+		api, find := meta.HookGetApiByPath(c.library.GetApiByPath)(product.Code, product.Version, args[1], args[2])
 		if !find && !force {
-			// throw error, can not find api by path
-			return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
-				"Please confirm if the API path exists")
+			return newInvalidRestfulPathError(c.library, &product, args[1], args[2])
 		}
 		if find {
 			c.CheckApiParamWithBuildInArgs(ctx, api)
@@ -448,8 +405,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		}
 		if ShouldUseOpenapi(ctx, &product) {
 			if !find {
-				return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
-					"Please confirm if the API path exists")
+				return newInvalidRestfulPathError(c.library, &product, args[1], args[2])
 			}
 			if args[2] == "/" {
 				return cli.NewErrorWithTip(fmt.Errorf("too broad path: %s for method: %s, please use specific ApiName instead",
