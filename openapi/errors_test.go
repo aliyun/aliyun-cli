@@ -297,14 +297,37 @@ func TestInvalidRestfulPathError(t *testing.T) {
 		lib := &Library{builtinRepo: repo}
 		product, ok := lib.GetProduct("cs")
 		assert.True(t, ok)
+		matches := lib.FindApisByPath(product.Code, product.Version, "/clusters")
 
-		errObj := newInvalidRestfulPathError(lib, &product, "PUT", "/clusters")
-		rpe, ok := errObj.(*InvalidRestfulPathError)
-		assert.True(t, ok)
-		assert.Contains(t, rpe.Error(), "with method PUT")
-		suggestions := rpe.GetSuggestions()
-		assert.Contains(t, strings.Join(suggestions, "\n"), "GET /clusters (DescribeClusters)")
-		assert.Contains(t, strings.Join(suggestions, "\n"), "POST /clusters (CreateCluster)")
+		errObj := newInvalidRestfulPathError(&product, "PUT", "/clusters", matches, "aliyun-cli-cs", nil)
+		assert.Contains(t, errObj.Error(), "with method PUT")
+		assert.Contains(t, errObj.Error(), "ApiName form")
+		assert.Contains(t, errObj.Error(), "METHOD + path")
+		assert.Contains(t, errObj.Error(), "aliyun plugin install --name aliyun-cli-cs")
+
+		suggestions := errObj.GetSuggestions()
+		joined := strings.Join(suggestions, "\n")
+		assert.Contains(t, joined, "aliyun cs GET /clusters [built-in RESTful Style for DescribeClusters]")
+		assert.Contains(t, joined, "aliyun cs POST /clusters [built-in RESTful Style for CreateCluster]")
+		assert.Contains(t, joined, "[built-in OpenAPI ApiName]")
+	})
+
+	t.Run("path exists wrong method with plugin", func(t *testing.T) {
+		product := meta.Product{Code: "cs", Version: "2015-12-15"}
+		matches := []meta.Api{
+			{Name: "DescribeClusters", Method: "GET", PathPattern: "/clusters"},
+			{Name: "CreateCluster", Method: "POST", PathPattern: "/clusters"},
+		}
+		lp := &plugin.LocalPlugin{
+			CmdNames: []string{"describe-clusters", "create-cluster", "delete-cluster"},
+		}
+
+		errObj := newInvalidRestfulPathError(&product, "PUT", "/clusters", matches, "aliyun-cli-cs", lp)
+		suggestions := errObj.GetSuggestions()
+		joined := strings.Join(suggestions, "\n")
+		assert.Contains(t, joined, "aliyun cs describe-clusters  [product plugin command]")
+		assert.Contains(t, joined, "aliyun cs create-cluster  [product plugin command]")
+		assert.NotContains(t, joined, "delete-cluster")
 	})
 
 	t.Run("path not found", func(t *testing.T) {
@@ -318,11 +341,11 @@ func TestInvalidRestfulPathError(t *testing.T) {
 		product, ok := lib.GetProduct("cs")
 		assert.True(t, ok)
 
-		errObj := newInvalidRestfulPathError(lib, &product, "PUT", "/no-such-path")
-		assert.NotNil(t, errObj)
-		_, ok = errObj.(*InvalidRestfulPathError)
-		assert.False(t, ok)
+		errObj := newInvalidRestfulPathError(&product, "PUT", "/no-such-path", nil, "", nil)
 		assert.Contains(t, errObj.Error(), "can not find api by path /no-such-path")
+		assert.Contains(t, errObj.Error(), "Use `aliyun cs --help` to confirm the correct ApiName and METHOD+path for this product.")
+		assert.Contains(t, errObj.Error(), "ApiName form")
+		assert.Empty(t, errObj.GetSuggestions())
 	})
 }
 

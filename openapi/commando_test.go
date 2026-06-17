@@ -2337,13 +2337,10 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 		args := []string{"sls", "GET", "/nonexistent"}
 		err := command.main(ctx, args)
 		assert.Error(t, err)
+		assert.IsType(t, &InvalidRestfulPathError{}, err)
 		assert.Contains(t, err.Error(), "can not find api by path")
 		assert.Contains(t, err.Error(), "/nonexistent")
-		if errorWithTip, ok := err.(cli.ErrorWithTip); ok {
-			assert.Contains(t, errorWithTip.GetTip("en"), "Please confirm if the API path exists")
-		} else {
-			t.Fatalf("Expected ErrorWithTip, got %T", err)
-		}
+		assert.Contains(t, err.Error(), "ApiName form")
 	})
 }
 

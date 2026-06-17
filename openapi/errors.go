@@ -247,38 +247,96 @@ func pluginCmdMatches(apiName string, lp *plugin.LocalPlugin) bool {
 	return false
 }
 
+func pluginCmdsMatchingApiName(apiName string, lp *plugin.LocalPlugin) []string {
+	if lp == nil {
+		return nil
+	}
+	sr := cli.NewSuggester(apiName, 2)
+	for _, cmd := range lp.CmdNames {
+		sr.UnifyApply(cmd)
+	}
+	return sr.GetResults()
+}
+
 // InvalidRestfulPathError is returned when aliyun <product> <METHOD> <path> cannot be resolved.
 // If the path exists for other HTTP methods, GetSuggestions lists them.
 type InvalidRestfulPathError struct {
-	Method  string
-	Path    string
-	Product *meta.Product
-	matches []meta.Api
+	Method      string
+	Path        string
+	Product     *meta.Product
+	matches     []meta.Api
+	pathMissing bool
+	pluginName  string
+	localPlugin *plugin.LocalPlugin
 }
 
-func newInvalidRestfulPathError(library *Library, product *meta.Product, method, path string) error {
-	matches := library.FindApisByPath(product.Code, product.Version, path)
-	if len(matches) == 0 {
-		return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", path),
-			"Please confirm if the API path exists")
-	}
+func newInvalidRestfulPathError(
+	product *meta.Product,
+	method, path string,
+	matches []meta.Api,
+	pluginName string,
+	localPlugin *plugin.LocalPlugin,
+) *InvalidRestfulPathError {
 	return &InvalidRestfulPathError{
-		Method:  method,
-		Path:    path,
-		Product: product,
-		matches: matches,
+		Method:      method,
+		Path:        path,
+		Product:     product,
+		matches:     matches,
+		pathMissing: len(matches) == 0,
+		pluginName:  pluginName,
+		localPlugin: localPlugin,
 	}
+}
+
+func restfulInvokeHint(productCode string, pluginInstalled bool, pluginName string) string {
+	lowerProduct := strings.ToLower(productCode)
+	msg := fmt.Sprintf(`
+
+Invocation options for restful product '%s':
+  · ApiName form  : aliyun %s <ApiName> --parameter1 value1 ...
+  · METHOD + path : aliyun %s [GET|PUT|POST|DELETE] <path> ...
+  · kebab-case    : aliyun %s <kebab-cmd> --parameter1 value1 ... from external product plugins`, lowerProduct, lowerProduct, lowerProduct, lowerProduct)
+	if !pluginInstalled && pluginName != "" {
+		msg += fmt.Sprintf(" (run aliyun plugin install --name %s first)", pluginName)
+	}
+	return msg
 }
 
 func (e *InvalidRestfulPathError) Error() string {
-	return fmt.Sprintf("can not find api by path %s with method %s", e.Path, strings.ToUpper(e.Method))
+	lowerProduct := e.Product.GetLowerCode()
+	var msg string
+	if e.pathMissing {
+		msg = fmt.Sprintf("can not find api by path %s", e.Path)
+		msg += fmt.Sprintf("\nUse `aliyun %s --help` to confirm the correct ApiName and METHOD+path for this product.", lowerProduct)
+	} else {
+		msg = fmt.Sprintf("can not find api by path %s with method %s",
+			e.Path, strings.ToUpper(e.Method))
+	}
+	pluginInstalled := e.localPlugin != nil
+	msg += restfulInvokeHint(lowerProduct, pluginInstalled, e.pluginName)
+	return msg
 }
 
 func (e *InvalidRestfulPathError) GetSuggestions() []string {
-	suggestions := make([]string, 0, len(e.matches))
+	lowerProduct := e.Product.GetLowerCode()
+	seen := make(map[string]struct{})
+	suggestions := make([]string, 0)
+
+	add := func(line string) {
+		if _, dup := seen[line]; dup {
+			return
+		}
+		seen[line] = struct{}{}
+		suggestions = append(suggestions, line)
+	}
+
 	for _, api := range e.matches {
-		suggestions = append(suggestions, fmt.Sprintf("%s %s (%s)",
-			strings.ToUpper(api.Method), api.PathPattern, api.Name))
+		add(fmt.Sprintf("aliyun %s %s  [built-in OpenAPI ApiName]", lowerProduct, api.Name))
+		add(fmt.Sprintf("aliyun %s %s %s [built-in RESTful Style for %s]",
+			lowerProduct, strings.ToUpper(api.Method), api.PathPattern, api.Name))
+		for _, cmd := range pluginCmdsMatchingApiName(api.Name, e.localPlugin) {
+			add(fmt.Sprintf("aliyun %s %s  [product plugin command]", lowerProduct, cmd))
+		}
 	}
 	return suggestions
 }

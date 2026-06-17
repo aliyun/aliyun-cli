@@ -396,7 +396,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		}
 		api, find := meta.HookGetApiByPath(c.library.GetApiByPath)(product.Code, product.Version, args[1], args[2])
 		if !find && !force {
-			return newInvalidRestfulPathError(c.library, &product, args[1], args[2])
+			return c.restfulPathNotFoundError(&product, args[1], args[2])
 		}
 		if find {
 			c.CheckApiParamWithBuildInArgs(ctx, api)
@@ -406,7 +406,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		}
 		if ShouldUseOpenapi(ctx, &product) {
 			if !find {
-				return newInvalidRestfulPathError(c.library, &product, args[1], args[2])
+				return c.restfulPathNotFoundError(&product, args[1], args[2])
 			}
 			if args[2] == "/" {
 				return cli.NewErrorWithTip(fmt.Errorf("too broad path: %s for method: %s, please use specific ApiName instead",
@@ -1044,6 +1044,13 @@ func (c *Commando) apiOrCmdNotFoundForPluginLane(productCode, apiOrCmd string) e
 		return &InvalidProductOrPluginError{Code: productCode, library: c.library, plugins: c.pluginIndex.Plugins}
 	}
 	return c.apiOrCmdNotFoundError(productCode, apiOrCmd)
+}
+
+func (c *Commando) restfulPathNotFoundError(product *meta.Product, method, path string) error {
+	c.loadPlugins()
+	pluginName, _ := c.lookupPluginForProduct(product.Code)
+	matches := c.library.FindApisByPath(product.Code, product.Version, path)
+	return newInvalidRestfulPathError(product, method, path, matches, pluginName, c.getInstalledLocalPlugin(product.Code))
 }
 
 func (c *Commando) findAndInstallPlugin(ctx *cli.Context, commandName, productCode string) (string, error) {
