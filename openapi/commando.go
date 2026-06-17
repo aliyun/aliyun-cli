@@ -394,6 +394,18 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			c.loadPlugins()
 			return &InvalidProductOrPluginError{Code: productName, library: c.library, plugins: c.pluginIndex.Plugins}
 		}
+		if product.Code != "" {
+			if version, _ := ctx.Flags().Get("version").GetValue(); version != "" {
+				if style, ok := c.library.GetStyle(productName, version); ok {
+					product.ApiStyle = style
+				}
+			}
+		}
+		upperMethod := strings.ToUpper(args[1])
+		isHttpMethod := upperMethod == "GET" || upperMethod == "POST" || upperMethod == "PUT" || upperMethod == "DELETE"
+		if isHttpMethod && strings.ToLower(product.ApiStyle) == "rpc" && !force {
+			return c.rpcMethodPathError(&product, args[1], args[2])
+		}
 		api, find := meta.HookGetApiByPath(c.library.GetApiByPath)(product.Code, product.Version, args[1], args[2])
 		if !find && !force {
 			return c.restfulPathNotFoundError(&product, args[1], args[2])
@@ -1056,6 +1068,12 @@ func (c *Commando) restfulBroadPathError(product *meta.Product, method, path str
 	c.loadPlugins()
 	pluginName, _ := c.lookupPluginForProduct(product.Code)
 	return newRestfulBroadPathError(product, method, path, api, pluginName, c.getInstalledLocalPlugin(product.Code))
+}
+
+func (c *Commando) rpcMethodPathError(product *meta.Product, method, path string) error {
+	c.loadPlugins()
+	pluginName, _ := c.lookupPluginForProduct(product.Code)
+	return newRpcMethodPathError(product, method, path, pluginName, c.getInstalledLocalPlugin(product.Code))
 }
 
 func (c *Commando) findAndInstallPlugin(ctx *cli.Context, commandName, productCode string) (string, error) {

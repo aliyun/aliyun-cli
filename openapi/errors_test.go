@@ -368,6 +368,19 @@ func TestRestfulBroadPathError(t *testing.T) {
 	assert.NotContains(t, joined, "[built-in RESTful Style")
 }
 
+func TestRpcMethodPathError(t *testing.T) {
+	product := meta.Product{Code: "ecs", Version: "2014-05-26", ApiStyle: "rpc"}
+	errObj := newRpcMethodPathError(&product, "GET", "/instances", "aliyun-cli-ecs", nil)
+
+	assert.Contains(t, errObj.Error(), "'ecs' is an RPC product and does not accept METHOD + path form")
+	assert.Contains(t, errObj.Error(), "got GET /instances")
+	assert.Contains(t, errObj.Error(), "Use `aliyun ecs <ApiName>` instead")
+	assert.Contains(t, errObj.Error(), "aliyun ecs --help")
+	assert.Contains(t, errObj.Error(), "CamelCase")
+	assert.NotContains(t, errObj.Error(), "REST shortcut")
+	assert.Equal(t, []string{"aliyun ecs --help"}, errObj.GetSuggestions())
+}
+
 func TestRemoveDuplicates(t *testing.T) {
 	t.Run("No duplicates", func(t *testing.T) {
 		result := removeDuplicates([]string{"a", "b", "c"})

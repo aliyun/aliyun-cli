@@ -2347,6 +2347,71 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 	})
 }
 
+func TestMain_RpcProductRejectsMethodPath(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "test-access-key-id",
+		AccessKeySecret: "test-access-key-secret",
+		RegionId:        "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+
+	cmd := &cli.Command{}
+	AddFlags(cmd.Flags())
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+
+	ecsProduct := meta.Product{
+		Code:     "ecs",
+		Version:  "2014-05-26",
+		ApiStyle: "rpc",
+		ApiNames: []string{"DescribeInstances"},
+	}
+	mockRepo, _ := meta.MockLoadRepository([]meta.Product{ecsProduct})
+	command.library = &Library{builtinRepo: mockRepo}
+
+	originalIgnoreProfile := os.Getenv("ALIBABA_CLOUD_IGNORE_PROFILE")
+	os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
+	defer func() {
+		if originalIgnoreProfile == "" {
+			os.Unsetenv("ALIBABA_CLOUD_IGNORE_PROFILE")
+		} else {
+			os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", originalIgnoreProfile)
+		}
+	}()
+
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+	regionflag := config.NewRegionFlag()
+	regionflag.SetAssigned(true)
+	regionflag.SetValue("cn-hangzhou")
+	ctx.Flags().Add(regionflag)
+	accessKeyIDFlag := config.NewAccessKeyIdFlag()
+	accessKeyIDFlag.SetAssigned(true)
+	accessKeyIDFlag.SetValue("test-access-key-id")
+	ctx.Flags().Add(accessKeyIDFlag)
+	accessKeySecretFlag := config.NewAccessKeySecretFlag()
+	accessKeySecretFlag.SetAssigned(true)
+	accessKeySecretFlag.SetValue("test-access-key-secret")
+	ctx.Flags().Add(accessKeySecretFlag)
+
+	err := command.main(ctx, []string{"ecs", "GET", "/instances"})
+	assert.Error(t, err)
+	assert.IsType(t, &RpcMethodPathError{}, err)
+	assert.Contains(t, err.Error(), "RPC product")
+	assert.Contains(t, err.Error(), "does not accept METHOD + path")
+	assert.NotContains(t, err.Error(), "can not find api by path")
+
+	ForceFlag(ctx.Flags()).SetAssigned(true)
+	err = command.main(ctx, []string{"ecs", "GET", "/instances"})
+	assert.Error(t, err)
+	_, isRpcMethodPathErr := err.(*RpcMethodPathError)
+	assert.False(t, isRpcMethodPathErr)
+}
+
 func TestMain_PluginExecution_KebabCase(t *testing.T) {
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)

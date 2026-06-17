@@ -138,15 +138,18 @@ func (e *InvalidUnifiedApiError) GetSuggestions() []string {
 
 const apiNamingRulesHintKebabSuffix = "plugin command of external product plugins"
 
-func apiNamingRulesHint(pluginInstalled bool, pluginName string) string {
+func apiNamingRulesHint(pluginInstalled bool, pluginName string, includeMethodPath bool) string {
 	kebabLine := apiNamingRulesHintKebabSuffix
 	if !pluginInstalled && pluginName != "" {
 		kebabLine = fmt.Sprintf("%s (run aliyun plugin install --name %s first)", apiNamingRulesHintKebabSuffix, pluginName)
 	}
-	return fmt.Sprintf(`Naming rules in Aliyun CLI:
+	msg := fmt.Sprintf(`Naming rules in Aliyun CLI:
   · CamelCase     → OpenAPI API name of built-in products
-  · kebab-case    → %s
-  · METHOD + path → REST shortcut for built-in restful products`, kebabLine)
+  · kebab-case    → %s`, kebabLine)
+	if includeMethodPath {
+		msg += "\n  · METHOD + path → REST shortcut for built-in restful products"
+	}
+	return msg
 }
 
 // GetSuggestions scans built-in ApiNames and installed plugin CmdNames (three-way scan subset).
@@ -188,7 +191,7 @@ func (e *InvalidApiOrCmdNotFoundError) Error() string {
 	msg := fmt.Sprintf("'%s' is not a valid api/command for product '%s'.",
 		e.Name, e.product.GetLowerCode())
 	pluginInstalled := e.localPlugin != nil
-	msg += "\n\n" + apiNamingRulesHint(pluginInstalled, e.pluginName)
+	msg += "\n\n" + apiNamingRulesHint(pluginInstalled, e.pluginName, true)
 	if !pluginInstalled && e.pluginName != "" {
 		msg += fmt.Sprintf(
 			"\n\nExternal product plugins must be installed before kebab-case commands work:\n"+
@@ -411,6 +414,45 @@ func (e *RestfulBroadPathError) GetSuggestions() []string {
 		add(fmt.Sprintf("aliyun %s %s  [product plugin command]", lowerProduct, cmd))
 	}
 	return suggestions
+}
+
+// RpcMethodPathError is returned when aliyun <rpc-product> <METHOD> <path> is used.
+type RpcMethodPathError struct {
+	Method      string
+	Path        string
+	Product     *meta.Product
+	pluginName  string
+	localPlugin *plugin.LocalPlugin
+}
+
+func newRpcMethodPathError(
+	product *meta.Product,
+	method, path string,
+	pluginName string,
+	localPlugin *plugin.LocalPlugin,
+) *RpcMethodPathError {
+	return &RpcMethodPathError{
+		Method:      method,
+		Path:        path,
+		Product:     product,
+		pluginName:  pluginName,
+		localPlugin: localPlugin,
+	}
+}
+
+func (e *RpcMethodPathError) Error() string {
+	lowerProduct := e.Product.GetLowerCode()
+	msg := fmt.Sprintf("'%s' is an RPC product and does not accept METHOD + path form (got %s %s).",
+		lowerProduct, strings.ToUpper(e.Method), e.Path)
+	msg += fmt.Sprintf("\nUse `aliyun %s <ApiName>` instead. See `aliyun %s --help` for available ApiNames.",
+		lowerProduct, lowerProduct)
+	pluginInstalled := e.localPlugin != nil
+	msg += "\n\n" + apiNamingRulesHint(pluginInstalled, e.pluginName, false)
+	return msg
+}
+
+func (e *RpcMethodPathError) GetSuggestions() []string {
+	return []string{fmt.Sprintf("aliyun %s --help", e.Product.GetLowerCode())}
 }
 
 func removeDuplicates(slice []string) []string {
