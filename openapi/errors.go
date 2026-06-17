@@ -288,14 +288,23 @@ func newInvalidRestfulPathError(
 	}
 }
 
-func restfulInvokeHint(productCode string, pluginInstalled bool, pluginName string) string {
+func restfulInvokeHint(productCode string, pluginInstalled bool, pluginName string, includeMethodPath bool) string {
 	lowerProduct := strings.ToLower(productCode)
-	msg := fmt.Sprintf(`
+	var msg string
+	if includeMethodPath {
+		msg = fmt.Sprintf(`
 
 Invocation options for restful product '%s':
   · ApiName form  : aliyun %s <ApiName> --parameter1 value1 ...
   · METHOD + path : aliyun %s [GET|PUT|POST|DELETE] <path> ...
   · kebab-case    : aliyun %s <kebab-cmd> --parameter1 value1 ... from external product plugins`, lowerProduct, lowerProduct, lowerProduct, lowerProduct)
+	} else {
+		msg = fmt.Sprintf(`
+
+Invocation options for restful product '%s':
+  · ApiName form  : aliyun %s <ApiName> --parameter1 value1 ...
+  · kebab-case    : aliyun %s <kebab-cmd> --parameter1 value1 ... from external product plugins`, lowerProduct, lowerProduct, lowerProduct)
+	}
 	if !pluginInstalled && pluginName != "" {
 		msg += fmt.Sprintf(" (run aliyun plugin install --name %s first)", pluginName)
 	}
@@ -313,7 +322,7 @@ func (e *InvalidRestfulPathError) Error() string {
 			e.Path, strings.ToUpper(e.Method))
 	}
 	pluginInstalled := e.localPlugin != nil
-	msg += restfulInvokeHint(lowerProduct, pluginInstalled, e.pluginName)
+	msg += restfulInvokeHint(lowerProduct, pluginInstalled, e.pluginName, true)
 	return msg
 }
 
@@ -337,6 +346,69 @@ func (e *InvalidRestfulPathError) GetSuggestions() []string {
 		for _, cmd := range pluginCmdsMatchingApiName(api.Name, e.localPlugin) {
 			add(fmt.Sprintf("aliyun %s %s  [product plugin command]", lowerProduct, cmd))
 		}
+	}
+	return suggestions
+}
+
+// RestfulBroadPathError is returned when aliyun <product> <METHOD> / matches an API
+// but root path "/" is too broad for OpenAPI invocation.
+type RestfulBroadPathError struct {
+	Method      string
+	Path        string
+	Product     *meta.Product
+	api         meta.Api
+	pluginName  string
+	localPlugin *plugin.LocalPlugin
+}
+
+func newRestfulBroadPathError(
+	product *meta.Product,
+	method, path string,
+	api meta.Api,
+	pluginName string,
+	localPlugin *plugin.LocalPlugin,
+) *RestfulBroadPathError {
+	return &RestfulBroadPathError{
+		Method:      method,
+		Path:        path,
+		Product:     product,
+		api:         api,
+		pluginName:  pluginName,
+		localPlugin: localPlugin,
+	}
+}
+
+func (e *RestfulBroadPathError) Error() string {
+	lowerProduct := e.Product.GetLowerCode()
+	msg := fmt.Sprintf("path %q is too broad for METHOD+path invocation with %s.",
+		e.Path, strings.ToUpper(e.Method))
+	msg += fmt.Sprintf("\nUse a specific ApiName instead of the root path %q.", e.Path)
+	msg += fmt.Sprintf("\nUse `aliyun %s --help` to confirm the correct ApiName for this product.", lowerProduct)
+	pluginInstalled := e.localPlugin != nil
+	msg += restfulInvokeHint(lowerProduct, pluginInstalled, e.pluginName, false)
+	return msg
+}
+
+func (e *RestfulBroadPathError) GetSuggestions() []string {
+	lowerProduct := e.Product.GetLowerCode()
+	suggestions := make([]string, 0, 3)
+
+	add := func(line string) {
+		for _, existing := range suggestions {
+			if existing == line {
+				return
+			}
+		}
+		suggestions = append(suggestions, line)
+	}
+
+	add(fmt.Sprintf("aliyun %s %s  [built-in OpenAPI ApiName]", lowerProduct, e.api.Name))
+	if e.api.PathPattern != "" && e.api.PathPattern != "/" {
+		add(fmt.Sprintf("aliyun %s %s %s [built-in RESTful Style for %s]",
+			lowerProduct, strings.ToUpper(e.api.Method), e.api.PathPattern, e.api.Name))
+	}
+	for _, cmd := range pluginCmdsMatchingApiName(e.api.Name, e.localPlugin) {
+		add(fmt.Sprintf("aliyun %s %s  [product plugin command]", lowerProduct, cmd))
 	}
 	return suggestions
 }

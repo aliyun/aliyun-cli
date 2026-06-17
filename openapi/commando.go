@@ -409,8 +409,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				return c.restfulPathNotFoundError(&product, args[1], args[2])
 			}
 			if args[2] == "/" {
-				return cli.NewErrorWithTip(fmt.Errorf("too broad path: %s for method: %s, please use specific ApiName instead",
-					args[2], args[1]), "Please confirm the API path")
+				return c.restfulBroadPathError(&product, args[1], args[2], api)
 			}
 			return c.processApiInvoke(ctx, &product, &api, args[1], args[2])
 		}
@@ -1051,6 +1050,12 @@ func (c *Commando) restfulPathNotFoundError(product *meta.Product, method, path 
 	pluginName, _ := c.lookupPluginForProduct(product.Code)
 	matches := c.library.FindApisByPath(product.Code, product.Version, path)
 	return newInvalidRestfulPathError(product, method, path, matches, pluginName, c.getInstalledLocalPlugin(product.Code))
+}
+
+func (c *Commando) restfulBroadPathError(product *meta.Product, method, path string, api meta.Api) error {
+	c.loadPlugins()
+	pluginName, _ := c.lookupPluginForProduct(product.Code)
+	return newRestfulBroadPathError(product, method, path, api, pluginName, c.getInstalledLocalPlugin(product.Code))
 }
 
 func (c *Commando) findAndInstallPlugin(ctx *cli.Context, commandName, productCode string) (string, error) {

@@ -1484,7 +1484,10 @@ func TestMainForSlsProduct(t *testing.T) {
 
 		args := []string{"sls", "Get", "/"}
 		err := command.main(ctx, args)
-		assert.Contains(t, err.Error(), "too broad path: / for method: Get, please use specific ApiName instead")
+		assert.IsType(t, &RestfulBroadPathError{}, err)
+		assert.Contains(t, err.Error(), `path "/" is too broad for METHOD+path invocation with GET`)
+		assert.Contains(t, err.Error(), "Use a specific ApiName or path instead of the root path")
+		assert.Contains(t, err.Error(), "aliyun sls --help")
 	})
 
 	t.Run("SLSProductWithRestCall", func(t *testing.T) {

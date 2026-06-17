@@ -349,6 +349,25 @@ func TestInvalidRestfulPathError(t *testing.T) {
 	})
 }
 
+func TestRestfulBroadPathError(t *testing.T) {
+	product := meta.Product{Code: "sls", Version: "2020-03-20"}
+	api := meta.Api{Name: "ListProjects", Method: "GET", PathPattern: "/"}
+	lp := &plugin.LocalPlugin{CmdNames: []string{"list-projects"}}
+
+	errObj := newRestfulBroadPathError(&product, "GET", "/", api, "aliyun-cli-sls", lp)
+	assert.Contains(t, errObj.Error(), `path "/" is too broad for METHOD+path invocation with GET`)
+	assert.Contains(t, errObj.Error(), "Use a specific ApiName or path instead of the root path")
+	assert.Contains(t, errObj.Error(), "Use `aliyun sls --help` to confirm the correct ApiName and METHOD+path for this product.")
+	assert.Contains(t, errObj.Error(), "ApiName form")
+	assert.NotContains(t, errObj.Error(), "METHOD + path")
+
+	suggestions := errObj.GetSuggestions()
+	joined := strings.Join(suggestions, "\n")
+	assert.Contains(t, joined, "aliyun sls ListProjects  [built-in OpenAPI ApiName]")
+	assert.Contains(t, joined, "aliyun sls list-projects  [product plugin command]")
+	assert.NotContains(t, joined, "[built-in RESTful Style")
+}
+
 func TestRemoveDuplicates(t *testing.T) {
 	t.Run("No duplicates", func(t *testing.T) {
 		result := removeDuplicates([]string{"a", "b", "c"})
