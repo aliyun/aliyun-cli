@@ -300,22 +300,92 @@ func TestLoadProfileWithContextWhenIGNORE_PROFILE(t *testing.T) {
 }
 
 func TestLoadProfileWithContext_Anonymous(t *testing.T) {
-	stdout := new(bytes.Buffer)
-	stderr := new(bytes.Buffer)
-	ctx := cli.NewCommandContext(stdout, stderr)
-	AddFlags(ctx.Flags())
-	CliCredFlag(ctx.Flags()).SetAssigned(true)
-	CliCredFlag(ctx.Flags()).SetValue("Anonymous")
-	ctx.Flags().Get("region").SetAssigned(true)
-	ctx.Flags().Get("region").SetValue("cn-hangzhou")
-	p, err := LoadProfileWithContext(ctx)
-	assert.Nil(t, err)
-	assert.Equal(t, Anonymous, p.Mode)
-	assert.Equal(t, "cn-hangzhou", p.RegionId)
-	assert.Equal(t, "Anonymous", p.OpenAPIAuthType())
-	cred, err := p.GetCredential(ctx, nil)
-	assert.NoError(t, err)
-	assert.Nil(t, cred)
+	// C-01: 无 config.json 也能走匿名模式
+	t.Run("C-01: Anonymous flag without config.json", func(t *testing.T) {
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		AddFlags(ctx.Flags())
+		CliCredFlag(ctx.Flags()).SetAssigned(true)
+		CliCredFlag(ctx.Flags()).SetValue("Anonymous")
+		ctx.Flags().Get("region").SetAssigned(true)
+		ctx.Flags().Get("region").SetValue("cn-hangzhou")
+		p, err := LoadProfileWithContext(ctx)
+		assert.Nil(t, err)
+		assert.Equal(t, Anonymous, p.Mode)
+		assert.Equal(t, "cn-hangzhou", p.RegionId)
+		assert.Equal(t, "Anonymous", p.OpenAPIAuthType())
+		cred, credErr := p.GetCredential(ctx, nil)
+		assert.NoError(t, credErr)
+		assert.Nil(t, cred)
+	})
+
+	// C-02: 有 config.json 存在时，--cli-cred Anonymous 也走匿名短路
+	t.Run("C-02: Anonymous flag with config.json present", func(t *testing.T) {
+		originhook := hookLoadOrCreateConfiguration
+		defer func() { hookLoadOrCreateConfiguration = originhook }()
+		hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+			return func(path string) (*Configuration, error) {
+				return &Configuration{
+					CurrentProfile: "default",
+					Profiles: []Profile{{
+						Name:            "default",
+						Mode:            AK,
+						AccessKeyId:     "fake-ak",
+						AccessKeySecret: "fake-sk",
+						RegionId:        "cn-shanghai",
+						OutputFormat:    "json",
+					}},
+				}, nil
+			}
+		}
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		AddFlags(ctx.Flags())
+		CliCredFlag(ctx.Flags()).SetAssigned(true)
+		CliCredFlag(ctx.Flags()).SetValue("Anonymous")
+		ctx.Flags().Get("region").SetAssigned(true)
+		ctx.Flags().Get("region").SetValue("cn-beijing")
+		p, err := LoadProfileWithContext(ctx)
+		assert.Nil(t, err)
+		// Should be Anonymous even though config.json has AK profile
+		assert.Equal(t, Anonymous, p.Mode)
+		assert.Equal(t, "cn-beijing", p.RegionId)
+		// Should NOT use fake-ak from config
+		assert.Empty(t, p.AccessKeyId)
+	})
+
+	// C-03: --region 覆盖默认 cn-hangzhou
+	t.Run("C-03: --region overrides default region", func(t *testing.T) {
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		AddFlags(ctx.Flags())
+		CliCredFlag(ctx.Flags()).SetAssigned(true)
+		CliCredFlag(ctx.Flags()).SetValue("Anonymous")
+		ctx.Flags().Get("region").SetAssigned(true)
+		ctx.Flags().Get("region").SetValue("us-east-1")
+		p, err := LoadProfileWithContext(ctx)
+		assert.Nil(t, err)
+		assert.Equal(t, Anonymous, p.Mode)
+		assert.Equal(t, "us-east-1", p.RegionId)
+	})
+
+	// C-03 extra: env-based ALIBABA_CLOUD_CLI_CRED + --region
+	t.Run("C-03 extra: env Anonymous with --region", func(t *testing.T) {
+		t.Setenv("ALIBABA_CLOUD_CLI_CRED", "anonymous")
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		AddFlags(ctx.Flags())
+		ctx.Flags().Get("region").SetAssigned(true)
+		ctx.Flags().Get("region").SetValue("ap-southeast-1")
+		p, err := LoadProfileWithContext(ctx)
+		assert.Nil(t, err)
+		assert.Equal(t, Anonymous, p.Mode)
+		assert.Equal(t, "ap-southeast-1", p.RegionId)
+	})
 }
 
 func TestGetHomePath(t *testing.T) {

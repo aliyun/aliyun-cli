@@ -1642,6 +1642,57 @@ func TestAnonymousFromEnv(t *testing.T) {
 	assert.Equal(t, "Anonymous", envs["ALIBABA_CLOUD_CLI_CRED"])
 }
 
+func TestAnonymousValidateNoRegion(t *testing.T) {
+	// P-04: Validate fails when RegionId is empty
+	p := &Profile{Name: "default", Mode: Anonymous, RegionId: ""}
+	err := p.Validate()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "region")
+}
+
+func TestNormalizeModeAnonymous(t *testing.T) {
+	// P-08: NormalizeMode recognizes Anonymous (case-insensitive)
+	assert.Equal(t, Anonymous, NormalizeMode("anonymous"))
+	assert.Equal(t, Anonymous, NormalizeMode("ANONYMOUS"))
+	assert.Equal(t, Anonymous, NormalizeMode("Anonymous"))
+}
+
+func TestCliCredOverridesMode(t *testing.T) {
+	// P-10: --cli-cred Anonymous overrides --mode AK
+	ctx := newCtx()
+	ctx.Flags().Get("mode").SetAssigned(true)
+	ctx.Flags().Get("mode").SetValue("AK")
+	CliCredFlag(ctx.Flags()).SetAssigned(true)
+	CliCredFlag(ctx.Flags()).SetValue("Anonymous")
+	p := &Profile{
+		Name:            "default",
+		RegionId:        "cn-hangzhou",
+		AccessKeyId:     "test-ak",
+		AccessKeySecret: "test-sk",
+	}
+	p.OverwriteWithFlags(ctx)
+	// --cli-cred Anonymous should override --mode AK
+	assert.Equal(t, Anonymous, p.Mode)
+}
+
+func TestCliCredFlagRegistered(t *testing.T) {
+	// F-01: cli-cred flag is registered
+	ctx := newCtx()
+	flag := CliCredFlag(ctx.Flags())
+	assert.NotNil(t, flag)
+	assert.Equal(t, CliCredFlagName, flag.Name)
+}
+
+func TestCliCredFlagValue(t *testing.T) {
+	// F-02: flag assignment
+	ctx := newCtx()
+	CliCredFlag(ctx.Flags()).SetAssigned(true)
+	CliCredFlag(ctx.Flags()).SetValue("Anonymous")
+	v, ok := CliCredFlag(ctx.Flags()).GetValue()
+	assert.True(t, ok)
+	assert.Equal(t, "Anonymous", v)
+}
+
 func TestInjectBearerTokenHeader(t *testing.T) {
 	headers := map[string]*string{}
 	(&Profile{Mode: AK, BearerTokenValue: "t"}).InjectBearerTokenHeader(headers)
@@ -1684,4 +1735,3 @@ func TestErrBearerTokenRequiresPlugin(t *testing.T) {
 	err = ErrBearerTokenRequiresPlugin("")
 	assert.Contains(t, err.Error(), "product plugin")
 }
-
