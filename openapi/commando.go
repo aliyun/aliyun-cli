@@ -943,13 +943,10 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 	}
 
 	if isRPC {
-		// RPC style: set Style to RPC, method defaults to POST, no path needed
+		// RPC style: set Style to RPC, always use POST, no path needed
 		s := "RPC"
 		apiContext.openapiParams.Style = &s
-		if method == "" {
-			method = "POST"
-		}
-		return &OpenapiContext{apiContext, method, "/", api}, nil
+		return &OpenapiContext{apiContext, "POST", "/", api}, nil
 	}
 
 	// RESTful style: validate method and path

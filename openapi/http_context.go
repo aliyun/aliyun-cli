@@ -80,6 +80,12 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		conf.Endpoint = tea.String(cp.Endpoint)
 	} else if strings.ToLower(product.Code) == "sls" {
 		conf.Endpoint = tea.String(cp.RegionId + ".log.aliyuncs.com") // should apply product template
+	} else if ep, ok := product.RegionalEndpoints[cp.RegionId]; ok {
+		conf.Endpoint = tea.String(ep)
+	} else if product.GlobalEndpoint != "" {
+		conf.Endpoint = tea.String(product.GlobalEndpoint)
+	} else if product.RegionalEndpointPattern != "" {
+		conf.Endpoint = tea.String(strings.ReplaceAll(product.RegionalEndpointPattern, "[RegionId]", cp.RegionId))
 	}
 
 	ua := util.GetAliyunCliUserAgent()
@@ -205,7 +211,7 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 }
 
 func (a *HttpContext) Call() error {
-	resp, err := a.openapiClient.Execute(a.openapiParams, a.openapiRequest, a.openapiRuntime)
+	resp, err := a.openapiClient.CallApi(a.openapiParams, a.openapiRequest, a.openapiRuntime)
 	a.openapiResponse = resp
 	return err
 }
