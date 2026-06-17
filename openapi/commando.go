@@ -296,7 +296,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			if !isHelp && !isVersion && len(pluginArgs) >= 2 {
 				ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
 				// Plugins may opt out of host-side profile enforcement by setting `profileRequired: false` in their manifest.
-				// When opted out, profile resolution is best-effort: we still try to load and forward the profile's env if it works, 
+				// When opted out, profile resolution is best-effort: we still try to load and forward the profile's env if it works,
 				// but we never block the plugin on host-side credential failures — the plugin is expected to resolve auth itself.
 				profileRequired := plugin.IsProfileRequiredForCommand(args[0])
 
@@ -403,7 +403,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 			}
 		}
-		// Safety policy is keyed on what the user actually typed, so a rule like `sls:ListProject` matches `aliyun sls ListProject` 
+		// Safety policy is keyed on what the user actually typed, so a rule like `sls:ListProject` matches `aliyun sls ListProject`
 		// regardless of how the cli later dispatches it (REST GET /, RPC, etc.).
 		if err := c.checkSafetyPolicy(ctx, product.Code, args[1], ""); err != nil {
 			return err
@@ -428,6 +428,10 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 		}
 
+		if ShouldUseOpenapiForProfile(ctx, &product, &c.profile) {
+			api, _ := meta.HookGetApi(c.library.GetApi)(product.Code, product.Version, args[1])
+			return c.processApiInvoke(ctx, &product, &api, args[1], "")
+		}
 		return c.processInvoke(ctx, productName, args[1], "")
 	} else if len(args) == 3 {
 		// restful call
@@ -930,7 +934,26 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 		}
 	}
 
-	if strings.ToLower(product.ApiStyle) == "rpc" || !ShouldUseOpenapiForProfile(ctx, product, &c.profile) {
+	isRPC := strings.ToLower(product.ApiStyle) == "rpc"
+
+	// For RPC products, only allow through if Anonymous mode forces the openapi path
+	if isRPC && !ShouldUseOpenapiForProfile(ctx, product, &c.profile) {
+		return nil, cli.NewErrorWithTip(fmt.Errorf("unchecked api style: %s or product: %s", product.ApiStyle, product.Code),
+			"Unsupported api style or product")
+	}
+
+	if isRPC {
+		// RPC style: set Style to RPC, method defaults to POST, no path needed
+		s := "RPC"
+		apiContext.openapiParams.Style = &s
+		if method == "" {
+			method = "POST"
+		}
+		return &OpenapiContext{apiContext, method, "/", api}, nil
+	}
+
+	// RESTful style: validate method and path
+	if !ShouldUseOpenapiForProfile(ctx, product, &c.profile) {
 		return nil, cli.NewErrorWithTip(fmt.Errorf("unchecked api style: %s or product: %s", product.ApiStyle, product.Code),
 			"Unsupported api style or product")
 	}
