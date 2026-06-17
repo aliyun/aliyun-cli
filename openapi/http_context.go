@@ -84,8 +84,6 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		conf.Endpoint = tea.String(ep)
 	} else if product.GlobalEndpoint != "" {
 		conf.Endpoint = tea.String(product.GlobalEndpoint)
-	} else if product.RegionalEndpointPattern != "" {
-		conf.Endpoint = tea.String(strings.ReplaceAll(product.RegionalEndpointPattern, "[RegionId]", cp.RegionId))
 	}
 
 	ua := util.GetAliyunCliUserAgent()
