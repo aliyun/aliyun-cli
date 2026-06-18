@@ -356,8 +356,8 @@ func TestRestfulBroadPathError(t *testing.T) {
 
 	errObj := newRestfulBroadPathError(&product, "GET", "/", api, "aliyun-cli-sls", lp)
 	assert.Contains(t, errObj.Error(), `path "/" is too broad for METHOD+path invocation with GET`)
-	assert.Contains(t, errObj.Error(), "Use a specific ApiName or path instead of the root path")
-	assert.Contains(t, errObj.Error(), "Use `aliyun sls --help` to confirm the correct ApiName and METHOD+path for this product.")
+	assert.Contains(t, errObj.Error(), `Use a specific ApiName instead of the root path "/"`)
+	assert.Contains(t, errObj.Error(), "Use `aliyun sls --help` to confirm the correct ApiName for this product.")
 	assert.Contains(t, errObj.Error(), "ApiName form")
 	assert.NotContains(t, errObj.Error(), "METHOD + path")
 

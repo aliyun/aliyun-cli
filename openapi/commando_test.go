@@ -82,7 +82,7 @@ func Test_main(t *testing.T) {
 	err := command.main(ctx, nil)
 	assert.Nil(t, err)
 
-	args := []string{"test"}
+	args := []string{"ecs", "DescribeRegions"}
 	profileflag := config.NewProfileFlag()
 	configpathflag := config.NewConfigurePathFlag()
 	profileflag.SetAssigned(true)
@@ -1486,8 +1486,8 @@ func TestMainForSlsProduct(t *testing.T) {
 		err := command.main(ctx, args)
 		assert.IsType(t, &RestfulBroadPathError{}, err)
 		assert.Contains(t, err.Error(), `path "/" is too broad for METHOD+path invocation with GET`)
-		assert.Contains(t, err.Error(), "Use a specific ApiName or path instead of the root path")
-		assert.Contains(t, err.Error(), "aliyun sls --help")
+		assert.Contains(t, err.Error(), `Use a specific ApiName instead of the root path "/"`)
+		assert.Contains(t, err.Error(), "Use `aliyun sls --help` to confirm the correct ApiName for this product.")
 	})
 
 	t.Run("SLSProductWithRestCall", func(t *testing.T) {
