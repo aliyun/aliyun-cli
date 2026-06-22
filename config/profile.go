@@ -350,8 +350,8 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		cp.AutoPluginInstallEnablePre = os.Getenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL_ENABLE_PRE") == "true"
 	}
 
-	// --cli-cred / ALIBABA_CLOUD_PROFILE_MODE takes precedence over --mode
-	cliCred := CliCredFlag(ctx.Flags()).GetStringOrDefault(util.GetFromEnv("ALIBABA_CLOUD_PROFILE_MODE"))
+	// --profile-mode / ALIBABA_CLOUD_PROFILE_MODE takes precedence over --mode
+	cliCred := ProfileModeFlag(ctx.Flags()).GetStringOrDefault(util.GetFromEnv("ALIBABA_CLOUD_PROFILE_MODE"))
 	if strings.EqualFold(cliCred, string(Anonymous)) {
 		cp.Mode = Anonymous
 	}

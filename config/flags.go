@@ -56,7 +56,7 @@ const (
 	AutoPluginInstallEnablePreFlagName = "auto-plugin-install-enable-pre"
 	BearerTokenFlagName                = "bearer-token"
 	BearerTokenHeaderKeyFlagName       = "bearer-token-header-key"
-	CliCredFlagName                    = "cli-cred"
+	ProfileModeFlagName                = "profile-mode"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -96,7 +96,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewAutoPluginInstallEnablePreFlag())
 	fs.Add(NewBearerTokenFlag())
 	fs.Add(NewBearerTokenHeaderKeyFlag())
-	fs.Add(NewCliCredFlag())
+	fs.Add(NewProfileModeFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -656,18 +656,18 @@ func NewBearerTokenHeaderKeyFlag() *cli.Flag {
 	}
 }
 
-func CliCredFlag(fs *cli.FlagSet) *cli.Flag {
-	return fs.Get(CliCredFlagName)
+func ProfileModeFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(ProfileModeFlagName)
 }
 
-func NewCliCredFlag() *cli.Flag {
+func NewProfileModeFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "config",
-		Name:         CliCredFlagName,
+		Name:         ProfileModeFlagName,
 		AssignedMode: cli.AssignedOnce,
 		Persistent:   true,
 		Short: i18n.T(
-			"use `--cli-cred Anonymous` to enable anonymous mode for accessing POP gateway anonymous APIs (no AK/SK required)",
-			"使用 `--cli-cred Anonymous` 开启匿名模式以访问 POP 网关匿名 API（无需 AK/SK）"),
+			"use `--profile-mode Anonymous` to enable anonymous mode for accessing POP gateway anonymous APIs (no AK/SK required)",
+			"使用 `--profile-mode Anonymous` 开启匿名模式以访问 POP 网关匿名 API（无需 AK/SK）"),
 	}
 }
