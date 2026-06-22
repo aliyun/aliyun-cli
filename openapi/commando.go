@@ -418,7 +418,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			}
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 			ctx.Command().Name = args[1]
-			if ShouldUseOpenapiForProfile(ctx, &product, &c.profile) {
+			if ShouldUseOpenapi(ctx, &product) {
 				return c.processApiInvoke(ctx, &product, &api, api.Method, api.PathPattern)
 			}
 			return c.processInvoke(ctx, productName, api.Method, api.PathPattern)
@@ -428,10 +428,6 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 		}
 
-		if ShouldUseOpenapiForProfile(ctx, &product, &c.profile) {
-			api, _ := meta.HookGetApi(c.library.GetApi)(product.Code, product.Version, args[1])
-			return c.processApiInvoke(ctx, &product, &api, args[1], "")
-		}
 		return c.processInvoke(ctx, productName, args[1], "")
 	} else if len(args) == 3 {
 		// restful call
@@ -450,7 +446,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		if err := c.checkSafetyPolicy(ctx, product.Code, args[1], args[2]); err != nil {
 			return err
 		}
-		if ShouldUseOpenapiForProfile(ctx, &product, &c.profile) {
+		if ShouldUseOpenapi(ctx, &product) {
 			if !find {
 				return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
 					"Please confirm if the API path exists")
@@ -936,24 +932,12 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 
 	isRPC := strings.ToLower(product.ApiStyle) == "rpc"
 
-	// For RPC products, only allow through if Anonymous mode forces the openapi path
-	if isRPC && !ShouldUseOpenapiForProfile(ctx, product, &c.profile) {
+	if isRPC || !ShouldUseOpenapi(ctx, product) {
 		return nil, cli.NewErrorWithTip(fmt.Errorf("unchecked api style: %s or product: %s", product.ApiStyle, product.Code),
 			"Unsupported api style or product")
-	}
-
-	if isRPC {
-		// RPC style: set Style to RPC, always use POST, no path needed
-		s := "RPC"
-		apiContext.openapiParams.Style = &s
-		return &OpenapiContext{apiContext, "POST", "/", api}, nil
 	}
 
 	// RESTful style: validate method and path
-	if !ShouldUseOpenapiForProfile(ctx, product, &c.profile) {
-		return nil, cli.NewErrorWithTip(fmt.Errorf("unchecked api style: %s or product: %s", product.ApiStyle, product.Code),
-			"Unsupported api style or product")
-	}
 	ok, method, path, err := checkRestfulMethod(ctx, method, path)
 	if err != nil {
 		return nil, err

@@ -40,16 +40,6 @@ func ShouldUseOpenapi(ctx *cli.Context, product *meta.Product) bool {
 	return strings.ToLower(product.Code) == "sls"
 }
 
-// ShouldUseOpenapiForProfile returns true if the request should be routed to the
-// darabonba-openapi path. Anonymous mode must always go through this path because
-// the legacy alibaba-cloud-sdk-go path cannot disable signing.
-func ShouldUseOpenapiForProfile(ctx *cli.Context, product *meta.Product, cp *config.Profile) bool {
-	if cp != nil && cp.Mode == config.Anonymous {
-		return true
-	}
-	return ShouldUseOpenapi(ctx, product)
-}
-
 var hookHttpContextCall = func(fn func() error) func() error {
 	return fn
 }
@@ -209,7 +199,7 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 }
 
 func (a *HttpContext) Call() error {
-	resp, err := a.openapiClient.CallApi(a.openapiParams, a.openapiRequest, a.openapiRuntime)
+	resp, err := a.openapiClient.Execute(a.openapiParams, a.openapiRequest, a.openapiRuntime)
 	a.openapiResponse = resp
 	return err
 }

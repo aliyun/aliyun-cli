@@ -126,7 +126,6 @@ type Profile struct {
 	AutoPluginInstallEnablePre bool             `json:"auto_plugin_install_enable_pre,omitempty"` // install latest version (including pre-release) when true
 	BearerTokenValue           string           `json:"bearer_token,omitempty"`
 	BearerTokenHeaderKey       string           `json:"bearer_token_header_key,omitempty"`
-	CliCred                    string           `json:"-"` // from --cli-cred flag or ALIBABA_CLOUD_CLI_CRED env, never persisted
 	parent                     *Configuration   //`json:"-"`
 }
 
@@ -246,8 +245,7 @@ func (cp *Profile) Validate() error {
 				cp.Name, cp.Name)
 		}
 	case Anonymous:
-		// Anonymous mode only requires region; no credential validation.
-		return nil
+		// Anonymous mode requires no credentials
 	default:
 		return fmt.Errorf("invalid mode: %s", cp.Mode)
 	}
@@ -352,11 +350,9 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		cp.AutoPluginInstallEnablePre = os.Getenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL_ENABLE_PRE") == "true"
 	}
 
-	// --cli-cred / ALIBABA_CLOUD_CLI_CRED takes precedence over --mode
-	if cp.CliCred == "" {
-		cp.CliCred = CliCredFlag(ctx.Flags()).GetStringOrDefault(util.GetFromEnv("ALIBABA_CLOUD_CLI_CRED"))
-	}
-	if strings.EqualFold(cp.CliCred, string(Anonymous)) {
+	// --cli-cred / ALIBABA_CLOUD_PROFILE_MODE takes precedence over --mode
+	cliCred := CliCredFlag(ctx.Flags()).GetStringOrDefault(util.GetFromEnv("ALIBABA_CLOUD_PROFILE_MODE"))
+	if strings.EqualFold(cliCred, string(Anonymous)) {
 		cp.Mode = Anonymous
 	}
 
@@ -748,7 +744,7 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 
 	if cp.Mode == Anonymous {
 		// Anonymous mode: do not resolve any credential; just propagate the switch to plugin subprocesses.
-		envs["ALIBABA_CLOUD_CLI_CRED"] = "Anonymous"
+		envs["ALIBABA_CLOUD_PROFILE_MODE"] = "Anonymous"
 	} else if cp.Mode == BearerToken {
 		if err := cp.Validate(); err != nil {
 			return nil, err

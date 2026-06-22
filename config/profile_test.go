@@ -1628,7 +1628,7 @@ func TestAnonymousFromFlag(t *testing.T) {
 }
 
 func TestAnonymousFromEnv(t *testing.T) {
-	t.Setenv("ALIBABA_CLOUD_CLI_CRED", "anonymous")
+	t.Setenv("ALIBABA_CLOUD_PROFILE_MODE", "anonymous")
 	ctx := newCtx()
 	p := &Profile{Name: "default", RegionId: "cn-hangzhou"}
 	p.OverwriteWithFlags(ctx)
@@ -1639,7 +1639,7 @@ func TestAnonymousFromEnv(t *testing.T) {
 	assert.Nil(t, cred)
 	envs, err := p.GetRuntimeEnv(ctx)
 	assert.NoError(t, err)
-	assert.Equal(t, "Anonymous", envs["ALIBABA_CLOUD_CLI_CRED"])
+	assert.Equal(t, "Anonymous", envs["ALIBABA_CLOUD_PROFILE_MODE"])
 }
 
 func TestAnonymousValidateNoRegion(t *testing.T) {

@@ -372,9 +372,9 @@ func TestLoadProfileWithContext_Anonymous(t *testing.T) {
 		assert.Equal(t, "us-east-1", p.RegionId)
 	})
 
-	// C-03 extra: env-based ALIBABA_CLOUD_CLI_CRED + --region
+	// C-03 extra: env-based ALIBABA_CLOUD_PROFILE_MODE + --region
 	t.Run("C-03 extra: env Anonymous with --region", func(t *testing.T) {
-		t.Setenv("ALIBABA_CLOUD_CLI_CRED", "anonymous")
+		t.Setenv("ALIBABA_CLOUD_PROFILE_MODE", "anonymous")
 		stdout := new(bytes.Buffer)
 		stderr := new(bytes.Buffer)
 		ctx := cli.NewCommandContext(stdout, stderr)
