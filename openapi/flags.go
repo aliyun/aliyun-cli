@@ -33,6 +33,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewDryRunFlag())
 	fs.Add(NewDryRunJsonFlag())
 	fs.Add(NewQuietFlag())
+	fs.Add(NewLogLevelFlag())
 	fs.Add(NewYesFlag())
 	fs.Add(NewQueryFlag())
 	fs.Add(NewRoaFlag())
@@ -55,6 +56,7 @@ const (
 	DryRunFlagName        = "dryrun"
 	CliDryRunJsonFlagName = "cli-dry-run-json"
 	QuietFlagName         = "quiet"
+	LogLevelFlagName      = "log-level"
 	YesFlagName           = "yes"
 	QueryFlagName         = "cli-query"
 	OutputFlagName        = "output"
@@ -114,6 +116,10 @@ func DryRunJsonFlag(fs *cli.FlagSet) *cli.Flag {
 
 func QuietFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(QuietFlagName)
+}
+
+func LogLevelFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(LogLevelFlagName)
 }
 
 func MethodFlag(fs *cli.FlagSet) *cli.Flag {
@@ -284,6 +290,19 @@ func NewQuietFlag() *cli.Flag {
 			"使用 `--quiet` 关闭正常输出",
 		),
 		ExcludeWith: []string{DryRunFlagName, CliDryRunJsonFlagName},
+	}
+}
+
+func NewLogLevelFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         LogLevelFlagName,
+		Aliases:      []string{"log_level"},
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"set log level: DEBUG, INFO, WARN, ERROR (default: ERROR)",
+			"设置日志级别: DEBUG、INFO、WARN、ERROR（默认: ERROR）",
+		),
 	}
 }
 

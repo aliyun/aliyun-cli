@@ -16,21 +16,25 @@ package openapi
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	slsgateway "github.com/alibabacloud-go/alibabacloud-gateway-sls/client"
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
 	openapiTeaUtils "github.com/alibabacloud-go/tea-utils/v2/service"
+	"github.com/alibabacloud-go/tea/dara"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	slsUtils "github.com/aliyun/aliyun-cli/v3/sls"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -83,15 +87,79 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 	if cp.ConnectTimeout > 0 {
 		conf.SetConnectTimeout(cp.ConnectTimeout * 1000)
 	}
-
 	client, err = openapiClient.NewClient(&conf)
 	if err != nil {
 		return
 	}
+	client.DisableSDKError = tea.Bool(true)
 	if strings.ToLower(product.Code) == "sls" {
 		client.Spi = &slsgateway.Client{} // host management for sls endpoint
 	}
 	return client, err
+}
+
+func openapiThrottlingRetryConfig(ctx *cli.Context) *throttlingretry.Config {
+	cfg, err := throttlingretry.LoadEffective(config.GetConfigDir(ctx))
+	if err != nil {
+		return throttlingretry.Default()
+	}
+	return cfg
+}
+
+func openapiThrottlingRetryEnabled(cfg *throttlingretry.Config) bool {
+	if cfg.Enabled != nil && !*cfg.Enabled {
+		return false
+	}
+	return true
+}
+
+func openapiThrottlingRetryMaxAttempts(cfg *throttlingretry.Config) int {
+	maxAttempts := cfg.MaxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = defaultThrottlingRetryMaxAttempts
+	}
+	return maxAttempts
+}
+
+func openapiThrottlingRetryMaxDelayMS(cfg *throttlingretry.Config) int64 {
+	maxDelay := cfg.MaxDelayMS
+	if maxDelay <= 0 {
+		maxDelay = defaultThrottlingRetryMaxDelayMS
+	}
+	return maxDelay
+}
+
+func openapiThrottlingRetryDelay(err error, cfg *throttlingretry.Config) (int64, bool) {
+	if !openapiThrottlingRetryEnabled(cfg) {
+		return 0, false
+	}
+
+	var throttlingErr *openapiClient.ThrottlingError
+	if !errors.As(err, &throttlingErr) {
+		return 0, false
+	}
+	if !strings.Contains(tea.StringValue(throttlingErr.GetCode()), "Throttling") {
+		return 0, false
+	}
+
+	retryAfter := throttlingErr.GetRetryAfter()
+	if retryAfter == nil || *retryAfter < 0 {
+		return 0, false
+	}
+
+	delayMS := *retryAfter
+	if maxDelay := openapiThrottlingRetryMaxDelayMS(cfg); maxDelay > 0 && delayMS > maxDelay {
+		delayMS = maxDelay
+	}
+	return delayMS, true
+}
+
+func applyOpenAPIRetryHeaders(headers map[string]*string, retryAttempt int, delayMS int64) {
+	if retryAttempt <= 0 || headers == nil {
+		return
+	}
+	headers["x-acs-retry-attempts"] = tea.String(fmt.Sprintf("%d", retryAttempt))
+	headers["x-acs-retry-delay"] = tea.String(fmt.Sprintf("%d", delayMS))
 }
 
 func GetContentFromApiResponse(response map[string]any) string {
@@ -129,6 +197,8 @@ type HttpContext struct {
 	openapiParams   *openapiClient.Params
 	openapiResponse map[string]any
 	product         *meta.Product
+
+	throttlingRetryConfig *throttlingretry.Config
 }
 
 func NewHttpContext(cp *config.Profile) *HttpContext {
@@ -141,6 +211,7 @@ func (a *HttpContext) getRequest() *openapiutil.OpenApiRequest {
 
 func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
+	initThrottlingLog(ctx)
 	a.product = product
 	a.openapiRequest = &openapiutil.OpenApiRequest{
 		Query:   map[string]*string{},
@@ -158,12 +229,8 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	if config.SkipSecureVerify(ctx.Flags()).IsAssigned() {
 		a.openapiRuntime.SetIgnoreSSL(true)
 	}
+	a.throttlingRetryConfig = openapiThrottlingRetryConfig(ctx)
 
-	if a.profile.RetryCount > 0 {
-		// when use --retry-count, enable auto retry
-		a.openapiRuntime.SetAutoretry(true)
-		a.openapiRuntime.SetMaxAttempts(a.profile.RetryCount)
-	}
 	if v, ok := config.EndpointFlag(ctx.Flags()).GetValue(); ok {
 		a.openapiRequest.EndpointOverride = tea.String(v)
 	}
@@ -191,9 +258,36 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 }
 
 func (a *HttpContext) Call() error {
-	resp, err := a.openapiClient.Execute(a.openapiParams, a.openapiRequest, a.openapiRuntime)
-	a.openapiResponse = resp
-	return err
+	cfg := a.throttlingRetryConfig
+	if cfg == nil {
+		cfg = throttlingretry.Default()
+	}
+	retried := false
+	retryDelayMS := int64(0)
+	maxAttempts := openapiThrottlingRetryMaxAttempts(cfg)
+	for retryAttempt := 0; ; retryAttempt++ {
+		if retryAttempt > 0 {
+			applyOpenAPIRetryHeaders(a.openapiRequest.Headers, retryAttempt, retryDelayMS)
+		}
+		resp, err := a.openapiClient.Execute(a.openapiParams, a.openapiRequest, a.openapiRuntime)
+		a.openapiResponse = resp
+		if err == nil {
+			return nil
+		}
+
+		delayMS, ok := openapiThrottlingRetryDelay(err, cfg)
+		if !ok || retryAttempt >= maxAttempts {
+			if ok && retried {
+				printThrottlingRetryExhausted(maxAttempts)
+			}
+			return dara.TeaSDKError(err)
+		}
+
+		printThrottlingRetryNotice(delayMS, retryAttempt+1, maxAttempts)
+		retryDelayMS = delayMS
+		time.Sleep(time.Duration(delayMS) * time.Millisecond)
+		retried = true
+	}
 }
 
 type OpenapiContext struct {
