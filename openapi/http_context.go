@@ -32,7 +32,6 @@ import (
 	slsUtils "github.com/aliyun/aliyun-cli/v3/sls"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/util"
-	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 )
 
 func ShouldUseOpenapi(ctx *cli.Context, product *meta.Product) bool {
@@ -53,12 +52,9 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		err = fmt.Errorf("default RegionId is empty! run `aliyun configure` first")
 		return
 	}
-	var credential credentialsv2.Credential
-	if cp.Mode != config.Anonymous {
-		credential, err = cp.GetCredential(ctx, nil)
-		if err != nil {
-			return
-		}
+	credential, err := cp.GetCredential(ctx, nil)
+	if err != nil {
+		return
 	}
 	conf := openapiClient.Config{
 		Credential: credential,
@@ -70,10 +66,6 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		conf.Endpoint = tea.String(cp.Endpoint)
 	} else if strings.ToLower(product.Code) == "sls" {
 		conf.Endpoint = tea.String(cp.RegionId + ".log.aliyuncs.com") // should apply product template
-	} else if ep, ok := product.RegionalEndpoints[cp.RegionId]; ok {
-		conf.Endpoint = tea.String(ep)
-	} else if product.GlobalEndpoint != "" {
-		conf.Endpoint = tea.String(product.GlobalEndpoint)
 	}
 
 	ua := util.GetAliyunCliUserAgent()

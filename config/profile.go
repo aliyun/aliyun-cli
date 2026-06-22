@@ -349,8 +349,8 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	}
 
 	// --profile-mode / ALIBABA_CLOUD_PROFILE_MODE takes precedence over --mode
-	cliCred := ProfileModeFlag(ctx.Flags()).GetStringOrDefault(util.GetFromEnv("ALIBABA_CLOUD_PROFILE_MODE"))
-	if strings.EqualFold(cliCred, string(Anonymous)) {
+	profileMode := ProfileModeFlag(ctx.Flags()).GetStringOrDefault(util.GetFromEnv("ALIBABA_CLOUD_PROFILE_MODE"))
+	if strings.EqualFold(profileMode, string(Anonymous)) {
 		cp.Mode = Anonymous
 	}
 
@@ -422,9 +422,6 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 	// Others are indirect credential
 	cp.Validate()
 	switch cp.Mode {
-	case Anonymous:
-		// darabonba-openapi skips Credential when AuthType="Anonymous".
-		return nil, nil
 	case AK:
 		if cp.AccessKeyId == "" || cp.AccessKeySecret == "" {
 			err = fmt.Errorf("AccessKeyId/AccessKeySecret is empty! run `aliyun configure` first")
@@ -888,9 +885,6 @@ func (cp *Profile) normalizeBearerTokenFields() error {
 }
 
 func (cp *Profile) OpenAPIAuthType() string {
-	if cp.Mode == Anonymous {
-		return "Anonymous"
-	}
 	if cp.Mode == BearerToken && cp.BearerTokenHeaderKey != "" {
 		return "Anonymous"
 	}
