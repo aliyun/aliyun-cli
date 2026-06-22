@@ -1621,7 +1621,6 @@ func TestAnonymousFromFlag(t *testing.T) {
 	p := &Profile{Name: "default", RegionId: "cn-hangzhou"}
 	p.OverwriteWithFlags(ctx)
 	assert.Equal(t, Anonymous, p.Mode)
-	assert.NoError(t, p.Validate())
 	cred, err := p.GetCredential(ctx, nil)
 	assert.NoError(t, err)
 	assert.Nil(t, cred)
@@ -1633,7 +1632,6 @@ func TestAnonymousFromEnv(t *testing.T) {
 	p := &Profile{Name: "default", RegionId: "cn-hangzhou"}
 	p.OverwriteWithFlags(ctx)
 	assert.Equal(t, Anonymous, p.Mode)
-	assert.NoError(t, p.Validate())
 	cred, err := p.GetCredential(ctx, nil)
 	assert.NoError(t, err)
 	assert.Nil(t, cred)

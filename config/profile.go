@@ -244,8 +244,6 @@ func (cp *Profile) Validate() error {
 			return fmt.Errorf("bearer_token is not configured for profile '%s'. Run `aliyun configure --profile %s --mode BearerToken` to set it",
 				cp.Name, cp.Name)
 		}
-	case Anonymous:
-		// Anonymous mode requires no credentials
 	default:
 		return fmt.Errorf("invalid mode: %s", cp.Mode)
 	}
