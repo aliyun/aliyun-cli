@@ -90,8 +90,8 @@ func (c *Commando) InitWithCommand(cmd *cli.Command) {
 }
 
 func DetectInConfigureMode(flags *cli.FlagSet) bool {
-	_, modeExist := flags.GetValue(config.ModeFlagName)
-	if !modeExist {
+	mode, modeExist := flags.GetValue(config.ModeFlagName)
+	if !modeExist || config.Anonymous == config.NormalizeMode(mode) {
 		return true
 	}
 	// if mode exist, check if other flags exist

@@ -20,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/util"
@@ -141,12 +140,6 @@ func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
 	if util.GetFromEnv("ALIBABA_CLOUD_IGNORE_PROFILE", "ALIBABACLOUD_IGNORE_PROFILE") == "TRUE" {
 		profile = NewProfile("default")
 		profile.RegionId = "cn-hangzhou"
-	} else if mode := ModeFlag(ctx.Flags()).GetStringOrDefault(util.GetFromEnv("ALIBABA_CLOUD_PROFILE_MODE")); strings.EqualFold(mode, string(Anonymous)) {
-		// Anonymous mode short-circuit: do not require ~/.aliyun/config.json or any AK/SK.
-		profile = NewProfile("default")
-		profile.Mode = Anonymous
-		profile.OverwriteWithFlags(ctx)
-		return
 	} else {
 		currentPath := getConfigurePath(ctx)
 		profileName := getProfileName(ctx)
