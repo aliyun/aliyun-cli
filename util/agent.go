@@ -49,12 +49,9 @@ func DetectAgentName() string {
 	return ""
 }
 
+// Agent UA 待接入inner plugin。
 func GetAgentUserAgentSegment() string {
-	name := DetectAgentName()
-	if name == "" {
-		return ""
-	}
-	return agentSegmentPrefix + name
+	return ""
 }
 
 const envCustomUserAgent = "ALIBABA_CLOUD_USER_AGENT"

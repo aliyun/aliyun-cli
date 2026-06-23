@@ -241,8 +241,10 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	}
 	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 
-	if name := util.DetectAgentName(); name != "" {
-		a.client.AppendUserAgent("Agent", name)
+	if seg := util.GetAgentUserAgentSegment(); seg != "" {
+		for _, pair := range parseCustomUserAgentSegments(seg) {
+			a.client.AppendUserAgent(pair[0], pair[1])
+		}
 	}
 
 	if envUA := util.GetFromEnv("ALIBABA_CLOUD_USER_AGENT"); envUA != "" {

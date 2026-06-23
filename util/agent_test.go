@@ -49,7 +49,7 @@ func TestDetectAgentName_KnownEnvs(t *testing.T) {
 			snapshotAndUnsetAgentEnvs(t)
 			_ = os.Setenv(c.env, "1")
 			assert.Equal(t, c.name, DetectAgentName())
-			assert.Equal(t, "Agent/"+c.name, GetAgentUserAgentSegment())
+			assert.Equal(t, "", GetAgentUserAgentSegment(), "agent UA segment is temporarily disabled")
 		})
 	}
 }
@@ -125,7 +125,8 @@ func TestMergeAgentSegmentIntoPluginEnvs_FreshEnv(t *testing.T) {
 	_ = os.Setenv("CURSOR_AGENT", "1")
 	envs := map[string]string{}
 	MergeAgentSegmentIntoPluginEnvs(envs)
-	assert.Equal(t, "Agent/cursor", envs[envCustomUserAgent])
+	_, ok := envs[envCustomUserAgent]
+	assert.False(t, ok, "agent UA segment unset")
 }
 
 func TestMergeAgentSegmentIntoPluginEnvs_PreservesParentEnv(t *testing.T) {
@@ -134,8 +135,8 @@ func TestMergeAgentSegmentIntoPluginEnvs_PreservesParentEnv(t *testing.T) {
 	t.Setenv(envCustomUserAgent, "skill/foo")
 	envs := map[string]string{}
 	MergeAgentSegmentIntoPluginEnvs(envs)
-	assert.Equal(t, "skill/foo Agent/cursor", envs[envCustomUserAgent],
-		"已 export 的 ALIBABA_CLOUD_USER_AGENT 必须保留并在末尾追加 Agent 段")
+	_, ok := envs[envCustomUserAgent]
+	assert.False(t, ok, "agent UA 关闭时不应写入 ALIBABA_CLOUD_USER_AGENT")
 }
 
 func TestMergeAgentSegmentIntoPluginEnvs_RuntimeEnvWinsOverParent(t *testing.T) {
@@ -146,6 +147,6 @@ func TestMergeAgentSegmentIntoPluginEnvs_RuntimeEnvWinsOverParent(t *testing.T) 
 		envCustomUserAgent: "from-runtime",
 	}
 	MergeAgentSegmentIntoPluginEnvs(envs)
-	assert.Equal(t, "from-runtime Agent/cursor", envs[envCustomUserAgent],
-		"envs 中已有值时优先使用 envs 中的值")
+	assert.Equal(t, "from-runtime", envs[envCustomUserAgent],
+		"agent UA 关闭时不应追加 Agent 段")
 }

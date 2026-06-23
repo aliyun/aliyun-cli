@@ -714,7 +714,7 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 		assert.Equal(t, ua1, ua2)
 	})
 
-	t.Run("with agent env appends agent segment", func(t *testing.T) {
+	t.Run("with agent env does not append agent segment while disabled", func(t *testing.T) {
 		snapshotAndUnsetAgentEnvs(t)
 		os.Unsetenv("ALIBABA_CLOUD_VENDOR")
 		os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
@@ -723,10 +723,10 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 		ua := GetAliyunCliUserAgent()
 
 		assert.Contains(t, ua, "Aliyun-CLI/")
-		assert.Contains(t, ua, "Agent/cursor")
+		assert.NotContains(t, ua, "Agent/")
 	})
 
-	t.Run("agent segment placed between vendor and custom UA", func(t *testing.T) {
+	t.Run("agent segment not injected between vendor and custom UA while disabled", func(t *testing.T) {
 		snapshotAndUnsetAgentEnvs(t)
 		os.Setenv("ALIBABA_CLOUD_VENDOR", "v1")
 		os.Setenv("ALIBABA_CLOUD_USER_AGENT", "skill/x")
@@ -734,10 +734,10 @@ func TestGetAliyunCliUserAgent(t *testing.T) {
 
 		ua := GetAliyunCliUserAgent()
 
+		assert.NotContains(t, ua, "Agent/")
 		idxVendor := strings.Index(ua, "vendor/")
-		idxAgent := strings.Index(ua, "Agent/")
 		idxSkill := strings.Index(ua, "skill/")
-		assert.True(t, idxVendor >= 0 && idxAgent > idxVendor && idxSkill > idxAgent,
-			"顺序应为 vendor/ → Agent/ → skill/，实际：%s", ua)
+		assert.True(t, idxVendor >= 0 && idxSkill > idxVendor,
+			"顺序应为 vendor/ → skill/，实际：%s", ua)
 	})
 }
