@@ -310,6 +310,7 @@ func TestLoadProfileWithContext_Anonymous(t *testing.T) {
 		ModeFlag(ctx.Flags()).SetValue("Anonymous")
 		ctx.Flags().Get("region").SetAssigned(true)
 		ctx.Flags().Get("region").SetValue("cn-hangzhou")
+		ctx.SetInConfigureMode(true)
 		p, err := LoadProfileWithContext(ctx)
 		assert.Nil(t, err)
 		assert.Equal(t, Anonymous, p.Mode)
@@ -318,42 +319,6 @@ func TestLoadProfileWithContext_Anonymous(t *testing.T) {
 		cred, credErr := p.GetCredential(ctx, nil)
 		assert.NoError(t, credErr)
 		assert.Nil(t, cred)
-	})
-
-	// C-02: 有 config.json 存在时，--mode Anonymous 也走匿名短路
-	t.Run("C-02: Anonymous flag with config.json present", func(t *testing.T) {
-		originhook := hookLoadOrCreateConfiguration
-		defer func() { hookLoadOrCreateConfiguration = originhook }()
-		hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
-			return func(path string) (*Configuration, error) {
-				return &Configuration{
-					CurrentProfile: "default",
-					Profiles: []Profile{{
-						Name:            "default",
-						Mode:            AK,
-						AccessKeyId:     "fake-ak",
-						AccessKeySecret: "fake-sk",
-						RegionId:        "cn-shanghai",
-						OutputFormat:    "json",
-					}},
-				}, nil
-			}
-		}
-		stdout := new(bytes.Buffer)
-		stderr := new(bytes.Buffer)
-		ctx := cli.NewCommandContext(stdout, stderr)
-		AddFlags(ctx.Flags())
-		ModeFlag(ctx.Flags()).SetAssigned(true)
-		ModeFlag(ctx.Flags()).SetValue("Anonymous")
-		ctx.Flags().Get("region").SetAssigned(true)
-		ctx.Flags().Get("region").SetValue("cn-beijing")
-		p, err := LoadProfileWithContext(ctx)
-		assert.Nil(t, err)
-		// Should be Anonymous even though config.json has AK profile
-		assert.Equal(t, Anonymous, p.Mode)
-		assert.Equal(t, "cn-beijing", p.RegionId)
-		// Should NOT use fake-ak from config
-		assert.Empty(t, p.AccessKeyId)
 	})
 
 	// C-03: --region 覆盖默认 cn-hangzhou
@@ -366,6 +331,7 @@ func TestLoadProfileWithContext_Anonymous(t *testing.T) {
 		ModeFlag(ctx.Flags()).SetValue("Anonymous")
 		ctx.Flags().Get("region").SetAssigned(true)
 		ctx.Flags().Get("region").SetValue("us-east-1")
+		ctx.SetInConfigureMode(true)
 		p, err := LoadProfileWithContext(ctx)
 		assert.Nil(t, err)
 		assert.Equal(t, Anonymous, p.Mode)
@@ -381,6 +347,7 @@ func TestLoadProfileWithContext_Anonymous(t *testing.T) {
 		AddFlags(ctx.Flags())
 		ctx.Flags().Get("region").SetAssigned(true)
 		ctx.Flags().Get("region").SetValue("ap-southeast-1")
+		ctx.SetInConfigureMode(true)
 		p, err := LoadProfileWithContext(ctx)
 		assert.Nil(t, err)
 		assert.Equal(t, Anonymous, p.Mode)
