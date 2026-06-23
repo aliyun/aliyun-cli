@@ -224,3 +224,50 @@ func newThrottlingServerError(code string, retryAfter string) error {
 	}
 	return serverErr
 }
+
+func TestRetryAfterFromHeaders(t *testing.T) {
+	delay, ok := retryAfterFromHeaders(map[string][]string{
+		"X-Acs-Retry-After": {" 42 "},
+	})
+	assert.True(t, ok)
+	assert.Equal(t, int64(42), delay)
+
+	_, ok = retryAfterFromHeaders(map[string][]string{
+		"x-acs-retry-after": {},
+	})
+	assert.False(t, ok)
+
+	_, ok = retryAfterFromHeaders(map[string][]string{
+		"x-acs-retry-after": {"bad"},
+	})
+	assert.False(t, ok)
+
+	_, ok = retryAfterFromHeaders(map[string][]string{
+		"x-acs-retry-after": {"-1"},
+	})
+	assert.False(t, ok)
+}
+
+func TestApplyRetryRequestHeadersEdgeCases(t *testing.T) {
+	var invoker *BasicInvoker
+	invoker.applyRetryRequestHeaders(1, 100)
+
+	invoker = &BasicInvoker{}
+	invoker.applyRetryRequestHeaders(0, 100)
+	invoker.applyRetryRequestHeaders(1, 100)
+
+	invoker.request = requests.NewCommonRequest()
+	invoker.request.Headers = nil
+	invoker.applyRetryRequestHeaders(2, 250)
+	assert.Equal(t, "2", invoker.request.Headers["x-acs-retry-attempts"])
+	assert.Equal(t, "250", invoker.request.Headers["x-acs-retry-delay"])
+}
+
+func TestThrottlingRetryMaxDelayCapsDelay(t *testing.T) {
+	invoker := &BasicInvoker{
+		throttlingRetryConfig: &throttlingretry.Config{MaxDelayMS: 80},
+	}
+	delay, ok := invoker.throttlingRetryDelay(newThrottlingServerError("Throttling.User", "200"))
+	assert.True(t, ok)
+	assert.Equal(t, int64(80), delay)
+}

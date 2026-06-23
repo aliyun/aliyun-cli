@@ -269,7 +269,7 @@ func (a *HttpContext) Call() error {
 		if retryAttempt > 0 {
 			applyOpenAPIRetryHeaders(a.openapiRequest.Headers, retryAttempt, retryDelayMS)
 		}
-		resp, err := a.openapiClient.Execute(a.openapiParams, a.openapiRequest, a.openapiRuntime)
+		resp, err := httpContextExecuteFunc(a)
 		a.openapiResponse = resp
 		if err == nil {
 			return nil
@@ -288,6 +288,10 @@ func (a *HttpContext) Call() error {
 		time.Sleep(time.Duration(delayMS) * time.Millisecond)
 		retried = true
 	}
+}
+
+var httpContextExecuteFunc = func(a *HttpContext) (map[string]interface{}, error) {
+	return a.openapiClient.Execute(a.openapiParams, a.openapiRequest, a.openapiRuntime)
 }
 
 type OpenapiContext struct {
