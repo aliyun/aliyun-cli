@@ -56,7 +56,6 @@ const (
 	AutoPluginInstallEnablePreFlagName = "auto-plugin-install-enable-pre"
 	BearerTokenFlagName                = "bearer-token"
 	BearerTokenHeaderKeyFlagName       = "bearer-token-header-key"
-	ProfileModeFlagName                = "profile-mode"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -96,7 +95,6 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewAutoPluginInstallEnablePreFlag())
 	fs.Add(NewBearerTokenFlag())
 	fs.Add(NewBearerTokenHeaderKeyFlag())
-	fs.Add(NewProfileModeFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -238,8 +236,8 @@ func NewModeFlag() *cli.Flag {
 		DefaultValue: "AK",
 		Persistent:   true,
 		Short: i18n.T(
-			"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth|BearerToken}` to assign authenticate mode",
-			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth|BearerToken}` 指定认证方式"),
+			"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth|BearerToken|Anonymous}` to assign authenticate mode",
+			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth|BearerToken|Anonymous}` 指定认证方式"),
 	}
 }
 
@@ -653,21 +651,5 @@ func NewBearerTokenHeaderKeyFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--bearer-token-header-key <key>` to assign custom auth header key, e.g. x-custom-token",
 			"使用 `--bearer-token-header-key <key>` 指定自定义认证 Header 名称，例如 x-custom-token"),
-	}
-}
-
-func ProfileModeFlag(fs *cli.FlagSet) *cli.Flag {
-	return fs.Get(ProfileModeFlagName)
-}
-
-func NewProfileModeFlag() *cli.Flag {
-	return &cli.Flag{
-		Category:     "config",
-		Name:         ProfileModeFlagName,
-		AssignedMode: cli.AssignedOnce,
-		Persistent:   true,
-		Short: i18n.T(
-			"use `--profile-mode Anonymous` to enable anonymous mode for accessing POP gateway anonymous APIs (no AK/SK required)",
-			"使用 `--profile-mode Anonymous` 开启匿名模式以访问 POP 网关匿名 API（无需 AK/SK）"),
 	}
 }

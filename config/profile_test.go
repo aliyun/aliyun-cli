@@ -1616,11 +1616,12 @@ func TestOpenAPIAuthType(t *testing.T) {
 
 func TestAnonymousFromFlag(t *testing.T) {
 	ctx := newCtx()
-	ProfileModeFlag(ctx.Flags()).SetAssigned(true)
-	ProfileModeFlag(ctx.Flags()).SetValue("Anonymous")
+	ModeFlag(ctx.Flags()).SetAssigned(true)
+	ModeFlag(ctx.Flags()).SetValue("Anonymous")
 	p := &Profile{Name: "default", RegionId: "cn-hangzhou"}
 	p.OverwriteWithFlags(ctx)
 	assert.Equal(t, Anonymous, p.Mode)
+	assert.NoError(t, p.Validate())
 	cred, err := p.GetCredential(ctx, nil)
 	assert.NoError(t, err)
 	assert.Nil(t, cred)
@@ -1655,13 +1656,11 @@ func TestNormalizeModeAnonymous(t *testing.T) {
 	assert.Equal(t, Anonymous, NormalizeMode("Anonymous"))
 }
 
-func TestProfileModeOverridesMode(t *testing.T) {
-	// P-10: --profile-mode Anonymous overrides --mode AK
+func TestModeAnonymousOverridesDefault(t *testing.T) {
+	// P-10: --mode Anonymous overrides default AK mode
 	ctx := newCtx()
-	ctx.Flags().Get("mode").SetAssigned(true)
-	ctx.Flags().Get("mode").SetValue("AK")
-	ProfileModeFlag(ctx.Flags()).SetAssigned(true)
-	ProfileModeFlag(ctx.Flags()).SetValue("Anonymous")
+	ModeFlag(ctx.Flags()).SetAssigned(true)
+	ModeFlag(ctx.Flags()).SetValue("Anonymous")
 	p := &Profile{
 		Name:            "default",
 		RegionId:        "cn-hangzhou",
@@ -1669,24 +1668,24 @@ func TestProfileModeOverridesMode(t *testing.T) {
 		AccessKeySecret: "test-sk",
 	}
 	p.OverwriteWithFlags(ctx)
-	// --profile-mode Anonymous should override --mode AK
+	// --mode Anonymous sets mode directly
 	assert.Equal(t, Anonymous, p.Mode)
 }
 
-func TestProfileModeFlagRegistered(t *testing.T) {
-	// F-01: profile-mode flag is registered
+func TestModeFlagRegistered(t *testing.T) {
+	// F-01: mode flag is registered and supports Anonymous
 	ctx := newCtx()
-	flag := ProfileModeFlag(ctx.Flags())
+	flag := ModeFlag(ctx.Flags())
 	assert.NotNil(t, flag)
-	assert.Equal(t, ProfileModeFlagName, flag.Name)
+	assert.Equal(t, ModeFlagName, flag.Name)
 }
 
-func TestProfileModeFlagValue(t *testing.T) {
+func TestModeFlagValue(t *testing.T) {
 	// F-02: flag assignment
 	ctx := newCtx()
-	ProfileModeFlag(ctx.Flags()).SetAssigned(true)
-	ProfileModeFlag(ctx.Flags()).SetValue("Anonymous")
-	v, ok := ProfileModeFlag(ctx.Flags()).GetValue()
+	ModeFlag(ctx.Flags()).SetAssigned(true)
+	ModeFlag(ctx.Flags()).SetValue("Anonymous")
+	v, ok := ModeFlag(ctx.Flags()).GetValue()
 	assert.True(t, ok)
 	assert.Equal(t, "Anonymous", v)
 }

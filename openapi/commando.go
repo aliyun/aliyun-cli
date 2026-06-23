@@ -930,9 +930,7 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 		}
 	}
 
-	isRPC := strings.ToLower(product.ApiStyle) == "rpc"
-
-	if isRPC || !ShouldUseOpenapi(ctx, product) {
+	if strings.ToLower(product.ApiStyle) == "rpc" || !ShouldUseOpenapi(ctx, product) {
 		return nil, cli.NewErrorWithTip(fmt.Errorf("unchecked api style: %s or product: %s", product.ApiStyle, product.Code),
 			"Unsupported api style or product")
 	}

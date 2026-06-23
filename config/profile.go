@@ -244,6 +244,8 @@ func (cp *Profile) Validate() error {
 			return fmt.Errorf("bearer_token is not configured for profile '%s'. Run `aliyun configure --profile %s --mode BearerToken` to set it",
 				cp.Name, cp.Name)
 		}
+	case Anonymous:
+		// Anonymous mode: no credential validation needed
 	default:
 		return fmt.Errorf("invalid mode: %s", cp.Mode)
 	}
@@ -348,9 +350,8 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		cp.AutoPluginInstallEnablePre = os.Getenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL_ENABLE_PRE") == "true"
 	}
 
-	// --profile-mode / ALIBABA_CLOUD_PROFILE_MODE takes precedence over --mode
-	profileMode := ProfileModeFlag(ctx.Flags()).GetStringOrDefault(util.GetFromEnv("ALIBABA_CLOUD_PROFILE_MODE"))
-	if strings.EqualFold(profileMode, string(Anonymous)) {
+	// ALIBABA_CLOUD_PROFILE_MODE env takes precedence over --mode / config file
+	if envMode := util.GetFromEnv("ALIBABA_CLOUD_PROFILE_MODE"); strings.EqualFold(envMode, string(Anonymous)) {
 		cp.Mode = Anonymous
 	}
 
@@ -677,6 +678,10 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		config.SetType("bearer").
 			SetBearerToken(cp.BearerTokenValue)
 
+	case Anonymous:
+		// Anonymous mode: no credential needed
+		return nil, nil
+
 	case OAuth:
 		// check sts expiration
 		stsExpiration := cp.StsExpiration
@@ -885,6 +890,9 @@ func (cp *Profile) normalizeBearerTokenFields() error {
 }
 
 func (cp *Profile) OpenAPIAuthType() string {
+	if cp.Mode == Anonymous {
+		return "Anonymous"
+	}
 	if cp.Mode == BearerToken && cp.BearerTokenHeaderKey != "" {
 		return "Anonymous"
 	}

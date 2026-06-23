@@ -306,8 +306,8 @@ func TestLoadProfileWithContext_Anonymous(t *testing.T) {
 		stderr := new(bytes.Buffer)
 		ctx := cli.NewCommandContext(stdout, stderr)
 		AddFlags(ctx.Flags())
-		ProfileModeFlag(ctx.Flags()).SetAssigned(true)
-		ProfileModeFlag(ctx.Flags()).SetValue("Anonymous")
+		ModeFlag(ctx.Flags()).SetAssigned(true)
+		ModeFlag(ctx.Flags()).SetValue("Anonymous")
 		ctx.Flags().Get("region").SetAssigned(true)
 		ctx.Flags().Get("region").SetValue("cn-hangzhou")
 		p, err := LoadProfileWithContext(ctx)
@@ -320,7 +320,7 @@ func TestLoadProfileWithContext_Anonymous(t *testing.T) {
 		assert.Nil(t, cred)
 	})
 
-	// C-02: 有 config.json 存在时，--profile-mode Anonymous 也走匿名短路
+	// C-02: 有 config.json 存在时，--mode Anonymous 也走匿名短路
 	t.Run("C-02: Anonymous flag with config.json present", func(t *testing.T) {
 		originhook := hookLoadOrCreateConfiguration
 		defer func() { hookLoadOrCreateConfiguration = originhook }()
@@ -343,8 +343,8 @@ func TestLoadProfileWithContext_Anonymous(t *testing.T) {
 		stderr := new(bytes.Buffer)
 		ctx := cli.NewCommandContext(stdout, stderr)
 		AddFlags(ctx.Flags())
-		ProfileModeFlag(ctx.Flags()).SetAssigned(true)
-		ProfileModeFlag(ctx.Flags()).SetValue("Anonymous")
+		ModeFlag(ctx.Flags()).SetAssigned(true)
+		ModeFlag(ctx.Flags()).SetValue("Anonymous")
 		ctx.Flags().Get("region").SetAssigned(true)
 		ctx.Flags().Get("region").SetValue("cn-beijing")
 		p, err := LoadProfileWithContext(ctx)
@@ -362,8 +362,8 @@ func TestLoadProfileWithContext_Anonymous(t *testing.T) {
 		stderr := new(bytes.Buffer)
 		ctx := cli.NewCommandContext(stdout, stderr)
 		AddFlags(ctx.Flags())
-		ProfileModeFlag(ctx.Flags()).SetAssigned(true)
-		ProfileModeFlag(ctx.Flags()).SetValue("Anonymous")
+		ModeFlag(ctx.Flags()).SetAssigned(true)
+		ModeFlag(ctx.Flags()).SetValue("Anonymous")
 		ctx.Flags().Get("region").SetAssigned(true)
 		ctx.Flags().Get("region").SetValue("us-east-1")
 		p, err := LoadProfileWithContext(ctx)
