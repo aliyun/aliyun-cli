@@ -299,6 +299,62 @@ func TestLoadProfileWithContextWhenIGNORE_PROFILE(t *testing.T) {
 	os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "")
 }
 
+func TestLoadProfileWithContext_Anonymous(t *testing.T) {
+	// C-01: 无 config.json 也能走匿名模式
+	t.Run("C-01: Anonymous flag without config.json", func(t *testing.T) {
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		AddFlags(ctx.Flags())
+		ModeFlag(ctx.Flags()).SetAssigned(true)
+		ModeFlag(ctx.Flags()).SetValue("Anonymous")
+		ctx.Flags().Get("region").SetAssigned(true)
+		ctx.Flags().Get("region").SetValue("cn-hangzhou")
+		ctx.SetInConfigureMode(true)
+		p, err := LoadProfileWithContext(ctx)
+		assert.Nil(t, err)
+		assert.Equal(t, Anonymous, p.Mode)
+		assert.Equal(t, "cn-hangzhou", p.RegionId)
+		assert.Equal(t, "Anonymous", p.OpenAPIAuthType())
+		cred, credErr := p.GetCredential(ctx, nil)
+		assert.NoError(t, credErr)
+		assert.Nil(t, cred)
+	})
+
+	// C-03: --region 覆盖默认 cn-hangzhou
+	t.Run("C-03: --region overrides default region", func(t *testing.T) {
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		AddFlags(ctx.Flags())
+		ModeFlag(ctx.Flags()).SetAssigned(true)
+		ModeFlag(ctx.Flags()).SetValue("Anonymous")
+		ctx.Flags().Get("region").SetAssigned(true)
+		ctx.Flags().Get("region").SetValue("us-east-1")
+		ctx.SetInConfigureMode(true)
+		p, err := LoadProfileWithContext(ctx)
+		assert.Nil(t, err)
+		assert.Equal(t, Anonymous, p.Mode)
+		assert.Equal(t, "us-east-1", p.RegionId)
+	})
+
+	// C-03 extra: env-based ALIBABA_CLOUD_PROFILE_MODE + --region
+	t.Run("C-03 extra: env Anonymous with --region", func(t *testing.T) {
+		t.Setenv("ALIBABA_CLOUD_PROFILE_MODE", "anonymous")
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		AddFlags(ctx.Flags())
+		ctx.Flags().Get("region").SetAssigned(true)
+		ctx.Flags().Get("region").SetValue("ap-southeast-1")
+		ctx.SetInConfigureMode(true)
+		p, err := LoadProfileWithContext(ctx)
+		assert.Nil(t, err)
+		assert.Equal(t, Anonymous, p.Mode)
+		assert.Equal(t, "ap-southeast-1", p.RegionId)
+	})
+}
+
 func TestGetHomePath(t *testing.T) {
 	home := GetHomePath()
 	assert.NotEqual(t, "", home)

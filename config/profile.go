@@ -59,6 +59,8 @@ const (
 	CloudSSO            = AuthenticateMode("CloudSSO")
 	OAuth               = AuthenticateMode("OAuth")
 	BearerToken         = AuthenticateMode("BearerToken")
+	// Anonymous mode skips AK/SK and accesses POP gateway anonymous APIs.
+	Anonymous = AuthenticateMode("Anonymous")
 )
 
 // standard OpenAPI bearer token header used by darabonba-openapi.
@@ -67,7 +69,7 @@ const DefaultBearerTokenHeaderKey = "x-acs-bearer-token"
 var knownModes = []AuthenticateMode{
 	AK, StsToken, RamRoleArn, EcsRamRole, RsaKeyPair,
 	RamRoleArnWithEcs, ChainableRamRoleArn, External,
-	CredentialsURI, OIDC, CloudSSO, OAuth, BearerToken,
+	CredentialsURI, OIDC, CloudSSO, OAuth, BearerToken, Anonymous,
 }
 
 func NormalizeMode(mode string) AuthenticateMode {
@@ -242,6 +244,8 @@ func (cp *Profile) Validate() error {
 			return fmt.Errorf("bearer_token is not configured for profile '%s'. Run `aliyun configure --profile %s --mode BearerToken` to set it",
 				cp.Name, cp.Name)
 		}
+	case Anonymous:
+		// Anonymous mode: no credential validation needed
 	default:
 		return fmt.Errorf("invalid mode: %s", cp.Mode)
 	}
@@ -344,6 +348,12 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 
 	if cp.AutoPluginInstallEnablePre == false {
 		cp.AutoPluginInstallEnablePre = os.Getenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL_ENABLE_PRE") == "true"
+	}
+
+	if cp.Mode == "" {
+		if envMode := util.GetFromEnv("ALIBABA_CLOUD_PROFILE_MODE"); NormalizeMode(envMode) == Anonymous {
+			cp.Mode = Anonymous
+		}
 	}
 
 	AutoModeRecognition(cp)
@@ -669,6 +679,10 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		config.SetType("bearer").
 			SetBearerToken(cp.BearerTokenValue)
 
+	case Anonymous:
+		// Anonymous mode: no credential needed
+		return nil, nil
+
 	case OAuth:
 		// check sts expiration
 		stsExpiration := cp.StsExpiration
@@ -729,7 +743,10 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 		"ALIBABA_CLOUD_REGION_ID": cp.RegionId,
 	}
 
-	if cp.Mode == BearerToken {
+	if cp.Mode == Anonymous {
+		// Anonymous mode: do not resolve any credential; just propagate the switch to plugin subprocesses.
+		envs["ALIBABA_CLOUD_PROFILE_MODE"] = "Anonymous"
+	} else if cp.Mode == BearerToken {
 		if err := cp.Validate(); err != nil {
 			return nil, err
 		}
@@ -874,6 +891,9 @@ func (cp *Profile) normalizeBearerTokenFields() error {
 }
 
 func (cp *Profile) OpenAPIAuthType() string {
+	if cp.Mode == Anonymous {
+		return "Anonymous"
+	}
 	if cp.Mode == BearerToken && cp.BearerTokenHeaderKey != "" {
 		return "Anonymous"
 	}
