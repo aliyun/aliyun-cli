@@ -37,9 +37,10 @@ func TestInitFromContextParsesInfo(t *testing.T) {
 	SetLevel(Error)
 }
 
-func TestInitFromContextNamedConfig(t *testing.T) {
+func TestInitFromContextFromEnv(t *testing.T) {
 	SetLevel(Error)
-	InitFromContext("development")
+	t.Setenv("ALIBABA_CLOUD_CLI_LOG_CONFIG", "INFO")
+	InitFromContext("")
 	assert.True(t, IsInfoEnabled())
 	SetLevel(Error)
 }

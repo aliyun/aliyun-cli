@@ -59,41 +59,15 @@ func LogThrottlingRetry(format string, args ...interface{}) {
 }
 
 func InitFromContext(logLevel string) {
-	if logLevel != "" {
-		if applyLevelConfig(logLevel) {
-			return
-		}
+	if level, err := ParseLevel(logLevel); err == nil {
+		SetLevel(level)
+		return
 	}
 	if env := strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_CLI_LOG_CONFIG")); env != "" {
-		applyLevelConfig(env)
+		if level, err := ParseLevel(env); err == nil {
+			SetLevel(level)
+		}
 	}
-}
-
-func applyLevelConfig(name string) bool {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "production", "prod":
-		SetLevel(Error)
-		return true
-	case "development", "dev":
-		SetLevel(Info)
-		return true
-	case "debug", "verbose":
-		SetLevel(Debug)
-		return true
-	case "quiet":
-		SetLevel(Fatal)
-		return true
-	case "ci":
-		SetLevel(Warn)
-		return true
-	}
-
-	level, err := ParseLevel(name)
-	if err != nil {
-		return false
-	}
-	SetLevel(level)
-	return true
 }
 
 func ParseLevel(level string) (Level, error) {
