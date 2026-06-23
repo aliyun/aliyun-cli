@@ -34,6 +34,9 @@ import (
 )
 
 func GetClient(cp *config.Profile, ctx *cli.Context) (client *sdk.Client, err error) {
+	if cp.Mode == config.Anonymous {
+		return nil, fmt.Errorf("anonymous mode is only supported via the OpenAPI path; legacy SDK cannot disable signing")
+	}
 	if cp.Mode == config.BearerToken {
 		return nil, config.ErrBearerTokenRequiresPlugin("")
 	}

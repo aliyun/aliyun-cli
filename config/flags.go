@@ -236,8 +236,8 @@ func NewModeFlag() *cli.Flag {
 		DefaultValue: "AK",
 		Persistent:   true,
 		Short: i18n.T(
-			"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth|BearerToken}` to assign authenticate mode",
-			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth|BearerToken}` 指定认证方式"),
+			"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth|BearerToken|Anonymous}` to assign authenticate mode",
+			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth|BearerToken|Anonymous}` 指定认证方式"),
 	}
 }
 
