@@ -272,7 +272,7 @@ func (c *Context) PrepareEnv() error {
 		envMap["ENDPOINT_TYPE"] = profile.EndpointType
 	}
 
-	envMap["LINDORM_CLI_NAME"] = "aliyun lindorm"
+	envMap["ALIBABA_CLOUD_LINDORM_COMPAT_MODE"] = "aliyun lindorm"
 
 	c.envMap = envMap
 	return nil

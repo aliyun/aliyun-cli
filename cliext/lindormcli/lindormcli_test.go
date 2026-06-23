@@ -443,8 +443,8 @@ func TestPrepareEnv(t *testing.T) {
 	if err := c.PrepareEnv(); err != nil {
 		t.Fatalf("PrepareEnv err: %v", err)
 	}
-	if c.envMap["LINDORM_CLI_NAME"] != "aliyun lindorm" {
-		t.Fatalf("LINDORM_CLI_NAME missing")
+	if c.envMap["ALIBABA_CLOUD_LINDORM_COMPAT_MODE"] != "aliyun lindorm" {
+		t.Fatalf("ALIBABA_CLOUD_LINDORM_COMPAT_MODE missing")
 	}
 	if c.envMap["REGION_ID"] != "cn-hangzhou" {
 		t.Fatalf("REGION_ID mismatch: %v", c.envMap["REGION_ID"])
@@ -471,8 +471,8 @@ func TestPrepareEnv_StsToken(t *testing.T) {
 	if c.envMap["ALIBABA_CLOUD_SECURITY_TOKEN"] != "sts123" {
 		t.Fatalf("security token mismatch: %v", c.envMap["ALIBABA_CLOUD_SECURITY_TOKEN"])
 	}
-	if c.envMap["LINDORM_CLI_NAME"] != "aliyun lindorm" {
-		t.Fatalf("LINDORM_CLI_NAME missing")
+	if c.envMap["ALIBABA_CLOUD_LINDORM_COMPAT_MODE"] != "aliyun lindorm" {
+		t.Fatalf("ALIBABA_CLOUD_LINDORM_COMPAT_MODE missing")
 	}
 }
 
