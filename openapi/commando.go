@@ -26,6 +26,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/headers"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 
 	"encoding/json"
@@ -329,6 +330,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				aimode.MergeUserAgentIntoPluginEnvs(configDir, envs, forceOn, forceOff)
 				util.MergeAgentSegmentIntoPluginEnvs(envs)
 				safety.MergeSafetyPolicyPathIntoEnvs(configDir, envs)
+				throttlingretry.MergeIntoPluginEnvs(configDir, envs)
 				headers.MergeIntoPluginEnvs(envs)
 				ctx.SetRuntimeEnvs(envs)
 			} else if isHelp || isVersion {

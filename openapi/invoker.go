@@ -30,6 +30,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -115,6 +116,8 @@ type BasicInvoker struct {
 	client  *sdk.Client
 	request *requests.CommonRequest
 	product *meta.Product
+
+	throttlingRetryConfig *throttlingretry.Config
 }
 
 func NewBasicInvoker(cp *config.Profile) *BasicInvoker {
@@ -161,6 +164,7 @@ func parseCustomUserAgentSegments(s string) [][2]string {
 
 func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
+	initThrottlingLog(ctx)
 	a.product = product
 
 	if a.profile.Mode == config.BearerToken {
@@ -173,6 +177,9 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 
 	a.request = requests.NewCommonRequest()
 	a.request.Product = product.Code
+	if cfg, cfgErr := throttlingretry.LoadEffective(config.GetConfigDir(ctx)); cfgErr == nil {
+		a.throttlingRetryConfig = cfg
+	}
 
 	a.request.RegionId = a.profile.RegionId
 	if v, ok := config.RegionFlag(ctx.Flags()).GetValue(); ok {

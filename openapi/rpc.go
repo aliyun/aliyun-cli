@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -111,19 +110,9 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 }
 
 func (a *RpcInvoker) Call() (*responses.CommonResponse, error) {
-	var resp *responses.CommonResponse
-	var err error
-
-	for i := 0; i < 5; i++ {
-		resp, err = a.client.ProcessCommonRequest(a.request)
-		if err != nil && strings.Contains(err.Error(), "Throttling.User") {
-			time.Sleep(time.Duration(i+1) * time.Second)
-			continue
-		}
-		break
-	}
-
-	return resp, err
+	return a.callWithThrottlingRetry(func() (*responses.CommonResponse, error) {
+		return a.client.ProcessCommonRequest(a.request)
+	})
 }
 
 func replaceValueWithFile(f *cli.Flag) {
