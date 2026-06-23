@@ -49,7 +49,7 @@ func TestDetectAgentName_KnownEnvs(t *testing.T) {
 			snapshotAndUnsetAgentEnvs(t)
 			_ = os.Setenv(c.env, "1")
 			assert.Equal(t, c.name, DetectAgentName())
-			assert.Equal(t, "", GetAgentUserAgentSegment(), "agent UA segment is temporarily disabled")
+			assert.Equal(t, "", GetAgentUserAgentSegment(), "agent UA segment unset")
 		})
 	}
 }
