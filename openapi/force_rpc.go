@@ -62,6 +62,7 @@ func (a *ForceRpcInvoker) Prepare(ctx *cli.Context) (err error) {
 }
 
 func (a *ForceRpcInvoker) Call() (resp *responses.CommonResponse, err error) {
-	resp, err = a.client.ProcessCommonRequest(a.request)
-	return
+	return a.callWithThrottlingRetry(func() (*responses.CommonResponse, error) {
+		return a.client.ProcessCommonRequest(a.request)
+	})
 }
