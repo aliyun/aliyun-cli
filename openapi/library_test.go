@@ -14,6 +14,7 @@
 package openapi
 
 import (
+	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/newmeta"
 	"github.com/stretchr/testify/assert"
@@ -71,30 +72,45 @@ func TestLibrary_PrintApiUsage(t *testing.T) {
 }
 
 func Test_printParameters(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+
 	w := new(bytes.Buffer)
 	params := []meta.Parameter{
 		{
+			Name:   "HiddenParam",
 			Hidden: true,
 		},
 		{
+			Name:     "DomainParam",
 			Position: "Domain",
 		},
 		{
-			Type:     "RepeatList",
-			Required: true,
+			Name:     "HeaderParam",
+			Position: "Header",
 		},
 		{
-			Required: false,
-		},
-		{
+			Name: "Filters",
+			Type: "RepeatList",
 			SubParameters: []meta.Parameter{
 				{
-					Name: "test",
+					Name: "Values",
+					Type: "RepeatList",
 				},
 			},
 		},
+		{
+			Name: "Name",
+			Type: "String",
+		},
 	}
 	printParameters(w, params, "", &newmeta.APIDetail{})
+
+	expected := "  --" + cli.Colorized(cli.Cyan, "Filters.n.") + cli.Colorized(cli.Cyan, "Values") + ".n\tRepeatList\tOptional\n\n  \n\n" +
+		"  --" + cli.Colorized(cli.Cyan, "") + cli.Colorized(cli.Cyan, "Name") + "\tString\tOptional\n\n  \n\n"
+	assert.Equal(t, expected, w.String())
+	assert.NotContains(t, w.String(), cli.BBlack)
+	assert.Contains(t, w.String(), "Name")
+	assert.Contains(t, w.String(), cli.Colorized(cli.Cyan, "Values")+".n")
 }
 
 func getRepository() *meta.Repository {
