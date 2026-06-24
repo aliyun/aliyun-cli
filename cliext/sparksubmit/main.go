@@ -19,7 +19,7 @@ func NewSparkSubmitCommand() *cli.Command {
 			"  oss://bucket/path/spark-examples.jar 10000\n" +
 			" \n" +
 			"  aliyun spark-submit --status jr-xxxxxxxx",
-		Hidden: false,
+		Hidden: true,
 	}
 	cmd.Run = func(ctx *cli.Context, args []string) error {
 		if ctx.IsHelp() {
