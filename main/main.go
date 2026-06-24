@@ -24,7 +24,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/aliyun/aliyun-cli/v3/agentbay"
+	"github.com/aliyun/aliyun-cli/v3/cliext/agentbay"
 	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
@@ -36,6 +36,9 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cliext/computenestutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/iact3"
 	"github.com/aliyun/aliyun-cli/v3/cliext/maxc"
+	"github.com/aliyun/aliyun-cli/v3/cliext/ossutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/otsutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/sparksubmit"
 	"github.com/aliyun/aliyun-cli/v3/cliext/rostran"
 	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -45,8 +48,6 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/mock"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
-	"github.com/aliyun/aliyun-cli/v3/ossutil"
-	"github.com/aliyun/aliyun-cli/v3/otsutil"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 )
 
@@ -133,6 +134,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(agentbay.NewAgentBayCommand())
 	// tablestore command
 	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
+	// EMR Serverless spark-submit command
+	rootCmd.AddSubCommand(sparksubmit.NewSparkSubmitCommand())
 	// kmscli command
 	rootCmd.AddSubCommand(kmscli.NewKmscliCommand())
 	// lindorm command
