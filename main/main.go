@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/aliyun/aliyun-cli/v3/cliext/kmscli"
+	"github.com/aliyun/aliyun-cli/v3/cliext/lindormcli"
 	"io"
 	"os"
 	"path"
@@ -137,6 +138,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(sparksubmit.NewSparkSubmitCommand())
 	// kmscli command
 	rootCmd.AddSubCommand(kmscli.NewKmscliCommand())
+	// lindorm command
+	rootCmd.AddSubCommand(lindormcli.NewLindormCliCommand())
 	// acr command
 	rootCmd.AddSubCommand(acrutil.NewAcrutilCommand())
 	// codeup command
