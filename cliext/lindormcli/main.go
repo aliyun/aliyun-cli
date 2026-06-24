@@ -12,8 +12,33 @@ func NewLindormCliCommand() *cli.Command {
 		Usage:  "aliyun lindorm <command> [options]",
 		Hidden: false,
 		Run: func(ctx *cli.Context, args []string) error {
-			options := NewContext(ctx)
-			return options.Run(args)
+			if ctx.IsHelp() {
+				hasHelp := false
+				for i, arg := range args {
+					if arg == "help" {
+						hasHelp = true
+						break
+					} else if arg == "--help" {
+						args[i] = "help"
+						hasHelp = true
+						break
+					}
+				}
+				if !hasHelp {
+					args = append(args, "help")
+				}
+			}
+			c := NewContext(ctx)
+			if err := c.Run(args); err != nil {
+				if exitErr, ok := err.(*ExitError); ok {
+					// The subprocess already wrote its own output to
+					// the connected stdout/stderr. Propagate the exit
+					// code directly instead of returning an error.
+					cli.Exit(exitErr.Code)
+				}
+				return err
+			}
+			return nil
 		},
 		EnableUnknownFlag: true,
 		KeepArgs:          true,

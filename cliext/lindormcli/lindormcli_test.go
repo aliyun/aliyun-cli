@@ -288,12 +288,8 @@ func TestNeedCheckVersionVariants(t *testing.T) {
 
 func TestRemoveFlagsForMainCli(t *testing.T) {
 	ctx, _, _ := newOriginCtx()
-	addConfigFlag(ctx, "region", "cn-hangzhou")
 	c := NewContext(ctx)
-	args, err := c.RemoveFlagsForMainCli([]string{"lindorm", "help", "--region", "cn-hangzhou"})
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
+	args := c.RemoveFlagsForMainCli([]string{"lindorm", "help", "--region", "cn-hangzhou"})
 	joined := strings.Join(args, " ")
 	if strings.Contains(joined, "--region") {
 		t.Fatalf("region flag should be removed: %s", joined)
@@ -306,13 +302,63 @@ func TestRemoveFlagsForMainCli(t *testing.T) {
 func TestRemoveFlagsForMainCli_NilFlags(t *testing.T) {
 	ctx, _, _ := newOriginCtx()
 	c := NewContext(ctx)
-	args, err := c.RemoveFlagsForMainCli([]string{"lindorm", "ls"})
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
+	args := c.RemoveFlagsForMainCli([]string{"lindorm", "ls"})
 	if len(args) != 2 || args[0] != "lindorm" || args[1] != "ls" {
 		t.Fatalf("unexpected args: %v", args)
 	}
+}
+
+func TestRemoveFlagsForMainCli_PassthroughFlags(t *testing.T) {
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+
+	// --version and --output should be preserved (passthrough)
+	args := c.RemoveFlagsForMainCli([]string{"--profile", "prod", "query", "--version", "--output", "json"})
+	hasVersion := false
+	hasOutput := false
+	for _, a := range args {
+		if a == "--version" {
+			hasVersion = true
+		}
+		if a == "--output" {
+			hasOutput = true
+		}
+		if a == "--profile" || a == "prod" {
+			t.Errorf("--profile should be stripped, got %v", args)
+		}
+	}
+	if !hasVersion {
+		t.Errorf("--version should be preserved (passthrough), got %v", args)
+	}
+	if !hasOutput {
+		t.Errorf("--output should be preserved (passthrough), got %v", args)
+	}
+}
+
+func TestRemoveFlagsForMainCli_InlineValue(t *testing.T) {
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+
+	// --profile=prod (inline) should be stripped
+	// --region=cn-hangzhou (inline) should also be stripped
+	args := c.RemoveFlagsForMainCli([]string{"list", "--profile=prod", "--region=cn-hangzhou", "--key", "value"})
+	for _, a := range args {
+		if strings.HasPrefix(a, "--profile") || strings.HasPrefix(a, "--region") {
+			t.Errorf("main CLI flags should be removed, got %v", args)
+		}
+	}
+	if !contains(args, "list") || !contains(args, "--key") || !contains(args, "value") {
+		t.Errorf("non-CLI args should remain: %v", args)
+	}
+}
+
+func contains(ss []string, s string) bool {
+	for _, v := range ss {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 // --- GetLocalVersion ---
@@ -446,14 +492,18 @@ func TestPrepareEnv(t *testing.T) {
 	if c.envMap["ALIBABA_CLOUD_LINDORM_COMPAT_MODE"] != "aliyun lindorm" {
 		t.Fatalf("ALIBABA_CLOUD_LINDORM_COMPAT_MODE missing")
 	}
-	if c.envMap["REGION_ID"] != "cn-hangzhou" {
-		t.Fatalf("REGION_ID mismatch: %v", c.envMap["REGION_ID"])
+	if c.envMap["ALIBABA_CLOUD_REGION_ID"] != "cn-hangzhou" {
+		t.Fatalf("ALIBABA_CLOUD_REGION_ID mismatch: %v", c.envMap["ALIBABA_CLOUD_REGION_ID"])
 	}
 	if c.envMap["ALIBABA_CLOUD_ACCESS_KEY_ID"] != "ak" {
 		t.Fatalf("ak mismatch: %v", c.envMap["ALIBABA_CLOUD_ACCESS_KEY_ID"])
 	}
 	if c.envMap["ALIBABA_CLOUD_ACCESS_KEY_SECRET"] != "sk" {
 		t.Fatalf("sk mismatch: %v", c.envMap["ALIBABA_CLOUD_ACCESS_KEY_SECRET"])
+	}
+	// Verify no legacy REGION_ID double-write
+	if _, hasLegacy := c.envMap["REGION_ID"]; hasLegacy {
+		t.Fatalf("legacy REGION_ID should not be set, use ALIBABA_CLOUD_REGION_ID only")
 	}
 }
 
@@ -631,5 +681,59 @@ func TestGetLatestLindormCliVersion_Empty(t *testing.T) {
 	_, err := GetLatestLindormCliVersion()
 	if err == nil || !strings.Contains(err.Error(), "empty") {
 		t.Fatalf("expected empty error, got %v", err)
+	}
+}
+
+// --- ExitError ---
+
+func TestExitError(t *testing.T) {
+	e := &ExitError{Code: 42}
+	if e.Error() != "subprocess exited with code 42" {
+		t.Errorf("Error() mismatch: %s", e.Error())
+	}
+	if e.ExitCode() != 42 {
+		t.Errorf("ExitCode() mismatch: %d", e.ExitCode())
+	}
+}
+
+func TestExecuteLindormCli_ExitCode(t *testing.T) {
+	origExec := execCommandFunc
+	defer func() { execCommandFunc = origExec }()
+	execCommandFunc = func(name string, args ...string) *exec.Cmd {
+		return exec.Command("bash", "-c", "exit 42")
+	}
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.execFilePath = "/any/path"
+	c.envMap = map[string]string{}
+
+	err := c.ExecuteLindormCli([]string{"version"})
+	if err == nil {
+		t.Fatalf("expected error for non-zero exit")
+	}
+	exitErr, ok := err.(*ExitError)
+	if !ok {
+		t.Fatalf("expected ExitError, got %T: %v", err, err)
+	}
+	if exitErr.Code != 42 {
+		t.Errorf("exit code: got %d, want 42", exitErr.Code)
+	}
+}
+
+func TestExecuteLindormCli_Success(t *testing.T) {
+	origExec := execCommandFunc
+	defer func() { execCommandFunc = origExec }()
+	execCommandFunc = func(name string, args ...string) *exec.Cmd {
+		return exec.Command("bash", "-c", "exit 0")
+	}
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.execFilePath = "/any/path"
+	c.envMap = map[string]string{"ALIBABA_CLOUD_LINDORM_COMPAT_MODE": "aliyun lindorm"}
+
+	if err := c.ExecuteLindormCli([]string{"version"}); err != nil {
+		t.Fatalf("Execute should succeed: %v", err)
 	}
 }

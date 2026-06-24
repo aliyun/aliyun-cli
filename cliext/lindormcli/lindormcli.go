@@ -13,6 +13,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -63,6 +64,30 @@ var platformBinaryNames = map[string]string{
 	"windows-amd64": "lindorm-open-api-cli_windows_amd64.exe",
 }
 
+// ExitError carries the exit code from the child process so the caller
+// can propagate it without calling os.Exit directly (which skips defers).
+type ExitError struct {
+	Code int
+}
+
+func (e *ExitError) Error() string {
+	return fmt.Sprintf("subprocess exited with code %d", e.Code)
+}
+
+func (e *ExitError) ExitCode() int {
+	return e.Code
+}
+
+// passthrough lists flags that exist in config/openapi but should NOT be
+// stripped — the child process may define its own with the same name.
+var passthrough = map[string]struct{}{
+	"output":    {},
+	"force":     {},
+	"version":   {},
+	"body":      {},
+	"body-file": {},
+}
+
 func NewContext(originContext *cli.Context) *Context {
 	return &Context{
 		originCtx: originContext,
@@ -85,16 +110,8 @@ func (c *Context) Run(args []string) error {
 		return err
 	}
 
-	newArgs, err := c.RemoveFlagsForMainCli(args)
-	if err != nil {
-		return err
-	}
-
-	err = c.ExecuteLindormCli(newArgs)
-	if err != nil {
-		return err
-	}
-	return nil
+	childArgs := c.RemoveFlagsForMainCli(args)
+	return c.ExecuteLindormCli(childArgs)
 }
 
 func (c *Context) InitializeAndValidatePlatform() error {
@@ -264,57 +281,49 @@ func (c *Context) PrepareEnv() error {
 		return fmt.Errorf("failed to get runtime env: %s", err.Error())
 	}
 
-	if profile.RegionId != "" {
-		envMap["REGION_ID"] = profile.RegionId
-	}
-
-	if profile.EndpointType != "" {
-		envMap["ENDPOINT_TYPE"] = profile.EndpointType
-	}
-
 	envMap["ALIBABA_CLOUD_LINDORM_COMPAT_MODE"] = "aliyun lindorm"
 
 	c.envMap = envMap
 	return nil
 }
 
-func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
-	if c.originCtx.Flags() == nil || c.originCtx.Flags().Flags() == nil {
-		return append([]string(nil), args...), nil
-	}
-	longNeedsValue := make(map[string]bool)
-	shortNeedsValue := make(map[string]bool)
-	for _, f := range c.originCtx.Flags().Flags() {
-		if !f.IsAssigned() || f.Category != "config" {
-			continue
-		}
-		needsValue := f.AssignedMode != cli.AssignedNone
-		if f.Name != "" {
-			longNeedsValue["--"+f.Name] = needsValue
-		}
-		if f.Shorthand != 0 {
-			shortNeedsValue["-"+string(f.Shorthand)] = needsValue
-		}
-	}
+func (c *Context) RemoveFlagsForMainCli(args []string) []string {
+	allFlags := cli.NewFlagSet()
+	config.AddFlags(allFlags)
+	openapi.AddFlags(allFlags)
 
 	out := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		a := args[i]
-		if needs, ok := longNeedsValue[a]; ok {
-			if needs && i+1 < len(args) {
+		argName := a
+		hasInlineValue := false
+		if prefix, _, ok := cli.SplitStringWithPrefix(a, "=:"); ok {
+			argName = prefix
+			hasInlineValue = true
+		}
+
+		var f *cli.Flag
+		if strings.HasPrefix(argName, "--") {
+			f = allFlags.Get(strings.TrimPrefix(argName, "--"))
+		} else if strings.HasPrefix(argName, "-") && len(argName) == 2 {
+			f = allFlags.GetByShorthand(rune(argName[1]))
+		}
+
+		if f != nil {
+			if _, keep := passthrough[f.Name]; keep {
+				out = append(out, a)
+				continue
+			}
+			needsValue := f.AssignedMode != cli.AssignedNone
+			if needsValue && !hasInlineValue && i+1 < len(args) {
 				i++
 			}
 			continue
 		}
-		if needs, ok := shortNeedsValue[a]; ok {
-			if needs && i+1 < len(args) {
-				i++
-			}
-			continue
-		}
+
 		out = append(out, a)
 	}
-	return out, nil
+	return out
 }
 
 func (c *Context) ExecuteLindormCli(args []string) error {
@@ -335,8 +344,10 @@ func (c *Context) ExecuteLindormCli(args []string) error {
 	cmd.Stderr = c.originCtx.Stderr()
 	cmd.Stdin = os.Stdin
 
-	err := cmd.Run()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return &ExitError{Code: exitErr.ExitCode()}
+		}
 		return fmt.Errorf("failed to execute %s %v: %v", c.execFilePath, args, err)
 	}
 	return nil
