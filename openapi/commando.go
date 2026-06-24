@@ -158,6 +158,18 @@ var stdin io.Reader = os.Stdin
 
 func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// fmt.Println("commando main", args)
+
+	// --estimate-cost needs a product + api to estimate against. Without an
+	// early fail here, len(args) == 0 below would silently print usage and
+	// exit 0 — users (and Agents) would see "nothing happened" and assume
+	// the flag is broken or unknown. Fail loud with a concrete example.
+	if EstimateCostFlag(ctx.Flags()).IsAssigned() && len(args) < 2 {
+		return cli.NewErrorWithTip(
+			fmt.Errorf("--estimate-cost requires a product and an API name"),
+			"example: aliyun ecs RunInstances --version 2014-05-26 --RegionId cn-hangzhou ... --estimate-cost\n"+
+				"        run `aliyun --list-supported-pricing-apis` to see every API that supports cost estimation")
+	}
+
 	// aliyun
 	if len(args) == 0 {
 		c.printUsage(ctx)
@@ -471,6 +483,15 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		return fmt.Errorf("invalid product, please check product code")
 	}
 
+	// --estimate-cost: the openapi-invoke path uses apiContext.Call instead
+	// of an Invoker, which estimate_cost.go's parameter extractor doesn't
+	// understand yet. Fail fast rather than silently invoke the target API.
+	if EstimateCostFlag(ctx.Flags()).IsAssigned() {
+		return cli.NewErrorWithTip(
+			fmt.Errorf("--estimate-cost is not supported for product %s which uses the openapi invoke path", product.Code),
+			"cost estimation supports RPC and ROA(restful) style products only")
+	}
+
 	apiContext, err := c.createHttpContext(ctx, product, api, method, path)
 	if err != nil {
 		return err
@@ -546,6 +567,11 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		}
 		cli.Println(ctx.Stdout(), line)
 		return nil
+	}
+	// --estimate-cost: terminal branch. Must come before --dryrun so we don't
+	// hit TransToAcsRequest side effects on the way to a quote.
+	if EstimateCostFlag(ctx.Flags()).IsAssigned() {
+		return c.processEstimateCost(ctx, invoker)
 	}
 	// process --dryrun
 	if DryRunFlag(ctx.Flags()).IsAssigned() {
