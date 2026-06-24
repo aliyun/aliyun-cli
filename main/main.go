@@ -120,6 +120,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	commando.InitWithCommand(rootCmd)
 
 	rootCmd.AddSubCommand(config.NewConfigureCommand())
+	// list-supported-pricing-apis: enumerate every OpenAPI that supports --estimate-cost
+	rootCmd.AddSubCommand(openapi.NewListSupportedPricingApisCommand())
 	// oss old version, duplicate with ossutil, will remove in future
 	rootCmd.AddSubCommand(lib.NewOssCommand())
 	rootCmd.AddSubCommand(cli.NewVersionCommand())
