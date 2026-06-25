@@ -32,6 +32,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(WaiterFlag)
 	fs.Add(NewDryRunFlag())
 	fs.Add(NewDryRunJsonFlag())
+	fs.Add(NewEstimateCostFlag())
 	fs.Add(NewQuietFlag())
 	fs.Add(NewLogLevelFlag())
 	fs.Add(NewYesFlag())
@@ -55,6 +56,7 @@ const (
 	RoaFlagName           = "roa"
 	DryRunFlagName        = "dryrun"
 	CliDryRunJsonFlagName = "cli-dry-run-json"
+	EstimateCostFlagName  = "estimate-cost"
 	QuietFlagName         = "quiet"
 	LogLevelFlagName      = "log-level"
 	YesFlagName           = "yes"
@@ -277,6 +279,26 @@ func NewDryRunJsonFlag() *cli.Flag {
 		),
 		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, DryRunFlagName},
 	}
+}
+
+// NewEstimateCostFlag registers `--estimate-cost`. See estimate_cost.go for
+// the routing details. Cross-product enumeration lives in the top-level
+// `aliyun list-supported-pricing-apis` subcommand (main/main.go), not here.
+func NewEstimateCostFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         EstimateCostFlagName,
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			"use `--estimate-cost` to estimate the cost of an OpenAPI call via CloudControl GetApiPrice without invoking it. Requires a product and an API name, e.g. `aliyun ecs RunInstances ... --estimate-cost`. Output is JSON.",
+			"使用 `--estimate-cost` 跳过实际调用，通过 CloudControl GetApiPrice 预估 OpenAPI 调用费用。需带 product 和 API 名（如 `aliyun ecs RunInstances ... --estimate-cost`），输出 JSON",
+		),
+		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, DryRunFlagName, CliDryRunJsonFlagName},
+	}
+}
+
+func EstimateCostFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(EstimateCostFlagName)
 }
 
 func NewQuietFlag() *cli.Flag {
