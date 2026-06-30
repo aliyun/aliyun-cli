@@ -67,6 +67,7 @@ func NewConfigureAiModeCommand() *cli.Command {
 	AddFlags(cmd.Flags())
 
 	cmd.AddSubCommand(newConfigureAiModeShowCommand())
+	cmd.AddSubCommand(newConfigureAiModeStatusCommand())
 	cmd.AddSubCommand(newConfigureAiModeEnableCommand())
 	cmd.AddSubCommand(newConfigureAiModeDisableCommand())
 	cmd.AddSubCommand(newConfigureAiModeSetUserAgentCommand())
@@ -90,6 +91,24 @@ func newConfigureAiModeShowCommand() *cli.Command {
 		Name:  "show",
 		Usage: "show [--config-path <configPath>]",
 		Short: i18n.T("display current AI mode config", "显示当前 AI 模式配置"),
+		Run: func(ctx *cli.Context, args []string) error {
+			if len(args) > 0 {
+				return cli.NewInvalidCommandError(args[0], ctx)
+			}
+			configDir, cfg, err := loadAiModeConfig(ctx)
+			if err != nil {
+				return err
+			}
+			return doAiModeShow(ctx, configDir, cfg)
+		},
+	}
+}
+
+func newConfigureAiModeStatusCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "status",
+		Usage: "status [--config-path <configPath>]",
+		Short: i18n.T("display current AI mode status", "显示当前 AI 模式状态"),
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
