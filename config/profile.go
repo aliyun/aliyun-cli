@@ -66,6 +66,15 @@ const (
 // standard OpenAPI bearer token header used by darabonba-openapi.
 const DefaultBearerTokenHeaderKey = "x-acs-bearer-token"
 
+// EnvDisableExternalProcess blocks External process_command and CredentialsURI HTTP fetch.
+// Set to "1" or "true" (case-insensitive) to disable.
+const EnvDisableExternalProcess = "ALIBABA_CLOUD_DISABLE_EXTERNAL_PROCESS"
+
+func isExternalCredentialSourceDisabled() bool {
+	v := os.Getenv(EnvDisableExternalProcess)
+	return v == "1" || strings.EqualFold(v, "true")
+}
+
 var knownModes = []AuthenticateMode{
 	AK, StsToken, RamRoleArn, EcsRamRole, RsaKeyPair,
 	RamRoleArnWithEcs, ChainableRamRoleArn, External,
@@ -534,6 +543,10 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		}
 
 	case External:
+		if isExternalCredentialSourceDisabled() {
+			return nil, fmt.Errorf("external credential source is disabled by %s (External mode)", EnvDisableExternalProcess)
+		}
+
 		args := strings.Fields(cp.ProcessCommand)
 		cmd := exec.Command(args[0], args[1:]...)
 
@@ -564,6 +577,10 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		return cp.GetCredential(ctx, proxyHost)
 
 	case CredentialsURI:
+		if isExternalCredentialSourceDisabled() {
+			return nil, fmt.Errorf("external credential source is disabled by %s (CredentialsURI mode)", EnvDisableExternalProcess)
+		}
+
 		uri := cp.CredentialsURI
 
 		if uri == "" {
