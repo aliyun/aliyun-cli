@@ -1196,6 +1196,74 @@ echo 'This is not a valid JSON'
 	}
 }
 
+func TestProfile_GetCredential_ExternalProcessDisabled(t *testing.T) {
+	orig := os.Getenv(EnvDisableExternalProcess)
+	os.Setenv(EnvDisableExternalProcess, "1")
+	defer func() {
+		if orig == "" {
+			os.Unsetenv(EnvDisableExternalProcess)
+		} else {
+			os.Setenv(EnvDisableExternalProcess, orig)
+		}
+	}()
+
+	profile := Profile{
+		Name:           "external",
+		Mode:           External,
+		ProcessCommand: "env",
+	}
+	config := &Configuration{
+		CurrentProfile: profile.Name,
+		Profiles:       []Profile{profile},
+	}
+	profile.parent = config
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	_, err := profile.GetCredential(ctx, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), EnvDisableExternalProcess)
+}
+
+func TestProfile_GetCredential_CredentialsURIDisabled(t *testing.T) {
+	successServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"Code": "Success",
+			"AccessKeyId": "mock-access-key-id",
+			"AccessKeySecret": "mock-access-key-secret",
+			"SecurityToken": "mock-security-token",
+			"Expiration": "2023-01-01T00:00:00Z"
+		}`))
+	}))
+	defer successServer.Close()
+
+	orig := os.Getenv(EnvDisableExternalProcess)
+	os.Setenv(EnvDisableExternalProcess, "true")
+	defer func() {
+		if orig == "" {
+			os.Unsetenv(EnvDisableExternalProcess)
+		} else {
+			os.Setenv(EnvDisableExternalProcess, orig)
+		}
+	}()
+
+	profile := Profile{
+		Name:           "uri",
+		Mode:           CredentialsURI,
+		CredentialsURI: successServer.URL,
+	}
+	config := &Configuration{
+		CurrentProfile: profile.Name,
+		Profiles:       []Profile{profile},
+	}
+	profile.parent = config
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	_, err := profile.GetCredential(ctx, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), EnvDisableExternalProcess)
+}
+
 // TestGetCredentialWithOAuthStsExpired 测试OAuth模式中STS过期时的刷新逻辑
 func TestGetCredentialWithOAuthStsExpired(t *testing.T) {
 	// 保存原始函数并在测试后恢复
