@@ -239,7 +239,7 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 			if k, v, ok := cli.SplitStringWithPrefix(s, "="); ok {
 				a.openapiRequest.Headers[k] = tea.String(v)
 			} else {
-				return fmt.Errorf("invaild flag --header `%s` use `--header HeaderName=Value`", s)
+				return fmt.Errorf("invalid flag --header `%s` use `--header HeaderName=Value`", s)
 			}
 		}
 	}

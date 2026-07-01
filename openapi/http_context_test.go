@@ -470,7 +470,7 @@ func TestHttpContext(t *testing.T) {
 		skipflag.SetAssigned(true)
 		ctx.Flags().Add(skipflag)
 		err := context.Init(ctx, product)
-		assert.Contains(t, err.Error(), "invaild flag --header `testfail`")
+		assert.Contains(t, err.Error(), "invalid flag --header `testfail`")
 	})
 
 	t.Run("InitWithEndpoint", func(t *testing.T) {

@@ -113,7 +113,7 @@ func TestConfigurePluginSettings_Root_InvalidArg(t *testing.T) {
 	err := root.Run(ctx, []string{"nope"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nope")
-	assert.Contains(t, err.Error(), "not a vaild command")
+	assert.Contains(t, err.Error(), "not a valid command")
 }
 
 func TestConfigurePluginSettings_Show_InvalidArg(t *testing.T) {
@@ -126,7 +126,7 @@ func TestConfigurePluginSettings_Show_InvalidArg(t *testing.T) {
 	err := show.Run(ctx, []string{"extra"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "extra")
-	assert.Contains(t, err.Error(), "not a vaild command")
+	assert.Contains(t, err.Error(), "not a valid command")
 }
 
 func TestConfigurePluginSettings_Set_InvalidArg(t *testing.T) {
@@ -139,7 +139,7 @@ func TestConfigurePluginSettings_Set_InvalidArg(t *testing.T) {
 	err := set.Run(ctx, []string{"junk"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "junk")
-	assert.Contains(t, err.Error(), "not a vaild command")
+	assert.Contains(t, err.Error(), "not a valid command")
 }
 
 func TestConfigurePluginSettings_Set_EmptySourceBase(t *testing.T) {
@@ -216,5 +216,5 @@ func TestConfigurePluginSettings_Clear_InvalidArg(t *testing.T) {
 	err := clear.Run(ctx, []string{"oops"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "oops")
-	assert.Contains(t, err.Error(), "not a vaild command")
+	assert.Contains(t, err.Error(), "not a valid command")
 }
