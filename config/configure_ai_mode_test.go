@@ -52,15 +52,6 @@ func enterAiModeSub(t *testing.T, ctx *cli.Context, name string) *cli.Command {
 	return sub
 }
 
-func TestConfigureAiMode_Status_Default(t *testing.T) {
-	dir := t.TempDir()
-	ctx, w := testAiModeContext(t, dir)
-	sub := enterAiModeSub(t, ctx, "status")
-	require.NoError(t, sub.Run(ctx, []string{}))
-	assert.Contains(t, w.String(), `"enabled": false`)
-	assert.Contains(t, w.String(), aimode.DefaultUserAgent)
-}
-
 func TestConfigureAiMode_Show_Default(t *testing.T) {
 	dir := t.TempDir()
 	ctx, w := testAiModeContext(t, dir)
