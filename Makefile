@@ -74,3 +74,23 @@ fmt:
 test:
 	LANG="en_US.UTF-8" go test -race -coverprofile=coverage.txt -covermode=atomic ./util/... ./cli/... ./config/... ./i18n/... ./main/... ./openapi/... ./meta/...
 	go tool cover -html=coverage.txt -o coverage.html
+
+TLA2TOOLS_JAR ?= $(HOME)/.cache/tla2tools/tla2tools.jar
+TLC_METADIR ?= /tmp/aliyun-cli-tlc-parser-states
+TLC_CASE_METADIR ?= /tmp/aliyun-cli-tlc-parser-case-enum
+PARSER_CASE_DUMP ?= formal/parser/generated/abstract_cases.dump
+PARSER_CASE_JSON ?= cli/testdata/parser_contract_cases.json
+PARSER_CASE_COVERAGE ?= docs/formal/parser-case-coverage.md
+
+formal-parser:
+	java -jar $(TLA2TOOLS_JAR) -metadir $(TLC_METADIR) -config formal/parser/Parser.cfg formal/parser/Parser.tla
+
+formal-parser-cases:
+	mkdir -p formal/parser/generated
+	java -jar $(TLA2TOOLS_JAR) -metadir $(TLC_CASE_METADIR) -config formal/parser/ParserCases.cfg -dump $(PARSER_CASE_DUMP) formal/parser/Parser.tla
+
+parser-contract-gen:
+	go run ./tools/parser-contract-gen -dump $(PARSER_CASE_DUMP) -out $(PARSER_CASE_JSON) -coverage $(PARSER_CASE_COVERAGE)
+
+parser-contract-test:
+	go test -tags parser_contract ./cli -run TestParserContractCases -count=1
