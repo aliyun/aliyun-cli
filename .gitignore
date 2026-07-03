@@ -27,3 +27,8 @@ cli-metadata/
 __debug_bin*
 .qoder
 docs/superpowers/
+
+# Local parser formal proof materials; not part of the runtime PR.
+.local-formal/
+formal/
+tools/parser-contract-gen/
