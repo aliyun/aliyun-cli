@@ -178,10 +178,16 @@ func (ctx *Context) detectFlag(name string) (*Flag, error) {
 			if err != nil {
 				return nil, err
 			}
+			f.dynamicUnknown = true
 			f.allowRepeatedUnknown = true
 			return f, nil
 		}
-		return ctx.unknownFlags.AddByName(name)
+		f, err := ctx.unknownFlags.AddByName(name)
+		if err != nil {
+			return nil, err
+		}
+		f.dynamicUnknown = true
+		return f, nil
 	}
 	return nil, NewInvalidFlagError(name, ctx)
 }
@@ -201,10 +207,16 @@ func (ctx *Context) detectFlagByShorthand(ch rune) (*Flag, error) {
 			if err != nil {
 				return nil, err
 			}
+			f.dynamicUnknown = true
 			f.allowRepeatedUnknown = true
 			return f, nil
 		}
-		return ctx.unknownFlags.AddByName(shName)
+		f, err := ctx.unknownFlags.AddByName(shName)
+		if err != nil {
+			return nil, err
+		}
+		f.dynamicUnknown = true
+		return f, nil
 	}
 	return nil, fmt.Errorf("unknown flag -%s", string(ch))
 }
