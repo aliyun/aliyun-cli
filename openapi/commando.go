@@ -26,6 +26,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/headers"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 
 	"encoding/json"
@@ -90,8 +91,8 @@ func (c *Commando) InitWithCommand(cmd *cli.Command) {
 }
 
 func DetectInConfigureMode(flags *cli.FlagSet) bool {
-	_, modeExist := flags.GetValue(config.ModeFlagName)
-	if !modeExist {
+	mode, modeExist := flags.GetValue(config.ModeFlagName)
+	if !modeExist || config.Anonymous == config.NormalizeMode(mode) {
 		return true
 	}
 	// if mode exist, check if other flags exist
@@ -157,6 +158,18 @@ var stdin io.Reader = os.Stdin
 
 func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// fmt.Println("commando main", args)
+
+	// --estimate-cost needs a product + api to estimate against. Without an
+	// early fail here, len(args) == 0 below would silently print usage and
+	// exit 0 — users (and Agents) would see "nothing happened" and assume
+	// the flag is broken or unknown. Fail loud with a concrete example.
+	if EstimateCostFlag(ctx.Flags()).IsAssigned() && len(args) < 2 {
+		return cli.NewErrorWithTip(
+			fmt.Errorf("--estimate-cost requires a product and an API name"),
+			"example: aliyun ecs RunInstances --version 2014-05-26 --RegionId cn-hangzhou ... --estimate-cost\n"+
+				"        run `aliyun --list-supported-pricing-apis` to see every API that supports cost estimation")
+	}
+
 	// aliyun
 	if len(args) == 0 {
 		c.printUsage(ctx)
@@ -295,35 +308,58 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			isVersion := (apiOrMethod == "version")
 			if !isHelp && !isVersion && len(pluginArgs) >= 2 {
 				ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
-				profile, err := config.LoadProfileWithContext(ctx)
-				if err != nil {
-					return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it")
-				}
-				c.profile = profile
-				if c.profile.Name == "" {
-					return fmt.Errorf("profile not found, use `aliyun configure` to configure it")
+				// Plugins may opt out of host-side profile enforcement by setting `profileRequired: false` in their manifest.
+				// When opted out, profile resolution is best-effort: we still try to load and forward the profile's env if it works,
+				// but we never block the plugin on host-side credential failures — the plugin is expected to resolve auth itself.
+				profileRequired := plugin.IsProfileRequiredForCommand(args[0])
+
+				profile, profileErr := config.LoadProfileWithContext(ctx)
+
+				var envs map[string]string
+				if profileErr == nil && profile.Name != "" {
+					c.profile = profile
+					var rtErr error
+					envs, rtErr = c.profile.GetRuntimeEnv(ctx)
+					if rtErr != nil {
+						if profileRequired {
+							return cli.NewErrorWithTip(rtErr,
+								fmt.Sprintf("profile %q: failed to resolve credentials", c.profile.Name))
+						}
+						envs = config.BuildBaselineEnv(ctx)
+					}
+				} else {
+					if profileRequired {
+						if profileErr != nil {
+							return cli.NewErrorWithTip(profileErr, "Configuration failed, use `aliyun configure` to configure it")
+						}
+						return fmt.Errorf("profile not found, use `aliyun configure` to configure it")
+					}
+					envs = config.BuildBaselineEnv(ctx)
 				}
 
-				// 凭证获取失败（OIDC / STS / RamRoleArn 远程换证等）同样 fail-fast
-				envs, err := c.profile.GetRuntimeEnv(ctx)
-				if err != nil {
-					return cli.NewErrorWithTip(err,
-						fmt.Sprintf("profile %q: failed to resolve credentials", c.profile.Name))
-				}
 				configDir := config.GetConfigDir(ctx)
 				forceOn, forceOff := CliAIOverrides(ctx.Flags())
 				aimode.MergeUserAgentIntoPluginEnvs(configDir, envs, forceOn, forceOff)
 				util.MergeAgentSegmentIntoPluginEnvs(envs)
 				safety.MergeSafetyPolicyPathIntoEnvs(configDir, envs)
+				throttlingretry.MergeIntoPluginEnvs(configDir, envs)
 				headers.MergeIntoPluginEnvs(envs)
 				ctx.SetRuntimeEnvs(envs)
 			} else if isHelp || isVersion {
 				c.setLangEnv(ctx)
 			}
 
-			// Safety policy check for plugin execution (before spawning plugin process)
+			// Safety policy check for plugin execution (before spawning plugin process).
+			// Plugins can be N-level (e.g. `aliyun fc function create`), so the
+			// command identifier joins every positional segment with ':' to stay
+			// consistent with how `product:command` itself is separated:
+			//   aliyun fc create-function       -> fc:create-function
+			//   aliyun fc function create       -> fc:function:create
+			//   aliyun fc invoke my-fn          -> fc:invoke:my-fn
+			// Users can still match coarsely with wildcards like `fc:function:*` or `fc:function*`.
 			if !isHelp && !isVersion {
-				if err := c.checkSafetyPolicy(ctx, args[0], apiOrMethod, ""); err != nil {
+				cmdName := strings.Join(args[1:], ":")
+				if err := c.checkSafetyPolicy(ctx, args[0], cmdName, ""); err != nil {
 					return err
 				}
 			}
@@ -381,6 +417,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 			}
 		}
+		// Safety policy is keyed on what the user actually typed, so a rule like `sls:ListProject` matches `aliyun sls ListProject`
+		// regardless of how the cli later dispatches it (REST GET /, RPC, etc.).
+		if err := c.checkSafetyPolicy(ctx, product.Code, args[1], ""); err != nil {
+			return err
+		}
 		if product.ApiStyle == "restful" {
 			api, found := meta.HookGetApi(c.library.GetApi)(product.Code, product.Version, args[1])
 			// For restful products, the 2-arg form `aliyun <product> <ApiName>` requires a valid ApiName so we can resolve the underlying Method + PathPattern from metadata.
@@ -416,6 +457,9 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		if find {
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 		}
+		if err := c.checkSafetyPolicy(ctx, product.Code, args[1], args[2]); err != nil {
+			return err
+		}
 		if ShouldUseOpenapi(ctx, &product) {
 			if !find {
 				return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
@@ -439,8 +483,13 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		return fmt.Errorf("invalid product, please check product code")
 	}
 
-	if err := c.checkSafetyPolicy(ctx, product.Code, method, path); err != nil {
-		return err
+	// --estimate-cost: the openapi-invoke path uses apiContext.Call instead
+	// of an Invoker, which estimate_cost.go's parameter extractor doesn't
+	// understand yet. Fail fast rather than silently invoke the target API.
+	if EstimateCostFlag(ctx.Flags()).IsAssigned() {
+		return cli.NewErrorWithTip(
+			fmt.Errorf("--estimate-cost is not supported for product %s which uses the openapi invoke path", product.Code),
+			"cost estimation supports RPC and ROA(restful) style products only")
 	}
 
 	apiContext, err := c.createHttpContext(ctx, product, api, method, path)
@@ -450,6 +499,19 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 	err = apiContext.Prepare(ctx)
 	if err != nil {
 		return err
+	}
+
+	if DryRunJsonFlag(ctx.Flags()).IsAssigned() {
+		oc, ok := apiContext.(*OpenapiContext)
+		if !ok {
+			return fmt.Errorf("--cli-dry-run-json is only supported for OpenAPI invoke path")
+		}
+		line, err := marshalDryRunOpenapiMeta(ctx, oc)
+		if err != nil {
+			return err
+		}
+		cli.Println(ctx.Stdout(), line)
+		return nil
 	}
 
 	err = hookHttpContextCall(apiContext.Call)()
@@ -488,10 +550,6 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 }
 
 func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
-	if err := c.checkSafetyPolicy(ctx, productCode, apiOrMethod, path); err != nil {
-		return err
-	}
-
 	// create specific invoker
 	invoker, err := c.createInvoker(ctx, productCode, apiOrMethod, path)
 	if err != nil {
@@ -502,6 +560,19 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		return err
 	}
 
+	if DryRunJsonFlag(ctx.Flags()).IsAssigned() {
+		line, err := marshalDryRunInvokeMeta(c.library, invoker)
+		if err != nil {
+			return err
+		}
+		cli.Println(ctx.Stdout(), line)
+		return nil
+	}
+	// --estimate-cost: terminal branch. Must come before --dryrun so we don't
+	// hit TransToAcsRequest side effects on the way to a quote.
+	if EstimateCostFlag(ctx.Flags()).IsAssigned() {
+		return c.processEstimateCost(ctx, invoker)
+	}
 	// process --dryrun
 	if DryRunFlag(ctx.Flags()).IsAssigned() {
 		invoker.getRequest().TransToAcsRequest()
@@ -573,6 +644,109 @@ func sortJSON(content string) string {
 		return content
 	}
 	return strings.TrimSuffix(buf.String(), "\n")
+}
+
+type dryRunInvokeMeta struct {
+	Product  string `json:"product"`
+	Version  string `json:"version"`
+	API      string `json:"api"`
+	Region   string `json:"region,omitempty"`
+	Endpoint string `json:"endpoint,omitempty"`
+}
+
+func effectiveDryRunRegion(ctx *cli.Context, profile *config.Profile) string {
+	if ctx != nil && ctx.Flags() != nil {
+		if v, ok := config.RegionFlag(ctx.Flags()).GetValue(); ok && v != "" {
+			return v
+		}
+		if v, ok := config.RegionIdFlag(ctx.Flags()).GetValue(); ok && v != "" {
+			return v
+		}
+	}
+	if profile != nil {
+		return profile.RegionId
+	}
+	return ""
+}
+
+func dryRunOpenapiEndpoint(ctx *cli.Context, o *OpenapiContext) string {
+	h := o.HttpContext
+	if h.openapiRequest != nil && h.openapiRequest.EndpointOverride != nil {
+		if v := *h.openapiRequest.EndpointOverride; v != "" {
+			return v
+		}
+	}
+	if h.profile != nil && h.profile.Endpoint != "" {
+		return h.profile.Endpoint
+	}
+	if h.product != nil && strings.ToLower(h.product.Code) == "sls" {
+		rid := effectiveDryRunRegion(ctx, h.profile)
+		if rid != "" {
+			return rid + ".log.aliyuncs.com"
+		}
+	}
+	return ""
+}
+
+func buildDryRunOpenapiMeta(ctx *cli.Context, o *OpenapiContext) dryRunInvokeMeta {
+	region := effectiveDryRunRegion(ctx, o.profile)
+	return dryRunInvokeMeta{
+		Product:  o.product.Code,
+		Version:  o.product.Version,
+		API:      o.api.Name,
+		Region:   region,
+		Endpoint: dryRunOpenapiEndpoint(ctx, o),
+	}
+}
+
+func marshalDryRunOpenapiMeta(ctx *cli.Context, o *OpenapiContext) (string, error) {
+	b, err := json.Marshal(buildDryRunOpenapiMeta(ctx, o))
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func dryRunRestfulAPIByPath(library *Library, productCode, version, method, path string) string {
+	fallback := strings.TrimSpace(method + " " + path)
+	if library == nil || productCode == "" || method == "" || path == "" {
+		return fallback
+	}
+	api, ok := meta.HookGetApiByPath(library.GetApiByPath)(productCode, version, method, path)
+	if ok && api.Name != "" {
+		return api.Name
+	}
+	return fallback
+}
+
+func buildDryRunInvokeMeta(library *Library, inv Invoker) dryRunInvokeMeta {
+	req := inv.getRequest()
+	out := dryRunInvokeMeta{
+		Product:  req.Product,
+		Version:  req.Version,
+		Region:   req.RegionId,
+		API:      req.ApiName,
+		Endpoint: req.Domain,
+	}
+	if out.API != "" {
+		return out
+	}
+	if r, ok := inv.(*RestfulInvoker); ok {
+		if r.api != nil {
+			out.API = r.api.Name
+		} else {
+			out.API = dryRunRestfulAPIByPath(library, req.Product, req.Version, r.method, r.path)
+		}
+	}
+	return out
+}
+
+func marshalDryRunInvokeMeta(library *Library, inv Invoker) (string, error) {
+	b, err := json.Marshal(buildDryRunInvokeMeta(library, inv))
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // invoke with helper
@@ -788,6 +962,8 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 		return nil, cli.NewErrorWithTip(fmt.Errorf("unchecked api style: %s or product: %s", product.ApiStyle, product.Code),
 			"Unsupported api style or product")
 	}
+
+	// RESTful style: validate method and path
 	ok, method, path, err := checkRestfulMethod(ctx, method, path)
 	if err != nil {
 		return nil, err
@@ -822,6 +998,10 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 		cmd.PrintHead(ctx)
 		return c.printApiUsage(ctx, args[0], args[1])
 	} else {
+		// Layer 3: plugin sub-command help (3+ levels deep).
+		if delegated, derr := c.tryDelegatePluginHelp(ctx, args); delegated {
+			return derr
+		}
 		return fmt.Errorf("too many arguments: %d", len(args))
 	}
 }

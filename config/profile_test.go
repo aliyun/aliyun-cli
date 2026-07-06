@@ -1196,6 +1196,74 @@ echo 'This is not a valid JSON'
 	}
 }
 
+func TestProfile_GetCredential_ExternalProcessDisabled(t *testing.T) {
+	orig := os.Getenv(EnvDisableExternalProcess)
+	os.Setenv(EnvDisableExternalProcess, "1")
+	defer func() {
+		if orig == "" {
+			os.Unsetenv(EnvDisableExternalProcess)
+		} else {
+			os.Setenv(EnvDisableExternalProcess, orig)
+		}
+	}()
+
+	profile := Profile{
+		Name:           "external",
+		Mode:           External,
+		ProcessCommand: "env",
+	}
+	config := &Configuration{
+		CurrentProfile: profile.Name,
+		Profiles:       []Profile{profile},
+	}
+	profile.parent = config
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	_, err := profile.GetCredential(ctx, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), EnvDisableExternalProcess)
+}
+
+func TestProfile_GetCredential_CredentialsURIDisabled(t *testing.T) {
+	successServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"Code": "Success",
+			"AccessKeyId": "mock-access-key-id",
+			"AccessKeySecret": "mock-access-key-secret",
+			"SecurityToken": "mock-security-token",
+			"Expiration": "2023-01-01T00:00:00Z"
+		}`))
+	}))
+	defer successServer.Close()
+
+	orig := os.Getenv(EnvDisableExternalProcess)
+	os.Setenv(EnvDisableExternalProcess, "true")
+	defer func() {
+		if orig == "" {
+			os.Unsetenv(EnvDisableExternalProcess)
+		} else {
+			os.Setenv(EnvDisableExternalProcess, orig)
+		}
+	}()
+
+	profile := Profile{
+		Name:           "uri",
+		Mode:           CredentialsURI,
+		CredentialsURI: successServer.URL,
+	}
+	config := &Configuration{
+		CurrentProfile: profile.Name,
+		Profiles:       []Profile{profile},
+	}
+	profile.parent = config
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	_, err := profile.GetCredential(ctx, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), EnvDisableExternalProcess)
+}
+
 // TestGetCredentialWithOAuthStsExpired 测试OAuth模式中STS过期时的刷新逻辑
 func TestGetCredentialWithOAuthStsExpired(t *testing.T) {
 	// 保存原始函数并在测试后恢复
@@ -1611,6 +1679,83 @@ func TestOpenAPIAuthType(t *testing.T) {
 		Mode:                 BearerToken,
 		BearerTokenHeaderKey: "x-custom-token",
 	}).OpenAPIAuthType())
+	assert.Equal(t, "Anonymous", (&Profile{Mode: Anonymous}).OpenAPIAuthType())
+}
+
+func TestAnonymousFromFlag(t *testing.T) {
+	ctx := newCtx()
+	ModeFlag(ctx.Flags()).SetAssigned(true)
+	ModeFlag(ctx.Flags()).SetValue("Anonymous")
+	p := &Profile{Name: "default", RegionId: "cn-hangzhou"}
+	p.OverwriteWithFlags(ctx)
+	assert.Equal(t, Anonymous, p.Mode)
+	assert.NoError(t, p.Validate())
+	cred, err := p.GetCredential(ctx, nil)
+	assert.NoError(t, err)
+	assert.Nil(t, cred)
+}
+
+func TestAnonymousFromEnv(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_PROFILE_MODE", "anonymous")
+	ctx := newCtx()
+	p := &Profile{Name: "default", RegionId: "cn-hangzhou"}
+	p.OverwriteWithFlags(ctx)
+	assert.Equal(t, Anonymous, p.Mode)
+	cred, err := p.GetCredential(ctx, nil)
+	assert.NoError(t, err)
+	assert.Nil(t, cred)
+	envs, err := p.GetRuntimeEnv(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "Anonymous", envs["ALIBABA_CLOUD_PROFILE_MODE"])
+}
+
+func TestAnonymousValidateNoRegion(t *testing.T) {
+	// P-04: Validate fails when RegionId is empty
+	p := &Profile{Name: "default", Mode: Anonymous, RegionId: ""}
+	err := p.Validate()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "region")
+}
+
+func TestNormalizeModeAnonymous(t *testing.T) {
+	// P-08: NormalizeMode recognizes Anonymous (case-insensitive)
+	assert.Equal(t, Anonymous, NormalizeMode("anonymous"))
+	assert.Equal(t, Anonymous, NormalizeMode("ANONYMOUS"))
+	assert.Equal(t, Anonymous, NormalizeMode("Anonymous"))
+}
+
+func TestModeAnonymousOverridesDefault(t *testing.T) {
+	// P-10: --mode Anonymous overrides default AK mode
+	ctx := newCtx()
+	ModeFlag(ctx.Flags()).SetAssigned(true)
+	ModeFlag(ctx.Flags()).SetValue("Anonymous")
+	p := &Profile{
+		Name:            "default",
+		RegionId:        "cn-hangzhou",
+		AccessKeyId:     "test-ak",
+		AccessKeySecret: "test-sk",
+	}
+	p.OverwriteWithFlags(ctx)
+	// --mode Anonymous sets mode directly
+	assert.Equal(t, Anonymous, p.Mode)
+}
+
+func TestModeFlagRegistered(t *testing.T) {
+	// F-01: mode flag is registered and supports Anonymous
+	ctx := newCtx()
+	flag := ModeFlag(ctx.Flags())
+	assert.NotNil(t, flag)
+	assert.Equal(t, ModeFlagName, flag.Name)
+}
+
+func TestModeFlagValue(t *testing.T) {
+	// F-02: flag assignment
+	ctx := newCtx()
+	ModeFlag(ctx.Flags()).SetAssigned(true)
+	ModeFlag(ctx.Flags()).SetValue("Anonymous")
+	v, ok := ModeFlag(ctx.Flags()).GetValue()
+	assert.True(t, ok)
+	assert.Equal(t, "Anonymous", v)
 }
 
 func TestInjectBearerTokenHeader(t *testing.T) {
@@ -1655,4 +1800,3 @@ func TestErrBearerTokenRequiresPlugin(t *testing.T) {
 	err = ErrBearerTokenRequiresPlugin("")
 	assert.Contains(t, err.Error(), "product plugin")
 }
-

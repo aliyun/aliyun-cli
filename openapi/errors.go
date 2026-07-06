@@ -82,13 +82,23 @@ func (e *InvalidParameterError) GetSuggestions() []string {
 }
 
 type InvalidProductOrPluginError struct {
-	Code    string
+	Code string
+	// Hint, when non-empty, is appended to Error() on its own line.
+	// Used by callers that have additional context to share
+	// — for example tryDelegatePluginHelp's step-4 explains why a 3+ arg lowercase shape was treated as a plugin command,
+	// so users who actually meant an OpenAPI built-in call see the right syntax.
+	// Default callers leave it empty; behaviour is unchanged.
+	Hint    string
 	library *Library
 	plugins []plugin.PluginInfo
 }
 
 func (e *InvalidProductOrPluginError) Error() string {
-	return fmt.Sprintf("'%s' is not a valid product. See `aliyun help`.", e.Code)
+	msg := fmt.Sprintf("'%s' is not a valid product. See `aliyun help`.", e.Code)
+	if e.Hint != "" {
+		msg += "\n" + e.Hint
+	}
+	return msg
 }
 
 func (e *InvalidProductOrPluginError) GetSuggestions() []string {

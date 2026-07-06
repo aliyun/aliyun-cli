@@ -59,15 +59,26 @@ const (
 	CloudSSO            = AuthenticateMode("CloudSSO")
 	OAuth               = AuthenticateMode("OAuth")
 	BearerToken         = AuthenticateMode("BearerToken")
+	// Anonymous mode skips AK/SK and accesses POP gateway anonymous APIs.
+	Anonymous = AuthenticateMode("Anonymous")
 )
 
 // standard OpenAPI bearer token header used by darabonba-openapi.
 const DefaultBearerTokenHeaderKey = "x-acs-bearer-token"
 
+// EnvDisableExternalProcess blocks External process_command and CredentialsURI HTTP fetch.
+// Set to "1" or "true" (case-insensitive) to disable.
+const EnvDisableExternalProcess = "ALIBABA_CLOUD_DISABLE_EXTERNAL_PROCESS"
+
+func isExternalCredentialSourceDisabled() bool {
+	v := os.Getenv(EnvDisableExternalProcess)
+	return v == "1" || strings.EqualFold(v, "true")
+}
+
 var knownModes = []AuthenticateMode{
 	AK, StsToken, RamRoleArn, EcsRamRole, RsaKeyPair,
 	RamRoleArnWithEcs, ChainableRamRoleArn, External,
-	CredentialsURI, OIDC, CloudSSO, OAuth, BearerToken,
+	CredentialsURI, OIDC, CloudSSO, OAuth, BearerToken, Anonymous,
 }
 
 func NormalizeMode(mode string) AuthenticateMode {
@@ -242,6 +253,8 @@ func (cp *Profile) Validate() error {
 			return fmt.Errorf("bearer_token is not configured for profile '%s'. Run `aliyun configure --profile %s --mode BearerToken` to set it",
 				cp.Name, cp.Name)
 		}
+	case Anonymous:
+		// Anonymous mode: no credential validation needed
 	default:
 		return fmt.Errorf("invalid mode: %s", cp.Mode)
 	}
@@ -344,6 +357,12 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 
 	if cp.AutoPluginInstallEnablePre == false {
 		cp.AutoPluginInstallEnablePre = os.Getenv("ALIBABA_CLOUD_CLI_PLUGIN_AUTO_INSTALL_ENABLE_PRE") == "true"
+	}
+
+	if cp.Mode == "" {
+		if envMode := util.GetFromEnv("ALIBABA_CLOUD_PROFILE_MODE"); NormalizeMode(envMode) == Anonymous {
+			cp.Mode = Anonymous
+		}
 	}
 
 	AutoModeRecognition(cp)
@@ -524,6 +543,10 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		}
 
 	case External:
+		if isExternalCredentialSourceDisabled() {
+			return nil, fmt.Errorf("external credential source is disabled by %s (External mode)", EnvDisableExternalProcess)
+		}
+
 		args := strings.Fields(cp.ProcessCommand)
 		cmd := exec.Command(args[0], args[1:]...)
 
@@ -554,6 +577,10 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		return cp.GetCredential(ctx, proxyHost)
 
 	case CredentialsURI:
+		if isExternalCredentialSourceDisabled() {
+			return nil, fmt.Errorf("external credential source is disabled by %s (CredentialsURI mode)", EnvDisableExternalProcess)
+		}
+
 		uri := cp.CredentialsURI
 
 		if uri == "" {
@@ -669,6 +696,10 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		config.SetType("bearer").
 			SetBearerToken(cp.BearerTokenValue)
 
+	case Anonymous:
+		// Anonymous mode: no credential needed
+		return nil, nil
+
 	case OAuth:
 		// check sts expiration
 		stsExpiration := cp.StsExpiration
@@ -729,7 +760,10 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 		"ALIBABA_CLOUD_REGION_ID": cp.RegionId,
 	}
 
-	if cp.Mode == BearerToken {
+	if cp.Mode == Anonymous {
+		// Anonymous mode: do not resolve any credential; just propagate the switch to plugin subprocesses.
+		envs["ALIBABA_CLOUD_PROFILE_MODE"] = "Anonymous"
+	} else if cp.Mode == BearerToken {
 		if err := cp.Validate(); err != nil {
 			return nil, err
 		}
@@ -782,6 +816,31 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 	envs["ALIBABA_CLOUD_CLI_VERSION"] = cli.GetVersion()
 
 	return envs, nil
+}
+
+// Intentionally NOT included (compare with GetRuntimeEnv above):
+//   - access keys, STS tokens, bearer tokens — host-side credentials must never be silently forwarded; the plugin is expected to resolve auth itself (registered CredentialResolver, ALIBABA_CLOUD_BEARER_TOKEN, ...)
+//   - any field that would only exist on a Profile (endpoint type, timeouts, retry count, external account type).
+func BuildBaselineEnv(ctx *cli.Context) map[string]string {
+	envs := map[string]string{
+		"ALIBABA_CLOUD_CLI_VERSION": cli.GetVersion(),
+	}
+	if region, ok := RegionFlag(ctx.Flags()).GetValue(); ok && region != "" {
+		envs["ALIBABA_CLOUD_REGION_ID"] = region
+	} else if v := util.GetFromEnv("ALIBABA_CLOUD_REGION_ID"); v != "" {
+		envs["ALIBABA_CLOUD_REGION_ID"] = v
+	}
+	if endpoint, ok := EndpointFlag(ctx.Flags()).GetValue(); ok && endpoint != "" {
+		envs["ALIBABA_CLOUD_ENDPOINT"] = endpoint
+	} else if v := util.GetFromEnv("ALIBABA_CLOUD_ENDPOINT"); v != "" {
+		envs["ALIBABA_CLOUD_ENDPOINT"] = v
+	}
+	if lang, ok := LanguageFlag(ctx.Flags()).GetValue(); ok && lang != "" {
+		envs["ALIBABA_CLOUD_LANGUAGE"] = lang
+	} else if v := util.GetFromEnv("ALIBABA_CLOUD_LANGUAGE"); v != "" {
+		envs["ALIBABA_CLOUD_LANGUAGE"] = v
+	}
+	return envs
 }
 
 func IsRegion(region string) bool {
@@ -849,6 +908,9 @@ func (cp *Profile) normalizeBearerTokenFields() error {
 }
 
 func (cp *Profile) OpenAPIAuthType() string {
+	if cp.Mode == Anonymous {
+		return "Anonymous"
+	}
 	if cp.Mode == BearerToken && cp.BearerTokenHeaderKey != "" {
 		return "Anonymous"
 	}

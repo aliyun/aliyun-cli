@@ -108,10 +108,26 @@ func TestInvalidParameterError_GetSuggestions(t *testing.T) {
 }
 
 func TestInvalidProductOrPluginError_Error(t *testing.T) {
-	err := &InvalidProductOrPluginError{
-		Code: "fcc",
-	}
-	assert.Equal(t, "'fcc' is not a valid product. See `aliyun help`.", err.Error())
+	t.Run("default (no hint) keeps legacy single-line wording", func(t *testing.T) {
+		err := &InvalidProductOrPluginError{
+			Code: "fcc",
+		}
+		assert.Equal(t, "'fcc' is not a valid product. See `aliyun help`.", err.Error())
+	})
+
+	t.Run("hint is appended on its own line", func(t *testing.T) {
+		// Hint exists so callers with extra context (e.g. step-4 of tryDelegatePluginHelp) can explain WHY the user landed on this diagnostic without the explanation leaking into other callers.
+		// Default Hint=="" must not change pre-existing output (covered by the subtest above).
+		err := &InvalidProductOrPluginError{
+			Code: "ecs",
+			Hint: "If you meant an OpenAPI built-in call, the form is 'aliyun <product> <APIName>'.",
+		}
+		assert.Equal(t,
+			"'ecs' is not a valid product. See `aliyun help`.\n"+
+				"If you meant an OpenAPI built-in call, the form is 'aliyun <product> <APIName>'.",
+			err.Error(),
+			"hint must follow the legacy line on its own line — single-line legacy users keep their format")
+	})
 }
 
 func TestInvalidProductOrPluginError_GetSuggestions(t *testing.T) {

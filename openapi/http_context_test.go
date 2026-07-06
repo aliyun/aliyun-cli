@@ -3,7 +3,9 @@ package openapi
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
@@ -38,6 +40,111 @@ func TestShouldUseOpenapi(t *testing.T) {
 		result := ShouldUseOpenapi(ctx, product)
 		assert.True(t, result)
 	})
+}
+
+func TestBuildDryRunOpenapiMeta(t *testing.T) {
+	prof := &config.Profile{RegionId: "cn-hangzhou"}
+	sls := &meta.Product{Code: "sls", Version: "2020-03-31"}
+	api := &meta.Api{Name: "GetProject", Product: sls}
+	h := NewHttpContext(prof)
+	h.product = sls
+	h.openapiRequest = &openapiutil.OpenApiRequest{
+		Query:   map[string]*string{},
+		Headers: map[string]*string{},
+		HostMap: map[string]*string{},
+	}
+	o := &OpenapiContext{HttpContext: h, method: "GET", path: "/projects/foo", api: api}
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+
+	m := buildDryRunOpenapiMeta(ctx, o)
+	assert.Equal(t, "sls", m.Product)
+	assert.Equal(t, "2020-03-31", m.Version)
+	assert.Equal(t, "GetProject", m.API)
+	assert.Equal(t, "cn-hangzhou", m.Region)
+	assert.Equal(t, "cn-hangzhou.log.aliyuncs.com", m.Endpoint)
+
+	h2 := NewHttpContext(prof)
+	h2.product = sls
+	h2.openapiRequest = &openapiutil.OpenApiRequest{
+		EndpointOverride: tea.String("custom.log.aliyuncs.com"),
+		Query:            map[string]*string{},
+		Headers:          map[string]*string{},
+		HostMap:          map[string]*string{},
+	}
+	o2 := &OpenapiContext{HttpContext: h2, method: "GET", path: "/", api: api}
+	m2 := buildDryRunOpenapiMeta(ctx, o2)
+	assert.Equal(t, "custom.log.aliyuncs.com", m2.Endpoint)
+}
+
+func TestEffectiveDryRunRegion(t *testing.T) {
+	profile := &config.Profile{RegionId: "cn-hangzhou"}
+
+	t.Run("RegionFlag", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		regionFlag := config.NewRegionFlag()
+		regionFlag.SetAssigned(true)
+		regionFlag.SetValue("cn-shanghai")
+		ctx.Flags().Add(regionFlag)
+
+		assert.Equal(t, "cn-shanghai", effectiveDryRunRegion(ctx, profile))
+	})
+
+	t.Run("RegionIdFlag", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		regionIDFlag := config.NewRegionIdFlag()
+		regionIDFlag.SetAssigned(true)
+		regionIDFlag.SetValue("cn-beijing")
+		ctx.Flags().Add(regionIDFlag)
+
+		assert.Equal(t, "cn-beijing", effectiveDryRunRegion(ctx, profile))
+	})
+
+	t.Run("RegionFlagPrecedence", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		regionFlag := config.NewRegionFlag()
+		regionFlag.SetAssigned(true)
+		regionFlag.SetValue("cn-shanghai")
+		ctx.Flags().Add(regionFlag)
+		regionIDFlag := config.NewRegionIdFlag()
+		regionIDFlag.SetAssigned(true)
+		regionIDFlag.SetValue("cn-beijing")
+		ctx.Flags().Add(regionIDFlag)
+
+		assert.Equal(t, "cn-shanghai", effectiveDryRunRegion(ctx, profile))
+	})
+
+	t.Run("ProfileFallback", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		assert.Equal(t, "cn-hangzhou", effectiveDryRunRegion(ctx, profile))
+	})
+
+	t.Run("NilProfile", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		assert.Equal(t, "", effectiveDryRunRegion(ctx, nil))
+	})
+}
+
+func TestMarshalDryRunOpenapiMeta(t *testing.T) {
+	prof := &config.Profile{RegionId: "cn-hangzhou"}
+	sls := &meta.Product{Code: "sls", Version: "2020-03-31"}
+	api := &meta.Api{Name: "GetProject", Product: sls}
+	h := NewHttpContext(prof)
+	h.product = sls
+	h.openapiRequest = &openapiutil.OpenApiRequest{
+		Query:   map[string]*string{},
+		Headers: map[string]*string{},
+		HostMap: map[string]*string{},
+	}
+	o := &OpenapiContext{HttpContext: h, method: "GET", path: "/projects/foo", api: api}
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+
+	line, err := marshalDryRunOpenapiMeta(ctx, o)
+	assert.NoError(t, err)
+	assert.False(t, strings.Contains(line, "\n"), "expected compact single-line JSON, got: %q", line)
+
+	var parsed dryRunInvokeMeta
+	assert.NoError(t, json.Unmarshal([]byte(line), &parsed))
+	assert.Equal(t, buildDryRunOpenapiMeta(ctx, o), parsed)
 }
 
 func TestGetOpenapiClient(t *testing.T) {
@@ -363,7 +470,7 @@ func TestHttpContext(t *testing.T) {
 		skipflag.SetAssigned(true)
 		ctx.Flags().Add(skipflag)
 		err := context.Init(ctx, product)
-		assert.Contains(t, err.Error(), "invaild flag --header `testfail`")
+		assert.Contains(t, err.Error(), "invalid flag --header `testfail`")
 	})
 
 	t.Run("InitWithEndpoint", func(t *testing.T) {
