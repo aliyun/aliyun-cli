@@ -34,6 +34,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cliext/cms2"
 	"github.com/aliyun/aliyun-cli/v3/cliext/codeup"
 	"github.com/aliyun/aliyun-cli/v3/cliext/computenestutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/esacli"
 	"github.com/aliyun/aliyun-cli/v3/cliext/iact3"
 	"github.com/aliyun/aliyun-cli/v3/cliext/maxc"
 	"github.com/aliyun/aliyun-cli/v3/cliext/ossutil"
@@ -152,6 +153,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(appmanagerutil.NewAppManagerCommand())
 	// computenest command
 	rootCmd.AddSubCommand(computenestutil.NewComputenestCommand())
+	// esa-cli command
+	rootCmd.AddSubCommand(esacli.NewEsacliCommand())
 	// cms2 command
 	rootCmd.AddSubCommand(cms2.NewCms2Command())
 	// maxc command
