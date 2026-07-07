@@ -22,10 +22,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"testing"
 	"time"
 
+	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cloudsso"
 
@@ -571,6 +573,149 @@ func TestIsRegion(t *testing.T) {
 func TestGetStsEndpoint(t *testing.T) {
 	assert.Equal(t, "sts.aliyuncs.com", getSTSEndpoint(""))
 	assert.Equal(t, "sts.cn-hangzhou.aliyuncs.com", getSTSEndpoint("cn-hangzhou"))
+}
+
+func TestNormalizeStsEndpointHost(t *testing.T) {
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", normalizeSTSEndpointHost("  https://sts-vpc.cn-hangzhou.aliyuncs.com/  "))
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", normalizeSTSEndpointHost("http://sts-vpc.cn-hangzhou.aliyuncs.com"))
+	assert.Equal(t, "sts.aliyuncs.com", normalizeSTSEndpointHost("sts.aliyuncs.com"))
+}
+
+func TestResolveStsEndpoint(t *testing.T) {
+	cp := &Profile{StsRegion: "cn-hangzhou"}
+	assert.Equal(t, "sts.cn-hangzhou.aliyuncs.com", resolveSTSEndpoint(cp))
+
+	cp = &Profile{StsRegion: "cn-beijing"}
+	assert.Equal(t, "sts.cn-beijing.aliyuncs.com", resolveSTSEndpoint(cp))
+
+	cp = &Profile{StsRegion: "cn-hangzhou", StsEndpoint: "https://sts-vpc.cn-hangzhou.aliyuncs.com/"}
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", resolveSTSEndpoint(cp))
+
+	cp = &Profile{StsRegion: "cn-hangzhou", StsEndpoint: "sts-vpc.cn-hangzhou.aliyuncs.com"}
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", resolveSTSEndpoint(cp))
+}
+
+func TestOverwriteWithFlagsStsEndpointEnv(t *testing.T) {
+	ctx := newCtx()
+	actual := &Profile{Name: "default", RegionId: "cn-hangzhou"}
+
+	os.Setenv("ALIBABA_CLOUD_STS_ENDPOINT", "sts-vpc.cn-hangzhou.aliyuncs.com")
+	actual.OverwriteWithFlags(ctx)
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", actual.StsEndpoint)
+	os.Unsetenv("ALIBABA_CLOUD_STS_ENDPOINT")
+
+	os.Setenv("ALIBABACLOUD_STS_ENDPOINT", "sts-vpc.cn-shanghai.aliyuncs.com")
+	actual.StsEndpoint = ""
+	actual.OverwriteWithFlags(ctx)
+	assert.Equal(t, "", actual.StsEndpoint)
+	os.Unsetenv("ALIBABACLOUD_STS_ENDPOINT")
+}
+
+func TestOverwriteWithFlagsStsEndpointFlag(t *testing.T) {
+	ctx := newCtx()
+	StsEndpointFlag(ctx.Flags()).SetAssigned(true)
+	StsEndpointFlag(ctx.Flags()).SetValue("sts-vpc.cn-beijing.aliyuncs.com")
+	actual := &Profile{Name: "default", StsEndpoint: "sts-vpc.cn-hangzhou.aliyuncs.com"}
+	actual.OverwriteWithFlags(ctx)
+	assert.Equal(t, "sts-vpc.cn-beijing.aliyuncs.com", actual.StsEndpoint)
+}
+
+func credentialSTSEndpoint(t *testing.T, cred credentialsv2.Credential) string {
+	t.Helper()
+	rv := reflect.ValueOf(cred)
+	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+		t.Fatal("credential must be a non-nil pointer")
+	}
+	rv = rv.Elem()
+	providerField := rv.FieldByName("provider")
+	if !providerField.IsValid() {
+		providerField = rv
+	}
+	for providerField.Kind() == reflect.Ptr || providerField.Kind() == reflect.Interface {
+		if providerField.IsNil() {
+			t.Fatal("credential provider is nil")
+		}
+		providerField = providerField.Elem()
+	}
+	if stsField := providerField.FieldByName("stsEndpoint"); stsField.IsValid() {
+		return stsField.String()
+	}
+	if runtimeField := providerField.FieldByName("runtime"); runtimeField.IsValid() && !runtimeField.IsNil() {
+		if runtimeField.Kind() == reflect.Ptr {
+			runtimeField = runtimeField.Elem()
+		}
+		if endpoint := runtimeField.FieldByName("STSEndpoint"); endpoint.IsValid() {
+			return endpoint.String()
+		}
+	}
+	t.Fatal("provider has no sts endpoint field")
+	return ""
+}
+
+func TestGetCredentialWithOIDCStsEndpoint(t *testing.T) {
+	tmpFile, err := ioutil.TempFile("", "oidc-token-*")
+	assert.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+	_, err = tmpFile.WriteString("dummy-oidc-token")
+	assert.NoError(t, err)
+	tmpFile.Close()
+
+	actual := newProfile()
+	actual.Mode = OIDC
+	actual.OIDCProviderARN = "acs:ram::123456789:oidc-provider/test"
+	actual.OIDCTokenFile = tmpFile.Name()
+	actual.RamRoleArn = "acs:ram::123456789:role/test"
+	actual.RoleSessionName = "ack-session"
+	actual.StsEndpoint = "https://sts-vpc.cn-hangzhou.aliyuncs.com/"
+
+	credential, err := actual.GetCredential(newCtx(), nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, credential)
+	assert.Equal(t, "oidc_role_arn", *credential.GetType())
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", credentialSTSEndpoint(t, credential))
+}
+
+func TestGetCredentialWithRamRoleArnStsEndpoint(t *testing.T) {
+	actual := newProfile()
+	actual.Mode = RamRoleArn
+	actual.AccessKeyId = "akid"
+	actual.AccessKeySecret = "skid"
+	actual.RamRoleArn = "ramRoleArn"
+	actual.RoleSessionName = "roleSessionName"
+	actual.ExpiredSeconds = 3600
+	actual.StsEndpoint = "sts-vpc.cn-hangzhou.aliyuncs.com"
+
+	credential, err := actual.GetCredential(newCtx(), nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, credential)
+	assert.Equal(t, "ram_role_arn", *credential.GetType())
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", credentialSTSEndpoint(t, credential))
+}
+
+func TestGetRuntimeEnv_StsEndpoint(t *testing.T) {
+	p := newProfile()
+	p.Mode = AK
+	p.AccessKeyId = "ak"
+	p.AccessKeySecret = "sk"
+	p.RegionId = "cn-hangzhou"
+	p.StsEndpoint = "sts-vpc.cn-hangzhou.aliyuncs.com"
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", envs["ALIBABA_CLOUD_STS_ENDPOINT"])
+}
+
+func TestGetRuntimeEnv_StsEndpointOmitted(t *testing.T) {
+	p := newProfile()
+	p.Mode = AK
+	p.AccessKeyId = "ak"
+	p.AccessKeySecret = "sk"
+	p.RegionId = "cn-hangzhou"
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	_, has := envs["ALIBABA_CLOUD_STS_ENDPOINT"]
+	assert.False(t, has)
 }
 
 func TestNormalizeMode(t *testing.T) {

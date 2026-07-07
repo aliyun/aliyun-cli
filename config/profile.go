@@ -97,6 +97,7 @@ type Profile struct {
 	AccessKeySecret            string           `json:"access_key_secret,omitempty"`
 	StsToken                   string           `json:"sts_token,omitempty"`
 	StsRegion                  string           `json:"sts_region,omitempty"`
+	StsEndpoint                string           `json:"sts_endpoint,omitempty"`
 	RamRoleName                string           `json:"ram_role_name,omitempty"`
 	RamRoleArn                 string           `json:"ram_role_arn,omitempty"`
 	RoleSessionName            string           `json:"ram_session_name,omitempty"`
@@ -271,6 +272,7 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 	cp.AccessKeySecret = AccessKeySecretFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeySecret)
 	cp.StsToken = StsTokenFlag(ctx.Flags()).GetStringOrDefault(cp.StsToken)
 	cp.StsRegion = StsRegionFlag(ctx.Flags()).GetStringOrDefault(cp.StsRegion)
+	cp.StsEndpoint = StsEndpointFlag(ctx.Flags()).GetStringOrDefault(cp.StsEndpoint)
 	cp.RamRoleName = RamRoleNameFlag(ctx.Flags()).GetStringOrDefault(cp.RamRoleName)
 	cp.RamRoleArn = RamRoleArnFlag(ctx.Flags()).GetStringOrDefault(cp.RamRoleArn)
 	cp.ExternalId = ExternalIdFlag(ctx.Flags()).GetStringOrDefault(cp.ExternalId)
@@ -309,6 +311,10 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 
 	if cp.RegionId == "" {
 		cp.RegionId = util.GetFromEnv("ALIBABA_CLOUD_REGION_ID", "ALIBABACLOUD_REGION_ID", "ALICLOUD_REGION_ID", "REGION_ID", "REGION")
+	}
+
+	if cp.StsEndpoint == "" {
+		cp.StsEndpoint = os.Getenv("ALIBABA_CLOUD_STS_ENDPOINT")
 	}
 
 	if cp.EndpointType == "" {
@@ -413,6 +419,20 @@ func getSTSEndpoint(regionId string) string {
 	return "sts.aliyuncs.com"
 }
 
+func normalizeSTSEndpointHost(endpoint string) string {
+	endpoint = strings.TrimSpace(endpoint)
+	endpoint = strings.TrimPrefix(endpoint, "https://")
+	endpoint = strings.TrimPrefix(endpoint, "http://")
+	return strings.TrimSuffix(endpoint, "/")
+}
+
+func resolveSTSEndpoint(cp *Profile) string {
+	if cp.StsEndpoint != "" {
+		return normalizeSTSEndpointHost(cp.StsEndpoint)
+	}
+	return getSTSEndpoint(cp.StsRegion)
+}
+
 // mergeProfileAfterCredentialRefresh persists STS / OAuth token fields from the in-memory profile onto the on-disk profile.
 // in-memory profile may include one-off CLI overrides(e.g. --endpoint) merged via OverwriteWithFlags; those must not overwrite stored settings.
 func mergeProfileAfterCredentialRefresh(disk Profile, cp *Profile) Profile {
@@ -462,7 +482,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
 			SetExternalId(cp.ExternalId).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+			SetSTSEndpoint(resolveSTSEndpoint(cp))
 
 		if cp.StsToken != "" {
 			config.SetSecurityToken(cp.StsToken)
@@ -477,7 +497,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetPrivateKeyFile(cp.PrivateKey).
 			SetPublicKeyId(cp.KeyPairName).
 			SetSessionExpiration(cp.ExpiredSeconds).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+			SetSTSEndpoint(resolveSTSEndpoint(cp))
 
 	case RamRoleArnWithEcs:
 		config.SetType("ecs_ram_role").
@@ -500,7 +520,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+			SetSTSEndpoint(resolveSTSEndpoint(cp))
 
 	case ChainableRamRoleArn:
 		profileName := cp.SourceProfile
@@ -536,7 +556,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
 			SetExternalId(cp.ExternalId).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+			SetSTSEndpoint(resolveSTSEndpoint(cp))
 
 		if model.SecurityToken != nil {
 			config.SetSecurityToken(*model.SecurityToken)
@@ -634,7 +654,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetOIDCTokenFilePath(cp.OIDCTokenFile).
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion)).
+			SetSTSEndpoint(resolveSTSEndpoint(cp)).
 			SetSessionExpiration(3600)
 
 	case CloudSSO:
@@ -799,6 +819,9 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 	}
 	if cp.Endpoint != "" {
 		envs["ALIBABA_CLOUD_ENDPOINT"] = cp.Endpoint
+	}
+	if cp.StsEndpoint != "" {
+		envs["ALIBABA_CLOUD_STS_ENDPOINT"] = cp.StsEndpoint
 	}
 	if cp.ExternalAccountType != "" {
 		envs["ALIBABA_CLOUD_EXTERNAL_ACCOUNT_TYPE"] = cp.ExternalAccountType

@@ -130,6 +130,7 @@ func doConfigureSet(ctx *cli.Context) error {
 	profile.ConnectTimeout = ConnectTimeoutFlag(flags).GetIntegerOrDefault(profile.ConnectTimeout)
 	profile.RetryCount = RetryCountFlag(flags).GetIntegerOrDefault(profile.RetryCount)
 	profile.StsRegion = StsRegionFlag(flags).GetStringOrDefault(profile.StsRegion)
+	profile.StsEndpoint = StsEndpointFlag(flags).GetStringOrDefault(profile.StsEndpoint)
 	profile.EndpointType = EndpointTypeFlag(flags).GetStringOrDefault(profile.EndpointType)
 	profile.Endpoint = EndpointFlag(flags).GetStringOrDefault(profile.Endpoint)
 	profile.ExternalAccountType = ExternalAccountTypeFlag(flags).GetStringOrDefault(profile.ExternalAccountType)
