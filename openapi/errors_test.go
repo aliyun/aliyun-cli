@@ -112,7 +112,7 @@ func TestInvalidProductOrPluginError_Error(t *testing.T) {
 		err := &InvalidProductOrPluginError{
 			Code: "fcc",
 		}
-		assert.Equal(t, "'fcc' is not a valid product. See `aliyun help`.", err.Error())
+		assert.Equal(t, "'fcc' is not a valid built-in product or external product plugin. See `aliyun --help`.", err.Error())
 	})
 
 	t.Run("hint is appended on its own line", func(t *testing.T) {
@@ -123,7 +123,7 @@ func TestInvalidProductOrPluginError_Error(t *testing.T) {
 			Hint: "If you meant an OpenAPI built-in call, the form is 'aliyun <product> <APIName>'.",
 		}
 		assert.Equal(t,
-			"'ecs' is not a valid product. See `aliyun help`.\n"+
+			"'ecs' is not a valid built-in product or external product plugin. See `aliyun --help`.\n"+
 				"If you meant an OpenAPI built-in call, the form is 'aliyun <product> <APIName>'.",
 			err.Error(),
 			"hint must follow the legacy line on its own line — single-line legacy users keep their format")
@@ -138,10 +138,32 @@ func TestInvalidProductOrPluginError_GetSuggestions(t *testing.T) {
 				{Name: "aliyun-cli-ecs", ProductCode: "ecs"},
 				{Name: "aliyun-cli-fc", ProductCode: "fc"},
 			},
+			library: &Library{
+				builtinRepo: &meta.Repository{
+					Products: []meta.Product{{Code: "ecs"}},
+				},
+			},
 		}
 		suggestions := err.GetSuggestions()
 		str := strings.Join(suggestions, ",")
 		assert.Contains(t, str, "ecs")
+	})
+
+	t.Run("Dedupes plugin and built-in product codes", func(t *testing.T) {
+		err := &InvalidProductOrPluginError{
+			Code: "ec",
+			plugins: []plugin.PluginInfo{
+				{Name: "aliyun-cli-ecs", ProductCode: "ecs"},
+			},
+			library: &Library{
+				builtinRepo: &meta.Repository{
+					Products: []meta.Product{{Code: "ecs"}},
+				},
+			},
+		}
+		suggestions := err.GetSuggestions()
+		assert.Equal(t, 1, len(suggestions))
+		assert.Equal(t, "ecs", suggestions[0])
 	})
 
 	t.Run("No match", func(t *testing.T) {
@@ -226,6 +248,137 @@ func TestInvalidUnifiedApiError_GetSuggestions(t *testing.T) {
 		suggestions := err.GetSuggestions()
 		assert.Empty(t, suggestions)
 	})
+}
+
+func TestInvalidApiOrCmdNotFoundError_GetSuggestions(t *testing.T) {
+	product := &meta.Product{
+		Code:     "ecs",
+		ApiNames: []string{"DescribeInstances", "DescribeRegions"},
+	}
+	lp := &plugin.LocalPlugin{
+		CmdNames: []string{"describe-instances", "list-images"},
+	}
+
+	t.Run("plugin installed", func(t *testing.T) {
+		err := newApiOrCmdNotFoundError(product, "describeinstances", lp, "aliyun-cli-ecs")
+		assert.Contains(t, err.Error(), "CamelCase")
+		assert.Contains(t, err.Error(), "kebab-case")
+		assert.NotContains(t, err.Error(), "aliyun plugin install --name")
+		assert.NotContains(t, err.Error(), "must be installed")
+
+		suggestions := err.GetSuggestions()
+		joined := strings.Join(suggestions, "\n")
+		assert.Contains(t, joined, "DescribeInstances")
+		assert.Contains(t, joined, "[built-in OpenAPI]")
+	})
+
+	t.Run("plugin not installed", func(t *testing.T) {
+		err := newApiOrCmdNotFoundError(product, "describeinstances", nil, "aliyun-cli-ecs")
+		assert.Contains(t, err.Error(), "aliyun plugin install --name aliyun-cli-ecs")
+		assert.Contains(t, err.Error(), "must be installed")
+	})
+}
+
+func TestPluginCmdMatches(t *testing.T) {
+	lp := &plugin.LocalPlugin{CmdNames: []string{"list-functions"}}
+	assert.True(t, pluginCmdMatches("list-functions", lp))
+	assert.False(t, pluginCmdMatches("List-Functions", lp))
+	assert.False(t, pluginCmdMatches("DescribeRegions", lp))
+}
+
+func TestInvalidRestfulPathError(t *testing.T) {
+	t.Run("path exists wrong method", func(t *testing.T) {
+		repo, err := meta.MockLoadRepository([]meta.Product{{
+			Code:     "cs",
+			Version:  "2015-12-15",
+			ApiNames: []string{"DescribeClusters", "CreateCluster"},
+		}})
+		assert.NoError(t, err)
+		lib := &Library{builtinRepo: repo}
+		product, ok := lib.GetProduct("cs")
+		assert.True(t, ok)
+		matches := lib.FindApisByPath(product.Code, product.Version, "/clusters")
+
+		errObj := newInvalidRestfulPathError(&product, "PUT", "/clusters", matches, "aliyun-cli-cs", nil)
+		assert.Contains(t, errObj.Error(), "with method PUT")
+		assert.Contains(t, errObj.Error(), "ApiName form")
+		assert.Contains(t, errObj.Error(), "METHOD + path")
+		assert.Contains(t, errObj.Error(), "aliyun plugin install --name aliyun-cli-cs")
+
+		suggestions := errObj.GetSuggestions()
+		joined := strings.Join(suggestions, "\n")
+		assert.Contains(t, joined, "aliyun cs GET /clusters [built-in RESTful Style for DescribeClusters]")
+		assert.Contains(t, joined, "aliyun cs POST /clusters [built-in RESTful Style for CreateCluster]")
+		assert.Contains(t, joined, "[built-in OpenAPI ApiName]")
+	})
+
+	t.Run("path exists wrong method with plugin", func(t *testing.T) {
+		product := meta.Product{Code: "cs", Version: "2015-12-15"}
+		matches := []meta.Api{
+			{Name: "DescribeClusters", Method: "GET", PathPattern: "/clusters"},
+			{Name: "CreateCluster", Method: "POST", PathPattern: "/clusters"},
+		}
+		lp := &plugin.LocalPlugin{
+			CmdNames: []string{"describe-clusters", "create-cluster", "delete-cluster"},
+		}
+
+		errObj := newInvalidRestfulPathError(&product, "PUT", "/clusters", matches, "aliyun-cli-cs", lp)
+		suggestions := errObj.GetSuggestions()
+		joined := strings.Join(suggestions, "\n")
+		assert.Contains(t, joined, "aliyun cs describe-clusters  [product plugin command]")
+		assert.Contains(t, joined, "aliyun cs create-cluster  [product plugin command]")
+		assert.NotContains(t, joined, "delete-cluster")
+	})
+
+	t.Run("path not found", func(t *testing.T) {
+		repo, err := meta.MockLoadRepository([]meta.Product{{
+			Code:     "cs",
+			Version:  "2015-12-15",
+			ApiNames: []string{"DescribeClusters"},
+		}})
+		assert.NoError(t, err)
+		lib := &Library{builtinRepo: repo}
+		product, ok := lib.GetProduct("cs")
+		assert.True(t, ok)
+
+		errObj := newInvalidRestfulPathError(&product, "PUT", "/no-such-path", nil, "", nil)
+		assert.Contains(t, errObj.Error(), "can not find api by path /no-such-path")
+		assert.Contains(t, errObj.Error(), "Use `aliyun cs --help` to confirm the correct ApiName and METHOD+path for this product.")
+		assert.Contains(t, errObj.Error(), "ApiName form")
+		assert.Empty(t, errObj.GetSuggestions())
+	})
+}
+
+func TestRestfulBroadPathError(t *testing.T) {
+	product := meta.Product{Code: "sls", Version: "2020-03-20"}
+	api := meta.Api{Name: "ListProjects", Method: "GET", PathPattern: "/"}
+	lp := &plugin.LocalPlugin{CmdNames: []string{"list-projects"}}
+
+	errObj := newRestfulBroadPathError(&product, "GET", "/", api, "aliyun-cli-sls", lp)
+	assert.Contains(t, errObj.Error(), `path "/" is too broad for METHOD+path invocation with GET`)
+	assert.Contains(t, errObj.Error(), `Use a specific ApiName instead of the root path "/"`)
+	assert.Contains(t, errObj.Error(), "Use `aliyun sls --help` to confirm the correct ApiName for this product.")
+	assert.Contains(t, errObj.Error(), "ApiName form")
+	assert.NotContains(t, errObj.Error(), "METHOD + path")
+
+	suggestions := errObj.GetSuggestions()
+	joined := strings.Join(suggestions, "\n")
+	assert.Contains(t, joined, "aliyun sls ListProjects  [built-in OpenAPI ApiName]")
+	assert.Contains(t, joined, "aliyun sls list-projects  [product plugin command]")
+	assert.NotContains(t, joined, "[built-in RESTful Style")
+}
+
+func TestRpcMethodPathError(t *testing.T) {
+	product := meta.Product{Code: "ecs", Version: "2014-05-26", ApiStyle: "rpc"}
+	errObj := newRpcMethodPathError(&product, "GET", "/instances", "aliyun-cli-ecs", nil)
+
+	assert.Contains(t, errObj.Error(), "'ecs' is an RPC product and does not accept METHOD + path form")
+	assert.Contains(t, errObj.Error(), "got GET /instances")
+	assert.Contains(t, errObj.Error(), "Use `aliyun ecs <ApiName>` instead")
+	assert.Contains(t, errObj.Error(), "aliyun ecs --help")
+	assert.Contains(t, errObj.Error(), "CamelCase")
+	assert.NotContains(t, errObj.Error(), "REST shortcut")
+	assert.Equal(t, []string{"aliyun ecs --help"}, errObj.GetSuggestions())
 }
 
 func TestRemoveDuplicates(t *testing.T) {

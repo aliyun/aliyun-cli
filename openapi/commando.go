@@ -60,6 +60,15 @@ func NewCommando(w io.Writer, profile config.Profile) *Commando {
 	return r
 }
 
+func (c *Commando) ensurePluginState() {
+	if c.pluginIndex == nil {
+		c.pluginIndex = &plugin.Index{}
+	}
+	if c.localManifest == nil {
+		c.localManifest = &plugin.LocalManifest{Plugins: make(map[string]plugin.LocalPlugin)}
+	}
+}
+
 func (c *Commando) loadPlugins() {
 	if c.pluginLoaded {
 		return
@@ -68,11 +77,17 @@ func (c *Commando) loadPlugins() {
 	mgr, err := plugin.NewManager()
 	if err != nil {
 		c.pluginIndexErr = err
+		c.ensurePluginState()
 		return
 	}
 	// Remote index may fail offline; local manifest still loads for installed plugins.
-	c.pluginIndex, c.pluginIndexErr = mgr.GetIndex()
-	c.localManifest, _ = mgr.GetLocalManifest()
+	if c.pluginIndex == nil {
+		c.pluginIndex, c.pluginIndexErr = mgr.GetIndex()
+	}
+	if c.localManifest == nil {
+		c.localManifest, _ = mgr.GetLocalManifest()
+	}
+	c.ensurePluginState()
 }
 
 func (c *Commando) printPluginIndexLoadFailureNote(ctx *cli.Context) {
@@ -176,71 +191,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		return nil
 	}
 
-	// Check if we should show original product help instead of plugin help, only and need to be applied in product level
-	envShowOriginalHelp := os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP")
-	showOriginalProductHelp := envShowOriginalHelp == "true" || envShowOriginalHelp == "1"
-
 	// Strategy: Plugin Execution
 	// If the second argument (API name) is all lowercase or version, use plugin.
-	// If only one arg and corresponding plugin is installed, use plugin, unless showOriginalProductHelp is true.
-	// If only one arg and corresponding plugin is not installed, show original product help.
+	// Product-level help (`aliyun <product>` / `--help`) is handled by renderProductLevelHelp.
 
-	// fmt.Println("args", args)
-	// fmt.Println("os.Args", os.Args)
-	if len(args) == 1 && !showOriginalProductHelp {
-		// 单产品输入，无论是否添加--help，都先由安装的插件运行，插件未安装则执行下面的运行逻辑
-		// 使用 ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP 环境变量可以显示原始产品的 help 信息，而不是插件 help
-		// 单产品运行就是--help
-		installed, pluginName, err := plugin.IsPluginInstalled(args[0])
-		if err != nil {
-			return fmt.Errorf("failed to check plugin status: %w", err)
-		}
-		if installed {
-			c.setLangEnv(ctx)
-			if os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP") == "true" {
-				// Fall through to built-in help
-			} else {
-				// Extract arguments from os.Args to preserve flags for plugin help, like --api-version
-				var pluginArgs []string
-				cmdIndex := -1
-				for i, arg := range os.Args {
-					if arg == args[0] {
-						cmdIndex = i
-						break
-					}
-				}
-				if cmdIndex != -1 && cmdIndex < len(os.Args) {
-					pluginArgs = os.Args[cmdIndex:]
-				} else {
-					pluginArgs = args
-				}
-
-				ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
-				if err != nil {
-					return err
-				}
-				if ok {
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\nNote: The help information for product '%s' is provided by the installed plugin '%s'.\n", args[0], pluginName)
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "To view the legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true\n")
-					return nil
-				}
-			}
-		} else {
-			c.loadPlugins()
-			if c.pluginIndex != nil {
-				for _, pInfo := range c.pluginIndex.Plugins {
-					if strings.EqualFold(pInfo.ProductCode, args[0]) {
-						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\n[Suggestion] A dedicated product plugin '%s' is available for '%s'.\n", pInfo.Name, args[0])
-						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "Run 'aliyun plugin install --names %s' to install it for enhanced features.\n\n", pInfo.Name)
-						break
-					}
-				}
-			} else if c.pluginIndexErr != nil {
-				c.printPluginIndexLoadFailureNote(ctx)
-			}
-		}
-
-	} else if len(args) > 1 {
+	if len(args) > 1 {
 		apiOrMethod := args[1]
 		// Check if it's all lowercase (plugin format) and not an HTTP method
 		upperMethod := strings.ToUpper(apiOrMethod)
@@ -283,20 +238,10 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 				if foundPluginName == "" {
 					c.loadPlugins()
-					if c.pluginIndex != nil {
-						for _, pInfo := range c.pluginIndex.Plugins {
-							if strings.EqualFold(pInfo.ProductCode, args[0]) {
-								return fmt.Errorf("'%s' is not a valid built-in product.\nA plugin '%s' is available which supports this product.\nRun 'aliyun plugin install --names %s' to install it.", args[0], pInfo.Name, pInfo.Name)
-							}
-						}
-					} else if c.pluginIndexErr != nil {
+					if c.pluginIndexErr != nil {
 						c.printPluginIndexLoadFailureNote(ctx)
 					}
-					var plugins []plugin.PluginInfo
-					if c.pluginIndex != nil {
-						plugins = c.pluginIndex.Plugins
-					}
-					return &InvalidProductOrPluginError{Code: args[0], library: c.library, plugins: plugins}
+					return c.apiOrCmdNotFoundForPluginLane(args[0], args[1])
 				}
 				pluginName = foundPluginName
 			}
@@ -379,6 +324,17 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		return c.help(ctx, args)
 	}
 
+	productName := args[0]
+	// 单产品运行就是 --help（`aliyun <product>` / `aliyun help <product>` / `aliyun <product> --help`）
+	// 不强制 profile， 之前legacy 逻辑为profile 必须配置，现在不强制。 legacy 的用户的profile 已经ready，language 可用；plugin 用户language 从参数或profile获取
+	// aliyun <productCode>
+	if len(args) == 1 {
+		if c.profile.Language != "" {
+			i18n.SetLanguage(c.profile.Language)
+		}
+		return c.renderProductLevelHelp(ctx, productName, pluginArgsFromOS(productName, args))
+	}
+
 	// detect if in configure mode
 	ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
 
@@ -393,20 +349,18 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it.")
 	}
 	i18n.SetLanguage(c.profile.Language)
-
 	// process following commands:
-	//   aliyun <productCode>
 	//   aliyun <productCode> <method> --param1 value1
 	//   aliyun <productCode> GET <path>
-	productName := args[0]
-	if len(args) == 1 {
-		// aliyun <productCode>
-		// TODO: aliyun pluginName ...
-		return c.library.PrintProductUsage(productName, true)
-	} else if len(args) == 2 {
+	if len(args) == 2 {
 		// rpc or restful call
 		// aliyun <productCode> <method> --param1 value1
-		product, _ := c.library.GetProduct(args[0])
+		product, productFound := c.library.GetProduct(args[0])
+		force := ForceFlag(ctx.Flags()).IsAssigned()
+		if !productFound && !force {
+			c.loadPlugins()
+			return &InvalidProductOrPluginError{Code: productName, library: c.library, plugins: c.pluginIndex.Plugins}
+		}
 		if product.Code != "" {
 			if version, _ := ctx.Flags().Get("version").GetValue(); version != "" {
 				if style, ok := c.library.GetStyle(productName, version); ok {
@@ -426,9 +380,8 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			api, found := meta.HookGetApi(c.library.GetApi)(product.Code, product.Version, args[1])
 			// For restful products, the 2-arg form `aliyun <product> <ApiName>` requires a valid ApiName so we can resolve the underlying Method + PathPattern from metadata.
 			// Otherwise we'd fall through with empty Method/PathPattern and surface the confusing "product 'xxx' need restful call" error from checkRestfulMethod.
-			force := ForceFlag(ctx.Flags()).IsAssigned()
 			if !found && !force {
-				return &InvalidApiError{Name: args[1], product: &product}
+				return c.apiOrCmdNotFoundError(productName, args[1])
 			}
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 			ctx.Command().Name = args[1]
@@ -438,7 +391,10 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			return c.processInvoke(ctx, productName, api.Method, api.PathPattern)
 		} else {
 			// RPC need check API parameters too
-			api, _ := c.library.GetApi(product.Code, product.Version, args[1])
+			api, found := c.library.GetApi(product.Code, product.Version, args[1])
+			if !found && !force {
+				return c.apiOrCmdNotFoundError(productName, args[1])
+			}
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 		}
 
@@ -446,13 +402,27 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	} else if len(args) == 3 {
 		// restful call
 		// aliyun <productCode> {GET|PUT|POST|DELETE} <path> --
-		product, _ := c.library.GetProduct(productName)
-		api, find := meta.HookGetApiByPath(c.library.GetApiByPath)(product.Code, product.Version, args[1], args[2])
 		force := ForceFlag(ctx.Flags()).IsAssigned()
+		product, productFound := c.library.GetProduct(productName)
+		if !productFound && !force {
+			c.loadPlugins()
+			return &InvalidProductOrPluginError{Code: productName, library: c.library, plugins: c.pluginIndex.Plugins}
+		}
+		if product.Code != "" {
+			if version, _ := ctx.Flags().Get("version").GetValue(); version != "" {
+				if style, ok := c.library.GetStyle(productName, version); ok {
+					product.ApiStyle = style
+				}
+			}
+		}
+		upperMethod := strings.ToUpper(args[1])
+		isHttpMethod := upperMethod == "GET" || upperMethod == "POST" || upperMethod == "PUT" || upperMethod == "DELETE"
+		if isHttpMethod && strings.ToLower(product.ApiStyle) == "rpc" && !force {
+			return c.rpcMethodPathError(&product, args[1], args[2])
+		}
+		api, find := meta.HookGetApiByPath(c.library.GetApiByPath)(product.Code, product.Version, args[1], args[2])
 		if !find && !force {
-			// throw error, can not find api by path
-			return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
-				"Please confirm if the API path exists")
+			return c.restfulPathNotFoundError(&product, args[1], args[2])
 		}
 		if find {
 			c.CheckApiParamWithBuildInArgs(ctx, api)
@@ -462,12 +432,10 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		}
 		if ShouldUseOpenapi(ctx, &product) {
 			if !find {
-				return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
-					"Please confirm if the API path exists")
+				return c.restfulPathNotFoundError(&product, args[1], args[2])
 			}
 			if args[2] == "/" {
-				return cli.NewErrorWithTip(fmt.Errorf("too broad path: %s for method: %s, please use specific ApiName instead",
-					args[2], args[1]), "Please confirm the API path")
+				return c.restfulBroadPathError(&product, args[1], args[2], api)
 			}
 			return c.processApiInvoke(ctx, &product, &api, args[1], args[2])
 		}
@@ -818,14 +786,6 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 					&api,
 				}, nil
 			}
-			c.loadPlugins()
-			if c.localManifest != nil {
-				pluginName := "aliyun-cli-" + strings.ToLower(product.Code)
-				localPlugin, isInstalled := c.localManifest.Plugins[pluginName]
-				if isInstalled {
-					return nil, &InvalidUnifiedApiError{Name: apiOrMethod, product: &product, lPlugin: localPlugin}
-				}
-			}
 			return nil, &InvalidApiError{apiOrMethod, &product}
 		}
 
@@ -1100,6 +1060,50 @@ func buildCommandName(args []string) string {
 		return args[0]
 	}
 	return strings.Join(args[:2], " ")
+}
+
+// unified api/cmd guidance (builtin ApiNames + installed plugin CmdNames).
+// assume product level has been verified in the caller
+func (c *Commando) apiOrCmdNotFoundError(productCode, apiOrCmd string) error {
+	c.loadPlugins()
+	product, inLibrary := c.library.GetProduct(productCode)
+	if !inLibrary {
+		product = meta.Product{Code: productCode}
+	}
+	pluginName, _ := c.lookupPluginForProduct(productCode)
+	localPlugin := c.getInstalledLocalPlugin(productCode)
+	return newApiOrCmdNotFoundError(&product, apiOrCmd, localPlugin, pluginName)
+}
+
+// used when lowercase args[1] routed to the plugin lane but no plugin could be resolved.
+// Known products get three-way api/cmd guidance instead of a misleading "invalid product" error (e.g. aliyun sts getcalleridentity).
+func (c *Commando) apiOrCmdNotFoundForPluginLane(productCode, apiOrCmd string) error {
+	c.loadPlugins()
+	_, inLibrary := c.library.GetProduct(productCode)
+	_, hasPlugin := c.lookupPluginForProduct(productCode)
+	if !inLibrary && !hasPlugin {
+		return &InvalidProductOrPluginError{Code: productCode, library: c.library, plugins: c.pluginIndex.Plugins}
+	}
+	return c.apiOrCmdNotFoundError(productCode, apiOrCmd)
+}
+
+func (c *Commando) restfulPathNotFoundError(product *meta.Product, method, path string) error {
+	c.loadPlugins()
+	pluginName, _ := c.lookupPluginForProduct(product.Code)
+	matches := c.library.FindApisByPath(product.Code, product.Version, path)
+	return newInvalidRestfulPathError(product, method, path, matches, pluginName, c.getInstalledLocalPlugin(product.Code))
+}
+
+func (c *Commando) restfulBroadPathError(product *meta.Product, method, path string, api meta.Api) error {
+	c.loadPlugins()
+	pluginName, _ := c.lookupPluginForProduct(product.Code)
+	return newRestfulBroadPathError(product, method, path, api, pluginName, c.getInstalledLocalPlugin(product.Code))
+}
+
+func (c *Commando) rpcMethodPathError(product *meta.Product, method, path string) error {
+	c.loadPlugins()
+	pluginName, _ := c.lookupPluginForProduct(product.Code)
+	return newRpcMethodPathError(product, method, path, pluginName, c.getInstalledLocalPlugin(product.Code))
 }
 
 func (c *Commando) findAndInstallPlugin(ctx *cli.Context, commandName, productCode string) (string, error) {
