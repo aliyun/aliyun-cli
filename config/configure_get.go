@@ -75,6 +75,8 @@ func doConfigureGet(c *cli.Context, args []string) error {
 			cli.Printf(c.Stdout(), "sts-token=%s\n", profile.StsToken)
 		case StsRegionFlagName:
 			cli.Printf(c.Stdout(), "sts-region=%s\n", profile.StsRegion)
+		case StsEndpointFlagName:
+			cli.Printf(c.Stdout(), "sts-endpoint=%s\n", profile.StsEndpoint)
 		case RamRoleNameFlagName:
 			cli.Printf(c.Stdout(), "ram-role-name=%s\n", profile.RamRoleName)
 		case RamRoleArnFlagName:
