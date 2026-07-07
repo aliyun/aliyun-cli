@@ -574,30 +574,17 @@ func TestGetStsEndpoint(t *testing.T) {
 }
 
 func TestResolveStsEndpoint(t *testing.T) {
-	cp := &Profile{RegionId: "cn-hangzhou"}
+	cp := &Profile{StsRegion: "cn-hangzhou"}
 	assert.Equal(t, "sts.cn-hangzhou.aliyuncs.com", resolveSTSEndpoint(cp))
 
 	cp = &Profile{StsRegion: "cn-beijing"}
 	assert.Equal(t, "sts.cn-beijing.aliyuncs.com", resolveSTSEndpoint(cp))
 
-	cp = &Profile{RegionId: "cn-hangzhou", EndpointType: "vpc"}
+	cp = &Profile{StsRegion: "cn-hangzhou", StsEndpoint: "https://sts-vpc.cn-hangzhou.aliyuncs.com/"}
 	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", resolveSTSEndpoint(cp))
 
-	cp = &Profile{StsRegion: "cn-shanghai", EndpointType: "VPC"}
-	assert.Equal(t, "sts-vpc.cn-shanghai.aliyuncs.com", resolveSTSEndpoint(cp))
-
-	cp = &Profile{RegionId: "cn-hangzhou", StsEndpoint: "https://sts-vpc.cn-hangzhou.aliyuncs.com/"}
+	cp = &Profile{StsRegion: "cn-hangzhou", StsEndpoint: "sts-vpc.cn-hangzhou.aliyuncs.com"}
 	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", resolveSTSEndpoint(cp))
-
-	cp = &Profile{RegionId: "cn-hangzhou", EndpointType: "vpc"}
-	os.Setenv("ALIBABA_CLOUD_VPC_ENDPOINT_ENABLED", "true")
-	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", resolveSTSEndpoint(cp))
-	os.Unsetenv("ALIBABA_CLOUD_VPC_ENDPOINT_ENABLED")
-
-	cp = &Profile{RegionId: "cn-hangzhou"}
-	os.Setenv("ALIBABA_CLOUD_VPC_ENDPOINT_ENABLED", "true")
-	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", resolveSTSEndpoint(cp))
-	os.Unsetenv("ALIBABA_CLOUD_VPC_ENDPOINT_ENABLED")
 }
 
 func TestOverwriteWithFlagsStsEndpointEnv(t *testing.T) {
@@ -609,16 +596,11 @@ func TestOverwriteWithFlagsStsEndpointEnv(t *testing.T) {
 	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", actual.StsEndpoint)
 	os.Unsetenv("ALIBABA_CLOUD_STS_ENDPOINT")
 
-	os.Setenv("ALIBABA_CLOUD_STS_REGION", "cn-beijing")
+	os.Setenv("ALIBABACLOUD_STS_ENDPOINT", "sts-vpc.cn-shanghai.aliyuncs.com")
+	actual.StsEndpoint = ""
 	actual.OverwriteWithFlags(ctx)
-	assert.Equal(t, "cn-beijing", actual.StsRegion)
-	os.Unsetenv("ALIBABA_CLOUD_STS_REGION")
-
-	os.Setenv("ALIBABA_CLOUD_VPC_ENDPOINT_ENABLED", "true")
-	actual.EndpointType = ""
-	actual.OverwriteWithFlags(ctx)
-	assert.Equal(t, "vpc", actual.EndpointType)
-	os.Unsetenv("ALIBABA_CLOUD_VPC_ENDPOINT_ENABLED")
+	assert.Equal(t, "", actual.StsEndpoint)
+	os.Unsetenv("ALIBABACLOUD_STS_ENDPOINT")
 }
 
 func TestNormalizeMode(t *testing.T) {

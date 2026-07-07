@@ -313,20 +313,12 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		cp.RegionId = util.GetFromEnv("ALIBABA_CLOUD_REGION_ID", "ALIBABACLOUD_REGION_ID", "ALICLOUD_REGION_ID", "REGION_ID", "REGION")
 	}
 
-	if cp.StsRegion == "" {
-		cp.StsRegion = util.GetFromEnv("ALIBABA_CLOUD_STS_REGION", "ALIBABACLOUD_STS_REGION")
-	}
-
 	if cp.StsEndpoint == "" {
-		cp.StsEndpoint = util.GetFromEnv("ALIBABA_CLOUD_STS_ENDPOINT", "ALIBABACLOUD_STS_ENDPOINT")
+		cp.StsEndpoint = os.Getenv("ALIBABA_CLOUD_STS_ENDPOINT")
 	}
 
 	if cp.EndpointType == "" {
 		cp.EndpointType = util.GetFromEnv("ALIBABA_CLOUD_ENDPOINT_TYPE", "ALIBABACLOUD_ENDPOINT_TYPE", "ALICLOUD_ENDPOINT_TYPE", "ENDPOINT_TYPE")
-	}
-
-	if cp.EndpointType == "" && isVpcEndpointEnabled() {
-		cp.EndpointType = "vpc"
 	}
 
 	if cp.Endpoint == "" {
@@ -427,25 +419,6 @@ func getSTSEndpoint(regionId string) string {
 	return "sts.aliyuncs.com"
 }
 
-func isVpcEndpointEnabled() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_VPC_ENDPOINT_ENABLED")))
-	return v == "true" || v == "1"
-}
-
-func isVpcSTSEndpoint(cp *Profile) bool {
-	if strings.EqualFold(cp.EndpointType, "vpc") {
-		return true
-	}
-	return isVpcEndpointEnabled()
-}
-
-func stsRegionForProfile(cp *Profile) string {
-	if cp.StsRegion != "" {
-		return cp.StsRegion
-	}
-	return cp.RegionId
-}
-
 func normalizeSTSEndpointHost(endpoint string) string {
 	endpoint = strings.TrimSpace(endpoint)
 	endpoint = strings.TrimPrefix(endpoint, "https://")
@@ -457,11 +430,7 @@ func resolveSTSEndpoint(cp *Profile) string {
 	if cp.StsEndpoint != "" {
 		return normalizeSTSEndpointHost(cp.StsEndpoint)
 	}
-	regionId := stsRegionForProfile(cp)
-	if isVpcSTSEndpoint(cp) && regionId != "" {
-		return fmt.Sprintf("sts-vpc.%s.aliyuncs.com", regionId)
-	}
-	return getSTSEndpoint(regionId)
+	return getSTSEndpoint(cp.StsRegion)
 }
 
 // mergeProfileAfterCredentialRefresh persists STS / OAuth token fields from the in-memory profile onto the on-disk profile.
@@ -853,12 +822,6 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 	}
 	if cp.StsEndpoint != "" {
 		envs["ALIBABA_CLOUD_STS_ENDPOINT"] = cp.StsEndpoint
-	}
-	if cp.StsRegion != "" {
-		envs["ALIBABA_CLOUD_STS_REGION"] = cp.StsRegion
-	}
-	if isVpcSTSEndpoint(cp) {
-		envs["ALIBABA_CLOUD_VPC_ENDPOINT_ENABLED"] = "true"
 	}
 	if cp.ExternalAccountType != "" {
 		envs["ALIBABA_CLOUD_EXTERNAL_ACCOUNT_TYPE"] = cp.ExternalAccountType
