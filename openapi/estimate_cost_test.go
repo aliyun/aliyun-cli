@@ -287,3 +287,125 @@ func TestMainEstimateCostMissingProductOrApi(t *testing.T) {
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "--estimate-cost requires a product and an API name")
 }
+
+// helper: build a context with flags and assign --estimate-cost-context values.
+func ctxWithPricingContext(values []string) *cli.Context {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	if values != nil {
+		f := EstimateCostContextFlag(ctx.Flags())
+		f.SetAssigned(true)
+		f.SetValues(values)
+	}
+	return ctx
+}
+
+func TestBuildPricingContextMultiValue(t *testing.T) {
+	ctx := ctxWithPricingContext([]string{"EstimatedInternetTrafficOutGB=100", "InternetChargeType=PayByTraffic"})
+	pc, err := buildPricingContext(ctx)
+	assert.Nil(t, err)
+	assert.Equal(t, map[string]interface{}{
+		"EstimatedInternetTrafficOutGB": "100",
+		"InternetChargeType":            "PayByTraffic",
+	}, pc)
+}
+
+func TestBuildPricingContextFirstEqualsSplit(t *testing.T) {
+	// value may contain '=' — split on the FIRST '=' only.
+	ctx := ctxWithPricingContext([]string{"Expr=a==b"})
+	pc, err := buildPricingContext(ctx)
+	assert.Nil(t, err)
+	assert.Equal(t, "a==b", pc["Expr"])
+}
+
+func TestBuildPricingContextEmptyValueAllowed(t *testing.T) {
+	ctx := ctxWithPricingContext([]string{"EipAllocationId="})
+	pc, err := buildPricingContext(ctx)
+	assert.Nil(t, err)
+	assert.Equal(t, "", pc["EipAllocationId"])
+}
+
+func TestBuildPricingContextMalformedNoEquals(t *testing.T) {
+	ctx := ctxWithPricingContext([]string{"novalue"})
+	_, err := buildPricingContext(ctx)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "novalue")
+}
+
+func TestBuildPricingContextEmptyKeyRejected(t *testing.T) {
+	ctx := ctxWithPricingContext([]string{"=100"})
+	_, err := buildPricingContext(ctx)
+	assert.NotNil(t, err)
+}
+
+func TestBuildPricingContextUnassigned(t *testing.T) {
+	ctx := ctxWithPricingContext(nil)
+	pc, err := buildPricingContext(ctx)
+	assert.Nil(t, err)
+	assert.Nil(t, pc)
+}
+
+func TestProcessInvokeEstimateCostWithContext(t *testing.T) {
+	// --estimate-cost + --estimate-cost-context: exercises the PricingContext
+	// nesting in processEstimateCost, then fails on an unresolvable host
+	// (proving the quote request — with the nested context — was assembled and
+	// sent, not the target API).
+	t.Setenv(estimateCostEndpointEnv, "estimate-cost.test.invalid")
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	profile := config.NewProfile("test-estimate-cost")
+	profile.Mode = "AK"
+	profile.AccessKeyId = "test-ak"
+	profile.AccessKeySecret = "test-secret"
+	profile.RegionId = "cn-hangzhou"
+	command := NewCommando(w, profile)
+
+	EstimateCostFlag(ctx.Flags()).SetAssigned(true)
+	cf := EstimateCostContextFlag(ctx.Flags())
+	cf.SetAssigned(true)
+	cf.SetValues([]string{"EstimatedInternetTrafficOutGB=100", "InternetChargeType=PayByTraffic"})
+
+	err := command.processInvoke(ctx, "ecs", "DescribeRegions", "")
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "estimate-cost.test.invalid")
+}
+
+func TestProcessInvokeEstimateCostContextMalformed(t *testing.T) {
+	// A malformed --estimate-cost-context entry must abort before any network
+	// call (buildPricingContext error propagates out of processEstimateCost).
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	profile := config.NewProfile("test-estimate-cost")
+	profile.Mode = "AK"
+	profile.AccessKeyId = "test-ak"
+	profile.AccessKeySecret = "test-secret"
+	profile.RegionId = "cn-hangzhou"
+	command := NewCommando(w, profile)
+
+	EstimateCostFlag(ctx.Flags()).SetAssigned(true)
+	cf := EstimateCostContextFlag(ctx.Flags())
+	cf.SetAssigned(true)
+	cf.SetValues([]string{"novalue"})
+
+	err := command.processInvoke(ctx, "ecs", "DescribeRegions", "")
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "novalue")
+}

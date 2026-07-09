@@ -170,6 +170,15 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				"        run `aliyun --list-supported-pricing-apis` to see every API that supports cost estimation")
 	}
 
+	// --estimate-cost-context only makes sense alongside --estimate-cost (it
+	// supplies PricingContext for the quote). Reject it standalone so a
+	// forgotten --estimate-cost doesn't silently run the real API.
+	if EstimateCostContextFlag(ctx.Flags()).IsAssigned() && !EstimateCostFlag(ctx.Flags()).IsAssigned() {
+		return cli.NewErrorWithTip(
+			fmt.Errorf("--estimate-cost-context requires --estimate-cost"),
+			"add --estimate-cost, e.g. aliyun ecs RunInstances ... --estimate-cost --estimate-cost-context EstimatedInternetTrafficOutGB=100")
+	}
+
 	// aliyun
 	if len(args) == 0 {
 		c.printUsage(ctx)

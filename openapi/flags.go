@@ -33,6 +33,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewDryRunFlag())
 	fs.Add(NewDryRunJsonFlag())
 	fs.Add(NewEstimateCostFlag())
+	fs.Add(NewEstimateCostContextFlag())
 	fs.Add(NewQuietFlag())
 	fs.Add(NewLogLevelFlag())
 	fs.Add(NewYesFlag())
@@ -45,27 +46,28 @@ func AddFlags(fs *cli.FlagSet) {
 }
 
 const (
-	SecureFlagName        = "secure"
-	InsecureFlagName      = "insecure"
-	ForceFlagName         = "force"
-	VersionFlagName       = "version"
-	HeaderFlagName        = "header"
-	BodyFlagName          = "body"
-	BodyFileFlagName      = "body-file"
-	AcceptFlagName        = "accept"
-	RoaFlagName           = "roa"
-	DryRunFlagName        = "dryrun"
-	CliDryRunJsonFlagName = "cli-dry-run-json"
-	EstimateCostFlagName  = "estimate-cost"
-	QuietFlagName         = "quiet"
-	LogLevelFlagName      = "log-level"
-	YesFlagName           = "yes"
-	QueryFlagName         = "cli-query"
-	OutputFlagName        = "output"
-	MethodFlagName        = "method"
-	UserAgentFlagName     = "user-agent"
-	CliAIModeFlagName     = "cli-ai-mode"
-	CliNoAIModeFlagName   = "no-cli-ai-mode"
+	SecureFlagName              = "secure"
+	InsecureFlagName            = "insecure"
+	ForceFlagName               = "force"
+	VersionFlagName             = "version"
+	HeaderFlagName              = "header"
+	BodyFlagName                = "body"
+	BodyFileFlagName            = "body-file"
+	AcceptFlagName              = "accept"
+	RoaFlagName                 = "roa"
+	DryRunFlagName              = "dryrun"
+	CliDryRunJsonFlagName       = "cli-dry-run-json"
+	EstimateCostFlagName        = "estimate-cost"
+	EstimateCostContextFlagName = "estimate-cost-context"
+	QuietFlagName               = "quiet"
+	LogLevelFlagName            = "log-level"
+	YesFlagName                 = "yes"
+	QueryFlagName               = "cli-query"
+	OutputFlagName              = "output"
+	MethodFlagName              = "method"
+	UserAgentFlagName           = "user-agent"
+	CliAIModeFlagName           = "cli-ai-mode"
+	CliNoAIModeFlagName         = "no-cli-ai-mode"
 )
 
 func OutputFlag(fs *cli.FlagSet) *cli.Flag {
@@ -299,6 +301,28 @@ func NewEstimateCostFlag() *cli.Flag {
 
 func EstimateCostFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(EstimateCostFlagName)
+}
+
+// NewEstimateCostContextFlag registers `--estimate-cost-context Key=Value`, a
+// companion to --estimate-cost that supplies PricingContext entries (usage
+// assumptions / future-state overrides, e.g. EstimatedInternetTrafficOutGB=100).
+// Repeatable and multi-value: `--estimate-cost-context K1=V1 K2=V2`. Keys are
+// not validated here — PricingContext is mapping-defined and evolving; the
+// server validates. Must accompany --estimate-cost (enforced in commando.go).
+func NewEstimateCostContextFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         EstimateCostContextFlagName,
+		AssignedMode: cli.AssignedRepeatable,
+		Short: i18n.T(
+			"use `--estimate-cost-context Key=Value` to pass PricingContext entries to --estimate-cost (e.g. EstimatedInternetTrafficOutGB=100), repeatable or multi-value",
+			"配合 `--estimate-cost` 使用 `--estimate-cost-context Key=Value` 传递 PricingContext 询价假设（如 EstimatedInternetTrafficOutGB=100），可多值或多次指定",
+		),
+	}
+}
+
+func EstimateCostContextFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(EstimateCostContextFlagName)
 }
 
 func NewQuietFlag() *cli.Flag {
