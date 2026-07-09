@@ -33,12 +33,12 @@ import (
 //	ALIBABA_CLOUD_PRICING_ENDPOINT — default cloudcontrol.aliyuncs.com
 //	ALIBABA_CLOUD_PRICING_HOST     — Host header when endpoint is a CNAME
 const (
-	estimateCostApiVersion   = "2022-08-30"
-	estimateCostQuotePath    = "/api/v1/price/quote"
-	estimateCostEndpointEnv  = "ALIBABA_CLOUD_PRICING_ENDPOINT"
-	estimateCostHostEnv      = "ALIBABA_CLOUD_PRICING_HOST"
-	defaultEstimateCostHost  = "cloudcontrol.aliyuncs.com"
-	estimateCostProductCode  = "cloudcontrol"
+	estimateCostApiVersion  = "2022-08-30"
+	estimateCostQuotePath   = "/api/v1/price/quote"
+	estimateCostEndpointEnv = "ALIBABA_CLOUD_PRICING_ENDPOINT"
+	estimateCostHostEnv     = "ALIBABA_CLOUD_PRICING_HOST"
+	defaultEstimateCostHost = "cloudcontrol.aliyuncs.com"
+	estimateCostProductCode = "cloudcontrol"
 )
 
 type estimateCostRequest struct {
@@ -63,6 +63,18 @@ func (c *Commando) processEstimateCost(ctx *cli.Context, inv Invoker) error {
 	parameters, err := buildEstimateCostParameters(req)
 	if err != nil {
 		return err
+	}
+
+	// PricingContext (--estimate-cost-context): pricing-only assumptions/state
+	// overrides. Nested inside `parameters` as a sibling of the API params —
+	// the quote service reads the whole parameters object as `request` and
+	// mapping expressions reference request.PricingContext.<key>.
+	pricingContext, err := buildPricingContext(ctx)
+	if err != nil {
+		return err
+	}
+	if len(pricingContext) > 0 {
+		parameters["PricingContext"] = pricingContext
 	}
 
 	out, err := invokeEstimateCost(ctx, &c.profile, req.Product, req.Version, apiName, parameters)
@@ -131,6 +143,30 @@ func buildEstimateCostParameters(req *requests.CommonRequest) (map[string]interf
 		}
 	}
 	return parameters, nil
+}
+
+// buildPricingContext collects `--estimate-cost-context Key=Value` entries into
+// a map for nesting under parameters.PricingContext. Repeatable and multi-value
+// (`--estimate-cost-context K1=V1 K2=V2`). Split on the FIRST `=` so values may
+// contain `=`. Keys are not validated — PricingContext is mapping-defined and
+// evolving; the quote service validates. Empty value allowed; empty key rejected.
+// Returns (nil, nil) when the flag is absent.
+func buildPricingContext(ctx *cli.Context) (map[string]interface{}, error) {
+	f := EstimateCostContextFlag(ctx.Flags())
+	if f == nil || !f.IsAssigned() {
+		return nil, nil
+	}
+	pc := make(map[string]interface{})
+	for _, s := range f.GetValues() {
+		k, v, ok := cli.SplitStringWithPrefix(s, "=")
+		if !ok || k == "" {
+			return nil, cli.NewErrorWithTip(
+				fmt.Errorf("invalid --estimate-cost-context `%s`", s),
+				"use `--estimate-cost-context Key=Value`, e.g. --estimate-cost-context EstimatedInternetTrafficOutGB=100")
+		}
+		pc[k] = v
+	}
+	return pc, nil
 }
 
 func estimateCostEndpoint() string {

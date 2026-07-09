@@ -3701,3 +3701,26 @@ func TestMain_SafetyPolicyEnforcement(t *testing.T) {
 		assert.Contains(t, err.Error(), "fc:create-function")
 	})
 }
+
+func TestEstimateCostContextRequiresEstimateCost(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	profile := config.Profile{Mode: config.AK, AccessKeyId: "id", AccessKeySecret: "secret", RegionId: "cn-hangzhou"}
+	command := NewCommando(w, profile)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	// context assigned but --estimate-cost NOT assigned → must fail loudly.
+	f := EstimateCostContextFlag(ctx.Flags())
+	f.SetAssigned(true)
+	f.SetValues([]string{"EstimatedInternetTrafficOutGB=100"})
+
+	err := command.main(ctx, []string{"ecs", "RunInstances"})
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "--estimate-cost-context requires --estimate-cost")
+}
