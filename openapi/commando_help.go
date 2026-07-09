@@ -404,6 +404,17 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 	printParameters(w, api.Parameters, "", detail)
 	w.Flush()
 
+	// Print example if available
+	if detail != nil && detail.Example != nil {
+		cli.Printf(ctx.Stdout(), "\nExample:\n")
+		if detail.Example.UnifiedCli != "" {
+			cli.Printf(ctx.Stdout(), "  (Recommended) New CLI:\n  %s\n", detail.Example.UnifiedCli)
+		}
+		if detail.Example.LegacyCli != "" {
+			cli.Printf(ctx.Stdout(), "  Legacy CLI:\n  %s\n", detail.Example.LegacyCli)
+		}
+	}
+
 	return nil
 }
 
