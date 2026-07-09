@@ -305,12 +305,34 @@ func matchPluginName(pluginName, userInput string) bool {
 	return false
 }
 
+// 新增的唯一路由 key：主命令继续靠 matchPluginName（plugin name / short-name）覆盖，
+// 因为 plugin name = "aliyun-cli-" + normalize(productCode) 且 Command = normalize(productCode)，short-name 匹配天然覆盖新旧两种 manifest；
+// alias 是不派生自 plugin name 的新入口，必须显式匹配。
+func matchPluginAlias(lp LocalPlugin, userInput string) bool {
+	if len(lp.CommandAliases) == 0 {
+		return false
+	}
+	key := strings.ToLower(strings.TrimSpace(userInput))
+	if key == "" {
+		return false
+	}
+	for _, alias := range lp.CommandAliases {
+		if strings.ToLower(strings.TrimSpace(alias)) == key {
+			return true
+		}
+	}
+	return false
+}
+
+// 匹配顺序：matchPluginName（覆盖主命令 / 完整插件名 / 历史 short-name）→ matchPluginAlias（覆盖产品方 alias）。
+// 说明：这是唯一的本地 manifest 查找入口，同时服务于执行链路和管理命令。管理命令（plugin uninstall/update/show）沿用与本函数相同的匹配语义，
+// 因此 `plugin uninstall hologres` 能命中 aliyun-cli-hologram
 func FindInstalledPluginInManifest(manifest *LocalManifest, userInput string) (pluginName string, lp *LocalPlugin, ok bool) {
 	if manifest == nil || manifest.Plugins == nil {
 		return "", nil, false
 	}
 	for name, p := range manifest.Plugins {
-		if matchPluginName(name, userInput) {
+		if matchPluginName(name, userInput) || matchPluginAlias(p, userInput) {
 			pl := p
 			return name, &pl, true
 		}
@@ -460,13 +482,31 @@ func (m *Manager) findPluginInIndex(pluginName string) (*PluginInfo, error) {
 		return nil, err
 	}
 
+	// 支持三种用户输入形式：完整 plugin name（"aliyun-cli-hologram"）、short-name（"hologram"）、 以及产品方 alias（"hologres"）。
+	// 若字段缺失，行为回退到既有的 matchPluginName 语义，不会误命中。
 	for _, p := range index.Plugins {
-		if matchPluginName(p.Name, pluginName) {
+		if matchPluginName(p.Name, pluginName) || matchPluginInfoAlias(p, pluginName) {
 			return &p, nil
 		}
 	}
 
 	return nil, fmt.Errorf("plugin %s not found", pluginName)
+}
+
+func matchPluginInfoAlias(p PluginInfo, userInput string) bool {
+	if len(p.CommandAliases) == 0 {
+		return false
+	}
+	key := strings.ToLower(strings.TrimSpace(userInput))
+	if key == "" {
+		return false
+	}
+	for _, alias := range p.CommandAliases {
+		if strings.ToLower(strings.TrimSpace(alias)) == key {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Manager) validateVersionAndPlatform(ctx *cli.Context, targetPlugin *PluginInfo, version, actualPluginName string) (*PlatformInfo, error) {
@@ -975,12 +1015,19 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 		return err
 	}
 
+	// 规范化 alias 后先做冲突校验，任何冲突都 fail-fast 阻止落盘，避免生成后 host 路由不可预测。允许同名插件覆盖自身（升级路径）。
+	aliases := sanitizeCommandAliases(pManifest.Command, pManifest.CommandAliases)
+	if err := validatePluginCommandAndAliases(localManifest, actualPluginName, pManifest.Command, aliases); err != nil {
+		return err
+	}
+
 	localManifest.Plugins[actualPluginName] = LocalPlugin{
 		Name:             actualPluginName,
 		Version:          version,
 		Path:             extractDir,
 		ProductCode:      pManifest.ProductCode,
 		Command:          pManifest.Command,
+		CommandAliases:   aliases,
 		ShortDescription: pManifest.ShortDescription,
 		Description:      pManifest.Description,
 		CmdNames:         pManifest.CmdNames,
@@ -1058,9 +1105,11 @@ func (m *Manager) Upgrade(ctx *cli.Context, pluginName string, enablePre bool) e
 		return err
 	}
 
-	targetPlugin, err := m.findPluginInIndex(pluginName)
+	// 用户可能通过 short-name / alias（e.g. "hologres"）触发升级，此处必须走标准 plugin name 去远端索引查，否则远端根本没有 alias 这个 key。
+	// 使用 findLocalPlugin 已经解出来的 canonical name。
+	targetPlugin, err := m.findPluginInIndex(actualPluginName)
 	if err != nil {
-		return fmt.Errorf("plugin %s not found in repository", pluginName)
+		return fmt.Errorf("plugin %s not found in repository", actualPluginName)
 	}
 
 	latestVersion, err := getLatestVersion(targetPlugin, enablePre)
