@@ -101,6 +101,13 @@ type APIDetail struct {
 	Method      string             `json:"method"`
 	PathPattern string             `json:"pathPattern"`
 	Parameters  []RequestParameter `json:"parameters"`
+	Example     *APIExample        `json:"example,omitempty"`
+}
+
+// APIExample holds recommended CLI examples in both unified (new) and legacy formats.
+type APIExample struct {
+	UnifiedCli string `json:"unifiedCli,omitempty"`
+	LegacyCli  string `json:"legacyCli,omitempty"`
 }
 
 func (api *APIDetail) IsAnonymousAPI() bool {
