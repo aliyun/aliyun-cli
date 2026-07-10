@@ -41,7 +41,7 @@ func TestMockAddFlagsAreNotPersistent(t *testing.T) {
 		t.Fatal("add subcommand is nil")
 	}
 
-	for _, name := range []string{"name", "cmd", "exit-code", "stdout", "stderr", "times"} {
+	for _, name := range []string{"name", "cmd", "exit-code", "stdout", "stderr", "times", "delay-ms"} {
 		flag := add.Flags().Get(name)
 		if flag == nil {
 			t.Fatalf("%s flag is nil", name)
@@ -66,6 +66,7 @@ func TestMockImportHelpShowsFlatJSONInputFormat(t *testing.T) {
 		`"stdout": "ecs 1.0.0\n"`,
 		`"stderr": ""`,
 		`"times": 10`,
+		`"delay_ms": 500`,
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("help stdout = %q, want contain %q", stdout, want)
@@ -109,6 +110,50 @@ func TestMockRootHelpShowsEnvironmentSetup(t *testing.T) {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("root help stdout = %q, want contain %q", stdout, want)
 		}
+	}
+}
+
+func TestMockAddWithDelayMs(t *testing.T) {
+	mockPath := filepath.Join(t.TempDir(), "mocks.json")
+	t.Setenv(sysmock.EnvMockPath, mockPath)
+
+	stdout, stderr := executeMockCommand(t, "mock", "add",
+		"--name", "delayed",
+		"--cmd", "ecs DescribeInstances",
+		"--exit-code", "0",
+		"--stdout", "ok",
+		"--stderr", "warn",
+		"--times", "10",
+		"--delay-ms", "2500",
+	)
+	if stdout != "" || stderr != "" {
+		t.Fatalf("add stdout = %q stderr = %q, want both empty", stdout, stderr)
+	}
+
+	stdout, stderr = executeMockCommand(t, "mock", "list")
+	if stderr != "" {
+		t.Fatalf("list stderr = %q, want empty", stderr)
+	}
+	if !strings.Contains(stdout, `"delay_ms": 2500`) {
+		t.Fatalf("list stdout = %q, want delay_ms field", stdout)
+	}
+}
+
+func TestMockAddRejectsInvalidDelayMs(t *testing.T) {
+	stdout, stderr := executeMockCommand(t, "mock", "add",
+		"--name", "bad-delay",
+		"--cmd", "ecs *",
+		"--exit-code", "0",
+		"--stdout", "ok",
+		"--stderr", "warn",
+		"--times", "0",
+		"--delay-ms", "bad",
+	)
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if !strings.Contains(stderr, "invalid --delay-ms") {
+		t.Fatalf("stderr = %q, want invalid delay-ms error", stderr)
 	}
 }
 

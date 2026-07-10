@@ -72,7 +72,7 @@ Workflow:
 func newAddCommand(defaultConfigDir func() string) *cli.Command {
 	cmd := &cli.Command{
 		Name:  "add",
-		Usage: "add --name <name> --cmd <rule> --exit-code <code> --times <count> [--stdout <text>] [--stderr <text>]",
+		Usage: "add --name <name> --cmd <rule> --exit-code <code> --times <count> [--stdout <text>] [--stderr <text>] [--delay-ms <milliseconds>]",
 		Short: i18n.T("add one mock record", "添加一条 mock 记录"),
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
@@ -141,6 +141,7 @@ func addRecordFlags(cmd *cli.Command) {
 		{"stdout", i18n.T("mock command stdout", "模拟命令标准输出")},
 		{"stderr", i18n.T("mock command stderr", "模拟命令标准错误")},
 		{"times", i18n.T("match count; 0 means unlimited", "匹配次数；0 表示不限次数")},
+		{"delay-ms", i18n.T("mock command execution delay in milliseconds; 0 means no delay", "模拟命令执行延迟（毫秒）；0 表示不延迟")},
 	} {
 		cmd.Flags().Add(&cli.Flag{
 			Name:         flag.name,
@@ -196,6 +197,16 @@ func recordFromFlags(ctx *cli.Context) (sysmock.Record, error) {
 		Stderr:   stderr,
 		Times:    times,
 	}
+	if delayFlag := ctx.Flags().Get("delay-ms"); delayFlag != nil && delayFlag.IsAssigned() {
+		delayText, _ := delayFlag.GetValue()
+		if delayText != "" {
+			delayMs, err := strconv.Atoi(delayText)
+			if err != nil {
+				return sysmock.Record{}, fmt.Errorf("invalid --delay-ms %q", delayText)
+			}
+			record.DelayMs = delayMs
+		}
+	}
 	if err := sysmock.ValidateRecord(record); err != nil {
 		return sysmock.Record{}, err
 	}
@@ -240,7 +251,7 @@ func addMissingFlagsMessage(missing []string) string {
 	return fmt.Sprintf(`missing required flags: %s
 
 Example:
-  aliyun mock add --name mock-ecs-version --cmd 'ecs *' --exit-code 0 --stdout 'ecs 1.0.0\n' --stderr 'mock stderr\n' --times 10`, strings.Join(missing, ", "))
+  aliyun mock add --name mock-ecs-version --cmd 'ecs *' --exit-code 0 --stdout 'ecs 1.0.0\n' --stderr 'mock stderr\n' --times 10 --delay-ms 500`, strings.Join(missing, ", "))
 }
 
 func requiredFlag(ctx *cli.Context, name string) (string, error) {
@@ -272,6 +283,7 @@ Fields:
   stdout    required mocked command stdout
   stderr    required mocked command stderr
   times     required match count; 0 means unlimited
+  delay_ms  optional execution delay in milliseconds before returning output; 0 means no delay
 
 Example:
 [
@@ -281,7 +293,8 @@ Example:
     "exit_code": 0,
     "stdout": "ecs 1.0.0\n",
     "stderr": "",
-    "times": 10
+    "times": 10,
+    "delay_ms": 500
   }
 ]`, `
 JSON 输入格式:
@@ -295,6 +308,7 @@ JSON 输入格式:
   stdout    必填的模拟命令标准输出
   stderr    必填的模拟命令标准错误
   times     必填的匹配次数；0 表示不限次数
+  delay_ms  可选的执行延迟（毫秒），在返回输出前等待；0 表示不延迟
 
 示例:
 [
@@ -304,7 +318,8 @@ JSON 输入格式:
     "exit_code": 0,
     "stdout": "ecs 1.0.0\n",
     "stderr": "",
-    "times": 10
+    "times": 10,
+    "delay_ms": 500
   }
 ]`).Text())
 	cmd.PrintTail(ctx)

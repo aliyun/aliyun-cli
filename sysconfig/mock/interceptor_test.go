@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestInterceptDisabled(t *testing.T) {
@@ -39,6 +40,84 @@ func TestInterceptDisabled(t *testing.T) {
 	}
 	if string(data) != original {
 		t.Fatalf("file content changed: %q", string(data))
+	}
+}
+
+func TestInterceptHitAppliesDelayBeforeOutput(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mocks.json")
+	if err := Save(path, []Record{{
+		Name:    "delayed",
+		Cmd:     "ecs *",
+		Stdout:  "mock stdout\n",
+		Times:   0,
+		DelayMs: 200,
+	}}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	t.Setenv(EnvMockEnabled, "true")
+
+	var slept time.Duration
+	originalSleep := sleep
+	sleep = func(d time.Duration) {
+		slept = d
+	}
+	t.Cleanup(func() {
+		sleep = originalSleep
+	})
+
+	var stdout, stderr bytes.Buffer
+	result := Intercept(Options{
+		Args:     []string{"ecs", "DescribeRegions"},
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+		MockPath: path,
+	})
+
+	if !result.Handled {
+		t.Fatalf("Handled = false, want true")
+	}
+	if slept != 200*time.Millisecond {
+		t.Fatalf("sleep duration = %v, want 200ms", slept)
+	}
+	if stdout.String() != "mock stdout\n" {
+		t.Fatalf("stdout = %q, want mock stdout", stdout.String())
+	}
+}
+
+func TestInterceptZeroDelaySkipsSleep(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mocks.json")
+	if err := Save(path, []Record{{
+		Name:   "instant",
+		Cmd:    "ecs *",
+		Stdout: "mock stdout\n",
+		Times:  0,
+	}}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	t.Setenv(EnvMockEnabled, "true")
+
+	called := false
+	originalSleep := sleep
+	sleep = func(time.Duration) {
+		called = true
+	}
+	t.Cleanup(func() {
+		sleep = originalSleep
+	})
+
+	var stdout, stderr bytes.Buffer
+	result := Intercept(Options{
+		Args:     []string{"ecs", "DescribeRegions"},
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+		MockPath: path,
+	})
+
+	if !result.Handled {
+		t.Fatalf("Handled = false, want true")
+	}
+	if called {
+		t.Fatal("sleep called, want skipped for zero delay")
 	}
 }
 
