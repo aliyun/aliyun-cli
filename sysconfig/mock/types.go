@@ -14,6 +14,8 @@ const (
 	MockFileName   = "mocks.json"
 )
 
+const MaxDelayMs = 3600000 // 1 hour
+
 type Record struct {
 	Name     string `json:"name"`
 	Cmd      string `json:"cmd"`
@@ -21,6 +23,7 @@ type Record struct {
 	Stdout   string `json:"stdout"`
 	Stderr   string `json:"stderr"`
 	Times    int    `json:"times"`
+	DelayMs  int    `json:"delay_ms,omitempty"`
 }
 
 func (r *Record) UnmarshalJSON(data []byte) error {

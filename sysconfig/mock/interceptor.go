@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 )
 
 type Options struct {
@@ -21,6 +22,7 @@ type Result struct {
 var (
 	loadRecords = Load
 	saveRecords = Save
+	sleep       = time.Sleep
 )
 
 func Intercept(opts Options) Result {
@@ -44,6 +46,10 @@ func Intercept(opts Options) Result {
 	if err := saveRecords(opts.MockPath, records); err != nil {
 		writef(opts.Stderr, "ERROR: save mock data failed %s\n", err)
 		return Result{Handled: true, ExitCode: 1}
+	}
+
+	if record.DelayMs > 0 {
+		sleep(time.Duration(record.DelayMs) * time.Millisecond)
 	}
 
 	if record.Stdout != "" {

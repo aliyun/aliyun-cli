@@ -119,6 +119,12 @@ func validateRecord(record Record) error {
 	if record.Times < 0 {
 		return fmt.Errorf("mock record times must be greater than or equal to 0")
 	}
+	if record.DelayMs < 0 {
+		return fmt.Errorf("mock record delay_ms must be greater than or equal to 0")
+	}
+	if record.DelayMs > MaxDelayMs {
+		return fmt.Errorf("mock record delay_ms must be less than or equal to %d", MaxDelayMs)
+	}
 	return nil
 }
 
