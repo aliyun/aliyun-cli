@@ -296,7 +296,8 @@ func TestInstallFromPackageFile_saveLocalManifestFails(t *testing.T) {
 
 func TestFindInstalledPluginInManifest(t *testing.T) {
 	m := &LocalManifest{Plugins: map[string]LocalPlugin{
-		"aliyun-cli-x": {Name: "aliyun-cli-x"},
+		"aliyun-cli-x":        {Name: "aliyun-cli-x"},
+		"aliyun-cli-hologram": {Name: "aliyun-cli-hologram", Command: "hologram", CommandAliases: []string{"hologres"}},
 	}}
 	n, lp, ok := FindInstalledPluginInManifest(m, "aliyun-cli-x")
 	require.True(t, ok)
@@ -306,6 +307,16 @@ func TestFindInstalledPluginInManifest(t *testing.T) {
 	n, _, ok = FindInstalledPluginInManifest(m, "x")
 	require.True(t, ok)
 	assert.Equal(t, "aliyun-cli-x", n)
+
+	// alias matches the same plugin as the main command
+	n, _, ok = FindInstalledPluginInManifest(m, "hologres")
+	require.True(t, ok)
+	assert.Equal(t, "aliyun-cli-hologram", n)
+
+	// alias matching is case-insensitive, mirroring matchPluginName
+	n, _, ok = FindInstalledPluginInManifest(m, "HOLOGRES")
+	require.True(t, ok)
+	assert.Equal(t, "aliyun-cli-hologram", n)
 
 	_, _, ok = FindInstalledPluginInManifest(m, "nosuch")
 	assert.False(t, ok)

@@ -17,19 +17,20 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"github.com/aliyun/aliyun-cli/v3/cliext/kmscli"
-	"github.com/aliyun/aliyun-cli/v3/cliext/lindormcli"
 	"io"
 	"os"
 	"path"
 	"strings"
 
-	"github.com/aliyun/aliyun-cli/v3/cliext/agentbay"
+	"github.com/aliyun/aliyun-cli/v3/cliext/kmscli"
+	"github.com/aliyun/aliyun-cli/v3/cliext/lindormcli"
+
 	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/cli/upgrade"
 	"github.com/aliyun/aliyun-cli/v3/cliext/acrutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/agentbay"
 	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/cms2"
 	"github.com/aliyun/aliyun-cli/v3/cliext/codeup"
@@ -39,9 +40,9 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cliext/maxc"
 	"github.com/aliyun/aliyun-cli/v3/cliext/ossutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/otsutil"
-	"github.com/aliyun/aliyun-cli/v3/cliext/sparksubmit"
 	"github.com/aliyun/aliyun-cli/v3/cliext/rostran"
 	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
+	"github.com/aliyun/aliyun-cli/v3/cliext/sparksubmit"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -169,6 +170,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(upgrade.NewUpgradeCommand())
 	// mock command
 	rootCmd.AddSubCommand(mock.NewMockCommand(config.GetConfigPath))
+
+	plugin.RegisterReservedTopLevelCommands(rootCmd.SubCommandNames())
 
 	return rootCmd
 }
