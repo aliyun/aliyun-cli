@@ -609,9 +609,9 @@ func displaySearchResults(ctx *cli.Context, mgr *Manager, prefix string, results
 		}
 
 		var targetPlugin *PluginInfo
-		for _, p := range index.Plugins {
-			if p.Name == pluginName {
-				targetPlugin = &p
+		for i := range index.Plugins {
+			if index.Plugins[i].Name == pluginName {
+				targetPlugin = &index.Plugins[i]
 				break
 			}
 		}

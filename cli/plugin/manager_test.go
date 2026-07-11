@@ -45,6 +45,27 @@ func TestManager_resolvePackageDownloadURL(t *testing.T) {
 
 	m2 := &Manager{}
 	assert.Equal(t, orig, m2.resolvePackageDownloadURL(orig, "x", "1.0.0"))
+
+	// Index URL basename from another plugin must not leak into mirror rewrite.
+	mismatched := "https://aliyuncli.alicdn.com/plugins/pkgs/aliyun-cli-imagerecog/0.5.1/aliyun-cli-imagesearch-darwin-arm64.tar.gz"
+	got = m.resolvePackageDownloadURL(mismatched, "aliyun-cli-imagerecog", "0.5.1")
+	assert.Equal(t, "https://mirror.example.com/plugins/pkgs/aliyun-cli-imagerecog/0.5.1/aliyun-cli-imagerecog-darwin-arm64.tar.gz", got)
+}
+
+func TestValidatePluginPackageURL(t *testing.T) {
+	url := "https://aliyuncli.alicdn.com/plugins/pkgs/aliyun-cli-imagerecog/0.5.1/aliyun-cli-imagerecog-darwin-arm64.tar.gz"
+	assert.NoError(t, validatePluginPackageURL("aliyun-cli-imagerecog", "0.5.1", url))
+
+	bad := "https://aliyuncli.alicdn.com/plugins/pkgs/aliyun-cli-imagesearch/0.5.2/aliyun-cli-imagesearch-darwin-arm64.tar.gz"
+	err := validatePluginPackageURL("aliyun-cli-imagerecog", "0.5.1", bad)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "does not match expected plugin")
+}
+
+func TestExtractPlatformArchiveSuffix(t *testing.T) {
+	suffix, ok := extractPlatformArchiveSuffix("aliyun-cli-imagesearch-darwin-arm64.tar.gz")
+	assert.True(t, ok)
+	assert.Equal(t, "darwin-arm64.tar.gz", suffix)
 }
 
 func TestNewManager_LoadsSourceBaseFromFile(t *testing.T) {
@@ -3002,6 +3023,60 @@ func TestManager_UpdateAll(t *testing.T) {
 		plugin1, exists := localManifest.Plugins["plugin1"]
 		assert.True(t, exists)
 		assert.Equal(t, "1.0.0", plugin1.Version)
+	})
+
+	t.Run("Error - mismatched package URL rejected before download", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		pluginDir := filepath.Join(tmpDir, "aliyun-cli-imagerecog")
+		os.MkdirAll(pluginDir, 0755)
+		localManifest := &LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"aliyun-cli-imagerecog": {
+					Name:    "aliyun-cli-imagerecog",
+					Version: "0.5.0",
+					Path:    pluginDir,
+				},
+			},
+		}
+		mgr.saveLocalManifest(localManifest)
+
+		platform := GetCurrentPlatform()
+		badURL := "https://aliyuncli.alicdn.com/plugins/pkgs/aliyun-cli-imagesearch/0.5.2/aliyun-cli-imagesearch-" + platform + ".tar.gz"
+		if strings.Contains(platform, "windows") {
+			badURL = strings.TrimSuffix(badURL, ".tar.gz") + ".zip"
+		}
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "aliyun-cli-imagerecog",
+					"versions": {
+						"0.5.1": {
+							"` + platform + `": {
+								"url": "` + badURL + `",
+								"checksum": "deadbeef"
+							}
+						}
+					}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.UpdateAll(ctx, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "1 plugin(s) failed to update")
+
+		localManifest, err = mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		assert.Equal(t, "0.5.0", localManifest.Plugins["aliyun-cli-imagerecog"].Version)
 	})
 }
 

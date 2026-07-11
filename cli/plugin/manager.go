@@ -136,6 +136,28 @@ func (m *Manager) resolvedCommandIndexURL() string {
 	return CommandIndexURL
 }
 
+// extractPlatformArchiveSuffix returns "{os}-{arch}.tar.gz" or "{os}-{arch}.zip" from a
+// plugin archive basename, regardless of which aliyun-cli-* product prefix it carries.
+func extractPlatformArchiveSuffix(baseName string) (string, bool) {
+	var ext string
+	switch {
+	case strings.HasSuffix(baseName, ".tar.gz"):
+		ext = ".tar.gz"
+		baseName = strings.TrimSuffix(baseName, ext)
+	case strings.HasSuffix(baseName, ".zip"):
+		ext = ".zip"
+		baseName = strings.TrimSuffix(baseName, ext)
+	default:
+		return "", false
+	}
+	for _, osName := range []string{"darwin", "linux", "windows"} {
+		if idx := strings.Index(baseName, osName+"-"); idx > 0 {
+			return baseName[idx:] + ext, true
+		}
+	}
+	return "", false
+}
+
 // common layout: .../pkgs/{name}/{version}/{basename}.
 func (m *Manager) resolvePackageDownloadURL(origURL, pluginName, version string) string {
 	if strings.TrimSpace(m.sourceBase) == "" {
@@ -150,7 +172,49 @@ func (m *Manager) resolvePackageDownloadURL(origURL, pluginName, version string)
 		return origURL
 	}
 	b := strings.TrimRight(strings.TrimSpace(m.sourceBase), "/")
+	if suffix, ok := extractPlatformArchiveSuffix(baseName); ok {
+		baseName = pluginName + "-" + suffix
+	}
 	return fmt.Sprintf("%s/pkgs/%s/%s/%s", b, pluginName, version, baseName)
+}
+
+func validatePluginPackageURL(pluginName, version, rawURL string) error {
+	// Only enforce layout for registry package URLs; unit tests and ad-hoc mirrors may differ.
+	if !strings.Contains(rawURL, "/pkgs/") {
+		return nil
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid package URL for plugin %s version %s: %w", pluginName, version, err)
+	}
+	segments := strings.Split(strings.Trim(u.Path, "/"), "/")
+	for i, seg := range segments {
+		if seg != "pkgs" || i+2 >= len(segments) {
+			continue
+		}
+		pathPlugin, pathVersion := segments[i+1], segments[i+2]
+		if pathPlugin != pluginName {
+			return fmt.Errorf(
+				"package URL path plugin %q does not match expected plugin %q (url: %s)",
+				pathPlugin, pluginName, rawURL,
+			)
+		}
+		if pathVersion != version {
+			return fmt.Errorf(
+				"package URL path version %q does not match expected version %q (url: %s)",
+				pathVersion, version, rawURL,
+			)
+		}
+		baseName := path.Base(u.Path)
+		if !strings.HasPrefix(baseName, pluginName+"-") {
+			return fmt.Errorf(
+				"package archive %q does not match expected plugin %q (url: %s)",
+				baseName, pluginName, rawURL,
+			)
+		}
+		return nil
+	}
+	return fmt.Errorf("package URL missing pkgs/%s/%s path segment (url: %s)", pluginName, version, rawURL)
 }
 
 func (m *Manager) readCache(cacheFile string, ttl time.Duration, result interface{}) (hit bool, staleAvailable bool) {
@@ -484,9 +548,9 @@ func (m *Manager) findPluginInIndex(pluginName string) (*PluginInfo, error) {
 
 	// 支持三种用户输入形式：完整 plugin name（"aliyun-cli-hologram"）、short-name（"hologram"）、 以及产品方 alias（"hologres"）。
 	// 若字段缺失，行为回退到既有的 matchPluginName 语义，不会误命中。
-	for _, p := range index.Plugins {
-		if matchPluginName(p.Name, pluginName) || matchPluginInfoAlias(p, pluginName) {
-			return &p, nil
+	for i := range index.Plugins {
+		if matchPluginName(index.Plugins[i].Name, pluginName) || matchPluginInfoAlias(index.Plugins[i], pluginName) {
+			return &index.Plugins[i], nil
 		}
 	}
 
@@ -1003,7 +1067,10 @@ func (m *Manager) loadAndValidatePluginManifest(extractDir, expectedName string)
 	}
 
 	if pManifest.Name != expectedName {
-		return nil, fmt.Errorf("plugin manifest name %s does not match expected name %s", pManifest.Name, expectedName)
+		return nil, fmt.Errorf(
+			"plugin manifest name %s does not match expected name %s (extract dir: %s)",
+			pManifest.Name, expectedName, extractDir,
+		)
 	}
 
 	return &pManifest, nil
@@ -1059,6 +1126,9 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 	}
 
 	downloadURL := m.resolvePackageDownloadURL(platInfo.URL, actualPluginName, version)
+	if err := validatePluginPackageURL(actualPluginName, version, downloadURL); err != nil {
+		return err
+	}
 	platForDownload := *platInfo
 	platForDownload.URL = downloadURL
 
@@ -1175,9 +1245,9 @@ func (m *Manager) UpdateAll(ctx *cli.Context, enablePre bool) error {
 	var updated, upToDate, failed int
 	for pluginName, localPlugin := range localManifest.Plugins {
 		var targetPlugin *PluginInfo
-		for _, p := range index.Plugins {
-			if p.Name == pluginName {
-				targetPlugin = &p
+		for i := range index.Plugins {
+			if index.Plugins[i].Name == pluginName {
+				targetPlugin = &index.Plugins[i]
 				break
 			}
 		}
@@ -1271,8 +1341,8 @@ func (m *Manager) InstallAll(ctx *cli.Context, enablePre bool) error {
 	cli.Printf(ctx.Stdout(), "Found %d plugins in index\n", len(index.Plugins))
 
 	var installed, skipped, failed int
-	for _, plugin := range index.Plugins {
-		pluginName := plugin.Name
+	for i := range index.Plugins {
+		pluginName := index.Plugins[i].Name
 
 		if _, exists := localManifest.Plugins[pluginName]; exists {
 			cli.Printf(ctx.Stdout(), "Skipping %s (already installed)\n", pluginName)
@@ -1282,7 +1352,7 @@ func (m *Manager) InstallAll(ctx *cli.Context, enablePre bool) error {
 
 		cli.Printf(ctx.Stdout(), "Installing %s...\n", pluginName)
 
-		if err := m.installPlugin(ctx, &plugin, "", enablePre, false); err != nil {
+		if err := m.installPlugin(ctx, &index.Plugins[i], "", enablePre, false); err != nil {
 			cli.Printf(ctx.Stdout(), "Failed to install %s: %v\n", pluginName, err)
 			failed++
 			continue
