@@ -136,28 +136,6 @@ func (m *Manager) resolvedCommandIndexURL() string {
 	return CommandIndexURL
 }
 
-// extractPlatformArchiveSuffix returns "{os}-{arch}.tar.gz" or "{os}-{arch}.zip" from a
-// plugin archive basename, regardless of which aliyun-cli-* product prefix it carries.
-func extractPlatformArchiveSuffix(baseName string) (string, bool) {
-	var ext string
-	switch {
-	case strings.HasSuffix(baseName, ".tar.gz"):
-		ext = ".tar.gz"
-		baseName = strings.TrimSuffix(baseName, ext)
-	case strings.HasSuffix(baseName, ".zip"):
-		ext = ".zip"
-		baseName = strings.TrimSuffix(baseName, ext)
-	default:
-		return "", false
-	}
-	for _, osName := range []string{"darwin", "linux", "windows"} {
-		if idx := strings.Index(baseName, osName+"-"); idx > 0 {
-			return baseName[idx:] + ext, true
-		}
-	}
-	return "", false
-}
-
 // common layout: .../pkgs/{name}/{version}/{basename}.
 func (m *Manager) resolvePackageDownloadURL(origURL, pluginName, version string) string {
 	if strings.TrimSpace(m.sourceBase) == "" {
@@ -172,49 +150,7 @@ func (m *Manager) resolvePackageDownloadURL(origURL, pluginName, version string)
 		return origURL
 	}
 	b := strings.TrimRight(strings.TrimSpace(m.sourceBase), "/")
-	if suffix, ok := extractPlatformArchiveSuffix(baseName); ok {
-		baseName = pluginName + "-" + suffix
-	}
 	return fmt.Sprintf("%s/pkgs/%s/%s/%s", b, pluginName, version, baseName)
-}
-
-func validatePluginPackageURL(pluginName, version, rawURL string) error {
-	// Only enforce layout for registry package URLs; unit tests and ad-hoc mirrors may differ.
-	if !strings.Contains(rawURL, "/pkgs/") {
-		return nil
-	}
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return fmt.Errorf("invalid package URL for plugin %s version %s: %w", pluginName, version, err)
-	}
-	segments := strings.Split(strings.Trim(u.Path, "/"), "/")
-	for i, seg := range segments {
-		if seg != "pkgs" || i+2 >= len(segments) {
-			continue
-		}
-		pathPlugin, pathVersion := segments[i+1], segments[i+2]
-		if pathPlugin != pluginName {
-			return fmt.Errorf(
-				"package URL path plugin %q does not match expected plugin %q (url: %s)",
-				pathPlugin, pluginName, rawURL,
-			)
-		}
-		if pathVersion != version {
-			return fmt.Errorf(
-				"package URL path version %q does not match expected version %q (url: %s)",
-				pathVersion, version, rawURL,
-			)
-		}
-		baseName := path.Base(u.Path)
-		if !strings.HasPrefix(baseName, pluginName+"-") {
-			return fmt.Errorf(
-				"package archive %q does not match expected plugin %q (url: %s)",
-				baseName, pluginName, rawURL,
-			)
-		}
-		return nil
-	}
-	return fmt.Errorf("package URL missing pkgs/%s/%s path segment (url: %s)", pluginName, version, rawURL)
 }
 
 func (m *Manager) readCache(cacheFile string, ttl time.Duration, result interface{}) (hit bool, staleAvailable bool) {
@@ -1126,9 +1062,6 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 	}
 
 	downloadURL := m.resolvePackageDownloadURL(platInfo.URL, actualPluginName, version)
-	if err := validatePluginPackageURL(actualPluginName, version, downloadURL); err != nil {
-		return err
-	}
 	platForDownload := *platInfo
 	platForDownload.URL = downloadURL
 
