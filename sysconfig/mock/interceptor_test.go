@@ -84,6 +84,72 @@ func TestInterceptHitAppliesDelayBeforeOutput(t *testing.T) {
 	}
 }
 
+func TestInterceptHitExpandsResponseBodySize(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mocks.json")
+	if err := Save(path, []Record{{
+		Name:             "sized",
+		Cmd:              "ecs *",
+		Stdout:           "hi",
+		Times:            0,
+		ResponseBodySize: 16,
+	}}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	t.Setenv(EnvMockEnabled, "true")
+
+	var stdout, stderr bytes.Buffer
+	result := Intercept(Options{
+		Args:     []string{"ecs", "DescribeRegions"},
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+		MockPath: path,
+	})
+
+	if !result.Handled {
+		t.Fatalf("Handled = false, want true")
+	}
+	got := stdout.String()
+	if len(got) != 16 {
+		t.Fatalf("stdout len = %d, want 16", len(got))
+	}
+	if got[:2] != "hi" {
+		t.Fatalf("stdout prefix = %q, want hi", got[:2])
+	}
+	for i := 2; i < 16; i++ {
+		if got[i] != 'x' {
+			t.Fatalf("stdout[%d] = %q, want 'x'", i, got[i])
+		}
+	}
+}
+
+func TestInterceptHitTruncatesWhenStdoutLongerThanResponseBodySize(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mocks.json")
+	if err := Save(path, []Record{{
+		Name:             "truncate",
+		Cmd:              "ecs *",
+		Stdout:           "abcdefghij",
+		Times:            0,
+		ResponseBodySize: 4,
+	}}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	t.Setenv(EnvMockEnabled, "true")
+
+	var stdout bytes.Buffer
+	result := Intercept(Options{
+		Args:     []string{"ecs", "DescribeRegions"},
+		Stdout:   &stdout,
+		MockPath: path,
+	})
+
+	if !result.Handled {
+		t.Fatalf("Handled = false, want true")
+	}
+	if got := stdout.String(); got != "abcd" {
+		t.Fatalf("stdout = %q, want abcd", got)
+	}
+}
+
 func TestInterceptZeroDelaySkipsSleep(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mocks.json")
 	if err := Save(path, []Record{{

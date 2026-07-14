@@ -41,7 +41,7 @@ func TestMockAddFlagsAreNotPersistent(t *testing.T) {
 		t.Fatal("add subcommand is nil")
 	}
 
-	for _, name := range []string{"name", "cmd", "exit-code", "stdout", "stderr", "times", "delay-ms"} {
+	for _, name := range []string{"name", "cmd", "exit-code", "stdout", "stderr", "times", "delay-ms", "response-body-size"} {
 		flag := add.Flags().Get(name)
 		if flag == nil {
 			t.Fatalf("%s flag is nil", name)
@@ -67,6 +67,7 @@ func TestMockImportHelpShowsFlatJSONInputFormat(t *testing.T) {
 		`"stderr": ""`,
 		`"times": 10`,
 		`"delay_ms": 500`,
+		`"response_body_size": 1024`,
 	} {
 		if !strings.Contains(stdout, want) {
 			t.Fatalf("help stdout = %q, want contain %q", stdout, want)
@@ -154,6 +155,50 @@ func TestMockAddRejectsInvalidDelayMs(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "invalid --delay-ms") {
 		t.Fatalf("stderr = %q, want invalid delay-ms error", stderr)
+	}
+}
+
+func TestMockAddWithResponseBodySize(t *testing.T) {
+	mockPath := filepath.Join(t.TempDir(), "mocks.json")
+	t.Setenv(sysmock.EnvMockPath, mockPath)
+
+	stdout, stderr := executeMockCommand(t, "mock", "add",
+		"--name", "sized",
+		"--cmd", "ecs DescribeInstances",
+		"--exit-code", "0",
+		"--stdout", "ok",
+		"--stderr", "warn",
+		"--times", "10",
+		"--response-body-size", "4096",
+	)
+	if stdout != "" || stderr != "" {
+		t.Fatalf("add stdout = %q stderr = %q, want both empty", stdout, stderr)
+	}
+
+	stdout, stderr = executeMockCommand(t, "mock", "list")
+	if stderr != "" {
+		t.Fatalf("list stderr = %q, want empty", stderr)
+	}
+	if !strings.Contains(stdout, `"response_body_size": 4096`) {
+		t.Fatalf("list stdout = %q, want response_body_size field", stdout)
+	}
+}
+
+func TestMockAddRejectsInvalidResponseBodySize(t *testing.T) {
+	stdout, stderr := executeMockCommand(t, "mock", "add",
+		"--name", "bad-size",
+		"--cmd", "ecs *",
+		"--exit-code", "0",
+		"--stdout", "ok",
+		"--stderr", "warn",
+		"--times", "0",
+		"--response-body-size", "bad",
+	)
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	if !strings.Contains(stderr, "invalid --response-body-size") {
+		t.Fatalf("stderr = %q, want invalid response-body-size error", stderr)
 	}
 }
 

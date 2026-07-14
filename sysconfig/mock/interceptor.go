@@ -52,8 +52,8 @@ func Intercept(opts Options) Result {
 		sleep(time.Duration(record.DelayMs) * time.Millisecond)
 	}
 
-	if record.Stdout != "" {
-		writes(opts.Stdout, record.Stdout)
+	if stdout := ResolveStdout(record); stdout != "" {
+		writes(opts.Stdout, stdout)
 	}
 	if record.Stderr != "" {
 		writes(opts.Stderr, record.Stderr)
