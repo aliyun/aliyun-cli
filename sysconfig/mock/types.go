@@ -14,16 +14,46 @@ const (
 	MockFileName   = "mocks.json"
 )
 
-const MaxDelayMs = 3600000 // 1 hour
+const (
+	MaxDelayMs           = 3600000          // 1 hour
+	MaxResponseBodySize  = 100 * 1024 * 1024 // 100 MiB
+	responseBodyPadByte  = 'x'
+)
 
 type Record struct {
-	Name     string `json:"name"`
-	Cmd      string `json:"cmd"`
-	ExitCode int    `json:"exit_code"`
-	Stdout   string `json:"stdout"`
-	Stderr   string `json:"stderr"`
-	Times    int    `json:"times"`
-	DelayMs  int    `json:"delay_ms,omitempty"`
+	Name             string `json:"name"`
+	Cmd              string `json:"cmd"`
+	ExitCode         int    `json:"exit_code"`
+	Stdout           string `json:"stdout"`
+	Stderr           string `json:"stderr"`
+	Times            int    `json:"times"`
+	DelayMs          int    `json:"delay_ms,omitempty"`
+	ResponseBodySize int    `json:"response_body_size,omitempty"`
+}
+
+// ExpandToSize returns content truncated or padded to exactly size bytes.
+// Padding uses a fixed ASCII byte so mock body length is deterministic for load tests.
+func ExpandToSize(content string, size int) string {
+	if size <= 0 {
+		return content
+	}
+	if len(content) >= size {
+		return content[:size]
+	}
+	buf := make([]byte, size)
+	n := copy(buf, content)
+	for i := n; i < size; i++ {
+		buf[i] = responseBodyPadByte
+	}
+	return string(buf)
+}
+
+// ResolveStdout returns the mock stdout, expanding to ResponseBodySize when set.
+func ResolveStdout(record Record) string {
+	if record.ResponseBodySize > 0 {
+		return ExpandToSize(record.Stdout, record.ResponseBodySize)
+	}
+	return record.Stdout
 }
 
 func (r *Record) UnmarshalJSON(data []byte) error {
