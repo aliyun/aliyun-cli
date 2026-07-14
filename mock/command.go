@@ -72,7 +72,7 @@ Workflow:
 func newAddCommand(defaultConfigDir func() string) *cli.Command {
 	cmd := &cli.Command{
 		Name:  "add",
-		Usage: "add --name <name> --cmd <rule> --exit-code <code> --times <count> [--stdout <text>] [--stderr <text>] [--delay-ms <milliseconds>]",
+		Usage: "add --name <name> --cmd <rule> --exit-code <code> --times <count> [--stdout <text>] [--stderr <text>] [--delay-ms <milliseconds>] [--response-body-size <bytes>]",
 		Short: i18n.T("add one mock record", "添加一条 mock 记录"),
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
@@ -142,6 +142,7 @@ func addRecordFlags(cmd *cli.Command) {
 		{"stderr", i18n.T("mock command stderr", "模拟命令标准错误")},
 		{"times", i18n.T("match count; 0 means unlimited", "匹配次数；0 表示不限次数")},
 		{"delay-ms", i18n.T("mock command execution delay in milliseconds; 0 means no delay", "模拟命令执行延迟（毫秒）；0 表示不延迟")},
+		{"response-body-size", i18n.T("mock stdout size in bytes; pads or truncates stdout to this length; 0 means use stdout as-is", "模拟标准输出字节大小；将 stdout 填充或截断到该长度；0 表示原样使用 stdout")},
 	} {
 		cmd.Flags().Add(&cli.Flag{
 			Name:         flag.name,
@@ -207,6 +208,16 @@ func recordFromFlags(ctx *cli.Context) (sysmock.Record, error) {
 			record.DelayMs = delayMs
 		}
 	}
+	if sizeFlag := ctx.Flags().Get("response-body-size"); sizeFlag != nil && sizeFlag.IsAssigned() {
+		sizeText, _ := sizeFlag.GetValue()
+		if sizeText != "" {
+			size, err := strconv.Atoi(sizeText)
+			if err != nil {
+				return sysmock.Record{}, fmt.Errorf("invalid --response-body-size %q", sizeText)
+			}
+			record.ResponseBodySize = size
+		}
+	}
 	if err := sysmock.ValidateRecord(record); err != nil {
 		return sysmock.Record{}, err
 	}
@@ -251,7 +262,7 @@ func addMissingFlagsMessage(missing []string) string {
 	return fmt.Sprintf(`missing required flags: %s
 
 Example:
-  aliyun mock add --name mock-ecs-version --cmd 'ecs *' --exit-code 0 --stdout 'ecs 1.0.0\n' --stderr 'mock stderr\n' --times 10 --delay-ms 500`, strings.Join(missing, ", "))
+  aliyun mock add --name mock-ecs-version --cmd 'ecs *' --exit-code 0 --stdout 'ecs 1.0.0\n' --stderr 'mock stderr\n' --times 10 --delay-ms 500 --response-body-size 1024`, strings.Join(missing, ", "))
 }
 
 func requiredFlag(ctx *cli.Context, name string) (string, error) {
@@ -277,13 +288,14 @@ JSON input format:
   Import replaces all existing mock records after the file is validated.
 
 Fields:
-  name      required record name
-  cmd       required command match rule; "*" and "?" wildcards are supported
-  exit_code required mocked command exit code
-  stdout    required mocked command stdout
-  stderr    required mocked command stderr
-  times     required match count; 0 means unlimited
-  delay_ms  optional execution delay in milliseconds before returning output; 0 means no delay
+  name                required record name
+  cmd                 required command match rule; "*" and "?" wildcards are supported
+  exit_code           required mocked command exit code
+  stdout              required mocked command stdout
+  stderr              required mocked command stderr
+  times               required match count; 0 means unlimited
+  delay_ms            optional execution delay in milliseconds before returning output; 0 means no delay
+  response_body_size  optional mocked stdout size in bytes; pads or truncates stdout to this length; 0 means use stdout as-is
 
 Example:
 [
@@ -294,7 +306,8 @@ Example:
     "stdout": "ecs 1.0.0\n",
     "stderr": "",
     "times": 10,
-    "delay_ms": 500
+    "delay_ms": 500,
+    "response_body_size": 1024
   }
 ]`, `
 JSON 输入格式:
@@ -302,13 +315,14 @@ JSON 输入格式:
   import 会先校验文件，校验通过后覆盖所有现有 mock 记录。
 
 字段:
-  name      必填的记录名称
-  cmd       必填的命令匹配规则，支持 "*" 和 "?" 通配符
-  exit_code 必填的模拟命令退出码
-  stdout    必填的模拟命令标准输出
-  stderr    必填的模拟命令标准错误
-  times     必填的匹配次数；0 表示不限次数
-  delay_ms  可选的执行延迟（毫秒），在返回输出前等待；0 表示不延迟
+  name                必填的记录名称
+  cmd                 必填的命令匹配规则，支持 "*" 和 "?" 通配符
+  exit_code           必填的模拟命令退出码
+  stdout              必填的模拟命令标准输出
+  stderr              必填的模拟命令标准错误
+  times               必填的匹配次数；0 表示不限次数
+  delay_ms            可选的执行延迟（毫秒），在返回输出前等待；0 表示不延迟
+  response_body_size  可选的模拟标准输出字节大小；将 stdout 填充或截断到该长度；0 表示原样使用 stdout
 
 示例:
 [
@@ -319,7 +333,8 @@ JSON 输入格式:
     "stdout": "ecs 1.0.0\n",
     "stderr": "",
     "times": 10,
-    "delay_ms": 500
+    "delay_ms": 500,
+    "response_body_size": 1024
   }
 ]`).Text())
 	cmd.PrintTail(ctx)
