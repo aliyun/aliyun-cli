@@ -484,9 +484,9 @@ func (m *Manager) findPluginInIndex(pluginName string) (*PluginInfo, error) {
 
 	// 支持三种用户输入形式：完整 plugin name（"aliyun-cli-hologram"）、short-name（"hologram"）、 以及产品方 alias（"hologres"）。
 	// 若字段缺失，行为回退到既有的 matchPluginName 语义，不会误命中。
-	for _, p := range index.Plugins {
-		if matchPluginName(p.Name, pluginName) || matchPluginInfoAlias(p, pluginName) {
-			return &p, nil
+	for i := range index.Plugins {
+		if matchPluginName(index.Plugins[i].Name, pluginName) || matchPluginInfoAlias(index.Plugins[i], pluginName) {
+			return &index.Plugins[i], nil
 		}
 	}
 
@@ -1003,7 +1003,10 @@ func (m *Manager) loadAndValidatePluginManifest(extractDir, expectedName string)
 	}
 
 	if pManifest.Name != expectedName {
-		return nil, fmt.Errorf("plugin manifest name %s does not match expected name %s", pManifest.Name, expectedName)
+		return nil, fmt.Errorf(
+			"plugin manifest name %s does not match expected name %s (extract dir: %s)",
+			pManifest.Name, expectedName, extractDir,
+		)
 	}
 
 	return &pManifest, nil
@@ -1175,9 +1178,9 @@ func (m *Manager) UpdateAll(ctx *cli.Context, enablePre bool) error {
 	var updated, upToDate, failed int
 	for pluginName, localPlugin := range localManifest.Plugins {
 		var targetPlugin *PluginInfo
-		for _, p := range index.Plugins {
-			if p.Name == pluginName {
-				targetPlugin = &p
+		for i := range index.Plugins {
+			if index.Plugins[i].Name == pluginName {
+				targetPlugin = &index.Plugins[i]
 				break
 			}
 		}
@@ -1271,8 +1274,8 @@ func (m *Manager) InstallAll(ctx *cli.Context, enablePre bool) error {
 	cli.Printf(ctx.Stdout(), "Found %d plugins in index\n", len(index.Plugins))
 
 	var installed, skipped, failed int
-	for _, plugin := range index.Plugins {
-		pluginName := plugin.Name
+	for i := range index.Plugins {
+		pluginName := index.Plugins[i].Name
 
 		if _, exists := localManifest.Plugins[pluginName]; exists {
 			cli.Printf(ctx.Stdout(), "Skipping %s (already installed)\n", pluginName)
@@ -1282,7 +1285,7 @@ func (m *Manager) InstallAll(ctx *cli.Context, enablePre bool) error {
 
 		cli.Printf(ctx.Stdout(), "Installing %s...\n", pluginName)
 
-		if err := m.installPlugin(ctx, &plugin, "", enablePre, false); err != nil {
+		if err := m.installPlugin(ctx, &index.Plugins[i], "", enablePre, false); err != nil {
 			cli.Printf(ctx.Stdout(), "Failed to install %s: %v\n", pluginName, err)
 			failed++
 			continue
