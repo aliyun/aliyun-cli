@@ -510,6 +510,14 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		return err
 	}
 
+	if CliDryRunFlag(ctx.Flags()).IsAssigned() {
+		oc, ok := apiContext.(*OpenapiContext)
+		if !ok {
+			return fmt.Errorf("--cli-dry-run is only supported for OpenAPI invoke path")
+		}
+		return processCliDryRunOpenapi(ctx, oc)
+	}
+
 	if DryRunJsonFlag(ctx.Flags()).IsAssigned() {
 		oc, ok := apiContext.(*OpenapiContext)
 		if !ok {
@@ -567,6 +575,10 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	err = invoker.Prepare(ctx)
 	if err != nil {
 		return err
+	}
+
+	if CliDryRunFlag(ctx.Flags()).IsAssigned() {
+		return processCliDryRun(ctx, invoker)
 	}
 
 	if DryRunJsonFlag(ctx.Flags()).IsAssigned() {
