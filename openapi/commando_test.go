@@ -18,6 +18,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -32,6 +34,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 )
 
@@ -2369,6 +2372,28 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		os.Args = originalArgs
 	}()
 
+	// Point plugin index fetches at a local fake so these cases stay offline-
+	// stable (Windows CI cannot reach the real CDN within the 10s timeout).
+	pkgIndex := &plugin.Index{
+		Plugins: []plugin.PluginInfo{
+			{Name: "aliyun-cli-fc", ProductCode: "fc"},
+		},
+	}
+	searchIndex := plugin.CommandIndex{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "plugin_pkg_index.json"):
+			_ = json.NewEncoder(w).Encode(pkgIndex)
+		case strings.HasSuffix(r.URL.Path, "plugin_search_index.json"):
+			_ = json.NewEncoder(w).Encode(searchIndex)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	t.Setenv(pluginsettings.EnvSourceBase, server.URL)
+
 	t.Run("Kebab-case API name triggers plugin execution - plugin not found", func(t *testing.T) {
 		testHome := t.TempDir()
 		cleanup := setTestHomeDir(t, testHome)
@@ -2378,6 +2403,10 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
 		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
+
+		command.pluginLoaded = false
+		command.pluginIndex = nil
+		command.pluginIndexErr = nil
 
 		os.Args = []string{"aliyun", "qqq", "describe-regions"}
 		args := []string{"qqq", "describe-regions"}
@@ -2401,6 +2430,10 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
 		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
+
+		command.pluginLoaded = false
+		command.pluginIndex = nil
+		command.pluginIndexErr = nil
 
 		os.Args = []string{"aliyun", "qqq", "describe-regions", "--region", "cn-hangzhou"}
 		args := []string{"qqq", "describe-regions"}
@@ -2439,6 +2472,10 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
 		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
 
+		command.pluginLoaded = false
+		command.pluginIndex = nil
+		command.pluginIndexErr = nil
+
 		os.Args = []string{"aliyun", "fc"}
 		args := []string{"fc"}
 
@@ -2457,6 +2494,10 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
 		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
+
+		command.pluginLoaded = false
+		command.pluginIndex = nil
+		command.pluginIndexErr = nil
 
 		os.Args = []string{"aliyun", "other-command"}
 		args := []string{"fc", "describe-regions"}
