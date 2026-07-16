@@ -55,6 +55,20 @@ const (
 
 var VersionCheckTTL = 86400
 
+// ExitError carries the exit code from the child process so the caller
+// can propagate it without calling os.Exit directly (which skips defers).
+type ExitError struct {
+	Code int
+}
+
+func (e *ExitError) Error() string {
+	return fmt.Sprintf("subprocess exited with code %d", e.Code)
+}
+
+func (e *ExitError) ExitCode() int {
+	return e.Code
+}
+
 func NewContext(originContext *cli.Context) *Context {
 	return &Context{originCtx: originContext}
 }
@@ -457,6 +471,9 @@ func (c *Context) ExecuteFlowcli(args []string) error {
 	cmd.Dir = wd
 
 	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return &ExitError{Code: exitErr.ExitCode()}
+		}
 		return fmt.Errorf("failed to execute %s %v: %v", c.execFilePath, args, err)
 	}
 	return nil

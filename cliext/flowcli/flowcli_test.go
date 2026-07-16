@@ -429,6 +429,68 @@ func TestFileExists(t *testing.T) {
 	}
 }
 
+// --- ExitError ---
+
+func TestExitError(t *testing.T) {
+	e := &ExitError{Code: 42}
+	if e.Error() != "subprocess exited with code 42" {
+		t.Errorf("Error() mismatch: %s", e.Error())
+	}
+	if e.ExitCode() != 42 {
+		t.Errorf("ExitCode() mismatch: %d", e.ExitCode())
+	}
+}
+
+func TestExecuteFlowcli_ExitCode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	prepareConfig(t, home)
+
+	origExec := execCommandFunc
+	defer func() { execCommandFunc = origExec }()
+	execCommandFunc = func(name string, args ...string) *exec.Cmd {
+		return exec.Command("bash", "-c", "exit 42")
+	}
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.execFilePath = "/any/path"
+
+	err := c.ExecuteFlowcli([]string{"version"})
+	if err == nil {
+		t.Fatalf("expected error for non-zero exit")
+	}
+	exitErr, ok := err.(*ExitError)
+	if !ok {
+		t.Fatalf("expected ExitError, got %T: %v", err, err)
+	}
+	if exitErr.Code != 42 {
+		t.Errorf("exit code: got %d, want 42", exitErr.Code)
+	}
+}
+
+func TestExecuteFlowcli_Success(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	prepareConfig(t, home)
+
+	origExec := execCommandFunc
+	defer func() { execCommandFunc = origExec }()
+	execCommandFunc = func(name string, args ...string) *exec.Cmd {
+		return exec.Command("bash", "-c", "exit 0")
+	}
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.execFilePath = "/any/path"
+
+	if err := c.ExecuteFlowcli([]string{"version"}); err != nil {
+		t.Fatalf("ExecuteFlowcli: %v", err)
+	}
+}
+
 // --- helpers ---
 
 func envContains(envs []string, needle string) bool {

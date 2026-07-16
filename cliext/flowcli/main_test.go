@@ -1,6 +1,7 @@
 package flowcli
 
 import (
+	"os/exec"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -59,5 +60,37 @@ func TestNewFlowcliCommandMetadata(t *testing.T) {
 	}
 	if m.Hidden != cmd.Hidden {
 		t.Errorf("metadata hidden mismatch")
+	}
+}
+
+func TestNewFlowcliCommand_RunSuppressesExitError(t *testing.T) {
+	cli.DisableExitCode()
+	defer cli.EnableExitCode()
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	prepareConfig(t, home)
+
+	t.Setenv("ALIBABA_CLOUD_FLOW_CLI_EXEC_PATH", "/fake/flow-cli")
+	t.Setenv("ALIBABA_CLOUD_FLOW_CLI_NODE_PATH", "/fake/node")
+	t.Setenv("ALIBABA_CLOUD_FLOW_CLI_NPM_PATH", "/fake/npm")
+	t.Setenv("ALIBABA_CLOUD_FLOW_CLI_NO_UPDATE_CHECK", "1")
+
+	origExec := execCommandFunc
+	defer func() { execCommandFunc = origExec }()
+	execCommandFunc = func(name string, args ...string) *exec.Cmd {
+		return exec.Command("bash", "-c", "exit 7")
+	}
+
+	ctx, stdout, _ := newOriginCtx()
+	cmd := NewFlowcliCommand()
+	err := cmd.Run(ctx, []string{"version"})
+
+	if err != nil {
+		t.Fatalf("Run should return nil for ExitError (not propagate to framework), got: %v", err)
+	}
+	if stdout.Len() > 0 {
+		t.Errorf("no ANSI error text should appear on stdout, got: %q", stdout.String())
 	}
 }

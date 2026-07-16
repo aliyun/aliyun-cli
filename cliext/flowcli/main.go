@@ -26,7 +26,18 @@ func NewFlowcliCommand() *cli.Command {
 					args = append(args, "--help")
 				}
 			}
-			return NewContext(ctx).Run(args)
+			if err := NewContext(ctx).Run(args); err != nil {
+				if exitErr, ok := err.(*ExitError); ok {
+					// Subprocess already wrote its own output to the connected
+					// stdout/stderr. Propagate the exit code directly instead
+					// of returning an error (which would print "ERROR: ..."
+					// and force exit code 1).
+					cli.Exit(exitErr.Code)
+					return nil
+				}
+				return err
+			}
+			return nil
 		},
 		EnableUnknownFlag: true,
 		KeepArgs:          true,
