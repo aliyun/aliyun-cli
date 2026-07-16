@@ -111,7 +111,7 @@ type Profile struct {
 	OutputFormat               string           `json:"output_format,omitempty"`
 	Language                   string           `json:"language,omitempty"`
 	Site                       string           `json:"site,omitempty"`
-	ReadTimeout                int              `json:"retry_timeout,omitempty"`
+	ReadTimeout                int              `json:"read_timeout,omitempty"`
 	ConnectTimeout             int              `json:"connect_timeout,omitempty"`
 	RetryCount                 int              `json:"retry_count,omitempty"`
 	ProcessCommand             string           `json:"process_command,omitempty"`
@@ -146,6 +146,25 @@ func NewProfile(name string) Profile {
 		OutputFormat: "json",
 		Language:     i18n.GetLanguage(),
 	}
+}
+
+// UnmarshalJSON accepts both read_timeout (current) and legacy retry_timeout.
+// configure set --read-timeout historically persisted as retry_timeout; keep loading those configs.
+func (cp *Profile) UnmarshalJSON(data []byte) error {
+	type profileAlias Profile
+	aux := &struct {
+		*profileAlias
+		RetryTimeout *int `json:"retry_timeout"`
+	}{
+		profileAlias: (*profileAlias)(cp),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if cp.ReadTimeout == 0 && aux.RetryTimeout != nil {
+		cp.ReadTimeout = *aux.RetryTimeout
+	}
+	return nil
 }
 
 func (cp *Profile) Validate() error {
