@@ -267,7 +267,13 @@ func (cp *Profile) GetParent() *Configuration {
 }
 
 func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
-	cp.Mode = NormalizeMode(ModeFlag(ctx.Flags()).GetStringOrDefault(string(cp.Mode)))
+	modeFlag := ModeFlag(ctx.Flags())
+	if modeFlag != nil && modeFlag.IsAssigned() {
+		// Empty --mode is ignored so profile Mode is preserved.
+		if mode := strings.TrimSpace(modeFlag.GetStringOrDefault("")); mode != "" {
+			cp.Mode = NormalizeMode(mode)
+		}
+	}
 	cp.AccessKeyId = AccessKeyIdFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeyId)
 	cp.AccessKeySecret = AccessKeySecretFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeySecret)
 	cp.StsToken = StsTokenFlag(ctx.Flags()).GetStringOrDefault(cp.StsToken)

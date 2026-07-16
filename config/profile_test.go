@@ -327,6 +327,27 @@ func TestOverwriteWithFlags(t *testing.T) {
 	assert.Equal(t, exp, actual)
 }
 
+func TestOverwriteWithFlagsIgnoresEmptyMode(t *testing.T) {
+	buf := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, stderr)
+	AddFlags(ctx.Flags())
+	resetEnv()
+
+	actual := newProfile()
+	actual.Mode = AK
+	actual.AccessKeyId = ""
+
+	ModeFlag(ctx.Flags()).SetAssigned(true)
+	ModeFlag(ctx.Flags()).SetValue("")
+	os.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "from-env")
+	defer os.Unsetenv("ALIBABA_CLOUD_ACCESS_KEY_ID")
+
+	actual.OverwriteWithFlags(ctx)
+	assert.Equal(t, AK, actual.Mode, "empty --mode should not overwrite profile Mode")
+	assert.Equal(t, "from-env", actual.AccessKeyId, "env credentials should still apply")
+}
+
 func TestOverwriteWithFlagsWithRegionIDEnv(t *testing.T) {
 	buf := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
