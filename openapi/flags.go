@@ -281,8 +281,8 @@ func NewCliDryRunFlag() *cli.Flag {
 		Name:         CliDryRunFlagName,
 		AssignedMode: cli.AssignedNone,
 		Short: i18n.T(
-			"add `--cli-dry-run` to validate and print request details as JSON without running.",
-			"使用 `--cli-dry-run` 在执行校验后以 JSON 格式输出请求详情，跳过实际运行",
+			"add `--cli-dry-run` to validate and print request details in human-readable format without running.",
+			"使用 `--cli-dry-run` 在执行校验后以人类可读格式输出请求详情，跳过实际运行",
 		),
 		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, DryRunFlagName, CliDryRunJsonFlagName},
 	}
@@ -295,8 +295,8 @@ func NewDryRunJsonFlag() *cli.Flag {
 		AssignedMode: cli.AssignedNone,
 		Hidden:       true,
 		Short: i18n.T(
-			"add `--cli-dry-run-json` to validate and print product/version/api/region/endpoint as JSON without running.",
-			"使用 `--cli-dry-run-json` 在执行校验后输出包含 product、version、api、region、endpoint 的一行 JSON，跳过实际运行",
+			"add `--cli-dry-run-json` to validate and print request details as JSON without running.",
+			"使用 `--cli-dry-run-json` 在执行校验后以 JSON 格式输出请求详情，跳过实际运行",
 		),
 		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, DryRunFlagName, CliDryRunFlagName},
 	}

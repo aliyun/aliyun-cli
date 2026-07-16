@@ -523,12 +523,7 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		if !ok {
 			return fmt.Errorf("--cli-dry-run-json is only supported for OpenAPI invoke path")
 		}
-		line, err := marshalDryRunOpenapiMeta(ctx, oc)
-		if err != nil {
-			return err
-		}
-		cli.Println(ctx.Stdout(), line)
-		return nil
+		return processCliDryRunOpenapiJson(ctx, oc)
 	}
 
 	err = hookHttpContextCall(apiContext.Call)()
@@ -582,12 +577,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	}
 
 	if DryRunJsonFlag(ctx.Flags()).IsAssigned() {
-		line, err := marshalDryRunInvokeMeta(c.library, invoker)
-		if err != nil {
-			return err
-		}
-		cli.Println(ctx.Stdout(), line)
-		return nil
+		return processCliDryRunJson(ctx, invoker)
 	}
 	// --estimate-cost: terminal branch. Must come before --dryrun so we don't
 	// hit TransToAcsRequest side effects on the way to a quote.

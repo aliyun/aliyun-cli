@@ -491,6 +491,38 @@ func TestProcessCliDryRun(t *testing.T) {
 	assert.Nil(t, err)
 
 	output := stdout.String()
+	assert.Contains(t, output, "Style:    RPC")
+	assert.Contains(t, output, "Endpoint: ecs.cn-hangzhou.aliyuncs.com")
+	assert.Contains(t, output, "Action:   DescribeInstances")
+	assert.Contains(t, output, "Version:  2014-05-26")
+	assert.Contains(t, output, "RegionId = cn-hangzhou")
+}
+
+func TestProcessCliDryRunJson(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, new(bytes.Buffer))
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	req := requests.NewCommonRequest()
+	req.Domain = "ecs.cn-hangzhou.aliyuncs.com"
+	req.Method = "POST"
+	req.ApiName = "DescribeInstances"
+	req.Version = "2014-05-26"
+	req.Product = "Ecs"
+	req.QueryParams["RegionId"] = "cn-hangzhou"
+
+	invoker := &ForceRpcInvoker{
+		BasicInvoker: &BasicInvoker{request: req},
+		method:       "DescribeInstances",
+	}
+
+	err := processCliDryRunJson(ctx, invoker)
+	assert.Nil(t, err)
+
+	output := stdout.String()
 	assert.Contains(t, output, "\"style\": \"RPC\"")
 	assert.Contains(t, output, "\"action\": \"DescribeInstances\"")
 
@@ -534,6 +566,44 @@ func TestProcessCliDryRunOpenapi(t *testing.T) {
 	assert.Nil(t, err)
 
 	output := stdout.String()
+	assert.Contains(t, output, "Style:    ROA")
+	assert.Contains(t, output, "Endpoint: cn-hangzhou.log.aliyuncs.com")
+	assert.Contains(t, output, "Action:   GetLogStore")
+}
+
+func TestProcessCliDryRunOpenapiJson(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, new(bytes.Buffer))
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
+	api := &meta.Api{Name: "GetLogStore", Product: product}
+	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "cn-hangzhou.log.aliyuncs.com"}
+
+	oc := &OpenapiContext{
+		HttpContext: &HttpContext{
+			profile: profile,
+			product: product,
+			openapiRequest: &openapiutil.OpenApiRequest{
+				Headers: map[string]*string{
+					"Content-Type": tea.String("application/json"),
+				},
+				Query: map[string]*string{},
+			},
+			openapiParams: newOpenapiParams("GET", "/logstores/my-store", "GetLogStore", "2020-12-30"),
+		},
+		method: "GET",
+		path:   "/logstores/[logstoreName]",
+		api:    api,
+	}
+
+	err := processCliDryRunOpenapiJson(ctx, oc)
+	assert.Nil(t, err)
+
+	output := stdout.String()
 	assert.Contains(t, output, "\"style\": \"ROA\"")
 	assert.Contains(t, output, "GetLogStore")
 
@@ -571,6 +641,53 @@ func TestProcessInvoke_CliDryRun_RPC(t *testing.T) {
 
 	ForceFlag(ctx.Flags()).SetAssigned(true)
 	CliDryRunFlag(ctx.Flags()).SetAssigned(true)
+
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+
+	err := command.processInvoke(ctx, "ecs", "DescribeRegions", "")
+	assert.Nil(t, err)
+
+	output := stdout.String()
+	assert.Contains(t, output, "Style:    RPC")
+	assert.Contains(t, output, "Action:   DescribeRegions")
+	assert.Contains(t, output, "Version:  2014-05-26")
+	assert.Contains(t, output, "Endpoint: ecs.cn-hangzhou.aliyuncs.com")
+}
+
+func TestProcessInvoke_CliDryRunJson_RPC(t *testing.T) {
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	skipflag := config.NewSkipSecureVerify()
+	skipflag.SetAssigned(true)
+	ctx.Flags().Add(skipflag)
+
+	regionflag := config.NewRegionFlag()
+	regionflag.SetAssigned(true)
+	regionflag.SetValue("cn-hangzhou")
+	ctx.Flags().Add(regionflag)
+
+	endpointflag := config.NewEndpointFlag()
+	endpointflag.SetAssigned(true)
+	endpointflag.SetValue("ecs.cn-hangzhou.aliyuncs.com")
+	ctx.Flags().Add(endpointflag)
+
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2014-05-26")
+
+	ForceFlag(ctx.Flags()).SetAssigned(true)
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
 
 	profile := config.Profile{
 		Language:        "en",
@@ -631,6 +748,50 @@ func TestProcessInvoke_CliDryRun_ROA(t *testing.T) {
 	err := command.processInvoke(ctx, "cs", "GET", "/clusters")
 	assert.Nil(t, err)
 
+	output := stdout.String()
+	assert.Contains(t, output, "Style:    ROA")
+	assert.Contains(t, output, "Method:   GET")
+	assert.Contains(t, output, "Pathname: /clusters")
+	assert.Contains(t, output, "Endpoint: cs.cn-hangzhou.aliyuncs.com")
+}
+
+func TestProcessInvoke_CliDryRunJson_ROA(t *testing.T) {
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	skipflag := config.NewSkipSecureVerify()
+	skipflag.SetAssigned(true)
+	ctx.Flags().Add(skipflag)
+
+	regionflag := config.NewRegionFlag()
+	regionflag.SetAssigned(true)
+	regionflag.SetValue("cn-hangzhou")
+	ctx.Flags().Add(regionflag)
+
+	endpointflag := config.NewEndpointFlag()
+	endpointflag.SetAssigned(true)
+	endpointflag.SetValue("cs.cn-hangzhou.aliyuncs.com")
+	ctx.Flags().Add(endpointflag)
+
+	ForceFlag(ctx.Flags()).SetAssigned(true)
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+
+	err := command.processInvoke(ctx, "cs", "GET", "/clusters")
+	assert.Nil(t, err)
+
 	output := strings.TrimSpace(stdout.String())
 	var parsed CliDryRunOutput
 	err = json.Unmarshal([]byte(output), &parsed)
@@ -639,6 +800,84 @@ func TestProcessInvoke_CliDryRun_ROA(t *testing.T) {
 	assert.Equal(t, "GET", parsed.Method)
 	assert.Equal(t, "/clusters", parsed.Pathname)
 	assert.Equal(t, "cs.cn-hangzhou.aliyuncs.com", parsed.Endpoint)
+}
+
+func TestFormatCliDryRunHuman_RPC(t *testing.T) {
+	out := &CliDryRunOutput{
+		Style:    "RPC",
+		Endpoint: "ecs.cn-hangzhou.aliyuncs.com",
+		Method:   "POST",
+		Headers:  map[string]string{"Content-Type": "application/json"},
+		Action:   "DescribeInstances",
+		Version:  "2014-05-26",
+		Query:    map[string]string{"RegionId": "cn-hangzhou"},
+	}
+
+	s := formatCliDryRunHuman(out)
+	assert.Contains(t, s, "Style:    RPC")
+	assert.Contains(t, s, "Endpoint: ecs.cn-hangzhou.aliyuncs.com")
+	assert.Contains(t, s, "Method:   POST")
+	assert.Contains(t, s, "Action:   DescribeInstances")
+	assert.Contains(t, s, "Version:  2014-05-26")
+	assert.Contains(t, s, "Content-Type: application/json")
+	assert.Contains(t, s, "RegionId = cn-hangzhou")
+	assert.True(t, strings.HasPrefix(s, "---\n"))
+	assert.True(t, strings.HasSuffix(s, "---"))
+}
+
+func TestFormatCliDryRunHuman_ROA(t *testing.T) {
+	out := &CliDryRunOutput{
+		Style:       "ROA",
+		Endpoint:    "cs.cn-hangzhou.aliyuncs.com",
+		Method:      "GET",
+		Headers:     map[string]string{},
+		PathPattern: "/clusters/[ClusterId]",
+		Pathname:    "/clusters/c123",
+		PathParams:  map[string]string{"ClusterId": "c123"},
+	}
+
+	s := formatCliDryRunHuman(out)
+	assert.Contains(t, s, "Style:    ROA")
+	assert.Contains(t, s, "PathPattern: /clusters/[ClusterId]")
+	assert.Contains(t, s, "Pathname: /clusters/c123")
+	assert.Contains(t, s, "ClusterId = c123")
+	assert.NotContains(t, s, "Action:")
+	assert.NotContains(t, s, "Version:")
+}
+
+func TestFormatCliDryRunHuman_WithBody(t *testing.T) {
+	out := &CliDryRunOutput{
+		Style:      "RPC",
+		Endpoint:   "ecs.cn-hangzhou.aliyuncs.com",
+		Method:     "POST",
+		Headers:    map[string]string{},
+		Action:     "RunInstances",
+		Version:    "2014-05-26",
+		Body:       `{"InstanceType":"ecs.g6.large"}`,
+		BodyFormat: "raw",
+	}
+
+	s := formatCliDryRunHuman(out)
+	assert.Contains(t, s, "Body[raw]:")
+	assert.Contains(t, s, `{"InstanceType":"ecs.g6.large"}`)
+}
+
+func TestFormatCliDryRunHuman_Minimal(t *testing.T) {
+	out := &CliDryRunOutput{
+		Style:    "RPC",
+		Endpoint: "ecs.cn-hangzhou.aliyuncs.com",
+		Method:   "GET",
+		Headers:  map[string]string{},
+		Action:   "DescribeRegions",
+		Version:  "2014-05-26",
+	}
+
+	s := formatCliDryRunHuman(out)
+	assert.NotContains(t, s, "PathPattern:")
+	assert.NotContains(t, s, "Pathname:")
+	assert.NotContains(t, s, "PathParams:")
+	assert.NotContains(t, s, "Query:")
+	assert.NotContains(t, s, "Body[")
 }
 
 func TestCliDryRunFlag_Definition(t *testing.T) {

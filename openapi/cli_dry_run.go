@@ -181,7 +181,63 @@ func marshalCliDryRunOutput(out *CliDryRunOutput) (string, error) {
 	return string(b), nil
 }
 
+func formatCliDryRunHuman(out *CliDryRunOutput) string {
+	var sb strings.Builder
+	sb.WriteString("---\n")
+	sb.WriteString("Style:    " + out.Style + "\n")
+	sb.WriteString("Endpoint: " + out.Endpoint + "\n")
+	sb.WriteString("Method:   " + out.Method + "\n")
+
+	if out.Action != "" {
+		sb.WriteString("Action:   " + out.Action + "\n")
+	}
+	if out.Version != "" {
+		sb.WriteString("Version:  " + out.Version + "\n")
+	}
+	if out.PathPattern != "" {
+		sb.WriteString("PathPattern: " + out.PathPattern + "\n")
+	}
+	if out.Pathname != "" {
+		sb.WriteString("Pathname: " + out.Pathname + "\n")
+	}
+
+	if len(out.PathParams) > 0 {
+		sb.WriteString("PathParams:\n")
+		for k, v := range out.PathParams {
+			sb.WriteString("  " + k + " = " + v + "\n")
+		}
+	}
+
+	if len(out.Headers) > 0 {
+		sb.WriteString("Headers:\n")
+		for k, v := range out.Headers {
+			sb.WriteString("  " + k + ": " + v + "\n")
+		}
+	}
+
+	if len(out.Query) > 0 {
+		sb.WriteString("Query:\n")
+		for k, v := range out.Query {
+			sb.WriteString("  " + k + " = " + v + "\n")
+		}
+	}
+
+	if out.Body != "" {
+		sb.WriteString("Body[" + out.BodyFormat + "]:\n")
+		sb.WriteString("  " + out.Body + "\n")
+	}
+
+	sb.WriteString("---")
+	return sb.String()
+}
+
 func processCliDryRun(ctx *cli.Context, inv Invoker) error {
+	out := buildCliDryRunFromInvoker(inv)
+	cli.Println(ctx.Stdout(), formatCliDryRunHuman(out))
+	return nil
+}
+
+func processCliDryRunJson(ctx *cli.Context, inv Invoker) error {
 	out := buildCliDryRunFromInvoker(inv)
 	s, err := marshalCliDryRunOutput(out)
 	if err != nil {
@@ -192,6 +248,12 @@ func processCliDryRun(ctx *cli.Context, inv Invoker) error {
 }
 
 func processCliDryRunOpenapi(ctx *cli.Context, oc *OpenapiContext) error {
+	out := buildCliDryRunFromOpenapi(oc)
+	cli.Println(ctx.Stdout(), formatCliDryRunHuman(out))
+	return nil
+}
+
+func processCliDryRunOpenapiJson(ctx *cli.Context, oc *OpenapiContext) error {
 	out := buildCliDryRunFromOpenapi(oc)
 	s, err := marshalCliDryRunOutput(out)
 	if err != nil {
