@@ -15,6 +15,7 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -1944,4 +1945,73 @@ func TestErrBearerTokenRequiresPlugin(t *testing.T) {
 
 	err = ErrBearerTokenRequiresPlugin("")
 	assert.Contains(t, err.Error(), "product plugin")
+}
+
+func TestProfileReadTimeoutJSONKey(t *testing.T) {
+	p := Profile{Name: "default", ReadTimeout: 30}
+	raw, err := json.Marshal(p)
+	assert.NoError(t, err)
+	assert.Contains(t, string(raw), `"read_timeout":30`)
+	assert.NotContains(t, string(raw), `retry_timeout`)
+
+	var fromNew Profile
+	assert.NoError(t, json.Unmarshal([]byte(`{"name":"default","read_timeout":45}`), &fromNew))
+	assert.Equal(t, 45, fromNew.ReadTimeout)
+
+	var fromLegacy Profile
+	assert.NoError(t, json.Unmarshal([]byte(`{"name":"default","retry_timeout":60}`), &fromLegacy))
+	assert.Equal(t, 60, fromLegacy.ReadTimeout)
+
+	var preferNew Profile
+	assert.NoError(t, json.Unmarshal([]byte(`{"name":"default","read_timeout":10,"retry_timeout":99}`), &preferNew))
+	assert.Equal(t, 10, preferNew.ReadTimeout)
+}
+
+func TestConfigureSetPersistsReadTimeoutJSONKey(t *testing.T) {
+	var saved *Configuration
+	origLoad := hookLoadOrCreateConfiguration
+	origSave := hookSaveConfigurationWithContext
+	defer func() {
+		hookLoadOrCreateConfiguration = origLoad
+		hookSaveConfigurationWithContext = origSave
+	}()
+
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{Name: "default", Mode: AK, AccessKeyId: "ak", AccessKeySecret: "sk", RegionId: "cn-hangzhou", OutputFormat: "json"},
+				},
+			}, nil
+		}
+	}
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
+			saved = config
+			return nil
+		}
+	}
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
+	ReadTimeoutFlag(ctx.Flags()).SetAssigned(true)
+	ReadTimeoutFlag(ctx.Flags()).SetValue("30")
+
+	assert.NoError(t, doConfigureSet(ctx))
+	assert.NotNil(t, saved)
+	p, ok := saved.GetProfile("default")
+	assert.True(t, ok)
+	assert.Equal(t, 30, p.ReadTimeout)
+
+	raw, err := json.Marshal(p)
+	assert.NoError(t, err)
+	assert.Contains(t, string(raw), `"read_timeout":30`)
+	assert.NotContains(t, string(raw), `retry_timeout`)
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.Equal(t, "30", envs["ALIBABA_CLOUD_READ_TIMEOUT"])
 }
