@@ -92,7 +92,9 @@ func (c *Commando) InitWithCommand(cmd *cli.Command) {
 
 func DetectInConfigureMode(flags *cli.FlagSet) bool {
 	mode, modeExist := flags.GetValue(config.ModeFlagName)
-	if !modeExist || config.Anonymous == config.NormalizeMode(mode) {
+	// Empty --mode is treated as unset so OverwriteWithFlags still runs
+	// (env credentials / timeout / retry flags remain effective).
+	if !modeExist || strings.TrimSpace(mode) == "" || config.Anonymous == config.NormalizeMode(mode) {
 		return true
 	}
 	// if mode exist, check if other flags exist

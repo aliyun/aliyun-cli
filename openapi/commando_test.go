@@ -654,13 +654,32 @@ func TestDetectInConfigureMode(t *testing.T) {
 	result := DetectInConfigureMode(flags)
 	assert.True(t, result, "Expected true when no flags are set")
 
-	// Test case 2: Mode flag set
+	// Test case 2: Mode flag assigned but empty — treat as unset
+	flags = cli.NewFlagSet()
+	emptyModeFlag := &cli.Flag{Name: config.ModeFlagName}
+	emptyModeFlag.SetAssigned(true)
+	emptyModeFlag.SetValue("")
+	flags.Add(emptyModeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when mode flag is empty")
+
+	// Test case 2b: Mode flag assigned with whitespace only — treat as unset
+	flags = cli.NewFlagSet()
+	wsModeFlag := &cli.Flag{Name: config.ModeFlagName}
+	wsModeFlag.SetAssigned(true)
+	wsModeFlag.SetValue("   ")
+	flags.Add(wsModeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when mode flag is whitespace-only")
+
+	// Test case 2c: Mode flag set to a non-empty value without credential flags
 	flags = cli.NewFlagSet()
 	modeFlag := &cli.Flag{Name: config.ModeFlagName}
 	modeFlag.SetAssigned(true)
+	modeFlag.SetValue("AK")
 	flags.Add(modeFlag)
 	result = DetectInConfigureMode(flags)
-	assert.False(t, result, "Expected false when mode flag is set")
+	assert.False(t, result, "Expected false when mode flag has a non-empty value without credential flags")
 
 	// Test case 3: AccessKeyId flag set
 	flags = cli.NewFlagSet()
