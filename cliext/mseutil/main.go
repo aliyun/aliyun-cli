@@ -25,7 +25,17 @@ func NewMseutilCommand() *cli.Command {
 					args = append(args, "--help")
 				}
 			}
-			return NewContext(ctx).Run(args)
+			if err := NewContext(ctx).Run(args); err != nil {
+				if exitErr, ok := err.(*ExitError); ok {
+					// Subprocess already wrote its own output to stdout/stderr.
+					// Propagate the exit code directly instead of returning an
+					// error (which would print an ANSI "ERROR: ..." line).
+					cli.Exit(exitErr.Code)
+					return nil
+				}
+				return err
+			}
+			return nil
 		},
 		EnableUnknownFlag: true,
 		KeepArgs:          true,

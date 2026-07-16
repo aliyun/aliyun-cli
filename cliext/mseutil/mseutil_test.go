@@ -655,3 +655,63 @@ func TestUnsupportedPlatform(t *testing.T) {
 		t.Fatalf("expected unsupported platform error, got %v", err)
 	}
 }
+
+// --- ExitError ---
+
+func TestExitError(t *testing.T) {
+	e := &ExitError{Code: 42}
+	if e.Error() != "subprocess exited with code 42" {
+		t.Errorf("Error() mismatch: %s", e.Error())
+	}
+	if e.ExitCode() != 42 {
+		t.Errorf("ExitCode() mismatch: %d", e.ExitCode())
+	}
+}
+
+func TestExecuteMseutil_ExitCode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("bash exit helper not used on windows")
+	}
+	origExec := execCommandFunc
+	defer func() { execCommandFunc = origExec }()
+	execCommandFunc = func(name string, args ...string) *exec.Cmd {
+		return exec.Command("bash", "-c", "exit 42")
+	}
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.execFilePath = "/any/path"
+	c.envMap = map[string]string{}
+
+	err := c.ExecuteMseutil([]string{"version"})
+	if err == nil {
+		t.Fatalf("expected error for non-zero exit")
+	}
+	exitErr, ok := err.(*ExitError)
+	if !ok {
+		t.Fatalf("expected ExitError, got %T: %v", err, err)
+	}
+	if exitErr.Code != 42 {
+		t.Errorf("exit code: got %d, want 42", exitErr.Code)
+	}
+}
+
+func TestExecuteMseutil_Success(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("bash exit helper not used on windows")
+	}
+	origExec := execCommandFunc
+	defer func() { execCommandFunc = origExec }()
+	execCommandFunc = func(name string, args ...string) *exec.Cmd {
+		return exec.Command("bash", "-c", "exit 0")
+	}
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.execFilePath = "/any/path"
+	c.envMap = map[string]string{"ALIBABA_CLOUD_MSEUTIL_COMPAT_MODE": "aliyun mseutil"}
+
+	if err := c.ExecuteMseutil([]string{"version"}); err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
+}

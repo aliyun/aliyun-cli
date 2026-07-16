@@ -56,6 +56,20 @@ const defaultDownloadBase = "https://msetools.oss-cn-hangzhou.aliyuncs.com/mseut
 
 var VersionCheckTTL = 86400 // 1 day, in seconds
 
+// ExitError carries the exit code from the child process so the caller
+// can propagate it without calling os.Exit directly (which skips defers).
+type ExitError struct {
+	Code int
+}
+
+func (e *ExitError) Error() string {
+	return fmt.Sprintf("subprocess exited with code %d", e.Code)
+}
+
+func (e *ExitError) ExitCode() int {
+	return e.Code
+}
+
 // platformPaths maps goos-goarch to OSS path segments used by mseutil releases.
 // Official URLs use x86_64 (not amd64).
 var platformPaths = map[string][2]string{
@@ -357,6 +371,9 @@ func (c *Context) ExecuteMseutil(args []string) error {
 	cmd.Stdin = os.Stdin
 
 	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return &ExitError{Code: exitErr.ExitCode()}
+		}
 		return fmt.Errorf("failed to execute %s %v: %v", c.execFilePath, args, err)
 	}
 	return nil
