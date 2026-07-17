@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"testing"
 
-  "github.com/aliyun/aliyun-cli/v3/cli"
+  	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-cli/v3/newmeta"
 	"github.com/stretchr/testify/assert"
