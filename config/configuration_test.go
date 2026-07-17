@@ -18,7 +18,9 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -217,12 +219,72 @@ func TestSaveConfiguration(t *testing.T) {
 	assert.Nil(t, err)
 	err = SaveConfiguration(conf)
 	assert.Nil(t, err)
-	file, err := os.Open(GetConfigPath() + "/" + configFile)
+	file, err := os.Open(filepath.Join(GetConfigPath(), configFile))
 	assert.Nil(t, err)
 	buf := make([]byte, 1024)
 	n, _ := file.Read(buf)
 	file.Close()
 	assert.Equal(t, string(bytes), string(buf[:n]))
+}
+
+func TestAtomicWriteFile_OverwriteExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	err := os.WriteFile(path, []byte(`{"current":"old"}`), 0600)
+	assert.NoError(t, err)
+
+	newContent := []byte(`{"current":"new","profiles":[]}`)
+	err = atomicWriteFile(path, newContent, 0600)
+	assert.NoError(t, err)
+
+	got, err := os.ReadFile(path)
+	assert.NoError(t, err)
+	assert.Equal(t, string(newContent), string(got))
+
+	entries, err := os.ReadDir(dir)
+	assert.NoError(t, err)
+	for _, e := range entries {
+		assert.False(t, strings.Contains(e.Name(), ".tmp-"), "temp file should be cleaned: %s", e.Name())
+	}
+}
+
+func TestSaveConfiguration_OverwriteExisting(t *testing.T) {
+	orighookGetHomePath := hookGetHomePath
+	defer func() {
+		os.RemoveAll("./.aliyun")
+		hookGetHomePath = orighookGetHomePath
+	}()
+	hookGetHomePath = func(fn func() string) func() string {
+		return func() string {
+			return "."
+		}
+	}
+
+	oldConf := &Configuration{
+		CurrentProfile: "old",
+		Profiles:       []Profile{{Language: "en", Name: "old", Mode: "AK", AccessKeyId: "old_id", AccessKeySecret: "old_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}},
+	}
+	assert.NoError(t, SaveConfiguration(oldConf))
+
+	newConf := &Configuration{
+		CurrentProfile: "default",
+		Profiles:       []Profile{{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "new_id", AccessKeySecret: "new_secret", RegionId: "cn-beijing", OutputFormat: "json"}},
+	}
+	assert.NoError(t, SaveConfiguration(newConf))
+
+	path := filepath.Join(GetConfigPath(), configFile)
+	loaded, err := LoadConfigurationFromFile(path)
+	assert.NoError(t, err)
+	assert.Equal(t, "default", loaded.CurrentProfile)
+	assert.Equal(t, "new_id", loaded.Profiles[0].AccessKeyId)
+	assert.Equal(t, "cn-beijing", loaded.Profiles[0].RegionId)
+
+	entries, err := os.ReadDir(GetConfigPath())
+	assert.NoError(t, err)
+	for _, e := range entries {
+		assert.False(t, strings.Contains(e.Name(), ".tmp-"), "temp file should be cleaned: %s", e.Name())
+	}
 }
 
 func TestLoadOrCreateConfiguration(t *testing.T) {
