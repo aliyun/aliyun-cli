@@ -1,0 +1,99 @@
+// Copyright (c) 2009-present, Alibaba Cloud All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package config
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestSplitProcessCommand(t *testing.T) {
+	cases := []struct {
+		name    string
+		input   string
+		want    []string
+		wantErr string
+	}{
+		{
+			name:  "simple",
+			input: "cmd arg1 arg2",
+			want:  []string{"cmd", "arg1", "arg2"},
+		},
+		{
+			name:  "extra whitespace",
+			input: "  cmd   arg1\targ2  ",
+			want:  []string{"cmd", "arg1", "arg2"},
+		},
+		{
+			name:  "windows path with spaces double quoted",
+			input: `"C:\Program Files\tool\cred.exe" get --profile default`,
+			want:  []string{`C:\Program Files\tool\cred.exe`, "get", "--profile", "default"},
+		},
+		{
+			name:  "unix path with spaces single quoted",
+			input: `'/usr/local/my tools/cred' arg`,
+			want:  []string{"/usr/local/my tools/cred", "arg"},
+		},
+		{
+			name:  "quoted argument with spaces",
+			input: `tool --name "First Last"`,
+			want:  []string{"tool", "--name", "First Last"},
+		},
+		{
+			name:  "escaped space",
+			input: `tool arg\ with\ space`,
+			want:  []string{"tool", "arg with space"},
+		},
+		{
+			name:  "escaped quote inside double quotes",
+			input: `tool "say \"hi\""`,
+			want:  []string{"tool", `say "hi"`},
+		},
+		{
+			name:    "empty",
+			input:   "   ",
+			wantErr: "process_command is empty",
+		},
+		{
+			name:    "unclosed double quote",
+			input:   `"C:\Program Files\tool.exe`,
+			wantErr: "unclosed quote",
+		},
+		{
+			name:    "unclosed single quote",
+			input:   `'/usr/bin/tool`,
+			wantErr: "unclosed quote",
+		},
+		{
+			name:    "trailing backslash",
+			input:   `tool\`,
+			wantErr: "trailing backslash",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := splitProcessCommand(tc.input)
+			if tc.wantErr != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErr)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
