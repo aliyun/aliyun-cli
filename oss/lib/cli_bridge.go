@@ -119,38 +119,66 @@ func NewCommandBridge(cmd Command) *cli.Command {
 	return result
 }
 
-// ParseAndGetEndpoint get oss endpoint from cli context
+// buildOssEndpoint builds the regional OSS endpoint.
+// When endpointType is "vpc", use the internal endpoint (oss-{region}-internal.aliyuncs.com).
+func buildOssEndpoint(region, endpointType string) string {
+	if strings.EqualFold(strings.TrimSpace(endpointType), "vpc") {
+		return "oss-" + region + "-internal.aliyuncs.com"
+	}
+	return "oss-" + region + ".aliyuncs.com"
+}
+
+func getArgValue(args []string, name string) (string, bool) {
+	for i, arg := range args {
+		if arg == name && i+1 < len(args) {
+			return args[i+1], true
+		}
+	}
+	return "", false
+}
+
+// ParseAndGetEndpoint get oss endpoint from cli context.
+// Priority (aligned with OpenAPI): explicit --endpoint (args/flag) >
+// profile.Endpoint > construct from region + endpoint-type.
 func ParseAndGetEndpoint(ctx *cli.Context, args []string) (string, error) {
 	profile, err := config.LoadProfileWithContext(ctx)
 	if err != nil {
 		return "", fmt.Errorf("config failed: %s", err.Error())
 	}
-	// try fetch endpoint from args
-	if len(args) > 0 {
-		for i, arg := range args {
-			if arg == "--endpoint" {
-				if i+1 < len(args) {
-					return args[i+1], nil
-				}
-			}
-		}
-	}
-	// try fetch region from args
-	if len(args) > 0 {
-		for i, arg := range args {
-			if arg == "--region" {
-				if i+1 < len(args) {
-					return "oss-" + args[i+1] + ".aliyuncs.com", nil
-				}
-			}
-		}
-	}
-	// check endpoint from flags
-	if ep, ok := ctx.Flags().GetValue("endpoint"); !ok {
-		return "oss-" + profile.RegionId + ".aliyuncs.com", nil
-	} else {
+	// Ensure flag/env overlays for endpoint fields even when not in configure mode.
+	profile.OverwriteWithFlags(ctx)
+
+	// 1. Explicit --endpoint in remaining args
+	if ep, ok := getArgValue(args, "--endpoint"); ok {
 		return ep, nil
 	}
+
+	// 2. Explicit --endpoint flag
+	if ep, ok := ctx.Flags().GetValue("endpoint"); ok && ep != "" {
+		return ep, nil
+	}
+
+	// 3. profile.Endpoint (config / env / flag via OverwriteWithFlags)
+	if profile.Endpoint != "" {
+		return profile.Endpoint, nil
+	}
+
+	// 4. Resolve region then build public or VPC/internal endpoint
+	region := profile.RegionId
+	if r, ok := getArgValue(args, "--region"); ok {
+		region = r
+	} else if r, ok := ctx.Flags().GetValue("region"); ok && r != "" {
+		region = r
+	}
+	region = strings.TrimSpace(region)
+	if region == "" {
+		return "", fmt.Errorf("missing region for oss endpoint, use --region <regionId>")
+	}
+	if !config.IsRegion(region) {
+		return "", fmt.Errorf("invalid region %s", region)
+	}
+
+	return buildOssEndpoint(region, profile.EndpointType), nil
 }
 
 func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
