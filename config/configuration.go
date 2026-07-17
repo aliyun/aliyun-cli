@@ -254,6 +254,18 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	return atomicWriteFileWithRename(path, data, perm, os.Rename)
 }
 
+type atomicTempFile interface {
+	Name() string
+	Chmod(os.FileMode) error
+	Write([]byte) (int, error)
+	Sync() error
+	Close() error
+}
+
+var createAtomicTempFile = func(dir, pattern string) (atomicTempFile, error) {
+	return os.CreateTemp(dir, pattern)
+}
+
 func atomicWriteFileWithRename(path string, data []byte, perm os.FileMode, rename func(string, string) error) error {
 	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
 		resolvedPath, err := filepath.EvalSymlinks(path)
@@ -267,7 +279,7 @@ func atomicWriteFileWithRename(path string, data []byte, perm os.FileMode, renam
 
 	dir := filepath.Dir(path)
 	base := filepath.Base(path)
-	temp, err := os.CreateTemp(dir, "."+base+".tmp-*")
+	temp, err := createAtomicTempFile(dir, "."+base+".tmp-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp config in %q: %w", dir, err)
 	}
