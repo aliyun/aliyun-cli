@@ -105,6 +105,38 @@ func TestSaveCreatesParentDirsAndWritesIndentedJSON(t *testing.T) {
 	}
 }
 
+func TestDecodeInputAcceptsOptionalDelayMs(t *testing.T) {
+	records, err := DecodeInput([]byte(`{"name":"delayed","cmd":"ecs *","exit_code":0,"stdout":"","stderr":"","times":0,"delay_ms":1500}`))
+	if err != nil {
+		t.Fatalf("DecodeInput(delay_ms) returned error: %v", err)
+	}
+	if len(records) != 1 || records[0].DelayMs != 1500 {
+		t.Fatalf("records = %#v, want delay_ms 1500", records)
+	}
+}
+
+func TestDecodeInputRejectsNegativeDelayMs(t *testing.T) {
+	if records, err := DecodeInput([]byte(`{"name":"bad","cmd":"ecs *","exit_code":0,"stdout":"","stderr":"","times":0,"delay_ms":-1}`)); err == nil {
+		t.Fatalf("DecodeInput(negative delay_ms) = %#v, nil error", records)
+	}
+}
+
+func TestDecodeInputAcceptsOptionalResponseBodySize(t *testing.T) {
+	records, err := DecodeInput([]byte(`{"name":"sized","cmd":"ecs *","exit_code":0,"stdout":"","stderr":"","times":0,"response_body_size":1024}`))
+	if err != nil {
+		t.Fatalf("DecodeInput(response_body_size) returned error: %v", err)
+	}
+	if len(records) != 1 || records[0].ResponseBodySize != 1024 {
+		t.Fatalf("records = %#v, want response_body_size 1024", records)
+	}
+}
+
+func TestDecodeInputRejectsNegativeResponseBodySize(t *testing.T) {
+	if records, err := DecodeInput([]byte(`{"name":"bad","cmd":"ecs *","exit_code":0,"stdout":"","stderr":"","times":0,"response_body_size":-1}`)); err == nil {
+		t.Fatalf("DecodeInput(negative response_body_size) = %#v, nil error", records)
+	}
+}
+
 func TestReadInputAcceptsFlatSingleObjectAndArray(t *testing.T) {
 	one, err := DecodeInput([]byte(`{"name":"one","cmd":"ecs *","exit_code":0,"stdout":"","stderr":"","times":0}`))
 	if err != nil || len(one) != 1 || one[0].Name != "one" {
@@ -178,6 +210,30 @@ func TestAppendAndClearRecords(t *testing.T) {
 	}
 	if string(data) != "[]\n" {
 		t.Fatalf("clear content = %q, want [] newline", string(data))
+	}
+}
+
+func TestValidateRecordRejectsInvalidDelayMs(t *testing.T) {
+	if err := ValidateRecord(Record{Name: "bad", Cmd: "ecs *", Times: 0, DelayMs: -1}); err == nil {
+		t.Fatal("ValidateRecord negative delay_ms returned nil error")
+	}
+	if err := ValidateRecord(Record{Name: "bad", Cmd: "ecs *", Times: 0, DelayMs: MaxDelayMs + 1}); err == nil {
+		t.Fatal("ValidateRecord excessive delay_ms returned nil error")
+	}
+	if err := ValidateRecord(Record{Name: "ok", Cmd: "ecs *", Times: 0, DelayMs: 500}); err != nil {
+		t.Fatalf("ValidateRecord valid delay_ms returned error: %v", err)
+	}
+}
+
+func TestValidateRecordRejectsInvalidResponseBodySize(t *testing.T) {
+	if err := ValidateRecord(Record{Name: "bad", Cmd: "ecs *", Times: 0, ResponseBodySize: -1}); err == nil {
+		t.Fatal("ValidateRecord negative response_body_size returned nil error")
+	}
+	if err := ValidateRecord(Record{Name: "bad", Cmd: "ecs *", Times: 0, ResponseBodySize: MaxResponseBodySize + 1}); err == nil {
+		t.Fatal("ValidateRecord excessive response_body_size returned nil error")
+	}
+	if err := ValidateRecord(Record{Name: "ok", Cmd: "ecs *", Times: 0, ResponseBodySize: 1024}); err != nil {
+		t.Fatalf("ValidateRecord valid response_body_size returned error: %v", err)
 	}
 }
 

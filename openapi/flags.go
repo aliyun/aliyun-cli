@@ -31,7 +31,10 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewOutputFlag())
 	fs.Add(WaiterFlag)
 	fs.Add(NewDryRunFlag())
+	fs.Add(NewCliDryRunFlag())
 	fs.Add(NewDryRunJsonFlag())
+	fs.Add(NewEstimateCostFlag())
+	fs.Add(NewEstimateCostContextFlag())
 	fs.Add(NewQuietFlag())
 	fs.Add(NewLogLevelFlag())
 	fs.Add(NewYesFlag())
@@ -44,26 +47,29 @@ func AddFlags(fs *cli.FlagSet) {
 }
 
 const (
-	SecureFlagName        = "secure"
-	InsecureFlagName      = "insecure"
-	ForceFlagName         = "force"
-	VersionFlagName       = "version"
-	HeaderFlagName        = "header"
-	BodyFlagName          = "body"
-	BodyFileFlagName      = "body-file"
-	AcceptFlagName        = "accept"
-	RoaFlagName           = "roa"
-	DryRunFlagName        = "dryrun"
-	CliDryRunJsonFlagName = "cli-dry-run-json"
-	QuietFlagName         = "quiet"
-	LogLevelFlagName      = "log-level"
-	YesFlagName           = "yes"
-	QueryFlagName         = "cli-query"
-	OutputFlagName        = "output"
-	MethodFlagName        = "method"
-	UserAgentFlagName     = "user-agent"
-	CliAIModeFlagName     = "cli-ai-mode"
-	CliNoAIModeFlagName   = "no-cli-ai-mode"
+	SecureFlagName              = "secure"
+	InsecureFlagName            = "insecure"
+	ForceFlagName               = "force"
+	VersionFlagName             = "version"
+	HeaderFlagName              = "header"
+	BodyFlagName                = "body"
+	BodyFileFlagName            = "body-file"
+	AcceptFlagName              = "accept"
+	RoaFlagName                 = "roa"
+	DryRunFlagName              = "dryrun"
+	CliDryRunFlagName           = "cli-dry-run"
+	CliDryRunJsonFlagName       = "cli-dry-run-json"
+	EstimateCostFlagName        = "estimate-cost"
+	EstimateCostContextFlagName = "estimate-cost-context"
+	QuietFlagName               = "quiet"
+	LogLevelFlagName            = "log-level"
+	YesFlagName                 = "yes"
+	QueryFlagName               = "cli-query"
+	OutputFlagName              = "output"
+	MethodFlagName              = "method"
+	UserAgentFlagName           = "user-agent"
+	CliAIModeFlagName           = "cli-ai-mode"
+	CliNoAIModeFlagName         = "no-cli-ai-mode"
 )
 
 func OutputFlag(fs *cli.FlagSet) *cli.Flag {
@@ -108,6 +114,10 @@ func RoaFlag(fs *cli.FlagSet) *cli.Flag {
 
 func DryRunFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(DryRunFlagName)
+}
+
+func CliDryRunFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CliDryRunFlagName)
 }
 
 func DryRunJsonFlag(fs *cli.FlagSet) *cli.Flag {
@@ -261,7 +271,20 @@ func NewDryRunFlag() *cli.Flag {
 			"add `--dryrun` to validate and print request without running.",
 			"使用 `--dryrun` 在执行校验后打印请求包体，跳过实际运行",
 		),
-		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, CliDryRunJsonFlagName},
+		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, CliDryRunFlagName, CliDryRunJsonFlagName},
+	}
+}
+
+func NewCliDryRunFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         CliDryRunFlagName,
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			"add `--cli-dry-run` to validate and print request details in human-readable format without running.",
+			"使用 `--cli-dry-run` 在执行校验后以人类可读格式输出请求详情，跳过实际运行",
+		),
+		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, DryRunFlagName, CliDryRunJsonFlagName},
 	}
 }
 
@@ -272,11 +295,53 @@ func NewDryRunJsonFlag() *cli.Flag {
 		AssignedMode: cli.AssignedNone,
 		Hidden:       true,
 		Short: i18n.T(
-			"add `--cli-dry-run-json` to validate and print product/version/api/region/endpoint as JSON without running.",
-			"使用 `--cli-dry-run-json` 在执行校验后输出包含 product、version、api、region、endpoint 的一行 JSON，跳过实际运行",
+			"add `--cli-dry-run-json` to validate and print request details as JSON without running.",
+			"使用 `--cli-dry-run-json` 在执行校验后以 JSON 格式输出请求详情，跳过实际运行",
 		),
-		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, DryRunFlagName},
+		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, DryRunFlagName, CliDryRunFlagName},
 	}
+}
+
+// NewEstimateCostFlag registers `--estimate-cost`. See estimate_cost.go for
+// the routing details. Cross-product enumeration lives in the top-level
+// `aliyun list-supported-pricing-apis` subcommand (main/main.go), not here.
+func NewEstimateCostFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         EstimateCostFlagName,
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			"use `--estimate-cost` to estimate the cost of an OpenAPI call via CloudControl GetApiPrice without invoking it. Requires a product and an API name, e.g. `aliyun ecs RunInstances ... --estimate-cost`. Output is JSON.",
+			"使用 `--estimate-cost` 跳过实际调用，通过 CloudControl GetApiPrice 预估 OpenAPI 调用费用。需带 product 和 API 名（如 `aliyun ecs RunInstances ... --estimate-cost`），输出 JSON",
+		),
+		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, DryRunFlagName, CliDryRunFlagName, CliDryRunJsonFlagName},
+	}
+}
+
+func EstimateCostFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(EstimateCostFlagName)
+}
+
+// NewEstimateCostContextFlag registers `--estimate-cost-context Key=Value`, a
+// companion to --estimate-cost that supplies PricingContext entries (usage
+// assumptions / future-state overrides, e.g. EstimatedInternetTrafficOutGB=100).
+// Repeatable and multi-value: `--estimate-cost-context K1=V1 K2=V2`. Keys are
+// not validated here — PricingContext is mapping-defined and evolving; the
+// server validates. Must accompany --estimate-cost (enforced in commando.go).
+func NewEstimateCostContextFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         EstimateCostContextFlagName,
+		AssignedMode: cli.AssignedRepeatable,
+		Short: i18n.T(
+			"use `--estimate-cost-context Key=Value` to pass PricingContext entries to --estimate-cost (e.g. EstimatedInternetTrafficOutGB=100), repeatable or multi-value",
+			"配合 `--estimate-cost` 使用 `--estimate-cost-context Key=Value` 传递 PricingContext 询价假设（如 EstimatedInternetTrafficOutGB=100），可多值或多次指定",
+		),
+	}
+}
+
+func EstimateCostContextFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(EstimateCostContextFlagName)
 }
 
 func NewQuietFlag() *cli.Flag {
@@ -289,7 +354,7 @@ func NewQuietFlag() *cli.Flag {
 			"add `--quiet` to hide normal output",
 			"使用 `--quiet` 关闭正常输出",
 		),
-		ExcludeWith: []string{DryRunFlagName, CliDryRunJsonFlagName},
+		ExcludeWith: []string{DryRunFlagName, CliDryRunFlagName, CliDryRunJsonFlagName},
 	}
 }
 

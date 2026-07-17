@@ -75,6 +75,20 @@ func (c *Command) AddSubCommand(cmd *Command) {
 	c.subCommands = append(c.subCommands, cmd)
 }
 
+func (c *Command) SubCommandNames() []string {
+	if c == nil || len(c.subCommands) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(c.subCommands))
+	for _, sub := range c.subCommands {
+		if sub == nil {
+			continue
+		}
+		names = append(names, sub.Name)
+	}
+	return names
+}
+
 func (c *Command) Flags() *FlagSet {
 	if c.flags == nil {
 		c.flags = NewFlagSet()

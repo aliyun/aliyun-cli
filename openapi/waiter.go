@@ -67,7 +67,7 @@ func (a *Waiter) CallWith(invoker Invoker) (string, error) {
 	timeout := time.Duration(time.Second * 180)
 	if s, ok := WaiterFlag.GetFieldValue("timeout"); ok {
 		if n, err := strconv.Atoi(s); err == nil {
-			if n <= 0 && n > 600 {
+			if n <= 0 || n > 600 {
 				return "", fmt.Errorf("--waiter timeout=%s must between 1-600 (seconds)", s)
 			}
 			timeout = time.Duration(time.Second * time.Duration(n))
@@ -80,7 +80,7 @@ func (a *Waiter) CallWith(invoker Invoker) (string, error) {
 	interval := time.Duration(time.Second * 5)
 	if s, ok := WaiterFlag.GetFieldValue("interval"); ok {
 		if n, err := strconv.Atoi(s); err == nil {
-			if n <= 1 && n > 10 {
+			if n <= 1 || n > 10 {
 				return "", fmt.Errorf("--waiter interval=%s must between 2-10 (seconds)", s)
 			}
 			interval = time.Duration(time.Second * time.Duration(n))

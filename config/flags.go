@@ -26,6 +26,7 @@ const (
 	AccessKeySecretFlagName            = "access-key-secret"
 	StsTokenFlagName                   = "sts-token"
 	StsRegionFlagName                  = "sts-region"
+	StsEndpointFlagName                = "sts-endpoint"
 	RamRoleNameFlagName                = "ram-role-name"
 	RamRoleArnFlagName                 = "ram-role-arn"
 	RoleSessionNameFlagName            = "role-session-name"
@@ -69,6 +70,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewAccessKeySecretFlag())
 	fs.Add(NewStsTokenFlag())
 	fs.Add(NewStsRegionFlag())
+	fs.Add(NewStsEndpointFlag())
 	fs.Add(NewRamRoleNameFlag())
 	fs.Add(NewRamRoleArnFlag())
 	fs.Add(NewSourceProfileFlag())
@@ -123,6 +125,10 @@ func StsTokenFlag(fs *cli.FlagSet) *cli.Flag {
 
 func StsRegionFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(StsRegionFlagName)
+}
+
+func StsEndpointFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(StsEndpointFlagName)
 }
 
 func RamRoleNameFlag(fs *cli.FlagSet) *cli.Flag {
@@ -282,6 +288,17 @@ func NewStsRegionFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--sts-region <StsRegion>` to assign StsRegion",
 			"使用 `--sts-region <StsRegion>` 指定StsRegion"),
+	}
+}
+
+func NewStsEndpointFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         StsEndpointFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--sts-endpoint <StsEndpoint>` to assign STS endpoint, e.g. sts-vpc.cn-hangzhou.aliyuncs.com",
+			"使用 `--sts-endpoint <StsEndpoint>` 指定 STS endpoint，例如 sts-vpc.cn-hangzhou.aliyuncs.com"),
 	}
 }
 

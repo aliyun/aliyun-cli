@@ -15,6 +15,7 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,10 +23,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"testing"
 	"time"
 
+	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cloudsso"
 
@@ -325,6 +328,27 @@ func TestOverwriteWithFlags(t *testing.T) {
 	assert.Equal(t, exp, actual)
 }
 
+func TestOverwriteWithFlagsIgnoresEmptyMode(t *testing.T) {
+	buf := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, stderr)
+	AddFlags(ctx.Flags())
+	resetEnv()
+
+	actual := newProfile()
+	actual.Mode = AK
+	actual.AccessKeyId = ""
+
+	ModeFlag(ctx.Flags()).SetAssigned(true)
+	ModeFlag(ctx.Flags()).SetValue("")
+	os.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "from-env")
+	defer os.Unsetenv("ALIBABA_CLOUD_ACCESS_KEY_ID")
+
+	actual.OverwriteWithFlags(ctx)
+	assert.Equal(t, AK, actual.Mode, "empty --mode should not overwrite profile Mode")
+	assert.Equal(t, "from-env", actual.AccessKeyId, "env credentials should still apply")
+}
+
 func TestOverwriteWithFlagsWithRegionIDEnv(t *testing.T) {
 	buf := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -571,6 +595,149 @@ func TestIsRegion(t *testing.T) {
 func TestGetStsEndpoint(t *testing.T) {
 	assert.Equal(t, "sts.aliyuncs.com", getSTSEndpoint(""))
 	assert.Equal(t, "sts.cn-hangzhou.aliyuncs.com", getSTSEndpoint("cn-hangzhou"))
+}
+
+func TestNormalizeStsEndpointHost(t *testing.T) {
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", normalizeSTSEndpointHost("  https://sts-vpc.cn-hangzhou.aliyuncs.com/  "))
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", normalizeSTSEndpointHost("http://sts-vpc.cn-hangzhou.aliyuncs.com"))
+	assert.Equal(t, "sts.aliyuncs.com", normalizeSTSEndpointHost("sts.aliyuncs.com"))
+}
+
+func TestResolveStsEndpoint(t *testing.T) {
+	cp := &Profile{StsRegion: "cn-hangzhou"}
+	assert.Equal(t, "sts.cn-hangzhou.aliyuncs.com", resolveSTSEndpoint(cp))
+
+	cp = &Profile{StsRegion: "cn-beijing"}
+	assert.Equal(t, "sts.cn-beijing.aliyuncs.com", resolveSTSEndpoint(cp))
+
+	cp = &Profile{StsRegion: "cn-hangzhou", StsEndpoint: "https://sts-vpc.cn-hangzhou.aliyuncs.com/"}
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", resolveSTSEndpoint(cp))
+
+	cp = &Profile{StsRegion: "cn-hangzhou", StsEndpoint: "sts-vpc.cn-hangzhou.aliyuncs.com"}
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", resolveSTSEndpoint(cp))
+}
+
+func TestOverwriteWithFlagsStsEndpointEnv(t *testing.T) {
+	ctx := newCtx()
+	actual := &Profile{Name: "default", RegionId: "cn-hangzhou"}
+
+	os.Setenv("ALIBABA_CLOUD_STS_ENDPOINT", "sts-vpc.cn-hangzhou.aliyuncs.com")
+	actual.OverwriteWithFlags(ctx)
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", actual.StsEndpoint)
+	os.Unsetenv("ALIBABA_CLOUD_STS_ENDPOINT")
+
+	os.Setenv("ALIBABACLOUD_STS_ENDPOINT", "sts-vpc.cn-shanghai.aliyuncs.com")
+	actual.StsEndpoint = ""
+	actual.OverwriteWithFlags(ctx)
+	assert.Equal(t, "", actual.StsEndpoint)
+	os.Unsetenv("ALIBABACLOUD_STS_ENDPOINT")
+}
+
+func TestOverwriteWithFlagsStsEndpointFlag(t *testing.T) {
+	ctx := newCtx()
+	StsEndpointFlag(ctx.Flags()).SetAssigned(true)
+	StsEndpointFlag(ctx.Flags()).SetValue("sts-vpc.cn-beijing.aliyuncs.com")
+	actual := &Profile{Name: "default", StsEndpoint: "sts-vpc.cn-hangzhou.aliyuncs.com"}
+	actual.OverwriteWithFlags(ctx)
+	assert.Equal(t, "sts-vpc.cn-beijing.aliyuncs.com", actual.StsEndpoint)
+}
+
+func credentialSTSEndpoint(t *testing.T, cred credentialsv2.Credential) string {
+	t.Helper()
+	rv := reflect.ValueOf(cred)
+	if rv.Kind() != reflect.Ptr || rv.IsNil() {
+		t.Fatal("credential must be a non-nil pointer")
+	}
+	rv = rv.Elem()
+	providerField := rv.FieldByName("provider")
+	if !providerField.IsValid() {
+		providerField = rv
+	}
+	for providerField.Kind() == reflect.Ptr || providerField.Kind() == reflect.Interface {
+		if providerField.IsNil() {
+			t.Fatal("credential provider is nil")
+		}
+		providerField = providerField.Elem()
+	}
+	if stsField := providerField.FieldByName("stsEndpoint"); stsField.IsValid() {
+		return stsField.String()
+	}
+	if runtimeField := providerField.FieldByName("runtime"); runtimeField.IsValid() && !runtimeField.IsNil() {
+		if runtimeField.Kind() == reflect.Ptr {
+			runtimeField = runtimeField.Elem()
+		}
+		if endpoint := runtimeField.FieldByName("STSEndpoint"); endpoint.IsValid() {
+			return endpoint.String()
+		}
+	}
+	t.Fatal("provider has no sts endpoint field")
+	return ""
+}
+
+func TestGetCredentialWithOIDCStsEndpoint(t *testing.T) {
+	tmpFile, err := ioutil.TempFile("", "oidc-token-*")
+	assert.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+	_, err = tmpFile.WriteString("dummy-oidc-token")
+	assert.NoError(t, err)
+	tmpFile.Close()
+
+	actual := newProfile()
+	actual.Mode = OIDC
+	actual.OIDCProviderARN = "acs:ram::123456789:oidc-provider/test"
+	actual.OIDCTokenFile = tmpFile.Name()
+	actual.RamRoleArn = "acs:ram::123456789:role/test"
+	actual.RoleSessionName = "ack-session"
+	actual.StsEndpoint = "https://sts-vpc.cn-hangzhou.aliyuncs.com/"
+
+	credential, err := actual.GetCredential(newCtx(), nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, credential)
+	assert.Equal(t, "oidc_role_arn", *credential.GetType())
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", credentialSTSEndpoint(t, credential))
+}
+
+func TestGetCredentialWithRamRoleArnStsEndpoint(t *testing.T) {
+	actual := newProfile()
+	actual.Mode = RamRoleArn
+	actual.AccessKeyId = "akid"
+	actual.AccessKeySecret = "skid"
+	actual.RamRoleArn = "ramRoleArn"
+	actual.RoleSessionName = "roleSessionName"
+	actual.ExpiredSeconds = 3600
+	actual.StsEndpoint = "sts-vpc.cn-hangzhou.aliyuncs.com"
+
+	credential, err := actual.GetCredential(newCtx(), nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, credential)
+	assert.Equal(t, "ram_role_arn", *credential.GetType())
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", credentialSTSEndpoint(t, credential))
+}
+
+func TestGetRuntimeEnv_StsEndpoint(t *testing.T) {
+	p := newProfile()
+	p.Mode = AK
+	p.AccessKeyId = "ak"
+	p.AccessKeySecret = "sk"
+	p.RegionId = "cn-hangzhou"
+	p.StsEndpoint = "sts-vpc.cn-hangzhou.aliyuncs.com"
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.Equal(t, "sts-vpc.cn-hangzhou.aliyuncs.com", envs["ALIBABA_CLOUD_STS_ENDPOINT"])
+}
+
+func TestGetRuntimeEnv_StsEndpointOmitted(t *testing.T) {
+	p := newProfile()
+	p.Mode = AK
+	p.AccessKeyId = "ak"
+	p.AccessKeySecret = "sk"
+	p.RegionId = "cn-hangzhou"
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	_, has := envs["ALIBABA_CLOUD_STS_ENDPOINT"]
+	assert.False(t, has)
 }
 
 func TestNormalizeMode(t *testing.T) {
@@ -1196,6 +1363,74 @@ echo 'This is not a valid JSON'
 	}
 }
 
+func TestProfile_GetCredential_ExternalProcessDisabled(t *testing.T) {
+	orig := os.Getenv(EnvDisableExternalProcess)
+	os.Setenv(EnvDisableExternalProcess, "1")
+	defer func() {
+		if orig == "" {
+			os.Unsetenv(EnvDisableExternalProcess)
+		} else {
+			os.Setenv(EnvDisableExternalProcess, orig)
+		}
+	}()
+
+	profile := Profile{
+		Name:           "external",
+		Mode:           External,
+		ProcessCommand: "env",
+	}
+	config := &Configuration{
+		CurrentProfile: profile.Name,
+		Profiles:       []Profile{profile},
+	}
+	profile.parent = config
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	_, err := profile.GetCredential(ctx, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), EnvDisableExternalProcess)
+}
+
+func TestProfile_GetCredential_CredentialsURIDisabled(t *testing.T) {
+	successServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"Code": "Success",
+			"AccessKeyId": "mock-access-key-id",
+			"AccessKeySecret": "mock-access-key-secret",
+			"SecurityToken": "mock-security-token",
+			"Expiration": "2023-01-01T00:00:00Z"
+		}`))
+	}))
+	defer successServer.Close()
+
+	orig := os.Getenv(EnvDisableExternalProcess)
+	os.Setenv(EnvDisableExternalProcess, "true")
+	defer func() {
+		if orig == "" {
+			os.Unsetenv(EnvDisableExternalProcess)
+		} else {
+			os.Setenv(EnvDisableExternalProcess, orig)
+		}
+	}()
+
+	profile := Profile{
+		Name:           "uri",
+		Mode:           CredentialsURI,
+		CredentialsURI: successServer.URL,
+	}
+	config := &Configuration{
+		CurrentProfile: profile.Name,
+		Profiles:       []Profile{profile},
+	}
+	profile.parent = config
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	_, err := profile.GetCredential(ctx, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), EnvDisableExternalProcess)
+}
+
 // TestGetCredentialWithOAuthStsExpired 测试OAuth模式中STS过期时的刷新逻辑
 func TestGetCredentialWithOAuthStsExpired(t *testing.T) {
 	// 保存原始函数并在测试后恢复
@@ -1731,4 +1966,73 @@ func TestErrBearerTokenRequiresPlugin(t *testing.T) {
 
 	err = ErrBearerTokenRequiresPlugin("")
 	assert.Contains(t, err.Error(), "product plugin")
+}
+
+func TestProfileReadTimeoutJSONKey(t *testing.T) {
+	p := Profile{Name: "default", ReadTimeout: 30}
+	raw, err := json.Marshal(p)
+	assert.NoError(t, err)
+	assert.Contains(t, string(raw), `"read_timeout":30`)
+	assert.NotContains(t, string(raw), `retry_timeout`)
+
+	var fromNew Profile
+	assert.NoError(t, json.Unmarshal([]byte(`{"name":"default","read_timeout":45}`), &fromNew))
+	assert.Equal(t, 45, fromNew.ReadTimeout)
+
+	var fromLegacy Profile
+	assert.NoError(t, json.Unmarshal([]byte(`{"name":"default","retry_timeout":60}`), &fromLegacy))
+	assert.Equal(t, 60, fromLegacy.ReadTimeout)
+
+	var preferNew Profile
+	assert.NoError(t, json.Unmarshal([]byte(`{"name":"default","read_timeout":10,"retry_timeout":99}`), &preferNew))
+	assert.Equal(t, 10, preferNew.ReadTimeout)
+}
+
+func TestConfigureSetPersistsReadTimeoutJSONKey(t *testing.T) {
+	var saved *Configuration
+	origLoad := hookLoadOrCreateConfiguration
+	origSave := hookSaveConfigurationWithContext
+	defer func() {
+		hookLoadOrCreateConfiguration = origLoad
+		hookSaveConfigurationWithContext = origSave
+	}()
+
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "default",
+				Profiles: []Profile{
+					{Name: "default", Mode: AK, AccessKeyId: "ak", AccessKeySecret: "sk", RegionId: "cn-hangzhou", OutputFormat: "json"},
+				},
+			}, nil
+		}
+	}
+	hookSaveConfigurationWithContext = func(fn func(ctx *cli.Context, config *Configuration) error) func(ctx *cli.Context, config *Configuration) error {
+		return func(ctx *cli.Context, config *Configuration) error {
+			saved = config
+			return nil
+		}
+	}
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
+	ReadTimeoutFlag(ctx.Flags()).SetAssigned(true)
+	ReadTimeoutFlag(ctx.Flags()).SetValue("30")
+
+	assert.NoError(t, doConfigureSet(ctx))
+	assert.NotNil(t, saved)
+	p, ok := saved.GetProfile("default")
+	assert.True(t, ok)
+	assert.Equal(t, 30, p.ReadTimeout)
+
+	raw, err := json.Marshal(p)
+	assert.NoError(t, err)
+	assert.Contains(t, string(raw), `"read_timeout":30`)
+	assert.NotContains(t, string(raw), `retry_timeout`)
+
+	envs, err := p.GetRuntimeEnv(newCtx())
+	assert.NoError(t, err)
+	assert.Equal(t, "30", envs["ALIBABA_CLOUD_READ_TIMEOUT"])
 }

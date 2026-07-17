@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 )
 
 type Options struct {
@@ -21,6 +22,7 @@ type Result struct {
 var (
 	loadRecords = Load
 	saveRecords = Save
+	sleep       = time.Sleep
 )
 
 func Intercept(opts Options) Result {
@@ -46,8 +48,12 @@ func Intercept(opts Options) Result {
 		return Result{Handled: true, ExitCode: 1}
 	}
 
-	if record.Stdout != "" {
-		writes(opts.Stdout, record.Stdout)
+	if record.DelayMs > 0 {
+		sleep(time.Duration(record.DelayMs) * time.Millisecond)
+	}
+
+	if stdout := ResolveStdout(record); stdout != "" {
+		writes(opts.Stdout, stdout)
 	}
 	if record.Stderr != "" {
 		writes(opts.Stderr, record.Stderr)

@@ -542,6 +542,60 @@ func TestManager_findPluginInIndex(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin aliyun-cli-fc not found")
 	})
+
+	// 覆盖 `plugin install --name <alias>` 场景：假设索引侧已按 design 落盘 CommandAliases，
+	// findPluginInIndex 应能通过 alias 命中同一个 PluginInfo。缺失该字段的旧索引不会命中 alias 分支。
+	t.Run("Success - alias match", func(t *testing.T) {
+		validIndex := Index{
+			Plugins: []PluginInfo{
+				{
+					Name:           "aliyun-cli-hologram",
+					Command:        "hologram",
+					CommandAliases: []string{"hologres"},
+					Description:    "Hologram plugin",
+				},
+				{
+					Name:        "aliyun-cli-fc",
+					Description: "FC plugin",
+				},
+			},
+		}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(validIndex)
+		}))
+		defer server.Close()
+
+		mgr := &Manager{
+			rootDir:  t.TempDir(),
+			indexURL: server.URL,
+		}
+
+		// alias 命中主插件
+		p, err := mgr.findPluginInIndex("hologres")
+		assert.NoError(t, err)
+		if assert.NotNil(t, p) {
+			assert.Equal(t, "aliyun-cli-hologram", p.Name)
+		}
+
+		// alias 匹配大小写不敏感，与 matchPluginName 语义一致
+		p, err = mgr.findPluginInIndex("HOLOGRES")
+		assert.NoError(t, err)
+		if assert.NotNil(t, p) {
+			assert.Equal(t, "aliyun-cli-hologram", p.Name)
+		}
+
+		// 主命令 short-name 走 matchPluginName 原有路径
+		p, err = mgr.findPluginInIndex("hologram")
+		assert.NoError(t, err)
+		if assert.NotNil(t, p) {
+			assert.Equal(t, "aliyun-cli-hologram", p.Name)
+		}
+
+		// 没声明 alias 的插件不会被误命中
+		_, err = mgr.findPluginInIndex("hologres-not-existing")
+		assert.Error(t, err)
+	})
 }
 
 func TestZipSlipProtection(t *testing.T) {
@@ -1518,6 +1572,62 @@ func TestSavePluginToManifest(t *testing.T) {
 		assert.True(t, *got.ProfileRequired)
 		assert.True(t, got.IsProfileRequired())
 	})
+
+	// Verify manifest.commandAliases round-trips to LocalPlugin, and that sanitize/validate
+	// run at save time so downstream lookup and persistence stay consistent.
+	t.Run("persists sanitized commandAliases", func(t *testing.T) {
+		aliasHome := t.TempDir()
+		aliasMgr := &Manager{rootDir: aliasHome}
+		aliasDir := filepath.Join(aliasHome, "hologram-extract")
+		if err := os.MkdirAll(aliasDir, 0755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		pm := &PluginManifest{
+			Name:    "aliyun-cli-hologram",
+			Command: "hologram",
+			// Purposely include noise (self-alias, dup, case, blank) so we prove sanitize runs before persistence.
+			CommandAliases: []string{"hologres", "hologram", "HOLOGRES", "", "hg"},
+		}
+		assert.NoError(t, aliasMgr.savePluginToManifest(pm.Name, "1.0.0", aliasDir, pm))
+		lm, err := aliasMgr.GetLocalManifest()
+		assert.NoError(t, err)
+		got, ok := lm.Plugins[pm.Name]
+		assert.True(t, ok)
+		assert.Equal(t, []string{"hologres", "hg"}, got.CommandAliases)
+	})
+
+	t.Run("rejects install when command clashes with reserved", func(t *testing.T) {
+		freshMgr := &Manager{rootDir: t.TempDir()}
+		err := freshMgr.savePluginToManifest("aliyun-cli-conflict", "1.0.0", extractDir, &PluginManifest{
+			Name:    "aliyun-cli-conflict",
+			Command: "plugin",
+		})
+		assert.ErrorContains(t, err, "conflicts with a built-in top-level command")
+	})
+
+	t.Run("rejects install when command missing", func(t *testing.T) {
+		freshMgr := &Manager{rootDir: t.TempDir()}
+		err := freshMgr.savePluginToManifest("aliyun-cli-empty", "1.0.0", extractDir, &PluginManifest{
+			Name: "aliyun-cli-empty",
+		})
+		assert.ErrorContains(t, err, "command is empty")
+	})
+
+	t.Run("rejects install when alias clashes with existing plugin short name", func(t *testing.T) {
+		crossMgr := &Manager{rootDir: t.TempDir()}
+		// Seed a plugin so cross-plugin conflict logic has something to compare against.
+		assert.NoError(t, crossMgr.saveLocalManifest(&LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"aliyun-cli-fc": {Name: "aliyun-cli-fc", Command: "fc"},
+			},
+		}))
+		err := crossMgr.savePluginToManifest("aliyun-cli-newone", "1.0.0", extractDir, &PluginManifest{
+			Name:           "aliyun-cli-newone",
+			Command:        "newone",
+			CommandAliases: []string{"fc"}, // conflicts with aliyun-cli-fc's command / short name
+		})
+		assert.ErrorContains(t, err, `command/alias "fc" conflicts with installed plugin "aliyun-cli-fc"`)
+	})
 }
 
 func TestManager_downloadAndVerifyPlugin(t *testing.T) {
@@ -2432,6 +2542,52 @@ func TestManager_Upgrade(t *testing.T) {
 		err := mgr.Upgrade(ctx, "test-plugin", false)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin test-plugin not found in repository")
+	})
+
+	// 覆盖用户通过 alias 触发 update 的路径：findLocalPlugin 命中本地插件后，Upgrade
+	// 必须用 canonical plugin name 去远端查（而不是把原始 alias 原样透传），否则远端索引
+	// 里根本没有 alias 这个 key 会直接 fail。
+	t.Run("Success - upgrade by alias", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir}
+
+		pluginDir := filepath.Join(tmpDir, "aliyun-cli-hologram")
+		os.MkdirAll(pluginDir, 0755)
+		localManifest := &LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"aliyun-cli-hologram": {
+					Name:           "aliyun-cli-hologram",
+					Version:        "1.0.0",
+					Path:           pluginDir,
+					Command:        "hologram",
+					CommandAliases: []string{"hologres"},
+				},
+			},
+		}
+		mgr.saveLocalManifest(localManifest)
+
+		// 只声明 canonical plugin name 到最新版本，模拟远端索引没有单独的 alias PluginInfo。
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "aliyun-cli-hologram",
+					"versions": {"2.0.0": {}}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		// 用户敲的是 alias，Upgrade 内部需要转成 canonical name 再去远端查
+		err := mgr.Upgrade(ctx, "hologres", false)
+		// 到这里能拿到 2.0.0 说明远端查找用的是 canonical name；实际 install 会在下载阶段失败
+		// （因为没提供 platform URL），但那已经在 findPluginInIndex 之后，不影响本用例要验证的错误路径。
+		assert.NotContains(t, fmt.Sprint(err), "not found in repository")
 	})
 
 	t.Run("Success - plugin already up to date", func(t *testing.T) {

@@ -66,6 +66,15 @@ const (
 // standard OpenAPI bearer token header used by darabonba-openapi.
 const DefaultBearerTokenHeaderKey = "x-acs-bearer-token"
 
+// EnvDisableExternalProcess blocks External process_command and CredentialsURI HTTP fetch.
+// Set to "1" or "true" (case-insensitive) to disable.
+const EnvDisableExternalProcess = "ALIBABA_CLOUD_DISABLE_EXTERNAL_PROCESS"
+
+func isExternalCredentialSourceDisabled() bool {
+	v := os.Getenv(EnvDisableExternalProcess)
+	return v == "1" || strings.EqualFold(v, "true")
+}
+
 var knownModes = []AuthenticateMode{
 	AK, StsToken, RamRoleArn, EcsRamRole, RsaKeyPair,
 	RamRoleArnWithEcs, ChainableRamRoleArn, External,
@@ -88,6 +97,7 @@ type Profile struct {
 	AccessKeySecret            string           `json:"access_key_secret,omitempty"`
 	StsToken                   string           `json:"sts_token,omitempty"`
 	StsRegion                  string           `json:"sts_region,omitempty"`
+	StsEndpoint                string           `json:"sts_endpoint,omitempty"`
 	RamRoleName                string           `json:"ram_role_name,omitempty"`
 	RamRoleArn                 string           `json:"ram_role_arn,omitempty"`
 	RoleSessionName            string           `json:"ram_session_name,omitempty"`
@@ -101,7 +111,7 @@ type Profile struct {
 	OutputFormat               string           `json:"output_format,omitempty"`
 	Language                   string           `json:"language,omitempty"`
 	Site                       string           `json:"site,omitempty"`
-	ReadTimeout                int              `json:"retry_timeout,omitempty"`
+	ReadTimeout                int              `json:"read_timeout,omitempty"`
 	ConnectTimeout             int              `json:"connect_timeout,omitempty"`
 	RetryCount                 int              `json:"retry_count,omitempty"`
 	ProcessCommand             string           `json:"process_command,omitempty"`
@@ -136,6 +146,25 @@ func NewProfile(name string) Profile {
 		OutputFormat: "json",
 		Language:     i18n.GetLanguage(),
 	}
+}
+
+// UnmarshalJSON accepts both read_timeout (current) and legacy retry_timeout.
+// configure set --read-timeout historically persisted as retry_timeout; keep loading those configs.
+func (cp *Profile) UnmarshalJSON(data []byte) error {
+	type profileAlias Profile
+	aux := &struct {
+		*profileAlias
+		RetryTimeout *int `json:"retry_timeout"`
+	}{
+		profileAlias: (*profileAlias)(cp),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if cp.ReadTimeout == 0 && aux.RetryTimeout != nil {
+		cp.ReadTimeout = *aux.RetryTimeout
+	}
+	return nil
 }
 
 func (cp *Profile) Validate() error {
@@ -257,11 +286,18 @@ func (cp *Profile) GetParent() *Configuration {
 }
 
 func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
-	cp.Mode = NormalizeMode(ModeFlag(ctx.Flags()).GetStringOrDefault(string(cp.Mode)))
+	modeFlag := ModeFlag(ctx.Flags())
+	if modeFlag != nil && modeFlag.IsAssigned() {
+		// Empty --mode is ignored so profile Mode is preserved.
+		if mode := strings.TrimSpace(modeFlag.GetStringOrDefault("")); mode != "" {
+			cp.Mode = NormalizeMode(mode)
+		}
+	}
 	cp.AccessKeyId = AccessKeyIdFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeyId)
 	cp.AccessKeySecret = AccessKeySecretFlag(ctx.Flags()).GetStringOrDefault(cp.AccessKeySecret)
 	cp.StsToken = StsTokenFlag(ctx.Flags()).GetStringOrDefault(cp.StsToken)
 	cp.StsRegion = StsRegionFlag(ctx.Flags()).GetStringOrDefault(cp.StsRegion)
+	cp.StsEndpoint = StsEndpointFlag(ctx.Flags()).GetStringOrDefault(cp.StsEndpoint)
 	cp.RamRoleName = RamRoleNameFlag(ctx.Flags()).GetStringOrDefault(cp.RamRoleName)
 	cp.RamRoleArn = RamRoleArnFlag(ctx.Flags()).GetStringOrDefault(cp.RamRoleArn)
 	cp.ExternalId = ExternalIdFlag(ctx.Flags()).GetStringOrDefault(cp.ExternalId)
@@ -300,6 +336,10 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 
 	if cp.RegionId == "" {
 		cp.RegionId = util.GetFromEnv("ALIBABA_CLOUD_REGION_ID", "ALIBABACLOUD_REGION_ID", "ALICLOUD_REGION_ID", "REGION_ID", "REGION")
+	}
+
+	if cp.StsEndpoint == "" {
+		cp.StsEndpoint = os.Getenv("ALIBABA_CLOUD_STS_ENDPOINT")
 	}
 
 	if cp.EndpointType == "" {
@@ -404,6 +444,20 @@ func getSTSEndpoint(regionId string) string {
 	return "sts.aliyuncs.com"
 }
 
+func normalizeSTSEndpointHost(endpoint string) string {
+	endpoint = strings.TrimSpace(endpoint)
+	endpoint = strings.TrimPrefix(endpoint, "https://")
+	endpoint = strings.TrimPrefix(endpoint, "http://")
+	return strings.TrimSuffix(endpoint, "/")
+}
+
+func resolveSTSEndpoint(cp *Profile) string {
+	if cp.StsEndpoint != "" {
+		return normalizeSTSEndpointHost(cp.StsEndpoint)
+	}
+	return getSTSEndpoint(cp.StsRegion)
+}
+
 // mergeProfileAfterCredentialRefresh persists STS / OAuth token fields from the in-memory profile onto the on-disk profile.
 // in-memory profile may include one-off CLI overrides(e.g. --endpoint) merged via OverwriteWithFlags; those must not overwrite stored settings.
 func mergeProfileAfterCredentialRefresh(disk Profile, cp *Profile) Profile {
@@ -453,7 +507,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
 			SetExternalId(cp.ExternalId).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+			SetSTSEndpoint(resolveSTSEndpoint(cp))
 
 		if cp.StsToken != "" {
 			config.SetSecurityToken(cp.StsToken)
@@ -468,7 +522,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetPrivateKeyFile(cp.PrivateKey).
 			SetPublicKeyId(cp.KeyPairName).
 			SetSessionExpiration(cp.ExpiredSeconds).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+			SetSTSEndpoint(resolveSTSEndpoint(cp))
 
 	case RamRoleArnWithEcs:
 		config.SetType("ecs_ram_role").
@@ -491,7 +545,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+			SetSTSEndpoint(resolveSTSEndpoint(cp))
 
 	case ChainableRamRoleArn:
 		profileName := cp.SourceProfile
@@ -527,13 +581,17 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetRoleSessionName(cp.RoleSessionName).
 			SetRoleSessionExpiration(cp.ExpiredSeconds).
 			SetExternalId(cp.ExternalId).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion))
+			SetSTSEndpoint(resolveSTSEndpoint(cp))
 
 		if model.SecurityToken != nil {
 			config.SetSecurityToken(*model.SecurityToken)
 		}
 
 	case External:
+		if isExternalCredentialSourceDisabled() {
+			return nil, fmt.Errorf("external credential source is disabled by %s (External mode)", EnvDisableExternalProcess)
+		}
+
 		args := strings.Fields(cp.ProcessCommand)
 		cmd := exec.Command(args[0], args[1:]...)
 
@@ -564,6 +622,10 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		return cp.GetCredential(ctx, proxyHost)
 
 	case CredentialsURI:
+		if isExternalCredentialSourceDisabled() {
+			return nil, fmt.Errorf("external credential source is disabled by %s (CredentialsURI mode)", EnvDisableExternalProcess)
+		}
+
 		uri := cp.CredentialsURI
 
 		if uri == "" {
@@ -617,7 +679,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			SetOIDCTokenFilePath(cp.OIDCTokenFile).
 			SetRoleArn(cp.RamRoleArn).
 			SetRoleSessionName(cp.RoleSessionName).
-			SetSTSEndpoint(getSTSEndpoint(cp.StsRegion)).
+			SetSTSEndpoint(resolveSTSEndpoint(cp)).
 			SetSessionExpiration(3600)
 
 	case CloudSSO:
@@ -782,6 +844,9 @@ func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 	}
 	if cp.Endpoint != "" {
 		envs["ALIBABA_CLOUD_ENDPOINT"] = cp.Endpoint
+	}
+	if cp.StsEndpoint != "" {
+		envs["ALIBABA_CLOUD_STS_ENDPOINT"] = cp.StsEndpoint
 	}
 	if cp.ExternalAccountType != "" {
 		envs["ALIBABA_CLOUD_EXTERNAL_ACCOUNT_TYPE"] = cp.ExternalAccountType

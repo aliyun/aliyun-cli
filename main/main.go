@@ -17,30 +17,33 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"github.com/aliyun/aliyun-cli/v3/cliext/kmscli"
-	"github.com/aliyun/aliyun-cli/v3/cliext/lindormcli"
 	"io"
 	"os"
 	"path"
 	"strings"
 
-	"github.com/aliyun/aliyun-cli/v3/cliext/agentbay"
+	"github.com/aliyun/aliyun-cli/v3/cliext/kmscli"
+	"github.com/aliyun/aliyun-cli/v3/cliext/lindormcli"
+	"github.com/aliyun/aliyun-cli/v3/cliext/mseutil"
+
 	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/cli/upgrade"
 	"github.com/aliyun/aliyun-cli/v3/cliext/acrutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/agentbay"
 	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/cms2"
 	"github.com/aliyun/aliyun-cli/v3/cliext/codeup"
 	"github.com/aliyun/aliyun-cli/v3/cliext/computenestutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/esacli"
 	"github.com/aliyun/aliyun-cli/v3/cliext/iact3"
 	"github.com/aliyun/aliyun-cli/v3/cliext/maxc"
 	"github.com/aliyun/aliyun-cli/v3/cliext/ossutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/otsutil"
-	"github.com/aliyun/aliyun-cli/v3/cliext/sparksubmit"
 	"github.com/aliyun/aliyun-cli/v3/cliext/rostran"
 	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
+	"github.com/aliyun/aliyun-cli/v3/cliext/sparksubmit"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -120,6 +123,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	commando.InitWithCommand(rootCmd)
 
 	rootCmd.AddSubCommand(config.NewConfigureCommand())
+	// list-supported-pricing-apis: enumerate every OpenAPI that supports --estimate-cost
+	rootCmd.AddSubCommand(openapi.NewListSupportedPricingApisCommand())
 	// oss old version, duplicate with ossutil, will remove in future
 	rootCmd.AddSubCommand(lib.NewOssCommand())
 	rootCmd.AddSubCommand(cli.NewVersionCommand())
@@ -140,6 +145,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(kmscli.NewKmscliCommand())
 	// lindorm command
 	rootCmd.AddSubCommand(lindormcli.NewLindormCliCommand())
+	// mseutil command
+	rootCmd.AddSubCommand(mseutil.NewMseutilCommand())
 	// acr command
 	rootCmd.AddSubCommand(acrutil.NewAcrutilCommand())
 	// codeup command
@@ -150,6 +157,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(appmanagerutil.NewAppManagerCommand())
 	// computenest command
 	rootCmd.AddSubCommand(computenestutil.NewComputenestCommand())
+	// esa-cli command
+	rootCmd.AddSubCommand(esacli.NewEsacliCommand())
 	// cms2 command
 	rootCmd.AddSubCommand(cms2.NewCms2Command())
 	// maxc command
@@ -164,6 +173,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(upgrade.NewUpgradeCommand())
 	// mock command
 	rootCmd.AddSubCommand(mock.NewMockCommand(config.GetConfigPath))
+
+	plugin.RegisterReservedTopLevelCommands(rootCmd.SubCommandNames())
 
 	return rootCmd
 }

@@ -199,7 +199,9 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 			}
 		}
 	}
-	// Locally installed plugin (e.g. plugin install --package) not in remote index
+	// Locally installed plugin (e.g. plugin install --package) not in remote index.
+	// FindInstalledPluginInManifest 已经把 plugin name / short-name / manifest.commandAliases 一起纳入匹配，
+	// 与 ExecutePlugin 使用的查找路径一致，因此 alias（例如 "hologres"）也能命中对应插件。
 	if pluginName == "" && c.localManifest != nil {
 		if n, _, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode); ok {
 			pluginName = n

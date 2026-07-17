@@ -18,6 +18,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -32,6 +34,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 )
 
@@ -253,8 +256,7 @@ func Test_processInvoke(t *testing.T) {
 }
 
 // TestProcessInvoke_DryRunJSON focuses on the --cli-dry-run-json branch of
-// processInvoke: a single compact JSON line on stdout with the expected
-// product/version/api/region/endpoint fields.
+// processInvoke: JSON output on stdout with full request details.
 func TestProcessInvoke_DryRunJSON(t *testing.T) {
 	newCtx := func(stdout, stderr *bytes.Buffer) *cli.Context {
 		ctx := cli.NewCommandContext(stdout, stderr)
@@ -318,13 +320,12 @@ func TestProcessInvoke_DryRunJSON(t *testing.T) {
 		RegionId:        "cn-hangzhou",
 	}
 
-	parseLine := func(t *testing.T, stdout *bytes.Buffer) dryRunInvokeMeta {
+	parseOutput := func(t *testing.T, stdout *bytes.Buffer) CliDryRunOutput {
 		t.Helper()
-		line := strings.TrimSpace(stdout.String())
-		assert.NotEmpty(t, line, "stdout must not be empty")
-		assert.False(t, strings.Contains(line, "\n"), "expected single-line JSON, got: %q", line)
-		var m dryRunInvokeMeta
-		assert.Nil(t, json.Unmarshal([]byte(line), &m), "stdout must be valid JSON: %q", line)
+		output := strings.TrimSpace(stdout.String())
+		assert.NotEmpty(t, output, "stdout must not be empty")
+		var m CliDryRunOutput
+		assert.Nil(t, json.Unmarshal([]byte(output), &m), "stdout must be valid JSON: %q", output)
 		return m
 	}
 
@@ -336,12 +337,10 @@ func TestProcessInvoke_DryRunJSON(t *testing.T) {
 		err := command.processInvoke(ctx, "ecs", "DescribeRegions", "")
 		assert.Nil(t, err)
 
-		m := parseLine(t, stdout)
-		// product code comes from library and may be canonicalized (e.g. "Ecs"); compare case-insensitively.
-		assert.Equal(t, "ecs", strings.ToLower(m.Product))
+		m := parseOutput(t, stdout)
+		assert.Equal(t, "RPC", m.Style)
 		assert.Equal(t, "2014-05-26", m.Version)
-		assert.Equal(t, "DescribeRegions", m.API)
-		assert.Equal(t, "cn-hangzhou", m.Region)
+		assert.Equal(t, "DescribeRegions", m.Action)
 		assert.Equal(t, "ecs.cn-hangzhou.aliyuncs.com", m.Endpoint)
 	})
 
@@ -353,13 +352,12 @@ func TestProcessInvoke_DryRunJSON(t *testing.T) {
 		err := command.processInvoke(ctx, "fc", "GET", "/2023-03-30/functions/function-test4/aliases/alias2")
 		assert.Nil(t, err)
 
-		m := parseLine(t, stdout)
-		assert.Equal(t, strings.ToLower("fc"), strings.ToLower(m.Product))
-		assert.Equal(t, "GetAlias", m.API)
+		m := parseOutput(t, stdout)
+		assert.Equal(t, "ROA", m.Style)
+		assert.Equal(t, "fcv3.cn-hangzhou.aliyuncs.com", m.Endpoint)
 	})
 
 	t.Run("RestfulInvoker_FallbackWhenPathNotFound", func(t *testing.T) {
-		// Known FC product but path does not match any API metadata → fallback to "<METHOD> <path>".
 		stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
 		ctx := newFcCtx(stdout, stderr)
 		command := NewCommando(stdout, profile)
@@ -367,8 +365,9 @@ func TestProcessInvoke_DryRunJSON(t *testing.T) {
 		err := command.processInvoke(ctx, "fc", "GET", "/2023-03-30/no-such-api")
 		assert.Nil(t, err)
 
-		m := parseLine(t, stdout)
-		assert.Equal(t, "GET /2023-03-30/no-such-api", m.API)
+		m := parseOutput(t, stdout)
+		assert.Equal(t, "ROA", m.Style)
+		assert.Equal(t, "GET", m.Method)
 	})
 
 	t.Run("RestfulInvoker_FallbackWhenForceAndUnknownProduct", func(t *testing.T) {
@@ -379,8 +378,9 @@ func TestProcessInvoke_DryRunJSON(t *testing.T) {
 		err := command.processInvoke(ctx, "unknown-product-xyz", "GET", "/instances")
 		assert.Nil(t, err)
 
-		m := parseLine(t, stdout)
-		assert.Equal(t, "GET /instances", m.API)
+		m := parseOutput(t, stdout)
+		assert.Equal(t, "ROA", m.Style)
+		assert.Equal(t, "GET", m.Method)
 	})
 }
 
@@ -654,13 +654,32 @@ func TestDetectInConfigureMode(t *testing.T) {
 	result := DetectInConfigureMode(flags)
 	assert.True(t, result, "Expected true when no flags are set")
 
-	// Test case 2: Mode flag set
+	// Test case 2: Mode flag assigned but empty — treat as unset
+	flags = cli.NewFlagSet()
+	emptyModeFlag := &cli.Flag{Name: config.ModeFlagName}
+	emptyModeFlag.SetAssigned(true)
+	emptyModeFlag.SetValue("")
+	flags.Add(emptyModeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when mode flag is empty")
+
+	// Test case 2b: Mode flag assigned with whitespace only — treat as unset
+	flags = cli.NewFlagSet()
+	wsModeFlag := &cli.Flag{Name: config.ModeFlagName}
+	wsModeFlag.SetAssigned(true)
+	wsModeFlag.SetValue("   ")
+	flags.Add(wsModeFlag)
+	result = DetectInConfigureMode(flags)
+	assert.True(t, result, "Expected true when mode flag is whitespace-only")
+
+	// Test case 2c: Mode flag set to a non-empty value without credential flags
 	flags = cli.NewFlagSet()
 	modeFlag := &cli.Flag{Name: config.ModeFlagName}
 	modeFlag.SetAssigned(true)
+	modeFlag.SetValue("AK")
 	flags.Add(modeFlag)
 	result = DetectInConfigureMode(flags)
-	assert.False(t, result, "Expected false when mode flag is set")
+	assert.False(t, result, "Expected false when mode flag has a non-empty value without credential flags")
 
 	// Test case 3: AccessKeyId flag set
 	flags = cli.NewFlagSet()
@@ -1169,16 +1188,15 @@ func TestProcessApiInvoke_DryRunJSON(t *testing.T) {
 	err := command.processApiInvoke(ctx, product, api, "GET", "/projects/foo")
 	assert.NoError(t, err)
 
-	line := strings.TrimSpace(stdout.String())
-	assert.NotEmpty(t, line)
-	assert.False(t, strings.Contains(line, "\n"), "expected single-line JSON, got: %q", line)
+	output := strings.TrimSpace(stdout.String())
+	assert.NotEmpty(t, output)
 
-	var m dryRunInvokeMeta
-	assert.Nil(t, json.Unmarshal([]byte(line), &m), "stdout must be valid JSON: %q", line)
-	assert.Equal(t, "sls", m.Product)
+	var m CliDryRunOutput
+	assert.Nil(t, json.Unmarshal([]byte(output), &m), "stdout must be valid JSON: %q", output)
+	assert.Equal(t, "ROA", m.Style)
+	assert.Equal(t, "GET", m.Method)
+	assert.Equal(t, "GetProject", m.Action)
 	assert.Equal(t, "2020-03-31", m.Version)
-	assert.Equal(t, "GetProject", m.API)
-	assert.Equal(t, "cn-hangzhou", m.Region)
 	// SLS without --endpoint / profile.Endpoint falls back to {region}.log.aliyuncs.com.
 	assert.Equal(t, "cn-hangzhou.log.aliyuncs.com", m.Endpoint)
 }
@@ -2369,6 +2387,28 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		os.Args = originalArgs
 	}()
 
+	// Point plugin index fetches at a local fake so these cases stay offline-
+	// stable (Windows CI cannot reach the real CDN within the 10s timeout).
+	pkgIndex := &plugin.Index{
+		Plugins: []plugin.PluginInfo{
+			{Name: "aliyun-cli-fc", ProductCode: "fc"},
+		},
+	}
+	searchIndex := plugin.CommandIndex{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "plugin_pkg_index.json"):
+			_ = json.NewEncoder(w).Encode(pkgIndex)
+		case strings.HasSuffix(r.URL.Path, "plugin_search_index.json"):
+			_ = json.NewEncoder(w).Encode(searchIndex)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	t.Setenv(pluginsettings.EnvSourceBase, server.URL)
+
 	t.Run("Kebab-case API name triggers plugin execution - plugin not found", func(t *testing.T) {
 		testHome := t.TempDir()
 		cleanup := setTestHomeDir(t, testHome)
@@ -2378,6 +2418,10 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
 		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
+
+		command.pluginLoaded = false
+		command.pluginIndex = nil
+		command.pluginIndexErr = nil
 
 		os.Args = []string{"aliyun", "qqq", "describe-regions"}
 		args := []string{"qqq", "describe-regions"}
@@ -2401,6 +2445,10 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
 		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
+
+		command.pluginLoaded = false
+		command.pluginIndex = nil
+		command.pluginIndexErr = nil
 
 		os.Args = []string{"aliyun", "qqq", "describe-regions", "--region", "cn-hangzhou"}
 		args := []string{"qqq", "describe-regions"}
@@ -2439,6 +2487,10 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
 		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
 
+		command.pluginLoaded = false
+		command.pluginIndex = nil
+		command.pluginIndexErr = nil
+
 		os.Args = []string{"aliyun", "fc"}
 		args := []string{"fc"}
 
@@ -2457,6 +2509,10 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
 		os.MkdirAll(filepath.Dir(manifestPath), 0755)
 		os.WriteFile(manifestPath, []byte(`{"plugins":{}}`), 0644)
+
+		command.pluginLoaded = false
+		command.pluginIndex = nil
+		command.pluginIndexErr = nil
 
 		os.Args = []string{"aliyun", "other-command"}
 		args := []string{"fc", "describe-regions"}
@@ -3700,4 +3756,27 @@ func TestMain_SafetyPolicyEnforcement(t *testing.T) {
 		assert.Contains(t, err.Error(), "blocked by safety policy")
 		assert.Contains(t, err.Error(), "fc:create-function")
 	})
+}
+
+func TestEstimateCostContextRequiresEstimateCost(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	profile := config.Profile{Mode: config.AK, AccessKeyId: "id", AccessKeySecret: "secret", RegionId: "cn-hangzhou"}
+	command := NewCommando(w, profile)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	// context assigned but --estimate-cost NOT assigned → must fail loudly.
+	f := EstimateCostContextFlag(ctx.Flags())
+	f.SetAssigned(true)
+	f.SetValues([]string{"EstimatedInternetTrafficOutGB=100"})
+
+	err := command.main(ctx, []string{"ecs", "RunInstances"})
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "--estimate-cost-context requires --estimate-cost")
 }

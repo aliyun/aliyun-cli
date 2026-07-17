@@ -69,7 +69,7 @@ func TestBasicInvoker_Init(t *testing.T) {
 	invoker.profile.Mode = config.AuthenticateMode("StsToken")
 	err := invoker.Init(ctx, product)
 	assert.NotNil(t, err)
-	assert.Equal(t, "invaild flag --header `testfail` use `--header HeaderName=Value`", err.Error())
+	assert.Equal(t, "invalid flag --header `testfail` use `--header HeaderName=Value`", err.Error())
 
 	regionflag.SetAssigned(false)
 	endpointflag.SetAssigned(false)

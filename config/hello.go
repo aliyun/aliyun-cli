@@ -34,7 +34,7 @@ func doHello(ctx *cli.Context, profile *Profile) (err error) {
 		Credential: credential,
 	}
 
-	config.Endpoint = tea.String(getSTSEndpoint(profile.StsRegion))
+	config.Endpoint = tea.String(resolveSTSEndpoint(profile))
 	client, err := openapi.NewClient(config)
 	if err != nil {
 		return

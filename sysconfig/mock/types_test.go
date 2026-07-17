@@ -37,3 +37,27 @@ func TestRecordUnmarshalRejectsInvalidJSON(t *testing.T) {
 		t.Fatal("Unmarshal invalid JSON returned nil error")
 	}
 }
+
+func TestExpandToSizePadsAndTruncates(t *testing.T) {
+	if got := ExpandToSize("ab", 5); got != "abxxx" {
+		t.Fatalf("ExpandToSize pad = %q, want abxxx", got)
+	}
+	if got := ExpandToSize("abcdef", 3); got != "abc" {
+		t.Fatalf("ExpandToSize truncate = %q, want abc", got)
+	}
+	if got := ExpandToSize("keep", 0); got != "keep" {
+		t.Fatalf("ExpandToSize zero = %q, want keep", got)
+	}
+	if got := ExpandToSize("", 4); got != "xxxx" {
+		t.Fatalf("ExpandToSize empty = %q, want xxxx", got)
+	}
+}
+
+func TestResolveStdoutUsesResponseBodySize(t *testing.T) {
+	if got := ResolveStdout(Record{Stdout: "prefix", ResponseBodySize: 8}); got != "prefixxx" {
+		t.Fatalf("ResolveStdout sized = %q, want prefixxx", got)
+	}
+	if got := ResolveStdout(Record{Stdout: "as-is"}); got != "as-is" {
+		t.Fatalf("ResolveStdout default = %q, want as-is", got)
+	}
+}
