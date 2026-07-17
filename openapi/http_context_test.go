@@ -3,7 +3,9 @@ package openapi
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
@@ -38,6 +40,111 @@ func TestShouldUseOpenapi(t *testing.T) {
 		result := ShouldUseOpenapi(ctx, product)
 		assert.True(t, result)
 	})
+}
+
+func TestBuildDryRunOpenapiMeta(t *testing.T) {
+	prof := &config.Profile{RegionId: "cn-hangzhou"}
+	sls := &meta.Product{Code: "sls", Version: "2020-03-31"}
+	api := &meta.Api{Name: "GetProject", Product: sls}
+	h := NewHttpContext(prof)
+	h.product = sls
+	h.openapiRequest = &openapiutil.OpenApiRequest{
+		Query:   map[string]*string{},
+		Headers: map[string]*string{},
+		HostMap: map[string]*string{},
+	}
+	o := &OpenapiContext{HttpContext: h, method: "GET", path: "/projects/foo", api: api}
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+
+	m := buildDryRunOpenapiMeta(ctx, o)
+	assert.Equal(t, "sls", m.Product)
+	assert.Equal(t, "2020-03-31", m.Version)
+	assert.Equal(t, "GetProject", m.API)
+	assert.Equal(t, "cn-hangzhou", m.Region)
+	assert.Equal(t, "cn-hangzhou.log.aliyuncs.com", m.Endpoint)
+
+	h2 := NewHttpContext(prof)
+	h2.product = sls
+	h2.openapiRequest = &openapiutil.OpenApiRequest{
+		EndpointOverride: tea.String("custom.log.aliyuncs.com"),
+		Query:            map[string]*string{},
+		Headers:          map[string]*string{},
+		HostMap:          map[string]*string{},
+	}
+	o2 := &OpenapiContext{HttpContext: h2, method: "GET", path: "/", api: api}
+	m2 := buildDryRunOpenapiMeta(ctx, o2)
+	assert.Equal(t, "custom.log.aliyuncs.com", m2.Endpoint)
+}
+
+func TestEffectiveDryRunRegion(t *testing.T) {
+	profile := &config.Profile{RegionId: "cn-hangzhou"}
+
+	t.Run("RegionFlag", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		regionFlag := config.NewRegionFlag()
+		regionFlag.SetAssigned(true)
+		regionFlag.SetValue("cn-shanghai")
+		ctx.Flags().Add(regionFlag)
+
+		assert.Equal(t, "cn-shanghai", effectiveDryRunRegion(ctx, profile))
+	})
+
+	t.Run("RegionIdFlag", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		regionIDFlag := config.NewRegionIdFlag()
+		regionIDFlag.SetAssigned(true)
+		regionIDFlag.SetValue("cn-beijing")
+		ctx.Flags().Add(regionIDFlag)
+
+		assert.Equal(t, "cn-beijing", effectiveDryRunRegion(ctx, profile))
+	})
+
+	t.Run("RegionFlagPrecedence", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		regionFlag := config.NewRegionFlag()
+		regionFlag.SetAssigned(true)
+		regionFlag.SetValue("cn-shanghai")
+		ctx.Flags().Add(regionFlag)
+		regionIDFlag := config.NewRegionIdFlag()
+		regionIDFlag.SetAssigned(true)
+		regionIDFlag.SetValue("cn-beijing")
+		ctx.Flags().Add(regionIDFlag)
+
+		assert.Equal(t, "cn-shanghai", effectiveDryRunRegion(ctx, profile))
+	})
+
+	t.Run("ProfileFallback", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		assert.Equal(t, "cn-hangzhou", effectiveDryRunRegion(ctx, profile))
+	})
+
+	t.Run("NilProfile", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		assert.Equal(t, "", effectiveDryRunRegion(ctx, nil))
+	})
+}
+
+func TestMarshalDryRunOpenapiMeta(t *testing.T) {
+	prof := &config.Profile{RegionId: "cn-hangzhou"}
+	sls := &meta.Product{Code: "sls", Version: "2020-03-31"}
+	api := &meta.Api{Name: "GetProject", Product: sls}
+	h := NewHttpContext(prof)
+	h.product = sls
+	h.openapiRequest = &openapiutil.OpenApiRequest{
+		Query:   map[string]*string{},
+		Headers: map[string]*string{},
+		HostMap: map[string]*string{},
+	}
+	o := &OpenapiContext{HttpContext: h, method: "GET", path: "/projects/foo", api: api}
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+
+	line, err := marshalDryRunOpenapiMeta(ctx, o)
+	assert.NoError(t, err)
+	assert.False(t, strings.Contains(line, "\n"), "expected compact single-line JSON, got: %q", line)
+
+	var parsed dryRunInvokeMeta
+	assert.NoError(t, json.Unmarshal([]byte(line), &parsed))
+	assert.Equal(t, buildDryRunOpenapiMeta(ctx, o), parsed)
 }
 
 func TestGetOpenapiClient(t *testing.T) {
@@ -141,6 +248,53 @@ func TestGetOpenapiClient(t *testing.T) {
 		}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 		product := &meta.Product{Code: "ECS"}
+
+		client, err := GetOpenapiClient(profile, ctx, product)
+		assert.NotNil(t, client)
+		assert.Nil(t, err)
+	})
+
+	t.Run("EndpointFromProfile", func(t *testing.T) {
+		profile := &config.Profile{
+			Mode:            "AK",
+			RegionId:        "cn-hangzhou",
+			AccessKeyId:     "test-access-key-id",
+			AccessKeySecret: "test-access-key-secret",
+			Endpoint:        "custom.endpoint.aliyuncs.com",
+		}
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		product := &meta.Product{Code: "ECS"}
+
+		client, err := GetOpenapiClient(profile, ctx, product)
+		assert.NotNil(t, client)
+		assert.Nil(t, err)
+	})
+
+	t.Run("SLSProductAutoGeneratedEndpoint", func(t *testing.T) {
+		profile := &config.Profile{
+			Mode:            "AK",
+			RegionId:        "cn-beijing",
+			AccessKeyId:     "test-access-key-id",
+			AccessKeySecret: "test-access-key-secret",
+		}
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		product := &meta.Product{Code: "SLS"}
+
+		client, err := GetOpenapiClient(profile, ctx, product)
+		assert.NotNil(t, client)
+		assert.Nil(t, err)
+	})
+
+	t.Run("SLSProductWithCustomEndpoint", func(t *testing.T) {
+		profile := &config.Profile{
+			Mode:            "AK",
+			RegionId:        "cn-hangzhou",
+			AccessKeyId:     "test-access-key-id",
+			AccessKeySecret: "test-access-key-secret",
+			Endpoint:        "custom-sls.endpoint.aliyuncs.com",
+		}
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		product := &meta.Product{Code: "SLS"}
 
 		client, err := GetOpenapiClient(profile, ctx, product)
 		assert.NotNil(t, client)
@@ -316,7 +470,7 @@ func TestHttpContext(t *testing.T) {
 		skipflag.SetAssigned(true)
 		ctx.Flags().Add(skipflag)
 		err := context.Init(ctx, product)
-		assert.Contains(t, err.Error(), "invaild flag --header `testfail`")
+		assert.Contains(t, err.Error(), "invalid flag --header `testfail`")
 	})
 
 	t.Run("InitWithEndpoint", func(t *testing.T) {
@@ -329,12 +483,15 @@ func TestHttpContext(t *testing.T) {
 		context := &HttpContext{profile: profile}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
-		endpointflag := NewEndpointFlag()
+		endpointflag := config.NewEndpointFlag()
 		endpointflag.SetAssigned(true)
 		endpointflag.SetValue("ecs.cn-hangzhou.aliyuncs")
 		ctx.Flags().Add(endpointflag)
 		err := context.Init(ctx, product)
 		assert.Nil(t, err)
+		assert.NotNil(t, context.openapiRequest)
+		assert.NotNil(t, context.openapiRequest.EndpointOverride)
+		assert.Equal(t, "ecs.cn-hangzhou.aliyuncs", *context.openapiRequest.EndpointOverride)
 	})
 
 	t.Run("InitWithEmptyRegion", func(t *testing.T) {
@@ -348,6 +505,47 @@ func TestHttpContext(t *testing.T) {
 		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
 		err := context.Init(ctx, product)
 		assert.Contains(t, err.Error(), "init openapi client failed")
+	})
+
+	t.Run("InitWithOtelHeaders", func(t *testing.T) {
+		t.Setenv("ALIBABA_CLOUD_OTEL_TRACEPARENT", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+		t.Setenv("ALIBABA_CLOUD_OTEL_BAGGAGE", "sessionId=abc-123")
+
+		profile := &config.Profile{
+			Mode:            "AK",
+			AccessKeyId:     "test-access-key-id",
+			AccessKeySecret: "test-access-key-secret",
+			RegionId:        "cn-hangzhou",
+		}
+		context := &HttpContext{profile: profile}
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
+
+		err := context.Init(ctx, product)
+		assert.NoError(t, err)
+		assert.Equal(t, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", *context.openapiRequest.Headers["traceparent"])
+		assert.Equal(t, "sessionId=abc-123", *context.openapiRequest.Headers["baggage"])
+	})
+
+	t.Run("InitWithOtelDisabled", func(t *testing.T) {
+		t.Setenv("ALIBABA_CLOUD_OTEL_ENABLED", "false")
+		t.Setenv("ALIBABA_CLOUD_OTEL_TRACEPARENT", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+		t.Setenv("ALIBABA_CLOUD_OTEL_BAGGAGE", "")
+
+		profile := &config.Profile{
+			Mode:            "AK",
+			AccessKeyId:     "test-access-key-id",
+			AccessKeySecret: "test-access-key-secret",
+			RegionId:        "cn-hangzhou",
+		}
+		context := &HttpContext{profile: profile}
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
+
+		err := context.Init(ctx, product)
+		assert.NoError(t, err)
+		assert.Nil(t, context.openapiRequest.Headers["traceparent"])
+		assert.Nil(t, context.openapiRequest.Headers["baggage"])
 	})
 
 }

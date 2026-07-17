@@ -56,10 +56,13 @@ func (a *ForceRpcInvoker) Prepare(ctx *cli.Context) (err error) {
 		}
 	}
 
+	applyCallContextRPC(a.productCode(), a.request.QueryParams)
+
 	return
 }
 
 func (a *ForceRpcInvoker) Call() (resp *responses.CommonResponse, err error) {
-	resp, err = a.client.ProcessCommonRequest(a.request)
-	return
+	return a.callWithThrottlingRetry(func() (*responses.CommonResponse, error) {
+		return a.client.ProcessCommonRequest(a.request)
+	})
 }

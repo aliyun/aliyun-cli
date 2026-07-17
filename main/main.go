@@ -17,24 +17,65 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"strings"
 
+	"github.com/aliyun/aliyun-cli/v3/cliext/kmscli"
+	"github.com/aliyun/aliyun-cli/v3/cliext/lindormcli"
+	"github.com/aliyun/aliyun-cli/v3/cliext/mseutil"
+
 	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
+	"github.com/aliyun/aliyun-cli/v3/cli/upgrade"
+	"github.com/aliyun/aliyun-cli/v3/cliext/acrutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/agentbay"
+	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/cms2"
+	"github.com/aliyun/aliyun-cli/v3/cliext/codeup"
+	"github.com/aliyun/aliyun-cli/v3/cliext/computenestutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/esacli"
+	"github.com/aliyun/aliyun-cli/v3/cliext/iact3"
+	"github.com/aliyun/aliyun-cli/v3/cliext/maxc"
+	"github.com/aliyun/aliyun-cli/v3/cliext/ossutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/otsutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/rostran"
+	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
+	"github.com/aliyun/aliyun-cli/v3/cliext/sparksubmit"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
+	"github.com/aliyun/aliyun-cli/v3/mock"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
-	"github.com/aliyun/aliyun-cli/v3/ossutil"
-	"github.com/aliyun/aliyun-cli/v3/otsutil"
+	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
+)
+
+var (
+	newStdoutWriter = cli.DefaultStdoutWriter
+	newStderrWriter = cli.DefaultStderrWriter
+	exit            = cli.Exit
 )
 
 func Main(args []string) {
-	stdout := cli.DefaultStdoutWriter()
-	stderr := cli.DefaultStderrWriter()
+	stdout := newStdoutWriter()
+	stderr := newStderrWriter()
+
+	if sysmock.FirstCommandToken(args) != "mock" {
+		result := sysmock.Intercept(sysmock.Options{
+			Args:     args,
+			Stdout:   stdout,
+			Stderr:   stderr,
+			MockPath: sysmock.ResolvePath(config.GetConfigPath),
+		})
+		if result.Handled {
+			exit(result.ExitCode)
+			return
+		}
+	}
 
 	// load current configuration
 	profile, err := config.LoadOrCreateDefaultProfile()
@@ -46,6 +87,24 @@ func Main(args []string) {
 	// set language with current profile
 	i18n.SetLanguage(profile.Language)
 
+	rootCmd := newRootCommand(profile, stdout)
+
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(rootCmd)
+	ctx.SetCompletion(cli.ParseCompletionForShell())
+	ctx.SetInConfigureMode(openapi.DetectInConfigureMode(ctx.Flags()))
+	// use http force, current use in oss bridge
+	insecure, _ := ParseInSecure(args)
+	ctx.SetInsecure(insecure)
+
+	if os.Getenv("GENERATE_METADATA") == "YES" {
+		generateMetadata(rootCmd)
+	} else {
+		rootCmd.Execute(ctx, args)
+	}
+}
+
+func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	// create root command
 	rootCmd := &cli.Command{
 		Name:              "aliyun",
@@ -63,30 +122,61 @@ func Main(args []string) {
 	commando := openapi.NewCommando(stdout, profile)
 	commando.InitWithCommand(rootCmd)
 
-	ctx := cli.NewCommandContext(stdout, stderr)
-	ctx.EnterCommand(rootCmd)
-	ctx.SetCompletion(cli.ParseCompletionForShell())
-	ctx.SetInConfigureMode(openapi.DetectInConfigureMode(ctx.Flags()))
-	// use http force, current use in oss bridge
-	insecure, _ := ParseInSecure(args)
-	ctx.SetInsecure(insecure)
-
 	rootCmd.AddSubCommand(config.NewConfigureCommand())
+	// list-supported-pricing-apis: enumerate every OpenAPI that supports --estimate-cost
+	rootCmd.AddSubCommand(openapi.NewListSupportedPricingApisCommand())
 	// oss old version, duplicate with ossutil, will remove in future
 	rootCmd.AddSubCommand(lib.NewOssCommand())
 	rootCmd.AddSubCommand(cli.NewVersionCommand())
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
+	// mcp proxy command
+	rootCmd.AddSubCommand(mcpproxy.NewMCPProxyCommand())
 	// go v1 to v2 migrate command
 	rootCmd.AddSubCommand(go_migrate.NewGoMigrateCommand())
 	// new oss command
 	rootCmd.AddSubCommand(ossutil.NewOssutilCommand())
+	// AgentBay command
+	rootCmd.AddSubCommand(agentbay.NewAgentBayCommand())
 	// tablestore command
 	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
-	if os.Getenv("GENERATE_METADATA") == "YES" {
-		generateMetadata(rootCmd)
-	} else {
-		rootCmd.Execute(ctx, args)
-	}
+	// EMR Serverless spark-submit command
+	rootCmd.AddSubCommand(sparksubmit.NewSparkSubmitCommand())
+	// kmscli command
+	rootCmd.AddSubCommand(kmscli.NewKmscliCommand())
+	// lindorm command
+	rootCmd.AddSubCommand(lindormcli.NewLindormCliCommand())
+	// mseutil command
+	rootCmd.AddSubCommand(mseutil.NewMseutilCommand())
+	// acr command
+	rootCmd.AddSubCommand(acrutil.NewAcrutilCommand())
+	// codeup command
+	rootCmd.AddSubCommand(codeup.NewCodeupCliCommand())
+	// sae command
+	rootCmd.AddSubCommand(saectl.NewSaectlCommand())
+	// appmanager command
+	rootCmd.AddSubCommand(appmanagerutil.NewAppManagerCommand())
+	// computenest command
+	rootCmd.AddSubCommand(computenestutil.NewComputenestCommand())
+	// esa-cli command
+	rootCmd.AddSubCommand(esacli.NewEsacliCommand())
+	// cms2 command
+	rootCmd.AddSubCommand(cms2.NewCms2Command())
+	// maxc command
+	rootCmd.AddSubCommand(maxc.NewMaxcCommand())
+	// iact3 command
+	rootCmd.AddSubCommand(iact3.NewIact3Command())
+	// rostran command
+	rootCmd.AddSubCommand(rostran.NewRostranCommand())
+	// plugin command
+	rootCmd.AddSubCommand(plugin.NewPluginCommand())
+	// upgrade command
+	rootCmd.AddSubCommand(upgrade.NewUpgradeCommand())
+	// mock command
+	rootCmd.AddSubCommand(mock.NewMockCommand(config.GetConfigPath))
+
+	plugin.RegisterReservedTopLevelCommands(rootCmd.SubCommandNames())
+
+	return rootCmd
 }
 
 func ParseInSecure(args []string) (bool, interface{}) {

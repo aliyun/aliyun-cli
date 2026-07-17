@@ -75,6 +75,8 @@ func doConfigureGet(c *cli.Context, args []string) error {
 			cli.Printf(c.Stdout(), "sts-token=%s\n", profile.StsToken)
 		case StsRegionFlagName:
 			cli.Printf(c.Stdout(), "sts-region=%s\n", profile.StsRegion)
+		case StsEndpointFlagName:
+			cli.Printf(c.Stdout(), "sts-endpoint=%s\n", profile.StsEndpoint)
 		case RamRoleNameFlagName:
 			cli.Printf(c.Stdout(), "ram-role-name=%s\n", profile.RamRoleName)
 		case RamRoleArnFlagName:
@@ -101,6 +103,10 @@ func doConfigureGet(c *cli.Context, args []string) error {
 			cli.Printf(c.Stdout(), "oauth-site-type=%s\n", profile.OAuthSiteType)
 		case EndpointTypeFlagName:
 			cli.Printf(c.Stdout(), "endpoint-type=%s\n", profile.EndpointType)
+		case EndpointFlagName:
+			cli.Printf(c.Stdout(), "endpoint=%s\n", profile.Endpoint)
+		case ExternalAccountTypeFlagName:
+			cli.Printf(c.Stdout(), "external-account-type=%s\n", profile.ExternalAccountType)
 		}
 	}
 

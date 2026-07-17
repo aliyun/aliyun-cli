@@ -28,9 +28,20 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
+	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 func GetClient(cp *config.Profile, ctx *cli.Context) (client *sdk.Client, err error) {
+	if cp.Mode == config.Anonymous {
+		return nil, fmt.Errorf("anonymous mode is only supported via the OpenAPI path; legacy SDK cannot disable signing")
+	}
+	if cp.Mode == config.BearerToken {
+		return nil, config.ErrBearerTokenRequiresPlugin("")
+	}
+
 	credential, err := cp.GetCredential(ctx, nil)
 	if err != nil {
 		return
@@ -105,6 +116,8 @@ type BasicInvoker struct {
 	client  *sdk.Client
 	request *requests.CommonRequest
 	product *meta.Product
+
+	throttlingRetryConfig *throttlingretry.Config
 }
 
 func NewBasicInvoker(cp *config.Profile) *BasicInvoker {
@@ -119,11 +132,54 @@ func (a *BasicInvoker) getRequest() *requests.CommonRequest {
 	return a.request
 }
 
+func (a *BasicInvoker) productCode() string {
+	if a.product == nil {
+		return ""
+	}
+	return a.product.Code
+}
+
+func aiModeSuffixForContext(ctx *cli.Context) string {
+	configDir := config.GetConfigDir(ctx)
+	aiCfg, err := aimode.Load(configDir)
+	if err != nil {
+		aiCfg = aimode.DefaultAiConfig()
+	}
+	forceOn, forceOff := CliAIOverrides(ctx.Flags())
+	return aimode.RequestUserAgentSuffixForCommand(aiCfg, forceOn, forceOff)
+}
+
+func parseCustomUserAgentSegments(s string) [][2]string {
+	var out [][2]string
+	for _, segment := range strings.Fields(s) {
+		parts := strings.SplitN(segment, "/", 2)
+		if len(parts) == 2 {
+			out = append(out, [2]string{parts[0], parts[1]})
+		} else {
+			out = append(out, [2]string{segment, ""})
+		}
+	}
+	return out
+}
+
 func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
+	initThrottlingLog(ctx)
 	a.product = product
+
+	if a.profile.Mode == config.BearerToken {
+		code := product.GetLowerCode()
+		return cli.NewErrorWithTip(
+			config.ErrBearerTokenRequiresPlugin(code),
+			"Install the plugin if needed: `aliyun plugin install --name %s`",
+			code)
+	}
+
 	a.request = requests.NewCommonRequest()
 	a.request.Product = product.Code
+	if cfg, cfgErr := throttlingretry.LoadEffective(config.GetConfigDir(ctx)); cfgErr == nil {
+		a.throttlingRetryConfig = cfg
+	}
 
 	a.request.RegionId = a.profile.RegionId
 	if v, ok := config.RegionFlag(ctx.Flags()).GetValue(); ok {
@@ -137,8 +193,10 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 		a.request.Version = v
 	}
 
-	if v, ok := EndpointFlag(ctx.Flags()).GetValue(); ok {
+	if v, ok := config.EndpointFlag(ctx.Flags()).GetValue(); ok {
 		a.request.Domain = v
+	} else if a.profile.Endpoint != "" {
+		a.request.Domain = a.profile.Endpoint
 	}
 
 	for _, s := range HeaderFlag(ctx.Flags()).GetValues() {
@@ -155,7 +213,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 				a.request.SetContentType(v)
 			}
 		} else {
-			return fmt.Errorf("invaild flag --header `%s` use `--header HeaderName=Value`", s)
+			return fmt.Errorf("invalid flag --header `%s` use `--header HeaderName=Value`", s)
 		}
 	}
 
@@ -183,6 +241,25 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	}
 	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 
+	if envUA := util.GetFromEnv("ALIBABA_CLOUD_USER_AGENT"); envUA != "" {
+		envUA = util.SanitizeUserAgent(envUA)
+		for _, pair := range parseCustomUserAgentSegments(envUA) {
+			a.client.AppendUserAgent(pair[0], pair[1])
+		}
+	}
+	if v, ok := UserAgentFlag(ctx.Flags()).GetValue(); ok && v != "" {
+		v = util.SanitizeUserAgent(v)
+		for _, pair := range parseCustomUserAgentSegments(v) {
+			a.client.AppendUserAgent(pair[0], pair[1])
+		}
+	}
+
+	if suf := aiModeSuffixForContext(ctx); suf != "" {
+		for _, pair := range parseCustomUserAgentSegments(suf) {
+			a.client.AppendUserAgent(pair[0], pair[1])
+		}
+	}
+
 	if a.request.Domain == "" {
 		endpointType := a.profile.EndpointType
 		a.request.Domain, err = product.GetEndpointWithType(a.request.RegionId, a.client, endpointType)
@@ -192,6 +269,8 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 				"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, "+hint)
 		}
 	}
+
+	otel.InjectHeaders(a.request.Headers)
 
 	return nil
 }

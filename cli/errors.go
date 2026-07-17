@@ -57,7 +57,7 @@ func NewInvalidCommandError(name string, ctx *Context) error {
 }
 
 func (e *InvalidCommandError) Error() string {
-	return fmt.Sprintf("'%s' is not a vaild command", e.Name)
+	return fmt.Sprintf("'%s' is not a valid command", e.Name)
 }
 
 func (e *InvalidCommandError) GetSuggestions() []string {

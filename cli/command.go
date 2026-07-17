@@ -65,11 +65,28 @@ type Command struct {
 	KeepArgs bool
 	// skip main process help
 	SkipDefaultHelp bool
+
+	// DisablePersistentFlags skip persistent flags from parent
+	DisablePersistentFlags bool
 }
 
 func (c *Command) AddSubCommand(cmd *Command) {
 	cmd.parent = c
 	c.subCommands = append(c.subCommands, cmd)
+}
+
+func (c *Command) SubCommandNames() []string {
+	if c == nil || len(c.subCommands) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(c.subCommands))
+	for _, sub := range c.subCommands {
+		if sub == nil {
+			continue
+		}
+		names = append(names, sub.Name)
+	}
+	return names
 }
 
 func (c *Command) Flags() *FlagSet {
@@ -353,6 +370,7 @@ func (c *Command) executeHelp(ctx *Context, args []string) {
 
 	c.PrintHead(ctx)
 	c.PrintUsage(ctx)
+	c.PrintSample(ctx)
 	c.PrintSubCommands(ctx)
 	c.PrintFlags(ctx)
 	c.PrintTail(ctx)

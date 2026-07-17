@@ -20,6 +20,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 )
 
 // helper to create a fake executable script
@@ -300,6 +301,23 @@ func TestRemoveFlagsForMainCli(t *testing.T) {
 	}
 }
 
+func TestRemoveFlagsForMainCli_stripsCliAIModeFlags(t *testing.T) {
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	args, err := c.RemoveFlagsForMainCli([]string{
+		"ossutil", "ls", "oss://b/",
+		"--cli-ai-mode",
+		"--no-cli-ai-mode",
+	})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	joined := strings.Join(args, " ")
+	if strings.Contains(joined, "--cli-ai-mode") || strings.Contains(joined, "--no-cli-ai-mode") {
+		t.Fatalf("cli ai override flags should be stripped for ossutil: %s", joined)
+	}
+}
+
 func TestGetLatestOssUtilVersionWithServer(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "ossutil version: 9.9.9")
@@ -495,6 +513,125 @@ func TestPrepareEnv(t *testing.T) {
 
 	if config["access_key_secret"] != "sk" {
 		t.Fatalf("sk mismatch: %v", config["access_key_secret"])
+	}
+	// ai-mode off by default: no cli_ai_* inside payload
+	if _, ok := config[aimode.OssutilConfigKeyAIMode]; ok {
+		t.Fatalf("unexpected %s when ai-mode off", aimode.OssutilConfigKeyAIMode)
+	}
+}
+
+func TestPrepareEnv_AiModeOssutilInPayload(t *testing.T) {
+	origHOME := os.Getenv("HOME")
+	defer func() { _ = os.Setenv("HOME", origHOME) }()
+	home := t.TempDir()
+	_ = os.Setenv("HOME", home)
+	prepareConfig(t, home, "en")
+	cfgDir := filepath.Join(home, ".aliyun")
+	ai := `{"enabled":false,"ossutil":{"from_ai_mode":"yes"}}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "ai-mode.json"), []byte(ai), 0600); err != nil {
+		t.Fatalf("write ai-mode: %v", err)
+	}
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.InitBasicInfo()
+	if err := c.PrepareEnv(); err != nil {
+		t.Fatalf("PrepareEnv err: %v", err)
+	}
+	val := c.envMap["OSSUTIL_CONFIG_VALUE"]
+	dec, err := base64.StdEncoding.DecodeString(val)
+	if err != nil {
+		t.Fatalf("base64: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(dec, &payload); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	ou, ok := payload[aimode.OssutilConfigAIModeOssutilKey].(map[string]any)
+	if !ok || ou["from_ai_mode"] != "yes" {
+		t.Fatalf("expected ai-ossutil block at %s, got %v", aimode.OssutilConfigAIModeOssutilKey, payload[aimode.OssutilConfigAIModeOssutilKey])
+	}
+	if _, hasProfile := payload["ossutil"]; hasProfile {
+		t.Fatalf("profile ossutil should be absent unless set in profile")
+	}
+}
+
+func TestPrepareEnv_ProfileOssutilInConfigIgnored(t *testing.T) {
+	origHOME := os.Getenv("HOME")
+	defer func() { _ = os.Setenv("HOME", origHOME) }()
+	home := t.TempDir()
+	_ = os.Setenv("HOME", home)
+	cfgDir := filepath.Join(home, ".aliyun")
+	if err := os.MkdirAll(cfgDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// legacy profile "ossutil" in config.json is not loaded into Profile and must not appear in payload
+	configJSON := `{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou","language":"en","ossutil":{"from_profile":"yes"}}]}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(configJSON), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	ai := `{"enabled":false,"ossutil":{"from_ai_mode":"yes"}}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "ai-mode.json"), []byte(ai), 0600); err != nil {
+		t.Fatalf("write ai-mode: %v", err)
+	}
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.InitBasicInfo()
+	if err := c.PrepareEnv(); err != nil {
+		t.Fatalf("PrepareEnv err: %v", err)
+	}
+	val := c.envMap["OSSUTIL_CONFIG_VALUE"]
+	dec, err := base64.StdEncoding.DecodeString(val)
+	if err != nil {
+		t.Fatalf("base64: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(dec, &payload); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if _, has := payload["ossutil"]; has {
+		t.Fatalf("profile ossutil in config.json must not be merged into OSSUTIL_CONFIG_VALUE, got %v", payload["ossutil"])
+	}
+	aiPart, ok := payload[aimode.OssutilConfigAIModeOssutilKey].(map[string]any)
+	if !ok || aiPart["from_ai_mode"] != "yes" {
+		t.Fatalf("ai-ossutil: %v", payload[aimode.OssutilConfigAIModeOssutilKey])
+	}
+}
+
+func TestPrepareEnv_AIModeInOssutilConfigValue(t *testing.T) {
+	origHOME := os.Getenv("HOME")
+	defer func() { _ = os.Setenv("HOME", origHOME) }()
+	home := t.TempDir()
+	_ = os.Setenv("HOME", home)
+	prepareConfig(t, home, "en")
+	cfgDir := filepath.Join(home, ".aliyun")
+	aiJSON := `{"enabled":true,"user_agent":"OssSkill/1"}`
+	if err := os.WriteFile(filepath.Join(cfgDir, "ai-mode.json"), []byte(aiJSON), 0600); err != nil {
+		t.Fatalf("write ai-mode: %v", err)
+	}
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	c.InitBasicInfo()
+	if err := c.PrepareEnv(); err != nil {
+		t.Fatalf("PrepareEnv err: %v", err)
+	}
+	if _, ok := c.envMap[aimode.EnvAIMode]; ok {
+		t.Fatalf("ossutil should not set %s env; use OSSUTIL_CONFIG_VALUE", aimode.EnvAIMode)
+	}
+	val := c.envMap["OSSUTIL_CONFIG_VALUE"]
+	dec, err := base64.StdEncoding.DecodeString(val)
+	if err != nil {
+		t.Fatalf("base64: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(dec, &payload); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if payload[aimode.OssutilConfigKeyAIMode] != "1" {
+		t.Fatalf("cli_ai_mode: %v", payload[aimode.OssutilConfigKeyAIMode])
+	}
+	s, _ := payload[aimode.OssutilConfigKeyAIUserAgent].(string)
+	if !strings.Contains(s, aimode.UserAgentEnabledMarker) || !strings.Contains(s, "OssSkill/1") {
+		t.Fatalf("cli_ai_user_agent: %q", s)
 	}
 }
 

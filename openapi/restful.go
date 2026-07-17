@@ -95,12 +95,15 @@ func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
 		a.request.Scheme = "https"
 	}
 
+	applyCallContextROA(a.productCode(), a.request.Headers)
+
 	return nil
 }
 
 func (a *RestfulInvoker) Call() (*responses.CommonResponse, error) {
-	resp, err := a.client.ProcessCommonRequest(a.request)
-	return resp, err
+	return a.callWithThrottlingRetry(func() (*responses.CommonResponse, error) {
+		return a.client.ProcessCommonRequest(a.request)
+	})
 }
 
 func checkRestfulMethod(ctx *cli.Context, methodOrPath string, pathPattern string) (ok bool, method string, path string, err error) {

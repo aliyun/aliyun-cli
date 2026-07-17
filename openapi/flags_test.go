@@ -33,10 +33,6 @@ func TestAFlags(t *testing.T) {
 	assert.Equal(t, "force", forceflag.Name)
 	assert.Equal(t, "use `--force` to skip api and parameters check", forceflag.Short.Text())
 
-	endpointflag := EndpointFlag(flagset)
-	assert.Equal(t, "endpoint", endpointflag.Name)
-	assert.Equal(t, "use `--endpoint <endpoint>` to assign endpoint", endpointflag.Short.Text())
-
 	versionflag := VersionFlag(flagset)
 	assert.Equal(t, "version", versionflag.Name)
 	assert.Equal(t, "use `--version <YYYY-MM-DD>` to assign product api version", versionflag.Short.Text())
@@ -65,6 +61,11 @@ func TestAFlags(t *testing.T) {
 	assert.Equal(t, "dryrun", dryrunflag.Name)
 	assert.Equal(t, "add `--dryrun` to validate and print request without running.", dryrunflag.Short.Text())
 
+	dryrunJSONFlag := DryRunJsonFlag(flagset)
+	assert.Equal(t, "cli-dry-run-json", dryrunJSONFlag.Name)
+	assert.True(t, dryrunJSONFlag.Hidden)
+	assert.Equal(t, "add `--cli-dry-run-json` to validate and print request details as JSON without running.", dryrunJSONFlag.Short.Text())
+
 	quietflag := QuietFlag(flagset)
 	assert.Equal(t, "quiet", quietflag.Name)
 	assert.Equal(t, "add `--quiet` to hide normal output", quietflag.Short.Text())
@@ -76,4 +77,34 @@ func TestAFlags(t *testing.T) {
 	methodflag := MethodFlag(flagset)
 	assert.Equal(t, "method", methodflag.Name)
 	assert.Equal(t, "add `--method {GET|POST}` to assign rpc call method.", methodflag.Short.Text())
+
+	useragentflag := UserAgentFlag(flagset)
+	assert.Equal(t, "user-agent", useragentflag.Name)
+	assert.Equal(t, cli.AssignedOnce, useragentflag.AssignedMode)
+	assert.False(t, useragentflag.Persistent)
+	assert.True(t, useragentflag.Hidden)
+	assert.Equal(t, "use `--user-agent <value>` to append custom User-Agent identifier", useragentflag.Short.Text())
+
+	aiFlag := CliAIModeFlag(flagset)
+	assert.Equal(t, CliAIModeFlagName, aiFlag.Name)
+	assert.False(t, aiFlag.Hidden)
+	noAiFlag := CliNoAIModeFlag(flagset)
+	assert.Equal(t, CliNoAIModeFlagName, noAiFlag.Name)
+	assert.True(t, noAiFlag.Hidden)
+
+	on, off := CliAIOverrides(flagset)
+	assert.False(t, on)
+	assert.False(t, off)
+	CliAIModeFlag(flagset).SetAssigned(true)
+	on, off = CliAIOverrides(flagset)
+	assert.True(t, on)
+	assert.False(t, off)
+
+	fs2 := cli.NewFlagSet()
+	AddFlags(fs2)
+	CliNoAIModeFlag(fs2).SetAssigned(true)
+	CliAIModeFlag(fs2).SetAssigned(true)
+	on, off = CliAIOverrides(fs2)
+	assert.False(t, on)
+	assert.True(t, off)
 }

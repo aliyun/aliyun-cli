@@ -128,7 +128,8 @@ func NewConfigureCommand() *cli.Command {
 		Short: i18n.T(
 			"configure credential and settings",
 			"配置身份认证和其他信息"),
-		Usage: "configure --mode {AK|RamRoleArn|EcsRamRole|OIDC|External|CredentialsURI|ChainableRamRoleArn|CloudSSO|OAuth} --profile <profileName> [--config-path <configPath>]",
+		Usage:  "configure --mode {AK|RamRoleArn|EcsRamRole|OIDC|External|CredentialsURI|ChainableRamRoleArn|CloudSSO|OAuth|BearerToken} --profile <profileName> [--config-path <configPath>]",
+		Sample: "aliyun configure --mode OAuth  (Recommended)",
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
@@ -171,6 +172,9 @@ func NewConfigureCommand() *cli.Command {
 	c.AddSubCommand(NewConfigureListCommand())
 	c.AddSubCommand(NewConfigureDeleteCommand())
 	c.AddSubCommand(NewConfigureSwitchCommand())
+	c.AddSubCommand(NewConfigureSafetyPolicyCommand())
+	c.AddSubCommand(NewConfigureAiModeCommand())
+	c.AddSubCommand(NewConfigurePluginSettingsCommand())
 	return c
 }
 
@@ -215,10 +219,11 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 		cp = conf.NewProfile(profileName)
 	}
 
-	cli.Printf(w, "Configuring profile '%s' in '%s' authenticate mode...\n", profileName, mode)
+	normalizedMode := NormalizeMode(mode)
+	cli.Printf(w, "Configuring profile '%s' in '%s' authenticate mode...\n", profileName, normalizedMode)
 
 	if mode != "" {
-		switch AuthenticateMode(mode) {
+		switch normalizedMode {
 		case AK:
 			cp.Mode = AK
 			configureAK(w, &cp)
@@ -274,6 +279,12 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 				return err
 			}
 			cli.Printf(w, "OAuth configuration completed. The temporary Access Key Id and Access Key Secret have been set in the profile.\n")
+		case BearerToken:
+			cp.Mode = BearerToken
+			err := configureBearerToken(w, &cp)
+			if err != nil {
+				return err
+			}
 		default:
 			return fmt.Errorf("unexcepted authenticate mode: %s", mode)
 		}
@@ -683,6 +694,15 @@ func detectPortUse(start int, end int) (int, error) {
 		}
 	}
 	return 0, fmt.Errorf("no available port found in range %d-%d", start, end)
+}
+
+func configureBearerToken(w io.Writer, cp *Profile) error {
+	cli.Printf(w, "Bearer Token [%s]: ", MosaicString(cp.BearerTokenValue, 3))
+	cp.BearerTokenValue = ReadInput(cp.BearerTokenValue)
+	cli.Printf(w, "Bearer Token Header Key [%s] (optional, e.g. x-custom-token; leave empty for %s): ",
+		cp.BearerTokenHeaderKey, DefaultBearerTokenHeaderKey)
+	cp.BearerTokenHeaderKey = ReadInput(cp.BearerTokenHeaderKey)
+	return nil
 }
 
 func configureAK(w io.Writer, cp *Profile) error {

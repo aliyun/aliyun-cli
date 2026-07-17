@@ -1,0 +1,427 @@
+// Copyright (c) 2009-present, Alibaba Cloud All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package safety
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func unsetEnvForTest(t *testing.T, key string) {
+	t.Helper()
+	prev, had := os.LookupEnv(key)
+	t.Cleanup(func() {
+		if had {
+			_ = os.Setenv(key, prev)
+		} else {
+			_ = os.Unsetenv(key)
+		}
+	})
+	_ = os.Unsetenv(key)
+}
+
+func TestPolicy_Check_Disabled(t *testing.T) {
+	policy := &Policy{
+		Enabled: false,
+		Rules: []Rule{
+			{Pattern: "*:Delete*", Action: ActionDeny},
+		},
+	}
+	cmd := CommandInfo{Product: "ecs", ApiOrMethod: "DeleteInstance"}
+	result := policy.Check(cmd)
+	assert.False(t, result.Matched)
+	assert.Equal(t, ActionAllow, result.Action)
+}
+
+func TestPolicy_Check_Deny(t *testing.T) {
+	policy := &Policy{
+		Enabled: true,
+		Rules: []Rule{
+			{Pattern: "*:Delete*", Action: ActionDeny},
+		},
+	}
+	cmd := CommandInfo{Product: "ecs", ApiOrMethod: "DeleteInstance"}
+	result := policy.Check(cmd)
+	assert.True(t, result.Matched)
+	assert.Equal(t, ActionDeny, result.Action)
+	assert.Equal(t, "*:Delete*", result.Rule.Pattern)
+}
+
+func TestPolicy_Check_Confirm(t *testing.T) {
+	policy := &Policy{
+		Enabled: true,
+		Rules: []Rule{
+			{Pattern: "ecs:Update*", Action: ActionConfirm},
+		},
+	}
+	cmd := CommandInfo{Product: "ecs", ApiOrMethod: "UpdateInstance"}
+	result := policy.Check(cmd)
+	assert.True(t, result.Matched)
+	assert.Equal(t, ActionConfirm, result.Action)
+}
+
+func TestPolicy_Check_REST_DELETE(t *testing.T) {
+	policy := &Policy{
+		Enabled: true,
+		Rules: []Rule{
+			{Pattern: "*:DELETE*", Action: ActionDeny},
+		},
+	}
+	cmd := CommandInfo{Product: "cs", ApiOrMethod: "DELETE", Path: "/clusters"}
+	result := policy.Check(cmd)
+	assert.True(t, result.Matched)
+	assert.Equal(t, ActionDeny, result.Action)
+}
+
+func TestPolicy_Check_Allow(t *testing.T) {
+	policy := &Policy{
+		Enabled: true,
+		Rules: []Rule{
+			{Pattern: "*:Delete*", Action: ActionDeny},
+		},
+	}
+	cmd := CommandInfo{Product: "ecs", ApiOrMethod: "DescribeInstances"}
+	result := policy.Check(cmd)
+	assert.False(t, result.Matched)
+	assert.Equal(t, ActionAllow, result.Action)
+}
+
+func TestPolicy_Check_ForbidAlias(t *testing.T) {
+	policy := &Policy{
+		Enabled: true,
+		Rules: []Rule{
+			{Pattern: "ecs:Update*", Action: ActionForbid},
+		},
+	}
+	cmd := CommandInfo{Product: "ecs", ApiOrMethod: "UpdateInstance"}
+	result := policy.Check(cmd)
+	assert.True(t, result.Matched)
+	assert.Equal(t, ActionConfirm, result.Action) // Forbid becomes Confirm
+}
+
+func TestPolicy_Check_Plugin(t *testing.T) {
+	policy := &Policy{
+		Enabled: true,
+		Rules: []Rule{
+			{Pattern: "*:delete*", Action: ActionDeny},
+		},
+	}
+	cmd := CommandInfo{Product: "fc", ApiOrMethod: "delete-function"}
+	result := policy.Check(cmd)
+	assert.True(t, result.Matched)
+	assert.Equal(t, ActionDeny, result.Action)
+}
+
+// Multi-segment plugin commands (`aliyun fc function create`) are joined with
+// ':' by the dispatcher so the hierarchy separator stays consistent with the
+// `product:command` convention. Rules can target either the exact path or use
+// wildcards.
+func TestPolicy_Check_MultiSegmentPlugin(t *testing.T) {
+	tests := []struct {
+		name    string
+		pattern string
+		cmd     CommandInfo
+		match   bool
+	}{
+		{
+			name:    "exact multi-segment match",
+			pattern: "fc:function:create",
+			cmd:     CommandInfo{Product: "fc", ApiOrMethod: "function:create"},
+			match:   true,
+		},
+		{
+			name:    "wildcard on first segment",
+			pattern: "fc:function:*",
+			cmd:     CommandInfo{Product: "fc", ApiOrMethod: "function:delete"},
+			match:   true,
+		},
+		{
+			name:    "wildcard catches trailing positional value",
+			pattern: "fc:invoke:*",
+			cmd:     CommandInfo{Product: "fc", ApiOrMethod: "invoke:my-function"},
+			match:   true,
+		},
+		{
+			name:    "loose star also works",
+			pattern: "fc:function*",
+			cmd:     CommandInfo{Product: "fc", ApiOrMethod: "function:create:my-fn"},
+			match:   true,
+		},
+		{
+			name:    "non-matching pattern stays allowed",
+			pattern: "fc:function:create",
+			cmd:     CommandInfo{Product: "fc", ApiOrMethod: "function:update"},
+			match:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			policy := &Policy{
+				Enabled: true,
+				Rules:   []Rule{{Pattern: tt.pattern, Action: ActionDeny}},
+			}
+			result := policy.Check(tt.cmd)
+			assert.Equal(t, tt.match, result.Matched)
+			if tt.match {
+				assert.Equal(t, ActionDeny, result.Action)
+			}
+		})
+	}
+}
+
+// User configures a rule using the OpenAPI ApiName they actually typed
+// (`aliyun sls ListProject`). Safety must treat the user-typed ApiOrMethod as
+// the canonical command identifier, regardless of how the cli later
+// dispatches it (REST GET / under the hood).
+func TestPolicy_Check_RESTByApiName(t *testing.T) {
+	policy := &Policy{
+		Enabled: true,
+		Rules: []Rule{
+			{Pattern: "sls:ListProject", Action: ActionDeny},
+		},
+	}
+	cmd := CommandInfo{Product: "sls", ApiOrMethod: "ListProject"}
+	result := policy.Check(cmd)
+	assert.True(t, result.Matched)
+	assert.Equal(t, ActionDeny, result.Action)
+	assert.Equal(t, "sls:ListProject", result.Rule.Pattern)
+}
+
+// Three-segment REST commands (`aliyun cs DELETE /clusters`) are matched as
+// product:METHOD/path; the `*:DELETE*` wildcard pattern keeps working.
+func TestPolicy_Check_RESTByMethodPath(t *testing.T) {
+	policy := &Policy{
+		Enabled: true,
+		Rules: []Rule{
+			{Pattern: "cs:DELETE/*", Action: ActionDeny},
+		},
+	}
+	cmd := CommandInfo{Product: "cs", ApiOrMethod: "DELETE", Path: "/clusters/abc"}
+	result := policy.Check(cmd)
+	assert.True(t, result.Matched)
+	assert.Equal(t, ActionDeny, result.Action)
+}
+
+// `*:DELETE*` should match both two-segment REST `aliyun sls DELETE /...` and
+// classic RPC delete-style API names.
+func TestPolicy_Check_DeleteWildcardCoversBothStyles(t *testing.T) {
+	policy := &Policy{
+		Enabled: true,
+		Rules: []Rule{
+			{Pattern: "*:Delete*", Action: ActionDeny},
+		},
+	}
+
+	rest := policy.Check(CommandInfo{Product: "cs", ApiOrMethod: "DELETE", Path: "/clusters"})
+	assert.True(t, rest.Matched)
+	assert.Equal(t, ActionDeny, rest.Action)
+
+	rpc := policy.Check(CommandInfo{Product: "ecs", ApiOrMethod: "DeleteInstance"})
+	assert.True(t, rpc.Matched)
+	assert.Equal(t, ActionDeny, rpc.Action)
+}
+
+func TestBuildCommandPattern(t *testing.T) {
+	tests := []struct {
+		name string
+		cmd  CommandInfo
+		want string
+	}{
+		{
+			name: "RPC two-segment",
+			cmd:  CommandInfo{Product: "ECS", ApiOrMethod: "DeleteInstance"},
+			want: "ecs:DeleteInstance",
+		},
+		{
+			name: "REST two-segment by ApiName",
+			cmd:  CommandInfo{Product: "sls", ApiOrMethod: "ListProject"},
+			want: "sls:ListProject",
+		},
+		{
+			name: "REST three-segment by method+path",
+			cmd:  CommandInfo{Product: "cs", ApiOrMethod: "delete", Path: "/clusters"},
+			want: "cs:DELETE/clusters",
+		},
+		{
+			name: "plugin sub-command",
+			cmd:  CommandInfo{Product: "fc", ApiOrMethod: "delete-function"},
+			want: "fc:delete-function",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildCommandPattern(tt.cmd)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestMatchPattern(t *testing.T) {
+	tests := []struct {
+		pattern string
+		cmd    string
+		want   bool
+	}{
+		{"*:Delete*", "ecs:DeleteInstance", true},
+		{"*:Delete*", "ecs:deleteinstance", true}, // case insensitive
+		{"*:delete*", "fc:delete-function", true}, // plugin command
+		{"ecs:Delete*", "ecs:DeleteInstance", true},
+		{"ecs:Delete*", "cs:DeleteCluster", false},
+		{"*:DELETE*", "cs:DELETE/clusters", true},
+		{"*:Update*", "ecs:UpdateInstance", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.pattern+"_"+tt.cmd, func(t *testing.T) {
+			got := matchPattern(tt.pattern, tt.cmd)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestMergeSafetyPolicyPathIntoEnvs(t *testing.T) {
+	unsetEnvForTest(t, EnvSafetyPolicyEnabled)
+	unsetEnvForTest(t, EnvSafetyPolicyRules)
+	dir := t.TempDir()
+	m := map[string]string{}
+	MergeSafetyPolicyPathIntoEnvs(dir, m)
+	want, err := filepath.Abs(filepath.Join(dir, SafetyPolicyFileName))
+	assert.NoError(t, err)
+	assert.Equal(t, want, m[EnvSafetyPolicyFile])
+	assert.Equal(t, "false", m[EnvSafetyPolicyEnabled])
+	assert.Equal(t, "", m[EnvSafetyPolicyRules])
+}
+
+func TestMergeSafetyPolicyPathIntoEnvs_EffectiveFromFile(t *testing.T) {
+	unsetEnvForTest(t, EnvSafetyPolicyEnabled)
+	unsetEnvForTest(t, EnvSafetyPolicyRules)
+	dir := t.TempDir()
+	require.NoError(t, SavePolicy(dir, &Policy{
+		Enabled: true,
+		Rules:   []Rule{{Pattern: "ecs:Delete*", Action: ActionDeny}},
+	}))
+	m := map[string]string{}
+	MergeSafetyPolicyPathIntoEnvs(dir, m)
+	assert.Equal(t, "true", m[EnvSafetyPolicyEnabled])
+	assert.Equal(t, "ecs:Delete*=deny", m[EnvSafetyPolicyRules])
+}
+
+func TestMergeSafetyPolicyPathIntoEnvs_EffectiveEnvOverridesFile(t *testing.T) {
+	unsetEnvForTest(t, EnvSafetyPolicyRules)
+	dir := t.TempDir()
+	require.NoError(t, SavePolicy(dir, &Policy{
+		Enabled: false,
+		Rules:   []Rule{{Pattern: "ecs:Delete*", Action: ActionDeny}},
+	}))
+	t.Setenv(EnvSafetyPolicyEnabled, "true")
+	m := map[string]string{}
+	MergeSafetyPolicyPathIntoEnvs(dir, m)
+	assert.Equal(t, "true", m[EnvSafetyPolicyEnabled])
+	assert.Equal(t, "ecs:Delete*=deny", m[EnvSafetyPolicyRules])
+}
+
+func TestMergeSafetyPolicyPathIntoEnvs_nilOrEmpty(t *testing.T) {
+	MergeSafetyPolicyPathIntoEnvs("", map[string]string{"a": "b"}) // no panic
+	m := map[string]string{}
+	MergeSafetyPolicyPathIntoEnvs("/tmp", nil) // no panic
+	assert.Empty(t, m)
+}
+
+func TestMergePolicyFromEnv_NoEnv(t *testing.T) {
+	unsetEnvForTest(t, EnvSafetyPolicyEnabled)
+	unsetEnvForTest(t, EnvSafetyPolicyRules)
+
+	base := &Policy{Enabled: true, Rules: []Rule{{Pattern: "ecs:Delete*", Action: ActionDeny}}}
+	got := MergePolicyFromEnv(base)
+	assert.True(t, got.Enabled)
+	require.Len(t, got.Rules, 1)
+	assert.Equal(t, "ecs:Delete*", got.Rules[0].Pattern)
+}
+
+func TestMergePolicyFromEnv_EnabledOverride(t *testing.T) {
+	unsetEnvForTest(t, EnvSafetyPolicyRules)
+	base := &Policy{Enabled: false, Rules: []Rule{{Pattern: "*:Delete*", Action: ActionDeny}}}
+
+	t.Setenv(EnvSafetyPolicyEnabled, "true")
+	got := MergePolicyFromEnv(base)
+	assert.True(t, got.Enabled)
+	assert.Len(t, got.Rules, 1)
+
+	t.Setenv(EnvSafetyPolicyEnabled, "0")
+	got2 := MergePolicyFromEnv(base)
+	assert.False(t, got2.Enabled)
+}
+
+func TestMergePolicyFromEnv_RulesOverride(t *testing.T) {
+	unsetEnvForTest(t, EnvSafetyPolicyEnabled)
+	base := &Policy{Enabled: true, Rules: []Rule{{Pattern: "old:*", Action: ActionDeny}}}
+	t.Setenv(EnvSafetyPolicyRules, "ecs:Update*=confirm")
+	got := MergePolicyFromEnv(base)
+	assert.True(t, got.Enabled)
+	require.Len(t, got.Rules, 1)
+	assert.Equal(t, "ecs:Update*", got.Rules[0].Pattern)
+	assert.Equal(t, ActionConfirm, got.Rules[0].Action)
+}
+
+func TestMergePolicyFromEnv_RulesOverride_MultipleComma(t *testing.T) {
+	unsetEnvForTest(t, EnvSafetyPolicyEnabled)
+	base := &Policy{Enabled: true, Rules: []Rule{{Pattern: "old:*", Action: ActionDeny}}}
+	t.Setenv(EnvSafetyPolicyRules, " *:Delete*=deny , ecs:Update* = confirm ")
+	got := MergePolicyFromEnv(base)
+	require.Len(t, got.Rules, 2)
+	assert.Equal(t, "*:Delete*", got.Rules[0].Pattern)
+	assert.Equal(t, ActionDeny, got.Rules[0].Action)
+	assert.Equal(t, "ecs:Update*", got.Rules[1].Pattern)
+	assert.Equal(t, ActionConfirm, got.Rules[1].Action)
+}
+
+func TestMergePolicyFromEnv_RulesEmptyStringClears(t *testing.T) {
+	unsetEnvForTest(t, EnvSafetyPolicyEnabled)
+	base := &Policy{Enabled: true, Rules: []Rule{{Pattern: "x", Action: ActionDeny}}}
+	t.Setenv(EnvSafetyPolicyRules, "   ")
+	got := MergePolicyFromEnv(base)
+	assert.Empty(t, got.Rules)
+}
+
+func TestMergePolicyFromEnv_InvalidRulesEnvKeepsFile(t *testing.T) {
+	unsetEnvForTest(t, EnvSafetyPolicyEnabled)
+	base := &Policy{Enabled: true, Rules: []Rule{{Pattern: "keep:me", Action: ActionDeny}}}
+	t.Setenv(EnvSafetyPolicyRules, "not-json,{badaction},noequals")
+	got := MergePolicyFromEnv(base)
+	require.Len(t, got.Rules, 1)
+	assert.Equal(t, "keep:me", got.Rules[0].Pattern)
+}
+
+func TestLoadEffectivePolicy_AppliesEnv(t *testing.T) {
+	dir := t.TempDir()
+	path := GetPolicyFilePath(dir)
+	filePolicy := Policy{Enabled: false, Rules: []Rule{{Pattern: "ecs:Describe*", Action: ActionDeny}}}
+	data, err := json.MarshalIndent(filePolicy, "", "\t")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, data, 0600))
+
+	t.Setenv(EnvSafetyPolicyEnabled, "true")
+	t.Setenv(EnvSafetyPolicyRules, "ecs:Delete*=deny")
+
+	got, err := LoadEffectivePolicy(dir)
+	require.NoError(t, err)
+	assert.True(t, got.Enabled)
+	require.Len(t, got.Rules, 1)
+	assert.Equal(t, "ecs:Delete*", got.Rules[0].Pattern)
+}

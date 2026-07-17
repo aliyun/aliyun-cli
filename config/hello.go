@@ -34,7 +34,7 @@ func doHello(ctx *cli.Context, profile *Profile) (err error) {
 		Credential: credential,
 	}
 
-	config.Endpoint = tea.String(getSTSEndpoint(profile.StsRegion))
+	config.Endpoint = tea.String(resolveSTSEndpoint(profile))
 	client, err := openapi.NewClient(config)
 	if err != nil {
 		return
@@ -74,6 +74,10 @@ func doHello(ctx *cli.Context, profile *Profile) (err error) {
 
 func DoHello(ctx *cli.Context, profile *Profile) {
 	w := ctx.Stdout()
+	if profile.Mode == BearerToken {
+		fmt.Fprintln(w, icon)
+		return
+	}
 	err := doHello(ctx, profile)
 	if err != nil {
 		cli.Println(w, "-----------------------------------------------")

@@ -48,8 +48,8 @@ func TestAddFlag(t *testing.T) {
 			DefaultValue: "AK",
 			Persistent:   true,
 			Short: i18n.T(
-				"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth}` to assign authenticate mode",
-				"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth}` 指定认证方式"),
+				"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth|BearerToken|Anonymous}` to assign authenticate mode",
+				"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth|BearerToken|Anonymous}` 指定认证方式"),
 			Long:         nil,
 			Required:     false,
 			Aliases:      nil,
@@ -462,6 +462,10 @@ func TestAddFlags(t *testing.T) {
 	assert.NotNil(t, flagSet.Get(OAuthSiteTypeName))
 	// 结果包含EndpointTypeFlagName
 	assert.NotNil(t, flagSet.Get(EndpointTypeFlagName))
+	// 结果包含EndpointFlagName
+	assert.NotNil(t, flagSet.Get(EndpointFlagName))
+	// 结果包含ExternalAccountTypeFlagName
+	assert.NotNil(t, flagSet.Get(ExternalAccountTypeFlagName))
 }
 
 func TestNewEndpointTypeFlag(t *testing.T) {
@@ -478,4 +482,37 @@ func TestEndpointTypeFlag(t *testing.T) {
 	flag := EndpointTypeFlag(flagSet)
 	assert.NotNil(t, flag)
 	assert.Equal(t, EndpointTypeFlagName, flag.Name)
+}
+
+func TestNewEndpointFlag(t *testing.T) {
+	var a = NewEndpointFlag()
+	assert.Equal(t, EndpointFlagName, a.Name)
+	assert.Equal(t, 'e', a.Shorthand)
+	assert.Equal(t, "config", a.Category)
+	assert.True(t, a.Persistent)
+	assert.Equal(t, cli.AssignedOnce, a.AssignedMode)
+}
+
+func TestEndpointFlag(t *testing.T) {
+	flagSet := cli.NewFlagSet()
+	AddFlags(flagSet)
+	flag := EndpointFlag(flagSet)
+	assert.NotNil(t, flag)
+	assert.Equal(t, EndpointFlagName, flag.Name)
+}
+
+func TestNewExternalAccountTypeFlag(t *testing.T) {
+	var a = NewExternalAccountTypeFlag()
+	assert.Equal(t, ExternalAccountTypeFlagName, a.Name)
+	assert.Equal(t, "config", a.Category)
+	assert.False(t, a.Persistent)
+	assert.Equal(t, cli.AssignedOnce, a.AssignedMode)
+}
+
+func TestExternalAccountTypeFlag(t *testing.T) {
+	flagSet := cli.NewFlagSet()
+	AddFlags(flagSet)
+	flag := ExternalAccountTypeFlag(flagSet)
+	assert.NotNil(t, flag)
+	assert.Equal(t, ExternalAccountTypeFlagName, flag.Name)
 }

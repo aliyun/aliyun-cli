@@ -83,6 +83,11 @@ func doConfigureList(ctx *cli.Context) error {
 			cred = "CloudSSO:" + pf.CloudSSOAccountId + "@" + pf.CloudSSOAccessConfig
 		case OAuth:
 			cred = "OAuth:" + GetLastChars(pf.OAuthAccessToken, 10) + "@" + pf.OAuthSiteType
+		case BearerToken:
+			cred = "BearerToken:" + "***" + GetLastChars(pf.BearerTokenValue, 3)
+			if pf.BearerTokenHeaderKey != "" {
+				cred = cred + "@" + pf.BearerTokenHeaderKey
+			}
 		}
 		fmt.Fprintf(tw, "%s\t| %s\t| %s\t| %s\t| %s\n", name, cred, valid, pf.RegionId, pf.Language)
 	}

@@ -92,7 +92,9 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 	cli.Printf(a.writer, "Version: %s \n", product.Version)
 
 	if withApi {
-		cli.PrintfWithColor(a.writer, cli.ColorOff, "\nAvailable Api List: \n")
+		if len(product.ApiNames) > 0 {
+			cli.PrintfWithColor(a.writer, cli.ColorOff, "\nAvailable Api List: \n")
+		}
 		maxNameLen := 0
 
 		for _, apiName := range product.ApiNames {

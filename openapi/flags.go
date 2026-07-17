@@ -22,7 +22,6 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewSecureFlag())
 	fs.Add(NewInsecureFlag())
 	fs.Add(NewForceFlag())
-	fs.Add(NewEndpointFlag())
 	fs.Add(NewVersionFlag())
 	fs.Add(NewHeaderFlag())
 	fs.Add(NewBodyFlag())
@@ -32,26 +31,45 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewOutputFlag())
 	fs.Add(WaiterFlag)
 	fs.Add(NewDryRunFlag())
+	fs.Add(NewCliDryRunFlag())
+	fs.Add(NewDryRunJsonFlag())
+	fs.Add(NewEstimateCostFlag())
+	fs.Add(NewEstimateCostContextFlag())
 	fs.Add(NewQuietFlag())
+	fs.Add(NewLogLevelFlag())
+	fs.Add(NewYesFlag())
+	fs.Add(NewQueryFlag())
 	fs.Add(NewRoaFlag())
 	fs.Add(NewMethodFlag())
+	fs.Add(NewUserAgentFlag())
+	fs.Add(NewCliAIModeFlag())
+	fs.Add(NewCliNoAIModeFlag())
 }
 
 const (
-	SecureFlagName   = "secure"
-	InsecureFlagName = "insecure"
-	ForceFlagName    = "force"
-	EndpointFlagName = "endpoint"
-	VersionFlagName  = "version"
-	HeaderFlagName   = "header"
-	BodyFlagName     = "body"
-	BodyFileFlagName = "body-file"
-	AcceptFlagName   = "accept"
-	RoaFlagName      = "roa"
-	DryRunFlagName   = "dryrun"
-	QuietFlagName    = "quiet"
-	OutputFlagName   = "output"
-	MethodFlagName   = "method"
+	SecureFlagName              = "secure"
+	InsecureFlagName            = "insecure"
+	ForceFlagName               = "force"
+	VersionFlagName             = "version"
+	HeaderFlagName              = "header"
+	BodyFlagName                = "body"
+	BodyFileFlagName            = "body-file"
+	AcceptFlagName              = "accept"
+	RoaFlagName                 = "roa"
+	DryRunFlagName              = "dryrun"
+	CliDryRunFlagName           = "cli-dry-run"
+	CliDryRunJsonFlagName       = "cli-dry-run-json"
+	EstimateCostFlagName        = "estimate-cost"
+	EstimateCostContextFlagName = "estimate-cost-context"
+	QuietFlagName               = "quiet"
+	LogLevelFlagName            = "log-level"
+	YesFlagName                 = "yes"
+	QueryFlagName               = "cli-query"
+	OutputFlagName              = "output"
+	MethodFlagName              = "method"
+	UserAgentFlagName           = "user-agent"
+	CliAIModeFlagName           = "cli-ai-mode"
+	CliNoAIModeFlagName         = "no-cli-ai-mode"
 )
 
 func OutputFlag(fs *cli.FlagSet) *cli.Flag {
@@ -68,10 +86,6 @@ func InsecureFlag(fs *cli.FlagSet) *cli.Flag {
 
 func ForceFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(ForceFlagName)
-}
-
-func EndpointFlag(fs *cli.FlagSet) *cli.Flag {
-	return fs.Get(EndpointFlagName)
 }
 
 func VersionFlag(fs *cli.FlagSet) *cli.Flag {
@@ -102,12 +116,45 @@ func DryRunFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(DryRunFlagName)
 }
 
+func CliDryRunFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CliDryRunFlagName)
+}
+
+func DryRunJsonFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CliDryRunJsonFlagName)
+}
+
 func QuietFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(QuietFlagName)
 }
 
+func LogLevelFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(LogLevelFlagName)
+}
+
 func MethodFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(MethodFlagName)
+}
+
+func QueryFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(QueryFlagName)
+}
+
+func YesFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(YesFlagName)
+}
+
+func NewYesFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         YesFlagName,
+		Shorthand:    'y',
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			"skip safety policy confirmation prompt (for non-interactive/agent use)",
+			"跳过安全策略的确认提示（用于非交互式/Agent 场景）",
+		),
+	}
 }
 
 // TODO next version
@@ -150,16 +197,6 @@ func NewForceFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--force` to skip api and parameters check",
 			"添加 `--force` 开关可跳过API与参数的合法性检查")}
-}
-
-func NewEndpointFlag() *cli.Flag {
-	return &cli.Flag{
-		Category:     "caller",
-		Name:         EndpointFlagName,
-		AssignedMode: cli.AssignedOnce,
-		Short: i18n.T(
-			"use `--endpoint <endpoint>` to assign endpoint",
-			"使用 `--endpoint <endpoint>` 来指定接入点地址")}
 }
 
 func NewVersionFlag() *cli.Flag {
@@ -234,8 +271,77 @@ func NewDryRunFlag() *cli.Flag {
 			"add `--dryrun` to validate and print request without running.",
 			"使用 `--dryrun` 在执行校验后打印请求包体，跳过实际运行",
 		),
-		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name},
+		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, CliDryRunFlagName, CliDryRunJsonFlagName},
 	}
+}
+
+func NewCliDryRunFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         CliDryRunFlagName,
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			"add `--cli-dry-run` to validate and print request details in human-readable format without running.",
+			"使用 `--cli-dry-run` 在执行校验后以人类可读格式输出请求详情，跳过实际运行",
+		),
+		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, DryRunFlagName, CliDryRunJsonFlagName},
+	}
+}
+
+func NewDryRunJsonFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         CliDryRunJsonFlagName,
+		AssignedMode: cli.AssignedNone,
+		Hidden:       true,
+		Short: i18n.T(
+			"add `--cli-dry-run-json` to validate and print request details as JSON without running.",
+			"使用 `--cli-dry-run-json` 在执行校验后以 JSON 格式输出请求详情，跳过实际运行",
+		),
+		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, DryRunFlagName, CliDryRunFlagName},
+	}
+}
+
+// NewEstimateCostFlag registers `--estimate-cost`. See estimate_cost.go for
+// the routing details. Cross-product enumeration lives in the top-level
+// `aliyun list-supported-pricing-apis` subcommand (main/main.go), not here.
+func NewEstimateCostFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         EstimateCostFlagName,
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			"use `--estimate-cost` to estimate the cost of an OpenAPI call via CloudControl GetApiPrice without invoking it. Requires a product and an API name, e.g. `aliyun ecs RunInstances ... --estimate-cost`. Output is JSON.",
+			"使用 `--estimate-cost` 跳过实际调用，通过 CloudControl GetApiPrice 预估 OpenAPI 调用费用。需带 product 和 API 名（如 `aliyun ecs RunInstances ... --estimate-cost`），输出 JSON",
+		),
+		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, DryRunFlagName, CliDryRunFlagName, CliDryRunJsonFlagName},
+	}
+}
+
+func EstimateCostFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(EstimateCostFlagName)
+}
+
+// NewEstimateCostContextFlag registers `--estimate-cost-context Key=Value`, a
+// companion to --estimate-cost that supplies PricingContext entries (usage
+// assumptions / future-state overrides, e.g. EstimatedInternetTrafficOutGB=100).
+// Repeatable and multi-value: `--estimate-cost-context K1=V1 K2=V2`. Keys are
+// not validated here — PricingContext is mapping-defined and evolving; the
+// server validates. Must accompany --estimate-cost (enforced in commando.go).
+func NewEstimateCostContextFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         EstimateCostContextFlagName,
+		AssignedMode: cli.AssignedRepeatable,
+		Short: i18n.T(
+			"use `--estimate-cost-context Key=Value` to pass PricingContext entries to --estimate-cost (e.g. EstimatedInternetTrafficOutGB=100), repeatable or multi-value",
+			"配合 `--estimate-cost` 使用 `--estimate-cost-context Key=Value` 传递 PricingContext 询价假设（如 EstimatedInternetTrafficOutGB=100），可多值或多次指定",
+		),
+	}
+}
+
+func EstimateCostContextFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(EstimateCostContextFlagName)
 }
 
 func NewQuietFlag() *cli.Flag {
@@ -248,7 +354,20 @@ func NewQuietFlag() *cli.Flag {
 			"add `--quiet` to hide normal output",
 			"使用 `--quiet` 关闭正常输出",
 		),
-		ExcludeWith: []string{DryRunFlagName},
+		ExcludeWith: []string{DryRunFlagName, CliDryRunFlagName, CliDryRunJsonFlagName},
+	}
+}
+
+func NewLogLevelFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         LogLevelFlagName,
+		Aliases:      []string{"log_level"},
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"set log level: DEBUG, INFO, WARN, ERROR (default: ERROR)",
+			"设置日志级别: DEBUG、INFO、WARN、ERROR（默认: ERROR）",
+		),
 	}
 }
 
@@ -262,4 +381,81 @@ func NewMethodFlag() *cli.Flag {
 			"使用 `--method {GET|POST}` 来指定 RPC 请求的 Method",
 		),
 	}
+}
+
+func NewQueryFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         QueryFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--cli-query <jmespath>` to filter output with JMESPath expression",
+			"使用 `--cli-query <jmespath>` 通过 JMESPath 表达式过滤输出结果",
+		),
+	}
+}
+
+func NewUserAgentFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         UserAgentFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Hidden:       true,
+		Short: i18n.T(
+			"use `--user-agent <value>` to append custom User-Agent identifier",
+			"使用 `--user-agent <value>` 追加自定义 User-Agent 标识",
+		),
+	}
+}
+
+func UserAgentFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(UserAgentFlagName)
+}
+
+func NewCliAIModeFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         CliAIModeFlagName,
+		AssignedMode: cli.AssignedNone,
+		Short: i18n.T(
+			"for this command only, append AI-mode User-Agent segment (skills from configure ai-mode) even if global ai-mode is off",
+			"仅本次命令追加 AI 模式 UA 段（skills 来自 configure ai-mode），即使全局 ai-mode 未开启",
+		),
+	}
+}
+
+func NewCliNoAIModeFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         CliNoAIModeFlagName,
+		AssignedMode: cli.AssignedNone,
+		Hidden:       true,
+		Short: i18n.T(
+			"for this command only, do not append AI-mode User-Agent segment even if global ai-mode is on",
+			"仅本次命令不追加 AI 模式 UA 段，即使全局 ai-mode 已开启",
+		),
+	}
+}
+
+func CliAIModeFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CliAIModeFlagName)
+}
+
+func CliNoAIModeFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CliNoAIModeFlagName)
+}
+
+// CliAIOverrides returns per-command AI User-Agent behavior from root flags.
+// If both --no-cli-ai-mode and --cli-ai-mode are present, --no-cli-ai-mode wins.
+func CliAIOverrides(fs *cli.FlagSet) (forceOn bool, forceOff bool) {
+	if fs == nil {
+		return false, false
+	}
+	if CliNoAIModeFlag(fs) != nil && CliNoAIModeFlag(fs).IsAssigned() {
+		return false, true
+	}
+	if CliAIModeFlag(fs) != nil && CliAIModeFlag(fs).IsAssigned() {
+		return true, false
+	}
+	return false, false
 }

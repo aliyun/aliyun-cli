@@ -206,7 +206,7 @@ func TestExecute(t *testing.T) {
 	DisableExitCode()
 	defer EnableExitCode()
 	cmd.Execute(ctx, []string{})
-	assert.Equal(t, "\x1b[1;31mERROR: 'test' is not a vaild command\n\x1b[0m", buf2.String())
+	assert.Equal(t, "\x1b[1;31mERROR: 'test' is not a valid command\n\x1b[0m", buf2.String())
 }
 
 func TestProcessError(t *testing.T) {

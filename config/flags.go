@@ -20,36 +20,43 @@ import (
 )
 
 const (
-	ProfileFlagName              = "profile"
-	ModeFlagName                 = "mode"
-	AccessKeyIdFlagName          = "access-key-id"
-	AccessKeySecretFlagName      = "access-key-secret"
-	StsTokenFlagName             = "sts-token"
-	StsRegionFlagName            = "sts-region"
-	RamRoleNameFlagName          = "ram-role-name"
-	RamRoleArnFlagName           = "ram-role-arn"
-	RoleSessionNameFlagName      = "role-session-name"
-	ExternalIdFlagName           = "external-id"
-	SourceProfileFlagName        = "source-profile"
-	PrivateKeyFlagName           = "private-key"
-	KeyPairNameFlagName          = "key-pair-name"
-	RegionFlagName               = "region"
-	RegionIdFlagName             = "RegionId"
-	LanguageFlagName             = "language"
-	ReadTimeoutFlagName          = "read-timeout"
-	ConnectTimeoutFlagName       = "connect-timeout"
-	RetryCountFlagName           = "retry-count"
-	SkipSecureVerifyName         = "skip-secure-verify"
-	ConfigurePathFlagName        = "config-path"
-	ExpiredSecondsFlagName       = "expired-seconds"
-	ProcessCommandFlagName       = "process-command"
-	OIDCProviderARNFlagName      = "oidc-provider-arn"
-	OIDCTokenFileFlagName        = "oidc-token-file"
-	CloudSSOSignInUrlFlagName    = "cloud-sso-sign-in-url"
-	CloudSSOAccessConfigFlagName = "cloud-sso-access-config"
-	CloudSSOAccountIdFlagName    = "cloud-sso-account-id"
-	OAuthSiteTypeName            = "oauth-site-type"
-	EndpointTypeFlagName         = "endpoint-type"
+	ProfileFlagName                    = "profile"
+	ModeFlagName                       = "mode"
+	AccessKeyIdFlagName                = "access-key-id"
+	AccessKeySecretFlagName            = "access-key-secret"
+	StsTokenFlagName                   = "sts-token"
+	StsRegionFlagName                  = "sts-region"
+	StsEndpointFlagName                = "sts-endpoint"
+	RamRoleNameFlagName                = "ram-role-name"
+	RamRoleArnFlagName                 = "ram-role-arn"
+	RoleSessionNameFlagName            = "role-session-name"
+	ExternalIdFlagName                 = "external-id"
+	SourceProfileFlagName              = "source-profile"
+	PrivateKeyFlagName                 = "private-key"
+	KeyPairNameFlagName                = "key-pair-name"
+	RegionFlagName                     = "region"
+	RegionIdFlagName                   = "RegionId"
+	LanguageFlagName                   = "language"
+	ReadTimeoutFlagName                = "read-timeout"
+	ConnectTimeoutFlagName             = "connect-timeout"
+	RetryCountFlagName                 = "retry-count"
+	SkipSecureVerifyName               = "skip-secure-verify"
+	ConfigurePathFlagName              = "config-path"
+	ExpiredSecondsFlagName             = "expired-seconds"
+	ProcessCommandFlagName             = "process-command"
+	OIDCProviderARNFlagName            = "oidc-provider-arn"
+	OIDCTokenFileFlagName              = "oidc-token-file"
+	CloudSSOSignInUrlFlagName          = "cloud-sso-sign-in-url"
+	CloudSSOAccessConfigFlagName       = "cloud-sso-access-config"
+	CloudSSOAccountIdFlagName          = "cloud-sso-account-id"
+	OAuthSiteTypeName                  = "oauth-site-type"
+	EndpointTypeFlagName               = "endpoint-type"
+	EndpointFlagName                   = "endpoint"
+	ExternalAccountTypeFlagName        = "external-account-type"
+	AutoPluginInstallFlagName          = "auto-plugin-install"
+	AutoPluginInstallEnablePreFlagName = "auto-plugin-install-enable-pre"
+	BearerTokenFlagName                = "bearer-token"
+	BearerTokenHeaderKeyFlagName       = "bearer-token-header-key"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -63,6 +70,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewAccessKeySecretFlag())
 	fs.Add(NewStsTokenFlag())
 	fs.Add(NewStsRegionFlag())
+	fs.Add(NewStsEndpointFlag())
 	fs.Add(NewRamRoleNameFlag())
 	fs.Add(NewRamRoleArnFlag())
 	fs.Add(NewSourceProfileFlag())
@@ -83,6 +91,12 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewCloudSSOAccountIdFlag())
 	fs.Add(NewOAuthSiteTypeFlag())
 	fs.Add(NewEndpointTypeFlag())
+	fs.Add(NewEndpointFlag())
+	fs.Add(NewExternalAccountTypeFlag())
+	fs.Add(NewAutoPluginInstallFlag())
+	fs.Add(NewAutoPluginInstallEnablePreFlag())
+	fs.Add(NewBearerTokenFlag())
+	fs.Add(NewBearerTokenHeaderKeyFlag())
 }
 
 func ConnectTimeoutFlag(fs *cli.FlagSet) *cli.Flag {
@@ -111,6 +125,10 @@ func StsTokenFlag(fs *cli.FlagSet) *cli.Flag {
 
 func StsRegionFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(StsRegionFlagName)
+}
+
+func StsEndpointFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(StsEndpointFlagName)
 }
 
 func RamRoleNameFlag(fs *cli.FlagSet) *cli.Flag {
@@ -224,8 +242,8 @@ func NewModeFlag() *cli.Flag {
 		DefaultValue: "AK",
 		Persistent:   true,
 		Short: i18n.T(
-			"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth}` to assign authenticate mode",
-			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth}` 指定认证方式"),
+			"use `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth|BearerToken|Anonymous}` to assign authenticate mode",
+			"使用 `--mode {AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair|RamRoleArnWithRoleName|CloudSSO|OAuth|BearerToken|Anonymous}` 指定认证方式"),
 	}
 }
 
@@ -270,6 +288,17 @@ func NewStsRegionFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--sts-region <StsRegion>` to assign StsRegion",
 			"使用 `--sts-region <StsRegion>` 指定StsRegion"),
+	}
+}
+
+func NewStsEndpointFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         StsEndpointFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--sts-endpoint <StsEndpoint>` to assign STS endpoint, e.g. sts-vpc.cn-hangzhou.aliyuncs.com",
+			"使用 `--sts-endpoint <StsEndpoint>` 指定 STS endpoint，例如 sts-vpc.cn-hangzhou.aliyuncs.com"),
 	}
 }
 
@@ -536,6 +565,23 @@ func EndpointTypeFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(EndpointTypeFlagName)
 }
 
+func EndpointFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(EndpointFlagName)
+}
+
+func NewEndpointFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         EndpointFlagName,
+		Shorthand:    'e',
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--endpoint`/`-e <endpoint>` to assign endpoint",
+			"使用 `--endpoint`/`-e <endpoint>` 来指定接入点地址"),
+	}
+}
+
 func NewEndpointTypeFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "config",
@@ -545,5 +591,82 @@ func NewEndpointTypeFlag() *cli.Flag {
 		Short: i18n.T(
 			"use `--endpoint-type` to specify the endpoint type, support vpc or empty (default public)",
 			"使用 `--endpoint-type` 指定 endpoint 类型, 支持 vpc 或空值(默认公网)"),
+	}
+}
+
+func ExternalAccountTypeFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(ExternalAccountTypeFlagName)
+}
+
+func BearerTokenFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(BearerTokenFlagName)
+}
+
+func BearerTokenHeaderKeyFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(BearerTokenHeaderKeyFlagName)
+}
+
+func NewExternalAccountTypeFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         ExternalAccountTypeFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--external-account-type <type>` to assign external account type",
+			"使用 `--external-account-type <type>` 来指定外部账号类型"),
+	}
+}
+
+func AutoPluginInstallFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(AutoPluginInstallFlagName)
+}
+
+func NewAutoPluginInstallFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         AutoPluginInstallFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--auto-plugin-install {true|false}` to enable/disable automatic plugin installation",
+			"使用 `--auto-plugin-install {true|false}` 启用/禁用自动安装插件"),
+	}
+}
+
+func AutoPluginInstallEnablePreFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(AutoPluginInstallEnablePreFlagName)
+}
+
+func NewAutoPluginInstallEnablePreFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         AutoPluginInstallEnablePreFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--auto-plugin-install-enable-pre {true|false}` to install latest version (including pre-release)",
+			"使用 `--auto-plugin-install-enable-pre {true|false}` 安装最新版本（包括预览版本）"),
+	}
+}
+
+func NewBearerTokenFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         BearerTokenFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--bearer-token <token>` to assign bearer token (BearerToken mode)",
+			"使用 `--bearer-token <token>` 指定 Bearer Token（BearerToken 认证模式）"),
+	}
+}
+
+func NewBearerTokenHeaderKeyFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "config",
+		Name:         BearerTokenHeaderKeyFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Short: i18n.T(
+			"use `--bearer-token-header-key <key>` to assign custom auth header key, e.g. x-custom-token",
+			"使用 `--bearer-token-header-key <key>` 指定自定义认证 Header 名称，例如 x-custom-token"),
 	}
 }
