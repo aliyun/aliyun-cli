@@ -1,7 +1,9 @@
 package flowcli
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -72,9 +74,12 @@ func TestNewFlowcliCommand_RunSuppressesExitError(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	prepareConfig(t, home)
 
-	t.Setenv("ALIBABA_CLOUD_FLOW_CLI_EXEC_PATH", "/fake/flow-cli")
+	fakeExec := filepath.Join(t.TempDir(), "flow-cli")
+	if err := os.WriteFile(fakeExec, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("write fake exec: %v", err)
+	}
+	t.Setenv("ALIBABA_CLOUD_FLOW_CLI_EXEC_PATH", fakeExec)
 	t.Setenv("ALIBABA_CLOUD_FLOW_CLI_NODE_PATH", "/fake/node")
-	t.Setenv("ALIBABA_CLOUD_FLOW_CLI_NPM_PATH", "/fake/npm")
 	t.Setenv("ALIBABA_CLOUD_FLOW_CLI_NO_UPDATE_CHECK", "1")
 
 	origExec := execCommandFunc

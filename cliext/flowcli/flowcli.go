@@ -80,8 +80,13 @@ func (c *Context) Run(args []string) error {
 	if err := c.EnsureNodeAvailable(); err != nil {
 		return err
 	}
-	if err := c.EnsureNpmAvailable(); err != nil {
-		return err
+	// npm is only needed to install/upgrade the managed copy. When the user
+	// points ALIBABA_CLOUD_FLOW_CLI_EXEC_PATH at an existing binary, honour
+	// that escape hatch even on machines without npm.
+	if !c.usingExecPathOverride() {
+		if err := c.EnsureNpmAvailable(); err != nil {
+			return err
+		}
 	}
 	if err := c.EnsurePrefixAndPackage(); err != nil {
 		return err
@@ -179,7 +184,13 @@ func (c *Context) EnsureNpmAvailable() error {
 }
 
 func (c *Context) EnsurePrefixAndPackage() error {
-	if os.Getenv("ALIBABA_CLOUD_FLOW_CLI_EXEC_PATH") != "" {
+	if c.usingExecPathOverride() {
+		// The user opted out of the managed install; make sure the override
+		// actually resolves so we fail fast with an actionable message
+		// instead of a cryptic exec error later.
+		if !c.installed {
+			return fmt.Errorf("ALIBABA_CLOUD_FLOW_CLI_EXEC_PATH=%s does not point to an existing file", c.execFilePath)
+		}
 		return nil
 	}
 
@@ -295,19 +306,31 @@ func (c *Context) applyMainCliFlagsFromArgs(args []string) {
 	flags := c.originCtx.Flags()
 	for i := 0; i < len(args); i++ {
 		a := args[i]
-		if !strings.HasPrefix(a, "--") {
+
+		var f *cli.Flag
+		var value string
+		var hasValue bool
+
+		switch {
+		case strings.HasPrefix(a, "--"):
+			name := a[2:]
+			if idx := strings.Index(a, "="); idx > 0 {
+				name = a[2:idx]
+				value = a[idx+1:]
+				hasValue = true
+			}
+			f = flags.Get(name)
+		case strings.HasPrefix(a, "-") && len(a) > 1:
+			// shorthand form: -p / -p=value / -pvalue (e.g. profile, endpoint)
+			f = flags.GetByShorthand(rune(a[1]))
+			if rest := a[2:]; rest != "" {
+				value = strings.TrimPrefix(rest, "=")
+				hasValue = true
+			}
+		default:
 			continue
 		}
-		var name, value string
-		var hasValue bool
-		if idx := strings.Index(a, "="); idx > 0 {
-			name = a[2:idx]
-			value = a[idx+1:]
-			hasValue = true
-		} else {
-			name = a[2:]
-		}
-		f := flags.Get(name)
+
 		if f == nil || f.Category != "config" {
 			continue
 		}
@@ -509,6 +532,13 @@ func (c *Context) UpdateCheckCacheTime() error {
 func fileExists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
+}
+
+// usingExecPathOverride reports whether the user pinned an existing flow-cli
+// binary via ALIBABA_CLOUD_FLOW_CLI_EXEC_PATH, in which case the managed
+// npm install/upgrade path (and the npm requirement) is bypassed.
+func (c *Context) usingExecPathOverride() bool {
+	return strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_FLOW_CLI_EXEC_PATH")) != ""
 }
 
 var getNodeMajorFunc = getNodeMajor

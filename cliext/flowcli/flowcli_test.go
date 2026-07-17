@@ -232,6 +232,87 @@ func TestEnsureNpmAvailablePrefersNextToNode(t *testing.T) {
 	}
 }
 
+func TestEnsurePrefixAndPackage_ExecPathOverrideMissing(t *testing.T) {
+	tmp := t.TempDir()
+	oldGet := getConfigurePathFunc
+	getConfigurePathFunc = func() string { return tmp }
+	defer func() { getConfigurePathFunc = oldGet }()
+
+	missing := filepath.Join(tmp, "nope", "flow-cli")
+	t.Setenv("ALIBABA_CLOUD_FLOW_CLI_EXEC_PATH", missing)
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	if err := c.InitBasicInfo(); err != nil {
+		t.Fatalf("InitBasicInfo: %v", err)
+	}
+	err := c.EnsurePrefixAndPackage()
+	if err == nil {
+		t.Fatalf("expected error for missing exec path override")
+	}
+	if !strings.Contains(err.Error(), "ALIBABA_CLOUD_FLOW_CLI_EXEC_PATH") || !strings.Contains(err.Error(), missing) {
+		t.Errorf("error should name the env var and path: %v", err)
+	}
+}
+
+func TestEnsurePrefixAndPackage_ExecPathOverrideExists(t *testing.T) {
+	tmp := t.TempDir()
+	oldGet := getConfigurePathFunc
+	getConfigurePathFunc = func() string { return tmp }
+	defer func() { getConfigurePathFunc = oldGet }()
+
+	fake := filepath.Join(tmp, "flow-cli")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("write fake: %v", err)
+	}
+	t.Setenv("ALIBABA_CLOUD_FLOW_CLI_EXEC_PATH", fake)
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	if err := c.InitBasicInfo(); err != nil {
+		t.Fatalf("InitBasicInfo: %v", err)
+	}
+	if err := c.EnsurePrefixAndPackage(); err != nil {
+		t.Fatalf("existing override should not error: %v", err)
+	}
+}
+
+func TestUsingExecPathOverride(t *testing.T) {
+	c := &Context{}
+	t.Setenv("ALIBABA_CLOUD_FLOW_CLI_EXEC_PATH", "")
+	if c.usingExecPathOverride() {
+		t.Errorf("empty env should not count as override")
+	}
+	t.Setenv("ALIBABA_CLOUD_FLOW_CLI_EXEC_PATH", "  /some/path  ")
+	if !c.usingExecPathOverride() {
+		t.Errorf("non-empty env should count as override")
+	}
+}
+
+func TestApplyMainCliFlagsFromArgs_Shorthand(t *testing.T) {
+	ctx, _, _ := newOriginCtx()
+	ctx.Flags().Add(&cli.Flag{Name: "profile", Shorthand: 'p', AssignedMode: cli.AssignedOnce, Category: "config"})
+	ctx.Flags().Add(&cli.Flag{Name: "endpoint", Shorthand: 'e', AssignedMode: cli.AssignedOnce, Category: "config"})
+
+	c := NewContext(ctx)
+	c.applyMainCliFlagsFromArgs([]string{"step", "list", "-p", "prod", "-e=https://x", "--name", "n"})
+
+	pf := ctx.Flags().Get("profile")
+	if pf == nil || !pf.IsAssigned() {
+		t.Fatalf("profile flag should be assigned via -p")
+	}
+	if v, _ := pf.GetValue(); v != "prod" {
+		t.Errorf("profile value: want prod got %q", v)
+	}
+	ef := ctx.Flags().Get("endpoint")
+	if ef == nil || !ef.IsAssigned() {
+		t.Fatalf("endpoint flag should be assigned via -e=")
+	}
+	if v, _ := ef.GetValue(); v != "https://x" {
+		t.Errorf("endpoint value: want https://x got %q", v)
+	}
+}
+
 func TestRemoveFlagsForMainCli(t *testing.T) {
 	ctx, _, _ := newOriginCtx()
 	addConfigFlag(ctx, "region", "cn-hangzhou")
