@@ -318,13 +318,20 @@ func TestAtomicWriteFile_CreateTempFailure(t *testing.T) {
 }
 
 func TestAtomicWriteFile_InspectPathFailure(t *testing.T) {
-	dir := t.TempDir()
-	blocker := filepath.Join(dir, "blocker")
-	assert.NoError(t, os.WriteFile(blocker, []byte("not-a-dir"), 0600))
-	path := filepath.Join(blocker, "config.json")
+	// Do not rely on "parent path is a file" to trigger Lstat failure:
+	// on Windows that yields a not-exist-style error (IsNotExist=true), so the
+	// inspect branch is skipped and CreateTemp fails instead. Inject Lstat.
+	originLstat := lstatAtomicPath
+	defer func() {
+		lstatAtomicPath = originLstat
+	}()
+	lstatAtomicPath = func(name string) (os.FileInfo, error) {
+		return nil, errors.New("permission denied")
+	}
 
-	err := atomicWriteFile(path, []byte(`{"current":"new"}`), 0600)
+	err := atomicWriteFile(filepath.Join(t.TempDir(), "config.json"), []byte(`{"current":"new"}`), 0600)
 	assert.ErrorContains(t, err, "failed to inspect config path")
+	assert.ErrorContains(t, err, "permission denied")
 }
 
 func TestAtomicWriteFile_TempFileFailures(t *testing.T) {

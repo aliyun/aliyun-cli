@@ -266,8 +266,10 @@ var createAtomicTempFile = func(dir, pattern string) (atomicTempFile, error) {
 	return os.CreateTemp(dir, pattern)
 }
 
+var lstatAtomicPath = os.Lstat
+
 func atomicWriteFileWithRename(path string, data []byte, perm os.FileMode, rename func(string, string) error) error {
-	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+	if info, err := lstatAtomicPath(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
 		resolvedPath, err := filepath.EvalSymlinks(path)
 		if err != nil {
 			return fmt.Errorf("failed to resolve config symlink %q: %w", path, err)
