@@ -17,11 +17,10 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/util"
@@ -252,16 +251,52 @@ func SaveConfigurationWithContext(ctx *cli.Context, config *Configuration) (err 
 // On Windows, os.Rename replaces an existing destination (MoveFileEx REPLACE_EXISTING),
 // matching credentials-go / mcpproxy behavior and avoiding truncated config.json on crash.
 func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	base := filepath.Base(path)
-	tempFile := filepath.Join(dir, "."+base+".tmp-"+strconv.Itoa(os.Getpid())+"-"+strconv.FormatInt(time.Now().UnixNano(), 10))
+	return atomicWriteFileWithRename(path, data, perm, os.Rename)
+}
 
-	if err := os.WriteFile(tempFile, data, perm); err != nil {
-		return fmt.Errorf("failed to write temp config %q: %w", tempFile, err)
+func atomicWriteFileWithRename(path string, data []byte, perm os.FileMode, rename func(string, string) error) error {
+	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		resolvedPath, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return fmt.Errorf("failed to resolve config symlink %q: %w", path, err)
+		}
+		path = resolvedPath
+	} else if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to inspect config path %q: %w", path, err)
 	}
 
-	if err := os.Rename(tempFile, path); err != nil {
-		_ = os.Remove(tempFile)
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	temp, err := os.CreateTemp(dir, "."+base+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp config in %q: %w", dir, err)
+	}
+	tempPath := temp.Name()
+	closed := false
+	defer func() {
+		if !closed {
+			_ = temp.Close()
+		}
+		_ = os.Remove(tempPath)
+	}()
+
+	if err := temp.Chmod(perm); err != nil {
+		return fmt.Errorf("failed to set temp config permissions %q: %w", tempPath, err)
+	}
+	if n, err := temp.Write(data); err != nil {
+		return fmt.Errorf("failed to write temp config %q: %w", tempPath, err)
+	} else if n != len(data) {
+		return fmt.Errorf("failed to write temp config %q: %w", tempPath, io.ErrShortWrite)
+	}
+	if err := temp.Sync(); err != nil {
+		return fmt.Errorf("failed to sync temp config %q: %w", tempPath, err)
+	}
+	if err := temp.Close(); err != nil {
+		return fmt.Errorf("failed to close temp config %q: %w", tempPath, err)
+	}
+	closed = true
+
+	if err := rename(tempPath, path); err != nil {
 		return fmt.Errorf("failed to rename temp config to %q: %w", path, err)
 	}
 	return nil

@@ -249,6 +249,54 @@ func TestAtomicWriteFile_OverwriteExisting(t *testing.T) {
 	}
 }
 
+func TestAtomicWriteFile_RenameFailurePreservesExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	oldContent := []byte(`{"current":"old"}`)
+	assert.NoError(t, os.WriteFile(path, oldContent, 0600))
+
+	rename := func(oldPath, newPath string) error {
+		return errors.New("injected rename failure")
+	}
+
+	err := atomicWriteFileWithRename(path, []byte(`{"current":"new"}`), 0600, rename)
+	assert.ErrorContains(t, err, "injected rename failure")
+
+	got, err := os.ReadFile(path)
+	assert.NoError(t, err)
+	assert.Equal(t, oldContent, got)
+
+	entries, err := os.ReadDir(dir)
+	assert.NoError(t, err)
+	for _, entry := range entries {
+		assert.False(t, strings.Contains(entry.Name(), ".tmp-"), "temp file should be cleaned: %s", entry.Name())
+	}
+}
+
+func TestAtomicWriteFile_PreservesSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks may require elevated privileges on Windows")
+	}
+
+	targetDir := t.TempDir()
+	targetPath := filepath.Join(targetDir, "config.json")
+	assert.NoError(t, os.WriteFile(targetPath, []byte(`{"current":"old"}`), 0600))
+
+	linkDir := t.TempDir()
+	linkPath := filepath.Join(linkDir, "config.json")
+	assert.NoError(t, os.Symlink(targetPath, linkPath))
+
+	newContent := []byte(`{"current":"new"}`)
+	assert.NoError(t, atomicWriteFile(linkPath, newContent, 0600))
+
+	info, err := os.Lstat(linkPath)
+	assert.NoError(t, err)
+	assert.NotZero(t, info.Mode()&os.ModeSymlink)
+	got, err := os.ReadFile(targetPath)
+	assert.NoError(t, err)
+	assert.Equal(t, newContent, got)
+}
+
 func TestSaveConfiguration_OverwriteExisting(t *testing.T) {
 	orighookGetHomePath := hookGetHomePath
 	defer func() {
