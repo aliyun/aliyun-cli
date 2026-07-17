@@ -49,6 +49,8 @@ var (
 	execCommandFunc      = exec.Command
 	httpGetFunc          = http.Get
 	timeNowFunc          = func() time.Time { return time.Now() }
+	osSymlinkFunc        = os.Symlink
+	ioCopyFunc           = io.Copy
 	getLatestVersionFunc = func(c *Context) (string, error) { return c.GetLatestVersion() }
 	loadProfileFunc      = func(ctx *cli.Context) (config.Profile, error) {
 		return config.LoadProfileWithContext(ctx)
@@ -397,11 +399,59 @@ func extractTarGz(src, destDir string) error {
 			return err
 		}
 		_ = os.Remove(s.path)
-		if err := os.Symlink(s.target, s.path); err != nil {
+		if err := createSymlinkOrCopy(s.path, s.target); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// createSymlinkOrCopy creates a symlink; on failure (common on non-admin Windows
+// without Developer Mode / SeCreateSymbolicLinkPrivilege), falls back to copying
+// the target file. Directory links and missing targets are skipped on Windows so
+// install is not aborted, matching saectl/plugin untar behavior.
+func createSymlinkOrCopy(linkPath, linkTarget string) error {
+	err := osSymlinkFunc(linkTarget, linkPath)
+	if err == nil {
+		return nil
+	}
+	symlinkErr := err
+
+	src := linkTarget
+	if !filepath.IsAbs(src) {
+		src = filepath.Join(filepath.Dir(linkPath), src)
+	}
+	info, statErr := os.Stat(src)
+	if statErr == nil && !info.IsDir() {
+		if copyErr := copyFileWithMode(src, linkPath, info.Mode().Perm()); copyErr == nil {
+			return nil
+		}
+	}
+	if runtimeGOOSFunc() == "windows" {
+		// Align with saectl / plugin manager: skip rather than fail install.
+		return nil
+	}
+	return symlinkErr
+}
+
+func copyFileWithMode(src, dst string, mode os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	_, copyErr := ioCopyFunc(out, in)
+	closeErr := out.Close()
+	if copyErr != nil {
+		_ = os.Remove(dst)
+		return copyErr
+	}
+	return closeErr
 }
 
 func pathInside(absRoot, p string) bool {
