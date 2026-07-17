@@ -189,7 +189,7 @@ func TestNewConfigFromBytes(t *testing.T) {
 				"output_format": "json",
 				"language": "en",
 				"site": "",
-				"retry_timeout": 0,
+				"read_timeout": 0,
 				"retry_count": 0
 			}
 		],

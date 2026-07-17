@@ -24,6 +24,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cliext/kmscli"
 	"github.com/aliyun/aliyun-cli/v3/cliext/lindormcli"
+	"github.com/aliyun/aliyun-cli/v3/cliext/mseutil"
 
 	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -145,6 +146,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(kmscli.NewKmscliCommand())
 	// lindorm command
 	rootCmd.AddSubCommand(lindormcli.NewLindormCliCommand())
+	// mseutil command
+	rootCmd.AddSubCommand(mseutil.NewMseutilCommand())
 	// acr command
 	rootCmd.AddSubCommand(acrutil.NewAcrutilCommand())
 	// codeup command

@@ -293,12 +293,46 @@ func TestNewInstallCommand_Run(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// startMockPluginSourceBase serves empty package/search indexes so install
+// tests resolve "plugin not found" without hitting the real CDN (Windows CI
+// often times out on that fetch).
+func startMockPluginSourceBase(t *testing.T, pkg *Index, search CommandIndex) *httptest.Server {
+	t.Helper()
+	if pkg == nil {
+		pkg = &Index{Plugins: []PluginInfo{}}
+	}
+	if search == nil {
+		search = CommandIndex{}
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "plugin_pkg_index.json"):
+			_ = json.NewEncoder(w).Encode(pkg)
+		case strings.HasSuffix(r.URL.Path, "plugin_search_index.json"):
+			_ = json.NewEncoder(w).Encode(search)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func assignSourceBaseFlag(ctx *cli.Context, base string) {
+	f := ctx.Flags().Get("source-base")
+	f.SetAssigned(true)
+	f.SetValue(base)
+}
+
 func TestNewInstallCommand_Run_WithNamesFlag(t *testing.T) {
 	cmd := newInstallCommand()
 
 	testHome := t.TempDir()
 	cleanup := setTestHomeDir(t, testHome)
 	defer cleanup()
+
+	server := startMockPluginSourceBase(t, nil, nil)
 
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -309,6 +343,7 @@ func TestNewInstallCommand_Run_WithNamesFlag(t *testing.T) {
 	assert.NotNil(t, namesFlag)
 	namesFlag.SetAssigned(true)
 	namesFlag.SetValues([]string{"nonexistent-plugin-xyz-123"})
+	assignSourceBaseFlag(ctx, server.URL)
 
 	err := cmd.Run(ctx, []string{})
 	assert.Error(t, err)
@@ -322,6 +357,8 @@ func TestNewInstallCommand_Run_WithNameFlag(t *testing.T) {
 	cleanup := setTestHomeDir(t, testHome)
 	defer cleanup()
 
+	server := startMockPluginSourceBase(t, nil, nil)
+
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(stdout, stderr)
@@ -331,6 +368,7 @@ func TestNewInstallCommand_Run_WithNameFlag(t *testing.T) {
 	assert.NotNil(t, nameFlag)
 	nameFlag.SetAssigned(true)
 	nameFlag.SetValue("nonexistent-plugin-xyz-456")
+	assignSourceBaseFlag(ctx, server.URL)
 
 	err := cmd.Run(ctx, []string{})
 	assert.Error(t, err)
@@ -398,6 +436,8 @@ func TestNewInstallCommand_Run_WithNamesAndVersionFlags(t *testing.T) {
 	cleanup := setTestHomeDir(t, testHome)
 	defer cleanup()
 
+	server := startMockPluginSourceBase(t, nil, nil)
+
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(stdout, stderr)
@@ -412,6 +452,7 @@ func TestNewInstallCommand_Run_WithNamesAndVersionFlags(t *testing.T) {
 	assert.NotNil(t, versionFlag)
 	versionFlag.SetAssigned(true)
 	versionFlag.SetValue("1.0.0")
+	assignSourceBaseFlag(ctx, server.URL)
 
 	err := cmd.Run(ctx, []string{})
 	assert.Error(t, err)
@@ -447,6 +488,8 @@ func TestNewInstallCommand_Run_WithNamesAndEnablePreFlags(t *testing.T) {
 	cleanup := setTestHomeDir(t, testHome)
 	defer cleanup()
 
+	server := startMockPluginSourceBase(t, nil, nil)
+
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(stdout, stderr)
@@ -460,6 +503,7 @@ func TestNewInstallCommand_Run_WithNamesAndEnablePreFlags(t *testing.T) {
 	enablePreFlag := ctx.Flags().Get("enable-pre")
 	assert.NotNil(t, enablePreFlag)
 	enablePreFlag.SetAssigned(true)
+	assignSourceBaseFlag(ctx, server.URL)
 
 	err := cmd.Run(ctx, []string{})
 	assert.Error(t, err)
