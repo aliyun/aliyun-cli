@@ -33,6 +33,32 @@ func newEndpointTestContext(t *testing.T) *cli.Context {
 	return ctx
 }
 
+func clearEndpointTestEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{
+		"ALIBABA_CLOUD_IGNORE_PROFILE",
+		"ALIBABACLOUD_IGNORE_PROFILE",
+		"ALIBABA_CLOUD_PROFILE",
+		"ALIBABACLOUD_PROFILE",
+		"ALICLOUD_PROFILE",
+		"ALIBABA_CLOUD_REGION_ID",
+		"ALIBABACLOUD_REGION_ID",
+		"ALICLOUD_REGION_ID",
+		"REGION_ID",
+		"REGION",
+		"ALIBABA_CLOUD_ENDPOINT",
+		"ALIBABACLOUD_ENDPOINT",
+		"ALICLOUD_ENDPOINT",
+		"ENDPOINT",
+		"ALIBABA_CLOUD_ENDPOINT_TYPE",
+		"ALIBABACLOUD_ENDPOINT_TYPE",
+		"ALICLOUD_ENDPOINT_TYPE",
+		"ENDPOINT_TYPE",
+	} {
+		t.Setenv(key, "")
+	}
+}
+
 func writeEndpointTestConfig(t *testing.T, endpoint, endpointType, region string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -56,9 +82,7 @@ func writeEndpointTestConfig(t *testing.T, endpoint, endpointType, region string
 }
 
 func TestParseAndGetEndpoint(t *testing.T) {
-	t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "")
-	t.Setenv("ALIBABA_CLOUD_ENDPOINT", "")
-	t.Setenv("ALIBABA_CLOUD_ENDPOINT_TYPE", "")
+	clearEndpointTestEnv(t)
 
 	t.Run("endpoint from args wins", func(t *testing.T) {
 		ctx := newEndpointTestContext(t)
@@ -139,6 +163,28 @@ func TestParseAndGetEndpoint(t *testing.T) {
 		got, err := ParseAndGetEndpoint(ctx, nil)
 		require.NoError(t, err)
 		assert.Equal(t, "oss-cn-beijing-internal.aliyuncs.com", got)
+	})
+
+	t.Run("whitespace region from args returns error", func(t *testing.T) {
+		ctx := newEndpointTestContext(t)
+		path := writeEndpointTestConfig(t, "", "", "cn-hangzhou")
+		config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+		config.ConfigurePathFlag(ctx.Flags()).SetValue(path)
+
+		_, err := ParseAndGetEndpoint(ctx, []string{"--region", "  "})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "missing region")
+	})
+
+	t.Run("invalid region from args returns error", func(t *testing.T) {
+		ctx := newEndpointTestContext(t)
+		path := writeEndpointTestConfig(t, "", "", "cn-hangzhou")
+		config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+		config.ConfigurePathFlag(ctx.Flags()).SetValue(path)
+
+		_, err := ParseAndGetEndpoint(ctx, []string{"--region", "bad region!"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid region")
 	})
 }
 

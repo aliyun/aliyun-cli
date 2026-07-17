@@ -170,6 +170,13 @@ func ParseAndGetEndpoint(ctx *cli.Context, args []string) (string, error) {
 	} else if r, ok := ctx.Flags().GetValue("region"); ok && r != "" {
 		region = r
 	}
+	region = strings.TrimSpace(region)
+	if region == "" {
+		return "", fmt.Errorf("missing region for oss endpoint, use --region <regionId>")
+	}
+	if !config.IsRegion(region) {
+		return "", fmt.Errorf("invalid region %s", region)
+	}
 
 	return buildOssEndpoint(region, profile.EndpointType), nil
 }
