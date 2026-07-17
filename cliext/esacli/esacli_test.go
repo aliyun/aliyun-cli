@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -232,6 +233,227 @@ func TestEnsureNpmAvailablePrefersNextToNode(t *testing.T) {
 	}
 }
 
+func TestRunExecPathOverrideSkipsNpm(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	prepareConfig(t, home)
+
+	fakeExec := filepath.Join(t.TempDir(), "esa-cli")
+	if err := os.WriteFile(fakeExec, []byte("fake"), 0o755); err != nil {
+		t.Fatalf("write fake exec: %v", err)
+	}
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH", fakeExec)
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_NODE_PATH", "/fake/node")
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_NPM_PATH", "")
+
+	oldLook := lookPathFunc
+	lookPathFunc = func(name string) (string, error) {
+		t.Fatalf("lookPathFunc(%q) should not be called with EXEC_PATH override", name)
+		return "", exec.ErrNotFound
+	}
+	defer func() { lookPathFunc = oldLook }()
+
+	oldExec := execCommandFunc
+	execCommandFunc = func(string, ...string) *exec.Cmd {
+		return exec.Command(os.Args[0], "-test.run=^TestEsacliHelperProcess$")
+	}
+	defer func() { execCommandFunc = oldExec }()
+
+	ctx, _, _ := newOriginCtx()
+	if err := NewContext(ctx).Run([]string{"--help"}); err != nil {
+		t.Fatalf("Run with EXEC_PATH override: %v", err)
+	}
+}
+
+func TestRunWithoutExecPathOverrideRequiresNpm(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH", "")
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_NODE_PATH", "/fake/node")
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_NPM_PATH", "")
+
+	oldLook := lookPathFunc
+	lookPathFunc = func(name string) (string, error) {
+		if name != "npm" {
+			t.Fatalf("unexpected lookup: %s", name)
+		}
+		return "", exec.ErrNotFound
+	}
+	defer func() { lookPathFunc = oldLook }()
+
+	ctx, _, _ := newOriginCtx()
+	err := NewContext(ctx).Run(nil)
+	if err == nil || !strings.Contains(err.Error(), "npm not found") {
+		t.Fatalf("Run without npm: got %v", err)
+	}
+}
+
+func TestEsacliHelperProcess(t *testing.T) {}
+
+func TestEnsurePrefixAndPackage_ExecPathOverrideMissing(t *testing.T) {
+	tmp := t.TempDir()
+	oldGet := getConfigurePathFunc
+	getConfigurePathFunc = func() string { return tmp }
+	defer func() { getConfigurePathFunc = oldGet }()
+
+	missing := filepath.Join(tmp, "nope", "esa-cli")
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH", missing)
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	if err := c.InitBasicInfo(); err != nil {
+		t.Fatalf("InitBasicInfo: %v", err)
+	}
+	err := c.EnsurePrefixAndPackage()
+	if err == nil {
+		t.Fatalf("expected error for missing exec path override")
+	}
+	if !strings.Contains(err.Error(), "ALIBABA_CLOUD_ESA_CLI_EXEC_PATH") || !strings.Contains(err.Error(), missing) {
+		t.Errorf("error should name the env var and path: %v", err)
+	}
+}
+
+func TestEnsurePrefixAndPackage_ExecPathOverrideDirectory(t *testing.T) {
+	tmp := t.TempDir()
+	oldGet := getConfigurePathFunc
+	getConfigurePathFunc = func() string { return tmp }
+	defer func() { getConfigurePathFunc = oldGet }()
+
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH", tmp)
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	if err := c.InitBasicInfo(); err != nil {
+		t.Fatalf("InitBasicInfo: %v", err)
+	}
+	err := c.EnsurePrefixAndPackage()
+	if err == nil {
+		t.Fatalf("expected error when override points at a directory")
+	}
+	if !strings.Contains(err.Error(), "not a regular file") {
+		t.Errorf("error should say not a regular file: %v", err)
+	}
+}
+
+func TestEnsurePrefixAndPackage_ExecPathOverrideNotExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable bit is not enforced on Windows")
+	}
+	tmp := t.TempDir()
+	oldGet := getConfigurePathFunc
+	getConfigurePathFunc = func() string { return tmp }
+	defer func() { getConfigurePathFunc = oldGet }()
+
+	fake := filepath.Join(tmp, "esa-cli")
+	if err := os.WriteFile(fake, []byte("fake"), 0o644); err != nil {
+		t.Fatalf("write fake: %v", err)
+	}
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH", fake)
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	if err := c.InitBasicInfo(); err != nil {
+		t.Fatalf("InitBasicInfo: %v", err)
+	}
+	err := c.EnsurePrefixAndPackage()
+	if err == nil {
+		t.Fatalf("expected error when override is not executable")
+	}
+	if !strings.Contains(err.Error(), "not executable") {
+		t.Errorf("error should say not executable: %v", err)
+	}
+}
+
+func TestEnsurePrefixAndPackage_ExecPathOverrideExists(t *testing.T) {
+	tmp := t.TempDir()
+	oldGet := getConfigurePathFunc
+	getConfigurePathFunc = func() string { return tmp }
+	defer func() { getConfigurePathFunc = oldGet }()
+
+	fake := filepath.Join(tmp, "esa-cli")
+	if err := os.WriteFile(fake, []byte("fake"), 0o755); err != nil {
+		t.Fatalf("write fake: %v", err)
+	}
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH", fake)
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	if err := c.InitBasicInfo(); err != nil {
+		t.Fatalf("InitBasicInfo: %v", err)
+	}
+	if err := c.EnsurePrefixAndPackage(); err != nil {
+		t.Fatalf("existing override should not error: %v", err)
+	}
+}
+
+func TestUsingExecPathOverride(t *testing.T) {
+	c := &Context{}
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH", "")
+	if c.usingExecPathOverride() {
+		t.Errorf("empty env should not count as override")
+	}
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH", "  /some/path  ")
+	if !c.usingExecPathOverride() {
+		t.Errorf("non-empty env should count as override")
+	}
+}
+
+func TestApplyMainCliFlagsFromArgs_Shorthand(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  string
+		want string
+	}{
+		{name: "separate value", arg: "-p", want: "prod"},
+		{name: "equals value", arg: "-p=prod", want: "prod"},
+		{name: "joined value", arg: "-pprod", want: "prod"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _, _ := newOriginCtx()
+			ctx.Flags().Add(&cli.Flag{
+				Name:         "profile",
+				Shorthand:    'p',
+				AssignedMode: cli.AssignedOnce,
+				Category:     "config",
+			})
+
+			args := []string{"deploy", tt.arg}
+			if tt.arg == "-p" {
+				args = append(args, tt.want)
+			}
+			NewContext(ctx).applyMainCliFlagsFromArgs(args)
+
+			f := ctx.Flags().Get("profile")
+			if f == nil || !f.IsAssigned() {
+				t.Fatalf("profile flag should be assigned via %s", tt.arg)
+			}
+			if got, _ := f.GetValue(); got != tt.want {
+				t.Errorf("profile value: want %q got %q", tt.want, got)
+			}
+		})
+	}
+}
+
+func TestApplyMainCliFlagsFromArgs_LongInlineValue(t *testing.T) {
+	ctx, _, _ := newOriginCtx()
+	ctx.Flags().Add(&cli.Flag{
+		Name:         "profile",
+		AssignedMode: cli.AssignedOnce,
+		Category:     "config",
+	})
+
+	NewContext(ctx).applyMainCliFlagsFromArgs([]string{"deploy", "--profile=prod"})
+
+	f := ctx.Flags().Get("profile")
+	if f == nil || !f.IsAssigned() {
+		t.Fatalf("profile flag should be assigned")
+	}
+	if got, _ := f.GetValue(); got != "prod" {
+		t.Errorf("profile value: want %q got %q", "prod", got)
+	}
+}
+
 func TestRemoveFlagsForMainCli(t *testing.T) {
 	ctx, _, _ := newOriginCtx()
 	addConfigFlag(ctx, "region", "cn-hangzhou")
@@ -295,9 +517,9 @@ func TestPrepareEnv_AKMode(t *testing.T) {
 		t.Fatalf("PrepareEnv: %v", err)
 	}
 	want := map[string]string{
-		"ALIBABA_CLOUD_ACCESS_KEY_ID":      "ak",
-		"ALIBABA_CLOUD_ACCESS_KEY_SECRET":  "sk",
-		"ALIBABA_CLOUD_REGION_ID":          "cn-hangzhou",
+		"ALIBABA_CLOUD_ACCESS_KEY_ID":       "ak",
+		"ALIBABA_CLOUD_ACCESS_KEY_SECRET":   "sk",
+		"ALIBABA_CLOUD_REGION_ID":           "cn-hangzhou",
 		"ALIBABA_CLOUD_ESA_CLI_COMPAT_MODE": "aliyun esa-cli",
 	}
 	for k, v := range want {
