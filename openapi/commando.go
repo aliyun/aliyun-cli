@@ -92,7 +92,9 @@ func (c *Commando) InitWithCommand(cmd *cli.Command) {
 
 func DetectInConfigureMode(flags *cli.FlagSet) bool {
 	mode, modeExist := flags.GetValue(config.ModeFlagName)
-	if !modeExist || config.Anonymous == config.NormalizeMode(mode) {
+	// Empty --mode is treated as unset so OverwriteWithFlags still runs
+	// (env credentials / timeout / retry flags remain effective).
+	if !modeExist || strings.TrimSpace(mode) == "" || config.Anonymous == config.NormalizeMode(mode) {
 		return true
 	}
 	// if mode exist, check if other flags exist
@@ -510,17 +512,20 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		return err
 	}
 
+	if CliDryRunFlag(ctx.Flags()).IsAssigned() {
+		oc, ok := apiContext.(*OpenapiContext)
+		if !ok {
+			return fmt.Errorf("--cli-dry-run is only supported for OpenAPI invoke path")
+		}
+		return processCliDryRunOpenapi(ctx, oc)
+	}
+
 	if DryRunJsonFlag(ctx.Flags()).IsAssigned() {
 		oc, ok := apiContext.(*OpenapiContext)
 		if !ok {
 			return fmt.Errorf("--cli-dry-run-json is only supported for OpenAPI invoke path")
 		}
-		line, err := marshalDryRunOpenapiMeta(ctx, oc)
-		if err != nil {
-			return err
-		}
-		cli.Println(ctx.Stdout(), line)
-		return nil
+		return processCliDryRunOpenapiJson(ctx, oc)
 	}
 
 	err = hookHttpContextCall(apiContext.Call)()
@@ -569,13 +574,12 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		return err
 	}
 
+	if CliDryRunFlag(ctx.Flags()).IsAssigned() {
+		return processCliDryRun(ctx, invoker)
+	}
+
 	if DryRunJsonFlag(ctx.Flags()).IsAssigned() {
-		line, err := marshalDryRunInvokeMeta(c.library, invoker)
-		if err != nil {
-			return err
-		}
-		cli.Println(ctx.Stdout(), line)
-		return nil
+		return processCliDryRunJson(ctx, invoker)
 	}
 	// --estimate-cost: terminal branch. Must come before --dryrun so we don't
 	// hit TransToAcsRequest side effects on the way to a quote.
