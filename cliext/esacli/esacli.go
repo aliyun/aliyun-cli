@@ -171,12 +171,9 @@ func (c *Context) EnsureNpmAvailable() error {
 func (c *Context) EnsurePrefixAndPackage() error {
 	if c.usingExecPathOverride() {
 		// The user opted out of the managed install; make sure the override
-		// actually resolves so we fail fast with an actionable message
+		// is a usable executable so we fail fast with an actionable message
 		// instead of a cryptic exec error later.
-		if !c.installed {
-			return fmt.Errorf("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH=%s does not point to an existing file", c.execFilePath)
-		}
-		return nil
+		return c.validateExecPathOverride()
 	}
 
 	if err := os.MkdirAll(c.prefixPath, 0o755); err != nil {
@@ -518,6 +515,27 @@ func fileExists(p string) bool {
 // npm install/upgrade path (and the npm requirement) is bypassed.
 func (c *Context) usingExecPathOverride() bool {
 	return strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH")) != ""
+}
+
+// validateExecPathOverride ensures ALIBABA_CLOUD_ESA_CLI_EXEC_PATH points at a
+// regular, executable file (existence alone is not enough — a directory or a
+// non-executable file would otherwise surface as a cryptic exec failure).
+func (c *Context) validateExecPathOverride() error {
+	info, err := os.Stat(c.execFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH=%q does not point to an existing file", c.execFilePath)
+		}
+		return fmt.Errorf("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH=%q: %v", c.execFilePath, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH=%q is not a regular file", c.execFilePath)
+	}
+	// Windows does not use Unix permission bits for executability.
+	if c.osType != "windows" && info.Mode()&0o111 == 0 {
+		return fmt.Errorf("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH=%q is not executable", c.execFilePath)
+	}
+	return nil
 }
 
 var getNodeMajorFunc = getNodeMajor

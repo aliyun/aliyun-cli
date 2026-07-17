@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -308,6 +309,57 @@ func TestEnsurePrefixAndPackage_ExecPathOverrideMissing(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "ALIBABA_CLOUD_ESA_CLI_EXEC_PATH") || !strings.Contains(err.Error(), missing) {
 		t.Errorf("error should name the env var and path: %v", err)
+	}
+}
+
+func TestEnsurePrefixAndPackage_ExecPathOverrideDirectory(t *testing.T) {
+	tmp := t.TempDir()
+	oldGet := getConfigurePathFunc
+	getConfigurePathFunc = func() string { return tmp }
+	defer func() { getConfigurePathFunc = oldGet }()
+
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH", tmp)
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	if err := c.InitBasicInfo(); err != nil {
+		t.Fatalf("InitBasicInfo: %v", err)
+	}
+	err := c.EnsurePrefixAndPackage()
+	if err == nil {
+		t.Fatalf("expected error when override points at a directory")
+	}
+	if !strings.Contains(err.Error(), "not a regular file") {
+		t.Errorf("error should say not a regular file: %v", err)
+	}
+}
+
+func TestEnsurePrefixAndPackage_ExecPathOverrideNotExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable bit is not enforced on Windows")
+	}
+	tmp := t.TempDir()
+	oldGet := getConfigurePathFunc
+	getConfigurePathFunc = func() string { return tmp }
+	defer func() { getConfigurePathFunc = oldGet }()
+
+	fake := filepath.Join(tmp, "esa-cli")
+	if err := os.WriteFile(fake, []byte("fake"), 0o644); err != nil {
+		t.Fatalf("write fake: %v", err)
+	}
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH", fake)
+
+	ctx, _, _ := newOriginCtx()
+	c := NewContext(ctx)
+	if err := c.InitBasicInfo(); err != nil {
+		t.Fatalf("InitBasicInfo: %v", err)
+	}
+	err := c.EnsurePrefixAndPackage()
+	if err == nil {
+		t.Fatalf("expected error when override is not executable")
+	}
+	if !strings.Contains(err.Error(), "not executable") {
+		t.Errorf("error should say not executable: %v", err)
 	}
 }
 
