@@ -265,6 +265,27 @@ func TestRunExecPathOverrideSkipsNpm(t *testing.T) {
 	}
 }
 
+func TestRunWithoutExecPathOverrideRequiresNpm(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_EXEC_PATH", "")
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_NODE_PATH", "/fake/node")
+	t.Setenv("ALIBABA_CLOUD_ESA_CLI_NPM_PATH", "")
+
+	oldLook := lookPathFunc
+	lookPathFunc = func(name string) (string, error) {
+		if name != "npm" {
+			t.Fatalf("unexpected lookup: %s", name)
+		}
+		return "", exec.ErrNotFound
+	}
+	defer func() { lookPathFunc = oldLook }()
+
+	ctx, _, _ := newOriginCtx()
+	err := NewContext(ctx).Run(nil)
+	if err == nil || !strings.Contains(err.Error(), "npm not found") {
+		t.Fatalf("Run without npm: got %v", err)
+	}
+}
+
 func TestEsacliHelperProcess(t *testing.T) {}
 
 func TestEnsurePrefixAndPackage_ExecPathOverrideMissing(t *testing.T) {
@@ -359,6 +380,25 @@ func TestApplyMainCliFlagsFromArgs_Shorthand(t *testing.T) {
 				t.Errorf("profile value: want %q got %q", tt.want, got)
 			}
 		})
+	}
+}
+
+func TestApplyMainCliFlagsFromArgs_LongInlineValue(t *testing.T) {
+	ctx, _, _ := newOriginCtx()
+	ctx.Flags().Add(&cli.Flag{
+		Name:         "profile",
+		AssignedMode: cli.AssignedOnce,
+		Category:     "config",
+	})
+
+	NewContext(ctx).applyMainCliFlagsFromArgs([]string{"deploy", "--profile=prod"})
+
+	f := ctx.Flags().Get("profile")
+	if f == nil || !f.IsAssigned() {
+		t.Fatalf("profile flag should be assigned")
+	}
+	if got, _ := f.GetValue(); got != "prod" {
+		t.Errorf("profile value: want %q got %q", "prod", got)
 	}
 }
 
