@@ -63,8 +63,28 @@ func TestSplitProcessCommand(t *testing.T) {
 			want:  []string{"tool", `say "hi"`},
 		},
 		{
+			name:  "empty double quoted argument",
+			input: `tool "" arg`,
+			want:  []string{"tool", "", "arg"},
+		},
+		{
+			name:  "empty single quoted argument",
+			input: `tool '' arg`,
+			want:  []string{"tool", "", "arg"},
+		},
+		{
+			name:  "adjacent quoted segments form one argument",
+			input: `tool "a b"'c d'`,
+			want:  []string{"tool", "a bc d"},
+		},
+		{
 			name:    "empty",
 			input:   "   ",
+			wantErr: "process_command is empty",
+		},
+		{
+			name:    "empty quoted command",
+			input:   `""`,
 			wantErr: "process_command is empty",
 		},
 		{
