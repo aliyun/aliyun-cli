@@ -82,6 +82,18 @@ func TestSplitProcessCommand(t *testing.T) {
 			want:  []string{"tool", "a bc d"},
 		},
 		{
+			name:          "backslash-newline outside quotes is line continuation",
+			input:         "tool arg1 \\\n arg2",
+			want:          []string{"tool", "arg1", "arg2"},
+			skipOnWindows: true,
+		},
+		{
+			name:          "backslash-newline inside double quotes is line continuation",
+			input:         "tool \"a\\\nb\"",
+			want:          []string{"tool", "ab"},
+			skipOnWindows: true,
+		},
+		{
 			name:    "empty",
 			input:   "   ",
 			wantErr: "process_command is empty",
