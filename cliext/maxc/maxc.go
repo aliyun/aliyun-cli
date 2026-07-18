@@ -408,8 +408,9 @@ func extractTarGz(src, destDir string) error {
 
 // createSymlinkOrCopy creates a symlink; on failure (common on non-admin Windows
 // without Developer Mode / SeCreateSymbolicLinkPrivilege), falls back to copying
-// the target file. Directory links and missing targets are skipped on Windows so
-// install is not aborted, matching saectl/plugin untar behavior.
+// the target file. A failed copy attempt is always reported. Directory links and
+// missing targets are skipped on Windows so install is not aborted, matching
+// saectl/plugin untar behavior.
 func createSymlinkOrCopy(linkPath, linkTarget string) error {
 	err := osSymlinkFunc(linkTarget, linkPath)
 	if err == nil {
@@ -423,12 +424,13 @@ func createSymlinkOrCopy(linkPath, linkTarget string) error {
 	}
 	info, statErr := os.Stat(src)
 	if statErr == nil && !info.IsDir() {
-		if copyErr := copyFileWithMode(src, linkPath, info.Mode().Perm()); copyErr == nil {
-			return nil
-		}
+		// Copy attempted: surface its failure instead of silently producing a
+		// partial install.
+		return copyFileWithMode(src, linkPath, info.Mode().Perm())
 	}
 	if runtimeGOOSFunc() == "windows" {
-		// Align with saectl / plugin manager: skip rather than fail install.
+		// Target missing or is a directory: skip rather than fail install,
+		// aligning with saectl / plugin manager.
 		return nil
 	}
 	return symlinkErr

@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -678,6 +679,15 @@ func TestExtractTarGz_PreservesSymlink(t *testing.T) {
 	}
 
 	linkPath := filepath.Join(dest, "pkg", "link.txt")
+	if runtime.GOOS != "windows" {
+		fi, err := os.Lstat(linkPath)
+		if err != nil {
+			t.Fatalf("lstat link: %v", err)
+		}
+		if fi.Mode()&os.ModeSymlink == 0 {
+			t.Errorf("expected %s to be a symlink on %s", linkPath, runtime.GOOS)
+		}
+	}
 	body, err := os.ReadFile(linkPath)
 	if err != nil {
 		t.Fatalf("readfile via link: %v", err)
@@ -701,7 +711,11 @@ func TestCreateSymlinkOrCopy_SymlinkSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// On platforms without symlink privilege, fallback copy is acceptable.
+	// On Windows without symlink privilege the fallback copy is acceptable;
+	// elsewhere a real symlink must be created.
+	if runtime.GOOS != "windows" && fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("expected a real symlink on %s, got mode %v", runtime.GOOS, fi.Mode())
+	}
 	body, err := os.ReadFile(link)
 	if err != nil {
 		t.Fatal(err)
@@ -709,7 +723,6 @@ func TestCreateSymlinkOrCopy_SymlinkSuccess(t *testing.T) {
 	if string(body) != "ok" {
 		t.Errorf("body = %q", string(body))
 	}
-	_ = fi
 }
 
 func TestExtractTarGz_SymlinkFallbackToCopy(t *testing.T) {
@@ -815,6 +828,34 @@ func TestCreateSymlinkOrCopy_NonWindowsReturnsSymlinkError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "privilege not held") {
 		t.Errorf("error = %v, want privilege not held", err)
+	}
+}
+
+func TestCreateSymlinkOrCopy_WindowsCopyFailureIsReported(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "real.txt")
+	if err := os.WriteFile(src, []byte("payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(tmp, "link.txt")
+
+	oldSym := osSymlinkFunc
+	oldOS := runtimeGOOSFunc
+	oldCopy := ioCopyFunc
+	osSymlinkFunc = func(string, string) error { return errors.New("privilege not held") }
+	runtimeGOOSFunc = func() string { return "windows" }
+	ioCopyFunc = func(io.Writer, io.Reader) (int64, error) {
+		return 0, errors.New("disk full")
+	}
+	defer func() {
+		osSymlinkFunc = oldSym
+		runtimeGOOSFunc = oldOS
+		ioCopyFunc = oldCopy
+	}()
+
+	err := createSymlinkOrCopy(link, "real.txt")
+	if err == nil || !strings.Contains(err.Error(), "disk full") {
+		t.Fatalf("error = %v, want copy failure surfaced", err)
 	}
 }
 
