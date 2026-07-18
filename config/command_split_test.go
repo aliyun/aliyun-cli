@@ -15,6 +15,7 @@
 package config
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,8 @@ func TestSplitProcessCommand(t *testing.T) {
 		input   string
 		want    []string
 		wantErr string
+		// skipOnWindows: POSIX-only escape semantics
+		skipOnWindows bool
 	}{
 		{
 			name:  "simple",
@@ -53,9 +56,10 @@ func TestSplitProcessCommand(t *testing.T) {
 			want:  []string{"tool", "--name", "First Last"},
 		},
 		{
-			name:  "escaped space",
-			input: `tool arg\ with\ space`,
-			want:  []string{"tool", "arg with space"},
+			name:          "escaped space",
+			input:         `tool arg\ with\ space`,
+			want:          []string{"tool", "arg with space"},
+			skipOnWindows: true,
 		},
 		{
 			name:  "escaped quote inside double quotes",
@@ -98,14 +102,18 @@ func TestSplitProcessCommand(t *testing.T) {
 			wantErr: "unclosed quote",
 		},
 		{
-			name:    "trailing backslash",
-			input:   `tool\`,
-			wantErr: "trailing backslash",
+			name:          "trailing backslash",
+			input:         `tool\`,
+			wantErr:       "trailing backslash",
+			skipOnWindows: true,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.skipOnWindows && runtime.GOOS == "windows" {
+				t.Skip("POSIX escape semantics not used on Windows")
+			}
 			got, err := splitProcessCommand(tc.input)
 			if tc.wantErr != "" {
 				assert.Error(t, err)
@@ -116,4 +124,45 @@ func TestSplitProcessCommand(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+func TestSplitProcessCommandForOS_WindowsKeepsBackslashes(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  []string
+	}{
+		{
+			name:  "unquoted windows path",
+			input: `C:\tools\cred.exe get`,
+			want:  []string{`C:\tools\cred.exe`, "get"},
+		},
+		{
+			name:  "quoted program files path",
+			input: `"C:\Program Files\tool\cred.exe" get`,
+			want:  []string{`C:\Program Files\tool\cred.exe`, "get"},
+		},
+		{
+			name:  "escaped quote still works",
+			input: `tool "say \"hi\""`,
+			want:  []string{"tool", `say "hi"`},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := splitProcessCommandForOS(tc.input, "windows")
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestSplitProcessCommandForOS_UnixEscapes(t *testing.T) {
+	got, err := splitProcessCommandForOS(`tool arg\ with\ space`, "linux")
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"tool", "arg with space"}, got)
+
+	_, err = splitProcessCommandForOS(`tool\`, "linux")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "trailing backslash")
 }

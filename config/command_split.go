@@ -16,6 +16,7 @@ package config
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
 	"unicode"
 )
@@ -23,15 +24,25 @@ import (
 // splitProcessCommand splits process_command into argv with quote support.
 // Whitespace outside quotes separates arguments. Double/single quotes group a
 // single argument so Windows paths like "C:\Program Files\tool.exe" work.
-// Escape rules follow POSIX shlex: outside quotes, '\' escapes the next rune;
-// inside double quotes, '\' only escapes '"', '\', '$', '`' and newline;
-// inside single quotes, all characters are literal.
+//
+// On Unix, escape rules follow POSIX shlex: outside quotes, '\' escapes the
+// next rune; inside double quotes, '\' only escapes '"', '\', '$', '`' and
+// newline; inside single quotes, all characters are literal.
+//
+// On Windows, '\' is a path separator and is treated as a literal (except
+// '\"' inside double quotes), so unquoted paths like C:\tools\cred.exe keep
+// their backslashes.
 func splitProcessCommand(command string) ([]string, error) {
+	return splitProcessCommandForOS(command, runtime.GOOS)
+}
+
+func splitProcessCommandForOS(command, goos string) ([]string, error) {
 	command = strings.TrimSpace(command)
 	if command == "" {
 		return nil, fmt.Errorf("process_command is empty")
 	}
 
+	windows := goos == "windows"
 	var args []string
 	var current strings.Builder
 	inSingle := false
@@ -66,7 +77,14 @@ func splitProcessCommand(command string) ([]string, error) {
 			}
 			if r == '\\' && i+1 < len(runes) {
 				next := runes[i+1]
-				if next == '"' || next == '\\' || next == '$' || next == '`' || next == '\n' {
+				if windows {
+					// On Windows only \" is an escape inside double quotes.
+					if next == '"' {
+						current.WriteRune(next)
+						i++
+						continue
+					}
+				} else if next == '"' || next == '\\' || next == '$' || next == '`' || next == '\n' {
 					current.WriteRune(next)
 					i++
 					continue
@@ -75,7 +93,14 @@ func splitProcessCommand(command string) ([]string, error) {
 			current.WriteRune(r)
 			continue
 		}
+		// unquoted
 		if r == '\\' {
+			if windows {
+				// Path separator — keep literal.
+				hasToken = true
+				current.WriteRune(r)
+				continue
+			}
 			if i+1 >= len(runes) {
 				return nil, fmt.Errorf("invalid process_command: trailing backslash")
 			}
