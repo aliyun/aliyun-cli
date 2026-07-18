@@ -594,7 +594,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 
 		args, err := splitProcessCommand(cp.ProcessCommand)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("profile %s: %s", cp.Name, err.Error())
 		}
 		cmd := exec.Command(args[0], args[1:]...)
 

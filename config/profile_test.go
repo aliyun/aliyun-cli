@@ -1363,6 +1363,25 @@ echo 'This is not a valid JSON'
 	}
 }
 
+func TestProfile_GetCredential_ExternalInvalidProcessCommand(t *testing.T) {
+	profile := Profile{
+		Name:           "badquote",
+		Mode:           External,
+		ProcessCommand: `"C:\Program Files\tool.exe`,
+	}
+	config := &Configuration{
+		CurrentProfile: profile.Name,
+		Profiles:       []Profile{profile},
+	}
+	profile.parent = config
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	_, err := profile.GetCredential(ctx, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "profile badquote")
+	assert.Contains(t, err.Error(), "unclosed quote")
+}
+
 func TestProfile_GetCredential_ExternalProcessDisabled(t *testing.T) {
 	orig := os.Getenv(EnvDisableExternalProcess)
 	os.Setenv(EnvDisableExternalProcess, "1")
