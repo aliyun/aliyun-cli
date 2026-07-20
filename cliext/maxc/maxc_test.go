@@ -8,12 +8,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -677,19 +679,304 @@ func TestExtractTarGz_PreservesSymlink(t *testing.T) {
 	}
 
 	linkPath := filepath.Join(dest, "pkg", "link.txt")
-	fi, err := os.Lstat(linkPath)
-	if err != nil {
-		t.Fatalf("lstat link: %v", err)
-	}
-	if fi.Mode()&os.ModeSymlink == 0 {
-		t.Errorf("link.txt is not a symlink (mode=%v)", fi.Mode())
+	if runtime.GOOS != "windows" {
+		fi, err := os.Lstat(linkPath)
+		if err != nil {
+			t.Fatalf("lstat link: %v", err)
+		}
+		if fi.Mode()&os.ModeSymlink == 0 {
+			t.Errorf("expected %s to be a symlink on %s", linkPath, runtime.GOOS)
+		}
 	}
 	body, err := os.ReadFile(linkPath)
 	if err != nil {
-		t.Fatalf("readfile via symlink: %v", err)
+		t.Fatalf("readfile via link: %v", err)
 	}
 	if string(body) != "hello" {
-		t.Errorf("symlink dereferenced = %q, want 'hello'", string(body))
+		t.Errorf("link content = %q, want 'hello'", string(body))
+	}
+}
+
+func TestCreateSymlinkOrCopy_SymlinkSuccess(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "real.txt")
+	if err := os.WriteFile(src, []byte("ok"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(tmp, "link.txt")
+	if err := createSymlinkOrCopy(link, "real.txt"); err != nil {
+		t.Fatalf("createSymlinkOrCopy: %v", err)
+	}
+	fi, err := os.Lstat(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// On Windows without symlink privilege the fallback copy is acceptable;
+	// elsewhere a real symlink must be created.
+	if runtime.GOOS != "windows" && fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("expected a real symlink on %s, got mode %v", runtime.GOOS, fi.Mode())
+	}
+	body, err := os.ReadFile(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "ok" {
+		t.Errorf("body = %q", string(body))
+	}
+}
+
+func TestExtractTarGz_SymlinkFallbackToCopy(t *testing.T) {
+	tarBytes := buildTarGz(t, []tarEntry{
+		{Name: "pkg/", Mode: 0o755},
+		{Name: "pkg/real.txt", Body: "hello", Mode: 0o644},
+		{Name: "pkg/link.txt", Linkname: "real.txt"},
+	})
+	tmp := t.TempDir()
+	tarPath := filepath.Join(tmp, "t.tar.gz")
+	if err := os.WriteFile(tarPath, tarBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(tmp, "out")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	old := osSymlinkFunc
+	osSymlinkFunc = func(string, string) error { return errors.New("privilege not held") }
+	defer func() { osSymlinkFunc = old }()
+
+	if err := extractTarGz(tarPath, dest); err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dest, "pkg", "link.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "hello" {
+		t.Errorf("body = %q, want hello", string(body))
+	}
+}
+
+func TestCreateSymlinkOrCopy_FallsBackToCopy(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "real.txt")
+	if err := os.WriteFile(src, []byte("payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(tmp, "link.txt")
+
+	old := osSymlinkFunc
+	osSymlinkFunc = func(string, string) error { return errors.New("privilege not held") }
+	defer func() { osSymlinkFunc = old }()
+
+	if err := createSymlinkOrCopy(link, "real.txt"); err != nil {
+		t.Fatalf("createSymlinkOrCopy: %v", err)
+	}
+	fi, err := os.Lstat(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("expected regular file copy, got symlink")
+	}
+	body, err := os.ReadFile(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "payload" {
+		t.Errorf("body = %q, want payload", string(body))
+	}
+}
+
+func TestCreateSymlinkOrCopy_WindowsSkipsMissingTarget(t *testing.T) {
+	tmp := t.TempDir()
+	link := filepath.Join(tmp, "missing-link")
+
+	oldSym := osSymlinkFunc
+	oldOS := runtimeGOOSFunc
+	osSymlinkFunc = func(string, string) error { return errors.New("privilege not held") }
+	runtimeGOOSFunc = func() string { return "windows" }
+	defer func() {
+		osSymlinkFunc = oldSym
+		runtimeGOOSFunc = oldOS
+	}()
+
+	if err := createSymlinkOrCopy(link, "no-such-file"); err != nil {
+		t.Fatalf("windows should skip missing target, got %v", err)
+	}
+	if _, err := os.Lstat(link); !os.IsNotExist(err) {
+		t.Fatalf("link should not exist, lstat err=%v", err)
+	}
+}
+
+func TestCreateSymlinkOrCopy_NonWindowsReturnsSymlinkError(t *testing.T) {
+	tmp := t.TempDir()
+	link := filepath.Join(tmp, "missing-link")
+
+	oldSym := osSymlinkFunc
+	oldOS := runtimeGOOSFunc
+	osSymlinkFunc = func(string, string) error { return errors.New("privilege not held") }
+	runtimeGOOSFunc = func() string { return "linux" }
+	defer func() {
+		osSymlinkFunc = oldSym
+		runtimeGOOSFunc = oldOS
+	}()
+
+	err := createSymlinkOrCopy(link, "no-such-file")
+	if err == nil {
+		t.Fatal("expected symlink error on non-windows")
+	}
+	if !strings.Contains(err.Error(), "privilege not held") {
+		t.Errorf("error = %v, want privilege not held", err)
+	}
+}
+
+func TestCreateSymlinkOrCopy_WindowsCopyFailureIsReported(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "real.txt")
+	if err := os.WriteFile(src, []byte("payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(tmp, "link.txt")
+
+	oldSym := osSymlinkFunc
+	oldOS := runtimeGOOSFunc
+	oldCopy := ioCopyFunc
+	osSymlinkFunc = func(string, string) error { return errors.New("privilege not held") }
+	runtimeGOOSFunc = func() string { return "windows" }
+	ioCopyFunc = func(io.Writer, io.Reader) (int64, error) {
+		return 0, errors.New("disk full")
+	}
+	defer func() {
+		osSymlinkFunc = oldSym
+		runtimeGOOSFunc = oldOS
+		ioCopyFunc = oldCopy
+	}()
+
+	err := createSymlinkOrCopy(link, "real.txt")
+	if err == nil || !strings.Contains(err.Error(), "disk full") {
+		t.Fatalf("error = %v, want copy failure surfaced", err)
+	}
+}
+
+func TestCreateSymlinkOrCopy_WindowsSkipsDirectoryTarget(t *testing.T) {
+	tmp := t.TempDir()
+	dir := filepath.Join(tmp, "dir")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(tmp, "dir-link")
+
+	oldSym := osSymlinkFunc
+	oldOS := runtimeGOOSFunc
+	osSymlinkFunc = func(string, string) error { return errors.New("privilege not held") }
+	runtimeGOOSFunc = func() string { return "windows" }
+	defer func() {
+		osSymlinkFunc = oldSym
+		runtimeGOOSFunc = oldOS
+	}()
+
+	if err := createSymlinkOrCopy(link, "dir"); err != nil {
+		t.Fatalf("windows should skip dir symlink, got %v", err)
+	}
+}
+
+func TestCopyFileWithMode(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "src")
+	dst := filepath.Join(tmp, "dst")
+	if err := os.WriteFile(src, []byte("abc"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyFileWithMode(src, dst, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "abc" {
+		t.Errorf("body = %q", string(body))
+	}
+}
+
+func TestCopyFileWithMode_OpenSourceError(t *testing.T) {
+	err := copyFileWithMode(filepath.Join(t.TempDir(), "nope"), filepath.Join(t.TempDir(), "dst"), 0o644)
+	if err == nil {
+		t.Fatal("expected open error")
+	}
+}
+
+func TestCopyFileWithMode_CreateDestError(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "src")
+	if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Parent path component is a file → OpenFile fails.
+	blocker := filepath.Join(tmp, "blocker")
+	if err := os.WriteFile(blocker, []byte("f"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(blocker, "child")
+	err := copyFileWithMode(src, dst, 0o644)
+	if err == nil {
+		t.Fatal("expected create dest error")
+	}
+}
+
+func TestCopyFileWithMode_CopyError(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "src")
+	dst := filepath.Join(tmp, "dst")
+	if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := ioCopyFunc
+	ioCopyFunc = func(dst io.Writer, src io.Reader) (int64, error) {
+		return 0, errors.New("copy failed")
+	}
+	defer func() { ioCopyFunc = old }()
+
+	err := copyFileWithMode(src, dst, 0o644)
+	if err == nil || !strings.Contains(err.Error(), "copy failed") {
+		t.Fatalf("error = %v, want copy failed", err)
+	}
+	if _, err := os.Stat(dst); !os.IsNotExist(err) {
+		t.Fatal("incomplete dst should be removed")
+	}
+}
+
+func TestExtractTarGz_SymlinkFailPropagatesOnNonWindows(t *testing.T) {
+	tarBytes := buildTarGz(t, []tarEntry{
+		{Name: "pkg/", Mode: 0o755},
+		{Name: "pkg/orphan", Linkname: "missing.txt"},
+	})
+	tmp := t.TempDir()
+	tarPath := filepath.Join(tmp, "t.tar.gz")
+	if err := os.WriteFile(tarPath, tarBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(tmp, "out")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldSym := osSymlinkFunc
+	oldOS := runtimeGOOSFunc
+	osSymlinkFunc = func(string, string) error { return errors.New("privilege not held") }
+	runtimeGOOSFunc = func() string { return "linux" }
+	defer func() {
+		osSymlinkFunc = oldSym
+		runtimeGOOSFunc = oldOS
+	}()
+
+	err := extractTarGz(tarPath, dest)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "privilege not held") {
+		t.Errorf("error = %v", err)
 	}
 }
 

@@ -592,7 +592,10 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			return nil, fmt.Errorf("external credential source is disabled by %s (External mode)", EnvDisableExternalProcess)
 		}
 
-		args := strings.Fields(cp.ProcessCommand)
+		args, err := splitProcessCommand(cp.ProcessCommand)
+		if err != nil {
+			return nil, fmt.Errorf("profile %s: %s", cp.Name, err.Error())
+		}
 		cmd := exec.Command(args[0], args[1:]...)
 
 		// 创建一个buffer来捕获标准输出
