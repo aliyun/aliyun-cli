@@ -14,13 +14,16 @@
 package openapi
 
 import (
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
+	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/stretchr/testify/assert"
+
 	"bytes"
 	"testing"
-
-  	"github.com/aliyun/aliyun-cli/v3/cli"
-	"github.com/aliyun/aliyun-cli/v3/meta"
-	"github.com/aliyun/aliyun-cli/v3/newmeta"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestLibrary_PrintProducts(t *testing.T) {
@@ -71,46 +74,122 @@ func TestLibrary_PrintApiUsage(t *testing.T) {
 	assert.Nil(t, err)
 }
 
-func Test_printParameters(t *testing.T) {
-	t.Setenv("NO_COLOR", "")
+func TestLibrary_PrintApiUsage_PrintsCanonicalExamples(t *testing.T) {
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "demo", Version: "2026-01-01", ApiStyle: "rpc", ApiNames: []string{"CreateThing"}},
+	})
+	assert.Nil(t, err)
 
 	w := new(bytes.Buffer)
-	params := []meta.Parameter{
-		{
-			Name:   "HiddenParam",
-			Hidden: true,
-		},
-		{
-			Name:     "DomainParam",
-			Position: "Domain",
-		},
-		{
-			Name:     "HeaderParam",
-			Position: "Header",
-		},
-		{
-			Name: "Filters",
-			Type: "RepeatList",
-			SubParameters: []meta.Parameter{
-				{
-					Name: "Values",
-					Type: "RepeatList",
-				},
+	library := &Library{
+		builtinRepo: repo,
+		canonicalRepo: &byNameOnlyCanonicalRepo{apis: map[string]*canonicalmeta.API{
+			"CreateThing": {
+				Name:         "CreateThing",
+				Protocol:     "HTTPS",
+				Method:       "POST",
+				KebabExample: "aliyun demo create-thing --name foo",
+				CamelExample: "aliyun demo CreateThing --Name foo",
 			},
-		},
-		{
-			Name: "Name",
-			Type: "String",
+		}},
+		writer: w,
+	}
+
+	err = library.PrintApiUsage("demo", "CreateThing")
+	assert.Nil(t, err)
+	out := w.String()
+	assert.Contains(t, out, "Example:")
+	assert.Contains(t, out, "(Recommended) New CLI:")
+	assert.Contains(t, out, "aliyun demo create-thing --name foo")
+	assert.Contains(t, out, "Legacy CLI:")
+	assert.Contains(t, out, "aliyun demo CreateThing --Name foo")
+}
+
+func TestLibrary_GetApi_NoLegacyRuntimeFallback(t *testing.T) {
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "ecs", Version: "2014-05-26", ApiNames: []string{"DescribeRegions"}},
+	})
+	assert.Nil(t, err)
+	library := &Library{builtinRepo: repo}
+
+	_, ok := library.GetApi("ecs", "2014-05-26", "DescribeRegions")
+	assert.False(t, ok)
+	assert.Nil(t, library.GetCanonicalApi("ecs", "2014-05-26", "DescribeRegions"))
+}
+
+type byNameOnlyCanonicalRepo struct {
+	apis map[string]*canonicalmeta.API
+}
+
+func (r *byNameOnlyCanonicalRepo) GetAPI(productCode, version, apiName string) (*canonicalmeta.API, error) {
+	if api, ok := r.apis[apiName]; ok {
+		return api, nil
+	}
+	return nil, fmt.Errorf("api not found")
+}
+
+func (r *byNameOnlyCanonicalRepo) GetAPIByPath(productCode, version, method, path string, apiNames []string) (*canonicalmeta.API, error) {
+	for _, apiName := range apiNames {
+		api, ok := r.apis[apiName]
+		if ok && api.MatchLegacyPath(method, path) {
+			return api, nil
+		}
+	}
+	return nil, fmt.Errorf("api not found")
+}
+
+func TestLibrary_GetApiByPath_UsesProductApiList(t *testing.T) {
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "demo", Version: "2026-01-01", ApiStyle: "restful", ApiNames: []string{"ListedMatch"}},
+	})
+	assert.Nil(t, err)
+
+	library := &Library{
+		builtinRepo: repo,
+		canonicalRepo: &byNameOnlyCanonicalRepo{apis: map[string]*canonicalmeta.API{
+			"ListedMatch": {Name: "ListedMatch", Method: "GET", PathPattern: "/items/[id]"},
+		}},
+	}
+
+	api, ok := library.GetApiByPath("demo", "2026-01-01", "GET", "/items/123")
+	assert.True(t, ok)
+	assert.Equal(t, "ListedMatch", api.Name)
+}
+
+func TestLibrary_PrintApiUsage_UsesV1BodyParameters(t *testing.T) {
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "demo", Version: "2026-01-01", ApiStyle: "rpc", ApiNames: []string{"CreateReport"}},
+	})
+	assert.Nil(t, err)
+
+	w := new(bytes.Buffer)
+	library := &Library{
+		builtinRepo:   repo,
+		canonicalRepo: canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata")),
+		writer:        w,
+	}
+
+	err = library.PrintApiUsage("demo", "CreateReport")
+	assert.Nil(t, err)
+	out := w.String()
+	assert.Contains(t, out, "--body")
+	assert.NotContains(t, out, "--ReportName")
+	assert.NotContains(t, out, "--WorkspaceId")
+}
+
+func TestPrintLegacyViews_DisplaysCanonicalLowercaseArrayType(t *testing.T) {
+	api := &canonicalmeta.API{
+		Parameters: []canonicalmeta.Parameter{
+			{RawName: "Items", Type: "array", ParamStyle: "repeatList"},
 		},
 	}
-	printParameters(w, params, "", &newmeta.APIDetail{})
 
-	expected := "  --" + cli.Colorized(cli.Cyan, "Filters.n.") + cli.Colorized(cli.Cyan, "Values") + ".n\tRepeatList\tOptional\n\n  \n\n" +
-		"  --" + cli.Colorized(cli.Cyan, "") + cli.Colorized(cli.Cyan, "Name") + "\tString\tOptional\n\n  \n\n"
-	assert.Equal(t, expected, w.String())
-	assert.NotContains(t, w.String(), cli.BBlack)
-	assert.Contains(t, w.String(), "Name")
-	assert.Contains(t, w.String(), cli.Colorized(cli.Cyan, "Values")+".n")
+	w := new(bytes.Buffer)
+	printLegacyViews(w, api.LegacyTopLevelParameters(), "")
+	out := w.String()
+	assert.Contains(t, out, "--Items.n")
+	assert.Contains(t, out, "\tarray\t")
+	assert.False(t, strings.Contains(out, "\tRepeatList\t"), out)
 }
 
 func getRepository() *meta.Repository {

@@ -24,7 +24,6 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
-	"github.com/aliyun/aliyun-cli/v3/newmeta"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 )
 
@@ -131,7 +130,7 @@ func (c *Commando) printProducts(ctx *cli.Context) {
 	// 2. From built-in: add or merge with existing
 	for _, product := range c.library.builtinRepo.Products {
 		lowerCode := strings.ToLower(product.Code)
-		productName, _ := newmeta.GetProductName(i18n.GetLanguage(), product.Code)
+		productName := getProductDisplayName(product)
 
 		if p, ok := productMap[lowerCode]; ok {
 			// Already from plugin index, add built-in info, for now it should always to be true
@@ -260,7 +259,7 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 		cli.Printf(ctx.Stdout(), "\nUsage 1:\n  aliyun %s [GET|PUT|POST|DELETE] <PathPattern> --body \"...\" \n", strings.ToLower(product.Code))
 		cli.Printf(ctx.Stdout(), "\nUsage 2 (For API with NO PARAMS in PathPattern only.):\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ... --body \"...\"\n", strings.ToLower(product.Code))
 	}
-	productName, _ := newmeta.GetProductName(i18n.GetLanguage(), product.Code)
+	productName := getProductDisplayName(product)
 	cli.Printf(ctx.Stdout(), "\nProduct: %s (%s)\n", product.Code, productName)
 	cli.Printf(ctx.Stdout(), "Version: %s \n", product.Version)
 
@@ -278,23 +277,35 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 
 	for _, apiName := range product.ApiNames {
 		if product.ApiStyle == "restful" {
-			api, _ := c.library.GetApi(product.Code, product.Version, apiName)
+			api := c.library.GetCanonicalApi(product.Code, product.Version, apiName)
+			if api == nil {
+				continue
+			}
 			ptn := fmt.Sprintf("  %%-%ds : %%s %%s\n", maxNameLen+1)
 			cli.PrintfWithColor(ctx.Stdout(), cli.Green, ptn, apiName, api.Method, api.PathPattern)
 		} else {
-			api, _ := newmeta.GetAPI(i18n.GetLanguage(), product.Code, apiName)
-			if api != nil {
-				apiDetail, _ := newmeta.GetAPIDetail(i18n.GetLanguage(), product.Code, apiName)
-				// use new api metadata
-				if api.Deprecated {
+			summary := ""
+			deprecated := false
+			anonymous := false
+
+			if c.library.canonicalRepo != nil {
+				if canonical, err := c.library.canonicalRepo.GetAPI(product.Code, product.Version, apiName); err == nil {
+					summary = canonical.Description(i18n.GetLanguage())
+					deprecated = canonical.Deprecated
+					anonymous = canonical.IsAnonymous()
+				}
+			}
+
+			if summary != "" {
+				if deprecated {
 					fmtStr := fmt.Sprintf("  %%-%ds [Deprecated]%%s\n", maxNameLen+1)
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, fmtStr, apiName, api.Summary)
-				} else if apiDetail.IsAnonymousAPI() {
+					cli.PrintfWithColor(ctx.Stdout(), cli.Green, fmtStr, apiName, summary)
+				} else if anonymous {
 					fmtStr := fmt.Sprintf("  %%-%ds [Anonymous]%%s\n", maxNameLen+1)
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, fmtStr, apiName, api.Summary)
+					cli.PrintfWithColor(ctx.Stdout(), cli.Green, fmtStr, apiName, summary)
 				} else {
 					fmtStr := fmt.Sprintf("  %%-%ds %%s\n", maxNameLen+1)
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, fmtStr, apiName, api.Summary)
+					cli.PrintfWithColor(ctx.Stdout(), cli.Green, fmtStr, apiName, summary)
 				}
 			} else {
 				cli.PrintfWithColor(ctx.Stdout(), cli.Green, "  %s\n", apiName)
@@ -365,8 +376,8 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 	}
 
 	// Case B: Built-in product exists
-	api, ok := c.library.builtinRepo.GetApi(productCode, product.Version, apiName)
-	if !ok {
+	canonicalApi := c.library.GetCanonicalApi(productCode, product.Version, apiName)
+	if canonicalApi == nil {
 		// API not found in built-in metadata. api in plugin is different from api from built-in
 		if pluginName != "" {
 			if shouldTryPlugin { // 全小写进入插件执行及智能纠错系统， 未安装则提示安装
@@ -389,12 +400,12 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 		return &InvalidApiError{Name: apiName, product: &product}
 	}
 
-	productName, _ := newmeta.GetProductName(i18n.GetLanguage(), productCode)
+	productName := getProductDisplayName(product)
 
 	if product.ApiStyle == "restful" {
 		cli.Printf(ctx.Stdout(), "\nProduct:     %s (%s)\n", product.Code, productName)
-		cli.Printf(ctx.Stdout(), "Method:      %s\n", api.Method)
-		cli.Printf(ctx.Stdout(), "PathPattern: %s\n", api.PathPattern)
+		cli.Printf(ctx.Stdout(), "Method:      %s\n", canonicalApi.Method)
+		cli.Printf(ctx.Stdout(), "PathPattern: %s\n", canonicalApi.PathPattern)
 	} else {
 		cli.Printf(ctx.Stdout(), "\nProduct: %s (%s)\n", product.Code, productName)
 	}
@@ -402,9 +413,10 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 	cli.Printf(ctx.Stdout(), "\nParameters:\n")
 
 	w := tabwriter.NewWriter(ctx.Stdout(), 8, 0, 1, ' ', 0)
-	detail, _ := newmeta.GetAPIDetail(i18n.GetLanguage(), productCode, apiName)
-	printParameters(w, api.Parameters, "", detail)
+	printCanonicalAPI(w, canonicalApi, "")
 	w.Flush()
+
+	printCanonicalExamples(ctx.Stdout(), canonicalApi)
 
 	return nil
 }

@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
-	"github.com/aliyun/aliyun-cli/v3/meta"
 )
 
 type RestfulInvoker struct {
@@ -29,7 +29,7 @@ type RestfulInvoker struct {
 	method string
 	path   string
 	force  bool
-	api    *meta.Api
+	api    *canonicalmeta.API
 }
 
 func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
@@ -67,20 +67,20 @@ func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
 		a.request.Scheme = "https"
 	} else {
 		for _, f := range ctx.UnknownFlags().Flags() {
-			param := a.api.FindParameter(f.Name)
+			param := a.api.FindLegacyParameter(f.Name)
 			if param == nil {
-				return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+				return NewInvalidParameterErrorFromCanonical(f.Name, a.api, a.productCode(), ctx.Flags())
 			}
-			if param.Position == "Query" {
+			if param.LegacyPosition() == "Query" {
 				a.request.QueryParams[f.Name], _ = f.GetValue()
-			} else if param.Position == "Body" {
+			} else if param.LegacyPosition() == "Body" {
 				a.request.FormParams[f.Name], _ = f.GetValue()
-			} else if param.Position == "Path" {
+			} else if param.LegacyPosition() == "Path" {
 				a.request.PathParams[f.Name], _ = f.GetValue()
-			} else if param.Position == "Domain" {
+			} else if param.LegacyPosition() == "Domain" || param.LegacyPosition() == "Host" {
 				continue
 			} else {
-				return fmt.Errorf("unknown parameter position; %s is %s", param.Name, param.Position)
+				return fmt.Errorf("unknown parameter position; %s is %s", param.LegacyName(), param.LegacyPosition())
 			}
 		}
 

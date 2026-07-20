@@ -22,7 +22,6 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
-	"github.com/aliyun/aliyun-cli/v3/meta"
 )
 
 // Routes an OpenAPI call to CloudControl GetApiPrice (POST /api/v1/price/quote)
@@ -96,7 +95,11 @@ func resolveEstimateCostApiName(library *Library, inv Invoker) (string, error) {
 		if r.api != nil && r.api.Name != "" {
 			return r.api.Name, nil
 		}
-		if api, found := meta.HookGetApiByPath(library.GetApiByPath)(req.Product, req.Version, r.method, r.path); found && api.Name != "" {
+		lookupVersion := req.Version
+		if r.product != nil && r.product.Version != "" {
+			lookupVersion = r.product.Version
+		}
+		if api, found := library.GetApiByPath(req.Product, lookupVersion, r.method, r.path); found && api.Name != "" {
 			return api.Name, nil
 		}
 		return "", cli.NewErrorWithTip(

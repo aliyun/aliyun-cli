@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -200,6 +201,34 @@ func TestPrintApiUsage_BuiltinApi(t *testing.T) {
 	output := stdout.String()
 	assert.Contains(t, output, "Product:")
 	assert.Contains(t, output, "Parameters:")
+}
+
+func TestPrintApiUsage_PrintsCanonicalExamples(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "demo", Version: "2026-01-01", ApiStyle: "rpc", ApiNames: []string{"CreateThing"}},
+	})
+	assert.NoError(t, err)
+	c.library.builtinRepo = repo
+	c.library.canonicalRepo = &byNameOnlyCanonicalRepo{apis: map[string]*canonicalmeta.API{
+		"CreateThing": {
+			Name:         "CreateThing",
+			Protocol:     "HTTPS",
+			Method:       "POST",
+			KebabExample: "aliyun demo create-thing --name foo",
+			CamelExample: "aliyun demo CreateThing --Name foo",
+		},
+	}}
+
+	err = c.printApiUsage(ctx, "demo", "CreateThing")
+	assert.NoError(t, err)
+	output := stdout.String()
+	assert.Contains(t, output, "Example:")
+	assert.Contains(t, output, "(Recommended) New CLI:")
+	assert.Contains(t, output, "aliyun demo create-thing --name foo")
+	assert.Contains(t, output, "Legacy CLI:")
+	assert.Contains(t, output, "aliyun demo CreateThing --Name foo")
 }
 
 func TestPrintApiUsage_UnknownApi_NoPlugin(t *testing.T) {

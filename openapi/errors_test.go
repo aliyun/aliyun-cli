@@ -17,7 +17,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/stretchr/testify/assert"
@@ -75,36 +77,51 @@ func TestInvalidApiError_GetSuggestions(t *testing.T) {
 
 func TestInvalidParameterError_Error(t *testing.T) {
 	err := &InvalidParameterError{
-		Name: "ak",
-		api: &meta.Api{
-			Name: "describeregion",
-			Product: &meta.Product{
-				Code: "ecs",
-			},
-		},
+		Name:           "ak",
+		ProductCode:    "ecs",
+		ApiName:        "describeregion",
+		ParameterNames: []string{},
 	}
 	str := err.Error()
 	assert.Equal(t, "'--ak' is not a valid parameter or flag. See `aliyun help ecs describeregion`.", str)
 }
 
 func TestInvalidParameterError_GetSuggestions(t *testing.T) {
+	flags := cli.NewFlagSet()
+	AddFlags(flags)
 	err := &InvalidParameterError{
-		Name: "secure",
-		api: &meta.Api{
-			Name: "describeregion",
-			Parameters: []meta.Parameter{
-				{
-					Name: "test",
-				},
-			},
-		},
-		flags: cli.NewFlagSet(),
+		Name:           "secure",
+		ProductCode:    "ecs",
+		ApiName:        "describeregion",
+		ParameterNames: []string{"test"},
+		flags:          flags,
 	}
-	AddFlags(err.flags)
-	err.GetSuggestions()
 	arrstr := err.GetSuggestions()
 	str := strings.Join(arrstr, ",")
 	assert.Contains(t, str, "secure")
+}
+
+func TestNewInvalidParameterErrorFromCanonical_SuggestionsIncludeNearestParameterExample(t *testing.T) {
+	flags := cli.NewFlagSet()
+	api := &canonicalmeta.API{
+		Name: "DescribeInstances",
+		Parameters: []canonicalmeta.Parameter{
+			{
+				RawName:  "InstanceId",
+				Location: "query",
+				Example:  "i-bp1234567890",
+			},
+			{
+				RawName:  "ImageId",
+				Location: "query",
+				Example:  "m-bp1234567890",
+			},
+		},
+	}
+
+	err := NewInvalidParameterErrorFromCanonical("InstancId", api, "ecs", flags)
+
+	assert.Equal(t, []string{"InstanceId (example: i-bp1234567890)"}, err.GetSuggestions())
 }
 
 func TestInvalidProductOrPluginError_Error(t *testing.T) {

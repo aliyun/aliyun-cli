@@ -25,19 +25,20 @@ func TestReadJsonFrom(t *testing.T) {
 	assert.NotNil(t, err)
 	assert.Equal(t, "read json from  failed", err.Error())
 
-	api := &Api{}
+	api := map[string]interface{}{}
 	path = `invalid path`
 
-	err = ReadJsonFrom(path, api)
+	err = ReadJsonFrom(path, &api)
 	assert.NotNil(t, err)
 	assert.Equal(t, "read json from invalid path failed", err.Error())
 
-	err = ReadJsonFrom("ecs/DescribeRegions.json", api)
-	assert.Equal(t, "DescribeRegions", api.Name)
+	var ps ProductSet
+	err = ReadJsonFrom("products.json", &ps)
 	assert.Nil(t, err)
+	assert.True(t, len(ps.Products) > 0)
 
 	str := ""
-	err = ReadJsonFrom("ecs/DescribeRegions.json", &str)
+	err = ReadJsonFrom("products.json", &str)
 	assert.NotNil(t, err)
-	assert.Equal(t, "unmarshal json ecs/DescribeRegions.json failed json: cannot unmarshal object into Go value of type string", err.Error())
+	assert.Contains(t, err.Error(), "unmarshal json products.json failed")
 }

@@ -29,6 +29,7 @@ import (
 	openapiTeaUtils "github.com/alibabacloud-go/tea-utils/v2/service"
 	"github.com/alibabacloud-go/tea/dara"
 	"github.com/alibabacloud-go/tea/tea"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -295,7 +296,7 @@ type OpenapiContext struct {
 	*HttpContext
 	method string
 	path   string
-	api    *meta.Api
+	api    *canonicalmeta.API
 }
 
 func (a *OpenapiContext) ProcessPullLogsHeaders(ctx *cli.Context) {
@@ -306,16 +307,16 @@ func (a *OpenapiContext) ProcessPullLogsHeaders(ctx *cli.Context) {
 
 func (a *OpenapiContext) ProcessHeaders(ctx *cli.Context) error {
 	for _, f := range ctx.UnknownFlags().Flags() {
-		param := a.api.FindParameter(f.Name)
+		param := a.api.FindLegacyParameter(f.Name)
 		if param == nil {
-			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+			return NewInvalidParameterErrorFromCanonical(f.Name, a.api, a.product.GetLowerCode(), ctx.Flags())
 		}
-		if param.Position != "header" {
+		if param.LegacyPosition() != "header" {
 			continue
 		}
 		value, _ := f.GetValue()
-		if param.Required && value == "" {
-			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		if param.LegacyRequired() && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.LegacyName())
 		}
 		a.openapiRequest.Headers[f.Name] = &value
 	}
@@ -367,16 +368,16 @@ func (a *OpenapiContext) ProcessBody(ctx *cli.Context) error {
 	}
 
 	for _, f := range ctx.UnknownFlags().Flags() {
-		param := a.api.FindParameter(f.Name)
+		param := a.api.FindLegacyParameter(f.Name)
 		if param == nil {
-			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+			return NewInvalidParameterErrorFromCanonical(f.Name, a.api, a.product.GetLowerCode(), ctx.Flags())
 		}
-		if param.Position != "Body" {
+		if param.LegacyPosition() != "Body" {
 			continue
 		}
 		value, _ := f.GetValue()
-		if param.Required && value == "" {
-			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		if param.LegacyRequired() && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.LegacyName())
 		}
 		body := map[string]interface{}{}
 		body[f.Name] = value
@@ -389,16 +390,16 @@ func (a *OpenapiContext) ProcessBody(ctx *cli.Context) error {
 func (a *OpenapiContext) ProcessPath(ctx *cli.Context) error {
 	pathParams := make(map[string]string)
 	for _, f := range ctx.UnknownFlags().Flags() {
-		param := a.api.FindParameter(f.Name)
+		param := a.api.FindLegacyParameter(f.Name)
 		if param == nil {
-			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+			return NewInvalidParameterErrorFromCanonical(f.Name, a.api, a.product.GetLowerCode(), ctx.Flags())
 		}
-		if param.Position != "Path" {
+		if param.LegacyPosition() != "Path" {
 			continue
 		}
 		value, _ := f.GetValue()
-		if param.Required && value == "" {
-			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		if param.LegacyRequired() && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.LegacyName())
 		}
 		pathParams[f.Name] = value
 	}
@@ -415,16 +416,16 @@ func (a *OpenapiContext) ProcessPath(ctx *cli.Context) error {
 
 func (a *OpenapiContext) ProcessHost(ctx *cli.Context) error {
 	for _, f := range ctx.UnknownFlags().Flags() {
-		param := a.api.FindParameter(f.Name)
+		param := a.api.FindLegacyParameter(f.Name)
 		if param == nil {
-			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+			return NewInvalidParameterErrorFromCanonical(f.Name, a.api, a.product.GetLowerCode(), ctx.Flags())
 		}
-		if param.Position != "Host" {
+		if param.LegacyPosition() != "Host" {
 			continue
 		}
 		value, _ := f.GetValue()
-		if param.Required && value == "" {
-			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		if param.LegacyRequired() && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.LegacyName())
 		}
 		a.openapiRequest.HostMap[strings.ToLower(f.Name)] = tea.String(value)
 	}
@@ -433,16 +434,16 @@ func (a *OpenapiContext) ProcessHost(ctx *cli.Context) error {
 
 func (a *OpenapiContext) ProcessQuery(ctx *cli.Context) error {
 	for _, f := range ctx.UnknownFlags().Flags() {
-		param := a.api.FindParameter(f.Name)
+		param := a.api.FindLegacyParameter(f.Name)
 		if param == nil {
-			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+			return NewInvalidParameterErrorFromCanonical(f.Name, a.api, a.product.GetLowerCode(), ctx.Flags())
 		}
-		if param.Position != "Query" {
+		if param.LegacyPosition() != "Query" {
 			continue
 		}
 		value, _ := f.GetValue()
-		if param.Required && value == "" {
-			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		if param.LegacyRequired() && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.LegacyName())
 		}
 		a.openapiRequest.Query[f.Name] = &value
 	}
@@ -457,7 +458,7 @@ func (a *OpenapiContext) Prepare(ctx *cli.Context) error {
 	}
 	oaParams := a.openapiParams
 	oaParams.Action = tea.String(a.api.Name)
-	oaParams.Version = &a.api.Product.Version
+	oaParams.Version = &a.product.Version
 	oaParams.Method = &a.method
 
 	oaParams.Protocol = tea.String(a.api.GetProtocol())
@@ -480,30 +481,30 @@ func (a *OpenapiContext) checkRequiredParameters(ctx *cli.Context) error {
 	requiredPathParams := make(map[string]bool)
 	requiredHostParams := make(map[string]bool)
 
-	for _, param := range a.api.Parameters {
-		if param.Position == "Host" && param.Required {
-			requiredHostParams[param.Name] = false
+	for _, param := range a.api.LegacyTopLevelParameters() {
+		if param.LegacyPosition() == "Host" && param.LegacyRequired() {
+			requiredHostParams[param.LegacyName()] = false
 		}
-		if param.Position == "Path" && param.Required {
-			requiredPathParams[param.Name] = false
+		if param.LegacyPosition() == "Path" && param.LegacyRequired() {
+			requiredPathParams[param.LegacyName()] = false
 		}
 	}
 
 	for _, f := range ctx.UnknownFlags().Flags() {
-		param := a.api.FindParameter(f.Name)
+		param := a.api.FindLegacyParameter(f.Name)
 		if param == nil {
 			continue
 		}
-		if param.Position == "Host" && param.Required {
+		if param.LegacyPosition() == "Host" && param.LegacyRequired() {
 			value, _ := f.GetValue()
 			if value != "" {
-				requiredHostParams[param.Name] = true
+				requiredHostParams[param.LegacyName()] = true
 			}
 		}
-		if param.Position == "Path" && param.Required {
+		if param.LegacyPosition() == "Path" && param.LegacyRequired() {
 			value, _ := f.GetValue()
 			if value != "" {
-				requiredPathParams[param.Name] = true
+				requiredPathParams[param.LegacyName()] = true
 			}
 		}
 	}

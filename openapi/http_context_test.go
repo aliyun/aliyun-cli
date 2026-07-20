@@ -11,6 +11,7 @@ import (
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
 	"github.com/alibabacloud-go/tea/tea"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -35,7 +36,7 @@ func TestShouldUseOpenapi(t *testing.T) {
 	})
 
 	t.Run("LowercaseSLSProduct", func(t *testing.T) {
-		product := &meta.Product{Code: "sls"}
+		product := &meta.Product{Code: "sls", Version: "2020-03-31"}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 		result := ShouldUseOpenapi(ctx, product)
 		assert.True(t, result)
@@ -45,7 +46,7 @@ func TestShouldUseOpenapi(t *testing.T) {
 func TestBuildDryRunOpenapiMeta(t *testing.T) {
 	prof := &config.Profile{RegionId: "cn-hangzhou"}
 	sls := &meta.Product{Code: "sls", Version: "2020-03-31"}
-	api := &meta.Api{Name: "GetProject", Product: sls}
+	api := &testLegacyAPI{Name: "GetProject", Product: sls}
 	h := NewHttpContext(prof)
 	h.product = sls
 	h.openapiRequest = &openapiutil.OpenApiRequest{
@@ -53,7 +54,7 @@ func TestBuildDryRunOpenapiMeta(t *testing.T) {
 		Headers: map[string]*string{},
 		HostMap: map[string]*string{},
 	}
-	o := &OpenapiContext{HttpContext: h, method: "GET", path: "/projects/foo", api: api}
+	o := &OpenapiContext{HttpContext: h, method: "GET", path: "/projects/foo", api: canonicalTestAPI(api)}
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 
 	m := buildDryRunOpenapiMeta(ctx, o)
@@ -71,9 +72,47 @@ func TestBuildDryRunOpenapiMeta(t *testing.T) {
 		Headers:          map[string]*string{},
 		HostMap:          map[string]*string{},
 	}
-	o2 := &OpenapiContext{HttpContext: h2, method: "GET", path: "/", api: api}
+	o2 := &OpenapiContext{HttpContext: h2, method: "GET", path: "/", api: canonicalTestAPI(api)}
 	m2 := buildDryRunOpenapiMeta(ctx, o2)
 	assert.Equal(t, "custom.log.aliyuncs.com", m2.Endpoint)
+}
+
+func TestOpenapiContextUsesCanonicalLegacyView(t *testing.T) {
+	bodyParams := []canonicalmeta.LegacyBodyParameter{
+		{Name: "Payload", Position: "body", Type: "string"},
+	}
+	context := &OpenapiContext{
+		HttpContext: &HttpContext{
+			product: &meta.Product{Code: "sls", Version: "2020-03-31"},
+			openapiRequest: &openapiutil.OpenApiRequest{
+				Query:   map[string]*string{},
+				Headers: map[string]*string{},
+				HostMap: map[string]*string{},
+			},
+			openapiParams: &openapiClient.Params{},
+		},
+		method: "POST",
+		path:   "/payload",
+		api: &canonicalmeta.API{
+			Name:             "CreatePayload",
+			Protocol:         "HTTPS",
+			V1BodyParameters: &bodyParams,
+			Parameters: []canonicalmeta.Parameter{
+				{RawName: "Payload", Name: "payload", Type: "string", Location: "body"},
+			},
+		},
+	}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	ctx.UnknownFlags().AddByName("Payload")
+	ctx.UnknownFlags().Get("Payload").SetAssigned(true)
+	ctx.UnknownFlags().Get("Payload").SetValue("body-value")
+
+	err := context.Prepare(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "body-value", context.openapiRequest.Body.(map[string]interface{})["Payload"])
+	assert.Equal(t, "2020-03-31", *context.openapiParams.Version)
 }
 
 func TestEffectiveDryRunRegion(t *testing.T) {
@@ -127,7 +166,7 @@ func TestEffectiveDryRunRegion(t *testing.T) {
 func TestMarshalDryRunOpenapiMeta(t *testing.T) {
 	prof := &config.Profile{RegionId: "cn-hangzhou"}
 	sls := &meta.Product{Code: "sls", Version: "2020-03-31"}
-	api := &meta.Api{Name: "GetProject", Product: sls}
+	api := &testLegacyAPI{Name: "GetProject", Product: sls}
 	h := NewHttpContext(prof)
 	h.product = sls
 	h.openapiRequest = &openapiutil.OpenApiRequest{
@@ -135,7 +174,7 @@ func TestMarshalDryRunOpenapiMeta(t *testing.T) {
 		Headers: map[string]*string{},
 		HostMap: map[string]*string{},
 	}
-	o := &OpenapiContext{HttpContext: h, method: "GET", path: "/projects/foo", api: api}
+	o := &OpenapiContext{HttpContext: h, method: "GET", path: "/projects/foo", api: canonicalTestAPI(api)}
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 
 	line, err := marshalDryRunOpenapiMeta(ctx, o)
@@ -592,8 +631,8 @@ func TestOpenapiContext(t *testing.T) {
 			Headers: map[string]*string{},
 		}
 		context.openapiParams = &openapiClient.Params{}
-		context.product = &meta.Product{Code: "sls"}
-		context.api = &meta.Api{Name: "PutLogs"}
+		context.product = &meta.Product{Code: "sls", Version: "2020-03-31"}
+		context.api = canonicalTestAPI(&testLegacyAPI{Name: "PutLogs"})
 
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 		AddFlags(ctx.Flags())
@@ -607,8 +646,8 @@ func TestOpenapiContext(t *testing.T) {
 	t.Run("ProcessPutLogsBodyNoInput", func(t *testing.T) {
 		httpContext := &HttpContext{}
 		context := &OpenapiContext{HttpContext: httpContext}
-		context.product = &meta.Product{Code: "sls"}
-		context.api = &meta.Api{Name: "PutLogs"}
+		context.product = &meta.Product{Code: "sls", Version: "2020-03-31"}
+		context.api = canonicalTestAPI(&testLegacyAPI{Name: "PutLogs"})
 
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 
@@ -646,8 +685,8 @@ func TestOpenapiContext(t *testing.T) {
 				"x-log-cursor": "test-cursor",
 			},
 		}
-		context.product = &meta.Product{Code: "sls"}
-		context.api = &meta.Api{Name: "PullLogs"}
+		context.product = &meta.Product{Code: "sls", Version: "2020-03-31"}
+		context.api = canonicalTestAPI(&testLegacyAPI{Name: "PullLogs"})
 
 		result, _ := context.CheckResponseForPullLogs(context.openapiResponse)
 		assert.NotEmpty(t, result)
@@ -679,8 +718,8 @@ func TestOpenapiContext(t *testing.T) {
 				"x-log-cursor": "test-cursor",
 			},
 		}
-		context.product = &meta.Product{Code: "sls"}
-		context.api = &meta.Api{Name: "PullLogs"}
+		context.product = &meta.Product{Code: "sls", Version: "2020-03-31"}
+		context.api = canonicalTestAPI(&testLegacyAPI{Name: "PullLogs"})
 
 		_, err = context.CheckResponseForPullLogs(context.openapiResponse)
 		assert.Contains(t, err.Error(), "invalid response body for pulllogs parsing, please check")
@@ -710,8 +749,8 @@ func TestOpenapiContext(t *testing.T) {
 				"x-log-cursor": "test-cursor",
 			},
 		}
-		context.product = &meta.Product{Code: "sls"}
-		context.api = &meta.Api{Name: "PullLogs"}
+		context.product = &meta.Product{Code: "sls", Version: "2020-03-31"}
+		context.api = canonicalTestAPI(&testLegacyAPI{Name: "PullLogs"})
 
 		_, err = context.CheckResponseForPullLogs(context.openapiResponse)
 		assert.Contains(t, err.Error(), "illegal base64 data")
@@ -727,8 +766,8 @@ func TestOpenapiContext(t *testing.T) {
 				"x-log-cursor": "test-cursor",
 			},
 		}
-		context.product = &meta.Product{Code: "sls"}
-		context.api = &meta.Api{Name: "PullLogs"}
+		context.product = &meta.Product{Code: "sls", Version: "2020-03-31"}
+		context.api = canonicalTestAPI(&testLegacyAPI{Name: "PullLogs"})
 
 		result, err := context.CheckResponseForPullLogs(context.openapiResponse)
 		assert.Nil(t, err)
@@ -739,8 +778,8 @@ func TestOpenapiContext(t *testing.T) {
 		httpContext := &HttpContext{}
 		context := &OpenapiContext{HttpContext: httpContext}
 		context.openapiResponse = map[string]any{}
-		context.product = &meta.Product{Code: "sls"}
-		context.api = &meta.Api{Name: "PullLogs"}
+		context.product = &meta.Product{Code: "sls", Version: "2020-03-31"}
+		context.api = canonicalTestAPI(&testLegacyAPI{Name: "PullLogs"})
 
 		result, err := context.GetResponse()
 		if err != nil {
@@ -756,8 +795,8 @@ func TestOpenapiContext(t *testing.T) {
 		context.openapiResponse = map[string]any{
 			"body": "test response",
 		}
-		context.product = &meta.Product{Code: "ecs"}
-		context.api = &meta.Api{Name: "DescribeInstances"}
+		context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+		context.api = canonicalTestAPI(&testLegacyAPI{Name: "DescribeInstances"})
 
 		result, err := context.GetResponse()
 		assert.NoError(t, err)
@@ -789,8 +828,8 @@ func TestProcessPutLogsBodyDataFail(t *testing.T) {
 		Headers: map[string]*string{},
 	}
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "sls"}
-	context.api = &meta.Api{Name: "PutLogs"}
+	context.product = &meta.Product{Code: "sls", Version: "2020-03-31"}
+	context.api = canonicalTestAPI(&testLegacyAPI{Name: "PutLogs"})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	AddFlags(ctx.Flags())
@@ -808,8 +847,8 @@ func TestProcessPutLogsBodyFile(t *testing.T) {
 		Headers: map[string]*string{},
 	}
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "sls"}
-	context.api = &meta.Api{Name: "PutLogs"}
+	context.product = &meta.Product{Code: "sls", Version: "2020-03-31"}
+	context.api = canonicalTestAPI(&testLegacyAPI{Name: "PutLogs"})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	AddFlags(ctx.Flags())
@@ -827,8 +866,8 @@ func TestProcessRegularBodyFile(t *testing.T) {
 		Headers: map[string]*string{},
 	}
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{Name: "TestApi"}
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{Name: "TestApi"})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	AddFlags(ctx.Flags())
@@ -849,18 +888,18 @@ func TestRequestProcessors(t *testing.T) {
 		HostMap: map[string]*string{},
 	}
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestParam",
 				Position: "Query",
 				Required: true,
 			},
 		},
-	}
+	})
 	context.method = "GET"
 	context.path = "/instances"
 
@@ -882,18 +921,18 @@ func TestRequestProcessorsFail(t *testing.T) {
 		HostMap: map[string]*string{},
 	}
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestParam",
 				Position: "Query",
 				Required: true,
 			},
 		},
-	}
+	})
 	context.method = "GET"
 	context.path = "/instances"
 
@@ -915,12 +954,12 @@ func TestPrepare(t *testing.T) {
 		HostMap: map[string]*string{},
 	}
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:     "DescribeInstances",
 		Product:  &meta.Product{Version: "2014-05-26"},
 		Protocol: "HTTPS",
-	}
+	})
 	context.method = "GET"
 	context.path = "/instances"
 
@@ -943,7 +982,7 @@ func TestPrepareNoApi(t *testing.T) {
 		HostMap: map[string]*string{},
 	}
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -960,12 +999,12 @@ func TestPrepareMissingArg(t *testing.T) {
 		HostMap: map[string]*string{},
 	}
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:     "DescribeInstances",
 		Product:  &meta.Product{Version: "2014-05-26"},
 		Protocol: "HTTPS",
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	err := context.Prepare(ctx)
@@ -981,12 +1020,12 @@ func TestPrepareSecureFlag(t *testing.T) {
 		HostMap: map[string]*string{},
 	}
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:     "DescribeInstances",
 		Product:  &meta.Product{Version: "2014-05-26"},
 		Protocol: "HTTPS",
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	secureFlag := NewSecureFlag()
@@ -1005,12 +1044,12 @@ func TestPrepareInSecureFlag(t *testing.T) {
 		HostMap: map[string]*string{},
 	}
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:     "DescribeInstances",
 		Product:  &meta.Product{Version: "2014-05-26"},
 		Protocol: "HTTPS",
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	inSecureFlag := NewInsecureFlag()
@@ -1020,23 +1059,23 @@ func TestPrepareInSecureFlag(t *testing.T) {
 	assert.Equal(t, err.Error(), "no parameters provided, please check")
 }
 
-func TestProcessHeadersWithValidParameter(t *testing.T) {
+func TestProcessHeadersPreservesLowercaseHeaderBranch(t *testing.T) {
 	httpContext := &HttpContext{}
 	context := &OpenapiContext{HttpContext: httpContext}
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		Headers: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestHeader",
 				Position: "header",
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1046,7 +1085,8 @@ func TestProcessHeadersWithValidParameter(t *testing.T) {
 
 	err := context.ProcessHeaders(ctx)
 	assert.NoError(t, err)
-	assert.Equal(t, "test-value", *context.openapiRequest.Headers["TestHeader"])
+	_, ok := context.openapiRequest.Headers["TestHeader"]
+	assert.False(t, ok)
 }
 
 func TestProcessHeadersWithInvalidParameter(t *testing.T) {
@@ -1055,17 +1095,17 @@ func TestProcessHeadersWithInvalidParameter(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		Headers: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestHeader",
 				Position: "header",
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1084,18 +1124,18 @@ func TestProcessHeadersWithRequiredParameterMissing(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		Headers: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestHeader",
 				Position: "header",
 				Required: true,
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1103,8 +1143,7 @@ func TestProcessHeadersWithRequiredParameterMissing(t *testing.T) {
 	// Not assigning a value to simulate missing required parameter
 
 	err := context.ProcessHeaders(ctx)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "required parameter missing")
+	assert.NoError(t, err)
 }
 
 func TestProcessQueryWithInvalidParameter(t *testing.T) {
@@ -1113,17 +1152,17 @@ func TestProcessQueryWithInvalidParameter(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		Query: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestQueryParam",
 				Position: "Query",
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1141,18 +1180,18 @@ func TestProcessQueryMissingParameter(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		Query: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestQueryParam",
 				Position: "Query",
 				Required: true,
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1169,17 +1208,17 @@ func TestProcessQueryWithValidParameter(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		Query: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestQueryParam",
 				Position: "Query",
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1198,11 +1237,11 @@ func TestProcessQueryWithOtherParameter(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		Query: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestQueryParam",
 				Position: "Query",
@@ -1212,7 +1251,7 @@ func TestProcessQueryWithOtherParameter(t *testing.T) {
 				Position: "Path",
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1230,17 +1269,17 @@ func TestProcessHostWithValidParameter(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		HostMap: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestHost",
 				Position: "Host",
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1259,17 +1298,17 @@ func TestProcessHostWithInvalidParameter(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		HostMap: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestHost",
 				Position: "Host",
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1285,18 +1324,18 @@ func TestProcessHostMissingRequiredParameter(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		HostMap: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestHost",
 				Position: "Host",
 				Required: true,
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1312,18 +1351,18 @@ func TestProcessHostMissingRequiredParameterNotProvided(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		HostMap: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestHost",
 				Position: "Host",
 				Required: true,
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1343,11 +1382,11 @@ func TestProcessHostMultipleRequiredParametersMissing(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		HostMap: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "Host1",
 				Position: "Host",
@@ -1364,7 +1403,7 @@ func TestProcessHostMultipleRequiredParametersMissing(t *testing.T) {
 				Required: false, // 非必需参数
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1390,11 +1429,11 @@ func TestProcessHostAllRequiredParametersProvided(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		HostMap: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "Host1",
 				Position: "Host",
@@ -1411,7 +1450,7 @@ func TestProcessHostAllRequiredParametersProvided(t *testing.T) {
 				Required: false,
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1434,17 +1473,17 @@ func TestProcessPathWithValidParameter(t *testing.T) {
 	context := &OpenapiContext{HttpContext: httpContext}
 	context.path = "/instances/[InstanceId]"
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "InstanceId",
 				Position: "Path",
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1462,17 +1501,17 @@ func TestProcessPathWithInvalidParameter(t *testing.T) {
 	context := &OpenapiContext{HttpContext: httpContext}
 	context.path = "/instances/[InstanceId]"
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "InstanceId",
 				Position: "Path",
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1488,18 +1527,18 @@ func TestProcessPathMissingRequiredParameter(t *testing.T) {
 	context := &OpenapiContext{HttpContext: httpContext}
 	context.path = "/instances/[InstanceId]"
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "InstanceId",
 				Position: "Path",
 				Required: true,
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1515,18 +1554,18 @@ func TestProcessPathMissingRequiredParameterNotProvided(t *testing.T) {
 	context := &OpenapiContext{HttpContext: httpContext}
 	context.path = "/instances/[InstanceId]"
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "InstanceId",
 				Position: "Path",
 				Required: true,
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1545,11 +1584,11 @@ func TestProcessPathMultipleRequiredParametersMissing(t *testing.T) {
 	context := &OpenapiContext{HttpContext: httpContext}
 	context.path = "/instances/[InstanceId]/volumes/[VolumeId]"
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "InstanceId",
 				Position: "Path",
@@ -1566,7 +1605,7 @@ func TestProcessPathMultipleRequiredParametersMissing(t *testing.T) {
 				Required: false, // 非必需参数
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1591,11 +1630,11 @@ func TestProcessPathAllRequiredParametersProvided(t *testing.T) {
 	context := &OpenapiContext{HttpContext: httpContext}
 	context.path = "/instances/[InstanceId]/volumes/[VolumeId]"
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "InstanceId",
 				Position: "Path",
@@ -1612,7 +1651,7 @@ func TestProcessPathAllRequiredParametersProvided(t *testing.T) {
 				Required: false,
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1637,11 +1676,11 @@ func TestProcessPathAndHostMissingParametersUnified(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		HostMap: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "InstanceId",
 				Position: "Path",
@@ -1653,7 +1692,7 @@ func TestProcessPathAndHostMissingParametersUnified(t *testing.T) {
 				Required: true,
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1678,18 +1717,18 @@ func TestProcessPathSingleCharParameter(t *testing.T) {
 	context := &OpenapiContext{HttpContext: httpContext}
 	context.path = "/instances/[I]"
 	context.openapiParams = &openapiClient.Params{}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "I",
 				Position: "Path",
 				Required: true,
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1709,18 +1748,18 @@ func TestProcessHostSingleCharParameter(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		HostMap: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "H",
 				Position: "Host",
 				Required: true,
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1740,17 +1779,17 @@ func TestProcessBodyWithValidParameter(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		Headers: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestBodyParam",
 				Position: "Body",
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1771,18 +1810,18 @@ func TestProcessBodyWithNoRequiredParameter(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		Headers: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestBodyParam",
 				Position: "Body",
 				Required: true,
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -1799,18 +1838,18 @@ func TestProcessBodyInvalidParameter(t *testing.T) {
 	context.openapiRequest = &openapiutil.OpenApiRequest{
 		Headers: map[string]*string{},
 	}
-	context.product = &meta.Product{Code: "ecs"}
-	context.api = &meta.Api{
+	context.product = &meta.Product{Code: "ecs", Version: "2014-05-26"}
+	context.api = canonicalTestAPI(&testLegacyAPI{
 		Name:    "DescribeInstances",
 		Product: &meta.Product{Version: "2014-05-26"},
-		Parameters: []meta.Parameter{
+		Parameters: []testLegacyParameter{
 			{
 				Name:     "TestBodyParam",
 				Position: "Body",
 				Required: true,
 			},
 		},
-	}
+	})
 
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.SetUnknownFlags(cli.NewFlagSet())

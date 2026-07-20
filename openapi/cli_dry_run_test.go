@@ -225,7 +225,7 @@ func TestBuildCliDryRunFromOpenapi(t *testing.T) {
 		Code:    "sls",
 		Version: "2020-12-30",
 	}
-	api := &meta.Api{
+	api := &testLegacyAPI{
 		Name:    "GetLogStore",
 		Product: product,
 	}
@@ -251,7 +251,7 @@ func TestBuildCliDryRunFromOpenapi(t *testing.T) {
 		},
 		method: "GET",
 		path:   "/logstores/[logstoreName]",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	out := buildCliDryRunFromOpenapi(oc)
@@ -269,7 +269,7 @@ func TestBuildCliDryRunFromOpenapi(t *testing.T) {
 
 func TestBuildCliDryRunFromOpenapi_EndpointOverride(t *testing.T) {
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "ListProject", Product: product}
+	api := &testLegacyAPI{Name: "ListProject", Product: product}
 	profile := &config.Profile{RegionId: "cn-hangzhou"}
 
 	oc := &OpenapiContext{
@@ -285,7 +285,7 @@ func TestBuildCliDryRunFromOpenapi_EndpointOverride(t *testing.T) {
 		},
 		method: "GET",
 		path:   "/",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	out := buildCliDryRunFromOpenapi(oc)
@@ -294,7 +294,7 @@ func TestBuildCliDryRunFromOpenapi_EndpointOverride(t *testing.T) {
 
 func TestBuildCliDryRunFromOpenapi_SLSEndpointFallback(t *testing.T) {
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "ListProject", Product: product}
+	api := &testLegacyAPI{Name: "ListProject", Product: product}
 	profile := &config.Profile{RegionId: "cn-shanghai"}
 
 	oc := &OpenapiContext{
@@ -309,7 +309,7 @@ func TestBuildCliDryRunFromOpenapi_SLSEndpointFallback(t *testing.T) {
 		},
 		method: "GET",
 		path:   "/",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	out := buildCliDryRunFromOpenapi(oc)
@@ -318,7 +318,7 @@ func TestBuildCliDryRunFromOpenapi_SLSEndpointFallback(t *testing.T) {
 
 func TestBuildCliDryRunFromOpenapi_WithBody(t *testing.T) {
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "CreateLogStore", Product: product}
+	api := &testLegacyAPI{Name: "CreateLogStore", Product: product}
 	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "cn-hangzhou.log.aliyuncs.com"}
 
 	bodyContent := map[string]interface{}{
@@ -338,7 +338,7 @@ func TestBuildCliDryRunFromOpenapi_WithBody(t *testing.T) {
 		},
 		method: "POST",
 		path:   "/logstores",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	out := buildCliDryRunFromOpenapi(oc)
@@ -349,7 +349,7 @@ func TestBuildCliDryRunFromOpenapi_WithBody(t *testing.T) {
 
 func TestBuildCliDryRunFromOpenapi_WithBinaryBody(t *testing.T) {
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "PutLogs", Product: product}
+	api := &testLegacyAPI{Name: "PutLogs", Product: product}
 	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "cn-hangzhou.log.aliyuncs.com"}
 
 	binaryData := []byte("compressed-data-here")
@@ -366,7 +366,7 @@ func TestBuildCliDryRunFromOpenapi_WithBinaryBody(t *testing.T) {
 		},
 		method: "POST",
 		path:   "/logstores/store/shards",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 	oc.openapiParams.ReqBodyType = tea.String("binary")
 
@@ -377,7 +377,7 @@ func TestBuildCliDryRunFromOpenapi_WithBinaryBody(t *testing.T) {
 
 func TestBuildCliDryRunFromOpenapi_NilHeaders(t *testing.T) {
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "ListProject", Product: product}
+	api := &testLegacyAPI{Name: "ListProject", Product: product}
 	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "cn-hangzhou.log.aliyuncs.com"}
 
 	oc := &OpenapiContext{
@@ -391,7 +391,7 @@ func TestBuildCliDryRunFromOpenapi_NilHeaders(t *testing.T) {
 		},
 		method: "GET",
 		path:   "/",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	out := buildCliDryRunFromOpenapi(oc)
@@ -542,7 +542,7 @@ func TestProcessCliDryRunOpenapi(t *testing.T) {
 	ctx.EnterCommand(cmd)
 
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "GetLogStore", Product: product}
+	api := &testLegacyAPI{Name: "GetLogStore", Product: product}
 	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "cn-hangzhou.log.aliyuncs.com"}
 
 	oc := &OpenapiContext{
@@ -559,7 +559,7 @@ func TestProcessCliDryRunOpenapi(t *testing.T) {
 		},
 		method: "GET",
 		path:   "/logstores/[logstoreName]",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	err := processCliDryRunOpenapi(ctx, oc)
@@ -580,7 +580,7 @@ func TestProcessCliDryRunOpenapiJson(t *testing.T) {
 	ctx.EnterCommand(cmd)
 
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "GetLogStore", Product: product}
+	api := &testLegacyAPI{Name: "GetLogStore", Product: product}
 	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "cn-hangzhou.log.aliyuncs.com"}
 
 	oc := &OpenapiContext{
@@ -597,7 +597,7 @@ func TestProcessCliDryRunOpenapiJson(t *testing.T) {
 		},
 		method: "GET",
 		path:   "/logstores/[logstoreName]",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	err := processCliDryRunOpenapiJson(ctx, oc)
@@ -744,8 +744,13 @@ func TestProcessInvoke_CliDryRun_ROA(t *testing.T) {
 		RegionId:        "cn-hangzhou",
 	}
 	command := NewCommando(stdout, profile)
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "cs", Version: "2015-12-15", ApiStyle: "restful"},
+	})
+	assert.Nil(t, err)
+	command.library.builtinRepo = repo
 
-	err := command.processInvoke(ctx, "cs", "GET", "/clusters")
+	err = command.processInvoke(ctx, "cs", "GET", "/clusters")
 	assert.Nil(t, err)
 
 	output := stdout.String()
@@ -788,8 +793,13 @@ func TestProcessInvoke_CliDryRunJson_ROA(t *testing.T) {
 		RegionId:        "cn-hangzhou",
 	}
 	command := NewCommando(stdout, profile)
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "cs", Version: "2015-12-15", ApiStyle: "restful"},
+	})
+	assert.Nil(t, err)
+	command.library.builtinRepo = repo
 
-	err := command.processInvoke(ctx, "cs", "GET", "/clusters")
+	err = command.processInvoke(ctx, "cs", "GET", "/clusters")
 	assert.Nil(t, err)
 
 	output := strings.TrimSpace(stdout.String())
@@ -935,7 +945,7 @@ func TestBuildCliDryRunFromInvoker_NoQuery(t *testing.T) {
 
 func TestBuildCliDryRunFromOpenapi_EmptyQuery(t *testing.T) {
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "ListProject", Product: product}
+	api := &testLegacyAPI{Name: "ListProject", Product: product}
 	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "cn-hangzhou.log.aliyuncs.com"}
 
 	oc := &OpenapiContext{
@@ -950,7 +960,7 @@ func TestBuildCliDryRunFromOpenapi_EmptyQuery(t *testing.T) {
 		},
 		method: "GET",
 		path:   "/",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	out := buildCliDryRunFromOpenapi(oc)

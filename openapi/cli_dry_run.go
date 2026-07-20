@@ -156,7 +156,9 @@ func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
 	out.PathPattern = oc.path
 	if oc.api != nil {
 		out.Action = oc.api.Name
-		out.Version = oc.api.Product.Version
+		if oc.product != nil {
+			out.Version = oc.product.Version
+		}
 	}
 
 	if oc.openapiRequest != nil && oc.openapiRequest.Body != nil {
