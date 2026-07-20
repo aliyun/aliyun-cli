@@ -87,11 +87,26 @@ func TestInvalidFlagError_DidYouMeanOr(t *testing.T) {
 
 	err := NewInvalidFlagError("fo", ctx)
 	e := err.(*InvalidFlagError)
+	// Suggestions are sorted so the joined message is stable across runs
+	assert.Equal(t, "invalid flag --fo, did you mean --foo or --fox?", e.Error())
+}
+
+func TestInvalidFlagError_AvailableIncludesAliasAndShort(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
+	cmd := &Command{Name: "cmd", flags: NewFlagSet()}
+	cmd.Flags().Add(&Flag{Name: "log-level", Aliases: []string{"log_level"}, Shorthand: 'L'})
+	ctx.EnterCommand(cmd)
+
+	err := NewInvalidFlagError("zzzzz", ctx)
+	e := err.(*InvalidFlagError)
 	msg := e.Error()
-	assert.Contains(t, msg, "invalid flag --fo, did you mean")
-	assert.Contains(t, msg, "--foo")
-	assert.Contains(t, msg, "--fox")
-	assert.Contains(t, msg, " or ")
+	assert.Contains(t, msg, "invalid flag --zzzzz; available flags:")
+	assert.Contains(t, msg, "--log-level")
+	assert.Contains(t, msg, "--log_level")
+	assert.Contains(t, msg, "-L")
+	assert.Contains(t, msg, "--help")
 }
 
 func TestInvalidFlagError_AlreadyPrefixed(t *testing.T) {

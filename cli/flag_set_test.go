@@ -97,6 +97,12 @@ func TestGetSuggestions(t *testing.T) {
 	// No close match
 	ss = fs.GetSuggestions("zzzzz", DefaultSuggestDistance)
 	assert.Empty(t, ss)
+
+	// Multiple matches are sorted for stable error messages
+	fs.Add(&Flag{Name: "foo", AssignedMode: AssignedOnce})
+	fs.Add(&Flag{Name: "fox", AssignedMode: AssignedOnce})
+	ss = fs.GetSuggestions("fo", DefaultSuggestDistance)
+	assert.Equal(t, []string{"--foo", "--fox"}, ss)
 }
 
 func TestAvailableFlagNames(t *testing.T) {
@@ -106,11 +112,11 @@ func TestAvailableFlagNames(t *testing.T) {
 	fs.Add(&Flag{Name: "name"})
 	fs.Add(&Flag{Name: "hidden", Hidden: true})
 	fs.Add(&Flag{Name: "profile", Shorthand: 'p'})
+	fs.Add(&Flag{Name: "log-level", Aliases: []string{"log_level"}})
 
 	names := fs.AvailableFlagNames()
-	assert.Equal(t, []string{"--name", "--profile"}, names)
+	assert.Equal(t, []string{"--log-level", "--log_level", "--name", "--profile", "-p"}, names)
 	assert.NotContains(t, names, "--hidden")
-	assert.NotContains(t, names, "-p")
 }
 
 func TestGetValue(t *testing.T) {

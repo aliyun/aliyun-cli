@@ -15,6 +15,7 @@ package cli
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -85,6 +86,7 @@ func (fs *FlagSet) GetByShorthand(c rune) *Flag {
 
 // get suggestions for an unknown flag name.
 // Uses UnifyApply so comparing "names" against "--name" works (dashes ignored).
+// Results are sorted for stable error messages (index is a map).
 func (fs *FlagSet) GetSuggestions(name string, distance int) []string {
 	sr := NewSuggester(name, distance)
 	for k := range fs.index {
@@ -92,11 +94,13 @@ func (fs *FlagSet) GetSuggestions(name string, distance int) []string {
 	}
 	ss := make([]string, 0)
 	ss = append(ss, sr.GetResults()...)
-
+	sort.Strings(ss)
 	return ss
 }
 
-// AvailableFlagNames returns long-form flag names (e.g. "--name") for non-hidden flags.
+// AvailableFlagNames returns accepted forms for non-hidden flags (primary,
+// aliases, and shorthand), e.g. "--name", "--log_level", "-p". Sorted for
+// stable error messages.
 func (fs *FlagSet) AvailableFlagNames() []string {
 	if fs == nil {
 		return nil
@@ -106,8 +110,9 @@ func (fs *FlagSet) AvailableFlagNames() []string {
 		if f.Hidden {
 			continue
 		}
-		ss = append(ss, "--"+f.Name)
+		ss = append(ss, f.GetFormations()...)
 	}
+	sort.Strings(ss)
 	return ss
 }
 
