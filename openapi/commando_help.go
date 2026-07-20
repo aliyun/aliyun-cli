@@ -22,6 +22,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
+	"github.com/aliyun/aliyun-cli/v3/cliext/oapicmd"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/newmeta"
@@ -308,6 +309,21 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 
 func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName string) error {
 	c.printHelpContextHints(ctx)
+
+	// aliyun-openapi-runtime engine help (default on). When enabled, a
+	// kebab command the engine can resolve (baseline / user meta
+	// plugin) renders its parameter help here, mirroring the engine
+	// execution route. PascalCase API names never match the engine's
+	// kebab route table, so legacy openapi help is unaffected. Products
+	// marked distribution=="go" in metadatas/products.json are excluded
+	// by the engine, so they still fall through to the plugin help below.
+	// Set ALIYUN_CLI_OPENAPI_RUNTIME_FALLBACK=1 to skip for local debug.
+	if commonRuntimeFallbackEnabled() {
+		if handled, herr := oapicmd.TryHelp(ctx, productCode, apiName); handled {
+			return herr
+		}
+	}
+
 	// 0. Check if it's a plugin product
 	var pluginName string
 	var isInstalled bool

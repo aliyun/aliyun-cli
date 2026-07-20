@@ -21,6 +21,9 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
+	runtimejsonl "github.com/aliyun/aliyun-openapi-runtime/jsonl"
+	runtimepbmeta "github.com/aliyun/aliyun-openapi-runtime/pbmeta"
+	runtimestorage "github.com/aliyun/aliyun-openapi-runtime/storage"
 	"golang.org/x/mod/semver"
 )
 
@@ -538,7 +541,13 @@ func (m *Manager) validateVersionAndPlatform(ctx *cli.Context, targetPlugin *Plu
 	platform := GetCurrentPlatform()
 	platInfo, ok := verInfo.Platforms[platform]
 	if !ok {
-		return nil, fmt.Errorf("plugin %s version %s not supported on %s", actualPluginName, version, platform)
+		// Metadata plugins and other platform-independent artifacts are
+		// published once under the reserved "any" key. Keep exact os-arch
+		// packages first so existing Go plugin distribution is unchanged.
+		platInfo, ok = verInfo.Platforms[PluginPlatformAny]
+		if !ok {
+			return nil, fmt.Errorf("plugin %s version %s not supported on %s", actualPluginName, version, platform)
+		}
 	}
 
 	return &platInfo, nil
@@ -810,7 +819,81 @@ func readPluginManifestFromDir(extractDir string) (*PluginManifest, error) {
 	if strings.TrimSpace(pManifest.Version) == "" {
 		return nil, fmt.Errorf("invalid plugin manifest: version is empty")
 	}
+	if err := validateAndResolvePackageType(extractDir, &pManifest); err != nil {
+		return nil, err
+	}
 	return &pManifest, nil
+}
+
+// validateAndResolvePackageType treats the downloaded package manifest as the
+// distribution authority. Remote indexes only locate an artifact; they do not
+// declare whether that artifact is executable Go or interpreted metadata.
+func validateAndResolvePackageType(extractDir string, manifest *PluginManifest) error {
+	declared := strings.ToLower(strings.TrimSpace(manifest.Type))
+	hasMetadata := manifest.Metadata != nil
+	hasBinary := strings.TrimSpace(manifest.Bin.Path) != ""
+
+	switch declared {
+	case "":
+		if hasMetadata {
+			// Migration compatibility for early metadata packages that shipped a
+			// descriptor before type=meta became mandatory.
+			manifest.Type = PluginTypeMeta
+		} else {
+			manifest.Type = PluginTypeGo
+			return nil
+		}
+	case PluginTypeGo:
+		if hasMetadata {
+			return fmt.Errorf("invalid plugin manifest: type %q cannot declare metadata", PluginTypeGo)
+		}
+		manifest.Type = PluginTypeGo
+		return nil
+	case PluginTypeMeta:
+		manifest.Type = PluginTypeMeta
+	default:
+		return fmt.Errorf("invalid plugin manifest: unsupported type %q", manifest.Type)
+	}
+
+	if !hasMetadata {
+		return fmt.Errorf("invalid metadata plugin: metadata descriptor is required")
+	}
+	if hasBinary {
+		return fmt.Errorf("invalid metadata plugin: bin.path must be empty")
+	}
+	d := manifest.Metadata
+	if d.Schema != runtimejsonl.SchemaName || d.SchemaVersion != runtimejsonl.SchemaVersion || d.LayoutVersion != runtimejsonl.LayoutVersion {
+		return fmt.Errorf("unsupported metadata contract format=%q schema=%q schemaVersion=%d layout=%q layoutVersion=%d", d.Format, d.Schema, d.SchemaVersion, d.Layout, d.LayoutVersion)
+	}
+	isJSONL := d.Format == "json" && d.Layout == runtimejsonl.LayoutName
+	isProtobuf := d.Format == "protobuf" && d.Layout == runtimepbmeta.LayoutName
+	if !isJSONL && !isProtobuf {
+		return fmt.Errorf("unsupported metadata contract format=%q schema=%q schemaVersion=%d layout=%q layoutVersion=%d", d.Format, d.Schema, d.SchemaVersion, d.Layout, d.LayoutVersion)
+	}
+	store := runtimestorage.NewDirStorage(filepath.Dir(extractDir))
+	vol, err := store.Open(filepath.Base(extractDir))
+	if err != nil {
+		return fmt.Errorf("open metadata plugin package: %w", err)
+	}
+	defer vol.Close()
+	var verifyErr error
+	if isProtobuf {
+		reader, openErr := runtimepbmeta.Open(vol, d.Index, d.Data)
+		if openErr != nil {
+			return fmt.Errorf("invalid metadata plugin index: %w", openErr)
+		}
+		verifyErr = reader.VerifyChecksum()
+	} else {
+		reader, openErr := runtimejsonl.Open(vol, d.Index, d.Data)
+		if openErr != nil {
+			return fmt.Errorf("invalid metadata plugin index: %w", openErr)
+		}
+		verifyErr = reader.VerifyChecksum()
+	}
+	if verifyErr != nil {
+		return fmt.Errorf("invalid metadata plugin data: %w", verifyErr)
+	}
+	return nil
 }
 
 func copyDirTree(src, dst string) error {
@@ -1008,6 +1091,9 @@ func (m *Manager) loadAndValidatePluginManifest(extractDir, expectedName string)
 			pManifest.Name, expectedName, extractDir,
 		)
 	}
+	if err := validateAndResolvePackageType(extractDir, &pManifest); err != nil {
+		return nil, err
+	}
 
 	return &pManifest, nil
 }
@@ -1029,6 +1115,8 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 		Version:          version,
 		Path:             extractDir,
 		ProductCode:      pManifest.ProductCode,
+		Type:             pManifest.Type,
+		Metadata:         pManifest.Metadata,
 		Command:          pManifest.Command,
 		CommandAliases:   aliases,
 		ShortDescription: pManifest.ShortDescription,

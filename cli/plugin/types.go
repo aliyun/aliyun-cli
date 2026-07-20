@@ -3,7 +3,32 @@ package plugin
 import (
 	"encoding/json"
 	"runtime"
+
+	runtimeschema "github.com/aliyun/aliyun-openapi-runtime/schema"
 )
+
+// Plugin distribution kinds. A product ships as exactly one form:
+// a compiled Go binary run as a separate process ("go"), or a bundle
+// of JSON metadata interpreted in-process by aliyun-openapi-runtime ("meta").
+// An empty value is treated as "go" for backward compatibility with
+// manifests/indexes authored before meta plugins existed.
+const (
+	PluginTypeGo   = "go"
+	PluginTypeMeta = "meta"
+
+	// PluginPlatformAny identifies a platform-independent package artifact.
+	// Installers prefer the exact os-arch entry and fall back to this key.
+	PluginPlatformAny = "any"
+)
+
+// NormalizePluginType maps an empty/unknown type string to the legacy
+// default ("go").
+func NormalizePluginType(t string) string {
+	if t == PluginTypeMeta {
+		return PluginTypeMeta
+	}
+	return PluginTypeGo
+}
 
 type Index struct {
 	Plugins []PluginInfo `json:"plugins"`
@@ -91,6 +116,14 @@ type LocalPlugin struct {
 	Version     string `json:"version"`
 	Path        string `json:"path"` // 插件目录路径
 	ProductCode string `json:"productCode,omitempty"`
+	// Type is the distribution kind: "go" (default) or "meta". Go
+	// plugins are executed as a separate process; meta plugins are
+	// interpreted in-process by aliyun-openapi-runtime.
+	Type string `json:"type,omitempty"`
+	// Metadata records the installed metadata encoding/layout contract. The
+	// package manifest remains authoritative; this copy supports routing and
+	// diagnostics without probing the package directory.
+	Metadata *MetadataDescriptor `json:"metadata,omitempty"`
 	// Command is the top-level CLI subcommand this plugin serves (e.g. "hologram" for `aliyun hologram ...`).
 	// 本期 runtime 不直接把 Command 当作查找 key —— 因为 plugin name 与 Command 都派生自 productCode
 	// (plugin name = "aliyun-cli-" + normalize(productCode), Command = normalize(productCode))，
@@ -101,15 +134,15 @@ type LocalPlugin struct {
 	// 是本期真正“新增”的查找 key，由 matchPluginAlias 在 FindInstalledPluginInManifest 里显式匹配。
 	// 与主命令一样落到同一份查找路径，因此 execute / help / 管理命令（install/uninstall/update）
 	// 都天然识别 alias；管理命令按 alias 定位到插件后仍以 plugin Name 为准做增删。
-	CommandAliases []string `json:"commandAliases,omitempty"`
+	CommandAliases   []string `json:"commandAliases,omitempty"`
 	CmdNames         []string `json:"cmdNames"`
 	ShortDescription string   `json:"shortDescription"`
 	Description      string   `json:"description"`
 	Inner            bool     `json:"inner,omitempty"` // 内置/产品侧插件（manifest.json inner）
-	// ProfileRequired controls whether the host CLI requires a valid configured profile before spawning this plugin. 
-	// Defaults to true (legacy behavior) when unset. 
-	// Set to false for plugins whose APIs may not need a profile (e.g. token-backed gateways, hybrid auth). 
-	// The plugin remains responsible for per-API auth validation. 
+	// ProfileRequired controls whether the host CLI requires a valid configured profile before spawning this plugin.
+	// Defaults to true (legacy behavior) when unset.
+	// Set to false for plugins whose APIs may not need a profile (e.g. token-backed gateways, hybrid auth).
+	// The plugin remains responsible for per-API auth validation.
 	// Use a pointer so an absent field in legacy manifests is reliably distinguishable from an explicit `false`.
 	ProfileRequired *bool `json:"profileRequired,omitempty"`
 }
@@ -119,6 +152,12 @@ func (lp *LocalPlugin) IsProfileRequired() bool {
 		return true
 	}
 	return *lp.ProfileRequired
+}
+
+// IsMeta reports whether this installed plugin is a JSON-metadata
+// plugin (interpreted in-process) rather than a Go binary.
+func (lp *LocalPlugin) IsMeta() bool {
+	return lp != nil && NormalizePluginType(lp.Type) == PluginTypeMeta
 }
 
 type PluginAPIVersions struct {
@@ -136,6 +175,7 @@ type PluginAPIVersionInfo struct {
 type PluginManifest struct {
 	Name        string `json:"name"`
 	Version     string `json:"version"`
+	Type        string `json:"type,omitempty"`
 	ProductCode string `json:"productCode,omitempty"`
 	// Command is the top-level CLI subcommand this plugin exposes to end users.
 	// See LocalPlugin.Command for the runtime semantics.
@@ -149,9 +189,15 @@ type PluginManifest struct {
 	Bin              struct {
 		Path string `json:"path"` // 二进制文件相对路径
 	} `json:"bin"`
-	CmdNames        []string `json:"cmdNames"`
-	ProfileRequired *bool    `json:"profileRequired,omitempty"`
+	CmdNames        []string            `json:"cmdNames"`
+	MinCliVersion   string              `json:"minCliVersion,omitempty"`
+	Metadata        *MetadataDescriptor `json:"metadata,omitempty"`
+	ProfileRequired *bool               `json:"profileRequired,omitempty"`
 }
+
+// MetadataDescriptor is shared with aliyun-openapi-runtime so the installer
+// validates exactly the contract consumed by the runtime.
+type MetadataDescriptor = runtimeschema.MetadataDescriptor
 
 // Key: kebab-case command name (e.g., "fc create-alias")
 // Value: plugin name (e.g., "aliyun-cli-fc")

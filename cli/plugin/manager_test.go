@@ -1058,6 +1058,7 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 		pluginName   string
 		wantErr      bool
 		errContains  string
+		wantURL      string
 	}{
 		{
 			name: "Valid version and platform",
@@ -1077,6 +1078,49 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 			version:    "1.0.0",
 			pluginName: "test-plugin",
 			wantErr:    false,
+			wantURL:    "http://example.com/plugin.tar.gz",
+		},
+		{
+			name: "Falls back to platform-independent artifact",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							PluginPlatformAny: {
+								URL:      "http://example.com/plugin-any.zip",
+								Checksum: "any123",
+							},
+						},
+					},
+				},
+			},
+			version:    "1.0.0",
+			pluginName: "test-plugin",
+			wantURL:    "http://example.com/plugin-any.zip",
+		},
+		{
+			name: "Exact platform takes precedence over any",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							currentPlatform: {
+								URL:      "http://example.com/plugin-platform.tar.gz",
+								Checksum: "platform123",
+							},
+							PluginPlatformAny: {
+								URL:      "http://example.com/plugin-any.zip",
+								Checksum: "any123",
+							},
+						},
+					},
+				},
+			},
+			version:    "1.0.0",
+			pluginName: "test-plugin",
+			wantURL:    "http://example.com/plugin-platform.tar.gz",
 		},
 		{
 			name: "Version not found",
@@ -1143,6 +1187,8 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 
 			if platInfo == nil {
 				t.Errorf("validateVersionAndPlatform() expected PlatformInfo, got nil")
+			} else if tt.wantURL != "" && platInfo.URL != tt.wantURL {
+				t.Errorf("validateVersionAndPlatform() URL = %q, want %q", platInfo.URL, tt.wantURL)
 			}
 		})
 	}

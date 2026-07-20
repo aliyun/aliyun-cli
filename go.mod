@@ -10,6 +10,7 @@ require (
 	github.com/alibabacloud-go/tea v1.3.12
 	github.com/alibabacloud-go/tea-utils/v2 v2.0.7
 	github.com/aliyun/alibaba-cloud-sdk-go v1.63.107
+	github.com/aliyun/aliyun-openapi-runtime v0.0.0-00010101000000-000000000000
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
 	github.com/aliyun/credentials-go v1.4.7
 	github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc
@@ -60,3 +61,5 @@ require (
 
 // should be removed after related pr merged in upstream jmespath/go-jmespath
 replace github.com/jmespath/go-jmespath => github.com/alibabacloud-go/go-jmespath v0.4.0-aliyun
+
+replace github.com/aliyun/aliyun-openapi-runtime => ./aliyun-openapi-runtime

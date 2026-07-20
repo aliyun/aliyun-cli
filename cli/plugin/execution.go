@@ -36,6 +36,22 @@ func IsPluginInstalled(command string) (bool, string, error) {
 	return true, pluginName, nil
 }
 
+// InstalledPluginType returns the distribution type ("go" | "meta") of
+// the installed plugin serving command, and ok=false when no plugin is
+// installed for it. An installed plugin with an unset type is reported
+// as "go" (legacy default).
+func InstalledPluginType(command string) (pluginType string, ok bool) {
+	mgr, err := NewManager()
+	if err != nil {
+		return "", false
+	}
+	_, lp, err := mgr.findLocalPlugin(command)
+	if err != nil || lp == nil {
+		return "", false
+	}
+	return NormalizePluginType(lp.Type), true
+}
+
 // Plugins explicitly opt out of host profile enforcement by setting `"profileRequired": false` in their manifest.json.
 // 走同一份 findLocalPlugin 查找，因此 alias 触发的命令也会读到与主命令一致的 profileRequired 配置。
 func IsProfileRequiredForCommand(command string) bool {

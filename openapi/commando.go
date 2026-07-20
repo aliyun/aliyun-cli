@@ -20,6 +20,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
+	"github.com/aliyun/aliyun-cli/v3/cliext/oapicmd"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -58,6 +59,21 @@ func NewCommando(w io.Writer, profile config.Profile) *Commando {
 	}
 	r.library = NewLibrary(w, profile.Language) //TODO: load from local repository
 	return r
+}
+
+// commonRuntimeFallbackEnabled reports whether, for a product with no
+// installed plugin, the CLI should route "<product> <kebab-command>" to
+// the aliyun-openapi-runtime engine (baseline / user meta plugin) instead of
+// the legacy auto-install / not-found path.
+//
+// Default is ON (unset => openapi-runtime) for local debugging. The engine
+// already ABSTAINS from products marked distribution=="go" in
+// metadatas/products.json (so Go-plugin products still fall through to
+// auto-install). Set ALIYUN_CLI_OPENAPI_RUNTIME_FALLBACK=1 (or true) to
+// disable the openapi-runtime route and exercise the legacy path.
+func commonRuntimeFallbackEnabled() bool {
+	v := strings.TrimSpace(os.Getenv("ALIYUN_CLI_OPENAPI_RUNTIME_FALLBACK"))
+	return !(v == "1" || strings.EqualFold(v, "true"))
 }
 
 func (c *Commando) loadPlugins() {
@@ -276,6 +292,28 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			if err != nil {
 				return fmt.Errorf("failed to check plugin status: %w", err)
 			}
+
+			// aliyun-openapi-runtime routing (does NOT absorb Go plugin
+			// processes). A product ships as exactly one form:
+			//   - installed Go plugin   -> fall through to ExecutePlugin
+			//   - installed meta plugin -> aliyun-openapi-runtime engine (always;
+			//     no legacy behavior exists for meta plugins)
+			//   - not installed but the engine resolves it (baseline /
+			//     user meta plugin) -> aliyun-openapi-runtime engine by
+			//     default. Set ALIYUN_CLI_OPENAPI_RUNTIME_FALLBACK=1 to
+			//     skip and exercise the legacy auto-install path.
+			//     Products marked distribution=="go" are abstained by
+			//     the engine so they still reach auto-install.
+			if installed {
+				if ptype, ok := plugin.InstalledPluginType(args[0]); ok && ptype == plugin.PluginTypeMeta {
+					return oapicmd.Dispatch(ctx, pluginArgs)
+				}
+			} else if commonRuntimeFallbackEnabled() {
+				if handled, derr := oapicmd.TryDispatch(ctx, pluginArgs); handled {
+					return derr
+				}
+			}
+
 			if !installed {
 				ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
 				// profile 加载 / 校验失败必须 fail-fast，不要 silent 吞错。否则会停留在main.go 启动时的默认 profile，--profile xxx 的语义丢失，用户毫无感知。

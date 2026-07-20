@@ -1,3 +1,4 @@
 [submodule "aliyun-openapi-meta"]
 	path = aliyun-openapi-meta
-	url = https://github.com/aliyun/aliyun-openapi-meta.git
+	url = git@github.com:pl0301/aliyun-openapi-meta.git
+	branch = change_v5
