@@ -13,7 +13,10 @@
 // limitations under the License.
 package cli
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // If command.Execute return Noticeable error, print i18n Notice under error information
 type ErrorWithTip interface {
@@ -77,11 +80,43 @@ func NewInvalidFlagError(name string, ctx *Context) error {
 	}
 }
 
+func (e *InvalidFlagError) flagDisplay() string {
+	if strings.HasPrefix(e.Flag, "-") {
+		return e.Flag
+	}
+	return "--" + e.Flag
+}
+
 func (e *InvalidFlagError) Error() string {
-	return fmt.Sprintf("invalid flag %s", e.Flag)
+	display := e.flagDisplay()
+	suggestions := e.closeSuggestions()
+	if len(suggestions) > 0 {
+		return fmt.Sprintf("invalid flag %s, did you mean %s?", display, strings.Join(suggestions, " or "))
+	}
+	available := e.availableFlags()
+	if len(available) > 0 {
+		return fmt.Sprintf("invalid flag %s; available flags: %s", display, strings.Join(available, ", "))
+	}
+	return fmt.Sprintf("invalid flag %s", display)
+}
+
+func (e *InvalidFlagError) closeSuggestions() []string {
+	if e.ctx == nil || e.ctx.command == nil || e.ctx.Flags() == nil {
+		return nil
+	}
+	distance := e.ctx.command.GetSuggestDistance()
+	return e.ctx.Flags().GetSuggestions(e.Flag, distance)
+}
+
+func (e *InvalidFlagError) availableFlags() []string {
+	if e.ctx == nil || e.ctx.Flags() == nil {
+		return nil
+	}
+	return e.ctx.Flags().AvailableFlagNames()
 }
 
 func (e *InvalidFlagError) GetSuggestions() []string {
-	distance := e.ctx.command.GetSuggestDistance()
-	return e.ctx.Flags().GetSuggestions(e.Flag, distance)
+	// Suggestions are already embedded in Error() to keep the hint on stderr
+	// (PrintSuggestions writes to stdout and is easy to miss).
+	return nil
 }
