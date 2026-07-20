@@ -199,15 +199,16 @@ func TestCallWithThrottlingRetryStopsWhenDisabled(t *testing.T) {
 	assert.Equal(t, 1, calls)
 }
 
-func TestThrottlingRetryDelayRequiresThrottlingCodeAndRetryAfter(t *testing.T) {
+func TestThrottlingRetryDelayRequiresRetryAfterHeader(t *testing.T) {
 	invoker := &BasicInvoker{}
 
 	delay, ok := invoker.throttlingRetryDelay(newThrottlingServerError("Throttling.Api", "123"))
 	assert.True(t, ok)
 	assert.Equal(t, int64(123), delay)
 
-	_, ok = invoker.throttlingRetryDelay(newThrottlingServerError("InternalError", "123"))
-	assert.False(t, ok)
+	delay, ok = invoker.throttlingRetryDelay(newThrottlingServerError("InternalError", "123"))
+	assert.True(t, ok)
+	assert.Equal(t, int64(123), delay)
 
 	_, ok = invoker.throttlingRetryDelay(newThrottlingServerError("Throttling.Api", "not-number"))
 	assert.False(t, ok)
