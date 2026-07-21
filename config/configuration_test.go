@@ -18,7 +18,9 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -217,12 +219,230 @@ func TestSaveConfiguration(t *testing.T) {
 	assert.Nil(t, err)
 	err = SaveConfiguration(conf)
 	assert.Nil(t, err)
-	file, err := os.Open(GetConfigPath() + "/" + configFile)
+	file, err := os.Open(filepath.Join(GetConfigPath(), configFile))
 	assert.Nil(t, err)
 	buf := make([]byte, 1024)
 	n, _ := file.Read(buf)
 	file.Close()
 	assert.Equal(t, string(bytes), string(buf[:n]))
+}
+
+func TestAtomicWriteFile_OverwriteExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	err := os.WriteFile(path, []byte(`{"current":"old"}`), 0600)
+	assert.NoError(t, err)
+
+	newContent := []byte(`{"current":"new","profiles":[]}`)
+	err = atomicWriteFile(path, newContent, 0600)
+	assert.NoError(t, err)
+
+	got, err := os.ReadFile(path)
+	assert.NoError(t, err)
+	assert.Equal(t, string(newContent), string(got))
+
+	entries, err := os.ReadDir(dir)
+	assert.NoError(t, err)
+	for _, e := range entries {
+		assert.False(t, strings.Contains(e.Name(), ".tmp-"), "temp file should be cleaned: %s", e.Name())
+	}
+}
+
+func TestAtomicWriteFile_RenameFailurePreservesExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	oldContent := []byte(`{"current":"old"}`)
+	assert.NoError(t, os.WriteFile(path, oldContent, 0600))
+
+	rename := func(oldPath, newPath string) error {
+		return errors.New("injected rename failure")
+	}
+
+	err := atomicWriteFileWithRename(path, []byte(`{"current":"new"}`), 0600, rename)
+	assert.ErrorContains(t, err, "injected rename failure")
+
+	got, err := os.ReadFile(path)
+	assert.NoError(t, err)
+	assert.Equal(t, oldContent, got)
+
+	entries, err := os.ReadDir(dir)
+	assert.NoError(t, err)
+	for _, entry := range entries {
+		assert.False(t, strings.Contains(entry.Name(), ".tmp-"), "temp file should be cleaned: %s", entry.Name())
+	}
+}
+
+func TestAtomicWriteFile_PreservesSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks may require elevated privileges on Windows")
+	}
+
+	targetDir := t.TempDir()
+	targetPath := filepath.Join(targetDir, "config.json")
+	assert.NoError(t, os.WriteFile(targetPath, []byte(`{"current":"old"}`), 0600))
+
+	linkDir := t.TempDir()
+	linkPath := filepath.Join(linkDir, "config.json")
+	assert.NoError(t, os.Symlink(targetPath, linkPath))
+
+	newContent := []byte(`{"current":"new"}`)
+	assert.NoError(t, atomicWriteFile(linkPath, newContent, 0600))
+
+	info, err := os.Lstat(linkPath)
+	assert.NoError(t, err)
+	assert.NotZero(t, info.Mode()&os.ModeSymlink)
+	got, err := os.ReadFile(targetPath)
+	assert.NoError(t, err)
+	assert.Equal(t, newContent, got)
+}
+
+func TestAtomicWriteFile_DanglingSymlinkFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("creating symlinks may require elevated privileges on Windows")
+	}
+
+	dir := t.TempDir()
+	linkPath := filepath.Join(dir, "config.json")
+	assert.NoError(t, os.Symlink(filepath.Join(dir, "missing.json"), linkPath))
+
+	err := atomicWriteFile(linkPath, []byte(`{"current":"new"}`), 0600)
+	assert.ErrorContains(t, err, "failed to resolve config symlink")
+}
+
+func TestAtomicWriteFile_CreateTempFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing", "config.json")
+
+	err := atomicWriteFile(path, []byte(`{"current":"new"}`), 0600)
+	assert.ErrorContains(t, err, "failed to create temp config")
+}
+
+func TestAtomicWriteFile_InspectPathFailure(t *testing.T) {
+	// Do not rely on "parent path is a file" to trigger Lstat failure:
+	// on Windows that yields a not-exist-style error (IsNotExist=true), so the
+	// inspect branch is skipped and CreateTemp fails instead. Inject Lstat.
+	originLstat := lstatAtomicPath
+	defer func() {
+		lstatAtomicPath = originLstat
+	}()
+	lstatAtomicPath = func(name string) (os.FileInfo, error) {
+		return nil, errors.New("permission denied")
+	}
+
+	err := atomicWriteFile(filepath.Join(t.TempDir(), "config.json"), []byte(`{"current":"new"}`), 0600)
+	assert.ErrorContains(t, err, "failed to inspect config path")
+	assert.ErrorContains(t, err, "permission denied")
+}
+
+func TestAtomicWriteFile_TempFileFailures(t *testing.T) {
+	originCreateTemp := createAtomicTempFile
+	defer func() {
+		createAtomicTempFile = originCreateTemp
+	}()
+
+	tests := []struct {
+		name    string
+		file    *fakeAtomicTempFile
+		wantErr string
+	}{
+		{
+			name:    "chmod",
+			file:    &fakeAtomicTempFile{chmodErr: errors.New("chmod failed")},
+			wantErr: "chmod failed",
+		},
+		{
+			name:    "write",
+			file:    &fakeAtomicTempFile{writeErr: errors.New("write failed")},
+			wantErr: "write failed",
+		},
+		{
+			name:    "short write",
+			file:    &fakeAtomicTempFile{writeN: 1},
+			wantErr: "short write",
+		},
+		{
+			name:    "sync",
+			file:    &fakeAtomicTempFile{syncErr: errors.New("sync failed")},
+			wantErr: "sync failed",
+		},
+		{
+			name:    "close",
+			file:    &fakeAtomicTempFile{closeErr: errors.New("close failed")},
+			wantErr: "close failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempPath := filepath.Join(t.TempDir(), "config.json.tmp")
+			tt.file.name = tempPath
+			createAtomicTempFile = func(dir, pattern string) (atomicTempFile, error) {
+				return tt.file, nil
+			}
+
+			err := atomicWriteFile(filepath.Join(t.TempDir(), "config.json"), []byte(`{"current":"new"}`), 0600)
+			assert.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestSaveConfiguration_OverwriteExisting(t *testing.T) {
+	orighookGetHomePath := hookGetHomePath
+	defer func() {
+		os.RemoveAll("./.aliyun")
+		hookGetHomePath = orighookGetHomePath
+	}()
+	hookGetHomePath = func(fn func() string) func() string {
+		return func() string {
+			return "."
+		}
+	}
+
+	oldConf := &Configuration{
+		CurrentProfile: "old",
+		Profiles:       []Profile{{Language: "en", Name: "old", Mode: "AK", AccessKeyId: "old_id", AccessKeySecret: "old_secret", RegionId: "cn-hangzhou", OutputFormat: "json"}},
+	}
+	assert.NoError(t, SaveConfiguration(oldConf))
+
+	newConf := &Configuration{
+		CurrentProfile: "default",
+		Profiles:       []Profile{{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "new_id", AccessKeySecret: "new_secret", RegionId: "cn-beijing", OutputFormat: "json"}},
+	}
+	assert.NoError(t, SaveConfiguration(newConf))
+
+	path := filepath.Join(GetConfigPath(), configFile)
+	loaded, err := LoadConfigurationFromFile(path)
+	assert.NoError(t, err)
+	assert.Equal(t, "default", loaded.CurrentProfile)
+	assert.Equal(t, "new_id", loaded.Profiles[0].AccessKeyId)
+	assert.Equal(t, "cn-beijing", loaded.Profiles[0].RegionId)
+
+	entries, err := os.ReadDir(GetConfigPath())
+	assert.NoError(t, err)
+	for _, e := range entries {
+		assert.False(t, strings.Contains(e.Name(), ".tmp-"), "temp file should be cleaned: %s", e.Name())
+	}
+}
+
+func TestSaveConfigurationWithContext_CustomPathCreatesDir(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
+	customPath := filepath.Join(t.TempDir(), "nested", "config.json")
+	ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+	ConfigurePathFlag(ctx.Flags()).SetValue(customPath)
+
+	conf := &Configuration{
+		CurrentProfile: "default",
+		Profiles:       []Profile{{Language: "en", Name: "default", Mode: "AK", AccessKeyId: "new_id", AccessKeySecret: "new_secret", RegionId: "cn-beijing", OutputFormat: "json"}},
+	}
+	assert.NoError(t, SaveConfigurationWithContext(ctx, conf))
+
+	loaded, err := LoadConfigurationFromFile(customPath)
+	assert.NoError(t, err)
+	assert.Equal(t, "default", loaded.CurrentProfile)
+	assert.Equal(t, "new_id", loaded.Profiles[0].AccessKeyId)
 }
 
 func TestLoadOrCreateConfiguration(t *testing.T) {
@@ -400,4 +620,39 @@ func TestGetConfigurePath(t *testing.T) {
 	ctx.Flags().Get("config-path").SetValue("/path/to/config.json")
 	p = getConfigurePath(ctx)
 	assert.Equal(t, p, "/path/to/config.json")
+}
+
+type fakeAtomicTempFile struct {
+	name     string
+	writeN   int
+	chmodErr error
+	writeErr error
+	syncErr  error
+	closeErr error
+}
+
+func (f *fakeAtomicTempFile) Name() string {
+	return f.name
+}
+
+func (f *fakeAtomicTempFile) Chmod(os.FileMode) error {
+	return f.chmodErr
+}
+
+func (f *fakeAtomicTempFile) Write(data []byte) (int, error) {
+	if f.writeErr != nil {
+		return 0, f.writeErr
+	}
+	if f.writeN != 0 {
+		return f.writeN, nil
+	}
+	return len(data), nil
+}
+
+func (f *fakeAtomicTempFile) Sync() error {
+	return f.syncErr
+}
+
+func (f *fakeAtomicTempFile) Close() error {
+	return f.closeErr
 }

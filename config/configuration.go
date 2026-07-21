@@ -17,6 +17,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -217,13 +218,12 @@ func LoadConfigurationWithContext(ctx *cli.Context) (conf *Configuration, err er
 }
 
 func SaveConfiguration(config *Configuration) (err error) {
-	// fmt.Printf("conf %v\n", config)
 	bytes, err := json.MarshalIndent(config, "", "\t")
 	if err != nil {
 		return
 	}
-	path := GetConfigPath() + "/" + configFile
-	err = os.WriteFile(path, bytes, 0600)
+	path := filepath.Join(GetConfigPath(), configFile)
+	err = atomicWriteFile(path, bytes, 0600)
 	return
 }
 
@@ -232,7 +232,7 @@ func SaveConfigurationWithContext(ctx *cli.Context, config *Configuration) (err 
 	if err != nil {
 		return
 	}
-	confFilePath := hookGetHomePath(GetHomePath)() + configPath + "/" + configFile
+	confFilePath := filepath.Join(hookGetHomePath(GetHomePath)()+configPath, configFile)
 	if customPath, ok := ConfigurePathFlag(ctx.Flags()).GetValue(); ok {
 		confFilePath = customPath
 	}
@@ -243,8 +243,77 @@ func SaveConfigurationWithContext(ctx *cli.Context, config *Configuration) (err 
 			panic(fmt.Errorf("failed to create config directory %q: %w", dir, err))
 		}
 	}
-	err = os.WriteFile(confFilePath, bytes, 0600)
+	err = atomicWriteFile(confFilePath, bytes, 0600)
 	return
+}
+
+// atomicWriteFile writes data via a same-directory temp file then os.Rename.
+// On Windows, os.Rename replaces an existing destination (MoveFileEx REPLACE_EXISTING),
+// matching credentials-go / mcpproxy behavior and avoiding truncated config.json on crash.
+func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+	return atomicWriteFileWithRename(path, data, perm, os.Rename)
+}
+
+type atomicTempFile interface {
+	Name() string
+	Chmod(os.FileMode) error
+	Write([]byte) (int, error)
+	Sync() error
+	Close() error
+}
+
+var createAtomicTempFile = func(dir, pattern string) (atomicTempFile, error) {
+	return os.CreateTemp(dir, pattern)
+}
+
+var lstatAtomicPath = os.Lstat
+
+func atomicWriteFileWithRename(path string, data []byte, perm os.FileMode, rename func(string, string) error) error {
+	if info, err := lstatAtomicPath(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		resolvedPath, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return fmt.Errorf("failed to resolve config symlink %q: %w", path, err)
+		}
+		path = resolvedPath
+	} else if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to inspect config path %q: %w", path, err)
+	}
+
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	temp, err := createAtomicTempFile(dir, "."+base+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp config in %q: %w", dir, err)
+	}
+	tempPath := temp.Name()
+	closed := false
+	defer func() {
+		if !closed {
+			_ = temp.Close()
+		}
+		_ = os.Remove(tempPath)
+	}()
+
+	if err := temp.Chmod(perm); err != nil {
+		return fmt.Errorf("failed to set temp config permissions %q: %w", tempPath, err)
+	}
+	if n, err := temp.Write(data); err != nil {
+		return fmt.Errorf("failed to write temp config %q: %w", tempPath, err)
+	} else if n != len(data) {
+		return fmt.Errorf("failed to write temp config %q: %w", tempPath, io.ErrShortWrite)
+	}
+	if err := temp.Sync(); err != nil {
+		return fmt.Errorf("failed to sync temp config %q: %w", tempPath, err)
+	}
+	if err := temp.Close(); err != nil {
+		return fmt.Errorf("failed to close temp config %q: %w", tempPath, err)
+	}
+	closed = true
+
+	if err := rename(tempPath, path); err != nil {
+		return fmt.Errorf("failed to rename temp config to %q: %w", path, err)
+	}
+	return nil
 }
 
 func NewConfigFromBytes(bytes []byte) (conf *Configuration, err error) {
