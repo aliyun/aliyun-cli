@@ -70,7 +70,14 @@ func validateAPI(api *API) error {
 	}
 	if api.V1BodyParameters != nil {
 		for _, p := range *api.V1BodyParameters {
-			if err := validateLegacyBodyParameter(p); err != nil {
+			if err := validateLegacyParameter(p); err != nil {
+				return err
+			}
+		}
+	}
+	if api.V1Parameters != nil {
+		for _, p := range *api.V1Parameters {
+			if err := validateLegacyParameter(p); err != nil {
 				return err
 			}
 		}
@@ -78,12 +85,12 @@ func validateAPI(api *API) error {
 	return nil
 }
 
-func validateLegacyBodyParameter(p LegacyBodyParameter) error {
+func validateLegacyParameter(p LegacyBodyParameter) error {
 	if !isKnownLocation(p.Position) {
-		return fmt.Errorf("unknown v1 body position %q for parameter %s", p.Position, p.Name)
+		return fmt.Errorf("unknown v1 parameter position %q for parameter %s", p.Position, p.Name)
 	}
 	for _, child := range p.SubParameters {
-		if err := validateLegacyBodyParameter(child); err != nil {
+		if err := validateLegacyParameter(child); err != nil {
 			return err
 		}
 	}
@@ -92,7 +99,7 @@ func validateLegacyBodyParameter(p LegacyBodyParameter) error {
 
 func isKnownLocation(location string) bool {
 	switch strings.ToLower(location) {
-	case "query", "body", "host", "path", "header", "form", "formdata":
+	case "query", "body", "host", "domain", "path", "header", "form", "formdata":
 		return true
 	default:
 		return false

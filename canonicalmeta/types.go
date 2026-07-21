@@ -19,6 +19,7 @@ type API struct {
 
 	Parameters []Parameter `json:"parameters"`
 
+	V1Parameters     *[]LegacyBodyParameter `json:"v1_parameters,omitempty"`
 	V1BodyParameters *[]LegacyBodyParameter `json:"v1_body_parameters,omitempty"`
 }
 

@@ -13,6 +13,7 @@ const (
 	SourceCanonical LegacyParameterSource = iota
 	SourceField
 	SourceBody
+	SourceV1
 )
 
 // LegacyParameterView is a read-only reference to a Canonical parameter node.
@@ -52,6 +53,14 @@ func NewBodyView(b *LegacyBodyParameter) *LegacyParameterView {
 	}
 }
 
+// NewV1View creates a view wrapping a complete V1 parameter.
+func NewV1View(b *LegacyBodyParameter) *LegacyParameterView {
+	return &LegacyParameterView{
+		source: SourceV1,
+		body:   b,
+	}
+}
+
 // LegacyName returns the old CLI parameter name (PascalCase).
 func (v *LegacyParameterView) LegacyName() string {
 	switch v.source {
@@ -59,7 +68,7 @@ func (v *LegacyParameterView) LegacyName() string {
 		return v.canonical.RawName
 	case SourceField:
 		return v.field.RawName
-	case SourceBody:
+	case SourceBody, SourceV1:
 		return v.body.Name
 	}
 	return ""
@@ -81,6 +90,11 @@ func (v *LegacyParameterView) LegacyPosition() string {
 			return "Body"
 		}
 		return legacySubPosition(v.body.Position)
+	case SourceV1:
+		if v.resolvedPosition != "" {
+			return v.resolvedPosition
+		}
+		return legacyPosition(v.body.Position)
 	}
 	return ""
 }
@@ -93,7 +107,7 @@ func (v *LegacyParameterView) LegacyType() string {
 		return v.canonical.Type
 	case SourceField:
 		return v.field.Type
-	case SourceBody:
+	case SourceBody, SourceV1:
 		return v.body.Type
 	}
 	return ""
@@ -106,7 +120,7 @@ func (v *LegacyParameterView) LegacyRequired() bool {
 		return v.canonical.Required
 	case SourceField:
 		return v.field.Required
-	case SourceBody:
+	case SourceBody, SourceV1:
 		return v.body.Required
 	}
 	return false
@@ -130,6 +144,11 @@ func (v *LegacyParameterView) LegacyDescription(language string) string {
 			return v.body.DescriptionEn
 		}
 		return v.body.DescriptionZh
+	case SourceV1:
+		if language == "en" {
+			return v.body.DescriptionEn
+		}
+		return v.body.DescriptionZh
 	}
 	return ""
 }
@@ -141,7 +160,7 @@ func (v *LegacyParameterView) LegacyExample() string {
 		return v.canonical.Example
 	case SourceField:
 		return v.field.Example
-	case SourceBody:
+	case SourceBody, SourceV1:
 		return v.body.Example
 	}
 	return ""
@@ -150,7 +169,7 @@ func (v *LegacyParameterView) LegacyExample() string {
 // LegacyHasChildren returns true if this parameter has sub-parameters
 // that the old CLI would expose via --X.1.Field syntax.
 func (v *LegacyParameterView) LegacyHasChildren() bool {
-	if v.source == SourceBody {
+	if v.source == SourceBody || v.source == SourceV1 {
 		return len(v.body.SubParameters) > 0
 	}
 	if v.source == SourceField {
@@ -168,7 +187,7 @@ func (v *LegacyParameterView) LegacyHasChildren() bool {
 // IsLegacyRepeatList returns true if this parameter behaves as a RepeatList
 // in old CLI semantics (accepts --X.1 syntax).
 func (v *LegacyParameterView) IsLegacyRepeatList() bool {
-	if v.source == SourceBody {
+	if v.source == SourceBody || v.source == SourceV1 {
 		return isBodyRepeatList(v.body)
 	}
 	if v.source == SourceField {
@@ -205,7 +224,7 @@ func (v *LegacyParameterView) LegacyChildren() []*LegacyParameterView {
 		for i := range v.field.ElementFields {
 			children = append(children, NewFieldView(&v.field.ElementFields[i], v.topLocation))
 		}
-	case SourceBody:
+	case SourceBody, SourceV1:
 		for i := range v.body.SubParameters {
 			child := NewBodyView(&v.body.SubParameters[i])
 			// Sub-parameters are NOT top-level; form -> FormData, not Body
@@ -227,6 +246,8 @@ func legacyPosition(location string) string {
 		return "Body"
 	case "host":
 		return "Host"
+	case "domain":
+		return "Domain"
 	case "path":
 		return "Path"
 	case "header":
@@ -247,6 +268,8 @@ func legacySubPosition(location string) string {
 		return "Body"
 	case "host":
 		return "Host"
+	case "domain":
+		return "Domain"
 	case "path":
 		return "Path"
 	case "header":
@@ -320,8 +343,35 @@ var excludedParamNames = map[string]bool{
 }
 
 // LegacyTopLevelParameters returns the top-level parameter views for old CLI consumption.
-// Applies v1_body_parameters three-state logic and deduplication.
+// If v1_parameters exists, it is the complete V1 parameter list and no other
+// parameter source is merged. Otherwise, applies v1_body_parameters three-state
+// logic and deduplication.
 func (api *API) LegacyTopLevelParameters() []*LegacyParameterView {
+	if api.V1Parameters != nil {
+		result := make([]*LegacyParameterView, 0, len(*api.V1Parameters))
+		seen := make(map[string]bool)
+		for i := range *api.V1Parameters {
+			b := &(*api.V1Parameters)[i]
+			if excludedParamNames[b.Name] {
+				continue
+			}
+			if seen[b.Name] {
+				continue
+			}
+			seen[b.Name] = true
+
+			v := NewV1View(b)
+			v.resolvedPosition = legacyPosition(b.Position)
+			result = append(result, v)
+		}
+
+		sort.SliceStable(result, func(i, j int) bool {
+			return result[i].LegacyName() < result[j].LegacyName()
+		})
+
+		return result
+	}
+
 	var result []*LegacyParameterView
 	seen := make(map[string]bool)
 
@@ -406,6 +456,10 @@ func (v *LegacyParameterView) IsTopLevelBody() bool {
 // the fields carried inside a top-level --body parameter; it does not affect
 // parameter lookup or execution semantics.
 func (api *API) LegacyBodyFields() []*Parameter {
+	if api.V1Parameters != nil {
+		return nil
+	}
+
 	var fields []*Parameter
 	for i := range api.Parameters {
 		p := &api.Parameters[i]
@@ -507,6 +561,29 @@ func foreachLegacyParameter(params []*LegacyParameterView, prefix string, f func
 // both public and v1_body_parameters, matching the old p.Type != "RepeatList".
 func (api *API) CheckLegacyRequiredParameters(checker func(string) bool) error {
 	var missing []string
+
+	if api.V1Parameters != nil {
+		seen := make(map[string]bool)
+		for i := range *api.V1Parameters {
+			b := &(*api.V1Parameters)[i]
+			if excludedParamNames[b.Name] {
+				continue
+			}
+			if seen[b.Name] {
+				continue
+			}
+			seen[b.Name] = true
+
+			if b.Required && !isBodyRepeatList(b) {
+				if !checker(b.Name) {
+					missing = append(missing, b.Name)
+				}
+			}
+		}
+
+		return formatMissingRequiredParameters(missing)
+	}
+
 	seen := make(map[string]bool)
 	skipBody := api.V1BodyParameters != nil
 	bodyNames := make(map[string]bool)
@@ -557,13 +634,17 @@ func (api *API) CheckLegacyRequiredParameters(checker func(string) bool) error {
 		}
 	}
 
-	if len(missing) > 0 {
-		s := ""
-		for _, name := range missing {
-			s += "\n  --" + name
-		}
-		return fmt.Errorf("required parameters not assigned: %s", s)
+	return formatMissingRequiredParameters(missing)
+}
+
+func formatMissingRequiredParameters(missing []string) error {
+	if len(missing) == 0 {
+		return nil
 	}
 
-	return nil
+	s := ""
+	for _, name := range missing {
+		s += "\n  --" + name
+	}
+	return fmt.Errorf("required parameters not assigned: %s", s)
 }

@@ -390,6 +390,96 @@ func TestLegacyTopLevelParameters_WithV1Body(t *testing.T) {
 	}
 }
 
+func TestLegacyTopLevelParameters_V1ParametersOverrideAllOtherSources(t *testing.T) {
+	var api API
+	err := json.Unmarshal([]byte(`{
+		"name": "CreateThing",
+		"protocol": "HTTP|HTTPS",
+		"method": "POST",
+		"pathPattern": "",
+		"parameters": [
+			{"name": "canonical_only", "raw_name": "CanonicalOnly", "type": "string", "required": true, "location": "query"},
+			{"name": "body_field", "raw_name": "BodyField", "type": "string", "required": true, "location": "body"}
+		],
+		"v1_body_parameters": [
+			{"name": "body", "position": "body", "type": "string", "required": true}
+		],
+		"v1_parameters": [
+			{"name": "Action", "position": "query", "type": "string", "required": true},
+			{"name": "ServiceHost", "position": "domain", "type": "string", "required": false},
+			{"name": "OnlyV1", "position": "query", "type": "string", "required": true},
+			{"name": "Payload", "position": "body", "type": "string", "required": false},
+			{
+				"name": "Tag",
+				"position": "query",
+				"type": "array",
+				"param_style": "repeatList",
+				"required": false,
+				"sub_parameters": [
+					{"name": "Key", "position": "query", "type": "string", "required": false}
+				]
+			}
+		]
+	}`), &api)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if api.V1Parameters == nil {
+		t.Fatal("expected v1_parameters to be deserialized")
+	}
+	if err := validateAPI(&api); err != nil {
+		t.Fatal(err)
+	}
+
+	params := api.LegacyTopLevelParameters()
+	names := map[string]*LegacyParameterView{}
+	for _, p := range params {
+		names[p.LegacyName()] = p
+	}
+
+	if len(names) != 4 {
+		t.Fatalf("expected only v1_parameters to be exposed, got %d: %#v", len(names), names)
+	}
+	if _, ok := names["OnlyV1"]; !ok {
+		t.Fatal("expected OnlyV1 from v1_parameters")
+	}
+	if names["OnlyV1"].LegacyPosition() != "Query" {
+		t.Fatalf("expected OnlyV1 position Query, got %s", names["OnlyV1"].LegacyPosition())
+	}
+	if names["Payload"].LegacyPosition() != "Body" {
+		t.Fatalf("expected Payload position Body, got %s", names["Payload"].LegacyPosition())
+	}
+	if names["ServiceHost"].LegacyPosition() != "Domain" {
+		t.Fatalf("expected ServiceHost position Domain, got %s", names["ServiceHost"].LegacyPosition())
+	}
+	if _, ok := names["CanonicalOnly"]; ok {
+		t.Fatal("CanonicalOnly from parameters must not be merged when v1_parameters exists")
+	}
+	if _, ok := names["body"]; ok {
+		t.Fatal("body from v1_body_parameters must not be merged when v1_parameters exists")
+	}
+	if _, ok := names["Action"]; ok {
+		t.Fatal("protocol-level Action must not be exposed when v1_parameters exists")
+	}
+	if len(api.LegacyBodyFields()) != 0 {
+		t.Fatal("LegacyBodyFields must not expose canonical body fields when v1_parameters exists")
+	}
+
+	if v := api.FindLegacyParameter("Tag.1.Key"); v == nil || v.LegacyName() != "Key" {
+		t.Fatalf("expected v1_parameters repeatList child lookup to find Key, got %#v", v)
+	}
+
+	err = api.CheckLegacyRequiredParameters(func(name string) bool {
+		return name != "OnlyV1"
+	})
+	if err == nil || !strings.Contains(err.Error(), "--OnlyV1") {
+		t.Fatalf("expected OnlyV1 to be the only missing required parameter, got %v", err)
+	}
+	if strings.Contains(err.Error(), "--CanonicalOnly") || strings.Contains(err.Error(), "--body") || strings.Contains(err.Error(), "--Action") {
+		t.Fatalf("required check must not include parameters or v1_body_parameters when v1_parameters exists, got %v", err)
+	}
+}
+
 func TestFindLegacyParameter_Exact(t *testing.T) {
 	repo := testFS()
 	api, err := repo.GetAPI("demo", "2026-01-01", "DescribeRegions")
