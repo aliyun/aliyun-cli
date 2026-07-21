@@ -150,6 +150,44 @@ func Test_main(t *testing.T) {
 
 }
 
+func TestMain_SingleBuiltinProduct_PluginNotInstalled_NoSuggestion(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	// Point plugin manifest lookup at an empty dir so the plugin counts as "not installed",
+	// and isolate HOME so the developer's real config is never loaded.
+	t.Setenv(plugin.EnvPluginsDir, t.TempDir())
+	cleanup := setTestHomeDir(t, t.TempDir())
+	defer cleanup()
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	profile := config.Profile{Language: "en", RegionId: "cn-hangzhou"}
+	command := NewCommando(w, profile)
+
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+	ctx.Flags().Add(config.NewProfileFlag())
+	ctx.Flags().Add(config.NewSkipSecureVerify())
+	ctx.Flags().Add(config.NewRegionFlag())
+	ctx.Flags().Add(config.NewConfigurePathFlag())
+
+	// Built-in product exists and a matching plugin is known but not installed.
+	command.library.builtinRepo = getRepository()
+	command.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{
+		{Name: "aliyun-cli-ecs", ProductCode: "ecs"},
+	}}
+
+	// The profile load may fail in the isolated HOME; only the stdout contract matters here.
+	_ = command.main(ctx, []string{"ecs"})
+
+	assert.NotContains(t, w.String(), "[Suggestion]")
+	assert.NotContains(t, w.String(), "aliyun plugin install --names")
+}
+
 func Test_processInvoke(t *testing.T) {
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)

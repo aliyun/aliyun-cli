@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -188,6 +189,33 @@ func TestPrintProductUsage_RestfulProduct(t *testing.T) {
 
 	output := stdout.String()
 	assert.Contains(t, output, "[GET|PUT|POST|DELETE]")
+}
+
+func TestPrintProductUsage_RestfulProduct_ListShowsSummary(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "demo", Version: "2026-01-01", ApiStyle: "restful", ApiNames: []string{"ValidateThing"}},
+	})
+	assert.NoError(t, err)
+	c.library.builtinRepo = repo
+	c.library.canonicalRepo = &byNameOnlyCanonicalRepo{apis: map[string]*canonicalmeta.API{
+		"ValidateThing": {
+			Name:          "ValidateThing",
+			Method:        "POST",
+			PathPattern:   "/things/validate",
+			DescriptionZh: "验证一个对象",
+			DescriptionEn: "Validates a thing",
+		},
+	}}
+
+	err = c.printProductUsage(ctx, "demo")
+	assert.NoError(t, err)
+
+	output := stdout.String()
+	assert.Contains(t, output, "POST /things/validate")
+	assert.True(t, strings.Contains(output, "Validates a thing") || strings.Contains(output, "验证一个对象"), output)
 }
 
 func TestPrintApiUsage_BuiltinApi(t *testing.T) {
