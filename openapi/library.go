@@ -329,7 +329,9 @@ func printLegacyViews(w io.Writer, views []*canonicalmeta.LegacyParameterView, p
 }
 
 // printBodyFields prints the fields carried inside a top-level --body parameter,
-// indented one extra level. Only one level is shown; nested fields are not expanded.
+// indented one extra level with a "|-" marker to show hierarchy. The marker
+// intentionally omits the "--" prefix: these are JSON keys inside --body, not flags.
+// Only one level is shown; nested fields are not expanded.
 func printBodyFields(w io.Writer, fields []*canonicalmeta.Parameter, lang string) {
 	sorted := make([]*canonicalmeta.Parameter, len(fields))
 	copy(sorted, fields)
@@ -341,7 +343,7 @@ func printBodyFields(w io.Writer, fields []*canonicalmeta.Parameter, lang string
 	})
 
 	for _, p := range sorted {
-		fmt.Fprintf(w, "    %s\t%s\t%s\n\n", cli.Colorized(cli.BBlack, p.RawName), p.Type, required(p.Required))
+		fmt.Fprintf(w, "    |- %s\t%s\t%s\n\n", cli.Colorized(cli.BBlack, p.RawName), p.Type, required(p.Required))
 		desc := p.DescriptionEn
 		if lang == "zh" {
 			desc = p.DescriptionZh

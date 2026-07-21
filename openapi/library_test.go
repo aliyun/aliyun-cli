@@ -233,9 +233,9 @@ func TestLibrary_PrintApiUsage_UsesV1BodyParameters(t *testing.T) {
 	assert.Contains(t, out, "--body")
 	assert.NotContains(t, out, "--ReportName")
 	assert.NotContains(t, out, "--WorkspaceId")
-	// Body sub-fields are shown indented under --body without flag prefix
-	assert.Contains(t, out, "WorkspaceId")
-	assert.Contains(t, out, "ReportName")
+	// Body sub-fields are shown indented under --body with a "|-" marker, no flag prefix
+	assert.Contains(t, out, "|- WorkspaceId")
+	assert.Contains(t, out, "|- ReportName")
 }
 
 func TestPrintLegacyViews_DisplaysCanonicalLowercaseArrayType(t *testing.T) {
