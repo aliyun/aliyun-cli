@@ -14,10 +14,11 @@
 package meta
 
 import (
+	"encoding/json"
+	"testing"
+
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/stretchr/testify/assert"
-
-	"testing"
 )
 
 func TestProduct_GetLowerCode(t *testing.T) {
@@ -52,6 +53,30 @@ func TestProduct_GetEndpoint(t *testing.T) {
 	_, err = product.GetEndpoint("us-west-1", client)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "us-west-1")
+}
+
+func TestProductSetUnmarshalsRegionalEndpointFields(t *testing.T) {
+	var set ProductSet
+	err := json.Unmarshal([]byte(`{
+		"products": [
+			{
+				"code": "demo",
+				"version": "2026-01-01",
+				"regional_endpoints": {
+					"cn-hangzhou": "demo.cn-hangzhou.aliyuncs.com"
+				},
+				"regional_vpc_endpoints": {
+					"cn-hangzhou": "demo-vpc.cn-hangzhou.aliyuncs.com"
+				}
+			}
+		]
+	}`), &set)
+	assert.Nil(t, err)
+	if assert.Len(t, set.Products, 1) {
+		product := set.Products[0]
+		assert.Equal(t, "demo.cn-hangzhou.aliyuncs.com", product.RegionalEndpoints["cn-hangzhou"])
+		assert.Equal(t, "demo-vpc.cn-hangzhou.aliyuncs.com", product.RegionalVpcEndpoints["cn-hangzhou"])
+	}
 }
 
 func TestProduct_GetEndpointWithType(t *testing.T) {

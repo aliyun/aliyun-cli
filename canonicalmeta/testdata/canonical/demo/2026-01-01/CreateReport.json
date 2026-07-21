@@ -12,13 +12,6 @@
   "description_en": "Creates a report.",
   "camel_example": "aliyun demo CreateReport ....",
   "kebab_example": "aliyun demo create-report ...",
-  "global_endpoint": "demo.aliyuncs.com",
-  "endpoint_map": {
-    "cn-hangzhou": "demo.cn-hangzhou.aliyuncs.com"
-  },
-  "vpc_endpoint_map": {
-    "cn-hangzhou": "demo-vpc.cn-hangzhou.aliyuncs.com"
-  },
   "operation": {
     "method": "POST",
     "url": "/reports/{ReportId}",

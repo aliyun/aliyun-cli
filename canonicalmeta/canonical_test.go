@@ -1,6 +1,7 @@
 package canonicalmeta
 
 import (
+	"encoding/json"
 	"io/fs"
 	"os"
 	"strings"
@@ -69,6 +70,23 @@ func TestReadAPI_CreateReport(t *testing.T) {
 	bodyParam := (*api.V1BodyParameters)[0]
 	if bodyParam.Name != "body" {
 		t.Errorf("expected body param name=body, got %s", bodyParam.Name)
+	}
+}
+
+func TestCanonicalAPITestdataOmitsEndpointMaps(t *testing.T) {
+	data, err := os.ReadFile("testdata/canonical/demo/2026-01-01/CreateReport.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, key := range []string{"endpoint_map", "vpc_endpoint_map", "global_endpoint"} {
+		if _, ok := raw[key]; ok {
+			t.Fatalf("API JSON testdata must not include %q; endpoint data belongs in products.json", key)
+		}
 	}
 }
 

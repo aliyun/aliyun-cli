@@ -10,6 +10,7 @@ import (
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -709,6 +710,114 @@ func TestProcessInvoke_CliDryRunJson_RPC(t *testing.T) {
 	assert.Equal(t, "DescribeRegions", parsed.Action)
 	assert.Equal(t, "2014-05-26", parsed.Version)
 	assert.Equal(t, "ecs.cn-hangzhou.aliyuncs.com", parsed.Endpoint)
+}
+
+func TestProcessInvoke_CliDryRunJson_UsesProductRegionalEndpointWithoutAPIEndpointMap(t *testing.T) {
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{
+			Code:     "demo",
+			Version:  "2026-01-01",
+			ApiStyle: "rpc",
+			ApiNames: []string{"DescribeThings"},
+			RegionalEndpoints: map[string]string{
+				"cn-hangzhou": "demo.cn-hangzhou.aliyuncs.com",
+			},
+		},
+	})
+	assert.Nil(t, err)
+	command.library.builtinRepo = repo
+	canonicalRepo := newFakeCanonicalRepo()
+	canonicalRepo.AddAPI("demo", "2026-01-01", &canonicalmeta.API{
+		Name:       "DescribeThings",
+		Protocol:   "HTTPS",
+		Method:     "POST",
+		Parameters: []canonicalmeta.Parameter{},
+	})
+	command.library.canonicalRepo = canonicalRepo
+
+	err = command.processInvoke(ctx, "demo", "DescribeThings", "")
+	assert.Nil(t, err)
+
+	output := strings.TrimSpace(stdout.String())
+	var parsed CliDryRunOutput
+	err = json.Unmarshal([]byte(output), &parsed)
+	assert.Nil(t, err)
+	assert.Equal(t, "RPC", parsed.Style)
+	assert.Equal(t, "DescribeThings", parsed.Action)
+	assert.Equal(t, "demo.cn-hangzhou.aliyuncs.com", parsed.Endpoint)
+}
+
+func TestProcessInvoke_CliDryRunJson_UsesProductRegionalVpcEndpointWithoutAPIEndpointMap(t *testing.T) {
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+		EndpointType:    "vpc",
+	}
+	command := NewCommando(stdout, profile)
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{
+			Code:     "demo",
+			Version:  "2026-01-01",
+			ApiStyle: "rpc",
+			ApiNames: []string{"DescribeThings"},
+			RegionalEndpoints: map[string]string{
+				"cn-hangzhou": "demo.cn-hangzhou.aliyuncs.com",
+			},
+			RegionalVpcEndpoints: map[string]string{
+				"cn-hangzhou": "demo-vpc.cn-hangzhou.aliyuncs.com",
+			},
+		},
+	})
+	assert.Nil(t, err)
+	command.library.builtinRepo = repo
+	canonicalRepo := newFakeCanonicalRepo()
+	canonicalRepo.AddAPI("demo", "2026-01-01", &canonicalmeta.API{
+		Name:       "DescribeThings",
+		Protocol:   "HTTPS",
+		Method:     "POST",
+		Parameters: []canonicalmeta.Parameter{},
+	})
+	command.library.canonicalRepo = canonicalRepo
+
+	err = command.processInvoke(ctx, "demo", "DescribeThings", "")
+	assert.Nil(t, err)
+
+	output := strings.TrimSpace(stdout.String())
+	var parsed CliDryRunOutput
+	err = json.Unmarshal([]byte(output), &parsed)
+	assert.Nil(t, err)
+	assert.Equal(t, "RPC", parsed.Style)
+	assert.Equal(t, "DescribeThings", parsed.Action)
+	assert.Equal(t, "demo-vpc.cn-hangzhou.aliyuncs.com", parsed.Endpoint)
 }
 
 func TestProcessInvoke_CliDryRun_ROA(t *testing.T) {

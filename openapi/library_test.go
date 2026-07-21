@@ -175,6 +175,36 @@ func TestLibrary_GetApi_NoLegacyRuntimeFallback(t *testing.T) {
 	assert.Nil(t, library.GetCanonicalApi("ecs", "2014-05-26", "DescribeRegions"))
 }
 
+func TestLibrary_GetCanonicalApi_UsesProductDefaultVersion(t *testing.T) {
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "bailian", Version: "2023-12-29", ApiStyle: "restful", ApiNames: []string{"ListIndices"}},
+	})
+	assert.Nil(t, err)
+
+	canonicalRepo := newFakeCanonicalRepo()
+	canonicalRepo.AddAPI("bailian", "2023-06-01", &canonicalmeta.API{
+		Name:        "ListIndices",
+		Method:      "POST",
+		PathPattern: "",
+	})
+	canonicalRepo.AddAPI("bailian", "2023-12-29", &canonicalmeta.API{
+		Name:        "ListIndices",
+		Method:      "GET",
+		PathPattern: "/[WorkspaceId]/index/list_indices",
+	})
+	library := &Library{
+		builtinRepo:   repo,
+		canonicalRepo: canonicalRepo,
+	}
+
+	product, ok := library.GetProduct("bailian")
+	assert.True(t, ok)
+	api := library.GetCanonicalApi(product.Code, product.Version, "ListIndices")
+	assert.NotNil(t, api)
+	assert.Equal(t, "GET", api.Method)
+	assert.Equal(t, "/[WorkspaceId]/index/list_indices", api.PathPattern)
+}
+
 type byNameOnlyCanonicalRepo struct {
 	apis map[string]*canonicalmeta.API
 }
