@@ -126,6 +126,124 @@ func TestRpcInvoker_Prepare(t *testing.T) {
 
 }
 
+func TestRpcInvoker_Prepare_ArrayJSONFlattensToFormParams(t *testing.T) {
+	a := &RpcInvoker{
+		BasicInvoker: &BasicInvoker{
+			request: requests.NewCommonRequest(),
+		},
+		api: &meta.Api{
+			Product: &meta.Product{Code: "alb"},
+			Name:    "AddServersToServerGroup",
+			Method:  "POST",
+			Parameters: []meta.Parameter{
+				{Name: "ServerGroupId", Position: "Query", Type: "String", Required: true},
+				{Name: "Servers", Position: "Body", Type: "Array", Required: true},
+			},
+		},
+	}
+	w := new(bufio.Writer)
+	stderr := new(bufio.Writer)
+	ctx := cli.NewCommandContext(w, stderr)
+	ctx.Flags().Add(NewSecureFlag())
+	ctx.Flags().Add(NewInsecureFlag())
+	ctx.Flags().Add(NewMethodFlag())
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+
+	ctx.UnknownFlags().AddByName("ServerGroupId")
+	ctx.UnknownFlags().Get("ServerGroupId").SetAssigned(true)
+	ctx.UnknownFlags().Get("ServerGroupId").SetValue("sgp-xxx")
+	ctx.UnknownFlags().AddByName("Servers")
+	ctx.UnknownFlags().Get("Servers").SetAssigned(true)
+	ctx.UnknownFlags().Get("Servers").SetValue(`[{"ServerId":"i-xxx","ServerType":"Ecs","Port":8081,"Weight":100}]`)
+
+	err := a.Prepare(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "sgp-xxx", a.request.QueryParams["ServerGroupId"])
+	assert.Equal(t, "i-xxx", a.request.FormParams["Servers.1.ServerId"])
+	assert.Equal(t, "Ecs", a.request.FormParams["Servers.1.ServerType"])
+	assert.Equal(t, "8081", a.request.FormParams["Servers.1.Port"])
+	assert.Equal(t, "100", a.request.FormParams["Servers.1.Weight"])
+	_, hasRaw := a.request.FormParams["Servers"]
+	assert.False(t, hasRaw, "raw JSON Servers key must not remain after flatten")
+}
+
+func TestRpcInvoker_Prepare_ArrayFlatFlagsAccepted(t *testing.T) {
+	a := &RpcInvoker{
+		BasicInvoker: &BasicInvoker{
+			request: requests.NewCommonRequest(),
+		},
+		api: &meta.Api{
+			Product: &meta.Product{Code: "alb"},
+			Name:    "AddServersToServerGroup",
+			Method:  "POST",
+			Parameters: []meta.Parameter{
+				{Name: "ServerGroupId", Position: "Query", Type: "String", Required: true},
+				{Name: "Servers", Position: "Body", Type: "Array", Required: true},
+			},
+		},
+	}
+	w := new(bufio.Writer)
+	stderr := new(bufio.Writer)
+	ctx := cli.NewCommandContext(w, stderr)
+	ctx.Flags().Add(NewSecureFlag())
+	ctx.Flags().Add(NewInsecureFlag())
+	ctx.Flags().Add(NewMethodFlag())
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+
+	ctx.UnknownFlags().AddByName("ServerGroupId")
+	ctx.UnknownFlags().Get("ServerGroupId").SetAssigned(true)
+	ctx.UnknownFlags().Get("ServerGroupId").SetValue("sgp-xxx")
+	for _, kv := range [][2]string{
+		{"Servers.1.ServerId", "i-xxx"},
+		{"Servers.1.ServerType", "Ecs"},
+		{"Servers.1.Port", "8081"},
+		{"Servers.1.Weight", "100"},
+	} {
+		ctx.UnknownFlags().AddByName(kv[0])
+		ctx.UnknownFlags().Get(kv[0]).SetAssigned(true)
+		ctx.UnknownFlags().Get(kv[0]).SetValue(kv[1])
+	}
+
+	err := a.Prepare(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "i-xxx", a.request.FormParams["Servers.1.ServerId"])
+	assert.Equal(t, "Ecs", a.request.FormParams["Servers.1.ServerType"])
+	assert.Equal(t, "8081", a.request.FormParams["Servers.1.Port"])
+	assert.Equal(t, "100", a.request.FormParams["Servers.1.Weight"])
+}
+
+func TestRpcInvoker_Prepare_ArrayJSONFlattensToQueryParams(t *testing.T) {
+	a := &RpcInvoker{
+		BasicInvoker: &BasicInvoker{
+			request: requests.NewCommonRequest(),
+		},
+		api: &meta.Api{
+			Product: &meta.Product{Code: "demo"},
+			Name:    "Demo",
+			Method:  "POST",
+			Parameters: []meta.Parameter{
+				{Name: "Tags", Position: "Query", Type: "Array", Required: true},
+			},
+		},
+	}
+	w := new(bufio.Writer)
+	stderr := new(bufio.Writer)
+	ctx := cli.NewCommandContext(w, stderr)
+	ctx.Flags().Add(NewSecureFlag())
+	ctx.Flags().Add(NewInsecureFlag())
+	ctx.Flags().Add(NewMethodFlag())
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+
+	ctx.UnknownFlags().AddByName("Tags")
+	ctx.UnknownFlags().Get("Tags").SetAssigned(true)
+	ctx.UnknownFlags().Get("Tags").SetValue(`[{"Key":"env","Value":"prod"}]`)
+
+	err := a.Prepare(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "env", a.request.QueryParams["Tags.1.Key"])
+	assert.Equal(t, "prod", a.request.QueryParams["Tags.1.Value"])
+}
+
 func TestRpcInvoker_Call(t *testing.T) {
 	client, err := sdk.NewClientWithAccessKey("regionid", "accesskeyid", "accesskeysecret")
 	assert.Nil(t, err)
