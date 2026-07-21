@@ -138,9 +138,6 @@ func openapiThrottlingRetryDelay(err error, cfg *throttlingretry.Config) (int64,
 	if !errors.As(err, &throttlingErr) {
 		return 0, false
 	}
-	if !strings.Contains(tea.StringValue(throttlingErr.GetCode()), "Throttling") {
-		return 0, false
-	}
 
 	retryAfter := throttlingErr.GetRetryAfter()
 	if retryAfter == nil || *retryAfter < 0 {

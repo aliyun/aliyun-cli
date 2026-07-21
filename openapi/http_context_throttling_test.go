@@ -59,8 +59,10 @@ func TestOpenapiThrottlingRetryDelay(t *testing.T) {
 	_, ok = openapiThrottlingRetryDelay(errors.New("plain"), cfg)
 	assert.False(t, ok)
 
-	_, ok = openapiThrottlingRetryDelay(newOpenAPThrottlingError("InternalError", 100), cfg)
-	assert.False(t, ok)
+	// Non-Throttling code with retryAfter still counts as throttling.
+	delay, ok = openapiThrottlingRetryDelay(newOpenAPThrottlingError("ServiceUnavailable", 100), cfg)
+	assert.True(t, ok)
+	assert.Equal(t, int64(100), delay)
 
 	err := newOpenAPThrottlingError("Throttling", 100)
 	throttlingErr := err.(*openapiClient.ThrottlingError)

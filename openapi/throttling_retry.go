@@ -70,9 +70,6 @@ func (a *BasicInvoker) throttlingRetryDelay(err error) (int64, bool) {
 	if !errors.As(err, &serverErr) {
 		return 0, false
 	}
-	if !strings.Contains(serverErr.ErrorCode(), "Throttling") {
-		return 0, false
-	}
 
 	delayMS, ok := retryAfterFromHeaders(serverErr.RespHeaders)
 	if !ok {
