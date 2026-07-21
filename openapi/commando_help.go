@@ -247,9 +247,6 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 				plugin.ExecutePlugin(productCode, getPluginArgsForHelp(productCode), ctx)
 				return nil
 			}
-		} else {
-			cli.Printf(ctx.Stdout(), "\n[Suggestion] A dedicated product plugin is available for '%s'.\n", productCode)
-			cli.Printf(ctx.Stdout(), "Run 'aliyun plugin install --names %s' to install it for enhanced features.\n\n", pluginName)
 		}
 	}
 
@@ -281,8 +278,17 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 			if api == nil {
 				continue
 			}
-			ptn := fmt.Sprintf("  %%-%ds : %%s %%s\n", maxNameLen+1)
-			cli.PrintfWithColor(ctx.Stdout(), cli.Green, ptn, apiName, api.Method, api.PathPattern)
+			summary := api.Description(i18n.GetLanguage())
+			if summary != "" {
+				if api.Deprecated {
+					summary = "[Deprecated]" + summary
+				}
+				ptn := fmt.Sprintf("  %%-%ds : %%s %%s  %%s\n", maxNameLen+1)
+				cli.PrintfWithColor(ctx.Stdout(), cli.Green, ptn, apiName, api.Method, api.PathPattern, summary)
+			} else {
+				ptn := fmt.Sprintf("  %%-%ds : %%s %%s\n", maxNameLen+1)
+				cli.PrintfWithColor(ctx.Stdout(), cli.Green, ptn, apiName, api.Method, api.PathPattern)
+			}
 		} else {
 			summary := ""
 			deprecated := false
@@ -388,12 +394,9 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 				} else {
 					return fmt.Errorf("'%s' is not a valid built-in command.\nA plugin '%s' is available which might support this command.\nRun 'aliyun plugin install --names %s' to install it.", apiName, pluginName, pluginName)
 				}
-			} else { // 非插件命令形式，如果本地插件安装了，则返回插件帮助; 如果未安装，则打印插件提示信息，并继续原有api纠错系统
+			} else { // 非插件命令形式，如果本地插件安装了，则返回插件帮助; 如果未安装，则继续原有api纠错系统
 				if isInstalled {
 					return &InvalidUnifiedApiError{Name: apiName, product: &product, lPlugin: localPlugin}
-				} else {
-					cli.Printf(ctx.Stdout(), "\n[Suggestion] A dedicated product plugin is available for '%s'.\n", productCode)
-					cli.Printf(ctx.Stdout(), "Run 'aliyun plugin install --names %s' to install it for enhanced features.\n\n", pluginName)
 				}
 			}
 		}
@@ -416,7 +419,7 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 	printCanonicalAPI(w, canonicalApi, "")
 	w.Flush()
 
-	printCanonicalExamples(ctx.Stdout(), canonicalApi)
+	printCanonicalExamples(ctx.Stdout(), canonicalApi, product.ApiStyle)
 
 	return nil
 }

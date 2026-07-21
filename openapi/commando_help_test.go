@@ -120,8 +120,8 @@ func TestPrintProductUsage_PluginAvailableNotInstalled(t *testing.T) {
 	assert.NoError(t, err)
 
 	output := stdout.String()
-	assert.Contains(t, output, "[Suggestion]")
-	assert.Contains(t, output, "aliyun-cli-ecs")
+	assert.NotContains(t, output, "[Suggestion]")
+	assert.NotContains(t, output, "aliyun-cli-ecs")
 	assert.Contains(t, output, "Available Api List")
 }
 
@@ -225,9 +225,9 @@ func TestPrintApiUsage_PrintsCanonicalExamples(t *testing.T) {
 	assert.NoError(t, err)
 	output := stdout.String()
 	assert.Contains(t, output, "Example:")
-	assert.Contains(t, output, "(Recommended) New CLI:")
+	assert.Contains(t, output, "(Recommended) Command Style:")
 	assert.Contains(t, output, "aliyun demo create-thing --name foo")
-	assert.Contains(t, output, "Legacy CLI:")
+	assert.Contains(t, output, "PascalCase Style:")
 	assert.Contains(t, output, "aliyun demo CreateThing --Name foo")
 }
 
@@ -286,14 +286,14 @@ func TestPrintApiUsage_UnknownApi_PluginHint_NonLowercase(t *testing.T) {
 		Plugins: map[string]plugin.LocalPlugin{},
 	}
 
-	// Non-lowercase (e.g. "BadApiName") -> prints suggestion, then returns InvalidApiError
+	// Non-lowercase (e.g. "BadApiName") -> returns InvalidApiError without plugin suggestion
 	err := c.printApiUsage(ctx, "ecs", "BadApiName")
 	assert.Error(t, err)
 	assert.IsType(t, &InvalidApiError{}, err)
 
 	output := stdout.String()
-	assert.Contains(t, output, "[Suggestion]")
-	assert.Contains(t, output, "aliyun-cli-ecs")
+	assert.NotContains(t, output, "[Suggestion]")
+	assert.NotContains(t, output, "aliyun-cli-ecs")
 }
 
 func TestPrintApiUsage_NonBuiltinProduct_PluginNotInstalled(t *testing.T) {

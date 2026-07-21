@@ -99,10 +99,68 @@ func TestLibrary_PrintApiUsage_PrintsCanonicalExamples(t *testing.T) {
 	assert.Nil(t, err)
 	out := w.String()
 	assert.Contains(t, out, "Example:")
-	assert.Contains(t, out, "(Recommended) New CLI:")
+	assert.Contains(t, out, "(Recommended) Command Style:")
 	assert.Contains(t, out, "aliyun demo create-thing --name foo")
-	assert.Contains(t, out, "Legacy CLI:")
+	assert.Contains(t, out, "PascalCase Style:")
 	assert.Contains(t, out, "aliyun demo CreateThing --Name foo")
+}
+
+func TestLibrary_PrintApiUsage_RestfulExampleLabel(t *testing.T) {
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "demo", Version: "2026-01-01", ApiStyle: "restful", ApiNames: []string{"ValidateThing"}},
+	})
+	assert.Nil(t, err)
+
+	w := new(bytes.Buffer)
+	library := &Library{
+		builtinRepo: repo,
+		canonicalRepo: &byNameOnlyCanonicalRepo{apis: map[string]*canonicalmeta.API{
+			"ValidateThing": {
+				Name:         "ValidateThing",
+				Protocol:     "HTTPS",
+				Method:       "POST",
+				PathPattern:  "/things/validate",
+				KebabExample: "aliyun demo validate-thing --code foo",
+				CamelExample: "aliyun demo POST /things/validate --body {}",
+			},
+		}},
+		writer: w,
+	}
+
+	err = library.PrintApiUsage("demo", "ValidateThing")
+	assert.Nil(t, err)
+	out := w.String()
+	assert.Contains(t, out, "(Recommended) Command Style:")
+	assert.Contains(t, out, "RESTful Style:")
+	assert.NotContains(t, out, "PascalCase Style:")
+}
+
+func TestLibrary_PrintProductUsage_RestfulListShowsSummary(t *testing.T) {
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "demo", Version: "2026-01-01", ApiStyle: "restful", ApiNames: []string{"ValidateThing"}},
+	})
+	assert.Nil(t, err)
+
+	w := new(bytes.Buffer)
+	library := &Library{
+		builtinRepo: repo,
+		canonicalRepo: &byNameOnlyCanonicalRepo{apis: map[string]*canonicalmeta.API{
+			"ValidateThing": {
+				Name:          "ValidateThing",
+				Method:        "POST",
+				PathPattern:   "/things/validate",
+				DescriptionZh: "验证一个对象",
+				DescriptionEn: "Validates a thing",
+			},
+		}},
+		writer: w,
+	}
+
+	err = library.PrintProductUsage("demo", true)
+	assert.Nil(t, err)
+	out := w.String()
+	assert.Contains(t, out, "POST /things/validate")
+	assert.True(t, strings.Contains(out, "Validates a thing") || strings.Contains(out, "验证一个对象"), out)
 }
 
 func TestLibrary_GetApi_NoLegacyRuntimeFallback(t *testing.T) {
@@ -175,6 +233,9 @@ func TestLibrary_PrintApiUsage_UsesV1BodyParameters(t *testing.T) {
 	assert.Contains(t, out, "--body")
 	assert.NotContains(t, out, "--ReportName")
 	assert.NotContains(t, out, "--WorkspaceId")
+	// Body sub-fields are shown indented under --body without flag prefix
+	assert.Contains(t, out, "WorkspaceId")
+	assert.Contains(t, out, "ReportName")
 }
 
 func TestPrintLegacyViews_DisplaysCanonicalLowercaseArrayType(t *testing.T) {
@@ -185,7 +246,7 @@ func TestPrintLegacyViews_DisplaysCanonicalLowercaseArrayType(t *testing.T) {
 	}
 
 	w := new(bytes.Buffer)
-	printLegacyViews(w, api.LegacyTopLevelParameters(), "")
+	printLegacyViews(w, api.LegacyTopLevelParameters(), "", nil)
 	out := w.String()
 	assert.Contains(t, out, "--Items.n")
 	assert.Contains(t, out, "\tarray\t")

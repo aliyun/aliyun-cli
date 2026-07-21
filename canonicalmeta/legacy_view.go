@@ -396,6 +396,29 @@ func isBodyLocation(location string) bool {
 	return loc == "body" || loc == "form" || loc == "formdata"
 }
 
+// IsTopLevelBody reports whether this view is a top-level v1 body parameter.
+func (v *LegacyParameterView) IsTopLevelBody() bool {
+	return v.source == SourceBody && v.isTopBody
+}
+
+// LegacyBodyFields returns the canonical body/form parameters in declaration
+// order, excluding protocol-level names. It is intended for help display of
+// the fields carried inside a top-level --body parameter; it does not affect
+// parameter lookup or execution semantics.
+func (api *API) LegacyBodyFields() []*Parameter {
+	var fields []*Parameter
+	for i := range api.Parameters {
+		p := &api.Parameters[i]
+		if excludedParamNames[p.RawName] {
+			continue
+		}
+		if isBodyLocation(p.Location) {
+			fields = append(fields, p)
+		}
+	}
+	return fields
+}
+
 // FindLegacyParameter finds a parameter by name with old CLI's loose index parsing.
 // Matches the original loose parameter lookup behavior:
 //   - Case-sensitive

@@ -237,19 +237,6 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					return nil
 				}
 			}
-		} else {
-			c.loadPlugins()
-			if c.pluginIndex != nil {
-				for _, pInfo := range c.pluginIndex.Plugins {
-					if strings.EqualFold(pInfo.ProductCode, args[0]) {
-						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\n[Suggestion] A dedicated product plugin '%s' is available for '%s'.\n", pInfo.Name, args[0])
-						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "Run 'aliyun plugin install --names %s' to install it for enhanced features.\n\n", pInfo.Name)
-						break
-					}
-				}
-			} else if c.pluginIndexErr != nil {
-				c.printPluginIndexLoadFailureNote(ctx)
-			}
 		}
 
 	} else if len(args) > 1 {

@@ -164,8 +164,17 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 				if api == nil {
 					continue
 				}
-				ptn := fmt.Sprintf("  %%-%ds : %%s %%s\n", maxNameLen+1)
-				cli.PrintfWithColor(a.writer, cli.Green, ptn, apiName, api.Method, api.PathPattern)
+				summary := api.Description(i18n.GetLanguage())
+				if summary != "" {
+					if api.Deprecated {
+						summary = "[Deprecated]" + summary
+					}
+					ptn := fmt.Sprintf("  %%-%ds : %%s %%s  %%s\n", maxNameLen+1)
+					cli.PrintfWithColor(a.writer, cli.Green, ptn, apiName, api.Method, api.PathPattern, summary)
+				} else {
+					ptn := fmt.Sprintf("  %%-%ds : %%s %%s\n", maxNameLen+1)
+					cli.PrintfWithColor(a.writer, cli.Green, ptn, apiName, api.Method, api.PathPattern)
+				}
 			} else {
 				summary := ""
 				deprecated := false
@@ -228,21 +237,25 @@ func (a *Library) PrintApiUsage(productCode string, apiName string) error {
 	printCanonicalAPI(w, api, "")
 	w.Flush()
 
-	printCanonicalExamples(a.writer, api)
+	printCanonicalExamples(a.writer, api, product.ApiStyle)
 
 	return nil
 }
 
-func printCanonicalExamples(w io.Writer, api *canonicalmeta.API) {
+func printCanonicalExamples(w io.Writer, api *canonicalmeta.API, apiStyle string) {
 	if api == nil || (api.KebabExample == "" && api.CamelExample == "") {
 		return
 	}
 	cli.Printf(w, "\nExample:\n")
 	if api.KebabExample != "" {
-		cli.Printf(w, "  (Recommended) New CLI:\n  %s\n", api.KebabExample)
+		cli.Printf(w, "  (Recommended) Command Style:\n  %s\n", api.KebabExample)
 	}
 	if api.CamelExample != "" {
-		cli.Printf(w, "  Legacy CLI:\n  %s\n", api.CamelExample)
+		if apiStyle == "restful" {
+			cli.Printf(w, "  RESTful Style:\n  %s\n", api.CamelExample)
+		} else {
+			cli.Printf(w, "  PascalCase Style:\n  %s\n", api.CamelExample)
+		}
 	}
 }
 
@@ -263,10 +276,14 @@ func required(r bool) string {
 }
 
 func printCanonicalAPI(w io.Writer, api *canonicalmeta.API, prefix string) {
-	printLegacyViews(w, api.LegacyTopLevelParameters(), prefix)
+	var bodyFields []*canonicalmeta.Parameter
+	if api.V1BodyParameters != nil {
+		bodyFields = api.LegacyBodyFields()
+	}
+	printLegacyViews(w, api.LegacyTopLevelParameters(), prefix, bodyFields)
 }
 
-func printLegacyViews(w io.Writer, views []*canonicalmeta.LegacyParameterView, prefix string) {
+func printLegacyViews(w io.Writer, views []*canonicalmeta.LegacyParameterView, prefix string, bodyFields []*canonicalmeta.Parameter) {
 	lang := i18n.GetLanguage()
 
 	// Sort on a separate slice copy: required first, then by name.
@@ -297,13 +314,43 @@ func printLegacyViews(w io.Writer, views []*canonicalmeta.LegacyParameterView, p
 
 		if v.LegacyHasChildren() {
 			children := v.LegacyChildren()
-			printLegacyViews(w, children, prefix+name+".n.")
+			printLegacyViews(w, children, prefix+name+".n.", nil)
 		} else if v.IsLegacyRepeatList() {
 			fmt.Fprintf(w, "  --%s%s.n\t%s\t%s\n\n", cli.Colorized(cli.BBlack, prefix), cli.Colorized(cli.BBlack, name), displayType, required(v.LegacyRequired()))
 			displayDescription(w, v.LegacyDescription(lang))
 		} else {
 			fmt.Fprintf(w, "  --%s%s\t%s\t%s\n\n", cli.Colorized(cli.BBlack, prefix), cli.Colorized(cli.BBlack, name), displayType, required(v.LegacyRequired()))
 			displayDescription(w, v.LegacyDescription(lang))
+			if v.IsTopLevelBody() && len(bodyFields) > 0 {
+				printBodyFields(w, bodyFields, lang)
+			}
+		}
+	}
+}
+
+// printBodyFields prints the fields carried inside a top-level --body parameter,
+// indented one extra level. Only one level is shown; nested fields are not expanded.
+func printBodyFields(w io.Writer, fields []*canonicalmeta.Parameter, lang string) {
+	sorted := make([]*canonicalmeta.Parameter, len(fields))
+	copy(sorted, fields)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].Required != sorted[j].Required {
+			return sorted[i].Required
+		}
+		return sorted[i].RawName < sorted[j].RawName
+	})
+
+	for _, p := range sorted {
+		fmt.Fprintf(w, "    %s\t%s\t%s\n\n", cli.Colorized(cli.BBlack, p.RawName), p.Type, required(p.Required))
+		desc := p.DescriptionEn
+		if lang == "zh" {
+			desc = p.DescriptionZh
+		}
+		if desc != "" {
+			for _, line := range strings.Split(desc, "\n") {
+				fmt.Fprintf(w, "      %s\n", line)
+			}
+			fmt.Fprintf(w, "\n")
 		}
 	}
 }
