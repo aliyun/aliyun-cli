@@ -82,7 +82,41 @@ func TestGetByShorthand(t *testing.T) {
 }
 
 func TestGetSuggestions(t *testing.T) {
-	//TODO after prefected cli/suggestion.go testcase
+	fs := NewFlagSet()
+	fs.Add(&Flag{Name: "name", AssignedMode: AssignedOnce})
+	fs.Add(&Flag{Name: "profile", Shorthand: 'p', AssignedMode: AssignedOnce})
+
+	// Typo "names" should suggest "--name" (UnifyApply ignores leading dashes)
+	ss := fs.GetSuggestions("names", DefaultSuggestDistance)
+	assert.Equal(t, []string{"--name"}, ss)
+
+	// Exact-ish match on long form
+	ss = fs.GetSuggestions("profil", DefaultSuggestDistance)
+	assert.Equal(t, []string{"--profile"}, ss)
+
+	// No close match
+	ss = fs.GetSuggestions("zzzzz", DefaultSuggestDistance)
+	assert.Empty(t, ss)
+
+	// Multiple matches are sorted for stable error messages
+	fs.Add(&Flag{Name: "foo", AssignedMode: AssignedOnce})
+	fs.Add(&Flag{Name: "fox", AssignedMode: AssignedOnce})
+	ss = fs.GetSuggestions("fo", DefaultSuggestDistance)
+	assert.Equal(t, []string{"--foo", "--fox"}, ss)
+}
+
+func TestAvailableFlagNames(t *testing.T) {
+	assert.Nil(t, (*FlagSet)(nil).AvailableFlagNames())
+
+	fs := NewFlagSet()
+	fs.Add(&Flag{Name: "name"})
+	fs.Add(&Flag{Name: "hidden", Hidden: true})
+	fs.Add(&Flag{Name: "profile", Shorthand: 'p'})
+	fs.Add(&Flag{Name: "log-level", Aliases: []string{"log_level"}})
+
+	names := fs.AvailableFlagNames()
+	assert.Equal(t, []string{"--log-level", "--log_level", "--name", "--profile", "-p"}, names)
+	assert.NotContains(t, names, "--hidden")
 }
 
 func TestGetValue(t *testing.T) {

@@ -118,6 +118,19 @@ func TestDetectFlag(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestDetectFlag_InvalidNamesSuggestsName(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(w, stderr)
+	cmd := &Command{Name: "uninstall", flags: NewFlagSet()}
+	cmd.Flags().Add(&Flag{Name: "name", AssignedMode: AssignedOnce})
+	ctx.EnterCommand(cmd)
+
+	f, err := ctx.detectFlag("names")
+	assert.Nil(t, f)
+	assert.EqualError(t, err, "invalid flag --names, did you mean --name?")
+}
+
 func TestDetectFlagByShorthand(t *testing.T) {
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
