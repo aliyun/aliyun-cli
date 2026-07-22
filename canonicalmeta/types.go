@@ -70,6 +70,14 @@ type Parameter struct {
 	InnerValueFields   []Field `json:"inner_value_fields,omitempty"`
 }
 
+// Help returns the CLI-facing parameter help for the given language.
+func (p *Parameter) Help(lang string) string {
+	if lang == "zh" {
+		return p.HelpZh
+	}
+	return p.HelpEn
+}
+
 // Field represents a nested field within a parameter.
 // Fields do not have independent location or param_style.
 type Field struct {
@@ -95,6 +103,14 @@ type Field struct {
 	InnerValueType     string  `json:"inner_value_type,omitempty"`
 	InnerElementFields []Field `json:"inner_element_fields,omitempty"`
 	InnerValueFields   []Field `json:"inner_value_fields,omitempty"`
+}
+
+// Help returns the CLI-facing field help for the given language.
+func (f *Field) Help(lang string) string {
+	if lang == "zh" {
+		return f.HelpZh
+	}
+	return f.HelpEn
 }
 
 // LegacyBodyParameter represents a V1 body parameter for backward compatibility.

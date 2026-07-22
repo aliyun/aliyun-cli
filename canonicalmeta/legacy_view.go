@@ -126,19 +126,15 @@ func (v *LegacyParameterView) LegacyRequired() bool {
 	return false
 }
 
-// LegacyDescription returns the parameter description for the given locale.
+// LegacyDescription returns the legacy help text for the given locale.
+// Canonical parameters/fields consume help_* only; v1 legacy parameters keep
+// description_* because the v1 projection does not yet provide help_* broadly.
 func (v *LegacyParameterView) LegacyDescription(language string) string {
 	switch v.source {
 	case SourceCanonical:
-		if language == "en" {
-			return v.canonical.DescriptionEn
-		}
-		return v.canonical.DescriptionZh
+		return v.canonical.Help(language)
 	case SourceField:
-		if language == "en" {
-			return v.field.DescriptionEn
-		}
-		return v.field.DescriptionZh
+		return v.field.Help(language)
 	case SourceBody:
 		if language == "en" {
 			return v.body.DescriptionEn

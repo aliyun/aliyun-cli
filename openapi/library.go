@@ -344,10 +344,7 @@ func printBodyFields(w io.Writer, fields []*canonicalmeta.Parameter, lang string
 
 	for _, p := range sorted {
 		fmt.Fprintf(w, "    |- %s\t%s\t%s\n\n", cli.Colorized(cli.BBlack, p.RawName), p.Type, required(p.Required))
-		desc := p.DescriptionEn
-		if lang == "zh" {
-			desc = p.DescriptionZh
-		}
+		desc := p.Help(lang)
 		if desc != "" {
 			for _, line := range strings.Split(desc, "\n") {
 				fmt.Fprintf(w, "      %s\n", line)

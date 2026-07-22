@@ -253,12 +253,13 @@ func TestLegacyParameterView_Position(t *testing.T) {
 	}
 }
 
-func TestLegacyParameterView_Description(t *testing.T) {
-	p := &Parameter{
+func TestLegacyParameterView_V1DescriptionKeepsDescription(t *testing.T) {
+	p := &LegacyBodyParameter{
+		Name:          "LegacyParam",
 		DescriptionZh: "中文说明",
 		DescriptionEn: "English description",
 	}
-	v := NewCanonicalView(p)
+	v := NewV1View(p)
 
 	if v.LegacyDescription("zh") != "中文说明" {
 		t.Errorf("expected 中文说明, got %s", v.LegacyDescription("zh"))
@@ -267,14 +268,65 @@ func TestLegacyParameterView_Description(t *testing.T) {
 		t.Errorf("expected English description, got %s", v.LegacyDescription("en"))
 	}
 
-	zhOnly := NewCanonicalView(&Parameter{DescriptionZh: "仅中文"})
+	zhOnly := NewV1View(&LegacyBodyParameter{DescriptionZh: "仅中文"})
 	if zhOnly.LegacyDescription("en") != "" {
 		t.Errorf("expected no cross-language fallback for English, got %q", zhOnly.LegacyDescription("en"))
 	}
 
-	enOnly := NewCanonicalView(&Parameter{DescriptionEn: "English only"})
+	enOnly := NewV1View(&LegacyBodyParameter{DescriptionEn: "English only"})
 	if enOnly.LegacyDescription("zh") != "" {
 		t.Errorf("expected no cross-language fallback for Chinese, got %q", enOnly.LegacyDescription("zh"))
+	}
+}
+
+func TestLegacyParameterView_HelpOnlyForCanonicalParametersAndFields(t *testing.T) {
+	// help_* is the CLI-facing parameter text for canonical parameters/fields.
+	p := &Parameter{
+		DescriptionZh: "中文说明",
+		DescriptionEn: "English description",
+		HelpZh:        "中文帮助",
+		HelpEn:        "English help",
+	}
+	v := NewCanonicalView(p)
+	if v.LegacyDescription("zh") != "中文帮助" {
+		t.Errorf("expected 中文帮助, got %s", v.LegacyDescription("zh"))
+	}
+	if v.LegacyDescription("en") != "English help" {
+		t.Errorf("expected English help, got %s", v.LegacyDescription("en"))
+	}
+
+	noHelp := NewCanonicalView(&Parameter{DescriptionZh: "中文说明", DescriptionEn: "English description"})
+	if noHelp.LegacyDescription("zh") != "" {
+		t.Errorf("expected empty zh help without help_zh, got %q", noHelp.LegacyDescription("zh"))
+	}
+	if noHelp.LegacyDescription("en") != "" {
+		t.Errorf("expected empty en help without help_en, got %q", noHelp.LegacyDescription("en"))
+	}
+
+	// No cross-language mixing and no description fallback.
+	zhHelpOnly := NewCanonicalView(&Parameter{HelpZh: "仅中文帮助", DescriptionEn: "English description"})
+	if zhHelpOnly.LegacyDescription("en") != "" {
+		t.Errorf("expected empty en help without help_en, got %q", zhHelpOnly.LegacyDescription("en"))
+	}
+
+	// Field views follow the same preference.
+	f := &Field{DescriptionZh: "字段说明", DescriptionEn: "Field description", HelpZh: "字段帮助"}
+	fv := NewFieldView(f, "body")
+	if fv.LegacyDescription("zh") != "字段帮助" {
+		t.Errorf("expected 字段帮助, got %s", fv.LegacyDescription("zh"))
+	}
+	if fv.LegacyDescription("en") != "" {
+		t.Errorf("expected empty en help without help_en, got %q", fv.LegacyDescription("en"))
+	}
+}
+
+func TestAPI_DescriptionKeepsTopLevelDescription(t *testing.T) {
+	api := &API{DescriptionZh: "API 中文说明", DescriptionEn: "API English description"}
+	if api.Description("zh") != "API 中文说明" {
+		t.Errorf("expected API 中文说明, got %q", api.Description("zh"))
+	}
+	if api.Description("en") != "API English description" {
+		t.Errorf("expected API English description, got %q", api.Description("en"))
 	}
 }
 
