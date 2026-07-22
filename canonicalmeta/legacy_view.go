@@ -135,16 +135,8 @@ func (v *LegacyParameterView) LegacyDescription(language string) string {
 		return v.canonical.Help(language)
 	case SourceField:
 		return v.field.Help(language)
-	case SourceBody:
-		if language == "en" {
-			return v.body.DescriptionEn
-		}
-		return v.body.DescriptionZh
-	case SourceV1:
-		if language == "en" {
-			return v.body.DescriptionEn
-		}
-		return v.body.DescriptionZh
+	case SourceBody, SourceV1:
+		return v.body.HelpOrDescription(language)
 	}
 	return ""
 }

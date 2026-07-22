@@ -279,6 +279,32 @@ func TestLegacyParameterView_V1DescriptionKeepsDescription(t *testing.T) {
 	}
 }
 
+func TestLegacyParameterView_V1HelpPreferredOverDescription(t *testing.T) {
+	p := &LegacyBodyParameter{
+		Name:          "LegacyParam",
+		DescriptionZh: "中文说明",
+		DescriptionEn: "English description",
+		HelpZh:        "中文帮助",
+		HelpEn:        "English help",
+	}
+	v := NewV1View(p)
+
+	if v.LegacyDescription("zh") != "中文帮助" {
+		t.Errorf("expected 中文帮助, got %s", v.LegacyDescription("zh"))
+	}
+	if v.LegacyDescription("en") != "English help" {
+		t.Errorf("expected English help, got %s", v.LegacyDescription("en"))
+	}
+
+	bodyOnlyHelp := NewBodyView(&LegacyBodyParameter{HelpZh: "body 帮助"})
+	if bodyOnlyHelp.LegacyDescription("zh") != "body 帮助" {
+		t.Errorf("expected body 帮助, got %s", bodyOnlyHelp.LegacyDescription("zh"))
+	}
+	if bodyOnlyHelp.LegacyDescription("en") != "" {
+		t.Errorf("expected no cross-language fallback for English, got %q", bodyOnlyHelp.LegacyDescription("en"))
+	}
+}
+
 func TestLegacyParameterView_HelpOnlyForCanonicalParametersAndFields(t *testing.T) {
 	// help_* is the CLI-facing parameter text for canonical parameters/fields.
 	p := &Parameter{

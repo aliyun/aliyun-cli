@@ -122,6 +122,22 @@ type LegacyBodyParameter struct {
 	Required      bool                  `json:"required"`
 	DescriptionZh string                `json:"description_zh,omitempty"`
 	DescriptionEn string                `json:"description_en,omitempty"`
+	HelpZh        string                `json:"help_zh,omitempty"`
+	HelpEn        string                `json:"help_en,omitempty"`
 	Example       string                `json:"example,omitempty"`
 	SubParameters []LegacyBodyParameter `json:"sub_parameters,omitempty"`
+}
+
+// HelpOrDescription returns the CLI-facing V1 parameter help for the locale.
+func (p *LegacyBodyParameter) HelpOrDescription(lang string) string {
+	if lang == "zh" {
+		if p.HelpZh != "" {
+			return p.HelpZh
+		}
+		return p.DescriptionZh
+	}
+	if p.HelpEn != "" {
+		return p.HelpEn
+	}
+	return p.DescriptionEn
 }
