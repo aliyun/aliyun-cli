@@ -22,7 +22,7 @@ type LegacyParameterView struct {
 	source           LegacyParameterSource
 	canonical        *Parameter
 	field            *Field
-	body             *LegacyBodyParameter
+	body             *V1Parameter
 	topLocation      string // inherited from top-level parameter for nested fields
 	resolvedPosition string // pre-resolved uppercase position for top-level and body views
 	isTopBody        bool   // true for top-level v1_body_parameters views
@@ -45,8 +45,8 @@ func NewFieldView(f *Field, topLocation string) *LegacyParameterView {
 	}
 }
 
-// NewBodyView creates a view wrapping a V1 body parameter.
-func NewBodyView(b *LegacyBodyParameter) *LegacyParameterView {
+// NewBodyView creates a view wrapping a v1_body_parameters entry.
+func NewBodyView(b *V1Parameter) *LegacyParameterView {
 	return &LegacyParameterView{
 		source: SourceBody,
 		body:   b,
@@ -54,7 +54,7 @@ func NewBodyView(b *LegacyBodyParameter) *LegacyParameterView {
 }
 
 // NewV1View creates a view wrapping a complete V1 parameter.
-func NewV1View(b *LegacyBodyParameter) *LegacyParameterView {
+func NewV1View(b *V1Parameter) *LegacyParameterView {
 	return &LegacyParameterView{
 		source: SourceV1,
 		body:   b,
@@ -192,7 +192,7 @@ func (v *LegacyParameterView) IsLegacyRepeatList() bool {
 
 // LegacyChildren returns the sub-parameter views for this parameter.
 // For Canonical parameters, only returns element_fields (one level).
-// For V1 body parameters, returns sub_parameters as-is.
+// For V1 parameters, returns sub_parameters as-is.
 func (v *LegacyParameterView) LegacyChildren() []*LegacyParameterView {
 	var children []*LegacyParameterView
 
@@ -278,9 +278,9 @@ func isCanonicalRepeatList(p *Parameter) bool {
 		p.ParamStyle != "json"
 }
 
-// isBodyRepeatList returns true if a V1 body parameter behaves as a RepeatList.
+// isBodyRepeatList returns true if a V1 parameter behaves as a RepeatList.
 // v1_body_parameters use unified lowercase types with param_style (spec 3.2).
-func isBodyRepeatList(b *LegacyBodyParameter) bool {
+func isBodyRepeatList(b *V1Parameter) bool {
 	return b.Type == "array" &&
 		b.ParamStyle != "flat" &&
 		b.ParamStyle != "json"

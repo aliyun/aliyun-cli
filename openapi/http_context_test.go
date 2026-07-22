@@ -78,7 +78,7 @@ func TestBuildDryRunOpenapiMeta(t *testing.T) {
 }
 
 func TestOpenapiContextUsesCanonicalLegacyView(t *testing.T) {
-	bodyParams := []canonicalmeta.LegacyBodyParameter{
+	bodyParams := []canonicalmeta.V1Parameter{
 		{Name: "Payload", Position: "body", Type: "string"},
 	}
 	context := &OpenapiContext{

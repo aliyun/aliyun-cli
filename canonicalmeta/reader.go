@@ -70,14 +70,14 @@ func validateAPI(api *API) error {
 	}
 	if api.V1BodyParameters != nil {
 		for _, p := range *api.V1BodyParameters {
-			if err := validateLegacyParameter(p); err != nil {
+			if err := validateV1Parameter(p); err != nil {
 				return err
 			}
 		}
 	}
 	if api.V1Parameters != nil {
 		for _, p := range *api.V1Parameters {
-			if err := validateLegacyParameter(p); err != nil {
+			if err := validateV1Parameter(p); err != nil {
 				return err
 			}
 		}
@@ -85,12 +85,12 @@ func validateAPI(api *API) error {
 	return nil
 }
 
-func validateLegacyParameter(p LegacyBodyParameter) error {
+func validateV1Parameter(p V1Parameter) error {
 	if !isKnownLocation(p.Position) {
 		return fmt.Errorf("unknown v1 parameter position %q for parameter %s", p.Position, p.Name)
 	}
 	for _, child := range p.SubParameters {
-		if err := validateLegacyParameter(child); err != nil {
+		if err := validateV1Parameter(child); err != nil {
 			return err
 		}
 	}

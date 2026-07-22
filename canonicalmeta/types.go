@@ -19,8 +19,8 @@ type API struct {
 
 	Parameters []Parameter `json:"parameters"`
 
-	V1Parameters     *[]LegacyBodyParameter `json:"v1_parameters,omitempty"`
-	V1BodyParameters *[]LegacyBodyParameter `json:"v1_body_parameters,omitempty"`
+	V1Parameters     *[]V1Parameter `json:"v1_parameters,omitempty"`
+	V1BodyParameters *[]V1Parameter `json:"v1_body_parameters,omitempty"`
 }
 
 // Description returns the API-level description for the given language.
@@ -113,23 +113,23 @@ func (f *Field) Help(lang string) string {
 	return f.HelpEn
 }
 
-// LegacyBodyParameter represents a V1 body parameter for backward compatibility.
-type LegacyBodyParameter struct {
-	Name          string                `json:"name"`
-	Position      string                `json:"position"`
-	Type          string                `json:"type"`
-	ParamStyle    string                `json:"param_style,omitempty"`
-	Required      bool                  `json:"required"`
-	DescriptionZh string                `json:"description_zh,omitempty"`
-	DescriptionEn string                `json:"description_en,omitempty"`
-	HelpZh        string                `json:"help_zh,omitempty"`
-	HelpEn        string                `json:"help_en,omitempty"`
-	Example       string                `json:"example,omitempty"`
-	SubParameters []LegacyBodyParameter `json:"sub_parameters,omitempty"`
+// V1Parameter represents a v1_parameters/v1_body_parameters compatibility projection.
+type V1Parameter struct {
+	Name          string        `json:"name"`
+	Position      string        `json:"position"`
+	Type          string        `json:"type"`
+	ParamStyle    string        `json:"param_style,omitempty"`
+	Required      bool          `json:"required"`
+	DescriptionZh string        `json:"description_zh,omitempty"`
+	DescriptionEn string        `json:"description_en,omitempty"`
+	HelpZh        string        `json:"help_zh,omitempty"`
+	HelpEn        string        `json:"help_en,omitempty"`
+	Example       string        `json:"example,omitempty"`
+	SubParameters []V1Parameter `json:"sub_parameters,omitempty"`
 }
 
 // HelpOrDescription returns the CLI-facing V1 parameter help for the locale.
-func (p *LegacyBodyParameter) HelpOrDescription(lang string) string {
+func (p *V1Parameter) HelpOrDescription(lang string) string {
 	if lang == "zh" {
 		if p.HelpZh != "" {
 			return p.HelpZh

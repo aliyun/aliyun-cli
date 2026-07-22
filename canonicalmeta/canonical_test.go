@@ -254,7 +254,7 @@ func TestLegacyParameterView_Position(t *testing.T) {
 }
 
 func TestLegacyParameterView_V1DescriptionKeepsDescription(t *testing.T) {
-	p := &LegacyBodyParameter{
+	p := &V1Parameter{
 		Name:          "LegacyParam",
 		DescriptionZh: "中文说明",
 		DescriptionEn: "English description",
@@ -268,19 +268,19 @@ func TestLegacyParameterView_V1DescriptionKeepsDescription(t *testing.T) {
 		t.Errorf("expected English description, got %s", v.LegacyDescription("en"))
 	}
 
-	zhOnly := NewV1View(&LegacyBodyParameter{DescriptionZh: "仅中文"})
+	zhOnly := NewV1View(&V1Parameter{DescriptionZh: "仅中文"})
 	if zhOnly.LegacyDescription("en") != "" {
 		t.Errorf("expected no cross-language fallback for English, got %q", zhOnly.LegacyDescription("en"))
 	}
 
-	enOnly := NewV1View(&LegacyBodyParameter{DescriptionEn: "English only"})
+	enOnly := NewV1View(&V1Parameter{DescriptionEn: "English only"})
 	if enOnly.LegacyDescription("zh") != "" {
 		t.Errorf("expected no cross-language fallback for Chinese, got %q", enOnly.LegacyDescription("zh"))
 	}
 }
 
 func TestLegacyParameterView_V1HelpPreferredOverDescription(t *testing.T) {
-	p := &LegacyBodyParameter{
+	p := &V1Parameter{
 		Name:          "LegacyParam",
 		DescriptionZh: "中文说明",
 		DescriptionEn: "English description",
@@ -296,7 +296,7 @@ func TestLegacyParameterView_V1HelpPreferredOverDescription(t *testing.T) {
 		t.Errorf("expected English help, got %s", v.LegacyDescription("en"))
 	}
 
-	bodyOnlyHelp := NewBodyView(&LegacyBodyParameter{HelpZh: "body 帮助"})
+	bodyOnlyHelp := NewBodyView(&V1Parameter{HelpZh: "body 帮助"})
 	if bodyOnlyHelp.LegacyDescription("zh") != "body 帮助" {
 		t.Errorf("expected body 帮助, got %s", bodyOnlyHelp.LegacyDescription("zh"))
 	}
@@ -725,7 +725,7 @@ func TestCheckLegacyRequiredParameters_V1BodyOverridesSameNamePublicParam(t *tes
 			{RawName: "Other", Location: "query", Type: "string", Required: true},
 		},
 	}
-	api.V1BodyParameters = &[]LegacyBodyParameter{
+	api.V1BodyParameters = &[]V1Parameter{
 		{Name: "Payload", Position: "body", Type: "string", Required: true},
 	}
 
@@ -746,7 +746,7 @@ func TestCheckLegacyRequiredParameters_V1BodyOptionalOverridesRequiredPublicPara
 			{RawName: "Payload", Location: "query", Type: "string", Required: true},
 		},
 	}
-	api.V1BodyParameters = &[]LegacyBodyParameter{
+	api.V1BodyParameters = &[]V1Parameter{
 		{Name: "Payload", Position: "body", Type: "string", Required: false},
 	}
 
@@ -759,7 +759,7 @@ func TestCheckLegacyRequiredParameters_V1BodyOptionalOverridesRequiredPublicPara
 // ── Body view tests ──
 
 func TestLegacyBodyView(t *testing.T) {
-	body := &LegacyBodyParameter{
+	body := &V1Parameter{
 		Name:     "body",
 		Position: "body",
 		Type:     "string",
@@ -782,7 +782,7 @@ func TestLegacyBodyView(t *testing.T) {
 }
 
 func TestLegacyBodyView_RepeatList(t *testing.T) {
-	params := []LegacyBodyParameter{
+	params := []V1Parameter{
 		{
 			Name:       "Items",
 			Position:   "body",
