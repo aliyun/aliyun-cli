@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 
 	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
@@ -131,6 +132,95 @@ func estimateCostBusinessError(out string) error {
 	}
 	return cli.NewErrorWithTip(fmt.Errorf("%s", msg),
 		"the quote response above has the full details; fix the reported parameter or retry later, the target API was NOT invoked")
+}
+
+// PascalCase OpenAPI action name, e.g. CreateTrainingJob. Product-command
+// tokens and file-operation subcommands are lowercase, so this cannot match
+// them by accident.
+var estimateCostApiNameRegexp = regexp.MustCompile(`^[A-Z][A-Za-z0-9]*$`)
+
+// processEstimateCostByTriple quotes an api the local metadata cannot
+// resolve — an api of a non-default product version (pai-dlc 2022-01-12,
+// Selectdb 2022-10-19), or a product with no api definitions at all
+// (Tablestore). A real invocation needs metadata to derive method/path and
+// a signer for the product's protocol, but a quote needs neither: only the
+// triple (popCode/popVersion/apiName) + parameters sent to CloudControl.
+// The trade-off is no local api-name validation — a typo comes back from
+// the server as PricingNotSupported instead of a local "invalid api" error.
+func (c *Commando) processEstimateCostByTriple(ctx *cli.Context, product *meta.Product, popVersion string, apiName string) error {
+	if !estimateCostApiNameRegexp.MatchString(apiName) {
+		return cli.NewErrorWithTip(
+			fmt.Errorf("--estimate-cost requires an OpenAPI name, got `%s`", apiName),
+			"use `aliyun <product> <ApiName> ... --estimate-cost`, e.g. `aliyun pai-dlc CreateTrainingJob --version 2022-01-12 ... --estimate-cost`")
+	}
+	parameters, err := buildEstimateCostParametersFromFlags(ctx, &c.profile)
+	if err != nil {
+		return err
+	}
+	pricingContext, err := buildPricingContext(ctx)
+	if err != nil {
+		return err
+	}
+	if len(pricingContext) > 0 {
+		parameters["PricingContext"] = pricingContext
+	}
+	out, err := invokeEstimateCost(ctx, &c.profile, product.Code, popVersion, apiName, parameters)
+	if err != nil {
+		return err
+	}
+	if err := printEstimateCostResult(ctx, out); err != nil {
+		return err
+	}
+	return estimateCostBusinessError(out)
+}
+
+// buildEstimateCostParametersFromFlags collects pricing parameters without
+// an invoker: unknown flags are the api parameters (there is no metadata to
+// type them against), the `--body` JSON object merges on top, and RegionId
+// falls back to --region and then the profile region.
+func buildEstimateCostParametersFromFlags(ctx *cli.Context, profile *config.Profile) (map[string]interface{}, error) {
+	parameters := make(map[string]interface{})
+	if ctx.UnknownFlags() != nil {
+		for _, f := range ctx.UnknownFlags().Flags() {
+			if !f.IsAssigned() {
+				continue
+			}
+			if values := f.GetValues(); len(values) > 1 {
+				parameters[f.Name] = values
+				continue
+			}
+			if v, ok := f.GetValue(); ok && v != "" {
+				parameters[f.Name] = v
+			}
+		}
+	}
+	if v, ok := BodyFlag(ctx.Flags()).GetValue(); ok && v != "" {
+		if err := mergeEstimateCostJSONBody(parameters, []byte(v)); err != nil {
+			return nil, err
+		}
+	}
+	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok && v != "" {
+		buf, err := os.ReadFile(v)
+		if err != nil {
+			return nil, fmt.Errorf("--estimate-cost failed to read --body-file %s: %v", v, err)
+		}
+		if err := mergeEstimateCostJSONBody(parameters, buf); err != nil {
+			return nil, err
+		}
+	}
+	if _, ok := parameters["RegionId"]; !ok {
+		// --RegionId is a REGISTERED root flag (config.NewRegionIdFlag), so it
+		// never lands in the unknown flags — read it explicitly, then fall
+		// back to --region and the profile region.
+		if regionId, ok := config.RegionIdFlag(ctx.Flags()).GetValue(); ok && regionId != "" {
+			parameters["RegionId"] = regionId
+		} else if region, ok := config.RegionFlag(ctx.Flags()).GetValue(); ok && region != "" {
+			parameters["RegionId"] = region
+		} else if profile.RegionId != "" {
+			parameters["RegionId"] = profile.RegionId
+		}
+	}
+	return parameters, nil
 }
 
 // processEstimateCostOpenapi handles --estimate-cost for the openapi invoke

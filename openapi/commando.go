@@ -423,6 +423,13 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				if style, ok := c.library.GetStyle(productName, version); ok {
 					product.ApiStyle = style
 				} else {
+					// A quote needs no style/method/path — only the triple.
+					// Explicit versions the local metadata doesn't know
+					// (Selectdb 2022-10-19, pai-dlc 2022-01-12, ...) can
+					// still be estimated; the server rejects unknown triples.
+					if EstimateCostFlag(ctx.Flags()).IsAssigned() {
+						return c.processEstimateCostByTriple(ctx, &product, version, args[1])
+					}
 					return cli.NewErrorWithTip(fmt.Errorf("unchecked version %s", version),
 						"Please contact the customer support to get more info about API version")
 				}
@@ -438,8 +445,21 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			// For restful products, the 2-arg form `aliyun <product> <ApiName>` requires a valid ApiName so we can resolve the underlying Method + PathPattern from metadata.
 			// Otherwise we'd fall through with empty Method/PathPattern and surface the confusing "product 'xxx' need restful call" error from checkRestfulMethod.
 			force := ForceFlag(ctx.Flags()).IsAssigned()
-			if !found && !force {
-				return &InvalidApiError{Name: args[1], product: &product}
+			if !found {
+				// The api name may be absent only from the LOCAL metadata —
+				// a product with no api definitions at all (Tablestore) or
+				// an api of the non-default version. A quote doesn't need
+				// the metadata-resolved method/path, so estimate by triple
+				// instead of failing; typos come back as PricingNotSupported.
+				// Checked before --force: forcing cannot make the restful
+				// invoker resolve a method/path the metadata doesn't have,
+				// so the quote intent always wins here.
+				if EstimateCostFlag(ctx.Flags()).IsAssigned() {
+					return c.processEstimateCostByTriple(ctx, &product, product.Version, args[1])
+				}
+				if !force {
+					return &InvalidApiError{Name: args[1], product: &product}
+				}
 			}
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 			ctx.Command().Name = args[1]

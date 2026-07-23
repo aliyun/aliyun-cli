@@ -55,14 +55,14 @@ func writeOssTestConfig(t *testing.T, ctx *cli.Context) {
 }
 
 func TestOssApiNameRegexp(t *testing.T) {
-	assert.True(t, ossApiNameRegexp.MatchString("CreateBucket"))
-	assert.True(t, ossApiNameRegexp.MatchString("PutBucketLifecycle"))
+	assert.True(t, estimateCostApiNameRegexp.MatchString("CreateBucket"))
+	assert.True(t, estimateCostApiNameRegexp.MatchString("PutBucketLifecycle"))
 	// ossutil subcommands and misc tokens must never look like OpenAPI names.
-	assert.False(t, ossApiNameRegexp.MatchString("mb"))
-	assert.False(t, ossApiNameRegexp.MatchString("cp"))
-	assert.False(t, ossApiNameRegexp.MatchString("oss://bucket"))
-	assert.False(t, ossApiNameRegexp.MatchString("--estimate-cost"))
-	assert.False(t, ossApiNameRegexp.MatchString(""))
+	assert.False(t, estimateCostApiNameRegexp.MatchString("mb"))
+	assert.False(t, estimateCostApiNameRegexp.MatchString("cp"))
+	assert.False(t, estimateCostApiNameRegexp.MatchString("oss://bucket"))
+	assert.False(t, estimateCostApiNameRegexp.MatchString("--estimate-cost"))
+	assert.False(t, estimateCostApiNameRegexp.MatchString(""))
 }
 
 func TestOssBridgeLegacyBehaviorPreserved(t *testing.T) {

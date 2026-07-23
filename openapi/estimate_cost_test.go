@@ -603,3 +603,116 @@ func TestProcessEstimateCostOpenapiNoApiName(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot resolve the api name")
 }
+
+func TestBuildEstimateCostParametersFromFlags(t *testing.T) {
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, w)
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	AddFlags(cmd.Flags())
+	config.AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	unknown := cli.NewFlagSet()
+	f1, _ := unknown.AddByName("WorkspaceId")
+	f1.SetAssigned(true)
+	f1.SetValue("ws-123")
+	ctx.SetUnknownFlags(unknown)
+
+	BodyFlag(ctx.Flags()).SetAssigned(true)
+	BodyFlag(ctx.Flags()).SetValue(`{"TrainingSpec":{"Instances":1},"Priority":2}`)
+
+	profile := config.NewProfile("p")
+	profile.RegionId = "cn-hangzhou"
+
+	parameters, err := buildEstimateCostParametersFromFlags(ctx, &profile)
+	assert.NoError(t, err)
+	assert.Equal(t, "ws-123", parameters["WorkspaceId"])
+	assert.Equal(t, float64(2), parameters["Priority"])
+	assert.NotNil(t, parameters["TrainingSpec"])
+	assert.Equal(t, "cn-hangzhou", parameters["RegionId"])
+
+	// --region beats the profile region as RegionId fallback.
+	rf := config.RegionFlag(ctx.Flags())
+	rf.SetAssigned(true)
+	rf.SetValue("cn-beijing")
+	parameters, err = buildEstimateCostParametersFromFlags(ctx, &profile)
+	assert.NoError(t, err)
+	assert.Equal(t, "cn-beijing", parameters["RegionId"])
+
+	// --RegionId is a registered root flag (never an unknown flag) and must
+	// win over --region and the profile region.
+	rif := config.RegionIdFlag(ctx.Flags())
+	rif.SetAssigned(true)
+	rif.SetValue("cn-shenzhen")
+	parameters, err = buildEstimateCostParametersFromFlags(ctx, &profile)
+	assert.NoError(t, err)
+	assert.Equal(t, "cn-shenzhen", parameters["RegionId"])
+
+	// Non-object --body is rejected with the shared JSON-object contract.
+	BodyFlag(ctx.Flags()).SetValue(`[1,2]`)
+	_, err = buildEstimateCostParametersFromFlags(ctx, &profile)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "JSON object")
+}
+
+func TestProcessEstimateCostByTriple(t *testing.T) {
+	// Sentinel-endpoint contract: reaching the quote client (DNS failure on
+	// the sentinel host) proves the metadata-less path routes to pricing and
+	// never tries to resolve/invoke the target api.
+	t.Setenv(estimateCostEndpointEnv, "estimate-cost.test.invalid")
+
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, w)
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	AddFlags(cmd.Flags())
+	config.AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+
+	profile := config.NewProfile("test-triple")
+	profile.Mode = "AK"
+	profile.AccessKeyId = "test-ak"
+	profile.AccessKeySecret = "test-secret"
+	profile.RegionId = "cn-hangzhou"
+	command := NewCommando(w, profile)
+
+	product := &meta.Product{Code: "pai-dlc", Version: "2020-12-03"}
+	err := command.processEstimateCostByTriple(ctx, product, "2022-01-12", "CreateTrainingJob")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "estimate-cost.test.invalid")
+
+	// Non-PascalCase api names are rejected locally with a usage tip.
+	err = command.processEstimateCostByTriple(ctx, product, "2022-01-12", "not-an-api")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "requires an OpenAPI name")
+}
+
+func TestMainEstimateCostUnknownApiRoutesToTriple(t *testing.T) {
+	// End-to-end through Commando.main: a restful product whose local
+	// metadata lacks the api (Tablestore has no api definitions at all)
+	// must fall through to the by-triple quote, not InvalidApiError.
+	t.Setenv(estimateCostEndpointEnv, "estimate-cost.test.invalid")
+
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, w)
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	AddFlags(cmd.Flags())
+	config.AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+
+	profile := config.NewProfile("test-triple-main")
+	profile.Mode = "AK"
+	profile.AccessKeyId = "test-ak"
+	profile.AccessKeySecret = "test-secret"
+	profile.RegionId = "cn-hangzhou"
+	command := NewCommando(w, profile)
+
+	EstimateCostFlag(ctx.Flags()).SetAssigned(true)
+	defer EstimateCostFlag(ctx.Flags()).SetAssigned(false)
+
+	err := command.main(ctx, []string{"tablestore", "CreateVCUInstance"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "estimate-cost.test.invalid")
+	assert.NotContains(t, err.Error(), "not a valid api")
+}

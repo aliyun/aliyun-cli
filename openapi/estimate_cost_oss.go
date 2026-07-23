@@ -15,7 +15,6 @@ package openapi
 
 import (
 	"fmt"
-	"regexp"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -35,10 +34,6 @@ const (
 	ossPopCode           = "Oss"
 	ossDefaultPopVersion = "2019-05-17"
 )
-
-// PascalCase OpenAPI action name, e.g. CreateBucket. ossutil subcommands are
-// all lowercase short words, so this cannot collide with them.
-var ossApiNameRegexp = regexp.MustCompile(`^[A-Z][A-Za-z0-9]*$`)
 
 // AttachOssEstimateCost wires --estimate-cost support onto the built-in
 // `oss` bridge command. Estimate-cost/output flags are registered on the
@@ -73,7 +68,7 @@ func (c *Commando) processOssBridgeFallthrough(ctx *cli.Context, cmd *cli.Comman
 		cmd.PrintTail(ctx)
 		return nil
 	}
-	if len(args) == 0 || !ossApiNameRegexp.MatchString(args[0]) {
+	if len(args) == 0 || !estimateCostApiNameRegexp.MatchString(args[0]) {
 		got := "<none>"
 		if len(args) > 0 {
 			got = args[0]
