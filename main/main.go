@@ -36,6 +36,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cliext/cms2"
 	"github.com/aliyun/aliyun-cli/v3/cliext/codeup"
 	"github.com/aliyun/aliyun-cli/v3/cliext/computenestutil"
+	"github.com/aliyun/aliyun-cli/v3/cliext/ecctl"
 	"github.com/aliyun/aliyun-cli/v3/cliext/esacli"
 	"github.com/aliyun/aliyun-cli/v3/cliext/flowcli"
 	"github.com/aliyun/aliyun-cli/v3/cliext/iact3"
@@ -158,6 +159,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(appmanagerutil.NewAppManagerCommand())
 	// computenest command
 	rootCmd.AddSubCommand(computenestutil.NewComputenestCommand())
+	// ecctl command
+	rootCmd.AddSubCommand(ecctl.NewEcctlCommand())
 	// esa-cli command
 	rootCmd.AddSubCommand(esacli.NewEsacliCommand())
 	// flow-cli command (云效 Flow)
