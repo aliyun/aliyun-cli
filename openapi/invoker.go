@@ -264,9 +264,18 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 		endpointType := a.profile.EndpointType
 		a.request.Domain, err = product.GetEndpointWithType(a.request.RegionId, a.client, endpointType)
 		if err != nil {
-			return cli.NewErrorWithTip(
-				fmt.Errorf("unknown endpoint for %s/%s! failed %s", product.GetLowerCode(), a.request.RegionId, err),
-				"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, "+hint)
+			// --estimate-cost never invokes the product API: the quote is
+			// intercepted before send and routed to CloudControl keyed by the
+			// api triple. A product without an endpoint in this region (e.g.
+			// appstream-center only serves cn-shanghai/ap-southeast-1) must
+			// not block quoting — use a placeholder that is never dialed.
+			if EstimateCostFlag(ctx.Flags()).IsAssigned() {
+				a.request.Domain = "estimate-cost-placeholder.invalid"
+			} else {
+				return cli.NewErrorWithTip(
+					fmt.Errorf("unknown endpoint for %s/%s! failed %s", product.GetLowerCode(), a.request.RegionId, err),
+					"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, "+hint)
+			}
 		}
 	}
 
