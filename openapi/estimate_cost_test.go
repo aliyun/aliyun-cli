@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"testing"
 
+	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
 	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -408,4 +409,197 @@ func TestProcessInvokeEstimateCostContextMalformed(t *testing.T) {
 	err := command.processInvoke(ctx, "ecs", "DescribeRegions", "")
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "novalue")
+}
+
+func TestEstimateCostBusinessErrorFailure(t *testing.T) {
+	// price.success == false must fail the process even though the HTTP call
+	// succeeded (dogfood 2026-07-22: business failures exited 0 and scripts
+	// gating on $? mistook them for successful estimates).
+	out := `{"price":{"success":false,"errorCode":"InvalidParameter","errorMessage":"COMMODITY.INVALID_COMPONENT","upstreamRequestId":"req-1"},"requestId":"r"}`
+	err := estimateCostBusinessError(out)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "InvalidParameter")
+	assert.Contains(t, err.Error(), "COMMODITY.INVALID_COMPONENT")
+	assert.Contains(t, err.Error(), "req-1")
+}
+
+func TestEstimateCostBusinessErrorSuccessAndTolerantShapes(t *testing.T) {
+	// success:true, missing price node, bare-DTO shape and non-JSON output must
+	// all keep exit code 0 — only explicit business failure is an error.
+	assert.Nil(t, estimateCostBusinessError(`{"price":{"success":true},"requestId":"r"}`))
+	assert.Nil(t, estimateCostBusinessError(`{"requestId":"r"}`))
+	assert.Nil(t, estimateCostBusinessError(`not json`))
+	// bare DTO without the gateway "price" envelope
+	assert.NotNil(t, estimateCostBusinessError(`{"success":false,"errorCode":"E"}`))
+	assert.Nil(t, estimateCostBusinessError(`{"success":true}`))
+}
+
+func TestEstimateCostBusinessErrorWithoutDetails(t *testing.T) {
+	err := estimateCostBusinessError(`{"price":{"success":false}}`)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "cost estimation failed")
+}
+
+func newOpenapiEstimateCostContext(api *meta.Api) *OpenapiContext {
+	return &OpenapiContext{
+		HttpContext: &HttpContext{
+			profile: &config.Profile{RegionId: "cn-hangzhou"},
+			product: &meta.Product{Code: "Sls", Version: "2020-12-30"},
+			openapiRequest: &openapiutil.OpenApiRequest{
+				Query:   map[string]*string{},
+				Headers: map[string]*string{},
+				HostMap: map[string]*string{},
+			},
+		},
+		method: "POST",
+		path:   "/logstores",
+		api:    api,
+	}
+}
+
+func TestBuildEstimateCostParametersFromOpenapi(t *testing.T) {
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, w)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	api := &meta.Api{
+		Name:    "CreateLogStore",
+		Product: &meta.Product{Version: "2020-12-30"},
+		Parameters: []meta.Parameter{
+			{Name: "project", Position: "Host"},
+			{Name: "logstoreName", Position: "Path"},
+		},
+	}
+
+	// Path/Host params are recovered from typed flags via api metadata;
+	// query comes from the prepared request; JSON body merges on top.
+	unknown := cli.NewFlagSet()
+	f, _ := unknown.AddByName("project")
+	f.SetAssigned(true)
+	f.SetValue("my-project")
+	f2, _ := unknown.AddByName("logstoreName")
+	f2.SetAssigned(true)
+	f2.SetValue("my-store")
+	ctx.SetUnknownFlags(unknown)
+
+	oc := newOpenapiEstimateCostContext(api)
+	shardCount := "2"
+	oc.openapiRequest.Query["shardCount"] = &shardCount
+	oc.openapiRequest.SetBody([]byte(`{"ttl":30,"hot_ttl":7}`))
+
+	parameters, err := buildEstimateCostParametersFromOpenapi(ctx, oc)
+	assert.NoError(t, err)
+	assert.Equal(t, "2", parameters["shardCount"])
+	assert.Equal(t, "my-project", parameters["project"])
+	assert.Equal(t, "my-store", parameters["logstoreName"])
+	assert.Equal(t, float64(30), parameters["ttl"])
+	assert.Equal(t, float64(7), parameters["hot_ttl"])
+	// RegionId defaulted from the profile so mapping expressions can rely on it.
+	assert.Equal(t, "cn-hangzhou", parameters["RegionId"])
+}
+
+func TestBuildEstimateCostParametersFromOpenapiBodyVariants(t *testing.T) {
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, w)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+
+	api := &meta.Api{Name: "CreateLogStore", Product: &meta.Product{Version: "2020-12-30"}}
+
+	// Per-flag body params arrive as an already-parsed map.
+	oc := newOpenapiEstimateCostContext(api)
+	oc.openapiRequest.Body = map[string]interface{}{"ttl": 30}
+	parameters, err := buildEstimateCostParametersFromOpenapi(ctx, oc)
+	assert.NoError(t, err)
+	assert.Equal(t, 30, parameters["ttl"])
+
+	// Raw --body string form.
+	oc = newOpenapiEstimateCostContext(api)
+	oc.openapiRequest.Body = `{"ttl":15}`
+	parameters, err = buildEstimateCostParametersFromOpenapi(ctx, oc)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(15), parameters["ttl"])
+
+	// Non-object body must be rejected, mirroring the RPC/ROA path contract.
+	oc = newOpenapiEstimateCostContext(api)
+	oc.openapiRequest.SetBody([]byte(`[1,2,3]`))
+	_, err = buildEstimateCostParametersFromOpenapi(ctx, oc)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "JSON object")
+
+	// Binary (non-JSON-decodable) bodies are rejected too.
+	oc = newOpenapiEstimateCostContext(api)
+	oc.openapiRequest.SetBody([]byte{0x28, 0xb5, 0x2f, 0xfd})
+	_, err = buildEstimateCostParametersFromOpenapi(ctx, oc)
+	assert.Error(t, err)
+}
+
+func TestProcessApiInvokeEstimateCost(t *testing.T) {
+	// Same contract as TestProcessInvokeEstimateCostFlag but for the openapi
+	// invoke path (SLS): the flow must reach the estimate-cost client (DNS
+	// failure on the sentinel host proves interception) and the target API
+	// hook must never fire.
+	t.Setenv(estimateCostEndpointEnv, "estimate-cost.test.invalid")
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+	}
+	command := NewCommando(w, profile)
+
+	EstimateCostFlag(ctx.Flags()).SetAssigned(true)
+	defer EstimateCostFlag(ctx.Flags()).SetAssigned(false)
+
+	originCallHook := hookHttpContextCall
+	defer func() { hookHttpContextCall = originCallHook }()
+	targetInvoked := false
+	hookHttpContextCall = func(fn func() error) func() error {
+		return func() error {
+			targetInvoked = true
+			return nil
+		}
+	}
+
+	product := &meta.Product{Code: "sls"}
+	api := &meta.Api{
+		Name:    "CreateLogStore",
+		Product: &meta.Product{Version: "2020-12-30"},
+	}
+	err := command.processApiInvoke(ctx, product, api, "POST", "/logstores")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "estimate-cost.test.invalid")
+	assert.False(t, targetInvoked, "--estimate-cost must not invoke the target API")
+}
+
+func TestProcessEstimateCostOpenapiNoApiName(t *testing.T) {
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, w)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	command := NewCommando(w, config.Profile{Mode: "AK", AccessKeyId: "ak", AccessKeySecret: "sk", RegionId: "cn-hangzhou"})
+	oc := newOpenapiEstimateCostContext(&meta.Api{})
+	err := command.processEstimateCostOpenapi(ctx, oc)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot resolve the api name")
 }

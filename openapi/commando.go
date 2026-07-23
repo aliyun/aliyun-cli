@@ -494,15 +494,6 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		return fmt.Errorf("invalid product, please check product code")
 	}
 
-	// --estimate-cost: the openapi-invoke path uses apiContext.Call instead
-	// of an Invoker, which estimate_cost.go's parameter extractor doesn't
-	// understand yet. Fail fast rather than silently invoke the target API.
-	if EstimateCostFlag(ctx.Flags()).IsAssigned() {
-		return cli.NewErrorWithTip(
-			fmt.Errorf("--estimate-cost is not supported for product %s which uses the openapi invoke path", product.Code),
-			"cost estimation supports RPC and ROA(restful) style products only")
-	}
-
 	apiContext, err := c.createHttpContext(ctx, product, api, method, path)
 	if err != nil {
 		return err
@@ -526,6 +517,20 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 			return fmt.Errorf("--cli-dry-run-json is only supported for OpenAPI invoke path")
 		}
 		return processCliDryRunOpenapiJson(ctx, oc)
+	}
+
+	// --estimate-cost: after Prepare the openapi request carries the fully
+	// assembled query/body/path parameters — route them to the quote service
+	// instead of invoking the target API (same interception contract as the
+	// Invoker path in processInvoke).
+	if EstimateCostFlag(ctx.Flags()).IsAssigned() {
+		oc, ok := apiContext.(*OpenapiContext)
+		if !ok {
+			return cli.NewErrorWithTip(
+				fmt.Errorf("--estimate-cost is not supported for product %s on this invoke path", product.Code),
+				"cost estimation supports RPC, ROA(restful) and openapi-path products only")
+		}
+		return c.processEstimateCostOpenapi(ctx, oc)
 	}
 
 	err = hookHttpContextCall(apiContext.Call)()
