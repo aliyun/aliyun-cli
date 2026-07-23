@@ -18,6 +18,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -68,11 +69,21 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 			return &InvalidParameterError{Name: f.Name, api: api, flags: ctx.Flags()}
 		}
 
+		value, _ := f.GetValue()
+		// Array params often require RPC flat serialization (Servers.1.ServerId).
+		// When the user passes a JSON array/object via --Servers '[...]', expand it.
+		if param.Type == "Array" && f.Name == param.Name {
+			if flat, ok := expandJSONArrayParameter(param.Name, value); ok {
+				assignRPCParams(request, param.Position, flat)
+				continue
+			}
+		}
+
 		if param.Position == "Query" {
-			request.QueryParams[f.Name], _ = f.GetValue()
+			request.QueryParams[f.Name] = value
 		} else if param.Position == "Body" || param.Position == "FormData" {
 			// new add FormData
-			request.FormParams[f.Name], _ = f.GetValue()
+			request.FormParams[f.Name] = value
 		} else if param.Position == "Domain" {
 			continue
 		} else {
@@ -122,4 +133,14 @@ func replaceValueWithFile(f *cli.Flag) {
 		panic(err)
 	}
 	f.SetValue(string(data))
+}
+
+func assignRPCParams(request *requests.CommonRequest, position string, params map[string]string) {
+	for k, v := range params {
+		if position == "Query" {
+			request.QueryParams[k] = v
+		} else if position == "Body" || position == "FormData" {
+			request.FormParams[k] = v
+		}
+	}
 }
