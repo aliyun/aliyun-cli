@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -21,6 +22,88 @@ func TestBuildOssEndpoint(t *testing.T) {
 	assert.Equal(t, "oss-cn-hangzhou.aliyuncs.com", buildOssEndpoint("cn-hangzhou", ""))
 	assert.Equal(t, "oss-cn-hangzhou-internal.aliyuncs.com", buildOssEndpoint("cn-hangzhou", "vpc"))
 	assert.Equal(t, "oss-cn-beijing-internal.aliyuncs.com", buildOssEndpoint("cn-beijing", "VPC"))
+}
+
+func TestStripCliOnlyFlagsFromArgs(t *testing.T) {
+	t.Run("strips profile long and value", func(t *testing.T) {
+		got := stripCliOnlyFlagsFromArgs([]string{
+			"oss://bucket/obj", "/tmp/out", "--profile", "mac16@oyj",
+		})
+		assert.Equal(t, []string{"oss://bucket/obj", "/tmp/out"}, got)
+	})
+
+	t.Run("strips profile equals form", func(t *testing.T) {
+		got := stripCliOnlyFlagsFromArgs([]string{
+			"oss://bucket/obj", "--profile=other", "--recursive",
+		})
+		assert.Equal(t, []string{"oss://bucket/obj", "--recursive"}, got)
+	})
+
+	t.Run("strips profile shorthand -p", func(t *testing.T) {
+		got := stripCliOnlyFlagsFromArgs([]string{
+			"src", "dst", "-p", "myprof", "--force",
+		})
+		assert.Equal(t, []string{"src", "dst", "--force"}, got)
+	})
+
+	t.Run("keeps shared OSS options like region and endpoint", func(t *testing.T) {
+		got := stripCliOnlyFlagsFromArgs([]string{
+			"ls", "oss://b",
+			"--region", "cn-hangzhou",
+			"--endpoint", "oss-cn-hangzhou.aliyuncs.com",
+			"--profile", "x",
+			"--access-key-id", "ak",
+		})
+		assert.Equal(t, []string{
+			"ls", "oss://b",
+			"--region", "cn-hangzhou",
+			"--endpoint", "oss-cn-hangzhou.aliyuncs.com",
+			"--access-key-id", "ak",
+		}, got)
+	})
+
+	t.Run("strips other CLI-only config flags", func(t *testing.T) {
+		got := stripCliOnlyFlagsFromArgs([]string{
+			"cp", "a", "b",
+			"--config-path", "/tmp/cfg.json",
+			"--sts-endpoint", "sts.aliyuncs.com",
+			"--source-profile", "base",
+			"--recursive",
+		})
+		assert.Equal(t, []string{"cp", "a", "b", "--recursive"}, got)
+	})
+
+	t.Run("profile without value does not swallow next flag", func(t *testing.T) {
+		got := stripCliOnlyFlagsFromArgs([]string{"ls", "--profile", "--recursive"})
+		assert.Equal(t, []string{"ls", "--recursive"}, got)
+	})
+
+	t.Run("shorthand without value does not swallow next flag", func(t *testing.T) {
+		got := stripCliOnlyFlagsFromArgs([]string{"ls", "-p", "--force"})
+		assert.Equal(t, []string{"ls", "--force"}, got)
+	})
+
+	t.Run("strips AssignedNone CLI-only flag without consuming next", func(t *testing.T) {
+		got := stripCliOnlyFlagsFromArgs([]string{
+			"ls", "oss://b", "--skip-secure-verify", "--recursive",
+		})
+		assert.Equal(t, []string{"ls", "oss://b", "--recursive"}, got)
+	})
+
+	t.Run("empty args", func(t *testing.T) {
+		assert.Empty(t, stripCliOnlyFlagsFromArgs(nil))
+		assert.Empty(t, stripCliOnlyFlagsFromArgs([]string{}))
+	})
+}
+
+func TestOssKnownOptionNames_IncludesEndpointAndRegion(t *testing.T) {
+	known := ossKnownOptionNames()
+	_, hasEndpoint := known["--endpoint"]
+	_, hasRegion := known["--region"]
+	_, hasProfile := known["--profile"]
+	assert.True(t, hasEndpoint)
+	assert.True(t, hasRegion)
+	assert.False(t, hasProfile)
 }
 
 func newEndpointTestContext(t *testing.T) *cli.Context {
@@ -335,6 +418,124 @@ func TestParseAndRunCommandFromCli(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseAndRunCommandFromCli_ProfileFlagStrippedAndApplied(t *testing.T) {
+	clearEndpointTestEnv(t)
+	originalParseAndRunCommand := parseAndRunCommandImpl
+	defer func() { parseAndRunCommandImpl = originalParseAndRunCommand }()
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	content := `{
+  "current": "default",
+  "profiles": [
+    {
+      "name": "default",
+      "mode": "AK",
+      "access_key_id": "default-ak",
+      "access_key_secret": "default-sk",
+      "region_id": "cn-hangzhou",
+      "output_format": "json",
+      "language": "en"
+    },
+    {
+      "name": "mac16@oyj",
+      "mode": "AK",
+      "access_key_id": "profile-ak",
+      "access_key_secret": "profile-sk",
+      "region_id": "cn-beijing",
+      "output_format": "json",
+      "language": "en"
+    }
+  ]
+}`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0600))
+
+	ctx := newEndpointTestContext(t)
+	cmd := &cli.Command{Name: "cp"}
+	ctx.SetCommand(cmd)
+	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+	config.ConfigurePathFlag(ctx.Flags()).SetValue(path)
+
+	var capturedArgs []string
+	parseAndRunCommandImpl = func() error {
+		capturedArgs = append([]string{}, os.Args...)
+		return nil
+	}
+
+	err := ParseAndRunCommandFromCli(ctx, []string{
+		"oss://oyj-test-role/file.vsix",
+		"/tmp/Downloads",
+		"--profile", "mac16@oyj",
+	})
+	require.NoError(t, err)
+
+	joined := strings.Join(capturedArgs, " ")
+	assert.NotContains(t, joined, "--profile")
+	assert.NotContains(t, joined, "mac16@oyj")
+	assert.Contains(t, joined, "--access-key-id")
+	assert.Contains(t, joined, "profile-ak")
+	assert.Contains(t, joined, "profile-sk")
+	assert.Contains(t, joined, "oss://oyj-test-role/file.vsix")
+	assert.Contains(t, joined, "/tmp/Downloads")
+}
+
+func TestParseAndRunCommandFromCli_ProfileEqualsForm(t *testing.T) {
+	clearEndpointTestEnv(t)
+	originalParseAndRunCommand := parseAndRunCommandImpl
+	defer func() { parseAndRunCommandImpl = originalParseAndRunCommand }()
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	content := `{
+  "current": "default",
+  "profiles": [
+    {
+      "name": "default",
+      "mode": "AK",
+      "access_key_id": "default-ak",
+      "access_key_secret": "default-sk",
+      "region_id": "cn-hangzhou",
+      "output_format": "json",
+      "language": "en"
+    },
+    {
+      "name": "alt",
+      "mode": "AK",
+      "access_key_id": "alt-ak",
+      "access_key_secret": "alt-sk",
+      "region_id": "cn-shanghai",
+      "output_format": "json",
+      "language": "en"
+    }
+  ]
+}`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0600))
+
+	ctx := newEndpointTestContext(t)
+	ctx.SetCommand(&cli.Command{Name: "ls"})
+	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+	config.ConfigurePathFlag(ctx.Flags()).SetValue(path)
+
+	var capturedArgs []string
+	parseAndRunCommandImpl = func() error {
+		capturedArgs = append([]string{}, os.Args...)
+		return nil
+	}
+
+	err := ParseAndRunCommandFromCli(ctx, []string{"oss://bucket", "--profile=alt"})
+	require.NoError(t, err)
+
+	joined := strings.Join(capturedArgs, " ")
+	assert.NotContains(t, joined, "--profile")
+	assert.NotContains(t, joined, "--profile=alt")
+	assert.Contains(t, joined, "alt-ak")
+	assert.Contains(t, joined, "oss://bucket")
 }
 
 // Helper functions for creating mock contexts and profiles

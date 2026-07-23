@@ -137,6 +137,71 @@ func getArgValue(args []string, name string) (string, bool) {
 	return "", false
 }
 
+// ossKnownOptionNames returns long/short option names understood by OSS goopt (OptionMap).
+func ossKnownOptionNames() map[string]struct{} {
+	m := make(map[string]struct{}, len(OptionMap)*2)
+	for _, opt := range OptionMap {
+		if opt.nameAlias != "" {
+			m[opt.nameAlias] = struct{}{}
+		}
+		if opt.name != "" {
+			m[opt.name] = struct{}{}
+		}
+	}
+	return m
+}
+
+// stripCliOnlyFlagsFromArgs removes aliyun CLI config flags that OSS goopt does not
+// understand (e.g. --profile / -p), while keeping flags shared with OSS
+// (e.g. --endpoint, --region). Keeps KeepArgs forwarding from breaking on
+// trailing global flags. Supports --name value, --name=value, and short forms.
+func stripCliOnlyFlagsFromArgs(args []string) []string {
+	configFS := cli.NewFlagSet()
+	config.AddFlags(configFS)
+	ossKnown := ossKnownOptionNames()
+
+	longNeedsValue := make(map[string]bool)
+	shortNeedsValue := make(map[string]bool)
+
+	for _, f := range configFS.Flags() {
+		long := "--" + f.Name
+		if _, ok := ossKnown[long]; ok {
+			continue
+		}
+		needsValue := f.AssignedMode != cli.AssignedNone
+		longNeedsValue[long] = needsValue
+		if f.Shorthand != 0 {
+			shortNeedsValue["-"+string(f.Shorthand)] = needsValue
+		}
+	}
+
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if strings.HasPrefix(a, "--") {
+			if idx := strings.IndexByte(a, '='); idx > 0 {
+				if _, ok := longNeedsValue[a[:idx]]; ok {
+					continue
+				}
+			}
+		}
+		if needs, ok := longNeedsValue[a]; ok {
+			if needs && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+			}
+			continue
+		}
+		if needs, ok := shortNeedsValue[a]; ok {
+			if needs && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				i++
+			}
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
+
 // ParseAndGetEndpoint get oss endpoint from cli context.
 // Priority (aligned with OpenAPI): explicit --endpoint (args/flag) >
 // profile.Endpoint > construct from region + endpoint-type.
@@ -253,6 +318,10 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 			}
 		}
 	}
+
+	// Drop CLI-only config flags (e.g. --profile) before forwarding to OSS goopt.
+	// Credentials were already resolved from the selected profile above.
+	args = stripCliOnlyFlagsFromArgs(args)
 
 	a2 := []string{"aliyun", "oss"}
 	a2 = append(a2, ctx.Command().Name)
