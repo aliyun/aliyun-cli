@@ -434,6 +434,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				if api == nil {
 					return &InvalidApiError{Name: args[1], product: &product}
 				}
+				c.CheckApiParamWithBuildInArgs(ctx, api)
 				return c.processApiInvoke(ctx, &product, api, api.Method, api.PathPattern)
 			}
 			if api == nil {

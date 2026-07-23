@@ -188,6 +188,83 @@ func TestMain_SingleBuiltinProduct_PluginNotInstalled_NoSuggestion(t *testing.T)
 	assert.NotContains(t, w.String(), "aliyun plugin install --names")
 }
 
+func TestMain_OpenapiApiNameCopiesKnownQueryFlags(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	ctx.Flags().Add(config.NewModeFlag())
+	ctx.Flags().Get(config.ModeFlagName).SetAssigned(true)
+	ctx.Flags().Get(config.ModeFlagName).SetValue("standard")
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	err := os.WriteFile(configPath, []byte(`{
+		"current": "default",
+		"profiles": [{
+			"name": "default",
+			"mode": "AK",
+			"access_key_id": "test-access-key-id",
+			"access_key_secret": "test-access-key-secret",
+			"region_id": "cn-hangzhou"
+		}]
+	}`), 0600)
+	assert.NoError(t, err)
+	configPathFlag := config.NewConfigurePathFlag()
+	configPathFlag.SetAssigned(true)
+	configPathFlag.SetValue(configPath)
+	ctx.Flags().Add(configPathFlag)
+
+	projectFlag := &cli.Flag{Name: "project"}
+	projectFlag.SetAssigned(true)
+	projectFlag.SetValue("test-project")
+	ctx.UnknownFlags().Add(projectFlag)
+
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+
+	slsProduct := meta.Product{
+		Code:     "sls",
+		Version:  "2020-12-30",
+		ApiStyle: "restful",
+		ApiNames: []string{"ListLogStores"},
+	}
+	mockRepo, _ := meta.MockLoadRepository([]meta.Product{slsProduct})
+	fakeRepo := newFakeCanonicalRepo()
+	fakeRepo.AddAPI("sls", "2020-12-30", canonicalTestAPI(&testLegacyAPI{
+		Name:        "ListLogStores",
+		Method:      "GET",
+		PathPattern: "/logstores",
+		Parameters: []testLegacyParameter{
+			{Name: "project", Position: "Host", Required: true},
+			{Name: "mode", Position: "Query"},
+		},
+	}))
+
+	command := NewCommando(stdout, config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "test-access-key-id",
+		AccessKeySecret: "test-access-key-secret",
+		RegionId:        "cn-hangzhou",
+	})
+	command.library = &Library{
+		builtinRepo:   mockRepo,
+		canonicalRepo: fakeRepo,
+	}
+
+	err = command.main(ctx, []string{"sls", "ListLogStores"})
+	assert.NoError(t, err)
+
+	var out CliDryRunOutput
+	assert.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &out))
+	assert.Equal(t, "standard", out.Query["mode"])
+}
+
 func Test_processInvoke(t *testing.T) {
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
