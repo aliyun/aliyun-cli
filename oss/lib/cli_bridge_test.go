@@ -83,6 +83,27 @@ func TestStripCliOnlyFlagsFromArgs(t *testing.T) {
 		assert.Equal(t, []string{"ls", "--force"}, got)
 	})
 
+	t.Run("consumes value that starts with single dash", func(t *testing.T) {
+		got := stripCliOnlyFlagsFromArgs([]string{
+			"cp", "a", "b", "--profile", "-myprof", "--recursive",
+		})
+		assert.Equal(t, []string{"cp", "a", "b", "--recursive"}, got)
+	})
+
+	t.Run("consumes config-path value that looks like a dash path", func(t *testing.T) {
+		got := stripCliOnlyFlagsFromArgs([]string{
+			"ls", "oss://b", "--config-path", "-tmp/cfg", "--force",
+		})
+		assert.Equal(t, []string{"ls", "oss://b", "--force"}, got)
+	})
+
+	t.Run("shorthand consumes dash-prefixed profile value", func(t *testing.T) {
+		got := stripCliOnlyFlagsFromArgs([]string{
+			"src", "dst", "-p", "-myprof", "--force",
+		})
+		assert.Equal(t, []string{"src", "dst", "--force"}, got)
+	})
+
 	t.Run("strips AssignedNone CLI-only flag without consuming next", func(t *testing.T) {
 		got := stripCliOnlyFlagsFromArgs([]string{
 			"ls", "oss://b", "--skip-secure-verify", "--recursive",

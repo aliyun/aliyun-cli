@@ -186,13 +186,16 @@ func stripCliOnlyFlagsFromArgs(args []string) []string {
 			}
 		}
 		if needs, ok := longNeedsValue[a]; ok {
-			if needs && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			// Consume the value token even when it starts with '-' (e.g. profile
+			// "-myprof" or path "-tmp/cfg"). Only skip when the next token is a
+			// long option (--...), which indicates a missing value.
+			if needs && i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
 				i++
 			}
 			continue
 		}
 		if needs, ok := shortNeedsValue[a]; ok {
-			if needs && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			if needs && i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
 				i++
 			}
 			continue
