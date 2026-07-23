@@ -232,3 +232,62 @@ func TestNewListSupportedPricingApisCommandRunReportsErrors(t *testing.T) {
 	err := cmd.Run(ctx, []string{})
 	assert.NotNil(t, err, "closure must surface failures, not silently return nil")
 }
+
+func TestListSupportedPricingApisCommandRegistersOutputFlags(t *testing.T) {
+	// --quiet / --cli-query / --output are not persistent, so they must be on
+	// the command's own flag set; otherwise they error after the command name
+	// and are silently dropped before it (dogfood 2026-07-22 finding #4).
+	cmd := NewListSupportedPricingApisCommand()
+	for _, name := range []string{QuietFlagName, QueryFlagName, OutputFlagName,
+		PricingProductFlagName, PricingApiVersionFlagName} {
+		assert.NotNil(t, cmd.Flags().Get(name), "flag --%s should be registered", name)
+	}
+}
+
+func TestFilterSupportedPricingApis(t *testing.T) {
+	body := `{"supportedApis":[
+		{"popCode":"Ecs","popVersion":"2014-05-26","apiName":"RunInstances"},
+		{"popCode":"adb","popVersion":"2019-03-15","apiName":"CreateDBResourceGroup"},
+		{"popCode":"adb","popVersion":"2021-12-01","apiName":"CreateDBCluster"}],
+		"nextToken":"","requestId":"rid"}`
+
+	newCtx := func(flagValues map[string]string) *cli.Context {
+		w := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(w, new(bytes.Buffer))
+		ctx.EnterCommand(NewListSupportedPricingApisCommand())
+		for k, v := range flagValues {
+			f := ctx.Flags().Get(k)
+			f.SetAssigned(true)
+			f.SetValue(v)
+		}
+		return ctx
+	}
+
+	// no filters: passthrough untouched
+	out, err := filterSupportedPricingApis(newCtx(nil), body)
+	assert.Nil(t, err)
+	assert.Equal(t, body, out)
+
+	// product filter is case-insensitive
+	out, err = filterSupportedPricingApis(newCtx(map[string]string{PricingProductFlagName: "ADB"}), body)
+	assert.Nil(t, err)
+	var parsed struct {
+		SupportedApis []map[string]interface{} `json:"supportedApis"`
+	}
+	assert.Nil(t, json.Unmarshal([]byte(out), &parsed))
+	assert.Len(t, parsed.SupportedApis, 2)
+
+	// product + version narrows to one
+	out, err = filterSupportedPricingApis(newCtx(map[string]string{
+		PricingProductFlagName:    "adb",
+		PricingApiVersionFlagName: "2021-12-01",
+	}), body)
+	assert.Nil(t, err)
+	assert.Nil(t, json.Unmarshal([]byte(out), &parsed))
+	assert.Len(t, parsed.SupportedApis, 1)
+	assert.Equal(t, "CreateDBCluster", parsed.SupportedApis[0]["apiName"])
+
+	// filter requested against a malformed body errors out instead of hiding it
+	_, err = filterSupportedPricingApis(newCtx(map[string]string{PricingProductFlagName: "adb"}), "not json")
+	assert.NotNil(t, err)
+}
