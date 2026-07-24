@@ -21,7 +21,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
-	"github.com/aliyun/aliyun-cli/v3/cliext/oapicmd"
+	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -289,10 +289,10 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			//     Products marked distribution=="go" are abstained by the engine so they still reach auto-install.
 			if installed {
 				if ptype, ok := plugin.InstalledPluginType(args[0]); ok && ptype == plugin.PluginTypeMeta {
-					return oapicmd.Dispatch(ctx, pluginArgs)
+					return runtimehost.Dispatch(ctx, pluginArgs)
 				}
 			} else if commonRuntimeFallbackEnabled() {
-				if handled, derr := oapicmd.TryDispatch(ctx, pluginArgs); handled {
+				if handled, derr := runtimehost.TryDispatch(ctx, pluginArgs); handled {
 					return derr
 				}
 			}

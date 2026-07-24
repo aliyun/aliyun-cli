@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package jsoncmd is the engine's command core: it turns a raw argv
+// Package engine is the meta-driven command core: it turns a raw argv
 // tail into a resolved API call and renders the result. It is
 // deliberately free of any CLI-framework, config, or i18n dependency
 // so the whole aliyun-openapi-runtime module can be published standalone.
 //
 // The embedding application (aliyun-cli) wraps Engine.Dispatch in its
 // own cli.Command and supplies a runtime.Host for credentials;
-// see the oapicmd adapter in the main module.
-package jsoncmd
+// see openapi/runtimehost in the main module.
+package engine
 
 import (
 	"bytes"
@@ -42,11 +42,9 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
 )
 
-// Engine dispatches OpenAPI commands against a lazy Loader. It carries no
-// presentation or host state; each call passes its own Request.
+// Engine dispatches OpenAPI commands against a lazy Loader. It carries no presentation or host state; each call passes its own Request.
 //
-// The loader is constructed on first use and memoised. Product ownership is
-// then resolved on demand for only the product named by the request.
+// The loader is constructed on first use and memoised. Product ownership is then resolved on demand for only the product named by the request.
 type Engine struct {
 	loaderFunc func() (loader.Loader, error)
 	executor   runtime.Executor
@@ -68,17 +66,15 @@ func (e *Engine) getLoader() (loader.Loader, error) {
 	return e.loader, e.lodErr
 }
 
-// Resolvable reports whether the engine can handle "<product> <command>"
-// (i.e. it resolves to a known API in baseline or a user meta plugin).
-// It is used by the host router to decide, for products WITHOUT an
-// installed Go plugin, whether to route here or fall back to legacy
-// handling. Resolves only the requested product on first call.
+// Resolvable reports whether the engine can handle "<product> <command>" (i.e. it resolves to a known API in baseline or a user meta plugin).
+// It is used by the host router to decide, for products WITHOUT an installed Go plugin, whether to route here or fall back to legacy handling.
+// Resolves only the requested product on first call.
 func (e *Engine) Resolvable(product, command string) bool {
 	ldr, err := e.getLoader()
 	if err != nil {
 		return false
 	}
-	if err := ldr.EnsureProduct(context.Background(), product); err != nil {
+	if err := ldr.EnsureProduct(product); err != nil {
 		return false
 	}
 	// Check across all of the product's versions, not just the default,
@@ -112,7 +108,7 @@ func (e *Engine) Dispatch(req Request) error {
 		return errors.New("expected <product> <command>")
 	}
 	product := args[0]
-	if err := ldr.EnsureProduct(context.Background(), product); err != nil {
+	if err := ldr.EnsureProduct(product); err != nil {
 		return err
 	}
 	cmdName := args[1]

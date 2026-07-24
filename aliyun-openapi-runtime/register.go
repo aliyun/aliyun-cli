@@ -17,7 +17,7 @@ package openapiruntime
 import (
 	"io/fs"
 
-	"github.com/aliyun/aliyun-openapi-runtime/jsoncmd"
+	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	"github.com/aliyun/aliyun-openapi-runtime/loader"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/source"
@@ -78,8 +78,8 @@ func NewLoader(opts Options) loader.Loader {
 // enumerates unrelated products.
 //
 // executor may be nil to use the default darabonba-backed executor.
-func NewEngine(opts Options, executor runtime.Executor) *jsoncmd.Engine {
-	return jsoncmd.NewEngine(
+func NewEngine(opts Options, executor runtime.Executor) *engine.Engine {
+	return engine.NewEngine(
 		func() (loader.Loader, error) {
 			return NewLoader(opts), nil
 		},

@@ -1,7 +1,6 @@
 package loader
 
 import (
-	"context"
 	"testing"
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
@@ -36,7 +35,7 @@ func TestEnsureProductLoadsOnlyRequestedProduct(t *testing.T) {
 	src := &targetedSource{}
 	ldr := New(src)
 
-	if err := ldr.EnsureProduct(context.Background(), "ECS"); err != nil {
+	if err := ldr.EnsureProduct("ECS"); err != nil {
 		t.Fatal(err)
 	}
 	if len(src.loadProductCalls) != 1 || src.loadProductCalls[0] != "ecs" {
@@ -44,7 +43,7 @@ func TestEnsureProductLoadsOnlyRequestedProduct(t *testing.T) {
 	}
 
 	// Ownership is cached for the rest of the process.
-	if err := ldr.EnsureProduct(context.Background(), "ecs"); err != nil {
+	if err := ldr.EnsureProduct("ecs"); err != nil {
 		t.Fatal(err)
 	}
 	if len(src.loadProductCalls) != 1 {

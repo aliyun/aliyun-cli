@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package oapicmd
+package runtimehost
 
 import (
 	"bytes"
@@ -27,7 +27,7 @@ import (
 
 	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
-	"github.com/aliyun/aliyun-openapi-runtime/jsoncmd"
+	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	"github.com/aliyun/aliyun-openapi-runtime/loader"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
@@ -64,7 +64,7 @@ func TestHostSettingsAppliedToExecContext(t *testing.T) {
 	var buf bytes.Buffer
 	// describe-regions has no required params; not a dry-run so the
 	// (capturing) executor is invoked with the fully-populated ec.
-	err := eng.Dispatch(jsoncmd.Request{
+	err := eng.Dispatch(engine.Request{
 		Args: []string{"ecs", "describe-regions"},
 		Out:  &buf,
 		Lang: "en",
@@ -98,7 +98,7 @@ func TestHostSettingsAppliedToExecContext(t *testing.T) {
 
 // baselineEngine boots an engine over the embedded baseline metadata,
 // exactly as the production wiring does (minus user/override layers).
-func baselineEngine(t *testing.T) *jsoncmd.Engine {
+func baselineEngine(t *testing.T) *engine.Engine {
 	t.Helper()
 	return openapiruntime.NewEngine(openapiruntime.Options{
 		BaselineFS: aliyunopenapimeta.Metadatas,
@@ -108,10 +108,10 @@ func baselineEngine(t *testing.T) *jsoncmd.Engine {
 
 // runOapi drives one dispatch and captures stdout. A StaticHost with a
 // fixed region keeps the test hermetic (dry-run never touches creds).
-func runOapi(t *testing.T, eng *jsoncmd.Engine, region string, args ...string) (string, error) {
+func runOapi(t *testing.T, eng *engine.Engine, region string, args ...string) (string, error) {
 	t.Helper()
 	var buf bytes.Buffer
-	err := eng.Dispatch(jsoncmd.Request{
+	err := eng.Dispatch(engine.Request{
 		Args: args,
 		Out:  &buf,
 		Lang: "en",
@@ -139,7 +139,7 @@ func baselineLoaderFor(t *testing.T, product string) loader.Loader {
 		BaselineFS: aliyunopenapimeta.Metadatas,
 		BundledBy:  "aliyun-cli test",
 	})
-	if err := l.EnsureProduct(context.Background(), product); err != nil {
+	if err := l.EnsureProduct(product); err != nil {
 		t.Fatalf("ensure product %s: %v", product, err)
 	}
 	return l
@@ -235,14 +235,14 @@ func TestMultiVersionResolutionFromBaseline(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// End-to-end dispatch (was aliyun-openapi-runtime/jsoncmd/oapi_e2e_test.go)
+// End-to-end dispatch (was aliyun-openapi-runtime/engine/oapi_e2e_test.go)
 // ---------------------------------------------------------------------------
 
 func TestOapiDryRunJSONEndToEnd(t *testing.T) {
 	eng := baselineEngine(t)
 	out, err := runOapi(t, eng, "cn-beijing",
 		"ecs", "run-instances",
-		"--region-id", "cn-beijing",
+		"--biz-region-id", "cn-beijing",
 		"--image-id", "img1",
 		"--instance-type", "ecs.g6.large",
 		"--cli-dry-run-json",
@@ -269,7 +269,7 @@ func TestOapiDryRunHumanEndToEnd(t *testing.T) {
 	eng := baselineEngine(t)
 	out, err := runOapi(t, eng, "cn-hangzhou",
 		"ecs", "run-instances",
-		"--region-id", "cn-hangzhou",
+		"--biz-region-id", "cn-hangzhou",
 		"--instance-type", "ecs.g6.large",
 		"--tag", "Key=env", "Value=prod",
 		"--cli-dry-run",
@@ -288,7 +288,7 @@ func TestOapiDashPrefixedValueEndToEnd(t *testing.T) {
 	eng := baselineEngine(t)
 	out, err := runOapi(t, eng, "cn-hangzhou",
 		"ecs", "run-instances",
-		"--region-id", "cn-hangzhou",
+		"--biz-region-id", "cn-hangzhou",
 		"--instance-name", "-1/-1",
 		"--cli-dry-run",
 	)
@@ -303,8 +303,8 @@ func TestOapiDashPrefixedValueEndToEnd(t *testing.T) {
 func TestOapiMissingRequiredParam(t *testing.T) {
 	eng := baselineEngine(t)
 	_, err := runOapi(t, eng, "cn-hangzhou", "ecs", "run-instances", "--cli-dry-run")
-	if err == nil || !strings.Contains(err.Error(), "region-id") {
-		t.Fatalf("expected missing region-id error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "biz-region-id") {
+		t.Fatalf("expected missing biz-region-id error, got %v", err)
 	}
 }
 
@@ -366,7 +366,7 @@ func TestUserMetaPluginOwnsProduct(t *testing.T) {
 	// Baseline products remain reachable (different product code).
 	out, err = runOapi(t, eng, "cn-hangzhou",
 		"ecs", "run-instances",
-		"--region-id", "cn-hangzhou",
+		"--biz-region-id", "cn-hangzhou",
 		"--instance-type", "ecs.g6.large",
 		"--cli-dry-run-json")
 	if err != nil {

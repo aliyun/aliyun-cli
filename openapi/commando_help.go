@@ -22,7 +22,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
-	"github.com/aliyun/aliyun-cli/v3/cliext/oapicmd"
+	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
@@ -336,7 +336,7 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 	// by the engine, so they still fall through to the plugin help below.
 	// Set ALIYUN_CLI_OPENAPI_RUNTIME_FALLBACK=1 to skip for local debug.
 	if commonRuntimeFallbackEnabled() {
-		if handled, herr := oapicmd.TryHelp(ctx, productCode, apiName); handled {
+		if handled, herr := runtimehost.TryHelp(ctx, productCode, apiName); handled {
 			return herr
 		}
 	}

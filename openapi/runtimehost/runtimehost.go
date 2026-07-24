@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package oapicmd is the aliyun-cli host adapter for the standalone
+// Package runtimehost is the aliyun-cli host adapter for the standalone
 // aliyun-openapi-runtime engine. It is the ONLY place that binds the engine to
 // aliyun-cli's cli.Command tree, config/profile credentials, and i18n,
 // keeping the engine module itself free of those dependencies.
-package oapicmd
+package runtimehost
 
 import (
 	"os"
@@ -31,7 +31,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
-	"github.com/aliyun/aliyun-openapi-runtime/jsoncmd"
+	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 )
@@ -152,11 +152,11 @@ func (h *profileHost) Credential() (credentialsv2.Credential, error) {
 // router dispatches through it and resolves only the requested product.
 var (
 	engineOnce sync.Once
-	engineInst *jsoncmd.Engine
+	engineInst *engine.Engine
 )
 
 // Engine returns the shared aliyun-openapi-runtime engine.
-func Engine() *jsoncmd.Engine {
+func Engine() *engine.Engine {
 	engineOnce.Do(func() {
 		engineInst = openapiruntime.NewEngine(openapiruntime.Options{
 			BaselineFS:     aliyunopenapimeta.Metadatas,
@@ -190,7 +190,7 @@ func Dispatch(ctx *cli.Context, rawArgs []string) error {
 		i18n.SetLanguage(lang)
 	}
 
-	return Engine().Dispatch(jsoncmd.Request{
+	return Engine().Dispatch(engine.Request{
 		Args: engineArgs,
 		Out:  ctx.Stdout(),
 		Lang: lang,

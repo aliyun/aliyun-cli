@@ -15,7 +15,6 @@
 package loader
 
 import (
-	"context"
 	"testing"
 	"testing/fstest"
 
@@ -48,7 +47,7 @@ func newTwoVersionLoader(t *testing.T) Loader {
 	t.Helper()
 	src := source.NewBaselineSource(twoVersionFS(), "test")
 	l := New(src)
-	if err := l.EnsureProduct(context.Background(), "demo"); err != nil {
+	if err := l.EnsureProduct("demo"); err != nil {
 		t.Fatalf("ensure product: %v", err)
 	}
 	return l

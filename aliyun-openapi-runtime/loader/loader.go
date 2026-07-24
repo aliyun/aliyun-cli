@@ -25,30 +25,30 @@
 //
 // Index/API decoding is on demand via GetIndex()/GetAPI() with no
 // memoisation (a CLI invocation resolves each item ~once).
+//
+// Concurrency: the Loader is process-scoped and reused within one CLI
+// invocation (Resolvable → Dispatch), but the CLI touches it from a
+// single goroutine. products is therefore an unsynchronised map; do not
+// call Loader methods concurrently without external serialisation.
 package loader
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/source"
 )
 
-// Loader is the interface consumed by upper layers. defaultLoader is
-// the only implementation shipped; tests may swap in mocks.
+// Loader is the interface consumed by upper layers. defaultLoader is the only implementation shipped.
 type Loader interface {
 	// EnsureProduct resolves and caches ownership for exactly one product.
-	// Normal CLI dispatch uses this path so it never enumerates unrelated
-	// products or plugin directories.
-	EnsureProduct(ctx context.Context, code string) error
+	// Normal CLI dispatch uses this path so it never enumerates unrelated products or plugin directories.
+	EnsureProduct(code string) error
 
-	// LookupProduct returns the cached Product manifest, or nil if
-	// unknown.
+	// LookupProduct returns the cached Product manifest, or nil if unknown.
 	LookupProduct(code string) *meta.Product
 
 	// ResolveVersion resolves an optionally-requested version to
@@ -56,39 +56,26 @@ type Loader interface {
 	// "" for the product's default.
 	ResolveVersion(product, requested string) (string, error)
 
-	// GetIndex returns the (product, version) index, decoded fresh from
-	// the product's owning Source on each call.
+	// GetIndex returns the (product, version) index, decoded fresh from the product's owning Source on each call.
 	GetIndex(product, version string) (*meta.APIIndex, error)
 
-	// GetAPI returns the fully-decoded API metadata, decoded fresh from
-	// the product's owning Source on each call.
+	// GetAPI returns the fully-decoded API metadata, decoded fresh from the product's owning Source on each call.
 	GetAPI(product, version, name string) (*meta.API, error)
 
-	// ResolveCommand maps the user-facing "<product> <cmd>" pair back
-	// to the canonical APIRef against the product's DEFAULT version.
-	// Unknown commands return ErrCommandNotFound so callers can
-	// short-circuit into a helpful "did you mean ..." message.
+	// ResolveCommand maps the user-facing "<product> <cmd>" pair back to the canonical APIRef against the product's DEFAULT version.
+	// Unknown commands return ErrCommandNotFound so callers can short-circuit into a helpful "did you mean ..." message.
 	ResolveCommand(product, cmdName string) (meta.APIRef, error)
 
-	// ResolveCommandVersion is the version-aware counterpart of
-	// ResolveCommand. It resolves the target version (empty -> product
-	// default; otherwise validated against the product's `versions`
-	// list) and then resolves the command uniformly from that version's
-	// index via its cmd-name -> APIName reverse map (built at decode
-	// time, O(1)). Default and non-default versions take the exact same
-	// path, so (product, cmd, version) always maps to one API through a
-	// single, consistent lookup.
+	// ResolveCommandVersion is the version-aware counterpart of ResolveCommand.
+	// It resolves the target version (empty -> product default; otherwise validated against the product's `versions` list) and then resolves the command uniformly from that version's index via its cmd-name -> APIName reverse map (built at decode time, O(1)).
+	// Default and non-default versions take the exact same path, so (product, cmd, version) always maps to one API through a single, consistent lookup.
 	ResolveCommandVersion(product, cmdName, version string) (meta.APIRef, error)
 
-	// CommandExists reports whether the product exposes the command in
-	// ANY of its versions. It is the existence check the host router
-	// uses to decide whether to route to the engine; unlike a
-	// default-version-only table it does not miss commands that live
-	// solely in a non-default version.
+	// CommandExists reports whether the product exposes the command in ANY of its versions. It is the existence check the host router uses to decide whether to route to the engine;
+	// unlike a default-version-only table it does not miss commands that live solely in a non-default version.
 	CommandExists(product, cmdName string) bool
 
-	// Provenance returns the Provenance record last observed for a product.
-	// Returns nil before that product has been ensured.
+	// Provenance returns the Provenance record last observed for a product. Returns nil before that product has been ensured.
 	Provenance(product string) *source.Provenance
 }
 
@@ -123,30 +110,20 @@ type productEntry struct {
 }
 
 type defaultLoader struct {
-	layers []source.Source // highest priority first
-
-	// mu guards products, which is populated lazily by EnsureProduct.
-	mu       sync.RWMutex
+	layers   []source.Source // highest priority first
 	products map[string]*productEntry
 }
 
-func (l *defaultLoader) EnsureProduct(ctx context.Context, code string) error {
+func (l *defaultLoader) EnsureProduct(code string) error {
 	code = strings.ToLower(strings.TrimSpace(code))
 	if code == "" {
 		return fmt.Errorf("product code is empty")
 	}
-
-	l.mu.RLock()
-	_, ok := l.products[code]
-	l.mu.RUnlock()
-	if ok {
+	if _, ok := l.products[code]; ok {
 		return nil
 	}
 
 	for _, s := range l.layers {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
 		p, prov, err := s.LoadProduct(code)
 		if err != nil {
 			if errors.Is(err, source.ErrNotFound) {
@@ -154,19 +131,13 @@ func (l *defaultLoader) EnsureProduct(ctx context.Context, code string) error {
 			}
 			return fmt.Errorf("load product %q from %s source: %w", code, s.Kind(), err)
 		}
-		l.mu.Lock()
-		if _, exists := l.products[code]; !exists {
-			l.products[code] = &productEntry{product: p, prov: prov, src: s}
-		}
-		l.mu.Unlock()
+		l.products[code] = &productEntry{product: p, prov: prov, src: s}
 		return nil
 	}
 	return fmt.Errorf("unknown product %q", code)
 }
 
 func (l *defaultLoader) LookupProduct(code string) *meta.Product {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
 	e := l.products[code]
 	if e == nil {
 		return nil
@@ -175,8 +146,6 @@ func (l *defaultLoader) LookupProduct(code string) *meta.Product {
 }
 
 func (l *defaultLoader) Provenance(product string) *source.Provenance {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
 	if e := l.products[product]; e != nil {
 		return e.prov
 	}
@@ -184,8 +153,6 @@ func (l *defaultLoader) Provenance(product string) *source.Provenance {
 }
 
 func (l *defaultLoader) owner(product string) (source.Source, error) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
 	e := l.products[product]
 	if e == nil || e.src == nil {
 		return nil, fmt.Errorf("unknown product %q", product)
@@ -230,12 +197,9 @@ func (l *defaultLoader) ResolveCommand(product, cmdName string) (meta.APIRef, er
 	return l.ResolveCommandVersion(product, cmdName, "")
 }
 
-// CommandExists reports whether the product exposes the command in ANY
-// of its registered versions (the default version is always one of
-// them), so a command that lives only in a non-default version is still
-// recognised — e.g. by the host router when the user will pass
-// --api-version. Unknown products short-circuit to false without any
-// index I/O.
+// CommandExists reports whether the product exposes the command in ANY of its registered versions (the default version is always one of them),
+// so a command that lives only in a non-default version is still recognised — e.g. by the host router when the user will pass --api-version.
+// Unknown products short-circuit to false without any index I/O.
 func (l *defaultLoader) CommandExists(product, cmdName string) bool {
 	if product == "" || cmdName == "" {
 		return false
