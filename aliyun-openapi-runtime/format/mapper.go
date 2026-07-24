@@ -111,7 +111,6 @@ func mapArgument(a *crschema.ArgumentDefinition) meta.Parameter {
 		Type:        mapType(a.Type),
 		Position:    mapPosition(a.Location),
 		Required:    a.Required,
-		Default:     a.Default,
 		Options:     a.Options,
 		Description: meta.Description{ZH: a.HelpZH, EN: a.HelpEN},
 		ParamStyle:  a.ParamStyle,

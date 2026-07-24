@@ -10,8 +10,6 @@ require (
 	google.golang.org/protobuf v1.26.0
 )
 
-// Mirror the main module's pin so standalone builds resolve the same
-// jmespath fork.
 replace github.com/jmespath/go-jmespath => github.com/alibabacloud-go/go-jmespath v0.4.0-aliyun
 
 require (

@@ -189,7 +189,6 @@ type ArgumentDefinition struct {
 	HelpZH        string               `json:"help_zh,omitempty"`
 	HelpEN        string               `json:"help_en,omitempty"`
 	Required      bool                 `json:"required"`
-	Default       any                  `json:"default,omitempty"`
 	Location      string               `json:"location,omitempty"`
 	ParamStyle    string               `json:"param_style,omitempty"`
 	ElementType   string               `json:"element_type,omitempty"`

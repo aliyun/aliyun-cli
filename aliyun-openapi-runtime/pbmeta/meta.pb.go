@@ -7,12 +7,11 @@
 package pbmeta
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -250,25 +249,21 @@ func (x *Operation) GetUrl() string {
 }
 
 type Argument struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Name     string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	RawName  string                 `protobuf:"bytes,2,opt,name=raw_name,json=rawName,proto3" json:"raw_name,omitempty"`
-	Type     string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	Options  []string               `protobuf:"bytes,4,rep,name=options,proto3" json:"options,omitempty"`
-	HelpZh   string                 `protobuf:"bytes,5,opt,name=help_zh,json=helpZh,proto3" json:"help_zh,omitempty"`
-	HelpEn   string                 `protobuf:"bytes,6,opt,name=help_en,json=helpEn,proto3" json:"help_en,omitempty"`
-	Required bool                   `protobuf:"varint,7,opt,name=required,proto3" json:"required,omitempty"`
-	// default_json preserves JSON scalar/object/array precision and shape. The
-	// separate presence bit distinguishes an absent default from JSON null.
-	DefaultJson   []byte      `protobuf:"bytes,8,opt,name=default_json,json=defaultJson,proto3" json:"default_json,omitempty"`
-	HasDefault    bool        `protobuf:"varint,9,opt,name=has_default,json=hasDefault,proto3" json:"has_default,omitempty"`
-	Location      string      `protobuf:"bytes,10,opt,name=location,proto3" json:"location,omitempty"`
-	ParamStyle    string      `protobuf:"bytes,11,opt,name=param_style,json=paramStyle,proto3" json:"param_style,omitempty"`
-	ElementType   string      `protobuf:"bytes,12,opt,name=element_type,json=elementType,proto3" json:"element_type,omitempty"`
-	ValueType     string      `protobuf:"bytes,13,opt,name=value_type,json=valueType,proto3" json:"value_type,omitempty"`
-	Fields        []*Argument `protobuf:"bytes,14,rep,name=fields,proto3" json:"fields,omitempty"`
-	ElementFields []*Argument `protobuf:"bytes,15,rep,name=element_fields,json=elementFields,proto3" json:"element_fields,omitempty"`
-	ValueFields   []*Argument `protobuf:"bytes,16,rep,name=value_fields,json=valueFields,proto3" json:"value_fields,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	RawName       string                 `protobuf:"bytes,2,opt,name=raw_name,json=rawName,proto3" json:"raw_name,omitempty"`
+	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Options       []string               `protobuf:"bytes,4,rep,name=options,proto3" json:"options,omitempty"`
+	HelpZh        string                 `protobuf:"bytes,5,opt,name=help_zh,json=helpZh,proto3" json:"help_zh,omitempty"`
+	HelpEn        string                 `protobuf:"bytes,6,opt,name=help_en,json=helpEn,proto3" json:"help_en,omitempty"`
+	Required      bool                   `protobuf:"varint,7,opt,name=required,proto3" json:"required,omitempty"`
+	Location      string                 `protobuf:"bytes,8,opt,name=location,proto3" json:"location,omitempty"`
+	ParamStyle    string                 `protobuf:"bytes,9,opt,name=param_style,json=paramStyle,proto3" json:"param_style,omitempty"`
+	ElementType   string                 `protobuf:"bytes,10,opt,name=element_type,json=elementType,proto3" json:"element_type,omitempty"`
+	ValueType     string                 `protobuf:"bytes,11,opt,name=value_type,json=valueType,proto3" json:"value_type,omitempty"`
+	Fields        []*Argument            `protobuf:"bytes,12,rep,name=fields,proto3" json:"fields,omitempty"`
+	ElementFields []*Argument            `protobuf:"bytes,13,rep,name=element_fields,json=elementFields,proto3" json:"element_fields,omitempty"`
+	ValueFields   []*Argument            `protobuf:"bytes,14,rep,name=value_fields,json=valueFields,proto3" json:"value_fields,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -348,20 +343,6 @@ func (x *Argument) GetHelpEn() string {
 func (x *Argument) GetRequired() bool {
 	if x != nil {
 		return x.Required
-	}
-	return false
-}
-
-func (x *Argument) GetDefaultJson() []byte {
-	if x != nil {
-		return x.DefaultJson
-	}
-	return nil
-}
-
-func (x *Argument) GetHasDefault() bool {
-	if x != nil {
-		return x.HasDefault
 	}
 	return false
 }
@@ -446,7 +427,7 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"apiVersion\x12\x16\n" +
 	"\x06method\x18\x04 \x01(\tR\x06method\x12\x1a\n" +
 	"\bprotocol\x18\x05 \x01(\tR\bprotocol\x12\x10\n" +
-	"\x03url\x18\x06 \x01(\tR\x03url\"\xc0\x04\n" +
+	"\x03url\x18\x06 \x01(\tR\x03url\"\xfc\x03\n" +
 	"\bArgument\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\braw_name\x18\x02 \x01(\tR\arawName\x12\x12\n" +
@@ -454,20 +435,17 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\aoptions\x18\x04 \x03(\tR\aoptions\x12\x17\n" +
 	"\ahelp_zh\x18\x05 \x01(\tR\x06helpZh\x12\x17\n" +
 	"\ahelp_en\x18\x06 \x01(\tR\x06helpEn\x12\x1a\n" +
-	"\brequired\x18\a \x01(\bR\brequired\x12!\n" +
-	"\fdefault_json\x18\b \x01(\fR\vdefaultJson\x12\x1f\n" +
-	"\vhas_default\x18\t \x01(\bR\n" +
-	"hasDefault\x12\x1a\n" +
-	"\blocation\x18\n" +
-	" \x01(\tR\blocation\x12\x1f\n" +
-	"\vparam_style\x18\v \x01(\tR\n" +
+	"\brequired\x18\a \x01(\bR\brequired\x12\x1a\n" +
+	"\blocation\x18\b \x01(\tR\blocation\x12\x1f\n" +
+	"\vparam_style\x18\t \x01(\tR\n" +
 	"paramStyle\x12!\n" +
-	"\felement_type\x18\f \x01(\tR\velementType\x12\x1d\n" +
+	"\felement_type\x18\n" +
+	" \x01(\tR\velementType\x12\x1d\n" +
 	"\n" +
-	"value_type\x18\r \x01(\tR\tvalueType\x128\n" +
-	"\x06fields\x18\x0e \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\x06fields\x12G\n" +
-	"\x0eelement_fields\x18\x0f \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\relementFields\x12C\n" +
-	"\fvalue_fields\x18\x10 \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\vvalueFieldsB8Z6github.com/aliyun/aliyun-openapi-runtime/pbmeta;pbmetab\x06proto3"
+	"value_type\x18\v \x01(\tR\tvalueType\x128\n" +
+	"\x06fields\x18\f \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\x06fields\x12G\n" +
+	"\x0eelement_fields\x18\r \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\relementFields\x12C\n" +
+	"\fvalue_fields\x18\x0e \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\vvalueFieldsB8Z6github.com/aliyun/aliyun-openapi-runtime/pbmeta;pbmetab\x06proto3"
 
 var (
 	file_aliyun_openapi_meta_proto_rawDescOnce sync.Once

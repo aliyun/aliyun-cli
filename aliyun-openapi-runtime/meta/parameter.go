@@ -33,7 +33,6 @@ type Parameter struct {
 	Type     DataType
 	Position Position // top-level only; inner fields ignore this
 	Required bool
-	Default  any      // parsed default, wire form
 	Enum     []string // legal values for scalar types
 
 	// UI.

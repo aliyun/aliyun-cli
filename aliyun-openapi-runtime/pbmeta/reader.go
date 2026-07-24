@@ -2,8 +2,6 @@
 package pbmeta
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 
 	"github.com/aliyun/aliyun-openapi-runtime/format"
@@ -119,12 +117,6 @@ func toCanonicalArguments(values []*Argument) ([]schema.ArgumentDefinition, erro
 			ValueType:   value.ValueType,
 		}
 		var err error
-		if value.HasDefault {
-			argument.Default, err = decodeDefault(value.DefaultJson)
-			if err != nil {
-				return nil, fmt.Errorf("argument %s default: %w", value.Name, err)
-			}
-		}
 		if argument.Fields, err = toCanonicalArguments(value.Fields); err != nil {
 			return nil, err
 		}
@@ -137,17 +129,4 @@ func toCanonicalArguments(values []*Argument) ([]schema.ArgumentDefinition, erro
 		result = append(result, argument)
 	}
 	return result, nil
-}
-
-func decodeDefault(data []byte) (any, error) {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	var value any
-	if err := decoder.Decode(&value); err != nil {
-		return nil, err
-	}
-	if decoder.More() {
-		return nil, fmt.Errorf("trailing bytes")
-	}
-	return value, nil
 }
