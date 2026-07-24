@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -60,25 +61,63 @@ func (e *InvalidApiError) GetSuggestions() []string {
 
 // return when use unknown parameter
 type InvalidParameterError struct {
-	Name  string
-	api   *meta.Api
-	flags *cli.FlagSet
+	Name              string
+	ProductCode       string
+	ApiName           string
+	ParameterNames    []string
+	ParameterExamples map[string]string
+	flags             *cli.FlagSet
 }
 
 func (e *InvalidParameterError) Error() string {
 	return fmt.Sprintf("'--%s' is not a valid parameter or flag. See `aliyun help %s %s`.",
-		e.Name, e.api.Product.GetLowerCode(), e.api.Name)
+		e.Name, strings.ToLower(e.ProductCode), e.ApiName)
 }
 
 func (e *InvalidParameterError) GetSuggestions() []string {
 	sr := cli.NewSuggester(e.Name, 2)
-	for _, p := range e.api.Parameters {
-		sr.Apply(p.Name)
+	for _, name := range e.ParameterNames {
+		sr.Apply(name)
 	}
-	for _, f := range e.flags.Flags() {
-		sr.Apply(f.Name)
+	if e.flags != nil {
+		for _, f := range e.flags.Flags() {
+			sr.Apply(f.Name)
+		}
 	}
-	return sr.GetResults()
+
+	results := sr.GetResults()
+	for i, name := range results {
+		if example := e.ParameterExamples[name]; example != "" {
+			results[i] = fmt.Sprintf("%s (example: %s)", name, example)
+		}
+	}
+	return results
+}
+
+// NewInvalidParameterErrorFromCanonical creates error from canonical API
+func NewInvalidParameterErrorFromCanonical(name string, api *canonicalmeta.API, productCode string, flags *cli.FlagSet) *InvalidParameterError {
+	views := api.LegacyTopLevelParameters()
+	params := make([]string, 0, len(views))
+	examples := make(map[string]string)
+	for _, v := range views {
+		pos := v.LegacyPosition()
+		if pos == "Domain" || pos == "Header" {
+			continue
+		}
+		name := v.LegacyName()
+		params = append(params, name)
+		if example := strings.TrimSpace(v.LegacyExample()); example != "" {
+			examples[name] = example
+		}
+	}
+	return &InvalidParameterError{
+		Name:              name,
+		ProductCode:       productCode,
+		ApiName:           api.Name,
+		ParameterNames:    params,
+		ParameterExamples: examples,
+		flags:             flags,
+	}
 }
 
 type InvalidProductOrPluginError struct {

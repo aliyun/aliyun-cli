@@ -18,6 +18,7 @@ import (
 	"bytes"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/cliext/oapicmd"
@@ -252,19 +253,6 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					return nil
 				}
 			}
-		} else {
-			c.loadPlugins()
-			if c.pluginIndex != nil {
-				for _, pInfo := range c.pluginIndex.Plugins {
-					if strings.EqualFold(pInfo.ProductCode, args[0]) {
-						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\n[Suggestion] A dedicated product plugin '%s' is available for '%s'.\n", pInfo.Name, args[0])
-						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "Run 'aliyun plugin install --names %s' to install it for enhanced features.\n\n", pInfo.Name)
-						break
-					}
-				}
-			} else if c.pluginIndexErr != nil {
-				c.printPluginIndexLoadFailureNote(ctx)
-			}
 		}
 
 	} else if len(args) > 1 {
@@ -467,18 +455,25 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			return err
 		}
 		if product.ApiStyle == "restful" {
-			api, found := meta.HookGetApi(c.library.GetApi)(product.Code, product.Version, args[1])
+			api, found := c.library.GetApi(product.Code, product.Version, args[1])
 			// For restful products, the 2-arg form `aliyun <product> <ApiName>` requires a valid ApiName so we can resolve the underlying Method + PathPattern from metadata.
 			// Otherwise we'd fall through with empty Method/PathPattern and surface the confusing "product 'xxx' need restful call" error from checkRestfulMethod.
 			force := ForceFlag(ctx.Flags()).IsAssigned()
 			if !found && !force {
 				return &InvalidApiError{Name: args[1], product: &product}
 			}
-			c.CheckApiParamWithBuildInArgs(ctx, api)
 			ctx.Command().Name = args[1]
 			if ShouldUseOpenapi(ctx, &product) {
-				return c.processApiInvoke(ctx, &product, &api, api.Method, api.PathPattern)
+				if api == nil {
+					return &InvalidApiError{Name: args[1], product: &product}
+				}
+				c.CheckApiParamWithBuildInArgs(ctx, api)
+				return c.processApiInvoke(ctx, &product, api, api.Method, api.PathPattern)
 			}
+			if api == nil {
+				return c.processInvoke(ctx, productName, args[1], "")
+			}
+			c.CheckApiParamWithBuildInArgs(ctx, api)
 			return c.processInvoke(ctx, productName, api.Method, api.PathPattern)
 		} else {
 			// RPC need check API parameters too
@@ -491,7 +486,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		// restful call
 		// aliyun <productCode> {GET|PUT|POST|DELETE} <path> --
 		product, _ := c.library.GetProduct(productName)
-		api, find := meta.HookGetApiByPath(c.library.GetApiByPath)(product.Code, product.Version, args[1], args[2])
+		api, find := c.library.GetApiByPath(product.Code, product.Version, args[1], args[2])
 		force := ForceFlag(ctx.Flags()).IsAssigned()
 		if !find && !force {
 			// throw error, can not find api by path
@@ -513,7 +508,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				return cli.NewErrorWithTip(fmt.Errorf("too broad path: %s for method: %s, please use specific ApiName instead",
 					args[2], args[1]), "Please confirm the API path")
 			}
-			return c.processApiInvoke(ctx, &product, &api, args[1], args[2])
+			if api == nil {
+				return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
+					"Please confirm if the API path exists")
+			}
+			return c.processApiInvoke(ctx, &product, api, args[1], args[2])
 		}
 		return c.processInvoke(ctx, productName, args[1], args[2])
 	} else {
@@ -522,7 +521,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	}
 }
 
-func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api *meta.Api, method string, path string) error {
+func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api *canonicalmeta.API, method string, path string) error {
 	if product == nil {
 		return fmt.Errorf("invalid product, please check product code")
 	}
@@ -758,7 +757,7 @@ func dryRunRestfulAPIByPath(library *Library, productCode, version, method, path
 	if library == nil || productCode == "" || method == "" || path == "" {
 		return fallback
 	}
-	api, ok := meta.HookGetApiByPath(library.GetApiByPath)(productCode, version, method, path)
+	api, ok := library.GetApiByPath(productCode, version, method, path)
 	if ok && api.Name != "" {
 		return api.Name
 	}
@@ -858,10 +857,10 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 					apiOrMethod,
 				}, nil
 			}
-			if api, ok := c.library.GetApi(product.Code, product.Version, apiOrMethod); ok {
+			if api := c.library.GetCanonicalApi(product.Code, product.Version, apiOrMethod); api != nil {
 				return &RpcInvoker{
 					basicInvoker,
-					&api,
+					api,
 				}, nil
 			}
 			c.loadPlugins()
@@ -889,13 +888,13 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 				"Use `aliyun %s {GET|PUT|POST|DELETE} <path> ...`", product.GetLowerCode())
 		}
 
-		if api, ok := c.library.GetApi(product.Code, product.Version, ctx.Command().Name); ok {
+		if api := c.library.GetCanonicalApi(product.Code, product.Version, ctx.Command().Name); api != nil {
 			return &RestfulInvoker{
 				basicInvoker,
 				method,
 				path,
 				force,
-				&api,
+				api,
 			}, nil
 		}
 
@@ -977,7 +976,7 @@ func ApplyQueryFilter(ctx *cli.Context, output string) (string, error) {
 }
 
 // openapi context
-func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, api *meta.Api, method string, path string) (HttpInvoker, error) {
+func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, api *canonicalmeta.API, method string, path string) (HttpInvoker, error) {
 	if product == nil {
 		return nil, fmt.Errorf("invalid product, please check product code")
 	}
@@ -1085,16 +1084,18 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 			}
 			return r
 		}
-		api, ok := c.library.GetApi(product.Code, product.Version, args[1])
-		if !ok {
-			return r
+		canonicalApi := c.library.GetCanonicalApi(product.Code, product.Version, args[1])
+		if canonicalApi != nil {
+			canonicalApi.ForeachLegacyParameter(func(s string, v *canonicalmeta.LegacyParameterView) {
+				pos := v.LegacyPosition()
+				if pos == "Domain" || pos == "Header" {
+					return
+				}
+				if strings.HasPrefix("--"+strings.ToLower(s), strings.ToLower(ctx.Completion().Current)) {
+					cli.Printf(ctx.Stdout(), "--%s\n", s)
+				}
+			})
 		}
-
-		api.ForeachParameters(func(s string, p meta.Parameter) {
-			if strings.HasPrefix("--"+strings.ToLower(s), strings.ToLower(ctx.Completion().Current)) && !p.Hidden {
-				cli.Printf(ctx.Stdout(), "--%s\n", s)
-			}
-		})
 	} else if product.ApiStyle == "restful" {
 		if len(args) == 1 {
 			cli.PrintfWithColor(w, "", "GET\n")
@@ -1120,15 +1121,18 @@ func (c *Commando) printUsage(ctx *cli.Context) {
 	// fmt.Println("printUsage", cmd.Name)
 }
 
-func (c *Commando) CheckApiParamWithBuildInArgs(ctx *cli.Context, api meta.Api) {
-	for _, p := range api.Parameters {
+func (c *Commando) CheckApiParamWithBuildInArgs(ctx *cli.Context, api *canonicalmeta.API) {
+	if api == nil {
+		return
+	}
+	for _, p := range api.LegacyTopLevelParameters() {
 		// 如果参数中包含了known参数，且 known参数已经被赋值，则将 known 参数拷贝给 unknown 参数
-		if ep, ok := ctx.Flags().GetValue(p.Name); ok {
-			if p.Position != "Query" {
+		if ep, ok := ctx.Flags().GetValue(p.LegacyName()); ok {
+			if p.LegacyPosition() != "Query" {
 				continue
 			}
 			var flagNew = &cli.Flag{
-				Name: p.Name,
+				Name: p.LegacyName(),
 			}
 			flagNew.SetValue(ep)
 			flagNew.SetAssigned(true)

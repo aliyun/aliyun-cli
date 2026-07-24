@@ -15,10 +15,12 @@ package openapi
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -83,7 +85,7 @@ func TestResolveEstimateCostApiName(t *testing.T) {
 	// RESTful style with resolved api metadata
 	restful := &RestfulInvoker{
 		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
-		api:          &meta.Api{Name: "DescribeClusters"},
+		api:          &canonicalmeta.API{Name: "DescribeClusters"},
 	}
 	name, err = resolveEstimateCostApiName(nil, restful)
 	assert.Nil(t, err)
@@ -103,6 +105,56 @@ func TestResolveEstimateCostApiName(t *testing.T) {
 	_, err = resolveEstimateCostApiName(library, bare)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "cannot resolve the api name")
+}
+
+type versionSensitiveCanonicalRepo struct {
+	expectedVersion string
+	api             *canonicalmeta.API
+}
+
+func (r *versionSensitiveCanonicalRepo) GetAPI(productCode, version, apiName string) (*canonicalmeta.API, error) {
+	return nil, fmt.Errorf("api not found")
+}
+
+func (r *versionSensitiveCanonicalRepo) GetAPIByPath(productCode, version, method, path string, apiNames []string) (*canonicalmeta.API, error) {
+	if version != r.expectedVersion {
+		return nil, fmt.Errorf("unexpected version %s", version)
+	}
+	return r.api, nil
+}
+
+func TestResolveEstimateCostApiNameUsesProductDefaultVersionForPathLookup(t *testing.T) {
+	product := meta.Product{
+		Code:     "demo",
+		Version:  "2026-01-01",
+		ApiStyle: "restful",
+		ApiNames: []string{"DescribeItem"},
+	}
+	productRepo, err := meta.MockLoadRepository([]meta.Product{product})
+	assert.Nil(t, err)
+	library := &Library{
+		builtinRepo: productRepo,
+		canonicalRepo: &versionSensitiveCanonicalRepo{
+			expectedVersion: product.Version,
+			api:             &canonicalmeta.API{Name: "DescribeItem"},
+		},
+	}
+
+	req := requests.NewCommonRequest()
+	req.Product = product.Code
+	req.Version = "2099-01-01"
+	restful := &RestfulInvoker{
+		BasicInvoker: &BasicInvoker{
+			request: req,
+			product: &product,
+		},
+		method: "GET",
+		path:   "/items/1",
+	}
+
+	name, err := resolveEstimateCostApiName(library, restful)
+	assert.Nil(t, err)
+	assert.Equal(t, "DescribeItem", name)
 }
 
 func TestTranslateEstimateCostErrorPassthrough(t *testing.T) {
@@ -240,6 +292,13 @@ func TestProcessInvokeEstimateCostFlag(t *testing.T) {
 
 	EstimateCostFlag(ctx.Flags()).SetAssigned(true)
 	defer EstimateCostFlag(ctx.Flags()).SetAssigned(false)
+
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2014-05-26")
+	defer VersionFlag(ctx.Flags()).SetAssigned(false)
+
+	ForceFlag(ctx.Flags()).SetAssigned(true)
+	defer ForceFlag(ctx.Flags()).SetAssigned(false)
 
 	err := command.processInvoke(ctx, "ecs", "DescribeRegions", "")
 	assert.NotNil(t, err)

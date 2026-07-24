@@ -22,11 +22,6 @@ import (
 	"path"
 	"strings"
 
-	"github.com/aliyun/aliyun-cli/v3/cliext/kmscli"
-	"github.com/aliyun/aliyun-cli/v3/cliext/lindormcli"
-	"github.com/aliyun/aliyun-cli/v3/cliext/mseutil"
-
-	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/cli/upgrade"
@@ -39,13 +34,17 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cliext/esacli"
 	"github.com/aliyun/aliyun-cli/v3/cliext/flowcli"
 	"github.com/aliyun/aliyun-cli/v3/cliext/iact3"
+	"github.com/aliyun/aliyun-cli/v3/cliext/kmscli"
+	"github.com/aliyun/aliyun-cli/v3/cliext/lindormcli"
 	"github.com/aliyun/aliyun-cli/v3/cliext/maxc"
+	"github.com/aliyun/aliyun-cli/v3/cliext/mseutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/ossutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/otsutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/rostran"
 	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
 	"github.com/aliyun/aliyun-cli/v3/cliext/sparksubmit"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/export"
 	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
@@ -258,5 +257,7 @@ func generateMetadata(rootCmd *cli.Command) {
 	versionPath := targetDir + "/version"
 	os.WriteFile(versionPath, []byte(cli.Version), 0666)
 
-	dumpFiles(aliyunopenapimeta.Metadatas, ".", targetDir)
+	if err := export.LegacyExportMetadata(targetDir); err != nil {
+		fmt.Println(err.Error())
+	}
 }

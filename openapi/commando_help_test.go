@@ -7,10 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -119,8 +121,8 @@ func TestPrintProductUsage_PluginAvailableNotInstalled(t *testing.T) {
 	assert.NoError(t, err)
 
 	output := stdout.String()
-	assert.Contains(t, output, "[Suggestion]")
-	assert.Contains(t, output, "aliyun-cli-ecs")
+	assert.NotContains(t, output, "[Suggestion]")
+	assert.NotContains(t, output, "aliyun-cli-ecs")
 	assert.Contains(t, output, "Available Api List")
 }
 
@@ -189,6 +191,33 @@ func TestPrintProductUsage_RestfulProduct(t *testing.T) {
 	assert.Contains(t, output, "[GET|PUT|POST|DELETE]")
 }
 
+func TestPrintProductUsage_RestfulProduct_ListShowsSummary(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "demo", Version: "2026-01-01", ApiStyle: "restful", ApiNames: []string{"ValidateThing"}},
+	})
+	assert.NoError(t, err)
+	c.library.builtinRepo = repo
+	c.library.canonicalRepo = &byNameOnlyCanonicalRepo{apis: map[string]*canonicalmeta.API{
+		"ValidateThing": {
+			Name:          "ValidateThing",
+			Method:        "POST",
+			PathPattern:   "/things/validate",
+			DescriptionZh: "验证一个对象",
+			DescriptionEn: "Validates a thing",
+		},
+	}}
+
+	err = c.printProductUsage(ctx, "demo")
+	assert.NoError(t, err)
+
+	output := stdout.String()
+	assert.Contains(t, output, "POST /things/validate")
+	assert.True(t, strings.Contains(output, "Validates a thing") || strings.Contains(output, "验证一个对象"), output)
+}
+
 func TestPrintApiUsage_BuiltinApi(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	ctx := newTestContext(stdout, stderr)
@@ -200,6 +229,34 @@ func TestPrintApiUsage_BuiltinApi(t *testing.T) {
 	output := stdout.String()
 	assert.Contains(t, output, "Product:")
 	assert.Contains(t, output, "Parameters:")
+}
+
+func TestPrintApiUsage_PrintsCanonicalExamples(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "demo", Version: "2026-01-01", ApiStyle: "rpc", ApiNames: []string{"CreateThing"}},
+	})
+	assert.NoError(t, err)
+	c.library.builtinRepo = repo
+	c.library.canonicalRepo = &byNameOnlyCanonicalRepo{apis: map[string]*canonicalmeta.API{
+		"CreateThing": {
+			Name:         "CreateThing",
+			Protocol:     "HTTPS",
+			Method:       "POST",
+			KebabExample: "aliyun demo create-thing --name foo",
+			CamelExample: "aliyun demo CreateThing --Name foo",
+		},
+	}}
+
+	err = c.printApiUsage(ctx, "demo", "CreateThing")
+	assert.NoError(t, err)
+	output := stdout.String()
+	assert.Contains(t, output, "Example:")
+	assert.Contains(t, output, "(Recommended) Command Style:")
+	assert.Contains(t, output, "aliyun demo create-thing --name foo")
+	assert.Contains(t, output, "PascalCase Style:")
+	assert.Contains(t, output, "aliyun demo CreateThing --Name foo")
 }
 
 func TestPrintApiUsage_UnknownApi_NoPlugin(t *testing.T) {
@@ -257,14 +314,14 @@ func TestPrintApiUsage_UnknownApi_PluginHint_NonLowercase(t *testing.T) {
 		Plugins: map[string]plugin.LocalPlugin{},
 	}
 
-	// Non-lowercase (e.g. "BadApiName") -> prints suggestion, then returns InvalidApiError
+	// Non-lowercase (e.g. "BadApiName") -> returns InvalidApiError without plugin suggestion
 	err := c.printApiUsage(ctx, "ecs", "BadApiName")
 	assert.Error(t, err)
 	assert.IsType(t, &InvalidApiError{}, err)
 
 	output := stdout.String()
-	assert.Contains(t, output, "[Suggestion]")
-	assert.Contains(t, output, "aliyun-cli-ecs")
+	assert.NotContains(t, output, "[Suggestion]")
+	assert.NotContains(t, output, "aliyun-cli-ecs")
 }
 
 func TestPrintApiUsage_NonBuiltinProduct_PluginNotInstalled(t *testing.T) {

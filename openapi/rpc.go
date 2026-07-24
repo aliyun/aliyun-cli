@@ -19,13 +19,13 @@ import (
 	"strings"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
-	"github.com/aliyun/aliyun-cli/v3/meta"
 )
 
 type RpcInvoker struct {
 	*BasicInvoker
-	api *meta.Api
+	api *canonicalmeta.API
 }
 
 func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
@@ -63,25 +63,24 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 			f.Name = strings.TrimSuffix(f.Name, "-FILE")
 			replaceValueWithFile(f)
 		}
-		param := api.FindParameter(f.Name)
+		param := api.FindLegacyParameter(f.Name)
 		if param == nil {
-			return &InvalidParameterError{Name: f.Name, api: api, flags: ctx.Flags()}
+			return NewInvalidParameterErrorFromCanonical(f.Name, api, a.productCode(), ctx.Flags())
 		}
 
-		if param.Position == "Query" {
+		if param.LegacyPosition() == "Query" {
 			request.QueryParams[f.Name], _ = f.GetValue()
-		} else if param.Position == "Body" || param.Position == "FormData" {
-			// new add FormData
+		} else if param.LegacyPosition() == "Body" || param.LegacyPosition() == "FormData" {
 			request.FormParams[f.Name], _ = f.GetValue()
-		} else if param.Position == "Domain" {
+		} else if param.LegacyPosition() == "Domain" {
 			continue
 		} else {
-			return fmt.Errorf("unknown parameter position; %s is %s", param.Name, param.Position)
+			return fmt.Errorf("unknown parameter position; %s is %s", param.LegacyName(), param.LegacyPosition())
 		}
 	}
 	// check api support Body
-	bodyParam := api.FindParameter("body")
-	if bodyParam != nil && bodyParam.Position == "Body" {
+	bodyParam := api.FindLegacyParameter("body")
+	if bodyParam != nil && bodyParam.LegacyPosition() == "Body" {
 		if v, ok := BodyFlag(ctx.Flags()).GetValue(); ok {
 			a.request.SetContent([]byte(v))
 		}
@@ -89,7 +88,7 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 
 	applyCallContextRPC(a.productCode(), request.QueryParams)
 
-	err := a.api.CheckRequiredParameters(func(s string) bool {
+	err := a.api.CheckLegacyRequiredParameters(func(s string) bool {
 		switch s {
 		case "RegionId":
 			return request.RegionId != ""
@@ -104,7 +103,7 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 	if err != nil {
 		return cli.NewErrorWithTip(err,
 			"use `aliyun %s %s --help` to get more information",
-			api.Product.GetLowerCode(), api.Name)
+			strings.ToLower(a.productCode()), api.Name)
 	}
 	return nil
 }

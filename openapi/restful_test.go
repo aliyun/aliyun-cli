@@ -14,15 +14,14 @@
 package openapi
 
 import (
-	"bytes"
+	"bufio"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
+	"testing"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/stretchr/testify/assert"
-
-	"bufio"
-	"testing"
 )
 
 func TestRestfulInvoker_Prepare(t *testing.T) {
@@ -67,7 +66,7 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 	err = a.Prepare(ctx)
 	assert.Nil(t, err)
 
-	// testcase 2
+	// testcase 2 - using mock API since cs product not in canonical
 	a = &RestfulInvoker{
 		BasicInvoker: &BasicInvoker{
 			request: requests.NewCommonRequest(),
@@ -76,11 +75,20 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 		method: "GET",
 	}
 	a.request.RegionId = "cn-hangzhou"
-	buf := new(bytes.Buffer)
-	library := NewLibrary(buf, "en")
 
-	api, _ := library.GetApi("cs", "2015-12-15", "DescribeClusterUserKubeconfig")
-	a.api = &api
+	// Create mock API with ClusterId parameter
+	mockApi := &canonicalmeta.API{
+		Name: "DescribeClusterUserKubeconfig", Parameters: []canonicalmeta.Parameter{
+			{
+				Name: "ClusterId", RawName: "ClusterId",
+				Location: "path",
+				Type:     "String",
+				Required: true,
+			},
+		},
+	}
+	a.api = mockApi
+
 	w = new(bufio.Writer)
 	stderr = new(bufio.Writer)
 	ctx = cli.NewCommandContext(w, stderr)
@@ -97,7 +105,7 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 	ctx.UnknownFlags().AddByName("TestFlag")
 	ctx.UnknownFlags().Get("TestFlag").SetValue("testFlagValue")
 	err = a.Prepare(ctx)
-	assert.EqualError(t, err, "'--TestFlag' is not a valid parameter or flag. See `aliyun help cs DescribeClusterUserKubeconfig`.")
+	assert.EqualError(t, err, "'--TestFlag' is not a valid parameter or flag. See `aliyun help  DescribeClusterUserKubeconfig`.")
 }
 
 func TestRestfulInvoker_Call(t *testing.T) {

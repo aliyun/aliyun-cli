@@ -1,0 +1,75 @@
+{
+  "name": "CreateReport",
+  "deprecated": false,
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "/reports/[ReportId]",
+  "cmd_full_name": "demo create-report",
+  "cmd_name": "create-report",
+  "product_code": "Demo",
+  "multi_version": false,
+  "description_zh": "创建报表。",
+  "description_en": "Creates a report.",
+  "camel_example": "aliyun demo CreateReport ....",
+  "kebab_example": "aliyun demo create-report ...",
+  "operation": {
+    "method": "POST",
+    "url": "/reports/{ReportId}",
+    "api_version": "2026-01-01",
+    "action": "CreateReport",
+    "protocol": "HTTPS",
+    "api_style": "ROA",
+    "content_type": "application/json",
+    "body_mapping": {
+      "workspace_id": "WorkspaceId",
+      "report_name": "ReportName"
+    }
+  },
+  "parameters": [
+    {
+      "name": "report_id",
+      "raw_name": "ReportId",
+      "type": "string",
+      "options": ["--report-id"],
+      "help_zh": "要创建的报表 ID。",
+      "help_en": "The ID of the report to create.",
+      "required": true,
+      "location": "path",
+      "example": "rpt-123"
+    },
+    {
+      "name": "workspace_id",
+      "raw_name": "WorkspaceId",
+      "type": "string",
+      "options": ["--workspace-id"],
+      "description_zh": "工作空间 ID。",
+      "description_en": "The workspace ID.",
+      "help_zh": "报表所属的工作空间 ID。",
+      "help_en": "The ID of the workspace to which the report belongs.",
+      "required": true,
+      "location": "body",
+      "param_style": "json",
+      "example": "ws-123"
+    },
+    {
+      "name": "report_name",
+      "raw_name": "ReportName",
+      "type": "string",
+      "options": ["--report-name"],
+      "help_zh": "报表名称。",
+      "help_en": "The report name.",
+      "required": false,
+      "location": "body",
+      "param_style": "json",
+      "example": "daily"
+    }
+  ],
+  "v1_body_parameters": [
+    {
+      "name": "body",
+      "position": "body",
+      "type": "string",
+      "required": false
+    }
+  ]
+}
