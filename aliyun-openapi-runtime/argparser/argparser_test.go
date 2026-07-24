@@ -134,13 +134,35 @@ func TestNumericPreservedAsJSONNumber(t *testing.T) {
 	}
 }
 
-// TestBoolean pins the plugin-parity contract: API-level boolean
-// parameters are kept as their verbatim string, not a Go bool, so
-// ROA/body payloads emit "true" (quoted) like aliyun-cli-runtime.
+// TestBoolean pins the plugin-parity contract: API-level booleans are
+// typed Go bools so JSON bodies emit true/false literals rather than
+// quoted strings.
 func TestBoolean(t *testing.T) {
-	res := mustParse(t, "--enabled", "true")
-	if res.Args["Enabled"] != "true" {
-		t.Fatalf("enabled = %#v (want string \"true\")", res.Args["Enabled"])
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"true", true},
+		{"t", true},
+		{"yes", true},
+		{"y", true},
+		{"1", true},
+		{"false", false},
+		{"f", false},
+		{"no", false},
+		{"n", false},
+		{"0", false},
+	}
+	for _, tt := range tests {
+		res := mustParse(t, "--enabled", tt.input)
+		if res.Args["Enabled"] != tt.want {
+			t.Errorf("--enabled %s = %#v (want %t)", tt.input, res.Args["Enabled"], tt.want)
+		}
+	}
+
+	_, err := Parse(schema(), []string{"--enabled", "not-a-bool"})
+	if err == nil || !strings.Contains(err.Error(), "invalid boolean value") {
+		t.Fatalf("invalid boolean error = %v", err)
 	}
 }
 
@@ -240,9 +262,8 @@ func TestNestedFieldTypeCoercion(t *testing.T) {
 	if got, ok := nc["Port"].(json.Number); !ok || got.String() != "8080" {
 		t.Fatalf("Port = %#v (want json.Number 8080)", nc["Port"])
 	}
-	// API-level bool stays a verbatim string (plugin parity).
-	if nc["Enabled"] != "true" {
-		t.Fatalf("Enabled = %#v (want string \"true\")", nc["Enabled"])
+	if nc["Enabled"] != true {
+		t.Fatalf("Enabled = %#v (want bool true)", nc["Enabled"])
 	}
 	acc, ok := nc["Acc"].(map[string]any)
 	if !ok {

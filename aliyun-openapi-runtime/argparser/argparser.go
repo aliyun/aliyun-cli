@@ -1024,12 +1024,10 @@ func stripOuterQuotes(s string) string {
 // precision end-to-end (see the precision contract in the module
 // architecture doc).
 //
-// Booleans are deliberately kept as their raw string, NOT converted to
-// a Go bool: aliyun-cli-runtime registers API-level boolean parameters
-// as string args, so the wire form is the verbatim token ("true"). A
-// Go bool would JSON-encode as an unquoted `true` in ROA/body payloads
-// and diverge from the plugin (many APIs expect the quoted string).
-// Only global/Reserved flags are true bools; those never pass here.
+// Booleans become Go bools so JSON body and param_style=json values use
+// JSON boolean literals, matching the legacy Go plugin. Ordinary query
+// serialization still renders them as the strings "true" / "false" on
+// the wire.
 func coerceScalar(t meta.DataType, raw string) (any, error) {
 	switch t {
 	case meta.TypeInteger, meta.TypeLong, meta.TypeFloat:
@@ -1039,10 +1037,25 @@ func coerceScalar(t meta.DataType, raw string) (any, error) {
 			return nil, fmt.Errorf("invalid number %q", raw)
 		}
 		return json.Number(raw), nil
+	case meta.TypeBoolean:
+		return parseBoolean(raw)
 	case meta.TypeAny:
 		return parseAny(raw), nil
 	default:
 		return raw, nil
+	}
+}
+
+// parseBoolean accepts the spellings supported by the legacy runtime's
+// BooleanArg and returns a typed value for the request serializer.
+func parseBoolean(raw string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "true", "t", "yes", "y", "1":
+		return true, nil
+	case "false", "f", "no", "n", "0":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid boolean value %q", raw)
 	}
 }
 

@@ -293,17 +293,12 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				return fmt.Errorf("failed to check plugin status: %w", err)
 			}
 
-			// aliyun-openapi-runtime routing (does NOT absorb Go plugin
-			// processes). A product ships as exactly one form:
+			// aliyun-openapi-runtime routing (does NOT absorb Go plugin processes). A product ships as exactly one form:
 			//   - installed Go plugin   -> fall through to ExecutePlugin
-			//   - installed meta plugin -> aliyun-openapi-runtime engine (always;
-			//     no legacy behavior exists for meta plugins)
-			//   - not installed but the engine resolves it (baseline /
-			//     user meta plugin) -> aliyun-openapi-runtime engine by
-			//     default. Set ALIYUN_CLI_OPENAPI_RUNTIME_FALLBACK=1 to
-			//     skip and exercise the legacy auto-install path.
-			//     Products marked distribution=="go" are abstained by
-			//     the engine so they still reach auto-install.
+			//   - installed meta plugin -> aliyun-openapi-runtime engine (always; no legacy behavior exists for meta plugins)
+			//   - not installed but the engine resolves it (baseline / user meta plugin) -> aliyun-openapi-runtime engine by default.
+			//     Set ALIYUN_CLI_OPENAPI_RUNTIME_FALLBACK=1 to skip and exercise the legacy auto-install path.
+			//     Products marked distribution=="go" are abstained by the engine so they still reach auto-install.
 			if installed {
 				if ptype, ok := plugin.InstalledPluginType(args[0]); ok && ptype == plugin.PluginTypeMeta {
 					return oapicmd.Dispatch(ctx, pluginArgs)

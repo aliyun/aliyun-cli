@@ -36,18 +36,14 @@ import (
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 )
 
-// envPluginsDir mirrors cli/plugin.EnvPluginsDir. Duplicated here (a
-// single string) to avoid importing the whole plugin manager for one
-// constant.
+// envPluginsDir mirrors cli/plugin.EnvPluginsDir. Duplicated here (a single string) to avoid importing the whole plugin manager for one constant.
 const envPluginsDir = "ALIBABA_CLOUD_CLI_PLUGINS_DIR"
 
-// userPluginsDir resolves the directory holding user-installed meta
-// plugins, matching the plugin manager's convention:
+// userPluginsDir resolves the directory holding user-installed meta plugins, matching the plugin manager's convention:
 //
 //	$ALIBABA_CLOUD_CLI_PLUGINS_DIR, or ~/.aliyun/plugins
 //
-// Returns "" when no home can be determined; the engine then simply
-// omits the user layer.
+// Returns "" when no home can be determined; the engine then simply omits the user layer.
 func userPluginsDir() string {
 	if d := os.Getenv(envPluginsDir); d != "" {
 		return d
@@ -59,9 +55,8 @@ func userPluginsDir() string {
 	return filepath.Join(home, ".aliyun", "plugins")
 }
 
-// profileHost adapts aliyun-cli's profile/credential resolution to the
-// engine's runtime.Host seam. The profile is loaded lazily and once, so
-// dry-run (which only reads Region) never triggers credential IO.
+// profileHost adapts aliyun-cli's profile/credential resolution to the engine's runtime.Host seam.
+// The profile is loaded lazily and once, so dry-run (which only reads Region) never triggers credential IO.
 type profileHost struct {
 	ctx     *cli.Context
 	once    sync.Once
@@ -203,10 +198,9 @@ func Dispatch(ctx *cli.Context, rawArgs []string) error {
 	})
 }
 
-// TryDispatch handles rawArgs via the engine only when the engine can
-// resolve the "<product> <command>" pair. It returns handled=false
-// (with nil error) otherwise, letting the caller fall back to legacy
-// routing (auto-install, built-in openapi, ...).
+// TryDispatch handles rawArgs via the engine only when the engine can resolve the "<product> <command>" pair.
+// It returns handled=false (with nil error) otherwise,
+// letting the caller fall back to legacy routing (auto-install, built-in openapi, ...).
 func TryDispatch(ctx *cli.Context, rawArgs []string) (handled bool, err error) {
 	if len(rawArgs) < 2 {
 		return false, nil

@@ -21,8 +21,6 @@ const (
 	PluginPlatformAny = "any"
 )
 
-// NormalizePluginType maps an empty/unknown type string to the legacy
-// default ("go").
 func NormalizePluginType(t string) string {
 	if t == PluginTypeMeta {
 		return PluginTypeMeta
