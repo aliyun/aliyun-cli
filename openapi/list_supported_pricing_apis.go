@@ -77,8 +77,8 @@ func newPricingApiVersionFlag() *cli.Flag {
 // command itself: they are NOT persistent flags, so they don't inherit from
 // the root command — without explicit registration they either error
 // ("invalid flag" when placed after the command) or are silently dropped
-// (when placed before it), which is exactly the flag inconsistency the
-// 2026-07-22 dogfood flagged. Config flags (--profile etc.) are persistent
+// (when placed before it) — the flag inconsistency this command previously
+// suffered from. Config flags (--profile etc.) are persistent
 // and inherit automatically.
 func NewListSupportedPricingApisCommand() *cli.Command {
 	cmd := &cli.Command{

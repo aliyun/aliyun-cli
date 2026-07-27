@@ -236,7 +236,7 @@ func TestNewListSupportedPricingApisCommandRunReportsErrors(t *testing.T) {
 func TestListSupportedPricingApisCommandRegistersOutputFlags(t *testing.T) {
 	// --quiet / --cli-query / --output are not persistent, so they must be on
 	// the command's own flag set; otherwise they error after the command name
-	// and are silently dropped before it (dogfood 2026-07-22 finding #4).
+	// and are silently dropped before it (a previously shipped inconsistency).
 	cmd := NewListSupportedPricingApisCommand()
 	for _, name := range []string{QuietFlagName, QueryFlagName, OutputFlagName,
 		PricingProductFlagName, PricingApiVersionFlagName} {

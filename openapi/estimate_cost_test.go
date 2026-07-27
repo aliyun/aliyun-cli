@@ -413,7 +413,7 @@ func TestProcessInvokeEstimateCostContextMalformed(t *testing.T) {
 
 func TestEstimateCostBusinessErrorFailure(t *testing.T) {
 	// price.success == false must fail the process even though the HTTP call
-	// succeeded (dogfood 2026-07-22: business failures exited 0 and scripts
+	// succeeded (previously business failures exited 0 and scripts
 	// gating on $? mistook them for successful estimates).
 	out := `{"price":{"success":false,"errorCode":"InvalidParameter","errorMessage":"COMMODITY.INVALID_COMPONENT","upstreamRequestId":"req-1"},"requestId":"r"}`
 	err := estimateCostBusinessError(out)

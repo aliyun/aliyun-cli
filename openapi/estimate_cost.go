@@ -87,8 +87,8 @@ func (c *Commando) processEstimateCost(ctx *cli.Context, inv Invoker) error {
 	}
 	// Business failure inside a 200 response (price.success == false) must fail
 	// the process: scripts and agents gate on `$?`, and an exit code of 0 with a
-	// failed quote inside the JSON reads as a successful estimate (dogfood
-	// 2026-07-22: 7 branches returned success:false with exit code 0). The JSON
+	// failed quote inside the JSON reads as a successful estimate (observed in
+	// practice with several products' business failures). The JSON
 	// is already printed above, so automation can still read the full details.
 	return estimateCostBusinessError(out)
 }
