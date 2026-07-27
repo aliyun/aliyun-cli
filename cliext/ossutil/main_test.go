@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -106,5 +107,17 @@ func TestOssutilCommandRunInstalledSkipNetwork(t *testing.T) {
 	if !bytes.Contains([]byte(errStr), []byte("profile default is not configure yet")) &&
 		!bytes.Contains([]byte(errStr), []byte("can't get credential")) {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestOssutilRejectsEstimateCost(t *testing.T) {
+	ctx := &Context{}
+	err := ctx.Run([]string{"api", "PutBucket", "--estimate-cost"})
+	if err == nil || !strings.Contains(err.Error(), "aliyun oss <ApiName> --estimate-cost") {
+		t.Fatalf("expected estimate-cost rejection with hint, got %v", err)
+	}
+	err = ctx.Run([]string{"ls", "--estimate-cost-context", "K=V"})
+	if err == nil || !strings.Contains(err.Error(), "not supported under") {
+		t.Fatalf("expected estimate-cost-context rejection, got %v", err)
 	}
 }

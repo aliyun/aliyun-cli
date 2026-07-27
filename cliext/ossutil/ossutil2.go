@@ -90,6 +90,17 @@ func (c *Context) errorf(format string, a ...interface{}) {
 }
 
 func (c *Context) Run(args []string) error {
+	// `aliyun ossutil` hands args verbatim to the external ossutil binary, so
+	// the CLI-side --estimate-cost interception (wired on the `aliyun oss`
+	// bridge) can never see them — including `ossutil api <Operation>` raw
+	// OpenAPI calls. Fail fast with a pointer to the supported form instead of
+	// letting the external binary reject (or silently ignore) the flag.
+	for _, arg := range args {
+		if arg == "--estimate-cost" || strings.HasPrefix(arg, "--estimate-cost=") ||
+			arg == "--estimate-cost-context" || strings.HasPrefix(arg, "--estimate-cost-context=") {
+			return fmt.Errorf("--estimate-cost is not supported under `aliyun ossutil` (args are passed through to the external ossutil binary); use `aliyun oss <ApiName> --estimate-cost` instead, e.g. `aliyun oss PutBucket --estimate-cost`")
+		}
+	}
 	// init config path and some basic info
 	c.InitBasicInfo()
 	c.CheckOsTypeAndArch()
