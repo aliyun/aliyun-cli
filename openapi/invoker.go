@@ -261,17 +261,22 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	}
 
 	if a.request.Domain == "" {
-		endpointType := a.profile.EndpointType
-		a.request.Domain, err = product.GetEndpointWithType(a.request.RegionId, a.client, endpointType)
-		if err != nil {
-			// --estimate-cost never invokes the product API: the quote is
-			// intercepted before send and routed to CloudControl keyed by the
-			// api triple. A product without an endpoint in this region (e.g.
-			// appstream-center only serves cn-shanghai/ap-southeast-1) must
-			// not block quoting — use a placeholder that is never dialed.
-			if EstimateCostFlag(ctx.Flags()).IsAssigned() {
-				a.request.Domain = "estimate-cost-placeholder.invalid"
-			} else {
+		if EstimateCostFlag(ctx.Flags()).IsAssigned() {
+			// Quote-only run: --estimate-cost is a terminal branch that routes
+			// the prepared request to CloudControl GetApiPrice and never dials
+			// the product API, so endpoint resolution is skipped entirely — a
+			// product without an endpoint in this region (e.g. appstream-center
+			// only serves cn-shanghai/ap-southeast-1) must not block quoting.
+			// The placeholder satisfies the SDK's non-empty domain check and is
+			// never connected to. This is the earliest hook the quote path can
+			// use: Init() rebuilds a.request, so callers can't pre-set the
+			// domain, and failing here would abort Prepare before the request
+			// parameters the quote needs are assembled.
+			a.request.Domain = "estimate-cost-placeholder.invalid"
+		} else {
+			endpointType := a.profile.EndpointType
+			a.request.Domain, err = product.GetEndpointWithType(a.request.RegionId, a.client, endpointType)
+			if err != nil {
 				return cli.NewErrorWithTip(
 					fmt.Errorf("unknown endpoint for %s/%s! failed %s", product.GetLowerCode(), a.request.RegionId, err),
 					"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, "+hint)
