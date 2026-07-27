@@ -25,7 +25,7 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 		Operation: &Operation{Action: "GetThing", ApiVersion: "2020-01-01", Method: "GET", ApiStyle: "ROA", Protocol: "HTTPS", Url: "/things/{id}"},
 		Parameters: []*Argument{{
 			Name: "limit", RawName: "Limit", Type: "integer", Options: []string{"--limit"},
-			Location: "query",
+			Location: "query", Example: "12****",
 		}},
 	}
 	payload, err := proto.MarshalOptions{Deterministic: true}.Marshal(definition)
@@ -66,6 +66,9 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 	}
 	if api.Name != "GetThing" || api.Version != "2020-01-01" || api.URL != "/things/{id}" {
 		t.Fatalf("API = %#v", api)
+	}
+	if got := api.Parameters[0].Example; got != "12****" {
+		t.Fatalf("parameter example = %q, want %q", got, "12****")
 	}
 	if got := reader.ProductEndpoints().Public["cn-hangzhou"]; got != "demo.cn-hangzhou.aliyuncs.com" {
 		t.Fatalf("endpoint = %q", got)

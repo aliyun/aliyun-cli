@@ -23,42 +23,33 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/source"
 )
 
-// Options collects the wiring knobs of the aliyun-openapi-runtime engine. It
-// is deliberately small; anything that changes at runtime (like which
-// plugin the user just installed) is discovered from the file system
-// by the Source layer instead of being passed in here.
+// Options collects the wiring knobs of the aliyun-openapi-runtime engine. It is deliberately small;
+// anything that changes at runtime (like which plugin the user just installed) is discovered from the file system by the Source layer instead of being passed in here.
 type Options struct {
-	// BaselineFS is the embedded baseline metadata tree
-	// (metas/ + meta_index/). It is INJECTED by the host so the
-	// engine module carries no baseline data of its own. A nil FS
-	// simply omits the baseline layer (useful for tests that rely
-	// solely on user/override directories).
+	// BaselineFS is the embedded baseline metadata tree (metas/ + meta_index/).
+	// It is INJECTED by the host so the engine module carries no baseline data of its own.
+	// A nil FS simply omits the baseline layer (useful for tests that rely solely on user/override directories).
 	BaselineFS fs.FS
 
-	// BundledBy is the CLI version string embedded in every baseline
-	// Provenance record, e.g. "aliyun-cli 3.0.234".
+	// BundledBy is the CLI version string embedded in every baseline Provenance record, e.g. "aliyun-cli 3.0.234".
 	BundledBy string
 
-	// UserPluginsDir is the directory holding user-installed plugins,
-	// typically ~/.aliyun/plugins. Empty -> user layer skipped.
+	// UserPluginsDir is the directory holding user-installed plugins, typically ~/.aliyun/plugins. Empty -> user layer skipped.
 	UserPluginsDir string
 
-	// OverrideDir mirrors $ALIYUN_CLI_PLUGINS_DIR_OVERRIDE. Empty ->
-	// override layer skipped.
+	// OverrideDir mirrors $ALIYUN_CLI_PLUGINS_DIR_OVERRIDE. Empty -> override layer skipped.
 	OverrideDir string
 }
 
 // NewLoader builds a Loader from the configured Sources.
 //
-// Priority (highest first); each product is owned wholly by the first
-// Source that claims it:
+// Priority (highest first); each product is owned wholly by the firstSource that claims it:
 //
 //	OverrideSource   (Options.OverrideDir, if non-empty)
 //	UserPluginSource (Options.UserPluginsDir, if non-empty)
 //	BaselineSource   (Options.BaselineFS, if non-nil)
 //
-// The returned Loader starts empty. Call EnsureProduct before target-specific
-// access.
+// The returned Loader starts empty. Call EnsureProduct before target-specific access.
 func NewLoader(opts Options) loader.Loader {
 	var override, user, baselineSrc source.Source
 	if opts.OverrideDir != "" {

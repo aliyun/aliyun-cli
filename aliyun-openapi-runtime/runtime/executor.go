@@ -89,9 +89,10 @@ type ExecContext struct {
 	ForceHTTPS bool
 	ForceHTTP  bool
 
-	// SkipSecureVerify / UserAgent come from Host.Settings.
+	// SkipSecureVerify / CLIVersion / UserAgent come from Host.Settings.
 	SkipSecureVerify bool
-	UserAgent        string
+	CLIVersion       string
+	UserAgent        string // host suffixes only; composed with base in send
 
 	// DryRun assembles the request and returns it without sending.
 	DryRun bool
@@ -318,9 +319,9 @@ func send(_ context.Context, ec *ExecContext, req *AssembledRequest) (*Response,
 		conf.RegionId = tea.String(ec.Region)
 	}
 	conf.Endpoint = tea.String(stripScheme(req.Endpoint))
-	if ec.UserAgent != "" {
-		conf.UserAgent = tea.String(ec.UserAgent)
-	}
+	// Always stamp engine + CLI version (plugin-parity BuildBaseUserAgent),
+	// then append host suffixes (--user-agent / AI mode).
+	conf.UserAgent = tea.String(ComposeUserAgent(ec.CLIVersion, ec.UserAgent))
 	if ec.ReadTimeout > 0 {
 		conf.ReadTimeout = tea.Int(int(ec.ReadTimeout / time.Millisecond))
 	}

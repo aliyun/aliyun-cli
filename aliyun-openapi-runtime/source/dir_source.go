@@ -30,11 +30,12 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/storage"
 )
 
+// dirSource serves user/override metadata plugins.
+// Only packaged layouts are supported: manifest.json plus an indexed metadata blob (JSONL or Protobuf).
 type dirSource struct {
 	root  string
 	kind  Kind
 	store *storage.DirStorage
-	codec *format.JSONFormat
 }
 
 type pluginVolume struct {
@@ -45,11 +46,11 @@ type pluginVolume struct {
 }
 
 func NewUserPluginSource(root string) Source {
-	return &dirSource{root: root, kind: KindUser, store: storage.NewDirStorage(root), codec: format.NewJSONFormat()}
+	return &dirSource{root: root, kind: KindUser, store: storage.NewDirStorage(root)}
 }
 
 func NewOverrideSource(root string) Source {
-	return &dirSource{root: root, kind: KindOverride, store: storage.NewDirStorage(root), codec: format.NewJSONFormat()}
+	return &dirSource{root: root, kind: KindOverride, store: storage.NewDirStorage(root)}
 }
 
 func (s *dirSource) Kind() Kind { return s.kind }
@@ -65,13 +66,6 @@ func (s *dirSource) LoadProduct(code string) (*meta.Product, *Provenance, error)
 	}
 	defer vol.Close()
 
-	if pv.manifest == nil || pv.metadata == nil {
-		product, err := s.codec.DecodeProduct(vol, pv.code)
-		if err != nil {
-			return nil, nil, err
-		}
-		return product, s.provenance(pv, product.DefaultVersion), nil
-	}
 	jsonlIndex, err := openMetadataIndex(vol, pv.metadata)
 	if err != nil {
 		return nil, nil, err
@@ -105,9 +99,6 @@ func (s *dirSource) LoadIndex(code, version string) (*meta.APIIndex, error) {
 		return nil, normalizeOpenError(err)
 	}
 	defer vol.Close()
-	if pv.metadata == nil {
-		return legacyIndex(vol, code, version)
-	}
 	idx, err := loadMetadataAPIIndex(vol, pv.metadata, code, version)
 	if errors.Is(err, storage.ErrEntryNotFound) {
 		return nil, ErrNotFound
@@ -127,9 +118,7 @@ func (s *dirSource) LoadAPI(code, version, name string) (*meta.API, error) {
 	defer vol.Close()
 
 	var api *meta.API
-	if pv.metadata == nil {
-		api, err = s.codec.DecodeAPI(vol, format.APIKey{Product: code, Version: version, Name: name})
-	} else if isProtobufMetadata(pv.metadata) {
+	if isProtobufMetadata(pv.metadata) {
 		reader, openErr := pbmeta.Open(vol, pv.metadata.Index, pv.metadata.Data)
 		if openErr != nil {
 			return nil, openErr
@@ -199,22 +188,21 @@ func (s *dirSource) inspect(name string) (*pluginVolume, bool, error) {
 		return nil, false, err
 	}
 	defer vol.Close()
-	pv := &pluginVolume{name: name, code: name}
+
 	raw, err := vol.ReadAll("manifest.json")
 	if err != nil {
-		if !storage.IsNotExist(err) {
-			return nil, false, err
+		if storage.IsNotExist(err) {
+			// No manifest → not a packaged meta plugin (scattered *.json is unsupported).
+			return nil, false, nil
 		}
-		if _, statErr := vol.Stat(schema.MetadataIndexFile); statErr == nil {
-			pv.metadata = defaultMetadataDescriptor()
-		}
-		return pv, true, nil
+		return nil, false, err
 	}
+
 	var manifest schema.PluginManifest
 	if err := format.DecodePluginManifestJSON(raw, &manifest); err != nil {
 		return nil, false, err
 	}
-	pv.manifest = &manifest
+	pv := &pluginVolume{name: name, code: name, manifest: &manifest}
 	if manifest.ProductCode != "" {
 		pv.code = strings.ToLower(manifest.ProductCode)
 	} else if manifest.Command != "" {
@@ -239,6 +227,10 @@ func (s *dirSource) inspect(name string) (*pluginVolume, bool, error) {
 		pv.metadata = &copy
 	} else if _, statErr := vol.Stat(schema.MetadataIndexFile); statErr == nil {
 		pv.metadata = defaultMetadataDescriptor()
+	}
+	if pv.metadata == nil {
+		// Manifest present but no indexed metadata blob → unsupported layout.
+		return nil, false, nil
 	}
 	return pv, true, nil
 }
@@ -295,29 +287,6 @@ func defaultMetadataDescriptor() *schema.MetadataDescriptor {
 	return &schema.MetadataDescriptor{Format: "json", Schema: jsonl.SchemaName, SchemaVersion: jsonl.SchemaVersion, Layout: jsonl.LayoutName, LayoutVersion: jsonl.LayoutVersion, Index: schema.MetadataIndexFile, Data: schema.MetadataDataFile}
 }
 
-func legacyIndex(vol storage.Volume, code, version string) (*meta.APIIndex, error) {
-	entries, err := vol.List(version + "/")
-	if err != nil {
-		return nil, err
-	}
-	idx := &meta.APIIndex{ProductCode: code, Version: version, Entries: make(map[string]meta.APIIndexEntry)}
-	prefix := version + "/"
-	for _, entry := range entries {
-		if !strings.HasPrefix(entry, prefix) || !strings.HasSuffix(entry, ".json") || strings.HasSuffix(entry, "/"+schema.VersionFileName) {
-			continue
-		}
-		name := strings.TrimSuffix(strings.TrimPrefix(entry, prefix), ".json")
-		if name != "" {
-			idx.Entries[name] = meta.APIIndexEntry{APIName: name, CmdName: kebabize(name)}
-		}
-	}
-	if len(idx.Entries) == 0 {
-		return nil, ErrNotFound
-	}
-	idx.BuildCmdIndex()
-	return idx, nil
-}
-
 func versionsFromIndex(idx jsonl.Index) []string {
 	seen := map[string]struct{}{}
 	for _, rec := range idx.APIs {
@@ -344,25 +313,4 @@ func (s *dirSource) provenance(pv *pluginVolume, version string) *Provenance {
 		p.InstalledAt = info.ModTime()
 	}
 	return p
-}
-
-func kebabize(value string) string {
-	var b strings.Builder
-	runes := []rune(value)
-	for i, r := range runes {
-		upper := r >= 'A' && r <= 'Z'
-		if i > 0 && upper {
-			prev := runes[i-1]
-			nextLower := i+1 < len(runes) && runes[i+1] >= 'a' && runes[i+1] <= 'z'
-			if (prev >= 'a' && prev <= 'z') || (prev >= '0' && prev <= '9') || nextLower {
-				b.WriteByte('-')
-			}
-		}
-		if upper {
-			b.WriteRune(r + ('a' - 'A'))
-		} else {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
 }

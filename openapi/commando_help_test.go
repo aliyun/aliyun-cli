@@ -92,9 +92,55 @@ func TestPrintProductUsage_BuiltinProduct(t *testing.T) {
 	assert.Contains(t, output, "Available Api List")
 }
 
+func TestPrintProductUsage_LegacyBuiltinWinsOverBaselineProductHelp(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	c.library.builtinRepo = getRepository()
+	c.pluginIndex = &plugin.Index{}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
+
+	original := productHelpTry
+	called := false
+	productHelpTry = func(*cli.Context, string) (bool, error) {
+		called = true
+		return true, nil
+	}
+	t.Cleanup(func() { productHelpTry = original })
+
+	err := c.printProductUsage(ctx, "ecs")
+	assert.NoError(t, err)
+	assert.False(t, called, "baseline product help must not run when legacy PascalCase help exists")
+	assert.Contains(t, stdout.String(), "Available Api List")
+	assert.Contains(t, stdout.String(), "DescribeInstances")
+}
+
+func TestPrintProductUsage_BaselineProductHelpFallback(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	repo, _ := meta.MockLoadRepository([]meta.Product{})
+	c.library.builtinRepo = repo
+	c.pluginIndex = &plugin.Index{}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
+
+	original := productHelpTry
+	productHelpTry = func(ctx *cli.Context, product string) (bool, error) {
+		assert.Equal(t, "baseline-only", product)
+		fmt.Fprintln(ctx.Stdout(), "BASELINE_KEBAB_PRODUCT_HELP")
+		return true, nil
+	}
+	t.Cleanup(func() { productHelpTry = original })
+
+	err := c.printProductUsage(ctx, "baseline-only")
+	assert.NoError(t, err)
+	assert.Contains(t, stdout.String(), "BASELINE_KEBAB_PRODUCT_HELP")
+}
+
 func TestPrintProductUsage_UnknownProduct_NoPlugin(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	ctx := newTestContext(stdout, stderr)
+	original := productHelpTry
+	productHelpTry = func(*cli.Context, string) (bool, error) { return false, nil }
+	t.Cleanup(func() { productHelpTry = original })
 	c.library.builtinRepo = getRepository()
 	c.pluginIndex = &plugin.Index{}
 
@@ -129,6 +175,9 @@ func TestPrintProductUsage_PluginAvailableNotInstalled(t *testing.T) {
 func TestPrintProductUsage_NonBuiltinProduct_PluginNotInstalled(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	ctx := newTestContext(stdout, stderr)
+	original := productHelpTry
+	productHelpTry = func(*cli.Context, string) (bool, error) { return false, nil }
+	t.Cleanup(func() { productHelpTry = original })
 
 	repo, _ := meta.MockLoadRepository([]meta.Product{})
 	c.library.builtinRepo = repo
@@ -149,6 +198,9 @@ func TestPrintProductUsage_NonBuiltinProduct_PluginNotInstalled(t *testing.T) {
 func TestPrintProductUsage_NonBuiltinProduct_NoPlugin(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	ctx := newTestContext(stdout, stderr)
+	original := productHelpTry
+	productHelpTry = func(*cli.Context, string) (bool, error) { return false, nil }
+	t.Cleanup(func() { productHelpTry = original })
 
 	repo, _ := meta.MockLoadRepository([]meta.Product{})
 	c.library.builtinRepo = repo
@@ -436,6 +488,12 @@ func TestPrintProductUsage_NonBuiltinProduct_PluginInstalled(t *testing.T) {
 func TestPrintProductUsage_BuiltinProduct_PluginInstalled(t *testing.T) {
 	setupInstalledPlugin(t, "aliyun-cli-ecs")
 	t.Setenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP", "")
+	originalExecute := helpDelegateExecute
+	helpDelegateExecute = func(_ string, _ []string, ctx *cli.Context) (bool, error) {
+		fmt.Fprintln(ctx.Stdout(), "GO_PLUGIN_PRODUCT_HELP")
+		return true, nil
+	}
+	t.Cleanup(func() { helpDelegateExecute = originalExecute })
 
 	c, w, stderr := newTestCommando()
 	ctx := newTestContext(w, stderr)
@@ -457,6 +515,46 @@ func TestPrintProductUsage_BuiltinProduct_PluginInstalled(t *testing.T) {
 	output := w.String()
 	assert.Contains(t, output, "Note: The help information for product 'ecs' is provided by the installed plugin 'aliyun-cli-ecs'")
 	assert.Contains(t, output, "ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true")
+	assert.Contains(t, output, "GO_PLUGIN_PRODUCT_HELP")
+	assert.NotContains(t, output, "Available Api List")
+}
+
+func TestPrintProductUsage_BuiltinMetaPluginWinsAndUsesRuntimeHelp(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP", "")
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	c.library.builtinRepo = getRepository()
+	c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{
+		{Name: "aliyun-cli-ecs", ProductCode: "ecs"},
+	}}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-ecs": {
+			Name: "aliyun-cli-ecs", Version: "0.7.4", Type: plugin.PluginTypeMeta,
+		},
+	}}
+
+	originalRender := productHelpRender
+	originalExecute := helpDelegateExecute
+	productHelpRender = func(ctx *cli.Context, product string) error {
+		assert.Equal(t, "ecs", product)
+		fmt.Fprintln(ctx.Stdout(), "META_PLUGIN_KEBAB_PRODUCT_HELP")
+		return nil
+	}
+	helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
+		t.Fatal("metadata plugin product help must not execute a Go binary")
+		return false, nil
+	}
+	t.Cleanup(func() {
+		productHelpRender = originalRender
+		helpDelegateExecute = originalExecute
+	})
+
+	err := c.printProductUsage(ctx, "ecs")
+	assert.NoError(t, err)
+	out := stdout.String()
+	assert.Contains(t, out, "provided by the installed plugin 'aliyun-cli-ecs'")
+	assert.Contains(t, out, "META_PLUGIN_KEBAB_PRODUCT_HELP")
+	assert.NotContains(t, out, "Available Api List")
 }
 
 func TestPrintApiUsage_NonBuiltinProduct_PluginInstalled(t *testing.T) {

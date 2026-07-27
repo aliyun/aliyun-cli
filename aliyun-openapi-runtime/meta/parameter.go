@@ -38,6 +38,7 @@ type Parameter struct {
 	// UI.
 	Options     []string    // command-line aliases, e.g. ["--region-id"]
 	Description Description // help_zh / help_en
+	Example     string      // display-only example text; never parsed as an argument value
 
 	// Wire style hints (mostly meaningful for arrays / body composition).
 	//

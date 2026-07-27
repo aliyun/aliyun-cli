@@ -34,7 +34,8 @@ func TestDirSourceLoadsJSONLPluginByManifestProductCode(t *testing.T) {
 	}
 	def := schema.CommandDefinition{
 		Name: "DescribeInstances", CmdName: "describe-instances", DescriptionZH: "查询实例",
-		Operation: &schema.OperationConfig{Action: "DescribeInstances", APIVersion: "2014-05-26", Method: "POST", APIStyle: "RPC"},
+		Operation:  &schema.OperationConfig{Action: "DescribeInstances", APIVersion: "2014-05-26", Method: "POST", APIStyle: "RPC"},
+		Parameters: []schema.ArgumentDefinition{{Name: "limit", RawName: "Limit", Type: "integer", Example: "12****"}},
 	}
 	raw, _ := json.Marshal(def)
 	data := append(raw, '\n')
@@ -86,6 +87,9 @@ func TestDirSourceLoadsJSONLPluginByManifestProductCode(t *testing.T) {
 	if api.ProductCode != "ecs" || api.Name != "DescribeInstances" {
 		t.Fatalf("LoadAPI() = %#v", api)
 	}
+	if got := api.Parameters[0].Example; got != "12****" {
+		t.Fatalf("parameter example = %q, want %q", got, "12****")
+	}
 	if got := api.Endpoints.Public["cn-hangzhou"]; got != "ecs.cn-hangzhou.aliyuncs.com" {
 		t.Fatalf("api endpoint = %q", got)
 	}
@@ -132,6 +136,41 @@ func TestDirSourceRejectsBareProductDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(bareDir, "manifest.json"), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := NewUserPluginSource(root).LoadProduct("ecs")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("LoadProduct() error = %v, want ErrNotFound", err)
+	}
+}
+
+// Scattered per-API *.json trees (no manifest / no indexed metadata) are not supported.
+func TestDirSourceRejectsScatteredJSONLayout(t *testing.T) {
+	root := t.TempDir()
+	pluginDir := filepath.Join(root, "aliyun-cli-ecs", "2014-05-26")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "DescribeInstances.json"), []byte(`{"name":"DescribeInstances"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := NewUserPluginSource(root).LoadProduct("ecs")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("LoadProduct() error = %v, want ErrNotFound", err)
+	}
+}
+
+// Manifest without indexed metadata blob is also rejected.
+func TestDirSourceRejectsManifestWithoutMetadata(t *testing.T) {
+	root := t.TempDir()
+	pluginDir := filepath.Join(root, "aliyun-cli-ecs")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"name":"aliyun-cli-ecs","type":"meta","productCode":"ecs","command":"ecs"}`
+	if err := os.WriteFile(filepath.Join(pluginDir, "manifest.json"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

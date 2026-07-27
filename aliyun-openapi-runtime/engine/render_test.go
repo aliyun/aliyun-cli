@@ -158,6 +158,51 @@ func TestPrintAPIHelpChineseLabels(t *testing.T) {
 	}
 }
 
+func TestPrintProductHelpUsesIndexWithoutLoadingAPIs(t *testing.T) {
+	var buf bytes.Buffer
+	product := &meta.Product{
+		Code:        "ecs",
+		Name:        meta.Description{EN: "Elastic Compute Service", ZH: "云服务器 ECS"},
+		Description: meta.Description{EN: "Compute service"},
+	}
+	index := &meta.APIIndex{
+		ProductCode: "ecs",
+		Version:     "2014-05-26",
+		Entries: map[string]meta.APIIndexEntry{
+			"StopInstances": {
+				APIName: "StopInstances", CmdName: "stop-instances",
+				Description: meta.Description{EN: "Stops instances"}, Deprecated: true,
+			},
+			"DescribeInstances": {
+				APIName: "DescribeInstances", CmdName: "describe-instances",
+				Description: meta.Description{EN: "Lists instances"},
+			},
+		},
+	}
+
+	if err := printProductHelp(&buf, product, index, "en"); err != nil {
+		t.Fatalf("printProductHelp: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"Product: ecs (Elastic Compute Service)",
+		"API Version: 2014-05-26",
+		"aliyun ecs <command> [parameters]",
+		"Available Commands:",
+		"describe-instances",
+		"Lists instances",
+		"stop-instances",
+		"[Deprecated] Stops instances",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("product help missing %q in:\n%s", want, out)
+		}
+	}
+	if strings.Index(out, "describe-instances") > strings.Index(out, "stop-instances") {
+		t.Fatalf("commands are not sorted:\n%s", out)
+	}
+}
+
 // TestPrintAPIHelpWrapsAligned verifies long descriptions wrap at the
 // fixed line width and continuation lines keep the description column
 // aligned (empty padded name), matching the Go plugin help.

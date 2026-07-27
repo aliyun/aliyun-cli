@@ -50,8 +50,7 @@ const (
 	MetadataDataFile  = "metadata.jsonl"
 )
 
-// MetadataDescriptor declares the encoding, schema and physical layout of an
-// interpreted metadata plugin.
+// MetadataDescriptor declares the encoding, schema and physical layout of an interpreted metadata plugin.
 type MetadataDescriptor struct {
 	Format        string `json:"format"`
 	Schema        string `json:"schema"`
@@ -85,11 +84,11 @@ type PluginManifest struct {
 	} `json:"bin,omitempty"`
 }
 
-// Distribution values on a product entry. A product ships as exactly
-// one form: a compiled Go binary plugin ("go", run as a separate
-// process) or interpreted JSON metadata ("meta", the aliyun-openapi-runtime
-// engine). An empty value means "not marked" and is treated as
-// engine-served (so an unpopulated catalog behaves as today).
+// Distribution values on a product entry.
+// A product ships as exactly one form:
+// a compiled Go binary plugin ("go", run as a separate process)
+// or interpreted JSON metadata ("meta", the aliyun-openapi-runtime engine).
+// An empty value means "not marked" and is treated as engine-served (so an unpopulated catalog behaves as today).
 const (
 	DistributionGo   = "go"
 	DistributionMeta = "meta"
@@ -104,8 +103,7 @@ type ProductsIndex struct {
 	Products []ProductEntry `json:"products"`
 }
 
-// ProductEntry is one product's catalog record. Endpoints live here at
-// the product level (they were per-API in the legacy layout).
+// ProductEntry is one product's catalog record. Endpoints live here at the product level.
 type ProductEntry struct {
 	Code                 string            `json:"code"`
 	Name                 map[string]string `json:"name"` // en / zh
@@ -119,8 +117,7 @@ type ProductEntry struct {
 	Versions             []string          `json:"versions"`
 	APIs                 []string          `json:"apis"`
 
-	// Distribution is "go" | "meta" | "" (unset). "go" makes the
-	// engine abstain so the product routes to its Go plugin instead.
+	// Distribution is "go" | "meta" | "" (unset). "go" makes the engine abstain so the product routes to its Go plugin instead.
 	Distribution string `json:"distribution,omitempty"`
 }
 
@@ -128,16 +125,14 @@ type ProductEntry struct {
 // Per-version index (canonical/<product>/<version>/version.json)
 // ============================================================================
 
-// VersionIndex is the deserialized shape of a version.json file.
 type VersionIndex struct {
 	APIs    map[string]VersionAPIEntry `json:"apis"` // key = APIName (PascalCase)
 	Style   string                     `json:"style"`
 	Version string                     `json:"version"`
 }
 
-// VersionAPIEntry is one API's lightweight index entry: enough to build
-// command stubs and the kebab->API route table without loading the full
-// per-API JSON.
+// VersionAPIEntry is one API's lightweight index entry:
+// enough to build command stubs and the kebab->API route table without loading the full per-API JSON.
 type VersionAPIEntry struct {
 	CmdName       string `json:"cmd_name"`
 	Deprecated    bool   `json:"deprecated"`
@@ -149,9 +144,9 @@ type VersionAPIEntry struct {
 // Per-API command definition (canonical/<product>/<version>/<APIName>.json)
 // ============================================================================
 
-// CommandDefinition is the per-API JSON shape. All fields except
-// Operation and Name are optional; callers MUST tolerate older/newer
-// revisions and treat missing fields as zero values.
+// CommandDefinition is the per-API JSON shape.
+// All fields except Operation and Name are optional;
+// callers MUST tolerate older/newer revisions and treat missing fields as zero values.
 type CommandDefinition struct {
 	Name          string               `json:"name"`
 	CmdName       string               `json:"cmd_name"`
@@ -177,10 +172,8 @@ type OperationConfig struct {
 	URL        string `json:"url"`
 }
 
-// ArgumentDefinition describes a single CLI parameter. Nested composite
-// parameters are represented recursively via Fields / ElementFields /
-// ValueFields depending on the parameter's kind. The internal shape is
-// unchanged from the legacy layout.
+// ArgumentDefinition describes a single CLI parameter.
+// Nested composite parameters are represented recursively via Fields / ElementFields /ValueFields depending on the parameter's kind.
 type ArgumentDefinition struct {
 	Name          string               `json:"name"`
 	RawName       string               `json:"raw_name"`
@@ -188,6 +181,7 @@ type ArgumentDefinition struct {
 	Options       []string             `json:"options,omitempty"`
 	HelpZH        string               `json:"help_zh,omitempty"`
 	HelpEN        string               `json:"help_en,omitempty"`
+	Example       string               `json:"example,omitempty"`
 	Required      bool                 `json:"required"`
 	Location      string               `json:"location,omitempty"`
 	ParamStyle    string               `json:"param_style,omitempty"`

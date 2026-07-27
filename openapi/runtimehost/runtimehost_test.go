@@ -17,6 +17,8 @@ package runtimehost
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
@@ -28,9 +30,11 @@ import (
 	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
+	"github.com/aliyun/aliyun-openapi-runtime/jsonl"
 	"github.com/aliyun/aliyun-openapi-runtime/loader"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
+	"github.com/aliyun/aliyun-openapi-runtime/schema"
 )
 
 // captureExecutor records the ExecContext it receives instead of
@@ -58,6 +62,7 @@ func TestHostSettingsAppliedToExecContext(t *testing.T) {
 			EndpointType:     "vpc",
 			Language:         "en",
 			SkipSecureVerify: true,
+			CLIVersion:       "3.0.234",
 			UserAgent:        "tool/1",
 		},
 	}
@@ -91,6 +96,9 @@ func TestHostSettingsAppliedToExecContext(t *testing.T) {
 	if !cap.last.SkipSecureVerify {
 		t.Error("SkipSecureVerify not applied")
 	}
+	if cap.last.CLIVersion != "3.0.234" {
+		t.Errorf("CLIVersion = %q", cap.last.CLIVersion)
+	}
 	if cap.last.UserAgent != "tool/1" {
 		t.Errorf("UserAgent = %q", cap.last.UserAgent)
 	}
@@ -104,6 +112,33 @@ func baselineEngine(t *testing.T) *engine.Engine {
 		BaselineFS: aliyunopenapimeta.Metadatas,
 		BundledBy:  "aliyun-cli test",
 	}, nil)
+}
+
+func TestEngineProductHelpReadsBaselineIndex(t *testing.T) {
+	eng := baselineEngine(t)
+	var buf bytes.Buffer
+	err := eng.ProductHelp(engine.ProductHelpRequest{
+		Product: "ecs",
+		Out:     &buf,
+		Lang:    "en",
+	})
+	if err != nil {
+		t.Fatalf("ProductHelp: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"Product: ecs",
+		"API Version: 2014-05-26",
+		"Available Commands:",
+		"describe-instances",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("product help missing %q in output", want)
+		}
+	}
+	if strings.Contains(out, "  DescribeInstances") {
+		t.Fatalf("common-runtime product help must use kebab commands:\n%s", out)
+	}
 }
 
 // runOapi drives one dispatch and captures stdout. A StaticHost with a
@@ -323,23 +358,51 @@ func TestOapiUnknownCommand(t *testing.T) {
 func TestUserMetaPluginOwnsProduct(t *testing.T) {
 	dir := t.TempDir()
 	pluginDir := filepath.Join(dir, "aliyun-cli-demo")
-	apiDir := filepath.Join(pluginDir, "2024-01-01")
-	if err := os.MkdirAll(apiDir, 0o755); err != nil {
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	const manifestJSON = `{"name":"aliyun-cli-demo","type":"meta","productCode":"demo","command":"demo"}`
+	const manifestJSON = `{
+  "name":"aliyun-cli-demo",
+  "type":"meta",
+  "productCode":"demo",
+  "command":"demo",
+  "apiVersions":{"default":"2024-01-01","supported":["2024-01-01"]},
+  "metadata":{"format":"json","schema":"aliyun-openapi-meta","schemaVersion":1,"layout":"jsonl","layoutVersion":1,"index":"metadata.index.json","data":"metadata.jsonl"}
+}`
 	if err := os.WriteFile(filepath.Join(pluginDir, "manifest.json"), []byte(manifestJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	const apiJSON = `{
-      "cmd_name": "describe-thing",
-      "name": "DescribeThing",
-      "operation": {"method":"POST","api_version":"2024-01-01","action":"DescribeThing","api_style":"RPC","protocol":"HTTPS"},
-      "parameters": [
-        {"name":"region_id","raw_name":"RegionId","type":"string","options":["--region-id"],"required":true,"location":"query"}
-      ]
-    }`
-	if err := os.WriteFile(filepath.Join(apiDir, "DescribeThing.json"), []byte(apiJSON), 0o644); err != nil {
+	def := schema.CommandDefinition{
+		Name: "DescribeThing", CmdName: "describe-thing",
+		Operation: &schema.OperationConfig{
+			Action: "DescribeThing", APIVersion: "2024-01-01", Method: "POST", APIStyle: "RPC", Protocol: "HTTPS",
+		},
+		Parameters: []schema.ArgumentDefinition{
+			{Name: "region_id", RawName: "RegionId", Type: "string", Options: []string{"--region-id"}, Required: true, Location: "query"},
+		},
+	}
+	raw, err := json.Marshal(def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := append(raw, '\n')
+	if err := os.WriteFile(filepath.Join(pluginDir, schema.MetadataDataFile), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(data)
+	index := jsonl.Index{
+		Schema: jsonl.SchemaName, SchemaVersion: jsonl.SchemaVersion, LayoutVersion: jsonl.LayoutVersion,
+		DataFile: schema.MetadataDataFile, DataSize: int64(len(data)), DataSHA256: "sha256:" + hex.EncodeToString(digest[:]),
+		APIs: []jsonl.Record{{
+			APIVersion: "2024-01-01", APIName: def.Name, CommandName: def.CmdName,
+			DescriptionEN: "Describes a thing", Offset: 0, Length: int64(len(raw)),
+		}},
+	}
+	indexRaw, err := json.Marshal(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, schema.MetadataIndexFile), indexRaw, 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -348,6 +411,13 @@ func TestUserMetaPluginOwnsProduct(t *testing.T) {
 		BundledBy:      "aliyun-cli test",
 		UserPluginsDir: dir,
 	}, nil)
+	var help bytes.Buffer
+	if err := eng.ProductHelp(engine.ProductHelpRequest{Product: "demo", Out: &help, Lang: "en"}); err != nil {
+		t.Fatalf("user JSONL product help failed: %v", err)
+	}
+	if out := help.String(); !strings.Contains(out, "describe-thing") || !strings.Contains(out, "Describes a thing") {
+		t.Fatalf("user JSONL product help did not use plugin index:\n%s", out)
+	}
 
 	out, err := runOapi(t, eng, "cn-hangzhou",
 		"demo", "describe-thing", "--region-id", "cn-hangzhou",

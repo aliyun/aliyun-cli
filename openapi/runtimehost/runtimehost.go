@@ -95,18 +95,20 @@ func (h *profileHost) Settings() runtime.Settings {
 		s.EndpointType = h.profile.EndpointType
 		s.Language = h.profile.Language
 	}
+	s.CLIVersion = cli.GetVersion()
 	if h.ctx != nil {
 		if f := h.ctx.Flags().Get(config.SkipSecureVerifyName); f != nil && f.IsAssigned() {
 			s.SkipSecureVerify = true
 		}
-		s.UserAgent = buildUserAgent(h.ctx)
+		s.UserAgent = buildUserAgentSuffix(h.ctx)
 	}
 	return s
 }
 
-// buildUserAgent merges --user-agent with the host AI-mode suffix
+// buildUserAgentSuffix merges --user-agent with the host AI-mode suffix
 // (config + --cli-ai-mode / --no-cli-ai-mode / --cli-ai-user-agent).
-func buildUserAgent(ctx *cli.Context) string {
+// The engine prefixes aliyun-openapi-runtime/{ver} Aliyun-CLI/{cliVer}.
+func buildUserAgentSuffix(ctx *cli.Context) string {
 	var parts []string
 	if f := ctx.Flags().Get("user-agent"); f != nil {
 		if v, ok := f.GetValue(); ok && strings.TrimSpace(v) != "" {
@@ -196,6 +198,36 @@ func Dispatch(ctx *cli.Context, rawArgs []string) error {
 		Lang: lang,
 		Host: host,
 	})
+}
+
+// ProductHelp renders a product-level kebab command list from the selected
+// common-runtime source. For an installed metadata plugin the user source wins
+// over baseline; only metadata.index.json is read, not the full API payloads.
+func ProductHelp(ctx *cli.Context, product string) error {
+	version := apiVersionFromArgs(os.Args)
+	if version == "" {
+		if vf := ctx.Flags().Get("version"); vf != nil {
+			if v, ok := vf.GetValue(); ok {
+				version = v
+			}
+		}
+	}
+	return Engine().ProductHelp(engine.ProductHelpRequest{
+		Product: product,
+		Version: version,
+		Out:     ctx.Stdout(),
+		Lang:    i18n.GetLanguage(),
+	})
+}
+
+// TryProductHelp renders product help only when common-runtime can resolve the
+// requested product, allowing the aliyun-cli host to retain its legacy
+// PascalCase product help as the higher-priority no-plugin path.
+func TryProductHelp(ctx *cli.Context, product string) (handled bool, err error) {
+	if product == "" || !Engine().HasProduct(product) {
+		return false, nil
+	}
+	return true, ProductHelp(ctx, product)
 }
 
 // TryDispatch handles rawArgs via the engine only when the engine can resolve the "<product> <command>" pair.

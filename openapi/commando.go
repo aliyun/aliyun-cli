@@ -21,10 +21,10 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
-	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/headers"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
@@ -228,6 +228,14 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			if os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP") == "true" {
 				// Fall through to built-in help
 			} else {
+				if ptype, ok := plugin.InstalledPluginType(args[0]); ok && ptype == plugin.PluginTypeMeta {
+					if err := runtimehost.ProductHelp(ctx, args[0]); err != nil {
+						return err
+					}
+					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\nNote: The help information for product '%s' is provided by the installed plugin '%s'.\n", args[0], pluginName)
+					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "To view the legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true\n")
+					return nil
+				}
 				// Extract arguments from os.Args to preserve flags for plugin help, like --api-version
 				var pluginArgs []string
 				cmdIndex := -1
@@ -434,6 +442,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	if len(args) == 1 {
 		// aliyun <productCode>
 		// TODO: aliyun pluginName ...
+		if _, ok := c.library.GetProduct(productName); !ok {
+			if handled, err := runtimehost.TryProductHelp(ctx, productName); handled {
+				return err
+			}
+		}
 		return c.library.PrintProductUsage(productName, true)
 	} else if len(args) == 2 {
 		// rpc or restful call

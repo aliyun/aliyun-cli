@@ -264,6 +264,7 @@ type Argument struct {
 	Fields        []*Argument            `protobuf:"bytes,12,rep,name=fields,proto3" json:"fields,omitempty"`
 	ElementFields []*Argument            `protobuf:"bytes,13,rep,name=element_fields,json=elementFields,proto3" json:"element_fields,omitempty"`
 	ValueFields   []*Argument            `protobuf:"bytes,14,rep,name=value_fields,json=valueFields,proto3" json:"value_fields,omitempty"`
+	Example       string                 `protobuf:"bytes,15,opt,name=example,proto3" json:"example,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -396,6 +397,13 @@ func (x *Argument) GetValueFields() []*Argument {
 	return nil
 }
 
+func (x *Argument) GetExample() string {
+	if x != nil {
+		return x.Example
+	}
+	return ""
+}
+
 var File_aliyun_openapi_meta_proto protoreflect.FileDescriptor
 
 const file_aliyun_openapi_meta_proto_rawDesc = "" +
@@ -427,7 +435,7 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"apiVersion\x12\x16\n" +
 	"\x06method\x18\x04 \x01(\tR\x06method\x12\x1a\n" +
 	"\bprotocol\x18\x05 \x01(\tR\bprotocol\x12\x10\n" +
-	"\x03url\x18\x06 \x01(\tR\x03url\"\xfc\x03\n" +
+	"\x03url\x18\x06 \x01(\tR\x03url\"\x96\x04\n" +
 	"\bArgument\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\braw_name\x18\x02 \x01(\tR\arawName\x12\x12\n" +
@@ -445,7 +453,8 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"value_type\x18\v \x01(\tR\tvalueType\x128\n" +
 	"\x06fields\x18\f \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\x06fields\x12G\n" +
 	"\x0eelement_fields\x18\r \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\relementFields\x12C\n" +
-	"\fvalue_fields\x18\x0e \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\vvalueFieldsB8Z6github.com/aliyun/aliyun-openapi-runtime/pbmeta;pbmetab\x06proto3"
+	"\fvalue_fields\x18\x0e \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\vvalueFields\x12\x18\n" +
+	"\aexample\x18\x0f \x01(\tR\aexampleB8Z6github.com/aliyun/aliyun-openapi-runtime/pbmeta;pbmetab\x06proto3"
 
 var (
 	file_aliyun_openapi_meta_proto_rawDescOnce sync.Once

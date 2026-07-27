@@ -96,6 +96,57 @@ type Request struct {
 	Host runtime.Host
 }
 
+// ProductHelpRequest describes a product-level help render. Unlike Dispatch,
+// it needs only a product (and optionally an API version): command summaries
+// come from the lightweight metadata index, so no per-API payload is decoded.
+type ProductHelpRequest struct {
+	Product string
+	Version string
+	Out     io.Writer
+	Lang    string
+}
+
+// HasProduct reports whether the configured source stack can resolve product.
+// Resolution remains targeted: it probes only the requested product and never
+// enumerates unrelated plugin directories.
+func (e *Engine) HasProduct(product string) bool {
+	ldr, err := e.getLoader()
+	if err != nil {
+		return false
+	}
+	return ldr.EnsureProduct(product) == nil
+}
+
+// ProductHelp renders the product's kebab-case command list from its selected
+// metadata index. The full JSONL/Protobuf API records remain lazy and are not
+// read by this operation.
+func (e *Engine) ProductHelp(req ProductHelpRequest) error {
+	ldr, err := e.getLoader()
+	if err != nil {
+		return fmt.Errorf("openapi-runtime loader: %w", err)
+	}
+	productCode := strings.ToLower(strings.TrimSpace(req.Product))
+	if productCode == "" {
+		return errors.New("product is required")
+	}
+	if err := ldr.EnsureProduct(productCode); err != nil {
+		return err
+	}
+	product := ldr.LookupProduct(productCode)
+	if product == nil {
+		return fmt.Errorf("unknown product %q", productCode)
+	}
+	version, err := ldr.ResolveVersion(productCode, req.Version)
+	if err != nil {
+		return err
+	}
+	index, err := ldr.GetIndex(productCode, version)
+	if err != nil {
+		return fmt.Errorf("load product index %s@%s: %w", productCode, version, err)
+	}
+	return printProductHelp(req.Out, product, index, req.Lang)
+}
+
 // Dispatch resolves and runs one command described by req.Args.
 func (e *Engine) Dispatch(req Request) error {
 	ldr, err := e.getLoader()
@@ -197,6 +248,7 @@ func (e *Engine) Dispatch(req Request) error {
 		ec.RetryCount = s.RetryCount
 		ec.UseVPC = s.UseVPC()
 		ec.SkipSecureVerify = s.SkipSecureVerify
+		ec.CLIVersion = s.CLIVersion
 		ec.UserAgent = s.UserAgent
 	}
 	needsCred := !ec.DryRun || res.Reserved.EstimateCost

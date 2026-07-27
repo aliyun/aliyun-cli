@@ -2312,6 +2312,10 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 }
 
 func TestMain_PluginExecution_KebabCase(t *testing.T) {
+	// This suite exercises the legacy Go-plugin discovery/execution branch.
+	// Keep common-runtime fallback out of the test so baseline kebab commands
+	// (for example fc describe-regions) cannot legitimately short-circuit it.
+	t.Setenv("ALIYUN_CLI_OPENAPI_RUNTIME_FALLBACK", "1")
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w, stderr)

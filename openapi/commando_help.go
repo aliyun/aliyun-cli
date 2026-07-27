@@ -22,9 +22,9 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
-	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 )
 
@@ -187,6 +187,7 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 	// 1. Check if it's a plugin product
 	var pluginName string
 	var isInstalled bool
+	var localPlugin plugin.LocalPlugin
 
 	if c.pluginIndex != nil {
 		for _, pInfo := range c.pluginIndex.Plugins {
@@ -214,16 +215,25 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 		// If not a built-in product, but is a valid plugin product
 		if pluginName != "" {
 			if c.localManifest != nil {
-				_, isInstalled = c.localManifest.Plugins[pluginName]
+				localPlugin, isInstalled = c.localManifest.Plugins[pluginName]
 			}
 			if isInstalled {
 				cli.Printf(ctx.Stdout(), "Product '%s' is provided by plugin '%s'\n", productCode, pluginName)
 				c.setLangEnv(ctx)
-				plugin.ExecutePlugin(productCode, getPluginArgsForHelp(productCode), ctx)
+				if localPlugin.IsMeta() {
+					return productHelpRender(ctx, productCode)
+				}
+				helpDelegateExecute(productCode, getPluginArgsForHelp(productCode), ctx)
 				return nil
 			} else {
+				if handled, err := productHelpTry(ctx, productCode); handled {
+					return err
+				}
 				return fmt.Errorf("'%s' is not a valid product.\nDid you mean to install corresponding product plugin?\n  aliyun plugin install --names %s", productCode, pluginName)
 			}
+		}
+		if handled, err := productHelpTry(ctx, productCode); handled {
+			return err
 		}
 		var plugList []plugin.PluginInfo
 		if c.pluginIndex != nil {
@@ -234,7 +244,7 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 
 	if pluginName != "" {
 		if c.localManifest != nil {
-			_, isInstalled = c.localManifest.Plugins[pluginName]
+			localPlugin, isInstalled = c.localManifest.Plugins[pluginName]
 		}
 
 		if isInstalled {
@@ -245,7 +255,10 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 				cli.Printf(ctx.Stdout(), "Note: The help information for product '%s' is provided by the installed plugin '%s'.\n", productCode, pluginName)
 				cli.Printf(ctx.Stdout(), "To view legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true\n")
 				c.setLangEnv(ctx)
-				plugin.ExecutePlugin(productCode, getPluginArgsForHelp(productCode), ctx)
+				if localPlugin.IsMeta() {
+					return productHelpRender(ctx, productCode)
+				}
+				helpDelegateExecute(productCode, getPluginArgsForHelp(productCode), ctx)
 				return nil
 			}
 		}
@@ -443,6 +456,8 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 var (
 	helpDelegateIsInstalled = plugin.IsPluginInstalled
 	helpDelegateExecute     = plugin.ExecutePlugin
+	productHelpRender       = runtimehost.ProductHelp
+	productHelpTry          = runtimehost.TryProductHelp
 )
 
 // tryDelegatePluginHelp is layer-3 of the help hierarchy:

@@ -34,8 +34,8 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 )
 
-// Kind categorises where a Source's data comes from. It is exposed
-// on Provenance so downstream code (e.g. `aliyun plugin which`) can report which layer served a given command.
+// Kind categorises where a Source's data comes from.
+// It is exposed on Provenance so downstream code (e.g. `aliyun plugin which`) can report which layer served a given command.
 type Kind int
 
 // Enumerated Kinds. Order matters for provenance reporting: overrides win over user plugins, which win over baseline.

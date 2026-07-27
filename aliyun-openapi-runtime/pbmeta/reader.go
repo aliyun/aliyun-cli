@@ -110,6 +110,7 @@ func toCanonicalArguments(values []*Argument) ([]schema.ArgumentDefinition, erro
 			Options:     append([]string(nil), value.Options...),
 			HelpZH:      value.HelpZh,
 			HelpEN:      value.HelpEn,
+			Example:     value.Example,
 			Required:    value.Required,
 			Location:    value.Location,
 			ParamStyle:  value.ParamStyle,

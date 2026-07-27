@@ -26,8 +26,7 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/storage"
 )
 
-// BaselineSource is the read-only source over the shared
-// aliyun-openapi-meta "canonical" dataset embedded in the CLI binary.
+// BaselineSource is the read-only source over the shared aliyun-openapi-meta "canonical" dataset embedded in the CLI binary.
 //
 // Layout (relative to the injected FS root):
 //
@@ -35,9 +34,8 @@ import (
 //	canonical/<product>/<version>/version.json     per-version index
 //	metadatas/products.json                        product catalog + endpoints
 //
-// Product identity, version list and endpoints come from the central
-// products.json (loaded once); per-version indexes and per-API
-// definitions come from the canonical/ tree.
+// Product identity, version list and endpoints come from the central products.json (loaded once);
+// per-version indexes and per-API definitions come from the canonical/ tree.
 type BaselineSource struct {
 	fsys      fs.FS
 	canonical storage.Storage // rooted at canonical/

@@ -15,6 +15,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -67,6 +68,99 @@ func printAPIHelp(w io.Writer, product string, api *meta.API, lang string) error
 		}
 	}
 	return nil
+}
+
+// printProductHelp renders the commands exposed by one product/version. The
+// APIIndex is deliberately sufficient for this view: descriptions and
+// deprecation markers do not require reading any full API payload.
+func printProductHelp(w io.Writer, product *meta.Product, index *meta.APIIndex, lang string) error {
+	if w == nil {
+		return errors.New("product help output is nil")
+	}
+	if product == nil {
+		return errors.New("product help product is nil")
+	}
+	if index == nil {
+		return errors.New("product help index is nil")
+	}
+
+	l := productHelpLabelsFor(lang)
+	code := strings.ToLower(product.Code)
+	name := product.Name.Localized(lang)
+	if name == "" {
+		fmt.Fprintf(w, "%s: %s\n", l.product, code)
+	} else {
+		fmt.Fprintf(w, "%s: %s (%s)\n", l.product, code, name)
+	}
+	if description := product.Description.Localized(lang); description != "" {
+		fmt.Fprintf(w, "%s: %s\n", l.description, collapse(description))
+	}
+	if index.Version != "" {
+		fmt.Fprintf(w, "%s: %s\n", l.apiVersion, index.Version)
+	}
+	fmt.Fprintf(w, "\n%s:\n  aliyun %s <command> [parameters]\n", l.usage, code)
+
+	entries := make([]meta.APIIndexEntry, 0, len(index.Entries))
+	for _, entry := range index.Entries {
+		if entry.CmdName != "" {
+			entries = append(entries, entry)
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].CmdName < entries[j].CmdName })
+	if len(entries) > 0 {
+		fmt.Fprintf(w, "\n%s:\n", l.availableCommands)
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		for i := range entries {
+			entry := &entries[i]
+			description := collapse(entry.Description.Localized(lang))
+			if entry.Deprecated {
+				if description == "" {
+					description = l.deprecated
+				} else {
+					description = l.deprecated + " " + description
+				}
+			}
+			fmt.Fprintf(tw, "  %s\t%s\n", entry.CmdName, description)
+		}
+		if err := tw.Flush(); err != nil {
+			return err
+		}
+	}
+	fmt.Fprintf(w, "\n%s\n", fmt.Sprintf(l.moreHelp, code))
+	return nil
+}
+
+type productHelpLabels struct {
+	product           string
+	description       string
+	apiVersion        string
+	usage             string
+	availableCommands string
+	deprecated        string
+	moreHelp          string
+}
+
+func productHelpLabelsFor(lang string) productHelpLabels {
+	if lang == "zh" {
+		return productHelpLabels{
+			product:           "产品",
+			description:       "描述",
+			apiVersion:        "API 版本",
+			usage:             "使用",
+			availableCommands: "可用命令",
+			deprecated:        "[已废弃]",
+			moreHelp:          "运行 `aliyun %s <command> --help` 查看命令详情。",
+		}
+	}
+	return productHelpLabels{
+		product:           "Product",
+		description:       "Description",
+		apiVersion:        "API Version",
+		usage:             "Usage",
+		availableCommands: "Available Commands",
+		deprecated:        "[Deprecated]",
+		moreHelp:          "Run `aliyun %s <command> --help` for command details.",
+	}
 }
 
 // labels holds the localized section headers. The engine stays

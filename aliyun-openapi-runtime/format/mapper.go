@@ -113,6 +113,7 @@ func mapArgument(a *crschema.ArgumentDefinition) meta.Parameter {
 		Required:    a.Required,
 		Options:     a.Options,
 		Description: meta.Description{ZH: a.HelpZH, EN: a.HelpEN},
+		Example:     a.Example,
 		ParamStyle:  a.ParamStyle,
 	}
 

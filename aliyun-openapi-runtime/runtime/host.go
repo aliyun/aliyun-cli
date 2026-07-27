@@ -61,9 +61,12 @@ type Settings struct {
 	// host --skip-secure-verify). Not recommended.
 	SkipSecureVerify bool
 
-	// UserAgent is the final suffix/string the host wants appended on
-	// the OpenAPI client (custom --user-agent plus AI-mode segments).
-	// Empty means leave the SDK default.
+	// CLIVersion is the embedding CLI version (e.g. cli.GetVersion()).
+	// Stamped as Aliyun-CLI/{CLIVersion} in the request User-Agent.
+	CLIVersion string
+
+	// UserAgent is the host-supplied UA suffix after the engine base
+	// (custom --user-agent plus AI-mode segments). Empty means base only.
 	UserAgent string
 }
 
