@@ -346,17 +346,21 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 
 func (c *Command) processError(ctx *Context, err error) {
 	Errorf(ctx.Stderr(), "ERROR: %s\n", err.Error())
+	exitCode := 1
 	if e, ok := err.(SuggestibleError); ok {
 		PrintSuggestions(ctx, i18n.GetLanguage(), e.GetSuggestions())
-		Exit(2)
-		return
+		exitCode = 2
 	}
+	// An error can be both suggestible and carry a tip (e.g. InvalidCommandError
+	// prints "did you mean" suggestions and points to `<cmd> --help`). Print the
+	// tip too, but keep the suggestible exit code when both apply.
 	if e, ok := err.(ErrorWithTip); ok {
 		Noticef(ctx.Stderr(), "\n%s\n", e.GetTip(i18n.GetLanguage()))
-		Exit(3)
-		return
+		if exitCode == 1 {
+			exitCode = 3
+		}
 	}
-	Exit(1)
+	Exit(exitCode)
 }
 
 func (c *Command) executeHelp(ctx *Context, args []string) {

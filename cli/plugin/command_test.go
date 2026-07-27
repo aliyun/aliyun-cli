@@ -31,14 +31,34 @@ func TestNewPluginCommand(t *testing.T) {
 
 func TestNewPluginCommand_Run(t *testing.T) {
 	cmd := NewPluginCommand()
+	// plugin is a pure dispatcher: it has no Run of its own so that an unknown
+	// subcommand is reported as an invalid command (before flag parsing) and a
+	// bare `plugin` invocation falls back to help.
+	assert.Nil(t, cmd.Run)
+}
+
+func TestNewPluginCommand_UnknownSubcommand(t *testing.T) {
+	cli.DisableExitCode()
+	defer cli.EnableExitCode()
+
+	// Mirror the production hierarchy so the help hint reads `aliyun plugin`.
+	root := &cli.Command{Name: "aliyun"}
+	cmd := NewPluginCommand()
+	root.AddSubCommand(cmd)
+
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(stdout, stderr)
 	ctx.EnterCommand(cmd)
 
-	err := cmd.Run(ctx, []string{})
-	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "command missing")
+	// `plugin remove --name bailian`: `remove` is not a valid subcommand.
+	// The error must be about the invalid command, not the trailing --name flag.
+	cmd.Execute(ctx, []string{"remove", "--name", "bailian"})
+
+	assert.Contains(t, stderr.String(), "'remove' is not a valid command")
+	assert.NotContains(t, stderr.String(), "invalid flag")
+	// The error should also point the user to the plugin help.
+	assert.Contains(t, stderr.String(), "Use `aliyun plugin --help` for more information.")
 }
 
 func TestNewListCommand(t *testing.T) {

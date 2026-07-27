@@ -68,6 +68,13 @@ func (e *InvalidCommandError) GetSuggestions() []string {
 	return cmd.GetSuggestions(e.Name)
 }
 
+func (e *InvalidCommandError) GetTip(lang string) string {
+	if e.ctx != nil && e.ctx.command != nil {
+		return fmt.Sprintf("Use `%s --help` for more information.", e.ctx.command.getName())
+	}
+	return "Use `--help` for more information."
+}
+
 type InvalidFlagError struct {
 	Flag string
 	ctx  *Context

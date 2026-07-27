@@ -47,9 +47,10 @@ func NewPluginCommand() *cli.Command {
 		Short:                  i18n.T("Manage plugins", "管理插件"),
 		Usage:                  "plugin <command> [args]",
 		DisablePersistentFlags: true,
-		Run: func(ctx *cli.Context, args []string) error {
-			return cli.NewErrorWithTip(fmt.Errorf("command missing"), "Use `aliyun plugin --help` for more information.")
-		},
+		// No Run: plugin is a pure dispatcher. Leaving Run nil lets the
+		// framework report an unknown subcommand (e.g. `plugin remove`) as
+		// an invalid command before it tries to parse the trailing flags,
+		// and show help when invoked with no subcommand.
 	}
 
 	cmd.AddSubCommand(newListCommand())
