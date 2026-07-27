@@ -92,14 +92,19 @@ func (c *Context) errorf(format string, a ...interface{}) {
 func (c *Context) Run(args []string) error {
 	// `aliyun ossutil` hands args verbatim to the external ossutil binary, so
 	// the CLI-side --estimate-cost interception (wired on the `aliyun oss`
-	// bridge) can never see them — including `ossutil api <Operation>` raw
-	// OpenAPI calls. Fail fast with a pointer to the supported form instead of
-	// letting the external binary reject (or silently ignore) the flag.
-	for _, arg := range args {
-		if arg == "--estimate-cost" || strings.HasPrefix(arg, "--estimate-cost=") ||
-			arg == "--estimate-cost-context" || strings.HasPrefix(arg, "--estimate-cost-context=") {
-			return fmt.Errorf("--estimate-cost is not supported under `aliyun ossutil` (args are passed through to the external ossutil binary); use `aliyun oss <ApiName> --estimate-cost` instead, e.g. `aliyun oss PutBucket --estimate-cost`")
+	// bridge) can never see them. `ossutil api <operation>` is a raw OpenAPI
+	// call though — same semantics the quote pipeline expects — so with
+	// --estimate-cost it is parsed here and routed to a quote (never executed).
+	// File/bucket management subcommands (cp/ls/mb…) meter data transfer and
+	// storage, not API pricing, so for them the flag fails fast with the
+	// supported alternatives. Both happen before the ossutil install/credential
+	// machinery below: a quote (or a usage error) must not trigger a binary
+	// download.
+	if hasEstimateCostFlag(args) {
+		if len(args) > 0 && args[0] == "api" {
+			return c.runApiEstimateCost(args[1:])
 		}
+		return fmt.Errorf("--estimate-cost only applies to OpenAPI calls; ossutil file commands (cp/ls/mb/...) meter data transfer and storage instead. Use `aliyun ossutil api <operation> --estimate-cost` or `aliyun oss <ApiName> --estimate-cost`")
 	}
 	// init config path and some basic info
 	c.InitBasicInfo()
@@ -696,4 +701,91 @@ func GetLatestOssUtilVersion() (string, error) {
 		return "", fmt.Errorf("failed to parse version from response body: %v", err)
 	}
 	return version, nil
+}
+
+// hasEstimateCostFlag reports whether the raw ossutil args carry
+// --estimate-cost / --estimate-cost-context (either flag form).
+func hasEstimateCostFlag(args []string) bool {
+	for _, arg := range args {
+		if arg == "--estimate-cost" || strings.HasPrefix(arg, "--estimate-cost=") ||
+			arg == "--estimate-cost-context" || strings.HasPrefix(arg, "--estimate-cost-context=") {
+			return true
+		}
+	}
+	return false
+}
+
+// runApiEstimateCost quotes `aliyun ossutil api <operation> ... --estimate-cost`.
+// Args are raw (KeepArgs), so flags are parsed by hand: the first non-flag
+// token is the operation (ossutil kebab-case is normalized to the PascalCase
+// name the pricing registry uses), `--region` becomes the RegionId fallback,
+// `--estimate-cost-context K=V` pairs feed PricingContext, and every other
+// `--flag value` pair is forwarded as an OpenAPI parameter.
+func (c *Context) runApiEstimateCost(args []string) error {
+	operation := ""
+	parameters := make(map[string]interface{})
+	pricingContext := make(map[string]interface{})
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if !strings.HasPrefix(arg, "--") {
+			if operation == "" {
+				operation = kebabToPascal(arg)
+			}
+			continue
+		}
+		name := strings.TrimPrefix(arg, "--")
+		value := ""
+		hasValue := false
+		if eq := strings.Index(name, "="); eq >= 0 {
+			name, value, hasValue = name[:eq], name[eq+1:], true
+		} else if i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
+			value, hasValue = args[i+1], true
+			i++
+		}
+		switch name {
+		case "estimate-cost":
+			// Bool marker; a greedily consumed trailing token is the operation.
+			if hasValue && value != "" && value != "true" && value != "false" {
+				if operation == "" {
+					operation = kebabToPascal(value)
+				}
+			}
+		case "estimate-cost-context":
+			if k, v, ok := strings.Cut(value, "="); ok && hasValue {
+				pricingContext[k] = v
+			} else {
+				return fmt.Errorf("invalid --estimate-cost-context `%s`, use Key=Value", value)
+			}
+		case "region":
+			if hasValue && value != "" {
+				parameters["RegionId"] = value
+			}
+		default:
+			if !hasValue || value == "" {
+				parameters[kebabToPascal(name)] = "true"
+			} else {
+				parameters[kebabToPascal(name)] = value
+			}
+		}
+	}
+	if operation == "" {
+		return fmt.Errorf("--estimate-cost on `aliyun ossutil api` requires an operation name, e.g. `aliyun ossutil api put-bucket --estimate-cost`")
+	}
+	return openapi.EstimateOssCost(c.originCtx, operation, parameters, pricingContext)
+}
+
+// kebabToPascal turns ossutil-style names into the PascalCase identifiers the
+// pricing registry uses: put-bucket -> PutBucket, storage-class ->
+// StorageClass. Already-Pascal input passes through unchanged.
+func kebabToPascal(s string) string {
+	parts := strings.Split(s, "-")
+	var b strings.Builder
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		b.WriteString(strings.ToUpper(part[:1]))
+		b.WriteString(part[1:])
+	}
+	return b.String()
 }

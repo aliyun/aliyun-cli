@@ -160,3 +160,33 @@ func buildOssEstimateCostParameters(ctx *cli.Context, profile *config.Profile) m
 	}
 	return parameters
 }
+
+// EstimateOssCost quotes an OSS OpenAPI call from pre-collected parameters.
+// It exists for callers whose argument list never goes through the flag
+// framework — the `aliyun ossutil` passthrough keeps args verbatim for the
+// external binary, so it parses them itself and hands the result here. The
+// quote is routed to CloudControl GetApiPrice; no OSS call is made.
+func EstimateOssCost(ctx *cli.Context, apiName string, parameters map[string]interface{}, pricingContext map[string]interface{}) error {
+	profile, err := config.LoadProfileWithContext(ctx)
+	if err != nil {
+		return cli.NewErrorWithTip(err,
+			"cost estimation needs a configured profile; run `aliyun configure` first")
+	}
+	if parameters == nil {
+		parameters = make(map[string]interface{})
+	}
+	if _, ok := parameters["RegionId"]; !ok && profile.RegionId != "" {
+		parameters["RegionId"] = profile.RegionId
+	}
+	if len(pricingContext) > 0 {
+		parameters["PricingContext"] = pricingContext
+	}
+	out, err := invokeEstimateCost(ctx, &profile, ossPopCode, ossDefaultPopVersion, apiName, parameters)
+	if err != nil {
+		return err
+	}
+	if err := printEstimateCostResult(ctx, out); err != nil {
+		return err
+	}
+	return estimateCostBusinessError(out)
+}

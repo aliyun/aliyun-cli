@@ -110,14 +110,37 @@ func TestOssutilCommandRunInstalledSkipNetwork(t *testing.T) {
 	}
 }
 
-func TestOssutilRejectsEstimateCost(t *testing.T) {
+func TestOssutilEstimateCostRouting(t *testing.T) {
+	// File/bucket commands meter transfer/storage, not API pricing: reject
+	// before any install/credential machinery (zero-value Context proves no
+	// environment is touched) and point at both supported forms.
 	ctx := &Context{}
-	err := ctx.Run([]string{"api", "PutBucket", "--estimate-cost"})
-	if err == nil || !strings.Contains(err.Error(), "aliyun oss <ApiName> --estimate-cost") {
-		t.Fatalf("expected estimate-cost rejection with hint, got %v", err)
+	err := ctx.Run([]string{"ls", "--estimate-cost"})
+	if err == nil || !strings.Contains(err.Error(), "aliyun ossutil api <operation> --estimate-cost") {
+		t.Fatalf("expected file-command rejection with hint, got %v", err)
 	}
-	err = ctx.Run([]string{"ls", "--estimate-cost-context", "K=V"})
-	if err == nil || !strings.Contains(err.Error(), "not supported under") {
+	err = ctx.Run([]string{"cp", "a", "oss://b", "--estimate-cost-context", "K=V"})
+	if err == nil || !strings.Contains(err.Error(), "only applies to OpenAPI calls") {
 		t.Fatalf("expected estimate-cost-context rejection, got %v", err)
+	}
+	// api subcommand without an operation name: parsed locally, still no
+	// environment access.
+	err = ctx.Run([]string{"api", "--estimate-cost"})
+	if err == nil || !strings.Contains(err.Error(), "requires an operation name") {
+		t.Fatalf("expected missing-operation error, got %v", err)
+	}
+}
+
+func TestOssutilKebabToPascal(t *testing.T) {
+	cases := map[string]string{
+		"put-bucket":    "PutBucket",
+		"storage-class": "StorageClass",
+		"PutBucket":     "PutBucket",
+		"acl":           "Acl",
+	}
+	for in, want := range cases {
+		if got := kebabToPascal(in); got != want {
+			t.Fatalf("kebabToPascal(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
