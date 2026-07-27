@@ -560,10 +560,36 @@ func TestReservedDryRunVariants(t *testing.T) {
 	if !res.Reserved.DryRun || !res.Reserved.DryRunJSON {
 		t.Fatalf("cli-dry-run-json: DryRun=%v DryRunJSON=%v", res.Reserved.DryRun, res.Reserved.DryRunJSON)
 	}
-	// --dry-run is an ergonomic alias of --cli-dry-run (human mode).
-	res = mustParse(t, "--dry-run", "--image-cache-name", "c1")
-	if !res.Reserved.DryRun || res.Reserved.DryRunJSON {
-		t.Fatalf("dry-run alias: DryRun=%v DryRunJSON=%v", res.Reserved.DryRun, res.Reserved.DryRunJSON)
+}
+
+func TestDryRunIsAPIParamNotReserved(t *testing.T) {
+	// --dry-run must NOT be a CLI reserved switch; it belongs to API
+	// params (DryRun). Coexist with --cli-dry-run for preflight.
+	params := []meta.Parameter{
+		{Name: "image_cache_name", RawName: "ImageCacheName", Type: meta.TypeString, Options: []string{"--image-cache-name"}},
+		{Name: "dry_run", RawName: "DryRun", Type: meta.TypeBoolean, Options: []string{"--dry-run"}},
+		{Name: "encrypted", RawName: "Encrypted", Type: meta.TypeBoolean, Options: []string{"--encrypted"}},
+	}
+	res, err := Parse(params, []string{
+		"--cli-dry-run",
+		"--dry-run", "true",
+		"--encrypted", "false",
+		"--image-cache-name", "c1",
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if !res.Reserved.DryRun {
+		t.Fatal("--cli-dry-run must set Reserved.DryRun")
+	}
+	if res.Reserved.DryRunJSON {
+		t.Fatal("--cli-dry-run must not set DryRunJSON")
+	}
+	if got := res.Args["DryRun"]; got != true {
+		t.Fatalf("API DryRun = %#v, want true", got)
+	}
+	if got := res.Args["Encrypted"]; got != false {
+		t.Fatalf("Encrypted = %#v, want false", got)
 	}
 }
 

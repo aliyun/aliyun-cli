@@ -60,7 +60,9 @@ type Reserved struct {
 	// convention so users get the same UX across engines:
 	//   --cli-dry-run       -> DryRun, human-readable request dump
 	//   --cli-dry-run-json  -> DryRun + DryRunJSON, one-line meta JSON
-	// --dry-run is kept as an ergonomic alias of --cli-dry-run.
+	// Do NOT reserve --dry-run: that name belongs to API params
+	// (e.g. DryRun -> --dry-run true|false). CLI preflight uses
+	// --cli-dry-run / --cli-dry-run-json only.
 	DryRun     bool
 	DryRunJSON bool
 
@@ -130,7 +132,6 @@ var reservedSpec = map[string]struct {
 	"body-file":        {true, func(r *Reserved, v string) { r.BodyFile = v }},
 	"cli-dry-run":      {false, func(r *Reserved, _ string) { r.DryRun = true }},
 	"cli-dry-run-json": {false, func(r *Reserved, _ string) { r.DryRun = true; r.DryRunJSON = true }},
-	"dry-run":          {false, func(r *Reserved, _ string) { r.DryRun = true }},
 	"help":             {false, func(r *Reserved, _ string) { r.Help = true }},
 	"quiet":            {false, func(r *Reserved, _ string) { r.Quiet = true }},
 	"secure":           {false, func(r *Reserved, _ string) { r.Secure = true }},
@@ -276,9 +277,9 @@ var reservedHelp = []ReservedFlag{
 }
 
 // ReservedFlags returns the engine's reserved (global) flags for help
-// rendering, in a stable user-facing order. The --help / -h, --dry-run
-// alias, hidden --output / --waiter / --estimate-cost* are intentionally
-// omitted (plugin parity).
+// rendering, in a stable user-facing order. The --help / -h and hidden
+// --output / --waiter / --estimate-cost* are intentionally omitted
+// (plugin parity). --dry-run is not reserved (API param name).
 func ReservedFlags() []ReservedFlag {
 	out := make([]ReservedFlag, len(reservedHelp))
 	copy(out, reservedHelp)
