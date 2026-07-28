@@ -15,7 +15,6 @@
 package runtime
 
 import (
-	"context"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -132,7 +131,7 @@ func TestExecuteDryRun(t *testing.T) {
 		DryRun: true,
 		Args:   map[string]any{"ImageCacheName": "c1"},
 	}
-	resp, err := NewExecutor().Execute(context.Background(), ec)
+	resp, err := NewExecutor().Execute(ec)
 	if err != nil {
 		t.Fatalf("Execute dry-run: %v", err)
 	}
@@ -158,7 +157,7 @@ func TestExecuteNoCredentialFails(t *testing.T) {
 		Region: "cn-beijing",
 		Args:   map[string]any{"ImageCacheName": "c1"},
 	}
-	_, err := NewExecutor().Execute(context.Background(), ec)
+	_, err := NewExecutor().Execute(ec)
 	if err == nil {
 		t.Fatal("expected error without credential")
 	}

@@ -32,6 +32,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/util"
 
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -204,65 +205,33 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		return nil
 	}
 
-	// Check if we should show original product help instead of plugin help, only and need to be applied in product level
-	envShowOriginalHelp := os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP")
-	showOriginalProductHelp := envShowOriginalHelp == "true" || envShowOriginalHelp == "1"
-
 	// Strategy: Plugin Execution
 	// If the second argument (API name) is all lowercase or version, use plugin.
-	// If only one arg and corresponding plugin is installed, use plugin, unless showOriginalProductHelp is true.
-	// If only one arg and corresponding plugin is not installed, show original product help.
+	// Product-level help (one arg) is routed centrally by printProductUsage.
 
 	// fmt.Println("args", args)
 	// fmt.Println("os.Args", os.Args)
-	if len(args) == 1 && !showOriginalProductHelp {
-		// 单产品输入，无论是否添加--help，都先由安装的插件运行，插件未安装则执行下面的运行逻辑
-		// 使用 ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP 环境变量可以显示原始产品的 help 信息，而不是插件 help
-		// 单产品运行就是--help
-		installed, pluginName, err := plugin.IsPluginInstalled(args[0])
+	if len(args) == 1 {
+		installed, _, err := plugin.IsPluginInstalled(args[0])
 		if err != nil {
 			return fmt.Errorf("failed to check plugin status: %w", err)
 		}
-		if installed {
-			c.setLangEnv(ctx)
-			if os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP") == "true" {
-				// Fall through to built-in help
-			} else {
-				if ptype, ok := plugin.InstalledPluginType(args[0]); ok && ptype == plugin.PluginTypeMeta {
-					if err := runtimehost.ProductHelp(ctx, args[0]); err != nil {
-						return err
-					}
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\nNote: The help information for product '%s' is provided by the installed plugin '%s'.\n", args[0], pluginName)
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "To view the legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true\n")
-					return nil
+		if installed || cli.HelpFlag(ctx.Flags()).IsAssigned() {
+			c.loadPlugins()
+			if installed {
+				// Product-help routing must observe the current local manifest
+				// even when this Commando instance loaded plugins earlier.
+				mgr, managerErr := plugin.NewManager()
+				if managerErr != nil {
+					return managerErr
 				}
-				// Extract arguments from os.Args to preserve flags for plugin help, like --api-version
-				var pluginArgs []string
-				cmdIndex := -1
-				for i, arg := range os.Args {
-					if arg == args[0] {
-						cmdIndex = i
-						break
-					}
-				}
-				if cmdIndex != -1 && cmdIndex < len(os.Args) {
-					pluginArgs = os.Args[cmdIndex:]
-				} else {
-					pluginArgs = args
-				}
-
-				ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
-				if err != nil {
-					return err
-				}
-				if ok {
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\nNote: The help information for product '%s' is provided by the installed plugin '%s'.\n", args[0], pluginName)
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "To view the legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true\n")
-					return nil
-				}
+				c.localManifest, _ = mgr.GetLocalManifest()
 			}
+			if cli.HelpFlag(ctx.Flags()).IsAssigned() {
+				ctx.Command().PrintHead(ctx)
+			}
+			return c.printProductUsage(ctx, args[0])
 		}
-
 	} else if len(args) > 1 {
 		apiOrMethod := args[1]
 		// Check if it's all lowercase (plugin format) and not an HTTP method
@@ -440,14 +409,13 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	//   aliyun <productCode> GET <path>
 	productName := args[0]
 	if len(args) == 1 {
-		// aliyun <productCode>
-		// TODO: aliyun pluginName ...
-		if _, ok := c.library.GetProduct(productName); !ok {
-			if handled, err := runtimehost.TryProductHelp(ctx, productName); handled {
-				return err
-			}
+		c.loadPlugins()
+		err := c.printProductUsage(ctx, productName)
+		var invalid *InvalidProductOrPluginError
+		if errors.As(err, &invalid) {
+			return &InvalidProductError{Code: productName, library: c.library}
 		}
-		return c.library.PrintProductUsage(productName, true)
+		return err
 	} else if len(args) == 2 {
 		// rpc or restful call
 		// aliyun <productCode> <method> --param1 value1

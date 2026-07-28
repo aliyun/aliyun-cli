@@ -36,10 +36,8 @@ func IsPluginInstalled(command string) (bool, string, error) {
 	return true, pluginName, nil
 }
 
-// InstalledPluginType returns the distribution type ("go" | "meta") of
-// the installed plugin serving command, and ok=false when no plugin is
-// installed for it. An installed plugin with an unset type is reported
-// as "go" (legacy default).
+// InstalledPluginType returns the distribution type ("go" | "meta") of the installed plugin serving command,
+// and ok=false when no plugin is installed for it. An installed plugin with an unset type is reported as "go" (legacy default).
 func InstalledPluginType(command string) (pluginType string, ok bool) {
 	mgr, err := NewManager()
 	if err != nil {

@@ -73,7 +73,9 @@ func TestDirSourceLoadsJSONLPluginByManifestProductCode(t *testing.T) {
 	if provenance.Origin != pluginDir {
 		t.Fatalf("provenance origin = %q, want %q", provenance.Origin, pluginDir)
 	}
-	idx, err := src.LoadIndex("ecs", "2014-05-26")
+	dirSrc := src.(*dirSource)
+	cachedReader := dirSrc.plugins["ecs"].reader
+	idx, err := src.LoadAPIIndex("ecs", "2014-05-26")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,6 +94,9 @@ func TestDirSourceLoadsJSONLPluginByManifestProductCode(t *testing.T) {
 	}
 	if got := api.Endpoints.Public["cn-hangzhou"]; got != "ecs.cn-hangzhou.aliyuncs.com" {
 		t.Fatalf("api endpoint = %q", got)
+	}
+	if dirSrc.plugins["ecs"].reader != cachedReader {
+		t.Fatal("LoadAPIIndex/LoadAPI replaced the invocation-scoped indexed reader")
 	}
 }
 

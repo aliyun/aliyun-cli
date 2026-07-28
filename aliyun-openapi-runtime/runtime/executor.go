@@ -28,7 +28,6 @@ package runtime
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,7 +45,7 @@ import (
 
 // Executor runs one API call end-to-end.
 type Executor interface {
-	Execute(ctx context.Context, ec *ExecContext) (*Response, error)
+	Execute(ec *ExecContext) (*Response, error)
 }
 
 // ExecContext bundles everything the Executor needs to make a call.
@@ -148,7 +147,7 @@ func NewExecutor() *DefaultExecutor { return &DefaultExecutor{} }
 // dry run it returns the AssembledRequest untouched; how it is
 // rendered (human dump vs one-line meta JSON) is the caller's
 // concern.
-func (e *DefaultExecutor) Execute(ctx context.Context, ec *ExecContext) (*Response, error) {
+func (e *DefaultExecutor) Execute(ec *ExecContext) (*Response, error) {
 	req, err := Assemble(ec)
 	if err != nil {
 		return nil, err
@@ -156,7 +155,7 @@ func (e *DefaultExecutor) Execute(ctx context.Context, ec *ExecContext) (*Respon
 	if ec.DryRun {
 		return &Response{StatusCode: 0, Assembled: req}, nil
 	}
-	return send(ctx, ec, req)
+	return send(ec, req)
 }
 
 // Assemble is the pure translation from meta + args to wire request.
@@ -306,7 +305,7 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 	return req, nil
 }
 
-func send(_ context.Context, ec *ExecContext, req *AssembledRequest) (*Response, error) {
+func send(ec *ExecContext, req *AssembledRequest) (*Response, error) {
 	if ec.Credential == nil {
 		return nil, errors.New("runtime: no credential resolved; run `aliyun configure` or pass --dry-run")
 	}

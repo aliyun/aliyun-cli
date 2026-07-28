@@ -2840,7 +2840,7 @@ exit 0
 		assert.Contains(t, err.Error(), "not found")
 	})
 
-	t.Run("Environment variable ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP skips plugin for single arg", func(t *testing.T) {
+	t.Run("Original help env keeps plugin help when no legacy product exists", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("shell script test skipped on Windows")
 		}
@@ -2875,7 +2875,7 @@ exit 0
 		assert.NoError(t, err)
 
 		mockPluginScript := `#!/bin/bash
-echo "Plugin should not execute"
+echo "Plugin product help"
 exit 0
 `
 		err = os.WriteFile(pluginPath, []byte(mockPluginScript), 0755)
@@ -2888,11 +2888,10 @@ exit 0
 		stdout.Reset()
 		err = command.main(ctx, args)
 
-		// With ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true and single arg,
-		// plugin execution is skipped
-		assert.NotNil(t, err)
-		assert.Contains(t, err.Error(), "not a valid command or product")
-		assert.NotContains(t, stdout.String(), "Plugin should not execute")
+		// There is no legacy product named envtest, so the installed plugin
+		// remains the only valid product-help source.
+		assert.NoError(t, err)
+		assert.Contains(t, stdout.String(), "Plugin product help")
 
 	})
 
@@ -3096,11 +3095,10 @@ exit 0
 		assert.Contains(t, err.Error(), "failed to check plugin status")
 	})
 
-	t.Run("Single arg - with ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true", func(t *testing.T) {
+	t.Run("Single arg - original env keeps plugin when legacy help is unavailable", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("shell script test skipped on Windows")
 		}
-		// Test that environment variable skips the entire plugin check block
 		originalEnv := os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP")
 		os.Setenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP", "true")
 		defer func() {
@@ -3129,7 +3127,7 @@ exit 0
 		assert.NoError(t, err)
 
 		mockPluginScript := `#!/bin/bash
-echo "Should not execute"
+echo "Plugin-only product help"
 exit 0
 `
 		err = os.WriteFile(pluginPath, []byte(mockPluginScript), 0755)
@@ -3141,12 +3139,8 @@ exit 0
 		stdout.Reset()
 		err = command.main(ctx, args)
 
-		// With ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true, the entire if block is skipped
-		// Plugin should NOT be executed
-		assert.NotContains(t, stdout.String(), "Should not execute")
-
-		// Should try to process as normal product command
-		assert.Error(t, err)
+		assert.NoError(t, err)
+		assert.Contains(t, stdout.String(), "Plugin-only product help")
 	})
 }
 

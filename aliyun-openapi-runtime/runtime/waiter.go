@@ -16,7 +16,6 @@ package runtime
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -59,14 +58,14 @@ func NewWaiter(cfg *argparser.WaiterConfig) *Waiter {
 
 // CallWithWaiter repeatedly Execute-s until the expression matches or
 // the timeout elapses. Returns the last matching response body.
-func CallWithWaiter(ctx context.Context, exec Executor, ec *ExecContext, cfg *argparser.WaiterConfig) (*Response, error) {
+func CallWithWaiter(exec Executor, ec *ExecContext, cfg *argparser.WaiterConfig) (*Response, error) {
 	w := NewWaiter(cfg)
 	if w.Expr == "" || w.To == "" {
 		return nil, fmt.Errorf("--waiter requires expr=... and to=...")
 	}
 	begin := time.Now()
 	for {
-		resp, err := exec.Execute(ctx, ec)
+		resp, err := exec.Execute(ec)
 		if err != nil {
 			return nil, err
 		}
@@ -81,11 +80,7 @@ func CallWithWaiter(ctx context.Context, exec Executor, ec *ExecContext, cfg *ar
 			return nil, fmt.Errorf("wait '%s' to '%s' timeout (%d seconds), last='%s'",
 				w.Expr, w.To, int(w.Timeout.Seconds()), v)
 		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(w.Interval):
-		}
+		time.Sleep(w.Interval)
 	}
 }
 

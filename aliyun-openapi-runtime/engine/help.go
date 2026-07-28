@@ -70,9 +70,6 @@ func printAPIHelp(w io.Writer, product string, api *meta.API, lang string) error
 	return nil
 }
 
-// printProductHelp renders the commands exposed by one product/version. The
-// APIIndex is deliberately sufficient for this view: descriptions and
-// deprecation markers do not require reading any full API payload.
 func printProductHelp(w io.Writer, product *meta.Product, index *meta.APIIndex, lang string) error {
 	if w == nil {
 		return errors.New("product help output is nil")
@@ -109,10 +106,9 @@ func printProductHelp(w io.Writer, product *meta.Product, index *meta.APIIndex, 
 	sort.Slice(entries, func(i, j int) bool { return entries[i].CmdName < entries[j].CmdName })
 	if len(entries) > 0 {
 		fmt.Fprintf(w, "\n%s:\n", l.availableCommands)
-		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 		for i := range entries {
 			entry := &entries[i]
-			description := collapse(entry.Description.Localized(lang))
+			description := entry.Description.Localized(lang)
 			if entry.Deprecated {
 				if description == "" {
 					description = l.deprecated
@@ -120,10 +116,7 @@ func printProductHelp(w io.Writer, product *meta.Product, index *meta.APIIndex, 
 					description = l.deprecated + " " + description
 				}
 			}
-			fmt.Fprintf(tw, "  %s\t%s\n", entry.CmdName, description)
-		}
-		if err := tw.Flush(); err != nil {
-			return err
+			printSubCommandWithDescription(w, entry.CmdName, description, 30)
 		}
 	}
 	fmt.Fprintf(w, "\n%s\n", fmt.Sprintf(l.moreHelp, code))
@@ -278,6 +271,54 @@ func getMaxLineLength() int {
 		return length
 	}
 	return defaultMaxLineLength
+}
+
+// printSubCommandWithDescription mirrors aliyun-cli-runtime's product-help
+// layout: a fixed-width command column followed by a wrapped description.
+// Continuation lines retain the empty command column, and users can control
+// the total line width through ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH.
+func printSubCommandWithDescription(w io.Writer, cmdName, description string, nameWidth int) {
+	maxTextLength := getMaxLineLength() - nameWidth - 3 // two-space indent + name column + separator
+	if maxTextLength < 20 {
+		maxTextLength = 20
+	}
+	if description == "" {
+		fmt.Fprintf(w, "  %-*s\n", nameWidth, cmdName)
+		return
+	}
+
+	emptyPrefix := strings.Repeat(" ", nameWidth+3)
+	first := true
+	for _, line := range strings.Split(description, "\n") {
+		runes := []rune(strings.TrimSpace(line))
+		for start := 0; start < len(runes); {
+			end := start + maxTextLength
+			if end > len(runes) {
+				end = len(runes)
+			}
+			breakPoint := end
+			if end < len(runes) {
+				for i := end - 1; i > start+maxTextLength/2; i-- {
+					switch runes[i] {
+					case ' ', ',', '.', ';', '，', '。', '、':
+						breakPoint = i + 1
+						i = start
+					}
+				}
+			}
+			chunk := strings.TrimSpace(string(runes[start:breakPoint]))
+			if first {
+				fmt.Fprintf(w, "  %-*s %s\n", nameWidth, cmdName, chunk)
+				first = false
+			} else {
+				fmt.Fprintf(w, "%s%s\n", emptyPrefix, chunk)
+			}
+			start = breakPoint
+			for start < len(runes) && runes[start] == ' ' {
+				start++
+			}
+		}
+	}
 }
 
 // printWrappedLine writes "  <prefix>\t<text>" with text wrapped to the

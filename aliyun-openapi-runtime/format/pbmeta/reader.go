@@ -38,6 +38,11 @@ type Reader struct {
 	indexed *indexed.Reader
 }
 
+// NewReader adds protobuf decoding to an already opened indexed reader.
+func NewReader(reader *indexed.Reader) *Reader {
+	return &Reader{indexed: reader}
+}
+
 func Open(vol storage.Volume, indexFile, dataFile string) (*Reader, error) {
 	if dataFile == "" {
 		dataFile = DataFileName
@@ -46,7 +51,7 @@ func Open(vol storage.Volume, indexFile, dataFile string) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Reader{indexed: reader}, nil
+	return NewReader(reader), nil
 }
 
 func (r *Reader) VerifyChecksum() error { return r.indexed.VerifyChecksum() }

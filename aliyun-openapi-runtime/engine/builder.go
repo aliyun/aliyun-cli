@@ -24,7 +24,6 @@ package engine
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -84,23 +83,18 @@ func (e *Engine) Resolvable(product, command string) bool {
 	return ldr.CommandExists(product, command)
 }
 
+// Request carries one engine call. Shared by Dispatch and ProductHelp:
+//
+//	Dispatch:     Args = "<product> <command> [--flag ...]" (Host usually required)
+//	ProductHelp:  Args = "<product> [--api-version ...]"    (Host unused)
 type Request struct {
-	// Args is the raw argv tail: "<product> <command> [--flag ...]".
 	Args []string
-	// Out receives all rendered output.
-	Out io.Writer
+	Out  io.Writer
 	// Lang selects help/description locale ("zh" / "en"). Empty => en.
 	Lang string
-	// Host supplies region + credentials. May be nil for a pure
-	// dry-run that needs neither (endpoint then resolves region-less).
+	// Host supplies region + credentials. May be nil for help or dry-run
+	// that needs neither (endpoint then resolves region-less).
 	Host runtime.Host
-}
-
-type ProductHelpRequest struct {
-	Product string
-	Version string
-	Out     io.Writer
-	Lang    string
 }
 
 func (e *Engine) HasProduct(product string) bool {
@@ -112,12 +106,16 @@ func (e *Engine) HasProduct(product string) bool {
 }
 
 // ProductHelp renders the product's kebab-case command list from its selected metadata index.
-func (e *Engine) ProductHelp(req ProductHelpRequest) error {
+// req.Args must start with the product code; optional --api-version selects a non-default version.
+func (e *Engine) ProductHelp(req Request) error {
 	ldr, err := e.getLoader()
 	if err != nil {
 		return fmt.Errorf("openapi-runtime loader: %w", err)
 	}
-	productCode := strings.ToLower(strings.TrimSpace(req.Product))
+	if len(req.Args) < 1 {
+		return errors.New("product is required")
+	}
+	productCode := strings.ToLower(strings.TrimSpace(req.Args[0]))
 	if productCode == "" {
 		return errors.New("product is required")
 	}
@@ -128,11 +126,11 @@ func (e *Engine) ProductHelp(req ProductHelpRequest) error {
 	if product == nil {
 		return fmt.Errorf("unknown product %q", productCode)
 	}
-	version, err := ldr.ResolveVersion(productCode, req.Version)
+	version, err := ldr.ResolveVersion(productCode, scanAPIVersion(req.Args[1:]))
 	if err != nil {
 		return err
 	}
-	index, err := ldr.GetIndex(productCode, version)
+	index, err := ldr.GetAPIIndex(productCode, version)
 	if err != nil {
 		return fmt.Errorf("load product index %s@%s: %w", productCode, version, err)
 	}
@@ -156,10 +154,8 @@ func (e *Engine) Dispatch(req Request) error {
 	}
 	cmdName := args[1]
 
-	// Pre-scan the raw tail for --api-version so command resolution and
-	// metadata loading target the requested version (not just the
-	// product default). Without this, an older version requested via
-	// --api-version would still resolve/execute against the default.
+	// Pre-scan the raw tail for --api-version so command resolution and metadata loading target the requested version (not just the product default).
+	// Without this, an older version requested via --api-version would still resolve/execute against the default.
 	reqVersion := scanAPIVersion(args[2:])
 
 	ref, err := ldr.ResolveCommandVersion(product, cmdName, reqVersion)
@@ -271,7 +267,6 @@ func (e *Engine) Dispatch(req Request) error {
 	runtime.InitLogger(res.Reserved.LogLevel, res.Reserved.DryRun)
 	runtime.LogArgs(res.Args)
 
-	ctx := context.Background()
 	if runtime.PriceModeEnabled(res.Reserved.EstimateCost) {
 		assembled, aerr := runtime.Assemble(ec)
 		if aerr != nil {
@@ -284,7 +279,7 @@ func (e *Engine) Dispatch(req Request) error {
 		if runtime.IsAPIDryRunRequested(assembled) {
 			callEC := *ec
 			callEC.DryRun = false
-			if _, callErr := e.executor.Execute(ctx, &callEC); callErr != nil && !runtime.IsDryRunPassError(callErr) {
+			if _, callErr := e.executor.Execute(&callEC); callErr != nil && !runtime.IsDryRunPassError(callErr) {
 				return callErr
 			}
 			runtime.StripAPIDryRun(assembled)
@@ -309,11 +304,11 @@ func (e *Engine) Dispatch(req Request) error {
 	var resp *runtime.Response
 	switch {
 	case res.Reserved.Pager != nil:
-		resp, err = runtime.CallWithPager(ctx, e.executor, ec, res.Reserved.Pager)
+		resp, err = runtime.CallWithPager(e.executor, ec, res.Reserved.Pager)
 	case res.Reserved.Waiter != nil:
-		resp, err = runtime.CallWithWaiter(ctx, e.executor, ec, res.Reserved.Waiter)
+		resp, err = runtime.CallWithWaiter(e.executor, ec, res.Reserved.Waiter)
 	default:
-		resp, err = e.executor.Execute(ctx, ec)
+		resp, err = e.executor.Execute(ec)
 	}
 	if err != nil {
 		return err
@@ -330,11 +325,7 @@ func (e *Engine) Dispatch(req Request) error {
 	return renderResponse(req.Out, resp, res.Reserved.CliQuery)
 }
 
-// scanAPIVersion extracts the value of --api-version from a raw argv
-// tail, supporting both "--api-version X" and "--api-version=X" forms.
-// Returns "" when the flag is absent. It is deliberately a cheap,
-// dependency-free pre-pass: command resolution needs the version
-// before the full parameter set (which is version-specific) is known.
+// scanAPIVersion extracts the value of --api-version from a raw argv tail, supporting both "--api-version X" and "--api-version=X" forms.
 func scanAPIVersion(args []string) string {
 	const flag = "--api-version"
 	for i := 0; i < len(args); i++ {

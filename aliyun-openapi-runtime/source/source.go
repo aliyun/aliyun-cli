@@ -77,8 +77,8 @@ type Source interface {
 	// LoadProduct returns the product manifest along with a Provenance record. Missing product -> ErrNotFound.
 	LoadProduct(code string) (*meta.Product, *Provenance, error)
 
-	// LoadIndex returns the per-(product, version) lightweight index. Missing product/version -> ErrNotFound.
-	LoadIndex(code, version string) (*meta.APIIndex, error)
+	// LoadAPIIndex returns the per-(product, version) logical command index.
+	LoadAPIIndex(code, version string) (*meta.APIIndex, error)
 
 	// LoadAPI returns the full per-API meta. Missing anything ->
 	// ErrNotFound. Implementations SHOULD prefer returning the sentinel over wrapping storage-level errors

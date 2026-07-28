@@ -15,7 +15,6 @@
 package runtime
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -25,12 +24,12 @@ import (
 )
 
 type fakeExec struct {
-	bodies []string
-	n      int
+	bodies  []string
+	n       int
 	queries []map[string]string
 }
 
-func (f *fakeExec) Execute(_ context.Context, ec *ExecContext) (*Response, error) {
+func (f *fakeExec) Execute(ec *ExecContext) (*Response, error) {
 	q := map[string]string{}
 	for k, v := range ec.ExtraQuery {
 		q[k] = v
@@ -52,7 +51,7 @@ func TestPagerNextToken(t *testing.T) {
 		`{"Data":{"Items":[{"id":2}],"NextToken":"","MaxResults":1}}`,
 	}}
 	ec := &ExecContext{}
-	resp, err := CallWithPager(context.Background(), exec, ec, &argparser.PagerConfig{
+	resp, err := CallWithPager(exec, ec, &argparser.PagerConfig{
 		Path:      "Data.Items[]",
 		NextToken: "Data.NextToken",
 		PageSize:  "Data.MaxResults",
@@ -83,7 +82,7 @@ func TestPagerPageNumber(t *testing.T) {
 		`{"Wrap":{"List":[{"id":2}],"PageNumber":2,"PageSize":1,"TotalCount":2}}`,
 	}}
 	ec := &ExecContext{}
-	resp, err := CallWithPager(context.Background(), exec, ec, &argparser.PagerConfig{
+	resp, err := CallWithPager(exec, ec, &argparser.PagerConfig{
 		Path:       "Wrap.List[]",
 		PageNumber: "Wrap.PageNumber",
 		PageSize:   "Wrap.PageSize",
@@ -123,7 +122,7 @@ func TestPagerAutoDetectPath(t *testing.T) {
 func TestWaiterMatches(t *testing.T) {
 	exec := &fakeExec{bodies: []string{`{"Status":"Running"}`}}
 	ec := &ExecContext{}
-	resp, err := CallWithWaiter(context.Background(), exec, ec, &argparser.WaiterConfig{
+	resp, err := CallWithWaiter(exec, ec, &argparser.WaiterConfig{
 		Expr: "Status", To: "Running", Timeout: 10, Interval: 1,
 	})
 	if err != nil {
@@ -138,7 +137,7 @@ func TestWaiterMatches(t *testing.T) {
 }
 
 func TestWaiterRequiresExprTo(t *testing.T) {
-	_, err := CallWithWaiter(context.Background(), &fakeExec{}, &ExecContext{}, &argparser.WaiterConfig{})
+	_, err := CallWithWaiter(&fakeExec{}, &ExecContext{}, &argparser.WaiterConfig{})
 	if err == nil || !strings.Contains(err.Error(), "requires") {
 		t.Fatalf("err=%v", err)
 	}

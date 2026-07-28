@@ -200,24 +200,32 @@ func Dispatch(ctx *cli.Context, rawArgs []string) error {
 
 // ProductHelp renders a product-level kebab command list from the selected common-runtime source.
 // For an installed metadata plugin the user source wins over baseline.
-// API version is selected only via --api-version (not the host legacy --version flag).
 func ProductHelp(ctx *cli.Context, product string) error {
-	return Engine().ProductHelp(engine.ProductHelpRequest{
-		Product: product,
-		Version: apiVersionFromArgs(os.Args),
-		Out:     ctx.Stdout(),
-		Lang:    i18n.GetLanguage(),
+	args := []string{product}
+	for i, arg := range os.Args {
+		if arg == product {
+			args = append([]string(nil), os.Args[i:]...)
+			break
+		}
+	}
+	return Engine().ProductHelp(engine.Request{
+		Args: args,
+		Out:  ctx.Stdout(),
+		Lang: i18n.GetLanguage(),
 	})
 }
 
-// TryProductHelp renders product help only when common-runtime can resolve the
-// requested product, allowing the aliyun-cli host to retain its legacy
-// PascalCase product help as the higher-priority no-plugin path.
+// TryProductHelp renders product help only when common-runtime can resolve the requested product,
+// allowing the aliyun-cli host to retain its legacy PascalCase product help as the higher-priority no-plugin path.
 func TryProductHelp(ctx *cli.Context, product string) (handled bool, err error) {
-	if product == "" || !Engine().HasProduct(product) {
+	if !HasProduct(product) {
 		return false, nil
 	}
 	return true, ProductHelp(ctx, product)
+}
+
+func HasProduct(product string) bool {
+	return product != "" && Engine().HasProduct(product)
 }
 
 // TryDispatch handles rawArgs via the engine only when the engine can resolve the "<product> <command>" pair.

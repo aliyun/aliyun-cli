@@ -60,9 +60,8 @@ func exampleList(def *crschema.CommandDefinition) []string {
 	return out
 }
 
-// ProductEntryToProduct maps a products.json catalog entry into a
-// meta.Product, with endpoints attached. code is the canonical
-// (lower-case) product directory name used as the routing identifier.
+// ProductEntryToProduct maps a products.json catalog entry into a meta.Product, with endpoints attached.
+// code is the canonical (lower-case) product directory name used as the routing identifier.
 func ProductEntryToProduct(e *crschema.ProductEntry, code string) *meta.Product {
 	p := &meta.Product{
 		Code:           code,

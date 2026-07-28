@@ -34,73 +34,75 @@ import (
 // dirSource serves user/override metadata plugins.
 // Only packaged layouts are supported: manifest.json plus an indexed metadata blob (JSONL or Protobuf).
 type dirSource struct {
-	root  string
-	kind  Kind
-	store *storage.DirStorage
+	root    string
+	kind    Kind
+	store   *storage.DirStorage
+	plugins map[string]*pluginSnapshot
 }
 
-type pluginVolume struct {
+type pluginDescriptor struct {
 	name     string
 	code     string
 	manifest *schema.PluginManifest
 	metadata *schema.MetadataDescriptor
 }
 
+// pluginSnapshot is the invocation-scoped, validated view of one plugin.
+// The Reader's index is immutable; payload reads bind it to a freshly opened
+// Volume so no file handle needs to remain open in the cache.
+type pluginSnapshot struct {
+	plugin *pluginDescriptor
+	reader *indexed.Reader
+}
+
 func NewUserPluginSource(root string) Source {
-	return &dirSource{root: root, kind: KindUser, store: storage.NewDirStorage(root)}
+	return &dirSource{
+		root: root, kind: KindUser, store: storage.NewDirStorage(root),
+		plugins: map[string]*pluginSnapshot{},
+	}
 }
 
 func NewOverrideSource(root string) Source {
-	return &dirSource{root: root, kind: KindOverride, store: storage.NewDirStorage(root)}
+	return &dirSource{
+		root: root, kind: KindOverride, store: storage.NewDirStorage(root),
+		plugins: map[string]*pluginSnapshot{},
+	}
 }
 
 func (s *dirSource) Kind() Kind { return s.kind }
 
 func (s *dirSource) LoadProduct(code string) (*meta.Product, *Provenance, error) {
-	pv, err := s.resolve(code)
+	snapshot, err := s.loadPluginSnapshot(code)
 	if err != nil {
 		return nil, nil, err
 	}
-	vol, err := s.store.Open(pv.name)
-	if err != nil {
-		return nil, nil, normalizeOpenError(err)
-	}
-	defer vol.Close()
-
-	jsonlIndex, err := openMetadataIndex(vol, pv.metadata)
-	if err != nil {
-		return nil, nil, err
-	}
-	versions := append([]string(nil), pv.manifest.APIVersions.Supported...)
+	plugin := snapshot.plugin
+	metadataIndex := snapshot.reader.Index()
+	versions := append([]string(nil), plugin.manifest.APIVersions.Supported...)
 	if len(versions) == 0 {
-		versions = versionsFromIndex(jsonlIndex)
+		versions = versionsFromIndex(metadataIndex)
 	}
 	sort.Strings(versions)
-	defaultVersion := pv.manifest.APIVersions.Default
+	defaultVersion := plugin.manifest.APIVersions.Default
 	if defaultVersion == "" && len(versions) > 0 {
 		defaultVersion = versions[len(versions)-1]
 	}
 	product := &meta.Product{
-		Code: pv.code, Versions: versions, DefaultVersion: defaultVersion,
-		MinCliVersion: pv.manifest.MinCliVersion,
-		Name:          meta.Description{ZH: pv.manifest.ProductName["zh"], EN: pv.manifest.ProductName["en"]},
-		Description:   meta.Description{EN: pv.manifest.Description},
-		Endpoints:     jsonlIndex.Product.Endpoints(),
+		Code: plugin.code, Versions: versions, DefaultVersion: defaultVersion,
+		MinCliVersion: plugin.manifest.MinCliVersion,
+		Name:          meta.Description{ZH: plugin.manifest.ProductName["zh"], EN: plugin.manifest.ProductName["en"]},
+		Description:   meta.Description{EN: plugin.manifest.Description},
+		Endpoints:     metadataIndex.Product.Endpoints(),
 	}
-	return product, s.provenance(pv, defaultVersion), nil
+	return product, s.provenance(plugin, defaultVersion), nil
 }
 
-func (s *dirSource) LoadIndex(code, version string) (*meta.APIIndex, error) {
-	pv, err := s.resolve(code)
+func (s *dirSource) LoadAPIIndex(code, version string) (*meta.APIIndex, error) {
+	snapshot, err := s.loadPluginSnapshot(code)
 	if err != nil {
 		return nil, err
 	}
-	vol, err := s.store.Open(pv.name)
-	if err != nil {
-		return nil, normalizeOpenError(err)
-	}
-	defer vol.Close()
-	idx, err := loadMetadataAPIIndex(vol, pv.metadata, code, version)
+	idx, err := snapshot.reader.APIIndex(snapshot.plugin.code, version)
 	if errors.Is(err, storage.ErrEntryNotFound) {
 		return nil, ErrNotFound
 	}
@@ -108,34 +110,29 @@ func (s *dirSource) LoadIndex(code, version string) (*meta.APIIndex, error) {
 }
 
 func (s *dirSource) LoadAPI(code, version, name string) (*meta.API, error) {
-	pv, err := s.resolve(code)
+	snapshot, err := s.loadPluginSnapshot(code)
 	if err != nil {
 		return nil, err
 	}
-	vol, err := s.store.Open(pv.name)
+	plugin := snapshot.plugin
+	vol, err := s.store.Open(plugin.name)
 	if err != nil {
 		return nil, normalizeOpenError(err)
 	}
 	defer vol.Close()
+	reader := snapshot.reader.ForVolume(vol)
 
 	var api *meta.API
-	if isProtobufMetadata(pv.metadata) {
-		reader, openErr := pbmeta.Open(vol, pv.metadata.Index, pv.metadata.Data)
-		if openErr != nil {
-			return nil, openErr
-		}
-		api, err = reader.ReadAPI(version, name)
+	if isProtobufMetadata(plugin.metadata) {
+		protobufReader := pbmeta.NewReader(reader)
+		api, err = protobufReader.ReadAPI(version, name)
 		if errors.Is(err, storage.ErrEntryNotFound) {
 			return nil, ErrNotFound
 		}
 		if err == nil {
-			api.Endpoints = reader.ProductEndpoints()
+			api.Endpoints = protobufReader.ProductEndpoints()
 		}
 	} else {
-		reader, openErr := indexed.Open(vol, pv.metadata.Index, pv.metadata.Data)
-		if openErr != nil {
-			return nil, openErr
-		}
 		payload, readErr := reader.ReadAPI(version, name)
 		if errors.Is(readErr, storage.ErrEntryNotFound) {
 			return nil, ErrNotFound
@@ -158,32 +155,58 @@ func (s *dirSource) LoadAPI(code, version, name string) (*meta.API, error) {
 		return nil, err
 	}
 	if api.ProductCode == "" {
-		api.ProductCode = code
+		api.ProductCode = plugin.code
 	}
 	return api, nil
 }
 
-func (s *dirSource) resolve(code string) (*pluginVolume, error) {
+// loadPluginSnapshot resolves, parses and structurally validates one plugin at most once during this Source's lifetime (normally one CLI invocation).
+func (s *dirSource) loadPluginSnapshot(code string) (*pluginSnapshot, error) {
+	code = strings.ToLower(strings.TrimSpace(code))
+	if s.plugins == nil {
+		s.plugins = map[string]*pluginSnapshot{}
+	}
+	if snapshot := s.plugins[code]; snapshot != nil {
+		return snapshot, nil
+	}
+	plugin, err := s.resolve(code)
+	if err != nil {
+		return nil, err
+	}
+	vol, err := s.store.Open(plugin.name)
+	if err != nil {
+		return nil, normalizeOpenError(err)
+	}
+	defer vol.Close()
+	reader, err := indexed.Open(vol, plugin.metadata.Index, plugin.metadata.Data)
+	if err != nil {
+		return nil, err
+	}
+	snapshot := &pluginSnapshot{plugin: plugin, reader: reader}
+	s.plugins[code] = snapshot
+	return snapshot, nil
+}
+
+func (s *dirSource) resolve(code string) (*pluginDescriptor, error) {
 	if s.root == "" || code == "" {
 		return nil, ErrNotFound
 	}
 	// Installed metadata plugins have exactly one canonical directory name.
-	// Never probe aliases or enumerate unrelated plugin directories.
 	name := "aliyun-cli-" + code
-	pv, ok, err := s.inspect(name)
+	plugin, ok, err := s.inspect(name)
 	if errors.Is(err, storage.ErrVolumeNotFound) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	if ok && pv.code == code {
-		return pv, nil
+	if ok && plugin.code == code {
+		return plugin, nil
 	}
 	return nil, ErrNotFound
 }
 
-func (s *dirSource) inspect(name string) (*pluginVolume, bool, error) {
+func (s *dirSource) inspect(name string) (*pluginDescriptor, bool, error) {
 	vol, err := s.store.Open(name)
 	if err != nil {
 		return nil, false, err
@@ -203,13 +226,13 @@ func (s *dirSource) inspect(name string) (*pluginVolume, bool, error) {
 	if err := format.DecodePluginManifestJSON(raw, &manifest); err != nil {
 		return nil, false, err
 	}
-	pv := &pluginVolume{name: name, code: name, manifest: &manifest}
+	plugin := &pluginDescriptor{name: name, code: name, manifest: &manifest}
 	if manifest.ProductCode != "" {
-		pv.code = strings.ToLower(manifest.ProductCode)
+		plugin.code = strings.ToLower(manifest.ProductCode)
 	} else if manifest.Command != "" {
-		pv.code = strings.ToLower(manifest.Command)
+		plugin.code = strings.ToLower(manifest.Command)
 	} else {
-		pv.code = strings.TrimPrefix(strings.ToLower(name), "aliyun-cli-")
+		plugin.code = strings.TrimPrefix(strings.ToLower(name), "aliyun-cli-")
 	}
 	if manifest.Type == schema.DistributionGo || (manifest.Type == "" && manifest.Bin.Path != "" && manifest.Metadata == nil) {
 		return nil, false, nil
@@ -225,15 +248,15 @@ func (s *dirSource) inspect(name string) (*pluginVolume, bool, error) {
 		if copy.Data == "" {
 			copy.Data = schema.MetadataDataFile
 		}
-		pv.metadata = &copy
+		plugin.metadata = &copy
 	} else if _, statErr := vol.Stat(schema.MetadataIndexFile); statErr == nil {
-		pv.metadata = defaultMetadataDescriptor()
+		plugin.metadata = defaultMetadataDescriptor()
 	}
-	if pv.metadata == nil {
+	if plugin.metadata == nil {
 		// Manifest present but no indexed metadata blob → unsupported layout.
 		return nil, false, nil
 	}
-	return pv, true, nil
+	return plugin, true, nil
 }
 
 func validateMetadataDescriptor(d *schema.MetadataDescriptor) error {
@@ -252,22 +275,6 @@ func isJSONLMetadata(d *schema.MetadataDescriptor) bool {
 
 func isProtobufMetadata(d *schema.MetadataDescriptor) bool {
 	return d != nil && d.Format == schema.FormatProtobuf && d.Layout == pbmeta.LayoutName
-}
-
-func openMetadataIndex(vol storage.Volume, d *schema.MetadataDescriptor) (indexed.Index, error) {
-	reader, err := indexed.Open(vol, d.Index, d.Data)
-	if err != nil {
-		return indexed.Index{}, err
-	}
-	return reader.Index(), nil
-}
-
-func loadMetadataAPIIndex(vol storage.Volume, d *schema.MetadataDescriptor, product, version string) (*meta.APIIndex, error) {
-	reader, err := indexed.Open(vol, d.Index, d.Data)
-	if err != nil {
-		return nil, err
-	}
-	return reader.APIIndex(product, version)
 }
 
 func defaultMetadataDescriptor() *schema.MetadataDescriptor {
@@ -297,8 +304,8 @@ func normalizeOpenError(err error) error {
 	return err
 }
 
-func (s *dirSource) provenance(pv *pluginVolume, version string) *Provenance {
-	origin := filepath.Join(s.root, pv.name)
+func (s *dirSource) provenance(plugin *pluginDescriptor, version string) *Provenance {
+	origin := filepath.Join(s.root, plugin.name)
 	p := &Provenance{Kind: s.kind, Version: version, Origin: origin}
 	if info, err := os.Stat(origin); err == nil {
 		p.InstalledAt = info.ModTime()

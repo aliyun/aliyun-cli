@@ -23,7 +23,7 @@
 //  2. Version routing — ResolveVersion() implements the "user
 //     omitted --version, pick the default" policy in one place.
 //
-// Index/API decoding is on demand via GetIndex()/GetAPI() with no
+// Index/API decoding is on demand via GetAPIIndex()/GetAPI() with no
 // memoisation (a CLI invocation resolves each item ~once).
 //
 // Concurrency: the Loader is process-scoped and reused within one CLI
@@ -45,19 +45,17 @@ import (
 // Loader is the interface consumed by upper layers. defaultLoader is the only implementation shipped.
 type Loader interface {
 	// EnsureProduct resolves and caches ownership for exactly one product.
-	// Normal CLI dispatch uses this path so it never enumerates unrelated products or plugin directories.
 	EnsureProduct(code string) error
 
 	// LookupProduct returns the cached Product manifest, or nil if unknown.
 	LookupProduct(code string) *meta.Product
 
-	// ResolveVersion resolves an optionally-requested version to
-	// the concrete version string used for LoadIndex / GetAPI. Pass
-	// "" for the product's default.
+	// ResolveVersion resolves an optionally-requested version to the concrete version string used for LoadAPIIndex / GetAPI.
+	// Pass "" for the product's default.
 	ResolveVersion(product, requested string) (string, error)
 
-	// GetIndex returns the (product, version) index, decoded fresh from the product's owning Source on each call.
-	GetIndex(product, version string) (*meta.APIIndex, error)
+	// GetAPIIndex returns the logical (product, version) command index.
+	GetAPIIndex(product, version string) (*meta.APIIndex, error)
 
 	// GetAPI returns the fully-decoded API metadata, decoded fresh from the product's owning Source on each call.
 	GetAPI(product, version, name string) (*meta.API, error)
@@ -83,9 +81,7 @@ type Loader interface {
 // "<product> <cmd>" pair is not in the route table.
 var ErrCommandNotFound = errors.New("loader: command not found")
 
-// New returns a fresh Loader backed by the given Sources in priority
-// order (highest first). Nil entries are skipped. A product is owned
-// entirely by the first Source that LoadProduct-claims it.
+// New returns a fresh Loader backed by the given Sources in priority order (highest first). Nil entries are skipped.
 func New(layers ...source.Source) Loader {
 	filtered := make([]source.Source, 0, len(layers))
 	for _, s := range layers {
@@ -185,12 +181,12 @@ func defaultVersionEnvVar(product string) string {
 	return "ALIBABA_CLOUD_" + prefix + "_API_VERSION"
 }
 
-func (l *defaultLoader) GetIndex(product, version string) (*meta.APIIndex, error) {
+func (l *defaultLoader) GetAPIIndex(product, version string) (*meta.APIIndex, error) {
 	src, err := l.owner(product)
 	if err != nil {
 		return nil, err
 	}
-	return src.LoadIndex(product, version)
+	return src.LoadAPIIndex(product, version)
 }
 
 func (l *defaultLoader) ResolveCommand(product, cmdName string) (meta.APIRef, error) {
@@ -212,7 +208,7 @@ func (l *defaultLoader) CommandExists(product, cmdName string) bool {
 		if v == "" {
 			continue
 		}
-		if idx, err := l.GetIndex(product, v); err == nil && idx.ResolveCmd(cmdName) != "" {
+		if idx, err := l.GetAPIIndex(product, v); err == nil && idx.ResolveCmd(cmdName) != "" {
 			return true
 		}
 	}
@@ -228,7 +224,7 @@ func (l *defaultLoader) ResolveCommandVersion(product, cmdName, version string) 
 	if err != nil {
 		return meta.APIRef{}, err
 	}
-	idx, err := l.GetIndex(product, resolved)
+	idx, err := l.GetAPIIndex(product, resolved)
 	if err != nil {
 		return meta.APIRef{}, err
 	}

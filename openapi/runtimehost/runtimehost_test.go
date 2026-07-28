@@ -16,7 +16,6 @@ package runtimehost
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -41,7 +40,7 @@ import (
 // sending, so tests can assert on how dispatch populated it.
 type captureExecutor struct{ last *runtime.ExecContext }
 
-func (c *captureExecutor) Execute(_ context.Context, ec *runtime.ExecContext) (*runtime.Response, error) {
+func (c *captureExecutor) Execute(ec *runtime.ExecContext) (*runtime.Response, error) {
 	c.last = ec
 	return &runtime.Response{StatusCode: 200, Raw: []byte(`{}`)}, nil
 }
@@ -117,10 +116,10 @@ func baselineEngine(t *testing.T) *engine.Engine {
 func TestEngineProductHelpReadsBaselineIndex(t *testing.T) {
 	eng := baselineEngine(t)
 	var buf bytes.Buffer
-	err := eng.ProductHelp(engine.ProductHelpRequest{
-		Product: "ecs",
-		Out:     &buf,
-		Lang:    "en",
+	err := eng.ProductHelp(engine.Request{
+		Args: []string{"ecs"},
+		Out:  &buf,
+		Lang: "en",
 	})
 	if err != nil {
 		t.Fatalf("ProductHelp: %v", err)
@@ -412,7 +411,7 @@ func TestUserMetaPluginOwnsProduct(t *testing.T) {
 		UserPluginsDir: dir,
 	}, nil)
 	var help bytes.Buffer
-	if err := eng.ProductHelp(engine.ProductHelpRequest{Product: "demo", Out: &help, Lang: "en"}); err != nil {
+	if err := eng.ProductHelp(engine.Request{Args: []string{"demo"}, Out: &help, Lang: "en"}); err != nil {
 		t.Fatalf("user JSONL product help failed: %v", err)
 	}
 	if out := help.String(); !strings.Contains(out, "describe-thing") || !strings.Contains(out, "Describes a thing") {

@@ -118,7 +118,7 @@ func (s *BaselineSource) LoadProduct(code string) (*meta.Product, *Provenance, e
 	return rec.product, s.provenance(rec.product.DefaultVersion), nil
 }
 
-func (s *BaselineSource) LoadIndex(code, version string) (*meta.APIIndex, error) {
+func (s *BaselineSource) LoadAPIIndex(code, version string) (*meta.APIIndex, error) {
 	vol, err := s.canonical.Open(strings.ToLower(code))
 	if err != nil {
 		if errors.Is(err, storage.ErrVolumeNotFound) {

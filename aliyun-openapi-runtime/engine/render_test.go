@@ -203,6 +203,59 @@ func TestPrintProductHelpUsesIndexWithoutLoadingAPIs(t *testing.T) {
 	}
 }
 
+func TestPrintProductHelpWrapsCommandDescriptionsLikePluginRuntime(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH", "60")
+	var buf bytes.Buffer
+	product := &meta.Product{Code: "demo"}
+	index := &meta.APIIndex{
+		ProductCode: "demo",
+		Version:     "2024-01-01",
+		Entries: map[string]meta.APIIndexEntry{
+			"DescribeThings": {
+				APIName: "DescribeThings",
+				CmdName: "describe-things",
+				Description: meta.Description{
+					EN: "Describes all things in the selected region with enough detail to require multiple output lines.",
+				},
+			},
+		},
+	}
+
+	if err := printProductHelp(&buf, product, index, "en"); err != nil {
+		t.Fatalf("printProductHelp: %v", err)
+	}
+	lines := strings.Split(buf.String(), "\n")
+	var commandLines []string
+	inCommands := false
+	for _, line := range lines {
+		if line == "Available Commands:" {
+			inCommands = true
+			continue
+		}
+		if inCommands {
+			if line == "" {
+				break
+			}
+			commandLines = append(commandLines, line)
+		}
+	}
+	if len(commandLines) < 2 {
+		t.Fatalf("expected wrapped command description:\n%s", buf.String())
+	}
+	const descriptionColumn = 33 // two spaces + fixed 30-char command column + one separator
+	if !strings.HasPrefix(commandLines[0], "  describe-things") {
+		t.Fatalf("first line missing command name: %q", commandLines[0])
+	}
+	if !strings.HasPrefix(commandLines[1], strings.Repeat(" ", descriptionColumn)) {
+		t.Fatalf("continuation is not aligned to description column: %q", commandLines[1])
+	}
+	for _, line := range commandLines {
+		if len([]rune(line)) > 60 {
+			t.Fatalf("line exceeds configured width: %d %q", len([]rune(line)), line)
+		}
+	}
+}
+
 // TestPrintAPIHelpWrapsAligned verifies long descriptions wrap at the
 // fixed line width and continuation lines keep the description column
 // aligned (empty padded name), matching the Go plugin help.

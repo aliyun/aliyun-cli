@@ -23,7 +23,7 @@ func (s *targetedSource) LoadProduct(code string) (*meta.Product, *source.Proven
 	}, &source.Provenance{Kind: source.KindUser}, nil
 }
 
-func (s *targetedSource) LoadIndex(string, string) (*meta.APIIndex, error) {
+func (s *targetedSource) LoadAPIIndex(string, string) (*meta.APIIndex, error) {
 	return nil, source.ErrNotFound
 }
 

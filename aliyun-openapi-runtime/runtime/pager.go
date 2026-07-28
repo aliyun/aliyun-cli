@@ -16,7 +16,6 @@ package runtime
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -76,11 +75,11 @@ func NewPager(cfg *argparser.PagerConfig) *Pager {
 
 // CallWithPager repeatedly Execute-s until no more pages, then returns
 // a Response whose Raw/Parsed hold the merged collection document.
-func CallWithPager(ctx context.Context, exec Executor, ec *ExecContext, cfg *argparser.PagerConfig) (*Response, error) {
+func CallWithPager(exec Executor, ec *ExecContext, cfg *argparser.PagerConfig) (*Response, error) {
 	p := NewPager(cfg)
 	var last *Response
 	for {
-		resp, err := exec.Execute(ctx, ec)
+		resp, err := exec.Execute(ec)
 		if err != nil {
 			return nil, err
 		}

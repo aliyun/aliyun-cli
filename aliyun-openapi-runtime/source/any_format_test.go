@@ -1,7 +1,6 @@
 package source
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -71,7 +70,7 @@ func loadAnyDryRun(t *testing.T, root string, argv []string) *openapiruntime.Ass
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	response, err := openapiruntime.NewExecutor().Execute(context.Background(), &openapiruntime.ExecContext{
+	response, err := openapiruntime.NewExecutor().Execute(&openapiruntime.ExecContext{
 		API: api, Args: parsed.Args, DryRun: true,
 	})
 	if err != nil {

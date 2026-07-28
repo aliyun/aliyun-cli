@@ -28,6 +28,20 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 )
 
+const (
+	originalProductHelpEnv = "ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP"
+	baselineProductHelpEnv = "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP"
+)
+
+func productHelpEnvEnabled(name string) bool {
+	value := strings.TrimSpace(os.Getenv(name))
+	return value == "1" || strings.EqualFold(value, "true")
+}
+
+func printProductHelpSwitchHint(ctx *cli.Context, english, chinese string) {
+	cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\n%s\n", i18n.T(english, chinese).Text())
+}
+
 func (c *Commando) printPluginIndexLoadHint(ctx *cli.Context) {
 	if c.pluginIndexErr == nil {
 		return
@@ -184,7 +198,8 @@ func (c *Commando) printProducts(ctx *cli.Context) {
 
 func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error {
 	c.printHelpContextHints(ctx)
-	// 1. Check if it's a plugin product
+	// Resolve remote catalog information and the locally installed plugin
+	// independently: package-installed plugins may not exist in the remote index.
 	var pluginName string
 	var isInstalled bool
 	var localPlugin plugin.LocalPlugin
@@ -200,68 +215,73 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 			}
 		}
 	}
-	// Locally installed plugin (e.g. plugin install --package) not in remote index.
-	// FindInstalledPluginInManifest 已经把 plugin name / short-name / manifest.commandAliases 一起纳入匹配，
-	// 与 ExecutePlugin 使用的查找路径一致，因此 alias（例如 "hologres"）也能命中对应插件。
-	if pluginName == "" && c.localManifest != nil {
-		if n, _, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode); ok {
-			pluginName = n
+	if c.localManifest != nil {
+		if pluginName != "" {
+			localPlugin, isInstalled = c.localManifest.Plugins[pluginName]
+		}
+		if !isInstalled {
+			// Includes plugin name / short name / command aliases.
+			if n, installedPlugin, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode); ok && installedPlugin != nil {
+				pluginName = n
+				localPlugin = *installedPlugin
+				isInstalled = true
+			}
+		}
+	}
+	product, hasLegacyHelp := c.library.GetProduct(productCode)
+	showOriginal := productHelpEnvEnabled(originalProductHelpEnv)
+	showBaseline := productHelpEnvEnabled(baselineProductHelpEnv)
+
+	// Installed plugins always own product help (Go and metadata alike), unless the user explicitly asks for legacy PascalCase help and it exists.
+	if isInstalled && (!showOriginal || !hasLegacyHelp) {
+		if hasLegacyHelp {
+			cli.Printf(ctx.Stdout(), "Note: The help information for product '%s' is provided by the installed plugin '%s'.\n", productCode, pluginName)
+		} else {
+			cli.Printf(ctx.Stdout(), "Product '%s' is provided by plugin '%s'\n", productCode, pluginName)
+		}
+		c.setLangEnv(ctx)
+		if localPlugin.IsMeta() {
+			if err := productHelpRender(ctx, productCode); err != nil {
+				return err
+			}
+		} else {
+			if _, err := helpDelegateExecute(productCode, getPluginArgsForHelp(productCode), ctx); err != nil {
+				return err
+			}
+		}
+		if hasLegacyHelp {
+			printProductHelpSwitchHint(ctx,
+				"To view legacy PascalCase product help, set "+originalProductHelpEnv+"=true.",
+				"如需查看旧版大驼峰产品帮助，请设置 "+originalProductHelpEnv+"=true。")
+		}
+		return nil
+	}
+
+	// Without an installed plugin, legacy help remains the default.
+	// Explicitly requested baseline help (or a baseline-only product) is rendered by the common runtime.
+	if !isInstalled && (showBaseline || !hasLegacyHelp) {
+		if handled, err := productHelpTry(ctx, productCode); handled {
+			if err != nil {
+				return err
+			}
+			if hasLegacyHelp {
+				printProductHelpSwitchHint(ctx,
+					"To return to legacy PascalCase product help, unset "+baselineProductHelpEnv+" (or set it to false).",
+					"如需返回旧版大驼峰产品帮助，请取消设置 "+baselineProductHelpEnv+"（或设为 false）。")
+			}
+			return nil
 		}
 	}
 
-	// 2. Check if it's a built-in product
-	product, ok := c.library.GetProduct(productCode)
-	if !ok {
-		// If not a built-in product, but is a valid plugin product
+	if !hasLegacyHelp {
 		if pluginName != "" {
-			if c.localManifest != nil {
-				localPlugin, isInstalled = c.localManifest.Plugins[pluginName]
-			}
-			if isInstalled {
-				cli.Printf(ctx.Stdout(), "Product '%s' is provided by plugin '%s'\n", productCode, pluginName)
-				c.setLangEnv(ctx)
-				if localPlugin.IsMeta() {
-					return productHelpRender(ctx, productCode)
-				}
-				helpDelegateExecute(productCode, getPluginArgsForHelp(productCode), ctx)
-				return nil
-			} else {
-				if handled, err := productHelpTry(ctx, productCode); handled {
-					return err
-				}
-				return fmt.Errorf("'%s' is not a valid product.\nDid you mean to install corresponding product plugin?\n  aliyun plugin install --names %s", productCode, pluginName)
-			}
-		}
-		if handled, err := productHelpTry(ctx, productCode); handled {
-			return err
+			return fmt.Errorf("'%s' is not a valid product.\nDid you mean to install corresponding product plugin?\n  aliyun plugin install --names %s", productCode, pluginName)
 		}
 		var plugList []plugin.PluginInfo
 		if c.pluginIndex != nil {
 			plugList = c.pluginIndex.Plugins
 		}
 		return &InvalidProductOrPluginError{Code: productCode, library: c.library, plugins: plugList}
-	}
-
-	if pluginName != "" {
-		if c.localManifest != nil {
-			localPlugin, isInstalled = c.localManifest.Plugins[pluginName]
-		}
-
-		if isInstalled {
-			// Built-in product AND installed plugin
-			if os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP") == "true" {
-				// Show built-in help (fall through)
-			} else {
-				cli.Printf(ctx.Stdout(), "Note: The help information for product '%s' is provided by the installed plugin '%s'.\n", productCode, pluginName)
-				cli.Printf(ctx.Stdout(), "To view legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true\n")
-				c.setLangEnv(ctx)
-				if localPlugin.IsMeta() {
-					return productHelpRender(ctx, productCode)
-				}
-				helpDelegateExecute(productCode, getPluginArgsForHelp(productCode), ctx)
-				return nil
-			}
-		}
 	}
 
 	if product.ApiStyle == "rpc" {
@@ -334,6 +354,16 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 	}
 
 	cli.Printf(ctx.Stdout(), "\nRun `aliyun %s <ApiName> --help` to get more information about this API\n", product.GetLowerCode())
+	switch {
+	case isInstalled && showOriginal:
+		printProductHelpSwitchHint(ctx,
+			"To return to installed plugin product help, unset "+originalProductHelpEnv+" (or set it to false).",
+			"如需返回已安装插件的产品帮助，请取消设置 "+originalProductHelpEnv+"（或设为 false）。")
+	case !isInstalled && !showBaseline && productHelpAvailable(productCode):
+		printProductHelpSwitchHint(ctx,
+			"To view baseline kebab-case product help, set "+baselineProductHelpEnv+"=true.",
+			"如需查看 baseline 的 kebab-case 产品帮助，请设置 "+baselineProductHelpEnv+"=true。")
+	}
 	return nil
 }
 
@@ -458,6 +488,7 @@ var (
 	helpDelegateExecute     = plugin.ExecutePlugin
 	productHelpRender       = runtimehost.ProductHelp
 	productHelpTry          = runtimehost.TryProductHelp
+	productHelpAvailable    = runtimehost.HasProduct
 )
 
 // tryDelegatePluginHelp is layer-3 of the help hierarchy:

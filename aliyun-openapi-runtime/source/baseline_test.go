@@ -56,9 +56,9 @@ func TestGoPluginProductsExcluded(t *testing.T) {
 	}
 
 	// The served product still resolves its commands via the index.
-	idx, err := src.LoadIndex("ecs", "2014-05-26")
+	idx, err := src.LoadAPIIndex("ecs", "2014-05-26")
 	if err != nil {
-		t.Fatalf("LoadIndex: %v", err)
+		t.Fatalf("LoadAPIIndex: %v", err)
 	}
 	if idx.ResolveCmd("describe-instances") != "DescribeInstances" {
 		t.Error("ecs describe-instances should resolve")
@@ -80,9 +80,9 @@ func TestUnmarkedProductIsServed(t *testing.T) {
 	if _, _, err := src.LoadProduct("fc"); err != nil {
 		t.Fatalf("an unmarked product must remain served: %v", err)
 	}
-	idx, err := src.LoadIndex("fc", "2023-03-30")
+	idx, err := src.LoadAPIIndex("fc", "2023-03-30")
 	if err != nil {
-		t.Fatalf("LoadIndex: %v", err)
+		t.Fatalf("LoadAPIIndex: %v", err)
 	}
 	if idx.ResolveCmd("list-functions") != "ListFunctions" {
 		t.Error("an unmarked product's command must resolve")

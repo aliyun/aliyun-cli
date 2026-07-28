@@ -15,7 +15,6 @@
 package runtime
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -81,7 +80,7 @@ func TestSendAgainstMockServer(t *testing.T) {
 		Args:       map[string]any{"RegionId": "cn-hangzhou"},
 	}
 
-	resp, err := NewExecutor().Execute(context.Background(), ec)
+	resp, err := NewExecutor().Execute(ec)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -148,7 +147,7 @@ func TestSendROAAgainstMockServer(t *testing.T) {
 		Args:       map[string]any{"functionName": "my-func", "prefix": "web"},
 	}
 
-	resp, err := NewExecutor().Execute(context.Background(), ec)
+	resp, err := NewExecutor().Execute(ec)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -191,7 +190,7 @@ func TestSendDirectAnyBodyAgainstMockServer(t *testing.T) {
 					Name: "body", RawName: "body", Type: meta.TypeAny, Position: meta.PosBody,
 				}},
 			}
-			_, err := NewExecutor().Execute(context.Background(), &ExecContext{
+			_, err := NewExecutor().Execute(&ExecContext{
 				API: api, Endpoint: strings.TrimPrefix(srv.URL, "http://"), Credential: staticAKCredential(t),
 				Args: map[string]any{"body": tt.body},
 			})

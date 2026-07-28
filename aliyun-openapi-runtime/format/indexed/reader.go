@@ -87,6 +87,20 @@ type Reader struct {
 	records  map[string]Record
 }
 
+// ForVolume returns a copy of this validated reader bound to vol.
+// It is intended for invocation-scoped caches: Open validates the immutable
+// index snapshot once, while each payload read can use a freshly opened Volume.
+// The caller must bind a Volume for the same plugin package represented by the
+// cached reader.
+func (r *Reader) ForVolume(vol storage.Volume) *Reader {
+	if r == nil {
+		return nil
+	}
+	bound := *r
+	bound.vol = vol
+	return &bound
+}
+
 // Open loads and validates indexFile. dataFile may be empty, in which case the index's dataFile field (or the standard filename) is used.
 func Open(vol storage.Volume, indexFile, dataFile string) (*Reader, error) {
 	if indexFile == "" {
