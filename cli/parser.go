@@ -25,20 +25,22 @@ type flagDetector interface {
 }
 
 type Parser struct {
-	current      int
-	args         []string
-	detector     flagDetector
-	currentFlag  *Flag
-	allowUnknown bool
+	current           int
+	args              []string
+	detector          flagDetector
+	currentFlag       *Flag
+	currentFlagOrigin string
+	allowUnknown      bool
 }
 
 func NewParser(args []string, detector flagDetector) *Parser {
 	return &Parser{
-		args:         args,
-		current:      0,
-		detector:     detector,
-		currentFlag:  nil,
-		allowUnknown: false,
+		args:              args,
+		current:           0,
+		detector:          detector,
+		currentFlag:       nil,
+		currentFlagOrigin: "none",
+		allowUnknown:      false,
 	}
 }
 
@@ -97,7 +99,14 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 	value := ""
 	flag, value, err = p.parseCommandArg(s)
 	if err != nil {
-		return
+		if p.canConsumeDashLeadingValue(s) {
+			value = s
+			err = nil
+		} else {
+			return
+		}
+	} else if flag == nil && value == "" && p.canConsumeDashLeadingValue(s) {
+		value = s
 	}
 	if flag != nil {
 		err = flag.setIsAssigned()
@@ -116,6 +125,7 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 			if !p.currentFlag.needValue() { // if current flag is feeds close it
 				// fmt.Printf("$$$ clear %s\n", p.currentFlag.AssignedMode)
 				p.currentFlag = nil
+				p.currentFlagOrigin = "none"
 			}
 		} else {
 			arg = value // this is a arg
@@ -127,6 +137,7 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 				return
 			}
 			p.currentFlag = nil
+			p.currentFlagOrigin = "none"
 		}
 
 		if value != "" { // pattern --xx=aa, -x:aa, -xxx=bb
@@ -137,10 +148,55 @@ func (p *Parser) readNext() (arg string, flag *Flag, more bool, err error) {
 		} else { // pattern --xx -- yy
 			if flag.needValue() {
 				p.currentFlag = flag
+				p.currentFlagOrigin = p.flagOrigin(s, flag)
 			}
 		}
 	}
 	return
+}
+
+func (p *Parser) canConsumeDashLeadingValue(s string) bool {
+	if p.currentFlag == nil {
+		return false
+	}
+	if p.currentFlagOrigin != "long_flag_candidate" {
+		return false
+	}
+	if p.currentFlag.dynamicUnknown {
+		return false
+	}
+	if !p.currentFlag.needValue() {
+		return false
+	}
+	return isDashLeadingValueCandidate(s)
+}
+
+func (p *Parser) flagOrigin(s string, flag *Flag) string {
+	if flag != nil && flag.dynamicUnknown {
+		return "dynamic_unknown_flag"
+	}
+	prefix, _, _ := SplitStringWithPrefix(s, "=:")
+	if strings.HasPrefix(prefix, "--") && len(prefix) > 2 {
+		return "long_flag_candidate"
+	}
+	if strings.HasPrefix(prefix, "-") && len(prefix) == 2 {
+		return "short_flag_candidate"
+	}
+	return "none"
+}
+
+func isDashLeadingValueCandidate(s string) bool {
+	prefix, _, ok := SplitStringWithPrefix(s, "=:")
+	if ok {
+		return false
+	}
+	if !strings.HasPrefix(prefix, "-") {
+		return false
+	}
+	if strings.HasPrefix(prefix, "--") {
+		return false
+	}
+	return len(prefix) >= 2
 }
 
 func (p *Parser) parseCommandArg(s string) (flag *Flag, value string, err error) {
