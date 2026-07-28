@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 
 	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
+	"github.com/alibabacloud-go/tea/dara"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -29,7 +31,7 @@ func TestShouldUseOpenapi(t *testing.T) {
 	})
 
 	t.Run("NonSLSProduct", func(t *testing.T) {
-		product := &meta.Product{Code: "ECS"}
+		product := &meta.Product{Code: "ECS", RegionalEndpoints: map[string]string{"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com"}}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 		result := ShouldUseOpenapi(ctx, product)
 		assert.False(t, result)
@@ -37,6 +39,20 @@ func TestShouldUseOpenapi(t *testing.T) {
 
 	t.Run("LowercaseSLSProduct", func(t *testing.T) {
 		product := &meta.Product{Code: "sls", Version: "2020-03-31"}
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		result := ShouldUseOpenapi(ctx, product)
+		assert.True(t, result)
+	})
+
+	t.Run("DASProduct", func(t *testing.T) {
+		product := &meta.Product{Code: "DAS", Version: "2020-01-16"}
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		result := ShouldUseOpenapi(ctx, product)
+		assert.True(t, result)
+	})
+
+	t.Run("LowercaseDASProduct", func(t *testing.T) {
+		product := &meta.Product{Code: "das", Version: "2020-01-16"}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 		result := ShouldUseOpenapi(ctx, product)
 		assert.True(t, result)
@@ -205,7 +221,7 @@ func TestGetOpenapiClient(t *testing.T) {
 			AccessKeySecret: "test-access-key-secret",
 		}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-		product := &meta.Product{Code: "ECS"}
+		product := &meta.Product{Code: "ECS", RegionalEndpoints: map[string]string{"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com"}}
 
 		client, err := GetOpenapiClient(profile, ctx, product)
 		assert.Nil(t, client)
@@ -220,7 +236,7 @@ func TestGetOpenapiClient(t *testing.T) {
 			AccessKeySecret: "test-access-key-secret",
 		}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-		product := &meta.Product{Code: "ECS"}
+		product := &meta.Product{Code: "ECS", RegionalEndpoints: map[string]string{"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com"}}
 
 		client, err := GetOpenapiClient(profile, ctx, product)
 		assert.NotNil(t, client)
@@ -251,7 +267,7 @@ func TestGetOpenapiClient(t *testing.T) {
 			AccessKeySecret: "test-access-key-secret",
 		}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-		product := &meta.Product{Code: "ECS"}
+		product := &meta.Product{Code: "ECS", RegionalEndpoints: map[string]string{"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com"}}
 
 		client, err := GetOpenapiClient(profile, ctx, product)
 		assert.NotNil(t, client)
@@ -269,7 +285,7 @@ func TestGetOpenapiClient(t *testing.T) {
 			ConnectTimeout:  10,
 		}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-		product := &meta.Product{Code: "ECS"}
+		product := &meta.Product{Code: "ECS", RegionalEndpoints: map[string]string{"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com"}}
 
 		client, err := GetOpenapiClient(profile, ctx, product)
 		assert.NotNil(t, client)
@@ -286,7 +302,7 @@ func TestGetOpenapiClient(t *testing.T) {
 			ConnectTimeout:  0,
 		}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-		product := &meta.Product{Code: "ECS"}
+		product := &meta.Product{Code: "ECS", RegionalEndpoints: map[string]string{"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com"}}
 
 		client, err := GetOpenapiClient(profile, ctx, product)
 		assert.NotNil(t, client)
@@ -302,7 +318,7 @@ func TestGetOpenapiClient(t *testing.T) {
 			Endpoint:        "custom.endpoint.aliyuncs.com",
 		}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-		product := &meta.Product{Code: "ECS"}
+		product := &meta.Product{Code: "ECS", RegionalEndpoints: map[string]string{"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com"}}
 
 		client, err := GetOpenapiClient(profile, ctx, product)
 		assert.NotNil(t, client)
@@ -338,6 +354,105 @@ func TestGetOpenapiClient(t *testing.T) {
 		client, err := GetOpenapiClient(profile, ctx, product)
 		assert.NotNil(t, client)
 		assert.Nil(t, err)
+	})
+
+	t.Run("DASProductResolvesRegionalEndpoint", func(t *testing.T) {
+		profile := &config.Profile{
+			Mode:            "AK",
+			RegionId:        "cn-shanghai",
+			AccessKeyId:     "test-access-key-id",
+			AccessKeySecret: "test-access-key-secret",
+		}
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		// DAS has no location service, so the endpoint resolves from the static
+		// regional endpoint table with a nil sdk client.
+		product := &meta.Product{
+			Code:                "DAS",
+			Version:             "2020-01-16",
+			ApiStyle:            "rpc",
+			LocationServiceCode: "",
+			RegionalEndpoints:   map[string]string{"cn-shanghai": "das.cn-shanghai.aliyuncs.com"},
+		}
+
+		client, err := GetOpenapiClient(profile, ctx, product)
+		assert.Nil(t, err)
+		assert.NotNil(t, client)
+		assert.Equal(t, "das.cn-shanghai.aliyuncs.com", tea.StringValue(client.Endpoint))
+	})
+
+	t.Run("DASProductWithCustomEndpointOverridesResolution", func(t *testing.T) {
+		profile := &config.Profile{
+			Mode:            "AK",
+			RegionId:        "cn-shanghai",
+			AccessKeyId:     "test-access-key-id",
+			AccessKeySecret: "test-access-key-secret",
+			Endpoint:        "custom-das.endpoint.aliyuncs.com",
+		}
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		product := &meta.Product{
+			Code:              "DAS",
+			Version:           "2020-01-16",
+			ApiStyle:          "rpc",
+			RegionalEndpoints: map[string]string{"cn-shanghai": "das.cn-shanghai.aliyuncs.com"},
+		}
+
+		client, err := GetOpenapiClient(profile, ctx, product)
+		assert.Nil(t, err)
+		assert.NotNil(t, client)
+		assert.Equal(t, "custom-das.endpoint.aliyuncs.com", tea.StringValue(client.Endpoint))
+	})
+
+	t.Run("DASProductUnresolvableRegionReturnsError", func(t *testing.T) {
+		profile := &config.Profile{
+			Mode:            "AK",
+			RegionId:        "cn-hangzhou",
+			AccessKeyId:     "test-access-key-id",
+			AccessKeySecret: "test-access-key-secret",
+		}
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		// The requested region is not in the endpoint table and there is no
+		// global endpoint, so resolution must fail loudly rather than produce a
+		// client with an empty host.
+		product := &meta.Product{
+			Code:                "DAS",
+			Version:             "2020-01-16",
+			ApiStyle:            "rpc",
+			LocationServiceCode: "",
+			RegionalEndpoints:   map[string]string{"cn-shanghai": "das.cn-shanghai.aliyuncs.com"},
+		}
+
+		client, err := GetOpenapiClient(profile, ctx, product)
+		assert.Error(t, err)
+		assert.Nil(t, client)
+		assert.Contains(t, err.Error(), "unknown endpoint for region cn-hangzhou")
+		assert.Contains(t, err.Error(), "--endpoint")
+	})
+
+	t.Run("DASProductUnresolvableRegionRescuedByEndpointFlag", func(t *testing.T) {
+		profile := &config.Profile{
+			Mode:            "AK",
+			RegionId:        "cn-hangzhou",
+			AccessKeyId:     "test-access-key-id",
+			AccessKeySecret: "test-access-key-secret",
+		}
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		// An explicit --endpoint override is applied at request time, so a region
+		// missing from the table is no longer fatal.
+		endpointFlag := config.NewEndpointFlag()
+		endpointFlag.SetAssigned(true)
+		endpointFlag.SetValue("das.aliyuncs.com")
+		ctx.Flags().Add(endpointFlag)
+		product := &meta.Product{
+			Code:                "DAS",
+			Version:             "2020-01-16",
+			ApiStyle:            "rpc",
+			LocationServiceCode: "",
+			RegionalEndpoints:   map[string]string{"cn-shanghai": "das.cn-shanghai.aliyuncs.com"},
+		}
+
+		client, err := GetOpenapiClient(profile, ctx, product)
+		assert.NoError(t, err)
+		assert.NotNil(t, client)
 	})
 }
 
@@ -464,7 +579,7 @@ func TestHttpContext(t *testing.T) {
 		}
 		context := &HttpContext{profile: profile}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
+		product := &meta.Product{Code: "ECS", Version: "2014-05-26", RegionalEndpoints: map[string]string{"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com"}}
 
 		err := context.Init(ctx, product)
 		assert.NoError(t, err)
@@ -483,7 +598,7 @@ func TestHttpContext(t *testing.T) {
 		}
 		context := &HttpContext{profile: profile}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
+		product := &meta.Product{Code: "ECS", Version: "2014-05-26", RegionalEndpoints: map[string]string{"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com"}}
 
 		err := context.Init(ctx, product)
 		assert.NoError(t, err)
@@ -501,7 +616,7 @@ func TestHttpContext(t *testing.T) {
 		}
 		context := &HttpContext{profile: profile}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
+		product := &meta.Product{Code: "ECS", Version: "2014-05-26", RegionalEndpoints: map[string]string{"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com"}}
 		headerflag := NewHeaderFlag()
 		headerflag.SetValues([]string{"Accept=json", "Content-Type=json", "testfail"})
 		ctx.Flags().Add(headerflag)
@@ -521,7 +636,7 @@ func TestHttpContext(t *testing.T) {
 		}
 		context := &HttpContext{profile: profile}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
+		product := &meta.Product{Code: "ECS", Version: "2014-05-26", RegionalEndpoints: map[string]string{"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com"}}
 		endpointflag := config.NewEndpointFlag()
 		endpointflag.SetAssigned(true)
 		endpointflag.SetValue("ecs.cn-hangzhou.aliyuncs")
@@ -541,7 +656,7 @@ func TestHttpContext(t *testing.T) {
 		}
 		context := &HttpContext{profile: profile}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
+		product := &meta.Product{Code: "ECS", Version: "2014-05-26", RegionalEndpoints: map[string]string{"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com"}}
 		err := context.Init(ctx, product)
 		assert.Contains(t, err.Error(), "init openapi client failed")
 	})
@@ -558,7 +673,7 @@ func TestHttpContext(t *testing.T) {
 		}
 		context := &HttpContext{profile: profile}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
+		product := &meta.Product{Code: "ECS", Version: "2014-05-26", RegionalEndpoints: map[string]string{"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com"}}
 
 		err := context.Init(ctx, product)
 		assert.NoError(t, err)
@@ -579,7 +694,7 @@ func TestHttpContext(t *testing.T) {
 		}
 		context := &HttpContext{profile: profile}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
-		product := &meta.Product{Code: "ECS", Version: "2014-05-26"}
+		product := &meta.Product{Code: "ECS", Version: "2014-05-26", RegionalEndpoints: map[string]string{"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com"}}
 
 		err := context.Init(ctx, product)
 		assert.NoError(t, err)
@@ -1858,4 +1973,122 @@ func TestProcessBodyInvalidParameter(t *testing.T) {
 
 	err := context.ProcessBody(ctx)
 	assert.Contains(t, err.Error(), "'--aaa' is not a valid parameter or flag")
+}
+
+func TestOpenapiContextRPCStyleInPrepare(t *testing.T) {
+	prof := &config.Profile{RegionId: "cn-shanghai"}
+
+	newContext := func(apiStyle string) *OpenapiContext {
+		h := NewHttpContext(prof)
+		h.product = &meta.Product{Code: "das", Version: "2020-01-16", ApiStyle: apiStyle}
+		h.openapiRequest = &openapiutil.OpenApiRequest{
+			Query:   map[string]*string{},
+			Headers: map[string]*string{},
+			HostMap: map[string]*string{},
+		}
+		// Init defaults Style to ROA; Prepare should override for rpc products.
+		h.openapiParams = &openapiClient.Params{Style: tea.String("ROA")}
+		api := canonicalTestAPI(&testLegacyAPI{
+			Name:        "GetDasAgentSSE",
+			Protocol:    "HTTPS|SSE",
+			Method:      "POST",
+			PathPattern: "/getDasAgentSSE",
+			Parameters: []testLegacyParameter{
+				{Name: "Query", Position: "Query", Required: true},
+			},
+		})
+		return &OpenapiContext{HttpContext: h, method: "POST", path: "/getDasAgentSSE", api: api}
+	}
+
+	newCtx := func() *cli.Context {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		ctx.SetUnknownFlags(cli.NewFlagSet())
+		ctx.UnknownFlags().AddByName("Query")
+		ctx.UnknownFlags().Get("Query").SetAssigned(true)
+		ctx.UnknownFlags().Get("Query").SetValue("hi")
+		return ctx
+	}
+
+	t.Run("RPCStyleSetsRPCAndPath", func(t *testing.T) {
+		o := newContext("rpc")
+		err := o.Prepare(newCtx())
+		assert.NoError(t, err)
+		assert.Equal(t, "RPC", tea.StringValue(o.openapiParams.Style))
+		assert.Equal(t, "POST", tea.StringValue(o.openapiParams.Method))
+		assert.Equal(t, "https", tea.StringValue(o.openapiParams.Protocol))
+		assert.Equal(t, "/getDasAgentSSE", tea.StringValue(o.openapiParams.Pathname))
+		assert.Equal(t, "hi", tea.StringValue(o.openapiRequest.Query["Query"]))
+	})
+
+	t.Run("RestfulStyleKeepsROA", func(t *testing.T) {
+		o := newContext("restful")
+		err := o.Prepare(newCtx())
+		assert.NoError(t, err)
+		assert.Equal(t, "ROA", tea.StringValue(o.openapiParams.Style))
+	})
+}
+
+func TestOpenapiContextIsSSE(t *testing.T) {
+	assert.True(t, (&OpenapiContext{api: &canonicalmeta.API{Protocol: "HTTPS|SSE"}}).IsSSE())
+	assert.True(t, (&OpenapiContext{api: &canonicalmeta.API{Protocol: "https|sse"}}).IsSSE())
+	assert.False(t, (&OpenapiContext{api: &canonicalmeta.API{Protocol: "HTTPS"}}).IsSSE())
+	assert.False(t, (&OpenapiContext{api: nil}).IsSSE())
+}
+
+func TestCallSSE(t *testing.T) {
+	orig := openapiCallSSEFunc
+	defer func() { openapiCallSSEFunc = orig }()
+
+	newContext := func() *OpenapiContext {
+		return &OpenapiContext{
+			HttpContext: &HttpContext{},
+			api:         &canonicalmeta.API{Name: "GetDasAgentSSE", Protocol: "HTTPS|SSE"},
+		}
+	}
+
+	t.Run("StreamsEventData", func(t *testing.T) {
+		openapiCallSSEFunc = func(a *OpenapiContext, yield chan *openapiClient.SSEResponse, yieldErr chan error) {
+			go func() {
+				defer close(yield)
+				defer close(yieldErr)
+				yield <- &openapiClient.SSEResponse{Event: &dara.SSEEvent{Data: tea.String("hello")}}
+				yield <- &openapiClient.SSEResponse{Event: &dara.SSEEvent{Data: tea.String("world")}}
+			}()
+		}
+		var buf bytes.Buffer
+		err := newContext().CallSSE(&buf)
+		assert.NoError(t, err)
+		assert.Equal(t, "hello\nworld\n", buf.String())
+	})
+
+	t.Run("ReturnsError", func(t *testing.T) {
+		openapiCallSSEFunc = func(a *OpenapiContext, yield chan *openapiClient.SSEResponse, yieldErr chan error) {
+			go func() {
+				defer close(yield)
+				defer close(yieldErr)
+				yieldErr <- fmt.Errorf("boom")
+			}()
+		}
+		var buf bytes.Buffer
+		err := newContext().CallSSE(&buf)
+		assert.Error(t, err)
+		assert.Equal(t, "", buf.String())
+	})
+
+	t.Run("SkipsNilEvents", func(t *testing.T) {
+		openapiCallSSEFunc = func(a *OpenapiContext, yield chan *openapiClient.SSEResponse, yieldErr chan error) {
+			go func() {
+				defer close(yield)
+				defer close(yieldErr)
+				yield <- nil
+				yield <- &openapiClient.SSEResponse{Event: nil}
+				yield <- &openapiClient.SSEResponse{Event: &dara.SSEEvent{Data: nil}}
+				yield <- &openapiClient.SSEResponse{Event: &dara.SSEEvent{Data: tea.String("ok")}}
+			}()
+		}
+		var buf bytes.Buffer
+		err := newContext().CallSSE(&buf)
+		assert.NoError(t, err)
+		assert.Equal(t, "ok\n", buf.String())
+	})
 }

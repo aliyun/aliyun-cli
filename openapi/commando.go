@@ -490,7 +490,15 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			return c.processInvoke(ctx, productName, api.Method, api.PathPattern)
 		} else {
 			// RPC need check API parameters too
-			api, _ := c.library.GetApi(product.Code, product.Version, args[1])
+			api, found := c.library.GetApi(product.Code, product.Version, args[1])
+			if ShouldUseOpenapi(ctx, &product) {
+				if !found || api == nil {
+					return &InvalidApiError{Name: args[1], product: &product}
+				}
+				ctx.Command().Name = args[1]
+				c.CheckApiParamWithBuildInArgs(ctx, api)
+				return c.processApiInvoke(ctx, &product, api, api.GetMethod(), api.PathPattern)
+			}
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 		}
 
@@ -571,6 +579,13 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 			return fmt.Errorf("--cli-dry-run-json is only supported for OpenAPI invoke path")
 		}
 		return processCliDryRunOpenapiJson(ctx, oc)
+	}
+
+	// SSE APIs stream events instead of returning a single buffered response.
+	if oc, ok := apiContext.(*OpenapiContext); ok && oc.IsSSE() {
+		return hookHttpContextCall(func() error {
+			return oc.CallSSE(ctx.Stdout())
+		})()
 	}
 
 	err = hookHttpContextCall(apiContext.Call)()
@@ -995,11 +1010,6 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 	}
 
 	force := ForceFlag(ctx.Flags()).IsAssigned()
-	apiContext := NewHttpContext(&c.profile)
-	err := apiContext.Init(ctx, product)
-	if err != nil {
-		return nil, err
-	}
 	if force {
 		if version, _ := ctx.Flags().Get("version").GetValue(); version != "" {
 			if style, ok := c.library.GetStyle(product.Code, version); ok {
@@ -1016,9 +1026,30 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 		}
 	}
 
-	if strings.ToLower(product.ApiStyle) == "rpc" || !ShouldUseOpenapi(ctx, product) {
+	// Validate routing before building the client: an unsupported product must
+	// report the style/product error, not an endpoint-resolution failure that
+	// only the routed channel would ever hit.
+	if !ShouldUseOpenapi(ctx, product) {
 		return nil, cli.NewErrorWithTip(fmt.Errorf("unchecked api style: %s or product: %s", product.ApiStyle, product.Code),
 			"Unsupported api style or product")
+	}
+
+	apiContext := NewHttpContext(&c.profile)
+	if err := apiContext.Init(ctx, product); err != nil {
+		return nil, err
+	}
+
+	// RPC style: the darabonba channel uses params.Pathname directly, so no
+	// restful method/path validation is needed. Default the pathname to "/"
+	// when the API declares no explicit path (the common RPC case).
+	if strings.ToLower(product.ApiStyle) == "rpc" {
+		if path == "" {
+			path = "/"
+		}
+		if method == "" {
+			method = "POST"
+		}
+		return &OpenapiContext{apiContext, method, path, api}, nil
 	}
 
 	// RESTful style: validate method and path
