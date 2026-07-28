@@ -5017,7 +5017,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -5028,7 +5028,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -5077,7 +5077,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -5136,7 +5136,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -5147,7 +5147,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -5196,7 +5196,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -5255,7 +5255,7 @@
       "tokenValue": "value",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -5266,7 +5266,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -5315,7 +5315,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -5374,7 +5374,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -5385,7 +5385,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -5434,7 +5434,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -5493,7 +5493,7 @@
       "tokenValue": "value",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -5504,7 +5504,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -5553,7 +5553,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -15413,7 +15413,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -15424,7 +15424,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -15473,7 +15473,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -15533,7 +15533,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -15544,7 +15544,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -15593,7 +15593,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -15653,7 +15653,7 @@
       "tokenValue": "value",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -15664,7 +15664,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -15713,7 +15713,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -15773,7 +15773,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -15784,7 +15784,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -15833,7 +15833,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -15893,7 +15893,7 @@
       "tokenValue": "value",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -15904,7 +15904,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -15953,7 +15953,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -25853,7 +25853,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -25864,7 +25864,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -25913,7 +25913,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -25973,7 +25973,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -25984,7 +25984,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -26033,7 +26033,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -26093,7 +26093,7 @@
       "tokenValue": "value",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -26104,7 +26104,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -26153,7 +26153,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -26213,7 +26213,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -26224,7 +26224,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -26273,7 +26273,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -26333,7 +26333,7 @@
       "tokenValue": "value",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -26344,7 +26344,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -26393,7 +26393,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -36293,7 +36293,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -36304,7 +36304,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -36353,7 +36353,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -36413,7 +36413,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -36424,7 +36424,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -36473,7 +36473,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -36533,7 +36533,7 @@
       "tokenValue": "value",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -36544,7 +36544,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -36593,7 +36593,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -36653,7 +36653,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -36664,7 +36664,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -36713,7 +36713,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -36773,7 +36773,7 @@
       "tokenValue": "value",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -36784,7 +36784,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -36833,7 +36833,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -46733,7 +46733,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -46744,7 +46744,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -46793,7 +46793,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -46853,7 +46853,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -46864,7 +46864,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -46913,7 +46913,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -46973,7 +46973,7 @@
       "tokenValue": "value",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -46984,7 +46984,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -47033,7 +47033,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -47093,7 +47093,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -47104,7 +47104,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -47153,7 +47153,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -47213,7 +47213,7 @@
       "tokenValue": "value",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -47224,7 +47224,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -47273,7 +47273,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -57173,7 +57173,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -57184,7 +57184,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -57233,7 +57233,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -57293,7 +57293,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -57304,7 +57304,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -57353,7 +57353,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -57413,7 +57413,7 @@
       "tokenValue": "value",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -57424,7 +57424,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -57473,7 +57473,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -57533,7 +57533,7 @@
       "tokenValue": "",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -57544,7 +57544,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -57593,7 +57593,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -57653,7 +57653,7 @@
       "tokenValue": "value",
       "tokenParseError": {
         "class": "InvalidFlag",
-        "text": "invalid flag unknown"
+        "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
       },
       "allowedDashValueEnhancement": false,
       "expectedSource": "selectedCase.newObservable",
@@ -57664,7 +57664,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
@@ -57713,7 +57713,7 @@
         "outMore": true,
         "err": {
           "class": "InvalidFlag",
-          "text": "invalid flag unknown"
+          "text": "invalid flag --unknown; available flags: --Count, --Name, --PortRange, --RegionId, --help, -c, -h"
         },
         "flags": {
           "Count": {
