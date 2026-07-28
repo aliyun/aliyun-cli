@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package jsonl implements the indexed JSONL physical layout used by metadata
-// plugins. The index is loaded eagerly; full API definitions stay in one data file and are fetched lazily with storage.Volume.ReadAt.
-package jsonl
+// Package indexed implements the shared metadata.index.json + data-blob
+// layout used by both JSONL and Protobuf metadata plugins.
+//
+// The index is loaded eagerly; API payloads stay in one data file and are
+// fetched lazily via storage.Volume.ReadAt. Payload decoding (JSON vs
+// Protobuf) is left to the caller.
+package indexed
 
 import (
 	"crypto/sha256"
@@ -32,14 +36,7 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/storage"
 )
 
-const (
-	SchemaName    = "aliyun-openapi-meta"
-	SchemaVersion = 1
-	LayoutName    = "jsonl"
-	LayoutVersion = 1
-)
-
-// Index is the small, eagerly loaded routing table for metadata.jsonl.
+// Index is the small, eagerly loaded routing table for an indexed data blob.
 type Index struct {
 	Schema        string   `json:"schema"`
 	SchemaVersion int      `json:"schemaVersion"`
@@ -51,9 +48,7 @@ type Index struct {
 	APIs          []Record `json:"apis"`
 }
 
-// Product holds metadata shared by every API record in the package. Keeping
-// endpoint maps here avoids repeating the same regional table on every JSONL
-// line and mirrors the baseline product catalog model.
+// Product holds metadata shared by every API record in the package.
 type Product struct {
 	GlobalEndpoint       string            `json:"globalEndpoint,omitempty"`
 	RegionalEndpoints    map[string]string `json:"regionalEndpoints,omitempty"`
@@ -69,7 +64,8 @@ func (p Product) Endpoints() meta.Endpoints {
 	}
 }
 
-// Record identifies one JSON line and carries enough presentation metadata to build command stubs without reading the full record.
+// Record identifies one payload range and carries enough presentation
+// metadata to build command stubs without reading the full record.
 type Record struct {
 	APIVersion    string `json:"apiVersion"`
 	APIName       string `json:"apiName"`
@@ -82,7 +78,8 @@ type Record struct {
 	Length        int64  `json:"length"`
 }
 
-// Reader is an immutable random-access view over a validated index and data file. It does not own the Volume; callers close the Volume.
+// Reader is an immutable random-access view over a validated index and data
+// file. It does not own the Volume; callers close the Volume.
 type Reader struct {
 	vol      storage.Volume
 	index    Index
@@ -90,8 +87,7 @@ type Reader struct {
 	records  map[string]Record
 }
 
-// Open loads and validates indexFile. dataFile may be empty, in which case the
-// index's dataFile field (or the standard filename) is used.
+// Open loads and validates indexFile. dataFile may be empty, in which case the index's dataFile field (or the standard filename) is used.
 func Open(vol storage.Volume, indexFile, dataFile string) (*Reader, error) {
 	if indexFile == "" {
 		indexFile = schema.MetadataIndexFile
@@ -105,7 +101,7 @@ func Open(vol storage.Volume, indexFile, dataFile string) (*Reader, error) {
 	}
 	var idx Index
 	if err := json.Unmarshal(raw, &idx); err != nil {
-		return nil, fmt.Errorf("decode JSONL index %s: %w", indexFile, err)
+		return nil, fmt.Errorf("decode metadata index %s: %w", indexFile, err)
 	}
 	if dataFile == "" {
 		dataFile = idx.DataFile
@@ -117,14 +113,14 @@ func Open(vol storage.Volume, indexFile, dataFile string) (*Reader, error) {
 		return nil, err
 	}
 	if idx.DataFile != "" && idx.DataFile != dataFile {
-		return nil, fmt.Errorf("JSONL index dataFile %q does not match manifest data %q", idx.DataFile, dataFile)
+		return nil, fmt.Errorf("metadata index dataFile %q does not match manifest data %q", idx.DataFile, dataFile)
 	}
 	stat, err := vol.Stat(dataFile)
 	if err != nil {
 		return nil, err
 	}
 	if stat.IsDir {
-		return nil, fmt.Errorf("JSONL data %s is a directory", dataFile)
+		return nil, fmt.Errorf("metadata data %s is a directory", dataFile)
 	}
 	if err := validateIndex(&idx, stat.Size); err != nil {
 		return nil, err
@@ -136,12 +132,10 @@ func Open(vol storage.Volume, indexFile, dataFile string) (*Reader, error) {
 	return &Reader{vol: vol, index: idx, dataFile: dataFile, records: records}, nil
 }
 
-// VerifyChecksum performs the intentionally non-lazy, install-time integrity
-// check. Runtime startup should normally call only Open so the large data file
-// is not read in full on every CLI invocation.
+// VerifyChecksum performs the intentionally non-lazy, install-time integrity check.
 func (r *Reader) VerifyChecksum() error {
 	if r.index.DataSHA256 == "" {
-		return errors.New("JSONL index is missing dataSha256")
+		return errors.New("metadata index is missing dataSha256")
 	}
 	data, err := r.vol.ReadAll(r.dataFile)
 	if err != nil {
@@ -150,11 +144,11 @@ func (r *Reader) VerifyChecksum() error {
 	digest := sha256.Sum256(data)
 	want := strings.TrimPrefix(strings.ToLower(r.index.DataSHA256), "sha256:")
 	if _, err := hex.DecodeString(want); err != nil || len(want) != sha256.Size*2 {
-		return fmt.Errorf("invalid JSONL dataSha256 %q", r.index.DataSHA256)
+		return fmt.Errorf("invalid metadata dataSha256 %q", r.index.DataSHA256)
 	}
 	got := hex.EncodeToString(digest[:])
 	if got != want {
-		return fmt.Errorf("JSONL data checksum mismatch: index=%s actual=sha256:%s", r.index.DataSHA256, got)
+		return fmt.Errorf("metadata data checksum mismatch: index=%s actual=sha256:%s", r.index.DataSHA256, got)
 	}
 	return nil
 }
@@ -166,13 +160,12 @@ func (r *Reader) Index() Index {
 	return idx
 }
 
-// ProductEndpoints returns the product-level endpoint table shared by all API
-// records. Reader and its index are immutable after Open.
+// ProductEndpoints returns the product-level endpoint table shared by all API records. Reader and its index are immutable after Open.
 func (r *Reader) ProductEndpoints() meta.Endpoints {
 	return r.index.Product.Endpoints()
 }
 
-// ReadAPI returns exactly one JSON document, excluding the JSONL newline.
+// ReadAPI returns exactly one payload byte range for (version, name).
 func (r *Reader) ReadAPI(version, name string) ([]byte, error) {
 	rec, ok := r.records[recordKey(version, name)]
 	if !ok {
@@ -183,7 +176,7 @@ func (r *Reader) ReadAPI(version, name string) ([]byte, error) {
 		return nil, err
 	}
 	if int64(len(data)) != rec.Length {
-		return nil, fmt.Errorf("short JSONL record %s/%s: got %d bytes, want %d", version, name, len(data), rec.Length)
+		return nil, fmt.Errorf("short metadata record %s/%s: got %d bytes, want %d", version, name, len(data), rec.Length)
 	}
 	return data, nil
 }
@@ -208,11 +201,11 @@ func (r *Reader) APIIndex(product, version string) (*meta.APIIndex, error) {
 }
 
 func validateIndex(idx *Index, actualSize int64) error {
-	if idx.Schema != SchemaName || idx.SchemaVersion != SchemaVersion || idx.LayoutVersion != LayoutVersion {
-		return fmt.Errorf("unsupported JSONL contract schema=%q schemaVersion=%d layoutVersion=%d", idx.Schema, idx.SchemaVersion, idx.LayoutVersion)
+	if idx.Schema != schema.SchemaName || idx.SchemaVersion != schema.SchemaVersion || idx.LayoutVersion != schema.LayoutVersion {
+		return fmt.Errorf("unsupported metadata index contract schema=%q schemaVersion=%d layoutVersion=%d", idx.Schema, idx.SchemaVersion, idx.LayoutVersion)
 	}
 	if idx.DataSize != actualSize {
-		return fmt.Errorf("JSONL data size mismatch: index=%d actual=%d", idx.DataSize, actualSize)
+		return fmt.Errorf("metadata data size mismatch: index=%d actual=%d", idx.DataSize, actualSize)
 	}
 	records := append([]Record(nil), idx.APIs...)
 	sort.Slice(records, func(i, j int) bool { return records[i].Offset < records[j].Offset })
@@ -220,18 +213,18 @@ func validateIndex(idx *Index, actualSize int64) error {
 	var end int64
 	for i, rec := range records {
 		if rec.APIVersion == "" || rec.APIName == "" || rec.CommandName == "" {
-			return errors.New("JSONL index record is missing apiVersion, apiName, or commandName")
+			return errors.New("metadata index record is missing apiVersion, apiName, or commandName")
 		}
 		if rec.Offset < 0 || rec.Length <= 0 || rec.Offset > actualSize || rec.Length > actualSize-rec.Offset {
-			return fmt.Errorf("JSONL record %s/%s has invalid byte range offset=%d length=%d", rec.APIVersion, rec.APIName, rec.Offset, rec.Length)
+			return fmt.Errorf("metadata record %s/%s has invalid byte range offset=%d length=%d", rec.APIVersion, rec.APIName, rec.Offset, rec.Length)
 		}
 		if i > 0 && rec.Offset < end {
-			return fmt.Errorf("JSONL record %s/%s overlaps the previous record", rec.APIVersion, rec.APIName)
+			return fmt.Errorf("metadata record %s/%s overlaps the previous record", rec.APIVersion, rec.APIName)
 		}
 		end = rec.Offset + rec.Length
 		key := recordKey(rec.APIVersion, rec.APIName)
 		if _, ok := seen[key]; ok {
-			return fmt.Errorf("duplicate JSONL record %s/%s", rec.APIVersion, rec.APIName)
+			return fmt.Errorf("duplicate metadata record %s/%s", rec.APIVersion, rec.APIName)
 		}
 		seen[key] = struct{}{}
 	}
@@ -243,7 +236,7 @@ func recordKey(version, name string) string { return version + "\x00" + name }
 func validateEntryName(name string) error {
 	clean := path.Clean(name)
 	if name == "" || path.IsAbs(name) || filepath.IsAbs(name) || clean == ".." || strings.HasPrefix(clean, "../") || strings.Contains(name, `\`) {
-		return fmt.Errorf("unsafe JSONL entry path %q", name)
+		return fmt.Errorf("unsafe metadata entry path %q", name)
 	}
 	return nil
 }

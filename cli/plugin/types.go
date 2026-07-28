@@ -8,10 +8,10 @@ import (
 )
 
 // Plugin distribution kinds. A product ships as exactly one form:
-// a compiled Go binary run as a separate process ("go"), or a bundle
-// of JSON metadata interpreted in-process by aliyun-openapi-runtime ("meta").
-// An empty value is treated as "go" for backward compatibility with
-// manifests/indexes authored before meta plugins existed.
+// a compiled Go binary run as a separate process ("go"),
+// or a bundle of indexed JSONL or Protobuf metadata interpreted in-process by aliyun-openapi-runtime ("meta").
+// An empty value is treated as "go" (legacy Go plugin manifests omit type).
+// Meta plugins must set type=meta explicitly together with a metadata descriptor.
 const (
 	PluginTypeGo   = "go"
 	PluginTypeMeta = "meta"
@@ -193,8 +193,7 @@ type PluginManifest struct {
 	ProfileRequired *bool               `json:"profileRequired,omitempty"`
 }
 
-// MetadataDescriptor is shared with aliyun-openapi-runtime so the installer
-// validates exactly the contract consumed by the runtime.
+// MetadataDescriptor is shared with aliyun-openapi-runtime so the installer validates exactly the contract consumed by the runtime.
 type MetadataDescriptor = runtimeschema.MetadataDescriptor
 
 // Key: kebab-case command name (e.g., "fc create-alias")

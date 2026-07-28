@@ -96,9 +96,6 @@ type Request struct {
 	Host runtime.Host
 }
 
-// ProductHelpRequest describes a product-level help render. Unlike Dispatch,
-// it needs only a product (and optionally an API version): command summaries
-// come from the lightweight metadata index, so no per-API payload is decoded.
 type ProductHelpRequest struct {
 	Product string
 	Version string
@@ -106,9 +103,6 @@ type ProductHelpRequest struct {
 	Lang    string
 }
 
-// HasProduct reports whether the configured source stack can resolve product.
-// Resolution remains targeted: it probes only the requested product and never
-// enumerates unrelated plugin directories.
 func (e *Engine) HasProduct(product string) bool {
 	ldr, err := e.getLoader()
 	if err != nil {
@@ -117,9 +111,7 @@ func (e *Engine) HasProduct(product string) bool {
 	return ldr.EnsureProduct(product) == nil
 }
 
-// ProductHelp renders the product's kebab-case command list from its selected
-// metadata index. The full JSONL/Protobuf API records remain lazy and are not
-// read by this operation.
+// ProductHelp renders the product's kebab-case command list from its selected metadata index.
 func (e *Engine) ProductHelp(req ProductHelpRequest) error {
 	ldr, err := e.getLoader()
 	if err != nil {

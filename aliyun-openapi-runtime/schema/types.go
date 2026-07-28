@@ -50,9 +50,21 @@ const (
 	MetadataDataFile  = "metadata.jsonl"
 )
 
+// Shared metadata-plugin contract identity. Layout-specific names
+// (e.g. format/jsonl.LayoutName, format/pbmeta.LayoutName) live under format/.
+// Shared index + ReadAt access lives in format/indexed.
+const (
+	SchemaName    = "aliyun-openapi-meta"
+	SchemaVersion = 1
+	LayoutVersion = 1
+
+	FormatJSON     = "json"
+	FormatProtobuf = "protobuf"
+)
+
 // MetadataDescriptor declares the encoding, schema and physical layout of an interpreted metadata plugin.
 type MetadataDescriptor struct {
-	Format        string `json:"format"`
+	Format        string `json:"format"` // FormatJSON or FormatProtobuf
 	Schema        string `json:"schema"`
 	SchemaVersion int    `json:"schemaVersion"`
 	Layout        string `json:"layout"`

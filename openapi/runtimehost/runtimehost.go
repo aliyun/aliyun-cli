@@ -150,14 +150,12 @@ func (h *profileHost) Credential() (credentialsv2.Credential, error) {
 	return h.profile.GetCredential(h.ctx, nil)
 }
 
-// sharedEngine is the process-wide engine, built once. The top-level product
-// router dispatches through it and resolves only the requested product.
+// sharedEngine is the process-wide engine, built once. The top-level product router dispatches through it and resolves only the requested product.
 var (
 	engineOnce sync.Once
 	engineInst *engine.Engine
 )
 
-// Engine returns the shared aliyun-openapi-runtime engine.
 func Engine() *engine.Engine {
 	engineOnce.Do(func() {
 		engineInst = openapiruntime.NewEngine(openapiruntime.Options{
@@ -200,21 +198,13 @@ func Dispatch(ctx *cli.Context, rawArgs []string) error {
 	})
 }
 
-// ProductHelp renders a product-level kebab command list from the selected
-// common-runtime source. For an installed metadata plugin the user source wins
-// over baseline; only metadata.index.json is read, not the full API payloads.
+// ProductHelp renders a product-level kebab command list from the selected common-runtime source.
+// For an installed metadata plugin the user source wins over baseline.
+// API version is selected only via --api-version (not the host legacy --version flag).
 func ProductHelp(ctx *cli.Context, product string) error {
-	version := apiVersionFromArgs(os.Args)
-	if version == "" {
-		if vf := ctx.Flags().Get("version"); vf != nil {
-			if v, ok := vf.GetValue(); ok {
-				version = v
-			}
-		}
-	}
 	return Engine().ProductHelp(engine.ProductHelpRequest{
 		Product: product,
-		Version: version,
+		Version: apiVersionFromArgs(os.Args),
 		Out:     ctx.Stdout(),
 		Lang:    i18n.GetLanguage(),
 	})
@@ -252,25 +242,17 @@ func TryHelp(ctx *cli.Context, product, command string) (handled bool, err error
 	if !Engine().Resolvable(product, command) {
 		return false, nil
 	}
-	// Forward a requested API version so help renders the selected
-	// version's parameters. The user may pass it either as the engine
-	// flag --api-version (scanned from the raw argv, mirroring the Go
-	// plugin help path) or the host's legacy --version flag.
+	// Forward --api-version so help renders the selected version's parameters.
 	args := []string{product, command}
 	if v := apiVersionFromArgs(os.Args); v != "" {
 		args = append(args, "--api-version", v)
-	} else if vf := ctx.Flags().Get("version"); vf != nil {
-		if v, ok := vf.GetValue(); ok && v != "" {
-			args = append(args, "--api-version", v)
-		}
 	}
 	// The engine's argparser turns --help into a Reserved.Help render.
 	args = append(args, "--help")
 	return true, Dispatch(ctx, args)
 }
 
-// apiVersionFromArgs extracts --api-version from a raw argv, supporting
-// both "--api-version X" and "--api-version=X". Returns "" when absent.
+// apiVersionFromArgs extracts --api-version from a raw argv, supporting both "--api-version X" and "--api-version=X". Returns "" when absent.
 func apiVersionFromArgs(argv []string) string {
 	const flag = "--api-version"
 	for i := 0; i < len(argv); i++ {

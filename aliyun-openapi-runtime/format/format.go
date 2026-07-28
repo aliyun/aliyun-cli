@@ -15,17 +15,17 @@
 // Package format decodes on-disk metadata bytes into the in-memory
 // Model defined in ../meta.
 //
-// Contract: every Format implementation MUST produce the same Model
-// types (meta.Product / meta.API / meta.APIIndex / meta.Parameter).
-// Upper layers depend on the Model, never on wire-specific
-// intermediates. This is the seam that lets us swap the disk format
-// (JSON <-> Protobuf <-> binary cache) without touching Loader,
-// Runtime, or CLI code.
+// Layout-specific packages live as subdirectories:
 //
-// Precision contract (JSON implementations): all number-bearing
-// decoders MUST honour encoding/json's UseNumber() so that int64
-// resource IDs and other large values are never routed through
-// float64.
+//	format/indexed  — shared index.json + ReadAt random access
+//	format/jsonl    — LayoutName for indexed-JSONL plugins
+//	format/pbmeta   — indexed-protobuf decode
+//
+// Contract: every Format implementation MUST produce the same Model types (meta.Product / meta.API / meta.APIIndex / meta.Parameter).
+// Upper layers depend on the Model, never on wire-specific intermediates.
+// This is the seam that lets us swap the disk format (JSON <-> Protobuf <-> binary cache) without touching Loader, Runtime, or CLI code.
+//
+// Precision contract (JSON implementations): all number-bearing decoders MUST honour encoding/json's UseNumber() so that int64 resource IDs and other large values are never routed through float64.
 package format
 
 import (
@@ -36,17 +36,14 @@ import (
 )
 
 type Format interface {
-	// DecodeIndex loads the lightweight per-(product, version) index
-	// used for command-stub rendering. version is the API version string (e.g. "2014-05-26").
+	// DecodeIndex loads the lightweight per-(product, version) index used for command-stub rendering. version is the API version string (e.g. "2014-05-26").
 	DecodeIndex(vol storage.Volume, version string) (*meta.APIIndex, error)
 
 	// DecodeAPI loads the full per-API meta identified by key.
 	DecodeAPI(vol storage.Volume, key APIKey) (*meta.API, error)
 
-	// DecodeProduct loads the top-level product manifest (versions,
-	// default version, description). Implementations that lack an
-	// explicit product manifest MAY synthesize one from directory
-	// scanning; see JSONFormat for the reference behaviour.
+	// DecodeProduct loads the top-level product manifest (versions, default version, description).
+	// Implementations that lack an explicit product manifest MAY synthesize one from directory scanning; see JSONFormat for the reference behaviour.
 	DecodeProduct(vol storage.Volume, code string) (*meta.Product, error)
 }
 
@@ -57,8 +54,6 @@ type APIKey struct {
 	Name    string // PascalCase API name (matches file basename)
 }
 
-// ErrNotSupported is returned by decoders that do not understand the
-// on-disk shape (e.g. legacy files without a required field). Callers
-// SHOULD treat ErrNotSupported as a soft failure and either fall
-// through to another Format or degrade gracefully.
+// ErrNotSupported is returned by decoders that do not understand the on-disk shape (e.g. legacy files without a required field).
+// Callers SHOULD treat ErrNotSupported as a soft failure and either fall through to another Format or degrade gracefully.
 var ErrNotSupported = errors.New("format: unsupported encoding")

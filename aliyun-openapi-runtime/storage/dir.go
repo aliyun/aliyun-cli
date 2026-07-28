@@ -19,26 +19,19 @@ import (
 	"path/filepath"
 )
 
-// DirStorage is a Storage backed by a real filesystem directory. It
-// is the storage of choice for user-installed plugins
-// (~/.aliyun/plugins/) and for developer overrides pointed to by
-// $ALIYUN_CLI_PLUGINS_DIR_OVERRIDE.
 type DirStorage struct {
 	root string
 }
 
 // NewDirStorage returns a DirStorage rooted at absolute path root.
-// The directory does not need to exist yet; Storage methods will
-// surface fs.ErrNotExist / ErrVolumeNotFound naturally when it is
-// missing.
+// The directory does not need to exist yet;
+// Storage methods will surface fs.ErrNotExist / ErrVolumeNotFound naturally when it is missing.
 func NewDirStorage(root string) *DirStorage {
 	return &DirStorage{root: root}
 }
 
-// Root returns the absolute filesystem root of the storage.
 func (s *DirStorage) Root() string { return s.root }
 
-// Open opens the volume named name.
 func (s *DirStorage) Open(name string) (Volume, error) {
 	dir := filepath.Join(s.root, name)
 	info, err := os.Stat(dir)
@@ -54,8 +47,7 @@ func (s *DirStorage) Open(name string) (Volume, error) {
 	return &dirVolume{base: dir}, nil
 }
 
-// ReadRoot reads a file located directly under the storage root
-// (outside any volume). Missing file -> ErrEntryNotFound.
+// ReadRoot reads a file located directly under the storage root (outside any volume). Missing file -> ErrEntryNotFound.
 func (s *DirStorage) ReadRoot(entry string) ([]byte, error) {
 	if entry == "" {
 		return nil, ErrEntryNotFound
@@ -67,8 +59,6 @@ func (s *DirStorage) ReadRoot(entry string) ([]byte, error) {
 	return data, err
 }
 
-// List enumerates every direct child directory of the storage root.
-// Missing root -> empty result, not an error.
 func (s *DirStorage) List() ([]string, error) {
 	entries, err := os.ReadDir(s.root)
 	if err != nil {

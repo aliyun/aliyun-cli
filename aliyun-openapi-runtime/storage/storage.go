@@ -26,8 +26,7 @@
 //     $ALIYUN_CLI_PLUGINS_DIR_OVERRIDE knob.
 //
 // Adding a new storage flavour (tar.zst, sqlite, HTTP CDN, ...)
-// means implementing the two interfaces below; every layer above
-// keeps working unchanged.
+// means implementing the two interfaces below; every layer above keeps working unchanged.
 package storage
 
 import (
@@ -36,9 +35,9 @@ import (
 	"time"
 )
 
-// Storage is a namespace of Volumes. A Volume typically maps to one
-// product; the namespace shape (e.g. one product per top-level dir)
-// is imposed by the caller, not by Storage itself.
+// Storage is a namespace of Volumes.
+// A Volume typically maps to one product;
+// the namespace shape (e.g. one product per top-level dir) is imposed by the caller, not by Storage itself.
 type Storage interface {
 	// Open returns the Volume for the given logical name. If no
 	// volume exists Open MUST return ErrVolumeNotFound.
@@ -55,24 +54,21 @@ type Storage interface {
 	ReadRoot(entry string) ([]byte, error)
 }
 
-// Volume is a flat namespace of entries (files) with random-access
-// reads. Volumes are cheap to reopen; implementations may treat
-// Close as a no-op.
+// Volume is a flat namespace of entries (files) with random-access reads.
+// Volumes are cheap to reopen; implementations may treat Close as a no-op.
 type Volume interface {
 	// ReadAll returns the entire content of entry.
 	ReadAll(entry string) ([]byte, error)
 
-	// ReadAt returns n bytes of entry starting at offset off. It is
-	// intended for range access into large multi-record files
-	// (e.g. JSONL + offset index). Implementations that can't
-	// support random access MAY simulate it via ReadAll + slice.
+	// ReadAt returns n bytes of entry starting at offset off.
+	// It is intended for range access into large multi-record files (e.g. JSONL + offset index).
+	// Implementations that can't support random access MAY simulate it via ReadAll + slice.
 	ReadAt(entry string, off, n int64) ([]byte, error)
 
 	// Stat returns metadata for entry.
 	Stat(entry string) (Stat, error)
 
-	// List enumerates every entry with the given prefix in an
-	// unspecified order. Pass "" for all entries.
+	// List enumerates every entry with the given prefix in an unspecified order. Pass "" for all entries.
 	List(prefix string) ([]string, error)
 
 	// Close releases any resources held by the volume. Callers MUST
@@ -87,18 +83,19 @@ type Stat struct {
 	IsDir   bool
 }
 
-// ErrVolumeNotFound is returned by Storage.Open when the requested
-// volume does not exist.
+// ErrVolumeNotFound is returned by Storage.Open when the requested volume does not exist.
 var ErrVolumeNotFound = errors.New("storage: volume not found")
 
-// ErrEntryNotFound is returned by Volume operations when the entry
-// does not exist. Implementations should return the sentinel, or wrap
-// it, so callers can check with errors.Is.
+// ErrEntryNotFound is returned by Volume operations when the entry does not exist.
 var ErrEntryNotFound = errors.New("storage: entry not found")
 
-// IsNotExist reports whether err (from Storage / Volume) means "the
-// named thing does not exist" — covering both sentinels above and
-// fs.ErrNotExist raised by embedded implementations.
+// ErrReadAtUnsupported is returned by Volume.ReadAt when the implementation
+// cannot perform ranged reads (e.g. embed fs.FS). Callers that need offset
+// access should use a Volume backed by a real file, such as DirStorage.
+var ErrReadAtUnsupported = errors.New("storage: ReadAt not supported")
+
+// IsNotExist reports whether err (from Storage / Volume) means "the named thing does not exist"
+// — covering both sentinels above and fs.ErrNotExist raised by embedded implementations.
 func IsNotExist(err error) bool {
 	return errors.Is(err, ErrVolumeNotFound) ||
 		errors.Is(err, ErrEntryNotFound) ||

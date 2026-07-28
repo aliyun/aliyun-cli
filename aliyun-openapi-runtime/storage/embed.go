@@ -120,23 +120,10 @@ func (v *fsVolume) ReadAll(entry string) ([]byte, error) {
 	return data, err
 }
 
-func (v *fsVolume) ReadAt(entry string, off, n int64) ([]byte, error) {
-	// fs.FS has no ReadAt affordance; simulate it. This is fine for
-	// small JSON files; if we ever ship JSONL + offset index we'll
-	// need a Volume implementation that actually holds an *os.File
-	// or a bytes.Reader.
-	data, err := v.ReadAll(entry)
-	if err != nil {
-		return nil, err
-	}
-	if off < 0 || off > int64(len(data)) {
-		return nil, errors.New("storage: offset out of range")
-	}
-	end := off + n
-	if end > int64(len(data)) {
-		end = int64(len(data))
-	}
-	return data[off:end], nil
+func (v *fsVolume) ReadAt(string, int64, int64) ([]byte, error) {
+	// fs.FS has no ranged-read API. Baseline canonical JSON only needs ReadAll;
+	// indexed JSONL/PB plugins use DirStorage instead.
+	return nil, ErrReadAtUnsupported
 }
 
 func (v *fsVolume) Stat(entry string) (Stat, error) {

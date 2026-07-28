@@ -1,4 +1,18 @@
-package jsonl
+// Copyright (c) 2009-present, Alibaba Cloud All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package indexed
 
 import (
 	"crypto/sha256"
@@ -76,7 +90,7 @@ func TestOpenRejectsOutOfBoundsRecord(t *testing.T) {
 	}
 	writeTestFile(t, filepath.Join(volumeDir, schema.MetadataDataFile), []byte("{}\n"))
 	idx := Index{
-		Schema: SchemaName, SchemaVersion: SchemaVersion, LayoutVersion: LayoutVersion,
+		Schema: schema.SchemaName, SchemaVersion: schema.SchemaVersion, LayoutVersion: schema.LayoutVersion,
 		DataFile: schema.MetadataDataFile, DataSize: 3,
 		APIs: []Record{{APIVersion: "v1", APIName: "A", CommandName: "a", Offset: 2, Length: 9}},
 	}
@@ -99,7 +113,7 @@ func TestOpenRejectsTraversalPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeTestFile(t, filepath.Join(root, "outside.jsonl"), []byte("{}\n"))
-	idx := Index{Schema: SchemaName, SchemaVersion: SchemaVersion, LayoutVersion: LayoutVersion, DataFile: "../outside.jsonl", DataSize: 3}
+	idx := Index{Schema: schema.SchemaName, SchemaVersion: schema.SchemaVersion, LayoutVersion: schema.LayoutVersion, DataFile: "../outside.jsonl", DataSize: 3}
 	raw, _ := json.Marshal(idx)
 	writeTestFile(t, filepath.Join(volumeDir, schema.MetadataIndexFile), raw)
 	vol, err := storage.NewDirStorage(root).Open("plugin")
@@ -136,7 +150,7 @@ func writeIndex(t *testing.T, volumeDir string, data []byte, records []Record) {
 	t.Helper()
 	digest := sha256.Sum256(data)
 	idx := Index{
-		Schema: SchemaName, SchemaVersion: SchemaVersion, LayoutVersion: LayoutVersion,
+		Schema: schema.SchemaName, SchemaVersion: schema.SchemaVersion, LayoutVersion: schema.LayoutVersion,
 		DataFile: schema.MetadataDataFile, DataSize: int64(len(data)),
 		DataSHA256: "sha256:" + hex.EncodeToString(digest[:]), APIs: records,
 	}

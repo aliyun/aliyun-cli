@@ -30,7 +30,7 @@ import (
 	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
-	"github.com/aliyun/aliyun-openapi-runtime/jsonl"
+	"github.com/aliyun/aliyun-openapi-runtime/format/indexed"
 	"github.com/aliyun/aliyun-openapi-runtime/loader"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
@@ -390,10 +390,10 @@ func TestUserMetaPluginOwnsProduct(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(data)
-	index := jsonl.Index{
-		Schema: jsonl.SchemaName, SchemaVersion: jsonl.SchemaVersion, LayoutVersion: jsonl.LayoutVersion,
+	index := indexed.Index{
+		Schema: schema.SchemaName, SchemaVersion: schema.SchemaVersion, LayoutVersion: schema.LayoutVersion,
 		DataFile: schema.MetadataDataFile, DataSize: int64(len(data)), DataSHA256: "sha256:" + hex.EncodeToString(digest[:]),
-		APIs: []jsonl.Record{{
+		APIs: []indexed.Record{{
 			APIVersion: "2024-01-01", APIName: def.Name, CommandName: def.CmdName,
 			DescriptionEN: "Describes a thing", Offset: 0, Length: int64(len(raw)),
 		}},

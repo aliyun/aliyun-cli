@@ -11,8 +11,9 @@ import (
 	"testing"
 
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
-	"github.com/aliyun/aliyun-openapi-runtime/jsonl"
-	"github.com/aliyun/aliyun-openapi-runtime/pbmeta"
+	"github.com/aliyun/aliyun-openapi-runtime/format/indexed"
+	"github.com/aliyun/aliyun-openapi-runtime/format/jsonl"
+	"github.com/aliyun/aliyun-openapi-runtime/format/pbmeta"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
 	"google.golang.org/protobuf/proto"
@@ -91,8 +92,8 @@ func writeAnyMetadataPlugin(t *testing.T, root string, protobuf bool) {
 	var offset int64
 	dataFile := schema.MetadataDataFile
 	descriptor := &schema.MetadataDescriptor{
-		Format: "json", Schema: jsonl.SchemaName, SchemaVersion: jsonl.SchemaVersion,
-		Layout: jsonl.LayoutName, LayoutVersion: jsonl.LayoutVersion,
+		Format: schema.FormatJSON, Schema: schema.SchemaName, SchemaVersion: schema.SchemaVersion,
+		Layout: jsonl.LayoutName, LayoutVersion: schema.LayoutVersion,
 		Index: schema.MetadataIndexFile, Data: schema.MetadataDataFile,
 	}
 	if protobuf {
@@ -104,7 +105,7 @@ func writeAnyMetadataPlugin(t *testing.T, root string, protobuf bool) {
 		data = append(prefix, payload...)
 		offset = int64(len(prefix))
 		dataFile = pbmeta.DataFileName
-		descriptor.Format = "protobuf"
+		descriptor.Format = schema.FormatProtobuf
 		descriptor.Layout = pbmeta.LayoutName
 		descriptor.Data = dataFile
 	} else {
@@ -119,11 +120,11 @@ func writeAnyMetadataPlugin(t *testing.T, root string, protobuf bool) {
 	}
 
 	digest := sha256.Sum256(data)
-	index := jsonl.Index{
-		Schema: jsonl.SchemaName, SchemaVersion: jsonl.SchemaVersion, LayoutVersion: jsonl.LayoutVersion,
+	index := indexed.Index{
+		Schema: schema.SchemaName, SchemaVersion: schema.SchemaVersion, LayoutVersion: schema.LayoutVersion,
 		DataFile: dataFile, DataSize: int64(len(data)), DataSHA256: "sha256:" + hex.EncodeToString(digest[:]),
-		Product: jsonl.Product{GlobalEndpoint: "demo.example.com"},
-		APIs: []jsonl.Record{{
+		Product: indexed.Product{GlobalEndpoint: "demo.example.com"},
+		APIs: []indexed.Record{{
 			APIVersion: "2020-01-01", APIName: "UpdateThing", CommandName: "update-thing",
 			Offset: offset, Length: int64(len(data)) - offset,
 		}},

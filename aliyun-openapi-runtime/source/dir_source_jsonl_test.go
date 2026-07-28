@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aliyun/aliyun-openapi-runtime/jsonl"
+	"github.com/aliyun/aliyun-openapi-runtime/format/indexed"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
 )
 
@@ -43,16 +43,16 @@ func TestDirSourceLoadsJSONLPluginByManifestProductCode(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(data)
-	index := jsonl.Index{
-		Schema: jsonl.SchemaName, SchemaVersion: jsonl.SchemaVersion, LayoutVersion: jsonl.LayoutVersion,
+	index := indexed.Index{
+		Schema: schema.SchemaName, SchemaVersion: schema.SchemaVersion, LayoutVersion: schema.LayoutVersion,
 		DataFile: schema.MetadataDataFile, DataSize: int64(len(data)), DataSHA256: "sha256:" + hex.EncodeToString(digest[:]),
-		Product: jsonl.Product{
+		Product: indexed.Product{
 			GlobalEndpoint: "ecs.aliyuncs.com",
 			RegionalEndpoints: map[string]string{
 				"cn-hangzhou": "ecs.cn-hangzhou.aliyuncs.com",
 			},
 		},
-		APIs: []jsonl.Record{{APIVersion: "2014-05-26", APIName: def.Name, CommandName: def.CmdName, Offset: 0, Length: int64(len(raw))}},
+		APIs: []indexed.Record{{APIVersion: "2014-05-26", APIName: def.Name, CommandName: def.CmdName, Offset: 0, Length: int64(len(raw))}},
 	}
 	indexRaw, _ := json.Marshal(index)
 	if err := os.WriteFile(filepath.Join(pluginDir, schema.MetadataIndexFile), indexRaw, 0o644); err != nil {

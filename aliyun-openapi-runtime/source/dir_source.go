@@ -23,9 +23,10 @@ import (
 	"strings"
 
 	"github.com/aliyun/aliyun-openapi-runtime/format"
-	"github.com/aliyun/aliyun-openapi-runtime/jsonl"
+	"github.com/aliyun/aliyun-openapi-runtime/format/indexed"
+	"github.com/aliyun/aliyun-openapi-runtime/format/jsonl"
+	"github.com/aliyun/aliyun-openapi-runtime/format/pbmeta"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
-	"github.com/aliyun/aliyun-openapi-runtime/pbmeta"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
 	"github.com/aliyun/aliyun-openapi-runtime/storage"
 )
@@ -131,18 +132,18 @@ func (s *dirSource) LoadAPI(code, version, name string) (*meta.API, error) {
 			api.Endpoints = reader.ProductEndpoints()
 		}
 	} else {
-		reader, openErr := jsonl.Open(vol, pv.metadata.Index, pv.metadata.Data)
+		reader, openErr := indexed.Open(vol, pv.metadata.Index, pv.metadata.Data)
 		if openErr != nil {
 			return nil, openErr
 		}
-		record, readErr := reader.ReadAPI(version, name)
+		payload, readErr := reader.ReadAPI(version, name)
 		if errors.Is(readErr, storage.ErrEntryNotFound) {
 			return nil, ErrNotFound
 		}
 		if readErr != nil {
 			return nil, readErr
 		}
-		api, err = format.DecodeAPIJSON(record, version+"/"+name)
+		api, err = format.DecodeAPIJSON(payload, version+"/"+name)
 		if err == nil && (api.Name != name || api.Version != version) {
 			return nil, fmt.Errorf("JSONL record identity mismatch: index=%s/%s data=%s/%s", version, name, api.Version, api.Name)
 		}
@@ -236,7 +237,7 @@ func (s *dirSource) inspect(name string) (*pluginVolume, bool, error) {
 }
 
 func validateMetadataDescriptor(d *schema.MetadataDescriptor) error {
-	if d.Schema != jsonl.SchemaName || d.SchemaVersion != jsonl.SchemaVersion || d.LayoutVersion != jsonl.LayoutVersion {
+	if d.Schema != schema.SchemaName || d.SchemaVersion != schema.SchemaVersion || d.LayoutVersion != schema.LayoutVersion {
 		return fmt.Errorf("unsupported metadata descriptor format=%q schema=%q schemaVersion=%d layout=%q layoutVersion=%d", d.Format, d.Schema, d.SchemaVersion, d.Layout, d.LayoutVersion)
 	}
 	if !isJSONLMetadata(d) && !isProtobufMetadata(d) {
@@ -246,37 +247,23 @@ func validateMetadataDescriptor(d *schema.MetadataDescriptor) error {
 }
 
 func isJSONLMetadata(d *schema.MetadataDescriptor) bool {
-	return d != nil && d.Format == "json" && d.Layout == jsonl.LayoutName
+	return d != nil && d.Format == schema.FormatJSON && d.Layout == jsonl.LayoutName
 }
 
 func isProtobufMetadata(d *schema.MetadataDescriptor) bool {
-	return d != nil && d.Format == "protobuf" && d.Layout == pbmeta.LayoutName
+	return d != nil && d.Format == schema.FormatProtobuf && d.Layout == pbmeta.LayoutName
 }
 
-func openMetadataIndex(vol storage.Volume, d *schema.MetadataDescriptor) (jsonl.Index, error) {
-	if isProtobufMetadata(d) {
-		reader, err := pbmeta.Open(vol, d.Index, d.Data)
-		if err != nil {
-			return jsonl.Index{}, err
-		}
-		return reader.Index(), nil
-	}
-	reader, err := jsonl.Open(vol, d.Index, d.Data)
+func openMetadataIndex(vol storage.Volume, d *schema.MetadataDescriptor) (indexed.Index, error) {
+	reader, err := indexed.Open(vol, d.Index, d.Data)
 	if err != nil {
-		return jsonl.Index{}, err
+		return indexed.Index{}, err
 	}
 	return reader.Index(), nil
 }
 
 func loadMetadataAPIIndex(vol storage.Volume, d *schema.MetadataDescriptor, product, version string) (*meta.APIIndex, error) {
-	if isProtobufMetadata(d) {
-		reader, err := pbmeta.Open(vol, d.Index, d.Data)
-		if err != nil {
-			return nil, err
-		}
-		return reader.APIIndex(product, version)
-	}
-	reader, err := jsonl.Open(vol, d.Index, d.Data)
+	reader, err := indexed.Open(vol, d.Index, d.Data)
 	if err != nil {
 		return nil, err
 	}
@@ -284,10 +271,14 @@ func loadMetadataAPIIndex(vol storage.Volume, d *schema.MetadataDescriptor, prod
 }
 
 func defaultMetadataDescriptor() *schema.MetadataDescriptor {
-	return &schema.MetadataDescriptor{Format: "json", Schema: jsonl.SchemaName, SchemaVersion: jsonl.SchemaVersion, Layout: jsonl.LayoutName, LayoutVersion: jsonl.LayoutVersion, Index: schema.MetadataIndexFile, Data: schema.MetadataDataFile}
+	return &schema.MetadataDescriptor{
+		Format: schema.FormatJSON, Schema: schema.SchemaName, SchemaVersion: schema.SchemaVersion,
+		Layout: jsonl.LayoutName, LayoutVersion: schema.LayoutVersion,
+		Index: schema.MetadataIndexFile, Data: schema.MetadataDataFile,
+	}
 }
 
-func versionsFromIndex(idx jsonl.Index) []string {
+func versionsFromIndex(idx indexed.Index) []string {
 	seen := map[string]struct{}{}
 	for _, rec := range idx.APIs {
 		seen[rec.APIVersion] = struct{}{}

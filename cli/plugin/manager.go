@@ -21,8 +21,10 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
-	runtimejsonl "github.com/aliyun/aliyun-openapi-runtime/jsonl"
-	runtimepbmeta "github.com/aliyun/aliyun-openapi-runtime/pbmeta"
+	runtimeindexed "github.com/aliyun/aliyun-openapi-runtime/format/indexed"
+	runtimejsonl "github.com/aliyun/aliyun-openapi-runtime/format/jsonl"
+	runtimepbmeta "github.com/aliyun/aliyun-openapi-runtime/format/pbmeta"
+	runtimeschema "github.com/aliyun/aliyun-openapi-runtime/schema"
 	runtimestorage "github.com/aliyun/aliyun-openapi-runtime/storage"
 	"golang.org/x/mod/semver"
 )
@@ -825,27 +827,16 @@ func readPluginManifestFromDir(extractDir string) (*PluginManifest, error) {
 	return &pManifest, nil
 }
 
-// validateAndResolvePackageType treats the downloaded package manifest as the
-// distribution authority. Remote indexes only locate an artifact; they do not
-// declare whether that artifact is executable Go or interpreted metadata.
 func validateAndResolvePackageType(extractDir string, manifest *PluginManifest) error {
 	declared := strings.ToLower(strings.TrimSpace(manifest.Type))
 	hasMetadata := manifest.Metadata != nil
 	hasBinary := strings.TrimSpace(manifest.Bin.Path) != ""
 
 	switch declared {
-	case "":
+	case "", PluginTypeGo:
+		// Legacy Go plugins may omit type.
 		if hasMetadata {
-			// Migration compatibility for early metadata packages that shipped a
-			// descriptor before type=meta became mandatory.
-			manifest.Type = PluginTypeMeta
-		} else {
-			manifest.Type = PluginTypeGo
-			return nil
-		}
-	case PluginTypeGo:
-		if hasMetadata {
-			return fmt.Errorf("invalid plugin manifest: type %q cannot declare metadata", PluginTypeGo)
+			return fmt.Errorf("invalid plugin manifest: type %q is required when metadata is declared", PluginTypeMeta)
 		}
 		manifest.Type = PluginTypeGo
 		return nil
@@ -862,11 +853,11 @@ func validateAndResolvePackageType(extractDir string, manifest *PluginManifest) 
 		return fmt.Errorf("invalid metadata plugin: bin.path must be empty")
 	}
 	d := manifest.Metadata
-	if d.Schema != runtimejsonl.SchemaName || d.SchemaVersion != runtimejsonl.SchemaVersion || d.LayoutVersion != runtimejsonl.LayoutVersion {
+	if d.Schema != runtimeschema.SchemaName || d.SchemaVersion != runtimeschema.SchemaVersion || d.LayoutVersion != runtimeschema.LayoutVersion {
 		return fmt.Errorf("unsupported metadata contract format=%q schema=%q schemaVersion=%d layout=%q layoutVersion=%d", d.Format, d.Schema, d.SchemaVersion, d.Layout, d.LayoutVersion)
 	}
-	isJSONL := d.Format == "json" && d.Layout == runtimejsonl.LayoutName
-	isProtobuf := d.Format == "protobuf" && d.Layout == runtimepbmeta.LayoutName
+	isJSONL := d.Format == runtimeschema.FormatJSON && d.Layout == runtimejsonl.LayoutName
+	isProtobuf := d.Format == runtimeschema.FormatProtobuf && d.Layout == runtimepbmeta.LayoutName
 	if !isJSONL && !isProtobuf {
 		return fmt.Errorf("unsupported metadata contract format=%q schema=%q schemaVersion=%d layout=%q layoutVersion=%d", d.Format, d.Schema, d.SchemaVersion, d.Layout, d.LayoutVersion)
 	}
@@ -876,22 +867,12 @@ func validateAndResolvePackageType(extractDir string, manifest *PluginManifest) 
 		return fmt.Errorf("open metadata plugin package: %w", err)
 	}
 	defer vol.Close()
-	var verifyErr error
-	if isProtobuf {
-		reader, openErr := runtimepbmeta.Open(vol, d.Index, d.Data)
-		if openErr != nil {
-			return fmt.Errorf("invalid metadata plugin index: %w", openErr)
-		}
-		verifyErr = reader.VerifyChecksum()
-	} else {
-		reader, openErr := runtimejsonl.Open(vol, d.Index, d.Data)
-		if openErr != nil {
-			return fmt.Errorf("invalid metadata plugin index: %w", openErr)
-		}
-		verifyErr = reader.VerifyChecksum()
+	reader, openErr := runtimeindexed.Open(vol, d.Index, d.Data)
+	if openErr != nil {
+		return fmt.Errorf("invalid metadata plugin index: %w", openErr)
 	}
-	if verifyErr != nil {
-		return fmt.Errorf("invalid metadata plugin data: %w", verifyErr)
+	if err := reader.VerifyChecksum(); err != nil {
+		return fmt.Errorf("invalid metadata plugin data: %w", err)
 	}
 	return nil
 }

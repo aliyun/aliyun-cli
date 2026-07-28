@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aliyun/aliyun-openapi-runtime/jsonl"
+	"github.com/aliyun/aliyun-openapi-runtime/format/indexed"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
 	"github.com/aliyun/aliyun-openapi-runtime/storage"
 	"google.golang.org/protobuf/proto"
@@ -38,11 +38,11 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(data)
-	index := jsonl.Index{
-		Schema: jsonl.SchemaName, SchemaVersion: jsonl.SchemaVersion, LayoutVersion: LayoutVersion,
+	index := indexed.Index{
+		Schema: schema.SchemaName, SchemaVersion: schema.SchemaVersion, LayoutVersion: schema.LayoutVersion,
 		DataFile: DataFileName, DataSize: int64(len(data)), DataSHA256: "sha256:" + hex.EncodeToString(digest[:]),
-		Product: jsonl.Product{RegionalEndpoints: map[string]string{"cn-hangzhou": "demo.cn-hangzhou.aliyuncs.com"}},
-		APIs:    []jsonl.Record{{APIVersion: "2020-01-01", APIName: "GetThing", CommandName: "get-thing", Offset: int64(len(prefix)), Length: int64(len(payload))}},
+		Product: indexed.Product{RegionalEndpoints: map[string]string{"cn-hangzhou": "demo.cn-hangzhou.aliyuncs.com"}},
+		APIs:    []indexed.Record{{APIVersion: "2020-01-01", APIName: "GetThing", CommandName: "get-thing", Offset: int64(len(prefix)), Length: int64(len(payload))}},
 	}
 	indexData, _ := json.Marshal(index)
 	if err := os.WriteFile(filepath.Join(pluginDir, schema.MetadataIndexFile), indexData, 0o644); err != nil {

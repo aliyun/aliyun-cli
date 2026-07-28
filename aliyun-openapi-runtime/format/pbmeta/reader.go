@@ -1,3 +1,17 @@
+// Copyright (c) 2009-present, Alibaba Cloud All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // Package pbmeta decodes the indexed protobuf metadata plugin layout.
 package pbmeta
 
@@ -5,7 +19,7 @@ import (
 	"fmt"
 
 	"github.com/aliyun/aliyun-openapi-runtime/format"
-	"github.com/aliyun/aliyun-openapi-runtime/jsonl"
+	"github.com/aliyun/aliyun-openapi-runtime/format/indexed"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
 	"github.com/aliyun/aliyun-openapi-runtime/storage"
@@ -13,31 +27,31 @@ import (
 )
 
 const (
-	LayoutName    = "indexed-pb"
-	LayoutVersion = 1
-	DataFileName  = "metadata.pb"
+	// LayoutName identifies the indexed-protobuf physical layout in MetadataDescriptor.Layout.
+	LayoutName   = "indexed-pb"
+	DataFileName = "metadata.pb"
 )
 
 // Reader uses the shared indexed range reader for bounds, checksum and
 // routing, then protobuf-decodes only the selected CommandDefinition payload.
 type Reader struct {
-	indexed *jsonl.Reader
+	indexed *indexed.Reader
 }
 
 func Open(vol storage.Volume, indexFile, dataFile string) (*Reader, error) {
 	if dataFile == "" {
 		dataFile = DataFileName
 	}
-	indexed, err := jsonl.Open(vol, indexFile, dataFile)
+	reader, err := indexed.Open(vol, indexFile, dataFile)
 	if err != nil {
 		return nil, err
 	}
-	return &Reader{indexed: indexed}, nil
+	return &Reader{indexed: reader}, nil
 }
 
 func (r *Reader) VerifyChecksum() error { return r.indexed.VerifyChecksum() }
 
-func (r *Reader) Index() jsonl.Index { return r.indexed.Index() }
+func (r *Reader) Index() indexed.Index { return r.indexed.Index() }
 
 func (r *Reader) ProductEndpoints() meta.Endpoints {
 	return r.indexed.ProductEndpoints()
