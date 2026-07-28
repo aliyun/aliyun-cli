@@ -390,11 +390,14 @@ func TestPrintApiUsage_UnknownApi_PluginAvailableNotInstalled_Lowercase(t *testi
 		Plugins: map[string]plugin.LocalPlugin{},
 	}
 
-	// Lowercase API name triggers shouldTryPlugin=true, uninstalled plugin -> install hint
+	// The runtime can handle ECS, so an unknown lowercase command is reported
+	// as an invalid baseline command rather than suggesting its optional plugin.
 	err := c.printApiUsage(ctx, "ecs", "describeinstances")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "aliyun-cli-ecs")
-	assert.Contains(t, err.Error(), "aliyun plugin install --names")
+	assert.Contains(t, err.Error(), "'describeinstances' is not a valid baseline kebab-case command")
+	assert.Contains(t, err.Error(), "aliyun ecs --help")
+	assert.Contains(t, err.Error(), "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help")
+	assert.NotContains(t, err.Error(), "plugin install")
 }
 
 func TestPrintApiUsage_UnknownApi_PluginHint_NonLowercase(t *testing.T) {

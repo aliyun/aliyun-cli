@@ -38,6 +38,16 @@ func productHelpEnvEnabled(name string) bool {
 	return value == "1" || strings.EqualFold(value, "true")
 }
 
+func (c *Commando) invalidBaselineCommandError(productCode, command string) error {
+	_, hasLegacyHelp := c.library.GetProduct(productCode)
+	if hasLegacyHelp {
+		return fmt.Errorf("'%s' is not a valid baseline kebab-case command for product '%s'.\nRun 'aliyun %s --help' to view legacy PascalCase commands, or '%s=true aliyun %s --help' to view baseline kebab-case commands.",
+			command, productCode, productCode, baselineProductHelpEnv, productCode)
+	}
+	return fmt.Errorf("'%s' is not a valid baseline kebab-case command for product '%s'.\nRun 'aliyun %s --help' to view available kebab-case commands.",
+		command, productCode, productCode)
+}
+
 func printProductHelpSwitchHint(ctx *cli.Context, english, chinese string) {
 	cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\n%s\n", i18n.T(english, chinese).Text())
 }
@@ -443,6 +453,9 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 	// Case B: Built-in product exists
 	canonicalApi := c.library.GetCanonicalApi(productCode, product.Version, apiName)
 	if canonicalApi == nil {
+		if shouldTryPlugin && !isInstalled && commonRuntimeFallbackEnabled() && runtimehost.HasProduct(productCode) {
+			return c.invalidBaselineCommandError(productCode, apiName)
+		}
 		// API not found in built-in metadata. api in plugin is different from api from built-in
 		if pluginName != "" {
 			if shouldTryPlugin { // 全小写进入插件执行及智能纠错系统， 未安装则提示安装

@@ -100,7 +100,7 @@ func Test_main(t *testing.T) {
 
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "unknown profile ecs, run configure to check", err.Error())
+	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
 	ctx.Flags().Get("region").SetAssigned(true)
 	ctx.Flags().Get("region").SetValue("cn-hangzhou")
 	ctx.Flags().Add(config.NewAccessKeyIdFlag())
@@ -113,7 +113,7 @@ func Test_main(t *testing.T) {
 	profileflag.SetAssigned(false)
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid command or product. See `aliyun help`.", err.Error())
+	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
 
 	ctx.Flags().Get("force").SetAssigned(true)
 	ctx.Flags().Get("version").SetAssigned(true)

@@ -32,7 +32,6 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/util"
 
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -216,22 +215,20 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to check plugin status: %w", err)
 		}
-		if installed || cli.HelpFlag(ctx.Flags()).IsAssigned() {
-			c.loadPlugins()
-			if installed {
-				// Product-help routing must observe the current local manifest
-				// even when this Commando instance loaded plugins earlier.
-				mgr, managerErr := plugin.NewManager()
-				if managerErr != nil {
-					return managerErr
-				}
-				c.localManifest, _ = mgr.GetLocalManifest()
+		c.loadPlugins()
+		if installed {
+			// Product-help routing must observe the current local manifest
+			// even when this Commando instance loaded plugins earlier.
+			mgr, managerErr := plugin.NewManager()
+			if managerErr != nil {
+				return managerErr
 			}
-			if cli.HelpFlag(ctx.Flags()).IsAssigned() {
-				ctx.Command().PrintHead(ctx)
-			}
-			return c.printProductUsage(ctx, args[0])
+			c.localManifest, _ = mgr.GetLocalManifest()
 		}
+		if cli.HelpFlag(ctx.Flags()).IsAssigned() {
+			ctx.Command().PrintHead(ctx)
+		}
+		return c.printProductUsage(ctx, args[0])
 	} else if len(args) > 1 {
 		apiOrMethod := args[1]
 		// Check if it's all lowercase (plugin format) and not an HTTP method
@@ -291,11 +288,14 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					return err
 				}
 				if foundPluginName == "" {
+					if commonRuntimeFallbackEnabled() && runtimehost.HasProduct(args[0]) {
+						return c.invalidBaselineCommandError(args[0], args[1])
+					}
 					c.loadPlugins()
 					if c.pluginIndex != nil {
 						for _, pInfo := range c.pluginIndex.Plugins {
 							if strings.EqualFold(pInfo.ProductCode, args[0]) {
-								return fmt.Errorf("'%s' is not a valid built-in product.\nA plugin '%s' is available which supports this product.\nRun 'aliyun plugin install --names %s' to install it.", args[0], pInfo.Name, pInfo.Name)
+								return fmt.Errorf("'%s' is not a valid built-in product.\nA plugin '%s' is available which supports this product.\nRun 'aliyun plugin install --name %s' to install it.", args[0], pInfo.Name, pInfo.Name)
 							}
 						}
 					} else if c.pluginIndexErr != nil {
@@ -408,15 +408,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	//   aliyun <productCode> <method> --param1 value1
 	//   aliyun <productCode> GET <path>
 	productName := args[0]
-	if len(args) == 1 {
-		c.loadPlugins()
-		err := c.printProductUsage(ctx, productName)
-		var invalid *InvalidProductOrPluginError
-		if errors.As(err, &invalid) {
-			return &InvalidProductError{Code: productName, library: c.library}
-		}
-		return err
-	} else if len(args) == 2 {
+	if len(args) == 2 {
 		// rpc or restful call
 		// aliyun <productCode> <method> --param1 value1
 		product, _ := c.library.GetProduct(args[0])
