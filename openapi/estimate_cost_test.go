@@ -15,6 +15,8 @@ package openapi
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
@@ -707,6 +709,17 @@ func TestMainEstimateCostUnknownApiRoutesToTriple(t *testing.T) {
 	profile.AccessKeySecret = "test-secret"
 	profile.RegionId = "cn-hangzhou"
 	command := NewCommando(w, profile)
+
+	// main() discards the injected profile and reloads one via
+	// LoadProfileWithContext, which reads the HOST config file by default —
+	// absent on CI runners ("region can't be empty" before the code under
+	// test runs). Point --config-path at a self-contained temp config so the
+	// test is hermetic on any machine.
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	assert.NoError(t, os.WriteFile(configPath, []byte(`{"current":"test-triple-main","profiles":[{"name":"test-triple-main","mode":"AK","access_key_id":"test-ak","access_key_secret":"test-secret","region_id":"cn-hangzhou"}]}`), 0o600))
+	configPathFlag := config.ConfigurePathFlag(ctx.Flags())
+	configPathFlag.SetAssigned(true)
+	configPathFlag.SetValue(configPath)
 
 	EstimateCostFlag(ctx.Flags()).SetAssigned(true)
 	defer EstimateCostFlag(ctx.Flags()).SetAssigned(false)
