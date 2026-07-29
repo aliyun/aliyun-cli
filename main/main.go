@@ -128,7 +128,12 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	// list-supported-pricing-apis: enumerate every OpenAPI that supports --estimate-cost
 	rootCmd.AddSubCommand(openapi.NewListSupportedPricingApisCommand())
 	// oss old version, duplicate with ossutil, will remove in future
-	rootCmd.AddSubCommand(lib.NewOssCommand())
+	ossCmd := lib.NewOssCommand()
+	// `aliyun oss <ApiName> ... --estimate-cost` quotes via CloudControl; the
+	// bridge shadows the generic product routing, so wire the quote fallthrough
+	// here (file-operation subcommands are matched first and stay untouched).
+	commando.AttachOssEstimateCost(ossCmd)
+	rootCmd.AddSubCommand(ossCmd)
 	rootCmd.AddSubCommand(cli.NewVersionCommand())
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
 	// mcp proxy command

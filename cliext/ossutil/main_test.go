@@ -2,8 +2,11 @@ package ossutil
 
 import (
 	"bytes"
+	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -106,5 +109,93 @@ func TestOssutilCommandRunInstalledSkipNetwork(t *testing.T) {
 	if !bytes.Contains([]byte(errStr), []byte("profile default is not configure yet")) &&
 		!bytes.Contains([]byte(errStr), []byte("can't get credential")) {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestOssutilEstimateCostRouting(t *testing.T) {
+	// File/bucket commands meter transfer/storage, not API pricing: reject
+	// before any install/credential machinery (zero-value Context proves no
+	// environment is touched) and point at both supported forms.
+	ctx := &Context{}
+	err := ctx.Run([]string{"ls", "--estimate-cost"})
+	if err == nil || !strings.Contains(err.Error(), "aliyun ossutil api <operation> --estimate-cost") {
+		t.Fatalf("expected file-command rejection with hint, got %v", err)
+	}
+	err = ctx.Run([]string{"cp", "a", "oss://b", "--estimate-cost-context", "K=V"})
+	if err == nil || !strings.Contains(err.Error(), "only applies to OpenAPI calls") {
+		t.Fatalf("expected estimate-cost-context rejection, got %v", err)
+	}
+	// api subcommand without an operation name: parsed locally, still no
+	// environment access.
+	err = ctx.Run([]string{"api", "--estimate-cost"})
+	if err == nil || !strings.Contains(err.Error(), "requires an operation name") {
+		t.Fatalf("expected missing-operation error, got %v", err)
+	}
+}
+
+func TestOssutilKebabToPascal(t *testing.T) {
+	cases := map[string]string{
+		"put-bucket":    "PutBucket",
+		"storage-class": "StorageClass",
+		"PutBucket":     "PutBucket",
+		"acl":           "Acl",
+	}
+	for in, want := range cases {
+		if got := kebabToPascal(in); got != want {
+			t.Fatalf("kebabToPascal(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// newApiEstimateTestContext builds a Context whose originCtx carries a
+// hermetic profile (temp config via --config-path) so runApiEstimateCost can
+// route all the way into the shared quote pipeline without touching the host
+// machine's configuration.
+func newApiEstimateTestContext(t *testing.T) *Context {
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, w)
+	cmd := &cli.Command{Name: "ossutil"}
+	config.AddFlags(cmd.Flags())
+	openapi.AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"current":"t","profiles":[{"name":"t","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pathFlag := config.ConfigurePathFlag(ctx.Flags())
+	pathFlag.SetAssigned(true)
+	pathFlag.SetValue(configPath)
+	return &Context{originCtx: ctx}
+}
+
+func TestOssutilApiEstimateCostFullParseAndRoute(t *testing.T) {
+	// Exercises every branch of the raw-arg parser (operation, kebab flag with
+	// separate value, --name=value form, bare bool flag, --region fallback,
+	// --estimate-cost marker, --estimate-cost-context K=V) and proves the
+	// result reaches the quote pipeline: the dial error names the fake
+	// endpoint, so parsing + EstimateOssCost ran end to end without invoking
+	// anything real.
+	t.Setenv("ALIBABA_CLOUD_PRICING_ENDPOINT", "estimate-cost.test.invalid")
+	c := newApiEstimateTestContext(t)
+	err := c.runApiEstimateCost([]string{
+		"put-bucket",
+		"--storage-class", "Standard",
+		"--acl=private",
+		"--versioning",
+		"--region", "cn-hangzhou",
+		"--estimate-cost",
+		"--estimate-cost-context", "EstimatedStorageGB=100",
+	})
+	if err == nil || !strings.Contains(err.Error(), "estimate-cost.test.invalid") {
+		t.Fatalf("expected quote dial error against fake endpoint, got %v", err)
+	}
+}
+
+func TestOssutilApiEstimateCostInvalidContextPair(t *testing.T) {
+	c := newApiEstimateTestContext(t)
+	err := c.runApiEstimateCost([]string{"put-bucket", "--estimate-cost", "--estimate-cost-context", "not-a-pair"})
+	if err == nil || !strings.Contains(err.Error(), "Key=Value") {
+		t.Fatalf("expected Key=Value usage error, got %v", err)
 	}
 }
