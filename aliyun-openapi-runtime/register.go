@@ -17,6 +17,7 @@ package openapiruntime
 import (
 	"io/fs"
 
+	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	"github.com/aliyun/aliyun-openapi-runtime/loader"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
@@ -39,6 +40,10 @@ type Options struct {
 
 	// OverrideDir mirrors $ALIYUN_CLI_PLUGINS_DIR_OVERRIDE. Empty -> override layer skipped.
 	OverrideDir string
+
+	// ExternalFlags are host-owned argv flags that the engine parser consumes
+	// syntactically but does not expose as API or reserved values.
+	ExternalFlags []argparser.ExternalFlagSpec
 }
 
 // NewLoader builds a Loader from the configured Sources.
@@ -70,10 +75,11 @@ func NewLoader(opts Options) loader.Loader {
 //
 // executor may be nil to use the default darabonba-backed executor.
 func NewEngine(opts Options, executor runtime.Executor) *engine.Engine {
-	return engine.NewEngine(
+	return engine.NewEngineWithOptions(
 		func() (loader.Loader, error) {
 			return NewLoader(opts), nil
 		},
 		executor,
+		engine.Options{ExternalFlags: opts.ExternalFlags},
 	)
 }

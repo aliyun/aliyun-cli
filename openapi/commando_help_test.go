@@ -99,13 +99,13 @@ func TestPrintProductUsage_LegacyBuiltinWinsOverBaselineProductHelp(t *testing.T
 	c.pluginIndex = &plugin.Index{}
 	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
 
-	original := productHelpTry
+	original := productHelpRender
 	called := false
-	productHelpTry = func(*cli.Context, string) (bool, error) {
+	productHelpRender = func(*cli.Context, string) error {
 		called = true
-		return true, nil
+		return nil
 	}
-	t.Cleanup(func() { productHelpTry = original })
+	t.Cleanup(func() { productHelpRender = original })
 
 	err := c.printProductUsage(ctx, "ecs")
 	assert.NoError(t, err)
@@ -142,13 +142,16 @@ func TestPrintProductUsage_BaselineEnvSelectsKebabHelp(t *testing.T) {
 	c.pluginIndex = &plugin.Index{}
 	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
 
-	originalTry := productHelpTry
-	productHelpTry = func(ctx *cli.Context, product string) (bool, error) {
+	originalAvailable := productHelpAvailable
+	productHelpAvailable = func(string) bool { return true }
+	t.Cleanup(func() { productHelpAvailable = originalAvailable })
+	originalRender := productHelpRender
+	productHelpRender = func(ctx *cli.Context, product string) error {
 		assert.Equal(t, "ecs", product)
 		fmt.Fprintln(ctx.Stdout(), "BASELINE_KEBAB_PRODUCT_HELP")
-		return true, nil
+		return nil
 	}
-	t.Cleanup(func() { productHelpTry = originalTry })
+	t.Cleanup(func() { productHelpRender = originalRender })
 
 	err := c.printProductUsage(ctx, "ecs")
 	assert.NoError(t, err)
@@ -166,13 +169,16 @@ func TestPrintProductUsage_BaselineProductHelpFallback(t *testing.T) {
 	c.pluginIndex = &plugin.Index{}
 	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
 
-	original := productHelpTry
-	productHelpTry = func(ctx *cli.Context, product string) (bool, error) {
+	originalAvailable := productHelpAvailable
+	productHelpAvailable = func(string) bool { return true }
+	t.Cleanup(func() { productHelpAvailable = originalAvailable })
+	originalRender := productHelpRender
+	productHelpRender = func(ctx *cli.Context, product string) error {
 		assert.Equal(t, "baseline-only", product)
 		fmt.Fprintln(ctx.Stdout(), "BASELINE_KEBAB_PRODUCT_HELP")
-		return true, nil
+		return nil
 	}
-	t.Cleanup(func() { productHelpTry = original })
+	t.Cleanup(func() { productHelpRender = originalRender })
 
 	err := c.printProductUsage(ctx, "baseline-only")
 	assert.NoError(t, err)
@@ -182,9 +188,9 @@ func TestPrintProductUsage_BaselineProductHelpFallback(t *testing.T) {
 func TestPrintProductUsage_UnknownProduct_NoPlugin(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	ctx := newTestContext(stdout, stderr)
-	original := productHelpTry
-	productHelpTry = func(*cli.Context, string) (bool, error) { return false, nil }
-	t.Cleanup(func() { productHelpTry = original })
+	original := productHelpAvailable
+	productHelpAvailable = func(string) bool { return false }
+	t.Cleanup(func() { productHelpAvailable = original })
 	c.library.builtinRepo = getRepository()
 	c.pluginIndex = &plugin.Index{}
 
@@ -219,9 +225,9 @@ func TestPrintProductUsage_PluginAvailableNotInstalled(t *testing.T) {
 func TestPrintProductUsage_NonBuiltinProduct_PluginNotInstalled(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	ctx := newTestContext(stdout, stderr)
-	original := productHelpTry
-	productHelpTry = func(*cli.Context, string) (bool, error) { return false, nil }
-	t.Cleanup(func() { productHelpTry = original })
+	original := productHelpAvailable
+	productHelpAvailable = func(string) bool { return false }
+	t.Cleanup(func() { productHelpAvailable = original })
 
 	repo, _ := meta.MockLoadRepository([]meta.Product{})
 	c.library.builtinRepo = repo
@@ -242,9 +248,9 @@ func TestPrintProductUsage_NonBuiltinProduct_PluginNotInstalled(t *testing.T) {
 func TestPrintProductUsage_NonBuiltinProduct_NoPlugin(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	ctx := newTestContext(stdout, stderr)
-	original := productHelpTry
-	productHelpTry = func(*cli.Context, string) (bool, error) { return false, nil }
-	t.Cleanup(func() { productHelpTry = original })
+	original := productHelpAvailable
+	productHelpAvailable = func(string) bool { return false }
+	t.Cleanup(func() { productHelpAvailable = original })
 
 	repo, _ := meta.MockLoadRepository([]meta.Product{})
 	c.library.builtinRepo = repo

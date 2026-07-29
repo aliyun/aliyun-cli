@@ -705,3 +705,86 @@ func TestUnknownFlag(t *testing.T) {
 		t.Fatalf("flag = %q", ufe.Flag)
 	}
 }
+
+func TestParseWithOptionsConsumesExternalFlags(t *testing.T) {
+	opts := ParseOptions{ExternalFlags: []ExternalFlagSpec{
+		{Name: "profile", Shorthand: 'p', Mode: ExternalFlagOptional},
+		{Name: "read-timeout", Mode: ExternalFlagRequired},
+		{Name: "cli-ai-mode", Mode: ExternalFlagNone},
+	}}
+	res, err := ParseWithOptions(schema(), []string{
+		"--profile", "prod",
+		"--biz-region-id", "cn-hangzhou",
+		"--read-timeout=30",
+		"--cli-ai-mode",
+	}, opts)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := res.Args["RegionId"]; got != "cn-hangzhou" {
+		t.Fatalf("RegionId = %v", got)
+	}
+}
+
+func TestParseWithOptionsExternalBoundaries(t *testing.T) {
+	opts := ParseOptions{ExternalFlags: []ExternalFlagSpec{
+		{Name: "profile", Shorthand: 'p', Mode: ExternalFlagOptional},
+	}}
+	res, err := ParseWithOptions(schema(), []string{
+		"--image-cache-name", "demo",
+		"-p=prod",
+		"--profile",
+		"--biz-region-id", "cn-hangzhou",
+	}, opts)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := res.Args["ImageCacheName"]; got != "demo" {
+		t.Fatalf("ImageCacheName = %v", got)
+	}
+	if got := res.Args["RegionId"]; got != "cn-hangzhou" {
+		t.Fatalf("RegionId = %v", got)
+	}
+}
+
+func TestParseWithOptionsRejectsExternalFlag(t *testing.T) {
+	opts := ParseOptions{ExternalFlags: []ExternalFlagSpec{{
+		Name:          "RegionId",
+		Mode:          ExternalFlagRequired,
+		RejectMessage: "use --region or --biz-region-id",
+	}}}
+	_, err := ParseWithOptions(schema(), []string{"--RegionId", "cn-hangzhou"}, opts)
+	if err == nil || !strings.Contains(err.Error(), "use --region or --biz-region-id") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseWithOptionsRequiresExternalValue(t *testing.T) {
+	opts := ParseOptions{ExternalFlags: []ExternalFlagSpec{{
+		Name: "read-timeout",
+		Mode: ExternalFlagRequired,
+	}}}
+	_, err := ParseWithOptions(schema(), []string{"--read-timeout", "--biz-region-id", "cn-hangzhou"}, opts)
+	if err == nil || !strings.Contains(err.Error(), "--read-timeout requires a value") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseWithOptionsFlagPriority(t *testing.T) {
+	opts := ParseOptions{ExternalFlags: []ExternalFlagSpec{
+		// Reserved wins even if a host accidentally declares the same name.
+		{Name: "quiet", Mode: ExternalFlagRequired},
+		// External wins over an API metadata option.
+		{Name: "biz-region-id", Mode: ExternalFlagNone},
+	}}
+	res, err := ParseWithOptions(schema(), []string{"--quiet", "--biz-region-id"}, opts)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !res.Reserved.Quiet {
+		t.Fatal("--quiet was not parsed as an engine-reserved flag")
+	}
+	if _, ok := res.Args["RegionId"]; ok {
+		t.Fatal("external --biz-region-id leaked into API arguments")
+	}
+}

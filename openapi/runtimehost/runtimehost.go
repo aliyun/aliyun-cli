@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package runtimehost is the aliyun-cli host adapter for the standalone
-// aliyun-openapi-runtime engine. It is the ONLY place that binds the engine to
-// aliyun-cli's cli.Command tree, config/profile credentials, and i18n,
-// keeping the engine module itself free of those dependencies.
+// Package runtimehost is the aliyun-cli host adapter for the standalone aliyun-openapi-runtime engine.
+// It is the ONLY place that binds the engine to aliyun-cli's cli.Command tree, config/profile credentials, and i18n, keeping the engine module itself free of those dependencies.
 package runtimehost
 
 import (
@@ -84,7 +82,7 @@ func (h *profileHost) Region() string {
 // a load error it returns zero values (the engine then uses SDK
 // defaults). Timeouts in the profile are seconds; convert to Duration.
 // Transport flags (--skip-secure-verify, --user-agent, AI mode) are
-// folded in from ctx after extractHostGlobals.
+// folded in from the flags already parsed into ctx.
 func (h *profileHost) Settings() runtime.Settings {
 	h.load()
 	s := runtime.Settings{}
@@ -106,7 +104,7 @@ func (h *profileHost) Settings() runtime.Settings {
 }
 
 // buildUserAgentSuffix merges --user-agent with the host AI-mode suffix
-// (config + --cli-ai-mode / --no-cli-ai-mode / --cli-ai-user-agent).
+// (config + --cli-ai-mode / --no-cli-ai-mode).
 // The engine prefixes aliyun-openapi-runtime/{ver} Aliyun-CLI/{cliVer}.
 func buildUserAgentSuffix(ctx *cli.Context) string {
 	var parts []string
@@ -121,14 +119,6 @@ func buildUserAgentSuffix(ctx *cli.Context) string {
 	cfg, err := aimode.Load(config.GetConfigDir(ctx))
 	if err != nil {
 		cfg = aimode.DefaultAiConfig()
-	}
-	if f := ctx.Flags().Get("cli-ai-user-agent"); f != nil {
-		if v, ok := f.GetValue(); ok && strings.TrimSpace(v) != "" {
-			if cfg == nil {
-				cfg = aimode.DefaultAiConfig()
-			}
-			cfg.UserAgent = strings.TrimSpace(v)
-		}
 	}
 	if suf := aimode.RequestUserAgentSuffixForCommand(cfg, forceOn, forceOff); suf != "" {
 		parts = append(parts, suf)
@@ -163,6 +153,7 @@ func Engine() *engine.Engine {
 			BundledBy:      "aliyun-cli " + cli.Version,
 			UserPluginsDir: userPluginsDir(),
 			OverrideDir:    os.Getenv("ALIYUN_CLI_PLUGINS_DIR_OVERRIDE"),
+			ExternalFlags:  engineExternalFlags(),
 		}, nil)
 	})
 	return engineInst
@@ -172,11 +163,10 @@ func Engine() *engine.Engine {
 // using the profile-backed host. rawArgs is the argv tail starting at
 // the product (e.g. os.Args from the product onward).
 //
-// Host global flags (profile / credential / network) are extracted from
-// the tail and applied to ctx first, so the engine only sees its own
-// runtime flags and the API parameters.
+// The root parser has already stored host global flags (profile /
+// credential / network) in ctx. Their raw argv tokens are declared as
+// external flags so the engine parser can consume and ignore them.
 func Dispatch(ctx *cli.Context, rawArgs []string) error {
-	engineArgs := extractHostGlobals(ctx, rawArgs)
 	host := &profileHost{ctx: ctx}
 
 	// Resolve the display language from the profile (which now reflects
@@ -191,11 +181,22 @@ func Dispatch(ctx *cli.Context, rawArgs []string) error {
 	}
 
 	return Engine().Dispatch(engine.Request{
-		Args: engineArgs,
+		Args: rawArgs,
 		Out:  ctx.Stdout(),
 		Lang: lang,
 		Host: host,
 	})
+}
+
+func helpLanguage(ctx *cli.Context) string {
+	if ctx != nil && ctx.Flags() != nil {
+		if f := config.LanguageFlag(ctx.Flags()); f != nil {
+			if lang, ok := f.GetValue(); ok && strings.TrimSpace(lang) != "" {
+				return strings.TrimSpace(lang)
+			}
+		}
+	}
+	return i18n.GetLanguage()
 }
 
 // ProductHelp renders a product-level kebab command list from the selected common-runtime source.
@@ -211,17 +212,8 @@ func ProductHelp(ctx *cli.Context, product string) error {
 	return Engine().ProductHelp(engine.Request{
 		Args: args,
 		Out:  ctx.Stdout(),
-		Lang: i18n.GetLanguage(),
+		Lang: helpLanguage(ctx),
 	})
-}
-
-// TryProductHelp renders product help only when common-runtime can resolve the requested product,
-// allowing the aliyun-cli host to retain its legacy PascalCase product help as the higher-priority no-plugin path.
-func TryProductHelp(ctx *cli.Context, product string) (handled bool, err error) {
-	if !HasProduct(product) {
-		return false, nil
-	}
-	return true, ProductHelp(ctx, product)
 }
 
 func HasProduct(product string) bool {
@@ -257,10 +249,13 @@ func TryHelp(ctx *cli.Context, product, command string) (handled bool, err error
 	}
 	// The engine's argparser turns --help into a Reserved.Help render.
 	args = append(args, "--help")
-	return true, Dispatch(ctx, args)
+	return true, Engine().Dispatch(engine.Request{
+		Args: args,
+		Out:  ctx.Stdout(),
+		Lang: helpLanguage(ctx),
+	})
 }
 
-// apiVersionFromArgs extracts --api-version from a raw argv, supporting both "--api-version X" and "--api-version=X". Returns "" when absent.
 func apiVersionFromArgs(argv []string) string {
 	const flag = "--api-version"
 	for i := 0; i < len(argv); i++ {

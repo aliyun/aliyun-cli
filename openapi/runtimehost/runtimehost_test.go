@@ -22,11 +22,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
+	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/config"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	"github.com/aliyun/aliyun-openapi-runtime/format/indexed"
@@ -43,6 +46,18 @@ type captureExecutor struct{ last *runtime.ExecContext }
 func (c *captureExecutor) Execute(ec *runtime.ExecContext) (*runtime.Response, error) {
 	c.last = ec
 	return &runtime.Response{StatusCode: 200, Raw: []byte(`{}`)}, nil
+}
+
+func TestHelpLanguagePrefersCommandFlag(t *testing.T) {
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	flag := config.NewLanguageFlag()
+	ctx.Flags().Add(flag)
+	flag.SetAssigned(true)
+	flag.SetValue("zh")
+
+	if got := helpLanguage(ctx); got != "zh" {
+		t.Fatalf("help language = %q, want zh", got)
+	}
 }
 
 // TestHostSettingsAppliedToExecContext verifies the engine copies the
@@ -265,6 +280,84 @@ func TestMultiVersionResolutionFromBaseline(t *testing.T) {
 	// An undeclared version is rejected via the `versions` list.
 	if _, err := l.ResolveCommandVersion("bailian", "add-category", "1999-01-01"); err == nil {
 		t.Fatal("undeclared version should error")
+	}
+
+	versions := l.FindCommandVersions("bailian", "create-document-tag")
+	if !reflect.DeepEqual(versions, []string{"2023-06-01"}) {
+		t.Fatalf("create-document-tag versions = %v", versions)
+	}
+}
+
+func TestListAPIVersionsFromBaseline(t *testing.T) {
+	eng := baselineEngine(t)
+	if !eng.Resolvable("bailian", "list-api-versions") {
+		t.Fatal("multi-version product should expose list-api-versions")
+	}
+
+	out, err := runOapi(t, eng, "", "bailian", "list-api-versions")
+	if err != nil {
+		t.Fatalf("list-api-versions: %v", err)
+	}
+	for _, want := range []string{
+		"Product: bailian",
+		"2023-06-01",
+		"* 2023-12-29 (default)",
+		"ALIBABA_CLOUD_BAILIAN_API_VERSION=<version>",
+		"aliyun bailian --api-version <version>",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("version list missing %q:\n%s", want, out)
+		}
+	}
+
+	help, err := runOapi(t, eng, "", "bailian", "list-api-versions", "--help")
+	if err != nil {
+		t.Fatalf("list-api-versions help: %v", err)
+	}
+	if !strings.Contains(help, "Description: List supported API versions") ||
+		!strings.Contains(help, "aliyun bailian list-api-versions") {
+		t.Fatalf("unexpected list-api-versions help:\n%s", help)
+	}
+
+	if eng.Resolvable("ecs", "list-api-versions") {
+		t.Fatal("single-version product should not expose list-api-versions")
+	}
+
+	var defaultHelp bytes.Buffer
+	if err := eng.ProductHelp(engine.Request{Args: []string{"bailian"}, Out: &defaultHelp, Lang: "en"}); err != nil {
+		t.Fatalf("default product help: %v", err)
+	}
+	if !strings.Contains(defaultHelp.String(), "list-api-versions") {
+		t.Fatalf("default multi-version help should advertise list-api-versions:\n%s", defaultHelp.String())
+	}
+
+	var versionHelp bytes.Buffer
+	if err := eng.ProductHelp(engine.Request{
+		Args: []string{"bailian", "--api-version", "2023-06-01"},
+		Out:  &versionHelp,
+		Lang: "en",
+	}); err != nil {
+		t.Fatalf("version product help: %v", err)
+	}
+	if strings.Contains(versionHelp.String(), "list-api-versions") {
+		t.Fatalf("version-specific product help should hide list-api-versions:\n%s", versionHelp.String())
+	}
+}
+
+func TestCrossVersionCommandErrorSuggestsAPIVersion(t *testing.T) {
+	eng := baselineEngine(t)
+	_, err := runOapi(t, eng, "", "bailian", "create-document-tag", "--help")
+	if err == nil {
+		t.Fatal("expected command version error")
+	}
+	for _, want := range []string{
+		`command "create-document-tag" is not available in API version "2023-12-29"`,
+		"available versions for this command: 2023-06-01",
+		"aliyun bailian create-document-tag --api-version 2023-06-01",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("version error missing %q:\n%s", want, err)
+		}
 	}
 }
 

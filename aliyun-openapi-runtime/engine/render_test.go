@@ -180,7 +180,7 @@ func TestPrintProductHelpUsesIndexWithoutLoadingAPIs(t *testing.T) {
 		},
 	}
 
-	if err := printProductHelp(&buf, product, index, "en"); err != nil {
+	if err := printProductHelp(&buf, product, index, "en", false); err != nil {
 		t.Fatalf("printProductHelp: %v", err)
 	}
 	out := buf.String()
@@ -221,7 +221,7 @@ func TestPrintProductHelpWrapsCommandDescriptionsLikePluginRuntime(t *testing.T)
 		},
 	}
 
-	if err := printProductHelp(&buf, product, index, "en"); err != nil {
+	if err := printProductHelp(&buf, product, index, "en", false); err != nil {
 		t.Fatalf("printProductHelp: %v", err)
 	}
 	lines := strings.Split(buf.String(), "\n")

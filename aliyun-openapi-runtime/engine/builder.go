@@ -41,23 +41,41 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
 )
 
-// Engine dispatches OpenAPI commands against a lazy Loader. It carries no presentation or host state; each call passes its own Request.
+// Engine dispatches OpenAPI commands against a lazy Loader. It carries only
+// immutable wiring/parser configuration; each call passes its own host and
+// presentation state in Request.
 //
 // The loader is constructed on first use and memoised. Product ownership is then resolved on demand for only the product named by the request.
 type Engine struct {
-	loaderFunc func() (loader.Loader, error)
-	executor   runtime.Executor
+	loaderFunc    func() (loader.Loader, error)
+	executor      runtime.Executor
+	externalFlags []argparser.ExternalFlagSpec
 
 	once   sync.Once
 	loader loader.Loader
 	lodErr error
 }
 
+const listAPIVersionsCommand = "list-api-versions"
+
 func NewEngine(loaderFunc func() (loader.Loader, error), executor runtime.Executor) *Engine {
+	return NewEngineWithOptions(loaderFunc, executor, Options{})
+}
+
+// Options configures immutable parser extensions for an Engine.
+type Options struct {
+	ExternalFlags []argparser.ExternalFlagSpec
+}
+
+func NewEngineWithOptions(loaderFunc func() (loader.Loader, error), executor runtime.Executor, opts Options) *Engine {
 	if executor == nil {
 		executor = runtime.NewExecutor()
 	}
-	return &Engine{loaderFunc: loaderFunc, executor: executor}
+	return &Engine{
+		loaderFunc:    loaderFunc,
+		executor:      executor,
+		externalFlags: append([]argparser.ExternalFlagSpec(nil), opts.ExternalFlags...),
+	}
 }
 
 func (e *Engine) getLoader() (loader.Loader, error) {
@@ -75,6 +93,10 @@ func (e *Engine) Resolvable(product, command string) bool {
 	}
 	if err := ldr.EnsureProduct(product); err != nil {
 		return false
+	}
+	if command == listAPIVersionsCommand {
+		p := ldr.LookupProduct(product)
+		return p != nil && len(p.Versions) > 1
 	}
 	// Check across all of the product's versions, not just the default,
 	// so a command that lives only in a non-default version is still
@@ -126,7 +148,8 @@ func (e *Engine) ProductHelp(req Request) error {
 	if product == nil {
 		return fmt.Errorf("unknown product %q", productCode)
 	}
-	version, err := ldr.ResolveVersion(productCode, scanAPIVersion(req.Args[1:]))
+	requestedVersion := scanAPIVersion(req.Args[1:])
+	version, err := ldr.ResolveVersion(productCode, requestedVersion)
 	if err != nil {
 		return err
 	}
@@ -134,7 +157,7 @@ func (e *Engine) ProductHelp(req Request) error {
 	if err != nil {
 		return fmt.Errorf("load product index %s@%s: %w", productCode, version, err)
 	}
-	return printProductHelp(req.Out, product, index, req.Lang)
+	return printProductHelp(req.Out, product, index, req.Lang, requestedVersion == "" && len(product.Versions) > 1)
 }
 
 // Dispatch resolves and runs one command described by req.Args.
@@ -153,6 +176,19 @@ func (e *Engine) Dispatch(req Request) error {
 		return err
 	}
 	cmdName := args[1]
+	productMeta := ldr.LookupProduct(product)
+	if cmdName == listAPIVersionsCommand && productMeta != nil && len(productMeta.Versions) > 1 {
+		res, err := argparser.ParseWithOptions(nil, args[2:], argparser.ParseOptions{
+			ExternalFlags: e.externalFlags,
+		})
+		if err != nil {
+			return err
+		}
+		if res.Reserved.Help {
+			return printAPIVersionsHelp(req.Out, productMeta, req.Lang)
+		}
+		return printAPIVersions(req.Out, productMeta, req.Lang)
+	}
 
 	// Pre-scan the raw tail for --api-version so command resolution and metadata loading target the requested version (not just the product default).
 	// Without this, an older version requested via --api-version would still resolve/execute against the default.
@@ -161,6 +197,13 @@ func (e *Engine) Dispatch(req Request) error {
 	ref, err := ldr.ResolveCommandVersion(product, cmdName, reqVersion)
 	if err != nil {
 		if errors.Is(err, loader.ErrCommandNotFound) {
+			if versions := ldr.FindCommandVersions(product, cmdName); len(versions) > 0 {
+				currentVersion, resolveErr := ldr.ResolveVersion(product, reqVersion)
+				if resolveErr != nil {
+					return resolveErr
+				}
+				return commandVersionError(product, cmdName, currentVersion, versions)
+			}
 			return fmt.Errorf("unknown command %q for product %q; try `aliyun %s` to list commands",
 				cmdName, product, product)
 		}
@@ -172,7 +215,9 @@ func (e *Engine) Dispatch(req Request) error {
 		return fmt.Errorf("load api %s: %w", ref, err)
 	}
 
-	res, err := argparser.Parse(api.Parameters, args[2:])
+	res, err := argparser.ParseWithOptions(api.Parameters, args[2:], argparser.ParseOptions{
+		ExternalFlags: e.externalFlags,
+	})
 	if err != nil {
 		var ufe *argparser.UnknownFlagError
 		if errors.As(err, &ufe) {
@@ -323,6 +368,17 @@ func (e *Engine) Dispatch(req Request) error {
 		return renderOutputTable(req.Out, resp.Parsed, resp.Raw, res.Reserved.OutputTable)
 	}
 	return renderResponse(req.Out, resp, res.Reserved.CliQuery)
+}
+
+func commandVersionError(product, command, currentVersion string, versions []string) error {
+	var b strings.Builder
+	fmt.Fprintf(&b, "command %q is not available in API version %q for product %q", command, currentVersion, product)
+	fmt.Fprintf(&b, "\navailable versions for this command: %s", strings.Join(versions, ", "))
+	b.WriteString("\nuse an API version explicitly:")
+	for _, version := range versions {
+		fmt.Fprintf(&b, "\n  aliyun %s %s --api-version %s", product, command, version)
+	}
+	return errors.New(b.String())
 }
 
 // scanAPIVersion extracts the value of --api-version from a raw argv tail, supporting both "--api-version X" and "--api-version=X" forms.

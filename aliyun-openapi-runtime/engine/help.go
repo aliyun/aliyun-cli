@@ -70,7 +70,7 @@ func printAPIHelp(w io.Writer, product string, api *meta.API, lang string) error
 	return nil
 }
 
-func printProductHelp(w io.Writer, product *meta.Product, index *meta.APIIndex, lang string) error {
+func printProductHelp(w io.Writer, product *meta.Product, index *meta.APIIndex, lang string, showVersionCommand bool) error {
 	if w == nil {
 		return errors.New("product help output is nil")
 	}
@@ -103,6 +103,16 @@ func printProductHelp(w io.Writer, product *meta.Product, index *meta.APIIndex, 
 			entries = append(entries, entry)
 		}
 	}
+	if showVersionCommand {
+		description := meta.Description{
+			EN: "List supported API versions",
+			ZH: "列出支持的 API 版本",
+		}
+		entries = append(entries, meta.APIIndexEntry{
+			CmdName:     listAPIVersionsCommand,
+			Description: description,
+		})
+	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].CmdName < entries[j].CmdName })
 	if len(entries) > 0 {
 		fmt.Fprintf(w, "\n%s:\n", l.availableCommands)
@@ -120,6 +130,72 @@ func printProductHelp(w io.Writer, product *meta.Product, index *meta.APIIndex, 
 		}
 	}
 	fmt.Fprintf(w, "\n%s\n", fmt.Sprintf(l.moreHelp, code))
+	return nil
+}
+
+func printAPIVersionsHelp(w io.Writer, product *meta.Product, lang string) error {
+	if w == nil {
+		return errors.New("API versions help output is nil")
+	}
+	if product == nil {
+		return errors.New("API versions help product is nil")
+	}
+	code := strings.ToLower(product.Code)
+	if lang == "zh" {
+		fmt.Fprintln(w, "\n描述: 列出支持的 API 版本")
+		fmt.Fprintf(w, "\n使用:\n  aliyun %s %s\n", code, listAPIVersionsCommand)
+		return nil
+	}
+	fmt.Fprintln(w, "\nDescription: List supported API versions")
+	fmt.Fprintf(w, "\nUsage:\n  aliyun %s %s\n", code, listAPIVersionsCommand)
+	return nil
+}
+
+func printAPIVersions(w io.Writer, product *meta.Product, lang string) error {
+	if w == nil {
+		return errors.New("API versions output is nil")
+	}
+	if product == nil {
+		return errors.New("API versions product is nil")
+	}
+
+	versions := append([]string(nil), product.Versions...)
+	sort.Strings(versions)
+	code := strings.ToLower(product.Code)
+	envProduct := strings.ToUpper(strings.ReplaceAll(code, "-", "_"))
+
+	if lang == "zh" {
+		fmt.Fprintf(w, "产品: %s\n\n支持的 API 版本:\n\n", code)
+		for _, version := range versions {
+			if version == product.DefaultVersion {
+				fmt.Fprintf(w, "* %s（默认）\n", version)
+			} else {
+				fmt.Fprintf(w, "  %s\n", version)
+			}
+		}
+		fmt.Fprintf(w, "\n默认版本: %s\n", product.DefaultVersion)
+		fmt.Fprintln(w, "\n使用指定版本:")
+		fmt.Fprintln(w, "  1. 为任意命令添加 --api-version <version>")
+		fmt.Fprintf(w, "  2. 设置环境变量: ALIBABA_CLOUD_%s_API_VERSION=<version>\n", envProduct)
+		fmt.Fprintln(w, "\n查看指定版本的命令:")
+		fmt.Fprintf(w, "  aliyun %s --api-version <version>\n", code)
+		return nil
+	}
+
+	fmt.Fprintf(w, "Product: %s\n\nSupported API versions:\n\n", code)
+	for _, version := range versions {
+		if version == product.DefaultVersion {
+			fmt.Fprintf(w, "* %s (default)\n", version)
+		} else {
+			fmt.Fprintf(w, "  %s\n", version)
+		}
+	}
+	fmt.Fprintf(w, "\nDefault version: %s\n", product.DefaultVersion)
+	fmt.Fprintln(w, "\nTo use a specific version:")
+	fmt.Fprintln(w, "  1. Add --api-version <version> to any command")
+	fmt.Fprintf(w, "  2. Set environment variable: ALIBABA_CLOUD_%s_API_VERSION=<version>\n", envProduct)
+	fmt.Fprintln(w, "\nTo view commands for a specific version:")
+	fmt.Fprintf(w, "  aliyun %s --api-version <version>\n", code)
 	return nil
 }
 

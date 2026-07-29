@@ -301,7 +301,17 @@ type Result struct {
 // produce an error carrying a suggestion-friendly message; the caller
 // (L6) decides whether to surface it or fall back to help.
 func Parse(params []meta.Parameter, args []string) (*Result, error) {
+	return ParseWithOptions(params, args, ParseOptions{})
+}
+
+// ParseWithOptions parses engine/API arguments while syntactically consuming
+// external flags whose values are already owned by the embedding host.
+func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions) (*Result, error) {
 	idx := newParamIndex(params)
+	external, err := newExternalFlagIndex(opts.ExternalFlags)
+	if err != nil {
+		return nil, err
+	}
 	res := &Result{Args: map[string]any{}}
 
 	i := 0
@@ -328,12 +338,22 @@ func Parse(params []meta.Parameter, args []string) (*Result, error) {
 			if hasInline {
 				occ = []string{inlineVal}
 			} else {
-				occ, i = takeValues(args, i)
+				occ, i = takeValues(args, i, external)
 			}
 			if err := parseOutputFlag(&res.Reserved, occ); err != nil {
 				return nil, err
 			}
 			_ = name
+			continue
+		}
+		// Engine short aliases have priority. Other declared short flags
+		// belong to the embedding host.
+		if spec, inlineVal, hasInline, ok := external.match(tok); ok && !strings.HasPrefix(tok, "--") {
+			i++
+			i, err = consumeExternalFlag(args, i, external, spec, inlineVal, hasInline)
+			if err != nil {
+				return nil, err
+			}
 			continue
 		}
 		name, inlineVal, hasInline, isFlag := splitFlag(tok)
@@ -349,7 +369,7 @@ func Parse(params []meta.Parameter, args []string) (*Result, error) {
 			if hasInline {
 				occ = []string{inlineVal}
 			} else {
-				occ, i = takeValues(args, i)
+				occ, i = takeValues(args, i, external)
 			}
 			kv, err := parseReservedObject(occ)
 			if err != nil {
@@ -365,7 +385,7 @@ func Parse(params []meta.Parameter, args []string) (*Result, error) {
 			if hasInline {
 				occ = []string{inlineVal}
 			} else {
-				occ, i = takeValues(args, i)
+				occ, i = takeValues(args, i, external)
 			}
 			if err := parseOutputFlag(&res.Reserved, occ); err != nil {
 				return nil, err
@@ -377,7 +397,7 @@ func Parse(params []meta.Parameter, args []string) (*Result, error) {
 			if hasInline {
 				occ = []string{inlineVal}
 			} else {
-				occ, i = takeValues(args, i)
+				occ, i = takeValues(args, i, external)
 			}
 			if len(occ) == 0 {
 				return nil, fmt.Errorf("--header expects Name=Value")
@@ -390,7 +410,7 @@ func Parse(params []meta.Parameter, args []string) (*Result, error) {
 			if hasInline {
 				occ = []string{inlineVal}
 			} else {
-				occ, i = takeValues(args, i)
+				occ, i = takeValues(args, i, external)
 			}
 			if len(occ) == 0 {
 				return nil, fmt.Errorf("--estimate-cost-context expects Key=Value")
@@ -405,9 +425,19 @@ func Parse(params []meta.Parameter, args []string) (*Result, error) {
 			}
 			val := inlineVal
 			if !hasInline {
-				val, i = takeOneValue(args, i)
+				val, i = takeOneValue(args, i, external)
 			}
 			spec.apply(&res.Reserved, val)
+			continue
+		}
+
+		// Engine-reserved flags above take priority over host declarations.
+		// External flags in turn take priority over API metadata parameters.
+		if spec, externalInline, externalHasInline, ok := external.match(tok); ok {
+			i, err = consumeExternalFlag(args, i, external, spec, externalInline, externalHasInline)
+			if err != nil {
+				return nil, err
+			}
 			continue
 		}
 
@@ -422,7 +452,7 @@ func Parse(params []meta.Parameter, args []string) (*Result, error) {
 		if hasInline {
 			occ = []string{inlineVal}
 		} else {
-			occ, i = takeValues(args, i)
+			occ, i = takeValues(args, i, external)
 		}
 
 		if err := assign(res.Args, p, occ); err != nil {
@@ -1136,21 +1166,21 @@ func isKnownShorthand(tok string) bool {
 }
 
 // isFlagToken reports whether tok terminates a value run: a long "--"
-// flag or a known shorthand.
-func isFlagToken(tok string) bool {
+// flag, a known engine shorthand, or a host-declared external flag.
+func isFlagToken(tok string, external *externalFlagIndex) bool {
 	if _, _, _, isFlag := splitFlag(tok); isFlag {
 		return true
 	}
-	return isKnownShorthand(tok)
+	return isKnownShorthand(tok) || external.isFlagToken(tok)
 }
 
 // takeValues consumes consecutive non-flag tokens starting at i and
 // returns them plus the new index. Used for flags that may take
 // multiple value tokens in one occurrence.
-func takeValues(args []string, i int) ([]string, int) {
+func takeValues(args []string, i int, external *externalFlagIndex) ([]string, int) {
 	var out []string
 	for i < len(args) {
-		if isFlagToken(args[i]) {
+		if isFlagToken(args[i], external) {
 			break
 		}
 		out = append(out, args[i])
@@ -1161,9 +1191,9 @@ func takeValues(args []string, i int) ([]string, int) {
 
 // takeOneValue consumes exactly one value token (for reserved
 // value-flags). Returns "" if the next token is a flag.
-func takeOneValue(args []string, i int) (string, int) {
+func takeOneValue(args []string, i int, external *externalFlagIndex) (string, int) {
 	if i < len(args) {
-		if !isFlagToken(args[i]) {
+		if !isFlagToken(args[i], external) {
 			return args[i], i + 1
 		}
 	}

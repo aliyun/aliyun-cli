@@ -36,6 +36,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
@@ -72,6 +73,10 @@ type Loader interface {
 	// CommandExists reports whether the product exposes the command in ANY of its versions. It is the existence check the host router uses to decide whether to route to the engine;
 	// unlike a default-version-only table it does not miss commands that live solely in a non-default version.
 	CommandExists(product, cmdName string) bool
+
+	// FindCommandVersions returns every API version exposing cmdName, sorted
+	// lexicographically. It is used for version-aware routing and diagnostics.
+	FindCommandVersions(product, cmdName string) []string
 
 	// Provenance returns the Provenance record last observed for a product. Returns nil before that product has been ensured.
 	Provenance(product string) *source.Provenance
@@ -213,6 +218,27 @@ func (l *defaultLoader) CommandExists(product, cmdName string) bool {
 		}
 	}
 	return false
+}
+
+func (l *defaultLoader) FindCommandVersions(product, cmdName string) []string {
+	if product == "" || cmdName == "" {
+		return nil
+	}
+	p := l.LookupProduct(product)
+	if p == nil {
+		return nil
+	}
+	versions := make([]string, 0, len(p.Versions))
+	for _, v := range p.Versions {
+		if v == "" {
+			continue
+		}
+		if idx, err := l.GetAPIIndex(product, v); err == nil && idx.ResolveCmd(cmdName) != "" {
+			versions = append(versions, v)
+		}
+	}
+	sort.Strings(versions)
+	return versions
 }
 
 func (l *defaultLoader) ResolveCommandVersion(product, cmdName, version string) (meta.APIRef, error) {

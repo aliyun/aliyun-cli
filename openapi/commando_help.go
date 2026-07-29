@@ -269,18 +269,16 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 
 	// Without an installed plugin, legacy help remains the default.
 	// Explicitly requested baseline help (or a baseline-only product) is rendered by the common runtime.
-	if !isInstalled && (showBaseline || !hasLegacyHelp) {
-		if handled, err := productHelpTry(ctx, productCode); handled {
-			if err != nil {
-				return err
-			}
-			if hasLegacyHelp {
-				printProductHelpSwitchHint(ctx,
-					"To return to legacy PascalCase product help, unset "+baselineProductHelpEnv+" (or set it to false).",
-					"如需返回旧版大驼峰产品帮助，请取消设置 "+baselineProductHelpEnv+"（或设为 false）。")
-			}
-			return nil
+	if !isInstalled && (showBaseline || !hasLegacyHelp) && productHelpAvailable(productCode) {
+		if err := productHelpRender(ctx, productCode); err != nil {
+			return err
 		}
+		if hasLegacyHelp {
+			printProductHelpSwitchHint(ctx,
+				"To return to legacy PascalCase product help, unset "+baselineProductHelpEnv+" (or set it to false).",
+				"如需返回旧版大驼峰产品帮助，请取消设置 "+baselineProductHelpEnv+"（或设为 false）。")
+		}
+		return nil
 	}
 
 	if !hasLegacyHelp {
@@ -500,7 +498,6 @@ var (
 	helpDelegateIsInstalled = plugin.IsPluginInstalled
 	helpDelegateExecute     = plugin.ExecutePlugin
 	productHelpRender       = runtimehost.ProductHelp
-	productHelpTry          = runtimehost.TryProductHelp
 	productHelpAvailable    = runtimehost.HasProduct
 )
 
