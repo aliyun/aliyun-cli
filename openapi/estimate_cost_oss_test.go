@@ -152,3 +152,40 @@ func TestOssBridgeEstimateCostFlow(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "estimate-cost.test.invalid")
 }
+
+func TestEstimateOssCostHermetic(t *testing.T) {
+	// Direct entry-point coverage (the ossutil passthrough calls this from
+	// another package): profile from a temp config, quote routed at a fake
+	// endpoint — the dial error proves parameters/pricing-context handling ran.
+	t.Setenv(estimateCostEndpointEnv, "estimate-cost.test.invalid")
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, w)
+	cmd := &cli.Command{Name: "ossutil"}
+	AddFlags(cmd.Flags())
+	config.AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	assert.NoError(t, os.WriteFile(configPath, []byte(`{"current":"t","profiles":[{"name":"t","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou"}]}`), 0o600))
+	pathFlag := config.ConfigurePathFlag(ctx.Flags())
+	pathFlag.SetAssigned(true)
+	pathFlag.SetValue(configPath)
+
+	err := EstimateOssCost(ctx, "PutBucket",
+		map[string]interface{}{"StorageClass": "Standard"},
+		map[string]interface{}{"EstimatedStorageGB": 100})
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "estimate-cost.test.invalid")
+
+	// Nil parameters must not panic; profile region backfills RegionId.
+	err = EstimateOssCost(ctx, "PutBucket", nil, nil)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "estimate-cost.test.invalid")
+
+	// Unconfigured profile fails with the actionable configure tip.
+	badPath := filepath.Join(t.TempDir(), "empty.json")
+	assert.NoError(t, os.WriteFile(badPath, []byte(`{"current":"t","profiles":[{"name":"t"}]}`), 0o600))
+	pathFlag.SetValue(badPath)
+	err = EstimateOssCost(ctx, "PutBucket", nil, nil)
+	assert.NotNil(t, err)
+}

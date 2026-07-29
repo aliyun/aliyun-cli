@@ -2,6 +2,8 @@ package ossutil
 
 import (
 	"bytes"
+	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"os"
 	"path/filepath"
 	"strings"
@@ -142,5 +144,58 @@ func TestOssutilKebabToPascal(t *testing.T) {
 		if got := kebabToPascal(in); got != want {
 			t.Fatalf("kebabToPascal(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// newApiEstimateTestContext builds a Context whose originCtx carries a
+// hermetic profile (temp config via --config-path) so runApiEstimateCost can
+// route all the way into the shared quote pipeline without touching the host
+// machine's configuration.
+func newApiEstimateTestContext(t *testing.T) *Context {
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, w)
+	cmd := &cli.Command{Name: "ossutil"}
+	config.AddFlags(cmd.Flags())
+	openapi.AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"current":"t","profiles":[{"name":"t","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pathFlag := config.ConfigurePathFlag(ctx.Flags())
+	pathFlag.SetAssigned(true)
+	pathFlag.SetValue(configPath)
+	return &Context{originCtx: ctx}
+}
+
+func TestOssutilApiEstimateCostFullParseAndRoute(t *testing.T) {
+	// Exercises every branch of the raw-arg parser (operation, kebab flag with
+	// separate value, --name=value form, bare bool flag, --region fallback,
+	// --estimate-cost marker, --estimate-cost-context K=V) and proves the
+	// result reaches the quote pipeline: the dial error names the fake
+	// endpoint, so parsing + EstimateOssCost ran end to end without invoking
+	// anything real.
+	t.Setenv("ALIBABA_CLOUD_PRICING_ENDPOINT", "estimate-cost.test.invalid")
+	c := newApiEstimateTestContext(t)
+	err := c.runApiEstimateCost([]string{
+		"put-bucket",
+		"--storage-class", "Standard",
+		"--acl=private",
+		"--versioning",
+		"--region", "cn-hangzhou",
+		"--estimate-cost",
+		"--estimate-cost-context", "EstimatedStorageGB=100",
+	})
+	if err == nil || !strings.Contains(err.Error(), "estimate-cost.test.invalid") {
+		t.Fatalf("expected quote dial error against fake endpoint, got %v", err)
+	}
+}
+
+func TestOssutilApiEstimateCostInvalidContextPair(t *testing.T) {
+	c := newApiEstimateTestContext(t)
+	err := c.runApiEstimateCost([]string{"put-bucket", "--estimate-cost", "--estimate-cost-context", "not-a-pair"})
+	if err == nil || !strings.Contains(err.Error(), "Key=Value") {
+		t.Fatalf("expected Key=Value usage error, got %v", err)
 	}
 }

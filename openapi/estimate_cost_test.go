@@ -729,3 +729,129 @@ func TestMainEstimateCostUnknownApiRoutesToTriple(t *testing.T) {
 	assert.Contains(t, err.Error(), "estimate-cost.test.invalid")
 	assert.NotContains(t, err.Error(), "not a valid api")
 }
+
+func TestBuildEstimateCostParametersFromFlagsBodyAndRegionFallbacks(t *testing.T) {
+	newCtx := func() *cli.Context {
+		w := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(w, w)
+		cmd := &cli.Command{EnableUnknownFlag: true}
+		AddFlags(cmd.Flags())
+		config.AddFlags(cmd.Flags())
+		ctx.EnterCommand(cmd)
+		ctx.SetUnknownFlags(cli.NewFlagSet())
+		return ctx
+	}
+	p := config.NewProfile("p")
+	p.RegionId = "cn-shanghai"
+	profile := &p
+
+	// --body JSON object merges on top of unknown-flag parameters.
+	ctx := newCtx()
+	bodyFlag := BodyFlag(ctx.Flags())
+	bodyFlag.SetAssigned(true)
+	bodyFlag.SetValue(`{"Period":2}`)
+	params, err := buildEstimateCostParametersFromFlags(ctx, profile)
+	assert.Nil(t, err)
+	assert.Equal(t, float64(2), params["Period"])
+	assert.Equal(t, "cn-shanghai", params["RegionId"], "profile region is the last fallback")
+
+	// --body that is not a JSON object fails with the actionable error.
+	ctx = newCtx()
+	bodyFlag = BodyFlag(ctx.Flags())
+	bodyFlag.SetAssigned(true)
+	bodyFlag.SetValue(`[1,2]`)
+	_, err = buildEstimateCostParametersFromFlags(ctx, profile)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "JSON object")
+
+	// --body-file: valid file merges, missing file errors with the path.
+	ctx = newCtx()
+	bodyPath := filepath.Join(t.TempDir(), "body.json")
+	assert.NoError(t, os.WriteFile(bodyPath, []byte(`{"AutoRenew":true}`), 0o600))
+	fileFlag := BodyFileFlag(ctx.Flags())
+	fileFlag.SetAssigned(true)
+	fileFlag.SetValue(bodyPath)
+	params, err = buildEstimateCostParametersFromFlags(ctx, profile)
+	assert.Nil(t, err)
+	assert.Equal(t, true, params["AutoRenew"])
+
+	ctx = newCtx()
+	fileFlag = BodyFileFlag(ctx.Flags())
+	fileFlag.SetAssigned(true)
+	fileFlag.SetValue(filepath.Join(t.TempDir(), "no-such.json"))
+	_, err = buildEstimateCostParametersFromFlags(ctx, profile)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "--body-file")
+
+	// --RegionId (registered root flag) wins over --region and the profile.
+	ctx = newCtx()
+	regionIdFlag := config.RegionIdFlag(ctx.Flags())
+	regionIdFlag.SetAssigned(true)
+	regionIdFlag.SetValue("cn-beijing")
+	params, err = buildEstimateCostParametersFromFlags(ctx, profile)
+	assert.Nil(t, err)
+	assert.Equal(t, "cn-beijing", params["RegionId"])
+
+	ctx = newCtx()
+	regionFlag := config.RegionFlag(ctx.Flags())
+	regionFlag.SetAssigned(true)
+	regionFlag.SetValue("cn-shenzhen")
+	params, err = buildEstimateCostParametersFromFlags(ctx, profile)
+	assert.Nil(t, err)
+	assert.Equal(t, "cn-shenzhen", params["RegionId"])
+}
+
+func TestMergeEstimateCostBodyForms(t *testing.T) {
+	// Already-parsed map form.
+	params := map[string]interface{}{}
+	assert.Nil(t, mergeEstimateCostBody(params, map[string]interface{}{"K": "v"}))
+	assert.Equal(t, "v", params["K"])
+
+	// Raw []byte and string forms decode as JSON objects.
+	assert.Nil(t, mergeEstimateCostBody(params, []byte(`{"A":1}`)))
+	assert.Equal(t, float64(1), params["A"])
+	assert.Nil(t, mergeEstimateCostBody(params, `{"B":2}`))
+	assert.Equal(t, float64(2), params["B"])
+
+	// Anything else is rejected with the actionable tip.
+	err := mergeEstimateCostBody(params, 42)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "cannot read the request body")
+}
+
+func TestEstimateCostBusinessErrorShapes(t *testing.T) {
+	// Bare DTO shape (success at top level, no "price" envelope) must still
+	// fail the process — tolerance for a future envelope change.
+	err := estimateCostBusinessError(`{"success":false,"errorCode":"X","errorMessage":"m","upstreamRequestId":"r"}`)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "X")
+	assert.Contains(t, err.Error(), "upstreamRequestId: r")
+
+	// Unparseable / non-JSON output is not the exit-code contract's business:
+	// transport and server errors surface earlier, so this returns nil.
+	assert.Nil(t, estimateCostBusinessError("not-json"))
+	// Missing success field means success.
+	assert.Nil(t, estimateCostBusinessError(`{"price":{}}`))
+}
+
+func TestFilterSupportedPricingApisEdgeShapes(t *testing.T) {
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, w)
+	cmd := NewListSupportedPricingApisCommand()
+	ctx.EnterCommand(cmd)
+	productFlag := ctx.Flags().Get(PricingProductFlagName)
+	productFlag.SetAssigned(true)
+	productFlag.SetValue("Ecs")
+
+	// Non-string popCode is skipped via the stringField guard, not a panic.
+	out, err := filterSupportedPricingApis(ctx, `{"supportedApis":[{"popCode":123},{"popCode":"Ecs","popVersion":"2014-05-26"}],"requestId":"r"}`)
+	assert.Nil(t, err)
+	assert.Contains(t, out, "2014-05-26")
+	assert.NotContains(t, out, "123")
+
+	// Unexpected response shape fails with a clear error instead of emitting
+	// a silently unfiltered list.
+	_, err = filterSupportedPricingApis(ctx, "not-json")
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "unexpected response shape")
+}
