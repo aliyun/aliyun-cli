@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
+	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 )
 
@@ -21,7 +21,7 @@ func LegacyExportMetadata(outputDir string) error {
 		return fmt.Errorf("load products: %w", err)
 	}
 
-	repo := canonicalmeta.NewRepository(aliyunopenapimeta.Metadatas)
+	repo := canonicalmeta.NewRepository(bundledmeta.Metadatas)
 
 	for i := range products.Products {
 		p := &products.Products[i]
@@ -104,7 +104,7 @@ func readProductsJSON() ([]byte, error) {
 	}
 	var lastErr error
 	for _, candidate := range paths {
-		content, err := aliyunopenapimeta.Metadatas.ReadFile(candidate)
+		content, err := bundledmeta.Metadatas.ReadFile(candidate)
 		if err == nil {
 			return content, nil
 		}

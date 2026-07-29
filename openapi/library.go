@@ -20,7 +20,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
+	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -43,7 +43,7 @@ func NewLibrary(w io.Writer, lang string) *Library {
 		builtinRepo: meta.LoadRepository(),
 		writer:      w,
 	}
-	lib.canonicalRepo = canonicalmeta.NewRepository(aliyunopenapimeta.Metadatas)
+	lib.canonicalRepo = canonicalmeta.NewRepository(bundledmeta.Metadatas)
 	return lib
 }
 

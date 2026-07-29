@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"io/fs"
 
-	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
+	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
 )
 
 func ReadJsonFrom(path string, v interface{}) error {
@@ -41,7 +41,7 @@ func readMetaFile(path string) ([]byte, error) {
 	}
 	var lastErr error
 	for _, candidate := range paths {
-		buf, err := aliyunopenapimeta.Metadatas.ReadFile(candidate)
+		buf, err := bundledmeta.Metadatas.ReadFile(candidate)
 		if err == nil {
 			return buf, nil
 		}

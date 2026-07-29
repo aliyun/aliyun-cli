@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
+	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
@@ -65,7 +65,7 @@ func TestHelpLanguagePrefersCommandFlag(t *testing.T) {
 // type) into the ExecContext, mirroring the Go plugin env behaviour.
 func TestHostSettingsAppliedToExecContext(t *testing.T) {
 	cap := &captureExecutor{}
-	eng := openapiruntime.NewEngine(openapiruntime.Options{BaselineFS: aliyunopenapimeta.Metadatas, BundledBy: "test"}, cap)
+	eng := openapiruntime.NewEngine(openapiruntime.Options{BaselineFS: bundledmeta.Metadatas, BundledBy: "test"}, cap)
 
 	host := runtime.StaticHost{
 		RegionID: "cn-hangzhou",
@@ -123,7 +123,7 @@ func TestHostSettingsAppliedToExecContext(t *testing.T) {
 func baselineEngine(t *testing.T) *engine.Engine {
 	t.Helper()
 	return openapiruntime.NewEngine(openapiruntime.Options{
-		BaselineFS: aliyunopenapimeta.Metadatas,
+		BaselineFS: bundledmeta.Metadatas,
 		BundledBy:  "aliyun-cli test",
 	}, nil)
 }
@@ -185,7 +185,7 @@ type dryRunMeta struct {
 func baselineLoaderFor(t *testing.T, product string) loader.Loader {
 	t.Helper()
 	l := openapiruntime.NewLoader(openapiruntime.Options{
-		BaselineFS: aliyunopenapimeta.Metadatas,
+		BaselineFS: bundledmeta.Metadatas,
 		BundledBy:  "aliyun-cli test",
 	})
 	if err := l.EnsureProduct(product); err != nil {
@@ -499,7 +499,7 @@ func TestUserMetaPluginOwnsProduct(t *testing.T) {
 	}
 
 	eng := openapiruntime.NewEngine(openapiruntime.Options{
-		BaselineFS:     aliyunopenapimeta.Metadatas,
+		BaselineFS:     bundledmeta.Metadatas,
 		BundledBy:      "aliyun-cli test",
 		UserPluginsDir: dir,
 	}, nil)

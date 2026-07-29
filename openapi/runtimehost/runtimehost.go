@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
+	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -149,7 +149,7 @@ var (
 func Engine() *engine.Engine {
 	engineOnce.Do(func() {
 		engineInst = openapiruntime.NewEngine(openapiruntime.Options{
-			BaselineFS:     aliyunopenapimeta.Metadatas,
+			BaselineFS:     bundledmeta.Metadatas,
 			BundledBy:      "aliyun-cli " + cli.Version,
 			UserPluginsDir: userPluginsDir(),
 			OverrideDir:    os.Getenv("ALIYUN_CLI_PLUGINS_DIR_OVERRIDE"),
