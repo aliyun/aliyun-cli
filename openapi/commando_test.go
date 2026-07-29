@@ -594,6 +594,8 @@ func TestCreateInvoker(t *testing.T) {
 	AddFlags(ctx.Flags())
 	ctx.Flags().Get("force").SetAssigned(false)
 	ctx.Flags().Get("version").SetAssigned(false)
+	ctx.Flags().Get("endpoint").SetAssigned(true)
+	ctx.Flags().Get("endpoint").SetValue("cs.cn-hangzhou.aliyuncs.com")
 	invoker, err = commando.createInvoker(ctx, "cs", "Get", "/api/v1/clusters")
 	_, ok = invoker.(*RestfulInvoker)
 	assert.True(t, ok)

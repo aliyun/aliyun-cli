@@ -123,7 +123,11 @@ func TestBasicInvoker_Init_ProfileEndpoint(t *testing.T) {
 	ctx.Flags().Add(NewHeaderFlag())
 	ctx.Flags().Add(config.NewSkipSecureVerify())
 
-	product := &meta.Product{Version: "v1.0"}
+	product := &meta.Product{
+		Code:                "test",
+		Version:             "v1.0",
+		LocationServiceCode: "test",
+	}
 
 	// When profile.Endpoint is set and no cmd --endpoint flag: should use profile endpoint
 	err := invoker.Init(ctx, product)
