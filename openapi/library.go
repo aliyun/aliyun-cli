@@ -16,7 +16,6 @@ package openapi
 import (
 	"fmt"
 	"io"
-	"io/fs"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -44,9 +43,7 @@ func NewLibrary(w io.Writer, lang string) *Library {
 		builtinRepo: meta.LoadRepository(),
 		writer:      w,
 	}
-	if _, err := fs.ReadDir(aliyunopenapimeta.Metadatas, "canonical"); err == nil {
-		lib.canonicalRepo = canonicalmeta.NewRepository(aliyunopenapimeta.Metadatas)
-	}
+	lib.canonicalRepo = canonicalmeta.NewRepository(aliyunopenapimeta.Metadatas)
 	return lib
 }
 
