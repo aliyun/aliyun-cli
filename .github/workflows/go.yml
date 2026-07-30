@@ -26,6 +26,8 @@ jobs:
 
     - name: Unit Test
       run: make test
+    - name: Packed metadata test
+      run: make test-release
     - name: Upload coverage infomartion
       uses: codecov/codecov-action@v4
       env:

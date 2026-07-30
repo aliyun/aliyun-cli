@@ -2,7 +2,6 @@ package bundledmeta
 
 import (
 	"bytes"
-	_ "embed"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -17,14 +16,10 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-//go:generate go run ./cmd/packmeta -canonical ../aliyun-openapi-meta/canonical -products ../aliyun-openapi-meta/metadatas/products.json -out packed
-
-//go:embed packed/canonical.pack
-var canonicalPack []byte
-
 // Metadatas exposes the generated metadata bundle through the filesystem API
-// expected by canonicalmeta and the OpenAPI runtime.
-var Metadatas = newPackedMetadataFS(canonicalPack)
+// expected by canonicalmeta and the OpenAPI runtime. Development builds read
+// the source metadata directory, while release builds embed a generated pack.
+var Metadatas fs.FS = newMetadataFS()
 
 const (
 	packMagic      = "ALIMETA1"

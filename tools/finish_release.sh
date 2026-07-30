@@ -6,7 +6,7 @@ VERSION=$1
 
 ALIYUN="./out/aliyun"
 
-go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o $ALIYUN main/main.go
+go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o $ALIYUN main/main.go
 
 FLAGS="oss://aliyun-cli --force --access-key-id ${ACCESS_KEY_ID} --access-key-secret ${ACCESS_KEY_SECRET} --region cn-hangzhou"
 

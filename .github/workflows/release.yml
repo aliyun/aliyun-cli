@@ -33,6 +33,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Generate packed metadata
+        run: go generate ./bundledmeta
       - name: Set up developer id application cert
         uses: apple-actions/import-codesign-certs@v2
         with:
@@ -50,7 +52,7 @@ jobs:
         run: |
           TAG=${{ github.ref_name }}
           VERSION=${TAG#v}
-          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun main/main.go
           codesign --sign "${{ secrets.APPLE_TEAM_ID }}" \
             --entitlements tools/osx-entitlements.plist \
             --options runtime \
@@ -58,7 +60,7 @@ jobs:
           tar zcvf out/aliyun-cli-macosx-${VERSION}-amd64.tgz -C out aliyun
           bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-macosx-${VERSION}-amd64.tgz
           cp out/aliyun out/aliyun.amd64
-          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun main/main.go
           codesign --sign "${{ secrets.APPLE_TEAM_ID }}" \
             --entitlements tools/osx-entitlements.plist \
             --options runtime \
@@ -95,16 +97,18 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Generate packed metadata
+        run: go generate ./bundledmeta
       - name: Build
         run: |
           TAG=${{ github.ref_name }}
           VERSION=${TAG#v}
           # build for Linux amd64
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun main/main.go
           tar zcvf out/aliyun-cli-linux-${VERSION}-amd64.tgz -C out aliyun
           bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-linux-${VERSION}-amd64.tgz
           # build for Linux arm64
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun main/main.go
           tar zcvf out/aliyun-cli-linux-${VERSION}-arm64.tgz -C out aliyun
           bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-linux-${VERSION}-arm64.tgz
   build_for_windows:
@@ -122,6 +126,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Generate packed metadata
+        run: go generate ./bundledmeta
       - name: Build
         run: |
           $tag = "${{ github.ref_name }}"
@@ -129,7 +135,7 @@ jobs:
           $env:GOOS = "windows"
           $env:GOARCH = "amd64"
           $env:CGO_ENABLED = "0"
-          go build -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${version}'" -o ./out/aliyun.exe main/main.go
+          go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${version}'" -o ./out/aliyun.exe main/main.go
           Compress-Archive -Path ./out/aliyun.exe -DestinationPath ./out/aliyun-cli-windows-${version}-amd64.zip
           bash ./tools/upload_asset.sh ${version} ./out/aliyun-cli-windows-${version}-amd64.zip
   finish_release:
@@ -145,6 +151,12 @@ jobs:
         with:
           submodules: true
           ref: ${{github.ref}}
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Generate packed metadata
+        run: go generate ./bundledmeta
       - name: Download assets and compute shasum
         run: |
           TAG=${{ github.ref_name }}

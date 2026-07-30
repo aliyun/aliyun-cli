@@ -104,7 +104,7 @@ func readProductsJSON() ([]byte, error) {
 	}
 	var lastErr error
 	for _, candidate := range paths {
-		content, err := bundledmeta.Metadatas.ReadFile(candidate)
+		content, err := fs.ReadFile(bundledmeta.Metadatas, candidate)
 		if err == nil {
 			return content, nil
 		}

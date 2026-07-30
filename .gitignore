@@ -28,6 +28,9 @@ __debug_bin*
 .qoder
 docs/superpowers/
 
+# Generated only for packed release builds.
+/bundledmeta/.generated/
+
 # Local parser formal proof materials; not part of the runtime PR.
 .local-formal/
 formal/

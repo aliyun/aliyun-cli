@@ -41,7 +41,7 @@ func readMetaFile(path string) ([]byte, error) {
 	}
 	var lastErr error
 	for _, candidate := range paths {
-		buf, err := bundledmeta.Metadatas.ReadFile(candidate)
+		buf, err := fs.ReadFile(bundledmeta.Metadatas, candidate)
 		if err == nil {
 			return buf, nil
 		}

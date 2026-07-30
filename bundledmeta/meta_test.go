@@ -27,8 +27,12 @@ func TestMetadatasFilesystem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadDir root: %v", err)
 	}
-	if len(root) != 2 || root[0].Name() != "canonical" || root[1].Name() != "metadatas" {
-		t.Fatalf("root entries = %v", root)
+	rootDirs := make(map[string]bool, len(root))
+	for _, entry := range root {
+		rootDirs[entry.Name()] = entry.IsDir()
+	}
+	if !rootDirs["canonical"] || !rootDirs["metadatas"] {
+		t.Fatalf("required metadata directories not found in root entries: %v", root)
 	}
 
 	entries, err := fs.ReadDir(Metadatas, "canonical/ecs/2014-05-26")
