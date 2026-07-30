@@ -99,6 +99,7 @@ Saving profile[akProfile] ...Done.
 | 凭证模式              | 说明                                    |
 |---------------------|-----------------------------------------|
 | AK                  | 使用直接的 AccessKey ID/Secret 访问凭证    |
+| StsToken            | 使用已获取的 STS 临时凭证（AccessKey + SecurityToken） |
 | RamRoleArn          | 使用 RAM 子账号角色扮演提供访问凭证          |
 | EcsRamRole          | 使用 ECS 实例角色提供访问凭证               |
 | OIDC                | 使用 OIDC 角色扮演的方式访问                |
@@ -107,6 +108,46 @@ Saving profile[akProfile] ...Done.
 | ChainableRamRoleArn | 使用链式角色扮演的方式提供访问凭证            |
 
 如果在配置时不传递 `--mode`，将默认使用 AK 模式。
+
+### 使用 StsToken 临时凭证
+
+若已通过 AssumeRole 或其他方式持有 STS 临时凭证（AccessKey ID、AccessKey Secret、Security Token），可使用 `--mode StsToken` 将其配置到 CLI。该模式下 CLI 直接使用传入凭证，不会自动刷新；凭证过期后需重新获取并覆盖配置。若需自动续期，建议改用 `RamRoleArn` 或 `EcsRamRole`。
+
+交互式配置示例：
+
+```shell
+$ aliyun configure --mode StsToken --profile StsProfile
+Configuring profile 'StsProfile' in 'StsToken' authenticate mode...
+Access Key Id []: STS.NUr5xxxxx
+Access Key Secret []: 7Bshxxxxx
+Sts Token []: CAISxxxxxxxxxxxxxxxx...
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] zh:
+Saving profile[StsProfile] ...Done.
+```
+
+非交互式配置示例：
+
+```shell
+$ aliyun configure set \
+  --profile StsProfile \
+  --mode StsToken \
+  --access-key-id STS.NUr5xxxxx \
+  --access-key-secret 7Bshxxxxx \
+  --sts-token CAISxxxxxxxxxxxxxxxx... \
+  --region cn-hangzhou
+```
+
+也可通过环境变量补全 Profile 中缺失的字段：
+
+```shell
+export ALIBABA_CLOUD_ACCESS_KEY_ID="STS.xxx"
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET="tempSecret"
+export ALIBABA_CLOUD_SECURITY_TOKEN="token-string"
+```
+
+更多说明见：[临时安全凭证 StsToken 配置](https://help.aliyun.com/zh/cli/temporary-security-credentials-sts-token)。
 
 ### RAM 子账号角色扮演
 
