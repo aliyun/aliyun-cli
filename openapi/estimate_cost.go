@@ -17,11 +17,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 
 	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/meta"
 )
 
 // Routes an OpenAPI call to CloudControl GetApiPrice (POST /api/v1/price/quote)
@@ -80,7 +82,257 @@ func (c *Commando) processEstimateCost(ctx *cli.Context, inv Invoker) error {
 	if err != nil {
 		return err
 	}
-	return printEstimateCostResult(ctx, out)
+	if err := printEstimateCostResult(ctx, out); err != nil {
+		return err
+	}
+	// Business failure inside a 200 response (price.success == false) must fail
+	// the process: scripts and agents gate on `$?`, and an exit code of 0 with a
+	// failed quote inside the JSON reads as a successful estimate (observed in
+	// practice with several products' business failures). The JSON
+	// is already printed above, so automation can still read the full details.
+	return estimateCostBusinessError(out)
+}
+
+// estimateCostBusinessError inspects the raw quote response and returns a
+// non-nil error when the quote itself reports failure. A missing/unparseable
+// success field is treated as success — the exit-code contract only covers
+// explicit business failures, and transport/server errors are surfaced earlier
+// by invokeEstimateCost.
+func estimateCostBusinessError(out string) error {
+	type quote struct {
+		Success      *bool  `json:"success"`
+		ErrorCode    string `json:"errorCode"`
+		ErrorMessage string `json:"errorMessage"`
+		RequestId    string `json:"upstreamRequestId"`
+	}
+	var body struct {
+		// Gateway shape: {"price": {...}, "requestId": "..."}; tolerate the bare
+		// DTO shape (success at top level) in case the envelope changes.
+		Price *quote `json:"price"`
+		quote
+	}
+	if err := json.Unmarshal([]byte(out), &body); err != nil {
+		return nil
+	}
+	if body.Price == nil {
+		body.Price = &body.quote
+	}
+	if body.Price.Success == nil || *body.Price.Success {
+		return nil
+	}
+	msg := "cost estimation failed"
+	if body.Price.ErrorCode != "" {
+		msg += ": " + body.Price.ErrorCode
+	}
+	if body.Price.ErrorMessage != "" {
+		msg += ": " + body.Price.ErrorMessage
+	}
+	if body.Price.RequestId != "" {
+		msg += " (upstreamRequestId: " + body.Price.RequestId + ")"
+	}
+	return cli.NewErrorWithTip(fmt.Errorf("%s", msg),
+		"the quote response above has the full details; fix the reported parameter or retry later, the target API was NOT invoked")
+}
+
+// PascalCase OpenAPI action name, e.g. CreateTrainingJob. Product-command
+// tokens and file-operation subcommands are lowercase, so this cannot match
+// them by accident.
+var estimateCostApiNameRegexp = regexp.MustCompile(`^[A-Z][A-Za-z0-9]*$`)
+
+// processEstimateCostByTriple quotes an api the local metadata cannot
+// resolve — an api of a non-default product version (pai-dlc 2022-01-12,
+// Selectdb 2022-10-19), or a product with no api definitions at all
+// (Tablestore). A real invocation needs metadata to derive method/path and
+// a signer for the product's protocol, but a quote needs neither: only the
+// triple (popCode/popVersion/apiName) + parameters sent to CloudControl.
+// The trade-off is no local api-name validation — a typo comes back from
+// the server as PricingNotSupported instead of a local "invalid api" error.
+func (c *Commando) processEstimateCostByTriple(ctx *cli.Context, product *meta.Product, popVersion string, apiName string) error {
+	if !estimateCostApiNameRegexp.MatchString(apiName) {
+		return cli.NewErrorWithTip(
+			fmt.Errorf("--estimate-cost requires an OpenAPI name, got `%s`", apiName),
+			"use `aliyun <product> <ApiName> ... --estimate-cost`, e.g. `aliyun pai-dlc CreateTrainingJob --version 2022-01-12 ... --estimate-cost`")
+	}
+	parameters, err := buildEstimateCostParametersFromFlags(ctx, &c.profile)
+	if err != nil {
+		return err
+	}
+	pricingContext, err := buildPricingContext(ctx)
+	if err != nil {
+		return err
+	}
+	if len(pricingContext) > 0 {
+		parameters["PricingContext"] = pricingContext
+	}
+	out, err := invokeEstimateCost(ctx, &c.profile, product.Code, popVersion, apiName, parameters)
+	if err != nil {
+		return err
+	}
+	if err := printEstimateCostResult(ctx, out); err != nil {
+		return err
+	}
+	return estimateCostBusinessError(out)
+}
+
+// buildEstimateCostParametersFromFlags collects pricing parameters without
+// an invoker: unknown flags are the api parameters (there is no metadata to
+// type them against), the `--body` JSON object merges on top, and RegionId
+// falls back to --region and then the profile region.
+func buildEstimateCostParametersFromFlags(ctx *cli.Context, profile *config.Profile) (map[string]interface{}, error) {
+	parameters := make(map[string]interface{})
+	if ctx.UnknownFlags() != nil {
+		for _, f := range ctx.UnknownFlags().Flags() {
+			if !f.IsAssigned() {
+				continue
+			}
+			if values := f.GetValues(); len(values) > 1 {
+				parameters[f.Name] = values
+				continue
+			}
+			if v, ok := f.GetValue(); ok && v != "" {
+				parameters[f.Name] = v
+			}
+		}
+	}
+	if v, ok := BodyFlag(ctx.Flags()).GetValue(); ok && v != "" {
+		if err := mergeEstimateCostJSONBody(parameters, []byte(v)); err != nil {
+			return nil, err
+		}
+	}
+	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok && v != "" {
+		buf, err := os.ReadFile(v)
+		if err != nil {
+			return nil, fmt.Errorf("--estimate-cost failed to read --body-file %s: %v", v, err)
+		}
+		if err := mergeEstimateCostJSONBody(parameters, buf); err != nil {
+			return nil, err
+		}
+	}
+	if _, ok := parameters["RegionId"]; !ok {
+		// --RegionId is a REGISTERED root flag (config.NewRegionIdFlag), so it
+		// never lands in the unknown flags — read it explicitly, then fall
+		// back to --region and the profile region.
+		if regionId, ok := config.RegionIdFlag(ctx.Flags()).GetValue(); ok && regionId != "" {
+			parameters["RegionId"] = regionId
+		} else if region, ok := config.RegionFlag(ctx.Flags()).GetValue(); ok && region != "" {
+			parameters["RegionId"] = region
+		} else if profile.RegionId != "" {
+			parameters["RegionId"] = profile.RegionId
+		}
+	}
+	return parameters, nil
+}
+
+// processEstimateCostOpenapi handles --estimate-cost for the openapi invoke
+// path (currently SLS only, see ShouldUseOpenapi; the path is meant to take
+// over more products later). Must be called after apiContext.Prepare(ctx) so
+// query/body/path parameters are fully assembled; the target API is never
+// invoked.
+func (c *Commando) processEstimateCostOpenapi(ctx *cli.Context, oc *OpenapiContext) error {
+	if oc.api == nil || oc.api.Name == "" {
+		return cli.NewErrorWithTip(
+			fmt.Errorf("--estimate-cost cannot resolve the api name for this call"),
+			"cost estimation needs the api name, please use the `aliyun <product> <ApiName>` form")
+	}
+	popCode := ""
+	popVersion := ""
+	if oc.product != nil {
+		popCode = oc.product.Code
+		popVersion = oc.product.Version
+	}
+
+	parameters, err := buildEstimateCostParametersFromOpenapi(ctx, oc)
+	if err != nil {
+		return err
+	}
+	pricingContext, err := buildPricingContext(ctx)
+	if err != nil {
+		return err
+	}
+	if len(pricingContext) > 0 {
+		parameters["PricingContext"] = pricingContext
+	}
+
+	out, err := invokeEstimateCost(ctx, &c.profile, popCode, popVersion, oc.api.Name, parameters)
+	if err != nil {
+		return err
+	}
+	if err := printEstimateCostResult(ctx, out); err != nil {
+		return err
+	}
+	return estimateCostBusinessError(out)
+}
+
+// buildEstimateCostParametersFromOpenapi flattens the prepared openapi-path
+// request into one parameter map: assembled query params, path/host parameter
+// raw values (Prepare substitutes them into the pathname, so they are
+// recovered from the typed flags via api metadata), and the JSON body.
+func buildEstimateCostParametersFromOpenapi(ctx *cli.Context, oc *OpenapiContext) (map[string]interface{}, error) {
+	parameters := make(map[string]interface{})
+	if oc.openapiRequest != nil {
+		for k, v := range oc.openapiRequest.Query {
+			if k != "" && v != nil && *v != "" {
+				parameters[k] = *v
+			}
+		}
+	}
+	if oc.api != nil && ctx.UnknownFlags() != nil {
+		for _, f := range ctx.UnknownFlags().Flags() {
+			param := oc.api.FindLegacyParameter(f.Name)
+			if param == nil || (param.LegacyPosition() != "Path" && param.LegacyPosition() != "Host") {
+				continue
+			}
+			if value, ok := f.GetValue(); ok && value != "" {
+				parameters[f.Name] = value
+			}
+		}
+	}
+	if oc.openapiRequest != nil && oc.openapiRequest.Body != nil {
+		if err := mergeEstimateCostBody(parameters, oc.openapiRequest.Body); err != nil {
+			return nil, err
+		}
+	}
+	if regionId := oc.profile.RegionId; regionId != "" {
+		if _, ok := parameters["RegionId"]; !ok {
+			parameters["RegionId"] = regionId
+		}
+	}
+	return parameters, nil
+}
+
+// mergeEstimateCostBody merges the openapi-path request body into the pricing
+// parameter map. The body is either the already-parsed per-flag map or the
+// raw `--body` bytes/string, which must decode to a JSON object — same
+// contract as the RPC/ROA path in buildEstimateCostParameters.
+func mergeEstimateCostBody(parameters map[string]interface{}, rawBody interface{}) error {
+	switch body := rawBody.(type) {
+	case map[string]interface{}:
+		for k, v := range body {
+			parameters[k] = v
+		}
+		return nil
+	case []byte:
+		return mergeEstimateCostJSONBody(parameters, body)
+	case string:
+		return mergeEstimateCostJSONBody(parameters, []byte(body))
+	default:
+		return cli.NewErrorWithTip(
+			fmt.Errorf("--estimate-cost cannot read the request body of type %T", rawBody),
+			"cost estimation merges the JSON body into pricing parameters, please pass `--body` as a JSON object")
+	}
+}
+
+func mergeEstimateCostJSONBody(parameters map[string]interface{}, raw []byte) error {
+	body := make(map[string]interface{})
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return cli.NewErrorWithTip(
+			fmt.Errorf("--estimate-cost requires the request body to be a JSON object: %v", err),
+			"cost estimation merges the JSON body into pricing parameters, please pass `--body` as a JSON object")
+	}
+	for k, v := range body {
+		parameters[k] = v
+	}
+	return nil
 }
 
 // resolveEstimateCostApiName returns the action name of the call being

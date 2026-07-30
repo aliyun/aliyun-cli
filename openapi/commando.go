@@ -417,6 +417,13 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				if style, ok := c.library.GetStyle(productName, version); ok {
 					product.ApiStyle = style
 				} else {
+					// A quote needs no style/method/path — only the triple.
+					// Explicit versions the local metadata doesn't know
+					// (Selectdb 2022-10-19, pai-dlc 2022-01-12, ...) can
+					// still be estimated; the server rejects unknown triples.
+					if EstimateCostFlag(ctx.Flags()).IsAssigned() {
+						return c.processEstimateCostByTriple(ctx, &product, version, args[1])
+					}
 					return cli.NewErrorWithTip(fmt.Errorf("unchecked version %s", version),
 						"Please contact the customer support to get more info about API version")
 				}
@@ -432,8 +439,21 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			// For restful products, the 2-arg form `aliyun <product> <ApiName>` requires a valid ApiName so we can resolve the underlying Method + PathPattern from metadata.
 			// Otherwise we'd fall through with empty Method/PathPattern and surface the confusing "product 'xxx' need restful call" error from checkRestfulMethod.
 			force := ForceFlag(ctx.Flags()).IsAssigned()
-			if !found && !force {
-				return &InvalidApiError{Name: args[1], product: &product}
+			if !found {
+				// The api name may be absent only from the LOCAL metadata —
+				// a product with no api definitions at all (Tablestore) or
+				// an api of the non-default version. A quote doesn't need
+				// the metadata-resolved method/path, so estimate by triple
+				// instead of failing; typos come back as PricingNotSupported.
+				// Checked before --force: forcing cannot make the restful
+				// invoker resolve a method/path the metadata doesn't have,
+				// so the quote intent always wins here.
+				if EstimateCostFlag(ctx.Flags()).IsAssigned() {
+					return c.processEstimateCostByTriple(ctx, &product, product.Version, args[1])
+				}
+				if !force {
+					return &InvalidApiError{Name: args[1], product: &product}
+				}
 			}
 			ctx.Command().Name = args[1]
 			if ShouldUseOpenapi(ctx, &product) {
@@ -507,15 +527,6 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		return fmt.Errorf("invalid product, please check product code")
 	}
 
-	// --estimate-cost: the openapi-invoke path uses apiContext.Call instead
-	// of an Invoker, which estimate_cost.go's parameter extractor doesn't
-	// understand yet. Fail fast rather than silently invoke the target API.
-	if EstimateCostFlag(ctx.Flags()).IsAssigned() {
-		return cli.NewErrorWithTip(
-			fmt.Errorf("--estimate-cost is not supported for product %s which uses the openapi invoke path", product.Code),
-			"cost estimation supports RPC and ROA(restful) style products only")
-	}
-
 	apiContext, err := c.createHttpContext(ctx, product, api, method, path)
 	if err != nil {
 		return err
@@ -539,6 +550,20 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 			return fmt.Errorf("--cli-dry-run-json is only supported for OpenAPI invoke path")
 		}
 		return processCliDryRunOpenapiJson(ctx, oc)
+	}
+
+	// --estimate-cost: after Prepare the openapi request carries the fully
+	// assembled query/body/path parameters — route them to the quote service
+	// instead of invoking the target API (same interception contract as the
+	// Invoker path in processInvoke).
+	if EstimateCostFlag(ctx.Flags()).IsAssigned() {
+		oc, ok := apiContext.(*OpenapiContext)
+		if !ok {
+			return cli.NewErrorWithTip(
+				fmt.Errorf("--estimate-cost is not supported for product %s on this invoke path", product.Code),
+				"cost estimation supports RPC, ROA(restful) and openapi-path products only")
+		}
+		return c.processEstimateCostOpenapi(ctx, oc)
 	}
 
 	// SSE APIs stream events instead of returning a single buffered response.

@@ -95,6 +95,7 @@ The following are supported authentication methods:
 | Authentication methods | Description                                                 |
 |------------------------|-------------------------------------------------------------|
 | AK                     | Use direct AccessKey ID/Secret as access credentials        |
+| StsToken               | Use STS temporary credentials (AccessKey + SecurityToken)   |
 | RamRoleArn             | Use RAM role assumption to provide access credentials       |
 | EcsRamRole             | Use ECS instance role to provide access credentials         |
 | OIDC                   | Use OIDC role assumption to provide access credentials      |
@@ -104,6 +105,46 @@ The following are supported authentication methods:
 | CloudSSO               | Use CloudSSO to provide access credentials                  |
 
 If the --mode is not specified during configuration, the AK mode will be used by default.
+
+### Use StsToken credentials
+
+If you already have an STS temporary credential (AccessKey ID, AccessKey Secret, and Security Token), use `--mode StsToken` to configure it. The CLI uses the credential as-is and does not refresh it automatically; obtain a new token and reconfigure after expiration. For automatic refresh, prefer `RamRoleArn` or `EcsRamRole`.
+
+Interactive example:
+
+```shell
+$ aliyun configure --mode StsToken --profile StsProfile
+Configuring profile 'StsProfile' in 'StsToken' authenticate mode...
+Access Key Id []: STS.NUr5xxxxx
+Access Key Secret []: 7Bshxxxxx
+Sts Token []: CAISxxxxxxxxxxxxxxxx...
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] en:
+Saving profile[StsProfile] ...Done.
+```
+
+Non-interactive example:
+
+```shell
+$ aliyun configure set \
+  --profile StsProfile \
+  --mode StsToken \
+  --access-key-id STS.NUr5xxxxx \
+  --access-key-secret 7Bshxxxxx \
+  --sts-token CAISxxxxxxxxxxxxxxxx... \
+  --region cn-hangzhou
+```
+
+You can also supply missing fields via environment variables:
+
+```shell
+export ALIBABA_CLOUD_ACCESS_KEY_ID="STS.xxx"
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET="tempSecret"
+export ALIBABA_CLOUD_SECURITY_TOKEN="token-string"
+```
+
+See also: [Configure StsToken credentials](https://help.aliyun.com/en/cli/temporary-security-credentials-sts-token).
 
 ### RAM Sub-account Role Assumption
 

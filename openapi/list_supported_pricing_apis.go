@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -37,16 +38,58 @@ const (
 	estimateCostListPath = "/api/v1/price/supported-apis"
 )
 
+// Filter flags are registered on this command only (not the global openapi
+// flag set): they are discovery filters that make no sense on a product call.
+const (
+	PricingProductFlagName    = "product"
+	PricingApiVersionFlagName = "api-version"
+)
+
+func newPricingProductFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         PricingProductFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--product <code>` to only list pricing APIs of one product (case-insensitive)",
+			"使用 `--product <code>` 只列出指定产品的询价 API（大小写不敏感）",
+		),
+	}
+}
+
+func newPricingApiVersionFlag() *cli.Flag {
+	return &cli.Flag{
+		Category:     "caller",
+		Name:         PricingApiVersionFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Short: i18n.T(
+			"use `--api-version <YYYY-MM-DD>` to only list pricing APIs of one api version",
+			"使用 `--api-version <YYYY-MM-DD>` 只列出指定版本的询价 API",
+		),
+	}
+}
+
 // NewListSupportedPricingApisCommand returns the top-level subcommand
 // registration. Wired up from main/main.go alongside the other standalone
 // subcommands (configure, plugin, upgrade, ...).
+//
+// Output flags (--quiet / --cli-query / --output) are registered on the
+// command itself: they are NOT persistent flags, so they don't inherit from
+// the root command — without explicit registration they either error
+// ("invalid flag" when placed after the command) or are silently dropped
+// (when placed before it) — the flag inconsistency this command previously
+// suffered from. Config flags (--profile etc.) are persistent
+// and inherit automatically.
 func NewListSupportedPricingApisCommand() *cli.Command {
-	return &cli.Command{
+	cmd := &cli.Command{
 		Name: "list-supported-pricing-apis",
 		Short: i18n.T(
 			"List every OpenAPI that supports --estimate-cost. Output is JSON.",
 			"列出所有支持 --estimate-cost 的 OpenAPI 三元组，输出 JSON",
 		),
+		Usage: "list-supported-pricing-apis [--product <code>] [--api-version <version>] [--cli-query <jmespath>]",
+		Sample: "aliyun list-supported-pricing-apis --product Ecs\n" +
+			"  aliyun ecs RunInstances --InstanceType ecs.e-c1m1.large ... --estimate-cost",
 		Run: func(ctx *cli.Context, args []string) error {
 			profile, err := config.LoadProfileWithContext(ctx)
 			if err != nil {
@@ -57,9 +100,68 @@ func NewListSupportedPricingApisCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			out, err = filterSupportedPricingApis(ctx, out)
+			if err != nil {
+				return err
+			}
 			return printEstimateCostResult(ctx, out)
 		},
 	}
+	cmd.Flags().Add(NewQuietFlag())
+	cmd.Flags().Add(NewQueryFlag())
+	cmd.Flags().Add(NewOutputFlag())
+	cmd.Flags().Add(newPricingProductFlag())
+	cmd.Flags().Add(newPricingApiVersionFlag())
+	return cmd
+}
+
+// filterSupportedPricingApis applies --product / --api-version to the merged
+// list. Client-side on purpose: the upstream enumeration is small (a few
+// hundred triples) and filtering locally keeps the server contract minimal.
+func filterSupportedPricingApis(ctx *cli.Context, out string) (string, error) {
+	productFlag := ctx.Flags().Get(PricingProductFlagName)
+	versionFlag := ctx.Flags().Get(PricingApiVersionFlagName)
+	product, _ := productFlag.GetValue()
+	version, _ := versionFlag.GetValue()
+	if product == "" && version == "" {
+		return out, nil
+	}
+
+	var body struct {
+		SupportedApis []map[string]interface{} `json:"supportedApis"`
+		NextToken     string                   `json:"nextToken"`
+		RequestId     string                   `json:"requestId"`
+	}
+	if err := json.Unmarshal([]byte(out), &body); err != nil {
+		return "", fmt.Errorf("list-supported-pricing-apis: cannot filter, unexpected response shape: %v", err)
+	}
+	filtered := make([]map[string]interface{}, 0, len(body.SupportedApis))
+	for _, api := range body.SupportedApis {
+		if product != "" && !strings.EqualFold(stringField(api, "popCode"), product) {
+			continue
+		}
+		if version != "" && stringField(api, "popVersion") != version {
+			continue
+		}
+		filtered = append(filtered, api)
+	}
+	merged := map[string]interface{}{
+		"supportedApis": filtered,
+		"nextToken":     "",
+		"requestId":     body.RequestId,
+	}
+	result, err := json.MarshalIndent(merged, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(result), nil
+}
+
+func stringField(m map[string]interface{}, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
 }
 
 // pagedListResponse is the slice of the upstream response we care about for
