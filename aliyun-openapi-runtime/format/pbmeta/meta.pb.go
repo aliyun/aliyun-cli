@@ -172,6 +172,7 @@ type Operation struct {
 	Method        string                 `protobuf:"bytes,4,opt,name=method,proto3" json:"method,omitempty"`
 	Protocol      string                 `protobuf:"bytes,5,opt,name=protocol,proto3" json:"protocol,omitempty"`
 	Url           string                 `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
+	IsSse         bool                   `protobuf:"varint,7,opt,name=is_sse,json=isSse,proto3" json:"is_sse,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -246,6 +247,13 @@ func (x *Operation) GetUrl() string {
 		return x.Url
 	}
 	return ""
+}
+
+func (x *Operation) GetIsSse() bool {
+	if x != nil {
+		return x.IsSse
+	}
+	return false
 }
 
 type Argument struct {
@@ -427,7 +435,7 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\toperation\x18\f \x01(\v2!.aliyun.openapi.meta.v1.OperationR\toperation\x12@\n" +
 	"\n" +
 	"parameters\x18\r \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\n" +
-	"parameters\"\xa7\x01\n" +
+	"parameters\"\xbe\x01\n" +
 	"\tOperation\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12\x1b\n" +
 	"\tapi_style\x18\x02 \x01(\tR\bapiStyle\x12\x1f\n" +
@@ -435,7 +443,8 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"apiVersion\x12\x16\n" +
 	"\x06method\x18\x04 \x01(\tR\x06method\x12\x1a\n" +
 	"\bprotocol\x18\x05 \x01(\tR\bprotocol\x12\x10\n" +
-	"\x03url\x18\x06 \x01(\tR\x03url\"\x96\x04\n" +
+	"\x03url\x18\x06 \x01(\tR\x03url\x12\x15\n" +
+	"\x06is_sse\x18\a \x01(\bR\x05isSse\"\x96\x04\n" +
 	"\bArgument\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\braw_name\x18\x02 \x01(\tR\arawName\x12\x12\n" +

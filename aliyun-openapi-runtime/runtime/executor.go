@@ -48,6 +48,13 @@ type Executor interface {
 	Execute(ec *ExecContext) (*Response, error)
 }
 
+// SSEExecutor is an optional capability implemented by executors that can
+// consume Server-Sent Events without buffering the HTTP response. Each event
+// is delivered as one normalized JSON object.
+type SSEExecutor interface {
+	ExecuteSSE(ec *ExecContext, yield func(SSEEvent)) error
+}
+
 // ExecContext bundles everything the Executor needs to make a call.
 // It is populated by the L6 Builder just before invocation.
 type ExecContext struct {
@@ -156,6 +163,17 @@ func (e *DefaultExecutor) Execute(ec *ExecContext) (*Response, error) {
 		return &Response{StatusCode: 0, Assembled: req}, nil
 	}
 	return send(ec, req)
+}
+
+func (e *DefaultExecutor) ExecuteSSE(ec *ExecContext, yield func(SSEEvent)) error {
+	req, err := Assemble(ec)
+	if err != nil {
+		return err
+	}
+	if ec.DryRun {
+		return errors.New("runtime: SSE execution cannot run in dry-run mode")
+	}
+	return sendSSE(ec, req, yield)
 }
 
 // Assemble is the pure translation from meta + args to wire request.
@@ -306,6 +324,29 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 }
 
 func send(ec *ExecContext, req *AssembledRequest) (*Response, error) {
+	call, err := prepareCall(ec, req)
+	if err != nil {
+		return nil, err
+	}
+	LogRequest(req)
+	raw, err := call.client.CallApi(call.params, call.request, call.runtime)
+	if err != nil {
+		return nil, fmt.Errorf("runtime: call failed: %w", dara.TeaSDKError(err))
+	}
+
+	resp := buildResponse(raw)
+	LogResponse(resp)
+	return resp, nil
+}
+
+type preparedCall struct {
+	client  *openapiClient.Client
+	params  *openapiClient.Params
+	request *openapiutil.OpenApiRequest
+	runtime *dara.RuntimeOptions
+}
+
+func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) {
 	if ec.Credential == nil {
 		return nil, errors.New("runtime: no credential resolved; run `aliyun configure` or pass --dry-run")
 	}
@@ -371,15 +412,12 @@ func send(ec *ExecContext, req *AssembledRequest) (*Response, error) {
 	if ec.SkipSecureVerify {
 		runtimeOpts.IgnoreSSL = tea.Bool(true)
 	}
-	LogRequest(req)
-	raw, err := client.CallApi(params, oaReq, runtimeOpts)
-	if err != nil {
-		return nil, fmt.Errorf("runtime: call failed: %w", dara.TeaSDKError(err))
-	}
-
-	resp := buildResponse(raw)
-	LogResponse(resp)
-	return resp, nil
+	return &preparedCall{
+		client:  client,
+		params:  params,
+		request: oaReq,
+		runtime: runtimeOpts,
+	}, nil
 }
 
 // buildResponse extracts status/headers/body from darabonba's response

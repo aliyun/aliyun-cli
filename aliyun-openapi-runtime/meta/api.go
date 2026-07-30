@@ -33,6 +33,7 @@ type API struct {
 	URL         string // RESTful path template; empty for RPC
 	Style       APIStyle
 	Protocol    string            // "HTTPS" / "HTTP"
+	IsSSE       bool              // response is a Server-Sent Events stream
 	ContentType string            // request Content-Type override, may be ""
 	BodyMapping map[string]string // raw_name -> wire key, RPC body overrides
 

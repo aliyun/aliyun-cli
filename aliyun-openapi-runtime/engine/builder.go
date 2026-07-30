@@ -37,15 +37,13 @@ import (
 
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/loader"
+	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/redact"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
 )
 
-// Engine dispatches OpenAPI commands against a lazy Loader. It carries only
-// immutable wiring/parser configuration; each call passes its own host and
-// presentation state in Request.
-//
-// The loader is constructed on first use and memoised. Product ownership is then resolved on demand for only the product named by the request.
+// Engine dispatches OpenAPI commands against a lazy Loader. It carries only immutable wiring/parser configuration;
+// each call passes its own host and presentation state in Request.
 type Engine struct {
 	loaderFunc    func() (loader.Loader, error)
 	executor      runtime.Executor
@@ -99,23 +97,21 @@ func (e *Engine) Resolvable(product, command string) bool {
 		return p != nil && len(p.Versions) > 1
 	}
 	// Check across all of the product's versions, not just the default,
-	// so a command that lives only in a non-default version is still
-	// routed to the engine (the user can then select it via
-	// --api-version).
+	// so a command that lives only in a non-default version is still routed to the engine (the user can then select it via --api-version).
 	return ldr.CommandExists(product, command)
 }
 
-// Request carries one engine call. Shared by Dispatch and ProductHelp:
+// Request carries one engine call. Shared by Dispatch, ProductHelp, and APIHelp:
 //
 //	Dispatch:     Args = "<product> <command> [--flag ...]" (Host usually required)
 //	ProductHelp:  Args = "<product> [--api-version ...]"    (Host unused)
+//	APIHelp:      Args = "<product> <command> [--api-version ...]" (Host unused)
 type Request struct {
 	Args []string
 	Out  io.Writer
 	// Lang selects help/description locale ("zh" / "en"). Empty => en.
 	Lang string
-	// Host supplies region + credentials. May be nil for help or dry-run
-	// that needs neither (endpoint then resolves region-less).
+	// Host supplies region + credentials. May be nil for help or dry-run that needs neither (endpoint then resolves region-less).
 	Host runtime.Host
 }
 
@@ -127,8 +123,6 @@ func (e *Engine) HasProduct(product string) bool {
 	return ldr.EnsureProduct(product) == nil
 }
 
-// ProductHelp renders the product's kebab-case command list from its selected metadata index.
-// req.Args must start with the product code; optional --api-version selects a non-default version.
 func (e *Engine) ProductHelp(req Request) error {
 	ldr, err := e.getLoader()
 	if err != nil {
@@ -160,7 +154,31 @@ func (e *Engine) ProductHelp(req Request) error {
 	return printProductHelp(req.Out, product, index, req.Lang, requestedVersion == "" && len(product.Versions) > 1)
 }
 
-// Dispatch resolves and runs one command described by req.Args.
+func (e *Engine) APIHelp(req Request) error {
+	ldr, err := e.getLoader()
+	if err != nil {
+		return fmt.Errorf("openapi-runtime loader: %w", err)
+	}
+	if len(req.Args) < 2 {
+		return errors.New("expected <product> <command>")
+	}
+	product, command := req.Args[0], req.Args[1]
+	if err := ldr.EnsureProduct(product); err != nil {
+		return err
+	}
+	if command == listAPIVersionsCommand {
+		productMeta := ldr.LookupProduct(product)
+		if productMeta != nil && len(productMeta.Versions) > 1 {
+			return printAPIVersionsHelp(req.Out, productMeta, req.Lang)
+		}
+	}
+	_, api, err := resolveDispatchAPI(ldr, product, command, req.Args[2:])
+	if err != nil {
+		return err
+	}
+	return printAPIHelp(req.Out, product, api, req.Lang)
+}
+
 func (e *Engine) Dispatch(req Request) error {
 	ldr, err := e.getLoader()
 	if err != nil {
@@ -176,43 +194,13 @@ func (e *Engine) Dispatch(req Request) error {
 		return err
 	}
 	cmdName := args[1]
-	productMeta := ldr.LookupProduct(product)
-	if cmdName == listAPIVersionsCommand && productMeta != nil && len(productMeta.Versions) > 1 {
-		res, err := argparser.ParseWithOptions(nil, args[2:], argparser.ParseOptions{
-			ExternalFlags: e.externalFlags,
-		})
-		if err != nil {
-			return err
-		}
-		if res.Reserved.Help {
-			return printAPIVersionsHelp(req.Out, productMeta, req.Lang)
-		}
-		return printAPIVersions(req.Out, productMeta, req.Lang)
-	}
-
-	// Pre-scan the raw tail for --api-version so command resolution and metadata loading target the requested version (not just the product default).
-	// Without this, an older version requested via --api-version would still resolve/execute against the default.
-	reqVersion := scanAPIVersion(args[2:])
-
-	ref, err := ldr.ResolveCommandVersion(product, cmdName, reqVersion)
-	if err != nil {
-		if errors.Is(err, loader.ErrCommandNotFound) {
-			if versions := ldr.FindCommandVersions(product, cmdName); len(versions) > 0 {
-				currentVersion, resolveErr := ldr.ResolveVersion(product, reqVersion)
-				if resolveErr != nil {
-					return resolveErr
-				}
-				return commandVersionError(product, cmdName, currentVersion, versions)
-			}
-			return fmt.Errorf("unknown command %q for product %q; try `aliyun %s` to list commands",
-				cmdName, product, product)
-		}
+	if handled, err := e.dispatchBuiltin(req, ldr, product, cmdName); handled {
 		return err
 	}
 
-	api, err := ldr.GetAPI(ref.Product, ref.Version, ref.Name)
+	ref, api, err := resolveDispatchAPI(ldr, product, cmdName, args[2:])
 	if err != nil {
-		return fmt.Errorf("load api %s: %w", ref, err)
+		return err
 	}
 
 	res, err := argparser.ParseWithOptions(api.Parameters, args[2:], argparser.ParseOptions{
@@ -230,123 +218,225 @@ func (e *Engine) Dispatch(req Request) error {
 		return printAPIHelp(req.Out, product, api, req.Lang)
 	}
 
-	// Client-side required-parameter check: fail fast with an
-	// actionable message rather than an opaque server 400.
 	if err := runtime.ValidateRequired(api, res.Args); err != nil {
 		return fmt.Errorf("%w\nrun `aliyun %s %s --help` to see all parameters", err, product, cmdName)
 	}
 
-	ec := &runtime.ExecContext{
-		API:      api,
-		Args:     res.Args,
-		Region:   res.Reserved.Region,
-		Endpoint: res.Reserved.Endpoint,
-		Version:  res.Reserved.Version,
-		DryRun:   res.Reserved.DryRun,
-	}
-	if len(res.Reserved.Headers) > 0 {
-		ec.ExtraHeaders = map[string]string{}
-		for _, h := range res.Reserved.Headers {
-			k, v, ok := strings.Cut(h, "=")
-			if !ok || strings.TrimSpace(k) == "" {
-				return fmt.Errorf("invalid header format %q, expected Name=Value", h)
-			}
-			ec.ExtraHeaders[strings.TrimSpace(k)] = strings.TrimSpace(v)
-		}
-	}
-	if res.Reserved.BodyFile != "" {
-		b, err := os.ReadFile(res.Reserved.BodyFile)
-		if err != nil {
-			return fmt.Errorf("--body-file: %w", err)
-		}
-		ec.RawBody = string(b)
-	} else if res.Reserved.Body != "" {
-		ec.RawBody = res.Reserved.Body
-	}
-	ec.ForceHTTPS = res.Reserved.Secure
-	ec.ForceHTTP = res.Reserved.Insecure
-	// --no-stream is accepted for plugin parity; with no SSE path yet it is a no-op.
-	_ = res.Reserved.NoStream
-
-	// Apply profile-derived wire settings from the host (timeouts,
-	// retry, endpoint type, TLS/UA), mirroring what the Go plugin path
-	// exports as env to a plugin process.
-	if req.Host != nil {
-		if ec.Region == "" {
-			ec.Region = req.Host.Region()
-		}
-		s := req.Host.Settings()
-		ec.ReadTimeout = s.ReadTimeout
-		ec.ConnectTimeout = s.ConnectTimeout
-		ec.RetryCount = s.RetryCount
-		ec.UseVPC = s.UseVPC()
-		ec.SkipSecureVerify = s.SkipSecureVerify
-		ec.CLIVersion = s.CLIVersion
-		ec.UserAgent = s.UserAgent
-	}
-	needsCred := !ec.DryRun || res.Reserved.EstimateCost
-	if needsCred {
-		if req.Host == nil {
-			return errors.New("no credential source configured; run `aliyun configure` or pass --cli-dry-run")
-		}
-		cred, cerr := req.Host.Credential()
-		if cerr != nil {
-			return fmt.Errorf("resolve credential: %w", cerr)
-		}
-		ec.Credential = cred
+	ec, err := buildExecContext(req, api, res)
+	if err != nil {
+		return err
 	}
 
-	// --cli-dry-run-json cannot combine with helpers.
-	if res.Reserved.DryRunJSON {
-		if res.Reserved.Pager != nil {
-			return fmt.Errorf("--cli-dry-run-json cannot be used with --pager")
-		}
-		if res.Reserved.Waiter != nil {
-			return fmt.Errorf("--cli-dry-run-json cannot be used with --waiter")
-		}
-		if res.Reserved.Quiet {
-			return fmt.Errorf("--cli-dry-run-json cannot be used with --quiet")
-		}
+	if err := validateDispatchOptions(res); err != nil {
+		return err
 	}
 
 	runtime.InitLogger(res.Reserved.LogLevel, res.Reserved.DryRun)
 	runtime.LogArgs(res.Args)
 
 	if runtime.PriceModeEnabled(res.Reserved.EstimateCost) {
-		assembled, aerr := runtime.Assemble(ec)
-		if aerr != nil {
-			return aerr
-		}
-		// Plugin parity: --estimate-cost + API DryRun=true runs the
-		// upstream dry-run first; DryRunOperation is success, then quote
-		// without DryRun. --cli-dry-run (ec.DryRun) is unrelated and must
-		// not suppress that network precheck.
-		if runtime.IsAPIDryRunRequested(assembled) {
-			callEC := *ec
-			callEC.DryRun = false
-			if _, callErr := e.executor.Execute(&callEC); callErr != nil && !runtime.IsDryRunPassError(callErr) {
-				return callErr
-			}
-			runtime.StripAPIDryRun(assembled)
-		}
-		pc := map[string]string{}
-		for _, item := range res.Reserved.EstimateCostContext {
-			k, v, ok := strings.Cut(item, "=")
-			if !ok || strings.TrimSpace(k) == "" {
-				return fmt.Errorf("invalid --estimate-cost-context %q, expected Key=Value", item)
-			}
-			pc[strings.TrimSpace(k)] = strings.TrimSpace(v)
-		}
-		out, perr := runtime.EstimateCost(ec, assembled, pc)
-		if perr != nil {
-			return perr
-		}
-		// Ignore --quiet: the quote IS the output (plugin parity).
-		fmt.Fprintln(req.Out, out)
-		return nil
+		return e.executeEstimateCost(req.Out, ec, res)
 	}
 
+	if api.IsSSE && !ec.DryRun {
+		return e.executeSSE(req.Out, ec, res)
+	}
+	return e.executeStandard(req.Out, ref.Product, ec, res)
+}
+
+func (e *Engine) dispatchBuiltin(req Request, ldr loader.Loader, product, command string) (bool, error) {
+	productMeta := ldr.LookupProduct(product)
+	if command != listAPIVersionsCommand || productMeta == nil || len(productMeta.Versions) <= 1 {
+		return false, nil
+	}
+	res, err := argparser.ParseWithOptions(nil, req.Args[2:], argparser.ParseOptions{
+		ExternalFlags: e.externalFlags,
+	})
+	if err != nil {
+		return true, err
+	}
+	if res.Reserved.Help {
+		return true, printAPIVersionsHelp(req.Out, productMeta, req.Lang)
+	}
+	return true, printAPIVersions(req.Out, productMeta, req.Lang)
+}
+
+func resolveDispatchAPI(ldr loader.Loader, product, command string, tail []string) (meta.APIRef, *meta.API, error) {
+	requestedVersion := scanAPIVersion(tail)
+	ref, err := ldr.ResolveCommandVersion(product, command, requestedVersion)
+	if err != nil {
+		if errors.Is(err, loader.ErrCommandNotFound) {
+			if versions := ldr.FindCommandVersions(product, command); len(versions) > 0 {
+				currentVersion, resolveErr := ldr.ResolveVersion(product, requestedVersion)
+				if resolveErr != nil {
+					return meta.APIRef{}, nil, resolveErr
+				}
+				return meta.APIRef{}, nil, commandVersionError(product, command, currentVersion, versions)
+			}
+			return meta.APIRef{}, nil, fmt.Errorf(
+				"unknown command %q for product %q; try `aliyun %s` to list commands",
+				command, product, product,
+			)
+		}
+		return meta.APIRef{}, nil, err
+	}
+	api, err := ldr.GetAPI(ref.Product, ref.Version, ref.Name)
+	if err != nil {
+		return meta.APIRef{}, nil, fmt.Errorf("load api %s: %w", ref, err)
+	}
+	return ref, api, nil
+}
+
+func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runtime.ExecContext, error) {
+	ec := &runtime.ExecContext{
+		API:        api,
+		Args:       res.Args,
+		Region:     res.Reserved.Region,
+		Endpoint:   res.Reserved.Endpoint,
+		Version:    res.Reserved.Version,
+		DryRun:     res.Reserved.DryRun,
+		ForceHTTPS: res.Reserved.Secure,
+		ForceHTTP:  res.Reserved.Insecure,
+	}
+	if len(res.Reserved.Headers) > 0 {
+		ec.ExtraHeaders = map[string]string{}
+		for _, header := range res.Reserved.Headers {
+			name, value, ok := strings.Cut(header, "=")
+			if !ok || strings.TrimSpace(name) == "" {
+				return nil, fmt.Errorf("invalid header format %q, expected Name=Value", header)
+			}
+			ec.ExtraHeaders[strings.TrimSpace(name)] = strings.TrimSpace(value)
+		}
+	}
+	if res.Reserved.BodyFile != "" {
+		body, err := os.ReadFile(res.Reserved.BodyFile)
+		if err != nil {
+			return nil, fmt.Errorf("--body-file: %w", err)
+		}
+		ec.RawBody = string(body)
+	} else if res.Reserved.Body != "" {
+		ec.RawBody = res.Reserved.Body
+	}
+
+	if req.Host != nil {
+		if ec.Region == "" {
+			ec.Region = req.Host.Region()
+		}
+		settings := req.Host.Settings()
+		ec.ReadTimeout = settings.ReadTimeout
+		ec.ConnectTimeout = settings.ConnectTimeout
+		ec.RetryCount = settings.RetryCount
+		ec.UseVPC = settings.UseVPC()
+		ec.SkipSecureVerify = settings.SkipSecureVerify
+		ec.CLIVersion = settings.CLIVersion
+		ec.UserAgent = settings.UserAgent
+	}
+	if !ec.DryRun || res.Reserved.EstimateCost {
+		if req.Host == nil {
+			return nil, errors.New("no credential source configured; run `aliyun configure` or pass --cli-dry-run")
+		}
+		credential, err := req.Host.Credential()
+		if err != nil {
+			return nil, fmt.Errorf("resolve credential: %w", err)
+		}
+		ec.Credential = credential
+	}
+	return ec, nil
+}
+
+func validateDispatchOptions(res *argparser.Result) error {
+	if !res.Reserved.DryRunJSON {
+		return nil
+	}
+	if res.Reserved.Pager != nil {
+		return fmt.Errorf("--cli-dry-run-json cannot be used with --pager")
+	}
+	if res.Reserved.Waiter != nil {
+		return fmt.Errorf("--cli-dry-run-json cannot be used with --waiter")
+	}
+	if res.Reserved.Quiet {
+		return fmt.Errorf("--cli-dry-run-json cannot be used with --quiet")
+	}
+	return nil
+}
+
+func (e *Engine) executeEstimateCost(out io.Writer, ec *runtime.ExecContext, res *argparser.Result) error {
+	assembled, err := runtime.Assemble(ec)
+	if err != nil {
+		return err
+	}
+	// API DryRun=true is an upstream validation call; CLI dry-run is unrelated.
+	if runtime.IsAPIDryRunRequested(assembled) {
+		callEC := *ec
+		callEC.DryRun = false
+		if _, callErr := e.executor.Execute(&callEC); callErr != nil && !runtime.IsDryRunPassError(callErr) {
+			return callErr
+		}
+		runtime.StripAPIDryRun(assembled)
+	}
+	context := map[string]string{}
+	for _, item := range res.Reserved.EstimateCostContext {
+		name, value, ok := strings.Cut(item, "=")
+		if !ok || strings.TrimSpace(name) == "" {
+			return fmt.Errorf("invalid --estimate-cost-context %q, expected Key=Value", item)
+		}
+		context[strings.TrimSpace(name)] = strings.TrimSpace(value)
+	}
+	quote, err := runtime.EstimateCost(ec, assembled, context)
+	if err != nil {
+		return err
+	}
+	// The quote is the result, so --quiet intentionally does not suppress it.
+	_, err = fmt.Fprintln(out, quote)
+	return err
+}
+
+func (e *Engine) executeSSE(out io.Writer, ec *runtime.ExecContext, res *argparser.Result) error {
+	if res.Reserved.Pager != nil {
+		return errors.New("--pager is not supported for SSE APIs")
+	}
+	if res.Reserved.Waiter != nil {
+		return errors.New("--waiter is not supported for SSE APIs")
+	}
+	sseExecutor, ok := e.executor.(runtime.SSEExecutor)
+	if !ok {
+		return errors.New("configured executor does not support SSE APIs")
+	}
+
+	aggregate := res.Reserved.NoStream || res.Reserved.CliQuery != "" || res.Reserved.OutputTable != nil
+	events := make([]runtime.SSEEvent, 0)
+	var writeErr error
+	err := sseExecutor.ExecuteSSE(ec, func(event runtime.SSEEvent) {
+		if aggregate {
+			events = append(events, append(runtime.SSEEvent(nil), event...))
+			return
+		}
+		if !res.Reserved.Quiet && writeErr == nil {
+			_, writeErr = fmt.Fprintln(out, string(event))
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if writeErr != nil {
+		return writeErr
+	}
+	if !aggregate || res.Reserved.Quiet || len(events) == 0 {
+		return nil
+	}
+	resp, err := aggregateSSEResponse(events)
+	if err != nil {
+		return err
+	}
+	if res.Reserved.OutputTable != nil {
+		return renderOutputTable(out, resp.Parsed, resp.Raw, res.Reserved.OutputTable)
+	}
+	return renderResponse(out, resp, res.Reserved.CliQuery)
+}
+
+func (e *Engine) executeStandard(out io.Writer, product string, ec *runtime.ExecContext, res *argparser.Result) error {
 	var resp *runtime.Response
+	var err error
 	switch {
 	case res.Reserved.Pager != nil:
 		resp, err = runtime.CallWithPager(e.executor, ec, res.Reserved.Pager)
@@ -359,15 +449,42 @@ func (e *Engine) Dispatch(req Request) error {
 		return err
 	}
 	if res.Reserved.DryRun {
-		return renderDryRun(req.Out, ref.Product, resp.Assembled, res.Reserved.DryRunJSON)
+		return renderDryRun(out, product, resp.Assembled, res.Reserved.DryRunJSON)
 	}
 	if res.Reserved.Quiet {
 		return nil
 	}
 	if res.Reserved.OutputTable != nil {
-		return renderOutputTable(req.Out, resp.Parsed, resp.Raw, res.Reserved.OutputTable)
+		return renderOutputTable(out, resp.Parsed, resp.Raw, res.Reserved.OutputTable)
 	}
-	return renderResponse(req.Out, resp, res.Reserved.CliQuery)
+	return renderResponse(out, resp, res.Reserved.CliQuery)
+}
+
+func aggregateSSEResponse(events []runtime.SSEEvent) (*runtime.Response, error) {
+	if len(events) == 0 {
+		return &runtime.Response{}, nil
+	}
+	var raw []byte
+	if len(events) == 1 {
+		raw = append([]byte(nil), events[0]...)
+	} else {
+		values := make([]json.RawMessage, len(events))
+		for i := range events {
+			values[i] = json.RawMessage(events[i])
+		}
+		var err error
+		raw, err = json.Marshal(values)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var parsed any
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&parsed); err != nil {
+		return nil, err
+	}
+	return &runtime.Response{Raw: raw, Parsed: parsed}, nil
 }
 
 func commandVersionError(product, command, currentVersion string, versions []string) error {

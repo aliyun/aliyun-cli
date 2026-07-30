@@ -182,6 +182,7 @@ type OperationConfig struct {
 	Method     string `json:"method"`
 	Protocol   string `json:"protocol,omitempty"`
 	URL        string `json:"url"`
+	IsSSE      bool   `json:"is_sse,omitempty"`
 }
 
 // ArgumentDefinition describes a single CLI parameter.

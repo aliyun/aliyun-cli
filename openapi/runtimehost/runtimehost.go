@@ -247,9 +247,7 @@ func TryHelp(ctx *cli.Context, product, command string) (handled bool, err error
 	if v := apiVersionFromArgs(os.Args); v != "" {
 		args = append(args, "--api-version", v)
 	}
-	// The engine's argparser turns --help into a Reserved.Help render.
-	args = append(args, "--help")
-	return true, Engine().Dispatch(engine.Request{
+	return true, Engine().APIHelp(engine.Request{
 		Args: args,
 		Out:  ctx.Stdout(),
 		Lang: helpLanguage(ctx),

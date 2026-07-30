@@ -288,6 +288,21 @@ func TestMultiVersionResolutionFromBaseline(t *testing.T) {
 	}
 }
 
+func TestBaselineSSEMetadata(t *testing.T) {
+	l := baselineLoaderFor(t, "rdsai")
+	ref, err := l.ResolveCommand("rdsai", "chat-messages")
+	if err != nil {
+		t.Fatalf("resolve SSE command: %v", err)
+	}
+	api, err := l.GetAPI(ref.Product, ref.Version, ref.Name)
+	if err != nil {
+		t.Fatalf("load SSE API: %v", err)
+	}
+	if !api.IsSSE {
+		t.Fatalf("rdsai chat-messages was not marked SSE: %+v", api)
+	}
+}
+
 func TestListAPIVersionsFromBaseline(t *testing.T) {
 	eng := baselineEngine(t)
 	if !eng.Resolvable("bailian", "list-api-versions") {
@@ -341,6 +356,38 @@ func TestListAPIVersionsFromBaseline(t *testing.T) {
 	}
 	if strings.Contains(versionHelp.String(), "list-api-versions") {
 		t.Fatalf("version-specific product help should hide list-api-versions:\n%s", versionHelp.String())
+	}
+}
+
+func TestAPIHelpFromBaseline(t *testing.T) {
+	eng := baselineEngine(t)
+
+	var help bytes.Buffer
+	err := eng.APIHelp(engine.Request{
+		Args: []string{"ecs", "describe-regions"},
+		Out:  &help,
+		Lang: "en",
+	})
+	if err != nil {
+		t.Fatalf("APIHelp: %v", err)
+	}
+	for _, want := range []string{"aliyun ecs describe-regions", "Global Parameters:"} {
+		if !strings.Contains(help.String(), want) {
+			t.Errorf("API help missing %q:\n%s", want, help.String())
+		}
+	}
+
+	var versionsHelp bytes.Buffer
+	err = eng.APIHelp(engine.Request{
+		Args: []string{"bailian", "list-api-versions"},
+		Out:  &versionsHelp,
+		Lang: "en",
+	})
+	if err != nil {
+		t.Fatalf("list-api-versions APIHelp: %v", err)
+	}
+	if !strings.Contains(versionsHelp.String(), "Description: List supported API versions") {
+		t.Fatalf("unexpected list-api-versions API help:\n%s", versionsHelp.String())
 	}
 }
 

@@ -103,6 +103,7 @@ func toCanonical(def *CommandDefinition) (*schema.CommandDefinition, error) {
 			Method:     def.Operation.Method,
 			Protocol:   def.Operation.Protocol,
 			URL:        def.Operation.Url,
+			IsSSE:      def.Operation.IsSse,
 		}
 	}
 	parameters, err := toCanonicalArguments(def.Parameters)
