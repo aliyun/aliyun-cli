@@ -538,9 +538,10 @@ func assignScalar(dst map[string]any, key string, p *meta.Parameter, tokens []st
 func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []string) error {
 	existing, _ := dst[key].([]any)
 
-	// JSON-first for this occurrence (plugin parity): a JSON array is
-	// expanded into multiple elements; a JSON object/scalar becomes a
-	// single element. Field names inside are resolved to wire RawNames.
+	// JSON-first for this occurrence: a JSON array is expanded into multiple elements;
+	// a JSON object/scalar becomes a single element.
+	// For scalar arrays, accepting a JSON array is an intentional extension beyond the legacy Go plugin.
+	// Field names inside are resolved to wire RawNames.
 	if v, ok := tryFlagJSON(tokens); ok {
 		if arr, isArr := v.([]any); isArr {
 			for _, e := range arr {
@@ -563,8 +564,8 @@ func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []str
 
 	elemObject := p.ItemType != nil && p.ItemType.Type == meta.TypeObject
 	if elemObject {
-		// Each occurrence is one object; its tokens are key=value
-		// pairs (dotted keys / array indices allowed for nesting).
+		// Each occurrence is one object;
+		// its tokens are key=value pairs (dotted keys / array indices allowed for nesting).
 		// Field keys are addressed and emitted by their wire RawName.
 		obj, err := parseKVPairs(tokens, p.ItemType.Fields)
 		if err != nil {
@@ -574,33 +575,26 @@ func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []str
 		return nil
 	}
 
-	// Array of scalars: append each token (optionally comma-split
-	// for the single-token "a,b,c" convenience form).
+	// Array of scalars: append each token as one element.
+	// Commas are common string content and are intentionally not treated as separators.
 	var elemType meta.DataType = meta.TypeString
 	if p.ItemType != nil {
 		elemType = p.ItemType.Type
 	}
 	for _, t := range tokens {
-		parts := []string{t}
-		if len(tokens) == 1 && strings.Contains(t, ",") {
-			parts = strings.Split(t, ",")
+		v, err := coerceScalar(elemType, t)
+		if err != nil {
+			return fmt.Errorf("--%s: %w", displayName(p), err)
 		}
-		for _, part := range parts {
-			v, err := coerceScalar(elemType, part)
-			if err != nil {
-				return fmt.Errorf("--%s: %w", displayName(p), err)
-			}
-			existing = append(existing, v)
-		}
+		existing = append(existing, v)
 	}
 	dst[key] = existing
 	return nil
 }
 
 func assignObject(dst map[string]any, key string, p *meta.Parameter, tokens []string) error {
-	// JSON-first (plugin parity): "--cfg '{...}'" is parsed as JSON and
-	// its field names resolved to wire RawNames; otherwise fall back to
-	// the key=value form.
+	// JSON-first (plugin parity): "--cfg '{...}'" is parsed as JSON and its field names resolved to wire RawNames;
+	// otherwise fall back to the key=value form.
 	if v, ok := tryFlagJSON(tokens); ok {
 		m, isMap := v.(map[string]any)
 		if !isMap {
@@ -623,9 +617,9 @@ func assignObject(dst map[string]any, key string, p *meta.Parameter, tokens []st
 }
 
 func assignMap(dst map[string]any, key string, p *meta.Parameter, tokens []string) error {
-	// JSON-first (plugin parity), then the flat key=value form. Keys are
-	// free-form (no schema, no dotted nesting); values are coerced to
-	// the map's declared ValueType.
+	// JSON-first (plugin parity), then the flat key=value form.
+	// Keys are free-form (no schema, no dotted nesting);
+	// values are coerced to the map's declared ValueType.
 	if v, ok := tryFlagJSON(tokens); ok {
 		m, isMap := v.(map[string]any)
 		if !isMap {
@@ -665,8 +659,7 @@ func assignMap(dst map[string]any, key string, p *meta.Parameter, tokens []strin
 	return nil
 }
 
-// mergeObject stores obj under key, merging into an existing map from a
-// prior occurrence of the same flag.
+// mergeObject stores obj under key, merging into an existing map from a prior occurrence of the same flag.
 func mergeObject(dst map[string]any, key string, obj map[string]any) {
 	if existing, ok := dst[key].(map[string]any); ok {
 		for k, v := range obj {
@@ -677,11 +670,10 @@ func mergeObject(dst map[string]any, key string, obj map[string]any) {
 	dst[key] = obj
 }
 
-// tryFlagJSON attempts to parse a flag occurrence's tokens as a single
-// JSON value. Tokens are joined with spaces and one layer of matching
-// outer quotes is stripped; only values starting with '{' or '[' are
-// considered (mirroring the plugin's tryParseJSONString). Numbers are
-// preserved as json.Number.
+// tryFlagJSON attempts to parse a flag occurrence's tokens as a single JSON value.
+// Tokens are joined with spaces and one layer of matching outer quotes is stripped;
+// only values starting with '{' or '[' are considered (mirroring the plugin's tryParseJSONString).
+// Numbers are preserved as json.Number.
 func tryFlagJSON(tokens []string) (any, bool) {
 	s := stripOuterQuotes(strings.TrimSpace(strings.Join(tokens, " ")))
 	if !strings.HasPrefix(s, "{") && !strings.HasPrefix(s, "[") {

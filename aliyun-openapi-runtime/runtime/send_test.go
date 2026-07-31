@@ -164,6 +164,41 @@ func TestSendROAAgainstMockServer(t *testing.T) {
 	}
 }
 
+// TestSendROAEncodedPathAgainstMockServer verifies that the Go-plugin-compatible
+// pathname produced by Assemble is preserved on the actual HTTP request URI.
+func TestSendROAEncodedPathAgainstMockServer(t *testing.T) {
+	var gotRequestURI string
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotRequestURI = r.RequestURI
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	api := &meta.API{
+		Name: "GetThing", Version: "2024-01-01", Method: "GET", Style: meta.StyleROA,
+		Protocol: "HTTP", URL: "/things/{thingId}:inspect", ProductCode: "demo",
+		Parameters: []meta.Parameter{
+			{Name: "thing_id", RawName: "thingId", Type: meta.TypeString, Position: meta.PosPath, Required: true},
+		},
+	}
+	_, err := NewExecutor().Execute(&ExecContext{
+		API: api, Endpoint: strings.TrimPrefix(srv.URL, "http://"), Credential: staticAKCredential(t),
+		Args: map[string]any{"thingId": "thing-123"},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if want := "/things/thing-123%3Ainspect"; gotRequestURI != want {
+		t.Fatalf("request URI = %q, want %q", gotRequestURI, want)
+	}
+	if gotAuth == "" {
+		t.Fatal("request was not signed")
+	}
+}
+
 func TestSendDirectAnyBodyAgainstMockServer(t *testing.T) {
 	tests := []struct {
 		name string

@@ -166,7 +166,7 @@ func TestBoolean(t *testing.T) {
 	}
 }
 
-func TestArrayScalarRepeatedAndMulti(t *testing.T) {
+func TestArrayScalarRepeatedMultiAndLiteralComma(t *testing.T) {
 	// Repeated flag form.
 	res := mustParse(t, "--images", "a", "--images", "b")
 	if !reflect.DeepEqual(res.Args["Images"], []any{"a", "b"}) {
@@ -177,10 +177,10 @@ func TestArrayScalarRepeatedAndMulti(t *testing.T) {
 	if !reflect.DeepEqual(res.Args["Images"], []any{"a", "b", "c"}) {
 		t.Fatalf("images multi = %#v", res.Args["Images"])
 	}
-	// Comma convenience form.
+	// A comma in a non-JSON scalar value is literal string content.
 	res = mustParse(t, "--images", "a,b,c")
-	if !reflect.DeepEqual(res.Args["Images"], []any{"a", "b", "c"}) {
-		t.Fatalf("images csv = %#v", res.Args["Images"])
+	if !reflect.DeepEqual(res.Args["Images"], []any{"a,b,c"}) {
+		t.Fatalf("images literal comma = %#v", res.Args["Images"])
 	}
 }
 
@@ -462,8 +462,8 @@ func TestFlagLevelJSONArrayExpands(t *testing.T) {
 // TestFlagLevelJSONScalarArray: a JSON array on a scalar-array flag
 // expands too (superset of the plugin's default branch).
 func TestFlagLevelJSONScalarArray(t *testing.T) {
-	res := mustParse(t, "--images", `["a","b","c"]`)
-	if !reflect.DeepEqual(res.Args["Images"], []any{"a", "b", "c"}) {
+	res := mustParse(t, "--images", `["a,b","c"]`)
+	if !reflect.DeepEqual(res.Args["Images"], []any{"a,b", "c"}) {
 		t.Fatalf("images = %#v", res.Args["Images"])
 	}
 }

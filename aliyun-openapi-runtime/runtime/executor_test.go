@@ -304,7 +304,7 @@ func TestAnyNullWireBehavior(t *testing.T) {
 	if len(req.Query) != 0 || len(req.Headers) != 0 {
 		t.Fatalf("null query/header must be omitted: query=%#v headers=%#v", req.Query, req.Headers)
 	}
-	if req.Pathname != "/things/{id}" {
+	if req.Pathname != "/things/%7Bid%7D" {
 		t.Fatalf("null path value must not become <nil>: %q", req.Pathname)
 	}
 	body, ok := req.Body.(map[string]any)
