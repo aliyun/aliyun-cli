@@ -401,6 +401,7 @@ func (a *OpenapiContext) ProcessBody(ctx *cli.Context) error {
 		a.openapiRequest.SetBody(buf)
 	}
 
+	body := map[string]interface{}{}
 	for _, f := range ctx.UnknownFlags().Flags() {
 		param := a.api.FindLegacyParameter(f.Name)
 		if param == nil {
@@ -413,9 +414,17 @@ func (a *OpenapiContext) ProcessBody(ctx *cli.Context) error {
 		if param.LegacyRequired() && value == "" {
 			return fmt.Errorf("required parameter missing; %s is required", param.LegacyName())
 		}
-		body := map[string]interface{}{}
 		body[f.Name] = value
+	}
+	if len(body) > 0 {
 		a.openapiRequest.Body = body
+		// RPC-style products (e.g. DAS) carry their body-position params as
+		// formData: the classic RPC channel sends them as form fields
+		// (application/x-www-form-urlencoded), so switch ReqBodyType away from
+		// the JSON default set in Init. ROA products keep the JSON body.
+		if a.openapiParams != nil && tea.StringValue(a.openapiParams.Style) == "RPC" {
+			a.openapiParams.ReqBodyType = tea.String("formData")
+		}
 	}
 
 	return nil

@@ -153,7 +153,13 @@ func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
 		bodyJSON, err := json.Marshal(oc.openapiRequest.Body)
 		if err == nil && string(bodyJSON) != "null" {
 			out.Body = string(bodyJSON)
+			// Reflect the request-body encoding resolved in Prepare/ProcessBody:
+			// RPC-style products send form fields (ReqBodyType=formData), which
+			// the classic dry-run reports as "form"; ROA keeps the JSON body.
 			out.BodyFormat = "json"
+			if oc.openapiParams != nil && tea.StringValue(oc.openapiParams.ReqBodyType) == "formData" {
+				out.BodyFormat = "form"
+			}
 		}
 	}
 
