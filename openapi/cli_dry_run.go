@@ -8,11 +8,20 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 )
 
+// cliDryRunHeaderNote documents that the header set printed by --cli-dry-run is
+// only what the CLI itself assembled. The underlying SDK runtime signs and sends
+// the request later, adding signing/transport headers (user-agent, x-acs-date,
+// x-acs-signature-nonce, authorization, content-type, ...) that dry-run never
+// materialises. Kept as a note rather than synthesised headers so the CLI does
+// not fake — or drift with — whatever the SDK version chooses to add.
+const cliDryRunHeaderNote = "SDK runtime may add signing and transport headers before sending the request."
+
 type CliDryRunOutput struct {
 	Style      string            `json:"style"`
 	Endpoint   string            `json:"endpoint"`
 	Method     string            `json:"method"`
 	Headers    map[string]string `json:"headers"`
+	Note       string            `json:"note,omitempty"`
 	Query      map[string]string `json:"query,omitempty"`
 	Body       string            `json:"body,omitempty"`
 	BodyFormat string            `json:"bodyFormat,omitempty"`
@@ -70,6 +79,7 @@ func buildCliDryRunFromInvoker(inv Invoker) *CliDryRunOutput {
 		Endpoint: req.Domain,
 		Method:   req.Method,
 		Headers:  sanitizeHeaders(req.Headers),
+		Note:     cliDryRunHeaderNote,
 	}
 
 	if len(req.QueryParams) > 0 {
@@ -113,6 +123,7 @@ func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
 	out := &CliDryRunOutput{
 		Style:  style,
 		Method: oc.method,
+		Note:   cliDryRunHeaderNote,
 	}
 
 	if oc.openapiRequest != nil && oc.openapiRequest.EndpointOverride != nil {
@@ -163,10 +174,16 @@ func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
 		}
 	}
 
-	if oc.openapiParams != nil && oc.openapiParams.Pathname != nil {
-		out.Pathname = tea.StringValue(oc.openapiParams.Pathname)
+	// Path fields are ROA-only: an RPC request always POSTs to "/" and routes
+	// by Action/Version (and the x-acs-action header), so pathPattern/pathname
+	// are meaningless for it. Mirror the classic invoker, which emits EITHER
+	// path fields (ROA) OR action/version (RPC), never both.
+	if style != "RPC" {
+		if oc.openapiParams != nil && oc.openapiParams.Pathname != nil {
+			out.Pathname = tea.StringValue(oc.openapiParams.Pathname)
+		}
+		out.PathPattern = oc.path
 	}
-	out.PathPattern = oc.path
 	if oc.api != nil {
 		out.Action = oc.api.Name
 		if oc.product != nil {
@@ -228,6 +245,10 @@ func formatCliDryRunHuman(out *CliDryRunOutput) string {
 		for k, v := range out.Headers {
 			sb.WriteString("  " + k + ": " + v + "\n")
 		}
+	}
+
+	if out.Note != "" {
+		sb.WriteString("Note:     " + out.Note + "\n")
 	}
 
 	if len(out.Query) > 0 {

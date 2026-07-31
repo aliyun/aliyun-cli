@@ -299,6 +299,16 @@ func TestBuildCliDryRunFromOpenapi_RPCStyle(t *testing.T) {
 	assert.Equal(t, "POST", out.Method)
 	assert.Equal(t, "test-value", out.Query["InstanceArea"])
 	assert.Equal(t, "AddHDMInstance", out.Action)
+	assert.Equal(t, "2020-01-16", out.Version)
+	// Path fields are ROA-only; an RPC request must not carry them, matching
+	// the classic invoker (and the online SDK output).
+	assert.Empty(t, out.PathPattern)
+	assert.Empty(t, out.Pathname)
+	// Headers stay empty (the CLI added none), but the note must explain that
+	// the SDK runtime adds signing/transport headers at send time — so an empty
+	// map is not read as "no headers on the wire".
+	assert.Empty(t, out.Headers)
+	assert.Equal(t, cliDryRunHeaderNote, out.Note)
 }
 
 func TestBuildCliDryRunFromOpenapi_EndpointOverride(t *testing.T) {
