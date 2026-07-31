@@ -434,6 +434,44 @@ func TestFlagLevelJSONObject(t *testing.T) {
 	}
 }
 
+// TestFlagLevelJSONUsesDeclaredScalarTypes pins that whole-JSON input follows
+// the same implicit scalar conversions as key=value input. The JSON syntax
+// must not change the resulting request types.
+func TestFlagLevelJSONUsesDeclaredScalarTypes(t *testing.T) {
+	res := mustParse(t, "--network-config", `{
+		"VSwitchId":123,
+		"Port":"8080",
+		"Enabled":"yes",
+		"Acc":{"Level":"2"},
+		"Ports":["80",443]
+	}`)
+	nc := res.Args["NetworkConfig"].(map[string]any)
+	if nc["VSwitchId"] != "123" {
+		t.Fatalf("VSwitchId = %#v (want string 123)", nc["VSwitchId"])
+	}
+	if got, ok := nc["Port"].(json.Number); !ok || got.String() != "8080" {
+		t.Fatalf("Port = %#v (want json.Number 8080)", nc["Port"])
+	}
+	if nc["Enabled"] != true {
+		t.Fatalf("Enabled = %#v (want bool true)", nc["Enabled"])
+	}
+	if got, ok := nc["Acc"].(map[string]any)["Level"].(json.Number); !ok || got.String() != "2" {
+		t.Fatalf("Acc.Level = %#v (want json.Number 2)", nc["Acc"].(map[string]any)["Level"])
+	}
+	ports := nc["Ports"].([]any)
+	for i, want := range []string{"80", "443"} {
+		if got, ok := ports[i].(json.Number); !ok || got.String() != want {
+			t.Fatalf("Ports[%d] = %#v (want json.Number %s)", i, ports[i], want)
+		}
+	}
+
+	res = mustParse(t, "--labels", `{"numeric":1,"boolean":true,"null":null}`)
+	labels := res.Args["Labels"].(map[string]any)
+	if labels["numeric"] != "1" || labels["boolean"] != "true" || labels["null"] != "" {
+		t.Fatalf("string map conversion = %#v", labels)
+	}
+}
+
 // TestFlagLevelJSONArrayExpands: a JSON array on an array-of-object flag
 // expands into multiple elements; a JSON object becomes one element.
 // Repeated occurrences accumulate.
@@ -477,6 +515,30 @@ func TestFlagLevelJSONMap(t *testing.T) {
 	}
 	if got, _ := scores["a"].(json.Number); got.String() != "1" {
 		t.Fatalf("scores.a = %#v", scores["a"])
+	}
+}
+
+func TestFlagLevelJSONRequiresCompleteValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{name: "invalid trailing text", value: `{"a":"1"} trailing`},
+		{name: "second JSON value", value: `{"a":"1"}{"b":"2"}`},
+		{name: "malformed JSON", value: `{"a":"1"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(schema(), []string{"--labels", tt.value})
+			if err == nil || !strings.Contains(err.Error(), "invalid JSON") {
+				t.Fatalf("error = %v, want invalid JSON", err)
+			}
+		})
+	}
+
+	res := mustParse(t, "--labels", `{"a":"1"}   `)
+	if !reflect.DeepEqual(res.Args["Labels"], map[string]any{"a": "1"}) {
+		t.Fatalf("labels = %#v", res.Args["Labels"])
 	}
 }
 
@@ -687,11 +749,18 @@ func TestReservedHeaderBodyEstimate(t *testing.T) {
 		"--no-stream",
 		"--image-cache-name", "c1",
 	)
-	if len(res.Reserved.Headers) != 2 || res.Reserved.Body == "" || !res.Reserved.Secure {
+	if len(res.Reserved.Headers) != 2 || res.Reserved.Body == "" || !res.Reserved.BodySet || !res.Reserved.Secure {
 		t.Fatalf("reserved = %+v", res.Reserved)
 	}
 	if !res.Reserved.EstimateCost || len(res.Reserved.EstimateCostContext) != 1 || !res.Reserved.NoStream {
 		t.Fatalf("estimate/no-stream = %+v", res.Reserved)
+	}
+}
+
+func TestReservedEmptyBodyStillEnablesEscapeHatch(t *testing.T) {
+	res := mustParse(t, "--body", "", "--image-cache-name", "c1")
+	if !res.Reserved.BodySet || res.Reserved.Body != "" {
+		t.Fatalf("reserved body = %+v", res.Reserved)
 	}
 }
 

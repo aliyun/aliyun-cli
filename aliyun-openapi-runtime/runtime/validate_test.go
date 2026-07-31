@@ -37,7 +37,7 @@ func roaAPI() *meta.API {
 }
 
 func TestValidateRequiredMissing(t *testing.T) {
-	err := ValidateRequired(roaAPI(), map[string]any{})
+	err := ValidateRequired(roaAPI(), map[string]any{}, false)
 	var mre *MissingRequiredError
 	if !errors.As(err, &mre) {
 		t.Fatalf("expected MissingRequiredError, got %v", err)
@@ -48,16 +48,47 @@ func TestValidateRequiredMissing(t *testing.T) {
 }
 
 func TestValidateRequiredPresent(t *testing.T) {
-	err := ValidateRequired(roaAPI(), map[string]any{"layerName": "my-layer"})
+	err := ValidateRequired(roaAPI(), map[string]any{"layerName": "my-layer"}, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestValidateRequiredEmptyStringCountsMissing(t *testing.T) {
-	err := ValidateRequired(roaAPI(), map[string]any{"layerName": ""})
+	err := ValidateRequired(roaAPI(), map[string]any{"layerName": ""}, false)
 	if err == nil {
 		t.Fatal("empty string should count as missing")
+	}
+}
+
+func TestValidateRequiredRawBodySkipsBodyAndFormDataParameters(t *testing.T) {
+	api := roaAPI()
+	api.Parameters = append(api.Parameters,
+		meta.Parameter{
+			Name: "payload", RawName: "payload", Type: meta.TypeObject,
+			Position: meta.PosBody, Required: true, Options: []string{"--payload"},
+		},
+		meta.Parameter{
+			Name: "document", RawName: "document", Type: meta.TypeString,
+			Position: meta.PosFormData, Required: true, Options: []string{"--document"},
+		},
+	)
+
+	// The raw body satisfies the body as a whole, but cannot satisfy a missing
+	// path parameter.
+	err := ValidateRequired(api, map[string]any{}, true)
+	var mre *MissingRequiredError
+	if !errors.As(err, &mre) || len(mre.Flags) != 1 || mre.Flags[0] != "--layer-name" {
+		t.Fatalf("missing flags = %v, err = %v", mre, err)
+	}
+
+	if err := ValidateRequired(api, map[string]any{"layerName": "my-layer"}, true); err != nil {
+		t.Fatalf("raw body should bypass required body and formData parameters: %v", err)
+	}
+
+	err = ValidateRequired(api, map[string]any{"layerName": "my-layer"}, false)
+	if !errors.As(err, &mre) || len(mre.Flags) != 2 || mre.Flags[0] != "--payload" || mre.Flags[1] != "--document" {
+		t.Fatalf("without raw body, missing flags = %v, err = %v", mre, err)
 	}
 }
 

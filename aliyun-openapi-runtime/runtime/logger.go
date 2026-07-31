@@ -68,11 +68,11 @@ type logConfig struct {
 }
 
 var (
-	productionConfig   = logConfig{Level: LogError, Output: os.Stderr}
-	developmentConfig  = logConfig{Level: LogInfo, EnableTime: true, EnableColor: true, Output: os.Stderr}
-	debugConfig        = logConfig{Level: LogDebug, EnableTime: true, EnableColor: true, Output: os.Stderr}
-	quietConfig        = logConfig{Level: LogFatal, Output: os.Stderr}
-	ciConfig           = logConfig{Level: LogWarn, EnableTime: true, Output: os.Stderr}
+	productionConfig  = logConfig{Level: LogError, Output: os.Stderr}
+	developmentConfig = logConfig{Level: LogInfo, EnableTime: true, EnableColor: true, Output: os.Stderr}
+	debugConfig       = logConfig{Level: LogDebug, EnableTime: true, EnableColor: true, Output: os.Stderr}
+	quietConfig       = logConfig{Level: LogFatal, Output: os.Stderr}
+	ciConfig          = logConfig{Level: LogWarn, EnableTime: true, Output: os.Stderr}
 )
 
 type logger struct {

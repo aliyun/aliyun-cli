@@ -20,9 +20,7 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 )
 
-// MissingRequiredError reports one or more required parameters that
-// were not supplied. It carries the user-facing flag names so the CLI
-// layer can print an actionable message.
+// MissingRequiredError reports one or more required parameters that were not supplied.
 type MissingRequiredError struct {
 	Flags []string // user-facing option names, e.g. ["--layer-name"]
 }
@@ -31,16 +29,9 @@ func (e *MissingRequiredError) Error() string {
 	return "missing required parameter(s): " + strings.Join(e.Flags, ", ")
 }
 
-// ValidateRequired checks that every required top-level parameter of
-// api has a non-empty value in args. It returns a *MissingRequiredError
-// listing every offender (not just the first) so users can fix them in
-// one pass.
-//
-// This runs before Assemble so failures are caught client-side with a
-// clear message rather than surfacing as an opaque server 400 (e.g.
-// an unsubstituted {layerName} path placeholder becoming "Illegal Path
-// Character").
-func ValidateRequired(api *meta.API, args map[string]any) error {
+// ValidateRequired checks that every required top-level parameter of api has a non-empty value in args.
+// When rawBody is true, body and formData parameters are skipped because --body/--body-file replaces the entire request body.
+func ValidateRequired(api *meta.API, args map[string]any, rawBody bool) error {
 	if api == nil {
 		return nil
 	}
@@ -50,8 +41,9 @@ func ValidateRequired(api *meta.API, args map[string]any) error {
 		if !p.Required {
 			continue
 		}
-		// Args are keyed by RawName; a required param without RawName
-		// can never be satisfied and is reported as missing.
+		if rawBody && (p.Position == meta.PosBody || p.Position == meta.PosFormData) {
+			continue
+		}
 		key := p.RawName
 		if key == "" || isEmptyValue(args[key]) {
 			missing = append(missing, flagLabel(p))
@@ -63,8 +55,7 @@ func ValidateRequired(api *meta.API, args map[string]any) error {
 	return nil
 }
 
-// isEmptyValue reports whether v counts as "not provided" for required
-// checking: nil, empty string, or empty composite.
+// isEmptyValue reports whether v counts as "not provided" for required checking: nil, empty string, or empty composite.
 func isEmptyValue(v any) bool {
 	switch t := v.(type) {
 	case nil:

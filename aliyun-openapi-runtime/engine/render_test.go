@@ -36,6 +36,7 @@ func TestRenderDryRunMasksSecrets(t *testing.T) {
 		Endpoint: "svc.cn-hangzhou.aliyuncs.com",
 		Headers:  map[string]string{"x-acs-security-token": "SToKeNSecretValue", "content-type": "application/json"},
 		Query:    map[string]string{"AccessKeyId": "LTAI5tRealKeyId", "RegionId": "cn-hangzhou"},
+		Body:     `{"password":"secret-value","name":"visible"}`,
 	}
 	if err := renderDryRun(&buf, "svc", req, false); err != nil {
 		t.Fatalf("renderDryRun: %v", err)
@@ -49,6 +50,12 @@ func TestRenderDryRunMasksSecrets(t *testing.T) {
 	}
 	if !strings.Contains(out, "RegionId: cn-hangzhou") {
 		t.Fatalf("non-secret should be visible:\n%s", out)
+	}
+	if strings.Contains(out, "secret-value") || !strings.Contains(out, `"password":"secr***"`) {
+		t.Fatalf("raw body secret was not masked:\n%s", out)
+	}
+	if strings.Contains(out, `"{\"password\"`) {
+		t.Fatalf("raw body should not be rendered as a quoted JSON string:\n%s", out)
 	}
 }
 

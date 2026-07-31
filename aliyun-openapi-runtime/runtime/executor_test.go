@@ -19,6 +19,8 @@ import (
 	"reflect"
 	"testing"
 
+	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
+
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 )
 
@@ -206,8 +208,9 @@ func TestFormDataBody(t *testing.T) {
 	for _, style := range []meta.APIStyle{meta.StyleRESTful, meta.StyleRPC} {
 		api := &meta.API{
 			Name: "Op", Version: "v", Method: "POST", Style: style, ProductCode: "p",
-			Endpoints:  meta.Endpoints{Global: "p.example.com"},
-			Parameters: []meta.Parameter{{Name: "field", RawName: "Field", Type: meta.TypeString, Position: meta.PosFormData}},
+			Endpoints:   meta.Endpoints{Global: "p.example.com"},
+			ReqBodyType: "formData",
+			Parameters:  []meta.Parameter{{Name: "field", RawName: "Field", Type: meta.TypeString, Position: meta.PosFormData}},
 		}
 		req, err := Assemble(&ExecContext{API: api, Args: map[string]any{"Field": "v"}})
 		if err != nil {
@@ -223,6 +226,40 @@ func TestFormDataBody(t *testing.T) {
 		if _, ok := req.Query["Field"]; ok {
 			t.Fatalf("style %s: form param must not be folded into Query", style)
 		}
+	}
+}
+
+func TestFormDataPositionFallsBackWhenOperationMetadataIsMissing(t *testing.T) {
+	api := &meta.API{
+		Name: "Op", Style: meta.StyleRESTful,
+		Parameters: []meta.Parameter{{Name: "field", RawName: "Field", Type: meta.TypeString, Position: meta.PosFormData}},
+	}
+	req, err := Assemble(&ExecContext{API: api, Args: map[string]any{"Field": "v"}})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if req.ReqBodyType != "formData" {
+		t.Fatalf("ReqBodyType = %q, want formData", req.ReqBodyType)
+	}
+	if got := req.Headers["content-type"]; got != "application/x-www-form-urlencoded" {
+		t.Fatalf("content-type = %q", got)
+	}
+}
+
+func TestFormDataWithoutArgumentsStillBuildsLegacyEmptyForm(t *testing.T) {
+	api := &meta.API{
+		Name: "Op", Style: meta.StyleRESTful,
+		Parameters: []meta.Parameter{{Name: "field", RawName: "Field", Type: meta.TypeString, Position: meta.PosFormData}},
+	}
+	req, err := Assemble(&ExecContext{API: api, Args: map[string]any{}})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if body, ok := req.Body.(map[string]any); !ok || len(body) != 0 {
+		t.Fatalf("body = %#v, want empty form map", req.Body)
+	}
+	if req.ReqBodyType != "formData" || req.Headers["content-type"] != "application/x-www-form-urlencoded" {
+		t.Fatalf("form wire metadata = %q, %#v", req.ReqBodyType, req.Headers)
 	}
 }
 
@@ -281,11 +318,135 @@ func TestDirectAnyBodyIsNotWrapped(t *testing.T) {
 	}
 }
 
+func TestRawBodyEscapeHatchReplacesSchemaBodyVerbatim(t *testing.T) {
+	api := &meta.API{
+		Name: "CreateThing", Version: "v", Method: "POST", Style: meta.StyleRESTful, ProductCode: "p",
+		Endpoints: meta.Endpoints{Global: "p.example.com"},
+		Parameters: []meta.Parameter{{
+			Name: "enabled", RawName: "enabled", Type: meta.TypeBoolean, Position: meta.PosBody,
+		}},
+	}
+	raw := `{"enabled":"gateway-specific-value","extra":1}`
+	req, err := Assemble(&ExecContext{
+		API: api, Args: map[string]any{"enabled": true}, RawBody: raw,
+	})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if req.Body != raw {
+		t.Fatalf("body = %#v, want raw string %#v", req.Body, raw)
+	}
+	if req.ReqBodyType != "json" {
+		t.Fatalf("ReqBodyType = %q, want json", req.ReqBodyType)
+	}
+}
+
+func TestRawBodyFormDataJSONIsFormEncoded(t *testing.T) {
+	api := &meta.API{
+		Name: "SubmitForm", Version: "v", Method: "POST", Style: meta.StyleRESTful, ProductCode: "p",
+		Endpoints:   meta.Endpoints{Global: "p.example.com"},
+		ReqBodyType: "formData",
+		Parameters: []meta.Parameter{
+			{Name: "a", RawName: "a", Type: meta.TypeString, Position: meta.PosFormData},
+			{Name: "b", RawName: "b", Type: meta.TypeString, Position: meta.PosFormData},
+		},
+	}
+	req, err := Assemble(&ExecContext{
+		API: api, Args: map[string]any{}, RawBody: `{"a":"1","b":"two words"}`,
+	})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if req.ReqBodyType != "formData" {
+		t.Fatalf("ReqBodyType = %q, want formData", req.ReqBodyType)
+	}
+	body, ok := req.Body.(map[string]any)
+	if !ok || body["a"] != "1" || body["b"] != "two words" {
+		t.Fatalf("form body = %#v", req.Body)
+	}
+	encoded := openapiutil.ToForm(body)
+	if encoded == nil || *encoded != "a=1&b=two+words" {
+		t.Fatalf("encoded form = %#v", encoded)
+	}
+}
+
+func TestRawBodyFormDataRejectsNonObjectJSON(t *testing.T) {
+	api := &meta.API{
+		Name: "SubmitForm", Style: meta.StyleRESTful, ReqBodyType: "formData",
+		Parameters: []meta.Parameter{{Name: "a", RawName: "a", Type: meta.TypeString, Position: meta.PosFormData}},
+	}
+	for _, raw := range []string{`["a"]`, `{"a":"1"} trailing`, `null`} {
+		if _, err := Assemble(&ExecContext{API: api, RawBody: raw}); err == nil {
+			t.Fatalf("RawBody %q: expected formData JSON object error", raw)
+		}
+	}
+}
+
+func TestNonFormBodyMetadataKeepsLegacyJSONExecution(t *testing.T) {
+	api := &meta.API{
+		Name: "Upload", Style: meta.StyleRESTful,
+		ReqBodyType: "byte", ContentType: "application/vnd.example.payload",
+		Parameters: []meta.Parameter{{Name: "body", RawName: "body", Type: meta.TypeString, Position: meta.PosBody}},
+	}
+	req, err := Assemble(&ExecContext{API: api, RawBody: "payload"})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if req.ReqBodyType != "json" {
+		t.Fatalf("ReqBodyType = %q, want json", req.ReqBodyType)
+	}
+	if _, exists := req.Headers["content-type"]; exists {
+		t.Fatalf("non-form metadata must not override content-type: %#v", req.Headers)
+	}
+	if req.Body != "payload" {
+		t.Fatalf("body = %#v, want raw string", req.Body)
+	}
+}
+
+func TestMixedBodyAndFormDataUsesOneFormBody(t *testing.T) {
+	api := &meta.API{
+		Name: "Submit", Style: meta.StyleRESTful, ReqBodyType: "formData",
+		Parameters: []meta.Parameter{
+			{Name: "form", RawName: "Form", Type: meta.TypeString, Position: meta.PosFormData},
+			{Name: "payload", RawName: "Payload", Type: meta.TypeString, Position: meta.PosBody},
+		},
+	}
+	req, err := Assemble(&ExecContext{API: api, Args: map[string]any{"Form": "a", "Payload": "b"}})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	want := map[string]any{"Form": "a", "Payload": "b"}
+	if !reflect.DeepEqual(req.Body, want) {
+		t.Fatalf("form body = %#v, want %#v", req.Body, want)
+	}
+	if req.ReqBodyType != "formData" {
+		t.Fatalf("ReqBodyType = %q, want formData", req.ReqBodyType)
+	}
+	if got := req.Headers["content-type"]; got != "application/x-www-form-urlencoded" {
+		t.Fatalf("content-type = %q", got)
+	}
+}
+
+func TestSetOpenAPIRequestBodyMatchesLegacyTypeBridge(t *testing.T) {
+	oaReq := &openapiutil.OpenApiRequest{}
+	setOpenAPIRequestBody(oaReq, `{"a":1}`)
+	if got, ok := oaReq.Body.([]byte); !ok || string(got) != `{"a":1}` {
+		t.Fatalf("string body bridge = %#v", oaReq.Body)
+	}
+
+	wantMap := map[string]any{"a": "1"}
+	setOpenAPIRequestBody(oaReq, wantMap)
+	if !reflect.DeepEqual(oaReq.Body, wantMap) {
+		t.Fatalf("map body bridge = %#v", oaReq.Body)
+	}
+}
+
 func TestAnyNullWireBehavior(t *testing.T) {
 	api := &meta.API{
 		Name: "UpdateThing", Version: "v", Method: "POST", Style: meta.StyleRESTful, ProductCode: "p",
-		URL:       "/things/{id}",
-		Endpoints: meta.Endpoints{Global: "p.example.com"},
+		ReqBodyType: "formData",
+		URL:         "/things/{id}",
+		Endpoints:   meta.Endpoints{Global: "p.example.com"},
 		Parameters: []meta.Parameter{
 			{Name: "query", RawName: "Query", Type: meta.TypeAny, Position: meta.PosQuery},
 			{Name: "json_query", RawName: "JsonQuery", Type: meta.TypeAny, Position: meta.PosQuery, ParamStyle: "json"},
@@ -301,8 +462,11 @@ func TestAnyNullWireBehavior(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Assemble: %v", err)
 	}
-	if len(req.Query) != 0 || len(req.Headers) != 0 {
-		t.Fatalf("null query/header must be omitted: query=%#v headers=%#v", req.Query, req.Headers)
+	if len(req.Query) != 0 {
+		t.Fatalf("null query must be omitted: %#v", req.Query)
+	}
+	if got := req.Headers["content-type"]; len(req.Headers) != 1 || got != "application/x-www-form-urlencoded" {
+		t.Fatalf("form content-type = %q; headers=%#v", got, req.Headers)
 	}
 	if req.Pathname != "/things/%7Bid%7D" {
 		t.Fatalf("null path value must not become <nil>: %q", req.Pathname)
@@ -314,8 +478,8 @@ func TestAnyNullWireBehavior(t *testing.T) {
 	if value, exists := body["Payload"]; !exists || value != nil {
 		t.Fatalf("JSON body must preserve explicit null: %#v", body)
 	}
-	if req.ReqBodyType != "json" {
-		t.Fatalf("ReqBodyType = %q, want json", req.ReqBodyType)
+	if req.ReqBodyType != "formData" {
+		t.Fatalf("ReqBodyType = %q, want formData", req.ReqBodyType)
 	}
 }
 

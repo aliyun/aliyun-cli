@@ -1,6 +1,7 @@
 package format
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
@@ -35,5 +36,16 @@ func TestSchemaToAPIDetectsSSE(t *testing.T) {
 				t.Fatalf("IsSSE = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSchemaToAPIMapsRequestBodyWireMetadata(t *testing.T) {
+	definition := &schema.CommandDefinition{Operation: &schema.OperationConfig{
+		ReqBodyType: "formData",
+		ContentType: "application/x-www-form-urlencoded",
+	}}
+	api := schemaToAPI(definition)
+	if got, want := []string{api.ReqBodyType, api.ContentType}, []string{"formData", "application/x-www-form-urlencoded"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("request body metadata = %v, want %v", got, want)
 	}
 }

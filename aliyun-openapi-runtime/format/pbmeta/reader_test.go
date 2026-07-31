@@ -22,7 +22,11 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 	}
 	definition := &CommandDefinition{
 		ProductCode: "Demo", Name: "GetThing", CmdName: "get-thing",
-		Operation: &Operation{Action: "GetThing", ApiVersion: "2020-01-01", Method: "GET", ApiStyle: "ROA", Protocol: "HTTPS", Url: "/things/{id}", IsSse: true},
+		Operation: &Operation{
+			Action: "GetThing", ApiVersion: "2020-01-01", Method: "GET", ApiStyle: "ROA",
+			Protocol: "HTTPS", Url: "/things/{id}", IsSse: true,
+			ReqBodyType: "formData", ContentType: "application/x-www-form-urlencoded",
+		},
 		Parameters: []*Argument{{
 			Name: "limit", RawName: "Limit", Type: "integer", Options: []string{"--limit"},
 			Location: "query", Example: "12****",
@@ -69,6 +73,9 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 	}
 	if !api.IsSSE {
 		t.Fatal("protobuf is_sse was not mapped")
+	}
+	if api.ReqBodyType != "formData" || api.ContentType != "application/x-www-form-urlencoded" {
+		t.Fatalf("protobuf request body metadata = %q, %q", api.ReqBodyType, api.ContentType)
 	}
 	if got := api.Parameters[0].Example; got != "12****" {
 		t.Fatalf("parameter example = %q, want %q", got, "12****")

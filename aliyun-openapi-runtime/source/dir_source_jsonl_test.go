@@ -34,7 +34,10 @@ func TestDirSourceLoadsJSONLPluginByManifestProductCode(t *testing.T) {
 	}
 	def := schema.CommandDefinition{
 		Name: "DescribeInstances", CmdName: "describe-instances", DescriptionZH: "查询实例",
-		Operation:  &schema.OperationConfig{Action: "DescribeInstances", APIVersion: "2014-05-26", Method: "POST", APIStyle: "RPC"},
+		Operation: &schema.OperationConfig{
+			Action: "DescribeInstances", APIVersion: "2014-05-26", Method: "POST", APIStyle: "RPC",
+			ReqBodyType: "formData", ContentType: "application/x-www-form-urlencoded",
+		},
 		Parameters: []schema.ArgumentDefinition{{Name: "limit", RawName: "Limit", Type: "integer", Example: "12****"}},
 	}
 	raw, _ := json.Marshal(def)
@@ -88,6 +91,9 @@ func TestDirSourceLoadsJSONLPluginByManifestProductCode(t *testing.T) {
 	}
 	if api.ProductCode != "ecs" || api.Name != "DescribeInstances" {
 		t.Fatalf("LoadAPI() = %#v", api)
+	}
+	if api.ReqBodyType != "formData" || api.ContentType != "application/x-www-form-urlencoded" {
+		t.Fatalf("JSONL request body metadata = %q, %q", api.ReqBodyType, api.ContentType)
 	}
 	if got := api.Parameters[0].Example; got != "12****" {
 		t.Fatalf("parameter example = %q, want %q", got, "12****")

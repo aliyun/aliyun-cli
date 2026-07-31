@@ -31,6 +31,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -87,7 +88,9 @@ type ExecContext struct {
 	ExtraHeaders map[string]string
 
 	// RawBody, when set, replaces the schema-derived body (from --body
-	// / --body-file). String payloads are sent as-is.
+	// / --body-file). JSON text stays raw; only formData needs to decode a
+	// JSON object before the SDK performs form serialization. No metadata
+	// field conversion is applied.
 	RawBody any
 
 	// ForceHTTPS / ForceHTTP override AssembledRequest.Protocol
@@ -118,7 +121,8 @@ type AssembledRequest struct {
 	Headers  map[string]string `json:"headers,omitempty"`
 	Body     any               `json:"body,omitempty"`
 	// ReqBodyType is the request body encoding: "json" (default) or
-	// "formData". Empty is treated as "json".
+	// "formData". Empty and all non-formData metadata values are treated as
+	// "json" to match aliyun-cli-runtime.
 	ReqBodyType string `json:"req_body_type,omitempty"`
 	Endpoint    string `json:"endpoint,omitempty"`
 	Region      string `json:"region,omitempty"`
@@ -197,6 +201,9 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 		Query:    map[string]string{},
 		Headers:  map[string]string{},
 		Region:   ec.Region,
+		// aliyun-cli-runtime defaults every operation to json and only generated
+		// formData APIs call SetReqBodyType("formData").
+		ReqBodyType: resolveReqBodyType(api),
 	}
 	if v := ec.Version; v != "" {
 		req.Version = v
@@ -245,8 +252,7 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 			req.Headers[wire] = scalarString(val)
 
 		case meta.PosFormData:
-			// Match generated plugins: form params always go into the
-			// request body with ReqBodyType=formData, for RPC and ROA.
+			// Form parameters go into the request body for RPC and ROA. Serialization is selected only by operation.req_body_type.
 			if formParts == nil {
 				formParts = map[string]any{}
 			}
@@ -254,9 +260,8 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 
 		case meta.PosBody:
 			if isDirectBodyParameter(p) {
-				// A top-level parameter whose schema identity is "body" is the
-				// complete request body, not a property named "body". This is
-				// how generator direct-body APIs (notably type=any) are defined.
+				// A top-level parameter whose schema identity is "body" is the complete request body, not a property named "body".
+				// This is how generator direct-body APIs (notably type=any) are defined.
 				directBody = val
 				directBodySet = true
 			} else {
@@ -299,13 +304,13 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 		} else {
 			req.Body = directBody
 		}
-		req.ReqBodyType = "json"
 	case formParts != nil:
+		for key, value := range bodyParts {
+			formParts[key] = value
+		}
 		req.Body = formParts
-		req.ReqBodyType = "formData"
 	case bodyParts != nil:
 		req.Body = bodyParts
-		req.ReqBodyType = "json"
 	}
 
 	for k, v := range ec.ExtraQuery {
@@ -315,10 +320,18 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 		req.Headers[k] = v
 	}
 	if ec.RawBody != nil {
-		req.Body = ec.RawBody
-		if req.ReqBodyType == "" {
-			req.ReqBodyType = "json"
+		body, err := normalizeRawBody(ec.RawBody, req.ReqBodyType)
+		if err != nil {
+			return nil, err
 		}
+		req.Body = body
+	}
+	if req.ReqBodyType == "formData" {
+		if req.Body == nil {
+			// Generated Go plugins call SetContent with the form builder's empty map even when the user supplied no optional form arguments.
+			req.Body = map[string]any{}
+		}
+		req.Headers["content-type"] = "application/x-www-form-urlencoded"
 	}
 	switch {
 	case ec.ForceHTTP:
@@ -327,6 +340,88 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 		req.Protocol = "HTTPS"
 	}
 	return req, nil
+}
+
+// resolveReqBodyType matches aliyun-cli-runtime: json is the operation default, and formData is the only metadata value that changes the SDK serializer.
+// Until every metadata artifact exports req_body_type, formData parameters are used as a compatibility fallback only when the operation field is absent.
+func resolveReqBodyType(api *meta.API) string {
+	if api == nil {
+		return "json"
+	}
+	if value := strings.TrimSpace(api.ReqBodyType); value != "" {
+		if strings.EqualFold(value, "formData") {
+			return "formData"
+		}
+		return "json"
+	}
+	for i := range api.Parameters {
+		if api.Parameters[i].Position == meta.PosFormData {
+			return "formData"
+		}
+	}
+	return "json"
+}
+
+// normalizeRawBody preserves --body as a schema escape hatch while adapting its representation to the serializer selected for the API.
+// In particular, darabonba's formData path expects a map, not a Go string. The legacy runtime accepts a JSON object for this purpose and then lets the SDK form-encode it.
+func normalizeRawBody(raw any, reqBodyType string) (any, error) {
+	switch strings.ToLower(strings.TrimSpace(reqBodyType)) {
+	case "formdata":
+		switch body := raw.(type) {
+		case map[string]any:
+			return body, nil
+		case string:
+			return decodeRawFormBody([]byte(body))
+		case []byte:
+			return decodeRawFormBody(body)
+		case json.RawMessage:
+			return decodeRawFormBody([]byte(body))
+		default:
+			return nil, fmt.Errorf("raw body for formData must be a JSON object, got %T", raw)
+		}
+	default: // json (and the SDK's default)
+		return raw, nil
+	}
+}
+
+func decodeRawFormBody(data []byte) (map[string]any, error) {
+	if len(bytes.TrimSpace(data)) == 0 {
+		return map[string]any{}, nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	var body map[string]any
+	if err := dec.Decode(&body); err != nil {
+		return nil, fmt.Errorf("raw body for formData must be a JSON object: %w", err)
+	}
+	if body == nil {
+		return nil, errors.New("raw body for formData must be a JSON object, got null")
+	}
+	var trailing any
+	if err := dec.Decode(&trailing); err != io.EOF {
+		return nil, errors.New("raw body for formData must contain exactly one JSON object")
+	}
+	return body, nil
+}
+
+func setOpenAPIRequestBody(req *openapiutil.OpenApiRequest, body any) {
+	if req == nil {
+		return
+	}
+	switch value := body.(type) {
+	case string:
+		req.SetBody([]byte(value))
+	case []byte:
+		req.SetBody(value)
+	case map[string]any:
+		req.Body = value
+	case []any:
+		req.Body = value
+	case []map[string]any:
+		req.Body = value
+	default:
+		req.Body = value
+	}
 }
 
 func send(ec *ExecContext, req *AssembledRequest) (*Response, error) {
@@ -411,7 +506,7 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 		HostMap: map[string]*string{},
 	}
 	if req.Body != nil {
-		oaReq.Body = req.Body
+		setOpenAPIRequestBody(oaReq, req.Body)
 	}
 
 	runtimeOpts := &dara.RuntimeOptions{}
@@ -518,10 +613,10 @@ func orSlash(p string) string {
 }
 
 func reqBodyType(t string) string {
-	if t == "" {
-		return "json"
+	if strings.EqualFold(strings.TrimSpace(t), "formData") {
+		return "formData"
 	}
-	return t
+	return "json"
 }
 
 func isDirectBodyParameter(p *meta.Parameter) bool {
