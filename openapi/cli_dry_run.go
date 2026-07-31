@@ -103,8 +103,15 @@ func buildCliDryRunFromInvoker(inv Invoker) *CliDryRunOutput {
 }
 
 func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
+	// Style reflects the actual request style resolved in Prepare
+	// (RPC-style products are overridden to "RPC"); fall back to the
+	// ROA default when openapiParams hasn't been populated.
+	style := "ROA"
+	if oc.openapiParams != nil && oc.openapiParams.Style != nil {
+		style = tea.StringValue(oc.openapiParams.Style)
+	}
 	out := &CliDryRunOutput{
-		Style:  "ROA",
+		Style:  style,
 		Method: oc.method,
 	}
 

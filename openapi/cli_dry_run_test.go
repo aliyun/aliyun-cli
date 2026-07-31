@@ -268,6 +268,39 @@ func TestBuildCliDryRunFromOpenapi(t *testing.T) {
 	assert.Equal(t, "2020-12-30", out.Version)
 }
 
+func TestBuildCliDryRunFromOpenapi_RPCStyle(t *testing.T) {
+	// RPC-style products routed through the openapi channel (e.g. DAS) have
+	// their style overridden to "RPC" in Prepare; the dry-run JSON must report
+	// that instead of the hardcoded ROA default. Regression for DAS showing ROA.
+	product := &meta.Product{Code: "das", Version: "2020-01-16"}
+	api := &testLegacyAPI{Name: "AddHDMInstance", Product: product}
+	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "example.com"}
+
+	params := newOpenapiParams("POST", "/", "AddHDMInstance", "2020-01-16")
+	params.Style = tea.String("RPC")
+
+	oc := &OpenapiContext{
+		HttpContext: &HttpContext{
+			profile: profile,
+			product: product,
+			openapiRequest: &openapiutil.OpenApiRequest{
+				Headers: map[string]*string{},
+				Query:   map[string]*string{"InstanceArea": tea.String("test-value")},
+			},
+			openapiParams: params,
+		},
+		method: "POST",
+		path:   "/",
+		api:    canonicalTestAPI(api),
+	}
+
+	out := buildCliDryRunFromOpenapi(oc)
+	assert.Equal(t, "RPC", out.Style)
+	assert.Equal(t, "POST", out.Method)
+	assert.Equal(t, "test-value", out.Query["InstanceArea"])
+	assert.Equal(t, "AddHDMInstance", out.Action)
+}
+
 func TestBuildCliDryRunFromOpenapi_EndpointOverride(t *testing.T) {
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
 	api := &testLegacyAPI{Name: "ListProject", Product: product}
