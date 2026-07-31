@@ -287,7 +287,7 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 		// Keep this after placeholder substitution to match generated Go plugins, which call aliyun-cli-runtime/http.EncodePath on the complete path.
 		// Do not pre-escape individual path parameters while this final encoding is in place: an escaped value such as "a%2Fb" would be encoded again as "a%252Fb".
 		// If parameter-level escaping is introduced in the future, template literals and parameter values must be encoded separately and this complete-path encoding must be removed.
-		req.Pathname = encodePath(req.Pathname)
+		req.Pathname = dara.PathEncode(req.Pathname)
 	}
 
 	switch {
