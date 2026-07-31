@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
-	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/endpoints"
 )
 
 type ProductSet struct {
@@ -48,32 +47,11 @@ func (a *Product) GetEndpoint(region string, client *sdk.Client) (endpoint strin
 }
 
 func (a *Product) GetEndpointWithType(region string, client *sdk.Client, endpointType string) (endpoint string, err error) {
-	var le error
-
-	// If endpoint_type is "vpc", prioritize RegionalVpcEndpoints and skip location service
-	// because location service returns public endpoints which are not suitable for VPC
+	// VPC endpoints remain independent from public endpoints generated from portal metadata.
 	if strings.ToLower(endpointType) == "vpc" && a.RegionalVpcEndpoints != nil && len(a.RegionalVpcEndpoints) > 0 {
 		ep, ok := a.RegionalVpcEndpoints[region]
 		if ok {
 			return ep, nil
-		}
-		// If VPC endpoint not found for the region, fall through to try other options
-	}
-
-	if a.LocationServiceCode != "" && strings.ToLower(endpointType) != "vpc" {
-		// resolve endpoint from location service
-		rp := endpoints.ResolveParam{
-			Product:              a.Code,
-			RegionId:             region,
-			LocationProduct:      a.LocationServiceCode,
-			LocationEndpointType: "openAPI",
-			CommonApi:            client.ProcessCommonRequest,
-		}
-		ep, err := endpoints.Resolve(&rp)
-		if err == nil {
-			return ep, nil
-		} else {
-			le = err
 		}
 	}
 
@@ -86,5 +64,5 @@ func (a *Product) GetEndpointWithType(region string, client *sdk.Client, endpoin
 		return a.GlobalEndpoint, nil
 	}
 
-	return "", &InvalidEndpointError{le, region, a}
+	return "", &InvalidEndpointError{nil, region, a}
 }
