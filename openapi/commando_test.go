@@ -2312,10 +2312,7 @@ func TestMain_RestfulCallWithForceAndApiFinding(t *testing.T) {
 }
 
 func TestMain_PluginExecution_KebabCase(t *testing.T) {
-	// This suite exercises the legacy Go-plugin discovery/execution branch.
-	// Keep common-runtime fallback out of the test so baseline kebab commands
-	// (for example fc describe-regions) cannot legitimately short-circuit it.
-	t.Setenv("ALIYUN_CLI_OPENAPI_RUNTIME_FALLBACK", "1")
+	// This suite exercises Go-plugin discovery/execution behavior.
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w, stderr)
@@ -2465,7 +2462,7 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 		command.pluginIndexErr = nil
 
 		os.Args = []string{"aliyun", "other-command"}
-		args := []string{"fc", "describe-regions"}
+		args := []string{"qqq", "describe-regions"}
 
 		// Mock isInteractiveInput to false for CI/CD
 		oldInteractive := isInteractiveInput
@@ -2474,8 +2471,79 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 
 		err := command.main(ctx, args)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "'fc' is not a valid built-in product")
+		assert.Contains(t, err.Error(), "'qqq' is not a valid product")
 	})
+}
+
+func TestMain_UninstalledPluginAlwaysTriesBuiltInRuntime(t *testing.T) {
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	os.MkdirAll(filepath.Join(testHome, ".aliyun", "plugins"), 0755)
+	os.WriteFile(filepath.Join(testHome, ".aliyun", "plugins", "manifest.json"), []byte(`{"plugins":{}}`), 0644)
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	repo, err := meta.MockLoadRepository(nil)
+	assert.NoError(t, err)
+	command := &Commando{library: &Library{builtinRepo: repo, writer: w}}
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	wantErr := errors.New("runtime handled request")
+	originalTryDispatch := runtimeTryDispatch
+	runtimeTryDispatch = func(_ *cli.Context, args []string) (bool, error) {
+		assert.Equal(t, []string{"ecs", "describe-instances"}, args)
+		return true, wantErr
+	}
+	t.Cleanup(func() { runtimeTryDispatch = originalTryDispatch })
+
+	originalArgs := os.Args
+	t.Cleanup(func() { os.Args = originalArgs })
+	os.Args = []string{"aliyun", "ecs", "describe-instances"}
+
+	err = command.main(ctx, []string{"ecs", "describe-instances"})
+	assert.ErrorIs(t, err, wantErr)
+}
+
+func TestMain_InstalledGoPluginOverridesBuiltInRuntime(t *testing.T) {
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	profile := config.Profile{Language: "en", RegionId: "cn-hangzhou"}
+	repo, err := meta.MockLoadRepository(nil)
+	assert.NoError(t, err)
+	command := &Commando{
+		profile: profile,
+		library: &Library{builtinRepo: repo, writer: w},
+	}
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-fc")
+	os.MkdirAll(pluginDir, 0755)
+	manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+	manifest := fmt.Sprintf(`{"plugins":{"aliyun-cli-fc":{"name":"aliyun-cli-fc","version":"1.0.0","type":"go","path":%q,"command":"fc"}}}`, pluginDir)
+	os.WriteFile(manifestPath, []byte(manifest), 0644)
+
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+	os.Args = []string{"aliyun", "fc", "describe-regions"}
+
+	err = command.main(ctx, []string{"fc", "describe-regions"})
+	assert.ErrorContains(t, err, "failed to resolve plugin binary path")
 }
 
 // TestMain_PluginExecution_ProfileFailFast 验证 plugin 路径下 profile 校验失败时必须 fail-fast，不能 silent 吞错回退到默认 profile。

@@ -54,27 +54,14 @@ var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*respons
 	return fn
 }
 
+var runtimeTryDispatch = runtimehost.TryDispatch
+
 func NewCommando(w io.Writer, profile config.Profile) *Commando {
 	r := &Commando{
 		profile: profile,
 	}
 	r.library = NewLibrary(w, profile.Language) //TODO: load from local repository
 	return r
-}
-
-// commonRuntimeFallbackEnabled reports whether, for a product with no
-// installed plugin, the CLI should route "<product> <kebab-command>" to
-// the aliyun-openapi-runtime engine (baseline / user meta plugin) instead of
-// the legacy auto-install / not-found path.
-//
-// Default is ON (unset => openapi-runtime) for local debugging. The engine
-// already ABSTAINS from products marked distribution=="go" in
-// metadatas/products.json (so Go-plugin products still fall through to
-// auto-install). Set ALIYUN_CLI_OPENAPI_RUNTIME_FALLBACK=1 (or true) to
-// disable the openapi-runtime route and exercise the legacy path.
-func commonRuntimeFallbackEnabled() bool {
-	v := strings.TrimSpace(os.Getenv("ALIYUN_CLI_OPENAPI_RUNTIME_FALLBACK"))
-	return !(v == "1" || strings.EqualFold(v, "true"))
 }
 
 func (c *Commando) loadPlugins() {
@@ -255,18 +242,20 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				return fmt.Errorf("failed to check plugin status: %w", err)
 			}
 
-			// aliyun-openapi-runtime routing (does NOT absorb Go plugin processes). A product ships as exactly one form:
+			// aliyun-openapi-runtime routing (does NOT absorb installed Go plugin processes). A product ships as exactly one form:
 			//   - installed Go plugin   -> fall through to ExecutePlugin
-			//   - installed meta plugin -> aliyun-openapi-runtime engine (always; no legacy behavior exists for meta plugins)
-			//   - not installed but the engine resolves it (baseline / user meta plugin) -> aliyun-openapi-runtime engine by default.
-			//     Set ALIYUN_CLI_OPENAPI_RUNTIME_FALLBACK=1 to skip and exercise the legacy auto-install path.
+			//   - installed meta plugin -> aliyun-openapi-runtime engine
+			//   - not installed but the engine resolves it (baseline / user meta plugin) -> aliyun-openapi-runtime engine.
 			//     Products marked distribution=="go" are abstained by the engine so they still reach auto-install.
 			if installed {
 				if ptype, ok := plugin.InstalledPluginType(args[0]); ok && ptype == plugin.PluginTypeMeta {
+					if err := plugin.ValidatePluginCliVersion(args[0]); err != nil {
+						return err
+					}
 					return runtimehost.Dispatch(ctx, pluginArgs)
 				}
-			} else if commonRuntimeFallbackEnabled() {
-				if handled, derr := runtimehost.TryDispatch(ctx, pluginArgs); handled {
+			} else {
+				if handled, derr := runtimeTryDispatch(ctx, pluginArgs); handled {
 					return derr
 				}
 			}
@@ -288,7 +277,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					return err
 				}
 				if foundPluginName == "" {
-					if commonRuntimeFallbackEnabled() && runtimehost.HasProduct(args[0]) {
+					if runtimehost.HasProduct(args[0]) {
 						return c.invalidBaselineCommandError(args[0], args[1])
 					}
 					c.loadPlugins()

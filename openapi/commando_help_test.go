@@ -3,6 +3,7 @@ package openapi
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -642,6 +643,76 @@ func TestPrintProductUsage_BuiltinMetaPluginWinsAndUsesRuntimeHelp(t *testing.T)
 	assert.Contains(t, out, "provided by the installed plugin 'aliyun-cli-ecs'")
 	assert.Contains(t, out, "META_PLUGIN_KEBAB_PRODUCT_HELP")
 	assert.NotContains(t, out, "Available Api List")
+}
+
+func TestPrintProductUsage_MetaPluginChecksMinCliVersionBeforeRuntimeHelp(t *testing.T) {
+	originalVersion := cli.Version
+	cli.Version = "3.3.5"
+	t.Cleanup(func() { cli.Version = originalVersion })
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := newTestContext(stdout, stderr)
+	repo, err := meta.MockLoadRepository(nil)
+	assert.NoError(t, err)
+	c := &Commando{library: &Library{builtinRepo: repo, writer: stdout}}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-ecs": {
+			Name: "aliyun-cli-ecs", Version: "1.0.0", Type: plugin.PluginTypeMeta, MinCliVersion: "9.0.0",
+		},
+	}}
+
+	originalRender := productHelpRender
+	productHelpRender = func(*cli.Context, string) error {
+		t.Fatal("runtime help must not run when minCliVersion is not satisfied")
+		return nil
+	}
+	t.Cleanup(func() { productHelpRender = originalRender })
+
+	err = c.printProductUsage(ctx, "ecs")
+	assert.ErrorContains(t, err, "requires CLI version 9.0.0 or higher")
+}
+
+func TestPrintApiUsage_MetaPluginChecksMinCliVersionBeforeRuntimeHelp(t *testing.T) {
+	originalVersion := cli.Version
+	cli.Version = "3.3.5"
+	t.Cleanup(func() { cli.Version = originalVersion })
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := newTestContext(stdout, stderr)
+	repo, err := meta.MockLoadRepository(nil)
+	assert.NoError(t, err)
+	c := &Commando{library: &Library{builtinRepo: repo, writer: stdout}}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-ecs": {
+			Name: "aliyun-cli-ecs", Version: "1.0.0", Type: plugin.PluginTypeMeta, MinCliVersion: "9.0.0",
+		},
+	}}
+
+	err = c.printApiUsage(ctx, "ecs", "describe-instances")
+	assert.ErrorContains(t, err, "requires CLI version 9.0.0 or higher")
+}
+
+func TestPrintApiUsageAlwaysTriesRuntime(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := newTestContext(stdout, stderr)
+	repo, err := meta.MockLoadRepository(nil)
+	assert.NoError(t, err)
+	c := &Commando{library: &Library{builtinRepo: repo, writer: stdout}}
+
+	wantErr := errors.New("runtime help handled request")
+	originalTryHelp := runtimeTryHelp
+	runtimeTryHelp = func(_ *cli.Context, product, command string) (bool, error) {
+		assert.Equal(t, "ecs", product)
+		assert.Equal(t, "describe-instances", command)
+		return true, wantErr
+	}
+	t.Cleanup(func() { runtimeTryHelp = originalTryHelp })
+
+	err = c.printApiUsage(ctx, "ecs", "describe-instances")
+	assert.ErrorIs(t, err, wantErr)
 }
 
 func TestPrintApiUsage_NonBuiltinProduct_PluginInstalled(t *testing.T) {

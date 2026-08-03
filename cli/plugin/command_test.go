@@ -295,6 +295,11 @@ func TestNewInstallCommand(t *testing.T) {
 	sourceBaseFlag := flags.Get("source-base")
 	assert.NotNil(t, sourceBaseFlag)
 	assert.False(t, sourceBaseFlag.Required)
+
+	preferGoFlag := flags.Get("prefer-go")
+	assert.NotNil(t, preferGoFlag)
+	assert.False(t, preferGoFlag.Required)
+	assert.True(t, preferGoFlag.Hidden)
 }
 
 func TestNewInstallCommand_Run(t *testing.T) {
@@ -617,6 +622,9 @@ func TestNewInstallAllCommand(t *testing.T) {
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Usage)
 	assert.NotNil(t, cmd.Flags().Get("source-base"))
+	preferGoFlag := cmd.Flags().Get("prefer-go")
+	assert.NotNil(t, preferGoFlag)
+	assert.True(t, preferGoFlag.Hidden)
 }
 
 func TestNewUninstallCommand(t *testing.T) {
@@ -782,6 +790,9 @@ func TestNewUpdateCommand(t *testing.T) {
 	assert.False(t, nameFlag.Required) // name is optional for update
 
 	assert.NotNil(t, flags.Get("source-base"))
+	preferGoFlag := flags.Get("prefer-go")
+	assert.NotNil(t, preferGoFlag)
+	assert.True(t, preferGoFlag.Hidden)
 }
 
 func TestNewManagerWithOptionalSourceBase(t *testing.T) {
@@ -814,6 +825,21 @@ func TestNewManagerWithOptionalSourceBase(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, mgr)
 		assert.Equal(t, "https://mirror.example/plugins", mgr.sourceBase)
+	})
+
+	t.Run("prefer go option is applied", func(t *testing.T) {
+		cmd := newUpdateCommand()
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		f := ctx.Flags().Get("prefer-go")
+		assert.NotNil(t, f)
+		f.SetAssigned(true)
+		mgr, err := newManagerWithOptionalSourceBase(ctx)
+		assert.NoError(t, err)
+		assert.NotNil(t, mgr)
+		assert.True(t, mgr.preferGo)
 	})
 
 	t.Run("invalid scheme returns ApplySourceBaseOverride error", func(t *testing.T) {

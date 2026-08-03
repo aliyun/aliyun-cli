@@ -37,16 +37,6 @@ func TestManager_resolvedIndexURLsWithSourceBase(t *testing.T) {
 	assert.Equal(t, "https://mirror.example.com/plugins/plugin_search_index.json", m.resolvedCommandIndexURL())
 }
 
-func TestManager_resolvePackageDownloadURL(t *testing.T) {
-	orig := "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/pkgs/aliyun-cli-acc/0.2.0/aliyun-cli-acc-linux-amd64.tar.gz"
-	m := &Manager{sourceBase: "https://mirror.example.com/plugins"}
-	got := m.resolvePackageDownloadURL(orig, "aliyun-cli-acc", "0.2.0")
-	assert.Equal(t, "https://mirror.example.com/plugins/pkgs/aliyun-cli-acc/0.2.0/aliyun-cli-acc-linux-amd64.tar.gz", got)
-
-	m2 := &Manager{}
-	assert.Equal(t, orig, m2.resolvePackageDownloadURL(orig, "x", "1.0.0"))
-}
-
 func TestNewManager_LoadsSourceBaseFromFile(t *testing.T) {
 	home := t.TempDir()
 	cleanup := setTestHomeDir(t, home)
@@ -1059,9 +1049,10 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 		wantErr      bool
 		errContains  string
 		wantURL      string
+		preferGo     bool
 	}{
 		{
-			name: "Valid version and platform",
+			name: "Falls back to exact platform when any is absent",
 			targetPlugin: &PluginInfo{
 				Name: "test-plugin",
 				Versions: map[string]VersionInfo{
@@ -1081,7 +1072,7 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 			wantURL:    "http://example.com/plugin.tar.gz",
 		},
 		{
-			name: "Falls back to platform-independent artifact",
+			name: "Uses platform-independent artifact",
 			targetPlugin: &PluginInfo{
 				Name: "test-plugin",
 				Versions: map[string]VersionInfo{
@@ -1100,7 +1091,30 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 			wantURL:    "http://example.com/plugin-any.zip",
 		},
 		{
-			name: "Exact platform takes precedence over any",
+			name: "Any takes precedence over exact platform",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							currentPlatform: {
+								URL:      "http://example.com/plugin-platform.tar.gz",
+								Checksum: "platform123",
+							},
+							PluginPlatformAny: {
+								URL:      "http://example.com/plugin-any.zip",
+								Checksum: "any123",
+							},
+						},
+					},
+				},
+			},
+			version:    "1.0.0",
+			pluginName: "test-plugin",
+			wantURL:    "http://example.com/plugin-any.zip",
+		},
+		{
+			name: "Prefers exact platform over any when requested",
 			targetPlugin: &PluginInfo{
 				Name: "test-plugin",
 				Versions: map[string]VersionInfo{
@@ -1121,6 +1135,27 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 			version:    "1.0.0",
 			pluginName: "test-plugin",
 			wantURL:    "http://example.com/plugin-platform.tar.gz",
+			preferGo:   true,
+		},
+		{
+			name: "Falls back to any when preferred exact platform is absent",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							PluginPlatformAny: {
+								URL:      "http://example.com/plugin-any.zip",
+								Checksum: "any123",
+							},
+						},
+					},
+				},
+			},
+			version:    "1.0.0",
+			pluginName: "test-plugin",
+			wantURL:    "http://example.com/plugin-any.zip",
+			preferGo:   true,
 		},
 		{
 			name: "Version not found",
@@ -1166,6 +1201,7 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			mgr.preferGo = tt.preferGo
 			ctx := newTestContext()
 			platInfo, err := mgr.validateVersionAndPlatform(ctx, tt.targetPlugin, tt.version, tt.pluginName)
 
@@ -1555,9 +1591,10 @@ func TestSavePluginToManifest(t *testing.T) {
 	version := "1.0.0"
 	extractDir := filepath.Join(tmpDir, "extracted")
 	pManifest := &PluginManifest{
-		Name:        pluginName,
-		Command:     "test",
-		Description: "Test plugin description",
+		Name:          pluginName,
+		Command:       "test",
+		Description:   "Test plugin description",
+		MinCliVersion: "3.2.0",
 	}
 
 	if err := os.MkdirAll(extractDir, 0755); err != nil {
@@ -1579,6 +1616,7 @@ func TestSavePluginToManifest(t *testing.T) {
 	assert.Equal(t, extractDir, plugin.Path)
 	assert.Equal(t, pManifest.Command, plugin.Command)
 	assert.Equal(t, pManifest.Description, plugin.Description)
+	assert.Equal(t, pManifest.MinCliVersion, plugin.MinCliVersion)
 	assert.Nil(t, plugin.ProfileRequired, "absent in manifest should stay nil")
 
 	t.Run("propagates explicit profileRequired=false", func(t *testing.T) {
@@ -2124,7 +2162,10 @@ func createTestZip(archivePath string, files []testFile) error {
 func TestManager_installPlugin(t *testing.T) {
 	t.Run("Success - install plugin with specified version", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		mgr := &Manager{rootDir: tmpDir}
+		mgr := &Manager{
+			rootDir:    tmpDir,
+			sourceBase: "http://127.0.0.1:1/custom-index",
+		}
 
 		archiveContent := createTestPluginArchive(t, "test-plugin", "1.0.0", "test")
 		expectedChecksum, err := calculateSHA256FromBytes(archiveContent)
@@ -2143,9 +2184,10 @@ func TestManager_installPlugin(t *testing.T) {
 			Name: "test-plugin",
 			Versions: map[string]VersionInfo{
 				"1.0.0": {
+					Metadata: &VersionMetadata{MinCliVersion: "9.0.0"},
 					Platforms: map[string]PlatformInfo{
 						platform: {
-							URL:      server.URL,
+							URL:      server.URL + "/artifacts/test-plugin.tar.gz",
 							Checksum: expectedChecksum,
 						},
 					},
@@ -2165,6 +2207,7 @@ func TestManager_installPlugin(t *testing.T) {
 		assert.Equal(t, "test-plugin", plugin.Name)
 		assert.Equal(t, "1.0.0", plugin.Version)
 		assert.Equal(t, "test", plugin.Command)
+		assert.Equal(t, "9.0.0", plugin.MinCliVersion)
 
 		pluginDir := filepath.Join(tmpDir, "test-plugin")
 		assert.DirExists(t, pluginDir)
@@ -3704,6 +3747,30 @@ func TestManager_InstallMultiple(t *testing.T) {
 		stdout := ctx.Stdout().(*bytes.Buffer).String()
 		assert.Contains(t, stdout, "Installing plugin1...")
 		assert.Contains(t, stdout, "Installed: 1")
+	})
+}
+
+func TestPopulateMinCliVersionFromIndex(t *testing.T) {
+	t.Run("fills missing package value from index", func(t *testing.T) {
+		manifest := &PluginManifest{}
+		populateMinCliVersionFromIndex(manifest, VersionInfo{
+			Metadata: &VersionMetadata{MinCliVersion: "3.4.0"},
+		})
+		assert.Equal(t, "3.4.0", manifest.MinCliVersion)
+	})
+
+	t.Run("package manifest value remains authoritative", func(t *testing.T) {
+		manifest := &PluginManifest{MinCliVersion: "3.5.0"}
+		populateMinCliVersionFromIndex(manifest, VersionInfo{
+			Metadata: &VersionMetadata{MinCliVersion: "3.4.0"},
+		})
+		assert.Equal(t, "3.5.0", manifest.MinCliVersion)
+	})
+
+	t.Run("missing values remain empty", func(t *testing.T) {
+		manifest := &PluginManifest{}
+		populateMinCliVersionFromIndex(manifest, VersionInfo{})
+		assert.Empty(t, manifest.MinCliVersion)
 	})
 }
 
