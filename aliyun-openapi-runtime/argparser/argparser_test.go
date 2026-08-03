@@ -197,17 +197,63 @@ func TestArrayOfObjectRepeatable(t *testing.T) {
 	}
 }
 
-// TestSubFieldNoFormatConversion pins that nested keys are NOT
-// converted: a kebab/snake spelling of a RawName field is treated as an
-// unknown (verbatim) key, never mapped to the RawName.
+// TestSubFieldNoFormatConversion pins that nested keys are NOT converted:
+// a kebab/snake spelling of a RawName field is unknown and rejected.
 func TestSubFieldNoFormatConversion(t *testing.T) {
-	res := mustParse(t, "--tags", "key=k1")
-	obj := res.Args["Tags"].([]any)[0].(map[string]any)
-	if _, mapped := obj["Key"]; mapped {
-		t.Fatalf("lowercase 'key' must not map to RawName 'Key': %#v", obj)
+	_, err := Parse(schema(), []string{"--tags", "key=k1"})
+	if err == nil || !strings.Contains(err.Error(), "unknown field: key") {
+		t.Fatalf("error = %v, want unknown field: key", err)
 	}
-	if obj["key"] != "k1" {
-		t.Fatalf("unknown key should pass through verbatim: %#v", obj)
+}
+
+func TestDeclaredObjectRejectsUnknownFields(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "object key value", args: []string{"--network-config", "Unknown=x"}},
+		{name: "object JSON", args: []string{"--network-config", `{"Unknown":"x"}`}},
+		{name: "nested object key value", args: []string{"--network-config", "Acc.Unknown=x"}},
+		{name: "nested object JSON", args: []string{"--network-config", `{"Acc":{"Unknown":"x"}}`}},
+		{name: "object JSON leaf", args: []string{"--network-config", `Spec={"Unknown":1}`}},
+		{name: "array object key value", args: []string{"--tags", "Unknown=x"}},
+		{name: "array object indexed", args: []string{"--network-config", "Rules[0].Unknown=x"}},
+		{name: "array object JSON", args: []string{"--tags", `[{"Unknown":"x"}]`}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(schema(), tt.args)
+			if err == nil || !strings.Contains(err.Error(), "unknown field: Unknown") {
+				t.Fatalf("error = %v, want unknown field: Unknown", err)
+			}
+		})
+	}
+}
+
+func TestObjectWithoutFieldsRemainsOpen(t *testing.T) {
+	params := []meta.Parameter{{
+		Name: "open", RawName: "Open", Type: meta.TypeObject, Options: []string{"--open"},
+	}}
+
+	res, err := Parse(params, []string{"--open", "free=value", "nested.key=x"})
+	if err != nil {
+		t.Fatalf("key=value Parse: %v", err)
+	}
+	want := map[string]any{"free": "value", "nested": map[string]any{"key": "x"}}
+	if !reflect.DeepEqual(res.Args["Open"], want) {
+		t.Fatalf("Open = %#v, want %#v", res.Args["Open"], want)
+	}
+
+	res, err = Parse(params, []string{"--open", `{"free":1,"nested":{"key":true}}`})
+	if err != nil {
+		t.Fatalf("JSON Parse: %v", err)
+	}
+	open := res.Args["Open"].(map[string]any)
+	if got, ok := open["free"].(json.Number); !ok || got.String() != "1" {
+		t.Fatalf("Open.free = %#v", open["free"])
+	}
+	if nested, ok := open["nested"].(map[string]any); !ok || nested["key"] != true {
+		t.Fatalf("Open.nested = %#v", open["nested"])
 	}
 }
 
@@ -239,14 +285,6 @@ func TestMap(t *testing.T) {
 	want := map[string]any{"env": "prod", "region": "cn"}
 	if !reflect.DeepEqual(res.Args["Labels"], want) {
 		t.Fatalf("labels = %#v", res.Args["Labels"])
-	}
-}
-
-func TestNestedDottedKey(t *testing.T) {
-	res := mustParse(t, "--network-config", "meta.owner=alice", "meta.team=infra")
-	want := map[string]any{"meta": map[string]any{"owner": "alice", "team": "infra"}}
-	if !reflect.DeepEqual(res.Args["NetworkConfig"], want) {
-		t.Fatalf("nested = %#v", res.Args["NetworkConfig"])
 	}
 }
 
