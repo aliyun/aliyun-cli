@@ -501,3 +501,23 @@ func TestDirectAnyNullProducesJSONNullBody(t *testing.T) {
 		t.Fatalf("direct null body = %s, want null", encoded)
 	}
 }
+
+func TestAssembleWildcardPathUsesCompleteParameterValue(t *testing.T) {
+	api := &meta.API{
+		Name: "GetResources", Version: "2022-08-30", Method: "GET", Style: meta.StyleRESTful,
+		URL: "/api/v1/providers/{provider}/products/{product}/resources/*", HasWildcardPath: true,
+		Parameters: []meta.Parameter{{
+			Name: "request_path", RawName: "requestPath", Type: meta.TypeString,
+			Position: meta.PosPath, Required: true, IsWildcard: true,
+		}},
+	}
+	req, err := Assemble(&ExecContext{API: api, Args: map[string]any{
+		"requestPath": "/api/v1/providers/qqq/products/dd/resources/dddd:4",
+	}})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if got, want := req.Pathname, "/api/v1/providers/qqq/products/dd/resources/dddd%3A4"; got != want {
+		t.Fatalf("Pathname = %q, want %q", got, want)
+	}
+}

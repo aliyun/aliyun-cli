@@ -18,13 +18,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestJSONLAndProtobufAnyProduceSameDryRun(t *testing.T) {
+func TestJSONLAndProtobufAnyAndWildcardProduceSameDryRun(t *testing.T) {
 	jsonRoot := t.TempDir()
 	pbRoot := t.TempDir()
 	writeAnyMetadataPlugin(t, jsonRoot, false)
 	writeAnyMetadataPlugin(t, pbRoot, true)
 
 	argv := []string{
+		"--request-path", "/api/v1/providers/qqq/products/dd/resources/dddd:4",
 		"--biz-body", `{"name":"demo","count":9007199254740993,"enabled":true}`,
 		"--items", `[1,"x",true,{"k":"v"}]`,
 		"--labels", `{"large":9007199254740993,"enabled":false}`,
@@ -57,6 +58,9 @@ func TestJSONLAndProtobufAnyProduceSameDryRun(t *testing.T) {
 	}
 	if _, exists := jsonRequest.Query["Empty"]; exists {
 		t.Fatalf("null query must be omitted: %#v", jsonRequest.Query)
+	}
+	if got, want := jsonRequest.Pathname, "/api/v1/providers/qqq/products/dd/resources/dddd%3A4"; got != want {
+		t.Fatalf("wildcard path = %q, want %q", got, want)
 	}
 }
 
@@ -145,9 +149,10 @@ func anyCommandDefinition() schema.CommandDefinition {
 		Name: "UpdateThing", CmdName: "update-thing",
 		Operation: &schema.OperationConfig{
 			Action: "UpdateThing", APIStyle: "ROA", APIVersion: "2020-01-01",
-			Method: "POST", Protocol: "HTTPS", URL: "/things",
+			Method: "POST", Protocol: "HTTPS", URL: "/things/*", HasWildcardPath: true,
 		},
 		Parameters: []schema.ArgumentDefinition{
+			{Name: "request_path", RawName: "requestPath", Type: "string", Options: []string{"--request-path"}, Location: "path", Required: true, IsWildcard: true},
 			{Name: "body", RawName: "body", Type: "any", Options: []string{"--biz-body"}, Location: "body"},
 			{Name: "items", RawName: "Items", Type: "array", ElementType: "any", Options: []string{"--items"}, Location: "query", ParamStyle: "json"},
 			{Name: "labels", RawName: "Labels", Type: "map", ValueType: "any", Options: []string{"--labels"}, Location: "query", ParamStyle: "json"},
@@ -164,9 +169,10 @@ func anyPBCommandDefinition() *pbmeta.CommandDefinition {
 		Name: "UpdateThing", CmdName: "update-thing",
 		Operation: &pbmeta.Operation{
 			Action: "UpdateThing", ApiStyle: "ROA", ApiVersion: "2020-01-01",
-			Method: "POST", Protocol: "HTTPS", Url: "/things",
+			Method: "POST", Protocol: "HTTPS", Url: "/things/*", HasWildcardPath: true,
 		},
 		Parameters: []*pbmeta.Argument{
+			{Name: "request_path", RawName: "requestPath", Type: "string", Options: []string{"--request-path"}, Location: "path", Required: true, IsWildcard: true},
 			{Name: "body", RawName: "body", Type: "any", Options: []string{"--biz-body"}, Location: "body"},
 			{Name: "items", RawName: "Items", Type: "array", ElementType: "any", Options: []string{"--items"}, Location: "query", ParamStyle: "json"},
 			{Name: "labels", RawName: "Labels", Type: "map", ValueType: "any", Options: []string{"--labels"}, Location: "query", ParamStyle: "json"},

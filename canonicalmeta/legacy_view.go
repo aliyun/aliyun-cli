@@ -26,6 +26,7 @@ type LegacyParameterView struct {
 	topLocation      string // inherited from top-level parameter for nested fields
 	resolvedPosition string // pre-resolved uppercase position for top-level and body views
 	isTopBody        bool   // true for top-level v1_body_parameters views
+	isWildcard       bool   // inherited from the canonical parameter for V1 views
 }
 
 // NewCanonicalView creates a view wrapping a Canonical parameter.
@@ -124,6 +125,14 @@ func (v *LegacyParameterView) LegacyRequired() bool {
 		return v.body.Required
 	}
 	return false
+}
+
+// IsWildcard reports whether this path parameter replaces the complete path template.
+func (v *LegacyParameterView) IsWildcard() bool {
+	if v.source == SourceCanonical {
+		return v.canonical.IsWildcard
+	}
+	return v.isWildcard
 }
 
 // LegacyDescription returns the legacy help text for the given locale.
@@ -350,6 +359,12 @@ func (api *API) LegacyTopLevelParameters() []*LegacyParameterView {
 
 			v := NewV1View(b)
 			v.resolvedPosition = legacyPosition(b.Position)
+			for j := range api.Parameters {
+				if api.Parameters[j].RawName == b.Name {
+					v.isWildcard = api.Parameters[j].IsWildcard
+					break
+				}
+			}
 			result = append(result, v)
 		}
 

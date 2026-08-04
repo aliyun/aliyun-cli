@@ -458,6 +458,26 @@ func TestOapiDryRunHumanEndToEnd(t *testing.T) {
 	}
 }
 
+func TestOapiCloudControlWildcardPathDryRunEndToEnd(t *testing.T) {
+	eng := baselineEngine(t)
+	out, err := runOapi(t, eng, "cn-hangzhou",
+		"cloudcontrol", "get-resources",
+		"--request-path", "/api/v1/providers/qqq/products/dd/resources/dddd:4",
+		"--cli-dry-run",
+	)
+	if err != nil {
+		t.Fatalf("dry-run: %v\n%s", err, out)
+	}
+	if want := "URL: /api/v1/providers/qqq/products/dd/resources/dddd%3A4"; !strings.Contains(out, want) {
+		t.Fatalf("wildcard URL missing %q in:\n%s", want, out)
+	}
+	for _, unwanted := range []string{"%7Bprovider%7D", "%7Bproduct%7D", "%2A"} {
+		if strings.Contains(out, unwanted) {
+			t.Fatalf("unresolved wildcard template %q in:\n%s", unwanted, out)
+		}
+	}
+}
+
 func TestOapiDashPrefixedValueEndToEnd(t *testing.T) {
 	eng := baselineEngine(t)
 	out, err := runOapi(t, eng, "cn-hangzhou",

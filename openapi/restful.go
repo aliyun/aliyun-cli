@@ -76,7 +76,14 @@ func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
 			} else if param.LegacyPosition() == "Body" {
 				a.request.FormParams[f.Name], _ = f.GetValue()
 			} else if param.LegacyPosition() == "Path" {
-				a.request.PathParams[f.Name], _ = f.GetValue()
+				value, _ := f.GetValue()
+				if param.IsWildcard() {
+					// SDK v1 signs the unescaped ROA resource path.
+					// The HTTP layer handles wire escaping
+					a.request.PathPattern = value
+				} else {
+					a.request.PathParams[f.Name] = value
+				}
 			} else if param.LegacyPosition() == "Domain" || param.LegacyPosition() == "Host" {
 				continue
 			} else {

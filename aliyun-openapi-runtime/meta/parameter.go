@@ -46,6 +46,7 @@ type Parameter struct {
 	//   bracketList -> --tag.1=k --tag.2=v
 	//   json        -> --tag '[{"k":"v"}]'
 	ParamStyle string
+	IsWildcard bool // path value replaces the complete URL template
 
 	// Composite descriptors.
 	Fields    []Parameter // Type == TypeObject
@@ -63,12 +64,10 @@ func (p Parameter) IsComposite() bool {
 	}
 }
 
-// WalkFields visits every descendant Parameter of an object/array/map
-// tree in depth-first order, invoking fn for each node. If fn returns
-// false the walk stops for that subtree.
+// WalkFields visits every descendant Parameter of an object/array/map tree in depth-first order, invoking fn for each node.
+// If fn returns false the walk stops for that subtree.
 //
-// The root parameter itself is NOT visited; use `fn(p) && p.WalkFields(fn)`
-// if you also need the root.
+// The root parameter itself is NOT visited; use `fn(p) && p.WalkFields(fn)` if you also need the root.
 func (p Parameter) WalkFields(fn func(Parameter) bool) {
 	switch p.Type {
 	case TypeObject:

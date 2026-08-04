@@ -176,15 +176,16 @@ type CommandDefinition struct {
 
 // OperationConfig describes the HTTP request shape for one API.
 type OperationConfig struct {
-	Action      string `json:"action"`
-	APIStyle    string `json:"api_style,omitempty"`
-	APIVersion  string `json:"api_version"`
-	Method      string `json:"method"`
-	Protocol    string `json:"protocol,omitempty"`
-	URL         string `json:"url"`
-	IsSSE       bool   `json:"is_sse,omitempty"`
-	ReqBodyType string `json:"req_body_type,omitempty"`
-	ContentType string `json:"content_type,omitempty"`
+	Action          string `json:"action"`
+	APIStyle        string `json:"api_style,omitempty"`
+	APIVersion      string `json:"api_version"`
+	Method          string `json:"method"`
+	Protocol        string `json:"protocol,omitempty"`
+	URL             string `json:"url"`
+	IsSSE           bool   `json:"is_sse,omitempty"`
+	ReqBodyType     string `json:"req_body_type,omitempty"`
+	ContentType     string `json:"content_type,omitempty"`
+	HasWildcardPath bool   `json:"has_wildcard_path,omitempty"`
 }
 
 // ArgumentDefinition describes a single CLI parameter.
@@ -200,6 +201,7 @@ type ArgumentDefinition struct {
 	Required      bool                 `json:"required"`
 	Location      string               `json:"location,omitempty"`
 	ParamStyle    string               `json:"param_style,omitempty"`
+	IsWildcard    bool                 `json:"is_wildcard,omitempty"`
 	ElementType   string               `json:"element_type,omitempty"`
 	ValueType     string               `json:"value_type,omitempty"`
 	Fields        []ArgumentDefinition `json:"fields,omitempty"`

@@ -432,6 +432,7 @@ func (a *OpenapiContext) ProcessBody(ctx *cli.Context) error {
 
 func (a *OpenapiContext) ProcessPath(ctx *cli.Context) error {
 	pathParams := make(map[string]string)
+	pathname := a.path
 	for _, f := range ctx.UnknownFlags().Flags() {
 		param := a.api.FindLegacyParameter(f.Name)
 		if param == nil {
@@ -444,9 +445,12 @@ func (a *OpenapiContext) ProcessPath(ctx *cli.Context) error {
 		if param.LegacyRequired() && value == "" {
 			return fmt.Errorf("required parameter missing; %s is required", param.LegacyName())
 		}
+		if param.IsWildcard() {
+			pathname = value
+			continue
+		}
 		pathParams[f.Name] = value
 	}
-	pathname := a.path
 	if len(pathParams) > 0 {
 		for key, value := range pathParams {
 			placeholder := "[" + key + "]"

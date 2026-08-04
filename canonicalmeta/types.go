@@ -49,6 +49,7 @@ type Parameter struct {
 	Required   bool   `json:"required"`
 	Location   string `json:"location"`
 	ParamStyle string `json:"param_style,omitempty"`
+	IsWildcard bool   `json:"is_wildcard,omitempty"`
 	Format     string `json:"format,omitempty"`
 	Example    string `json:"example,omitempty"`
 

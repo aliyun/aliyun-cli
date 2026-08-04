@@ -49,3 +49,16 @@ func TestSchemaToAPIMapsRequestBodyWireMetadata(t *testing.T) {
 		t.Fatalf("request body metadata = %v, want %v", got, want)
 	}
 }
+
+func TestSchemaToAPIMapsWildcardPathMetadata(t *testing.T) {
+	definition := &schema.CommandDefinition{
+		Operation: &schema.OperationConfig{HasWildcardPath: true},
+		Parameters: []schema.ArgumentDefinition{{
+			Name: "request_path", RawName: "requestPath", Location: "path", IsWildcard: true,
+		}},
+	}
+	api := schemaToAPI(definition)
+	if !api.HasWildcardPath || len(api.Parameters) != 1 || !api.Parameters[0].IsWildcard {
+		t.Fatalf("wildcard metadata was not mapped: %#v", api)
+	}
+}

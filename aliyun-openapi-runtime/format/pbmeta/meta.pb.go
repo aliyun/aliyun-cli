@@ -165,18 +165,19 @@ func (x *CommandDefinition) GetParameters() []*Argument {
 }
 
 type Operation struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Action        string                 `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`
-	ApiStyle      string                 `protobuf:"bytes,2,opt,name=api_style,json=apiStyle,proto3" json:"api_style,omitempty"`
-	ApiVersion    string                 `protobuf:"bytes,3,opt,name=api_version,json=apiVersion,proto3" json:"api_version,omitempty"`
-	Method        string                 `protobuf:"bytes,4,opt,name=method,proto3" json:"method,omitempty"`
-	Protocol      string                 `protobuf:"bytes,5,opt,name=protocol,proto3" json:"protocol,omitempty"`
-	Url           string                 `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
-	IsSse         bool                   `protobuf:"varint,7,opt,name=is_sse,json=isSse,proto3" json:"is_sse,omitempty"`
-	ReqBodyType   string                 `protobuf:"bytes,8,opt,name=req_body_type,json=reqBodyType,proto3" json:"req_body_type,omitempty"`
-	ContentType   string                 `protobuf:"bytes,9,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Action          string                 `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`
+	ApiStyle        string                 `protobuf:"bytes,2,opt,name=api_style,json=apiStyle,proto3" json:"api_style,omitempty"`
+	ApiVersion      string                 `protobuf:"bytes,3,opt,name=api_version,json=apiVersion,proto3" json:"api_version,omitempty"`
+	Method          string                 `protobuf:"bytes,4,opt,name=method,proto3" json:"method,omitempty"`
+	Protocol        string                 `protobuf:"bytes,5,opt,name=protocol,proto3" json:"protocol,omitempty"`
+	Url             string                 `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
+	IsSse           bool                   `protobuf:"varint,7,opt,name=is_sse,json=isSse,proto3" json:"is_sse,omitempty"`
+	ReqBodyType     string                 `protobuf:"bytes,8,opt,name=req_body_type,json=reqBodyType,proto3" json:"req_body_type,omitempty"`
+	ContentType     string                 `protobuf:"bytes,9,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	HasWildcardPath bool                   `protobuf:"varint,10,opt,name=has_wildcard_path,json=hasWildcardPath,proto3" json:"has_wildcard_path,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Operation) Reset() {
@@ -272,6 +273,13 @@ func (x *Operation) GetContentType() string {
 	return ""
 }
 
+func (x *Operation) GetHasWildcardPath() bool {
+	if x != nil {
+		return x.HasWildcardPath
+	}
+	return false
+}
+
 type Argument struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -289,6 +297,7 @@ type Argument struct {
 	ElementFields []*Argument            `protobuf:"bytes,13,rep,name=element_fields,json=elementFields,proto3" json:"element_fields,omitempty"`
 	ValueFields   []*Argument            `protobuf:"bytes,14,rep,name=value_fields,json=valueFields,proto3" json:"value_fields,omitempty"`
 	Example       string                 `protobuf:"bytes,15,opt,name=example,proto3" json:"example,omitempty"`
+	IsWildcard    bool                   `protobuf:"varint,16,opt,name=is_wildcard,json=isWildcard,proto3" json:"is_wildcard,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -428,6 +437,13 @@ func (x *Argument) GetExample() string {
 	return ""
 }
 
+func (x *Argument) GetIsWildcard() bool {
+	if x != nil {
+		return x.IsWildcard
+	}
+	return false
+}
+
 var File_aliyun_openapi_meta_proto protoreflect.FileDescriptor
 
 const file_aliyun_openapi_meta_proto_rawDesc = "" +
@@ -451,7 +467,7 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\toperation\x18\f \x01(\v2!.aliyun.openapi.meta.v1.OperationR\toperation\x12@\n" +
 	"\n" +
 	"parameters\x18\r \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\n" +
-	"parameters\"\x85\x02\n" +
+	"parameters\"\xb1\x02\n" +
 	"\tOperation\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12\x1b\n" +
 	"\tapi_style\x18\x02 \x01(\tR\bapiStyle\x12\x1f\n" +
@@ -462,7 +478,9 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\x03url\x18\x06 \x01(\tR\x03url\x12\x15\n" +
 	"\x06is_sse\x18\a \x01(\bR\x05isSse\x12\"\n" +
 	"\rreq_body_type\x18\b \x01(\tR\vreqBodyType\x12!\n" +
-	"\fcontent_type\x18\t \x01(\tR\vcontentType\"\x96\x04\n" +
+	"\fcontent_type\x18\t \x01(\tR\vcontentType\x12*\n" +
+	"\x11has_wildcard_path\x18\n" +
+	" \x01(\bR\x0fhasWildcardPath\"\xb7\x04\n" +
 	"\bArgument\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\braw_name\x18\x02 \x01(\tR\arawName\x12\x12\n" +
@@ -481,7 +499,9 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\x06fields\x18\f \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\x06fields\x12G\n" +
 	"\x0eelement_fields\x18\r \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\relementFields\x12C\n" +
 	"\fvalue_fields\x18\x0e \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\vvalueFields\x12\x18\n" +
-	"\aexample\x18\x0f \x01(\tR\aexampleB?Z=github.com/aliyun/aliyun-openapi-runtime/format/pbmeta;pbmetab\x06proto3"
+	"\aexample\x18\x0f \x01(\tR\aexample\x12\x1f\n" +
+	"\vis_wildcard\x18\x10 \x01(\bR\n" +
+	"isWildcardB?Z=github.com/aliyun/aliyun-openapi-runtime/format/pbmeta;pbmetab\x06proto3"
 
 var (
 	file_aliyun_openapi_meta_proto_rawDescOnce sync.Once

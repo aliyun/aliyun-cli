@@ -21,14 +21,11 @@ import (
 	crschema "github.com/aliyun/aliyun-openapi-runtime/schema"
 )
 
-// This file is the ONLY place that knows both the on-disk schema
-// (aliyun-openapi-runtime/schema) and the runtime model (../meta).
-// Every mapping decision lives here so it can evolve independently of
-// both sides.
+// This file is the ONLY place that knows both the on-disk schema (aliyun-openapi-runtime/schema) and the runtime model (../meta).
+// Every mapping decision lives here so it can evolve independently of both sides.
 
-// schemaToAPI converts one CommandDefinition into meta.API. Endpoints
-// are NOT set here — they live at the product level in the canonical
-// layout and are injected by the Source after decoding.
+// schemaToAPI converts one CommandDefinition into meta.API.
+// Endpoints are NOT set here — they live at the product level in the canonical layout and are injected by the Source after decoding.
 func schemaToAPI(def *crschema.CommandDefinition) *meta.API {
 	api := &meta.API{
 		Name:        def.Name,
@@ -47,6 +44,7 @@ func schemaToAPI(def *crschema.CommandDefinition) *meta.API {
 		api.IsSSE = def.Operation.IsSSE
 		api.ReqBodyType = def.Operation.ReqBodyType
 		api.ContentType = def.Operation.ContentType
+		api.HasWildcardPath = def.Operation.HasWildcardPath
 	}
 	api.Parameters = mapArguments(def.Parameters)
 	return api
@@ -117,6 +115,7 @@ func mapArgument(a *crschema.ArgumentDefinition) meta.Parameter {
 		Description: meta.Description{ZH: a.HelpZH, EN: a.HelpEN},
 		Example:     a.Example,
 		ParamStyle:  a.ParamStyle,
+		IsWildcard:  a.IsWildcard,
 	}
 
 	switch p.Type {

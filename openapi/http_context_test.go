@@ -1611,6 +1611,27 @@ func TestProcessPathWithValidParameter(t *testing.T) {
 	assert.Equal(t, "/instances/i-test123", *context.openapiParams.Pathname)
 }
 
+func TestProcessPathWithWildcardParameter(t *testing.T) {
+	context := &OpenapiContext{HttpContext: &HttpContext{}}
+	context.path = "/api/v1/providers/[provider]/products/[product]/resources/*"
+	context.openapiParams = &openapiClient.Params{}
+	context.product = &meta.Product{Code: "cloudcontrol", Version: "2022-08-30"}
+	context.api = &canonicalmeta.API{Parameters: []canonicalmeta.Parameter{{
+		Name: "request_path", RawName: "requestPath", Type: "string", Required: true,
+		Location: "path", IsWildcard: true,
+	}}}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	ctx.UnknownFlags().AddByName("requestPath")
+	ctx.UnknownFlags().Get("requestPath").SetAssigned(true)
+	ctx.UnknownFlags().Get("requestPath").SetValue("/api/v1/providers/qqq/products/dd/resources/dddd:4")
+
+	err := context.ProcessPath(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, "/api/v1/providers/qqq/products/dd/resources/dddd:4", *context.openapiParams.Pathname)
+}
+
 func TestProcessPathWithInvalidParameter(t *testing.T) {
 	httpContext := &HttpContext{}
 	context := &OpenapiContext{HttpContext: httpContext}

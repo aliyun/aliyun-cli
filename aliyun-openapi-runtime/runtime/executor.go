@@ -220,6 +220,8 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 	var directBody any           // a schema parameter named "body" is the whole JSON body
 	var directBodySet bool
 	var pathParams map[string]string
+	var wildcardPath string
+	var wildcardPathSet bool
 
 	for name, val := range ec.Args {
 		p := api.FindParameter(name)
@@ -243,6 +245,11 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 
 		switch p.Position {
 		case meta.PosPath:
+			if api.HasWildcardPath && p.IsWildcard {
+				wildcardPath = scalarString(val)
+				wildcardPathSet = true
+				continue
+			}
 			if pathParams == nil {
 				pathParams = map[string]string{}
 			}
@@ -282,7 +289,9 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 		}
 	}
 
-	if len(pathParams) > 0 && req.Pathname != "" {
+	if wildcardPathSet {
+		req.Pathname = wildcardPath
+	} else if len(pathParams) > 0 && req.Pathname != "" {
 		for k, v := range pathParams {
 			req.Pathname = strings.ReplaceAll(req.Pathname, "{"+k+"}", v)
 			req.Pathname = strings.ReplaceAll(req.Pathname, "["+k+"]", v)

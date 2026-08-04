@@ -108,6 +108,41 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 	assert.EqualError(t, err, "'--TestFlag' is not a valid parameter or flag. See `aliyun help  DescribeClusterUserKubeconfig`.")
 }
 
+func TestRestfulInvokerPrepareWildcardPath(t *testing.T) {
+	a := &RestfulInvoker{
+		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
+		path:         "/api/v1/providers/[provider]/products/[product]/resources/*",
+		method:       "GET",
+		api: &canonicalmeta.API{Parameters: []canonicalmeta.Parameter{{
+			Name: "request_path", RawName: "requestPath", Location: "path",
+			Type: "string", Required: true, IsWildcard: true,
+		}}},
+	}
+	ctx := cli.NewCommandContext(new(bufio.Writer), new(bufio.Writer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	ctx.Flags().Add(NewBodyFlag())
+	ctx.Flags().Add(NewSecureFlag())
+	ctx.Flags().Add(NewInsecureFlag())
+	ctx.Flags().Add(NewBodyFileFlag())
+	ctx.UnknownFlags().AddByName("requestPath")
+	ctx.UnknownFlags().Get("requestPath").SetAssigned(true)
+	ctx.UnknownFlags().Get("requestPath").SetValue("/api/v1/providers/qqq/products/dd/resources/dddd:4")
+
+	if err := a.Prepare(ctx); err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	if got, want := a.request.PathPattern, "/api/v1/providers/qqq/products/dd/resources/dddd:4"; got != want {
+		t.Fatalf("PathPattern = %q, want %q", got, want)
+	}
+	if len(a.request.PathParams) != 0 {
+		t.Fatalf("wildcard path must not remain in PathParams: %#v", a.request.PathParams)
+	}
+	a.request.TransToAcsRequest()
+	if got, want := a.request.BuildQueries(), "/api/v1/providers/qqq/products/dd/resources/dddd:4"; got != want {
+		t.Fatalf("signature resource path = %q, want %q", got, want)
+	}
+}
+
 func TestRestfulInvoker_Call(t *testing.T) {
 	client, err := sdk.NewClientWithAccessKey("regionid", "accesskeyid", "accesskeysecret")
 	assert.Nil(t, err)

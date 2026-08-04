@@ -24,13 +24,19 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 		ProductCode: "Demo", Name: "GetThing", CmdName: "get-thing",
 		Operation: &Operation{
 			Action: "GetThing", ApiVersion: "2020-01-01", Method: "GET", ApiStyle: "ROA",
-			Protocol: "HTTPS", Url: "/things/{id}", IsSse: true,
+			Protocol: "HTTPS", Url: "/things/*", IsSse: true, HasWildcardPath: true,
 			ReqBodyType: "formData", ContentType: "application/x-www-form-urlencoded",
 		},
-		Parameters: []*Argument{{
-			Name: "limit", RawName: "Limit", Type: "integer", Options: []string{"--limit"},
-			Location: "query", Example: "12****",
-		}},
+		Parameters: []*Argument{
+			{
+				Name: "limit", RawName: "Limit", Type: "integer", Options: []string{"--limit"},
+				Location: "query", Example: "12****",
+			},
+			{
+				Name: "request_path", RawName: "requestPath", Type: "string",
+				Options: []string{"--request-path"}, Location: "path", IsWildcard: true,
+			},
+		},
 	}
 	payload, err := proto.MarshalOptions{Deterministic: true}.Marshal(definition)
 	if err != nil {
@@ -68,11 +74,14 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if api.Name != "GetThing" || api.Version != "2020-01-01" || api.URL != "/things/{id}" {
+	if api.Name != "GetThing" || api.Version != "2020-01-01" || api.URL != "/things/*" {
 		t.Fatalf("API = %#v", api)
 	}
 	if !api.IsSSE {
 		t.Fatal("protobuf is_sse was not mapped")
+	}
+	if !api.HasWildcardPath || !api.Parameters[1].IsWildcard {
+		t.Fatalf("protobuf wildcard metadata was not mapped: %#v", api)
 	}
 	if api.ReqBodyType != "formData" || api.ContentType != "application/x-www-form-urlencoded" {
 		t.Fatalf("protobuf request body metadata = %q, %q", api.ReqBodyType, api.ContentType)

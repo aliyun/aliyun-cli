@@ -558,6 +558,21 @@ func TestLegacyTopLevelParameters_V1ParametersOverrideAllOtherSources(t *testing
 	}
 }
 
+func TestLegacyTopLevelParameters_V1InheritsCanonicalWildcard(t *testing.T) {
+	v1 := []V1Parameter{{Name: "requestPath", Position: "path", Type: "string", Required: true}}
+	api := API{
+		Parameters: []Parameter{{
+			Name: "request_path", RawName: "requestPath", Type: "string",
+			Location: "path", Required: true, IsWildcard: true,
+		}},
+		V1Parameters: &v1,
+	}
+	parameters := api.LegacyTopLevelParameters()
+	if len(parameters) != 1 || !parameters[0].IsWildcard() {
+		t.Fatalf("V1 wildcard marker was not inherited: %#v", parameters)
+	}
+}
+
 func TestFindLegacyParameter_Exact(t *testing.T) {
 	repo := testFS()
 	api, err := repo.GetAPI("demo", "2026-01-01", "DescribeRegions")

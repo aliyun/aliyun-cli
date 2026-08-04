@@ -29,14 +29,15 @@ type API struct {
 	Version     string // API version (e.g. "2014-05-26")
 
 	// Wire.
-	Method      string // "GET" / "POST" / ...
-	URL         string // RESTful path template; empty for RPC
-	Style       APIStyle
-	Protocol    string            // "HTTPS" / "HTTP"
-	IsSSE       bool              // response is a Server-Sent Events stream
-	ReqBodyType string            // request serializer: "json" / "formData" / "byte"
-	ContentType string            // declared request media type; execution currently follows legacy ReqBodyType behavior
-	BodyMapping map[string]string // raw_name -> wire key, RPC body overrides
+	Method          string // "GET" / "POST" / ...
+	URL             string // RESTful path template; empty for RPC
+	Style           APIStyle
+	Protocol        string            // "HTTPS" / "HTTP"
+	IsSSE           bool              // response is a Server-Sent Events stream
+	ReqBodyType     string            // request serializer: "json" / "formData" / "byte"
+	ContentType     string            // declared request media type; execution currently follows legacy ReqBodyType behavior
+	HasWildcardPath bool              // URL contains a wildcard replaced by one complete path argument
+	BodyMapping     map[string]string // raw_name -> wire key, RPC body overrides
 
 	// Content.
 	Parameters  []Parameter // top-level arguments

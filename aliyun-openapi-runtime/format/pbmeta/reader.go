@@ -97,15 +97,16 @@ func toCanonical(def *CommandDefinition) (*schema.CommandDefinition, error) {
 	}
 	if def.Operation != nil {
 		canonical.Operation = &schema.OperationConfig{
-			Action:      def.Operation.Action,
-			APIStyle:    def.Operation.ApiStyle,
-			APIVersion:  def.Operation.ApiVersion,
-			Method:      def.Operation.Method,
-			Protocol:    def.Operation.Protocol,
-			URL:         def.Operation.Url,
-			IsSSE:       def.Operation.IsSse,
-			ReqBodyType: def.Operation.ReqBodyType,
-			ContentType: def.Operation.ContentType,
+			Action:          def.Operation.Action,
+			APIStyle:        def.Operation.ApiStyle,
+			APIVersion:      def.Operation.ApiVersion,
+			Method:          def.Operation.Method,
+			Protocol:        def.Operation.Protocol,
+			URL:             def.Operation.Url,
+			IsSSE:           def.Operation.IsSse,
+			ReqBodyType:     def.Operation.ReqBodyType,
+			ContentType:     def.Operation.ContentType,
+			HasWildcardPath: def.Operation.HasWildcardPath,
 		}
 	}
 	parameters, err := toCanonicalArguments(def.Parameters)
@@ -136,6 +137,7 @@ func toCanonicalArguments(values []*Argument) ([]schema.ArgumentDefinition, erro
 			Required:    value.Required,
 			Location:    value.Location,
 			ParamStyle:  value.ParamStyle,
+			IsWildcard:  value.IsWildcard,
 			ElementType: value.ElementType,
 			ValueType:   value.ValueType,
 		}
