@@ -20,6 +20,8 @@ resource/metas.go
 local-*
 coverage.txt
 oss/lib/ossutil_test*
+# Go build cache (when GOCACHE points into the repo)
+.gocache/
 coverage.html
 coverage/
 integration/*.txt
