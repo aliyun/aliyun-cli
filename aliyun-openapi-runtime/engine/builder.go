@@ -218,7 +218,7 @@ func (e *Engine) Dispatch(req Request) error {
 		return printAPIHelp(req.Out, product, api, req.Lang)
 	}
 
-	if err := runtime.ValidateRequired(api, res.Args); err != nil {
+	if err := runtime.ValidateRequired(api, res.Args, res.Reserved.BodySet || res.Reserved.BodyFileSet); err != nil {
 		return fmt.Errorf("%w\nrun `aliyun %s %s --help` to see all parameters", err, product, cmdName)
 	}
 
@@ -308,14 +308,20 @@ func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runti
 			ec.ExtraHeaders[strings.TrimSpace(name)] = strings.TrimSpace(value)
 		}
 	}
-	if res.Reserved.BodyFile != "" {
-		body, err := os.ReadFile(res.Reserved.BodyFile)
+	if res.Reserved.BodySet {
+		ec.RawBody = res.Reserved.Body
+	} else if res.Reserved.BodyFileSet {
+		var body []byte
+		var err error
+		if res.Reserved.BodyFile == "-" {
+			body, err = io.ReadAll(os.Stdin)
+		} else {
+			body, err = os.ReadFile(res.Reserved.BodyFile)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("--body-file: %w", err)
 		}
 		ec.RawBody = string(body)
-	} else if res.Reserved.Body != "" {
-		ec.RawBody = res.Reserved.Body
 	}
 
 	if req.Host != nil {
@@ -572,8 +578,16 @@ func renderDryRun(w io.Writer, product string, req *runtime.AssembledRequest, js
 	printSortedKV(w, "Headers", req.Headers)
 	printSortedKV(w, "Query Parameters", req.Query)
 	if req.Body != nil {
-		b, _ := json.Marshal(redact.MaskAny(req.Body))
-		fmt.Fprintf(w, "Body:\n  %s\n", string(b))
+		switch body := req.Body.(type) {
+		case string:
+			// Raw --body/--body-file strings are sent as-is by the SDK.
+			fmt.Fprintf(w, "Body:\n  %s\n", redact.MaskBody(body))
+		case []byte:
+			fmt.Fprintf(w, "Body:\n  %s\n", redact.MaskBody(string(body)))
+		default:
+			b, _ := json.Marshal(redact.MaskAny(req.Body))
+			fmt.Fprintf(w, "Body:\n  %s\n", string(b))
+		}
 	}
 	return nil
 }

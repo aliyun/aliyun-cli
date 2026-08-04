@@ -251,6 +251,9 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 		}
 		c.setLangEnv(ctx)
 		if localPlugin.IsMeta() {
+			if err := plugin.ValidateLocalPluginCliVersion(pluginName, &localPlugin); err != nil {
+				return err
+			}
 			if err := productHelpRender(ctx, productCode); err != nil {
 				return err
 			}
@@ -377,19 +380,16 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 
 func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName string) error {
 	c.printHelpContextHints(ctx)
-
-	// aliyun-openapi-runtime engine help (default on). When enabled, a
-	// kebab command the engine can resolve (baseline / user meta
-	// plugin) renders its parameter help here, mirroring the engine
-	// execution route. PascalCase API names never match the engine's
-	// kebab route table, so legacy openapi help is unaffected. Products
-	// marked distribution=="go" in metadatas/products.json are excluded
-	// by the engine, so they still fall through to the plugin help below.
-	// Set ALIYUN_CLI_OPENAPI_RUNTIME_FALLBACK=1 to skip for local debug.
-	if commonRuntimeFallbackEnabled() {
-		if handled, herr := runtimehost.TryHelp(ctx, productCode, apiName); handled {
-			return herr
+	if c.localManifest != nil {
+		if pluginName, lp, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode); ok && lp.IsMeta() {
+			if err := plugin.ValidateLocalPluginCliVersion(pluginName, lp); err != nil {
+				return err
+			}
 		}
+	}
+
+	if handled, herr := runtimeTryHelp(ctx, productCode, apiName); handled {
+		return herr
 	}
 
 	// 0. Check if it's a plugin product
@@ -451,7 +451,7 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 	// Case B: Built-in product exists
 	canonicalApi := c.library.GetCanonicalApi(productCode, product.Version, apiName)
 	if canonicalApi == nil {
-		if shouldTryPlugin && !isInstalled && commonRuntimeFallbackEnabled() && runtimehost.HasProduct(productCode) {
+		if shouldTryPlugin && !isInstalled && runtimehost.HasProduct(productCode) {
 			return c.invalidBaselineCommandError(productCode, apiName)
 		}
 		// API not found in built-in metadata. api in plugin is different from api from built-in
@@ -499,6 +499,7 @@ var (
 	helpDelegateExecute     = plugin.ExecutePlugin
 	productHelpRender       = runtimehost.ProductHelp
 	productHelpAvailable    = runtimehost.HasProduct
+	runtimeTryHelp          = runtimehost.TryHelp
 )
 
 // tryDelegatePluginHelp is layer-3 of the help hierarchy:

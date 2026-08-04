@@ -173,6 +173,8 @@ type Operation struct {
 	Protocol      string                 `protobuf:"bytes,5,opt,name=protocol,proto3" json:"protocol,omitempty"`
 	Url           string                 `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
 	IsSse         bool                   `protobuf:"varint,7,opt,name=is_sse,json=isSse,proto3" json:"is_sse,omitempty"`
+	ReqBodyType   string                 `protobuf:"bytes,8,opt,name=req_body_type,json=reqBodyType,proto3" json:"req_body_type,omitempty"`
+	ContentType   string                 `protobuf:"bytes,9,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -254,6 +256,20 @@ func (x *Operation) GetIsSse() bool {
 		return x.IsSse
 	}
 	return false
+}
+
+func (x *Operation) GetReqBodyType() string {
+	if x != nil {
+		return x.ReqBodyType
+	}
+	return ""
+}
+
+func (x *Operation) GetContentType() string {
+	if x != nil {
+		return x.ContentType
+	}
+	return ""
 }
 
 type Argument struct {
@@ -435,7 +451,7 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\toperation\x18\f \x01(\v2!.aliyun.openapi.meta.v1.OperationR\toperation\x12@\n" +
 	"\n" +
 	"parameters\x18\r \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\n" +
-	"parameters\"\xbe\x01\n" +
+	"parameters\"\x85\x02\n" +
 	"\tOperation\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12\x1b\n" +
 	"\tapi_style\x18\x02 \x01(\tR\bapiStyle\x12\x1f\n" +
@@ -444,7 +460,9 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\x06method\x18\x04 \x01(\tR\x06method\x12\x1a\n" +
 	"\bprotocol\x18\x05 \x01(\tR\bprotocol\x12\x10\n" +
 	"\x03url\x18\x06 \x01(\tR\x03url\x12\x15\n" +
-	"\x06is_sse\x18\a \x01(\bR\x05isSse\"\x96\x04\n" +
+	"\x06is_sse\x18\a \x01(\bR\x05isSse\x12\"\n" +
+	"\rreq_body_type\x18\b \x01(\tR\vreqBodyType\x12!\n" +
+	"\fcontent_type\x18\t \x01(\tR\vcontentType\"\x96\x04\n" +
 	"\bArgument\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\braw_name\x18\x02 \x01(\tR\arawName\x12\x12\n" +

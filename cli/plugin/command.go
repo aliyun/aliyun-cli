@@ -25,10 +25,24 @@ func addPluginSourceBaseFlag(cmd *cli.Command) {
 	})
 }
 
+func addPreferGoFlag(cmd *cli.Command) {
+	cmd.Flags().Add(&cli.Flag{
+		Name: "prefer-go",
+		Short: i18n.T(
+			"Prefer the Go plugin package for the current platform-arch",
+			"优先选择当前 platform-arch 的 Go 插件包"),
+		AssignedMode: cli.AssignedNone,
+		Hidden:       true,
+	})
+}
+
 func newManagerWithOptionalSourceBase(ctx *cli.Context) (*Manager, error) {
 	mgr, err := NewManager()
 	if err != nil {
 		return nil, err
+	}
+	if f := ctx.Flags().Get("prefer-go"); f != nil && f.IsAssigned() {
+		mgr.preferGo = true
 	}
 	f := ctx.Flags().Get("source-base")
 	if f == nil || !f.IsAssigned() {
@@ -312,6 +326,7 @@ func newInstallCommand() *cli.Command {
 		DefaultValue: "",
 	})
 
+	addPreferGoFlag(cmd)
 	addPluginSourceBaseFlag(cmd)
 	return cmd
 }
@@ -343,6 +358,7 @@ func newInstallAllCommand() *cli.Command {
 		AssignedMode: cli.AssignedNone,
 	})
 
+	addPreferGoFlag(cmd)
 	addPluginSourceBaseFlag(cmd)
 	return cmd
 }
@@ -422,6 +438,7 @@ func newUpdateCommand() *cli.Command {
 		AssignedMode: cli.AssignedNone,
 	})
 
+	addPreferGoFlag(cmd)
 	addPluginSourceBaseFlag(cmd)
 	return cmd
 }

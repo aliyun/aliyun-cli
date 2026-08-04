@@ -45,6 +45,8 @@ func schemaToAPI(def *crschema.CommandDefinition) *meta.API {
 		api.Style = mapStyle(def.Operation.APIStyle)
 		api.Protocol = def.Operation.Protocol
 		api.IsSSE = def.Operation.IsSSE
+		api.ReqBodyType = def.Operation.ReqBodyType
+		api.ContentType = def.Operation.ContentType
 	}
 	api.Parameters = mapArguments(def.Parameters)
 	return api

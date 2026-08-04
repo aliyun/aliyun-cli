@@ -34,7 +34,8 @@ type API struct {
 	Style       APIStyle
 	Protocol    string            // "HTTPS" / "HTTP"
 	IsSSE       bool              // response is a Server-Sent Events stream
-	ContentType string            // request Content-Type override, may be ""
+	ReqBodyType string            // request serializer: "json" / "formData" / "byte"
+	ContentType string            // declared request media type; execution currently follows legacy ReqBodyType behavior
 	BodyMapping map[string]string // raw_name -> wire key, RPC body overrides
 
 	// Content.

@@ -176,13 +176,15 @@ type CommandDefinition struct {
 
 // OperationConfig describes the HTTP request shape for one API.
 type OperationConfig struct {
-	Action     string `json:"action"`
-	APIStyle   string `json:"api_style,omitempty"`
-	APIVersion string `json:"api_version"`
-	Method     string `json:"method"`
-	Protocol   string `json:"protocol,omitempty"`
-	URL        string `json:"url"`
-	IsSSE      bool   `json:"is_sse,omitempty"`
+	Action      string `json:"action"`
+	APIStyle    string `json:"api_style,omitempty"`
+	APIVersion  string `json:"api_version"`
+	Method      string `json:"method"`
+	Protocol    string `json:"protocol,omitempty"`
+	URL         string `json:"url"`
+	IsSSE       bool   `json:"is_sse,omitempty"`
+	ReqBodyType string `json:"req_body_type,omitempty"`
+	ContentType string `json:"content_type,omitempty"`
 }
 
 // ArgumentDefinition describes a single CLI parameter.

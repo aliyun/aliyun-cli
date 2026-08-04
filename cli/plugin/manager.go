@@ -55,6 +55,8 @@ type Manager struct {
 	sourceBase      string // from plugin-settings.json / env; empty = use built-in index URLs
 	indexURL        string // For testing: allows overriding resolved package index URL
 	commandIndexURL string // For testing: allows overriding resolved command index URL
+	// preferGo reverses the default package selection order from any -> current platform-arch to current platform-arch -> any.
+	preferGo bool
 	// skipPluginIndexCacheForCLI is set when --source-base is used on this command only.
 	skipPluginIndexCacheForCLI bool
 }
@@ -139,23 +141,6 @@ func (m *Manager) resolvedCommandIndexURL() string {
 		return b + "/plugin_search_index.json"
 	}
 	return CommandIndexURL
-}
-
-// common layout: .../pkgs/{name}/{version}/{basename}.
-func (m *Manager) resolvePackageDownloadURL(origURL, pluginName, version string) string {
-	if strings.TrimSpace(m.sourceBase) == "" {
-		return origURL
-	}
-	u, err := url.Parse(origURL)
-	if err != nil {
-		return origURL
-	}
-	baseName := path.Base(u.Path)
-	if baseName == "" || baseName == "." || baseName == "/" {
-		return origURL
-	}
-	b := strings.TrimRight(strings.TrimSpace(m.sourceBase), "/")
-	return fmt.Sprintf("%s/pkgs/%s/%s/%s", b, pluginName, version, baseName)
 }
 
 func (m *Manager) readCache(cacheFile string, ttl time.Duration, result interface{}) (hit bool, staleAvailable bool) {
@@ -382,6 +367,27 @@ func compareVersion(v1, v2 string) int {
 	return semver.Compare(v1, v2)
 }
 
+func validatePluginCliVersion(pluginName, pluginVersion, minCliVersion string) error {
+	minCliVersion = strings.TrimSpace(minCliVersion)
+	if minCliVersion == "" {
+		return nil
+	}
+
+	currentVersion := cli.GetVersion()
+	if isDevVersion(currentVersion) || compareVersion(currentVersion, minCliVersion) >= 0 {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"plugin %s version %s requires CLI version %s or higher, but you have %s\n%s",
+		pluginName,
+		pluginVersion,
+		minCliVersion,
+		currentVersion,
+		buildCliUpgradeTip(currentVersion),
+	)
+}
+
 // Pre-release versions contain hyphens (e.g., 1.0.0-alpha, 1.0.0-beta, 1.0.0-rc.1).
 func isPrerelease(version string) bool {
 	v := version
@@ -528,25 +534,20 @@ func (m *Manager) validateVersionAndPlatform(ctx *cli.Context, targetPlugin *Plu
 			cli.Printf(ctx.Stdout(),
 				"Skipping version check, plugin requires CLI version %s or higher\n",
 				verInfo.Metadata.MinCliVersion)
-		} else if compareVersion(currentVersion, verInfo.Metadata.MinCliVersion) < 0 {
-			return nil, fmt.Errorf(
-				"plugin %s version %s requires CLI version %s or higher, but you have %s\n%s",
-				actualPluginName,
-				version,
-				verInfo.Metadata.MinCliVersion,
-				currentVersion,
-				buildCliUpgradeTip(currentVersion),
-			)
+		} else if err := validatePluginCliVersion(actualPluginName, version, verInfo.Metadata.MinCliVersion); err != nil {
+			return nil, err
 		}
 	}
 
 	platform := GetCurrentPlatform()
-	platInfo, ok := verInfo.Platforms[platform]
+	primaryPlatform, fallbackPlatform := PluginPlatformAny, platform
+	if m.preferGo {
+		primaryPlatform, fallbackPlatform = platform, PluginPlatformAny
+	}
+
+	platInfo, ok := verInfo.Platforms[primaryPlatform]
 	if !ok {
-		// Metadata plugins and other platform-independent artifacts are
-		// published once under the reserved "any" key. Keep exact os-arch
-		// packages first so existing Go plugin distribution is unchanged.
-		platInfo, ok = verInfo.Platforms[PluginPlatformAny]
+		platInfo, ok = verInfo.Platforms[fallbackPlatform]
 		if !ok {
 			return nil, fmt.Errorf("plugin %s version %s not supported on %s", actualPluginName, version, platform)
 		}
@@ -1094,6 +1095,7 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 	localManifest.Plugins[actualPluginName] = LocalPlugin{
 		Name:             actualPluginName,
 		Version:          version,
+		MinCliVersion:    pManifest.MinCliVersion,
 		Path:             extractDir,
 		ProductCode:      pManifest.ProductCode,
 		Type:             pManifest.Type,
@@ -1108,6 +1110,13 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 	}
 
 	return m.saveLocalManifest(localManifest)
+}
+
+func populateMinCliVersionFromIndex(pManifest *PluginManifest, verInfo VersionInfo) {
+	if pManifest == nil || strings.TrimSpace(pManifest.MinCliVersion) != "" || verInfo.Metadata == nil {
+		return
+	}
+	pManifest.MinCliVersion = verInfo.Metadata.MinCliVersion
 }
 
 func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, version string, enablePre bool, warnIfAlreadyInstalled bool) error {
@@ -1130,11 +1139,8 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 		return err
 	}
 
-	downloadURL := m.resolvePackageDownloadURL(platInfo.URL, actualPluginName, version)
-	platForDownload := *platInfo
-	platForDownload.URL = downloadURL
-
-	archivePath, err := m.downloadAndVerifyPlugin(ctx, &platForDownload, actualPluginName, version)
+	downloadURL := platInfo.URL
+	archivePath, err := m.downloadAndVerifyPlugin(ctx, platInfo, actualPluginName, version)
 	if err != nil {
 		return err
 	}
@@ -1152,6 +1158,10 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 	pManifest, err := m.loadAndValidatePluginManifest(extractDir, actualPluginName)
 	if err != nil {
 		return err
+	}
+
+	if verInfo, ok := targetPlugin.Versions[version]; ok {
+		populateMinCliVersionFromIndex(pManifest, verInfo)
 	}
 
 	if err := m.savePluginToManifest(actualPluginName, version, extractDir, pManifest); err != nil {

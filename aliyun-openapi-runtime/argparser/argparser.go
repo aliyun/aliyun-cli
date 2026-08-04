@@ -39,6 +39,7 @@ package argparser
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -72,9 +73,11 @@ type Reserved struct {
 	Secure   bool // --secure: force HTTPS
 	Insecure bool // --insecure: force HTTP
 
-	Headers  []string // --header Name=Value (repeatable)
-	Body     string   // --body raw string
-	BodyFile string   // --body-file path
+	Headers     []string // --header Name=Value (repeatable)
+	Body        string   // --body raw string
+	BodyFile    string   // --body-file path
+	BodySet     bool     // distinguishes --body '' from an absent escape hatch
+	BodyFileSet bool     // distinguishes an explicitly supplied --body-file
 
 	// OutputTable is --output / -o with plugin object form
 	// cols=... [rows=...] [num=...]. Absent => default pretty JSON.
@@ -128,8 +131,8 @@ var reservedSpec = map[string]struct {
 	"api-version":      {true, func(r *Reserved, v string) { r.Version = v }},
 	"cli-query":        {true, func(r *Reserved, v string) { r.CliQuery = v }},
 	"log-level":        {true, func(r *Reserved, v string) { r.LogLevel = v }},
-	"body":             {true, func(r *Reserved, v string) { r.Body = v }},
-	"body-file":        {true, func(r *Reserved, v string) { r.BodyFile = v }},
+	"body":             {true, func(r *Reserved, v string) { r.Body = v; r.BodySet = true }},
+	"body-file":        {true, func(r *Reserved, v string) { r.BodyFile = v; r.BodyFileSet = true }},
 	"cli-dry-run":      {false, func(r *Reserved, _ string) { r.DryRun = true }},
 	"cli-dry-run-json": {false, func(r *Reserved, _ string) { r.DryRun = true; r.DryRunJSON = true }},
 	"help":             {false, func(r *Reserved, _ string) { r.Help = true }},
@@ -239,9 +242,8 @@ func applyOutputTable(r *Reserved, kv map[string]string) error {
 	return nil
 }
 
-// ReservedFlag describes one engine reserved (global) flag for help
-// rendering. It is the public, ordered counterpart of the internal
-// reservedSpec parsing table.
+// ReservedFlag describes one engine reserved (global) flag for help rendering.
+// It is the public, ordered counterpart of the internal reservedSpec parsing table.
 type ReservedFlag struct {
 	Name       string // long name without the leading "--"
 	TakesValue bool   // whether it consumes a value (vs boolean switch)
@@ -278,7 +280,7 @@ var reservedHelp = []ReservedFlag{
 
 // ReservedFlags returns the engine's reserved (global) flags for help
 // rendering, in a stable user-facing order. The --help / -h and hidden
-// --output / --waiter / --estimate-cost* are intentionally omitted
+// --body / --body-file / --output / --waiter / --estimate-cost* are intentionally omitted
 // (plugin parity). --dry-run is not reserved (API param name).
 func ReservedFlags() []ReservedFlag {
 	out := make([]ReservedFlag, len(reservedHelp))
@@ -542,7 +544,10 @@ func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []str
 	// a JSON object/scalar becomes a single element.
 	// For scalar arrays, accepting a JSON array is an intentional extension beyond the legacy Go plugin.
 	// Field names inside are resolved to wire RawNames.
-	if v, ok := tryFlagJSON(tokens); ok {
+	if v, recognized, err := tryFlagJSON(tokens); recognized {
+		if err != nil {
+			return fmt.Errorf("--%s: %w", displayName(p), err)
+		}
 		if arr, isArr := v.([]any); isArr {
 			for _, e := range arr {
 				rv, err := resolveNames(p.ItemType, e)
@@ -595,7 +600,10 @@ func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []str
 func assignObject(dst map[string]any, key string, p *meta.Parameter, tokens []string) error {
 	// JSON-first (plugin parity): "--cfg '{...}'" is parsed as JSON and its field names resolved to wire RawNames;
 	// otherwise fall back to the key=value form.
-	if v, ok := tryFlagJSON(tokens); ok {
+	if v, recognized, err := tryFlagJSON(tokens); recognized {
+		if err != nil {
+			return fmt.Errorf("--%s: %w", displayName(p), err)
+		}
 		m, isMap := v.(map[string]any)
 		if !isMap {
 			return fmt.Errorf("--%s: expected a JSON object", displayName(p))
@@ -620,7 +628,10 @@ func assignMap(dst map[string]any, key string, p *meta.Parameter, tokens []strin
 	// JSON-first (plugin parity), then the flat key=value form.
 	// Keys are free-form (no schema, no dotted nesting);
 	// values are coerced to the map's declared ValueType.
-	if v, ok := tryFlagJSON(tokens); ok {
+	if v, recognized, err := tryFlagJSON(tokens); recognized {
+		if err != nil {
+			return fmt.Errorf("--%s: %w", displayName(p), err)
+		}
 		m, isMap := v.(map[string]any)
 		if !isMap {
 			return fmt.Errorf("--%s: expected a JSON object", displayName(p))
@@ -670,30 +681,33 @@ func mergeObject(dst map[string]any, key string, obj map[string]any) {
 	dst[key] = obj
 }
 
-// tryFlagJSON attempts to parse a flag occurrence's tokens as a single JSON value.
-// Tokens are joined with spaces and one layer of matching outer quotes is stripped;
-// only values starting with '{' or '[' are considered (mirroring the plugin's tryParseJSONString).
-// Numbers are preserved as json.Number.
-func tryFlagJSON(tokens []string) (any, bool) {
+// tryFlagJSON parses a flag occurrence that looks like an object or array as
+// exactly one complete JSON value. Tokens are joined with spaces and one layer
+// of matching outer quotes is stripped. Numbers are preserved as json.Number.
+// recognized distinguishes non-JSON key=value input from malformed JSON-looking
+// input, which must be reported rather than silently falling back to key=value.
+func tryFlagJSON(tokens []string) (value any, recognized bool, err error) {
 	s := stripOuterQuotes(strings.TrimSpace(strings.Join(tokens, " ")))
 	if !strings.HasPrefix(s, "{") && !strings.HasPrefix(s, "[") {
-		return nil, false
+		return nil, false, nil
 	}
 	dec := json.NewDecoder(strings.NewReader(s))
 	dec.UseNumber()
 	var v any
 	if err := dec.Decode(&v); err != nil {
-		return nil, false
+		return nil, true, fmt.Errorf("invalid JSON: %w", err)
 	}
-	return v, true
+	var trailing any
+	if err := dec.Decode(&trailing); err != io.EOF {
+		return nil, true, fmt.Errorf("invalid JSON: unexpected trailing content")
+	}
+	return v, true, nil
 }
 
-// resolveNames recursively validates the keys of a decoded JSON value
-// against the parameter schema: a key that matches a known field must
-// address it by its wire RawName (a field lacking a RawName is a
-// metadata error and is rejected). Unknown keys pass through verbatim
-// (no format conversion). Value types (json.Number / bool / string) are
-// left intact so explicit JSON input round-trips faithfully.
+// resolveNames recursively validates the keys of a decoded JSON value against the parameter schema.
+// Object fields are addressed by their wire RawName.
+// An object with declared fields rejects unknown keys; an object without fields remains open and passes free-form keys through verbatim.
+// Known values are resolved recursively with the declared metadata type, matching the legacy runtime's Arg.Resolve behavior for JSON object/array/map input as well as key=value input.
 func resolveNames(p *meta.Parameter, v any) (any, error) {
 	if p == nil {
 		return v, nil
@@ -715,10 +729,12 @@ func resolveNames(p *meta.Parameter, v any) (any, error) {
 				}
 				wk = w
 				fp = f
+			} else if len(p.Fields) > 0 {
+				return nil, fmt.Errorf("unknown field: %s", k)
 			}
 			rv, err := resolveNames(fp, val)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("field %q: %w", k, err)
 			}
 			out[wk] = rv
 		}
@@ -732,7 +748,7 @@ func resolveNames(p *meta.Parameter, v any) (any, error) {
 		for i, e := range a {
 			rv, err := resolveNames(p.ItemType, e)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("element %d: %w", i, err)
 			}
 			out[i] = rv
 		}
@@ -746,11 +762,61 @@ func resolveNames(p *meta.Parameter, v any) (any, error) {
 		for k, val := range m {
 			rv, err := resolveNames(p.ValueType, val)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("value for key %q: %w", k, err)
 			}
 			out[k] = rv
 		}
 		return out, nil
+	default:
+		return coerceDecodedScalar(p.Type, v)
+	}
+}
+
+// coerceDecodedScalar applies the same declared-type conversion to a scalar
+// decoded from JSON that coerceScalar applies to key=value and ordinary flag
+// input. Without this pass, equivalent spellings were syntax-dependent: for
+// example enabled=yes became true, while {"enabled":"yes"} stayed a string.
+//
+// nil follows the legacy Arg.Resolve defaults. Any intentionally remains
+// schema-free and is returned unchanged.
+func coerceDecodedScalar(t meta.DataType, v any) (any, error) {
+	switch t {
+	case meta.TypeAny:
+		return v, nil
+	case meta.TypeString:
+		if v == nil {
+			return "", nil
+		}
+		if s, ok := v.(string); ok {
+			return s, nil
+		}
+		return fmt.Sprintf("%v", v), nil
+	case meta.TypeBoolean:
+		if v == nil {
+			return false, nil
+		}
+		switch value := v.(type) {
+		case bool:
+			return value, nil
+		case string:
+			return parseBoolean(value)
+		case json.Number:
+			return parseBoolean(value.String())
+		default:
+			return nil, fmt.Errorf("cannot convert %T to boolean", v)
+		}
+	case meta.TypeInteger, meta.TypeLong, meta.TypeFloat:
+		if v == nil {
+			return json.Number("0"), nil
+		}
+		switch value := v.(type) {
+		case json.Number:
+			return coerceScalar(t, value.String())
+		case string:
+			return coerceScalar(t, strings.TrimSpace(value))
+		default:
+			return nil, fmt.Errorf("cannot convert %T to number", v)
+		}
 	default:
 		return v, nil
 	}
@@ -764,9 +830,8 @@ func resolveNames(p *meta.Parameter, v any) (any, error) {
 //	array indices    items[0]=v  |  items[0].key=v
 //	JSON leaves      cfg='{"a":1}'  |  items[0]='{"k":"v"}'
 //
-// Field keys resolve to their wire RawName and leaf values are coerced
-// to the field's declared type. Unknown keys pass through unchanged
-// (string leaves) so forward-compatible payloads still work.
+// Field keys resolve to their wire RawName and leaf values are coerced to the field's declared type.
+// Objects with declared fields reject unknown keys; objects without fields remain open and accept free-form keys.
 func parseKVPairs(tokens []string, fields []meta.Parameter) (map[string]any, error) {
 	obj := map[string]any{}
 	for _, t := range tokens {
@@ -784,15 +849,16 @@ func parseKVPairs(tokens []string, fields []meta.Parameter) (map[string]any, err
 	return obj, nil
 }
 
-// setSchemaValue assigns rawVal at keyPath within obj, walking the
-// field schema to resolve wire names, coerce leaf types, descend nested
-// objects and index arrays. Mirrors the plugin's ObjectArg.setNestedValue.
+// setSchemaValue assigns rawVal at keyPath within obj, walking the field schema to resolve wire names, coerce leaf types, descend nested objects and index arrays.
 func setSchemaValue(obj map[string]any, keyPath, rawVal string, fields []meta.Parameter) error {
 	firstKey, rest, isIndex := parseKeyPath(keyPath)
 	if firstKey == "" {
 		return fmt.Errorf("invalid key path %q", keyPath)
 	}
 	f := findField(fields, firstKey)
+	if f == nil && len(fields) > 0 {
+		return fmt.Errorf("unknown field: %s", firstKey)
+	}
 	wire := firstKey
 	if f != nil {
 		w, err := resolveWire(f)
@@ -812,7 +878,7 @@ func setSchemaValue(obj map[string]any, keyPath, rawVal string, fields []meta.Pa
 		return nil
 	}
 
-	// Unknown fields become free-form nested objects (string leaves).
+	// A fieldless object is open: free-form dotted paths become nested objects.
 	if f == nil {
 		child, ok := obj[wire].(map[string]any)
 		if !ok {
@@ -908,9 +974,9 @@ func setSchemaValue(obj map[string]any, keyPath, rawVal string, fields []meta.Pa
 	}
 }
 
-// coerceLeaf converts a leaf value against its field schema. Object /
-// map / array leaves accept a JSON literal ('{...}' / '[...]'); scalars
-// go through coerceScalar. A nil field (unknown key) is verbatim string.
+// coerceLeaf converts a leaf value against its field schema.
+// Object / map / array leaves accept a JSON literal ('{...}' / '[...]');
+// scalarsgo through coerceScalar. A nil field belongs to an open object and is preserved as a verbatim string.
 func coerceLeaf(f *meta.Parameter, rawVal string) (any, error) {
 	if f == nil {
 		return rawVal, nil
@@ -947,8 +1013,8 @@ func findField(fields []meta.Parameter, key string) *meta.Parameter {
 	return nil
 }
 
-// resolveWire returns the parameter's RawName, or an error when metadata
-// omitted it. Args keys (top-level and nested) are always RawName.
+// resolveWire returns the parameter's RawName, or an error when metadata omitted it.
+// Args keys (top-level and nested) are always RawName.
 func resolveWire(p *meta.Parameter) (string, error) {
 	if p == nil {
 		return "", fmt.Errorf("nil parameter")
@@ -963,8 +1029,7 @@ func resolveWire(p *meta.Parameter) (string, error) {
 	return p.RawName, nil
 }
 
-// parseKeyPath splits the leading segment from a key path, reporting
-// whether that segment indexes an array.
+// parseKeyPath splits the leading segment from a key path, reporting whether that segment indexes an array.
 //
 //	"key"          -> ("key", "", false)
 //	"a.b"          -> ("a", "b", false)
@@ -983,8 +1048,7 @@ func parseKeyPath(keyPath string) (firstKey, rest string, isIndex bool) {
 	return keyPath, "", false
 }
 
-// splitIndex parses a leading "[n]" from rest, returning the index and
-// the remaining path (with a leading dot trimmed).
+// splitIndex parses a leading "[n]" from rest, returning the index and the remaining path (with a leading dot trimmed).
 func splitIndex(rest string) (idx int, nextPath string, err error) {
 	if !strings.HasPrefix(rest, "[") {
 		return 0, "", fmt.Errorf("expected [index], got %q", rest)
@@ -1000,8 +1064,7 @@ func splitIndex(rest string) (idx int, nextPath string, err error) {
 	return n, strings.TrimPrefix(rest[end+1:], "."), nil
 }
 
-// decodeJSONObject parses a '{...}' literal (optionally wrapped in
-// matching quotes) into a map, preserving numbers as json.Number.
+// decodeJSONObject parses a '{...}' literal (optionally wrapped in matching quotes) into a map, preserving numbers as json.Number.
 func decodeJSONObject(raw string) (map[string]any, error) {
 	s := stripOuterQuotes(strings.TrimSpace(raw))
 	if !strings.HasPrefix(s, "{") || !strings.HasSuffix(s, "}") {
@@ -1016,8 +1079,7 @@ func decodeJSONObject(raw string) (map[string]any, error) {
 	return m, nil
 }
 
-// decodeJSONArray parses a '[...]' literal (optionally quote-wrapped)
-// into a slice, preserving numbers as json.Number.
+// decodeJSONArray parses a '[...]' literal (optionally quote-wrapped) into a slice, preserving numbers as json.Number.
 func decodeJSONArray(raw string) ([]any, error) {
 	s := stripOuterQuotes(strings.TrimSpace(raw))
 	if !strings.HasPrefix(s, "[") || !strings.HasSuffix(s, "]") {
@@ -1135,9 +1197,8 @@ func isLikelyJSON(s string) bool {
 // tokenizer helpers
 // ============================================================================
 
-// splitFlag inspects one token. A flag is any token starting with
-// "--". It may carry an inline value via "=". Returns isFlag=false for
-// value tokens (including "-1", "-1/-1", bare words).
+// splitFlag inspects one token. A flag is any token starting with "--".
+// It may carry an inline value via "=". Returns isFlag=false for value tokens (including "-1", "-1/-1", bare words).
 func splitFlag(tok string) (name, value string, hasInline, isFlag bool) {
 	if !strings.HasPrefix(tok, "--") || tok == "--" {
 		return "", "", false, false

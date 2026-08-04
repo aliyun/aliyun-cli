@@ -17,7 +17,6 @@ const (
 	PluginTypeMeta = "meta"
 
 	// PluginPlatformAny identifies a platform-independent package artifact.
-	// Installers prefer the exact os-arch entry and fall back to this key.
 	PluginPlatformAny = "any"
 )
 
@@ -110,10 +109,13 @@ type LocalManifest struct {
 }
 
 type LocalPlugin struct {
-	Name        string `json:"name"`
-	Version     string `json:"version"`
-	Path        string `json:"path"` // 插件目录路径
-	ProductCode string `json:"productCode,omitempty"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	// MinCliVersion is copied from the installed package manifest (or the remote version metadata as a compatibility fallback)
+	// and checked before every plugin execution.
+	MinCliVersion string `json:"minCliVersion,omitempty"`
+	Path          string `json:"path"` // 插件目录路径
+	ProductCode   string `json:"productCode,omitempty"`
 	// Type is the distribution kind: "go" (default) or "meta". Go
 	// plugins are executed as a separate process; meta plugins are
 	// interpreted in-process by aliyun-openapi-runtime.
