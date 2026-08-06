@@ -181,7 +181,7 @@ func printParameters(w io.Writer, params []meta.Parameter, prefix string, detail
 			continue
 		}
 
-		if param.Type == "RepeatList" {
+		if meta.IsListParameterType(param.Type) {
 			if len(param.SubParameters) > 0 {
 				printParameters(w, param.SubParameters, prefix+param.Name+".n.", detail)
 			} else {

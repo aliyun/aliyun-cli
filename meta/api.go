@@ -65,11 +65,18 @@ func (a *Api) ForeachParameters(f func(s string, p Parameter)) {
 	foreachParameters(a.Parameters, "", f)
 }
 
+// IsListParameterType reports whether the parameter is a list that may be
+// assigned via flat dotted flags (Name.1 / Name.1.Field), including both the
+// classic RepeatList style and the newer Array type used by products such as ALB.
+func IsListParameterType(t string) bool {
+	return t == "RepeatList" || t == "Array"
+}
+
 func foreachParameters(params []Parameter, prefix string, f func(s string, p Parameter)) {
 	for _, p := range params {
 		if len(p.SubParameters) > 0 {
 			foreachParameters(p.SubParameters, prefix+p.Name+".1.", f)
-		} else if p.Type == "RepeatList" {
+		} else if IsListParameterType(p.Type) {
 			f(prefix+p.Name+".1", p)
 		} else {
 			f(prefix+p.Name, p)
@@ -93,8 +100,8 @@ func findParameterInner(params []Parameter, name string) *Parameter {
 			return nil
 		}
 
-		if p.Type == "RepeatList" && strings.HasPrefix(name, p.Name) {
-			// XXX.1
+		if IsListParameterType(p.Type) && strings.HasPrefix(name, p.Name) {
+			// XXX.1 or XXX.1.YYY
 			s := name[len(p.Name):]
 			if len(s) >= 2 && s[0] == '.' {
 				return &((params)[i])
@@ -110,7 +117,9 @@ func (a *Api) CheckRequiredParameters(checker func(string) bool) error {
 	for _, p := range a.Parameters {
 		if p.Required {
 			name := p.Name
-			if p.Type != "RepeatList" {
+			// List params may be supplied as --Name.1 / --Name.1.Field; skip the
+			// top-level presence check (same historical behavior as RepeatList).
+			if !IsListParameterType(p.Type) {
 				if !checker(name) {
 					missing = true
 					s = s + "\n  --" + p.Name

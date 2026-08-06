@@ -113,6 +113,19 @@ func Test_printParameters(t *testing.T) {
 	assert.Contains(t, w.String(), cli.Colorized(cli.Cyan, "Values")+".n")
 }
 
+func TestPrintParameters_ArrayShowsFlatHint(t *testing.T) {
+	w := new(bytes.Buffer)
+	params := []meta.Parameter{
+		{Name: "Servers", Type: "Array", Required: true},
+		{Name: "ServerGroupId", Type: "String", Required: true},
+	}
+	printParameters(w, params, "", &newmeta.APIDetail{})
+	assert.Contains(t, w.String(), cli.Colorized(cli.Cyan, "Servers")+".n")
+	assert.Contains(t, w.String(), "Array")
+	assert.Contains(t, w.String(), "Required")
+	assert.Contains(t, w.String(), cli.Colorized(cli.Cyan, "ServerGroupId"))
+}
+
 func getRepository() *meta.Repository {
 	repository := meta.LoadRepository()
 	return repository

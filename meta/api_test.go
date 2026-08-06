@@ -143,6 +143,45 @@ func TestApi_FindParameter(t *testing.T) {
 	assert.NotNil(t, parameter)
 }
 
+func TestApi_FindParameter_ArrayFlatFlags(t *testing.T) {
+	api := &Api{
+		Parameters: []Parameter{
+			{Name: "Servers", Type: "Array", Position: "Body", Required: true},
+			{Name: "ServerGroupId", Type: "String", Position: "Query", Required: true},
+		},
+	}
+
+	assert.NotNil(t, api.FindParameter("Servers"))
+	assert.NotNil(t, api.FindParameter("Servers.1.ServerId"))
+	assert.NotNil(t, api.FindParameter("Servers.1.ServerType"))
+	assert.NotNil(t, api.FindParameter("Servers.10.Port"))
+	assert.Equal(t, "Servers", api.FindParameter("Servers.1.Weight").Name)
+	assert.Nil(t, api.FindParameter("ServersX.1.ServerId"))
+	assert.Nil(t, api.FindParameter("ServerGroupId.1.X"))
+}
+
+func TestIsListParameterType(t *testing.T) {
+	assert.True(t, IsListParameterType("RepeatList"))
+	assert.True(t, IsListParameterType("Array"))
+	assert.False(t, IsListParameterType("String"))
+	assert.False(t, IsListParameterType(""))
+}
+
+func TestApi_CheckRequiredParameters_ArraySkippedLikeRepeatList(t *testing.T) {
+	api := &Api{
+		Parameters: []Parameter{
+			{Name: "Servers", Type: "Array", Required: true},
+			{Name: "ServerGroupId", Type: "String", Required: true},
+		},
+	}
+	err := api.CheckRequiredParameters(func(s string) bool {
+		return false
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "--ServerGroupId")
+	assert.NotContains(t, err.Error(), "--Servers")
+}
+
 func TestApi_ForeachParameters(t *testing.T) {
 	api := &Api{}
 	f := func(s string, p Parameter) {
