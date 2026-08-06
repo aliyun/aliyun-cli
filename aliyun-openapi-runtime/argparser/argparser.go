@@ -563,6 +563,11 @@ func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []str
 			if p.ItemType != nil && p.ItemType.Type == meta.TypeArray {
 				return assignNestedArrayJSON(dst, key, p, existing, arr)
 			}
+			// Preserve the distinction between an omitted flag and an explicitly supplied empty JSON array.
+			// Appending zero elements to a nil slice would otherwise make JSON serialization produce null instead of [].
+			if len(arr) == 0 && existing == nil {
+				existing = []any{}
+			}
 			for _, e := range arr {
 				rv, err := resolveNames(p.ItemType, e)
 				if err != nil {

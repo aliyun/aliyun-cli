@@ -684,7 +684,7 @@ func isDirectBodyParameter(p *meta.Parameter) bool {
 		return false
 	}
 	switch p.Type {
-	case meta.TypeAny, meta.TypeArray, meta.TypeString:
+	case meta.TypeAny, meta.TypeArray, meta.TypeString, meta.TypeMap:
 		return true
 	default:
 		return false

@@ -273,6 +273,23 @@ func TestParamStyleJSONAndSimple(t *testing.T) {
 	}
 }
 
+func TestParamStyleJSONPreservesExplicitEmptyArray(t *testing.T) {
+	api := &meta.API{
+		Name: "CreateHubCluster", Version: "2022-01-01", Method: "POST", Style: meta.StyleRPC, ProductCode: "adcp",
+		Parameters: []meta.Parameter{{
+			Name: "tag", RawName: "Tag", Type: meta.TypeArray, Position: meta.PosQuery, ParamStyle: "json",
+			ItemType: &meta.Parameter{Type: meta.TypeObject},
+		}},
+	}
+	req, err := Assemble(&ExecContext{API: api, Args: map[string]any{"Tag": []any{}}})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if got := req.Query["Tag"]; got != `[]` {
+		t.Fatalf("Tag query = %q, want []", got)
+	}
+}
+
 // TestFormDataBody routes formData params to a form body for ROA and RPC
 // (plugin SetReqBodyType("formData") + SetContent parity).
 func TestFormDataBody(t *testing.T) {
@@ -405,6 +422,29 @@ func TestDirectAnyBodyIsNotWrapped(t *testing.T) {
 	}
 	if wrapped, ok := req.Body.(map[string]any)["body"]; ok {
 		t.Fatalf("direct body was wrapped as body.body: %#v", wrapped)
+	}
+}
+
+func TestDirectMapBodyIsNotWrapped(t *testing.T) {
+	api := &meta.API{
+		Name: "BindAnalyzer", Version: "v", Method: "POST", Style: meta.StyleRESTful, ProductCode: "p",
+		Endpoints: meta.Endpoints{Global: "p.example.com"},
+		Parameters: []meta.Parameter{{
+			Name: "body", RawName: "body", Type: meta.TypeMap, Position: meta.PosBody,
+			Options:   []string{"--biz-body"},
+			ValueType: &meta.Parameter{Type: meta.TypeString},
+		}},
+	}
+	want := map[string]any{"name": "kevintest-analyzer"}
+	req, err := Assemble(&ExecContext{API: api, Args: map[string]any{"body": want}})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if !reflect.DeepEqual(req.Body, want) {
+		t.Fatalf("direct map body = %#v, want %#v", req.Body, want)
+	}
+	if wrapped, ok := req.Body.(map[string]any)["body"]; ok {
+		t.Fatalf("direct map body was wrapped as body.body: %#v", wrapped)
 	}
 }
 

@@ -604,6 +604,20 @@ func TestFlagLevelJSONArrayExpands(t *testing.T) {
 	}
 }
 
+func TestFlagLevelExplicitEmptyJSONArrayIsPreserved(t *testing.T) {
+	res := mustParse(t, "--tags", `[]`)
+	tags, ok := res.Args["Tags"].([]any)
+	if !ok {
+		t.Fatalf("tags type = %T, want []any", res.Args["Tags"])
+	}
+	if tags == nil {
+		t.Fatal("tags is a nil slice, want an explicit empty slice")
+	}
+	if len(tags) != 0 {
+		t.Fatalf("len(tags) = %d, want 0", len(tags))
+	}
+}
+
 // TestFlagLevelJSONScalarArray: a JSON array on a scalar-array flag
 // expands too (superset of the plugin's default branch).
 func TestFlagLevelJSONScalarArray(t *testing.T) {
