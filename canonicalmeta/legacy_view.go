@@ -170,7 +170,7 @@ func (v *LegacyParameterView) LegacyHasChildren() bool {
 		return len(v.body.SubParameters) > 0
 	}
 	if v.source == SourceField {
-		return v.field.Type == "array" && len(v.field.ElementFields) > 0
+		return v.field.Type == "array" && len(objectShapeFields(v.field.Element)) > 0
 	}
 	if v.source != SourceCanonical {
 		return false
@@ -178,7 +178,7 @@ func (v *LegacyParameterView) LegacyHasChildren() bool {
 	p := v.canonical
 	return p.Type == "array" &&
 		p.ParamStyle != "flat" &&
-		len(p.ElementFields) > 0
+		len(objectShapeFields(p.Element)) > 0
 }
 
 // IsLegacyRepeatList returns true if this parameter behaves as a RepeatList
@@ -200,7 +200,7 @@ func (v *LegacyParameterView) IsLegacyRepeatList() bool {
 }
 
 // LegacyChildren returns the sub-parameter views for this parameter.
-// For Canonical parameters, only returns element_fields (one level).
+// For Canonical parameters, returns the object fields under element.
 // For V1 parameters, returns sub_parameters as-is.
 func (v *LegacyParameterView) LegacyChildren() []*LegacyParameterView {
 	var children []*LegacyParameterView
@@ -211,15 +211,17 @@ func (v *LegacyParameterView) LegacyChildren() []*LegacyParameterView {
 			return nil
 		}
 		topLoc := v.canonical.Location
-		for i := range v.canonical.ElementFields {
-			children = append(children, NewFieldView(&v.canonical.ElementFields[i], topLoc))
+		fields := objectShapeFields(v.canonical.Element)
+		for i := range fields {
+			children = append(children, NewFieldView(&fields[i], topLoc))
 		}
 	case SourceField:
 		if !v.LegacyHasChildren() {
 			return nil
 		}
-		for i := range v.field.ElementFields {
-			children = append(children, NewFieldView(&v.field.ElementFields[i], v.topLocation))
+		fields := objectShapeFields(v.field.Element)
+		for i := range fields {
+			children = append(children, NewFieldView(&fields[i], v.topLocation))
 		}
 	case SourceBody, SourceV1:
 		for i := range v.body.SubParameters {
@@ -231,6 +233,14 @@ func (v *LegacyParameterView) LegacyChildren() []*LegacyParameterView {
 	}
 
 	return children
+}
+
+// objectShapeFields returns fields only when the recursive shape is an object.
+func objectShapeFields(shape *TypeShape) []Field {
+	if shape == nil || shape.Type != "object" {
+		return nil
+	}
+	return shape.Fields
 }
 
 // legacyPosition converts Canonical lowercase location to old CLI uppercase position.

@@ -39,23 +39,25 @@
       "required": false,
       "location": "query",
       "param_style": "repeatList",
-      "element_type": "object",
-      "element_fields": [
-        {
-          "name": "key",
-          "raw_name": "Key",
-          "type": "string",
-          "required": false,
-          "example": "env"
-        },
-        {
-          "name": "value",
-          "raw_name": "Value",
-          "type": "string",
-          "required": false,
-          "example": "prod"
-        }
-      ]
+      "element": {
+        "type": "object",
+        "fields": [
+          {
+            "name": "key",
+            "raw_name": "Key",
+            "type": "string",
+            "required": false,
+            "example": "env"
+          },
+          {
+            "name": "value",
+            "raw_name": "Value",
+            "type": "string",
+            "required": false,
+            "example": "prod"
+          }
+        ]
+      }
     }
   ]
 }

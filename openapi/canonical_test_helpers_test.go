@@ -93,8 +93,11 @@ func canonicalTestParameters(params []testLegacyParameter) []canonicalmeta.Param
 		if p.Type == "RepeatList" {
 			cp.ParamStyle = "repeatList"
 		}
+		if len(p.SubParameters) > 0 {
+			cp.Element = &canonicalmeta.TypeShape{Type: "object"}
+		}
 		for _, sp := range p.SubParameters {
-			cp.ElementFields = append(cp.ElementFields, canonicalmeta.Field{
+			cp.Element.Fields = append(cp.Element.Fields, canonicalmeta.Field{
 				Name:          sp.Name,
 				RawName:       sp.Name,
 				Type:          canonicalTestType(sp.Type),

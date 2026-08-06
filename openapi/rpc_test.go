@@ -139,8 +139,11 @@ func TestRpcInvoker_PrepareFormDataSubParameter(t *testing.T) {
 					Type:       "array",
 					Location:   "form",
 					ParamStyle: "repeatList",
-					ElementFields: []canonicalmeta.Field{
-						{Name: "Key", RawName: "Key", Type: "string"},
+					Element: &canonicalmeta.TypeShape{
+						Type: "object",
+						Fields: []canonicalmeta.Field{
+							{Name: "Key", RawName: "Key", Type: "string"},
+						},
 					},
 				},
 			},

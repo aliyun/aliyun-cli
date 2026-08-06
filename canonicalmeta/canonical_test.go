@@ -387,12 +387,15 @@ func TestLegacyParameterView_RepeatList(t *testing.T) {
 }
 
 func TestLegacyParameterView_HasChildren(t *testing.T) {
-	// Array with element_fields
+	// Array with recursive element.fields
 	p := &Parameter{
 		Type:       "array",
 		ParamStyle: "repeatList",
-		ElementFields: []Field{
-			{RawName: "Key", Type: "string"},
+		Element: &TypeShape{
+			Type: "object",
+			Fields: []Field{
+				{RawName: "Key", Type: "string"},
+			},
 		},
 	}
 	v := NewCanonicalView(p)
@@ -412,6 +415,76 @@ func TestLegacyParameterView_HasChildren(t *testing.T) {
 	arrayChild.field.Type = "array"
 	if !arrayChild.IsLegacyRepeatList() {
 		t.Error("expected array field child to behave as legacy RepeatList")
+	}
+}
+
+func TestLegacyParameterView_RecursiveNestedArrayChildren(t *testing.T) {
+	api := &API{Parameters: []Parameter{{
+		RawName:    "Filter",
+		Type:       "array",
+		ParamStyle: "repeatList",
+		Element: &TypeShape{Type: "object", Fields: []Field{
+			{RawName: "Key", Type: "string"},
+			{
+				RawName: "Groups",
+				Type:    "array",
+				Element: &TypeShape{Type: "object", Fields: []Field{
+					{RawName: "Name", Type: "string"},
+				}},
+			},
+		}},
+	}}}
+
+	if v := api.FindLegacyParameter("Filter.1.Groups.1.Name"); v == nil || v.LegacyName() != "Name" {
+		t.Fatalf("expected recursive element.fields lookup to find Name, got %#v", v)
+	}
+
+	var names []string
+	api.ForeachLegacyParameter(func(name string, _ *LegacyParameterView) {
+		names = append(names, name)
+	})
+	want := []string{"Filter.1.Key", "Filter.1.Groups.1.Name"}
+	if len(names) != len(want) {
+		t.Fatalf("expected %v, got %v", want, names)
+	}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Fatalf("expected %v, got %v", want, names)
+		}
+	}
+}
+
+func TestLegacyParameterView_DeserializesRecursiveParameterShape(t *testing.T) {
+	var api API
+	err := json.Unmarshal([]byte(`{
+		"name":"DescribeThings",
+		"protocol":"HTTPS",
+		"method":"POST",
+		"pathPattern":"",
+		"parameters":[{
+			"name":"tags",
+			"raw_name":"Tags",
+			"type":"array",
+			"required":false,
+			"location":"query",
+			"param_style":"repeatList",
+			"element":{
+				"type":"object",
+				"fields":[
+					{"name":"key","raw_name":"Key","type":"string","required":false},
+					{"name":"values","raw_name":"Values","type":"array","required":false,"param_style":"repeatList","element":{"type":"string"}}
+				]
+			}
+		}]
+	}`), &api)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := api.FindLegacyParameter("Tags.1.Key"); v == nil || v.LegacyName() != "Key" {
+		t.Fatalf("expected recursive JSON shape to expose Key, got %#v", v)
+	}
+	if v := api.FindLegacyParameter("Tags.1.Values.1"); v == nil || v.LegacyName() != "Values" {
+		t.Fatalf("expected recursive JSON shape to expose Values.1, got %#v", v)
 	}
 }
 
@@ -628,8 +701,11 @@ func TestFindLegacyParameter_SubFieldLooseIndex(t *testing.T) {
 				RawName:    "Tag",
 				Type:       "array",
 				ParamStyle: "repeatList",
-				ElementFields: []Field{
-					{RawName: "Key", Type: "string"},
+				Element: &TypeShape{
+					Type: "object",
+					Fields: []Field{
+						{RawName: "Key", Type: "string"},
+					},
 				},
 			},
 		},
@@ -653,9 +729,12 @@ func TestFindLegacyParameter_SubFieldRepeatListLeaf(t *testing.T) {
 				RawName:    "Filter",
 				Type:       "array",
 				ParamStyle: "repeatList",
-				ElementFields: []Field{
-					{RawName: "Key", Type: "string"},
-					{RawName: "Value", Type: "array", ElementType: "string"},
+				Element: &TypeShape{
+					Type: "object",
+					Fields: []Field{
+						{RawName: "Key", Type: "string"},
+						{RawName: "Value", Type: "array", Element: &TypeShape{Type: "string"}},
+					},
 				},
 			},
 		},

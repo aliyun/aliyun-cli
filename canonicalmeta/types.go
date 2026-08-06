@@ -41,6 +41,15 @@ func (a *API) IsAnonymous() bool {
 	return false
 }
 
+// TypeShape recursively describes an array element or map value.
+// Arrays use Element, maps use Value, and objects use Fields.
+type TypeShape struct {
+	Type    string     `json:"type"`
+	Fields  []Field    `json:"fields,omitempty"`
+	Element *TypeShape `json:"element,omitempty"`
+	Value   *TypeShape `json:"value,omitempty"`
+}
+
 // Parameter represents a Canonical API parameter.
 type Parameter struct {
 	Name       string `json:"name"`
@@ -58,17 +67,9 @@ type Parameter struct {
 	HelpZh        string `json:"help_zh,omitempty"`
 	HelpEn        string `json:"help_en,omitempty"`
 
-	ElementType string `json:"element_type,omitempty"`
-	ValueType   string `json:"value_type,omitempty"`
-
-	Fields        []Field `json:"fields,omitempty"`
-	ElementFields []Field `json:"element_fields,omitempty"`
-	ValueFields   []Field `json:"value_fields,omitempty"`
-
-	InnerElementType   string  `json:"inner_element_type,omitempty"`
-	InnerValueType     string  `json:"inner_value_type,omitempty"`
-	InnerElementFields []Field `json:"inner_element_fields,omitempty"`
-	InnerValueFields   []Field `json:"inner_value_fields,omitempty"`
+	Fields  []Field    `json:"fields,omitempty"`
+	Element *TypeShape `json:"element,omitempty"`
+	Value   *TypeShape `json:"value,omitempty"`
 }
 
 // Help returns the CLI-facing parameter help for the given language.
@@ -93,17 +94,9 @@ type Field struct {
 	HelpZh        string `json:"help_zh,omitempty"`
 	HelpEn        string `json:"help_en,omitempty"`
 
-	ElementType string `json:"element_type,omitempty"`
-	ValueType   string `json:"value_type,omitempty"`
-
-	Fields        []Field `json:"fields,omitempty"`
-	ElementFields []Field `json:"element_fields,omitempty"`
-	ValueFields   []Field `json:"value_fields,omitempty"`
-
-	InnerElementType   string  `json:"inner_element_type,omitempty"`
-	InnerValueType     string  `json:"inner_value_type,omitempty"`
-	InnerElementFields []Field `json:"inner_element_fields,omitempty"`
-	InnerValueFields   []Field `json:"inner_value_fields,omitempty"`
+	Fields  []Field    `json:"fields,omitempty"`
+	Element *TypeShape `json:"element,omitempty"`
+	Value   *TypeShape `json:"value,omitempty"`
 }
 
 // Help returns the CLI-facing field help for the given language.
