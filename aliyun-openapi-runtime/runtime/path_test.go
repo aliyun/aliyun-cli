@@ -66,3 +66,23 @@ func TestAssembleEncodesPathAfterSubstitution(t *testing.T) {
 		t.Fatalf("pathname = %q, want %q", req.Pathname, want)
 	}
 }
+
+func TestAssemblePreservesInlineQuerySuffix(t *testing.T) {
+	api := &meta.API{
+		Name:    "GetAgentStatus",
+		Version: "2024-06-26",
+		Method:  "GET",
+		Style:   meta.StyleROA,
+		URL:     "/agent/{agentName}?status",
+		Parameters: []meta.Parameter{
+			{Name: "agent_name", RawName: "agentName", Type: meta.TypeString, Position: meta.PosPath, Required: true},
+		},
+	}
+	req, err := Assemble(&ExecContext{API: api, Args: map[string]any{"agentName": "test_agent_name"}})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if want := "/agent/test_agent_name?status"; req.Pathname != want {
+		t.Fatalf("pathname = %q, want %q", req.Pathname, want)
+	}
+}

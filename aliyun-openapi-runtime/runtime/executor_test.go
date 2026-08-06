@@ -126,6 +126,77 @@ func TestAssembleEndpointOverride(t *testing.T) {
 	}
 }
 
+func TestAssemblePathTemplateUsesBodyBoundArgument(t *testing.T) {
+	api := &meta.API{
+		Name: "CreateTrigger", Version: "2015-12-15", Method: "POST", Style: meta.StyleRESTful,
+		URL: "/clusters/{cluster_id}/triggers",
+		Parameters: []meta.Parameter{
+			{Name: "cluster_id", RawName: "cluster_id", Type: meta.TypeString, Position: meta.PosBody},
+			{Name: "project_id", RawName: "project_id", Type: meta.TypeString, Position: meta.PosBody},
+		},
+	}
+	req, err := Assemble(&ExecContext{API: api, Args: map[string]any{
+		"cluster_id": "c5cdf7e3938bc4f8eb0e44b21a80f0000",
+		"project_id": "default/test-app",
+	}})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if got, want := req.Pathname, "/clusters/c5cdf7e3938bc4f8eb0e44b21a80f0000/triggers"; got != want {
+		t.Fatalf("Pathname = %q, want %q", got, want)
+	}
+	wantBody := map[string]any{
+		"cluster_id": "c5cdf7e3938bc4f8eb0e44b21a80f0000",
+		"project_id": "default/test-app",
+	}
+	if !reflect.DeepEqual(req.Body, wantBody) {
+		t.Fatalf("Body = %#v, want %#v", req.Body, wantBody)
+	}
+}
+
+func TestSubstitutePathTemplateArgsRequiresExactRawName(t *testing.T) {
+	api := &meta.API{Parameters: []meta.Parameter{{
+		Name: "cluster_id", RawName: "cluster_id", Type: meta.TypeString, Position: meta.PosBody,
+	}}}
+	args := map[string]any{"cluster_id": "c-123"}
+
+	for _, template := range []string{"/clusters/{cluster_id}", "/clusters/[cluster_id]"} {
+		got, err := substitutePathTemplateArgs(template, api, args)
+		if err != nil {
+			t.Fatalf("substitutePathTemplateArgs(%q): %v", template, err)
+		}
+		if want := "/clusters/c-123"; got != want {
+			t.Errorf("exact RawName: substitutePathTemplateArgs(%q) = %q, want %q", template, got, want)
+		}
+	}
+	for _, template := range []string{"/clusters/{ClusterId}", "/clusters/{clusterId}"} {
+		got, err := substitutePathTemplateArgs(template, api, args)
+		if err != nil {
+			t.Fatalf("substitutePathTemplateArgs(%q): %v", template, err)
+		}
+		if got != template {
+			t.Errorf("non-RawName placeholder must remain unchanged: got %q, want %q", got, template)
+		}
+	}
+}
+
+func TestSubstitutePathTemplateArgsRejectsCompositeValue(t *testing.T) {
+	api := &meta.API{Parameters: []meta.Parameter{{
+		Name: "cluster_ids", RawName: "ClusterIds", Type: meta.TypeArray, Position: meta.PosBody,
+	}}}
+	_, err := substitutePathTemplateArgs(
+		"/clusters/{ClusterIds}",
+		api,
+		map[string]any{"ClusterIds": []any{"c-1", "c-2"}},
+	)
+	if err == nil {
+		t.Fatal("expected composite path value error")
+	}
+	if want := `path placeholder "ClusterIds" requires a scalar value, got []interface {}`; err.Error() != want {
+		t.Fatalf("error = %q, want %q", err, want)
+	}
+}
+
 func TestExecuteDryRun(t *testing.T) {
 	ec := &ExecContext{
 		API:    rpcAPI(),

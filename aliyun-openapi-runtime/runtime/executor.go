@@ -219,7 +219,6 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 	var formParts map[string]any // formData body (RPC and ROA; plugin SetReqBodyType parity)
 	var directBody any           // a schema parameter named "body" is the whole JSON body
 	var directBodySet bool
-	var pathParams map[string]string
 	var wildcardPath string
 	var wildcardPathSet bool
 
@@ -248,12 +247,7 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 			if api.HasWildcardPath && p.IsWildcard {
 				wildcardPath = scalarString(val)
 				wildcardPathSet = true
-				continue
 			}
-			if pathParams == nil {
-				pathParams = map[string]string{}
-			}
-			pathParams[wire] = scalarString(val)
 
 		case meta.PosHeader:
 			req.Headers[wire] = scalarString(val)
@@ -291,17 +285,19 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 
 	if wildcardPathSet {
 		req.Pathname = wildcardPath
-	} else if len(pathParams) > 0 && req.Pathname != "" {
-		for k, v := range pathParams {
-			req.Pathname = strings.ReplaceAll(req.Pathname, "{"+k+"}", v)
-			req.Pathname = strings.ReplaceAll(req.Pathname, "["+k+"]", v)
+	} else if req.Pathname != "" {
+		// Match generated plugins: a RawName in the URL may also be body-bound.
+		var err error
+		req.Pathname, err = substitutePathTemplateArgs(req.Pathname, api, ec.Args)
+		if err != nil {
+			return nil, err
 		}
 	}
 	if req.Pathname != "" {
-		// Keep this after placeholder substitution to match generated Go plugins, which call aliyun-cli-runtime/http.EncodePath on the complete path.
+		// Keep this after placeholder substitution to match generated Go plugins.
+		// encodePath encodes only the pathname and preserves an inline query suffix.
 		// Do not pre-escape individual path parameters while this final encoding is in place: an escaped value such as "a%2Fb" would be encoded again as "a%252Fb".
-		// If parameter-level escaping is introduced in the future, template literals and parameter values must be encoded separately and this complete-path encoding must be removed.
-		req.Pathname = dara.PathEncode(req.Pathname)
+		req.Pathname = encodePath(req.Pathname)
 	}
 
 	switch {
@@ -349,6 +345,49 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 		req.Protocol = "HTTPS"
 	}
 	return req, nil
+}
+
+// substitutePathTemplateArgs replaces {RawName} and [RawName] placeholders from parsed API arguments, regardless of parameter position.
+// Composite values are rejected because path placeholders must resolve to scalars.
+func substitutePathTemplateArgs(path string, api *meta.API, args map[string]any) (string, error) {
+	if path == "" || api == nil || len(args) == 0 {
+		return path, nil
+	}
+
+	for i := range api.Parameters {
+		rawName := api.Parameters[i].RawName
+		if rawName == "" {
+			continue
+		}
+		bracePlaceholder := "{" + rawName + "}"
+		bracketPlaceholder := "[" + rawName + "]"
+		if !strings.Contains(path, bracePlaceholder) && !strings.Contains(path, bracketPlaceholder) {
+			continue
+		}
+		value, ok := args[rawName]
+		if !ok {
+			continue
+		}
+		formatted, ok := scalarPathTemplateValue(value)
+		if !ok {
+			if value == nil {
+				continue
+			}
+			return "", fmt.Errorf("path placeholder %q requires a scalar value, got %T", rawName, value)
+		}
+		path = strings.ReplaceAll(path, bracePlaceholder, formatted)
+		path = strings.ReplaceAll(path, bracketPlaceholder, formatted)
+	}
+	return path, nil
+}
+
+func scalarPathTemplateValue(value any) (string, bool) {
+	switch value.(type) {
+	case nil, []any, map[string]any:
+		return "", false
+	default:
+		return scalarString(value), true
+	}
 }
 
 // resolveReqBodyType matches aliyun-cli-runtime: json is the operation default, and formData is the only metadata value that changes the SDK serializer.

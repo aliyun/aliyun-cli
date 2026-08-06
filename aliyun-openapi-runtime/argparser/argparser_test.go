@@ -613,6 +613,52 @@ func TestFlagLevelJSONScalarArray(t *testing.T) {
 	}
 }
 
+func TestFlagLevelJSONObjectRejectedForScalarArray(t *testing.T) {
+	for _, itemType := range []meta.DataType{
+		meta.TypeString,
+		meta.TypeInteger,
+		meta.TypeLong,
+		meta.TypeFloat,
+		meta.TypeBoolean,
+	} {
+		t.Run(string(itemType), func(t *testing.T) {
+			params := []meta.Parameter{{
+				Name: "items", RawName: "Items", Type: meta.TypeArray,
+				Options: []string{"--items"}, ItemType: &meta.Parameter{Type: itemType},
+			}}
+			res, err := Parse(params, []string{"--items", `{}`})
+			if err == nil {
+				t.Fatalf("Parse accepted scalar-array JSON object: %#v", res.Args["Items"])
+			}
+			if !strings.Contains(err.Error(), "expected JSON array") {
+				t.Fatalf("Parse error = %q, want expected JSON array", err)
+			}
+		})
+	}
+}
+
+func TestFlagLevelJSONObjectAcceptedForAnyArray(t *testing.T) {
+	params := []meta.Parameter{{
+		Name: "items", RawName: "Items", Type: meta.TypeArray,
+		Options: []string{"--items"}, ItemType: &meta.Parameter{Type: meta.TypeAny},
+	}}
+	res, err := Parse(params, []string{"--items", `{"key":"value"}`})
+	if err != nil {
+		t.Fatalf("Parse any-array JSON object: %v", err)
+	}
+	want := []any{map[string]any{"key": "value"}}
+	if !reflect.DeepEqual(res.Args["Items"], want) {
+		t.Fatalf("items = %#v, want %#v", res.Args["Items"], want)
+	}
+}
+
+func TestFlagLevelJSONObjectStringRemainsExpressibleInScalarArray(t *testing.T) {
+	res := mustParse(t, "--images", `["{}"]`)
+	if !reflect.DeepEqual(res.Args["Images"], []any{"{}"}) {
+		t.Fatalf("images = %#v", res.Args["Images"])
+	}
+}
+
 // TestFlagLevelJSONMap: a map flag accepts whole JSON, values coerced.
 func TestFlagLevelJSONMap(t *testing.T) {
 	res := mustParse(t, "--scores", `{"a":1,"b":2}`)

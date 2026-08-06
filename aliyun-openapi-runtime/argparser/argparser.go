@@ -535,11 +535,24 @@ func assignScalar(dst map[string]any, key string, p *meta.Parameter, tokens []st
 	return nil
 }
 
+func isScalarArrayItem(item *meta.Parameter) bool {
+	if item == nil {
+		return true
+	}
+	switch item.Type {
+	case meta.TypeObject, meta.TypeMap, meta.TypeArray, meta.TypeAny:
+		return false
+	default:
+		return true
+	}
+}
+
 func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []string) error {
 	existing, _ := dst[key].([]any)
 
-	// JSON-first for this occurrence: a JSON array is expanded into multiple elements;
-	// a JSON object/scalar becomes a single element.
+	// JSON-first for this occurrence: a JSON array is expanded into multiple elements.
+	// A JSON object may be shorthand for one composite element, but is invalid for
+	// arrays whose declared element type is scalar.
 	// For scalar arrays, accepting a JSON array is an intentional extension beyond the legacy Go plugin.
 	// Field names inside are resolved to wire RawNames.
 	if v, recognized, err := tryFlagJSON(tokens); recognized {
@@ -558,6 +571,9 @@ func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []str
 				existing = append(existing, rv)
 			}
 		} else {
+			if isScalarArrayItem(p.ItemType) {
+				return fmt.Errorf("--%s: expected JSON array, got %T", displayName(p), v)
+			}
 			rv, err := resolveNames(p.ItemType, v)
 			if err != nil {
 				return fmt.Errorf("--%s: %w", displayName(p), err)
