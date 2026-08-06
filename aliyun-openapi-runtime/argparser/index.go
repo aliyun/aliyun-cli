@@ -22,10 +22,9 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 )
 
-// paramIndex resolves a user-typed flag name to its Parameter via
-// Parameter.Options only (minus the "--"). Name and RawName are never
-// registered as CLI aliases; RawName is only the Args map key after a
-// flag resolves. A parameter with empty Options is unreachable from argv.
+// paramIndex resolves a user-typed flag name to its Parameter via Parameter.Options only (minus the "--").
+// RawName is only the Args map key after a flag resolves.
+// A parameter with empty Options is unreachable from argv.
 type paramIndex struct {
 	byName map[string]*meta.Parameter
 	params []meta.Parameter
@@ -33,7 +32,7 @@ type paramIndex struct {
 
 func newParamIndex(params []meta.Parameter) *paramIndex {
 	pi := &paramIndex{
-		byName: make(map[string]*meta.Parameter, len(params)*2),
+		byName: make(map[string]*meta.Parameter, len(params)),
 		params: params,
 	}
 	for i := range params {
@@ -45,8 +44,6 @@ func newParamIndex(params []meta.Parameter) *paramIndex {
 	return pi
 }
 
-// register binds alias->param but never lets a later parameter steal
-// an alias already owned by an earlier one (deterministic precedence).
 func (pi *paramIndex) register(alias string, p *meta.Parameter) {
 	if alias == "" {
 		return
@@ -61,16 +58,10 @@ func (pi *paramIndex) lookup(name string) *meta.Parameter {
 	if p, ok := pi.byName[name]; ok {
 		return p
 	}
-	// Be lenient about case for the flag head so --Biz-Region-Id and
-	// --biz-region-id both resolve.
-	if p, ok := pi.byName[strings.ToLower(name)]; ok {
-		return p
-	}
 	return nil
 }
 
-// optionNames returns the sorted, user-facing option names (without
-// "--") for error suggestions — exactly the registered Options aliases.
+// optionNames returns the sorted, user-facing option names (without "--") for error suggestions — exactly the registered Options aliases.
 func (pi *paramIndex) optionNames() []string {
 	seen := map[string]struct{}{}
 	for i := range pi.params {
@@ -99,39 +90,4 @@ type UnknownFlagError struct {
 
 func (e *UnknownFlagError) Error() string {
 	return fmt.Sprintf("unknown flag --%s", e.Flag)
-}
-
-// kebab converts snake_case or PascalCase to kebab-case:
-//
-//	region_id       -> region-id
-//	RegionId        -> region-id
-//	image_cache_name -> image-cache-name
-func kebab(s string) string {
-	if s == "" {
-		return s
-	}
-	// snake_case fast path.
-	if strings.Contains(s, "_") {
-		return strings.ReplaceAll(s, "_", "-")
-	}
-	var b strings.Builder
-	runes := []rune(s)
-	for i, r := range runes {
-		isUpper := r >= 'A' && r <= 'Z'
-		if i > 0 && isUpper {
-			prev := runes[i-1]
-			prevLower := prev >= 'a' && prev <= 'z'
-			prevDigit := prev >= '0' && prev <= '9'
-			nextLower := i+1 < len(runes) && runes[i+1] >= 'a' && runes[i+1] <= 'z'
-			if prevLower || prevDigit || nextLower {
-				b.WriteByte('-')
-			}
-		}
-		if isUpper {
-			b.WriteRune(r + ('a' - 'A'))
-		} else {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
 }

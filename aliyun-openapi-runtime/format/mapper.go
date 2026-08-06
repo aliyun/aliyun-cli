@@ -122,36 +122,27 @@ func mapArgument(a *crschema.ArgumentDefinition) meta.Parameter {
 	case meta.TypeObject:
 		p.Fields = mapArguments(a.Fields)
 	case meta.TypeArray:
-		p.ItemType = mapItemType(a)
+		p.ItemType = mapTypeShape(a.Element)
 	case meta.TypeMap:
-		p.ValueType = mapValueType(a)
+		p.ValueType = mapTypeShape(a.Value)
 	}
 	return p
 }
 
-// mapItemType builds the ItemType descriptor for an array.
-// If the element type is object, ElementFields describes its structure;
-// otherwise ElementType names a scalar.
-func mapItemType(a *crschema.ArgumentDefinition) *meta.Parameter {
-	item := meta.Parameter{
-		Type: mapType(a.ElementType),
+func mapTypeShape(s *crschema.TypeShape) *meta.Parameter {
+	if s == nil {
+		return nil
 	}
-	if item.Type == meta.TypeObject {
-		item.Fields = mapArguments(a.ElementFields)
+	shape := &meta.Parameter{Type: mapType(s.Type)}
+	switch shape.Type {
+	case meta.TypeObject:
+		shape.Fields = mapArguments(s.Fields)
+	case meta.TypeArray:
+		shape.ItemType = mapTypeShape(s.Element)
+	case meta.TypeMap:
+		shape.ValueType = mapTypeShape(s.Value)
 	}
-	return &item
-}
-
-// mapValueType builds the ValueType descriptor for a map.
-// Analogous to mapItemType but for map<string, T>.
-func mapValueType(a *crschema.ArgumentDefinition) *meta.Parameter {
-	val := meta.Parameter{
-		Type: mapType(a.ValueType),
-	}
-	if val.Type == meta.TypeObject {
-		val.Fields = mapArguments(a.ValueFields)
-	}
-	return &val
+	return shape
 }
 
 // mapType normalises the schema's free-form Type string to a

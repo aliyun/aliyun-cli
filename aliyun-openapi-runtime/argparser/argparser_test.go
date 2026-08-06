@@ -184,6 +184,75 @@ func TestArrayScalarRepeatedMultiAndLiteralComma(t *testing.T) {
 	}
 }
 
+func TestArrayOfArrayJSONForms(t *testing.T) {
+	params := []meta.Parameter{{
+		Name: "process_nodes", RawName: "ProcessNodes", Type: meta.TypeArray, Options: []string{"--process-nodes"},
+		ItemType: &meta.Parameter{Type: meta.TypeArray, ItemType: &meta.Parameter{Type: meta.TypeString}},
+	}}
+	want := []any{[]any{"a", "b"}, []any{"c"}}
+
+	complete, err := Parse(params, []string{"--process-nodes", `[["a","b"],["c"]]`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(complete.Args["ProcessNodes"], want) {
+		t.Fatalf("complete array = %#v, want %#v", complete.Args["ProcessNodes"], want)
+	}
+
+	repeated, err := Parse(params, []string{"--process-nodes", `["a","b"]`, "--process-nodes", `["c"]`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(repeated.Args["ProcessNodes"], want) {
+		t.Fatalf("repeated inner arrays = %#v, want %#v", repeated.Args["ProcessNodes"], want)
+	}
+}
+
+func TestCompositeMapRequiresCompleteJSON(t *testing.T) {
+	params := []meta.Parameter{{
+		Name: "partitions", RawName: "Partitions", Type: meta.TypeMap, Options: []string{"--partitions"},
+		ValueType: &meta.Parameter{Type: meta.TypeMap, ValueType: &meta.Parameter{Type: meta.TypeString}},
+	}}
+
+	parsed, err := Parse(params, []string{"--partitions", `{"p1":{"key":"value"}}`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"p1": map[string]any{"key": "value"}}
+	if !reflect.DeepEqual(parsed.Args["Partitions"], want) {
+		t.Fatalf("composite map = %#v, want %#v", parsed.Args["Partitions"], want)
+	}
+
+	_, err = Parse(params, []string{"--partitions", `p1={"key":"value"}`})
+	if err == nil || !strings.Contains(err.Error(), "require a complete JSON object") {
+		t.Fatalf("key=value composite map error = %v", err)
+	}
+}
+
+func TestObjectMapFieldRequiresCompleteJSON(t *testing.T) {
+	params := []meta.Parameter{{
+		Name: "config", RawName: "Config", Type: meta.TypeObject, Options: []string{"--config"},
+		Fields: []meta.Parameter{{
+			Name: "labels", RawName: "Labels", Type: meta.TypeMap,
+			ValueType: &meta.Parameter{Type: meta.TypeString},
+		}},
+	}}
+
+	_, err := Parse(params, []string{"--config", "Labels.env=prod"})
+	if err == nil || !strings.Contains(err.Error(), "set the complete map field as JSON") {
+		t.Fatalf("map path error = %v", err)
+	}
+
+	parsed, err := Parse(params, []string{"--config", `Labels={"env":"prod"}`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"Labels": map[string]any{"env": "prod"}}
+	if !reflect.DeepEqual(parsed.Args["Config"], want) {
+		t.Fatalf("map JSON field = %#v, want %#v", parsed.Args["Config"], want)
+	}
+}
+
 func TestArrayOfObjectRepeatable(t *testing.T) {
 	// Sub-field keys are addressed by their RawName verbatim (no
 	// kebab/snake conversion), and emitted under the same RawName.
@@ -809,6 +878,17 @@ func TestUnknownFlag(t *testing.T) {
 		t.Fatalf("expected UnknownFlagError, got %v", err)
 	}
 	if ufe.Flag != "nope" {
+		t.Fatalf("flag = %q", ufe.Flag)
+	}
+}
+
+func TestParameterOptionIsCaseSensitive(t *testing.T) {
+	_, err := Parse(schema(), []string{"--Biz-Region-Id", "cn-hangzhou"})
+	var ufe *UnknownFlagError
+	if !errors.As(err, &ufe) {
+		t.Fatalf("expected mixed-case option to be rejected, got %v", err)
+	}
+	if ufe.Flag != "Biz-Region-Id" {
 		t.Fatalf("flag = %q", ufe.Flag)
 	}
 }

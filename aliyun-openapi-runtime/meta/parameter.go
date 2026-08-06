@@ -33,7 +33,8 @@ type Parameter struct {
 	Type     DataType
 	Position Position // top-level only; inner fields ignore this
 	Required bool
-	Enum     []string // legal values for scalar types
+
+	Enum []string // legal values for scalar types
 
 	// UI.
 	Options     []string    // command-line aliases, e.g. ["--region-id"]

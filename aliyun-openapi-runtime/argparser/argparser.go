@@ -299,15 +299,14 @@ type Result struct {
 	Reserved Reserved
 }
 
-// Parse interprets args against the parameter schema. Unknown flags
-// produce an error carrying a suggestion-friendly message; the caller
-// (L6) decides whether to surface it or fall back to help.
+// Parse interprets args against the parameter schema.
+// Unknown flags produce an error carrying a suggestion-friendly message;
+// the caller (L6) decides whether to surface it or fall back to help.
 func Parse(params []meta.Parameter, args []string) (*Result, error) {
 	return ParseWithOptions(params, args, ParseOptions{})
 }
 
-// ParseWithOptions parses engine/API arguments while syntactically consuming
-// external flags whose values are already owned by the embedding host.
+// ParseWithOptions parses engine/API arguments while syntactically consuming external flags whose values are already owned by the embedding host.
 func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions) (*Result, error) {
 	idx := newParamIndex(params)
 	external, err := newExternalFlagIndex(opts.ExternalFlags)
@@ -501,10 +500,9 @@ func parseReservedObject(tokens []string) (map[string]string, error) {
 	return kv, nil
 }
 
-// assign folds one flag occurrence's raw tokens into res under the
-// parameter's WIRE key (RawName), honouring the parameter's composite
-// shape and merging repeated occurrences. A parameter without a RawName
-// in metadata is rejected: the args map is keyed strictly by RawName.
+// assign folds one flag occurrence's raw tokens into res under the parameter's WIRE key (RawName),
+// honouring the parameter's composite shape and merging repeated occurrences.
+// A parameter without a RawName in metadata is rejected: the args map is keyed strictly by RawName.
 func assign(dst map[string]any, p *meta.Parameter, tokens []string) error {
 	key, err := resolveWire(p)
 	if err != nil {
@@ -549,6 +547,9 @@ func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []str
 			return fmt.Errorf("--%s: %w", displayName(p), err)
 		}
 		if arr, isArr := v.([]any); isArr {
+			if p.ItemType != nil && p.ItemType.Type == meta.TypeArray {
+				return assignNestedArrayJSON(dst, key, p, existing, arr)
+			}
 			for _, e := range arr {
 				rv, err := resolveNames(p.ItemType, e)
 				if err != nil {
@@ -592,6 +593,33 @@ func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []str
 			return fmt.Errorf("--%s: %w", displayName(p), err)
 		}
 		existing = append(existing, v)
+	}
+	dst[key] = existing
+	return nil
+}
+
+// assignNestedArrayJSON matches aliyun-cli-runtime's array-of-array input convention.
+// A JSON value containing inner arrays is a complete outer array, while a single flat JSON array is one inner array and can be repeated:
+//
+//	--nodes '[["a","b"],["c"]]'
+//	--nodes '["a","b"]' --nodes '["c"]'
+func assignNestedArrayJSON(dst map[string]any, key string, p *meta.Parameter, existing []any, decoded []any) error {
+	innerValues := decoded
+	if len(decoded) == 0 {
+		innerValues = []any{decoded}
+	} else if _, nested := decoded[0].([]any); !nested {
+		innerValues = []any{decoded}
+	}
+
+	for i, value := range innerValues {
+		if _, ok := value.([]any); !ok {
+			value = []any{value}
+		}
+		resolved, err := resolveNames(p.ItemType, value)
+		if err != nil {
+			return fmt.Errorf("--%s: invalid array element at index %d: %w", displayName(p), len(existing)+i, err)
+		}
+		existing = append(existing, resolved)
 	}
 	dst[key] = existing
 	return nil
@@ -648,6 +676,9 @@ func assignMap(dst map[string]any, key string, p *meta.Parameter, tokens []strin
 	if existing == nil {
 		existing = map[string]any{}
 	}
+	if p.ValueType != nil && p.ValueType.IsComposite() {
+		return compositeMapJSONError(p)
+	}
 	vt := meta.TypeString
 	if p.ValueType != nil {
 		vt = p.ValueType.Type
@@ -668,6 +699,10 @@ func assignMap(dst map[string]any, key string, p *meta.Parameter, tokens []strin
 	}
 	dst[key] = existing
 	return nil
+}
+
+func compositeMapJSONError(p *meta.Parameter) error {
+	return fmt.Errorf("--%s: map values of type %s require a complete JSON object", displayName(p), p.ValueType.Type)
 }
 
 // mergeObject stores obj under key, merging into an existing map from a prior occurrence of the same flag.
@@ -952,22 +987,7 @@ func setSchemaValue(obj map[string]any, keyPath, rawVal string, fields []meta.Pa
 		return nil
 
 	case meta.TypeMap:
-		// Map keys are free-form; the remaining path segment is the key.
-		child, ok := obj[wire].(map[string]any)
-		if !ok {
-			child = map[string]any{}
-			obj[wire] = child
-		}
-		vt := meta.TypeString
-		if f.ValueType != nil {
-			vt = f.ValueType.Type
-		}
-		val, err := coerceScalar(vt, rawVal)
-		if err != nil {
-			return fmt.Errorf("%s: %w", keyPath, err)
-		}
-		child[rest] = val
-		return nil
+		return fmt.Errorf("field %q is a map; set the complete map field as JSON", firstKey)
 
 	default:
 		return fmt.Errorf("field %q is a scalar; cannot descend %q", firstKey, rest)
@@ -1283,8 +1303,5 @@ func looksNumeric(s string) bool {
 }
 
 func displayName(p *meta.Parameter) string {
-	if len(p.Options) > 0 {
-		return strings.TrimPrefix(p.Options[0], "--")
-	}
-	return kebab(p.Name)
+	return strings.TrimPrefix(p.Options[0], "--")
 }

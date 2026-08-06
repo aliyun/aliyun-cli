@@ -17,6 +17,7 @@ package pbmeta
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/aliyun/aliyun-openapi-runtime/format"
 	"github.com/aliyun/aliyun-openapi-runtime/format/indexed"
@@ -51,6 +52,13 @@ func Open(vol storage.Volume, indexFile, dataFile string) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
+	if reader.Index().SchemaVersion != schema.SchemaVersion {
+		return nil, fmt.Errorf(
+			"unsupported protobuf metadata schemaVersion=%d, want %d",
+			reader.Index().SchemaVersion,
+			schema.SchemaVersion,
+		)
+	}
 	return NewReader(reader), nil
 }
 
@@ -67,6 +75,13 @@ func (r *Reader) APIIndex(product, version string) (*meta.APIIndex, error) {
 }
 
 func (r *Reader) ReadAPI(version, name string) (*meta.API, error) {
+	if r.indexed.Index().SchemaVersion != schema.SchemaVersion {
+		return nil, fmt.Errorf(
+			"unsupported protobuf metadata schemaVersion=%d, want %d",
+			r.indexed.Index().SchemaVersion,
+			schema.SchemaVersion,
+		)
+	}
 	payload, err := r.indexed.ReadAPI(version, name)
 	if err != nil {
 		return nil, err
@@ -122,36 +137,105 @@ func toCanonicalArguments(values []*Argument) ([]schema.ArgumentDefinition, erro
 		return nil, nil
 	}
 	result := make([]schema.ArgumentDefinition, 0, len(values))
-	for _, value := range values {
+	for index, value := range values {
 		if value == nil {
 			return nil, fmt.Errorf("nil argument")
 		}
+		if err := validateArgumentShape(value, fmt.Sprintf("parameters[%d]", index)); err != nil {
+			return nil, err
+		}
 		argument := schema.ArgumentDefinition{
-			Name:        value.Name,
-			RawName:     value.RawName,
-			Type:        value.Type,
-			Options:     append([]string(nil), value.Options...),
-			HelpZH:      value.HelpZh,
-			HelpEN:      value.HelpEn,
-			Example:     value.Example,
-			Required:    value.Required,
-			Location:    value.Location,
-			ParamStyle:  value.ParamStyle,
-			IsWildcard:  value.IsWildcard,
-			ElementType: value.ElementType,
-			ValueType:   value.ValueType,
+			Name:       value.Name,
+			RawName:    value.RawName,
+			Type:       value.Type,
+			Options:    append([]string(nil), value.Options...),
+			HelpZH:     value.HelpZh,
+			HelpEN:     value.HelpEn,
+			Example:    value.Example,
+			Required:   value.Required,
+			Location:   value.Location,
+			ParamStyle: value.ParamStyle,
+			IsWildcard: value.IsWildcard,
 		}
 		var err error
 		if argument.Fields, err = toCanonicalArguments(value.Fields); err != nil {
 			return nil, err
 		}
-		if argument.ElementFields, err = toCanonicalArguments(value.ElementFields); err != nil {
+		if argument.Element, err = toCanonicalTypeShape(value.Element, fmt.Sprintf("parameters[%d].element", index)); err != nil {
 			return nil, err
 		}
-		if argument.ValueFields, err = toCanonicalArguments(value.ValueFields); err != nil {
+		if argument.Value, err = toCanonicalTypeShape(value.Value, fmt.Sprintf("parameters[%d].value", index)); err != nil {
 			return nil, err
 		}
 		result = append(result, argument)
 	}
 	return result, nil
+}
+
+func validateArgumentShape(value *Argument, path string) error {
+	switch strings.ToLower(strings.TrimSpace(value.Type)) {
+	case "array":
+		if value.Element == nil {
+			return fmt.Errorf("%s: array is missing element", path)
+		}
+		return validateTypeShape(value.Element, path+".element")
+	case "map":
+		if value.Value == nil {
+			return fmt.Errorf("%s: map is missing value", path)
+		}
+		return validateTypeShape(value.Value, path+".value")
+	case "object":
+		for index, field := range value.Fields {
+			if field == nil {
+				return fmt.Errorf("%s.fields[%d]: nil argument", path, index)
+			}
+			if err := validateArgumentShape(field, fmt.Sprintf("%s.fields[%d]", path, index)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateTypeShape(value *TypeShape, path string) error {
+	switch strings.ToLower(strings.TrimSpace(value.Type)) {
+	case "array":
+		if value.Element == nil {
+			return fmt.Errorf("%s: array is missing element", path)
+		}
+		return validateTypeShape(value.Element, path+".element")
+	case "map":
+		if value.Value == nil {
+			return fmt.Errorf("%s: map is missing value", path)
+		}
+		return validateTypeShape(value.Value, path+".value")
+	case "object":
+		for index, field := range value.Fields {
+			if field == nil {
+				return fmt.Errorf("%s.fields[%d]: nil argument", path, index)
+			}
+			if err := validateArgumentShape(field, fmt.Sprintf("%s.fields[%d]", path, index)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func toCanonicalTypeShape(value *TypeShape, path string) (*schema.TypeShape, error) {
+	if value == nil {
+		return nil, nil
+	}
+	shape := &schema.TypeShape{Type: value.Type}
+	var err error
+	if shape.Fields, err = toCanonicalArguments(value.Fields); err != nil {
+		return nil, err
+	}
+	if shape.Element, err = toCanonicalTypeShape(value.Element, path+".element"); err != nil {
+		return nil, err
+	}
+	if shape.Value, err = toCanonicalTypeShape(value.Value, path+".value"); err != nil {
+		return nil, err
+	}
+	return shape, nil
 }

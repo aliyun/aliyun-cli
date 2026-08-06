@@ -165,6 +165,31 @@ func TestPrintAPIHelpChineseLabels(t *testing.T) {
 	}
 }
 
+func TestPrintAPIHelpPreservesParameterDescriptionLines(t *testing.T) {
+	var buf bytes.Buffer
+	api := &meta.API{
+		Name: "Do", CmdName: "do", Version: "v1",
+		Parameters: []meta.Parameter{{
+			Name:        "mode",
+			Type:        meta.TypeString,
+			Options:     []string{"--mode"},
+			Description: meta.Description{EN: "Select a mode.\n- fast: lower latency\n- safe: stronger checks"},
+		}},
+	}
+	if err := printAPIHelp(&buf, "demo", api, "en"); err != nil {
+		t.Fatalf("printAPIHelp: %v", err)
+	}
+	out := buf.String()
+	fast := strings.Index(out, "- fast: lower latency")
+	safe := strings.Index(out, "- safe: stronger checks")
+	if fast < 0 || safe < 0 {
+		t.Fatalf("explicit description lines were not preserved:\n%s", out)
+	}
+	if lineStart := strings.LastIndex(out[:fast], "\n") + 1; strings.Contains(out[lineStart:fast], "--mode") {
+		t.Fatalf("continuation line repeated the parameter name:\n%s", out)
+	}
+}
+
 func TestPrintProductHelpUsesIndexWithoutLoadingAPIs(t *testing.T) {
 	var buf bytes.Buffer
 	product := &meta.Product{

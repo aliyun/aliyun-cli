@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-openapi-runtime/format/indexed"
@@ -13,6 +14,30 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/storage"
 	"google.golang.org/protobuf/proto"
 )
+
+func TestToCanonicalRejectsIncompleteRecursivePBShapes(t *testing.T) {
+	tests := []struct {
+		name string
+		arg  *Argument
+		want string
+	}{
+		{name: "array missing element", arg: &Argument{Type: "array"}, want: "array is missing element"},
+		{name: "map missing value", arg: &Argument{Type: "map"}, want: "map is missing value"},
+		{
+			name: "nested array missing element",
+			arg:  &Argument{Type: "map", Value: &TypeShape{Type: "array"}},
+			want: "parameters[0].value: array is missing element",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := toCanonical(&CommandDefinition{Parameters: []*Argument{test.arg}})
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want substring %q", err, test.want)
+			}
+		})
+	}
+}
 
 func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 	root := t.TempDir()
@@ -35,6 +60,15 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 			{
 				Name: "request_path", RawName: "requestPath", Type: "string",
 				Options: []string{"--request-path"}, Location: "path", IsWildcard: true,
+			},
+			{
+				Name: "privileges", RawName: "Privileges", Type: "map",
+				Value: &TypeShape{
+					Type: "array",
+					Element: &TypeShape{Type: "object", Fields: []*Argument{{
+						Name: "enabled", RawName: "Enabled", Type: "boolean",
+					}}},
+				},
 			},
 		},
 	}
@@ -88,6 +122,12 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 	}
 	if got := api.Parameters[0].Example; got != "12****" {
 		t.Fatalf("parameter example = %q, want %q", got, "12****")
+	}
+	privileges := api.Parameters[2]
+	if privileges.ValueType == nil || privileges.ValueType.ItemType == nil ||
+		len(privileges.ValueType.ItemType.Fields) != 1 ||
+		privileges.ValueType.ItemType.Fields[0].RawName != "Enabled" {
+		t.Fatalf("protobuf recursive composite metadata was not mapped: %#v", privileges)
 	}
 	if got := reader.ProductEndpoints().Public["cn-hangzhou"]; got != "demo.cn-hangzhou.aliyuncs.com" {
 		t.Fatalf("endpoint = %q", got)

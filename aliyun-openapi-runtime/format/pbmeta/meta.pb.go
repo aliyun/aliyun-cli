@@ -291,13 +291,11 @@ type Argument struct {
 	Required      bool                   `protobuf:"varint,7,opt,name=required,proto3" json:"required,omitempty"`
 	Location      string                 `protobuf:"bytes,8,opt,name=location,proto3" json:"location,omitempty"`
 	ParamStyle    string                 `protobuf:"bytes,9,opt,name=param_style,json=paramStyle,proto3" json:"param_style,omitempty"`
-	ElementType   string                 `protobuf:"bytes,10,opt,name=element_type,json=elementType,proto3" json:"element_type,omitempty"`
-	ValueType     string                 `protobuf:"bytes,11,opt,name=value_type,json=valueType,proto3" json:"value_type,omitempty"`
-	Fields        []*Argument            `protobuf:"bytes,12,rep,name=fields,proto3" json:"fields,omitempty"`
-	ElementFields []*Argument            `protobuf:"bytes,13,rep,name=element_fields,json=elementFields,proto3" json:"element_fields,omitempty"`
-	ValueFields   []*Argument            `protobuf:"bytes,14,rep,name=value_fields,json=valueFields,proto3" json:"value_fields,omitempty"`
-	Example       string                 `protobuf:"bytes,15,opt,name=example,proto3" json:"example,omitempty"`
-	IsWildcard    bool                   `protobuf:"varint,16,opt,name=is_wildcard,json=isWildcard,proto3" json:"is_wildcard,omitempty"`
+	Fields        []*Argument            `protobuf:"bytes,10,rep,name=fields,proto3" json:"fields,omitempty"`
+	Element       *TypeShape             `protobuf:"bytes,11,opt,name=element,proto3" json:"element,omitempty"`
+	Value         *TypeShape             `protobuf:"bytes,12,opt,name=value,proto3" json:"value,omitempty"`
+	Example       string                 `protobuf:"bytes,13,opt,name=example,proto3" json:"example,omitempty"`
+	IsWildcard    bool                   `protobuf:"varint,14,opt,name=is_wildcard,json=isWildcard,proto3" json:"is_wildcard,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -395,20 +393,6 @@ func (x *Argument) GetParamStyle() string {
 	return ""
 }
 
-func (x *Argument) GetElementType() string {
-	if x != nil {
-		return x.ElementType
-	}
-	return ""
-}
-
-func (x *Argument) GetValueType() string {
-	if x != nil {
-		return x.ValueType
-	}
-	return ""
-}
-
 func (x *Argument) GetFields() []*Argument {
 	if x != nil {
 		return x.Fields
@@ -416,16 +400,16 @@ func (x *Argument) GetFields() []*Argument {
 	return nil
 }
 
-func (x *Argument) GetElementFields() []*Argument {
+func (x *Argument) GetElement() *TypeShape {
 	if x != nil {
-		return x.ElementFields
+		return x.Element
 	}
 	return nil
 }
 
-func (x *Argument) GetValueFields() []*Argument {
+func (x *Argument) GetValue() *TypeShape {
 	if x != nil {
-		return x.ValueFields
+		return x.Value
 	}
 	return nil
 }
@@ -442,6 +426,76 @@ func (x *Argument) GetIsWildcard() bool {
 		return x.IsWildcard
 	}
 	return false
+}
+
+// TypeShape is a depth-independent recursive description of a container
+// child. Arrays use element and maps use value at every level.
+type TypeShape struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Fields        []*Argument            `protobuf:"bytes,2,rep,name=fields,proto3" json:"fields,omitempty"`
+	Element       *TypeShape             `protobuf:"bytes,3,opt,name=element,proto3" json:"element,omitempty"`
+	Value         *TypeShape             `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TypeShape) Reset() {
+	*x = TypeShape{}
+	mi := &file_aliyun_openapi_meta_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TypeShape) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TypeShape) ProtoMessage() {}
+
+func (x *TypeShape) ProtoReflect() protoreflect.Message {
+	mi := &file_aliyun_openapi_meta_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TypeShape.ProtoReflect.Descriptor instead.
+func (*TypeShape) Descriptor() ([]byte, []int) {
+	return file_aliyun_openapi_meta_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *TypeShape) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *TypeShape) GetFields() []*Argument {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+func (x *TypeShape) GetElement() *TypeShape {
+	if x != nil {
+		return x.Element
+	}
+	return nil
+}
+
+func (x *TypeShape) GetValue() *TypeShape {
+	if x != nil {
+		return x.Value
+	}
+	return nil
 }
 
 var File_aliyun_openapi_meta_proto protoreflect.FileDescriptor
@@ -480,7 +534,7 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\rreq_body_type\x18\b \x01(\tR\vreqBodyType\x12!\n" +
 	"\fcontent_type\x18\t \x01(\tR\vcontentType\x12*\n" +
 	"\x11has_wildcard_path\x18\n" +
-	" \x01(\bR\x0fhasWildcardPath\"\xb7\x04\n" +
+	" \x01(\bR\x0fhasWildcardPath\"\xdd\x03\n" +
 	"\bArgument\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\braw_name\x18\x02 \x01(\tR\arawName\x12\x12\n" +
@@ -491,17 +545,19 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\brequired\x18\a \x01(\bR\brequired\x12\x1a\n" +
 	"\blocation\x18\b \x01(\tR\blocation\x12\x1f\n" +
 	"\vparam_style\x18\t \x01(\tR\n" +
-	"paramStyle\x12!\n" +
-	"\felement_type\x18\n" +
-	" \x01(\tR\velementType\x12\x1d\n" +
-	"\n" +
-	"value_type\x18\v \x01(\tR\tvalueType\x128\n" +
-	"\x06fields\x18\f \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\x06fields\x12G\n" +
-	"\x0eelement_fields\x18\r \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\relementFields\x12C\n" +
-	"\fvalue_fields\x18\x0e \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\vvalueFields\x12\x18\n" +
-	"\aexample\x18\x0f \x01(\tR\aexample\x12\x1f\n" +
-	"\vis_wildcard\x18\x10 \x01(\bR\n" +
-	"isWildcardB?Z=github.com/aliyun/aliyun-openapi-runtime/format/pbmeta;pbmetab\x06proto3"
+	"paramStyle\x128\n" +
+	"\x06fields\x18\n" +
+	" \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\x06fields\x12;\n" +
+	"\aelement\x18\v \x01(\v2!.aliyun.openapi.meta.v1.TypeShapeR\aelement\x127\n" +
+	"\x05value\x18\f \x01(\v2!.aliyun.openapi.meta.v1.TypeShapeR\x05value\x12\x18\n" +
+	"\aexample\x18\r \x01(\tR\aexample\x12\x1f\n" +
+	"\vis_wildcard\x18\x0e \x01(\bR\n" +
+	"isWildcard\"\xcf\x01\n" +
+	"\tTypeShape\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x128\n" +
+	"\x06fields\x18\x02 \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\x06fields\x12;\n" +
+	"\aelement\x18\x03 \x01(\v2!.aliyun.openapi.meta.v1.TypeShapeR\aelement\x127\n" +
+	"\x05value\x18\x04 \x01(\v2!.aliyun.openapi.meta.v1.TypeShapeR\x05valueB?Z=github.com/aliyun/aliyun-openapi-runtime/format/pbmeta;pbmetab\x06proto3"
 
 var (
 	file_aliyun_openapi_meta_proto_rawDescOnce sync.Once
@@ -515,23 +571,27 @@ func file_aliyun_openapi_meta_proto_rawDescGZIP() []byte {
 	return file_aliyun_openapi_meta_proto_rawDescData
 }
 
-var file_aliyun_openapi_meta_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_aliyun_openapi_meta_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_aliyun_openapi_meta_proto_goTypes = []any{
 	(*CommandDefinition)(nil), // 0: aliyun.openapi.meta.v1.CommandDefinition
 	(*Operation)(nil),         // 1: aliyun.openapi.meta.v1.Operation
 	(*Argument)(nil),          // 2: aliyun.openapi.meta.v1.Argument
+	(*TypeShape)(nil),         // 3: aliyun.openapi.meta.v1.TypeShape
 }
 var file_aliyun_openapi_meta_proto_depIdxs = []int32{
 	1, // 0: aliyun.openapi.meta.v1.CommandDefinition.operation:type_name -> aliyun.openapi.meta.v1.Operation
 	2, // 1: aliyun.openapi.meta.v1.CommandDefinition.parameters:type_name -> aliyun.openapi.meta.v1.Argument
 	2, // 2: aliyun.openapi.meta.v1.Argument.fields:type_name -> aliyun.openapi.meta.v1.Argument
-	2, // 3: aliyun.openapi.meta.v1.Argument.element_fields:type_name -> aliyun.openapi.meta.v1.Argument
-	2, // 4: aliyun.openapi.meta.v1.Argument.value_fields:type_name -> aliyun.openapi.meta.v1.Argument
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	3, // 3: aliyun.openapi.meta.v1.Argument.element:type_name -> aliyun.openapi.meta.v1.TypeShape
+	3, // 4: aliyun.openapi.meta.v1.Argument.value:type_name -> aliyun.openapi.meta.v1.TypeShape
+	2, // 5: aliyun.openapi.meta.v1.TypeShape.fields:type_name -> aliyun.openapi.meta.v1.Argument
+	3, // 6: aliyun.openapi.meta.v1.TypeShape.element:type_name -> aliyun.openapi.meta.v1.TypeShape
+	3, // 7: aliyun.openapi.meta.v1.TypeShape.value:type_name -> aliyun.openapi.meta.v1.TypeShape
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_aliyun_openapi_meta_proto_init() }
@@ -545,7 +605,7 @@ func file_aliyun_openapi_meta_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_aliyun_openapi_meta_proto_rawDesc), len(file_aliyun_openapi_meta_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -272,5 +272,25 @@ func (l *defaultLoader) GetAPI(product, version, name string) (*meta.API, error)
 		}
 		return nil, err
 	}
+	if err := validateAPIParameterOptions(api); err != nil {
+		return nil, fmt.Errorf("api %s/%s/%s metadata: %w", product, version, name, err)
+	}
 	return api, nil
+}
+
+func validateAPIParameterOptions(api *meta.API) error {
+	if api == nil {
+		return errors.New("decoded API is nil")
+	}
+	for i := range api.Parameters {
+		param := &api.Parameters[i]
+		if len(param.Options) != 1 {
+			return fmt.Errorf("parameter %q must declare exactly one CLI option, got %d", param.Name, len(param.Options))
+		}
+		option := strings.TrimSpace(param.Options[0])
+		if !strings.HasPrefix(option, "--") || len(option) == 2 {
+			return fmt.Errorf("parameter %q has invalid CLI option %q", param.Name, param.Options[0])
+		}
+	}
+	return nil
 }

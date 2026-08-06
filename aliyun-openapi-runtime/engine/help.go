@@ -90,7 +90,7 @@ func printProductHelp(w io.Writer, product *meta.Product, index *meta.APIIndex, 
 		fmt.Fprintf(w, "%s: %s (%s)\n", l.product, code, name)
 	}
 	if description := product.Description.Localized(lang); description != "" {
-		fmt.Fprintf(w, "%s: %s\n", l.description, collapse(description))
+		fmt.Fprintf(w, "%s: %s\n", l.description, description)
 	}
 	if index.Version != "" {
 		fmt.Fprintf(w, "%s: %s\n", l.apiVersion, index.Version)
@@ -301,13 +301,17 @@ func renderOneParameter(tw *tabwriter.Writer, p *meta.Parameter, lang string) {
 	if p.Required {
 		typ += " (required)"
 	}
-	help := collapse(p.Description.Localized(lang))
-
+	helpLines := strings.Split(p.Description.Localized(lang), "\n")
 	head := typ
-	if help != "" {
-		head += ", " + help
+	if firstLine := normalizeHelpLine(helpLines[0]); firstLine != "" {
+		head += ", " + firstLine
 	}
 	printWrappedLine(tw, namePadded, head, helpNameWidth)
+	for _, line := range helpLines[1:] {
+		if line = normalizeHelpLine(line); line != "" {
+			printWrappedLine(tw, emptyPadded, line, helpNameWidth)
+		}
+	}
 
 	structure, format := describeHint(name, p)
 	if structure != "" {
@@ -457,20 +461,12 @@ func printWrappedLine(w *tabwriter.Writer, prefix string, text string, prefixWid
 // helpers
 // ============================================================================
 
-// collapse trims and squeezes internal whitespace/newlines to single
-// spaces so multi-line meta help renders as one logical paragraph that
-// printWrappedLine can then re-wrap at the column boundary.
-func collapse(s string) string {
+func normalizeHelpLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// displayFlag returns the user-facing flag spelling: the curated
-// option(s) joined, or the derived kebab of the parameter name.
 func displayFlag(p *meta.Parameter) string {
-	if len(p.Options) > 0 {
-		return strings.Join(p.Options, ", ")
-	}
-	return "--" + kebab(p.Name)
+	return p.Options[0]
 }
 
 // typeName maps a meta.DataType to the plugin engine's help vocabulary

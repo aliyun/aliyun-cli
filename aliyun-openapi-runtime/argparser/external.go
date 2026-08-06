@@ -19,9 +19,8 @@ import (
 	"strings"
 )
 
-// ExternalFlagMode describes the value arity of a flag parsed and owned by
-// the embedding host. Repeatable external flags are intentionally unsupported
-// until a host has a concrete need and value-boundary contract for them.
+// ExternalFlagMode describes the value arity of a flag parsed and owned by the embedding host.
+// Repeatable external flags are intentionally unsupported until a host has a concrete need and value-boundary contract for them.
 type ExternalFlagMode uint8
 
 const (
@@ -30,8 +29,7 @@ const (
 	ExternalFlagRequired
 )
 
-// ExternalFlagSpec lets an embedding host declare argv flags that the engine
-// must recognise syntactically but must not expose as API or reserved values.
+// ExternalFlagSpec lets an embedding host declare argv flags that the engine must recognise syntactically but must not expose as API or reserved values.
 type ExternalFlagSpec struct {
 	Name          string
 	Shorthand     rune

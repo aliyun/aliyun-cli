@@ -156,9 +156,9 @@ type VersionAPIEntry struct {
 // Per-API command definition (canonical/<product>/<version>/<APIName>.json)
 // ============================================================================
 
-// CommandDefinition is the per-API JSON shape.
-// All fields except Operation and Name are optional;
-// callers MUST tolerate older/newer revisions and treat missing fields as zero values.
+// CommandDefinition is the per-API JSON shape. Most root fields are optional,
+// but composite parameters are strict: arrays require element and maps require
+// value at every nesting level.
 type CommandDefinition struct {
 	Name          string               `json:"name"`
 	CmdName       string               `json:"cmd_name"`
@@ -188,23 +188,30 @@ type OperationConfig struct {
 	HasWildcardPath bool   `json:"has_wildcard_path,omitempty"`
 }
 
+// TypeShape recursively describes an array element or map value. Its structure
+// is independent of nesting depth: arrays use Element, maps use Value, and
+// objects use Fields.
+type TypeShape struct {
+	Type    string               `json:"type"`
+	Fields  []ArgumentDefinition `json:"fields,omitempty"`
+	Element *TypeShape           `json:"element,omitempty"`
+	Value   *TypeShape           `json:"value,omitempty"`
+}
+
 // ArgumentDefinition describes a single CLI parameter.
-// Nested composite parameters are represented recursively via Fields / ElementFields /ValueFields depending on the parameter's kind.
 type ArgumentDefinition struct {
-	Name          string               `json:"name"`
-	RawName       string               `json:"raw_name"`
-	Type          string               `json:"type"`
-	Options       []string             `json:"options,omitempty"`
-	HelpZH        string               `json:"help_zh,omitempty"`
-	HelpEN        string               `json:"help_en,omitempty"`
-	Example       string               `json:"example,omitempty"`
-	Required      bool                 `json:"required"`
-	Location      string               `json:"location,omitempty"`
-	ParamStyle    string               `json:"param_style,omitempty"`
-	IsWildcard    bool                 `json:"is_wildcard,omitempty"`
-	ElementType   string               `json:"element_type,omitempty"`
-	ValueType     string               `json:"value_type,omitempty"`
-	Fields        []ArgumentDefinition `json:"fields,omitempty"`
-	ElementFields []ArgumentDefinition `json:"element_fields,omitempty"`
-	ValueFields   []ArgumentDefinition `json:"value_fields,omitempty"`
+	Name       string               `json:"name"`
+	RawName    string               `json:"raw_name"`
+	Type       string               `json:"type"`
+	Options    []string             `json:"options,omitempty"`
+	HelpZH     string               `json:"help_zh,omitempty"`
+	HelpEN     string               `json:"help_en,omitempty"`
+	Example    string               `json:"example,omitempty"`
+	Required   bool                 `json:"required"`
+	Location   string               `json:"location,omitempty"`
+	ParamStyle string               `json:"param_style,omitempty"`
+	IsWildcard bool                 `json:"is_wildcard,omitempty"`
+	Fields     []ArgumentDefinition `json:"fields,omitempty"`
+	Element    *TypeShape           `json:"element,omitempty"`
+	Value      *TypeShape           `json:"value,omitempty"`
 }

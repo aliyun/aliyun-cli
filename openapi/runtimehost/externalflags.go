@@ -22,9 +22,7 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 )
 
-// engineExternalFlags describes root-parsed flags that remain in the raw argv
-// tail passed to the engine. The engine consumes these tokens syntactically;
-// their values continue to be owned by ctx/profileHost.
+// engineExternalFlags describes root-parsed flags that remain in the raw argv tail passed to the engine.
 func engineExternalFlags() []argparser.ExternalFlagSpec {
 	ref := cli.NewFlagSet()
 	config.AddFlags(ref)

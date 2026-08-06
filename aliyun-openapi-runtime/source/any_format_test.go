@@ -154,8 +154,8 @@ func anyCommandDefinition() schema.CommandDefinition {
 		Parameters: []schema.ArgumentDefinition{
 			{Name: "request_path", RawName: "requestPath", Type: "string", Options: []string{"--request-path"}, Location: "path", Required: true, IsWildcard: true},
 			{Name: "body", RawName: "body", Type: "any", Options: []string{"--biz-body"}, Location: "body"},
-			{Name: "items", RawName: "Items", Type: "array", ElementType: "any", Options: []string{"--items"}, Location: "query", ParamStyle: "json"},
-			{Name: "labels", RawName: "Labels", Type: "map", ValueType: "any", Options: []string{"--labels"}, Location: "query", ParamStyle: "json"},
+			{Name: "items", RawName: "Items", Type: "array", Element: &schema.TypeShape{Type: "any"}, Options: []string{"--items"}, Location: "query", ParamStyle: "json"},
+			{Name: "labels", RawName: "Labels", Type: "map", Value: &schema.TypeShape{Type: "any"}, Options: []string{"--labels"}, Location: "query", ParamStyle: "json"},
 			{Name: "config", RawName: "Config", Type: "object", Options: []string{"--config"}, Location: "query", ParamStyle: "json", Fields: []schema.ArgumentDefinition{
 				{Name: "dynamic", RawName: "Dynamic", Type: "any"},
 			}},
@@ -174,8 +174,8 @@ func anyPBCommandDefinition() *pbmeta.CommandDefinition {
 		Parameters: []*pbmeta.Argument{
 			{Name: "request_path", RawName: "requestPath", Type: "string", Options: []string{"--request-path"}, Location: "path", Required: true, IsWildcard: true},
 			{Name: "body", RawName: "body", Type: "any", Options: []string{"--biz-body"}, Location: "body"},
-			{Name: "items", RawName: "Items", Type: "array", ElementType: "any", Options: []string{"--items"}, Location: "query", ParamStyle: "json"},
-			{Name: "labels", RawName: "Labels", Type: "map", ValueType: "any", Options: []string{"--labels"}, Location: "query", ParamStyle: "json"},
+			{Name: "items", RawName: "Items", Type: "array", Element: &pbmeta.TypeShape{Type: "any"}, Options: []string{"--items"}, Location: "query", ParamStyle: "json"},
+			{Name: "labels", RawName: "Labels", Type: "map", Value: &pbmeta.TypeShape{Type: "any"}, Options: []string{"--labels"}, Location: "query", ParamStyle: "json"},
 			{Name: "config", RawName: "Config", Type: "object", Options: []string{"--config"}, Location: "query", ParamStyle: "json", Fields: []*pbmeta.Argument{
 				{Name: "dynamic", RawName: "Dynamic", Type: "any"},
 			}},

@@ -38,7 +38,9 @@ func TestDirSourceLoadsJSONLPluginByManifestProductCode(t *testing.T) {
 			Action: "DescribeInstances", APIVersion: "2014-05-26", Method: "POST", APIStyle: "RPC",
 			ReqBodyType: "formData", ContentType: "application/x-www-form-urlencoded",
 		},
-		Parameters: []schema.ArgumentDefinition{{Name: "limit", RawName: "Limit", Type: "integer", Example: "12****"}},
+		Parameters: []schema.ArgumentDefinition{{
+			Name: "limit", RawName: "Limit", Type: "integer", Example: "12****",
+		}},
 	}
 	raw, _ := json.Marshal(def)
 	data := append(raw, '\n')

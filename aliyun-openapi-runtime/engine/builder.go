@@ -194,6 +194,7 @@ func (e *Engine) Dispatch(req Request) error {
 		return err
 	}
 	cmdName := args[1]
+	// deal with internal commands
 	if handled, err := e.dispatchBuiltin(req, ldr, product, cmdName); handled {
 		return err
 	}
@@ -659,16 +660,4 @@ func writeJSON(w io.Writer, data any, raw []byte, filtered string) error {
 	}
 	fmt.Fprintln(w, string(b))
 	return nil
-}
-
-func kebab(s string) string {
-	out := make([]rune, 0, len(s)+4)
-	for _, r := range s {
-		if r == '_' {
-			out = append(out, '-')
-			continue
-		}
-		out = append(out, r)
-	}
-	return string(out)
 }

@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	crschema "github.com/aliyun/aliyun-openapi-runtime/schema"
@@ -103,10 +104,62 @@ func DecodeAPIJSON(data []byte, identity string) (*meta.API, error) {
 // schema. JSON and protobuf decoders converge here so runtime behavior stays
 // identical across plugin distribution formats.
 func DecodeCommandDefinition(def *crschema.CommandDefinition, identity string) (*meta.API, error) {
+	if def == nil {
+		return nil, fmt.Errorf("api %s: nil command definition", identity)
+	}
 	if def.Operation == nil {
 		return nil, fmt.Errorf("api %s: missing operation block", identity)
 	}
+	for i := range def.Parameters {
+		if err := validateArgumentShape(&def.Parameters[i], fmt.Sprintf("parameters[%d]", i)); err != nil {
+			return nil, fmt.Errorf("api %s: %w", identity, err)
+		}
+	}
 	return schemaToAPI(def), nil
+}
+
+func validateArgumentShape(arg *crschema.ArgumentDefinition, path string) error {
+	switch strings.ToLower(strings.TrimSpace(arg.Type)) {
+	case "array":
+		if arg.Element == nil {
+			return fmt.Errorf("%s: array is missing element", path)
+		}
+		return validateTypeShape(arg.Element, path+".element")
+	case "map":
+		if arg.Value == nil {
+			return fmt.Errorf("%s: map is missing value", path)
+		}
+		return validateTypeShape(arg.Value, path+".value")
+	case "object":
+		for i := range arg.Fields {
+			if err := validateArgumentShape(&arg.Fields[i], fmt.Sprintf("%s.fields[%d]", path, i)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateTypeShape(shape *crschema.TypeShape, path string) error {
+	switch strings.ToLower(strings.TrimSpace(shape.Type)) {
+	case "array":
+		if shape.Element == nil {
+			return fmt.Errorf("%s: array is missing element", path)
+		}
+		return validateTypeShape(shape.Element, path+".element")
+	case "map":
+		if shape.Value == nil {
+			return fmt.Errorf("%s: map is missing value", path)
+		}
+		return validateTypeShape(shape.Value, path+".value")
+	case "object":
+		for i := range shape.Fields {
+			if err := validateArgumentShape(&shape.Fields[i], fmt.Sprintf("%s.fields[%d]", path, i)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func DecodePluginManifestJSON(data []byte, dst *crschema.PluginManifest) error {
