@@ -300,6 +300,25 @@ func TestFormDataBody(t *testing.T) {
 	}
 }
 
+func TestFormDataJSONStyleSerializesFieldValue(t *testing.T) {
+	api := &meta.API{
+		Name: "AppendCases", Style: meta.StyleRPC, ReqBodyType: "formData",
+		Parameters: []meta.Parameter{{
+			Name: "body", RawName: "body", Type: meta.TypeArray, Position: meta.PosFormData, ParamStyle: "json",
+			ItemType: &meta.Parameter{Type: meta.TypeObject},
+		}},
+	}
+	cases := []any{map[string]any{"ReferenceId": "01", "PhoneNumber": "1888880000"}}
+	req, err := Assemble(&ExecContext{API: api, Args: map[string]any{"body": cases}})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	want := map[string]any{"body": `[{"PhoneNumber":"1888880000","ReferenceId":"01"}]`}
+	if !reflect.DeepEqual(req.Body, want) {
+		t.Fatalf("form body = %#v, want %#v", req.Body, want)
+	}
+}
+
 func TestFormDataPositionFallsBackWhenOperationMetadataIsMissing(t *testing.T) {
 	api := &meta.API{
 		Name: "Op", Style: meta.StyleRESTful,
@@ -312,8 +331,8 @@ func TestFormDataPositionFallsBackWhenOperationMetadataIsMissing(t *testing.T) {
 	if req.ReqBodyType != "formData" {
 		t.Fatalf("ReqBodyType = %q, want formData", req.ReqBodyType)
 	}
-	if got := req.Headers["content-type"]; got != "application/x-www-form-urlencoded" {
-		t.Fatalf("content-type = %q", got)
+	if _, exists := req.Headers["content-type"]; exists {
+		t.Fatalf("formData content-type must be left to the SDK: %#v", req.Headers)
 	}
 }
 
@@ -329,7 +348,7 @@ func TestFormDataWithoutArgumentsStillBuildsLegacyEmptyForm(t *testing.T) {
 	if body, ok := req.Body.(map[string]any); !ok || len(body) != 0 {
 		t.Fatalf("body = %#v, want empty form map", req.Body)
 	}
-	if req.ReqBodyType != "formData" || req.Headers["content-type"] != "application/x-www-form-urlencoded" {
+	if req.ReqBodyType != "formData" || len(req.Headers) != 0 {
 		t.Fatalf("form wire metadata = %q, %#v", req.ReqBodyType, req.Headers)
 	}
 }
@@ -493,8 +512,8 @@ func TestMixedBodyAndFormDataUsesOneFormBody(t *testing.T) {
 	if req.ReqBodyType != "formData" {
 		t.Fatalf("ReqBodyType = %q, want formData", req.ReqBodyType)
 	}
-	if got := req.Headers["content-type"]; got != "application/x-www-form-urlencoded" {
-		t.Fatalf("content-type = %q", got)
+	if _, exists := req.Headers["content-type"]; exists {
+		t.Fatalf("formData content-type must be left to the SDK: %#v", req.Headers)
 	}
 }
 
@@ -536,8 +555,8 @@ func TestAnyNullWireBehavior(t *testing.T) {
 	if len(req.Query) != 0 {
 		t.Fatalf("null query must be omitted: %#v", req.Query)
 	}
-	if got := req.Headers["content-type"]; len(req.Headers) != 1 || got != "application/x-www-form-urlencoded" {
-		t.Fatalf("form content-type = %q; headers=%#v", got, req.Headers)
+	if len(req.Headers) != 0 {
+		t.Fatalf("formData content-type must be left to the SDK: %#v", req.Headers)
 	}
 	if req.Pathname != "/things/%7Bid%7D" {
 		t.Fatalf("null path value must not become <nil>: %q", req.Pathname)

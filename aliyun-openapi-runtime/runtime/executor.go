@@ -253,11 +253,20 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 			req.Headers[wire] = scalarString(val)
 
 		case meta.PosFormData:
-			// Form parameters go into the request body for RPC and ROA. Serialization is selected only by operation.req_body_type.
+			// Form parameters go into the request body for RPC and ROA.
+			// A per-parameter json style is encoded before the SDK applies the outer application/x-www-form-urlencoded serialization.
 			if formParts == nil {
 				formParts = map[string]any{}
 			}
-			formParts[wire] = val
+			if p.ParamStyle == "json" {
+				encoded, err := serializeJSONParameter(wire, val)
+				if err != nil {
+					return nil, err
+				}
+				formParts[wire] = encoded
+			} else {
+				formParts[wire] = val
+			}
 
 		case meta.PosBody:
 			if isDirectBodyParameter(p) {
@@ -336,7 +345,6 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 			// Generated Go plugins call SetContent with the form builder's empty map even when the user supplied no optional form arguments.
 			req.Body = map[string]any{}
 		}
-		req.Headers["content-type"] = "application/x-www-form-urlencoded"
 	}
 	switch {
 	case ec.ForceHTTP:

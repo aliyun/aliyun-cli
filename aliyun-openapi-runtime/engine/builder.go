@@ -590,6 +590,10 @@ func renderDryRun(w io.Writer, product string, req *runtime.AssembledRequest, js
 			fmt.Fprintf(w, "Body:\n  %s\n", string(b))
 		}
 	}
+	fmt.Fprintf(w, "%s\nRequest NOT sent (dry-run mode)\n%s\n", bar, bar)
+	fmt.Fprintln(w, "{")
+	fmt.Fprintln(w, "\t\"message\": \"dry-run mode - no request sent\"")
+	fmt.Fprintln(w, "}")
 	return nil
 }
 

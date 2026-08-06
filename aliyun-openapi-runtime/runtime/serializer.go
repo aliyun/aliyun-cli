@@ -78,11 +78,11 @@ func flatten(prefix string, value any, out map[string]string) {
 func serializeQuery(name string, value any, isRPC bool, paramStyle string) (map[string]string, error) {
 	switch paramStyle {
 	case "json":
-		b, err := json.Marshal(value)
+		encoded, err := serializeJSONParameter(name, value)
 		if err != nil {
-			return nil, fmt.Errorf("marshal %s as json: %w", name, err)
+			return nil, err
 		}
-		return map[string]string{name: string(b)}, nil
+		return map[string]string{name: encoded}, nil
 	case "simple":
 		if arr, ok := value.([]any); ok {
 			parts := make([]string, 0, len(arr))
@@ -111,6 +111,14 @@ func serializeQuery(name string, value any, isRPC bool, paramStyle string) (map[
 	default:
 		return map[string]string{name: basicString(value)}, nil
 	}
+}
+
+func serializeJSONParameter(name string, value any) (string, error) {
+	b, err := json.Marshal(value)
+	if err != nil {
+		return "", fmt.Errorf("marshal %s as json: %w", name, err)
+	}
+	return string(b), nil
 }
 
 func basicString(v any) string {

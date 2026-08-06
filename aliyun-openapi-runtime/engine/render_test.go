@@ -57,6 +57,13 @@ func TestRenderDryRunMasksSecrets(t *testing.T) {
 	if strings.Contains(out, `"{\"password\"`) {
 		t.Fatalf("raw body should not be rendered as a quoted JSON string:\n%s", out)
 	}
+	wantFooter := "============================================================\n" +
+		"Request NOT sent (dry-run mode)\n" +
+		"============================================================\n" +
+		"{\n\t\"message\": \"dry-run mode - no request sent\"\n}\n"
+	if !strings.HasSuffix(out, wantFooter) {
+		t.Fatalf("dry-run footer does not match plugin runtime:\n%s", out)
+	}
 }
 
 func TestRenderResponseCliQuery(t *testing.T) {

@@ -110,6 +110,59 @@ func TestSendAgainstMockServer(t *testing.T) {
 	}
 }
 
+func TestSendFormDataLetsSDKSetContentType(t *testing.T) {
+	var gotContentType string
+	var gotForm url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotContentType = r.Header.Get("Content-Type")
+		body, _ := io.ReadAll(r.Body)
+		gotForm, _ = url.ParseQuery(string(body))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	api := &meta.API{
+		Name: "SubmitForm", Version: "2024-01-01", Method: "POST", Style: meta.StyleRPC,
+		Protocol: "HTTP", ProductCode: "demo", ReqBodyType: "formData",
+		Parameters: []meta.Parameter{
+			{Name: "field", RawName: "Field", Type: meta.TypeString, Position: meta.PosFormData},
+			{Name: "body", RawName: "body", Type: meta.TypeArray, Position: meta.PosFormData, ParamStyle: "json",
+				ItemType: &meta.Parameter{Type: meta.TypeObject}},
+		},
+	}
+	ec := &ExecContext{
+		API: api, Endpoint: strings.TrimPrefix(srv.URL, "http://"), Credential: staticAKCredential(t),
+		Args: map[string]any{
+			"Field": "two words",
+			"body":  []any{map[string]any{"ReferenceId": "01"}},
+		},
+	}
+
+	assembled, err := Assemble(ec)
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if _, exists := assembled.Headers["content-type"]; exists {
+		t.Fatalf("runtime must leave formData content-type to the SDK: %#v", assembled.Headers)
+	}
+	if _, err := NewExecutor().Execute(ec); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if gotContentType != "application/x-www-form-urlencoded" {
+		t.Fatalf("wire Content-Type = %q", gotContentType)
+	}
+	if gotForm.Get("Field") != "two words" {
+		t.Fatalf("wire Field = %q; form=%v", gotForm.Get("Field"), gotForm)
+	}
+	if gotForm.Get("body") != `[{"ReferenceId":"01"}]` {
+		t.Fatalf("wire body field = %q; form=%v", gotForm.Get("body"), gotForm)
+	}
+	if gotForm.Get("body.1.ReferenceId") != "" {
+		t.Fatalf("json-style form field was flattened: %v", gotForm)
+	}
+}
+
 // TestSendROAAgainstMockServer exercises the ROA path against a
 // mock gateway: the path placeholder must be substituted, the request
 // must actually reach the templated path with the query attached, and
