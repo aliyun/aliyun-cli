@@ -83,6 +83,7 @@ type Flag struct {
 	// looks like a plugin subcommand (product + lowercase action). Plugins may repeat the
 	// same parameter; each new --flag starts a fresh value from the next argv token.
 	allowRepeatedUnknown bool
+	dynamicUnknown       bool
 
 	assigned bool
 	value    string
