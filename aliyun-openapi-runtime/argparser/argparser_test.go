@@ -32,6 +32,7 @@ func schema() []meta.Parameter {
 		{Name: "image_cache_name", RawName: "ImageCacheName", Type: meta.TypeString, Options: []string{"--image-cache-name"}},
 		{Name: "count", RawName: "Count", Type: meta.TypeInteger, Options: []string{"--count"}},
 		{Name: "big_id", RawName: "BigId", Type: meta.TypeLong, Options: []string{"--big-id"}},
+		{Name: "threshold", RawName: "Threshold", Type: meta.TypeFloat, Options: []string{"--threshold"}},
 		{Name: "enabled", RawName: "Enabled", Type: meta.TypeBoolean, Options: []string{"--enabled"}},
 		{
 			Name: "images", RawName: "Images", Type: meta.TypeArray, Options: []string{"--images"},
@@ -51,6 +52,7 @@ func schema() []meta.Parameter {
 				{Name: "vswitch_id", RawName: "VSwitchId", Type: meta.TypeString},
 				{Name: "security_group_id", RawName: "SecurityGroupId", Type: meta.TypeString},
 				{Name: "port", RawName: "Port", Type: meta.TypeInteger},
+				{Name: "threshold", RawName: "Threshold", Type: meta.TypeFloat},
 				{Name: "enabled", RawName: "Enabled", Type: meta.TypeBoolean},
 				{Name: "acc", RawName: "Acc", Type: meta.TypeObject, Fields: []meta.Parameter{
 					{Name: "level", RawName: "Level", Type: meta.TypeInteger},
@@ -79,6 +81,10 @@ func schema() []meta.Parameter {
 		{
 			Name: "scores", RawName: "Scores", Type: meta.TypeMap, Options: []string{"--scores"},
 			ValueType: &meta.Parameter{Type: meta.TypeInteger},
+		},
+		{
+			Name: "job_file", RawName: "JobFile", Type: meta.TypeMap, Options: []string{"--job-file"}, ParamStyle: "json",
+			ValueType: &meta.Parameter{Type: meta.TypeAny},
 		},
 	}
 }
@@ -131,6 +137,65 @@ func TestNumericPreservedAsJSONNumber(t *testing.T) {
 	// 2^53+1 would lose precision as float64; json.Number keeps it.
 	if got, ok := res.Args["BigId"].(json.Number); !ok || got.String() != "9007199254740993" {
 		t.Fatalf("big_id = %#v", res.Args["BigId"])
+	}
+}
+
+func TestFloatCoercedToFloat64(t *testing.T) {
+	res := mustParse(t, "--threshold", "5.0")
+	got, ok := res.Args["Threshold"].(float64)
+	if !ok || got != 5 {
+		t.Fatalf("threshold = %#v (%T), want float64(5)", res.Args["Threshold"], res.Args["Threshold"])
+	}
+
+	encoded, err := json.Marshal(res.Args["Threshold"])
+	if err != nil {
+		t.Fatalf("marshal threshold: %v", err)
+	}
+	if string(encoded) != "5" {
+		t.Fatalf("encoded threshold = %s, want 5", encoded)
+	}
+}
+
+func TestNestedFloatCoercedToFloat64(t *testing.T) {
+	for _, tt := range []struct {
+		input string
+		want  float64
+	}{
+		{input: "Threshold=15.0", want: 15},
+		{input: `{"Threshold":200.0}`, want: 200},
+	} {
+		res := mustParse(t, "--network-config", tt.input)
+		network := res.Args["NetworkConfig"].(map[string]any)
+		got, ok := network["Threshold"].(float64)
+		if !ok {
+			t.Fatalf("input %q: threshold = %#v (%T), want float64", tt.input, network["Threshold"], network["Threshold"])
+		}
+		if got != tt.want {
+			t.Fatalf("input %q: threshold = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestFloatSupportsDecimalAndExponent(t *testing.T) {
+	for _, tt := range []struct {
+		raw  string
+		want float64
+	}{
+		{raw: "5.25", want: 5.25},
+		{raw: "5e2", want: 500},
+	} {
+		res := mustParse(t, "--threshold", tt.raw)
+		if got, ok := res.Args["Threshold"].(float64); !ok || got != tt.want {
+			t.Fatalf("threshold %q = %#v, want float64(%v)", tt.raw, res.Args["Threshold"], tt.want)
+		}
+	}
+}
+
+func TestFloatRejectsInvalidAndOutOfRangeValues(t *testing.T) {
+	for _, raw := range []string{"not-a-number", "1e10000"} {
+		if _, err := Parse(schema(), []string{"--threshold", raw}); err == nil {
+			t.Fatalf("Parse accepted invalid float %q", raw)
+		}
 	}
 }
 
@@ -515,6 +580,34 @@ func TestAnyTypeSmartParse(t *testing.T) {
 	res = mustParse(t, "--payload", `[1,"x"]`)
 	if arr, ok := res.Args["Payload"].([]any); !ok || len(arr) != 2 {
 		t.Fatalf("payload arr = %#v", res.Args["Payload"])
+	}
+}
+
+func TestMapAnyKeepsInvalidJSONNumbersAsStrings(t *testing.T) {
+	res := mustParse(t,
+		"--job-file",
+		"sign=000",
+		"positive=+1",
+		"fraction=.5",
+		"trailing=1.",
+		"count=12",
+		"ratio=0.5",
+	)
+	jobFile := res.Args["JobFile"].(map[string]any)
+	for key, want := range map[string]string{
+		"sign": "000", "positive": "+1", "fraction": ".5", "trailing": "1.",
+	} {
+		if got, ok := jobFile[key].(string); !ok || got != want {
+			t.Fatalf("JobFile[%q] = %#v, want string %q", key, jobFile[key], want)
+		}
+	}
+	for key, want := range map[string]string{"count": "12", "ratio": "0.5"} {
+		if got, ok := jobFile[key].(json.Number); !ok || got.String() != want {
+			t.Fatalf("JobFile[%q] = %#v, want json.Number(%s)", key, jobFile[key], want)
+		}
+	}
+	if _, err := json.Marshal(jobFile); err != nil {
+		t.Fatalf("json.Marshal(JobFile) failed: %v", err)
 	}
 }
 

@@ -291,8 +291,10 @@ func ReservedFlags() []ReservedFlag {
 // Result bundles the parsed API arguments and the reserved flags.
 type Result struct {
 	// Args maps each provided parameter's wire RawName to its parsed
-	// value (nested object keys are also RawName). Scalars are string /
-	// json.Number; arrays are []any; objects/maps are map[string]any.
+	// value (nested object keys are also RawName).
+	// Scalars are string / json.Number / float64 / bool;
+	// arrays are []any;
+	// objects/maps are map[string]any.
 	Args map[string]any
 
 	// Reserved holds the runtime-steering flags.
@@ -861,7 +863,7 @@ func coerceDecodedScalar(t meta.DataType, v any) (any, error) {
 		default:
 			return nil, fmt.Errorf("cannot convert %T to boolean", v)
 		}
-	case meta.TypeInteger, meta.TypeLong, meta.TypeFloat:
+	case meta.TypeInteger, meta.TypeLong:
 		if v == nil {
 			return json.Number("0"), nil
 		}
@@ -872,6 +874,18 @@ func coerceDecodedScalar(t meta.DataType, v any) (any, error) {
 			return coerceScalar(t, strings.TrimSpace(value))
 		default:
 			return nil, fmt.Errorf("cannot convert %T to number", v)
+		}
+	case meta.TypeFloat:
+		if v == nil {
+			return float64(0), nil
+		}
+		switch value := v.(type) {
+		case json.Number:
+			return coerceScalar(t, value.String())
+		case string:
+			return coerceScalar(t, strings.TrimSpace(value))
+		default:
+			return nil, fmt.Errorf("cannot convert %T to float", v)
 		}
 	default:
 		return v, nil
@@ -1146,9 +1160,10 @@ func stripOuterQuotes(s string) string {
 }
 
 // coerceScalar converts a raw string into the typed value the wire
-// layer expects. Numbers become json.Number to preserve int64/large
+// layer expects. Integers become json.Number to preserve int64/large
 // precision end-to-end (see the precision contract in the module
-// architecture doc).
+// architecture doc). Floats become float64, matching OpenAPI
+// number/double and aliyun-cli-runtime's FloatArg contract.
 //
 // Booleans become Go bools so JSON body and param_style=json values use
 // JSON boolean literals, matching the legacy Go plugin. Ordinary query
@@ -1156,13 +1171,22 @@ func stripOuterQuotes(s string) string {
 // the wire.
 func coerceScalar(t meta.DataType, raw string) (any, error) {
 	switch t {
-	case meta.TypeInteger, meta.TypeLong, meta.TypeFloat:
+	case meta.TypeInteger, meta.TypeLong:
 		// Preserve exactly as typed; json.Number marshals without
 		// quotes and never routes through float64.
 		if !looksNumeric(raw) {
 			return nil, fmt.Errorf("invalid number %q", raw)
 		}
 		return json.Number(raw), nil
+	case meta.TypeFloat:
+		if !looksNumeric(raw) {
+			return nil, fmt.Errorf("invalid float %q", raw)
+		}
+		value, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid float %q: %w", raw, err)
+		}
+		return value, nil
 	case meta.TypeBoolean:
 		return parseBoolean(raw)
 	case meta.TypeAny:
@@ -1209,10 +1233,24 @@ func parseAny(s string) any {
 	case "null":
 		return nil
 	}
-	if looksNumeric(t) {
+	if isValidJSONNumberLiteral(t) {
 		return json.Number(t)
 	}
 	return s
+}
+
+func isValidJSONNumberLiteral(s string) bool {
+	if !json.Valid([]byte(s)) {
+		return false
+	}
+	dec := json.NewDecoder(strings.NewReader(s))
+	dec.UseNumber()
+	var value any
+	if err := dec.Decode(&value); err != nil {
+		return false
+	}
+	_, ok := value.(json.Number)
+	return ok
 }
 
 // isLikelyJSON reports whether s looks like a JSON object, array, or
