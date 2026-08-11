@@ -114,12 +114,18 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 			}
 		}
 
-		// Collect this occurrence's value tokens: everything up to the next flag-looking token.
+		// Scalars consume one value; composites consume through the next registered flag.
 		var occ []string
 		if hasInline {
 			occ = []string{inlineVal}
-		} else {
+		} else if p.IsComposite() {
 			occ, i = takeValues(args, i, externalFlags, apiParams)
+		} else {
+			value, next := takeOneValue(args, i, externalFlags, apiParams)
+			if next != i {
+				occ = []string{value}
+				i = next
+			}
 		}
 
 		if err := assign(res.Args, p, occ); err != nil {

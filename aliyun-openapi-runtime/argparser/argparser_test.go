@@ -1086,6 +1086,27 @@ func TestUnknownFlag(t *testing.T) {
 	}
 }
 
+func TestUnknownFlagAfterScalarIsNotAbsorbedAsAnotherValue(t *testing.T) {
+	params := []meta.Parameter{{
+		Name: "email", RawName: "Email", Type: meta.TypeString, Options: []string{"--email"},
+	}}
+	_, err := Parse(params, []string{"--email", "a0@gmail.com", "--timestamp", "example-string"})
+	var ufe *UnknownFlagError
+	if !errors.As(err, &ufe) {
+		t.Fatalf("expected UnknownFlagError, got %v", err)
+	}
+	if ufe.Flag != "timestamp" {
+		t.Fatalf("flag = %q, want timestamp", ufe.Flag)
+	}
+}
+
+func TestScalarMissingValueBeforeRegisteredFlag(t *testing.T) {
+	_, err := Parse(schema(), []string{"--image-cache-name", "--biz-region-id", "cn-hangzhou"})
+	if err == nil || err.Error() != "--image-cache-name expects a value" {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestParameterOptionIsCaseSensitive(t *testing.T) {
 	_, err := Parse(schema(), []string{"--Biz-Region-Id", "cn-hangzhou"})
 	var ufe *UnknownFlagError
