@@ -136,13 +136,21 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 	return res, nil
 }
 
-// assign folds one flag occurrence's raw tokens into res under the parameter's WIRE key (RawName),
-// honouring the parameter's composite shape and merging repeated occurrences.
+// assign folds one flag occurrence's raw tokens into res under the parameter's WIRE key (RawName).
+// Arrays accumulate repeated occurrences; maps and objects must be specified once.
 // A parameter without a RawName in metadata is rejected: the args map is keyed strictly by RawName.
 func assign(dst map[string]any, p *meta.Parameter, tokens []string) error {
 	key, err := resolveWire(p)
 	if err != nil {
 		return err
+	}
+	if p.Type == meta.TypeObject || p.Type == meta.TypeMap {
+		if _, exists := dst[key]; exists {
+			return fmt.Errorf(
+				"--%s may only be specified once; pass multiple key=value pairs after one flag or use a single JSON object",
+				displayName(p),
+			)
+		}
 	}
 	switch p.Type {
 	case meta.TypeArray:
@@ -297,7 +305,7 @@ func assignObject(dst map[string]any, key string, p *meta.Parameter, tokens []st
 		if err != nil {
 			return fmt.Errorf("--%s: %w", displayName(p), err)
 		}
-		mergeObject(dst, key, rv.(map[string]any))
+		dst[key] = rv.(map[string]any)
 		return nil
 	}
 
@@ -305,7 +313,7 @@ func assignObject(dst map[string]any, key string, p *meta.Parameter, tokens []st
 	if err != nil {
 		return fmt.Errorf("--%s: %w", displayName(p), err)
 	}
-	mergeObject(dst, key, obj)
+	dst[key] = obj
 	return nil
 }
 
@@ -325,7 +333,7 @@ func assignMap(dst map[string]any, key string, p *meta.Parameter, tokens []strin
 		if err != nil {
 			return fmt.Errorf("--%s: %w", displayName(p), err)
 		}
-		mergeObject(dst, key, rv.(map[string]any))
+		dst[key] = rv.(map[string]any)
 		return nil
 	}
 
@@ -360,17 +368,6 @@ func assignMap(dst map[string]any, key string, p *meta.Parameter, tokens []strin
 
 func compositeMapJSONError(p *meta.Parameter) error {
 	return fmt.Errorf("--%s: map values of type %s require a complete JSON object", displayName(p), p.ValueType.Type)
-}
-
-// mergeObject stores obj under key, merging into an existing map from a prior occurrence of the same flag.
-func mergeObject(dst map[string]any, key string, obj map[string]any) {
-	if existing, ok := dst[key].(map[string]any); ok {
-		for k, v := range obj {
-			existing[k] = v
-		}
-		return
-	}
-	dst[key] = obj
 }
 
 // tryFlagJSON parses a flag occurrence that looks like an object or array as

@@ -413,11 +413,76 @@ func TestMissingRawNameErrors(t *testing.T) {
 	}
 }
 
-func TestObjectMergedAcrossOccurrences(t *testing.T) {
-	res := mustParse(t, "--network-config", "VSwitchId=vsw-1", "--network-config", "SecurityGroupId=sg-1")
-	want := map[string]any{"VSwitchId": "vsw-1", "SecurityGroupId": "sg-1"}
-	if !reflect.DeepEqual(res.Args["NetworkConfig"], want) {
-		t.Fatalf("NetworkConfig = %#v", res.Args["NetworkConfig"])
+func TestObjectAndMapRejectRepeatedOccurrences(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "object key value occurrences",
+			args: []string{"--network-config", "VSwitchId=vsw-1", "--network-config", "SecurityGroupId=sg-1"},
+			want: "--network-config may only be specified once; pass multiple key=value pairs after one flag or use a single JSON object",
+		},
+		{
+			name: "object JSON occurrences",
+			args: []string{"--network-config", `{"VSwitchId":"vsw-1"}`, "--network-config", `{"SecurityGroupId":"sg-1"}`},
+			want: "--network-config may only be specified once; pass multiple key=value pairs after one flag or use a single JSON object",
+		},
+		{
+			name: "map occurrences",
+			args: []string{"--labels", "env=prod", "--labels", "region=cn"},
+			want: "--labels may only be specified once; pass multiple key=value pairs after one flag or use a single JSON object",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(schema(), tt.args)
+			if err == nil || err.Error() != tt.want {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestObjectAndMapSplitEachTokenAtFirstEquals(t *testing.T) {
+	objectResult, err := Parse(schema(), []string{"--network-config", "VSwitchId=hello key=value"})
+	if err != nil {
+		t.Fatalf("object value containing spaces and equals: %v", err)
+	}
+	object := objectResult.Args["NetworkConfig"].(map[string]any)
+	if object["VSwitchId"] != "hello key=value" {
+		t.Fatalf("NetworkConfig.VSwitchId = %#v", object["VSwitchId"])
+	}
+
+	mapResult, err := Parse(schema(), []string{"--labels", "name=hello key=value"})
+	if err != nil {
+		t.Fatalf("map value containing spaces and equals: %v", err)
+	}
+	labels := mapResult.Args["Labels"].(map[string]any)
+	if labels["name"] != "hello key=value" {
+		t.Fatalf("Labels.name = %#v", labels["name"])
+	}
+}
+
+func TestObjectAndMapAcceptSpacesInSingleValue(t *testing.T) {
+	objectResult, err := Parse(schema(), []string{"--network-config", "VSwitchId=hello world"})
+	if err != nil {
+		t.Fatalf("object value with spaces: %v", err)
+	}
+	object := objectResult.Args["NetworkConfig"].(map[string]any)
+	if object["VSwitchId"] != "hello world" {
+		t.Fatalf("NetworkConfig.VSwitchId = %#v", object["VSwitchId"])
+	}
+
+	mapResult, err := Parse(schema(), []string{"--labels", "name=hello world"})
+	if err != nil {
+		t.Fatalf("map value with spaces: %v", err)
+	}
+	labels := mapResult.Args["Labels"].(map[string]any)
+	if labels["name"] != "hello world" {
+		t.Fatalf("Labels.name = %#v", labels["name"])
 	}
 }
 
