@@ -129,6 +129,13 @@ func TestScalarInlineEquals(t *testing.T) {
 	}
 }
 
+func TestCompositeParameterRejectsInlineEquals(t *testing.T) {
+	_, err := Parse(schema(), []string{"--network-config={\"Port\":80}"})
+	if err == nil || !strings.Contains(err.Error(), "does not support an inline value") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestNumericPreservedAsJSONNumber(t *testing.T) {
 	res := mustParse(t, "--count", "42", "--big-id", "9007199254740993")
 	if got, ok := res.Args["Count"].(json.Number); !ok || got.String() != "42" {
@@ -836,6 +843,16 @@ func TestDashPrefixedValue(t *testing.T) {
 	if res.Args["ImageCacheName"] != "-1/-1" {
 		t.Fatalf("dash value = %v", res.Args["ImageCacheName"])
 	}
+	certificate := "-----BEGIN_CERTIFICATE-----MIIDrzCCApeg-----END_CERTIFICATE-----"
+	res = mustParse(t, "--image-cache-name", certificate)
+	if res.Args["ImageCacheName"] != certificate {
+		t.Fatalf("certificate value = %v", res.Args["ImageCacheName"])
+	}
+	unregisteredLongToken := "--not-a-registered-flag"
+	res = mustParse(t, "--image-cache-name", unregisteredLongToken)
+	if res.Args["ImageCacheName"] != unregisteredLongToken {
+		t.Fatalf("unregistered long token value = %v", res.Args["ImageCacheName"])
+	}
 	// Negative number into a numeric field.
 	res = mustParse(t, "--count", "-5")
 	if got, _ := res.Args["Count"].(json.Number); got.String() != "-5" {
@@ -873,6 +890,30 @@ func TestReservedFlags(t *testing.T) {
 	// Reserved names never leak into API args.
 	if _, ok := res.Args["region"]; ok {
 		t.Fatal("reserved --region leaked into API args")
+	}
+}
+
+func TestReservedFlagsHelpFiltersHiddenEntries(t *testing.T) {
+	flags := ReservedFlags()
+	names := make([]string, len(flags))
+	for i, flag := range flags {
+		names[i] = flag.Name
+		if flag.DescZH == "" || flag.DescEN == "" {
+			t.Fatalf("visible reserved flag %q is missing help text", flag.Name)
+		}
+	}
+	want := []string{
+		"cli-dry-run",
+		"region",
+		"endpoint",
+		"api-version",
+		"cli-query",
+		"log-level",
+		"quiet",
+		"pager",
+	}
+	if !reflect.DeepEqual(names, want) {
+		t.Fatalf("visible reserved flags = %v, want %v", names, want)
 	}
 }
 
@@ -1017,6 +1058,16 @@ func TestReservedHeaderBodyEstimate(t *testing.T) {
 	}
 }
 
+func TestParserDoesNotValidateEstimateCostOptionDependency(t *testing.T) {
+	res := mustParse(t,
+		"--estimate-cost-context", "Traffic=10",
+		"--image-cache-name", "c1",
+	)
+	if len(res.Reserved.EstimateCostContext) != 1 || res.Reserved.EstimateCost {
+		t.Fatalf("estimate context = %+v", res.Reserved)
+	}
+}
+
 func TestReservedEmptyBodyStillEnablesEscapeHatch(t *testing.T) {
 	res := mustParse(t, "--body", "", "--image-cache-name", "c1")
 	if !res.Reserved.BodySet || res.Reserved.Body != "" {
@@ -1057,6 +1108,23 @@ func TestParseWithOptionsConsumesExternalFlags(t *testing.T) {
 		"--biz-region-id", "cn-hangzhou",
 		"--read-timeout=30",
 		"--cli-ai-mode",
+	}, opts)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := res.Args["RegionId"]; got != "cn-hangzhou" {
+		t.Fatalf("RegionId = %v", got)
+	}
+}
+
+func TestParseWithOptionsConsumesExternalColonValue(t *testing.T) {
+	opts := ParseOptions{ExternalFlags: []ExternalFlagSpec{{
+		Name: "read-timeout",
+		Mode: ExternalFlagRequired,
+	}}}
+	res, err := ParseWithOptions(schema(), []string{
+		"--read-timeout:30",
+		"--biz-region-id", "cn-hangzhou",
 	}, opts)
 	if err != nil {
 		t.Fatalf("parse: %v", err)

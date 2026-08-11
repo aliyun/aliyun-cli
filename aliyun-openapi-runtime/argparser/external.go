@@ -48,7 +48,7 @@ type externalFlagIndex struct {
 }
 
 func newExternalFlagIndex(specs []ExternalFlagSpec) (*externalFlagIndex, error) {
-	idx := &externalFlagIndex{
+	externalFlags := &externalFlagIndex{
 		byName:      make(map[string]ExternalFlagSpec, len(specs)),
 		byShorthand: make(map[rune]ExternalFlagSpec),
 	}
@@ -57,45 +57,39 @@ func newExternalFlagIndex(specs []ExternalFlagSpec) (*externalFlagIndex, error) 
 		if spec.Name == "" {
 			return nil, fmt.Errorf("external flag name is empty")
 		}
-		if _, exists := idx.byName[spec.Name]; exists {
+		if _, exists := externalFlags.byName[spec.Name]; exists {
 			return nil, fmt.Errorf("external flag --%s duplicated", spec.Name)
 		}
-		idx.byName[spec.Name] = spec
+		externalFlags.byName[spec.Name] = spec
 		if spec.Shorthand != 0 {
-			if _, exists := idx.byShorthand[spec.Shorthand]; exists {
+			if _, exists := externalFlags.byShorthand[spec.Shorthand]; exists {
 				return nil, fmt.Errorf("external flag -%c duplicated", spec.Shorthand)
 			}
-			idx.byShorthand[spec.Shorthand] = spec
+			externalFlags.byShorthand[spec.Shorthand] = spec
 		}
 	}
-	return idx, nil
+	return externalFlags, nil
 }
 
-func (idx *externalFlagIndex) match(tok string) (ExternalFlagSpec, string, bool, bool) {
-	if idx == nil {
+func (externalFlags *externalFlagIndex) match(tok string) (ExternalFlagSpec, string, bool, bool) {
+	if externalFlags == nil {
 		return ExternalFlagSpec{}, "", false, false
 	}
 	prefix, inline, hasInline := splitExternalToken(tok)
 	if strings.HasPrefix(prefix, "--") && len(prefix) > 2 {
-		spec, ok := idx.byName[prefix[2:]]
+		spec, ok := externalFlags.byName[prefix[2:]]
 		return spec, inline, hasInline, ok
 	}
 	runes := []rune(prefix)
 	if len(runes) == 2 && runes[0] == '-' && runes[1] != '-' {
-		spec, ok := idx.byShorthand[runes[1]]
+		spec, ok := externalFlags.byShorthand[runes[1]]
 		return spec, inline, hasInline, ok
 	}
 	return ExternalFlagSpec{}, "", false, false
 }
 
-func (idx *externalFlagIndex) isFlagToken(tok string) bool {
-	if _, _, _, ok := idx.match(tok); ok {
-		return true
-	}
-	return false
-}
-
 func splitExternalToken(tok string) (prefix, value string, hasInline bool) {
+	// 只有继承自cli 全局参数的，根据现有规则，支持= : 及空格传参
 	if i := strings.IndexAny(tok, "=:"); i >= 0 {
 		return tok[:i], tok[i+1:], true
 	}
@@ -105,7 +99,8 @@ func splitExternalToken(tok string) (prefix, value string, hasInline bool) {
 func consumeExternalFlag(
 	args []string,
 	i int,
-	external *externalFlagIndex,
+	externalFlags *externalFlagIndex,
+	apiParams *paramIndex,
 	spec ExternalFlagSpec,
 	inlineVal string,
 	hasInline bool,
@@ -120,14 +115,14 @@ func consumeExternalFlag(
 		}
 	case ExternalFlagOptional:
 		if !hasInline || inlineVal == "" {
-			_, i = takeOneValue(args, i, external)
+			_, i = takeOneValue(args, i, externalFlags, apiParams)
 		}
 	case ExternalFlagRequired:
 		if hasInline && inlineVal != "" {
 			return i, nil
 		}
 		before := i
-		_, i = takeOneValue(args, i, external)
+		_, i = takeOneValue(args, i, externalFlags, apiParams)
 		if i == before {
 			return i, fmt.Errorf("--%s requires a value", spec.Name)
 		}

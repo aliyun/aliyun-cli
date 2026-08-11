@@ -46,248 +46,6 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 )
 
-// Reserved carries the well-known flags that steer the runtime rather
-// than becoming API parameters. They are recognised regardless of the
-// command schema so every aliyun-openapi-runtime command accepts them
-// uniformly.
-type Reserved struct {
-	Region   string // --region: profile/wire region for signing + endpoint
-	Endpoint string // --endpoint: explicit endpoint override
-	Version  string // --api-version: API version override
-	CliQuery string // --cli-query: jmespath expression applied to the response
-	LogLevel string // --log-level: DEBUG|INFO|WARN|ERROR (and plugin aliases)
-
-	// Dry-run has two flavours, matching the plugin-common
-	// convention so users get the same UX across engines:
-	//   --cli-dry-run       -> DryRun, human-readable request dump
-	//   --cli-dry-run-json  -> DryRun + DryRunJSON, one-line meta JSON
-	// Do NOT reserve --dry-run: that name belongs to API params
-	// (e.g. DryRun -> --dry-run true|false). CLI preflight uses
-	// --cli-dry-run / --cli-dry-run-json only.
-	DryRun     bool
-	DryRunJSON bool
-
-	Help  bool // --help / -h
-	Quiet bool // --quiet / -q
-
-	Secure   bool // --secure: force HTTPS
-	Insecure bool // --insecure: force HTTP
-
-	Headers     []string // --header Name=Value (repeatable)
-	Body        string   // --body raw string
-	BodyFile    string   // --body-file path
-	BodySet     bool     // distinguishes --body '' from an absent escape hatch
-	BodyFileSet bool     // distinguishes an explicitly supplied --body-file
-
-	// OutputTable is --output / -o with plugin object form
-	// cols=... [rows=...] [num=...]. Absent => default pretty JSON.
-	OutputTable *OutputTableConfig
-
-	EstimateCost        bool     // --estimate-cost
-	EstimateCostContext []string // --estimate-cost-context Key=Value (repeatable)
-
-	NoStream bool // --no-stream (SSE only; ignored otherwise)
-
-	// Pager / Waiter mirror aliyun-cli-runtime's global ObjectArg
-	// helpers. Non-nil means the flag was present (even bare --pager).
-	Pager  *PagerConfig
-	Waiter *WaiterConfig
-}
-
-// OutputTableConfig is the plugin-style --output cols/rows/num object.
-type OutputTableConfig struct {
-	Cols    []string
-	Rows    string
-	ShowNum bool
-}
-
-// PagerConfig is the --pager / --all-pages object. Empty fields take
-// the plugin-compatible defaults at execution time.
-type PagerConfig struct {
-	Path       string // JMESPath to the collection (e.g. "Data.CategoryList[]")
-	PageNumber string // request/response field for page number
-	PageSize   string
-	TotalCount string
-	NextToken  string
-}
-
-// WaiterConfig is the --waiter object. Expr and To are required;
-// Timeout/Interval default to 180s / 5s when zero.
-type WaiterConfig struct {
-	Expr     string
-	To       string
-	Timeout  int // seconds; 0 -> default 180
-	Interval int // seconds; 0 -> default 5
-}
-
-// reservedNames maps each reserved flag's long name to a small parse
-// descriptor. takesValue=false means the flag is a boolean switch.
-var reservedSpec = map[string]struct {
-	takesValue bool
-	apply      func(r *Reserved, v string)
-}{
-	"region":           {true, func(r *Reserved, v string) { r.Region = v }},
-	"endpoint":         {true, func(r *Reserved, v string) { r.Endpoint = v }},
-	"api-version":      {true, func(r *Reserved, v string) { r.Version = v }},
-	"cli-query":        {true, func(r *Reserved, v string) { r.CliQuery = v }},
-	"log-level":        {true, func(r *Reserved, v string) { r.LogLevel = v }},
-	"body":             {true, func(r *Reserved, v string) { r.Body = v; r.BodySet = true }},
-	"body-file":        {true, func(r *Reserved, v string) { r.BodyFile = v; r.BodyFileSet = true }},
-	"cli-dry-run":      {false, func(r *Reserved, _ string) { r.DryRun = true }},
-	"cli-dry-run-json": {false, func(r *Reserved, _ string) { r.DryRun = true; r.DryRunJSON = true }},
-	"help":             {false, func(r *Reserved, _ string) { r.Help = true }},
-	"quiet":            {false, func(r *Reserved, _ string) { r.Quiet = true }},
-	"secure":           {false, func(r *Reserved, _ string) { r.Secure = true }},
-	"insecure":         {false, func(r *Reserved, _ string) { r.Insecure = true }},
-	"estimate-cost":    {false, func(r *Reserved, _ string) { r.EstimateCost = true }},
-	"no-stream":        {false, func(r *Reserved, _ string) { r.NoStream = true }},
-}
-
-// reservedObjectFlags are object-style reserved flags that consume a
-// trail of key=value tokens (or nothing, for bare --pager).
-var reservedObjectFlags = map[string]func(r *Reserved, kv map[string]string) error{
-	"pager":     applyPager,
-	"all-pages": applyPager, // alias of --pager
-	"waiter":    applyWaiter,
-}
-
-var pagerFields = map[string]bool{
-	"path": true, "PageNumber": true, "PageSize": true, "TotalCount": true, "NextToken": true,
-}
-
-var waiterFields = map[string]bool{
-	"expr": true, "to": true, "timeout": true, "interval": true,
-}
-
-func applyPager(r *Reserved, kv map[string]string) error {
-	for k := range kv {
-		if !pagerFields[k] {
-			return fmt.Errorf("--pager: unknown field %q (want path/PageNumber/PageSize/TotalCount/NextToken)", k)
-		}
-	}
-	if r.Pager == nil {
-		r.Pager = &PagerConfig{}
-	}
-	if v, ok := kv["path"]; ok {
-		r.Pager.Path = v
-	}
-	if v, ok := kv["PageNumber"]; ok {
-		r.Pager.PageNumber = v
-	}
-	if v, ok := kv["PageSize"]; ok {
-		r.Pager.PageSize = v
-	}
-	if v, ok := kv["TotalCount"]; ok {
-		r.Pager.TotalCount = v
-	}
-	if v, ok := kv["NextToken"]; ok {
-		r.Pager.NextToken = v
-	}
-	return nil
-}
-
-func applyWaiter(r *Reserved, kv map[string]string) error {
-	for k := range kv {
-		if !waiterFields[k] {
-			return fmt.Errorf("--waiter: unknown field %q (want expr/to/timeout/interval)", k)
-		}
-	}
-	if r.Waiter == nil {
-		r.Waiter = &WaiterConfig{}
-	}
-	if v, ok := kv["expr"]; ok {
-		r.Waiter.Expr = v
-	}
-	if v, ok := kv["to"]; ok {
-		r.Waiter.To = v
-	}
-	if v, ok := kv["timeout"]; ok {
-		n, err := strconv.Atoi(v)
-		if err != nil || n <= 0 {
-			return fmt.Errorf("--waiter timeout: invalid value %q", v)
-		}
-		r.Waiter.Timeout = n
-	}
-	if v, ok := kv["interval"]; ok {
-		n, err := strconv.Atoi(v)
-		if err != nil || n <= 0 {
-			return fmt.Errorf("--waiter interval: invalid value %q", v)
-		}
-		r.Waiter.Interval = n
-	}
-	return nil
-}
-
-func applyOutputTable(r *Reserved, kv map[string]string) error {
-	for k := range kv {
-		if k != "cols" && k != "rows" && k != "num" {
-			return fmt.Errorf("--output: unknown field %q (want cols/rows/num)", k)
-		}
-	}
-	cols, ok := kv["cols"]
-	if !ok || cols == "" {
-		return fmt.Errorf("--output object form requires cols=...")
-	}
-	cfg := &OutputTableConfig{Rows: kv["rows"]}
-	for _, c := range strings.Split(cols, ",") {
-		c = strings.TrimSpace(c)
-		if c != "" {
-			cfg.Cols = append(cfg.Cols, c)
-		}
-	}
-	if n := kv["num"]; n == "true" || n == "1" {
-		cfg.ShowNum = true
-	}
-	r.OutputTable = cfg
-	return nil
-}
-
-// ReservedFlag describes one engine reserved (global) flag for help rendering.
-// It is the public, ordered counterpart of the internal reservedSpec parsing table.
-type ReservedFlag struct {
-	Name       string // long name without the leading "--"
-	TakesValue bool   // whether it consumes a value (vs boolean switch)
-	DescZH     string
-	DescEN     string
-}
-
-// Desc returns the localized description ("zh" -> Chinese, otherwise
-// English).
-func (f ReservedFlag) Desc(lang string) string {
-	if lang == "zh" && f.DescZH != "" {
-		return f.DescZH
-	}
-	if f.DescEN != "" {
-		return f.DescEN
-	}
-	return f.DescZH
-}
-
-// reservedHelp is the ordered, documented list of engine reserved
-// flags. Kept in a stable, user-facing order (most useful first). It
-// mirrors reservedSpec; keep the two in sync when adding a flag.
-var reservedHelp = []ReservedFlag{
-	{"cli-dry-run", false, "组装请求但不发送，打印请求详情", "Assemble the request and print it without sending"},
-	{"cli-dry-run-json", false, "以一行 JSON 打印调用元信息，不发送", "Print one-line invocation metadata as JSON without sending"},
-	{"region", true, "指定调用的地域，用于签名与 endpoint 解析", "Region used for signing and endpoint resolution"},
-	{"endpoint", true, "显式指定接入 endpoint", "Explicit endpoint override"},
-	{"api-version", true, "覆盖 API 版本", "Override the API version"},
-	{"cli-query", true, "对响应应用 jmespath 表达式过滤", "Apply a jmespath expression to the response"},
-	{"log-level", true, "设置日志级别: DEBUG、INFO、WARN、ERROR(默认: ERROR)", "Set log level: DEBUG, INFO, WARN, ERROR (default: ERROR)"},
-	{"quiet", false, "抑制正常输出", "Suppress normal output"},
-	{"pager", true, "合并可分页 API 的多页结果（可用 --all-pages）；可选 path/PageNumber/PageSize/TotalCount/NextToken", "Merge pages for pageable APIs (alias --all-pages); optional path/PageNumber/PageSize/TotalCount/NextToken"},
-}
-
-// ReservedFlags returns the engine's reserved (global) flags for help
-// rendering, in a stable user-facing order. The --help / -h and hidden
-// --body / --body-file / --output / --waiter / --estimate-cost* are intentionally omitted
-// (plugin parity). --dry-run is not reserved (API param name).
-func ReservedFlags() []ReservedFlag {
-	out := make([]ReservedFlag, len(reservedHelp))
-	copy(out, reservedHelp)
-	return out
-}
-
 // Result bundles the parsed API arguments and the reserved flags.
 type Result struct {
 	// Args maps each provided parameter's wire RawName to its parsed
@@ -310,8 +68,8 @@ func Parse(params []meta.Parameter, args []string) (*Result, error) {
 
 // ParseWithOptions parses engine/API arguments while syntactically consuming external flags whose values are already owned by the embedding host.
 func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions) (*Result, error) {
-	idx := newParamIndex(params)
-	external, err := newExternalFlagIndex(opts.ExternalFlags)
+	apiParams := newParamIndex(params)
+	externalFlags, err := newExternalFlagIndex(opts.ExternalFlags)
 	if err != nil {
 		return nil, err
 	}
@@ -320,142 +78,48 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 	i := 0
 	for i < len(args) {
 		tok := args[i]
-		// Short aliases matching plugin globals.
-		if tok == "-q" {
-			res.Reserved.Quiet = true
+		// Runtime-owned flags, long and shorthand, have highest priority.
+		if _, spec, inlineVal, hasInline, ok := reservedFlags.match(tok); ok {
 			i++
-			continue
-		}
-		if tok == "-h" {
-			res.Reserved.Help = true
-			i++
-			continue
-		}
-		if tok == "-o" || strings.HasPrefix(tok, "-o=") {
-			name, inlineVal, hasInline := "output", "", false
-			if strings.HasPrefix(tok, "-o=") {
-				inlineVal, hasInline = tok[3:], true
-			}
-			i++
-			var occ []string
-			if hasInline {
-				occ = []string{inlineVal}
-			} else {
-				occ, i = takeValues(args, i, external)
-			}
-			if err := parseOutputFlag(&res.Reserved, occ); err != nil {
-				return nil, err
-			}
-			_ = name
-			continue
-		}
-		// Engine short aliases have priority. Other declared short flags
-		// belong to the embedding host.
-		if spec, inlineVal, hasInline, ok := external.match(tok); ok && !strings.HasPrefix(tok, "--") {
-			i++
-			i, err = consumeExternalFlag(args, i, external, spec, inlineVal, hasInline)
+			i, err = consumeReservedFlag(args, i, externalFlags, apiParams, spec, inlineVal, hasInline, &res.Reserved)
 			if err != nil {
 				return nil, err
 			}
 			continue
 		}
-		name, inlineVal, hasInline, isFlag := splitFlag(tok)
+
+		// Host-owned external flags have priority over API metadata parameters.
+		if spec, inlineVal, hasInline, ok := externalFlags.match(tok); ok {
+			i++
+			i, err = consumeExternalFlag(args, i, externalFlags, apiParams, spec, inlineVal, hasInline)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		name, inlineVal, hasInline, isFlag := splitLongFlag(tok)
 		if !isFlag {
 			return nil, fmt.Errorf("unexpected positional argument %q", tok)
 		}
 		i++
 
-		// Reserved flags win over schema flags: they use fixed
-		// names that products are not allowed to shadow.
-		if applyObj, ok := reservedObjectFlags[name]; ok {
-			var occ []string
-			if hasInline {
-				occ = []string{inlineVal}
-			} else {
-				occ, i = takeValues(args, i, external)
-			}
-			kv, err := parseReservedObject(occ)
-			if err != nil {
-				return nil, fmt.Errorf("--%s: %w", name, err)
-			}
-			if err := applyObj(&res.Reserved, kv); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if name == "output" {
-			var occ []string
-			if hasInline {
-				occ = []string{inlineVal}
-			} else {
-				occ, i = takeValues(args, i, external)
-			}
-			if err := parseOutputFlag(&res.Reserved, occ); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if name == "header" {
-			var occ []string
-			if hasInline {
-				occ = []string{inlineVal}
-			} else {
-				occ, i = takeValues(args, i, external)
-			}
-			if len(occ) == 0 {
-				return nil, fmt.Errorf("--header expects Name=Value")
-			}
-			res.Reserved.Headers = append(res.Reserved.Headers, occ...)
-			continue
-		}
-		if name == "estimate-cost-context" {
-			var occ []string
-			if hasInline {
-				occ = []string{inlineVal}
-			} else {
-				occ, i = takeValues(args, i, external)
-			}
-			if len(occ) == 0 {
-				return nil, fmt.Errorf("--estimate-cost-context expects Key=Value")
-			}
-			res.Reserved.EstimateCostContext = append(res.Reserved.EstimateCostContext, occ...)
-			continue
-		}
-		if spec, ok := reservedSpec[name]; ok {
-			if !spec.takesValue {
-				spec.apply(&res.Reserved, "")
-				continue
-			}
-			val := inlineVal
-			if !hasInline {
-				val, i = takeOneValue(args, i, external)
-			}
-			spec.apply(&res.Reserved, val)
-			continue
-		}
-
-		// Engine-reserved flags above take priority over host declarations.
-		// External flags in turn take priority over API metadata parameters.
-		if spec, externalInline, externalHasInline, ok := external.match(tok); ok {
-			i, err = consumeExternalFlag(args, i, external, spec, externalInline, externalHasInline)
-			if err != nil {
-				return nil, err
-			}
-			continue
-		}
-
-		p := idx.lookup(name)
+		p := apiParams.lookup(name)
 		if p == nil {
-			return nil, &UnknownFlagError{Flag: name, Known: idx.optionNames()}
+			return nil, &UnknownFlagError{Flag: name, Known: apiParams.optionNames()}
+		}
+		if hasInline {
+			switch p.Type {
+			case meta.TypeArray, meta.TypeObject, meta.TypeMap:
+				return nil, fmt.Errorf("--%s does not support an inline value; use --%s <value>", name, name)
+			}
 		}
 
-		// Collect this occurrence's value tokens: everything up to
-		// the next flag-looking token.
+		// Collect this occurrence's value tokens: everything up to the next flag-looking token.
 		var occ []string
 		if hasInline {
 			occ = []string{inlineVal}
 		} else {
-			occ, i = takeValues(args, i, external)
+			occ, i = takeValues(args, i, externalFlags, apiParams)
 		}
 
 		if err := assign(res.Args, p, occ); err != nil {
@@ -463,43 +127,7 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 		}
 	}
 
-	if len(res.Reserved.EstimateCostContext) > 0 && !res.Reserved.EstimateCost {
-		return nil, fmt.Errorf("--estimate-cost-context requires --estimate-cost")
-	}
 	return res, nil
-}
-
-// parseOutputFlag accepts only the plugin object form:
-// cols=... [rows=...] [num=...]. Default (absent --output) is pretty JSON.
-func parseOutputFlag(r *Reserved, occ []string) error {
-	if len(occ) == 0 {
-		return fmt.Errorf("--output expects cols=... [rows=...] [num=...]")
-	}
-	kv, err := parseReservedObject(occ)
-	if err != nil {
-		return fmt.Errorf("--output: %w", err)
-	}
-	return applyOutputTable(r, kv)
-}
-
-// parseReservedObject turns object-flag value tokens into a flat
-// key=value map. Empty tokens (bare --pager) yield an empty map.
-func parseReservedObject(tokens []string) (map[string]string, error) {
-	kv := map[string]string{}
-	for _, t := range tokens {
-		if t == "" {
-			continue
-		}
-		k, v, ok := strings.Cut(t, "=")
-		if !ok {
-			return nil, fmt.Errorf("expected key=value, got %q", t)
-		}
-		if k == "" {
-			return nil, fmt.Errorf("empty key in %q", t)
-		}
-		kv[k] = v
-	}
-	return kv, nil
 }
 
 // assign folds one flag occurrence's raw tokens into res under the parameter's WIRE key (RawName),
@@ -1270,66 +898,6 @@ func isLikelyJSON(s string) bool {
 	default:
 		return false
 	}
-}
-
-// ============================================================================
-// tokenizer helpers
-// ============================================================================
-
-// splitFlag inspects one token. A flag is any token starting with "--".
-// It may carry an inline value via "=". Returns isFlag=false for value tokens (including "-1", "-1/-1", bare words).
-func splitFlag(tok string) (name, value string, hasInline, isFlag bool) {
-	if !strings.HasPrefix(tok, "--") || tok == "--" {
-		return "", "", false, false
-	}
-	body := tok[2:]
-	if k, v, ok := strings.Cut(body, "="); ok {
-		return k, v, true, true
-	}
-	return body, "", false, true
-}
-
-// isKnownShorthand reports whether tok is one of the recognised
-// single-dash aliases (-h / -q / -o[=...]). These must stop value
-// collection like a real flag (mirroring pflag), while other
-// single-dash tokens (e.g. "-1", "-1/-1") remain values.
-func isKnownShorthand(tok string) bool {
-	return tok == "-h" || tok == "-q" || tok == "-o" || strings.HasPrefix(tok, "-o=")
-}
-
-// isFlagToken reports whether tok terminates a value run: a long "--"
-// flag, a known engine shorthand, or a host-declared external flag.
-func isFlagToken(tok string, external *externalFlagIndex) bool {
-	if _, _, _, isFlag := splitFlag(tok); isFlag {
-		return true
-	}
-	return isKnownShorthand(tok) || external.isFlagToken(tok)
-}
-
-// takeValues consumes consecutive non-flag tokens starting at i and
-// returns them plus the new index. Used for flags that may take
-// multiple value tokens in one occurrence.
-func takeValues(args []string, i int, external *externalFlagIndex) ([]string, int) {
-	var out []string
-	for i < len(args) {
-		if isFlagToken(args[i], external) {
-			break
-		}
-		out = append(out, args[i])
-		i++
-	}
-	return out, i
-}
-
-// takeOneValue consumes exactly one value token (for reserved
-// value-flags). Returns "" if the next token is a flag.
-func takeOneValue(args []string, i int, external *externalFlagIndex) (string, int) {
-	if i < len(args) {
-		if !isFlagToken(args[i], external) {
-			return args[i], i + 1
-		}
-	}
-	return "", i
 }
 
 func looksNumeric(s string) bool {

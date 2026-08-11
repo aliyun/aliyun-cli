@@ -61,6 +61,29 @@ func TestValidateRequiredEmptyStringCountsMissing(t *testing.T) {
 	}
 }
 
+func TestValidateRequiredEmptyCompositeCountsPresent(t *testing.T) {
+	api := roaAPI()
+	api.Parameters = append(api.Parameters,
+		meta.Parameter{
+			Name: "payload", RawName: "payload", Type: meta.TypeObject,
+			Position: meta.PosBody, Required: true, Options: []string{"--payload"},
+		},
+		meta.Parameter{
+			Name: "items", RawName: "items", Type: meta.TypeArray,
+			Position: meta.PosBody, Required: true, Options: []string{"--items"},
+		},
+	)
+
+	err := ValidateRequired(api, map[string]any{
+		"layerName": "my-layer",
+		"payload":   map[string]any{},
+		"items":     []any{},
+	}, false)
+	if err != nil {
+		t.Fatalf("explicit empty composites should count as present: %v", err)
+	}
+}
+
 func TestValidateRequiredRawBodySkipsBodyAndFormDataParameters(t *testing.T) {
 	api := roaAPI()
 	api.Parameters = append(api.Parameters,

@@ -44,7 +44,6 @@ type Parameter struct {
 	// Wire style hints (mostly meaningful for arrays / body composition).
 	//
 	//   repeatList  -> --tag k=v --tag k=v
-	//   bracketList -> --tag.1=k --tag.2=v
 	//   json        -> --tag '[{"k":"v"}]'
 	ParamStyle string
 	IsWildcard bool // path value replaces the complete URL template

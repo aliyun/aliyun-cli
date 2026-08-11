@@ -29,7 +29,7 @@ func (e *MissingRequiredError) Error() string {
 	return "missing required parameter(s): " + strings.Join(e.Flags, ", ")
 }
 
-// ValidateRequired checks that every required top-level parameter of api has a non-empty value in args.
+// ValidateRequired checks that every required top-level parameter of api was supplied.
 // When rawBody is true, body and formData parameters are skipped because --body/--body-file replaces the entire request body.
 func ValidateRequired(api *meta.API, args map[string]any, rawBody bool) error {
 	if api == nil {
@@ -55,17 +55,14 @@ func ValidateRequired(api *meta.API, args map[string]any, rawBody bool) error {
 	return nil
 }
 
-// isEmptyValue reports whether v counts as "not provided" for required checking: nil, empty string, or empty composite.
+// isEmptyValue matches aliyun-cli-runtime's required-argument semantics:
+// nil and empty strings count as not provided, while an explicitly supplied empty object or array still satisfies the top-level required parameter.
 func isEmptyValue(v any) bool {
 	switch t := v.(type) {
 	case nil:
 		return true
 	case string:
 		return t == ""
-	case []any:
-		return len(t) == 0
-	case map[string]any:
-		return len(t) == 0
 	default:
 		return false
 	}

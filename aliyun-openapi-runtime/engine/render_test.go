@@ -60,9 +60,9 @@ func TestRenderDryRunMasksSecrets(t *testing.T) {
 	wantFooter := "============================================================\n" +
 		"Request NOT sent (dry-run mode)\n" +
 		"============================================================\n" +
-		"{\n\t\"message\": \"dry-run mode - no request sent\"\n}\n"
+		"{\n\t\"message\": \"aliyun-openapi-runtime dry-run mode - no request sent\"\n}\n"
 	if !strings.HasSuffix(out, wantFooter) {
-		t.Fatalf("dry-run footer does not match plugin runtime:\n%s", out)
+		t.Fatalf("unexpected aliyun-openapi-runtime dry-run footer:\n%s", out)
 	}
 }
 

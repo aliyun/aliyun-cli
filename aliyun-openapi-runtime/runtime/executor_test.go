@@ -336,6 +336,51 @@ func TestFormDataJSONStyleSerializesFieldValue(t *testing.T) {
 	}
 }
 
+func TestFormDataSimpleStyleJoinsScalarArray(t *testing.T) {
+	api := &meta.API{
+		Name: "SendMessageToGroupUsers", Style: meta.StyleRPC, ReqBodyType: "formData",
+		Parameters: []meta.Parameter{{
+			Name: "receiver_id_list", RawName: "ReceiverIdList", Type: meta.TypeArray,
+			Position: meta.PosFormData, ParamStyle: "simple",
+			ItemType: &meta.Parameter{Type: meta.TypeString},
+		}},
+	}
+	req, err := Assemble(&ExecContext{
+		API:  api,
+		Args: map[string]any{"ReceiverIdList": []any{"user1", "user2"}},
+	})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	want := map[string]any{"ReceiverIdList": "user1,user2"}
+	if !reflect.DeepEqual(req.Body, want) {
+		t.Fatalf("form body = %#v, want %#v", req.Body, want)
+	}
+}
+
+func TestFormDataFlatAndRepeatListRemainStructured(t *testing.T) {
+	for _, paramStyle := range []string{"flat", "repeatList"} {
+		t.Run(paramStyle, func(t *testing.T) {
+			api := &meta.API{
+				Name: "Op", Style: meta.StyleRPC, ReqBodyType: "formData",
+				Parameters: []meta.Parameter{{
+					Name: "items", RawName: "Items", Type: meta.TypeArray,
+					Position: meta.PosFormData, ParamStyle: paramStyle,
+				}},
+			}
+			items := []any{map[string]any{"Key": "value"}}
+			req, err := Assemble(&ExecContext{API: api, Args: map[string]any{"Items": items}})
+			if err != nil {
+				t.Fatalf("Assemble: %v", err)
+			}
+			want := map[string]any{"Items": items}
+			if !reflect.DeepEqual(req.Body, want) {
+				t.Fatalf("form body = %#v, want %#v", req.Body, want)
+			}
+		})
+	}
+}
+
 func TestFormDataPositionFallsBackWhenOperationMetadataIsMissing(t *testing.T) {
 	api := &meta.API{
 		Name: "Op", Style: meta.StyleRESTful,

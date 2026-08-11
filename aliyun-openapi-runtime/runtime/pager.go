@@ -27,9 +27,8 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 )
 
-// Pager aggregates multi-page API responses. Semantics mirror
-// aliyun-cli-runtime/http.Pager (path / PageNumber / PageSize /
-// TotalCount / NextToken).
+// Pager aggregates multi-page API responses.
+// Semantics mirror aliyun-cli-runtime/http.Pager (path / PageNumber / PageSize / TotalCount / NextToken).
 type Pager struct {
 	PageNumberExpr string
 	PageSizeExpr   string
@@ -45,8 +44,6 @@ type Pager struct {
 	results           []any
 }
 
-// NewPager builds a Pager from the argparser config, applying the same
-// field defaults as the Go plugin executor.
 func NewPager(cfg *argparser.PagerConfig) *Pager {
 	p := &Pager{results: make([]any, 0)}
 	if cfg == nil {
@@ -73,8 +70,6 @@ func NewPager(cfg *argparser.PagerConfig) *Pager {
 	return p
 }
 
-// CallWithPager repeatedly Execute-s until no more pages, then returns
-// a Response whose Raw/Parsed hold the merged collection document.
 func CallWithPager(exec Executor, ec *ExecContext, cfg *argparser.PagerConfig) (*Response, error) {
 	p := NewPager(cfg)
 	var last *Response
@@ -107,7 +102,6 @@ func CallWithPager(exec Executor, ec *ExecContext, cfg *argparser.PagerConfig) (
 	return out, nil
 }
 
-// FeedResponse consumes one page body and appends its collection items.
 func (p *Pager) FeedResponse(body []byte) error {
 	if len(body) == 0 {
 		return fmt.Errorf("empty response body")
@@ -203,9 +197,8 @@ func asIntValue(v any) (int, bool) {
 	}
 }
 
-// detectArrayPath walks one level of top-level object keys; if the
-// value is an object, looks for the first nested key whose value is a
-// JSON array and returns "outer.inner[]".
+// detectArrayPath walks one level of top-level object keys;
+// if the value is an object, looks for the first nested key whose value is a JSON array and returns "outer.inner[]".
 func detectArrayPath(d any) string {
 	m, ok := d.(map[string]any)
 	if !ok {
@@ -225,7 +218,6 @@ func detectArrayPath(d any) string {
 	return ""
 }
 
-// HasMore reports whether another page should be fetched.
 func (p *Pager) HasMore() bool {
 	if p.nextTokenMode {
 		return p.nextToken != ""
@@ -237,7 +229,6 @@ func (p *Pager) HasMore() bool {
 	return false
 }
 
-// MoveNextPage injects the next-page query param into ec.ExtraQuery.
 func (p *Pager) MoveNextPage(ec *ExecContext) {
 	if ec.ExtraQuery == nil {
 		ec.ExtraQuery = map[string]string{}
@@ -256,8 +247,7 @@ func (p *Pager) MoveNextPage(ec *ExecContext) {
 	}
 }
 
-// GetResponseCollection rebuilds a JSON document with the merged
-// collection under the detected/configured path.
+// GetResponseCollection rebuilds a JSON document with the merged collection under the detected/configured path.
 func (p *Pager) GetResponseCollection() string {
 	if p.CollectionPath == "" {
 		result, err := json.Marshal(p.results)

@@ -254,18 +254,17 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 
 		case meta.PosFormData:
 			// Form parameters go into the request body for RPC and ROA.
-			// A per-parameter json style is encoded before the SDK applies the outer application/x-www-form-urlencoded serialization.
+			// Apply the formData-specific param style before the SDK performs
+			// the outer application/x-www-form-urlencoded serialization.
 			if formParts == nil {
 				formParts = map[string]any{}
 			}
-			if p.ParamStyle == "json" {
-				encoded, err := serializeJSONParameter(wire, val)
-				if err != nil {
-					return nil, err
-				}
-				formParts[wire] = encoded
-			} else {
-				formParts[wire] = val
+			serialized, err := serializeFormParameter(wire, val, p.ParamStyle)
+			if err != nil {
+				return nil, err
+			}
+			for key, value := range serialized {
+				formParts[key] = value
 			}
 
 		case meta.PosBody:

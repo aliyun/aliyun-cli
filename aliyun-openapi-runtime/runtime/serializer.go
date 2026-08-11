@@ -73,8 +73,8 @@ func flatten(prefix string, value any, out map[string]string) {
 //	"" (unset)          -> RPC flatten when the operation is RPC,
 //	                       otherwise JSON for composites / raw for scalars
 //
-// This is the single place that maps the abstract param_style to the
-// wire form, shared by query and (RPC) body handling.
+// Query and formData use different wire containers; formData styles are
+// handled separately by serializeFormParameter.
 func serializeQuery(name string, value any, isRPC bool, paramStyle string) (map[string]string, error) {
 	switch paramStyle {
 	case "json":
@@ -110,6 +110,43 @@ func serializeQuery(name string, value any, isRPC bool, paramStyle string) (map[
 		return map[string]string{name: string(b)}, nil
 	default:
 		return map[string]string{name: basicString(value)}, nil
+	}
+}
+
+// serializeFormParameter applies the formData subset of param_style.
+// simple arrays are joined before SDK form encoding; json values are encoded
+// as one JSON string; flat/repeatList values stay structured for the SDK.
+func serializeFormParameter(name string, value any, paramStyle string) (map[string]any, error) {
+	switch paramStyle {
+	case "simple":
+		arr, ok := value.([]any)
+		if !ok {
+			return nil, fmt.Errorf("parameter %s: simple style only supports arrays of scalar values, got %T", name, value)
+		}
+		out := make(map[string]any)
+		if len(arr) == 0 {
+			return out, nil
+		}
+		parts := make([]string, 0, len(arr))
+		for i, item := range arr {
+			switch item.(type) {
+			case nil, []any, map[string]any:
+				return nil, fmt.Errorf("parameter %s: simple style only supports arrays of scalar values, got %T at index %d", name, item, i)
+			}
+			parts = append(parts, basicString(item))
+		}
+		out[name] = strings.Join(parts, ",")
+		return out, nil
+	case "json":
+		encoded, err := serializeJSONParameter(name, value)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{name: encoded}, nil
+	case "", "flat", "repeatList":
+		return map[string]any{name: value}, nil
+	default:
+		return nil, fmt.Errorf("unsupported formData style %q for parameter %s", paramStyle, name)
 	}
 }
 

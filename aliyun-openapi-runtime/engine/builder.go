@@ -223,12 +223,12 @@ func (e *Engine) Dispatch(req Request) error {
 		return fmt.Errorf("%w\nrun `aliyun %s %s --help` to see all parameters", err, product, cmdName)
 	}
 
-	ec, err := buildExecContext(req, api, res)
-	if err != nil {
+	if err := validateDispatchOptions(res); err != nil {
 		return err
 	}
 
-	if err := validateDispatchOptions(res); err != nil {
+	ec, err := buildExecContext(req, api, res)
+	if err != nil {
 		return err
 	}
 
@@ -352,6 +352,9 @@ func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runti
 }
 
 func validateDispatchOptions(res *argparser.Result) error {
+	if len(res.Reserved.EstimateCostContext) > 0 && !res.Reserved.EstimateCost {
+		return fmt.Errorf("--estimate-cost-context requires --estimate-cost")
+	}
 	if !res.Reserved.DryRunJSON {
 		return nil
 	}
@@ -537,7 +540,7 @@ type dryRunMeta struct {
 // renderDryRun prints the assembled request. jsonMeta selects the
 // terse one-line metadata form (--cli-dry-run-json); otherwise a
 // human-readable multi-line dump (--cli-dry-run) matching the plugin
-// engine's layout.
+// engine's layout, with a runtime-labelled footer for diff identification.
 func renderDryRun(w io.Writer, product string, req *runtime.AssembledRequest, jsonMeta bool) error {
 	if req == nil {
 		return fmt.Errorf("dry-run produced no request")
@@ -592,7 +595,7 @@ func renderDryRun(w io.Writer, product string, req *runtime.AssembledRequest, js
 	}
 	fmt.Fprintf(w, "%s\nRequest NOT sent (dry-run mode)\n%s\n", bar, bar)
 	fmt.Fprintln(w, "{")
-	fmt.Fprintln(w, "\t\"message\": \"dry-run mode - no request sent\"")
+	fmt.Fprintln(w, "\t\"message\": \"aliyun-openapi-runtime dry-run mode - no request sent\"")
 	fmt.Fprintln(w, "}")
 	return nil
 }

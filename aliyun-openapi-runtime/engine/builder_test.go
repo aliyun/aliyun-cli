@@ -48,3 +48,18 @@ func TestBuildExecContextPreservesExplicitEmptyRawBody(t *testing.T) {
 		t.Fatalf("raw body = %#v, want explicit empty string", ec.RawBody)
 	}
 }
+
+func TestValidateDispatchOptionsRequiresEstimateCost(t *testing.T) {
+	res := &argparser.Result{Reserved: argparser.Reserved{
+		EstimateCostContext: []string{"Traffic=10"},
+	}}
+	err := validateDispatchOptions(res)
+	if err == nil || err.Error() != "--estimate-cost-context requires --estimate-cost" {
+		t.Fatalf("validateDispatchOptions error = %v", err)
+	}
+
+	res.Reserved.EstimateCost = true
+	if err := validateDispatchOptions(res); err != nil {
+		t.Fatalf("validateDispatchOptions with --estimate-cost: %v", err)
+	}
+}

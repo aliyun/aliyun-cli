@@ -26,8 +26,8 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 )
 
-// Waiter polls an API until a JMESPath expression equals the expected
-// value. Defaults (timeout 180s, interval 5s) match the Go plugin.
+// Waiter polls an API until a JMESPath expression equals the expected value.
+// Defaults (timeout 180s, interval 5s) match the Go plugin.
 type Waiter struct {
 	Expr     string
 	To       string
@@ -35,7 +35,6 @@ type Waiter struct {
 	Interval time.Duration
 }
 
-// NewWaiter builds a Waiter from the argparser config.
 func NewWaiter(cfg *argparser.WaiterConfig) *Waiter {
 	if cfg == nil {
 		cfg = &argparser.WaiterConfig{}
@@ -56,8 +55,6 @@ func NewWaiter(cfg *argparser.WaiterConfig) *Waiter {
 	}
 }
 
-// CallWithWaiter repeatedly Execute-s until the expression matches or
-// the timeout elapses. Returns the last matching response body.
 func CallWithWaiter(exec Executor, ec *ExecContext, cfg *argparser.WaiterConfig) (*Response, error) {
 	w := NewWaiter(cfg)
 	if w.Expr == "" || w.To == "" {
