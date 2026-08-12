@@ -26,6 +26,8 @@ jobs:
 
     - name: Unit Test
       run: make test
+    - name: Runtime Module Check
+      run: make check-runtime
     - name: Packed metadata test
       run: make test-release
     - name: Upload coverage infomartion

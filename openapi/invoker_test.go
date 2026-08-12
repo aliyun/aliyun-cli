@@ -14,13 +14,13 @@
 package openapi
 
 import (
-	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"bytes"
 	"testing"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
