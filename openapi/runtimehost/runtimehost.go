@@ -28,6 +28,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
@@ -127,8 +128,44 @@ func buildUserAgentSuffix(ctx *cli.Context) string {
 }
 
 func flagAssigned(ctx *cli.Context, name string) bool {
+	if ctx == nil {
+		return false
+	}
 	f := ctx.Flags().Get(name)
 	return f != nil && f.IsAssigned()
+}
+
+func checkSafetyPolicy(ctx *cli.Context, rawArgs []string) error {
+	if ctx == nil || len(rawArgs) < 2 {
+		return nil
+	}
+
+	// Metadata commands are interpreted in-process, so they never reach the Go-plugin safety check in openapi.Commando.
+	// Keep read-only help/version requests aligned with that path and guard every actual metadata command here,
+	// where both bundled baseline and installed meta plugins converge.
+	command := rawArgs[1]
+	if strings.EqualFold(command, "version") || flagAssigned(ctx, "help") {
+		return nil
+	}
+	for _, arg := range rawArgs[2:] {
+		if arg == "--help" || arg == "-h" {
+			return nil
+		}
+	}
+
+	policy, err := safety.LoadEffectivePolicy(config.GetConfigDir(ctx))
+	if err != nil {
+		// Preserve the existing host policy semantics: malformed/unreadable
+		// policy configuration fails open rather than breaking CLI execution.
+		return nil
+	}
+	skipConfirm := flagAssigned(ctx, "yes") ||
+		os.Getenv("ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM") == "1" ||
+		strings.EqualFold(os.Getenv("ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM"), "true")
+	return safety.CheckAndConfirm(ctx, policy, safety.CommandInfo{
+		Product:     rawArgs[0],
+		ApiOrMethod: command,
+	}, skipConfirm)
 }
 
 // Credential resolves the caller's credential from the profile.
@@ -167,6 +204,9 @@ func Engine() *engine.Engine {
 // credential / network) in ctx. Their raw argv tokens are declared as
 // external flags so the engine parser can consume and ignore them.
 func Dispatch(ctx *cli.Context, rawArgs []string) error {
+	if err := checkSafetyPolicy(ctx, rawArgs); err != nil {
+		return err
+	}
 	host := &profileHost{ctx: ctx}
 
 	// Resolve the display language from the profile (which now reflects

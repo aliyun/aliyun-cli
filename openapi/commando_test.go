@@ -3619,15 +3619,72 @@ func newSafetyCommandoTestCtx(t *testing.T) (*cli.Context, *Commando) {
 	return ctx, command
 }
 
-// TestMain_SafetyPolicyEnforcement guards the three safety-policy call sites
-// in commando.main: the plugin dispatch path, the 2-arg RPC/REST-by-ApiName
-// path and the 3-arg REST-by-method/path path. Each subtest writes a deny
-// rule shaped exactly like what users type and asserts that command.main
+// TestMain_SafetyPolicyEnforcement guards every execution route: bundled
+// baseline metadata, installed metadata plugins, Go plugins, 2-arg
+// RPC/REST-by-ApiName and 3-arg REST-by-method/path. Each subtest writes a
+// deny rule shaped exactly like what users type and asserts that command.main
 // short-circuits with the canonical "blocked by safety policy" error before
 // any actual API / plugin execution kicks in.
 func TestMain_SafetyPolicyEnforcement(t *testing.T) {
 	originalArgs := os.Args
 	defer func() { os.Args = originalArgs }()
+
+	t.Run("bundled baseline meta: kebab-case command is blocked", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+		writeMinimalConfigJSON(t, testHome)
+		writeSafetyPolicy(t, testHome, []safety.Rule{
+			{Pattern: "ecs:describe-regions", Action: safety.ActionDeny},
+		})
+
+		ctx, command := newSafetyCommandoTestCtx(t)
+		os.Args = []string{"aliyun", "ecs", "describe-regions"}
+
+		err := command.main(ctx, []string{"ecs", "describe-regions"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "blocked by safety policy")
+		assert.Contains(t, err.Error(), "ecs:describe-regions")
+	})
+
+	t.Run("installed meta plugin: kebab-case command is blocked", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+		writeMinimalConfigJSON(t, testHome)
+		writeSafetyPolicy(t, testHome, []safety.Rule{
+			{Pattern: "metaonlytest:delete-widget", Action: safety.ActionDeny},
+		})
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins")
+		pluginPath := filepath.Join(pluginDir, "aliyun-cli-metaonlytest")
+		if err := os.MkdirAll(pluginPath, 0755); err != nil {
+			t.Fatalf("mkdir plugin dir: %v", err)
+		}
+		manifest := fmt.Sprintf(`{
+  "plugins": {
+    "aliyun-cli-metaonlytest": {
+      "name": "aliyun-cli-metaonlytest",
+      "version": "1.0.0",
+      "type": "meta",
+      "productCode": "metaonlytest",
+      "command": "metaonlytest",
+      "path": %q
+    }
+  }
+}`, pluginPath)
+		if err := os.WriteFile(filepath.Join(pluginDir, "manifest.json"), []byte(manifest), 0644); err != nil {
+			t.Fatalf("write manifest: %v", err)
+		}
+
+		ctx, command := newSafetyCommandoTestCtx(t)
+		os.Args = []string{"aliyun", "metaonlytest", "delete-widget"}
+
+		err := command.main(ctx, []string{"metaonlytest", "delete-widget"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "blocked by safety policy")
+		assert.Contains(t, err.Error(), "metaonlytest:delete-widget")
+	})
 
 	t.Run("2-arg RPC: rule on ApiName blocks the call", func(t *testing.T) {
 		testHome := t.TempDir()
