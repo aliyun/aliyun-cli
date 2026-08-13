@@ -369,7 +369,24 @@ func TestPrintAPIHelpWrapsAligned(t *testing.T) {
 // TestDryRunJSONOneLine checks the machine-readable form.
 func TestDryRunJSONOneLine(t *testing.T) {
 	var buf bytes.Buffer
-	req := &runtime.AssembledRequest{Action: "A", Version: "V", Region: "cn-x", Endpoint: "https://svc.example.com"}
+	req := &runtime.AssembledRequest{
+		Action:      "CreateThing",
+		Version:     "2026-01-01",
+		Method:      "POST",
+		Style:       "ROA",
+		PathPattern: "/things/{thingId}",
+		Pathname:    "/things/thing-1",
+		PathParams:  map[string]string{"thingId": "thing-1"},
+		Query:       map[string]string{"verbose": "true"},
+		Headers: map[string]string{
+			"Authorization": "secret-token",
+			"x-trace-id":    "trace-1",
+		},
+		Body:        map[string]any{"name": "demo"},
+		ReqBodyType: "json",
+		Region:      "cn-x",
+		Endpoint:    "https://svc.example.com",
+	}
 	if err := renderDryRun(&buf, "svc", req, true); err != nil {
 		t.Fatalf("renderDryRun json: %v", err)
 	}
@@ -377,7 +394,57 @@ func TestDryRunJSONOneLine(t *testing.T) {
 	if strings.Contains(out, "\n") {
 		t.Fatalf("json form must be one line: %q", out)
 	}
-	if !strings.Contains(out, `"product":"svc"`) || !strings.Contains(out, `"endpoint":"svc.example.com"`) {
-		t.Fatalf("unexpected json meta: %s", out)
+	if strings.Contains(out, `"note"`) {
+		t.Fatalf("json form must not contain note: %s", out)
+	}
+	var got cliDryRunOutput
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("invalid dry-run JSON: %v\n%s", err, out)
+	}
+	if got.Style != "ROA" || got.Endpoint != "svc.example.com" || got.Method != "POST" {
+		t.Fatalf("request identity fields missing: %+v", got)
+	}
+	if got.Product != "svc" || got.API != "CreateThing" || got.Region != "cn-x" {
+		t.Fatalf("legacy metadata fields missing: %+v", got)
+	}
+	if got.Action != "CreateThing" || got.Version != "2026-01-01" {
+		t.Fatalf("API fields missing: %+v", got)
+	}
+	if got.Pathname != req.Pathname {
+		t.Fatalf("pathname = %q, want %q", got.Pathname, req.Pathname)
+	}
+	if strings.Contains(out, `"pathPattern"`) || strings.Contains(out, `"pathParams"`) {
+		t.Fatalf("dry-run JSON must not expose path template metadata: %s", out)
+	}
+	if got.Query["verbose"] != "true" || got.Body != `{"name":"demo"}` || got.BodyFormat != "json" {
+		t.Fatalf("payload fields missing: %+v", got)
+	}
+	if got.Headers["Authorization"] != "secr***" || got.Headers["x-trace-id"] != "trace-1" {
+		t.Fatalf("headers were not sanitized correctly: %#v", got.Headers)
+	}
+}
+
+func TestDryRunJSONIncludesActualRPCPathname(t *testing.T) {
+	var buf bytes.Buffer
+	req := &runtime.AssembledRequest{
+		Action:   "DescribeThings",
+		Version:  "2026-01-01",
+		Method:   "POST",
+		Style:    "RPC",
+		Endpoint: "svc.example.com",
+	}
+	if err := renderDryRun(&buf, "svc", req, true); err != nil {
+		t.Fatalf("renderDryRun json: %v", err)
+	}
+	var got cliDryRunOutput
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &got); err != nil {
+		t.Fatalf("invalid dry-run JSON: %v", err)
+	}
+	if got.Pathname != "/" {
+		t.Fatalf("RPC pathname = %q, want /", got.Pathname)
+	}
+	out := strings.TrimSpace(buf.String())
+	if strings.Contains(out, `"pathPattern"`) || strings.Contains(out, `"pathParams"`) {
+		t.Fatalf("dry-run JSON must not expose path template metadata: %s", out)
 	}
 }

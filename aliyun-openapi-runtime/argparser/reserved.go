@@ -21,10 +21,8 @@ import (
 	"strings"
 )
 
-// Reserved carries the well-known flags that steer the runtime rather
-// than becoming API parameters. They are recognised regardless of the
-// command schema so every aliyun-openapi-runtime command accepts them
-// uniformly.
+// Reserved carries the well-known flags that steer the runtime rather than becoming API parameters.
+// They are recognised regardless of the command schema so every aliyun-openapi-runtime command accepts them uniformly.
 type Reserved struct {
 	Region   string // --region: profile/wire region for signing + endpoint
 	Endpoint string // --endpoint: explicit endpoint override
@@ -32,10 +30,9 @@ type Reserved struct {
 	CliQuery string // --cli-query: jmespath expression applied to the response
 	LogLevel string // --log-level: DEBUG|INFO|WARN|ERROR (and plugin aliases)
 
-	// Dry-run has two flavours, matching the plugin-common
-	// convention so users get the same UX across engines:
+	// Dry-run has two flavours, matching the plugin-common convention so users get the same UX across engines:
 	//   --cli-dry-run       -> DryRun, human-readable request dump
-	//   --cli-dry-run-json  -> DryRun + DryRunJSON, one-line meta JSON
+	//   --cli-dry-run-json  -> DryRun + DryRunJSON, one-line full request JSON
 	// Do NOT reserve --dry-run: that name belongs to API params
 	// (e.g. DryRun -> --dry-run true|false). CLI preflight uses
 	// --cli-dry-run / --cli-dry-run-json only.
@@ -103,179 +100,307 @@ const (
 )
 
 type reservedFlagSpec struct {
+	name      string
 	mode      reservedValueMode
 	shorthand rune
-	hidden    bool
+	visible   bool
 	helpOrder int
 	descZH    string
 	descEN    string
 	apply     func(r *Reserved, values []string) error
 }
 
-// reservedFlags is the single registry for runtime-owned flags.
-// It covers switches, scalar values, object-style values, and repeatable lists.
-var reservedFlags = newReservedFlagIndex(map[string]reservedFlagSpec{
-	"region": documentedReserved(
-		scalarReserved(func(r *Reserved, v string) { r.Region = v }),
-		3, "指定调用的地域，用于签名与 endpoint 解析", "Region used for signing and endpoint resolution",
-	),
-	"endpoint": documentedReserved(
-		scalarReserved(func(r *Reserved, v string) { r.Endpoint = v }),
-		4, "显式指定接入 endpoint", "Explicit endpoint override",
-	),
-	"api-version": documentedReserved(
-		scalarReserved(func(r *Reserved, v string) { r.Version = v }),
-		5, "覆盖 API 版本", "Override the API version",
-	),
-	"cli-query": documentedReserved(
-		scalarReserved(func(r *Reserved, v string) { r.CliQuery = v }),
-		6, "对响应应用 jmespath 表达式过滤", "Apply a jmespath expression to the response",
-	),
-	"log-level": documentedReserved(
-		scalarReserved(func(r *Reserved, v string) { r.LogLevel = v }),
-		7, "设置日志级别: DEBUG、INFO、WARN、ERROR(默认: ERROR)", "Set log level: DEBUG, INFO, WARN, ERROR (default: ERROR)",
-	),
-	"body": scalarReserved(func(r *Reserved, v string) {
-		r.Body = v
+var regionFlagSpec = reservedFlagSpec{
+	name:      "region",
+	mode:      reservedSingleValue,
+	visible:   true,
+	helpOrder: 3,
+	descZH:    "指定调用的地域，用于签名与 endpoint 解析",
+	descEN:    "Region used for signing and endpoint resolution",
+	apply: func(r *Reserved, values []string) error {
+		r.Region = values[0]
+		return nil
+	},
+}
+
+var endpointFlagSpec = reservedFlagSpec{
+	name:      "endpoint",
+	mode:      reservedSingleValue,
+	visible:   true,
+	helpOrder: 4,
+	descZH:    "显式指定接入 endpoint",
+	descEN:    "Explicit endpoint override",
+	apply: func(r *Reserved, values []string) error {
+		r.Endpoint = values[0]
+		return nil
+	},
+}
+
+var apiVersionFlagSpec = reservedFlagSpec{
+	name:      "api-version",
+	mode:      reservedSingleValue,
+	visible:   true,
+	helpOrder: 5,
+	descZH:    "覆盖 API 版本",
+	descEN:    "Override the API version",
+	apply: func(r *Reserved, values []string) error {
+		r.Version = values[0]
+		return nil
+	},
+}
+
+var cliQueryFlagSpec = reservedFlagSpec{
+	name:      "cli-query",
+	mode:      reservedSingleValue,
+	visible:   true,
+	helpOrder: 6,
+	descZH:    "对响应应用 jmespath 表达式过滤",
+	descEN:    "Apply a jmespath expression to the response",
+	apply: func(r *Reserved, values []string) error {
+		r.CliQuery = values[0]
+		return nil
+	},
+}
+
+var logLevelFlagSpec = reservedFlagSpec{
+	name:      "log-level",
+	mode:      reservedSingleValue,
+	visible:   true,
+	helpOrder: 7,
+	descZH:    "设置日志级别: DEBUG、INFO、WARN、ERROR(默认: ERROR)",
+	descEN:    "Set log level: DEBUG, INFO, WARN, ERROR (default: ERROR)",
+	apply: func(r *Reserved, values []string) error {
+		r.LogLevel = values[0]
+		return nil
+	},
+}
+
+var bodyFlagSpec = reservedFlagSpec{
+	name: "body",
+	mode: reservedSingleValue,
+	apply: func(r *Reserved, values []string) error {
+		r.Body = values[0]
 		r.BodySet = true
-	}),
-	"body-file": scalarReserved(func(r *Reserved, v string) {
-		r.BodyFile = v
+		return nil
+	},
+}
+
+var bodyFileFlagSpec = reservedFlagSpec{
+	name: "body-file",
+	mode: reservedSingleValue,
+	apply: func(r *Reserved, values []string) error {
+		r.BodyFile = values[0]
 		r.BodyFileSet = true
-	}),
-	"cli-dry-run": documentedReserved(
-		switchReserved(func(r *Reserved) { r.DryRun = true }),
-		1, "组装请求但不发送，打印请求详情", "Assemble the request and print it without sending",
-	),
-	"cli-dry-run-json": switchReserved(func(r *Reserved) {
+		return nil
+	},
+}
+
+var cliDryRunFlagSpec = reservedFlagSpec{
+	name:      "cli-dry-run",
+	mode:      reservedNoValue,
+	visible:   true,
+	helpOrder: 1,
+	descZH:    "组装请求但不发送，打印请求详情",
+	descEN:    "Assemble the request and print it without sending",
+	apply: func(r *Reserved, _ []string) error {
+		r.DryRun = true
+		return nil
+	},
+}
+
+var cliDryRunJSONFlagSpec = reservedFlagSpec{
+	name: "cli-dry-run-json",
+	mode: reservedNoValue,
+	apply: func(r *Reserved, _ []string) error {
 		r.DryRun = true
 		r.DryRunJSON = true
-	}),
-	"help": shorthandReserved(
-		switchReserved(func(r *Reserved) { r.Help = true }),
-		'h',
-	),
-	"quiet": documentedReserved(
-		shorthandReserved(switchReserved(func(r *Reserved) { r.Quiet = true }), 'q'),
-		8, "抑制正常输出", "Suppress normal output",
-	),
-	"secure":        switchReserved(func(r *Reserved) { r.Secure = true }),
-	"insecure":      switchReserved(func(r *Reserved) { r.Insecure = true }),
-	"estimate-cost": switchReserved(func(r *Reserved) { r.EstimateCost = true }),
-	"no-stream":     switchReserved(func(r *Reserved) { r.NoStream = true }),
-	"pager": documentedReserved(
-		objectReserved("pager", applyPager),
-		9,
-		"合并可分页 API 的多页结果（可用 --all-pages）；可选 path/PageNumber/PageSize/TotalCount/NextToken",
-		"Merge pages for pageable APIs (alias --all-pages); optional path/PageNumber/PageSize/TotalCount/NextToken",
-	),
-	"all-pages": objectReserved("all-pages", applyPager),
-	"waiter":    objectReserved("waiter", applyWaiter),
-	"output": shorthandReserved(
-		reservedFlagSpec{
-			mode:   reservedMultiValue,
-			hidden: true,
-			apply: func(r *Reserved, values []string) error {
-				return parseOutputFlag(r, values)
-			},
-		},
-		'o',
-	),
-	"header": {
-		mode:   reservedMultiValue,
-		hidden: true,
-		apply: func(r *Reserved, values []string) error {
-			if len(values) == 0 {
-				return fmt.Errorf("--header expects Name=Value")
-			}
-			r.Headers = append(r.Headers, values...)
-			return nil
-		},
+		return nil
 	},
-	"estimate-cost-context": {
-		mode:   reservedMultiValue,
-		hidden: true,
-		apply: func(r *Reserved, values []string) error {
-			if len(values) == 0 {
-				return fmt.Errorf("--estimate-cost-context expects Key=Value")
-			}
-			r.EstimateCostContext = append(r.EstimateCostContext, values...)
-			return nil
-		},
+}
+
+var helpFlagSpec = reservedFlagSpec{
+	name:      "help",
+	shorthand: 'h',
+	mode:      reservedNoValue,
+	apply: func(r *Reserved, _ []string) error {
+		r.Help = true
+		return nil
 	},
-})
-
-func documentedReserved(spec reservedFlagSpec, order int, descZH, descEN string) reservedFlagSpec {
-	spec.hidden = false
-	spec.helpOrder = order
-	spec.descZH = descZH
-	spec.descEN = descEN
-	return spec
 }
 
-func shorthandReserved(spec reservedFlagSpec, shorthand rune) reservedFlagSpec {
-	spec.shorthand = shorthand
-	return spec
+var quietFlagSpec = reservedFlagSpec{
+	name:      "quiet",
+	shorthand: 'q',
+	mode:      reservedNoValue,
+	visible:   true,
+	helpOrder: 8,
+	descZH:    "抑制正常输出",
+	descEN:    "Suppress normal output",
+	apply: func(r *Reserved, _ []string) error {
+		r.Quiet = true
+		return nil
+	},
 }
 
-func switchReserved(apply func(r *Reserved)) reservedFlagSpec {
-	return reservedFlagSpec{
-		mode:   reservedNoValue,
-		hidden: true,
-		apply: func(r *Reserved, _ []string) error {
-			apply(r)
-			return nil
-		},
-	}
+var secureFlagSpec = reservedFlagSpec{
+	name: "secure",
+	mode: reservedNoValue,
+	apply: func(r *Reserved, _ []string) error {
+		r.Secure = true
+		return nil
+	},
 }
 
-func scalarReserved(apply func(r *Reserved, value string)) reservedFlagSpec {
-	return reservedFlagSpec{
-		mode:   reservedSingleValue,
-		hidden: true,
-		apply: func(r *Reserved, values []string) error {
-			value := ""
-			if len(values) > 0 {
-				value = values[0]
-			}
-			apply(r, value)
-			return nil
-		},
-	}
+var insecureFlagSpec = reservedFlagSpec{
+	name: "insecure",
+	mode: reservedNoValue,
+	apply: func(r *Reserved, _ []string) error {
+		r.Insecure = true
+		return nil
+	},
 }
 
-func objectReserved(name string, apply func(r *Reserved, kv map[string]string) error) reservedFlagSpec {
-	return reservedFlagSpec{
-		mode:   reservedMultiValue,
-		hidden: true,
-		apply: func(r *Reserved, values []string) error {
-			kv, err := parseReservedObject(values)
-			if err != nil {
-				return fmt.Errorf("--%s: %w", name, err)
-			}
-			return apply(r, kv)
-		},
-	}
+var estimateCostFlagSpec = reservedFlagSpec{
+	name: "estimate-cost",
+	mode: reservedNoValue,
+	apply: func(r *Reserved, _ []string) error {
+		r.EstimateCost = true
+		return nil
+	},
 }
+
+var noStreamFlagSpec = reservedFlagSpec{
+	name: "no-stream",
+	mode: reservedNoValue,
+	apply: func(r *Reserved, _ []string) error {
+		r.NoStream = true
+		return nil
+	},
+}
+
+var pagerFlagSpec = reservedFlagSpec{
+	name:      "pager",
+	mode:      reservedMultiValue,
+	visible:   true,
+	helpOrder: 9,
+	descZH:    "合并可分页 API 的多页结果（可用 --all-pages）；可选 path/PageNumber/PageSize/TotalCount/NextToken",
+	descEN:    "Merge pages for pageable APIs (alias --all-pages); optional path/PageNumber/PageSize/TotalCount/NextToken",
+	apply: func(r *Reserved, values []string) error {
+		kv, err := parseReservedObject(values)
+		if err != nil {
+			return fmt.Errorf("--pager: %w", err)
+		}
+		return applyPager(r, kv)
+	},
+}
+
+var allPagesFlagSpec = reservedFlagSpec{
+	name: "all-pages",
+	mode: reservedMultiValue,
+	apply: func(r *Reserved, values []string) error {
+		kv, err := parseReservedObject(values)
+		if err != nil {
+			return fmt.Errorf("--all-pages: %w", err)
+		}
+		return applyPager(r, kv)
+	},
+}
+
+var waiterFlagSpec = reservedFlagSpec{
+	name: "waiter",
+	mode: reservedMultiValue,
+	apply: func(r *Reserved, values []string) error {
+		kv, err := parseReservedObject(values)
+		if err != nil {
+			return fmt.Errorf("--waiter: %w", err)
+		}
+		return applyWaiter(r, kv)
+	},
+}
+
+var outputFlagSpec = reservedFlagSpec{
+	name:      "output",
+	shorthand: 'o',
+	mode:      reservedMultiValue,
+	apply: func(r *Reserved, values []string) error {
+		return parseOutputFlag(r, values)
+	},
+}
+
+var headerFlagSpec = reservedFlagSpec{
+	name: "header",
+	mode: reservedMultiValue,
+	apply: func(r *Reserved, values []string) error {
+		if len(values) == 0 {
+			return fmt.Errorf("--header expects Name=Value")
+		}
+		r.Headers = append(r.Headers, values...)
+		return nil
+	},
+}
+
+var estimateCostContextFlagSpec = reservedFlagSpec{
+	name: "estimate-cost-context",
+	mode: reservedMultiValue,
+	apply: func(r *Reserved, values []string) error {
+		if len(values) == 0 {
+			return fmt.Errorf("--estimate-cost-context expects Key=Value")
+		}
+		r.EstimateCostContext = append(r.EstimateCostContext, values...)
+		return nil
+	},
+}
+
+// reservedFlags is the single ordered registry for runtime-owned flags.
+var reservedFlags = newReservedFlagIndex(
+	regionFlagSpec,
+	endpointFlagSpec,
+	apiVersionFlagSpec,
+	cliQueryFlagSpec,
+	logLevelFlagSpec,
+	bodyFlagSpec,
+	bodyFileFlagSpec,
+	cliDryRunFlagSpec,
+	cliDryRunJSONFlagSpec,
+	helpFlagSpec,
+	quietFlagSpec,
+	secureFlagSpec,
+	insecureFlagSpec,
+	estimateCostFlagSpec,
+	noStreamFlagSpec,
+	pagerFlagSpec,
+	allPagesFlagSpec,
+	waiterFlagSpec,
+	outputFlagSpec,
+	headerFlagSpec,
+	estimateCostContextFlagSpec,
+)
 
 type reservedFlagIndex struct {
 	byName      map[string]reservedFlagSpec
 	byShorthand map[rune]string
 }
 
-func newReservedFlagIndex(specs map[string]reservedFlagSpec) *reservedFlagIndex {
+func newReservedFlagIndex(specs ...reservedFlagSpec) *reservedFlagIndex {
 	reservedFlags := &reservedFlagIndex{
-		byName:      specs,
+		byName:      make(map[string]reservedFlagSpec, len(specs)),
 		byShorthand: make(map[rune]string),
 	}
-	for name, spec := range specs {
+	for _, spec := range specs {
+		if spec.name == "" {
+			panic("reserved flag name is empty")
+		}
+		if _, duplicate := reservedFlags.byName[spec.name]; duplicate {
+			panic(fmt.Sprintf("reserved flag --%s is registered more than once", spec.name))
+		}
+		reservedFlags.byName[spec.name] = spec
 		if spec.shorthand == 0 {
 			continue
 		}
 		if existing, duplicate := reservedFlags.byShorthand[spec.shorthand]; duplicate {
-			panic(fmt.Sprintf("reserved shorthand -%c is registered by both --%s and --%s", spec.shorthand, existing, name))
+			panic(fmt.Sprintf("reserved shorthand -%c is registered by both --%s and --%s", spec.shorthand, existing, spec.name))
 		}
-		reservedFlags.byShorthand[spec.shorthand] = name
+		reservedFlags.byShorthand[spec.shorthand] = spec.name
 	}
 	return reservedFlags
 }
@@ -419,7 +544,7 @@ func ReservedFlags() []ReservedFlag {
 	out := make([]ReservedFlag, 0, len(reservedFlags.byName))
 	order := make(map[string]int, len(reservedFlags.byName))
 	for name, spec := range reservedFlags.byName {
-		if spec.hidden {
+		if !spec.visible {
 			continue
 		}
 		out = append(out, ReservedFlag{

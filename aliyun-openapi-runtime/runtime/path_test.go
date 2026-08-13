@@ -65,6 +65,9 @@ func TestAssembleEncodesPathAfterSubstitution(t *testing.T) {
 	if want := "/things/thing-123%3Ainspect"; req.Pathname != want {
 		t.Fatalf("pathname = %q, want %q", req.Pathname, want)
 	}
+	if req.PathPattern != api.URL || req.PathParams["thingId"] != "thing-123" {
+		t.Fatalf("dry-run path metadata = pattern %q params %#v", req.PathPattern, req.PathParams)
+	}
 }
 
 func TestAssemblePreservesInlineQuerySuffix(t *testing.T) {

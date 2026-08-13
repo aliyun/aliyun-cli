@@ -172,7 +172,7 @@ func TestDispatchSSEDryRunUsesOrdinaryExecutor(t *testing.T) {
 	if executor.normalCalls != 1 || executor.sseCalls != 0 {
 		t.Fatalf("normal=%d sse=%d", executor.normalCalls, executor.sseCalls)
 	}
-	if !strings.Contains(out, `"api":"StreamThing"`) {
+	if !strings.Contains(out, `"action":"StreamThing"`) {
 		t.Fatalf("dry-run output = %q", out)
 	}
 }

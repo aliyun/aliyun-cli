@@ -107,22 +107,24 @@ type ExecContext struct {
 	DryRun bool
 }
 
-// AssembledRequest is the fully-resolved wire request, independent of
-// any HTTP client. It is returned verbatim on --dry-run and is the
-// unit-testable output of Assemble.
+// AssembledRequest is the fully-resolved wire request, independent of any HTTP client.
+// It is returned verbatim on --dry-run and is the unit-testable output of Assemble.
 type AssembledRequest struct {
-	Action   string            `json:"action"`
-	Version  string            `json:"version"`
-	Method   string            `json:"method"`
-	Protocol string            `json:"protocol"`
-	Style    string            `json:"style"`
-	Pathname string            `json:"pathname,omitempty"`
-	Query    map[string]string `json:"query,omitempty"`
-	Headers  map[string]string `json:"headers,omitempty"`
-	Body     any               `json:"body,omitempty"`
-	// ReqBodyType is the request body encoding: "json" (default) or
-	// "formData". Empty and all non-formData metadata values are treated as
-	// "json" to match aliyun-cli-runtime.
+	Action   string `json:"action"`
+	Version  string `json:"version"`
+	Method   string `json:"method"`
+	Protocol string `json:"protocol"`
+	Style    string `json:"style"`
+	// PathPattern and PathParams retain the metadata-level ROA route alongside Pathname, which is the substituted and encoded wire path.
+	// They let host tooling (notably --cli-dry-run-json) expose the same request view as the legacy aliyun-cli OpenAPI path.
+	PathPattern string            `json:"path_pattern,omitempty"`
+	Pathname    string            `json:"pathname,omitempty"`
+	PathParams  map[string]string `json:"path_params,omitempty"`
+	Query       map[string]string `json:"query,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	Body        any               `json:"body,omitempty"`
+	// ReqBodyType is the request body encoding: "json" (default) or "formData".
+	// Empty and all non-formData metadata values are treated as "json" to match aliyun-cli-runtime.
 	ReqBodyType string `json:"req_body_type,omitempty"`
 	Endpoint    string `json:"endpoint,omitempty"`
 	Region      string `json:"region,omitempty"`
@@ -133,12 +135,10 @@ type Response struct {
 	StatusCode int
 	Headers    map[string][]string
 	Raw        []byte
-	// Parsed carries the response decoded with UseNumber() so int64
-	// IDs survive as json.Number rather than being routed through
-	// float64. Populated on structured output.
+	// Parsed carries the response decoded with UseNumber() so int64 IDs survive as json.Number rather than being routed through float64.
+	// Populated on structured output.
 	Parsed any
-	// Assembled is set on dry-run so callers can inspect / print the
-	// request that would have been sent.
+	// Assembled is set on dry-run so callers can inspect / print the request that would have been sent.
 	Assembled *AssembledRequest
 }
 
@@ -154,10 +154,9 @@ type DefaultExecutor struct{}
 // to reuse across goroutines.
 func NewExecutor() *DefaultExecutor { return &DefaultExecutor{} }
 
-// Execute assembles the request and, unless DryRun, sends it. On a
-// dry run it returns the AssembledRequest untouched; how it is
-// rendered (human dump vs one-line meta JSON) is the caller's
-// concern.
+// Execute assembles the request and, unless DryRun, sends it.
+// On a dry run it returns the AssembledRequest untouched;
+// how it is rendered (human dump vs one-line full request JSON) is the caller's concern.
 func (e *DefaultExecutor) Execute(ec *ExecContext) (*Response, error) {
 	req, err := Assemble(ec)
 	if err != nil {
@@ -201,9 +200,11 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 		Query:    map[string]string{},
 		Headers:  map[string]string{},
 		Region:   ec.Region,
-		// aliyun-cli-runtime defaults every operation to json and only generated
-		// formData APIs call SetReqBodyType("formData").
+		// aliyun-cli-runtime defaults every operation to json and only generated formData APIs call SetReqBodyType("formData").
 		ReqBodyType: resolveReqBodyType(api),
+	}
+	if !strings.EqualFold(style, string(meta.StyleRPC)) {
+		req.PathPattern = api.URL
 	}
 	if v := ec.Version; v != "" {
 		req.Version = v
@@ -244,6 +245,10 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 
 		switch p.Position {
 		case meta.PosPath:
+			if req.PathParams == nil {
+				req.PathParams = map[string]string{}
+			}
+			req.PathParams[wire] = scalarString(val)
 			if api.HasWildcardPath && p.IsWildcard {
 				wildcardPath = scalarString(val)
 				wildcardPathSet = true

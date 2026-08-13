@@ -169,13 +169,23 @@ func runOapi(t *testing.T, eng *engine.Engine, region string, args ...string) (s
 	return buf.String(), err
 }
 
-// dryRunMeta mirrors the engine's one-line --cli-dry-run-json shape.
-type dryRunMeta struct {
-	Product  string `json:"product"`
-	Version  string `json:"version"`
-	API      string `json:"api"`
-	Region   string `json:"region,omitempty"`
-	Endpoint string `json:"endpoint,omitempty"`
+// dryRunOutput mirrors aliyun-cli's full --cli-dry-run-json request shape.
+type dryRunOutput struct {
+	Product     string            `json:"product"`
+	API         string            `json:"api"`
+	Region      string            `json:"region,omitempty"`
+	Style       string            `json:"style"`
+	Endpoint    string            `json:"endpoint"`
+	Method      string            `json:"method"`
+	Headers     map[string]string `json:"headers"`
+	Query       map[string]string `json:"query,omitempty"`
+	Body        string            `json:"body,omitempty"`
+	BodyFormat  string            `json:"bodyFormat,omitempty"`
+	PathPattern string            `json:"pathPattern,omitempty"`
+	Pathname    string            `json:"pathname,omitempty"`
+	PathParams  map[string]string `json:"pathParams,omitempty"`
+	Action      string            `json:"action,omitempty"`
+	Version     string            `json:"version,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -424,15 +434,18 @@ func TestOapiDryRunJSONEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dry-run-json: %v\n%s", err, out)
 	}
-	var m dryRunMeta
+	var m dryRunOutput
 	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &m); err != nil {
-		t.Fatalf("not dryRunMeta JSON: %v\n%s", err, out)
+		t.Fatalf("not dryRunOutput JSON: %v\n%s", err, out)
 	}
-	if m.Product != "ecs" || m.API != "RunInstances" || m.Version != "2014-05-26" {
-		t.Errorf("meta identity wrong: %+v", m)
+	if m.Style != "RPC" || m.Action != "RunInstances" || m.Version != "2014-05-26" || m.Method != "POST" {
+		t.Errorf("request identity wrong: %+v", m)
 	}
-	if m.Region != "cn-beijing" || m.Endpoint != "ecs.cn-beijing.aliyuncs.com" {
-		t.Errorf("meta region/endpoint wrong: %+v", m)
+	if m.Product != "ecs" || m.API != "RunInstances" || m.Region != "cn-beijing" {
+		t.Errorf("legacy metadata identity wrong: %+v", m)
+	}
+	if m.Endpoint != "ecs.cn-beijing.aliyuncs.com" || m.Query["ImageId"] != "img1" || m.Query["InstanceType"] != "ecs.g6.large" {
+		t.Errorf("request details wrong: %+v", m)
 	}
 	if strings.Count(strings.TrimSpace(out), "\n") != 0 {
 		t.Errorf("dry-run-json should be one line:\n%s", out)
@@ -584,11 +597,11 @@ func TestUserMetaPluginOwnsProduct(t *testing.T) {
 	if err != nil {
 		t.Fatalf("user meta plugin command failed: %v\n%s", err, out)
 	}
-	var m dryRunMeta
+	var m dryRunOutput
 	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &m); err != nil {
 		t.Fatalf("bad output: %v\n%s", err, out)
 	}
-	if m.API != "DescribeThing" || m.Product != "demo" {
+	if m.Product != "demo" || m.API != "DescribeThing" || m.Action != "DescribeThing" || m.Version != "2024-01-01" {
 		t.Fatalf("user plugin not routed: %+v", m)
 	}
 

@@ -529,16 +529,116 @@ func scanAPIVersion(args []string) string {
 // ============================================================================
 // dry-run rendering
 // ============================================================================
-type dryRunMeta struct {
-	Product  string `json:"product"`
-	Version  string `json:"version"`
-	API      string `json:"api"`
-	Region   string `json:"region,omitempty"`
-	Endpoint string `json:"endpoint,omitempty"`
+type cliDryRunOutput struct {
+	// Legacy metadata fields retained for backward-compatible consumers.
+	Product string `json:"product"`
+	API     string `json:"api"`
+	Region  string `json:"region,omitempty"`
+
+	Style      string            `json:"style"`
+	Endpoint   string            `json:"endpoint"`
+	Method     string            `json:"method"`
+	Headers    map[string]string `json:"headers"`
+	Query      map[string]string `json:"query,omitempty"`
+	Body       string            `json:"body,omitempty"`
+	BodyFormat string            `json:"bodyFormat,omitempty"`
+
+	Pathname string `json:"pathname,omitempty"`
+
+	Action  string `json:"action,omitempty"`
+	Version string `json:"version,omitempty"`
 }
 
-// renderDryRun prints the assembled request. jsonMeta selects the
-// terse one-line metadata form (--cli-dry-run-json); otherwise a
+var sensitiveDryRunHeaderKeys = map[string]struct{}{
+	"authorization":        {},
+	"x-acs-accesskey-id":   {},
+	"x-acs-security-token": {},
+	"x-acs-signature":      {},
+}
+
+func maskDryRunValue(value string) string {
+	if len(value) <= 4 {
+		return "***"
+	}
+	return value[:4] + "***"
+}
+
+func sanitizeDryRunHeaders(headers map[string]string) map[string]string {
+	out := make(map[string]string, len(headers))
+	for key, value := range headers {
+		if _, sensitive := sensitiveDryRunHeaderKeys[strings.ToLower(key)]; sensitive {
+			out[key] = maskDryRunValue(value)
+		} else {
+			out[key] = value
+		}
+	}
+	return out
+}
+
+func dryRunBody(body any, reqBodyType string) (value, format string, err error) {
+	if body == nil {
+		return "", "", nil
+	}
+	if data, ok := body.(string); ok {
+		format = reqBodyType
+		if format == "" {
+			format = "raw"
+		}
+		if strings.EqualFold(format, "formData") {
+			format = "form"
+		}
+		return data, format, nil
+	}
+	if data, ok := body.([]byte); ok {
+		format = reqBodyType
+		if format == "" {
+			format = "binary"
+		}
+		if strings.EqualFold(format, "formData") {
+			format = "form"
+		}
+		return string(data), format, nil
+	}
+	b, err := json.Marshal(body)
+	if err != nil {
+		return "", "", err
+	}
+	format = "json"
+	if strings.EqualFold(reqBodyType, "formData") {
+		format = "form"
+	}
+	return string(b), format, nil
+}
+
+func buildCliDryRunOutput(product string, req *runtime.AssembledRequest) (*cliDryRunOutput, error) {
+	body, bodyFormat, err := dryRunBody(req.Body, req.ReqBodyType)
+	if err != nil {
+		return nil, err
+	}
+	out := &cliDryRunOutput{
+		Product:    product,
+		API:        req.Action,
+		Region:     req.Region,
+		Style:      req.Style,
+		Endpoint:   stripScheme(req.Endpoint),
+		Method:     req.Method,
+		Headers:    sanitizeDryRunHeaders(req.Headers),
+		Query:      req.Query,
+		Body:       body,
+		BodyFormat: bodyFormat,
+		Action:     req.Action,
+		Version:    req.Version,
+		Pathname:   req.Pathname,
+	}
+	if out.Pathname == "" {
+		// darabonba-openapi sends an empty pathname as "/".
+		out.Pathname = "/"
+	}
+	return out, nil
+}
+
+// renderDryRun prints the assembled request.
+// jsonMeta selects the one-line full request form (--cli-dry-run-json); otherwise a
 // human-readable multi-line dump (--cli-dry-run) matching the plugin
 // engine's layout, with a runtime-labelled footer for diff identification.
 func renderDryRun(w io.Writer, product string, req *runtime.AssembledRequest, jsonMeta bool) error {
@@ -546,13 +646,11 @@ func renderDryRun(w io.Writer, product string, req *runtime.AssembledRequest, js
 		return fmt.Errorf("dry-run produced no request")
 	}
 	if jsonMeta {
-		b, err := json.Marshal(dryRunMeta{
-			Product:  product,
-			Version:  req.Version,
-			API:      req.Action,
-			Region:   req.Region,
-			Endpoint: stripScheme(req.Endpoint),
-		})
+		output, err := buildCliDryRunOutput(product, req)
+		if err != nil {
+			return err
+		}
+		b, err := json.Marshal(output)
 		if err != nil {
 			return err
 		}
