@@ -15,7 +15,7 @@
 // Package storage abstracts the "give me bytes for a named entry"
 // concern. It is the lowest layer of aliyun-openapi-runtime and has no
 // notion of products, API versions, or meta shapes; those concepts
-// live in ../format and ../source respectively.
+// live in ../format and the parent source package respectively.
 //
 // Two implementations ship out of the box:
 //

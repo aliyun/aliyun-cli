@@ -100,3 +100,30 @@ func TestExecuteSSEReturnsHTTPError(t *testing.T) {
 		t.Fatalf("unexpected SSE error: %v", err)
 	}
 }
+
+func TestSSEUsesProfileSDKRetryWhenThrottlingRetryDisabled(t *testing.T) {
+	disabled := false
+	ec := &ExecContext{
+		API: &meta.API{
+			Name: "StreamThing", Version: "2024-01-01", Method: "POST",
+			Style: meta.StyleRPC, Protocol: "HTTP", ProductCode: "demo", IsSSE: true,
+		},
+		Endpoint:   "example.com",
+		Credential: staticAKCredential(t),
+		RetryCount: 5,
+		Transport: TransportOptions{ThrottlingRetry: ThrottlingRetryOptions{
+			Enabled: &disabled,
+		}},
+	}
+	req, err := Assemble(ec)
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	call, err := prepareCall(ec, req)
+	if err != nil {
+		t.Fatalf("prepareCall: %v", err)
+	}
+	if call.client.RetryOptions == nil {
+		t.Fatal("SSE should configure SDK retry options from profile RetryCount")
+	}
+}

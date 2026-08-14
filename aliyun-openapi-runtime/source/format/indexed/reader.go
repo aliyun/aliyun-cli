@@ -33,7 +33,7 @@ import (
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
-	"github.com/aliyun/aliyun-openapi-runtime/storage"
+	"github.com/aliyun/aliyun-openapi-runtime/source/storage"
 )
 
 // Index is the small, eagerly loaded routing table for an indexed data blob.

@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aliyun/aliyun-openapi-runtime/format/indexed"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
+	"github.com/aliyun/aliyun-openapi-runtime/source/format/indexed"
 )
 
 func TestDirSourceLoadsJSONLPluginByManifestProductCode(t *testing.T) {

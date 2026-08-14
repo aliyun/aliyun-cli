@@ -24,7 +24,7 @@ import (
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	crschema "github.com/aliyun/aliyun-openapi-runtime/schema"
-	"github.com/aliyun/aliyun-openapi-runtime/storage"
+	"github.com/aliyun/aliyun-openapi-runtime/source/storage"
 )
 
 // JSONFormat decodes the upstream plugin-generator JSON layout:

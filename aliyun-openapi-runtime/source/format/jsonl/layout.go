@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Package jsonl names the indexed-JSONL metadata plugin layout.
-// Shared index/data random-access lives in format/indexed; this package
+// Shared index/data random-access lives in source/format/indexed; this package
 // only exposes the LayoutName used in MetadataDescriptor.Layout.
 package jsonl
 

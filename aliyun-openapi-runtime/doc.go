@@ -15,10 +15,9 @@
 // Package openapiruntime is the "OpenAPI-metadata-driven engine":
 //
 //	baseline metas (embed.FS) ─┐
-//	user plugins (~/.aliyun)   ├─► Storage ─► Format ─► Source ─► Loader ─► Runtime ─► CLI
+//	user plugins (~/.aliyun)   ├─► Source (Storage + Format) ─► Loader ─► Runtime ─► CLI
 //	dev override ($ENV)        ─┘
 //
-// This root package only exposes the high-level assembly entry
-// (register.go). Consumers should import the sub-packages they
-// depend on directly (e.g. meta / source / loader for tests).
+// This root package only exposes the high-level assembly entry (register.go).
+// Consumers should import the sub-packages they depend on directly (e.g. meta / source / loader for tests).
 package openapiruntime

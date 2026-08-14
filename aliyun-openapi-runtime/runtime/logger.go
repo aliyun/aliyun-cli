@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aliyun/aliyun-openapi-runtime/redact"
+	redact "github.com/aliyun/aliyun-openapi-runtime/internal"
 )
 
 // LogLevel controls which diagnostic messages are emitted to stderr.
@@ -290,9 +290,9 @@ func LogRequest(req *AssembledRequest) {
 	if req.Body != nil {
 		switch v := req.Body.(type) {
 		case string:
-			Debug("Body (string): %s", v)
+			Debug("Body (string): %s", redact.MaskBody(v))
 		case []byte:
-			Debug("Body (bytes): %s", string(v))
+			Debug("Body (bytes): %s", redact.MaskBody(string(v)))
 		default:
 			logJSON("Body", redact.MaskAny(req.Body))
 		}
@@ -319,8 +319,8 @@ func LogResponse(resp *Response) {
 			}
 		}
 	}
-	body := string(resp.Raw)
-	if body == "" {
+	rawBody := string(resp.Raw)
+	if rawBody == "" {
 		Debug("Response Body: (empty)")
 		return
 	}
@@ -330,11 +330,7 @@ func LogResponse(resp *Response) {
 			return
 		}
 	}
-	if len(body) > 1000 {
-		Debug("Response Body (truncated): %s... (%d bytes total)", body[:1000], len(body))
-		return
-	}
-	Debug("Response Body: %s", body)
+	Debug("Response Body: %s", redact.MaskBody(rawBody))
 }
 
 func logStringMap(title string, m map[string]string) {

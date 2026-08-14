@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aliyun/aliyun-openapi-runtime/format/indexed"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
-	"github.com/aliyun/aliyun-openapi-runtime/storage"
+	"github.com/aliyun/aliyun-openapi-runtime/source/format/indexed"
+	"github.com/aliyun/aliyun-openapi-runtime/source/storage"
 	"google.golang.org/protobuf/proto"
 )
 

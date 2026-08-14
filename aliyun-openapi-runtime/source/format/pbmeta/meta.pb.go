@@ -557,7 +557,7 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x128\n" +
 	"\x06fields\x18\x02 \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\x06fields\x12;\n" +
 	"\aelement\x18\x03 \x01(\v2!.aliyun.openapi.meta.v1.TypeShapeR\aelement\x127\n" +
-	"\x05value\x18\x04 \x01(\v2!.aliyun.openapi.meta.v1.TypeShapeR\x05valueB?Z=github.com/aliyun/aliyun-openapi-runtime/format/pbmeta;pbmetab\x06proto3"
+	"\x05value\x18\x04 \x01(\v2!.aliyun.openapi.meta.v1.TypeShapeR\x05valueBFZDgithub.com/aliyun/aliyun-openapi-runtime/source/format/pbmeta;pbmetab\x06proto3"
 
 var (
 	file_aliyun_openapi_meta_proto_rawDescOnce sync.Once

@@ -23,7 +23,6 @@ import (
 	"github.com/alibabacloud-go/tea/dara"
 )
 
-// SSEEvent is one normalized JSON object emitted for an SSE frame.
 type SSEEvent json.RawMessage
 
 func sendSSE(ec *ExecContext, req *AssembledRequest, yield func(SSEEvent)) error {
@@ -37,9 +36,8 @@ func sendSSE(ec *ExecContext, req *AssembledRequest, yield func(SSEEvent)) error
 	errs := make(chan error, 1)
 	go call.client.CallSSEApi(call.params, call.request, call.runtime, events, errs)
 
-	// CallSSEApi/ReadAsSSE send their terminal error on errs while producing
-	// events. Drain the event channel first so the producer can always finish,
-	// then read the terminal error exactly once.
+	// CallSSEApi/ReadAsSSE send their terminal error on errs while producing events.
+	// Drain the event channel first so the producer can always finish, then read the terminal error exactly once.
 	for response := range events {
 		if response == nil {
 			continue
@@ -54,9 +52,9 @@ func sendSSE(ec *ExecContext, req *AssembledRequest, yield func(SSEEvent)) error
 	return nil
 }
 
-// MarshalSSEEvent matches aliyun-cli-runtime's event shape: id/event/retry
-// are included when present, while data is decoded as JSON when possible and
-// otherwise retained as a string. Empty frames are skipped.
+// MarshalSSEEvent matches aliyun-cli-runtime's event shape: id/event/retry are included when present,
+// while data is decoded as JSON when possible and otherwise retained as a string.
+// Empty frames are skipped.
 func MarshalSSEEvent(event *dara.SSEEvent) (SSEEvent, bool) {
 	if event == nil {
 		return nil, false

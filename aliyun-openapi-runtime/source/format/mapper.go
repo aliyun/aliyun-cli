@@ -21,7 +21,7 @@ import (
 	crschema "github.com/aliyun/aliyun-openapi-runtime/schema"
 )
 
-// This file is the ONLY place that knows both the on-disk schema (aliyun-openapi-runtime/schema) and the runtime model (../meta).
+// This file is the ONLY place that knows both the on-disk schema (aliyun-openapi-runtime/schema) and the runtime model (../../meta).
 // Every mapping decision lives here so it can evolve independently of both sides.
 
 // schemaToAPI converts one CommandDefinition into meta.API.
@@ -145,9 +145,8 @@ func mapTypeShape(s *crschema.TypeShape) *meta.Parameter {
 	return shape
 }
 
-// mapType normalises the schema's free-form Type string to a
-// meta.DataType. Unknown values fall through to TypeAny so a stale
-// generator does not crash the runtime.
+// mapType normalises the schema's free-form Type string to a meta.DataType.
+// Unknown values fall through to TypeAny so a stale generator does not crash the runtime.
 func mapType(t string) meta.DataType {
 	switch strings.ToLower(strings.TrimSpace(t)) {
 	case "string", "":

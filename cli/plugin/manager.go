@@ -21,11 +21,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
-	runtimeindexed "github.com/aliyun/aliyun-openapi-runtime/format/indexed"
-	runtimejsonl "github.com/aliyun/aliyun-openapi-runtime/format/jsonl"
-	runtimepbmeta "github.com/aliyun/aliyun-openapi-runtime/format/pbmeta"
-	runtimeschema "github.com/aliyun/aliyun-openapi-runtime/schema"
-	runtimestorage "github.com/aliyun/aliyun-openapi-runtime/storage"
+	runtimesource "github.com/aliyun/aliyun-openapi-runtime/source"
 	"golang.org/x/mod/semver"
 )
 
@@ -853,29 +849,7 @@ func validateAndResolvePackageType(extractDir string, manifest *PluginManifest) 
 	if hasBinary {
 		return fmt.Errorf("invalid metadata plugin: bin.path must be empty")
 	}
-	d := manifest.Metadata
-	if d.Schema != runtimeschema.SchemaName || d.SchemaVersion != runtimeschema.SchemaVersion || d.LayoutVersion != runtimeschema.LayoutVersion {
-		return fmt.Errorf("unsupported metadata contract format=%q schema=%q schemaVersion=%d layout=%q layoutVersion=%d", d.Format, d.Schema, d.SchemaVersion, d.Layout, d.LayoutVersion)
-	}
-	isJSONL := d.Format == runtimeschema.FormatJSON && d.Layout == runtimejsonl.LayoutName
-	isProtobuf := d.Format == runtimeschema.FormatProtobuf && d.Layout == runtimepbmeta.LayoutName
-	if !isJSONL && !isProtobuf {
-		return fmt.Errorf("unsupported metadata contract format=%q schema=%q schemaVersion=%d layout=%q layoutVersion=%d", d.Format, d.Schema, d.SchemaVersion, d.Layout, d.LayoutVersion)
-	}
-	store := runtimestorage.NewDirStorage(filepath.Dir(extractDir))
-	vol, err := store.Open(filepath.Base(extractDir))
-	if err != nil {
-		return fmt.Errorf("open metadata plugin package: %w", err)
-	}
-	defer vol.Close()
-	reader, openErr := runtimeindexed.Open(vol, d.Index, d.Data)
-	if openErr != nil {
-		return fmt.Errorf("invalid metadata plugin index: %w", openErr)
-	}
-	if err := reader.VerifyChecksum(); err != nil {
-		return fmt.Errorf("invalid metadata plugin data: %w", err)
-	}
-	return nil
+	return runtimesource.ValidateMetadataPlugin(extractDir, manifest.Metadata)
 }
 
 func copyDirTree(src, dst string) error {

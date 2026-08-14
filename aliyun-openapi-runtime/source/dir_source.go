@@ -22,13 +22,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aliyun/aliyun-openapi-runtime/format"
-	"github.com/aliyun/aliyun-openapi-runtime/format/indexed"
-	"github.com/aliyun/aliyun-openapi-runtime/format/jsonl"
-	"github.com/aliyun/aliyun-openapi-runtime/format/pbmeta"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
-	"github.com/aliyun/aliyun-openapi-runtime/storage"
+	"github.com/aliyun/aliyun-openapi-runtime/source/format"
+	"github.com/aliyun/aliyun-openapi-runtime/source/format/indexed"
+	"github.com/aliyun/aliyun-openapi-runtime/source/format/jsonl"
+	"github.com/aliyun/aliyun-openapi-runtime/source/format/pbmeta"
+	"github.com/aliyun/aliyun-openapi-runtime/source/storage"
 )
 
 // dirSource serves user/override metadata plugins.

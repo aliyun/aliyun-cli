@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 
@@ -107,6 +108,53 @@ func TestSendAgainstMockServer(t *testing.T) {
 	}
 	if num.String() != "9007199254740993" {
 		t.Fatalf("precision lost: %s", num.String())
+	}
+}
+
+func TestSendRetriesThrottlingResponse(t *testing.T) {
+	requests := 0
+	var retryAttempts, retryDelay string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if requests == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("x-acs-retry-after", "0")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"Code":"Throttling","Message":"slow down","RequestId":"req-1"}`))
+			return
+		}
+		retryAttempts = r.Header.Get("x-acs-retry-attempts")
+		retryDelay = r.Header.Get("x-acs-retry-delay")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"RequestId":"req-2"}`))
+	}))
+	defer srv.Close()
+
+	originalSleep := throttlingRetrySleep
+	throttlingRetrySleep = func(time.Duration) {}
+	t.Cleanup(func() { throttlingRetrySleep = originalSleep })
+
+	api := &meta.API{
+		Name: "DescribeThing", Version: "2024-04-02", Method: "POST",
+		Style: meta.StyleRPC, Protocol: "HTTP", ProductCode: "acc",
+	}
+	_, err := NewExecutor().Execute(&ExecContext{
+		API:        api,
+		Endpoint:   strings.TrimPrefix(srv.URL, "http://"),
+		Credential: staticAKCredential(t),
+		Args:       map[string]any{},
+		Transport: TransportOptions{ThrottlingRetry: ThrottlingRetryOptions{
+			MaxAttempts: 1,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if requests != 2 {
+		t.Fatalf("requests = %d, want 2", requests)
+	}
+	if retryAttempts != "1" || retryDelay != "0" {
+		t.Fatalf("retry headers attempts=%q delay=%q", retryAttempts, retryDelay)
 	}
 }
 

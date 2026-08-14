@@ -78,11 +78,11 @@ func TestLogRequestResponse(t *testing.T) {
 		Method: "POST", Pathname: "/", Version: "v1", Action: "List",
 		Protocol: "HTTPS", Style: "RPC", Endpoint: "example.com",
 		Query: map[string]string{"PageSize": "10", "password": "secret123"},
+		Body:  `{"accessKeySecret":"request-secret","name":"visible"}`,
 	})
 	LogResponse(&Response{
 		StatusCode: 200,
-		Raw:        []byte(`{"ok":true}`),
-		Parsed:     map[string]any{"ok": true},
+		Raw:        []byte(`{"token":"response-secret","ok":true}`),
 	})
 
 	out := buf.String()
@@ -94,5 +94,13 @@ func TestLogRequestResponse(t *testing.T) {
 	}
 	if strings.Contains(out, "secret123") {
 		t.Fatalf("raw password leaked:\n%s", out)
+	}
+	for _, secret := range []string{"request-secret", "response-secret"} {
+		if strings.Contains(out, secret) {
+			t.Fatalf("raw body secret %q leaked:\n%s", secret, out)
+		}
+	}
+	if !strings.Contains(out, "requ***") || !strings.Contains(out, "resp***") {
+		t.Fatalf("request or response body was not masked:\n%s", out)
 	}
 }

@@ -77,6 +77,7 @@ type ExecContext struct {
 	ConnectTimeout time.Duration
 	RetryCount     int
 	Credential     credentialsv2.Credential
+	Transport      TransportOptions
 
 	// ExtraQuery is merged into the assembled request's Query after
 	// schema args are serialized. Used by --pager to inject NextToken /
@@ -356,6 +357,7 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 	case ec.ForceHTTPS:
 		req.Protocol = "HTTPS"
 	}
+	applyTransportOptions(req, api.ProductCode, ec.Transport)
 	return req, nil
 }
 
@@ -490,7 +492,7 @@ func send(ec *ExecContext, req *AssembledRequest) (*Response, error) {
 		return nil, err
 	}
 	LogRequest(req)
-	raw, err := call.client.CallApi(call.params, call.request, call.runtime)
+	raw, err := callWithThrottlingRetry(ec.Transport.ThrottlingRetry, call)
 	if err != nil {
 		return nil, fmt.Errorf("runtime: call failed: %w", dara.TeaSDKError(err))
 	}
@@ -529,7 +531,9 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 	if ec.ConnectTimeout > 0 {
 		conf.ConnectTimeout = tea.Int(int(ec.ConnectTimeout / time.Millisecond))
 	}
-	if ec.RetryCount > 0 {
+	// Throttling retry owns the call loop when enabled, matching
+	// aliyun-cli-runtime and avoiding multiplied SDK/runtime retries.
+	if ec.RetryCount > 0 && !ec.Transport.ThrottlingRetry.IsEnabled() {
 		conf.RetryOptions = &dara.RetryOptions{
 			Retryable: true,
 			RetryCondition: []*dara.RetryCondition{

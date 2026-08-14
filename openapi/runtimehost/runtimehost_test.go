@@ -30,9 +30,9 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
-	"github.com/aliyun/aliyun-openapi-runtime/format/indexed"
 	"github.com/aliyun/aliyun-openapi-runtime/loader"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
@@ -46,6 +46,51 @@ type captureExecutor struct{ last *runtime.ExecContext }
 func (c *captureExecutor) Execute(ec *runtime.ExecContext) (*runtime.Response, error) {
 	c.last = ec
 	return &runtime.Response{StatusCode: 200, Raw: []byte(`{}`)}, nil
+}
+
+func TestBuildUserAgentSuffix(t *testing.T) {
+	t.Setenv(envUserAgent, "env-\nagent/1")
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	userAgent := &cli.Flag{Name: "user-agent", AssignedMode: cli.AssignedOnce}
+	ctx.Flags().Add(userAgent)
+	userAgent.SetAssigned(true)
+	userAgent.SetValue("flag-\ragent/2")
+	forceOff := &cli.Flag{Name: "no-cli-ai-mode", AssignedMode: cli.AssignedOnce}
+	ctx.Flags().Add(forceOff)
+	forceOff.SetAssigned(true)
+
+	if got, want := buildUserAgentSuffix(ctx), "env-agent/1 flag-agent/2"; got != want {
+		t.Fatalf("suffix = %q, want %q", got, want)
+	}
+}
+
+func TestProfileHostTransportOptions(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_OTEL_TRACEPARENT", "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01")
+	t.Setenv("ALIBABA_CLOUD_OTEL_BAGGAGE", "tenant=test")
+	t.Setenv(envSourceIP, " 192.0.2.1 ")
+	t.Setenv(envSecureTransport, " true ")
+	t.Setenv(envCallContextSkipProduct, " custom, DEMO ")
+	t.Setenv(throttlingretry.EnvEnabled, "false")
+	t.Setenv(throttlingretry.EnvMaxAttempts, "7")
+	t.Setenv(throttlingretry.EnvMaxDelayMS, "4321")
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	options := (&cliHost{ctx: ctx}).TransportOptions()
+	if options.Headers["traceparent"] == "" || options.Headers["baggage"] != "tenant=test" {
+		t.Fatalf("OTEL headers = %#v", options.Headers)
+	}
+	if options.CallContext.SourceIP != "192.0.2.1" || options.CallContext.SecureTransport != "true" {
+		t.Fatalf("call context = %#v", options.CallContext)
+	}
+	if !reflect.DeepEqual(options.CallContext.SkipProducts, []string{"custom", "DEMO"}) {
+		t.Fatalf("skip products = %#v", options.CallContext.SkipProducts)
+	}
+	if options.ThrottlingRetry.Enabled == nil || *options.ThrottlingRetry.Enabled {
+		t.Fatalf("throttling enabled = %#v", options.ThrottlingRetry.Enabled)
+	}
+	if options.ThrottlingRetry.MaxAttempts != 7 || options.ThrottlingRetry.MaxDelayMS != 4321 {
+		t.Fatalf("throttling = %#v", options.ThrottlingRetry)
+	}
 }
 
 func TestHelpLanguagePrefersCommandFlag(t *testing.T) {
@@ -78,6 +123,16 @@ func TestHostSettingsAppliedToExecContext(t *testing.T) {
 			SkipSecureVerify: true,
 			CLIVersion:       "3.0.234",
 			UserAgent:        "tool/1",
+		},
+		TransportOptionsVal: runtime.TransportOptions{
+			Headers: map[string]string{"traceparent": "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01"},
+			CallContext: runtime.CallContextOptions{
+				SourceIP: "192.0.2.1",
+			},
+			ThrottlingRetry: runtime.ThrottlingRetryOptions{
+				MaxAttempts: 5,
+				MaxDelayMS:  2500,
+			},
 		},
 	}
 	var buf bytes.Buffer
@@ -115,6 +170,15 @@ func TestHostSettingsAppliedToExecContext(t *testing.T) {
 	}
 	if cap.last.UserAgent != "tool/1" {
 		t.Errorf("UserAgent = %q", cap.last.UserAgent)
+	}
+	if cap.last.Transport.Headers["traceparent"] == "" {
+		t.Error("transport headers not applied")
+	}
+	if cap.last.Transport.CallContext.SourceIP != "192.0.2.1" {
+		t.Errorf("SourceIP = %q", cap.last.Transport.CallContext.SourceIP)
+	}
+	if cap.last.Transport.ThrottlingRetry.MaxAttempts != 5 {
+		t.Errorf("throttling max attempts = %d", cap.last.Transport.ThrottlingRetry.MaxAttempts)
 	}
 }
 
@@ -562,12 +626,20 @@ func TestUserMetaPluginOwnsProduct(t *testing.T) {
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(data)
-	index := indexed.Index{
-		Schema: schema.SchemaName, SchemaVersion: schema.SchemaVersion, LayoutVersion: schema.LayoutVersion,
-		DataFile: schema.MetadataDataFile, DataSize: int64(len(data)), DataSHA256: "sha256:" + hex.EncodeToString(digest[:]),
-		APIs: []indexed.Record{{
-			APIVersion: "2024-01-01", APIName: def.Name, CommandName: def.CmdName,
-			DescriptionEN: "Describes a thing", Offset: 0, Length: int64(len(raw)),
+	index := map[string]any{
+		"schema":        schema.SchemaName,
+		"schemaVersion": schema.SchemaVersion,
+		"layoutVersion": schema.LayoutVersion,
+		"dataFile":      schema.MetadataDataFile,
+		"dataSize":      int64(len(data)),
+		"dataSha256":    "sha256:" + hex.EncodeToString(digest[:]),
+		"apis": []map[string]any{{
+			"apiVersion":    "2024-01-01",
+			"apiName":       def.Name,
+			"commandName":   def.CmdName,
+			"descriptionEn": "Describes a thing",
+			"offset":        int64(0),
+			"length":        int64(len(raw)),
 		}},
 	}
 	indexRaw, err := json.Marshal(index)

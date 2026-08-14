@@ -20,10 +20,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/aliyun/aliyun-openapi-runtime/format"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
-	"github.com/aliyun/aliyun-openapi-runtime/storage"
+	"github.com/aliyun/aliyun-openapi-runtime/source/format"
+	"github.com/aliyun/aliyun-openapi-runtime/source/storage"
 )
 
 // BaselineSource is the read-only source over the shared aliyun-openapi-meta "canonical" dataset embedded in the CLI binary.
@@ -67,8 +67,7 @@ func NewBaselineSource(embedFS fs.FS, bundledBy string) *BaselineSource {
 // Kind reports the baseline layer.
 func (s *BaselineSource) Kind() Kind { return KindBaseline }
 
-// loadCatalog reads metadatas/products.json once and builds the
-// product records (with endpoints). Missing file -> empty catalog.
+// loadCatalog reads metadatas/products.json once and builds the product records (with endpoints). Missing file -> empty catalog.
 func (s *BaselineSource) loadCatalog() (map[string]*productRec, error) {
 	s.loadOnce.Do(func() {
 		s.products = map[string]*productRec{}
@@ -100,8 +99,7 @@ func (s *BaselineSource) loadCatalog() (map[string]*productRec, error) {
 	return s.products, s.loadErr
 }
 
-// excluded reports whether the engine must abstain from a product
-// because it ships as a Go plugin (distribution == "go").
+// excluded reports whether the engine must abstain from a product because it ships as a Go plugin (distribution == "go").
 func excluded(rec *productRec) bool {
 	return rec != nil && rec.distribution == schema.DistributionGo
 }

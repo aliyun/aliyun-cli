@@ -28,7 +28,10 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/headers"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
+	"github.com/aliyun/aliyun-cli/v3/util"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
@@ -37,6 +40,13 @@ import (
 
 // envPluginsDir mirrors cli/plugin.EnvPluginsDir. Duplicated here (a single string) to avoid importing the whole plugin manager for one constant.
 const envPluginsDir = "ALIBABA_CLOUD_CLI_PLUGINS_DIR"
+
+const (
+	envUserAgent              = "ALIBABA_CLOUD_USER_AGENT"
+	envSourceIP               = "ALIBABA_CLOUD_SOURCE_IP"
+	envSecureTransport        = "ALIBABA_CLOUD_SECURE_TRANSPORT"
+	envCallContextSkipProduct = "ALIBABA_CLOUD_CALL_CONTEXT_SKIP_PRODUCTS"
+)
 
 // userPluginsDir resolves the directory holding user-installed meta plugins, matching the plugin manager's convention:
 //
@@ -54,16 +64,16 @@ func userPluginsDir() string {
 	return filepath.Join(home, ".aliyun", "plugins")
 }
 
-// profileHost adapts aliyun-cli's profile/credential resolution to the engine's runtime.Host seam.
+// cliHost adapts aliyun-cli's profile, flags and system configuration to the engine's runtime.Host seam.
 // The profile is loaded lazily and once, so dry-run (which only reads Region) never triggers credential IO.
-type profileHost struct {
+type cliHost struct {
 	ctx     *cli.Context
 	once    sync.Once
 	profile config.Profile
 	loadErr error
 }
 
-func (h *profileHost) load() {
+func (h *cliHost) load() {
 	h.once.Do(func() {
 		h.profile, h.loadErr = config.LoadProfileWithContext(h.ctx)
 	})
@@ -71,7 +81,7 @@ func (h *profileHost) load() {
 
 // Region returns the profile's default region, or "" if the profile
 // cannot be loaded (dry-run tolerates this and resolves region-less).
-func (h *profileHost) Region() string {
+func (h *cliHost) Region() string {
 	h.load()
 	if h.loadErr != nil {
 		return ""
@@ -84,7 +94,7 @@ func (h *profileHost) Region() string {
 // defaults). Timeouts in the profile are seconds; convert to Duration.
 // Transport flags (--skip-secure-verify, --user-agent, AI mode) are
 // folded in from the flags already parsed into ctx.
-func (h *profileHost) Settings() runtime.Settings {
+func (h *cliHost) Settings() runtime.Settings {
 	h.load()
 	s := runtime.Settings{}
 	if h.loadErr == nil {
@@ -104,14 +114,54 @@ func (h *profileHost) Settings() runtime.Settings {
 	return s
 }
 
-// buildUserAgentSuffix merges --user-agent with the host AI-mode suffix
+// TransportOptions resolves non-secret request context without touching credentials.
+// Configuration parsing stays in the aliyun-cli host adapter.
+func (h *cliHost) TransportOptions() runtime.TransportOptions {
+	options := runtime.TransportOptions{
+		Headers: headers.Collect(),
+		CallContext: runtime.CallContextOptions{
+			SourceIP:        strings.TrimSpace(os.Getenv(envSourceIP)),
+			SecureTransport: strings.TrimSpace(os.Getenv(envSecureTransport)),
+			SkipProducts:    splitCommaList(os.Getenv(envCallContextSkipProduct)),
+		},
+	}
+	cfg, err := throttlingretry.LoadEffective(config.GetConfigDir(h.ctx))
+	if err == nil && cfg != nil {
+		options.ThrottlingRetry = runtime.ThrottlingRetryOptions{
+			Enabled:     cfg.Enabled,
+			MaxAttempts: cfg.MaxAttempts,
+			MaxDelayMS:  cfg.MaxDelayMS,
+		}
+	}
+	return options
+}
+
+func splitCommaList(raw string) []string {
+	var values []string
+	for _, value := range strings.Split(raw, ",") {
+		if value = strings.TrimSpace(value); value != "" {
+			values = append(values, value)
+		}
+	}
+	return values
+}
+
+// buildUserAgentSuffix merges ALIBABA_CLOUD_USER_AGENT and --user-agent
+// with the host AI-mode suffix.
 // (config + --cli-ai-mode / --no-cli-ai-mode).
-// The engine prefixes aliyun-openapi-runtime/{ver} Aliyun-CLI/{cliVer}.
+// The engine prefixes Aliyun-CLI/{cliVer} aliyun-openapi-runtime/{ver}.
 func buildUserAgentSuffix(ctx *cli.Context) string {
 	var parts []string
+	if value := strings.TrimSpace(os.Getenv(envUserAgent)); value != "" {
+		if value = strings.TrimSpace(util.SanitizeUserAgent(value)); value != "" {
+			parts = append(parts, value)
+		}
+	}
 	if f := ctx.Flags().Get("user-agent"); f != nil {
 		if v, ok := f.GetValue(); ok && strings.TrimSpace(v) != "" {
-			parts = append(parts, strings.TrimSpace(v))
+			if v = strings.TrimSpace(util.SanitizeUserAgent(v)); v != "" {
+				parts = append(parts, v)
+			}
 		}
 	}
 
@@ -169,7 +219,7 @@ func checkSafetyPolicy(ctx *cli.Context, rawArgs []string) error {
 }
 
 // Credential resolves the caller's credential from the profile.
-func (h *profileHost) Credential() (credentialsv2.Credential, error) {
+func (h *cliHost) Credential() (credentialsv2.Credential, error) {
 	h.load()
 	if h.loadErr != nil {
 		return nil, h.loadErr
@@ -207,7 +257,7 @@ func Dispatch(ctx *cli.Context, rawArgs []string) error {
 	if err := checkSafetyPolicy(ctx, rawArgs); err != nil {
 		return err
 	}
-	host := &profileHost{ctx: ctx}
+	host := &cliHost{ctx: ctx}
 
 	// Resolve the display language from the profile (which now reflects
 	// a command-line --language via OverwriteWithFlags), falling back to

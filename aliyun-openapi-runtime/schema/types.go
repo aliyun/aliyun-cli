@@ -24,7 +24,7 @@
 // This is the *data contract*; it is intentionally decoupled from the
 // runtime's in-memory model (aliyun-openapi-runtime/meta) so the disk format
 // can evolve without dragging the abstraction along. The mapping lives
-// in aliyun-openapi-runtime/format.
+// in aliyun-openapi-runtime/source/format.
 package schema
 
 // ============================================================================
@@ -50,9 +50,8 @@ const (
 	MetadataDataFile  = "metadata.jsonl"
 )
 
-// Shared metadata-plugin contract identity. Layout-specific names
-// (e.g. format/jsonl.LayoutName, format/pbmeta.LayoutName) live under format/.
-// Shared index + ReadAt access lives in format/indexed.
+// Shared metadata-plugin contract identity. Layout-specific names and
+// index/data access implementations live under source/format.
 const (
 	SchemaName    = "aliyun-openapi-meta"
 	SchemaVersion = 1

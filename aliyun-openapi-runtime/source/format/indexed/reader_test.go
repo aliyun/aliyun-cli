@@ -22,9 +22,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aliyun/aliyun-openapi-runtime/format"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
-	"github.com/aliyun/aliyun-openapi-runtime/storage"
+	"github.com/aliyun/aliyun-openapi-runtime/source/format"
+	"github.com/aliyun/aliyun-openapi-runtime/source/storage"
 )
 
 func TestReaderRandomAccess(t *testing.T) {

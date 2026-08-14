@@ -36,9 +36,9 @@ import (
 	"github.com/jmespath/go-jmespath"
 
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
+	redact "github.com/aliyun/aliyun-openapi-runtime/internal"
 	"github.com/aliyun/aliyun-openapi-runtime/loader"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
-	"github.com/aliyun/aliyun-openapi-runtime/redact"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
 )
 
@@ -337,6 +337,7 @@ func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runti
 		ec.SkipSecureVerify = settings.SkipSecureVerify
 		ec.CLIVersion = settings.CLIVersion
 		ec.UserAgent = settings.UserAgent
+		ec.Transport = req.Host.TransportOptions()
 	}
 	if !ec.DryRun || res.Reserved.EstimateCost {
 		if req.Host == nil {
@@ -549,28 +550,10 @@ type cliDryRunOutput struct {
 	Version string `json:"version,omitempty"`
 }
 
-var sensitiveDryRunHeaderKeys = map[string]struct{}{
-	"authorization":        {},
-	"x-acs-accesskey-id":   {},
-	"x-acs-security-token": {},
-	"x-acs-signature":      {},
-}
-
-func maskDryRunValue(value string) string {
-	if len(value) <= 4 {
-		return "***"
-	}
-	return value[:4] + "***"
-}
-
 func sanitizeDryRunHeaders(headers map[string]string) map[string]string {
 	out := make(map[string]string, len(headers))
 	for key, value := range headers {
-		if _, sensitive := sensitiveDryRunHeaderKeys[strings.ToLower(key)]; sensitive {
-			out[key] = maskDryRunValue(value)
-		} else {
-			out[key] = value
-		}
+		out[key] = redact.MaskKV(key, value)
 	}
 	return out
 }

@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
-	"github.com/aliyun/aliyun-openapi-runtime/format/indexed"
-	"github.com/aliyun/aliyun-openapi-runtime/format/jsonl"
-	"github.com/aliyun/aliyun-openapi-runtime/format/pbmeta"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
+	"github.com/aliyun/aliyun-openapi-runtime/source/format/indexed"
+	"github.com/aliyun/aliyun-openapi-runtime/source/format/jsonl"
+	"github.com/aliyun/aliyun-openapi-runtime/source/format/pbmeta"
 	"google.golang.org/protobuf/proto"
 )
 

@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package format decodes on-disk metadata bytes into the in-memory
-// Model defined in ../meta.
+// Package format decodes on-disk metadata bytes into the in-memory Model defined in ../../meta.
 //
 // Layout-specific packages live as subdirectories:
 //
-//	format/indexed  — shared index.json + ReadAt random access
-//	format/jsonl    — LayoutName for indexed-JSONL plugins
-//	format/pbmeta   — indexed-protobuf decode
+//	source/format/indexed  — shared index.json + ReadAt random access
+//	source/format/jsonl    — LayoutName for indexed-JSONL plugins
+//	source/format/pbmeta   — indexed-protobuf decode
 //
 // Contract: every Format implementation MUST produce the same Model types (meta.Product / meta.API / meta.APIIndex / meta.Parameter).
 // Upper layers depend on the Model, never on wire-specific intermediates.
@@ -32,7 +31,7 @@ import (
 	"errors"
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
-	"github.com/aliyun/aliyun-openapi-runtime/storage"
+	"github.com/aliyun/aliyun-openapi-runtime/source/storage"
 )
 
 type Format interface {
