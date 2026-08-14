@@ -4,9 +4,9 @@ go 1.25.0
 
 require (
 	github.com/alibabacloud-go/alibabacloud-gateway-sls v0.3.0
-	github.com/alibabacloud-go/darabonba-openapi/v2 v2.1.12
-	github.com/alibabacloud-go/tea v1.3.12
-	github.com/alibabacloud-go/tea-utils/v2 v2.0.7
+	github.com/alibabacloud-go/darabonba-openapi/v2 v2.2.4
+	github.com/alibabacloud-go/tea v1.5.2
+	github.com/alibabacloud-go/tea-utils/v2 v2.0.9
 	github.com/aliyun/alibaba-cloud-sdk-go v1.63.107
 	github.com/aliyun/aliyun-openapi-runtime v0.0.0-00010101000000-000000000000
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
@@ -39,6 +39,7 @@ require (
 	github.com/clbanning/mxj/v2 v2.7.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
