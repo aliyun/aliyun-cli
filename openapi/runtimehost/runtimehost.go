@@ -27,6 +27,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/headers"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
@@ -38,23 +39,13 @@ import (
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 )
 
-// envPluginsDir mirrors cli/plugin.EnvPluginsDir. Duplicated here (a single string) to avoid importing the whole plugin manager for one constant.
-const envPluginsDir = "ALIBABA_CLOUD_CLI_PLUGINS_DIR"
-
-const (
-	envUserAgent              = "ALIBABA_CLOUD_USER_AGENT"
-	envSourceIP               = "ALIBABA_CLOUD_SOURCE_IP"
-	envSecureTransport        = "ALIBABA_CLOUD_SECURE_TRANSPORT"
-	envCallContextSkipProduct = "ALIBABA_CLOUD_CALL_CONTEXT_SKIP_PRODUCTS"
-)
-
 // userPluginsDir resolves the directory holding user-installed meta plugins, matching the plugin manager's convention:
 //
 //	$ALIBABA_CLOUD_CLI_PLUGINS_DIR, or ~/.aliyun/plugins
 //
 // Returns "" when no home can be determined; the engine then simply omits the user layer.
 func userPluginsDir() string {
-	if d := os.Getenv(envPluginsDir); d != "" {
+	if d := os.Getenv(sysconfig.EnvPluginsDir); d != "" {
 		return d
 	}
 	home, err := os.UserHomeDir()
@@ -120,9 +111,9 @@ func (h *cliHost) TransportOptions() runtime.TransportOptions {
 	options := runtime.TransportOptions{
 		Headers: headers.Collect(),
 		CallContext: runtime.CallContextOptions{
-			SourceIP:        strings.TrimSpace(os.Getenv(envSourceIP)),
-			SecureTransport: strings.TrimSpace(os.Getenv(envSecureTransport)),
-			SkipProducts:    splitCommaList(os.Getenv(envCallContextSkipProduct)),
+			SourceIP:        strings.TrimSpace(os.Getenv(sysconfig.EnvSourceIP)),
+			SecureTransport: strings.TrimSpace(os.Getenv(sysconfig.EnvSecureTransport)),
+			SkipProducts:    splitCommaList(os.Getenv(sysconfig.EnvCallContextSkipProducts)),
 		},
 	}
 	cfg, err := throttlingretry.LoadEffective(config.GetConfigDir(h.ctx))
@@ -152,7 +143,7 @@ func splitCommaList(raw string) []string {
 // The engine prefixes Aliyun-CLI/{cliVer} aliyun-openapi-runtime/{ver}.
 func buildUserAgentSuffix(ctx *cli.Context) string {
 	var parts []string
-	if value := strings.TrimSpace(os.Getenv(envUserAgent)); value != "" {
+	if value := strings.TrimSpace(os.Getenv(sysconfig.EnvUserAgent)); value != "" {
 		if value = strings.TrimSpace(util.SanitizeUserAgent(value)); value != "" {
 			parts = append(parts, value)
 		}

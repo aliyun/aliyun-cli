@@ -36,3 +36,19 @@ func TestComposeUserAgent(t *testing.T) {
 		t.Fatalf("ComposeUserAgent = %q, want %q", got, want)
 	}
 }
+
+func TestComposeUserAgentWithPlugin(t *testing.T) {
+	got := ComposeUserAgentWithPlugin("3.0.1", "aliyun-cli-fc", "0.7.1", "tool/1")
+	want := "Aliyun-CLI/3.0.1 aliyun-openapi-runtime/" + Version + " aliyun-cli-fc/0.7.1 tool/1"
+	if got != want {
+		t.Fatalf("ComposeUserAgentWithPlugin = %q, want %q", got, want)
+	}
+}
+
+func TestComposeUserAgentWithPluginRequiresCompleteIdentity(t *testing.T) {
+	got := ComposeUserAgentWithPlugin("3.0.1", "aliyun-cli-fc", "", "tool/1")
+	want := "Aliyun-CLI/3.0.1 aliyun-openapi-runtime/" + Version + " tool/1"
+	if got != want {
+		t.Fatalf("ComposeUserAgentWithPlugin incomplete identity = %q, want %q", got, want)
+	}
+}

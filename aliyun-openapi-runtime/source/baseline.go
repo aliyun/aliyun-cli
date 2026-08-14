@@ -173,9 +173,9 @@ func (s *BaselineSource) LoadAPI(code, version, name string) (*meta.API, error) 
 
 func (s *BaselineSource) provenance(version string) *Provenance {
 	return &Provenance{
-		Kind:      KindBaseline,
-		Version:   version,
-		BundledBy: s.bundledBy,
-		Origin:    s.origin,
+		Kind:       KindBaseline,
+		APIVersion: version,
+		BundledBy:  s.bundledBy,
+		Origin:     s.origin,
 	}
 }

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
 	runtimesource "github.com/aliyun/aliyun-openapi-runtime/source"
 	"golang.org/x/mod/semver"
@@ -28,7 +29,7 @@ import (
 const (
 	IndexURL        = "https://aliyuncli.alicdn.com/plugins/plugin_pkg_index.json"    // 默认索引地址
 	CommandIndexURL = "https://aliyuncli.alicdn.com/plugins/plugin_search_index.json" // 命令倒排索引地址
-	EnvPluginsDir   = "ALIBABA_CLOUD_CLI_PLUGINS_DIR"
+	EnvPluginsDir   = sysconfig.EnvPluginsDir
 	EnvNoCache      = "ALIBABA_CLOUD_CLI_PLUGIN_NO_CACHE"
 
 	indexCacheFile         = "plugin_pkg_index_cache.json"

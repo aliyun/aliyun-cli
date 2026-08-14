@@ -306,7 +306,13 @@ func normalizeOpenError(err error) error {
 
 func (s *dirSource) provenance(plugin *pluginDescriptor, version string) *Provenance {
 	origin := filepath.Join(s.root, plugin.name)
-	p := &Provenance{Kind: s.kind, Version: version, Origin: origin}
+	p := &Provenance{
+		Kind:          s.kind,
+		PluginName:    plugin.manifest.Name,
+		PluginVersion: plugin.manifest.Version,
+		APIVersion:    version,
+		Origin:        origin,
+	}
 	if info, err := os.Stat(origin); err == nil {
 		p.InstalledAt = info.ModTime()
 	}

@@ -64,6 +64,30 @@ func TestJSONLAndProtobufAnyAndWildcardProduceSameDryRun(t *testing.T) {
 	}
 }
 
+func TestJSONLAndProtobufExposePluginVersionProvenance(t *testing.T) {
+	for _, protobuf := range []bool{false, true} {
+		name := "jsonl"
+		if protobuf {
+			name = "protobuf"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeAnyMetadataPlugin(t, root, protobuf)
+
+			_, provenance, err := NewUserPluginSource(root).LoadProduct("demo")
+			if err != nil {
+				t.Fatalf("LoadProduct: %v", err)
+			}
+			if provenance.PluginName != "aliyun-cli-demo" || provenance.PluginVersion != "1.0.0" {
+				t.Fatalf("plugin provenance = %#v", provenance)
+			}
+			if provenance.APIVersion != "2020-01-01" {
+				t.Fatalf("API version provenance = %q", provenance.APIVersion)
+			}
+		})
+	}
+}
+
 func loadAnyDryRun(t *testing.T, root string, argv []string) *openapiruntime.AssembledRequest {
 	t.Helper()
 	api, err := NewUserPluginSource(root).LoadAPI("demo", "2020-01-01", "UpdateThing")

@@ -104,6 +104,11 @@ type ExecContext struct {
 	CLIVersion       string
 	UserAgent        string // host suffixes only; composed with base in send
 
+	// MetadataPluginName and MetadataPluginVersion identify the user/override metadata package that supplied this API.
+	// Baseline metadata leaves both empty.
+	MetadataPluginName    string
+	MetadataPluginVersion string
+
 	// DryRun assembles the request and returns it without sending.
 	DryRun bool
 }
@@ -185,12 +190,21 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 	if ec == nil || ec.API == nil {
 		return nil, errors.New("runtime: nil API in ExecContext")
 	}
-	api := ec.API
+	req := newAssembledRequest(ec.API)
+	if err := assembleArgs(req, ec.API, ec.Args); err != nil {
+		return nil, err
+	}
+	if err := applyReservedOptions(req, ec); err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
+func newAssembledRequest(api *meta.API) *AssembledRequest {
 	style := string(api.Style)
 	if style == "" {
 		style = string(meta.StyleRPC)
 	}
-
 	req := &AssembledRequest{
 		Action:   api.Name,
 		Version:  api.Version,
@@ -200,23 +214,17 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 		Pathname: api.URL,
 		Query:    map[string]string{},
 		Headers:  map[string]string{},
-		Region:   ec.Region,
 		// aliyun-cli-runtime defaults every operation to json and only generated formData APIs call SetReqBodyType("formData").
 		ReqBodyType: resolveReqBodyType(api),
 	}
 	if !strings.EqualFold(style, string(meta.StyleRPC)) {
 		req.PathPattern = api.URL
 	}
-	if v := ec.Version; v != "" {
-		req.Version = v
-	}
+	return req
+}
 
-	req.Endpoint = ec.Endpoint
-	if req.Endpoint == "" {
-		req.Endpoint = api.Endpoints.Resolve(ec.Region, ec.UseVPC)
-	}
-
-	isRPC := strings.EqualFold(style, string(meta.StyleRPC))
+func assembleArgs(req *AssembledRequest, api *meta.API, args map[string]any) error {
+	isRPC := strings.EqualFold(req.Style, string(meta.StyleRPC))
 	var bodyParts map[string]any // JSON body (RPC and ROA; plugin SetContent parity)
 	var formParts map[string]any // formData body (RPC and ROA; plugin SetReqBodyType parity)
 	var directBody any           // a schema parameter named "body" is the whole JSON body
@@ -224,7 +232,7 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 	var wildcardPath string
 	var wildcardPathSet bool
 
-	for name, val := range ec.Args {
+	for name, val := range args {
 		p := api.FindParameter(name)
 		if p == nil {
 			// Unknown args should have been rejected by the parser;
@@ -234,7 +242,7 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 		}
 		// Args are keyed by RawName; wire name must come from metadata.
 		if p.RawName == "" {
-			return nil, fmt.Errorf("parameter %q is missing raw_name in metadata", p.Name)
+			return fmt.Errorf("parameter %q is missing raw_name in metadata", p.Name)
 		}
 		wire := p.RawName
 		// JSON null has a meaningful representation only in a JSON body.
@@ -267,7 +275,7 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 			}
 			serialized, err := serializeFormParameter(wire, val, p.ParamStyle)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			for key, value := range serialized {
 				formParts[key] = value
@@ -291,7 +299,7 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 		default: // query / host
 			kv, err := serializeQuery(wire, val, isRPC, p.ParamStyle)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			mergeFlat(req.Query, kv)
 		}
@@ -302,9 +310,9 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 	} else if req.Pathname != "" {
 		// Match generated plugins: a RawName in the URL may also be body-bound.
 		var err error
-		req.Pathname, err = substitutePathTemplateArgs(req.Pathname, api, ec.Args)
+		req.Pathname, err = substitutePathTemplateArgs(req.Pathname, api, args)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 	if req.Pathname != "" {
@@ -331,7 +339,18 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 	case bodyParts != nil:
 		req.Body = bodyParts
 	}
+	return nil
+}
 
+func applyReservedOptions(req *AssembledRequest, ec *ExecContext) error {
+	if v := ec.Version; v != "" {
+		req.Version = v
+	}
+	req.Region = ec.Region
+	req.Endpoint = ec.Endpoint
+	if req.Endpoint == "" {
+		req.Endpoint = ec.API.Endpoints.Resolve(ec.Region, ec.UseVPC)
+	}
 	for k, v := range ec.ExtraQuery {
 		req.Query[k] = v
 	}
@@ -341,7 +360,7 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 	if ec.RawBody != nil {
 		body, err := normalizeRawBody(ec.RawBody, req.ReqBodyType)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		req.Body = body
 	}
@@ -357,8 +376,8 @@ func Assemble(ec *ExecContext) (*AssembledRequest, error) {
 	case ec.ForceHTTPS:
 		req.Protocol = "HTTPS"
 	}
-	applyTransportOptions(req, api.ProductCode, ec.Transport)
-	return req, nil
+	applyTransportOptions(req, ec.API.ProductCode, ec.Transport)
+	return nil
 }
 
 // substitutePathTemplateArgs replaces {RawName} and [RawName] placeholders from parsed API arguments, regardless of parameter position.
@@ -522,9 +541,14 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 		conf.RegionId = tea.String(ec.Region)
 	}
 	conf.Endpoint = tea.String(stripScheme(req.Endpoint))
-	// Always stamp engine + CLI version (plugin-parity BuildBaseUserAgent),
+	// Always stamp engine + CLI version, append the metadata plugin identity when present,
 	// then append host suffixes (--user-agent / AI mode).
-	conf.UserAgent = tea.String(ComposeUserAgent(ec.CLIVersion, ec.UserAgent))
+	conf.UserAgent = tea.String(ComposeUserAgentWithPlugin(
+		ec.CLIVersion,
+		ec.MetadataPluginName,
+		ec.MetadataPluginVersion,
+		ec.UserAgent,
+	))
 	if ec.ReadTimeout > 0 {
 		conf.ReadTimeout = tea.Int(int(ec.ReadTimeout / time.Millisecond))
 	}

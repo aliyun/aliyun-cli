@@ -28,6 +28,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
@@ -241,7 +242,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	}
 	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 
-	if envUA := util.GetFromEnv("ALIBABA_CLOUD_USER_AGENT"); envUA != "" {
+	if envUA := util.GetFromEnv(sysconfig.EnvUserAgent); envUA != "" {
 		envUA = util.SanitizeUserAgent(envUA)
 		for _, pair := range parseCustomUserAgentSegments(envUA) {
 			a.client.AppendUserAgent(pair[0], pair[1])

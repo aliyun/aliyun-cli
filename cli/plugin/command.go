@@ -224,8 +224,24 @@ func displayInstalledPluginDetails(ctx *cli.Context, canonicalName string, p *Lo
 	out := ctx.Stdout()
 	fmt.Fprintf(out, "Name:\t%s\n", canonicalName)
 	fmt.Fprintf(out, "Version:\t%s\n", p.Version)
+	fmt.Fprintf(out, "Type:\t%s\n", NormalizePluginType(p.Type))
 	if pc := strings.TrimSpace(p.ProductCode); pc != "" {
 		fmt.Fprintf(out, "Product code:\t%s\n", pc)
+	}
+	if command := strings.TrimSpace(p.Command); command != "" {
+		fmt.Fprintf(out, "Command:\t%s\n", command)
+	}
+	if len(p.CommandAliases) > 0 {
+		fmt.Fprintf(out, "Command aliases:\t%s\n", strings.Join(p.CommandAliases, ", "))
+	}
+	if path := strings.TrimSpace(p.Path); path != "" {
+		fmt.Fprintf(out, "Path:\t%s\n", path)
+	}
+	if minVersion := strings.TrimSpace(p.MinCliVersion); minVersion != "" {
+		fmt.Fprintf(out, "Minimum CLI version:\t%s\n", minVersion)
+	}
+	if metadata := p.Metadata; metadata != nil {
+		fmt.Fprintf(out, "Metadata format:\t%s\n", metadata.Format)
 	}
 	if p.ShortDescription != "" {
 		fmt.Fprintf(out, "Short description:\t%s\n", p.ShortDescription)

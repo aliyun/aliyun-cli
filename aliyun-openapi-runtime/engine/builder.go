@@ -40,6 +40,7 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/loader"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
+	"github.com/aliyun/aliyun-openapi-runtime/source"
 )
 
 // Engine dispatches OpenAPI commands against a lazy Loader. It carries only immutable wiring/parser configuration;
@@ -231,6 +232,7 @@ func (e *Engine) Dispatch(req Request) error {
 	if err != nil {
 		return err
 	}
+	applyMetadataPluginProvenance(ec, ldr.Provenance(ref.Product))
 
 	runtime.InitLogger(res.Reserved.LogLevel, res.Reserved.DryRun)
 	runtime.LogArgs(res.Args)
@@ -350,6 +352,14 @@ func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runti
 		ec.Credential = credential
 	}
 	return ec, nil
+}
+
+func applyMetadataPluginProvenance(ec *runtime.ExecContext, provenance *source.Provenance) {
+	if ec == nil || provenance == nil {
+		return
+	}
+	ec.MetadataPluginName = provenance.PluginName
+	ec.MetadataPluginVersion = provenance.PluginVersion
 }
 
 func validateDispatchOptions(res *argparser.Result) error {

@@ -51,6 +51,57 @@ func rpcAPI() *meta.API {
 	}
 }
 
+func TestAssembleArgsOnlyAppliesSchemaArguments(t *testing.T) {
+	api := rpcAPI()
+	req := newAssembledRequest(api)
+
+	err := assembleArgs(req, api, map[string]any{
+		"ImageCacheName": "cache1",
+		"Images":         []any{"img1"},
+	})
+	if err != nil {
+		t.Fatalf("assembleArgs: %v", err)
+	}
+	want := map[string]string{
+		"ImageCacheName": "cache1",
+		"Images.1":       "img1",
+	}
+	if !reflect.DeepEqual(req.Query, want) {
+		t.Fatalf("query = %#v, want %#v", req.Query, want)
+	}
+	if req.Endpoint != "" || req.Region != "" {
+		t.Fatalf("reserved options unexpectedly applied: %+v", req)
+	}
+}
+
+func TestApplyReservedOptions(t *testing.T) {
+	api := rpcAPI()
+	req := newAssembledRequest(api)
+	ec := &ExecContext{
+		API:          api,
+		Version:      "2025-01-01",
+		Region:       "cn-beijing",
+		Endpoint:     "custom.example.com",
+		ExtraQuery:   map[string]string{"PageSize": "10"},
+		ExtraHeaders: map[string]string{"x-test": "value"},
+		RawBody:      `{"name":"demo"}`,
+		ForceHTTP:    true,
+	}
+
+	if err := applyReservedOptions(req, ec); err != nil {
+		t.Fatalf("applyReservedOptions: %v", err)
+	}
+	if req.Version != "2025-01-01" || req.Region != "cn-beijing" || req.Endpoint != "custom.example.com" {
+		t.Fatalf("identity options not applied: %+v", req)
+	}
+	if req.Protocol != "HTTP" || req.Query["PageSize"] != "10" || req.Headers["x-test"] != "value" {
+		t.Fatalf("wire options not applied: %+v", req)
+	}
+	if req.Body != `{"name":"demo"}` {
+		t.Fatalf("raw body = %#v", req.Body)
+	}
+}
+
 func TestAssembleRPCScalarAndArray(t *testing.T) {
 	ec := &ExecContext{
 		API:    rpcAPI(),

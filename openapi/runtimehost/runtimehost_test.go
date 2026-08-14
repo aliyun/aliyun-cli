@@ -30,6 +30,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
@@ -49,7 +50,7 @@ func (c *captureExecutor) Execute(ec *runtime.ExecContext) (*runtime.Response, e
 }
 
 func TestBuildUserAgentSuffix(t *testing.T) {
-	t.Setenv(envUserAgent, "env-\nagent/1")
+	t.Setenv(sysconfig.EnvUserAgent, "env-\nagent/1")
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	userAgent := &cli.Flag{Name: "user-agent", AssignedMode: cli.AssignedOnce}
 	ctx.Flags().Add(userAgent)
@@ -67,9 +68,9 @@ func TestBuildUserAgentSuffix(t *testing.T) {
 func TestProfileHostTransportOptions(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_OTEL_TRACEPARENT", "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01")
 	t.Setenv("ALIBABA_CLOUD_OTEL_BAGGAGE", "tenant=test")
-	t.Setenv(envSourceIP, " 192.0.2.1 ")
-	t.Setenv(envSecureTransport, " true ")
-	t.Setenv(envCallContextSkipProduct, " custom, DEMO ")
+	t.Setenv(sysconfig.EnvSourceIP, " 192.0.2.1 ")
+	t.Setenv(sysconfig.EnvSecureTransport, " true ")
+	t.Setenv(sysconfig.EnvCallContextSkipProducts, " custom, DEMO ")
 	t.Setenv(throttlingretry.EnvEnabled, "false")
 	t.Setenv(throttlingretry.EnvMaxAttempts, "7")
 	t.Setenv(throttlingretry.EnvMaxDelayMS, "4321")

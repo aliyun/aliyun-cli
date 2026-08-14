@@ -738,11 +738,21 @@ func TestNewShowCommand_Run_Success(t *testing.T) {
 	manifest := LocalManifest{
 		Plugins: map[string]LocalPlugin{
 			"aliyun-cli-demo": {
-				Name:             "aliyun-cli-demo",
-				Version:          "2.0.0",
-				Path:             pluginPath,
-				ProductCode:      "demo-product",
-				Command:          "demo",
+				Name:           "aliyun-cli-demo",
+				Version:        "2.0.0",
+				Type:           PluginTypeMeta,
+				Path:           pluginPath,
+				ProductCode:    "demo-product",
+				Command:        "demo",
+				CommandAliases: []string{"demo-alias"},
+				MinCliVersion:  "3.3.1",
+				Metadata: &MetadataDescriptor{
+					Format:        "protobuf",
+					Schema:        "aliyun-openapi-meta",
+					SchemaVersion: 1,
+					Layout:        "indexed-pb",
+					LayoutVersion: 1,
+				},
 				ShortDescription: "short",
 				Description:      "full description",
 				Inner:            true,
@@ -769,7 +779,15 @@ func TestNewShowCommand_Run_Success(t *testing.T) {
 	out := stdout.String()
 	assert.Contains(t, out, "Name:\taliyun-cli-demo")
 	assert.Contains(t, out, "Version:\t2.0.0")
+	assert.Contains(t, out, "Type:\tmeta\n")
 	assert.Contains(t, out, "Product code:\tdemo-product\n")
+	assert.Contains(t, out, "Command:\tdemo\n")
+	assert.Contains(t, out, "Command aliases:\tdemo-alias\n")
+	assert.Contains(t, out, "Path:\t"+pluginPath+"\n")
+	assert.Contains(t, out, "Minimum CLI version:\t3.3.1\n")
+	assert.Contains(t, out, "Metadata format:\tprotobuf\n")
+	assert.NotContains(t, out, "Metadata layout:")
+	assert.NotContains(t, out, "Metadata schema:")
 	assert.Contains(t, out, "Short description:\tshort")
 	assert.Contains(t, out, "Description:\tfull description")
 	assert.Contains(t, out, "API default:\t2017-06-13\n")

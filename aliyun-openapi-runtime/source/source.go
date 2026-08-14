@@ -35,7 +35,7 @@ import (
 )
 
 // Kind categorises where a Source's data comes from.
-// It is exposed on Provenance so downstream code (e.g. `aliyun plugin which`) can report which layer served a given command.
+// Provenance exposes it for routing diagnostics that need to report which layer served a product.
 type Kind int
 
 // Enumerated Kinds. Order matters for provenance reporting: overrides win over user plugins, which win over baseline.
@@ -62,11 +62,13 @@ func (k Kind) String() string {
 
 // Provenance records where a piece of metadata came from. It is attached to LoadProduct results by every Source implementation.
 type Provenance struct {
-	Kind        Kind
-	Version     string    // product version, e.g. "1.5.0"
-	BundledBy   string    // only meaningful for baseline: e.g. "aliyun-cli 3.0.234"
-	InstalledAt time.Time // wall-clock install time for user/override
-	Origin      string    // absolute path or embed root, human-readable
+	Kind          Kind
+	PluginName    string    // metadata plugin package name, e.g. "aliyun-cli-fc"
+	PluginVersion string    // metadata plugin package version, e.g. "0.7.1"
+	APIVersion    string    // resolved/default API version, e.g. "2023-03-30"
+	BundledBy     string    // only meaningful for baseline: e.g. "aliyun-cli 3.0.234"
+	InstalledAt   time.Time // wall-clock install time for user/override
+	Origin        string    // absolute path or embed root, human-readable
 }
 
 // Source is the read-only product/API lookup contract.

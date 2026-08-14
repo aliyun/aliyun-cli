@@ -19,6 +19,8 @@ import (
 
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
+	"github.com/aliyun/aliyun-openapi-runtime/runtime"
+	"github.com/aliyun/aliyun-openapi-runtime/source"
 )
 
 func TestBuildExecContextRawBodyPrecedesBodyFile(t *testing.T) {
@@ -46,6 +48,18 @@ func TestBuildExecContextPreservesExplicitEmptyRawBody(t *testing.T) {
 	}
 	if ec.RawBody == nil || ec.RawBody != "" {
 		t.Fatalf("raw body = %#v, want explicit empty string", ec.RawBody)
+	}
+}
+
+func TestApplyMetadataPluginProvenance(t *testing.T) {
+	ec := &runtime.ExecContext{}
+	applyMetadataPluginProvenance(ec, &source.Provenance{
+		PluginName:    "aliyun-cli-fc",
+		PluginVersion: "0.7.1",
+	})
+
+	if ec.MetadataPluginName != "aliyun-cli-fc" || ec.MetadataPluginVersion != "0.7.1" {
+		t.Fatalf("metadata plugin identity = %q/%q", ec.MetadataPluginName, ec.MetadataPluginVersion)
 	}
 }
 
