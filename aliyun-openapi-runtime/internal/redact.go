@@ -110,9 +110,13 @@ func MaskKV(key, value string) string {
 
 func MaskBody(body string) string {
 	var data any
-	if err := json.Unmarshal([]byte(body), &data); err == nil {
-		if masked, err := json.Marshal(maskJSON(data)); err == nil {
-			return truncate(string(masked))
+	if json.Valid([]byte(body)) {
+		decoder := json.NewDecoder(strings.NewReader(body))
+		decoder.UseNumber()
+		if err := decoder.Decode(&data); err == nil {
+			if masked, err := json.Marshal(maskJSON(data)); err == nil {
+				return truncate(string(masked))
+			}
 		}
 	}
 	return truncate(body)

@@ -93,6 +93,29 @@ func TestMaskBodyMasksBeforeTruncating(t *testing.T) {
 	}
 }
 
+func TestMaskBodyTopLevelArrayPreservesNumbers(t *testing.T) {
+	const secret = "body-secret-value"
+	input := `[{"TaskId":3460000290000487710,"password":"` + secret + `"}]`
+	output := MaskBody(input)
+
+	if strings.Contains(output, secret) {
+		t.Fatalf("secret leaked from JSON array body: %s", output)
+	}
+	if !strings.Contains(output, `3460000290000487710`) {
+		t.Fatalf("large JSON number changed: %s", output)
+	}
+	var body []any
+	decoder := json.NewDecoder(strings.NewReader(output))
+	decoder.UseNumber()
+	if err := decoder.Decode(&body); err != nil {
+		t.Fatalf("masked body is not valid JSON: %v", err)
+	}
+	item := body[0].(map[string]any)
+	if item["password"] != "body***" {
+		t.Fatalf("password was not masked: %#v", item)
+	}
+}
+
 func TestMaskBodyWholeObjectSecret(t *testing.T) {
 	output := MaskBody(`{"credentials":{"accessKeySecret":"x"}}`)
 	var body map[string]any

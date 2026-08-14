@@ -66,6 +66,48 @@ func TestRenderDryRunMasksSecrets(t *testing.T) {
 	}
 }
 
+func TestRenderDryRunJSONMasksSecretsWithoutMutatingRequest(t *testing.T) {
+	var buf bytes.Buffer
+	req := &runtime.AssembledRequest{
+		Action:   "DoThing",
+		Version:  "2024-01-01",
+		Method:   "POST",
+		Protocol: "HTTPS",
+		Style:    "RPC",
+		Endpoint: "svc.cn-hangzhou.aliyuncs.com",
+		Headers: map[string]string{
+			"Authorization": "header-secret-value",
+			"content-type":  "application/json",
+		},
+		Query: map[string]string{
+			"Password": "query-secret-value",
+			"RegionId": "cn-hangzhou",
+		},
+		Body:        `{"TaskId":3460000290000487710,"password":"body-secret-value"}`,
+		ReqBodyType: "json",
+	}
+	if err := renderDryRun(&buf, "svc", req, true); err != nil {
+		t.Fatalf("renderDryRun: %v", err)
+	}
+
+	var output cliDryRunOutput
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &output); err != nil {
+		t.Fatalf("invalid dry-run JSON: %v\n%s", err, buf.String())
+	}
+	if output.Headers["Authorization"] != "head***" {
+		t.Fatalf("header was not masked: %#v", output.Headers)
+	}
+	if output.Query["Password"] != "quer***" || output.Query["RegionId"] != "cn-hangzhou" {
+		t.Fatalf("query was not masked correctly: %#v", output.Query)
+	}
+	if output.Body != `{"TaskId":3460000290000487710,"password":"body***"}` {
+		t.Fatalf("body was not masked without changing its number: %s", output.Body)
+	}
+	if req.Headers["Authorization"] != "header-secret-value" || req.Query["Password"] != "query-secret-value" || strings.Contains(req.Body.(string), "body***") {
+		t.Fatal("dry-run redaction mutated the assembled request")
+	}
+}
+
 func TestRenderResponseCliQuery(t *testing.T) {
 	raw := []byte(`{"Instances":[{"Id":"i-1","Region":"cn-hangzhou"},{"Id":"i-2","Region":"cn-beijing"}]}`)
 	var parsed any

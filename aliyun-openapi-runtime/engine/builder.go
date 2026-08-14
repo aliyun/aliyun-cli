@@ -550,9 +550,9 @@ type cliDryRunOutput struct {
 	Version string `json:"version,omitempty"`
 }
 
-func sanitizeDryRunHeaders(headers map[string]string) map[string]string {
-	out := make(map[string]string, len(headers))
-	for key, value := range headers {
+func sanitizeDryRunValues(values map[string]string) map[string]string {
+	out := make(map[string]string, len(values))
+	for key, value := range values {
 		out[key] = redact.MaskKV(key, value)
 	}
 	return out
@@ -570,7 +570,7 @@ func dryRunBody(body any, reqBodyType string) (value, format string, err error) 
 		if strings.EqualFold(format, "formData") {
 			format = "form"
 		}
-		return data, format, nil
+		return redact.MaskBody(data), format, nil
 	}
 	if data, ok := body.([]byte); ok {
 		format = reqBodyType
@@ -580,9 +580,9 @@ func dryRunBody(body any, reqBodyType string) (value, format string, err error) 
 		if strings.EqualFold(format, "formData") {
 			format = "form"
 		}
-		return string(data), format, nil
+		return redact.MaskBody(string(data)), format, nil
 	}
-	b, err := json.Marshal(body)
+	b, err := json.Marshal(redact.MaskAny(body))
 	if err != nil {
 		return "", "", err
 	}
@@ -605,8 +605,8 @@ func buildCliDryRunOutput(product string, req *runtime.AssembledRequest) (*cliDr
 		Style:      req.Style,
 		Endpoint:   stripScheme(req.Endpoint),
 		Method:     req.Method,
-		Headers:    sanitizeDryRunHeaders(req.Headers),
-		Query:      req.Query,
+		Headers:    sanitizeDryRunValues(req.Headers),
+		Query:      sanitizeDryRunValues(req.Query),
 		Body:       body,
 		BodyFormat: bodyFormat,
 		Action:     req.Action,
