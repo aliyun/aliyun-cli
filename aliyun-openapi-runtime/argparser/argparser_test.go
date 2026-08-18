@@ -298,6 +298,95 @@ func TestArrayOfArrayJSONForms(t *testing.T) {
 	}
 }
 
+func TestArrayOfMapForms(t *testing.T) {
+	params := []meta.Parameter{{
+		Name: "partition_specs", RawName: "PartitionSpecs", Type: meta.TypeArray, Options: []string{"--partition-specs"},
+		ItemType: &meta.Parameter{Type: meta.TypeMap, ValueType: &meta.Parameter{Type: meta.TypeAny}},
+	}}
+
+	t.Run("key value tokens form one map element", func(t *testing.T) {
+		parsed, err := Parse(params, []string{"--partition-specs", "name=test", "enabled=true", "message=hello world=again"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []any{map[string]any{
+			"name": "test", "enabled": true, "message": "hello world=again",
+		}}
+		if !reflect.DeepEqual(parsed.Args["PartitionSpecs"], want) {
+			t.Fatalf("key=value array<map> = %#v, want %#v", parsed.Args["PartitionSpecs"], want)
+		}
+	})
+
+	t.Run("repeated occurrences append map elements", func(t *testing.T) {
+		parsed, err := Parse(params, []string{
+			"--partition-specs", "name=first",
+			"--partition-specs", "name=second",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []any{
+			map[string]any{"name": "first"},
+			map[string]any{"name": "second"},
+		}
+		if !reflect.DeepEqual(parsed.Args["PartitionSpecs"], want) {
+			t.Fatalf("repeated array<map> = %#v, want %#v", parsed.Args["PartitionSpecs"], want)
+		}
+	})
+
+	t.Run("JSON object and array", func(t *testing.T) {
+		object, err := Parse(params, []string{"--partition-specs", `{"name":"one"}`})
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantObject := []any{map[string]any{"name": "one"}}
+		if !reflect.DeepEqual(object.Args["PartitionSpecs"], wantObject) {
+			t.Fatalf("JSON object array<map> = %#v, want %#v", object.Args["PartitionSpecs"], wantObject)
+		}
+
+		array, err := Parse(params, []string{"--partition-specs", `[{"name":"one"},{"name":"two"}]`})
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantArray := []any{
+			map[string]any{"name": "one"},
+			map[string]any{"name": "two"},
+		}
+		if !reflect.DeepEqual(array.Args["PartitionSpecs"], wantArray) {
+			t.Fatalf("JSON array array<map> = %#v, want %#v", array.Args["PartitionSpecs"], wantArray)
+		}
+	})
+
+	for _, tt := range []struct {
+		name string
+		arg  string
+	}{
+		{name: "bare string", arg: "example-string"},
+		{name: "JSON string", arg: `"example-string"`},
+		{name: "JSON array of strings", arg: `["example-string"]`},
+	} {
+		t.Run("rejects "+tt.name, func(t *testing.T) {
+			_, err := Parse(params, []string{"--partition-specs", tt.arg})
+			if err == nil {
+				t.Fatalf("accepted invalid array<map> value %q", tt.arg)
+			}
+		})
+	}
+}
+
+func TestArrayOfObjectRejectsNonObjectJSONElements(t *testing.T) {
+	for _, input := range []string{
+		`["example-string"]`,
+		`[null]`,
+		`[1]`,
+	} {
+		_, err := Parse(schema(), []string{"--tags", input})
+		if err == nil || !strings.Contains(err.Error(), "expected a JSON object for object element") {
+			t.Fatalf("input %s: error = %v", input, err)
+		}
+	}
+}
+
 func TestCompositeMapRequiresCompleteJSON(t *testing.T) {
 	params := []meta.Parameter{{
 		Name: "partitions", RawName: "Partitions", Type: meta.TypeMap, Options: []string{"--partitions"},

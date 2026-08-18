@@ -195,8 +195,7 @@ func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []str
 	existing, _ := dst[key].([]any)
 
 	// JSON-first for this occurrence: a JSON array is expanded into multiple elements.
-	// A JSON object may be shorthand for one composite element, but is invalid for
-	// arrays whose declared element type is scalar.
+	// A JSON object may be shorthand for one composite element, but is invalid for arrays whose declared element type is scalar.
 	// For scalar arrays, accepting a JSON array is an intentional extension beyond the legacy Go plugin.
 	// Field names inside are resolved to wire RawNames.
 	if v, recognized, err := tryFlagJSON(tokens); recognized {
@@ -212,10 +211,11 @@ func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []str
 			if len(arr) == 0 && existing == nil {
 				existing = []any{}
 			}
-			for _, e := range arr {
-				rv, err := resolveNames(p.ItemType, e)
+			startIndex := len(existing)
+			for i, e := range arr {
+				rv, err := resolveArrayItem(p.ItemType, e)
 				if err != nil {
-					return fmt.Errorf("--%s: %w", displayName(p), err)
+					return fmt.Errorf("--%s: invalid element at index %d: %w", displayName(p), startIndex+i, err)
 				}
 				existing = append(existing, rv)
 			}
@@ -223,7 +223,7 @@ func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []str
 			if isScalarArrayItem(p.ItemType) {
 				return fmt.Errorf("--%s: expected JSON array, got %T", displayName(p), v)
 			}
-			rv, err := resolveNames(p.ItemType, v)
+			rv, err := resolveArrayItem(p.ItemType, v)
 			if err != nil {
 				return fmt.Errorf("--%s: %w", displayName(p), err)
 			}
@@ -245,6 +245,16 @@ func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []str
 		dst[key] = append(existing, obj)
 		return nil
 	}
+	if p.ItemType != nil && p.ItemType.Type == meta.TypeMap {
+		// Each occurrence is one map element. A complete JSON object/array was
+		// handled above; the non-JSON form is one or more key=value tokens.
+		m, err := parseMapKVPairs(tokens, p.ItemType.ValueType)
+		if err != nil {
+			return fmt.Errorf("--%s: %w", displayName(p), err)
+		}
+		dst[key] = append(existing, m)
+		return nil
+	}
 
 	// Array of scalars: append each token as one element.
 	// Commas are common string content and are intentionally not treated as separators.
@@ -261,6 +271,15 @@ func assignArray(dst map[string]any, key string, p *meta.Parameter, tokens []str
 	}
 	dst[key] = existing
 	return nil
+}
+
+func resolveArrayItem(item *meta.Parameter, value any) (any, error) {
+	if item != nil && (item.Type == meta.TypeObject || item.Type == meta.TypeMap) {
+		if _, ok := value.(map[string]any); !ok {
+			return nil, fmt.Errorf("expected a JSON object for %s element, got %T", item.Type, value)
+		}
+	}
+	return resolveNames(item, value)
 }
 
 // assignNestedArrayJSON matches aliyun-cli-runtime's array-of-array input convention.
@@ -337,37 +356,38 @@ func assignMap(dst map[string]any, key string, p *meta.Parameter, tokens []strin
 		return nil
 	}
 
-	existing, _ := dst[key].(map[string]any)
-	if existing == nil {
-		existing = map[string]any{}
+	parsed, err := parseMapKVPairs(tokens, p.ValueType)
+	if err != nil {
+		return fmt.Errorf("--%s: %w", displayName(p), err)
 	}
-	if p.ValueType != nil && p.ValueType.IsComposite() {
-		return compositeMapJSONError(p)
-	}
-	vt := meta.TypeString
-	if p.ValueType != nil {
-		vt = p.ValueType.Type
-	}
-	for _, t := range tokens {
-		k, v, ok := strings.Cut(t, "=")
-		if !ok {
-			return fmt.Errorf("--%s: expected key=value, got %q", displayName(p), t)
-		}
-		if k == "" {
-			return fmt.Errorf("--%s: empty key in %q", displayName(p), t)
-		}
-		cv, err := coerceScalar(vt, v)
-		if err != nil {
-			return fmt.Errorf("--%s: %w", displayName(p), err)
-		}
-		existing[k] = cv
-	}
-	dst[key] = existing
+	dst[key] = parsed
 	return nil
 }
 
-func compositeMapJSONError(p *meta.Parameter) error {
-	return fmt.Errorf("--%s: map values of type %s require a complete JSON object", displayName(p), p.ValueType.Type)
+func parseMapKVPairs(tokens []string, valueType *meta.Parameter) (map[string]any, error) {
+	if valueType != nil && valueType.IsComposite() {
+		return nil, fmt.Errorf("map values of type %s require a complete JSON object", valueType.Type)
+	}
+	vt := meta.TypeString
+	if valueType != nil {
+		vt = valueType.Type
+	}
+	result := make(map[string]any)
+	for _, t := range tokens {
+		k, v, ok := strings.Cut(t, "=")
+		if !ok {
+			return nil, fmt.Errorf("expected key=value, got %q", t)
+		}
+		if k == "" {
+			return nil, fmt.Errorf("empty key in %q", t)
+		}
+		cv, err := coerceScalar(vt, v)
+		if err != nil {
+			return nil, err
+		}
+		result[k] = cv
+	}
+	return result, nil
 }
 
 // tryFlagJSON parses a flag occurrence that looks like an object or array as
