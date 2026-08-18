@@ -150,21 +150,27 @@ func MergeAiModeIntoOssutilPayload(configDir string, envMap map[string]any, forc
 
 // RequestUserAgentSuffixForCommand applies per-invocation overrides from the root CLI
 func RequestUserAgentSuffixForCommand(cfg *AiConfig, forceOn, forceOff bool) string {
-	if forceOff {
+	if !EnabledForCommand(cfg, forceOn, forceOff) {
 		return ""
+	}
+	effective := DefaultAiConfig()
+	if cfg != nil {
+		effective.UserAgent = cfg.UserAgent
+	}
+	effective.Enabled = true
+	return RequestUserAgentSuffix(effective)
+}
+
+// EnabledForCommand resolves the effective AI mode for one command. A
+// command-level opt-out always wins, followed by opt-in and then configuration.
+func EnabledForCommand(cfg *AiConfig, forceOn, forceOff bool) bool {
+	if forceOff {
+		return false
 	}
 	if forceOn {
-		effective := DefaultAiConfig()
-		if cfg != nil {
-			effective.UserAgent = cfg.UserAgent
-		}
-		effective.Enabled = true
-		return RequestUserAgentSuffix(effective)
+		return true
 	}
-	if cfg == nil {
-		return ""
-	}
-	return RequestUserAgentSuffix(cfg)
+	return cfg != nil && cfg.Enabled
 }
 
 func MergeUserAgentIntoPluginEnvs(configDir string, envs map[string]string, forceOn, forceOff bool) {

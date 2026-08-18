@@ -34,9 +34,72 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 )
+
+func TestCommandoAgentModeNormalizesOnlyInProcessErrors(t *testing.T) {
+	sourceErr := errors.New("source")
+	normalizedErr := errors.New("normalized")
+	originalNormalizer := agentErrorNormalizer
+	agentErrorNormalizer = func(err error, args []string) error {
+		assert.ErrorIs(t, err, sourceErr)
+		assert.Equal(t, []string{"ecs", "describe-instances"}, args)
+		return normalizedErr
+	}
+	t.Cleanup(func() { agentErrorNormalizer = originalNormalizer })
+
+	newContext := func(t *testing.T, configured bool, forceOn bool, forceOff bool) *cli.Context {
+		t.Helper()
+		configDir := t.TempDir()
+		assert.NoError(t, aimode.Save(configDir, &aimode.AiConfig{Enabled: configured}))
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		configPath := config.NewConfigurePathFlag()
+		configPath.SetAssigned(true)
+		configPath.SetValue(filepath.Join(configDir, "config.json"))
+		ctx.Flags().Add(configPath)
+		if forceOn {
+			flag := NewCliAIModeFlag()
+			flag.SetAssigned(true)
+			ctx.Flags().Add(flag)
+		}
+		if forceOff {
+			flag := NewCliNoAIModeFlag()
+			flag.SetAssigned(true)
+			ctx.Flags().Add(flag)
+		}
+		return ctx
+	}
+
+	tests := []struct {
+		name       string
+		configured bool
+		forceOn    bool
+		forceOff   bool
+		want       error
+	}{
+		{name: "configured off", want: sourceErr},
+		{name: "configured on", configured: true, want: normalizedErr},
+		{name: "force on", forceOn: true, want: normalizedErr},
+		{name: "force off", configured: true, forceOff: true, want: sourceErr},
+		{name: "force off wins", configured: true, forceOn: true, forceOff: true, want: sourceErr},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := newContext(t, tt.configured, tt.forceOn, tt.forceOff)
+			got := (&Commando{}).finishCommandRun(ctx, []string{"ecs", "describe-instances"}, sourceErr)
+			assert.ErrorIs(t, got, tt.want)
+		})
+	}
+
+	t.Run("external plugin bypasses normalization", func(t *testing.T) {
+		ctx := newContext(t, true, false, false)
+		got := (&Commando{}).finishCommandRun(ctx, []string{"fc", "invoke"}, &externalPluginError{err: sourceErr})
+		assert.Equal(t, sourceErr, got)
+	})
+}
 
 // setTestHomeDir sets the test home directory for cross-platform testing.
 // Returns a cleanup function that restores the original environment variables.

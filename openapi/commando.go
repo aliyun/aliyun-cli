@@ -16,6 +16,7 @@ package openapi
 import (
 	"bufio"
 	"bytes"
+	"errors"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
@@ -56,6 +57,22 @@ var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*respons
 
 var runtimeTryDispatch = runtimehost.TryDispatch
 
+var agentErrorNormalizer = func(err error, _ []string) error {
+	return err
+}
+
+type externalPluginError struct {
+	err error
+}
+
+func (e *externalPluginError) Error() string {
+	return e.err.Error()
+}
+
+func (e *externalPluginError) Unwrap() error {
+	return e.err
+}
+
 func NewCommando(w io.Writer, profile config.Profile) *Commando {
 	r := &Commando{
 		profile: profile,
@@ -89,9 +106,34 @@ func (c *Commando) printPluginIndexLoadFailureNote(ctx *cli.Context) {
 }
 
 func (c *Commando) InitWithCommand(cmd *cli.Command) {
-	cmd.Run = c.main
+	cmd.Run = c.run
 	cmd.Help = c.help
 	cmd.AutoComplete = c.complete
+}
+
+func (c *Commando) run(ctx *cli.Context, args []string) error {
+	return c.finishCommandRun(ctx, args, c.main(ctx, args))
+}
+
+func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	var pluginErr *externalPluginError
+	if errors.As(err, &pluginErr) {
+		return pluginErr.err
+	}
+
+	cfg, loadErr := aimode.Load(config.GetConfigDir(ctx))
+	if loadErr != nil {
+		cfg = aimode.DefaultAiConfig()
+	}
+	forceOn, forceOff := CliAIOverrides(ctx.Flags())
+	if !aimode.EnabledForCommand(cfg, forceOn, forceOff) {
+		return err
+	}
+	return agentErrorNormalizer(err, args)
 }
 
 func DetectInConfigureMode(flags *cli.FlagSet) bool {
@@ -364,7 +406,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 
 			ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
 			if err != nil {
-				return err
+				return &externalPluginError{err: err}
 			}
 			if !ok {
 				return fmt.Errorf("plugin %s not found", pluginName)

@@ -147,3 +147,26 @@ func TestRequestUserAgentSuffixForCommand(t *testing.T) {
 	assert.Contains(t, RequestUserAgentSuffixForCommand(&AiConfig{Enabled: false, UserAgent: "s"}, true, false), "s")
 	assert.Equal(t, "", RequestUserAgentSuffixForCommand(&AiConfig{Enabled: false}, false, false))
 }
+
+func TestEnabledForCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      *AiConfig
+		forceOn  bool
+		forceOff bool
+		want     bool
+	}{
+		{name: "nil config", cfg: nil, want: false},
+		{name: "configured off", cfg: &AiConfig{Enabled: false}, want: false},
+		{name: "configured on", cfg: &AiConfig{Enabled: true}, want: true},
+		{name: "force on", cfg: &AiConfig{Enabled: false}, forceOn: true, want: true},
+		{name: "force off", cfg: &AiConfig{Enabled: true}, forceOff: true, want: false},
+		{name: "force off wins", cfg: &AiConfig{Enabled: true}, forceOn: true, forceOff: true, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, EnabledForCommand(tt.cfg, tt.forceOn, tt.forceOff))
+		})
+	}
+}
