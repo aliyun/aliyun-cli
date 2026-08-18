@@ -57,9 +57,7 @@ var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*respons
 
 var runtimeTryDispatch = runtimehost.TryDispatch
 
-var agentErrorNormalizer = func(err error, _ []string) error {
-	return err
-}
+var agentErrorNormalizer = normalizeAgentError
 
 type externalPluginError struct {
 	err error
@@ -307,7 +305,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				// profile 加载 / 校验失败必须 fail-fast，不要 silent 吞错。否则会停留在main.go 启动时的默认 profile，--profile xxx 的语义丢失，用户毫无感知。
 				profile, err := config.LoadProfileWithContext(ctx)
 				if err != nil {
-					return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it")
+					return cli.NewErrorWithTip(&credentialConfigurationError{Err: err}, "Configuration failed, use `aliyun configure` to configure it")
 				}
 				c.profile = profile
 				// 需要判断是否plugin auto install enabled, 且支持环境变量
@@ -362,7 +360,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					envs, rtErr = c.profile.GetRuntimeEnv(ctx)
 					if rtErr != nil {
 						if profileRequired {
-							return cli.NewErrorWithTip(rtErr,
+							return cli.NewErrorWithTip(&credentialConfigurationError{Err: rtErr},
 								fmt.Sprintf("profile %q: failed to resolve credentials", c.profile.Name))
 						}
 						envs = config.BuildBaselineEnv(ctx)
@@ -370,9 +368,9 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				} else {
 					if profileRequired {
 						if profileErr != nil {
-							return cli.NewErrorWithTip(profileErr, "Configuration failed, use `aliyun configure` to configure it")
+							return cli.NewErrorWithTip(&credentialConfigurationError{Err: profileErr}, "Configuration failed, use `aliyun configure` to configure it")
 						}
-						return fmt.Errorf("profile not found, use `aliyun configure` to configure it")
+						return &credentialConfigurationError{Err: fmt.Errorf("profile not found, use `aliyun configure` to configure it")}
 					}
 					envs = config.BuildBaselineEnv(ctx)
 				}
@@ -426,11 +424,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	var err error
 	c.profile, err = config.LoadProfileWithContext(ctx)
 	if err != nil {
-		return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it")
+		return cli.NewErrorWithTip(&credentialConfigurationError{Err: err}, "Configuration failed, use `aliyun configure` to configure it")
 	}
 	err = c.profile.Validate()
 	if err != nil {
-		return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it.")
+		return cli.NewErrorWithTip(&credentialConfigurationError{Err: err}, "Configuration failed, use `aliyun configure` to configure it.")
 	}
 	i18n.SetLanguage(c.profile.Language)
 
