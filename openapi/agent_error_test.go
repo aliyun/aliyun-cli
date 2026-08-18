@@ -15,15 +15,22 @@
 package openapi
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/alibabacloud-go/tea/tea"
 	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	runtime "github.com/aliyun/aliyun-openapi-runtime/runtime"
@@ -199,4 +206,139 @@ func TestNormalizeAgentErrorNetworkAndUnknownFallback(t *testing.T) {
 		assert.Equal(t, err.Error(), envelope.Message)
 		assert.False(t, envelope.Retryable)
 	})
+}
+
+func TestAgentErrorEnvelopeEndToEndForBothCommandStyles(t *testing.T) {
+	testHome := t.TempDir()
+	cleanupHome := setTestHomeDir(t, testHome)
+	defer cleanupHome()
+	writeMinimalConfigJSON(t, testHome)
+	require.NoError(t, os.MkdirAll(filepath.Join(testHome, ".aliyun", "plugins"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(testHome, ".aliyun", "plugins", "manifest.json"), []byte(`{"plugins":{}}`), 0644))
+	require.NoError(t, aimode.Save(filepath.Join(testHome, ".aliyun"), &aimode.AiConfig{Enabled: false}))
+
+	cli.DisableExitCode()
+	defer cli.EnableExitCode()
+
+	assertEnvelopeShape := func(t *testing.T, stderr string) map[string]interface{} {
+		t.Helper()
+		assert.Equal(t, 1, strings.Count(stderr, "\n"), "agent error must be one JSON line")
+		var decoded map[string]interface{}
+		require.NoError(t, json.Unmarshal([]byte(stderr), &decoded))
+		assert.ElementsMatch(t,
+			[]string{"ok", "category", "code", "message", "suggestions", "retryable", "requestId", "recovery"},
+			mapKeys(decoded))
+		return decoded
+	}
+
+	t.Run("kebab-case runtime", func(t *testing.T) {
+		originalDispatch := runtimeTryDispatch
+		runtimeTryDispatch = func(_ *cli.Context, _ []string) (bool, error) {
+			unknown := &argparser.UnknownFlagError{Flag: "instnace-type", Known: []string{"image-id", "instance-type"}}
+			return true, &engine.UsageError{Code: "UNKNOWN_FLAG", Err: unknown}
+		}
+		defer func() { runtimeTryDispatch = originalDispatch }()
+
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		cmd := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
+		config.AddFlags(cmd.Flags())
+		AddFlags(cmd.Flags())
+		commando := NewCommando(stdout, config.Profile{Language: "en"})
+		commando.InitWithCommand(cmd)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+
+		originalArgs := os.Args
+		os.Args = []string{"aliyun", "ecs", "describe-instances", "--instnace-type", "ecs.g6.large", "--cli-ai-mode"}
+		defer func() { os.Args = originalArgs }()
+		cmd.Execute(ctx, os.Args[1:])
+
+		assert.Empty(t, stdout.String())
+		decoded := assertEnvelopeShape(t, stderr.String())
+		assert.Equal(t, "USAGE_ERROR", decoded["category"])
+		assert.Equal(t, "UNKNOWN_FLAG", decoded["code"])
+		assert.Equal(t, []interface{}{"--instance-type"}, decoded["suggestions"])
+	})
+
+	t.Run("PascalCase legacy view", func(t *testing.T) {
+		product := meta.Product{
+			Code: "Ecs", Version: "2014-05-26", ApiStyle: "rpc", ApiNames: []string{"RunInstances"},
+		}
+		builtinRepo, err := meta.MockLoadRepository([]meta.Product{product})
+		require.NoError(t, err)
+		canonicalRepo := newFakeCanonicalRepo()
+		canonicalRepo.AddAPI("ecs", "2014-05-26", canonicalTestAPI(&testLegacyAPI{
+			Name: "RunInstances", Protocol: "HTTPS", Method: "POST",
+			Parameters: []testLegacyParameter{{Name: "InstanceType", Position: "Query", Type: "String"}},
+		}))
+
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		cmd := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
+		config.AddFlags(cmd.Flags())
+		AddFlags(cmd.Flags())
+		commando := NewCommando(stdout, config.Profile{Language: "en"})
+		commando.library = &Library{builtinRepo: builtinRepo, canonicalRepo: canonicalRepo}
+		commando.InitWithCommand(cmd)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+
+		originalArgs := os.Args
+		os.Args = []string{"aliyun", "ecs", "RunInstances", "--InstnaceType", "ecs.g6.large", "--endpoint", "ecs.aliyuncs.com", "--cli-ai-mode"}
+		defer func() { os.Args = originalArgs }()
+		cmd.Execute(ctx, os.Args[1:])
+
+		assert.Empty(t, stdout.String())
+		decoded := assertEnvelopeShape(t, stderr.String())
+		assert.Equal(t, "USAGE_ERROR", decoded["category"])
+		assert.Equal(t, "UNKNOWN_FLAG", decoded["code"])
+		assert.Equal(t, []interface{}{"--InstanceType"}, decoded["suggestions"])
+	})
+}
+
+func TestAgentErrorEnvelopeForcedOffKeepsHumanOutput(t *testing.T) {
+	testHome := t.TempDir()
+	cleanupHome := setTestHomeDir(t, testHome)
+	defer cleanupHome()
+	writeMinimalConfigJSON(t, testHome)
+	require.NoError(t, os.MkdirAll(filepath.Join(testHome, ".aliyun", "plugins"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(testHome, ".aliyun", "plugins", "manifest.json"), []byte(`{"plugins":{}}`), 0644))
+	require.NoError(t, aimode.Save(filepath.Join(testHome, ".aliyun"), &aimode.AiConfig{Enabled: true}))
+
+	originalDispatch := runtimeTryDispatch
+	runtimeTryDispatch = func(_ *cli.Context, _ []string) (bool, error) {
+		unknown := &argparser.UnknownFlagError{Flag: "instnace-type", Known: []string{"instance-type"}}
+		return true, &engine.UsageError{Code: "UNKNOWN_FLAG", Err: unknown}
+	}
+	defer func() { runtimeTryDispatch = originalDispatch }()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	cmd := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
+	config.AddFlags(cmd.Flags())
+	AddFlags(cmd.Flags())
+	commando := NewCommando(stdout, config.Profile{Language: "en"})
+	commando.InitWithCommand(cmd)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	cli.DisableExitCode()
+	defer cli.EnableExitCode()
+	originalArgs := os.Args
+	os.Args = []string{"aliyun", "ecs", "describe-instances", "--instnace-type", "ecs.g6.large", "--no-cli-ai-mode"}
+	defer func() { os.Args = originalArgs }()
+	cmd.Execute(ctx, os.Args[1:])
+
+	assert.Empty(t, stdout.String())
+	assert.Contains(t, stderr.String(), "ERROR: unknown flag --instnace-type")
+	assert.False(t, strings.HasPrefix(strings.TrimSpace(stderr.String()), "{"))
+}
+
+func mapKeys(values map[string]interface{}) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	return keys
 }
