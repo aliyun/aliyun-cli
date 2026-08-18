@@ -48,6 +48,10 @@ func (e *errorWithTip) Error() string {
 	return e.err.Error()
 }
 
+func (e *errorWithTip) Unwrap() error {
+	return e.err
+}
+
 func (e *errorWithTip) GetTip(lang string) string {
 	return e.tip
 }

@@ -109,6 +109,24 @@ func TestScalarByOption(t *testing.T) {
 	}
 }
 
+func TestBusinessVersionParameterRemainsAPIArgument(t *testing.T) {
+	params := []meta.Parameter{{
+		Name: "version", RawName: "Version", Type: meta.TypeString,
+		Options: []string{"--version"},
+	}}
+
+	res, err := Parse(params, []string{"--version", "1.0.0"})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := res.Args["Version"]; got != "1.0.0" {
+		t.Fatalf("Version = %#v", got)
+	}
+	if res.Reserved.Version != "" {
+		t.Fatalf("reserved API version = %q", res.Reserved.Version)
+	}
+}
+
 func TestOnlyOptionsAcceptedAsFlag(t *testing.T) {
 	for _, flag := range []string{"RegionId", "region-id"} {
 		_, err := Parse(schema(), []string{"--" + flag, "cn-beijing"})

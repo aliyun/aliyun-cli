@@ -218,6 +218,7 @@ func NewVersionFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "caller",
 		Name:         VersionFlagName,
+		Aliases:      []string{"api-version"},
 		AssignedMode: cli.AssignedOnce,
 		Short: i18n.T(
 			"use `--version <YYYY-MM-DD>` to assign product api version",

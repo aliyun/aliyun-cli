@@ -248,6 +248,31 @@ func TestProcessStructuredError(t *testing.T) {
 	assert.Empty(t, stdout.String())
 }
 
+func TestProcessAgentErrorWritesOneJSONLineToStderr(t *testing.T) {
+	DisableExitCode()
+	defer EnableExitCode()
+
+	cmd := newAliyunCmd()
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(stdout, stderr)
+	err := NewAgentError(AgentErrorEnvelope{
+		OK:          false,
+		Category:    UsageErrorCategory,
+		Code:        "UNKNOWN_FLAG",
+		Message:     "unknown flag --instnace-type",
+		Suggestions: []string{"--instance-type"},
+		Retryable:   false,
+		RequestID:   "",
+		Recovery:    AgentErrorRecovery{Command: "aliyun ecs describe-instances --help"},
+	}, errors.New("unknown flag --instnace-type"))
+
+	cmd.processError(ctx, err)
+
+	assert.Empty(t, stdout.String())
+	assert.Equal(t, "{\"ok\":false,\"category\":\"USAGE_ERROR\",\"code\":\"UNKNOWN_FLAG\",\"message\":\"unknown flag --instnace-type\",\"suggestions\":[\"--instance-type\"],\"retryable\":false,\"requestId\":\"\",\"recovery\":{\"command\":\"aliyun ecs describe-instances --help\"}}\n", stderr.String())
+}
+
 func TestExecuteHelp(t *testing.T) {
 	cmd := newAliyunCmd()
 	buf := new(bytes.Buffer)

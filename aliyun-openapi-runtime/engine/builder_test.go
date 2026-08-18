@@ -15,13 +15,114 @@
 package engine
 
 import (
+	"errors"
+	"io"
+	"reflect"
 	"testing"
 
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
+	"github.com/aliyun/aliyun-openapi-runtime/loader"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/source"
 )
+
+type dispatchErrorTestSource struct{}
+
+func (dispatchErrorTestSource) Kind() source.Kind { return source.KindBaseline }
+
+func (dispatchErrorTestSource) LoadProduct(code string) (*meta.Product, *source.Provenance, error) {
+	if code != "demo" {
+		return nil, nil, source.ErrNotFound
+	}
+	return &meta.Product{
+		Code: "demo", Versions: []string{"2024-01-01"}, DefaultVersion: "2024-01-01",
+	}, &source.Provenance{Kind: source.KindBaseline}, nil
+}
+
+func (dispatchErrorTestSource) LoadAPIIndex(code, version string) (*meta.APIIndex, error) {
+	if code != "demo" || version != "2024-01-01" {
+		return nil, source.ErrNotFound
+	}
+	index := &meta.APIIndex{
+		ProductCode: code,
+		Version:     version,
+		Entries: map[string]meta.APIIndexEntry{
+			"RunThing": {APIName: "RunThing", CmdName: "run-thing"},
+		},
+	}
+	index.BuildCmdIndex()
+	return index, nil
+}
+
+func (dispatchErrorTestSource) LoadAPI(code, version, name string) (*meta.API, error) {
+	if code != "demo" || version != "2024-01-01" || name != "RunThing" {
+		return nil, source.ErrNotFound
+	}
+	return &meta.API{
+		Name: "RunThing", CmdName: "run-thing", ProductCode: "demo",
+		Version: "2024-01-01", Method: "POST", Protocol: "HTTPS", Style: meta.StyleRPC,
+		Endpoints: meta.Endpoints{Global: "demo.example.com"},
+		Parameters: []meta.Parameter{{
+			Name: "instance_type", RawName: "InstanceType", Type: meta.TypeString,
+			Position: meta.PosQuery, Required: true, Options: []string{"--instance-type"},
+		}},
+	}, nil
+}
+
+func newDispatchErrorTestEngine() *Engine {
+	return NewEngine(func() (loader.Loader, error) {
+		return loader.New(dispatchErrorTestSource{}), nil
+	}, nil)
+}
+
+func TestDispatchPreservesUnknownFlagDetails(t *testing.T) {
+	err := newDispatchErrorTestEngine().Dispatch(Request{
+		Args: []string{"demo", "run-thing", "--instnace-type", "ecs.g6"},
+		Out:  io.Discard,
+	})
+
+	var unknownFlag *argparser.UnknownFlagError
+	if !errors.As(err, &unknownFlag) {
+		t.Fatalf("Dispatch error %T does not preserve UnknownFlagError: %v", err, err)
+	}
+	if unknownFlag.Flag != "instnace-type" || !reflect.DeepEqual(unknownFlag.Known, []string{"instance-type"}) {
+		t.Fatalf("UnknownFlagError = %#v", unknownFlag)
+	}
+}
+
+func TestDispatchPreservesMissingRequiredDetails(t *testing.T) {
+	err := newDispatchErrorTestEngine().Dispatch(Request{
+		Args: []string{"demo", "run-thing"},
+		Out:  io.Discard,
+	})
+
+	var usage *UsageError
+	if !errors.As(err, &usage) || usage.Code != "MISSING_REQUIRED_PARAMETER" {
+		t.Fatalf("Dispatch error = %#v, want MISSING_REQUIRED_PARAMETER UsageError", err)
+	}
+	var missing *runtime.MissingRequiredError
+	if !errors.As(err, &missing) || !reflect.DeepEqual(missing.Flags, []string{"--instance-type"}) {
+		t.Fatalf("Dispatch error does not preserve MissingRequiredError: %v", err)
+	}
+}
+
+func TestDispatchPreservesCredentialFailure(t *testing.T) {
+	cause := errors.New("credential unavailable")
+	err := newDispatchErrorTestEngine().Dispatch(Request{
+		Args: []string{"demo", "run-thing", "--instance-type", "ecs.g6"},
+		Out:  io.Discard,
+		Host: runtime.StaticHost{CredErr: cause},
+	})
+
+	var credential *CredentialError
+	if !errors.As(err, &credential) {
+		t.Fatalf("Dispatch error %T does not preserve CredentialError: %v", err, err)
+	}
+	if !errors.Is(err, cause) {
+		t.Fatalf("Dispatch error does not preserve credential cause: %v", err)
+	}
+}
 
 func TestBuildExecContextRawBodyPrecedesBodyFile(t *testing.T) {
 	res := &argparser.Result{Reserved: argparser.Reserved{

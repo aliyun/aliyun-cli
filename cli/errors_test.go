@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,12 +23,14 @@ import (
 )
 
 func TestErrorWithTip(t *testing.T) {
-	err := NewErrorWithTip(errors.New("err test"), "%s-%d", "nicai", 1)
+	cause := errors.New("err test")
+	err := NewErrorWithTip(cause, "%s-%d", "nicai", 1)
 	e, ok := err.(*errorWithTip)
 	assert.True(t, ok)
 	assert.Equal(t, &errorWithTip{err: errors.New("err test"), tip: fmt.Sprintf("%s-%d", "nicai", 1)}, e)
 	assert.Equal(t, e.Error(), "err test")
 	assert.Equal(t, "nicai-1", e.GetTip("ch"))
+	assert.ErrorIs(t, err, cause)
 }
 
 func TestInvalidCommandError(t *testing.T) {
