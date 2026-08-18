@@ -360,6 +360,19 @@ aliyun rds DescribeDBInstanceAttribute --DBInstanceId xxxxxx
 
   如获取 ECS 的 CreateInstance 的信息： `aliyun help ecs CreateInstance`
 
+#### 面向 Agent 的结构化帮助
+
+使用 `--help=json`，或者等价的 `help ... --format json`，可以把本地内置的 Canonical 元数据读取为稳定的 JSON：
+
+```sh
+aliyun --help=json
+aliyun help ecs --format json
+aliyun help ecs DescribeInstances --format json
+aliyun ecs describe-instances --help=json
+```
+
+根命令、产品、传统大驼峰 API 和烤串风 API 均受支持。当前协议版本为 `schemaVersion: "v1"`，无需凭证，也不会访问网络。API 文档会同时返回两种命令风格的参数树；当前来源中没有的 `outputSchema`、`pagination`、`risk`、`recovery` 固定输出为 `null`。
+
 ### 使用`--force`参数
 
 阿里云 CLI 集成了一部分云产品的元数据，在调用时会对参数的合法性进行检查。如果使用了一个元数据中未包含的API或参数会导致`unknown api`或`unknown parameter`错误。可以使用`--force`参数跳过API和参数检查，强制调用元数据列表外的API和参数，如:
