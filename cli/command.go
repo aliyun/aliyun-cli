@@ -15,6 +15,8 @@
 package cli
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -345,6 +347,13 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 }
 
 func (c *Command) processError(ctx *Context, err error) {
+	var agentErr *AgentError
+	if errors.As(err, &agentErr) {
+		_ = json.NewEncoder(ctx.Stderr()).Encode(agentErr.Envelope())
+		Exit(agentErr.ExitCode())
+		return
+	}
+
 	Errorf(ctx.Stderr(), "ERROR: %s\n", err.Error())
 	exitCode := 1
 	if e, ok := err.(SuggestibleError); ok {
