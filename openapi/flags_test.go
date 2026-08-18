@@ -14,6 +14,7 @@
 package openapi
 
 import (
+	"io"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -107,4 +108,33 @@ func TestAFlags(t *testing.T) {
 	on, off = CliAIOverrides(fs2)
 	assert.False(t, on)
 	assert.True(t, off)
+}
+
+func TestVersionFlagSupportsAPIVersionAlias(t *testing.T) {
+	ctx := cli.NewCommandContext(io.Discard, io.Discard)
+	ctx.Flags().Add(NewVersionFlag())
+
+	versionflag := VersionFlag(ctx.Flags())
+	assert.Equal(t, []string{"api-version"}, versionflag.Aliases)
+	assert.Same(t, versionflag, ctx.Flags().Get("api-version"))
+
+	parser := cli.NewParser([]string{"--api-version", "2014-05-26"}, ctx)
+	args, err := parser.ReadAll()
+	assert.NoError(t, err)
+	assert.Empty(t, args)
+	value, assigned := versionflag.GetValue()
+	assert.True(t, assigned)
+	assert.Equal(t, "2014-05-26", value)
+}
+
+func TestVersionFlagRejectsBothSpellings(t *testing.T) {
+	ctx := cli.NewCommandContext(io.Discard, io.Discard)
+	ctx.Flags().Add(NewVersionFlag())
+
+	parser := cli.NewParser([]string{
+		"--version", "2014-05-26",
+		"--api-version", "2020-01-01",
+	}, ctx)
+	_, err := parser.ReadAll()
+	assert.EqualError(t, err, "--version duplicated")
 }
