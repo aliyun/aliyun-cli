@@ -1,6 +1,8 @@
 package openapi
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"testing"
 
@@ -143,4 +145,73 @@ func findMachineHelpParameter(parameters []machineHelpParameter, option string) 
 		}
 	}
 	return nil
+}
+
+func TestCommandoHelpJSONUsesCanonicalMetadataWithoutLoadingPlugins(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	MachineHelpFormatFlag(ctx.Flags()).SetAssigned(true)
+	MachineHelpFormatFlag(ctx.Flags()).SetValue("json")
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	err := c.help(ctx, []string{"demo", "CreateReport"})
+	require.NoError(t, err)
+	assert.False(t, c.pluginLoaded)
+	assert.Empty(t, stderr.String())
+
+	var doc machineHelpAPIDocument
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &doc))
+	assert.Equal(t, machineHelpSchemaVersion, doc.SchemaVersion)
+	assert.Equal(t, "api", doc.Kind)
+	assert.Equal(t, "CreateReport", doc.API.Name)
+	assert.NotEmpty(t, doc.GlobalParameters)
+}
+
+func TestCommandoHelpJSONAcceptsKebabAPIVersionFlag(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	MachineHelpFormatFlag(ctx.Flags()).SetAssigned(true)
+	MachineHelpFormatFlag(ctx.Flags()).SetValue("json")
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	apiVersion, err := ctx.UnknownFlags().AddByName("api-version")
+	require.NoError(t, err)
+	apiVersion.SetAssigned(true)
+	apiVersion.SetValue("2026-01-01")
+
+	err = c.help(ctx, []string{"demo", "create-report"})
+	require.NoError(t, err)
+	assert.Empty(t, stderr.String())
+
+	var doc machineHelpAPIDocument
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &doc))
+	assert.Equal(t, "kebab", doc.ActiveParameterSet)
+	assert.Equal(t, "2026-01-01", doc.Product.SelectedVersion)
+}
+
+func TestCommandoHelpJSONRejectsUnsupportedFormatStructurally(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	MachineHelpFormatFlag(ctx.Flags()).SetAssigned(true)
+	MachineHelpFormatFlag(ctx.Flags()).SetValue("yaml")
+
+	err := c.help(ctx, nil)
+	require.Error(t, err)
+	structured, ok := err.(cli.StructuredError)
+	require.True(t, ok)
+	var rendered bytes.Buffer
+	require.NoError(t, structured.RenderError(&rendered))
+	assert.JSONEq(t, `{"schemaVersion":"v1","error":{"code":"INVALID_FORMAT","message":"unsupported help format \"yaml\"","target":["aliyun"],"suggestions":["use --help=json or help --format json"]}}`, rendered.String())
+	assert.False(t, c.pluginLoaded)
 }

@@ -1043,6 +1043,11 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {
 	// fmt.Println("commando help", args)
+	if formatFlag := MachineHelpFormatFlag(ctx.Flags()); formatFlag != nil && formatFlag.IsAssigned() {
+		format, _ := formatFlag.GetValue()
+		return c.printMachineHelp(ctx, args, format)
+	}
+
 	c.loadPlugins()
 	cmd := ctx.Command()
 	if len(args) == 0 {

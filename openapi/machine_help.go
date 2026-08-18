@@ -1,7 +1,10 @@
 package openapi
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -20,6 +23,50 @@ type machineHelpRepository interface {
 type machineHelpService struct {
 	repository machineHelpRepository
 }
+
+type machineHelpErrorBody struct {
+	Code        string   `json:"code"`
+	Message     string   `json:"message"`
+	Target      []string `json:"target"`
+	Suggestions []string `json:"suggestions"`
+}
+
+type machineHelpErrorDocument struct {
+	SchemaVersion string               `json:"schemaVersion"`
+	Error         machineHelpErrorBody `json:"error"`
+}
+
+type machineHelpError struct {
+	document machineHelpErrorDocument
+	cause    error
+}
+
+func newMachineHelpError(code, message string, target, suggestions []string) *machineHelpError {
+	return &machineHelpError{document: machineHelpErrorDocument{
+		SchemaVersion: machineHelpSchemaVersion,
+		Error: machineHelpErrorBody{
+			Code:        code,
+			Message:     message,
+			Target:      append([]string(nil), target...),
+			Suggestions: append([]string(nil), suggestions...),
+		},
+	}}
+}
+
+func (e *machineHelpError) Error() string {
+	if e.cause != nil {
+		return e.document.Error.Message + ": " + e.cause.Error()
+	}
+	return e.document.Error.Message
+}
+
+func (e *machineHelpError) Unwrap() error { return e.cause }
+
+func (e *machineHelpError) RenderError(w io.Writer) error {
+	return encodeMachineHelpJSON(w, e.document)
+}
+
+func (e *machineHelpError) ExitCode() int { return 2 }
 
 func newMachineHelpService(repository machineHelpRepository) *machineHelpService {
 	return &machineHelpService{repository: repository}
@@ -273,7 +320,12 @@ func (s *machineHelpService) buildAPI(code, command, requestedVersion string) (*
 	}
 	apiName := resolveAPIName(index, command, style)
 	if apiName == "" {
-		return nil, fmt.Errorf("unknown API command %q for product %q version %q", command, product.Code, selected)
+		return nil, newMachineHelpError(
+			"UNKNOWN_API",
+			fmt.Sprintf("unknown API command %q for product %q version %q", command, product.Code, selected),
+			[]string{"aliyun", strings.ToLower(product.Code), command},
+			[]string{"inspect product help to list available APIs"},
+		)
 	}
 	api, err := s.repository.GetAPI(product.Code, selected, apiName)
 	if err != nil {
@@ -472,7 +524,12 @@ func (s *machineHelpService) findProduct(code string) (*canonicalmeta.ProductEnt
 			return &catalog.Products[i], nil
 		}
 	}
-	return nil, fmt.Errorf("unknown product %q", code)
+	return nil, newMachineHelpError(
+		"UNKNOWN_PRODUCT",
+		fmt.Sprintf("unknown product %q", code),
+		[]string{"aliyun", strings.ToLower(code)},
+		[]string{"inspect root help to list available products"},
+	)
 }
 
 func selectProductVersion(product canonicalmeta.ProductEntry, versions []string, requested string) (string, error) {
@@ -482,7 +539,12 @@ func selectProductVersion(product canonicalmeta.ProductEntry, versions []string,
 				return requested, nil
 			}
 		}
-		return "", fmt.Errorf("product %q does not expose version %q", product.Code, requested)
+		return "", newMachineHelpError(
+			"UNKNOWN_VERSION",
+			fmt.Sprintf("product %q does not expose version %q", product.Code, requested),
+			[]string{"aliyun", strings.ToLower(product.Code)},
+			[]string{"inspect supportedVersions in product help"},
+		)
 	}
 	for _, candidate := range []string{product.PluginDefaultVersion, product.Version} {
 		if candidate != "" {
@@ -490,7 +552,12 @@ func selectProductVersion(product canonicalmeta.ProductEntry, versions []string,
 		}
 	}
 	if len(versions) == 0 {
-		return "", fmt.Errorf("product %q has no API version", product.Code)
+		return "", newMachineHelpError(
+			"UNKNOWN_VERSION",
+			fmt.Sprintf("product %q has no API version", product.Code),
+			[]string{"aliyun", strings.ToLower(product.Code)},
+			nil,
+		)
 	}
 	return versions[0], nil
 }
@@ -511,4 +578,125 @@ func normalizedVersions(product canonicalmeta.ProductEntry) []string {
 
 func localizedText(values map[string]string) machineHelpLocalizedText {
 	return machineHelpLocalizedText{EN: values["en"], ZH: values["zh"]}
+}
+
+func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format string) error {
+	target := append([]string{"aliyun"}, args...)
+	if format != "json" {
+		return newMachineHelpError(
+			"INVALID_FORMAT",
+			fmt.Sprintf("unsupported help format %q", format),
+			target,
+			[]string{"use --help=json or help --format json"},
+		)
+	}
+	if len(args) > 2 {
+		return newMachineHelpError(
+			"INVALID_TARGET",
+			fmt.Sprintf("machine help accepts at most a product and an API, got %d arguments", len(args)),
+			target,
+			nil,
+		)
+	}
+	if c.library == nil || c.library.helpRepo == nil {
+		return newMachineHelpUnavailableError(target, errors.New("canonical metadata repository is unavailable"))
+	}
+
+	service := newMachineHelpService(c.library.helpRepo)
+	var (
+		document any
+		err      error
+	)
+	switch len(args) {
+	case 0:
+		document, err = service.buildRoot(ctx.Command())
+	case 1:
+		document, err = service.buildProduct(args[0], requestedMachineHelpVersion(ctx))
+	case 2:
+		document, err = service.buildAPI(args[0], args[1], requestedMachineHelpVersion(ctx))
+	}
+	if err != nil {
+		var structured *machineHelpError
+		if errors.As(err, &structured) {
+			return structured
+		}
+		return newMachineHelpUnavailableError(target, err)
+	}
+	if api, ok := document.(*machineHelpAPIDocument); ok {
+		api.GlobalParameters = projectGlobalParameters(ctx.Flags())
+	}
+	if err := encodeMachineHelpJSON(ctx.Stdout(), document); err != nil {
+		return newMachineHelpUnavailableError(target, err)
+	}
+	return nil
+}
+
+func newMachineHelpUnavailableError(target []string, cause error) *machineHelpError {
+	err := newMachineHelpError(
+		"MACHINE_HELP_UNAVAILABLE",
+		"machine-readable help is unavailable",
+		target,
+		nil,
+	)
+	err.cause = cause
+	return err
+}
+
+func encodeMachineHelpJSON(w io.Writer, value any) error {
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(value)
+}
+
+func requestedMachineHelpVersion(ctx *cli.Context) string {
+	if ctx != nil && ctx.UnknownFlags() != nil {
+		if value, ok := ctx.UnknownFlags().GetValue("api-version"); ok && value != "" {
+			return value
+		}
+	}
+	if ctx != nil {
+		if value, ok := VersionFlag(ctx.Flags()).GetValue(); ok {
+			return value
+		}
+	}
+	return ""
+}
+
+func projectGlobalParameters(flags *cli.FlagSet) []machineHelpParameter {
+	parameters := make([]machineHelpParameter, 0)
+	if flags == nil {
+		return parameters
+	}
+	for _, flag := range flags.Flags() {
+		if flag == nil || flag.Hidden || flag.Name == "help" {
+			continue
+		}
+		parameterType := "string"
+		serialization := "once"
+		switch flag.AssignedMode {
+		case cli.AssignedNone:
+			parameterType = "bool"
+			serialization = "flag"
+		case cli.AssignedRepeatable:
+			serialization = "repeatable"
+		}
+		parameter := machineHelpParameter{
+			Name:          flag.Name,
+			RawName:       flag.Name,
+			Options:       append([]string(nil), flag.GetFormations()...),
+			Type:          parameterType,
+			Location:      "global",
+			Required:      flag.Required,
+			Serialization: serialization,
+			Example:       flag.DefaultValue,
+			Constraints:   machineHelpConstraints{},
+		}
+		if flag.Short != nil {
+			parameter.Help = localizedText(flag.Short.GetData())
+		}
+		parameters = append(parameters, parameter)
+	}
+	sort.Slice(parameters, func(i, j int) bool { return parameters[i].Name < parameters[j].Name })
+	return parameters
 }

@@ -30,6 +30,7 @@ import (
 type Library struct {
 	builtinRepo   *meta.Repository
 	canonicalRepo canonicalAPIRepository
+	helpRepo      machineHelpRepository
 	writer        io.Writer
 }
 
@@ -39,11 +40,13 @@ type canonicalAPIRepository interface {
 }
 
 func NewLibrary(w io.Writer, lang string) *Library {
+	repo := canonicalmeta.NewRepository(bundledmeta.Metadatas)
 	lib := &Library{
 		builtinRepo: meta.LoadRepository(),
+		helpRepo:    repo,
 		writer:      w,
 	}
-	lib.canonicalRepo = canonicalmeta.NewRepository(bundledmeta.Metadatas)
+	lib.canonicalRepo = repo
 	return lib
 }
 

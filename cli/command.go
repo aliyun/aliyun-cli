@@ -345,6 +345,12 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 }
 
 func (c *Command) processError(ctx *Context, err error) {
+	if e, ok := err.(StructuredError); ok {
+		_ = e.RenderError(ctx.Stderr())
+		Exit(e.ExitCode())
+		return
+	}
+
 	Errorf(ctx.Stderr(), "ERROR: %s\n", err.Error())
 	exitCode := 1
 	if e, ok := err.(SuggestibleError); ok {

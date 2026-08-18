@@ -15,8 +15,17 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"strings"
 )
+
+// StructuredError renders a machine-readable error without the decorations
+// used by the interactive error path.
+type StructuredError interface {
+	error
+	RenderError(io.Writer) error
+	ExitCode() int
+}
 
 // If command.Execute return Noticeable error, print i18n Notice under error information
 type ErrorWithTip interface {
