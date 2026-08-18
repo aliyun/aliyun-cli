@@ -226,6 +226,10 @@ func (r *byNameOnlyCanonicalRepo) GetAPIByPath(productCode, version, method, pat
 	return nil, fmt.Errorf("api not found")
 }
 
+func (r *byNameOnlyCanonicalRepo) GetVersionIndex(productCode, version string) (*canonicalmeta.VersionIndex, error) {
+	return nil, fmt.Errorf("version index not found")
+}
+
 func TestLibrary_GetApiByPath_UsesProductApiList(t *testing.T) {
 	repo, err := meta.MockLoadRepository([]meta.Product{
 		{Code: "demo", Version: "2026-01-01", ApiStyle: "restful", ApiNames: []string{"ListedMatch"}},

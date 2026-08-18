@@ -126,6 +126,10 @@ func (r *versionSensitiveCanonicalRepo) GetAPIByPath(productCode, version, metho
 	return r.api, nil
 }
 
+func (r *versionSensitiveCanonicalRepo) GetVersionIndex(productCode, version string) (*canonicalmeta.VersionIndex, error) {
+	return nil, fmt.Errorf("version index not found")
+}
+
 func TestResolveEstimateCostApiNameUsesProductDefaultVersionForPathLookup(t *testing.T) {
 	product := meta.Product{
 		Code:     "demo",

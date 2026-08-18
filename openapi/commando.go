@@ -37,6 +37,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"unicode"
 
 	jmespath "github.com/jmespath/go-jmespath"
 )
@@ -1145,11 +1146,11 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 
 	if product.ApiStyle == "rpc" {
 		if len(args) == 1 {
-			for _, name := range product.ApiNames {
-				if !strings.HasPrefix(strings.ToLower(name), strings.ToLower(ctx.Completion().Current)) {
+			for _, completionName := range c.library.GetAPINamesForCompletion(product) {
+				if !strings.HasPrefix(completionName, strings.ToLower(ctx.Completion().Current)) {
 					continue
 				}
-				cli.PrintfWithColor(w, "", "%s\n", name)
+				cli.PrintfWithColor(w, "", "%s\n", completionName)
 			}
 			return r
 		}
@@ -1177,6 +1178,31 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 	}
 
 	return r
+}
+
+func apiNameToKebab(name string) string {
+	var b strings.Builder
+	runes := []rune(name)
+	for i, r := range runes {
+		if r == '_' || unicode.IsSpace(r) {
+			if b.Len() > 0 {
+				b.WriteRune('-')
+			}
+			continue
+		}
+		if i > 0 && unicode.IsUpper(r) {
+			prev := runes[i-1]
+			var next rune
+			if i+1 < len(runes) {
+				next = runes[i+1]
+			}
+			if unicode.IsLower(prev) || unicode.IsDigit(prev) || (unicode.IsUpper(prev) && next != 0 && unicode.IsLower(next)) {
+				b.WriteRune('-')
+			}
+		}
+		b.WriteRune(unicode.ToLower(r))
+	}
+	return b.String()
 }
 
 func (c *Commando) printUsage(ctx *cli.Context) {

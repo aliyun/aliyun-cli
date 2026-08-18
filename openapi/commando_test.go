@@ -29,6 +29,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -738,6 +739,82 @@ func Test_complete(t *testing.T) {
 	args = []string{"aos"}
 	str = command.complete(ctx, args)
 	assert.Equal(t, []string{}, str)
+}
+
+func TestCompleteRPCAPIsUsesKebabCase(t *testing.T) {
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+	ctx.SetCompletion(&cli.Completion{Current: "describe"})
+
+	repo, err := meta.MockLoadRepository([]meta.Product{{
+		Code:     "ecs",
+		Version:  "2014-05-26",
+		ApiStyle: "rpc",
+		ApiNames: []string{"DescribeInstances", "DescribeDBInstances", "RunInstances"},
+	}})
+	assert.NoError(t, err)
+	command := &Commando{library: &Library{builtinRepo: repo}}
+
+	str := command.complete(ctx, []string{"ecs"})
+	assert.Equal(t, []string{}, str)
+	assert.Equal(t, "describe-db-instances\ndescribe-instances\n", w.String())
+	assert.NotContains(t, w.String(), "DescribeInstances")
+}
+
+func TestCompleteRPCAPIsPrefersCanonicalCommandMetadata(t *testing.T) {
+	t.Setenv(plugin.EnvPluginsDir, t.TempDir())
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+	ctx.SetCompletion(&cli.Completion{Current: "describe-v"})
+
+	repo, err := meta.MockLoadRepository([]meta.Product{{
+		Code:     "ecs",
+		Version:  "2014-05-26",
+		ApiStyle: "rpc",
+		ApiNames: []string{"DescribeVRouters"},
+	}})
+	assert.NoError(t, err)
+	canonicalRepo := newFakeCanonicalRepo()
+	canonicalRepo.AddVersionIndex("ecs", "2014-05-26", &canonicalmeta.VersionIndex{
+		Version: "2014-05-26",
+		APIs: map[string]canonicalmeta.VersionAPIEntry{
+			"DescribeVRouters": {CmdName: "describe-vrouters"},
+		},
+	})
+	command := &Commando{library: &Library{builtinRepo: repo, canonicalRepo: canonicalRepo}}
+
+	str := command.complete(ctx, []string{"ecs"})
+	assert.Equal(t, []string{}, str)
+	assert.Equal(t, "describe-vrouters\n", w.String())
+	assert.NotContains(t, w.String(), "describe-v-routers")
+}
+
+func TestApiNameToKebab(t *testing.T) {
+	tests := map[string]string{
+		"DescribeInstances":    "describe-instances",
+		"DescribeDBInstances":  "describe-db-instances",
+		"CreateIpv6Translator": "create-ipv6-translator",
+		"ListTagResources":     "list-tag-resources",
+		"Describe_Instances":   "describe-instances",
+		"Describe Instances":   "describe-instances",
+	}
+
+	for name, want := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, want, apiNameToKebab(name))
+		})
+	}
 }
 
 func TestCreateInvoker(t *testing.T) {
