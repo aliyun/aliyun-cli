@@ -41,6 +41,17 @@ func (e *InvalidProductError) GetSuggestions() []string {
 	return sr.GetResults()
 }
 
+func (e *InvalidProductError) AgentSuggestions() []string {
+	if e.library == nil {
+		return nil
+	}
+	candidates := make([]string, 0)
+	for _, product := range e.library.GetProducts() {
+		candidates = append(candidates, strings.ToLower(product.Code))
+	}
+	return apiSuggestions(strings.ToLower(e.Code), candidates)
+}
+
 // return when use unknown api
 type InvalidApiError struct {
 	Name    string
@@ -57,6 +68,13 @@ func (e *InvalidApiError) GetSuggestions() []string {
 		sr.Apply(s)
 	}
 	return sr.GetResults()
+}
+
+func (e *InvalidApiError) AgentSuggestions() []string {
+	if e.product == nil {
+		return nil
+	}
+	return apiSuggestions(e.Name, e.product.ApiNames)
 }
 
 // return when use unknown parameter
@@ -92,6 +110,16 @@ func (e *InvalidParameterError) GetSuggestions() []string {
 		}
 	}
 	return results
+}
+
+func (e *InvalidParameterError) AgentSuggestions() []string {
+	candidates := append([]string(nil), e.ParameterNames...)
+	if e.flags != nil {
+		for _, flag := range e.flags.Flags() {
+			candidates = append(candidates, flag.Name)
+		}
+	}
+	return flagSuggestions(e.Name, candidates)
 }
 
 // NewInvalidParameterErrorFromCanonical creates error from canonical API
@@ -151,6 +179,14 @@ func (e *InvalidProductOrPluginError) GetSuggestions() []string {
 	return sr.GetResults()
 }
 
+func (e *InvalidProductOrPluginError) AgentSuggestions() []string {
+	candidates := make([]string, 0, len(e.plugins))
+	for _, product := range e.plugins {
+		candidates = append(candidates, strings.ToLower(product.ProductCode))
+	}
+	return apiSuggestions(strings.ToLower(e.Code), candidates)
+}
+
 type InvalidUnifiedApiError struct {
 	Name    string
 	product *meta.Product
@@ -171,6 +207,15 @@ func (e *InvalidUnifiedApiError) GetSuggestions() []string {
 	}
 	results := removeDuplicates(sr.GetResults())
 	return results
+}
+
+func (e *InvalidUnifiedApiError) AgentSuggestions() []string {
+	if e.product == nil {
+		return nil
+	}
+	candidates := append([]string(nil), e.product.ApiNames...)
+	candidates = append(candidates, e.lPlugin.CmdNames...)
+	return apiSuggestions(e.Name, candidates)
 }
 
 func removeDuplicates(slice []string) []string {

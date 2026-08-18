@@ -188,7 +188,7 @@ func (e *Engine) Dispatch(req Request) error {
 
 	args := req.Args
 	if len(args) < 2 {
-		return errors.New("expected <product> <command>")
+		return &UsageError{Code: "MISSING_COMMAND", Err: errors.New("expected <product> <command>")}
 	}
 	product := args[0]
 	if err := ldr.EnsureProduct(product); err != nil {
@@ -211,9 +211,12 @@ func (e *Engine) Dispatch(req Request) error {
 	if err != nil {
 		var ufe *argparser.UnknownFlagError
 		if errors.As(err, &ufe) {
-			return fmt.Errorf("%v (run `aliyun %s %s --help` for accepted flags)", err, product, cmdName)
+			return &UsageError{
+				Code: "UNKNOWN_FLAG",
+				Err:  fmt.Errorf("%w (run `aliyun %s %s --help` for accepted flags)", err, product, cmdName),
+			}
 		}
-		return err
+		return &UsageError{Code: "INVALID_ARGUMENT", Err: err}
 	}
 
 	if res.Reserved.Help {
@@ -221,11 +224,14 @@ func (e *Engine) Dispatch(req Request) error {
 	}
 
 	if err := runtime.ValidateRequired(api, res.Args, res.Reserved.BodySet || res.Reserved.BodyFileSet); err != nil {
-		return fmt.Errorf("%w\nrun `aliyun %s %s --help` to see all parameters", err, product, cmdName)
+		return &UsageError{
+			Code: "MISSING_REQUIRED_PARAMETER",
+			Err:  fmt.Errorf("%w\nrun `aliyun %s %s --help` to see all parameters", err, product, cmdName),
+		}
 	}
 
 	if err := validateDispatchOptions(res); err != nil {
-		return err
+		return &UsageError{Code: "INVALID_OPTION_COMBINATION", Err: err}
 	}
 
 	ec, err := buildExecContext(req, api, res)
@@ -256,7 +262,7 @@ func (e *Engine) dispatchBuiltin(req Request, ldr loader.Loader, product, comman
 		ExternalFlags: e.externalFlags,
 	})
 	if err != nil {
-		return true, err
+		return true, &UsageError{Code: "INVALID_ARGUMENT", Err: err}
 	}
 	if res.Reserved.Help {
 		return true, printAPIVersionsHelp(req.Out, productMeta, req.Lang)
@@ -306,7 +312,10 @@ func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runti
 		for _, header := range res.Reserved.Headers {
 			name, value, ok := strings.Cut(header, "=")
 			if !ok || strings.TrimSpace(name) == "" {
-				return nil, fmt.Errorf("invalid header format %q, expected Name=Value", header)
+				return nil, &UsageError{
+					Code: "INVALID_HEADER",
+					Err:  fmt.Errorf("invalid header format %q, expected Name=Value", header),
+				}
 			}
 			ec.ExtraHeaders[strings.TrimSpace(name)] = strings.TrimSpace(value)
 		}
@@ -322,7 +331,7 @@ func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runti
 			body, err = os.ReadFile(res.Reserved.BodyFile)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("--body-file: %w", err)
+			return nil, &UsageError{Code: "INVALID_BODY_FILE", Err: fmt.Errorf("--body-file: %w", err)}
 		}
 		ec.RawBody = string(body)
 	}
@@ -343,11 +352,11 @@ func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runti
 	}
 	if !ec.DryRun || res.Reserved.EstimateCost {
 		if req.Host == nil {
-			return nil, errors.New("no credential source configured; run `aliyun configure` or pass --cli-dry-run")
+			return nil, &CredentialError{Err: errors.New("no credential source configured; run `aliyun configure` or pass --cli-dry-run")}
 		}
 		credential, err := req.Host.Credential()
 		if err != nil {
-			return nil, fmt.Errorf("resolve credential: %w", err)
+			return nil, &CredentialError{Err: fmt.Errorf("resolve credential: %w", err)}
 		}
 		ec.Credential = credential
 	}
