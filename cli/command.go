@@ -347,6 +347,12 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 }
 
 func (c *Command) processError(ctx *Context, err error) {
+	if e, ok := err.(StructuredError); ok {
+		_ = e.RenderError(ctx.Stderr())
+		Exit(e.ExitCode())
+		return
+	}
+
 	var agentErr *AgentError
 	if errors.As(err, &agentErr) {
 		_ = json.NewEncoder(ctx.Stderr()).Encode(agentErr.Envelope())

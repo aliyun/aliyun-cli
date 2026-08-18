@@ -44,6 +44,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewUserAgentFlag())
 	fs.Add(NewCliAIModeFlag())
 	fs.Add(NewCliNoAIModeFlag())
+	fs.Add(NewMachineHelpFormatFlag())
 }
 
 const (
@@ -70,7 +71,21 @@ const (
 	UserAgentFlagName           = "user-agent"
 	CliAIModeFlagName           = "cli-ai-mode"
 	CliNoAIModeFlagName         = "no-cli-ai-mode"
+	MachineHelpFormatFlagName   = "help-format"
 )
+
+func MachineHelpFormatFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(MachineHelpFormatFlagName)
+}
+
+func NewMachineHelpFormatFlag() *cli.Flag {
+	return &cli.Flag{
+		Name:         MachineHelpFormatFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Hidden:       true,
+	}
+}
 
 func OutputFlag(fs *cli.FlagSet) *cli.Flag {
 	return fs.Get(OutputFlagName)

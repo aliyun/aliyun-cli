@@ -17,11 +17,23 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/stretchr/testify/assert"
 )
+
+type structuredTestError struct{}
+
+func (structuredTestError) Error() string { return "fallback" }
+
+func (structuredTestError) RenderError(w io.Writer) error {
+	_, err := io.WriteString(w, "{\"schemaVersion\":\"v1\",\"error\":{\"code\":\"TEST\"}}\n")
+	return err
+}
+
+func (structuredTestError) ExitCode() int { return 2 }
 
 func TestCommand(t *testing.T) {
 	cmd := &Command{
@@ -220,6 +232,20 @@ func TestProcessError(t *testing.T) {
 	err := NewErrorWithTip(e, "")
 	cmd.processError(ctx, err)
 	assert.Equal(t, "\x1b[1;31mERROR: test error tip\n\x1b[0m\x1b[1;33m\n\n\x1b[0m", buf2.String())
+}
+
+func TestProcessStructuredError(t *testing.T) {
+	DisableExitCode()
+	defer EnableExitCode()
+	cmd := newAliyunCmd()
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(stdout, stderr)
+
+	cmd.processError(ctx, structuredTestError{})
+
+	assert.Equal(t, "{\"schemaVersion\":\"v1\",\"error\":{\"code\":\"TEST\"}}\n", stderr.String())
+	assert.Empty(t, stdout.String())
 }
 
 func TestProcessAgentErrorWritesOneJSONLineToStderr(t *testing.T) {

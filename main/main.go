@@ -101,6 +101,7 @@ func Main(args []string) {
 	if os.Getenv("GENERATE_METADATA") == "YES" {
 		generateMetadata(rootCmd)
 	} else {
+		args = openapi.NormalizeMachineHelpArgs(args)
 		rootCmd.Execute(ctx, args)
 	}
 }

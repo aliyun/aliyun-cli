@@ -392,6 +392,19 @@ Alibaba Cloud CLI integrates API descriptions for some products, you can get hel
 
  For example, get the help information of the CreateInstance API: `aliyun help ecs CreateInstance`
 
+#### Machine-readable help for Agents
+
+Pass `--help=json`, or use the equivalent `help ... --format json` form, to read the locally bundled Canonical metadata as stable JSON:
+
+```sh
+aliyun --help=json
+aliyun help ecs --format json
+aliyun help ecs DescribeInstances --format json
+aliyun ecs describe-instances --help=json
+```
+
+Root, product, legacy PascalCase API, and kebab-case API help are supported. The current contract uses `schemaVersion: "v1"` and does not require credentials or network access. API documents expose both command-style parameter trees; source data not currently available for `outputSchema`, `pagination`, `risk`, and `recovery` is emitted as `null`.
+
 ### Use the `--force` option
 
 Alibaba Cloud CLI integrates the product metadata of some products. It will validate API parameters when calling the API. If an API or a parameter that is not included in the metadata is used, an error `unknown api` or `unknown parameter` will be returned. You can use the `--force` option to skip the validation and call the API by force as shown in the following example:

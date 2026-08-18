@@ -36,6 +36,9 @@ type Product struct {
 	RegionalEndpointPattern string            `json:"regional_endpoint_patterns"`
 	ApiStyle                string            `json:"api_style"`
 	ApiNames                []string          `json:"apis"`
+	PluginDefaultVersion    string            `json:"plugin_default_version"`
+	Versions                []string          `json:"versions"`
+	Distribution            string            `json:"distribution,omitempty"`
 }
 
 func (a *Product) GetLowerCode() string {

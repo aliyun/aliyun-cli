@@ -1,0 +1,12 @@
+{
+  "apis": {
+    "DescribeRegions": {
+      "cmd_name": "describe-regions",
+      "deprecated": false,
+      "description_zh": "查询地域列表。",
+      "description_en": "Queries regions."
+    }
+  },
+  "style": "ROA",
+  "version": "2025-01-01"
+}

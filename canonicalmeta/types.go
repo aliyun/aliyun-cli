@@ -3,24 +3,80 @@ package canonicalmeta
 // API represents a Canonical API JSON file.
 // Fields not needed by the old CLI are omitted from deserialization.
 type API struct {
-	Name        string `json:"name"`
-	Deprecated  bool   `json:"deprecated,omitempty"`
-	Protocol    string `json:"protocol"`
-	Method      string `json:"method"`
-	PathPattern string `json:"pathPattern"`
+	Name         string `json:"name"`
+	CmdName      string `json:"cmd_name,omitempty"`
+	CmdFullName  string `json:"cmd_full_name,omitempty"`
+	ProductCode  string `json:"product_code,omitempty"`
+	MultiVersion bool   `json:"multi_version,omitempty"`
+	Deprecated   bool   `json:"deprecated,omitempty"`
+	Protocol     string `json:"protocol"`
+	Method       string `json:"method"`
+	PathPattern  string `json:"pathPattern"`
 
 	Security []string `json:"security,omitempty"`
 
 	DescriptionZh string `json:"description_zh,omitempty"`
 	DescriptionEn string `json:"description_en,omitempty"`
 
-	CamelExample string `json:"camel_example,omitempty"`
-	KebabExample string `json:"kebab_example,omitempty"`
+	CamelExample string     `json:"camel_example,omitempty"`
+	KebabExample string     `json:"kebab_example,omitempty"`
+	Operation    *Operation `json:"operation,omitempty"`
 
 	Parameters []Parameter `json:"parameters"`
 
 	V1Parameters     *[]V1Parameter `json:"v1_parameters,omitempty"`
 	V1BodyParameters *[]V1Parameter `json:"v1_body_parameters,omitempty"`
+}
+
+// Operation describes the selected HTTP operation for the Canonical command.
+type Operation struct {
+	Action          string            `json:"action,omitempty"`
+	APIStyle        string            `json:"api_style,omitempty"`
+	APIVersion      string            `json:"api_version,omitempty"`
+	Method          string            `json:"method,omitempty"`
+	Protocol        string            `json:"protocol,omitempty"`
+	URL             string            `json:"url,omitempty"`
+	IsSSE           bool              `json:"is_sse,omitempty"`
+	ReqBodyType     string            `json:"req_body_type,omitempty"`
+	ContentType     string            `json:"content_type,omitempty"`
+	HasWildcardPath bool              `json:"has_wildcard_path,omitempty"`
+	BodyMapping     map[string]string `json:"body_mapping,omitempty"`
+}
+
+// ProductsIndex is the product catalog stored in metadatas/products.json.
+type ProductsIndex struct {
+	Products []ProductEntry `json:"products"`
+}
+
+// ProductEntry contains product identity, versions, endpoints, and distribution.
+type ProductEntry struct {
+	Code                 string            `json:"code"`
+	Name                 map[string]string `json:"name"`
+	APIStyle             string            `json:"api_style"`
+	GlobalEndpoint       string            `json:"global_endpoint"`
+	RegionalEndpoints    map[string]string `json:"regional_endpoints"`
+	RegionalVPCEndpoints map[string]string `json:"regional_vpc_endpoints"`
+	LocationServiceCode  string            `json:"location_service_code"`
+	PluginDefaultVersion string            `json:"plugin_default_version"`
+	Version              string            `json:"version"`
+	Versions             []string          `json:"versions"`
+	APIs                 []string          `json:"apis"`
+	Distribution         string            `json:"distribution,omitempty"`
+}
+
+// VersionIndex is the lightweight API index stored beside per-API JSON files.
+type VersionIndex struct {
+	APIs    map[string]VersionAPIEntry `json:"apis"`
+	Style   string                     `json:"style"`
+	Version string                     `json:"version"`
+}
+
+// VersionAPIEntry is one API entry in version.json.
+type VersionAPIEntry struct {
+	CmdName       string `json:"cmd_name"`
+	Deprecated    bool   `json:"deprecated"`
+	DescriptionZh string `json:"description_zh"`
+	DescriptionEn string `json:"description_en"`
 }
 
 // Description returns the API-level description for the given language.
@@ -52,15 +108,16 @@ type TypeShape struct {
 
 // Parameter represents a Canonical API parameter.
 type Parameter struct {
-	Name       string `json:"name"`
-	RawName    string `json:"raw_name"`
-	Type       string `json:"type"`
-	Required   bool   `json:"required"`
-	Location   string `json:"location"`
-	ParamStyle string `json:"param_style,omitempty"`
-	IsWildcard bool   `json:"is_wildcard,omitempty"`
-	Format     string `json:"format,omitempty"`
-	Example    string `json:"example,omitempty"`
+	Name       string   `json:"name"`
+	RawName    string   `json:"raw_name"`
+	Type       string   `json:"type"`
+	Required   bool     `json:"required"`
+	Location   string   `json:"location"`
+	ParamStyle string   `json:"param_style,omitempty"`
+	IsWildcard bool     `json:"is_wildcard,omitempty"`
+	Format     string   `json:"format,omitempty"`
+	Example    string   `json:"example,omitempty"`
+	Options    []string `json:"options,omitempty"`
 
 	DescriptionZh string `json:"description_zh,omitempty"`
 	DescriptionEn string `json:"description_en,omitempty"`

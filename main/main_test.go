@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,6 +18,48 @@ func TestMainWithNoArgs(t *testing.T) {
 	resetMainHooks(t, nil, nil, nil)
 
 	Main([]string{})
+}
+
+func TestMainMachineHelpJSON(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		wantKind  string
+		wantStyle string
+	}{
+		{name: "root equals form", args: []string{"--help=json"}, wantKind: "root"},
+		{name: "product help command", args: []string{"help", "ecs", "--format", "json"}, wantKind: "product"},
+		{name: "camel API", args: []string{"help", "ecs", "DescribeInstances", "--version", "2014-05-26", "--format", "json"}, wantKind: "api", wantStyle: "camel"},
+		{name: "kebab API", args: []string{"ecs", "describe-instances", "--api-version", "2014-05-26", "--help=json"}, wantKind: "api", wantStyle: "kebab"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			var stdout, stderr bytes.Buffer
+			resetMainHooks(t, &stdout, &stderr, nil)
+
+			Main(tt.args)
+
+			if stderr.Len() != 0 {
+				t.Fatalf("stderr = %q, want empty", stderr.String())
+			}
+			var document struct {
+				SchemaVersion      string `json:"schemaVersion"`
+				Kind               string `json:"kind"`
+				ActiveParameterSet string `json:"activeParameterSet"`
+			}
+			if err := json.Unmarshal(stdout.Bytes(), &document); err != nil {
+				t.Fatalf("machine help is not JSON: %v\n%s", err, stdout.String())
+			}
+			if document.SchemaVersion != "v1" || document.Kind != tt.wantKind {
+				t.Fatalf("document = %#v, want schema v1 kind %s", document, tt.wantKind)
+			}
+			if document.ActiveParameterSet != tt.wantStyle {
+				t.Fatalf("activeParameterSet = %q, want %q", document.ActiveParameterSet, tt.wantStyle)
+			}
+		})
+	}
 }
 
 func TestMainInterceptsMockBeforeLoadingProfile(t *testing.T) {
