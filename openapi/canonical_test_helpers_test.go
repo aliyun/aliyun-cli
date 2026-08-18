@@ -9,17 +9,23 @@ import (
 )
 
 type fakeCanonicalRepo struct {
-	byName map[string]*canonicalmeta.API
+	byName         map[string]*canonicalmeta.API
+	versionIndexes map[string]*canonicalmeta.VersionIndex
 }
 
 func newFakeCanonicalRepo() *fakeCanonicalRepo {
 	return &fakeCanonicalRepo{
-		byName: make(map[string]*canonicalmeta.API),
+		byName:         make(map[string]*canonicalmeta.API),
+		versionIndexes: make(map[string]*canonicalmeta.VersionIndex),
 	}
 }
 
 func (r *fakeCanonicalRepo) AddAPI(productCode, version string, api *canonicalmeta.API) {
 	r.byName[apiKey(productCode, version, api.Name)] = api
+}
+
+func (r *fakeCanonicalRepo) AddVersionIndex(productCode, version string, index *canonicalmeta.VersionIndex) {
+	r.versionIndexes[apiKey(productCode, version, "")] = index
 }
 
 func (r *fakeCanonicalRepo) GetAPI(productCode, version, apiName string) (*canonicalmeta.API, error) {
@@ -37,6 +43,13 @@ func (r *fakeCanonicalRepo) GetAPIByPath(productCode, version, method, path stri
 		}
 	}
 	return nil, fmt.Errorf("api not found")
+}
+
+func (r *fakeCanonicalRepo) GetVersionIndex(productCode, version string) (*canonicalmeta.VersionIndex, error) {
+	if index, ok := r.versionIndexes[apiKey(productCode, version, "")]; ok {
+		return index, nil
+	}
+	return nil, fmt.Errorf("version index not found")
 }
 
 func apiKey(productCode, version, apiName string) string {

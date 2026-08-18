@@ -37,6 +37,7 @@ type Library struct {
 type canonicalAPIRepository interface {
 	GetAPI(productCode, version, apiName string) (*canonicalmeta.API, error)
 	GetAPIByPath(productCode, version, method, path string, apiNames []string) (*canonicalmeta.API, error)
+	GetVersionIndex(productCode, version string) (*canonicalmeta.VersionIndex, error)
 }
 
 func NewLibrary(w io.Writer, lang string) *Library {
@@ -98,6 +99,38 @@ func (a *Library) GetStyle(productCode string, version string) (string, bool) {
 
 func (a *Library) GetProducts() []meta.Product {
 	return a.builtinRepo.Products
+}
+
+func (a *Library) GetAPINamesForCompletion(product meta.Product) []string {
+	if a.canonicalRepo != nil {
+		if index, err := a.canonicalRepo.GetVersionIndex(product.Code, product.Version); err == nil && index != nil {
+			names := make([]string, 0, len(index.APIs))
+			seen := make(map[string]struct{}, len(index.APIs))
+			for apiName, entry := range index.APIs {
+				name := strings.TrimSpace(entry.CmdName)
+				if name == "" {
+					name = apiNameToKebab(apiName)
+				}
+				name = strings.ToLower(name)
+				if _, ok := seen[name]; ok {
+					continue
+				}
+				seen[name] = struct{}{}
+				names = append(names, name)
+			}
+			if len(names) > 0 {
+				sort.Strings(names)
+				return names
+			}
+		}
+	}
+
+	names := make([]string, 0, len(product.ApiNames))
+	for _, name := range product.ApiNames {
+		names = append(names, apiNameToKebab(name))
+	}
+	sort.Strings(names)
+	return names
 }
 
 func (a *Library) PrintProducts() {
