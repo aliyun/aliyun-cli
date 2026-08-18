@@ -18,6 +18,57 @@ func NewReader(fsys fs.FS) *Reader {
 	return &Reader{fs: fsys}
 }
 
+// ReadProducts reads the Canonical product catalog.
+func (r *Reader) ReadProducts() (*ProductsIndex, error) {
+	paths := []string{
+		"metadatas/products.json",
+		"canonical/metadatas/products.json",
+	}
+	var lastErr error
+	for _, candidate := range paths {
+		data, err := fs.ReadFile(r.fs, candidate)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				lastErr = err
+				continue
+			}
+			return nil, fmt.Errorf("read canonical products %s failed: %w", candidate, err)
+		}
+		var products ProductsIndex
+		if err := json.Unmarshal(data, &products); err != nil {
+			return nil, fmt.Errorf("parse canonical products %s failed: %w", candidate, err)
+		}
+		return &products, nil
+	}
+	return nil, fmt.Errorf("read canonical products failed: %w", lastErr)
+}
+
+// ReadVersionIndex reads one product/version index.
+func (r *Reader) ReadVersionIndex(product, version string) (*VersionIndex, error) {
+	lower := strings.ToLower(product)
+	paths := []string{
+		fmt.Sprintf("canonical/%s/%s/version.json", lower, version),
+		fmt.Sprintf("canonical/%s/canonical/%s/%s/version.json", lower, lower, version),
+	}
+	var lastErr error
+	for _, candidate := range paths {
+		data, err := fs.ReadFile(r.fs, candidate)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				lastErr = err
+				continue
+			}
+			return nil, fmt.Errorf("read canonical version index %s failed: %w", candidate, err)
+		}
+		var index VersionIndex
+		if err := json.Unmarshal(data, &index); err != nil {
+			return nil, fmt.Errorf("parse canonical version index %s failed: %w", candidate, err)
+		}
+		return &index, nil
+	}
+	return nil, fmt.Errorf("read canonical version index for %s/%s failed: %w", lower, version, lastErr)
+}
+
 // ReadAPI reads a single Canonical API JSON file.
 // Product directory names are always lowercase.
 func (r *Reader) ReadAPI(product, version, apiName string) (*API, error) {

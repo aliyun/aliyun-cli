@@ -1,0 +1,23 @@
+{
+  "products": [
+    {
+      "code": "demo",
+      "name": {
+        "en": "Demo Service",
+        "zh": "演示服务"
+      },
+      "api_style": "restful",
+      "version": "2026-01-01",
+      "plugin_default_version": "2025-01-01",
+      "versions": [
+        "2025-01-01",
+        "2026-01-01"
+      ],
+      "apis": [
+        "CreateReport",
+        "DescribeRegions"
+      ],
+      "distribution": "meta"
+    }
+  ]
+}

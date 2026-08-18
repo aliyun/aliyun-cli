@@ -1,0 +1,18 @@
+{
+  "apis": {
+    "CreateReport": {
+      "cmd_name": "create-report",
+      "deprecated": false,
+      "description_zh": "创建报表。",
+      "description_en": "Creates a report."
+    },
+    "DescribeRegions": {
+      "cmd_name": "describe-regions",
+      "deprecated": false,
+      "description_zh": "查询地域列表。",
+      "description_en": "Queries regions."
+    }
+  },
+  "style": "ROA",
+  "version": "2026-01-01"
+}

@@ -24,6 +24,16 @@ func (r *Repository) GetAPI(product, version, apiName string) (*API, error) {
 	return r.reader.ReadAPI(product, version, apiName)
 }
 
+// GetProducts returns the Canonical product catalog.
+func (r *Repository) GetProducts() (*ProductsIndex, error) {
+	return r.reader.ReadProducts()
+}
+
+// GetVersionIndex returns the lightweight API index for one product version.
+func (r *Repository) GetVersionIndex(product, version string) (*VersionIndex, error) {
+	return r.reader.ReadVersionIndex(product, version)
+}
+
 // GetAPIByPath finds a Canonical API by matching method and path pattern.
 // Used for ROA-style APIs where the API is identified by HTTP method + URL path.
 func (r *Repository) GetAPIByPath(product, version, method, path string, apiNames []string) (*API, error) {

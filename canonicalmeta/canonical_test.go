@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -70,6 +71,66 @@ func TestReadAPI_CreateReport(t *testing.T) {
 	bodyParam := (*api.V1BodyParameters)[0]
 	if bodyParam.Name != "body" {
 		t.Errorf("expected body param name=body, got %s", bodyParam.Name)
+	}
+}
+
+func TestReadProducts(t *testing.T) {
+	catalog, err := testFS().GetProducts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog.Products) != 1 {
+		t.Fatalf("expected 1 product, got %d", len(catalog.Products))
+	}
+	product := catalog.Products[0]
+	if product.Code != "demo" {
+		t.Fatalf("expected code demo, got %s", product.Code)
+	}
+	if product.Version != "2026-01-01" {
+		t.Fatalf("expected legacy default 2026-01-01, got %s", product.Version)
+	}
+	if product.PluginDefaultVersion != "2025-01-01" {
+		t.Fatalf("expected plugin default 2025-01-01, got %s", product.PluginDefaultVersion)
+	}
+	wantVersions := []string{"2025-01-01", "2026-01-01"}
+	if !slices.Equal(product.Versions, wantVersions) {
+		t.Fatalf("versions = %#v, want %#v", product.Versions, wantVersions)
+	}
+}
+
+func TestReadVersionIndex(t *testing.T) {
+	index, err := testFS().GetVersionIndex("demo", "2026-01-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.Version != "2026-01-01" {
+		t.Fatalf("version = %s", index.Version)
+	}
+	entry, ok := index.APIs["DescribeRegions"]
+	if !ok {
+		t.Fatal("DescribeRegions is missing")
+	}
+	if entry.CmdName != "describe-regions" {
+		t.Fatalf("cmd_name = %s", entry.CmdName)
+	}
+}
+
+func TestReadAPICompleteHelpFields(t *testing.T) {
+	api, err := testFS().GetAPI("demo", "2026-01-01", "CreateReport")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if api.CmdName != "create-report" {
+		t.Fatalf("cmd_name = %s", api.CmdName)
+	}
+	if api.Operation == nil {
+		t.Fatal("operation is nil")
+	}
+	if api.Operation.APIVersion != "2026-01-01" {
+		t.Fatalf("api_version = %s", api.Operation.APIVersion)
+	}
+	if len(api.Parameters) == 0 || !slices.Equal(api.Parameters[0].Options, []string{"--report-id"}) {
+		t.Fatalf("options = %#v", api.Parameters[0].Options)
 	}
 }
 
