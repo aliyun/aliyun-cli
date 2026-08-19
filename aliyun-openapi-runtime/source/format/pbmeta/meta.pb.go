@@ -296,6 +296,11 @@ type Argument struct {
 	Value         *TypeShape             `protobuf:"bytes,12,opt,name=value,proto3" json:"value,omitempty"`
 	Example       string                 `protobuf:"bytes,13,opt,name=example,proto3" json:"example,omitempty"`
 	IsWildcard    bool                   `protobuf:"varint,14,opt,name=is_wildcard,json=isWildcard,proto3" json:"is_wildcard,omitempty"`
+	Enum          []string               `protobuf:"bytes,15,rep,name=enum,proto3" json:"enum,omitempty"`
+	Minimum       string                 `protobuf:"bytes,16,opt,name=minimum,proto3" json:"minimum,omitempty"`
+	Maximum       string                 `protobuf:"bytes,17,opt,name=maximum,proto3" json:"maximum,omitempty"`
+	Pattern       string                 `protobuf:"bytes,18,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	Format        string                 `protobuf:"bytes,19,opt,name=format,proto3" json:"format,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -428,6 +433,41 @@ func (x *Argument) GetIsWildcard() bool {
 	return false
 }
 
+func (x *Argument) GetEnum() []string {
+	if x != nil {
+		return x.Enum
+	}
+	return nil
+}
+
+func (x *Argument) GetMinimum() string {
+	if x != nil {
+		return x.Minimum
+	}
+	return ""
+}
+
+func (x *Argument) GetMaximum() string {
+	if x != nil {
+		return x.Maximum
+	}
+	return ""
+}
+
+func (x *Argument) GetPattern() string {
+	if x != nil {
+		return x.Pattern
+	}
+	return ""
+}
+
+func (x *Argument) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
 // TypeShape is a depth-independent recursive description of a container
 // child. Arrays use element and maps use value at every level.
 type TypeShape struct {
@@ -436,6 +476,11 @@ type TypeShape struct {
 	Fields        []*Argument            `protobuf:"bytes,2,rep,name=fields,proto3" json:"fields,omitempty"`
 	Element       *TypeShape             `protobuf:"bytes,3,opt,name=element,proto3" json:"element,omitempty"`
 	Value         *TypeShape             `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
+	Enum          []string               `protobuf:"bytes,5,rep,name=enum,proto3" json:"enum,omitempty"`
+	Minimum       string                 `protobuf:"bytes,6,opt,name=minimum,proto3" json:"minimum,omitempty"`
+	Maximum       string                 `protobuf:"bytes,7,opt,name=maximum,proto3" json:"maximum,omitempty"`
+	Pattern       string                 `protobuf:"bytes,8,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	Format        string                 `protobuf:"bytes,9,opt,name=format,proto3" json:"format,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -498,6 +543,41 @@ func (x *TypeShape) GetValue() *TypeShape {
 	return nil
 }
 
+func (x *TypeShape) GetEnum() []string {
+	if x != nil {
+		return x.Enum
+	}
+	return nil
+}
+
+func (x *TypeShape) GetMinimum() string {
+	if x != nil {
+		return x.Minimum
+	}
+	return ""
+}
+
+func (x *TypeShape) GetMaximum() string {
+	if x != nil {
+		return x.Maximum
+	}
+	return ""
+}
+
+func (x *TypeShape) GetPattern() string {
+	if x != nil {
+		return x.Pattern
+	}
+	return ""
+}
+
+func (x *TypeShape) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
 var File_aliyun_openapi_meta_proto protoreflect.FileDescriptor
 
 const file_aliyun_openapi_meta_proto_rawDesc = "" +
@@ -534,7 +614,7 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\rreq_body_type\x18\b \x01(\tR\vreqBodyType\x12!\n" +
 	"\fcontent_type\x18\t \x01(\tR\vcontentType\x12*\n" +
 	"\x11has_wildcard_path\x18\n" +
-	" \x01(\bR\x0fhasWildcardPath\"\xdd\x03\n" +
+	" \x01(\bR\x0fhasWildcardPath\"\xd7\x04\n" +
 	"\bArgument\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\braw_name\x18\x02 \x01(\tR\arawName\x12\x12\n" +
@@ -552,12 +632,22 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\x05value\x18\f \x01(\v2!.aliyun.openapi.meta.v1.TypeShapeR\x05value\x12\x18\n" +
 	"\aexample\x18\r \x01(\tR\aexample\x12\x1f\n" +
 	"\vis_wildcard\x18\x0e \x01(\bR\n" +
-	"isWildcard\"\xcf\x01\n" +
+	"isWildcard\x12\x12\n" +
+	"\x04enum\x18\x0f \x03(\tR\x04enum\x12\x18\n" +
+	"\aminimum\x18\x10 \x01(\tR\aminimum\x12\x18\n" +
+	"\amaximum\x18\x11 \x01(\tR\amaximum\x12\x18\n" +
+	"\apattern\x18\x12 \x01(\tR\apattern\x12\x16\n" +
+	"\x06format\x18\x13 \x01(\tR\x06format\"\xc9\x02\n" +
 	"\tTypeShape\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x128\n" +
 	"\x06fields\x18\x02 \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\x06fields\x12;\n" +
 	"\aelement\x18\x03 \x01(\v2!.aliyun.openapi.meta.v1.TypeShapeR\aelement\x127\n" +
-	"\x05value\x18\x04 \x01(\v2!.aliyun.openapi.meta.v1.TypeShapeR\x05valueBFZDgithub.com/aliyun/aliyun-openapi-runtime/source/format/pbmeta;pbmetab\x06proto3"
+	"\x05value\x18\x04 \x01(\v2!.aliyun.openapi.meta.v1.TypeShapeR\x05value\x12\x12\n" +
+	"\x04enum\x18\x05 \x03(\tR\x04enum\x12\x18\n" +
+	"\aminimum\x18\x06 \x01(\tR\aminimum\x12\x18\n" +
+	"\amaximum\x18\a \x01(\tR\amaximum\x12\x18\n" +
+	"\apattern\x18\b \x01(\tR\apattern\x12\x16\n" +
+	"\x06format\x18\t \x01(\tR\x06formatBFZDgithub.com/aliyun/aliyun-openapi-runtime/source/format/pbmeta;pbmetab\x06proto3"
 
 var (
 	file_aliyun_openapi_meta_proto_rawDescOnce sync.Once

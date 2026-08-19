@@ -387,6 +387,63 @@ func TestArrayOfObjectRejectsNonObjectJSONElements(t *testing.T) {
 	}
 }
 
+func TestRecursiveCompositeShapeValidation(t *testing.T) {
+	t.Run("nested object field", func(t *testing.T) {
+		_, err := Parse(schema(), []string{"--network-config", `{"Acc":"example-string"}`})
+		if err == nil || !strings.Contains(err.Error(), "expected a JSON object, got string") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+
+	t.Run("nested array field", func(t *testing.T) {
+		_, err := Parse(schema(), []string{"--network-config", `{"Ports":"example-string"}`})
+		if err == nil || !strings.Contains(err.Error(), "expected a JSON array, got string") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+
+	t.Run("nested map field", func(t *testing.T) {
+		params := []meta.Parameter{{
+			Name: "config", RawName: "Config", Type: meta.TypeObject, Options: []string{"--config"},
+			Fields: []meta.Parameter{{
+				Name: "labels", RawName: "Labels", Type: meta.TypeMap,
+				ValueType: &meta.Parameter{Type: meta.TypeString},
+			}},
+		}}
+		_, err := Parse(params, []string{"--config", `{"Labels":"example-string"}`})
+		if err == nil || !strings.Contains(err.Error(), "expected a JSON object for map, got string") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+}
+
+func TestNestedArrayOfObjectShape(t *testing.T) {
+	params := []meta.Parameter{{
+		Name: "guests", RawName: "Guests", Type: meta.TypeArray, Options: []string{"--guests"},
+		ItemType: &meta.Parameter{Type: meta.TypeArray, ItemType: &meta.Parameter{
+			Type: meta.TypeObject,
+			Fields: []meta.Parameter{
+				{Name: "first_name", RawName: "FirstName", Type: meta.TypeString},
+				{Name: "last_name", RawName: "LastName", Type: meta.TypeString},
+			},
+		}},
+	}}
+
+	_, err := Parse(params, []string{"--guests", `["example-string"]`})
+	if err == nil || !strings.Contains(err.Error(), "expected a JSON object, got string") {
+		t.Fatalf("invalid guests error = %v", err)
+	}
+
+	parsed, err := Parse(params, []string{"--guests", `[[{"FirstName":"John","LastName":"Doe"}]]`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []any{[]any{map[string]any{"FirstName": "John", "LastName": "Doe"}}}
+	if !reflect.DeepEqual(parsed.Args["Guests"], want) {
+		t.Fatalf("Guests = %#v, want %#v", parsed.Args["Guests"], want)
+	}
+}
+
 func TestCompositeMapRequiresCompleteJSON(t *testing.T) {
 	params := []meta.Parameter{{
 		Name: "partitions", RawName: "Partitions", Type: meta.TypeMap, Options: []string{"--partitions"},

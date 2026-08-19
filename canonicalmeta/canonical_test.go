@@ -549,6 +549,47 @@ func TestLegacyParameterView_DeserializesRecursiveParameterShape(t *testing.T) {
 	}
 }
 
+func TestLegacyParameterView_ConstraintAccessors(t *testing.T) {
+	var api API
+	err := json.Unmarshal([]byte(`{
+		"name":"CreateThing",
+		"parameters":[{
+			"name":"mode","raw_name":"Mode","type":"string","required":false,"location":"query",
+			"format":"token","enum":["ReadOnly","ReadWrite"],"minimum":"1","maximum":"9","pattern":"^[A-Z]",
+			"element":{"type":"string","format":"uuid","enum":["A"],"minimum":"2","maximum":"8","pattern":"^A$"}
+		},{
+			"name":"tags","raw_name":"Tag","type":"array","required":false,"location":"query",
+			"element":{"type":"object","fields":[{
+				"name":"key","raw_name":"Key","type":"string","required":false,
+				"format":"token","enum":["env"],"minimum":"2","maximum":"10","pattern":"^[a-z]+$"
+			}]}
+		}],
+		"v1_parameters":[{"name":"OnlyV1","position":"query","type":"string","required":false}]
+	}`), &api)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := api.Parameters[0].Element; got == nil || got.Format != "uuid" ||
+		len(got.Enum) != 1 || got.Minimum != "2" || got.Maximum != "8" || got.Pattern != "^A$" {
+		t.Fatalf("type-shape constraints were not decoded: %#v", got)
+	}
+
+	canonical := NewCanonicalView(&api.Parameters[0]).Constraints()
+	if len(canonical.Enum) != 2 || canonical.Minimum != "1" ||
+		canonical.Maximum != "9" || canonical.Pattern != "^[A-Z]" {
+		t.Fatalf("canonical constraints = %#v", canonical)
+	}
+	field := NewFieldView(&api.Parameters[1].Element.Fields[0], "query").Constraints()
+	if len(field.Enum) != 1 || field.Enum[0] != "env" ||
+		field.Minimum != "2" || field.Maximum != "10" || field.Pattern != "^[a-z]+$" {
+		t.Fatalf("field constraints = %#v", field)
+	}
+	if got := NewV1View(&(*api.V1Parameters)[0]).Constraints(); len(got.Enum) != 0 ||
+		got.Minimum != "" || got.Maximum != "" || got.Pattern != "" {
+		t.Fatalf("V1 constraints = %#v, want empty", got)
+	}
+}
+
 // ── Legacy View: API-level parameter methods ──
 
 func TestLegacyTopLevelParameters_NoV1Body(t *testing.T) {

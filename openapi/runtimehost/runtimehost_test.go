@@ -65,6 +65,42 @@ func TestBuildUserAgentSuffix(t *testing.T) {
 	}
 }
 
+func TestDispatchPropagatesEffectiveAIMode(t *testing.T) {
+	originalDispatch := engineDispatch
+	t.Cleanup(func() { engineDispatch = originalDispatch })
+
+	var captured engine.Request
+	engineDispatch = func(request engine.Request) error {
+		captured = request
+		return nil
+	}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.Flags().Add(config.NewConfigurePathFlag())
+	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+	config.ConfigurePathFlag(ctx.Flags()).SetValue(filepath.Join(t.TempDir(), "config.json"))
+	forceOn := &cli.Flag{Name: "cli-ai-mode"}
+	forceOff := &cli.Flag{Name: "no-cli-ai-mode"}
+	ctx.Flags().Add(forceOn)
+	ctx.Flags().Add(forceOff)
+
+	forceOn.SetAssigned(true)
+	if err := Dispatch(ctx, []string{"ecs", "describe-regions"}); err != nil {
+		t.Fatal(err)
+	}
+	if !captured.AIMode {
+		t.Fatal("engine request AIMode = false, want true")
+	}
+
+	forceOff.SetAssigned(true)
+	if err := Dispatch(ctx, []string{"ecs", "describe-regions"}); err != nil {
+		t.Fatal(err)
+	}
+	if captured.AIMode {
+		t.Fatal("engine request AIMode = true when force-off is assigned")
+	}
+}
+
 func TestProfileHostTransportOptions(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_OTEL_TRACEPARENT", "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01")
 	t.Setenv("ALIBABA_CLOUD_OTEL_BAGGAGE", "tenant=test")

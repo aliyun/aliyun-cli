@@ -102,3 +102,34 @@ func TestMapArgumentSupportsArbitraryRecursiveContainerDepth(t *testing.T) {
 		t.Fatalf("deep recursive shape was not mapped: %#v", got)
 	}
 }
+
+func TestMapArgumentMapsRecursiveConstraints(t *testing.T) {
+	arg := schema.ArgumentDefinition{
+		Name: "items", Type: "array", Format: "ignored-top",
+		Enum: []string{"ignored-for-container"},
+		Element: &schema.TypeShape{
+			Type: "object", Format: "ignored-element",
+			Fields: []schema.ArgumentDefinition{{
+				Name: "score", RawName: "Score", Type: "float",
+				Enum: []string{"1.5", "2.5"}, Minimum: "1.5", Maximum: "2.5",
+			}, {
+				Name: "label", RawName: "Label", Type: "string",
+				Pattern: "^[a-z]+$",
+			}},
+		},
+	}
+
+	got := mapArgument(&arg)
+	if !reflect.DeepEqual(got.Enum, []string{"ignored-for-container"}) ||
+		got.ItemType == nil || len(got.ItemType.Fields) != 2 {
+		t.Fatalf("recursive constraints were not mapped: %#v", got)
+	}
+	score := got.ItemType.Fields[0]
+	if !reflect.DeepEqual(score.Enum, []string{"1.5", "2.5"}) ||
+		score.Minimum != "1.5" || score.Maximum != "2.5" {
+		t.Fatalf("numeric constraints = %#v", score)
+	}
+	if got.ItemType.Fields[1].Pattern != "^[a-z]+$" {
+		t.Fatalf("pattern constraint = %#v", got.ItemType.Fields[1])
+	}
+}

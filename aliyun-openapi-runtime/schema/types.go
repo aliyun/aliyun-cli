@@ -192,6 +192,11 @@ type OperationConfig struct {
 // objects use Fields.
 type TypeShape struct {
 	Type    string               `json:"type"`
+	Format  string               `json:"format,omitempty"`
+	Enum    []string             `json:"enum,omitempty"`
+	Minimum string               `json:"minimum,omitempty"`
+	Maximum string               `json:"maximum,omitempty"`
+	Pattern string               `json:"pattern,omitempty"`
 	Fields  []ArgumentDefinition `json:"fields,omitempty"`
 	Element *TypeShape           `json:"element,omitempty"`
 	Value   *TypeShape           `json:"value,omitempty"`
@@ -202,6 +207,11 @@ type ArgumentDefinition struct {
 	Name       string               `json:"name"`
 	RawName    string               `json:"raw_name"`
 	Type       string               `json:"type"`
+	Format     string               `json:"format,omitempty"`
+	Enum       []string             `json:"enum,omitempty"`
+	Minimum    string               `json:"minimum,omitempty"`
+	Maximum    string               `json:"maximum,omitempty"`
+	Pattern    string               `json:"pattern,omitempty"`
 	Options    []string             `json:"options,omitempty"`
 	HelpZH     string               `json:"help_zh,omitempty"`
 	HelpEN     string               `json:"help_en,omitempty"`

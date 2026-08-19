@@ -425,7 +425,7 @@ func resolveNames(p *meta.Parameter, v any) (any, error) {
 	case meta.TypeObject:
 		m, ok := v.(map[string]any)
 		if !ok {
-			return v, nil
+			return nil, fmt.Errorf("expected a JSON object, got %T", v)
 		}
 		out := make(map[string]any, len(m))
 		for k, val := range m {
@@ -451,7 +451,7 @@ func resolveNames(p *meta.Parameter, v any) (any, error) {
 	case meta.TypeArray:
 		a, ok := v.([]any)
 		if !ok {
-			return v, nil
+			return nil, fmt.Errorf("expected a JSON array, got %T", v)
 		}
 		out := make([]any, len(a))
 		for i, e := range a {
@@ -465,7 +465,7 @@ func resolveNames(p *meta.Parameter, v any) (any, error) {
 	case meta.TypeMap:
 		m, ok := v.(map[string]any)
 		if !ok {
-			return v, nil
+			return nil, fmt.Errorf("expected a JSON object for map, got %T", v)
 		}
 		out := make(map[string]any, len(m))
 		for k, val := range m {

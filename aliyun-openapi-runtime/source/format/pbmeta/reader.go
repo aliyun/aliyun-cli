@@ -148,6 +148,11 @@ func toCanonicalArguments(values []*Argument) ([]schema.ArgumentDefinition, erro
 			Name:       value.Name,
 			RawName:    value.RawName,
 			Type:       value.Type,
+			Format:     value.Format,
+			Enum:       append([]string(nil), value.Enum...),
+			Minimum:    value.Minimum,
+			Maximum:    value.Maximum,
+			Pattern:    value.Pattern,
 			Options:    append([]string(nil), value.Options...),
 			HelpZH:     value.HelpZh,
 			HelpEN:     value.HelpEn,
@@ -226,7 +231,14 @@ func toCanonicalTypeShape(value *TypeShape, path string) (*schema.TypeShape, err
 	if value == nil {
 		return nil, nil
 	}
-	shape := &schema.TypeShape{Type: value.Type}
+	shape := &schema.TypeShape{
+		Type:    value.Type,
+		Format:  value.Format,
+		Enum:    append([]string(nil), value.Enum...),
+		Minimum: value.Minimum,
+		Maximum: value.Maximum,
+		Pattern: value.Pattern,
+	}
 	var err error
 	if shape.Fields, err = toCanonicalArguments(value.Fields); err != nil {
 		return nil, err

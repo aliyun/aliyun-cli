@@ -110,6 +110,8 @@ func (e *Engine) Resolvable(product, command string) bool {
 type Request struct {
 	Args []string
 	Out  io.Writer
+	// AIMode enables metadata constraint validation for agent-driven calls.
+	AIMode bool
 	// Lang selects help/description locale ("zh" / "en"). Empty => en.
 	Lang string
 	// Host supplies region + credentials. May be nil for help or dry-run that needs neither (endpoint then resolves region-less).
@@ -226,7 +228,12 @@ func (e *Engine) Dispatch(req Request) error {
 	if err := runtime.ValidateRequired(api, res.Args, res.Reserved.BodySet || res.Reserved.BodyFileSet); err != nil {
 		return &UsageError{
 			Code: "MISSING_REQUIRED_PARAMETER",
-			Err:  fmt.Errorf("%w\nrun `aliyun %s %s --help` to see all parameters", err, product, cmdName),
+			Err:  err,
+		}
+	}
+	if req.AIMode {
+		if err := runtime.ValidateConstraints(api, res.Args, res.Reserved.BodySet || res.Reserved.BodyFileSet); err != nil {
+			return &UsageError{Code: "INVALID_PARAMETER_VALUE", Err: err}
 		}
 	}
 

@@ -101,6 +101,11 @@ func (a *API) IsAnonymous() bool {
 // Arrays use Element, maps use Value, and objects use Fields.
 type TypeShape struct {
 	Type    string     `json:"type"`
+	Format  string     `json:"format,omitempty"`
+	Enum    []string   `json:"enum,omitempty"`
+	Minimum string     `json:"minimum,omitempty"`
+	Maximum string     `json:"maximum,omitempty"`
+	Pattern string     `json:"pattern,omitempty"`
 	Fields  []Field    `json:"fields,omitempty"`
 	Element *TypeShape `json:"element,omitempty"`
 	Value   *TypeShape `json:"value,omitempty"`
@@ -116,6 +121,10 @@ type Parameter struct {
 	ParamStyle string   `json:"param_style,omitempty"`
 	IsWildcard bool     `json:"is_wildcard,omitempty"`
 	Format     string   `json:"format,omitempty"`
+	Enum       []string `json:"enum,omitempty"`
+	Minimum    string   `json:"minimum,omitempty"`
+	Maximum    string   `json:"maximum,omitempty"`
+	Pattern    string   `json:"pattern,omitempty"`
 	Example    string   `json:"example,omitempty"`
 	Options    []string `json:"options,omitempty"`
 
@@ -140,11 +149,16 @@ func (p *Parameter) Help(lang string) string {
 // Field represents a nested field within a parameter.
 // Fields do not have independent location or param_style.
 type Field struct {
-	Name     string `json:"name"`
-	RawName  string `json:"raw_name"`
-	Type     string `json:"type"`
-	Required bool   `json:"required"`
-	Example  string `json:"example,omitempty"`
+	Name     string   `json:"name"`
+	RawName  string   `json:"raw_name"`
+	Type     string   `json:"type"`
+	Required bool     `json:"required"`
+	Format   string   `json:"format,omitempty"`
+	Minimum  string   `json:"minimum,omitempty"`
+	Maximum  string   `json:"maximum,omitempty"`
+	Pattern  string   `json:"pattern,omitempty"`
+	Example  string   `json:"example,omitempty"`
+	Enum     []string `json:"enum,omitempty"`
 
 	DescriptionZh string `json:"description_zh,omitempty"`
 	DescriptionEn string `json:"description_en,omitempty"`

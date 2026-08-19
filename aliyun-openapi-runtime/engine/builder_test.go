@@ -66,6 +66,7 @@ func (dispatchErrorTestSource) LoadAPI(code, version, name string) (*meta.API, e
 		Parameters: []meta.Parameter{{
 			Name: "instance_type", RawName: "InstanceType", Type: meta.TypeString,
 			Position: meta.PosQuery, Required: true, Options: []string{"--instance-type"},
+			Enum: []string{"ecs.g6"},
 		}},
 	}, nil
 }
@@ -96,6 +97,9 @@ func TestDispatchPreservesMissingRequiredDetails(t *testing.T) {
 		Args: []string{"demo", "run-thing"},
 		Out:  io.Discard,
 	})
+	if got, want := err.Error(), "missing required parameter(s): --instance-type"; got != want {
+		t.Fatalf("Dispatch error text = %q, want %q", got, want)
+	}
 
 	var usage *UsageError
 	if !errors.As(err, &usage) || usage.Code != "MISSING_REQUIRED_PARAMETER" {
@@ -104,6 +108,38 @@ func TestDispatchPreservesMissingRequiredDetails(t *testing.T) {
 	var missing *runtime.MissingRequiredError
 	if !errors.As(err, &missing) || !reflect.DeepEqual(missing.Flags, []string{"--instance-type"}) {
 		t.Fatalf("Dispatch error does not preserve MissingRequiredError: %v", err)
+	}
+}
+
+func TestDispatchConstraintValidationFollowsAIMode(t *testing.T) {
+	args := []string{"demo", "run-thing", "--instance-type", "ecs.invalid"}
+
+	err := newDispatchErrorTestEngine().Dispatch(Request{
+		Args: args, Out: io.Discard, AIMode: true,
+	})
+	var usage *UsageError
+	if !errors.As(err, &usage) || usage.Code != "INVALID_PARAMETER_VALUE" {
+		t.Fatalf("AI mode error = %#v, want INVALID_PARAMETER_VALUE UsageError", err)
+	}
+	var violation *runtime.ConstraintViolationError
+	if !errors.As(err, &violation) || violation.Flag != "--instance-type" ||
+		violation.Constraint != "enum" {
+		t.Fatalf("AI mode did not preserve constraint violation: %v", err)
+	}
+
+	credentialCause := errors.New("stop after validation")
+	err = newDispatchErrorTestEngine().Dispatch(Request{
+		Args: args, Out: io.Discard,
+		Host: runtime.StaticHost{CredErr: credentialCause},
+	})
+	if errors.As(err, &usage) && usage.Code == "INVALID_PARAMETER_VALUE" {
+		t.Fatalf("human mode unexpectedly validated metadata constraints: %v", err)
+	}
+	if errors.As(err, &violation) {
+		t.Fatalf("human mode unexpectedly returned constraint violation: %v", err)
+	}
+	if !errors.Is(err, credentialCause) {
+		t.Fatalf("human mode did not continue past constraints: %v", err)
 	}
 }
 

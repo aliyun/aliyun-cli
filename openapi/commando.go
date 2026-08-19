@@ -560,6 +560,9 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 	if err != nil {
 		return err
 	}
+	if err = validateLegacyConstraints(ctx, api); err != nil {
+		return err
+	}
 	err = apiContext.Prepare(ctx)
 	if err != nil {
 		return err
@@ -641,6 +644,9 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	// create specific invoker
 	invoker, err := c.createInvoker(ctx, productCode, apiOrMethod, path)
 	if err != nil {
+		return err
+	}
+	if err = validateLegacyConstraints(ctx, legacyAPIForInvoker(invoker)); err != nil {
 		return err
 	}
 	err = invoker.Prepare(ctx)

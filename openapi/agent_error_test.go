@@ -109,6 +109,39 @@ func TestNormalizeAgentErrorLocalUsageErrors(t *testing.T) {
 	})
 }
 
+func TestNormalizeAgentErrorConstraintViolations(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{
+			name: "runtime kebab constraint",
+			err: &runtime.ConstraintViolationError{
+				Parameter: "mode", Flag: "--mode", Path: "Mode",
+				Constraint: "enum", Actual: "readonly",
+				Allowed: []string{"ReadOnly", "ReadWrite"},
+			},
+		},
+		{
+			name: "legacy PascalCase constraint",
+			err: &ConstraintViolationError{
+				Flag: "Mode", Value: "readonly", Constraint: "enum",
+				Allowed: []string{"ReadOnly", "ReadWrite"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			envelope := agentEnvelope(t, tt.err, "ecs", "RunInstances")
+			assert.Equal(t, cli.UsageErrorCategory, envelope.Category)
+			assert.Equal(t, "INVALID_PARAMETER_VALUE", envelope.Code)
+			assert.Equal(t, []string{"ReadOnly", "ReadWrite"}, envelope.Suggestions)
+			assert.Equal(t, "aliyun ecs RunInstances --help", envelope.Recovery.Command)
+			assert.False(t, envelope.Retryable)
+		})
+	}
+}
+
 func TestNormalizeAgentErrorCredentialFailure(t *testing.T) {
 	cause := errors.New("profile is not configured")
 	tests := []error{

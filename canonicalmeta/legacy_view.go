@@ -29,6 +29,80 @@ type LegacyParameterView struct {
 	isWildcard       bool   // inherited from the canonical parameter for V1 views
 }
 
+// Constraints contains optional schema restrictions used by AI-mode validation.
+type Constraints struct {
+	Enum    []string
+	Minimum string
+	Maximum string
+	Pattern string
+}
+
+// Constraints returns canonical restrictions for this parameter. V1-only
+// compatibility projections intentionally have no constraints.
+func (v *LegacyParameterView) Constraints() Constraints {
+	switch v.source {
+	case SourceCanonical:
+		if v.canonical.Type == "array" && isScalarTypeShape(v.canonical.Element) {
+			return constraintsFromTypeShape(v.canonical.Element)
+		}
+		return Constraints{
+			Enum:    v.canonical.Enum,
+			Minimum: v.canonical.Minimum,
+			Maximum: v.canonical.Maximum,
+			Pattern: v.canonical.Pattern,
+		}
+	case SourceField:
+		if v.field.Type == "array" && isScalarTypeShape(v.field.Element) {
+			return constraintsFromTypeShape(v.field.Element)
+		}
+		return Constraints{
+			Enum:    v.field.Enum,
+			Minimum: v.field.Minimum,
+			Maximum: v.field.Maximum,
+			Pattern: v.field.Pattern,
+		}
+	default:
+		return Constraints{}
+	}
+}
+
+// ConstraintType returns the scalar type to which Constraints applies. Legacy
+// RepeatList leaves expose the array element as one flag value at a time.
+func (v *LegacyParameterView) ConstraintType() string {
+	switch v.source {
+	case SourceCanonical:
+		if v.canonical.Type == "array" && isScalarTypeShape(v.canonical.Element) {
+			return v.canonical.Element.Type
+		}
+	case SourceField:
+		if v.field.Type == "array" && isScalarTypeShape(v.field.Element) {
+			return v.field.Element.Type
+		}
+	}
+	return v.LegacyType()
+}
+
+func isScalarTypeShape(shape *TypeShape) bool {
+	if shape == nil {
+		return false
+	}
+	switch strings.ToLower(shape.Type) {
+	case "string", "int", "integer", "int32", "int64", "long", "float", "double", "number", "bool", "boolean":
+		return true
+	default:
+		return false
+	}
+}
+
+func constraintsFromTypeShape(shape *TypeShape) Constraints {
+	return Constraints{
+		Enum:    shape.Enum,
+		Minimum: shape.Minimum,
+		Maximum: shape.Maximum,
+		Pattern: shape.Pattern,
+	}
+}
+
 // NewCanonicalView creates a view wrapping a Canonical parameter.
 func NewCanonicalView(p *Parameter) *LegacyParameterView {
 	return &LegacyParameterView{

@@ -156,16 +156,22 @@ func buildUserAgentSuffix(ctx *cli.Context) string {
 		}
 	}
 
-	forceOn := flagAssigned(ctx, "cli-ai-mode")
-	forceOff := flagAssigned(ctx, "no-cli-ai-mode")
+	cfg, enabled := aiModeForCommand(ctx)
+	if enabled {
+		suf := aimode.RequestUserAgentSuffixForCommand(cfg, true, false)
+		parts = append(parts, suf)
+	}
+	return strings.TrimSpace(strings.Join(parts, " "))
+}
+
+func aiModeForCommand(ctx *cli.Context) (*aimode.AiConfig, bool) {
 	cfg, err := aimode.Load(config.GetConfigDir(ctx))
 	if err != nil {
 		cfg = aimode.DefaultAiConfig()
 	}
-	if suf := aimode.RequestUserAgentSuffixForCommand(cfg, forceOn, forceOff); suf != "" {
-		parts = append(parts, suf)
-	}
-	return strings.TrimSpace(strings.Join(parts, " "))
+	forceOn := flagAssigned(ctx, "cli-ai-mode")
+	forceOff := flagAssigned(ctx, "no-cli-ai-mode")
+	return cfg, aimode.EnabledForCommand(cfg, forceOn, forceOff)
 }
 
 func flagAssigned(ctx *cli.Context, name string) bool {
@@ -220,8 +226,11 @@ func (h *cliHost) Credential() (credentialsv2.Credential, error) {
 
 // sharedEngine is the process-wide engine, built once. The top-level product router dispatches through it and resolves only the requested product.
 var (
-	engineOnce sync.Once
-	engineInst *engine.Engine
+	engineOnce     sync.Once
+	engineInst     *engine.Engine
+	engineDispatch = func(request engine.Request) error {
+		return Engine().Dispatch(request)
+	}
 )
 
 func Engine() *engine.Engine {
@@ -260,12 +269,14 @@ func Dispatch(ctx *cli.Context, rawArgs []string) error {
 	} else {
 		i18n.SetLanguage(lang)
 	}
+	_, aiModeEnabled := aiModeForCommand(ctx)
 
-	return Engine().Dispatch(engine.Request{
-		Args: rawArgs,
-		Out:  ctx.Stdout(),
-		Lang: lang,
-		Host: host,
+	return engineDispatch(engine.Request{
+		Args:   rawArgs,
+		Out:    ctx.Stdout(),
+		Lang:   lang,
+		Host:   host,
+		AIMode: aiModeEnabled,
 	})
 }
 

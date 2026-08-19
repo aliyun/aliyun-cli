@@ -60,6 +60,18 @@ func normalizeAgentError(err error, args []string) error {
 			stableStrings(missing.Flags), false, "", commandHelp(args))
 	}
 
+	var runtimeConstraint *runtime.ConstraintViolationError
+	if errors.As(err, &runtimeConstraint) {
+		return newAgentError(err, cli.UsageErrorCategory, "INVALID_PARAMETER_VALUE", runtimeConstraint.Error(),
+			stableStrings(runtimeConstraint.Allowed), false, "", commandHelp(args))
+	}
+
+	var legacyConstraint *ConstraintViolationError
+	if errors.As(err, &legacyConstraint) {
+		return newAgentError(err, cli.UsageErrorCategory, "INVALID_PARAMETER_VALUE", legacyConstraint.Error(),
+			stableStrings(legacyConstraint.Allowed), false, "", commandHelp(args))
+	}
+
 	var invalidParameter *InvalidParameterError
 	if errors.As(err, &invalidParameter) {
 		return newAgentError(err, cli.UsageErrorCategory, "UNKNOWN_FLAG", invalidParameter.Error(),
