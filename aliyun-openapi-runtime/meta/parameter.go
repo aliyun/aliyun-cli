@@ -34,10 +34,12 @@ type Parameter struct {
 	Position Position // top-level only; inner fields ignore this
 	Required bool
 
-	Enum    []string // legal values for scalar types
-	Minimum string   // inclusive numeric lower bound
-	Maximum string   // inclusive numeric upper bound
-	Pattern string   // regular expression for string values
+	Enum      []string // legal values for scalar types
+	Minimum   string   // inclusive numeric lower bound
+	Maximum   string   // inclusive numeric upper bound
+	MinLength string   // inclusive minimum Unicode code-point count
+	MaxLength string   // inclusive maximum Unicode code-point count
+	Pattern   string   // regular expression for string values
 
 	// UI.
 	Options     []string    // command-line aliases, e.g. ["--region-id"]

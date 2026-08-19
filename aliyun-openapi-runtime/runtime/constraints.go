@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 )
@@ -92,22 +93,28 @@ func validateConstraintValue(parameter *meta.Parameter, value any, context const
 	}
 
 	actual := constraintActual(value)
-	for _, allowed := range parameter.Enum {
-		if actual == allowed {
-			goto enumValid
+	if len(parameter.Enum) > 0 {
+		matched := false
+		for _, allowed := range parameter.Enum {
+			if actual == allowed {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return constraintError(context, parameter, "enum", actual, "", parameter.Enum)
 		}
 	}
-	if len(parameter.Enum) > 0 {
-		return constraintError(context, parameter, "enum", actual, "", parameter.Enum)
-	}
 
-enumValid:
 	switch parameter.Type {
 	case meta.TypeInteger, meta.TypeLong, meta.TypeFloat:
 		if err := validateNumericConstraints(parameter, value, actual, context); err != nil {
 			return err
 		}
 	case meta.TypeString:
+		if err := validateStringLengthConstraints(parameter, actual, context); err != nil {
+			return err
+		}
 		if parameter.Pattern != "" {
 			expression, err := regexp.Compile(parameter.Pattern)
 			if err == nil && !expression.MatchString(actual) {
@@ -163,6 +170,21 @@ enumValid:
 			if err := validateConstraintValue(parameter.ValueType, item, child); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func validateStringLengthConstraints(parameter *meta.Parameter, actual string, context constraintContext) error {
+	length := uint64(utf8.RuneCountInString(actual))
+	if parameter.MinLength != "" {
+		if minimum, err := strconv.ParseUint(parameter.MinLength, 10, 64); err == nil && length < minimum {
+			return constraintError(context, parameter, "minLength", actual, parameter.MinLength, nil)
+		}
+	}
+	if parameter.MaxLength != "" {
+		if maximum, err := strconv.ParseUint(parameter.MaxLength, 10, 64); err == nil && length > maximum {
+			return constraintError(context, parameter, "maxLength", actual, parameter.MaxLength, nil)
 		}
 	}
 	return nil

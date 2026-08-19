@@ -301,6 +301,8 @@ type Argument struct {
 	Maximum       string                 `protobuf:"bytes,17,opt,name=maximum,proto3" json:"maximum,omitempty"`
 	Pattern       string                 `protobuf:"bytes,18,opt,name=pattern,proto3" json:"pattern,omitempty"`
 	Format        string                 `protobuf:"bytes,19,opt,name=format,proto3" json:"format,omitempty"`
+	MinLength     string                 `protobuf:"bytes,20,opt,name=min_length,json=minLength,proto3" json:"min_length,omitempty"`
+	MaxLength     string                 `protobuf:"bytes,21,opt,name=max_length,json=maxLength,proto3" json:"max_length,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -468,6 +470,20 @@ func (x *Argument) GetFormat() string {
 	return ""
 }
 
+func (x *Argument) GetMinLength() string {
+	if x != nil {
+		return x.MinLength
+	}
+	return ""
+}
+
+func (x *Argument) GetMaxLength() string {
+	if x != nil {
+		return x.MaxLength
+	}
+	return ""
+}
+
 // TypeShape is a depth-independent recursive description of a container
 // child. Arrays use element and maps use value at every level.
 type TypeShape struct {
@@ -481,6 +497,8 @@ type TypeShape struct {
 	Maximum       string                 `protobuf:"bytes,7,opt,name=maximum,proto3" json:"maximum,omitempty"`
 	Pattern       string                 `protobuf:"bytes,8,opt,name=pattern,proto3" json:"pattern,omitempty"`
 	Format        string                 `protobuf:"bytes,9,opt,name=format,proto3" json:"format,omitempty"`
+	MinLength     string                 `protobuf:"bytes,10,opt,name=min_length,json=minLength,proto3" json:"min_length,omitempty"`
+	MaxLength     string                 `protobuf:"bytes,11,opt,name=max_length,json=maxLength,proto3" json:"max_length,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -578,6 +596,20 @@ func (x *TypeShape) GetFormat() string {
 	return ""
 }
 
+func (x *TypeShape) GetMinLength() string {
+	if x != nil {
+		return x.MinLength
+	}
+	return ""
+}
+
+func (x *TypeShape) GetMaxLength() string {
+	if x != nil {
+		return x.MaxLength
+	}
+	return ""
+}
+
 var File_aliyun_openapi_meta_proto protoreflect.FileDescriptor
 
 const file_aliyun_openapi_meta_proto_rawDesc = "" +
@@ -614,7 +646,7 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\rreq_body_type\x18\b \x01(\tR\vreqBodyType\x12!\n" +
 	"\fcontent_type\x18\t \x01(\tR\vcontentType\x12*\n" +
 	"\x11has_wildcard_path\x18\n" +
-	" \x01(\bR\x0fhasWildcardPath\"\xd7\x04\n" +
+	" \x01(\bR\x0fhasWildcardPath\"\x95\x05\n" +
 	"\bArgument\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\braw_name\x18\x02 \x01(\tR\arawName\x12\x12\n" +
@@ -637,7 +669,11 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\aminimum\x18\x10 \x01(\tR\aminimum\x12\x18\n" +
 	"\amaximum\x18\x11 \x01(\tR\amaximum\x12\x18\n" +
 	"\apattern\x18\x12 \x01(\tR\apattern\x12\x16\n" +
-	"\x06format\x18\x13 \x01(\tR\x06format\"\xc9\x02\n" +
+	"\x06format\x18\x13 \x01(\tR\x06format\x12\x1d\n" +
+	"\n" +
+	"min_length\x18\x14 \x01(\tR\tminLength\x12\x1d\n" +
+	"\n" +
+	"max_length\x18\x15 \x01(\tR\tmaxLength\"\x87\x03\n" +
 	"\tTypeShape\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x128\n" +
 	"\x06fields\x18\x02 \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\x06fields\x12;\n" +
@@ -647,7 +683,12 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\aminimum\x18\x06 \x01(\tR\aminimum\x12\x18\n" +
 	"\amaximum\x18\a \x01(\tR\amaximum\x12\x18\n" +
 	"\apattern\x18\b \x01(\tR\apattern\x12\x16\n" +
-	"\x06format\x18\t \x01(\tR\x06formatBFZDgithub.com/aliyun/aliyun-openapi-runtime/source/format/pbmeta;pbmetab\x06proto3"
+	"\x06format\x18\t \x01(\tR\x06format\x12\x1d\n" +
+	"\n" +
+	"min_length\x18\n" +
+	" \x01(\tR\tminLength\x12\x1d\n" +
+	"\n" +
+	"max_length\x18\v \x01(\tR\tmaxLengthBFZDgithub.com/aliyun/aliyun-openapi-runtime/source/format/pbmeta;pbmetab\x06proto3"
 
 var (
 	file_aliyun_openapi_meta_proto_rawDescOnce sync.Once

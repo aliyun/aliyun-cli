@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"math/big"
 	"regexp"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -21,6 +23,8 @@ type ConstraintViolationError struct {
 	Allowed    []string
 	Minimum    string
 	Maximum    string
+	MinLength  string
+	MaxLength  string
 	Pattern    string
 }
 
@@ -32,6 +36,10 @@ func (e *ConstraintViolationError) Error() string {
 		return fmt.Sprintf("--%s value %q must be greater than or equal to %s", e.Flag, e.Value, e.Minimum)
 	case "maximum":
 		return fmt.Sprintf("--%s value %q must be less than or equal to %s", e.Flag, e.Value, e.Maximum)
+	case "minLength":
+		return fmt.Sprintf("--%s value %q must contain at least %s characters", e.Flag, e.Value, e.MinLength)
+	case "maxLength":
+		return fmt.Sprintf("--%s value %q must contain at most %s characters", e.Flag, e.Value, e.MaxLength)
 	case "pattern":
 		return fmt.Sprintf("--%s value %q does not match pattern %q", e.Flag, e.Value, e.Pattern)
 	default:
@@ -115,6 +123,20 @@ func validateLegacyValue(flag, value string, param *canonicalmeta.LegacyParamete
 	constraintType := param.ConstraintType()
 	if err := validateLegacyBounds(flag, value, constraintType, constraints); err != nil {
 		return err
+	}
+
+	if strings.EqualFold(constraintType, "string") {
+		length := uint64(utf8.RuneCountInString(value))
+		if minimum, err := strconv.ParseUint(constraints.MinLength, 10, 64); constraints.MinLength != "" && err == nil && length < minimum {
+			return &ConstraintViolationError{
+				Flag: flag, Value: value, Constraint: "minLength", MinLength: constraints.MinLength,
+			}
+		}
+		if maximum, err := strconv.ParseUint(constraints.MaxLength, 10, 64); constraints.MaxLength != "" && err == nil && length > maximum {
+			return &ConstraintViolationError{
+				Flag: flag, Value: value, Constraint: "maxLength", MaxLength: constraints.MaxLength,
+			}
+		}
 	}
 
 	if constraints.Pattern != "" && strings.EqualFold(constraintType, "string") {

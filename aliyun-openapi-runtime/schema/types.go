@@ -191,15 +191,17 @@ type OperationConfig struct {
 // is independent of nesting depth: arrays use Element, maps use Value, and
 // objects use Fields.
 type TypeShape struct {
-	Type    string               `json:"type"`
-	Format  string               `json:"format,omitempty"`
-	Enum    []string             `json:"enum,omitempty"`
-	Minimum string               `json:"minimum,omitempty"`
-	Maximum string               `json:"maximum,omitempty"`
-	Pattern string               `json:"pattern,omitempty"`
-	Fields  []ArgumentDefinition `json:"fields,omitempty"`
-	Element *TypeShape           `json:"element,omitempty"`
-	Value   *TypeShape           `json:"value,omitempty"`
+	Type      string               `json:"type"`
+	Format    string               `json:"format,omitempty"`
+	Enum      []string             `json:"enum,omitempty"`
+	Minimum   string               `json:"minimum,omitempty"`
+	Maximum   string               `json:"maximum,omitempty"`
+	MinLength string               `json:"minLength,omitempty"`
+	MaxLength string               `json:"maxLength,omitempty"`
+	Pattern   string               `json:"pattern,omitempty"`
+	Fields    []ArgumentDefinition `json:"fields,omitempty"`
+	Element   *TypeShape           `json:"element,omitempty"`
+	Value     *TypeShape           `json:"value,omitempty"`
 }
 
 // ArgumentDefinition describes a single CLI parameter.
@@ -211,6 +213,8 @@ type ArgumentDefinition struct {
 	Enum       []string             `json:"enum,omitempty"`
 	Minimum    string               `json:"minimum,omitempty"`
 	Maximum    string               `json:"maximum,omitempty"`
+	MinLength  string               `json:"minLength,omitempty"`
+	MaxLength  string               `json:"maxLength,omitempty"`
 	Pattern    string               `json:"pattern,omitempty"`
 	Options    []string             `json:"options,omitempty"`
 	HelpZH     string               `json:"help_zh,omitempty"`

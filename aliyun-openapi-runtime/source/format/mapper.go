@@ -114,6 +114,8 @@ func mapArgument(a *crschema.ArgumentDefinition) meta.Parameter {
 		Enum:        append([]string(nil), a.Enum...),
 		Minimum:     a.Minimum,
 		Maximum:     a.Maximum,
+		MinLength:   a.MinLength,
+		MaxLength:   a.MaxLength,
 		Pattern:     a.Pattern,
 		Options:     a.Options,
 		Description: meta.Description{ZH: a.HelpZH, EN: a.HelpEN},
@@ -138,11 +140,13 @@ func mapTypeShape(s *crschema.TypeShape) *meta.Parameter {
 		return nil
 	}
 	shape := &meta.Parameter{
-		Type:    mapType(s.Type),
-		Enum:    append([]string(nil), s.Enum...),
-		Minimum: s.Minimum,
-		Maximum: s.Maximum,
-		Pattern: s.Pattern,
+		Type:      mapType(s.Type),
+		Enum:      append([]string(nil), s.Enum...),
+		Minimum:   s.Minimum,
+		Maximum:   s.Maximum,
+		MinLength: s.MinLength,
+		MaxLength: s.MaxLength,
+		Pattern:   s.Pattern,
 	}
 	switch shape.Type {
 	case meta.TypeObject:

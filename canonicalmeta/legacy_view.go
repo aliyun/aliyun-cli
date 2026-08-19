@@ -31,10 +31,12 @@ type LegacyParameterView struct {
 
 // Constraints contains optional schema restrictions used by AI-mode validation.
 type Constraints struct {
-	Enum    []string
-	Minimum string
-	Maximum string
-	Pattern string
+	Enum      []string
+	Minimum   string
+	Maximum   string
+	MinLength string
+	MaxLength string
+	Pattern   string
 }
 
 // Constraints returns canonical restrictions for this parameter. V1-only
@@ -46,20 +48,24 @@ func (v *LegacyParameterView) Constraints() Constraints {
 			return constraintsFromTypeShape(v.canonical.Element)
 		}
 		return Constraints{
-			Enum:    v.canonical.Enum,
-			Minimum: v.canonical.Minimum,
-			Maximum: v.canonical.Maximum,
-			Pattern: v.canonical.Pattern,
+			Enum:      v.canonical.Enum,
+			Minimum:   v.canonical.Minimum,
+			Maximum:   v.canonical.Maximum,
+			MinLength: v.canonical.MinLength,
+			MaxLength: v.canonical.MaxLength,
+			Pattern:   v.canonical.Pattern,
 		}
 	case SourceField:
 		if v.field.Type == "array" && isScalarTypeShape(v.field.Element) {
 			return constraintsFromTypeShape(v.field.Element)
 		}
 		return Constraints{
-			Enum:    v.field.Enum,
-			Minimum: v.field.Minimum,
-			Maximum: v.field.Maximum,
-			Pattern: v.field.Pattern,
+			Enum:      v.field.Enum,
+			Minimum:   v.field.Minimum,
+			Maximum:   v.field.Maximum,
+			MinLength: v.field.MinLength,
+			MaxLength: v.field.MaxLength,
+			Pattern:   v.field.Pattern,
 		}
 	default:
 		return Constraints{}
@@ -96,10 +102,12 @@ func isScalarTypeShape(shape *TypeShape) bool {
 
 func constraintsFromTypeShape(shape *TypeShape) Constraints {
 	return Constraints{
-		Enum:    shape.Enum,
-		Minimum: shape.Minimum,
-		Maximum: shape.Maximum,
-		Pattern: shape.Pattern,
+		Enum:      shape.Enum,
+		Minimum:   shape.Minimum,
+		Maximum:   shape.Maximum,
+		MinLength: shape.MinLength,
+		MaxLength: shape.MaxLength,
+		Pattern:   shape.Pattern,
 	}
 }
 

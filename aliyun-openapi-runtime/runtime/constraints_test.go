@@ -55,6 +55,32 @@ func TestValidateConstraintsNumericBoundsAreInclusiveAndExact(t *testing.T) {
 	}
 }
 
+func TestValidateConstraintsStringLengthUsesUnicodeCodePoints(t *testing.T) {
+	parameter := meta.Parameter{
+		Name: "name", RawName: "Name", Type: meta.TypeString,
+		MinLength: "2", MaxLength: "3",
+	}
+	api := constraintAPI(parameter)
+	for _, value := range []string{"阿里", "a云c"} {
+		if err := ValidateConstraints(api, map[string]any{"Name": value}, false); err != nil {
+			t.Fatalf("inclusive length rejected %q: %v", value, err)
+		}
+	}
+
+	err := ValidateConstraints(api, map[string]any{"Name": "云"}, false)
+	var violation *ConstraintViolationError
+	if !errors.As(err, &violation) || violation.Constraint != "minLength" ||
+		violation.Expected != "2" {
+		t.Fatalf("minLength violation = %#v, error = %v", violation, err)
+	}
+
+	err = ValidateConstraints(api, map[string]any{"Name": "阿里云CLI"}, false)
+	if !errors.As(err, &violation) || violation.Constraint != "maxLength" ||
+		violation.Expected != "3" {
+		t.Fatalf("maxLength violation = %#v, error = %v", violation, err)
+	}
+}
+
 func TestValidateConstraintsRecursesObjectArrayAndMap(t *testing.T) {
 	parameter := meta.Parameter{
 		Name: "config", RawName: "Config", Type: meta.TypeObject, Options: []string{"--config"},
@@ -93,7 +119,7 @@ func TestValidateConstraintsRecursesObjectArrayAndMap(t *testing.T) {
 func TestValidateConstraintsFailsOpenForInvalidMetadata(t *testing.T) {
 	parameters := []meta.Parameter{
 		{Name: "count", RawName: "Count", Type: meta.TypeInteger, Minimum: "not-a-number", Maximum: "also-invalid"},
-		{Name: "name", RawName: "Name", Type: meta.TypeString, Pattern: "["},
+		{Name: "name", RawName: "Name", Type: meta.TypeString, MinLength: "bad", MaxLength: "-1", Pattern: "["},
 	}
 	api := &meta.API{Parameters: parameters}
 	args := map[string]any{"Count": json.Number("10"), "Name": "anything"}

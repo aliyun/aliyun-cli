@@ -50,6 +50,10 @@ func legacyConstraintAPI() *canonicalmeta.API {
 			Minimum: "1", Maximum: "3",
 		},
 		{
+			Name: "name", RawName: "Name", Type: "string", Location: "query",
+			MinLength: "2", MaxLength: "3",
+		},
+		{
 			Name: "tag", RawName: "Tag", Type: "array", Location: "query",
 			Element: &canonicalmeta.TypeShape{Type: "object", Fields: []canonicalmeta.Field{{
 				Name: "key", RawName: "Key", Type: "string",
@@ -72,6 +76,8 @@ func TestValidateLegacyConstraintsPascalCaseAndNestedLeaf(t *testing.T) {
 	}{
 		{name: "scalar enum is case sensitive", flag: "Mode", value: "readonly", constraint: "enum"},
 		{name: "integer lower bound is inclusive", flag: "Count", value: "0", constraint: "minimum"},
+		{name: "string minimum length", flag: "Name", value: "云", constraint: "minLength"},
+		{name: "string maximum length", flag: "Name", value: "阿里云CLI", constraint: "maxLength"},
 		{name: "nested repeat-list leaf", flag: "Tag.1.Key", value: "NOT_LOWER", constraint: "pattern"},
 		{name: "scalar repeat-list element", flag: "Zone.1", value: "c", constraint: "enum"},
 	}
@@ -95,6 +101,13 @@ func TestValidateLegacyConstraintsPascalCaseAndNestedLeaf(t *testing.T) {
 		assignLegacyUnknown(t, ctx, "Count", value)
 		if err := validateLegacyConstraints(ctx, legacyConstraintAPI()); err != nil {
 			t.Fatalf("inclusive bound rejected %q: %v", value, err)
+		}
+	}
+	for _, value := range []string{"阿里", "a云c"} {
+		ctx := legacyConstraintContext(t, true, false)
+		assignLegacyUnknown(t, ctx, "Name", value)
+		if err := validateLegacyConstraints(ctx, legacyConstraintAPI()); err != nil {
+			t.Fatalf("inclusive Unicode length rejected %q: %v", value, err)
 		}
 	}
 }
@@ -149,7 +162,7 @@ func TestValidateLegacyConstraintsFailOpenInvalidSchemaAndUnknownFlag(t *testing
 		},
 		{
 			Name: "text", RawName: "Text", Type: "string", Location: "query",
-			Pattern: "[",
+			MinLength: "bad", MaxLength: "-1", Pattern: "[",
 		},
 		{
 			Name: "body", RawName: "body", Type: "string", Location: "body",
