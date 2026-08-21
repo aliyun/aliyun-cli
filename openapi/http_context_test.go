@@ -48,14 +48,14 @@ func TestShouldUseOpenapi(t *testing.T) {
 		product := &meta.Product{Code: "DAS", Version: "2020-01-16"}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 		result := ShouldUseOpenapi(ctx, product)
-		assert.True(t, result)
+		assert.False(t, result)
 	})
 
 	t.Run("LowercaseDASProduct", func(t *testing.T) {
 		product := &meta.Product{Code: "das", Version: "2020-01-16"}
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 		result := ShouldUseOpenapi(ctx, product)
-		assert.True(t, result)
+		assert.False(t, result)
 	})
 }
 

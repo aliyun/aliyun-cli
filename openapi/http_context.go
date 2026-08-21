@@ -41,10 +41,10 @@ import (
 )
 
 func ShouldUseOpenapi(ctx *cli.Context, product *meta.Product) bool {
-	// These products are routed through the darabonba-openapi/v2 channel (v3 signature).
+	// SLS is routed through the darabonba-openapi/v2 channel (v3 signature).
 	// Should be applied to all products later.
 	switch strings.ToLower(product.Code) {
-	case "sls", "das":
+	case "sls":
 		return true
 	}
 	return false
@@ -312,7 +312,7 @@ func (a *HttpContext) Call() error {
 var httpContextExecuteFunc = func(a *HttpContext) (map[string]interface{}, error) {
 	// Products with a self-built gateway (e.g. sls) plug in a Spi that handles
 	// host/endpoint management, so they go through Execute. Products without a
-	// gateway (e.g. das) use CallApi, which signs and sends the request directly
+	// gateway use CallApi, which signs and sends the request directly
 	// with the v3 (ACS3-HMAC-SHA256) algorithm and no Spi dependency.
 	if a.openapiClient.Spi != nil {
 		return a.openapiClient.Execute(a.openapiParams, a.openapiRequest, a.openapiRuntime)
