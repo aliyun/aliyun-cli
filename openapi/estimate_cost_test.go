@@ -15,6 +15,9 @@ package openapi
 
 import (
 	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -108,6 +111,93 @@ func TestResolveEstimateCostApiName(t *testing.T) {
 	assert.Contains(t, err.Error(), "cannot resolve the api name")
 }
 
+// quoteServer stands up a TLS stub of the quote endpoint, points
+// --estimate-cost at it and relaxes cert verification (self-signed), so the
+// full request path — signing, transport, status handling — is exercised
+// rather than the body classifier alone. Returns the ready command context.
+func quoteServer(t *testing.T, status int, body string) (*cli.Context, *bytes.Buffer, *config.Profile) {
+	t.Helper()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv(estimateCostEndpointEnv, srv.Listener.Addr().String())
+
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, w)
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	AddFlags(cmd.Flags())
+	config.AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	config.SkipSecureVerify(ctx.Flags()).SetAssigned(true)
+
+	profile := config.NewProfile("estimate-cost-test")
+	profile.Mode = "AK"
+	profile.AccessKeyId = "test-ak"
+	profile.AccessKeySecret = "test-secret"
+	profile.RegionId = "cn-hangzhou"
+	return ctx, w, &profile
+}
+
+func TestInvokeEstimateCostCostIrrelevantSucceeds(t *testing.T) {
+	// The whole point of the change: a confirmed-free API arrives as a 4xx,
+	// and the call must still succeed so the command exits 0.
+	ctx, _, profile := quoteServer(t, http.StatusBadRequest,
+		`{"RequestId":"req-pnr","Code":"PricingNotRequired","Message":"该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。","HostId":"h"}`)
+
+	out, err := invokeEstimateCost(ctx, profile, "hbr", "2017-09-08", "EnableBackupPlan", map[string]interface{}{})
+	assert.Nil(t, err)
+
+	var got costIrrelevantQuote
+	assert.Nil(t, json.Unmarshal([]byte(out), &got))
+	assert.True(t, got.CostIrrelevant)
+	assert.Equal(t, "hbr", got.PopCode)
+	assert.Equal(t, "2017-09-08", got.PopVersion)
+	assert.Equal(t, "EnableBackupPlan", got.ApiName)
+	assert.Equal(t, costIrrelevantMessage, got.Message)
+
+	// And it must not trip the exit-code contract on the way out.
+	assert.Nil(t, estimateCostBusinessError(out))
+}
+
+func TestInvokeEstimateCostNotSupportedStillFails(t *testing.T) {
+	// The sibling code must keep failing — "cannot be quoted" is a real error.
+	ctx, _, profile := quoteServer(t, http.StatusNotFound,
+		`{"RequestId":"req-pns","Code":"PricingNotSupported","Message":"no pricing","HostId":"h"}`)
+
+	out, err := invokeEstimateCost(ctx, profile, "Ecs", "2014-05-26", "DescribeInstances", map[string]interface{}{})
+	assert.Equal(t, "", out)
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "no pricing information for Ecs/2014-05-26/DescribeInstances")
+}
+
+func TestInvokeEstimateCostSuccessBodyPassesThrough(t *testing.T) {
+	// A normal 2xx quote is untouched by the cost-irrelevant handling.
+	ctx, _, profile := quoteServer(t, http.StatusOK, `{"price":{"originalAmount":0.178},"requestId":"req-ok"}`)
+
+	out, err := invokeEstimateCost(ctx, profile, "Ecs", "2014-05-26", "RunInstances", map[string]interface{}{})
+	assert.Nil(t, err)
+	assert.Contains(t, out, "originalAmount")
+	assert.NotContains(t, out, "costIrrelevant")
+}
+
+func TestProcessEstimateCostByTripleCostIrrelevantPrintsAndSucceeds(t *testing.T) {
+	// End-to-end through the by-triple entry point: the document is printed
+	// and no error is returned, which is what makes the command exit 0.
+	ctx, w, profile := quoteServer(t, http.StatusBadRequest,
+		`{"RequestId":"req-pnr","Code":"PricingNotRequired","Message":"...","HostId":"h"}`)
+	command := NewCommando(w, *profile)
+
+	product := &meta.Product{Code: "tablestore", Version: "2020-12-09"}
+	err := command.processEstimateCostByTriple(ctx, product, "2020-12-09", "CreateAgentStorage")
+	assert.Nil(t, err)
+	assert.Contains(t, w.String(), `"costIrrelevant": true`)
+	assert.Contains(t, w.String(), costIrrelevantMessage)
+}
+
 func TestTranslateEstimateCostErrorPassthrough(t *testing.T) {
 	// Non-server errors fall through unchanged so callers see the original
 	// network/transport error instead of a misleading "pricing rejected" tip.
@@ -116,8 +206,8 @@ func TestTranslateEstimateCostErrorPassthrough(t *testing.T) {
 }
 
 func TestTranslateEstimateCostErrorPricingNotSupported(t *testing.T) {
-	// The common "this API isn't billable" case — must be turned into the
-	// friendly hint, not a raw error string with the upstream Code embedded.
+	// "The quote cannot be produced" case — must be turned into the friendly
+	// hint, not a raw error string with the upstream Code embedded.
 	body := `{"RequestId":"req-pns","Code":"PricingNotSupported","Message":"no pricing","HostId":"host"}`
 	serverErr := sdkerrors.NewServerError(404, body, "")
 	err := translateEstimateCostError("Ecs", "2014-05-26", "DescribeRegions", serverErr)
@@ -125,7 +215,89 @@ func TestTranslateEstimateCostErrorPricingNotSupported(t *testing.T) {
 	assert.Contains(t, err.Error(), "no pricing information for Ecs/2014-05-26/DescribeRegions")
 	tip, _ := err.(cli.ErrorWithTip)
 	assert.NotNil(t, tip)
-	assert.Contains(t, tip.GetTip(""), "incurs no cost or has no pricing mapping registered yet")
+	assert.Contains(t, tip.GetTip(""), "cannot be quoted")
+	// The tip must not let a reader conclude the call is free — that is the
+	// exact conflation PricingNotRequired exists to remove, and reading it the
+	// wrong way is a billing-relevant mistake.
+	assert.Contains(t, tip.GetTip(""), "does not mean the call is free")
+	assert.NotContains(t, tip.GetTip(""), "either incurs no cost")
+}
+
+func TestTranslateEstimateCostErrorLeavesPricingNotRequiredAlone(t *testing.T) {
+	// PricingNotRequired is intercepted in invokeEstimateCost and never
+	// reaches the error translator; if it ever did, it must not be dressed up
+	// as one of the failure cases.
+	body := `{"RequestId":"req-pnr","Code":"PricingNotRequired","Message":"free","HostId":"host"}`
+	serverErr := sdkerrors.NewServerError(400, body, "")
+	err := translateEstimateCostError("hbr", "2017-09-08", "EnableBackupPlan", serverErr)
+	assert.Equal(t, serverErr, err)
+}
+
+// TestCostIrrelevantQuoteMarshals guards the assumption that lets
+// newCostIrrelevantQuote ignore the json.Marshal error: the document is a bool
+// and four strings, which cannot fail to marshal. If someone later adds a field
+// that can (a channel, a func, a failing MarshalJSON), this test breaks loudly
+// at build time — better than a runtime branch that could silently report a
+// free API as unquotable, which is a billing-relevant wrong answer.
+func TestCostIrrelevantQuoteMarshals(t *testing.T) {
+	out := newCostIrrelevantQuote("Ecs", "2014-05-26", "RunInstances")
+	assert.JSONEq(t, `{
+		"costIrrelevant": true,
+		"popCode": "Ecs",
+		"popVersion": "2014-05-26",
+		"apiName": "RunInstances",
+		"message": "`+costIrrelevantMessage+`"
+	}`, out)
+}
+
+func TestNewCostIrrelevantQuoteCarriesTripleAndEnglishMessage(t *testing.T) {
+	out := newCostIrrelevantQuote("hbr", "2017-09-08", "EnableBackupPlan")
+
+	var got costIrrelevantQuote
+	assert.Nil(t, json.Unmarshal([]byte(out), &got))
+	assert.True(t, got.CostIrrelevant)
+	assert.Equal(t, "hbr", got.PopCode)
+	assert.Equal(t, "2017-09-08", got.PopVersion)
+	assert.Equal(t, "EnableBackupPlan", got.ApiName)
+	assert.Equal(t, costIrrelevantMessage, got.Message)
+	// CLI output is read internationally and by scripts, so the wording is
+	// the CLI's own English text, never the server's localized message.
+	assert.NotContains(t, got.Message, "无需询价")
+}
+
+func TestCostIrrelevantFromErrorRecognisesPricingNotRequired(t *testing.T) {
+	body := `{"RequestId":"req-pnr","Code":"PricingNotRequired","Message":"该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。","HostId":"host"}`
+	serverErr := sdkerrors.NewServerError(400, body, "")
+
+	out, isCostIrrelevant := costIrrelevantFromError("hbr", "2017-09-08", "EnableBackupPlan", serverErr)
+	assert.True(t, isCostIrrelevant)
+
+	var got costIrrelevantQuote
+	assert.Nil(t, json.Unmarshal([]byte(out), &got))
+	assert.True(t, got.CostIrrelevant)
+	assert.Equal(t, "EnableBackupPlan", got.ApiName)
+	// Server sent a Chinese message; the CLI reports its own English wording.
+	assert.Equal(t, costIrrelevantMessage, got.Message)
+}
+
+func TestCostIrrelevantFromErrorPassesOtherErrorsThrough(t *testing.T) {
+	// Anything that is not PricingNotRequired must stay on the error path —
+	// especially PricingNotSupported, which means the opposite thing.
+	notSupported := sdkerrors.NewServerError(404,
+		`{"RequestId":"r","Code":"PricingNotSupported","Message":"no pricing","HostId":"h"}`, "")
+	_, isCostIrrelevant := costIrrelevantFromError("Ecs", "2014-05-26", "DescribeRegions", notSupported)
+	assert.False(t, isCostIrrelevant)
+
+	_, isCostIrrelevant = costIrrelevantFromError("Ecs", "2014-05-26", "RunInstances", assert.AnError)
+	assert.False(t, isCostIrrelevant)
+}
+
+func TestCostIrrelevantQuoteIsNotABusinessFailure(t *testing.T) {
+	// The exit-code contract: a confirmed-free answer must NOT fail the
+	// process. Scripts and agents gate on `$?`, and aborting on a free
+	// operation is precisely the behaviour this change removes.
+	out := newCostIrrelevantQuote("hbr", "2017-09-08", "EnableBackupPlan")
+	assert.Nil(t, estimateCostBusinessError(out))
 }
 
 func TestTranslateEstimateCostErrorInvalidParameter(t *testing.T) {
