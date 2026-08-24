@@ -209,6 +209,16 @@ func (v *LegacyParameterView) LegacyRequired() bool {
 	return false
 }
 
+func (v *LegacyParameterView) DocRequired() bool {
+	switch v.source {
+	case SourceCanonical:
+		return v.canonical.DocRequired
+	case SourceField:
+		return v.field.DocRequired
+	}
+	return false
+}
+
 // IsWildcard reports whether this path parameter replaces the complete path template.
 func (v *LegacyParameterView) IsWildcard() bool {
 	if v.source == SourceCanonical {

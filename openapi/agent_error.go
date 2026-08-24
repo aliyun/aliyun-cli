@@ -72,6 +72,12 @@ func normalizeAgentError(err error, args []string) error {
 			stableStrings(legacyConstraint.Allowed), false, "", commandHelp(args))
 	}
 
+	var legacyDocRequired *LegacyDocRequiredError
+	if errors.As(err, &legacyDocRequired) {
+		return newAgentError(err, cli.UsageErrorCategory, "MISSING_REQUIRED_PARAMETER", legacyDocRequired.Error(),
+			stableStrings(legacyDocRequired.Flags), false, "", commandHelp(args))
+	}
+
 	var invalidParameter *InvalidParameterError
 	if errors.As(err, &invalidParameter) {
 		return newAgentError(err, cli.UsageErrorCategory, "UNKNOWN_FLAG", invalidParameter.Error(),

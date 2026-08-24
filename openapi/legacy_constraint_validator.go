@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -26,6 +27,16 @@ type ConstraintViolationError struct {
 	MinLength  string
 	MaxLength  string
 	Pattern    string
+}
+
+// LegacyDocRequiredError reports AI-mode documentation-required parameters
+// missing from a PascalCase invocation.
+type LegacyDocRequiredError struct {
+	Flags []string
+}
+
+func (e *LegacyDocRequiredError) Error() string {
+	return "missing docRequired parameter(s): " + strings.Join(e.Flags, ", ")
 }
 
 func (e *ConstraintViolationError) Error() string {
@@ -78,6 +89,130 @@ func validateLegacyConstraints(ctx *cli.Context, api *canonicalmeta.API) error {
 		}
 	}
 	return nil
+}
+
+func validateLegacyDocRequired(ctx *cli.Context, api *canonicalmeta.API) error {
+	if api == nil || ctx == nil || ctx.UnknownFlags() == nil || !legacyAIModeEnabled(ctx) {
+		return nil
+	}
+
+	assigned := make(map[string]bool)
+	nonEmpty := make(map[string]bool)
+	for _, flag := range ctx.UnknownFlags().Flags() {
+		if flag != nil && flag.IsAssigned() && !isRawBodyFlag(flag.Name) {
+			assigned[flag.Name] = true
+			value, _ := flag.GetValue()
+			if value != "" {
+				nonEmpty[flag.Name] = true
+			}
+		}
+	}
+
+	rawBody := (BodyFlag(ctx.Flags()) != nil && BodyFlag(ctx.Flags()).IsAssigned()) ||
+		(BodyFileFlag(ctx.Flags()) != nil && BodyFileFlag(ctx.Flags()).IsAssigned())
+	missing := make(map[string]bool)
+	for _, parameter := range api.LegacyTopLevelParameters() {
+		if rawBody && (parameter.LegacyPosition() == "Body" || parameter.LegacyPosition() == "FormData") {
+			continue
+		}
+		validateLegacyDocRequiredNode(
+			parameter,
+			parameter.LegacyName(),
+			assigned,
+			nonEmpty,
+			missing,
+		)
+	}
+
+	if len(missing) == 0 {
+		return nil
+	}
+	flags := make([]string, 0, len(missing))
+	for flag := range missing {
+		flags = append(flags, "--"+flag)
+	}
+	sort.Strings(flags)
+	return &LegacyDocRequiredError{Flags: flags}
+}
+
+func validateLegacyDocRequiredNode(
+	parameter *canonicalmeta.LegacyParameterView,
+	path string,
+	assigned map[string]bool,
+	nonEmpty map[string]bool,
+	missing map[string]bool,
+) {
+	if parameter == nil {
+		return
+	}
+
+	children := parameter.LegacyChildren()
+	if len(children) > 0 {
+		instances := legacyRepeatListInstances(path, assigned)
+		if parameter.DocRequired() && len(instances) == 0 {
+			missing[path] = true
+		}
+		for _, instance := range instances {
+			for _, child := range children {
+				validateLegacyDocRequiredNode(
+					child,
+					instance+"."+child.LegacyName(),
+					assigned,
+					nonEmpty,
+					missing,
+				)
+			}
+		}
+		return
+	}
+
+	if parameter.IsLegacyRepeatList() {
+		if parameter.DocRequired() && len(legacyRepeatListInstances(path, nonEmpty)) == 0 {
+			missing[path] = true
+		}
+		return
+	}
+
+	if parameter.DocRequired() && !nonEmpty[path] {
+		missing[path] = true
+	}
+}
+
+func legacyRepeatListInstances(path string, assigned map[string]bool) []string {
+	prefix := path + "."
+	seen := make(map[string]bool)
+	for name := range assigned {
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		rest := strings.TrimPrefix(name, prefix)
+		index := rest
+		if dot := strings.IndexByte(rest, '.'); dot >= 0 {
+			index = rest[:dot]
+		}
+		if !isDecimalIndex(index) {
+			continue
+		}
+		seen[prefix+index] = true
+	}
+	instances := make([]string, 0, len(seen))
+	for instance := range seen {
+		instances = append(instances, instance)
+	}
+	sort.Strings(instances)
+	return instances
+}
+
+func isDecimalIndex(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func legacyAPIForInvoker(invoker Invoker) *canonicalmeta.API {
