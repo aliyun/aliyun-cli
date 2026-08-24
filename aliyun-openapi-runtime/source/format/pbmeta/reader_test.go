@@ -58,6 +58,7 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 				Name: "limit", RawName: "Limit", Type: "integer", Options: []string{"--limit"},
 				Location: "query", Example: "12****", Format: "int32",
 				Enum: []string{"1", "10"}, Minimum: "1", Maximum: "10",
+				DocRequired: true,
 			},
 			{
 				Name: "request_path", RawName: "requestPath", Type: "string",
@@ -68,7 +69,7 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 				Value: &TypeShape{
 					Type: "array",
 					Element: &TypeShape{Type: "object", Fields: []*Argument{{
-						Name: "enabled", RawName: "Enabled", Type: "boolean",
+						Name: "enabled", RawName: "Enabled", Type: "boolean", DocRequired: true,
 					}, {
 						Name: "name", RawName: "Name", Type: "string",
 						Pattern: "^[a-z]+$", Format: "custom",
@@ -129,7 +130,7 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 		t.Fatalf("parameter example = %q, want %q", got, "12****")
 	}
 	if got := api.Parameters[0]; !reflect.DeepEqual(got.Enum, []string{"1", "10"}) ||
-		got.Minimum != "1" || got.Maximum != "10" {
+		got.Minimum != "1" || got.Maximum != "10" || !got.DocRequired {
 		t.Fatalf("protobuf numeric constraints were not mapped: %#v", got)
 	}
 	privileges := api.Parameters[2]
@@ -140,6 +141,9 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 	}
 	if got := privileges.ValueType.ItemType.Fields[1].Pattern; got != "^[a-z]+$" {
 		t.Fatalf("protobuf recursive pattern = %q", got)
+	}
+	if !privileges.ValueType.ItemType.Fields[0].DocRequired {
+		t.Fatalf("protobuf recursive docRequired was not mapped: %#v", privileges)
 	}
 	if got := reader.ProductEndpoints().Public["cn-hangzhou"]; got != "demo.cn-hangzhou.aliyuncs.com" {
 		t.Fatalf("endpoint = %q", got)

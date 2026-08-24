@@ -33,6 +33,9 @@ type Parameter struct {
 	Type     DataType
 	Position Position // top-level only; inner fields ignore this
 	Required bool
+	// DocRequired is enforced only for AI-mode calls and may apply recursively
+	// to named object fields.
+	DocRequired bool
 
 	Enum      []string // legal values for scalar types
 	Minimum   string   // inclusive numeric lower bound

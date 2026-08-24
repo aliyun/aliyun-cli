@@ -16,6 +16,7 @@ package runtime
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
@@ -112,6 +113,83 @@ func TestValidateRequiredRawBodySkipsBodyAndFormDataParameters(t *testing.T) {
 	err = ValidateRequired(api, map[string]any{"layerName": "my-layer"}, false)
 	if !errors.As(err, &mre) || len(mre.Flags) != 2 || mre.Flags[0] != "--payload" || mre.Flags[1] != "--document" {
 		t.Fatalf("without raw body, missing flags = %v, err = %v", mre, err)
+	}
+}
+
+func TestValidateDocRequiredRecursesCompositeValues(t *testing.T) {
+	api := &meta.API{Parameters: []meta.Parameter{
+		{
+			Name: "config", RawName: "Config", Type: meta.TypeObject, Options: []string{"--config"},
+			Fields: []meta.Parameter{
+				{Name: "token", RawName: "Token", Type: meta.TypeString, DocRequired: true},
+				{
+					Name: "groups", RawName: "Groups", Type: meta.TypeArray,
+					ItemType: &meta.Parameter{Type: meta.TypeObject, Fields: []meta.Parameter{{
+						Name: "name", RawName: "Name", Type: meta.TypeString, DocRequired: true,
+					}}},
+				},
+				{
+					Name: "labels", RawName: "Labels", Type: meta.TypeMap,
+					ValueType: &meta.Parameter{Type: meta.TypeObject, Fields: []meta.Parameter{{
+						Name: "secret", RawName: "Secret", Type: meta.TypeString, DocRequired: true,
+					}}},
+				},
+			},
+		},
+		{Name: "region_id", RawName: "RegionId", Type: meta.TypeString, DocRequired: true, Options: []string{"--region-id"}},
+	}}
+	args := map[string]any{
+		"Config": map[string]any{
+			"Token": nil,
+			"Groups": []any{
+				map[string]any{"Name": "primary"},
+				map[string]any{},
+			},
+			"Labels": map[string]any{
+				"z": map[string]any{"Secret": "set"},
+				"a": map[string]any{},
+			},
+		},
+	}
+
+	err := ValidateDocRequired(api, args, false)
+	var missing *MissingRequiredError
+	if !errors.As(err, &missing) {
+		t.Fatalf("error = %v, want MissingRequiredError", err)
+	}
+	wantFlags := []string{"--config", "--config", "--config", "--region-id"}
+	wantPaths := []string{"Config.Token", "Config.Groups[1].Name", `Config.Labels["a"].Secret`, "RegionId"}
+	if !reflect.DeepEqual(missing.Flags, wantFlags) || !reflect.DeepEqual(missing.Paths, wantPaths) {
+		t.Fatalf("missing = %#v, want flags %v paths %v", missing, wantFlags, wantPaths)
+	}
+}
+
+func TestValidateDocRequiredOnlyChecksChildrenOfPresentContainers(t *testing.T) {
+	api := &meta.API{Parameters: []meta.Parameter{{
+		Name: "config", RawName: "Config", Type: meta.TypeObject,
+		Fields: []meta.Parameter{{
+			Name: "token", RawName: "Token", Type: meta.TypeString, DocRequired: true,
+		}},
+	}}}
+	if err := ValidateDocRequired(api, map[string]any{}, false); err != nil {
+		t.Fatalf("absent optional container should not require its children: %v", err)
+	}
+	if err := ValidateDocRequired(api, map[string]any{"Config": map[string]any{"Token": ""}}, false); err == nil {
+		t.Fatal("empty docRequired object field should count as missing")
+	}
+}
+
+func TestValidateDocRequiredRawBodySkipsBodyAndFormData(t *testing.T) {
+	api := &meta.API{Parameters: []meta.Parameter{
+		{Name: "body", RawName: "Body", Type: meta.TypeString, Position: meta.PosBody, DocRequired: true},
+		{Name: "form", RawName: "Form", Type: meta.TypeString, Position: meta.PosFormData, DocRequired: true},
+		{Name: "query", RawName: "Query", Type: meta.TypeString, Position: meta.PosQuery, DocRequired: true},
+	}}
+	err := ValidateDocRequired(api, map[string]any{}, true)
+	var missing *MissingRequiredError
+	if !errors.As(err, &missing) ||
+		!reflect.DeepEqual(missing.Paths, []string{"Query"}) {
+		t.Fatalf("raw-body docRequired result = %#v, error = %v", missing, err)
 	}
 }
 

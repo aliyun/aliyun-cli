@@ -111,6 +111,7 @@ func mapArgument(a *crschema.ArgumentDefinition) meta.Parameter {
 		Type:        mapType(a.Type),
 		Position:    mapPosition(a.Location),
 		Required:    a.Required,
+		DocRequired: a.DocRequired,
 		Enum:        append([]string(nil), a.Enum...),
 		Minimum:     a.Minimum,
 		Maximum:     a.Maximum,

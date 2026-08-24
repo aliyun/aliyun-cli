@@ -206,25 +206,26 @@ type TypeShape struct {
 
 // ArgumentDefinition describes a single CLI parameter.
 type ArgumentDefinition struct {
-	Name       string               `json:"name"`
-	RawName    string               `json:"raw_name"`
-	Type       string               `json:"type"`
-	Format     string               `json:"format,omitempty"`
-	Enum       []string             `json:"enum,omitempty"`
-	Minimum    string               `json:"minimum,omitempty"`
-	Maximum    string               `json:"maximum,omitempty"`
-	MinLength  string               `json:"minLength,omitempty"`
-	MaxLength  string               `json:"maxLength,omitempty"`
-	Pattern    string               `json:"pattern,omitempty"`
-	Options    []string             `json:"options,omitempty"`
-	HelpZH     string               `json:"help_zh,omitempty"`
-	HelpEN     string               `json:"help_en,omitempty"`
-	Example    string               `json:"example,omitempty"`
-	Required   bool                 `json:"required"`
-	Location   string               `json:"location,omitempty"`
-	ParamStyle string               `json:"param_style,omitempty"`
-	IsWildcard bool                 `json:"is_wildcard,omitempty"`
-	Fields     []ArgumentDefinition `json:"fields,omitempty"`
-	Element    *TypeShape           `json:"element,omitempty"`
-	Value      *TypeShape           `json:"value,omitempty"`
+	Name        string               `json:"name"`
+	RawName     string               `json:"raw_name"`
+	Type        string               `json:"type"`
+	Format      string               `json:"format,omitempty"`
+	Enum        []string             `json:"enum,omitempty"`
+	Minimum     string               `json:"minimum,omitempty"`
+	Maximum     string               `json:"maximum,omitempty"`
+	MinLength   string               `json:"minLength,omitempty"`
+	MaxLength   string               `json:"maxLength,omitempty"`
+	Pattern     string               `json:"pattern,omitempty"`
+	Options     []string             `json:"options,omitempty"`
+	HelpZH      string               `json:"help_zh,omitempty"`
+	HelpEN      string               `json:"help_en,omitempty"`
+	Example     string               `json:"example,omitempty"`
+	Required    bool                 `json:"required"`
+	DocRequired bool                 `json:"docRequired,omitempty"`
+	Location    string               `json:"location,omitempty"`
+	ParamStyle  string               `json:"param_style,omitempty"`
+	IsWildcard  bool                 `json:"is_wildcard,omitempty"`
+	Fields      []ArgumentDefinition `json:"fields,omitempty"`
+	Element     *TypeShape           `json:"element,omitempty"`
+	Value       *TypeShape           `json:"value,omitempty"`
 }

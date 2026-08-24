@@ -63,11 +63,17 @@ func (dispatchErrorTestSource) LoadAPI(code, version, name string) (*meta.API, e
 		Name: "RunThing", CmdName: "run-thing", ProductCode: "demo",
 		Version: "2024-01-01", Method: "POST", Protocol: "HTTPS", Style: meta.StyleRPC,
 		Endpoints: meta.Endpoints{Global: "demo.example.com"},
-		Parameters: []meta.Parameter{{
-			Name: "instance_type", RawName: "InstanceType", Type: meta.TypeString,
-			Position: meta.PosQuery, Required: true, Options: []string{"--instance-type"},
-			Enum: []string{"ecs.g6"},
-		}},
+		Parameters: []meta.Parameter{
+			{
+				Name: "instance_type", RawName: "InstanceType", Type: meta.TypeString,
+				Position: meta.PosQuery, Required: true, Options: []string{"--instance-type"},
+				Enum: []string{"ecs.g6"},
+			},
+			{
+				Name: "change_reason", RawName: "ChangeReason", Type: meta.TypeString,
+				Position: meta.PosQuery, DocRequired: true, Options: []string{"--change-reason"},
+			},
+		},
 	}, nil
 }
 
@@ -87,7 +93,7 @@ func TestDispatchPreservesUnknownFlagDetails(t *testing.T) {
 	if !errors.As(err, &unknownFlag) {
 		t.Fatalf("Dispatch error %T does not preserve UnknownFlagError: %v", err, err)
 	}
-	if unknownFlag.Flag != "instnace-type" || !reflect.DeepEqual(unknownFlag.Known, []string{"instance-type"}) {
+	if unknownFlag.Flag != "instnace-type" || !reflect.DeepEqual(unknownFlag.Known, []string{"change-reason", "instance-type"}) {
 		t.Fatalf("UnknownFlagError = %#v", unknownFlag)
 	}
 }
@@ -112,7 +118,7 @@ func TestDispatchPreservesMissingRequiredDetails(t *testing.T) {
 }
 
 func TestDispatchConstraintValidationFollowsAIMode(t *testing.T) {
-	args := []string{"demo", "run-thing", "--instance-type", "ecs.invalid"}
+	args := []string{"demo", "run-thing", "--instance-type", "ecs.invalid", "--change-reason", "testing"}
 
 	err := newDispatchErrorTestEngine().Dispatch(Request{
 		Args: args, Out: io.Discard, AIMode: true,
@@ -140,6 +146,40 @@ func TestDispatchConstraintValidationFollowsAIMode(t *testing.T) {
 	}
 	if !errors.Is(err, credentialCause) {
 		t.Fatalf("human mode did not continue past constraints: %v", err)
+	}
+}
+
+func TestDispatchDocRequiredValidationFollowsAIModeAndPrecedesConstraints(t *testing.T) {
+	args := []string{"demo", "run-thing", "--instance-type", "ecs.invalid"}
+
+	err := newDispatchErrorTestEngine().Dispatch(Request{
+		Args: args, Out: io.Discard, AIMode: true,
+	})
+	var usage *UsageError
+	if !errors.As(err, &usage) || usage.Code != "MISSING_REQUIRED_PARAMETER" {
+		t.Fatalf("AI mode error = %#v, want MISSING_REQUIRED_PARAMETER UsageError", err)
+	}
+	var missing *runtime.MissingRequiredError
+	if !errors.As(err, &missing) ||
+		!reflect.DeepEqual(missing.Flags, []string{"--change-reason"}) ||
+		!reflect.DeepEqual(missing.Paths, []string{"ChangeReason"}) {
+		t.Fatalf("AI mode did not preserve docRequired details: %v", err)
+	}
+	var violation *runtime.ConstraintViolationError
+	if errors.As(err, &violation) {
+		t.Fatalf("constraints ran before docRequired validation: %v", err)
+	}
+
+	credentialCause := errors.New("stop after validation")
+	err = newDispatchErrorTestEngine().Dispatch(Request{
+		Args: args, Out: io.Discard,
+		Host: runtime.StaticHost{CredErr: credentialCause},
+	})
+	if errors.As(err, &missing) {
+		t.Fatalf("human mode unexpectedly validated docRequired metadata: %v", err)
+	}
+	if !errors.Is(err, credentialCause) {
+		t.Fatalf("human mode did not continue past docRequired validation: %v", err)
 	}
 }
 

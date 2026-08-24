@@ -232,6 +232,9 @@ func (e *Engine) Dispatch(req Request) error {
 		}
 	}
 	if req.AIMode {
+		if err := runtime.ValidateDocRequired(api, res.Args, res.Reserved.BodySet || res.Reserved.BodyFileSet); err != nil {
+			return &UsageError{Code: "MISSING_REQUIRED_PARAMETER", Err: err}
+		}
 		if err := runtime.ValidateConstraints(api, res.Args, res.Reserved.BodySet || res.Reserved.BodyFileSet); err != nil {
 			return &UsageError{Code: "INVALID_PARAMETER_VALUE", Err: err}
 		}

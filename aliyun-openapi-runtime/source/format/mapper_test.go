@@ -1,6 +1,7 @@
 package format
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -131,5 +132,20 @@ func TestMapArgumentMapsRecursiveConstraints(t *testing.T) {
 	}
 	if got.ItemType.Fields[1].Pattern != "^[a-z]+$" {
 		t.Fatalf("pattern constraint = %#v", got.ItemType.Fields[1])
+	}
+}
+
+func TestMapArgumentMapsJSONDocRequired(t *testing.T) {
+	var arg schema.ArgumentDefinition
+	if err := json.Unmarshal([]byte(`{
+		"name":"config","raw_name":"Config","type":"object","docRequired":true,
+		"fields":[{"name":"token","raw_name":"Token","type":"string","docRequired":true}]
+	}`), &arg); err != nil {
+		t.Fatal(err)
+	}
+
+	got := mapArgument(&arg)
+	if !got.DocRequired || len(got.Fields) != 1 || !got.Fields[0].DocRequired {
+		t.Fatalf("JSON docRequired metadata was not mapped recursively: %#v", got)
 	}
 }
