@@ -233,6 +233,23 @@ func TestTranslateEstimateCostErrorLeavesPricingNotRequiredAlone(t *testing.T) {
 	assert.Equal(t, serverErr, err)
 }
 
+// TestCostIrrelevantQuoteMarshals guards the assumption that lets
+// newCostIrrelevantQuote ignore the json.Marshal error: the document is a bool
+// and four strings, which cannot fail to marshal. If someone later adds a field
+// that can (a channel, a func, a failing MarshalJSON), this test breaks loudly
+// at build time — better than a runtime branch that could silently report a
+// free API as unquotable, which is a billing-relevant wrong answer.
+func TestCostIrrelevantQuoteMarshals(t *testing.T) {
+	out := newCostIrrelevantQuote("Ecs", "2014-05-26", "RunInstances")
+	assert.JSONEq(t, `{
+		"costIrrelevant": true,
+		"popCode": "Ecs",
+		"popVersion": "2014-05-26",
+		"apiName": "RunInstances",
+		"message": "`+costIrrelevantMessage+`"
+	}`, out)
+}
+
 func TestNewCostIrrelevantQuoteCarriesTripleAndEnglishMessage(t *testing.T) {
 	out := newCostIrrelevantQuote("hbr", "2017-09-08", "EnableBackupPlan")
 
