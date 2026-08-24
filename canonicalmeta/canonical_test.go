@@ -154,11 +154,11 @@ func TestCanonicalAPITestdataOmitsEndpointMaps(t *testing.T) {
 func TestReadAPI_UsesSpecPathBeforeNestedCompatibilityPath(t *testing.T) {
 	repo := NewRepository(fstest.MapFS{
 		"canonical/demo/2026-01-01/Describe.json": &fstest.MapFile{
-			Data: []byte(`{"name":"SpecPath","protocol":"HTTP","method":"GET","pathPattern":"","parameters":[]}`),
+			Data: []byte(`{"name":"Describe","description_en":"SpecPath","protocol":"HTTP","method":"GET","pathPattern":"","parameters":[]}`),
 			Mode: fs.ModePerm,
 		},
 		"canonical/demo/canonical/demo/2026-01-01/Describe.json": &fstest.MapFile{
-			Data: []byte(`{"name":"NestedPath","protocol":"HTTP","method":"GET","pathPattern":"","parameters":[]}`),
+			Data: []byte(`{"name":"Describe","description_en":"NestedPath","protocol":"HTTP","method":"GET","pathPattern":"","parameters":[]}`),
 			Mode: fs.ModePerm,
 		},
 	})
@@ -167,15 +167,15 @@ func TestReadAPI_UsesSpecPathBeforeNestedCompatibilityPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if api.Name != "SpecPath" {
-		t.Fatalf("expected spec path to win, got %s", api.Name)
+	if api.DescriptionEn != "SpecPath" {
+		t.Fatalf("expected spec path to win, got %s", api.DescriptionEn)
 	}
 }
 
 func TestReadAPI_CurrentNestedCompatibilityPath(t *testing.T) {
 	repo := NewRepository(fstest.MapFS{
 		"canonical/demo/canonical/demo/2026-01-01/Describe.json": &fstest.MapFile{
-			Data: []byte(`{"name":"NestedPath","protocol":"HTTP","method":"GET","pathPattern":"","parameters":[]}`),
+			Data: []byte(`{"name":"Describe","description_en":"NestedPath","protocol":"HTTP","method":"GET","pathPattern":"","parameters":[]}`),
 			Mode: fs.ModePerm,
 		},
 	})
@@ -184,8 +184,25 @@ func TestReadAPI_CurrentNestedCompatibilityPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if api.Name != "NestedPath" {
-		t.Fatalf("expected nested compatibility path, got %s", api.Name)
+	if api.DescriptionEn != "NestedPath" {
+		t.Fatalf("expected nested compatibility path, got %s", api.DescriptionEn)
+	}
+}
+
+func TestReadAPI_RequiresExactAPIName(t *testing.T) {
+	repo := NewRepository(fstest.MapFS{
+		"canonical/demo/2026-01-01/describeinstances.json": &fstest.MapFile{
+			Data: []byte(`{"name":"DescribeInstances","protocol":"HTTP","method":"GET","pathPattern":"","parameters":[]}`),
+			Mode: fs.ModePerm,
+		},
+	})
+
+	_, err := repo.GetAPI("demo", "2026-01-01", "describeinstances")
+	if err == nil {
+		t.Fatal("expected mismatched API name casing to fail")
+	}
+	if got := err.Error(); !strings.Contains(got, `requested "describeinstances", found "DescribeInstances"`) {
+		t.Fatalf("expected API name mismatch error, got %s", got)
 	}
 }
 

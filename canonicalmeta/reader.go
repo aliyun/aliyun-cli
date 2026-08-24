@@ -81,6 +81,12 @@ func (r *Reader) ReadAPI(product, version, apiName string) (*API, error) {
 	for _, path := range paths {
 		api, err := r.readAPIFromPath(path)
 		if err == nil {
+			// Do not let a case-insensitive filesystem turn a mistyped API name
+			// (for example, describeinstances) into DescribeInstances. Canonical
+			// API filenames and their embedded names use the exact APIName.
+			if api.Name != apiName {
+				return nil, fmt.Errorf("canonical API name mismatch: requested %q, found %q", apiName, api.Name)
+			}
 			return api, nil
 		}
 		if !errors.Is(err, fs.ErrNotExist) {

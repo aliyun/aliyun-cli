@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -400,7 +401,7 @@ func TestPrintApiUsage_UnknownApi_PluginAvailableNotInstalled_Lowercase(t *testi
 	// The runtime can handle ECS, so an unknown lowercase command is reported
 	// as an invalid baseline command rather than suggesting its optional plugin.
 	err := c.printApiUsage(ctx, "ecs", "describeinstances")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "'describeinstances' is not a valid baseline kebab-case command")
 	assert.Contains(t, err.Error(), "aliyun ecs --help")
 	assert.Contains(t, err.Error(), "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help")
