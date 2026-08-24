@@ -1715,6 +1715,27 @@ func TestProcessPathMissingRequiredParameterNotProvided(t *testing.T) {
 	assert.Contains(t, err.Error(), "path parameter --InstanceId")
 }
 
+func TestCheckRequiredParametersSortsMissingParameters(t *testing.T) {
+	context := &OpenapiContext{HttpContext: &HttpContext{}}
+	context.api = canonicalTestAPI(&testLegacyAPI{
+		Name:    "DeleteConfigFromMachineGroup",
+		Product: &meta.Product{Version: "2020-12-30"},
+		Parameters: []testLegacyParameter{
+			{Name: "machineGroup", Position: "Path", Required: true},
+			{Name: "configName", Position: "Path", Required: true},
+		},
+	})
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+
+	assert.EqualError(
+		t,
+		context.checkRequiredParameters(ctx),
+		"required parameters missing: path parameter --configName, path parameter --machineGroup",
+	)
+}
+
 func TestProcessPathMultipleRequiredParametersMissing(t *testing.T) {
 	httpContext := &HttpContext{}
 	context := &OpenapiContext{HttpContext: httpContext}

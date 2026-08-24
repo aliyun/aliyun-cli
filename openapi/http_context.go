@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -583,6 +584,7 @@ func (a *OpenapiContext) checkRequiredParameters(ctx *cli.Context) error {
 	}
 
 	if len(allMissing) > 0 {
+		sort.Strings(allMissing)
 		return fmt.Errorf("required parameters missing: %s", strings.Join(allMissing, ", "))
 	}
 
