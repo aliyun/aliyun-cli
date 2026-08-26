@@ -708,19 +708,7 @@ func reqBodyType(t string) string {
 }
 
 func isDirectBodyParameter(p *meta.Parameter) bool {
-	if p == nil || p.Position != meta.PosBody {
-		return false
-	}
-	if !strings.EqualFold(strings.TrimSpace(p.Name), "body") ||
-		!strings.EqualFold(strings.TrimSpace(p.RawName), "body") {
-		return false
-	}
-	switch p.Type {
-	case meta.TypeAny, meta.TypeArray, meta.TypeString, meta.TypeMap:
-		return true
-	default:
-		return false
-	}
+	return p != nil && p.Position == meta.PosBody && p.DirectBody
 }
 
 // darabonbaStyle translates the engine's meta.APIStyle vocabulary into

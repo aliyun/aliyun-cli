@@ -161,6 +161,7 @@ func toCanonicalArguments(values []*Argument) ([]schema.ArgumentDefinition, erro
 			Example:     value.Example,
 			Required:    value.Required,
 			DocRequired: value.GetDocRequired(),
+			DirectBody:  value.GetDirectBody(),
 			Location:    value.Location,
 			ParamStyle:  value.ParamStyle,
 			IsWildcard:  value.IsWildcard,

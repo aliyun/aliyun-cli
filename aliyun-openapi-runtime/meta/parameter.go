@@ -36,6 +36,9 @@ type Parameter struct {
 	// DocRequired is enforced only for AI-mode calls and may apply recursively
 	// to named object fields.
 	DocRequired bool
+	// DirectBody means this parameter value is the complete HTTP request body,
+	// not a named property inside an object body.
+	DirectBody bool
 
 	Enum      []string // legal values for scalar types
 	Minimum   string   // inclusive numeric lower bound

@@ -222,6 +222,7 @@ type ArgumentDefinition struct {
 	Example     string               `json:"example,omitempty"`
 	Required    bool                 `json:"required"`
 	DocRequired bool                 `json:"docRequired,omitempty"`
+	DirectBody  bool                 `json:"direct_body,omitempty"`
 	Location    string               `json:"location,omitempty"`
 	ParamStyle  string               `json:"param_style,omitempty"`
 	IsWildcard  bool                 `json:"is_wildcard,omitempty"`

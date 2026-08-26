@@ -498,7 +498,7 @@ func TestDirectAnyBodyIsNotWrapped(t *testing.T) {
 		Endpoints: meta.Endpoints{Global: "p.example.com"},
 		Parameters: []meta.Parameter{{
 			Name: "body", RawName: "body", Type: meta.TypeAny, Position: meta.PosBody,
-			Options: []string{"--biz-body"},
+			Options: []string{"--biz-body"}, DirectBody: true,
 		}},
 	}
 	want := map[string]any{
@@ -521,13 +521,33 @@ func TestDirectAnyBodyIsNotWrapped(t *testing.T) {
 	}
 }
 
+func TestDirectArrayBodyUsesRawNameOnlyForArgumentLookup(t *testing.T) {
+	api := &meta.API{
+		Name: "UnInstallClusterAddons", Version: "2015-12-15", Method: "POST", Style: meta.StyleRESTful, ProductCode: "CS",
+		Endpoints: meta.Endpoints{Global: "cs.example.com"},
+		Parameters: []meta.Parameter{{
+			Name: "body", RawName: "addons", Type: meta.TypeArray, Position: meta.PosBody,
+			Options: []string{"--biz-body"}, DirectBody: true,
+			ItemType: &meta.Parameter{Type: meta.TypeObject},
+		}},
+	}
+	want := []any{map[string]any{"name": "ttt", "cleanup_cloud_resources": true}}
+	req, err := Assemble(&ExecContext{API: api, Args: map[string]any{"addons": want}})
+	if err != nil {
+		t.Fatalf("Assemble: %v", err)
+	}
+	if !reflect.DeepEqual(req.Body, want) {
+		t.Fatalf("direct body = %#v, want %#v", req.Body, want)
+	}
+}
+
 func TestDirectMapBodyIsNotWrapped(t *testing.T) {
 	api := &meta.API{
 		Name: "BindAnalyzer", Version: "v", Method: "POST", Style: meta.StyleRESTful, ProductCode: "p",
 		Endpoints: meta.Endpoints{Global: "p.example.com"},
 		Parameters: []meta.Parameter{{
 			Name: "body", RawName: "body", Type: meta.TypeMap, Position: meta.PosBody,
-			Options:   []string{"--biz-body"},
+			Options: []string{"--biz-body"}, DirectBody: true,
 			ValueType: &meta.Parameter{Type: meta.TypeString},
 		}},
 	}
@@ -612,7 +632,7 @@ func TestNonFormBodyMetadataKeepsLegacyJSONExecution(t *testing.T) {
 	api := &meta.API{
 		Name: "Upload", Style: meta.StyleRESTful,
 		ReqBodyType: "byte", ContentType: "application/vnd.example.payload",
-		Parameters: []meta.Parameter{{Name: "body", RawName: "body", Type: meta.TypeString, Position: meta.PosBody}},
+		Parameters: []meta.Parameter{{Name: "body", RawName: "body", Type: meta.TypeString, Position: meta.PosBody, DirectBody: true}},
 	}
 	req, err := Assemble(&ExecContext{API: api, RawBody: "payload"})
 	if err != nil {
@@ -713,7 +733,7 @@ func TestDirectAnyNullProducesJSONNullBody(t *testing.T) {
 	api := &meta.API{
 		Name: "UpdateThing", Version: "v", Method: "POST", Style: meta.StyleRESTful, ProductCode: "p",
 		Endpoints:  meta.Endpoints{Global: "p.example.com"},
-		Parameters: []meta.Parameter{{Name: "body", RawName: "body", Type: meta.TypeAny, Position: meta.PosBody}},
+		Parameters: []meta.Parameter{{Name: "body", RawName: "body", Type: meta.TypeAny, Position: meta.PosBody, DirectBody: true}},
 	}
 	req, err := Assemble(&ExecContext{API: api, Args: map[string]any{"body": nil}})
 	if err != nil {

@@ -262,7 +262,11 @@ func (v *LegacyParameterView) LegacyHasChildren() bool {
 		return len(v.body.SubParameters) > 0
 	}
 	if v.source == SourceField {
-		return v.field.Type == "array" && len(objectShapeFields(v.field.Element)) > 0
+		// The legacy metadata generator projected only the fields directly below
+		// a top-level RepeatList. A nested RepeatList was emitted as a leaf even
+		// when the canonical schema describes object fields below it. Preserve
+		// that truncation so PascalCase flags keep the old --X.1.Y.1 shape.
+		return false
 	}
 	if v.source != SourceCanonical {
 		return false
@@ -308,13 +312,8 @@ func (v *LegacyParameterView) LegacyChildren() []*LegacyParameterView {
 			children = append(children, NewFieldView(&fields[i], topLoc))
 		}
 	case SourceField:
-		if !v.LegacyHasChildren() {
-			return nil
-		}
-		fields := objectShapeFields(v.field.Element)
-		for i := range fields {
-			children = append(children, NewFieldView(&fields[i], v.topLocation))
-		}
+		// Nested canonical fields were not present in generated legacy metadata.
+		return nil
 	case SourceBody, SourceV1:
 		for i := range v.body.SubParameters {
 			child := NewBodyView(&v.body.SubParameters[i])

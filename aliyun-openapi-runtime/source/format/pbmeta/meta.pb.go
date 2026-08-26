@@ -304,6 +304,7 @@ type Argument struct {
 	MinLength     string                 `protobuf:"bytes,20,opt,name=min_length,json=minLength,proto3" json:"min_length,omitempty"`
 	MaxLength     string                 `protobuf:"bytes,21,opt,name=max_length,json=maxLength,proto3" json:"max_length,omitempty"`
 	DocRequired   bool                   `protobuf:"varint,22,opt,name=doc_required,json=docRequired,proto3" json:"doc_required,omitempty"`
+	DirectBody    bool                   `protobuf:"varint,23,opt,name=direct_body,json=directBody,proto3" json:"direct_body,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -492,6 +493,13 @@ func (x *Argument) GetDocRequired() bool {
 	return false
 }
 
+func (x *Argument) GetDirectBody() bool {
+	if x != nil {
+		return x.DirectBody
+	}
+	return false
+}
+
 // TypeShape is a depth-independent recursive description of a container
 // child. Arrays use element and maps use value at every level.
 type TypeShape struct {
@@ -654,7 +662,7 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"\rreq_body_type\x18\b \x01(\tR\vreqBodyType\x12!\n" +
 	"\fcontent_type\x18\t \x01(\tR\vcontentType\x12*\n" +
 	"\x11has_wildcard_path\x18\n" +
-	" \x01(\bR\x0fhasWildcardPath\"\xb8\x05\n" +
+	" \x01(\bR\x0fhasWildcardPath\"\xd9\x05\n" +
 	"\bArgument\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\braw_name\x18\x02 \x01(\tR\arawName\x12\x12\n" +
@@ -682,7 +690,9 @@ const file_aliyun_openapi_meta_proto_rawDesc = "" +
 	"min_length\x18\x14 \x01(\tR\tminLength\x12\x1d\n" +
 	"\n" +
 	"max_length\x18\x15 \x01(\tR\tmaxLength\x12!\n" +
-	"\fdoc_required\x18\x16 \x01(\bR\vdocRequired\"\x87\x03\n" +
+	"\fdoc_required\x18\x16 \x01(\bR\vdocRequired\x12\x1f\n" +
+	"\vdirect_body\x18\x17 \x01(\bR\n" +
+	"directBody\"\x87\x03\n" +
 	"\tTypeShape\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x128\n" +
 	"\x06fields\x18\x02 \x03(\v2 .aliyun.openapi.meta.v1.ArgumentR\x06fields\x12;\n" +

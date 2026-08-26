@@ -496,7 +496,7 @@ func TestLegacyParameterView_HasChildren(t *testing.T) {
 	}
 }
 
-func TestLegacyParameterView_RecursiveNestedArrayChildren(t *testing.T) {
+func TestLegacyParameterView_TruncatesNestedArrayChildrenLikeLegacyGenerator(t *testing.T) {
 	api := &API{Parameters: []Parameter{{
 		RawName:    "Filter",
 		Type:       "array",
@@ -513,15 +513,18 @@ func TestLegacyParameterView_RecursiveNestedArrayChildren(t *testing.T) {
 		}},
 	}}}
 
-	if v := api.FindLegacyParameter("Filter.1.Groups.1.Name"); v == nil || v.LegacyName() != "Name" {
-		t.Fatalf("expected recursive element.fields lookup to find Name, got %#v", v)
+	if v := api.FindLegacyParameter("Filter.1.Groups.1"); v == nil || v.LegacyName() != "Groups" {
+		t.Fatalf("expected nested RepeatList leaf lookup to find Groups, got %#v", v)
+	}
+	if v := api.FindLegacyParameter("Filter.1.Groups.1.Name"); v == nil || v.LegacyName() != "Groups" {
+		t.Fatalf("legacy loose suffix lookup must still resolve to the truncated Groups leaf, got %#v", v)
 	}
 
 	var names []string
 	api.ForeachLegacyParameter(func(name string, _ *LegacyParameterView) {
 		names = append(names, name)
 	})
-	want := []string{"Filter.1.Key", "Filter.1.Groups.1.Name"}
+	want := []string{"Filter.1.Key", "Filter.1.Groups.1"}
 	if len(names) != len(want) {
 		t.Fatalf("expected %v, got %v", want, names)
 	}

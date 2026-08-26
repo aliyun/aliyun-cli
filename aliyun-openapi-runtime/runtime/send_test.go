@@ -323,7 +323,7 @@ func TestSendDirectAnyBodyAgainstMockServer(t *testing.T) {
 				Name: "UpdateThing", Version: "2020-01-01", Method: "POST", Style: meta.StyleROA,
 				Protocol: "HTTP", URL: "/things", ProductCode: "demo",
 				Parameters: []meta.Parameter{{
-					Name: "body", RawName: "body", Type: meta.TypeAny, Position: meta.PosBody,
+					Name: "body", RawName: "body", Type: meta.TypeAny, Position: meta.PosBody, DirectBody: true,
 				}},
 			}
 			_, err := NewExecutor().Execute(&ExecContext{
