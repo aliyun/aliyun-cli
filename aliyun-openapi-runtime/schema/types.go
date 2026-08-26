@@ -196,8 +196,8 @@ type TypeShape struct {
 	Enum      []string             `json:"enum,omitempty"`
 	Minimum   string               `json:"minimum,omitempty"`
 	Maximum   string               `json:"maximum,omitempty"`
-	MinLength string               `json:"minLength,omitempty"`
-	MaxLength string               `json:"maxLength,omitempty"`
+	MinLength string               `json:"min_length,omitempty"`
+	MaxLength string               `json:"max_length,omitempty"`
 	Pattern   string               `json:"pattern,omitempty"`
 	Fields    []ArgumentDefinition `json:"fields,omitempty"`
 	Element   *TypeShape           `json:"element,omitempty"`
@@ -213,15 +213,15 @@ type ArgumentDefinition struct {
 	Enum        []string             `json:"enum,omitempty"`
 	Minimum     string               `json:"minimum,omitempty"`
 	Maximum     string               `json:"maximum,omitempty"`
-	MinLength   string               `json:"minLength,omitempty"`
-	MaxLength   string               `json:"maxLength,omitempty"`
+	MinLength   string               `json:"min_length,omitempty"`
+	MaxLength   string               `json:"max_length,omitempty"`
 	Pattern     string               `json:"pattern,omitempty"`
 	Options     []string             `json:"options,omitempty"`
 	HelpZH      string               `json:"help_zh,omitempty"`
 	HelpEN      string               `json:"help_en,omitempty"`
 	Example     string               `json:"example,omitempty"`
 	Required    bool                 `json:"required"`
-	DocRequired bool                 `json:"docRequired,omitempty"`
+	DocRequired bool                 `json:"doc_required,omitempty"`
 	DirectBody  bool                 `json:"direct_body,omitempty"`
 	Location    string               `json:"location,omitempty"`
 	ParamStyle  string               `json:"param_style,omitempty"`

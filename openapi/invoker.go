@@ -225,12 +225,12 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 
 	if a.request.Version == "" {
 		return cli.NewErrorWithTip(fmt.Errorf("missing version for product %s", product.Code),
-			"Use flag `--version <YYYY-MM-DD>` to assign version, "+hint)
+			"Use flag `--version <YYYY-MM-DD>` to assign version, %s", hint)
 	}
 
 	if a.request.RegionId == "" {
 		return cli.NewErrorWithTip(fmt.Errorf("missing region for product %s", product.Code),
-			"Use flag --region <regionId> to assign region, "+hint)
+			"Use flag --region <regionId> to assign region, %s", hint)
 	}
 
 	a.client, err = GetClient(a.profile, ctx)
@@ -280,7 +280,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 			if err != nil {
 				return cli.NewErrorWithTip(
 					fmt.Errorf("unknown endpoint for %s/%s! failed %s", product.GetLowerCode(), a.request.RegionId, err),
-					"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, "+hint)
+					"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, %s", hint)
 			}
 		}
 	}

@@ -54,7 +54,7 @@ func doConfigureGet(c *cli.Context, args []string) error {
 	if len(args) == 0 && !reflect.DeepEqual(profile, Profile{}) {
 		data, err := json.MarshalIndent(profile, "", "\t")
 		if err != nil {
-			return fmt.Errorf("ERROR:" + err.Error())
+			return fmt.Errorf("ERROR:%w", err)
 		}
 		cli.Println(c.Stdout(), string(data))
 		cli.Printf(c.Stdout(), "\n")
@@ -90,7 +90,7 @@ func doConfigureGet(c *cli.Context, args []string) error {
 		case PrivateKeyFlagName:
 			cli.Printf(c.Stdout(), "private-key=%s\n", profile.PrivateKey)
 		case RegionFlagName:
-			cli.Printf(c.Stdout(), profile.RegionId)
+			cli.Print(c.Stdout(), profile.RegionId)
 		case LanguageFlagName:
 			cli.Printf(c.Stdout(), "language=%s\n", profile.Language)
 		case CloudSSOSignInUrlFlagName:

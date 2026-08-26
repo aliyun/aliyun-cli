@@ -138,14 +138,20 @@ func TestMapArgumentMapsRecursiveConstraints(t *testing.T) {
 func TestMapArgumentMapsJSONDocRequired(t *testing.T) {
 	var arg schema.ArgumentDefinition
 	if err := json.Unmarshal([]byte(`{
-		"name":"config","raw_name":"Config","type":"object","docRequired":true,
-		"fields":[{"name":"token","raw_name":"Token","type":"string","docRequired":true}]
+		"name":"config","raw_name":"Config","type":"object",
+		"doc_required":true,"min_length":"1","max_length":"8",
+		"fields":[{
+			"name":"token","raw_name":"Token","type":"string",
+			"doc_required":true,"min_length":"2","max_length":"4"
+		}]
 	}`), &arg); err != nil {
 		t.Fatal(err)
 	}
 
 	got := mapArgument(&arg)
-	if !got.DocRequired || len(got.Fields) != 1 || !got.Fields[0].DocRequired {
+	if !got.DocRequired || got.MinLength != "1" || got.MaxLength != "8" ||
+		len(got.Fields) != 1 || !got.Fields[0].DocRequired ||
+		got.Fields[0].MinLength != "2" || got.Fields[0].MaxLength != "4" {
 		t.Fatalf("JSON docRequired metadata was not mapped recursively: %#v", got)
 	}
 }

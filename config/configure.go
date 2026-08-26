@@ -383,7 +383,7 @@ func exchangeFromOAuth(w io.Writer, cp *Profile) error {
 	accessTokenExpire := cp.OAuthAccessTokenExpire
 	if accessTokenExpire == 0 || accessTokenExpire < util.GetCurrentUnixTime() {
 		if refreshToken == "" {
-			return fmt.Errorf("both access token and refresh token are empty, please re-authenticate, cmd: " + buildReLoginOauthCommand(cp))
+			return fmt.Errorf("both access token and refresh token are empty, please re-authenticate, cmd: %s", buildReLoginOauthCommand(cp))
 		}
 		// refresh token
 		err := oauthTryRefreshOauthToken(w, cp)
@@ -395,7 +395,7 @@ func exchangeFromOAuth(w io.Writer, cp *Profile) error {
 	exchangeUrl := fmt.Sprintf("%s/v1/exchange", baseUrl)
 	accessToken := cp.OAuthAccessToken
 	if accessToken == "" {
-		return fmt.Errorf("access token is empty, please re-authenticate, cmd: " + buildReLoginOauthCommand(cp))
+		return fmt.Errorf("access token is empty, please re-authenticate, cmd: %s", buildReLoginOauthCommand(cp))
 	}
 
 	// 构造请求
@@ -485,7 +485,7 @@ func buildReLoginOauthCommand(cp *Profile) string {
 func tryRefreshOauthToken(w io.Writer, cp *Profile) error {
 	refreshToken := cp.OAuthRefreshToken
 	if refreshToken == "" {
-		return fmt.Errorf("refresh token is empty, please re-authenticate, cmd: " + buildReLoginOauthCommand(cp))
+		return fmt.Errorf("refresh token is empty, please re-authenticate, cmd: %s", buildReLoginOauthCommand(cp))
 	}
 	currentOauthSiteType := cp.OAuthSiteType
 	if currentOauthSiteType != "CN" && currentOauthSiteType != "INTL" {

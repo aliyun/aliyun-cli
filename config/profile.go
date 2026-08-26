@@ -553,7 +553,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		// 从 configuration 中重新获取 source profile
 		source, loaded := cp.parent.GetProfile(profileName)
 		if !loaded {
-			err = fmt.Errorf("can not load the source profile: " + profileName)
+			err = fmt.Errorf("can not load the source profile: %s", profileName)
 			return
 		}
 		source.parent = cp.parent

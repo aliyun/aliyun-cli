@@ -105,8 +105,8 @@ type TypeShape struct {
 	Enum      []string   `json:"enum,omitempty"`
 	Minimum   string     `json:"minimum,omitempty"`
 	Maximum   string     `json:"maximum,omitempty"`
-	MinLength string     `json:"minLength,omitempty"`
-	MaxLength string     `json:"maxLength,omitempty"`
+	MinLength string     `json:"min_length,omitempty"`
+	MaxLength string     `json:"max_length,omitempty"`
 	Pattern   string     `json:"pattern,omitempty"`
 	Fields    []Field    `json:"fields,omitempty"`
 	Element   *TypeShape `json:"element,omitempty"`
@@ -119,7 +119,7 @@ type Parameter struct {
 	RawName     string   `json:"raw_name"`
 	Type        string   `json:"type"`
 	Required    bool     `json:"required"`
-	DocRequired bool     `json:"docRequired,omitempty"`
+	DocRequired bool     `json:"doc_required,omitempty"`
 	Location    string   `json:"location"`
 	ParamStyle  string   `json:"param_style,omitempty"`
 	IsWildcard  bool     `json:"is_wildcard,omitempty"`
@@ -127,8 +127,8 @@ type Parameter struct {
 	Enum        []string `json:"enum,omitempty"`
 	Minimum     string   `json:"minimum,omitempty"`
 	Maximum     string   `json:"maximum,omitempty"`
-	MinLength   string   `json:"minLength,omitempty"`
-	MaxLength   string   `json:"maxLength,omitempty"`
+	MinLength   string   `json:"min_length,omitempty"`
+	MaxLength   string   `json:"max_length,omitempty"`
 	Pattern     string   `json:"pattern,omitempty"`
 	Example     string   `json:"example,omitempty"`
 	Options     []string `json:"options,omitempty"`
@@ -158,12 +158,12 @@ type Field struct {
 	RawName     string   `json:"raw_name"`
 	Type        string   `json:"type"`
 	Required    bool     `json:"required"`
-	DocRequired bool     `json:"docRequired,omitempty"`
+	DocRequired bool     `json:"doc_required,omitempty"`
 	Format      string   `json:"format,omitempty"`
 	Minimum     string   `json:"minimum,omitempty"`
 	Maximum     string   `json:"maximum,omitempty"`
-	MinLength   string   `json:"minLength,omitempty"`
-	MaxLength   string   `json:"maxLength,omitempty"`
+	MinLength   string   `json:"min_length,omitempty"`
+	MaxLength   string   `json:"max_length,omitempty"`
 	Pattern     string   `json:"pattern,omitempty"`
 	Example     string   `json:"example,omitempty"`
 	Enum        []string `json:"enum,omitempty"`

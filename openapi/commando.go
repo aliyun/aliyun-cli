@@ -362,7 +362,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					if rtErr != nil {
 						if profileRequired {
 							return cli.NewErrorWithTip(&credentialConfigurationError{Err: rtErr},
-								fmt.Sprintf("profile %q: failed to resolve credentials", c.profile.Name))
+								"profile %q: failed to resolve credentials", c.profile.Name)
 						}
 						envs = config.BuildBaselineEnv(ctx)
 					}

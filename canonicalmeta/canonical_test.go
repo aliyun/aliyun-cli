@@ -14,6 +14,43 @@ func testFS() *Repository {
 	return NewRepository(os.DirFS("testdata"))
 }
 
+func TestAPIJSONUsesSnakeCaseForNewConstraintFields(t *testing.T) {
+	var api API
+	if err := json.Unmarshal([]byte(`{
+		"name":"DescribeDemo",
+		"pathPattern":"/resources/{id}",
+		"parameters":[{
+			"name":"config",
+			"raw_name":"Config",
+			"type":"object",
+			"required":false,
+			"doc_required":true,
+			"min_length":"1",
+			"max_length":"8",
+			"location":"body",
+			"fields":[{
+				"name":"token",
+				"raw_name":"Token",
+				"type":"string",
+				"doc_required":true,
+				"min_length":"2",
+				"max_length":"4"
+			}]
+		}]
+	}`), &api); err != nil {
+		t.Fatal(err)
+	}
+
+	parameter := api.Parameters[0]
+	if api.PathPattern != "/resources/{id}" || !parameter.DocRequired ||
+		parameter.MinLength != "1" || parameter.MaxLength != "8" ||
+		len(parameter.Fields) != 1 || !parameter.Fields[0].DocRequired ||
+		parameter.Fields[0].MinLength != "2" ||
+		parameter.Fields[0].MaxLength != "4" {
+		t.Fatalf("canonical JSON fields were not decoded: %#v", api)
+	}
+}
+
 // ── Reader tests ──
 
 func TestReadAPI_DescribeRegions(t *testing.T) {
