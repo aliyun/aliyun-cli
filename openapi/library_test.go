@@ -249,6 +249,8 @@ func TestLibrary_GetApiByPath_UsesProductApiList(t *testing.T) {
 }
 
 func TestLibrary_PrintApiUsage_UsesV1BodyParameters(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
 	repo, err := meta.MockLoadRepository([]meta.Product{
 		{Code: "demo", Version: "2026-01-01", ApiStyle: "rpc", ApiNames: []string{"CreateReport"}},
 	})
@@ -273,6 +275,8 @@ func TestLibrary_PrintApiUsage_UsesV1BodyParameters(t *testing.T) {
 }
 
 func TestPrintLegacyViews_DisplaysCanonicalLowercaseArrayType(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
 	api := &canonicalmeta.API{
 		Parameters: []canonicalmeta.Parameter{
 			{RawName: "Items", Type: "array", ParamStyle: "repeatList"},
