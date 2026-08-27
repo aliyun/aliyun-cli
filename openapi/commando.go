@@ -1270,19 +1270,7 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 			if buildErr != nil {
 				return buildErr
 			}
-			document.GlobalParameters = projectGlobalParameters(ctx.Flags())
-			applyRequestHelpOptions(document, helpOpts, aiMode)
-			if helpOpts.Search != "" {
-				if renderErr := renderCanonicalRequestSearchText(ctx.Stdout(), document, helpOpts.Search); renderErr != nil {
-					return renderErr
-				}
-				if renderErr := renderRequestQueryExampleText(ctx.Stdout(), document.ResponseQuery); renderErr != nil {
-					return renderErr
-				}
-			} else if renderErr := renderCanonicalRequestText(ctx.Stdout(), document); renderErr != nil {
-				return renderErr
-			}
-			return c.finishCanonicalTextHelp(ctx, aiMode)
+			return c.renderProjectedOriginalRequestHelp(ctx, args, document, helpOpts, aiMode)
 		}
 	}
 	c.loadPlugins()
@@ -1332,6 +1320,38 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 		}
 		return fmt.Errorf("too many arguments: %d", len(args))
 	}
+}
+
+func (c *Commando) renderProjectedOriginalRequestHelp(
+	ctx *cli.Context,
+	args []string,
+	document *machineHelpAPIDocument,
+	options helpOptions,
+	aiMode bool,
+) error {
+	var original bytes.Buffer
+	captureCtx := cli.NewCommandContext(&original, ctx.Stderr())
+	captureCtx.SetAgentName(ctx.AgentName())
+	if cmd := ctx.Command(); cmd != nil {
+		captureCtx.EnterCommand(cmd)
+		cmd.PrintHead(captureCtx)
+	}
+	if err := c.printApiUsage(captureCtx, args[0], args[1]); err != nil {
+		_, _ = io.Copy(ctx.Stdout(), &original)
+		return err
+	}
+
+	projected, _ := projectOriginalRequestHelpText(original.String(), options, aiMode)
+	if _, err := io.WriteString(ctx.Stdout(), projected); err != nil {
+		return err
+	}
+	if err := renderRequestQueryExampleText(ctx.Stdout(), document.ResponseQuery); err != nil {
+		return err
+	}
+	if !aiMode {
+		return renderAIModeEnableHelpHint(ctx.Stdout())
+	}
+	return nil
 }
 
 func (c *Commando) complete(ctx *cli.Context, args []string) []string {
