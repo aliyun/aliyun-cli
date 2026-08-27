@@ -716,6 +716,55 @@ func TestPrintApiUsageAlwaysTriesRuntime(t *testing.T) {
 	assert.ErrorIs(t, err, wantErr)
 }
 
+func TestHelpResponseSectionUsesHostCanonicalWhenPluginIsNotInstalled(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.pluginLoaded = true
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	err := c.help(ctx, []string{"demo", "CreateReport"})
+	require.NoError(t, err)
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "Response Schema (HTTP 200, application/json):")
+	assert.NotContains(t, stdout.String(), "Parameters:")
+}
+
+func TestHelpResponseSectionDoesNotOverrideInstalledPluginTextHelp(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	c.pluginLoaded = true
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-demo": {Name: "aliyun-cli-demo", Type: plugin.PluginTypeMeta},
+	}}
+	c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{{Name: "aliyun-cli-demo", ProductCode: "demo"}}}
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+
+	originalTryHelp := runtimeTryHelp
+	runtimeTryHelp = func(ctx *cli.Context, product, command string) (bool, error) {
+		fmt.Fprintln(ctx.Stdout(), "PLUGIN_OWNED_TEXT_HELP")
+		return true, nil
+	}
+	t.Cleanup(func() { runtimeTryHelp = originalTryHelp })
+
+	err := c.help(ctx, []string{"demo", "create-report"})
+	require.NoError(t, err)
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "PLUGIN_OWNED_TEXT_HELP")
+	assert.NotContains(t, stdout.String(), "Response Schema")
+}
+
 func TestPrintApiUsage_NonBuiltinProduct_PluginInstalled(t *testing.T) {
 	setupInstalledPlugin(t, "aliyun-cli-fc")
 

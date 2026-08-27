@@ -1108,6 +1108,16 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 	_ = helpOpts // consumed by the Canonical text Help integration path
 
 	c.loadPlugins()
+	if helpOpts.Section == helpSectionResponse && len(args) == 2 && !c.hasInstalledProductPlugin(args[0]) {
+		if c.library == nil || c.library.helpRepo == nil {
+			return fmt.Errorf("response Help is unavailable: canonical metadata repository is unavailable")
+		}
+		document, buildErr := newMachineHelpService(c.library.helpRepo).buildAPIResponse(args[0], args[1], requestedMachineHelpVersion(ctx))
+		if buildErr != nil {
+			return buildErr
+		}
+		return renderResponseHelpText(ctx.Stdout(), document)
+	}
 	cmd := ctx.Command()
 	if len(args) == 0 {
 		cmd.PrintHead(ctx)

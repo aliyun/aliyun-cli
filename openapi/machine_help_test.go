@@ -130,6 +130,38 @@ func TestMachineHelpAPIDefaultVersionFollowsCommandStyle(t *testing.T) {
 	assert.Contains(t, err.Error(), "2025-01-01")
 }
 
+func TestMachineHelpAPIResponseUsesCanonicalSchemaAndReachableComponents(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPIResponse("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+
+	assert.Equal(t, helpSectionResponse, doc.Section)
+	assert.Equal(t, "camel", doc.Target.RequestedStyle)
+	require.NotNil(t, doc.OutputSchema)
+	assert.Equal(t, "200", doc.OutputSchema.StatusCode)
+	assert.Equal(t, "application/json", doc.OutputSchema.ContentType)
+	assert.JSONEq(t, `{"type":"object","properties":{"RequestId":{"type":"string","description_en":"The request ID.","description_zh":"请求 ID。"},"Reports":{"$ref":"#/components/schemas/ReportList"}}}`, string(doc.OutputSchema.Schema))
+	require.NotNil(t, doc.OutputSchema.Components)
+	assert.Contains(t, doc.OutputSchema.Components.Schemas, "ReportList")
+	assert.Contains(t, doc.OutputSchema.Components.Schemas, "Report")
+	assert.NotContains(t, doc.OutputSchema.Components.Schemas, "Unused")
+	assert.Empty(t, doc.Notice)
+}
+
+func TestMachineHelpAPIResponseWithoutSchemaReturnsNotice(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPIResponse("demo", "DescribeRegions", "2026-01-01")
+	require.NoError(t, err)
+
+	assert.Nil(t, doc.OutputSchema)
+	assert.Equal(t, "No response schema is available for this API.", doc.Notice)
+
+	var encoded bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	assert.NotContains(t, encoded.String(), `"outputSchema"`)
+	assert.Contains(t, encoded.String(), `"notice": "No response schema is available for this API."`)
+}
+
 func TestMachineHelpNestedParameters(t *testing.T) {
 	service := testMachineHelpService(t)
 	doc, err := service.buildAPI("demo", "DescribeRegions", "2026-01-01")
@@ -185,6 +217,33 @@ func TestCommandoHelpJSONUsesCanonicalMetadataWithoutLoadingPlugins(t *testing.T
 	assert.Equal(t, "api", doc.Kind)
 	assert.Equal(t, "CreateReport", doc.API.Name)
 	assert.NotEmpty(t, doc.GlobalParameters)
+}
+
+func TestCommandoHelpJSONResponseSection(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	MachineHelpFormatFlag(ctx.Flags()).SetAssigned(true)
+	MachineHelpFormatFlag(ctx.Flags()).SetValue("json")
+	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	err := c.help(ctx, []string{"demo", "CreateReport"})
+	require.NoError(t, err)
+	assert.False(t, c.pluginLoaded)
+	assert.Empty(t, stderr.String())
+
+	var doc machineHelpAPIResponseDocument
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &doc))
+	assert.Equal(t, helpSectionResponse, doc.Section)
+	require.NotNil(t, doc.OutputSchema)
+	assert.Equal(t, "200", doc.OutputSchema.StatusCode)
+	assert.NotContains(t, stdout.String(), `"parameterSets"`)
 }
 
 func TestCommandoHelpJSONAcceptsKebabAPIVersionFlag(t *testing.T) {
