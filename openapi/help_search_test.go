@@ -290,6 +290,89 @@ func TestSearchResponseSchemaMergesMultipleMatchesInSchemaOrder(t *testing.T) {
 	}`, result.Components["Result"])
 }
 
+func TestSearchResponseSchemaMatchesFullPathAcrossSeparators(t *testing.T) {
+	document := HelpResponseSchema{
+		Schema: json.RawMessage(`{
+			"type":"object",
+			"properties":{"Instances":{"type":"object","properties":{
+				"Instance":{"type":"object","properties":{
+					"InstanceId":{"type":"string"},
+					"State":{"type":"string"}
+				}}
+			}}}
+		}`),
+	}
+
+	for _, keyword := range []string{
+		"Instances.Instance.InstanceId",
+		"instances-instance-instance-id",
+		"instances_instance_instance_id",
+		"instances instance instance id",
+	} {
+		t.Run(keyword, func(t *testing.T) {
+			result, err := SearchResponseSchema(document, keyword)
+			require.NoError(t, err)
+			assert.Equal(t, []string{"Instances.Instance.InstanceId"}, result.Paths)
+		})
+	}
+
+	result, err := SearchResponseSchema(document, "instances")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"Instances"}, result.Paths)
+}
+
+func TestSearchResponseSchemaRanksMatchesByRelevance(t *testing.T) {
+	document := HelpResponseSchema{
+		Schema: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"Unrelated":{"type":"string","description_en":"The instance id."},
+				"preinstanceidpost":{"type":"string"},
+				"InstanceIdentifier":{"type":"string"},
+				"InstanceId":{"type":"string"}
+			}
+		}`),
+	}
+
+	result, err := SearchResponseSchema(document, "instance_id")
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"InstanceId",
+		"InstanceIdentifier",
+		"preinstanceidpost",
+		"Unrelated",
+	}, result.Paths)
+}
+
+func TestSearchResponseSchemaPrunesUnmatchedCompositionBranches(t *testing.T) {
+	for _, keyword := range []string{"allOf", "oneOf", "anyOf"} {
+		t.Run(keyword, func(t *testing.T) {
+			document := HelpResponseSchema{
+				Schema: json.RawMessage(`{
+					"type":"object",
+					"properties":{"Result":{"` + keyword + `":[
+						{"type":"object","properties":{
+							"MatchingField":{"type":"string"},
+							"UnusedSibling":{"type":"string"}
+						}},
+						{"type":"object","properties":{"UnusedBranch":{"type":"string"}}}
+					]}}
+				}`),
+			}
+
+			result, err := SearchResponseSchema(document, "matching-field")
+			require.NoError(t, err)
+			assert.Equal(t, []string{"Result.MatchingField"}, result.Paths)
+			assertRawJSONEq(t, `{
+				"type":"object",
+				"properties":{"Result":{"`+keyword+`":[
+					{"type":"object","properties":{"MatchingField":{"type":"string"}}}
+				]}}
+			}`, result.Schema)
+		})
+	}
+}
+
 func TestSearchResponseSchemaMatchesTitleOnReferencedField(t *testing.T) {
 	document := HelpResponseSchema{
 		Schema: json.RawMessage(`{"type":"object","properties":{"Result":{"$ref":"#/components/schemas/Result"}}}`),

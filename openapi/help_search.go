@@ -305,7 +305,7 @@ func SearchResponseSchema(input HelpResponseSchema, keyword string) (HelpRespons
 		return emptyHelpResponseSchemaSearchResult(), nil
 	}
 
-	state := newResponseSchemaSearchState(document, query, keyword)
+	state := newResponseSchemaSearchState(document, query)
 	state.walk(document.root, nil, make(map[string]bool))
 	if len(state.paths) == 0 {
 		return emptyHelpResponseSchemaSearchResult(), nil
@@ -320,7 +320,7 @@ func SearchResponseSchema(input HelpResponseSchema, keyword string) (HelpRespons
 		return HelpResponseSchemaSearchResult{}, err
 	}
 	return HelpResponseSchemaSearchResult{
-		Paths:      append([]string(nil), state.paths...),
+		Paths:      state.sortedPaths(),
 		Schema:     root,
 		Components: components,
 	}, nil
@@ -346,14 +346,15 @@ type responseSchemaDocument struct {
 }
 
 type responseSchemaNode struct {
-	raw        json.RawMessage
-	fields     []responseSchemaRawField
-	properties []responseSchemaProperty
-	items      *responseSchemaNode
-	ref        string
-	typ        string
-	titles     []string
-	describes  []string
+	raw          json.RawMessage
+	fields       []responseSchemaRawField
+	properties   []responseSchemaProperty
+	items        *responseSchemaNode
+	compositions map[string][]*responseSchemaNode
+	ref          string
+	typ          string
+	titles       []string
+	describes    []string
 }
 
 type responseSchemaRawField struct {
@@ -394,7 +395,7 @@ func parseResponseSchemaNode(raw json.RawMessage) (*responseSchemaNode, error) {
 	if !json.Valid(raw) {
 		return nil, fmt.Errorf("invalid JSON")
 	}
-	node := &responseSchemaNode{raw: raw}
+	node := &responseSchemaNode{raw: raw, compositions: make(map[string][]*responseSchemaNode)}
 	fields, object, err := decodeOrderedRawObject(raw)
 	if err != nil {
 		return nil, err
@@ -443,6 +444,18 @@ func parseResponseSchemaNode(raw json.RawMessage) (*responseSchemaNode, error) {
 					return nil, fmt.Errorf("parse array items: %w", itemsErr)
 				}
 				node.items = items
+			}
+		case "allOf", "oneOf", "anyOf":
+			var branches []json.RawMessage
+			if json.Unmarshal(field.raw, &branches) != nil {
+				continue
+			}
+			for index, branchRaw := range branches {
+				branch, branchErr := parseResponseSchemaNode(branchRaw)
+				if branchErr != nil {
+					return nil, fmt.Errorf("parse %s branch %d: %w", field.name, index, branchErr)
+				}
+				node.compositions[field.name] = append(node.compositions[field.name], branch)
 			}
 		}
 	}
@@ -515,30 +528,35 @@ func localResponseComponentName(ref string) (string, bool) {
 }
 
 type responseSchemaKeep struct {
-	properties map[int]bool
-	items      bool
+	properties   map[int]bool
+	items        bool
+	compositions map[string]map[int]bool
+}
+
+type responseSchemaPathMatch struct {
+	path  string
+	rank  HelpSearchRank
+	order int
 }
 
 type responseSchemaSearchState struct {
 	document       *responseSchemaDocument
 	query          helpSearchText
-	rawKeyword     string
 	keep           map[*responseSchemaNode]*responseSchemaKeep
 	fullNodes      map[*responseSchemaNode]bool
 	fullComponents map[string]bool
-	paths          []string
-	pathSet        map[string]bool
+	paths          []responseSchemaPathMatch
+	pathIndex      map[string]int
 }
 
-func newResponseSchemaSearchState(document *responseSchemaDocument, query helpSearchText, rawKeyword string) *responseSchemaSearchState {
+func newResponseSchemaSearchState(document *responseSchemaDocument, query helpSearchText) *responseSchemaSearchState {
 	return &responseSchemaSearchState{
 		document:       document,
 		query:          query,
-		rawKeyword:     rawKeyword,
 		keep:           make(map[*responseSchemaNode]*responseSchemaKeep),
 		fullNodes:      make(map[*responseSchemaNode]bool),
 		fullComponents: make(map[string]bool),
-		pathSet:        make(map[string]bool),
+		pathIndex:      make(map[string]int),
 	}
 }
 
@@ -548,7 +566,10 @@ func (s *responseSchemaSearchState) keepFor(node *responseSchemaNode) *responseS
 	}
 	result := s.keep[node]
 	if result == nil {
-		result = &responseSchemaKeep{properties: make(map[int]bool)}
+		result = &responseSchemaKeep{
+			properties:   make(map[int]bool),
+			compositions: make(map[string]map[int]bool),
+		}
 		s.keep[node] = result
 	}
 	return result
@@ -575,11 +596,11 @@ func (s *responseSchemaSearchState) walk(node *responseSchemaNode, path []string
 		case "properties":
 			for index, property := range node.properties {
 				propertyPath := appendPath(path, property.name)
-				selfMatch := s.propertyMatches(property, propertyPath)
+				rank, selfMatch := s.propertyMatchRank(property, propertyPath)
 				if selfMatch {
 					s.keepFor(node).properties[index] = true
 					s.markNodeSelf(property.node, activeRefs)
-					s.addPath(strings.Join(propertyPath, "."))
+					s.addPath(strings.Join(propertyPath, "."), rank)
 					matched = true
 				}
 				if s.walk(property.node, propertyPath, activeRefs) {
@@ -592,30 +613,40 @@ func (s *responseSchemaSearchState) walk(node *responseSchemaNode, path []string
 				s.keepFor(node).items = true
 				matched = true
 			}
+		case "allOf", "oneOf", "anyOf":
+			for index, branch := range node.compositions[field.name] {
+				if s.walk(branch, path, activeRefs) {
+					selection := s.keepFor(node)
+					if selection.compositions[field.name] == nil {
+						selection.compositions[field.name] = make(map[int]bool)
+					}
+					selection.compositions[field.name][index] = true
+					matched = true
+				}
+			}
 		}
 	}
 	return matched
 }
 
-func (s *responseSchemaSearchState) propertyMatches(property responseSchemaProperty, path []string) bool {
+func (s *responseSchemaSearchState) propertyMatchRank(property responseSchemaProperty, path []string) (HelpSearchRank, bool) {
 	titles, descriptions := s.nodeSearchText(property.node, make(map[string]bool))
 	candidate := HelpSearchCandidate{
 		Name:          property.name,
 		TitleEN:       strings.Join(titles, " "),
 		DescriptionEN: strings.Join(descriptions, " "),
 	}
-	if _, matched := rankHelpSearchCandidate(candidate, s.query); matched {
-		return true
+	if rank, matched := rankHelpSearchCandidate(candidate, s.query); matched {
+		return rank, true
 	}
 
-	// A full response path is an explicit search surface. Requiring a dot in
-	// the query avoids turning a parent-name search into an implicit match for
-	// every descendant under that parent.
-	if strings.Contains(s.rawKeyword, ".") {
-		pathText := newHelpSearchText(strings.Join(path, "."))
-		return pathText.compact == s.query.compact || tokenPrefixMatch(pathText.tokens, s.query.tokens) || strings.Contains(pathText.compact, s.query.compact)
+	pathText := newHelpSearchText(strings.Join(path, "."))
+	propertyText := newHelpSearchText(property.name)
+	pathRank, pathMatched := rankHelpSearchCandidate(HelpSearchCandidate{Name: strings.Join(path, ".")}, s.query)
+	if pathMatched && (pathText.compact == s.query.compact || len(s.query.tokens) > len(propertyText.tokens)) {
+		return pathRank, true
 	}
-	return false
+	return 0, false
 }
 
 func (s *responseSchemaSearchState) nodeSearchText(node *responseSchemaNode, visited map[string]bool) ([]string, []string) {
@@ -625,12 +656,20 @@ func (s *responseSchemaSearchState) nodeSearchText(node *responseSchemaNode, vis
 	titles := append([]string(nil), node.titles...)
 	descriptions := append([]string(nil), node.describes...)
 	name, target := s.document.resolveRef(node.ref)
-	if target == nil || visited[name] {
-		return titles, descriptions
+	if target != nil && !visited[name] {
+		visited[name] = true
+		referencedTitles, referencedDescriptions := s.nodeSearchText(target, visited)
+		titles = append(titles, referencedTitles...)
+		descriptions = append(descriptions, referencedDescriptions...)
 	}
-	visited[name] = true
-	referencedTitles, referencedDescriptions := s.nodeSearchText(target, visited)
-	return append(titles, referencedTitles...), append(descriptions, referencedDescriptions...)
+	for _, keyword := range []string{"allOf", "oneOf", "anyOf"} {
+		for _, branch := range node.compositions[keyword] {
+			branchTitles, branchDescriptions := s.nodeSearchText(branch, visited)
+			titles = append(titles, branchTitles...)
+			descriptions = append(descriptions, branchDescriptions...)
+		}
+	}
+	return titles, descriptions
 }
 
 func appendPath(path []string, name string) []string {
@@ -640,12 +679,33 @@ func appendPath(path []string, name string) []string {
 	return result
 }
 
-func (s *responseSchemaSearchState) addPath(path string) {
-	if path == "" || s.pathSet[path] {
+func (s *responseSchemaSearchState) addPath(path string, rank HelpSearchRank) {
+	if path == "" {
 		return
 	}
-	s.pathSet[path] = true
-	s.paths = append(s.paths, path)
+	if index, exists := s.pathIndex[path]; exists {
+		if rank < s.paths[index].rank {
+			s.paths[index].rank = rank
+		}
+		return
+	}
+	s.pathIndex[path] = len(s.paths)
+	s.paths = append(s.paths, responseSchemaPathMatch{path: path, rank: rank, order: len(s.paths)})
+}
+
+func (s *responseSchemaSearchState) sortedPaths() []string {
+	matches := append([]responseSchemaPathMatch(nil), s.paths...)
+	sort.SliceStable(matches, func(i, j int) bool {
+		if matches[i].rank != matches[j].rank {
+			return matches[i].rank < matches[j].rank
+		}
+		return matches[i].order < matches[j].order
+	})
+	result := make([]string, 0, len(matches))
+	for _, match := range matches {
+		result = append(result, match.path)
+	}
+	return result
 }
 
 func (s *responseSchemaSearchState) markNodeSelf(node *responseSchemaNode, activeRefs map[string]bool) {
@@ -653,6 +713,10 @@ func (s *responseSchemaSearchState) markNodeSelf(node *responseSchemaNode, activ
 		return
 	}
 	s.keepFor(node)
+	if len(node.compositions) > 0 {
+		s.markFullNode(node)
+		return
+	}
 	if responseSchemaNodeIsArray(node) && node.items != nil {
 		s.keepFor(node).items = true
 		s.markFullNode(node.items)
@@ -739,9 +803,11 @@ func (s *responseSchemaSearchState) marshalNode(node *responseSchemaNode) (json.
 	selection := s.keep[node]
 	selectedProperties := map[int]bool(nil)
 	keepItems := false
+	selectedCompositions := map[string]map[int]bool(nil)
 	if selection != nil {
 		selectedProperties = selection.properties
 		keepItems = selection.items
+		selectedCompositions = selection.compositions
 	}
 
 	fields := make([]responseSchemaRawField, 0, len(node.fields))
@@ -774,11 +840,36 @@ func (s *responseSchemaSearchState) marshalNode(node *responseSchemaNode) (json.
 				return nil, err
 			}
 			fields = append(fields, responseSchemaRawField{name: field.name, raw: items})
+		case "allOf", "oneOf", "anyOf":
+			selected := selectedCompositions[field.name]
+			if len(selected) == 0 {
+				continue
+			}
+			branches, err := s.marshalSelectedComposition(node.compositions[field.name], selected)
+			if err != nil {
+				return nil, err
+			}
+			fields = append(fields, responseSchemaRawField{name: field.name, raw: branches})
 		default:
 			fields = append(fields, field)
 		}
 	}
 	return marshalOrderedRawObject(fields), nil
+}
+
+func (s *responseSchemaSearchState) marshalSelectedComposition(branches []*responseSchemaNode, selected map[int]bool) (json.RawMessage, error) {
+	values := make([]json.RawMessage, 0, len(selected))
+	for index, branch := range branches {
+		if !selected[index] {
+			continue
+		}
+		raw, err := s.marshalNode(branch)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, raw)
+	}
+	return json.Marshal(values)
 }
 
 func (s *responseSchemaSearchState) marshalSelectedProperties(node *responseSchemaNode, selected map[int]bool) (json.RawMessage, error) {

@@ -54,7 +54,7 @@ func SelectResponseArrayPath(input HelpResponseSchema, apiName, paginationCollec
 		return "", nil
 	}
 
-	explicitPath := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(paginationCollectionPath), "$."))
+	explicitPath := normalizeResponseCollectionPath(paginationCollectionPath)
 	if explicitPath != "" {
 		for _, candidate := range collector.paths {
 			if explicitPath == candidate.rawPath || explicitPath == candidate.queryPath {
@@ -78,6 +78,11 @@ func SelectResponseArrayPath(input HelpResponseSchema, apiName, paginationCollec
 		}
 	}
 	return collector.paths[0].queryPath, nil
+}
+
+func normalizeResponseCollectionPath(path string) string {
+	path = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(path), "$."))
+	return strings.TrimSpace(strings.TrimSuffix(path, "[]"))
 }
 
 // BuildResponseQueryExample selects an array and renders style-preserving,
@@ -166,6 +171,10 @@ func (c *responseArrayCollector) walk(node *responseSchemaNode, path []responseP
 			}
 		case "items":
 			c.walk(node.items, path, activeRefs)
+		case "allOf", "oneOf", "anyOf":
+			for _, branch := range node.compositions[field.name] {
+				c.walk(branch, path, activeRefs)
+			}
 		}
 	}
 }
@@ -184,12 +193,22 @@ func responseNodeIsArray(document *responseSchemaDocument, node *responseSchemaN
 	if responseSchemaNodeIsArray(node) {
 		return true
 	}
+	for _, keyword := range []string{"allOf", "oneOf", "anyOf"} {
+		for _, branch := range node.compositions[keyword] {
+			if responseNodeIsArray(document, branch, visited) {
+				return true
+			}
+		}
+	}
 	name, target := document.resolveRef(node.ref)
 	if target == nil || visited[name] {
 		return false
 	}
 	visited[name] = true
-	return responseNodeIsArray(document, target, visited)
+	if responseNodeIsArray(document, target, visited) {
+		return true
+	}
+	return false
 }
 
 func responseNodeHasPaginationField(node *responseSchemaNode) bool {
@@ -257,26 +276,25 @@ func responseArrayMatchesAPIResource(candidate responseArrayPath, apiName string
 		return false
 	}
 
-	pathTokens := make([]string, 0, len(candidate.segments))
 	for _, segment := range candidate.segments {
-		pathTokens = append(pathTokens, singularResponseTokens(splitHelpSearchTokens(segment.name))...)
-	}
-	if len(resourceTokens) > len(pathTokens) {
-		return false
-	}
-	for start := 0; start+len(resourceTokens) <= len(pathTokens); start++ {
-		matched := true
-		for index := range resourceTokens {
-			if resourceTokens[index] != pathTokens[start+index] {
-				matched = false
-				break
-			}
-		}
-		if matched {
+		segmentTokens := singularResponseTokens(splitHelpSearchTokens(segment.name))
+		if equalResponseTokens(resourceTokens, segmentTokens) {
 			return true
 		}
 	}
 	return false
+}
+
+func equalResponseTokens(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func isResponseAPIActionToken(token string) bool {

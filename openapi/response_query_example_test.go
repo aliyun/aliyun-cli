@@ -37,9 +37,29 @@ func TestResponseQuerySelectArrayPathUsesExplicitPaginationCollection(t *testing
 	require.NoError(t, err)
 	assert.Equal(t, "Payload.Entries", path)
 
+	path, err = SelectResponseArrayPath(document, "ListThings", "$.Payload.Entries[]")
+	require.NoError(t, err)
+	assert.Equal(t, "Payload.Entries", path)
+
 	path, err = SelectResponseArrayPath(document, "ListThings", "Payload.DoesNotExist")
 	require.NoError(t, err)
 	assert.Equal(t, "Items", path)
+}
+
+func TestResponseQuerySelectArrayPathRequiresFullAPIResourceTokenMatch(t *testing.T) {
+	document := responseQueryDocument(`{
+		"type":"object",
+		"properties":{
+			"InstanceStatuses":{"type":"array","items":{"type":"object"}},
+			"Instances":{"type":"object","properties":{
+				"Instance":{"type":"array","items":{"type":"object"}}
+			}}
+		}
+	}`, nil)
+
+	path, err := SelectResponseArrayPath(document, "DescribeInstances", "")
+	require.NoError(t, err)
+	assert.Equal(t, "Instances.Instance", path)
 }
 
 func TestResponseQuerySelectArrayPathPrefersPaginationSibling(t *testing.T) {
