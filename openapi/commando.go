@@ -1265,17 +1265,21 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 				return renderErr
 			}
 			return c.finishCanonicalTextHelp(ctx, aiMode)
-		case len(args) == 2 && helpOpts.Search != "":
+		case len(args) == 2 && (helpOpts.Search != "" || helpOpts.All || aiMode):
 			document, buildErr := service.buildAPI(args[0], args[1], requestedMachineHelpVersion(ctx))
 			if buildErr != nil {
 				return buildErr
 			}
 			document.GlobalParameters = projectGlobalParameters(ctx.Flags())
-			applyRequestHelpOptions(document, helpOpts)
-			if renderErr := renderCanonicalRequestSearchText(ctx.Stdout(), document, helpOpts.Search); renderErr != nil {
-				return renderErr
-			}
-			if renderErr := renderRequestQueryExampleText(ctx.Stdout(), document.ResponseQuery); renderErr != nil {
+			applyRequestHelpOptions(document, helpOpts, aiMode)
+			if helpOpts.Search != "" {
+				if renderErr := renderCanonicalRequestSearchText(ctx.Stdout(), document, helpOpts.Search); renderErr != nil {
+					return renderErr
+				}
+				if renderErr := renderRequestQueryExampleText(ctx.Stdout(), document.ResponseQuery); renderErr != nil {
+					return renderErr
+				}
+			} else if renderErr := renderCanonicalRequestText(ctx.Stdout(), document); renderErr != nil {
 				return renderErr
 			}
 			return c.finishCanonicalTextHelp(ctx, aiMode)

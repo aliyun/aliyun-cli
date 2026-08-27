@@ -138,6 +138,19 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		assert.Equal(t, "Inspect the complete request help and provide every required parameter.", envelope.Recovery.Hint)
 	})
 
+	t.Run("legacy missing required parameter uses complete request help", func(t *testing.T) {
+		cause := cli.NewErrorWithTip(&LegacyMissingRequiredError{
+			Err: errors.New("required parameters not assigned: --InstanceId"),
+		}, "use `aliyun ecs DescribeInstanceAttribute --help` to get more information")
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "DescribeInstanceAttribute"}, nil)
+
+		assert.Empty(t, envelope.DidYouMean)
+		assert.Equal(t, "required parameters not assigned: --InstanceId", envelope.Message)
+		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help ecs DescribeInstanceAttribute --cli-section request", envelope.Recovery.Command)
+		assert.Equal(t, "Inspect the complete request help and provide every required parameter.", envelope.Recovery.Hint)
+	})
+
 	t.Run("invalid argument preserves typed parameter context", func(t *testing.T) {
 		text := "--tags: invalid JSON: unexpected end of JSON input"
 		cause := &engine.UsageError{Code: "INVALID_ARGUMENT", Err: &argparser.InvalidArgumentError{

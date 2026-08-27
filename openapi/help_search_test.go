@@ -187,10 +187,15 @@ func TestProjectHelpListingCapsOnlyUnsearchedAIRootAndProductLists(t *testing.T)
 			wantShown: 100,
 		},
 		{
-			name:      "request and response targets are never capped",
+			name:      "API request parameters are capped",
 			items:     items100,
-			options:   HelpListingOptions{Target: HelpListingNonCapped, AIMode: true},
-			wantShown: 100,
+			options:   HelpListingOptions{Target: HelpListingAPIParameters, AIMode: true},
+			wantShown: 20,
+			wantListing: &HelpListingMetadata{
+				Shown: 20,
+				Total: 100,
+				Hint:  "Use --cli-search <keyword> to narrow the list, or --cli-all to show everything.",
+			},
 		},
 	}
 

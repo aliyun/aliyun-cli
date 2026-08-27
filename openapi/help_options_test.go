@@ -74,14 +74,6 @@ func TestParseHelpOptionsValidatesScopeAndValues(t *testing.T) {
 			},
 			want: "--cli-search requires a non-empty keyword",
 		},
-		{
-			name:   "all rejected for api",
-			target: []string{"ecs", "DescribeInstances"},
-			setup: func(fs *cli.FlagSet) {
-				assignHelpFlag(t, CliHelpAllFlag(fs), "")
-			},
-			want: "--cli-all is only valid for root or product Help",
-		},
 	}
 
 	for _, tt := range tests {
@@ -92,6 +84,15 @@ func TestParseHelpOptionsValidatesScopeAndValues(t *testing.T) {
 			assert.EqualError(t, err, tt.want)
 		})
 	}
+}
+
+func TestParseHelpOptionsAcceptsAllForAPI(t *testing.T) {
+	ctx := testHelpOptionsContext()
+	assignHelpFlag(t, CliHelpAllFlag(ctx.Flags()), "")
+
+	opts, err := parseHelpOptions(ctx, []string{"ecs", "DescribeInstances"})
+	require.NoError(t, err)
+	assert.True(t, opts.All)
 }
 
 func TestParseHelpOptionsSearchTakesPrecedenceOverAll(t *testing.T) {

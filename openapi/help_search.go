@@ -234,14 +234,13 @@ func helpTextContains(value string, query helpSearchText) bool {
 	return text.compact != "" && strings.Contains(text.compact, query.compact)
 }
 
-// HelpListingTarget identifies the only two lists that AI mode may cap. All
-// request/response data should use HelpListingNonCapped.
+// HelpListingTarget identifies lists that AI mode may cap.
 type HelpListingTarget string
 
 const (
-	HelpListingRootProducts HelpListingTarget = "root-products"
-	HelpListingProductAPIs  HelpListingTarget = "product-apis"
-	HelpListingNonCapped    HelpListingTarget = "non-capped"
+	HelpListingRootProducts  HelpListingTarget = "root-products"
+	HelpListingProductAPIs   HelpListingTarget = "product-apis"
+	HelpListingAPIParameters HelpListingTarget = "api-parameters"
 )
 
 // HelpListingOptions contains the orthogonal mode/search/all policy inputs.
@@ -263,7 +262,7 @@ type HelpListingMetadata struct {
 
 // ProjectHelpListing applies the AI-mode limit without mutating the input.
 func ProjectHelpListing[T any](items []T, options HelpListingOptions) ([]T, *HelpListingMetadata) {
-	mayCap := options.Target == HelpListingRootProducts || options.Target == HelpListingProductAPIs
+	mayCap := options.Target == HelpListingRootProducts || options.Target == HelpListingProductAPIs || options.Target == HelpListingAPIParameters
 	if !mayCap || !options.AIMode || options.Searched || options.All || len(items) <= helpListingLimit {
 		return append([]T(nil), items...), nil
 	}

@@ -3,6 +3,7 @@ package openapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 
@@ -216,7 +217,7 @@ func TestMachineHelpRequestSearchKeepsOnlyActiveParameterSetAndGlobals(t *testin
 		Name: "header", Options: []string{"--header"}, Type: "string", Location: "global",
 	}}
 
-	applyRequestHelpOptions(doc, helpOptions{Search: "report-id"})
+	applyRequestHelpOptions(doc, helpOptions{Search: "report-id"}, false)
 
 	require.Len(t, doc.ParameterSets.Kebab, 1)
 	assert.Equal(t, "report_id", doc.ParameterSets.Kebab[0].Name)
@@ -228,10 +229,61 @@ func TestMachineHelpRequestSearchKeepsOnlyActiveParameterSetAndGlobals(t *testin
 	doc.GlobalParameters = []machineHelpParameter{{
 		Name: "header", Options: []string{"--header"}, Type: "string", Location: "global",
 	}}
-	applyRequestHelpOptions(doc, helpOptions{Search: "header"})
+	applyRequestHelpOptions(doc, helpOptions{Search: "header"}, false)
 	assert.Empty(t, doc.ParameterSets.Kebab)
 	require.Len(t, doc.GlobalParameters, 1)
 	assert.Equal(t, "header", doc.GlobalParameters[0].Name)
+}
+
+func TestMachineHelpAIRequestCapsRequiredFirstAndAllRestoresEverything(t *testing.T) {
+	newDocument := func() *machineHelpAPIDocument {
+		parameters := make([]machineHelpParameter, 0, 23)
+		for index := 1; index <= 21; index++ {
+			parameters = append(parameters, machineHelpParameter{Name: fmt.Sprintf("optional-%02d", index)})
+		}
+		parameters = append(parameters,
+			machineHelpParameter{Name: "required-one", Required: true},
+			machineHelpParameter{Name: "required-two", Required: true},
+		)
+		return &machineHelpAPIDocument{
+			ActiveParameterSet: "camel",
+			ParameterSets: machineHelpParameterSets{
+				Camel: parameters,
+				Kebab: []machineHelpParameter{{Name: "inactive-style"}},
+			},
+			GlobalParameters: []machineHelpParameter{
+				{Name: "global-one"},
+				{Name: "global-two"},
+				{Name: "global-three"},
+			},
+		}
+	}
+
+	compact := newDocument()
+	applyRequestHelpOptions(compact, helpOptions{}, true)
+	require.Len(t, compact.ParameterSets.Camel, helpListingLimit)
+	assert.Equal(t, "required-one", compact.ParameterSets.Camel[0].Name)
+	assert.Equal(t, "required-two", compact.ParameterSets.Camel[1].Name)
+	assert.Empty(t, compact.ParameterSets.Kebab)
+	assert.Empty(t, compact.GlobalParameters)
+	assert.Equal(t, &machineHelpListing{Shown: 20, Total: 26, Hint: helpListingHint}, compact.Listing)
+
+	complete := newDocument()
+	applyRequestHelpOptions(complete, helpOptions{All: true}, true)
+	require.Len(t, complete.ParameterSets.Camel, 23)
+	assert.Equal(t, "required-one", complete.ParameterSets.Camel[0].Name)
+	assert.Equal(t, "required-two", complete.ParameterSets.Camel[1].Name)
+	assert.Empty(t, complete.ParameterSets.Kebab)
+	assert.Len(t, complete.GlobalParameters, 3)
+	assert.Nil(t, complete.Listing)
+
+	legacy := newDocument()
+	applyRequestHelpOptions(legacy, helpOptions{}, false)
+	require.Len(t, legacy.ParameterSets.Camel, 23)
+	assert.Equal(t, "optional-01", legacy.ParameterSets.Camel[0].Name)
+	assert.Len(t, legacy.ParameterSets.Kebab, 1)
+	assert.Len(t, legacy.GlobalParameters, 3)
+	assert.Nil(t, legacy.Listing)
 }
 
 func TestMachineHelpResponseSearchProjectsMatchesAndFilteredQuery(t *testing.T) {

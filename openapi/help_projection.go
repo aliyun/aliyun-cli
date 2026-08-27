@@ -78,8 +78,16 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 	document.Listing = projectMachineHelpListing(listing)
 }
 
-func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptions) {
-	if document == nil || options.Search == "" {
+func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptions, aiMode bool) {
+	if document == nil {
+		return
+	}
+	document.Listing = nil
+	if options.Search == "" {
+		if !aiMode {
+			return
+		}
+		applyAIRequestHelpListing(document, options.All)
 		return
 	}
 
@@ -123,6 +131,61 @@ func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptio
 		document.ParameterSets.Camel = parameters
 	}
 	document.GlobalParameters = globals
+}
+
+type machineHelpRequestEntry struct {
+	Parameter machineHelpParameter
+	Global    bool
+}
+
+func applyAIRequestHelpListing(document *machineHelpAPIDocument, all bool) {
+	active := prioritizedMachineHelpParameters(activeMachineHelpParameters(document))
+	entries := make([]machineHelpRequestEntry, 0, len(active)+len(document.GlobalParameters))
+	for _, parameter := range active {
+		entries = append(entries, machineHelpRequestEntry{Parameter: parameter})
+	}
+	for _, parameter := range document.GlobalParameters {
+		entries = append(entries, machineHelpRequestEntry{Parameter: parameter, Global: true})
+	}
+
+	shown, listing := ProjectHelpListing(entries, HelpListingOptions{
+		Target: HelpListingAPIParameters,
+		AIMode: true,
+		All:    all,
+	})
+	parameters := make([]machineHelpParameter, 0, len(shown))
+	globals := make([]machineHelpParameter, 0, len(shown))
+	for _, entry := range shown {
+		if entry.Global {
+			globals = append(globals, entry.Parameter)
+		} else {
+			parameters = append(parameters, entry.Parameter)
+		}
+	}
+
+	document.ParameterSets = machineHelpParameterSets{}
+	if document.ActiveParameterSet == "kebab" {
+		document.ParameterSets.Kebab = parameters
+	} else {
+		document.ParameterSets.Camel = parameters
+	}
+	document.GlobalParameters = globals
+	document.Listing = projectMachineHelpListing(listing)
+}
+
+func prioritizedMachineHelpParameters(parameters []machineHelpParameter) []machineHelpParameter {
+	result := make([]machineHelpParameter, 0, len(parameters))
+	for _, parameter := range parameters {
+		if parameter.Required {
+			result = append(result, parameter)
+		}
+	}
+	for _, parameter := range parameters {
+		if !parameter.Required {
+			result = append(result, parameter)
+		}
+	}
+	return result
 }
 
 func applyResponseHelpOptions(document *machineHelpAPIResponseDocument, options helpOptions) error {
@@ -296,7 +359,7 @@ func (c *Commando) validateRecoverySearch(ctx *cli.Context, request RecoverySear
 		if ctx != nil {
 			document.GlobalParameters = projectGlobalParameters(ctx.Flags())
 		}
-		applyRequestHelpOptions(document, options)
+		applyRequestHelpOptions(document, options, false)
 		return len(activeMachineHelpParameters(document)) > 0 || len(document.GlobalParameters) > 0
 	}
 }
@@ -385,6 +448,54 @@ func renderCanonicalRequestSearchText(w io.Writer, document *machineHelpAPIDocum
 		}
 	}
 	return nil
+}
+
+func renderCanonicalRequestText(w io.Writer, document *machineHelpAPIDocument) error {
+	if document == nil {
+		return fmt.Errorf("request Help document is nil")
+	}
+	description := localizedMachineHelpText(document.API.Description)
+	if _, err := fmt.Fprintf(w,
+		"Alibaba Cloud Command Line Interface Version %s\n\nDescription: %s\n\nAPI Version: %s\n\nUsage:\n  %s [parameters]\n",
+		cli.Version,
+		description,
+		document.API.Operation.APIVersion,
+		strings.Join(document.Target.Path, " "),
+	); err != nil {
+		return err
+	}
+
+	parameters := activeMachineHelpParameters(document)
+	if len(parameters) > 0 {
+		if _, err := fmt.Fprintln(w, "\nParameters:"); err != nil {
+			return err
+		}
+		if err := renderMachineHelpParameters(w, parameters); err != nil {
+			return err
+		}
+	}
+	if len(document.GlobalParameters) > 0 {
+		if _, err := fmt.Fprintln(w, "\nGlobal Parameters:"); err != nil {
+			return err
+		}
+		if err := renderMachineHelpParameters(w, document.GlobalParameters); err != nil {
+			return err
+		}
+	}
+	if err := renderTextListing(w, "parameters", document.Listing); err != nil {
+		return err
+	}
+
+	example := document.Examples.Camel
+	if document.ActiveParameterSet == "kebab" {
+		example = document.Examples.Kebab
+	}
+	if strings.TrimSpace(example) != "" {
+		if _, err := fmt.Fprintf(w, "\nExample:\n  %s\n", example); err != nil {
+			return err
+		}
+	}
+	return renderRequestQueryExampleText(w, document.ResponseQuery)
 }
 
 func renderMachineHelpParameters(w io.Writer, parameters []machineHelpParameter) error {

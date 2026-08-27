@@ -14,6 +14,7 @@
 package openapi
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -22,6 +23,40 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 )
+
+// LegacyMissingRequiredError marks required-parameter validation failures from
+// the PascalCase OpenAPI path as explicit local CLI errors. The marker lets
+// non-AI rendering append the AI-mode hint without guessing from error text.
+type LegacyMissingRequiredError struct {
+	Err error
+}
+
+func (e *LegacyMissingRequiredError) Error() string {
+	if e == nil || e.Err == nil {
+		return "required parameters are not assigned"
+	}
+	return e.Err.Error()
+}
+
+func (e *LegacyMissingRequiredError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func (*LegacyMissingRequiredError) AIRecoveryEligible() {}
+
+func newLegacyMissingRequiredError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var existing *LegacyMissingRequiredError
+	if errors.As(err, &existing) {
+		return err
+	}
+	return &LegacyMissingRequiredError{Err: err}
+}
 
 // return when use unknown product
 type InvalidProductError struct {

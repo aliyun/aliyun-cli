@@ -213,6 +213,7 @@ type machineHelpAPIDocument struct {
 	Risk               any                      `json:"risk"`
 	Recovery           any                      `json:"recovery"`
 	ResponseQuery      *machineHelpQueryExample `json:"responseQueryExample"`
+	Listing            *machineHelpListing      `json:"listing"`
 	AIModeHint         *machineHelpAIModeHint   `json:"aiModeHint"`
 }
 
@@ -813,7 +814,7 @@ func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format stri
 	case *machineHelpProductDocument:
 		applyProductHelpOptions(typed, opts, aiMode)
 	case *machineHelpAPIDocument:
-		applyRequestHelpOptions(typed, opts)
+		applyRequestHelpOptions(typed, opts, aiMode)
 	case *machineHelpAPIResponseDocument:
 		if applyErr := applyResponseHelpOptions(typed, opts); applyErr != nil {
 			return newMachineHelpUnavailableError(target, applyErr)

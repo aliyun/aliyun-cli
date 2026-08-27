@@ -91,6 +91,15 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 		})
 	}
 
+	var legacyMissingRequired *LegacyMissingRequiredError
+	if errors.As(err, &legacyMissingRequired) {
+		return newLocalAgentError(err, legacyMissingRequired.Error(), nil, cli.AgentErrorRecovery{
+			Action:  "inspect_request_help",
+			Command: context.requestHelpCommand(),
+			Hint:    "Inspect the complete request help and provide every required parameter.",
+		})
+	}
+
 	var invalidParameter *InvalidParameterError
 	if errors.As(err, &invalidParameter) {
 		parameterContext := context.withProductAPI(invalidParameter.ProductCode, invalidParameter.ApiName)
