@@ -213,15 +213,55 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 }
 
 func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T) {
-	t.Run("failed API search validation falls back to product help", func(t *testing.T) {
+	t.Run("baseline unknown API tokenizes the invalid name and uses a validated keyword", func(t *testing.T) {
+		cause := &InvalidBaselineCommandError{
+			Product: "bssopenapi",
+			Command: "QueryMonthlyBill",
+			Err:     errors.New(`"QueryMonthlyBill" is not a valid api.`),
+		}
+		var requests []RecoverySearchRequest
+		envelope := requireAgentEnvelope(t, cause, []string{"bssopenapi", "QueryMonthlyBill"}, func(got RecoverySearchRequest) bool {
+			requests = append(requests, got)
+			return got.Keyword == "Bill"
+		})
+
+		assert.Equal(t, "search_api", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help bssopenapi --cli-search Bill", envelope.Recovery.Command)
+		assert.Equal(t, "Search APIs related to Bill.", envelope.Recovery.Hint)
+		assert.Contains(t, requests, RecoverySearchRequest{Product: "bssopenapi", Style: "pascal", Keyword: "MonthlyBill"})
+		assert.Contains(t, requests, RecoverySearchRequest{Product: "bssopenapi", Style: "pascal", Keyword: "Bill"})
+	})
+
+	t.Run("failed API search validation falls back to product inspection", func(t *testing.T) {
 		cause := &InvalidApiError{
 			Name:    "GetCouponLits",
 			product: &meta.Product{Code: "billing", ApiNames: []string{"GetCouponList"}},
 		}
 		envelope := requireAgentEnvelope(t, cause, []string{"billing", "GetCouponLits"}, func(RecoverySearchRequest) bool { return false })
 
+		assert.Equal(t, "inspect_product_help", envelope.Recovery.Action)
 		assert.Equal(t, "aliyun help billing", envelope.Recovery.Command)
-		assert.Equal(t, "Search APIs related to CouponList.", envelope.Recovery.Hint)
+		assert.Equal(t, "Inspect the available APIs for this product.", envelope.Recovery.Hint)
+	})
+
+	t.Run("failed product search validation falls back to root inspection", func(t *testing.T) {
+		cause := &InvalidProductError{Code: "not-a-product"}
+		envelope := requireAgentEnvelope(t, cause, []string{"not-a-product"}, func(RecoverySearchRequest) bool { return false })
+
+		assert.Equal(t, "inspect_root_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help", envelope.Recovery.Command)
+		assert.Equal(t, "Inspect the available products.", envelope.Recovery.Hint)
+	})
+
+	t.Run("failed parameter search validation falls back to request inspection", func(t *testing.T) {
+		cause := &engine.UsageError{Code: "UNKNOWN_FLAG", Err: &argparser.UnknownFlagError{
+			Flag: "not-a-parameter", Known: []string{"image-id", "instance-type"},
+		}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "describe-instances"}, func(RecoverySearchRequest) bool { return false })
+
+		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help ecs describe-instances --cli-section request", envelope.Recovery.Command)
+		assert.Equal(t, "Inspect the complete request help and correct the parameter or flag.", envelope.Recovery.Hint)
 	})
 
 	t.Run("PascalCase recovery keeps style and explicit version", func(t *testing.T) {

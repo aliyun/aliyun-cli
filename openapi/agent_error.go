@@ -70,7 +70,7 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	var unknownFlag *argparser.UnknownFlagError
 	if errors.As(err, &unknownFlag) {
 		suggestions := flagSuggestions(unknownFlag.Flag, unknownFlag.Known)
-		return parameterSearchAgentError(err, unknownFlag.Error(), suggestions, strings.TrimLeft(firstString(suggestions), "-"), context, validate)
+		return parameterSearchAgentError(err, unknownFlag.Error(), suggestions, unknownFlag.Flag, context, validate)
 	}
 
 	var missing *runtime.MissingRequiredError
@@ -105,7 +105,7 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 		parameterContext := context.withProductAPI(invalidParameter.ProductCode, invalidParameter.ApiName)
 		suggestions := invalidParameter.AgentSuggestions()
 		return parameterSearchAgentError(err, invalidParameter.AgentMessage(), suggestions,
-			strings.TrimLeft(firstString(suggestions), "-"), parameterContext, validate)
+			invalidParameter.Name, parameterContext, validate)
 	}
 
 	var invalidAPI *InvalidApiError
@@ -135,12 +135,12 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 
 	var invalidProduct *InvalidProductError
 	if errors.As(err, &invalidProduct) {
-		return unknownProductAgentError(err, invalidProduct.AgentMessage(), invalidProduct.AgentSuggestions(), validate)
+		return unknownProductAgentError(err, invalidProduct.AgentMessage(), invalidProduct.AgentSuggestions(), invalidProduct.Code, validate)
 	}
 
 	var invalidProductOrPlugin *InvalidProductOrPluginError
 	if errors.As(err, &invalidProductOrPlugin) {
-		return unknownProductAgentError(err, invalidProductOrPlugin.AgentMessage(), invalidProductOrPlugin.AgentSuggestions(), validate)
+		return unknownProductAgentError(err, invalidProductOrPlugin.AgentMessage(), invalidProductOrPlugin.AgentSuggestions(), invalidProductOrPlugin.Code, validate)
 	}
 
 	var invalidFlag *cli.InvalidFlagError
@@ -222,53 +222,58 @@ func newLocalAgentError(cause error, message string, suggestions []string, recov
 	}, cause)
 }
 
-func unknownProductAgentError(cause error, message string, suggestions []string, validate RecoverySearchValidator) error {
+func unknownProductAgentError(cause error, message string, suggestions []string, invalidName string, validate RecoverySearchValidator) error {
 	suggestions = stableStrings(suggestions)
-	candidate := firstString(suggestions)
 	recovery := cli.AgentErrorRecovery{
-		Action:  "search_product",
+		Action:  "inspect_root_help",
 		Command: "aliyun help",
 		Hint:    "Inspect the available products.",
 	}
-	if candidate != "" {
-		recovery.Hint = fmt.Sprintf("Search products related to %s.", candidate)
+	for _, candidate := range orderedSearchCandidates(append(append([]string(nil), suggestions...), invalidName)...) {
 		request := RecoverySearchRequest{Keyword: candidate}
-		if validate != nil && validate(request) && safeCommandToken(candidate) {
+		if validate != nil && validate(request) {
+			recovery.Action = "search_product"
 			recovery.Command = "aliyun help --cli-search " + candidate
+			recovery.Hint = fmt.Sprintf("Search products related to %s.", candidate)
+			break
 		}
 	}
 	return newLocalAgentError(cause, message, suggestions, recovery)
 }
 
 func unknownAPIAgentError(cause error, message string, suggestions []string, context recoveryContext, validate RecoverySearchValidator) error {
-	keyword := resourceKeyword(firstString(suggestions))
 	recovery := cli.AgentErrorRecovery{
-		Action:  "search_api",
+		Action:  "inspect_product_help",
 		Command: context.productHelpCommand(),
 		Hint:    "Inspect the available APIs for this product.",
 	}
-	if keyword != "" {
-		recovery.Hint = fmt.Sprintf("Search APIs related to %s.", keyword)
+	seeds := append(append([]string(nil), suggestions...), context.api)
+	for _, keyword := range apiSearchKeywordCandidates(context.style, seeds...) {
 		request := context.searchRequest("", "", keyword)
 		if validate != nil && validate(request) {
+			recovery.Action = "search_api"
 			recovery.Command = context.productSearchCommand(keyword)
+			recovery.Hint = fmt.Sprintf("Search APIs related to %s.", keyword)
+			break
 		}
 	}
 	return newLocalAgentError(cause, message, suggestions, recovery)
 }
 
-func parameterSearchAgentError(cause error, message string, suggestions []string, keyword string,
+func parameterSearchAgentError(cause error, message string, suggestions []string, invalidName string,
 	context recoveryContext, validate RecoverySearchValidator) error {
-	keyword = strings.TrimLeft(strings.TrimSpace(keyword), "-")
 	recovery := cli.AgentErrorRecovery{
-		Action:  "search_parameter",
+		Action:  "inspect_request_help",
 		Command: context.requestHelpCommand(),
 		Hint:    "Inspect the complete request help and correct the parameter or flag.",
 	}
-	if keyword != "" {
-		recovery.Hint = fmt.Sprintf("Search request parameters related to %s.", keyword)
+	seeds := append(append([]string(nil), suggestions...), invalidName)
+	for _, keyword := range parameterSearchKeywordCandidates(context.style, seeds...) {
 		if validate != nil && validate(context.searchRequest("request", context.api, keyword)) {
+			recovery.Action = "search_parameter"
 			recovery.Command = context.requestSearchCommand(keyword)
+			recovery.Hint = fmt.Sprintf("Search request parameters related to %s.", keyword)
+			break
 		}
 	}
 	return newLocalAgentError(cause, message, suggestions, recovery)
@@ -459,6 +464,69 @@ func commandStyle(api string) string {
 		return "pascal"
 	}
 	return ""
+}
+
+func apiSearchKeywordCandidates(style string, seeds ...string) []string {
+	candidates := make([]string, 0, len(seeds)*3)
+	for _, seed := range seeds {
+		resource := resourceKeyword(seed)
+		if resource == "" {
+			continue
+		}
+		if style == "kebab" {
+			resource = apiNameToKebab(resource)
+		}
+		candidates = append(candidates, resource)
+		tokens := splitHelpSearchTokens(resource)
+		for index := len(tokens) - 1; index >= 0; index-- {
+			candidates = append(candidates, formatSearchToken(tokens[index], style))
+		}
+	}
+	return orderedSearchCandidates(candidates...)
+}
+
+func parameterSearchKeywordCandidates(style string, seeds ...string) []string {
+	candidates := make([]string, 0, len(seeds)*3)
+	for _, seed := range seeds {
+		seed = strings.TrimLeft(strings.TrimSpace(seed), "-")
+		if seed == "" {
+			continue
+		}
+		candidates = append(candidates, seed)
+		tokens := splitHelpSearchTokens(seed)
+		for index := len(tokens) - 1; index >= 0; index-- {
+			candidates = append(candidates, formatSearchToken(tokens[index], style))
+		}
+	}
+	return orderedSearchCandidates(candidates...)
+}
+
+func formatSearchToken(token, style string) string {
+	token = strings.ToLower(strings.TrimSpace(token))
+	if token == "" || style != "pascal" {
+		return token
+	}
+	runes := []rune(token)
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
+}
+
+func orderedSearchCandidates(values ...string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if !safeCommandToken(value) {
+			continue
+		}
+		key := strings.ToLower(value)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
 
 func resourceKeyword(candidate string) string {
