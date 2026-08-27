@@ -520,6 +520,16 @@ func TestLoadProfileWithContextWhenIGNORE_PROFILE(t *testing.T) {
 }
 
 func TestLoadProfileWithContext_Anonymous(t *testing.T) {
+	originHook := hookLoadOrCreateConfiguration
+	t.Cleanup(func() {
+		hookLoadOrCreateConfiguration = originHook
+	})
+	hookLoadOrCreateConfiguration = func(fn func(path string) (*Configuration, error)) func(path string) (*Configuration, error) {
+		return func(path string) (*Configuration, error) {
+			return NewConfiguration(), nil
+		}
+	}
+
 	// C-01: 无 config.json 也能走匿名模式
 	t.Run("C-01: Anonymous flag without config.json", func(t *testing.T) {
 		stdout := new(bytes.Buffer)

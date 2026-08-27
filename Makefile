@@ -91,7 +91,11 @@ test-runtime:
 check-runtime: test-runtime
 
 test: deps
-	ALIYUN_CLI_META_DIR="$(META_DIR)" LANG="en_US.UTF-8" go test -race -coverprofile=coverage.txt -covermode=atomic ./bundledmeta ./util/... ./cli/... ./config/... ./i18n/... ./main/... ./openapi/... ./meta/... ./export/...
+	ALIYUN_CLI_META_DIR="$(META_DIR)" LANG="en_US.UTF-8" go test -race -coverprofile=coverage.txt -covermode=atomic \
+		./bundledmeta ./canonicalmeta \
+		./util/... ./cli/... ./config/... \
+		./i18n/... ./main/... ./openapi/... ./meta/... ./export/... \
+		./sysconfig/...
 	go tool cover -html=coverage.txt -o coverage.html
 
 test-release: meta-pack
