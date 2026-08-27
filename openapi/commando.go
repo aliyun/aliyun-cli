@@ -128,7 +128,7 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 	if loadErr != nil {
 		cfg = aimode.DefaultAiConfig()
 	}
-	forceOn, forceOff := CliAIOverrides(ctx.Flags())
+	forceOn, forceOff := CliAIOverridesForOpenAPI(ctx)
 	if !aimode.EnabledForCommand(cfg, forceOn, forceOff) {
 		return err
 	}

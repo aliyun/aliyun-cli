@@ -31,6 +31,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
@@ -62,6 +63,20 @@ func TestBuildUserAgentSuffix(t *testing.T) {
 
 	if got, want := buildUserAgentSuffix(ctx), "env-agent/1 flag-agent/2"; got != want {
 		t.Fatalf("suffix = %q, want %q", got, want)
+	}
+}
+
+func TestBuildUserAgentSuffixForDetectedAgentUsesMarkerOnly(t *testing.T) {
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.Flags().Add(config.NewConfigurePathFlag())
+	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+	config.ConfigurePathFlag(ctx.Flags()).SetValue(filepath.Join(t.TempDir(), "config.json"))
+	ctx.Flags().Add(&cli.Flag{Name: "cli-ai-mode"})
+	ctx.Flags().Add(&cli.Flag{Name: "no-cli-ai-mode"})
+	ctx.SetAgentName("codex")
+
+	if got := buildUserAgentSuffix(ctx); got != aimode.UserAgentEnabledMarker {
+		t.Fatalf("agent suffix = %q, want marker only", got)
 	}
 }
 
@@ -98,6 +113,24 @@ func TestDispatchPropagatesEffectiveAIMode(t *testing.T) {
 	}
 	if captured.AIMode {
 		t.Fatal("engine request AIMode = true when force-off is assigned")
+	}
+
+	forceOn.SetAssigned(false)
+	forceOff.SetAssigned(false)
+	ctx.SetAgentName("codex")
+	if err := Dispatch(ctx, []string{"ecs", "describe-regions"}); err != nil {
+		t.Fatal(err)
+	}
+	if !captured.AIMode {
+		t.Fatal("engine request AIMode = false for detected agent")
+	}
+
+	forceOff.SetAssigned(true)
+	if err := Dispatch(ctx, []string{"ecs", "describe-regions"}); err != nil {
+		t.Fatal(err)
+	}
+	if captured.AIMode {
+		t.Fatal("engine request AIMode = true for detected agent with force-off")
 	}
 }
 
