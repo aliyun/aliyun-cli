@@ -3,6 +3,7 @@ package mock
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -336,6 +337,10 @@ func TestAppendLenientRecoversMalformedData(t *testing.T) {
 }
 
 func TestSaveSetsExistingFileModeToPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose POSIX file permission bits")
+	}
+
 	path := filepath.Join(t.TempDir(), "mocks.json")
 	if err := os.WriteFile(path, []byte("[]\n"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)

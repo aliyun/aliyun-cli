@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -447,8 +448,17 @@ func TestExecutePlugin(t *testing.T) {
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
 		assert.NoError(t, os.MkdirAll(pluginDir, 0755))
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
-		manifestJSON := `{"plugins":{"aliyun-cli-test":{"name":"aliyun-cli-test","version":"1.0.0","minCliVersion":"9.0.0","path":"` + pluginDir + `","command":"test"}}}`
-		assert.NoError(t, os.WriteFile(manifestPath, []byte(manifestJSON), 0644))
+		manifestJSON, err := json.Marshal(LocalManifest{Plugins: map[string]LocalPlugin{
+			"aliyun-cli-test": {
+				Name:          "aliyun-cli-test",
+				Version:       "1.0.0",
+				MinCliVersion: "9.0.0",
+				Path:          pluginDir,
+				Command:       "test",
+			},
+		}})
+		assert.NoError(t, err)
+		assert.NoError(t, os.WriteFile(manifestPath, manifestJSON, 0644))
 
 		ok, err := ExecutePlugin("test", []string{}, nil)
 		assert.True(t, ok)
