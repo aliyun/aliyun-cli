@@ -719,7 +719,7 @@ func TestPrintApiUsageAlwaysTriesRuntime(t *testing.T) {
 func TestHelpResponseSectionUsesHostCanonicalWhenPluginIsNotInstalled(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
-	c.pluginLoaded = true
+	c.localLoaded = true
 	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
 	root := testMachineHelpRootCommand()
 	AddFlags(root.Flags())
@@ -732,6 +732,7 @@ func TestHelpResponseSectionUsesHostCanonicalWhenPluginIsNotInstalled(t *testing
 
 	err := c.help(ctx, []string{"demo", "CreateReport"})
 	require.NoError(t, err)
+	assert.False(t, c.pluginLoaded, "host Canonical response Help must not load the remote plugin index")
 	assert.Empty(t, stderr.String())
 	assert.Contains(t, stdout.String(), "Response Schema (HTTP 200, application/json):")
 	assert.NotContains(t, stdout.String(), "Parameters:")

@@ -104,3 +104,20 @@ func TestParseHelpOptionsSearchTakesPrecedenceOverAll(t *testing.T) {
 	assert.Equal(t, "instance", opts.Search)
 	assert.True(t, opts.All)
 }
+
+func TestCanonicalHelpOptionAssigned(t *testing.T) {
+	ctx := testHelpOptionsContext()
+	assert.False(t, canonicalHelpOptionAssigned(ctx.Flags()))
+	assignHelpFlag(t, CliHelpSearchFlag(ctx.Flags()), "instance")
+	assert.True(t, canonicalHelpOptionAssigned(ctx.Flags()))
+}
+
+func TestCommandoRejectsCanonicalHelpOptionsOutsideHelp(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	ctx := cli.NewCommandContext(stdout, stderr)
+	AddFlags(ctx.Flags())
+	assignHelpFlag(t, CliHelpSectionFlag(ctx.Flags()), "response")
+
+	err := c.main(ctx, []string{"ecs", "DescribeInstances"})
+	assert.EqualError(t, err, "--cli-section, --cli-search, and --cli-all can only be used with `aliyun help ...` or --help")
+}

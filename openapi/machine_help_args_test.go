@@ -28,6 +28,11 @@ func TestNormalizeMachineHelpArgs(t *testing.T) {
 			want: []string{"ecs", "DescribeInstances", "--help", "--help-format", "json"},
 		},
 		{
+			name: "help response section and format stay orthogonal",
+			in:   []string{"help", "ecs", "DescribeInstances", "--cli-section", "response", "--format", "json"},
+			want: []string{"ecs", "DescribeInstances", "--cli-section", "response", "--help", "--help-format", "json"},
+		},
+		{
 			name: "help command equals format",
 			in:   []string{"help", "ecs", "--format=json"},
 			want: []string{"ecs", "--help", "--help-format", "json"},
@@ -51,6 +56,11 @@ func TestNormalizeMachineHelpArgs(t *testing.T) {
 			name: "input is not mutated",
 			in:   []string{"ecs", "Call", "--help=json"},
 			want: []string{"ecs", "Call", "--help", "--help-format", "json"},
+		},
+		{
+			name: "compatibility response help json keeps section",
+			in:   []string{"ecs", "DescribeInstances", "--cli-section", "response", "--help=json"},
+			want: []string{"ecs", "DescribeInstances", "--cli-section", "response", "--help", "--help-format", "json"},
 		},
 	}
 

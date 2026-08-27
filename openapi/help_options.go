@@ -19,6 +19,22 @@ type helpOptions struct {
 	All             bool
 }
 
+func canonicalHelpOptionAssigned(fs *cli.FlagSet) bool {
+	if fs == nil {
+		return false
+	}
+	for _, flag := range []*cli.Flag{
+		CliHelpSectionFlag(fs),
+		CliHelpSearchFlag(fs),
+		CliHelpAllFlag(fs),
+	} {
+		if flag != nil && flag.IsAssigned() {
+			return true
+		}
+	}
+	return false
+}
+
 func parseHelpOptions(ctx *cli.Context, target []string) (helpOptions, error) {
 	opts := helpOptions{Section: helpSectionRequest}
 	if ctx == nil || ctx.Flags() == nil {

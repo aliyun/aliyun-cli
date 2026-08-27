@@ -50,6 +50,7 @@ type Commando struct {
 	pluginIndexErr error // set when remote plugin index could not be loaded
 	localManifest  *plugin.LocalManifest
 	pluginLoaded   bool
+	localLoaded    bool
 }
 
 var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
@@ -92,6 +93,23 @@ func (c *Commando) loadPlugins() {
 	}
 	// Remote index may fail offline; local manifest still loads for installed plugins.
 	c.pluginIndex, c.pluginIndexErr = mgr.GetIndex()
+	c.localManifest, _ = mgr.GetLocalManifest()
+	c.localLoaded = true
+}
+
+// loadLocalPlugins reads only the on-disk manifest. Canonical Help paths use
+// it to preserve installed-plugin ownership without making Help depend on the
+// remote plugin index.
+func (c *Commando) loadLocalPlugins() {
+	if c.localLoaded || c.localManifest != nil {
+		c.localLoaded = true
+		return
+	}
+	c.localLoaded = true
+	mgr, err := plugin.NewManager()
+	if err != nil {
+		return
+	}
 	c.localManifest, _ = mgr.GetLocalManifest()
 }
 
@@ -205,6 +223,9 @@ var stdin io.Reader = os.Stdin
 
 func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// fmt.Println("commando main", args)
+	if canonicalHelpOptionAssigned(ctx.Flags()) {
+		return fmt.Errorf("--cli-section, --cli-search, and --cli-all can only be used with `aliyun help ...` or --help")
+	}
 
 	// --estimate-cost needs a product + api to estimate against. Without an
 	// early fail here, len(args) == 0 below would silently print usage and
@@ -1107,7 +1128,7 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 	}
 	_ = helpOpts // consumed by the Canonical text Help integration path
 
-	c.loadPlugins()
+	c.loadLocalPlugins()
 	if helpOpts.Section == helpSectionResponse && len(args) == 2 && !c.hasInstalledProductPlugin(args[0]) {
 		if c.library == nil || c.library.helpRepo == nil {
 			return fmt.Errorf("response Help is unavailable: canonical metadata repository is unavailable")
@@ -1118,6 +1139,7 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 		}
 		return renderResponseHelpText(ctx.Stdout(), document)
 	}
+	c.loadPlugins()
 	cmd := ctx.Command()
 	if len(args) == 0 {
 		cmd.PrintHead(ctx)
