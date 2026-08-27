@@ -417,7 +417,7 @@ func (rc *RemoveCommand) RunCommand() error {
 	if err = rc.removeEntry(bucket, cloudURL); err != nil {
 		exitStat = errExit
 	}
-	fmt.Printf(rc.monitor.progressBar(true, exitStat))
+	fmt.Print(rc.monitor.progressBar(true, exitStat))
 	return err
 }
 
@@ -722,7 +722,7 @@ func (rc *RemoveCommand) ossDeleteObjectRetry(bucket *oss.Bucket, object string)
 func (rc *RemoveCommand) updateObjectMonitor(okNum, errNum int64) {
 	rc.monitor.updateObjectNum(okNum)
 	rc.monitor.updateErrObjectNum(errNum)
-	fmt.Printf(rc.monitor.progressBar(false, normalExit))
+	fmt.Print(rc.monitor.progressBar(false, normalExit))
 }
 
 func (rc *RemoveCommand) batchDeleteObjects(bucket *oss.Bucket, cloudURL CloudURL) error {
@@ -901,7 +901,7 @@ func (rc *RemoveCommand) updateUploadIdMonitor(err error) {
 	} else {
 		rc.monitor.updateErrUploadIdNum(1)
 	}
-	fmt.Printf(rc.monitor.progressBar(false, normalExit))
+	fmt.Print(rc.monitor.progressBar(false, normalExit))
 }
 
 func (rc *RemoveCommand) ossAbortMultipartUploadRetry(bucket *oss.Bucket, key, uploadId string) error {
@@ -943,7 +943,7 @@ func (rc *RemoveCommand) removeBucket(bucket *oss.Bucket, cloudURL CloudURL) err
 func (rc *RemoveCommand) confirmRemoveBucket(cloudURL CloudURL) bool {
 	if !rc.rmOption.force {
 		var val string
-		fmt.Printf(getClearStr(fmt.Sprintf("Do you really mean to remove the Bucket: %s(y or N)? ", cloudURL.bucket)))
+		fmt.Print(getClearStr(fmt.Sprintf("Do you really mean to remove the Bucket: %s(y or N)? ", cloudURL.bucket)))
 		if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
 			fmt.Println("operation is canceled.")
 			return false

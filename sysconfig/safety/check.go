@@ -16,6 +16,7 @@ package safety
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -79,7 +80,7 @@ func CheckAndConfirm(ctx *cli.Context, policy *Policy, cmd CommandInfo, skipConf
 			"安全策略要求确认以下操作: %s %s\n输入 'yes' 继续，其他任意输入取消: ",
 		).GetMessage(), cmd.Product, displayCommand(cmd))
 		if !PromptConfirm(ctx.Stderr(), prompt) {
-			return fmt.Errorf(i18n.T(
+			return errors.New(i18n.T(
 				"operation cancelled by user",
 				"操作已由用户取消",
 			).GetMessage())

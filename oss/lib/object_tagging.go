@@ -353,7 +353,7 @@ func (otc *ObjectTagCommand) waitRoutinueComplete(chError, chListError <-chan er
 			} else {
 				ferr = err
 				if !otc.reportOption.ctnu {
-					fmt.Printf(otc.monitor.progressBar(true, errExit))
+					fmt.Print(otc.monitor.progressBar(true, errExit))
 					return err
 				}
 			}
@@ -364,7 +364,7 @@ func (otc *ObjectTagCommand) waitRoutinueComplete(chError, chListError <-chan er
 
 func (otc *ObjectTagCommand) formatResultPrompt(err error) error {
 	if otc.method != "get" {
-		fmt.Printf(otc.monitor.progressBar(true, normalExit))
+		fmt.Print(otc.monitor.progressBar(true, normalExit))
 	}
 
 	if err != nil && otc.reportOption.ctnu {

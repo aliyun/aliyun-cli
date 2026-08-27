@@ -71,10 +71,10 @@ func (s *OssUtilLogSuite) TestLogLevel(c *C) {
 	InitLogger(logLevel, logName)
 
 	errorContext := "i am error log.\n"
-	LogError(errorContext)
-	LogWarn(errorContext)
-	LogInfo(errorContext)
-	LogDebug(errorContext)
+	LogError("%s", errorContext)
+	LogWarn("%s", errorContext)
+	LogInfo("%s", errorContext)
+	LogDebug("%s", errorContext)
 
 	contents, err := ioutil.ReadFile(absLogName)
 	LogContent := string(contents)
@@ -88,10 +88,10 @@ func (s *OssUtilLogSuite) TestLogLevel(c *C) {
 	// errorLevel
 	logLevel = oss.Error
 	InitLogger(logLevel, logName)
-	LogError(errorContext)
-	LogWarn(errorContext)
-	LogInfo(errorContext)
-	LogDebug(errorContext)
+	LogError("%s", errorContext)
+	LogWarn("%s", errorContext)
+	LogInfo("%s", errorContext)
+	LogDebug("%s", errorContext)
 
 	contents, err = ioutil.ReadFile(absLogName)
 	LogContent = string(contents)
@@ -106,10 +106,10 @@ func (s *OssUtilLogSuite) TestLogLevel(c *C) {
 	logLevel = oss.Warn
 	InitLogger(logLevel, logName)
 	normalContext := "i am normal log.\n"
-	LogError(normalContext)
-	LogWarn(normalContext)
-	LogInfo(normalContext)
-	LogDebug(normalContext)
+	LogError("%s", normalContext)
+	LogWarn("%s", normalContext)
+	LogInfo("%s", normalContext)
+	LogDebug("%s", normalContext)
 
 	contents, err = ioutil.ReadFile(absLogName)
 	LogContent = string(contents)
@@ -124,10 +124,10 @@ func (s *OssUtilLogSuite) TestLogLevel(c *C) {
 	logLevel = oss.Info
 	InitLogger(logLevel, logName)
 	infoContext := "i am info log.\n"
-	LogError(infoContext)
-	LogWarn(infoContext)
-	LogInfo(infoContext)
-	LogDebug(infoContext)
+	LogError("%s", infoContext)
+	LogWarn("%s", infoContext)
+	LogInfo("%s", infoContext)
+	LogDebug("%s", infoContext)
 
 	contents, err = ioutil.ReadFile(absLogName)
 	LogContent = string(contents)
@@ -142,10 +142,10 @@ func (s *OssUtilLogSuite) TestLogLevel(c *C) {
 	logLevel = oss.Debug
 	InitLogger(logLevel, logName)
 	debugContext := "i am debug log.\n"
-	LogError(debugContext)
-	LogWarn(debugContext)
-	LogInfo(debugContext)
-	LogDebug(debugContext)
+	LogError("%s", debugContext)
+	LogWarn("%s", debugContext)
+	LogInfo("%s", debugContext)
+	LogDebug("%s", debugContext)
 
 	contents, err = ioutil.ReadFile(absLogName)
 	LogContent = string(contents)

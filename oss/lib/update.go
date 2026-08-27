@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -216,7 +217,7 @@ func (uc *UpdateCommand) ossAnonymousGetToFile(host, filePath string) error {
 	statusCode := response.StatusCode
 	body, _ := ioutil.ReadAll(response.Body)
 	if statusCode >= 300 {
-		return fmt.Errorf(string(body))
+		return errors.New(string(body))
 	}
 
 	fd, err := os.OpenFile(filePath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0640)

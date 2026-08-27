@@ -1035,7 +1035,7 @@ func TestValidateExecPathOverride_StatError(t *testing.T) {
 	}
 }
 
-func TestbuildTarGzArchive_Error(t *testing.T) {
+func TestBuildTarGzArchive_Error(t *testing.T) {
 	_, err := buildTarGzArchive(map[string][]byte{"bad": make([]byte, 1)})
 	if err != nil {
 		// header write always succeeds for small payload; still call buildZipArchive

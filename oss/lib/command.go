@@ -789,7 +789,7 @@ func (cmd *Command) updateMonitor(err error, monitor *Monitor) {
 	} else {
 		monitor.updateErrNum(1)
 	}
-	fmt.Printf(monitor.progressBar(false, normalExit))
+	fmt.Print(monitor.progressBar(false, normalExit))
 }
 
 func (cmd *Command) report(msg string, err error, option *batchOptionType) {
