@@ -321,7 +321,7 @@ func TestAgentErrorEnvelopeEndToEndIsOneCleanJSONDocument(t *testing.T) {
 	assert.Equal(t, []interface{}{"--instance-type"}, decoded["did_you_mean"])
 	recovery := decoded["recovery"].(map[string]interface{})
 	assert.Equal(t, "search_parameter", recovery["action"])
-	assert.Equal(t, "aliyun help ecs describe-instances --cli-section request", recovery["command"])
+	assert.Equal(t, "aliyun help ecs describe-instances --cli-section request --cli-search instance-type", recovery["command"])
 }
 
 func TestNonAIExplicitLocalErrorKeepsTextAndAppendsHintOnce(t *testing.T) {

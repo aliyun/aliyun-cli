@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
@@ -227,6 +228,79 @@ func projectMachineHelpListing(listing *HelpListingMetadata) *machineHelpListing
 	return &machineHelpListing{Shown: listing.Shown, Total: listing.Total, Hint: listing.Hint}
 }
 
+// validateRecoverySearch runs the same local projection used by real Help.
+// It never calls the remote plugin catalog and refuses to advertise host
+// Canonical search for a product whose installed plugin owns text Help.
+func (c *Commando) validateRecoverySearch(ctx *cli.Context, request RecoverySearchRequest) bool {
+	if c == nil || c.library == nil || c.library.helpRepo == nil || strings.TrimSpace(request.Keyword) == "" {
+		return false
+	}
+	c.loadLocalPlugins()
+	if request.Product != "" && c.hasInstalledProductPlugin(request.Product) {
+		return false
+	}
+
+	service := newMachineHelpService(c.library.helpRepo)
+	options := helpOptions{Section: helpSectionRequest, Search: request.Keyword}
+	if request.Section == helpSectionResponse {
+		options.Section = helpSectionResponse
+	}
+	switch {
+	case request.Product == "":
+		if ctx == nil || ctx.Command() == nil {
+			return false
+		}
+		document, err := service.buildRoot(ctx.Command())
+		if err != nil {
+			return false
+		}
+		applyRootHelpOptions(document, options, false)
+		return len(document.Products) > 0
+
+	case request.API == "":
+		product, err := service.findProduct(request.Product)
+		if err != nil {
+			return false
+		}
+		versions := normalizedVersions(*product)
+		style := request.Style
+		if style == "pascal" {
+			style = "camel"
+		}
+		selected, err := selectAPIVersion(*product, versions, request.Version, style)
+		if err != nil {
+			return false
+		}
+		document, err := service.buildProduct(request.Product, selected)
+		if err != nil {
+			return false
+		}
+		applyProductHelpOptions(document, options, false)
+		return len(document.APIs) > 0
+
+	case options.Section == helpSectionResponse:
+		document, err := service.buildAPIResponse(request.Product, request.API, request.Version)
+		if err != nil {
+			return false
+		}
+		if err := applyResponseHelpOptions(document, options); err != nil {
+			return false
+		}
+		return len(document.Matches) > 0
+
+	default:
+		document, err := service.buildAPI(request.Product, request.API, request.Version)
+		if err != nil {
+			return false
+		}
+		if ctx != nil {
+			document.GlobalParameters = projectGlobalParameters(ctx.Flags())
+		}
+		applyRequestHelpOptions(document, options)
+		return len(activeMachineHelpParameters(document)) > 0 || len(document.GlobalParameters) > 0
+	}
+}
+
 func renderCanonicalRootText(w io.Writer, document *machineHelpRootDocument, search string) error {
 	if document == nil {
 		return fmt.Errorf("root Help document is nil")
@@ -350,6 +424,11 @@ func renderRequestQueryExampleText(w io.Writer, example *machineHelpQueryExample
 			"This response contains a complex array. Inspect its structure with the response section, then use --cli-query to return only that array:\n"+
 			"  %s\n  %s\n",
 		example.Path, example.SchemaCommand, example.QueryCommand)
+	return err
+}
+
+func renderAIModeEnableHelpHint(w io.Writer) error {
+	_, err := fmt.Fprintf(w, "\n%s\n", cli.AIModeEnableTextHint)
 	return err
 }
 

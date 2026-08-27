@@ -20,6 +20,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 )
 
 func newTestCommando() (*Commando, *bytes.Buffer, *bytes.Buffer) {
@@ -739,6 +740,7 @@ func TestHelpResponseSectionUsesHostCanonicalWhenPluginIsNotInstalled(t *testing
 }
 
 func TestHelpResponseSectionDoesNotOverrideInstalledPluginTextHelp(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "0")
 	c, stdout, stderr := newTestCommando()
 	c.pluginLoaded = true
 	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
@@ -764,10 +766,12 @@ func TestHelpResponseSectionDoesNotOverrideInstalledPluginTextHelp(t *testing.T)
 	assert.Empty(t, stderr.String())
 	assert.Contains(t, stdout.String(), "PLUGIN_OWNED_TEXT_HELP")
 	assert.NotContains(t, stdout.String(), "Response Schema")
+	assert.NotContains(t, stdout.String(), cli.AIModeEnableCommand)
 }
 
 func newCanonicalHelpTestContext(t *testing.T) (*Commando, *cli.Context, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
+	t.Setenv(aimode.EnvAIMode, "0")
 	c, stdout, stderr := newTestCommando()
 	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
 	c.localLoaded = true
@@ -790,6 +794,7 @@ func TestCanonicalTextHelpSearchesRootProductAndRequestLocally(t *testing.T) {
 		assert.Empty(t, stderr.String())
 		assert.Contains(t, stdout.String(), "demo")
 		assert.NotContains(t, stdout.String(), "Commands:")
+		assert.Contains(t, stdout.String(), cli.AIModeEnableCommand)
 	})
 
 	t.Run("product api", func(t *testing.T) {
@@ -817,6 +822,17 @@ func TestCanonicalTextHelpSearchesRootProductAndRequestLocally(t *testing.T) {
 		assert.NotContains(t, stdout.String(), "--report-id")
 		assert.Contains(t, stdout.String(), "Response query example (Reports.Report)")
 	})
+}
+
+func TestCanonicalTextHelpOmitsEnableHintWhenAIModeIsOn(t *testing.T) {
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	t.Setenv(aimode.EnvAIMode, "1")
+	CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSearchFlag(ctx.Flags()).SetValue("demo")
+
+	require.NoError(t, c.help(ctx, nil))
+	assert.Empty(t, stderr.String())
+	assert.NotContains(t, stdout.String(), cli.AIModeEnableCommand)
 }
 
 func TestCanonicalTextResponseSearchPrintsMatchedPathAndFilteredQuery(t *testing.T) {

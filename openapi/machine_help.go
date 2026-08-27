@@ -830,6 +830,20 @@ func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format stri
 			}
 		}
 	}
+	if !aiMode {
+		hint := cli.NewAIModeHint()
+		projected := &machineHelpAIModeHint{Command: hint.Command, Message: hint.Message}
+		switch typed := document.(type) {
+		case *machineHelpRootDocument:
+			typed.AIModeHint = projected
+		case *machineHelpProductDocument:
+			typed.AIModeHint = projected
+		case *machineHelpAPIDocument:
+			typed.AIModeHint = projected
+		case *machineHelpAPIResponseDocument:
+			typed.AIModeHint = projected
+		}
+	}
 	if err := encodeMachineHelpJSON(ctx.Stdout(), document); err != nil {
 		return newMachineHelpUnavailableError(target, err)
 	}
