@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
@@ -138,5 +139,101 @@ func TestValidateConstraintsSkipsOptionalAnyAndRawBody(t *testing.T) {
 	args := map[string]any{"Payload": "anything", "Body": "bad", "Form": "bad"}
 	if err := ValidateConstraints(api, args, true); err != nil {
 		t.Fatalf("optional, TypeAny, and raw body values should be skipped: %v", err)
+	}
+}
+
+func TestConstraintNumericMaximumAndPatterns(t *testing.T) {
+	maximum := meta.Parameter{Name: "ratio", RawName: "Ratio", Type: meta.TypeFloat, Maximum: "1.5"}
+	err := ValidateConstraints(constraintAPI(maximum), map[string]any{"Ratio": float64(2)}, false)
+	var violation *ConstraintViolationError
+	if !errors.As(err, &violation) || violation.Constraint != "maximum" || violation.Expected != "1.5" {
+		t.Fatalf("maximum violation = %#v, %v", violation, err)
+	}
+	pattern := meta.Parameter{Name: "name", RawName: "Name", Type: meta.TypeString, Pattern: "^[a-z]+$"}
+	err = ValidateConstraints(constraintAPI(pattern), map[string]any{"Name": "BAD"}, false)
+	if !errors.As(err, &violation) || violation.Constraint != "pattern" {
+		t.Fatalf("pattern violation = %#v, %v", violation, err)
+	}
+	if err := ValidateConstraints(nil, nil, false); err != nil {
+		t.Fatalf("nil API error = %v", err)
+	}
+}
+
+func TestConstraintHelperConversions(t *testing.T) {
+	ratTests := []struct {
+		value any
+		want  string
+		ok    bool
+	}{
+		{json.Number("1.25"), "5/4", true}, {float64(1.5), "3/2", true}, {float32(2.5), "5/2", true},
+		{int(3), "3", true}, {int32(4), "4", true}, {int64(5), "5", true}, {"6", "", false},
+	}
+	for _, tc := range ratTests {
+		got, ok := constraintRat(tc.value)
+		if ok != tc.ok {
+			t.Errorf("constraintRat(%#v) ok = %v", tc.value, ok)
+			continue
+		}
+		if ok && got.RatString() != tc.want {
+			t.Errorf("constraintRat(%#v) = %s", tc.value, got.RatString())
+		}
+	}
+	actualTests := []struct {
+		value any
+		want  string
+	}{
+		{"text", "text"}, {json.Number("9.1"), "9.1"}, {float64(2.5), "2.5"}, {float32(3.5), "3.5"}, {true, "true"}, {int(7), "7"},
+	}
+	for _, tc := range actualTests {
+		if got := constraintActual(tc.value); got != tc.want {
+			t.Errorf("constraintActual(%#v) = %q, want %q", tc.value, got, tc.want)
+		}
+	}
+	if pathName(&meta.Parameter{Name: "fallback"}) != "fallback" || pathName(&meta.Parameter{Name: "name", RawName: "Raw"}) != "Raw" {
+		t.Fatal("pathName fallback failed")
+	}
+	for _, tc := range []struct{ parent, child, want string }{
+		{"", "child", "child"}, {"parent", "", "parent"}, {"parent", "child", "parent.child"},
+	} {
+		if got := appendObjectPath(tc.parent, tc.child); got != tc.want {
+			t.Errorf("appendObjectPath(%q,%q) = %q", tc.parent, tc.child, got)
+		}
+	}
+}
+
+func TestValidateConstraintValueIgnoresShapeMismatches(t *testing.T) {
+	context := constraintContext{parameter: "value", flag: "--value", path: "Value"}
+	tests := []struct {
+		parameter *meta.Parameter
+		value     any
+	}{
+		{nil, "x"},
+		{&meta.Parameter{Type: meta.TypeAny}, "x"},
+		{&meta.Parameter{Type: meta.TypeString, MinLength: "2"}, nil},
+		{&meta.Parameter{Type: meta.TypeInteger, Minimum: "2"}, "not-number"},
+		{&meta.Parameter{Type: meta.TypeObject, Fields: []meta.Parameter{{RawName: "Name", Type: meta.TypeString}}}, "not-object"},
+		{&meta.Parameter{Type: meta.TypeArray, ItemType: &meta.Parameter{Type: meta.TypeString}}, "not-array"},
+		{&meta.Parameter{Type: meta.TypeArray}, []any{"x"}},
+		{&meta.Parameter{Type: meta.TypeMap, ValueType: &meta.Parameter{Type: meta.TypeString}}, "not-map"},
+		{&meta.Parameter{Type: meta.TypeMap}, map[string]any{"a": "b"}},
+	}
+	for i, tc := range tests {
+		if err := validateConstraintValue(tc.parameter, tc.value, context); err != nil {
+			t.Errorf("case %d returned %v", i, err)
+		}
+	}
+}
+
+func TestConstraintErrorCopiesAllowedValues(t *testing.T) {
+	allowed := []string{"a", "b"}
+	err := constraintError(constraintContext{parameter: "p", flag: "--p", path: "P"}, &meta.Parameter{}, "enum", "c", "", allowed)
+	allowed[0] = "changed"
+	var violation *ConstraintViolationError
+	if !errors.As(err, &violation) || violation.Allowed[0] != "a" {
+		t.Fatalf("constraint error = %#v", violation)
+	}
+	withExpected := &ConstraintViolationError{Parameter: "p", Constraint: "minimum", Actual: "1", Expected: "2"}
+	if !strings.Contains(withExpected.Error(), `expected="2"`) {
+		t.Fatalf("expected formatting = %q", withExpected.Error())
 	}
 }

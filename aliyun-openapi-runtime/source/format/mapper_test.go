@@ -155,3 +155,93 @@ func TestMapArgumentMapsJSONDocRequired(t *testing.T) {
 		t.Fatalf("JSON docRequired metadata was not mapped recursively: %#v", got)
 	}
 }
+
+func TestProductEntryToProductDefaultsAndCopies(t *testing.T) {
+	entry := &schema.ProductEntry{
+		PluginDefaultVersion: "v2", Version: "v1", Versions: []string{"v1", "v2"},
+		Name: map[string]string{"zh": "演示", "en": "Demo"}, GlobalEndpoint: "global.example",
+		RegionalEndpoints: map[string]string{"cn-a": "public.example"}, RegionalVPCEndpoints: map[string]string{"cn-a": "vpc.example"},
+	}
+	product := ProductEntryToProduct(entry, "demo")
+	if product.Code != "demo" || product.DefaultVersion != "v2" || product.Description.ZH != "演示" || product.Description.EN != "Demo" ||
+		product.Endpoints.Global != "global.example" || product.Endpoints.Public["cn-a"] != "public.example" || product.Endpoints.VPC["cn-a"] != "vpc.example" {
+		t.Fatalf("product = %#v", product)
+	}
+	product.Versions[0] = "changed"
+	if entry.Versions[0] != "v1" {
+		t.Fatal("Versions was not copied")
+	}
+
+	if got := ProductEntryToProduct(&schema.ProductEntry{Version: "legacy"}, "x").DefaultVersion; got != "legacy" {
+		t.Fatalf("legacy default = %q", got)
+	}
+	if got := ProductEntryToProduct(&schema.ProductEntry{Versions: []string{"2020-01-01", "2022-01-01"}}, "x").DefaultVersion; got != "2022-01-01" {
+		t.Fatalf("chosen default = %q", got)
+	}
+	if mapLookup(nil, "en") != "" || mapLookup(map[string]string{"en": "name"}, "en") != "name" {
+		t.Fatal("mapLookup returned an unexpected value")
+	}
+}
+
+func TestMapperScalarTablesAndExamples(t *testing.T) {
+	typeTests := map[string]meta.DataType{
+		"": meta.TypeString, " string ": meta.TypeString, "int": meta.TypeInteger, "int32": meta.TypeInteger, "integer": meta.TypeInteger,
+		"long": meta.TypeLong, "int64": meta.TypeLong, "float": meta.TypeFloat, "double": meta.TypeFloat, "number": meta.TypeFloat,
+		"bool": meta.TypeBoolean, "boolean": meta.TypeBoolean, "object": meta.TypeObject, "struct": meta.TypeObject,
+		"array": meta.TypeArray, "list": meta.TypeArray, "repeatlist": meta.TypeArray, "map": meta.TypeMap, "any": meta.TypeAny, "unknown": meta.TypeAny,
+	}
+	for input, want := range typeTests {
+		if got := mapType(input); got != want {
+			t.Errorf("mapType(%q) = %v, want %v", input, got, want)
+		}
+	}
+	positionTests := map[string]meta.Position{
+		"": meta.PosQuery, "query": meta.PosQuery, "body": meta.PosBody, "header": meta.PosHeader, "path": meta.PosPath,
+		"formdata": meta.PosFormData, "host": meta.PosHost, "unknown": meta.PosQuery,
+	}
+	for input, want := range positionTests {
+		if got := mapPosition(input); got != want {
+			t.Errorf("mapPosition(%q) = %v, want %v", input, got, want)
+		}
+	}
+	for input, want := range map[string]meta.APIStyle{"": meta.StyleRPC, " RPC ": meta.StyleRPC, "roa": meta.StyleROA, "RESTFUL": meta.StyleROA, "unknown": meta.StyleRPC} {
+		if got := mapStyle(input); got != want {
+			t.Errorf("mapStyle(%q) = %v, want %v", input, got, want)
+		}
+	}
+	if got := exampleList(&schema.CommandDefinition{}); got != nil {
+		t.Fatalf("empty examples = %#v", got)
+	}
+	if got := exampleList(&schema.CommandDefinition{CamelExample: "camel"}); !reflect.DeepEqual(got, []string{"camel"}) {
+		t.Fatalf("camel examples = %#v", got)
+	}
+	if got := exampleList(&schema.CommandDefinition{KebabExample: "kebab", CamelExample: "camel"}); !reflect.DeepEqual(got, []string{"kebab"}) {
+		t.Fatalf("preferred examples = %#v", got)
+	}
+	if mapTypeShape(nil) != nil || mapArguments(nil) != nil {
+		t.Fatal("nil mapping should remain nil")
+	}
+}
+
+func TestSchemaToAPIMapsOperationAndArgumentMetadata(t *testing.T) {
+	def := &schema.CommandDefinition{
+		Name: "Action", CmdName: "action", CmdFullName: "action-full", DescriptionZH: "中", DescriptionEN: "en", Deprecated: true,
+		Operation: &schema.OperationConfig{APIVersion: "v1", Method: "get", URL: "/items", APIStyle: "ROA", Protocol: "HTTPS"},
+		Parameters: []schema.ArgumentDefinition{{
+			Name: "name", RawName: "Name", Type: "string", Location: "header", Required: true, DirectBody: true,
+			Options: []string{"--name"}, HelpZH: "名称", HelpEN: "name", Example: "demo", ParamStyle: "json",
+		}},
+	}
+	api := schemaToAPI(def)
+	if api.Name != "Action" || api.Version != "v1" || api.Method != "GET" || api.Style != meta.StyleROA || api.URL != "/items" || api.Protocol != "HTTPS" || !api.Deprecated {
+		t.Fatalf("API = %#v", api)
+	}
+	p := api.Parameters[0]
+	if p.Position != meta.PosHeader || !p.Required || !p.DirectBody || p.Description.EN != "name" || p.Example != "demo" || p.ParamStyle != "json" {
+		t.Fatalf("parameter = %#v", p)
+	}
+	withoutOperation := schemaToAPI(&schema.CommandDefinition{Name: "NoOp"})
+	if withoutOperation.Name != "NoOp" || withoutOperation.Version != "" {
+		t.Fatalf("API without operation = %#v", withoutOperation)
+	}
+}
