@@ -1097,10 +1097,15 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {
 	// fmt.Println("commando help", args)
+	helpOpts, err := parseHelpOptions(ctx, args)
+	if err != nil {
+		return err
+	}
 	if formatFlag := MachineHelpFormatFlag(ctx.Flags()); formatFlag != nil && formatFlag.IsAssigned() {
 		format, _ := formatFlag.GetValue()
-		return c.printMachineHelp(ctx, args, format)
+		return c.printMachineHelp(ctx, args, format, helpOpts)
 	}
+	_ = helpOpts // consumed by the Canonical text Help integration path
 
 	c.loadPlugins()
 	cmd := ctx.Command()

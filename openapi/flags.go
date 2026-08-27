@@ -45,6 +45,9 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewCliAIModeFlag())
 	fs.Add(NewCliNoAIModeFlag())
 	fs.Add(NewMachineHelpFormatFlag())
+	fs.Add(NewCliHelpSectionFlag())
+	fs.Add(NewCliHelpSearchFlag())
+	fs.Add(NewCliHelpAllFlag())
 }
 
 const (
@@ -72,6 +75,9 @@ const (
 	CliAIModeFlagName           = "cli-ai-mode"
 	CliNoAIModeFlagName         = "no-cli-ai-mode"
 	MachineHelpFormatFlagName   = "help-format"
+	CliHelpSectionFlagName      = "cli-section"
+	CliHelpSearchFlagName       = "cli-search"
+	CliHelpAllFlagName          = "cli-all"
 )
 
 func MachineHelpFormatFlag(fs *cli.FlagSet) *cli.Flag {
@@ -82,6 +88,45 @@ func NewMachineHelpFormatFlag() *cli.Flag {
 	return &cli.Flag{
 		Name:         MachineHelpFormatFlagName,
 		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Hidden:       true,
+	}
+}
+
+func CliHelpSectionFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CliHelpSectionFlagName)
+}
+
+func NewCliHelpSectionFlag() *cli.Flag {
+	return &cli.Flag{
+		Name:         CliHelpSectionFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Hidden:       true,
+	}
+}
+
+func CliHelpSearchFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CliHelpSearchFlagName)
+}
+
+func NewCliHelpSearchFlag() *cli.Flag {
+	return &cli.Flag{
+		Name:         CliHelpSearchFlagName,
+		AssignedMode: cli.AssignedOnce,
+		Persistent:   true,
+		Hidden:       true,
+	}
+}
+
+func CliHelpAllFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CliHelpAllFlagName)
+}
+
+func NewCliHelpAllFlag() *cli.Flag {
+	return &cli.Flag{
+		Name:         CliHelpAllFlagName,
+		AssignedMode: cli.AssignedNone,
 		Persistent:   true,
 		Hidden:       true,
 	}

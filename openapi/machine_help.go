@@ -195,6 +195,7 @@ type machineHelpExamples struct {
 type machineHelpAPIDocument struct {
 	SchemaVersion      string                   `json:"schemaVersion"`
 	Kind               string                   `json:"kind"`
+	Section            string                   `json:"section"`
 	Target             machineHelpTarget        `json:"target"`
 	Product            machineHelpProduct       `json:"product"`
 	API                machineHelpAPI           `json:"api"`
@@ -360,6 +361,7 @@ func (s *machineHelpService) buildAPI(code, command, requestedVersion string) (*
 	return &machineHelpAPIDocument{
 		SchemaVersion: machineHelpSchemaVersion,
 		Kind:          "api",
+		Section:       helpSectionRequest,
 		Target: machineHelpTarget{
 			Path:           []string{"aliyun", productDoc.Code, command},
 			RequestedStyle: style,
@@ -580,7 +582,8 @@ func localizedText(values map[string]string) machineHelpLocalizedText {
 	return machineHelpLocalizedText{EN: values["en"], ZH: values["zh"]}
 }
 
-func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format string) error {
+func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format string, opts helpOptions) error {
+	_ = opts // consumed by Section/Search/Listing projection during integration
 	target := append([]string{"aliyun"}, args...)
 	if format != "json" {
 		return newMachineHelpError(
@@ -643,10 +646,56 @@ func newMachineHelpUnavailableError(target []string, cause error) *machineHelpEr
 }
 
 func encodeMachineHelpJSON(w io.Writer, value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	var document any
+	if err := json.Unmarshal(data, &document); err != nil {
+		return err
+	}
+	document, _ = pruneMachineHelpEmpty(document)
+
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(value)
+	return encoder.Encode(document)
+}
+
+// pruneMachineHelpEmpty removes values that carry no machine-readable
+// information while preserving false and numeric zero, which are meaningful
+// for fields such as required, deprecated, and listing counts.
+func pruneMachineHelpEmpty(value any) (any, bool) {
+	switch typed := value.(type) {
+	case nil:
+		return nil, false
+	case string:
+		return typed, typed != ""
+	case []any:
+		result := make([]any, 0, len(typed))
+		for _, item := range typed {
+			if cleaned, keep := pruneMachineHelpEmpty(item); keep {
+				result = append(result, cleaned)
+			}
+		}
+		if len(result) == 0 {
+			return nil, false
+		}
+		return result, true
+	case map[string]any:
+		result := make(map[string]any, len(typed))
+		for key, item := range typed {
+			if cleaned, keep := pruneMachineHelpEmpty(item); keep {
+				result[key] = cleaned
+			}
+		}
+		if len(result) == 0 {
+			return nil, false
+		}
+		return result, true
+	default:
+		return value, true
+	}
 }
 
 func requestedMachineHelpVersion(ctx *cli.Context) string {

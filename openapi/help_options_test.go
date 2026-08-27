@@ -1,0 +1,106 @@
+package openapi
+
+import (
+	"io"
+	"testing"
+
+	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func testHelpOptionsContext() *cli.Context {
+	ctx := cli.NewCommandContext(io.Discard, io.Discard)
+	AddFlags(ctx.Flags())
+	return ctx
+}
+
+func assignHelpFlag(t *testing.T, flag *cli.Flag, value string) {
+	t.Helper()
+	require.NotNil(t, flag)
+	flag.SetAssigned(true)
+	flag.SetValue(value)
+}
+
+func TestParseHelpOptionsDefaultsToRequest(t *testing.T) {
+	opts, err := parseHelpOptions(testHelpOptionsContext(), []string{"ecs", "DescribeInstances"})
+	require.NoError(t, err)
+	assert.Equal(t, helpSectionRequest, opts.Section)
+	assert.False(t, opts.SectionExplicit)
+	assert.Empty(t, opts.Search)
+	assert.False(t, opts.All)
+}
+
+func TestParseHelpOptionsAcceptsResponseSearch(t *testing.T) {
+	ctx := testHelpOptionsContext()
+	assignHelpFlag(t, CliHelpSectionFlag(ctx.Flags()), " Response ")
+	assignHelpFlag(t, CliHelpSearchFlag(ctx.Flags()), " instance-id ")
+
+	opts, err := parseHelpOptions(ctx, []string{"ecs", "DescribeInstances"})
+	require.NoError(t, err)
+	assert.Equal(t, helpSectionResponse, opts.Section)
+	assert.True(t, opts.SectionExplicit)
+	assert.Equal(t, "instance-id", opts.Search)
+}
+
+func TestParseHelpOptionsValidatesScopeAndValues(t *testing.T) {
+	tests := []struct {
+		name   string
+		target []string
+		setup  func(*cli.FlagSet)
+		want   string
+	}{
+		{
+			name:   "invalid section",
+			target: []string{"ecs", "DescribeInstances"},
+			setup: func(fs *cli.FlagSet) {
+				assignHelpFlag(t, CliHelpSectionFlag(fs), "headers")
+			},
+			want: "--cli-section must be request or response",
+		},
+		{
+			name:   "section needs api",
+			target: []string{"ecs"},
+			setup: func(fs *cli.FlagSet) {
+				assignHelpFlag(t, CliHelpSectionFlag(fs), "request")
+			},
+			want: "--cli-section requires a product and an API",
+		},
+		{
+			name:   "search needs keyword",
+			target: []string{"ecs"},
+			setup: func(fs *cli.FlagSet) {
+				assignHelpFlag(t, CliHelpSearchFlag(fs), "  ")
+			},
+			want: "--cli-search requires a non-empty keyword",
+		},
+		{
+			name:   "all rejected for api",
+			target: []string{"ecs", "DescribeInstances"},
+			setup: func(fs *cli.FlagSet) {
+				assignHelpFlag(t, CliHelpAllFlag(fs), "")
+			},
+			want: "--cli-all is only valid for root or product Help",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := testHelpOptionsContext()
+			tt.setup(ctx.Flags())
+			_, err := parseHelpOptions(ctx, tt.target)
+			assert.EqualError(t, err, tt.want)
+		})
+	}
+}
+
+func TestParseHelpOptionsSearchTakesPrecedenceOverAll(t *testing.T) {
+	ctx := testHelpOptionsContext()
+	assignHelpFlag(t, CliHelpSearchFlag(ctx.Flags()), "instance")
+	assignHelpFlag(t, CliHelpAllFlag(ctx.Flags()), "")
+
+	opts, err := parseHelpOptions(ctx, []string{"ecs"})
+	require.NoError(t, err)
+	assert.Equal(t, "instance", opts.Search)
+	assert.True(t, opts.All)
+}

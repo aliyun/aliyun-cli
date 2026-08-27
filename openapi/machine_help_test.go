@@ -81,6 +81,7 @@ func TestMachineHelpAPICamelAndKebabShareCanonicalIdentity(t *testing.T) {
 
 	assert.Equal(t, machineHelpSchemaVersion, camel.SchemaVersion)
 	assert.Equal(t, "api", camel.Kind)
+	assert.Equal(t, helpSectionRequest, camel.Section)
 	assert.Equal(t, "CreateReport", camel.API.Name)
 	assert.Equal(t, "CreateReport", kebab.API.Name)
 	assert.Equal(t, "create-report", camel.API.CmdName)
@@ -96,10 +97,24 @@ func TestMachineHelpAPICamelAndKebabShareCanonicalIdentity(t *testing.T) {
 	assert.NotNil(t, findMachineHelpParameter(kebab.ParameterSets.Kebab, "--workspace-id"))
 	assert.Equal(t, "aliyun demo CreateReport ....", camel.Examples.Camel)
 	assert.Equal(t, "aliyun demo create-report ...", camel.Examples.Kebab)
-	assert.Nil(t, camel.OutputSchema)
-	assert.Nil(t, camel.Pagination)
-	assert.Nil(t, camel.Risk)
-	assert.Nil(t, camel.Recovery)
+}
+
+func TestMachineHelpJSONOmitsEmptyOptionalValues(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPI("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+
+	var encoded bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	assert.NotContains(t, encoded.String(), `"outputSchema"`)
+	assert.NotContains(t, encoded.String(), `"pagination"`)
+	assert.NotContains(t, encoded.String(), `"risk"`)
+	assert.NotContains(t, encoded.String(), `"recovery"`)
+	assert.NotContains(t, encoded.String(), `: null`)
+	assert.NotContains(t, encoded.String(), `: ""`)
+	assert.NotContains(t, encoded.String(), `: []`)
+	assert.NotContains(t, encoded.String(), `: {}`)
+	assert.Contains(t, encoded.String(), `"required": false`)
 }
 
 func TestMachineHelpAPIDefaultVersionFollowsCommandStyle(t *testing.T) {
