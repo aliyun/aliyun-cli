@@ -62,6 +62,9 @@ func parseHelpOptions(ctx *cli.Context, target []string) (helpOptions, error) {
 	}
 
 	if flag := CliHelpAllFlag(ctx.Flags()); flag != nil && flag.IsAssigned() {
+		if len(target) >= 2 {
+			return helpOptions{}, fmt.Errorf("--%s is only supported for root and product Help", CliHelpAllFlagName)
+		}
 		opts.All = true
 	}
 

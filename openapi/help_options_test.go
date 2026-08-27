@@ -86,13 +86,12 @@ func TestParseHelpOptionsValidatesScopeAndValues(t *testing.T) {
 	}
 }
 
-func TestParseHelpOptionsAcceptsAllForAPI(t *testing.T) {
+func TestParseHelpOptionsRejectsAllForAPI(t *testing.T) {
 	ctx := testHelpOptionsContext()
 	assignHelpFlag(t, CliHelpAllFlag(ctx.Flags()), "")
 
-	opts, err := parseHelpOptions(ctx, []string{"ecs", "DescribeInstances"})
-	require.NoError(t, err)
-	assert.True(t, opts.All)
+	_, err := parseHelpOptions(ctx, []string{"ecs", "DescribeInstances"})
+	assert.EqualError(t, err, "--cli-all is only supported for root and product Help")
 }
 
 func TestParseHelpOptionsSearchTakesPrecedenceOverAll(t *testing.T) {

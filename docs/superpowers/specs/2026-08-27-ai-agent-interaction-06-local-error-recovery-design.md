@@ -51,7 +51,7 @@
 | --- | --- | --- |
 | 未知产品 | `search_product` | 验证成功后 `aliyun help --cli-search <candidate>`；否则 `aliyun help` |
 | 未知 API | `search_api` | 验证成功后 `aliyun help <product> --cli-search <resource-keyword>`；否则 Product Help |
-| 未知 CLI 子命令 | `search_command` | 当前父级 `aliyun help ...` |
+| 未知 CLI 子命令 | `inspect_parent_help` | 当前父级 `aliyun help ...` |
 | 未知参数或 Flag | `search_parameter` | 验证成功后 API Help `--cli-search <parameter>`；否则完整 Request Help |
 | 缺少必填参数 | `inspect_request_help` | 完整 `--cli-section request` |
 | 参数语法、类型或 JSON 不合法 | `inspect_request_help` | 参数已知时搜索参数，否则完整 Request Help |

@@ -78,16 +78,12 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 	document.Listing = projectMachineHelpListing(listing)
 }
 
-func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptions, aiMode bool) {
+func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptions, _ bool) {
 	if document == nil {
 		return
 	}
 	document.Listing = nil
 	if options.Search == "" {
-		if !aiMode {
-			return
-		}
-		applyAIRequestHelpListing(document, options.All)
 		return
 	}
 
@@ -131,61 +127,6 @@ func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptio
 		document.ParameterSets.Camel = parameters
 	}
 	document.GlobalParameters = globals
-}
-
-type machineHelpRequestEntry struct {
-	Parameter machineHelpParameter
-	Global    bool
-}
-
-func applyAIRequestHelpListing(document *machineHelpAPIDocument, all bool) {
-	active := prioritizedMachineHelpParameters(activeMachineHelpParameters(document))
-	entries := make([]machineHelpRequestEntry, 0, len(active)+len(document.GlobalParameters))
-	for _, parameter := range active {
-		entries = append(entries, machineHelpRequestEntry{Parameter: parameter})
-	}
-	for _, parameter := range document.GlobalParameters {
-		entries = append(entries, machineHelpRequestEntry{Parameter: parameter, Global: true})
-	}
-
-	shown, listing := ProjectHelpListing(entries, HelpListingOptions{
-		Target: HelpListingAPIParameters,
-		AIMode: true,
-		All:    all,
-	})
-	parameters := make([]machineHelpParameter, 0, len(shown))
-	globals := make([]machineHelpParameter, 0, len(shown))
-	for _, entry := range shown {
-		if entry.Global {
-			globals = append(globals, entry.Parameter)
-		} else {
-			parameters = append(parameters, entry.Parameter)
-		}
-	}
-
-	document.ParameterSets = machineHelpParameterSets{}
-	if document.ActiveParameterSet == "kebab" {
-		document.ParameterSets.Kebab = parameters
-	} else {
-		document.ParameterSets.Camel = parameters
-	}
-	document.GlobalParameters = globals
-	document.Listing = projectMachineHelpListing(listing)
-}
-
-func prioritizedMachineHelpParameters(parameters []machineHelpParameter) []machineHelpParameter {
-	result := make([]machineHelpParameter, 0, len(parameters))
-	for _, parameter := range parameters {
-		if parameter.Required {
-			result = append(result, parameter)
-		}
-	}
-	for _, parameter := range parameters {
-		if !parameter.Required {
-			result = append(result, parameter)
-		}
-	}
-	return result
 }
 
 func applyResponseHelpOptions(document *machineHelpAPIResponseDocument, options helpOptions) error {

@@ -73,10 +73,10 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 				Code: "ecs", ApiNames: []string{"DescribeImages", "DescribeInstances"},
 			},
 		}
-		var request RecoverySearchRequest
+		var requests []RecoverySearchRequest
 		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "DescribeInstnaces"}, func(got RecoverySearchRequest) bool {
-			request = got
-			return true
+			requests = append(requests, got)
+			return got.Keyword == "Instances"
 		})
 
 		assert.Equal(t, `"DescribeInstnaces" is not a valid api.`, envelope.Message)
@@ -84,7 +84,10 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		assert.Equal(t, "search_api", envelope.Recovery.Action)
 		assert.Equal(t, "aliyun help ecs --cli-search Instances", envelope.Recovery.Command)
 		assert.Equal(t, "Search APIs related to Instances.", envelope.Recovery.Hint)
-		assert.Equal(t, RecoverySearchRequest{Product: "ecs", Style: "pascal", Keyword: "Instances"}, request)
+		assert.Equal(t, []RecoverySearchRequest{
+			{Product: "ecs", Style: "pascal", Keyword: "Instnaces"},
+			{Product: "ecs", Style: "pascal", Keyword: "Instances"},
+		}, requests)
 	})
 
 	t.Run("legacy unknown parameter message excludes Help recovery text", func(t *testing.T) {
@@ -104,7 +107,7 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		cause := cli.NewInvalidCommandError("profiel", ctx)
 
 		envelope := requireAgentEnvelope(t, cause, []string{"configure", "profiel"}, nil)
-		assert.Equal(t, "search_command", envelope.Recovery.Action)
+		assert.Equal(t, "inspect_parent_help", envelope.Recovery.Action)
 		assert.Equal(t, "aliyun help configure", envelope.Recovery.Command)
 		assert.Equal(t, "Inspect commands under the current parent.", envelope.Recovery.Hint)
 	})
@@ -465,7 +468,7 @@ func TestBuiltInSubcommandErrorUsesRootAIModeAdapter(t *testing.T) {
 	var envelope cli.AgentErrorEnvelope
 	require.NoError(t, json.Unmarshal(stderr.Bytes(), &envelope))
 	assert.Equal(t, []string{"profile"}, envelope.DidYouMean)
-	assert.Equal(t, "search_command", envelope.Recovery.Action)
+	assert.Equal(t, "inspect_parent_help", envelope.Recovery.Action)
 	assert.Equal(t, "aliyun help configure", envelope.Recovery.Command)
 	assert.Equal(t, "\x1b[0;31mtext\x1b[0m", cli.Colorized(cli.Red, "text"), "AI no-color override must be restored after Execute")
 }

@@ -235,7 +235,7 @@ func TestMachineHelpRequestSearchKeepsOnlyActiveParameterSetAndGlobals(t *testin
 	assert.Equal(t, "header", doc.GlobalParameters[0].Name)
 }
 
-func TestMachineHelpAIRequestCapsRequiredFirstAndAllRestoresEverything(t *testing.T) {
+func TestMachineHelpAIRequestRemainsComplete(t *testing.T) {
 	newDocument := func() *machineHelpAPIDocument {
 		parameters := make([]machineHelpParameter, 0, 23)
 		for index := 1; index <= 21; index++ {
@@ -259,21 +259,11 @@ func TestMachineHelpAIRequestCapsRequiredFirstAndAllRestoresEverything(t *testin
 		}
 	}
 
-	compact := newDocument()
-	applyRequestHelpOptions(compact, helpOptions{}, true)
-	require.Len(t, compact.ParameterSets.Camel, helpListingLimit)
-	assert.Equal(t, "required-one", compact.ParameterSets.Camel[0].Name)
-	assert.Equal(t, "required-two", compact.ParameterSets.Camel[1].Name)
-	assert.Empty(t, compact.ParameterSets.Kebab)
-	assert.Empty(t, compact.GlobalParameters)
-	assert.Equal(t, &machineHelpListing{Shown: 20, Total: 26, Hint: helpListingHint}, compact.Listing)
-
 	complete := newDocument()
-	applyRequestHelpOptions(complete, helpOptions{All: true}, true)
+	applyRequestHelpOptions(complete, helpOptions{}, true)
 	require.Len(t, complete.ParameterSets.Camel, 23)
-	assert.Equal(t, "required-one", complete.ParameterSets.Camel[0].Name)
-	assert.Equal(t, "required-two", complete.ParameterSets.Camel[1].Name)
-	assert.Empty(t, complete.ParameterSets.Kebab)
+	assert.Equal(t, "optional-01", complete.ParameterSets.Camel[0].Name)
+	assert.Len(t, complete.ParameterSets.Kebab, 1)
 	assert.Len(t, complete.GlobalParameters, 3)
 	assert.Nil(t, complete.Listing)
 

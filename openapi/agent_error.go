@@ -155,7 +155,7 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	var invalidCommand *cli.InvalidCommandError
 	if errors.As(err, &invalidCommand) {
 		return newLocalAgentError(err, invalidCommand.Error(), stableStrings(invalidCommand.GetSuggestions()), cli.AgentErrorRecovery{
-			Action:  "search_command",
+			Action:  "inspect_parent_help",
 			Command: context.parentHelpCommand(invalidCommand.Name),
 			Hint:    "Inspect commands under the current parent.",
 		})
@@ -247,7 +247,7 @@ func unknownAPIAgentError(cause error, message string, suggestions []string, con
 		Command: context.productHelpCommand(),
 		Hint:    "Inspect the available APIs for this product.",
 	}
-	seeds := append(append([]string(nil), suggestions...), context.api)
+	seeds := append([]string{context.api}, suggestions...)
 	for _, keyword := range apiSearchKeywordCandidates(context.style, seeds...) {
 		request := context.searchRequest("", "", keyword)
 		if validate != nil && validate(request) {

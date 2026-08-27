@@ -238,9 +238,8 @@ func helpTextContains(value string, query helpSearchText) bool {
 type HelpListingTarget string
 
 const (
-	HelpListingRootProducts  HelpListingTarget = "root-products"
-	HelpListingProductAPIs   HelpListingTarget = "product-apis"
-	HelpListingAPIParameters HelpListingTarget = "api-parameters"
+	HelpListingRootProducts HelpListingTarget = "root-products"
+	HelpListingProductAPIs  HelpListingTarget = "product-apis"
 )
 
 // HelpListingOptions contains the orthogonal mode/search/all policy inputs.
@@ -262,7 +261,7 @@ type HelpListingMetadata struct {
 
 // ProjectHelpListing applies the AI-mode limit without mutating the input.
 func ProjectHelpListing[T any](items []T, options HelpListingOptions) ([]T, *HelpListingMetadata) {
-	mayCap := options.Target == HelpListingRootProducts || options.Target == HelpListingProductAPIs || options.Target == HelpListingAPIParameters
+	mayCap := options.Target == HelpListingRootProducts || options.Target == HelpListingProductAPIs
 	if !mayCap || !options.AIMode || options.Searched || options.All || len(items) <= helpListingLimit {
 		return append([]T(nil), items...), nil
 	}
