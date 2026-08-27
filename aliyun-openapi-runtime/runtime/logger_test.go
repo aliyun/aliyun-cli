@@ -104,3 +104,143 @@ func TestLogRequestResponse(t *testing.T) {
 		t.Fatalf("request or response body was not masked:\n%s", out)
 	}
 }
+
+func TestApplyNamedConfigAliases(t *testing.T) {
+	t.Cleanup(ResetLoggerForTest)
+	tests := []struct {
+		name  string
+		level LogLevel
+	}{
+		{"production", LogError}, {"prod", LogError}, {"ERROR", LogError},
+		{"development", LogInfo}, {"dev", LogInfo}, {"info", LogInfo},
+		{"debug", LogDebug}, {"verbose", LogDebug}, {"DEBUG", LogDebug},
+		{"quiet", LogFatal}, {"FATAL", LogFatal},
+		{"ci", LogWarn}, {"WARN", LogWarn}, {"warning", LogWarn},
+	}
+	for _, test := range tests {
+		if !applyNamedConfig("  " + test.name + "  ") {
+			t.Fatalf("applyNamedConfig(%q) = false", test.name)
+		}
+		globalLogger.mu.Lock()
+		level := globalLogger.level
+		globalLogger.mu.Unlock()
+		if level != test.level {
+			t.Fatalf("applyNamedConfig(%q) level = %v, want %v", test.name, level, test.level)
+		}
+	}
+	if applyNamedConfig("invalid") {
+		t.Fatal("applyNamedConfig(invalid) = true")
+	}
+}
+
+func TestInitLoggerEnvironmentAndInvalidConfig(t *testing.T) {
+	t.Cleanup(ResetLoggerForTest)
+	ResetLoggerForTest()
+	t.Setenv(envLogConfig, "debug")
+	InitLogger("ERROR", false)
+	if !IsDebugEnabled() {
+		t.Fatal("environment config should take precedence")
+	}
+
+	var buf bytes.Buffer
+	SetLoggerOutputForTest(&buf)
+	t.Setenv(envLogConfig, "invalid")
+	InitLogger("", false)
+	if !strings.Contains(buf.String(), "Invalid log config") {
+		t.Fatalf("invalid config warning missing: %q", buf.String())
+	}
+
+	t.Setenv(envLogConfig, "")
+	before := buf.Len()
+	InitLogger("", false)
+	if buf.Len() != before {
+		t.Fatal("empty log config should be a no-op")
+	}
+}
+
+func TestLoggerFormattingAndFiltering(t *testing.T) {
+	var buf bytes.Buffer
+	local := &logger{level: LogInfo, output: &buf, enableTime: true, enableColor: true}
+	local.log(LogDebug, "hidden")
+	if buf.Len() != 0 {
+		t.Fatalf("filtered debug log = %q", buf.String())
+	}
+	local.log(LogInfo, "hello %s", "world")
+	out := buf.String()
+	if !strings.Contains(out, "\x1b[32m[INFO ]\x1b[0m hello world") || len(out) < len("2006-01-02 15:04:05") {
+		t.Fatalf("formatted log = %q", out)
+	}
+
+	buf.Reset()
+	local.enableTime = false
+	local.enableColor = false
+	local.log(LogWarn, "plain")
+	if got := buf.String(); got != "[WARN ] plain\n" {
+		t.Fatalf("plain log = %q", got)
+	}
+}
+
+func TestLogArgsMasksAndHandlesMarshalFailure(t *testing.T) {
+	t.Cleanup(ResetLoggerForTest)
+	ResetLoggerForTest()
+	LogArgs(map[string]any{"ignored": true})
+	logSection("ignored")
+
+	InitLogger("DEBUG", false)
+	var buf bytes.Buffer
+	SetLoggerOutputForTest(&buf)
+	SetLoggerOutputForTest(nil)
+	LogArgs(nil)
+	LogArgs(map[string]any{
+		"password": "secret-value",
+		"token":    123,
+		"name":     "visible",
+	})
+	LogArgs(map[string]any{"bad": make(chan int)})
+
+	out := buf.String()
+	if !strings.Contains(out, "Arguments: (empty)") || !strings.Contains(out, "secr***") || strings.Contains(out, "secret-value") {
+		t.Fatalf("LogArgs output = %q", out)
+	}
+	if !strings.Contains(out, `"token":"***"`) || !strings.Contains(out, "error marshaling") {
+		t.Fatalf("LogArgs special cases missing: %q", out)
+	}
+}
+
+func TestLogJSONRequestAndResponseBranches(t *testing.T) {
+	t.Cleanup(ResetLoggerForTest)
+	ResetLoggerForTest()
+	InitLogger("DEBUG", false)
+	var buf bytes.Buffer
+	SetLoggerOutputForTest(&buf)
+
+	logJSON("Object", map[string]any{"name": "value"})
+	logJSON("Bad", make(chan int))
+	LogRequest(nil)
+	LogRequest(&AssembledRequest{
+		Method: "POST", Pathname: "/bytes", Headers: map[string]string{"Authorization": "secret-token"},
+		Body: []byte(`{"password":"byte-secret"}`),
+	})
+	LogRequest(&AssembledRequest{Method: "POST", Pathname: "/object", Body: map[string]any{"password": "object-secret"}})
+
+	LogResponse(nil)
+	LogResponse(&Response{StatusCode: 204})
+	LogResponse(&Response{StatusCode: 200, Headers: map[string][]string{
+		"Authorization": {"header-secret"}, "X-Test": {"one", "two"},
+	}, Raw: []byte(`{"password":"raw-secret"}`)})
+	LogResponse(&Response{StatusCode: 200, Raw: []byte(`{"ok":true}`), Parsed: map[string]any{"token": "parsed-secret"}})
+	LogResponse(&Response{StatusCode: 200, Raw: []byte("fallback"), Parsed: make(chan int)})
+	logStringMap("Empty", nil)
+
+	out := buf.String()
+	for _, want := range []string{"Object:", "failed to marshal", "Body (bytes)", "Body:", "Response Body: (empty)", "fallback"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+	for _, secret := range []string{"secret-token", "byte-secret", "object-secret", "header-secret", "raw-secret", "parsed-secret"} {
+		if strings.Contains(out, secret) {
+			t.Errorf("secret %q leaked:\n%s", secret, out)
+		}
+	}
+}
