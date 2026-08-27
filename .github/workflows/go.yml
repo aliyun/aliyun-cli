@@ -30,8 +30,12 @@ jobs:
       run: make check-runtime
     - name: Packed metadata test
       run: make test-release
-    - name: Upload coverage infomartion
+    - name: Upload coverage information
       uses: codecov/codecov-action@v4
+      with:
+        files: ./coverage.txt,./coverage-runtime.txt
+        disable_search: true
+        fail_ci_if_error: true
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
