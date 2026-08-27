@@ -30,7 +30,8 @@ func TestInvalidProductError_Error(t *testing.T) {
 		Code: "ecs",
 	}
 	str := err.Error()
-	assert.Equal(t, "'ecs' is not a valid command or product. See `aliyun help`.", str)
+	assert.Equal(t, `"ecs" is not a valid command or product. See `+"`aliyun help`"+`.`, str)
+	assert.Equal(t, `"ec's" is not a valid command or product. See `+"`aliyun help`"+`.`, (&InvalidProductError{Code: "EC'S"}).Error())
 }
 
 func TestInvalidProductError_GetSuggestions(t *testing.T) {
@@ -59,7 +60,11 @@ func TestInvalidApiError_Error(t *testing.T) {
 		},
 	}
 	str := err.Error()
-	assert.Equal(t, "'describeregion' is not a valid api. See `aliyun help ecs`.", str)
+	assert.Equal(t, `"describeregion" is not a valid api. See `+"`aliyun help ecs`"+`.`, str)
+	assert.Equal(t, `"describe'region" is not a valid api. See `+"`aliyun help ecs`"+`.`, (&InvalidApiError{
+		Name:    "describe'region",
+		product: &meta.Product{Code: "ecs"},
+	}).Error())
 }
 
 func TestInvalidApiError_GetSuggestions(t *testing.T) {
@@ -83,7 +88,12 @@ func TestInvalidParameterError_Error(t *testing.T) {
 		ParameterNames: []string{},
 	}
 	str := err.Error()
-	assert.Equal(t, "'--ak' is not a valid parameter or flag. See `aliyun help ecs describeregion`.", str)
+	assert.Equal(t, `"--ak" is not a valid parameter or flag. See `+"`aliyun help ecs describeregion`"+`.`, str)
+	assert.Equal(t, `"--a'k" is not a valid parameter or flag. See `+"`aliyun help ecs describeregion`"+`.`, (&InvalidParameterError{
+		Name:        "a'k",
+		ProductCode: "ecs",
+		ApiName:     "describeregion",
+	}).Error())
 }
 
 func TestInvalidParameterError_GetSuggestions(t *testing.T) {
@@ -129,7 +139,7 @@ func TestInvalidProductOrPluginError_Error(t *testing.T) {
 		err := &InvalidProductOrPluginError{
 			Code: "fcc",
 		}
-		assert.Equal(t, "'fcc' is not a valid product. See `aliyun help`.", err.Error())
+		assert.Equal(t, `"fcc" is not a valid product. See `+"`aliyun help`"+`.`, err.Error())
 	})
 
 	t.Run("hint is appended on its own line", func(t *testing.T) {
@@ -140,7 +150,7 @@ func TestInvalidProductOrPluginError_Error(t *testing.T) {
 			Hint: "If you meant an OpenAPI built-in call, the form is 'aliyun <product> <APIName>'.",
 		}
 		assert.Equal(t,
-			"'ecs' is not a valid product. See `aliyun help`.\n"+
+			`"ecs" is not a valid product. See `+"`aliyun help`"+`.`+"\n"+
 				"If you meant an OpenAPI built-in call, the form is 'aliyun <product> <APIName>'.",
 			err.Error(),
 			"hint must follow the legacy line on its own line — single-line legacy users keep their format")
@@ -189,7 +199,7 @@ func TestInvalidUnifiedApiError_Error(t *testing.T) {
 			Code: "ecs",
 		},
 	}
-	assert.Equal(t, "'describreregions' is not a valid api. See `aliyun help ecs`.", err.Error())
+	assert.Equal(t, `"describreregions" is not a valid api. See `+"`aliyun help ecs`"+`.`, err.Error())
 }
 
 func TestInvalidUnifiedApiError_GetSuggestions(t *testing.T) {

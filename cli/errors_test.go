@@ -40,7 +40,8 @@ func TestInvalidCommandError(t *testing.T) {
 	err := NewInvalidCommandError("MrX", ctx)
 	e, ok := err.(*InvalidCommandError)
 	assert.True(t, ok)
-	assert.Equal(t, "'MrX' is not a valid command", e.Error())
+	assert.Equal(t, `"MrX" is not a valid command`, e.Error())
+	assert.Equal(t, `"Mr'X" is not a valid command`, NewInvalidCommandError("Mr'X", ctx).Error())
 	e.ctx.EnterCommand(&Command{Name: "oss", flags: NewFlagSet()})
 	assert.Nil(t, e.GetSuggestions())
 }

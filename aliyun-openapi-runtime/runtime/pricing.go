@@ -139,7 +139,7 @@ func buildPriceRequest(ec *ExecContext, req *AssembledRequest, pricingContext ma
 		params["RegionId"] = ec.Region
 	}
 
-	out := make(map[string]interface{}, len(params)+1)
+	out := make(map[string]interface{}, len(params))
 	for k, v := range params {
 		out[k] = v
 	}

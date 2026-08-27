@@ -55,7 +55,7 @@ func TestNewPluginCommand_UnknownSubcommand(t *testing.T) {
 	// The error must be about the invalid command, not the trailing --name flag.
 	cmd.Execute(ctx, []string{"remove", "--name", "bailian"})
 
-	assert.Contains(t, stderr.String(), "'remove' is not a valid command")
+	assert.Contains(t, stderr.String(), `"remove" is not a valid command`)
 	assert.NotContains(t, stderr.String(), "invalid flag")
 	// The error should also point the user to the plugin help.
 	assert.Contains(t, stderr.String(), "Use `aliyun plugin --help` for more information.")

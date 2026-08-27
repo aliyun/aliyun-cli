@@ -164,7 +164,7 @@ func Test_main(t *testing.T) {
 
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
+	assert.Equal(t, `"test" is not a valid product. See `+"`aliyun help`"+`.`, err.Error())
 	ctx.Flags().Get("region").SetAssigned(true)
 	ctx.Flags().Get("region").SetValue("cn-hangzhou")
 	ctx.Flags().Add(config.NewAccessKeyIdFlag())
@@ -177,7 +177,7 @@ func Test_main(t *testing.T) {
 	profileflag.SetAssigned(false)
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
+	assert.Equal(t, `"test" is not a valid product. See `+"`aliyun help`"+`.`, err.Error())
 
 	ctx.Flags().Get("force").SetAssigned(true)
 	ctx.Flags().Get("version").SetAssigned(true)
@@ -192,7 +192,7 @@ func Test_main(t *testing.T) {
 	args = []string{"ecs", "NonExistentApi"}
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "'NonExistentApi' is not a valid api")
+	assert.Contains(t, err.Error(), `"NonExistentApi" is not a valid api`)
 
 	ctx.Flags().Get("force").SetAssigned(false)
 	ctx.Flags().Get("version").SetAssigned(false)
@@ -200,12 +200,12 @@ func Test_main(t *testing.T) {
 	args = []string{"aos", "test2"}
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'aos' is not a valid product. See `aliyun help`.", err.Error())
+	assert.Equal(t, `"aos" is not a valid product. See `+"`aliyun help`"+`.`, err.Error())
 
 	args = []string{"test", "test2", "test1"}
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
+	assert.Equal(t, `"test" is not a valid product. See `+"`aliyun help`"+`.`, err.Error())
 
 	args = []string{"test", "Test2", "test1", "test3"}
 	err = command.main(ctx, args)
@@ -672,12 +672,12 @@ func Test_help(t *testing.T) {
 	args = []string{"test"}
 	err = command.help(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
+	assert.Equal(t, `"test" is not a valid product. See `+"`aliyun help`"+`.`, err.Error())
 
 	args = []string{"test", "test0"}
 	err = command.help(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'test' is not a valid product. See `aliyun help`.", err.Error())
+	assert.Equal(t, `"test" is not a valid product. See `+"`aliyun help`"+`.`, err.Error())
 
 	args = []string{"test", "test0", "test1"}
 	err = command.help(ctx, args)
@@ -686,7 +686,7 @@ func Test_help(t *testing.T) {
 	// — which used to imply args[0] was a valid product even when (as here) it wasn't.
 	// For args[0]="test", neither an installed plugin nor a built-in OpenAPI product,
 	// the helper falls all the way through to step-4 (fuzzy suggestion via InvalidProductOrPluginError, plus a Hint explaining the OpenAPI alternative form).
-	assert.Contains(t, err.Error(), "'test' is not a valid product. See `aliyun help`.")
+	assert.Contains(t, err.Error(), `"test" is not a valid product. See `+"`aliyun help`"+`.`)
 	assert.Contains(t, err.Error(), "OpenAPI built-in call",
 		"step-4 must surface the OpenAPI alternative as a Hint")
 }
@@ -1660,7 +1660,7 @@ func TestMainForSlsProduct(t *testing.T) {
 		// Test the SLS product call that should use OpenAPI
 		args := []string{"sls", "TestApi"}
 		err := command.main(ctx, args)
-		assert.Equal(t, "'TestApi' is not a valid api. See `aliyun help sls`.", err.Error())
+		assert.Equal(t, `"TestApi" is not a valid api. See `+"`aliyun help sls`"+`.`, err.Error())
 	})
 
 	t.Run("SLSProductInvalidRestCall", func(t *testing.T) {
@@ -1860,7 +1860,7 @@ func TestMainRestfulProductWithInvalidApiName(t *testing.T) {
 	invalidApiErr, ok := err.(*InvalidApiError)
 	assert.True(t, ok, "expected *InvalidApiError, got %T: %v", err, err)
 	assert.Equal(t, "GetPlugin", invalidApiErr.Name)
-	assert.Contains(t, err.Error(), "'GetPlugin' is not a valid api")
+	assert.Contains(t, err.Error(), `"GetPlugin" is not a valid api`)
 	assert.NotContains(t, err.Error(), "need restful call")
 }
 
@@ -2520,7 +2520,7 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 
 		err := command.main(ctx, args)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "'qqq' is not a valid product")
+		assert.Contains(t, err.Error(), `"qqq" is not a valid product`)
 	})
 
 	t.Run("Kebab-case API name with multiple arguments extracts all args", func(t *testing.T) {
@@ -2542,7 +2542,7 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 
 		err := command.main(ctx, args)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "'qqq' is not a valid product")
+		assert.Contains(t, err.Error(), `"qqq" is not a valid product`)
 	})
 
 	t.Run("Non-kebab-case API name does not trigger plugin", func(t *testing.T) {
@@ -2611,7 +2611,7 @@ func TestMain_PluginExecution_KebabCase(t *testing.T) {
 
 		err := command.main(ctx, args)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "'qqq' is not a valid product")
+		assert.Contains(t, err.Error(), `"qqq" is not a valid product`)
 	})
 }
 

@@ -30,7 +30,7 @@ type InvalidProductError struct {
 }
 
 func (e *InvalidProductError) Error() string {
-	return fmt.Sprintf("'%s' is not a valid command or product. See `aliyun help`.", strings.ToLower(e.Code))
+	return fmt.Sprintf("%q is not a valid command or product. See `aliyun help`.", strings.ToLower(e.Code))
 }
 
 func (e *InvalidProductError) GetSuggestions() []string {
@@ -59,7 +59,7 @@ type InvalidApiError struct {
 }
 
 func (e *InvalidApiError) Error() string {
-	return fmt.Sprintf("'%s' is not a valid api. See `aliyun help %s`.", e.Name, e.product.GetLowerCode())
+	return fmt.Sprintf("%q is not a valid api. See `aliyun help %s`.", e.Name, e.product.GetLowerCode())
 }
 
 func (e *InvalidApiError) GetSuggestions() []string {
@@ -88,8 +88,8 @@ type InvalidParameterError struct {
 }
 
 func (e *InvalidParameterError) Error() string {
-	return fmt.Sprintf("'--%s' is not a valid parameter or flag. See `aliyun help %s %s`.",
-		e.Name, strings.ToLower(e.ProductCode), e.ApiName)
+	return fmt.Sprintf("%q is not a valid parameter or flag. See `aliyun help %s %s`.",
+		"--"+e.Name, strings.ToLower(e.ProductCode), e.ApiName)
 }
 
 func (e *InvalidParameterError) GetSuggestions() []string {
@@ -161,7 +161,7 @@ type InvalidProductOrPluginError struct {
 }
 
 func (e *InvalidProductOrPluginError) Error() string {
-	msg := fmt.Sprintf("'%s' is not a valid product. See `aliyun help`.", e.Code)
+	msg := fmt.Sprintf("%q is not a valid product. See `aliyun help`.", e.Code)
 	if e.Hint != "" {
 		msg += "\n" + e.Hint
 	}
@@ -194,7 +194,7 @@ type InvalidUnifiedApiError struct {
 }
 
 func (e *InvalidUnifiedApiError) Error() string {
-	return fmt.Sprintf("'%s' is not a valid api. See `aliyun help %s`.", e.Name, e.product.GetLowerCode())
+	return fmt.Sprintf("%q is not a valid api. See `aliyun help %s`.", e.Name, e.product.GetLowerCode())
 }
 
 func (e *InvalidUnifiedApiError) GetSuggestions() []string {

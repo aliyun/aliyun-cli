@@ -105,7 +105,7 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 	ctx.UnknownFlags().AddByName("TestFlag")
 	ctx.UnknownFlags().Get("TestFlag").SetValue("testFlagValue")
 	err = a.Prepare(ctx)
-	assert.EqualError(t, err, "'--TestFlag' is not a valid parameter or flag. See `aliyun help  DescribeClusterUserKubeconfig`.")
+	assert.EqualError(t, err, `"--TestFlag" is not a valid parameter or flag. See `+"`aliyun help  DescribeClusterUserKubeconfig`"+`.`)
 }
 
 func TestRestfulInvokerPrepareWildcardPath(t *testing.T) {

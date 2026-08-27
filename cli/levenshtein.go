@@ -90,37 +90,37 @@ func DistanceForStrings(source []rune, target []rune, op Options) int {
 	// single value (see DistanceForMatrix) and the main loop of the algorithm
 	// only uses the current and previous row. As such we create a 2D matrix,
 	// but with height 2 (enough to store current and previous row).
-	height := len(source) + 1
-	width := len(target) + 1
 	matrix := make([][]int, 2)
 
 	// Initialize trivial distances (from/to empty string). That is, fill
 	// the left column and the top row with row/column indices.
 	for i := 0; i < 2; i++ {
-		matrix[i] = make([]int, width)
+		matrix[i] = append(make([]int, len(target)), 0)
 		matrix[i][0] = i
 	}
-	for j := 1; j < width; j++ {
-		matrix[0][j] = j
+	for j := range target {
+		matrix[0][j+1] = j + 1
 	}
 
 	// Fill in the remaining cells: for each prefix pair, choose the
 	// (edit history, operation) pair with the lowest cost.
-	for i := 1; i < height; i++ {
-		cur := matrix[i%2]
-		prev := matrix[(i-1)%2]
-		cur[0] = i
-		for j := 1; j < width; j++ {
-			delCost := prev[j] + op.DelCost
-			matchSubCost := prev[j-1]
-			if !op.Matches(source[i-1], target[j-1]) {
+	for sourceIndex, sourceCharacter := range source {
+		row := sourceIndex + 1
+		cur := matrix[row%2]
+		prev := matrix[(row-1)%2]
+		cur[0] = row
+		for targetIndex, targetCharacter := range target {
+			column := targetIndex + 1
+			delCost := prev[column] + op.DelCost
+			matchSubCost := prev[column-1]
+			if !op.Matches(sourceCharacter, targetCharacter) {
 				matchSubCost += op.SubCost
 			}
-			insCost := cur[j-1] + op.InsCost
-			cur[j] = min(delCost, min(matchSubCost, insCost))
+			insCost := cur[column-1] + op.InsCost
+			cur[column] = min(delCost, min(matchSubCost, insCost))
 		}
 	}
-	return matrix[(height-1)%2][width-1]
+	return matrix[len(source)%2][len(target)]
 }
 
 // DistanceForMatrix reads the edit distance off the given Levenshtein matrix.

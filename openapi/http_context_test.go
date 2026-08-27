@@ -1286,7 +1286,7 @@ func TestProcessQueryWithInvalidParameter(t *testing.T) {
 	ctx.UnknownFlags().Get("aaa").SetValue("test-value")
 
 	err := context.ProcessQuery(ctx)
-	assert.Contains(t, err.Error(), "'--aaa' is not a valid parameter or flag")
+	assert.Contains(t, err.Error(), `"--aaa" is not a valid parameter or flag`)
 }
 
 func TestProcessQueryMissingParameter(t *testing.T) {
@@ -1430,7 +1430,7 @@ func TestProcessHostWithInvalidParameter(t *testing.T) {
 	ctx.UnknownFlags().AddByName("aaa")
 	ctx.UnknownFlags().Get("aaa").SetAssigned(true)
 	err := context.ProcessHost(ctx)
-	assert.Contains(t, err.Error(), "'--aaa' is not a valid parameter or flag")
+	assert.Contains(t, err.Error(), `"--aaa" is not a valid parameter or flag`)
 }
 
 func TestProcessHostMissingRequiredParameter(t *testing.T) {
@@ -1655,7 +1655,7 @@ func TestProcessPathWithInvalidParameter(t *testing.T) {
 	ctx.UnknownFlags().Get("aaa").SetAssigned(true)
 
 	err := context.ProcessPath(ctx)
-	assert.Contains(t, err.Error(), "'--aaa' is not a valid parameter or flag")
+	assert.Contains(t, err.Error(), `"--aaa" is not a valid parameter or flag`)
 }
 
 func TestProcessPathMissingRequiredParameter(t *testing.T) {
@@ -2014,7 +2014,7 @@ func TestProcessBodyInvalidParameter(t *testing.T) {
 	ctx.UnknownFlags().Get("aaa").SetAssigned(true)
 
 	err := context.ProcessBody(ctx)
-	assert.Contains(t, err.Error(), "'--aaa' is not a valid parameter or flag")
+	assert.Contains(t, err.Error(), `"--aaa" is not a valid parameter or flag`)
 }
 
 func TestOpenapiContextRPCStyleInPrepare(t *testing.T) {

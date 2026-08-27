@@ -64,3 +64,26 @@ func TestStripAPIDryRun(t *testing.T) {
 		t.Fatal("other query keys must remain")
 	}
 }
+
+func TestBuildPriceRequestIncludesPricingContext(t *testing.T) {
+	t.Setenv(pricingPopCodeEnv, "ecs")
+	ec := &ExecContext{Region: "cn-hangzhou"}
+	req := &AssembledRequest{
+		Action:  "RunInstances",
+		Version: "2014-05-26",
+		Query:   map[string]string{"Amount": "1"},
+		Body:    map[string]any{"SpotStrategy": "SpotAsPriceGo"},
+	}
+
+	got := buildPriceRequest(ec, req, map[string]string{"ZoneId": "cn-hangzhou-i"})
+	if got.PopCode != "ecs" || got.PopVersion != req.Version || got.ApiName != req.Action {
+		t.Fatalf("unexpected price request identity: %#v", got)
+	}
+	if got.Parameters["Amount"] != "1" || got.Parameters["SpotStrategy"] != "SpotAsPriceGo" || got.Parameters["RegionId"] != "cn-hangzhou" {
+		t.Fatalf("unexpected price request parameters: %#v", got.Parameters)
+	}
+	context, ok := got.Parameters["PricingContext"].(map[string]interface{})
+	if !ok || context["ZoneId"] != "cn-hangzhou-i" {
+		t.Fatalf("unexpected pricing context: %#v", got.Parameters["PricingContext"])
+	}
+}
