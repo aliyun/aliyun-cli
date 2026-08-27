@@ -808,6 +808,8 @@ func TestCanonicalTextHelpSearchesRootProductAndRequestLocally(t *testing.T) {
 	})
 
 	t.Run("product api", func(t *testing.T) {
+		t.Setenv(originalProductHelpEnv, "")
+		t.Setenv(baselineProductHelpEnv, "")
 		c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
 		CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
 		CliHelpSearchFlag(ctx.Flags()).SetValue("region")
@@ -815,7 +817,24 @@ func TestCanonicalTextHelpSearchesRootProductAndRequestLocally(t *testing.T) {
 		require.NoError(t, c.help(ctx, []string{"demo"}))
 		assert.False(t, c.pluginLoaded)
 		assert.Empty(t, stderr.String())
-		assert.Contains(t, stdout.String(), "DescribeRegions")
+		assert.Contains(t, stdout.String(), "Version: 2026-01-01")
+		assert.Contains(t, stdout.String(), "  DescribeRegions")
+		assert.NotContains(t, stdout.String(), "  describe-regions")
+	})
+
+	t.Run("product api baseline kebab style", func(t *testing.T) {
+		t.Setenv(originalProductHelpEnv, "")
+		t.Setenv(baselineProductHelpEnv, "true")
+		c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+		CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+		CliHelpSearchFlag(ctx.Flags()).SetValue("region")
+
+		require.NoError(t, c.help(ctx, []string{"demo"}))
+		assert.False(t, c.pluginLoaded)
+		assert.Empty(t, stderr.String())
+		assert.Contains(t, stdout.String(), "Version: 2025-01-01")
+		assert.Contains(t, stdout.String(), "  describe-regions")
+		assert.NotContains(t, stdout.String(), "  DescribeRegions")
 	})
 
 	t.Run("request parameter", func(t *testing.T) {

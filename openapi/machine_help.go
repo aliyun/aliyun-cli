@@ -447,6 +447,12 @@ func (s *machineHelpService) buildProductForStyle(code, requestedVersion, style 
 	if err != nil {
 		return nil, err
 	}
+	if style == "" {
+		style = "kebab"
+		if product.Version != "" {
+			style = "camel"
+		}
+	}
 	versions := normalizedVersions(*product)
 	if style == "pascal" {
 		style = "camel"
