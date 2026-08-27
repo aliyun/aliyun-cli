@@ -319,6 +319,58 @@ func TestCommandoHelpJSONResponseSection(t *testing.T) {
 	assert.NotContains(t, stdout.String(), `"parameterSets"`)
 }
 
+func TestCommandoHelpJSONRequestSearchReturnsOnlyActiveMatches(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	MachineHelpFormatFlag(ctx.Flags()).SetAssigned(true)
+	MachineHelpFormatFlag(ctx.Flags()).SetValue("json")
+	CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSearchFlag(ctx.Flags()).SetValue("workspace-id")
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	require.NoError(t, c.help(ctx, []string{"demo", "create-report"}))
+	assert.Empty(t, stderr.String())
+
+	var document map[string]any
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &document))
+	sets := document["parameterSets"].(map[string]any)
+	assert.NotContains(t, sets, "camel")
+	kebab := sets["kebab"].([]any)
+	require.Len(t, kebab, 1)
+	assert.Equal(t, "workspace_id", kebab[0].(map[string]any)["name"])
+	assert.NotContains(t, document, "globalParameters")
+	assert.Contains(t, document, "responseQueryExample")
+}
+
+func TestCommandoHelpJSONResponseSearchReturnsPathsAndMinimalSchema(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	MachineHelpFormatFlag(ctx.Flags()).SetAssigned(true)
+	MachineHelpFormatFlag(ctx.Flags()).SetValue("json")
+	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+	CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSearchFlag(ctx.Flags()).SetValue("report-id")
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	require.NoError(t, c.help(ctx, []string{"demo", "CreateReport"}))
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), `"matches": [`)
+	assert.Contains(t, stdout.String(), `"Reports.Report.ReportId"`)
+	assert.Contains(t, stdout.String(), `"responseQueryExample"`)
+	assert.NotContains(t, stdout.String(), `"Unused"`)
+}
+
 func TestCommandoHelpJSONAcceptsKebabAPIVersionFlag(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
