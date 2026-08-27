@@ -53,6 +53,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
+	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 var (
@@ -90,7 +91,7 @@ func Main(args []string) {
 
 	rootCmd := newRootCommand(profile, stdout)
 
-	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx := newCommandContext(stdout, stderr)
 	ctx.EnterCommand(rootCmd)
 	ctx.SetCompletion(cli.ParseCompletionForShell())
 	ctx.SetInConfigureMode(openapi.DetectInConfigureMode(ctx.Flags()))
@@ -104,6 +105,12 @@ func Main(args []string) {
 		args = openapi.NormalizeMachineHelpArgs(args)
 		rootCmd.Execute(ctx, args)
 	}
+}
+
+func newCommandContext(stdout io.Writer, stderr io.Writer) *cli.Context {
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.SetAgentName(util.DetectAgentName())
+	return ctx
 }
 
 func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {

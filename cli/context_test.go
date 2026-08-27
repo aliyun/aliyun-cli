@@ -64,6 +64,25 @@ func TestNewCommandContext(t *testing.T) {
 	}, ctx)
 }
 
+func TestContextAgentDetectionState(t *testing.T) {
+	ctx := NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	assert.False(t, ctx.IsAgent())
+	assert.Empty(t, ctx.AgentName())
+
+	ctx.SetAgentName("  codex  ")
+	assert.True(t, ctx.IsAgent())
+	assert.Equal(t, "codex", ctx.AgentName())
+
+	ctx.SetAgentName("  ")
+	assert.False(t, ctx.IsAgent())
+	assert.Empty(t, ctx.AgentName())
+
+	var nilContext *Context
+	assert.NotPanics(t, func() { nilContext.SetAgentName("codex") })
+	assert.False(t, nilContext.IsAgent())
+	assert.Empty(t, nilContext.AgentName())
+}
+
 func TestCtx(t *testing.T) {
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)

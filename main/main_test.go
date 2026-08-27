@@ -20,6 +20,34 @@ func TestMainWithNoArgs(t *testing.T) {
 	Main([]string{})
 }
 
+func TestNewCommandContextDetectsAgentOnce(t *testing.T) {
+	for _, key := range []string{
+		"CURSOR_AGENT", "CLAUDECODE", "CLAUDE_CODE", "GEMINI_CLI",
+		"AUGMENT_AGENT", "OPENCODE", "OPENCODE_CLIENT", "CLINE_ACTIVE",
+		"CODEX_SANDBOX", "QODER_AGENT", "QODER_CLI", "AGENT",
+	} {
+		t.Setenv(key, "")
+	}
+
+	ctx := newCommandContext(io.Discard, io.Discard)
+	if ctx.IsAgent() {
+		t.Fatalf("unexpected detected agent %q", ctx.AgentName())
+	}
+
+	t.Setenv("CURSOR_AGENT", "1")
+	ctx = newCommandContext(io.Discard, io.Discard)
+	if !ctx.IsAgent() || ctx.AgentName() != "cursor" {
+		t.Fatalf("agent state = %v, %q", ctx.IsAgent(), ctx.AgentName())
+	}
+
+	// Detection is a startup snapshot; later environment mutations do not
+	// silently change the context used by the active command.
+	t.Setenv("CURSOR_AGENT", "")
+	if !ctx.IsAgent() || ctx.AgentName() != "cursor" {
+		t.Fatalf("agent snapshot changed = %v, %q", ctx.IsAgent(), ctx.AgentName())
+	}
+}
+
 func TestMainMachineHelpJSON(t *testing.T) {
 	tests := []struct {
 		name      string
