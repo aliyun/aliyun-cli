@@ -117,6 +117,35 @@ func TestMachineHelpJSONOmitsEmptyOptionalValues(t *testing.T) {
 	assert.Contains(t, encoded.String(), `"required": false`)
 }
 
+func TestMachineHelpJSONPreservesResponseSchemaValues(t *testing.T) {
+	schema := json.RawMessage(`{"type":"object","properties":{"Token":{"type":"string","const":"","default":"","enum":[""]},"Counter":{"type":"integer","maximum":9223372036854775809}}}`)
+	doc := &machineHelpAPIResponseDocument{
+		SchemaVersion: machineHelpSchemaVersion,
+		Kind:          "api",
+		Section:       helpSectionResponse,
+		OutputSchema: &machineHelpOutputSchema{
+			StatusCode:  "200",
+			ContentType: "application/json",
+			Schema:      schema,
+			Components: &machineHelpComponents{Schemas: map[string]json.RawMessage{
+				"Payload":  schema,
+				"Anything": json.RawMessage(`{}`),
+			}},
+		},
+	}
+
+	var encoded bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	var compact bytes.Buffer
+	require.NoError(t, json.Compact(&compact, encoded.Bytes()))
+	output := compact.String()
+	assert.Contains(t, output, `"const":""`)
+	assert.Contains(t, output, `"default":""`)
+	assert.Contains(t, output, `"enum":[""]`)
+	assert.Contains(t, output, `"maximum":9223372036854775809`)
+	assert.Contains(t, output, `"Anything":{}`)
+}
+
 func TestMachineHelpAPIDefaultVersionFollowsCommandStyle(t *testing.T) {
 	service := testMachineHelpService(t)
 	camel, err := service.buildAPI("demo", "DescribeRegions", "")

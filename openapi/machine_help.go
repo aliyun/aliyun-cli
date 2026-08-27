@@ -1,6 +1,7 @@
 package openapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -867,10 +868,12 @@ func encodeMachineHelpJSON(w io.Writer, value any) error {
 		return err
 	}
 	var document any
-	if err := json.Unmarshal(data, &document); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&document); err != nil {
 		return err
 	}
-	document, _ = pruneMachineHelpEmpty(document)
+	document, _ = pruneMachineHelpEmptyAt(document, nil)
 
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
@@ -882,6 +885,10 @@ func encodeMachineHelpJSON(w io.Writer, value any) error {
 // information while preserving false and numeric zero, which are meaningful
 // for fields such as required, deprecated, and listing counts.
 func pruneMachineHelpEmpty(value any) (any, bool) {
+	return pruneMachineHelpEmptyAt(value, nil)
+}
+
+func pruneMachineHelpEmptyAt(value any, path []string) (any, bool) {
 	switch typed := value.(type) {
 	case nil:
 		return nil, false
@@ -890,7 +897,13 @@ func pruneMachineHelpEmpty(value any) (any, bool) {
 	case []any:
 		result := make([]any, 0, len(typed))
 		for _, item := range typed {
-			if cleaned, keep := pruneMachineHelpEmpty(item); keep {
+			// Empty strings can be meaningful members of enum-like arrays. Only
+			// omit the array when the array itself is empty.
+			if text, ok := item.(string); ok {
+				result = append(result, text)
+				continue
+			}
+			if cleaned, keep := pruneMachineHelpEmptyAt(item, path); keep {
 				result = append(result, cleaned)
 			}
 		}
@@ -901,7 +914,11 @@ func pruneMachineHelpEmpty(value any) (any, bool) {
 	case map[string]any:
 		result := make(map[string]any, len(typed))
 		for key, item := range typed {
-			if cleaned, keep := pruneMachineHelpEmpty(item); keep {
+			if preserveMachineHelpSchema(path, key) {
+				result[key] = item
+				continue
+			}
+			if cleaned, keep := pruneMachineHelpEmptyAt(item, append(path, key)); keep {
 				result[key] = cleaned
 			}
 		}
@@ -912,6 +929,13 @@ func pruneMachineHelpEmpty(value any) (any, bool) {
 	default:
 		return value, true
 	}
+}
+
+func preserveMachineHelpSchema(path []string, key string) bool {
+	if len(path) == 1 && path[0] == "outputSchema" && key == "schema" {
+		return true
+	}
+	return len(path) == 2 && path[0] == "outputSchema" && path[1] == "components" && key == "schemas"
 }
 
 func requestedMachineHelpVersion(ctx *cli.Context) string {
