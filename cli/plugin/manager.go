@@ -27,8 +27,8 @@ import (
 )
 
 const (
-	IndexURL        = "https://aliyuncli.alicdn.com/plugins/plugin_pkg_index.json"    // 默认索引地址
-	CommandIndexURL = "https://aliyuncli.alicdn.com/plugins/plugin_search_index.json" // 命令倒排索引地址
+	IndexURL        = "https://pre-cli.aliyun-inc.com/registry_id/1/env/test/plugins-pb/plugin_pkg_index.json"    // 默认索引地址
+	CommandIndexURL = "https://pre-cli.aliyun-inc.com/registry_id/1/env/test/plugins-pb/plugin_search_index.json" // 命令倒排索引地址
 	EnvPluginsDir   = sysconfig.EnvPluginsDir
 	EnvNoCache      = "ALIBABA_CLOUD_CLI_PLUGIN_NO_CACHE"
 
