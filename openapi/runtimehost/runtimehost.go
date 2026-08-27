@@ -139,7 +139,7 @@ func splitCommaList(raw string) []string {
 
 // buildUserAgentSuffix merges ALIBABA_CLOUD_USER_AGENT and --user-agent
 // with the host AI-mode suffix.
-// (config + --cli-ai-mode / --no-cli-ai-mode).
+// (config + detected agent + --cli-ai-mode / --no-cli-ai-mode).
 // The engine prefixes Aliyun-CLI/{cliVer} aliyun-openapi-runtime/{ver}.
 func buildUserAgentSuffix(ctx *cli.Context) string {
 	var parts []string
@@ -158,7 +158,12 @@ func buildUserAgentSuffix(ctx *cli.Context) string {
 
 	cfg, enabled := aiModeForCommand(ctx)
 	if enabled {
-		suf := aimode.RequestUserAgentSuffixForCommand(cfg, true, false)
+		forceOn := flagAssigned(ctx, "cli-ai-mode")
+		forceOff := flagAssigned(ctx, "no-cli-ai-mode")
+		detectedAgent := ctx != nil && ctx.IsAgent()
+		suf := aimode.RequestUserAgentSuffixForCommandWithDetectedAgent(
+			cfg, forceOn, forceOff, detectedAgent,
+		)
 		parts = append(parts, suf)
 	}
 	return strings.TrimSpace(strings.Join(parts, " "))
@@ -171,6 +176,9 @@ func aiModeForCommand(ctx *cli.Context) (*aimode.AiConfig, bool) {
 	}
 	forceOn := flagAssigned(ctx, "cli-ai-mode")
 	forceOff := flagAssigned(ctx, "no-cli-ai-mode")
+	if !forceOff && ctx != nil && ctx.IsAgent() {
+		forceOn = true
+	}
 	return cfg, aimode.EnabledForCommand(cfg, forceOn, forceOff)
 }
 

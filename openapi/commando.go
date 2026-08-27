@@ -183,7 +183,7 @@ func (c *Commando) applyEffectiveAIModeForArgs(ctx *cli.Context, args []string) 
 	if loadErr != nil {
 		cfg = aimode.DefaultAiConfig()
 	}
-	forceOn, forceOff := CliAIOverrides(ctx.Flags())
+	forceOn, forceOff := CliAIOverridesForOpenAPI(ctx)
 	for _, arg := range args {
 		switch arg {
 		case "--no-cli-ai-mode":

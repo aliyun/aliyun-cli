@@ -148,6 +148,21 @@ func TestRequestUserAgentSuffixForCommand(t *testing.T) {
 	assert.Equal(t, "", RequestUserAgentSuffixForCommand(&AiConfig{Enabled: false}, false, false))
 }
 
+func TestRequestUserAgentSuffixForCommandWithDetectedAgent(t *testing.T) {
+	assert.Equal(t, UserAgentEnabledMarker,
+		RequestUserAgentSuffixForCommandWithDetectedAgent(DefaultAiConfig(), false, false, true))
+	assert.Equal(t, "",
+		RequestUserAgentSuffixForCommandWithDetectedAgent(DefaultAiConfig(), false, true, true))
+	assert.Equal(t, UserAgentEnabledMarker+" "+DefaultUserAgent,
+		RequestUserAgentSuffixForCommandWithDetectedAgent(&AiConfig{Enabled: true}, false, false, true))
+	assert.Equal(t, UserAgentEnabledMarker+" "+DefaultUserAgent,
+		RequestUserAgentSuffixForCommandWithDetectedAgent(DefaultAiConfig(), true, false, true))
+	assert.Equal(t, UserAgentEnabledMarker+" custom-agent",
+		RequestUserAgentSuffixForCommandWithDetectedAgent(
+			&AiConfig{Enabled: true, UserAgent: "custom-agent"}, false, false, true,
+		))
+}
+
 func TestEnabledForCommand(t *testing.T) {
 	tests := []struct {
 		name     string

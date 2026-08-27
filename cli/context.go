@@ -53,9 +53,31 @@ type Context struct {
 	inConfigureMode    bool
 	hasPluginSubCmd    bool
 	hasPluginSubCmdSet bool
+	// agentName is detected once at process startup and propagated through the
+	// command context. An empty value means the current environment was not
+	// recognized as an agent environment.
+	agentName string
 	// use http instead of https
 	insecure    bool
 	runtimeEnvs map[string]string
+}
+
+func (ctx *Context) SetAgentName(name string) {
+	if ctx == nil {
+		return
+	}
+	ctx.agentName = strings.TrimSpace(name)
+}
+
+func (ctx *Context) AgentName() string {
+	if ctx == nil {
+		return ""
+	}
+	return ctx.agentName
+}
+
+func (ctx *Context) IsAgent() bool {
+	return ctx != nil && ctx.agentName != ""
 }
 
 func (ctx *Context) Insecure() bool {

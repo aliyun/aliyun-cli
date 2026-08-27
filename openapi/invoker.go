@@ -147,7 +147,9 @@ func aiModeSuffixForContext(ctx *cli.Context) string {
 		aiCfg = aimode.DefaultAiConfig()
 	}
 	forceOn, forceOff := CliAIOverrides(ctx.Flags())
-	return aimode.RequestUserAgentSuffixForCommand(aiCfg, forceOn, forceOff)
+	return aimode.RequestUserAgentSuffixForCommandWithDetectedAgent(
+		aiCfg, forceOn, forceOff, ctx.IsAgent(),
+	)
 }
 
 func parseCustomUserAgentSegments(s string) [][2]string {

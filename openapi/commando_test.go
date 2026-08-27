@@ -100,6 +100,20 @@ func TestCommandoAgentModeNormalizesOnlyInProcessErrors(t *testing.T) {
 		})
 	}
 
+	t.Run("detected agent", func(t *testing.T) {
+		ctx := newContext(t, false, false, false)
+		ctx.SetAgentName("codex")
+		got := (&Commando{}).finishCommandRun(ctx, []string{"ecs", "describe-instances"}, sourceErr)
+		assert.ErrorIs(t, got, normalizedErr)
+	})
+
+	t.Run("force off wins over detected agent", func(t *testing.T) {
+		ctx := newContext(t, false, false, true)
+		ctx.SetAgentName("codex")
+		got := (&Commando{}).finishCommandRun(ctx, []string{"ecs", "describe-instances"}, sourceErr)
+		assert.ErrorIs(t, got, sourceErr)
+	})
+
 	t.Run("external plugin bypasses normalization", func(t *testing.T) {
 		ctx := newContext(t, true, false, false)
 		got := (&Commando{}).finishCommandRun(ctx, []string{"fc", "invoke"}, &externalPluginError{err: sourceErr})

@@ -18,8 +18,10 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+	"time"
 
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
+	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 )
@@ -684,6 +686,118 @@ func TestSetOpenAPIRequestBodyMatchesLegacyTypeBridge(t *testing.T) {
 	setOpenAPIRequestBody(oaReq, wantMap)
 	if !reflect.DeepEqual(oaReq.Body, wantMap) {
 		t.Fatalf("map body bridge = %#v", oaReq.Body)
+	}
+}
+
+func TestExecutorBoundaryAndBodyHelpers(t *testing.T) {
+	if _, err := Assemble(nil); err == nil {
+		t.Fatal("Assemble(nil) succeeded")
+	}
+	if _, err := Assemble(&ExecContext{}); err == nil {
+		t.Fatal("Assemble(nil API) succeeded")
+	}
+	if _, err := NewExecutor().Execute(&ExecContext{}); err == nil {
+		t.Fatal("Execute(nil API) succeeded")
+	}
+	if err := NewExecutor().ExecuteSSE(&ExecContext{}, nil); err == nil {
+		t.Fatal("ExecuteSSE(nil API) succeeded")
+	}
+	if err := NewExecutor().ExecuteSSE(&ExecContext{API: &meta.API{}, DryRun: true}, nil); err == nil || err.Error() != "runtime: SSE execution cannot run in dry-run mode" {
+		t.Fatalf("ExecuteSSE(dry-run) error = %v", err)
+	}
+
+	formMap := map[string]any{"name": "value"}
+	for _, body := range []any{formMap, `{"name":"value"}`, []byte(`{"name":"value"}`), json.RawMessage(`{"name":"value"}`)} {
+		got, err := normalizeRawBody(body, " formData ")
+		if err != nil || !reflect.DeepEqual(got, formMap) {
+			t.Fatalf("normalizeRawBody(%T) = %#v, %v", body, got, err)
+		}
+	}
+	if _, err := normalizeRawBody(123, "formData"); err == nil {
+		t.Fatal("normalizeRawBody accepted non-object form body")
+	}
+	if got, err := normalizeRawBody("raw", "json"); err != nil || got != "raw" {
+		t.Fatalf("normalizeRawBody(json) = %#v, %v", got, err)
+	}
+
+	request := &openapiutil.OpenApiRequest{}
+	setOpenAPIRequestBody(nil, "ignored")
+	for _, body := range []any{
+		[]byte("bytes"), []any{"one"}, []map[string]any{{"name": "one"}}, 42,
+	} {
+		setOpenAPIRequestBody(request, body)
+		if !reflect.DeepEqual(request.Body, body) {
+			t.Fatalf("setOpenAPIRequestBody(%T) = %#v", body, request.Body)
+		}
+	}
+}
+
+func TestPrepareCallAndResponseConversion(t *testing.T) {
+	if _, err := prepareCall(&ExecContext{}, &AssembledRequest{}); err == nil {
+		t.Fatal("prepareCall without credential succeeded")
+	}
+	credential := pricingTestCredential{model: &credentialsv2.CredentialModel{
+		AccessKeyId: stringPointer("ak"), AccessKeySecret: stringPointer("secret"),
+	}}
+	if _, err := prepareCall(&ExecContext{Credential: credential, API: &meta.API{ProductCode: "demo"}}, &AssembledRequest{}); err == nil {
+		t.Fatal("prepareCall without endpoint succeeded")
+	}
+
+	ec := &ExecContext{
+		Credential: credential, API: &meta.API{ProductCode: "demo"}, Region: "cn-test",
+		ReadTimeout: time.Second, ConnectTimeout: 2 * time.Second, RetryCount: 3,
+		SkipSecureVerify: true, CLIVersion: "3.0.0", UserAgent: "custom",
+	}
+	req := &AssembledRequest{
+		Action: "Run", Version: "v1", Protocol: "HTTPS", Method: "POST", Style: "ROA",
+		Pathname: "/run", Endpoint: "https://demo.example.com/", ReqBodyType: "formData",
+		Query: map[string]string{"Page": "1"}, Headers: map[string]string{"X-Test": "value"}, Body: map[string]any{"name": "value"},
+	}
+	call, err := prepareCall(ec, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if call.client == nil || call.params == nil || call.request == nil || call.runtime == nil || call.request.Body == nil {
+		t.Fatalf("prepared call = %#v", call)
+	}
+
+	headerValue := "value"
+	responses := []struct {
+		raw      map[string]any
+		wantBody string
+	}{
+		{map[string]any{"statusCode": 200, "headers": map[string]*string{"X-Test": &headerValue, "Nil": nil}, "body": `{"id":9007199254740993}`}, `{"id":9007199254740993}`},
+		{map[string]any{"statusCode": int64(201), "body": []byte("bytes")}, "bytes"},
+		{map[string]any{"statusCode": float64(202), "body": map[string]any{"ok": true}}, `{"ok":true}`},
+		{map[string]any{"statusCode": json.Number("203")}, ""},
+		{map[string]any{"statusCode": json.Number("bad"), "body": make(chan int)}, ""},
+	}
+	for _, test := range responses {
+		response := buildResponse(test.raw)
+		if string(response.Raw) != test.wantBody {
+			t.Fatalf("buildResponse(%#v) body = %q, want %q", test.raw, response.Raw, test.wantBody)
+		}
+	}
+	if got := asInt(nil); got != 0 {
+		t.Fatalf("asInt(nil) = %d", got)
+	}
+	value := 204
+	if got := asInt(&value); got != 204 {
+		t.Fatalf("asInt(pointer) = %d", got)
+	}
+	var nilValue *int
+	if got := asInt(nilValue); got != 0 {
+		t.Fatalf("asInt(nil pointer) = %d", got)
+	}
+}
+
+func TestScalarStringVariants(t *testing.T) {
+	for value, want := range map[any]string{
+		"text": "text", json.Number("12"): "12", true: "true", false: "false", int64(7): "7",
+	} {
+		if got := scalarString(value); got != want {
+			t.Fatalf("scalarString(%#v) = %q, want %q", value, got, want)
+		}
 	}
 }
 

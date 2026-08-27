@@ -68,7 +68,7 @@ func legacyAIModeEnabled(ctx *cli.Context) bool {
 	if err != nil {
 		cfg = aimode.DefaultAiConfig()
 	}
-	forceOn, forceOff := CliAIOverrides(ctx.Flags())
+	forceOn, forceOff := CliAIOverridesForOpenAPI(ctx)
 	return aimode.EnabledForCommand(cfg, forceOn, forceOff)
 }
 

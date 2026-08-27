@@ -161,6 +161,21 @@ func RequestUserAgentSuffixForCommand(cfg *AiConfig, forceOn, forceOff bool) str
 	return RequestUserAgentSuffix(effective)
 }
 
+// RequestUserAgentSuffixForCommandWithDetectedAgent keeps automatic agent
+// detection distinct from an explicit AI-mode opt-in. When detection is the
+// only reason AI mode is active, emit only the mode marker: the default
+// AlibabaCloud-Agent-Skills segment would incorrectly attribute an arbitrary
+// agent invocation to Agent Skills.
+func RequestUserAgentSuffixForCommandWithDetectedAgent(cfg *AiConfig, forceOn, forceOff, detectedAgent bool) string {
+	if forceOff {
+		return ""
+	}
+	if detectedAgent && !forceOn && (cfg == nil || !cfg.Enabled) {
+		return util.SanitizeUserAgent(UserAgentEnabledMarker)
+	}
+	return RequestUserAgentSuffixForCommand(cfg, forceOn, false)
+}
+
 // EnabledForCommand resolves the effective AI mode for one command. A
 // command-level opt-out always wins, followed by opt-in, a valid environment
 // override, and then configuration.
