@@ -101,7 +101,13 @@ func (a *Library) GetProducts() []meta.Product {
 	return a.builtinRepo.Products
 }
 
-func (a *Library) GetAPINamesForCompletion(product meta.Product) []string {
+func (a *Library) GetAPINamesForCompletion(product meta.Product, kebabCase bool) []string {
+	if !kebabCase {
+		names := append([]string(nil), product.ApiNames...)
+		sort.Strings(names)
+		return names
+	}
+
 	if a.canonicalRepo != nil {
 		if index, err := a.canonicalRepo.GetVersionIndex(product.Code, product.Version); err == nil && index != nil {
 			names := make([]string, 0, len(index.APIs))

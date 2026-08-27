@@ -741,7 +741,11 @@ func Test_complete(t *testing.T) {
 	assert.Equal(t, []string{}, str)
 }
 
-func TestCompleteRPCAPIsUsesKebabCase(t *testing.T) {
+func TestCompleteRPCAPIsDefaultsToPascalCase(t *testing.T) {
+	t.Setenv(plugin.EnvPluginsDir, t.TempDir())
+	t.Setenv(baselineProductHelpEnv, "")
+	t.Setenv(originalProductHelpEnv, "")
+
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w, stderr)
@@ -749,7 +753,7 @@ func TestCompleteRPCAPIsUsesKebabCase(t *testing.T) {
 	AddFlags(cmd.Flags())
 	ctx.EnterCommand(cmd)
 	ctx.Command().Short = &i18n.Text{}
-	ctx.SetCompletion(&cli.Completion{Current: "describe"})
+	ctx.SetCompletion(&cli.Completion{Current: "Describe"})
 
 	repo, err := meta.MockLoadRepository([]meta.Product{{
 		Code:     "ecs",
@@ -762,12 +766,14 @@ func TestCompleteRPCAPIsUsesKebabCase(t *testing.T) {
 
 	str := command.complete(ctx, []string{"ecs"})
 	assert.Equal(t, []string{}, str)
-	assert.Equal(t, "describe-db-instances\ndescribe-instances\n", w.String())
-	assert.NotContains(t, w.String(), "DescribeInstances")
+	assert.Equal(t, "DescribeDBInstances\nDescribeInstances\n", w.String())
+	assert.NotContains(t, w.String(), "describe-instances")
 }
 
-func TestCompleteRPCAPIsPrefersCanonicalCommandMetadata(t *testing.T) {
+func TestCompleteRPCAPIsUsesKebabCaseWhenBaselineHelpRequested(t *testing.T) {
 	t.Setenv(plugin.EnvPluginsDir, t.TempDir())
+	t.Setenv(baselineProductHelpEnv, "true")
+	t.Setenv(originalProductHelpEnv, "")
 
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -798,6 +804,91 @@ func TestCompleteRPCAPIsPrefersCanonicalCommandMetadata(t *testing.T) {
 	assert.Equal(t, []string{}, str)
 	assert.Equal(t, "describe-vrouters\n", w.String())
 	assert.NotContains(t, w.String(), "describe-v-routers")
+}
+
+func TestCompleteRPCAPIsUsesKebabCaseWhenProductPluginInstalled(t *testing.T) {
+	pluginsDir := t.TempDir()
+	t.Setenv(plugin.EnvPluginsDir, pluginsDir)
+	t.Setenv(baselineProductHelpEnv, "")
+	t.Setenv(originalProductHelpEnv, "")
+	writeTestLocalPluginManifest(t, pluginsDir, "ecs")
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+	ctx.SetCompletion(&cli.Completion{Current: "describe-v"})
+
+	repo, err := meta.MockLoadRepository([]meta.Product{{
+		Code:     "ecs",
+		Version:  "2014-05-26",
+		ApiStyle: "rpc",
+		ApiNames: []string{"DescribeVRouters"},
+	}})
+	assert.NoError(t, err)
+	canonicalRepo := newFakeCanonicalRepo()
+	canonicalRepo.AddVersionIndex("ecs", "2014-05-26", &canonicalmeta.VersionIndex{
+		Version: "2014-05-26",
+		APIs: map[string]canonicalmeta.VersionAPIEntry{
+			"DescribeVRouters": {CmdName: "describe-vrouters"},
+		},
+	})
+	command := &Commando{library: &Library{builtinRepo: repo, canonicalRepo: canonicalRepo}}
+
+	str := command.complete(ctx, []string{"ecs"})
+	assert.Equal(t, []string{}, str)
+	assert.Equal(t, "describe-vrouters\n", w.String())
+}
+
+func TestCompleteRPCAPIsOriginalHelpOverridesInstalledPlugin(t *testing.T) {
+	pluginsDir := t.TempDir()
+	t.Setenv(plugin.EnvPluginsDir, pluginsDir)
+	t.Setenv(baselineProductHelpEnv, "")
+	t.Setenv(originalProductHelpEnv, "true")
+	writeTestLocalPluginManifest(t, pluginsDir, "ecs")
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+	ctx.SetCompletion(&cli.Completion{Current: "Describe"})
+
+	repo, err := meta.MockLoadRepository([]meta.Product{{
+		Code:     "ecs",
+		Version:  "2014-05-26",
+		ApiStyle: "rpc",
+		ApiNames: []string{"DescribeInstances", "DescribeDBInstances"},
+	}})
+	assert.NoError(t, err)
+	command := &Commando{library: &Library{builtinRepo: repo}}
+
+	str := command.complete(ctx, []string{"ecs"})
+	assert.Equal(t, []string{}, str)
+	assert.Equal(t, "DescribeDBInstances\nDescribeInstances\n", w.String())
+}
+
+func writeTestLocalPluginManifest(t *testing.T, pluginsDir, productCode string) {
+	t.Helper()
+	manifest := plugin.LocalManifest{
+		Plugins: map[string]plugin.LocalPlugin{
+			"aliyun-cli-" + productCode: {
+				Name:        "aliyun-cli-" + productCode,
+				ProductCode: productCode,
+				Command:     productCode,
+				Path:        filepath.Join(pluginsDir, "aliyun-cli-"+productCode),
+				CmdNames:    []string{"describe-vrouters"},
+			},
+		},
+	}
+	data, err := json.Marshal(manifest)
+	assert.NoError(t, err)
+	assert.NoError(t, os.WriteFile(filepath.Join(pluginsDir, "manifest.json"), data, 0600))
 }
 
 func TestApiNameToKebab(t *testing.T) {

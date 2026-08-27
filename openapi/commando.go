@@ -1153,8 +1153,9 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 
 	if product.ApiStyle == "rpc" {
 		if len(args) == 1 {
-			for _, completionName := range c.library.GetAPINamesForCompletion(product) {
-				if !strings.HasPrefix(completionName, strings.ToLower(ctx.Completion().Current)) {
+			kebabCase := c.shouldCompleteKebabCaseAPINames(product)
+			for _, completionName := range c.library.GetAPINamesForCompletion(product, kebabCase) {
+				if !strings.HasPrefix(strings.ToLower(completionName), strings.ToLower(ctx.Completion().Current)) {
 					continue
 				}
 				cli.PrintfWithColor(w, "", "%s\n", completionName)
@@ -1185,6 +1186,17 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 	}
 
 	return r
+}
+
+func (c *Commando) shouldCompleteKebabCaseAPINames(product meta.Product) bool {
+	if productHelpEnvEnabled(originalProductHelpEnv) {
+		return false
+	}
+	if productHelpEnvEnabled(baselineProductHelpEnv) {
+		return true
+	}
+	installed, _, err := plugin.IsPluginInstalled(product.Code)
+	return err == nil && installed
 }
 
 func apiNameToKebab(name string) string {
