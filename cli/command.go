@@ -106,6 +106,8 @@ func (c *Command) Flags() *FlagSet {
 }
 
 func (c *Command) Execute(ctx *Context, args []string) {
+	previousNoColorOverride := noColorOverride.Load()
+	defer noColorOverride.Store(previousNoColorOverride)
 	if ctx.completion != nil {
 		args = ctx.completion.GetArgs()
 	}

@@ -58,7 +58,7 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 			return true
 		})
 
-		assert.Equal(t, cause.Error(), envelope.Message)
+		assert.Equal(t, `"ecx" is not a valid command or product.`, envelope.Message)
 		assert.Equal(t, []string{"ecs"}, envelope.DidYouMean)
 		assert.Equal(t, "search_product", envelope.Recovery.Action)
 		assert.Equal(t, "aliyun help --cli-search ecs", envelope.Recovery.Command)
@@ -79,11 +79,22 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 			return true
 		})
 
+		assert.Equal(t, `"DescribeInstnaces" is not a valid api.`, envelope.Message)
 		assert.Equal(t, []string{"DescribeInstances", "describe-instances"}, envelope.DidYouMean)
 		assert.Equal(t, "search_api", envelope.Recovery.Action)
 		assert.Equal(t, "aliyun help ecs --cli-search Instances", envelope.Recovery.Command)
 		assert.Equal(t, "Search APIs related to Instances.", envelope.Recovery.Hint)
 		assert.Equal(t, RecoverySearchRequest{Product: "ecs", Style: "pascal", Keyword: "Instances"}, request)
+	})
+
+	t.Run("legacy unknown parameter message excludes Help recovery text", func(t *testing.T) {
+		cause := &InvalidParameterError{
+			Name: "InstnaceType", ProductCode: "ecs", ApiName: "RunInstances", ParameterNames: []string{"InstanceType"},
+		}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "RunInstances"}, func(RecoverySearchRequest) bool { return true })
+
+		assert.Equal(t, `"--InstnaceType" is not a valid parameter or flag.`, envelope.Message)
+		assert.NotContains(t, envelope.Message, "aliyun help")
 	})
 
 	t.Run("unknown CLI subcommand points at its current parent", func(t *testing.T) {
@@ -403,6 +414,36 @@ func TestBuiltInSubcommandErrorUsesRootAIModeAdapter(t *testing.T) {
 	assert.Equal(t, []string{"profile"}, envelope.DidYouMean)
 	assert.Equal(t, "search_command", envelope.Recovery.Action)
 	assert.Equal(t, "aliyun help configure", envelope.Recovery.Command)
+	assert.Equal(t, "\x1b[0;31mtext\x1b[0m", cli.Colorized(cli.Red, "text"), "AI no-color override must be restored after Execute")
+}
+
+func TestBuiltInUnknownFlagFallsBackToCurrentCommandHelp(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "1")
+	t.Setenv("NO_COLOR", "")
+	cli.SetNoColorOverride(false)
+	t.Cleanup(func() { cli.SetNoColorOverride(false) })
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	root := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
+	config.AddFlags(root.Flags())
+	AddFlags(root.Flags())
+	commando := NewCommando(stdout, config.Profile{Language: "en"})
+	commando.InitWithCommand(root)
+	root.AddSubCommand(&cli.Command{Name: "configure", Run: func(*cli.Context, []string) error { return nil }})
+
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	cli.DisableExitCode()
+	t.Cleanup(cli.EnableExitCode)
+	root.Execute(ctx, []string{"configure", "--bogus"})
+
+	var envelope cli.AgentErrorEnvelope
+	require.NoError(t, json.Unmarshal(stderr.Bytes(), &envelope))
+	assert.Equal(t, "invalid flag --bogus", envelope.Message)
+	assert.Equal(t, "inspect_command_help", envelope.Recovery.Action)
+	assert.Equal(t, "aliyun help configure", envelope.Recovery.Command)
+	assert.NotContains(t, envelope.Recovery.Command, "--cli-section")
 }
 
 func TestBuiltInSubcommandErrorKeepsNonAIText(t *testing.T) {

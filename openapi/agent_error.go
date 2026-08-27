@@ -95,7 +95,7 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	if errors.As(err, &invalidParameter) {
 		parameterContext := context.withProductAPI(invalidParameter.ProductCode, invalidParameter.ApiName)
 		suggestions := invalidParameter.AgentSuggestions()
-		return parameterSearchAgentError(err, invalidParameter.Error(), suggestions,
+		return parameterSearchAgentError(err, invalidParameter.AgentMessage(), suggestions,
 			strings.TrimLeft(firstString(suggestions), "-"), parameterContext, validate)
 	}
 
@@ -105,7 +105,7 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 		if invalidAPI.product != nil {
 			apiContext = context.withProductAPI(invalidAPI.product.GetLowerCode(), invalidAPI.Name)
 		}
-		return unknownAPIAgentError(err, invalidAPI.Error(), apiCandidateForms(invalidAPI.AgentSuggestions()), apiContext, validate)
+		return unknownAPIAgentError(err, invalidAPI.AgentMessage(), apiCandidateForms(invalidAPI.AgentSuggestions()), apiContext, validate)
 	}
 
 	var invalidUnifiedAPI *InvalidUnifiedApiError
@@ -114,30 +114,33 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 		if invalidUnifiedAPI.product != nil {
 			apiContext = context.withProductAPI(invalidUnifiedAPI.product.GetLowerCode(), invalidUnifiedAPI.Name)
 		}
-		return unknownAPIAgentError(err, invalidUnifiedAPI.Error(), apiCandidateForms(invalidUnifiedAPI.AgentSuggestions()), apiContext, validate)
+		return unknownAPIAgentError(err, invalidUnifiedAPI.AgentMessage(), apiCandidateForms(invalidUnifiedAPI.AgentSuggestions()), apiContext, validate)
 	}
 
 	var invalidBaseline *InvalidBaselineCommandError
 	if errors.As(err, &invalidBaseline) {
 		apiContext := context.withProductAPI(invalidBaseline.Product, invalidBaseline.Command)
-		return unknownAPIAgentError(err, invalidBaseline.Error(), nil, apiContext, validate)
+		message := fmt.Sprintf("%q is not a valid api.", invalidBaseline.Command)
+		return unknownAPIAgentError(err, message, nil, apiContext, validate)
 	}
 
 	var invalidProduct *InvalidProductError
 	if errors.As(err, &invalidProduct) {
-		return unknownProductAgentError(err, invalidProduct.Error(), invalidProduct.AgentSuggestions(), validate)
+		return unknownProductAgentError(err, invalidProduct.AgentMessage(), invalidProduct.AgentSuggestions(), validate)
 	}
 
 	var invalidProductOrPlugin *InvalidProductOrPluginError
 	if errors.As(err, &invalidProductOrPlugin) {
-		return unknownProductAgentError(err, invalidProductOrPlugin.Error(), invalidProductOrPlugin.AgentSuggestions(), validate)
+		return unknownProductAgentError(err, invalidProductOrPlugin.AgentMessage(), invalidProductOrPlugin.AgentSuggestions(), validate)
 	}
 
 	var invalidFlag *cli.InvalidFlagError
 	if errors.As(err, &invalidFlag) {
-		suggestions := invalidFlag.AgentSuggestions()
-		return parameterSearchAgentError(err, invalidFlag.Error(), suggestions,
-			strings.TrimLeft(firstString(suggestions), "-"), context, validate)
+		return newLocalAgentError(err, invalidFlag.AgentMessage(), invalidFlag.AgentSuggestions(), cli.AgentErrorRecovery{
+			Action:  "inspect_command_help",
+			Command: invalidFlag.AgentHelpCommand(),
+			Hint:    "Inspect the available flags for this command.",
+		})
 	}
 
 	var invalidCommand *cli.InvalidCommandError

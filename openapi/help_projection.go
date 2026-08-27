@@ -432,6 +432,16 @@ func renderAIModeEnableHelpHint(w io.Writer) error {
 	return err
 }
 
+func (c *Commando) finishCanonicalTextHelp(ctx *cli.Context, aiMode bool) error {
+	if aiMode {
+		// These specialized Canonical renderers bypass the historical text
+		// route, so explicitly preserve its configured AI-mode disable hint.
+		c.printAiModeHelpHint(ctx)
+		return nil
+	}
+	return renderAIModeEnableHelpHint(ctx.Stdout())
+}
+
 func localizedMachineHelpText(text machineHelpLocalizedText) string {
 	if i18n.GetLanguage() == "zh" && text.ZH != "" {
 		return text.ZH

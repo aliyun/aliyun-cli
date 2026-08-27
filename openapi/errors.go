@@ -33,6 +33,10 @@ func (e *InvalidProductError) Error() string {
 	return fmt.Sprintf("%q is not a valid command or product. See `aliyun help`.", strings.ToLower(e.Code))
 }
 
+func (e *InvalidProductError) AgentMessage() string {
+	return fmt.Sprintf("%q is not a valid command or product.", strings.ToLower(e.Code))
+}
+
 func (*InvalidProductError) AIRecoveryEligible() {}
 
 func (e *InvalidProductError) GetSuggestions() []string {
@@ -62,6 +66,10 @@ type InvalidApiError struct {
 
 func (e *InvalidApiError) Error() string {
 	return fmt.Sprintf("%q is not a valid api. See `aliyun help %s`.", e.Name, e.product.GetLowerCode())
+}
+
+func (e *InvalidApiError) AgentMessage() string {
+	return fmt.Sprintf("%q is not a valid api.", e.Name)
 }
 
 func (*InvalidApiError) AIRecoveryEligible() {}
@@ -94,6 +102,10 @@ type InvalidParameterError struct {
 func (e *InvalidParameterError) Error() string {
 	return fmt.Sprintf("%q is not a valid parameter or flag. See `aliyun help %s %s`.",
 		"--"+e.Name, strings.ToLower(e.ProductCode), e.ApiName)
+}
+
+func (e *InvalidParameterError) AgentMessage() string {
+	return fmt.Sprintf("%q is not a valid parameter or flag.", "--"+strings.TrimLeft(e.Name, "-"))
 }
 
 func (*InvalidParameterError) AIRecoveryEligible() {}
@@ -174,6 +186,10 @@ func (e *InvalidProductOrPluginError) Error() string {
 	return msg
 }
 
+func (e *InvalidProductOrPluginError) AgentMessage() string {
+	return fmt.Sprintf("%q is not a valid product.", e.Code)
+}
+
 func (*InvalidProductOrPluginError) AIRecoveryEligible() {}
 
 func (e *InvalidProductOrPluginError) GetSuggestions() []string {
@@ -203,6 +219,10 @@ type InvalidUnifiedApiError struct {
 
 func (e *InvalidUnifiedApiError) Error() string {
 	return fmt.Sprintf("%q is not a valid api. See `aliyun help %s`.", e.Name, e.product.GetLowerCode())
+}
+
+func (e *InvalidUnifiedApiError) AgentMessage() string {
+	return fmt.Sprintf("%q is not a valid api.", e.Name)
 }
 
 func (*InvalidUnifiedApiError) AIRecoveryEligible() {}

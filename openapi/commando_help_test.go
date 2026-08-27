@@ -835,6 +835,25 @@ func TestCanonicalTextHelpOmitsEnableHintWhenAIModeIsOn(t *testing.T) {
 	assert.NotContains(t, stdout.String(), cli.AIModeEnableCommand)
 }
 
+func TestCanonicalTextHelpKeepsConfiguredAIModeDisableHint(t *testing.T) {
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	t.Cleanup(cleanup)
+
+	confDir := filepath.Join(testHome, ".aliyun")
+	require.NoError(t, os.MkdirAll(confDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(confDir, "ai-mode.json"), []byte(`{"enabled":true}`), 0600))
+
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	t.Setenv(aimode.EnvAIMode, "")
+	CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSearchFlag(ctx.Flags()).SetValue("demo")
+
+	require.NoError(t, c.help(ctx, nil))
+	assert.NotContains(t, stdout.String(), cli.AIModeEnableCommand)
+	assert.Contains(t, stderr.String(), "aliyun configure ai-mode disable")
+}
+
 func TestCanonicalTextResponseSearchPrintsMatchedPathAndFilteredQuery(t *testing.T) {
 	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
 	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)

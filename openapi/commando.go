@@ -1237,10 +1237,7 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 		if renderErr := renderResponseHelpText(ctx.Stdout(), document); renderErr != nil {
 			return renderErr
 		}
-		if !aiMode {
-			return renderAIModeEnableHelpHint(ctx.Stdout())
-		}
-		return nil
+		return c.finishCanonicalTextHelp(ctx, aiMode)
 	}
 
 	// The new Search and AI listing views use only the local Canonical index.
@@ -1257,10 +1254,7 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 			if renderErr := renderCanonicalRootText(ctx.Stdout(), document, helpOpts.Search); renderErr != nil {
 				return renderErr
 			}
-			if !aiMode {
-				return renderAIModeEnableHelpHint(ctx.Stdout())
-			}
-			return nil
+			return c.finishCanonicalTextHelp(ctx, aiMode)
 		case len(args) == 1 && (helpOpts.Search != "" || helpOpts.All || aiMode):
 			document, buildErr := service.buildProduct(args[0], requestedMachineHelpVersion(ctx))
 			if buildErr != nil {
@@ -1270,10 +1264,7 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 			if renderErr := renderCanonicalProductText(ctx.Stdout(), document, helpOpts.Search); renderErr != nil {
 				return renderErr
 			}
-			if !aiMode {
-				return renderAIModeEnableHelpHint(ctx.Stdout())
-			}
-			return nil
+			return c.finishCanonicalTextHelp(ctx, aiMode)
 		case len(args) == 2 && helpOpts.Search != "":
 			document, buildErr := service.buildAPI(args[0], args[1], requestedMachineHelpVersion(ctx))
 			if buildErr != nil {
@@ -1287,10 +1278,7 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 			if renderErr := renderRequestQueryExampleText(ctx.Stdout(), document.ResponseQuery); renderErr != nil {
 				return renderErr
 			}
-			if !aiMode {
-				return renderAIModeEnableHelpHint(ctx.Stdout())
-			}
-			return nil
+			return c.finishCanonicalTextHelp(ctx, aiMode)
 		}
 	}
 	c.loadPlugins()
