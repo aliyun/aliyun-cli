@@ -93,6 +93,7 @@ func TestRpcInvoker_Prepare(t *testing.T) {
 	err = a.Prepare(ctx)
 	assert.NotNil(t, err)
 	assert.Equal(t, "required parameters not assigned: \n  --body\n  --secure\n  --RegionId", err.Error())
+	assert.True(t, cli.IsAIRecoveryEligible(err), "legacy missing-required errors must receive the non-AI AI-mode hint")
 
 	a.api.Parameters = []canonicalmeta.Parameter{
 		{

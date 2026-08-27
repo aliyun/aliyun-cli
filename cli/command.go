@@ -59,6 +59,13 @@ type Command struct {
 	// auto compete
 	AutoComplete func(ctx *Context, args []string) []string
 
+	// BeforeExecute configures process-level behavior before parsing begins.
+	BeforeExecute func(ctx *Context, args []string)
+
+	// NormalizeError adapts errors from both this command and nested commands
+	// immediately before rendering.
+	NormalizeError func(ctx *Context, args []string, err error) error
+
 	parent      *Command
 	subCommands []*Command
 	flags       *FlagSet
@@ -99,8 +106,20 @@ func (c *Command) Flags() *FlagSet {
 }
 
 func (c *Command) Execute(ctx *Context, args []string) {
+	previousNoColorOverride := noColorOverride.Load()
+	defer noColorOverride.Store(previousNoColorOverride)
 	if ctx.completion != nil {
 		args = ctx.completion.GetArgs()
+	}
+	if c.BeforeExecute != nil {
+		c.BeforeExecute(ctx, args)
+	}
+	ctx.errorNormalizer = nil
+	ctx.SetErrorNormalizationArgs(args)
+	if c.NormalizeError != nil {
+		ctx.errorNormalizer = func(err error) error {
+			return c.NormalizeError(ctx, append([]string(nil), ctx.errorNormalizeArgs...), err)
+		}
 	}
 
 	err := c.executeInner(ctx, args)
@@ -347,6 +366,9 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 }
 
 func (c *Command) processError(ctx *Context, err error) {
+	if ctx != nil && ctx.errorNormalizer != nil {
+		err = ctx.errorNormalizer(err)
+	}
 	if e, ok := err.(StructuredError); ok {
 		_ = e.RenderError(ctx.Stderr())
 		Exit(e.ExitCode())
@@ -362,18 +384,23 @@ func (c *Command) processError(ctx *Context, err error) {
 
 	Errorf(ctx.Stderr(), "ERROR: %s\n", err.Error())
 	exitCode := 1
-	if e, ok := err.(SuggestibleError); ok {
-		PrintSuggestions(ctx, i18n.GetLanguage(), e.GetSuggestions())
+	var suggestible SuggestibleError
+	if errors.As(err, &suggestible) {
+		PrintSuggestions(ctx, i18n.GetLanguage(), suggestible.GetSuggestions())
 		exitCode = 2
 	}
 	// An error can be both suggestible and carry a tip (e.g. InvalidCommandError
 	// prints "did you mean" suggestions and points to `<cmd> --help`). Print the
 	// tip too, but keep the suggestible exit code when both apply.
-	if e, ok := err.(ErrorWithTip); ok {
-		Noticef(ctx.Stderr(), "\n%s\n", e.GetTip(i18n.GetLanguage()))
+	var withTip ErrorWithTip
+	if errors.As(err, &withTip) {
+		Noticef(ctx.Stderr(), "\n%s\n", withTip.GetTip(i18n.GetLanguage()))
 		if exitCode == 1 {
 			exitCode = 3
 		}
+	}
+	if IsAIRecoveryEligible(err) {
+		Printf(ctx.Stderr(), "\n%s\n", AIModeEnableTextHint)
 	}
 	Exit(exitCode)
 }

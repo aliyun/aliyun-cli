@@ -78,6 +78,14 @@ func (c *Commando) printHelpContextHints(ctx *cli.Context) {
 	c.printAiModeHelpHint(ctx)
 }
 
+func (c *Commando) hasInstalledProductPlugin(productCode string) bool {
+	if c == nil || c.localManifest == nil {
+		return false
+	}
+	_, installed, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode)
+	return ok && installed != nil
+}
+
 func getPluginArgsForHelp(productCode string) []string {
 	cmdIndex := -1
 	for i, arg := range os.Args {

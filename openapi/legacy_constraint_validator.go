@@ -39,6 +39,8 @@ func (e *LegacyDocRequiredError) Error() string {
 	return "missing docRequired parameter(s): " + strings.Join(e.Flags, ", ")
 }
 
+func (*LegacyDocRequiredError) AIRecoveryEligible() {}
+
 func (e *ConstraintViolationError) Error() string {
 	switch e.Constraint {
 	case "enum":

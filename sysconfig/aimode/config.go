@@ -177,7 +177,8 @@ func RequestUserAgentSuffixForCommandWithDetectedAgent(cfg *AiConfig, forceOn, f
 }
 
 // EnabledForCommand resolves the effective AI mode for one command. A
-// command-level opt-out always wins, followed by opt-in and then configuration.
+// command-level opt-out always wins, followed by opt-in, a valid environment
+// override, and then configuration.
 func EnabledForCommand(cfg *AiConfig, forceOn, forceOff bool) bool {
 	if forceOff {
 		return false
@@ -185,7 +186,21 @@ func EnabledForCommand(cfg *AiConfig, forceOn, forceOff bool) bool {
 	if forceOn {
 		return true
 	}
+	if enabled, ok := parseEnabledValue(os.Getenv(EnvAIMode)); ok {
+		return enabled
+	}
 	return cfg != nil && cfg.Enabled
+}
+
+func parseEnabledValue(value string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true":
+		return true, true
+	case "0", "false":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 func MergeUserAgentIntoPluginEnvs(configDir string, envs map[string]string, forceOn, forceOff bool) {

@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync/atomic"
 )
 
 const (
@@ -92,6 +93,15 @@ const (
 	OnIWhite  = "\033[0;107m" // White
 )
 
+var noColorOverride atomic.Bool
+
+// SetNoColorOverride controls color for the current CLI process without
+// mutating NO_COLOR. The CLI executes one command per process; tests and
+// embedders should restore false after a scoped invocation.
+func SetNoColorOverride(disabled bool) {
+	noColorOverride.Store(disabled)
+}
+
 const (
 	DebugColor   = White
 	InfoColor    = Cyan
@@ -103,7 +113,7 @@ const (
 func isNoColor() bool {
 	var isTTY = os.FileMode(0)&os.ModeDevice != 0
 	var NO_COLOR = os.Getenv("NO_COLOR")
-	return isTTY || NO_COLOR == "true" || NO_COLOR == "1"
+	return noColorOverride.Load() || isTTY || NO_COLOR == "true" || NO_COLOR == "1"
 }
 
 func Colorized(color string, a ...interface{}) string {

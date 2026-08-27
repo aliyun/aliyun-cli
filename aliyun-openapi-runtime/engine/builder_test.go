@@ -17,6 +17,8 @@ package engine
 import (
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -253,4 +255,51 @@ func TestValidateDispatchOptionsRequiresEstimateCost(t *testing.T) {
 	if err := validateDispatchOptions(res); err != nil {
 		t.Fatalf("validateDispatchOptions with --estimate-cost: %v", err)
 	}
+}
+
+func TestValidateDispatchOptionsPreservesTypedConflict(t *testing.T) {
+	res := &argparser.Result{Reserved: argparser.Reserved{
+		DryRunJSON: true,
+		Pager:      &argparser.PagerConfig{},
+	}}
+	err := validateDispatchOptions(res)
+	var conflict *InvalidOptionCombinationError
+	if !errors.As(err, &conflict) {
+		t.Fatalf("validateDispatchOptions error %T does not preserve conflict: %v", err, err)
+	}
+	if !reflect.DeepEqual(conflict.Options, []string{"--cli-dry-run-json", "--pager"}) {
+		t.Fatalf("conflict options = %#v", conflict.Options)
+	}
+	if got, want := err.Error(), "--cli-dry-run-json cannot be used with --pager"; got != want {
+		t.Fatalf("conflict text = %q, want %q", got, want)
+	}
+}
+
+func TestBuildExecContextPreservesTypedHeaderAndBodyFileErrors(t *testing.T) {
+	t.Run("header", func(t *testing.T) {
+		_, err := buildExecContext(Request{}, &meta.API{}, &argparser.Result{Reserved: argparser.Reserved{
+			Headers: []string{"broken"}, DryRun: true,
+		}})
+		var invalid *InvalidHeaderError
+		if !errors.As(err, &invalid) {
+			t.Fatalf("buildExecContext error %T does not preserve header: %v", err, err)
+		}
+		if invalid.Input != "broken" || invalid.ExpectedFormat != "Name=Value" {
+			t.Fatalf("InvalidHeaderError = %#v", invalid)
+		}
+	})
+
+	t.Run("body file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "missing.json")
+		_, err := buildExecContext(Request{}, &meta.API{}, &argparser.Result{Reserved: argparser.Reserved{
+			BodyFile: path, BodyFileSet: true, DryRun: true,
+		}})
+		var invalid *InvalidBodyFileError
+		if !errors.As(err, &invalid) {
+			t.Fatalf("buildExecContext error %T does not preserve body file: %v", err, err)
+		}
+		if invalid.Path != path || !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("InvalidBodyFileError = %#v, err = %v", invalid, err)
+		}
+	})
 }

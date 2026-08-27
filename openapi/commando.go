@@ -44,12 +44,14 @@ import (
 
 // main entrance of aliyun cli
 type Commando struct {
-	profile        config.Profile
-	library        *Library
-	pluginIndex    *plugin.Index
-	pluginIndexErr error // set when remote plugin index could not be loaded
-	localManifest  *plugin.LocalManifest
-	pluginLoaded   bool
+	profile                 config.Profile
+	library                 *Library
+	pluginIndex             *plugin.Index
+	pluginIndexErr          error // set when remote plugin index could not be loaded
+	localManifest           *plugin.LocalManifest
+	pluginLoaded            bool
+	localLoaded             bool
+	recoverySearchValidator RecoverySearchValidator
 }
 
 var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
@@ -59,6 +61,8 @@ var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*respons
 var runtimeTryDispatch = runtimehost.TryDispatch
 
 var agentErrorNormalizer = normalizeAgentError
+
+var agentErrorNormalizerWithSearch = normalizeAgentErrorWithSearch
 
 type externalPluginError struct {
 	err error
@@ -80,6 +84,13 @@ func NewCommando(w io.Writer, profile config.Profile) *Commando {
 	return r
 }
 
+// SetRecoverySearchValidator injects the host Help search validator used to
+// prove that a proposed --cli-search recovery command has at least one match.
+// A nil validator always falls back to ordinary Help.
+func (c *Commando) SetRecoverySearchValidator(validate RecoverySearchValidator) {
+	c.recoverySearchValidator = validate
+}
+
 func (c *Commando) loadPlugins() {
 	if c.pluginLoaded {
 		return
@@ -92,6 +103,23 @@ func (c *Commando) loadPlugins() {
 	}
 	// Remote index may fail offline; local manifest still loads for installed plugins.
 	c.pluginIndex, c.pluginIndexErr = mgr.GetIndex()
+	c.localManifest, _ = mgr.GetLocalManifest()
+	c.localLoaded = true
+}
+
+// loadLocalPlugins reads only the on-disk manifest. Canonical Help paths use
+// it to preserve installed-plugin ownership without making Help depend on the
+// remote plugin index.
+func (c *Commando) loadLocalPlugins() {
+	if c.localLoaded || c.localManifest != nil {
+		c.localLoaded = true
+		return
+	}
+	c.localLoaded = true
+	mgr, err := plugin.NewManager()
+	if err != nil {
+		return
+	}
 	c.localManifest, _ = mgr.GetLocalManifest()
 }
 
@@ -108,13 +136,20 @@ func (c *Commando) InitWithCommand(cmd *cli.Command) {
 	cmd.Run = c.run
 	cmd.Help = c.help
 	cmd.AutoComplete = c.complete
+	cmd.BeforeExecute = func(ctx *cli.Context, args []string) {
+		c.applyEffectiveAIModeForArgs(ctx, args)
+	}
+	cmd.NormalizeError = c.finishCommandRun
 }
 
 func (c *Commando) run(ctx *cli.Context, args []string) error {
-	return c.finishCommandRun(ctx, args, c.main(ctx, args))
+	ctx.SetErrorNormalizationArgs(args)
+	c.applyEffectiveAIMode(ctx)
+	return c.main(ctx, args)
 }
 
 func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) error {
+	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
 	if err == nil {
 		return nil
 	}
@@ -124,15 +159,67 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 		return pluginErr.err
 	}
 
+	if !enabled {
+		return err
+	}
+	normalizationArgs := recoveryNormalizationArgs(ctx, args)
+	if c.recoverySearchValidator != nil {
+		return agentErrorNormalizerWithSearch(err, normalizationArgs, c.recoverySearchValidator)
+	}
+	if c.library != nil && c.library.helpRepo != nil {
+		return agentErrorNormalizerWithSearch(err, normalizationArgs, func(request RecoverySearchRequest) bool {
+			return c.validateRecoverySearch(ctx, request)
+		})
+	}
+	return agentErrorNormalizer(err, normalizationArgs)
+}
+
+func (c *Commando) applyEffectiveAIMode(ctx *cli.Context) bool {
+	return c.applyEffectiveAIModeForArgs(ctx, nil)
+}
+
+func (c *Commando) applyEffectiveAIModeForArgs(ctx *cli.Context, args []string) bool {
 	cfg, loadErr := aimode.Load(config.GetConfigDir(ctx))
 	if loadErr != nil {
 		cfg = aimode.DefaultAiConfig()
 	}
 	forceOn, forceOff := CliAIOverridesForOpenAPI(ctx)
-	if !aimode.EnabledForCommand(cfg, forceOn, forceOff) {
-		return err
+	for _, arg := range args {
+		switch arg {
+		case "--no-cli-ai-mode":
+			forceOff = true
+		case "--cli-ai-mode":
+			forceOn = true
+		}
 	}
-	return agentErrorNormalizer(err, args)
+	enabled := aimode.EnabledForCommand(cfg, forceOn, forceOff)
+	cli.SetNoColorOverride(enabled)
+	return enabled
+}
+
+func recoveryNormalizationArgs(ctx *cli.Context, args []string) []string {
+	result := make([]string, 0, len(args)+2)
+	for _, arg := range args {
+		if arg != "--cli-ai-mode" && arg != "--no-cli-ai-mode" {
+			result = append(result, arg)
+		}
+	}
+	if _, version := explicitVersion(result); version != "" || ctx == nil || ctx.Flags() == nil {
+		return result
+	}
+	versionFlag := VersionFlag(ctx.Flags())
+	if versionFlag == nil {
+		return result
+	}
+	version, assigned := versionFlag.GetValue()
+	if !assigned || strings.TrimSpace(version) == "" {
+		return result
+	}
+	flagName := "--version"
+	if len(args) > 1 && commandStyle(args[1]) == "kebab" {
+		flagName = "--api-version"
+	}
+	return append(result, flagName, version)
 }
 
 func DetectInConfigureMode(flags *cli.FlagSet) bool {
@@ -205,6 +292,9 @@ var stdin io.Reader = os.Stdin
 
 func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// fmt.Println("commando main", args)
+	if canonicalHelpOptionAssigned(ctx.Flags()) {
+		return fmt.Errorf("--cli-section, --cli-search, and --cli-all can only be used with `aliyun help ...` or --help")
+	}
 
 	// --estimate-cost needs a product + api to estimate against. Without an
 	// early fail here, len(args) == 0 below would silently print usage and
@@ -222,7 +312,10 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// forgotten --estimate-cost doesn't silently run the real API.
 	if EstimateCostContextFlag(ctx.Flags()).IsAssigned() && !EstimateCostFlag(ctx.Flags()).IsAssigned() {
 		return cli.NewErrorWithTip(
-			fmt.Errorf("--estimate-cost-context requires --estimate-cost"),
+			&InvalidOptionCombinationError{
+				Options: []string{"--estimate-cost-context", "--estimate-cost"},
+				Err:     fmt.Errorf("--estimate-cost-context requires --estimate-cost"),
+			},
 			"add --estimate-cost, e.g. aliyun ecs RunInstances ... --estimate-cost --estimate-cost-context EstimatedInternetTrafficOutGB=100")
 	}
 
@@ -319,7 +412,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 				if foundPluginName == "" {
 					if runtimehost.HasProduct(args[0]) {
-						return c.invalidBaselineCommandError(args[0], args[1])
+						return &InvalidBaselineCommandError{
+							Product: args[0],
+							Command: args[1],
+							Err:     c.invalidBaselineCommandError(args[0], args[1]),
+						}
 					}
 					c.loadPlugins()
 					if c.pluginIndex != nil {
@@ -904,7 +1001,10 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			//
 			// Rpc call
 			if path != "" {
-				return nil, cli.NewErrorWithTip(fmt.Errorf("invalid argument %s", path),
+				return nil, cli.NewErrorWithTip(&InvalidArgumentError{
+					FieldPath: path,
+					Err:       fmt.Errorf("invalid argument %s", path),
+				},
 					"Use `aliyun help %s` see more information.", product.GetLowerCode())
 			}
 			if force {
@@ -1096,12 +1196,95 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 }
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {
+	ctx.SetErrorNormalizationArgs(args)
+	c.applyEffectiveAIMode(ctx)
 	// fmt.Println("commando help", args)
+	helpOpts, err := parseHelpOptions(ctx, args)
+	if err != nil {
+		return err
+	}
 	if formatFlag := MachineHelpFormatFlag(ctx.Flags()); formatFlag != nil && formatFlag.IsAssigned() {
 		format, _ := formatFlag.GetValue()
-		return c.printMachineHelp(ctx, args, format)
+		return c.printMachineHelp(ctx, args, format, helpOpts)
 	}
 
+	c.loadLocalPlugins()
+	aiMode := legacyAIModeEnabled(ctx)
+	installedPlugin := len(args) > 0 && c.hasInstalledProductPlugin(args[0])
+	if helpOpts.Section == helpSectionResponse && len(args) == 2 && !installedPlugin {
+		if c.library == nil || c.library.helpRepo == nil {
+			return fmt.Errorf("response Help is unavailable: canonical metadata repository is unavailable")
+		}
+		document, buildErr := newMachineHelpService(c.library.helpRepo).buildAPIResponse(args[0], args[1], requestedMachineHelpVersion(ctx))
+		if buildErr != nil {
+			return buildErr
+		}
+		if applyErr := applyResponseHelpOptions(document, helpOpts); applyErr != nil {
+			return applyErr
+		}
+		if helpOpts.Search != "" {
+			document.ResponseQuery = nil
+			if document.OutputSchema != nil {
+				document.ResponseQuery = projectResponseQueryExample(
+					helpResponseSchema(document),
+					document.Product.Code,
+					document.Target.Path[len(document.Target.Path)-1],
+					document.Target.RequestedStyle,
+					requestedMachineHelpVersion(ctx),
+				)
+			}
+		}
+		if renderErr := renderResponseHelpText(ctx.Stdout(), document); renderErr != nil {
+			return renderErr
+		}
+		return c.finishCanonicalTextHelp(ctx, aiMode)
+	}
+
+	// The new Search and AI listing views use only the local Canonical index.
+	// Installed plugins retain ownership of their text Help and bypass this path.
+	if !installedPlugin && c.library != nil && c.library.helpRepo != nil {
+		service := newMachineHelpService(c.library.helpRepo)
+		switch {
+		case len(args) == 0 && (helpOpts.Search != "" || helpOpts.All || aiMode):
+			document, buildErr := service.buildRoot(ctx.Command())
+			if buildErr != nil {
+				return buildErr
+			}
+			applyRootHelpOptions(document, helpOpts, aiMode)
+			if renderErr := renderCanonicalRootText(ctx.Stdout(), document, helpOpts.Search); renderErr != nil {
+				return renderErr
+			}
+			return c.finishCanonicalTextHelp(ctx, aiMode)
+		case len(args) == 1 && (helpOpts.Search != "" || helpOpts.All || aiMode):
+			document, buildErr := service.buildProduct(args[0], requestedMachineHelpVersion(ctx))
+			if buildErr != nil {
+				return buildErr
+			}
+			applyProductHelpOptions(document, helpOpts, aiMode)
+			if renderErr := renderCanonicalProductText(ctx.Stdout(), document, helpOpts.Search); renderErr != nil {
+				return renderErr
+			}
+			return c.finishCanonicalTextHelp(ctx, aiMode)
+		case len(args) == 2 && (helpOpts.Search != "" || helpOpts.All || aiMode):
+			document, buildErr := service.buildAPI(args[0], args[1], requestedMachineHelpVersion(ctx))
+			if buildErr != nil {
+				return buildErr
+			}
+			document.GlobalParameters = projectGlobalParameters(ctx.Flags())
+			applyRequestHelpOptions(document, helpOpts, aiMode)
+			if helpOpts.Search != "" {
+				if renderErr := renderCanonicalRequestSearchText(ctx.Stdout(), document, helpOpts.Search); renderErr != nil {
+					return renderErr
+				}
+				if renderErr := renderRequestQueryExampleText(ctx.Stdout(), document.ResponseQuery); renderErr != nil {
+					return renderErr
+				}
+			} else if renderErr := renderCanonicalRequestText(ctx.Stdout(), document); renderErr != nil {
+				return renderErr
+			}
+			return c.finishCanonicalTextHelp(ctx, aiMode)
+		}
+	}
 	c.loadPlugins()
 	cmd := ctx.Command()
 	if len(args) == 0 {
@@ -1112,13 +1295,36 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 		cmd.PrintSample(ctx)
 		c.printProducts(ctx)
 		cmd.PrintTail(ctx)
+		if !aiMode {
+			return renderAIModeEnableHelpHint(ctx.Stdout())
+		}
 		return nil
 	} else if len(args) == 1 {
 		cmd.PrintHead(ctx)
-		return c.printProductUsage(ctx, args[0])
+		if err := c.printProductUsage(ctx, args[0]); err != nil {
+			return err
+		}
+		if !installedPlugin && !aiMode {
+			return renderAIModeEnableHelpHint(ctx.Stdout())
+		}
+		return nil
 	} else if len(args) == 2 {
 		cmd.PrintHead(ctx)
-		return c.printApiUsage(ctx, args[0], args[1])
+		if err := c.printApiUsage(ctx, args[0], args[1]); err != nil {
+			return err
+		}
+		if !installedPlugin && c.library != nil && c.library.helpRepo != nil {
+			document, buildErr := newMachineHelpService(c.library.helpRepo).buildAPI(args[0], args[1], requestedMachineHelpVersion(ctx))
+			if buildErr == nil {
+				if renderErr := renderRequestQueryExampleText(ctx.Stdout(), document.ResponseQuery); renderErr != nil {
+					return renderErr
+				}
+			}
+		}
+		if !installedPlugin && !aiMode {
+			return renderAIModeEnableHelpHint(ctx.Stdout())
+		}
+		return nil
 	} else {
 		// Layer 3: plugin sub-command help (3+ levels deep).
 		if delegated, derr := c.tryDelegatePluginHelp(ctx, args); delegated {

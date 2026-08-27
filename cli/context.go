@@ -48,6 +48,8 @@ type Context struct {
 	completion         *Completion
 	stdout             io.Writer
 	stderr             io.Writer
+	errorNormalizer    func(error) error
+	errorNormalizeArgs []string
 	inConfigureMode    bool
 	hasPluginSubCmd    bool
 	hasPluginSubCmdSet bool
@@ -134,6 +136,12 @@ func (ctx *Context) Stdout() io.Writer {
 
 func (ctx *Context) Stderr() io.Writer {
 	return ctx.stderr
+}
+
+// SetErrorNormalizationArgs records the parsed command identity used by a
+// root error adapter. Values are copied so callers cannot mutate the context.
+func (ctx *Context) SetErrorNormalizationArgs(args []string) {
+	ctx.errorNormalizeArgs = append(ctx.errorNormalizeArgs[:0], args...)
 }
 
 func (ctx *Context) UnknownFlags() *FlagSet {

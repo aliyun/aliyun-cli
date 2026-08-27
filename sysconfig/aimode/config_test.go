@@ -167,6 +167,7 @@ func TestEnabledForCommand(t *testing.T) {
 	tests := []struct {
 		name     string
 		cfg      *AiConfig
+		env      string
 		forceOn  bool
 		forceOff bool
 		want     bool
@@ -174,13 +175,22 @@ func TestEnabledForCommand(t *testing.T) {
 		{name: "nil config", cfg: nil, want: false},
 		{name: "configured off", cfg: &AiConfig{Enabled: false}, want: false},
 		{name: "configured on", cfg: &AiConfig{Enabled: true}, want: true},
+		{name: "environment one", cfg: &AiConfig{Enabled: false}, env: "1", want: true},
+		{name: "environment true is trimmed and case insensitive", cfg: &AiConfig{Enabled: false}, env: "  TrUe  ", want: true},
+		{name: "environment zero", cfg: &AiConfig{Enabled: true}, env: "0", want: false},
+		{name: "environment false is trimmed and case insensitive", cfg: &AiConfig{Enabled: true}, env: "  FaLsE  ", want: false},
+		{name: "empty environment falls back to configuration", cfg: &AiConfig{Enabled: true}, env: "", want: true},
+		{name: "invalid environment falls back to configuration", cfg: &AiConfig{Enabled: true}, env: "enabled", want: true},
 		{name: "force on", cfg: &AiConfig{Enabled: false}, forceOn: true, want: true},
+		{name: "force on wins over false environment", cfg: &AiConfig{Enabled: false}, env: "false", forceOn: true, want: true},
 		{name: "force off", cfg: &AiConfig{Enabled: true}, forceOff: true, want: false},
+		{name: "force off wins over true environment", cfg: &AiConfig{Enabled: true}, env: "true", forceOff: true, want: false},
 		{name: "force off wins", cfg: &AiConfig{Enabled: true}, forceOn: true, forceOff: true, want: false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(EnvAIMode, tt.env)
 			assert.Equal(t, tt.want, EnabledForCommand(tt.cfg, tt.forceOn, tt.forceOff))
 		})
 	}

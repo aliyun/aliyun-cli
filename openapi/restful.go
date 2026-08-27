@@ -45,8 +45,11 @@ func (a *RestfulInvoker) Prepare(ctx *cli.Context) error {
 		a.request.SetContent([]byte(v))
 	}
 
-	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok {
-		buf, _ := os.ReadFile(v)
+	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok && strings.TrimSpace(v) != "" {
+		buf, err := os.ReadFile(v)
+		if err != nil {
+			return &InvalidBodyFileError{Path: v, Err: fmt.Errorf("--body-file: %w", err)}
+		}
 		a.request.SetContent(buf)
 	}
 

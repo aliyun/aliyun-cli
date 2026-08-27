@@ -15,8 +15,10 @@ package openapi
 
 import (
 	"bufio"
-	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
+	"path/filepath"
 	"testing"
+
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
@@ -106,6 +108,14 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 	ctx.UnknownFlags().Get("TestFlag").SetValue("testFlagValue")
 	err = a.Prepare(ctx)
 	assert.EqualError(t, err, `"--TestFlag" is not a valid parameter or flag. See `+"`aliyun help  DescribeClusterUserKubeconfig`"+`.`)
+
+	missing := filepath.Join(t.TempDir(), "missing.json")
+	BodyFileFlag(ctx.Flags()).SetAssigned(true)
+	BodyFileFlag(ctx.Flags()).SetValue(missing)
+	err = a.Prepare(ctx)
+	var invalidBodyFile *InvalidBodyFileError
+	assert.ErrorAs(t, err, &invalidBodyFile)
+	assert.Equal(t, missing, invalidBodyFile.Path)
 }
 
 func TestRestfulInvokerPrepareWildcardPath(t *testing.T) {

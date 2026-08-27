@@ -25,6 +25,56 @@
       "report_name": "ReportName"
     }
   },
+  "responses": {
+    "200": {
+      "description": "Success",
+      "content": {
+        "application/json": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "RequestId": {
+                "type": "string",
+                "description_en": "The request ID.",
+                "description_zh": "请求 ID。"
+              },
+              "Reports": {
+                "$ref": "#/components/schemas/ReportList"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ReportList": {
+        "type": "object",
+        "properties": {
+          "Report": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Report"
+            }
+          }
+        }
+      },
+      "Report": {
+        "type": "object",
+        "properties": {
+          "ReportId": {
+            "type": "string",
+            "title_en": "Report ID",
+            "title_zh": "报表 ID"
+          }
+        }
+      },
+      "Unused": {
+        "type": "string"
+      }
+    }
+  },
   "parameters": [
     {
       "name": "report_id",

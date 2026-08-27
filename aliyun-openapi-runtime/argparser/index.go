@@ -91,3 +91,5 @@ type UnknownFlagError struct {
 func (e *UnknownFlagError) Error() string {
 	return fmt.Sprintf("unknown flag --%s", e.Flag)
 }
+
+func (*UnknownFlagError) AIRecoveryEligible() {}

@@ -38,6 +38,18 @@ func TestColorized(t *testing.T) {
 	os.Setenv("NO_COLOR", "")
 }
 
+func TestProcessNoColorOverride(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	SetNoColorOverride(false)
+	t.Cleanup(func() { SetNoColorOverride(false) })
+
+	assert.Equal(t, "\x1b[0;31mtext\x1b[0m", Colorized(Red, "text"))
+	SetNoColorOverride(true)
+	assert.Equal(t, "text", Colorized(Red, "text"))
+	SetNoColorOverride(false)
+	assert.Equal(t, "\x1b[0;31mtext\x1b[0m", Colorized(Red, "text"))
+}
+
 func TestCotainWriter(t *testing.T) {
 	writer := new(bytes.Buffer)
 	n, err := PrintWithColor(writer, "red", "a")

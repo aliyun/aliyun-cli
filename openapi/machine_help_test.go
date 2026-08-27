@@ -3,6 +3,7 @@ package openapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 
@@ -81,6 +82,7 @@ func TestMachineHelpAPICamelAndKebabShareCanonicalIdentity(t *testing.T) {
 
 	assert.Equal(t, machineHelpSchemaVersion, camel.SchemaVersion)
 	assert.Equal(t, "api", camel.Kind)
+	assert.Equal(t, helpSectionRequest, camel.Section)
 	assert.Equal(t, "CreateReport", camel.API.Name)
 	assert.Equal(t, "CreateReport", kebab.API.Name)
 	assert.Equal(t, "create-report", camel.API.CmdName)
@@ -96,10 +98,53 @@ func TestMachineHelpAPICamelAndKebabShareCanonicalIdentity(t *testing.T) {
 	assert.NotNil(t, findMachineHelpParameter(kebab.ParameterSets.Kebab, "--workspace-id"))
 	assert.Equal(t, "aliyun demo CreateReport ....", camel.Examples.Camel)
 	assert.Equal(t, "aliyun demo create-report ...", camel.Examples.Kebab)
-	assert.Nil(t, camel.OutputSchema)
-	assert.Nil(t, camel.Pagination)
-	assert.Nil(t, camel.Risk)
-	assert.Nil(t, camel.Recovery)
+}
+
+func TestMachineHelpJSONOmitsEmptyOptionalValues(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPI("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+
+	var encoded bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	assert.NotContains(t, encoded.String(), `"outputSchema"`)
+	assert.NotContains(t, encoded.String(), `"pagination"`)
+	assert.NotContains(t, encoded.String(), `"risk"`)
+	assert.NotContains(t, encoded.String(), `"recovery"`)
+	assert.NotContains(t, encoded.String(), `: null`)
+	assert.NotContains(t, encoded.String(), `: ""`)
+	assert.NotContains(t, encoded.String(), `: []`)
+	assert.NotContains(t, encoded.String(), `: {}`)
+	assert.Contains(t, encoded.String(), `"required": false`)
+}
+
+func TestMachineHelpJSONPreservesResponseSchemaValues(t *testing.T) {
+	schema := json.RawMessage(`{"type":"object","properties":{"Token":{"type":"string","const":"","default":"","enum":[""]},"Counter":{"type":"integer","maximum":9223372036854775809}}}`)
+	doc := &machineHelpAPIResponseDocument{
+		SchemaVersion: machineHelpSchemaVersion,
+		Kind:          "api",
+		Section:       helpSectionResponse,
+		OutputSchema: &machineHelpOutputSchema{
+			StatusCode:  "200",
+			ContentType: "application/json",
+			Schema:      schema,
+			Components: &machineHelpComponents{Schemas: map[string]json.RawMessage{
+				"Payload":  schema,
+				"Anything": json.RawMessage(`{}`),
+			}},
+		},
+	}
+
+	var encoded bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	var compact bytes.Buffer
+	require.NoError(t, json.Compact(&compact, encoded.Bytes()))
+	output := compact.String()
+	assert.Contains(t, output, `"const":""`)
+	assert.Contains(t, output, `"default":""`)
+	assert.Contains(t, output, `"enum":[""]`)
+	assert.Contains(t, output, `"maximum":9223372036854775809`)
+	assert.Contains(t, output, `"Anything":{}`)
 }
 
 func TestMachineHelpAPIDefaultVersionFollowsCommandStyle(t *testing.T) {
@@ -113,6 +158,152 @@ func TestMachineHelpAPIDefaultVersionFollowsCommandStyle(t *testing.T) {
 	_, err = service.buildAPI("demo", "describe-regions", "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "2025-01-01")
+}
+
+func TestMachineHelpAPIResponseUsesCanonicalSchemaAndReachableComponents(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPIResponse("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+
+	assert.Equal(t, helpSectionResponse, doc.Section)
+	assert.Equal(t, "camel", doc.Target.RequestedStyle)
+	require.NotNil(t, doc.OutputSchema)
+	assert.Equal(t, "200", doc.OutputSchema.StatusCode)
+	assert.Equal(t, "application/json", doc.OutputSchema.ContentType)
+	assert.JSONEq(t, `{"type":"object","properties":{"RequestId":{"type":"string","description_en":"The request ID.","description_zh":"请求 ID。"},"Reports":{"$ref":"#/components/schemas/ReportList"}}}`, string(doc.OutputSchema.Schema))
+	require.NotNil(t, doc.OutputSchema.Components)
+	assert.Contains(t, doc.OutputSchema.Components.Schemas, "ReportList")
+	assert.Contains(t, doc.OutputSchema.Components.Schemas, "Report")
+	assert.NotContains(t, doc.OutputSchema.Components.Schemas, "Unused")
+	assert.Empty(t, doc.Notice)
+}
+
+func TestMachineHelpAPIResponseWithoutSchemaReturnsNotice(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPIResponse("demo", "DescribeRegions", "2026-01-01")
+	require.NoError(t, err)
+
+	assert.Nil(t, doc.OutputSchema)
+	assert.Equal(t, "No response schema is available for this API.", doc.Notice)
+
+	var encoded bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	assert.NotContains(t, encoded.String(), `"outputSchema"`)
+	assert.Contains(t, encoded.String(), `"notice": "No response schema is available for this API."`)
+}
+
+func TestMachineHelpRequestIncludesStylePreservingResponseQueryExample(t *testing.T) {
+	service := testMachineHelpService(t)
+
+	camel, err := service.buildAPI("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+	require.NotNil(t, camel.ResponseQuery)
+	assert.Equal(t, "Reports.Report", camel.ResponseQuery.Path)
+	assert.Equal(t, "aliyun help demo CreateReport --api-version 2026-01-01 --cli-section response", camel.ResponseQuery.SchemaCommand)
+	assert.Equal(t, "aliyun demo CreateReport --api-version 2026-01-01 --cli-query 'Reports.Report'", camel.ResponseQuery.QueryCommand)
+
+	kebab, err := service.buildAPI("demo", "create-report", "2026-01-01")
+	require.NoError(t, err)
+	require.NotNil(t, kebab.ResponseQuery)
+	assert.Equal(t, "aliyun help demo create-report --api-version 2026-01-01 --cli-section response", kebab.ResponseQuery.SchemaCommand)
+	assert.Equal(t, "aliyun demo create-report --api-version 2026-01-01 --cli-query 'Reports.Report'", kebab.ResponseQuery.QueryCommand)
+}
+
+func TestMachineHelpRequestSearchKeepsOnlyActiveParameterSetAndGlobals(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPI("demo", "create-report", "2026-01-01")
+	require.NoError(t, err)
+	doc.GlobalParameters = []machineHelpParameter{{
+		Name: "header", Options: []string{"--header"}, Type: "string", Location: "global",
+	}}
+
+	applyRequestHelpOptions(doc, helpOptions{Search: "report-id"}, false)
+
+	require.Len(t, doc.ParameterSets.Kebab, 1)
+	assert.Equal(t, "report_id", doc.ParameterSets.Kebab[0].Name)
+	assert.Empty(t, doc.ParameterSets.Camel)
+	assert.Empty(t, doc.GlobalParameters)
+
+	doc, err = service.buildAPI("demo", "create-report", "2026-01-01")
+	require.NoError(t, err)
+	doc.GlobalParameters = []machineHelpParameter{{
+		Name: "header", Options: []string{"--header"}, Type: "string", Location: "global",
+	}}
+	applyRequestHelpOptions(doc, helpOptions{Search: "header"}, false)
+	assert.Empty(t, doc.ParameterSets.Kebab)
+	require.Len(t, doc.GlobalParameters, 1)
+	assert.Equal(t, "header", doc.GlobalParameters[0].Name)
+}
+
+func TestMachineHelpAIRequestRemainsComplete(t *testing.T) {
+	newDocument := func() *machineHelpAPIDocument {
+		parameters := make([]machineHelpParameter, 0, 23)
+		for index := 1; index <= 21; index++ {
+			parameters = append(parameters, machineHelpParameter{Name: fmt.Sprintf("optional-%02d", index)})
+		}
+		parameters = append(parameters,
+			machineHelpParameter{Name: "required-one", Required: true},
+			machineHelpParameter{Name: "required-two", Required: true},
+		)
+		return &machineHelpAPIDocument{
+			ActiveParameterSet: "camel",
+			ParameterSets: machineHelpParameterSets{
+				Camel: parameters,
+				Kebab: []machineHelpParameter{{Name: "inactive-style"}},
+			},
+			GlobalParameters: []machineHelpParameter{
+				{Name: "global-one"},
+				{Name: "global-two"},
+				{Name: "global-three"},
+			},
+		}
+	}
+
+	complete := newDocument()
+	applyRequestHelpOptions(complete, helpOptions{}, true)
+	require.Len(t, complete.ParameterSets.Camel, 23)
+	assert.Equal(t, "optional-01", complete.ParameterSets.Camel[0].Name)
+	assert.Len(t, complete.ParameterSets.Kebab, 1)
+	assert.Len(t, complete.GlobalParameters, 3)
+	assert.Nil(t, complete.Listing)
+
+	legacy := newDocument()
+	applyRequestHelpOptions(legacy, helpOptions{}, false)
+	require.Len(t, legacy.ParameterSets.Camel, 23)
+	assert.Equal(t, "optional-01", legacy.ParameterSets.Camel[0].Name)
+	assert.Len(t, legacy.ParameterSets.Kebab, 1)
+	assert.Len(t, legacy.GlobalParameters, 3)
+	assert.Nil(t, legacy.Listing)
+}
+
+func TestMachineHelpResponseSearchProjectsMatchesAndFilteredQuery(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPIResponse("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+
+	require.NoError(t, applyResponseHelpOptions(doc, helpOptions{Search: "report-id"}))
+	assert.Equal(t, []string{"Reports.Report.ReportId"}, doc.Matches)
+	require.NotNil(t, doc.OutputSchema)
+	require.NotNil(t, doc.OutputSchema.Components)
+	assert.Contains(t, doc.OutputSchema.Components.Schemas, "ReportList")
+	assert.Contains(t, doc.OutputSchema.Components.Schemas, "Report")
+	assert.NotContains(t, doc.OutputSchema.Components.Schemas, "Unused")
+
+	doc.ResponseQuery = projectResponseQueryExample(
+		helpResponseSchema(doc), doc.Product.Code, "CreateReport", doc.Target.RequestedStyle, "2026-01-01",
+	)
+	require.NotNil(t, doc.ResponseQuery)
+	assert.Equal(t, "Reports.Report", doc.ResponseQuery.Path)
+}
+
+func TestMachineHelpResponseSearchNoMatchReturnsClearNotice(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPIResponse("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+
+	require.NoError(t, applyResponseHelpOptions(doc, helpOptions{Search: "does-not-exist"}))
+	assert.Nil(t, doc.OutputSchema)
+	assert.Equal(t, `No Help entries matched --cli-search "does-not-exist".`, doc.Notice)
 }
 
 func TestMachineHelpNestedParameters(t *testing.T) {
@@ -170,6 +361,85 @@ func TestCommandoHelpJSONUsesCanonicalMetadataWithoutLoadingPlugins(t *testing.T
 	assert.Equal(t, "api", doc.Kind)
 	assert.Equal(t, "CreateReport", doc.API.Name)
 	assert.NotEmpty(t, doc.GlobalParameters)
+}
+
+func TestCommandoHelpJSONResponseSection(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	MachineHelpFormatFlag(ctx.Flags()).SetAssigned(true)
+	MachineHelpFormatFlag(ctx.Flags()).SetValue("json")
+	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	err := c.help(ctx, []string{"demo", "CreateReport"})
+	require.NoError(t, err)
+	assert.False(t, c.pluginLoaded)
+	assert.Empty(t, stderr.String())
+
+	var doc machineHelpAPIResponseDocument
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &doc))
+	assert.Equal(t, helpSectionResponse, doc.Section)
+	require.NotNil(t, doc.OutputSchema)
+	assert.Equal(t, "200", doc.OutputSchema.StatusCode)
+	assert.NotContains(t, stdout.String(), `"parameterSets"`)
+}
+
+func TestCommandoHelpJSONRequestSearchReturnsOnlyActiveMatches(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	MachineHelpFormatFlag(ctx.Flags()).SetAssigned(true)
+	MachineHelpFormatFlag(ctx.Flags()).SetValue("json")
+	CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSearchFlag(ctx.Flags()).SetValue("workspace-id")
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	require.NoError(t, c.help(ctx, []string{"demo", "create-report"}))
+	assert.Empty(t, stderr.String())
+
+	var document map[string]any
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &document))
+	sets := document["parameterSets"].(map[string]any)
+	assert.NotContains(t, sets, "camel")
+	kebab := sets["kebab"].([]any)
+	require.Len(t, kebab, 1)
+	assert.Equal(t, "workspace_id", kebab[0].(map[string]any)["name"])
+	assert.NotContains(t, document, "globalParameters")
+	assert.Contains(t, document, "responseQueryExample")
+}
+
+func TestCommandoHelpJSONResponseSearchReturnsPathsAndMinimalSchema(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	MachineHelpFormatFlag(ctx.Flags()).SetAssigned(true)
+	MachineHelpFormatFlag(ctx.Flags()).SetValue("json")
+	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+	CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSearchFlag(ctx.Flags()).SetValue("report-id")
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	require.NoError(t, c.help(ctx, []string{"demo", "CreateReport"}))
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), `"matches": [`)
+	assert.Contains(t, stdout.String(), `"Reports.Report.ReportId"`)
+	assert.Contains(t, stdout.String(), `"responseQueryExample"`)
+	assert.NotContains(t, stdout.String(), `"Unused"`)
 }
 
 func TestCommandoHelpJSONAcceptsKebabAPIVersionFlag(t *testing.T) {

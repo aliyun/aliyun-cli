@@ -1,5 +1,7 @@
 package canonicalmeta
 
+import "encoding/json"
+
 // API represents a Canonical API JSON file.
 // Fields not needed by the old CLI are omitted from deserialization.
 type API struct {
@@ -26,6 +28,13 @@ type API struct {
 
 	V1Parameters     *[]V1Parameter `json:"v1_parameters,omitempty"`
 	V1BodyParameters *[]V1Parameter `json:"v1_body_parameters,omitempty"`
+
+	// Responses and Components retain the optional response metadata in its
+	// encoded form. Command execution and request help do not pay the cost of
+	// expanding response schemas; callers decode them explicitly through
+	// ResponseSchema.
+	Responses  json.RawMessage `json:"responses,omitempty"`
+	Components json.RawMessage `json:"components,omitempty"`
 }
 
 // Operation describes the selected HTTP operation for the Canonical command.

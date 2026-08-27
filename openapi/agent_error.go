@@ -15,15 +15,12 @@
 package openapi
 
 import (
-	"encoding/json"
 	"errors"
-	"net"
+	"fmt"
 	"sort"
 	"strings"
 	"unicode"
 
-	"github.com/alibabacloud-go/tea/tea"
-	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
@@ -38,7 +35,27 @@ func (e *credentialConfigurationError) Error() string { return e.Err.Error() }
 
 func (e *credentialConfigurationError) Unwrap() error { return e.Err }
 
+// RecoverySearchRequest contains only metadata identities and keywords. It
+// deliberately carries no user parameter, header, body, or credential value.
+type RecoverySearchRequest struct {
+	Product string
+	API     string
+	Version string
+	Section string
+	Style   string
+	Keyword string
+}
+
+// RecoverySearchValidator confirms that a provider supports the proposed
+// search and that the search has at least one real result. Nil means the
+// current provider/path cannot validate search and forces ordinary Help.
+type RecoverySearchValidator func(RecoverySearchRequest) bool
+
 func normalizeAgentError(err error, args []string) error {
+	return normalizeAgentErrorWithSearch(err, args, nil)
+}
+
+func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySearchValidator) error {
 	if err == nil {
 		return nil
 	}
@@ -48,255 +65,542 @@ func normalizeAgentError(err error, args []string) error {
 		return existing
 	}
 
+	context := newRecoveryContext(args)
+
 	var unknownFlag *argparser.UnknownFlagError
 	if errors.As(err, &unknownFlag) {
-		return newAgentError(err, cli.UsageErrorCategory, "UNKNOWN_FLAG", unknownFlag.Error(),
-			flagSuggestions(unknownFlag.Flag, unknownFlag.Known), false, "", commandHelp(args))
+		suggestions := flagSuggestions(unknownFlag.Flag, unknownFlag.Known)
+		return parameterSearchAgentError(err, unknownFlag.Error(), suggestions, unknownFlag.Flag, context, validate)
 	}
 
 	var missing *runtime.MissingRequiredError
 	if errors.As(err, &missing) {
-		return newAgentError(err, cli.UsageErrorCategory, "MISSING_REQUIRED_PARAMETER", missing.Error(),
-			stableStrings(missing.Flags), false, "", commandHelp(args))
-	}
-
-	var runtimeConstraint *runtime.ConstraintViolationError
-	if errors.As(err, &runtimeConstraint) {
-		return newAgentError(err, cli.UsageErrorCategory, "INVALID_PARAMETER_VALUE", runtimeConstraint.Error(),
-			stableStrings(runtimeConstraint.Allowed), false, "", commandHelp(args))
-	}
-
-	var legacyConstraint *ConstraintViolationError
-	if errors.As(err, &legacyConstraint) {
-		return newAgentError(err, cli.UsageErrorCategory, "INVALID_PARAMETER_VALUE", legacyConstraint.Error(),
-			stableStrings(legacyConstraint.Allowed), false, "", commandHelp(args))
+		return newLocalAgentError(err, missing.Error(), nil, cli.AgentErrorRecovery{
+			Action:  "inspect_request_help",
+			Command: context.requestHelpCommand(),
+			Hint:    "Inspect the complete request help and provide every required parameter.",
+		})
 	}
 
 	var legacyDocRequired *LegacyDocRequiredError
 	if errors.As(err, &legacyDocRequired) {
-		return newAgentError(err, cli.UsageErrorCategory, "MISSING_REQUIRED_PARAMETER", legacyDocRequired.Error(),
-			stableStrings(legacyDocRequired.Flags), false, "", commandHelp(args))
+		return newLocalAgentError(err, legacyDocRequired.Error(), nil, cli.AgentErrorRecovery{
+			Action:  "inspect_request_help",
+			Command: context.requestHelpCommand(),
+			Hint:    "Inspect the complete request help and provide every required parameter.",
+		})
+	}
+
+	var legacyMissingRequired *LegacyMissingRequiredError
+	if errors.As(err, &legacyMissingRequired) {
+		return newLocalAgentError(err, legacyMissingRequired.Error(), nil, cli.AgentErrorRecovery{
+			Action:  "inspect_request_help",
+			Command: context.requestHelpCommand(),
+			Hint:    "Inspect the complete request help and provide every required parameter.",
+		})
 	}
 
 	var invalidParameter *InvalidParameterError
 	if errors.As(err, &invalidParameter) {
-		return newAgentError(err, cli.UsageErrorCategory, "UNKNOWN_FLAG", invalidParameter.Error(),
-			invalidParameter.AgentSuggestions(), false, "", commandHelp(args))
+		parameterContext := context.withProductAPI(invalidParameter.ProductCode, invalidParameter.ApiName)
+		suggestions := invalidParameter.AgentSuggestions()
+		return parameterSearchAgentError(err, invalidParameter.AgentMessage(), suggestions,
+			invalidParameter.Name, parameterContext, validate)
 	}
 
 	var invalidAPI *InvalidApiError
 	if errors.As(err, &invalidAPI) {
-		return newAgentError(err, cli.UsageErrorCategory, "UNKNOWN_API", invalidAPI.Error(),
-			invalidAPI.AgentSuggestions(), false, "", productHelp(args))
+		apiContext := context
+		if invalidAPI.product != nil {
+			apiContext = context.withProductAPI(invalidAPI.product.GetLowerCode(), invalidAPI.Name)
+		}
+		return unknownAPIAgentError(err, invalidAPI.AgentMessage(), apiCandidateForms(invalidAPI.AgentSuggestions()), apiContext, validate)
 	}
 
 	var invalidUnifiedAPI *InvalidUnifiedApiError
 	if errors.As(err, &invalidUnifiedAPI) {
-		return newAgentError(err, cli.UsageErrorCategory, "UNKNOWN_API", invalidUnifiedAPI.Error(),
-			invalidUnifiedAPI.AgentSuggestions(), false, "", productHelp(args))
+		apiContext := context
+		if invalidUnifiedAPI.product != nil {
+			apiContext = context.withProductAPI(invalidUnifiedAPI.product.GetLowerCode(), invalidUnifiedAPI.Name)
+		}
+		return unknownAPIAgentError(err, invalidUnifiedAPI.AgentMessage(), apiCandidateForms(invalidUnifiedAPI.AgentSuggestions()), apiContext, validate)
+	}
+
+	var invalidBaseline *InvalidBaselineCommandError
+	if errors.As(err, &invalidBaseline) {
+		apiContext := context.withProductAPI(invalidBaseline.Product, invalidBaseline.Command)
+		message := fmt.Sprintf("%q is not a valid api.", invalidBaseline.Command)
+		return unknownAPIAgentError(err, message, nil, apiContext, validate)
 	}
 
 	var invalidProduct *InvalidProductError
 	if errors.As(err, &invalidProduct) {
-		return newAgentError(err, cli.UsageErrorCategory, "UNKNOWN_PRODUCT", invalidProduct.Error(),
-			invalidProduct.AgentSuggestions(), false, "", "aliyun --help")
+		return unknownProductAgentError(err, invalidProduct.AgentMessage(), invalidProduct.AgentSuggestions(), invalidProduct.Code, validate)
 	}
 
 	var invalidProductOrPlugin *InvalidProductOrPluginError
 	if errors.As(err, &invalidProductOrPlugin) {
-		return newAgentError(err, cli.UsageErrorCategory, "UNKNOWN_PRODUCT", invalidProductOrPlugin.Error(),
-			invalidProductOrPlugin.AgentSuggestions(), false, "", "aliyun --help")
+		return unknownProductAgentError(err, invalidProductOrPlugin.AgentMessage(), invalidProductOrPlugin.AgentSuggestions(), invalidProductOrPlugin.Code, validate)
 	}
 
 	var invalidFlag *cli.InvalidFlagError
 	if errors.As(err, &invalidFlag) {
-		return newAgentError(err, cli.UsageErrorCategory, "UNKNOWN_FLAG", invalidFlag.Error(),
-			nil, false, "", commandHelp(args))
+		return newLocalAgentError(err, invalidFlag.AgentMessage(), invalidFlag.AgentSuggestions(), cli.AgentErrorRecovery{
+			Action:  "inspect_command_help",
+			Command: invalidFlag.AgentHelpCommand(),
+			Hint:    "Inspect the available flags for this command.",
+		})
 	}
 
 	var invalidCommand *cli.InvalidCommandError
 	if errors.As(err, &invalidCommand) {
-		return newAgentError(err, cli.UsageErrorCategory, "UNKNOWN_COMMAND", invalidCommand.Error(),
-			invalidCommand.GetSuggestions(), false, "", commandHelp(args))
+		return newLocalAgentError(err, invalidCommand.Error(), stableStrings(invalidCommand.GetSuggestions()), cli.AgentErrorRecovery{
+			Action:  "inspect_parent_help",
+			Command: context.parentHelpCommand(invalidCommand.Name),
+			Hint:    "Inspect commands under the current parent.",
+		})
 	}
 
-	var runtimeCredential *engine.CredentialError
-	var configuredCredential *credentialConfigurationError
-	if errors.As(err, &runtimeCredential) || errors.As(err, &configuredCredential) {
-		return newAgentError(err, cli.AuthenticationErrorCategory, "CREDENTIAL_NOT_CONFIGURED", err.Error(),
-			nil, false, "", "aliyun configure")
+	var invalidArgument *argparser.InvalidArgumentError
+	if errors.As(err, &invalidArgument) {
+		return invalidArgumentAgentError(err, invalidArgument.Error(), invalidArgument.Flag,
+			invalidArgument.Parameter, invalidArgument.FieldPath, context, validate)
 	}
 
-	var usage *engine.UsageError
-	if errors.As(err, &usage) {
-		code := strings.TrimSpace(usage.Code)
-		if code == "" {
-			code = "INVALID_ARGUMENT"
-		}
-		return newAgentError(err, cli.UsageErrorCategory, code, err.Error(), nil, false, "", commandHelp(args))
+	var legacyInvalidArgument *InvalidArgumentError
+	if errors.As(err, &legacyInvalidArgument) {
+		return invalidArgumentAgentError(err, legacyInvalidArgument.Error(), legacyInvalidArgument.Flag,
+			legacyInvalidArgument.Parameter, legacyInvalidArgument.FieldPath, context, validate)
 	}
 
-	var serverError *sdkerrors.ServerError
-	if errors.As(err, &serverError) {
-		category, retryable := classifySDKFailure(serverError.HttpStatus(), serverError.ErrorCode())
-		code := nonEmptyCode(serverError.ErrorCode(), "SERVICE_ERROR")
-		message := nonEmptyMessage(serverError.Message(), err.Error())
-		return newAgentError(err, category, code, message, nil, retryable, serverError.RequestId(), "")
+	var invalidOptions *engine.InvalidOptionCombinationError
+	if errors.As(err, &invalidOptions) {
+		return optionCombinationAgentError(err, invalidOptions.Error(), invalidOptions.Options, context)
 	}
 
-	var teaError *tea.SDKError
-	if errors.As(err, &teaError) {
-		status := tea.IntValue(teaError.StatusCode)
-		code := tea.StringValue(teaError.Code)
-		category, retryable := classifySDKFailure(status, code)
-		return newAgentError(err, category, nonEmptyCode(code, "SERVICE_ERROR"),
-			nonEmptyMessage(tea.StringValue(teaError.Message), err.Error()), nil, retryable,
-			requestIDFromTeaData(tea.StringValue(teaError.Data)), "")
+	var legacyInvalidOptions *InvalidOptionCombinationError
+	if errors.As(err, &legacyInvalidOptions) {
+		return optionCombinationAgentError(err, legacyInvalidOptions.Error(), legacyInvalidOptions.Options, context)
 	}
 
-	var networkError net.Error
-	if errors.As(err, &networkError) {
-		retryable := networkError.Timeout()
-		if temporary, ok := networkError.(interface{ Temporary() bool }); ok {
-			retryable = retryable || temporary.Temporary()
-		}
-		return newAgentError(err, cli.NetworkErrorCategory, "NETWORK_FAILURE", err.Error(), nil, retryable, "", "")
+	var invalidHeader *engine.InvalidHeaderError
+	if errors.As(err, &invalidHeader) {
+		return fixedSearchAgentError(err, invalidHeader.Error(), "inspect_header_usage", "header",
+			"Inspect header usage and pass each header as Name=Value.", context, validate)
 	}
 
-	return newAgentError(err, cli.InternalErrorCategory, "INTERNAL_ERROR", err.Error(), nil, false, "", "")
+	var legacyInvalidHeader *InvalidHeaderError
+	if errors.As(err, &legacyInvalidHeader) {
+		return fixedSearchAgentError(err, legacyInvalidHeader.Error(), "inspect_header_usage", "header",
+			"Inspect header usage and pass each header as Name=Value.", context, validate)
+	}
+
+	var invalidBodyFile *engine.InvalidBodyFileError
+	if errors.As(err, &invalidBodyFile) {
+		return fixedSearchAgentError(err, invalidBodyFile.Error(), "fix_body_file", "body-file",
+			"Check that --body-file points to a readable file.", context, validate)
+	}
+
+	var legacyInvalidBodyFile *InvalidBodyFileError
+	if errors.As(err, &legacyInvalidBodyFile) {
+		return fixedSearchAgentError(err, legacyInvalidBodyFile.Error(), "fix_body_file", "body-file",
+			"Check that --body-file points to a readable file.", context, validate)
+	}
+
+	// This is intentionally an allowlist. Canonical constraints, credentials,
+	// SDK/Tea/server/network failures, plugins, postprocessing, safety-policy,
+	// Machine Help, corrupt metadata, broad UsageError, and untyped errors all
+	// retain their original rendering and identity.
+	return err
 }
 
-func newAgentError(cause error, category cli.AgentErrorCategory, code, message string, suggestions []string,
-	retryable bool, requestID, recoveryCommand string) error {
+func newLocalAgentError(cause error, message string, suggestions []string, recovery cli.AgentErrorRecovery) error {
 	return cli.NewAgentError(cli.AgentErrorEnvelope{
-		OK:          false,
-		Category:    category,
-		Code:        code,
-		Message:     message,
-		Suggestions: suggestions,
-		Retryable:   retryable,
-		RequestID:   requestID,
-		Recovery:    cli.AgentErrorRecovery{Command: recoveryCommand},
+		Message:    nonEmptyMessage(message, cause),
+		DidYouMean: stableStrings(suggestions),
+		Recovery:   recovery,
 	}, cause)
 }
 
-func classifySDKFailure(status int, code string) (cli.AgentErrorCategory, bool) {
-	normalized := normalizeErrorCode(code)
-	switch {
-	case status == 401 || isAuthenticationCode(normalized):
-		return cli.AuthenticationErrorCategory, false
-	case status == 403 || isPermissionCode(normalized):
-		return cli.PermissionErrorCategory, false
-	case status == 429 || isThrottlingCode(normalized):
-		return cli.ThrottlingErrorCategory, true
-	case status >= 500 && status <= 599:
-		return cli.ServiceErrorCategory, true
-	default:
-		return cli.ServiceErrorCategory, false
+func unknownProductAgentError(cause error, message string, suggestions []string, invalidName string, validate RecoverySearchValidator) error {
+	suggestions = stableStrings(suggestions)
+	recovery := cli.AgentErrorRecovery{
+		Action:  "inspect_root_help",
+		Command: "aliyun help",
+		Hint:    "Inspect the available products.",
 	}
-}
-
-func normalizeErrorCode(code string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(code) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			b.WriteRune(r)
+	for _, candidate := range orderedSearchCandidates(append(append([]string(nil), suggestions...), invalidName)...) {
+		request := RecoverySearchRequest{Keyword: candidate}
+		if validate != nil && validate(request) {
+			recovery.Action = "search_product"
+			recovery.Command = "aliyun help --cli-search " + candidate
+			recovery.Hint = fmt.Sprintf("Search products related to %s.", candidate)
+			break
 		}
 	}
-	return b.String()
+	return newLocalAgentError(cause, message, suggestions, recovery)
 }
 
-func isAuthenticationCode(code string) bool {
-	if code == "unauthorized" {
-		return true
+func unknownAPIAgentError(cause error, message string, suggestions []string, context recoveryContext, validate RecoverySearchValidator) error {
+	recovery := cli.AgentErrorRecovery{
+		Action:  "inspect_product_help",
+		Command: context.productHelpCommand(),
+		Hint:    "Inspect the available APIs for this product.",
 	}
-	return hasAnyPrefix(code,
-		"invalidaccesskey", "invalidsecuritytoken", "missingsecuritytoken",
-		"expiredsecuritytoken", "tokenexpired", "signaturedoesnotmatch",
-		"incompletesignature", "authentication", "authfailure", "invalidcredential")
-}
-
-func isPermissionCode(code string) bool {
-	return hasAnyPrefix(code,
-		"forbidden", "accessdenied", "unauthorizedoperation", "permissiondenied",
-		"nopermission", "operationdenied")
-}
-
-func isThrottlingCode(code string) bool {
-	return hasAnyPrefix(code, "throttling", "toomanyrequests", "requestlimitexceeded", "flowcontrol")
-}
-
-func hasAnyPrefix(value string, prefixes ...string) bool {
-	for _, prefix := range prefixes {
-		if strings.HasPrefix(value, prefix) {
-			return true
+	seeds := append([]string{context.api}, suggestions...)
+	for _, keyword := range apiSearchKeywordCandidates(context.style, seeds...) {
+		request := context.searchRequest("", "", keyword)
+		if validate != nil && validate(request) {
+			recovery.Action = "search_api"
+			recovery.Command = context.productSearchCommand(keyword)
+			recovery.Hint = fmt.Sprintf("Search APIs related to %s.", keyword)
+			break
 		}
 	}
-	return false
+	return newLocalAgentError(cause, message, suggestions, recovery)
 }
 
-func requestIDFromTeaData(data string) string {
-	if strings.TrimSpace(data) == "" {
-		return ""
+func parameterSearchAgentError(cause error, message string, suggestions []string, invalidName string,
+	context recoveryContext, validate RecoverySearchValidator) error {
+	recovery := cli.AgentErrorRecovery{
+		Action:  "inspect_request_help",
+		Command: context.requestHelpCommand(),
+		Hint:    "Inspect the complete request help and correct the parameter or flag.",
 	}
-	var decoded interface{}
-	if json.Unmarshal([]byte(data), &decoded) != nil {
-		return ""
+	seeds := append(append([]string(nil), suggestions...), invalidName)
+	for _, keyword := range parameterSearchKeywordCandidates(context.style, seeds...) {
+		if validate != nil && validate(context.searchRequest("request", context.api, keyword)) {
+			recovery.Action = "search_parameter"
+			recovery.Command = context.requestSearchCommand(keyword)
+			recovery.Hint = fmt.Sprintf("Search request parameters related to %s.", keyword)
+			break
+		}
 	}
-	return findRequestID(decoded)
+	return newLocalAgentError(cause, message, suggestions, recovery)
 }
 
-func findRequestID(value interface{}) string {
-	switch typed := value.(type) {
-	case map[string]interface{}:
-		for key, item := range typed {
-			if strings.EqualFold(key, "requestId") {
-				if requestID, ok := item.(string); ok {
-					return requestID
+func invalidArgumentAgentError(cause error, message, flag, parameter, fieldPath string,
+	context recoveryContext, validate RecoverySearchValidator) error {
+	keyword := firstNonEmpty(strings.TrimLeft(flag, "-"), parameter, fieldPath)
+	recovery := cli.AgentErrorRecovery{
+		Action:  "inspect_request_help",
+		Command: context.requestHelpCommand(),
+		Hint:    "Inspect the complete request help and correct the argument syntax or type.",
+	}
+	if keyword != "" {
+		recovery.Hint = fmt.Sprintf("Inspect request help for %s and correct its syntax or type.", keyword)
+		if validate != nil && validate(context.searchRequest("request", context.api, keyword)) {
+			recovery.Command = context.requestSearchCommand(keyword)
+		}
+	}
+	return newLocalAgentError(cause, message, nil, recovery)
+}
+
+func optionCombinationAgentError(cause error, message string, options []string, context recoveryContext) error {
+	options = stableStrings(options)
+	hint := "Remove one of the conflicting options."
+	if len(options) > 0 {
+		hint = fmt.Sprintf("Remove one of the conflicting options: %s.", strings.Join(options, ", "))
+	}
+	return newLocalAgentError(cause, message, nil, cli.AgentErrorRecovery{
+		Action:  "fix_option_combination",
+		Command: context.requestHelpCommand(),
+		Hint:    hint,
+	})
+}
+
+func fixedSearchAgentError(cause error, message, action, keyword, hint string,
+	context recoveryContext, validate RecoverySearchValidator) error {
+	command := context.requestHelpCommand()
+	if validate != nil && validate(context.searchRequest("request", context.api, keyword)) {
+		command = context.requestSearchCommand(keyword)
+	}
+	return newLocalAgentError(cause, message, nil, cli.AgentErrorRecovery{
+		Action:  action,
+		Command: command,
+		Hint:    hint,
+	})
+}
+
+type recoveryContext struct {
+	args        []string
+	product     string
+	api         string
+	version     string
+	versionFlag string
+	style       string
+}
+
+func newRecoveryContext(args []string) recoveryContext {
+	context := recoveryContext{args: append([]string(nil), args...)}
+	if len(args) > 0 && safeCommandToken(args[0]) {
+		context.product = args[0]
+	}
+	if len(args) > 1 && safeCommandToken(args[1]) {
+		context.api = args[1]
+		context.style = commandStyle(args[1])
+	}
+	context.versionFlag, context.version = explicitVersion(args)
+	return context
+}
+
+func (c recoveryContext) withProductAPI(product, api string) recoveryContext {
+	if safeCommandToken(product) {
+		c.product = strings.ToLower(product)
+	}
+	if safeCommandToken(api) {
+		c.api = api
+		c.style = commandStyle(api)
+	}
+	return c
+}
+
+func (c recoveryContext) searchRequest(section, api, keyword string) RecoverySearchRequest {
+	return RecoverySearchRequest{
+		Product: c.product,
+		API:     api,
+		Version: c.version,
+		Section: section,
+		Style:   c.style,
+		Keyword: keyword,
+	}
+}
+
+func (c recoveryContext) productHelpCommand() string {
+	if c.product == "" {
+		return "aliyun help"
+	}
+	return "aliyun help " + c.product + c.versionSuffix()
+}
+
+func (c recoveryContext) productSearchCommand(keyword string) string {
+	if c.product == "" || !safeCommandToken(keyword) {
+		return c.productHelpCommand()
+	}
+	return "aliyun help " + c.product + c.versionSuffix() + " --cli-search " + keyword
+}
+
+func (c recoveryContext) requestHelpCommand() string {
+	if c.product == "" || c.api == "" {
+		return c.productHelpCommand()
+	}
+	return "aliyun help " + c.product + " " + c.api + c.versionSuffix() + " --cli-section request"
+}
+
+func (c recoveryContext) requestSearchCommand(keyword string) string {
+	if !safeCommandToken(keyword) {
+		return c.requestHelpCommand()
+	}
+	return c.requestHelpCommand() + " --cli-search " + keyword
+}
+
+func (c recoveryContext) parentHelpCommand(invalidName string) string {
+	limit := len(c.args)
+	if limit > 0 && c.args[limit-1] == invalidName {
+		limit--
+	}
+	parts := make([]string, 0, limit)
+	for _, value := range c.args[:limit] {
+		if strings.HasPrefix(value, "-") {
+			break
+		}
+		if !safeCommandToken(value) {
+			break
+		}
+		parts = append(parts, value)
+	}
+	if len(parts) == 0 {
+		return "aliyun help"
+	}
+	return "aliyun help " + strings.Join(parts, " ")
+}
+
+func (c recoveryContext) versionSuffix() string {
+	if c.version == "" || c.versionFlag == "" {
+		return ""
+	}
+	return " " + c.versionFlag + " " + c.version
+}
+
+func explicitVersion(args []string) (string, string) {
+	for index, arg := range args {
+		for _, flag := range []string{"--version", "--api-version"} {
+			if arg == flag {
+				if index+1 < len(args) && safeCommandToken(args[index+1]) {
+					return flag, args[index+1]
 				}
+				return "", ""
+			}
+			if strings.HasPrefix(arg, flag+"=") {
+				value := strings.TrimPrefix(arg, flag+"=")
+				if safeCommandToken(value) {
+					return flag, value
+				}
+				return "", ""
 			}
 		}
-		for _, item := range typed {
-			if requestID := findRequestID(item); requestID != "" {
-				return requestID
-			}
+	}
+	return "", ""
+}
+
+func safeCommandToken(value string) bool {
+	if strings.TrimSpace(value) == "" {
+		return false
+	}
+	for _, r := range value {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' || r == '.' {
+			continue
 		}
-	case []interface{}:
-		for _, item := range typed {
-			if requestID := findRequestID(item); requestID != "" {
-				return requestID
-			}
-		}
+		return false
+	}
+	return true
+}
+
+func commandStyle(api string) string {
+	if api != "" && (api == strings.ToLower(api) || strings.Contains(api, "-")) {
+		return "kebab"
+	}
+	if api != "" {
+		return "pascal"
 	}
 	return ""
 }
 
-func commandHelp(args []string) string {
-	if len(args) >= 2 && strings.TrimSpace(args[0]) != "" && strings.TrimSpace(args[1]) != "" {
-		return "aliyun " + args[0] + " " + args[1] + " --help"
+func apiSearchKeywordCandidates(style string, seeds ...string) []string {
+	candidates := make([]string, 0, len(seeds)*3)
+	for _, seed := range seeds {
+		resource := resourceKeyword(seed)
+		if resource == "" {
+			continue
+		}
+		if style == "kebab" {
+			resource = apiNameToKebab(resource)
+		}
+		candidates = append(candidates, resource)
+		tokens := splitHelpSearchTokens(resource)
+		for index := len(tokens) - 1; index >= 0; index-- {
+			candidates = append(candidates, formatSearchToken(tokens[index], style))
+		}
 	}
-	return productHelp(args)
+	return orderedSearchCandidates(candidates...)
 }
 
-func productHelp(args []string) string {
-	if len(args) >= 1 && strings.TrimSpace(args[0]) != "" {
-		return "aliyun " + args[0] + " --help"
+func parameterSearchKeywordCandidates(style string, seeds ...string) []string {
+	candidates := make([]string, 0, len(seeds)*3)
+	for _, seed := range seeds {
+		seed = strings.TrimLeft(strings.TrimSpace(seed), "-")
+		if seed == "" {
+			continue
+		}
+		candidates = append(candidates, seed)
+		tokens := splitHelpSearchTokens(seed)
+		for index := len(tokens) - 1; index >= 0; index-- {
+			candidates = append(candidates, formatSearchToken(tokens[index], style))
+		}
 	}
-	return "aliyun --help"
+	return orderedSearchCandidates(candidates...)
 }
 
-func nonEmptyCode(code, fallback string) string {
-	if strings.TrimSpace(code) == "" {
-		return fallback
+func formatSearchToken(token, style string) string {
+	token = strings.ToLower(strings.TrimSpace(token))
+	if token == "" || style != "pascal" {
+		return token
 	}
-	return code
+	runes := []rune(token)
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
 }
 
-func nonEmptyMessage(message, fallback string) string {
-	if strings.TrimSpace(message) == "" {
-		return fallback
+func orderedSearchCandidates(values ...string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if !safeCommandToken(value) {
+			continue
+		}
+		key := strings.ToLower(value)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, value)
 	}
-	return message
+	return result
+}
+
+func resourceKeyword(candidate string) string {
+	candidate = strings.TrimLeft(strings.TrimSpace(candidate), "-")
+	if candidate == "" {
+		return ""
+	}
+	if strings.Contains(candidate, "-") {
+		candidate = kebabToPascal(candidate)
+	}
+	for _, prefix := range []string{
+		"Describe", "Create", "Delete", "Update", "Modify", "Remove", "Search", "Disable", "Enable",
+		"List", "Query", "Start", "Stop", "Get", "Put", "Set", "Add",
+	} {
+		if strings.HasPrefix(candidate, prefix) && len(candidate) > len(prefix) {
+			return candidate[len(prefix):]
+		}
+	}
+	return candidate
+}
+
+func kebabToPascal(value string) string {
+	parts := strings.FieldsFunc(value, func(r rune) bool { return r == '-' || r == '_' })
+	var builder strings.Builder
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		runes := []rune(part)
+		builder.WriteRune(unicode.ToUpper(runes[0]))
+		builder.WriteString(string(runes[1:]))
+	}
+	return builder.String()
+}
+
+func apiCandidateForms(candidates []string) []string {
+	forms := make([]string, 0, len(candidates)*2)
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		forms = append(forms, candidate)
+		if candidate != strings.ToLower(candidate) && !strings.Contains(candidate, "-") {
+			forms = append(forms, apiNameToKebab(candidate))
+		}
+	}
+	return stableStrings(forms)
+}
+
+func nonEmptyMessage(message string, cause error) string {
+	if strings.TrimSpace(message) != "" {
+		return message
+	}
+	if cause != nil && strings.TrimSpace(cause.Error()) != "" {
+		return cause.Error()
+	}
+	return "CLI request is invalid."
+}
+
+func firstString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func flagSuggestions(input string, candidates []string) []string {
@@ -318,8 +622,8 @@ func closeSuggestions(input string, candidates []string, flags bool) []string {
 	}
 	results := suggester.GetResults()
 	if flags {
-		for i := range results {
-			results[i] = "--" + strings.TrimLeft(results[i], "-")
+		for index := range results {
+			results[index] = "--" + strings.TrimLeft(results[index], "-")
 		}
 	}
 	return stableStrings(results)
@@ -329,6 +633,7 @@ func stableStrings(values []string) []string {
 	seen := make(map[string]struct{}, len(values))
 	result := make([]string, 0, len(values))
 	for _, value := range values {
+		value = strings.TrimSpace(value)
 		if value == "" {
 			continue
 		}

@@ -14,31 +14,38 @@
 
 package cli
 
-type AgentErrorCategory string
+import "errors"
 
 const (
-	InternalErrorCategory       AgentErrorCategory = "INTERNAL_ERROR"
-	UsageErrorCategory          AgentErrorCategory = "USAGE_ERROR"
-	AuthenticationErrorCategory AgentErrorCategory = "AUTHENTICATION_ERROR"
-	PermissionErrorCategory     AgentErrorCategory = "PERMISSION_ERROR"
-	ThrottlingErrorCategory     AgentErrorCategory = "THROTTLING_ERROR"
-	NetworkErrorCategory        AgentErrorCategory = "NETWORK_ERROR"
-	ServiceErrorCategory        AgentErrorCategory = "SERVICE_ERROR"
+	AIModeEnableCommand  = "export ALIBABA_CLOUD_CLI_AI_MODE=1"
+	AIModeEnableTextHint = "For AI agents, run:\n  " + AIModeEnableCommand +
+		"\n\nThis enables compact Help, structured JSON errors, and actionable recovery guidance."
+	aiModeEnableMessage = "Enable AI Mode for compact Help, structured JSON errors, and actionable recovery guidance."
 )
 
-type AgentErrorRecovery struct {
+// AIModeHint is embedded by Machine Help when the effective AI mode is off.
+type AIModeHint struct {
 	Command string `json:"command"`
+	Message string `json:"message"`
+}
+
+func NewAIModeHint() AIModeHint {
+	return AIModeHint{
+		Command: AIModeEnableCommand,
+		Message: aiModeEnableMessage,
+	}
+}
+
+type AgentErrorRecovery struct {
+	Action  string `json:"action"`
+	Command string `json:"command,omitempty"`
+	Hint    string `json:"hint"`
 }
 
 type AgentErrorEnvelope struct {
-	OK          bool               `json:"ok"`
-	Category    AgentErrorCategory `json:"category"`
-	Code        string             `json:"code"`
-	Message     string             `json:"message"`
-	Suggestions []string           `json:"suggestions"`
-	Retryable   bool               `json:"retryable"`
-	RequestID   string             `json:"requestId"`
-	Recovery    AgentErrorRecovery `json:"recovery"`
+	Message    string             `json:"message"`
+	DidYouMean []string           `json:"did_you_mean,omitempty"`
+	Recovery   AgentErrorRecovery `json:"recovery"`
 }
 
 type AgentError struct {
@@ -47,7 +54,7 @@ type AgentError struct {
 }
 
 func NewAgentError(envelope AgentErrorEnvelope, cause error) *AgentError {
-	envelope.Suggestions = copySuggestions(envelope.Suggestions)
+	envelope.DidYouMean = copyStrings(envelope.DidYouMean)
 	return &AgentError{envelope: envelope, cause: cause}
 }
 
@@ -58,7 +65,7 @@ func (e *AgentError) Error() string {
 	if e.cause != nil {
 		return e.cause.Error()
 	}
-	return e.envelope.Code
+	return ""
 }
 
 func (e *AgentError) Unwrap() error {
@@ -67,31 +74,33 @@ func (e *AgentError) Unwrap() error {
 
 func (e *AgentError) Envelope() AgentErrorEnvelope {
 	envelope := e.envelope
-	envelope.Suggestions = copySuggestions(envelope.Suggestions)
+	envelope.DidYouMean = copyStrings(envelope.DidYouMean)
 	return envelope
 }
 
-func (e *AgentError) ExitCode() int {
-	switch e.envelope.Category {
-	case UsageErrorCategory:
-		return 2
-	case AuthenticationErrorCategory:
-		return 3
-	case PermissionErrorCategory:
-		return 4
-	case ThrottlingErrorCategory:
-		return 5
-	case NetworkErrorCategory:
-		return 6
-	case ServiceErrorCategory:
-		return 7
-	default:
-		return 1
-	}
+// Supported agent-local errors are usage errors and retain the conventional
+// command-line usage exit status.
+func (e *AgentError) ExitCode() int { return 2 }
+
+// AIRecoveryEligible is a structural marker implemented only by explicit CLI
+// local error types. It intentionally has no text-based fallback.
+type AIRecoveryEligible interface {
+	AIRecoveryEligible()
 }
 
-func copySuggestions(suggestions []string) []string {
-	copyOfSuggestions := make([]string, len(suggestions))
-	copy(copyOfSuggestions, suggestions)
-	return copyOfSuggestions
+func IsAIRecoveryEligible(err error) bool {
+	if err == nil {
+		return false
+	}
+	var eligible AIRecoveryEligible
+	return errors.As(err, &eligible)
+}
+
+func copyStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	copyOfValues := make([]string, len(values))
+	copy(copyOfValues, values)
+	return copyOfValues
 }

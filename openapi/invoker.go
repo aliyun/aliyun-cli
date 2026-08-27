@@ -216,7 +216,11 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 				a.request.SetContentType(v)
 			}
 		} else {
-			return fmt.Errorf("invalid flag --header `%s` use `--header HeaderName=Value`", s)
+			return &InvalidHeaderError{
+				Input:          s,
+				ExpectedFormat: "HeaderName=Value",
+				Err:            fmt.Errorf("invalid flag --header `%s` use `--header HeaderName=Value`", s),
+			}
 		}
 	}
 

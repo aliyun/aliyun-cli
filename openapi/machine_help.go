@@ -1,6 +1,7 @@
 package openapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -101,6 +102,8 @@ type machineHelpRootDocument struct {
 	Target        machineHelpTarget           `json:"target"`
 	Commands      []machineHelpCommandSummary `json:"commands"`
 	Products      []machineHelpProductSummary `json:"products"`
+	Listing       *machineHelpListing         `json:"listing"`
+	AIModeHint    *machineHelpAIModeHint      `json:"aiModeHint"`
 }
 
 type machineHelpProduct struct {
@@ -127,6 +130,8 @@ type machineHelpProductDocument struct {
 	Target        machineHelpTarget       `json:"target"`
 	Product       machineHelpProduct      `json:"product"`
 	APIs          []machineHelpAPISummary `json:"apis"`
+	Listing       *machineHelpListing     `json:"listing"`
+	AIModeHint    *machineHelpAIModeHint  `json:"aiModeHint"`
 }
 
 type machineHelpOperation struct {
@@ -195,6 +200,7 @@ type machineHelpExamples struct {
 type machineHelpAPIDocument struct {
 	SchemaVersion      string                   `json:"schemaVersion"`
 	Kind               string                   `json:"kind"`
+	Section            string                   `json:"section"`
 	Target             machineHelpTarget        `json:"target"`
 	Product            machineHelpProduct       `json:"product"`
 	API                machineHelpAPI           `json:"api"`
@@ -206,6 +212,61 @@ type machineHelpAPIDocument struct {
 	Pagination         any                      `json:"pagination"`
 	Risk               any                      `json:"risk"`
 	Recovery           any                      `json:"recovery"`
+	ResponseQuery      *machineHelpQueryExample `json:"responseQueryExample"`
+	Listing            *machineHelpListing      `json:"listing"`
+	AIModeHint         *machineHelpAIModeHint   `json:"aiModeHint"`
+}
+
+type machineHelpListing struct {
+	Shown int    `json:"shown"`
+	Total int    `json:"total"`
+	Hint  string `json:"hint"`
+}
+
+type machineHelpAIModeHint struct {
+	Command string `json:"command"`
+	Message string `json:"message"`
+}
+
+type machineHelpQueryExample struct {
+	Path          string `json:"path"`
+	SchemaCommand string `json:"schemaCommand"`
+	QueryCommand  string `json:"queryCommand"`
+}
+
+type machineHelpComponents struct {
+	Schemas map[string]json.RawMessage `json:"schemas"`
+}
+
+type machineHelpOutputSchema struct {
+	StatusCode  string                 `json:"statusCode"`
+	ContentType string                 `json:"contentType"`
+	Schema      json.RawMessage        `json:"schema"`
+	Components  *machineHelpComponents `json:"components"`
+}
+
+type machineHelpAPIResponseDocument struct {
+	SchemaVersion string                   `json:"schemaVersion"`
+	Kind          string                   `json:"kind"`
+	Section       string                   `json:"section"`
+	Target        machineHelpTarget        `json:"target"`
+	Product       machineHelpProduct       `json:"product"`
+	API           machineHelpAPI           `json:"api"`
+	OutputSchema  *machineHelpOutputSchema `json:"outputSchema"`
+	Matches       []string                 `json:"matches"`
+	Notice        string                   `json:"notice"`
+	Warnings      []string                 `json:"warnings"`
+	ResponseQuery *machineHelpQueryExample `json:"responseQueryExample"`
+	AIModeHint    *machineHelpAIModeHint   `json:"aiModeHint"`
+}
+
+type resolvedMachineHelpAPI struct {
+	Product  canonicalmeta.ProductEntry
+	Versions []string
+	Selected string
+	Style    string
+	Command  string
+	API      *canonicalmeta.API
 }
 
 func (s *machineHelpService) buildRoot(root *cli.Command) (*machineHelpRootDocument, error) {
@@ -301,6 +362,173 @@ func (s *machineHelpService) buildProduct(code, requestedVersion string) (*machi
 }
 
 func (s *machineHelpService) buildAPI(code, command, requestedVersion string) (*machineHelpAPIDocument, error) {
+	resolved, err := s.resolveAPI(code, command, requestedVersion)
+	if err != nil {
+		return nil, err
+	}
+	api := resolved.API
+
+	operation := projectMachineHelpOperation(api)
+	camelParameters := make([]machineHelpParameter, 0)
+	for _, view := range api.LegacyTopLevelParameters() {
+		camelParameters = append(camelParameters, projectLegacyParameter(view, ""))
+	}
+	kebabParameters := make([]machineHelpParameter, 0, len(api.Parameters))
+	for i := range api.Parameters {
+		kebabParameters = append(kebabParameters, projectCanonicalParameter(&api.Parameters[i]))
+	}
+
+	productDoc := buildMachineHelpProduct(resolved.Product, resolved.Versions, resolved.Selected)
+	document := &machineHelpAPIDocument{
+		SchemaVersion: machineHelpSchemaVersion,
+		Kind:          "api",
+		Section:       helpSectionRequest,
+		Target: machineHelpTarget{
+			Path:           []string{"aliyun", productDoc.Code, command},
+			RequestedStyle: resolved.Style,
+		},
+		Product: productDoc,
+		API: machineHelpAPI{
+			Name:         api.Name,
+			CmdName:      api.CmdName,
+			CmdFullName:  api.CmdFullName,
+			Description:  machineHelpLocalizedText{EN: api.DescriptionEn, ZH: api.DescriptionZh},
+			Deprecated:   api.Deprecated,
+			MultiVersion: api.MultiVersion,
+			Operation:    operation,
+		},
+		ActiveParameterSet: resolved.Style,
+		ParameterSets: machineHelpParameterSets{
+			Camel: camelParameters,
+			Kebab: kebabParameters,
+		},
+		GlobalParameters: make([]machineHelpParameter, 0),
+		Examples: machineHelpExamples{
+			Camel: api.CamelExample,
+			Kebab: api.KebabExample,
+		},
+		OutputSchema: nil,
+		Pagination:   nil,
+		Risk:         nil,
+		Recovery:     nil,
+	}
+	document.ResponseQuery = projectCanonicalResponseQueryExample(api, productDoc.Code, command, resolved.Style, requestedVersion)
+	return document, nil
+}
+
+func (s *machineHelpService) buildAPIResponse(code, command, requestedVersion string) (*machineHelpAPIResponseDocument, error) {
+	resolved, err := s.resolveAPI(code, command, requestedVersion)
+	if err != nil {
+		return nil, err
+	}
+	api := resolved.API
+	response, err := api.ResponseSchema()
+	if err != nil {
+		return nil, err
+	}
+
+	productDoc := buildMachineHelpProduct(resolved.Product, resolved.Versions, resolved.Selected)
+	document := &machineHelpAPIResponseDocument{
+		SchemaVersion: machineHelpSchemaVersion,
+		Kind:          "api",
+		Section:       helpSectionResponse,
+		Target: machineHelpTarget{
+			Path:           []string{"aliyun", productDoc.Code, command},
+			RequestedStyle: resolved.Style,
+		},
+		Product: productDoc,
+		API: machineHelpAPI{
+			Name:         api.Name,
+			CmdName:      api.CmdName,
+			CmdFullName:  api.CmdFullName,
+			Description:  machineHelpLocalizedText{EN: api.DescriptionEn, ZH: api.DescriptionZh},
+			Deprecated:   api.Deprecated,
+			MultiVersion: api.MultiVersion,
+			Operation:    projectMachineHelpOperation(api),
+		},
+		Warnings: response.Warnings,
+	}
+	if !response.HasSchema() {
+		document.Notice = "No response schema is available for this API."
+		return document, nil
+	}
+
+	output := &machineHelpOutputSchema{
+		StatusCode:  response.StatusCode,
+		ContentType: response.ContentType,
+		Schema:      response.Schema,
+	}
+	if len(response.Components) > 0 {
+		output.Components = &machineHelpComponents{Schemas: response.Components}
+	}
+	document.OutputSchema = output
+	document.ResponseQuery = projectResponseQueryExample(
+		HelpResponseSchema{Schema: response.Schema, Components: response.Components},
+		productDoc.Code,
+		command,
+		resolved.Style,
+		requestedVersion,
+	)
+	return document, nil
+}
+
+func projectCanonicalResponseQueryExample(api *canonicalmeta.API, product, command, style, requestedVersion string) *machineHelpQueryExample {
+	if api == nil {
+		return nil
+	}
+	response, err := api.ResponseSchema()
+	if err != nil || !response.HasSchema() {
+		return nil
+	}
+	return projectResponseQueryExample(
+		HelpResponseSchema{Schema: response.Schema, Components: response.Components},
+		product,
+		command,
+		style,
+		requestedVersion,
+	)
+}
+
+func projectResponseQueryExample(schema HelpResponseSchema, product, command, style, requestedVersion string) *machineHelpQueryExample {
+	example, err := BuildResponseQueryExample(ResponseQueryContext{
+		Document:   schema,
+		Product:    product,
+		API:        command,
+		APIVersion: requestedVersion,
+		Style:      responseCommandStyle(style),
+	})
+	if err != nil || example == nil {
+		return nil
+	}
+	return &machineHelpQueryExample{
+		Path:          example.Path,
+		SchemaCommand: example.SchemaCommand,
+		QueryCommand:  example.QueryCommand,
+	}
+}
+
+func projectMachineHelpOperation(api *canonicalmeta.API) machineHelpOperation {
+	if api == nil {
+		return machineHelpOperation{}
+	}
+	if api.Operation == nil {
+		return machineHelpOperation{Method: api.Method, Protocol: api.Protocol, URL: api.PathPattern}
+	}
+	return machineHelpOperation{
+		Action:          api.Operation.Action,
+		APIStyle:        api.Operation.APIStyle,
+		APIVersion:      api.Operation.APIVersion,
+		Method:          api.Operation.Method,
+		Protocol:        api.Operation.Protocol,
+		URL:             api.Operation.URL,
+		IsSSE:           api.Operation.IsSSE,
+		ReqBodyType:     api.Operation.ReqBodyType,
+		ContentType:     api.Operation.ContentType,
+		HasWildcardPath: api.Operation.HasWildcardPath,
+	}
+}
+
+func (s *machineHelpService) resolveAPI(code, command, requestedVersion string) (*resolvedMachineHelpAPI, error) {
 	product, err := s.findProduct(code)
 	if err != nil {
 		return nil, err
@@ -331,63 +559,13 @@ func (s *machineHelpService) buildAPI(code, command, requestedVersion string) (*
 	if err != nil {
 		return nil, err
 	}
-
-	operation := machineHelpOperation{Method: api.Method, Protocol: api.Protocol, URL: api.PathPattern}
-	if api.Operation != nil {
-		operation = machineHelpOperation{
-			Action:          api.Operation.Action,
-			APIStyle:        api.Operation.APIStyle,
-			APIVersion:      api.Operation.APIVersion,
-			Method:          api.Operation.Method,
-			Protocol:        api.Operation.Protocol,
-			URL:             api.Operation.URL,
-			IsSSE:           api.Operation.IsSSE,
-			ReqBodyType:     api.Operation.ReqBodyType,
-			ContentType:     api.Operation.ContentType,
-			HasWildcardPath: api.Operation.HasWildcardPath,
-		}
-	}
-	camelParameters := make([]machineHelpParameter, 0)
-	for _, view := range api.LegacyTopLevelParameters() {
-		camelParameters = append(camelParameters, projectLegacyParameter(view, ""))
-	}
-	kebabParameters := make([]machineHelpParameter, 0, len(api.Parameters))
-	for i := range api.Parameters {
-		kebabParameters = append(kebabParameters, projectCanonicalParameter(&api.Parameters[i]))
-	}
-
-	productDoc := buildMachineHelpProduct(*product, versions, selected)
-	return &machineHelpAPIDocument{
-		SchemaVersion: machineHelpSchemaVersion,
-		Kind:          "api",
-		Target: machineHelpTarget{
-			Path:           []string{"aliyun", productDoc.Code, command},
-			RequestedStyle: style,
-		},
-		Product: productDoc,
-		API: machineHelpAPI{
-			Name:         api.Name,
-			CmdName:      api.CmdName,
-			CmdFullName:  api.CmdFullName,
-			Description:  machineHelpLocalizedText{EN: api.DescriptionEn, ZH: api.DescriptionZh},
-			Deprecated:   api.Deprecated,
-			MultiVersion: api.MultiVersion,
-			Operation:    operation,
-		},
-		ActiveParameterSet: style,
-		ParameterSets: machineHelpParameterSets{
-			Camel: camelParameters,
-			Kebab: kebabParameters,
-		},
-		GlobalParameters: make([]machineHelpParameter, 0),
-		Examples: machineHelpExamples{
-			Camel: api.CamelExample,
-			Kebab: api.KebabExample,
-		},
-		OutputSchema: nil,
-		Pagination:   nil,
-		Risk:         nil,
-		Recovery:     nil,
+	return &resolvedMachineHelpAPI{
+		Product:  *product,
+		Versions: versions,
+		Selected: selected,
+		Style:    style,
+		Command:  command,
+		API:      api,
 	}, nil
 }
 
@@ -580,7 +758,7 @@ func localizedText(values map[string]string) machineHelpLocalizedText {
 	return machineHelpLocalizedText{EN: values["en"], ZH: values["zh"]}
 }
 
-func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format string) error {
+func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format string, opts helpOptions) error {
 	target := append([]string{"aliyun"}, args...)
 	if format != "json" {
 		return newMachineHelpError(
@@ -603,6 +781,7 @@ func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format stri
 	}
 
 	service := newMachineHelpService(c.library.helpRepo)
+	aiMode := legacyAIModeEnabled(ctx)
 	var (
 		document any
 		err      error
@@ -613,7 +792,11 @@ func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format stri
 	case 1:
 		document, err = service.buildProduct(args[0], requestedMachineHelpVersion(ctx))
 	case 2:
-		document, err = service.buildAPI(args[0], args[1], requestedMachineHelpVersion(ctx))
+		if opts.Section == helpSectionResponse {
+			document, err = service.buildAPIResponse(args[0], args[1], requestedMachineHelpVersion(ctx))
+		} else {
+			document, err = service.buildAPI(args[0], args[1], requestedMachineHelpVersion(ctx))
+		}
 	}
 	if err != nil {
 		var structured *machineHelpError
@@ -624,6 +807,44 @@ func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format stri
 	}
 	if api, ok := document.(*machineHelpAPIDocument); ok {
 		api.GlobalParameters = projectGlobalParameters(ctx.Flags())
+	}
+	switch typed := document.(type) {
+	case *machineHelpRootDocument:
+		applyRootHelpOptions(typed, opts, aiMode)
+	case *machineHelpProductDocument:
+		applyProductHelpOptions(typed, opts, aiMode)
+	case *machineHelpAPIDocument:
+		applyRequestHelpOptions(typed, opts, aiMode)
+	case *machineHelpAPIResponseDocument:
+		if applyErr := applyResponseHelpOptions(typed, opts); applyErr != nil {
+			return newMachineHelpUnavailableError(target, applyErr)
+		}
+		if opts.Search != "" {
+			typed.ResponseQuery = nil
+			if typed.OutputSchema != nil {
+				typed.ResponseQuery = projectResponseQueryExample(
+					helpResponseSchema(typed),
+					typed.Product.Code,
+					typed.Target.Path[len(typed.Target.Path)-1],
+					typed.Target.RequestedStyle,
+					requestedMachineHelpVersion(ctx),
+				)
+			}
+		}
+	}
+	if !aiMode {
+		hint := cli.NewAIModeHint()
+		projected := &machineHelpAIModeHint{Command: hint.Command, Message: hint.Message}
+		switch typed := document.(type) {
+		case *machineHelpRootDocument:
+			typed.AIModeHint = projected
+		case *machineHelpProductDocument:
+			typed.AIModeHint = projected
+		case *machineHelpAPIDocument:
+			typed.AIModeHint = projected
+		case *machineHelpAPIResponseDocument:
+			typed.AIModeHint = projected
+		}
 	}
 	if err := encodeMachineHelpJSON(ctx.Stdout(), document); err != nil {
 		return newMachineHelpUnavailableError(target, err)
@@ -643,10 +864,79 @@ func newMachineHelpUnavailableError(target []string, cause error) *machineHelpEr
 }
 
 func encodeMachineHelpJSON(w io.Writer, value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	var document any
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&document); err != nil {
+		return err
+	}
+	document, _ = pruneMachineHelpEmptyAt(document, nil)
+
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(value)
+	return encoder.Encode(document)
+}
+
+// pruneMachineHelpEmpty removes values that carry no machine-readable
+// information while preserving false and numeric zero, which are meaningful
+// for fields such as required, deprecated, and listing counts.
+func pruneMachineHelpEmpty(value any) (any, bool) {
+	return pruneMachineHelpEmptyAt(value, nil)
+}
+
+func pruneMachineHelpEmptyAt(value any, path []string) (any, bool) {
+	switch typed := value.(type) {
+	case nil:
+		return nil, false
+	case string:
+		return typed, typed != ""
+	case []any:
+		result := make([]any, 0, len(typed))
+		for _, item := range typed {
+			// Empty strings can be meaningful members of enum-like arrays. Only
+			// omit the array when the array itself is empty.
+			if text, ok := item.(string); ok {
+				result = append(result, text)
+				continue
+			}
+			if cleaned, keep := pruneMachineHelpEmptyAt(item, path); keep {
+				result = append(result, cleaned)
+			}
+		}
+		if len(result) == 0 {
+			return nil, false
+		}
+		return result, true
+	case map[string]any:
+		result := make(map[string]any, len(typed))
+		for key, item := range typed {
+			if preserveMachineHelpSchema(path, key) {
+				result[key] = item
+				continue
+			}
+			if cleaned, keep := pruneMachineHelpEmptyAt(item, append(path, key)); keep {
+				result[key] = cleaned
+			}
+		}
+		if len(result) == 0 {
+			return nil, false
+		}
+		return result, true
+	default:
+		return value, true
+	}
+}
+
+func preserveMachineHelpSchema(path []string, key string) bool {
+	if len(path) == 1 && path[0] == "outputSchema" && key == "schema" {
+		return true
+	}
+	return len(path) == 2 && path[0] == "outputSchema" && path[1] == "components" && key == "schemas"
 }
 
 func requestedMachineHelpVersion(ctx *cli.Context) string {

@@ -20,6 +20,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 )
 
 func newTestCommando() (*Commando, *bytes.Buffer, *bytes.Buffer) {
@@ -714,6 +715,161 @@ func TestPrintApiUsageAlwaysTriesRuntime(t *testing.T) {
 
 	err = c.printApiUsage(ctx, "ecs", "describe-instances")
 	assert.ErrorIs(t, err, wantErr)
+}
+
+func TestHelpResponseSectionUsesHostCanonicalWhenPluginIsNotInstalled(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.localLoaded = true
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	err := c.help(ctx, []string{"demo", "CreateReport"})
+	require.NoError(t, err)
+	assert.False(t, c.pluginLoaded, "host Canonical response Help must not load the remote plugin index")
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "Response Schema (HTTP 200, application/json):")
+	assert.NotContains(t, stdout.String(), "Parameters:")
+}
+
+func TestHelpResponseSectionDoesNotOverrideInstalledPluginTextHelp(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "0")
+	c, stdout, stderr := newTestCommando()
+	c.pluginLoaded = true
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-demo": {Name: "aliyun-cli-demo", Type: plugin.PluginTypeMeta},
+	}}
+	c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{{Name: "aliyun-cli-demo", ProductCode: "demo"}}}
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+
+	originalTryHelp := runtimeTryHelp
+	runtimeTryHelp = func(ctx *cli.Context, product, command string) (bool, error) {
+		fmt.Fprintln(ctx.Stdout(), "PLUGIN_OWNED_TEXT_HELP")
+		return true, nil
+	}
+	t.Cleanup(func() { runtimeTryHelp = originalTryHelp })
+
+	err := c.help(ctx, []string{"demo", "create-report"})
+	require.NoError(t, err)
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "PLUGIN_OWNED_TEXT_HELP")
+	assert.NotContains(t, stdout.String(), "Response Schema")
+	assert.NotContains(t, stdout.String(), cli.AIModeEnableCommand)
+}
+
+func newCanonicalHelpTestContext(t *testing.T) (*Commando, *cli.Context, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+	t.Setenv(aimode.EnvAIMode, "0")
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.localLoaded = true
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	return c, ctx, stdout, stderr
+}
+
+func TestCanonicalTextHelpSearchesRootProductAndRequestLocally(t *testing.T) {
+	t.Run("root product", func(t *testing.T) {
+		c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+		CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+		CliHelpSearchFlag(ctx.Flags()).SetValue("演示")
+
+		require.NoError(t, c.help(ctx, nil))
+		assert.False(t, c.pluginLoaded)
+		assert.Empty(t, stderr.String())
+		assert.Contains(t, stdout.String(), "demo")
+		assert.NotContains(t, stdout.String(), "Commands:")
+		assert.Contains(t, stdout.String(), cli.AIModeEnableCommand)
+	})
+
+	t.Run("product api", func(t *testing.T) {
+		c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+		CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+		CliHelpSearchFlag(ctx.Flags()).SetValue("region")
+
+		require.NoError(t, c.help(ctx, []string{"demo"}))
+		assert.False(t, c.pluginLoaded)
+		assert.Empty(t, stderr.String())
+		assert.Contains(t, stdout.String(), "describe-regions")
+	})
+
+	t.Run("request parameter", func(t *testing.T) {
+		c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+		CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+		CliHelpSearchFlag(ctx.Flags()).SetValue("workspace-id")
+		VersionFlag(ctx.Flags()).SetAssigned(true)
+		VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+		require.NoError(t, c.help(ctx, []string{"demo", "create-report"}))
+		assert.False(t, c.pluginLoaded)
+		assert.Empty(t, stderr.String())
+		assert.Contains(t, stdout.String(), "--workspace-id")
+		assert.NotContains(t, stdout.String(), "--report-id")
+		assert.Contains(t, stdout.String(), "Response query example (Reports.Report)")
+	})
+}
+
+func TestCanonicalTextHelpOmitsEnableHintWhenAIModeIsOn(t *testing.T) {
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	t.Setenv(aimode.EnvAIMode, "1")
+	CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSearchFlag(ctx.Flags()).SetValue("demo")
+
+	require.NoError(t, c.help(ctx, nil))
+	assert.Empty(t, stderr.String())
+	assert.NotContains(t, stdout.String(), cli.AIModeEnableCommand)
+}
+
+func TestCanonicalTextHelpKeepsConfiguredAIModeDisableHint(t *testing.T) {
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	t.Cleanup(cleanup)
+
+	confDir := filepath.Join(testHome, ".aliyun")
+	require.NoError(t, os.MkdirAll(confDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(confDir, "ai-mode.json"), []byte(`{"enabled":true}`), 0600))
+
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	t.Setenv(aimode.EnvAIMode, "")
+	CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSearchFlag(ctx.Flags()).SetValue("demo")
+
+	require.NoError(t, c.help(ctx, nil))
+	assert.NotContains(t, stdout.String(), cli.AIModeEnableCommand)
+	assert.Contains(t, stderr.String(), "aliyun configure ai-mode disable")
+}
+
+func TestCanonicalTextResponseSearchPrintsMatchedPathAndFilteredQuery(t *testing.T) {
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+	CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSearchFlag(ctx.Flags()).SetValue("report-id")
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	require.NoError(t, c.help(ctx, []string{"demo", "CreateReport"}))
+	assert.False(t, c.pluginLoaded)
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "Matched Response Paths:")
+	assert.Contains(t, stdout.String(), "Reports.Report.ReportId")
+	assert.Contains(t, stdout.String(), "aliyun demo CreateReport --api-version 2026-01-01 --cli-query 'Reports.Report'")
+	assert.NotContains(t, stdout.String(), "Unused")
 }
 
 func TestPrintApiUsage_NonBuiltinProduct_PluginInstalled(t *testing.T) {

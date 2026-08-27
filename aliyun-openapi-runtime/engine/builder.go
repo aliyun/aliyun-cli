@@ -324,7 +324,11 @@ func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runti
 			if !ok || strings.TrimSpace(name) == "" {
 				return nil, &UsageError{
 					Code: "INVALID_HEADER",
-					Err:  fmt.Errorf("invalid header format %q, expected Name=Value", header),
+					Err: &InvalidHeaderError{
+						Input:          header,
+						ExpectedFormat: "Name=Value",
+						Err:            fmt.Errorf("invalid header format %q, expected Name=Value", header),
+					},
 				}
 			}
 			ec.ExtraHeaders[strings.TrimSpace(name)] = strings.TrimSpace(value)
@@ -341,7 +345,10 @@ func buildExecContext(req Request, api *meta.API, res *argparser.Result) (*runti
 			body, err = os.ReadFile(res.Reserved.BodyFile)
 		}
 		if err != nil {
-			return nil, &UsageError{Code: "INVALID_BODY_FILE", Err: fmt.Errorf("--body-file: %w", err)}
+			return nil, &UsageError{Code: "INVALID_BODY_FILE", Err: &InvalidBodyFileError{
+				Path: res.Reserved.BodyFile,
+				Err:  fmt.Errorf("--body-file: %w", err),
+			}}
 		}
 		ec.RawBody = string(body)
 	}
@@ -383,21 +390,40 @@ func applyMetadataPluginProvenance(ec *runtime.ExecContext, provenance *source.P
 
 func validateDispatchOptions(res *argparser.Result) error {
 	if len(res.Reserved.EstimateCostContext) > 0 && !res.Reserved.EstimateCost {
-		return fmt.Errorf("--estimate-cost-context requires --estimate-cost")
+		return newInvalidOptionCombinationError(
+			[]string{"--estimate-cost-context", "--estimate-cost"},
+			"--estimate-cost-context requires --estimate-cost",
+		)
 	}
 	if !res.Reserved.DryRunJSON {
 		return nil
 	}
 	if res.Reserved.Pager != nil {
-		return fmt.Errorf("--cli-dry-run-json cannot be used with --pager")
+		return newInvalidOptionCombinationError(
+			[]string{"--cli-dry-run-json", "--pager"},
+			"--cli-dry-run-json cannot be used with --pager",
+		)
 	}
 	if res.Reserved.Waiter != nil {
-		return fmt.Errorf("--cli-dry-run-json cannot be used with --waiter")
+		return newInvalidOptionCombinationError(
+			[]string{"--cli-dry-run-json", "--waiter"},
+			"--cli-dry-run-json cannot be used with --waiter",
+		)
 	}
 	if res.Reserved.Quiet {
-		return fmt.Errorf("--cli-dry-run-json cannot be used with --quiet")
+		return newInvalidOptionCombinationError(
+			[]string{"--cli-dry-run-json", "--quiet"},
+			"--cli-dry-run-json cannot be used with --quiet",
+		)
 	}
 	return nil
+}
+
+func newInvalidOptionCombinationError(options []string, message string) error {
+	return &InvalidOptionCombinationError{
+		Options: append([]string(nil), options...),
+		Err:     errors.New(message),
+	}
 }
 
 func (e *Engine) executeEstimateCost(out io.Writer, ec *runtime.ExecContext, res *argparser.Result) error {

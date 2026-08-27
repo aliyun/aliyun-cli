@@ -101,7 +101,7 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 	})
 
 	if err != nil {
-		return cli.NewErrorWithTip(err,
+		return cli.NewErrorWithTip(newLegacyMissingRequiredError(err),
 			"use `aliyun %s %s --help` to get more information",
 			strings.ToLower(a.productCode()), api.Name)
 	}

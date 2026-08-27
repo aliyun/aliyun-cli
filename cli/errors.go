@@ -76,7 +76,12 @@ func (e *InvalidCommandError) Error() string {
 	return fmt.Sprintf("%q is not a valid command", e.Name)
 }
 
+func (*InvalidCommandError) AIRecoveryEligible() {}
+
 func (e *InvalidCommandError) GetSuggestions() []string {
+	if e == nil || e.ctx == nil || e.ctx.command == nil {
+		return nil
+	}
 	cmd := e.ctx.command
 	return cmd.GetSuggestions(e.Name)
 }
@@ -118,6 +123,38 @@ func (e *InvalidFlagError) Error() string {
 		return fmt.Sprintf("invalid flag %s; available flags: %s", display, strings.Join(available, ", "))
 	}
 	return fmt.Sprintf("invalid flag %s", display)
+}
+
+// AgentMessage keeps recovery instructions out of the structured error
+// message. Human Error() output remains unchanged.
+func (e *InvalidFlagError) AgentMessage() string {
+	return fmt.Sprintf("invalid flag %s", e.flagDisplay())
+}
+
+// AgentHelpCommand returns the ordinary Help entry for the command that
+// rejected this CLI flag. Built-in commands do not support Canonical
+// --cli-search/--cli-section options.
+func (e *InvalidFlagError) AgentHelpCommand() string {
+	if e == nil || e.ctx == nil || e.ctx.command == nil {
+		return "aliyun help"
+	}
+	path := strings.TrimSpace(e.ctx.command.getName())
+	if path == "aliyun" {
+		return "aliyun help"
+	}
+	path = strings.TrimSpace(strings.TrimPrefix(path, "aliyun "))
+	if path == "" {
+		return "aliyun help"
+	}
+	return "aliyun help " + path
+}
+
+func (*InvalidFlagError) AIRecoveryEligible() {}
+
+// AgentSuggestions returns the same close flag matches used by Error without
+// exposing Context internals to the OpenAPI recovery adapter.
+func (e *InvalidFlagError) AgentSuggestions() []string {
+	return e.closeSuggestions()
 }
 
 func (e *InvalidFlagError) closeSuggestions() []string {

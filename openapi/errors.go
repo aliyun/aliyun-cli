@@ -14,6 +14,7 @@
 package openapi
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -22,6 +23,40 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 )
+
+// LegacyMissingRequiredError marks required-parameter validation failures from
+// the PascalCase OpenAPI path as explicit local CLI errors. The marker lets
+// non-AI rendering append the AI-mode hint without guessing from error text.
+type LegacyMissingRequiredError struct {
+	Err error
+}
+
+func (e *LegacyMissingRequiredError) Error() string {
+	if e == nil || e.Err == nil {
+		return "required parameters are not assigned"
+	}
+	return e.Err.Error()
+}
+
+func (e *LegacyMissingRequiredError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func (*LegacyMissingRequiredError) AIRecoveryEligible() {}
+
+func newLegacyMissingRequiredError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var existing *LegacyMissingRequiredError
+	if errors.As(err, &existing) {
+		return err
+	}
+	return &LegacyMissingRequiredError{Err: err}
+}
 
 // return when use unknown product
 type InvalidProductError struct {
@@ -32,6 +67,12 @@ type InvalidProductError struct {
 func (e *InvalidProductError) Error() string {
 	return fmt.Sprintf("%q is not a valid command or product. See `aliyun help`.", strings.ToLower(e.Code))
 }
+
+func (e *InvalidProductError) AgentMessage() string {
+	return fmt.Sprintf("%q is not a valid command or product.", strings.ToLower(e.Code))
+}
+
+func (*InvalidProductError) AIRecoveryEligible() {}
 
 func (e *InvalidProductError) GetSuggestions() []string {
 	sr := cli.NewSuggester(strings.ToLower(e.Code), 2)
@@ -62,6 +103,12 @@ func (e *InvalidApiError) Error() string {
 	return fmt.Sprintf("%q is not a valid api. See `aliyun help %s`.", e.Name, e.product.GetLowerCode())
 }
 
+func (e *InvalidApiError) AgentMessage() string {
+	return fmt.Sprintf("%q is not a valid api.", e.Name)
+}
+
+func (*InvalidApiError) AIRecoveryEligible() {}
+
 func (e *InvalidApiError) GetSuggestions() []string {
 	sr := cli.NewSuggester(e.Name, 2)
 	for _, s := range e.product.ApiNames {
@@ -91,6 +138,12 @@ func (e *InvalidParameterError) Error() string {
 	return fmt.Sprintf("%q is not a valid parameter or flag. See `aliyun help %s %s`.",
 		"--"+e.Name, strings.ToLower(e.ProductCode), e.ApiName)
 }
+
+func (e *InvalidParameterError) AgentMessage() string {
+	return fmt.Sprintf("%q is not a valid parameter or flag.", "--"+strings.TrimLeft(e.Name, "-"))
+}
+
+func (*InvalidParameterError) AIRecoveryEligible() {}
 
 func (e *InvalidParameterError) GetSuggestions() []string {
 	sr := cli.NewSuggester(e.Name, 2)
@@ -168,6 +221,12 @@ func (e *InvalidProductOrPluginError) Error() string {
 	return msg
 }
 
+func (e *InvalidProductOrPluginError) AgentMessage() string {
+	return fmt.Sprintf("%q is not a valid product.", e.Code)
+}
+
+func (*InvalidProductOrPluginError) AIRecoveryEligible() {}
+
 func (e *InvalidProductOrPluginError) GetSuggestions() []string {
 	sr := cli.NewSuggester(strings.ToLower(e.Code), 2)
 	for _, p := range e.plugins {
@@ -195,6 +254,89 @@ type InvalidUnifiedApiError struct {
 
 func (e *InvalidUnifiedApiError) Error() string {
 	return fmt.Sprintf("%q is not a valid api. See `aliyun help %s`.", e.Name, e.product.GetLowerCode())
+}
+
+func (e *InvalidUnifiedApiError) AgentMessage() string {
+	return fmt.Sprintf("%q is not a valid api.", e.Name)
+}
+
+func (*InvalidUnifiedApiError) AIRecoveryEligible() {}
+
+// InvalidBaselineCommandError adapts the runtime router's existing human text
+// into an explicit unknown-API cause without changing that text.
+type InvalidBaselineCommandError struct {
+	Product string
+	Command string
+	Err     error
+}
+
+func (e *InvalidBaselineCommandError) Error() string {
+	return explicitLocalErrorText(e.Err, "invalid baseline command")
+}
+
+func (e *InvalidBaselineCommandError) Unwrap() error { return e.Err }
+
+func (*InvalidBaselineCommandError) AIRecoveryEligible() {}
+
+type InvalidArgumentError struct {
+	Parameter    string
+	Flag         string
+	FieldPath    string
+	ExpectedType string
+	Err          error
+}
+
+func (e *InvalidArgumentError) Error() string {
+	return explicitLocalErrorText(e.Err, "invalid argument")
+}
+
+func (e *InvalidArgumentError) Unwrap() error { return e.Err }
+
+func (*InvalidArgumentError) AIRecoveryEligible() {}
+
+type InvalidOptionCombinationError struct {
+	Options []string
+	Err     error
+}
+
+func (e *InvalidOptionCombinationError) Error() string {
+	return explicitLocalErrorText(e.Err, "invalid option combination")
+}
+
+func (e *InvalidOptionCombinationError) Unwrap() error { return e.Err }
+
+func (*InvalidOptionCombinationError) AIRecoveryEligible() {}
+
+type InvalidHeaderError struct {
+	Input          string
+	ExpectedFormat string
+	Err            error
+}
+
+func (e *InvalidHeaderError) Error() string { return explicitLocalErrorText(e.Err, "invalid header") }
+
+func (e *InvalidHeaderError) Unwrap() error { return e.Err }
+
+func (*InvalidHeaderError) AIRecoveryEligible() {}
+
+type InvalidBodyFileError struct {
+	Path string
+	Err  error
+}
+
+func (e *InvalidBodyFileError) Error() string {
+	return explicitLocalErrorText(e.Err, "invalid body file")
+}
+
+func (e *InvalidBodyFileError) Unwrap() error { return e.Err }
+
+func (*InvalidBodyFileError) AIRecoveryEligible() {}
+
+func explicitLocalErrorText(err error, fallback string) string {
+	if err == nil {
+		return fallback
+	}
+	return err.Error()
 }
 
 func (e *InvalidUnifiedApiError) GetSuggestions() []string {
