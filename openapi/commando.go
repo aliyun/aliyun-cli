@@ -1256,7 +1256,13 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 			}
 			return c.finishCanonicalTextHelp(ctx, aiMode)
 		case len(args) == 1 && (helpOpts.Search != "" || helpOpts.All || aiMode):
-			document, buildErr := service.buildProduct(args[0], requestedMachineHelpVersion(ctx))
+			style := ""
+			if productHelpEnvEnabled(originalProductHelpEnv) {
+				style = "camel"
+			} else if productHelpEnvEnabled(baselineProductHelpEnv) {
+				style = "kebab"
+			}
+			document, buildErr := service.buildProductForStyle(args[0], requestedMachineHelpVersion(ctx), style)
 			if buildErr != nil {
 				return buildErr
 			}

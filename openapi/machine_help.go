@@ -132,6 +132,7 @@ type machineHelpProductDocument struct {
 	APIs          []machineHelpAPISummary `json:"apis"`
 	Listing       *machineHelpListing     `json:"listing"`
 	AIModeHint    *machineHelpAIModeHint  `json:"aiModeHint"`
+	commandStyle  string
 }
 
 type machineHelpOperation struct {
@@ -320,12 +321,26 @@ func (s *machineHelpService) buildRoot(root *cli.Command) (*machineHelpRootDocum
 }
 
 func (s *machineHelpService) buildProduct(code, requestedVersion string) (*machineHelpProductDocument, error) {
+	document, err := s.buildProductForStyle(code, requestedVersion, "kebab")
+	if document != nil {
+		document.Target.RequestedStyle = "product"
+	}
+	return document, err
+}
+
+func (s *machineHelpService) buildProductForStyle(code, requestedVersion, requestedStyle string) (*machineHelpProductDocument, error) {
 	product, err := s.findProduct(code)
 	if err != nil {
 		return nil, err
 	}
+	if requestedStyle == "" {
+		requestedStyle = "kebab"
+		if product.Version != "" {
+			requestedStyle = "camel"
+		}
+	}
 	versions := normalizedVersions(*product)
-	selected, err := selectProductVersion(*product, versions, requestedVersion)
+	selected, err := selectAPIVersion(*product, versions, requestedVersion, requestedStyle)
 	if err != nil {
 		return nil, err
 	}
@@ -358,6 +373,7 @@ func (s *machineHelpService) buildProduct(code, requestedVersion string) (*machi
 		Target:        machineHelpTarget{Path: []string{"aliyun", code}, RequestedStyle: "product"},
 		Product:       productDoc,
 		APIs:          apis,
+		commandStyle:  requestedStyle,
 	}, nil
 }
 

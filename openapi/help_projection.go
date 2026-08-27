@@ -351,7 +351,10 @@ func renderCanonicalProductText(w io.Writer, document *machineHelpProductDocumen
 		return err
 	}
 	for _, api := range document.APIs {
-		name := api.CmdName
+		name := api.Name
+		if document.commandStyle != "camel" && api.CmdName != "" {
+			name = api.CmdName
+		}
 		if name == "" {
 			name = api.Name
 		}
