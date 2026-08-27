@@ -1126,10 +1126,11 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 		format, _ := formatFlag.GetValue()
 		return c.printMachineHelp(ctx, args, format, helpOpts)
 	}
-	_ = helpOpts // consumed by the Canonical text Help integration path
 
 	c.loadLocalPlugins()
-	if helpOpts.Section == helpSectionResponse && len(args) == 2 && !c.hasInstalledProductPlugin(args[0]) {
+	aiMode := legacyAIModeEnabled(ctx)
+	installedPlugin := len(args) > 0 && c.hasInstalledProductPlugin(args[0])
+	if helpOpts.Section == helpSectionResponse && len(args) == 2 && !installedPlugin {
 		if c.library == nil || c.library.helpRepo == nil {
 			return fmt.Errorf("response Help is unavailable: canonical metadata repository is unavailable")
 		}
@@ -1137,7 +1138,55 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 		if buildErr != nil {
 			return buildErr
 		}
+		if applyErr := applyResponseHelpOptions(document, helpOpts); applyErr != nil {
+			return applyErr
+		}
+		if helpOpts.Search != "" {
+			document.ResponseQuery = nil
+			if document.OutputSchema != nil {
+				document.ResponseQuery = projectResponseQueryExample(
+					helpResponseSchema(document),
+					document.Product.Code,
+					document.Target.Path[len(document.Target.Path)-1],
+					document.Target.RequestedStyle,
+					requestedMachineHelpVersion(ctx),
+				)
+			}
+		}
 		return renderResponseHelpText(ctx.Stdout(), document)
+	}
+
+	// The new Search and AI listing views use only the local Canonical index.
+	// Installed plugins retain ownership of their text Help and bypass this path.
+	if !installedPlugin && c.library != nil && c.library.helpRepo != nil {
+		service := newMachineHelpService(c.library.helpRepo)
+		switch {
+		case len(args) == 0 && (helpOpts.Search != "" || helpOpts.All || aiMode):
+			document, buildErr := service.buildRoot(ctx.Command())
+			if buildErr != nil {
+				return buildErr
+			}
+			applyRootHelpOptions(document, helpOpts, aiMode)
+			return renderCanonicalRootText(ctx.Stdout(), document, helpOpts.Search)
+		case len(args) == 1 && (helpOpts.Search != "" || helpOpts.All || aiMode):
+			document, buildErr := service.buildProduct(args[0], requestedMachineHelpVersion(ctx))
+			if buildErr != nil {
+				return buildErr
+			}
+			applyProductHelpOptions(document, helpOpts, aiMode)
+			return renderCanonicalProductText(ctx.Stdout(), document, helpOpts.Search)
+		case len(args) == 2 && helpOpts.Search != "":
+			document, buildErr := service.buildAPI(args[0], args[1], requestedMachineHelpVersion(ctx))
+			if buildErr != nil {
+				return buildErr
+			}
+			document.GlobalParameters = projectGlobalParameters(ctx.Flags())
+			applyRequestHelpOptions(document, helpOpts)
+			if renderErr := renderCanonicalRequestSearchText(ctx.Stdout(), document, helpOpts.Search); renderErr != nil {
+				return renderErr
+			}
+			return renderRequestQueryExampleText(ctx.Stdout(), document.ResponseQuery)
+		}
 	}
 	c.loadPlugins()
 	cmd := ctx.Command()
@@ -1155,7 +1204,16 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 		return c.printProductUsage(ctx, args[0])
 	} else if len(args) == 2 {
 		cmd.PrintHead(ctx)
-		return c.printApiUsage(ctx, args[0], args[1])
+		if err := c.printApiUsage(ctx, args[0], args[1]); err != nil {
+			return err
+		}
+		if !installedPlugin && c.library != nil && c.library.helpRepo != nil {
+			document, buildErr := newMachineHelpService(c.library.helpRepo).buildAPI(args[0], args[1], requestedMachineHelpVersion(ctx))
+			if buildErr == nil {
+				return renderRequestQueryExampleText(ctx.Stdout(), document.ResponseQuery)
+			}
+		}
+		return nil
 	} else {
 		// Layer 3: plugin sub-command help (3+ levels deep).
 		if delegated, derr := c.tryDelegatePluginHelp(ctx, args); delegated {

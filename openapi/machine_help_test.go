@@ -162,6 +162,79 @@ func TestMachineHelpAPIResponseWithoutSchemaReturnsNotice(t *testing.T) {
 	assert.Contains(t, encoded.String(), `"notice": "No response schema is available for this API."`)
 }
 
+func TestMachineHelpRequestIncludesStylePreservingResponseQueryExample(t *testing.T) {
+	service := testMachineHelpService(t)
+
+	camel, err := service.buildAPI("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+	require.NotNil(t, camel.ResponseQuery)
+	assert.Equal(t, "Reports.Report", camel.ResponseQuery.Path)
+	assert.Equal(t, "aliyun help demo CreateReport --api-version 2026-01-01 --cli-section response", camel.ResponseQuery.SchemaCommand)
+	assert.Equal(t, "aliyun demo CreateReport --api-version 2026-01-01 --cli-query 'Reports.Report'", camel.ResponseQuery.QueryCommand)
+
+	kebab, err := service.buildAPI("demo", "create-report", "2026-01-01")
+	require.NoError(t, err)
+	require.NotNil(t, kebab.ResponseQuery)
+	assert.Equal(t, "aliyun help demo create-report --api-version 2026-01-01 --cli-section response", kebab.ResponseQuery.SchemaCommand)
+	assert.Equal(t, "aliyun demo create-report --api-version 2026-01-01 --cli-query 'Reports.Report'", kebab.ResponseQuery.QueryCommand)
+}
+
+func TestMachineHelpRequestSearchKeepsOnlyActiveParameterSetAndGlobals(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPI("demo", "create-report", "2026-01-01")
+	require.NoError(t, err)
+	doc.GlobalParameters = []machineHelpParameter{{
+		Name: "header", Options: []string{"--header"}, Type: "string", Location: "global",
+	}}
+
+	applyRequestHelpOptions(doc, helpOptions{Search: "report-id"})
+
+	require.Len(t, doc.ParameterSets.Kebab, 1)
+	assert.Equal(t, "report_id", doc.ParameterSets.Kebab[0].Name)
+	assert.Empty(t, doc.ParameterSets.Camel)
+	assert.Empty(t, doc.GlobalParameters)
+
+	doc, err = service.buildAPI("demo", "create-report", "2026-01-01")
+	require.NoError(t, err)
+	doc.GlobalParameters = []machineHelpParameter{{
+		Name: "header", Options: []string{"--header"}, Type: "string", Location: "global",
+	}}
+	applyRequestHelpOptions(doc, helpOptions{Search: "header"})
+	assert.Empty(t, doc.ParameterSets.Kebab)
+	require.Len(t, doc.GlobalParameters, 1)
+	assert.Equal(t, "header", doc.GlobalParameters[0].Name)
+}
+
+func TestMachineHelpResponseSearchProjectsMatchesAndFilteredQuery(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPIResponse("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+
+	require.NoError(t, applyResponseHelpOptions(doc, helpOptions{Search: "report-id"}))
+	assert.Equal(t, []string{"Reports.Report.ReportId"}, doc.Matches)
+	require.NotNil(t, doc.OutputSchema)
+	require.NotNil(t, doc.OutputSchema.Components)
+	assert.Contains(t, doc.OutputSchema.Components.Schemas, "ReportList")
+	assert.Contains(t, doc.OutputSchema.Components.Schemas, "Report")
+	assert.NotContains(t, doc.OutputSchema.Components.Schemas, "Unused")
+
+	doc.ResponseQuery = projectResponseQueryExample(
+		helpResponseSchema(doc), doc.Product.Code, "CreateReport", doc.Target.RequestedStyle, "2026-01-01",
+	)
+	require.NotNil(t, doc.ResponseQuery)
+	assert.Equal(t, "Reports.Report", doc.ResponseQuery.Path)
+}
+
+func TestMachineHelpResponseSearchNoMatchReturnsClearNotice(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPIResponse("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+
+	require.NoError(t, applyResponseHelpOptions(doc, helpOptions{Search: "does-not-exist"}))
+	assert.Nil(t, doc.OutputSchema)
+	assert.Equal(t, `No Help entries matched --cli-search "does-not-exist".`, doc.Notice)
+}
+
 func TestMachineHelpNestedParameters(t *testing.T) {
 	service := testMachineHelpService(t)
 	doc, err := service.buildAPI("demo", "DescribeRegions", "2026-01-01")

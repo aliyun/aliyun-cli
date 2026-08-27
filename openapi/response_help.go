@@ -15,6 +15,19 @@ func renderResponseHelpText(w io.Writer, document *machineHelpAPIResponseDocumen
 		_, err := fmt.Fprintln(w, document.Notice)
 		return err
 	}
+	if len(document.Matches) > 0 {
+		if _, err := fmt.Fprintln(w, "Matched Response Paths:"); err != nil {
+			return err
+		}
+		for _, path := range document.Matches {
+			if _, err := fmt.Fprintf(w, "- %s\n", path); err != nil {
+				return err
+			}
+		}
+		if _, err := fmt.Fprintln(w); err != nil {
+			return err
+		}
+	}
 
 	heading := fmt.Sprintf("Response Schema (HTTP %s", document.OutputSchema.StatusCode)
 	if document.OutputSchema.ContentType != "" {

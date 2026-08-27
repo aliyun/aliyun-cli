@@ -251,6 +251,7 @@ type machineHelpAPIResponseDocument struct {
 	Product       machineHelpProduct       `json:"product"`
 	API           machineHelpAPI           `json:"api"`
 	OutputSchema  *machineHelpOutputSchema `json:"outputSchema"`
+	Matches       []string                 `json:"matches"`
 	Notice        string                   `json:"notice"`
 	Warnings      []string                 `json:"warnings"`
 	ResponseQuery *machineHelpQueryExample `json:"responseQueryExample"`
@@ -376,7 +377,7 @@ func (s *machineHelpService) buildAPI(code, command, requestedVersion string) (*
 	}
 
 	productDoc := buildMachineHelpProduct(resolved.Product, resolved.Versions, resolved.Selected)
-	return &machineHelpAPIDocument{
+	document := &machineHelpAPIDocument{
 		SchemaVersion: machineHelpSchemaVersion,
 		Kind:          "api",
 		Section:       helpSectionRequest,
@@ -408,7 +409,9 @@ func (s *machineHelpService) buildAPI(code, command, requestedVersion string) (*
 		Pagination:   nil,
 		Risk:         nil,
 		Recovery:     nil,
-	}, nil
+	}
+	document.ResponseQuery = projectCanonicalResponseQueryExample(api, productDoc.Code, command, resolved.Style, requestedVersion)
+	return document, nil
 }
 
 func (s *machineHelpService) buildAPIResponse(code, command, requestedVersion string) (*machineHelpAPIResponseDocument, error) {
@@ -457,7 +460,49 @@ func (s *machineHelpService) buildAPIResponse(code, command, requestedVersion st
 		output.Components = &machineHelpComponents{Schemas: response.Components}
 	}
 	document.OutputSchema = output
+	document.ResponseQuery = projectResponseQueryExample(
+		HelpResponseSchema{Schema: response.Schema, Components: response.Components},
+		productDoc.Code,
+		command,
+		resolved.Style,
+		requestedVersion,
+	)
 	return document, nil
+}
+
+func projectCanonicalResponseQueryExample(api *canonicalmeta.API, product, command, style, requestedVersion string) *machineHelpQueryExample {
+	if api == nil {
+		return nil
+	}
+	response, err := api.ResponseSchema()
+	if err != nil || !response.HasSchema() {
+		return nil
+	}
+	return projectResponseQueryExample(
+		HelpResponseSchema{Schema: response.Schema, Components: response.Components},
+		product,
+		command,
+		style,
+		requestedVersion,
+	)
+}
+
+func projectResponseQueryExample(schema HelpResponseSchema, product, command, style, requestedVersion string) *machineHelpQueryExample {
+	example, err := BuildResponseQueryExample(ResponseQueryContext{
+		Document:   schema,
+		Product:    product,
+		API:        command,
+		APIVersion: requestedVersion,
+		Style:      responseCommandStyle(style),
+	})
+	if err != nil || example == nil {
+		return nil
+	}
+	return &machineHelpQueryExample{
+		Path:          example.Path,
+		SchemaCommand: example.SchemaCommand,
+		QueryCommand:  example.QueryCommand,
+	}
 }
 
 func projectMachineHelpOperation(api *canonicalmeta.API) machineHelpOperation {
@@ -712,7 +757,6 @@ func localizedText(values map[string]string) machineHelpLocalizedText {
 }
 
 func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format string, opts helpOptions) error {
-	_ = opts // consumed by Section/Search/Listing projection during integration
 	target := append([]string{"aliyun"}, args...)
 	if format != "json" {
 		return newMachineHelpError(
@@ -735,6 +779,7 @@ func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format stri
 	}
 
 	service := newMachineHelpService(c.library.helpRepo)
+	aiMode := legacyAIModeEnabled(ctx)
 	var (
 		document any
 		err      error
@@ -760,6 +805,30 @@ func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format stri
 	}
 	if api, ok := document.(*machineHelpAPIDocument); ok {
 		api.GlobalParameters = projectGlobalParameters(ctx.Flags())
+	}
+	switch typed := document.(type) {
+	case *machineHelpRootDocument:
+		applyRootHelpOptions(typed, opts, aiMode)
+	case *machineHelpProductDocument:
+		applyProductHelpOptions(typed, opts, aiMode)
+	case *machineHelpAPIDocument:
+		applyRequestHelpOptions(typed, opts)
+	case *machineHelpAPIResponseDocument:
+		if applyErr := applyResponseHelpOptions(typed, opts); applyErr != nil {
+			return newMachineHelpUnavailableError(target, applyErr)
+		}
+		if opts.Search != "" {
+			typed.ResponseQuery = nil
+			if typed.OutputSchema != nil {
+				typed.ResponseQuery = projectResponseQueryExample(
+					helpResponseSchema(typed),
+					typed.Product.Code,
+					typed.Target.Path[len(typed.Target.Path)-1],
+					typed.Target.RequestedStyle,
+					requestedMachineHelpVersion(ctx),
+				)
+			}
+		}
 	}
 	if err := encodeMachineHelpJSON(ctx.Stdout(), document); err != nil {
 		return newMachineHelpUnavailableError(target, err)
