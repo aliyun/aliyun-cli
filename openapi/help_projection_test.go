@@ -1,6 +1,7 @@
 package openapi
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -9,7 +10,46 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestProjectOriginalRequestHelpTextPreservesLayoutWhileCappingAndSearching(t *testing.T) {
+	var source strings.Builder
+	source.WriteString("Description: original renderer\n\nParameters:\n")
+	for index := 1; index <= 23; index++ {
+		fmt.Fprintf(&source, "  --parameter-%02d              string, help %02d\n", index, index)
+		if index == 2 {
+			source.WriteString("                              continuation stays aligned\n")
+		}
+	}
+	source.WriteString("\nGlobal Parameters:\n  --region                      string, original global help\n\nExamples:\n  aliyun demo list-items\n")
+
+	t.Run("AI mode caps only API parameters", func(t *testing.T) {
+		projected, listing := projectOriginalRequestHelpText(source.String(), helpOptions{}, true)
+
+		require.NotNil(t, listing)
+		assert.Equal(t, 20, listing.Shown)
+		assert.Equal(t, 23, listing.Total)
+		assert.Contains(t, projected, "Description: original renderer")
+		assert.Contains(t, projected, "--parameter-20")
+		assert.NotContains(t, projected, "--parameter-21")
+		assert.Contains(t, projected, "--region                      string, original global help")
+		assert.Contains(t, projected, "Examples:\n  aliyun demo list-items")
+		assert.Contains(t, projected, "Showing 20 of 23 parameters.")
+	})
+
+	t.Run("search keeps original matching blocks and all globals", func(t *testing.T) {
+		projected, listing := projectOriginalRequestHelpText(source.String(), helpOptions{Search: "parameter-02"}, true)
+
+		assert.Nil(t, listing)
+		assert.Contains(t, projected, "--parameter-02")
+		assert.Contains(t, projected, "continuation stays aligned")
+		assert.NotContains(t, projected, "--parameter-01")
+		assert.NotContains(t, projected, "--parameter-03")
+		assert.Contains(t, projected, "--region                      string, original global help")
+		assert.NotContains(t, projected, "Showing ")
+	})
+}
 
 func TestValidateRecoverySearchUsesRealCanonicalHelpProvider(t *testing.T) {
 	c, ctx, _, _ := newCanonicalHelpTestContext(t)

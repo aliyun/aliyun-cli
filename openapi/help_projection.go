@@ -439,6 +439,111 @@ func renderCanonicalRequestText(w io.Writer, document *machineHelpAPIDocument) e
 	return renderRequestQueryExampleText(w, document.ResponseQuery)
 }
 
+// projectOriginalRequestHelpText keeps the established runtime/legacy Help
+// renderer intact and changes only the API parameter blocks. Global parameters,
+// examples, wrapping, labels, and every other section remain byte-for-byte as
+// rendered by the original provider.
+func projectOriginalRequestHelpText(text string, options helpOptions, aiMode bool) (string, *HelpListingMetadata) {
+	lines := strings.SplitAfter(text, "\n")
+	parametersLine := -1
+	globalParametersLine := -1
+	for index, line := range lines {
+		switch strings.TrimSpace(line) {
+		case "Parameters:", "参数:":
+			parametersLine = index
+		case "Global Parameters:", "全局参数:":
+			if parametersLine >= 0 {
+				globalParametersLine = index
+			}
+		}
+	}
+	if parametersLine < 0 || globalParametersLine <= parametersLine {
+		return text, nil
+	}
+
+	type parameterBlock struct {
+		text string
+	}
+	blocks := make([]parameterBlock, 0)
+	var current strings.Builder
+	flush := func() {
+		if current.Len() == 0 {
+			return
+		}
+		blocks = append(blocks, parameterBlock{text: current.String()})
+		current.Reset()
+	}
+	for _, line := range lines[parametersLine+1 : globalParametersLine] {
+		if strings.HasPrefix(line, "  --") {
+			flush()
+		}
+		if len(blocks) == 0 && current.Len() == 0 && strings.TrimSpace(line) == "" {
+			continue
+		}
+		current.WriteString(line)
+	}
+	flush()
+	if len(blocks) == 0 {
+		return text, nil
+	}
+
+	selected := blocks
+	if options.Search != "" {
+		query := newHelpSearchText(options.Search)
+		selected = make([]parameterBlock, 0, len(blocks))
+		for _, block := range blocks {
+			if helpTextContains(stripHelpANSI(block.text), query) {
+				selected = append(selected, block)
+			}
+		}
+
+	}
+
+	var listing *HelpListingMetadata
+	if aiMode && options.Search == "" && !options.All && len(selected) > helpListingLimit {
+		listing = &HelpListingMetadata{Shown: helpListingLimit, Total: len(selected), Hint: helpListingHint}
+		selected = selected[:helpListingLimit]
+	}
+	if options.Search == "" && listing == nil {
+		return text, nil
+	}
+
+	var projected strings.Builder
+	for _, line := range lines[:parametersLine+1] {
+		projected.WriteString(line)
+	}
+	if len(selected) == 0 {
+		fmt.Fprintf(&projected, noHelpSearchMatchesFormat+"\n", options.Search)
+	} else {
+		for _, block := range selected {
+			projected.WriteString(strings.TrimRight(block.text, "\n"))
+			projected.WriteByte('\n')
+		}
+	}
+	if listing != nil {
+		fmt.Fprintf(&projected, "\nShowing %d of %d parameters.\n%s\n", listing.Shown, listing.Total, listing.Hint)
+	}
+	projected.WriteByte('\n')
+	for _, line := range lines[globalParametersLine:] {
+		projected.WriteString(line)
+	}
+	return projected.String(), listing
+}
+
+func stripHelpANSI(value string) string {
+	for {
+		start := strings.Index(value, "\x1b[")
+		if start < 0 {
+			return value
+		}
+		end := strings.IndexByte(value[start:], 'm')
+		if end < 0 {
+			return value
+		}
+		value = value[:start] + value[start+end+1:]
+	}
+}
+
 func renderMachineHelpParameters(w io.Writer, parameters []machineHelpParameter) error {
 	for _, parameter := range parameters {
 		name := parameter.Name
