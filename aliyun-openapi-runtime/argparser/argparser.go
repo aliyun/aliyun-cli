@@ -99,7 +99,7 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 		}
 		name, inlineVal, hasInline, isFlag := splitLongFlag(tok)
 		if !isFlag {
-			return nil, fmt.Errorf("unexpected positional argument %q", tok)
+			return nil, &InvalidArgumentError{Err: fmt.Errorf("unexpected positional argument %q", tok)}
 		}
 		i++
 
@@ -110,7 +110,8 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 		if hasInline {
 			switch p.Type {
 			case meta.TypeArray, meta.TypeObject, meta.TypeMap:
-				return nil, fmt.Errorf("--%s does not support an inline value; use --%s <value>", name, name)
+				return nil, invalidArgument(p,
+					fmt.Errorf("--%s does not support an inline value; use --%s <value>", name, name))
 			}
 		}
 
@@ -129,11 +130,28 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 		}
 
 		if err := assign(res.Args, p, occ); err != nil {
-			return nil, err
+			return nil, invalidArgument(p, err)
 		}
 	}
 
 	return res, nil
+}
+
+func invalidArgument(parameter *meta.Parameter, err error) error {
+	if parameter == nil {
+		return &InvalidArgumentError{Err: err}
+	}
+	flag := ""
+	if len(parameter.Options) > 0 {
+		flag = parameter.Options[0]
+	}
+	return &InvalidArgumentError{
+		Parameter:    parameter.Name,
+		Flag:         flag,
+		FieldPath:    parameter.RawName,
+		ExpectedType: string(parameter.Type),
+		Err:          err,
+	}
 }
 
 // assign folds one flag occurrence's raw tokens into res under the parameter's WIRE key (RawName).

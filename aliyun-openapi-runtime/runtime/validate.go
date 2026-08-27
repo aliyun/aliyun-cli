@@ -39,6 +39,8 @@ func (e *MissingRequiredError) Error() string {
 	return "missing required parameter(s): " + strings.Join(e.Flags, ", ")
 }
 
+func (*MissingRequiredError) AIRecoveryEligible() {}
+
 // ValidateRequired checks that every required top-level parameter of api was supplied.
 // When rawBody is true, body and formData parameters are skipped because --body/--body-file replaces the entire request body.
 func ValidateRequired(api *meta.API, args map[string]any, rawBody bool) error {

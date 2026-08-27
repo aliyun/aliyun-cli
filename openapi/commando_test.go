@@ -41,6 +41,11 @@ import (
 )
 
 func TestCommandoAgentModeNormalizesOnlyInProcessErrors(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "")
+	t.Setenv("NO_COLOR", "")
+	cli.SetNoColorOverride(false)
+	t.Cleanup(func() { cli.SetNoColorOverride(false) })
+
 	sourceErr := errors.New("source")
 	normalizedErr := errors.New("normalized")
 	originalNormalizer := agentErrorNormalizer
@@ -99,6 +104,17 @@ func TestCommandoAgentModeNormalizesOnlyInProcessErrors(t *testing.T) {
 		ctx := newContext(t, true, false, false)
 		got := (&Commando{}).finishCommandRun(ctx, []string{"fc", "invoke"}, &externalPluginError{err: sourceErr})
 		assert.Equal(t, sourceErr, got)
+	})
+
+	t.Run("effective mode controls host colors without mutating NO_COLOR", func(t *testing.T) {
+		configuredOn := newContext(t, true, false, false)
+		_ = (&Commando{}).finishCommandRun(configuredOn, []string{"ecs", "describe-instances"}, sourceErr)
+		assert.Equal(t, "text", cli.Colorized(cli.Red, "text"))
+		assert.Empty(t, os.Getenv("NO_COLOR"))
+
+		configuredOff := newContext(t, false, false, false)
+		_ = (&Commando{}).finishCommandRun(configuredOff, []string{"ecs", "describe-instances"}, sourceErr)
+		assert.Equal(t, "\x1b[0;31mtext\x1b[0m", cli.Colorized(cli.Red, "text"))
 	})
 }
 
@@ -935,6 +951,11 @@ func TestCreateInvoker(t *testing.T) {
 	_, ok = invoker.(*ForceRpcInvoker)
 	assert.True(t, ok)
 	assert.Nil(t, err)
+
+	_, err = commando.createInvoker(ctx, "ecs", "DescribeRegions", "/unexpected")
+	var invalidArgument *InvalidArgumentError
+	assert.ErrorAs(t, err, &invalidArgument)
+	assert.Equal(t, "/unexpected", invalidArgument.FieldPath)
 
 }
 
@@ -4081,4 +4102,7 @@ func TestEstimateCostContextRequiresEstimateCost(t *testing.T) {
 	err := command.main(ctx, []string{"ecs", "RunInstances"})
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "--estimate-cost-context requires --estimate-cost")
+	var invalidOptions *InvalidOptionCombinationError
+	assert.ErrorAs(t, err, &invalidOptions)
+	assert.ElementsMatch(t, []string{"--estimate-cost-context", "--estimate-cost"}, invalidOptions.Options)
 }

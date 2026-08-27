@@ -34,3 +34,50 @@ type CredentialError struct {
 func (e *CredentialError) Error() string { return e.Err.Error() }
 
 func (e *CredentialError) Unwrap() error { return e.Err }
+
+// InvalidOptionCombinationError identifies conflicting local CLI options.
+type InvalidOptionCombinationError struct {
+	Options []string
+	Err     error
+}
+
+func (e *InvalidOptionCombinationError) Error() string {
+	return localErrorText(e.Err, "invalid option combination")
+}
+
+func (e *InvalidOptionCombinationError) Unwrap() error { return e.Err }
+
+func (*InvalidOptionCombinationError) AIRecoveryEligible() {}
+
+// InvalidHeaderError preserves the input and expected format without exposing
+// either field in recovery commands.
+type InvalidHeaderError struct {
+	Input          string
+	ExpectedFormat string
+	Err            error
+}
+
+func (e *InvalidHeaderError) Error() string { return localErrorText(e.Err, "invalid header") }
+
+func (e *InvalidHeaderError) Unwrap() error { return e.Err }
+
+func (*InvalidHeaderError) AIRecoveryEligible() {}
+
+// InvalidBodyFileError identifies a local body file read failure.
+type InvalidBodyFileError struct {
+	Path string
+	Err  error
+}
+
+func (e *InvalidBodyFileError) Error() string { return localErrorText(e.Err, "invalid body file") }
+
+func (e *InvalidBodyFileError) Unwrap() error { return e.Err }
+
+func (*InvalidBodyFileError) AIRecoveryEligible() {}
+
+func localErrorText(err error, fallback string) string {
+	if err == nil {
+		return fallback
+	}
+	return err.Error()
+}

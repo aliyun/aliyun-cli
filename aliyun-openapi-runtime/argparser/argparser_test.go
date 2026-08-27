@@ -1446,3 +1446,25 @@ func TestParseWithOptionsFlagPriority(t *testing.T) {
 		t.Fatal("external --biz-region-id leaked into API arguments")
 	}
 }
+
+func TestParsePreservesTypedAPIArgumentContext(t *testing.T) {
+	_, err := Parse(schema(), []string{"--count", "not-a-number"})
+	var invalid *InvalidArgumentError
+	if !errors.As(err, &invalid) {
+		t.Fatalf("Parse error %T does not preserve InvalidArgumentError: %v", err, err)
+	}
+	if invalid.Parameter != "count" || invalid.Flag != "--count" || invalid.FieldPath != "Count" || invalid.ExpectedType != "integer" {
+		t.Fatalf("InvalidArgumentError = %#v", invalid)
+	}
+	if got, want := err.Error(), `--count: invalid number "not-a-number"`; got != want {
+		t.Fatalf("Parse error = %q, want %q", got, want)
+	}
+}
+
+func TestParseDoesNotTypePostprocessingFlagErrorsAsAPIArguments(t *testing.T) {
+	_, err := Parse(schema(), []string{"--pager", "unknown=value"})
+	var invalid *InvalidArgumentError
+	if errors.As(err, &invalid) {
+		t.Fatalf("reserved postprocessing error was typed as API argument: %#v", invalid)
+	}
+}

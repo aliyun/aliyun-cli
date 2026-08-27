@@ -44,13 +44,14 @@ import (
 
 // main entrance of aliyun cli
 type Commando struct {
-	profile        config.Profile
-	library        *Library
-	pluginIndex    *plugin.Index
-	pluginIndexErr error // set when remote plugin index could not be loaded
-	localManifest  *plugin.LocalManifest
-	pluginLoaded   bool
-	localLoaded    bool
+	profile                 config.Profile
+	library                 *Library
+	pluginIndex             *plugin.Index
+	pluginIndexErr          error // set when remote plugin index could not be loaded
+	localManifest           *plugin.LocalManifest
+	pluginLoaded            bool
+	localLoaded             bool
+	recoverySearchValidator RecoverySearchValidator
 }
 
 var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
@@ -60,6 +61,8 @@ var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*respons
 var runtimeTryDispatch = runtimehost.TryDispatch
 
 var agentErrorNormalizer = normalizeAgentError
+
+var agentErrorNormalizerWithSearch = normalizeAgentErrorWithSearch
 
 type externalPluginError struct {
 	err error
@@ -79,6 +82,13 @@ func NewCommando(w io.Writer, profile config.Profile) *Commando {
 	}
 	r.library = NewLibrary(w, profile.Language) //TODO: load from local repository
 	return r
+}
+
+// SetRecoverySearchValidator injects the host Help search validator used to
+// prove that a proposed --cli-search recovery command has at least one match.
+// A nil validator always falls back to ordinary Help.
+func (c *Commando) SetRecoverySearchValidator(validate RecoverySearchValidator) {
+	c.recoverySearchValidator = validate
 }
 
 func (c *Commando) loadPlugins() {
@@ -126,13 +136,20 @@ func (c *Commando) InitWithCommand(cmd *cli.Command) {
 	cmd.Run = c.run
 	cmd.Help = c.help
 	cmd.AutoComplete = c.complete
+	cmd.BeforeExecute = func(ctx *cli.Context, args []string) {
+		c.applyEffectiveAIModeForArgs(ctx, args)
+	}
+	cmd.NormalizeError = c.finishCommandRun
 }
 
 func (c *Commando) run(ctx *cli.Context, args []string) error {
-	return c.finishCommandRun(ctx, args, c.main(ctx, args))
+	ctx.SetErrorNormalizationArgs(args)
+	c.applyEffectiveAIMode(ctx)
+	return c.main(ctx, args)
 }
 
 func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) error {
+	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
 	if err == nil {
 		return nil
 	}
@@ -142,15 +159,62 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 		return pluginErr.err
 	}
 
+	if !enabled {
+		return err
+	}
+	normalizationArgs := recoveryNormalizationArgs(ctx, args)
+	if c.recoverySearchValidator != nil {
+		return agentErrorNormalizerWithSearch(err, normalizationArgs, c.recoverySearchValidator)
+	}
+	return agentErrorNormalizer(err, normalizationArgs)
+}
+
+func (c *Commando) applyEffectiveAIMode(ctx *cli.Context) bool {
+	return c.applyEffectiveAIModeForArgs(ctx, nil)
+}
+
+func (c *Commando) applyEffectiveAIModeForArgs(ctx *cli.Context, args []string) bool {
 	cfg, loadErr := aimode.Load(config.GetConfigDir(ctx))
 	if loadErr != nil {
 		cfg = aimode.DefaultAiConfig()
 	}
 	forceOn, forceOff := CliAIOverrides(ctx.Flags())
-	if !aimode.EnabledForCommand(cfg, forceOn, forceOff) {
-		return err
+	for _, arg := range args {
+		switch arg {
+		case "--no-cli-ai-mode":
+			forceOff = true
+		case "--cli-ai-mode":
+			forceOn = true
+		}
 	}
-	return agentErrorNormalizer(err, args)
+	enabled := aimode.EnabledForCommand(cfg, forceOn, forceOff)
+	cli.SetNoColorOverride(enabled)
+	return enabled
+}
+
+func recoveryNormalizationArgs(ctx *cli.Context, args []string) []string {
+	result := make([]string, 0, len(args)+2)
+	for _, arg := range args {
+		if arg != "--cli-ai-mode" && arg != "--no-cli-ai-mode" {
+			result = append(result, arg)
+		}
+	}
+	if _, version := explicitVersion(result); version != "" || ctx == nil || ctx.Flags() == nil {
+		return result
+	}
+	versionFlag := VersionFlag(ctx.Flags())
+	if versionFlag == nil {
+		return result
+	}
+	version, assigned := versionFlag.GetValue()
+	if !assigned || strings.TrimSpace(version) == "" {
+		return result
+	}
+	flagName := "--version"
+	if len(args) > 1 && commandStyle(args[1]) == "kebab" {
+		flagName = "--api-version"
+	}
+	return append(result, flagName, version)
 }
 
 func DetectInConfigureMode(flags *cli.FlagSet) bool {
@@ -243,7 +307,10 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// forgotten --estimate-cost doesn't silently run the real API.
 	if EstimateCostContextFlag(ctx.Flags()).IsAssigned() && !EstimateCostFlag(ctx.Flags()).IsAssigned() {
 		return cli.NewErrorWithTip(
-			fmt.Errorf("--estimate-cost-context requires --estimate-cost"),
+			&InvalidOptionCombinationError{
+				Options: []string{"--estimate-cost-context", "--estimate-cost"},
+				Err:     fmt.Errorf("--estimate-cost-context requires --estimate-cost"),
+			},
 			"add --estimate-cost, e.g. aliyun ecs RunInstances ... --estimate-cost --estimate-cost-context EstimatedInternetTrafficOutGB=100")
 	}
 
@@ -340,7 +407,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 				if foundPluginName == "" {
 					if runtimehost.HasProduct(args[0]) {
-						return c.invalidBaselineCommandError(args[0], args[1])
+						return &InvalidBaselineCommandError{
+							Product: args[0],
+							Command: args[1],
+							Err:     c.invalidBaselineCommandError(args[0], args[1]),
+						}
 					}
 					c.loadPlugins()
 					if c.pluginIndex != nil {
@@ -925,7 +996,10 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			//
 			// Rpc call
 			if path != "" {
-				return nil, cli.NewErrorWithTip(fmt.Errorf("invalid argument %s", path),
+				return nil, cli.NewErrorWithTip(&InvalidArgumentError{
+					FieldPath: path,
+					Err:       fmt.Errorf("invalid argument %s", path),
+				},
 					"Use `aliyun help %s` see more information.", product.GetLowerCode())
 			}
 			if force {
@@ -1117,6 +1191,8 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 }
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {
+	ctx.SetErrorNormalizationArgs(args)
+	c.applyEffectiveAIMode(ctx)
 	// fmt.Println("commando help", args)
 	helpOpts, err := parseHelpOptions(ctx, args)
 	if err != nil {

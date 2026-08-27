@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -218,7 +219,7 @@ func TestExecute(t *testing.T) {
 	DisableExitCode()
 	defer EnableExitCode()
 	cmd.Execute(ctx, []string{})
-	assert.Equal(t, "\x1b[1;31mERROR: \"test\" is not a valid command\n\x1b[0m\x1b[1;33m\nUse `test --help` for more information.\n\x1b[0m", buf2.String())
+	assert.Equal(t, "\x1b[1;31mERROR: \"test\" is not a valid command\n\x1b[0m\x1b[1;33m\nUse `test --help` for more information.\n\x1b[0m\n"+AIModeEnableTextHint+"\n", buf2.String())
 }
 
 func TestProcessError(t *testing.T) {
@@ -257,20 +258,41 @@ func TestProcessAgentErrorWritesOneJSONLineToStderr(t *testing.T) {
 	stderr := new(bytes.Buffer)
 	ctx := NewCommandContext(stdout, stderr)
 	err := NewAgentError(AgentErrorEnvelope{
-		OK:          false,
-		Category:    UsageErrorCategory,
-		Code:        "UNKNOWN_FLAG",
-		Message:     "unknown flag --instnace-type",
-		Suggestions: []string{"--instance-type"},
-		Retryable:   false,
-		RequestID:   "",
-		Recovery:    AgentErrorRecovery{Command: "aliyun ecs describe-instances --help"},
+		Message:    "unknown flag --instnace-type",
+		DidYouMean: []string{"--instance-type"},
+		Recovery: AgentErrorRecovery{
+			Action:  "search_parameter",
+			Command: "aliyun help ecs describe-instances --cli-search instance-type",
+			Hint:    "Search request parameters related to instance-type.",
+		},
 	}, errors.New("unknown flag --instnace-type"))
 
 	cmd.processError(ctx, err)
 
 	assert.Empty(t, stdout.String())
-	assert.Equal(t, "{\"ok\":false,\"category\":\"USAGE_ERROR\",\"code\":\"UNKNOWN_FLAG\",\"message\":\"unknown flag --instnace-type\",\"suggestions\":[\"--instance-type\"],\"retryable\":false,\"requestId\":\"\",\"recovery\":{\"command\":\"aliyun ecs describe-instances --help\"}}\n", stderr.String())
+	assert.Equal(t, "{\"message\":\"unknown flag --instnace-type\",\"did_you_mean\":[\"--instance-type\"],\"recovery\":{\"action\":\"search_parameter\",\"command\":\"aliyun help ecs describe-instances --cli-search instance-type\",\"hint\":\"Search request parameters related to instance-type.\"}}\n", stderr.String())
+	assert.NotContains(t, stderr.String(), AIModeEnableTextHint)
+}
+
+type localAgentHintTestError struct{ message string }
+
+func (e localAgentHintTestError) Error() string { return e.message }
+
+func (localAgentHintTestError) AIRecoveryEligible() {}
+
+func TestProcessExplicitLocalErrorAppendsAIModeHintOnce(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	DisableExitCode()
+	defer EnableExitCode()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(stdout, stderr)
+	newAliyunCmd().processError(ctx, localAgentHintTestError{message: "local failure"})
+
+	assert.Empty(t, stdout.String())
+	assert.Equal(t, "ERROR: local failure\n\n"+AIModeEnableTextHint+"\n", stderr.String())
+	assert.Equal(t, 1, strings.Count(stderr.String(), "export ALIBABA_CLOUD_CLI_AI_MODE=1"))
 }
 
 func TestExecuteHelp(t *testing.T) {

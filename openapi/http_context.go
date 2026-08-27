@@ -259,7 +259,11 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 			if k, v, ok := cli.SplitStringWithPrefix(s, "="); ok {
 				a.openapiRequest.Headers[k] = tea.String(v)
 			} else {
-				return fmt.Errorf("invalid flag --header `%s` use `--header HeaderName=Value`", s)
+				return &InvalidHeaderError{
+					Input:          s,
+					ExpectedFormat: "HeaderName=Value",
+					Err:            fmt.Errorf("invalid flag --header `%s` use `--header HeaderName=Value`", s),
+				}
 			}
 		}
 	}
@@ -367,8 +371,11 @@ func (a *OpenapiContext) ProcessPutLogsBody(ctx *cli.Context) error {
 		body = []byte(v)
 	}
 
-	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok {
-		buf, _ := os.ReadFile(v)
+	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok && strings.TrimSpace(v) != "" {
+		buf, err := os.ReadFile(v)
+		if err != nil {
+			return &InvalidBodyFileError{Path: v, Err: fmt.Errorf("--body-file: %w", err)}
+		}
 		body = buf
 	}
 	if body == nil {
@@ -397,8 +404,11 @@ func (a *OpenapiContext) ProcessBody(ctx *cli.Context) error {
 		a.openapiRequest.SetBody([]byte(v))
 	}
 
-	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok {
-		buf, _ := os.ReadFile(v)
+	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok && strings.TrimSpace(v) != "" {
+		buf, err := os.ReadFile(v)
+		if err != nil {
+			return &InvalidBodyFileError{Path: v, Err: fmt.Errorf("--body-file: %w", err)}
+		}
 		a.openapiRequest.SetBody(buf)
 	}
 

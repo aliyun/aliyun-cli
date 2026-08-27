@@ -71,6 +71,10 @@ func TestBasicInvoker_Init(t *testing.T) {
 	err := invoker.Init(ctx, product)
 	assert.NotNil(t, err)
 	assert.Equal(t, "invalid flag --header `testfail` use `--header HeaderName=Value`", err.Error())
+	var invalidHeader *InvalidHeaderError
+	assert.ErrorAs(t, err, &invalidHeader)
+	assert.Equal(t, "testfail", invalidHeader.Input)
+	assert.Equal(t, "HeaderName=Value", invalidHeader.ExpectedFormat)
 
 	regionflag.SetAssigned(false)
 	endpointflag.SetAssigned(false)

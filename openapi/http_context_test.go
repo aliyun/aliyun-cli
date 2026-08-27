@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -625,6 +626,9 @@ func TestHttpContext(t *testing.T) {
 		ctx.Flags().Add(skipflag)
 		err := context.Init(ctx, product)
 		assert.Contains(t, err.Error(), "invalid flag --header `testfail`")
+		var invalidHeader *InvalidHeaderError
+		assert.ErrorAs(t, err, &invalidHeader)
+		assert.Equal(t, "testfail", invalidHeader.Input)
 	})
 
 	t.Run("InitWithEndpoint", func(t *testing.T) {
@@ -972,6 +976,13 @@ func TestProcessPutLogsBodyFile(t *testing.T) {
 
 	err := context.ProcessPutLogsBody(ctx)
 	assert.Nil(t, err)
+
+	missing := filepath.Join(t.TempDir(), "missing.json")
+	BodyFileFlag(ctx.Flags()).SetValue(missing)
+	err = context.ProcessPutLogsBody(ctx)
+	var invalidBodyFile *InvalidBodyFileError
+	assert.ErrorAs(t, err, &invalidBodyFile)
+	assert.Equal(t, missing, invalidBodyFile.Path)
 }
 
 func TestProcessRegularBodyFile(t *testing.T) {
@@ -992,6 +1003,13 @@ func TestProcessRegularBodyFile(t *testing.T) {
 
 	err := context.ProcessBody(ctx)
 	assert.Nil(t, err)
+
+	missing := filepath.Join(t.TempDir(), "missing.json")
+	BodyFileFlag(ctx.Flags()).SetValue(missing)
+	err = context.ProcessBody(ctx)
+	var invalidBodyFile *InvalidBodyFileError
+	assert.ErrorAs(t, err, &invalidBodyFile)
+	assert.Equal(t, missing, invalidBodyFile.Path)
 }
 
 func TestRequestProcessors(t *testing.T) {

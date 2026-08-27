@@ -38,210 +38,246 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func agentEnvelope(t *testing.T, err error, args ...string) cli.AgentErrorEnvelope {
+func requireAgentEnvelope(t *testing.T, err error, args []string, validator RecoverySearchValidator) cli.AgentErrorEnvelope {
 	t.Helper()
-	normalized := normalizeAgentError(err, args)
+	normalized := normalizeAgentErrorWithSearch(err, args, validator)
 	var agentErr *cli.AgentError
 	require.ErrorAs(t, normalized, &agentErr)
+	assert.ErrorIs(t, agentErr, err)
 	return agentErr.Envelope()
 }
 
-func TestNormalizeAgentErrorLocalUsageErrors(t *testing.T) {
-	t.Run("kebab unknown flag", func(t *testing.T) {
-		cause := &argparser.UnknownFlagError{
-			Flag:  "instnace-type",
-			Known: []string{"image-id", "instance-type"},
-		}
-		err := &engine.UsageError{Code: "UNKNOWN_FLAG", Err: fmt.Errorf("%w (help)", cause)}
+func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
+	t.Run("unknown product uses validated product search", func(t *testing.T) {
+		repo, err := meta.MockLoadRepository([]meta.Product{{Code: "Ecs"}})
+		require.NoError(t, err)
+		cause := &InvalidProductError{Code: "ecx", library: &Library{builtinRepo: repo}}
+		var request RecoverySearchRequest
+		envelope := requireAgentEnvelope(t, cause, []string{"ecx"}, func(got RecoverySearchRequest) bool {
+			request = got
+			return true
+		})
 
-		envelope := agentEnvelope(t, err, "ecs", "describe-instances")
-		assert.Equal(t, cli.UsageErrorCategory, envelope.Category)
-		assert.Equal(t, "UNKNOWN_FLAG", envelope.Code)
 		assert.Equal(t, cause.Error(), envelope.Message)
-		assert.Equal(t, []string{"--instance-type"}, envelope.Suggestions)
-		assert.Equal(t, "aliyun ecs describe-instances --help", envelope.Recovery.Command)
-		assert.False(t, envelope.Retryable)
+		assert.Equal(t, []string{"ecs"}, envelope.DidYouMean)
+		assert.Equal(t, "search_product", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help --cli-search ecs", envelope.Recovery.Command)
+		assert.Equal(t, "Search products related to ecs.", envelope.Recovery.Hint)
+		assert.Equal(t, RecoverySearchRequest{Keyword: "ecs"}, request)
 	})
 
-	t.Run("missing required parameters", func(t *testing.T) {
-		cause := &runtime.MissingRequiredError{Flags: []string{"--image-id", "--instance-type"}}
-		err := &engine.UsageError{Code: "MISSING_REQUIRED_PARAMETER", Err: cause}
-
-		envelope := agentEnvelope(t, err, "ecs", "run-instances")
-		assert.Equal(t, cli.UsageErrorCategory, envelope.Category)
-		assert.Equal(t, "MISSING_REQUIRED_PARAMETER", envelope.Code)
-		assert.Equal(t, cause.Error(), envelope.Message)
-		assert.Equal(t, []string{"--image-id", "--instance-type"}, envelope.Suggestions)
-		assert.Equal(t, "aliyun ecs run-instances --help", envelope.Recovery.Command)
-	})
-
-	t.Run("PascalCase invalid parameter", func(t *testing.T) {
-		err := &InvalidParameterError{
-			Name:              "InstnaceType",
-			ProductCode:       "ecs",
-			ApiName:           "RunInstances",
-			ParameterNames:    []string{"ImageId", "InstanceType"},
-			ParameterExamples: map[string]string{"InstanceType": "ecs.g6.large"},
-		}
-
-		envelope := agentEnvelope(t, err, "ecs", "RunInstances")
-		assert.Equal(t, cli.UsageErrorCategory, envelope.Category)
-		assert.Equal(t, "UNKNOWN_FLAG", envelope.Code)
-		assert.Equal(t, []string{"--InstanceType"}, envelope.Suggestions)
-		assert.NotContains(t, envelope.Suggestions[0], "example")
-		assert.Equal(t, "aliyun ecs RunInstances --help", envelope.Recovery.Command)
-	})
-
-	t.Run("PascalCase invalid API", func(t *testing.T) {
-		err := &InvalidApiError{
+	t.Run("unknown API derives a resource keyword from a real candidate", func(t *testing.T) {
+		cause := &InvalidApiError{
 			Name: "DescribeInstnaces",
 			product: &meta.Product{
-				Code:     "ecs",
-				ApiNames: []string{"DescribeImages", "DescribeInstances"},
+				Code: "ecs", ApiNames: []string{"DescribeImages", "DescribeInstances"},
 			},
 		}
+		var request RecoverySearchRequest
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "DescribeInstnaces"}, func(got RecoverySearchRequest) bool {
+			request = got
+			return true
+		})
 
-		envelope := agentEnvelope(t, err, "ecs", "DescribeInstnaces")
-		assert.Equal(t, cli.UsageErrorCategory, envelope.Category)
-		assert.Equal(t, "UNKNOWN_API", envelope.Code)
-		assert.Equal(t, []string{"DescribeInstances"}, envelope.Suggestions)
-		assert.Equal(t, "aliyun ecs --help", envelope.Recovery.Command)
+		assert.Equal(t, []string{"DescribeInstances", "describe-instances"}, envelope.DidYouMean)
+		assert.Equal(t, "search_api", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help ecs --cli-search Instances", envelope.Recovery.Command)
+		assert.Equal(t, "Search APIs related to Instances.", envelope.Recovery.Hint)
+		assert.Equal(t, RecoverySearchRequest{Product: "ecs", Style: "pascal", Keyword: "Instances"}, request)
+	})
+
+	t.Run("unknown CLI subcommand points at its current parent", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		parent := &cli.Command{Name: "configure"}
+		ctx.EnterCommand(parent)
+		cause := cli.NewInvalidCommandError("profiel", ctx)
+
+		envelope := requireAgentEnvelope(t, cause, []string{"configure", "profiel"}, nil)
+		assert.Equal(t, "search_command", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help configure", envelope.Recovery.Command)
+		assert.Equal(t, "Inspect commands under the current parent.", envelope.Recovery.Hint)
+	})
+
+	t.Run("unknown kebab flag searches a validated request parameter", func(t *testing.T) {
+		cause := &engine.UsageError{Code: "UNKNOWN_FLAG", Err: &argparser.UnknownFlagError{
+			Flag: "instnace-type", Known: []string{"image-id", "instance-type"},
+		}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "describe-instances"}, func(request RecoverySearchRequest) bool {
+			assert.Equal(t, RecoverySearchRequest{
+				Product: "ecs", API: "describe-instances", Section: "request", Style: "kebab", Keyword: "instance-type",
+			}, request)
+			return true
+		})
+
+		assert.Equal(t, []string{"--instance-type"}, envelope.DidYouMean)
+		assert.Equal(t, "search_parameter", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help ecs describe-instances --cli-section request --cli-search instance-type", envelope.Recovery.Command)
+		assert.Equal(t, "Search request parameters related to instance-type.", envelope.Recovery.Hint)
+	})
+
+	t.Run("missing required parameter uses complete request help", func(t *testing.T) {
+		cause := &engine.UsageError{Code: "MISSING_REQUIRED_PARAMETER", Err: &runtime.MissingRequiredError{
+			Flags: []string{"--image-id", "--instance-type"},
+		}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "run-instances"}, nil)
+
+		assert.Empty(t, envelope.DidYouMean)
+		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help ecs run-instances --cli-section request", envelope.Recovery.Command)
+		assert.Equal(t, "Inspect the complete request help and provide every required parameter.", envelope.Recovery.Hint)
+	})
+
+	t.Run("invalid argument preserves typed parameter context", func(t *testing.T) {
+		text := "--tags: invalid JSON: unexpected end of JSON input"
+		cause := &engine.UsageError{Code: "INVALID_ARGUMENT", Err: &argparser.InvalidArgumentError{
+			Parameter: "tags", Flag: "--tags", FieldPath: "Tags", ExpectedType: "array", Err: errors.New(text),
+		}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "run-instances"}, func(request RecoverySearchRequest) bool {
+			assert.Equal(t, "tags", request.Keyword)
+			return true
+		})
+
+		assert.Equal(t, text, envelope.Message)
+		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help ecs run-instances --cli-section request --cli-search tags", envelope.Recovery.Command)
+		assert.Equal(t, "Inspect request help for tags and correct its syntax or type.", envelope.Recovery.Hint)
+	})
+
+	t.Run("invalid option combination identifies options to remove", func(t *testing.T) {
+		text := "--cli-dry-run-json cannot be used with --pager"
+		cause := &engine.UsageError{Code: "INVALID_OPTION_COMBINATION", Err: &engine.InvalidOptionCombinationError{
+			Options: []string{"--cli-dry-run-json", "--pager"}, Err: errors.New(text),
+		}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "describe-instances"}, nil)
+
+		assert.Equal(t, text, envelope.Message)
+		assert.Equal(t, "fix_option_combination", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help ecs describe-instances --cli-section request", envelope.Recovery.Command)
+		assert.Equal(t, "Remove one of the conflicting options: --cli-dry-run-json, --pager.", envelope.Recovery.Hint)
+	})
+
+	t.Run("invalid header searches validated header usage without copying its value", func(t *testing.T) {
+		cause := &engine.UsageError{Code: "INVALID_HEADER", Err: &engine.InvalidHeaderError{
+			Input: "Authorization=secret-value=still-secret", ExpectedFormat: "Name=Value",
+			Err: errors.New(`invalid header format "broken", expected Name=Value`),
+		}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "describe-instances"}, func(request RecoverySearchRequest) bool {
+			assert.Equal(t, "header", request.Keyword)
+			return true
+		})
+
+		assert.Equal(t, "inspect_header_usage", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help ecs describe-instances --cli-section request --cli-search header", envelope.Recovery.Command)
+		assert.NotContains(t, envelope.Recovery.Command, "secret-value")
+		assert.Equal(t, "Inspect header usage and pass each header as Name=Value.", envelope.Recovery.Hint)
+	})
+
+	t.Run("unreadable body file searches validated body-file usage without copying the path", func(t *testing.T) {
+		cause := &engine.UsageError{Code: "INVALID_BODY_FILE", Err: &engine.InvalidBodyFileError{
+			Path: "/private/secret/request.json", Err: errors.New("--body-file: permission denied"),
+		}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "run-instances"}, func(request RecoverySearchRequest) bool {
+			assert.Equal(t, "body-file", request.Keyword)
+			return true
+		})
+
+		assert.Equal(t, "fix_body_file", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help ecs run-instances --cli-section request --cli-search body-file", envelope.Recovery.Command)
+		assert.NotContains(t, envelope.Recovery.Command, "/private/secret")
+		assert.Equal(t, "Check that --body-file points to a readable file.", envelope.Recovery.Hint)
 	})
 }
 
-func TestNormalizeAgentErrorConstraintViolations(t *testing.T) {
+func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T) {
+	t.Run("failed API search validation falls back to product help", func(t *testing.T) {
+		cause := &InvalidApiError{
+			Name:    "GetCouponLits",
+			product: &meta.Product{Code: "billing", ApiNames: []string{"GetCouponList"}},
+		}
+		envelope := requireAgentEnvelope(t, cause, []string{"billing", "GetCouponLits"}, func(RecoverySearchRequest) bool { return false })
+
+		assert.Equal(t, "aliyun help billing", envelope.Recovery.Command)
+		assert.Equal(t, "Search APIs related to CouponList.", envelope.Recovery.Hint)
+	})
+
+	t.Run("PascalCase recovery keeps style and explicit version", func(t *testing.T) {
+		cause := &InvalidParameterError{
+			Name: "InstnaceType", ProductCode: "ecs", ApiName: "RunInstances", ParameterNames: []string{"InstanceType"},
+		}
+		var request RecoverySearchRequest
+		envelope := requireAgentEnvelope(t, cause,
+			[]string{"ecs", "RunInstances", "--version", "2014-05-26"},
+			func(got RecoverySearchRequest) bool { request = got; return true })
+
+		assert.Equal(t, "aliyun help ecs RunInstances --version 2014-05-26 --cli-section request --cli-search InstanceType", envelope.Recovery.Command)
+		assert.Equal(t, "pascal", request.Style)
+		assert.Equal(t, "2014-05-26", request.Version)
+	})
+
+	t.Run("kebab recovery keeps style and explicit API version", func(t *testing.T) {
+		cause := &engine.UsageError{Code: "UNKNOWN_FLAG", Err: &argparser.UnknownFlagError{
+			Flag: "instnace-type", Known: []string{"instance-type"},
+		}}
+		var request RecoverySearchRequest
+		envelope := requireAgentEnvelope(t, cause,
+			[]string{"ecs", "run-instances", "--api-version", "2014-05-26"},
+			func(got RecoverySearchRequest) bool { request = got; return true })
+
+		assert.Equal(t, "aliyun help ecs run-instances --api-version 2014-05-26 --cli-section request --cli-search instance-type", envelope.Recovery.Command)
+		assert.Equal(t, "kebab", request.Style)
+		assert.Equal(t, "2014-05-26", request.Version)
+	})
+}
+
+func TestNormalizeAgentErrorStrictlyBypassesExcludedErrors(t *testing.T) {
+	serverBody := `{"RequestId":"req-1","Code":"Throttling.User","Message":"slow down"}`
 	tests := []struct {
 		name string
 		err  error
 	}{
-		{
-			name: "runtime kebab constraint",
-			err: &runtime.ConstraintViolationError{
-				Parameter: "mode", Flag: "--mode", Path: "Mode",
-				Constraint: "enum", Actual: "readonly",
-				Allowed: []string{"ReadOnly", "ReadWrite"},
-			},
-		},
-		{
-			name: "legacy PascalCase constraint",
-			err: &ConstraintViolationError{
-				Flag: "Mode", Value: "readonly", Constraint: "enum",
-				Allowed: []string{"ReadOnly", "ReadWrite"},
-			},
-		},
+		{name: "runtime canonical constraint", err: &runtime.ConstraintViolationError{Parameter: "mode", Constraint: "enum"}},
+		{name: "legacy canonical constraint", err: &ConstraintViolationError{Flag: "Mode", Constraint: "enum"}},
+		{name: "runtime credential", err: &engine.CredentialError{Err: errors.New("profile not configured")}},
+		{name: "host credential", err: &credentialConfigurationError{Err: errors.New("profile not configured")}},
+		{name: "old SDK server", err: sdkerrors.NewServerError(429, serverBody, "")},
+		{name: "Tea SDK server", err: tea.NewSDKError(map[string]interface{}{"statusCode": 503, "code": "ServiceUnavailable"})},
+		{name: "network", err: &net.DNSError{Err: "temporary failure", Name: "ecs.aliyuncs.com", IsTemporary: true}},
+		{name: "external plugin", err: &externalPluginError{err: errors.New("plugin process failed")}},
+		{name: "postprocessing", err: errors.New("invalid --cli-query expression")},
+		{name: "untyped usage wrapper", err: &engine.UsageError{Code: "INVALID_ARGUMENT", Err: errors.New("opaque parser failure")}},
+		{name: "untyped internal", err: errors.New("AccessDenied Throttling InvalidAccessKeyId")},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			envelope := agentEnvelope(t, tt.err, "ecs", "RunInstances")
-			assert.Equal(t, cli.UsageErrorCategory, envelope.Category)
-			assert.Equal(t, "INVALID_PARAMETER_VALUE", envelope.Code)
-			assert.Equal(t, []string{"ReadOnly", "ReadWrite"}, envelope.Suggestions)
-			assert.Equal(t, "aliyun ecs RunInstances --help", envelope.Recovery.Command)
-			assert.False(t, envelope.Retryable)
+			got := normalizeAgentErrorWithSearch(tt.err, []string{"ecs", "describe-instances"}, func(RecoverySearchRequest) bool { return true })
+			assert.Same(t, tt.err, got)
+			var agentErr *cli.AgentError
+			assert.False(t, errors.As(got, &agentErr))
 		})
 	}
 }
 
-func TestNormalizeAgentErrorCredentialFailure(t *testing.T) {
-	cause := errors.New("profile is not configured")
+func TestExplicitLocalTypesAreEligibleForNonAIHint(t *testing.T) {
 	tests := []error{
-		&engine.CredentialError{Err: cause},
-		&credentialConfigurationError{Err: cause},
+		&InvalidProductError{Code: "ecx"},
+		&InvalidApiError{Name: "DescribeInstnaces", product: &meta.Product{Code: "ecs"}},
+		&InvalidParameterError{Name: "InstnaceType", ProductCode: "ecs", ApiName: "RunInstances"},
+		&argparser.UnknownFlagError{Flag: "instnace-type"},
+		&runtime.MissingRequiredError{Flags: []string{"--region-id"}},
+		&argparser.InvalidArgumentError{Err: errors.New("invalid argument")},
+		&engine.InvalidOptionCombinationError{Err: errors.New("conflict")},
+		&engine.InvalidHeaderError{Err: errors.New("bad header")},
+		&engine.InvalidBodyFileError{Err: errors.New("unreadable")},
 	}
-
 	for _, err := range tests {
-		envelope := agentEnvelope(t, err, "ecs", "DescribeInstances")
-		assert.Equal(t, cli.AuthenticationErrorCategory, envelope.Category)
-		assert.Equal(t, "CREDENTIAL_NOT_CONFIGURED", envelope.Code)
-		assert.Equal(t, "aliyun configure", envelope.Recovery.Command)
-		assert.False(t, envelope.Retryable)
+		assert.Truef(t, cli.IsAIRecoveryEligible(err), "%T", err)
 	}
+	assert.False(t, cli.IsAIRecoveryEligible(&runtime.ConstraintViolationError{Constraint: "enum"}))
+	assert.False(t, cli.IsAIRecoveryEligible(&engine.CredentialError{Err: errors.New("credential")}))
 }
 
-func TestNormalizeAgentErrorOldSDKFailures(t *testing.T) {
-	tests := []struct {
-		name      string
-		status    int
-		code      string
-		category  cli.AgentErrorCategory
-		retryable bool
-	}{
-		{name: "authentication", status: 401, code: "InvalidAccessKeyId.NotFound", category: cli.AuthenticationErrorCategory},
-		{name: "permission", status: 403, code: "Forbidden.RAM", category: cli.PermissionErrorCategory},
-		{name: "throttling", status: 429, code: "Throttling.User", category: cli.ThrottlingErrorCategory, retryable: true},
-		{name: "service", status: 500, code: "InternalError", category: cli.ServiceErrorCategory, retryable: true},
-		{name: "authentication code on 400", status: 400, code: "InvalidSecurityToken.Expired", category: cli.AuthenticationErrorCategory},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			body := fmt.Sprintf(`{"RequestId":"old-%d","Code":%q,"Message":"structured message"}`, tt.status, tt.code)
-			err := sdkerrors.NewServerError(tt.status, body, "")
-			envelope := agentEnvelope(t, fmt.Errorf("call failed: %w", err), "ecs", "DescribeInstances")
-
-			assert.Equal(t, tt.category, envelope.Category)
-			assert.Equal(t, tt.code, envelope.Code)
-			assert.Equal(t, fmt.Sprintf("old-%d", tt.status), envelope.RequestID)
-			assert.Equal(t, "structured message", envelope.Message)
-			assert.Equal(t, tt.retryable, envelope.Retryable)
-			assert.Empty(t, envelope.Suggestions)
-		})
-	}
-}
-
-func TestNormalizeAgentErrorTeaSDKFailures(t *testing.T) {
-	tests := []struct {
-		name      string
-		status    int
-		code      string
-		category  cli.AgentErrorCategory
-		retryable bool
-	}{
-		{name: "authentication", status: 401, code: "Unauthorized", category: cli.AuthenticationErrorCategory},
-		{name: "permission", status: 403, code: "AccessDenied", category: cli.PermissionErrorCategory},
-		{name: "throttling", status: 429, code: "Throttling.Api", category: cli.ThrottlingErrorCategory, retryable: true},
-		{name: "service", status: 503, code: "ServiceUnavailable", category: cli.ServiceErrorCategory, retryable: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tea.NewSDKError(map[string]interface{}{
-				"statusCode": tt.status,
-				"code":       tt.code,
-				"message":    "structured tea message",
-				"data":       map[string]interface{}{"requestId": fmt.Sprintf("tea-%d", tt.status)},
-			})
-			envelope := agentEnvelope(t, fmt.Errorf("runtime: %w", err), "ecs", "describe-instances")
-
-			assert.Equal(t, tt.category, envelope.Category)
-			assert.Equal(t, tt.code, envelope.Code)
-			assert.Equal(t, fmt.Sprintf("tea-%d", tt.status), envelope.RequestID)
-			assert.Equal(t, "structured tea message", envelope.Message)
-			assert.Equal(t, tt.retryable, envelope.Retryable)
-		})
-	}
-}
-
-func TestNormalizeAgentErrorNetworkAndUnknownFallback(t *testing.T) {
-	t.Run("temporary DNS failure", func(t *testing.T) {
-		err := &net.DNSError{Err: "temporary failure", Name: "ecs.aliyuncs.com", IsTemporary: true}
-		envelope := agentEnvelope(t, err, "ecs", "DescribeInstances")
-		assert.Equal(t, cli.NetworkErrorCategory, envelope.Category)
-		assert.Equal(t, "NETWORK_FAILURE", envelope.Code)
-		assert.True(t, envelope.Retryable)
-	})
-
-	t.Run("unknown text is never guessed", func(t *testing.T) {
-		err := errors.New("AccessDenied Throttling InvalidAccessKeyId")
-		envelope := agentEnvelope(t, err, "ecs", "DescribeInstances")
-		assert.Equal(t, cli.InternalErrorCategory, envelope.Category)
-		assert.Equal(t, "INTERNAL_ERROR", envelope.Code)
-		assert.Equal(t, err.Error(), envelope.Message)
-		assert.False(t, envelope.Retryable)
-	})
-}
-
-func TestAgentErrorEnvelopeEndToEndForBothCommandStyles(t *testing.T) {
+func TestAgentErrorEnvelopeEndToEndIsOneCleanJSONDocument(t *testing.T) {
 	testHome := t.TempDir()
 	cleanupHome := setTestHomeDir(t, testHome)
 	defer cleanupHome()
@@ -249,88 +285,46 @@ func TestAgentErrorEnvelopeEndToEndForBothCommandStyles(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(testHome, ".aliyun", "plugins"), 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(testHome, ".aliyun", "plugins", "manifest.json"), []byte(`{"plugins":{}}`), 0644))
 	require.NoError(t, aimode.Save(filepath.Join(testHome, ".aliyun"), &aimode.AiConfig{Enabled: false}))
+	t.Setenv(aimode.EnvAIMode, "")
+
+	originalDispatch := runtimeTryDispatch
+	runtimeTryDispatch = func(_ *cli.Context, _ []string) (bool, error) {
+		unknown := &argparser.UnknownFlagError{Flag: "instnace-type", Known: []string{"image-id", "instance-type"}}
+		return true, &engine.UsageError{Code: "UNKNOWN_FLAG", Err: unknown}
+	}
+	defer func() { runtimeTryDispatch = originalDispatch }()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	cmd := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
+	config.AddFlags(cmd.Flags())
+	AddFlags(cmd.Flags())
+	commando := NewCommando(stdout, config.Profile{Language: "en"})
+	commando.InitWithCommand(cmd)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
 
 	cli.DisableExitCode()
 	defer cli.EnableExitCode()
+	originalArgs := os.Args
+	os.Args = []string{"aliyun", "ecs", "describe-instances", "--instnace-type", "ecs.g6.large", "--cli-ai-mode"}
+	defer func() { os.Args = originalArgs }()
+	cmd.Execute(ctx, os.Args[1:])
 
-	assertEnvelopeShape := func(t *testing.T, stderr string) map[string]interface{} {
-		t.Helper()
-		assert.Equal(t, 1, strings.Count(stderr, "\n"), "agent error must be one JSON line")
-		var decoded map[string]interface{}
-		require.NoError(t, json.Unmarshal([]byte(stderr), &decoded))
-		assert.ElementsMatch(t,
-			[]string{"ok", "category", "code", "message", "suggestions", "retryable", "requestId", "recovery"},
-			mapKeys(decoded))
-		return decoded
-	}
-
-	t.Run("kebab-case runtime", func(t *testing.T) {
-		originalDispatch := runtimeTryDispatch
-		runtimeTryDispatch = func(_ *cli.Context, _ []string) (bool, error) {
-			unknown := &argparser.UnknownFlagError{Flag: "instnace-type", Known: []string{"image-id", "instance-type"}}
-			return true, &engine.UsageError{Code: "UNKNOWN_FLAG", Err: unknown}
-		}
-		defer func() { runtimeTryDispatch = originalDispatch }()
-
-		stdout := new(bytes.Buffer)
-		stderr := new(bytes.Buffer)
-		cmd := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
-		config.AddFlags(cmd.Flags())
-		AddFlags(cmd.Flags())
-		commando := NewCommando(stdout, config.Profile{Language: "en"})
-		commando.InitWithCommand(cmd)
-		ctx := cli.NewCommandContext(stdout, stderr)
-		ctx.EnterCommand(cmd)
-
-		originalArgs := os.Args
-		os.Args = []string{"aliyun", "ecs", "describe-instances", "--instnace-type", "ecs.g6.large", "--cli-ai-mode"}
-		defer func() { os.Args = originalArgs }()
-		cmd.Execute(ctx, os.Args[1:])
-
-		assert.Empty(t, stdout.String())
-		decoded := assertEnvelopeShape(t, stderr.String())
-		assert.Equal(t, "USAGE_ERROR", decoded["category"])
-		assert.Equal(t, "UNKNOWN_FLAG", decoded["code"])
-		assert.Equal(t, []interface{}{"--instance-type"}, decoded["suggestions"])
-	})
-
-	t.Run("PascalCase legacy view", func(t *testing.T) {
-		product := meta.Product{
-			Code: "Ecs", Version: "2014-05-26", ApiStyle: "rpc", ApiNames: []string{"RunInstances"},
-		}
-		builtinRepo, err := meta.MockLoadRepository([]meta.Product{product})
-		require.NoError(t, err)
-		canonicalRepo := newFakeCanonicalRepo()
-		canonicalRepo.AddAPI("ecs", "2014-05-26", canonicalTestAPI(&testLegacyAPI{
-			Name: "RunInstances", Protocol: "HTTPS", Method: "POST",
-			Parameters: []testLegacyParameter{{Name: "InstanceType", Position: "Query", Type: "String"}},
-		}))
-
-		stdout := new(bytes.Buffer)
-		stderr := new(bytes.Buffer)
-		cmd := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
-		config.AddFlags(cmd.Flags())
-		AddFlags(cmd.Flags())
-		commando := NewCommando(stdout, config.Profile{Language: "en"})
-		commando.library = &Library{builtinRepo: builtinRepo, canonicalRepo: canonicalRepo}
-		commando.InitWithCommand(cmd)
-		ctx := cli.NewCommandContext(stdout, stderr)
-		ctx.EnterCommand(cmd)
-
-		originalArgs := os.Args
-		os.Args = []string{"aliyun", "ecs", "RunInstances", "--InstnaceType", "ecs.g6.large", "--endpoint", "ecs.aliyuncs.com", "--cli-ai-mode"}
-		defer func() { os.Args = originalArgs }()
-		cmd.Execute(ctx, os.Args[1:])
-
-		assert.Empty(t, stdout.String())
-		decoded := assertEnvelopeShape(t, stderr.String())
-		assert.Equal(t, "USAGE_ERROR", decoded["category"])
-		assert.Equal(t, "UNKNOWN_FLAG", decoded["code"])
-		assert.Equal(t, []interface{}{"--InstanceType"}, decoded["suggestions"])
-	})
+	assert.Empty(t, stdout.String())
+	assert.Equal(t, 1, strings.Count(stderr.String(), "\n"))
+	assert.NotContains(t, stderr.String(), "\x1b[")
+	assert.NotContains(t, stderr.String(), cli.AIModeEnableTextHint)
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal(stderr.Bytes(), &decoded))
+	assert.ElementsMatch(t, []string{"message", "did_you_mean", "recovery"}, mapKeys(decoded))
+	assert.Equal(t, []interface{}{"--instance-type"}, decoded["did_you_mean"])
+	recovery := decoded["recovery"].(map[string]interface{})
+	assert.Equal(t, "search_parameter", recovery["action"])
+	assert.Equal(t, "aliyun help ecs describe-instances --cli-section request", recovery["command"])
 }
 
-func TestAgentErrorEnvelopeForcedOffKeepsHumanOutput(t *testing.T) {
+func TestNonAIExplicitLocalErrorKeepsTextAndAppendsHintOnce(t *testing.T) {
 	testHome := t.TempDir()
 	cleanupHome := setTestHomeDir(t, testHome)
 	defer cleanupHome()
@@ -338,6 +332,8 @@ func TestAgentErrorEnvelopeForcedOffKeepsHumanOutput(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(testHome, ".aliyun", "plugins"), 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(testHome, ".aliyun", "plugins", "manifest.json"), []byte(`{"plugins":{}}`), 0644))
 	require.NoError(t, aimode.Save(filepath.Join(testHome, ".aliyun"), &aimode.AiConfig{Enabled: true}))
+	t.Setenv(aimode.EnvAIMode, "")
+	t.Setenv("NO_COLOR", "1")
 
 	originalDispatch := runtimeTryDispatch
 	runtimeTryDispatch = func(_ *cli.Context, _ []string) (bool, error) {
@@ -366,6 +362,79 @@ func TestAgentErrorEnvelopeForcedOffKeepsHumanOutput(t *testing.T) {
 	assert.Empty(t, stdout.String())
 	assert.Contains(t, stderr.String(), "ERROR: unknown flag --instnace-type")
 	assert.False(t, strings.HasPrefix(strings.TrimSpace(stderr.String()), "{"))
+	assert.Equal(t, 1, strings.Count(stderr.String(), cli.AIModeEnableCommand))
+	assert.True(t, strings.HasSuffix(stderr.String(), cli.AIModeEnableTextHint+"\n"))
+}
+
+func TestBuiltInSubcommandErrorUsesRootAIModeAdapter(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, " TRUE ")
+	t.Setenv("NO_COLOR", "")
+	cli.SetNoColorOverride(false)
+	t.Cleanup(func() { cli.SetNoColorOverride(false) })
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	root := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
+	config.AddFlags(root.Flags())
+	AddFlags(root.Flags())
+	commando := NewCommando(stdout, config.Profile{Language: "en"})
+	commando.InitWithCommand(root)
+
+	configure := &cli.Command{
+		Name: "configure",
+		Run: func(ctx *cli.Context, args []string) error {
+			return cli.NewInvalidCommandError(args[0], ctx)
+		},
+	}
+	configure.AddSubCommand(&cli.Command{Name: "profile"})
+	root.AddSubCommand(configure)
+
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	cli.DisableExitCode()
+	t.Cleanup(cli.EnableExitCode)
+	root.Execute(ctx, []string{"configure", "profiel"})
+
+	assert.Empty(t, stdout.String())
+	assert.NotContains(t, stderr.String(), "\x1b[")
+	assert.NotContains(t, stderr.String(), cli.AIModeEnableTextHint)
+	var envelope cli.AgentErrorEnvelope
+	require.NoError(t, json.Unmarshal(stderr.Bytes(), &envelope))
+	assert.Equal(t, []string{"profile"}, envelope.DidYouMean)
+	assert.Equal(t, "search_command", envelope.Recovery.Action)
+	assert.Equal(t, "aliyun help configure", envelope.Recovery.Command)
+}
+
+func TestBuiltInSubcommandErrorKeepsNonAIText(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "false")
+	t.Setenv("NO_COLOR", "1")
+	cli.SetNoColorOverride(false)
+	t.Cleanup(func() { cli.SetNoColorOverride(false) })
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	root := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
+	config.AddFlags(root.Flags())
+	AddFlags(root.Flags())
+	commando := NewCommando(stdout, config.Profile{Language: "en"})
+	commando.InitWithCommand(root)
+	configure := &cli.Command{
+		Name: "configure",
+		Run: func(ctx *cli.Context, args []string) error {
+			return cli.NewInvalidCommandError(args[0], ctx)
+		},
+	}
+	root.AddSubCommand(configure)
+
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	cli.DisableExitCode()
+	t.Cleanup(cli.EnableExitCode)
+	root.Execute(ctx, []string{"configure", "profiel"})
+
+	assert.Contains(t, stderr.String(), `ERROR: "profiel" is not a valid command`)
+	assert.False(t, strings.HasPrefix(strings.TrimSpace(stderr.String()), "{"))
+	assert.Equal(t, 1, strings.Count(stderr.String(), cli.AIModeEnableCommand))
 }
 
 func mapKeys(values map[string]interface{}) []string {
@@ -374,4 +443,18 @@ func mapKeys(values map[string]interface{}) []string {
 		keys = append(keys, key)
 	}
 	return keys
+}
+
+func TestTypedLocalErrorsPreserveHumanText(t *testing.T) {
+	cause := errors.New("original human message")
+	tests := []error{
+		&argparser.InvalidArgumentError{Flag: "--count", ExpectedType: "integer", Err: cause},
+		&engine.InvalidOptionCombinationError{Options: []string{"--secure", "--insecure"}, Err: cause},
+		&engine.InvalidHeaderError{Input: "broken", ExpectedFormat: "Name=Value", Err: cause},
+		&engine.InvalidBodyFileError{Path: "/tmp/body.json", Err: cause},
+	}
+	for _, err := range tests {
+		assert.Equal(t, cause.Error(), err.Error(), fmt.Sprintf("%T", err))
+		assert.ErrorIs(t, err, cause)
+	}
 }

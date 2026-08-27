@@ -76,7 +76,12 @@ func (e *InvalidCommandError) Error() string {
 	return fmt.Sprintf("%q is not a valid command", e.Name)
 }
 
+func (*InvalidCommandError) AIRecoveryEligible() {}
+
 func (e *InvalidCommandError) GetSuggestions() []string {
+	if e == nil || e.ctx == nil || e.ctx.command == nil {
+		return nil
+	}
 	cmd := e.ctx.command
 	return cmd.GetSuggestions(e.Name)
 }
@@ -118,6 +123,14 @@ func (e *InvalidFlagError) Error() string {
 		return fmt.Sprintf("invalid flag %s; available flags: %s", display, strings.Join(available, ", "))
 	}
 	return fmt.Sprintf("invalid flag %s", display)
+}
+
+func (*InvalidFlagError) AIRecoveryEligible() {}
+
+// AgentSuggestions returns the same close flag matches used by Error without
+// exposing Context internals to the OpenAPI recovery adapter.
+func (e *InvalidFlagError) AgentSuggestions() []string {
+	return e.closeSuggestions()
 }
 
 func (e *InvalidFlagError) closeSuggestions() []string {

@@ -15,6 +15,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -22,18 +23,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAgentErrorPreservesStableEnvelope(t *testing.T) {
+func TestAgentErrorPreservesCompactLocalEnvelope(t *testing.T) {
 	cause := errors.New("unknown flag --instnace-type")
 	suggestions := []string{"--instance-type"}
 	envelope := AgentErrorEnvelope{
-		OK:          false,
-		Category:    UsageErrorCategory,
-		Code:        "UNKNOWN_FLAG",
-		Message:     cause.Error(),
-		Suggestions: suggestions,
-		Retryable:   false,
-		RequestID:   "",
-		Recovery:    AgentErrorRecovery{Command: "aliyun ecs describe-instances --help"},
+		Message:    cause.Error(),
+		DidYouMean: suggestions,
+		Recovery: AgentErrorRecovery{
+			Action:  "search_parameter",
+			Command: "aliyun help ecs describe-instances --cli-search instance-type",
+			Hint:    "Search request parameters related to instance-type.",
+		},
 	}
 
 	err := NewAgentError(envelope, cause)
@@ -41,39 +41,49 @@ func TestAgentErrorPreservesStableEnvelope(t *testing.T) {
 
 	assert.Equal(t, cause.Error(), err.Error())
 	assert.ErrorIs(t, err, cause)
-	assert.Equal(t, []string{"--instance-type"}, err.Envelope().Suggestions)
+	assert.Equal(t, []string{"--instance-type"}, err.Envelope().DidYouMean)
 	assert.Equal(t, 2, err.ExitCode())
+
+	encoded, marshalErr := json.Marshal(err.Envelope())
+	require.NoError(t, marshalErr)
+	assert.JSONEq(t, `{
+		"message":"unknown flag --instnace-type",
+		"did_you_mean":["--instance-type"],
+		"recovery":{
+			"action":"search_parameter",
+			"command":"aliyun help ecs describe-instances --cli-search instance-type",
+			"hint":"Search request parameters related to instance-type."
+		}
+	}`, string(encoded))
+	for _, removed := range []string{"ok", "category", "code", "details", "suggestions", "requestId", "retryable"} {
+		assert.NotContains(t, string(encoded), `"`+removed+`"`)
+	}
 }
 
-func TestAgentErrorNormalizesNilSuggestions(t *testing.T) {
+func TestAgentErrorOmitsEmptyOptionalFields(t *testing.T) {
 	err := NewAgentError(AgentErrorEnvelope{
-		Category: InternalErrorCategory,
-		Code:     "INTERNAL_ERROR",
-		Message:  "opaque",
-	}, errors.New("opaque"))
+		Message: "missing required parameter(s): --region-id",
+		Recovery: AgentErrorRecovery{
+			Action: "inspect_request_help",
+			Hint:   "Inspect the complete request help.",
+		},
+	}, errors.New("missing required parameter(s): --region-id"))
 
-	require.NotNil(t, err.Envelope().Suggestions)
-	assert.Empty(t, err.Envelope().Suggestions)
+	encoded, marshalErr := json.Marshal(err.Envelope())
+	require.NoError(t, marshalErr)
+	assert.JSONEq(t, `{
+		"message":"missing required parameter(s): --region-id",
+		"recovery":{
+			"action":"inspect_request_help",
+			"hint":"Inspect the complete request help."
+		}
+	}`, string(encoded))
+	assert.NotContains(t, string(encoded), "did_you_mean")
+	assert.NotContains(t, string(encoded), "command")
 }
 
-func TestAgentErrorExitCodes(t *testing.T) {
-	tests := []struct {
-		category AgentErrorCategory
-		want     int
-	}{
-		{InternalErrorCategory, 1},
-		{UsageErrorCategory, 2},
-		{AuthenticationErrorCategory, 3},
-		{PermissionErrorCategory, 4},
-		{ThrottlingErrorCategory, 5},
-		{NetworkErrorCategory, 6},
-		{ServiceErrorCategory, 7},
-	}
-
-	for _, tt := range tests {
-		t.Run(string(tt.category), func(t *testing.T) {
-			err := NewAgentError(AgentErrorEnvelope{Category: tt.category}, errors.New("test"))
-			assert.Equal(t, tt.want, err.ExitCode())
-		})
-	}
+func TestAIModeEnableHintsShareStableContent(t *testing.T) {
+	assert.Equal(t, "export ALIBABA_CLOUD_CLI_AI_MODE=1", NewAIModeHint().Command)
+	assert.Equal(t, "Enable AI Mode for compact Help, structured JSON errors, and actionable recovery guidance.", NewAIModeHint().Message)
+	assert.Equal(t, "For AI agents, run:\n  export ALIBABA_CLOUD_CLI_AI_MODE=1\n\nThis enables compact Help, structured JSON errors, and actionable recovery guidance.", AIModeEnableTextHint)
 }

@@ -127,3 +127,12 @@ func TestInvalidFlagError_NilContext(t *testing.T) {
 	assert.Nil(t, e.closeSuggestions())
 	assert.Nil(t, e.availableFlags())
 }
+
+func TestExplicitCLIUsageErrorsAreAIRecoveryEligible(t *testing.T) {
+	ctx := NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.EnterCommand(&Command{Name: "aliyun"})
+
+	assert.True(t, IsAIRecoveryEligible(NewInvalidCommandError("confgure", ctx)))
+	assert.True(t, IsAIRecoveryEligible(NewInvalidFlagError("regoin", ctx)))
+	assert.False(t, IsAIRecoveryEligible(errors.New("untyped internal failure")))
+}
