@@ -91,6 +91,15 @@ type machineHelpCommandSummary struct {
 	Description machineHelpLocalizedText `json:"description"`
 }
 
+type machineHelpFlagSummary struct {
+	Name        string                   `json:"name"`
+	Aliases     []string                 `json:"aliases"`
+	Shorthand   string                   `json:"shorthand"`
+	Category    string                   `json:"category"`
+	Visibility  string                   `json:"visibility"`
+	Description machineHelpLocalizedText `json:"description"`
+}
+
 type machineHelpProductSummary struct {
 	Code          string                   `json:"code"`
 	Name          machineHelpLocalizedText `json:"name"`
@@ -99,13 +108,30 @@ type machineHelpProductSummary struct {
 	Distribution  string                   `json:"distribution,omitempty"`
 }
 
+type machineHelpRootMatch struct {
+	Kind        string                   `json:"kind"`
+	Name        string                   `json:"name"`
+	Aliases     []string                 `json:"aliases"`
+	Command     string                   `json:"command"`
+	Description machineHelpLocalizedText `json:"description"`
+}
+
 type machineHelpRootDocument struct {
 	SchemaVersion string                      `json:"schemaVersion"`
 	Kind          string                      `json:"kind"`
 	Target        machineHelpTarget           `json:"target"`
+	Name          string                      `json:"name"`
+	Version       string                      `json:"version"`
+	Description   machineHelpLocalizedText    `json:"description"`
+	QuickStart    []string                    `json:"quickStart"`
 	Query         string                      `json:"query"`
-	Commands      []machineHelpCommandSummary `json:"commands"`
+	Commands      []machineHelpCommandSummary `json:"-"`
+	CoreCommands  []machineHelpCommandSummary `json:"coreCommands"`
+	Utilities     []machineHelpCommandSummary `json:"utilities"`
+	Extensions    []machineHelpCommandSummary `json:"extensions"`
+	GlobalFlags   []machineHelpFlagSummary    `json:"globalFlags"`
 	Products      []machineHelpProductSummary `json:"products"`
+	Matches       []machineHelpRootMatch      `json:"matches"`
 	Result        HelpResult                  `json:"result"`
 	Next          *HelpNext                   `json:"next"`
 	Listing       *machineHelpListing         `json:"listing"`
@@ -862,7 +888,7 @@ func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format stri
 			"INVALID_FORMAT",
 			fmt.Sprintf("unsupported help format %q", format),
 			target,
-			[]string{"use --help=json or help --format json"},
+			[]string{"use --cli-output json with a Help operation"},
 		)
 	}
 	if len(args) > 2 {
@@ -961,6 +987,9 @@ func newMachineHelpUnavailableError(target []string, cause error) *machineHelpEr
 }
 
 func encodeMachineHelpJSON(w io.Writer, value any) error {
+	if root, ok := value.(*machineHelpRootDocument); ok {
+		root.prepareJSONGroups()
+	}
 	data, err := json.Marshal(value)
 	if err != nil {
 		return err
@@ -977,6 +1006,28 @@ func encodeMachineHelpJSON(w io.Writer, value any) error {
 	encoder.SetEscapeHTML(false)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(document)
+}
+
+func (document *machineHelpRootDocument) prepareJSONGroups() {
+	if document == nil {
+		return
+	}
+	document.CoreCommands = nil
+	document.Utilities = nil
+	document.Extensions = nil
+	if document.Query != "" {
+		return
+	}
+	for _, command := range document.Commands {
+		switch command.Group {
+		case string(RootGroupUtils):
+			document.Utilities = append(document.Utilities, command)
+		case string(RootGroupExtension):
+			document.Extensions = append(document.Extensions, command)
+		default:
+			document.CoreCommands = append(document.CoreCommands, command)
+		}
+	}
 }
 
 // pruneMachineHelpEmpty removes values that carry no machine-readable

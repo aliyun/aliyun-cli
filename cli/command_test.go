@@ -341,7 +341,7 @@ func TestProcessAgentErrorWritesOneJSONLineToStderr(t *testing.T) {
 		DidYouMean: []string{"--instance-type"},
 		Recovery: AgentErrorRecovery{
 			Action:  "search_parameter",
-			Command: "aliyun help ecs describe-instances --cli-search instance-type",
+			Command: "aliyun ecs describe-instances --help-search instance-type",
 			Hint:    "Search request parameters related to instance-type.",
 		},
 	}, errors.New("unknown flag --instnace-type"))
@@ -349,7 +349,7 @@ func TestProcessAgentErrorWritesOneJSONLineToStderr(t *testing.T) {
 	cmd.processError(ctx, err)
 
 	assert.Empty(t, stdout.String())
-	assert.Equal(t, "{\"message\":\"unknown flag --instnace-type\",\"did_you_mean\":[\"--instance-type\"],\"recovery\":{\"action\":\"search_parameter\",\"command\":\"aliyun help ecs describe-instances --cli-search instance-type\",\"hint\":\"Search request parameters related to instance-type.\"}}\n", stderr.String())
+	assert.Equal(t, "{\"message\":\"unknown flag --instnace-type\",\"did_you_mean\":[\"--instance-type\"],\"recovery\":{\"action\":\"search_parameter\",\"command\":\"aliyun ecs describe-instances --help-search instance-type\",\"hint\":\"Search request parameters related to instance-type.\"}}\n", stderr.String())
 	assert.NotContains(t, stderr.String(), AIModeEnableTextHint)
 }
 

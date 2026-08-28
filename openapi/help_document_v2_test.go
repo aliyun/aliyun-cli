@@ -49,14 +49,15 @@ func TestProductDefaultAllAndSearchProjectionSemantics(t *testing.T) {
 
 	defaultDocument := newDocument()
 	applyProductHelpOptions(defaultDocument, helpOptions{}, true)
-	assert.Len(t, defaultDocument.APIs, 92)
+	wantShown := defaultHelpLogicalLineBudget - productDefaultHelpReservedLines
+	assert.Len(t, defaultDocument.APIs, wantShown)
 	assert.Equal(t, "DescribeItem000", defaultDocument.APIs[0].DisplayName)
 	assert.Empty(t, defaultDocument.APIs[0].Title.EN)
 	assert.Empty(t, defaultDocument.APIs[0].Description.EN)
-	assert.Equal(t, HelpResult{Shown: 92, Total: 105, Truncated: true}, defaultDocument.Result)
+	assert.Equal(t, HelpResult{Shown: wantShown, Total: 105, Truncated: true}, defaultDocument.Result)
 	var defaultText bytes.Buffer
 	require.NoError(t, renderCanonicalProductText(&defaultText, defaultDocument, ""))
-	assert.Contains(t, defaultText.String(), "...\nShowing 92 of 105 APIs.")
+	assert.Contains(t, defaultText.String(), fmt.Sprintf("...\nShowing %d of 105 APIs.", wantShown))
 
 	allDocument := newDocument()
 	applyProductHelpOptions(allDocument, helpOptions{All: true}, true)

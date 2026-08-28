@@ -307,6 +307,8 @@ func (e *InvalidOptionCombinationError) Unwrap() error { return e.Err }
 
 func (*InvalidOptionCombinationError) AIRecoveryEligible() {}
 
+func (*InvalidOptionCombinationError) GetSuggestions() []string { return nil }
+
 type InvalidHeaderError struct {
 	Input          string
 	ExpectedFormat string

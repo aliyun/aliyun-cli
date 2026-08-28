@@ -277,6 +277,9 @@ func BuildHelpCommand(target HelpTarget) (string, error) {
 }
 
 func shellQuoteHelpArg(value string) string {
+	if value == "<keyword>" {
+		return value
+	}
 	if value != "" && strings.IndexFunc(value, func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("-._/:@", r)
 	}) == -1 {

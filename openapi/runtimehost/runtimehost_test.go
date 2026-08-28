@@ -134,6 +134,44 @@ func TestDispatchPropagatesEffectiveAIMode(t *testing.T) {
 	}
 }
 
+func TestDispatchPluginHelpPreservesRawArgsAndDisablesHostAIMode(t *testing.T) {
+	originalDispatch := engineDispatch
+	t.Cleanup(func() { engineDispatch = originalDispatch })
+
+	var captured engine.Request
+	engineDispatch = func(request engine.Request) error {
+		captured = request
+		return nil
+	}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	language := config.NewLanguageFlag()
+	ctx.Flags().Add(language)
+	language.SetAssigned(true)
+	language.SetValue("zh")
+	ctx.SetAgentName("codex")
+
+	args := []string{"demo", "CreateReport", "--help-search", "Report ID", "--cli-output", "json"}
+	want := append([]string(nil), args...)
+	if err := DispatchPluginHelp(ctx, args); err != nil {
+		t.Fatal(err)
+	}
+	args[1] = "mutated"
+
+	if !reflect.DeepEqual(captured.Args, want) {
+		t.Fatalf("plugin Help args = %#v, want %#v", captured.Args, want)
+	}
+	if captured.AIMode {
+		t.Fatal("installed metadata plugin Help inherited host AI mode")
+	}
+	if captured.Host != nil {
+		t.Fatal("installed metadata plugin Help inherited host execution context")
+	}
+	if captured.Lang != "zh" {
+		t.Fatalf("plugin Help language = %q, want zh", captured.Lang)
+	}
+}
+
 func TestProfileHostTransportOptions(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_OTEL_TRACEPARENT", "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01")
 	t.Setenv("ALIBABA_CLOUD_OTEL_BAGGAGE", "tenant=test")

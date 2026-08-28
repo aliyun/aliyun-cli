@@ -82,6 +82,11 @@ func (e *HelpOptionError) Error() string {
 	}
 }
 
+// Help option failures are local CLI usage errors. Implementing the existing
+// suggestion contract gives them the standard usage-error exit code without
+// adding decorative suggestions.
+func (*HelpOptionError) GetSuggestions() []string { return nil }
+
 // ParseHelpOptions recognizes only the stable public Help surface. Other argv
 // tokens are intentionally preserved for the normal command parser/provider
 // router. The caller still owns target parsing and plugin delegation.

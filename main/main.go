@@ -100,7 +100,6 @@ func Main(args []string) {
 	if os.Getenv("GENERATE_METADATA") == "YES" {
 		generateMetadata(rootCmd)
 	} else {
-		args = openapi.NormalizeMachineHelpArgs(args)
 		rootCmd.Execute(ctx, args)
 	}
 }
@@ -190,6 +189,7 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(upgrade.NewUpgradeCommand())
 	// mock command
 	rootCmd.AddSubCommand(mock.NewMockCommand(config.GetConfigPath))
+	commando.SetRootHelpSpecs(rootCommandHelpSpecs, rootFlagHelpSpecs)
 
 	plugin.RegisterReservedTopLevelCommands(rootCmd.SubCommandNames())
 

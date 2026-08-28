@@ -131,8 +131,9 @@ func TestCommandoRejectsCanonicalHelpOptionsOutsideHelp(t *testing.T) {
 	ctx := cli.NewCommandContext(stdout, stderr)
 	AddFlags(ctx.Flags())
 	assignHelpFlag(t, CliHelpSectionFlag(ctx.Flags()), "response")
+	ctx.SetInvocationArgs([]string{"ecs", "DescribeInstances", "--cli-section", "response"})
 
 	err := c.main(ctx, []string{"ecs", "DescribeInstances"})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "can only be used with `aliyun help ...` or --help")
+	assert.Contains(t, err.Error(), "--cli-section is only valid with `aliyun help <product> <API>`")
 }

@@ -13,8 +13,8 @@ import (
 const noHelpSearchMatchesFormat = "No Help entries matched --help-search %q."
 
 const (
-	rootDefaultHelpReservedLines    = 8
-	productDefaultHelpReservedLines = 8
+	rootDefaultHelpReservedLines    = 25
+	productDefaultHelpReservedLines = 15
 )
 
 func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions, aiMode bool) {
@@ -30,11 +30,22 @@ func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions
 	type rootProjectionEntry struct {
 		kind    string
 		command machineHelpCommandSummary
+		flag    machineHelpFlagSummary
 		product machineHelpProductSummary
 	}
-	entries := make([]rootProjectionEntry, 0, len(document.Commands)+len(document.Products))
+	allFlags := append([]machineHelpFlagSummary(nil), document.GlobalFlags...)
+	visibleFlags := make([]machineHelpFlagSummary, 0, len(allFlags))
+	for _, flag := range allFlags {
+		if options.All || options.Search != "" || flag.Visibility == string(RootVisibilityDefault) {
+			visibleFlags = append(visibleFlags, flag)
+		}
+	}
+	entries := make([]rootProjectionEntry, 0, len(document.Commands)+len(visibleFlags)+len(document.Products))
 	for _, command := range document.Commands {
 		entries = append(entries, rootProjectionEntry{kind: "command", command: command})
+	}
+	for _, flag := range visibleFlags {
+		entries = append(entries, rootProjectionEntry{kind: "flag", flag: flag})
 	}
 	for _, product := range document.Products {
 		entries = append(entries, rootProjectionEntry{kind: "product", product: product})
@@ -55,11 +66,27 @@ func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions
 				})
 				continue
 			}
+			if entry.kind == "flag" {
+				aliases := append([]string(nil), entry.flag.Aliases...)
+				if entry.flag.Shorthand != "" {
+					aliases = append(aliases, entry.flag.Shorthand)
+				}
+				candidates = append(candidates, HelpSearchCandidate{
+					Kind:          "global-flag",
+					Name:          entry.flag.Name,
+					Aliases:       aliases,
+					DescriptionEN: entry.flag.Description.EN,
+					DescriptionZH: entry.flag.Description.ZH,
+					Value:         entry,
+				})
+				continue
+			}
 			product := entry.product
+			productAliases := nonEmptyMachineHelpStrings(product.Name.EN, product.Name.ZH)
 			candidates = append(candidates, HelpSearchCandidate{
 				Kind:          "product",
 				Name:          product.Code,
-				Aliases:       []string{product.Name.EN, product.Name.ZH},
+				Aliases:       productAliases,
 				DescriptionEN: product.Name.EN,
 				DescriptionZH: product.Name.ZH,
 				Value:         entry,
@@ -67,7 +94,9 @@ func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions
 		}
 		projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.Search))
 		document.Commands = nil
+		document.GlobalFlags = nil
 		document.Products = nil
+		document.Matches = nil
 		for _, match := range projection.Matches {
 			entry, ok := match.Candidate.Value.(rootProjectionEntry)
 			if !ok {
@@ -75,8 +104,28 @@ func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions
 			}
 			if entry.kind == "command" {
 				document.Commands = append(document.Commands, entry.command)
+				document.Matches = append(document.Matches, machineHelpRootMatch{
+					Kind: "command", Name: entry.command.Name, Aliases: entry.command.Aliases,
+					Command: strings.Join(entry.command.Path, " ") + " --help", Description: entry.command.Description,
+				})
+			} else if entry.kind == "flag" {
+				document.GlobalFlags = append(document.GlobalFlags, entry.flag)
+				aliases := append([]string(nil), entry.flag.Aliases...)
+				if entry.flag.Shorthand != "" {
+					aliases = append(aliases, entry.flag.Shorthand)
+				}
+				document.Matches = append(document.Matches, machineHelpRootMatch{
+					Kind: "global-flag", Name: entry.flag.Name,
+					Aliases: aliases,
+					Command: "aliyun --help-search " + strings.TrimLeft(entry.flag.Name, "-"), Description: entry.flag.Description,
+				})
 			} else {
 				document.Products = append(document.Products, entry.product)
+				document.Matches = append(document.Matches, machineHelpRootMatch{
+					Kind: "product", Name: entry.product.Code,
+					Aliases: nonEmptyMachineHelpStrings(entry.product.Name.EN, entry.product.Name.ZH),
+					Command: "aliyun " + entry.product.Code + " --help", Description: entry.product.Name,
+				})
 			}
 		}
 		document.Result = projection.Result
@@ -93,10 +142,14 @@ func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions
 		ReservedLines: rootDefaultHelpReservedLines,
 	})
 	document.Commands = nil
+	document.GlobalFlags = nil
 	document.Products = nil
+	document.Matches = nil
 	for _, entry := range projection.Items {
 		if entry.kind == "command" {
 			document.Commands = append(document.Commands, entry.command)
+		} else if entry.kind == "flag" {
+			document.GlobalFlags = append(document.GlobalFlags, entry.flag)
 		} else {
 			document.Products = append(document.Products, entry.product)
 		}
@@ -104,6 +157,16 @@ func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions
 	document.Result = projection.Result
 	document.Next = projection.Next
 	document.Listing = nil
+}
+
+func nonEmptyMachineHelpStrings(values ...string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 func applyProductHelpOptions(document *machineHelpProductDocument, options helpOptions, aiMode bool) {
@@ -173,10 +236,13 @@ func applyActionHelpOptions(document *machineHelpAPIDocument, options helpOption
 	}
 	if options.Search != "" {
 		applyRequestHelpOptions(document, options, aiMode)
+		retainActiveMachineHelpExample(document)
 		return
 	}
 	parameters := activeMachineHelpParameters(document)
 	if options.All {
+		retainActiveMachineHelpParameterSet(document)
+		retainActiveMachineHelpExample(document)
 		document.Result = HelpResult{
 			Shown: len(parameters) + len(document.GlobalParameters),
 			Total: len(parameters) + len(document.GlobalParameters),
@@ -199,9 +265,12 @@ func applyActionHelpOptions(document *machineHelpAPIDocument, options helpOption
 	})
 	if document.ActiveParameterSet == "kebab" {
 		document.ParameterSets.Kebab = projection.Items
+		document.ParameterSets.Camel = nil
 	} else {
 		document.ParameterSets.Camel = projection.Items
+		document.ParameterSets.Kebab = nil
 	}
+	retainActiveMachineHelpExample(document)
 	document.GlobalParameters = nil
 	document.Result = projection.Result
 	document.Next = projection.Next
@@ -275,6 +344,28 @@ func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptio
 	}
 	document.GlobalParameters = globals
 	document.Result = projection.Result
+}
+
+func retainActiveMachineHelpParameterSet(document *machineHelpAPIDocument) {
+	if document == nil {
+		return
+	}
+	if document.ActiveParameterSet == "kebab" {
+		document.ParameterSets.Camel = nil
+		return
+	}
+	document.ParameterSets.Kebab = nil
+}
+
+func retainActiveMachineHelpExample(document *machineHelpAPIDocument) {
+	if document == nil {
+		return
+	}
+	if document.ActiveParameterSet == "kebab" {
+		document.Examples.Camel = ""
+		return
+	}
+	document.Examples.Kebab = ""
 }
 
 func applyResponseHelpOptions(document *machineHelpAPIResponseDocument, options helpOptions) error {
@@ -447,12 +538,12 @@ func (c *Commando) validateRecoverySearch(ctx *cli.Context, request RecoverySear
 		if ctx == nil || ctx.Command() == nil {
 			return false
 		}
-		document, err := service.buildRoot(ctx.Command())
+		document, err := c.buildRootHelpDocument(ctx.Command())
 		if err != nil {
 			return false
 		}
 		applyRootHelpOptions(document, options, false)
-		return len(document.Products) > 0
+		return len(document.Commands) > 0 || len(document.GlobalFlags) > 0 || len(document.Products) > 0
 
 	case request.API == "":
 		product, err := service.findProduct(request.Product)
@@ -468,7 +559,7 @@ func (c *Commando) validateRecoverySearch(ctx *cli.Context, request RecoverySear
 		if err != nil {
 			return false
 		}
-		document, err := service.buildProduct(request.Product, selected)
+		document, err := service.buildProductForStyle(request.Product, selected, style)
 		if err != nil {
 			return false
 		}
@@ -502,30 +593,99 @@ func renderCanonicalRootText(w io.Writer, document *machineHelpRootDocument, sea
 	if document == nil {
 		return fmt.Errorf("root Help document is nil")
 	}
-	if len(document.Products) == 0 && search != "" {
+	version := firstNonEmptyMachineHelpString(document.Version, cli.Version)
+	if _, err := fmt.Fprintf(w, "Alibaba Cloud Command Line Interface Version %s\n", version); err != nil {
+		return err
+	}
+	if search == "" && len(document.QuickStart) > 0 {
+		if _, err := fmt.Fprintln(w, "\nQuick Start:"); err != nil {
+			return err
+		}
+		for _, command := range document.QuickStart {
+			if _, err := fmt.Fprintf(w, "  %s\n", command); err != nil {
+				return err
+			}
+		}
+	}
+	if len(document.Commands) == 0 && len(document.GlobalFlags) == 0 && len(document.Products) == 0 && len(document.Matches) == 0 && search != "" {
 		_, err := fmt.Fprintf(w, noHelpSearchMatchesFormat+"\n", search)
 		return err
 	}
+	if search != "" && len(document.Matches) > 0 {
+		if _, err := fmt.Fprintln(w, "Matches:"); err != nil {
+			return err
+		}
+		for _, match := range document.Matches {
+			if _, err := fmt.Fprintf(w, "  %-14s %-20s %s\n", match.Kind, match.Name, localizedMachineHelpText(match.Description)); err != nil {
+				return err
+			}
+			if match.Command != "" {
+				if _, err := fmt.Fprintf(w, "    %s\n", match.Command); err != nil {
+					return err
+				}
+			}
+		}
+		return renderHelpProjectionResult(w, "matches", document.Result, document.Next)
+	}
 	if len(document.Commands) > 0 {
-		groups := []struct {
-			name  string
-			label string
-		}{{"core", "Core Commands"}, {"utils", "Utilities"}, {"extension", "Extensions"}}
-		for _, group := range groups {
+		renderGroup := func(name, label string) error {
 			entries := make([]machineHelpCommandSummary, 0)
 			for _, command := range document.Commands {
 				commandGroup := command.Group
 				if commandGroup == "" {
 					commandGroup = "core"
 				}
-				if commandGroup == group.name {
+				if commandGroup == name {
 					entries = append(entries, command)
 				}
 			}
 			if len(entries) == 0 {
-				continue
+				return nil
 			}
-			if _, err := fmt.Fprintf(w, "\n%s:\n", group.label); err != nil {
+			if _, err := fmt.Fprintf(w, "\n%s:\n", label); err != nil {
+				return err
+			}
+			for _, command := range entries {
+				name := command.Name
+				if len(command.Path) > 1 {
+					name = strings.Join(command.Path[1:], " ")
+				}
+				if _, err := fmt.Fprintf(w, "  %-20s %s\n", name, localizedMachineHelpText(command.Description)); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		if err := renderGroup("core", "Core Commands"); err != nil {
+			return err
+		}
+		if err := renderGroup("utils", "Utilities"); err != nil {
+			return err
+		}
+	}
+	if len(document.GlobalFlags) > 0 {
+		if _, err := fmt.Fprintln(w, "\nGlobal Flags:"); err != nil {
+			return err
+		}
+		for _, flag := range document.GlobalFlags {
+			name := flag.Name
+			if flag.Shorthand != "" {
+				name += ", " + flag.Shorthand
+			}
+			if _, err := fmt.Fprintf(w, "  %-20s %s\n", name, localizedMachineHelpText(flag.Description)); err != nil {
+				return err
+			}
+		}
+	}
+	if len(document.Commands) > 0 {
+		entries := make([]machineHelpCommandSummary, 0)
+		for _, command := range document.Commands {
+			if command.Group == "extension" {
+				entries = append(entries, command)
+			}
+		}
+		if len(entries) > 0 {
+			if _, err := fmt.Fprintln(w, "\nExtensions:"); err != nil {
 				return err
 			}
 			for _, command := range entries {
@@ -539,19 +699,21 @@ func renderCanonicalRootText(w io.Writer, document *machineHelpRootDocument, sea
 			}
 		}
 	}
-	if _, err := fmt.Fprintln(w, "\nProducts:"); err != nil {
-		return err
-	}
-	for _, product := range document.Products {
-		name := localizedMachineHelpText(product.Name)
-		if _, err := fmt.Fprintf(w, "  %-20s %s\n", product.Code, name); err != nil {
+	if len(document.Products) > 0 || search == "" {
+		if _, err := fmt.Fprintln(w, "\nProducts:"); err != nil {
 			return err
+		}
+		for _, product := range document.Products {
+			name := localizedMachineHelpText(product.Name)
+			if _, err := fmt.Fprintf(w, "  %-20s %s\n", product.Code, name); err != nil {
+				return err
+			}
 		}
 	}
 	if err := renderTextListing(w, "products", document.Listing); err != nil {
 		return err
 	}
-	return renderHelpProjectionResult(w, "products", document.Result, document.Next)
+	return renderHelpProjectionResult(w, "entries", document.Result, document.Next)
 }
 
 func renderCanonicalProductText(w io.Writer, document *machineHelpProductDocument, search string) error {

@@ -46,6 +46,20 @@ func TestMachineHelpRoot(t *testing.T) {
 	assert.True(t, doc.Products[0].CanonicalHelp)
 }
 
+func TestMachineHelpRootJSONUsesExplicitGroups(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildRoot(testMachineHelpRootCommand())
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&output, doc))
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
+	assert.NotContains(t, raw, "commands")
+	assert.Contains(t, raw, "coreCommands")
+	assert.Contains(t, raw, "products")
+}
+
 func TestMachineHelpProduct(t *testing.T) {
 	service := testMachineHelpService(t)
 	doc, err := service.buildProduct("demo", "")
@@ -368,7 +382,7 @@ func TestCommandoHelpJSONUsesCanonicalMetadataWithoutLoadingPlugins(t *testing.T
 	assert.Equal(t, machineHelpSchemaVersion, doc.SchemaVersion)
 	assert.Equal(t, "api", doc.Kind)
 	assert.Equal(t, "CreateReport", doc.API.Name)
-	assert.NotEmpty(t, doc.GlobalParameters)
+	assert.Empty(t, doc.GlobalParameters, "default Action Help does not repeat Root global flags")
 }
 
 func TestCommandoHelpJSONResponseSection(t *testing.T) {
