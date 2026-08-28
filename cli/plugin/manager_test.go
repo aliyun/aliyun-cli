@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -1050,6 +1051,7 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 		errContains  string
 		wantURL      string
 		preferGo     bool
+		goOnly       bool
 	}{
 		{
 			name: "Falls back to exact platform when any is absent",
@@ -1158,6 +1160,51 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 			preferGo:   true,
 		},
 		{
+			name: "Go-only skips any and uses exact platform",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							currentPlatform: {
+								URL:      "http://example.com/plugin-platform.tar.gz",
+								Checksum: "platform123",
+							},
+							PluginPlatformAny: {
+								URL:      "http://example.com/plugin-any.zip",
+								Checksum: "any123",
+							},
+						},
+					},
+				},
+			},
+			version:    "1.0.0",
+			pluginName: "test-plugin",
+			wantURL:    "http://example.com/plugin-platform.tar.gz",
+			goOnly:     true,
+		},
+		{
+			name: "Go-only does not fall back to any",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							PluginPlatformAny: {
+								URL:      "http://example.com/plugin-any.zip",
+								Checksum: "any123",
+							},
+						},
+					},
+				},
+			},
+			version:     "1.0.0",
+			pluginName:  "test-plugin",
+			wantErr:     true,
+			errContains: "not supported on",
+			goOnly:      true,
+		},
+		{
 			name: "Version not found",
 			targetPlugin: &PluginInfo{
 				Name: "test-plugin",
@@ -1202,6 +1249,7 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mgr.preferGo = tt.preferGo
+			mgr.goOnly = tt.goOnly
 			ctx := newTestContext()
 			platInfo, err := mgr.validateVersionAndPlatform(ctx, tt.targetPlugin, tt.version, tt.pluginName)
 
@@ -3331,6 +3379,351 @@ func TestManager_InstallAll(t *testing.T) {
 		// Verify plugin1 was not installed (install failed)
 		_, exists = localManifest.Plugins["plugin1"]
 		assert.False(t, exists)
+	})
+}
+
+func canonicalProductsFS(productsJSON string) fstest.MapFS {
+	return fstest.MapFS{
+		"metadatas/products.json": &fstest.MapFile{Data: []byte(productsJSON)},
+	}
+}
+
+func TestListCustomProductCodes(t *testing.T) {
+	t.Run("filters custom (distribution contains go) products and sorts case-insensitively", func(t *testing.T) {
+		fsys := canonicalProductsFS(`{
+			"products": [
+				{"code": "Sls", "distribution": "go"},
+				{"code": "ecs", "distribution": "meta"},
+				{"code": "pds", "distribution": "GO"},
+				{"code": "fc"},
+				{"code": "ros", "distribution": "openapi|go"},
+				{"code": "cs", "distribution": "openapi"},
+				{"code": "vpc", "distribution": " go | openapi "}
+			]
+		}`)
+		codes, err := listCustomProductCodes(fsys)
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"pds", "ros", "Sls", "vpc"}, codes)
+	})
+
+	t.Run("empty catalog", func(t *testing.T) {
+		codes, err := listCustomProductCodes(canonicalProductsFS(`{"products": []}`))
+		assert.NoError(t, err)
+		assert.Empty(t, codes)
+	})
+
+	t.Run("nil filesystem", func(t *testing.T) {
+		_, err := listCustomProductCodes(nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "canonical metadata filesystem is unavailable")
+	})
+
+	t.Run("missing products.json", func(t *testing.T) {
+		_, err := listCustomProductCodes(fstest.MapFS{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to load canonical products")
+	})
+}
+
+func TestCollectPluginsForProductCodes(t *testing.T) {
+	index := &Index{Plugins: []PluginInfo{
+		{Name: "aliyun-cli-sls", ProductCode: "Sls"},
+		{Name: "aliyun-cli-pds"},
+		{Name: "aliyun-cli-ecs", ProductCode: "ecs"},
+	}}
+
+	matched, missing := collectPluginsForProductCodes(index, []string{"Sls", "pds", "missing"})
+	assert.Equal(t, []string{"missing"}, missing)
+	assert.Len(t, matched, 2)
+	assert.Equal(t, "aliyun-cli-sls", matched[0].Name)
+	assert.Equal(t, "aliyun-cli-pds", matched[1].Name)
+}
+
+func TestManager_InstallCustom(t *testing.T) {
+	t.Run("Success - install only custom products", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{
+			rootDir: tmpDir,
+			canonicalFS: canonicalProductsFS(`{
+				"products": [
+					{"code": "Sls", "distribution": "go"},
+					{"code": "ecs", "distribution": "meta"}
+				]
+			}`),
+		}
+
+		archiveGo := createTestPluginArchive(t, "aliyun-cli-sls", "1.0.0", "sls")
+		archiveMeta := createTestPluginArchive(t, "aliyun-cli-ecs", "1.0.0", "ecs")
+		checksumGo, _ := calculateSHA256FromBytes(archiveGo)
+		checksumMeta, _ := calculateSHA256FromBytes(archiveMeta)
+
+		serverGo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archiveGo)
+		}))
+		defer serverGo.Close()
+
+		serverMeta := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archiveMeta)
+		}))
+		defer serverMeta.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "aliyun-cli-sls",
+					"productCode": "Sls",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "` + serverGo.URL + `",
+								"checksum": "` + checksumGo + `"
+							}
+						}
+					}
+				},
+				{
+					"name": "aliyun-cli-ecs",
+					"productCode": "ecs",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "` + serverMeta.URL + `",
+								"checksum": "` + checksumMeta + `"
+							}
+						}
+					}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.InstallCustom(ctx, false)
+		assert.NoError(t, err)
+
+		localManifest, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+
+		sls, exists := localManifest.Plugins["aliyun-cli-sls"]
+		assert.True(t, exists)
+		assert.Equal(t, "1.0.0", sls.Version)
+		_, exists = localManifest.Plugins["aliyun-cli-ecs"]
+		assert.False(t, exists)
+	})
+
+	t.Run("Success - match by plugin name when productCode is absent", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{
+			rootDir: tmpDir,
+			canonicalFS: canonicalProductsFS(`{
+				"products": [{"code": "pds", "distribution": "go"}]
+			}`),
+		}
+
+		archive := createTestPluginArchive(t, "aliyun-cli-pds", "1.0.0", "pds")
+		checksum, _ := calculateSHA256FromBytes(archive)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "aliyun-cli-pds",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "` + server.URL + `",
+								"checksum": "` + checksum + `"
+							}
+						}
+					}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.InstallCustom(ctx, false)
+		assert.NoError(t, err)
+
+		localManifest, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		_, exists := localManifest.Plugins["aliyun-cli-pds"]
+		assert.True(t, exists)
+	})
+
+	t.Run("Success - skip already installed plugins", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		pluginDir := filepath.Join(tmpDir, "aliyun-cli-sls")
+		assert.NoError(t, os.MkdirAll(pluginDir, 0755))
+
+		mgr := &Manager{
+			rootDir: tmpDir,
+			canonicalFS: canonicalProductsFS(`{
+				"products": [
+					{"code": "Sls", "distribution": "go"},
+					{"code": "pds", "distribution": "go"}
+				]
+			}`),
+		}
+		assert.NoError(t, mgr.saveLocalManifest(&LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"aliyun-cli-sls": {Name: "aliyun-cli-sls", Version: "1.0.0", Path: pluginDir},
+			},
+		}))
+
+		archive := createTestPluginArchive(t, "aliyun-cli-pds", "1.0.0", "pds")
+		checksum, _ := calculateSHA256FromBytes(archive)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := `{
+			"plugins": [
+				{"name": "aliyun-cli-sls", "productCode": "Sls", "versions": {"1.0.0": {}}},
+				{
+					"name": "aliyun-cli-pds",
+					"productCode": "pds",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "` + server.URL + `",
+								"checksum": "` + checksum + `"
+							}
+						}
+					}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.InstallCustom(ctx, false)
+		assert.NoError(t, err)
+
+		localManifest, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		assert.Equal(t, "1.0.0", localManifest.Plugins["aliyun-cli-sls"].Version)
+		_, exists := localManifest.Plugins["aliyun-cli-pds"]
+		assert.True(t, exists)
+	})
+
+	t.Run("Success - no custom products", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{
+			rootDir:     tmpDir,
+			canonicalFS: canonicalProductsFS(`{"products": [{"code": "ecs", "distribution": "meta"}]}`),
+		}
+
+		ctx := newTestContext()
+		err := mgr.InstallCustom(ctx, false)
+		assert.NoError(t, err)
+	})
+
+	t.Run("Error - product has no plugin in index", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{
+			rootDir: tmpDir,
+			canonicalFS: canonicalProductsFS(`{
+				"products": [
+					{"code": "Sls", "distribution": "go"},
+					{"code": "missing", "distribution": "go"}
+				]
+			}`),
+		}
+
+		archive := createTestPluginArchive(t, "aliyun-cli-sls", "1.0.0", "sls")
+		checksum, _ := calculateSHA256FromBytes(archive)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "aliyun-cli-sls",
+					"productCode": "Sls",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "` + server.URL + `",
+								"checksum": "` + checksum + `"
+							}
+						}
+					}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.InstallCustom(ctx, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "1 plugin(s) failed to install")
+
+		localManifest, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		_, exists := localManifest.Plugins["aliyun-cli-sls"]
+		assert.True(t, exists)
+	})
+
+	t.Run("Error - index fetch fails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{
+			rootDir: tmpDir,
+			canonicalFS: canonicalProductsFS(`{
+				"products": [{"code": "Sls", "distribution": "go"}]
+			}`),
+			indexURL: "http://invalid-url-that-does-not-exist.local/index.json",
+		}
+
+		ctx := newTestContext()
+		err := mgr.InstallCustom(ctx, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get plugin index")
+	})
+
+	t.Run("Error - canonical products missing", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir, canonicalFS: fstest.MapFS{}}
+
+		ctx := newTestContext()
+		err := mgr.InstallCustom(ctx, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to load canonical products")
 	})
 }
 

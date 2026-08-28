@@ -73,6 +73,7 @@ func NewPluginCommand() *cli.Command {
 	cmd.AddSubCommand(newShowCommand())
 	cmd.AddSubCommand(newInstallCommand())
 	cmd.AddSubCommand(newInstallAllCommand())
+	cmd.AddSubCommand(newInstallCustomCommand())
 	cmd.AddSubCommand(newUninstallCommand())
 	cmd.AddSubCommand(newUpdateCommand())
 
@@ -375,6 +376,37 @@ func newInstallAllCommand() *cli.Command {
 	})
 
 	addPreferGoFlag(cmd)
+	addPluginSourceBaseFlag(cmd)
+	return cmd
+}
+
+func newInstallCustomCommand() *cli.Command {
+	cmd := &cli.Command{
+		Name:   "install-custom",
+		Short:  i18n.T("Install plugins with product-side custom logic", "安装云产品定制逻辑插件"),
+		Usage:  "install-custom [--source-base <url>] [--enable-pre]",
+		Hidden: true,
+		Run: func(ctx *cli.Context, args []string) error {
+			mgr, err := newManagerWithOptionalSourceBase(ctx)
+			if err != nil {
+				return err
+			}
+
+			enablePre := false
+			if enablePreFlag := ctx.Flags().Get("enable-pre"); enablePreFlag != nil && enablePreFlag.IsAssigned() {
+				enablePre = true
+			}
+
+			return mgr.InstallCustom(ctx, enablePre)
+		},
+	}
+
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "enable-pre",
+		Short:        i18n.T("Allow installing pre-release versions", "允许安装预发布版本"),
+		AssignedMode: cli.AssignedNone,
+	})
+
 	addPluginSourceBaseFlag(cmd)
 	return cmd
 }

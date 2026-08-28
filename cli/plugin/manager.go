@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
@@ -52,8 +55,12 @@ type Manager struct {
 	sourceBase      string // from plugin-settings.json / env; empty = use built-in index URLs
 	indexURL        string // For testing: allows overriding resolved package index URL
 	commandIndexURL string // For testing: allows overriding resolved command index URL
+	// canonicalFS overrides the bundled canonical metadata used by InstallCustom (tests).
+	canonicalFS fs.FS
 	// preferGo reverses the default package selection order from any -> current platform-arch to current platform-arch -> any.
 	preferGo bool
+	// goOnly selects only the current platform-arch package and never considers the platform-independent "any" (meta/pb) artifact. Used by install-custom.
+	goOnly bool
 	// skipPluginIndexCacheForCLI is set when --source-base is used on this command only.
 	skipPluginIndexCacheForCLI bool
 }
@@ -537,17 +544,24 @@ func (m *Manager) validateVersionAndPlatform(ctx *cli.Context, targetPlugin *Plu
 	}
 
 	platform := GetCurrentPlatform()
-	primaryPlatform, fallbackPlatform := PluginPlatformAny, platform
-	if m.preferGo {
-		primaryPlatform, fallbackPlatform = platform, PluginPlatformAny
+	candidates := []string{PluginPlatformAny, platform}
+	if m.goOnly {
+		candidates = []string{platform}
+	} else if m.preferGo {
+		candidates = []string{platform, PluginPlatformAny}
 	}
 
-	platInfo, ok := verInfo.Platforms[primaryPlatform]
-	if !ok {
-		platInfo, ok = verInfo.Platforms[fallbackPlatform]
-		if !ok {
-			return nil, fmt.Errorf("plugin %s version %s not supported on %s", actualPluginName, version, platform)
+	var platInfo PlatformInfo
+	found := false
+	for _, key := range candidates {
+		if info, ok := verInfo.Platforms[key]; ok {
+			platInfo = info
+			found = true
+			break
 		}
+	}
+	if !found {
+		return nil, fmt.Errorf("plugin %s version %s not supported on %s", actualPluginName, version, platform)
 	}
 
 	return &platInfo, nil
@@ -1320,16 +1334,131 @@ func (m *Manager) InstallAll(ctx *cli.Context, enablePre bool) error {
 		return fmt.Errorf("failed to get plugin index: %w", err)
 	}
 
+	cli.Printf(ctx.Stdout(), "Found %d plugins in index\n", len(index.Plugins))
+	return m.installListedPlugins(ctx, pluginInfos(index), enablePre)
+}
+
+func (m *Manager) InstallCustom(ctx *cli.Context, enablePre bool) error {
+	m.goOnly = true
+	codes, err := listCustomProductCodes(m.canonicalMetaFS())
+	if err != nil {
+		return err
+	}
+	if len(codes) == 0 {
+		cli.Printf(ctx.Stdout(), "No custom product plugins in canonical metadata\n")
+		return nil
+	}
+
+	index, err := m.GetIndex()
+	if err != nil {
+		return fmt.Errorf("failed to get plugin index: %w", err)
+	}
+
+	matched, missing := collectPluginsForProductCodes(index, codes)
+	cli.Printf(ctx.Stdout(), "Found %d custom product plugins in canonical metadata\n", len(codes))
+	for _, code := range missing {
+		cli.Printf(ctx.Stdout(), "No plugin found in index for product %s\n", code)
+	}
+
+	err = m.installListedPlugins(ctx, matched, enablePre)
+	if len(missing) == 0 {
+		return err
+	}
+	if err != nil {
+		return fmt.Errorf("%w; %d custom product(s) had no plugin in the index", err, len(missing))
+	}
+	cli.Printf(ctx.Stdout(), "Failed: %d\n", len(missing))
+	return fmt.Errorf("%d plugin(s) failed to install", len(missing))
+}
+
+func (m *Manager) canonicalMetaFS() fs.FS {
+	if m.canonicalFS != nil {
+		return m.canonicalFS
+	}
+	return bundledmeta.Metadatas
+}
+
+func listCustomProductCodes(fsys fs.FS) ([]string, error) {
+	if fsys == nil {
+		return nil, fmt.Errorf("canonical metadata filesystem is unavailable")
+	}
+	catalog, err := canonicalmeta.NewRepository(fsys).GetProducts()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load canonical products: %w", err)
+	}
+
+	codes := make([]string, 0)
+	for _, p := range catalog.Products {
+		if p.HasDistribution(canonicalmeta.DistributionGo) {
+			codes = append(codes, p.Code)
+		}
+	}
+	sort.Slice(codes, func(i, j int) bool {
+		return strings.ToLower(codes[i]) < strings.ToLower(codes[j])
+	})
+	return codes, nil
+}
+
+func collectPluginsForProductCodes(index *Index, codes []string) (matched []*PluginInfo, missing []string) {
+	if index == nil {
+		return nil, append([]string(nil), codes...)
+	}
+	seen := make(map[string]struct{})
+	for _, code := range codes {
+		found := false
+		for i := range index.Plugins {
+			p := &index.Plugins[i]
+			if !pluginMatchesProductCode(p, code) {
+				continue
+			}
+			found = true
+			if _, ok := seen[p.Name]; !ok {
+				seen[p.Name] = struct{}{}
+				matched = append(matched, p)
+			}
+			break
+		}
+		if !found {
+			missing = append(missing, code)
+		}
+	}
+	return matched, missing
+}
+
+func pluginMatchesProductCode(p *PluginInfo, productCode string) bool {
+	if p == nil {
+		return false
+	}
+	code := strings.TrimSpace(productCode)
+	if code == "" {
+		return false
+	}
+	if strings.TrimSpace(p.ProductCode) != "" && strings.EqualFold(p.ProductCode, code) {
+		return true
+	}
+	return matchPluginName(p.Name, code)
+}
+
+func pluginInfos(index *Index) []*PluginInfo {
+	if index == nil {
+		return nil
+	}
+	out := make([]*PluginInfo, 0, len(index.Plugins))
+	for i := range index.Plugins {
+		out = append(out, &index.Plugins[i])
+	}
+	return out
+}
+
+func (m *Manager) installListedPlugins(ctx *cli.Context, plugins []*PluginInfo, enablePre bool) error {
 	localManifest, err := m.GetLocalManifest()
 	if err != nil {
 		return fmt.Errorf("failed to get local manifest: %w", err)
 	}
 
-	cli.Printf(ctx.Stdout(), "Found %d plugins in index\n", len(index.Plugins))
-
 	var installed, skipped, failed int
-	for i := range index.Plugins {
-		pluginName := index.Plugins[i].Name
+	for _, p := range plugins {
+		pluginName := p.Name
 
 		if _, exists := localManifest.Plugins[pluginName]; exists {
 			cli.Printf(ctx.Stdout(), "Skipping %s (already installed)\n", pluginName)
@@ -1339,7 +1468,7 @@ func (m *Manager) InstallAll(ctx *cli.Context, enablePre bool) error {
 
 		cli.Printf(ctx.Stdout(), "Installing %s...\n", pluginName)
 
-		if err := m.installPlugin(ctx, &index.Plugins[i], "", enablePre, false); err != nil {
+		if err := m.installPlugin(ctx, p, "", enablePre, false); err != nil {
 			cli.Printf(ctx.Stdout(), "Failed to install %s: %v\n", pluginName, err)
 			failed++
 			continue

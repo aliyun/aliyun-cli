@@ -24,6 +24,7 @@ func TestNewPluginCommand(t *testing.T) {
 	assert.NotNil(t, cmd.GetSubCommand("list"), "Should have list subcommand")
 	assert.NotNil(t, cmd.GetSubCommand("install"), "Should have install subcommand")
 	assert.NotNil(t, cmd.GetSubCommand("install-all"), "Should have install-all subcommand")
+	assert.NotNil(t, cmd.GetSubCommand("install-custom"), "Should have install-custom subcommand")
 	assert.NotNil(t, cmd.GetSubCommand("uninstall"), "Should have uninstall subcommand")
 	assert.NotNil(t, cmd.GetSubCommand("show"), "Should have show subcommand")
 	assert.NotNil(t, cmd.GetSubCommand("update"), "Should have update subcommand")
@@ -625,6 +626,18 @@ func TestNewInstallAllCommand(t *testing.T) {
 	preferGoFlag := cmd.Flags().Get("prefer-go")
 	assert.NotNil(t, preferGoFlag)
 	assert.True(t, preferGoFlag.Hidden)
+}
+
+func TestNewInstallCustomCommand(t *testing.T) {
+	cmd := newInstallCustomCommand()
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "install-custom", cmd.Name)
+	assert.True(t, cmd.Hidden)
+	assert.NotEmpty(t, cmd.Short)
+	assert.NotEmpty(t, cmd.Usage)
+	assert.NotNil(t, cmd.Flags().Get("source-base"))
+	assert.NotNil(t, cmd.Flags().Get("enable-pre"))
+	assert.Nil(t, cmd.Flags().Get("prefer-go"))
 }
 
 func TestNewUninstallCommand(t *testing.T) {

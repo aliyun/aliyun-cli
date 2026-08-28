@@ -95,14 +95,10 @@ type PluginManifest struct {
 	} `json:"bin,omitempty"`
 }
 
-// Distribution values on a product entry.
-// A product ships as exactly one form:
-// a compiled Go binary plugin ("go", run as a separate process)
-// or interpreted JSON metadata ("meta", the aliyun-openapi-runtime engine).
-// An empty value means "not marked" and is treated as engine-served (so an unpopulated catalog behaves as today).
 const (
-	DistributionGo   = "go"
-	DistributionMeta = "meta"
+	DistributionGo      = "go"
+	DistributionMeta    = "meta"
+	DistributionOpenAPI = "openapi"
 )
 
 // ============================================================================
@@ -128,7 +124,9 @@ type ProductEntry struct {
 	Versions             []string          `json:"versions"`
 	APIs                 []string          `json:"apis"`
 
-	// Distribution is "go" | "meta" | "" (unset). "go" makes the engine abstain so the product routes to its Go plugin instead.
+	// Distribution is a pipe-separated list of shipping forms: "go", "meta", "openapi", or combinations such as "openapi|go".
+	// "go" alone makes the engine abstain so the product routes to its Go plugin;
+	// "openapi|go" keeps the built-in engine and also allows a custom Go plugin.
 	Distribution string `json:"distribution,omitempty"`
 }
 
