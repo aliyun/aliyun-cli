@@ -60,6 +60,53 @@ func TestMachineHelpRootJSONUsesExplicitGroups(t *testing.T) {
 	assert.Contains(t, raw, "products")
 }
 
+func TestMachineHelpRootJSONOmitsUtilityAliases(t *testing.T) {
+	doc := &machineHelpRootDocument{Commands: []machineHelpCommandSummary{
+		{
+			Group:   string(RootGroupCore),
+			Name:    "configure",
+			Aliases: []string{"setup"},
+		},
+		{
+			Group:   string(RootGroupUtils),
+			Name:    "utils go-migrate",
+			Aliases: []string{"go-migrate"},
+		},
+	}}
+
+	var output bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&output, doc))
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
+
+	utilities := raw["utilities"].([]any)
+	require.Len(t, utilities, 1)
+	assert.NotContains(t, utilities[0].(map[string]any), "aliases")
+
+	coreCommands := raw["coreCommands"].([]any)
+	require.Len(t, coreCommands, 1)
+	assert.Equal(t, []any{"setup"}, coreCommands[0].(map[string]any)["aliases"])
+}
+
+func TestMachineHelpRootSearchJSONOmitsUtilityAliases(t *testing.T) {
+	doc := &machineHelpRootDocument{Commands: []machineHelpCommandSummary{{
+		Group:   string(RootGroupUtils),
+		Path:    []string{"aliyun", "utils", "go-migrate"},
+		Name:    "utils go-migrate",
+		Aliases: []string{"go-migrate"},
+	}}}
+	applyRootHelpOptions(doc, helpOptions{Search: "go-migrate"}, false)
+
+	var output bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&output, doc))
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
+
+	matches := raw["matches"].([]any)
+	require.Len(t, matches, 1)
+	assert.NotContains(t, matches[0].(map[string]any), "aliases")
+}
+
 func TestMachineHelpProduct(t *testing.T) {
 	service := testMachineHelpService(t)
 	doc, err := service.buildProduct("demo", "")

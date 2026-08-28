@@ -106,8 +106,12 @@ func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions
 			}
 			if entry.kind == "command" {
 				document.Commands = append(document.Commands, entry.command)
+				aliases := entry.command.Aliases
+				if entry.command.Group == string(RootGroupUtils) {
+					aliases = nil
+				}
 				document.Matches = append(document.Matches, machineHelpRootMatch{
-					Kind: "command", Name: entry.command.Name, Aliases: entry.command.Aliases,
+					Kind: "command", Name: entry.command.Name, Aliases: aliases,
 					Command: strings.Join(entry.command.Path, " ") + " --help", Description: entry.command.Description,
 				})
 			} else if entry.kind == "flag" {

@@ -1183,6 +1183,10 @@ func (document *machineHelpRootDocument) prepareJSONGroups() {
 	for _, command := range document.Commands {
 		switch command.Group {
 		case string(RootGroupUtils):
+			// Root-level aliases keep the historical hidden utility entrypoints
+			// searchable and executable, but they are implementation details and
+			// must not be exposed as part of the public utilities Help document.
+			command.Aliases = nil
 			document.Utilities = append(document.Utilities, command)
 		case string(RootGroupExtension):
 			document.Extensions = append(document.Extensions, command)
