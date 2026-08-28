@@ -139,6 +139,7 @@ func TestRenderParameterHelpTextGoldenKeepsNestedTree(t *testing.T) {
 		Element: &machineHelpShape{
 			Type: "string", Format: "uuid",
 			Constraints: machineHelpConstraints{Pattern: "^res-", MinLength: "4"},
+			Element:     &machineHelpShape{Type: "integer"},
 		},
 	}}
 
@@ -163,5 +164,7 @@ func TestRenderParameterHelpTextGoldenKeepsNestedTree(t *testing.T) {
 		"    Type: string\n"+
 		"    Format: uuid\n"+
 		"    Pattern: ^res-\n"+
-		"    Minimum length: 4\n", output.String())
+		"    Minimum length: 4\n"+
+		"    Element:\n"+
+		"      Type: integer\n", output.String())
 }

@@ -2,6 +2,7 @@ package openapi
 
 import (
 	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -37,4 +38,18 @@ func TestRenderResponseHelpTextWithoutSchema(t *testing.T) {
 	var output bytes.Buffer
 	require.NoError(t, renderResponseHelpText(&output, doc))
 	assert.Equal(t, "No response schema is available for this API.\n", output.String())
+}
+
+func TestRenderResponseHelpTextKeepsFullResponsesWhenSuccessHasNoBody(t *testing.T) {
+	document := &machineHelpAPIResponseDocument{
+		Responses: json.RawMessage(`{"204":{"description":"No content"},"400":{"description":"Invalid request"}}`),
+		Notice:    "No response schema is available for this API.",
+		Result:    HelpResult{Shown: 2, Total: 2},
+	}
+
+	var output bytes.Buffer
+	require.NoError(t, renderResponseHelpText(&output, document))
+	assert.Contains(t, output.String(), "Responses:")
+	assert.Contains(t, output.String(), `"400": {`)
+	assert.Contains(t, output.String(), "Notice: No response schema is available for this API.")
 }

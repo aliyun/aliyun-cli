@@ -12,6 +12,11 @@ import (
 
 const noHelpSearchMatchesFormat = "No Help entries matched --help-search %q."
 
+const (
+	rootDefaultHelpReservedLines    = 8
+	productDefaultHelpReservedLines = 8
+)
+
 func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions, aiMode bool) {
 	if document == nil {
 		return
@@ -84,7 +89,8 @@ func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions
 		objects = append(objects, HelpBudgetObject[rootProjectionEntry]{Value: entry, LogicalLines: 1})
 	}
 	projection := ProjectDefaultHelpObjects(objects, HelpDefaultProjectionOptions{
-		Mode: HelpProjectionMode{AIMode: aiMode, JSON: true, All: options.All},
+		Mode:          HelpProjectionMode{AIMode: aiMode, JSON: true, All: options.All},
+		ReservedLines: rootDefaultHelpReservedLines,
 	})
 	document.Commands = nil
 	document.Products = nil
@@ -144,7 +150,8 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 		objects = append(objects, HelpBudgetObject[machineHelpAPISummary]{Value: api, LogicalLines: 1})
 	}
 	projection := ProjectDefaultHelpObjects(objects, HelpDefaultProjectionOptions{
-		Mode: HelpProjectionMode{AIMode: aiMode, JSON: true, All: options.All},
+		Mode:          HelpProjectionMode{AIMode: aiMode, JSON: true, All: options.All},
+		ReservedLines: productDefaultHelpReservedLines,
 	})
 	document.APIs = projection.Items
 	document.Result = projection.Result

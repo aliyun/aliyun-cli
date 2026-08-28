@@ -144,10 +144,21 @@ func renderMachineHelpShapeNode(w io.Writer, shape *machineHelpShape, path []str
 			return err
 		}
 	}
-	if err := renderMachineHelpShapeNode(w, shape.Element, path, indent+2); err != nil {
-		return err
+	for _, entry := range []struct {
+		label string
+		shape *machineHelpShape
+	}{{"Element", shape.Element}, {"Value", shape.Value}} {
+		if entry.shape == nil {
+			continue
+		}
+		if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, entry.label); err != nil {
+			return err
+		}
+		if err := renderMachineHelpShapeNode(w, entry.shape, path, indent+2); err != nil {
+			return err
+		}
 	}
-	return renderMachineHelpShapeNode(w, shape.Value, path, indent+2)
+	return nil
 }
 
 func renderMachineHelpConstraints(w io.Writer, prefix string, constraints machineHelpConstraints) error {

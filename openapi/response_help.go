@@ -14,7 +14,7 @@ func renderResponseHelpText(w io.Writer, document *machineHelpAPIResponseDocumen
 	// Explicit Response Section Help is lossless: retain every response and
 	// print only its reachable component closure without inlining refs. Search
 	// projections continue through the filtered OutputSchema branch below.
-	if len(bytes.TrimSpace(document.Responses)) > 0 && len(document.Matches) == 0 && document.Notice == "" {
+	if len(bytes.TrimSpace(document.Responses)) > 0 && len(document.Matches) == 0 {
 		if _, err := fmt.Fprintln(w, "Responses:"); err != nil {
 			return err
 		}
@@ -29,6 +29,11 @@ func renderResponseHelpText(w io.Writer, document *machineHelpAPIResponseDocumen
 		}
 		if err := renderMachineHelpResponseQuery(w, document.ResponseQuery); err != nil {
 			return err
+		}
+		if document.Notice != "" {
+			if _, err := fmt.Fprintf(w, "\nNotice: %s\n", document.Notice); err != nil {
+				return err
+			}
 		}
 		return renderHelpProjectionResult(w, "matches", document.Result, document.Next)
 	}
