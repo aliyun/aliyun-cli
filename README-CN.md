@@ -53,7 +53,11 @@ aliyun upgrade
 
 PATH 配置、源码构建和升级方法见[安装指南](./docs/zh-CN/installation.md)。
 
-如果暂时不想在本地安装，可以通过[阿里云 Cloud Shell](https://shell.aliyun.com/)试用。
+如果暂时不想在本地安装，可以通过[阿里云 Cloud Shell](https://shell.aliyun.com/)试用：
+
+<a href="https://shell.aliyun.com/" target="cloudshell">
+  <img src="https://img.alicdn.com/tfs/TB1wt1zq9zqK1RjSZFpXXakSXXa-1066-166.png" width="180" alt="Alibaba Cloud Shell" />
+</a>
 
 ## 快速开始
 
@@ -77,7 +81,7 @@ aliyun configure switch --profile default
 
 ### 2. 调用 API
 
-在元数据可用时，CLI 同时支持传统大驼峰命名（PascalCase）和元数据驱动的短横线命名（kebab-case）：
+CLI 同时支持传统大驼峰命名（PascalCase）和短横线命名（kebab-case）：
 
 ```sh
 aliyun ecs DescribeRegions
@@ -123,6 +127,10 @@ aliyun plugin update --name <plugin-name>
 
 完整说明见[命令使用指南](./docs/zh-CN/usage.md)和[插件管理指南](./docs/zh-CN/plugins.md)。
 
+## 问题诊断
+
+[OpenAPI 问题诊断](https://api.aliyun.com/troubleshoot?source=github_sdk) 可通过 `RequestId` 或报错信息定位 OpenAPI 调用问题。
+
 ## 文档
 
 | 主题 | 简体中文 | English |
@@ -137,7 +145,6 @@ aliyun plugin update --name <plugin-name>
 
 - [阿里云 CLI 官方文档](https://help.aliyun.com/zh/cli/)
 - [OpenAPI 门户](https://api.aliyun.com/)
-- [OpenAPI 问题诊断](https://api.aliyun.com/troubleshoot?source=github_sdk)
 - [版本记录](./CHANGELOG.md)
 - [安全策略](./SECURITY.md)
 

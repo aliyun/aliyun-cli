@@ -2,7 +2,7 @@
 
 [文档索引](../README.md) | [English](../en/configuration.md)
 
-阿里云 CLI 默认将具名 Profile 保存在 `~/.aliyun/config.json`。需要隔离配置时，可以使用 `--config-path <文件>`。
+阿里云 CLI 默认将具名 Profile 保存在 `~/.aliyun/config.json`。
 
 ## 创建和管理 Profile
 
@@ -10,6 +10,19 @@
 
 ```sh
 aliyun configure --mode OAuth --profile default
+```
+
+需要交互式创建基础 AK Profile 时，可以运行 `aliyun configure`。为新 Profile 配置且没有指定模式时，CLI 使用 AK 模式：
+
+```text
+$ aliyun configure --profile default
+Configuring profile 'default' in 'AK' authenticate mode...
+Access Key Id []: <AccessKeyId>
+Access Key Secret []: <AccessKeySecret>
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] zh:
+Saving profile[default] ...Done.
 ```
 
 Profile 管理命令：
@@ -67,27 +80,76 @@ aliyun configure set \
 
 已经获得三个临时凭证字段时，可以使用 `StsToken`：
 
+交互式配置示例：
+
+```text
+$ aliyun configure --mode StsToken --profile StsProfile
+Configuring profile 'StsProfile' in 'StsToken' authenticate mode...
+Access Key Id []: STS.NUr5xxxxx
+Access Key Secret []: 7Bshxxxxx
+Sts Token []: CAISxxxxxxxxxxxxxxxx...
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] zh:
+Saving profile[StsProfile] ...Done.
+```
+
+非交互式配置示例：
+
 ```sh
 aliyun configure set \
-  --profile sts \
+  --profile StsProfile \
   --mode StsToken \
-  --access-key-id 'STS....' \
-  --access-key-secret '<临时 Secret>' \
-  --sts-token '<SecurityToken>' \
+  --access-key-id STS.NUr5xxxxx \
+  --access-key-secret 7Bshxxxxx \
+  --sts-token CAISxxxxxxxxxxxxxxxx... \
   --region cn-hangzhou
 ```
 
 该模式不会自动续期。凭证过期后需要重新配置，或者改用可续期的 `RamRoleArn`、`EcsRamRole`、`OIDC` 等身份模式。
 
-## 角色与工作负载凭证
-
-交互式配置角色扮演：
+也可以通过环境变量补全 Profile 中缺失的凭证字段：
 
 ```sh
-aliyun configure --mode RamRoleArn --profile assumed-role
+export ALIBABA_CLOUD_ACCESS_KEY_ID="STS.xxx"
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET="temporary-secret"
+export ALIBABA_CLOUD_SECURITY_TOKEN="security-token"
 ```
 
-使用已有 Profile 进行链式角色扮演：
+更多说明见：[配置 StsToken 临时凭证](https://help.aliyun.com/zh/cli/temporary-security-credentials-sts-token)。
+
+## 角色与工作负载凭证
+
+### RAM 角色扮演
+
+`RamRoleArn` 使用基于 AccessKey 的身份调用 AssumeRole，换取临时凭证：
+
+```text
+$ aliyun configure --mode RamRoleArn --profile subaccount
+Configuring profile 'subaccount' in 'RamRoleArn' authenticate mode...
+Access Key Id []: <AccessKeyId>
+Access Key Secret []: <AccessKeySecret>
+Sts Region []: cn-hangzhou
+Ram Role Arn []: acs:ram::<账号ID>:role/<角色名>
+Role Session Name []: aliyun-cli
+Expired Seconds []: 900
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] zh:
+Saving profile[subaccount] ...Done.
+```
+
+### ECS 实例角色
+
+`EcsRamRole` 从当前 ECS 实例绑定的 RAM 角色获取凭证：
+
+```sh
+aliyun configure --mode EcsRamRole --profile ecs-role
+```
+
+### 链式 RAM 角色
+
+`ChainableRamRoleArn` 使用已有 Profile 作为源身份，再扮演配置的 RAM 角色：
 
 ```sh
 aliyun configure set \
@@ -98,43 +160,146 @@ aliyun configure set \
   --role-session-name aliyun-cli
 ```
 
-在 ECS 上，`EcsRamRole` 会读取实例 RAM 角色。在支持 OIDC 的 CI 或工作负载环境中，需要配置 Provider ARN、Token 文件、角色 ARN 和会话名称：
+对应的 Profile 关系如下：
 
-```sh
-aliyun configure --mode OIDC --profile workload
+```json
+{
+  "profiles": [
+    {
+      "name": "chained-role",
+      "mode": "ChainableRamRoleArn",
+      "ram_role_arn": "acs:ram::<账号ID>:role/<角色名>",
+      "ram_session_name": "aliyun-cli",
+      "source_profile": "source-profile"
+    },
+    {
+      "name": "source-profile",
+      "mode": "AK",
+      "access_key_id": "<AccessKeyId>",
+      "access_key_secret": "<AccessKeySecret>"
+    }
+  ]
+}
+```
+
+### OIDC 工作负载身份
+
+在支持 OIDC 的 CI 或工作负载环境中，需要配置 Provider ARN、Token 文件、RAM 角色 ARN 和会话名称：
+
+```text
+$ aliyun configure --mode OIDC --profile oidc-profile
+Configuring profile 'oidc-profile' in 'OIDC' authenticate mode...
+OIDC Provider ARN []: acs:ram::<账号ID>:oidc-provider/<Provider名称>
+OIDC Token File []: /path/to/oidc-token
+RAM Role ARN []: acs:ram::<账号ID>:role/<角色名>
+Role Session Name []: aliyun-cli
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] zh:
+Saving profile[oidc-profile] ...Done.
+```
+
+## 交互式身份登录
+
+### OAuth
+
+OAuth 会打开基于浏览器的登录流程，并将获得的临时凭证保存到 Profile：
+
+```text
+$ aliyun configure --mode OAuth --profile oauth-profile
+Configuring profile 'oauth-profile' in 'OAuth' authenticate mode...
+OAuth Site Type (CN: 0 or INTL: 1, default: CN): 0
+请在浏览器中打开命令显示的地址并完成授权。
+OAuth configuration completed.
+Default Region Id []: cn-hangzhou
+Saving profile[oauth-profile] ...Done.
+```
+
+### CloudSSO
+
+CloudSSO 会通过配置的 CloudSSO 门户启动交互式登录流程：
+
+```text
+$ aliyun configure --mode CloudSSO --profile cloud-sso
+Configuring profile 'cloud-sso' in 'CloudSSO' authenticate mode...
+CloudSSO Sign In Url []: https://signin-cn-shanghai.alibabacloudsso.com/start/login
+按照命令提示完成登录，并选择账号和访问配置。
+Default Region Id []: cn-hangzhou
+Saving profile[cloud-sso] ...Done.
 ```
 
 ## 外部凭证源
 
 ### 外部程序
 
-`External` 会运行配置的命令，并从标准输出读取一个 JSON 对象。外部程序的诊断信息应写入标准错误，不能混入标准输出。
+`External` 会运行配置的本地命令，并将其输出作为凭证。外部程序需要遵循以下约定：
+
+1. 将凭证响应写入标准输出。
+2. 标准输出只能包含一个有效的 JSON 对象；诊断信息应写入标准错误。
+3. 返回 `mode` 以及该模式要求的全部凭证字段。目前支持返回 `AK` 和 `StsToken` 两种模式。
+
+AK 返回结构：
+
+```json
+{
+  "mode": "AK",
+  "access_key_id": "<AccessKeyId>",
+  "access_key_secret": "<AccessKeySecret>"
+}
+```
+
+StsToken 返回结构：
 
 ```json
 {
   "mode": "StsToken",
-  "access_key_id": "STS....",
-  "access_key_secret": "temporary-secret",
-  "sts_token": "security-token"
+  "access_key_id": "<AccessKeyId>",
+  "access_key_secret": "<AccessKeySecret>",
+  "sts_token": "<SecurityToken>"
 }
 ```
 
 交互式配置：
 
-```sh
-aliyun configure --mode External --profile external
+```text
+$ aliyun configure --mode External --profile external
+Configuring profile 'external' in 'External' authenticate mode...
+Process Command []: <credential-command>
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] zh:
+Saving profile[external] ...Done.
 ```
 
 ### Credentials URI
 
-交互式配置本地或远程地址：
+`CredentialsURI` 从本地或远程 HTTP 地址获取临时凭证。交互式配置示例：
 
-```sh
-aliyun configure --profile uri --mode CredentialsURI
-# Credentials URI []: http://127.0.0.1:6666/credentials
+```text
+$ aliyun configure --profile uri --mode CredentialsURI
+Configuring profile 'uri' in 'CredentialsURI' authenticate mode...
+Credentials URI []: http://127.0.0.1:6666/credentials
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] zh:
+Saving profile[uri] ...Done.
 ```
 
-也可以为当前进程设置 `ALIBABA_CLOUD_CREDENTIALS_URI`。
+保存后的 Profile 等价于：
+
+```json
+{
+  "profiles": [
+    {
+      "name": "uri",
+      "mode": "CredentialsURI",
+      "credentials_uri": "http://127.0.0.1:6666/credentials"
+    }
+  ]
+}
+```
+
+也可以只为当前进程设置 `ALIBABA_CLOUD_CREDENTIALS_URI`，而不把 URI 保存到 Profile。
 
 服务必须返回 HTTP 200，并提供类似以下结构的凭证：
 
@@ -147,6 +312,8 @@ aliyun configure --profile uri --mode CredentialsURI
   "Expiration": "2030-01-02T15:04:05Z"
 }
 ```
+
+非 200 响应、响应格式错误或缺少凭证字段时，CLI 会将其视为凭证获取失败。
 
 在受限环境中设置 `ALIBABA_CLOUD_DISABLE_EXTERNAL_PROCESS=true`，可以同时禁止外部进程执行和 CredentialsURI 请求。
 
