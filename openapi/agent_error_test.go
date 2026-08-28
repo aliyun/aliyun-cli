@@ -80,7 +80,7 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		})
 
 		assert.Equal(t, `"DescribeInstnaces" is not a valid api.`, envelope.Message)
-		assert.Equal(t, []string{"DescribeInstances", "describe-instances"}, envelope.DidYouMean)
+		assert.Equal(t, []string{"DescribeInstances"}, envelope.DidYouMean)
 		assert.Equal(t, "search_api", envelope.Recovery.Action)
 		assert.Equal(t, "aliyun ecs --help-search Instances", envelope.Recovery.Command)
 		assert.Equal(t, "Search APIs related to Instances.", envelope.Recovery.Hint)
@@ -262,6 +262,50 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		assert.NotContains(t, envelope.Recovery.Command, "/private/secret")
 		assert.Equal(t, "Check that --body-file points to a readable file.", envelope.Recovery.Hint)
 	})
+}
+
+func TestNormalizeAgentErrorRedactsHeaderValuesAndBodyFilePaths(t *testing.T) {
+	tests := []struct {
+		name      string
+		cause     error
+		sensitive string
+		message   string
+	}{
+		{
+			name:      "runtime header",
+			cause:     &engine.InvalidHeaderError{Err: errors.New(`invalid header "Authorization=secret-token"`)},
+			sensitive: "secret-token",
+			message:   "invalid --header value: expected Name=Value",
+		},
+		{
+			name:      "legacy header",
+			cause:     &InvalidHeaderError{Err: errors.New(`invalid header "Authorization=legacy-secret"`)},
+			sensitive: "legacy-secret",
+			message:   "invalid --header value: expected Name=Value",
+		},
+		{
+			name:      "runtime body file",
+			cause:     &engine.InvalidBodyFileError{Err: errors.New("open /private/customer/request.json: permission denied")},
+			sensitive: "/private/customer/request.json",
+			message:   "unable to read --body-file",
+		},
+		{
+			name:      "legacy body file",
+			cause:     &InvalidBodyFileError{Err: errors.New("open /tmp/customer-body.json: no such file")},
+			sensitive: "/tmp/customer-body.json",
+			message:   "unable to read --body-file",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			envelope := requireAgentEnvelope(t, tt.cause, []string{"ecs", "DescribeInstances"}, nil)
+			encoded, err := json.Marshal(envelope)
+			require.NoError(t, err)
+			assert.Equal(t, tt.message, envelope.Message)
+			assert.NotContains(t, string(encoded), tt.sensitive)
+		})
+	}
 }
 
 func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T) {

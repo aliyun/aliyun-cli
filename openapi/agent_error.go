@@ -114,7 +114,7 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 		if invalidAPI.product != nil {
 			apiContext = context.withProductAPI(invalidAPI.product.GetLowerCode(), invalidAPI.Name)
 		}
-		return unknownAPIAgentError(err, invalidAPI.AgentMessage(), apiCandidateForms(invalidAPI.AgentSuggestions()), apiContext, validate)
+		return unknownAPIAgentError(err, invalidAPI.AgentMessage(), apiCandidateFormsForStyle(invalidAPI.AgentSuggestions(), apiContext.style), apiContext, validate)
 	}
 
 	var invalidUnifiedAPI *InvalidUnifiedApiError
@@ -123,7 +123,7 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 		if invalidUnifiedAPI.product != nil {
 			apiContext = context.withProductAPI(invalidUnifiedAPI.product.GetLowerCode(), invalidUnifiedAPI.Name)
 		}
-		return unknownAPIAgentError(err, invalidUnifiedAPI.AgentMessage(), apiCandidateForms(invalidUnifiedAPI.AgentSuggestions()), apiContext, validate)
+		return unknownAPIAgentError(err, invalidUnifiedAPI.AgentMessage(), apiCandidateFormsForStyle(invalidUnifiedAPI.AgentSuggestions(), apiContext.style), apiContext, validate)
 	}
 
 	var invalidBaseline *InvalidBaselineCommandError
@@ -178,25 +178,25 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 
 	var invalidHeader *engine.InvalidHeaderError
 	if errors.As(err, &invalidHeader) {
-		return fixedParameterHelpAgentError(err, invalidHeader.Error(), "inspect_header_usage", "header",
+		return fixedParameterHelpAgentError(err, "invalid --header value: expected Name=Value", "inspect_header_usage", "header",
 			"Inspect header usage and pass each header as Name=Value.", context)
 	}
 
 	var legacyInvalidHeader *InvalidHeaderError
 	if errors.As(err, &legacyInvalidHeader) {
-		return fixedParameterHelpAgentError(err, legacyInvalidHeader.Error(), "inspect_header_usage", "header",
+		return fixedParameterHelpAgentError(err, "invalid --header value: expected Name=Value", "inspect_header_usage", "header",
 			"Inspect header usage and pass each header as Name=Value.", context)
 	}
 
 	var invalidBodyFile *engine.InvalidBodyFileError
 	if errors.As(err, &invalidBodyFile) {
-		return fixedParameterHelpAgentError(err, invalidBodyFile.Error(), "fix_body_file", "body-file",
+		return fixedParameterHelpAgentError(err, "unable to read --body-file", "fix_body_file", "body-file",
 			"Check that --body-file points to a readable file.", context)
 	}
 
 	var legacyInvalidBodyFile *InvalidBodyFileError
 	if errors.As(err, &legacyInvalidBodyFile) {
-		return fixedParameterHelpAgentError(err, legacyInvalidBodyFile.Error(), "fix_body_file", "body-file",
+		return fixedParameterHelpAgentError(err, "unable to read --body-file", "fix_body_file", "body-file",
 			"Check that --body-file points to a readable file.", context)
 	}
 
@@ -733,17 +733,24 @@ func kebabToPascal(value string) string {
 	return builder.String()
 }
 
-func apiCandidateForms(candidates []string) []string {
-	forms := make([]string, 0, len(candidates)*2)
+func apiCandidateFormsForStyle(candidates []string, style string) []string {
+	forms := make([]string, 0, len(candidates))
 	for _, candidate := range candidates {
 		candidate = strings.TrimSpace(candidate)
 		if candidate == "" {
 			continue
 		}
-		forms = append(forms, candidate)
-		if candidate != strings.ToLower(candidate) && !strings.Contains(candidate, "-") {
-			forms = append(forms, apiNameToKebab(candidate))
+		switch style {
+		case "kebab":
+			if candidate != strings.ToLower(candidate) && !strings.Contains(candidate, "-") {
+				candidate = apiNameToKebab(candidate)
+			}
+		case "pascal":
+			if candidate == strings.ToLower(candidate) || strings.Contains(candidate, "-") || strings.Contains(candidate, "_") {
+				candidate = kebabToPascal(candidate)
+			}
 		}
+		forms = append(forms, candidate)
 	}
 	return stableStrings(forms)
 }
