@@ -176,7 +176,7 @@ type machineHelpProduct struct {
 }
 
 type machineHelpAPISummary struct {
-	Name string `json:"name,omitempty"`
+	Name    string `json:"name,omitempty"`
 	CmdName string `json:"cmdName,omitempty"`
 	// DisplayName is the sort/search key in the active command style; in the
 	// emitted JSON it always equals the surviving name/cmdName, so it stays
@@ -185,6 +185,21 @@ type machineHelpAPISummary struct {
 	Title       machineHelpLocalizedText `json:"title"`
 	Description machineHelpLocalizedText `json:"description"`
 	Deprecated  bool                     `json:"deprecated"`
+}
+
+func (summary machineHelpAPISummary) MarshalJSON() ([]byte, error) {
+	type apiSummaryJSON struct {
+		Name        string                   `json:"name"`
+		Title       machineHelpLocalizedText `json:"title"`
+		Description machineHelpLocalizedText `json:"description"`
+		Deprecated  bool                     `json:"deprecated,omitempty"`
+	}
+	return json.Marshal(apiSummaryJSON{
+		Name:        firstNonEmptyMachineHelpString(summary.DisplayName, summary.CmdName, summary.Name),
+		Title:       summary.Title,
+		Description: summary.Description,
+		Deprecated:  summary.Deprecated,
+	})
 }
 
 type machineHelpProductDocument struct {
@@ -243,7 +258,7 @@ type machineHelpShape struct {
 }
 
 type machineHelpParameter struct {
-	Name    string `json:"name"`
+	Name string `json:"name"`
 	// RawName carries the wire name for legacy-camel views where it is set;
 	// it is only ever equal to Name, so it stays struct-only.
 	RawName       string                   `json:"-"`

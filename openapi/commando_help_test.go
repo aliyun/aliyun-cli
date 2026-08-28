@@ -845,6 +845,52 @@ func TestCanonicalTextHelpOmitsEnableHintWhenAIModeIsOn(t *testing.T) {
 	assert.NotContains(t, stdout.String(), cli.AIModeEnableCommand)
 }
 
+func TestCanonicalCamelProductTextHelpIncludesKebabSwitchHint(t *testing.T) {
+	t.Setenv(baselineProductHelpEnv, "")
+	originalAvailable := productHelpAvailable
+	productHelpAvailable = func(product string) bool { return product == "demo" }
+	t.Cleanup(func() { productHelpAvailable = originalAvailable })
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	target := HelpTarget{
+		Level:        HelpLevelProduct,
+		Product:      "demo",
+		CommandStyle: CommandStyleCamel,
+		Operation:    HelpOperationDefault,
+		Output:       HelpOutputText,
+		Provider:     HelpProviderHost,
+	}
+
+	require.NoError(t, c.renderHostHelpTarget(ctx, target, false))
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "set "+baselineProductHelpEnv+"=true")
+}
+
+func TestCanonicalProductJSONHonorsRawLanguageFlagBeforeParsing(t *testing.T) {
+	previousLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(previousLanguage) })
+	i18n.SetLanguage("en")
+
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	ctx.SetInvocationArgs([]string{"demo", "--help-search", "report", "--cli-output", "json", "--language", "zh"})
+	target := HelpTarget{
+		Level:        HelpLevelProduct,
+		Product:      "demo",
+		CommandStyle: CommandStyleCamel,
+		Operation:    HelpOperationSearch,
+		SearchQuery:  "report",
+		Output:       HelpOutputJSON,
+		Provider:     HelpProviderHost,
+	}
+
+	require.NoError(t, c.renderHostHelpTarget(ctx, target, false))
+	assert.Empty(t, stderr.String())
+	var output map[string]any
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &output))
+	apis := output["apis"].([]any)
+	require.Len(t, apis, 1)
+	assert.Equal(t, "创建报表。", apis[0].(map[string]any)["description"])
+}
+
 func TestCanonicalTextHelpKeepsConfiguredAIModeDisableHint(t *testing.T) {
 	testHome := t.TempDir()
 	cleanup := setTestHomeDir(t, testHome)

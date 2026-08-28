@@ -90,6 +90,18 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		}, requests)
 	})
 
+	t.Run("short unknown API still uses validated product search", func(t *testing.T) {
+		cause := &InvalidApiError{Name: "get", product: &meta.Product{Code: "sts"}}
+		envelope := requireAgentEnvelope(t, cause, []string{"sts", "get"}, func(request RecoverySearchRequest) bool {
+			assert.Equal(t, RecoverySearchRequest{Product: "sts", Style: "kebab", Keyword: "get"}, request)
+			return true
+		})
+
+		assert.Equal(t, "search_api", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun sts --help-search get", envelope.Recovery.Command)
+		assert.Equal(t, "Search APIs related to get.", envelope.Recovery.Hint)
+	})
+
 	t.Run("legacy unknown parameter message excludes Help recovery text", func(t *testing.T) {
 		cause := &InvalidParameterError{
 			Name: "InstnaceType", ProductCode: "ecs", ApiName: "RunInstances", ParameterNames: []string{"InstanceType"},
