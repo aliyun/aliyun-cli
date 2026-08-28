@@ -53,7 +53,11 @@ If the CLI was installed through a package manager, prefer that package manager'
 
 See the [installation guide](./docs/en/installation.md) for PATH setup, source builds, and upgrades.
 
-To try the CLI without installing it locally, open [Alibaba Cloud Shell](https://shell.aliyun.com/).
+To try the CLI without installing it locally, open [Alibaba Cloud Shell](https://shell.aliyun.com/):
+
+<a href="https://shell.aliyun.com/" target="cloudshell">
+  <img src="https://img.alicdn.com/tfs/TB1wt1zq9zqK1RjSZFpXXakSXXa-1066-166.png" width="180" alt="Alibaba Cloud Shell" />
+</a>
 
 ## Quick start
 
@@ -123,6 +127,10 @@ aliyun plugin update --name <plugin-name>
 
 See [command usage](./docs/en/usage.md) and [plugin management](./docs/en/plugins.md) for the complete workflows.
 
+## Troubleshoot
+
+[OpenAPI Troubleshoot](https://api.aliyun.com/troubleshoot?source=github_sdk) helps diagnose OpenAPI request failures by `RequestId` or error message.
+
 ## Documentation
 
 | Topic | English | 简体中文 |
@@ -137,7 +145,6 @@ Additional resources:
 
 - [Official Alibaba Cloud CLI documentation](https://www.alibabacloud.com/help/en/cli/)
 - [OpenAPI Portal](https://api.aliyun.com/)
-- [OpenAPI troubleshooting](https://api.aliyun.com/troubleshoot?source=github_sdk)
 - [Changelog](./CHANGELOG.md)
 - [Security policy](./SECURITY.md)
 

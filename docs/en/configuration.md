@@ -2,7 +2,7 @@
 
 [Documentation index](../README.md) | [简体中文](../zh-CN/configuration.md)
 
-Alibaba Cloud CLI stores named profiles in `~/.aliyun/config.json` by default. Use `--config-path <file>` when an isolated configuration file is required.
+Alibaba Cloud CLI stores named profiles in `~/.aliyun/config.json` by default.
 
 ## Create and manage profiles
 
@@ -10,6 +10,19 @@ For interactive local use, OAuth is the recommended starting point:
 
 ```sh
 aliyun configure --mode OAuth --profile default
+```
+
+To create a basic AK profile interactively, run `aliyun configure`. When no mode is specified for a new profile, the CLI uses AK mode:
+
+```text
+$ aliyun configure --profile default
+Configuring profile 'default' in 'AK' authenticate mode...
+Access Key Id []: <AccessKeyId>
+Access Key Secret []: <AccessKeySecret>
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] en:
+Saving profile[default] ...Done.
 ```
 
 Profile management commands:
@@ -67,27 +80,76 @@ Do not put real secrets in scripts, shell history, source control, or issue repo
 
 Use `StsToken` when all three credential values have already been issued:
 
+Interactive example:
+
+```text
+$ aliyun configure --mode StsToken --profile StsProfile
+Configuring profile 'StsProfile' in 'StsToken' authenticate mode...
+Access Key Id []: STS.NUr5xxxxx
+Access Key Secret []: 7Bshxxxxx
+Sts Token []: CAISxxxxxxxxxxxxxxxx...
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] en:
+Saving profile[StsProfile] ...Done.
+```
+
+Non-interactive example:
+
 ```sh
 aliyun configure set \
-  --profile sts \
+  --profile StsProfile \
   --mode StsToken \
-  --access-key-id 'STS....' \
-  --access-key-secret '<temporary-secret>' \
-  --sts-token '<security-token>' \
+  --access-key-id STS.NUr5xxxxx \
+  --access-key-secret 7Bshxxxxx \
+  --sts-token CAISxxxxxxxxxxxxxxxx... \
   --region cn-hangzhou
 ```
 
 This mode does not renew the token. Reconfigure after expiration, or use a renewable identity mode such as `RamRoleArn`, `EcsRamRole`, or `OIDC`.
 
-## Role and workload credentials
-
-Interactive role assumption:
+Missing credential fields can also be supplied through environment variables:
 
 ```sh
-aliyun configure --mode RamRoleArn --profile assumed-role
+export ALIBABA_CLOUD_ACCESS_KEY_ID="STS.xxx"
+export ALIBABA_CLOUD_ACCESS_KEY_SECRET="temporary-secret"
+export ALIBABA_CLOUD_SECURITY_TOKEN="security-token"
 ```
 
-For a role chained from an existing profile:
+See [Configure StsToken credentials](https://help.aliyun.com/en/cli/temporary-security-credentials-sts-token) for more information.
+
+## Role and workload credentials
+
+### RAM role assumption
+
+`RamRoleArn` uses an AccessKey-based identity to call AssumeRole and obtain temporary credentials:
+
+```text
+$ aliyun configure --mode RamRoleArn --profile subaccount
+Configuring profile 'subaccount' in 'RamRoleArn' authenticate mode...
+Access Key Id []: <AccessKeyId>
+Access Key Secret []: <AccessKeySecret>
+Sts Region []: cn-hangzhou
+Ram Role Arn []: acs:ram::<account-id>:role/<role-name>
+Role Session Name []: aliyun-cli
+Expired Seconds []: 900
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] en:
+Saving profile[subaccount] ...Done.
+```
+
+### ECS instance role
+
+`EcsRamRole` obtains credentials from the RAM role attached to the current ECS instance:
+
+```sh
+aliyun configure --mode EcsRamRole --profile ecs-role
+```
+
+### Chainable RAM role
+
+`ChainableRamRoleArn` uses an existing profile as its source identity, then assumes the configured RAM role:
 
 ```sh
 aliyun configure set \
@@ -98,43 +160,146 @@ aliyun configure set \
   --role-session-name aliyun-cli
 ```
 
-On ECS, `EcsRamRole` reads the instance role. In OIDC-enabled CI or workload environments, configure the provider ARN, token file, role ARN, and session name:
+The resulting profile relationship is equivalent to:
 
-```sh
-aliyun configure --mode OIDC --profile workload
+```json
+{
+  "profiles": [
+    {
+      "name": "chained-role",
+      "mode": "ChainableRamRoleArn",
+      "ram_role_arn": "acs:ram::<account-id>:role/<role-name>",
+      "ram_session_name": "aliyun-cli",
+      "source_profile": "source-profile"
+    },
+    {
+      "name": "source-profile",
+      "mode": "AK",
+      "access_key_id": "<AccessKeyId>",
+      "access_key_secret": "<AccessKeySecret>"
+    }
+  ]
+}
+```
+
+### OIDC workload identity
+
+In an OIDC-enabled CI or workload environment, configure the provider ARN, token file, RAM role ARN, and session name:
+
+```text
+$ aliyun configure --mode OIDC --profile oidc-profile
+Configuring profile 'oidc-profile' in 'OIDC' authenticate mode...
+OIDC Provider ARN []: acs:ram::<account-id>:oidc-provider/<provider-name>
+OIDC Token File []: /path/to/oidc-token
+RAM Role ARN []: acs:ram::<account-id>:role/<role-name>
+Role Session Name []: aliyun-cli
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] en:
+Saving profile[oidc-profile] ...Done.
+```
+
+## Interactive identity sign-in
+
+### OAuth
+
+OAuth opens a browser-based sign-in flow and stores the resulting temporary credentials in the profile:
+
+```text
+$ aliyun configure --mode OAuth --profile oauth-profile
+Configuring profile 'oauth-profile' in 'OAuth' authenticate mode...
+OAuth Site Type (CN: 0 or INTL: 1, default: CN): 0
+Please open the displayed URL in your browser to authorize.
+OAuth configuration completed.
+Default Region Id []: cn-hangzhou
+Saving profile[oauth-profile] ...Done.
+```
+
+### CloudSSO
+
+CloudSSO starts an interactive sign-in flow through the configured CloudSSO portal:
+
+```text
+$ aliyun configure --mode CloudSSO --profile cloud-sso
+Configuring profile 'cloud-sso' in 'CloudSSO' authenticate mode...
+CloudSSO Sign In Url []: https://signin-cn-shanghai.alibabacloudsso.com/start/login
+Follow the displayed instructions to sign in and select the account/access configuration.
+Default Region Id []: cn-hangzhou
+Saving profile[cloud-sso] ...Done.
 ```
 
 ## External credential sources
 
 ### External process
 
-`External` runs the configured command and reads one JSON object from standard output. The command must write diagnostics to standard error, not standard output.
+`External` runs a configured local command and uses its output as credentials. The external program must follow these rules:
+
+1. Write the credential response to standard output.
+2. Write exactly one valid JSON object to standard output. Diagnostics belong on standard error.
+3. Include `mode` and all credential fields required by that mode. The supported response modes are `AK` and `StsToken`.
+
+AK response:
+
+```json
+{
+  "mode": "AK",
+  "access_key_id": "<AccessKeyId>",
+  "access_key_secret": "<AccessKeySecret>"
+}
+```
+
+StsToken response:
 
 ```json
 {
   "mode": "StsToken",
-  "access_key_id": "STS....",
-  "access_key_secret": "temporary-secret",
-  "sts_token": "security-token"
+  "access_key_id": "<AccessKeyId>",
+  "access_key_secret": "<AccessKeySecret>",
+  "sts_token": "<SecurityToken>"
 }
 ```
 
 Configure it interactively:
 
-```sh
-aliyun configure --mode External --profile external
+```text
+$ aliyun configure --mode External --profile external
+Configuring profile 'external' in 'External' authenticate mode...
+Process Command []: <credential-command>
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] en:
+Saving profile[external] ...Done.
 ```
 
 ### Credentials URI
 
-Configure a local or remote endpoint interactively:
+`CredentialsURI` obtains temporary credentials from a local or remote HTTP endpoint. Configure it interactively:
 
-```sh
-aliyun configure --profile uri --mode CredentialsURI
-# Credentials URI []: http://127.0.0.1:6666/credentials
+```text
+$ aliyun configure --profile uri --mode CredentialsURI
+Configuring profile 'uri' in 'CredentialsURI' authenticate mode...
+Credentials URI []: http://127.0.0.1:6666/credentials
+Default Region Id []: cn-hangzhou
+Default Output Format [json]: json (Only support json)
+Default Language [zh|en] en:
+Saving profile[uri] ...Done.
 ```
 
-Alternatively, set `ALIBABA_CLOUD_CREDENTIALS_URI` for the current process.
+The stored profile is equivalent to:
+
+```json
+{
+  "profiles": [
+    {
+      "name": "uri",
+      "mode": "CredentialsURI",
+      "credentials_uri": "http://127.0.0.1:6666/credentials"
+    }
+  ]
+}
+```
+
+Alternatively, set `ALIBABA_CLOUD_CREDENTIALS_URI` for the current process instead of storing the URI in a profile.
 
 The endpoint must return HTTP 200 with a credential response such as:
 
@@ -147,6 +312,8 @@ The endpoint must return HTTP 200 with a credential response such as:
   "Expiration": "2030-01-02T15:04:05Z"
 }
 ```
+
+Any non-200 response or malformed/missing credential field is treated as a credential retrieval failure.
 
 Set `ALIBABA_CLOUD_DISABLE_EXTERNAL_PROCESS=true` to block both external process execution and CredentialsURI fetching in a restricted environment.
 
