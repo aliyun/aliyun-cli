@@ -19,7 +19,8 @@ func TestRenderResponseHelpText(t *testing.T) {
 
 	var output bytes.Buffer
 	require.NoError(t, renderResponseHelpText(&output, doc))
-	assert.Contains(t, output.String(), "Response Schema (HTTP 200, application/json):")
+	assert.Contains(t, output.String(), "Responses:")
+	assert.Contains(t, output.String(), `"200": {`)
 	assert.Contains(t, output.String(), `"$ref": "#/components/schemas/ReportList"`)
 	assert.Contains(t, output.String(), "Components:")
 	assert.Contains(t, output.String(), `"ReportList": {`)

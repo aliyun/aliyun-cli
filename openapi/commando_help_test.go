@@ -735,7 +735,8 @@ func TestHelpResponseSectionUsesHostCanonicalWhenPluginIsNotInstalled(t *testing
 	require.NoError(t, err)
 	assert.False(t, c.pluginLoaded, "host Canonical response Help must not load the remote plugin index")
 	assert.Empty(t, stderr.String())
-	assert.Contains(t, stdout.String(), "Response Schema (HTTP 200, application/json):")
+	assert.Contains(t, stdout.String(), "Responses:")
+	assert.Contains(t, stdout.String(), `"200": {`)
 	assert.NotContains(t, stdout.String(), "Parameters:")
 }
 

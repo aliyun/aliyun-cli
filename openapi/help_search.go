@@ -12,8 +12,11 @@ import (
 )
 
 const (
-	helpListingLimit = 20
-	helpListingHint  = "Use --cli-search <keyword> to narrow the list, or --cli-all to show everything."
+	helpSearchResultLimit = 20
+	// helpListingLimit is retained for the legacy renderer until integration
+	// switches its default lists to the 100-line policy in help_policy.go.
+	helpListingLimit = helpSearchResultLimit
+	helpListingHint  = "Use --help-search <keyword> to narrow the list, or --help-all to show everything."
 )
 
 // HelpSearchRank is the stable relevance tier assigned to a local Help match.
@@ -93,9 +96,43 @@ func SearchHelpCandidates(candidates []HelpSearchCandidate, keyword string) []He
 		}
 	}
 	sort.SliceStable(matches, func(i, j int) bool {
-		return matches[i].Rank < matches[j].Rank
+		if matches[i].Rank != matches[j].Rank {
+			return matches[i].Rank < matches[j].Rank
+		}
+		left := newHelpSearchText(matches[i].Candidate.Name).compact
+		right := newHelpSearchText(matches[j].Candidate.Name).compact
+		if left == right {
+			return false
+		}
+		return left < right
 	})
 	return matches
+}
+
+// HelpSearchResults is the renderer-independent full-rank-then-limit result.
+// Validation intentionally uses the unprojected matcher so MatchCount remains
+// the real total even when only twenty matches are rendered.
+type HelpSearchResults struct {
+	Matches []HelpSearchMatch `json:"matches"`
+	Result  HelpResult        `json:"result"`
+}
+
+// ProjectHelpSearchMatches caps a completely ranked match set at the single
+// Help Search limit used by every target and output mode.
+func ProjectHelpSearchMatches(matches []HelpSearchMatch) HelpSearchResults {
+	total := len(matches)
+	shown := total
+	if shown > helpSearchResultLimit {
+		shown = helpSearchResultLimit
+	}
+	return HelpSearchResults{
+		Matches: append([]HelpSearchMatch(nil), matches[:shown]...),
+		Result: HelpResult{
+			Shown:     shown,
+			Total:     total,
+			Truncated: shown < total,
+		},
+	}
 }
 
 // SearchHelpParameters searches only the selected request parameter style and
@@ -190,13 +227,18 @@ func splitHelpSearchTokens(value string) []string {
 		}
 
 		boundary := false
-		if len(current) > 0 && unicode.IsUpper(r) {
+		if len(current) > 0 {
 			previous := runes[i-1]
-			nextIsLower := i+1 < len(runes) && unicode.IsLower(runes[i+1])
-			pluralAcronymSuffix := unicode.IsUpper(previous) && nextIsLower && runes[i+1] == 's' &&
-				(i+2 == len(runes) || !unicode.IsLower(runes[i+2]))
-			boundary = unicode.IsLower(previous) || unicode.IsDigit(previous) ||
-				(unicode.IsUpper(previous) && nextIsLower && len(current) > 1 && !pluralAcronymSuffix)
+			switch {
+			case unicode.IsDigit(r) != unicode.IsDigit(previous):
+				boundary = true
+			case unicode.IsUpper(r):
+				nextIsLower := i+1 < len(runes) && unicode.IsLower(runes[i+1])
+				pluralAcronymSuffix := unicode.IsUpper(previous) && nextIsLower && runes[i+1] == 's' &&
+					(i+2 == len(runes) || !unicode.IsLower(runes[i+2]))
+				boundary = unicode.IsLower(previous) ||
+					(unicode.IsUpper(previous) && nextIsLower && len(current) > 1 && !pluralAcronymSuffix)
+			}
 		}
 		if boundary {
 			flush()
@@ -285,6 +327,7 @@ type HelpResponseSchemaSearchResult struct {
 	Paths      []string
 	Schema     json.RawMessage
 	Components map[string]json.RawMessage
+	Result     HelpResult
 }
 
 // SearchResponseSchema returns every matching field path, the merged minimum
@@ -305,8 +348,20 @@ func SearchResponseSchema(input HelpResponseSchema, keyword string) (HelpRespons
 
 	state := newResponseSchemaSearchState(document, query)
 	state.walk(document.root, nil, make(map[string]bool))
-	if len(state.paths) == 0 {
+	allMatches := state.sortedPathMatches()
+	if len(allMatches) == 0 {
 		return emptyHelpResponseSchemaSearchResult(), nil
+	}
+	shown := len(allMatches)
+	if shown > helpSearchResultLimit {
+		shown = helpSearchResultLimit
+		allowed := make(map[string]bool, shown)
+		for _, match := range allMatches[:shown] {
+			allowed[match.path] = true
+		}
+		state = newResponseSchemaSearchState(document, query)
+		state.allowedPaths = allowed
+		state.walk(document.root, nil, make(map[string]bool))
 	}
 
 	root, err := state.marshalNode(document.root)
@@ -318,9 +373,14 @@ func SearchResponseSchema(input HelpResponseSchema, keyword string) (HelpRespons
 		return HelpResponseSchemaSearchResult{}, err
 	}
 	return HelpResponseSchemaSearchResult{
-		Paths:      state.sortedPaths(),
+		Paths:      responseSchemaMatchPaths(allMatches[:shown]),
 		Schema:     root,
 		Components: components,
+		Result: HelpResult{
+			Shown:     shown,
+			Total:     len(allMatches),
+			Truncated: shown < len(allMatches),
+		},
 	}, nil
 }
 
@@ -331,7 +391,7 @@ func ValidateResponseSchemaSearch(input HelpResponseSchema, keyword string) (Hel
 	if err != nil {
 		return HelpSearchValidation{}, err
 	}
-	return HelpSearchValidation{Matched: len(result.Paths) > 0, MatchCount: len(result.Paths)}, nil
+	return HelpSearchValidation{Matched: result.Result.Total > 0, MatchCount: result.Result.Total}, nil
 }
 
 func emptyHelpResponseSchemaSearchResult() HelpResponseSchemaSearchResult {
@@ -545,6 +605,7 @@ type responseSchemaSearchState struct {
 	fullComponents map[string]bool
 	paths          []responseSchemaPathMatch
 	pathIndex      map[string]int
+	allowedPaths   map[string]bool
 }
 
 func newResponseSchemaSearchState(document *responseSchemaDocument, query helpSearchText) *responseSchemaSearchState {
@@ -595,10 +656,11 @@ func (s *responseSchemaSearchState) walk(node *responseSchemaNode, path []string
 			for index, property := range node.properties {
 				propertyPath := appendPath(path, property.name)
 				rank, selfMatch := s.propertyMatchRank(property, propertyPath)
-				if selfMatch {
+				pathName := strings.Join(propertyPath, ".")
+				if selfMatch && (s.allowedPaths == nil || s.allowedPaths[pathName]) {
 					s.keepFor(node).properties[index] = true
 					s.markNodeSelf(property.node, activeRefs)
-					s.addPath(strings.Join(propertyPath, "."), rank)
+					s.addPath(pathName, rank)
 					matched = true
 				}
 				if s.walk(property.node, propertyPath, activeRefs) {
@@ -692,13 +754,26 @@ func (s *responseSchemaSearchState) addPath(path string, rank HelpSearchRank) {
 }
 
 func (s *responseSchemaSearchState) sortedPaths() []string {
+	return responseSchemaMatchPaths(s.sortedPathMatches())
+}
+
+func (s *responseSchemaSearchState) sortedPathMatches() []responseSchemaPathMatch {
 	matches := append([]responseSchemaPathMatch(nil), s.paths...)
 	sort.SliceStable(matches, func(i, j int) bool {
 		if matches[i].rank != matches[j].rank {
 			return matches[i].rank < matches[j].rank
 		}
+		left := newHelpSearchText(matches[i].path).compact
+		right := newHelpSearchText(matches[j].path).compact
+		if left != right {
+			return left < right
+		}
 		return matches[i].order < matches[j].order
 	})
+	return matches
+}
+
+func responseSchemaMatchPaths(matches []responseSchemaPathMatch) []string {
 	result := make([]string, 0, len(matches))
 	for _, match := range matches {
 		result = append(result, match.path)

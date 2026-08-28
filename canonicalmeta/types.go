@@ -19,6 +19,10 @@ type API struct {
 
 	DescriptionZh string `json:"description_zh,omitempty"`
 	DescriptionEn string `json:"description_en,omitempty"`
+	// Title is optional in Canonical Meta v12. Help consumers must retain the
+	// distinction between an absent title and a description fallback.
+	TitleZh string `json:"title_zh,omitempty"`
+	TitleEn string `json:"title_en,omitempty"`
 
 	CamelExample string     `json:"camel_example,omitempty"`
 	KebabExample string     `json:"kebab_example,omitempty"`
@@ -84,6 +88,8 @@ type VersionIndex struct {
 type VersionAPIEntry struct {
 	CmdName       string `json:"cmd_name"`
 	Deprecated    bool   `json:"deprecated"`
+	TitleZh       string `json:"title_zh,omitempty"`
+	TitleEn       string `json:"title_en,omitempty"`
 	DescriptionZh string `json:"description_zh"`
 	DescriptionEn string `json:"description_en"`
 }
@@ -94,6 +100,50 @@ func (a *API) Description(lang string) string {
 		return a.DescriptionZh
 	}
 	return a.DescriptionEn
+}
+
+// Title returns only title metadata. It intentionally does not synthesize a
+// title from description so structured Help can faithfully expose absence.
+func (a *API) Title(lang string) string {
+	if a == nil {
+		return ""
+	}
+	if lang == "zh" {
+		return a.TitleZh
+	}
+	return a.TitleEn
+}
+
+// TitleOrDescription returns the short Help purpose, preferring title while
+// keeping the underlying title fields untouched when Canonical omits them.
+func (a *API) TitleOrDescription(lang string) string {
+	if title := a.Title(lang); title != "" {
+		return title
+	}
+	if a == nil {
+		return ""
+	}
+	return a.Description(lang)
+}
+
+// Title returns only the optional version-index title metadata.
+func (e VersionAPIEntry) Title(lang string) string {
+	if lang == "zh" {
+		return e.TitleZh
+	}
+	return e.TitleEn
+}
+
+// TitleOrDescription returns the compact index summary without fabricating a
+// title when the optional v12 title fields are absent.
+func (e VersionAPIEntry) TitleOrDescription(lang string) string {
+	if title := e.Title(lang); title != "" {
+		return title
+	}
+	if lang == "zh" {
+		return e.DescriptionZh
+	}
+	return e.DescriptionEn
 }
 
 // IsAnonymous returns true if the API's security list contains "Anonymous".

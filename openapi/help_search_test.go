@@ -154,7 +154,7 @@ func TestProjectHelpListingCapsOnlyUnsearchedAIRootAndProductLists(t *testing.T)
 			wantListing: &HelpListingMetadata{
 				Shown: 20,
 				Total: 21,
-				Hint:  "Use --cli-search <keyword> to narrow the list, or --cli-all to show everything.",
+				Hint:  "Use --help-search <keyword> to narrow the list, or --help-all to show everything.",
 			},
 		},
 		{
@@ -165,7 +165,7 @@ func TestProjectHelpListingCapsOnlyUnsearchedAIRootAndProductLists(t *testing.T)
 			wantListing: &HelpListingMetadata{
 				Shown: 20,
 				Total: 100,
-				Hint:  "Use --cli-search <keyword> to narrow the list, or --cli-all to show everything.",
+				Hint:  "Use --help-search <keyword> to narrow the list, or --help-all to show everything.",
 			},
 		},
 		{

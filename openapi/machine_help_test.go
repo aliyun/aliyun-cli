@@ -134,6 +134,9 @@ func TestMachineHelpJSONPreservesResponseSchemaValues(t *testing.T) {
 				"Anything": json.RawMessage(`{}`),
 			}},
 		},
+		Components: &machineHelpComponents{Schemas: map[string]json.RawMessage{
+			"TopLevelEmpty": json.RawMessage(`{}`),
+		}},
 	}
 
 	var encoded bytes.Buffer
@@ -146,6 +149,7 @@ func TestMachineHelpJSONPreservesResponseSchemaValues(t *testing.T) {
 	assert.Contains(t, output, `"enum":[""]`)
 	assert.Contains(t, output, `"maximum":9223372036854775809`)
 	assert.Contains(t, output, `"Anything":{}`)
+	assert.Contains(t, output, `"TopLevelEmpty":{}`)
 }
 
 func TestMachineHelpAPIDefaultVersionFollowsCommandStyle(t *testing.T) {
@@ -283,6 +287,9 @@ func TestMachineHelpResponseSearchProjectsMatchesAndFilteredQuery(t *testing.T) 
 	require.NoError(t, err)
 
 	require.NoError(t, applyResponseHelpOptions(doc, helpOptions{Search: "report-id"}))
+	assert.Equal(t, "report-id", doc.Query)
+	assert.Empty(t, doc.Responses, "Search must not leak the unfiltered full response document")
+	assert.Nil(t, doc.Components)
 	assert.Equal(t, []string{"Reports.Report.ReportId"}, doc.Matches)
 	require.NotNil(t, doc.OutputSchema)
 	require.NotNil(t, doc.OutputSchema.Components)
@@ -304,7 +311,7 @@ func TestMachineHelpResponseSearchNoMatchReturnsClearNotice(t *testing.T) {
 
 	require.NoError(t, applyResponseHelpOptions(doc, helpOptions{Search: "does-not-exist"}))
 	assert.Nil(t, doc.OutputSchema)
-	assert.Equal(t, `No Help entries matched --cli-search "does-not-exist".`, doc.Notice)
+	assert.Equal(t, `No Help entries matched --help-search "does-not-exist".`, doc.Notice)
 }
 
 func TestMachineHelpNestedParameters(t *testing.T) {
