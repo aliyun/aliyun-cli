@@ -88,6 +88,32 @@ func TestMachineHelpProductExplicitVersion(t *testing.T) {
 	assert.Equal(t, "describe-regions", doc.APIs[1].CmdName)
 }
 
+func TestMachineHelpProductJSONUsesSelectedLanguageAndActiveCommandName(t *testing.T) {
+	previousLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(previousLanguage) })
+	i18n.SetLanguage("en")
+
+	service := testMachineHelpService(t)
+	doc, err := service.buildProductForStyle("demo", "2026-01-01", "camel")
+	require.NoError(t, err)
+	require.Len(t, doc.APIs, 2)
+	doc.APIs[1].Deprecated = true
+
+	var encoded bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	var output map[string]any
+	require.NoError(t, json.Unmarshal(encoded.Bytes(), &output))
+	apis := output["apis"].([]any)
+	first := apis[0].(map[string]any)
+	assert.Equal(t, "CreateReport", first["name"])
+	assert.Equal(t, "Creates a report.", first["description"])
+	assert.ElementsMatch(t, []string{"name", "description"}, mapKeys(first))
+	second := apis[1].(map[string]any)
+	assert.Equal(t, true, second["deprecated"])
+	assert.NotContains(t, second, "cmdName")
+	assert.NotContains(t, second, "displayName")
+}
+
 func TestMachineHelpAPICamelAndKebabShareCanonicalIdentity(t *testing.T) {
 	service := testMachineHelpService(t)
 	camel, err := service.buildAPI("demo", "CreateReport", "2026-01-01")

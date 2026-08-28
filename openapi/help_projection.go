@@ -1021,11 +1021,18 @@ func (c *Commando) finishCanonicalTextHelp(ctx *cli.Context, aiMode bool) error 
 }
 
 func localizedMachineHelpText(text machineHelpLocalizedText) string {
-	if i18n.GetLanguage() == "zh" && text.ZH != "" {
+	if localizedMachineHelpLanguage() == "zh" && text.ZH != "" {
 		return text.ZH
 	}
 	if text.EN != "" {
 		return text.EN
 	}
 	return text.ZH
+}
+
+func localizedMachineHelpLanguage() string {
+	if i18n.GetLanguage() == "zh" {
+		return "zh"
+	}
+	return "en"
 }

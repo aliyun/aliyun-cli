@@ -84,6 +84,24 @@ type machineHelpLocalizedText struct {
 	ZH string `json:"zh"`
 }
 
+func (text machineHelpLocalizedText) MarshalJSON() ([]byte, error) {
+	return json.Marshal(localizedMachineHelpText(text))
+}
+
+func (text *machineHelpLocalizedText) UnmarshalJSON(data []byte) error {
+	var selected string
+	if err := json.Unmarshal(data, &selected); err == nil {
+		if localizedMachineHelpLanguage() == "zh" {
+			text.ZH = selected
+		} else {
+			text.EN = selected
+		}
+		return nil
+	}
+	type localizedTextJSON machineHelpLocalizedText
+	return json.Unmarshal(data, (*localizedTextJSON)(text))
+}
+
 type machineHelpCommandSummary struct {
 	Group       string                   `json:"group"`
 	Path        []string                 `json:"path"`
@@ -157,6 +175,21 @@ type machineHelpAPISummary struct {
 	Title       machineHelpLocalizedText `json:"title"`
 	Description machineHelpLocalizedText `json:"description"`
 	Deprecated  bool                     `json:"deprecated"`
+}
+
+func (summary machineHelpAPISummary) MarshalJSON() ([]byte, error) {
+	type apiSummaryJSON struct {
+		Name        string                   `json:"name"`
+		Title       machineHelpLocalizedText `json:"title"`
+		Description machineHelpLocalizedText `json:"description"`
+		Deprecated  bool                     `json:"deprecated,omitempty"`
+	}
+	return json.Marshal(apiSummaryJSON{
+		Name:        firstNonEmptyMachineHelpString(summary.DisplayName, summary.CmdName, summary.Name),
+		Title:       summary.Title,
+		Description: summary.Description,
+		Deprecated:  summary.Deprecated,
+	})
 }
 
 type machineHelpProductDocument struct {

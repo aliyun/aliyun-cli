@@ -7,6 +7,8 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
+	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 )
 
@@ -35,13 +37,13 @@ func (c *Commando) beforeParseHelpRoute(ctx *cli.Context, args []string) (bool, 
 	}
 	requested := rawHelpRequested(args)
 	positionals := rawHelpPositionals(args)
-	if len(positionals) == 0 {
+	if len(positionals) > 0 && positionals[0] != "utils" && ctx != nil && ctx.Command() != nil && ctx.Command().GetSubCommand(positionals[0]) != nil {
+		return false, nil
+	}
+	if len(positionals) <= 1 {
 		if unknown := unknownRootOption(ctx, args); unknown != "" {
 			return true, cli.NewInvalidFlagError(unknown, ctx)
 		}
-	}
-	if len(positionals) > 0 && positionals[0] != "utils" && ctx != nil && ctx.Command() != nil && ctx.Command().GetSubCommand(positionals[0]) != nil {
-		return false, nil
 	}
 	implicitProductHelp := !requested && len(positionals) == 1
 	if !requested && !implicitProductHelp {
@@ -425,6 +427,7 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 	if err := target.Validate(); err != nil {
 		return err
 	}
+	c.applyHostHelpLanguage(ctx)
 	service := newMachineHelpService(c.library.helpRepo)
 	jsonOutput := aiMode || target.Output == HelpOutputJSON
 	opts := helpOptions{
@@ -511,7 +514,41 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 	if err := renderHostHelpText(ctx, document, target.SearchQuery); err != nil {
 		return err
 	}
+	if target.Level == HelpLevelProduct && target.CommandStyle == CommandStyleCamel &&
+		!productHelpEnvEnabled(baselineProductHelpEnv) && productHelpAvailable(target.Product) {
+		printProductHelpSwitchHint(ctx,
+			"To view baseline kebab-case product help, set "+baselineProductHelpEnv+"=true.",
+			"如需查看 baseline 的 kebab-case 产品帮助，请设置 "+baselineProductHelpEnv+"=true。")
+	}
 	return c.finishCanonicalTextHelp(ctx, aiMode)
+}
+
+func (c *Commando) applyHostHelpLanguage(ctx *cli.Context) {
+	lang := strings.TrimSpace(c.profile.Language)
+	if ctx != nil {
+		if flag := config.LanguageFlag(ctx.Flags()); flag != nil && flag.IsAssigned() {
+			lang = strings.TrimSpace(flag.GetStringOrDefault(lang))
+		}
+		if raw := rawHelpLanguage(ctx.InvocationArgs()); raw != "" {
+			lang = raw
+		}
+	}
+	switch strings.ToLower(lang) {
+	case "zh", "en":
+		i18n.SetLanguage(strings.ToLower(lang))
+	}
+}
+
+func rawHelpLanguage(args []string) string {
+	for index, arg := range args {
+		if strings.HasPrefix(arg, "--language=") {
+			return strings.TrimSpace(strings.TrimPrefix(arg, "--language="))
+		}
+		if arg == "--language" && index+1 < len(args) {
+			return strings.TrimSpace(args[index+1])
+		}
+	}
+	return ""
 }
 
 func rewriteResponseQueryVersionFlag(example *machineHelpQueryExample, versionFlag APIVersionFlag) {

@@ -401,6 +401,9 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					return runtimehost.Dispatch(ctx, pluginArgs)
 				}
 			} else {
+				if validationErr := c.validateCanonicalRuntimeCommand(args, ctx); validationErr != nil {
+					return validationErr
+				}
 				if handled, derr := runtimeTryDispatch(ctx, pluginArgs); handled {
 					return derr
 				}

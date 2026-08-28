@@ -14,7 +14,7 @@ func (c *Commando) validateCanonicalAPICommand(args []string, ctx *cli.Context) 
 	if len(args) != 2 || c.library == nil || c.library.helpRepo == nil {
 		return nil
 	}
-	method := strings.ToUpper(args[1])
+	method := args[1]
 	if method == "GET" || method == "POST" || method == "PUT" || method == "DELETE" {
 		return nil
 	}
@@ -56,4 +56,18 @@ func (c *Commando) validateCanonicalAPICommand(args []string, ctx *cli.Context) 
 	default:
 		return nil
 	}
+}
+
+// validateCanonicalRuntimeCommand validates a command for products already
+// present in Canonical metadata without preventing unknown/plugin-only
+// products from continuing through the established runtime and auto-install
+// routing paths.
+func (c *Commando) validateCanonicalRuntimeCommand(args []string, ctx *cli.Context) error {
+	err := c.validateCanonicalAPICommand(args, ctx)
+	var invalidProduct *InvalidProductError
+	var invalidParameter *InvalidParameterError
+	if errors.As(err, &invalidProduct) || errors.As(err, &invalidParameter) {
+		return nil
+	}
+	return err
 }
