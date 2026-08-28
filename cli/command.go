@@ -118,6 +118,7 @@ func (c *Command) Execute(ctx *Context, args []string) {
 	if ctx.completion != nil {
 		args = ctx.completion.GetArgs()
 	}
+	ctx.SetInvocationArgs(args)
 	ctx.errorNormalizer = nil
 	ctx.SetErrorNormalizationArgs(args)
 	if c.NormalizeError != nil {
