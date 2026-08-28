@@ -44,7 +44,7 @@ func AddFlags(fs *cli.FlagSet) {
 	fs.Add(NewUserAgentFlag())
 	fs.Add(NewCliAIModeFlag())
 	fs.Add(NewCliNoAIModeFlag())
-	fs.Add(NewMachineHelpFormatFlag())
+	fs.Add(NewCliOutputFlag())
 	fs.Add(NewCliHelpSectionFlag())
 	fs.Add(NewCliHelpSearchFlag())
 	fs.Add(NewCliHelpAllFlag())
@@ -74,10 +74,16 @@ const (
 	UserAgentFlagName           = "user-agent"
 	CliAIModeFlagName           = "cli-ai-mode"
 	CliNoAIModeFlagName         = "no-cli-ai-mode"
-	MachineHelpFormatFlagName   = "help-format"
-	CliHelpSectionFlagName      = "cli-section"
-	CliHelpSearchFlagName       = "cli-search"
-	CliHelpAllFlagName          = "cli-all"
+	CliOutputFlagName           = cli.CLIOutputFlagName
+	HelpSectionFlagName         = cli.CLISectionFlagName
+	HelpSearchFlagName          = cli.HelpSearchFlagName
+	HelpAllFlagName             = cli.HelpAllFlagName
+	// Compatibility identifiers for internal call sites. The registered public
+	// spellings are the final Help V2 names above.
+	MachineHelpFormatFlagName = CliOutputFlagName
+	CliHelpSectionFlagName    = HelpSectionFlagName
+	CliHelpSearchFlagName     = HelpSearchFlagName
+	CliHelpAllFlagName        = HelpAllFlagName
 )
 
 func MachineHelpFormatFlag(fs *cli.FlagSet) *cli.Flag {
@@ -85,11 +91,23 @@ func MachineHelpFormatFlag(fs *cli.FlagSet) *cli.Flag {
 }
 
 func NewMachineHelpFormatFlag() *cli.Flag {
+	return NewCliOutputFlag()
+}
+
+func CliOutputFlag(fs *cli.FlagSet) *cli.Flag {
+	return fs.Get(CliOutputFlagName)
+}
+
+func NewCliOutputFlag() *cli.Flag {
 	return &cli.Flag{
-		Name:         MachineHelpFormatFlagName,
+		Name:         CliOutputFlagName,
 		AssignedMode: cli.AssignedOnce,
 		Persistent:   true,
-		Hidden:       true,
+		Category:     "help",
+		Short: i18n.T(
+			"set host CLI Help and local error output format (json)",
+			"设置宿主 CLI Help 和本地错误的输出格式（json）",
+		),
 	}
 }
 
@@ -102,7 +120,11 @@ func NewCliHelpSectionFlag() *cli.Flag {
 		Name:         CliHelpSectionFlagName,
 		AssignedMode: cli.AssignedOnce,
 		Persistent:   true,
-		Hidden:       true,
+		Category:     "help",
+		Short: i18n.T(
+			"select request or response Help for an API",
+			"选择 API 的 request 或 response 帮助",
+		),
 	}
 }
 
@@ -115,7 +137,12 @@ func NewCliHelpSearchFlag() *cli.Flag {
 		Name:         CliHelpSearchFlagName,
 		AssignedMode: cli.AssignedOnce,
 		Persistent:   true,
-		Hidden:       true,
+		Category:     "help",
+		ExcludeWith:  []string{"help", CliHelpAllFlagName},
+		Short: i18n.T(
+			"search Help at the current command level",
+			"在当前命令层级搜索帮助",
+		),
 	}
 }
 
@@ -128,7 +155,12 @@ func NewCliHelpAllFlag() *cli.Flag {
 		Name:         CliHelpAllFlagName,
 		AssignedMode: cli.AssignedNone,
 		Persistent:   true,
-		Hidden:       true,
+		Category:     "help",
+		ExcludeWith:  []string{"help", CliHelpSearchFlagName},
+		Short: i18n.T(
+			"show the complete Help document at the current command level",
+			"显示当前命令层级的完整帮助文档",
+		),
 	}
 }
 

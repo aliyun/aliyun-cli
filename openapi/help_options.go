@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	helpSectionRequest  = "request"
-	helpSectionResponse = "response"
+	helpSectionRequest  = string(cli.HelpSectionRequest)
+	helpSectionResponse = string(cli.HelpSectionResponse)
 )
 
 type helpOptions struct {
@@ -17,6 +17,7 @@ type helpOptions struct {
 	SectionExplicit bool
 	Search          string
 	All             bool
+	Output          cli.HelpOutput
 }
 
 func canonicalHelpOptionAssigned(fs *cli.FlagSet) bool {
@@ -36,7 +37,7 @@ func canonicalHelpOptionAssigned(fs *cli.FlagSet) bool {
 }
 
 func parseHelpOptions(ctx *cli.Context, target []string) (helpOptions, error) {
-	opts := helpOptions{Section: helpSectionRequest}
+	opts := helpOptions{Section: helpSectionRequest, Output: cli.HelpOutputText}
 	if ctx == nil || ctx.Flags() == nil {
 		return opts, nil
 	}
@@ -46,7 +47,11 @@ func parseHelpOptions(ctx *cli.Context, target []string) (helpOptions, error) {
 		opts.Section = strings.ToLower(strings.TrimSpace(value))
 		opts.SectionExplicit = true
 		if opts.Section != helpSectionRequest && opts.Section != helpSectionResponse {
-			return helpOptions{}, fmt.Errorf("--%s must be request or response", CliHelpSectionFlagName)
+			return helpOptions{}, &cli.HelpOptionError{
+				Code:   cli.HelpOptionInvalidSection,
+				Option: "--" + CliHelpSectionFlagName,
+				Value:  opts.Section,
+			}
 		}
 		if len(target) != 2 {
 			return helpOptions{}, fmt.Errorf("--%s requires a product and an API", CliHelpSectionFlagName)
@@ -57,15 +62,35 @@ func parseHelpOptions(ctx *cli.Context, target []string) (helpOptions, error) {
 		value, _ := flag.GetValue()
 		opts.Search = strings.TrimSpace(value)
 		if opts.Search == "" {
-			return helpOptions{}, fmt.Errorf("--%s requires a non-empty keyword", CliHelpSearchFlagName)
+			return helpOptions{}, &cli.HelpOptionError{
+				Code:   cli.HelpOptionEmptySearch,
+				Option: "--" + CliHelpSearchFlagName,
+			}
 		}
 	}
 
 	if flag := CliHelpAllFlag(ctx.Flags()); flag != nil && flag.IsAssigned() {
-		if len(target) >= 2 {
-			return helpOptions{}, fmt.Errorf("--%s is only supported for root and product Help", CliHelpAllFlagName)
+		if opts.Search != "" {
+			return helpOptions{}, &cli.HelpOptionError{
+				Code:          cli.HelpOptionConflict,
+				Option:        "--" + CliHelpSearchFlagName,
+				ConflictsWith: "--" + CliHelpAllFlagName,
+			}
 		}
 		opts.All = true
+	}
+
+	if flag := CliOutputFlag(ctx.Flags()); flag != nil && flag.IsAssigned() {
+		value, _ := flag.GetValue()
+		value = strings.TrimSpace(value)
+		if value != string(cli.HelpOutputJSON) {
+			return helpOptions{}, &cli.HelpOptionError{
+				Code:   cli.HelpOptionInvalidOutput,
+				Option: "--" + CliOutputFlagName,
+				Value:  value,
+			}
+		}
+		opts.Output = cli.HelpOutputJSON
 	}
 
 	return opts, nil

@@ -3,6 +3,7 @@ package openapi
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -467,7 +468,7 @@ func TestCommandoHelpJSONAcceptsKebabAPIVersionFlag(t *testing.T) {
 	assert.Equal(t, "2026-01-01", doc.Product.SelectedVersion)
 }
 
-func TestCommandoHelpJSONRejectsUnsupportedFormatStructurally(t *testing.T) {
+func TestCommandoHelpJSONRejectsUnsupportedCLIOutputAsTypedOptionError(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	root := testMachineHelpRootCommand()
 	AddFlags(root.Flags())
@@ -478,10 +479,9 @@ func TestCommandoHelpJSONRejectsUnsupportedFormatStructurally(t *testing.T) {
 
 	err := c.help(ctx, nil)
 	require.Error(t, err)
-	structured, ok := err.(cli.StructuredError)
-	require.True(t, ok)
-	var rendered bytes.Buffer
-	require.NoError(t, structured.RenderError(&rendered))
-	assert.JSONEq(t, `{"schemaVersion":"v1","error":{"code":"INVALID_FORMAT","message":"unsupported help format \"yaml\"","target":["aliyun"],"suggestions":["use --help=json or help --format json"]}}`, rendered.String())
+	var optionErr *cli.HelpOptionError
+	require.True(t, errors.As(err, &optionErr))
+	assert.Equal(t, cli.HelpOptionInvalidOutput, optionErr.Code)
+	assert.Equal(t, "yaml", optionErr.Value)
 	assert.False(t, c.pluginLoaded)
 }
