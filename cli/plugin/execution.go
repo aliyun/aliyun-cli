@@ -92,6 +92,17 @@ func IsProfileRequiredForCommand(command string) bool {
 // Returns (false, error) if there's an error finding the plugin or resolving the plugin binary path.
 // If ctx is nil, uses os.Stdout and os.Stderr.
 func ExecutePlugin(command string, args []string, ctx *cli.Context) (bool, error) {
+	return executePlugin(command, args, ctx, true)
+}
+
+// ExecutePluginRaw is reserved for provider-first Help routing. It forwards a
+// defensive copy of the product-tail argv without the historical lowercase or
+// plugin-help rewrite, so the installed plugin remains the sole Help parser.
+func ExecutePluginRaw(command string, args []string, ctx *cli.Context) (bool, error) {
+	return executePlugin(command, args, ctx, false)
+}
+
+func executePlugin(command string, args []string, ctx *cli.Context, adjust bool) (bool, error) {
 	mgr, err := NewManager()
 	if err != nil {
 		return false, nil
@@ -118,7 +129,10 @@ func ExecutePlugin(command string, args []string, ctx *cli.Context) (bool, error
 	}
 
 	// Handle plugin-help subcommand: convert to --help, and trans first argument to lowercase for plugin system
-	adjustedArgs := adjustPluginArgs(args)
+	adjustedArgs := append([]string(nil), args...)
+	if adjust {
+		adjustedArgs = adjustPluginArgs(adjustedArgs)
+	}
 
 	var stdout, stderr io.Writer
 	if ctx != nil {

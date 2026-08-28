@@ -76,6 +76,7 @@ func newMachineHelpService(repository machineHelpRepository) *machineHelpService
 type machineHelpTarget struct {
 	Path           []string `json:"path"`
 	RequestedStyle string   `json:"requestedStyle"`
+	APIVersion     string   `json:"apiVersion"`
 }
 
 type machineHelpLocalizedText struct {
@@ -84,7 +85,19 @@ type machineHelpLocalizedText struct {
 }
 
 type machineHelpCommandSummary struct {
+	Group       string                   `json:"group"`
+	Path        []string                 `json:"path"`
 	Name        string                   `json:"name"`
+	Aliases     []string                 `json:"aliases"`
+	Description machineHelpLocalizedText `json:"description"`
+}
+
+type machineHelpFlagSummary struct {
+	Name        string                   `json:"name"`
+	Aliases     []string                 `json:"aliases"`
+	Shorthand   string                   `json:"shorthand"`
+	Category    string                   `json:"category"`
+	Visibility  string                   `json:"visibility"`
 	Description machineHelpLocalizedText `json:"description"`
 }
 
@@ -96,12 +109,32 @@ type machineHelpProductSummary struct {
 	Distribution  string                   `json:"distribution,omitempty"`
 }
 
+type machineHelpRootMatch struct {
+	Kind        string                   `json:"kind"`
+	Name        string                   `json:"name"`
+	Aliases     []string                 `json:"aliases"`
+	Command     string                   `json:"command"`
+	Description machineHelpLocalizedText `json:"description"`
+}
+
 type machineHelpRootDocument struct {
 	SchemaVersion string                      `json:"schemaVersion"`
 	Kind          string                      `json:"kind"`
 	Target        machineHelpTarget           `json:"target"`
-	Commands      []machineHelpCommandSummary `json:"commands"`
+	Name          string                      `json:"name"`
+	Version       string                      `json:"version"`
+	Description   machineHelpLocalizedText    `json:"description"`
+	QuickStart    []string                    `json:"quickStart"`
+	Query         string                      `json:"query"`
+	Commands      []machineHelpCommandSummary `json:"-"`
+	CoreCommands  []machineHelpCommandSummary `json:"coreCommands"`
+	Utilities     []machineHelpCommandSummary `json:"utilities"`
+	Extensions    []machineHelpCommandSummary `json:"extensions"`
+	GlobalFlags   []machineHelpFlagSummary    `json:"globalFlags"`
 	Products      []machineHelpProductSummary `json:"products"`
+	Matches       []machineHelpRootMatch      `json:"matches"`
+	Result        HelpResult                  `json:"result"`
+	Next          *HelpNext                   `json:"next"`
 	Listing       *machineHelpListing         `json:"listing"`
 	AIModeHint    *machineHelpAIModeHint      `json:"aiModeHint"`
 }
@@ -120,6 +153,8 @@ type machineHelpProduct struct {
 type machineHelpAPISummary struct {
 	Name        string                   `json:"name"`
 	CmdName     string                   `json:"cmdName"`
+	DisplayName string                   `json:"displayName"`
+	Title       machineHelpLocalizedText `json:"title"`
 	Description machineHelpLocalizedText `json:"description"`
 	Deprecated  bool                     `json:"deprecated"`
 }
@@ -128,8 +163,11 @@ type machineHelpProductDocument struct {
 	SchemaVersion string                  `json:"schemaVersion"`
 	Kind          string                  `json:"kind"`
 	Target        machineHelpTarget       `json:"target"`
+	Query         string                  `json:"query"`
 	Product       machineHelpProduct      `json:"product"`
 	APIs          []machineHelpAPISummary `json:"apis"`
+	Result        HelpResult              `json:"result"`
+	Next          *HelpNext               `json:"next"`
 	Listing       *machineHelpListing     `json:"listing"`
 	AIModeHint    *machineHelpAIModeHint  `json:"aiModeHint"`
 }
@@ -151,6 +189,7 @@ type machineHelpAPI struct {
 	Name         string                   `json:"name"`
 	CmdName      string                   `json:"cmdName"`
 	CmdFullName  string                   `json:"cmdFullName"`
+	Title        machineHelpLocalizedText `json:"title"`
 	Description  machineHelpLocalizedText `json:"description"`
 	Deprecated   bool                     `json:"deprecated"`
 	MultiVersion bool                     `json:"multiVersion"`
@@ -158,17 +197,21 @@ type machineHelpAPI struct {
 }
 
 type machineHelpConstraints struct {
-	Enum    any `json:"enum"`
-	Pattern any `json:"pattern"`
-	Minimum any `json:"minimum"`
-	Maximum any `json:"maximum"`
+	Enum      []string `json:"enum"`
+	Pattern   string   `json:"pattern"`
+	Minimum   string   `json:"minimum"`
+	Maximum   string   `json:"maximum"`
+	MinLength string   `json:"minLength"`
+	MaxLength string   `json:"maxLength"`
 }
 
 type machineHelpShape struct {
-	Type    string                 `json:"type"`
-	Fields  []machineHelpParameter `json:"fields,omitempty"`
-	Element *machineHelpShape      `json:"element,omitempty"`
-	Value   *machineHelpShape      `json:"value,omitempty"`
+	Type        string                 `json:"type"`
+	Format      string                 `json:"format,omitempty"`
+	Constraints machineHelpConstraints `json:"constraints"`
+	Fields      []machineHelpParameter `json:"fields,omitempty"`
+	Element     *machineHelpShape      `json:"element,omitempty"`
+	Value       *machineHelpShape      `json:"value,omitempty"`
 }
 
 type machineHelpParameter struct {
@@ -202,6 +245,7 @@ type machineHelpAPIDocument struct {
 	Kind               string                   `json:"kind"`
 	Section            string                   `json:"section"`
 	Target             machineHelpTarget        `json:"target"`
+	Query              string                   `json:"query"`
 	Product            machineHelpProduct       `json:"product"`
 	API                machineHelpAPI           `json:"api"`
 	ActiveParameterSet string                   `json:"activeParameterSet"`
@@ -213,6 +257,8 @@ type machineHelpAPIDocument struct {
 	Risk               any                      `json:"risk"`
 	Recovery           any                      `json:"recovery"`
 	ResponseQuery      *machineHelpQueryExample `json:"responseQueryExample"`
+	Result             HelpResult               `json:"result"`
+	Next               *HelpNext                `json:"next"`
 	Listing            *machineHelpListing      `json:"listing"`
 	AIModeHint         *machineHelpAIModeHint   `json:"aiModeHint"`
 }
@@ -250,10 +296,15 @@ type machineHelpAPIResponseDocument struct {
 	Kind          string                   `json:"kind"`
 	Section       string                   `json:"section"`
 	Target        machineHelpTarget        `json:"target"`
+	Query         string                   `json:"query"`
 	Product       machineHelpProduct       `json:"product"`
 	API           machineHelpAPI           `json:"api"`
+	Responses     json.RawMessage          `json:"responses"`
+	Components    *machineHelpComponents   `json:"components"`
 	OutputSchema  *machineHelpOutputSchema `json:"outputSchema"`
 	Matches       []string                 `json:"matches"`
+	Result        HelpResult               `json:"result"`
+	Next          *HelpNext                `json:"next"`
 	Notice        string                   `json:"notice"`
 	Warnings      []string                 `json:"warnings"`
 	ResponseQuery *machineHelpQueryExample `json:"responseQueryExample"`
@@ -287,6 +338,8 @@ func (s *machineHelpService) buildRoot(root *cli.Command) (*machineHelpRootDocum
 			continue
 		}
 		commands = append(commands, machineHelpCommandSummary{
+			Group:       "core",
+			Path:        []string{"aliyun", name},
 			Name:        name,
 			Description: localizedText(entry.Short),
 		})
@@ -320,12 +373,28 @@ func (s *machineHelpService) buildRoot(root *cli.Command) (*machineHelpRootDocum
 }
 
 func (s *machineHelpService) buildProduct(code, requestedVersion string) (*machineHelpProductDocument, error) {
+	document, err := s.buildProductForStyle(code, requestedVersion, "kebab")
+	if document != nil {
+		document.Target.RequestedStyle = "product"
+	}
+	return document, err
+}
+
+// buildProductForStyle reads only products.json plus the selected version.json;
+// it never loads per-Action JSON while producing product Help.
+func (s *machineHelpService) buildProductForStyle(code, requestedVersion, style string) (*machineHelpProductDocument, error) {
 	product, err := s.findProduct(code)
 	if err != nil {
 		return nil, err
 	}
 	versions := normalizedVersions(*product)
-	selected, err := selectProductVersion(*product, versions, requestedVersion)
+	if style == "pascal" {
+		style = "camel"
+	}
+	if style != "camel" && style != "kebab" {
+		return nil, fmt.Errorf("unsupported command style %q", style)
+	}
+	selected, err := selectAPIVersion(*product, versions, requestedVersion, style)
 	if err != nil {
 		return nil, err
 	}
@@ -336,18 +405,24 @@ func (s *machineHelpService) buildProduct(code, requestedVersion string) (*machi
 
 	apis := make([]machineHelpAPISummary, 0, len(index.APIs))
 	for name, entry := range index.APIs {
+		displayName := name
+		if style == "kebab" && entry.CmdName != "" {
+			displayName = entry.CmdName
+		}
 		apis = append(apis, machineHelpAPISummary{
 			Name:        name,
 			CmdName:     entry.CmdName,
+			DisplayName: displayName,
+			Title:       machineHelpLocalizedText{EN: entry.TitleEn, ZH: entry.TitleZh},
 			Description: machineHelpLocalizedText{EN: entry.DescriptionEn, ZH: entry.DescriptionZh},
 			Deprecated:  entry.Deprecated,
 		})
 	}
 	sort.Slice(apis, func(i, j int) bool {
-		if apis[i].CmdName == apis[j].CmdName {
+		if apis[i].DisplayName == apis[j].DisplayName {
 			return apis[i].Name < apis[j].Name
 		}
-		return apis[i].CmdName < apis[j].CmdName
+		return apis[i].DisplayName < apis[j].DisplayName
 	})
 
 	productDoc := buildMachineHelpProduct(*product, versions, selected)
@@ -355,7 +430,7 @@ func (s *machineHelpService) buildProduct(code, requestedVersion string) (*machi
 	return &machineHelpProductDocument{
 		SchemaVersion: machineHelpSchemaVersion,
 		Kind:          "product",
-		Target:        machineHelpTarget{Path: []string{"aliyun", code}, RequestedStyle: "product"},
+		Target:        machineHelpTarget{Path: []string{"aliyun", code}, RequestedStyle: style},
 		Product:       productDoc,
 		APIs:          apis,
 	}, nil
@@ -392,6 +467,7 @@ func (s *machineHelpService) buildAPI(code, command, requestedVersion string) (*
 			Name:         api.Name,
 			CmdName:      api.CmdName,
 			CmdFullName:  api.CmdFullName,
+			Title:        machineHelpLocalizedText{EN: api.TitleEn, ZH: api.TitleZh},
 			Description:  machineHelpLocalizedText{EN: api.DescriptionEn, ZH: api.DescriptionZh},
 			Deprecated:   api.Deprecated,
 			MultiVersion: api.MultiVersion,
@@ -412,6 +488,10 @@ func (s *machineHelpService) buildAPI(code, command, requestedVersion string) (*
 		Risk:         nil,
 		Recovery:     nil,
 	}
+	document.Result = HelpResult{
+		Shown: len(activeMachineHelpParameters(document)),
+		Total: len(activeMachineHelpParameters(document)),
+	}
 	document.ResponseQuery = projectCanonicalResponseQueryExample(api, productDoc.Code, command, resolved.Style, requestedVersion)
 	return document, nil
 }
@@ -422,6 +502,10 @@ func (s *machineHelpService) buildAPIResponse(code, command, requestedVersion st
 		return nil, err
 	}
 	api := resolved.API
+	section, err := api.ResponseSection()
+	if err != nil {
+		return nil, err
+	}
 	response, err := api.ResponseSchema()
 	if err != nil {
 		return nil, err
@@ -441,12 +525,18 @@ func (s *machineHelpService) buildAPIResponse(code, command, requestedVersion st
 			Name:         api.Name,
 			CmdName:      api.CmdName,
 			CmdFullName:  api.CmdFullName,
+			Title:        machineHelpLocalizedText{EN: api.TitleEn, ZH: api.TitleZh},
 			Description:  machineHelpLocalizedText{EN: api.DescriptionEn, ZH: api.DescriptionZh},
 			Deprecated:   api.Deprecated,
 			MultiVersion: api.MultiVersion,
 			Operation:    projectMachineHelpOperation(api),
 		},
-		Warnings: response.Warnings,
+		Responses: section.Responses,
+		Warnings:  mergeMachineHelpWarnings(section.Warnings, response.Warnings),
+		Result:    completeMachineHelpJSONResult(section.Responses),
+	}
+	if len(section.Components) > 0 {
+		document.Components = &machineHelpComponents{Schemas: section.Components}
 	}
 	if !response.HasSchema() {
 		document.Notice = "No response schema is available for this API."
@@ -618,6 +708,14 @@ func projectCanonicalParameter(parameter *canonicalmeta.Parameter) machineHelpPa
 		Serialization: parameter.ParamStyle,
 		Help:          machineHelpLocalizedText{EN: parameter.HelpEn, ZH: parameter.HelpZh},
 		Example:       parameter.Example,
+		Constraints: machineHelpConstraints{
+			Enum:      append([]string(nil), parameter.Enum...),
+			Pattern:   parameter.Pattern,
+			Minimum:   parameter.Minimum,
+			Maximum:   parameter.Maximum,
+			MinLength: parameter.MinLength,
+			MaxLength: parameter.MaxLength,
+		},
 	}
 	for i := range parameter.Fields {
 		result.Fields = append(result.Fields, projectCanonicalField(&parameter.Fields[i]))
@@ -632,14 +730,21 @@ func projectCanonicalField(field *canonicalmeta.Field) machineHelpParameter {
 		return machineHelpParameter{}
 	}
 	result := machineHelpParameter{
-		Name:        field.Name,
-		RawName:     field.RawName,
-		Options:     make([]string, 0),
-		Type:        field.Type,
-		Required:    field.Required,
-		Help:        machineHelpLocalizedText{EN: field.HelpEn, ZH: field.HelpZh},
-		Example:     field.Example,
-		Constraints: machineHelpConstraints{},
+		Name:     field.Name,
+		RawName:  field.RawName,
+		Options:  make([]string, 0),
+		Type:     field.Type,
+		Required: field.Required,
+		Help:     machineHelpLocalizedText{EN: field.HelpEn, ZH: field.HelpZh},
+		Example:  field.Example,
+		Constraints: machineHelpConstraints{
+			Enum:      append([]string(nil), field.Enum...),
+			Pattern:   field.Pattern,
+			Minimum:   field.Minimum,
+			Maximum:   field.Maximum,
+			MinLength: field.MinLength,
+			MaxLength: field.MaxLength,
+		},
 	}
 	for i := range field.Fields {
 		result.Fields = append(result.Fields, projectCanonicalField(&field.Fields[i]))
@@ -653,7 +758,18 @@ func projectCanonicalShape(shape *canonicalmeta.TypeShape) *machineHelpShape {
 	if shape == nil {
 		return nil
 	}
-	result := &machineHelpShape{Type: shape.Type}
+	result := &machineHelpShape{
+		Type:   shape.Type,
+		Format: shape.Format,
+		Constraints: machineHelpConstraints{
+			Enum:      append([]string(nil), shape.Enum...),
+			Pattern:   shape.Pattern,
+			Minimum:   shape.Minimum,
+			Maximum:   shape.Maximum,
+			MinLength: shape.MinLength,
+			MaxLength: shape.MaxLength,
+		},
+	}
 	for i := range shape.Fields {
 		result.Fields = append(result.Fields, projectCanonicalField(&shape.Fields[i]))
 	}
@@ -668,16 +784,24 @@ func projectLegacyParameter(view *canonicalmeta.LegacyParameterView, prefix stri
 	if prefix != "" {
 		optionPath = prefix + "." + name
 	}
+	constraints := view.Constraints()
 	result := machineHelpParameter{
-		Name:        name,
-		RawName:     name,
-		Options:     []string{"--" + optionPath},
-		Type:        view.LegacyType(),
-		Location:    strings.ToLower(view.LegacyPosition()),
-		Required:    view.LegacyRequired(),
-		Help:        machineHelpLocalizedText{EN: view.LegacyDescription("en"), ZH: view.LegacyDescription("zh")},
-		Example:     view.LegacyExample(),
-		Constraints: machineHelpConstraints{},
+		Name:     name,
+		RawName:  name,
+		Options:  []string{"--" + optionPath},
+		Type:     view.LegacyType(),
+		Location: strings.ToLower(view.LegacyPosition()),
+		Required: view.LegacyRequired(),
+		Help:     machineHelpLocalizedText{EN: view.LegacyDescription("en"), ZH: view.LegacyDescription("zh")},
+		Example:  view.LegacyExample(),
+		Constraints: machineHelpConstraints{
+			Enum:      append([]string(nil), constraints.Enum...),
+			Pattern:   constraints.Pattern,
+			Minimum:   constraints.Minimum,
+			Maximum:   constraints.Maximum,
+			MinLength: constraints.MinLength,
+			MaxLength: constraints.MaxLength,
+		},
 	}
 	children := view.LegacyChildren()
 	if view.IsLegacyRepeatList() {
@@ -765,7 +889,7 @@ func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format stri
 			"INVALID_FORMAT",
 			fmt.Sprintf("unsupported help format %q", format),
 			target,
-			[]string{"use --help=json or help --format json"},
+			[]string{"use --cli-output json with a Help operation"},
 		)
 	}
 	if len(args) > 2 {
@@ -864,6 +988,9 @@ func newMachineHelpUnavailableError(target []string, cause error) *machineHelpEr
 }
 
 func encodeMachineHelpJSON(w io.Writer, value any) error {
+	if root, ok := value.(*machineHelpRootDocument); ok {
+		root.prepareJSONGroups()
+	}
 	data, err := json.Marshal(value)
 	if err != nil {
 		return err
@@ -880,6 +1007,28 @@ func encodeMachineHelpJSON(w io.Writer, value any) error {
 	encoder.SetEscapeHTML(false)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(document)
+}
+
+func (document *machineHelpRootDocument) prepareJSONGroups() {
+	if document == nil {
+		return
+	}
+	document.CoreCommands = nil
+	document.Utilities = nil
+	document.Extensions = nil
+	if document.Query != "" {
+		return
+	}
+	for _, command := range document.Commands {
+		switch command.Group {
+		case string(RootGroupUtils):
+			document.Utilities = append(document.Utilities, command)
+		case string(RootGroupExtension):
+			document.Extensions = append(document.Extensions, command)
+		default:
+			document.CoreCommands = append(document.CoreCommands, command)
+		}
+	}
 }
 
 // pruneMachineHelpEmpty removes values that carry no machine-readable
@@ -936,7 +1085,10 @@ func preserveMachineHelpSchema(path []string, key string) bool {
 	if len(path) == 1 && path[0] == "outputSchema" && key == "schema" {
 		return true
 	}
-	return len(path) == 2 && path[0] == "outputSchema" && path[1] == "components" && key == "schemas"
+	if len(path) == 2 && path[0] == "outputSchema" && path[1] == "components" && key == "schemas" {
+		return true
+	}
+	return len(path) == 2 && path[0] == "components" && path[1] == "schemas"
 }
 
 func requestedMachineHelpVersion(ctx *cli.Context) string {

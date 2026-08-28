@@ -50,6 +50,7 @@ type Context struct {
 	stderr             io.Writer
 	errorNormalizer    func(error) error
 	errorNormalizeArgs []string
+	invocationArgs     []string
 	inConfigureMode    bool
 	hasPluginSubCmd    bool
 	hasPluginSubCmdSet bool
@@ -60,6 +61,24 @@ type Context struct {
 	// use http instead of https
 	insecure    bool
 	runtimeEnvs map[string]string
+}
+
+// SetInvocationArgs records the original argv passed to the root command.
+// The copy remains available after generic parsing has consumed flags and is
+// used by provider-first Help routing to preserve plugin and parameter tokens.
+func (ctx *Context) SetInvocationArgs(args []string) {
+	if ctx == nil {
+		return
+	}
+	ctx.invocationArgs = append(ctx.invocationArgs[:0], args...)
+}
+
+// InvocationArgs returns a defensive copy of the root invocation argv.
+func (ctx *Context) InvocationArgs() []string {
+	if ctx == nil {
+		return nil
+	}
+	return append([]string(nil), ctx.invocationArgs...)
 }
 
 func (ctx *Context) SetAgentName(name string) {

@@ -14,7 +14,10 @@
 
 package cli
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 const (
 	AIModeEnableCommand  = "export ALIBABA_CLOUD_CLI_AI_MODE=1"
@@ -53,8 +56,16 @@ type AgentError struct {
 	cause    error
 }
 
+// NewAgentError returns nil when the required compact-envelope fields are
+// incomplete. Optional data is normalized before it can reach JSON output.
 func NewAgentError(envelope AgentErrorEnvelope, cause error) *AgentError {
-	envelope.DidYouMean = copyStrings(envelope.DidYouMean)
+	envelope.DidYouMean = compactStrings(envelope.DidYouMean)
+	envelope.Recovery.Command = strings.TrimSpace(envelope.Recovery.Command)
+	if strings.TrimSpace(envelope.Message) == "" ||
+		strings.TrimSpace(envelope.Recovery.Action) == "" ||
+		strings.TrimSpace(envelope.Recovery.Hint) == "" {
+		return nil
+	}
 	return &AgentError{envelope: envelope, cause: cause}
 }
 
@@ -103,4 +114,27 @@ func copyStrings(values []string) []string {
 	copyOfValues := make([]string, len(values))
 	copy(copyOfValues, values)
 	return copyOfValues
+}
+
+func compactStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }

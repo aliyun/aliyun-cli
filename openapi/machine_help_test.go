@@ -3,6 +3,7 @@ package openapi
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -43,6 +44,20 @@ func TestMachineHelpRoot(t *testing.T) {
 	assert.Equal(t, "demo", doc.Products[0].Code)
 	assert.Equal(t, []string{"camel", "kebab"}, doc.Products[0].CommandStyles)
 	assert.True(t, doc.Products[0].CanonicalHelp)
+}
+
+func TestMachineHelpRootJSONUsesExplicitGroups(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildRoot(testMachineHelpRootCommand())
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&output, doc))
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
+	assert.NotContains(t, raw, "commands")
+	assert.Contains(t, raw, "coreCommands")
+	assert.Contains(t, raw, "products")
 }
 
 func TestMachineHelpProduct(t *testing.T) {
@@ -133,6 +148,9 @@ func TestMachineHelpJSONPreservesResponseSchemaValues(t *testing.T) {
 				"Anything": json.RawMessage(`{}`),
 			}},
 		},
+		Components: &machineHelpComponents{Schemas: map[string]json.RawMessage{
+			"TopLevelEmpty": json.RawMessage(`{}`),
+		}},
 	}
 
 	var encoded bytes.Buffer
@@ -145,6 +163,7 @@ func TestMachineHelpJSONPreservesResponseSchemaValues(t *testing.T) {
 	assert.Contains(t, output, `"enum":[""]`)
 	assert.Contains(t, output, `"maximum":9223372036854775809`)
 	assert.Contains(t, output, `"Anything":{}`)
+	assert.Contains(t, output, `"TopLevelEmpty":{}`)
 }
 
 func TestMachineHelpAPIDefaultVersionFollowsCommandStyle(t *testing.T) {
@@ -282,6 +301,9 @@ func TestMachineHelpResponseSearchProjectsMatchesAndFilteredQuery(t *testing.T) 
 	require.NoError(t, err)
 
 	require.NoError(t, applyResponseHelpOptions(doc, helpOptions{Search: "report-id"}))
+	assert.Equal(t, "report-id", doc.Query)
+	assert.Empty(t, doc.Responses, "Search must not leak the unfiltered full response document")
+	assert.Nil(t, doc.Components)
 	assert.Equal(t, []string{"Reports.Report.ReportId"}, doc.Matches)
 	require.NotNil(t, doc.OutputSchema)
 	require.NotNil(t, doc.OutputSchema.Components)
@@ -303,7 +325,7 @@ func TestMachineHelpResponseSearchNoMatchReturnsClearNotice(t *testing.T) {
 
 	require.NoError(t, applyResponseHelpOptions(doc, helpOptions{Search: "does-not-exist"}))
 	assert.Nil(t, doc.OutputSchema)
-	assert.Equal(t, `No Help entries matched --cli-search "does-not-exist".`, doc.Notice)
+	assert.Equal(t, `No Help entries matched --help-search "does-not-exist".`, doc.Notice)
 }
 
 func TestMachineHelpNestedParameters(t *testing.T) {
@@ -360,7 +382,7 @@ func TestCommandoHelpJSONUsesCanonicalMetadataWithoutLoadingPlugins(t *testing.T
 	assert.Equal(t, machineHelpSchemaVersion, doc.SchemaVersion)
 	assert.Equal(t, "api", doc.Kind)
 	assert.Equal(t, "CreateReport", doc.API.Name)
-	assert.NotEmpty(t, doc.GlobalParameters)
+	assert.Empty(t, doc.GlobalParameters, "default Action Help does not repeat Root global flags")
 }
 
 func TestCommandoHelpJSONResponseSection(t *testing.T) {
@@ -467,7 +489,7 @@ func TestCommandoHelpJSONAcceptsKebabAPIVersionFlag(t *testing.T) {
 	assert.Equal(t, "2026-01-01", doc.Product.SelectedVersion)
 }
 
-func TestCommandoHelpJSONRejectsUnsupportedFormatStructurally(t *testing.T) {
+func TestCommandoHelpJSONRejectsUnsupportedCLIOutputAsTypedOptionError(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	root := testMachineHelpRootCommand()
 	AddFlags(root.Flags())
@@ -478,10 +500,9 @@ func TestCommandoHelpJSONRejectsUnsupportedFormatStructurally(t *testing.T) {
 
 	err := c.help(ctx, nil)
 	require.Error(t, err)
-	structured, ok := err.(cli.StructuredError)
-	require.True(t, ok)
-	var rendered bytes.Buffer
-	require.NoError(t, structured.RenderError(&rendered))
-	assert.JSONEq(t, `{"schemaVersion":"v1","error":{"code":"INVALID_FORMAT","message":"unsupported help format \"yaml\"","target":["aliyun"],"suggestions":["use --help=json or help --format json"]}}`, rendered.String())
+	var optionErr *cli.HelpOptionError
+	require.True(t, errors.As(err, &optionErr))
+	assert.Equal(t, cli.HelpOptionInvalidOutput, optionErr.Code)
+	assert.Equal(t, "yaml", optionErr.Value)
 	assert.False(t, c.pluginLoaded)
 }

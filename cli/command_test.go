@@ -222,6 +222,85 @@ func TestExecute(t *testing.T) {
 	assert.Equal(t, "\x1b[1;31mERROR: \"test\" is not a valid command\n\x1b[0m\x1b[1;33m\nUse `test --help` for more information.\n\x1b[0m\n"+AIModeEnableTextHint+"\n", buf2.String())
 }
 
+func TestBeforeParseRouteCanConsumeOriginalInvocation(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(stdout, stderr)
+	runCalled := false
+	beforeExecuteCalled := false
+	cmd := &Command{
+		Name:              "aliyun",
+		EnableUnknownFlag: true,
+		Run: func(ctx *Context, args []string) error {
+			runCalled = true
+			return nil
+		},
+	}
+	cmd.BeforeExecute = func(*Context, []string) { beforeExecuteCalled = true }
+	ctx.EnterCommand(cmd)
+	wantArgs := []string{"ecs", "DescribeInstances", "--InstanceIds", "--help"}
+	cmd.BeforeParseRoute = func(ctx *Context, args []string) (bool, error) {
+		assert.Equal(t, wantArgs, args)
+		fmt.Fprint(ctx.Stdout(), "parameter help")
+		return true, nil
+	}
+
+	cmd.Execute(ctx, wantArgs)
+
+	assert.False(t, runCalled)
+	assert.False(t, beforeExecuteCalled, "handled pre-parse routes must not apply host execution policy")
+	assert.Equal(t, "parameter help", stdout.String())
+	assert.Empty(t, stderr.String())
+}
+
+func TestBeforeParseRouteFallsThroughBeforeExecuteAndParser(t *testing.T) {
+	ctx := NewCommandContext(io.Discard, io.Discard)
+	events := make([]string, 0, 3)
+	cmd := &Command{
+		Name: "aliyun",
+		BeforeParseRoute: func(*Context, []string) (bool, error) {
+			events = append(events, "route")
+			return false, nil
+		},
+		BeforeExecute: func(*Context, []string) {
+			events = append(events, "before")
+		},
+		Run: func(*Context, []string) error {
+			events = append(events, "run")
+			return nil
+		},
+	}
+	ctx.EnterCommand(cmd)
+
+	cmd.Execute(ctx, nil)
+
+	assert.Equal(t, []string{"route", "before", "run"}, events)
+}
+
+func TestBeforeParseRouteErrorUsesCommandNormalizer(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	DisableExitCode()
+	defer EnableExitCode()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(stdout, stderr)
+	cmd := &Command{Name: "aliyun"}
+	ctx.EnterCommand(cmd)
+	cmd.BeforeParseRoute = func(*Context, []string) (bool, error) {
+		return true, errors.New("route failed")
+	}
+	cmd.NormalizeError = func(_ *Context, args []string, err error) error {
+		assert.Equal(t, []string{"ecs", "--help"}, args)
+		return fmt.Errorf("normalized: %w", err)
+	}
+
+	cmd.Execute(ctx, []string{"ecs", "--help"})
+
+	assert.Empty(t, stdout.String())
+	assert.Equal(t, "ERROR: normalized: route failed\n", stderr.String())
+}
+
 func TestProcessError(t *testing.T) {
 	DisableExitCode()
 	defer EnableExitCode()
@@ -262,7 +341,7 @@ func TestProcessAgentErrorWritesOneJSONLineToStderr(t *testing.T) {
 		DidYouMean: []string{"--instance-type"},
 		Recovery: AgentErrorRecovery{
 			Action:  "search_parameter",
-			Command: "aliyun help ecs describe-instances --cli-search instance-type",
+			Command: "aliyun ecs describe-instances --help-search instance-type",
 			Hint:    "Search request parameters related to instance-type.",
 		},
 	}, errors.New("unknown flag --instnace-type"))
@@ -270,7 +349,7 @@ func TestProcessAgentErrorWritesOneJSONLineToStderr(t *testing.T) {
 	cmd.processError(ctx, err)
 
 	assert.Empty(t, stdout.String())
-	assert.Equal(t, "{\"message\":\"unknown flag --instnace-type\",\"did_you_mean\":[\"--instance-type\"],\"recovery\":{\"action\":\"search_parameter\",\"command\":\"aliyun help ecs describe-instances --cli-search instance-type\",\"hint\":\"Search request parameters related to instance-type.\"}}\n", stderr.String())
+	assert.Equal(t, "{\"message\":\"unknown flag --instnace-type\",\"did_you_mean\":[\"--instance-type\"],\"recovery\":{\"action\":\"search_parameter\",\"command\":\"aliyun ecs describe-instances --help-search instance-type\",\"hint\":\"Search request parameters related to instance-type.\"}}\n", stderr.String())
 	assert.NotContains(t, stderr.String(), AIModeEnableTextHint)
 }
 

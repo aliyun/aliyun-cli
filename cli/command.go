@@ -62,6 +62,13 @@ type Command struct {
 	// BeforeExecute configures process-level behavior before parsing begins.
 	BeforeExecute func(ctx *Context, args []string)
 
+	// BeforeParseRoute may consume an invocation before the generic flag parser
+	// runs. It is intentionally a narrow root-command seam for routes that must
+	// inspect the original argv, such as installed-plugin Help and parameter
+	// Help ("--Parameter --help"). Returning handled=true prevents the parser
+	// and Run callback from processing the invocation.
+	BeforeParseRoute func(ctx *Context, args []string) (handled bool, err error)
+
 	// NormalizeError adapts errors from both this command and nested commands
 	// immediately before rendering.
 	NormalizeError func(ctx *Context, args []string, err error) error
@@ -111,15 +118,25 @@ func (c *Command) Execute(ctx *Context, args []string) {
 	if ctx.completion != nil {
 		args = ctx.completion.GetArgs()
 	}
-	if c.BeforeExecute != nil {
-		c.BeforeExecute(ctx, args)
-	}
+	ctx.SetInvocationArgs(args)
 	ctx.errorNormalizer = nil
 	ctx.SetErrorNormalizationArgs(args)
 	if c.NormalizeError != nil {
 		ctx.errorNormalizer = func(err error) error {
 			return c.NormalizeError(ctx, append([]string(nil), ctx.errorNormalizeArgs...), err)
 		}
+	}
+	if c.BeforeParseRoute != nil {
+		handled, err := c.BeforeParseRoute(ctx, append([]string(nil), args...))
+		if handled {
+			if err != nil {
+				c.processError(ctx, err)
+			}
+			return
+		}
+	}
+	if c.BeforeExecute != nil {
+		c.BeforeExecute(ctx, args)
 	}
 
 	err := c.executeInner(ctx, args)

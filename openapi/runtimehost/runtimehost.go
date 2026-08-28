@@ -288,6 +288,28 @@ func Dispatch(ctx *cli.Context, rawArgs []string) error {
 	})
 }
 
+// DispatchPluginHelp forwards an installed metadata plugin Help invocation
+// without host AI mode, safety policy, credential loading, argv rebuilding, or
+// modifier loss. The installed plugin/runtime remains the output owner.
+func DispatchPluginHelp(ctx *cli.Context, rawArgs []string) error {
+	lang := helpLanguage(ctx)
+	for i, arg := range rawArgs {
+		if arg == "--language" && i+1 < len(rawArgs) {
+			lang = rawArgs[i+1]
+			break
+		}
+		if strings.HasPrefix(arg, "--language=") {
+			lang = strings.TrimPrefix(arg, "--language=")
+			break
+		}
+	}
+	request := engine.Request{Args: append([]string(nil), rawArgs...), Out: ctx.Stdout(), Lang: lang}
+	if len(rawArgs) == 2 && (rawArgs[1] == "--help" || rawArgs[1] == "-h") {
+		return Engine().ProductHelp(request)
+	}
+	return engineDispatch(request)
+}
+
 func helpLanguage(ctx *cli.Context) string {
 	if ctx != nil && ctx.Flags() != nil {
 		if f := config.LanguageFlag(ctx.Flags()); f != nil {

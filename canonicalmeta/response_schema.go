@@ -25,6 +25,16 @@ type ResponseSchemaDocument struct {
 	Warnings    []string                   `json:"warnings,omitempty"`
 }
 
+// ResponseSectionDocument is the lossless response Help view. Responses keeps
+// every declared response status/content object, while Components contains
+// only schemas reachable from those responses. References are preserved and
+// never recursively inlined.
+type ResponseSectionDocument struct {
+	Responses  json.RawMessage            `json:"responses,omitempty"`
+	Components map[string]json.RawMessage `json:"components,omitempty"`
+	Warnings   []string                   `json:"warnings,omitempty"`
+}
+
 // HasSchema reports whether the selected successful response has a body
 // schema. A false result is the stable no-schema state and is not an error.
 func (d ResponseSchemaDocument) HasSchema() bool {
@@ -140,6 +150,82 @@ func (a *API) ResponseSchema() (ResponseSchemaDocument, error) {
 		}
 	}
 
+	if len(reachable) > 0 {
+		document.Components = reachable
+	}
+	document.Warnings = warnings.values()
+	return document, nil
+}
+
+// ResponseSection projects all response metadata for explicit Response Help.
+// It is separate from ResponseSchema, whose purpose is selecting one success
+// body for query guidance.
+func (a *API) ResponseSection() (ResponseSectionDocument, error) {
+	var document ResponseSectionDocument
+	if a == nil || !hasJSONValue(a.Responses) {
+		return document, nil
+	}
+
+	var responses map[string]json.RawMessage
+	if err := json.Unmarshal(a.Responses, &responses); err != nil {
+		return document, responseSchemaError("responses", err)
+	}
+	document.Responses = cloneRawMessage(a.Responses)
+
+	refs, refWarnings, err := schemaReferences(a.Responses)
+	if err != nil {
+		return ResponseSectionDocument{}, responseSchemaError("responses", err)
+	}
+	warnings := newWarningCollector()
+	warnings.addAll(refWarnings)
+	if len(refs) == 0 {
+		document.Warnings = warnings.values()
+		return document, nil
+	}
+
+	schemas, err := decodeComponentSchemas(a.Components)
+	if err != nil {
+		return ResponseSectionDocument{}, responseSchemaError("components", err)
+	}
+	reachable := make(map[string]json.RawMessage)
+	states := make(map[string]componentVisitState)
+	var visit func(string) error
+	visit = func(name string) error {
+		ref := localSchemaRefPrefix + escapeJSONPointerSegment(name)
+		switch states[name] {
+		case componentVisiting:
+			warnings.add(fmt.Sprintf("cyclic schema reference %q was preserved", ref))
+			return nil
+		case componentVisited:
+			return nil
+		}
+
+		schema, ok := schemas[name]
+		if !ok {
+			warnings.add(fmt.Sprintf("schema reference %q was not found in components.schemas", ref))
+			return nil
+		}
+		states[name] = componentVisiting
+		reachable[name] = cloneRawMessage(schema)
+		dependencies, dependencyWarnings, dependencyErr := schemaReferences(schema)
+		if dependencyErr != nil {
+			return dependencyErr
+		}
+		warnings.addAll(dependencyWarnings)
+		for _, dependency := range dependencies {
+			if err := visit(dependency); err != nil {
+				return err
+			}
+		}
+		states[name] = componentVisited
+		return nil
+	}
+
+	for _, name := range refs {
+		if err := visit(name); err != nil {
+			return ResponseSectionDocument{}, responseSchemaError("components", err)
+		}
+	}
 	if len(reachable) > 0 {
 		document.Components = reachable
 	}

@@ -46,9 +46,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cliext/sparksubmit"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/export"
-	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
-	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
 	"github.com/aliyun/aliyun-cli/v3/mock"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
@@ -102,7 +100,6 @@ func Main(args []string) {
 	if os.Getenv("GENERATE_METADATA") == "YES" {
 		generateMetadata(rootCmd)
 	} else {
-		args = openapi.NormalizeMachineHelpArgs(args)
 		rootCmd.Execute(ctx, args)
 	}
 }
@@ -132,8 +129,11 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	commando.InitWithCommand(rootCmd)
 
 	rootCmd.AddSubCommand(config.NewConfigureCommand())
-	// list-supported-pricing-apis: enumerate every OpenAPI that supports --estimate-cost
-	rootCmd.AddSubCommand(openapi.NewListSupportedPricingApisCommand())
+	utilsCmd, utilityAliases := newUtilsCommands()
+	rootCmd.AddSubCommand(utilsCmd)
+	for _, alias := range utilityAliases {
+		rootCmd.AddSubCommand(alias)
+	}
 	// oss old version, duplicate with ossutil, will remove in future
 	ossCmd := lib.NewOssCommand()
 	// `aliyun oss <ApiName> ... --estimate-cost` quotes via CloudControl; the
@@ -141,12 +141,10 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	// here (file-operation subcommands are matched first and stay untouched).
 	commando.AttachOssEstimateCost(ossCmd)
 	rootCmd.AddSubCommand(ossCmd)
-	rootCmd.AddSubCommand(cli.NewVersionCommand())
+	versionCmd := cli.NewVersionCommand()
+	versionCmd.Hidden = false
+	rootCmd.AddSubCommand(versionCmd)
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
-	// mcp proxy command
-	rootCmd.AddSubCommand(mcpproxy.NewMCPProxyCommand())
-	// go v1 to v2 migrate command
-	rootCmd.AddSubCommand(go_migrate.NewGoMigrateCommand())
 	// new oss command
 	rootCmd.AddSubCommand(ossutil.NewOssutilCommand())
 	// AgentBay command
@@ -191,6 +189,7 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(upgrade.NewUpgradeCommand())
 	// mock command
 	rootCmd.AddSubCommand(mock.NewMockCommand(config.GetConfigPath))
+	commando.SetRootHelpSpecs(rootCommandHelpSpecs, rootFlagHelpSpecs)
 
 	plugin.RegisterReservedTopLevelCommands(rootCmd.SubCommandNames())
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMatchPluginCommand(t *testing.T) {
@@ -522,6 +523,35 @@ func TestExecutePlugin(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, ok)
 		assert.Contains(t, stdout.String(), "args: arg1 arg2")
+	})
+
+	t.Run("Raw Help execution preserves argv and caller slice", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
+		require.NoError(t, os.MkdirAll(pluginDir, 0755))
+		binPath := filepath.Join(pluginDir, "aliyun-cli-test")
+		require.NoError(t, os.WriteFile(binPath, []byte("#!/bin/sh\nprintf 'args:%s\\n' \"$*\"\n"), 0755))
+
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		manifestJSON := `{"plugins":{"aliyun-cli-test":{"name":"aliyun-cli-test","version":"1.0.0","path":"` + pluginDir + `","command":"test"}}}`
+		require.NoError(t, os.WriteFile(manifestPath, []byte(manifestJSON), 0644))
+
+		stdout := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, new(bytes.Buffer))
+		args := []string{"Test", "plugin-help", "--help-search", "FooBar"}
+		original := append([]string(nil), args...)
+		ok, err := ExecutePluginRaw("test", args, ctx)
+		require.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, original, args)
+		assert.Contains(t, stdout.String(), "args:Test plugin-help --help-search FooBar")
 	})
 
 	t.Run("Plugin execution with plugin-help subcommand", func(t *testing.T) {

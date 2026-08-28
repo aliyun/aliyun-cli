@@ -194,7 +194,7 @@ func Test_main(t *testing.T) {
 
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, `"test" is not a valid product. See `+"`aliyun help`"+`.`, err.Error())
+	assert.Equal(t, `"test" is not a valid command or product. See `+"`aliyun help`"+`.`, err.Error())
 	ctx.Flags().Get("region").SetAssigned(true)
 	ctx.Flags().Get("region").SetValue("cn-hangzhou")
 	ctx.Flags().Add(config.NewAccessKeyIdFlag())
@@ -207,7 +207,7 @@ func Test_main(t *testing.T) {
 	profileflag.SetAssigned(false)
 	err = command.main(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, `"test" is not a valid product. See `+"`aliyun help`"+`.`, err.Error())
+	assert.Equal(t, `"test" is not a valid command or product. See `+"`aliyun help`"+`.`, err.Error())
 
 	ctx.Flags().Get("force").SetAssigned(true)
 	ctx.Flags().Get("version").SetAssigned(true)
@@ -702,23 +702,17 @@ func Test_help(t *testing.T) {
 	args = []string{"test"}
 	err = command.help(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, `"test" is not a valid product. See `+"`aliyun help`"+`.`, err.Error())
+	assert.Equal(t, `"test" is not a valid command or product. See `+"`aliyun help`"+`.`, err.Error())
 
 	args = []string{"test", "test0"}
 	err = command.help(ctx, args)
 	assert.NotNil(t, err)
-	assert.Equal(t, `"test" is not a valid product. See `+"`aliyun help`"+`.`, err.Error())
+	assert.Equal(t, `"test" is not a valid command or product. See `+"`aliyun help`"+`.`, err.Error())
 
 	args = []string{"test", "test0", "test1"}
 	err = command.help(ctx, args)
 	assert.NotNil(t, err)
-	// tryDelegatePluginHelp now intercepts every 3+ arg shape and produces an actionable diagnostic instead of the legacy "too many arguments: 3"
-	// — which used to imply args[0] was a valid product even when (as here) it wasn't.
-	// For args[0]="test", neither an installed plugin nor a built-in OpenAPI product,
-	// the helper falls all the way through to step-4 (fuzzy suggestion via InvalidProductOrPluginError, plus a Hint explaining the OpenAPI alternative form).
-	assert.Contains(t, err.Error(), `"test" is not a valid product. See `+"`aliyun help`"+`.`)
-	assert.Contains(t, err.Error(), "OpenAPI built-in call",
-		"step-4 must surface the OpenAPI alternative as a Hint")
+	assert.Contains(t, err.Error(), "too many Help target arguments")
 }
 
 func Test_complete(t *testing.T) {
@@ -3106,7 +3100,6 @@ func TestPluginExecutionLogic(t *testing.T) {
 	manifestPath := filepath.Join(pluginDir, "manifest.json")
 	err := os.MkdirAll(pluginDir, 0755)
 	assert.NoError(t, err)
-
 	t.Run("Plugin execution with valid executable", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("shell script test skipped on Windows")
@@ -3324,6 +3317,11 @@ func TestSingleProductPluginExecution(t *testing.T) {
 	manifestPath := filepath.Join(pluginDir, "manifest.json")
 	err := os.MkdirAll(pluginDir, 0755)
 	assert.NoError(t, err)
+	refreshLocalManifest := func() {
+		command.localLoaded = false
+		command.localManifest = nil
+		command.localManifestErr = nil
+	}
 
 	t.Run("Single arg - plugin installed and executes successfully", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
@@ -3356,6 +3354,7 @@ exit 0
 
 		os.Args = []string{"aliyun", "singletest"}
 		args := []string{"singletest"}
+		refreshLocalManifest()
 
 		stdout.Reset()
 		err = command.main(ctx, args)
@@ -3385,6 +3384,7 @@ exit 0
 
 		os.Args = []string{"aliyun", "missingbin"}
 		args := []string{"missingbin"}
+		refreshLocalManifest()
 
 		stdout.Reset()
 		err = command.main(ctx, args)
@@ -3404,6 +3404,7 @@ exit 0
 
 		os.Args = []string{"aliyun", "notinstalled"}
 		args := []string{"notinstalled"}
+		refreshLocalManifest()
 
 		stdout.Reset()
 		err = command.main(ctx, args)
@@ -3422,6 +3423,7 @@ exit 0
 
 		os.Args = []string{"aliyun", "testprod"}
 		args := []string{"testprod"}
+		refreshLocalManifest()
 
 		stdout.Reset()
 		err = command.main(ctx, args)
@@ -3469,6 +3471,7 @@ exit 0
 
 		os.Args = []string{"aliyun", "envskip"}
 		args := []string{"envskip"}
+		refreshLocalManifest()
 
 		stdout.Reset()
 		err = command.main(ctx, args)

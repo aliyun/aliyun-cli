@@ -31,7 +31,7 @@ func TestAgentErrorPreservesCompactLocalEnvelope(t *testing.T) {
 		DidYouMean: suggestions,
 		Recovery: AgentErrorRecovery{
 			Action:  "search_parameter",
-			Command: "aliyun help ecs describe-instances --cli-search instance-type",
+			Command: "aliyun ecs describe-instances --help-search instance-type",
 			Hint:    "Search request parameters related to instance-type.",
 		},
 	}
@@ -51,13 +51,75 @@ func TestAgentErrorPreservesCompactLocalEnvelope(t *testing.T) {
 		"did_you_mean":["--instance-type"],
 		"recovery":{
 			"action":"search_parameter",
-			"command":"aliyun help ecs describe-instances --cli-search instance-type",
+			"command":"aliyun ecs describe-instances --help-search instance-type",
 			"hint":"Search request parameters related to instance-type."
 		}
 	}`, string(encoded))
 	for _, removed := range []string{"ok", "category", "code", "details", "suggestions", "requestId", "retryable"} {
 		assert.NotContains(t, string(encoded), `"`+removed+`"`)
 	}
+}
+
+func TestNewAgentErrorRejectsIncompleteRequiredEnvelope(t *testing.T) {
+	valid := AgentErrorEnvelope{
+		Message: "invalid local usage",
+		Recovery: AgentErrorRecovery{
+			Action: "inspect_request_help",
+			Hint:   "Inspect the request help.",
+		},
+	}
+
+	tests := []struct {
+		name     string
+		envelope AgentErrorEnvelope
+	}{
+		{name: "message", envelope: func() AgentErrorEnvelope {
+			envelope := valid
+			envelope.Message = " \t "
+			return envelope
+		}()},
+		{name: "recovery action", envelope: func() AgentErrorEnvelope {
+			envelope := valid
+			envelope.Recovery.Action = ""
+			return envelope
+		}()},
+		{name: "recovery hint", envelope: func() AgentErrorEnvelope {
+			envelope := valid
+			envelope.Recovery.Hint = "\n"
+			return envelope
+		}()},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Nil(t, NewAgentError(test.envelope, errors.New("cause")))
+		})
+	}
+}
+
+func TestAgentErrorRecursivelyOmitsEmptyOptionalValues(t *testing.T) {
+	err := NewAgentError(AgentErrorEnvelope{
+		Message:    "invalid local usage",
+		DidYouMean: []string{"", "  --instance-id  ", "\t"},
+		Recovery: AgentErrorRecovery{
+			Action:  "inspect_request_help",
+			Command: " \t ",
+			Hint:    "Inspect the request help.",
+		},
+	}, errors.New("invalid local usage"))
+	require.NotNil(t, err)
+
+	encoded, marshalErr := json.Marshal(err.Envelope())
+	require.NoError(t, marshalErr)
+	assert.JSONEq(t, `{
+		"message":"invalid local usage",
+		"did_you_mean":["--instance-id"],
+		"recovery":{
+			"action":"inspect_request_help",
+			"hint":"Inspect the request help."
+		}
+	}`, string(encoded))
+	assert.NotContains(t, string(encoded), `"command"`)
 }
 
 func TestAgentErrorOmitsEmptyOptionalFields(t *testing.T) {

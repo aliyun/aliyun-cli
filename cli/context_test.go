@@ -64,6 +64,18 @@ func TestNewCommandContext(t *testing.T) {
 	}, ctx)
 }
 
+func TestInvocationArgsAreDefensiveCopies(t *testing.T) {
+	ctx := NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	input := []string{"ecs", "DescribeInstances", "--InstanceIds", "--help"}
+	ctx.SetInvocationArgs(input)
+	input[0] = "mutated"
+
+	got := ctx.InvocationArgs()
+	assert.Equal(t, []string{"ecs", "DescribeInstances", "--InstanceIds", "--help"}, got)
+	got[1] = "mutated"
+	assert.Equal(t, "DescribeInstances", ctx.InvocationArgs()[1])
+}
+
 func TestContextAgentDetectionState(t *testing.T) {
 	ctx := NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	assert.False(t, ctx.IsAgent())

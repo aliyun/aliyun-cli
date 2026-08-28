@@ -735,7 +735,8 @@ func TestHelpResponseSectionUsesHostCanonicalWhenPluginIsNotInstalled(t *testing
 	require.NoError(t, err)
 	assert.False(t, c.pluginLoaded, "host Canonical response Help must not load the remote plugin index")
 	assert.Empty(t, stderr.String())
-	assert.Contains(t, stdout.String(), "Response Schema (HTTP 200, application/json):")
+	assert.Contains(t, stdout.String(), "Responses:")
+	assert.Contains(t, stdout.String(), `"200": {`)
 	assert.NotContains(t, stdout.String(), "Parameters:")
 }
 
@@ -754,12 +755,13 @@ func TestHelpResponseSectionDoesNotOverrideInstalledPluginTextHelp(t *testing.T)
 	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
 	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
 
-	originalTryHelp := runtimeTryHelp
-	runtimeTryHelp = func(ctx *cli.Context, product, command string) (bool, error) {
+	originalDispatch := metaPluginHelpDispatch
+	metaPluginHelpDispatch = func(ctx *cli.Context, args []string) error {
+		assert.Equal(t, []string{"demo", "create-report", "--help"}, args)
 		fmt.Fprintln(ctx.Stdout(), "PLUGIN_OWNED_TEXT_HELP")
-		return true, nil
+		return nil
 	}
-	t.Cleanup(func() { runtimeTryHelp = originalTryHelp })
+	t.Cleanup(func() { metaPluginHelpDispatch = originalDispatch })
 
 	err := c.help(ctx, []string{"demo", "create-report"})
 	require.NoError(t, err)
@@ -805,7 +807,7 @@ func TestCanonicalTextHelpSearchesRootProductAndRequestLocally(t *testing.T) {
 		require.NoError(t, c.help(ctx, []string{"demo"}))
 		assert.False(t, c.pluginLoaded)
 		assert.Empty(t, stderr.String())
-		assert.Contains(t, stdout.String(), "describe-regions")
+		assert.Contains(t, stdout.String(), "DescribeRegions")
 	})
 
 	t.Run("request parameter", func(t *testing.T) {
@@ -820,7 +822,7 @@ func TestCanonicalTextHelpSearchesRootProductAndRequestLocally(t *testing.T) {
 		assert.Empty(t, stderr.String())
 		assert.Contains(t, stdout.String(), "--workspace-id")
 		assert.NotContains(t, stdout.String(), "--report-id")
-		assert.Contains(t, stdout.String(), "Response query example (Reports.Report)")
+		assert.NotContains(t, stdout.String(), "Response query example", "Search renders only matching request entries")
 	})
 }
 
@@ -846,10 +848,7 @@ func TestCanonicalTextHelpKeepsConfiguredAIModeDisableHint(t *testing.T) {
 
 	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
 	t.Setenv(aimode.EnvAIMode, "")
-	CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
-	CliHelpSearchFlag(ctx.Flags()).SetValue("demo")
-
-	require.NoError(t, c.help(ctx, nil))
+	require.NoError(t, c.finishCanonicalTextHelp(ctx, true))
 	assert.NotContains(t, stdout.String(), cli.AIModeEnableCommand)
 	assert.Contains(t, stderr.String(), "aliyun configure ai-mode disable")
 }
@@ -868,7 +867,7 @@ func TestCanonicalTextResponseSearchPrintsMatchedPathAndFilteredQuery(t *testing
 	assert.Empty(t, stderr.String())
 	assert.Contains(t, stdout.String(), "Matched Response Paths:")
 	assert.Contains(t, stdout.String(), "Reports.Report.ReportId")
-	assert.Contains(t, stdout.String(), "aliyun demo CreateReport --api-version 2026-01-01 --cli-query 'Reports.Report'")
+	assert.Contains(t, stdout.String(), "aliyun demo CreateReport --version 2026-01-01 --cli-query 'Reports.Report'")
 	assert.NotContains(t, stdout.String(), "Unused")
 }
 

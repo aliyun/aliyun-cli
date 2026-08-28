@@ -49,9 +49,12 @@ type Commando struct {
 	pluginIndex             *plugin.Index
 	pluginIndexErr          error // set when remote plugin index could not be loaded
 	localManifest           *plugin.LocalManifest
+	localManifestErr        error
 	pluginLoaded            bool
 	localLoaded             bool
 	recoverySearchValidator RecoverySearchValidator
+	rootCommandHelpSpecs    []RootCommandSpec
+	rootFlagHelpSpecs       []RootFlagSpec
 }
 
 var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
@@ -85,10 +88,17 @@ func NewCommando(w io.Writer, profile config.Profile) *Commando {
 }
 
 // SetRecoverySearchValidator injects the host Help search validator used to
-// prove that a proposed --cli-search recovery command has at least one match.
+// prove that a proposed --help-search recovery command has at least one match.
 // A nil validator always falls back to ordinary Help.
 func (c *Commando) SetRecoverySearchValidator(validate RecoverySearchValidator) {
 	c.recoverySearchValidator = validate
+}
+
+// SetRootHelpSpecs injects the explicit, locally registered root command and
+// flag classification used by the offline command-tree document.
+func (c *Commando) SetRootHelpSpecs(commands []RootCommandSpec, flags []RootFlagSpec) {
+	c.rootCommandHelpSpecs = append([]RootCommandSpec(nil), commands...)
+	c.rootFlagHelpSpecs = append([]RootFlagSpec(nil), flags...)
 }
 
 func (c *Commando) loadPlugins() {
@@ -118,9 +128,10 @@ func (c *Commando) loadLocalPlugins() {
 	c.localLoaded = true
 	mgr, err := plugin.NewManager()
 	if err != nil {
+		c.localManifestErr = err
 		return
 	}
-	c.localManifest, _ = mgr.GetLocalManifest()
+	c.localManifest, c.localManifestErr = mgr.GetLocalManifest()
 }
 
 func (c *Commando) printPluginIndexLoadFailureNote(ctx *cli.Context) {
@@ -136,7 +147,11 @@ func (c *Commando) InitWithCommand(cmd *cli.Command) {
 	cmd.Run = c.run
 	cmd.Help = c.help
 	cmd.AutoComplete = c.complete
+	cmd.BeforeParseRoute = c.beforeParseHelpRoute
 	cmd.BeforeExecute = func(ctx *cli.Context, args []string) {
+		if c.isExtensionInvocation(args) {
+			return
+		}
 		c.applyEffectiveAIModeForArgs(ctx, args)
 	}
 	cmd.NormalizeError = c.finishCommandRun
@@ -149,7 +164,6 @@ func (c *Commando) run(ctx *cli.Context, args []string) error {
 }
 
 func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) error {
-	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
 	if err == nil {
 		return nil
 	}
@@ -158,6 +172,10 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 	if errors.As(err, &pluginErr) {
 		return pluginErr.err
 	}
+	if c.isExtensionInvocation(args) {
+		return err
+	}
+	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
 
 	if !enabled {
 		return err
@@ -172,6 +190,18 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 		})
 	}
 	return agentErrorNormalizer(err, normalizationArgs)
+}
+
+func (c *Commando) isExtensionInvocation(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	for _, spec := range c.rootCommandHelpSpecs {
+		if spec.Group == RootGroupExtension && len(spec.Path) > 0 && spec.Path[0] == args[0] {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Commando) applyEffectiveAIMode(ctx *cli.Context) bool {
@@ -293,7 +323,7 @@ var stdin io.Reader = os.Stdin
 func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// fmt.Println("commando main", args)
 	if canonicalHelpOptionAssigned(ctx.Flags()) {
-		return fmt.Errorf("--cli-section, --cli-search, and --cli-all can only be used with `aliyun help ...` or --help")
+		return c.help(ctx, args)
 	}
 
 	// --estimate-cost needs a product + api to estimate against. Without an
@@ -321,8 +351,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 
 	// aliyun
 	if len(args) == 0 {
-		c.printUsage(ctx)
-		return nil
+		return c.help(ctx, args)
 	}
 
 	// Strategy: Plugin Execution
@@ -332,24 +361,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// fmt.Println("args", args)
 	// fmt.Println("os.Args", os.Args)
 	if len(args) == 1 {
-		installed, _, err := plugin.IsPluginInstalled(args[0])
-		if err != nil {
-			return fmt.Errorf("failed to check plugin status: %w", err)
-		}
-		c.loadPlugins()
-		if installed {
-			// Product-help routing must observe the current local manifest
-			// even when this Commando instance loaded plugins earlier.
-			mgr, managerErr := plugin.NewManager()
-			if managerErr != nil {
-				return managerErr
-			}
-			c.localManifest, _ = mgr.GetLocalManifest()
-		}
-		if cli.HelpFlag(ctx.Flags()).IsAssigned() {
-			ctx.Command().PrintHead(ctx)
-		}
-		return c.printProductUsage(ctx, args[0])
+		return c.help(ctx, args)
 	} else if len(args) > 1 {
 		apiOrMethod := args[1]
 		// Check if it's all lowercase (plugin format) and not an HTTP method
@@ -513,6 +525,14 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 
 	if cli.HelpFlag(ctx.Flags()).IsAssigned() {
 		return c.help(ctx, args)
+	}
+
+	// Reject an unknown built-in API before profile resolution. This is a
+	// local command-tree error and must not be masked by an unrelated missing
+	// credential/region error. Installed and runtime plugins have already had
+	// the opportunity to own the invocation above.
+	if err := c.validateCanonicalAPICommand(args, ctx); err != nil {
+		return err
 	}
 
 	// detect if in configure mode
@@ -1196,6 +1216,25 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 }
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {
+	ctx.SetErrorNormalizationArgs(args)
+	raw := ctx.InvocationArgs()
+	if len(raw) == 0 {
+		raw = append(append([]string(nil), args...), "--help")
+	}
+	if delegated, err := c.delegateInstalledPluginHelp(ctx, raw); delegated {
+		return err
+	}
+	aiMode := c.applyEffectiveAIModeForArgs(ctx, raw)
+	target, _, err := c.resolveParsedHelpTarget(ctx, args)
+	if err != nil {
+		return err
+	}
+	return c.renderHostHelpTarget(ctx, target, aiMode)
+}
+
+// legacyHelp retains the pre-V2 implementation for focused compatibility
+// tests while every public host entry is routed through help above.
+func (c *Commando) legacyHelp(ctx *cli.Context, args []string) error {
 	ctx.SetErrorNormalizationArgs(args)
 	c.applyEffectiveAIMode(ctx)
 	// fmt.Println("commando help", args)

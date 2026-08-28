@@ -3,79 +3,292 @@ package openapi
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
-const noHelpSearchMatchesFormat = "No Help entries matched --cli-search %q."
+const noHelpSearchMatchesFormat = "No Help entries matched --help-search %q."
+
+const (
+	rootDefaultHelpReservedLines    = 25
+	productDefaultHelpReservedLines = 15
+)
 
 func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions, aiMode bool) {
 	if document == nil {
 		return
 	}
+	sort.SliceStable(document.Commands, func(i, j int) bool {
+		return strings.ToLower(document.Commands[i].Name) < strings.ToLower(document.Commands[j].Name)
+	})
+	sort.SliceStable(document.Products, func(i, j int) bool {
+		return strings.ToLower(document.Products[i].Code) < strings.ToLower(document.Products[j].Code)
+	})
+	type rootProjectionEntry struct {
+		kind    string
+		command machineHelpCommandSummary
+		flag    machineHelpFlagSummary
+		product machineHelpProductSummary
+	}
+	allFlags := append([]machineHelpFlagSummary(nil), document.GlobalFlags...)
+	visibleFlags := make([]machineHelpFlagSummary, 0, len(allFlags))
+	for _, flag := range allFlags {
+		if options.All || options.Search != "" || flag.Visibility == string(RootVisibilityDefault) {
+			visibleFlags = append(visibleFlags, flag)
+		}
+	}
+	entries := make([]rootProjectionEntry, 0, len(document.Commands)+len(visibleFlags)+len(document.Products))
+	for _, command := range document.Commands {
+		entries = append(entries, rootProjectionEntry{kind: "command", command: command})
+	}
+	for _, flag := range visibleFlags {
+		entries = append(entries, rootProjectionEntry{kind: "flag", flag: flag})
+	}
+	for _, product := range document.Products {
+		entries = append(entries, rootProjectionEntry{kind: "product", product: product})
+	}
 	searched := options.Search != ""
 	if searched {
-		candidates := make([]HelpSearchCandidate, 0, len(document.Products))
-		for index := range document.Products {
-			product := document.Products[index]
+		document.Query = options.Search
+		candidates := make([]HelpSearchCandidate, 0, len(entries))
+		for _, entry := range entries {
+			if entry.kind == "command" {
+				candidates = append(candidates, HelpSearchCandidate{
+					Kind:          "command",
+					Name:          entry.command.Name,
+					Aliases:       entry.command.Aliases,
+					DescriptionEN: entry.command.Description.EN,
+					DescriptionZH: entry.command.Description.ZH,
+					Value:         entry,
+				})
+				continue
+			}
+			if entry.kind == "flag" {
+				aliases := append([]string(nil), entry.flag.Aliases...)
+				if entry.flag.Shorthand != "" {
+					aliases = append(aliases, entry.flag.Shorthand)
+				}
+				candidates = append(candidates, HelpSearchCandidate{
+					Kind:          "global-flag",
+					Name:          entry.flag.Name,
+					Aliases:       aliases,
+					DescriptionEN: entry.flag.Description.EN,
+					DescriptionZH: entry.flag.Description.ZH,
+					Value:         entry,
+				})
+				continue
+			}
+			product := entry.product
+			productAliases := nonEmptyMachineHelpStrings(product.Name.EN, product.Name.ZH)
 			candidates = append(candidates, HelpSearchCandidate{
 				Kind:          "product",
 				Name:          product.Code,
-				Aliases:       []string{product.Name.EN, product.Name.ZH},
+				Aliases:       productAliases,
 				DescriptionEN: product.Name.EN,
 				DescriptionZH: product.Name.ZH,
-				Value:         product,
+				Value:         entry,
 			})
 		}
-		matches := SearchHelpCandidates(candidates, options.Search)
-		document.Products = helpSearchValues[machineHelpProductSummary](matches)
-		// Root Search is a product search. Built-in commands are deliberately
-		// omitted so unrelated command entries do not dilute the result.
+		projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.Search))
 		document.Commands = nil
+		document.GlobalFlags = nil
+		document.Products = nil
+		document.Matches = nil
+		for _, match := range projection.Matches {
+			entry, ok := match.Candidate.Value.(rootProjectionEntry)
+			if !ok {
+				continue
+			}
+			if entry.kind == "command" {
+				document.Commands = append(document.Commands, entry.command)
+				document.Matches = append(document.Matches, machineHelpRootMatch{
+					Kind: "command", Name: entry.command.Name, Aliases: entry.command.Aliases,
+					Command: strings.Join(entry.command.Path, " ") + " --help", Description: entry.command.Description,
+				})
+			} else if entry.kind == "flag" {
+				document.GlobalFlags = append(document.GlobalFlags, entry.flag)
+				aliases := append([]string(nil), entry.flag.Aliases...)
+				if entry.flag.Shorthand != "" {
+					aliases = append(aliases, entry.flag.Shorthand)
+				}
+				document.Matches = append(document.Matches, machineHelpRootMatch{
+					Kind: "global-flag", Name: entry.flag.Name,
+					Aliases: aliases,
+					Command: "aliyun --help-search " + strings.TrimLeft(entry.flag.Name, "-"), Description: entry.flag.Description,
+				})
+			} else {
+				document.Products = append(document.Products, entry.product)
+				document.Matches = append(document.Matches, machineHelpRootMatch{
+					Kind: "product", Name: entry.product.Code,
+					Aliases: nonEmptyMachineHelpStrings(entry.product.Name.EN, entry.product.Name.ZH),
+					Command: "aliyun " + entry.product.Code + " --help", Description: entry.product.Name,
+				})
+			}
+		}
+		document.Result = projection.Result
+		document.Listing = nil
+		return
 	}
 
-	products, listing := ProjectHelpListing(document.Products, HelpListingOptions{
-		Target:   HelpListingRootProducts,
-		AIMode:   aiMode,
-		Searched: searched,
-		All:      options.All,
+	objects := make([]HelpBudgetObject[rootProjectionEntry], 0, len(entries))
+	for _, entry := range entries {
+		objects = append(objects, HelpBudgetObject[rootProjectionEntry]{Value: entry, LogicalLines: 1})
+	}
+	projection := ProjectDefaultHelpObjects(objects, HelpDefaultProjectionOptions{
+		Mode:          HelpProjectionMode{AIMode: aiMode, JSON: true, All: options.All},
+		ReservedLines: rootDefaultHelpReservedLines,
 	})
-	document.Products = products
-	document.Listing = projectMachineHelpListing(listing)
+	document.Commands = nil
+	document.GlobalFlags = nil
+	document.Products = nil
+	document.Matches = nil
+	for _, entry := range projection.Items {
+		if entry.kind == "command" {
+			document.Commands = append(document.Commands, entry.command)
+		} else if entry.kind == "flag" {
+			document.GlobalFlags = append(document.GlobalFlags, entry.flag)
+		} else {
+			document.Products = append(document.Products, entry.product)
+		}
+	}
+	document.Result = projection.Result
+	document.Next = projection.Next
+	document.Listing = nil
+}
+
+func nonEmptyMachineHelpStrings(values ...string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 func applyProductHelpOptions(document *machineHelpProductDocument, options helpOptions, aiMode bool) {
 	if document == nil {
 		return
 	}
+	sort.SliceStable(document.APIs, func(i, j int) bool {
+		left := document.APIs[i].DisplayName
+		if left == "" {
+			left = document.APIs[i].Name
+		}
+		right := document.APIs[j].DisplayName
+		if right == "" {
+			right = document.APIs[j].Name
+		}
+		return strings.ToLower(left) < strings.ToLower(right)
+	})
 	searched := options.Search != ""
 	if searched {
+		document.Query = options.Search
 		candidates := make([]HelpSearchCandidate, 0, len(document.APIs))
 		for index := range document.APIs {
 			api := document.APIs[index]
 			candidates = append(candidates, HelpSearchCandidate{
 				Kind:          "api",
-				Name:          api.Name,
-				Aliases:       []string{api.CmdName},
+				Name:          firstNonEmptyMachineHelpString(api.DisplayName, api.Name),
+				Aliases:       []string{api.Name, api.CmdName},
+				TitleEN:       api.Title.EN,
+				TitleZH:       api.Title.ZH,
 				DescriptionEN: api.Description.EN,
 				DescriptionZH: api.Description.ZH,
 				Value:         api,
 			})
 		}
-		matches := SearchHelpCandidates(candidates, options.Search)
-		document.APIs = helpSearchValues[machineHelpAPISummary](matches)
+		projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.Search))
+		document.APIs = helpSearchValues[machineHelpAPISummary](projection.Matches)
+		document.Result = projection.Result
+		document.Listing = nil
+		return
 	}
 
-	apis, listing := ProjectHelpListing(document.APIs, HelpListingOptions{
-		Target:   HelpListingProductAPIs,
-		AIMode:   aiMode,
-		Searched: searched,
-		All:      options.All,
+	objects := make([]HelpBudgetObject[machineHelpAPISummary], 0, len(document.APIs))
+	for _, api := range document.APIs {
+		objects = append(objects, HelpBudgetObject[machineHelpAPISummary]{Value: api, LogicalLines: 1})
+	}
+	projection := ProjectDefaultHelpObjects(objects, HelpDefaultProjectionOptions{
+		Mode:          HelpProjectionMode{AIMode: aiMode, JSON: true, All: options.All},
+		ReservedLines: productDefaultHelpReservedLines,
 	})
-	document.APIs = apis
-	document.Listing = projectMachineHelpListing(listing)
+	document.APIs = projection.Items
+	document.Result = projection.Result
+	document.Next = projection.Next
+	document.Listing = nil
+	if !options.All && !showProductActionDescriptionsInDefaultHelp {
+		for index := range document.APIs {
+			document.APIs[index].Title = machineHelpLocalizedText{}
+			document.APIs[index].Description = machineHelpLocalizedText{}
+		}
+	}
+}
+
+// applyActionHelpOptions projects an L2 Action summary. Explicit Request
+// Sections continue to use applyRequestHelpOptions and remain complete.
+func applyActionHelpOptions(document *machineHelpAPIDocument, options helpOptions, aiMode, jsonOutput bool) {
+	if document == nil {
+		return
+	}
+	if options.Search != "" {
+		applyRequestHelpOptions(document, options, aiMode)
+		retainActiveMachineHelpExample(document)
+		return
+	}
+	parameters := activeMachineHelpParameters(document)
+	if options.All {
+		retainActiveMachineHelpParameterSet(document)
+		retainActiveMachineHelpExample(document)
+		document.Result = HelpResult{
+			Shown: len(parameters) + len(document.GlobalParameters),
+			Total: len(parameters) + len(document.GlobalParameters),
+		}
+		return
+	}
+
+	objects := make([]HelpBudgetObject[machineHelpParameter], 0, len(parameters))
+	for _, parameter := range parameters {
+		objects = append(objects, HelpBudgetObject[machineHelpParameter]{
+			Value:        parameter,
+			LogicalLines: machineHelpParameterLogicalLines(parameter),
+			Required:     parameter.Required,
+		})
+	}
+	projection := ProjectDefaultHelpObjects(objects, HelpDefaultProjectionOptions{
+		Mode:           HelpProjectionMode{AIMode: aiMode, JSON: jsonOutput},
+		ReservedLines:  8,
+		RequiredSafety: true,
+	})
+	if document.ActiveParameterSet == "kebab" {
+		document.ParameterSets.Kebab = projection.Items
+		document.ParameterSets.Camel = nil
+	} else {
+		document.ParameterSets.Camel = projection.Items
+		document.ParameterSets.Kebab = nil
+	}
+	retainActiveMachineHelpExample(document)
+	document.GlobalParameters = nil
+	document.Result = projection.Result
+	document.Next = projection.Next
+	// Default shows one compact purpose: title when present, otherwise the
+	// description fallback. Structured All/Section retains both fields.
+	if document.API.Title.EN != "" || document.API.Title.ZH != "" {
+		document.API.Description = machineHelpLocalizedText{}
+	}
+	apiStyle := strings.ToLower(document.Product.APIStyle)
+	if apiStyle != "roa" && apiStyle != "rest" && apiStyle != "restful" {
+		document.API.Operation.Method = ""
+		document.API.Operation.Protocol = ""
+		document.API.Operation.URL = ""
+		document.API.Operation.IsSSE = false
+		document.API.Operation.ReqBodyType = ""
+		document.API.Operation.ContentType = ""
+		document.API.Operation.HasWildcardPath = false
+	}
 }
 
 func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptions, _ bool) {
@@ -84,8 +297,11 @@ func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptio
 	}
 	document.Listing = nil
 	if options.Search == "" {
+		total := len(activeMachineHelpParameters(document)) + len(document.GlobalParameters)
+		document.Result = HelpResult{Shown: total, Total: total}
 		return
 	}
+	document.Query = options.Search
 
 	active := activeMachineHelpParameters(document)
 	parameterCandidates := make([]HelpSearchCandidate, 0, len(active))
@@ -98,17 +314,17 @@ func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptio
 		parameter := document.GlobalParameters[index]
 		globalCandidates = append(globalCandidates, machineHelpParameterCandidate(parameter, "global-parameter"))
 	}
-	matches := SearchHelpParameters(HelpParameterSearchInput{
+	projection := ProjectHelpSearchMatches(SearchHelpParameters(HelpParameterSearchInput{
 		ActiveParameterSet: document.ActiveParameterSet,
 		ParameterSets: map[string][]HelpSearchCandidate{
 			document.ActiveParameterSet: parameterCandidates,
 		},
 		GlobalParameters: globalCandidates,
-	}, options.Search)
+	}, options.Search))
 
 	parameters := make([]machineHelpParameter, 0)
 	globals := make([]machineHelpParameter, 0)
-	for _, match := range matches {
+	for _, match := range projection.Matches {
 		value, ok := match.Candidate.Value.(machineHelpParameter)
 		if !ok {
 			continue
@@ -127,10 +343,43 @@ func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptio
 		document.ParameterSets.Camel = parameters
 	}
 	document.GlobalParameters = globals
+	document.Result = projection.Result
+}
+
+func retainActiveMachineHelpParameterSet(document *machineHelpAPIDocument) {
+	if document == nil {
+		return
+	}
+	if document.ActiveParameterSet == "kebab" {
+		document.ParameterSets.Camel = nil
+		return
+	}
+	document.ParameterSets.Kebab = nil
+}
+
+func retainActiveMachineHelpExample(document *machineHelpAPIDocument) {
+	if document == nil {
+		return
+	}
+	if document.ActiveParameterSet == "kebab" {
+		document.Examples.Camel = ""
+		return
+	}
+	document.Examples.Kebab = ""
 }
 
 func applyResponseHelpOptions(document *machineHelpAPIResponseDocument, options helpOptions) error {
-	if document == nil || document.OutputSchema == nil || options.Search == "" {
+	if document == nil || options.Search == "" {
+		return nil
+	}
+	document.Query = options.Search
+	// Search projects only matched response structure. The complete unfiltered
+	// Section remains available from a separate default/all document.
+	document.Responses = nil
+	document.Components = nil
+	if document.OutputSchema == nil {
+		document.Result = HelpResult{}
+		document.Notice = fmt.Sprintf(noHelpSearchMatchesFormat, options.Search)
 		return nil
 	}
 	input := helpResponseSchema(document)
@@ -141,6 +390,7 @@ func applyResponseHelpOptions(document *machineHelpAPIResponseDocument, options 
 	if len(result.Paths) == 0 {
 		document.OutputSchema = nil
 		document.Matches = nil
+		document.Result = result.Result
 		document.Notice = fmt.Sprintf(noHelpSearchMatchesFormat, options.Search)
 		return nil
 	}
@@ -150,6 +400,7 @@ func applyResponseHelpOptions(document *machineHelpAPIResponseDocument, options 
 		document.OutputSchema.Components = &machineHelpComponents{Schemas: result.Components}
 	}
 	document.Matches = result.Paths
+	document.Result = result.Result
 	return nil
 }
 
@@ -188,6 +439,7 @@ func machineHelpParameterCandidate(parameter machineHelpParameter, kind string) 
 	aliases = append(aliases, parameter.Options...)
 	descriptionsEN := []string{parameter.Help.EN}
 	descriptionsZH := []string{parameter.Help.ZH}
+	appendMachineHelpParameterSearchDocument(parameter, &descriptionsEN, &descriptionsZH)
 	collectMachineHelpShapeSearchText(parameter.Fields, parameter.Element, parameter.Value, &aliases, &descriptionsEN, &descriptionsZH)
 	return HelpSearchCandidate{
 		Kind:          kind,
@@ -206,13 +458,45 @@ func collectMachineHelpShapeSearchText(fields []machineHelpParameter, element, v
 		*aliases = append(*aliases, field.Options...)
 		*descriptionsEN = append(*descriptionsEN, field.Help.EN)
 		*descriptionsZH = append(*descriptionsZH, field.Help.ZH)
+		appendMachineHelpParameterSearchDocument(field, descriptionsEN, descriptionsZH)
 		collectMachineHelpShapeSearchText(field.Fields, field.Element, field.Value, aliases, descriptionsEN, descriptionsZH)
 	}
 	for _, shape := range []*machineHelpShape{element, value} {
 		if shape != nil {
+			appendMachineHelpShapeSearchDocument(shape, descriptionsEN, descriptionsZH)
 			collectMachineHelpShapeSearchText(shape.Fields, shape.Element, shape.Value, aliases, descriptionsEN, descriptionsZH)
 		}
 	}
+}
+
+func appendMachineHelpParameterSearchDocument(parameter machineHelpParameter, descriptionsEN, descriptionsZH *[]string) {
+	values := []string{
+		parameter.Example,
+		strings.Join(parameter.Constraints.Enum, " "),
+		parameter.Constraints.Pattern,
+		parameter.Constraints.Minimum,
+		parameter.Constraints.Maximum,
+		parameter.Constraints.MinLength,
+		parameter.Constraints.MaxLength,
+	}
+	*descriptionsEN = append(*descriptionsEN, values...)
+	*descriptionsZH = append(*descriptionsZH, values...)
+}
+
+func appendMachineHelpShapeSearchDocument(shape *machineHelpShape, descriptionsEN, descriptionsZH *[]string) {
+	if shape == nil {
+		return
+	}
+	values := []string{
+		strings.Join(shape.Constraints.Enum, " "),
+		shape.Constraints.Pattern,
+		shape.Constraints.Minimum,
+		shape.Constraints.Maximum,
+		shape.Constraints.MinLength,
+		shape.Constraints.MaxLength,
+	}
+	*descriptionsEN = append(*descriptionsEN, values...)
+	*descriptionsZH = append(*descriptionsZH, values...)
 }
 
 func helpSearchValues[T any](matches []HelpSearchMatch) []T {
@@ -254,12 +538,12 @@ func (c *Commando) validateRecoverySearch(ctx *cli.Context, request RecoverySear
 		if ctx == nil || ctx.Command() == nil {
 			return false
 		}
-		document, err := service.buildRoot(ctx.Command())
+		document, err := c.buildRootHelpDocument(ctx.Command())
 		if err != nil {
 			return false
 		}
 		applyRootHelpOptions(document, options, false)
-		return len(document.Products) > 0
+		return len(document.Commands) > 0 || len(document.GlobalFlags) > 0 || len(document.Products) > 0
 
 	case request.API == "":
 		product, err := service.findProduct(request.Product)
@@ -275,7 +559,7 @@ func (c *Commando) validateRecoverySearch(ctx *cli.Context, request RecoverySear
 		if err != nil {
 			return false
 		}
-		document, err := service.buildProduct(request.Product, selected)
+		document, err := service.buildProductForStyle(request.Product, selected, style)
 		if err != nil {
 			return false
 		}
@@ -309,30 +593,127 @@ func renderCanonicalRootText(w io.Writer, document *machineHelpRootDocument, sea
 	if document == nil {
 		return fmt.Errorf("root Help document is nil")
 	}
-	if len(document.Products) == 0 && search != "" {
-		_, err := fmt.Fprintf(w, noHelpSearchMatchesFormat+"\n", search)
+	version := firstNonEmptyMachineHelpString(document.Version, cli.Version)
+	if _, err := fmt.Fprintf(w, "Alibaba Cloud Command Line Interface Version %s\n", version); err != nil {
 		return err
 	}
-	if len(document.Commands) > 0 {
-		if _, err := fmt.Fprintln(w, "\nCommands:"); err != nil {
+	if search == "" && len(document.QuickStart) > 0 {
+		if _, err := fmt.Fprintln(w, "\nQuick Start:"); err != nil {
 			return err
 		}
-		for _, command := range document.Commands {
-			if _, err := fmt.Fprintf(w, "  %-20s %s\n", command.Name, localizedMachineHelpText(command.Description)); err != nil {
+		for _, command := range document.QuickStart {
+			if _, err := fmt.Fprintf(w, "  %s\n", command); err != nil {
 				return err
 			}
 		}
 	}
-	if _, err := fmt.Fprintln(w, "\nProducts:"); err != nil {
+	if len(document.Commands) == 0 && len(document.GlobalFlags) == 0 && len(document.Products) == 0 && len(document.Matches) == 0 && search != "" {
+		_, err := fmt.Fprintf(w, noHelpSearchMatchesFormat+"\n", search)
 		return err
 	}
-	for _, product := range document.Products {
-		name := localizedMachineHelpText(product.Name)
-		if _, err := fmt.Fprintf(w, "  %-20s %s\n", product.Code, name); err != nil {
+	if search != "" && len(document.Matches) > 0 {
+		if _, err := fmt.Fprintln(w, "Matches:"); err != nil {
+			return err
+		}
+		for _, match := range document.Matches {
+			if _, err := fmt.Fprintf(w, "  %-14s %-20s %s\n", match.Kind, match.Name, localizedMachineHelpText(match.Description)); err != nil {
+				return err
+			}
+			if match.Command != "" {
+				if _, err := fmt.Fprintf(w, "    %s\n", match.Command); err != nil {
+					return err
+				}
+			}
+		}
+		return renderHelpProjectionResult(w, "matches", document.Result, document.Next)
+	}
+	if len(document.Commands) > 0 {
+		renderGroup := func(name, label string) error {
+			entries := make([]machineHelpCommandSummary, 0)
+			for _, command := range document.Commands {
+				commandGroup := command.Group
+				if commandGroup == "" {
+					commandGroup = "core"
+				}
+				if commandGroup == name {
+					entries = append(entries, command)
+				}
+			}
+			if len(entries) == 0 {
+				return nil
+			}
+			if _, err := fmt.Fprintf(w, "\n%s:\n", label); err != nil {
+				return err
+			}
+			for _, command := range entries {
+				name := command.Name
+				if len(command.Path) > 1 {
+					name = strings.Join(command.Path[1:], " ")
+				}
+				if _, err := fmt.Fprintf(w, "  %-20s %s\n", name, localizedMachineHelpText(command.Description)); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		if err := renderGroup("core", "Core Commands"); err != nil {
+			return err
+		}
+		if err := renderGroup("utils", "Utilities"); err != nil {
 			return err
 		}
 	}
-	return renderTextListing(w, "products", document.Listing)
+	if len(document.GlobalFlags) > 0 {
+		if _, err := fmt.Fprintln(w, "\nGlobal Flags:"); err != nil {
+			return err
+		}
+		for _, flag := range document.GlobalFlags {
+			name := flag.Name
+			if flag.Shorthand != "" {
+				name += ", " + flag.Shorthand
+			}
+			if _, err := fmt.Fprintf(w, "  %-20s %s\n", name, localizedMachineHelpText(flag.Description)); err != nil {
+				return err
+			}
+		}
+	}
+	if len(document.Commands) > 0 {
+		entries := make([]machineHelpCommandSummary, 0)
+		for _, command := range document.Commands {
+			if command.Group == "extension" {
+				entries = append(entries, command)
+			}
+		}
+		if len(entries) > 0 {
+			if _, err := fmt.Fprintln(w, "\nExtensions:"); err != nil {
+				return err
+			}
+			for _, command := range entries {
+				name := command.Name
+				if len(command.Path) > 1 {
+					name = strings.Join(command.Path[1:], " ")
+				}
+				if _, err := fmt.Fprintf(w, "  %-20s %s\n", name, localizedMachineHelpText(command.Description)); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if len(document.Products) > 0 || search == "" {
+		if _, err := fmt.Fprintln(w, "\nProducts:"); err != nil {
+			return err
+		}
+		for _, product := range document.Products {
+			name := localizedMachineHelpText(product.Name)
+			if _, err := fmt.Fprintf(w, "  %-20s %s\n", product.Code, name); err != nil {
+				return err
+			}
+		}
+	}
+	if err := renderTextListing(w, "products", document.Listing); err != nil {
+		return err
+	}
+	return renderHelpProjectionResult(w, "entries", document.Result, document.Next)
 }
 
 func renderCanonicalProductText(w io.Writer, document *machineHelpProductDocument, search string) error {
@@ -351,16 +732,23 @@ func renderCanonicalProductText(w io.Writer, document *machineHelpProductDocumen
 		return err
 	}
 	for _, api := range document.APIs {
-		name := api.CmdName
+		name := api.DisplayName
 		if name == "" {
-			name = api.Name
+			name = firstNonEmptyMachineHelpString(api.CmdName, api.Name)
 		}
-		description := localizedMachineHelpText(api.Description)
+		description := localizedMachineHelpPurpose(api.Title, api.Description)
+		fullDescription := localizedMachineHelpText(api.Description)
+		if description != "" && fullDescription != "" && description != fullDescription {
+			description += " — " + fullDescription
+		}
 		if _, err := fmt.Fprintf(w, "  %-30s %s\n", name, description); err != nil {
 			return err
 		}
 	}
-	return renderTextListing(w, "APIs", document.Listing)
+	if err := renderTextListing(w, "APIs", document.Listing); err != nil {
+		return err
+	}
+	return renderHelpProjectionResult(w, "APIs", document.Result, document.Next)
 }
 
 func renderCanonicalRequestSearchText(w io.Writer, document *machineHelpAPIDocument, search string) error {
@@ -395,11 +783,17 @@ func renderCanonicalRequestText(w io.Writer, document *machineHelpAPIDocument) e
 	if document == nil {
 		return fmt.Errorf("request Help document is nil")
 	}
-	description := localizedMachineHelpText(document.API.Description)
+	description := localizedMachineHelpPurpose(document.API.Title, document.API.Description)
+	fullDescription := localizedMachineHelpText(document.API.Description)
+	details := ""
+	if fullDescription != "" && fullDescription != description {
+		details = "\nDetails: " + fullDescription
+	}
 	if _, err := fmt.Fprintf(w,
-		"Alibaba Cloud Command Line Interface Version %s\n\nDescription: %s\n\nAPI Version: %s\n\nUsage:\n  %s [parameters]\n",
+		"Alibaba Cloud Command Line Interface Version %s\n\nDescription: %s%s\n\nAPI Version: %s\n\nUsage:\n  %s [parameters]\n",
 		cli.Version,
 		description,
+		details,
 		document.API.Operation.APIVersion,
 		strings.Join(document.Target.Path, " "),
 	); err != nil {
@@ -424,6 +818,9 @@ func renderCanonicalRequestText(w io.Writer, document *machineHelpAPIDocument) e
 		}
 	}
 	if err := renderTextListing(w, "parameters", document.Listing); err != nil {
+		return err
+	}
+	if err := renderHelpProjectionResult(w, "parameters", document.Result, document.Next); err != nil {
 		return err
 	}
 
@@ -570,6 +967,30 @@ func renderTextListing(w io.Writer, noun string, listing *machineHelpListing) er
 		return err
 	}
 	return nil
+}
+
+func renderHelpProjectionResult(w io.Writer, noun string, result HelpResult, next *HelpNext) error {
+	if !result.Truncated {
+		return nil
+	}
+	if _, err := fmt.Fprintf(w, "\n...\nShowing %d of %d %s.\n", result.Shown, result.Total, noun); err != nil {
+		return err
+	}
+	if next != nil {
+		if next.ShowAll != "" {
+			if _, err := fmt.Fprintf(w, "Show all: %s\n", next.ShowAll); err != nil {
+				return err
+			}
+		}
+		if next.Search != "" {
+			if _, err := fmt.Fprintf(w, "Search: %s\n", next.Search); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	_, err := fmt.Fprintln(w, "Use a more specific --help-search query.")
+	return err
 }
 
 func renderRequestQueryExampleText(w io.Writer, example *machineHelpQueryExample) error {

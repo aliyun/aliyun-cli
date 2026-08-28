@@ -29,6 +29,7 @@ func TestParseHelpOptionsDefaultsToRequest(t *testing.T) {
 	assert.False(t, opts.SectionExplicit)
 	assert.Empty(t, opts.Search)
 	assert.False(t, opts.All)
+	assert.Equal(t, cli.HelpOutputText, opts.Output)
 }
 
 func TestParseHelpOptionsAcceptsResponseSearch(t *testing.T) {
@@ -56,7 +57,7 @@ func TestParseHelpOptionsValidatesScopeAndValues(t *testing.T) {
 			setup: func(fs *cli.FlagSet) {
 				assignHelpFlag(t, CliHelpSectionFlag(fs), "headers")
 			},
-			want: "--cli-section must be request or response",
+			want: "--cli-section must be request or response, got \"headers\"",
 		},
 		{
 			name:   "section needs api",
@@ -72,7 +73,7 @@ func TestParseHelpOptionsValidatesScopeAndValues(t *testing.T) {
 			setup: func(fs *cli.FlagSet) {
 				assignHelpFlag(t, CliHelpSearchFlag(fs), "  ")
 			},
-			want: "--cli-search requires a non-empty keyword",
+			want: "--help-search requires a non-empty query",
 		},
 	}
 
@@ -86,23 +87,36 @@ func TestParseHelpOptionsValidatesScopeAndValues(t *testing.T) {
 	}
 }
 
-func TestParseHelpOptionsRejectsAllForAPI(t *testing.T) {
+func TestParseHelpOptionsAcceptsAllForAPI(t *testing.T) {
 	ctx := testHelpOptionsContext()
 	assignHelpFlag(t, CliHelpAllFlag(ctx.Flags()), "")
 
-	_, err := parseHelpOptions(ctx, []string{"ecs", "DescribeInstances"})
-	assert.EqualError(t, err, "--cli-all is only supported for root and product Help")
+	opts, err := parseHelpOptions(ctx, []string{"ecs", "DescribeInstances"})
+	require.NoError(t, err)
+	assert.True(t, opts.All)
 }
 
-func TestParseHelpOptionsSearchTakesPrecedenceOverAll(t *testing.T) {
+func TestParseHelpOptionsRejectsSearchWithAll(t *testing.T) {
 	ctx := testHelpOptionsContext()
 	assignHelpFlag(t, CliHelpSearchFlag(ctx.Flags()), "instance")
 	assignHelpFlag(t, CliHelpAllFlag(ctx.Flags()), "")
 
+	_, err := parseHelpOptions(ctx, []string{"ecs"})
+	assert.EqualError(t, err, "--help-search conflicts with --help-all")
+}
+
+func TestParseHelpOptionsValidatesCLIOutput(t *testing.T) {
+	ctx := testHelpOptionsContext()
+	assignHelpFlag(t, CliOutputFlag(ctx.Flags()), "json")
+
 	opts, err := parseHelpOptions(ctx, []string{"ecs"})
 	require.NoError(t, err)
-	assert.Equal(t, "instance", opts.Search)
-	assert.True(t, opts.All)
+	assert.Equal(t, cli.HelpOutputJSON, opts.Output)
+	assert.False(t, canonicalHelpOptionAssigned(ctx.Flags()), "--cli-output alone must not enter Help")
+
+	assignHelpFlag(t, CliOutputFlag(ctx.Flags()), "yaml")
+	_, err = parseHelpOptions(ctx, []string{"ecs"})
+	assert.EqualError(t, err, "--cli-output only supports json, got \"yaml\"")
 }
 
 func TestCanonicalHelpOptionAssigned(t *testing.T) {
@@ -117,7 +131,9 @@ func TestCommandoRejectsCanonicalHelpOptionsOutsideHelp(t *testing.T) {
 	ctx := cli.NewCommandContext(stdout, stderr)
 	AddFlags(ctx.Flags())
 	assignHelpFlag(t, CliHelpSectionFlag(ctx.Flags()), "response")
+	ctx.SetInvocationArgs([]string{"ecs", "DescribeInstances", "--cli-section", "response"})
 
 	err := c.main(ctx, []string{"ecs", "DescribeInstances"})
-	assert.EqualError(t, err, "--cli-section, --cli-search, and --cli-all can only be used with `aliyun help ...` or --help")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "--cli-section is only valid with `aliyun help <product> <API>`")
 }

@@ -14,10 +14,23 @@ import (
 )
 
 func TestMainWithNoArgs(t *testing.T) {
+	clearAgentDetectionEnv(t)
 	t.Setenv("HOME", t.TempDir())
 	resetMainHooks(t, nil, nil, nil)
 
 	Main([]string{})
+}
+
+func clearAgentDetectionEnv(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{
+		"CURSOR_AGENT", "CLAUDECODE", "CLAUDE_CODE", "GEMINI_CLI",
+		"AUGMENT_AGENT", "OPENCODE", "OPENCODE_CLIENT", "CLINE_ACTIVE",
+		"CODEX_SANDBOX", "QODER_AGENT", "QODER_CLI", "AGENT",
+		"ALIBABA_CLOUD_CLI_AI_MODE", "NO_COLOR",
+	} {
+		t.Setenv(key, "")
+	}
 }
 
 func TestNewCommandContextDetectsAgentOnce(t *testing.T) {
@@ -55,14 +68,17 @@ func TestMainMachineHelpJSON(t *testing.T) {
 		wantKind  string
 		wantStyle string
 	}{
-		{name: "root equals form", args: []string{"--help=json"}, wantKind: "root"},
-		{name: "product help command", args: []string{"help", "ecs", "--format", "json"}, wantKind: "product"},
-		{name: "camel API", args: []string{"help", "ecs", "DescribeInstances", "--version", "2014-05-26", "--format", "json"}, wantKind: "api", wantStyle: "camel"},
-		{name: "kebab API", args: []string{"ecs", "describe-instances", "--api-version", "2014-05-26", "--help=json"}, wantKind: "api", wantStyle: "kebab"},
+		{name: "root", args: []string{"--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "root"},
+		{name: "utils", args: []string{"utils", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "utility"},
+		{name: "utility leaf", args: []string{"utils", "list-supported-pricing-apis", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "utility"},
+		{name: "product", args: []string{"ecs", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "product"},
+		{name: "camel API", args: []string{"ecs", "DescribeInstances", "--version", "2014-05-26", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "api", wantStyle: "camel"},
+		{name: "kebab API", args: []string{"ecs", "describe-instances", "--api-version", "2014-05-26", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "api", wantStyle: "kebab"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			clearAgentDetectionEnv(t)
 			t.Setenv("HOME", t.TempDir())
 			var stdout, stderr bytes.Buffer
 			resetMainHooks(t, &stdout, &stderr, nil)

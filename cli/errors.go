@@ -133,7 +133,7 @@ func (e *InvalidFlagError) AgentMessage() string {
 
 // AgentHelpCommand returns the ordinary Help entry for the command that
 // rejected this CLI flag. Built-in commands do not support Canonical
-// --cli-search/--cli-section options.
+// --help-search/--cli-section options.
 func (e *InvalidFlagError) AgentHelpCommand() string {
 	if e == nil || e.ctx == nil || e.ctx.command == nil {
 		return "aliyun help"

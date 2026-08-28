@@ -1,0 +1,108 @@
+package main
+
+import (
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
+	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/openapi"
+)
+
+var rootCommandHelpSpecs = []openapi.RootCommandSpec{
+	{Path: []string{"configure"}, Group: openapi.RootGroupCore},
+	{Path: []string{"plugin"}, Group: openapi.RootGroupCore},
+	{Path: []string{"upgrade"}, Group: openapi.RootGroupCore},
+	{Path: []string{"version"}, Group: openapi.RootGroupCore},
+	{Path: []string{"auto-completion"}, Group: openapi.RootGroupCore},
+	{Path: []string{"mock"}, Group: openapi.RootGroupCore},
+	{Path: []string{"utils"}, Group: openapi.RootGroupCore},
+
+	{Path: []string{"utils", "list-supported-pricing-apis"}, Group: openapi.RootGroupUtils, Aliases: []string{"list-supported-pricing-apis"}},
+	{Path: []string{"utils", "mcp-proxy"}, Group: openapi.RootGroupUtils, Aliases: []string{"mcp-proxy"}},
+	{Path: []string{"utils", "go-migrate"}, Group: openapi.RootGroupUtils, Aliases: []string{"go-migrate"}},
+
+	{Path: []string{"oss"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"ossutil"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"agentbay"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"otsutil"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"kmscli"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"lindorm"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"mseutil"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"acrutil"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"codeup-cli"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"saectl"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"appmanager"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"computenest-cli"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"ecctl"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"esa-cli"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"flow-cli"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"cms2"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"maxc"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"iact3"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"rostran"}, Group: openapi.RootGroupExtension},
+}
+
+var rootFlagHelpSpecs = []openapi.RootFlagSpec{
+	{Name: "profile", Visibility: openapi.RootVisibilityDefault},
+	{Name: "region", Visibility: openapi.RootVisibilityDefault},
+	{Name: "language", Visibility: openapi.RootVisibilityDefault},
+	{Name: "version", Visibility: openapi.RootVisibilityDefault},
+	{Name: "output", Visibility: openapi.RootVisibilityDefault},
+	{Name: "cli-query", Visibility: openapi.RootVisibilityDefault},
+	{Name: "cli-output", Visibility: openapi.RootVisibilityDefault},
+	{Name: "dryrun", Visibility: openapi.RootVisibilityDefault},
+	{Name: "yes", Visibility: openapi.RootVisibilityDefault},
+	{Name: "cli-ai-mode", Visibility: openapi.RootVisibilityDefault},
+	{Name: "help", Visibility: openapi.RootVisibilityDefault},
+	{Name: "help-all", Visibility: openapi.RootVisibilityDefault},
+	{Name: "help-search", Visibility: openapi.RootVisibilityDefault},
+
+	{Name: "mode", Visibility: openapi.RootVisibilityExtended},
+	{Name: "config-path", Visibility: openapi.RootVisibilityExtended},
+	{Name: "access-key-id", Visibility: openapi.RootVisibilityExtended},
+	{Name: "access-key-secret", Visibility: openapi.RootVisibilityExtended},
+	{Name: "sts-token", Visibility: openapi.RootVisibilityExtended},
+	{Name: "sts-region", Visibility: openapi.RootVisibilityExtended},
+	{Name: "sts-endpoint", Visibility: openapi.RootVisibilityExtended},
+	{Name: "ram-role-name", Visibility: openapi.RootVisibilityExtended},
+	{Name: "ram-role-arn", Visibility: openapi.RootVisibilityExtended},
+	{Name: "source-profile", Visibility: openapi.RootVisibilityExtended},
+	{Name: "role-session-name", Visibility: openapi.RootVisibilityExtended},
+	{Name: "external-id", Visibility: openapi.RootVisibilityExtended},
+	{Name: "private-key", Visibility: openapi.RootVisibilityExtended},
+	{Name: "key-pair-name", Visibility: openapi.RootVisibilityExtended},
+	{Name: "read-timeout", Visibility: openapi.RootVisibilityExtended},
+	{Name: "connect-timeout", Visibility: openapi.RootVisibilityExtended},
+	{Name: "retry-count", Visibility: openapi.RootVisibilityExtended},
+	{Name: "skip-secure-verify", Visibility: openapi.RootVisibilityExtended},
+	{Name: "expired-seconds", Visibility: openapi.RootVisibilityExtended},
+	{Name: "process-command", Visibility: openapi.RootVisibilityExtended},
+	{Name: "oidc-provider-arn", Visibility: openapi.RootVisibilityExtended},
+	{Name: "oidc-token-file", Visibility: openapi.RootVisibilityExtended},
+	{Name: "cloud-sso-sign-in-url", Visibility: openapi.RootVisibilityExtended},
+	{Name: "cloud-sso-access-config", Visibility: openapi.RootVisibilityExtended},
+	{Name: "cloud-sso-account-id", Visibility: openapi.RootVisibilityExtended},
+	{Name: "oauth-site-type", Visibility: openapi.RootVisibilityExtended},
+	{Name: "endpoint-type", Visibility: openapi.RootVisibilityExtended},
+	{Name: "endpoint", Visibility: openapi.RootVisibilityExtended},
+	{Name: "external-account-type", Visibility: openapi.RootVisibilityExtended},
+	{Name: "auto-plugin-install", Visibility: openapi.RootVisibilityExtended},
+	{Name: "auto-plugin-install-enable-pre", Visibility: openapi.RootVisibilityExtended},
+	{Name: "bearer-token", Visibility: openapi.RootVisibilityExtended},
+	{Name: "bearer-token-header-key", Visibility: openapi.RootVisibilityExtended},
+	{Name: "secure", Visibility: openapi.RootVisibilityExtended},
+	{Name: "force", Visibility: openapi.RootVisibilityExtended},
+	{Name: "header", Visibility: openapi.RootVisibilityExtended},
+	{Name: "body", Visibility: openapi.RootVisibilityExtended},
+	{Name: "pager", Visibility: openapi.RootVisibilityExtended},
+	{Name: "waiter", Visibility: openapi.RootVisibilityExtended},
+	{Name: "cli-dry-run", Visibility: openapi.RootVisibilityExtended},
+	{Name: "estimate-cost", Visibility: openapi.RootVisibilityExtended},
+	{Name: "estimate-cost-context", Visibility: openapi.RootVisibilityExtended},
+	{Name: "quiet", Visibility: openapi.RootVisibilityExtended},
+	{Name: "log-level", Visibility: openapi.RootVisibilityExtended},
+	{Name: "method", Visibility: openapi.RootVisibilityExtended},
+	{Name: "cli-section", Visibility: openapi.RootVisibilityExtended},
+}
+
+func newRootHelpInput(root *cli.Command, catalog *canonicalmeta.ProductsIndex) (openapi.RootHelpInput, error) {
+	return openapi.BuildRootHelpInput(root, catalog, rootCommandHelpSpecs, rootFlagHelpSpecs)
+}
