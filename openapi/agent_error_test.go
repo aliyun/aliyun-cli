@@ -61,7 +61,7 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		assert.Equal(t, `"ecx" is not a valid command or product.`, envelope.Message)
 		assert.Equal(t, []string{"ecs"}, envelope.DidYouMean)
 		assert.Equal(t, "search_product", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help --cli-search ecs", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun --help-search ecs", envelope.Recovery.Command)
 		assert.Equal(t, "Search products related to ecs.", envelope.Recovery.Hint)
 		assert.Equal(t, RecoverySearchRequest{Keyword: "ecs"}, request)
 	})
@@ -82,10 +82,9 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		assert.Equal(t, `"DescribeInstnaces" is not a valid api.`, envelope.Message)
 		assert.Equal(t, []string{"DescribeInstances", "describe-instances"}, envelope.DidYouMean)
 		assert.Equal(t, "search_api", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help ecs --cli-search Instances", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun ecs --help-search Instances", envelope.Recovery.Command)
 		assert.Equal(t, "Search APIs related to Instances.", envelope.Recovery.Hint)
 		assert.Equal(t, []RecoverySearchRequest{
-			{Product: "ecs", Style: "pascal", Keyword: "Instnaces"},
 			{Product: "ecs", Style: "pascal", Keyword: "Instances"},
 		}, requests)
 	})
@@ -108,8 +107,41 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 
 		envelope := requireAgentEnvelope(t, cause, []string{"configure", "profiel"}, nil)
 		assert.Equal(t, "inspect_parent_help", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help configure", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun configure --help", envelope.Recovery.Command)
 		assert.Equal(t, "Inspect commands under the current parent.", envelope.Recovery.Hint)
+	})
+
+	t.Run("unknown CLI subcommand publishes only validated current-level search", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		parent := &cli.Command{Name: "configure"}
+		parent.AddSubCommand(&cli.Command{Name: "profile"})
+		ctx.EnterCommand(parent)
+		cause := cli.NewInvalidCommandError("profiel", ctx)
+
+		envelope := requireAgentEnvelope(t, cause, []string{"configure", "profiel"}, func(request RecoverySearchRequest) bool {
+			assert.Equal(t, RecoverySearchRequest{Product: "configure", Keyword: "profile"}, request)
+			return true
+		})
+		assert.Equal(t, "search_command", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun configure --help-search profile", envelope.Recovery.Command)
+		assert.Equal(t, "Search commands under the current parent related to profile.", envelope.Recovery.Hint)
+	})
+
+	t.Run("unknown host flag publishes only validated current-level search", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		command := &cli.Command{Name: "configure"}
+		command.Flags().Add(&cli.Flag{Name: "region"})
+		ctx.EnterCommand(command)
+		cause := cli.NewInvalidFlagError("regoin", ctx)
+
+		envelope := requireAgentEnvelope(t, cause, []string{"configure", "--regoin"}, func(request RecoverySearchRequest) bool {
+			assert.Equal(t, RecoverySearchRequest{Product: "configure", Keyword: "region"}, request)
+			return true
+		})
+		assert.Equal(t, []string{"--region"}, envelope.DidYouMean)
+		assert.Equal(t, "search_parameter", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun configure --help-search region", envelope.Recovery.Command)
+		assert.Equal(t, "Search flags for this command related to region.", envelope.Recovery.Hint)
 	})
 
 	t.Run("unknown kebab flag searches a validated request parameter", func(t *testing.T) {
@@ -125,7 +157,7 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 
 		assert.Equal(t, []string{"--instance-type"}, envelope.DidYouMean)
 		assert.Equal(t, "search_parameter", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help ecs describe-instances --cli-section request --cli-search instance-type", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun ecs describe-instances --help-search instance-type", envelope.Recovery.Command)
 		assert.Equal(t, "Search request parameters related to instance-type.", envelope.Recovery.Hint)
 	})
 
@@ -165,9 +197,26 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		})
 
 		assert.Equal(t, text, envelope.Message)
-		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help ecs run-instances --cli-section request --cli-search tags", envelope.Recovery.Command)
-		assert.Equal(t, "Inspect request help for tags and correct its syntax or type.", envelope.Recovery.Hint)
+		assert.Equal(t, "inspect_parameter_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun ecs run-instances --tags --help", envelope.Recovery.Command)
+		assert.Equal(t, "Inspect help for --tags and correct its syntax or type.", envelope.Recovery.Hint)
+	})
+
+	t.Run("invalid argument without a real top-level flag uses validated request search", func(t *testing.T) {
+		text := "Tags.0.Value must be a string"
+		cause := &engine.UsageError{Code: "INVALID_ARGUMENT", Err: &argparser.InvalidArgumentError{
+			FieldPath: "Tags.0.Value", ExpectedType: "string", Err: errors.New(text),
+		}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "run-instances"}, func(request RecoverySearchRequest) bool {
+			assert.Equal(t, RecoverySearchRequest{
+				Product: "ecs", API: "run-instances", Section: "request", Style: "kebab", Keyword: "Tags.0.Value",
+			}, request)
+			return true
+		})
+
+		assert.Equal(t, text, envelope.Message)
+		assert.Equal(t, "search_parameter", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help ecs run-instances --cli-section request --help-search Tags.0.Value", envelope.Recovery.Command)
 	})
 
 	t.Run("invalid option combination identifies options to remove", func(t *testing.T) {
@@ -179,7 +228,7 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 
 		assert.Equal(t, text, envelope.Message)
 		assert.Equal(t, "fix_option_combination", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help ecs describe-instances --cli-section request", envelope.Recovery.Command)
+		assert.Empty(t, envelope.Recovery.Command)
 		assert.Equal(t, "Remove one of the conflicting options: --cli-dry-run-json, --pager.", envelope.Recovery.Hint)
 	})
 
@@ -194,7 +243,7 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		})
 
 		assert.Equal(t, "inspect_header_usage", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help ecs describe-instances --cli-section request --cli-search header", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun ecs describe-instances --header --help", envelope.Recovery.Command)
 		assert.NotContains(t, envelope.Recovery.Command, "secret-value")
 		assert.Equal(t, "Inspect header usage and pass each header as Name=Value.", envelope.Recovery.Hint)
 	})
@@ -209,7 +258,7 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		})
 
 		assert.Equal(t, "fix_body_file", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help ecs run-instances --cli-section request --cli-search body-file", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun ecs run-instances --body-file --help", envelope.Recovery.Command)
 		assert.NotContains(t, envelope.Recovery.Command, "/private/secret")
 		assert.Equal(t, "Check that --body-file points to a readable file.", envelope.Recovery.Hint)
 	})
@@ -229,7 +278,7 @@ func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T
 		})
 
 		assert.Equal(t, "search_api", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help bssopenapi --cli-search Bill", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun bssopenapi --help-search Bill", envelope.Recovery.Command)
 		assert.Equal(t, "Search APIs related to Bill.", envelope.Recovery.Hint)
 		assert.Contains(t, requests, RecoverySearchRequest{Product: "bssopenapi", Style: "pascal", Keyword: "MonthlyBill"})
 		assert.Contains(t, requests, RecoverySearchRequest{Product: "bssopenapi", Style: "pascal", Keyword: "Bill"})
@@ -243,7 +292,7 @@ func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T
 		envelope := requireAgentEnvelope(t, cause, []string{"billing", "GetCouponLits"}, func(RecoverySearchRequest) bool { return false })
 
 		assert.Equal(t, "inspect_product_help", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help billing", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun billing --help", envelope.Recovery.Command)
 		assert.Equal(t, "Inspect the available APIs for this product.", envelope.Recovery.Hint)
 	})
 
@@ -252,7 +301,7 @@ func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T
 		envelope := requireAgentEnvelope(t, cause, []string{"not-a-product"}, func(RecoverySearchRequest) bool { return false })
 
 		assert.Equal(t, "inspect_root_help", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun --help", envelope.Recovery.Command)
 		assert.Equal(t, "Inspect the available products.", envelope.Recovery.Hint)
 	})
 
@@ -262,9 +311,9 @@ func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T
 		}}
 		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "describe-instances"}, func(RecoverySearchRequest) bool { return false })
 
-		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help ecs describe-instances --cli-section request", envelope.Recovery.Command)
-		assert.Equal(t, "Inspect the complete request help and correct the parameter or flag.", envelope.Recovery.Hint)
+		assert.Equal(t, "inspect_action_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun ecs describe-instances --help", envelope.Recovery.Command)
+		assert.Equal(t, "Inspect the action help and correct the parameter or flag.", envelope.Recovery.Hint)
 	})
 
 	t.Run("PascalCase recovery keeps style and explicit version", func(t *testing.T) {
@@ -276,9 +325,24 @@ func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T
 			[]string{"ecs", "RunInstances", "--version", "2014-05-26"},
 			func(got RecoverySearchRequest) bool { request = got; return true })
 
-		assert.Equal(t, "aliyun help ecs RunInstances --version 2014-05-26 --cli-section request --cli-search InstanceType", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun ecs RunInstances --version 2014-05-26 --help-search InstanceType", envelope.Recovery.Command)
 		assert.Equal(t, "pascal", request.Style)
 		assert.Equal(t, "2014-05-26", request.Version)
+	})
+
+	t.Run("known PascalCase parameter syntax error uses versioned L3 help", func(t *testing.T) {
+		cause := &argparser.InvalidArgumentError{
+			Flag: "--InstanceIds", Parameter: "InstanceIds", FieldPath: "InstanceIds",
+			Err: errors.New("--InstanceIds: invalid JSON"),
+		}
+		validatorCalled := false
+		envelope := requireAgentEnvelope(t, cause,
+			[]string{"ecs", "DescribeInstances", "--version=2014-05-26"},
+			func(RecoverySearchRequest) bool { validatorCalled = true; return true })
+
+		assert.Equal(t, "inspect_parameter_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun ecs DescribeInstances --version 2014-05-26 --InstanceIds --help", envelope.Recovery.Command)
+		assert.False(t, validatorCalled, "known top-level flags do not need Search validation")
 	})
 
 	t.Run("kebab recovery keeps style and explicit API version", func(t *testing.T) {
@@ -290,9 +354,18 @@ func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T
 			[]string{"ecs", "run-instances", "--api-version", "2014-05-26"},
 			func(got RecoverySearchRequest) bool { request = got; return true })
 
-		assert.Equal(t, "aliyun help ecs run-instances --api-version 2014-05-26 --cli-section request --cli-search instance-type", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun ecs run-instances --api-version 2014-05-26 --help-search instance-type", envelope.Recovery.Command)
 		assert.Equal(t, "kebab", request.Style)
 		assert.Equal(t, "2014-05-26", request.Version)
+	})
+
+	t.Run("required recovery keeps prefix Section form and explicit API version", func(t *testing.T) {
+		cause := &runtime.MissingRequiredError{Flags: []string{"--instance-id"}}
+		envelope := requireAgentEnvelope(t, cause,
+			[]string{"ecs", "describe-instance-attribute", "--api-version=2014-05-26"}, nil)
+
+		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help ecs describe-instance-attribute --api-version 2014-05-26 --cli-section request", envelope.Recovery.Command)
 	})
 }
 
@@ -388,7 +461,7 @@ func TestAgentErrorEnvelopeEndToEndIsOneCleanJSONDocument(t *testing.T) {
 	assert.Equal(t, []interface{}{"--instance-type"}, decoded["did_you_mean"])
 	recovery := decoded["recovery"].(map[string]interface{})
 	assert.Equal(t, "search_parameter", recovery["action"])
-	assert.Equal(t, "aliyun help ecs describe-instances --cli-section request --cli-search instance-type", recovery["command"])
+	assert.Equal(t, "aliyun ecs describe-instances --help-search instance-type", recovery["command"])
 }
 
 func TestNonAIExplicitLocalErrorKeepsTextAndAppendsHintOnce(t *testing.T) {
@@ -469,7 +542,7 @@ func TestBuiltInSubcommandErrorUsesRootAIModeAdapter(t *testing.T) {
 	require.NoError(t, json.Unmarshal(stderr.Bytes(), &envelope))
 	assert.Equal(t, []string{"profile"}, envelope.DidYouMean)
 	assert.Equal(t, "inspect_parent_help", envelope.Recovery.Action)
-	assert.Equal(t, "aliyun help configure", envelope.Recovery.Command)
+	assert.Equal(t, "aliyun configure --help", envelope.Recovery.Command)
 	assert.Equal(t, "\x1b[0;31mtext\x1b[0m", cli.Colorized(cli.Red, "text"), "AI no-color override must be restored after Execute")
 }
 
@@ -498,7 +571,7 @@ func TestBuiltInUnknownFlagFallsBackToCurrentCommandHelp(t *testing.T) {
 	require.NoError(t, json.Unmarshal(stderr.Bytes(), &envelope))
 	assert.Equal(t, "invalid flag --bogus", envelope.Message)
 	assert.Equal(t, "inspect_command_help", envelope.Recovery.Action)
-	assert.Equal(t, "aliyun help configure", envelope.Recovery.Command)
+	assert.Equal(t, "aliyun configure --help", envelope.Recovery.Command)
 	assert.NotContains(t, envelope.Recovery.Command, "--cli-section")
 }
 
