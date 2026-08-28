@@ -76,6 +76,7 @@ func newMachineHelpService(repository machineHelpRepository) *machineHelpService
 type machineHelpTarget struct {
 	Path           []string `json:"path"`
 	RequestedStyle string   `json:"requestedStyle"`
+	APIVersion     string   `json:"apiVersion"`
 }
 
 type machineHelpLocalizedText struct {

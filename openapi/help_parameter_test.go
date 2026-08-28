@@ -2,6 +2,7 @@ package openapi
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -9,6 +10,52 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestParameterHelpJSONKeepsOnlyParameterContext(t *testing.T) {
+	service := testMachineHelpService(t)
+	action, err := service.buildAPI("demo", "create-report", "2026-01-01")
+	require.NoError(t, err)
+	document, err := buildParameterHelpDocument(action, "--report-id")
+	require.NoError(t, err)
+	attachMachineHelpAIModeHint(document)
+
+	var output bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&output, document))
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
+
+	assert.Len(t, raw, 5)
+	for _, key := range []string{"schemaVersion", "kind", "target", "parameter", "aiModeHint"} {
+		assert.Contains(t, raw, key)
+	}
+	for _, key := range []string{"product", "api", "section", "result", "query", "matches"} {
+		assert.NotContains(t, raw, key)
+	}
+	target, ok := raw["target"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "2026-01-01", target["apiVersion"])
+}
+
+func TestParameterSearchJSONAddsOnlySearchProjection(t *testing.T) {
+	service := testMachineHelpService(t)
+	action, err := service.buildAPI("demo", "create-report", "2026-01-01")
+	require.NoError(t, err)
+	document, err := buildParameterHelpDocument(action, "--report-id")
+	require.NoError(t, err)
+	searchParameterHelpDocument(document, "report")
+
+	var output bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&output, document))
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
+
+	for _, key := range []string{"query", "matches", "result"} {
+		assert.Contains(t, raw, key)
+	}
+	for _, key := range []string{"product", "api", "section"} {
+		assert.NotContains(t, raw, key)
+	}
+}
 
 func TestProjectCanonicalParameterRetainsCompleteFiniteTreeAndConstraints(t *testing.T) {
 	parameter := canonicalmeta.Parameter{
@@ -91,7 +138,7 @@ func TestSearchParameterHelpDocumentSearchesNestedFieldsAndCapsResults(t *testin
 	require.Len(t, document.Matches, helpSearchResultLimit)
 	assert.Equal(t, "Config.Field00", document.Matches[0].Path)
 	assert.Equal(t, "Config.Field19", document.Matches[19].Path)
-	assert.Equal(t, HelpResult{Shown: 20, Total: 25, Truncated: true}, document.Result)
+	assert.Equal(t, &HelpResult{Shown: 20, Total: 25, Truncated: true}, document.Result)
 	assert.Len(t, document.Parameter.Fields, 25, "L3 source tree remains complete")
 	var output bytes.Buffer
 	require.NoError(t, renderParameterHelpText(&output, document))

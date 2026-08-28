@@ -28,7 +28,10 @@ func renderParameterHelpText(w io.Writer, document *machineHelpParameterDocument
 				return err
 			}
 		}
-		return renderHelpProjectionResult(w, "matches", document.Result, nil)
+		if document.Result == nil {
+			return nil
+		}
+		return renderHelpProjectionResult(w, "matches", *document.Result, nil)
 	}
 	name := helpParameterDisplayName(document.Parameter)
 	if _, err := fmt.Fprintf(w, "Parameter: %s\n", name); err != nil {
@@ -38,7 +41,10 @@ func renderParameterHelpText(w io.Writer, document *machineHelpParameterDocument
 	if err := renderMachineHelpParameterNode(w, document.Parameter, []string{rootName}, 2, false); err != nil {
 		return err
 	}
-	return renderHelpProjectionResult(w, "matches", document.Result, nil)
+	if document.Result == nil {
+		return nil
+	}
+	return renderHelpProjectionResult(w, "matches", *document.Result, nil)
 }
 
 func renderMachineHelpParameterNode(w io.Writer, parameter machineHelpParameter, path []string, indent int, printPath bool) error {
@@ -187,14 +193,11 @@ func renderMachineHelpConstraints(w io.Writer, prefix string, constraints machin
 type machineHelpParameterDocument struct {
 	SchemaVersion string                      `json:"schemaVersion"`
 	Kind          string                      `json:"kind"`
-	Section       string                      `json:"section"`
 	Target        machineHelpTarget           `json:"target"`
 	Query         string                      `json:"query"`
-	Product       machineHelpProduct          `json:"product"`
-	API           machineHelpAPI              `json:"api"`
 	Parameter     machineHelpParameter        `json:"parameter"`
 	Matches       []machineHelpParameterMatch `json:"matches"`
-	Result        HelpResult                  `json:"result"`
+	Result        *HelpResult                 `json:"result"`
 	AIModeHint    *machineHelpAIModeHint      `json:"aiModeHint"`
 }
 
@@ -238,16 +241,13 @@ func buildParameterHelpDocument(action *machineHelpAPIDocument, option string) (
 	target := machineHelpTarget{
 		Path:           append(append([]string(nil), action.Target.Path...), option),
 		RequestedStyle: action.Target.RequestedStyle,
+		APIVersion:     action.API.Operation.APIVersion,
 	}
 	return &machineHelpParameterDocument{
 		SchemaVersion: action.SchemaVersion,
 		Kind:          "parameter",
-		Section:       helpSectionRequest,
 		Target:        target,
-		Product:       action.Product,
-		API:           action.API,
 		Parameter:     matches[0],
-		Result:        HelpResult{Shown: 1, Total: 1},
 	}, nil
 }
 
@@ -301,7 +301,7 @@ func searchParameterHelpDocument(document *machineHelpParameterDocument, query s
 			Rank:      match.Rank,
 		})
 	}
-	document.Result = projected.Result
+	document.Result = &projected.Result
 }
 
 func walkMachineHelpParameter(parameter machineHelpParameter, parent []string, visit func(string, machineHelpParameter)) {

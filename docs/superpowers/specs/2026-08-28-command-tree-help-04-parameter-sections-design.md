@@ -24,9 +24,9 @@ Default、All、JSON 均返回完整单参数对象，不应用 100 行限制。
 - example、enum、pattern、minimum、maximum 等存在的约束；
 - `fields`、`element`、`value` 及其全部有限子层级。
 
-Canonical Request 已展开，不读取 Components、不处理 Request `$ref`。Text 使用插件交集一致的单参数渲染；JSON 返回结构化树。
+Canonical Request 已展开，不读取 Components、不处理 Request `$ref`。Text 使用插件交集一致的单参数渲染；JSON 返回结构化树。默认/All JSON 只包含 `schemaVersion`、`kind`、带实际 `apiVersion` 的 `target`、`parameter`，以及非 AI Mode 下的 `aiModeHint`；不重复输出 Product、Action、Section 和固定的 Result 外壳。
 
-`--help-all` 在 L3 合法但与 `--help` 内容相同。`--help-search` 只搜索当前参数及嵌套字段，零命中 exit 0，最多 20 条。
+`--help-all` 在 L3 合法但与 `--help` 内容相同。`--help-search` 只搜索当前参数及嵌套字段，零命中 exit 0，最多 20 条；Search JSON 才额外输出 `query`、`matches` 和 `result`。
 
 ## 3. L2 Action/Section 边界
 

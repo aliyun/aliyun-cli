@@ -30,7 +30,7 @@ JSON 默认选择与文本摘要相同范围的对象，不按格式化行数二
 }
 ```
 
-未截断时保留 `result.truncated=false`、正确 shown/total，并省略无意义的 `next`。非 AI Mode 显式 JSON 的后续命令继续带 `--cli-output json`；AI Mode 不带冗余格式参数。
+未截断时通常保留 `result.truncated=false`、正确 shown/total，并省略无意义的 `next`。L3 默认/All Parameter Help 是单对象视图，不输出固定的 `1/1/false`；只有 Parameter Search 才输出 `result`。非 AI Mode 显式 JSON 的后续命令继续带 `--cli-output json`；AI Mode 不带冗余格式参数。
 
 ## 3. Product Help
 
