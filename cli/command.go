@@ -118,9 +118,6 @@ func (c *Command) Execute(ctx *Context, args []string) {
 	if ctx.completion != nil {
 		args = ctx.completion.GetArgs()
 	}
-	if c.BeforeExecute != nil {
-		c.BeforeExecute(ctx, args)
-	}
 	ctx.errorNormalizer = nil
 	ctx.SetErrorNormalizationArgs(args)
 	if c.NormalizeError != nil {
@@ -136,6 +133,9 @@ func (c *Command) Execute(ctx *Context, args []string) {
 			}
 			return
 		}
+	}
+	if c.BeforeExecute != nil {
+		c.BeforeExecute(ctx, args)
 	}
 
 	err := c.executeInner(ctx, args)

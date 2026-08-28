@@ -227,6 +227,7 @@ func TestBeforeParseRouteCanConsumeOriginalInvocation(t *testing.T) {
 	stderr := new(bytes.Buffer)
 	ctx := NewCommandContext(stdout, stderr)
 	runCalled := false
+	beforeExecuteCalled := false
 	cmd := &Command{
 		Name:              "aliyun",
 		EnableUnknownFlag: true,
@@ -235,6 +236,7 @@ func TestBeforeParseRouteCanConsumeOriginalInvocation(t *testing.T) {
 			return nil
 		},
 	}
+	cmd.BeforeExecute = func(*Context, []string) { beforeExecuteCalled = true }
 	ctx.EnterCommand(cmd)
 	wantArgs := []string{"ecs", "DescribeInstances", "--InstanceIds", "--help"}
 	cmd.BeforeParseRoute = func(ctx *Context, args []string) (bool, error) {
@@ -246,8 +248,33 @@ func TestBeforeParseRouteCanConsumeOriginalInvocation(t *testing.T) {
 	cmd.Execute(ctx, wantArgs)
 
 	assert.False(t, runCalled)
+	assert.False(t, beforeExecuteCalled, "handled pre-parse routes must not apply host execution policy")
 	assert.Equal(t, "parameter help", stdout.String())
 	assert.Empty(t, stderr.String())
+}
+
+func TestBeforeParseRouteFallsThroughBeforeExecuteAndParser(t *testing.T) {
+	ctx := NewCommandContext(io.Discard, io.Discard)
+	events := make([]string, 0, 3)
+	cmd := &Command{
+		Name: "aliyun",
+		BeforeParseRoute: func(*Context, []string) (bool, error) {
+			events = append(events, "route")
+			return false, nil
+		},
+		BeforeExecute: func(*Context, []string) {
+			events = append(events, "before")
+		},
+		Run: func(*Context, []string) error {
+			events = append(events, "run")
+			return nil
+		},
+	}
+	ctx.EnterCommand(cmd)
+
+	cmd.Execute(ctx, nil)
+
+	assert.Equal(t, []string{"route", "before", "run"}, events)
 }
 
 func TestBeforeParseRouteErrorUsesCommandNormalizer(t *testing.T) {
