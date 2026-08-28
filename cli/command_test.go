@@ -222,6 +222,58 @@ func TestExecute(t *testing.T) {
 	assert.Equal(t, "\x1b[1;31mERROR: \"test\" is not a valid command\n\x1b[0m\x1b[1;33m\nUse `test --help` for more information.\n\x1b[0m\n"+AIModeEnableTextHint+"\n", buf2.String())
 }
 
+func TestBeforeParseRouteCanConsumeOriginalInvocation(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(stdout, stderr)
+	runCalled := false
+	cmd := &Command{
+		Name:              "aliyun",
+		EnableUnknownFlag: true,
+		Run: func(ctx *Context, args []string) error {
+			runCalled = true
+			return nil
+		},
+	}
+	ctx.EnterCommand(cmd)
+	wantArgs := []string{"ecs", "DescribeInstances", "--InstanceIds", "--help"}
+	cmd.BeforeParseRoute = func(ctx *Context, args []string) (bool, error) {
+		assert.Equal(t, wantArgs, args)
+		fmt.Fprint(ctx.Stdout(), "parameter help")
+		return true, nil
+	}
+
+	cmd.Execute(ctx, wantArgs)
+
+	assert.False(t, runCalled)
+	assert.Equal(t, "parameter help", stdout.String())
+	assert.Empty(t, stderr.String())
+}
+
+func TestBeforeParseRouteErrorUsesCommandNormalizer(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	DisableExitCode()
+	defer EnableExitCode()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(stdout, stderr)
+	cmd := &Command{Name: "aliyun"}
+	ctx.EnterCommand(cmd)
+	cmd.BeforeParseRoute = func(*Context, []string) (bool, error) {
+		return true, errors.New("route failed")
+	}
+	cmd.NormalizeError = func(_ *Context, args []string, err error) error {
+		assert.Equal(t, []string{"ecs", "--help"}, args)
+		return fmt.Errorf("normalized: %w", err)
+	}
+
+	cmd.Execute(ctx, []string{"ecs", "--help"})
+
+	assert.Empty(t, stdout.String())
+	assert.Equal(t, "ERROR: normalized: route failed\n", stderr.String())
+}
+
 func TestProcessError(t *testing.T) {
 	DisableExitCode()
 	defer EnableExitCode()
