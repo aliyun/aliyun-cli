@@ -223,6 +223,53 @@ func TestMachineHelpAPIResponseUsesCanonicalSchemaAndReachableComponents(t *test
 	assert.Empty(t, doc.Notice)
 }
 
+func TestMachineHelpAPIResponseJSONKeepsOneLocalizedResponseSchema(t *testing.T) {
+	previousLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(previousLanguage) })
+
+	tests := []struct {
+		language        string
+		wantDescription string
+		wantTitle       string
+	}{
+		{language: "en", wantDescription: "The request ID.", wantTitle: "Report ID"},
+		{language: "zh", wantDescription: "请求 ID。", wantTitle: "报表 ID"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.language, func(t *testing.T) {
+			i18n.SetLanguage(tt.language)
+			service := testMachineHelpService(t)
+			doc, err := service.buildAPIResponse("demo", "CreateReport", "2026-01-01")
+			require.NoError(t, err)
+
+			var encoded bytes.Buffer
+			require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+			output := encoded.String()
+			assert.Contains(t, output, `"responses"`)
+			assert.Contains(t, output, `"components"`)
+			assert.NotContains(t, output, `"outputSchema"`)
+			assert.NotContains(t, output, `"description_en"`)
+			assert.NotContains(t, output, `"description_zh"`)
+			assert.NotContains(t, output, `"title_en"`)
+			assert.NotContains(t, output, `"title_zh"`)
+			assert.Contains(t, output, fmt.Sprintf(`"description": %q`, tt.wantDescription))
+			assert.Contains(t, output, fmt.Sprintf(`"title": %q`, tt.wantTitle))
+		})
+	}
+}
+
+func TestLocalizeMachineHelpRawJSONOmitsEmptyLocalizedText(t *testing.T) {
+	previousLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(previousLanguage) })
+	i18n.SetLanguage("en")
+
+	localized, err := localizeMachineHelpRawJSON(json.RawMessage(
+		`{"type":"object","description_en":"","description_zh":""}`,
+	))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"type":"object"}`, string(localized))
+}
+
 func TestMachineHelpAPIResponseWithoutSchemaReturnsNotice(t *testing.T) {
 	service := testMachineHelpService(t)
 	doc, err := service.buildAPIResponse("demo", "DescribeRegions", "2026-01-01")
@@ -430,11 +477,12 @@ func TestCommandoHelpJSONResponseSection(t *testing.T) {
 	assert.False(t, c.pluginLoaded)
 	assert.Empty(t, stderr.String())
 
-	var doc machineHelpAPIResponseDocument
+	var doc map[string]any
 	require.NoError(t, json.Unmarshal(stdout.Bytes(), &doc))
-	assert.Equal(t, helpSectionResponse, doc.Section)
-	require.NotNil(t, doc.OutputSchema)
-	assert.Equal(t, "200", doc.OutputSchema.StatusCode)
+	assert.Equal(t, helpSectionResponse, doc["section"])
+	assert.Contains(t, doc, "responses")
+	assert.Contains(t, doc, "components")
+	assert.NotContains(t, doc, "outputSchema")
 	assert.NotContains(t, stdout.String(), `"parameterSets"`)
 }
 

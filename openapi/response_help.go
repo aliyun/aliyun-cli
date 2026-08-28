@@ -18,7 +18,11 @@ func renderResponseHelpText(w io.Writer, document *machineHelpAPIResponseDocumen
 		if _, err := fmt.Fprintln(w, "Responses:"); err != nil {
 			return err
 		}
-		if err := writeIndentedJSON(w, document.Responses); err != nil {
+		responses, err := localizeMachineHelpRawJSON(document.Responses)
+		if err != nil {
+			return err
+		}
+		if err := writeIndentedJSON(w, responses); err != nil {
 			return err
 		}
 		if err := renderMachineHelpComponents(w, document.Components); err != nil {
@@ -62,7 +66,11 @@ func renderResponseHelpText(w io.Writer, document *machineHelpAPIResponseDocumen
 	if _, err := fmt.Fprintf(w, "%s):\n", heading); err != nil {
 		return err
 	}
-	if err := writeIndentedJSON(w, document.OutputSchema.Schema); err != nil {
+	schema, err := localizeMachineHelpRawJSON(document.OutputSchema.Schema)
+	if err != nil {
+		return err
+	}
+	if err := writeIndentedJSON(w, schema); err != nil {
 		return err
 	}
 
@@ -83,12 +91,16 @@ func renderMachineHelpComponents(w io.Writer, components *machineHelpComponents)
 	if components == nil || len(components.Schemas) == 0 {
 		return nil
 	}
+	localized, err := localizeMachineHelpComponents(components)
+	if err != nil {
+		return err
+	}
 	if _, err := fmt.Fprintln(w, "\nComponents:"); err != nil {
 		return err
 	}
 	encoded, err := json.Marshal(struct {
 		Schemas map[string]json.RawMessage `json:"schemas"`
-	}{Schemas: components.Schemas})
+	}{Schemas: localized.Schemas})
 	if err != nil {
 		return err
 	}
