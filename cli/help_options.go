@@ -87,6 +87,8 @@ func (e *HelpOptionError) Error() string {
 // adding decorative suggestions.
 func (*HelpOptionError) GetSuggestions() []string { return nil }
 
+func (*HelpOptionError) AIRecoveryEligible() {}
+
 // ParseHelpOptions recognizes only the stable public Help surface. Other argv
 // tokens are intentionally preserved for the normal command parser/provider
 // router. The caller still owns target parsing and plugin delegation.

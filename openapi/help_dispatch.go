@@ -298,7 +298,11 @@ func rawParameterHelpTarget(args []string) (string, bool) {
 			cli.CLISectionFlagName, "version", "api-version", "cli-ai-mode", "no-cli-ai-mode":
 			continue
 		}
-		if i+1 < len(args) && !isHelpControlToken(args[i+1]) {
+		// A parameter is assigned only when its next token is a value. If the
+		// next token starts another long option, the current parameter is also
+		// unassigned; retaining every such candidate lets us reject ambiguous
+		// L3 invocations instead of silently choosing the final flag.
+		if i+1 < len(args) && !isHelpControlToken(args[i+1]) && !strings.HasPrefix(args[i+1], "--") {
 			continue
 		}
 		candidates = append(candidates, "--"+name)
@@ -347,6 +351,12 @@ func (c *Commando) resolveParsedHelpTarget(ctx *cli.Context, args []string) (Hel
 	opts, err := parseHelpOptions(ctx, args)
 	if err != nil {
 		return HelpTarget{}, false, err
+	}
+	if opts.SectionExplicit && opts.All {
+		return HelpTarget{}, false, &InvalidOptionCombinationError{
+			Options: []string{"--" + CliHelpSectionFlagName, "--" + cli.HelpAllFlagName},
+			Err:     fmt.Errorf("Help sections do not support --%s", cli.HelpAllFlagName),
+		}
 	}
 	original := ctx.InvocationArgs()
 	prefix := len(original) > 0 && original[0] == "help"

@@ -62,6 +62,31 @@ func TestBeforeParseHelpRouteRendersCanonicalL3WithoutParsingAValue(t *testing.T
 	assert.NotContains(t, stdout.String(), "--WorkspaceId")
 }
 
+func TestBeforeParseHelpRouteRejectsAmbiguousUnassignedL3Parameters(t *testing.T) {
+	c, ctx, _, _ := newCanonicalHelpTestContext(t)
+	handled, err := c.beforeParseHelpRoute(ctx, []string{
+		"demo", "CreateReport", "--ReportId", "--WorkspaceId", "--help",
+	})
+	assert.True(t, handled)
+	var invalidOptions *InvalidOptionCombinationError
+	require.True(t, errors.As(err, &invalidOptions))
+	assert.Contains(t, err.Error(), "parameter Help target is ambiguous")
+}
+
+func TestResolveParsedHelpTargetTypesSectionAllConflict(t *testing.T) {
+	c, ctx, _, _ := newCanonicalHelpTestContext(t)
+	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(ctx.Flags()).SetValue("request")
+	CliHelpAllFlag(ctx.Flags()).SetAssigned(true)
+	ctx.SetInvocationArgs([]string{
+		"help", "demo", "CreateReport", "--cli-section", "request", "--help-all",
+	})
+	_, _, err := c.resolveParsedHelpTarget(ctx, []string{"demo", "CreateReport"})
+	var invalidOptions *InvalidOptionCombinationError
+	require.True(t, errors.As(err, &invalidOptions))
+	assert.Equal(t, []string{"--cli-section", "--help-all"}, invalidOptions.Options)
+}
+
 func TestBeforeParseHelpRouteRejectsRemovedHostHelpFlags(t *testing.T) {
 	c, ctx, _, _ := newCanonicalHelpTestContext(t)
 	for _, args := range [][]string{

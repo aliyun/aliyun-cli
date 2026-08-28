@@ -442,6 +442,43 @@ func TestNormalizeAgentErrorStrictlyBypassesExcludedErrors(t *testing.T) {
 	}
 }
 
+func TestNormalizeAgentHelpOptionErrors(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    *cli.HelpOptionError
+		action string
+		hint   string
+	}{
+		{
+			name:   "conflict",
+			err:    &cli.HelpOptionError{Code: cli.HelpOptionConflict, Option: "--help-all", ConflictsWith: "--help"},
+			action: "fix_option_combination",
+			hint:   "Use only one Help operation; remove either --help-all or --help.",
+		},
+		{
+			name:   "empty search",
+			err:    &cli.HelpOptionError{Code: cli.HelpOptionEmptySearch, Option: "--help-search"},
+			action: "fix_help_options",
+			hint:   "Provide a non-empty query after --help-search.",
+		},
+		{
+			name:   "invalid output",
+			err:    &cli.HelpOptionError{Code: cli.HelpOptionInvalidOutput, Option: "--cli-output", Value: "yaml"},
+			action: "fix_help_options",
+			hint:   "Use --cli-output json, or remove --cli-output.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			envelope := requireAgentEnvelope(t, tt.err, []string{"ecs", "DescribeInstances"}, nil)
+			assert.Equal(t, tt.action, envelope.Recovery.Action)
+			assert.Equal(t, tt.hint, envelope.Recovery.Hint)
+			assert.Empty(t, envelope.Recovery.Command)
+		})
+	}
+}
+
 func TestExplicitLocalTypesAreEligibleForNonAIHint(t *testing.T) {
 	tests := []error{
 		&InvalidProductError{Code: "ecx"},
@@ -450,6 +487,7 @@ func TestExplicitLocalTypesAreEligibleForNonAIHint(t *testing.T) {
 		&argparser.UnknownFlagError{Flag: "instnace-type"},
 		&runtime.MissingRequiredError{Flags: []string{"--region-id"}},
 		&argparser.InvalidArgumentError{Err: errors.New("invalid argument")},
+		&cli.HelpOptionError{Code: cli.HelpOptionConflict},
 		&engine.InvalidOptionCombinationError{Err: errors.New("conflict")},
 		&engine.InvalidHeaderError{Err: errors.New("bad header")},
 		&engine.InvalidBodyFileError{Err: errors.New("unreadable")},

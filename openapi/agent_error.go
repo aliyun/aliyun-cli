@@ -166,6 +166,11 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 			legacyInvalidArgument.Parameter, legacyInvalidArgument.FieldPath, context, validate)
 	}
 
+	var invalidHelpOptions *cli.HelpOptionError
+	if errors.As(err, &invalidHelpOptions) {
+		return helpOptionAgentError(err, invalidHelpOptions)
+	}
+
 	var invalidOptions *engine.InvalidOptionCombinationError
 	if errors.As(err, &invalidOptions) {
 		return optionCombinationAgentError(err, invalidOptions.Error(), invalidOptions.Options)
@@ -354,6 +359,30 @@ func optionCombinationAgentError(cause error, message string, options []string) 
 		Action: "fix_option_combination",
 		Hint:   hint,
 	})
+}
+
+func helpOptionAgentError(cause error, optionErr *cli.HelpOptionError) error {
+	if optionErr == nil {
+		return cause
+	}
+	recovery := cli.AgentErrorRecovery{Action: "fix_help_options"}
+	switch optionErr.Code {
+	case cli.HelpOptionConflict:
+		recovery.Action = "fix_option_combination"
+		recovery.Hint = fmt.Sprintf("Use only one Help operation; remove either %s or %s.", optionErr.Option, optionErr.ConflictsWith)
+	case cli.HelpOptionDuplicate:
+		recovery.Action = "fix_option_combination"
+		recovery.Hint = fmt.Sprintf("Remove the duplicate %s option.", optionErr.Option)
+	case cli.HelpOptionEmptySearch:
+		recovery.Hint = "Provide a non-empty query after --help-search."
+	case cli.HelpOptionInvalidOutput:
+		recovery.Hint = "Use --cli-output json, or remove --cli-output."
+	case cli.HelpOptionInvalidSection:
+		recovery.Hint = "Use --cli-section request or --cli-section response."
+	default:
+		recovery.Hint = "Correct the Help options and run the command again."
+	}
+	return newLocalAgentError(cause, optionErr.Error(), nil, recovery)
 }
 
 func fixedParameterHelpAgentError(cause error, message, action, parameter, hint string,
