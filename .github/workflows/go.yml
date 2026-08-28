@@ -40,7 +40,7 @@ jobs:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Smoking Test
-      run: go run ./main/main.go
+      run: go run ./main
 
     - run: |
         make build
