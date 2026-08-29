@@ -9,16 +9,23 @@ package openapi
 //   - annotation booleans whose false value is the unambiguous default
 //     (deprecated, multiVersion, canonicalHelp) are omitted; decision-relevant
 //     booleans such as required stay explicit;
-//   - options is omitted when it repeats exactly ["--"+name].
+//   - options is omitted when it repeats exactly ["--"+name];
+//   - maps/arrays left empty by the omissions above are dropped, so a zeroed
+//     api/product block fully disappears rather than lingering as {}.
 //
 // The response-schema subtrees (responses, outputSchema, components) are
 // skipped: they are already localized by localizeHelpJSON and may legitimately
 // contain user-shaped {en, zh} values such as schema defaults or examples.
-func slimMachineHelpJSON(value any, lang string) any {
+// The second return reports whether the value survived; callers at the top
+// level ignore it because a whole document never slims to nothing.
+func slimMachineHelpJSON(value any, lang string) (any, bool) {
 	switch typed := value.(type) {
 	case map[string]any:
 		if text, ok := machineHelpLocalizedJSONText(typed, lang); ok {
-			return text
+			if text == "" {
+				return nil, false
+			}
+			return text, true
 		}
 		result := make(map[string]any, len(typed))
 		for key, item := range typed {
@@ -29,17 +36,27 @@ func slimMachineHelpJSON(value any, lang string) any {
 			if omitMachineHelpJSONField(key, item, typed) {
 				continue
 			}
-			result[key] = slimMachineHelpJSON(item, lang)
+			if cleaned, keep := slimMachineHelpJSON(item, lang); keep {
+				result[key] = cleaned
+			}
 		}
-		return result
+		if len(result) == 0 {
+			return nil, false
+		}
+		return result, true
 	case []any:
 		result := make([]any, 0, len(typed))
 		for _, item := range typed {
-			result = append(result, slimMachineHelpJSON(item, lang))
+			if cleaned, keep := slimMachineHelpJSON(item, lang); keep {
+				result = append(result, cleaned)
+			}
 		}
-		return result
+		if len(result) == 0 {
+			return nil, false
+		}
+		return result, true
 	default:
-		return value
+		return value, true
 	}
 }
 
@@ -80,10 +97,14 @@ func machineHelpLocalizedJSONText(value map[string]any, lang string) (string, bo
 }
 
 // machineHelpFalseDefaultBools are annotation flags where absence means false.
+// isSSE/hasWildcardPath are included so a zeroed api.operation block fully
+// prunes away when AI-mode search drops the api metadata.
 var machineHelpFalseDefaultBools = map[string]bool{
-	"deprecated":    true,
-	"multiVersion":  true,
-	"canonicalHelp": true,
+	"deprecated":       true,
+	"multiVersion":     true,
+	"canonicalHelp":    true,
+	"isSSE":            true,
+	"hasWildcardPath":  true,
 }
 
 func omitMachineHelpJSONField(key string, item any, parent map[string]any) bool {

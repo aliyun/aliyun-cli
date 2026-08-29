@@ -315,6 +315,15 @@ func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptio
 		// Search results carry only the matched entries; the full invocation
 		// example is unrelated payload.
 		document.Examples = machineHelpExamples{}
+		if aiMode {
+			// AI-mode search consumers only need the matched parameters plus
+			// identity (target/result/next); drop the api/product/queryOptions/
+			// responseQueryExample metadata that dominates the payload.
+			document.Product = machineHelpProduct{}
+			document.API = machineHelpAPI{}
+			document.QueryOptions = nil
+			document.ResponseQuery = nil
+		}
 	}
 	retainActiveMachineHelpExample(document)
 	if options.Search == "" {

@@ -569,26 +569,34 @@ func TestNormalizeAgentErrorStrictlyBypassesExcludedErrors(t *testing.T) {
 func TestNormalizeAgentErrorServerErrorsShareOneEnvelope(t *testing.T) {
 	serverBody := `{"RequestId":"req-1","Code":"Throttling.User","Message":"slow down"}`
 	tests := []struct {
-		name       string
-		err        error
-		wantPrefix string
-		wantSuffix string
+		name           string
+		err            error
+		wantMessage    string
+		wantCode       string
+		wantStatus     int
+		wantRequestID  string
 	}{
 		{
-			name:       "old SDK server keeps request id",
-			err:        sdkerrors.NewServerError(429, serverBody, ""),
-			wantPrefix: "server error [Throttling.User]: slow down",
-			wantSuffix: " (request id: req-1)",
+			name:          "old SDK server keeps request id",
+			err:           sdkerrors.NewServerError(429, serverBody, ""),
+			wantMessage:   "slow down",
+			wantCode:      "Throttling.User",
+			wantStatus:    429,
+			wantRequestID: "req-1",
 		},
 		{
-			name:       "Tea SDK server",
-			err:        tea.NewSDKError(map[string]interface{}{"statusCode": 503, "code": "ServiceUnavailable", "message": "try later"}),
-			wantPrefix: "server error [ServiceUnavailable]: try later",
+			name:        "Tea SDK server",
+			err:         tea.NewSDKError(map[string]interface{}{"statusCode": 503, "code": "ServiceUnavailable", "message": "try later"}),
+			wantMessage: "try later",
+			wantCode:    "ServiceUnavailable",
+			wantStatus:  503,
 		},
 		{
-			name:       "Tea SDK server wrapped by runtime call failure",
-			err:        fmt.Errorf("runtime: call failed: %w", tea.NewSDKError(map[string]interface{}{"statusCode": 503, "code": "ServiceUnavailable", "message": "try later"})),
-			wantPrefix: "server error [ServiceUnavailable]: try later",
+			name:        "Tea SDK server wrapped by runtime call failure",
+			err:         fmt.Errorf("runtime: call failed: %w", tea.NewSDKError(map[string]interface{}{"statusCode": 503, "code": "ServiceUnavailable", "message": "try later"})),
+			wantMessage: "try later",
+			wantCode:    "ServiceUnavailable",
+			wantStatus:  503,
 		},
 	}
 
@@ -598,12 +606,29 @@ func TestNormalizeAgentErrorServerErrorsShareOneEnvelope(t *testing.T) {
 			var agentErr *cli.AgentError
 			require.ErrorAs(t, got, &agentErr)
 			envelope := agentErr.Envelope()
-			assert.Equal(t, tt.wantPrefix+tt.wantSuffix, envelope.Message)
-			assert.Equal(t, "inspect_action_help", envelope.Recovery.Action)
-			assert.Equal(t, "aliyun ecs describe-instances --help", envelope.Recovery.Command)
+			assert.Equal(t, tt.wantMessage, envelope.Message)
+			assert.Equal(t, tt.wantCode, envelope.ErrorCode)
+			assert.Equal(t, tt.wantStatus, envelope.StatusCode)
+			assert.Equal(t, tt.wantRequestID, envelope.RequestId)
+			assert.Equal(t, "diagnose_error_code", envelope.Recovery.Action)
+			assert.Contains(t, envelope.Recovery.Command, "openapiexplorer get-error-code-solutions")
+			assert.Contains(t, envelope.Recovery.Command, "--error-code '"+tt.wantCode+"'")
+			assert.Contains(t, envelope.Recovery.Command, "--product Ecs")
 			assert.Equal(t, 2, agentErr.ExitCode())
 		})
 	}
+}
+
+func TestServerAgentErrorFallsBackToActionHelpWithoutCode(t *testing.T) {
+	// A server error with no code keeps the generic action-help recovery.
+	err := tea.NewSDKError(map[string]interface{}{"statusCode": 500, "message": "internal"})
+	got := normalizeAgentErrorWithSearch(err, []string{"ecs", "describe-instances"}, nil)
+	var agentErr *cli.AgentError
+	require.ErrorAs(t, got, &agentErr)
+	envelope := agentErr.Envelope()
+	assert.Equal(t, "internal", envelope.Message)
+	assert.Equal(t, "inspect_action_help", envelope.Recovery.Action)
+	assert.Equal(t, "aliyun ecs describe-instances --help", envelope.Recovery.Command)
 }
 
 func TestNormalizeAgentErrorServerErrorKeepsTipPath(t *testing.T) {
@@ -613,6 +638,26 @@ func TestNormalizeAgentErrorServerErrorKeepsTipPath(t *testing.T) {
 	)
 	got := normalizeAgentErrorWithSearch(tipped, []string{"ecs", "describe-instances"}, nil)
 	assert.Same(t, tipped, got)
+}
+
+func TestNormalizeAgentErrorEndpointResolution(t *testing.T) {
+	// Client-side endpoint resolution failures are wrapped exactly as invoker.go
+	// wraps them (ErrorWithTip around a %w chain) and must become an envelope.
+	endpointErr := &meta.InvalidEndpointError{Region: "invalid-region-xxx", Product: &meta.Product{}}
+	wrapped := cli.NewErrorWithTip(
+		fmt.Errorf("unknown endpoint for %s/%s! failed %w", "ecs", "invalid-region-xxx", endpointErr),
+		"Use flag --endpoint xxx.aliyuncs.com to assign endpoint",
+	)
+
+	got := normalizeAgentErrorWithSearch(wrapped, []string{"ecs", "describe-zones"}, nil)
+	var agentErr *cli.AgentError
+	require.ErrorAs(t, got, &agentErr)
+	envelope := agentErr.Envelope()
+	assert.Contains(t, envelope.Message, "unknown endpoint for region invalid-region-xxx")
+	assert.Equal(t, "fix_endpoint_or_region", envelope.Recovery.Action)
+	assert.Empty(t, envelope.Recovery.Command, "no misleading command for endpoint failures")
+	assert.NotEmpty(t, envelope.Recovery.Hint)
+	assert.Equal(t, 2, agentErr.ExitCode())
 }
 
 func TestNormalizeAgentHelpOptionErrors(t *testing.T) {

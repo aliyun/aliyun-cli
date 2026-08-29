@@ -218,6 +218,36 @@ func TestPrintAPIHelpShowsGlobalOptions(t *testing.T) {
 	}
 }
 
+// TestPrintAPIHelpMarksDocRequiredAsRequired verifies doc_required parameters
+// render with the "(required)" label, matching the AI-mode interception that
+// treats them as required.
+func TestPrintAPIHelpMarksDocRequiredAsRequired(t *testing.T) {
+	var buf bytes.Buffer
+	api := &meta.API{
+		Name:    "GetUser",
+		CmdName: "get-user",
+		Version: "2015-05-01",
+		Parameters: []meta.Parameter{
+			{Name: "user_name", Type: meta.TypeString, Required: false, DocRequired: true, Options: []string{"--user-name"}},
+			{Name: "marker", Type: meta.TypeString, Required: false, DocRequired: false, Options: []string{"--marker"}},
+		},
+	}
+	if err := printAPIHelp(&buf, "ram", api, "en"); err != nil {
+		t.Fatalf("printAPIHelp: %v", err)
+	}
+	out := buf.String()
+	userNameIdx := strings.Index(out, "--user-name")
+	requiredIdx := strings.Index(out, "(required)")
+	if userNameIdx < 0 || requiredIdx < 0 || requiredIdx < userNameIdx {
+		t.Fatalf("doc_required parameter must carry the (required) label:\n%s", out)
+	}
+	// The optional parameter's line must not be labeled required.
+	markerIdx := strings.Index(out, "--marker")
+	if markerIdx >= 0 && strings.Contains(out[markerIdx:strings.Index(out, "Global Parameters:")], "(required)") {
+		t.Fatalf("optional --marker must not be labeled required:\n%s", out)
+	}
+}
+
 // TestPrintAPIHelpChineseLabels verifies section headers localize to
 // Chinese when lang == "zh".
 func TestPrintAPIHelpChineseLabels(t *testing.T) {

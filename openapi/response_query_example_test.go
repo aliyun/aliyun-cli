@@ -438,6 +438,95 @@ func TestBuildResponseQueryExampleProjectionFallsBackWithoutScalarItems(t *testi
 	assert.Equal(t, "Instances.Instance", example.Path)
 }
 
+// TestResponseProjectionSemanticScoring pins the field-choice rules against the
+// real declaration orders the review called out: identity/status fields must win
+// over arbitrary leading fields, and timestamps/long-text lose.
+func TestResponseProjectionSemanticScoring(t *testing.T) {
+	t.Run("DescribeInstances prefers InstanceId/InstanceName/Status over timestamps", func(t *testing.T) {
+		document := responseQueryDocument(`{
+			"type":"object",
+			"properties":{
+				"Instances":{"type":"object","properties":{
+					"Instance":{"type":"array","items":{"type":"object","properties":{
+						"AutoReleaseTime":{"type":"string"},
+						"ClusterId":{"type":"string"},
+						"Cpu":{"type":"integer"},
+						"CreationTime":{"type":"string"},
+						"InstanceId":{"type":"string"},
+						"InstanceName":{"type":"string"},
+						"Status":{"type":"string"}
+					}}}
+				}}
+			}
+		}`, nil)
+
+		example, err := BuildResponseQueryExample(ResponseQueryContext{
+			Document: document,
+			Product:  "ecs",
+			API:      "DescribeInstances",
+			Style:    ResponseCommandStylePascal,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, example)
+		assert.Equal(t, `Instances.Instance[*].{InstanceId:InstanceId,InstanceName:InstanceName,Status:Status}`, example.Path)
+	})
+
+	t.Run("ListUsers prefers UserId/UserName/DisplayName over comments and dates", func(t *testing.T) {
+		document := responseQueryDocument(`{
+			"type":"object",
+			"properties":{
+				"Users":{"type":"object","properties":{
+					"User":{"type":"array","items":{"type":"object","properties":{
+						"Comments":{"type":"string"},
+						"CreateDate":{"type":"string"},
+						"DisplayName":{"type":"string"},
+						"Email":{"type":"string"},
+						"MobilePhone":{"type":"string"},
+						"UpdateDate":{"type":"string"},
+						"UserId":{"type":"string"},
+						"UserName":{"type":"string"}
+					}}}
+				}}
+			}
+		}`, nil)
+
+		example, err := BuildResponseQueryExample(ResponseQueryContext{
+			Document: document,
+			Product:  "ram",
+			API:      "ListUsers",
+			Style:    ResponseCommandStylePascal,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, example)
+		assert.Equal(t, `Users.User[*].{UserId:UserId,UserName:UserName,DisplayName:DisplayName}`, example.Path)
+	})
+}
+
+func TestResponseProjectionFieldScore(t *testing.T) {
+	resource := []string{"instance"}
+	tests := []struct {
+		name string
+		want int
+	}{
+		{"InstanceId", 100},
+		{"InstanceName", 90},
+		{"Status", 60},
+		{"ClusterId", 50},
+		{"ZoneType", 20},
+		{"Cpu", 10},
+		{"CreationTime", -50},
+		{"AutoReleaseTime", -50},
+		{"Description", -30},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, responseProjectionFieldScore(tt.name, resource), tt.name)
+	}
+	// Resource match boosts type/category when the field echoes the resource.
+	assert.Equal(t, 55, responseProjectionFieldScore("InstanceType", resource))
+	// No resource tokens: generic scoring only.
+	assert.Equal(t, 50, responseProjectionFieldScore("UserId", nil))
+}
+
 func TestBuildResponseQueryExampleProjectionMergesAllOfItems(t *testing.T) {
 	document := responseQueryDocument(`{
 		"type":"object",

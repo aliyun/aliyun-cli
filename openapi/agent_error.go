@@ -15,6 +15,7 @@
 package openapi
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -24,6 +25,8 @@ import (
 
 	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	runtime "github.com/aliyun/aliyun-openapi-runtime/runtime"
@@ -218,6 +221,14 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 		return externalFlagRejectAgentError(err, externalReject, context)
 	}
 
+	// Client-side endpoint/region resolution failures carry no server error
+	// code, so they are handled before the remote server-error branch (which
+	// bails on ErrorWithTip-wrapped errors).
+	var endpointErr *meta.InvalidEndpointError
+	if errors.As(err, &endpointErr) {
+		return endpointAgentError(err, endpointErr)
+	}
+
 	if normalized := normalizeServerAgentError(err, context); normalized != nil {
 		return normalized
 	}
@@ -243,9 +254,10 @@ func normalizeServerAgentError(err error, context recoveryContext) error {
 	var teaErr *tea.SDKError
 	if errors.As(err, &teaErr) {
 		facts := serverErrorFacts{
-			code:      tea.StringValue(teaErr.Code),
-			message:   tea.StringValue(teaErr.Message),
-			requestID: "",
+			code:       tea.StringValue(teaErr.Code),
+			message:    tea.StringValue(teaErr.Message),
+			requestID:  teaRequestID(teaErr),
+			statusCode: tea.IntValue(teaErr.StatusCode),
 		}
 		if facts.code == "" && facts.message == "" {
 			return nil
@@ -255,9 +267,10 @@ func normalizeServerAgentError(err error, context recoveryContext) error {
 	var serverErr *sdkerrors.ServerError
 	if errors.As(err, &serverErr) {
 		facts := serverErrorFacts{
-			code:      serverErr.ErrorCode(),
-			message:   serverErr.Message(),
-			requestID: serverErr.RequestId(),
+			code:       serverErr.ErrorCode(),
+			message:    serverErr.Message(),
+			requestID:  serverErr.RequestId(),
+			statusCode: serverErr.HttpStatus(),
 		}
 		if facts.code == "" && facts.message == "" {
 			return nil
@@ -267,22 +280,86 @@ func normalizeServerAgentError(err error, context recoveryContext) error {
 	return nil
 }
 
-type serverErrorFacts struct {
-	code      string
-	message   string
-	requestID string
+// teaRequestID best-effort extracts a RequestId from the Tea error's Data JSON
+// payload; the kebab/Tea SDK does not expose it as a dedicated field.
+func teaRequestID(err *tea.SDKError) string {
+	data := tea.StringValue(err.Data)
+	if strings.TrimSpace(data) == "" {
+		return ""
+	}
+	var payload map[string]any
+	if json.Unmarshal([]byte(data), &payload) != nil {
+		return ""
+	}
+	if requestID, ok := payload["RequestId"].(string); ok {
+		return requestID
+	}
+	if requestID, ok := payload["requestId"].(string); ok {
+		return requestID
+	}
+	return ""
 }
 
+type serverErrorFacts struct {
+	code       string
+	message    string
+	requestID  string
+	statusCode int
+}
+
+// serverAgentError renders a remote server error with its facts as structured
+// envelope fields and routes recovery to the OpenAPI Explorer error-code
+// diagnostics API when a code is available.
 func serverAgentError(cause error, facts serverErrorFacts, context recoveryContext) error {
-	message := fmt.Sprintf("server error [%s]: %s", facts.code, facts.message)
-	if facts.requestID != "" {
-		message += " (request id: " + facts.requestID + ")"
+	message := facts.message
+	if strings.TrimSpace(message) == "" {
+		message = "server error " + facts.code
 	}
-	return newLocalAgentError(cause, message, nil, cli.AgentErrorRecovery{
+
+	recovery := cli.AgentErrorRecovery{
 		Action:  "inspect_action_help",
 		Command: context.actionHelpCommand(),
 		Hint:    "The server rejected the request; check the error code and message, fix the parameters, or retry if the failure is transient.",
-	})
+	}
+	if facts.code != "" {
+		recovery = cli.AgentErrorRecovery{
+			Action:  "diagnose_error_code",
+			Command: diagnoseErrorCodeCommand(facts, context),
+			Hint:    fmt.Sprintf("Look up diagnostic solutions for error code %s.", facts.code),
+		}
+	}
+
+	agentErr := cli.NewAgentError(cli.AgentErrorEnvelope{
+		Message:    nonEmptyMessage(message, cause),
+		ErrorCode:  facts.code,
+		StatusCode: facts.statusCode,
+		RequestId:  facts.requestID,
+		Recovery:   recovery,
+	}, cause)
+	if agentErr == nil {
+		return cause
+	}
+	return agentErr
+}
+
+// diagnoseErrorCodeCommand builds the OpenAPI Explorer error-code solutions
+// invocation. The product code is PascalCase (the portal CODE), the command
+// token is the canonical kebab form, and the language follows the CLI locale.
+func diagnoseErrorCodeCommand(facts serverErrorFacts, context recoveryContext) string {
+	parts := []string{"aliyun", "openapiexplorer", "get-error-code-solutions",
+		"--error-code", shellSingleQuote(facts.code)}
+	if product := strings.TrimSpace(context.product); product != "" {
+		parts = append(parts, "--product", firstRuneUpper(product))
+	}
+	parts = append(parts, "--accept-language", diagnoseAcceptLanguage(), "--region", "cn-hangzhou")
+	return strings.Join(parts, " ")
+}
+
+func diagnoseAcceptLanguage() string {
+	if i18n.GetLanguage() == "zh" {
+		return "zh-CN"
+	}
+	return "en-US"
 }
 
 func externalFlagRejectAgentError(cause error, reject *argparser.ExternalFlagRejectError, context recoveryContext) error {
@@ -290,6 +367,21 @@ func externalFlagRejectAgentError(cause error, reject *argparser.ExternalFlagRej
 		Action:  "inspect_action_help",
 		Command: context.actionHelpCommand(),
 		Hint:    "Use the flag spelling this command style accepts; the action help lists the parameters of this API.",
+	})
+}
+
+// endpointAgentError renders a client-side endpoint/region resolution failure
+// as a JSON envelope. There is no server error code and no single command that
+// fixes it, so the recovery is a hint about --region/--endpoint without a
+// misleading command.
+func endpointAgentError(cause error, endpointErr *meta.InvalidEndpointError) error {
+	message := endpointErr.Error()
+	if message == "" {
+		message = "unknown endpoint for the requested region"
+	}
+	return newLocalAgentError(cause, message, nil, cli.AgentErrorRecovery{
+		Action: "fix_endpoint_or_region",
+		Hint:   "The endpoint for this region could not be resolved. Use a region the product supports, or pass --endpoint <host> explicitly.",
 	})
 }
 

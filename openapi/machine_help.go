@@ -845,7 +845,7 @@ func projectCanonicalParameter(parameter *canonicalmeta.Parameter) machineHelpPa
 		Options:       append([]string(nil), parameter.Options...),
 		Type:          parameter.Type,
 		Location:      strings.ToLower(parameter.Location),
-		Required:      parameter.Required,
+		Required:      parameter.Required || parameter.DocRequired,
 		Serialization: parameter.ParamStyle,
 		Help:          machineHelpLocalizedText{EN: parameter.HelpEn, ZH: parameter.HelpZh},
 		Example:       parameter.Example,
@@ -874,7 +874,7 @@ func projectCanonicalField(field *canonicalmeta.Field) machineHelpParameter {
 		Name:     field.Name,
 		Options:  make([]string, 0),
 		Type:     field.Type,
-		Required: field.Required,
+		Required: field.Required || field.DocRequired,
 		Help:     machineHelpLocalizedText{EN: field.HelpEn, ZH: field.HelpZh},
 		Example:  field.Example,
 		Constraints: machineHelpConstraints{
@@ -931,7 +931,7 @@ func projectLegacyParameter(view *canonicalmeta.LegacyParameterView, prefix stri
 		Options:  []string{"--" + optionPath},
 		Type:     view.LegacyType(),
 		Location: strings.ToLower(view.LegacyPosition()),
-		Required: view.LegacyRequired(),
+		Required: view.LegacyRequired() || view.DocRequired(),
 		Help:     machineHelpLocalizedText{EN: view.LegacyDescription("en"), ZH: view.LegacyDescription("zh")},
 		Example:  view.LegacyExample(),
 		Constraints: machineHelpConstraints{
@@ -1145,7 +1145,7 @@ func encodeMachineHelpJSON(w io.Writer, value any, compact bool) error {
 		return err
 	}
 	document, _ = pruneMachineHelpEmptyAt(document, nil)
-	document = slimMachineHelpJSON(document, helpResponseLanguage())
+	document, _ = slimMachineHelpJSON(document, helpResponseLanguage())
 
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)

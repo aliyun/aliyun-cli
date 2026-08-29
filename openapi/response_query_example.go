@@ -1,6 +1,7 @@
 package openapi
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -119,7 +120,7 @@ func BuildResponseQueryExample(context ResponseQueryContext) (*ResponseQueryExam
 		return nil, nil
 	}
 	path := candidate.queryPath
-	if fields := responseArrayProjectionFields(document, candidate.arrayNode); len(fields) > 0 {
+	if fields := responseArrayProjectionFields(document, candidate.arrayNode, context.API); len(fields) > 0 {
 		path = responseQueryProjectionPath(path, fields)
 	}
 
@@ -278,10 +279,12 @@ func queryResponsePath(path []responsePathSegment) string {
 // stays a demonstration of the pattern rather than a full field list.
 const responseQueryProjectionFieldLimit = 3
 
-// responseArrayProjectionFields lists the first scalar properties of the
-// array's item object (resolving $ref and allOf shapes). Nil means the items
-// carry no projectable scalar fields and the array path stays as-is.
-func responseArrayProjectionFields(document *responseSchemaDocument, arrayNode *responseSchemaNode) []string {
+// responseArrayProjectionFields picks the most useful scalar properties of the
+// array's item object (resolving $ref and allOf shapes) by semantic relevance
+// rather than declaration order, so the projected query surfaces identity and
+// status fields instead of arbitrary leading fields. Nil means the items carry
+// no projectable scalar fields and the array path stays as-is.
+func responseArrayProjectionFields(document *responseSchemaDocument, arrayNode *responseSchemaNode, apiName string) []string {
 	if document == nil || arrayNode == nil {
 		return nil
 	}
@@ -293,16 +296,111 @@ func responseArrayProjectionFields(document *responseSchemaDocument, arrayNode *
 	if items == nil {
 		return nil
 	}
-	var fields []string
+	resourceTokens := responseProjectionResourceTokens(apiName)
+
+	type scoredField struct {
+		name  string
+		score int
+	}
+	var candidates []scoredField
 	for _, property := range responseArrayItemProperties(document, items) {
-		if len(fields) >= responseQueryProjectionFieldLimit {
-			break
+		if !responseSchemaPropertyIsScalar(document, property.node) {
+			continue
 		}
-		if responseSchemaPropertyIsScalar(document, property.node) {
-			fields = append(fields, property.name)
+		score := responseProjectionFieldScore(property.name, resourceTokens)
+		if score > 0 {
+			candidates = append(candidates, scoredField{name: property.name, score: score})
 		}
 	}
+	// Descending by score; SliceStable keeps declaration order among ties so
+	// output is deterministic.
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return candidates[i].score > candidates[j].score
+	})
+
+	limit := responseQueryProjectionFieldLimit
+	if len(candidates) < limit {
+		limit = len(candidates)
+	}
+	fields := make([]string, 0, limit)
+	for _, candidate := range candidates[:limit] {
+		fields = append(fields, candidate.name)
+	}
 	return fields
+}
+
+// responseProjectionResourceTokens extracts the resource noun from an API name
+// (DescribeInstances -> [instance], ListUsers -> [user]) by dropping leading
+// action verbs and singularizing, mirroring responseArrayMatchesAPIResource.
+func responseProjectionResourceTokens(apiName string) []string {
+	tokens := splitHelpSearchTokens(apiName)
+	for len(tokens) > 0 && isResponseAPIActionToken(tokens[0]) {
+		tokens = tokens[1:]
+	}
+	return singularResponseTokens(tokens)
+}
+
+// responseProjectionFieldScore ranks a scalar field for projection usefulness:
+// identity fields that echo the API resource rank highest, then status, then
+// generic id/name/type; timestamps and long-text fields are penalized because
+// they are rarely the fields an agent projects for.
+func responseProjectionFieldScore(name string, resourceTokens []string) int {
+	tokens := splitHelpSearchTokens(name)
+	if len(tokens) == 0 {
+		return 0
+	}
+	last := tokens[len(tokens)-1]
+	matchesResource := len(resourceTokens) > 0 && responseTokensContainAll(tokens, resourceTokens)
+
+	score := 0
+	switch last {
+	case "id":
+		if matchesResource {
+			score = 100
+		} else {
+			score = 50
+		}
+	case "name":
+		if matchesResource {
+			score = 90
+		} else {
+			score = 45
+		}
+	case "status", "state", "phase":
+		score = 60
+	case "type", "category", "kind":
+		if matchesResource {
+			score = 55
+		} else {
+			score = 20
+		}
+	default:
+		score = 10
+	}
+
+	for _, token := range tokens {
+		switch token {
+		case "time", "date", "timestamp", "at":
+			score -= 60
+		case "description", "comment", "comments", "reason", "message", "detail", "details", "remark", "remarks":
+			score -= 40
+		}
+	}
+	return score
+}
+
+// responseTokensContainAll reports whether tokens include every wanted token.
+func responseTokensContainAll(tokens, wanted []string) bool {
+	set := make(map[string]bool, len(tokens))
+	for _, token := range tokens {
+		set[token] = true
+	}
+	for _, want := range wanted {
+		if !set[want] {
+			return false
+		}
+	}
+	return true
 }
 
 // responseQueryProjectionPath turns an array path into a JMESPath projection

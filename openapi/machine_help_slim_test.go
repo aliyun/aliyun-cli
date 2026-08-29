@@ -103,8 +103,8 @@ func TestMachineHelpJSONOmitsDefaultAnnotationsAndRepeatedIdentity(t *testing.T)
 		Kind:          "product",
 		Product:       machineHelpProduct{Code: "demo", SelectedVersion: "2026-01-01"},
 		APIs: []machineHelpAPISummary{
-			{DisplayName: "CreateThing"},
-			{DisplayName: "DeleteThing", Deprecated: true},
+			{Name: "CreateThing", DisplayName: "CreateThing"},
+			{Name: "DeleteThing", DisplayName: "DeleteThing", Deprecated: true},
 		},
 		Result: HelpResult{Shown: 2, Total: 2, Truncated: false},
 	}

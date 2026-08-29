@@ -284,8 +284,10 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 			endpointType := a.profile.EndpointType
 			a.request.Domain, err = product.GetEndpointWithType(a.request.RegionId, a.client, endpointType)
 			if err != nil {
+				// Wrap with %w (not %s) so *meta.InvalidEndpointError survives the
+				// chain and the AI-mode normalizer can render a JSON envelope.
 				return cli.NewErrorWithTip(
-					fmt.Errorf("unknown endpoint for %s/%s! failed %s", product.GetLowerCode(), a.request.RegionId, err),
+					fmt.Errorf("unknown endpoint for %s/%s! failed %w", product.GetLowerCode(), a.request.RegionId, err),
 					"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, %s", hint)
 			}
 		}

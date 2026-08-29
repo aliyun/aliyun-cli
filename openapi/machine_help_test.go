@@ -544,3 +544,65 @@ func TestMachineHelpRequestSearchDropsInvocationExample(t *testing.T) {
 	require.NotEmpty(t, document.ParameterSets.Kebab)
 	assert.Equal(t, "report_id", document.ParameterSets.Kebab[0].Name)
 }
+
+func TestMachineHelpAggregatesDocRequiredIntoRequired(t *testing.T) {
+	parameter := canonicalmeta.Parameter{
+		Name:        "user_name",
+		RawName:     "UserName",
+		Type:        "string",
+		Required:    false,
+		DocRequired: true,
+		Location:    "query",
+		Options:     []string{"--user-name"},
+		Fields: []canonicalmeta.Field{{
+			Name:        "token",
+			RawName:     "Token",
+			Type:        "string",
+			Required:    false,
+			DocRequired: true,
+		}},
+	}
+
+	t.Run("kebab parameter and nested field", func(t *testing.T) {
+		projected := projectCanonicalParameter(&parameter)
+		assert.True(t, projected.Required, "doc_required must surface as required")
+		require.Len(t, projected.Fields, 1)
+		assert.True(t, projected.Fields[0].Required, "nested doc_required must surface as required")
+	})
+
+	t.Run("camel legacy view", func(t *testing.T) {
+		view := canonicalmeta.NewCanonicalView(&parameter)
+		projected := projectLegacyParameter(view, "")
+		assert.True(t, projected.Required, "camel help must aggregate doc_required")
+	})
+
+	t.Run("protocol-required stays true without doc_required", func(t *testing.T) {
+		plain := parameter
+		plain.Required = true
+		plain.DocRequired = false
+		assert.True(t, projectCanonicalParameter(&plain).Required)
+	})
+}
+
+func TestMachineHelpSearchDropsMetadataInAIMode(t *testing.T) {
+	service := testMachineHelpService(t)
+	document, err := service.buildAPI("demo", "create-report", "2026-01-01")
+	require.NoError(t, err)
+
+	applyRequestHelpOptions(document, helpOptions{Search: "report-id"}, true)
+
+	var encoded bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&encoded, document, true))
+	out := encoded.String()
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(encoded.Bytes(), &raw))
+	assert.NotContains(t, raw, "api")
+	assert.NotContains(t, raw, "product")
+	assert.NotContains(t, raw, "queryOptions")
+	assert.NotContains(t, raw, "responseQueryExample")
+	assert.NotContains(t, raw, "examples")
+	assert.Contains(t, raw, "parameterSets")
+	assert.Contains(t, raw, "target")
+	assert.Contains(t, out, "report_id")
+}
