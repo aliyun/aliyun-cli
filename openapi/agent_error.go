@@ -75,7 +75,7 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 
 	var missing *runtime.MissingRequiredError
 	if errors.As(err, &missing) {
-		return newLocalAgentError(err, missing.Error(), nil, cli.AgentErrorRecovery{
+		return newLocalAgentError(err, missingRequiredAgentMessage(missing), nil, cli.AgentErrorRecovery{
 			Action:  "inspect_request_help",
 			Command: context.requestHelpCommand(),
 			Hint:    "Inspect the complete request help and provide every required parameter.",
@@ -367,6 +367,13 @@ type constraintFacts struct {
 	allowed    []string
 }
 
+// missingRequiredAgentMessage reports missing parameters with the flags the
+// user can actually assign. MissingRequiredError.Error() also appends the
+// PascalCase wire paths, which must not surface in kebab-style agent output.
+func missingRequiredAgentMessage(err *runtime.MissingRequiredError) string {
+	return "missing required parameter(s): " + strings.Join(err.Flags, ", ")
+}
+
 func runtimeConstraintFacts(e *runtime.ConstraintViolationError) constraintFacts {
 	return constraintFacts{
 		flag:       strings.TrimLeft(e.Flag, "-"),
@@ -566,14 +573,25 @@ func (c recoveryContext) productHelpCommand() string {
 	if c.product == "" {
 		return "aliyun --help"
 	}
-	return "aliyun " + c.product + c.versionSuffix() + " --help"
+	return c.kebabHelpEnvPrefix() + "aliyun " + c.product + c.versionSuffix() + " --help"
 }
 
 func (c recoveryContext) productSearchCommand(keyword string) string {
 	if c.product == "" || !safeCommandToken(keyword) {
 		return c.productHelpCommand()
 	}
-	return "aliyun " + c.product + c.versionSuffix() + " --help-search " + keyword
+	return c.kebabHelpEnvPrefix() + "aliyun " + c.product + c.versionSuffix() + " --help-search " + keyword
+}
+
+// kebabHelpEnvPrefix keeps product-level recovery commands in the command style
+// the user already used. Products that also have legacy help render PascalCase
+// product help by default, so kebab help must be requested through the env var.
+// Action-level help is routed by the command token itself and needs no prefix.
+func (c recoveryContext) kebabHelpEnvPrefix() string {
+	if c.style == "kebab" {
+		return baselineProductHelpEnv + "=true "
+	}
+	return ""
 }
 
 func (c recoveryContext) hasAction() bool {

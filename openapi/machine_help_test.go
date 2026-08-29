@@ -73,7 +73,8 @@ func TestMachineHelpProduct(t *testing.T) {
 	assert.Equal(t, []string{"2025-01-01", "2026-01-01"}, doc.Product.SupportedVersions)
 	assert.Equal(t, "2025-01-01", doc.Product.SelectedVersion)
 	require.Len(t, doc.APIs, 1)
-	assert.Equal(t, "DescribeRegions", doc.APIs[0].Name)
+	// buildProduct renders kebab style: the PascalCase name must stay hidden.
+	assert.Empty(t, doc.APIs[0].Name)
 	assert.Equal(t, "describe-regions", doc.APIs[0].CmdName)
 }
 
@@ -98,10 +99,14 @@ func TestMachineHelpAPICamelAndKebabShareCanonicalIdentity(t *testing.T) {
 	assert.Equal(t, machineHelpSchemaVersion, camel.SchemaVersion)
 	assert.Equal(t, "api", camel.Kind)
 	assert.Equal(t, helpSectionRequest, camel.Section)
+	// Each document exposes only its own style's identifiers.
 	assert.Equal(t, "CreateReport", camel.API.Name)
-	assert.Equal(t, "CreateReport", kebab.API.Name)
-	assert.Equal(t, "create-report", camel.API.CmdName)
+	assert.Empty(t, camel.API.CmdName)
+	assert.Equal(t, "demo CreateReport", camel.API.CmdFullName)
+	assert.Empty(t, kebab.API.Name)
 	assert.Equal(t, "create-report", kebab.API.CmdName)
+	assert.Equal(t, "demo create-report", kebab.API.CmdFullName)
+	assert.Empty(t, kebab.API.Operation.Action)
 	assert.Equal(t, "camel", camel.ActiveParameterSet)
 	assert.Equal(t, "kebab", kebab.ActiveParameterSet)
 	assert.Equal(t, []string{"aliyun", "demo", "CreateReport"}, camel.Target.Path)
@@ -282,7 +287,7 @@ func TestMachineHelpAIRequestRemainsComplete(t *testing.T) {
 	applyRequestHelpOptions(complete, helpOptions{}, true)
 	require.Len(t, complete.ParameterSets.Camel, 23)
 	assert.Equal(t, "optional-01", complete.ParameterSets.Camel[0].Name)
-	assert.Len(t, complete.ParameterSets.Kebab, 1)
+	assert.Empty(t, complete.ParameterSets.Kebab, "explicit sections must not expose the inactive style")
 	assert.Len(t, complete.GlobalParameters, 3)
 	assert.Nil(t, complete.Listing)
 
@@ -290,7 +295,7 @@ func TestMachineHelpAIRequestRemainsComplete(t *testing.T) {
 	applyRequestHelpOptions(legacy, helpOptions{}, false)
 	require.Len(t, legacy.ParameterSets.Camel, 23)
 	assert.Equal(t, "optional-01", legacy.ParameterSets.Camel[0].Name)
-	assert.Len(t, legacy.ParameterSets.Kebab, 1)
+	assert.Empty(t, legacy.ParameterSets.Kebab, "explicit sections must not expose the inactive style")
 	assert.Len(t, legacy.GlobalParameters, 3)
 	assert.Nil(t, legacy.Listing)
 }
@@ -339,8 +344,10 @@ func TestMachineHelpNestedParameters(t *testing.T) {
 	require.NotNil(t, tags.Element)
 	assert.Equal(t, "object", tags.Element.Type)
 	require.Len(t, tags.Element.Fields, 2)
-	assert.Equal(t, "Key", tags.Element.Fields[0].RawName)
-	assert.Equal(t, "Value", tags.Element.Fields[1].RawName)
+	assert.Equal(t, "key", tags.Element.Fields[0].Name)
+	assert.Empty(t, tags.Element.Fields[0].RawName, "kebab help must not expose PascalCase wire names")
+	assert.Equal(t, "value", tags.Element.Fields[1].Name)
+	assert.Empty(t, tags.Element.Fields[1].RawName)
 
 	legacyTags := findMachineHelpParameter(doc.ParameterSets.Camel, "--Tags")
 	require.NotNil(t, legacyTags)

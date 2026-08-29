@@ -194,6 +194,16 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		assert.Equal(t, "Inspect the complete request help and provide every required parameter.", envelope.Recovery.Hint)
 	})
 
+	t.Run("missing required parameter hides PascalCase wire paths", func(t *testing.T) {
+		cause := &engine.UsageError{Code: "MISSING_REQUIRED_PARAMETER", Err: &runtime.MissingRequiredError{
+			Flags: []string{"--user-name"},
+			Paths: []string{"UserName"},
+		}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ram", "create-user"}, nil)
+
+		assert.Equal(t, "missing required parameter(s): --user-name", envelope.Message)
+	})
+
 	t.Run("legacy missing required parameter uses complete request help", func(t *testing.T) {
 		cause := cli.NewErrorWithTip(&LegacyMissingRequiredError{
 			Err: errors.New("required parameters not assigned: --InstanceId"),
@@ -347,6 +357,34 @@ func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T
 		assert.Equal(t, "Search APIs related to Bill.", envelope.Recovery.Hint)
 		assert.Contains(t, requests, RecoverySearchRequest{Product: "bssopenapi", Style: "pascal", Keyword: "MonthlyBill"})
 		assert.Contains(t, requests, RecoverySearchRequest{Product: "bssopenapi", Style: "pascal", Keyword: "Bill"})
+	})
+
+	t.Run("kebab unknown API keeps kebab help in the recovery command", func(t *testing.T) {
+		cause := &InvalidBaselineCommandError{
+			Product: "ecs",
+			Command: "describe-instnaces",
+			Err:     errors.New(`"describe-instnaces" is not a valid api.`),
+		}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "describe-instnaces"}, func(RecoverySearchRequest) bool { return false })
+
+		assert.Equal(t, "inspect_product_help", envelope.Recovery.Action)
+		assert.Equal(t, "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help", envelope.Recovery.Command)
+		assert.Equal(t, "Inspect the available APIs for this product.", envelope.Recovery.Hint)
+	})
+
+	t.Run("kebab API search recovery keeps the kebab help env prefix", func(t *testing.T) {
+		cause := &InvalidBaselineCommandError{
+			Product: "ecs",
+			Command: "describe-instance",
+			Err:     errors.New(`"describe-instance" is not a valid api.`),
+		}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "describe-instance"}, func(got RecoverySearchRequest) bool {
+			return got.Style == "kebab" && got.Keyword == "instance"
+		})
+
+		assert.Equal(t, "search_api", envelope.Recovery.Action)
+		assert.Equal(t, "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help-search instance", envelope.Recovery.Command)
+		assert.Equal(t, "Search APIs related to instance.", envelope.Recovery.Hint)
 	})
 
 	t.Run("failed API search validation falls back to product inspection", func(t *testing.T) {

@@ -296,6 +296,10 @@ func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptio
 		return
 	}
 	document.Listing = nil
+	// Explicit Sections stay complete (no budget projection) but still expose
+	// only the active command style, matching the default Action Help.
+	retainActiveMachineHelpParameterSet(document)
+	retainActiveMachineHelpExample(document)
 	if options.Search == "" {
 		total := len(activeMachineHelpParameters(document)) + len(document.GlobalParameters)
 		document.Result = HelpResult{Shown: total, Total: total}

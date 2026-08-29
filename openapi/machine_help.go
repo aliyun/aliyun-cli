@@ -151,8 +151,8 @@ type machineHelpProduct struct {
 }
 
 type machineHelpAPISummary struct {
-	Name        string                   `json:"name"`
-	CmdName     string                   `json:"cmdName"`
+	Name        string                   `json:"name,omitempty"`
+	CmdName     string                   `json:"cmdName,omitempty"`
 	DisplayName string                   `json:"displayName"`
 	Title       machineHelpLocalizedText `json:"title"`
 	Description machineHelpLocalizedText `json:"description"`
@@ -173,7 +173,7 @@ type machineHelpProductDocument struct {
 }
 
 type machineHelpOperation struct {
-	Action          string `json:"action"`
+	Action          string `json:"action,omitempty"`
 	APIStyle        string `json:"apiStyle"`
 	APIVersion      string `json:"apiVersion"`
 	Method          string `json:"method"`
@@ -186,8 +186,8 @@ type machineHelpOperation struct {
 }
 
 type machineHelpAPI struct {
-	Name         string                   `json:"name"`
-	CmdName      string                   `json:"cmdName"`
+	Name         string                   `json:"name,omitempty"`
+	CmdName      string                   `json:"cmdName,omitempty"`
 	CmdFullName  string                   `json:"cmdFullName"`
 	Title        machineHelpLocalizedText `json:"title"`
 	Description  machineHelpLocalizedText `json:"description"`
@@ -216,7 +216,7 @@ type machineHelpShape struct {
 
 type machineHelpParameter struct {
 	Name          string                   `json:"name"`
-	RawName       string                   `json:"rawName"`
+	RawName       string                   `json:"rawName,omitempty"`
 	Options       []string                 `json:"options"`
 	Type          string                   `json:"type"`
 	Location      string                   `json:"location"`
@@ -424,6 +424,14 @@ func (s *machineHelpService) buildProductForStyle(code, requestedVersion, style 
 		}
 		return apis[i].DisplayName < apis[j].DisplayName
 	})
+	// Keep only the active style's identifiers; sorting above still needs both.
+	for i := range apis {
+		if style == "kebab" {
+			apis[i].Name = ""
+		} else {
+			apis[i].CmdName = ""
+		}
+	}
 
 	productDoc := buildMachineHelpProduct(*product, versions, selected)
 	code = productDoc.Code
@@ -443,7 +451,6 @@ func (s *machineHelpService) buildAPI(code, command, requestedVersion string) (*
 	}
 	api := resolved.API
 
-	operation := projectMachineHelpOperation(api)
 	camelParameters := make([]machineHelpParameter, 0)
 	for _, view := range api.LegacyTopLevelParameters() {
 		camelParameters = append(camelParameters, projectLegacyParameter(view, ""))
@@ -462,17 +469,8 @@ func (s *machineHelpService) buildAPI(code, command, requestedVersion string) (*
 			Path:           []string{"aliyun", productDoc.Code, command},
 			RequestedStyle: resolved.Style,
 		},
-		Product: productDoc,
-		API: machineHelpAPI{
-			Name:         api.Name,
-			CmdName:      api.CmdName,
-			CmdFullName:  api.CmdFullName,
-			Title:        machineHelpLocalizedText{EN: api.TitleEn, ZH: api.TitleZh},
-			Description:  machineHelpLocalizedText{EN: api.DescriptionEn, ZH: api.DescriptionZh},
-			Deprecated:   api.Deprecated,
-			MultiVersion: api.MultiVersion,
-			Operation:    operation,
-		},
+		Product:            productDoc,
+		API:                projectMachineHelpAPI(api, productDoc.Code, resolved.Style),
 		ActiveParameterSet: resolved.Style,
 		ParameterSets: machineHelpParameterSets{
 			Camel: camelParameters,
@@ -520,17 +518,8 @@ func (s *machineHelpService) buildAPIResponse(code, command, requestedVersion st
 			Path:           []string{"aliyun", productDoc.Code, command},
 			RequestedStyle: resolved.Style,
 		},
-		Product: productDoc,
-		API: machineHelpAPI{
-			Name:         api.Name,
-			CmdName:      api.CmdName,
-			CmdFullName:  api.CmdFullName,
-			Title:        machineHelpLocalizedText{EN: api.TitleEn, ZH: api.TitleZh},
-			Description:  machineHelpLocalizedText{EN: api.DescriptionEn, ZH: api.DescriptionZh},
-			Deprecated:   api.Deprecated,
-			MultiVersion: api.MultiVersion,
-			Operation:    projectMachineHelpOperation(api),
-		},
+		Product:   productDoc,
+		API:       projectMachineHelpAPI(api, productDoc.Code, resolved.Style),
 		Responses: section.Responses,
 		Warnings:  mergeMachineHelpWarnings(section.Warnings, response.Warnings),
 		Result:    completeMachineHelpJSONResult(section.Responses),
@@ -618,6 +607,30 @@ func projectMachineHelpOperation(api *canonicalmeta.API) machineHelpOperation {
 	}
 }
 
+// projectMachineHelpAPI projects the API identity in one command style only.
+// Machine Help consumers must never see the other style's identifiers: hiding
+// them keeps agents from being pulled back into the style they did not use.
+func projectMachineHelpAPI(api *canonicalmeta.API, productCode, style string) machineHelpAPI {
+	identity := machineHelpAPI{
+		Title:        machineHelpLocalizedText{EN: api.TitleEn, ZH: api.TitleZh},
+		Description:  machineHelpLocalizedText{EN: api.DescriptionEn, ZH: api.DescriptionZh},
+		Deprecated:   api.Deprecated,
+		MultiVersion: api.MultiVersion,
+		Operation:    projectMachineHelpOperation(api),
+	}
+	if style == "kebab" {
+		identity.CmdName = api.CmdName
+		identity.CmdFullName = api.CmdFullName
+		// operation.action is the PascalCase wire action; it equals the hidden
+		// legacy name and is redundant with cmdName for command construction.
+		identity.Operation.Action = ""
+		return identity
+	}
+	identity.Name = api.Name
+	identity.CmdFullName = strings.TrimSpace(productCode + " " + api.Name)
+	return identity
+}
+
 func (s *machineHelpService) resolveAPI(code, command, requestedVersion string) (*resolvedMachineHelpAPI, error) {
 	product, err := s.findProduct(code)
 	if err != nil {
@@ -700,7 +713,6 @@ func projectCanonicalParameter(parameter *canonicalmeta.Parameter) machineHelpPa
 	}
 	result := machineHelpParameter{
 		Name:          parameter.Name,
-		RawName:       parameter.RawName,
 		Options:       append([]string(nil), parameter.Options...),
 		Type:          parameter.Type,
 		Location:      strings.ToLower(parameter.Location),
@@ -731,7 +743,6 @@ func projectCanonicalField(field *canonicalmeta.Field) machineHelpParameter {
 	}
 	result := machineHelpParameter{
 		Name:     field.Name,
-		RawName:  field.RawName,
 		Options:  make([]string, 0),
 		Type:     field.Type,
 		Required: field.Required,
