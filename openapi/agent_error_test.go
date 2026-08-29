@@ -619,6 +619,47 @@ func TestNormalizeAgentErrorServerErrorsShareOneEnvelope(t *testing.T) {
 	}
 }
 
+func TestServerAgentErrorDiagnoseCommandMatchesCallerStyle(t *testing.T) {
+	makeErr := func() error {
+		return tea.NewSDKError(map[string]interface{}{"statusCode": 400, "code": "InvalidParameter", "message": "bad"})
+	}
+
+	t.Run("camel caller gets PascalCase entry with raw-name flags", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(makeErr(), []string{"ecs", "DescribeInstances"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		assert.Equal(t,
+			"aliyun openapiexplorer GetErrorCodeSolutions --errorCode 'InvalidParameter' --product Ecs --acceptLanguage en-US --region cn-hangzhou",
+			agentErr.Envelope().Recovery.Command)
+	})
+
+	t.Run("kebab caller keeps kebab entry", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(makeErr(), []string{"ecs", "describe-instances"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		assert.Equal(t,
+			"aliyun openapiexplorer get-error-code-solutions --error-code 'InvalidParameter' --product Ecs --accept-language en-US --region cn-hangzhou",
+			agentErr.Envelope().Recovery.Command)
+	})
+}
+
+func TestServerAgentErrorCleansTeaMessageEnvelope(t *testing.T) {
+	// darabonba-openapi builds Tea messages as "code: <status>, <msg> request id: <id>";
+	// the duplicates must be stripped and the request id surfaced as a field.
+	err := tea.NewSDKError(map[string]interface{}{
+		"statusCode": 400,
+		"code":       "InvalidOperation.NotSupportedEndpoint",
+		"message":    "code: 400, The specified endpoint can't operate this region. request id: 01A04DF0-7C9A-55A7",
+	})
+	got := normalizeAgentErrorWithSearch(err, []string{"ecs", "describe-instances"}, nil)
+	var agentErr *cli.AgentError
+	require.ErrorAs(t, got, &agentErr)
+	envelope := agentErr.Envelope()
+	assert.Equal(t, "The specified endpoint can't operate this region.", envelope.Message)
+	assert.Equal(t, 400, envelope.StatusCode)
+	assert.Equal(t, "01A04DF0-7C9A-55A7", envelope.RequestId)
+}
+
 func TestServerAgentErrorFallsBackToActionHelpWithoutCode(t *testing.T) {
 	// A server error with no code keeps the generic action-help recovery.
 	err := tea.NewSDKError(map[string]interface{}{"statusCode": 500, "message": "internal"})
@@ -642,22 +683,35 @@ func TestNormalizeAgentErrorServerErrorKeepsTipPath(t *testing.T) {
 
 func TestNormalizeAgentErrorEndpointResolution(t *testing.T) {
 	// Client-side endpoint resolution failures are wrapped exactly as invoker.go
-	// wraps them (ErrorWithTip around a %w chain) and must become an envelope.
-	endpointErr := &meta.InvalidEndpointError{Region: "invalid-region-xxx", Product: &meta.Product{}}
-	wrapped := cli.NewErrorWithTip(
-		fmt.Errorf("unknown endpoint for %s/%s! failed %w", "ecs", "invalid-region-xxx", endpointErr),
-		"Use flag --endpoint xxx.aliyuncs.com to assign endpoint",
-	)
+	// wraps them (ErrorWithTip around a %w chain) and must become an envelope
+	// whose diagnostics command matches the caller's command style.
+	newEndpointError := func() error {
+		endpointErr := &meta.InvalidEndpointError{Region: "invalid-region-xxx", Product: &meta.Product{}}
+		return cli.NewErrorWithTip(
+			fmt.Errorf("unknown endpoint for %s/%s! failed %w", "ecs", "invalid-region-xxx", endpointErr),
+			"Use flag --endpoint xxx.aliyuncs.com to assign endpoint",
+		)
+	}
 
-	got := normalizeAgentErrorWithSearch(wrapped, []string{"ecs", "describe-zones"}, nil)
-	var agentErr *cli.AgentError
-	require.ErrorAs(t, got, &agentErr)
-	envelope := agentErr.Envelope()
-	assert.Contains(t, envelope.Message, "unknown endpoint for region invalid-region-xxx")
-	assert.Equal(t, "fix_endpoint_or_region", envelope.Recovery.Action)
-	assert.Empty(t, envelope.Recovery.Command, "no misleading command for endpoint failures")
-	assert.NotEmpty(t, envelope.Recovery.Hint)
-	assert.Equal(t, 2, agentErr.ExitCode())
+	t.Run("kebab command gets kebab diagnostics", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(newEndpointError(), []string{"ecs", "describe-zones"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		envelope := agentErr.Envelope()
+		assert.Contains(t, envelope.Message, "unknown endpoint for region invalid-region-xxx")
+		assert.Equal(t, "fix_endpoint_or_region", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun openapiexplorer get-product-endpoints --product Ecs --region cn-hangzhou", envelope.Recovery.Command)
+		assert.NotEmpty(t, envelope.Recovery.Hint)
+		assert.Equal(t, 2, agentErr.ExitCode())
+	})
+
+	t.Run("camel command gets camel diagnostics", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(newEndpointError(), []string{"ecs", "DescribeZones"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		envelope := agentErr.Envelope()
+		assert.Equal(t, "aliyun openapiexplorer GetProductEndpoints --product Ecs --region cn-hangzhou", envelope.Recovery.Command)
+	})
 }
 
 func TestNormalizeAgentHelpOptionErrors(t *testing.T) {

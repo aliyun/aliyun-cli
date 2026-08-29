@@ -500,6 +500,33 @@ func TestResponseProjectionSemanticScoring(t *testing.T) {
 		require.NotNil(t, example)
 		assert.Equal(t, `Users.User[*].{UserId:UserId,UserName:UserName,DisplayName:DisplayName}`, example.Path)
 	})
+
+	t.Run("DescribeDisks prefers DiskId/DiskName/Status over SourceDiskId", func(t *testing.T) {
+		document := responseQueryDocument(`{
+		"type":"object",
+		"properties":{
+			"Disks":{"type":"object","properties":{
+				"Disk":{"type":"array","items":{"type":"object","properties":{
+					"SourceDiskId":{"type":"string"},
+					"DiskName":{"type":"string"},
+					"Status":{"type":"string"},
+					"DiskId":{"type":"string"},
+					"CreationTime":{"type":"string"}
+				}}}
+			}}
+		}
+	}`, nil)
+
+		example, err := BuildResponseQueryExample(ResponseQueryContext{
+			Document: document,
+			Product:  "ecs",
+			API:      "DescribeDisks",
+			Style:    ResponseCommandStylePascal,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, example)
+		assert.Equal(t, `Disks.Disk[*].{DiskId:DiskId,DiskName:DiskName,Status:Status}`, example.Path)
+	})
 }
 
 func TestResponseProjectionFieldScore(t *testing.T) {
@@ -525,6 +552,17 @@ func TestResponseProjectionFieldScore(t *testing.T) {
 	assert.Equal(t, 55, responseProjectionFieldScore("InstanceType", resource))
 	// No resource tokens: generic scoring only.
 	assert.Equal(t, 50, responseProjectionFieldScore("UserId", nil))
+
+	// Resource match requires the exact prefix plus a single suffix: DiskId is a
+	// resource identity, SourceDiskId merely contains the resource and ranks
+	// as a generic id.
+	disk := []string{"disk"}
+	assert.Equal(t, 100, responseProjectionFieldScore("DiskId", disk))
+	assert.Equal(t, 50, responseProjectionFieldScore("SourceDiskId", disk))
+	assert.Equal(t, 90, responseProjectionFieldScore("DiskName", disk))
+	// Multi-token resources still match exactly (SecurityGroupId).
+	secGroup := []string{"security", "group"}
+	assert.Equal(t, 100, responseProjectionFieldScore("SecurityGroupId", secGroup))
 }
 
 func TestBuildResponseQueryExampleProjectionMergesAllOfItems(t *testing.T) {

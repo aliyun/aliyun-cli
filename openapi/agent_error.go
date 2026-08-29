@@ -226,7 +226,7 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	// bails on ErrorWithTip-wrapped errors).
 	var endpointErr *meta.InvalidEndpointError
 	if errors.As(err, &endpointErr) {
-		return endpointAgentError(err, endpointErr)
+		return endpointAgentError(err, endpointErr, context)
 	}
 
 	if normalized := normalizeServerAgentError(err, context); normalized != nil {
@@ -253,10 +253,15 @@ func normalizeServerAgentError(err error, context recoveryContext) error {
 	}
 	var teaErr *tea.SDKError
 	if errors.As(err, &teaErr) {
+		message, messageRequestID := cleanTeaServerMessage(tea.StringValue(teaErr.Message))
+		requestID := teaRequestID(teaErr)
+		if requestID == "" {
+			requestID = messageRequestID
+		}
 		facts := serverErrorFacts{
 			code:       tea.StringValue(teaErr.Code),
-			message:    tea.StringValue(teaErr.Message),
-			requestID:  teaRequestID(teaErr),
+			message:    message,
+			requestID:  requestID,
 			statusCode: tea.IntValue(teaErr.StatusCode),
 		}
 		if facts.code == "" && facts.message == "" {
@@ -298,6 +303,28 @@ func teaRequestID(err *tea.SDKError) string {
 		return requestID
 	}
 	return ""
+}
+
+// darabonba-openapi builds Tea server-error messages as
+// "code: <status>, <message> request id: <id>" (client.go), duplicating the
+// structured status_code/request_id envelope fields. These patterns strip that
+// envelope so the message matches the clean legacy old-SDK form.
+var (
+	teaServerErrorPrefixPattern    = regexp.MustCompile(`^code:\s*\d+,\s*`)
+	teaServerErrorRequestIDPattern = regexp.MustCompile(`\s*request id:\s*(\S+)\s*$`)
+)
+
+// cleanTeaServerMessage strips the status prefix and trailing request id from
+// a Tea server-error message, returning the cleaned message and the extracted
+// request id (empty when absent).
+func cleanTeaServerMessage(message string) (string, string) {
+	message = teaServerErrorPrefixPattern.ReplaceAllString(message, "")
+	requestID := ""
+	if match := teaServerErrorRequestIDPattern.FindStringSubmatch(message); match != nil {
+		requestID = match[1]
+		message = teaServerErrorRequestIDPattern.ReplaceAllString(message, "")
+	}
+	return strings.TrimSpace(message), requestID
 }
 
 type serverErrorFacts struct {
@@ -343,15 +370,27 @@ func serverAgentError(cause error, facts serverErrorFacts, context recoveryConte
 }
 
 // diagnoseErrorCodeCommand builds the OpenAPI Explorer error-code solutions
-// invocation. The product code is PascalCase (the portal CODE), the command
-// token is the canonical kebab form, and the language follows the CLI locale.
+// invocation in the same command style as the failed call: PascalCase users
+// get the PascalCase entry with raw-name flags, kebab users the kebab entry.
+// openapiexplorer has no global endpoint, so a known-good region is pinned.
 func diagnoseErrorCodeCommand(facts serverErrorFacts, context recoveryContext) string {
-	parts := []string{"aliyun", "openapiexplorer", "get-error-code-solutions",
-		"--error-code", shellSingleQuote(facts.code)}
+	var parts []string
+	if context.style == "pascal" {
+		parts = []string{"aliyun", "openapiexplorer", "GetErrorCodeSolutions",
+			"--errorCode", shellSingleQuote(facts.code)}
+	} else {
+		parts = []string{"aliyun", "openapiexplorer", "get-error-code-solutions",
+			"--error-code", shellSingleQuote(facts.code)}
+	}
 	if product := strings.TrimSpace(context.product); product != "" {
 		parts = append(parts, "--product", firstRuneUpper(product))
 	}
-	parts = append(parts, "--accept-language", diagnoseAcceptLanguage(), "--region", "cn-hangzhou")
+	if context.style == "pascal" {
+		parts = append(parts, "--acceptLanguage", diagnoseAcceptLanguage())
+	} else {
+		parts = append(parts, "--accept-language", diagnoseAcceptLanguage())
+	}
+	parts = append(parts, "--region", "cn-hangzhou")
 	return strings.Join(parts, " ")
 }
 
@@ -371,18 +410,32 @@ func externalFlagRejectAgentError(cause error, reject *argparser.ExternalFlagRej
 }
 
 // endpointAgentError renders a client-side endpoint/region resolution failure
-// as a JSON envelope. There is no server error code and no single command that
-// fixes it, so the recovery is a hint about --region/--endpoint without a
-// misleading command.
-func endpointAgentError(cause error, endpointErr *meta.InvalidEndpointError) error {
+// as a JSON envelope with a style-matched diagnostics command that lists the
+// product's available endpoints.
+func endpointAgentError(cause error, endpointErr *meta.InvalidEndpointError, context recoveryContext) error {
 	message := endpointErr.Error()
 	if message == "" {
 		message = "unknown endpoint for the requested region"
 	}
 	return newLocalAgentError(cause, message, nil, cli.AgentErrorRecovery{
-		Action: "fix_endpoint_or_region",
-		Hint:   "The endpoint for this region could not be resolved. Use a region the product supports, or pass --endpoint <host> explicitly.",
+		Action:  "fix_endpoint_or_region",
+		Command: endpointDiagnosticsCommand(context),
+		Hint:    "The endpoint for this region could not be resolved. List the product's available endpoints with the command, use a supported region, or pass --endpoint <host> explicitly.",
 	})
+}
+
+// endpointDiagnosticsCommand builds the OpenAPI Explorer product-endpoints
+// invocation in the caller's command style; empty when the product is unknown.
+func endpointDiagnosticsCommand(context recoveryContext) string {
+	product := strings.TrimSpace(context.product)
+	if product == "" {
+		return ""
+	}
+	code := firstRuneUpper(product)
+	if context.style == "pascal" {
+		return "aliyun openapiexplorer GetProductEndpoints --product " + code + " --region cn-hangzhou"
+	}
+	return "aliyun openapiexplorer get-product-endpoints --product " + code + " --region cn-hangzhou"
 }
 
 func newLocalAgentError(cause error, message string, suggestions []string, recovery cli.AgentErrorRecovery) error {

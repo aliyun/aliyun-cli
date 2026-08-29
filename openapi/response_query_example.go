@@ -350,7 +350,10 @@ func responseProjectionFieldScore(name string, resourceTokens []string) int {
 		return 0
 	}
 	last := tokens[len(tokens)-1]
-	matchesResource := len(resourceTokens) > 0 && responseTokensContainAll(tokens, resourceTokens)
+	// Only a field that is exactly the resource plus one trailing suffix token
+	// (DiskId for resource [disk]) counts as a resource match; longer compounds
+	// such as SourceDiskId rank as generic identity fields instead.
+	matchesResource := responseProjectionResourceMatch(tokens, resourceTokens)
 
 	score := 0
 	switch last {
@@ -389,14 +392,16 @@ func responseProjectionFieldScore(name string, resourceTokens []string) int {
 	return score
 }
 
-// responseTokensContainAll reports whether tokens include every wanted token.
-func responseTokensContainAll(tokens, wanted []string) bool {
-	set := make(map[string]bool, len(tokens))
-	for _, token := range tokens {
-		set[token] = true
+// responseProjectionResourceMatch reports whether tokens are exactly the
+// resource tokens followed by a single suffix token (e.g. [disk,id] for
+// resource [disk], or [security,group,id] for [security,group]). Compounds
+// that merely contain the resource ([source,disk,id]) do not match.
+func responseProjectionResourceMatch(tokens, resource []string) bool {
+	if len(resource) == 0 || len(tokens) != len(resource)+1 {
+		return false
 	}
-	for _, want := range wanted {
-		if !set[want] {
+	for index, want := range resource {
+		if tokens[index] != want {
 			return false
 		}
 	}
