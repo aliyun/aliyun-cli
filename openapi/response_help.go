@@ -11,6 +11,11 @@ func renderResponseHelpText(w io.Writer, document *machineHelpAPIResponseDocumen
 	if document == nil {
 		return fmt.Errorf("response Help document is nil")
 	}
+	if provider := machineHelpPluginProvider(document.Product); provider != "" {
+		if _, err := fmt.Fprintf(w, "\nProvided by plugin: %s\n", provider); err != nil {
+			return err
+		}
+	}
 	// Explicit Response Section Help is lossless: retain every response and
 	// print only its reachable component closure without inlining refs. Search
 	// projections continue through the filtered OutputSchema branch below.

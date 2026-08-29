@@ -14,6 +14,8 @@
 
 package engine
 
+import "fmt"
+
 // UsageError preserves a machine-readable reason while keeping the exact
 // existing error text for human-mode callers.
 type UsageError struct {
@@ -24,6 +26,21 @@ type UsageError struct {
 func (e *UsageError) Error() string { return e.Err.Error() }
 
 func (e *UsageError) Unwrap() error { return e.Err }
+
+// UnknownCommandError identifies a command that does not exist in the
+// product's command index, so the host can render agent guidance (did you
+// mean, recovery) instead of an opaque text error.
+type UnknownCommandError struct {
+	Product string
+	Command string
+}
+
+func (e *UnknownCommandError) Error() string {
+	return fmt.Sprintf("unknown command %q for product %q; try `aliyun %s` to list commands",
+		e.Command, e.Product, e.Product)
+}
+
+func (*UnknownCommandError) AIRecoveryEligible() {}
 
 // CredentialError identifies failures that occur before an API call while
 // resolving the credential source configured by the embedding host.

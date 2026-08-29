@@ -44,7 +44,7 @@ func NewLibrary(w io.Writer, lang string) *Library {
 	repo := canonicalmeta.NewRepository(bundledmeta.Metadatas)
 	lib := &Library{
 		builtinRepo: meta.LoadRepository(),
-		helpRepo:    repo,
+		helpRepo:    newPluginAwareHelpRepository(repo),
 		writer:      w,
 	}
 	lib.canonicalRepo = repo

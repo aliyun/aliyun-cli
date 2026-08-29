@@ -143,6 +143,13 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 		return unknownAPIAgentError(err, message, nil, apiContext, validate)
 	}
 
+	var unknownCommand *engine.UnknownCommandError
+	if errors.As(err, &unknownCommand) {
+		apiContext := context.withProductAPI(unknownCommand.Product, unknownCommand.Command)
+		message := fmt.Sprintf("%q is not a valid api.", unknownCommand.Command)
+		return unknownAPIAgentError(err, message, nil, apiContext, validate)
+	}
+
 	var invalidProduct *InvalidProductError
 	if errors.As(err, &invalidProduct) {
 		return unknownProductAgentError(err, invalidProduct.AgentMessage(), invalidProduct.AgentSuggestions(), invalidProduct.Code, validate)

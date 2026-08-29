@@ -43,9 +43,18 @@ func TestBeforeParseHelpRouteDelegatesInstalledPluginBeforeHostValidation(t *tes
 			}
 
 			handled, err := c.beforeParseHelpRoute(ctx, input)
-			require.NoError(t, err)
-			assert.True(t, handled)
-			assert.Equal(t, input, received, "plugin owns even host-invalid Help option combinations")
+			if test.pluginType == plugin.PluginTypeMeta {
+				// Metadata plugins are served by host Machine Help: the
+				// invocation must NOT be forwarded to the plugin process, and
+				// host option validation applies exactly like the baseline path.
+				assert.True(t, handled)
+				assert.EqualError(t, err, "--help-all conflicts with --help")
+				assert.Empty(t, received, "metadata-plugin Help must not delegate to the engine text path")
+			} else {
+				require.NoError(t, err)
+				assert.True(t, handled)
+				assert.Equal(t, input, received, "plugin owns even host-invalid Help option combinations")
+			}
 			assert.Equal(t, []string{"demo", "CreateReport", "--help", "--help-all", "--cli-output", "json"}, input)
 		})
 	}

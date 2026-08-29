@@ -3,7 +3,9 @@ package openapi
 import (
 	"fmt"
 	"io"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -280,6 +282,10 @@ func applyActionHelpOptions(document *machineHelpAPIDocument, options helpOption
 		document.API.Description = machineHelpLocalizedText{}
 	}
 	apiStyle := strings.ToLower(document.Product.APIStyle)
+	if apiStyle == "" {
+		// Metadata-plugin products carry the style per API, not per product.
+		apiStyle = strings.ToLower(document.API.Operation.APIStyle)
+	}
 	if apiStyle != "roa" && apiStyle != "rest" && apiStyle != "restful" {
 		document.API.Operation.Method = ""
 		document.API.Operation.Protocol = ""
@@ -528,7 +534,10 @@ func (c *Commando) validateRecoverySearch(ctx *cli.Context, request RecoverySear
 		return false
 	}
 	c.loadLocalPlugins()
-	if request.Product != "" && c.hasInstalledProductPlugin(request.Product) {
+	// Go plugins own their text Help, so their products cannot be searched
+	// through the host. Metadata plugins are served by host Machine Help via
+	// the engine loader, so search stays available for them.
+	if request.Product != "" && c.hasInstalledProductPlugin(request.Product) && !c.installedMetaPluginProduct(request.Product) {
 		return false
 	}
 
@@ -728,6 +737,11 @@ func renderCanonicalProductText(w io.Writer, document *machineHelpProductDocumen
 	if _, err := fmt.Fprintf(w, "\nProduct: %s (%s)\nVersion: %s\n", document.Product.Code, name, document.Product.SelectedVersion); err != nil {
 		return err
 	}
+	if provider := machineHelpPluginProvider(document.Product); provider != "" {
+		if _, err := fmt.Fprintf(w, "Provided by plugin: %s\n", provider); err != nil {
+			return err
+		}
+	}
 	if len(document.APIs) == 0 && search != "" {
 		_, err := fmt.Fprintf(w, "\n"+noHelpSearchMatchesFormat+"\n", search)
 		return err
@@ -758,6 +772,11 @@ func renderCanonicalProductText(w io.Writer, document *machineHelpProductDocumen
 func renderCanonicalRequestSearchText(w io.Writer, document *machineHelpAPIDocument, search string) error {
 	if document == nil {
 		return fmt.Errorf("request Help document is nil")
+	}
+	if provider := machineHelpPluginProvider(document.Product); provider != "" {
+		if _, err := fmt.Fprintf(w, "\nProvided by plugin: %s\n", provider); err != nil {
+			return err
+		}
 	}
 	parameters := activeMachineHelpParameters(document)
 	if len(parameters) == 0 && len(document.GlobalParameters) == 0 {
@@ -794,8 +813,18 @@ func renderCanonicalRequestText(w io.Writer, document *machineHelpAPIDocument) e
 		details = "\nDetails: " + fullDescription
 	}
 	if _, err := fmt.Fprintf(w,
-		"Alibaba Cloud Command Line Interface Version %s\n\nDescription: %s%s\n\nAPI Version: %s\n\nUsage:\n  %s [parameters]\n",
+		"Alibaba Cloud Command Line Interface Version %s\n",
 		cli.Version,
+	); err != nil {
+		return err
+	}
+	if provider := machineHelpPluginProvider(document.Product); provider != "" {
+		if _, err := fmt.Fprintf(w, "\nProvided by plugin: %s\n", provider); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintf(w,
+		"\nDescription: %s%s\n\nAPI Version: %s\n\nUsage:\n  %s [parameters]\n",
 		description,
 		details,
 		document.API.Operation.APIVersion,
@@ -945,7 +974,25 @@ func stripHelpANSI(value string) string {
 	}
 }
 
+const machineHelpParameterNameWidth = 30
+
+// machineHelpPluginProvider renders "name (version)" for a plugin-served
+// product, or "" for baseline-served products.
+func machineHelpPluginProvider(product machineHelpProduct) string {
+	if product.Plugin == "" {
+		return ""
+	}
+	if product.PluginVersion != "" {
+		return product.Plugin + " (" + product.PluginVersion + ")"
+	}
+	return product.Plugin
+}
+
 func renderMachineHelpParameters(w io.Writer, parameters []machineHelpParameter) error {
+	// Continuation lines align under the type column, mirroring the engine's
+	// parameter Help layout, and leave room for readable wrapped text.
+	indent := strings.Repeat(" ", 2+machineHelpParameterNameWidth+1)
+	wrapWidth := machineHelpMaxLineLength() - len(indent)
 	for _, parameter := range parameters {
 		name := parameter.Name
 		if len(parameter.Options) > 0 {
@@ -955,12 +1002,91 @@ func renderMachineHelpParameters(w io.Writer, parameters []machineHelpParameter)
 		if parameter.Required {
 			requiredLabel = "required"
 		}
+		prefix := fmt.Sprintf("  %-*s %s (%s)", machineHelpParameterNameWidth, name, parameter.Type, requiredLabel)
 		help := localizedMachineHelpText(parameter.Help)
-		if _, err := fmt.Fprintf(w, "  %-30s %s (%s)  %s\n", name, parameter.Type, requiredLabel, help); err != nil {
+		lines := wrapMachineHelpText(help, wrapWidth)
+		if len(lines) == 1 && len([]rune(prefix))+2+len([]rune(lines[0])) <= machineHelpMaxLineLength() {
+			if _, err := fmt.Fprintf(w, "%s  %s\n", prefix, lines[0]); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, err := fmt.Fprintf(w, "%s\n", prefix); err != nil {
 			return err
+		}
+		for _, line := range lines {
+			if _, err := fmt.Fprintf(w, "%s%s\n", indent, line); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+func machineHelpMaxLineLength() int {
+	if value := strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH")); value != "" {
+		if length, err := strconv.Atoi(value); err == nil && length > 0 {
+			return length
+		}
+	}
+	return 80
+}
+
+// wrapMachineHelpText reflows parameter Help text into fixed-width lines:
+// embedded blank lines are collapsed and long lines wrap at spaces or CJK
+// punctuation so continuation lines stay inside the Help column.
+func wrapMachineHelpText(text string, width int) []string {
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	if width < 12 {
+		width = 12
+	}
+	lines := make([]string, 0, 2)
+	for _, paragraph := range strings.Split(text, "\n") {
+		paragraph = strings.TrimSpace(paragraph)
+		if paragraph == "" {
+			continue
+		}
+		lines = append(lines, wrapMachineHelpLine(paragraph, width)...)
+	}
+	return lines
+}
+
+func wrapMachineHelpLine(text string, width int) []string {
+	runes := []rune(text)
+	if len(runes) <= width {
+		return []string{text}
+	}
+	lines := make([]string, 0, len(runes)/width+1)
+	for start := 0; start < len(runes); {
+		end := start + width
+		if end >= len(runes) {
+			lines = append(lines, string(runes[start:]))
+			break
+		}
+		breakPoint := wrapBreakPoint(runes, start, end)
+		lines = append(lines, strings.TrimSpace(string(runes[start:breakPoint])))
+		start = breakPoint
+		for start < len(runes) && runes[start] == ' ' {
+			start++
+		}
+	}
+	return lines
+}
+
+// wrapBreakPoint finds a break position in the second half of the window so
+// wrapped lines keep a coherent chunk on each side. Spaces, ASCII and CJK
+// punctuation, and slashes (URLs and paths carry no spaces) all qualify; the
+// latest qualifying rune wins.
+func wrapBreakPoint(runes []rune, start, end int) int {
+	for i := end - 1; i > start+(end-start)/2; i-- {
+		switch runes[i] {
+		case ' ', ',', '.', ';', '/', '，', '。', '、', '：':
+			return i + 1
+		}
+	}
+	return end
 }
 
 func renderTextListing(w io.Writer, noun string, listing *machineHelpListing) error {

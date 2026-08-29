@@ -86,6 +86,47 @@ func (c *Commando) hasInstalledProductPlugin(productCode string) bool {
 	return ok && installed != nil
 }
 
+// installedMetaPluginProduct reports whether an installed metadata plugin
+// owns the product. Metadata plugins expose kebab commands only, so their
+// product Help defaults to the kebab style without any environment variable.
+func (c *Commando) installedMetaPluginProduct(productCode string) bool {
+	if c == nil || c.localManifest == nil {
+		return false
+	}
+	_, local, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode)
+	return ok && local != nil && local.IsMeta()
+}
+
+// annotatePluginProvenance records which installed metadata plugin serves the
+// product's data, so text and JSON Help both state the provider. Go plugins
+// render their own Help output and are not annotated here.
+func (c *Commando) annotatePluginProvenance(document any, productCode string) {
+	if c == nil || document == nil {
+		return
+	}
+	c.loadLocalPlugins()
+	if c.localManifest == nil {
+		return
+	}
+	name, local, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode)
+	if !ok || local == nil || !local.IsMeta() {
+		return
+	}
+	var product *machineHelpProduct
+	switch typed := document.(type) {
+	case *machineHelpProductDocument:
+		product = &typed.Product
+	case *machineHelpAPIDocument:
+		product = &typed.Product
+	case *machineHelpAPIResponseDocument:
+		product = &typed.Product
+	}
+	if product != nil {
+		product.Plugin = name
+		product.PluginVersion = local.Version
+	}
+}
+
 func getPluginArgsForHelp(productCode string) []string {
 	cmdIndex := -1
 	for i, arg := range os.Args {

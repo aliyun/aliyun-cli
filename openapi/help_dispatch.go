@@ -188,10 +188,11 @@ func (c *Commando) delegateInstalledPluginHelp(ctx *cli.Context, args []string) 
 	}
 	c.setLangEnv(ctx)
 	if local.IsMeta() {
-		if err := metaPluginHelpDispatch(ctx, pluginArgs); err != nil {
-			return true, &externalPluginError{err: err}
-		}
-		return true, nil
+		// Metadata plugins are served by the host's Machine Help (JSON,
+		// sections, search) through the engine loader, so a hot-updated
+		// plugin renders exactly like the bundled kebab experience.
+		// The version contract was already validated above.
+		return false, nil
 	}
 	ok, err := goPluginHelpDispatch(product, pluginArgs, ctx)
 	if err != nil {
@@ -383,7 +384,7 @@ func (c *Commando) resolveParsedHelpTarget(ctx *cli.Context, args []string) (Hel
 		target.Level = HelpLevelProduct
 		target.Product = args[0]
 		target.CommandStyle = CommandStyleCamel
-		if productHelpEnvEnabled(baselineProductHelpEnv) {
+		if productHelpEnvEnabled(baselineProductHelpEnv) || c.installedMetaPluginProduct(args[0]) {
 			target.CommandStyle = CommandStyleKebab
 		}
 	}
@@ -502,6 +503,7 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 		return err
 	}
 
+	c.annotatePluginProvenance(document, target.Product)
 	if !aiMode && jsonOutput {
 		attachMachineHelpAIModeHint(document)
 	}

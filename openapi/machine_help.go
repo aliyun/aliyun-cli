@@ -148,6 +148,10 @@ type machineHelpProduct struct {
 	SupportedVersions    []string                 `json:"supportedVersions"`
 	SelectedVersion      string                   `json:"selectedVersion"`
 	Distribution         string                   `json:"distribution,omitempty"`
+	// Plugin/PluginVersion identify the installed metadata plugin whose data
+	// serves this product. Empty for baseline-served products.
+	Plugin        string `json:"plugin,omitempty"`
+	PluginVersion string `json:"pluginVersion,omitempty"`
 }
 
 type machineHelpAPISummary struct {
@@ -621,6 +625,11 @@ func projectMachineHelpAPI(api *canonicalmeta.API, productCode, style string) ma
 	if style == "kebab" {
 		identity.CmdName = api.CmdName
 		identity.CmdFullName = api.CmdFullName
+		if identity.CmdFullName == "" && api.CmdName != "" {
+			// Metadata plugins may omit cmd_full_name; synthesize the same
+			// "<product> <command>" shape the canonical generator writes.
+			identity.CmdFullName = strings.TrimSpace(productCode + " " + api.CmdName)
+		}
 		// operation.action is the PascalCase wire action; it equals the hidden
 		// legacy name and is redundant with cmdName for command construction.
 		identity.Operation.Action = ""

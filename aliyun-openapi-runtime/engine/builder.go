@@ -82,6 +82,12 @@ func (e *Engine) getLoader() (loader.Loader, error) {
 	return e.loader, e.lodErr
 }
 
+// Loader exposes the lazy loader for host-side read-only projections such as
+// Machine Help. Callers must not mutate loader state.
+func (e *Engine) Loader() (loader.Loader, error) {
+	return e.getLoader()
+}
+
 // Resolvable reports whether the engine can handle "<product> <command>" (i.e. it resolves to a known API in baseline or a user meta plugin).
 // It is used by the host router to decide, for products WITHOUT an installed Go plugin, whether to route here or fall back to legacy handling.
 // Resolves only the requested product on first call.
@@ -292,10 +298,7 @@ func resolveDispatchAPI(ldr loader.Loader, product, command string, tail []strin
 				}
 				return meta.APIRef{}, nil, commandVersionError(product, command, currentVersion, versions)
 			}
-			return meta.APIRef{}, nil, fmt.Errorf(
-				"unknown command %q for product %q; try `aliyun %s` to list commands",
-				command, product, product,
-			)
+			return meta.APIRef{}, nil, &UnknownCommandError{Product: product, Command: command}
 		}
 		return meta.APIRef{}, nil, err
 	}

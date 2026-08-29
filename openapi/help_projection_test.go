@@ -98,10 +98,23 @@ func TestValidateRecoverySearchUsesRealCanonicalHelpProvider(t *testing.T) {
 	}
 }
 
-func TestValidateRecoverySearchRefusesInstalledPluginTextProvider(t *testing.T) {
+func TestValidateRecoverySearchAllowsMetaPluginProvider(t *testing.T) {
 	c, ctx, _, _ := newCanonicalHelpTestContext(t)
 	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
 		"aliyun-cli-demo": {Name: "aliyun-cli-demo", Type: plugin.PluginTypeMeta},
+	}}
+
+	// Metadata plugins are served by host Machine Help, so search validation
+	// must keep working instead of refusing the provider.
+	assert.True(t, c.validateRecoverySearch(ctx, RecoverySearchRequest{
+		Product: "demo", Style: "pascal", Keyword: "report",
+	}))
+}
+
+func TestValidateRecoverySearchRefusesGoPluginTextProvider(t *testing.T) {
+	c, ctx, _, _ := newCanonicalHelpTestContext(t)
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-demo": {Name: "aliyun-cli-demo", Type: plugin.PluginTypeGo},
 	}}
 
 	assert.False(t, c.validateRecoverySearch(ctx, RecoverySearchRequest{
@@ -133,4 +146,82 @@ func TestMachineHelpAIModeHintFollowsEffectiveMode(t *testing.T) {
 
 func containsJSONField(data []byte, field string) bool {
 	return strings.Contains(string(data), `"`+field+`"`)
+}
+
+func TestRenderMachineHelpParametersIndentsMultilineHelp(t *testing.T) {
+	parameters := []machineHelpParameter{
+		{
+			Name:    "page-size",
+			Options: []string{"--page-size"},
+			Type:    "int",
+			Help:    machineHelpLocalizedText{EN: "The page size."},
+		},
+		{
+			Name:     "accept-language",
+			Options:  []string{"--accept-language"},
+			Type:     "string",
+			Required: true,
+			Help: machineHelpLocalizedText{
+				EN: "The language of the response. Valid values:\n\nzh-CN: Chinese.\nen-US (default): English",
+			},
+		},
+	}
+	var out strings.Builder
+	require.NoError(t, renderMachineHelpParameters(&out, parameters))
+
+	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+	require.Len(t, lines, 5)
+	inline := fmt.Sprintf("  %-30s %s (%s)  %s", "--page-size", "int", "optional", "The page size.")
+	assert.Equal(t, inline, lines[0])
+	assert.Equal(t, fmt.Sprintf("  %-30s %s (%s)", "--accept-language", "string", "required"), lines[1])
+	indent := strings.Repeat(" ", 2+machineHelpParameterNameWidth+1)
+	assert.Equal(t, indent+"The language of the response. Valid values:", lines[2])
+	assert.Equal(t, indent+"zh-CN: Chinese.", lines[3])
+	assert.Equal(t, indent+"en-US (default): English", lines[4])
+}
+
+func TestWrapMachineHelpTextCollapsesBlankLinesAndWrapsLongLines(t *testing.T) {
+	lines := wrapMachineHelpText("first paragraph\n\nsecond paragraph that is long enough to require wrapping at the configured width\n\n\nthird", 30)
+	require.NotEmpty(t, lines)
+	assert.Equal(t, "first paragraph", lines[0])
+	assert.Equal(t, "third", lines[len(lines)-1])
+	for _, line := range lines {
+		assert.NotEmpty(t, line)
+		assert.LessOrEqual(t, len([]rune(line)), 30)
+	}
+}
+
+func TestAnnotatePluginProvenanceMarksMetaPluginProducts(t *testing.T) {
+	c, _, _ := newTestCommando()
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-demo": {Name: "aliyun-cli-demo", Version: "1.2.3", Type: plugin.PluginTypeMeta},
+	}}
+
+	productDoc := &machineHelpProductDocument{}
+	c.annotatePluginProvenance(productDoc, "demo")
+	assert.Equal(t, "aliyun-cli-demo", productDoc.Product.Plugin)
+	assert.Equal(t, "1.2.3", productDoc.Product.PluginVersion)
+
+	apiDoc := &machineHelpAPIDocument{}
+	c.annotatePluginProvenance(apiDoc, "DEMO")
+	assert.Equal(t, "aliyun-cli-demo", apiDoc.Product.Plugin)
+
+	responseDoc := &machineHelpAPIResponseDocument{}
+	c.annotatePluginProvenance(responseDoc, "demo")
+	assert.Equal(t, "aliyun-cli-demo", responseDoc.Product.Plugin)
+}
+
+func TestAnnotatePluginProvenanceSkipsGoPluginsAndUnknownProducts(t *testing.T) {
+	c, _, _ := newTestCommando()
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-demo": {Name: "aliyun-cli-demo", Type: plugin.PluginTypeGo},
+	}}
+
+	doc := &machineHelpProductDocument{}
+	c.annotatePluginProvenance(doc, "demo")
+	assert.Empty(t, doc.Product.Plugin)
+
+	other := &machineHelpProductDocument{}
+	c.annotatePluginProvenance(other, "not-installed")
+	assert.Empty(t, other.Product.Plugin)
 }
