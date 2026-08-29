@@ -842,19 +842,23 @@ func renderCanonicalRequestText(w io.Writer, document *machineHelpAPIDocument) e
 			return err
 		}
 	}
-	if len(document.GlobalParameters) > 0 {
-		if _, err := fmt.Fprintln(w, "\nGlobal Parameters:"); err != nil {
-			return err
-		}
-		if err := renderMachineHelpParameters(w, document.GlobalParameters); err != nil {
-			return err
-		}
-	}
 	if err := renderTextListing(w, "parameters", document.Listing); err != nil {
 		return err
 	}
 	if err := renderHelpProjectionResult(w, "parameters", document.Result, document.Next); err != nil {
 		return err
+	}
+
+	if len(document.QueryOptions) > 0 {
+		if _, err := fmt.Fprintln(w, "\nQuery Options:"); err != nil {
+			return err
+		}
+		if err := renderMachineHelpQueryOptions(w, document.QueryOptions); err != nil {
+			return err
+		}
+		if err := renderRequestQueryExampleText(w, document.ResponseQuery); err != nil {
+			return err
+		}
 	}
 
 	example := document.Examples.Camel
@@ -866,7 +870,7 @@ func renderCanonicalRequestText(w io.Writer, document *machineHelpAPIDocument) e
 			return err
 		}
 	}
-	return renderRequestQueryExampleText(w, document.ResponseQuery)
+	return nil
 }
 
 // projectOriginalRequestHelpText keeps the established runtime/legacy Help
@@ -1128,16 +1132,52 @@ func renderHelpProjectionResult(w io.Writer, noun string, result HelpResult, nex
 	return err
 }
 
+// renderRequestQueryExampleText appends the API-specific response-query pair
+// to the Query Options block. The text spells out the token-saving workflow:
+// inspect the response structure first, then let --cli-query aggregate the
+// final answer server-side of the pipe so only the needed array is returned.
 func renderRequestQueryExampleText(w io.Writer, example *machineHelpQueryExample) error {
 	if example == nil {
 		return nil
 	}
 	_, err := fmt.Fprintf(w,
-		"\nResponse query example (%s):\n"+
-			"This response contains a complex array. Inspect its structure with the response section, then use --cli-query to return only that array:\n"+
-			"  %s\n  %s\n",
+		"\n  Response aggregation example (JMESPath: %s):\n"+
+			"    1. Inspect the response structure to pick the fields you need:\n      %s\n"+
+			"    2. Then get only those fields, at any level of the response, in one call:\n      %s\n",
 		example.Path, example.SchemaCommand, example.QueryCommand)
 	return err
+}
+
+func renderMachineHelpQueryOptions(w io.Writer, options []machineHelpQueryOption) error {
+	for _, option := range options {
+		typeLabel := option.Type + " (optional)"
+		if option.Required {
+			typeLabel = option.Type + " (required)"
+		}
+		if option.HasDefault {
+			typeLabel += ", default: " + option.Default
+		}
+		prefix := fmt.Sprintf("  %-*s %s", machineHelpParameterNameWidth, option.Name, typeLabel)
+		help := localizedMachineHelpText(option.Help)
+		indent := strings.Repeat(" ", 2+machineHelpParameterNameWidth+1)
+		wrapWidth := machineHelpMaxLineLength() - len(indent)
+		lines := wrapMachineHelpText(help, wrapWidth)
+		if len(lines) == 1 && len([]rune(prefix))+2+len([]rune(lines[0])) <= machineHelpMaxLineLength() {
+			if _, err := fmt.Fprintf(w, "%s  %s\n", prefix, lines[0]); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, err := fmt.Fprintf(w, "%s\n", prefix); err != nil {
+			return err
+		}
+		for _, line := range lines {
+			if _, err := fmt.Fprintf(w, "%s%s\n", indent, line); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func renderAIModeEnableHelpHint(w io.Writer) error {

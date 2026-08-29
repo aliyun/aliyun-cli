@@ -194,7 +194,7 @@ func TestMachineHelpAPIResponseUsesCanonicalSchemaAndReachableComponents(t *test
 	require.NotNil(t, doc.OutputSchema)
 	assert.Equal(t, "200", doc.OutputSchema.StatusCode)
 	assert.Equal(t, "application/json", doc.OutputSchema.ContentType)
-	assert.JSONEq(t, `{"type":"object","properties":{"RequestId":{"type":"string","description_en":"The request ID.","description_zh":"请求 ID。"},"Reports":{"$ref":"#/components/schemas/ReportList"}}}`, string(doc.OutputSchema.Schema))
+	assert.JSONEq(t, `{"type":"object","properties":{"RequestId":{"type":"string","description":"The request ID."},"Reports":{"$ref":"#/components/schemas/ReportList"}}}`, string(doc.OutputSchema.Schema))
 	require.NotNil(t, doc.OutputSchema.Components)
 	assert.Contains(t, doc.OutputSchema.Components.Schemas, "ReportList")
 	assert.Contains(t, doc.OutputSchema.Components.Schemas, "Report")
@@ -224,13 +224,13 @@ func TestMachineHelpRequestIncludesStylePreservingResponseQueryExample(t *testin
 	require.NotNil(t, camel.ResponseQuery)
 	assert.Equal(t, "Reports.Report", camel.ResponseQuery.Path)
 	assert.Equal(t, "aliyun help demo CreateReport --api-version 2026-01-01 --cli-section response", camel.ResponseQuery.SchemaCommand)
-	assert.Equal(t, "aliyun demo CreateReport --api-version 2026-01-01 --cli-query 'Reports.Report'", camel.ResponseQuery.QueryCommand)
+	assert.Equal(t, "aliyun demo CreateReport --api-version 2026-01-01 --ReportId <value> --WorkspaceId <value> --cli-query 'Reports.Report'", camel.ResponseQuery.QueryCommand)
 
 	kebab, err := service.buildAPI("demo", "create-report", "2026-01-01")
 	require.NoError(t, err)
 	require.NotNil(t, kebab.ResponseQuery)
 	assert.Equal(t, "aliyun help demo create-report --api-version 2026-01-01 --cli-section response", kebab.ResponseQuery.SchemaCommand)
-	assert.Equal(t, "aliyun demo create-report --api-version 2026-01-01 --cli-query 'Reports.Report'", kebab.ResponseQuery.QueryCommand)
+	assert.Equal(t, "aliyun demo create-report --api-version 2026-01-01 --report-id <value> --workspace-id <value> --cli-query 'Reports.Report'", kebab.ResponseQuery.QueryCommand)
 }
 
 func TestMachineHelpRequestSearchKeepsOnlyActiveParameterSetAndGlobals(t *testing.T) {
@@ -317,7 +317,7 @@ func TestMachineHelpResponseSearchProjectsMatchesAndFilteredQuery(t *testing.T) 
 	assert.NotContains(t, doc.OutputSchema.Components.Schemas, "Unused")
 
 	doc.ResponseQuery = projectResponseQueryExample(
-		helpResponseSchema(doc), doc.Product.Code, "CreateReport", doc.Target.RequestedStyle, "2026-01-01",
+		helpResponseSchema(doc), "demo", "CreateReport", doc.Target.RequestedStyle, "2026-01-01",
 	)
 	require.NotNil(t, doc.ResponseQuery)
 	assert.Equal(t, "Reports.Report", doc.ResponseQuery.Path)
@@ -414,8 +414,9 @@ func TestCommandoHelpJSONResponseSection(t *testing.T) {
 	var doc machineHelpAPIResponseDocument
 	require.NoError(t, json.Unmarshal(stdout.Bytes(), &doc))
 	assert.Equal(t, helpSectionResponse, doc.Section)
-	require.NotNil(t, doc.OutputSchema)
-	assert.Equal(t, "200", doc.OutputSchema.StatusCode)
+	// The complete document carries the schema once, in responses.
+	assert.NotNil(t, doc.Responses)
+	assert.Nil(t, doc.OutputSchema)
 	assert.NotContains(t, stdout.String(), `"parameterSets"`)
 }
 
@@ -512,4 +513,21 @@ func TestCommandoHelpJSONRejectsUnsupportedCLIOutputAsTypedOptionError(t *testin
 	assert.Equal(t, cli.HelpOptionInvalidOutput, optionErr.Code)
 	assert.Equal(t, "yaml", optionErr.Value)
 	assert.False(t, c.pluginLoaded)
+}
+
+func TestBuildAPIIncludesQueryOptions(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPI("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+
+	require.Len(t, doc.QueryOptions, 3)
+	section := doc.QueryOptions[0]
+	assert.Equal(t, "--cli-section", section.Name)
+	assert.True(t, section.HasDefault)
+	assert.Equal(t, "request", section.Default)
+
+	var encoded bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	assert.Contains(t, encoded.String(), `"queryOptions"`)
+	assert.Contains(t, encoded.String(), `"default": "request"`)
 }

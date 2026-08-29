@@ -2,10 +2,14 @@ package openapi
 
 import (
 	"errors"
+	"os"
+	"strings"
 	"testing"
 
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -138,4 +142,36 @@ func TestValidateCanonicalAPICommandPrecedesProfileResolution(t *testing.T) {
 	var invalidParameter *InvalidParameterError
 	require.True(t, errors.As(err, &invalidParameter))
 	assert.Equal(t, "ReprotId", invalidParameter.Name)
+}
+
+func TestHelpFlagRendersResponseSectionEquivalentToPrefix(t *testing.T) {
+	for _, invocation := range [][]string{
+		{"demo", "create-report", "--help", "--cli-section", "response"},
+		{"help", "demo", "create-report", "--cli-section", "response"},
+	} {
+		t.Run(strings.Join(invocation, " "), func(t *testing.T) {
+			t.Setenv(aimode.EnvAIMode, "0")
+			c, stdout, stderr := newTestCommando()
+			c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+			c.localLoaded = true
+			c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
+			root := testMachineHelpRootCommand()
+			AddFlags(root.Flags())
+			ctx := cli.NewCommandContext(stdout, stderr)
+			ctx.EnterCommand(root)
+			CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+			CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+			VersionFlag(ctx.Flags()).SetAssigned(true)
+			VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+			ctx.SetInvocationArgs(invocation)
+
+			// Production routing passes only the positional target to Help;
+			// flags were already consumed by the parser.
+			target, _, err := c.resolveParsedHelpTarget(ctx, []string{"demo", "create-report"})
+			require.NoError(t, err)
+			require.NoError(t, c.renderHostHelpTarget(ctx, target, false))
+			assert.Contains(t, stdout.String(), "Responses:")
+			assert.Contains(t, stdout.String(), `"200": {`)
+		})
+	}
 }

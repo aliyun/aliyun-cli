@@ -65,7 +65,7 @@ func TestParseHelpOptionsValidatesScopeAndValues(t *testing.T) {
 			setup: func(fs *cli.FlagSet) {
 				assignHelpFlag(t, CliHelpSectionFlag(fs), "request")
 			},
-			want: "--cli-section requires a product and an API",
+			want: "--cli-section requires an API target: `aliyun help <product> <API>` or `aliyun <product> <API> --help`",
 		},
 		{
 			name:   "search needs keyword",
@@ -129,14 +129,16 @@ func TestCanonicalHelpOptionAssigned(t *testing.T) {
 	assert.True(t, canonicalHelpOptionAssigned(ctx.Flags()))
 }
 
-func TestCommandoRejectsCanonicalHelpOptionsOutsideHelp(t *testing.T) {
+func TestCommandoRendersSectionWithoutHelpFlag(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	ctx := cli.NewCommandContext(stdout, stderr)
 	AddFlags(ctx.Flags())
 	assignHelpFlag(t, CliHelpSectionFlag(ctx.Flags()), "response")
 	ctx.SetInvocationArgs([]string{"ecs", "DescribeInstances", "--cli-section", "response"})
 
+	// --cli-section is itself a Help request: the flag form and the `help`
+	// prefix are equivalent entry points.
 	err := c.main(ctx, []string{"ecs", "DescribeInstances"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "--cli-section is only valid with `aliyun help <product> <API>`")
+	require.NoError(t, err)
+	assert.Contains(t, stdout.String(), "Responses:")
 }

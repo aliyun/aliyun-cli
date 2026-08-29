@@ -1266,7 +1266,7 @@ func (c *Commando) legacyHelp(ctx *cli.Context, args []string) error {
 			if document.OutputSchema != nil {
 				document.ResponseQuery = projectResponseQueryExample(
 					helpResponseSchema(document),
-					document.Product.Code,
+					document.Target.Path[1],
 					document.Target.Path[len(document.Target.Path)-1],
 					document.Target.RequestedStyle,
 					requestedMachineHelpVersion(ctx),

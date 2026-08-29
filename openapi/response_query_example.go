@@ -26,6 +26,10 @@ type ResponseQueryContext struct {
 	API                      string
 	APIVersion               string
 	Style                    ResponseCommandStyle
+	// RequiredFlags are the API's required parameters in the target command
+	// style's flag form. The query example embeds them as placeholders so
+	// copying it cannot fail with missing-parameter errors.
+	RequiredFlags []string
 }
 
 // ResponseQueryExample is shared by text and JSON Help renderers. Request Help
@@ -114,6 +118,11 @@ func BuildResponseQueryExample(context ResponseQueryContext) (*ResponseQueryExam
 		queryParts = append(queryParts, "--api-version", version)
 	}
 	schemaParts = append(schemaParts, "--cli-section", "response")
+	for _, flag := range context.RequiredFlags {
+		if safeResponseCommandToken(strings.TrimLeft(flag, "-")) {
+			queryParts = append(queryParts, flag, "<value>")
+		}
+	}
 	queryParts = append(queryParts, "--cli-query", shellSingleQuote(path))
 
 	return &ResponseQueryExample{

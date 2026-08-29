@@ -208,7 +208,7 @@ func TestAnnotatePluginProvenanceMarksMetaPluginProducts(t *testing.T) {
 
 	responseDoc := &machineHelpAPIResponseDocument{}
 	c.annotatePluginProvenance(responseDoc, "demo")
-	assert.Equal(t, "aliyun-cli-demo", responseDoc.Product.Plugin)
+	assert.Equal(t, "aliyun-cli-demo", responseDoc.Provider)
 }
 
 func TestAnnotatePluginProvenanceSkipsGoPluginsAndUnknownProducts(t *testing.T) {
@@ -224,4 +224,49 @@ func TestAnnotatePluginProvenanceSkipsGoPluginsAndUnknownProducts(t *testing.T) 
 	other := &machineHelpProductDocument{}
 	c.annotatePluginProvenance(other, "not-installed")
 	assert.Empty(t, other.Product.Plugin)
+}
+
+func TestRenderCanonicalRequestTextShowsQueryOptions(t *testing.T) {
+	document := &machineHelpAPIDocument{
+		ActiveParameterSet: "camel",
+		Target:             machineHelpTarget{Path: []string{"aliyun", "ecs", "DescribeSpotPriceHistory"}},
+		API:                machineHelpAPI{Operation: machineHelpOperation{APIVersion: "2014-05-26"}},
+		QueryOptions:       buildMachineHelpQueryOptions(),
+		Examples:           machineHelpExamples{Camel: "aliyun ecs DescribeSpotPriceHistory --RegionId cn-hangzhou"},
+		ResponseQuery: &machineHelpQueryExample{
+			Path:          "SpotPrices.SpotPriceType",
+			SchemaCommand: "aliyun help ecs DescribeSpotPriceHistory --cli-section response",
+			QueryCommand:  "aliyun ecs DescribeSpotPriceHistory --cli-query 'SpotPrices.SpotPriceType'",
+		},
+	}
+	var out strings.Builder
+	require.NoError(t, renderCanonicalRequestText(&out, document))
+
+	rendered := out.String()
+	assert.Contains(t, rendered, "\nQuery Options:\n")
+	assert.Contains(t, rendered, "--cli-section                  string (optional), default: request")
+	assert.Contains(t, rendered, "--cli-query                    string (optional)")
+	assert.Contains(t, rendered, "--help-search                  string (optional)")
+	assert.Contains(t, rendered, "Response aggregation example (JMESPath: SpotPrices.SpotPriceType):")
+	assert.Contains(t, rendered, "1. Inspect the response structure to pick the fields you need:")
+	assert.Contains(t, rendered, "2. Then get only those fields, at any level of the response, in one call:")
+	assert.Contains(t, rendered, "  aliyun help ecs DescribeSpotPriceHistory --cli-section response")
+	assert.Contains(t, rendered, "  aliyun ecs DescribeSpotPriceHistory --cli-query 'SpotPrices.SpotPriceType'")
+	assert.NotContains(t, rendered, "Response query example (")
+	// Query Options precedes Example
+	assert.Less(t, strings.Index(rendered, "Query Options:"), strings.Index(rendered, "Example:"))
+}
+
+func TestRenderCanonicalRequestTextQueryOptionsWithoutSchema(t *testing.T) {
+	document := &machineHelpAPIDocument{
+		ActiveParameterSet: "kebab",
+		Target:             machineHelpTarget{Path: []string{"aliyun", "ecs", "describe-regions"}},
+		API:                machineHelpAPI{Operation: machineHelpOperation{APIVersion: "2014-05-26"}},
+		QueryOptions:       buildMachineHelpQueryOptions(),
+	}
+	var out strings.Builder
+	require.NoError(t, renderCanonicalRequestText(&out, document))
+
+	assert.Contains(t, out.String(), "\nQuery Options:\n")
+	assert.NotContains(t, out.String(), "complex array")
 }

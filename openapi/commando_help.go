@@ -112,18 +112,15 @@ func (c *Commando) annotatePluginProvenance(document any, productCode string) {
 	if !ok || local == nil || !local.IsMeta() {
 		return
 	}
-	var product *machineHelpProduct
 	switch typed := document.(type) {
 	case *machineHelpProductDocument:
-		product = &typed.Product
+		typed.Product.Plugin = name
+		typed.Product.PluginVersion = local.Version
 	case *machineHelpAPIDocument:
-		product = &typed.Product
+		typed.Product.Plugin = name
+		typed.Product.PluginVersion = local.Version
 	case *machineHelpAPIResponseDocument:
-		product = &typed.Product
-	}
-	if product != nil {
-		product.Plugin = name
-		product.PluginVersion = local.Version
+		typed.Provider = name
 	}
 }
 

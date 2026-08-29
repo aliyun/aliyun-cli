@@ -57,7 +57,7 @@ func parseHelpOptions(ctx *cli.Context, target []string) (helpOptions, error) {
 			}
 		}
 		if len(target) != 2 {
-			return helpOptions{}, fmt.Errorf("--%s requires a product and an API", CliHelpSectionFlagName)
+			return helpOptions{}, fmt.Errorf("--%s requires an API target: `aliyun help <product> <API>` or `aliyun <product> <API> --help`", CliHelpSectionFlagName)
 		}
 	}
 

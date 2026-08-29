@@ -361,13 +361,6 @@ func (c *Commando) resolveParsedHelpTarget(ctx *cli.Context, args []string) (Hel
 		}
 	}
 	original := ctx.InvocationArgs()
-	prefix := len(original) > 0 && original[0] == "help"
-	// Unit/library callers may invoke Help directly without going through
-	// Command.Execute. Preserve the public prefix-only Section contract while
-	// allowing those callers to supply an already parsed section.
-	if len(original) == 0 && opts.SectionExplicit {
-		prefix = true
-	}
 	target := HelpTarget{
 		Level:     HelpLevelRoot,
 		Operation: HelpOperationDefault,
@@ -398,16 +391,15 @@ func (c *Commando) resolveParsedHelpTarget(ctx *cli.Context, args []string) (Hel
 	if len(args) > 2 {
 		return HelpTarget{}, false, fmt.Errorf("too many Help target arguments: %d", len(args))
 	}
-	if opts.SectionExplicit && !prefix {
+	// --cli-section needs an API-level target (product + API). The `help`
+	// prefix and the `--help` flag are equivalent entry points.
+	if opts.SectionExplicit && target.Level != HelpLevelAction {
 		return HelpTarget{}, false, &InvalidOptionCombinationError{
 			Options: []string{"--" + CliHelpSectionFlagName},
-			Err:     fmt.Errorf("--%s is only valid with `aliyun help <product> <API>`", CliHelpSectionFlagName),
+			Err:     fmt.Errorf("--%s is only valid with an API target: `aliyun help <product> <API>` or `aliyun <product> <API> --help`", CliHelpSectionFlagName),
 		}
 	}
-	if prefix && len(args) == 2 {
-		target.SectionExplicit = true
-		target.Section = HelpSection(opts.Section)
-	} else if opts.SectionExplicit {
+	if opts.SectionExplicit {
 		target.SectionExplicit = true
 		target.Section = HelpSection(opts.Section)
 	}
@@ -456,10 +448,23 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 		}
 	case HelpLevelAction:
 		if target.SectionExplicit && target.Section == HelpSectionResponse {
+			response := (*machineHelpAPIResponseDocument)(nil)
 			document, err = service.buildAPIResponse(target.Product, target.Action, target.Version)
 			if err == nil {
-				rewriteResponseQueryVersionFlag(document.(*machineHelpAPIResponseDocument).ResponseQuery, target.VersionFlag)
-				err = applyResponseHelpOptions(document.(*machineHelpAPIResponseDocument), opts)
+				response = document.(*machineHelpAPIResponseDocument)
+				rewriteResponseQueryVersionFlag(response.ResponseQuery, target.VersionFlag)
+				err = applyResponseHelpOptions(response, opts)
+			}
+			if err == nil && response != nil {
+				// Carry the schema exactly once: the lossless responses view
+				// for the complete document, outputSchema for search
+				// projections.
+				if opts.Search == "" {
+					response.OutputSchema = nil
+				} else {
+					response.Responses = nil
+					response.Components = nil
+				}
 			}
 		} else {
 			document, err = service.buildAPI(target.Product, target.Action, target.Version)
