@@ -210,6 +210,28 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 		return
 	}
 
+	if options.All {
+		// Deprecated APIs stay available with --help-all but move to the end,
+		// so the leading list is the supported surface.
+		sort.SliceStable(document.APIs, func(i, j int) bool {
+			if document.APIs[i].Deprecated != document.APIs[j].Deprecated {
+				return !document.APIs[i].Deprecated
+			}
+			return false
+		})
+	} else {
+		// Deprecated APIs are a liability rather than help for agents and
+		// humans alike: hide them from the default listing. They remain
+		// reachable through --help-all (at the end) and --help-search.
+		visible := document.APIs[:0]
+		for _, api := range document.APIs {
+			if !api.Deprecated {
+				visible = append(visible, api)
+			}
+		}
+		document.APIs = visible
+	}
+
 	objects := make([]HelpBudgetObject[machineHelpAPISummary], 0, len(document.APIs))
 	for _, api := range document.APIs {
 		objects = append(objects, HelpBudgetObject[machineHelpAPISummary]{Value: api, LogicalLines: 1})

@@ -290,3 +290,57 @@ func TestValidateRecoverySearchMirrorsAIModeGlobals(t *testing.T) {
 		Product: "demo", API: "create-report", Version: "2026-01-01", Section: "request", Keyword: "workspace-id",
 	}))
 }
+
+func productDocWithDeprecatedAPIs() *machineHelpProductDocument {
+	return &machineHelpProductDocument{
+		SchemaVersion: machineHelpSchemaVersion,
+		Kind:          "product",
+		Product:       machineHelpProduct{Code: "demo"},
+		APIs: []machineHelpAPISummary{
+			{Name: "AlphaActive"},
+			{Name: "BravoLegacy", Deprecated: true},
+			{Name: "CharlieActive"},
+			{Name: "DeltaLegacy", Deprecated: true},
+			{Name: "EchoActive"},
+		},
+	}
+}
+
+func TestProductHelpDefaultHidesDeprecatedAPIs(t *testing.T) {
+	for _, aiMode := range []bool{false, true} {
+		document := productDocWithDeprecatedAPIs()
+		applyProductHelpOptions(document, helpOptions{}, aiMode)
+
+		names := make([]string, 0, len(document.APIs))
+		for _, api := range document.APIs {
+			names = append(names, api.Name)
+			assert.False(t, api.Deprecated, "default listing must not contain deprecated APIs (aiMode=%v)", aiMode)
+		}
+		assert.Equal(t, []string{"AlphaActive", "CharlieActive", "EchoActive"}, names)
+		assert.Equal(t, 3, document.Result.Total, "total reflects the supported surface")
+		assert.False(t, document.Result.Truncated)
+	}
+}
+
+func TestProductHelpAllMovesDeprecatedAPIsToEnd(t *testing.T) {
+	document := productDocWithDeprecatedAPIs()
+	applyProductHelpOptions(document, helpOptions{All: true}, true)
+
+	names := make([]string, 0, len(document.APIs))
+	for _, api := range document.APIs {
+		names = append(names, api.Name)
+	}
+	assert.Equal(t,
+		[]string{"AlphaActive", "CharlieActive", "EchoActive", "BravoLegacy", "DeltaLegacy"},
+		names, "supported APIs lead, deprecated APIs trail")
+	assert.Equal(t, 5, document.Result.Total)
+}
+
+func TestProductHelpSearchStillFindsDeprecatedAPIs(t *testing.T) {
+	document := productDocWithDeprecatedAPIs()
+	applyProductHelpOptions(document, helpOptions{Search: "bravo"}, true)
+
+	require.Len(t, document.APIs, 1)
+	assert.Equal(t, "BravoLegacy", document.APIs[0].Name)
+	assert.True(t, document.APIs[0].Deprecated, "explicit search surfaces the deprecated flag")
+}
