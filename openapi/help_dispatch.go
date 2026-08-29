@@ -516,7 +516,7 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 		attachMachineHelpAIModeHint(document)
 	}
 	if jsonOutput {
-		return encodeMachineHelpJSON(ctx.Stdout(), document)
+		return encodeMachineHelpJSON(ctx.Stdout(), document, aiMode)
 	}
 	if err := renderHostHelpText(ctx, document, target.SearchQuery); err != nil {
 		return err

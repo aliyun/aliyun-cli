@@ -20,7 +20,7 @@ func TestParameterHelpJSONKeepsOnlyParameterContext(t *testing.T) {
 	attachMachineHelpAIModeHint(document)
 
 	var output bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&output, document))
+	require.NoError(t, encodeMachineHelpJSON(&output, document, false))
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
 
@@ -45,7 +45,7 @@ func TestParameterSearchJSONAddsOnlySearchProjection(t *testing.T) {
 	searchParameterHelpDocument(document, "report", false)
 
 	var output bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&output, document))
+	require.NoError(t, encodeMachineHelpJSON(&output, document, false))
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
 

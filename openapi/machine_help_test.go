@@ -52,7 +52,7 @@ func TestMachineHelpRootJSONUsesExplicitGroups(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&output, doc))
+	require.NoError(t, encodeMachineHelpJSON(&output, doc, false))
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
 	assert.NotContains(t, raw, "commands")
@@ -126,7 +126,7 @@ func TestMachineHelpJSONOmitsEmptyOptionalValues(t *testing.T) {
 	require.NoError(t, err)
 
 	var encoded bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc, false))
 	assert.NotContains(t, encoded.String(), `"outputSchema"`)
 	assert.NotContains(t, encoded.String(), `"pagination"`)
 	assert.NotContains(t, encoded.String(), `"risk"`)
@@ -159,7 +159,7 @@ func TestMachineHelpJSONPreservesResponseSchemaValues(t *testing.T) {
 	}
 
 	var encoded bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc, false))
 	var compact bytes.Buffer
 	require.NoError(t, json.Compact(&compact, encoded.Bytes()))
 	output := compact.String()
@@ -211,7 +211,7 @@ func TestMachineHelpAPIResponseWithoutSchemaReturnsNotice(t *testing.T) {
 	assert.Equal(t, "No response schema is available for this API.", doc.Notice)
 
 	var encoded bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc, false))
 	assert.NotContains(t, encoded.String(), `"outputSchema"`)
 	assert.Contains(t, encoded.String(), `"notice": "No response schema is available for this API."`)
 }
@@ -222,15 +222,15 @@ func TestMachineHelpRequestIncludesStylePreservingResponseQueryExample(t *testin
 	camel, err := service.buildAPI("demo", "CreateReport", "2026-01-01")
 	require.NoError(t, err)
 	require.NotNil(t, camel.ResponseQuery)
-	assert.Equal(t, "Reports.Report", camel.ResponseQuery.Path)
+	assert.Equal(t, "Reports.Report[*].{ReportId:ReportId}", camel.ResponseQuery.Path)
 	assert.Equal(t, "aliyun help demo CreateReport --api-version 2026-01-01 --cli-section response", camel.ResponseQuery.SchemaCommand)
-	assert.Equal(t, "aliyun demo CreateReport --api-version 2026-01-01 --ReportId <value> --WorkspaceId <value> --cli-query 'Reports.Report'", camel.ResponseQuery.QueryCommand)
+	assert.Equal(t, "aliyun demo CreateReport --api-version 2026-01-01 --ReportId <value> --WorkspaceId <value> --cli-query 'Reports.Report[*].{ReportId:ReportId}'", camel.ResponseQuery.QueryCommand)
 
 	kebab, err := service.buildAPI("demo", "create-report", "2026-01-01")
 	require.NoError(t, err)
 	require.NotNil(t, kebab.ResponseQuery)
 	assert.Equal(t, "aliyun help demo create-report --api-version 2026-01-01 --cli-section response", kebab.ResponseQuery.SchemaCommand)
-	assert.Equal(t, "aliyun demo create-report --api-version 2026-01-01 --report-id <value> --workspace-id <value> --cli-query 'Reports.Report'", kebab.ResponseQuery.QueryCommand)
+	assert.Equal(t, "aliyun demo create-report --api-version 2026-01-01 --report-id <value> --workspace-id <value> --cli-query 'Reports.Report[*].{ReportId:ReportId}'", kebab.ResponseQuery.QueryCommand)
 }
 
 func TestMachineHelpRequestSearchKeepsOnlyActiveParameterSetAndGlobals(t *testing.T) {
@@ -288,7 +288,7 @@ func TestMachineHelpAIRequestRemainsComplete(t *testing.T) {
 	require.Len(t, complete.ParameterSets.Camel, 23)
 	assert.Equal(t, "optional-01", complete.ParameterSets.Camel[0].Name)
 	assert.Empty(t, complete.ParameterSets.Kebab, "explicit sections must not expose the inactive style")
-	assert.Len(t, complete.GlobalParameters, 3)
+	assert.Empty(t, complete.GlobalParameters, "AI mode drops global CLI flags from request Help")
 	assert.Nil(t, complete.Listing)
 
 	legacy := newDocument()
@@ -320,7 +320,7 @@ func TestMachineHelpResponseSearchProjectsMatchesAndFilteredQuery(t *testing.T) 
 		helpResponseSchema(doc), "demo", "CreateReport", doc.Target.RequestedStyle, "2026-01-01",
 	)
 	require.NotNil(t, doc.ResponseQuery)
-	assert.Equal(t, "Reports.Report", doc.ResponseQuery.Path)
+	assert.Equal(t, "Reports.Report[*].{ReportId:ReportId}", doc.ResponseQuery.Path)
 }
 
 func TestMachineHelpResponseSearchNoMatchReturnsClearNotice(t *testing.T) {
@@ -527,7 +527,20 @@ func TestBuildAPIIncludesQueryOptions(t *testing.T) {
 	assert.Equal(t, "request", section.Default)
 
 	var encoded bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc, false))
 	assert.Contains(t, encoded.String(), `"queryOptions"`)
 	assert.Contains(t, encoded.String(), `"default": "request"`)
+}
+
+func TestMachineHelpRequestSearchDropsInvocationExample(t *testing.T) {
+	service := testMachineHelpService(t)
+	document, err := service.buildAPI("demo", "create-report", "2026-01-01")
+	require.NoError(t, err)
+
+	applyRequestHelpOptions(document, helpOptions{Search: "report-id"}, true)
+
+	assert.Equal(t, "", document.Examples.Kebab)
+	assert.Equal(t, "", document.Examples.Camel)
+	require.NotEmpty(t, document.ParameterSets.Kebab)
+	assert.Equal(t, "report_id", document.ParameterSets.Kebab[0].Name)
 }

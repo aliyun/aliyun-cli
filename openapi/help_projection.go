@@ -297,7 +297,7 @@ func applyActionHelpOptions(document *machineHelpAPIDocument, options helpOption
 	}
 }
 
-func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptions, _ bool) {
+func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptions, aiMode bool) {
 	if document == nil {
 		return
 	}
@@ -305,6 +305,17 @@ func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptio
 	// Explicit Sections stay complete (no budget projection) but still expose
 	// only the active command style, matching the default Action Help.
 	retainActiveMachineHelpParameterSet(document)
+	if aiMode {
+		// Global CLI flags (credentials, profile, output control) are host
+		// concerns: the default Action Help already omits them, and repeating
+		// all ~58 of them in AI-mode request Help is pure token cost.
+		document.GlobalParameters = nil
+	}
+	if options.Search != "" {
+		// Search results carry only the matched entries; the full invocation
+		// example is unrelated payload.
+		document.Examples = machineHelpExamples{}
+	}
 	retainActiveMachineHelpExample(document)
 	if options.Search == "" {
 		total := len(activeMachineHelpParameters(document)) + len(document.GlobalParameters)
@@ -597,7 +608,10 @@ func (c *Commando) validateRecoverySearch(ctx *cli.Context, request RecoverySear
 		if ctx != nil {
 			document.GlobalParameters = projectGlobalParameters(ctx.Flags())
 		}
-		applyRequestHelpOptions(document, options, false)
+		// Replay with the caller's effective AI mode so a keyword that only
+		// matches global CLI flags cannot validate against help that would
+		// render those globals away in AI mode.
+		applyRequestHelpOptions(document, options, legacyAIModeEnabled(ctx))
 		return len(activeMachineHelpParameters(document)) > 0 || len(document.GlobalParameters) > 0
 	}
 }

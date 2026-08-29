@@ -756,7 +756,7 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 			return err
 		}
 	}
-	out = sortJSON(out)
+	out = formatResponseJSON(ctx, out)
 	cli.Println(ctx.Stdout(), out)
 	return nil
 }
@@ -839,10 +839,27 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		}
 	}
 
-	out = sortJSON(out)
+	out = formatResponseJSON(ctx, out)
 
 	cli.Println(ctx.Stdout(), out)
 	return nil
+}
+
+// formatResponseJSON normalizes response output for printing: AI mode gets a
+// compact encoding (server key order preserved), every other mode keeps the
+// pretty-printed, key-sorted form.
+func formatResponseJSON(ctx *cli.Context, content string) string {
+	if !legacyAIModeEnabled(ctx) {
+		return sortJSON(content)
+	}
+	if !json.Valid([]byte(content)) {
+		return content
+	}
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, []byte(content)); err != nil {
+		return content
+	}
+	return buf.String()
 }
 
 func sortJSON(content string) string {

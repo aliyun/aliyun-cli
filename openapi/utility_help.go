@@ -35,7 +35,7 @@ func (c *Commando) renderUtilityHelp(ctx *cli.Context, path []string, options cl
 		document.AIModeHint = &machineHelpAIModeHint{Command: hint.Command, Message: hint.Message}
 	}
 	if jsonOutput {
-		return encodeMachineHelpJSON(ctx.Stdout(), document)
+		return encodeMachineHelpJSON(ctx.Stdout(), document, aiMode)
 	}
 	if err := renderUtilityHelpText(ctx, document); err != nil {
 		return err

@@ -4123,3 +4123,30 @@ func TestEstimateCostContextRequiresEstimateCost(t *testing.T) {
 	assert.ErrorAs(t, err, &invalidOptions)
 	assert.ElementsMatch(t, []string{"--estimate-cost-context", "--estimate-cost"}, invalidOptions.Options)
 }
+
+func TestFormatResponseJSONCompactInAIMode(t *testing.T) {
+	content := "{\n\t\"Zones\": {\n\t\t\"Zone\": [\"a\", \"b\"]\n\t},\n\t\"RequestId\": \"req-1\"\n}"
+
+	c, ctx, _, _ := newTestCommandoForResponse(t, "0")
+	_ = c
+	out := formatResponseJSON(ctx, content)
+	assert.Contains(t, out, "\n\t")
+	assert.Contains(t, out, "\"RequestId\": \"req-1\"")
+
+	_, ctx2, _, _ := newTestCommandoForResponse(t, "1")
+	compact := formatResponseJSON(ctx2, content)
+	assert.Equal(t, `{"Zones":{"Zone":["a","b"]},"RequestId":"req-1"}`, compact)
+
+	assert.Equal(t, "plain text", formatResponseJSON(ctx2, "plain text"))
+}
+
+func newTestCommandoForResponse(t *testing.T, aimodeEnv string) (*Commando, *cli.Context, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+	t.Setenv(aimode.EnvAIMode, aimodeEnv)
+	c, stdout, stderr := newTestCommando()
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	return c, ctx, stdout, stderr
+}

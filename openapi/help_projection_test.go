@@ -270,3 +270,23 @@ func TestRenderCanonicalRequestTextQueryOptionsWithoutSchema(t *testing.T) {
 	assert.Contains(t, out.String(), "\nQuery Options:\n")
 	assert.NotContains(t, out.String(), "complex array")
 }
+
+func TestValidateRecoverySearchMirrorsAIModeGlobals(t *testing.T) {
+	// Non-AI replay keeps global CLI flags searchable...
+	c, ctx, _, _ := newCanonicalHelpTestContext(t)
+	assert.True(t, c.validateRecoverySearch(ctx, RecoverySearchRequest{
+		Product: "demo", API: "create-report", Version: "2026-01-01", Section: "request", Keyword: "header",
+	}))
+
+	// ...while AI mode drops them, so a global-only keyword must not validate
+	// against help that would render empty.
+	c2, ctx2, _, _ := newCanonicalHelpTestContext(t)
+	t.Setenv(aimode.EnvAIMode, "1")
+	assert.False(t, c2.validateRecoverySearch(ctx2, RecoverySearchRequest{
+		Product: "demo", API: "create-report", Version: "2026-01-01", Section: "request", Keyword: "header",
+	}))
+	// API parameters remain searchable in AI mode.
+	assert.True(t, c2.validateRecoverySearch(ctx2, RecoverySearchRequest{
+		Product: "demo", API: "create-report", Version: "2026-01-01", Section: "request", Keyword: "workspace-id",
+	}))
+}

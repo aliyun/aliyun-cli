@@ -115,7 +115,7 @@ func TestRenderResponseCliQuery(t *testing.T) {
 	resp := &runtime.Response{StatusCode: 200, Raw: raw, Parsed: parsed}
 
 	var buf bytes.Buffer
-	if err := renderResponse(&buf, resp, "Instances[].Id"); err != nil {
+	if err := renderResponse(&buf, resp, "Instances[].Id", false); err != nil {
 		t.Fatalf("cli-query json: %v", err)
 	}
 	if !strings.Contains(buf.String(), `"i-1"`) || !strings.Contains(buf.String(), `"i-2"`) {
@@ -131,7 +131,7 @@ func TestWriteJSONPrettyPrints(t *testing.T) {
 	var parsed any
 	_ = json.Unmarshal(raw, &parsed)
 	var buf bytes.Buffer
-	if err := renderResponse(&buf, &runtime.Response{Raw: raw, Parsed: parsed}, ""); err != nil {
+	if err := renderResponse(&buf, &runtime.Response{Raw: raw, Parsed: parsed}, "", false); err != nil {
 		t.Fatalf("renderResponse: %v", err)
 	}
 	out := buf.String()
@@ -140,6 +140,34 @@ func TestWriteJSONPrettyPrints(t *testing.T) {
 	}
 	if strings.Count(strings.TrimSpace(out), "\n") < 2 {
 		t.Fatalf("expected multi-line pretty JSON:\n%s", out)
+	}
+}
+
+// TestWriteJSONCompactEmitsSingleLine keeps AI-mode responses on one line and
+// preserves the server's key order for both the raw and filtered branches.
+func TestWriteJSONCompactEmitsSingleLine(t *testing.T) {
+	raw := []byte(`{"Zones":{"Zone":[{"ZoneId":"cn-hangzhou-a"},{"ZoneId":"cn-hangzhou-b"}]},"RequestId":"req-1"}`)
+	var parsed any
+	_ = json.Unmarshal(raw, &parsed)
+
+	var buf bytes.Buffer
+	if err := renderResponse(&buf, &runtime.Response{Raw: raw, Parsed: parsed}, "", true); err != nil {
+		t.Fatalf("renderResponse compact: %v", err)
+	}
+	out := buf.String()
+	if strings.Count(strings.TrimSpace(out), "\n") != 0 {
+		t.Fatalf("expected single-line compact JSON:\n%s", out)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(out), `{"Zones":`) {
+		t.Fatalf("expected server key order preserved, got:\n%s", out)
+	}
+
+	buf.Reset()
+	if err := renderResponse(&buf, &runtime.Response{Raw: raw, Parsed: parsed}, "Zones.Zone", true); err != nil {
+		t.Fatalf("renderResponse compact filtered: %v", err)
+	}
+	if strings.Count(strings.TrimSpace(buf.String()), "\n") != 0 || !strings.Contains(buf.String(), `"cn-hangzhou-a"`) {
+		t.Fatalf("expected compact filtered JSON:\n%s", buf.String())
 	}
 }
 

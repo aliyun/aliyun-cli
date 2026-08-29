@@ -875,7 +875,7 @@ func TestCanonicalTextResponseSearchPrintsMatchedPathAndFilteredQuery(t *testing
 	assert.Empty(t, stderr.String())
 	assert.Contains(t, stdout.String(), "Matched Response Paths:")
 	assert.Contains(t, stdout.String(), "Reports.Report.ReportId")
-	assert.Contains(t, stdout.String(), "aliyun demo CreateReport --version 2026-01-01 --ReportId <value> --WorkspaceId <value> --cli-query 'Reports.Report'")
+	assert.Contains(t, stdout.String(), "aliyun demo CreateReport --version 2026-01-01 --ReportId <value> --WorkspaceId <value> --cli-query 'Reports.Report[*].{ReportId:ReportId}'")
 	assert.NotContains(t, stdout.String(), "Unused")
 }
 

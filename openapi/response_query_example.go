@@ -44,44 +44,57 @@ type ResponseQueryExample struct {
 // pagination path, pagination siblings, API resource name, common result name,
 // then original schema declaration order.
 func SelectResponseArrayPath(input HelpResponseSchema, apiName, paginationCollectionPath string) (string, error) {
-	document, err := parseHelpResponseSchema(input)
-	if err != nil {
+	candidate, _, err := selectResponseArrayCandidate(input, apiName, paginationCollectionPath)
+	if err != nil || candidate == nil {
 		return "", err
 	}
+	return candidate.queryPath, nil
+}
+
+// selectResponseArrayCandidate returns the representative array path plus the
+// parsed schema document, so callers can inspect the array's item shape.
+func selectResponseArrayCandidate(input HelpResponseSchema, apiName, paginationCollectionPath string) (*responseArrayPath, *responseSchemaDocument, error) {
+	document, err := parseHelpResponseSchema(input)
+	if err != nil {
+		return nil, nil, err
+	}
 	if document.root == nil || responseNodeIsArray(document, document.root, make(map[string]bool)) {
-		return "", nil
+		return nil, document, nil
 	}
 
 	collector := responseArrayCollector{document: document}
 	collector.walk(document.root, nil, make(map[string]bool))
 	if len(collector.paths) == 0 {
-		return "", nil
+		return nil, document, nil
 	}
 
 	explicitPath := normalizeResponseCollectionPath(paginationCollectionPath)
 	if explicitPath != "" {
-		for _, candidate := range collector.paths {
+		for i := range collector.paths {
+			candidate := &collector.paths[i]
 			if explicitPath == candidate.rawPath || explicitPath == candidate.queryPath {
-				return candidate.queryPath, nil
+				return candidate, document, nil
 			}
 		}
 	}
-	for _, candidate := range collector.paths {
-		if candidate.paginationSibling {
-			return candidate.queryPath, nil
+	for i := range collector.paths {
+		if collector.paths[i].paginationSibling {
+			return &collector.paths[i], document, nil
 		}
 	}
-	for _, candidate := range collector.paths {
-		if responseArrayMatchesAPIResource(candidate, apiName) {
-			return candidate.queryPath, nil
+	for i := range collector.paths {
+		candidate := &collector.paths[i]
+		if responseArrayMatchesAPIResource(*candidate, apiName) {
+			return candidate, document, nil
 		}
 	}
-	for _, candidate := range collector.paths {
+	for i := range collector.paths {
+		candidate := &collector.paths[i]
 		if isCommonResponseArrayName(candidate.segments[len(candidate.segments)-1].name) {
-			return candidate.queryPath, nil
+			return candidate, document, nil
 		}
 	}
-	return collector.paths[0].queryPath, nil
+	return &collector.paths[0], document, nil
 }
 
 func normalizeResponseCollectionPath(path string) string {
@@ -91,8 +104,10 @@ func normalizeResponseCollectionPath(path string) string {
 
 // BuildResponseQueryExample selects an array and renders style-preserving,
 // shell-safe local commands. Invalid or scalar-only contexts omit the example.
+// When the array's items are objects with scalar properties, the query
+// projects the first few fields instead of returning every full object.
 func BuildResponseQueryExample(context ResponseQueryContext) (*ResponseQueryExample, error) {
-	path, err := SelectResponseArrayPath(
+	candidate, document, err := selectResponseArrayCandidate(
 		context.Document,
 		context.API,
 		context.PaginationCollectionPath,
@@ -100,8 +115,12 @@ func BuildResponseQueryExample(context ResponseQueryContext) (*ResponseQueryExam
 	if err != nil {
 		return nil, err
 	}
-	if path == "" {
+	if candidate == nil {
 		return nil, nil
+	}
+	path := candidate.queryPath
+	if fields := responseArrayProjectionFields(document, candidate.arrayNode); len(fields) > 0 {
+		path = responseQueryProjectionPath(path, fields)
 	}
 
 	product := strings.TrimSpace(context.Product)
@@ -142,6 +161,9 @@ type responseArrayPath struct {
 	rawPath           string
 	queryPath         string
 	paginationSibling bool
+	// arrayNode is the schema node of the array property itself; its items
+	// shape drives the field projection.
+	arrayNode *responseSchemaNode
 }
 
 type responseArrayCollector struct {
@@ -174,6 +196,7 @@ func (c *responseArrayCollector) walk(node *responseSchemaNode, path []responseP
 						rawPath:           rawResponsePath(propertyPath),
 						queryPath:         queryResponsePath(propertyPath),
 						paginationSibling: paginationSibling,
+						arrayNode:         property.node,
 					})
 				}
 				c.walk(property.node, propertyPath, activeRefs)
@@ -249,6 +272,93 @@ func queryResponsePath(path []responsePathSegment) string {
 		parts = append(parts, part)
 	}
 	return strings.Join(parts, ".")
+}
+
+// responseQueryProjectionFieldLimit caps the projected fields so the example
+// stays a demonstration of the pattern rather than a full field list.
+const responseQueryProjectionFieldLimit = 3
+
+// responseArrayProjectionFields lists the first scalar properties of the
+// array's item object (resolving $ref and allOf shapes). Nil means the items
+// carry no projectable scalar fields and the array path stays as-is.
+func responseArrayProjectionFields(document *responseSchemaDocument, arrayNode *responseSchemaNode) []string {
+	if document == nil || arrayNode == nil {
+		return nil
+	}
+	resolvedArray := resolveResponseSchemaNode(document, arrayNode, make(map[string]bool))
+	if resolvedArray == nil {
+		return nil
+	}
+	items := resolveResponseSchemaNode(document, resolvedArray.items, make(map[string]bool))
+	if items == nil {
+		return nil
+	}
+	var fields []string
+	for _, property := range responseArrayItemProperties(document, items) {
+		if len(fields) >= responseQueryProjectionFieldLimit {
+			break
+		}
+		if responseSchemaPropertyIsScalar(document, property.node) {
+			fields = append(fields, property.name)
+		}
+	}
+	return fields
+}
+
+// responseQueryProjectionPath turns an array path into a JMESPath projection
+// such as `Zones.Zone[*].{ZoneId:ZoneId,LocalName:LocalName}`; keys keep the
+// original field names so the mapping is self-documenting.
+func responseQueryProjectionPath(path string, fields []string) string {
+	parts := make([]string, 0, len(fields))
+	for _, field := range fields {
+		identifier := responseJMESPathIdentifier(field)
+		parts = append(parts, identifier+":"+identifier)
+	}
+	return path + "[*].{" + strings.Join(parts, ",") + "}"
+}
+
+// resolveResponseSchemaNode unwraps $ref chains to the concrete schema node.
+func resolveResponseSchemaNode(document *responseSchemaDocument, node *responseSchemaNode, visited map[string]bool) *responseSchemaNode {
+	if node == nil {
+		return nil
+	}
+	if node.ref == "" {
+		return node
+	}
+	name, target := document.resolveRef(node.ref)
+	if target == nil || visited[name] {
+		return node
+	}
+	visited[name] = true
+	return resolveResponseSchemaNode(document, target, visited)
+}
+
+// responseArrayItemProperties returns an object node's own properties plus
+// those contributed by its allOf branches, in declaration order.
+func responseArrayItemProperties(document *responseSchemaDocument, node *responseSchemaNode) []responseSchemaProperty {
+	if node == nil {
+		return nil
+	}
+	properties := append([]responseSchemaProperty(nil), node.properties...)
+	for _, branch := range node.compositions["allOf"] {
+		resolved := resolveResponseSchemaNode(document, branch, make(map[string]bool))
+		if resolved != nil {
+			properties = append(properties, resolved.properties...)
+		}
+	}
+	return properties
+}
+
+func responseSchemaPropertyIsScalar(document *responseSchemaDocument, node *responseSchemaNode) bool {
+	resolved := resolveResponseSchemaNode(document, node, make(map[string]bool))
+	if resolved == nil {
+		return false
+	}
+	switch resolved.typ {
+	case "string", "integer", "number", "boolean":
+		return true
+	}
+	return false
 }
 
 func responseJMESPathIdentifier(value string) string {

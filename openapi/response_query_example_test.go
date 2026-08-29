@@ -324,7 +324,7 @@ func TestResponseQueryUsesOnlyFilteredResponseSearchSchema(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, example)
-	assert.Equal(t, "Tags", example.Path)
+	assert.Equal(t, "Tags[*].{Key:Key}", example.Path)
 }
 
 func TestBuildResponseQueryExampleOmitsInvalidContexts(t *testing.T) {
@@ -360,4 +360,104 @@ func responseQueryDocument(schema string, components map[string]string) HelpResp
 		document.Components[name] = json.RawMessage(component)
 	}
 	return document
+}
+
+func TestBuildResponseQueryExampleProjectsItemFields(t *testing.T) {
+	document := responseQueryDocument(`{
+		"type":"object",
+		"properties":{
+			"Zones":{"type":"object","properties":{
+				"Zone":{"type":"array","items":{"$ref":"#/components/schemas/Zone"}}
+			}}
+		}
+	}`, map[string]string{
+		"Zone": `{"type":"object","properties":{
+			"ZoneId":{"type":"string"},
+			"LocalName":{"type":"string"},
+			"ResourceTypes":{"type":"array"},
+			"AvailableInstanceTypes":{"type":"array"}
+		}}`,
+	})
+
+	example, err := BuildResponseQueryExample(ResponseQueryContext{
+		Document: document,
+		Product:  "ecs",
+		API:      "DescribeZones",
+		Style:    ResponseCommandStylePascal,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, example)
+	assert.Equal(t, `Zones.Zone[*].{ZoneId:ZoneId,LocalName:LocalName}`, example.Path)
+	assert.Contains(t, example.QueryCommand, `--cli-query 'Zones.Zone[*].{ZoneId:ZoneId,LocalName:LocalName}'`)
+}
+
+func TestBuildResponseQueryExampleProjectionCapsAndSkipsNonScalars(t *testing.T) {
+	document := responseQueryDocument(`{
+		"type":"object",
+		"properties":{
+			"Records":{"type":"array","items":{"type":"object","properties":{
+				"Id":{"type":"string"},
+				"Count":{"type":"integer"},
+				"Enabled":{"type":"boolean"},
+				"Ratio":{"type":"number"},
+				"Fourth":{"type":"string"},
+				"Nested":{"type":"object"}
+			}}}
+		}
+	}`, nil)
+
+	example, err := BuildResponseQueryExample(ResponseQueryContext{
+		Document: document,
+		Product:  "demo",
+		API:      "ListRecords",
+		Style:    ResponseCommandStyleKebab,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, example)
+	assert.Equal(t, `Records[*].{Id:Id,Count:Count,Enabled:Enabled}`, example.Path)
+}
+
+func TestBuildResponseQueryExampleProjectionFallsBackWithoutScalarItems(t *testing.T) {
+	document := responseQueryDocument(`{
+		"type":"object",
+		"properties":{
+			"Instances":{"type":"object","properties":{
+				"Instance":{"type":"array","items":{"type":"object"}}
+			}}
+		}
+	}`, nil)
+
+	example, err := BuildResponseQueryExample(ResponseQueryContext{
+		Document: document,
+		Product:  "ecs",
+		API:      "DescribeInstances",
+		Style:    ResponseCommandStylePascal,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, example)
+	assert.Equal(t, "Instances.Instance", example.Path)
+}
+
+func TestBuildResponseQueryExampleProjectionMergesAllOfItems(t *testing.T) {
+	document := responseQueryDocument(`{
+		"type":"object",
+		"properties":{
+			"Things":{"type":"array","items":{"$ref":"#/components/schemas/Thing"}}
+		}
+	}`, map[string]string{
+		"Thing": `{"allOf":[
+			{"type":"object","properties":{"Name":{"type":"string"}}},
+			{"type":"object","properties":{"Code":{"type":"string"},"Detail":{"type":"object"}}}
+		]}`,
+	})
+
+	example, err := BuildResponseQueryExample(ResponseQueryContext{
+		Document: document,
+		Product:  "demo",
+		API:      "ListThings",
+		Style:    ResponseCommandStylePascal,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, example)
+	assert.Equal(t, `Things[*].{Name:Name,Code:Code}`, example.Path)
 }

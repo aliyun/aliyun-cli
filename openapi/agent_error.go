@@ -17,14 +17,17 @@ package openapi
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode"
 
+	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	runtime "github.com/aliyun/aliyun-openapi-runtime/runtime"
+	"github.com/alibabacloud-go/tea/tea"
 )
 
 type credentialConfigurationError struct {
@@ -75,39 +78,27 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 
 	var missing *runtime.MissingRequiredError
 	if errors.As(err, &missing) {
-		return newLocalAgentError(err, missingRequiredAgentMessage(missing), nil, cli.AgentErrorRecovery{
-			Action:  "inspect_request_help",
-			Command: context.requestHelpCommand(),
-			Hint:    "Inspect the complete request help and provide every required parameter.",
-		})
+		return missingRequiredAgentError(err, missingRequiredAgentMessage(missing), missing.Flags, context, validate)
 	}
 
 	var legacyDocRequired *LegacyDocRequiredError
 	if errors.As(err, &legacyDocRequired) {
-		return newLocalAgentError(err, legacyDocRequired.Error(), nil, cli.AgentErrorRecovery{
-			Action:  "inspect_request_help",
-			Command: context.requestHelpCommand(),
-			Hint:    "Inspect the complete request help and provide every required parameter.",
-		})
+		return missingRequiredAgentError(err, legacyDocRequired.Error(), legacyDocRequired.Flags, context, validate)
 	}
 
 	var legacyMissingRequired *LegacyMissingRequiredError
 	if errors.As(err, &legacyMissingRequired) {
-		return newLocalAgentError(err, legacyMissingRequired.Error(), nil, cli.AgentErrorRecovery{
-			Action:  "inspect_request_help",
-			Command: context.requestHelpCommand(),
-			Hint:    "Inspect the complete request help and provide every required parameter.",
-		})
+		return missingRequiredAgentError(err, legacyMissingRequired.Error(), legacyMissingRequiredFlagNames(legacyMissingRequired), context, validate)
 	}
 
 	var runtimeConstraint *runtime.ConstraintViolationError
 	if errors.As(err, &runtimeConstraint) {
-		return constraintViolationAgentError(err, runtimeConstraintFacts(runtimeConstraint), context)
+		return constraintViolationAgentError(err, runtimeConstraintFacts(runtimeConstraint), context, validate)
 	}
 
 	var legacyConstraint *ConstraintViolationError
 	if errors.As(err, &legacyConstraint) {
-		return constraintViolationAgentError(err, legacyConstraintFacts(legacyConstraint), context)
+		return constraintViolationAgentError(err, legacyConstraintFacts(legacyConstraint), context, validate)
 	}
 
 	var invalidParameter *InvalidParameterError
@@ -222,11 +213,84 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 			"Check that --body-file points to a readable file.", context)
 	}
 
-	// This is intentionally an allowlist. Credentials, SDK/Tea/server/network
+	var externalReject *argparser.ExternalFlagRejectError
+	if errors.As(err, &externalReject) {
+		return externalFlagRejectAgentError(err, externalReject, context)
+	}
+
+	if normalized := normalizeServerAgentError(err, context); normalized != nil {
+		return normalized
+	}
+
+	// This is intentionally an allowlist. Credentials, network
 	// failures, plugins, postprocessing, safety-policy, Machine Help, corrupt
 	// metadata, broad UsageError, and untyped errors all retain their original
 	// rendering and identity.
 	return err
+}
+
+// normalizeServerAgentError wraps remote server errors from either runtime
+// (kebab dara/Tea errors and legacy old-SDK ServerError) into one envelope so
+// the message prefix and exit code no longer differ by command style. Errors
+// already carrying a CLI tip (estimate-cost guidance) keep their original
+// rendering, and network/credential failures are not SDK errors and never
+// reach this branch.
+func normalizeServerAgentError(err error, context recoveryContext) error {
+	var withTip cli.ErrorWithTip
+	if errors.As(err, &withTip) {
+		return nil
+	}
+	var teaErr *tea.SDKError
+	if errors.As(err, &teaErr) {
+		facts := serverErrorFacts{
+			code:      tea.StringValue(teaErr.Code),
+			message:   tea.StringValue(teaErr.Message),
+			requestID: "",
+		}
+		if facts.code == "" && facts.message == "" {
+			return nil
+		}
+		return serverAgentError(err, facts, context)
+	}
+	var serverErr *sdkerrors.ServerError
+	if errors.As(err, &serverErr) {
+		facts := serverErrorFacts{
+			code:      serverErr.ErrorCode(),
+			message:   serverErr.Message(),
+			requestID: serverErr.RequestId(),
+		}
+		if facts.code == "" && facts.message == "" {
+			return nil
+		}
+		return serverAgentError(err, facts, context)
+	}
+	return nil
+}
+
+type serverErrorFacts struct {
+	code      string
+	message   string
+	requestID string
+}
+
+func serverAgentError(cause error, facts serverErrorFacts, context recoveryContext) error {
+	message := fmt.Sprintf("server error [%s]: %s", facts.code, facts.message)
+	if facts.requestID != "" {
+		message += " (request id: " + facts.requestID + ")"
+	}
+	return newLocalAgentError(cause, message, nil, cli.AgentErrorRecovery{
+		Action:  "inspect_action_help",
+		Command: context.actionHelpCommand(),
+		Hint:    "The server rejected the request; check the error code and message, fix the parameters, or retry if the failure is transient.",
+	})
+}
+
+func externalFlagRejectAgentError(cause error, reject *argparser.ExternalFlagRejectError, context recoveryContext) error {
+	return newLocalAgentError(cause, reject.Message, nil, cli.AgentErrorRecovery{
+		Action:  "inspect_action_help",
+		Command: context.actionHelpCommand(),
+		Hint:    "Use the flag spelling this command style accepts; the action help lists the parameters of this API.",
+	})
 }
 
 func newLocalAgentError(cause error, message string, suggestions []string, recovery cli.AgentErrorRecovery) error {
@@ -381,6 +445,43 @@ func missingRequiredAgentMessage(err *runtime.MissingRequiredError) string {
 	return "missing required parameter(s): " + strings.Join(err.Flags, ", ")
 }
 
+// legacyMissingRequiredFlagNames extracts the --Flag tokens from the wrapped
+// legacy error text, which formats them one per line.
+func legacyMissingRequiredFlagNames(err *LegacyMissingRequiredError) []string {
+	matches := missingRequiredFlagPattern.FindAllStringSubmatch(err.Error(), -1)
+	names := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if match[1] != "" {
+			names = append(names, "--"+match[1])
+		}
+	}
+	return names
+}
+
+var missingRequiredFlagPattern = regexp.MustCompile(`--([A-Za-z0-9_.-]+)`)
+
+// missingRequiredAgentError upgrades the recovery command from the full
+// request Help to a targeted parameter search whenever the validator confirms
+// the missing flag would be found — the search returns the parameter's schema
+// alone instead of the complete request document.
+func missingRequiredAgentError(cause error, message string, flags []string,
+	context recoveryContext, validate RecoverySearchValidator) error {
+	recovery := cli.AgentErrorRecovery{
+		Action:  "inspect_request_help",
+		Command: context.requestHelpCommand(),
+		Hint:    "Inspect the complete request help and provide every required parameter.",
+	}
+	for _, keyword := range parameterSearchKeywordCandidates(context.style, flags...) {
+		if validate != nil && validate(context.searchRequest("request", context.api, keyword)) {
+			recovery.Action = "search_parameter"
+			recovery.Command = context.actionSearchCommand(keyword)
+			recovery.Hint = fmt.Sprintf("Search request parameters related to %s and provide the required value.", keyword)
+			break
+		}
+	}
+	return newLocalAgentError(cause, message, nil, recovery)
+}
+
 func runtimeConstraintFacts(e *runtime.ConstraintViolationError) constraintFacts {
 	return constraintFacts{
 		flag:       strings.TrimLeft(e.Flag, "-"),
@@ -414,12 +515,21 @@ func legacyConstraintFacts(e *ConstraintViolationError) constraintFacts {
 	}
 }
 
-func constraintViolationAgentError(cause error, facts constraintFacts, context recoveryContext) error {
-	return newLocalAgentError(cause, constraintViolationMessage(facts), stableStrings(facts.allowed), cli.AgentErrorRecovery{
+func constraintViolationAgentError(cause error, facts constraintFacts, context recoveryContext, validate RecoverySearchValidator) error {
+	recovery := cli.AgentErrorRecovery{
 		Action:  "inspect_request_help",
 		Command: context.requestHelpCommand(),
 		Hint:    constraintViolationHint(facts),
-	})
+	}
+	for _, keyword := range parameterSearchKeywordCandidates(context.style, facts.flag) {
+		if validate != nil && validate(context.searchRequest("request", context.api, keyword)) {
+			recovery.Action = "search_parameter"
+			recovery.Command = context.actionSearchCommand(keyword)
+			recovery.Hint = fmt.Sprintf("Search request parameters related to %s and use a value that satisfies its constraints.", keyword)
+			break
+		}
+	}
+	return newLocalAgentError(cause, constraintViolationMessage(facts), stableStrings(facts.allowed), recovery)
 }
 
 func constraintViolationMessage(facts constraintFacts) string {

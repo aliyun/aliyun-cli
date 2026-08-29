@@ -64,7 +64,7 @@ func (e *machineHelpError) Error() string {
 func (e *machineHelpError) Unwrap() error { return e.cause }
 
 func (e *machineHelpError) RenderError(w io.Writer) error {
-	return encodeMachineHelpJSON(w, e.document)
+	return encodeMachineHelpJSON(w, e.document, false)
 }
 
 func (e *machineHelpError) ExitCode() int { return 2 }
@@ -82,6 +82,27 @@ type machineHelpTarget struct {
 type machineHelpLocalizedText struct {
 	EN string `json:"en"`
 	ZH string `json:"zh"`
+}
+
+// UnmarshalJSON accepts both the bilingual object and the slimmed single
+// string the encoder emits for the current language.
+func (t *machineHelpLocalizedText) UnmarshalJSON(data []byte) error {
+	var text string
+	if err := json.Unmarshal(data, &text); err == nil {
+		if helpResponseLanguage() == "zh" {
+			t.ZH = text
+		} else {
+			t.EN = text
+		}
+		return nil
+	}
+	type plain machineHelpLocalizedText
+	var value plain
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*t = machineHelpLocalizedText(value)
+	return nil
 }
 
 type machineHelpCommandSummary struct {
@@ -155,9 +176,12 @@ type machineHelpProduct struct {
 }
 
 type machineHelpAPISummary struct {
-	Name        string                   `json:"name,omitempty"`
-	CmdName     string                   `json:"cmdName,omitempty"`
-	DisplayName string                   `json:"displayName"`
+	Name string `json:"name,omitempty"`
+	CmdName string `json:"cmdName,omitempty"`
+	// DisplayName is the sort/search key in the active command style; in the
+	// emitted JSON it always equals the surviving name/cmdName, so it stays
+	// struct-only.
+	DisplayName string                   `json:"-"`
 	Title       machineHelpLocalizedText `json:"title"`
 	Description machineHelpLocalizedText `json:"description"`
 	Deprecated  bool                     `json:"deprecated"`
@@ -219,8 +243,10 @@ type machineHelpShape struct {
 }
 
 type machineHelpParameter struct {
-	Name          string                   `json:"name"`
-	RawName       string                   `json:"rawName,omitempty"`
+	Name    string `json:"name"`
+	// RawName carries the wire name for legacy-camel views where it is set;
+	// it is only ever equal to Name, so it stays struct-only.
+	RawName       string                   `json:"-"`
 	Options       []string                 `json:"options"`
 	Type          string                   `json:"type"`
 	Location      string                   `json:"location"`
@@ -1084,7 +1110,7 @@ func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format stri
 			typed.AIModeHint = projected
 		}
 	}
-	if err := encodeMachineHelpJSON(ctx.Stdout(), document); err != nil {
+	if err := encodeMachineHelpJSON(ctx.Stdout(), document, aiMode); err != nil {
 		return newMachineHelpUnavailableError(target, err)
 	}
 	return nil
@@ -1101,7 +1127,10 @@ func newMachineHelpUnavailableError(target []string, cause error) *machineHelpEr
 	return err
 }
 
-func encodeMachineHelpJSON(w io.Writer, value any) error {
+// encodeMachineHelpJSON writes the canonical Machine Help document. compact
+// drops the pretty indentation for AI-mode consumers; slimming (single-language
+// collapse plus omission of default-valued fields) applies to every encoding.
+func encodeMachineHelpJSON(w io.Writer, value any, compact bool) error {
 	if root, ok := value.(*machineHelpRootDocument); ok {
 		root.prepareJSONGroups()
 	}
@@ -1116,10 +1145,13 @@ func encodeMachineHelpJSON(w io.Writer, value any) error {
 		return err
 	}
 	document, _ = pruneMachineHelpEmptyAt(document, nil)
+	document = slimMachineHelpJSON(document, helpResponseLanguage())
 
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
-	encoder.SetIndent("", "  ")
+	if !compact {
+		encoder.SetIndent("", "  ")
+	}
 	return encoder.Encode(document)
 }
 
