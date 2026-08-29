@@ -96,13 +96,16 @@ func TestParseHelpOptionsAcceptsAllForAPI(t *testing.T) {
 	assert.True(t, opts.All)
 }
 
-func TestParseHelpOptionsRejectsSearchWithAll(t *testing.T) {
+func TestParseHelpOptionsComposesSearchWithAll(t *testing.T) {
 	ctx := testHelpOptionsContext()
 	assignHelpFlag(t, CliHelpSearchFlag(ctx.Flags()), "instance")
 	assignHelpFlag(t, CliHelpAllFlag(ctx.Flags()), "")
 
-	_, err := parseHelpOptions(ctx, []string{"ecs"})
-	assert.EqualError(t, err, "--help-search conflicts with --help-all")
+	opts, err := parseHelpOptions(ctx, []string{"ecs"})
+	require.NoError(t, err)
+	assert.Equal(t, "instance", opts.Search)
+	assert.True(t, opts.SearchAll)
+	assert.False(t, opts.All)
 }
 
 func TestParseHelpOptionsValidatesCLIOutput(t *testing.T) {

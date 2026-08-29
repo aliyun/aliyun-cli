@@ -21,7 +21,7 @@ func TestProjectHelpSearchMatchesRanksAllThenCapsTwenty(t *testing.T) {
 		candidates = append(candidates, HelpSearchCandidate{Name: fmt.Sprintf("Item%02d", index)})
 	}
 
-	projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, "item"))
+	projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, "item"), false)
 	require.Len(t, projection.Matches, helpSearchResultLimit)
 	assert.Equal(t, "Item00", projection.Matches[0].Candidate.Name)
 	assert.Equal(t, "Item19", projection.Matches[19].Candidate.Name)
@@ -41,7 +41,7 @@ func TestSearchResponseSchemaRanksAllThenProjectsTopTwenty(t *testing.T) {
 	}
 	document := HelpResponseSchema{Schema: json.RawMessage(`{"type":"object","properties":{` + properties + `}}`)}
 
-	result, err := SearchResponseSchema(document, "item")
+	result, err := SearchResponseSchema(document, "item", false)
 	require.NoError(t, err)
 	require.Len(t, result.Paths, helpSearchResultLimit)
 	assert.Equal(t, "Item00", result.Paths[0])

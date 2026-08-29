@@ -254,7 +254,7 @@ func buildParameterHelpDocument(action *machineHelpAPIDocument, option string) (
 // searchParameterHelpDocument uses the shared tokenizer/ranker over the root
 // parameter and every finite fields/element/value descendant, then applies the
 // global twenty-result Search limit after full ranking.
-func searchParameterHelpDocument(document *machineHelpParameterDocument, query string) {
+func searchParameterHelpDocument(document *machineHelpParameterDocument, query string, unlimited bool) {
 	if document == nil {
 		return
 	}
@@ -287,7 +287,7 @@ func searchParameterHelpDocument(document *machineHelpParameterDocument, query s
 		})
 	})
 
-	projected := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, query))
+	projected := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, query), unlimited)
 	document.Matches = make([]machineHelpParameterMatch, 0, len(projected.Matches))
 	for _, match := range projected.Matches {
 		value, ok := match.Candidate.Value.(parameterPathValue)

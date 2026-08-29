@@ -303,7 +303,7 @@ func TestResponseQueryUsesOnlyFilteredResponseSearchSchema(t *testing.T) {
 		}
 	}`, nil)
 
-	scalarSearch, err := SearchResponseSchema(document, "instance-id")
+	scalarSearch, err := SearchResponseSchema(document, "instance-id", false)
 	require.NoError(t, err)
 	example, err := BuildResponseQueryExample(ResponseQueryContext{
 		Document: HelpResponseSchema{Schema: scalarSearch.Schema, Components: scalarSearch.Components},
@@ -314,7 +314,7 @@ func TestResponseQueryUsesOnlyFilteredResponseSearchSchema(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, example)
 
-	arraySearch, err := SearchResponseSchema(document, "tags")
+	arraySearch, err := SearchResponseSchema(document, "tags", false)
 	require.NoError(t, err)
 	example, err = BuildResponseQueryExample(ResponseQueryContext{
 		Document: HelpResponseSchema{Schema: arraySearch.Schema, Components: arraySearch.Components},

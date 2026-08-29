@@ -16,8 +16,11 @@ type helpOptions struct {
 	Section         string
 	SectionExplicit bool
 	Search          string
-	All             bool
-	Output          cli.HelpOutput
+	// SearchAll removes the search result cap when --help-all accompanies
+	// --help-search. All alone keeps the complete-document meaning.
+	SearchAll bool
+	All       bool
+	Output    cli.HelpOutput
 }
 
 func canonicalHelpOptionAssigned(fs *cli.FlagSet) bool {
@@ -71,13 +74,12 @@ func parseHelpOptions(ctx *cli.Context, target []string) (helpOptions, error) {
 
 	if flag := CliHelpAllFlag(ctx.Flags()); flag != nil && flag.IsAssigned() {
 		if opts.Search != "" {
-			return helpOptions{}, &cli.HelpOptionError{
-				Code:          cli.HelpOptionConflict,
-				Option:        "--" + CliHelpSearchFlagName,
-				ConflictsWith: "--" + CliHelpAllFlagName,
-			}
+			// Search + All composes: the keyword keeps filtering while the
+			// result cap is removed.
+			opts.SearchAll = true
+		} else {
+			opts.All = true
 		}
-		opts.All = true
 	}
 
 	if flag := CliOutputFlag(ctx.Flags()); flag != nil && flag.IsAssigned() {

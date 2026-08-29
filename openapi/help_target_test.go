@@ -188,3 +188,16 @@ func TestBuildHelpCommandRejectsInvalidTargets(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildHelpCommandAppendsAllToSearch(t *testing.T) {
+	target := HelpTarget{
+		Level:       HelpLevelProduct,
+		Product:     "vpc",
+		Operation:   HelpOperationSearch,
+		SearchQuery: "instance",
+		SearchAll:   true,
+	}
+	command, err := BuildHelpCommand(target)
+	require.NoError(t, err)
+	assert.Equal(t, "aliyun vpc --help-search instance --help-all", command)
+}

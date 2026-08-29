@@ -23,6 +23,9 @@ type HelpResult struct {
 type HelpNext struct {
 	ShowAll string `json:"showAll,omitempty"`
 	Search  string `json:"search,omitempty"`
+	// SearchAll re-runs the same Help search with --help-all to lift the
+	// result cap while keeping the keyword.
+	SearchAll string `json:"searchAll,omitempty"`
 }
 
 // HelpProjectionMode contains only policy inputs; operation parsing remains in

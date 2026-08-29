@@ -94,7 +94,7 @@ func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions
 				Value:         entry,
 			})
 		}
-		projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.Search))
+		projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.Search), options.SearchAll)
 		document.Commands = nil
 		document.GlobalFlags = nil
 		document.Products = nil
@@ -203,7 +203,7 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 				Value:         api,
 			})
 		}
-		projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.Search))
+		projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.Search), options.SearchAll)
 		document.APIs = helpSearchValues[machineHelpAPISummary](projection.Matches)
 		document.Result = projection.Result
 		document.Listing = nil
@@ -330,7 +330,7 @@ func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptio
 			document.ActiveParameterSet: parameterCandidates,
 		},
 		GlobalParameters: globalCandidates,
-	}, options.Search))
+	}, options.Search), options.SearchAll)
 
 	parameters := make([]machineHelpParameter, 0)
 	globals := make([]machineHelpParameter, 0)
@@ -393,7 +393,7 @@ func applyResponseHelpOptions(document *machineHelpAPIResponseDocument, options 
 		return nil
 	}
 	input := helpResponseSchema(document)
-	result, err := SearchResponseSchema(input, options.Search)
+	result, err := SearchResponseSchema(input, options.Search, options.SearchAll)
 	if err != nil {
 		return err
 	}
@@ -1117,9 +1117,14 @@ func renderHelpProjectionResult(w io.Writer, noun string, result HelpResult, nex
 				return err
 			}
 		}
+		if next.SearchAll != "" {
+			if _, err := fmt.Fprintf(w, "Show all matches: %s\n", next.SearchAll); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
-	_, err := fmt.Fprintln(w, "Use a more specific --help-search query.")
+	_, err := fmt.Fprintln(w, "Use a more specific --help-search query, or append --help-all to show every match.")
 	return err
 }
 

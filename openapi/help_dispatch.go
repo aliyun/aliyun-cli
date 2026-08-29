@@ -95,6 +95,7 @@ func (c *Commando) beforeParseHelpRoute(ctx *cli.Context, args []string) (bool, 
 		CommandStyle: commandStyleForAction(targetArgs[1]),
 		Operation:    opts.Operation,
 		SearchQuery:  opts.SearchQuery,
+		SearchAll:    opts.SearchAll,
 		Output:       opts.Output,
 		Provider:     HelpProviderHost,
 	}
@@ -379,6 +380,7 @@ func (c *Commando) resolveParsedHelpTarget(ctx *cli.Context, args []string) (Hel
 	} else if opts.Search != "" {
 		target.Operation = HelpOperationSearch
 		target.SearchQuery = opts.Search
+		target.SearchAll = opts.SearchAll
 	}
 	if len(args) >= 1 {
 		target.Level = HelpLevelProduct
@@ -432,6 +434,7 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 		Section:         string(target.Section),
 		SectionExplicit: target.SectionExplicit,
 		Search:          target.SearchQuery,
+		SearchAll:       target.SearchAll,
 		All:             target.Operation == HelpOperationAll,
 		Output:          cli.HelpOutput(target.Output),
 	}
@@ -484,7 +487,7 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 			}
 			if err == nil {
 				if target.Operation == HelpOperationSearch {
-					searchParameterHelpDocument(parameter, target.SearchQuery)
+					searchParameterHelpDocument(parameter, target.SearchQuery, target.SearchAll)
 				}
 				document = parameter
 			}
@@ -704,5 +707,17 @@ func buildHelpNext(target HelpTarget, aiMode bool) *HelpNext {
 	search.Operation = HelpOperationSearch
 	search.SearchQuery = "<keyword>"
 	find, _ := BuildHelpCommand(search)
-	return &HelpNext{ShowAll: showAll, Search: find}
+	next := &HelpNext{ShowAll: showAll, Search: find}
+	if strings.TrimSpace(target.SearchQuery) != "" && !target.SearchAll {
+		// The current search was truncated: offer the same keyword with the
+		// cap lifted instead of forcing a keyword change.
+		searchAll := base
+		searchAll.Operation = HelpOperationSearch
+		searchAll.SearchQuery = target.SearchQuery
+		searchAll.SearchAll = true
+		if command, err := BuildHelpCommand(searchAll); err == nil {
+			next.SearchAll = command
+		}
+	}
+	return next
 }

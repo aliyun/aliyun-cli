@@ -120,7 +120,7 @@ func applyUtilityHelpOptions(document *machineHelpUtilityDocument, options cli.H
 			Aliases:       aliases,
 			DescriptionEN: flag.Description.EN, DescriptionZH: flag.Description.ZH, Value: entry{flag: &flag}})
 	}
-	projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.SearchQuery))
+	projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.SearchQuery), options.SearchAll)
 	document.Commands = nil
 	document.Flags = nil
 	for _, match := range projection.Matches {
