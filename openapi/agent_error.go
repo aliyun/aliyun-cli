@@ -100,6 +100,16 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 		})
 	}
 
+	var runtimeConstraint *runtime.ConstraintViolationError
+	if errors.As(err, &runtimeConstraint) {
+		return constraintViolationAgentError(err, runtimeConstraintFacts(runtimeConstraint), context)
+	}
+
+	var legacyConstraint *ConstraintViolationError
+	if errors.As(err, &legacyConstraint) {
+		return constraintViolationAgentError(err, legacyConstraintFacts(legacyConstraint), context)
+	}
+
 	var invalidParameter *InvalidParameterError
 	if errors.As(err, &invalidParameter) {
 		parameterContext := context.withProductAPI(invalidParameter.ProductCode, invalidParameter.ApiName)
@@ -205,10 +215,10 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 			"Check that --body-file points to a readable file.", context)
 	}
 
-	// This is intentionally an allowlist. Canonical constraints, credentials,
-	// SDK/Tea/server/network failures, plugins, postprocessing, safety-policy,
-	// Machine Help, corrupt metadata, broad UsageError, and untyped errors all
-	// retain their original rendering and identity.
+	// This is intentionally an allowlist. Credentials, SDK/Tea/server/network
+	// failures, plugins, postprocessing, safety-policy, Machine Help, corrupt
+	// metadata, broad UsageError, and untyped errors all retain their original
+	// rendering and identity.
 	return err
 }
 
@@ -347,6 +357,104 @@ func invalidArgumentAgentError(cause error, message, flag, parameter, fieldPath 
 		}
 	}
 	return newLocalAgentError(cause, message, nil, recovery)
+}
+
+type constraintFacts struct {
+	flag       string
+	value      string
+	constraint string
+	bound      string
+	allowed    []string
+}
+
+func runtimeConstraintFacts(e *runtime.ConstraintViolationError) constraintFacts {
+	return constraintFacts{
+		flag:       strings.TrimLeft(e.Flag, "-"),
+		value:      e.Actual,
+		constraint: e.Constraint,
+		bound:      e.Expected,
+		allowed:    e.Allowed,
+	}
+}
+
+func legacyConstraintFacts(e *ConstraintViolationError) constraintFacts {
+	bound := ""
+	switch e.Constraint {
+	case "minimum":
+		bound = e.Minimum
+	case "maximum":
+		bound = e.Maximum
+	case "minLength":
+		bound = e.MinLength
+	case "maxLength":
+		bound = e.MaxLength
+	case "pattern":
+		bound = e.Pattern
+	}
+	return constraintFacts{
+		flag:       strings.TrimLeft(e.Flag, "-"),
+		value:      e.Value,
+		constraint: e.Constraint,
+		bound:      bound,
+		allowed:    e.Allowed,
+	}
+}
+
+func constraintViolationAgentError(cause error, facts constraintFacts, context recoveryContext) error {
+	return newLocalAgentError(cause, constraintViolationMessage(facts), stableStrings(facts.allowed), cli.AgentErrorRecovery{
+		Action:  "inspect_request_help",
+		Command: context.requestHelpCommand(),
+		Hint:    constraintViolationHint(facts),
+	})
+}
+
+func constraintViolationMessage(facts constraintFacts) string {
+	switch facts.constraint {
+	case "enum":
+		return fmt.Sprintf("--%s value %q is not allowed", facts.flag, facts.value)
+	case "minimum":
+		return fmt.Sprintf("--%s value %q must be greater than or equal to %s", facts.flag, facts.value, facts.bound)
+	case "maximum":
+		return fmt.Sprintf("--%s value %q must be less than or equal to %s", facts.flag, facts.value, facts.bound)
+	case "minLength":
+		return fmt.Sprintf("--%s value %q must contain at least %s characters", facts.flag, facts.value, facts.bound)
+	case "maxLength":
+		return fmt.Sprintf("--%s value %q must contain at most %s characters", facts.flag, facts.value, facts.bound)
+	case "pattern":
+		return fmt.Sprintf("--%s value %q does not match pattern %q", facts.flag, facts.value, facts.bound)
+	default:
+		return fmt.Sprintf("--%s value %q violates its schema constraint", facts.flag, facts.value)
+	}
+}
+
+func constraintViolationHint(facts constraintFacts) string {
+	switch facts.constraint {
+	case "enum":
+		return fmt.Sprintf("Use one of the allowed values for --%s.", facts.flag)
+	case "minimum":
+		if facts.bound == "" {
+			break
+		}
+		return fmt.Sprintf("Use a value greater than or equal to %s.", facts.bound)
+	case "maximum":
+		if facts.bound == "" {
+			break
+		}
+		return fmt.Sprintf("Use a value less than or equal to %s.", facts.bound)
+	case "minLength":
+		if facts.bound == "" {
+			break
+		}
+		return fmt.Sprintf("Use at least %s characters.", facts.bound)
+	case "maxLength":
+		if facts.bound == "" {
+			break
+		}
+		return fmt.Sprintf("Use at most %s characters.", facts.bound)
+	case "pattern":
+		return fmt.Sprintf("Adjust the value of --%s to match the documented pattern.", facts.flag)
+	}
+	return fmt.Sprintf("Adjust the value of --%s to satisfy the documented constraint.", facts.flag)
 }
 
 func optionCombinationAgentError(cause error, message string, options []string) error {
@@ -811,7 +919,36 @@ func firstNonEmpty(values ...string) string {
 }
 
 func flagSuggestions(input string, candidates []string) []string {
-	return closeSuggestions(input, candidates, true)
+	suggestions := closeSuggestions(input, candidates, true)
+	if len(suggestions) == 0 {
+		suggestions = crossStyleFlagSuggestions(input, candidates)
+	}
+	return suggestions
+}
+
+// crossStyleFlagSuggestions recovers the exact candidate when the flag merely
+// uses the other command style's casing convention: a PascalCase flag on a
+// kebab command, or the reverse. Edit distance cannot bridge that gap
+// ("RegionId" vs "region-id"), so the converted form is matched exactly.
+func crossStyleFlagSuggestions(input string, candidates []string) []string {
+	input = strings.TrimLeft(strings.TrimSpace(input), "-")
+	if input == "" {
+		return nil
+	}
+	converted := apiNameToKebab(input)
+	if strings.ContainsAny(input, "-_") {
+		converted = kebabToPascal(input)
+	}
+	if converted == "" || converted == input {
+		return nil
+	}
+	for _, candidate := range candidates {
+		candidate = strings.TrimLeft(strings.TrimSpace(candidate), "-")
+		if candidate == converted {
+			return []string{"--" + candidate}
+		}
+	}
+	return nil
 }
 
 func apiSuggestions(input string, candidates []string) []string {

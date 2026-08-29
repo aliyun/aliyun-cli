@@ -718,6 +718,7 @@ func TestPrintApiUsageAlwaysTriesRuntime(t *testing.T) {
 }
 
 func TestHelpResponseSectionUsesHostCanonicalWhenPluginIsNotInstalled(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "0")
 	c, stdout, stderr := newTestCommando()
 	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
 	c.localLoaded = true

@@ -161,6 +161,27 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		assert.Equal(t, "Search request parameters related to instance-type.", envelope.Recovery.Hint)
 	})
 
+	t.Run("PascalCase flag on a kebab command suggests the kebab flag", func(t *testing.T) {
+		cause := &engine.UsageError{Code: "UNKNOWN_FLAG", Err: &argparser.UnknownFlagError{
+			Flag: "InstanceType", Known: []string{"image-id", "instance-type"},
+		}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "describe-instances"}, nil)
+
+		assert.Equal(t, []string{"--instance-type"}, envelope.DidYouMean)
+	})
+
+	t.Run("kebab flag on a PascalCase command suggests the PascalCase flag", func(t *testing.T) {
+		cause := &InvalidParameterError{
+			Name:           "instance-type",
+			ProductCode:    "ecs",
+			ApiName:        "DescribeInstances",
+			ParameterNames: []string{"ImageId", "InstanceType"},
+		}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "DescribeInstances"}, nil)
+
+		assert.Equal(t, []string{"--InstanceType"}, envelope.DidYouMean)
+	})
+
 	t.Run("missing required parameter uses complete request help", func(t *testing.T) {
 		cause := &engine.UsageError{Code: "MISSING_REQUIRED_PARAMETER", Err: &runtime.MissingRequiredError{
 			Flags: []string{"--image-id", "--instance-type"},
@@ -413,14 +434,82 @@ func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T
 	})
 }
 
+func TestNormalizeAgentErrorConstraintViolations(t *testing.T) {
+	t.Run("runtime enum violation exposes allowed values", func(t *testing.T) {
+		cause := &engine.UsageError{
+			Code: "INVALID_PARAMETER_VALUE",
+			Err: &runtime.ConstraintViolationError{
+				Parameter:  "Status",
+				Flag:       "--status",
+				Path:       "Status",
+				Constraint: "enum",
+				Actual:     "runing",
+				Allowed:    []string{"Running", "Stopped"},
+			},
+		}
+		envelope := requireAgentEnvelope(t, cause,
+			[]string{"ecs", "describe-instances", "--status", "runing"}, nil)
+
+		assert.Equal(t, `--status value "runing" is not allowed`, envelope.Message)
+		assert.Equal(t, []string{"Running", "Stopped"}, envelope.DidYouMean)
+		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help ecs describe-instances --cli-section request", envelope.Recovery.Command)
+		assert.Equal(t, "Use one of the allowed values for --status.", envelope.Recovery.Hint)
+	})
+
+	t.Run("runtime maximum violation keeps the bound in message and hint", func(t *testing.T) {
+		cause := &runtime.ConstraintViolationError{
+			Parameter:  "PageSize",
+			Flag:       "--page-size",
+			Constraint: "maximum",
+			Actual:     "101",
+			Expected:   "100",
+		}
+		envelope := requireAgentEnvelope(t, cause,
+			[]string{"ecs", "describe-instances", "--page-size", "101"}, nil)
+
+		assert.Equal(t, `--page-size value "101" must be less than or equal to 100`, envelope.Message)
+		assert.Empty(t, envelope.DidYouMean)
+		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
+		assert.Equal(t, "Use a value less than or equal to 100.", envelope.Recovery.Hint)
+	})
+
+	t.Run("legacy enum violation exposes allowed values", func(t *testing.T) {
+		cause := &ConstraintViolationError{
+			Flag:       "Status",
+			Value:      "runing",
+			Constraint: "enum",
+			Allowed:    []string{"Running", "Stopped"},
+		}
+		envelope := requireAgentEnvelope(t, cause,
+			[]string{"ecs", "DescribeInstances", "--Status", "runing"}, nil)
+
+		assert.Equal(t, `--Status value "runing" is not allowed`, envelope.Message)
+		assert.Equal(t, []string{"Running", "Stopped"}, envelope.DidYouMean)
+		assert.Equal(t, "aliyun help ecs DescribeInstances --cli-section request", envelope.Recovery.Command)
+	})
+
+	t.Run("legacy maximum violation keeps the bound", func(t *testing.T) {
+		cause := &ConstraintViolationError{
+			Flag:       "PageSize",
+			Value:      "101",
+			Constraint: "maximum",
+			Maximum:    "100",
+		}
+		envelope := requireAgentEnvelope(t, cause,
+			[]string{"ecs", "DescribeInstances", "--PageSize", "101"}, nil)
+
+		assert.Equal(t, `--PageSize value "101" must be less than or equal to 100`, envelope.Message)
+		assert.Equal(t, "Use a value less than or equal to 100.", envelope.Recovery.Hint)
+	})
+}
+
 func TestNormalizeAgentErrorStrictlyBypassesExcludedErrors(t *testing.T) {
 	serverBody := `{"RequestId":"req-1","Code":"Throttling.User","Message":"slow down"}`
 	tests := []struct {
 		name string
 		err  error
 	}{
-		{name: "runtime canonical constraint", err: &runtime.ConstraintViolationError{Parameter: "mode", Constraint: "enum"}},
-		{name: "legacy canonical constraint", err: &ConstraintViolationError{Flag: "Mode", Constraint: "enum"}},
 		{name: "runtime credential", err: &engine.CredentialError{Err: errors.New("profile not configured")}},
 		{name: "host credential", err: &credentialConfigurationError{Err: errors.New("profile not configured")}},
 		{name: "old SDK server", err: sdkerrors.NewServerError(429, serverBody, "")},
