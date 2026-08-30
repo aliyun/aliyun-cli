@@ -36,7 +36,7 @@ type LegacyDocRequiredError struct {
 }
 
 func (e *LegacyDocRequiredError) Error() string {
-	return "missing docRequired parameter(s): " + strings.Join(e.Flags, ", ")
+	return "missing required parameter(s): " + strings.Join(e.Flags, ", ")
 }
 
 func (*LegacyDocRequiredError) AIRecoveryEligible() {}

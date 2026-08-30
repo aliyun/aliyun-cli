@@ -115,7 +115,7 @@ func TestRenderResponseCliQuery(t *testing.T) {
 	resp := &runtime.Response{StatusCode: 200, Raw: raw, Parsed: parsed}
 
 	var buf bytes.Buffer
-	if err := renderResponse(&buf, resp, "Instances[].Id"); err != nil {
+	if err := renderResponse(&buf, resp, "Instances[].Id", false); err != nil {
 		t.Fatalf("cli-query json: %v", err)
 	}
 	if !strings.Contains(buf.String(), `"i-1"`) || !strings.Contains(buf.String(), `"i-2"`) {
@@ -131,7 +131,7 @@ func TestWriteJSONPrettyPrints(t *testing.T) {
 	var parsed any
 	_ = json.Unmarshal(raw, &parsed)
 	var buf bytes.Buffer
-	if err := renderResponse(&buf, &runtime.Response{Raw: raw, Parsed: parsed}, ""); err != nil {
+	if err := renderResponse(&buf, &runtime.Response{Raw: raw, Parsed: parsed}, "", false); err != nil {
 		t.Fatalf("renderResponse: %v", err)
 	}
 	out := buf.String()
@@ -140,6 +140,34 @@ func TestWriteJSONPrettyPrints(t *testing.T) {
 	}
 	if strings.Count(strings.TrimSpace(out), "\n") < 2 {
 		t.Fatalf("expected multi-line pretty JSON:\n%s", out)
+	}
+}
+
+// TestWriteJSONCompactEmitsSingleLine keeps AI-mode responses on one line and
+// preserves the server's key order for both the raw and filtered branches.
+func TestWriteJSONCompactEmitsSingleLine(t *testing.T) {
+	raw := []byte(`{"Zones":{"Zone":[{"ZoneId":"cn-hangzhou-a"},{"ZoneId":"cn-hangzhou-b"}]},"RequestId":"req-1"}`)
+	var parsed any
+	_ = json.Unmarshal(raw, &parsed)
+
+	var buf bytes.Buffer
+	if err := renderResponse(&buf, &runtime.Response{Raw: raw, Parsed: parsed}, "", true); err != nil {
+		t.Fatalf("renderResponse compact: %v", err)
+	}
+	out := buf.String()
+	if strings.Count(strings.TrimSpace(out), "\n") != 0 {
+		t.Fatalf("expected single-line compact JSON:\n%s", out)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(out), `{"Zones":`) {
+		t.Fatalf("expected server key order preserved, got:\n%s", out)
+	}
+
+	buf.Reset()
+	if err := renderResponse(&buf, &runtime.Response{Raw: raw, Parsed: parsed}, "Zones.Zone", true); err != nil {
+		t.Fatalf("renderResponse compact filtered: %v", err)
+	}
+	if strings.Count(strings.TrimSpace(buf.String()), "\n") != 0 || !strings.Contains(buf.String(), `"cn-hangzhou-a"`) {
+		t.Fatalf("expected compact filtered JSON:\n%s", buf.String())
 	}
 }
 
@@ -187,6 +215,36 @@ func TestPrintAPIHelpShowsGlobalOptions(t *testing.T) {
 	// Host credential flags must NOT be listed (host owns them).
 	if strings.Contains(out, "--profile") {
 		t.Errorf("help must not list host --profile:\n%s", out)
+	}
+}
+
+// TestPrintAPIHelpMarksDocRequiredAsRequired verifies doc_required parameters
+// render with the "(required)" label, matching the AI-mode interception that
+// treats them as required.
+func TestPrintAPIHelpMarksDocRequiredAsRequired(t *testing.T) {
+	var buf bytes.Buffer
+	api := &meta.API{
+		Name:    "GetUser",
+		CmdName: "get-user",
+		Version: "2015-05-01",
+		Parameters: []meta.Parameter{
+			{Name: "user_name", Type: meta.TypeString, Required: false, DocRequired: true, Options: []string{"--user-name"}},
+			{Name: "marker", Type: meta.TypeString, Required: false, DocRequired: false, Options: []string{"--marker"}},
+		},
+	}
+	if err := printAPIHelp(&buf, "ram", api, "en"); err != nil {
+		t.Fatalf("printAPIHelp: %v", err)
+	}
+	out := buf.String()
+	userNameIdx := strings.Index(out, "--user-name")
+	requiredIdx := strings.Index(out, "(required)")
+	if userNameIdx < 0 || requiredIdx < 0 || requiredIdx < userNameIdx {
+		t.Fatalf("doc_required parameter must carry the (required) label:\n%s", out)
+	}
+	// The optional parameter's line must not be labeled required.
+	markerIdx := strings.Index(out, "--marker")
+	if markerIdx >= 0 && strings.Contains(out[markerIdx:strings.Index(out, "Global Parameters:")], "(required)") {
+		t.Fatalf("optional --marker must not be labeled required:\n%s", out)
 	}
 }
 

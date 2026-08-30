@@ -281,3 +281,119 @@ func TestRemoveDuplicates(t *testing.T) {
 		assert.Empty(t, result)
 	})
 }
+
+func TestInvalidApiError_GetSuggestions_PrefixFallback(t *testing.T) {
+	err := &InvalidApiError{
+		Name: "Get",
+		product: &meta.Product{
+			Code:     "sts",
+			ApiNames: []string{"AssumeRole", "AssumeRoleWithOIDC", "AssumeRoleWithSAML", "GetCallerIdentity"},
+		},
+	}
+	results := err.GetSuggestions()
+	assert.Equal(t, []string{"GetCallerIdentity"}, results)
+}
+
+func TestInvalidApiError_GetSuggestions_PrefixFallbackWithOverflow(t *testing.T) {
+	apiNames := []string{
+		"DescribeA", "DescribeB", "DescribeC", "DescribeD", "DescribeE", "DescribeF", "DescribeG",
+	}
+	err := &InvalidApiError{
+		Name:    "Des",
+		product: &meta.Product{Code: "ecs", ApiNames: apiNames},
+	}
+	results := err.GetSuggestions()
+	assert.Equal(t, 6, len(results))
+	assert.Equal(t, apiNames[:5], results[:5])
+	assert.Equal(t, "... and 2 more, run `aliyun ecs --help-search Des`", results[5])
+}
+
+func TestInvalidApiError_GetSuggestions_TypoStillPrefersEditDistance(t *testing.T) {
+	err := &InvalidApiError{
+		Name: "GetCallerIdentit",
+		product: &meta.Product{
+			Code:     "sts",
+			ApiNames: []string{"AssumeRole", "GetCallerIdentity"},
+		},
+	}
+	results := err.GetSuggestions()
+	assert.Equal(t, []string{"GetCallerIdentity"}, results)
+}
+
+func TestInvalidApiError_AgentSuggestions_PrefixFallback(t *testing.T) {
+	err := &InvalidApiError{
+		Name: "Get",
+		product: &meta.Product{
+			Code:     "sts",
+			ApiNames: []string{"AssumeRole", "GetCallerIdentity"},
+		},
+	}
+	assert.Equal(t, []string{"GetCallerIdentity"}, err.AgentSuggestions())
+}
+
+func TestSameStyleCandidates(t *testing.T) {
+	candidates := []string{"GetCallerIdentity", "get-caller-identity", "AssumeRole"}
+
+	pascal := sameStyleCandidates("Get", candidates)
+	assert.Equal(t, []string{"GetCallerIdentity", "AssumeRole"}, pascal)
+
+	kebab := sameStyleCandidates("get-caller", candidates)
+	assert.Equal(t, []string{"get-caller-identity"}, kebab)
+}
+
+func TestInvalidBaselineCommandError_Suggestions(t *testing.T) {
+	candidates := []string{"describe-instances", "describe-instance-attribute", "run-instances"}
+
+	t.Run("edit distance wins for typos", func(t *testing.T) {
+		err := &InvalidBaselineCommandError{
+			Product:    "Ecs",
+			Command:    "describe-instancez",
+			Candidates: candidates,
+			Err:        nil,
+		}
+		results := err.GetSuggestions()
+		assert.Contains(t, results, "describe-instances")
+		assert.Equal(t, []string{"describe-instances"}, err.AgentSuggestions())
+	})
+
+	t.Run("prefix fallback for partial commands", func(t *testing.T) {
+		err := &InvalidBaselineCommandError{
+			Product:    "Ecs",
+			Command:    "describe-i",
+			Candidates: candidates,
+			Err:        nil,
+		}
+		results := err.GetSuggestions()
+		assert.Contains(t, results, "describe-instances")
+		assert.Contains(t, results, "describe-instance-attribute")
+		assert.NotContains(t, results, "run-instances")
+
+		agentResults := err.AgentSuggestions()
+		assert.Contains(t, agentResults, "describe-instances")
+		assert.Contains(t, agentResults, "describe-instance-attribute")
+		assert.NotContains(t, agentResults, "run-instances")
+	})
+
+	t.Run("prefix fallback overflow hint", func(t *testing.T) {
+		many := []string{"describe-a", "describe-b", "describe-c", "describe-d", "describe-e", "describe-f"}
+		err := &InvalidBaselineCommandError{
+			Product:    "Ecs",
+			Command:    "desc",
+			Candidates: many,
+			Err:        nil,
+		}
+		results := err.GetSuggestions()
+		assert.Equal(t, 6, len(results))
+		assert.Equal(t, "... and 1 more, run `ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help-search desc`", results[5])
+	})
+
+	t.Run("no candidates yields nothing", func(t *testing.T) {
+		err := &InvalidBaselineCommandError{
+			Product: "Ecs",
+			Command: "describe-instancez",
+			Err:     nil,
+		}
+		assert.Nil(t, err.GetSuggestions())
+		assert.Nil(t, err.AgentSuggestions())
+	})
+}

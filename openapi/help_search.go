@@ -118,11 +118,12 @@ type HelpSearchResults struct {
 }
 
 // ProjectHelpSearchMatches caps a completely ranked match set at the single
-// Help Search limit used by every target and output mode.
-func ProjectHelpSearchMatches(matches []HelpSearchMatch) HelpSearchResults {
+// Help Search limit used by every target and output mode. unlimited (the
+// --help-search + --help-all composition) keeps every match.
+func ProjectHelpSearchMatches(matches []HelpSearchMatch, unlimited bool) HelpSearchResults {
 	total := len(matches)
 	shown := total
-	if shown > helpSearchResultLimit {
+	if !unlimited && shown > helpSearchResultLimit {
 		shown = helpSearchResultLimit
 	}
 	return HelpSearchResults{
@@ -331,8 +332,9 @@ type HelpResponseSchemaSearchResult struct {
 }
 
 // SearchResponseSchema returns every matching field path, the merged minimum
-// root tree, and the reachable pruned component closure.
-func SearchResponseSchema(input HelpResponseSchema, keyword string) (HelpResponseSchemaSearchResult, error) {
+// root tree, and the reachable pruned component closure. unlimited (the
+// --help-search + --help-all composition) removes the match cap.
+func SearchResponseSchema(input HelpResponseSchema, keyword string, unlimited bool) (HelpResponseSchemaSearchResult, error) {
 	query := newHelpSearchText(keyword)
 	if query.compact == "" {
 		return emptyHelpResponseSchemaSearchResult(), nil
@@ -353,7 +355,7 @@ func SearchResponseSchema(input HelpResponseSchema, keyword string) (HelpRespons
 		return emptyHelpResponseSchemaSearchResult(), nil
 	}
 	shown := len(allMatches)
-	if shown > helpSearchResultLimit {
+	if !unlimited && shown > helpSearchResultLimit {
 		shown = helpSearchResultLimit
 		allowed := make(map[string]bool, shown)
 		for _, match := range allMatches[:shown] {
@@ -387,7 +389,7 @@ func SearchResponseSchema(input HelpResponseSchema, keyword string) (HelpRespons
 // ValidateResponseSchemaSearch runs the exact response matcher used by real
 // Help search, without executing a CLI command or touching the network.
 func ValidateResponseSchemaSearch(input HelpResponseSchema, keyword string) (HelpSearchValidation, error) {
-	result, err := SearchResponseSchema(input, keyword)
+	result, err := SearchResponseSchema(input, keyword, false)
 	if err != nil {
 		return HelpSearchValidation{}, err
 	}

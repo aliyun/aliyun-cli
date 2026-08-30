@@ -19,6 +19,7 @@ package runtimehost
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,7 @@ import (
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
+	"github.com/aliyun/aliyun-openapi-runtime/source"
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 )
 
@@ -340,6 +342,57 @@ func ProductHelp(ctx *cli.Context, product string) error {
 
 func HasProduct(product string) bool {
 	return product != "" && Engine().HasProduct(product)
+}
+
+// ProductCommands returns the kebab command names the engine serves for a
+// product, or nil when the product cannot be resolved. It is the candidate
+// source for host-side suggestions on kebab commands.
+func ProductCommands(product string) []string {
+	if product == "" {
+		return nil
+	}
+	ldr, err := Engine().Loader()
+	if err != nil {
+		return nil
+	}
+	if err := ldr.EnsureProduct(product); err != nil {
+		return nil
+	}
+	version, err := ldr.ResolveVersion(product, "")
+	if err != nil {
+		return nil
+	}
+	index, err := ldr.GetAPIIndex(product, version)
+	if err != nil || index == nil {
+		return nil
+	}
+	names := make([]string, 0, len(index.Entries))
+	for _, entry := range index.Entries {
+		name := strings.TrimSpace(entry.CmdName)
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// MetaPluginProvenance resolves product ownership through the engine loader.
+// A non-nil record whose Kind is not KindBaseline means an installed metadata
+// plugin (user or override layer) owns the product and its data must be
+// preferred over the bundled baseline.
+func MetaPluginProvenance(product string) *source.Provenance {
+	if product == "" {
+		return nil
+	}
+	ldr, err := Engine().Loader()
+	if err != nil {
+		return nil
+	}
+	if err := ldr.EnsureProduct(product); err != nil {
+		return nil
+	}
+	return ldr.Provenance(product)
 }
 
 // TryDispatch handles rawArgs via the engine only when the engine can resolve the "<product> <command>" pair.

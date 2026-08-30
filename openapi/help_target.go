@@ -72,8 +72,11 @@ type HelpTarget struct {
 	SectionExplicit bool
 	Operation       HelpOperation
 	SearchQuery     string
-	Output          HelpOutput
-	Provider        HelpProvider
+	// SearchAll appends --help-all to a Search operation, removing the result
+	// cap while the keyword keeps filtering.
+	SearchAll bool
+	Output    HelpOutput
+	Provider  HelpProvider
 }
 
 func (t HelpTarget) normalized() HelpTarget {
@@ -269,6 +272,9 @@ func BuildHelpCommand(target HelpTarget) (string, error) {
 		args = append(args, "--"+CliHelpAllFlagName)
 	case HelpOperationSearch:
 		args = append(args, "--"+CliHelpSearchFlagName, shellQuoteHelpArg(strings.TrimSpace(target.SearchQuery)))
+		if target.SearchAll {
+			args = append(args, "--"+CliHelpAllFlagName)
+		}
 	}
 	if target.Output == HelpOutputJSON {
 		args = append(args, "--"+CliOutputFlagName, string(HelpOutputJSON))

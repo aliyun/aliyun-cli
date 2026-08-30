@@ -20,6 +20,11 @@ import (
 
 const DefaultSuggestDistance = 2
 
+// DefaultSuggestLimit caps how many suggestions are listed when the prefix
+// fallback triggers. Large products match hundreds of commands for short
+// prefixes, so the list is truncated and the caller prints an overflow hint.
+const DefaultSuggestLimit = 5
+
 func CalculateStringDistance(source string, target string) int {
 	return DistanceForStrings([]rune(source), []rune(target), DefaultOptions)
 }
@@ -88,4 +93,36 @@ func (a *Suggester) UnifyApply(s string) {
 
 func (a *Suggester) GetResults() []string {
 	return a.results
+}
+
+// PrefixSuggestions returns up to limit candidates that begin with input,
+// compared after stripping non-alphanumeric characters and lowercasing, plus
+// the total number of matches before truncation. It is the fallback for
+// edit-distance suggestion: a partial name such as "Get" or "get-caller" is
+// a prefix rather than a typo, so distance-based matching cannot reach it.
+func PrefixSuggestions(input string, candidates []string, limit int) (results []string, total int) {
+	if limit <= 0 {
+		limit = DefaultSuggestLimit
+	}
+	needle := strings.ToLower(stripNonAlphanumeric(input))
+	if len(needle) < 2 {
+		return nil, 0
+	}
+	matches := make([]string, 0)
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(stripNonAlphanumeric(candidate)), needle) {
+			matches = append(matches, candidate)
+		}
+	}
+	if len(matches) == 0 {
+		return nil, 0
+	}
+	if len(matches) > limit {
+		return matches[:limit], len(matches)
+	}
+	return matches, len(matches)
 }

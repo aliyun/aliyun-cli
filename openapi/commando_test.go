@@ -159,6 +159,14 @@ func setTestHomeDir(t *testing.T, testHome string) func() {
 }
 
 func Test_main(t *testing.T) {
+	// Isolate HOME: command.main loads the profile from the real config when
+	// no test home is set, and a non-English profile would leak into the
+	// global i18n language and break later tests asserting English output.
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w, stderr)
@@ -1417,7 +1425,7 @@ func TestProcessApiInvoke(t *testing.T) {
 
 		err := command.processApiInvoke(ctx, product, canonicalTestAPI(api), "GET", "/test")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "JMESPath query failed")
+		assert.Contains(t, err.Error(), "invalid --cli-query")
 	})
 
 	t.Run("QueryFlagNotAssigned", func(t *testing.T) {
@@ -1728,6 +1736,14 @@ func TestCreateHttpContextRestCheckFail(t *testing.T) {
 }
 
 func TestMainForSlsProduct(t *testing.T) {
+	// Isolate HOME: command.main loads the profile from the real config when
+	// no test home is set, and a non-English profile would leak into the
+	// global i18n language and break later tests asserting English output.
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(stdout, stderr)
@@ -1879,6 +1895,13 @@ func TestMainForSlsProduct(t *testing.T) {
 }
 
 func TestMainForNonSlsProductApi(t *testing.T) {
+	// Isolate HOME so command.main never loads the developer's real profile
+	// (a non-English profile language would pollute the global i18n state).
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	profile := config.Profile{
@@ -1932,6 +1955,13 @@ func TestMainForNonSlsProductApi(t *testing.T) {
 // Regression test: for a restful product, when the user provides an API name that does not exist in metadata (e.g. `aliyun apig GetPlugin`), the error should be `InvalidApiError` with suggestions,
 // NOT the confusing `product 'xxx' need restful call` produced by checkRestfulMethod.
 func TestMainRestfulProductWithInvalidApiName(t *testing.T) {
+	// Isolate HOME so command.main never loads the developer's real profile
+	// (a non-English profile language would pollute the global i18n state).
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	profile := config.Profile{
@@ -1985,6 +2015,13 @@ func TestMainRestfulProductWithInvalidApiName(t *testing.T) {
 }
 
 func TestMainForNonSlsProductApiWithRestCall(t *testing.T) {
+	// Isolate HOME so command.main never loads the developer's real profile
+	// (a non-English profile language would pollute the global i18n state).
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	profile := config.Profile{
@@ -2147,7 +2184,7 @@ func TestApplyQueryFilter(t *testing.T) {
 		output := `{"key": "value"}`
 		result, err := ApplyQueryFilter(ctx, output)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "JMESPath query failed")
+		assert.Contains(t, err.Error(), "invalid --cli-query")
 		assert.Equal(t, output, result)
 	})
 
@@ -4099,6 +4136,13 @@ func TestMain_SafetyPolicyEnforcement(t *testing.T) {
 }
 
 func TestEstimateCostContextRequiresEstimateCost(t *testing.T) {
+	// Isolate HOME so command.main never loads the developer's real profile
+	// (a non-English profile language would pollute the global i18n state).
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w, stderr)
@@ -4122,4 +4166,31 @@ func TestEstimateCostContextRequiresEstimateCost(t *testing.T) {
 	var invalidOptions *InvalidOptionCombinationError
 	assert.ErrorAs(t, err, &invalidOptions)
 	assert.ElementsMatch(t, []string{"--estimate-cost-context", "--estimate-cost"}, invalidOptions.Options)
+}
+
+func TestFormatResponseJSONCompactInAIMode(t *testing.T) {
+	content := "{\n\t\"Zones\": {\n\t\t\"Zone\": [\"a\", \"b\"]\n\t},\n\t\"RequestId\": \"req-1\"\n}"
+
+	c, ctx, _, _ := newTestCommandoForResponse(t, "0")
+	_ = c
+	out := formatResponseJSON(ctx, content)
+	assert.Contains(t, out, "\n\t")
+	assert.Contains(t, out, "\"RequestId\": \"req-1\"")
+
+	_, ctx2, _, _ := newTestCommandoForResponse(t, "1")
+	compact := formatResponseJSON(ctx2, content)
+	assert.Equal(t, `{"Zones":{"Zone":["a","b"]},"RequestId":"req-1"}`, compact)
+
+	assert.Equal(t, "plain text", formatResponseJSON(ctx2, "plain text"))
+}
+
+func newTestCommandoForResponse(t *testing.T, aimodeEnv string) (*Commando, *cli.Context, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+	t.Setenv(aimode.EnvAIMode, aimodeEnv)
+	c, stdout, stderr := newTestCommando()
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	return c, ctx, stdout, stderr
 }

@@ -303,7 +303,7 @@ func TestResponseQueryUsesOnlyFilteredResponseSearchSchema(t *testing.T) {
 		}
 	}`, nil)
 
-	scalarSearch, err := SearchResponseSchema(document, "instance-id")
+	scalarSearch, err := SearchResponseSchema(document, "instance-id", false)
 	require.NoError(t, err)
 	example, err := BuildResponseQueryExample(ResponseQueryContext{
 		Document: HelpResponseSchema{Schema: scalarSearch.Schema, Components: scalarSearch.Components},
@@ -314,7 +314,7 @@ func TestResponseQueryUsesOnlyFilteredResponseSearchSchema(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, example)
 
-	arraySearch, err := SearchResponseSchema(document, "tags")
+	arraySearch, err := SearchResponseSchema(document, "tags", false)
 	require.NoError(t, err)
 	example, err = BuildResponseQueryExample(ResponseQueryContext{
 		Document: HelpResponseSchema{Schema: arraySearch.Schema, Components: arraySearch.Components},
@@ -324,7 +324,7 @@ func TestResponseQueryUsesOnlyFilteredResponseSearchSchema(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, example)
-	assert.Equal(t, "Tags", example.Path)
+	assert.Equal(t, "Tags[*].{Key:Key}", example.Path)
 }
 
 func TestBuildResponseQueryExampleOmitsInvalidContexts(t *testing.T) {
@@ -360,4 +360,231 @@ func responseQueryDocument(schema string, components map[string]string) HelpResp
 		document.Components[name] = json.RawMessage(component)
 	}
 	return document
+}
+
+func TestBuildResponseQueryExampleProjectsItemFields(t *testing.T) {
+	document := responseQueryDocument(`{
+		"type":"object",
+		"properties":{
+			"Zones":{"type":"object","properties":{
+				"Zone":{"type":"array","items":{"$ref":"#/components/schemas/Zone"}}
+			}}
+		}
+	}`, map[string]string{
+		"Zone": `{"type":"object","properties":{
+			"ZoneId":{"type":"string"},
+			"LocalName":{"type":"string"},
+			"ResourceTypes":{"type":"array"},
+			"AvailableInstanceTypes":{"type":"array"}
+		}}`,
+	})
+
+	example, err := BuildResponseQueryExample(ResponseQueryContext{
+		Document: document,
+		Product:  "ecs",
+		API:      "DescribeZones",
+		Style:    ResponseCommandStylePascal,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, example)
+	assert.Equal(t, `Zones.Zone[*].{ZoneId:ZoneId,LocalName:LocalName}`, example.Path)
+	assert.Contains(t, example.QueryCommand, `--cli-query 'Zones.Zone[*].{ZoneId:ZoneId,LocalName:LocalName}'`)
+}
+
+func TestBuildResponseQueryExampleProjectionCapsAndSkipsNonScalars(t *testing.T) {
+	document := responseQueryDocument(`{
+		"type":"object",
+		"properties":{
+			"Records":{"type":"array","items":{"type":"object","properties":{
+				"Id":{"type":"string"},
+				"Count":{"type":"integer"},
+				"Enabled":{"type":"boolean"},
+				"Ratio":{"type":"number"},
+				"Fourth":{"type":"string"},
+				"Nested":{"type":"object"}
+			}}}
+		}
+	}`, nil)
+
+	example, err := BuildResponseQueryExample(ResponseQueryContext{
+		Document: document,
+		Product:  "demo",
+		API:      "ListRecords",
+		Style:    ResponseCommandStyleKebab,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, example)
+	assert.Equal(t, `Records[*].{Id:Id,Count:Count,Enabled:Enabled}`, example.Path)
+}
+
+func TestBuildResponseQueryExampleProjectionFallsBackWithoutScalarItems(t *testing.T) {
+	document := responseQueryDocument(`{
+		"type":"object",
+		"properties":{
+			"Instances":{"type":"object","properties":{
+				"Instance":{"type":"array","items":{"type":"object"}}
+			}}
+		}
+	}`, nil)
+
+	example, err := BuildResponseQueryExample(ResponseQueryContext{
+		Document: document,
+		Product:  "ecs",
+		API:      "DescribeInstances",
+		Style:    ResponseCommandStylePascal,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, example)
+	assert.Equal(t, "Instances.Instance", example.Path)
+}
+
+// TestResponseProjectionSemanticScoring pins the field-choice rules against the
+// real declaration orders the review called out: identity/status fields must win
+// over arbitrary leading fields, and timestamps/long-text lose.
+func TestResponseProjectionSemanticScoring(t *testing.T) {
+	t.Run("DescribeInstances prefers InstanceId/InstanceName/Status over timestamps", func(t *testing.T) {
+		document := responseQueryDocument(`{
+			"type":"object",
+			"properties":{
+				"Instances":{"type":"object","properties":{
+					"Instance":{"type":"array","items":{"type":"object","properties":{
+						"AutoReleaseTime":{"type":"string"},
+						"ClusterId":{"type":"string"},
+						"Cpu":{"type":"integer"},
+						"CreationTime":{"type":"string"},
+						"InstanceId":{"type":"string"},
+						"InstanceName":{"type":"string"},
+						"Status":{"type":"string"}
+					}}}
+				}}
+			}
+		}`, nil)
+
+		example, err := BuildResponseQueryExample(ResponseQueryContext{
+			Document: document,
+			Product:  "ecs",
+			API:      "DescribeInstances",
+			Style:    ResponseCommandStylePascal,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, example)
+		assert.Equal(t, `Instances.Instance[*].{InstanceId:InstanceId,InstanceName:InstanceName,Status:Status}`, example.Path)
+	})
+
+	t.Run("ListUsers prefers UserId/UserName/DisplayName over comments and dates", func(t *testing.T) {
+		document := responseQueryDocument(`{
+			"type":"object",
+			"properties":{
+				"Users":{"type":"object","properties":{
+					"User":{"type":"array","items":{"type":"object","properties":{
+						"Comments":{"type":"string"},
+						"CreateDate":{"type":"string"},
+						"DisplayName":{"type":"string"},
+						"Email":{"type":"string"},
+						"MobilePhone":{"type":"string"},
+						"UpdateDate":{"type":"string"},
+						"UserId":{"type":"string"},
+						"UserName":{"type":"string"}
+					}}}
+				}}
+			}
+		}`, nil)
+
+		example, err := BuildResponseQueryExample(ResponseQueryContext{
+			Document: document,
+			Product:  "ram",
+			API:      "ListUsers",
+			Style:    ResponseCommandStylePascal,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, example)
+		assert.Equal(t, `Users.User[*].{UserId:UserId,UserName:UserName,DisplayName:DisplayName}`, example.Path)
+	})
+
+	t.Run("DescribeDisks prefers DiskId/DiskName/Status over SourceDiskId", func(t *testing.T) {
+		document := responseQueryDocument(`{
+		"type":"object",
+		"properties":{
+			"Disks":{"type":"object","properties":{
+				"Disk":{"type":"array","items":{"type":"object","properties":{
+					"SourceDiskId":{"type":"string"},
+					"DiskName":{"type":"string"},
+					"Status":{"type":"string"},
+					"DiskId":{"type":"string"},
+					"CreationTime":{"type":"string"}
+				}}}
+			}}
+		}
+	}`, nil)
+
+		example, err := BuildResponseQueryExample(ResponseQueryContext{
+			Document: document,
+			Product:  "ecs",
+			API:      "DescribeDisks",
+			Style:    ResponseCommandStylePascal,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, example)
+		assert.Equal(t, `Disks.Disk[*].{DiskId:DiskId,DiskName:DiskName,Status:Status}`, example.Path)
+	})
+}
+
+func TestResponseProjectionFieldScore(t *testing.T) {
+	resource := []string{"instance"}
+	tests := []struct {
+		name string
+		want int
+	}{
+		{"InstanceId", 100},
+		{"InstanceName", 90},
+		{"Status", 60},
+		{"ClusterId", 50},
+		{"ZoneType", 20},
+		{"Cpu", 10},
+		{"CreationTime", -50},
+		{"AutoReleaseTime", -50},
+		{"Description", -30},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, responseProjectionFieldScore(tt.name, resource), tt.name)
+	}
+	// Resource match boosts type/category when the field echoes the resource.
+	assert.Equal(t, 55, responseProjectionFieldScore("InstanceType", resource))
+	// No resource tokens: generic scoring only.
+	assert.Equal(t, 50, responseProjectionFieldScore("UserId", nil))
+
+	// Resource match requires the exact prefix plus a single suffix: DiskId is a
+	// resource identity, SourceDiskId merely contains the resource and ranks
+	// as a generic id.
+	disk := []string{"disk"}
+	assert.Equal(t, 100, responseProjectionFieldScore("DiskId", disk))
+	assert.Equal(t, 50, responseProjectionFieldScore("SourceDiskId", disk))
+	assert.Equal(t, 90, responseProjectionFieldScore("DiskName", disk))
+	// Multi-token resources still match exactly (SecurityGroupId).
+	secGroup := []string{"security", "group"}
+	assert.Equal(t, 100, responseProjectionFieldScore("SecurityGroupId", secGroup))
+}
+
+func TestBuildResponseQueryExampleProjectionMergesAllOfItems(t *testing.T) {
+	document := responseQueryDocument(`{
+		"type":"object",
+		"properties":{
+			"Things":{"type":"array","items":{"$ref":"#/components/schemas/Thing"}}
+		}
+	}`, map[string]string{
+		"Thing": `{"allOf":[
+			{"type":"object","properties":{"Name":{"type":"string"}}},
+			{"type":"object","properties":{"Code":{"type":"string"},"Detail":{"type":"object"}}}
+		]}`,
+	})
+
+	example, err := BuildResponseQueryExample(ResponseQueryContext{
+		Document: document,
+		Product:  "demo",
+		API:      "ListThings",
+		Style:    ResponseCommandStylePascal,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, example)
+	assert.Equal(t, `Things[*].{Name:Name,Code:Code}`, example.Path)
 }

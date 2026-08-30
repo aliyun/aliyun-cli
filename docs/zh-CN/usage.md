@@ -35,6 +35,18 @@ aliyun ecs describe-instance-attribute --instance-id i-1234567890abcdef
 - 大驼峰命令使用 API 原始操作名，例如 `DescribeInstances`，参数名通常也是 API 文档里的原始字段名，例如 `--RegionId`、`--InstanceId`。
 - 短横线命令使用 metadata 生成的命令名，参数名通常也改为短横线形式；具体名称以命令帮助为准。例如 `describe-instances` 使用 `--biz-region-id`，`describe-instance-attribute` 使用 `--instance-id`。
 
+子命令的大小写决定由哪个引擎处理调用：全小写的子命令进入插件/runtime 引擎，包含大写字母的子命令走内置 OpenAPI 链路。不要在同一条命令里混用两种写法——`aliyun ecs DescribeInstances --biz-region-id cn-hangzhou` 会报未知参数错误；`--RegionId` 与 `DescribeInstances` 配对，`--biz-region-id` 与 `describe-instances` 配对。
+
+产品级帮助同样遵循该规则。未安装产品插件时，`aliyun ecs --help` 默认展示大驼峰命令列表；仅存在于内置 metadata 中的产品则展示短横线命令列表。两个环境变量可以显式切换帮助风格：
+
+```sh
+# 查看短横线产品帮助（未安装产品插件时）
+ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help
+
+# 查看旧版大驼峰产品帮助（已安装产品插件时）
+ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true aliyun ecs --help
+```
+
 常规 API 调用应优先使用上述产品和操作名形式。对于只能通过原始 HTTP 方法和路径访问的 API，CLI 仍保留以下 RESTful 兼容形式，但不建议作为一般用法：
 
 ```sh

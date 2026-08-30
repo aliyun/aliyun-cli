@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,7 +98,7 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		})
 
 		assert.Equal(t, "search_api", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun sts --help-search get", envelope.Recovery.Command)
+		assert.Equal(t, "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun sts --help-search get", envelope.Recovery.Command)
 		assert.Equal(t, "Search APIs related to get.", envelope.Recovery.Hint)
 	})
 
@@ -173,6 +174,27 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		assert.Equal(t, "Search request parameters related to instance-type.", envelope.Recovery.Hint)
 	})
 
+	t.Run("PascalCase flag on a kebab command suggests the kebab flag", func(t *testing.T) {
+		cause := &engine.UsageError{Code: "UNKNOWN_FLAG", Err: &argparser.UnknownFlagError{
+			Flag: "InstanceType", Known: []string{"image-id", "instance-type"},
+		}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "describe-instances"}, nil)
+
+		assert.Equal(t, []string{"--instance-type"}, envelope.DidYouMean)
+	})
+
+	t.Run("kebab flag on a PascalCase command suggests the PascalCase flag", func(t *testing.T) {
+		cause := &InvalidParameterError{
+			Name:           "instance-type",
+			ProductCode:    "ecs",
+			ApiName:        "DescribeInstances",
+			ParameterNames: []string{"ImageId", "InstanceType"},
+		}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "DescribeInstances"}, nil)
+
+		assert.Equal(t, []string{"--InstanceType"}, envelope.DidYouMean)
+	})
+
 	t.Run("missing required parameter uses complete request help", func(t *testing.T) {
 		cause := &engine.UsageError{Code: "MISSING_REQUIRED_PARAMETER", Err: &runtime.MissingRequiredError{
 			Flags: []string{"--image-id", "--instance-type"},
@@ -183,6 +205,16 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
 		assert.Equal(t, "aliyun help ecs run-instances --cli-section request", envelope.Recovery.Command)
 		assert.Equal(t, "Inspect the complete request help and provide every required parameter.", envelope.Recovery.Hint)
+	})
+
+	t.Run("missing required parameter hides PascalCase wire paths", func(t *testing.T) {
+		cause := &engine.UsageError{Code: "MISSING_REQUIRED_PARAMETER", Err: &runtime.MissingRequiredError{
+			Flags: []string{"--user-name"},
+			Paths: []string{"UserName"},
+		}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ram", "create-user"}, nil)
+
+		assert.Equal(t, "missing required parameter(s): --user-name", envelope.Message)
 	})
 
 	t.Run("legacy missing required parameter uses complete request help", func(t *testing.T) {
@@ -340,6 +372,34 @@ func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T
 		assert.Contains(t, requests, RecoverySearchRequest{Product: "bssopenapi", Style: "pascal", Keyword: "Bill"})
 	})
 
+	t.Run("kebab unknown API keeps kebab help in the recovery command", func(t *testing.T) {
+		cause := &InvalidBaselineCommandError{
+			Product: "ecs",
+			Command: "describe-instnaces",
+			Err:     errors.New(`"describe-instnaces" is not a valid api.`),
+		}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "describe-instnaces"}, func(RecoverySearchRequest) bool { return false })
+
+		assert.Equal(t, "inspect_product_help", envelope.Recovery.Action)
+		assert.Equal(t, "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help", envelope.Recovery.Command)
+		assert.Equal(t, "Inspect the available APIs for this product.", envelope.Recovery.Hint)
+	})
+
+	t.Run("kebab API search recovery keeps the kebab help env prefix", func(t *testing.T) {
+		cause := &InvalidBaselineCommandError{
+			Product: "ecs",
+			Command: "describe-instance",
+			Err:     errors.New(`"describe-instance" is not a valid api.`),
+		}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "describe-instance"}, func(got RecoverySearchRequest) bool {
+			return got.Style == "kebab" && got.Keyword == "instance"
+		})
+
+		assert.Equal(t, "search_api", envelope.Recovery.Action)
+		assert.Equal(t, "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help-search instance", envelope.Recovery.Command)
+		assert.Equal(t, "Search APIs related to instance.", envelope.Recovery.Hint)
+	})
+
 	t.Run("failed API search validation falls back to product inspection", func(t *testing.T) {
 		cause := &InvalidApiError{
 			Name:    "GetCouponLits",
@@ -425,18 +485,83 @@ func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T
 	})
 }
 
+func TestNormalizeAgentErrorConstraintViolations(t *testing.T) {
+	t.Run("runtime enum violation exposes allowed values", func(t *testing.T) {
+		cause := &engine.UsageError{
+			Code: "INVALID_PARAMETER_VALUE",
+			Err: &runtime.ConstraintViolationError{
+				Parameter:  "Status",
+				Flag:       "--status",
+				Path:       "Status",
+				Constraint: "enum",
+				Actual:     "runing",
+				Allowed:    []string{"Running", "Stopped"},
+			},
+		}
+		envelope := requireAgentEnvelope(t, cause,
+			[]string{"ecs", "describe-instances", "--status", "runing"}, nil)
+
+		assert.Equal(t, `--status value "runing" is not allowed`, envelope.Message)
+		assert.Equal(t, []string{"Running", "Stopped"}, envelope.DidYouMean)
+		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help ecs describe-instances --cli-section request", envelope.Recovery.Command)
+		assert.Equal(t, "Use one of the allowed values for --status.", envelope.Recovery.Hint)
+	})
+
+	t.Run("runtime maximum violation keeps the bound in message and hint", func(t *testing.T) {
+		cause := &runtime.ConstraintViolationError{
+			Parameter:  "PageSize",
+			Flag:       "--page-size",
+			Constraint: "maximum",
+			Actual:     "101",
+			Expected:   "100",
+		}
+		envelope := requireAgentEnvelope(t, cause,
+			[]string{"ecs", "describe-instances", "--page-size", "101"}, nil)
+
+		assert.Equal(t, `--page-size value "101" must be less than or equal to 100`, envelope.Message)
+		assert.Empty(t, envelope.DidYouMean)
+		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
+		assert.Equal(t, "Use a value less than or equal to 100.", envelope.Recovery.Hint)
+	})
+
+	t.Run("legacy enum violation exposes allowed values", func(t *testing.T) {
+		cause := &ConstraintViolationError{
+			Flag:       "Status",
+			Value:      "runing",
+			Constraint: "enum",
+			Allowed:    []string{"Running", "Stopped"},
+		}
+		envelope := requireAgentEnvelope(t, cause,
+			[]string{"ecs", "DescribeInstances", "--Status", "runing"}, nil)
+
+		assert.Equal(t, `--Status value "runing" is not allowed`, envelope.Message)
+		assert.Equal(t, []string{"Running", "Stopped"}, envelope.DidYouMean)
+		assert.Equal(t, "aliyun help ecs DescribeInstances --cli-section request", envelope.Recovery.Command)
+	})
+
+	t.Run("legacy maximum violation keeps the bound", func(t *testing.T) {
+		cause := &ConstraintViolationError{
+			Flag:       "PageSize",
+			Value:      "101",
+			Constraint: "maximum",
+			Maximum:    "100",
+		}
+		envelope := requireAgentEnvelope(t, cause,
+			[]string{"ecs", "DescribeInstances", "--PageSize", "101"}, nil)
+
+		assert.Equal(t, `--PageSize value "101" must be less than or equal to 100`, envelope.Message)
+		assert.Equal(t, "Use a value less than or equal to 100.", envelope.Recovery.Hint)
+	})
+}
+
 func TestNormalizeAgentErrorStrictlyBypassesExcludedErrors(t *testing.T) {
-	serverBody := `{"RequestId":"req-1","Code":"Throttling.User","Message":"slow down"}`
 	tests := []struct {
 		name string
 		err  error
 	}{
-		{name: "runtime canonical constraint", err: &runtime.ConstraintViolationError{Parameter: "mode", Constraint: "enum"}},
-		{name: "legacy canonical constraint", err: &ConstraintViolationError{Flag: "Mode", Constraint: "enum"}},
 		{name: "runtime credential", err: &engine.CredentialError{Err: errors.New("profile not configured")}},
 		{name: "host credential", err: &credentialConfigurationError{Err: errors.New("profile not configured")}},
-		{name: "old SDK server", err: sdkerrors.NewServerError(429, serverBody, "")},
-		{name: "Tea SDK server", err: tea.NewSDKError(map[string]interface{}{"statusCode": 503, "code": "ServiceUnavailable"})},
 		{name: "network", err: &net.DNSError{Err: "temporary failure", Name: "ecs.aliyuncs.com", IsTemporary: true}},
 		{name: "external plugin", err: &externalPluginError{err: errors.New("plugin process failed")}},
 		{name: "postprocessing", err: errors.New("invalid --cli-query expression")},
@@ -452,6 +577,269 @@ func TestNormalizeAgentErrorStrictlyBypassesExcludedErrors(t *testing.T) {
 			assert.False(t, errors.As(got, &agentErr))
 		})
 	}
+}
+
+func TestNormalizeAgentErrorOAuthRefreshFailure(t *testing.T) {
+	// The invoker wraps credential init failures as "init client failed: %w";
+	// the OAuth refresh error must surface through that chain with the OAuth
+	// server's facts and a re-login recovery.
+	cause := fmt.Errorf("init client failed: %w", &config.OAuthTokenError{
+		Stage:       "failed to refresh token",
+		StatusCode:  400,
+		Code:        "invalid_grant",
+		Description: "invalid refreshToken",
+		RequestID:   "52beb483-d0bb-483d-bcfa-049bab9e2f6d",
+		ReLogin:     "aliyun configure --mode OAuth --oauth-site-type CN --profile oauth",
+	})
+	envelope := requireAgentEnvelope(t, cause, []string{"sts", "GetCallerIdentity"}, nil)
+
+	assert.Equal(t, "failed to refresh token: invalid_grant (invalid refreshToken)", envelope.Message)
+	assert.Equal(t, "invalid_grant", envelope.ErrorCode)
+	assert.Equal(t, 400, envelope.StatusCode)
+	assert.Equal(t, "52beb483-d0bb-483d-bcfa-049bab9e2f6d", envelope.RequestId)
+	assert.Equal(t, "reauthenticate", envelope.Recovery.Action)
+	assert.Equal(t, "aliyun configure --mode OAuth --oauth-site-type CN --profile oauth", envelope.Recovery.Command)
+	assert.NotEmpty(t, envelope.Recovery.Hint)
+}
+
+func TestNormalizeAgentErrorServerErrorsShareOneEnvelope(t *testing.T) {
+	serverBody := `{"RequestId":"req-1","Code":"Throttling.User","Message":"slow down"}`
+	tests := []struct {
+		name          string
+		err           error
+		wantMessage   string
+		wantCode      string
+		wantStatus    int
+		wantRequestID string
+	}{
+		{
+			name:          "old SDK server keeps request id",
+			err:           sdkerrors.NewServerError(429, serverBody, ""),
+			wantMessage:   "slow down",
+			wantCode:      "Throttling.User",
+			wantStatus:    429,
+			wantRequestID: "req-1",
+		},
+		{
+			name:        "Tea SDK server",
+			err:         tea.NewSDKError(map[string]interface{}{"statusCode": 503, "code": "ServiceUnavailable", "message": "try later"}),
+			wantMessage: "try later",
+			wantCode:    "ServiceUnavailable",
+			wantStatus:  503,
+		},
+		{
+			name:        "Tea SDK server wrapped by runtime call failure",
+			err:         fmt.Errorf("runtime: call failed: %w", tea.NewSDKError(map[string]interface{}{"statusCode": 503, "code": "ServiceUnavailable", "message": "try later"})),
+			wantMessage: "try later",
+			wantCode:    "ServiceUnavailable",
+			wantStatus:  503,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeAgentErrorWithSearch(tt.err, []string{"ecs", "describe-instances"}, nil)
+			var agentErr *cli.AgentError
+			require.ErrorAs(t, got, &agentErr)
+			envelope := agentErr.Envelope()
+			assert.Equal(t, tt.wantMessage, envelope.Message)
+			assert.Equal(t, tt.wantCode, envelope.ErrorCode)
+			assert.Equal(t, tt.wantStatus, envelope.StatusCode)
+			assert.Equal(t, tt.wantRequestID, envelope.RequestId)
+			assert.Equal(t, "diagnose_error_code", envelope.Recovery.Action)
+			assert.Contains(t, envelope.Recovery.Command, "openapiexplorer get-error-code-solutions")
+			assert.Contains(t, envelope.Recovery.Command, "--error-code '"+tt.wantCode+"'")
+			assert.Contains(t, envelope.Recovery.Command, "--product Ecs")
+			assert.Equal(t, 2, agentErr.ExitCode())
+		})
+	}
+}
+
+func TestServerAgentErrorDiagnoseCommandMatchesCallerStyle(t *testing.T) {
+	makeErr := func() error {
+		return tea.NewSDKError(map[string]interface{}{"statusCode": 400, "code": "InvalidParameter", "message": "bad"})
+	}
+
+	t.Run("camel caller gets PascalCase entry with raw-name flags", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(makeErr(), []string{"ecs", "DescribeInstances"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		assert.Equal(t,
+			"aliyun openapiexplorer GetErrorCodeSolutions --errorCode 'InvalidParameter' --product Ecs --acceptLanguage en-US --region cn-hangzhou",
+			agentErr.Envelope().Recovery.Command)
+	})
+
+	t.Run("kebab caller keeps kebab entry", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(makeErr(), []string{"ecs", "describe-instances"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		assert.Equal(t,
+			"aliyun openapiexplorer get-error-code-solutions --error-code 'InvalidParameter' --product Ecs --accept-language en-US --region cn-hangzhou",
+			agentErr.Envelope().Recovery.Command)
+	})
+}
+
+func TestServerAgentErrorCleansTeaMessageEnvelope(t *testing.T) {
+	// darabonba-openapi builds Tea messages as "code: <status>, <msg> request id: <id>";
+	// the duplicates must be stripped and the request id surfaced as a field.
+	err := tea.NewSDKError(map[string]interface{}{
+		"statusCode": 400,
+		"code":       "InvalidOperation.NotSupportedEndpoint",
+		"message":    "code: 400, The specified endpoint can't operate this region. request id: 01A04DF0-7C9A-55A7",
+	})
+	got := normalizeAgentErrorWithSearch(err, []string{"ecs", "describe-instances"}, nil)
+	var agentErr *cli.AgentError
+	require.ErrorAs(t, got, &agentErr)
+	envelope := agentErr.Envelope()
+	assert.Equal(t, "The specified endpoint can't operate this region.", envelope.Message)
+	assert.Equal(t, 400, envelope.StatusCode)
+	assert.Equal(t, "01A04DF0-7C9A-55A7", envelope.RequestId)
+}
+
+func TestServerAgentErrorFallsBackToActionHelpWithoutCode(t *testing.T) {
+	// A server error with no code keeps the generic action-help recovery.
+	err := tea.NewSDKError(map[string]interface{}{"statusCode": 500, "message": "internal"})
+	got := normalizeAgentErrorWithSearch(err, []string{"ecs", "describe-instances"}, nil)
+	var agentErr *cli.AgentError
+	require.ErrorAs(t, got, &agentErr)
+	envelope := agentErr.Envelope()
+	assert.Equal(t, "internal", envelope.Message)
+	assert.Equal(t, "inspect_action_help", envelope.Recovery.Action)
+	assert.Equal(t, "aliyun ecs describe-instances --help", envelope.Recovery.Command)
+}
+
+func TestNormalizeAgentErrorServerErrorKeepsTipPath(t *testing.T) {
+	tipped := cli.NewErrorWithTip(
+		sdkerrors.NewServerError(400, `{"Code":"PricingNotSupported","Message":"no pricing"}`, ""),
+		"this OpenAPI either incurs no cost or has no pricing mapping registered yet",
+	)
+	got := normalizeAgentErrorWithSearch(tipped, []string{"ecs", "describe-instances"}, nil)
+	assert.Same(t, tipped, got)
+}
+
+func TestNormalizeAgentErrorEndpointResolution(t *testing.T) {
+	// Client-side endpoint resolution failures are wrapped exactly as invoker.go
+	// wraps them (ErrorWithTip around a %w chain) and must become an envelope
+	// whose diagnostics command matches the caller's command style.
+	newEndpointError := func() error {
+		endpointErr := &meta.InvalidEndpointError{Region: "invalid-region-xxx", Product: &meta.Product{}}
+		return cli.NewErrorWithTip(
+			fmt.Errorf("unknown endpoint for %s/%s! failed %w", "ecs", "invalid-region-xxx", endpointErr),
+			"Use flag --endpoint xxx.aliyuncs.com to assign endpoint",
+		)
+	}
+
+	t.Run("kebab command gets kebab diagnostics", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(newEndpointError(), []string{"ecs", "describe-zones"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		envelope := agentErr.Envelope()
+		assert.Contains(t, envelope.Message, "unknown endpoint for region invalid-region-xxx")
+		assert.Equal(t, "fix_endpoint_or_region", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun openapiexplorer get-product-endpoints --product Ecs --region cn-hangzhou "+endpointProjection, envelope.Recovery.Command)
+		assert.NotEmpty(t, envelope.Recovery.Hint)
+		assert.Equal(t, 2, agentErr.ExitCode())
+	})
+
+	t.Run("camel command gets camel diagnostics", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(newEndpointError(), []string{"ecs", "DescribeZones"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		envelope := agentErr.Envelope()
+		assert.Equal(t, "aliyun openapiexplorer GetProductEndpoints --product Ecs --region cn-hangzhou "+endpointProjection, envelope.Recovery.Command)
+	})
+}
+
+const endpointProjection = "--cli-query 'data.endpoints[*].{regionId:regionId,endpoint:endpoint}'"
+
+func TestSanitizeNetworkTransportErrorStripsSignedURL(t *testing.T) {
+	signedURL := "https://ecs.cn-shanghai.aliyuncs.com/?AccessKeyId=REAL-AK&Signature=abc%2Fsig&SignatureNonce=n1&RegionId=cn-shanghai"
+
+	t.Run("bare url.Error", func(t *testing.T) {
+		raw := &url.Error{Op: "Post", URL: signedURL, Err: errors.New("connection refused")}
+		sanitized := sanitizeNetworkTransportError(raw)
+		msg := sanitized.Error()
+		assert.Contains(t, msg, "request to ecs.cn-shanghai.aliyuncs.com failed")
+		assert.Contains(t, msg, "connection refused")
+		assert.NotContains(t, msg, "AccessKeyId")
+		assert.NotContains(t, msg, "REAL-AK")
+		assert.NotContains(t, msg, "Signature")
+		assert.NotContains(t, msg, "SignatureNonce")
+	})
+
+	t.Run("url.Error wrapped by retry-exhausted ClientError", func(t *testing.T) {
+		inner := &url.Error{Op: "Post", URL: signedURL, Err: errors.New("connection refused")}
+		clientErr := sdkerrors.NewClientError("SDK.TimeoutError", "timeout", inner)
+		sanitized := sanitizeNetworkTransportError(clientErr)
+		msg := sanitized.Error()
+		assert.Contains(t, msg, "connection refused")
+		assert.NotContains(t, msg, "AccessKeyId")
+		assert.NotContains(t, msg, "REAL-AK")
+	})
+
+	t.Run("non-transport errors pass through", func(t *testing.T) {
+		other := errors.New("some other failure")
+		assert.Same(t, other, sanitizeNetworkTransportError(other))
+	})
+}
+
+func TestNormalizeAgentErrorTransport(t *testing.T) {
+	raw := &url.Error{Op: "Post", URL: "https://ecs.cn-shanghai.aliyuncs.com/?AccessKeyId=REAL-AK&Signature=sig", Err: errors.New("connection refused")}
+
+	t.Run("camel", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(sanitizeNetworkTransportError(raw), []string{"ecs", "DescribeInstances"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		envelope := agentErr.Envelope()
+		assert.Contains(t, envelope.Message, "request to ecs.cn-shanghai.aliyuncs.com failed")
+		assert.NotContains(t, envelope.Message, "AccessKeyId")
+		assert.Equal(t, "retry_or_fix_endpoint", envelope.Recovery.Action)
+		assert.Contains(t, envelope.Recovery.Command, "GetProductEndpoints --product Ecs")
+		assert.Equal(t, 2, agentErr.ExitCode())
+	})
+
+	t.Run("kebab", func(t *testing.T) {
+		wrapped := fmt.Errorf("runtime: call failed: %w", raw)
+		got := normalizeAgentErrorWithSearch(sanitizeNetworkTransportError(wrapped), []string{"ecs", "describe-instances"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		assert.Contains(t, agentErr.Envelope().Recovery.Command, "get-product-endpoints --product Ecs")
+	})
+}
+
+func TestNormalizeAgentErrorQueryFilter(t *testing.T) {
+	queryErr := &engine.QueryFilterError{Expr: "invalid[", Err: errors.New("SyntaxError: Incomplete expression")}
+
+	t.Run("camel", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(queryErr, []string{"ecs", "DescribeZones"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		envelope := agentErr.Envelope()
+		assert.Equal(t, `invalid --cli-query "invalid[": SyntaxError: Incomplete expression`, envelope.Message)
+		assert.Equal(t, "fix_cli_query", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun ecs DescribeZones --cli-section response", envelope.Recovery.Command)
+		assert.Equal(t, 2, agentErr.ExitCode())
+	})
+
+	t.Run("kebab", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(queryErr, []string{"ecs", "describe-zones"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		assert.Equal(t, `invalid --cli-query "invalid[": SyntaxError: Incomplete expression`, agentErr.Envelope().Message)
+		assert.Equal(t, "aliyun ecs describe-zones --cli-section response", agentErr.Envelope().Recovery.Command)
+	})
+}
+
+func TestNormalizeAgentErrorKebabEndpointResolution(t *testing.T) {
+	endpointErr := &runtime.EndpointNotResolvedError{Product: "ecs", Region: "invalid-region-for-ai-check"}
+	got := normalizeAgentErrorWithSearch(endpointErr, []string{"ecs", "describe-instances"}, nil)
+	var agentErr *cli.AgentError
+	require.ErrorAs(t, got, &agentErr)
+	envelope := agentErr.Envelope()
+	assert.Contains(t, envelope.Message, `endpoint not resolved for product "ecs" region "invalid-region-for-ai-check"`)
+	assert.Equal(t, "fix_endpoint_or_region", envelope.Recovery.Action)
+	assert.Equal(t, "aliyun openapiexplorer get-product-endpoints --product Ecs --region cn-hangzhou "+endpointProjection, envelope.Recovery.Command)
+	assert.Equal(t, 2, agentErr.ExitCode())
 }
 
 func TestNormalizeAgentHelpOptionErrors(t *testing.T) {
@@ -721,4 +1109,65 @@ func TestTypedLocalErrorsPreserveHumanText(t *testing.T) {
 		assert.Equal(t, cause.Error(), err.Error(), fmt.Sprintf("%T", err))
 		assert.ErrorIs(t, err, cause)
 	}
+}
+
+func TestNormalizeAgentErrorMissingRequiredUpgradesToTargetedSearch(t *testing.T) {
+	t.Run("runtime missing required validates into parameter search", func(t *testing.T) {
+		cause := &engine.UsageError{Code: "MISSING_REQUIRED_PARAMETER", Err: &runtime.MissingRequiredError{
+			Flags: []string{"--image-id", "--instance-type"},
+		}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "run-instances"}, func(request RecoverySearchRequest) bool {
+			assert.Equal(t, "request", request.Section)
+			assert.Equal(t, "run-instances", request.API)
+			return request.Keyword == "image-id"
+		})
+
+		assert.Equal(t, "search_parameter", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun ecs run-instances --help-search image-id", envelope.Recovery.Command)
+	})
+
+	t.Run("legacy doc required validates into parameter search", func(t *testing.T) {
+		cause := &LegacyDocRequiredError{Flags: []string{"--RegionId"}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "DescribeInstances"}, func(request RecoverySearchRequest) bool {
+			return request.Keyword == "RegionId"
+		})
+
+		assert.Equal(t, "missing required parameter(s): --RegionId", envelope.Message)
+		assert.Equal(t, "search_parameter", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun ecs DescribeInstances --help-search RegionId", envelope.Recovery.Command)
+	})
+
+	t.Run("validator rejection falls back to complete request help", func(t *testing.T) {
+		cause := &LegacyDocRequiredError{Flags: []string{"--RegionId"}}
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "DescribeInstances"}, func(RecoverySearchRequest) bool {
+			return false
+		})
+
+		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun help ecs DescribeInstances --cli-section request", envelope.Recovery.Command)
+	})
+}
+
+func TestNormalizeAgentErrorConstraintUpgradesToTargetedSearch(t *testing.T) {
+	cause := &engine.UsageError{Code: "INVALID_PARAMETER_VALUE", Err: &runtime.ConstraintViolationError{
+		Flag: "--page-size", Actual: "101", Constraint: "maximum", Expected: "100",
+	}}
+	envelope := requireAgentEnvelope(t, cause, []string{"ecs", "describe-instances"}, func(request RecoverySearchRequest) bool {
+		return request.Keyword == "page-size"
+	})
+
+	assert.Equal(t, "search_parameter", envelope.Recovery.Action)
+	assert.Equal(t, "aliyun ecs describe-instances --help-search page-size", envelope.Recovery.Command)
+}
+
+func TestNormalizeAgentErrorExternalFlagReject(t *testing.T) {
+	cause := &engine.UsageError{Code: "INVALID_ARGUMENT", Err: &argparser.ExternalFlagRejectError{
+		Flag:    "RegionId",
+		Message: "--RegionId is only supported by legacy PascalCase commands; use --region instead",
+	}}
+	envelope := requireAgentEnvelope(t, cause, []string{"ecs", "describe-instances"}, nil)
+
+	assert.Equal(t, "--RegionId is only supported by legacy PascalCase commands; use --region instead", envelope.Message)
+	assert.Equal(t, "inspect_action_help", envelope.Recovery.Action)
+	assert.Equal(t, "aliyun ecs describe-instances --help", envelope.Recovery.Command)
 }

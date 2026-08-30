@@ -52,7 +52,7 @@ func TestMachineHelpRootJSONUsesExplicitGroups(t *testing.T) {
 	require.NoError(t, err)
 
 	var output bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&output, doc))
+	require.NoError(t, encodeMachineHelpJSON(&output, doc, false))
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
 	assert.NotContains(t, raw, "commands")
@@ -75,7 +75,7 @@ func TestMachineHelpRootJSONOmitsUtilityAliases(t *testing.T) {
 	}}
 
 	var output bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&output, doc))
+	require.NoError(t, encodeMachineHelpJSON(&output, doc, false))
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
 
@@ -98,7 +98,7 @@ func TestMachineHelpRootSearchJSONOmitsUtilityAliases(t *testing.T) {
 	applyRootHelpOptions(doc, helpOptions{Search: "go-migrate"}, false)
 
 	var output bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&output, doc))
+	require.NoError(t, encodeMachineHelpJSON(&output, doc, false))
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
 
@@ -120,7 +120,8 @@ func TestMachineHelpProduct(t *testing.T) {
 	assert.Equal(t, []string{"2025-01-01", "2026-01-01"}, doc.Product.SupportedVersions)
 	assert.Equal(t, "2025-01-01", doc.Product.SelectedVersion)
 	require.Len(t, doc.APIs, 1)
-	assert.Equal(t, "DescribeRegions", doc.APIs[0].Name)
+	// buildProduct renders kebab style: the PascalCase name must stay hidden.
+	assert.Empty(t, doc.APIs[0].Name)
 	assert.Equal(t, "describe-regions", doc.APIs[0].CmdName)
 }
 
@@ -147,7 +148,7 @@ func TestMachineHelpProductJSONUsesSelectedLanguageAndActiveCommandName(t *testi
 	doc.APIs[1].Deprecated = true
 
 	var encoded bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc, false))
 	var output map[string]any
 	require.NoError(t, json.Unmarshal(encoded.Bytes(), &output))
 	apis := output["apis"].([]any)
@@ -171,10 +172,14 @@ func TestMachineHelpAPICamelAndKebabShareCanonicalIdentity(t *testing.T) {
 	assert.Equal(t, machineHelpSchemaVersion, camel.SchemaVersion)
 	assert.Equal(t, "api", camel.Kind)
 	assert.Equal(t, helpSectionRequest, camel.Section)
+	// Each document exposes only its own style's identifiers.
 	assert.Equal(t, "CreateReport", camel.API.Name)
-	assert.Equal(t, "CreateReport", kebab.API.Name)
-	assert.Equal(t, "create-report", camel.API.CmdName)
+	assert.Empty(t, camel.API.CmdName)
+	assert.Equal(t, "demo CreateReport", camel.API.CmdFullName)
+	assert.Empty(t, kebab.API.Name)
 	assert.Equal(t, "create-report", kebab.API.CmdName)
+	assert.Equal(t, "demo create-report", kebab.API.CmdFullName)
+	assert.Empty(t, kebab.API.Operation.Action)
 	assert.Equal(t, "camel", camel.ActiveParameterSet)
 	assert.Equal(t, "kebab", kebab.ActiveParameterSet)
 	assert.Equal(t, []string{"aliyun", "demo", "CreateReport"}, camel.Target.Path)
@@ -194,7 +199,7 @@ func TestMachineHelpJSONOmitsEmptyOptionalValues(t *testing.T) {
 	require.NoError(t, err)
 
 	var encoded bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc, false))
 	assert.NotContains(t, encoded.String(), `"outputSchema"`)
 	assert.NotContains(t, encoded.String(), `"pagination"`)
 	assert.NotContains(t, encoded.String(), `"risk"`)
@@ -227,7 +232,7 @@ func TestMachineHelpJSONPreservesResponseSchemaValues(t *testing.T) {
 	}
 
 	var encoded bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc, false))
 	var compact bytes.Buffer
 	require.NoError(t, json.Compact(&compact, encoded.Bytes()))
 	output := compact.String()
@@ -262,7 +267,7 @@ func TestMachineHelpAPIResponseUsesCanonicalSchemaAndReachableComponents(t *test
 	require.NotNil(t, doc.OutputSchema)
 	assert.Equal(t, "200", doc.OutputSchema.StatusCode)
 	assert.Equal(t, "application/json", doc.OutputSchema.ContentType)
-	assert.JSONEq(t, `{"type":"object","properties":{"RequestId":{"type":"string","description_en":"The request ID.","description_zh":"请求 ID。"},"Reports":{"$ref":"#/components/schemas/ReportList"}}}`, string(doc.OutputSchema.Schema))
+	assert.JSONEq(t, `{"type":"object","properties":{"RequestId":{"type":"string","description":"The request ID."},"Reports":{"$ref":"#/components/schemas/ReportList"}}}`, string(doc.OutputSchema.Schema))
 	require.NotNil(t, doc.OutputSchema.Components)
 	assert.Contains(t, doc.OutputSchema.Components.Schemas, "ReportList")
 	assert.Contains(t, doc.OutputSchema.Components.Schemas, "Report")
@@ -290,7 +295,7 @@ func TestMachineHelpAPIResponseJSONKeepsOneLocalizedResponseSchema(t *testing.T)
 			require.NoError(t, err)
 
 			var encoded bytes.Buffer
-			require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+			require.NoError(t, encodeMachineHelpJSON(&encoded, doc, false))
 			output := encoded.String()
 			assert.Contains(t, output, `"responses"`)
 			assert.Contains(t, output, `"components"`)
@@ -326,7 +331,7 @@ func TestMachineHelpAPIResponseWithoutSchemaReturnsNotice(t *testing.T) {
 	assert.Equal(t, "No response schema is available for this API.", doc.Notice)
 
 	var encoded bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc, false))
 	assert.NotContains(t, encoded.String(), `"outputSchema"`)
 	assert.Contains(t, encoded.String(), `"notice": "No response schema is available for this API."`)
 }
@@ -337,15 +342,15 @@ func TestMachineHelpRequestIncludesStylePreservingResponseQueryExample(t *testin
 	camel, err := service.buildAPI("demo", "CreateReport", "2026-01-01")
 	require.NoError(t, err)
 	require.NotNil(t, camel.ResponseQuery)
-	assert.Equal(t, "Reports.Report", camel.ResponseQuery.Path)
+	assert.Equal(t, "Reports.Report[*].{ReportId:ReportId}", camel.ResponseQuery.Path)
 	assert.Equal(t, "aliyun help demo CreateReport --api-version 2026-01-01 --cli-section response", camel.ResponseQuery.SchemaCommand)
-	assert.Equal(t, "aliyun demo CreateReport --api-version 2026-01-01 --cli-query 'Reports.Report'", camel.ResponseQuery.QueryCommand)
+	assert.Equal(t, "aliyun demo CreateReport --api-version 2026-01-01 --ReportId <value> --WorkspaceId <value> --cli-query 'Reports.Report[*].{ReportId:ReportId}'", camel.ResponseQuery.QueryCommand)
 
 	kebab, err := service.buildAPI("demo", "create-report", "2026-01-01")
 	require.NoError(t, err)
 	require.NotNil(t, kebab.ResponseQuery)
 	assert.Equal(t, "aliyun help demo create-report --api-version 2026-01-01 --cli-section response", kebab.ResponseQuery.SchemaCommand)
-	assert.Equal(t, "aliyun demo create-report --api-version 2026-01-01 --cli-query 'Reports.Report'", kebab.ResponseQuery.QueryCommand)
+	assert.Equal(t, "aliyun demo create-report --api-version 2026-01-01 --report-id <value> --workspace-id <value> --cli-query 'Reports.Report[*].{ReportId:ReportId}'", kebab.ResponseQuery.QueryCommand)
 }
 
 func TestMachineHelpRequestSearchKeepsOnlyActiveParameterSetAndGlobals(t *testing.T) {
@@ -402,15 +407,15 @@ func TestMachineHelpAIRequestRemainsComplete(t *testing.T) {
 	applyRequestHelpOptions(complete, helpOptions{}, true)
 	require.Len(t, complete.ParameterSets.Camel, 23)
 	assert.Equal(t, "optional-01", complete.ParameterSets.Camel[0].Name)
-	assert.Len(t, complete.ParameterSets.Kebab, 1)
-	assert.Len(t, complete.GlobalParameters, 3)
+	assert.Empty(t, complete.ParameterSets.Kebab, "explicit sections must not expose the inactive style")
+	assert.Empty(t, complete.GlobalParameters, "AI mode drops global CLI flags from request Help")
 	assert.Nil(t, complete.Listing)
 
 	legacy := newDocument()
 	applyRequestHelpOptions(legacy, helpOptions{}, false)
 	require.Len(t, legacy.ParameterSets.Camel, 23)
 	assert.Equal(t, "optional-01", legacy.ParameterSets.Camel[0].Name)
-	assert.Len(t, legacy.ParameterSets.Kebab, 1)
+	assert.Empty(t, legacy.ParameterSets.Kebab, "explicit sections must not expose the inactive style")
 	assert.Len(t, legacy.GlobalParameters, 3)
 	assert.Nil(t, legacy.Listing)
 }
@@ -432,10 +437,10 @@ func TestMachineHelpResponseSearchProjectsMatchesAndFilteredQuery(t *testing.T) 
 	assert.NotContains(t, doc.OutputSchema.Components.Schemas, "Unused")
 
 	doc.ResponseQuery = projectResponseQueryExample(
-		helpResponseSchema(doc), doc.Product.Code, "CreateReport", doc.Target.RequestedStyle, "2026-01-01",
+		helpResponseSchema(doc), "demo", "CreateReport", doc.Target.RequestedStyle, "2026-01-01",
 	)
 	require.NotNil(t, doc.ResponseQuery)
-	assert.Equal(t, "Reports.Report", doc.ResponseQuery.Path)
+	assert.Equal(t, "Reports.Report[*].{ReportId:ReportId}", doc.ResponseQuery.Path)
 }
 
 func TestMachineHelpResponseSearchNoMatchReturnsClearNotice(t *testing.T) {
@@ -459,8 +464,10 @@ func TestMachineHelpNestedParameters(t *testing.T) {
 	require.NotNil(t, tags.Element)
 	assert.Equal(t, "object", tags.Element.Type)
 	require.Len(t, tags.Element.Fields, 2)
-	assert.Equal(t, "Key", tags.Element.Fields[0].RawName)
-	assert.Equal(t, "Value", tags.Element.Fields[1].RawName)
+	assert.Equal(t, "key", tags.Element.Fields[0].Name)
+	assert.Empty(t, tags.Element.Fields[0].RawName, "kebab help must not expose PascalCase wire names")
+	assert.Equal(t, "value", tags.Element.Fields[1].Name)
+	assert.Empty(t, tags.Element.Fields[1].RawName)
 
 	legacyTags := findMachineHelpParameter(doc.ParameterSets.Camel, "--Tags")
 	require.NotNil(t, legacyTags)
@@ -626,4 +633,96 @@ func TestCommandoHelpJSONRejectsUnsupportedCLIOutputAsTypedOptionError(t *testin
 	assert.Equal(t, cli.HelpOptionInvalidOutput, optionErr.Code)
 	assert.Equal(t, "yaml", optionErr.Value)
 	assert.False(t, c.pluginLoaded)
+}
+
+func TestBuildAPIIncludesQueryOptions(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPI("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+
+	require.Len(t, doc.QueryOptions, 3)
+	section := doc.QueryOptions[0]
+	assert.Equal(t, "--cli-section", section.Name)
+	assert.True(t, section.HasDefault)
+	assert.Equal(t, "request", section.Default)
+
+	var encoded bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc, false))
+	assert.Contains(t, encoded.String(), `"queryOptions"`)
+	assert.Contains(t, encoded.String(), `"default": "request"`)
+}
+
+func TestMachineHelpRequestSearchDropsInvocationExample(t *testing.T) {
+	service := testMachineHelpService(t)
+	document, err := service.buildAPI("demo", "create-report", "2026-01-01")
+	require.NoError(t, err)
+
+	applyRequestHelpOptions(document, helpOptions{Search: "report-id"}, true)
+
+	assert.Equal(t, "", document.Examples.Kebab)
+	assert.Equal(t, "", document.Examples.Camel)
+	require.NotEmpty(t, document.ParameterSets.Kebab)
+	assert.Equal(t, "report_id", document.ParameterSets.Kebab[0].Name)
+}
+
+func TestMachineHelpAggregatesDocRequiredIntoRequired(t *testing.T) {
+	parameter := canonicalmeta.Parameter{
+		Name:        "user_name",
+		RawName:     "UserName",
+		Type:        "string",
+		Required:    false,
+		DocRequired: true,
+		Location:    "query",
+		Options:     []string{"--user-name"},
+		Fields: []canonicalmeta.Field{{
+			Name:        "token",
+			RawName:     "Token",
+			Type:        "string",
+			Required:    false,
+			DocRequired: true,
+		}},
+	}
+
+	t.Run("kebab parameter and nested field", func(t *testing.T) {
+		projected := projectCanonicalParameter(&parameter)
+		assert.True(t, projected.Required, "doc_required must surface as required")
+		require.Len(t, projected.Fields, 1)
+		assert.True(t, projected.Fields[0].Required, "nested doc_required must surface as required")
+	})
+
+	t.Run("camel legacy view", func(t *testing.T) {
+		view := canonicalmeta.NewCanonicalView(&parameter)
+		projected := projectLegacyParameter(view, "")
+		assert.True(t, projected.Required, "camel help must aggregate doc_required")
+	})
+
+	t.Run("protocol-required stays true without doc_required", func(t *testing.T) {
+		plain := parameter
+		plain.Required = true
+		plain.DocRequired = false
+		assert.True(t, projectCanonicalParameter(&plain).Required)
+	})
+}
+
+func TestMachineHelpSearchDropsMetadataInAIMode(t *testing.T) {
+	service := testMachineHelpService(t)
+	document, err := service.buildAPI("demo", "create-report", "2026-01-01")
+	require.NoError(t, err)
+
+	applyRequestHelpOptions(document, helpOptions{Search: "report-id"}, true)
+
+	var encoded bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&encoded, document, true))
+	out := encoded.String()
+
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(encoded.Bytes(), &raw))
+	assert.NotContains(t, raw, "api")
+	assert.NotContains(t, raw, "product")
+	assert.NotContains(t, raw, "queryOptions")
+	assert.NotContains(t, raw, "responseQueryExample")
+	assert.NotContains(t, raw, "examples")
+	assert.Contains(t, raw, "parameterSets")
+	assert.Contains(t, raw, "target")
+	assert.Contains(t, out, "report_id")
 }

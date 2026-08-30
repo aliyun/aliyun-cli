@@ -718,6 +718,7 @@ func TestPrintApiUsageAlwaysTriesRuntime(t *testing.T) {
 }
 
 func TestHelpResponseSectionUsesHostCanonicalWhenPluginIsNotInstalled(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "0")
 	c, stdout, stderr := newTestCommando()
 	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
 	c.localLoaded = true
@@ -743,6 +744,7 @@ func TestHelpResponseSectionUsesHostCanonicalWhenPluginIsNotInstalled(t *testing
 func TestHelpResponseSectionDoesNotOverrideInstalledPluginTextHelp(t *testing.T) {
 	t.Setenv(aimode.EnvAIMode, "0")
 	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
 	c.pluginLoaded = true
 	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
 		"aliyun-cli-demo": {Name: "aliyun-cli-demo", Type: plugin.PluginTypeMeta},
@@ -754,10 +756,13 @@ func TestHelpResponseSectionDoesNotOverrideInstalledPluginTextHelp(t *testing.T)
 	ctx.EnterCommand(root)
 	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
 	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
 
 	originalDispatch := metaPluginHelpDispatch
+	dispatched := false
 	metaPluginHelpDispatch = func(ctx *cli.Context, args []string) error {
-		assert.Equal(t, []string{"demo", "create-report", "--help"}, args)
+		dispatched = true
 		fmt.Fprintln(ctx.Stdout(), "PLUGIN_OWNED_TEXT_HELP")
 		return nil
 	}
@@ -766,9 +771,12 @@ func TestHelpResponseSectionDoesNotOverrideInstalledPluginTextHelp(t *testing.T)
 	err := c.help(ctx, []string{"demo", "create-report"})
 	require.NoError(t, err)
 	assert.Empty(t, stderr.String())
-	assert.Contains(t, stdout.String(), "PLUGIN_OWNED_TEXT_HELP")
-	assert.NotContains(t, stdout.String(), "Response Schema")
-	assert.NotContains(t, stdout.String(), cli.AIModeEnableCommand)
+	// Metadata plugins are served by host Machine Help: no delegation to the
+	// engine text path, and the host renders the canonical response section.
+	assert.False(t, dispatched, "metadata-plugin Help must be rendered by host Machine Help")
+	assert.Contains(t, stdout.String(), "Responses:")
+	assert.Contains(t, stdout.String(), `"200": {`)
+	assert.NotContains(t, stdout.String(), "PLUGIN_OWNED_TEXT_HELP")
 }
 
 func newCanonicalHelpTestContext(t *testing.T) (*Commando, *cli.Context, *bytes.Buffer, *bytes.Buffer) {
@@ -913,7 +921,7 @@ func TestCanonicalTextResponseSearchPrintsMatchedPathAndFilteredQuery(t *testing
 	assert.Empty(t, stderr.String())
 	assert.Contains(t, stdout.String(), "Matched Response Paths:")
 	assert.Contains(t, stdout.String(), "Reports.Report.ReportId")
-	assert.Contains(t, stdout.String(), "aliyun demo CreateReport --version 2026-01-01 --cli-query 'Reports.Report'")
+	assert.Contains(t, stdout.String(), "aliyun demo CreateReport --version 2026-01-01 --ReportId <value> --WorkspaceId <value> --cli-query 'Reports.Report[*].{ReportId:ReportId}'")
 	assert.NotContains(t, stdout.String(), "Unused")
 }
 
@@ -1427,4 +1435,28 @@ func Test_tryDelegatePluginHelp_PluginPath(t *testing.T) {
 		assert.False(t, delegated, "PascalCase args[1] must fall through; legacy 'too many arguments' is the right error here")
 		assert.NoError(t, err)
 	})
+}
+
+func TestHelpTextShowsMetaPluginProvider(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "0")
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-demo": {Name: "aliyun-cli-demo", Version: "1.2.3", Type: plugin.PluginTypeMeta},
+	}}
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	require.NoError(t, c.help(ctx, []string{"demo", "create-report"}))
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "Provided by plugin: aliyun-cli-demo (1.2.3)")
+	assert.Contains(t, stdout.String(), "aliyun demo create-report")
+
+	stdout.Reset()
+	require.NoError(t, c.help(ctx, []string{"demo"}))
+	assert.Contains(t, stdout.String(), "Provided by plugin: aliyun-cli-demo (1.2.3)")
 }

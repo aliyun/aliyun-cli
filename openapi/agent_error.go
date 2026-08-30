@@ -15,13 +15,22 @@
 package openapi
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode"
 
+	"github.com/alibabacloud-go/tea/tea"
+	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	runtime "github.com/aliyun/aliyun-openapi-runtime/runtime"
@@ -75,29 +84,27 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 
 	var missing *runtime.MissingRequiredError
 	if errors.As(err, &missing) {
-		return newLocalAgentError(err, missing.Error(), nil, cli.AgentErrorRecovery{
-			Action:  "inspect_request_help",
-			Command: context.requestHelpCommand(),
-			Hint:    "Inspect the complete request help and provide every required parameter.",
-		})
+		return missingRequiredAgentError(err, missingRequiredAgentMessage(missing), missing.Flags, context, validate)
 	}
 
 	var legacyDocRequired *LegacyDocRequiredError
 	if errors.As(err, &legacyDocRequired) {
-		return newLocalAgentError(err, legacyDocRequired.Error(), nil, cli.AgentErrorRecovery{
-			Action:  "inspect_request_help",
-			Command: context.requestHelpCommand(),
-			Hint:    "Inspect the complete request help and provide every required parameter.",
-		})
+		return missingRequiredAgentError(err, legacyDocRequired.Error(), legacyDocRequired.Flags, context, validate)
 	}
 
 	var legacyMissingRequired *LegacyMissingRequiredError
 	if errors.As(err, &legacyMissingRequired) {
-		return newLocalAgentError(err, legacyMissingRequired.Error(), nil, cli.AgentErrorRecovery{
-			Action:  "inspect_request_help",
-			Command: context.requestHelpCommand(),
-			Hint:    "Inspect the complete request help and provide every required parameter.",
-		})
+		return missingRequiredAgentError(err, legacyMissingRequired.Error(), legacyMissingRequiredFlagNames(legacyMissingRequired), context, validate)
+	}
+
+	var runtimeConstraint *runtime.ConstraintViolationError
+	if errors.As(err, &runtimeConstraint) {
+		return constraintViolationAgentError(err, runtimeConstraintFacts(runtimeConstraint), context, validate)
+	}
+
+	var legacyConstraint *ConstraintViolationError
+	if errors.As(err, &legacyConstraint) {
+		return constraintViolationAgentError(err, legacyConstraintFacts(legacyConstraint), context, validate)
 	}
 
 	var invalidParameter *InvalidParameterError
@@ -130,7 +137,16 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	if errors.As(err, &invalidBaseline) {
 		apiContext := context.withProductAPI(invalidBaseline.Product, invalidBaseline.Command)
 		message := fmt.Sprintf("%q is not a valid api.", invalidBaseline.Command)
-		return unknownAPIAgentError(err, message, nil, apiContext, validate)
+		return unknownAPIAgentError(err, message,
+			apiCandidateFormsForStyle(invalidBaseline.AgentSuggestions(), apiContext.style), apiContext, validate)
+	}
+
+	var unknownCommand *engine.UnknownCommandError
+	if errors.As(err, &unknownCommand) {
+		apiContext := context.withProductAPI(unknownCommand.Product, unknownCommand.Command)
+		message := fmt.Sprintf("%q is not a valid api.", unknownCommand.Command)
+		suggestions := apiSuggestions(unknownCommand.Command, runtimehost.ProductCommands(unknownCommand.Product))
+		return unknownAPIAgentError(err, message, apiCandidateFormsForStyle(suggestions, apiContext.style), apiContext, validate)
 	}
 
 	var invalidProduct *InvalidProductError
@@ -205,11 +221,345 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 			"Check that --body-file points to a readable file.", context)
 	}
 
-	// This is intentionally an allowlist. Canonical constraints, credentials,
-	// SDK/Tea/server/network failures, plugins, postprocessing, safety-policy,
-	// Machine Help, corrupt metadata, broad UsageError, and untyped errors all
-	// retain their original rendering and identity.
+	var externalReject *argparser.ExternalFlagRejectError
+	if errors.As(err, &externalReject) {
+		return externalFlagRejectAgentError(err, externalReject, context)
+	}
+
+	// Client-side endpoint/region resolution failures carry no server error
+	// code, so they are handled before the remote server-error branch (which
+	// bails on ErrorWithTip-wrapped errors).
+	var endpointErr *meta.InvalidEndpointError
+	if errors.As(err, &endpointErr) {
+		message := endpointErr.Error()
+		if message == "" {
+			message = "unknown endpoint for the requested region"
+		}
+		return endpointAgentError(err, message, context)
+	}
+	var kebabEndpointErr *runtime.EndpointNotResolvedError
+	if errors.As(err, &kebabEndpointErr) {
+		return endpointAgentError(err, kebabEndpointErr.Error(), context)
+	}
+
+	var oauthErr *config.OAuthTokenError
+	if errors.As(err, &oauthErr) {
+		return oauthAgentError(err, oauthErr)
+	}
+
+	if normalized := normalizeServerAgentError(err, context); normalized != nil {
+		return normalized
+	}
+
+	var transportErr *transportError
+	if errors.As(err, &transportErr) {
+		return transportAgentError(err, transportErr, context)
+	}
+
+	var queryErr *engine.QueryFilterError
+	if errors.As(err, &queryErr) {
+		return newLocalAgentError(err, queryErr.Error(), nil, cli.AgentErrorRecovery{
+			Action:  "fix_cli_query",
+			Command: context.responseSectionCommand(),
+			Hint:    "The --cli-query JMESPath expression is invalid. Check its syntax; the command shows the response structure to build a valid query from.",
+		})
+	}
+
+	// This is intentionally an allowlist. Other credential failures, plugins,
+	// postprocessing, safety-policy, Machine Help, corrupt metadata, broad
+	// UsageError, and untyped errors all retain their original rendering and
+	// identity.
 	return err
+}
+
+// oauthAgentError renders an OAuth credential failure (expired or revoked
+// refresh token, rejected exchange) as a JSON envelope carrying the OAuth
+// server's error facts and the re-login recovery command.
+func oauthAgentError(cause error, oauthErr *config.OAuthTokenError) error {
+	agentErr := cli.NewAgentError(cli.AgentErrorEnvelope{
+		Message:    oauthAgentMessage(oauthErr),
+		ErrorCode:  oauthErr.Code,
+		StatusCode: oauthErr.StatusCode,
+		RequestId:  oauthErr.RequestID,
+		Recovery: cli.AgentErrorRecovery{
+			Action:  "reauthenticate",
+			Command: oauthErr.ReLogin,
+			Hint:    "The OAuth credential cannot be refreshed. Re-authenticate with the command, then retry the original call.",
+		},
+	}, cause)
+	if agentErr == nil {
+		return cause
+	}
+	return agentErr
+}
+
+func oauthAgentMessage(oauthErr *config.OAuthTokenError) string {
+	if oauthErr.Code != "" && oauthErr.Description != "" {
+		return fmt.Sprintf("%s: %s (%s)", oauthErr.Stage, oauthErr.Code, oauthErr.Description)
+	}
+	if oauthErr.Code != "" {
+		return fmt.Sprintf("%s: %s", oauthErr.Stage, oauthErr.Code)
+	}
+	return fmt.Sprintf("%s (HTTP %d)", oauthErr.Stage, oauthErr.StatusCode)
+}
+
+// normalizeServerAgentError wraps remote server errors from either runtime
+// (kebab dara/Tea errors and legacy old-SDK ServerError) into one envelope so
+// the message prefix and exit code no longer differ by command style. Errors
+// already carrying a CLI tip (estimate-cost guidance) keep their original
+// rendering, and network/credential failures are not SDK errors and never
+// reach this branch.
+func normalizeServerAgentError(err error, context recoveryContext) error {
+	var withTip cli.ErrorWithTip
+	if errors.As(err, &withTip) {
+		return nil
+	}
+	var teaErr *tea.SDKError
+	if errors.As(err, &teaErr) {
+		message, messageRequestID := cleanTeaServerMessage(tea.StringValue(teaErr.Message))
+		requestID := teaRequestID(teaErr)
+		if requestID == "" {
+			requestID = messageRequestID
+		}
+		facts := serverErrorFacts{
+			code:       tea.StringValue(teaErr.Code),
+			message:    message,
+			requestID:  requestID,
+			statusCode: tea.IntValue(teaErr.StatusCode),
+		}
+		if facts.code == "" && facts.message == "" {
+			return nil
+		}
+		return serverAgentError(err, facts, context)
+	}
+	var serverErr *sdkerrors.ServerError
+	if errors.As(err, &serverErr) {
+		facts := serverErrorFacts{
+			code:       serverErr.ErrorCode(),
+			message:    serverErr.Message(),
+			requestID:  serverErr.RequestId(),
+			statusCode: serverErr.HttpStatus(),
+		}
+		if facts.code == "" && facts.message == "" {
+			return nil
+		}
+		return serverAgentError(err, facts, context)
+	}
+	return nil
+}
+
+// teaRequestID best-effort extracts a RequestId from the Tea error's Data JSON
+// payload; the kebab/Tea SDK does not expose it as a dedicated field.
+func teaRequestID(err *tea.SDKError) string {
+	data := tea.StringValue(err.Data)
+	if strings.TrimSpace(data) == "" {
+		return ""
+	}
+	var payload map[string]any
+	if json.Unmarshal([]byte(data), &payload) != nil {
+		return ""
+	}
+	if requestID, ok := payload["RequestId"].(string); ok {
+		return requestID
+	}
+	if requestID, ok := payload["requestId"].(string); ok {
+		return requestID
+	}
+	return ""
+}
+
+// darabonba-openapi builds Tea server-error messages as
+// "code: <status>, <message> request id: <id>" (client.go), duplicating the
+// structured status_code/request_id envelope fields. These patterns strip that
+// envelope so the message matches the clean legacy old-SDK form.
+var (
+	teaServerErrorPrefixPattern    = regexp.MustCompile(`^code:\s*\d+,\s*`)
+	teaServerErrorRequestIDPattern = regexp.MustCompile(`\s*request id:\s*(\S+)\s*$`)
+)
+
+// cleanTeaServerMessage strips the status prefix and trailing request id from
+// a Tea server-error message, returning the cleaned message and the extracted
+// request id (empty when absent).
+func cleanTeaServerMessage(message string) (string, string) {
+	message = teaServerErrorPrefixPattern.ReplaceAllString(message, "")
+	requestID := ""
+	if match := teaServerErrorRequestIDPattern.FindStringSubmatch(message); match != nil {
+		requestID = match[1]
+		message = teaServerErrorRequestIDPattern.ReplaceAllString(message, "")
+	}
+	return strings.TrimSpace(message), requestID
+}
+
+type serverErrorFacts struct {
+	code       string
+	message    string
+	requestID  string
+	statusCode int
+}
+
+// serverAgentError renders a remote server error with its facts as structured
+// envelope fields and routes recovery to the OpenAPI Explorer error-code
+// diagnostics API when a code is available.
+func serverAgentError(cause error, facts serverErrorFacts, context recoveryContext) error {
+	message := facts.message
+	if strings.TrimSpace(message) == "" {
+		message = "server error " + facts.code
+	}
+
+	recovery := cli.AgentErrorRecovery{
+		Action:  "inspect_action_help",
+		Command: context.actionHelpCommand(),
+		Hint:    "The server rejected the request; check the error code and message, fix the parameters, or retry if the failure is transient.",
+	}
+	if facts.code != "" {
+		recovery = cli.AgentErrorRecovery{
+			Action:  "diagnose_error_code",
+			Command: diagnoseErrorCodeCommand(facts, context),
+			Hint:    fmt.Sprintf("Look up diagnostic solutions for error code %s.", facts.code),
+		}
+	}
+
+	agentErr := cli.NewAgentError(cli.AgentErrorEnvelope{
+		Message:    nonEmptyMessage(message, cause),
+		ErrorCode:  facts.code,
+		StatusCode: facts.statusCode,
+		RequestId:  facts.requestID,
+		Recovery:   recovery,
+	}, cause)
+	if agentErr == nil {
+		return cause
+	}
+	return agentErr
+}
+
+// diagnoseErrorCodeCommand builds the OpenAPI Explorer error-code solutions
+// invocation in the same command style as the failed call: PascalCase users
+// get the PascalCase entry with raw-name flags, kebab users the kebab entry.
+// openapiexplorer has no global endpoint, so a known-good region is pinned.
+func diagnoseErrorCodeCommand(facts serverErrorFacts, context recoveryContext) string {
+	var parts []string
+	if context.style == "pascal" {
+		parts = []string{"aliyun", "openapiexplorer", "GetErrorCodeSolutions",
+			"--errorCode", shellSingleQuote(facts.code)}
+	} else {
+		parts = []string{"aliyun", "openapiexplorer", "get-error-code-solutions",
+			"--error-code", shellSingleQuote(facts.code)}
+	}
+	if product := strings.TrimSpace(context.product); product != "" {
+		parts = append(parts, "--product", firstRuneUpper(product))
+	}
+	if context.style == "pascal" {
+		parts = append(parts, "--acceptLanguage", diagnoseAcceptLanguage())
+	} else {
+		parts = append(parts, "--accept-language", diagnoseAcceptLanguage())
+	}
+	parts = append(parts, "--region", "cn-hangzhou")
+	return strings.Join(parts, " ")
+}
+
+func diagnoseAcceptLanguage() string {
+	if i18n.GetLanguage() == "zh" {
+		return "zh-CN"
+	}
+	return "en-US"
+}
+
+func externalFlagRejectAgentError(cause error, reject *argparser.ExternalFlagRejectError, context recoveryContext) error {
+	return newLocalAgentError(cause, reject.Message, nil, cli.AgentErrorRecovery{
+		Action:  "inspect_action_help",
+		Command: context.actionHelpCommand(),
+		Hint:    "Use the flag spelling this command style accepts; the action help lists the parameters of this API.",
+	})
+}
+
+// endpointAgentError renders a client-side endpoint/region resolution failure
+// (from either execution chain) as a JSON envelope with a style-matched
+// diagnostics command that lists the product's available endpoints.
+func endpointAgentError(cause error, message string, context recoveryContext) error {
+	return newLocalAgentError(cause, message, nil, cli.AgentErrorRecovery{
+		Action:  "fix_endpoint_or_region",
+		Command: endpointDiagnosticsCommand(context),
+		Hint:    "The endpoint for this region could not be resolved. List the product's available endpoints with the command, use a supported region, or pass --endpoint <host> explicitly.",
+	})
+}
+
+// endpointDiagnosticsCommand builds the OpenAPI Explorer product-endpoints
+// invocation in the caller's command style, projecting to the region/endpoint
+// pairs so the recovery stays small; empty when the product is unknown.
+func endpointDiagnosticsCommand(context recoveryContext) string {
+	product := strings.TrimSpace(context.product)
+	if product == "" {
+		return ""
+	}
+	code := firstRuneUpper(product)
+	const projection = "--cli-query 'data.endpoints[*].{regionId:regionId,endpoint:endpoint}'"
+	if context.style == "pascal" {
+		return "aliyun openapiexplorer GetProductEndpoints --product " + code + " --region cn-hangzhou " + projection
+	}
+	return "aliyun openapiexplorer get-product-endpoints --product " + code + " --region cn-hangzhou " + projection
+}
+
+// transportError is the credential-safe rendering of a network transport
+// failure. The original url.Error carries the signed request URL (AccessKeyId,
+// Signature, SignatureNonce, request parameters in the query for the legacy
+// chain), which must never reach stderr, logs, or models; only the host and
+// the underlying cause are kept.
+type transportError struct {
+	host  string
+	cause error
+}
+
+func (e *transportError) Error() string {
+	if e.host == "" {
+		return "network request failed: " + e.cause.Error()
+	}
+	return "request to " + e.host + " failed: " + e.cause.Error()
+}
+
+func (e *transportError) Unwrap() error { return e.cause }
+
+// sanitizeNetworkTransportError replaces credential-bearing transport errors
+// with a safe form in every mode (the AI normalizer only runs when AI mode is
+// enabled, so sanitizing here protects non-AI output as well).
+func sanitizeNetworkTransportError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return newTransportError(urlErr)
+	}
+	// With --retry-count the old SDK wraps the transport error in a ClientError
+	// that has no Unwrap; recover the inner url.Error via OriginError.
+	var clientErr *sdkerrors.ClientError
+	if errors.As(err, &clientErr) {
+		if inner, ok := clientErr.OriginError().(*url.Error); ok {
+			return newTransportError(inner)
+		}
+	}
+	return err
+}
+
+func newTransportError(urlErr *url.Error) *transportError {
+	host := ""
+	if parsed, parseErr := url.Parse(urlErr.URL); parseErr == nil {
+		host = parsed.Host
+	}
+	cause := urlErr.Err
+	if cause == nil {
+		cause = errors.New("network transport failed")
+	}
+	return &transportError{host: host, cause: cause}
+}
+
+// transportAgentError wraps a sanitized transport failure with a retry/endpoint
+// recovery; the diagnostics command is empty when the product is unknown.
+func transportAgentError(cause error, transportErr *transportError, context recoveryContext) error {
+	return newLocalAgentError(cause, transportErr.Error(), nil, cli.AgentErrorRecovery{
+		Action:  "retry_or_fix_endpoint",
+		Command: endpointDiagnosticsCommand(context),
+		Hint:    "The API endpoint could not be reached. Retry if the failure is transient; otherwise verify the region or pass --endpoint <host> explicitly. The command lists the product's valid endpoints.",
+	})
 }
 
 func newLocalAgentError(cause error, message string, suggestions []string, recovery cli.AgentErrorRecovery) error {
@@ -349,6 +699,157 @@ func invalidArgumentAgentError(cause error, message, flag, parameter, fieldPath 
 	return newLocalAgentError(cause, message, nil, recovery)
 }
 
+type constraintFacts struct {
+	flag       string
+	value      string
+	constraint string
+	bound      string
+	allowed    []string
+}
+
+// missingRequiredAgentMessage reports missing parameters with the flags the
+// user can actually assign. MissingRequiredError.Error() also appends the
+// PascalCase wire paths, which must not surface in kebab-style agent output.
+func missingRequiredAgentMessage(err *runtime.MissingRequiredError) string {
+	return "missing required parameter(s): " + strings.Join(err.Flags, ", ")
+}
+
+// legacyMissingRequiredFlagNames extracts the --Flag tokens from the wrapped
+// legacy error text, which formats them one per line.
+func legacyMissingRequiredFlagNames(err *LegacyMissingRequiredError) []string {
+	matches := missingRequiredFlagPattern.FindAllStringSubmatch(err.Error(), -1)
+	names := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if match[1] != "" {
+			names = append(names, "--"+match[1])
+		}
+	}
+	return names
+}
+
+var missingRequiredFlagPattern = regexp.MustCompile(`--([A-Za-z0-9_.-]+)`)
+
+// missingRequiredAgentError upgrades the recovery command from the full
+// request Help to a targeted parameter search whenever the validator confirms
+// the missing flag would be found — the search returns the parameter's schema
+// alone instead of the complete request document.
+func missingRequiredAgentError(cause error, message string, flags []string,
+	context recoveryContext, validate RecoverySearchValidator) error {
+	recovery := cli.AgentErrorRecovery{
+		Action:  "inspect_request_help",
+		Command: context.requestHelpCommand(),
+		Hint:    "Inspect the complete request help and provide every required parameter.",
+	}
+	for _, keyword := range parameterSearchKeywordCandidates(context.style, flags...) {
+		if validate != nil && validate(context.searchRequest("request", context.api, keyword)) {
+			recovery.Action = "search_parameter"
+			recovery.Command = context.actionSearchCommand(keyword)
+			recovery.Hint = fmt.Sprintf("Search request parameters related to %s and provide the required value.", keyword)
+			break
+		}
+	}
+	return newLocalAgentError(cause, message, nil, recovery)
+}
+
+func runtimeConstraintFacts(e *runtime.ConstraintViolationError) constraintFacts {
+	return constraintFacts{
+		flag:       strings.TrimLeft(e.Flag, "-"),
+		value:      e.Actual,
+		constraint: e.Constraint,
+		bound:      e.Expected,
+		allowed:    e.Allowed,
+	}
+}
+
+func legacyConstraintFacts(e *ConstraintViolationError) constraintFacts {
+	bound := ""
+	switch e.Constraint {
+	case "minimum":
+		bound = e.Minimum
+	case "maximum":
+		bound = e.Maximum
+	case "minLength":
+		bound = e.MinLength
+	case "maxLength":
+		bound = e.MaxLength
+	case "pattern":
+		bound = e.Pattern
+	}
+	return constraintFacts{
+		flag:       strings.TrimLeft(e.Flag, "-"),
+		value:      e.Value,
+		constraint: e.Constraint,
+		bound:      bound,
+		allowed:    e.Allowed,
+	}
+}
+
+func constraintViolationAgentError(cause error, facts constraintFacts, context recoveryContext, validate RecoverySearchValidator) error {
+	recovery := cli.AgentErrorRecovery{
+		Action:  "inspect_request_help",
+		Command: context.requestHelpCommand(),
+		Hint:    constraintViolationHint(facts),
+	}
+	for _, keyword := range parameterSearchKeywordCandidates(context.style, facts.flag) {
+		if validate != nil && validate(context.searchRequest("request", context.api, keyword)) {
+			recovery.Action = "search_parameter"
+			recovery.Command = context.actionSearchCommand(keyword)
+			recovery.Hint = fmt.Sprintf("Search request parameters related to %s and use a value that satisfies its constraints.", keyword)
+			break
+		}
+	}
+	return newLocalAgentError(cause, constraintViolationMessage(facts), stableStrings(facts.allowed), recovery)
+}
+
+func constraintViolationMessage(facts constraintFacts) string {
+	switch facts.constraint {
+	case "enum":
+		return fmt.Sprintf("--%s value %q is not allowed", facts.flag, facts.value)
+	case "minimum":
+		return fmt.Sprintf("--%s value %q must be greater than or equal to %s", facts.flag, facts.value, facts.bound)
+	case "maximum":
+		return fmt.Sprintf("--%s value %q must be less than or equal to %s", facts.flag, facts.value, facts.bound)
+	case "minLength":
+		return fmt.Sprintf("--%s value %q must contain at least %s characters", facts.flag, facts.value, facts.bound)
+	case "maxLength":
+		return fmt.Sprintf("--%s value %q must contain at most %s characters", facts.flag, facts.value, facts.bound)
+	case "pattern":
+		return fmt.Sprintf("--%s value %q does not match pattern %q", facts.flag, facts.value, facts.bound)
+	default:
+		return fmt.Sprintf("--%s value %q violates its schema constraint", facts.flag, facts.value)
+	}
+}
+
+func constraintViolationHint(facts constraintFacts) string {
+	switch facts.constraint {
+	case "enum":
+		return fmt.Sprintf("Use one of the allowed values for --%s.", facts.flag)
+	case "minimum":
+		if facts.bound == "" {
+			break
+		}
+		return fmt.Sprintf("Use a value greater than or equal to %s.", facts.bound)
+	case "maximum":
+		if facts.bound == "" {
+			break
+		}
+		return fmt.Sprintf("Use a value less than or equal to %s.", facts.bound)
+	case "minLength":
+		if facts.bound == "" {
+			break
+		}
+		return fmt.Sprintf("Use at least %s characters.", facts.bound)
+	case "maxLength":
+		if facts.bound == "" {
+			break
+		}
+		return fmt.Sprintf("Use at most %s characters.", facts.bound)
+	case "pattern":
+		return fmt.Sprintf("Adjust the value of --%s to match the documented pattern.", facts.flag)
+	}
+	return fmt.Sprintf("Adjust the value of --%s to satisfy the documented constraint.", facts.flag)
+}
+
 func optionCombinationAgentError(cause error, message string, options []string) error {
 	options = stableStrings(options)
 	hint := "Remove one of the conflicting options."
@@ -458,14 +959,25 @@ func (c recoveryContext) productHelpCommand() string {
 	if c.product == "" {
 		return "aliyun --help"
 	}
-	return "aliyun " + c.product + c.versionSuffix() + " --help"
+	return c.kebabHelpEnvPrefix() + "aliyun " + c.product + c.versionSuffix() + " --help"
 }
 
 func (c recoveryContext) productSearchCommand(keyword string) string {
 	if c.product == "" || !safeCommandToken(keyword) {
 		return c.productHelpCommand()
 	}
-	return "aliyun " + c.product + c.versionSuffix() + " --help-search " + keyword
+	return c.kebabHelpEnvPrefix() + "aliyun " + c.product + c.versionSuffix() + " --help-search " + keyword
+}
+
+// kebabHelpEnvPrefix keeps product-level recovery commands in the command style
+// the user already used. Products that also have legacy help render PascalCase
+// product help by default, so kebab help must be requested through the env var.
+// Action-level help is routed by the command token itself and needs no prefix.
+func (c recoveryContext) kebabHelpEnvPrefix() string {
+	if c.style == "kebab" {
+		return baselineProductHelpEnv + "=true "
+	}
+	return ""
 }
 
 func (c recoveryContext) hasAction() bool {
@@ -484,6 +996,15 @@ func (c recoveryContext) actionSearchCommand(keyword string) string {
 		return c.actionHelpCommand()
 	}
 	return "aliyun " + c.product + " " + c.api + c.versionSuffix() + " --help-search " + keyword
+}
+
+// responseSectionCommand inspects the API's response schema; the --cli-section
+// flag spelling is identical in both command styles.
+func (c recoveryContext) responseSectionCommand() string {
+	if !c.hasAction() {
+		return c.productHelpCommand()
+	}
+	return "aliyun " + c.product + " " + c.api + c.versionSuffix() + " --cli-section response"
 }
 
 func (c recoveryContext) parameterHelpCommand(parameter string) string {
@@ -811,11 +1332,45 @@ func firstNonEmpty(values ...string) string {
 }
 
 func flagSuggestions(input string, candidates []string) []string {
-	return closeSuggestions(input, candidates, true)
+	suggestions := closeSuggestions(input, candidates, true)
+	if len(suggestions) == 0 {
+		suggestions = crossStyleFlagSuggestions(input, candidates)
+	}
+	return suggestions
+}
+
+// crossStyleFlagSuggestions recovers the exact candidate when the flag merely
+// uses the other command style's casing convention: a PascalCase flag on a
+// kebab command, or the reverse. Edit distance cannot bridge that gap
+// ("RegionId" vs "region-id"), so the converted form is matched exactly.
+func crossStyleFlagSuggestions(input string, candidates []string) []string {
+	input = strings.TrimLeft(strings.TrimSpace(input), "-")
+	if input == "" {
+		return nil
+	}
+	converted := apiNameToKebab(input)
+	if strings.ContainsAny(input, "-_") {
+		converted = kebabToPascal(input)
+	}
+	if converted == "" || converted == input {
+		return nil
+	}
+	for _, candidate := range candidates {
+		candidate = strings.TrimLeft(strings.TrimSpace(candidate), "-")
+		if candidate == converted {
+			return []string{"--" + candidate}
+		}
+	}
+	return nil
 }
 
 func apiSuggestions(input string, candidates []string) []string {
-	return closeSuggestions(input, candidates, false)
+	suggestions := closeSuggestions(input, candidates, false)
+	if len(suggestions) == 0 {
+		results, _ := cli.PrefixSuggestions(input, sameStyleCandidates(input, candidates), cli.DefaultSuggestLimit)
+		return results
+	}
+	return suggestions
 }
 
 func closeSuggestions(input string, candidates []string, flags bool) []string {
