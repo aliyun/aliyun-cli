@@ -24,15 +24,16 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/alibabacloud-go/tea/tea"
 	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	runtime "github.com/aliyun/aliyun-openapi-runtime/runtime"
-	"github.com/alibabacloud-go/tea/tea"
 )
 
 type credentialConfigurationError struct {
@@ -136,14 +137,16 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	if errors.As(err, &invalidBaseline) {
 		apiContext := context.withProductAPI(invalidBaseline.Product, invalidBaseline.Command)
 		message := fmt.Sprintf("%q is not a valid api.", invalidBaseline.Command)
-		return unknownAPIAgentError(err, message, nil, apiContext, validate)
+		return unknownAPIAgentError(err, message,
+			apiCandidateFormsForStyle(invalidBaseline.AgentSuggestions(), apiContext.style), apiContext, validate)
 	}
 
 	var unknownCommand *engine.UnknownCommandError
 	if errors.As(err, &unknownCommand) {
 		apiContext := context.withProductAPI(unknownCommand.Product, unknownCommand.Command)
 		message := fmt.Sprintf("%q is not a valid api.", unknownCommand.Command)
-		return unknownAPIAgentError(err, message, nil, apiContext, validate)
+		suggestions := apiSuggestions(unknownCommand.Command, runtimehost.ProductCommands(unknownCommand.Product))
+		return unknownAPIAgentError(err, message, apiCandidateFormsForStyle(suggestions, apiContext.style), apiContext, validate)
 	}
 
 	var invalidProduct *InvalidProductError
@@ -1362,7 +1365,12 @@ func crossStyleFlagSuggestions(input string, candidates []string) []string {
 }
 
 func apiSuggestions(input string, candidates []string) []string {
-	return closeSuggestions(input, candidates, false)
+	suggestions := closeSuggestions(input, candidates, false)
+	if len(suggestions) == 0 {
+		results, _ := cli.PrefixSuggestions(input, sameStyleCandidates(input, candidates), cli.DefaultSuggestLimit)
+		return results
+	}
+	return suggestions
 }
 
 func closeSuggestions(input string, candidates []string, flags bool) []string {
