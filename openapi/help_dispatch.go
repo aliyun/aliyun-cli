@@ -195,6 +195,14 @@ func (c *Commando) delegateInstalledPluginHelp(ctx *cli.Context, args []string) 
 		// The version contract was already validated above.
 		return false, nil
 	}
+	if c.hostOwnsLegacyHelpCommand(args) {
+		// PascalCase commands execute on the host's built-in legacy chain
+		// even with a plugin installed (commando.main only hands
+		// all-lowercase commands to the plugin), so Help must resolve
+		// against the same owner — otherwise `aliyun sts GetCallerIdentity
+		// --help` reports "unknown command" for a command that runs.
+		return false, nil
+	}
 	ok, err := goPluginHelpDispatch(product, pluginArgs, ctx)
 	if err != nil {
 		return true, &externalPluginError{err: err}
@@ -203,6 +211,34 @@ func (c *Commando) delegateInstalledPluginHelp(ctx *cli.Context, args []string) 
 		return true, &externalPluginError{err: fmt.Errorf("plugin %s not found", pluginName)}
 	}
 	return true, nil
+}
+
+// hostOwnsLegacyHelpCommand reports whether the requested Help target names a
+// PascalCase API command on a product the host's built-in metadata serves.
+// Execution routes such commands through the host's legacy chain even when a
+// Go plugin is installed (commando.main only hands all-lowercase commands to
+// the plugin), so Help must resolve against the same owner. HTTP verbs are
+// excluded: method+path targets exceed the host Help model today and stay with
+// the plugin. Products the host does not know keep full Help ownership in the
+// plugin.
+func (c *Commando) hostOwnsLegacyHelpCommand(args []string) bool {
+	positionals := rawHelpPositionals(args)
+	if len(positionals) < 2 {
+		return false
+	}
+	command := positionals[1]
+	switch strings.ToUpper(command) {
+	case "GET", "POST", "PUT", "DELETE":
+		return false
+	}
+	if strings.ToLower(command) == command {
+		return false
+	}
+	if c.library == nil {
+		return false
+	}
+	_, known := c.library.GetProduct(positionals[0])
+	return known
 }
 
 func containsPluginHelpOperation(args []string) bool {

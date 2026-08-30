@@ -1,6 +1,7 @@
 package openapi
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"strings"
@@ -174,4 +175,72 @@ func TestHelpFlagRendersResponseSectionEquivalentToPrefix(t *testing.T) {
 			assert.Contains(t, stdout.String(), `"200": {`)
 		})
 	}
+}
+
+func TestHostOwnsLegacyHelpCommand(t *testing.T) {
+	c, _, _, _ := newCanonicalHelpTestContext(t)
+	assert.True(t, c.hostOwnsLegacyHelpCommand([]string{"sts", "GetCallerIdentity", "--help"}), "PascalCase API names belong to the host legacy chain")
+	assert.True(t, c.hostOwnsLegacyHelpCommand([]string{"help", "ecs", "DescribeRegions"}), "the help prefix keeps the same target semantics")
+	assert.False(t, c.hostOwnsLegacyHelpCommand([]string{"sts", "get-caller-identity"}), "kebab commands belong to the plugin chain")
+	assert.False(t, c.hostOwnsLegacyHelpCommand([]string{"cs", "GET", "/clusters"}), "HTTP verbs stay with the plugin (method+path exceeds the host Help model)")
+	assert.False(t, c.hostOwnsLegacyHelpCommand([]string{"cs", "get", "/clusters"}), "HTTP verbs are case-insensitive")
+	assert.False(t, c.hostOwnsLegacyHelpCommand([]string{"sts", "--help"}), "product-level Help keeps plugin ownership")
+	assert.False(t, c.hostOwnsLegacyHelpCommand([]string{"demo", "CreateReport", "--help"}), "products unknown to the host stay plugin-owned")
+}
+
+func TestGoPluginHelpDelegationKeepsPascalCaseWithHost(t *testing.T) {
+	newGoPluginCommando := func(t *testing.T) (*Commando, *cli.Context, *bytes.Buffer, *bytes.Buffer, *bool) {
+		t.Helper()
+		t.Setenv(aimode.EnvAIMode, "0")
+		c, stdout, stderr := newTestCommando()
+		c.localLoaded = true
+		c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+			"aliyun-cli-sts": {Name: "aliyun-cli-sts", Version: "1.0.0", Type: plugin.PluginTypeGo},
+		}}
+		dispatched := false
+		original := goPluginHelpDispatch
+		goPluginHelpDispatch = func(_ string, _ []string, _ *cli.Context) (bool, error) {
+			dispatched = true
+			return true, nil
+		}
+		t.Cleanup(func() { goPluginHelpDispatch = original })
+		root := testMachineHelpRootCommand()
+		AddFlags(root.Flags())
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(root)
+		return c, ctx, stdout, stderr, &dispatched
+	}
+
+	t.Run("pascal case api renders from host", func(t *testing.T) {
+		c, ctx, stdout, _, dispatched := newGoPluginCommando(t)
+		ctx.SetInvocationArgs([]string{"sts", "GetCallerIdentity", "--help"})
+		require.NoError(t, c.help(ctx, []string{"sts", "GetCallerIdentity"}))
+		assert.False(t, *dispatched, "PascalCase Help must resolve against the same owner that executes it (host legacy chain)")
+		assert.Contains(t, stdout.String(), "GetCallerIdentity")
+		assert.Contains(t, stdout.String(), "sts")
+	})
+
+	t.Run("kebab command still delegates", func(t *testing.T) {
+		c, ctx, _, _, dispatched := newGoPluginCommando(t)
+		delegated, err := c.delegateInstalledPluginHelp(ctx, []string{"sts", "get-caller-identity", "--help"})
+		require.NoError(t, err)
+		assert.True(t, delegated)
+		assert.True(t, *dispatched)
+	})
+
+	t.Run("product level help still delegates", func(t *testing.T) {
+		c, ctx, _, _, dispatched := newGoPluginCommando(t)
+		delegated, err := c.delegateInstalledPluginHelp(ctx, []string{"sts", "--help"})
+		require.NoError(t, err)
+		assert.True(t, delegated)
+		assert.True(t, *dispatched)
+	})
+
+	t.Run("http verb still delegates", func(t *testing.T) {
+		c, ctx, _, _, dispatched := newGoPluginCommando(t)
+		delegated, err := c.delegateInstalledPluginHelp(ctx, []string{"sts", "GET", "--help"})
+		require.NoError(t, err)
+		assert.True(t, delegated)
+		assert.True(t, *dispatched)
+	})
 }
