@@ -567,6 +567,29 @@ func TestNormalizeAgentErrorStrictlyBypassesExcludedErrors(t *testing.T) {
 	}
 }
 
+func TestNormalizeAgentErrorOAuthRefreshFailure(t *testing.T) {
+	// The invoker wraps credential init failures as "init client failed: %w";
+	// the OAuth refresh error must surface through that chain with the OAuth
+	// server's facts and a re-login recovery.
+	cause := fmt.Errorf("init client failed: %w", &config.OAuthTokenError{
+		Stage:       "failed to refresh token",
+		StatusCode:  400,
+		Code:        "invalid_grant",
+		Description: "invalid refreshToken",
+		RequestID:   "52beb483-d0bb-483d-bcfa-049bab9e2f6d",
+		ReLogin:     "aliyun configure --mode OAuth --oauth-site-type CN --profile oauth",
+	})
+	envelope := requireAgentEnvelope(t, cause, []string{"sts", "GetCallerIdentity"}, nil)
+
+	assert.Equal(t, "failed to refresh token: invalid_grant (invalid refreshToken)", envelope.Message)
+	assert.Equal(t, "invalid_grant", envelope.ErrorCode)
+	assert.Equal(t, 400, envelope.StatusCode)
+	assert.Equal(t, "52beb483-d0bb-483d-bcfa-049bab9e2f6d", envelope.RequestId)
+	assert.Equal(t, "reauthenticate", envelope.Recovery.Action)
+	assert.Equal(t, "aliyun configure --mode OAuth --oauth-site-type CN --profile oauth", envelope.Recovery.Command)
+	assert.NotEmpty(t, envelope.Recovery.Hint)
+}
+
 func TestNormalizeAgentErrorServerErrorsShareOneEnvelope(t *testing.T) {
 	serverBody := `{"RequestId":"req-1","Code":"Throttling.User","Message":"slow down"}`
 	tests := []struct {

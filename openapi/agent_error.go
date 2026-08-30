@@ -26,6 +26,7 @@ import (
 
 	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
@@ -238,6 +239,11 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 		return endpointAgentError(err, kebabEndpointErr.Error(), context)
 	}
 
+	var oauthErr *config.OAuthTokenError
+	if errors.As(err, &oauthErr) {
+		return oauthAgentError(err, oauthErr)
+	}
+
 	if normalized := normalizeServerAgentError(err, context); normalized != nil {
 		return normalized
 	}
@@ -256,10 +262,42 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 		})
 	}
 
-	// This is intentionally an allowlist. Credentials, plugins, postprocessing,
-	// safety-policy, Machine Help, corrupt metadata, broad UsageError, and
-	// untyped errors all retain their original rendering and identity.
+	// This is intentionally an allowlist. Other credential failures, plugins,
+	// postprocessing, safety-policy, Machine Help, corrupt metadata, broad
+	// UsageError, and untyped errors all retain their original rendering and
+	// identity.
 	return err
+}
+
+// oauthAgentError renders an OAuth credential failure (expired or revoked
+// refresh token, rejected exchange) as a JSON envelope carrying the OAuth
+// server's error facts and the re-login recovery command.
+func oauthAgentError(cause error, oauthErr *config.OAuthTokenError) error {
+	agentErr := cli.NewAgentError(cli.AgentErrorEnvelope{
+		Message:    oauthAgentMessage(oauthErr),
+		ErrorCode:  oauthErr.Code,
+		StatusCode: oauthErr.StatusCode,
+		RequestId:  oauthErr.RequestID,
+		Recovery: cli.AgentErrorRecovery{
+			Action:  "reauthenticate",
+			Command: oauthErr.ReLogin,
+			Hint:    "The OAuth credential cannot be refreshed. Re-authenticate with the command, then retry the original call.",
+		},
+	}, cause)
+	if agentErr == nil {
+		return cause
+	}
+	return agentErr
+}
+
+func oauthAgentMessage(oauthErr *config.OAuthTokenError) string {
+	if oauthErr.Code != "" && oauthErr.Description != "" {
+		return fmt.Sprintf("%s: %s (%s)", oauthErr.Stage, oauthErr.Code, oauthErr.Description)
+	}
+	if oauthErr.Code != "" {
+		return fmt.Sprintf("%s: %s", oauthErr.Stage, oauthErr.Code)
+	}
+	return fmt.Sprintf("%s (HTTP %d)", oauthErr.Stage, oauthErr.StatusCode)
 }
 
 // normalizeServerAgentError wraps remote server errors from either runtime

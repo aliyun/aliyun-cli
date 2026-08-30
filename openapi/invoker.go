@@ -241,7 +241,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 
 	a.client, err = GetClient(a.profile, ctx)
 	if err != nil {
-		return fmt.Errorf("init client failed %s", err)
+		return fmt.Errorf("init client failed: %w", err)
 	}
 	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
 		a.client.AppendUserAgent("vendor", vendorEnv)
