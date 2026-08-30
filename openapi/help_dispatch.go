@@ -577,9 +577,10 @@ func adaptMachineHelpTargetError(target HelpTarget, structured *machineHelpError
 		return &InvalidProductError{Code: target.Product, library: library}
 	case "UNKNOWN_API":
 		return &InvalidBaselineCommandError{
-			Product: target.Product,
-			Command: target.Action,
-			Err:     fmt.Errorf("%q is not a valid api. See `aliyun %s --help`.", target.Action, strings.ToLower(target.Product)),
+			Product:    target.Product,
+			Command:    target.Action,
+			Candidates: runtimehost.ProductCommands(target.Product),
+			Err:        fmt.Errorf("%q is not a valid api. See `aliyun %s --help`.", target.Action, strings.ToLower(target.Product)),
 		}
 	default:
 		return structured

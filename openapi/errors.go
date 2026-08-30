@@ -114,7 +114,12 @@ func (e *InvalidApiError) GetSuggestions() []string {
 	for _, s := range e.product.ApiNames {
 		sr.Apply(s)
 	}
-	return sr.GetResults()
+	results := sr.GetResults()
+	if len(results) > 0 {
+		return results
+	}
+	return prefixSuggestionsWithOverflow(e.Name, e.product.ApiNames,
+		apiSearchHelpCommand(e.Name, e.product.GetLowerCode()))
 }
 
 func (e *InvalidApiError) AgentSuggestions() []string {
@@ -267,7 +272,11 @@ func (*InvalidUnifiedApiError) AIRecoveryEligible() {}
 type InvalidBaselineCommandError struct {
 	Product string
 	Command string
-	Err     error
+	// Candidates are the kebab command names the runtime engine serves for
+	// the product; populated by the creation site so suggestions stay on the
+	// kebab path instead of jumping to PascalCase APIs.
+	Candidates []string
+	Err        error
 }
 
 func (e *InvalidBaselineCommandError) Error() string {
@@ -277,6 +286,23 @@ func (e *InvalidBaselineCommandError) Error() string {
 func (e *InvalidBaselineCommandError) Unwrap() error { return e.Err }
 
 func (*InvalidBaselineCommandError) AIRecoveryEligible() {}
+
+func (e *InvalidBaselineCommandError) GetSuggestions() []string {
+	sr := cli.NewSuggester(e.Command, 2)
+	for _, s := range e.Candidates {
+		sr.Apply(s)
+	}
+	results := sr.GetResults()
+	if len(results) > 0 {
+		return results
+	}
+	return prefixSuggestionsWithOverflow(e.Command, e.Candidates,
+		baselineSearchHelpCommand(e.Command, e.Product))
+}
+
+func (e *InvalidBaselineCommandError) AgentSuggestions() []string {
+	return apiSuggestions(e.Command, e.Candidates)
+}
 
 type InvalidArgumentError struct {
 	Parameter    string
@@ -350,6 +376,11 @@ func (e *InvalidUnifiedApiError) GetSuggestions() []string {
 		sr.UnifyApply(s)
 	}
 	results := removeDuplicates(sr.GetResults())
+	if len(results) > 0 {
+		return results
+	}
+	candidates := append(append([]string(nil), e.product.ApiNames...), e.lPlugin.CmdNames...)
+	results, _ = cli.PrefixSuggestions(e.Name, sameStyleCandidates(e.Name, candidates), cli.DefaultSuggestLimit)
 	return results
 }
 
@@ -374,4 +405,48 @@ func removeDuplicates(slice []string) []string {
 	}
 
 	return result
+}
+
+// sameStyleCandidates keeps only candidates written in the input's command
+// style: mixed-case input keeps PascalCase candidates and all-lowercase
+// input keeps kebab candidates. Suggestions must not cross styles — a
+// suggested command has to run through the same engine as the failed one.
+func sameStyleCandidates(input string, candidates []string) []string {
+	hasUpper := input != strings.ToLower(input)
+	result := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if (candidate != strings.ToLower(candidate)) == hasUpper {
+			result = append(result, candidate)
+		}
+	}
+	return result
+}
+
+func prefixSuggestionsWithOverflow(input string, candidates []string, helpCommand string) []string {
+	results, total := cli.PrefixSuggestions(input, sameStyleCandidates(input, candidates), cli.DefaultSuggestLimit)
+	if total > len(results) {
+		results = append(results, fmt.Sprintf("... and %d more, run `%s`", total-len(results), helpCommand))
+	}
+	return results
+}
+
+// apiSearchHelpCommand builds the PascalCase-style search hint. --help-search
+// returns a compact filtered list, so it costs far fewer tokens than dumping
+// the full product help when a prefix matches many APIs.
+func apiSearchHelpCommand(input, product string) string {
+	if safeCommandToken(input) {
+		return fmt.Sprintf("aliyun %s --help-search %s", product, input)
+	}
+	return fmt.Sprintf("aliyun help %s", product)
+}
+
+// baselineSearchHelpCommand builds the kebab-style search hint. Products that
+// also have legacy PascalCase help render it by default, so baseline kebab
+// help must be requested through the env var prefix.
+func baselineSearchHelpCommand(input, product string) string {
+	prefix := baselineProductHelpEnv + "=true aliyun " + strings.ToLower(product)
+	if safeCommandToken(input) {
+		return prefix + " --help-search " + input
+	}
+	return prefix + " --help"
 }

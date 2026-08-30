@@ -19,6 +19,7 @@ package runtimehost
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -341,6 +342,39 @@ func ProductHelp(ctx *cli.Context, product string) error {
 
 func HasProduct(product string) bool {
 	return product != "" && Engine().HasProduct(product)
+}
+
+// ProductCommands returns the kebab command names the engine serves for a
+// product, or nil when the product cannot be resolved. It is the candidate
+// source for host-side suggestions on kebab commands.
+func ProductCommands(product string) []string {
+	if product == "" {
+		return nil
+	}
+	ldr, err := Engine().Loader()
+	if err != nil {
+		return nil
+	}
+	if err := ldr.EnsureProduct(product); err != nil {
+		return nil
+	}
+	version, err := ldr.ResolveVersion(product, "")
+	if err != nil {
+		return nil
+	}
+	index, err := ldr.GetAPIIndex(product, version)
+	if err != nil || index == nil {
+		return nil
+	}
+	names := make([]string, 0, len(index.Entries))
+	for _, entry := range index.Entries {
+		name := strings.TrimSpace(entry.CmdName)
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 // MetaPluginProvenance resolves product ownership through the engine loader.
