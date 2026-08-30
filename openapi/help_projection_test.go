@@ -1,6 +1,7 @@
 package openapi
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -343,4 +344,20 @@ func TestProductHelpSearchStillFindsDeprecatedAPIs(t *testing.T) {
 	require.Len(t, document.APIs, 1)
 	assert.Equal(t, "BravoLegacy", document.APIs[0].Name)
 	assert.True(t, document.APIs[0].Deprecated, "explicit search surfaces the deprecated flag")
+}
+
+func TestProductHelpOmittedDeprecatedCount(t *testing.T) {
+	defaultDocument := productDocWithDeprecatedAPIs()
+	applyProductHelpOptions(defaultDocument, helpOptions{}, true)
+	assert.Equal(t, 3, defaultDocument.Result.Total)
+	assert.Equal(t, 2, defaultDocument.Result.OmittedDeprecated, "default view reports how many deprecated APIs it hides")
+
+	allDocument := productDocWithDeprecatedAPIs()
+	applyProductHelpOptions(allDocument, helpOptions{All: true}, true)
+	assert.Equal(t, 5, allDocument.Result.Total)
+	assert.Equal(t, 0, allDocument.Result.OmittedDeprecated, "show-all hides nothing")
+
+	var text bytes.Buffer
+	require.NoError(t, renderCanonicalProductText(&text, defaultDocument, ""))
+	assert.Contains(t, text.String(), "Omitting 2 deprecated APIs; use --help-all to include them.")
 }

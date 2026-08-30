@@ -31,6 +31,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	"github.com/aliyun/aliyun-openapi-runtime/engine"
 
 	"encoding/json"
 	"fmt"
@@ -175,6 +176,13 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 	if c.isExtensionInvocation(args) {
 		return err
 	}
+
+	// Credential-safe rendering in every mode: transport failures carry the
+	// signed request URL (AccessKeyId/Signature in the query for the legacy
+	// chain), which must never reach stderr, logs, or models. Sanitize before
+	// the AI gate so non-AI output is protected too.
+	err = sanitizeNetworkTransportError(err)
+
 	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
 
 	if !enabled {
@@ -1157,7 +1165,7 @@ func ApplyQueryFilter(ctx *cli.Context, output string) (string, error) {
 
 	result, err := jmespath.Search(queryExpr, v)
 	if err != nil {
-		return output, fmt.Errorf("JMESPath query failed: %w", err)
+		return output, &engine.QueryFilterError{Expr: queryExpr, Err: err}
 	}
 
 	resultBytes, err := json.Marshal(result)

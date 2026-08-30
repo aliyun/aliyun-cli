@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -700,7 +701,7 @@ func TestNormalizeAgentErrorEndpointResolution(t *testing.T) {
 		envelope := agentErr.Envelope()
 		assert.Contains(t, envelope.Message, "unknown endpoint for region invalid-region-xxx")
 		assert.Equal(t, "fix_endpoint_or_region", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun openapiexplorer get-product-endpoints --product Ecs --region cn-hangzhou", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun openapiexplorer get-product-endpoints --product Ecs --region cn-hangzhou "+endpointProjection, envelope.Recovery.Command)
 		assert.NotEmpty(t, envelope.Recovery.Hint)
 		assert.Equal(t, 2, agentErr.ExitCode())
 	})
@@ -710,8 +711,100 @@ func TestNormalizeAgentErrorEndpointResolution(t *testing.T) {
 		var agentErr *cli.AgentError
 		require.ErrorAs(t, got, &agentErr)
 		envelope := agentErr.Envelope()
-		assert.Equal(t, "aliyun openapiexplorer GetProductEndpoints --product Ecs --region cn-hangzhou", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun openapiexplorer GetProductEndpoints --product Ecs --region cn-hangzhou "+endpointProjection, envelope.Recovery.Command)
 	})
+}
+
+const endpointProjection = "--cli-query 'data.endpoints[*].{regionId:regionId,endpoint:endpoint}'"
+
+func TestSanitizeNetworkTransportErrorStripsSignedURL(t *testing.T) {
+	signedURL := "https://ecs.cn-shanghai.aliyuncs.com/?AccessKeyId=REAL-AK&Signature=abc%2Fsig&SignatureNonce=n1&RegionId=cn-shanghai"
+
+	t.Run("bare url.Error", func(t *testing.T) {
+		raw := &url.Error{Op: "Post", URL: signedURL, Err: errors.New("connection refused")}
+		sanitized := sanitizeNetworkTransportError(raw)
+		msg := sanitized.Error()
+		assert.Contains(t, msg, "request to ecs.cn-shanghai.aliyuncs.com failed")
+		assert.Contains(t, msg, "connection refused")
+		assert.NotContains(t, msg, "AccessKeyId")
+		assert.NotContains(t, msg, "REAL-AK")
+		assert.NotContains(t, msg, "Signature")
+		assert.NotContains(t, msg, "SignatureNonce")
+	})
+
+	t.Run("url.Error wrapped by retry-exhausted ClientError", func(t *testing.T) {
+		inner := &url.Error{Op: "Post", URL: signedURL, Err: errors.New("connection refused")}
+		clientErr := sdkerrors.NewClientError("SDK.TimeoutError", "timeout", inner)
+		sanitized := sanitizeNetworkTransportError(clientErr)
+		msg := sanitized.Error()
+		assert.Contains(t, msg, "connection refused")
+		assert.NotContains(t, msg, "AccessKeyId")
+		assert.NotContains(t, msg, "REAL-AK")
+	})
+
+	t.Run("non-transport errors pass through", func(t *testing.T) {
+		other := errors.New("some other failure")
+		assert.Same(t, other, sanitizeNetworkTransportError(other))
+	})
+}
+
+func TestNormalizeAgentErrorTransport(t *testing.T) {
+	raw := &url.Error{Op: "Post", URL: "https://ecs.cn-shanghai.aliyuncs.com/?AccessKeyId=REAL-AK&Signature=sig", Err: errors.New("connection refused")}
+
+	t.Run("camel", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(sanitizeNetworkTransportError(raw), []string{"ecs", "DescribeInstances"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		envelope := agentErr.Envelope()
+		assert.Contains(t, envelope.Message, "request to ecs.cn-shanghai.aliyuncs.com failed")
+		assert.NotContains(t, envelope.Message, "AccessKeyId")
+		assert.Equal(t, "retry_or_fix_endpoint", envelope.Recovery.Action)
+		assert.Contains(t, envelope.Recovery.Command, "GetProductEndpoints --product Ecs")
+		assert.Equal(t, 2, agentErr.ExitCode())
+	})
+
+	t.Run("kebab", func(t *testing.T) {
+		wrapped := fmt.Errorf("runtime: call failed: %w", raw)
+		got := normalizeAgentErrorWithSearch(sanitizeNetworkTransportError(wrapped), []string{"ecs", "describe-instances"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		assert.Contains(t, agentErr.Envelope().Recovery.Command, "get-product-endpoints --product Ecs")
+	})
+}
+
+func TestNormalizeAgentErrorQueryFilter(t *testing.T) {
+	queryErr := &engine.QueryFilterError{Expr: "invalid[", Err: errors.New("SyntaxError: Incomplete expression")}
+
+	t.Run("camel", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(queryErr, []string{"ecs", "DescribeZones"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		envelope := agentErr.Envelope()
+		assert.Equal(t, `invalid --cli-query "invalid[": SyntaxError: Incomplete expression`, envelope.Message)
+		assert.Equal(t, "fix_cli_query", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun ecs DescribeZones --cli-section response", envelope.Recovery.Command)
+		assert.Equal(t, 2, agentErr.ExitCode())
+	})
+
+	t.Run("kebab", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(queryErr, []string{"ecs", "describe-zones"}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		assert.Equal(t, `invalid --cli-query "invalid[": SyntaxError: Incomplete expression`, agentErr.Envelope().Message)
+		assert.Equal(t, "aliyun ecs describe-zones --cli-section response", agentErr.Envelope().Recovery.Command)
+	})
+}
+
+func TestNormalizeAgentErrorKebabEndpointResolution(t *testing.T) {
+	endpointErr := &runtime.EndpointNotResolvedError{Product: "ecs", Region: "invalid-region-for-ai-check"}
+	got := normalizeAgentErrorWithSearch(endpointErr, []string{"ecs", "describe-instances"}, nil)
+	var agentErr *cli.AgentError
+	require.ErrorAs(t, got, &agentErr)
+	envelope := agentErr.Envelope()
+	assert.Contains(t, envelope.Message, `endpoint not resolved for product "ecs" region "invalid-region-for-ai-check"`)
+	assert.Equal(t, "fix_endpoint_or_region", envelope.Recovery.Action)
+	assert.Equal(t, "aliyun openapiexplorer get-product-endpoints --product Ecs --region cn-hangzhou "+endpointProjection, envelope.Recovery.Command)
+	assert.Equal(t, 2, agentErr.ExitCode())
 }
 
 func TestNormalizeAgentHelpOptionErrors(t *testing.T) {

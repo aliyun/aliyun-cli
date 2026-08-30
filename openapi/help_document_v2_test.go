@@ -62,7 +62,8 @@ func TestProductDefaultAllAndSearchProjectionSemantics(t *testing.T) {
 	allDocument := newDocument()
 	applyProductHelpOptions(allDocument, helpOptions{All: true}, true)
 	assert.Len(t, allDocument.APIs, 105)
-	assert.Equal(t, "Complete item description", allDocument.APIs[0].Description.EN)
+	assert.Equal(t, "Item title", allDocument.APIs[0].Title.EN)
+	assert.Equal(t, "Complete item description", allDocument.APIs[0].Description.EN, "AI --help-all keeps descriptions so agents can pick the right API")
 	assert.Equal(t, HelpResult{Shown: 105, Total: 105}, allDocument.Result)
 
 	searchDocument := newDocument()

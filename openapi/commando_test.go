@@ -1417,7 +1417,7 @@ func TestProcessApiInvoke(t *testing.T) {
 
 		err := command.processApiInvoke(ctx, product, canonicalTestAPI(api), "GET", "/test")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "JMESPath query failed")
+		assert.Contains(t, err.Error(), "invalid --cli-query")
 	})
 
 	t.Run("QueryFlagNotAssigned", func(t *testing.T) {
@@ -2147,7 +2147,7 @@ func TestApplyQueryFilter(t *testing.T) {
 		output := `{"key": "value"}`
 		result, err := ApplyQueryFilter(ctx, output)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "JMESPath query failed")
+		assert.Contains(t, err.Error(), "invalid --cli-query")
 		assert.Equal(t, output, result)
 	})
 

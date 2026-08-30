@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -226,17 +227,38 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	// bails on ErrorWithTip-wrapped errors).
 	var endpointErr *meta.InvalidEndpointError
 	if errors.As(err, &endpointErr) {
-		return endpointAgentError(err, endpointErr, context)
+		message := endpointErr.Error()
+		if message == "" {
+			message = "unknown endpoint for the requested region"
+		}
+		return endpointAgentError(err, message, context)
+	}
+	var kebabEndpointErr *runtime.EndpointNotResolvedError
+	if errors.As(err, &kebabEndpointErr) {
+		return endpointAgentError(err, kebabEndpointErr.Error(), context)
 	}
 
 	if normalized := normalizeServerAgentError(err, context); normalized != nil {
 		return normalized
 	}
 
-	// This is intentionally an allowlist. Credentials, network
-	// failures, plugins, postprocessing, safety-policy, Machine Help, corrupt
-	// metadata, broad UsageError, and untyped errors all retain their original
-	// rendering and identity.
+	var transportErr *transportError
+	if errors.As(err, &transportErr) {
+		return transportAgentError(err, transportErr, context)
+	}
+
+	var queryErr *engine.QueryFilterError
+	if errors.As(err, &queryErr) {
+		return newLocalAgentError(err, queryErr.Error(), nil, cli.AgentErrorRecovery{
+			Action:  "fix_cli_query",
+			Command: context.responseSectionCommand(),
+			Hint:    "The --cli-query JMESPath expression is invalid. Check its syntax; the command shows the response structure to build a valid query from.",
+		})
+	}
+
+	// This is intentionally an allowlist. Credentials, plugins, postprocessing,
+	// safety-policy, Machine Help, corrupt metadata, broad UsageError, and
+	// untyped errors all retain their original rendering and identity.
 	return err
 }
 
@@ -410,13 +432,9 @@ func externalFlagRejectAgentError(cause error, reject *argparser.ExternalFlagRej
 }
 
 // endpointAgentError renders a client-side endpoint/region resolution failure
-// as a JSON envelope with a style-matched diagnostics command that lists the
-// product's available endpoints.
-func endpointAgentError(cause error, endpointErr *meta.InvalidEndpointError, context recoveryContext) error {
-	message := endpointErr.Error()
-	if message == "" {
-		message = "unknown endpoint for the requested region"
-	}
+// (from either execution chain) as a JSON envelope with a style-matched
+// diagnostics command that lists the product's available endpoints.
+func endpointAgentError(cause error, message string, context recoveryContext) error {
 	return newLocalAgentError(cause, message, nil, cli.AgentErrorRecovery{
 		Action:  "fix_endpoint_or_region",
 		Command: endpointDiagnosticsCommand(context),
@@ -425,17 +443,82 @@ func endpointAgentError(cause error, endpointErr *meta.InvalidEndpointError, con
 }
 
 // endpointDiagnosticsCommand builds the OpenAPI Explorer product-endpoints
-// invocation in the caller's command style; empty when the product is unknown.
+// invocation in the caller's command style, projecting to the region/endpoint
+// pairs so the recovery stays small; empty when the product is unknown.
 func endpointDiagnosticsCommand(context recoveryContext) string {
 	product := strings.TrimSpace(context.product)
 	if product == "" {
 		return ""
 	}
 	code := firstRuneUpper(product)
+	const projection = "--cli-query 'data.endpoints[*].{regionId:regionId,endpoint:endpoint}'"
 	if context.style == "pascal" {
-		return "aliyun openapiexplorer GetProductEndpoints --product " + code + " --region cn-hangzhou"
+		return "aliyun openapiexplorer GetProductEndpoints --product " + code + " --region cn-hangzhou " + projection
 	}
-	return "aliyun openapiexplorer get-product-endpoints --product " + code + " --region cn-hangzhou"
+	return "aliyun openapiexplorer get-product-endpoints --product " + code + " --region cn-hangzhou " + projection
+}
+
+// transportError is the credential-safe rendering of a network transport
+// failure. The original url.Error carries the signed request URL (AccessKeyId,
+// Signature, SignatureNonce, request parameters in the query for the legacy
+// chain), which must never reach stderr, logs, or models; only the host and
+// the underlying cause are kept.
+type transportError struct {
+	host  string
+	cause error
+}
+
+func (e *transportError) Error() string {
+	if e.host == "" {
+		return "network request failed: " + e.cause.Error()
+	}
+	return "request to " + e.host + " failed: " + e.cause.Error()
+}
+
+func (e *transportError) Unwrap() error { return e.cause }
+
+// sanitizeNetworkTransportError replaces credential-bearing transport errors
+// with a safe form in every mode (the AI normalizer only runs when AI mode is
+// enabled, so sanitizing here protects non-AI output as well).
+func sanitizeNetworkTransportError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return newTransportError(urlErr)
+	}
+	// With --retry-count the old SDK wraps the transport error in a ClientError
+	// that has no Unwrap; recover the inner url.Error via OriginError.
+	var clientErr *sdkerrors.ClientError
+	if errors.As(err, &clientErr) {
+		if inner, ok := clientErr.OriginError().(*url.Error); ok {
+			return newTransportError(inner)
+		}
+	}
+	return err
+}
+
+func newTransportError(urlErr *url.Error) *transportError {
+	host := ""
+	if parsed, parseErr := url.Parse(urlErr.URL); parseErr == nil {
+		host = parsed.Host
+	}
+	cause := urlErr.Err
+	if cause == nil {
+		cause = errors.New("network transport failed")
+	}
+	return &transportError{host: host, cause: cause}
+}
+
+// transportAgentError wraps a sanitized transport failure with a retry/endpoint
+// recovery; the diagnostics command is empty when the product is unknown.
+func transportAgentError(cause error, transportErr *transportError, context recoveryContext) error {
+	return newLocalAgentError(cause, transportErr.Error(), nil, cli.AgentErrorRecovery{
+		Action:  "retry_or_fix_endpoint",
+		Command: endpointDiagnosticsCommand(context),
+		Hint:    "The API endpoint could not be reached. Retry if the failure is transient; otherwise verify the region or pass --endpoint <host> explicitly. The command lists the product's valid endpoints.",
+	})
 }
 
 func newLocalAgentError(cause error, message string, suggestions []string, recovery cli.AgentErrorRecovery) error {
@@ -872,6 +955,15 @@ func (c recoveryContext) actionSearchCommand(keyword string) string {
 		return c.actionHelpCommand()
 	}
 	return "aliyun " + c.product + " " + c.api + c.versionSuffix() + " --help-search " + keyword
+}
+
+// responseSectionCommand inspects the API's response schema; the --cli-section
+// flag spelling is identical in both command styles.
+func (c recoveryContext) responseSectionCommand() string {
+	if !c.hasAction() {
+		return c.productHelpCommand()
+	}
+	return "aliyun " + c.product + " " + c.api + c.versionSuffix() + " --cli-section response"
 }
 
 func (c recoveryContext) parameterHelpCommand(parameter string) string {

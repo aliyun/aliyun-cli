@@ -778,7 +778,7 @@ func renderResponse(w io.Writer, resp *runtime.Response, filter string, compact 
 	if filter != "" {
 		out, err := jmespath.Search(filter, data)
 		if err != nil {
-			return fmt.Errorf("cli-query %q: %w", filter, err)
+			return &QueryFilterError{Expr: filter, Err: err}
 		}
 		data = out
 	}

@@ -210,6 +210,7 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 		return
 	}
 
+	omittedDeprecated := 0
 	if options.All {
 		// Deprecated APIs stay available with --help-all but move to the end,
 		// so the leading list is the supported surface.
@@ -225,9 +226,11 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 		// reachable through --help-all (at the end) and --help-search.
 		visible := document.APIs[:0]
 		for _, api := range document.APIs {
-			if !api.Deprecated {
-				visible = append(visible, api)
+			if api.Deprecated {
+				omittedDeprecated++
+				continue
 			}
+			visible = append(visible, api)
 		}
 		document.APIs = visible
 	}
@@ -242,8 +245,10 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 	})
 	document.APIs = projection.Items
 	document.Result = projection.Result
+	document.Result.OmittedDeprecated = omittedDeprecated
 	document.Next = projection.Next
 	document.Listing = nil
+
 	if !options.All && !showProductActionDescriptionsInDefaultHelp {
 		for index := range document.APIs {
 			document.APIs[index].Title = machineHelpLocalizedText{}
@@ -805,6 +810,11 @@ func renderCanonicalProductText(w io.Writer, document *machineHelpProductDocumen
 			description += " — " + fullDescription
 		}
 		if _, err := fmt.Fprintf(w, "  %-30s %s\n", name, description); err != nil {
+			return err
+		}
+	}
+	if document.Result.OmittedDeprecated > 0 {
+		if _, err := fmt.Fprintf(w, "\nOmitting %d deprecated APIs; use --help-all to include them.\n", document.Result.OmittedDeprecated); err != nil {
 			return err
 		}
 	}

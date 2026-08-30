@@ -533,7 +533,7 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 		return nil, errors.New("runtime: no credential resolved; run `aliyun configure` or pass --dry-run")
 	}
 	if req.Endpoint == "" {
-		return nil, fmt.Errorf("runtime: endpoint not resolved for product %q region %q; pass --endpoint", ec.API.ProductCode, ec.Region)
+		return nil, &EndpointNotResolvedError{Product: ec.API.ProductCode, Region: ec.Region}
 	}
 
 	conf := &openapiClient.Config{Credential: ec.Credential}

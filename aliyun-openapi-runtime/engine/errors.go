@@ -92,6 +92,21 @@ func (e *InvalidBodyFileError) Unwrap() error { return e.Err }
 
 func (*InvalidBodyFileError) AIRecoveryEligible() {}
 
+// QueryFilterError reports a --cli-query JMESPath failure with one wording in
+// both command styles, so the host can render a unified AI envelope.
+type QueryFilterError struct {
+	Expr string
+	Err  error
+}
+
+func (e *QueryFilterError) Error() string {
+	return fmt.Sprintf("invalid --cli-query %q: %s", e.Expr, localErrorText(e.Err, "invalid JMESPath expression"))
+}
+
+func (e *QueryFilterError) Unwrap() error { return e.Err }
+
+func (*QueryFilterError) AIRecoveryEligible() {}
+
 func localErrorText(err error, fallback string) string {
 	if err == nil {
 		return fallback
