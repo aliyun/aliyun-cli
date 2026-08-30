@@ -35,6 +35,18 @@ In practice:
 - PascalCase commands use the original API operation name, such as `DescribeInstances`, and usually keep the original API parameter names such as `--RegionId` and `--InstanceId`.
 - Kebab-case commands use the metadata-derived command name, and parameter names are also exposed in kebab-case where defined by metadata. Use the local command help for the exact flag names. For example, `describe-instances` uses `--biz-region-id`, while `describe-instance-attribute` uses `--instance-id`.
 
+The subcommand casing decides which engine handles the call: an all-lowercase subcommand is routed to the plugin/runtime engine, while a subcommand containing uppercase letters goes through the built-in OpenAPI path. Do not mix the two spellings in one command — `aliyun ecs DescribeInstances --biz-region-id cn-hangzhou` fails with an unknown parameter error; pair `--RegionId` with `DescribeInstances` and `--biz-region-id` with `describe-instances`.
+
+Product-level help follows the same split. Without an installed product plugin, `aliyun ecs --help` shows the PascalCase command list by default; products that exist only in the bundled metadata show the kebab-case list. Two environment variables switch the style explicitly:
+
+```sh
+# kebab-case product help (no product plugin installed)
+ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help
+
+# legacy PascalCase product help (a product plugin is installed)
+ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true aliyun ecs --help
+```
+
 Use the product/operation forms above for normal API calls. For APIs that can only be addressed by a raw method and path, the CLI retains the following RESTful compatibility form; it is not the recommended form for general use:
 
 ```sh

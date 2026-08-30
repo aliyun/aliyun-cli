@@ -26,7 +26,7 @@ func TestRenderResponseHelpText(t *testing.T) {
 	assert.Contains(t, output.String(), "Components:")
 	assert.Contains(t, output.String(), `"ReportList": {`)
 	assert.NotContains(t, output.String(), `"Unused":`)
-	assert.Contains(t, output.String(), "Query this array directly:")
+	assert.Contains(t, output.String(), "Fetch any of these fields with --cli-query (JMESPath), e.g.:")
 	assert.Contains(t, output.String(), "aliyun demo CreateReport --cli-query 'Reports.Report'")
 }
 

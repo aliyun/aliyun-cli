@@ -41,6 +41,19 @@ func (e *MissingRequiredError) Error() string {
 
 func (*MissingRequiredError) AIRecoveryEligible() {}
 
+// EndpointNotResolvedError reports that no endpoint could be resolved for the
+// product/region pair and no --endpoint override was supplied.
+type EndpointNotResolvedError struct {
+	Product string
+	Region  string
+}
+
+func (e *EndpointNotResolvedError) Error() string {
+	return fmt.Sprintf("endpoint not resolved for product %q region %q; pass --endpoint", e.Product, e.Region)
+}
+
+func (*EndpointNotResolvedError) AIRecoveryEligible() {}
+
 // ValidateRequired checks that every required top-level parameter of api was supplied.
 // When rawBody is true, body and formData parameters are skipped because --body/--body-file replaces the entire request body.
 func ValidateRequired(api *meta.API, args map[string]any, rawBody bool) error {

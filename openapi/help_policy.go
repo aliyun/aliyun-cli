@@ -16,6 +16,10 @@ type HelpResult struct {
 	Shown     int  `json:"shown"`
 	Total     int  `json:"total"`
 	Truncated bool `json:"truncated"`
+	// OmittedDeprecated counts deprecated objects hidden from the default view;
+	// they remain reachable through the show-all operation. Only product Help
+	// sets it, so it reconciles the default Total with the show-all Total.
+	OmittedDeprecated int `json:"omittedDeprecated,omitempty"`
 }
 
 // HelpNext carries only meaningful follow-up commands. Callers build commands
@@ -23,6 +27,9 @@ type HelpResult struct {
 type HelpNext struct {
 	ShowAll string `json:"showAll,omitempty"`
 	Search  string `json:"search,omitempty"`
+	// SearchAll re-runs the same Help search with --help-all to lift the
+	// result cap while keeping the keyword.
+	SearchAll string `json:"searchAll,omitempty"`
 }
 
 // HelpProjectionMode contains only policy inputs; operation parsing remains in

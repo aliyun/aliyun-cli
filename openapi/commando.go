@@ -31,6 +31,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	"github.com/aliyun/aliyun-openapi-runtime/engine"
 
 	"encoding/json"
 	"fmt"
@@ -175,6 +176,13 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 	if c.isExtensionInvocation(args) {
 		return err
 	}
+
+	// Credential-safe rendering in every mode: transport failures carry the
+	// signed request URL (AccessKeyId/Signature in the query for the legacy
+	// chain), which must never reach stderr, logs, or models. Sanitize before
+	// the AI gate so non-AI output is protected too.
+	err = sanitizeNetworkTransportError(err)
+
 	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
 
 	if !enabled {
@@ -756,7 +764,7 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 			return err
 		}
 	}
-	out = sortJSON(out)
+	out = formatResponseJSON(ctx, out)
 	cli.Println(ctx.Stdout(), out)
 	return nil
 }
@@ -839,10 +847,27 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		}
 	}
 
-	out = sortJSON(out)
+	out = formatResponseJSON(ctx, out)
 
 	cli.Println(ctx.Stdout(), out)
 	return nil
+}
+
+// formatResponseJSON normalizes response output for printing: AI mode gets a
+// compact encoding (server key order preserved), every other mode keeps the
+// pretty-printed, key-sorted form.
+func formatResponseJSON(ctx *cli.Context, content string) string {
+	if !legacyAIModeEnabled(ctx) {
+		return sortJSON(content)
+	}
+	if !json.Valid([]byte(content)) {
+		return content
+	}
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, []byte(content)); err != nil {
+		return content
+	}
+	return buf.String()
 }
 
 func sortJSON(content string) string {
@@ -1140,7 +1165,7 @@ func ApplyQueryFilter(ctx *cli.Context, output string) (string, error) {
 
 	result, err := jmespath.Search(queryExpr, v)
 	if err != nil {
-		return output, fmt.Errorf("JMESPath query failed: %w", err)
+		return output, &engine.QueryFilterError{Expr: queryExpr, Err: err}
 	}
 
 	resultBytes, err := json.Marshal(result)
@@ -1266,7 +1291,7 @@ func (c *Commando) legacyHelp(ctx *cli.Context, args []string) error {
 			if document.OutputSchema != nil {
 				document.ResponseQuery = projectResponseQueryExample(
 					helpResponseSchema(document),
-					document.Product.Code,
+					document.Target.Path[1],
 					document.Target.Path[len(document.Target.Path)-1],
 					document.Target.RequestedStyle,
 					requestedMachineHelpVersion(ctx),

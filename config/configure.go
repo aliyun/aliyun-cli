@@ -414,10 +414,6 @@ func exchangeFromOAuth(w io.Writer, cp *Profile) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("exchange failed, status code: %d", resp.StatusCode)
-	}
-
 	var result struct {
 		RequestId       string `json:"requestId"`
 		AccessKeyId     string `json:"accessKeyId"`
@@ -425,28 +421,12 @@ func exchangeFromOAuth(w io.Writer, cp *Profile) error {
 		Expiration      string `json:"expiration"`
 		SecurityToken   string `json:"securityToken"`
 	}
-	// {
-	//  "error" : "expired_token",
-	//  "error_description": "The access token is expired.",
-	//  "requestId": "xxxxx"
-	//}
-	var resultError struct {
-		Error            string `json:"error"`
-		ErrorDescription string `json:"error_description"`
-		RequestId        string `json:"requestId"`
-	}
-	// check status code
 	if resp.StatusCode != http.StatusOK {
-		data, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		err = json.Unmarshal(data, &resultError)
-		if err != nil {
+		data, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
 			return fmt.Errorf("exchange failed, status code: %d", resp.StatusCode)
 		}
-		return fmt.Errorf("exchange failed, error: %s, description: %s, requestId: %s",
-			resultError.Error, resultError.ErrorDescription, resultError.RequestId)
+		return newOAuthTokenError("exchange failed", resp.StatusCode, data, cp)
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -465,6 +445,68 @@ func exchangeFromOAuth(w io.Writer, cp *Profile) error {
 		cp.StsExpiration = parsedTime.Unix()
 	}
 	return nil
+}
+
+// OAuthTokenError carries the OAuth server's structured failure from token
+// refresh or exchange: the RFC 6749 error code, its description, the server's
+// request id, and the executable re-login command that recovers from it.
+type OAuthTokenError struct {
+	Stage       string // "failed to refresh token" or "exchange failed"
+	StatusCode  int
+	Code        string
+	Description string
+	RequestID   string
+	ReLogin     string
+}
+
+func (e *OAuthTokenError) Error() string {
+	parts := []string{fmt.Sprintf("%s, status code: %d", e.Stage, e.StatusCode)}
+	if e.Code != "" {
+		parts = append(parts, "error: "+e.Code)
+	}
+	if e.Description != "" {
+		parts = append(parts, "description: "+e.Description)
+	}
+	if e.RequestID != "" {
+		parts = append(parts, "requestId: "+e.RequestID)
+	}
+	message := strings.Join(parts, ", ")
+	if e.ReLogin != "" {
+		message += "; re-authenticate: " + e.ReLogin
+	}
+	return message
+}
+
+// oauthErrorBody decodes the OAuth server's error payload. The refresh
+// endpoint returns snake_case request_id while the exchange endpoint returns
+// camelCase requestId; both spellings are accepted.
+type oauthErrorBody struct {
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description"`
+	RequestID        string `json:"request_id"`
+	RequestIDCamel   string `json:"requestId"`
+}
+
+// newOAuthTokenError builds the structured OAuth failure, best-effort decoding
+// the response body so the server's code, description, and request id survive.
+func newOAuthTokenError(stage string, statusCode int, body []byte, cp *Profile) *OAuthTokenError {
+	e := &OAuthTokenError{
+		Stage:      stage,
+		StatusCode: statusCode,
+		ReLogin:    buildReLoginOauthCommand(cp),
+	}
+	if len(body) > 0 {
+		var parsed oauthErrorBody
+		if json.Unmarshal(body, &parsed) == nil {
+			e.Code = parsed.Error
+			e.Description = parsed.ErrorDescription
+			e.RequestID = parsed.RequestID
+			if e.RequestID == "" {
+				e.RequestID = parsed.RequestIDCamel
+			}
+		}
+	}
+	return e
 }
 
 // 构建 Oauth 应用重新登录的命令
@@ -508,8 +550,13 @@ func tryRefreshOauthToken(w io.Writer, cp *Profile) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to refresh token, status code: %d", resp.StatusCode)
+		data, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("failed to refresh token, status code: %d", resp.StatusCode)
+		}
+		return newOAuthTokenError("failed to refresh token", resp.StatusCode, data, cp)
 	}
 	var tokenResp struct {
 		AccessToken  string `json:"access_token"`

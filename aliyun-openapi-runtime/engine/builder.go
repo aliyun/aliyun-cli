@@ -82,6 +82,12 @@ func (e *Engine) getLoader() (loader.Loader, error) {
 	return e.loader, e.lodErr
 }
 
+// Loader exposes the lazy loader for host-side read-only projections such as
+// Machine Help. Callers must not mutate loader state.
+func (e *Engine) Loader() (loader.Loader, error) {
+	return e.getLoader()
+}
+
 // Resolvable reports whether the engine can handle "<product> <command>" (i.e. it resolves to a known API in baseline or a user meta plugin).
 // It is used by the host router to decide, for products WITHOUT an installed Go plugin, whether to route here or fall back to legacy handling.
 // Resolves only the requested product on first call.
@@ -258,9 +264,9 @@ func (e *Engine) Dispatch(req Request) error {
 	}
 
 	if api.IsSSE && !ec.DryRun {
-		return e.executeSSE(req.Out, ec, res)
+		return e.executeSSE(req.Out, ec, res, req.AIMode)
 	}
-	return e.executeStandard(req.Out, ref.Product, ec, res)
+	return e.executeStandard(req.Out, ref.Product, ec, res, req.AIMode)
 }
 
 func (e *Engine) dispatchBuiltin(req Request, ldr loader.Loader, product, command string) (bool, error) {
@@ -292,10 +298,7 @@ func resolveDispatchAPI(ldr loader.Loader, product, command string, tail []strin
 				}
 				return meta.APIRef{}, nil, commandVersionError(product, command, currentVersion, versions)
 			}
-			return meta.APIRef{}, nil, fmt.Errorf(
-				"unknown command %q for product %q; try `aliyun %s` to list commands",
-				command, product, product,
-			)
+			return meta.APIRef{}, nil, &UnknownCommandError{Product: product, Command: command}
 		}
 		return meta.APIRef{}, nil, err
 	}
@@ -457,7 +460,7 @@ func (e *Engine) executeEstimateCost(out io.Writer, ec *runtime.ExecContext, res
 	return err
 }
 
-func (e *Engine) executeSSE(out io.Writer, ec *runtime.ExecContext, res *argparser.Result) error {
+func (e *Engine) executeSSE(out io.Writer, ec *runtime.ExecContext, res *argparser.Result, compact bool) error {
 	if res.Reserved.Pager != nil {
 		return errors.New("--pager is not supported for SSE APIs")
 	}
@@ -497,10 +500,10 @@ func (e *Engine) executeSSE(out io.Writer, ec *runtime.ExecContext, res *argpars
 	if res.Reserved.OutputTable != nil {
 		return renderOutputTable(out, resp.Parsed, resp.Raw, res.Reserved.OutputTable)
 	}
-	return renderResponse(out, resp, res.Reserved.CliQuery)
+	return renderResponse(out, resp, res.Reserved.CliQuery, compact)
 }
 
-func (e *Engine) executeStandard(out io.Writer, product string, ec *runtime.ExecContext, res *argparser.Result) error {
+func (e *Engine) executeStandard(out io.Writer, product string, ec *runtime.ExecContext, res *argparser.Result, compact bool) error {
 	var resp *runtime.Response
 	var err error
 	switch {
@@ -523,7 +526,7 @@ func (e *Engine) executeStandard(out io.Writer, product string, ec *runtime.Exec
 	if res.Reserved.OutputTable != nil {
 		return renderOutputTable(out, resp.Parsed, resp.Raw, res.Reserved.OutputTable)
 	}
-	return renderResponse(out, resp, res.Reserved.CliQuery)
+	return renderResponse(out, resp, res.Reserved.CliQuery, compact)
 }
 
 func aggregateSSEResponse(events []runtime.SSEEvent) (*runtime.Response, error) {
@@ -760,7 +763,7 @@ func stripScheme(ep string) string {
 // output helpers
 // ============================================================================
 
-func renderResponse(w io.Writer, resp *runtime.Response, filter string) error {
+func renderResponse(w io.Writer, resp *runtime.Response, filter string, compact bool) error {
 	// Start from the precision-preserving parsed value when available;
 	// fall back to the raw bytes otherwise.
 	var data any = resp.Parsed
@@ -775,20 +778,30 @@ func renderResponse(w io.Writer, resp *runtime.Response, filter string) error {
 	if filter != "" {
 		out, err := jmespath.Search(filter, data)
 		if err != nil {
-			return fmt.Errorf("cli-query %q: %w", filter, err)
+			return &QueryFilterError{Expr: filter, Err: err}
 		}
 		data = out
 	}
 
-	return writeJSON(w, data, resp.Raw, filter)
+	return writeJSON(w, data, resp.Raw, filter, compact)
 }
 
-func writeJSON(w io.Writer, data any, raw []byte, filtered string) error {
-	// Prefer re-indenting the original raw bytes when no filter was
-	// applied, so key order and numeric precision survive. Fall back to
-	// MarshalIndent on the parsed value (filtered results, or missing raw).
+func writeJSON(w io.Writer, data any, raw []byte, filtered string, compact bool) error {
+	// Prefer re-encoding the original raw bytes when no filter was applied,
+	// so key order and numeric precision survive. Fall back to Marshal(Indent)
+	// on the parsed value (filtered results, or missing raw). compact drops
+	// the indentation for AI-mode consumers.
 	if filtered == "" && len(raw) > 0 {
 		var buf bytes.Buffer
+		if compact {
+			if err := json.Compact(&buf, raw); err != nil {
+				// Not valid JSON: emit raw and stop.
+				fmt.Fprintln(w, string(raw))
+				return nil
+			}
+			fmt.Fprintln(w, buf.String())
+			return nil
+		}
 		if err := json.Indent(&buf, raw, "", "\t"); err == nil {
 			fmt.Fprintln(w, buf.String())
 			return nil
@@ -797,7 +810,13 @@ func writeJSON(w io.Writer, data any, raw []byte, filtered string) error {
 		fmt.Fprintln(w, string(raw))
 		return nil
 	}
-	b, err := json.MarshalIndent(data, "", "\t")
+	var b []byte
+	var err error
+	if compact {
+		b, err = json.Marshal(data)
+	} else {
+		b, err = json.MarshalIndent(data, "", "\t")
+	}
 	if err != nil {
 		return err
 	}

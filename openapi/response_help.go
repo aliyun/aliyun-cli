@@ -11,6 +11,11 @@ func renderResponseHelpText(w io.Writer, document *machineHelpAPIResponseDocumen
 	if document == nil {
 		return fmt.Errorf("response Help document is nil")
 	}
+	if document.Provider != "" {
+		if _, err := fmt.Fprintf(w, "\nProvided by plugin: %s\n", document.Provider); err != nil {
+			return err
+		}
+	}
 	// Explicit Response Section Help is lossless: retain every response and
 	// print only its reachable component closure without inlining refs. Search
 	// projections continue through the filtered OutputSchema branch below.
@@ -114,7 +119,9 @@ func renderMachineHelpResponseQuery(w io.Writer, query *machineHelpQueryExample)
 	if query == nil {
 		return nil
 	}
-	_, err := fmt.Fprintf(w, "\nQuery this array directly:\n  %s\n", query.QueryCommand)
+	_, err := fmt.Fprintf(w,
+		"\nFetch any of these fields with --cli-query (JMESPath), e.g.:\n  %s\n",
+		query.QueryCommand)
 	return err
 }
 

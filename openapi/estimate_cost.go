@@ -508,7 +508,7 @@ func printEstimateCostResult(ctx *cli.Context, out string) error {
 			return err
 		}
 	}
-	out = sortJSON(out)
+	out = formatResponseJSON(ctx, out)
 	cli.Println(ctx.Stdout(), out)
 	return nil
 }

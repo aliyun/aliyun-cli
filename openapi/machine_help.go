@@ -64,7 +64,7 @@ func (e *machineHelpError) Error() string {
 func (e *machineHelpError) Unwrap() error { return e.cause }
 
 func (e *machineHelpError) RenderError(w io.Writer) error {
-	return encodeMachineHelpJSON(w, e.document)
+	return encodeMachineHelpJSON(w, e.document, false)
 }
 
 func (e *machineHelpError) ExitCode() int { return 2 }
@@ -82,6 +82,27 @@ type machineHelpTarget struct {
 type machineHelpLocalizedText struct {
 	EN string `json:"en"`
 	ZH string `json:"zh"`
+}
+
+// UnmarshalJSON accepts both the bilingual object and the slimmed single
+// string the encoder emits for the current language.
+func (t *machineHelpLocalizedText) UnmarshalJSON(data []byte) error {
+	var text string
+	if err := json.Unmarshal(data, &text); err == nil {
+		if helpResponseLanguage() == "zh" {
+			t.ZH = text
+		} else {
+			t.EN = text
+		}
+		return nil
+	}
+	type plain machineHelpLocalizedText
+	var value plain
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*t = machineHelpLocalizedText(value)
+	return nil
 }
 
 type machineHelpCommandSummary struct {
@@ -148,12 +169,19 @@ type machineHelpProduct struct {
 	SupportedVersions    []string                 `json:"supportedVersions"`
 	SelectedVersion      string                   `json:"selectedVersion"`
 	Distribution         string                   `json:"distribution,omitempty"`
+	// Plugin/PluginVersion identify the installed metadata plugin whose data
+	// serves this product. Empty for baseline-served products.
+	Plugin        string `json:"plugin,omitempty"`
+	PluginVersion string `json:"pluginVersion,omitempty"`
 }
 
 type machineHelpAPISummary struct {
-	Name        string                   `json:"name"`
-	CmdName     string                   `json:"cmdName"`
-	DisplayName string                   `json:"displayName"`
+	Name string `json:"name,omitempty"`
+	CmdName string `json:"cmdName,omitempty"`
+	// DisplayName is the sort/search key in the active command style; in the
+	// emitted JSON it always equals the surviving name/cmdName, so it stays
+	// struct-only.
+	DisplayName string                   `json:"-"`
 	Title       machineHelpLocalizedText `json:"title"`
 	Description machineHelpLocalizedText `json:"description"`
 	Deprecated  bool                     `json:"deprecated"`
@@ -173,7 +201,7 @@ type machineHelpProductDocument struct {
 }
 
 type machineHelpOperation struct {
-	Action          string `json:"action"`
+	Action          string `json:"action,omitempty"`
 	APIStyle        string `json:"apiStyle"`
 	APIVersion      string `json:"apiVersion"`
 	Method          string `json:"method"`
@@ -186,8 +214,8 @@ type machineHelpOperation struct {
 }
 
 type machineHelpAPI struct {
-	Name         string                   `json:"name"`
-	CmdName      string                   `json:"cmdName"`
+	Name         string                   `json:"name,omitempty"`
+	CmdName      string                   `json:"cmdName,omitempty"`
 	CmdFullName  string                   `json:"cmdFullName"`
 	Title        machineHelpLocalizedText `json:"title"`
 	Description  machineHelpLocalizedText `json:"description"`
@@ -215,8 +243,10 @@ type machineHelpShape struct {
 }
 
 type machineHelpParameter struct {
-	Name          string                   `json:"name"`
-	RawName       string                   `json:"rawName"`
+	Name    string `json:"name"`
+	// RawName carries the wire name for legacy-camel views where it is set;
+	// it is only ever equal to Name, so it stays struct-only.
+	RawName       string                   `json:"-"`
 	Options       []string                 `json:"options"`
 	Type          string                   `json:"type"`
 	Location      string                   `json:"location"`
@@ -251,6 +281,7 @@ type machineHelpAPIDocument struct {
 	ActiveParameterSet string                   `json:"activeParameterSet"`
 	ParameterSets      machineHelpParameterSets `json:"parameterSets"`
 	GlobalParameters   []machineHelpParameter   `json:"globalParameters"`
+	QueryOptions       []machineHelpQueryOption `json:"queryOptions"`
 	Examples           machineHelpExamples      `json:"examples"`
 	OutputSchema       any                      `json:"outputSchema"`
 	Pagination         any                      `json:"pagination"`
@@ -261,6 +292,18 @@ type machineHelpAPIDocument struct {
 	Next               *HelpNext                `json:"next"`
 	Listing            *machineHelpListing      `json:"listing"`
 	AIModeHint         *machineHelpAIModeHint   `json:"aiModeHint"`
+}
+
+// machineHelpQueryOption describes one metadata-inspection flag in the same
+// vocabulary as Parameters so agents discover --cli-section / --cli-query /
+// --help-search from the default API Help.
+type machineHelpQueryOption struct {
+	Name       string                   `json:"name"`
+	Type       string                   `json:"type"`
+	Required   bool                     `json:"required"`
+	HasDefault bool                     `json:"hasDefault,omitempty"`
+	Default    string                   `json:"default,omitempty"`
+	Help       machineHelpLocalizedText `json:"help"`
 }
 
 type machineHelpListing struct {
@@ -291,24 +334,26 @@ type machineHelpOutputSchema struct {
 	Components  *machineHelpComponents `json:"components"`
 }
 
+// machineHelpAPIResponseDocument intentionally omits the API and Product
+// blocks: the caller already knows which API it asked about, and the schema
+// is the payload. Provider keeps the plugin attribution in one string.
 type machineHelpAPIResponseDocument struct {
 	SchemaVersion string                   `json:"schemaVersion"`
 	Kind          string                   `json:"kind"`
 	Section       string                   `json:"section"`
 	Target        machineHelpTarget        `json:"target"`
 	Query         string                   `json:"query"`
-	Product       machineHelpProduct       `json:"product"`
-	API           machineHelpAPI           `json:"api"`
-	Responses     json.RawMessage          `json:"responses"`
-	Components    *machineHelpComponents   `json:"components"`
-	OutputSchema  *machineHelpOutputSchema `json:"outputSchema"`
+	Provider      string                   `json:"provider,omitempty"`
+	Responses     json.RawMessage          `json:"responses,omitempty"`
+	Components    *machineHelpComponents   `json:"components,omitempty"`
+	OutputSchema  *machineHelpOutputSchema `json:"outputSchema,omitempty"`
 	Matches       []string                 `json:"matches"`
 	Result        HelpResult               `json:"result"`
 	Next          *HelpNext                `json:"next"`
-	Notice        string                   `json:"notice"`
-	Warnings      []string                 `json:"warnings"`
-	ResponseQuery *machineHelpQueryExample `json:"responseQueryExample"`
-	AIModeHint    *machineHelpAIModeHint   `json:"aiModeHint"`
+	Notice        string                   `json:"notice,omitempty"`
+	Warnings      []string                 `json:"warnings,omitempty"`
+	ResponseQuery *machineHelpQueryExample `json:"responseQueryExample,omitempty"`
+	AIModeHint    *machineHelpAIModeHint   `json:"aiModeHint,omitempty"`
 }
 
 type resolvedMachineHelpAPI struct {
@@ -424,6 +469,14 @@ func (s *machineHelpService) buildProductForStyle(code, requestedVersion, style 
 		}
 		return apis[i].DisplayName < apis[j].DisplayName
 	})
+	// Keep only the active style's identifiers; sorting above still needs both.
+	for i := range apis {
+		if style == "kebab" {
+			apis[i].Name = ""
+		} else {
+			apis[i].CmdName = ""
+		}
+	}
 
 	productDoc := buildMachineHelpProduct(*product, versions, selected)
 	code = productDoc.Code
@@ -443,7 +496,6 @@ func (s *machineHelpService) buildAPI(code, command, requestedVersion string) (*
 	}
 	api := resolved.API
 
-	operation := projectMachineHelpOperation(api)
 	camelParameters := make([]machineHelpParameter, 0)
 	for _, view := range api.LegacyTopLevelParameters() {
 		camelParameters = append(camelParameters, projectLegacyParameter(view, ""))
@@ -462,23 +514,15 @@ func (s *machineHelpService) buildAPI(code, command, requestedVersion string) (*
 			Path:           []string{"aliyun", productDoc.Code, command},
 			RequestedStyle: resolved.Style,
 		},
-		Product: productDoc,
-		API: machineHelpAPI{
-			Name:         api.Name,
-			CmdName:      api.CmdName,
-			CmdFullName:  api.CmdFullName,
-			Title:        machineHelpLocalizedText{EN: api.TitleEn, ZH: api.TitleZh},
-			Description:  machineHelpLocalizedText{EN: api.DescriptionEn, ZH: api.DescriptionZh},
-			Deprecated:   api.Deprecated,
-			MultiVersion: api.MultiVersion,
-			Operation:    operation,
-		},
+		Product:            productDoc,
+		API:                projectMachineHelpAPI(api, productDoc.Code, resolved.Style),
 		ActiveParameterSet: resolved.Style,
 		ParameterSets: machineHelpParameterSets{
 			Camel: camelParameters,
 			Kebab: kebabParameters,
 		},
 		GlobalParameters: make([]machineHelpParameter, 0),
+		QueryOptions:     buildMachineHelpQueryOptions(),
 		Examples: machineHelpExamples{
 			Camel: api.CamelExample,
 			Kebab: api.KebabExample,
@@ -512,6 +556,7 @@ func (s *machineHelpService) buildAPIResponse(code, command, requestedVersion st
 	}
 
 	productDoc := buildMachineHelpProduct(resolved.Product, resolved.Versions, resolved.Selected)
+	lang := helpResponseLanguage()
 	document := &machineHelpAPIResponseDocument{
 		SchemaVersion: machineHelpSchemaVersion,
 		Kind:          "api",
@@ -520,23 +565,14 @@ func (s *machineHelpService) buildAPIResponse(code, command, requestedVersion st
 			Path:           []string{"aliyun", productDoc.Code, command},
 			RequestedStyle: resolved.Style,
 		},
-		Product: productDoc,
-		API: machineHelpAPI{
-			Name:         api.Name,
-			CmdName:      api.CmdName,
-			CmdFullName:  api.CmdFullName,
-			Title:        machineHelpLocalizedText{EN: api.TitleEn, ZH: api.TitleZh},
-			Description:  machineHelpLocalizedText{EN: api.DescriptionEn, ZH: api.DescriptionZh},
-			Deprecated:   api.Deprecated,
-			MultiVersion: api.MultiVersion,
-			Operation:    projectMachineHelpOperation(api),
-		},
-		Responses: section.Responses,
+		// Localized single-language schema keeps Help output lean; the
+		// canonical source stays bilingual and untouched on disk.
+		Responses: localizeHelpJSON(section.Responses, lang),
 		Warnings:  mergeMachineHelpWarnings(section.Warnings, response.Warnings),
 		Result:    completeMachineHelpJSONResult(section.Responses),
 	}
 	if len(section.Components) > 0 {
-		document.Components = &machineHelpComponents{Schemas: section.Components}
+		document.Components = &machineHelpComponents{Schemas: localizeHelpComponents(section.Components, lang)}
 	}
 	if !response.HasSchema() {
 		document.Notice = "No response schema is available for this API."
@@ -546,20 +582,56 @@ func (s *machineHelpService) buildAPIResponse(code, command, requestedVersion st
 	output := &machineHelpOutputSchema{
 		StatusCode:  response.StatusCode,
 		ContentType: response.ContentType,
-		Schema:      response.Schema,
+		Schema:      localizeHelpJSON(response.Schema, lang),
 	}
 	if len(response.Components) > 0 {
-		output.Components = &machineHelpComponents{Schemas: response.Components}
+		output.Components = &machineHelpComponents{Schemas: localizeHelpComponents(response.Components, lang)}
 	}
+	// The unfiltered document carries the schema once: responses is the
+	// lossless view and outputSchema would repeat it. Search projections
+	// rebuild outputSchema from the localized schema below.
 	document.OutputSchema = output
-	document.ResponseQuery = projectResponseQueryExample(
+	document.ResponseQuery = projectResponseQueryExampleWithRequired(
 		HelpResponseSchema{Schema: response.Schema, Components: response.Components},
 		productDoc.Code,
 		command,
 		resolved.Style,
 		requestedVersion,
+		requiredResponseQueryFlags(api, resolved.Style),
 	)
 	return document, nil
+}
+
+// requiredResponseQueryFlags returns the API's required top-level parameters
+// as flags in the target command style, capped to keep the example short.
+func requiredResponseQueryFlags(api *canonicalmeta.API, style string) []string {
+	if api == nil {
+		return nil
+	}
+	const maxRequiredFlags = 4
+	flags := make([]string, 0, maxRequiredFlags)
+	for i := range api.Parameters {
+		parameter := &api.Parameters[i]
+		if !parameter.Required || len(flags) >= maxRequiredFlags {
+			continue
+		}
+		// Options are the kebab plugin form; PascalCase commands take the
+		// raw wire name so the placeholder example stays executable.
+		flag := ""
+		if style == "kebab" {
+			if len(parameter.Options) > 0 {
+				flag = parameter.Options[0]
+			} else if parameter.Name != "" {
+				flag = "--" + strings.ReplaceAll(parameter.Name, "_", "-")
+			}
+		} else if parameter.RawName != "" {
+			flag = "--" + parameter.RawName
+		}
+		if flag != "" {
+			flags = append(flags, flag)
+		}
+	}
+	return flags
 }
 
 func projectCanonicalResponseQueryExample(api *canonicalmeta.API, product, command, style, requestedVersion string) *machineHelpQueryExample {
@@ -570,22 +642,28 @@ func projectCanonicalResponseQueryExample(api *canonicalmeta.API, product, comma
 	if err != nil || !response.HasSchema() {
 		return nil
 	}
-	return projectResponseQueryExample(
+	return projectResponseQueryExampleWithRequired(
 		HelpResponseSchema{Schema: response.Schema, Components: response.Components},
 		product,
 		command,
 		style,
 		requestedVersion,
+		requiredResponseQueryFlags(api, style),
 	)
 }
 
 func projectResponseQueryExample(schema HelpResponseSchema, product, command, style, requestedVersion string) *machineHelpQueryExample {
+	return projectResponseQueryExampleWithRequired(schema, product, command, style, requestedVersion, nil)
+}
+
+func projectResponseQueryExampleWithRequired(schema HelpResponseSchema, product, command, style, requestedVersion string, requiredFlags []string) *machineHelpQueryExample {
 	example, err := BuildResponseQueryExample(ResponseQueryContext{
-		Document:   schema,
-		Product:    product,
-		API:        command,
-		APIVersion: requestedVersion,
-		Style:      responseCommandStyle(style),
+		Document:      schema,
+		Product:       product,
+		API:           command,
+		APIVersion:    requestedVersion,
+		Style:         responseCommandStyle(style),
+		RequiredFlags: requiredFlags,
 	})
 	if err != nil || example == nil {
 		return nil
@@ -616,6 +694,70 @@ func projectMachineHelpOperation(api *canonicalmeta.API) machineHelpOperation {
 		ContentType:     api.Operation.ContentType,
 		HasWildcardPath: api.Operation.HasWildcardPath,
 	}
+}
+
+// buildMachineHelpQueryOptions lists the metadata-inspection flags in the
+// parameter vocabulary: which section of the API metadata to inspect
+// (request parameters by default, response schema on demand), how to filter
+// call output, and how to search this API's metadata for a keyword.
+func buildMachineHelpQueryOptions() []machineHelpQueryOption {
+	return []machineHelpQueryOption{
+		{
+			Name:       "--cli-section",
+			Type:       "string",
+			HasDefault: true,
+			Default:    "request",
+			Help: machineHelpLocalizedText{
+				EN: "inspect this API's structure: request parameters (default) or response schema",
+				ZH: "查看该 API 的结构：request 参数（默认）或 response 响应结构",
+			},
+		},
+		{
+			Name: "--cli-query",
+			Type: "string",
+			Help: machineHelpLocalizedText{
+				EN: "filter call output with a JMESPath expression, e.g. --cli-query 'Instances.Instance[]'",
+				ZH: "用 JMESPath 表达式过滤调用输出，例如 --cli-query 'Instances.Instance[]'",
+			},
+		},
+		{
+			Name: "--help-search",
+			Type: "string",
+			Help: machineHelpLocalizedText{
+				EN: "search this API's parameters and response fields for a keyword",
+				ZH: "在本 API 的参数与响应字段中搜索关键字",
+			},
+		},
+	}
+}
+
+// projectMachineHelpAPI projects the API identity in one command style only.
+// Machine Help consumers must never see the other style's identifiers: hiding
+// them keeps agents from being pulled back into the style they did not use.
+func projectMachineHelpAPI(api *canonicalmeta.API, productCode, style string) machineHelpAPI {
+	identity := machineHelpAPI{
+		Title:        machineHelpLocalizedText{EN: api.TitleEn, ZH: api.TitleZh},
+		Description:  machineHelpLocalizedText{EN: api.DescriptionEn, ZH: api.DescriptionZh},
+		Deprecated:   api.Deprecated,
+		MultiVersion: api.MultiVersion,
+		Operation:    projectMachineHelpOperation(api),
+	}
+	if style == "kebab" {
+		identity.CmdName = api.CmdName
+		identity.CmdFullName = api.CmdFullName
+		if identity.CmdFullName == "" && api.CmdName != "" {
+			// Metadata plugins may omit cmd_full_name; synthesize the same
+			// "<product> <command>" shape the canonical generator writes.
+			identity.CmdFullName = strings.TrimSpace(productCode + " " + api.CmdName)
+		}
+		// operation.action is the PascalCase wire action; it equals the hidden
+		// legacy name and is redundant with cmdName for command construction.
+		identity.Operation.Action = ""
+		return identity
+	}
+	identity.Name = api.Name
+	identity.CmdFullName = strings.TrimSpace(productCode + " " + api.Name)
+	return identity
 }
 
 func (s *machineHelpService) resolveAPI(code, command, requestedVersion string) (*resolvedMachineHelpAPI, error) {
@@ -700,11 +842,10 @@ func projectCanonicalParameter(parameter *canonicalmeta.Parameter) machineHelpPa
 	}
 	result := machineHelpParameter{
 		Name:          parameter.Name,
-		RawName:       parameter.RawName,
 		Options:       append([]string(nil), parameter.Options...),
 		Type:          parameter.Type,
 		Location:      strings.ToLower(parameter.Location),
-		Required:      parameter.Required,
+		Required:      parameter.Required || parameter.DocRequired,
 		Serialization: parameter.ParamStyle,
 		Help:          machineHelpLocalizedText{EN: parameter.HelpEn, ZH: parameter.HelpZh},
 		Example:       parameter.Example,
@@ -731,10 +872,9 @@ func projectCanonicalField(field *canonicalmeta.Field) machineHelpParameter {
 	}
 	result := machineHelpParameter{
 		Name:     field.Name,
-		RawName:  field.RawName,
 		Options:  make([]string, 0),
 		Type:     field.Type,
-		Required: field.Required,
+		Required: field.Required || field.DocRequired,
 		Help:     machineHelpLocalizedText{EN: field.HelpEn, ZH: field.HelpZh},
 		Example:  field.Example,
 		Constraints: machineHelpConstraints{
@@ -791,7 +931,7 @@ func projectLegacyParameter(view *canonicalmeta.LegacyParameterView, prefix stri
 		Options:  []string{"--" + optionPath},
 		Type:     view.LegacyType(),
 		Location: strings.ToLower(view.LegacyPosition()),
-		Required: view.LegacyRequired(),
+		Required: view.LegacyRequired() || view.DocRequired(),
 		Help:     machineHelpLocalizedText{EN: view.LegacyDescription("en"), ZH: view.LegacyDescription("zh")},
 		Example:  view.LegacyExample(),
 		Constraints: machineHelpConstraints{
@@ -948,7 +1088,7 @@ func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format stri
 			if typed.OutputSchema != nil {
 				typed.ResponseQuery = projectResponseQueryExample(
 					helpResponseSchema(typed),
-					typed.Product.Code,
+					typed.Target.Path[1],
 					typed.Target.Path[len(typed.Target.Path)-1],
 					typed.Target.RequestedStyle,
 					requestedMachineHelpVersion(ctx),
@@ -970,7 +1110,7 @@ func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format stri
 			typed.AIModeHint = projected
 		}
 	}
-	if err := encodeMachineHelpJSON(ctx.Stdout(), document); err != nil {
+	if err := encodeMachineHelpJSON(ctx.Stdout(), document, aiMode); err != nil {
 		return newMachineHelpUnavailableError(target, err)
 	}
 	return nil
@@ -987,7 +1127,10 @@ func newMachineHelpUnavailableError(target []string, cause error) *machineHelpEr
 	return err
 }
 
-func encodeMachineHelpJSON(w io.Writer, value any) error {
+// encodeMachineHelpJSON writes the canonical Machine Help document. compact
+// drops the pretty indentation for AI-mode consumers; slimming (single-language
+// collapse plus omission of default-valued fields) applies to every encoding.
+func encodeMachineHelpJSON(w io.Writer, value any, compact bool) error {
 	if root, ok := value.(*machineHelpRootDocument); ok {
 		root.prepareJSONGroups()
 	}
@@ -1002,10 +1145,13 @@ func encodeMachineHelpJSON(w io.Writer, value any) error {
 		return err
 	}
 	document, _ = pruneMachineHelpEmptyAt(document, nil)
+	document, _ = slimMachineHelpJSON(document, helpResponseLanguage())
 
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
-	encoder.SetIndent("", "  ")
+	if !compact {
+		encoder.SetIndent("", "  ")
+	}
 	return encoder.Encode(document)
 }
 

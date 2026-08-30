@@ -225,7 +225,7 @@ func TestSearchResponseSchemaPrunesToMatchedRefPath(t *testing.T) {
 		},
 	}
 
-	result, err := SearchResponseSchema(document, "instance-id")
+	result, err := SearchResponseSchema(document, "instance-id", false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Instances.Instance.InstanceId"}, result.Paths)
 	assertRawJSONEq(t, `{
@@ -268,7 +268,7 @@ func TestSearchResponseSchemaMergesMultipleMatchesInSchemaOrder(t *testing.T) {
 		},
 	}
 
-	result, err := SearchResponseSchema(document, "标识")
+	result, err := SearchResponseSchema(document, "标识", false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"RequestId", "Result.InstanceId"}, result.Paths)
 	assertRawJSONEq(t, `{
@@ -304,13 +304,13 @@ func TestSearchResponseSchemaMatchesFullPathAcrossSeparators(t *testing.T) {
 		"instances instance instance id",
 	} {
 		t.Run(keyword, func(t *testing.T) {
-			result, err := SearchResponseSchema(document, keyword)
+			result, err := SearchResponseSchema(document, keyword, false)
 			require.NoError(t, err)
 			assert.Equal(t, []string{"Instances.Instance.InstanceId"}, result.Paths)
 		})
 	}
 
-	result, err := SearchResponseSchema(document, "instances")
+	result, err := SearchResponseSchema(document, "instances", false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Instances"}, result.Paths)
 }
@@ -328,7 +328,7 @@ func TestSearchResponseSchemaRanksMatchesByRelevance(t *testing.T) {
 		}`),
 	}
 
-	result, err := SearchResponseSchema(document, "instance_id")
+	result, err := SearchResponseSchema(document, "instance_id", false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{
 		"InstanceId",
@@ -354,7 +354,7 @@ func TestSearchResponseSchemaPrunesUnmatchedCompositionBranches(t *testing.T) {
 				}`),
 			}
 
-			result, err := SearchResponseSchema(document, "matching-field")
+			result, err := SearchResponseSchema(document, "matching-field", false)
 			require.NoError(t, err)
 			assert.Equal(t, []string{"Result.MatchingField"}, result.Paths)
 			assertRawJSONEq(t, `{
@@ -379,7 +379,7 @@ func TestSearchResponseSchemaMatchesTitleOnReferencedField(t *testing.T) {
 		},
 	}
 
-	result, err := SearchResponseSchema(document, "结果集合")
+	result, err := SearchResponseSchema(document, "结果集合", false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Result"}, result.Paths)
 	assertRawJSONEq(t, `{
@@ -411,7 +411,7 @@ func TestSearchResponseSchemaKeepsArrayItemsAndReachableComponents(t *testing.T)
 		},
 	}
 
-	result, err := SearchResponseSchema(document, "entries")
+	result, err := SearchResponseSchema(document, "entries", false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Entries"}, result.Paths)
 	assertRawJSONEq(t, `{
@@ -445,7 +445,7 @@ func TestSearchResponseSchemaPrunesNestedComponentClosure(t *testing.T) {
 		},
 	}
 
-	result, err := SearchResponseSchema(document, "display-name")
+	result, err := SearchResponseSchema(document, "display-name", false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Result.Data.DisplayName"}, result.Paths)
 	assert.Equal(t, []string{"Data", "Page"}, sortedRawMessageKeys(result.Components))
@@ -479,7 +479,7 @@ func TestSearchResponseSchemaHandlesCyclesMissingRefsAndEmptyMatches(t *testing.
 		},
 	}
 
-	result, err := SearchResponseSchema(document, "name")
+	result, err := SearchResponseSchema(document, "name", false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Node.Name"}, result.Paths)
 	assert.Equal(t, []string{"Node"}, sortedRawMessageKeys(result.Components))
@@ -488,7 +488,7 @@ func TestSearchResponseSchemaHandlesCyclesMissingRefsAndEmptyMatches(t *testing.
 		"properties":{"Name":{"type":"string"}}
 	}`, result.Components["Node"])
 
-	result, err = SearchResponseSchema(document, "missing")
+	result, err = SearchResponseSchema(document, "missing", false)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Missing"}, result.Paths)
 	assert.Empty(t, result.Components)
@@ -497,7 +497,7 @@ func TestSearchResponseSchemaHandlesCyclesMissingRefsAndEmptyMatches(t *testing.
 		"properties":{"Missing":{"$ref":"#/components/schemas/DoesNotExist"}}
 	}`, result.Schema)
 
-	result, err = SearchResponseSchema(document, "not-present")
+	result, err = SearchResponseSchema(document, "not-present", false)
 	require.NoError(t, err)
 	assert.Empty(t, result.Paths)
 	assert.Nil(t, result.Schema)
@@ -505,7 +505,7 @@ func TestSearchResponseSchemaHandlesCyclesMissingRefsAndEmptyMatches(t *testing.
 }
 
 func TestSearchResponseSchemaRejectsMalformedJSON(t *testing.T) {
-	_, err := SearchResponseSchema(HelpResponseSchema{Schema: json.RawMessage(`{"type":`)}, "field")
+	_, err := SearchResponseSchema(HelpResponseSchema{Schema: json.RawMessage(`{"type":`)}, "field", false)
 	require.Error(t, err)
 }
 
@@ -555,4 +555,21 @@ func assertRawJSONEq(t *testing.T, expected any, actual json.RawMessage) {
 	}
 	require.NotEmpty(t, actual)
 	assert.JSONEq(t, expectedJSON, string(actual))
+}
+
+func TestProjectHelpSearchMatchesUnlimitedLiftsCap(t *testing.T) {
+	matches := make([]HelpSearchMatch, helpSearchResultLimit+5)
+	for i := range matches {
+		matches[i] = HelpSearchMatch{Candidate: HelpSearchCandidate{Name: fmt.Sprintf("item-%02d", i)}}
+	}
+
+	capped := ProjectHelpSearchMatches(matches, false)
+	assert.Equal(t, helpSearchResultLimit, capped.Result.Shown)
+	assert.Equal(t, len(matches), capped.Result.Total)
+	assert.True(t, capped.Result.Truncated)
+
+	unlimited := ProjectHelpSearchMatches(matches, true)
+	assert.Equal(t, len(matches), unlimited.Result.Shown)
+	assert.Equal(t, len(matches), unlimited.Result.Total)
+	assert.False(t, unlimited.Result.Truncated)
 }

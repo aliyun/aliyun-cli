@@ -95,6 +95,7 @@ func (c *Commando) beforeParseHelpRoute(ctx *cli.Context, args []string) (bool, 
 		CommandStyle: commandStyleForAction(targetArgs[1]),
 		Operation:    opts.Operation,
 		SearchQuery:  opts.SearchQuery,
+		SearchAll:    opts.SearchAll,
 		Output:       opts.Output,
 		Provider:     HelpProviderHost,
 	}
@@ -188,10 +189,19 @@ func (c *Commando) delegateInstalledPluginHelp(ctx *cli.Context, args []string) 
 	}
 	c.setLangEnv(ctx)
 	if local.IsMeta() {
-		if err := metaPluginHelpDispatch(ctx, pluginArgs); err != nil {
-			return true, &externalPluginError{err: err}
-		}
-		return true, nil
+		// Metadata plugins are served by the host's Machine Help (JSON,
+		// sections, search) through the engine loader, so a hot-updated
+		// plugin renders exactly like the bundled kebab experience.
+		// The version contract was already validated above.
+		return false, nil
+	}
+	if c.hostOwnsLegacyHelpCommand(args) {
+		// PascalCase commands execute on the host's built-in legacy chain
+		// even with a plugin installed (commando.main only hands
+		// all-lowercase commands to the plugin), so Help must resolve
+		// against the same owner — otherwise `aliyun sts GetCallerIdentity
+		// --help` reports "unknown command" for a command that runs.
+		return false, nil
 	}
 	ok, err := goPluginHelpDispatch(product, pluginArgs, ctx)
 	if err != nil {
@@ -201,6 +211,34 @@ func (c *Commando) delegateInstalledPluginHelp(ctx *cli.Context, args []string) 
 		return true, &externalPluginError{err: fmt.Errorf("plugin %s not found", pluginName)}
 	}
 	return true, nil
+}
+
+// hostOwnsLegacyHelpCommand reports whether the requested Help target names a
+// PascalCase API command on a product the host's built-in metadata serves.
+// Execution routes such commands through the host's legacy chain even when a
+// Go plugin is installed (commando.main only hands all-lowercase commands to
+// the plugin), so Help must resolve against the same owner. HTTP verbs are
+// excluded: method+path targets exceed the host Help model today and stay with
+// the plugin. Products the host does not know keep full Help ownership in the
+// plugin.
+func (c *Commando) hostOwnsLegacyHelpCommand(args []string) bool {
+	positionals := rawHelpPositionals(args)
+	if len(positionals) < 2 {
+		return false
+	}
+	command := positionals[1]
+	switch strings.ToUpper(command) {
+	case "GET", "POST", "PUT", "DELETE":
+		return false
+	}
+	if strings.ToLower(command) == command {
+		return false
+	}
+	if c.library == nil {
+		return false
+	}
+	_, known := c.library.GetProduct(positionals[0])
+	return known
 }
 
 func containsPluginHelpOperation(args []string) bool {
@@ -359,13 +397,6 @@ func (c *Commando) resolveParsedHelpTarget(ctx *cli.Context, args []string) (Hel
 		}
 	}
 	original := ctx.InvocationArgs()
-	prefix := len(original) > 0 && original[0] == "help"
-	// Unit/library callers may invoke Help directly without going through
-	// Command.Execute. Preserve the public prefix-only Section contract while
-	// allowing those callers to supply an already parsed section.
-	if len(original) == 0 && opts.SectionExplicit {
-		prefix = true
-	}
 	target := HelpTarget{
 		Level:     HelpLevelRoot,
 		Operation: HelpOperationDefault,
@@ -378,12 +409,13 @@ func (c *Commando) resolveParsedHelpTarget(ctx *cli.Context, args []string) (Hel
 	} else if opts.Search != "" {
 		target.Operation = HelpOperationSearch
 		target.SearchQuery = opts.Search
+		target.SearchAll = opts.SearchAll
 	}
 	if len(args) >= 1 {
 		target.Level = HelpLevelProduct
 		target.Product = args[0]
 		target.CommandStyle = CommandStyleCamel
-		if productHelpEnvEnabled(baselineProductHelpEnv) {
+		if productHelpEnvEnabled(baselineProductHelpEnv) || c.installedMetaPluginProduct(args[0]) {
 			target.CommandStyle = CommandStyleKebab
 		}
 	}
@@ -395,16 +427,15 @@ func (c *Commando) resolveParsedHelpTarget(ctx *cli.Context, args []string) (Hel
 	if len(args) > 2 {
 		return HelpTarget{}, false, fmt.Errorf("too many Help target arguments: %d", len(args))
 	}
-	if opts.SectionExplicit && !prefix {
+	// --cli-section needs an API-level target (product + API). The `help`
+	// prefix and the `--help` flag are equivalent entry points.
+	if opts.SectionExplicit && target.Level != HelpLevelAction {
 		return HelpTarget{}, false, &InvalidOptionCombinationError{
 			Options: []string{"--" + CliHelpSectionFlagName},
-			Err:     fmt.Errorf("--%s is only valid with `aliyun help <product> <API>`", CliHelpSectionFlagName),
+			Err:     fmt.Errorf("--%s is only valid with an API target: `aliyun help <product> <API>` or `aliyun <product> <API> --help`", CliHelpSectionFlagName),
 		}
 	}
-	if prefix && len(args) == 2 {
-		target.SectionExplicit = true
-		target.Section = HelpSection(opts.Section)
-	} else if opts.SectionExplicit {
+	if opts.SectionExplicit {
 		target.SectionExplicit = true
 		target.Section = HelpSection(opts.Section)
 	}
@@ -431,6 +462,7 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 		Section:         string(target.Section),
 		SectionExplicit: target.SectionExplicit,
 		Search:          target.SearchQuery,
+		SearchAll:       target.SearchAll,
 		All:             target.Operation == HelpOperationAll,
 		Output:          cli.HelpOutput(target.Output),
 	}
@@ -452,10 +484,23 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 		}
 	case HelpLevelAction:
 		if target.SectionExplicit && target.Section == HelpSectionResponse {
+			response := (*machineHelpAPIResponseDocument)(nil)
 			document, err = service.buildAPIResponse(target.Product, target.Action, target.Version)
 			if err == nil {
-				rewriteResponseQueryVersionFlag(document.(*machineHelpAPIResponseDocument).ResponseQuery, target.VersionFlag)
-				err = applyResponseHelpOptions(document.(*machineHelpAPIResponseDocument), opts)
+				response = document.(*machineHelpAPIResponseDocument)
+				rewriteResponseQueryVersionFlag(response.ResponseQuery, target.VersionFlag)
+				err = applyResponseHelpOptions(response, opts)
+			}
+			if err == nil && response != nil {
+				// Carry the schema exactly once: the lossless responses view
+				// for the complete document, outputSchema for search
+				// projections.
+				if opts.Search == "" {
+					response.OutputSchema = nil
+				} else {
+					response.Responses = nil
+					response.Components = nil
+				}
 			}
 		} else {
 			document, err = service.buildAPI(target.Product, target.Action, target.Version)
@@ -483,7 +528,7 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 			}
 			if err == nil {
 				if target.Operation == HelpOperationSearch {
-					searchParameterHelpDocument(parameter, target.SearchQuery)
+					searchParameterHelpDocument(parameter, target.SearchQuery, target.SearchAll)
 				}
 				document = parameter
 			}
@@ -502,11 +547,12 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 		return err
 	}
 
+	c.annotatePluginProvenance(document, target.Product)
 	if !aiMode && jsonOutput {
 		attachMachineHelpAIModeHint(document)
 	}
 	if jsonOutput {
-		return encodeMachineHelpJSON(ctx.Stdout(), document)
+		return encodeMachineHelpJSON(ctx.Stdout(), document, aiMode)
 	}
 	if err := renderHostHelpText(ctx, document, target.SearchQuery); err != nil {
 		return err
@@ -702,5 +748,17 @@ func buildHelpNext(target HelpTarget, aiMode bool) *HelpNext {
 	search.Operation = HelpOperationSearch
 	search.SearchQuery = "<keyword>"
 	find, _ := BuildHelpCommand(search)
-	return &HelpNext{ShowAll: showAll, Search: find}
+	next := &HelpNext{ShowAll: showAll, Search: find}
+	if strings.TrimSpace(target.SearchQuery) != "" && !target.SearchAll {
+		// The current search was truncated: offer the same keyword with the
+		// cap lifted instead of forcing a keyword change.
+		searchAll := base
+		searchAll.Operation = HelpOperationSearch
+		searchAll.SearchQuery = target.SearchQuery
+		searchAll.SearchAll = true
+		if command, err := BuildHelpCommand(searchAll); err == nil {
+			next.SearchAll = command
+		}
+	}
+	return next
 }

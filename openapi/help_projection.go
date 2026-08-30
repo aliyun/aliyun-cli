@@ -3,7 +3,9 @@ package openapi
 import (
 	"fmt"
 	"io"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -92,7 +94,7 @@ func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions
 				Value:         entry,
 			})
 		}
-		projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.Search))
+		projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.Search), options.SearchAll)
 		document.Commands = nil
 		document.GlobalFlags = nil
 		document.Products = nil
@@ -201,11 +203,36 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 				Value:         api,
 			})
 		}
-		projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.Search))
+		projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.Search), options.SearchAll)
 		document.APIs = helpSearchValues[machineHelpAPISummary](projection.Matches)
 		document.Result = projection.Result
 		document.Listing = nil
 		return
+	}
+
+	omittedDeprecated := 0
+	if options.All {
+		// Deprecated APIs stay available with --help-all but move to the end,
+		// so the leading list is the supported surface.
+		sort.SliceStable(document.APIs, func(i, j int) bool {
+			if document.APIs[i].Deprecated != document.APIs[j].Deprecated {
+				return !document.APIs[i].Deprecated
+			}
+			return false
+		})
+	} else {
+		// Deprecated APIs are a liability rather than help for agents and
+		// humans alike: hide them from the default listing. They remain
+		// reachable through --help-all (at the end) and --help-search.
+		visible := document.APIs[:0]
+		for _, api := range document.APIs {
+			if api.Deprecated {
+				omittedDeprecated++
+				continue
+			}
+			visible = append(visible, api)
+		}
+		document.APIs = visible
 	}
 
 	objects := make([]HelpBudgetObject[machineHelpAPISummary], 0, len(document.APIs))
@@ -218,8 +245,10 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 	})
 	document.APIs = projection.Items
 	document.Result = projection.Result
+	document.Result.OmittedDeprecated = omittedDeprecated
 	document.Next = projection.Next
 	document.Listing = nil
+
 	if !options.All && !showProductActionDescriptionsInDefaultHelp {
 		for index := range document.APIs {
 			document.APIs[index].Title = machineHelpLocalizedText{}
@@ -280,6 +309,10 @@ func applyActionHelpOptions(document *machineHelpAPIDocument, options helpOption
 		document.API.Description = machineHelpLocalizedText{}
 	}
 	apiStyle := strings.ToLower(document.Product.APIStyle)
+	if apiStyle == "" {
+		// Metadata-plugin products carry the style per API, not per product.
+		apiStyle = strings.ToLower(document.API.Operation.APIStyle)
+	}
 	if apiStyle != "roa" && apiStyle != "rest" && apiStyle != "restful" {
 		document.API.Operation.Method = ""
 		document.API.Operation.Protocol = ""
@@ -291,11 +324,35 @@ func applyActionHelpOptions(document *machineHelpAPIDocument, options helpOption
 	}
 }
 
-func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptions, _ bool) {
+func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptions, aiMode bool) {
 	if document == nil {
 		return
 	}
 	document.Listing = nil
+	// Explicit Sections stay complete (no budget projection) but still expose
+	// only the active command style, matching the default Action Help.
+	retainActiveMachineHelpParameterSet(document)
+	if aiMode {
+		// Global CLI flags (credentials, profile, output control) are host
+		// concerns: the default Action Help already omits them, and repeating
+		// all ~58 of them in AI-mode request Help is pure token cost.
+		document.GlobalParameters = nil
+	}
+	if options.Search != "" {
+		// Search results carry only the matched entries; the full invocation
+		// example is unrelated payload.
+		document.Examples = machineHelpExamples{}
+		if aiMode {
+			// AI-mode search consumers only need the matched parameters plus
+			// identity (target/result/next); drop the api/product/queryOptions/
+			// responseQueryExample metadata that dominates the payload.
+			document.Product = machineHelpProduct{}
+			document.API = machineHelpAPI{}
+			document.QueryOptions = nil
+			document.ResponseQuery = nil
+		}
+	}
+	retainActiveMachineHelpExample(document)
 	if options.Search == "" {
 		total := len(activeMachineHelpParameters(document)) + len(document.GlobalParameters)
 		document.Result = HelpResult{Shown: total, Total: total}
@@ -320,7 +377,7 @@ func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptio
 			document.ActiveParameterSet: parameterCandidates,
 		},
 		GlobalParameters: globalCandidates,
-	}, options.Search))
+	}, options.Search), options.SearchAll)
 
 	parameters := make([]machineHelpParameter, 0)
 	globals := make([]machineHelpParameter, 0)
@@ -383,7 +440,7 @@ func applyResponseHelpOptions(document *machineHelpAPIResponseDocument, options 
 		return nil
 	}
 	input := helpResponseSchema(document)
-	result, err := SearchResponseSchema(input, options.Search)
+	result, err := SearchResponseSchema(input, options.Search, options.SearchAll)
 	if err != nil {
 		return err
 	}
@@ -524,7 +581,10 @@ func (c *Commando) validateRecoverySearch(ctx *cli.Context, request RecoverySear
 		return false
 	}
 	c.loadLocalPlugins()
-	if request.Product != "" && c.hasInstalledProductPlugin(request.Product) {
+	// Go plugins own their text Help, so their products cannot be searched
+	// through the host. Metadata plugins are served by host Machine Help via
+	// the engine loader, so search stays available for them.
+	if request.Product != "" && c.hasInstalledProductPlugin(request.Product) && !c.installedMetaPluginProduct(request.Product) {
 		return false
 	}
 
@@ -584,7 +644,10 @@ func (c *Commando) validateRecoverySearch(ctx *cli.Context, request RecoverySear
 		if ctx != nil {
 			document.GlobalParameters = projectGlobalParameters(ctx.Flags())
 		}
-		applyRequestHelpOptions(document, options, false)
+		// Replay with the caller's effective AI mode so a keyword that only
+		// matches global CLI flags cannot validate against help that would
+		// render those globals away in AI mode.
+		applyRequestHelpOptions(document, options, legacyAIModeEnabled(ctx))
 		return len(activeMachineHelpParameters(document)) > 0 || len(document.GlobalParameters) > 0
 	}
 }
@@ -724,6 +787,11 @@ func renderCanonicalProductText(w io.Writer, document *machineHelpProductDocumen
 	if _, err := fmt.Fprintf(w, "\nProduct: %s (%s)\nVersion: %s\n", document.Product.Code, name, document.Product.SelectedVersion); err != nil {
 		return err
 	}
+	if provider := machineHelpPluginProvider(document.Product); provider != "" {
+		if _, err := fmt.Fprintf(w, "Provided by plugin: %s\n", provider); err != nil {
+			return err
+		}
+	}
 	if len(document.APIs) == 0 && search != "" {
 		_, err := fmt.Fprintf(w, "\n"+noHelpSearchMatchesFormat+"\n", search)
 		return err
@@ -745,6 +813,11 @@ func renderCanonicalProductText(w io.Writer, document *machineHelpProductDocumen
 			return err
 		}
 	}
+	if document.Result.OmittedDeprecated > 0 {
+		if _, err := fmt.Fprintf(w, "\nOmitting %d deprecated APIs; use --help-all to include them.\n", document.Result.OmittedDeprecated); err != nil {
+			return err
+		}
+	}
 	if err := renderTextListing(w, "APIs", document.Listing); err != nil {
 		return err
 	}
@@ -754,6 +827,11 @@ func renderCanonicalProductText(w io.Writer, document *machineHelpProductDocumen
 func renderCanonicalRequestSearchText(w io.Writer, document *machineHelpAPIDocument, search string) error {
 	if document == nil {
 		return fmt.Errorf("request Help document is nil")
+	}
+	if provider := machineHelpPluginProvider(document.Product); provider != "" {
+		if _, err := fmt.Fprintf(w, "\nProvided by plugin: %s\n", provider); err != nil {
+			return err
+		}
 	}
 	parameters := activeMachineHelpParameters(document)
 	if len(parameters) == 0 && len(document.GlobalParameters) == 0 {
@@ -790,8 +868,18 @@ func renderCanonicalRequestText(w io.Writer, document *machineHelpAPIDocument) e
 		details = "\nDetails: " + fullDescription
 	}
 	if _, err := fmt.Fprintf(w,
-		"Alibaba Cloud Command Line Interface Version %s\n\nDescription: %s%s\n\nAPI Version: %s\n\nUsage:\n  %s [parameters]\n",
+		"Alibaba Cloud Command Line Interface Version %s\n",
 		cli.Version,
+	); err != nil {
+		return err
+	}
+	if provider := machineHelpPluginProvider(document.Product); provider != "" {
+		if _, err := fmt.Fprintf(w, "\nProvided by plugin: %s\n", provider); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintf(w,
+		"\nDescription: %s%s\n\nAPI Version: %s\n\nUsage:\n  %s [parameters]\n",
 		description,
 		details,
 		document.API.Operation.APIVersion,
@@ -809,19 +897,23 @@ func renderCanonicalRequestText(w io.Writer, document *machineHelpAPIDocument) e
 			return err
 		}
 	}
-	if len(document.GlobalParameters) > 0 {
-		if _, err := fmt.Fprintln(w, "\nGlobal Parameters:"); err != nil {
-			return err
-		}
-		if err := renderMachineHelpParameters(w, document.GlobalParameters); err != nil {
-			return err
-		}
-	}
 	if err := renderTextListing(w, "parameters", document.Listing); err != nil {
 		return err
 	}
 	if err := renderHelpProjectionResult(w, "parameters", document.Result, document.Next); err != nil {
 		return err
+	}
+
+	if len(document.QueryOptions) > 0 {
+		if _, err := fmt.Fprintln(w, "\nQuery Options:"); err != nil {
+			return err
+		}
+		if err := renderMachineHelpQueryOptions(w, document.QueryOptions); err != nil {
+			return err
+		}
+		if err := renderRequestQueryExampleText(w, document.ResponseQuery); err != nil {
+			return err
+		}
 	}
 
 	example := document.Examples.Camel
@@ -833,7 +925,7 @@ func renderCanonicalRequestText(w io.Writer, document *machineHelpAPIDocument) e
 			return err
 		}
 	}
-	return renderRequestQueryExampleText(w, document.ResponseQuery)
+	return nil
 }
 
 // projectOriginalRequestHelpText keeps the established runtime/legacy Help
@@ -941,7 +1033,25 @@ func stripHelpANSI(value string) string {
 	}
 }
 
+const machineHelpParameterNameWidth = 30
+
+// machineHelpPluginProvider renders "name (version)" for a plugin-served
+// product, or "" for baseline-served products.
+func machineHelpPluginProvider(product machineHelpProduct) string {
+	if product.Plugin == "" {
+		return ""
+	}
+	if product.PluginVersion != "" {
+		return product.Plugin + " (" + product.PluginVersion + ")"
+	}
+	return product.Plugin
+}
+
 func renderMachineHelpParameters(w io.Writer, parameters []machineHelpParameter) error {
+	// Continuation lines align under the type column, mirroring the engine's
+	// parameter Help layout, and leave room for readable wrapped text.
+	indent := strings.Repeat(" ", 2+machineHelpParameterNameWidth+1)
+	wrapWidth := machineHelpMaxLineLength() - len(indent)
 	for _, parameter := range parameters {
 		name := parameter.Name
 		if len(parameter.Options) > 0 {
@@ -951,12 +1061,91 @@ func renderMachineHelpParameters(w io.Writer, parameters []machineHelpParameter)
 		if parameter.Required {
 			requiredLabel = "required"
 		}
+		prefix := fmt.Sprintf("  %-*s %s (%s)", machineHelpParameterNameWidth, name, parameter.Type, requiredLabel)
 		help := localizedMachineHelpText(parameter.Help)
-		if _, err := fmt.Fprintf(w, "  %-30s %s (%s)  %s\n", name, parameter.Type, requiredLabel, help); err != nil {
+		lines := wrapMachineHelpText(help, wrapWidth)
+		if len(lines) == 1 && len([]rune(prefix))+2+len([]rune(lines[0])) <= machineHelpMaxLineLength() {
+			if _, err := fmt.Fprintf(w, "%s  %s\n", prefix, lines[0]); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, err := fmt.Fprintf(w, "%s\n", prefix); err != nil {
 			return err
+		}
+		for _, line := range lines {
+			if _, err := fmt.Fprintf(w, "%s%s\n", indent, line); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+func machineHelpMaxLineLength() int {
+	if value := strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH")); value != "" {
+		if length, err := strconv.Atoi(value); err == nil && length > 0 {
+			return length
+		}
+	}
+	return 80
+}
+
+// wrapMachineHelpText reflows parameter Help text into fixed-width lines:
+// embedded blank lines are collapsed and long lines wrap at spaces or CJK
+// punctuation so continuation lines stay inside the Help column.
+func wrapMachineHelpText(text string, width int) []string {
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	if width < 12 {
+		width = 12
+	}
+	lines := make([]string, 0, 2)
+	for _, paragraph := range strings.Split(text, "\n") {
+		paragraph = strings.TrimSpace(paragraph)
+		if paragraph == "" {
+			continue
+		}
+		lines = append(lines, wrapMachineHelpLine(paragraph, width)...)
+	}
+	return lines
+}
+
+func wrapMachineHelpLine(text string, width int) []string {
+	runes := []rune(text)
+	if len(runes) <= width {
+		return []string{text}
+	}
+	lines := make([]string, 0, len(runes)/width+1)
+	for start := 0; start < len(runes); {
+		end := start + width
+		if end >= len(runes) {
+			lines = append(lines, string(runes[start:]))
+			break
+		}
+		breakPoint := wrapBreakPoint(runes, start, end)
+		lines = append(lines, strings.TrimSpace(string(runes[start:breakPoint])))
+		start = breakPoint
+		for start < len(runes) && runes[start] == ' ' {
+			start++
+		}
+	}
+	return lines
+}
+
+// wrapBreakPoint finds a break position in the second half of the window so
+// wrapped lines keep a coherent chunk on each side. Spaces, ASCII and CJK
+// punctuation, and slashes (URLs and paths carry no spaces) all qualify; the
+// latest qualifying rune wins.
+func wrapBreakPoint(runes []rune, start, end int) int {
+	for i := end - 1; i > start+(end-start)/2; i-- {
+		switch runes[i] {
+		case ' ', ',', '.', ';', '/', '，', '。', '、', '：':
+			return i + 1
+		}
+	}
+	return end
 }
 
 func renderTextListing(w io.Writer, noun string, listing *machineHelpListing) error {
@@ -987,22 +1176,63 @@ func renderHelpProjectionResult(w io.Writer, noun string, result HelpResult, nex
 				return err
 			}
 		}
+		if next.SearchAll != "" {
+			if _, err := fmt.Fprintf(w, "Show all matches: %s\n", next.SearchAll); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
-	_, err := fmt.Fprintln(w, "Use a more specific --help-search query.")
+	_, err := fmt.Fprintln(w, "Use a more specific --help-search query, or append --help-all to show every match.")
 	return err
 }
 
+// renderRequestQueryExampleText appends the API-specific response-query pair
+// to the Query Options block. The text spells out the token-saving workflow:
+// inspect the response structure first, then let --cli-query aggregate the
+// final answer server-side of the pipe so only the needed array is returned.
 func renderRequestQueryExampleText(w io.Writer, example *machineHelpQueryExample) error {
 	if example == nil {
 		return nil
 	}
 	_, err := fmt.Fprintf(w,
-		"\nResponse query example (%s):\n"+
-			"This response contains a complex array. Inspect its structure with the response section, then use --cli-query to return only that array:\n"+
-			"  %s\n  %s\n",
+		"\n  Response aggregation example (JMESPath: %s):\n"+
+			"    1. Inspect the response structure to pick the fields you need:\n      %s\n"+
+			"    2. Then get only those fields, at any level of the response, in one call:\n      %s\n",
 		example.Path, example.SchemaCommand, example.QueryCommand)
 	return err
+}
+
+func renderMachineHelpQueryOptions(w io.Writer, options []machineHelpQueryOption) error {
+	for _, option := range options {
+		typeLabel := option.Type + " (optional)"
+		if option.Required {
+			typeLabel = option.Type + " (required)"
+		}
+		if option.HasDefault {
+			typeLabel += ", default: " + option.Default
+		}
+		prefix := fmt.Sprintf("  %-*s %s", machineHelpParameterNameWidth, option.Name, typeLabel)
+		help := localizedMachineHelpText(option.Help)
+		indent := strings.Repeat(" ", 2+machineHelpParameterNameWidth+1)
+		wrapWidth := machineHelpMaxLineLength() - len(indent)
+		lines := wrapMachineHelpText(help, wrapWidth)
+		if len(lines) == 1 && len([]rune(prefix))+2+len([]rune(lines[0])) <= machineHelpMaxLineLength() {
+			if _, err := fmt.Fprintf(w, "%s  %s\n", prefix, lines[0]); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, err := fmt.Fprintf(w, "%s\n", prefix); err != nil {
+			return err
+		}
+		for _, line := range lines {
+			if _, err := fmt.Fprintf(w, "%s%s\n", indent, line); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func renderAIModeEnableHelpHint(w io.Writer) error {

@@ -138,7 +138,9 @@ func NewCliHelpSearchFlag() *cli.Flag {
 		AssignedMode: cli.AssignedOnce,
 		Persistent:   true,
 		Category:     "help",
-		ExcludeWith:  []string{"help", CliHelpAllFlagName},
+		// --help-all stays excluded only for --help itself: combined with a
+		// search, --help-all lifts the result cap instead of conflicting.
+		ExcludeWith: []string{"help"},
 		Short: i18n.T(
 			"search Help at the current command level",
 			"在当前命令层级搜索帮助",
@@ -156,7 +158,7 @@ func NewCliHelpAllFlag() *cli.Flag {
 		AssignedMode: cli.AssignedNone,
 		Persistent:   true,
 		Category:     "help",
-		ExcludeWith:  []string{"help", CliHelpSearchFlagName},
+		ExcludeWith:  []string{"help"},
 		Short: i18n.T(
 			"show the complete Help document at the current command level",
 			"显示当前命令层级的完整帮助文档",

@@ -38,9 +38,12 @@ const (
 // modifiers. Requested deliberately remains false for a lone --cli-output:
 // output selection is orthogonal to, and cannot itself enter, Help.
 type HelpOptions struct {
-	Requested       bool
-	Operation       HelpOperation
-	SearchQuery     string
+	Requested   bool
+	Operation   HelpOperation
+	SearchQuery string
+	// SearchAll reports the --help-all modifier combined with --help-search:
+	// the keyword still filters, but the result cap is removed.
+	SearchAll       bool
 	Output          HelpOutput
 	Section         HelpSection
 	SectionExplicit bool
@@ -114,11 +117,25 @@ func ParseHelpOptions(args []string) (HelpOptions, error) {
 				return HelpOptions{}, err
 			}
 		case arg == "--"+HelpAllFlagName:
+			if opts.Operation == HelpOperationSearch {
+				if opts.SearchAll {
+					return HelpOptions{}, &HelpOptionError{Code: HelpOptionDuplicate, Option: arg}
+				}
+				// Search + All composes: the keyword keeps filtering while the
+				// result cap is removed.
+				opts.SearchAll = true
+				break
+			}
 			if err := setHelpOperation(&opts, &operationOption, HelpOperationAll, arg); err != nil {
 				return HelpOptions{}, err
 			}
 		case arg == "--"+HelpSearchFlagName || strings.HasPrefix(arg, "--"+HelpSearchFlagName+"="):
-			if err := setHelpOperation(&opts, &operationOption, HelpOperationSearch, "--"+HelpSearchFlagName); err != nil {
+			if opts.Operation == HelpOperationAll && !opts.SearchAll {
+				// All + Search composes in either flag order.
+				opts.Operation = HelpOperationSearch
+				opts.SearchAll = true
+				operationOption = arg
+			} else if err := setHelpOperation(&opts, &operationOption, HelpOperationSearch, "--"+HelpSearchFlagName); err != nil {
 				return HelpOptions{}, err
 			}
 			value, consumed := helpOptionValue(args, i, HelpSearchFlagName)

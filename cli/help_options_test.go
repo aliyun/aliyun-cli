@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -76,6 +77,23 @@ func TestParseHelpOptionsRecognizesFinalSurface(t *testing.T) {
 	}
 }
 
+func TestParseHelpOptionsComposesSearchWithAll(t *testing.T) {
+	orders := [][]string{
+		{"--help-search", "instance", "--help-all"},
+		{"--help-all", "--help-search=instance"},
+	}
+	for _, args := range orders {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			opts, err := ParseHelpOptions(args)
+			require.NoError(t, err)
+			assert.Equal(t, HelpOperationSearch, opts.Operation)
+			assert.Equal(t, "instance", opts.SearchQuery)
+			assert.True(t, opts.SearchAll)
+			assert.True(t, opts.Requested)
+		})
+	}
+}
+
 func TestParseHelpOptionsRejectsInvalidCombinations(t *testing.T) {
 	tests := []struct {
 		name string
@@ -84,8 +102,8 @@ func TestParseHelpOptionsRejectsInvalidCombinations(t *testing.T) {
 	}{
 		{name: "duplicate default", args: []string{"--help", "-h"}, code: HelpOptionDuplicate},
 		{name: "duplicate all", args: []string{"--help-all", "--help-all"}, code: HelpOptionDuplicate},
+		{name: "duplicate all after search", args: []string{"--help-search", "instance", "--help-all", "--help-all"}, code: HelpOptionDuplicate},
 		{name: "conflicting operations", args: []string{"--help", "--help-search", "instance"}, code: HelpOptionConflict},
-		{name: "all and search conflict", args: []string{"--help-all", "--help-search=instance"}, code: HelpOptionConflict},
 		{name: "empty search separated", args: []string{"--help-search", "  "}, code: HelpOptionEmptySearch},
 		{name: "empty search equals", args: []string{"--help-search="}, code: HelpOptionEmptySearch},
 		{name: "search cannot consume another option", args: []string{"--help-search", "--cli-output", "json"}, code: HelpOptionEmptySearch},

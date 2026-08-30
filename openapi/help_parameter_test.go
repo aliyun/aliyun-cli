@@ -20,7 +20,7 @@ func TestParameterHelpJSONKeepsOnlyParameterContext(t *testing.T) {
 	attachMachineHelpAIModeHint(document)
 
 	var output bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&output, document))
+	require.NoError(t, encodeMachineHelpJSON(&output, document, false))
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
 
@@ -42,10 +42,10 @@ func TestParameterSearchJSONAddsOnlySearchProjection(t *testing.T) {
 	require.NoError(t, err)
 	document, err := buildParameterHelpDocument(action, "--report-id")
 	require.NoError(t, err)
-	searchParameterHelpDocument(document, "report")
+	searchParameterHelpDocument(document, "report", false)
 
 	var output bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&output, document))
+	require.NoError(t, encodeMachineHelpJSON(&output, document, false))
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
 
@@ -133,7 +133,7 @@ func TestSearchParameterHelpDocumentSearchesNestedFieldsAndCapsResults(t *testin
 		Name: "config", RawName: "Config", Options: []string{"--config"}, Type: "object", Fields: fields,
 	}}
 
-	searchParameterHelpDocument(document, "field")
+	searchParameterHelpDocument(document, "field", false)
 	assert.Equal(t, "field", document.Query)
 	require.Len(t, document.Matches, helpSearchResultLimit)
 	assert.Equal(t, "Config.Field00", document.Matches[0].Path)

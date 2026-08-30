@@ -275,7 +275,7 @@ func renderParameters(w io.Writer, params []meta.Parameter, lang string) {
 	var required, optional []*meta.Parameter
 	for i := range params {
 		p := &params[i]
-		if p.Required {
+		if p.Required || p.DocRequired {
 			required = append(required, p)
 		} else {
 			optional = append(optional, p)
@@ -298,7 +298,7 @@ func renderOneParameter(tw *tabwriter.Writer, p *meta.Parameter, lang string) {
 	emptyPadded := fmt.Sprintf("%-*s", helpNameWidth, "")
 
 	typ := typeName(p)
-	if p.Required {
+	if p.Required || p.DocRequired {
 		typ += " (required)"
 	}
 	helpLines := strings.Split(p.Description.Localized(lang), "\n")

@@ -411,13 +411,13 @@ func TestBuilderErrorAndRenderBranches(t *testing.T) {
 	printSortedKV(io.Discard, "Empty", nil)
 
 	var out bytes.Buffer
-	if err := renderResponse(&out, &runtime.Response{Raw: []byte("not-json")}, ""); err != nil || !strings.Contains(out.String(), "not-json") {
+	if err := renderResponse(&out, &runtime.Response{Raw: []byte("not-json")}, "", false); err != nil || !strings.Contains(out.String(), "not-json") {
 		t.Fatalf("renderResponse(raw) = %q, %v", out.String(), err)
 	}
-	if err := renderResponse(io.Discard, &runtime.Response{Parsed: map[string]any{}}, "["); err == nil {
+	if err := renderResponse(io.Discard, &runtime.Response{Parsed: map[string]any{}}, "[", false); err == nil {
 		t.Fatal("renderResponse accepted invalid JMESPath")
 	}
-	if err := writeJSON(io.Discard, make(chan int), nil, "filtered"); err == nil {
+	if err := writeJSON(io.Discard, make(chan int), nil, "filtered", false); err == nil {
 		t.Fatal("writeJSON accepted channel")
 	}
 }

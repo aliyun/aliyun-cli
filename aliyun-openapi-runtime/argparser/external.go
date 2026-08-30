@@ -37,6 +37,21 @@ type ExternalFlagSpec struct {
 	RejectMessage string
 }
 
+// ExternalFlagRejectError reports a host flag the engine must refuse outright
+// (for example a PascalCase-only global passed to a kebab command). The typed
+// carrier lets the host render it through its agent error envelope instead of
+// falling back to plain text.
+type ExternalFlagRejectError struct {
+	Flag    string
+	Message string
+}
+
+func (e *ExternalFlagRejectError) Error() string {
+	return e.Message
+}
+
+func (*ExternalFlagRejectError) AIRecoveryEligible() {}
+
 // ParseOptions carries host-specific parser extensions for one invocation.
 type ParseOptions struct {
 	ExternalFlags []ExternalFlagSpec
@@ -106,7 +121,7 @@ func consumeExternalFlag(
 	hasInline bool,
 ) (int, error) {
 	if spec.RejectMessage != "" {
-		return i, fmt.Errorf("%s", spec.RejectMessage)
+		return i, &ExternalFlagRejectError{Flag: spec.Name, Message: spec.RejectMessage}
 	}
 	switch spec.Mode {
 	case ExternalFlagNone:
