@@ -159,6 +159,14 @@ func setTestHomeDir(t *testing.T, testHome string) func() {
 }
 
 func Test_main(t *testing.T) {
+	// Isolate HOME: command.main loads the profile from the real config when
+	// no test home is set, and a non-English profile would leak into the
+	// global i18n language and break later tests asserting English output.
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w, stderr)
@@ -1728,6 +1736,14 @@ func TestCreateHttpContextRestCheckFail(t *testing.T) {
 }
 
 func TestMainForSlsProduct(t *testing.T) {
+	// Isolate HOME: command.main loads the profile from the real config when
+	// no test home is set, and a non-English profile would leak into the
+	// global i18n language and break later tests asserting English output.
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(stdout, stderr)
@@ -1879,6 +1895,13 @@ func TestMainForSlsProduct(t *testing.T) {
 }
 
 func TestMainForNonSlsProductApi(t *testing.T) {
+	// Isolate HOME so command.main never loads the developer's real profile
+	// (a non-English profile language would pollute the global i18n state).
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	profile := config.Profile{
@@ -1932,6 +1955,13 @@ func TestMainForNonSlsProductApi(t *testing.T) {
 // Regression test: for a restful product, when the user provides an API name that does not exist in metadata (e.g. `aliyun apig GetPlugin`), the error should be `InvalidApiError` with suggestions,
 // NOT the confusing `product 'xxx' need restful call` produced by checkRestfulMethod.
 func TestMainRestfulProductWithInvalidApiName(t *testing.T) {
+	// Isolate HOME so command.main never loads the developer's real profile
+	// (a non-English profile language would pollute the global i18n state).
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	profile := config.Profile{
@@ -1985,6 +2015,13 @@ func TestMainRestfulProductWithInvalidApiName(t *testing.T) {
 }
 
 func TestMainForNonSlsProductApiWithRestCall(t *testing.T) {
+	// Isolate HOME so command.main never loads the developer's real profile
+	// (a non-English profile language would pollute the global i18n state).
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	profile := config.Profile{
@@ -4099,6 +4136,13 @@ func TestMain_SafetyPolicyEnforcement(t *testing.T) {
 }
 
 func TestEstimateCostContextRequiresEstimateCost(t *testing.T) {
+	// Isolate HOME so command.main never loads the developer's real profile
+	// (a non-English profile language would pollute the global i18n state).
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(w, stderr)
