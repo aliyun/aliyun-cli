@@ -695,6 +695,62 @@ func TestServerAgentErrorDiagnoseCommandMatchesCallerStyle(t *testing.T) {
 	})
 }
 
+func TestServerErrorCodeParameter(t *testing.T) {
+	tests := map[string]string{
+		"InvalidParameter.Tags":                 "Tags",
+		"MissingParameter.Tags":                 "Tags",
+		"MissingParameter.ResourceARN":          "ResourceARN",
+		"InvalidParameter.ResourceARN.1":        "",
+		"InvalidParameter":                      "",
+		"InvalidParameter.":                     "",
+		"InvalidAccessKeyId.NotFound":           "",
+		"InvalidOperation.NotSupportedEndpoint": "",
+		"Throttling.User":                       "",
+	}
+	for code, want := range tests {
+		t.Run(code, func(t *testing.T) {
+			assert.Equal(t, want, serverErrorCodeParameter(code))
+		})
+	}
+}
+
+func TestServerAgentErrorParameterCodeAddsParameterGuidance(t *testing.T) {
+	makeErr := func(code string) error {
+		return tea.NewSDKError(map[string]interface{}{"statusCode": 400, "code": code, "message": "bad parameter"})
+	}
+
+	t.Run("camel caller gets parameter-scoped help flag", func(t *testing.T) {
+		envelope := requireAgentEnvelope(t, makeErr("InvalidParameter.Tags"), []string{"tag", "TagResources"}, nil)
+		assert.Equal(t, "diagnose_error_code", envelope.Recovery.Action)
+		assert.Contains(t, envelope.Recovery.Command, "openapiexplorer GetErrorCodeSolutions")
+		assert.Equal(t,
+			"Look up diagnostic solutions for error code InvalidParameter.Tags. For the accepted format of parameter Tags, run: aliyun tag TagResources --Tags --help",
+			envelope.Recovery.Hint)
+	})
+
+	t.Run("kebab caller gets parameter keyword search", func(t *testing.T) {
+		envelope := requireAgentEnvelope(t, makeErr("MissingParameter.Tags"), []string{"tag", "tag-resources"}, nil)
+		assert.Equal(t, "diagnose_error_code", envelope.Recovery.Action)
+		assert.Equal(t,
+			"Look up diagnostic solutions for error code MissingParameter.Tags. For the accepted format of parameter Tags, run: aliyun tag tag-resources --help-search Tags",
+			envelope.Recovery.Hint)
+	})
+
+	t.Run("non-parameter code keeps the plain diagnose hint", func(t *testing.T) {
+		envelope := requireAgentEnvelope(t, makeErr("InvalidAccessKeyId.NotFound"), []string{"ecs", "DescribeInstances"}, nil)
+		assert.Equal(t,
+			"Look up diagnostic solutions for error code InvalidAccessKeyId.NotFound.",
+			envelope.Recovery.Hint)
+	})
+
+	t.Run("without an action the plain diagnose hint stays", func(t *testing.T) {
+		envelope := requireAgentEnvelope(t, makeErr("InvalidParameter.Tags"), []string{"ecs"}, nil)
+		assert.Equal(t,
+			"Look up diagnostic solutions for error code InvalidParameter.Tags.",
+			envelope.Recovery.Hint)
+	})
+}
+
 func TestServerAgentErrorCleansTeaMessageEnvelope(t *testing.T) {
 	// darabonba-openapi builds Tea messages as "code: <status>, <msg> request id: <id>";
 	// the duplicates must be stripped and the request id surfaced as a field.

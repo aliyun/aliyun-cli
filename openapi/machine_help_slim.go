@@ -100,11 +100,11 @@ func machineHelpLocalizedJSONText(value map[string]any, lang string) (string, bo
 // isSSE/hasWildcardPath are included so a zeroed api.operation block fully
 // prunes away when AI-mode search drops the api metadata.
 var machineHelpFalseDefaultBools = map[string]bool{
-	"deprecated":       true,
-	"multiVersion":     true,
-	"canonicalHelp":    true,
-	"isSSE":            true,
-	"hasWildcardPath":  true,
+	"deprecated":      true,
+	"multiVersion":    true,
+	"canonicalHelp":   true,
+	"isSSE":           true,
+	"hasWildcardPath": true,
 }
 
 func omitMachineHelpJSONField(key string, item any, parent map[string]any) bool {

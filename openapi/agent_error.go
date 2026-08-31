@@ -412,10 +412,17 @@ func serverAgentError(cause error, facts serverErrorFacts, context recoveryConte
 		Hint:    "The server rejected the request; check the error code and message, fix the parameters, or retry if the failure is transient.",
 	}
 	if facts.code != "" {
+		hint := fmt.Sprintf("Look up diagnostic solutions for error code %s.", facts.code)
+		if parameter := serverErrorCodeParameter(facts.code); parameter != "" {
+			if command := context.parameterGuidanceCommand(parameter); command != "" {
+				hint = fmt.Sprintf("Look up diagnostic solutions for error code %s. For the accepted format of parameter %s, run: %s",
+					facts.code, parameter, command)
+			}
+		}
 		recovery = cli.AgentErrorRecovery{
 			Action:  "diagnose_error_code",
 			Command: diagnoseErrorCodeCommand(facts, context),
-			Hint:    fmt.Sprintf("Look up diagnostic solutions for error code %s.", facts.code),
+			Hint:    hint,
 		}
 	}
 
@@ -462,6 +469,24 @@ func diagnoseAcceptLanguage() string {
 		return "zh-CN"
 	}
 	return "en-US"
+}
+
+// serverErrorCodeParameter extracts the offending parameter name from server
+// error codes that carry one, such as InvalidParameter.Tags or
+// MissingParameter.Tags. Other dotted codes (InvalidAccessKeyId.NotFound,
+// InvalidVpcId.NotFound) do not name a parameter in the suffix and return "".
+func serverErrorCodeParameter(code string) string {
+	for _, prefix := range []string{"InvalidParameter.", "MissingParameter."} {
+		if !strings.HasPrefix(code, prefix) {
+			continue
+		}
+		parameter := strings.TrimSpace(strings.TrimPrefix(code, prefix))
+		if safeCommandToken(parameter) && !strings.Contains(parameter, ".") {
+			return parameter
+		}
+		return ""
+	}
+	return ""
 }
 
 func externalFlagRejectAgentError(cause error, reject *argparser.ExternalFlagRejectError, context recoveryContext) error {
@@ -1013,6 +1038,21 @@ func (c recoveryContext) parameterHelpCommand(parameter string) string {
 		return c.actionHelpCommand()
 	}
 	return "aliyun " + c.product + " " + c.api + c.versionSuffix() + " --" + parameter + " --help"
+}
+
+// parameterGuidanceCommand points at a server-rejected parameter's accepted
+// format in the caller's command style. PascalCase commands accept the raw
+// wire name as a parameter-scoped help flag; kebab commands may rename flags
+// (RegionId -> --biz-region-id), so they get the parameter keyword search,
+// which the engine itself also suggests for unknown kebab flags.
+func (c recoveryContext) parameterGuidanceCommand(parameter string) string {
+	if !c.hasAction() {
+		return ""
+	}
+	if c.style == "kebab" {
+		return c.actionSearchCommand(parameter)
+	}
+	return c.parameterHelpCommand(parameter)
 }
 
 func (c recoveryContext) requestHelpCommand() string {

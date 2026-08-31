@@ -43,8 +43,8 @@ func TestMachineHelpJSONCollapsesLocalizedTextPerLanguage(t *testing.T) {
 		SchemaVersion: machineHelpSchemaVersion,
 		Kind:          "product",
 		Product: machineHelpProduct{
-			Code:           "demo",
-			Name:           machineHelpLocalizedText{EN: "Demo Service", ZH: "演示服务"},
+			Code:            "demo",
+			Name:            machineHelpLocalizedText{EN: "Demo Service", ZH: "演示服务"},
 			SelectedVersion: "2026-01-01",
 		},
 		APIs: []machineHelpAPISummary{
