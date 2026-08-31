@@ -115,6 +115,14 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 			invalidParameter.Name, parameterContext, validate)
 	}
 
+	var invalidBaseline *InvalidBaselineCommandError
+	if errors.As(err, &invalidBaseline) {
+		apiContext := context.withProductAPI(invalidBaseline.Product, invalidBaseline.Command)
+		message := fmt.Sprintf("%q is not a valid api.", invalidBaseline.Command)
+		return unknownAPIAgentError(err, message,
+			apiCandidateFormsForStyle(invalidBaseline.AgentSuggestions(), apiContext.style), apiContext, validate)
+	}
+
 	var invalidAPI *InvalidApiError
 	if errors.As(err, &invalidAPI) {
 		apiContext := context
@@ -131,14 +139,6 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 			apiContext = context.withProductAPI(invalidUnifiedAPI.product.GetLowerCode(), invalidUnifiedAPI.Name)
 		}
 		return unknownAPIAgentError(err, invalidUnifiedAPI.AgentMessage(), apiCandidateFormsForStyle(invalidUnifiedAPI.AgentSuggestions(), apiContext.style), apiContext, validate)
-	}
-
-	var invalidBaseline *InvalidBaselineCommandError
-	if errors.As(err, &invalidBaseline) {
-		apiContext := context.withProductAPI(invalidBaseline.Product, invalidBaseline.Command)
-		message := fmt.Sprintf("%q is not a valid api.", invalidBaseline.Command)
-		return unknownAPIAgentError(err, message,
-			apiCandidateFormsForStyle(invalidBaseline.AgentSuggestions(), apiContext.style), apiContext, validate)
 	}
 
 	var unknownCommand *engine.UnknownCommandError

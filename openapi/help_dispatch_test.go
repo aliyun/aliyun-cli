@@ -126,6 +126,16 @@ func TestBeforeParseHelpRouteRejectsUnknownRootFlag(t *testing.T) {
 
 func TestBeforeParseHelpRouteRejectsUnknownProductFlag(t *testing.T) {
 	c, ctx, _, _ := newCanonicalHelpTestContext(t)
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-demo": {Name: "aliyun-cli-demo", Version: "1.0.0", Type: plugin.PluginTypeGo},
+	}}
+	originalDispatch := goPluginHelpDispatch
+	goPluginHelpDispatch = func(string, []string, *cli.Context) (bool, error) {
+		t.Fatal("the host must reject an invalid product-level flag before plugin Help delegation")
+		return false, nil
+	}
+	t.Cleanup(func() { goPluginHelpDispatch = originalDispatch })
+
 	handled, err := c.beforeParseHelpRoute(ctx, []string{"demo", "--hekp"})
 
 	assert.True(t, handled)
@@ -294,13 +304,14 @@ func TestBundledSTSUnknownCommandIsLocallyIdentified(t *testing.T) {
 	AddFlags(root.Flags())
 	ctx := cli.NewCommandContext(stdout, stderr)
 	ctx.EnterCommand(root)
-	ctx.SetInvocationArgs([]string{"sts", "get"})
+	ctx.SetInvocationArgs([]string{"sts", "get-caller"})
 	assert.False(t, EstimateCostFlag(ctx.Flags()).IsAssigned())
 	assert.False(t, ForceFlag(ctx.Flags()).IsAssigned())
 
-	err := c.validateCanonicalRuntimeCommand([]string{"sts", "get"}, ctx)
-	var invalid *InvalidApiError
+	err := c.validateCanonicalRuntimeCommand([]string{"sts", "get-caller"}, ctx)
+	var invalid *InvalidBaselineCommandError
 	require.True(t, errors.As(err, &invalid), "err=%T %v", err, err)
-	assert.Equal(t, "get", invalid.Name)
+	assert.Equal(t, "get-caller", invalid.Command)
+	assert.Contains(t, invalid.AgentSuggestions(), "get-caller-identity")
 	require.NoError(t, c.validateCanonicalAPICommand([]string{"sts", "GET"}, ctx), "uppercase REST method remains exempt")
 }

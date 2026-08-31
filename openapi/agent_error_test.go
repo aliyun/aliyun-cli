@@ -353,6 +353,22 @@ func TestNormalizeAgentErrorRedactsHeaderValuesAndBodyFilePaths(t *testing.T) {
 }
 
 func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T) {
+	t.Run("baseline wrapper wins over its canonical unknown API cause", func(t *testing.T) {
+		cause := &InvalidBaselineCommandError{
+			Product:    "sts",
+			Command:    "get-caller",
+			Candidates: []string{"assume-role", "get-caller-identity"},
+			Err:        &InvalidApiError{Name: "get-caller"},
+		}
+		envelope := requireAgentEnvelope(t, cause, []string{"sts", "get-caller"}, func(got RecoverySearchRequest) bool {
+			return got.Style == "kebab" && got.Keyword == "caller-identity"
+		})
+
+		assert.Equal(t, []string{"get-caller-identity"}, envelope.DidYouMean)
+		assert.Equal(t, "search_api", envelope.Recovery.Action)
+		assert.Equal(t, "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun sts --help-search caller-identity", envelope.Recovery.Command)
+	})
+
 	t.Run("baseline unknown API tokenizes the invalid name and uses a validated keyword", func(t *testing.T) {
 		cause := &InvalidBaselineCommandError{
 			Product: "bssopenapi",

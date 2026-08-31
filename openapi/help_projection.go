@@ -253,7 +253,7 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 	document.Next = projection.Next
 	document.Listing = nil
 
-	if !options.All && !showProductActionDescriptionsInDefaultHelp {
+	if !options.All && !shouldShowProductActionDescriptions(aiMode) {
 		for index := range document.APIs {
 			document.APIs[index].Title = machineHelpLocalizedText{}
 			document.APIs[index].Description = machineHelpLocalizedText{}

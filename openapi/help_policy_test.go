@@ -65,8 +65,7 @@ func TestProjectDefaultHelpObjectsAllAndInternalSwitches(t *testing.T) {
 	assert.Nil(t, all.Next)
 
 	assert.True(t, ShouldTruncateDefaultHelp(HelpProjectionMode{AIMode: true, JSON: true}))
-	assert.True(t, ShouldTruncateDefaultHelp(HelpProjectionMode{JSON: true}))
-	assert.True(t, ShouldTruncateDefaultHelp(HelpProjectionMode{}))
+	assert.False(t, ShouldTruncateDefaultHelp(HelpProjectionMode{JSON: true}))
+	assert.False(t, ShouldTruncateDefaultHelp(HelpProjectionMode{}))
 	assert.False(t, ShouldTruncateDefaultHelp(HelpProjectionMode{All: true}))
-	assert.False(t, showProductActionDescriptionsInDefaultHelp)
 }

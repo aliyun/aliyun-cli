@@ -5,9 +5,10 @@ const defaultHelpLogicalLineBudget = 100
 // These are internal policy switches, deliberately not flags or environment
 // variables. Keeping them here makes Text/JSON projection share one policy.
 const (
-	truncateNonAIModeTextHelp                  = true
-	truncateNonAIModeJSONHelp                  = true
-	showProductActionDescriptionsInDefaultHelp = false
+	truncateNonAIModeTextHelp                           = false
+	truncateNonAIModeJSONHelp                           = false
+	showProductActionDescriptionsInAIModeDefaultHelp    = false
+	showProductActionDescriptionsInNonAIModeDefaultHelp = true
 )
 
 // HelpResult describes the selected object range. It is present for both
@@ -80,6 +81,13 @@ func ShouldTruncateDefaultHelp(mode HelpProjectionMode) bool {
 		return truncateNonAIModeJSONHelp
 	}
 	return truncateNonAIModeTextHelp
+}
+
+func shouldShowProductActionDescriptions(aiMode bool) bool {
+	if aiMode {
+		return showProductActionDescriptionsInAIModeDefaultHelp
+	}
+	return showProductActionDescriptionsInNonAIModeDefaultHelp
 }
 
 // ProjectDefaultHelpObjects selects a stable prefix of complete objects under
