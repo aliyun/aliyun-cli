@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	"encoding/json"
+
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
 	"github.com/aliyun/aliyun-openapi-runtime/source/format"
@@ -129,6 +131,12 @@ func toCanonical(def *CommandDefinition) (*schema.CommandDefinition, error) {
 		return nil, err
 	}
 	canonical.Parameters = parameters
+	if len(def.Responses) > 0 {
+		canonical.Responses = append(json.RawMessage(nil), def.Responses...)
+	}
+	if len(def.Components) > 0 {
+		canonical.Components = append(json.RawMessage(nil), def.Components...)
+	}
 	return canonical, nil
 }
 

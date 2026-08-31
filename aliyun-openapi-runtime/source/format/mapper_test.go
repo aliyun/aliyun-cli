@@ -245,3 +245,23 @@ func TestSchemaToAPIMapsOperationAndArgumentMetadata(t *testing.T) {
 		t.Fatalf("API without operation = %#v", withoutOperation)
 	}
 }
+
+func TestSchemaToAPIMapsResponseMetadata(t *testing.T) {
+	responses := json.RawMessage(`{"200":{"schema":{"type":"object"}}}`)
+	components := json.RawMessage(`{"schemas":{"Result":{"type":"object"}}}`)
+	api := schemaToAPI(&schema.CommandDefinition{
+		Name:       "ListTools",
+		Operation:  &schema.OperationConfig{Action: "ListTools", APIVersion: "2025-09-10", Method: "GET"},
+		Responses:  responses,
+		Components: components,
+	})
+	if string(api.Responses) != string(responses) {
+		t.Fatalf("Responses = %s, want %s", api.Responses, responses)
+	}
+	if string(api.Components) != string(components) {
+		t.Fatalf("Components = %s, want %s", api.Components, components)
+	}
+	if len(schemaToAPI(&schema.CommandDefinition{Name: "NoOp"}).Responses) != 0 {
+		t.Fatal("expected empty Responses when absent")
+	}
+}

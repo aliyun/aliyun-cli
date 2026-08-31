@@ -16,6 +16,36 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func TestToCanonicalMapsResponseMetadata(t *testing.T) {
+	t.Run("protobuf", func(t *testing.T) {
+		responses := []byte(`{"200":{"schema":{"type":"object"}}}`)
+		components := []byte(`{"schemas":{"Result":{"type":"object"}}}`)
+		canonical, err := toCanonical(&CommandDefinition{
+			Name:       "ListTools",
+			Responses:  responses,
+			Components: components,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(canonical.Responses) != string(responses) {
+			t.Fatalf("Responses = %s, want %s", canonical.Responses, responses)
+		}
+		if string(canonical.Components) != string(components) {
+			t.Fatalf("Components = %s, want %s", canonical.Components, components)
+		}
+	})
+	t.Run("omits empty", func(t *testing.T) {
+		canonical, err := toCanonical(&CommandDefinition{Name: "GetThing"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(canonical.Responses) != 0 || len(canonical.Components) != 0 {
+			t.Fatalf("expected empty response metadata, got %#v", canonical)
+		}
+	})
+}
+
 func TestToCanonicalRejectsIncompleteRecursivePBShapes(t *testing.T) {
 	tests := []struct {
 		name string
@@ -78,6 +108,10 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 			},
 		},
 	}
+	responses := []byte(`{"200":{"description_zh":"成功","schema":{"type":"object"}}}`)
+	components := []byte(`{"schemas":{"ThingResult":{"type":"object"}}}`)
+	definition.Responses = responses
+	definition.Components = components
 	payload, err := proto.MarshalOptions{Deterministic: true}.Marshal(definition)
 	if err != nil {
 		t.Fatal(err)
@@ -147,6 +181,12 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 	}
 	if got := reader.ProductEndpoints().Public["cn-hangzhou"]; got != "demo.cn-hangzhou.aliyuncs.com" {
 		t.Fatalf("endpoint = %q", got)
+	}
+	if string(api.Responses) != string(responses) {
+		t.Fatalf("Responses = %s, want %s", api.Responses, responses)
+	}
+	if string(api.Components) != string(components) {
+		t.Fatalf("Components = %s, want %s", api.Components, components)
 	}
 }
 

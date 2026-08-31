@@ -15,6 +15,7 @@
 package format
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
@@ -47,7 +48,16 @@ func schemaToAPI(def *crschema.CommandDefinition) *meta.API {
 		api.HasWildcardPath = def.Operation.HasWildcardPath
 	}
 	api.Parameters = mapArguments(def.Parameters)
+	api.Responses = cloneRawJSON(def.Responses)
+	api.Components = cloneRawJSON(def.Components)
 	return api
+}
+
+func cloneRawJSON(value json.RawMessage) json.RawMessage {
+	if len(value) == 0 {
+		return nil
+	}
+	return append(json.RawMessage(nil), value...)
 }
 
 // exampleList prefers the kebab example (matches the CLI's kebab command form); falls back to the camel example.

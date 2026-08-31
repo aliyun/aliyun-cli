@@ -27,6 +27,8 @@
 // in aliyun-openapi-runtime/source/format.
 package schema
 
+import "encoding/json"
+
 // ============================================================================
 // On-disk layout constants
 // ============================================================================
@@ -169,6 +171,10 @@ type CommandDefinition struct {
 	CamelExample  string               `json:"camel_example,omitempty"`
 	Operation     *OperationConfig     `json:"operation"`
 	Parameters    []ArgumentDefinition `json:"parameters,omitempty"`
+	// Responses and Components retain optional response metadata in encoded
+	// form. Command execution ignores them; Help consumers decode explicitly.
+	Responses  json.RawMessage `json:"responses,omitempty"`
+	Components json.RawMessage `json:"components,omitempty"`
 }
 
 // OperationConfig describes the HTTP request shape for one API.

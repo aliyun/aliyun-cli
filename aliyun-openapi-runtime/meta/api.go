@@ -14,6 +14,8 @@
 
 package meta
 
+import "encoding/json"
+
 // API is the complete in-memory description of one OpenAPI operation.
 // Instances are constructed by format.Format implementations from the
 // on-disk representation and consumed by runtime.Executor via the
@@ -44,6 +46,9 @@ type API struct {
 	Endpoints   Endpoints
 	Examples    []string
 	Description Description
+	// Responses and Components carry optional response schema metadata as JSON.
+	Responses  json.RawMessage `json:"responses,omitempty"`
+	Components json.RawMessage `json:"components,omitempty"`
 
 	// Lifecycle.
 	Deprecated bool
