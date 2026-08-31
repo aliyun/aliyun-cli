@@ -555,11 +555,9 @@ func CliAIOverrides(fs *cli.FlagSet) (forceOn bool, forceOff bool) {
 	return false, false
 }
 
-// CliAIOverridesForOpenAPI combines explicit command flags with the agent
-// environment detected at process startup. It is intentionally used only by
-// the in-process OpenAPI implementations (legacy CamelCase and
-// aliyun-openapi-runtime); external plugin branches keep their existing
-// flag/config-only behavior. An explicit opt-out always wins.
+// CliAIOverridesForOpenAPI combines explicit command flags with the agent environment detected at process startup.
+// Used by in-process OpenAPI and when injecting AI-mode env into Go plugins.
+// An explicit opt-out always wins.
 func CliAIOverridesForOpenAPI(ctx *cli.Context) (forceOn bool, forceOff bool) {
 	if ctx == nil {
 		return false, false

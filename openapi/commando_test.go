@@ -3259,6 +3259,86 @@ exit 0
 
 	})
 
+	t.Run("detected agent injects AI env into plugin", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+		testPluginManifest := `{
+			"plugins": {
+				"aientv": {
+					"name": "aientv",
+					"version": "1.0.0",
+					"path": "` + filepath.Join(pluginDir, "aientv") + `",
+					"command": "aientv"
+				}
+			}
+		}`
+		err := os.WriteFile(manifestPath, []byte(testPluginManifest), 0644)
+		assert.NoError(t, err)
+
+		pluginPath := filepath.Join(pluginDir, "aientv", "aientv")
+		err = os.MkdirAll(filepath.Dir(pluginPath), 0755)
+		assert.NoError(t, err)
+		err = os.WriteFile(pluginPath, []byte(`#!/bin/bash
+echo "AI_MODE=${ALIBABA_CLOUD_CLI_AI_MODE}"
+echo "AI_UA=${ALIBABA_CLOUD_CLI_AI_USER_AGENT}"
+exit 0
+`), 0755)
+		assert.NoError(t, err)
+
+		ctx.SetAgentName("codex")
+		t.Cleanup(func() { ctx.SetAgentName("") })
+
+		os.Args = []string{"aliyun", "aientv", "list"}
+		stdout.Reset()
+		err = command.main(ctx, []string{"aientv", "list"})
+		assert.NoError(t, err)
+		assert.Contains(t, stdout.String(), "AI_MODE=1")
+		assert.Contains(t, stdout.String(), "AI_UA="+aimode.UserAgentEnabledMarker)
+	})
+
+	t.Run("no-cli-ai-mode wins over detected agent for plugin env", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+		testPluginManifest := `{
+			"plugins": {
+				"aientvoff": {
+					"name": "aientvoff",
+					"version": "1.0.0",
+					"path": "` + filepath.Join(pluginDir, "aientvoff") + `",
+					"command": "aientvoff"
+				}
+			}
+		}`
+		err := os.WriteFile(manifestPath, []byte(testPluginManifest), 0644)
+		assert.NoError(t, err)
+
+		pluginPath := filepath.Join(pluginDir, "aientvoff", "aientvoff")
+		err = os.MkdirAll(filepath.Dir(pluginPath), 0755)
+		assert.NoError(t, err)
+		err = os.WriteFile(pluginPath, []byte(`#!/bin/bash
+echo "AI_MODE=${ALIBABA_CLOUD_CLI_AI_MODE}"
+echo "AI_UA=${ALIBABA_CLOUD_CLI_AI_USER_AGENT}"
+exit 0
+`), 0755)
+		assert.NoError(t, err)
+
+		ctx.SetAgentName("codex")
+		CliNoAIModeFlag(ctx.Flags()).SetAssigned(true)
+		t.Cleanup(func() {
+			ctx.SetAgentName("")
+			CliNoAIModeFlag(ctx.Flags()).SetAssigned(false)
+		})
+
+		os.Args = []string{"aliyun", "aientvoff", "list"}
+		stdout.Reset()
+		err = command.main(ctx, []string{"aientvoff", "list"})
+		assert.NoError(t, err)
+		assert.NotContains(t, stdout.String(), "AI_MODE=1")
+		assert.NotContains(t, stdout.String(), aimode.UserAgentEnabledMarker)
+	})
+
 	t.Run("Kebab-case command triggers plugin execution", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("shell script test skipped on Windows")

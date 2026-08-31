@@ -10,8 +10,8 @@ import (
 )
 
 func TestEffectiveUserAgent(t *testing.T) {
-	assert.Equal(t, DefaultUserAgent, EffectiveUserAgent(nil))
-	assert.Equal(t, DefaultUserAgent, EffectiveUserAgent(DefaultAiConfig()))
+	assert.Equal(t, "", EffectiveUserAgent(nil))
+	assert.Equal(t, "", EffectiveUserAgent(DefaultAiConfig()))
 	assert.Equal(t, "CustomAgent/1", EffectiveUserAgent(&AiConfig{UserAgent: "CustomAgent/1"}))
 }
 
@@ -19,8 +19,7 @@ func TestRequestUserAgentSuffix(t *testing.T) {
 	assert.Equal(t, "", RequestUserAgentSuffix(nil))
 	assert.Equal(t, "", RequestUserAgentSuffix(&AiConfig{Enabled: false}))
 	s := RequestUserAgentSuffix(&AiConfig{Enabled: true, UserAgent: ""})
-	assert.Contains(t, s, UserAgentEnabledMarker)
-	assert.Contains(t, s, DefaultUserAgent)
+	assert.Equal(t, UserAgentEnabledMarker, s)
 	assert.Equal(t, UserAgentEnabledMarker+" CustomAgent/1", RequestUserAgentSuffix(&AiConfig{Enabled: true, UserAgent: "CustomAgent/1"}))
 }
 
@@ -144,23 +143,13 @@ func TestMergeAiModeIntoOssutilPayload(t *testing.T) {
 func TestRequestUserAgentSuffixForCommand(t *testing.T) {
 	cfg := &AiConfig{Enabled: true, UserAgent: "s"}
 	assert.Equal(t, "", RequestUserAgentSuffixForCommand(cfg, false, true))
-	assert.Contains(t, RequestUserAgentSuffixForCommand(&AiConfig{Enabled: false, UserAgent: "s"}, true, false), "s")
+	assert.Equal(t, UserAgentEnabledMarker+" s",
+		RequestUserAgentSuffixForCommand(&AiConfig{Enabled: false, UserAgent: "s"}, true, false))
+	assert.Equal(t, UserAgentEnabledMarker, RequestUserAgentSuffixForCommand(&AiConfig{Enabled: true}, false, false))
+	assert.Equal(t, UserAgentEnabledMarker, RequestUserAgentSuffixForCommand(DefaultAiConfig(), true, false))
 	assert.Equal(t, "", RequestUserAgentSuffixForCommand(&AiConfig{Enabled: false}, false, false))
-}
-
-func TestRequestUserAgentSuffixForCommandWithDetectedAgent(t *testing.T) {
-	assert.Equal(t, UserAgentEnabledMarker,
-		RequestUserAgentSuffixForCommandWithDetectedAgent(DefaultAiConfig(), false, false, true))
-	assert.Equal(t, "",
-		RequestUserAgentSuffixForCommandWithDetectedAgent(DefaultAiConfig(), false, true, true))
-	assert.Equal(t, UserAgentEnabledMarker+" "+DefaultUserAgent,
-		RequestUserAgentSuffixForCommandWithDetectedAgent(&AiConfig{Enabled: true}, false, false, true))
-	assert.Equal(t, UserAgentEnabledMarker+" "+DefaultUserAgent,
-		RequestUserAgentSuffixForCommandWithDetectedAgent(DefaultAiConfig(), true, false, true))
 	assert.Equal(t, UserAgentEnabledMarker+" custom-agent",
-		RequestUserAgentSuffixForCommandWithDetectedAgent(
-			&AiConfig{Enabled: true, UserAgent: "custom-agent"}, false, false, true,
-		))
+		RequestUserAgentSuffixForCommand(&AiConfig{Enabled: true, UserAgent: "custom-agent"}, false, false))
 }
 
 func TestEnabledForCommand(t *testing.T) {

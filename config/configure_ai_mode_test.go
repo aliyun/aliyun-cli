@@ -58,7 +58,8 @@ func TestConfigureAiMode_Show_Default(t *testing.T) {
 	sub := enterAiModeSub(t, ctx, "show")
 	require.NoError(t, sub.Run(ctx, []string{}))
 	assert.Contains(t, w.String(), `"enabled": false`)
-	assert.Contains(t, w.String(), aimode.DefaultUserAgent)
+	assert.Contains(t, w.String(), `"effective_user_agent": ""`)
+	assert.NotContains(t, w.String(), "AlibabaCloud-Agent-Skills")
 }
 
 func TestConfigureAiMode_ParentRun_DefaultShows(t *testing.T) {

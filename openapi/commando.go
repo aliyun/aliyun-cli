@@ -535,7 +535,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 
 				configDir := config.GetConfigDir(ctx)
-				forceOn, forceOff := CliAIOverrides(ctx.Flags())
+				forceOn, forceOff := CliAIOverridesForOpenAPI(ctx)
 				aimode.MergeUserAgentIntoPluginEnvs(configDir, envs, forceOn, forceOff)
 				util.MergeAgentSegmentIntoPluginEnvs(envs)
 				safety.MergeSafetyPolicyPathIntoEnvs(configDir, envs)
