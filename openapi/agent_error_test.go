@@ -90,6 +90,18 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		}, requests)
 	})
 
+	t.Run("short unknown API still uses validated product search", func(t *testing.T) {
+		cause := &InvalidApiError{Name: "get", product: &meta.Product{Code: "sts"}}
+		envelope := requireAgentEnvelope(t, cause, []string{"sts", "get"}, func(request RecoverySearchRequest) bool {
+			assert.Equal(t, RecoverySearchRequest{Product: "sts", Style: "kebab", Keyword: "get"}, request)
+			return true
+		})
+
+		assert.Equal(t, "search_api", envelope.Recovery.Action)
+		assert.Equal(t, "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun sts --help-search get", envelope.Recovery.Command)
+		assert.Equal(t, "Search APIs related to get.", envelope.Recovery.Hint)
+	})
+
 	t.Run("legacy unknown parameter message excludes Help recovery text", func(t *testing.T) {
 		cause := &InvalidParameterError{
 			Name: "InstnaceType", ProductCode: "ecs", ApiName: "RunInstances", ParameterNames: []string{"InstanceType"},
@@ -341,6 +353,22 @@ func TestNormalizeAgentErrorRedactsHeaderValuesAndBodyFilePaths(t *testing.T) {
 }
 
 func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T) {
+	t.Run("baseline wrapper wins over its canonical unknown API cause", func(t *testing.T) {
+		cause := &InvalidBaselineCommandError{
+			Product:    "sts",
+			Command:    "get-caller",
+			Candidates: []string{"assume-role", "get-caller-identity"},
+			Err:        &InvalidApiError{Name: "get-caller"},
+		}
+		envelope := requireAgentEnvelope(t, cause, []string{"sts", "get-caller"}, func(got RecoverySearchRequest) bool {
+			return got.Style == "kebab" && got.Keyword == "caller-identity"
+		})
+
+		assert.Equal(t, []string{"get-caller-identity"}, envelope.DidYouMean)
+		assert.Equal(t, "search_api", envelope.Recovery.Action)
+		assert.Equal(t, "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun sts --help-search caller-identity", envelope.Recovery.Command)
+	})
+
 	t.Run("baseline unknown API tokenizes the invalid name and uses a validated keyword", func(t *testing.T) {
 		cause := &InvalidBaselineCommandError{
 			Product: "bssopenapi",
@@ -593,12 +621,12 @@ func TestNormalizeAgentErrorOAuthRefreshFailure(t *testing.T) {
 func TestNormalizeAgentErrorServerErrorsShareOneEnvelope(t *testing.T) {
 	serverBody := `{"RequestId":"req-1","Code":"Throttling.User","Message":"slow down"}`
 	tests := []struct {
-		name           string
-		err            error
-		wantMessage    string
-		wantCode       string
-		wantStatus     int
-		wantRequestID  string
+		name          string
+		err           error
+		wantMessage   string
+		wantCode      string
+		wantStatus    int
+		wantRequestID string
 	}{
 		{
 			name:          "old SDK server keeps request id",
@@ -918,6 +946,54 @@ func TestAgentErrorEnvelopeEndToEndIsOneCleanJSONDocument(t *testing.T) {
 	defer cli.EnableExitCode()
 	originalArgs := os.Args
 	os.Args = []string{"aliyun", "ecs", "describe-instances", "--instnace-type", "ecs.g6.large", "--cli-ai-mode"}
+	defer func() { os.Args = originalArgs }()
+	cmd.Execute(ctx, os.Args[1:])
+
+	assert.Empty(t, stdout.String())
+	assert.Equal(t, 1, strings.Count(stderr.String(), "\n"))
+	assert.NotContains(t, stderr.String(), "\x1b[")
+	assert.NotContains(t, stderr.String(), cli.AIModeEnableTextHint)
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal(stderr.Bytes(), &decoded))
+	assert.ElementsMatch(t, []string{"message", "did_you_mean", "recovery"}, mapKeys(decoded))
+	assert.Equal(t, []interface{}{"--instance-type"}, decoded["did_you_mean"])
+	recovery := decoded["recovery"].(map[string]interface{})
+	assert.Equal(t, "search_parameter", recovery["action"])
+	assert.Equal(t, "aliyun ecs describe-instances --help-search instance-type", recovery["command"])
+}
+
+func TestCLIOutputJSONStructuresLocalErrorWhenAIModeIsDisabled(t *testing.T) {
+	testHome := t.TempDir()
+	cleanupHome := setTestHomeDir(t, testHome)
+	defer cleanupHome()
+	writeMinimalConfigJSON(t, testHome)
+	require.NoError(t, os.MkdirAll(filepath.Join(testHome, ".aliyun", "plugins"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(testHome, ".aliyun", "plugins", "manifest.json"), []byte(`{"plugins":{}}`), 0644))
+	require.NoError(t, aimode.Save(filepath.Join(testHome, ".aliyun"), &aimode.AiConfig{Enabled: false}))
+	t.Setenv(aimode.EnvAIMode, "")
+	t.Setenv("NO_COLOR", "")
+
+	originalDispatch := runtimeTryDispatch
+	runtimeTryDispatch = func(_ *cli.Context, _ []string) (bool, error) {
+		unknown := &argparser.UnknownFlagError{Flag: "instnace-type", Known: []string{"image-id", "instance-type"}}
+		return true, &engine.UsageError{Code: "UNKNOWN_FLAG", Err: unknown}
+	}
+	defer func() { runtimeTryDispatch = originalDispatch }()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	cmd := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
+	config.AddFlags(cmd.Flags())
+	AddFlags(cmd.Flags())
+	commando := NewCommando(stdout, config.Profile{Language: "en"})
+	commando.InitWithCommand(cmd)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	cli.DisableExitCode()
+	defer cli.EnableExitCode()
+	originalArgs := os.Args
+	os.Args = []string{"aliyun", "ecs", "describe-instances", "--instnace-type", "ecs.g6.large", "--cli-output", "json", "--no-cli-ai-mode"}
 	defer func() { os.Args = originalArgs }()
 	cmd.Execute(ctx, os.Args[1:])
 

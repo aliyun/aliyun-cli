@@ -185,7 +185,7 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 
 	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
 
-	if !enabled {
+	if !enabled && !explicitLocalErrorJSONRequested(ctx, err) {
 		return err
 	}
 	normalizationArgs := recoveryNormalizationArgs(ctx, args)
@@ -198,6 +198,23 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 		})
 	}
 	return agentErrorNormalizer(err, normalizationArgs)
+}
+
+// explicitLocalErrorJSONRequested reports whether the caller explicitly
+// selected JSON output for a CLI-local error. --cli-output is orthogonal to
+// Help, so this check belongs in the shared error-rendering gate rather than
+// the Help router. Remote server, network, and credential errors retain their
+// existing non-AI rendering.
+func explicitLocalErrorJSONRequested(ctx *cli.Context, err error) bool {
+	if ctx == nil || ctx.Flags() == nil || !cli.IsAIRecoveryEligible(err) {
+		return false
+	}
+	flag := CliOutputFlag(ctx.Flags())
+	if flag == nil || !flag.IsAssigned() {
+		return false
+	}
+	value, _ := flag.GetValue()
+	return strings.TrimSpace(value) == string(cli.HelpOutputJSON)
 }
 
 func (c *Commando) isExtensionInvocation(args []string) bool {
@@ -429,6 +446,9 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					return c.adaptEngineUnknownCommand(runtimehost.Dispatch(ctx, pluginArgs))
 				}
 			} else {
+				if validationErr := c.validateCanonicalRuntimeCommand(args, ctx); validationErr != nil {
+					return validationErr
+				}
 				if handled, derr := runtimeTryDispatch(ctx, pluginArgs); handled {
 					return c.adaptEngineUnknownCommand(derr)
 				}
@@ -1341,7 +1361,13 @@ func (c *Commando) legacyHelp(ctx *cli.Context, args []string) error {
 			}
 			return c.finishCanonicalTextHelp(ctx, aiMode)
 		case len(args) == 1 && (helpOpts.Search != "" || helpOpts.All || aiMode):
-			document, buildErr := service.buildProduct(args[0], requestedMachineHelpVersion(ctx))
+			style := ""
+			if productHelpEnvEnabled(originalProductHelpEnv) {
+				style = "camel"
+			} else if productHelpEnvEnabled(baselineProductHelpEnv) {
+				style = "kebab"
+			}
+			document, buildErr := service.buildProductForStyle(args[0], requestedMachineHelpVersion(ctx), style)
 			if buildErr != nil {
 				return buildErr
 			}

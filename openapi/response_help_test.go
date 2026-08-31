@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,4 +53,23 @@ func TestRenderResponseHelpTextKeepsFullResponsesWhenSuccessHasNoBody(t *testing
 	assert.Contains(t, output.String(), "Responses:")
 	assert.Contains(t, output.String(), `"400": {`)
 	assert.Contains(t, output.String(), "Notice: No response schema is available for this API.")
+}
+
+func TestRenderResponseHelpTextUsesSelectedSchemaLanguage(t *testing.T) {
+	previousLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(previousLanguage) })
+	i18n.SetLanguage("zh")
+
+	service := testMachineHelpService(t)
+	document, err := service.buildAPIResponse("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	require.NoError(t, renderResponseHelpText(&output, document))
+	assert.Contains(t, output.String(), `"description": "请求 ID。"`)
+	assert.Contains(t, output.String(), `"title": "报表 ID"`)
+	assert.NotContains(t, output.String(), `"description_en"`)
+	assert.NotContains(t, output.String(), `"description_zh"`)
+	assert.NotContains(t, output.String(), `"title_en"`)
+	assert.NotContains(t, output.String(), `"title_zh"`)
 }

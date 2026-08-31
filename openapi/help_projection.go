@@ -106,8 +106,12 @@ func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions
 			}
 			if entry.kind == "command" {
 				document.Commands = append(document.Commands, entry.command)
+				aliases := entry.command.Aliases
+				if entry.command.Group == string(RootGroupUtils) {
+					aliases = nil
+				}
 				document.Matches = append(document.Matches, machineHelpRootMatch{
-					Kind: "command", Name: entry.command.Name, Aliases: entry.command.Aliases,
+					Kind: "command", Name: entry.command.Name, Aliases: aliases,
 					Command: strings.Join(entry.command.Path, " ") + " --help", Description: entry.command.Description,
 				})
 			} else if entry.kind == "flag" {
@@ -249,7 +253,7 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 	document.Next = projection.Next
 	document.Listing = nil
 
-	if !options.All && !showProductActionDescriptionsInDefaultHelp {
+	if !options.All && !shouldShowProductActionDescriptions(aiMode) {
 		for index := range document.APIs {
 			document.APIs[index].Title = machineHelpLocalizedText{}
 			document.APIs[index].Description = machineHelpLocalizedText{}
@@ -1251,11 +1255,18 @@ func (c *Commando) finishCanonicalTextHelp(ctx *cli.Context, aiMode bool) error 
 }
 
 func localizedMachineHelpText(text machineHelpLocalizedText) string {
-	if i18n.GetLanguage() == "zh" && text.ZH != "" {
+	if localizedMachineHelpLanguage() == "zh" && text.ZH != "" {
 		return text.ZH
 	}
 	if text.EN != "" {
 		return text.EN
 	}
 	return text.ZH
+}
+
+func localizedMachineHelpLanguage() string {
+	if i18n.GetLanguage() == "zh" {
+		return "zh"
+	}
+	return "en"
 }

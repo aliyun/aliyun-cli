@@ -808,6 +808,8 @@ func TestCanonicalTextHelpSearchesRootProductAndRequestLocally(t *testing.T) {
 	})
 
 	t.Run("product api", func(t *testing.T) {
+		t.Setenv(originalProductHelpEnv, "")
+		t.Setenv(baselineProductHelpEnv, "")
 		c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
 		CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
 		CliHelpSearchFlag(ctx.Flags()).SetValue("region")
@@ -815,7 +817,24 @@ func TestCanonicalTextHelpSearchesRootProductAndRequestLocally(t *testing.T) {
 		require.NoError(t, c.help(ctx, []string{"demo"}))
 		assert.False(t, c.pluginLoaded)
 		assert.Empty(t, stderr.String())
-		assert.Contains(t, stdout.String(), "DescribeRegions")
+		assert.Contains(t, stdout.String(), "Version: 2026-01-01")
+		assert.Contains(t, stdout.String(), "  DescribeRegions")
+		assert.NotContains(t, stdout.String(), "  describe-regions")
+	})
+
+	t.Run("product api baseline kebab style", func(t *testing.T) {
+		t.Setenv(originalProductHelpEnv, "")
+		t.Setenv(baselineProductHelpEnv, "true")
+		c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+		CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+		CliHelpSearchFlag(ctx.Flags()).SetValue("region")
+
+		require.NoError(t, c.help(ctx, []string{"demo"}))
+		assert.False(t, c.pluginLoaded)
+		assert.Empty(t, stderr.String())
+		assert.Contains(t, stdout.String(), "Version: 2025-01-01")
+		assert.Contains(t, stdout.String(), "  describe-regions")
+		assert.NotContains(t, stdout.String(), "  DescribeRegions")
 	})
 
 	t.Run("request parameter", func(t *testing.T) {
@@ -843,6 +862,52 @@ func TestCanonicalTextHelpOmitsEnableHintWhenAIModeIsOn(t *testing.T) {
 	require.NoError(t, c.help(ctx, nil))
 	assert.Empty(t, stderr.String())
 	assert.NotContains(t, stdout.String(), cli.AIModeEnableCommand)
+}
+
+func TestCanonicalCamelProductTextHelpIncludesKebabSwitchHint(t *testing.T) {
+	t.Setenv(baselineProductHelpEnv, "")
+	originalAvailable := productHelpAvailable
+	productHelpAvailable = func(product string) bool { return product == "demo" }
+	t.Cleanup(func() { productHelpAvailable = originalAvailable })
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	target := HelpTarget{
+		Level:        HelpLevelProduct,
+		Product:      "demo",
+		CommandStyle: CommandStyleCamel,
+		Operation:    HelpOperationDefault,
+		Output:       HelpOutputText,
+		Provider:     HelpProviderHost,
+	}
+
+	require.NoError(t, c.renderHostHelpTarget(ctx, target, false))
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "set "+baselineProductHelpEnv+"=true")
+}
+
+func TestCanonicalProductJSONHonorsRawLanguageFlagBeforeParsing(t *testing.T) {
+	previousLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(previousLanguage) })
+	i18n.SetLanguage("en")
+
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	ctx.SetInvocationArgs([]string{"demo", "--help-search", "report", "--cli-output", "json", "--language", "zh"})
+	target := HelpTarget{
+		Level:        HelpLevelProduct,
+		Product:      "demo",
+		CommandStyle: CommandStyleCamel,
+		Operation:    HelpOperationSearch,
+		SearchQuery:  "report",
+		Output:       HelpOutputJSON,
+		Provider:     HelpProviderHost,
+	}
+
+	require.NoError(t, c.renderHostHelpTarget(ctx, target, false))
+	assert.Empty(t, stderr.String())
+	var output map[string]any
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &output))
+	apis := output["apis"].([]any)
+	require.Len(t, apis, 1)
+	assert.Equal(t, "创建报表。", apis[0].(map[string]any)["description"])
 }
 
 func TestCanonicalTextHelpKeepsConfiguredAIModeDisableHint(t *testing.T) {

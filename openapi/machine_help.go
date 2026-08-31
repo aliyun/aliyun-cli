@@ -176,7 +176,7 @@ type machineHelpProduct struct {
 }
 
 type machineHelpAPISummary struct {
-	Name string `json:"name,omitempty"`
+	Name    string `json:"name,omitempty"`
 	CmdName string `json:"cmdName,omitempty"`
 	// DisplayName is the sort/search key in the active command style; in the
 	// emitted JSON it always equals the surviving name/cmdName, so it stays
@@ -185,6 +185,21 @@ type machineHelpAPISummary struct {
 	Title       machineHelpLocalizedText `json:"title"`
 	Description machineHelpLocalizedText `json:"description"`
 	Deprecated  bool                     `json:"deprecated"`
+}
+
+func (summary machineHelpAPISummary) MarshalJSON() ([]byte, error) {
+	type apiSummaryJSON struct {
+		Name        string                   `json:"name"`
+		Title       machineHelpLocalizedText `json:"title"`
+		Description machineHelpLocalizedText `json:"description"`
+		Deprecated  bool                     `json:"deprecated,omitempty"`
+	}
+	return json.Marshal(apiSummaryJSON{
+		Name:        firstNonEmptyMachineHelpString(summary.DisplayName, summary.CmdName, summary.Name),
+		Title:       summary.Title,
+		Description: summary.Description,
+		Deprecated:  summary.Deprecated,
+	})
 }
 
 type machineHelpProductDocument struct {
@@ -243,7 +258,7 @@ type machineHelpShape struct {
 }
 
 type machineHelpParameter struct {
-	Name    string `json:"name"`
+	Name string `json:"name"`
 	// RawName carries the wire name for legacy-camel views where it is set;
 	// it is only ever equal to Name, so it stays struct-only.
 	RawName       string                   `json:"-"`
@@ -431,6 +446,12 @@ func (s *machineHelpService) buildProductForStyle(code, requestedVersion, style 
 	product, err := s.findProduct(code)
 	if err != nil {
 		return nil, err
+	}
+	if style == "" {
+		style = "kebab"
+		if product.Version != "" {
+			style = "camel"
+		}
 	}
 	versions := normalizedVersions(*product)
 	if style == "pascal" {
@@ -1168,6 +1189,10 @@ func (document *machineHelpRootDocument) prepareJSONGroups() {
 	for _, command := range document.Commands {
 		switch command.Group {
 		case string(RootGroupUtils):
+			// Root-level aliases keep the historical hidden utility entrypoints
+			// searchable and executable, but they are implementation details and
+			// must not be exposed as part of the public utilities Help document.
+			command.Aliases = nil
 			document.Utilities = append(document.Utilities, command)
 		case string(RootGroupExtension):
 			document.Extensions = append(document.Extensions, command)

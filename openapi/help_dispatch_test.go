@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -121,6 +122,26 @@ func TestBeforeParseHelpRouteRejectsUnknownRootFlag(t *testing.T) {
 	var invalid *cli.InvalidFlagError
 	require.True(t, errors.As(err, &invalid))
 	assert.Equal(t, "--regoin", invalid.Flag)
+}
+
+func TestBeforeParseHelpRouteRejectsUnknownProductFlag(t *testing.T) {
+	c, ctx, _, _ := newCanonicalHelpTestContext(t)
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-demo": {Name: "aliyun-cli-demo", Version: "1.0.0", Type: plugin.PluginTypeGo},
+	}}
+	originalDispatch := goPluginHelpDispatch
+	goPluginHelpDispatch = func(string, []string, *cli.Context) (bool, error) {
+		t.Fatal("the host must reject an invalid product-level flag before plugin Help delegation")
+		return false, nil
+	}
+	t.Cleanup(func() { goPluginHelpDispatch = originalDispatch })
+
+	handled, err := c.beforeParseHelpRoute(ctx, []string{"demo", "--hekp"})
+
+	assert.True(t, handled)
+	var invalid *cli.InvalidFlagError
+	require.True(t, errors.As(err, &invalid))
+	assert.Equal(t, "--hekp", invalid.Flag)
 }
 
 func TestValidateCanonicalAPICommandPrecedesProfileResolution(t *testing.T) {
@@ -243,4 +264,54 @@ func TestGoPluginHelpDelegationKeepsPascalCaseWithHost(t *testing.T) {
 		assert.True(t, delegated)
 		assert.True(t, *dispatched)
 	})
+}
+
+func TestLowercaseCanonicalCommandIsValidatedBeforeRuntimeProfileResolution(t *testing.T) {
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	t.Cleanup(cleanup)
+	require.NoError(t, os.MkdirAll(filepath.Join(testHome, ".aliyun", "plugins"), 0755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(testHome, ".aliyun", "plugins", "manifest.json"),
+		[]byte(`{"plugins":{}}`),
+		0644,
+	))
+
+	c, ctx, _, _ := newCanonicalHelpTestContext(t)
+	ctx.SetInvocationArgs([]string{"demo", "get-caller"})
+	originalArgs := os.Args
+	os.Args = []string{"aliyun", "demo", "get-caller"}
+	t.Cleanup(func() { os.Args = originalArgs })
+
+	runtimeCalled := false
+	originalDispatch := runtimeTryDispatch
+	runtimeTryDispatch = func(_ *cli.Context, _ []string) (bool, error) {
+		runtimeCalled = true
+		return true, errors.New("profile default: failed to resolve credentials")
+	}
+	t.Cleanup(func() { runtimeTryDispatch = originalDispatch })
+
+	err := c.main(ctx, []string{"demo", "get-caller"})
+	var invalid *InvalidApiError
+	require.True(t, errors.As(err, &invalid), "err=%T %v", err, err)
+	assert.Equal(t, "get-caller", invalid.Name)
+	assert.False(t, runtimeCalled, "local command identity must be checked before runtime/profile setup")
+}
+
+func TestBundledSTSUnknownCommandIsLocallyIdentified(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	ctx.SetInvocationArgs([]string{"sts", "get-caller"})
+	assert.False(t, EstimateCostFlag(ctx.Flags()).IsAssigned())
+	assert.False(t, ForceFlag(ctx.Flags()).IsAssigned())
+
+	err := c.validateCanonicalRuntimeCommand([]string{"sts", "get-caller"}, ctx)
+	var invalid *InvalidBaselineCommandError
+	require.True(t, errors.As(err, &invalid), "err=%T %v", err, err)
+	assert.Equal(t, "get-caller", invalid.Command)
+	assert.Contains(t, invalid.AgentSuggestions(), "get-caller-identity")
+	require.NoError(t, c.validateCanonicalAPICommand([]string{"sts", "GET"}, ctx), "uppercase REST method remains exempt")
 }

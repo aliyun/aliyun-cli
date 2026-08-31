@@ -60,6 +60,53 @@ func TestMachineHelpRootJSONUsesExplicitGroups(t *testing.T) {
 	assert.Contains(t, raw, "products")
 }
 
+func TestMachineHelpRootJSONOmitsUtilityAliases(t *testing.T) {
+	doc := &machineHelpRootDocument{Commands: []machineHelpCommandSummary{
+		{
+			Group:   string(RootGroupCore),
+			Name:    "configure",
+			Aliases: []string{"setup"},
+		},
+		{
+			Group:   string(RootGroupUtils),
+			Name:    "utils go-migrate",
+			Aliases: []string{"go-migrate"},
+		},
+	}}
+
+	var output bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&output, doc, false))
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
+
+	utilities := raw["utilities"].([]any)
+	require.Len(t, utilities, 1)
+	assert.NotContains(t, utilities[0].(map[string]any), "aliases")
+
+	coreCommands := raw["coreCommands"].([]any)
+	require.Len(t, coreCommands, 1)
+	assert.Equal(t, []any{"setup"}, coreCommands[0].(map[string]any)["aliases"])
+}
+
+func TestMachineHelpRootSearchJSONOmitsUtilityAliases(t *testing.T) {
+	doc := &machineHelpRootDocument{Commands: []machineHelpCommandSummary{{
+		Group:   string(RootGroupUtils),
+		Path:    []string{"aliyun", "utils", "go-migrate"},
+		Name:    "utils go-migrate",
+		Aliases: []string{"go-migrate"},
+	}}}
+	applyRootHelpOptions(doc, helpOptions{Search: "go-migrate"}, false)
+
+	var output bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&output, doc, false))
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
+
+	matches := raw["matches"].([]any)
+	require.Len(t, matches, 1)
+	assert.NotContains(t, matches[0].(map[string]any), "aliases")
+}
+
 func TestMachineHelpProduct(t *testing.T) {
 	service := testMachineHelpService(t)
 	doc, err := service.buildProduct("demo", "")
@@ -87,6 +134,32 @@ func TestMachineHelpProductExplicitVersion(t *testing.T) {
 	require.Len(t, doc.APIs, 2)
 	assert.Equal(t, "create-report", doc.APIs[0].CmdName)
 	assert.Equal(t, "describe-regions", doc.APIs[1].CmdName)
+}
+
+func TestMachineHelpProductJSONUsesSelectedLanguageAndActiveCommandName(t *testing.T) {
+	previousLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(previousLanguage) })
+	i18n.SetLanguage("en")
+
+	service := testMachineHelpService(t)
+	doc, err := service.buildProductForStyle("demo", "2026-01-01", "camel")
+	require.NoError(t, err)
+	require.Len(t, doc.APIs, 2)
+	doc.APIs[1].Deprecated = true
+
+	var encoded bytes.Buffer
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc, false))
+	var output map[string]any
+	require.NoError(t, json.Unmarshal(encoded.Bytes(), &output))
+	apis := output["apis"].([]any)
+	first := apis[0].(map[string]any)
+	assert.Equal(t, "CreateReport", first["name"])
+	assert.Equal(t, "Creates a report.", first["description"])
+	assert.ElementsMatch(t, []string{"name", "description"}, mapKeys(first))
+	second := apis[1].(map[string]any)
+	assert.Equal(t, true, second["deprecated"])
+	assert.NotContains(t, second, "cmdName")
+	assert.NotContains(t, second, "displayName")
 }
 
 func TestMachineHelpAPICamelAndKebabShareCanonicalIdentity(t *testing.T) {
@@ -200,6 +273,53 @@ func TestMachineHelpAPIResponseUsesCanonicalSchemaAndReachableComponents(t *test
 	assert.Contains(t, doc.OutputSchema.Components.Schemas, "Report")
 	assert.NotContains(t, doc.OutputSchema.Components.Schemas, "Unused")
 	assert.Empty(t, doc.Notice)
+}
+
+func TestMachineHelpAPIResponseJSONKeepsOneLocalizedResponseSchema(t *testing.T) {
+	previousLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(previousLanguage) })
+
+	tests := []struct {
+		language        string
+		wantDescription string
+		wantTitle       string
+	}{
+		{language: "en", wantDescription: "The request ID.", wantTitle: "Report ID"},
+		{language: "zh", wantDescription: "请求 ID。", wantTitle: "报表 ID"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.language, func(t *testing.T) {
+			i18n.SetLanguage(tt.language)
+			service := testMachineHelpService(t)
+			doc, err := service.buildAPIResponse("demo", "CreateReport", "2026-01-01")
+			require.NoError(t, err)
+
+			var encoded bytes.Buffer
+			require.NoError(t, encodeMachineHelpJSON(&encoded, doc, false))
+			output := encoded.String()
+			assert.Contains(t, output, `"responses"`)
+			assert.Contains(t, output, `"components"`)
+			assert.NotContains(t, output, `"outputSchema"`)
+			assert.NotContains(t, output, `"description_en"`)
+			assert.NotContains(t, output, `"description_zh"`)
+			assert.NotContains(t, output, `"title_en"`)
+			assert.NotContains(t, output, `"title_zh"`)
+			assert.Contains(t, output, fmt.Sprintf(`"description": %q`, tt.wantDescription))
+			assert.Contains(t, output, fmt.Sprintf(`"title": %q`, tt.wantTitle))
+		})
+	}
+}
+
+func TestLocalizeMachineHelpRawJSONOmitsEmptyLocalizedText(t *testing.T) {
+	previousLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(previousLanguage) })
+	i18n.SetLanguage("en")
+
+	localized, err := localizeMachineHelpRawJSON(json.RawMessage(
+		`{"type":"object","description_en":"","description_zh":""}`,
+	))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"type":"object"}`, string(localized))
 }
 
 func TestMachineHelpAPIResponseWithoutSchemaReturnsNotice(t *testing.T) {
@@ -411,12 +531,12 @@ func TestCommandoHelpJSONResponseSection(t *testing.T) {
 	assert.False(t, c.pluginLoaded)
 	assert.Empty(t, stderr.String())
 
-	var doc machineHelpAPIResponseDocument
+	var doc map[string]any
 	require.NoError(t, json.Unmarshal(stdout.Bytes(), &doc))
-	assert.Equal(t, helpSectionResponse, doc.Section)
-	// The complete document carries the schema once, in responses.
-	assert.NotNil(t, doc.Responses)
-	assert.Nil(t, doc.OutputSchema)
+	assert.Equal(t, helpSectionResponse, doc["section"])
+	assert.Contains(t, doc, "responses")
+	assert.Contains(t, doc, "components")
+	assert.NotContains(t, doc, "outputSchema")
 	assert.NotContains(t, stdout.String(), `"parameterSets"`)
 }
 

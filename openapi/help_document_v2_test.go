@@ -59,6 +59,13 @@ func TestProductDefaultAllAndSearchProjectionSemantics(t *testing.T) {
 	require.NoError(t, renderCanonicalProductText(&defaultText, defaultDocument, ""))
 	assert.Contains(t, defaultText.String(), fmt.Sprintf("...\nShowing %d of 105 APIs.", wantShown))
 
+	nonAIDocument := newDocument()
+	applyProductHelpOptions(nonAIDocument, helpOptions{}, false)
+	assert.Len(t, nonAIDocument.APIs, 105)
+	assert.Equal(t, "Item title", nonAIDocument.APIs[0].Title.EN)
+	assert.Equal(t, "Complete item description", nonAIDocument.APIs[0].Description.EN)
+	assert.Equal(t, HelpResult{Shown: 105, Total: 105}, nonAIDocument.Result)
+
 	allDocument := newDocument()
 	applyProductHelpOptions(allDocument, helpOptions{All: true}, true)
 	assert.Len(t, allDocument.APIs, 105)
