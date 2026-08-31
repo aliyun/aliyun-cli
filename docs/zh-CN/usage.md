@@ -37,15 +37,23 @@ aliyun ecs describe-instance-attribute --instance-id i-1234567890abcdef
 
 子命令的大小写决定由哪个引擎处理调用：全小写的子命令进入插件/runtime 引擎，包含大写字母的子命令走内置 OpenAPI 链路。不要在同一条命令里混用两种写法——`aliyun ecs DescribeInstances --biz-region-id cn-hangzhou` 会报未知参数错误；`--RegionId` 与 `DescribeInstances` 配对，`--biz-region-id` 与 `describe-instances` 配对。
 
-产品级帮助同样遵循该规则。未安装产品插件时，`aliyun ecs --help` 默认展示大驼峰命令列表；仅存在于内置 metadata 中的产品则展示短横线命令列表。两个环境变量可以显式切换帮助风格：
+产品级帮助同样遵循该规则。未安装产品插件时，`aliyun ecs --help` 默认展示大驼峰命令列表；仅存在于内置 metadata 中的产品则展示短横线命令列表。可以通过一次性环境变量切换产品帮助；下面的写法只影响当前这次命令，不会修改 Shell 的持久配置：
 
 ```sh
-# 查看短横线产品帮助（未安装产品插件时）
+# 从传统大驼峰帮助切换到短横线帮助
 ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help
 
-# 查看旧版大驼峰产品帮助（已安装产品插件时）
+# 返回传统大驼峰帮助
+ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=false aliyun ecs --help
+
+# 从已安装插件提供的帮助切换到传统大驼峰帮助
 ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true aliyun ecs --help
+
+# 返回已安装插件提供的帮助
+ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=false aliyun ecs --help
 ```
+
+帮助风格切换提示只出现在面向用户的产品级帮助中。AI 模式使用结构化帮助描述当前命令风格，API 级帮助只展示当前命令对应的参数，不重复提示另一种风格。
 
 常规 API 调用应优先使用上述产品和操作名形式。对于只能通过原始 HTTP 方法和路径访问的 API，CLI 仍保留以下 RESTful 兼容形式，但不建议作为一般用法：
 

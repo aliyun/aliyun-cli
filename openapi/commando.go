@@ -1407,7 +1407,7 @@ func (c *Commando) legacyHelp(ctx *cli.Context, args []string) error {
 		return nil
 	} else if len(args) == 1 {
 		cmd.PrintHead(ctx)
-		if err := c.printProductUsage(ctx, args[0]); err != nil {
+		if err := c.printProductUsageForMode(ctx, args[0], aiMode); err != nil {
 			return err
 		}
 		if !installedPlugin && !aiMode {

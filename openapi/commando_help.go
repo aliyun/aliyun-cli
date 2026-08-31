@@ -33,6 +33,15 @@ const (
 	baselineProductHelpEnv = "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP"
 )
 
+type productHelpSwitch int
+
+const (
+	productHelpTraditionalToKebab productHelpSwitch = iota
+	productHelpKebabToTraditional
+	productHelpPluginToTraditional
+	productHelpTraditionalToPlugin
+)
+
 func productHelpEnvEnabled(name string) bool {
 	value := strings.TrimSpace(os.Getenv(name))
 	return value == "1" || strings.EqualFold(value, "true")
@@ -41,15 +50,37 @@ func productHelpEnvEnabled(name string) bool {
 func (c *Commando) invalidBaselineCommandError(productCode, command string) error {
 	_, hasLegacyHelp := c.library.GetProduct(productCode)
 	if hasLegacyHelp {
-		return fmt.Errorf("'%s' is not a valid baseline kebab-case command for product '%s'.\nRun 'aliyun %s --help' to view legacy PascalCase commands, or '%s=true aliyun %s --help' to view baseline kebab-case commands.",
+		return fmt.Errorf("'%s' is not a valid kebab-case command for product '%s'.\nRun 'aliyun %s --help' to view traditional PascalCase commands, or '%s=true aliyun %s --help' to view kebab-case commands.",
 			command, productCode, productCode, baselineProductHelpEnv, productCode)
 	}
-	return fmt.Errorf("'%s' is not a valid baseline kebab-case command for product '%s'.\nRun 'aliyun %s --help' to view available kebab-case commands.",
+	return fmt.Errorf("'%s' is not a valid kebab-case command for product '%s'.\nRun 'aliyun %s --help' to view available kebab-case commands.",
 		command, productCode, productCode)
 }
 
-func printProductHelpSwitchHint(ctx *cli.Context, english, chinese string) {
-	cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\n%s\n", i18n.T(english, chinese).Text())
+func printProductHelpSwitchHint(ctx *cli.Context, productCode string, target productHelpSwitch) {
+	productCode = strings.ToLower(productCode)
+	var english, chinese, command string
+	switch target {
+	case productHelpTraditionalToKebab:
+		english = "Note: This help shows traditional PascalCase commands. To view kebab-case commands, run:"
+		chinese = "提示：当前显示传统大驼峰命令。查看短横线命令，请运行："
+		command = baselineProductHelpEnv + "=true aliyun " + productCode + " --help"
+	case productHelpKebabToTraditional:
+		english = "Note: This help shows kebab-case commands. To return to traditional PascalCase commands, run:"
+		chinese = "提示：当前显示短横线命令。返回传统大驼峰命令，请运行："
+		command = baselineProductHelpEnv + "=false aliyun " + productCode + " --help"
+	case productHelpPluginToTraditional:
+		english = "Note: This help is provided by the installed plugin. To view traditional PascalCase commands, run:"
+		chinese = "提示：当前显示已安装插件提供的命令。查看传统大驼峰命令，请运行："
+		command = originalProductHelpEnv + "=true aliyun " + productCode + " --help"
+	case productHelpTraditionalToPlugin:
+		english = "Note: This help shows traditional PascalCase commands. To return to the installed plugin commands, run:"
+		chinese = "提示：当前显示传统大驼峰命令。返回已安装插件提供的命令，请运行："
+		command = originalProductHelpEnv + "=false aliyun " + productCode + " --help"
+	default:
+		return
+	}
+	cli.Printf(ctx.Stdout(), "\n%s\n\n  %s\n", i18n.T(english, chinese).Text(), command)
 }
 
 func (c *Commando) printPluginIndexLoadHint(ctx *cli.Context) {
@@ -253,6 +284,10 @@ func (c *Commando) printProducts(ctx *cli.Context) {
 }
 
 func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error {
+	return c.printProductUsageForMode(ctx, productCode, false)
+}
+
+func (c *Commando) printProductUsageForMode(ctx *cli.Context, productCode string, aiMode bool) error {
 	c.printHelpContextHints(ctx)
 	// Resolve remote catalog information and the locally installed plugin
 	// independently: package-installed plugins may not exist in the remote index.
@@ -308,10 +343,8 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 				return err
 			}
 		}
-		if hasLegacyHelp {
-			printProductHelpSwitchHint(ctx,
-				"To view legacy PascalCase product help, set "+originalProductHelpEnv+"=true.",
-				"如需查看旧版大驼峰产品帮助，请设置 "+originalProductHelpEnv+"=true。")
+		if hasLegacyHelp && !aiMode {
+			printProductHelpSwitchHint(ctx, productCode, productHelpPluginToTraditional)
 		}
 		return nil
 	}
@@ -322,10 +355,8 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 		if err := productHelpRender(ctx, productCode); err != nil {
 			return err
 		}
-		if hasLegacyHelp {
-			printProductHelpSwitchHint(ctx,
-				"To return to legacy PascalCase product help, unset "+baselineProductHelpEnv+" (or set it to false).",
-				"如需返回旧版大驼峰产品帮助，请取消设置 "+baselineProductHelpEnv+"（或设为 false）。")
+		if hasLegacyHelp && !aiMode {
+			printProductHelpSwitchHint(ctx, productCode, productHelpKebabToTraditional)
 		}
 		return nil
 	}
@@ -412,14 +443,11 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 
 	cli.Printf(ctx.Stdout(), "\nRun `aliyun %s <ApiName> --help` to get more information about this API\n", product.GetLowerCode())
 	switch {
+	case aiMode:
 	case isInstalled && showOriginal:
-		printProductHelpSwitchHint(ctx,
-			"To return to installed plugin product help, unset "+originalProductHelpEnv+" (or set it to false).",
-			"如需返回已安装插件的产品帮助，请取消设置 "+originalProductHelpEnv+"（或设为 false）。")
+		printProductHelpSwitchHint(ctx, productCode, productHelpTraditionalToPlugin)
 	case !isInstalled && !showBaseline && productHelpAvailable(productCode):
-		printProductHelpSwitchHint(ctx,
-			"To view baseline kebab-case product help, set "+baselineProductHelpEnv+"=true.",
-			"如需查看 baseline 的 kebab-case 产品帮助，请设置 "+baselineProductHelpEnv+"=true。")
+		printProductHelpSwitchHint(ctx, productCode, productHelpTraditionalToKebab)
 	}
 	return nil
 }

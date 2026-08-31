@@ -189,6 +189,16 @@ func (c *Commando) delegateInstalledPluginHelp(ctx *cli.Context, args []string) 
 	if err := plugin.ValidateLocalPluginCliVersion(pluginName, local); err != nil {
 		return true, &externalPluginError{err: err}
 	}
+	positionals := rawHelpPositionals(args)
+	productLevel := len(positionals) == 1
+	hasTraditionalHelp := false
+	if c.library != nil {
+		_, hasTraditionalHelp = c.library.GetProduct(product)
+	}
+	if productLevel && hasTraditionalHelp && productHelpEnvEnabled(originalProductHelpEnv) {
+		return false, nil
+	}
+	aiMode := c.applyEffectiveAIModeForArgs(ctx, args)
 
 	pluginArgs := append([]string(nil), args[index:]...)
 	if (len(pluginArgs) == 1 || (len(args) > 0 && args[0] == "help")) && !containsPluginHelpOperation(pluginArgs) {
@@ -215,6 +225,9 @@ func (c *Commando) delegateInstalledPluginHelp(ctx *cli.Context, args []string) 
 	}
 	if !ok {
 		return true, &externalPluginError{err: fmt.Errorf("plugin %s not found", pluginName)}
+	}
+	if productLevel && hasTraditionalHelp && !aiMode {
+		printProductHelpSwitchHint(ctx, product, productHelpPluginToTraditional)
 	}
 	return true, nil
 }
@@ -428,7 +441,8 @@ func (c *Commando) resolveParsedHelpTarget(ctx *cli.Context, args []string) (Hel
 		target.Level = HelpLevelProduct
 		target.Product = args[0]
 		target.CommandStyle = CommandStyleCamel
-		if productHelpEnvEnabled(baselineProductHelpEnv) || c.installedMetaPluginProduct(args[0]) {
+		if !productHelpEnvEnabled(originalProductHelpEnv) &&
+			(productHelpEnvEnabled(baselineProductHelpEnv) || c.installedMetaPluginProduct(args[0])) {
 			target.CommandStyle = CommandStyleKebab
 		}
 	}
@@ -571,11 +585,18 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 	if err := renderHostHelpText(ctx, document, target.SearchQuery); err != nil {
 		return err
 	}
-	if target.Level == HelpLevelProduct && target.CommandStyle == CommandStyleCamel &&
-		!productHelpEnvEnabled(baselineProductHelpEnv) && productHelpAvailable(target.Product) {
-		printProductHelpSwitchHint(ctx,
-			"To view baseline kebab-case product help, set "+baselineProductHelpEnv+"=true.",
-			"如需查看 baseline 的 kebab-case 产品帮助，请设置 "+baselineProductHelpEnv+"=true。")
+	if target.Level == HelpLevelProduct && !aiMode {
+		_, hasTraditionalHelp := c.library.GetProduct(target.Product)
+		switch {
+		case target.CommandStyle == CommandStyleCamel && c.hasInstalledProductPlugin(target.Product) && productHelpEnvEnabled(originalProductHelpEnv):
+			printProductHelpSwitchHint(ctx, target.Product, productHelpTraditionalToPlugin)
+		case target.CommandStyle == CommandStyleCamel && !productHelpEnvEnabled(baselineProductHelpEnv) && productHelpAvailable(target.Product):
+			printProductHelpSwitchHint(ctx, target.Product, productHelpTraditionalToKebab)
+		case target.CommandStyle == CommandStyleKebab && productHelpEnvEnabled(baselineProductHelpEnv) && hasTraditionalHelp:
+			printProductHelpSwitchHint(ctx, target.Product, productHelpKebabToTraditional)
+		case target.CommandStyle == CommandStyleKebab && c.installedMetaPluginProduct(target.Product) && hasTraditionalHelp:
+			printProductHelpSwitchHint(ctx, target.Product, productHelpPluginToTraditional)
+		}
 	}
 	return c.finishCanonicalTextHelp(ctx, aiMode)
 }

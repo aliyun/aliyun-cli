@@ -37,15 +37,23 @@ In practice:
 
 The subcommand casing decides which engine handles the call: an all-lowercase subcommand is routed to the plugin/runtime engine, while a subcommand containing uppercase letters goes through the built-in OpenAPI path. Do not mix the two spellings in one command — `aliyun ecs DescribeInstances --biz-region-id cn-hangzhou` fails with an unknown parameter error; pair `--RegionId` with `DescribeInstances` and `--biz-region-id` with `describe-instances`.
 
-Product-level help follows the same split. Without an installed product plugin, `aliyun ecs --help` shows the PascalCase command list by default; products that exist only in the bundled metadata show the kebab-case list. Two environment variables switch the style explicitly:
+Product-level help follows the same split. Without an installed product plugin, `aliyun ecs --help` shows the PascalCase command list by default; products that exist only in the bundled metadata show the kebab-case list. One-shot environment variables can switch the product Help style. The forms below affect only that invocation and do not persist in the shell:
 
 ```sh
-# kebab-case product help (no product plugin installed)
+# Switch from traditional PascalCase Help to kebab-case Help
 ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help
 
-# legacy PascalCase product help (a product plugin is installed)
+# Return to traditional PascalCase Help
+ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=false aliyun ecs --help
+
+# Switch from installed plugin Help to traditional PascalCase Help
 ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true aliyun ecs --help
+
+# Return to installed plugin Help
+ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=false aliyun ecs --help
 ```
+
+Style-switch hints appear only in human-readable product-level Help. AI mode uses structured Help to identify the active command style, and API-level Help shows only the parameters for the selected command style.
 
 Use the product/operation forms above for normal API calls. For APIs that can only be addressed by a raw method and path, the CLI retains the following RESTful compatibility form; it is not the recommended form for general use:
 

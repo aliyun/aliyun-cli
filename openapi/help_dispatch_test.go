@@ -296,11 +296,42 @@ func TestGoPluginHelpDelegationKeepsPascalCaseWithHost(t *testing.T) {
 	})
 
 	t.Run("product level help still delegates", func(t *testing.T) {
-		c, ctx, _, _, dispatched := newGoPluginCommando(t)
+		c, ctx, stdout, _, dispatched := newGoPluginCommando(t)
 		delegated, err := c.delegateInstalledPluginHelp(ctx, []string{"sts", "--help"})
 		require.NoError(t, err)
 		assert.True(t, delegated)
 		assert.True(t, *dispatched)
+		assert.Contains(t, stdout.String(), originalProductHelpEnv+"=true aliyun sts --help")
+	})
+
+	t.Run("product level help omits style switch in AI mode", func(t *testing.T) {
+		c, ctx, stdout, _, dispatched := newGoPluginCommando(t)
+		t.Setenv(aimode.EnvAIMode, "1")
+		delegated, err := c.delegateInstalledPluginHelp(ctx, []string{"sts", "--help"})
+		require.NoError(t, err)
+		assert.True(t, delegated)
+		assert.True(t, *dispatched)
+		assert.NotContains(t, stdout.String(), originalProductHelpEnv)
+	})
+
+	t.Run("original product help stays with host", func(t *testing.T) {
+		c, ctx, _, _, dispatched := newGoPluginCommando(t)
+		t.Setenv(originalProductHelpEnv, "true")
+		delegated, err := c.delegateInstalledPluginHelp(ctx, []string{"sts", "--help"})
+		require.NoError(t, err)
+		assert.False(t, delegated)
+		assert.False(t, *dispatched)
+	})
+
+	t.Run("original product help command renders host help", func(t *testing.T) {
+		c, ctx, stdout, stderr, dispatched := newGoPluginCommando(t)
+		t.Setenv(originalProductHelpEnv, "true")
+		ctx.SetInvocationArgs([]string{"sts", "--help"})
+		require.NoError(t, c.help(ctx, []string{"sts"}))
+		assert.False(t, *dispatched)
+		assert.Empty(t, stderr.String())
+		assert.Contains(t, stdout.String(), "AssumeRole")
+		assert.Contains(t, stdout.String(), originalProductHelpEnv+"=false aliyun sts --help")
 	})
 
 	t.Run("http verb still delegates", func(t *testing.T) {

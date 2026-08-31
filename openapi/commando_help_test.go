@@ -38,6 +38,19 @@ func newTestContext(w, stderr *bytes.Buffer) *cli.Context {
 	return cli.NewCommandContext(w, stderr)
 }
 
+func TestPrintProductHelpSwitchHintUsesPlainText(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	cli.SetNoColorOverride(false)
+	t.Cleanup(func() { cli.SetNoColorOverride(false) })
+	_, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+
+	printProductHelpSwitchHint(ctx, "STS", productHelpKebabToTraditional)
+
+	assert.NotContains(t, stdout.String(), "\x1b[")
+	assert.Contains(t, stdout.String(), baselineProductHelpEnv+"=false aliyun sts --help")
+}
+
 func TestPrintPluginIndexLoadFailureNote_NoError(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	c, stdout, stderr := newTestCommando()
@@ -134,7 +147,24 @@ func TestPrintProductUsage_LegacyHelpAdvertisesBaselineSwitch(t *testing.T) {
 
 	err := c.printProductUsage(ctx, "ecs")
 	assert.NoError(t, err)
-	assert.Contains(t, stdout.String(), baselineProductHelpEnv+"=true")
+	assert.Contains(t, stdout.String(), "This help shows traditional PascalCase commands")
+	assert.Contains(t, stdout.String(), baselineProductHelpEnv+"=true aliyun ecs --help")
+}
+
+func TestPrintProductUsage_AIModeOmitsStyleSwitch(t *testing.T) {
+	t.Setenv(baselineProductHelpEnv, "")
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	c.library.builtinRepo = getRepository()
+	c.pluginIndex = &plugin.Index{}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
+
+	originalAvailable := productHelpAvailable
+	productHelpAvailable = func(string) bool { return true }
+	t.Cleanup(func() { productHelpAvailable = originalAvailable })
+
+	require.NoError(t, c.printProductUsageForMode(ctx, "ecs", true))
+	assert.NotContains(t, stdout.String(), baselineProductHelpEnv)
 }
 
 func TestPrintProductUsage_BaselineEnvSelectsKebabHelp(t *testing.T) {
@@ -160,7 +190,8 @@ func TestPrintProductUsage_BaselineEnvSelectsKebabHelp(t *testing.T) {
 	assert.NoError(t, err)
 	out := stdout.String()
 	assert.Contains(t, out, "BASELINE_KEBAB_PRODUCT_HELP")
-	assert.Contains(t, out, "unset "+baselineProductHelpEnv)
+	assert.Contains(t, out, "This help shows kebab-case commands")
+	assert.Contains(t, out, baselineProductHelpEnv+"=false aliyun ecs --help")
 	assert.NotContains(t, out, "Available Api List")
 }
 
@@ -403,7 +434,7 @@ func TestPrintApiUsage_UnknownApi_PluginAvailableNotInstalled_Lowercase(t *testi
 	// as an invalid baseline command rather than suggesting its optional plugin.
 	err := c.printApiUsage(ctx, "ecs", "describeinstances")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "'describeinstances' is not a valid baseline kebab-case command")
+	assert.Contains(t, err.Error(), "'describeinstances' is not a valid kebab-case command")
 	assert.Contains(t, err.Error(), "aliyun ecs --help")
 	assert.Contains(t, err.Error(), "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help")
 	assert.NotContains(t, err.Error(), "plugin install")
@@ -606,7 +637,7 @@ func TestPrintProductUsage_OriginalEnvSelectsLegacyHelp(t *testing.T) {
 	out := stdout.String()
 	assert.Contains(t, out, "Available Api List")
 	assert.Contains(t, out, "DescribeInstances")
-	assert.Contains(t, out, "unset "+originalProductHelpEnv)
+	assert.Contains(t, out, originalProductHelpEnv+"=false aliyun ecs --help")
 }
 
 func TestPrintProductUsage_BuiltinMetaPluginWinsAndUsesRuntimeHelp(t *testing.T) {
@@ -880,7 +911,67 @@ func TestCanonicalCamelProductTextHelpIncludesKebabSwitchHint(t *testing.T) {
 
 	require.NoError(t, c.renderHostHelpTarget(ctx, target, false))
 	assert.Empty(t, stderr.String())
-	assert.Contains(t, stdout.String(), "set "+baselineProductHelpEnv+"=true")
+	assert.Contains(t, stdout.String(), "This help shows traditional PascalCase commands")
+	assert.Contains(t, stdout.String(), baselineProductHelpEnv+"=true aliyun demo --help")
+}
+
+func TestCanonicalKebabProductTextHelpIncludesTraditionalSwitchHint(t *testing.T) {
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	repo, err := meta.MockLoadRepository([]meta.Product{{
+		Code: "demo", Version: "2026-01-01", ApiStyle: "rpc", ApiNames: []string{"DescribeRegions"},
+	}})
+	require.NoError(t, err)
+	c.library.builtinRepo = repo
+	t.Setenv(baselineProductHelpEnv, "true")
+	target := HelpTarget{
+		Level:        HelpLevelProduct,
+		Product:      "demo",
+		CommandStyle: CommandStyleKebab,
+		Operation:    HelpOperationDefault,
+		Output:       HelpOutputText,
+		Provider:     HelpProviderHost,
+	}
+
+	require.NoError(t, c.renderHostHelpTarget(ctx, target, false))
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "This help shows kebab-case commands")
+	assert.Contains(t, stdout.String(), baselineProductHelpEnv+"=false aliyun demo --help")
+}
+
+func TestCanonicalProductHelpOmitsStyleSwitchInAIMode(t *testing.T) {
+	t.Setenv(baselineProductHelpEnv, "")
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	target := HelpTarget{
+		Level:        HelpLevelProduct,
+		Product:      "demo",
+		CommandStyle: CommandStyleCamel,
+		Operation:    HelpOperationDefault,
+		Output:       HelpOutputText,
+		Provider:     HelpProviderHost,
+	}
+
+	require.NoError(t, c.renderHostHelpTarget(ctx, target, true))
+	assert.Empty(t, stderr.String())
+	assert.NotContains(t, stdout.String(), baselineProductHelpEnv)
+	assert.True(t, json.Valid(stdout.Bytes()), "AI Mode product Help must remain structured JSON")
+}
+
+func TestCanonicalAPIHelpOmitsProductStyleSwitch(t *testing.T) {
+	t.Setenv(baselineProductHelpEnv, "")
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	target := HelpTarget{
+		Level:        HelpLevelAction,
+		Product:      "demo",
+		Action:       "CreateReport",
+		CommandStyle: CommandStyleCamel,
+		Operation:    HelpOperationDefault,
+		Output:       HelpOutputText,
+		Provider:     HelpProviderHost,
+	}
+
+	require.NoError(t, c.renderHostHelpTarget(ctx, target, false))
+	assert.Empty(t, stderr.String())
+	assert.NotContains(t, stdout.String(), baselineProductHelpEnv)
 }
 
 func TestCanonicalProductJSONHonorsRawLanguageFlagBeforeParsing(t *testing.T) {
