@@ -1228,7 +1228,7 @@ func commandStyle(api string) string {
 }
 
 func apiSearchKeywordCandidates(style string, seeds ...string) []string {
-	candidates := make([]string, 0, len(seeds)*3)
+	candidates := make([]string, 0, len(seeds))
 	for _, seed := range seeds {
 		resource := resourceKeyword(seed)
 		if resource == "" {
@@ -1247,7 +1247,7 @@ func apiSearchKeywordCandidates(style string, seeds ...string) []string {
 }
 
 func parameterSearchKeywordCandidates(style string, seeds ...string) []string {
-	candidates := make([]string, 0, len(seeds)*3)
+	candidates := make([]string, 0, len(seeds))
 	for _, seed := range seeds {
 		seed = strings.TrimLeft(strings.TrimSpace(seed), "-")
 		if seed == "" {
