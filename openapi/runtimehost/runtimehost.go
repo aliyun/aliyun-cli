@@ -17,6 +17,7 @@
 package runtimehost
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -214,9 +215,7 @@ func checkSafetyPolicy(ctx *cli.Context, rawArgs []string) error {
 
 	policy, err := safety.LoadEffectivePolicy(config.GetConfigDir(ctx))
 	if err != nil {
-		// Preserve the existing host policy semantics: malformed/unreadable
-		// policy configuration fails open rather than breaking CLI execution.
-		return nil
+		return fmt.Errorf("load safety policy failed: %w", err)
 	}
 	skipConfirm := flagAssigned(ctx, "yes") ||
 		os.Getenv("ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM") == "1" ||

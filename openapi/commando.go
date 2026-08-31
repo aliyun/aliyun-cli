@@ -1706,8 +1706,7 @@ func (c *Commando) checkSafetyPolicy(ctx *cli.Context, productCode string, apiOr
 	configDir := config.GetConfigDir(ctx)
 	policy, err := safety.LoadEffectivePolicy(configDir)
 	if err != nil {
-		// Failed to load - skip policy check (fail open)
-		return nil
+		return fmt.Errorf("load safety policy failed: %w", err)
 	}
 	cmd := safety.CommandInfo{
 		Product:     productCode,

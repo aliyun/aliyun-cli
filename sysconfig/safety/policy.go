@@ -184,7 +184,7 @@ func LoadPolicy(configDir string) (*Policy, error) {
 	}
 	var p Policy
 	if err := json.Unmarshal(data, &p); err != nil {
-		return DefaultPolicy(), nil
+		return nil, fmt.Errorf("parse safety policy: %w", err)
 	}
 	if p.Rules == nil {
 		p.Rules = []Rule{}

@@ -32,6 +32,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
@@ -131,6 +132,25 @@ func TestDispatchPropagatesEffectiveAIMode(t *testing.T) {
 	}
 	if captured.AIMode {
 		t.Fatal("engine request AIMode = true for detected agent with force-off")
+	}
+}
+
+func TestDispatchSafetyPolicyLoadFailureDoesNotFailOpen(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, safety.SafetyPolicyFileName), 0755); err != nil {
+		t.Fatal(err)
+	}
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.Flags().Add(config.NewConfigurePathFlag())
+	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+	config.ConfigurePathFlag(ctx.Flags()).SetValue(filepath.Join(dir, "config.json"))
+
+	err := Dispatch(ctx, []string{"ecs", "describe-regions"})
+	if err == nil {
+		t.Fatal("expected load safety policy error")
+	}
+	if !strings.Contains(err.Error(), "load safety policy failed") {
+		t.Fatalf("err = %v", err)
 	}
 }
 

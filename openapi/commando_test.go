@@ -4215,6 +4215,30 @@ func TestMain_SafetyPolicyEnforcement(t *testing.T) {
 	})
 }
 
+func TestMain_SafetyPolicyLoadFailureDoesNotFailOpen(t *testing.T) {
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+	dir := filepath.Join(testHome, ".aliyun")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, safety.SafetyPolicyFileName), 0755); err != nil {
+		t.Fatalf("mkdir policy path: %v", err)
+	}
+
+	ctx, command := newSafetyCommandoTestCtx(t)
+	os.Args = []string{"aliyun", "ecs", "DescribeRegions"}
+	err := command.main(ctx, []string{"ecs", "DescribeRegions"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "load safety policy failed")
+	assert.NotContains(t, err.Error(), "blocked by safety policy")
+}
+
 func TestEstimateCostContextRequiresEstimateCost(t *testing.T) {
 	// Isolate HOME so command.main never loads the developer's real profile
 	// (a non-English profile language would pollute the global i18n state).
