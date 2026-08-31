@@ -98,7 +98,7 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		})
 
 		assert.Equal(t, "search_api", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun sts --help-search get", envelope.Recovery.Command)
+		assert.Equal(t, "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun sts --help-search get", envelope.Recovery.Command)
 		assert.Equal(t, "Search APIs related to get.", envelope.Recovery.Hint)
 	})
 
@@ -605,12 +605,12 @@ func TestNormalizeAgentErrorOAuthRefreshFailure(t *testing.T) {
 func TestNormalizeAgentErrorServerErrorsShareOneEnvelope(t *testing.T) {
 	serverBody := `{"RequestId":"req-1","Code":"Throttling.User","Message":"slow down"}`
 	tests := []struct {
-		name           string
-		err            error
-		wantMessage    string
-		wantCode       string
-		wantStatus     int
-		wantRequestID  string
+		name          string
+		err           error
+		wantMessage   string
+		wantCode      string
+		wantStatus    int
+		wantRequestID string
 	}{
 		{
 			name:          "old SDK server keeps request id",

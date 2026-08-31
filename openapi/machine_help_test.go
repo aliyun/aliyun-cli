@@ -75,7 +75,7 @@ func TestMachineHelpRootJSONOmitsUtilityAliases(t *testing.T) {
 	}}
 
 	var output bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&output, doc))
+	require.NoError(t, encodeMachineHelpJSON(&output, doc, false))
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
 
@@ -98,7 +98,7 @@ func TestMachineHelpRootSearchJSONOmitsUtilityAliases(t *testing.T) {
 	applyRootHelpOptions(doc, helpOptions{Search: "go-migrate"}, false)
 
 	var output bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&output, doc))
+	require.NoError(t, encodeMachineHelpJSON(&output, doc, false))
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
 
@@ -148,7 +148,7 @@ func TestMachineHelpProductJSONUsesSelectedLanguageAndActiveCommandName(t *testi
 	doc.APIs[1].Deprecated = true
 
 	var encoded bytes.Buffer
-	require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+	require.NoError(t, encodeMachineHelpJSON(&encoded, doc, false))
 	var output map[string]any
 	require.NoError(t, json.Unmarshal(encoded.Bytes(), &output))
 	apis := output["apis"].([]any)
@@ -295,7 +295,7 @@ func TestMachineHelpAPIResponseJSONKeepsOneLocalizedResponseSchema(t *testing.T)
 			require.NoError(t, err)
 
 			var encoded bytes.Buffer
-			require.NoError(t, encodeMachineHelpJSON(&encoded, doc))
+			require.NoError(t, encodeMachineHelpJSON(&encoded, doc, false))
 			output := encoded.String()
 			assert.Contains(t, output, `"responses"`)
 			assert.Contains(t, output, `"components"`)
