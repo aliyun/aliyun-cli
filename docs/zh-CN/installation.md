@@ -83,7 +83,7 @@ make build
 开发构建会直接读取已检出的 metadata 子模块：
 
 ```sh
-go build -o out/aliyun ./main/main.go
+go build -o out/aliyun ./main
 ```
 
 ## 常见问题

@@ -83,7 +83,7 @@ make build
 For a development build that reads metadata from the checked-out submodule:
 
 ```sh
-go build -o out/aliyun ./main/main.go
+go build -o out/aliyun ./main
 ```
 
 ## Troubleshooting
