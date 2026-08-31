@@ -592,7 +592,11 @@ func (c *Commando) validateRecoverySearch(ctx *cli.Context, request RecoverySear
 		return false
 	}
 
-	service := newMachineHelpService(c.library.helpRepo)
+	style := request.Style
+	if style == "pascal" {
+		style = "camel"
+	}
+	service := newMachineHelpService(c.helpRepositoryForStyle(style))
 	options := helpOptions{Section: helpSectionRequest, Search: request.Keyword}
 	if request.Section == helpSectionResponse {
 		options.Section = helpSectionResponse
@@ -615,10 +619,6 @@ func (c *Commando) validateRecoverySearch(ctx *cli.Context, request RecoverySear
 			return false
 		}
 		versions := normalizedVersions(*product)
-		style := request.Style
-		if style == "pascal" {
-			style = "camel"
-		}
 		selected, err := selectAPIVersion(*product, versions, request.Version, style)
 		if err != nil {
 			return false

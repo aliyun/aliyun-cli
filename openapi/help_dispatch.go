@@ -484,7 +484,7 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 		return err
 	}
 	c.applyHostHelpLanguage(ctx)
-	service := newMachineHelpService(c.library.helpRepo)
+	service := newMachineHelpService(c.helpRepositoryForStyle(string(target.CommandStyle)))
 	jsonOutput := aiMode || target.Output == HelpOutputJSON
 	opts := helpOptions{
 		Section:         string(target.Section),
@@ -575,7 +575,9 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 		return err
 	}
 
-	c.annotatePluginProvenance(document, target.Product)
+	if target.CommandStyle != CommandStyleCamel {
+		c.annotatePluginProvenance(document, target.Product)
+	}
 	if !aiMode && jsonOutput {
 		attachMachineHelpAIModeHint(document)
 	}
@@ -677,6 +679,22 @@ func invalidMachineHelpParameter(target HelpTarget, action *machineHelpAPIDocume
 		ParameterNames: names,
 		flags:          flags,
 	}
+}
+
+// helpRepositoryForStyle keeps command style and metadata ownership aligned.
+// An installed metadata plugin owns kebab Help, but it must never supply a
+// synthetic PascalCase surface. Camel Help always reads the bundled baseline;
+// a meta-only product therefore reports PascalCase as unsupported.
+func (c *Commando) helpRepositoryForStyle(style string) machineHelpRepository {
+	if c == nil || c.library == nil {
+		return nil
+	}
+	if style == string(CommandStyleCamel) || style == "pascal" {
+		if c.library.baselineHelpRepo != nil {
+			return c.library.baselineHelpRepo
+		}
+	}
+	return c.library.helpRepo
 }
 
 func (c *Commando) buildRootHelpDocument(root *cli.Command) (*machineHelpRootDocument, error) {

@@ -22,6 +22,24 @@ func TestRuntimeHelpCandidateRequiresKebabAction(t *testing.T) {
 	assert.True(t, runtimeHelpCandidate([]string{"fc", "create-alias"}))
 }
 
+func TestHelpRepositoryForStyleNeverProjectsMetaOnlyProductAsCamel(t *testing.T) {
+	c, _, _, _ := newCanonicalHelpTestContext(t)
+	baseline := canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	pluginAware := canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.baselineHelpRepo = baseline
+	c.library.helpRepo = pluginAware
+
+	if got := c.helpRepositoryForStyle("camel"); got != baseline {
+		t.Fatalf("camel Help repository = %T, want bundled baseline", got)
+	}
+	if got := c.helpRepositoryForStyle("pascal"); got != baseline {
+		t.Fatalf("pascal recovery repository = %T, want bundled baseline", got)
+	}
+	if got := c.helpRepositoryForStyle("kebab"); got != pluginAware {
+		t.Fatalf("kebab Help repository = %T, want plugin-aware repository", got)
+	}
+}
+
 func TestBeforeParseHelpRouteDelegatesInstalledPluginBeforeHostValidation(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -28,10 +28,11 @@ import (
 )
 
 type Library struct {
-	builtinRepo   *meta.Repository
-	canonicalRepo canonicalAPIRepository
-	helpRepo      machineHelpRepository
-	writer        io.Writer
+	builtinRepo      *meta.Repository
+	canonicalRepo    canonicalAPIRepository
+	baselineHelpRepo machineHelpRepository
+	helpRepo         machineHelpRepository
+	writer           io.Writer
 }
 
 type canonicalAPIRepository interface {
@@ -43,9 +44,10 @@ type canonicalAPIRepository interface {
 func NewLibrary(w io.Writer, lang string) *Library {
 	repo := canonicalmeta.NewRepository(bundledmeta.Metadatas)
 	lib := &Library{
-		builtinRepo: meta.LoadRepository(),
-		helpRepo:    newPluginAwareHelpRepository(repo),
-		writer:      w,
+		builtinRepo:      meta.LoadRepository(),
+		baselineHelpRepo: repo,
+		helpRepo:         newPluginAwareHelpRepository(repo),
+		writer:           w,
 	}
 	lib.canonicalRepo = repo
 	return lib

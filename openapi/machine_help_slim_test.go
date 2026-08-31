@@ -213,6 +213,7 @@ func TestCommandoHelpJSONAIModeEmitsCompactOutput(t *testing.T) {
 	t.Setenv(aimode.EnvAIMode, "1")
 	c, stdout, stderr := newTestCommando()
 	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.baselineHelpRepo = c.library.helpRepo
 	root := testMachineHelpRootCommand()
 	AddFlags(root.Flags())
 	ctx := cli.NewCommandContext(stdout, stderr)

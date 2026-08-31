@@ -751,6 +751,7 @@ func TestHelpResponseSectionUsesHostCanonicalWhenPluginIsNotInstalled(t *testing
 	t.Setenv(aimode.EnvAIMode, "0")
 	c, stdout, stderr := newTestCommando()
 	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.baselineHelpRepo = c.library.helpRepo
 	c.localLoaded = true
 	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
 	root := testMachineHelpRootCommand()
@@ -775,6 +776,7 @@ func TestHelpResponseSectionDoesNotOverrideInstalledPluginTextHelp(t *testing.T)
 	t.Setenv(aimode.EnvAIMode, "0")
 	c, stdout, stderr := newTestCommando()
 	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.baselineHelpRepo = c.library.helpRepo
 	c.pluginLoaded = true
 	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
 		"aliyun-cli-demo": {Name: "aliyun-cli-demo", Type: plugin.PluginTypeMeta},
@@ -814,6 +816,7 @@ func newCanonicalHelpTestContext(t *testing.T) (*Commando, *cli.Context, *bytes.
 	t.Setenv(aimode.EnvAIMode, "0")
 	c, stdout, stderr := newTestCommando()
 	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.baselineHelpRepo = c.library.helpRepo
 	c.localLoaded = true
 	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
 	root := testMachineHelpRootCommand()
@@ -1549,7 +1552,15 @@ func Test_tryDelegatePluginHelp_PluginPath(t *testing.T) {
 func TestHelpTextShowsMetaPluginProvider(t *testing.T) {
 	t.Setenv(aimode.EnvAIMode, "0")
 	c, stdout, stderr := newTestCommando()
-	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	baseline := canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.helpRepo = baseline
+	c.library.canonicalRepo = baseline
+	c.library.baselineHelpRepo = baseline
+	traditional, err := meta.MockLoadRepository([]meta.Product{{
+		Code: "demo", Version: "2026-01-01", ApiStyle: "rpc", ApiNames: []string{"CreateReport"},
+	}})
+	require.NoError(t, err)
+	c.library.builtinRepo = traditional
 	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
 		"aliyun-cli-demo": {Name: "aliyun-cli-demo", Version: "1.2.3", Type: plugin.PluginTypeMeta},
 	}}
@@ -1568,4 +1579,9 @@ func TestHelpTextShowsMetaPluginProvider(t *testing.T) {
 	stdout.Reset()
 	require.NoError(t, c.help(ctx, []string{"demo"}))
 	assert.Contains(t, stdout.String(), "Provided by plugin: aliyun-cli-demo (1.2.3)")
+
+	stdout.Reset()
+	require.NoError(t, c.help(ctx, []string{"demo", "CreateReport"}))
+	assert.NotContains(t, stdout.String(), "Provided by plugin:")
+	assert.Contains(t, stdout.String(), "aliyun demo CreateReport")
 }

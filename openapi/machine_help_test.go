@@ -490,6 +490,7 @@ func findMachineHelpParameter(parameters []machineHelpParameter, option string) 
 func TestCommandoHelpJSONUsesCanonicalMetadataWithoutLoadingPlugins(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.baselineHelpRepo = c.library.helpRepo
 	root := testMachineHelpRootCommand()
 	AddFlags(root.Flags())
 	ctx := cli.NewCommandContext(stdout, stderr)
@@ -515,6 +516,7 @@ func TestCommandoHelpJSONUsesCanonicalMetadataWithoutLoadingPlugins(t *testing.T
 func TestCommandoHelpJSONResponseSection(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.baselineHelpRepo = c.library.helpRepo
 	root := testMachineHelpRootCommand()
 	AddFlags(root.Flags())
 	ctx := cli.NewCommandContext(stdout, stderr)
@@ -543,6 +545,7 @@ func TestCommandoHelpJSONResponseSection(t *testing.T) {
 func TestCommandoHelpJSONRequestSearchReturnsOnlyActiveMatches(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.baselineHelpRepo = c.library.helpRepo
 	root := testMachineHelpRootCommand()
 	AddFlags(root.Flags())
 	ctx := cli.NewCommandContext(stdout, stderr)
@@ -571,6 +574,7 @@ func TestCommandoHelpJSONRequestSearchReturnsOnlyActiveMatches(t *testing.T) {
 func TestCommandoHelpJSONResponseSearchReturnsPathsAndMinimalSchema(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.baselineHelpRepo = c.library.helpRepo
 	root := testMachineHelpRootCommand()
 	AddFlags(root.Flags())
 	ctx := cli.NewCommandContext(stdout, stderr)
@@ -595,6 +599,7 @@ func TestCommandoHelpJSONResponseSearchReturnsPathsAndMinimalSchema(t *testing.T
 func TestCommandoHelpJSONAcceptsKebabAPIVersionFlag(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.baselineHelpRepo = c.library.helpRepo
 	root := testMachineHelpRootCommand()
 	AddFlags(root.Flags())
 	ctx := cli.NewCommandContext(stdout, stderr)
