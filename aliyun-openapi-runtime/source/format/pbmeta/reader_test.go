@@ -160,6 +160,10 @@ func TestReaderDecodesOneIndexedAPI(t *testing.T) {
 	if api.ReqBodyType != "formData" || api.ContentType != "application/x-www-form-urlencoded" {
 		t.Fatalf("protobuf request body metadata = %q, %q", api.ReqBodyType, api.ContentType)
 	}
+	if string(api.Responses) != string(responses) ||
+		string(api.Components) != string(components) {
+		t.Fatalf("protobuf response metadata = %s, %s", api.Responses, api.Components)
+	}
 	if got := api.Parameters[0].Example; got != "12****" {
 		t.Fatalf("parameter example = %q, want %q", got, "12****")
 	}

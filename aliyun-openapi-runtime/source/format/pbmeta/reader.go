@@ -111,6 +111,8 @@ func toCanonical(def *CommandDefinition) (*schema.CommandDefinition, error) {
 		Deprecated:    def.Deprecated,
 		KebabExample:  def.KebabExample,
 		CamelExample:  def.CamelExample,
+		Responses:     append([]byte(nil), def.Responses...),
+		Components:    append([]byte(nil), def.Components...),
 	}
 	if def.Operation != nil {
 		canonical.Operation = &schema.OperationConfig{

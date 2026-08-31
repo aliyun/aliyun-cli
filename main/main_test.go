@@ -73,7 +73,7 @@ func TestMainMachineHelpJSON(t *testing.T) {
 		{name: "utility leaf", args: []string{"utils", "list-supported-pricing-apis", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "utility"},
 		{name: "product", args: []string{"ecs", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "product"},
 		{name: "camel API", args: []string{"ecs", "DescribeInstances", "--version", "2014-05-26", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "api", wantStyle: "camel"},
-		{name: "kebab API", args: []string{"ecs", "describe-instances", "--api-version", "2014-05-26", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "api", wantStyle: "kebab"},
+		{name: "kebab API", args: []string{"ecs", "describe-instances", "--api-version", "2014-05-26", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "api"},
 	}
 
 	for _, tt := range tests {

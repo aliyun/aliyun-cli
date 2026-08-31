@@ -131,6 +131,33 @@ func TestReservedParsingErrorsAndValueModes(t *testing.T) {
 	}
 }
 
+func TestHelpReservedFlags(t *testing.T) {
+	got, err := Parse(nil, []string{
+		"--cli-section", "response",
+		"--help-search", " RequestId ",
+		"--help-all",
+		"--cli-output=json",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Reserved.Help || got.Reserved.HelpSection != "response" ||
+		got.Reserved.HelpSearch != "RequestId" || !got.Reserved.HelpAll ||
+		got.Reserved.HelpOutput != "json" {
+		t.Fatalf("reserved Help options = %#v", got.Reserved)
+	}
+
+	for _, args := range [][]string{
+		{"--cli-section", "headers"},
+		{"--help-search", " "},
+		{"--cli-output", "yaml"},
+	} {
+		if _, err := Parse(nil, args); err == nil {
+			t.Fatalf("Parse(%v) succeeded", args)
+		}
+	}
+}
+
 var errReservedAdditional = &reservedAdditionalError{}
 
 type reservedAdditionalError struct{}

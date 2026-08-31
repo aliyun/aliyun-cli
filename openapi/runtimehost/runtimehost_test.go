@@ -134,41 +134,114 @@ func TestDispatchPropagatesEffectiveAIMode(t *testing.T) {
 	}
 }
 
-func TestDispatchPluginHelpPreservesRawArgsAndDisablesHostAIMode(t *testing.T) {
-	originalDispatch := engineDispatch
-	t.Cleanup(func() { engineDispatch = originalDispatch })
-
-	var captured engine.Request
-	engineDispatch = func(request engine.Request) error {
-		captured = request
-		return nil
-	}
-
-	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+func TestDispatchPluginHelpPreservesRawArgsAndMapsHelpContext(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, new(bytes.Buffer))
 	language := config.NewLanguageFlag()
 	ctx.Flags().Add(language)
 	language.SetAssigned(true)
 	language.SetValue("zh")
 	ctx.SetAgentName("codex")
 
-	args := []string{"demo", "CreateReport", "--help-search", "Report ID", "--cli-output", "json"}
+	args := []string{"ecs", "describe-regions", "--help"}
 	want := append([]string(nil), args...)
 	if err := DispatchPluginHelp(ctx, args); err != nil {
 		t.Fatal(err)
 	}
 	args[1] = "mutated"
 
-	if !reflect.DeepEqual(captured.Args, want) {
-		t.Fatalf("plugin Help args = %#v, want %#v", captured.Args, want)
+	if !reflect.DeepEqual(want, []string{"ecs", "describe-regions", "--help"}) {
+		t.Fatalf("plugin Help mutated caller args: %#v", want)
 	}
-	if captured.AIMode {
-		t.Fatal("installed metadata plugin Help inherited host AI mode")
+	var document map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &document); err != nil ||
+		document["schemaVersion"] != "v1" || document["kind"] != "api" ||
+		len(strings.Split(strings.TrimSpace(stdout.String()), "\n")) != 1 {
+		t.Fatalf("AI mode must force Runtime JSON Help, got:\n%s", stdout.String())
 	}
-	if captured.Host != nil {
-		t.Fatal("installed metadata plugin Help inherited host execution context")
+}
+
+func TestRuntimeHelpArgsPreservesTargetsAndModifiers(t *testing.T) {
+	got, product, command := runtimeHelpArgs([]string{
+		"help", "demo", "--api-version", "v1", "get-thing",
+		"--report-id", "--help", "--cli-section=response",
+		"--help-search", "request id", "--help-all", "--cli-output", "json",
+		"--language=zh",
+	})
+	want := []string{
+		"demo", "get-thing", "--api-version", "v1",
+		"--report-id", "--help", "--cli-section=response",
+		"--help-search", "request id",
+		"--help-all",
+		"--cli-output", "json",
+		"--language=zh",
 	}
-	if captured.Lang != "zh" {
-		t.Fatalf("plugin Help language = %q, want zh", captured.Lang)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("runtime Help args = %#v, want %#v", got, want)
+	}
+	if product != "demo" || command != "get-thing" {
+		t.Fatalf("runtime Help target = %q %q", product, command)
+	}
+
+	got, product, command = runtimeHelpArgs([]string{
+		"demo", "--help-search", "instance", "--help-all", "--language", "zh",
+	})
+	want = []string{"demo", "--help-search", "instance", "--help-all", "--language", "zh"}
+	if !reflect.DeepEqual(got, want) || product != "demo" || command != "" {
+		t.Fatalf("product Runtime Help = %#v, %q %q", got, product, command)
+	}
+
+	got, product, command = runtimeHelpArgs([]string{
+		"--profile", "work", "--language", "zh", "demo", "--api-version=v1", "get-thing", "--help",
+	})
+	want = []string{"demo", "get-thing", "--language", "zh", "--api-version=v1", "--help"}
+	if !reflect.DeepEqual(got, want) || product != "demo" || command != "get-thing" {
+		t.Fatalf("root-option Runtime Help = %#v, %q %q", got, product, command)
+	}
+}
+
+func TestTryHelpRoutesRuntimeHelpLevelsWithoutHostCredentials(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "0")
+	stdout := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, new(bytes.Buffer))
+
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "product", args: []string{"ecs", "--help"}, want: "Available APIs:"},
+		{name: "action", args: []string{"ecs", "describe-regions", "--help"}, want: "Usage:"},
+		{name: "request", args: []string{"ecs", "describe-regions", "--help", "--cli-section", "request"}, want: "Parameters:"},
+		{name: "response", args: []string{"help", "ecs", "describe-regions", "--cli-section", "response"}, want: "Responses:"},
+		{name: "parameter", args: []string{"ecs", "describe-regions", "--accept-language", "--help"}, want: "Parameter:"},
+		{name: "search", args: []string{"ecs", "describe-regions", "--help-search", "language", "--help-all"}, want: "accept-language"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stdout.Reset()
+			handled, err := TryHelp(ctx, test.args)
+			if err != nil {
+				t.Fatalf("TryHelp(%v): %v", test.args, err)
+			}
+			if !handled {
+				t.Fatalf("TryHelp(%v) was not handled", test.args)
+			}
+			if !strings.Contains(stdout.String(), test.want) {
+				t.Fatalf("TryHelp(%v) missing %q:\n%s", test.args, test.want, stdout.String())
+			}
+		})
+	}
+
+	for _, args := range [][]string{
+		{"ecs", "DescribeRegions", "--help"},
+		{"help"},
+		{"not-a-runtime-product", "--help"},
+	} {
+		handled, err := TryHelp(ctx, args)
+		if err != nil || handled {
+			t.Fatalf("TryHelp(%v) = %v, %v; want Host fallback", args, handled, err)
+		}
 	}
 }
 
@@ -315,7 +388,7 @@ func TestEngineProductHelpReadsBaselineIndex(t *testing.T) {
 	for _, want := range []string{
 		"Product: ecs",
 		"API Version: 2014-05-26",
-		"Available Commands:",
+		"Available APIs:",
 		"describe-instances",
 	} {
 		if !strings.Contains(out, want) {
@@ -524,8 +597,8 @@ func TestListAPIVersionsFromBaseline(t *testing.T) {
 	if err := eng.ProductHelp(engine.Request{Args: []string{"bailian"}, Out: &defaultHelp, Lang: "en"}); err != nil {
 		t.Fatalf("default product help: %v", err)
 	}
-	if !strings.Contains(defaultHelp.String(), "list-api-versions") {
-		t.Fatalf("default multi-version help should advertise list-api-versions:\n%s", defaultHelp.String())
+	if strings.Contains(defaultHelp.String(), "list-api-versions") {
+		t.Fatalf("Runtime Help v1 product API list must contain metadata APIs only:\n%s", defaultHelp.String())
 	}
 
 	var versionHelp bytes.Buffer
@@ -553,7 +626,7 @@ func TestAPIHelpFromBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("APIHelp: %v", err)
 	}
-	for _, want := range []string{"aliyun ecs describe-regions", "Global Parameters:"} {
+	for _, want := range []string{"aliyun ecs describe-regions", "Query Options:"} {
 		if !strings.Contains(help.String(), want) {
 			t.Errorf("API help missing %q:\n%s", want, help.String())
 		}

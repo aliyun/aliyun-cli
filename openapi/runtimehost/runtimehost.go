@@ -19,7 +19,6 @@ package runtimehost
 import (
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +34,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 	openapiruntime "github.com/aliyun/aliyun-openapi-runtime"
+	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/source"
@@ -291,25 +291,13 @@ func Dispatch(ctx *cli.Context, rawArgs []string) error {
 }
 
 // DispatchPluginHelp forwards an installed metadata plugin Help invocation
-// without host AI mode, safety policy, credential loading, argv rebuilding, or
-// modifier loss. The installed plugin/runtime remains the output owner.
+// without safety policy, credential loading, argv rebuilding, or modifier
+// loss. Runtime Help receives the host's effective AI mode and language.
 func DispatchPluginHelp(ctx *cli.Context, rawArgs []string) error {
-	lang := helpLanguage(ctx)
-	for i, arg := range rawArgs {
-		if arg == "--language" && i+1 < len(rawArgs) {
-			lang = rawArgs[i+1]
-			break
-		}
-		if strings.HasPrefix(arg, "--language=") {
-			lang = strings.TrimPrefix(arg, "--language=")
-			break
-		}
+	if handled, err := TryHelp(ctx, rawArgs); handled {
+		return err
 	}
-	request := engine.Request{Args: append([]string(nil), rawArgs...), Out: ctx.Stdout(), Lang: lang}
-	if len(rawArgs) == 2 && (rawArgs[1] == "--help" || rawArgs[1] == "-h") {
-		return Engine().ProductHelp(request)
-	}
-	return engineDispatch(request)
+	return nil
 }
 
 func helpLanguage(ctx *cli.Context) string {
@@ -333,11 +321,8 @@ func ProductHelp(ctx *cli.Context, product string) error {
 			break
 		}
 	}
-	return Engine().ProductHelp(engine.Request{
-		Args: args,
-		Out:  ctx.Stdout(),
-		Lang: helpLanguage(ctx),
-	})
+	_, err := TryHelp(ctx, args)
+	return err
 }
 
 func HasProduct(product string) bool {
@@ -351,30 +336,7 @@ func ProductCommands(product string) []string {
 	if product == "" {
 		return nil
 	}
-	ldr, err := Engine().Loader()
-	if err != nil {
-		return nil
-	}
-	if err := ldr.EnsureProduct(product); err != nil {
-		return nil
-	}
-	version, err := ldr.ResolveVersion(product, "")
-	if err != nil {
-		return nil
-	}
-	index, err := ldr.GetAPIIndex(product, version)
-	if err != nil || index == nil {
-		return nil
-	}
-	names := make([]string, 0, len(index.Entries))
-	for _, entry := range index.Entries {
-		name := strings.TrimSpace(entry.CmdName)
-		if name != "" {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	return names
+	return Engine().ProductCommands(product)
 }
 
 // MetaPluginProvenance resolves product ownership through the engine loader.
@@ -408,40 +370,155 @@ func TryDispatch(ctx *cli.Context, rawArgs []string) (handled bool, err error) {
 	return true, Dispatch(ctx, rawArgs)
 }
 
-// TryHelp renders the engine's parameter help for "<product> <command>" when the engine can resolve it,
-// returning handled=false otherwise so the caller can fall back to the legacy help path.
-func TryHelp(ctx *cli.Context, product, command string) (handled bool, err error) {
-	if product == "" || command == "" {
+// TryHelp routes a raw Help invocation to Runtime Help v1 when its target is
+// a Runtime product or a resolvable lowercase kebab action. It preserves the
+// original action tail so request, response and parameter Help share Runtime's
+// parser and validation. Host Root, Utility and PascalCase targets are left to
+// the caller.
+func TryHelp(ctx *cli.Context, rawArgs []string) (handled bool, err error) {
+	args, product, command := runtimeHelpArgs(rawArgs)
+	if product == "" {
 		return false, nil
 	}
-	if !Engine().Resolvable(product, command) {
+	if command == "" {
+		if !Engine().HasProduct(product) {
+			return false, nil
+		}
+		request := runtimeHelpRequest(ctx, rawArgs, args)
+		return true, Engine().ProductHelp(request)
+	}
+	if strings.ToLower(command) != command || !Engine().Resolvable(product, command) {
 		return false, nil
 	}
-	// Forward --api-version so help renders the selected version's parameters.
-	args := []string{product, command}
-	if v := apiVersionFromArgs(os.Args); v != "" {
-		args = append(args, "--api-version", v)
-	}
-	return true, Engine().APIHelp(engine.Request{
-		Args: args,
-		Out:  ctx.Stdout(),
-		Lang: helpLanguage(ctx),
-	})
+	return true, Engine().APIHelp(runtimeHelpRequest(ctx, rawArgs, args))
 }
 
-func apiVersionFromArgs(argv []string) string {
-	const flag = "--api-version"
-	for i := 0; i < len(argv); i++ {
-		a := argv[i]
-		if a == flag {
-			if i+1 < len(argv) {
-				return argv[i+1]
-			}
-			return ""
+func runtimeHelpRequest(ctx *cli.Context, rawArgs, args []string) engine.Request {
+	lang := helpLanguage(ctx)
+	if explicit := helpLanguageFromArgs(rawArgs); explicit != "" {
+		lang = explicit
+	}
+	return engine.Request{
+		Args:   args,
+		Out:    ctx.Stdout(),
+		Lang:   lang,
+		AIMode: helpAIMode(ctx, rawArgs),
+	}
+}
+
+func helpLanguageFromArgs(args []string) string {
+	for i, arg := range args {
+		if arg == "--language" && i+1 < len(args) {
+			return strings.TrimSpace(args[i+1])
 		}
-		if strings.HasPrefix(a, flag+"=") {
-			return a[len(flag)+1:]
+		if strings.HasPrefix(arg, "--language=") {
+			return strings.TrimSpace(strings.TrimPrefix(arg, "--language="))
 		}
 	}
 	return ""
+}
+
+func helpAIMode(ctx *cli.Context, args []string) bool {
+	cfg, _ := aiModeForCommand(ctx)
+	forceOn := flagAssigned(ctx, "cli-ai-mode")
+	forceOff := flagAssigned(ctx, "no-cli-ai-mode")
+	for _, arg := range args {
+		switch strings.SplitN(arg, "=", 2)[0] {
+		case "--cli-ai-mode":
+			forceOn = true
+		case "--no-cli-ai-mode":
+			forceOff = true
+		}
+	}
+	if !forceOff && ctx != nil && ctx.IsAgent() {
+		forceOn = true
+	}
+	return aimode.EnabledForCommand(cfg, forceOn, forceOff)
+}
+
+func runtimeHelpArgs(rawArgs []string) (args []string, product, command string) {
+	raw := append([]string(nil), rawArgs...)
+	if len(raw) > 0 && raw[0] == "help" {
+		raw = raw[1:]
+	}
+	productIndex := nextRuntimeHelpPositional(raw, 0)
+	if productIndex < 0 {
+		return nil, "", ""
+	}
+	product = raw[productIndex]
+	commandIndex := nextRuntimeHelpPositional(raw, productIndex+1)
+	if commandIndex < 0 {
+		return append([]string{product}, runtimeHelpOptions(raw)...), product, ""
+	}
+	command = raw[commandIndex]
+	args = []string{product, command}
+	args = append(args, runtimeHelpOptions(raw[:commandIndex])...)
+	args = append(args, raw[commandIndex+1:]...)
+	return args, product, command
+}
+
+func nextRuntimeHelpPositional(args []string, start int) int {
+	for i := start; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			continue
+		}
+		name := strings.SplitN(arg, "=", 2)[0]
+		if strings.HasPrefix(name, "-") {
+			if runtimeHelpScanOptionTakesValue(name) && arg == name && i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		return i
+	}
+	return -1
+}
+
+func runtimeHelpOptions(args []string) []string {
+	result := make([]string, 0)
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		name := strings.SplitN(arg, "=", 2)[0]
+		if !runtimeHelpOption(name) {
+			continue
+		}
+		result = append(result, arg)
+		if runtimeHelpOptionTakesValue(name) && arg == name && i+1 < len(args) {
+			result = append(result, args[i+1])
+			i++
+		}
+	}
+	return result
+}
+
+func runtimeHelpOption(name string) bool {
+	switch name {
+	case "--help", "-h", "--api-version", "--language", "--cli-section",
+		"--help-search", "--help-all", "--cli-output", "--cli-ai-mode",
+		"--no-cli-ai-mode":
+		return true
+	}
+	return false
+}
+
+func runtimeHelpOptionTakesValue(name string) bool {
+	switch name {
+	case "--api-version", "--language", "--cli-section", "--help-search", "--cli-output":
+		return true
+	}
+	return false
+}
+
+func runtimeHelpScanOptionTakesValue(name string) bool {
+	if runtimeHelpOptionTakesValue(name) {
+		return true
+	}
+	for _, spec := range engineExternalFlags() {
+		if name != "--"+spec.Name && (spec.Shorthand == 0 || name != "-"+string(spec.Shorthand)) {
+			continue
+		}
+		return spec.Mode == argparser.ExternalFlagRequired || spec.Mode == argparser.ExternalFlagOptional
+	}
+	return false
 }

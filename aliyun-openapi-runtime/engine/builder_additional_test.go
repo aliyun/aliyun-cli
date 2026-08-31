@@ -20,6 +20,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -76,6 +77,9 @@ func (multiVersionSource) LoadAPIIndex(code, version string) (*meta.APIIndex, er
 	index := &meta.APIIndex{ProductCode: code, Version: version, Entries: map[string]meta.APIIndexEntry{
 		"RunThing": {APIName: "RunThing", CmdName: "run-thing"},
 	}}
+	if version == "v1" {
+		index.Entries["LegacyThing"] = meta.APIIndexEntry{APIName: "LegacyThing", CmdName: "legacy-thing"}
+	}
 	index.BuildCmdIndex()
 	return index, nil
 }
@@ -122,6 +126,167 @@ func TestEngineDiscoveryAndHelpEntryPoints(t *testing.T) {
 	}
 	if !strings.Contains(apiHelp.String(), "--instance-type") {
 		t.Fatalf("APIHelp output = %q", apiHelp.String())
+	}
+	if !strings.Contains(apiHelp.String(), "Global Parameters:") ||
+		!strings.Contains(apiHelp.String(), "--cli-dry-run") {
+		t.Fatalf("default Action Help omitted Runtime global parameters: %q", apiHelp.String())
+	}
+
+	var aiHelp bytes.Buffer
+	if err := engine.APIHelp(Request{
+		Args: []string{"demo", "run-thing"}, Out: &aiHelp, AIMode: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(aiHelp.String(), `"schemaVersion":"v1"`) ||
+		!strings.Contains(aiHelp.String(), `"kind":"api"`) ||
+		strings.Count(aiHelp.String(), "\n") != 1 {
+		t.Fatalf("AI Help must force Runtime v1 JSON: %q", aiHelp.String())
+	}
+}
+
+func TestEngineStructuredResponseHelp(t *testing.T) {
+	engine := newBuilderCoverageEngine(&responseExecutor{})
+
+	var requestOutput bytes.Buffer
+	err := engine.Dispatch(Request{
+		Args: []string{"demo", "run-thing", "--cli-section", "request"},
+		Out:  &requestOutput,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Global Parameters:", "--cli-dry-run"} {
+		if !strings.Contains(requestOutput.String(), want) {
+			t.Fatalf("structured request Help missing %q: %s", want, requestOutput.String())
+		}
+	}
+	var output bytes.Buffer
+	err = engine.Dispatch(Request{
+		Args: []string{
+			"demo", "run-thing",
+			"--cli-section", "response",
+			"--help-search", "request id",
+			"--cli-output", "json",
+		},
+		Out: &output, Lang: "zh",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := output.String()
+	for _, want := range []string{`"section": "response"`, `"RequestId"`, `"请求 ID"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("response Help missing %q: %s", want, got)
+		}
+	}
+	if strings.Contains(got, `"Unused"`) || strings.Contains(got, `"responses"`) {
+		t.Fatalf("searched response Help must contain only projected output schema: %s", got)
+	}
+
+	if err := engine.Dispatch(Request{
+		Args: []string{"demo", "run-thing", "--cli-output", "json"},
+		Out:  io.Discard,
+	}); err == nil || !strings.Contains(err.Error(), "only valid for Help") {
+		t.Fatalf("execution --cli-output error = %v", err)
+	}
+	if err := engine.Dispatch(Request{
+		Args: []string{"demo", "run-thing", "--help", "--help-all"},
+		Out:  io.Discard,
+	}); err == nil || !strings.Contains(err.Error(), "conflicts with --help") {
+		t.Fatalf("conflicting Help operations error = %v", err)
+	}
+}
+
+func TestEngineKebabParameterHelp(t *testing.T) {
+	executor := &responseExecutor{}
+	engine := newBuilderCoverageEngine(executor)
+	var output bytes.Buffer
+	err := engine.Dispatch(Request{
+		Args: []string{
+			"demo", "run-thing", "--instance-type", "--help",
+			"--cli-output", "json",
+		},
+		Out: &output,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`"kind": "parameter"`,
+		`"name": "instance-type"`,
+		`"rawName": "InstanceType"`,
+		`"enum":`,
+		`"ecs.g6"`,
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("parameter Help missing %q: %s", want, output.String())
+		}
+	}
+	if executor.calls != 0 {
+		t.Fatalf("parameter Help executed API %d time(s)", executor.calls)
+	}
+
+	output.Reset()
+	err = engine.Dispatch(Request{
+		Args: []string{
+			"demo", "run-thing", "--instance-type",
+			"--help-search", "nested field", "--cli-output", "json",
+		},
+		Out: &output,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`"kind": "parameter"`,
+		`"query": "nested field"`,
+		`"shown": 0`,
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("parameter search Help missing %q: %s", want, output.String())
+		}
+	}
+	if executor.calls != 0 {
+		t.Fatalf("parameter search Help executed API %d time(s)", executor.calls)
+	}
+
+	err = engine.Dispatch(Request{
+		Args: []string{
+			"demo", "run-thing", "--instance-type", "--help",
+			"--cli-section", "response",
+		},
+		Out: io.Discard,
+	})
+	if err == nil || !strings.Contains(err.Error(), "only supports the request section") {
+		t.Fatalf("parameter response Help error = %v", err)
+	}
+}
+
+func TestProductCommandsAndUnknownCommandCandidatesCoverAllVersions(t *testing.T) {
+	engine := newMultiVersionEngine()
+	want := []string{"legacy-thing", "run-thing"}
+	if got := engine.ProductCommands("demo"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("ProductCommands() = %v, want %v", got, want)
+	}
+	if got := engine.ProductCommands("missing"); got != nil {
+		t.Fatalf("ProductCommands(missing) = %v, want nil", got)
+	}
+
+	err := engine.APIHelp(Request{
+		Args: []string{"demo", "rn-thing", "--api-version", "v2"},
+		Out:  io.Discard,
+	})
+	var unknown *UnknownCommandError
+	if !errors.As(err, &unknown) {
+		t.Fatalf("APIHelp error = %T %v, want UnknownCommandError", err, err)
+	}
+	if unknown.Product != "demo" || unknown.Command != "rn-thing" ||
+		!reflect.DeepEqual(unknown.Candidates, want) {
+		t.Fatalf("UnknownCommandError = %#v, want candidates %v", unknown, want)
+	}
+	if got, wantText := err.Error(), "unknown command \"rn-thing\" for product \"demo\"; try `aliyun demo` to list commands"; got != wantText {
+		t.Fatalf("UnknownCommandError text = %q, want %q", got, wantText)
 	}
 }
 

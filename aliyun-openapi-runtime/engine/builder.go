@@ -132,11 +132,51 @@ func (e *Engine) HasProduct(product string) bool {
 	return ldr.EnsureProduct(product) == nil
 }
 
-func (e *Engine) ProductHelp(req Request) error {
+// ProductCommands returns the sorted, de-duplicated kebab command names
+// exposed by any available version of product. It returns nil when the
+// product cannot be loaded.
+func (e *Engine) ProductCommands(product string) []string {
 	ldr, err := e.getLoader()
-	if err != nil {
-		return fmt.Errorf("openapi-runtime loader: %w", err)
+	if err != nil || ldr.EnsureProduct(product) != nil {
+		return nil
 	}
+	return productCommands(ldr, product)
+}
+
+func productCommands(ldr loader.Loader, product string) []string {
+	productMeta := ldr.LookupProduct(product)
+	if productMeta == nil {
+		return nil
+	}
+
+	commands := make(map[string]struct{})
+	for _, version := range productMeta.Versions {
+		if version == "" {
+			continue
+		}
+		index, err := ldr.GetAPIIndex(product, version)
+		if err != nil || index == nil {
+			continue
+		}
+		for _, entry := range index.Entries {
+			if command := strings.TrimSpace(entry.CmdName); command != "" {
+				commands[command] = struct{}{}
+			}
+		}
+	}
+	if len(commands) == 0 {
+		return nil
+	}
+
+	result := make([]string, 0, len(commands))
+	for command := range commands {
+		result = append(result, command)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func (e *Engine) ProductHelp(req Request) error {
 	if len(req.Args) < 1 {
 		return errors.New("product is required")
 	}
@@ -144,23 +184,21 @@ func (e *Engine) ProductHelp(req Request) error {
 	if productCode == "" {
 		return errors.New("product is required")
 	}
-	if err := ldr.EnsureProduct(productCode); err != nil {
-		return err
-	}
-	product := ldr.LookupProduct(productCode)
-	if product == nil {
-		return fmt.Errorf("unknown product %q", productCode)
-	}
-	requestedVersion := scanAPIVersion(req.Args[1:])
-	version, err := ldr.ResolveVersion(productCode, requestedVersion)
+	parsed, err := argparser.ParseWithOptions(nil, req.Args[1:], argparser.ParseOptions{
+		ExternalFlags: e.externalFlags,
+	})
 	if err != nil {
-		return err
+		return &UsageError{Code: "INVALID_ARGUMENT", Err: err}
 	}
-	index, err := ldr.GetAPIIndex(productCode, version)
-	if err != nil {
-		return fmt.Errorf("load product index %s@%s: %w", productCode, version, err)
+	if err := validateReservedHelp(parsed.Reserved, true); err != nil {
+		return &UsageError{Code: "INVALID_OPTION_COMBINATION", Err: err}
 	}
-	return printProductHelp(req.Out, product, index, req.Lang, requestedVersion == "" && len(product.Versions) > 1)
+	options := helpOptionsFromReserved(req, parsed.Reserved)
+	document, buildErr := e.BuildProductHelp(req, options)
+	if buildErr != nil {
+		return buildErr
+	}
+	return RenderHelp(req.Out, document, options)
 }
 
 func (e *Engine) APIHelp(req Request) error {
@@ -185,7 +223,24 @@ func (e *Engine) APIHelp(req Request) error {
 	if err != nil {
 		return err
 	}
-	return printAPIHelp(req.Out, product, api, req.Lang)
+	if handled, parameterErr := e.tryParameterHelp(req, api.Parameters, req.Args[2:]); handled {
+		return parameterErr
+	}
+	parsed, err := argparser.ParseWithOptions(api.Parameters, req.Args[2:], argparser.ParseOptions{
+		ExternalFlags: e.externalFlags,
+	})
+	if err != nil {
+		return &UsageError{Code: "INVALID_ARGUMENT", Err: err}
+	}
+	if err := validateReservedHelp(parsed.Reserved, false); err != nil {
+		return &UsageError{Code: "INVALID_OPTION_COMBINATION", Err: err}
+	}
+	options := helpOptionsFromReserved(req, parsed.Reserved)
+	document, buildErr := e.BuildAPIHelp(req, options)
+	if buildErr != nil {
+		return buildErr
+	}
+	return RenderHelp(req.Out, document, options)
 }
 
 func (e *Engine) Dispatch(req Request) error {
@@ -213,6 +268,9 @@ func (e *Engine) Dispatch(req Request) error {
 		return err
 	}
 
+	if handled, parameterErr := e.tryParameterHelp(req, api.Parameters, args[2:]); handled {
+		return parameterErr
+	}
 	res, err := argparser.ParseWithOptions(api.Parameters, args[2:], argparser.ParseOptions{
 		ExternalFlags: e.externalFlags,
 	})
@@ -228,7 +286,21 @@ func (e *Engine) Dispatch(req Request) error {
 	}
 
 	if res.Reserved.Help {
-		return printAPIHelp(req.Out, product, api, req.Lang)
+		if err := validateReservedHelp(res.Reserved, false); err != nil {
+			return &UsageError{Code: "INVALID_OPTION_COMBINATION", Err: err}
+		}
+		options := helpOptionsFromReserved(req, res.Reserved)
+		document, buildErr := e.BuildAPIHelp(req, options)
+		if buildErr != nil {
+			return buildErr
+		}
+		return RenderHelp(req.Out, document, options)
+	}
+	if res.Reserved.HelpOutput != "" {
+		return &UsageError{
+			Code: "INVALID_OPTION_COMBINATION",
+			Err:  errors.New("--cli-output is only valid for Help"),
+		}
 	}
 
 	if err := runtime.ValidateRequired(api, res.Args, res.Reserved.BodySet || res.Reserved.BodyFileSet); err != nil {
@@ -298,7 +370,11 @@ func resolveDispatchAPI(ldr loader.Loader, product, command string, tail []strin
 				}
 				return meta.APIRef{}, nil, commandVersionError(product, command, currentVersion, versions)
 			}
-			return meta.APIRef{}, nil, &UnknownCommandError{Product: product, Command: command}
+			return meta.APIRef{}, nil, &UnknownCommandError{
+				Product:    product,
+				Command:    command,
+				Candidates: productCommands(ldr, product),
+			}
 		}
 		return meta.APIRef{}, nil, err
 	}

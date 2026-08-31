@@ -95,14 +95,40 @@ func TestDecodeAPIJSONAcceptsRecursiveCompositeShapes(t *testing.T) {
 	}
 }
 
+func TestDecodeAPIJSONPreservesResponseMetadata(t *testing.T) {
+	api, err := DecodeAPIJSON([]byte(`{
+		"name":"GetThing",
+		"operation":{},
+		"responses":{"200":{"description":"OK","schema":{"$ref":"#/components/schemas/Thing"}}},
+		"components":{"schemas":{"Thing":{"type":"object","properties":{"id":{"type":"string"}}}}}
+	}`), "response-metadata")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var responses, components map[string]any
+	if err := json.Unmarshal(api.Responses, &responses); err != nil {
+		t.Fatalf("responses are not valid JSON: %v", err)
+	}
+	if err := json.Unmarshal(api.Components, &components); err != nil {
+		t.Fatalf("components are not valid JSON: %v", err)
+	}
+	if _, ok := responses["200"]; !ok {
+		t.Fatalf("responses = %#v", responses)
+	}
+	if _, ok := components["schemas"]; !ok {
+		t.Fatalf("components = %#v", components)
+	}
+}
+
 func TestJSONFormatDecodesIndexAndAPIFromVolume(t *testing.T) {
 	fsys := fstest.MapFS{
 		"demo/v1/version.json": {Data: []byte(`{
 			"version":"v1",
-			"apis":{"RunThing":{"cmd_name":"run-thing","description_en":"Run a thing","deprecated":true}}
+			"apis":{"RunThing":{"cmd_name":"run-thing","title_en":"Run","description_en":"Run a thing","deprecated":true}}
 		}`)},
 		"demo/v1/RunThing.json": {Data: []byte(`{
-			"name":"RunThing","cmd_name":"run-thing",
+			"name":"RunThing","cmd_name":"run-thing","title_en":"Run",
 			"operation":{"action":"RunThing","api_version":"v1","method":"POST","api_style":"RPC"},
 			"parameters":[{"name":"count","raw_name":"Count","type":"integer","options":["--count"]}]
 		}`)},
@@ -119,12 +145,18 @@ func TestJSONFormatDecodesIndexAndAPIFromVolume(t *testing.T) {
 	if index.Version != "v1" || index.ResolveCmd("run-thing") != "RunThing" || !index.Entries["RunThing"].Deprecated {
 		t.Fatalf("DecodeIndex() = %#v", index)
 	}
+	if index.Entries["RunThing"].Title.EN != "Run" {
+		t.Fatalf("DecodeIndex title = %#v", index.Entries["RunThing"].Title)
+	}
 	api, err := format.DecodeAPI(volume, APIKey{Version: "v1", Name: "RunThing"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if api.Name != "RunThing" || api.Version != "v1" || len(api.Parameters) != 1 || api.Parameters[0].Type != meta.TypeInteger {
 		t.Fatalf("DecodeAPI() = %#v", api)
+	}
+	if api.Title.EN != "Run" {
+		t.Fatalf("DecodeAPI title = %#v", api.Title)
 	}
 	if _, err := format.DecodeIndex(volume, "missing"); !errors.Is(err, storage.ErrEntryNotFound) {
 		t.Fatalf("DecodeIndex(missing) error = %v", err)

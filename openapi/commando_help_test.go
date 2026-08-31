@@ -706,9 +706,8 @@ func TestPrintApiUsageAlwaysTriesRuntime(t *testing.T) {
 
 	wantErr := errors.New("runtime help handled request")
 	originalTryHelp := runtimeTryHelp
-	runtimeTryHelp = func(_ *cli.Context, product, command string) (bool, error) {
-		assert.Equal(t, "ecs", product)
-		assert.Equal(t, "describe-instances", command)
+	runtimeTryHelp = func(_ *cli.Context, args []string) (bool, error) {
+		assert.Equal(t, []string{"ecs", "describe-instances"}, args)
 		return true, wantErr
 	}
 	t.Cleanup(func() { runtimeTryHelp = originalTryHelp })

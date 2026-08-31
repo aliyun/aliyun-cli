@@ -147,6 +147,8 @@ type VersionIndex struct {
 type VersionAPIEntry struct {
 	CmdName       string `json:"cmd_name"`
 	Deprecated    bool   `json:"deprecated"`
+	TitleZH       string `json:"title_zh,omitempty"`
+	TitleEN       string `json:"title_en,omitempty"`
 	DescriptionZH string `json:"description_zh"`
 	DescriptionEN string `json:"description_en"`
 }
@@ -162,6 +164,8 @@ type CommandDefinition struct {
 	Name          string               `json:"name"`
 	CmdName       string               `json:"cmd_name"`
 	CmdFullName   string               `json:"cmd_full_name"`
+	TitleZH       string               `json:"title_zh,omitempty"`
+	TitleEN       string               `json:"title_en,omitempty"`
 	DescriptionZH string               `json:"description_zh,omitempty"`
 	DescriptionEN string               `json:"description_en,omitempty"`
 	Method        string               `json:"method,omitempty"`

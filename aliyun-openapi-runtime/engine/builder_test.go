@@ -64,7 +64,9 @@ func (dispatchErrorTestSource) LoadAPI(code, version, name string) (*meta.API, e
 	return &meta.API{
 		Name: "RunThing", CmdName: "run-thing", ProductCode: "demo",
 		Version: "2024-01-01", Method: "POST", Protocol: "HTTPS", Style: meta.StyleRPC,
-		Endpoints: meta.Endpoints{Global: "demo.example.com"},
+		Endpoints:  meta.Endpoints{Global: "demo.example.com"},
+		Responses:  []byte(`{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Result"}}}}}`),
+		Components: []byte(`{"schemas":{"Result":{"type":"object","properties":{"RequestId":{"type":"string","description_en":"request id","description_zh":"请求 ID"}}},"Unused":{"type":"object"}}}`),
 		Parameters: []meta.Parameter{
 			{
 				Name: "instance_type", RawName: "InstanceType", Type: meta.TypeString,

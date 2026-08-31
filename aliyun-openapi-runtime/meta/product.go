@@ -55,6 +55,7 @@ type APIIndexEntry struct {
 	APIName     string // PascalCase, matches API.Name and the file basename
 	CmdName     string
 	CmdFullName string
+	Title       Description
 	Description Description
 	Deprecated  bool
 }

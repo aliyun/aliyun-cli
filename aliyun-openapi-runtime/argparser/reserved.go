@@ -39,8 +39,16 @@ type Reserved struct {
 	DryRun     bool
 	DryRunJSON bool
 
-	Help  bool // --help / -h
-	Quiet bool // --quiet / -q
+	Help         bool // any Help operation
+	HelpExplicit bool // --help / -h
+	Quiet        bool // --quiet / -q
+
+	// HelpSection, HelpSearch, HelpAll and HelpOutput select structured Help
+	// projections. These flags imply Help even when --help is omitted.
+	HelpSection string // --cli-section: request|response
+	HelpSearch  string // --help-search: case-insensitive query
+	HelpAll     bool   // --help-all: full listing or uncapped search
+	HelpOutput  string // --cli-output: json (empty means text)
 
 	Secure   bool // --secure: force HTTPS
 	Insecure bool // --insecure: force HTTP
@@ -224,6 +232,58 @@ var helpFlagSpec = reservedFlagSpec{
 	mode:      reservedNoValue,
 	apply: func(r *Reserved, _ []string) error {
 		r.Help = true
+		r.HelpExplicit = true
+		return nil
+	},
+}
+
+var cliSectionFlagSpec = reservedFlagSpec{
+	name: "cli-section",
+	mode: reservedSingleValue,
+	apply: func(r *Reserved, values []string) error {
+		section := strings.ToLower(strings.TrimSpace(values[0]))
+		if section != "request" && section != "response" {
+			return fmt.Errorf("--cli-section must be request or response, got %q", values[0])
+		}
+		r.Help = true
+		r.HelpSection = section
+		return nil
+	},
+}
+
+var helpSearchFlagSpec = reservedFlagSpec{
+	name: "help-search",
+	mode: reservedSingleValue,
+	apply: func(r *Reserved, values []string) error {
+		query := strings.TrimSpace(values[0])
+		if query == "" {
+			return fmt.Errorf("--help-search requires a non-empty query")
+		}
+		r.Help = true
+		r.HelpSearch = query
+		return nil
+	},
+}
+
+var helpAllFlagSpec = reservedFlagSpec{
+	name: "help-all",
+	mode: reservedNoValue,
+	apply: func(r *Reserved, _ []string) error {
+		r.Help = true
+		r.HelpAll = true
+		return nil
+	},
+}
+
+var cliOutputFlagSpec = reservedFlagSpec{
+	name: "cli-output",
+	mode: reservedSingleValue,
+	apply: func(r *Reserved, values []string) error {
+		output := strings.ToLower(strings.TrimSpace(values[0]))
+		if output != "json" {
+			return fmt.Errorf("--cli-output only supports json, got %q", values[0])
+		}
+		r.HelpOutput = output
 		return nil
 	},
 }
@@ -363,6 +423,10 @@ var reservedFlags = newReservedFlagIndex(
 	cliDryRunFlagSpec,
 	cliDryRunJSONFlagSpec,
 	helpFlagSpec,
+	cliSectionFlagSpec,
+	helpSearchFlagSpec,
+	helpAllFlagSpec,
+	cliOutputFlagSpec,
 	quietFlagSpec,
 	secureFlagSpec,
 	insecureFlagSpec,

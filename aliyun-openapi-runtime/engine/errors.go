@@ -31,8 +31,9 @@ func (e *UsageError) Unwrap() error { return e.Err }
 // product's command index, so the host can render agent guidance (did you
 // mean, recovery) instead of an opaque text error.
 type UnknownCommandError struct {
-	Product string
-	Command string
+	Product    string
+	Command    string
+	Candidates []string
 }
 
 func (e *UnknownCommandError) Error() string {

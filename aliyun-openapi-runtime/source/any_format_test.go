@@ -88,6 +88,28 @@ func TestJSONLAndProtobufExposePluginVersionProvenance(t *testing.T) {
 	}
 }
 
+func TestJSONLAndProtobufPreserveResponseMetadata(t *testing.T) {
+	for _, protobuf := range []bool{false, true} {
+		name := "jsonl"
+		if protobuf {
+			name = "protobuf"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeAnyMetadataPlugin(t, root, protobuf)
+
+			api, err := NewUserPluginSource(root).LoadAPI("demo", "2020-01-01", "UpdateThing")
+			if err != nil {
+				t.Fatalf("LoadAPI: %v", err)
+			}
+			if string(api.Responses) != `{"200":{"description":"OK"}}` ||
+				string(api.Components) != `{"schemas":{"Thing":{"type":"object"}}}` {
+				t.Fatalf("response metadata = %s, %s", api.Responses, api.Components)
+			}
+		})
+	}
+}
+
 func loadAnyDryRun(t *testing.T, root string, argv []string) *openapiruntime.AssembledRequest {
 	t.Helper()
 	api, err := NewUserPluginSource(root).LoadAPI("demo", "2020-01-01", "UpdateThing")
@@ -171,6 +193,8 @@ func writeAnyMetadataPlugin(t *testing.T, root string, protobuf bool) {
 func anyCommandDefinition() schema.CommandDefinition {
 	return schema.CommandDefinition{
 		Name: "UpdateThing", CmdName: "update-thing",
+		Responses:  json.RawMessage(`{"200":{"description":"OK"}}`),
+		Components: json.RawMessage(`{"schemas":{"Thing":{"type":"object"}}}`),
 		Operation: &schema.OperationConfig{
 			Action: "UpdateThing", APIStyle: "ROA", APIVersion: "2020-01-01",
 			Method: "POST", Protocol: "HTTPS", URL: "/things/*", HasWildcardPath: true,
@@ -191,6 +215,8 @@ func anyCommandDefinition() schema.CommandDefinition {
 func anyPBCommandDefinition() *pbmeta.CommandDefinition {
 	return &pbmeta.CommandDefinition{
 		Name: "UpdateThing", CmdName: "update-thing",
+		Responses:  []byte(`{"200":{"description":"OK"}}`),
+		Components: []byte(`{"schemas":{"Thing":{"type":"object"}}}`),
 		Operation: &pbmeta.Operation{
 			Action: "UpdateThing", ApiStyle: "ROA", ApiVersion: "2020-01-01",
 			Method: "POST", Protocol: "HTTPS", Url: "/things/*", HasWildcardPath: true,

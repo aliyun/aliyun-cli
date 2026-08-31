@@ -154,6 +154,8 @@ func engineVersionIndex(product, version string) (*canonicalmeta.VersionIndex, e
 		converted.APIs[name] = canonicalmeta.VersionAPIEntry{
 			CmdName:       entry.CmdName,
 			Deprecated:    entry.Deprecated,
+			TitleZh:       entry.Title.ZH,
+			TitleEn:       entry.Title.EN,
 			DescriptionZh: entry.Description.ZH,
 			DescriptionEn: entry.Description.EN,
 		}
@@ -187,8 +189,12 @@ func engineAPIToCanonical(api *meta.API) *canonicalmeta.API {
 		Protocol:      api.Protocol,
 		Method:        api.Method,
 		PathPattern:   api.URL,
+		TitleZh:       api.Title.ZH,
+		TitleEn:       api.Title.EN,
 		DescriptionZh: api.Description.ZH,
 		DescriptionEn: api.Description.EN,
+		Responses:     append([]byte(nil), api.Responses...),
+		Components:    append([]byte(nil), api.Components...),
 		Operation: &canonicalmeta.Operation{
 			Action:          api.Name,
 			APIStyle:        engineAPIStyle(api.Style),

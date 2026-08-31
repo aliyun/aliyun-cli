@@ -45,13 +45,17 @@ type API struct {
 	Parameters  []Parameter // top-level arguments
 	Endpoints   Endpoints
 	Examples    []string
+	Title       Description
 	Description Description
-	// Responses and Components carry optional response schema metadata as JSON.
+	// Responses and Components retain optional response metadata in encoded
+	// form. Ordinary execution does not decode them; response help callers
+	// project them explicitly through ResponseSchema or ResponseSection.
 	Responses  json.RawMessage `json:"responses,omitempty"`
 	Components json.RawMessage `json:"components,omitempty"`
 
 	// Lifecycle.
-	Deprecated bool
+	Deprecated   bool
+	MultiVersion bool
 }
 
 // FindParameter returns a top-level Parameter by its Name (snake_case

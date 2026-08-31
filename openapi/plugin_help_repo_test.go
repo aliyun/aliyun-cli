@@ -36,8 +36,11 @@ func TestEngineAPIToCanonicalMapsIdentityOperationAndParameters(t *testing.T) {
 		Style:       meta.StyleROA,
 		Protocol:    "HTTPS",
 		Deprecated:  true,
+		Title:       meta.Description{ZH: "中文标题", EN: "english title"},
 		Description: meta.Description{ZH: "中文描述", EN: "english description"},
 		Examples:    []string{"aliyun ecs describe-plugin-demo --region-id cn-hangzhou"},
+		Responses:   []byte(`{"200":{"description":"ok"}}`),
+		Components:  []byte(`{"schemas":{"Result":{"type":"object"}}}`),
 		Parameters: []meta.Parameter{{
 			Name:        "region_id",
 			RawName:     "RegionId",
@@ -59,9 +62,13 @@ func TestEngineAPIToCanonicalMapsIdentityOperationAndParameters(t *testing.T) {
 	assert.Equal(t, "ecs describe-plugin-demo", converted.CmdFullName)
 	assert.Equal(t, "ecs", converted.ProductCode)
 	assert.True(t, converted.Deprecated)
+	assert.Equal(t, "中文标题", converted.TitleZh)
+	assert.Equal(t, "english title", converted.TitleEn)
 	assert.Equal(t, "中文描述", converted.DescriptionZh)
 	assert.Equal(t, "english description", converted.DescriptionEn)
 	assert.Equal(t, "aliyun ecs describe-plugin-demo --region-id cn-hangzhou", converted.KebabExample)
+	assert.JSONEq(t, `{"200":{"description":"ok"}}`, string(converted.Responses))
+	assert.JSONEq(t, `{"schemas":{"Result":{"type":"object"}}}`, string(converted.Components))
 	require.NotNil(t, converted.Operation)
 	assert.Equal(t, "ROA", converted.Operation.APIStyle)
 	assert.Equal(t, "2014-05-26", converted.Operation.APIVersion)

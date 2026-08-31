@@ -1290,6 +1290,13 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 	if delegated, err := c.delegateInstalledPluginHelp(ctx, raw); delegated {
 		return err
 	}
+	positionals := rawHelpPositionals(raw)
+	hostCommand := len(positionals) > 0 && ctx.Command() != nil && ctx.Command().GetSubCommand(positionals[0]) != nil
+	if !hostCommand && runtimeHelpCandidate(positionals) {
+		if handled, err := runtimeTryHelp(ctx, raw); handled {
+			return err
+		}
+	}
 	aiMode := c.applyEffectiveAIModeForArgs(ctx, raw)
 	target, _, err := c.resolveParsedHelpTarget(ctx, args)
 	if err != nil {

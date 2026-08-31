@@ -71,6 +71,8 @@ type Record struct {
 	APIName       string `json:"apiName"`
 	CommandName   string `json:"commandName"`
 	CmdFullName   string `json:"cmdFullName,omitempty"`
+	TitleZH       string `json:"titleZh,omitempty"`
+	TitleEN       string `json:"titleEn,omitempty"`
 	DescriptionZH string `json:"descriptionZh,omitempty"`
 	DescriptionEN string `json:"descriptionEn,omitempty"`
 	Deprecated    bool   `json:"deprecated,omitempty"`
@@ -204,6 +206,7 @@ func (r *Reader) APIIndex(product, version string) (*meta.APIIndex, error) {
 		}
 		idx.Entries[rec.APIName] = meta.APIIndexEntry{
 			APIName: rec.APIName, CmdName: rec.CommandName, CmdFullName: rec.CmdFullName,
+			Title:       meta.Description{ZH: rec.TitleZH, EN: rec.TitleEN},
 			Description: meta.Description{ZH: rec.DescriptionZH, EN: rec.DescriptionEN}, Deprecated: rec.Deprecated,
 		}
 	}

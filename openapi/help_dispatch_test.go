@@ -16,6 +16,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestRuntimeHelpCandidateRequiresKebabAction(t *testing.T) {
+	assert.False(t, runtimeHelpCandidate([]string{"fc"}), "product Help must retain host style selection")
+	assert.False(t, runtimeHelpCandidate([]string{"fc", "CreateAlias"}))
+	assert.True(t, runtimeHelpCandidate([]string{"fc", "create-alias"}))
+}
+
 func TestBeforeParseHelpRouteDelegatesInstalledPluginBeforeHostValidation(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -33,12 +39,13 @@ func TestBeforeParseHelpRouteDelegatesInstalledPluginBeforeHostValidation(t *tes
 			input := []string{"demo", "CreateReport", "--help", "--help-all", "--cli-output", "json"}
 			var received []string
 			if test.pluginType == plugin.PluginTypeMeta {
-				original := metaPluginHelpDispatch
-				metaPluginHelpDispatch = func(_ *cli.Context, args []string) error {
+				input[1] = "create-report"
+				original := runtimeTryHelp
+				runtimeTryHelp = func(_ *cli.Context, args []string) (bool, error) {
 					received = append([]string(nil), args...)
-					return nil
+					return true, nil
 				}
-				t.Cleanup(func() { metaPluginHelpDispatch = original })
+				t.Cleanup(func() { runtimeTryHelp = original })
 			} else {
 				original := goPluginHelpDispatch
 				goPluginHelpDispatch = func(_ string, args []string, _ *cli.Context) (bool, error) {
@@ -50,18 +57,19 @@ func TestBeforeParseHelpRouteDelegatesInstalledPluginBeforeHostValidation(t *tes
 
 			handled, err := c.beforeParseHelpRoute(ctx, input)
 			if test.pluginType == plugin.PluginTypeMeta {
-				// Metadata plugins are served by host Machine Help: the
-				// invocation must NOT be forwarded to the plugin process, and
-				// host option validation applies exactly like the baseline path.
+				// Metadata plugins use the same user-first Runtime loader as
+				// bundled kebab Help, including Runtime option validation.
 				assert.True(t, handled)
-				assert.EqualError(t, err, "--help-all conflicts with --help")
-				assert.Empty(t, received, "metadata-plugin Help must not delegate to the engine text path")
+				require.NoError(t, err)
+				assert.Equal(t, input, received)
 			} else {
 				require.NoError(t, err)
 				assert.True(t, handled)
 				assert.Equal(t, input, received, "plugin owns even host-invalid Help option combinations")
 			}
-			assert.Equal(t, []string{"demo", "CreateReport", "--help", "--help-all", "--cli-output", "json"}, input)
+			if test.pluginType == plugin.PluginTypeGo {
+				assert.Equal(t, []string{"demo", "CreateReport", "--help", "--help-all", "--cli-output", "json"}, input)
+			}
 		})
 	}
 }
@@ -75,6 +83,44 @@ func TestBeforeParseHelpRouteRendersCanonicalL3WithoutParsingAValue(t *testing.T
 	assert.Contains(t, stdout.String(), "--ReportId")
 	assert.Contains(t, stdout.String(), "string")
 	assert.NotContains(t, stdout.String(), "--WorkspaceId")
+}
+
+func TestBeforeParseHelpRouteSelectsRuntimeForKebabHelpOnly(t *testing.T) {
+	c, ctx, _, _ := newCanonicalHelpTestContext(t)
+	original := runtimeTryHelp
+	t.Cleanup(func() { runtimeTryHelp = original })
+
+	var calls [][]string
+	runtimeTryHelp = func(_ *cli.Context, args []string) (bool, error) {
+		calls = append(calls, append([]string(nil), args...))
+		return true, nil
+	}
+
+	runtimeCases := [][]string{
+		{"ecs", "describe-instances", "--help"},
+		{"ecs", "describe-instances", "--help", "--cli-section", "request"},
+		{"ecs", "describe-instances", "--help", "--cli-section", "response"},
+		{"ecs", "describe-instances", "--region-id", "--help"},
+	}
+	for _, args := range runtimeCases {
+		handled, err := c.beforeParseHelpRoute(ctx, args)
+		require.NoError(t, err, "args=%v", args)
+		assert.True(t, handled, "args=%v", args)
+	}
+	assert.Equal(t, runtimeCases, calls)
+
+	calls = nil
+	for _, args := range [][]string{
+		{"ecs"},
+		{"ecs", "--help"},
+		{"ecs", "DescribeInstances", "--help"},
+		{"--help"},
+		{"configure", "--help"},
+		{"utils", "--help"},
+	} {
+		_, _ = c.beforeParseHelpRoute(ctx, args)
+	}
+	assert.Empty(t, calls, "PascalCase, Root and Utility Help must remain Host-owned")
 }
 
 func TestBeforeParseHelpRouteRejectsAmbiguousUnassignedL3Parameters(t *testing.T) {

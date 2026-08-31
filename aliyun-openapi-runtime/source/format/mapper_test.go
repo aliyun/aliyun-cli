@@ -52,6 +52,24 @@ func TestSchemaToAPIMapsRequestBodyWireMetadata(t *testing.T) {
 	}
 }
 
+func TestSchemaToAPIMapsResponseMetadata(t *testing.T) {
+	definition := &schema.CommandDefinition{
+		Responses:  json.RawMessage(`{"200":{"description":"OK"}}`),
+		Components: json.RawMessage(`{"schemas":{"Thing":{"type":"object"}}}`),
+	}
+	api := schemaToAPI(definition)
+	if !reflect.DeepEqual(api.Responses, definition.Responses) ||
+		!reflect.DeepEqual(api.Components, definition.Components) {
+		t.Fatalf("response metadata = %s, %s", api.Responses, api.Components)
+	}
+
+	definition.Responses[0] = '['
+	definition.Components[0] = '['
+	if api.Responses[0] != '{' || api.Components[0] != '{' {
+		t.Fatal("response metadata must be copied")
+	}
+}
+
 func TestSchemaToAPIMapsWildcardPathMetadata(t *testing.T) {
 	definition := &schema.CommandDefinition{
 		Operation: &schema.OperationConfig{HasWildcardPath: true},
@@ -225,16 +243,26 @@ func TestMapperScalarTablesAndExamples(t *testing.T) {
 
 func TestSchemaToAPIMapsOperationAndArgumentMetadata(t *testing.T) {
 	def := &schema.CommandDefinition{
-		Name: "Action", CmdName: "action", CmdFullName: "action-full", DescriptionZH: "中", DescriptionEN: "en", Deprecated: true,
-		Operation: &schema.OperationConfig{APIVersion: "v1", Method: "get", URL: "/items", APIStyle: "ROA", Protocol: "HTTPS"},
+		Name: "Action", CmdName: "action", CmdFullName: "action-full",
+		TitleZH: "标题", TitleEN: "title", DescriptionZH: "中", DescriptionEN: "en",
+		Deprecated: true, MultiVersion: true,
+		Operation: &schema.OperationConfig{
+			APIVersion: "v1", Method: "get", URL: "/items/*", APIStyle: "ROA",
+			Protocol: "HTTPS", HasWildcardPath: true,
+		},
 		Parameters: []schema.ArgumentDefinition{{
 			Name: "name", RawName: "Name", Type: "string", Location: "header", Required: true, DirectBody: true,
 			Options: []string{"--name"}, HelpZH: "名称", HelpEN: "name", Example: "demo", ParamStyle: "json",
 		}},
 	}
 	api := schemaToAPI(def)
-	if api.Name != "Action" || api.Version != "v1" || api.Method != "GET" || api.Style != meta.StyleROA || api.URL != "/items" || api.Protocol != "HTTPS" || !api.Deprecated {
+	if api.Name != "Action" || api.CmdFullName != "action-full" || api.Version != "v1" ||
+		api.Method != "GET" || api.Style != meta.StyleROA || api.URL != "/items/*" ||
+		api.Protocol != "HTTPS" || !api.Deprecated || !api.MultiVersion || !api.HasWildcardPath {
 		t.Fatalf("API = %#v", api)
+	}
+	if api.Title.ZH != "标题" || api.Title.EN != "title" {
+		t.Fatalf("API title = %#v", api.Title)
 	}
 	p := api.Parameters[0]
 	if p.Position != meta.PosHeader || !p.Required || !p.DirectBody || p.Description.EN != "name" || p.Example != "demo" || p.ParamStyle != "json" {
@@ -243,25 +271,5 @@ func TestSchemaToAPIMapsOperationAndArgumentMetadata(t *testing.T) {
 	withoutOperation := schemaToAPI(&schema.CommandDefinition{Name: "NoOp"})
 	if withoutOperation.Name != "NoOp" || withoutOperation.Version != "" {
 		t.Fatalf("API without operation = %#v", withoutOperation)
-	}
-}
-
-func TestSchemaToAPIMapsResponseMetadata(t *testing.T) {
-	responses := json.RawMessage(`{"200":{"schema":{"type":"object"}}}`)
-	components := json.RawMessage(`{"schemas":{"Result":{"type":"object"}}}`)
-	api := schemaToAPI(&schema.CommandDefinition{
-		Name:       "ListTools",
-		Operation:  &schema.OperationConfig{Action: "ListTools", APIVersion: "2025-09-10", Method: "GET"},
-		Responses:  responses,
-		Components: components,
-	})
-	if string(api.Responses) != string(responses) {
-		t.Fatalf("Responses = %s, want %s", api.Responses, responses)
-	}
-	if string(api.Components) != string(components) {
-		t.Fatalf("Components = %s, want %s", api.Components, components)
-	}
-	if len(schemaToAPI(&schema.CommandDefinition{Name: "NoOp"}).Responses) != 0 {
-		t.Fatal("expected empty Responses when absent")
 	}
 }

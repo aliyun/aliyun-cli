@@ -434,7 +434,11 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 		}
 	}
 
-	if handled, herr := runtimeTryHelp(ctx, productCode, apiName); handled {
+	rawHelpArgs := ctx.InvocationArgs()
+	if len(rawHelpArgs) == 0 {
+		rawHelpArgs = []string{productCode, apiName}
+	}
+	if handled, herr := runtimeTryHelp(ctx, rawHelpArgs); handled {
 		return herr
 	}
 

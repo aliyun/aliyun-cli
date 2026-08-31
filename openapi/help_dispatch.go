@@ -52,6 +52,11 @@ func (c *Commando) beforeParseHelpRoute(ctx *cli.Context, args []string) (bool, 
 	if delegated, err := c.delegateInstalledPluginHelp(ctx, args); delegated {
 		return true, err
 	}
+	if runtimeHelpCandidate(positionals) {
+		if handled, err := runtimeTryHelp(ctx, args); handled {
+			return true, err
+		}
+	}
 	if len(positionals) > 0 && positionals[0] == "utils" {
 		opts, err := cli.ParseHelpOptions(args)
 		if err != nil {
@@ -191,10 +196,9 @@ func (c *Commando) delegateInstalledPluginHelp(ctx *cli.Context, args []string) 
 	}
 	c.setLangEnv(ctx)
 	if local.IsMeta() {
-		// Metadata plugins are served by the host's Machine Help (JSON,
-		// sections, search) through the engine loader, so a hot-updated
-		// plugin renders exactly like the bundled kebab experience.
-		// The version contract was already validated above.
+		// Metadata plugins remain in the host Help projection so provider
+		// attribution and root routing stay intact. The repository bridge reads
+		// the user-first Runtime loader and now preserves response metadata.
 		return false, nil
 	}
 	if c.hostOwnsLegacyHelpCommand(args) {
@@ -385,6 +389,13 @@ func commandStyleForAction(action string) CommandStyle {
 		return CommandStyleKebab
 	}
 	return CommandStyleCamel
+}
+
+func runtimeHelpCandidate(positionals []string) bool {
+	if len(positionals) < 2 || positionals[0] == "utils" {
+		return false
+	}
+	return strings.ToLower(positionals[1]) == positionals[1]
 }
 
 func (c *Commando) resolveParsedHelpTarget(ctx *cli.Context, args []string) (HelpTarget, bool, error) {

@@ -22,7 +22,7 @@ func openAdditionalReader(t *testing.T) (*Reader, storage.Volume) {
 	data := []byte("firstsecond")
 	writeTestFile(t, filepath.Join(dir, schema.MetadataDataFile), data)
 	records := []Record{
-		{APIVersion: "v1", APIName: "First", CommandName: "first", CmdFullName: "first-full", DescriptionZH: "一", DescriptionEN: "one", Deprecated: true, Offset: 0, Length: 5},
+		{APIVersion: "v1", APIName: "First", CommandName: "first", CmdFullName: "first-full", TitleZH: "标题", TitleEN: "title", DescriptionZH: "一", DescriptionEN: "one", Deprecated: true, Offset: 0, Length: 5},
 		{APIVersion: "v2", APIName: "Second", CommandName: "second", Offset: 5, Length: 6},
 	}
 	writeIndex(t, dir, data, records)
@@ -52,7 +52,7 @@ func TestReaderAccessorsAndLookupFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	entry := idx.Entries["First"]
-	if idx.ProductCode != "demo" || entry.CmdName != "first" || entry.CmdFullName != "first-full" || !entry.Deprecated || entry.Description.EN != "one" {
+	if idx.ProductCode != "demo" || entry.CmdName != "first" || entry.CmdFullName != "first-full" || !entry.Deprecated || entry.Title.EN != "title" || entry.Description.EN != "one" {
 		t.Fatalf("APIIndex = %#v", idx)
 	}
 	if _, err := reader.APIIndex("demo", "missing"); !errors.Is(err, storage.ErrEntryNotFound) {
