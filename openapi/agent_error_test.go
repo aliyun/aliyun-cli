@@ -946,6 +946,54 @@ func TestAgentErrorEnvelopeEndToEndIsOneCleanJSONDocument(t *testing.T) {
 	assert.Equal(t, "aliyun ecs describe-instances --help-search instance-type", recovery["command"])
 }
 
+func TestCLIOutputJSONStructuresLocalErrorWhenAIModeIsDisabled(t *testing.T) {
+	testHome := t.TempDir()
+	cleanupHome := setTestHomeDir(t, testHome)
+	defer cleanupHome()
+	writeMinimalConfigJSON(t, testHome)
+	require.NoError(t, os.MkdirAll(filepath.Join(testHome, ".aliyun", "plugins"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(testHome, ".aliyun", "plugins", "manifest.json"), []byte(`{"plugins":{}}`), 0644))
+	require.NoError(t, aimode.Save(filepath.Join(testHome, ".aliyun"), &aimode.AiConfig{Enabled: false}))
+	t.Setenv(aimode.EnvAIMode, "")
+	t.Setenv("NO_COLOR", "")
+
+	originalDispatch := runtimeTryDispatch
+	runtimeTryDispatch = func(_ *cli.Context, _ []string) (bool, error) {
+		unknown := &argparser.UnknownFlagError{Flag: "instnace-type", Known: []string{"image-id", "instance-type"}}
+		return true, &engine.UsageError{Code: "UNKNOWN_FLAG", Err: unknown}
+	}
+	defer func() { runtimeTryDispatch = originalDispatch }()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	cmd := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
+	config.AddFlags(cmd.Flags())
+	AddFlags(cmd.Flags())
+	commando := NewCommando(stdout, config.Profile{Language: "en"})
+	commando.InitWithCommand(cmd)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(cmd)
+
+	cli.DisableExitCode()
+	defer cli.EnableExitCode()
+	originalArgs := os.Args
+	os.Args = []string{"aliyun", "ecs", "describe-instances", "--instnace-type", "ecs.g6.large", "--cli-output", "json", "--no-cli-ai-mode"}
+	defer func() { os.Args = originalArgs }()
+	cmd.Execute(ctx, os.Args[1:])
+
+	assert.Empty(t, stdout.String())
+	assert.Equal(t, 1, strings.Count(stderr.String(), "\n"))
+	assert.NotContains(t, stderr.String(), "\x1b[")
+	assert.NotContains(t, stderr.String(), cli.AIModeEnableTextHint)
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal(stderr.Bytes(), &decoded))
+	assert.ElementsMatch(t, []string{"message", "did_you_mean", "recovery"}, mapKeys(decoded))
+	assert.Equal(t, []interface{}{"--instance-type"}, decoded["did_you_mean"])
+	recovery := decoded["recovery"].(map[string]interface{})
+	assert.Equal(t, "search_parameter", recovery["action"])
+	assert.Equal(t, "aliyun ecs describe-instances --help-search instance-type", recovery["command"])
+}
+
 func TestNonAIExplicitLocalErrorKeepsTextAndAppendsHintOnce(t *testing.T) {
 	testHome := t.TempDir()
 	cleanupHome := setTestHomeDir(t, testHome)

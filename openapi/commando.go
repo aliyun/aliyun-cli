@@ -185,7 +185,7 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 
 	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
 
-	if !enabled {
+	if !enabled && !explicitLocalErrorJSONRequested(ctx, err) {
 		return err
 	}
 	normalizationArgs := recoveryNormalizationArgs(ctx, args)
@@ -198,6 +198,23 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 		})
 	}
 	return agentErrorNormalizer(err, normalizationArgs)
+}
+
+// explicitLocalErrorJSONRequested reports whether the caller explicitly
+// selected JSON output for a CLI-local error. --cli-output is orthogonal to
+// Help, so this check belongs in the shared error-rendering gate rather than
+// the Help router. Remote server, network, and credential errors retain their
+// existing non-AI rendering.
+func explicitLocalErrorJSONRequested(ctx *cli.Context, err error) bool {
+	if ctx == nil || ctx.Flags() == nil || !cli.IsAIRecoveryEligible(err) {
+		return false
+	}
+	flag := CliOutputFlag(ctx.Flags())
+	if flag == nil || !flag.IsAssigned() {
+		return false
+	}
+	value, _ := flag.GetValue()
+	return strings.TrimSpace(value) == string(cli.HelpOutputJSON)
 }
 
 func (c *Commando) isExtensionInvocation(args []string) bool {
