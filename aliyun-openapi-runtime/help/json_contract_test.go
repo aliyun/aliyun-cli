@@ -159,7 +159,7 @@ func TestRuntimeHelpJSONKeepsNextCommandsWhileHidingRoutingTargets(t *testing.T)
 		{
 			name:      "response",
 			document:  response,
-			searchAll: "aliyun demo list-plugins --api-version v1 --help-search plugin --help-all",
+			searchAll: "aliyun help demo list-plugins --api-version v1 --cli-section response --help-search plugin --help-all",
 		},
 	}
 
