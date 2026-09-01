@@ -233,6 +233,13 @@ func TestEditScriptForStrings(t *testing.T) {
 	}
 }
 
+func TestEditScriptForMatrixAndDeprecatedLogger(t *testing.T) {
+	matrix := MatrixForStrings([]rune("cat"), []rune("cut"), DefaultOptions)
+	assert.Equal(t, EditScriptForStrings([]rune("cat"), []rune("cut"), DefaultOptions),
+		EditScriptForMatrix(matrix, DefaultOptions))
+	LogMatrix([]rune("a"), []rune("b"), MatrixForStrings([]rune("a"), []rune("b"), DefaultOptions))
+}
+
 func equal(a, b EditScript) bool {
 	for i := range a {
 		if a[i] != b[i] {

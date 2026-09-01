@@ -3439,6 +3439,54 @@ func TestCollectPluginsForProductCodes(t *testing.T) {
 	assert.Equal(t, "aliyun-cli-pds", matched[1].Name)
 }
 
+func TestValidateAndResolvePackageTypeBranches(t *testing.T) {
+	dir := t.TempDir()
+	metadata := &MetadataDescriptor{}
+
+	tests := []struct {
+		name     string
+		manifest PluginManifest
+		wantType string
+		wantErr  string
+	}{
+		{name: "legacy go default", manifest: PluginManifest{}, wantType: PluginTypeGo},
+		{name: "explicit go", manifest: PluginManifest{Type: " GO "}, wantType: PluginTypeGo},
+		{name: "go cannot declare metadata", manifest: PluginManifest{Type: PluginTypeGo, Metadata: metadata}, wantErr: `type "meta" is required`},
+		{name: "implicit go cannot declare metadata", manifest: PluginManifest{Metadata: metadata}, wantErr: `type "meta" is required`},
+		{name: "unsupported", manifest: PluginManifest{Type: "python"}, wantErr: "unsupported type"},
+		{name: "meta requires descriptor", manifest: PluginManifest{Type: PluginTypeMeta}, wantErr: "metadata descriptor is required"},
+		{name: "meta rejects binary", manifest: func() PluginManifest {
+			m := PluginManifest{Type: PluginTypeMeta, Metadata: metadata}
+			m.Bin.Path = "plugin"
+			return m
+		}(), wantErr: "bin.path must be empty"},
+		{name: "invalid metadata descriptor", manifest: PluginManifest{Type: PluginTypeMeta, Metadata: metadata}, wantErr: "metadata"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := test.manifest
+			err := validateAndResolvePackageType(dir, &manifest)
+			if test.wantErr != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), test.wantErr)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, test.wantType, manifest.Type)
+		})
+	}
+}
+
+func TestExpandPluginSourcePathHomeAndEmpty(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path, err := expandPluginSourcePath("~/package.tgz")
+	assert.NoError(t, err)
+	assert.Equal(t, filepath.Join(home, "package.tgz"), path)
+	_, err = expandPluginSourcePath("   ")
+	assert.ErrorContains(t, err, "source path is empty")
+}
+
 func TestManager_InstallCustom(t *testing.T) {
 	t.Run("Success - install only custom products", func(t *testing.T) {
 		tmpDir := t.TempDir()

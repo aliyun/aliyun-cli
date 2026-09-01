@@ -224,9 +224,6 @@ func TestDoUpgrade_DirectWhenNotBrew(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestUpgradeViaDirect_FullFlow(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("skipping test on non-linux platform")
-	}
 	binaryContent := []byte("#!/bin/sh\necho upgraded\n")
 	archive := createTarGzInMemory(t, "aliyun", binaryContent)
 
@@ -376,9 +373,6 @@ func TestConfirmUpgrade_StdinEmpty(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDownloadAndExtract_Success(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("skipping test on non-linux platform")
-	}
 	binaryContent := []byte("#!/bin/sh\necho upgraded\n")
 	archiveBuf := createTarGzInMemory(t, "aliyun", binaryContent)
 

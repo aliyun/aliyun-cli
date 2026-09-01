@@ -11,6 +11,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,6 +21,133 @@ func TestRuntimeHelpCandidateRequiresKebabAction(t *testing.T) {
 	assert.False(t, runtimeHelpCandidate([]string{"fc"}), "product Help must retain host style selection")
 	assert.False(t, runtimeHelpCandidate([]string{"fc", "CreateAlias"}))
 	assert.True(t, runtimeHelpCandidate([]string{"fc", "create-alias"}))
+}
+
+func TestContainsPluginHelpOperation(t *testing.T) {
+	for _, args := range [][]string{
+		{"--help"}, {"-h"}, {"--help-all"}, {"--help-search", "instance"}, {"--help-search=instance"},
+	} {
+		assert.True(t, containsPluginHelpOperation(args), "args=%v", args)
+	}
+	assert.False(t, containsPluginHelpOperation([]string{"--cli-output", "json"}))
+}
+
+func TestAdaptMachineHelpTargetErrorAndInvalidParameter(t *testing.T) {
+	target := HelpTarget{Product: "demo", Action: "Missing", Parameter: "--Wrong"}
+	assert.Nil(t, adaptMachineHelpTargetError(target, nil, nil))
+
+	unknownProduct := newMachineHelpError("UNKNOWN_PRODUCT", "missing", nil, nil)
+	var productError *InvalidProductError
+	assert.ErrorAs(t, adaptMachineHelpTargetError(target, unknownProduct, nil), &productError)
+
+	unknownAPI := newMachineHelpError("UNKNOWN_API", "missing", nil, nil)
+	var commandError *InvalidBaselineCommandError
+	assert.ErrorAs(t, adaptMachineHelpTargetError(target, unknownAPI, nil), &commandError)
+	assert.Equal(t, "Missing", commandError.Command)
+
+	other := newMachineHelpError("OTHER", "other", nil, nil)
+	assert.Same(t, other, adaptMachineHelpTargetError(target, other, nil))
+
+	cause := errors.New("unknown parameter flag --Wrong")
+	assert.Same(t, cause, invalidMachineHelpParameter(target, nil, nil, cause))
+	different := errors.New("different")
+	assert.Same(t, different, invalidMachineHelpParameter(target, &machineHelpAPIDocument{}, nil, different))
+	action := &machineHelpAPIDocument{
+		ActiveParameterSet: "camel",
+		ParameterSets: machineHelpParameterSets{Camel: []machineHelpParameter{
+			{Name: "region-id", RawName: "RegionId", Options: []string{"--RegionId", "--region-id"}},
+			{Name: "name", RawName: "Name"},
+		}},
+		GlobalParameters: []machineHelpParameter{{Name: "profile", Options: []string{"--profile"}}},
+	}
+	var parameterError *InvalidParameterError
+	require.ErrorAs(t, invalidMachineHelpParameter(target, action, cli.NewFlagSet(), cause), &parameterError)
+	assert.ElementsMatch(t, []string{"RegionId", "region-id", "name", "profile"}, parameterError.ParameterNames)
+}
+
+func TestBuildRootHelpDocumentFromExplicitSpecs(t *testing.T) {
+	c, _, _, _ := newCanonicalHelpTestContext(t)
+	root := &cli.Command{Name: "aliyun", Short: i18n.T("Alibaba Cloud CLI", "阿里云 CLI")}
+	root.AddSubCommand(&cli.Command{Name: "configure", Short: i18n.T("Configure credentials", "配置凭证")})
+	root.Flags().Add(&cli.Flag{Name: "profile", Shorthand: 'p', Short: i18n.T("Profile", "配置")})
+	c.SetRootHelpSpecs(
+		[]RootCommandSpec{{Path: []string{"configure"}, Group: RootGroupCore, Aliases: []string{"config"}}},
+		[]RootFlagSpec{{Name: "profile", Visibility: RootVisibilityDefault}},
+	)
+	document, err := c.buildRootHelpDocument(root)
+	require.NoError(t, err)
+	require.Len(t, document.Commands, 1)
+	require.Len(t, document.GlobalFlags, 1)
+	require.Len(t, document.Products, 1)
+	assert.Equal(t, []string{"aliyun", "configure"}, document.Commands[0].Path)
+	assert.Equal(t, "-p", document.GlobalFlags[0].Shorthand)
+	assert.Equal(t, "demo", document.Products[0].Code)
+
+	missing := &Commando{}
+	_, err = missing.buildRootHelpDocument(root)
+	assert.ErrorContains(t, err, "repository is unavailable")
+}
+
+func TestHelpNextBuildersAndDocumentSetters(t *testing.T) {
+	target := HelpTarget{
+		Level: HelpLevelProduct, Product: "ecs", Operation: HelpOperationSearch,
+		SearchQuery: "instance", Output: HelpOutputJSON,
+	}
+	next := buildHelpNext(target, false)
+	assert.Contains(t, next.ShowAll, "--help-all")
+	assert.Contains(t, next.Search, "--help-search")
+	assert.Contains(t, next.SearchAll, "instance")
+	assert.Contains(t, next.SearchAll, "--help-all")
+
+	aiNext := buildHelpNext(HelpTarget{Level: HelpLevelAction, Product: "ecs", Action: "DescribeInstances", Output: HelpOutputJSON}, true)
+	assert.NotContains(t, aiNext.ShowAll, "--cli-output json")
+
+	root := &machineHelpRootDocument{}
+	product := &machineHelpProductDocument{}
+	action := &machineHelpAPIDocument{}
+	setRootHelpNext(root, target, false)
+	setProductHelpNext(product, target, false)
+	setActionHelpNext(action, target, false)
+	assert.Nil(t, root.Next)
+	assert.Nil(t, product.Next)
+	assert.Nil(t, action.Next)
+	root.Result.Truncated, product.Result.Truncated, action.Result.Truncated = true, true, true
+	setRootHelpNext(root, target, false)
+	setProductHelpNext(product, target, false)
+	setActionHelpNext(action, target, false)
+	assert.NotNil(t, root.Next)
+	assert.NotNil(t, product.Next)
+	assert.NotNil(t, action.Next)
+	setRootHelpNext(nil, target, false)
+	setProductHelpNext(nil, target, false)
+	setActionHelpNext(nil, target, false)
+}
+
+func TestRenderHostHelpTextAndHintDispatch(t *testing.T) {
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	assert.ErrorContains(t, renderHostHelpText(ctx, struct{}{}, ""), "unsupported Help document")
+
+	documents := []any{
+		&machineHelpRootDocument{}, &machineHelpProductDocument{}, &machineHelpAPIDocument{},
+		&machineHelpAPIResponseDocument{}, &machineHelpParameterDocument{}, struct{}{},
+	}
+	for _, document := range documents {
+		attachMachineHelpAIModeHint(document)
+	}
+	assert.NotNil(t, documents[0].(*machineHelpRootDocument).AIModeHint)
+	assert.NotNil(t, documents[1].(*machineHelpProductDocument).AIModeHint)
+	assert.NotNil(t, documents[2].(*machineHelpAPIDocument).AIModeHint)
+	assert.NotNil(t, documents[3].(*machineHelpAPIResponseDocument).AIModeHint)
+	assert.NotNil(t, documents[4].(*machineHelpParameterDocument).AIModeHint)
+}
+
+func TestHelpRepositoryForStyleNilAndFallback(t *testing.T) {
+	var nilCommando *Commando
+	assert.Nil(t, nilCommando.helpRepositoryForStyle("camel"))
+	assert.Nil(t, (&Commando{}).helpRepositoryForStyle("camel"))
+	repo := canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c := &Commando{library: &Library{helpRepo: repo}}
+	assert.Equal(t, repo, c.helpRepositoryForStyle("camel"))
 }
 
 func TestHelpRepositoryForStyleNeverProjectsMetaOnlyProductAsCamel(t *testing.T) {
