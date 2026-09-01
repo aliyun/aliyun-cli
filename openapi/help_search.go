@@ -413,6 +413,7 @@ type responseSchemaNode struct {
 	compositions map[string][]*responseSchemaNode
 	ref          string
 	typ          string
+	itemName     string
 	titles       []string
 	describes    []string
 }
@@ -471,6 +472,8 @@ func parseResponseSchemaNode(raw json.RawMessage) (*responseSchemaNode, error) {
 			_ = json.Unmarshal(field.raw, &node.ref)
 		case "type":
 			_ = json.Unmarshal(field.raw, &node.typ)
+		case "itemName":
+			_ = json.Unmarshal(field.raw, &node.itemName)
 		case "title", "title_en", "title_zh", "x-title-en", "x-title-zh":
 			var value string
 			if json.Unmarshal(field.raw, &value) == nil && value != "" {

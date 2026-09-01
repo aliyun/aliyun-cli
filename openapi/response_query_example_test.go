@@ -22,6 +22,38 @@ func TestResponseQuerySelectArrayPathHandlesSingleInlineArray(t *testing.T) {
 	assert.Equal(t, "Items", path)
 }
 
+func TestResponseQueryUsesRPCItemNameWrapper(t *testing.T) {
+	document := responseQueryDocument(`{
+		"type":"object",
+		"properties":{
+			"TotalCount":{"type":"integer"},
+			"Instances":{
+				"type":"array",
+				"itemName":"Instance",
+				"items":{"type":"object","properties":{
+					"InstanceId":{"type":"string"},
+					"InstanceName":{"type":"string"},
+					"Status":{"type":"string"}
+				}}
+			}
+		}
+	}`, nil)
+
+	path, err := SelectResponseArrayPath(document, "DescribeInstances", "Instances")
+	require.NoError(t, err)
+	assert.Equal(t, "Instances.Instance", path)
+
+	example, err := BuildResponseQueryExample(ResponseQueryContext{
+		Document: document,
+		Product:  "ecs",
+		API:      "DescribeInstances",
+		Style:    ResponseCommandStylePascal,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, example)
+	assert.Equal(t, "Instances.Instance[*].{InstanceId:InstanceId,InstanceName:InstanceName,Status:Status}", example.Path)
+}
+
 func TestResponseQuerySelectArrayPathUsesExplicitPaginationCollection(t *testing.T) {
 	document := responseQueryDocument(`{
 		"type":"object",

@@ -446,6 +446,38 @@ func TestBuildResponseQueryExample(t *testing.T) {
 	}
 }
 
+func TestBuildResponseQueryExampleUsesRPCItemNameWrapper(t *testing.T) {
+	document := ResponseDocumentation{
+		Schema: json.RawMessage(`{
+			"type":"object",
+			"properties":{
+				"Instances":{
+					"type":"array",
+					"itemName":"Instance",
+					"items":{"type":"object","properties":{
+						"InstanceId":{"type":"string"},
+						"Status":{"type":"string"}
+					}}
+				}
+			}
+		}`),
+		PaginationCollectionPath: "Instances",
+	}
+
+	example, err := BuildResponseQueryExample(ResponseQueryContext{
+		Document: document, Product: "ecs", API: "DescribeInstances",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if example == nil {
+		t.Fatal("expected query example")
+	}
+	if example.Path != "Instances.Instance[*].{InstanceId:InstanceId,Status:Status}" {
+		t.Fatalf("unexpected itemName projection: %s", example.Path)
+	}
+}
+
 func TestResponseProjectionIsLosslessNormallyAndCompactForAI(t *testing.T) {
 	api := &meta.API{Name: "GetThing", CmdName: "get-thing", ProductCode: "demo", Version: "v1"}
 	response := &ResponseDocumentation{

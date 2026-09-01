@@ -73,7 +73,7 @@ func selectResponseArrayCandidate(input HelpResponseSchema, apiName, paginationC
 	if explicitPath != "" {
 		for i := range collector.paths {
 			candidate := &collector.paths[i]
-			if explicitPath == candidate.rawPath || explicitPath == candidate.queryPath {
+			if explicitPath == candidate.schemaPath || explicitPath == candidate.rawPath || explicitPath == candidate.queryPath {
 				return candidate, document, nil
 			}
 		}
@@ -159,6 +159,7 @@ type responsePathSegment struct {
 
 type responseArrayPath struct {
 	segments          []responsePathSegment
+	schemaPath        string
 	rawPath           string
 	queryPath         string
 	paginationSibling bool
@@ -190,10 +191,17 @@ func (c *responseArrayCollector) walk(node *responseSchemaNode, path []responseP
 			paginationSibling := responseNodeHasPaginationField(node)
 			for _, property := range node.properties {
 				isArray := responseNodeIsArray(c.document, property.node, make(map[string]bool))
-				propertyPath := appendResponsePath(path, responsePathSegment{name: property.name, array: isArray})
+				schemaPath := appendResponsePath(path, responsePathSegment{name: property.name, array: isArray})
+				propertyPath := schemaPath
 				if isArray {
+					if itemName := responseArrayItemName(c.document, property.node); itemName != "" {
+						propertyPath = append([]responsePathSegment(nil), schemaPath...)
+						propertyPath[len(propertyPath)-1].array = false
+						propertyPath = appendResponsePath(propertyPath, responsePathSegment{name: itemName, array: true})
+					}
 					c.paths = append(c.paths, responseArrayPath{
 						segments:          propertyPath,
+						schemaPath:        rawResponsePath(schemaPath),
 						rawPath:           rawResponsePath(propertyPath),
 						queryPath:         queryResponsePath(propertyPath),
 						paginationSibling: paginationSibling,
@@ -242,6 +250,14 @@ func responseNodeIsArray(document *responseSchemaDocument, node *responseSchemaN
 		return true
 	}
 	return false
+}
+
+func responseArrayItemName(document *responseSchemaDocument, node *responseSchemaNode) string {
+	resolved := resolveResponseSchemaNode(document, node, make(map[string]bool))
+	if resolved == nil {
+		return ""
+	}
+	return strings.TrimSpace(resolved.itemName)
 }
 
 func responseNodeHasPaginationField(node *responseSchemaNode) bool {

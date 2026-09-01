@@ -19,6 +19,7 @@ type ResponseQueryContext struct {
 type arrayCandidate struct {
 	names             []string
 	arrays            []bool
+	schemaPath        string
 	node              map[string]any
 	paginationSibling bool
 	order             int
@@ -99,11 +100,19 @@ func collectArrays(node map[string]any, names []string, arrays []bool, component
 		raw := properties[name]
 		child, _ := raw.(map[string]any)
 		isArray := schemaNodeIsArray(child, components, map[string]bool{})
-		childNames := append(append([]string(nil), names...), name)
+		schemaNames := append(append([]string(nil), names...), name)
+		childNames := schemaNames
 		childArrays := append(append([]bool(nil), arrays...), isArray)
 		if isArray {
+			resolved := resolveNode(child, components, map[string]bool{})
+			if itemName, _ := resolved["itemName"].(string); strings.TrimSpace(itemName) != "" {
+				childNames = append(append([]string(nil), schemaNames...), strings.TrimSpace(itemName))
+				childArrays[len(childArrays)-1] = false
+				childArrays = append(childArrays, true)
+			}
 			*output = append(*output, arrayCandidate{
 				names: childNames, arrays: childArrays, node: child,
+				schemaPath:        strings.Join(schemaNames, "."),
 				paginationSibling: paginated, order: len(*output),
 			})
 		}
@@ -125,7 +134,7 @@ func collectArrays(node map[string]any, names []string, arrays []bool, component
 func selectArray(candidates []arrayCandidate, apiName, explicit string) arrayCandidate {
 	explicit = strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(explicit), "$."), "[]")
 	for _, candidate := range candidates {
-		if strings.Join(candidate.names, ".") == explicit || candidateQueryPath(candidate) == explicit {
+		if candidate.schemaPath == explicit || strings.Join(candidate.names, ".") == explicit || candidateQueryPath(candidate) == explicit {
 			return candidate
 		}
 	}
