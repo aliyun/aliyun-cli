@@ -944,7 +944,7 @@ func renderCanonicalRequestText(w io.Writer, document *machineHelpAPIDocument) e
 	if err := renderTextListing(w, "parameters", document.Listing); err != nil {
 		return err
 	}
-	if err := renderHelpProjectionResult(w, "parameters", document.Result, document.Next); err != nil {
+	if err := renderHelpProjectionStatistics(w, "parameters", document.Result, document.Next != nil); err != nil {
 		return err
 	}
 
@@ -969,7 +969,7 @@ func renderCanonicalRequestText(w io.Writer, document *machineHelpAPIDocument) e
 			return err
 		}
 	}
-	return nil
+	return renderHelpHintFooter(w, document.Next, true)
 }
 
 // projectOriginalRequestHelpText keeps the established runtime/legacy Help
@@ -1308,16 +1308,23 @@ func renderTextListing(w io.Writer, noun string, listing *machineHelpListing) er
 }
 
 func renderHelpProjectionResult(w io.Writer, noun string, result HelpResult, next *HelpNext) error {
+	if err := renderHelpProjectionStatistics(w, noun, result, next != nil); err != nil {
+		return err
+	}
+	return renderHelpHintFooter(w, next, !result.Truncated)
+}
+
+func renderHelpProjectionStatistics(w io.Writer, noun string, result HelpResult, hasNext bool) error {
 	if result.Truncated {
 		if _, err := fmt.Fprintf(w, "\n...\nShowing %d of %d %s.\n", result.Shown, result.Total, noun); err != nil {
 			return err
 		}
-		if next == nil {
+		if !hasNext {
 			_, err := fmt.Fprintln(w, "Use a more specific --help-search query, or append --help-all to show every match.")
 			return err
 		}
 	}
-	return renderHelpHintFooter(w, next, !result.Truncated)
+	return nil
 }
 
 // renderRequestQueryExampleText appends the API-specific response-query pair

@@ -106,7 +106,7 @@ func TestRenderCanonicalRequestSearchAndFullDocuments(t *testing.T) {
 		GlobalParameters: []machineHelpParameter{{Name: "region", Type: "string", Options: []string{"--region"}, Help: machineHelpLocalizedText{EN: "Region"}}},
 		Listing:          &machineHelpListing{Shown: 1, Total: 2, Hint: "use all"},
 		Result:           HelpResult{Shown: 1, Total: 2, Truncated: true},
-		Next:             &HelpNext{Search: "aliyun ecs DescribeInstances --help-search id"},
+		Next:             &HelpNext{Search: "aliyun ecs DescribeInstances --help-search id", operation: HelpOperationAll},
 		QueryOptions:     []machineHelpQueryOption{{Name: "--cli-query", Type: "string", Required: true, Help: machineHelpLocalizedText{EN: "JMESPath expression"}}},
 		ResponseQuery:    &machineHelpQueryExample{Path: "Instances.Instance", SchemaCommand: "schema command", QueryCommand: "query command"},
 		Examples:         machineHelpExamples{Camel: "aliyun ecs DescribeInstances --InstanceId i-1"},
@@ -129,6 +129,8 @@ func TestRenderCanonicalRequestSearchAndFullDocuments(t *testing.T) {
 		assert.Contains(t, rendered, expected)
 	}
 	assert.Contains(t, rendered, "Global Parameters:")
+	assert.Less(t, strings.Index(rendered, "Example:"), strings.Index(rendered, "Search this Help:"))
+	assert.True(t, strings.HasSuffix(rendered, "Search this Help:\n  aliyun ecs DescribeInstances --help-search id [--cli-output json]\n"))
 
 	out.Reset()
 	require.NoError(t, renderCanonicalRequestSearchText(&out, &machineHelpAPIDocument{}, "absent"))
