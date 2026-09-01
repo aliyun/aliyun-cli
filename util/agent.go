@@ -31,6 +31,7 @@ var knownAgentEnv = []struct {
 	{"OPENCODE", "opencode"},
 	{"OPENCODE_CLIENT", "opencode"},
 	{"CLINE_ACTIVE", "cline"},
+	{"CODEX_SHELL", "codex"},
 	{"CODEX_SANDBOX", "codex"},
 	{"QODER_AGENT", "qoder"},
 	{"QODER_CLI", "qoder-cli"},
