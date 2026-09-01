@@ -21,6 +21,92 @@ func TestMainWithNoArgs(t *testing.T) {
 	Main([]string{})
 }
 
+func TestMainExplicitLanguageOverridesProfileForCoreAndOpenAPIHelp(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		want    string
+		notWant string
+	}{
+		{
+			name:    "core",
+			args:    []string{"--language", "en", "version", "--help"},
+			want:    "print current version",
+			notWant: "打印当前版本号",
+		},
+		{
+			name: "PascalCase OpenAPI",
+			args: []string{
+				"ecs", "DescribeInstances", "--version", "2014-05-26",
+				"--help", "--cli-output", "json", "--no-cli-ai-mode", "--language", "en",
+			},
+			want:    "Queries the list of instances",
+			notWant: "查询一台或多台实例的详细信息",
+		},
+		{
+			name: "kebab OpenAPI",
+			args: []string{
+				"fc", "create-alias", "--api-version", "2023-03-30",
+				"--help", "--cli-output", "json", "--no-cli-ai-mode", "--language", "en",
+			},
+			want:    "Creates an alias",
+			notWant: "创建别名",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			clearAgentDetectionEnv(t)
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			configDir := filepath.Join(home, ".aliyun")
+			if err := os.MkdirAll(configDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			profile := []byte(`{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"ak","access_key_secret":"sk","region_id":"cn-hangzhou","language":"zh"}]}`)
+			if err := os.WriteFile(filepath.Join(configDir, "config.json"), profile, 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			var stdout, stderr bytes.Buffer
+			resetMainHooks(t, &stdout, &stderr, nil)
+			Main(test.args)
+
+			if stderr.Len() != 0 {
+				t.Fatalf("stderr = %q, want empty", stderr.String())
+			}
+			if !bytes.Contains(stdout.Bytes(), []byte(test.want)) {
+				t.Fatalf("stdout does not contain explicit English output %q:\n%s", test.want, stdout.String())
+			}
+			if bytes.Contains(stdout.Bytes(), []byte(test.notWant)) {
+				t.Fatalf("stdout contains profile-selected Chinese output %q:\n%s", test.notWant, stdout.String())
+			}
+		})
+	}
+}
+
+func TestEffectiveLanguagePriority(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		profile string
+		want    string
+	}{
+		{name: "separate explicit value", args: []string{"--language", "en"}, profile: "zh", want: "en"},
+		{name: "equals explicit value", args: []string{"--language=zh"}, profile: "en", want: "zh"},
+		{name: "explicit value is case insensitive", args: []string{"--language=EN"}, profile: "zh", want: "en"},
+		{name: "unsupported explicit value uses English", args: []string{"--language", "fr"}, profile: "zh", want: "en"},
+		{name: "profile fallback", profile: "zh", want: "zh"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := effectiveLanguage(test.args, test.profile); got != test.want {
+				t.Fatalf("effectiveLanguage(%v, %q) = %q, want %q", test.args, test.profile, got, test.want)
+			}
+		})
+	}
+}
+
 func clearAgentDetectionEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{

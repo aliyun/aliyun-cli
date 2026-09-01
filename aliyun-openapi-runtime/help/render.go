@@ -682,6 +682,7 @@ func firstNonEmpty(values ...string) string {
 }
 
 func localizeDocumentRawJSON(document any, language string) (any, error) {
+	localized := document
 	switch typed := document.(type) {
 	case *APIResponseDocument:
 		if typed == nil {
@@ -709,8 +710,57 @@ func localizeDocumentRawJSON(document any, language string) (any, error) {
 			}
 			copy.OutputSchema = &output
 		}
-		return &copy, nil
-	default:
-		return document, nil
+		localized = &copy
 	}
+	raw, err := json.Marshal(localized)
+	if err != nil {
+		return nil, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	return localizeDocumentValue(value, language), nil
+}
+
+func localizeDocumentValue(value any, language string) any {
+	switch typed := value.(type) {
+	case []any:
+		for i := range typed {
+			typed[i] = localizeDocumentValue(typed[i], language)
+		}
+	case map[string]any:
+		if selected, ok := localizedTextValue(typed, language); ok {
+			return selected
+		}
+		for key, child := range typed {
+			typed[key] = localizeDocumentValue(child, language)
+		}
+	}
+	return value
+}
+
+func localizedTextValue(value map[string]any, language string) (string, bool) {
+	if len(value) == 0 {
+		return "", false
+	}
+	for key := range value {
+		if key != "en" && key != "zh" {
+			return "", false
+		}
+	}
+	en, enOK := value["en"].(string)
+	zh, zhOK := value["zh"].(string)
+	if _, exists := value["en"]; exists && !enOK {
+		return "", false
+	}
+	if _, exists := value["zh"]; exists && !zhOK {
+		return "", false
+	}
+	if language == "zh" {
+		return firstNonEmpty(zh, en), true
+	}
+	return firstNonEmpty(en, zh), true
 }

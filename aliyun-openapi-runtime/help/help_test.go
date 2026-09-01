@@ -388,6 +388,30 @@ func TestLocalizeRawJSONAndRenderers(t *testing.T) {
 	}
 }
 
+func TestJSONRendererEmitsOnlySelectedDocumentLanguage(t *testing.T) {
+	document := &ActionDocument{
+		SchemaVersion: SchemaVersion,
+		Kind:          "api",
+		Description:   LocalizedText{EN: "English description", ZH: "中文描述"},
+		Parameters: []Parameter{{
+			Name: "name",
+			Help: LocalizedText{EN: "English parameter", ZH: "中文参数"},
+		}},
+	}
+	var output bytes.Buffer
+	if err := Render(&output, document, HelpOptions{Format: FormatJSON, Language: "en"}); err != nil {
+		t.Fatal(err)
+	}
+	text := output.String()
+	if !strings.Contains(text, `"description": "English description"`) ||
+		!strings.Contains(text, `"help": "English parameter"`) {
+		t.Fatalf("JSON renderer did not select English strings: %s", text)
+	}
+	if strings.Contains(text, "中文") || strings.Contains(text, `"en"`) || strings.Contains(text, `"zh"`) {
+		t.Fatalf("JSON renderer retained bilingual fields: %s", text)
+	}
+}
+
 func TestBuildResponseQueryExample(t *testing.T) {
 	document := ResponseDocumentation{
 		Schema: json.RawMessage(`{

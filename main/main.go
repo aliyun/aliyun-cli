@@ -84,8 +84,9 @@ func Main(args []string) {
 		return
 	}
 
-	// set language with current profile
-	i18n.SetLanguage(profile.Language)
+	// Resolve language before command routing so Core and OpenAPI Help observe
+	// the same deterministic priority: explicit flag > profile > system locale.
+	i18n.SetLanguage(effectiveLanguage(args, profile.Language))
 
 	rootCmd := newRootCommand(profile, stdout)
 
@@ -102,6 +103,32 @@ func Main(args []string) {
 	} else {
 		rootCmd.Execute(ctx, args)
 	}
+}
+
+func effectiveLanguage(args []string, profileLanguage string) string {
+	for i, arg := range args {
+		value := ""
+		switch {
+		case strings.HasPrefix(arg, "--language="):
+			value = strings.TrimSpace(strings.TrimPrefix(arg, "--language="))
+		case arg == "--language" && i+1 < len(args):
+			value = strings.TrimSpace(args[i+1])
+		}
+		if value == "" {
+			continue
+		}
+		switch strings.ToLower(value) {
+		case string(i18n.Zh):
+			return string(i18n.Zh)
+		case string(i18n.En):
+			return string(i18n.En)
+		default:
+			// Keep the existing CLI behavior for unsupported language values:
+			// fall back to English instead of allowing the profile to win.
+			return string(i18n.En)
+		}
+	}
+	return profileLanguage
 }
 
 func newCommandContext(stdout io.Writer, stderr io.Writer) *cli.Context {
