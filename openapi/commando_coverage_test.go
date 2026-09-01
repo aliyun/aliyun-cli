@@ -80,7 +80,7 @@ func TestLegacyHelpCanonicalRootProductRequestAndResponse(t *testing.T) {
 		MachineHelpFormatFlag(ctx.Flags()).SetAssigned(true)
 		MachineHelpFormatFlag(ctx.Flags()).SetValue("json")
 		require.NoError(t, c.legacyHelp(ctx, []string{"demo"}))
-		assert.Contains(t, stdout.String(), `"kind": "product"`)
+		assert.Contains(t, stdout.String(), `"helpLevel": "product"`)
 	})
 }
 

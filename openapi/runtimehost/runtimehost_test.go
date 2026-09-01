@@ -176,7 +176,7 @@ func TestDispatchPluginHelpPreservesRawArgsAndMapsHelpContext(t *testing.T) {
 	}
 	var document map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &document); err != nil ||
-		document["schemaVersion"] != "v1" || document["kind"] != "api" ||
+		document["schemaVersion"] != "v1" || document["helpLevel"] != "api" ||
 		len(strings.Split(strings.TrimSpace(stdout.String()), "\n")) != 1 {
 		t.Fatalf("AI mode must force Runtime JSON Help, got:\n%s", stdout.String())
 	}

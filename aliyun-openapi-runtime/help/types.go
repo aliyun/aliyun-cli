@@ -122,9 +122,9 @@ type APISummary struct {
 
 type ProductDocument struct {
 	SchemaVersion string              `json:"schemaVersion"`
-	Kind          string              `json:"kind"`
-	Target        Target              `json:"target"`
-	Provenance    *MetadataProvenance `json:"provenance,omitempty"`
+	Kind          string              `json:"helpLevel"`
+	Target        Target              `json:"-"`
+	Provenance    *MetadataProvenance `json:"-"`
 	Query         string              `json:"query,omitempty"`
 	Product       Product             `json:"product"`
 	APIs          []APISummary        `json:"apis"`
@@ -197,10 +197,10 @@ type QueryOption struct {
 // `aliyun <product> <kebab-action> --help`.
 type ActionDocument struct {
 	SchemaVersion    string              `json:"schemaVersion"`
-	Kind             string              `json:"kind"`
+	Kind             string              `json:"helpLevel"`
 	Section          Section             `json:"section"`
-	Target           Target              `json:"target"`
-	Provenance       *MetadataProvenance `json:"provenance,omitempty"`
+	Target           Target              `json:"-"`
+	Provenance       *MetadataProvenance `json:"-"`
 	Query            string              `json:"query,omitempty"`
 	Name             string              `json:"name"`
 	Command          string              `json:"command"`
@@ -223,10 +223,10 @@ type ActionDocument struct {
 // with `--cli-section request`.
 type RequestDocument struct {
 	SchemaVersion    string              `json:"schemaVersion"`
-	Kind             string              `json:"kind"`
+	Kind             string              `json:"helpLevel"`
 	Section          Section             `json:"section"`
-	Target           Target              `json:"target"`
-	Provenance       *MetadataProvenance `json:"provenance,omitempty"`
+	Target           Target              `json:"-"`
+	Provenance       *MetadataProvenance `json:"-"`
 	Query            string              `json:"query,omitempty"`
 	Product          Product             `json:"product"`
 	Name             string              `json:"name"`
@@ -255,10 +255,10 @@ type APIRequestDocument = RequestDocument
 // Parameter so composite request shapes are preserved.
 type APIParameterDocument struct {
 	SchemaVersion string              `json:"schemaVersion"`
-	Kind          string              `json:"kind"`
+	Kind          string              `json:"helpLevel"`
 	Section       Section             `json:"section"`
-	Target        Target              `json:"target"`
-	Provenance    *MetadataProvenance `json:"provenance,omitempty"`
+	Target        Target              `json:"-"`
+	Provenance    *MetadataProvenance `json:"-"`
 	Product       Product             `json:"product"`
 	Name          string              `json:"name"`
 	Command       string              `json:"command"`
@@ -296,10 +296,10 @@ type OutputSchema struct {
 
 type APIResponseDocument struct {
 	SchemaVersion string                     `json:"schemaVersion"`
-	Kind          string                     `json:"kind"`
+	Kind          string                     `json:"helpLevel"`
 	Section       Section                    `json:"section"`
-	Target        Target                     `json:"target"`
-	Provenance    *MetadataProvenance        `json:"provenance,omitempty"`
+	Target        Target                     `json:"-"`
+	Provenance    *MetadataProvenance        `json:"-"`
 	Query         string                     `json:"query,omitempty"`
 	Responses     json.RawMessage            `json:"responses,omitempty"`
 	Components    map[string]json.RawMessage `json:"components,omitempty"`

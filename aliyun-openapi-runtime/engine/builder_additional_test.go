@@ -139,7 +139,7 @@ func TestEngineDiscoveryAndHelpEntryPoints(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(aiHelp.String(), `"schemaVersion":"v1"`) ||
-		!strings.Contains(aiHelp.String(), `"kind":"api"`) ||
+		!strings.Contains(aiHelp.String(), `"helpLevel":"api"`) ||
 		strings.Count(aiHelp.String(), "\n") != 1 {
 		t.Fatalf("AI Help must force Runtime v1 JSON: %q", aiHelp.String())
 	}
@@ -213,7 +213,7 @@ func TestEngineKebabParameterHelp(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		`"kind": "parameter"`,
+		`"helpLevel": "parameter"`,
 		`"name": "instance-type"`,
 		`"rawName": "InstanceType"`,
 		`"enum":`,
@@ -239,7 +239,7 @@ func TestEngineKebabParameterHelp(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		`"kind": "parameter"`,
+		`"helpLevel": "parameter"`,
 		`"query": "nested field"`,
 		`"shown": 0`,
 	} {

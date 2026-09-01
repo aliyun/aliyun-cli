@@ -136,7 +136,7 @@ func TestServiceBuildsEveryHelpLevelThroughSmallInterfaces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if request.Kind != "request" || request.Target.APIVersion != "v2" || request.Provenance == nil {
+	if request.Kind != "api" || request.Target.APIVersion != "v2" || request.Provenance == nil {
 		t.Fatalf("compatibility request document = %#v", request)
 	}
 	action, err := service.BuildAction(" DEMO ", "v1", "list-things", HelpOptions{})
@@ -164,7 +164,7 @@ func TestServiceBuildsEveryHelpLevelThroughSmallInterfaces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Kind != "response" || len(response.Responses) == 0 || response.Provenance == nil {
+	if response.Kind != "api" || len(response.Responses) == 0 || response.Provenance == nil {
 		t.Fatalf("response document = %#v", response)
 	}
 }

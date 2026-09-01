@@ -728,6 +728,7 @@ func TestMachineHelpSearchDropsMetadataInAIMode(t *testing.T) {
 	assert.NotContains(t, raw, "responseQueryExample")
 	assert.NotContains(t, raw, "examples")
 	assert.Contains(t, raw, "parameterSets")
-	assert.Contains(t, raw, "target")
+	assert.NotContains(t, raw, "target")
+	assert.Equal(t, []string{"aliyun", "demo", "create-report"}, document.Target.Path)
 	assert.Contains(t, out, "report_id")
 }

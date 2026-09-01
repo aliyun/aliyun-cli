@@ -9,8 +9,8 @@ import (
 
 type machineHelpUtilityDocument struct {
 	SchemaVersion string                      `json:"schemaVersion"`
-	Kind          string                      `json:"kind"`
-	Target        machineHelpTarget           `json:"target"`
+	Kind          string                      `json:"helpLevel"`
+	Target        machineHelpTarget           `json:"-"`
 	Name          string                      `json:"name"`
 	Description   machineHelpLocalizedText    `json:"description"`
 	Usage         string                      `json:"usage"`
