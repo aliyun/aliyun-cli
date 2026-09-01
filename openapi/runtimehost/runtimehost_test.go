@@ -40,6 +40,7 @@ import (
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
+	"github.com/aliyun/aliyun-openapi-runtime/source"
 )
 
 // captureExecutor records the ExecContext it receives instead of
@@ -304,6 +305,87 @@ func TestHelpLanguagePrefersCommandFlag(t *testing.T) {
 	if got := helpLanguage(ctx); got != "zh" {
 		t.Fatalf("help language = %q, want zh", got)
 	}
+}
+
+func TestRuntimeHostPublicRoutingWrappers(t *testing.T) {
+	t.Setenv(sysconfig.EnvPluginsDir, filepath.Join(t.TempDir(), "plugins"))
+	if got := userPluginsDir(); got != os.Getenv(sysconfig.EnvPluginsDir) {
+		t.Fatalf("userPluginsDir() = %q", got)
+	}
+
+	if HasProduct("") {
+		t.Fatal("empty product must not resolve")
+	}
+	if !HasProduct("ecs") {
+		t.Fatal("embedded ECS product did not resolve")
+	}
+	if ProductCommands("") != nil {
+		t.Fatal("empty product commands must be nil")
+	}
+	commands := ProductCommands("ecs")
+	if len(commands) == 0 || !containsString(commands, "describe-regions") {
+		t.Fatalf("ECS commands = %v", commands)
+	}
+	if MetaPluginProvenance("") != nil {
+		t.Fatal("empty product provenance must be nil")
+	}
+	if provenance := MetaPluginProvenance("ecs"); provenance == nil || provenance.Kind != source.KindBaseline {
+		t.Fatalf("ECS provenance = %#v", provenance)
+	}
+	if MetaPluginProvenance("definitely-missing") != nil {
+		t.Fatal("unknown product provenance must be nil")
+	}
+
+	stdout := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, new(bytes.Buffer))
+	if err := ProductHelp(ctx, "ecs"); err != nil {
+		t.Fatalf("ProductHelp(): %v", err)
+	}
+	if !strings.Contains(stdout.String(), "Available APIs:") {
+		t.Fatalf("product help output = %s", stdout.String())
+	}
+
+	if handled, err := TryDispatch(ctx, []string{"ecs"}); handled || err != nil {
+		t.Fatalf("short TryDispatch = %v, %v", handled, err)
+	}
+	if handled, err := TryDispatch(ctx, []string{"ecs", "definitely-missing"}); handled || err != nil {
+		t.Fatalf("unknown TryDispatch = %v, %v", handled, err)
+	}
+	stdout.Reset()
+	handled, err := TryDispatch(ctx, []string{"ecs", "describe-regions", "--cli-dry-run"})
+	if err != nil || !handled {
+		t.Fatalf("resolvable TryDispatch = %v, %v", handled, err)
+	}
+	if stdout.Len() == 0 {
+		t.Fatal("dry-run dispatch produced no output")
+	}
+}
+
+func TestRuntimeHostProfileLoadFailuresAreBestEffort(t *testing.T) {
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.Flags().Add(config.NewConfigurePathFlag())
+	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+	config.ConfigurePathFlag(ctx.Flags()).SetValue(filepath.Join(t.TempDir(), "missing", "config.json"))
+	host := &cliHost{ctx: ctx}
+	if region := host.Region(); region != "" {
+		t.Fatalf("Region() = %q", region)
+	}
+	settings := host.Settings()
+	if settings.CLIVersion == "" {
+		t.Fatal("Settings() must retain CLI version on profile load failure")
+	}
+	if _, err := host.Credential(); err == nil {
+		t.Fatal("Credential() must return profile load error")
+	}
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 // TestHostSettingsAppliedToExecContext verifies the engine copies the

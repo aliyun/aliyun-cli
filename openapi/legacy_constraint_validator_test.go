@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
@@ -176,5 +178,158 @@ func TestValidateLegacyConstraintsFailOpenInvalidSchemaAndUnknownFlag(t *testing
 	assignLegacyUnknown(t, ctx, "Unknown", "anything")
 	if err := validateLegacyConstraints(ctx, api); err != nil {
 		t.Fatalf("invalid producer schema, raw body and unknown flags must fail open: %v", err)
+	}
+}
+
+func TestConstraintViolationErrorMessages(t *testing.T) {
+	tests := []struct {
+		violation  ConstraintViolationError
+		wantPhrase string
+	}{
+		{ConstraintViolationError{Flag: "Mode", Value: "bad", Constraint: "enum"}, "not allowed"},
+		{ConstraintViolationError{Flag: "Count", Value: "0", Constraint: "minimum", Minimum: "1"}, "greater than or equal to 1"},
+		{ConstraintViolationError{Flag: "Count", Value: "4", Constraint: "maximum", Maximum: "3"}, "less than or equal to 3"},
+		{ConstraintViolationError{Flag: "Name", Value: "a", Constraint: "minLength", MinLength: "2"}, "at least 2 characters"},
+		{ConstraintViolationError{Flag: "Name", Value: "abcd", Constraint: "maxLength", MaxLength: "3"}, "at most 3 characters"},
+		{ConstraintViolationError{Flag: "Name", Value: "A", Constraint: "pattern", Pattern: "^[a-z]+$"}, "does not match pattern"},
+		{ConstraintViolationError{Flag: "Value", Value: "x", Constraint: "future"}, "violates its schema constraint"},
+	}
+	for _, test := range tests {
+		if got := test.violation.Error(); !strings.Contains(got, test.wantPhrase) {
+			t.Errorf("Error() = %q, want phrase %q", got, test.wantPhrase)
+		}
+	}
+
+	docRequired := &LegacyDocRequiredError{Flags: []string{"--Name", "--RegionId"}}
+	if got := docRequired.Error(); got != "missing required parameter(s): --Name, --RegionId" {
+		t.Fatalf("LegacyDocRequiredError.Error() = %q", got)
+	}
+	docRequired.AIRecoveryEligible()
+}
+
+func TestValidateLegacyDocRequiredScalarAndRepeatLists(t *testing.T) {
+	api := &canonicalmeta.API{Parameters: []canonicalmeta.Parameter{
+		{Name: "name", RawName: "Name", Type: "string", Location: "query", DocRequired: true},
+		{Name: "tags", RawName: "Tag", Type: "array", Location: "query", ParamStyle: "repeatList", DocRequired: true,
+			Element: &canonicalmeta.TypeShape{Type: "object", Fields: []canonicalmeta.Field{
+				{Name: "key", RawName: "Key", Type: "string", DocRequired: true},
+				{Name: "value", RawName: "Value", Type: "string"},
+			}}},
+		{Name: "zones", RawName: "Zone", Type: "array", Location: "query", ParamStyle: "repeatList", DocRequired: true,
+			Element: &canonicalmeta.TypeShape{Type: "string"}},
+	}}
+
+	t.Run("all documentation-required paths are reported", func(t *testing.T) {
+		ctx := legacyConstraintContext(t, true, false)
+		err := validateLegacyDocRequired(ctx, api)
+		var missing *LegacyDocRequiredError
+		if !errors.As(err, &missing) {
+			t.Fatalf("error = %v, want LegacyDocRequiredError", err)
+		}
+		assertStringSliceEqual(t, []string{"--Name", "--Tag", "--Zone"}, missing.Flags)
+	})
+
+	t.Run("child paths are checked for every assigned instance", func(t *testing.T) {
+		ctx := legacyConstraintContext(t, true, false)
+		assignLegacyUnknown(t, ctx, "Name", "demo")
+		assignLegacyUnknown(t, ctx, "Tag.2.Value", "value")
+		assignLegacyUnknown(t, ctx, "Tag.10.Key", "key")
+		assignLegacyUnknown(t, ctx, "Zone.1", "cn-a")
+		err := validateLegacyDocRequired(ctx, api)
+		var missing *LegacyDocRequiredError
+		if !errors.As(err, &missing) {
+			t.Fatalf("error = %v, want LegacyDocRequiredError", err)
+		}
+		assertStringSliceEqual(t, []string{"--Tag.2.Key"}, missing.Flags)
+	})
+
+	t.Run("all assigned values pass", func(t *testing.T) {
+		ctx := legacyConstraintContext(t, true, false)
+		assignLegacyUnknown(t, ctx, "Name", "demo")
+		assignLegacyUnknown(t, ctx, "Tag.1.Key", "key")
+		assignLegacyUnknown(t, ctx, "Zone.1", "cn-a")
+		if err := validateLegacyDocRequired(ctx, api); err != nil {
+			t.Fatalf("validateLegacyDocRequired() = %v", err)
+		}
+	})
+
+	t.Run("assigned empty scalar stays missing", func(t *testing.T) {
+		ctx := legacyConstraintContext(t, true, false)
+		assignLegacyUnknown(t, ctx, "Name", "")
+		err := validateLegacyDocRequired(ctx, &canonicalmeta.API{Parameters: api.Parameters[:1]})
+		if err == nil || !strings.Contains(err.Error(), "--Name") {
+			t.Fatalf("error = %v", err)
+		}
+	})
+}
+
+func TestValidateLegacyDocRequiredEarlyReturnsAndRawBody(t *testing.T) {
+	ctx := legacyConstraintContext(t, true, false)
+	api := &canonicalmeta.API{Parameters: []canonicalmeta.Parameter{{RawName: "Payload", Type: "string", Location: "body", DocRequired: true}}}
+	if err := validateLegacyDocRequired(nil, api); err != nil {
+		t.Fatalf("nil context: %v", err)
+	}
+	if err := validateLegacyDocRequired(ctx, nil); err != nil {
+		t.Fatalf("nil API: %v", err)
+	}
+	ctxWithoutUnknown := cli.NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
+	if err := validateLegacyDocRequired(ctxWithoutUnknown, api); err != nil {
+		t.Fatalf("nil unknown flags: %v", err)
+	}
+	off := legacyConstraintContext(t, false, false)
+	if err := validateLegacyDocRequired(off, api); err != nil {
+		t.Fatalf("AI mode off: %v", err)
+	}
+
+	ctx.Flags().Add(NewBodyFlag())
+	BodyFlag(ctx.Flags()).SetAssigned(true)
+	BodyFlag(ctx.Flags()).SetValue(`{"payload":true}`)
+	if err := validateLegacyDocRequired(ctx, api); err != nil {
+		t.Fatalf("raw body should satisfy body documentation requirements: %v", err)
+	}
+}
+
+func TestLegacyRepeatListAndInvokerHelpers(t *testing.T) {
+	assigned := map[string]bool{
+		"Tag.10.Key": true, "Tag.2.Value": true, "Tag.2.Key": true,
+		"Tag.bad.Key": true, "Tag.": true, "Other.1": true,
+	}
+	assertStringSliceEqual(t, []string{"Tag.10", "Tag.2"}, legacyRepeatListInstances("Tag", assigned))
+	for _, value := range []string{"0", "1", "123"} {
+		if !isDecimalIndex(value) {
+			t.Errorf("isDecimalIndex(%q) = false", value)
+		}
+	}
+	for _, value := range []string{"", "-1", "1a", "a"} {
+		if isDecimalIndex(value) {
+			t.Errorf("isDecimalIndex(%q) = true", value)
+		}
+	}
+
+	api := &canonicalmeta.API{Name: "Demo"}
+	if got := legacyAPIForInvoker(&RpcInvoker{api: api}); got != api {
+		t.Fatalf("RPC API = %#v", got)
+	}
+	if got := legacyAPIForInvoker(&RestfulInvoker{api: api}); got != api {
+		t.Fatalf("REST API = %#v", got)
+	}
+	if got := legacyAPIForInvoker(nil); got != nil {
+		t.Fatalf("unknown invoker API = %#v", got)
+	}
+
+	for _, name := range []string{"body", "BODY", "body-file", "BODY-FILE"} {
+		if !isRawBodyFlag(name) {
+			t.Errorf("isRawBodyFlag(%q) = false", name)
+		}
+	}
+	if isRawBodyFlag("payload") {
+		t.Fatal("payload must not be treated as raw body")
+	}
+}
+
+func assertStringSliceEqual(t *testing.T, want, got []string) {
+	t.Helper()
+	if !reflect.DeepEqual(want, got) {
+		t.Fatalf("got %v, want %v", got, want)
 	}
 }

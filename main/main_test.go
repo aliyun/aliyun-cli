@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"embed"
 	"encoding/json"
 	"io"
 	"os"
@@ -12,6 +13,41 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/config"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 )
+
+//go:embed testdata/dump
+var testDumpFS embed.FS
+
+func TestDumpFilesCopiesEmbeddedTree(t *testing.T) {
+	output := t.TempDir()
+	dumpFiles(testDumpFS, "./testdata/dump", output)
+
+	root, err := os.ReadFile(filepath.Join(output, "testdata", "dump", "root.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(root) != "root fixture\n" {
+		t.Fatalf("root fixture = %q", root)
+	}
+	child, err := os.ReadFile(filepath.Join(output, "testdata", "dump", "nested", "child.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(child) != "child fixture\n" {
+		t.Fatalf("child fixture = %q", child)
+	}
+}
+
+func TestDumpFilesMissingPathReturnsWithoutWriting(t *testing.T) {
+	output := t.TempDir()
+	dumpFiles(testDumpFS, "missing", output)
+	entries, err := os.ReadDir(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("unexpected output entries: %v", entries)
+	}
+}
 
 func TestMainWithNoArgs(t *testing.T) {
 	clearAgentDetectionEnv(t)
