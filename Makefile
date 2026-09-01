@@ -99,10 +99,17 @@ test-runtime:
 check-runtime: test-runtime
 
 test: deps
-	# Fail fast on broken packages under the module (e.g. stale go:embed).
+	# Ensure every package under the module is listable/vettable (catches stale
+	# go:embed in submodules). Unit tests keep the historical package set —
+	# ./... also pulls cliext/*, cloudsso, oss/lib which need credentials or
+	# are intentionally out of CI unit coverage.
 	go list ./... >/dev/null
 	go vet ./...
-	ALIYUN_CLI_META_DIR="$(META_DIR)" LANG="en_US.UTF-8" go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+	ALIYUN_CLI_META_DIR="$(META_DIR)" LANG="en_US.UTF-8" go test -race -coverprofile=coverage.txt -covermode=atomic \
+		./bundledmeta ./canonicalmeta \
+		./util/... ./cli/... ./config/... \
+		./i18n/... ./main/... ./openapi/... ./meta/... ./export/... \
+		./sysconfig/...
 	go tool cover -html=coverage.txt -o coverage.html
 
 test-release: meta-pack
