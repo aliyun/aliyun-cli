@@ -101,7 +101,7 @@ func TestBuildActionKeepsRequiredParametersAndRequestIsComplete(t *testing.T) {
 			typeColumn, exampleColumn, constraintsColumn, actionOutput.String())
 	}
 	complete := BuildRequestDocument(&meta.Product{Code: "ecs"}, api, nil, HelpOptions{AIMode: true})
-	if complete.Kind != "request" || len(complete.Parameters) != 101 || complete.Result.Truncated {
+	if complete.Kind != "api" || len(complete.Parameters) != 101 || complete.Result.Truncated {
 		t.Fatalf("explicit request Help was truncated: %+v", complete.Result)
 	}
 	if len(complete.GlobalParameters) == 0 {

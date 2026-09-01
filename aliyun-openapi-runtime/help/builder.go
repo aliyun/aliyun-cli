@@ -364,7 +364,7 @@ func BuildRequestDocument(product *meta.Product, api *meta.API, response *Respon
 		}
 	}
 	document := &RequestDocument{
-		SchemaVersion: SchemaVersion, Kind: "request", Section: SectionRequest,
+		SchemaVersion: SchemaVersion, Kind: "api", Section: SectionRequest,
 		Target: Target{Product: code, API: command, APIVersion: api.Version},
 		Query:  options.Search, Product: productDTO, Name: api.Name, Command: command,
 		CmdFullName: cmdFullName, Title: localized(api.Title), Description: localized(api.Description),
@@ -641,7 +641,7 @@ func BuildAPIResponseDocument(api *meta.API, response *ResponseDocumentation, op
 	}
 	command := api.CmdName
 	document := &APIResponseDocument{
-		SchemaVersion: SchemaVersion, Kind: "response", Section: SectionResponse,
+		SchemaVersion: SchemaVersion, Kind: "api", Section: SectionResponse,
 		Target: Target{Product: strings.ToLower(api.ProductCode), API: command, APIVersion: api.Version},
 		Query:  options.Search, Warnings: append([]string(nil), response.Warnings...),
 	}

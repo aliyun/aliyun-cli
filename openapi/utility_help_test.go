@@ -139,7 +139,8 @@ func TestRenderUtilityHelpTextAndJSON(t *testing.T) {
 		}, false))
 		var document map[string]any
 		require.NoError(t, json.Unmarshal(stdout.Bytes(), &document))
-		assert.Equal(t, "utility", document["kind"])
+		assert.Equal(t, "utility", document["helpLevel"])
+		assert.NotContains(t, document, "target")
 		assert.Contains(t, document, "aiModeHint")
 	})
 

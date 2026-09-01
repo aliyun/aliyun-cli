@@ -192,8 +192,8 @@ func renderMachineHelpConstraints(w io.Writer, prefix string, constraints machin
 // finite tree; Search results are an orthogonal projection.
 type machineHelpParameterDocument struct {
 	SchemaVersion string                      `json:"schemaVersion"`
-	Kind          string                      `json:"kind"`
-	Target        machineHelpTarget           `json:"target"`
+	Kind          string                      `json:"helpLevel"`
+	Target        machineHelpTarget           `json:"-"`
 	Query         string                      `json:"query"`
 	Parameter     machineHelpParameter        `json:"parameter"`
 	Matches       []machineHelpParameterMatch `json:"matches"`

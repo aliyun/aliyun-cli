@@ -24,16 +24,14 @@ func TestParameterHelpJSONKeepsOnlyParameterContext(t *testing.T) {
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
 
-	assert.Len(t, raw, 5)
-	for _, key := range []string{"schemaVersion", "kind", "target", "parameter", "aiModeHint"} {
+	assert.Len(t, raw, 4)
+	for _, key := range []string{"schemaVersion", "helpLevel", "parameter", "aiModeHint"} {
 		assert.Contains(t, raw, key)
 	}
-	for _, key := range []string{"product", "api", "section", "result", "query", "matches"} {
+	for _, key := range []string{"kind", "target", "product", "api", "section", "result", "query", "matches"} {
 		assert.NotContains(t, raw, key)
 	}
-	target, ok := raw["target"].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "2026-01-01", target["apiVersion"])
+	assert.Equal(t, "2026-01-01", document.Target.APIVersion)
 }
 
 func TestParameterSearchJSONAddsOnlySearchProjection(t *testing.T) {
