@@ -38,13 +38,13 @@ var getConfigurePathFunc = func() string {
 }
 
 var (
-	downloadBinaryFunc              = downloadBinary
-	execCommandFunc                 = exec.Command
-	timeNowFunc                     = time.Now
-	runtimeGOOSFunc                 = func() string { return runtime.GOOS }
-	runtimeGOARCHFunc               = func() string { return runtime.GOARCH }
-	getLatestLindormCliVersionFunc  = GetLatestLindormCliVersion
-	httpDoFunc                      = func(req *http.Request) (*http.Response, error) {
+	downloadBinaryFunc             = downloadBinary
+	execCommandFunc                = exec.Command
+	timeNowFunc                    = time.Now
+	runtimeGOOSFunc                = func() string { return runtime.GOOS }
+	runtimeGOARCHFunc              = func() string { return runtime.GOARCH }
+	getLatestLindormCliVersionFunc = GetLatestLindormCliVersion
+	httpDoFunc                     = func(req *http.Request) (*http.Response, error) {
 		client := &http.Client{Timeout: 30 * time.Second}
 		return client.Do(req)
 	}

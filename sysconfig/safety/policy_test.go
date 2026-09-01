@@ -276,8 +276,8 @@ func TestBuildCommandPattern(t *testing.T) {
 func TestMatchPattern(t *testing.T) {
 	tests := []struct {
 		pattern string
-		cmd    string
-		want   bool
+		cmd     string
+		want    bool
 	}{
 		{"*:Delete*", "ecs:DeleteInstance", true},
 		{"*:Delete*", "ecs:deleteinstance", true}, // case insensitive

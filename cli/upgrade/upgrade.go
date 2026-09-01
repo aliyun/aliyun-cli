@@ -48,8 +48,8 @@ var (
 )
 
 var (
-	httpClient          = &http.Client{Timeout: 60 * time.Second}
-	stdin     io.Reader = os.Stdin
+	httpClient           = &http.Client{Timeout: 60 * time.Second}
+	stdin      io.Reader = os.Stdin
 
 	execCommand         = exec.Command
 	detectInstallerFunc = detectInstaller

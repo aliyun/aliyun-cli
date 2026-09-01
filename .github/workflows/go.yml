@@ -24,6 +24,9 @@ jobs:
       with:
         go-version-file: go.mod
 
+    - name: Check Go formatting
+      run: make check-fmt
+
     - name: Unit Test
       run: make test
     - name: Runtime Module Check

@@ -32,7 +32,7 @@ const (
 )
 
 var (
-	currentLevel = Error
+	currentLevel           = Error
 	output       io.Writer = os.Stderr
 )
 

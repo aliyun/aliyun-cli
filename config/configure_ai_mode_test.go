@@ -184,8 +184,8 @@ func TestConfigureAiMode_ParentRun_ExtraArgs(t *testing.T) {
 func TestConfigureAiMode_Show_IncludesOssutilInOutput(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, aimode.Save(dir, &aimode.AiConfig{
-		Enabled:  true,
-		UserAgent: "ua",
+		Enabled:              true,
+		UserAgent:            "ua",
 		PluginSpecialOSSUTIL: map[string]any{"a": true},
 	}))
 	ctx, w := testAiModeContext(t, dir)

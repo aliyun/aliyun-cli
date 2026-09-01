@@ -28,9 +28,9 @@ import (
 	"testing"
 	"time"
 
-	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cloudsso"
+	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 
 	"github.com/stretchr/testify/assert"
 )

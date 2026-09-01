@@ -122,8 +122,8 @@ func (p *Policy) Check(cmd CommandInfo) CheckResult {
 //	product:ApiOrMethod          (two-segment commands: RPC, REST-by-ApiName, plugin)
 //	product:METHOD/path          (three-segment REST commands)
 //
-// Product is always lowercased; 
-// HTTP methods are upper-cased so rules like `*:DELETE` work regardless of how the user typed the verb. 
+// Product is always lowercased;
+// HTTP methods are upper-cased so rules like `*:DELETE` work regardless of how the user typed the verb.
 // ApiOrMethod preserves the original casing because matching itself is case-insensitive.
 func buildCommandPattern(cmd CommandInfo) string {
 	product := strings.ToLower(cmd.Product)

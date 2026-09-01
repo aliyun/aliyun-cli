@@ -64,15 +64,15 @@ func TestNewMaxcCommand_HelpOutput(t *testing.T) {
 	out := stdout.String()
 
 	for _, want := range []string{
-		"MaxCompute CLI",                                   // PrintHead
-		"Usage:",                                           // PrintUsage
-		"aliyun maxc <command>",                            // usage body (parent path prepended by framework)
-		"Sample:",                                          // PrintSample
-		"Commands:",                                        // our custom groups
-		"query",                                            // one group from the table
-		"auth",                                             // another group
-		"ALIBABA_CLOUD_MAXC_NO_UPDATE_CHECK",               // env var section
-		"Use `maxc --help` for more information.",          // PrintTail
+		"MaxCompute CLI",                     // PrintHead
+		"Usage:",                             // PrintUsage
+		"aliyun maxc <command>",              // usage body (parent path prepended by framework)
+		"Sample:",                            // PrintSample
+		"Commands:",                          // our custom groups
+		"query",                              // one group from the table
+		"auth",                               // another group
+		"ALIBABA_CLOUD_MAXC_NO_UPDATE_CHECK", // env var section
+		"Use `maxc --help` for more information.", // PrintTail
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("help output missing %q\nfull output:\n%s", want, out)

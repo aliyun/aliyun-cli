@@ -85,6 +85,14 @@ release_windows: meta-pack
 fmt:
 	go fmt ./bundledmeta/... ./util/... ./cli/... ./config/... ./i18n/... ./main/... ./openapi/... ./oss/... ./resource/... ./meta/... ./export/...
 
+check-fmt:
+	@files="$$(gofmt -l .)"; \
+	if [ -n "$$files" ]; then \
+		echo "The following Go files are not formatted with gofmt:"; \
+		echo "$$files"; \
+		exit 1; \
+	fi
+
 test-runtime:
 	cd "$(RUNTIME_DIR)" && go test -race -coverprofile="$(CURDIR)/coverage-runtime.txt" -covermode=atomic ./...
 
@@ -102,7 +110,7 @@ test-release: meta-pack
 	LANG="en_US.UTF-8" go test -tags "$(META_TAG)" ./bundledmeta ./meta ./export ./openapi/runtimehost
 
 .PHONY: all publish install
-.PHONY: deps clean run fmt test-runtime check-runtime test test-release
+.PHONY: deps clean run fmt check-fmt test-runtime check-runtime test test-release
 .PHONY: meta-pack build build_mac build_linux build_windows build_linux_arm64
 .PHONY: gen_version git_release make_release_dir
 .PHONY: release_mac release_mac_arm64 release_linux release_linux_arm64 release_windows
