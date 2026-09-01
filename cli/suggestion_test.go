@@ -38,6 +38,7 @@ func TestApply(t *testing.T) {
 }
 
 func TestPrintSuggestions(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := NewCommandContext(w, stderr)

@@ -136,6 +136,7 @@ func TestNewAutoCompleteCommand(t *testing.T) {
 }
 
 func TestUninstallCompletion(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	orighookGetBinaryPath := hookGetBinaryPath
 	defer func() {
 		hookGetBinaryPath = orighookGetBinaryPath

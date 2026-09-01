@@ -23,6 +23,7 @@ import (
 )
 
 func TestCmdPrint(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := NewCommandContext(w, stderr)

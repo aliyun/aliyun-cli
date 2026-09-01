@@ -205,6 +205,7 @@ func TestGetSubCommand(t *testing.T) {
 }
 
 func TestExecute(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	buf := new(bytes.Buffer)
 	buf2 := new(bytes.Buffer)
 	ctx := NewCommandContext(buf, buf2)
@@ -302,6 +303,7 @@ func TestBeforeParseRouteErrorUsesCommandNormalizer(t *testing.T) {
 }
 
 func TestProcessError(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	DisableExitCode()
 	defer EnableExitCode()
 	cmd := newAliyunCmd()
@@ -375,6 +377,7 @@ func TestProcessExplicitLocalErrorAppendsAIModeHintOnce(t *testing.T) {
 }
 
 func TestExecuteHelp(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	cmd := newAliyunCmd()
 	buf := new(bytes.Buffer)
 	buf2 := new(bytes.Buffer)

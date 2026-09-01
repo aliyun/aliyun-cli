@@ -31,6 +31,7 @@ import (
 )
 
 func TestNewConfigureCommand(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	originhook := hookLoadOrCreateConfiguration
 	originhookLoad := hookLoadConfigurationWithContext
 	originhookSave := hookSaveConfigurationWithContext
