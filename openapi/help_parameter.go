@@ -16,8 +16,13 @@ func renderParameterHelpText(w io.Writer, document *machineHelpParameterDocument
 	}
 	if document.Query != "" {
 		if len(document.Matches) == 0 {
-			_, err := fmt.Fprintf(w, noHelpSearchMatchesFormat+"\n", document.Query)
-			return err
+			if _, err := fmt.Fprintf(w, noHelpSearchMatchesFormat+"\n", document.Query); err != nil {
+				return err
+			}
+			if document.Result == nil {
+				return nil
+			}
+			return renderHelpProjectionResult(w, "matches", *document.Result, document.Next)
 		}
 		if _, err := fmt.Fprintln(w, "Matched fields:"); err != nil {
 			return err
@@ -31,7 +36,7 @@ func renderParameterHelpText(w io.Writer, document *machineHelpParameterDocument
 		if document.Result == nil {
 			return nil
 		}
-		return renderHelpProjectionResult(w, "matches", *document.Result, nil)
+		return renderHelpProjectionResult(w, "matches", *document.Result, document.Next)
 	}
 	name := helpParameterDisplayName(document.Parameter)
 	if _, err := fmt.Fprintf(w, "Parameter: %s\n", name); err != nil {
@@ -44,7 +49,7 @@ func renderParameterHelpText(w io.Writer, document *machineHelpParameterDocument
 	if document.Result == nil {
 		return nil
 	}
-	return renderHelpProjectionResult(w, "matches", *document.Result, nil)
+	return renderHelpProjectionResult(w, "matches", *document.Result, document.Next)
 }
 
 func renderMachineHelpParameterNode(w io.Writer, parameter machineHelpParameter, path []string, indent int, printPath bool) error {
@@ -198,6 +203,7 @@ type machineHelpParameterDocument struct {
 	Parameter     machineHelpParameter        `json:"parameter"`
 	Matches       []machineHelpParameterMatch `json:"matches"`
 	Result        *HelpResult                 `json:"result"`
+	Next          *HelpNext                   `json:"next,omitempty"`
 	AIModeHint    *machineHelpAIModeHint      `json:"aiModeHint"`
 }
 

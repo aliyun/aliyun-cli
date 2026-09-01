@@ -529,6 +529,7 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 					response.Responses = nil
 					response.Components = nil
 				}
+				setResponseHelpNext(response, target, aiMode)
 			}
 		} else {
 			document, err = service.buildAPI(target.Product, target.Action, target.Version)
@@ -538,6 +539,7 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 				action.GlobalParameters = projectGlobalParameters(ctx.Flags())
 				if target.SectionExplicit {
 					applyRequestHelpOptions(action, opts, aiMode)
+					setActionHelpNext(action, target, aiMode)
 				} else {
 					applyActionHelpOptions(action, opts, aiMode, jsonOutput)
 					setActionHelpNext(action, target, aiMode)
@@ -558,6 +560,7 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 				if target.Operation == HelpOperationSearch {
 					searchParameterHelpDocument(parameter, target.SearchQuery, target.SearchAll)
 				}
+				setParameterHelpNext(parameter, target, aiMode)
 				document = parameter
 			}
 		}
@@ -600,7 +603,7 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 			printProductHelpSwitchHint(ctx, target.Product, productHelpPluginToTraditional)
 		}
 	}
-	return c.finishCanonicalTextHelp(ctx, aiMode)
+	return c.finishCanonicalTextHelp(ctx, aiMode, target)
 }
 
 func (c *Commando) applyHostHelpLanguage(ctx *cli.Context) {
@@ -798,55 +801,4 @@ func attachMachineHelpAIModeHint(document any) {
 	case *machineHelpParameterDocument:
 		typed.AIModeHint = value
 	}
-}
-
-func setRootHelpNext(document *machineHelpRootDocument, target HelpTarget, aiMode bool) {
-	if document == nil || !document.Result.Truncated {
-		return
-	}
-	document.Next = buildHelpNext(target, aiMode)
-}
-
-func setProductHelpNext(document *machineHelpProductDocument, target HelpTarget, aiMode bool) {
-	if document == nil || !document.Result.Truncated {
-		return
-	}
-	document.Next = buildHelpNext(target, aiMode)
-}
-
-func setActionHelpNext(document *machineHelpAPIDocument, target HelpTarget, aiMode bool) {
-	if document == nil || !document.Result.Truncated {
-		return
-	}
-	document.Next = buildHelpNext(target, aiMode)
-}
-
-func buildHelpNext(target HelpTarget, aiMode bool) *HelpNext {
-	base := target
-	base.SectionExplicit = false
-	base.Section = HelpSectionRequest
-	base.SearchQuery = ""
-	if aiMode {
-		base.Output = HelpOutputText
-	}
-	all := base
-	all.Operation = HelpOperationAll
-	showAll, _ := BuildHelpCommand(all)
-	search := base
-	search.Operation = HelpOperationSearch
-	search.SearchQuery = "<keyword>"
-	find, _ := BuildHelpCommand(search)
-	next := &HelpNext{ShowAll: showAll, Search: find}
-	if strings.TrimSpace(target.SearchQuery) != "" && !target.SearchAll {
-		// The current search was truncated: offer the same keyword with the
-		// cap lifted instead of forcing a keyword change.
-		searchAll := base
-		searchAll.Operation = HelpOperationSearch
-		searchAll.SearchQuery = target.SearchQuery
-		searchAll.SearchAll = true
-		if command, err := BuildHelpCommand(searchAll); err == nil {
-			next.SearchAll = command
-		}
-	}
-	return next
 }

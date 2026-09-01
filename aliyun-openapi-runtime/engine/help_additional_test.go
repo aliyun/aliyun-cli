@@ -16,14 +16,36 @@ package engine
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"reflect"
 	"strings"
 	"testing"
 	"text/tabwriter"
 
+	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 )
+
+func TestValidateReservedHelpPreservesSectionAllConflictForRecovery(t *testing.T) {
+	err := validateReservedHelp(argparser.Reserved{HelpSection: "request", HelpAll: true}, false)
+	var conflict *InvalidOptionCombinationError
+	if !errors.As(err, &conflict) {
+		t.Fatalf("validateReservedHelp error %T does not preserve option conflict: %v", err, err)
+	}
+	if !reflect.DeepEqual(conflict.Options, []string{"--cli-section", "--help-all"}) {
+		t.Fatalf("conflict options = %#v", conflict.Options)
+	}
+	if got, want := err.Error(), "--cli-section does not support --help-all without --help-search"; got != want {
+		t.Fatalf("conflict text = %q, want %q", got, want)
+	}
+
+	if err := validateReservedHelp(argparser.Reserved{
+		HelpSection: "request", HelpSearch: "instance", HelpAll: true,
+	}, false); err != nil {
+		t.Fatalf("section Search-All rejected: %v", err)
+	}
+}
 
 func TestHelpEntryValidation(t *testing.T) {
 	product := &meta.Product{}

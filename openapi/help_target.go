@@ -186,6 +186,9 @@ func validateTargetPath(t HelpTarget) error {
 		}
 		return validateCommandToken("parameter", parameter)
 	case HelpLevelUtility:
+		if t.Utility == "" {
+			return nil
+		}
 		return validateCommandToken("utility", t.Utility)
 	default:
 		return fmt.Errorf("unsupported Help level %q", t.Level)
@@ -248,7 +251,10 @@ func BuildHelpCommand(target HelpTarget) (string, error) {
 		case HelpLevelParameter:
 			args = append(args, target.Product, target.Action)
 		case HelpLevelUtility:
-			args = append(args, "utils", target.Utility)
+			args = append(args, "utils")
+			if target.Utility != "" {
+				args = append(args, target.Utility)
+			}
 		}
 	}
 

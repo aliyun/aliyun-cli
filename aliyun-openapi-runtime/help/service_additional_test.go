@@ -418,7 +418,8 @@ func TestActionSearchReportsTheFullMatchCount(t *testing.T) {
 		t.Fatalf("limited action search = %#v", limited)
 	}
 	unlimited := BuildActionDocument(product, api, nil, HelpOptions{Search: "coverage probe", All: true})
-	if len(unlimited.Parameters) != 25 || unlimited.Result.Total != 25 || unlimited.Result.Truncated || unlimited.Next != nil {
+	if len(unlimited.Parameters) != 25 || unlimited.Result.Total != 25 || unlimited.Result.Truncated ||
+		unlimited.Next == nil || unlimited.Next.Search == "" || unlimited.Next.SearchAll != "" {
 		t.Fatalf("unlimited action search = %#v", unlimited)
 	}
 }

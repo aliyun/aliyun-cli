@@ -29,6 +29,8 @@ func (JSONRenderer) Render(w io.Writer, document any, options HelpOptions) error
 		return fmt.Errorf("help output is nil")
 	}
 	options = options.normalized()
+	attachRuntimeAIModeHint(document, !options.AIMode)
+	normalizeRuntimeNextOutput(document, !options.AIMode)
 	projected, err := localizeDocumentRawJSON(document, options.Language)
 	if err != nil {
 		return err
@@ -46,20 +48,25 @@ func (TextRenderer) Render(w io.Writer, document any, options HelpOptions) error
 		return fmt.Errorf("help output is nil")
 	}
 	options = options.normalized()
+	var err error
 	switch typed := document.(type) {
 	case *ProductDocument:
-		return renderProductText(w, typed, options.Language)
+		err = renderProductText(w, typed, options.Language)
 	case *ActionDocument:
-		return renderActionText(w, typed, options.Language)
+		err = renderActionText(w, typed, options.Language)
 	case *RequestDocument:
-		return renderRequestText(w, typed, options.Language)
+		err = renderRequestText(w, typed, options.Language)
 	case *APIParameterDocument:
-		return renderParameterDocumentText(w, typed, options.Language)
+		err = renderParameterDocumentText(w, typed, options.Language)
 	case *APIResponseDocument:
-		return renderResponseText(w, typed, options.Language)
+		err = renderResponseText(w, typed, options.Language)
 	default:
 		return fmt.Errorf("unsupported Runtime Help v1 document %T", document)
 	}
+	if err != nil {
+		return err
+	}
+	return renderRuntimeTextFooter(w, document, options)
 }
 
 func renderProvenanceText(w io.Writer, provenance *MetadataProvenance, language string) {
@@ -99,7 +106,7 @@ func renderParameterDocumentText(w io.Writer, document *APIParameterDocument, la
 		return renderResult(w, document.Result, language, document.Next)
 	}
 	renderParameterText(w, document.Parameter, language, "", true)
-	return nil
+	return renderResult(w, document.Result, language, document.Next)
 }
 
 func renderProductText(w io.Writer, document *ProductDocument, language string) error {
@@ -549,30 +556,16 @@ func renderResponseText(w io.Writer, document *APIResponseDocument, language str
 }
 
 func renderResult(w io.Writer, result Result, language string, nextValues ...*Next) error {
-	if !result.Truncated {
-		return nil
-	}
-	if _, err := fmt.Fprintf(w, "\n%s\n",
-		fmt.Sprintf(label(language, "Showing %d of %d entries; use all mode for the complete document.", "显示 %d/%d 项；使用 all 模式查看完整文档。"), result.Shown, result.Total)); err != nil {
-		return err
-	}
-	if len(nextValues) == 0 || nextValues[0] == nil {
-		return nil
-	}
-	next := nextValues[0]
-	for _, item := range []struct {
-		label string
-		value string
-	}{
-		{label(language, "Show all", "显示全部"), next.ShowAll},
-		{label(language, "Search", "搜索"), next.Search},
-		{label(language, "Show all matches", "显示全部匹配"), next.SearchAll},
-	} {
-		if item.value != "" {
-			fmt.Fprintf(w, "%s: %s\n", item.label, item.value)
+	if result.Truncated {
+		if _, err := fmt.Fprintf(w, "\n%s\n",
+			fmt.Sprintf(label(language, "Showing %d of %d entries; use all mode for the complete document.", "显示 %d/%d 项；使用 all 模式查看完整文档。"), result.Shown, result.Total)); err != nil {
+			return err
 		}
 	}
-	return nil
+	if len(nextValues) == 0 {
+		return nil
+	}
+	return renderHelpHintFooter(w, nextValues[0], language, !result.Truncated)
 }
 
 func label(language, en, zh string) string {

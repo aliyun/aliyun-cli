@@ -47,8 +47,10 @@ func renderResponseHelpText(w io.Writer, document *machineHelpAPIResponseDocumen
 		return renderHelpProjectionResult(w, "matches", document.Result, document.Next)
 	}
 	if document.OutputSchema == nil {
-		_, err := fmt.Fprintln(w, document.Notice)
-		return err
+		if _, err := fmt.Fprintln(w, document.Notice); err != nil {
+			return err
+		}
+		return renderHelpProjectionResult(w, "matches", document.Result, document.Next)
 	}
 	if len(document.Matches) > 0 {
 		if _, err := fmt.Fprintln(w, "Matched Response Paths:"); err != nil {

@@ -303,6 +303,16 @@ func TestRecoveryNormalizationArgsAndDryRunPathLookup(t *testing.T) {
 		recoveryNormalizationArgs(ctx, []string{"ecs", "describe-instances"}))
 	assert.Equal(t, []string{"ecs", "DescribeInstances", "--version", "2020-01-01"},
 		recoveryNormalizationArgs(ctx, []string{"ecs", "DescribeInstances", "--version", "2020-01-01"}))
+	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+	CliOutputFlag(ctx.Flags()).SetAssigned(true)
+	CliOutputFlag(ctx.Flags()).SetValue("json")
+	assert.Equal(t,
+		[]string{"help", "ecs", "DescribeInstances", "--version", "2014-05-26", "--cli-section", "response", "--cli-output", "json"},
+		recoveryNormalizationArgs(ctx, []string{"help", "ecs", "DescribeInstances"}))
+	assert.Equal(t,
+		[]string{"help", "ecs", "DescribeInstances", "--version", "2014-05-26", "--cli-section", "response"},
+		recoveryNormalizationArgs(ctx, []string{"help", "ecs", "DescribeInstances", "--cli-output=json"}, true))
 	assert.Equal(t, []string{"ecs"}, recoveryNormalizationArgs(nil, []string{"ecs"}))
 
 	repo, err := meta.MockLoadRepository([]meta.Product{{
