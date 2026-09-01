@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"hash"
 	"io/ioutil"
-	"math"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -110,10 +109,11 @@ func max(a, b int64) int64 {
 }
 
 func checkedInt(value int64, name string) (int, error) {
-	if value < int64(math.MinInt) || value > int64(math.MaxInt) {
-		return 0, fmt.Errorf("%s value %d exceeds the platform int range", name, value)
+	converted, err := strconv.Atoi(strconv.FormatInt(value, 10))
+	if err != nil {
+		return 0, fmt.Errorf("%s value %d exceeds the platform int range: %w", name, value, err)
 	}
-	return int(value), nil
+	return converted, nil
 }
 
 func getSizeString(size int64) string {
