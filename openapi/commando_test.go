@@ -1796,7 +1796,7 @@ func TestMainForSlsProduct(t *testing.T) {
 		// Test the SLS product call that should use OpenAPI
 		args := []string{"sls", "TestApi"}
 		err := command.main(ctx, args)
-		assert.Equal(t, `"TestApi" is not a valid api. See `+"`aliyun help sls`"+`.`, err.Error())
+		assert.Equal(t, `"TestApi" is not a valid api. Search matching APIs with `+"`aliyun sls --help-search Test`"+`.`, err.Error())
 	})
 
 	t.Run("SLSProductInvalidRestCall", func(t *testing.T) {

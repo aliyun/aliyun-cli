@@ -60,8 +60,8 @@ func TestInvalidApiError_Error(t *testing.T) {
 		},
 	}
 	str := err.Error()
-	assert.Equal(t, `"describeregion" is not a valid api. See `+"`aliyun help ecs`"+`.`, str)
-	assert.Equal(t, `"describe'region" is not a valid api. See `+"`aliyun help ecs`"+`.`, (&InvalidApiError{
+	assert.Equal(t, `"describeregion" is not a valid api. Search matching APIs with `+"`ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help-search describeregion`"+`.`, str)
+	assert.Equal(t, `"describe'region" is not a valid api. Search matching APIs with `+"`ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help-search region`"+`.`, (&InvalidApiError{
 		Name:    "describe'region",
 		product: &meta.Product{Code: "ecs"},
 	}).Error())
@@ -199,7 +199,7 @@ func TestInvalidUnifiedApiError_Error(t *testing.T) {
 			Code: "ecs",
 		},
 	}
-	assert.Equal(t, `"describreregions" is not a valid api. See `+"`aliyun help ecs`"+`.`, err.Error())
+	assert.Equal(t, `"describreregions" is not a valid api. Search matching APIs with `+"`ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help-search describreregion`"+`.`, err.Error())
 }
 
 func TestInvalidUnifiedApiError_GetSuggestions(t *testing.T) {
@@ -329,6 +329,42 @@ func TestInvalidApiError_AgentSuggestions_PrefixFallback(t *testing.T) {
 		},
 	}
 	assert.Equal(t, []string{"GetCallerIdentity"}, err.AgentSuggestions())
+}
+
+func TestInvalidApiError_CouponTokenSuggestionsInEveryMode(t *testing.T) {
+	apiNames := []string{"QueryAccountBalance", "QueryAccountDetails", "QueryCashCoupons", "QueryOrders"}
+	for _, input := range []string{"DescribeCoupons", "QueryAvailableCoupons", "QueryCouponDetails"} {
+		t.Run(input, func(t *testing.T) {
+			err := &InvalidApiError{
+				Name:    input,
+				product: &meta.Product{Code: "bssopenapi", ApiNames: apiNames},
+			}
+			assert.Equal(t, []string{"QueryCashCoupons"}, err.GetSuggestions())
+			assert.Equal(t, []string{"QueryCashCoupons"}, err.AgentSuggestions())
+			assert.Contains(t, err.Error(), "`aliyun bssopenapi --help-search Coupon`")
+		})
+	}
+}
+
+func TestInvalidAPIWithoutTokenMatchStillUsesTargetedSearch(t *testing.T) {
+	err := &InvalidApiError{
+		Name:    "QueryVoucherBalance",
+		product: &meta.Product{Code: "bssopenapi", ApiNames: []string{"QueryCashCoupons"}},
+	}
+	assert.Nil(t, err.GetSuggestions())
+	assert.Contains(t, err.Error(), "`aliyun bssopenapi --help-search Voucher`")
+}
+
+func TestInvalidBaselineCommandError_CouponTokenSuggestion(t *testing.T) {
+	err := &InvalidBaselineCommandError{
+		Product:    "bssopenapi",
+		Command:    "query-coupon-details",
+		Candidates: []string{"query-account-balance", "query-cash-coupons", "query-orders"},
+		Err:        assert.AnError,
+	}
+	assert.Equal(t, []string{"query-cash-coupons"}, err.GetSuggestions())
+	assert.Equal(t, []string{"query-cash-coupons"}, err.AgentSuggestions())
+	assert.Contains(t, err.Error(), "`ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun bssopenapi --help-search coupon`")
 }
 
 func TestSameStyleCandidates(t *testing.T) {

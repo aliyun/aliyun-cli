@@ -100,7 +100,11 @@ type InvalidApiError struct {
 }
 
 func (e *InvalidApiError) Error() string {
-	return fmt.Sprintf("%q is not a valid api. See `aliyun help %s`.", e.Name, e.product.GetLowerCode())
+	product := e.product.GetLowerCode()
+	if command := apiRecoveryCommand(e.Name, product, e.product.ApiNames); command != "" {
+		return fmt.Sprintf("%q is not a valid api. Search matching APIs with `%s`.", e.Name, command)
+	}
+	return fmt.Sprintf("%q is not a valid api. See `aliyun help %s`.", e.Name, product)
 }
 
 func (e *InvalidApiError) AgentMessage() string {
@@ -110,16 +114,8 @@ func (e *InvalidApiError) AgentMessage() string {
 func (*InvalidApiError) AIRecoveryEligible() {}
 
 func (e *InvalidApiError) GetSuggestions() []string {
-	sr := cli.NewSuggester(e.Name, 2)
-	for _, s := range e.product.ApiNames {
-		sr.Apply(s)
-	}
-	results := sr.GetResults()
-	if len(results) > 0 {
-		return results
-	}
-	return prefixSuggestionsWithOverflow(e.Name, e.product.ApiNames,
-		apiSearchHelpCommand(e.Name, e.product.GetLowerCode()))
+	return humanAPISuggestions(e.Name, e.product.ApiNames,
+		apiRecoveryCommand(e.Name, e.product.GetLowerCode(), e.product.ApiNames))
 }
 
 func (e *InvalidApiError) AgentSuggestions() []string {
@@ -258,7 +254,12 @@ type InvalidUnifiedApiError struct {
 }
 
 func (e *InvalidUnifiedApiError) Error() string {
-	return fmt.Sprintf("%q is not a valid api. See `aliyun help %s`.", e.Name, e.product.GetLowerCode())
+	product := e.product.GetLowerCode()
+	candidates := append(append([]string(nil), e.product.ApiNames...), e.lPlugin.CmdNames...)
+	if command := apiRecoveryCommand(e.Name, product, candidates); command != "" {
+		return fmt.Sprintf("%q is not a valid api. Search matching APIs with `%s`.", e.Name, command)
+	}
+	return fmt.Sprintf("%q is not a valid api. See `aliyun help %s`.", e.Name, product)
 }
 
 func (e *InvalidUnifiedApiError) AgentMessage() string {
@@ -280,7 +281,11 @@ type InvalidBaselineCommandError struct {
 }
 
 func (e *InvalidBaselineCommandError) Error() string {
-	return explicitLocalErrorText(e.Err, "invalid baseline command")
+	message := explicitLocalErrorText(e.Err, "invalid baseline command")
+	if command := apiRecoveryCommand(e.Command, e.Product, e.Candidates); command != "" && !strings.Contains(message, command) {
+		return strings.TrimSuffix(message, ".") + fmt.Sprintf(". Search matching APIs with `%s`.", command)
+	}
+	return message
 }
 
 func (e *InvalidBaselineCommandError) Unwrap() error { return e.Err }
@@ -288,16 +293,8 @@ func (e *InvalidBaselineCommandError) Unwrap() error { return e.Err }
 func (*InvalidBaselineCommandError) AIRecoveryEligible() {}
 
 func (e *InvalidBaselineCommandError) GetSuggestions() []string {
-	sr := cli.NewSuggester(e.Command, 2)
-	for _, s := range e.Candidates {
-		sr.Apply(s)
-	}
-	results := sr.GetResults()
-	if len(results) > 0 {
-		return results
-	}
-	return prefixSuggestionsWithOverflow(e.Command, e.Candidates,
-		baselineSearchHelpCommand(e.Command, e.Product))
+	return humanAPISuggestions(e.Command, e.Candidates,
+		apiRecoveryCommand(e.Command, e.Product, e.Candidates))
 }
 
 func (e *InvalidBaselineCommandError) AgentSuggestions() []string {
@@ -368,20 +365,9 @@ func explicitLocalErrorText(err error, fallback string) string {
 }
 
 func (e *InvalidUnifiedApiError) GetSuggestions() []string {
-	sr := cli.NewSuggester(e.Name, 2)
-	for _, s := range e.product.ApiNames {
-		sr.Apply(s)
-	}
-	for _, s := range e.lPlugin.CmdNames {
-		sr.UnifyApply(s)
-	}
-	results := removeDuplicates(sr.GetResults())
-	if len(results) > 0 {
-		return results
-	}
 	candidates := append(append([]string(nil), e.product.ApiNames...), e.lPlugin.CmdNames...)
-	results, _ = cli.PrefixSuggestions(e.Name, sameStyleCandidates(e.Name, candidates), cli.DefaultSuggestLimit)
-	return results
+	return humanAPISuggestions(e.Name, candidates,
+		apiRecoveryCommand(e.Name, e.product.GetLowerCode(), candidates))
 }
 
 func (e *InvalidUnifiedApiError) AgentSuggestions() []string {
@@ -428,6 +414,32 @@ func prefixSuggestionsWithOverflow(input string, candidates []string, helpComman
 		results = append(results, fmt.Sprintf("... and %d more, run `%s`", total-len(results), helpCommand))
 	}
 	return results
+}
+
+// humanAPISuggestions applies the same precision order in every output mode:
+// close typo, partial prefix, then meaningful token overlap. The recovery
+// command is included only as an overflow hint; the error text always carries
+// it so zero-match cases do not fall back to dumping the whole product Help.
+func humanAPISuggestions(input string, candidates []string, recoveryCommand string) []string {
+	if results := closeSuggestions(input, sameStyleCandidates(input, candidates), false); len(results) > 0 {
+		return results
+	}
+	if results := prefixSuggestionsWithOverflow(input, candidates, recoveryCommand); len(results) > 0 {
+		return results
+	}
+	return apiTokenSuggestions(input, candidates, cli.DefaultSuggestLimit)
+}
+
+func apiRecoveryCommand(input, product string, candidates []string) string {
+	style := commandStyle(input)
+	keyword := apiRecoverySearchKeyword(input, candidates, style)
+	if keyword == "" || !safeCommandToken(keyword) {
+		return ""
+	}
+	if style == "kebab" {
+		return baselineSearchHelpCommand(keyword, product)
+	}
+	return apiSearchHelpCommand(keyword, product)
 }
 
 // apiSearchHelpCommand builds the PascalCase-style search hint. --help-search

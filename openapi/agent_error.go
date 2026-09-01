@@ -1234,14 +1234,18 @@ func apiSearchKeywordCandidates(style string, seeds ...string) []string {
 		if resource == "" {
 			continue
 		}
+		tokens := splitHelpSearchTokens(resource)
+		for index := len(tokens) - 1; index >= 0; index-- {
+			token := normalizeAPISuggestionToken(tokens[index])
+			if ignoredAPISuggestionToken(token) {
+				continue
+			}
+			candidates = append(candidates, formatSearchToken(token, style))
+		}
 		if style == "kebab" {
 			resource = apiNameToKebab(resource)
 		}
 		candidates = append(candidates, resource)
-		tokens := splitHelpSearchTokens(resource)
-		for index := len(tokens) - 1; index >= 0; index-- {
-			candidates = append(candidates, formatSearchToken(tokens[index], style))
-		}
 	}
 	return orderedSearchCandidates(candidates...)
 }
@@ -1408,7 +1412,10 @@ func apiSuggestions(input string, candidates []string) []string {
 	suggestions := closeSuggestions(input, candidates, false)
 	if len(suggestions) == 0 {
 		results, _ := cli.PrefixSuggestions(input, sameStyleCandidates(input, candidates), cli.DefaultSuggestLimit)
-		return results
+		if len(results) > 0 {
+			return results
+		}
+		return apiTokenSuggestions(input, candidates, cli.DefaultSuggestLimit)
 	}
 	return suggestions
 }

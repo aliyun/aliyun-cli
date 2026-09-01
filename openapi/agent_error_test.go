@@ -77,16 +77,16 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		var requests []RecoverySearchRequest
 		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "DescribeInstnaces"}, func(got RecoverySearchRequest) bool {
 			requests = append(requests, got)
-			return got.Keyword == "Instances"
+			return got.Keyword == "Instance"
 		})
 
 		assert.Equal(t, `"DescribeInstnaces" is not a valid api.`, envelope.Message)
 		assert.Equal(t, []string{"DescribeInstances"}, envelope.DidYouMean)
 		assert.Equal(t, "search_api", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun ecs --help-search Instances", envelope.Recovery.Command)
-		assert.Equal(t, "Search APIs related to Instances.", envelope.Recovery.Hint)
+		assert.Equal(t, "aliyun ecs --help-search Instance", envelope.Recovery.Command)
+		assert.Equal(t, "Search APIs related to Instance.", envelope.Recovery.Hint)
 		assert.Equal(t, []RecoverySearchRequest{
-			{Product: "ecs", Style: "pascal", Keyword: "Instances"},
+			{Product: "ecs", Style: "pascal", Keyword: "Instance"},
 		}, requests)
 	})
 
@@ -384,9 +384,27 @@ func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T
 		assert.Equal(t, "search_api", envelope.Recovery.Action)
 		assert.Equal(t, "aliyun bssopenapi --help-search Bill", envelope.Recovery.Command)
 		assert.Equal(t, "Search APIs related to Bill.", envelope.Recovery.Hint)
-		assert.Contains(t, requests, RecoverySearchRequest{Product: "bssopenapi", Style: "pascal", Keyword: "MonthlyBill"})
-		assert.Contains(t, requests, RecoverySearchRequest{Product: "bssopenapi", Style: "pascal", Keyword: "Bill"})
+		assert.Equal(t, []RecoverySearchRequest{{Product: "bssopenapi", Style: "pascal", Keyword: "Bill"}}, requests)
 	})
+
+	for _, input := range []string{"DescribeCoupons", "QueryAvailableCoupons", "QueryCouponDetails"} {
+		t.Run("coupon token recovery for "+input, func(t *testing.T) {
+			cause := &InvalidApiError{
+				Name: input,
+				product: &meta.Product{Code: "bssopenapi", ApiNames: []string{
+					"QueryAccountBalance", "QueryAccountDetails", "QueryCashCoupons", "QueryOrders",
+				}},
+			}
+			envelope := requireAgentEnvelope(t, cause, []string{"bssopenapi", input}, func(got RecoverySearchRequest) bool {
+				return got.Keyword == "Coupon"
+			})
+
+			assert.Equal(t, []string{"QueryCashCoupons"}, envelope.DidYouMean)
+			assert.Equal(t, "search_api", envelope.Recovery.Action)
+			assert.Equal(t, "aliyun bssopenapi --help-search Coupon", envelope.Recovery.Command)
+			assert.Equal(t, "Search APIs related to Coupon.", envelope.Recovery.Hint)
+		})
+	}
 
 	t.Run("kebab unknown API keeps kebab help in the recovery command", func(t *testing.T) {
 		cause := &InvalidBaselineCommandError{
