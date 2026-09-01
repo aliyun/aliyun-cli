@@ -55,7 +55,7 @@ func renderParameterHelpText(w io.Writer, document *machineHelpParameterDocument
 		return err
 	}
 	if document.Result == nil {
-		return nil
+		return renderHelpHintFooter(w, document.Next, true)
 	}
 	return renderHelpProjectionResult(w, "matches", *document.Result, document.Next)
 }

@@ -240,3 +240,18 @@ func TestRenderParameterHelpTextWrapsStructuredDescription(t *testing.T) {
 	assert.Contains(t, rendered, "\n  "+url+"\n")
 	assert.NotContains(t, rendered, "help.aliyun.com/\n")
 }
+
+func TestRenderParameterHelpTextAllIncludesSearchHint(t *testing.T) {
+	document := &machineHelpParameterDocument{
+		Target:    machineHelpTarget{Path: []string{"aliyun", "demo", "create-report", "--config"}, APIVersion: "2026-01-01"},
+		Parameter: machineHelpParameter{Name: "config", Type: "string", Location: "query"},
+		Next: &HelpNext{
+			Search:    "aliyun demo create-report --config --help-search <keyword>",
+			operation: HelpOperationAll,
+		},
+	}
+
+	var output bytes.Buffer
+	require.NoError(t, renderParameterHelpText(&output, document))
+	assert.Contains(t, output.String(), "Search this Help:\n  aliyun demo create-report --config --help-search <keyword> [--cli-output json]")
+}
