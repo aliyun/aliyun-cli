@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -214,4 +215,130 @@ func TestDefaultTextHelpAddsMachineReadableCommandBeforeAIModeHint(t *testing.T)
 	assert.Contains(t, output, machine)
 	assert.Contains(t, output, ai)
 	assert.Less(t, strings.Index(output, machine), strings.Index(output, ai))
+}
+
+func TestHelpHintHelperEdgeContracts(t *testing.T) {
+	t.Run("parameter navigation guards and eligibility", func(t *testing.T) {
+		target := HelpTarget{Level: HelpLevelParameter, Product: "demo", Action: "CreateReport", Parameter: "Config"}
+		setParameterHelpNext(nil, target, false)
+
+		document := &machineHelpParameterDocument{}
+		setParameterHelpNext(document, target, false)
+		assert.Nil(t, document.Next)
+
+		target.Operation = HelpOperationAll
+		setParameterHelpNext(document, target, false)
+		require.NotNil(t, document.Next)
+
+		document.Next = nil
+		document.Result = &HelpResult{Truncated: true}
+		target.Operation = HelpOperationDefault
+		setParameterHelpNext(document, target, false)
+		require.NotNil(t, document.Next)
+	})
+
+	t.Run("utility target preserves parsed options", func(t *testing.T) {
+		target := utilityHelpTarget([]string{"utils", "mcp-proxy"}, cli.HelpOptions{
+			Operation: HelpOperationSearch, SearchQuery: "oauth", SearchAll: true, Output: cli.HelpOutputJSON,
+		})
+		assert.Equal(t, HelpLevelUtility, target.Level)
+		assert.Equal(t, "mcp-proxy", target.Utility)
+		assert.Equal(t, HelpOperationSearch, target.Operation)
+		assert.Equal(t, "oauth", target.SearchQuery)
+		assert.True(t, target.SearchAll)
+		assert.Equal(t, HelpOutputJSON, target.Output)
+
+		root := utilityHelpTarget([]string{"utils"}, cli.HelpOptions{})
+		assert.Empty(t, root.Utility)
+		assert.Equal(t, HelpOperationDefault, root.Operation)
+	})
+
+	t.Run("parameter shape and preferred option recursion", func(t *testing.T) {
+		assert.Equal(t, "Config", preferredHelpParameterOption(machineHelpParameter{Options: []string{"--Config"}}))
+		assert.Equal(t, "Raw", preferredHelpParameterOption(machineHelpParameter{RawName: "Raw", Name: "name"}))
+		assert.Equal(t, "name", preferredHelpParameterOption(machineHelpParameter{Name: "name"}))
+
+		assert.False(t, machineHelpShapeHasFields(nil))
+		assert.True(t, machineHelpShapeHasFields(&machineHelpShape{Fields: []machineHelpParameter{{Name: "field"}}}))
+		assert.True(t, machineHelpShapeHasFields(&machineHelpShape{Element: &machineHelpShape{Fields: []machineHelpParameter{{Name: "field"}}}}))
+		assert.True(t, machineHelpShapeHasFields(&machineHelpShape{Value: &machineHelpShape{Fields: []machineHelpParameter{{Name: "field"}}}}))
+		assert.False(t, machineHelpParameterHasNestedFields(machineHelpParameter{}))
+		assert.True(t, machineHelpParameterHasNestedFields(machineHelpParameter{Value: &machineHelpShape{Fields: []machineHelpParameter{{Name: "field"}}}}))
+	})
+
+	t.Run("invalid child navigation stays absent", func(t *testing.T) {
+		next := &HelpNext{}
+		parent := HelpTarget{Level: HelpLevelAction, Operation: HelpOperationSearch}
+		attachHelpChildSearch(next, parent, false, helpHintExact{count: 1, kind: helpHintChildAPI, action: "CreateReport"})
+		assert.Empty(t, next.ChildSearch, "invalid action target must not emit a broken command")
+
+		attachHelpChildSearch(next, parent, false, helpHintExact{count: 1, kind: helpHintChildKind(255)})
+		assert.Empty(t, next.ChildSearch)
+	})
+
+	t.Run("footer labels and writer errors", func(t *testing.T) {
+		previous := i18n.GetLanguage()
+		i18n.SetLanguage("en")
+		t.Cleanup(func() { i18n.SetLanguage(previous) })
+
+		assert.NoError(t, renderHelpHintFooter(&bytes.Buffer{}, nil, true))
+		assert.Empty(t, helpHintTextCommand("  "))
+		assert.NoError(t, renderHelpHintFooter(&bytes.Buffer{}, &HelpNext{}, false))
+
+		for _, test := range []struct {
+			kind helpHintChildKind
+			name string
+			want string
+		}{
+			{helpHintChildProduct, "demo", "Search APIs in demo"},
+			{helpHintChildAPI, "CreateReport", "Search parameters in CreateReport"},
+			{helpHintChildParameter, "Config", "Search nested fields in Config"},
+		} {
+			var output bytes.Buffer
+			next := &HelpNext{
+				operation: HelpOperationSearch, Search: "search", SearchAll: "search-all",
+				ChildSearch: "child-search", childKind: test.kind, childName: test.name,
+			}
+			require.NoError(t, renderHelpHintFooter(&output, next, false))
+			assert.Contains(t, output.String(), test.want)
+		}
+
+		next := &HelpNext{
+			operation: HelpOperationSearch, Search: "search", SearchAll: "search-all",
+			ChildSearch: "child-search", childKind: helpHintChildProduct, childName: "demo",
+		}
+		exerciseWriterFailures(t, func(w *failAfterWrites) error {
+			return renderHelpHintFooter(w, next, true)
+		})
+	})
+
+	t.Run("machine readable hint propagates target and writer errors", func(t *testing.T) {
+		assert.Error(t, renderMachineReadableHelpHint(&bytes.Buffer{}, HelpTarget{Level: HelpLevel("invalid")}))
+		assert.Error(t, renderMachineReadableHelpHint(alwaysFailWriter{}, HelpTarget{Level: HelpLevelRoot}))
+
+		commando := &Commando{}
+		defaultContext := cli.NewCommandContext(alwaysFailWriter{}, &bytes.Buffer{})
+		assert.Error(t, commando.finishCanonicalTextHelp(defaultContext, false, HelpTarget{
+			Level: HelpLevelRoot, Operation: HelpOperationDefault,
+		}))
+
+		searchContext := cli.NewCommandContext(alwaysFailWriter{}, &bytes.Buffer{})
+		assert.Error(t, commando.finishCanonicalTextHelp(searchContext, false, HelpTarget{
+			Level: HelpLevelRoot, Operation: HelpOperationSearch,
+		}))
+	})
+
+	t.Run("localized labels use one language with fallback", func(t *testing.T) {
+		previous := i18n.GetLanguage()
+		t.Cleanup(func() { i18n.SetLanguage(previous) })
+
+		i18n.SetLanguage("zh")
+		assert.Equal(t, "中文", machineHelpLabel("English", "中文"))
+		assert.Equal(t, "中文描述", localizedMachineHelpText(machineHelpLocalizedText{EN: "English description", ZH: "中文描述"}))
+
+		i18n.SetLanguage("en")
+		assert.Equal(t, "English", machineHelpLabel("English", "中文"))
+		assert.Equal(t, "English description", localizedMachineHelpText(machineHelpLocalizedText{EN: "English description", ZH: "中文描述"}))
+		assert.Equal(t, "仅中文", localizedMachineHelpText(machineHelpLocalizedText{ZH: "仅中文"}))
+	})
 }

@@ -156,6 +156,7 @@ func TestHelpProjectionSmallHelpers(t *testing.T) {
 
 	assert.Equal(t, "plain", stripHelpANSI("\x1b[31mplain\x1b[0m"))
 	assert.Equal(t, "before\x1b[", stripHelpANSI("before\x1b["))
+	assert.Equal(t, "plugin (1.2.3)", machineHelpPluginProvider(machineHelpProduct{Plugin: "plugin", PluginVersion: "1.2.3"}))
 	assert.Equal(t, "plugin", machineHelpPluginProvider(machineHelpProduct{Plugin: "plugin"}))
 	assert.Empty(t, machineHelpPluginProvider(machineHelpProduct{}))
 

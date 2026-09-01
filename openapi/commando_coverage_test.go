@@ -285,6 +285,23 @@ func TestCommandoSmallRoutingHelpers(t *testing.T) {
 	assert.Equal(t, "", buildCommandName(nil))
 	assert.Equal(t, "ecs", buildCommandName([]string{"ecs"}))
 	assert.Equal(t, "ecs DescribeInstances", buildCommandName([]string{"ecs", "DescribeInstances", "ignored"}))
+
+	sectionRecovery := &sectionHelpAllRecoveryError{cause: cause, command: "aliyun help ecs DescribeInstances --cli-section response --help-search <keyword>"}
+	assert.EqualError(t, sectionRecovery, "ordinary")
+	assert.ErrorIs(t, sectionRecovery, cause)
+	sectionRecovery.AIRecoveryEligible()
+	assert.Contains(t, sectionRecovery.GetTip("en"), "Search this Help:")
+	assert.Contains(t, sectionRecovery.GetTip("zh"), "搜索当前 Help：")
+	assert.True(t, isSectionHelpAllConflict(&engine.InvalidOptionCombinationError{
+		Options: []string{"--cli-section", "--help-all"}, Err: cause,
+	}))
+	assert.False(t, isSectionHelpAllConflict(&engine.InvalidOptionCombinationError{
+		Options: []string{"--cli-section"}, Err: cause,
+	}))
+	assert.True(t, isSectionHelpAllConflict(&InvalidOptionCombinationError{
+		Options: []string{"--cli-section", "--help-all"}, Err: cause,
+	}))
+	assert.False(t, isSectionHelpAllConflict(cause))
 }
 
 func TestRecoveryNormalizationArgsAndDryRunPathLookup(t *testing.T) {
@@ -313,6 +330,8 @@ func TestRecoveryNormalizationArgsAndDryRunPathLookup(t *testing.T) {
 	assert.Equal(t,
 		[]string{"help", "ecs", "DescribeInstances", "--version", "2014-05-26", "--cli-section", "response"},
 		recoveryNormalizationArgs(ctx, []string{"help", "ecs", "DescribeInstances", "--cli-output=json"}, true))
+	assert.Equal(t, []string{"ecs", "DescribeInstances"},
+		recoveryNormalizationArgs(nil, []string{"ecs", "--cli-output", "json", "DescribeInstances"}, true))
 	assert.Equal(t, []string{"ecs"}, recoveryNormalizationArgs(nil, []string{"ecs"}))
 
 	repo, err := meta.MockLoadRepository([]meta.Product{{
