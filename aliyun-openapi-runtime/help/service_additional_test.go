@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -356,5 +357,183 @@ func TestUnknownParameterErrorIncludesCandidates(t *testing.T) {
 	}
 	if got := (&UnknownParameterError{API: "ListThings", Parameter: "unknown"}).Error(); got != "unknown parameter --unknown for ListThings" {
 		t.Fatalf("UnknownParameterError without candidates = %q", got)
+	}
+}
+
+func TestDocumentBuildersCoverFallbackIdentityAndRPCProjection(t *testing.T) {
+	index := &meta.APIIndex{ProductCode: "dns", Version: "v1"}
+	if BuildProductDocument(nil, index, HelpOptions{}) != nil {
+		t.Fatal("BuildProductDocument accepted a nil product")
+	}
+	if BuildProductDocument(&meta.Product{Code: "dns"}, nil, HelpOptions{}) != nil {
+		t.Fatal("BuildProductDocument accepted a nil API index")
+	}
+	if BuildRequestDocument(nil, nil, nil, HelpOptions{}) != nil {
+		t.Fatal("BuildRequestDocument accepted a nil API")
+	}
+	if BuildActionDocument(nil, nil, nil, HelpOptions{}) != nil {
+		t.Fatal("BuildActionDocument accepted a nil API")
+	}
+
+	api := &meta.API{
+		Name: "DescribeDNSRecords", ProductCode: "DNS", Version: "v1",
+		Style: meta.StyleRPC, Method: "POST", Protocol: "HTTPS", URL: "/rpc",
+		ReqBodyType: "json", ContentType: "application/json", IsSSE: true, HasWildcardPath: true,
+		Description: meta.Description{EN: "Describe DNS records"},
+		Examples:    []string{"aliyun dns describe-dns-records"},
+	}
+	request := BuildAPIRequestDocument(nil, api, nil, HelpOptions{})
+	if request.Command != "describe-dns-records" || request.CmdFullName != "dns describe-dns-records" ||
+		request.Target.Product != "dns" || request.Examples.Kebab == "" {
+		t.Fatalf("request fallback identity = %#v", request)
+	}
+	if request.Operation.Method != "POST" || request.Operation.Protocol != "HTTPS" || !request.Operation.IsSSE {
+		t.Fatalf("request RPC wire metadata = %#v", request.Operation)
+	}
+
+	action := BuildActionDocument(nil, api, nil, HelpOptions{})
+	if action.Description.EN != "Describe DNS records" {
+		t.Fatalf("action description = %#v", action.Description)
+	}
+	if action.Operation.Method != "" || action.Operation.Protocol != "" || action.Operation.URL != "" ||
+		action.Operation.RequestBodyType != "" || action.Operation.ContentType != "" ||
+		action.Operation.IsSSE || action.Operation.HasWildcardPath {
+		t.Fatalf("RPC action leaked ROA-only wire metadata: %#v", action.Operation)
+	}
+}
+
+func TestActionSearchReportsTheFullMatchCount(t *testing.T) {
+	api := &meta.API{Name: "RunThing", CmdName: "run-thing", ProductCode: "demo", Version: "v1"}
+	for i := 0; i < 25; i++ {
+		api.Parameters = append(api.Parameters, meta.Parameter{
+			Name:    fmt.Sprintf("coverage_probe_%02d", i),
+			Options: []string{fmt.Sprintf("--coverage-probe-%02d", i)},
+			Type:    meta.TypeString,
+		})
+	}
+	product := &meta.Product{Code: "demo", Versions: []string{"v1"}}
+	limited := BuildActionDocument(product, api, nil, HelpOptions{Search: "coverage probe"})
+	if len(limited.Parameters) != 20 || limited.Result.Total != 25 || !limited.Result.Truncated ||
+		limited.Next == nil || limited.Next.SearchAll == "" {
+		t.Fatalf("limited action search = %#v", limited)
+	}
+	unlimited := BuildActionDocument(product, api, nil, HelpOptions{Search: "coverage probe", All: true})
+	if len(unlimited.Parameters) != 25 || unlimited.Result.Total != 25 || unlimited.Result.Truncated || unlimited.Next != nil {
+		t.Fatalf("unlimited action search = %#v", unlimited)
+	}
+}
+
+func TestResponseTextRendererCoversSchemaAndResponsesComponents(t *testing.T) {
+	schemaDocument := &APIResponseDocument{
+		Warnings: []string{"schema warning"},
+		Matches:  []string{"Items.Name"},
+		OutputSchema: &OutputSchema{
+			StatusCode: "200",
+			Schema: json.RawMessage(`{
+				"type":"object",
+				"description_en":"English schema",
+				"description_zh":"中文结构"
+			}`),
+			Components: map[string]json.RawMessage{
+				"Thing": json.RawMessage(`{
+					"type":"object",
+					"description_en":"English component",
+					"description_zh":"中文组件"
+				}`),
+			},
+		},
+		ResponseQuery: &QueryExample{QueryCommand: "aliyun demo list-things --cli-query Items"},
+		Result:        Result{Shown: 1, Total: 2, Truncated: true},
+		Next:          &Next{ShowAll: "aliyun demo list-things --help-all"},
+	}
+	var output bytes.Buffer
+	if err := Render(&output, schemaDocument, HelpOptions{Language: "zh"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"警告:", "schema warning", "匹配的响应路径:", "Items.Name",
+		"响应结构 (HTTP 200):", "中文结构", "组件:", "中文组件",
+		"使用 JMESPath 查询:", "显示全部: aliyun demo list-things --help-all",
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("response schema text missing %q:\n%s", want, output.String())
+		}
+	}
+	if strings.Contains(output.String(), "English schema") || strings.Contains(output.String(), "English component") {
+		t.Fatalf("response schema text mixed languages:\n%s", output.String())
+	}
+
+	responsesDocument := &APIResponseDocument{
+		Responses: json.RawMessage(`{
+			"200":{"description_en":"Success","description_zh":"成功"}
+		}`),
+		Components: map[string]json.RawMessage{
+			"Error": json.RawMessage(`{
+				"type":"object",
+				"title_en":"Error response",
+				"title_zh":"错误响应"
+			}`),
+		},
+	}
+	output.Reset()
+	if err := Render(&output, responsesDocument, HelpOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Responses:", "Success", "Components:", "Error response"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("responses text missing %q:\n%s", want, output.String())
+		}
+	}
+	if strings.Contains(output.String(), "成功") || strings.Contains(output.String(), "错误响应") {
+		t.Fatalf("responses text mixed languages:\n%s", output.String())
+	}
+}
+
+func TestResponseTextRendererPropagatesMalformedJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		document *APIResponseDocument
+	}{
+		{
+			name: "output schema",
+			document: &APIResponseDocument{OutputSchema: &OutputSchema{
+				Schema: json.RawMessage(`{`),
+			}},
+		},
+		{
+			name: "output component",
+			document: &APIResponseDocument{OutputSchema: &OutputSchema{
+				Schema:     json.RawMessage(`{}`),
+				Components: map[string]json.RawMessage{"Broken": json.RawMessage(`{`)},
+			}},
+		},
+		{
+			name:     "responses",
+			document: &APIResponseDocument{Responses: json.RawMessage(`{`)},
+		},
+		{
+			name: "response component",
+			document: &APIResponseDocument{
+				Responses:  json.RawMessage(`{}`),
+				Components: map[string]json.RawMessage{"Broken": json.RawMessage(`{`)},
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var output bytes.Buffer
+			if err := Render(&output, test.document, HelpOptions{}); err == nil {
+				t.Fatalf("Render accepted malformed JSON: %s", output.String())
+			}
+		})
+	}
+
+	var output bytes.Buffer
+	if err := writePrettyJSON(&output, nil); err != nil || output.String() != "{}\n" {
+		t.Fatalf("empty pretty JSON = %q, %v", output.String(), err)
+	}
+	localized, err := LocalizeRawJSONMap(nil, "en")
+	if err != nil || localized != nil {
+		t.Fatalf("nil localized component map = %#v, %v", localized, err)
 	}
 }
