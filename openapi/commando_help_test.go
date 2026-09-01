@@ -49,6 +49,13 @@ func TestPrintProductHelpSwitchHintUsesPlainText(t *testing.T) {
 
 	assert.NotContains(t, stdout.String(), "\x1b[")
 	assert.Contains(t, stdout.String(), baselineProductHelpEnv+"=false aliyun sts --help")
+	assert.Contains(t, stdout.String(), "[--cli-output json]")
+
+	for _, target := range []productHelpSwitch{productHelpPluginToTraditional, productHelpTraditionalToPlugin} {
+		stdout.Reset()
+		printProductHelpSwitchHint(ctx, "STS", target)
+		assert.NotContains(t, stdout.String(), "[--cli-output json]", "plugin switch %v", target)
+	}
 }
 
 func TestPrintPluginIndexLoadFailureNote_NoError(t *testing.T) {

@@ -189,12 +189,12 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 
 	var invalidOptions *engine.InvalidOptionCombinationError
 	if errors.As(err, &invalidOptions) {
-		return optionCombinationAgentError(err, invalidOptions.Error(), invalidOptions.Options)
+		return optionCombinationAgentError(err, invalidOptions.Error(), invalidOptions.Options, context)
 	}
 
 	var legacyInvalidOptions *InvalidOptionCombinationError
 	if errors.As(err, &legacyInvalidOptions) {
-		return optionCombinationAgentError(err, legacyInvalidOptions.Error(), legacyInvalidOptions.Options)
+		return optionCombinationAgentError(err, legacyInvalidOptions.Error(), legacyInvalidOptions.Options, context)
 	}
 
 	var invalidHeader *engine.InvalidHeaderError
@@ -875,8 +875,17 @@ func constraintViolationHint(facts constraintFacts) string {
 	return fmt.Sprintf("Adjust the value of --%s to satisfy the documented constraint.", facts.flag)
 }
 
-func optionCombinationAgentError(cause error, message string, options []string) error {
+func optionCombinationAgentError(cause error, message string, options []string, context recoveryContext) error {
 	options = stableStrings(options)
+	if containsString(options, "--cli-section") && containsString(options, "--help-all") {
+		if command := context.sectionSearchCommand("<keyword>"); command != "" {
+			return newLocalAgentError(cause, message, nil, cli.AgentErrorRecovery{
+				Action:  "fix_option_combination",
+				Command: command,
+				Hint:    "Search the same Help section with a keyword instead of using --help-all alone.",
+			})
+		}
+	}
 	hint := "Remove one of the conflicting options."
 	if len(options) > 0 {
 		hint = fmt.Sprintf("Remove one of the conflicting options: %s.", strings.Join(options, ", "))
@@ -885,6 +894,15 @@ func optionCombinationAgentError(cause error, message string, options []string) 
 		Action: "fix_option_combination",
 		Hint:   hint,
 	})
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func helpOptionAgentError(cause error, optionErr *cli.HelpOptionError) error {
@@ -943,18 +961,27 @@ type recoveryContext struct {
 	version     string
 	versionFlag string
 	style       string
+	section     string
+	outputJSON  bool
 }
 
 func newRecoveryContext(args []string) recoveryContext {
 	context := recoveryContext{args: append([]string(nil), args...)}
-	if len(args) > 0 && safeCommandToken(args[0]) {
-		context.product = args[0]
+	pathOffset := 0
+	if len(args) > 0 && args[0] == "help" {
+		pathOffset = 1
 	}
-	if len(args) > 1 && safeCommandToken(args[1]) {
-		context.api = args[1]
-		context.style = commandStyle(args[1])
+	if len(args) > pathOffset && safeCommandToken(args[pathOffset]) {
+		context.product = args[pathOffset]
+	}
+	if len(args) > pathOffset+1 && safeCommandToken(args[pathOffset+1]) {
+		context.api = args[pathOffset+1]
+		context.style = commandStyle(args[pathOffset+1])
 	}
 	context.versionFlag, context.version = explicitVersion(args)
+	context.section, _ = recoveryOptionValue(args, "--cli-section")
+	output, _ := recoveryOptionValue(args, "--cli-output")
+	context.outputJSON = strings.EqualFold(strings.TrimSpace(output), "json")
 	return context
 }
 
@@ -1067,6 +1094,33 @@ func (c recoveryContext) requestSearchCommand(keyword string) string {
 		return c.requestHelpCommand()
 	}
 	return c.requestHelpCommand() + " --help-search " + keyword
+}
+
+func (c recoveryContext) sectionSearchCommand(keyword string) string {
+	if !c.hasAction() || (c.section != helpSectionRequest && c.section != helpSectionResponse) {
+		return ""
+	}
+	style := CommandStyleCamel
+	if c.style == "kebab" {
+		style = CommandStyleKebab
+	}
+	target := HelpTarget{
+		Level: HelpLevelAction, Product: c.product, Action: c.api, CommandStyle: style,
+		Section: HelpSection(c.section), SectionExplicit: true,
+		Operation: HelpOperationSearch, SearchQuery: keyword,
+		Version: c.version,
+	}
+	if c.versionFlag != "" {
+		target.VersionFlag = APIVersionFlag(strings.TrimPrefix(c.versionFlag, "--"))
+	}
+	if c.outputJSON {
+		target.Output = HelpOutputJSON
+	}
+	command, err := BuildHelpCommand(target)
+	if err != nil {
+		return ""
+	}
+	return command
 }
 
 func (c recoveryContext) parentHelpCommand(invalidName string) string {
@@ -1202,6 +1256,21 @@ func explicitVersion(args []string) (string, string) {
 		}
 	}
 	return "", ""
+}
+
+func recoveryOptionValue(args []string, option string) (string, bool) {
+	for index, arg := range args {
+		if arg == option {
+			if index+1 < len(args) {
+				return args[index+1], true
+			}
+			return "", true
+		}
+		if strings.HasPrefix(arg, option+"=") {
+			return strings.TrimPrefix(arg, option+"="), true
+		}
+	}
+	return "", false
 }
 
 func safeCommandToken(value string) bool {

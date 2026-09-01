@@ -88,9 +88,19 @@ type Result struct {
 }
 
 type Next struct {
-	ShowAll   string `json:"showAll,omitempty"`
-	Search    string `json:"search,omitempty"`
-	SearchAll string `json:"searchAll,omitempty"`
+	ShowAll     string `json:"showAll,omitempty"`
+	Search      string `json:"search,omitempty"`
+	SearchAll   string `json:"searchAll,omitempty"`
+	ChildSearch string `json:"childSearch,omitempty"`
+
+	operation string
+	childKind helpHintKind
+	childName string
+}
+
+type AIModeHint struct {
+	Command string `json:"command"`
+	Message string `json:"message"`
 }
 
 // MetadataProvenance identifies the metadata layer that supplied a Help
@@ -130,6 +140,7 @@ type ProductDocument struct {
 	APIs          []APISummary        `json:"apis"`
 	Result        Result              `json:"result"`
 	Next          *Next               `json:"next,omitempty"`
+	AIModeHint    *AIModeHint         `json:"aiModeHint,omitempty"`
 }
 
 type Operation struct {
@@ -217,6 +228,7 @@ type ActionDocument struct {
 	ResponseQuery    *QueryExample       `json:"responseQueryExample,omitempty"`
 	Result           Result              `json:"result"`
 	Next             *Next               `json:"next,omitempty"`
+	AIModeHint       *AIModeHint         `json:"aiModeHint,omitempty"`
 }
 
 // RequestDocument is the complete request metadata view selected explicitly
@@ -244,6 +256,7 @@ type RequestDocument struct {
 	ResponseQuery    *QueryExample       `json:"responseQueryExample,omitempty"`
 	Result           Result              `json:"result"`
 	Next             *Next               `json:"next,omitempty"`
+	AIModeHint       *AIModeHint         `json:"aiModeHint,omitempty"`
 }
 
 // APIRequestDocument is retained as a source-compatible name for callers that
@@ -267,6 +280,7 @@ type APIParameterDocument struct {
 	Matches       []ParameterMatch    `json:"matches,omitempty"`
 	Result        Result              `json:"result"`
 	Next          *Next               `json:"next,omitempty"`
+	AIModeHint    *AIModeHint         `json:"aiModeHint,omitempty"`
 	Candidates    []string            `json:"candidates,omitempty"`
 }
 
@@ -310,6 +324,7 @@ type APIResponseDocument struct {
 	ResponseQuery *QueryExample              `json:"responseQueryExample,omitempty"`
 	Result        Result                     `json:"result"`
 	Next          *Next                      `json:"next,omitempty"`
+	AIModeHint    *AIModeHint                `json:"aiModeHint,omitempty"`
 }
 
 // DataSource is deliberately compatible with the useful subset of loader.Loader.

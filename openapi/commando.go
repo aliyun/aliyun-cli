@@ -186,9 +186,16 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
 
 	if !enabled && !explicitLocalErrorJSONRequested(ctx, err) {
+		normalizationArgs := recoveryNormalizationArgs(ctx, args, false)
+		context := newRecoveryContext(normalizationArgs)
+		if isSectionHelpAllConflict(err) {
+			if command := context.sectionSearchCommand("<keyword>"); command != "" {
+				return &sectionHelpAllRecoveryError{cause: err, command: command}
+			}
+		}
 		return err
 	}
-	normalizationArgs := recoveryNormalizationArgs(ctx, args)
+	normalizationArgs := recoveryNormalizationArgs(ctx, args, enabled)
 	if c.recoverySearchValidator != nil {
 		return agentErrorNormalizerWithSearch(err, normalizationArgs, c.recoverySearchValidator)
 	}
@@ -198,6 +205,33 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 		})
 	}
 	return agentErrorNormalizer(err, normalizationArgs)
+}
+
+type sectionHelpAllRecoveryError struct {
+	cause   error
+	command string
+}
+
+func (e *sectionHelpAllRecoveryError) Error() string     { return e.cause.Error() }
+func (e *sectionHelpAllRecoveryError) Unwrap() error     { return e.cause }
+func (*sectionHelpAllRecoveryError) AIRecoveryEligible() {}
+
+func (e *sectionHelpAllRecoveryError) GetTip(language string) string {
+	message := "Search this Help:"
+	if language == "zh" {
+		message = "搜索当前 Help："
+	}
+	return message + "\n  " + helpHintTextCommand(e.command)
+}
+
+func isSectionHelpAllConflict(err error) bool {
+	var runtimeConflict *engine.InvalidOptionCombinationError
+	if errors.As(err, &runtimeConflict) {
+		return containsString(runtimeConflict.Options, "--cli-section") && containsString(runtimeConflict.Options, "--help-all")
+	}
+	var hostConflict *InvalidOptionCombinationError
+	return errors.As(err, &hostConflict) &&
+		containsString(hostConflict.Options, "--cli-section") && containsString(hostConflict.Options, "--help-all")
 }
 
 // explicitLocalErrorJSONRequested reports whether the caller explicitly
@@ -272,29 +306,61 @@ func (c *Commando) applyEffectiveAIModeForArgs(ctx *cli.Context, args []string) 
 	return enabled
 }
 
-func recoveryNormalizationArgs(ctx *cli.Context, args []string) []string {
+func recoveryNormalizationArgs(ctx *cli.Context, args []string, aiMode ...bool) []string {
+	aiEnabled := len(aiMode) > 0 && aiMode[0]
 	result := make([]string, 0, len(args)+2)
-	for _, arg := range args {
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
 		if arg != "--cli-ai-mode" && arg != "--no-cli-ai-mode" {
+			if aiEnabled && arg == "--"+CliOutputFlagName {
+				index++
+				continue
+			}
+			if aiEnabled && strings.HasPrefix(arg, "--"+CliOutputFlagName+"=") {
+				continue
+			}
 			result = append(result, arg)
 		}
 	}
-	if _, version := explicitVersion(result); version != "" || ctx == nil || ctx.Flags() == nil {
+	if ctx == nil || ctx.Flags() == nil {
 		return result
 	}
-	versionFlag := VersionFlag(ctx.Flags())
-	if versionFlag == nil {
-		return result
+	if _, version := explicitVersion(result); version == "" {
+		versionFlag := VersionFlag(ctx.Flags())
+		if versionFlag != nil {
+			version, assigned := versionFlag.GetValue()
+			if assigned && strings.TrimSpace(version) != "" {
+				flagName := "--version"
+				pathOffset := 0
+				if len(result) > 0 && result[0] == "help" {
+					pathOffset = 1
+				}
+				if len(result) > pathOffset+1 && commandStyle(result[pathOffset+1]) == "kebab" {
+					flagName = "--api-version"
+				}
+				result = append(result, flagName, version)
+			}
+		}
 	}
-	version, assigned := versionFlag.GetValue()
-	if !assigned || strings.TrimSpace(version) == "" {
-		return result
+	if _, present := recoveryOptionValue(result, "--"+CliHelpSectionFlagName); !present {
+		if flag := CliHelpSectionFlag(ctx.Flags()); flag != nil && flag.IsAssigned() {
+			value, _ := flag.GetValue()
+			if value = strings.TrimSpace(value); value != "" {
+				result = append(result, "--"+CliHelpSectionFlagName, value)
+			}
+		}
 	}
-	flagName := "--version"
-	if len(args) > 1 && commandStyle(args[1]) == "kebab" {
-		flagName = "--api-version"
+	if !aiEnabled {
+		if _, present := recoveryOptionValue(result, "--"+CliOutputFlagName); !present {
+			if flag := CliOutputFlag(ctx.Flags()); flag != nil && flag.IsAssigned() {
+				value, _ := flag.GetValue()
+				if strings.TrimSpace(value) == string(cli.HelpOutputJSON) {
+					result = append(result, "--"+CliOutputFlagName, string(cli.HelpOutputJSON))
+				}
+			}
+		}
 	}
-	return append(result, flagName, version)
+	return result
 }
 
 func DetectInConfigureMode(flags *cli.FlagSet) bool {

@@ -158,6 +158,7 @@ type machineHelpRootDocument struct {
 	Next          *HelpNext                   `json:"next"`
 	Listing       *machineHelpListing         `json:"listing"`
 	AIModeHint    *machineHelpAIModeHint      `json:"aiModeHint"`
+	helpHintExact helpHintExact
 }
 
 type machineHelpProduct struct {
@@ -213,6 +214,7 @@ type machineHelpProductDocument struct {
 	Next          *HelpNext               `json:"next"`
 	Listing       *machineHelpListing     `json:"listing"`
 	AIModeHint    *machineHelpAIModeHint  `json:"aiModeHint"`
+	helpHintExact helpHintExact
 }
 
 type machineHelpOperation struct {
@@ -307,6 +309,7 @@ type machineHelpAPIDocument struct {
 	Next               *HelpNext                `json:"next"`
 	Listing            *machineHelpListing      `json:"listing"`
 	AIModeHint         *machineHelpAIModeHint   `json:"aiModeHint"`
+	helpHintExact      helpHintExact
 }
 
 // machineHelpQueryOption describes one metadata-inspection flag in the same

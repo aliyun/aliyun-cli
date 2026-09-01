@@ -27,12 +27,12 @@ func TestRenderCanonicalRootTextAllSectionsAndSearch(t *testing.T) {
 		Products:    []machineHelpProductSummary{{Code: "ecs", Name: machineHelpLocalizedText{EN: "Elastic Compute Service"}}},
 		Listing:     &machineHelpListing{Shown: 1, Total: 2, Hint: "list hint"},
 		Result:      HelpResult{Shown: 3, Total: 9, Truncated: true},
-		Next:        &HelpNext{ShowAll: "aliyun --help-all", Search: "aliyun --help-search ecs", SearchAll: "aliyun --help-search ecs --help-all"},
+		Next:        &HelpNext{Search: "aliyun --help-search <keyword>", SearchAll: "aliyun --help-search ecs --help-all", operation: HelpOperationSearch},
 	}
 	var out strings.Builder
 	require.NoError(t, renderCanonicalRootText(&out, document, ""))
 	rendered := out.String()
-	for _, expected := range []string{"Version 9.9.9", "Quick Start:", "Core Commands:", "Utilities:", "Global Flags:", "Extensions:", "Products:", "Showing 1 of 2 products", "Show all:", "Search:", "Show all matches:"} {
+	for _, expected := range []string{"Version 9.9.9", "Quick Start:", "Core Commands:", "Utilities:", "Global Flags:", "Extensions:", "Products:", "Showing 1 of 2 products", "Try another keyword:", "Show all matches:"} {
 		assert.Contains(t, rendered, expected)
 	}
 

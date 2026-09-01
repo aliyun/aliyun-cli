@@ -193,6 +193,7 @@ func BuildProductDocument(product *meta.Product, index *meta.APIIndex, options H
 	sort.Slice(apis, func(i, j int) bool {
 		return strings.ToLower(apis[i].Command) < strings.ToLower(apis[j].Command)
 	})
+	allAPIs := append([]APISummary(nil), apis...)
 	if options.Search != "" {
 		apis = searchAPIs(apis, options.Search)
 	} else if options.All {
@@ -244,11 +245,16 @@ func BuildProductDocument(product *meta.Product, index *meta.APIIndex, options H
 			OmittedDeprecated: omittedDeprecated,
 		},
 	}
-	document.Next = productNext(document, options)
+	document.Next = buildHelpNext(
+		helpHintTargetForProduct(document, options), options, document.Result,
+		document.Result.Truncated || document.Result.OmittedDeprecated > 0,
+		uniqueExactAPIChild(allAPIs, options.Search),
+	)
 	return document
 }
 
 func BuildActionDocument(product *meta.Product, api *meta.API, response *ResponseDocumentation, options HelpOptions) *ActionDocument {
+	options = options.normalized()
 	request := BuildRequestDocument(product, api, response, options)
 	if request == nil {
 		return nil
@@ -304,7 +310,17 @@ func BuildActionDocument(product *meta.Product, api *meta.API, response *Respons
 		document.Operation.IsSSE = false
 		document.Operation.HasWildcardPath = false
 	}
-	document.Next = actionNext(document.Target, options, document.Result)
+	allParameters := make([]Parameter, 0, len(api.Parameters))
+	for i := range api.Parameters {
+		allParameters = append(allParameters, projectParameter(api.Parameters[i]))
+	}
+	actionOptions := options
+	actionOptions.ExplicitSection = false
+	document.Next = buildHelpNext(
+		helpHintTargetForAPI(document.Target, actionOptions), actionOptions, document.Result,
+		document.Result.Truncated,
+		uniqueExactParameterChild(allParameters, projectGlobalParameters(), options.Search),
+	)
 	return document
 }
 
@@ -331,10 +347,12 @@ func BuildRequestDocument(product *meta.Product, api *meta.API, response *Respon
 		}
 		return parameters[i].Name < parameters[j].Name
 	})
+	allParameters := append([]Parameter(nil), parameters...)
 	if options.Search != "" {
 		parameters = searchParameters(parameters, options.Search)
 	}
 	globals := projectGlobalParameters()
+	allGlobals := append([]GlobalParameter(nil), globals...)
 	if options.Search != "" {
 		globals = searchGlobalParameters(globals, options.Search)
 	}
@@ -393,6 +411,13 @@ func BuildRequestDocument(product *meta.Product, api *meta.API, response *Respon
 			PaginationCollectionPath: response.PaginationCollectionPath,
 		})
 	}
+	sectionOptions := options
+	sectionOptions.ExplicitSection = true
+	sectionOptions.Section = SectionRequest
+	document.Next = buildHelpNext(
+		helpHintTargetForAPI(document.Target, sectionOptions), sectionOptions, document.Result, false,
+		uniqueExactParameterChild(allParameters, allGlobals, options.Search),
+	)
 	return document
 }
 
@@ -464,6 +489,10 @@ func BuildAPIParameterDocument(product *meta.Product, api *meta.API, parameterNa
 	}
 	selected := matches[0]
 	projected := projectParameter(*selected)
+	command := api.CmdName
+	if command == "" {
+		command = kebabCase(api.Name)
+	}
 
 	code := strings.ToLower(api.ProductCode)
 	var productDTO Product
@@ -478,10 +507,10 @@ func BuildAPIParameterDocument(product *meta.Product, api *meta.API, parameterNa
 		SchemaVersion: SchemaVersion,
 		Kind:          "parameter",
 		Section:       SectionRequest,
-		Target:        Target{Product: code, API: api.CmdName, APIVersion: api.Version},
+		Target:        Target{Product: code, API: command, APIVersion: api.Version},
 		Product:       productDTO,
 		Name:          api.Name,
-		Command:       api.CmdName,
+		Command:       command,
 		Parameter:     projected,
 		Result:        Result{Shown: 1, Total: 1},
 	}
@@ -497,8 +526,10 @@ func BuildAPIParameterDocument(product *meta.Product, api *meta.API, parameterNa
 		document.Parameter.Element = nil
 		document.Parameter.Value = nil
 		document.Result = Result{Shown: len(allMatches), Total: total, Truncated: len(allMatches) < total}
-		document.Next = parameterNext(document.Target, projected.Name, options, document.Result)
 	}
+	document.Next = buildHelpNext(
+		helpHintTargetForParameter(document.Target, projected.Name, options), options, document.Result, false, nil,
+	)
 	return document, nil
 }
 
@@ -640,6 +671,9 @@ func BuildAPIResponseDocument(api *meta.API, response *ResponseDocumentation, op
 		return nil, fmt.Errorf("API and response documentation are required")
 	}
 	command := api.CmdName
+	if command == "" {
+		command = kebabCase(api.Name)
+	}
 	document := &APIResponseDocument{
 		SchemaVersion: SchemaVersion, Kind: "response", Section: SectionResponse,
 		Target: Target{Product: strings.ToLower(api.ProductCode), API: command, APIVersion: api.Version},
@@ -689,7 +723,12 @@ func BuildAPIResponseDocument(api *meta.API, response *ResponseDocumentation, op
 		APIVersion: options.RequestedVersion, RequiredFlags: requiredFlags(api.Parameters),
 		PaginationCollectionPath: response.PaginationCollectionPath,
 	})
-	document.Next = actionNext(document.Target, options, document.Result)
+	sectionOptions := options
+	sectionOptions.ExplicitSection = true
+	sectionOptions.Section = SectionResponse
+	document.Next = buildHelpNext(
+		helpHintTargetForAPI(document.Target, sectionOptions), sectionOptions, document.Result, false, nil,
+	)
 	return document, nil
 }
 
@@ -784,62 +823,6 @@ func requiredFlags(parameters []meta.Parameter) []string {
 		result = append(result, "--"+strings.TrimLeft(name, "-"))
 	}
 	return result
-}
-
-func productNext(document *ProductDocument, options HelpOptions) *Next {
-	if document == nil {
-		return nil
-	}
-	base := []string{"aliyun", document.Target.Product}
-	if options.RequestedVersion != "" {
-		base = append(base, "--api-version", options.RequestedVersion)
-	}
-	if options.Search != "" {
-		if document.Result.Truncated {
-			return &Next{SearchAll: strings.Join(append(base, "--help-search", shellToken(options.Search), "--help-all"), " ")}
-		}
-		return nil
-	}
-	if document.Result.Truncated || document.Result.OmittedDeprecated > 0 {
-		return &Next{
-			ShowAll: strings.Join(append(base, "--help-all"), " "),
-			Search:  strings.Join(append(base, "--help-search", "<keyword>"), " "),
-		}
-	}
-	return nil
-}
-
-func actionNext(target Target, options HelpOptions, result Result) *Next {
-	base := []string{"aliyun", target.Product, target.API}
-	if options.RequestedVersion != "" {
-		base = append(base, "--api-version", options.RequestedVersion)
-	}
-	if options.Search != "" {
-		if result.Truncated {
-			return &Next{SearchAll: strings.Join(append(base, "--help-search", shellToken(options.Search), "--help-all"), " ")}
-		}
-		return nil
-	}
-	if !result.Truncated {
-		return nil
-	}
-	return &Next{
-		ShowAll: strings.Join(append(base, "--help-all"), " "),
-		Search:  strings.Join(append(base, "--help-search", "<keyword>"), " "),
-	}
-}
-
-func parameterNext(target Target, parameter string, options HelpOptions, result Result) *Next {
-	if !result.Truncated || options.Search == "" {
-		return nil
-	}
-	base := []string{"aliyun", target.Product, target.API}
-	if options.RequestedVersion != "" {
-		base = append(base, "--api-version", options.RequestedVersion)
-	}
-	base = append(base, "--"+strings.TrimLeft(parameter, "-"),
-		"--help-search", shellToken(options.Search), "--help-all")
-	return &Next{SearchAll: strings.Join(base, " ")}
 }
 
 func shellToken(value string) string {

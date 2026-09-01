@@ -94,7 +94,17 @@ func applyRootHelpOptions(document *machineHelpRootDocument, options helpOptions
 				Value:         entry,
 			})
 		}
-		projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.Search), options.SearchAll)
+		matches := SearchHelpCandidates(candidates, options.Search)
+		document.helpHintExact = helpHintExact{}
+		for _, match := range matches {
+			entry, ok := match.Candidate.Value.(rootProjectionEntry)
+			if !ok || entry.kind != "product" {
+				document.helpHintExact.observe(match, helpHintChildNone, "", "", "")
+				continue
+			}
+			document.helpHintExact.observe(match, helpHintChildProduct, entry.product.Code, "", "")
+		}
+		projection := ProjectHelpSearchMatches(matches, options.SearchAll)
 		document.Commands = nil
 		document.GlobalFlags = nil
 		document.Products = nil
@@ -207,7 +217,18 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 				Value:         api,
 			})
 		}
-		projection := ProjectHelpSearchMatches(SearchHelpCandidates(candidates, options.Search), options.SearchAll)
+		matches := SearchHelpCandidates(candidates, options.Search)
+		document.helpHintExact = helpHintExact{}
+		for _, match := range matches {
+			api, ok := match.Candidate.Value.(machineHelpAPISummary)
+			if !ok {
+				document.helpHintExact.observe(match, helpHintChildNone, "", "", "")
+				continue
+			}
+			action := firstNonEmptyMachineHelpString(api.DisplayName, api.CmdName, api.Name)
+			document.helpHintExact.observe(match, helpHintChildAPI, "", action, "")
+		}
+		projection := ProjectHelpSearchMatches(matches, options.SearchAll)
 		document.APIs = helpSearchValues[machineHelpAPISummary](projection.Matches)
 		document.Result = projection.Result
 		document.Listing = nil
@@ -375,6 +396,24 @@ func applyRequestHelpOptions(document *machineHelpAPIDocument, options helpOptio
 		parameter := document.GlobalParameters[index]
 		globalCandidates = append(globalCandidates, machineHelpParameterCandidate(parameter, "global-parameter"))
 	}
+	document.helpHintExact = helpHintExact{}
+	directCandidates := make([]HelpSearchCandidate, 0, len(active)+len(document.GlobalParameters))
+	for index := range active {
+		parameter := active[index]
+		directCandidates = append(directCandidates, machineHelpDirectParameterCandidate(parameter, "parameter"))
+	}
+	for index := range document.GlobalParameters {
+		parameter := document.GlobalParameters[index]
+		directCandidates = append(directCandidates, machineHelpDirectParameterCandidate(parameter, "global-parameter"))
+	}
+	for _, match := range SearchHelpCandidates(directCandidates, options.Search) {
+		parameter, ok := match.Candidate.Value.(machineHelpParameter)
+		if !ok || !machineHelpParameterHasNestedFields(parameter) {
+			document.helpHintExact.observe(match, helpHintChildNone, "", "", "")
+			continue
+		}
+		document.helpHintExact.observe(match, helpHintChildParameter, "", "", preferredHelpParameterOption(parameter))
+	}
 	projection := ProjectHelpSearchMatches(SearchHelpParameters(HelpParameterSearchInput{
 		ActiveParameterSet: document.ActiveParameterSet,
 		ParameterSets: map[string][]HelpSearchCandidate{
@@ -509,6 +548,15 @@ func machineHelpParameterCandidate(parameter machineHelpParameter, kind string) 
 		DescriptionEN: strings.Join(descriptionsEN, "\n"),
 		DescriptionZH: strings.Join(descriptionsZH, "\n"),
 		Value:         parameter,
+	}
+}
+
+func machineHelpDirectParameterCandidate(parameter machineHelpParameter, kind string) HelpSearchCandidate {
+	aliases := make([]string, 0, len(parameter.Options)+1)
+	aliases = append(aliases, parameter.RawName)
+	aliases = append(aliases, parameter.Options...)
+	return HelpSearchCandidate{
+		Kind: kind, Name: parameter.Name, Aliases: aliases, Value: parameter,
 	}
 }
 
@@ -675,8 +723,10 @@ func renderCanonicalRootText(w io.Writer, document *machineHelpRootDocument, sea
 		}
 	}
 	if len(document.Commands) == 0 && len(document.GlobalFlags) == 0 && len(document.Products) == 0 && len(document.Matches) == 0 && search != "" {
-		_, err := fmt.Fprintf(w, noHelpSearchMatchesFormat+"\n", search)
-		return err
+		if _, err := fmt.Fprintf(w, noHelpSearchMatchesFormat+"\n", search); err != nil {
+			return err
+		}
+		return renderHelpProjectionResult(w, "matches", document.Result, document.Next)
 	}
 	if search != "" && len(document.Matches) > 0 {
 		if _, err := fmt.Fprintln(w, "Matches:"); err != nil {
@@ -797,8 +847,10 @@ func renderCanonicalProductText(w io.Writer, document *machineHelpProductDocumen
 		}
 	}
 	if len(document.APIs) == 0 && search != "" {
-		_, err := fmt.Fprintf(w, "\n"+noHelpSearchMatchesFormat+"\n", search)
-		return err
+		if _, err := fmt.Fprintf(w, "\n"+noHelpSearchMatchesFormat+"\n", search); err != nil {
+			return err
+		}
+		return renderHelpProjectionResult(w, "APIs", document.Result, document.Next)
 	}
 	if _, err := fmt.Fprintln(w, "\nAvailable API List:"); err != nil {
 		return err
@@ -1163,32 +1215,16 @@ func renderTextListing(w io.Writer, noun string, listing *machineHelpListing) er
 }
 
 func renderHelpProjectionResult(w io.Writer, noun string, result HelpResult, next *HelpNext) error {
-	if !result.Truncated {
-		return nil
-	}
-	if _, err := fmt.Fprintf(w, "\n...\nShowing %d of %d %s.\n", result.Shown, result.Total, noun); err != nil {
-		return err
-	}
-	if next != nil {
-		if next.ShowAll != "" {
-			if _, err := fmt.Fprintf(w, "Show all: %s\n", next.ShowAll); err != nil {
-				return err
-			}
+	if result.Truncated {
+		if _, err := fmt.Fprintf(w, "\n...\nShowing %d of %d %s.\n", result.Shown, result.Total, noun); err != nil {
+			return err
 		}
-		if next.Search != "" {
-			if _, err := fmt.Fprintf(w, "Search: %s\n", next.Search); err != nil {
-				return err
-			}
+		if next == nil {
+			_, err := fmt.Fprintln(w, "Use a more specific --help-search query, or append --help-all to show every match.")
+			return err
 		}
-		if next.SearchAll != "" {
-			if _, err := fmt.Fprintf(w, "Show all matches: %s\n", next.SearchAll); err != nil {
-				return err
-			}
-		}
-		return nil
 	}
-	_, err := fmt.Fprintln(w, "Use a more specific --help-search query, or append --help-all to show every match.")
-	return err
+	return renderHelpHintFooter(w, next, !result.Truncated)
 }
 
 // renderRequestQueryExampleText appends the API-specific response-query pair
@@ -1244,12 +1280,17 @@ func renderAIModeEnableHelpHint(w io.Writer) error {
 	return err
 }
 
-func (c *Commando) finishCanonicalTextHelp(ctx *cli.Context, aiMode bool) error {
+func (c *Commando) finishCanonicalTextHelp(ctx *cli.Context, aiMode bool, targets ...HelpTarget) error {
 	if aiMode {
 		// These specialized Canonical renderers bypass the historical text
 		// route, so explicitly preserve its configured AI-mode disable hint.
 		c.printAiModeHelpHint(ctx)
 		return nil
+	}
+	if len(targets) > 0 && targets[0].Operation == HelpOperationDefault {
+		if err := renderMachineReadableHelpHint(ctx.Stdout(), targets[0]); err != nil {
+			return err
+		}
 	}
 	return renderAIModeEnableHelpHint(ctx.Stdout())
 }

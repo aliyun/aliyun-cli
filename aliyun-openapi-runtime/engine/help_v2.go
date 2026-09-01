@@ -136,7 +136,10 @@ func validateReservedHelp(reserved argparser.Reserved, productLevel bool) error 
 		return errors.New("--cli-section requires an API target")
 	}
 	if reserved.HelpSection != "" && reserved.HelpAll && reserved.HelpSearch == "" {
-		return errors.New("--cli-section does not support --help-all without --help-search")
+		return &InvalidOptionCombinationError{
+			Options: []string{"--cli-section", "--help-all"},
+			Err:     errors.New("--cli-section does not support --help-all without --help-search"),
+		}
 	}
 	return nil
 }
