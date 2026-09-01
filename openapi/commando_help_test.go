@@ -582,6 +582,7 @@ func TestPrintProductUsage_NonBuiltinProduct_PluginInstalled(t *testing.T) {
 	assert.NoError(t, err)
 
 	output := w.String()
+	assert.Contains(t, output, "GO_PLUGIN_PRODUCT_HELP")
 	assert.Contains(t, output, "Product 'fc' is provided by plugin 'aliyun-cli-fc'")
 }
 
@@ -1143,6 +1144,7 @@ func TestPrintApiUsage_LocalPluginNotInRemoteIndex(t *testing.T) {
 	err = c.printApiUsage(ctx, "localonly2", "SomeApi")
 	assert.NoError(t, err)
 	assert.Contains(t, w.String(), "Command 'localonly2 SomeApi' is provided by plugin 'aliyun-cli-localonly2'")
+	assert.Contains(t, w.String(), "HELP_FROM_LOCAL_PLUGIN")
 }
 
 func TestPrintProducts_PluginIndexLoadHint(t *testing.T) {
@@ -1556,7 +1558,7 @@ func Test_tryDelegatePluginHelp_PluginPath(t *testing.T) {
 	})
 }
 
-func TestHelpTextShowsMetaPluginProvider(t *testing.T) {
+func TestHostGeneratedHelpTextHidesMetaPluginProvider(t *testing.T) {
 	t.Setenv(aimode.EnvAIMode, "0")
 	c, stdout, stderr := newTestCommando()
 	baseline := canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
@@ -1580,12 +1582,12 @@ func TestHelpTextShowsMetaPluginProvider(t *testing.T) {
 
 	require.NoError(t, c.help(ctx, []string{"demo", "create-report"}))
 	assert.Empty(t, stderr.String())
-	assert.Contains(t, stdout.String(), "Provided by plugin: aliyun-cli-demo (1.2.3)")
+	assert.NotContains(t, stdout.String(), "Provided by plugin")
 	assert.Contains(t, stdout.String(), "aliyun demo create-report")
 
 	stdout.Reset()
 	require.NoError(t, c.help(ctx, []string{"demo"}))
-	assert.Contains(t, stdout.String(), "Provided by plugin: aliyun-cli-demo (1.2.3)")
+	assert.NotContains(t, stdout.String(), "Provided by plugin")
 
 	stdout.Reset()
 	require.NoError(t, c.help(ctx, []string{"demo", "CreateReport"}))

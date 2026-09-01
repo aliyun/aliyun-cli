@@ -306,10 +306,13 @@ func TestProductTextRendererLocalizesAndMarksDeprecatedAPIs(t *testing.T) {
 	if err := Render(&output, document, HelpOptions{Language: "zh"}); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"产品: demo (演示产品)", "描述: 演示服务", "元数据来源: aliyun-cli-demo (2.0.0)", "[已废弃] 旧接口"} {
+	for _, want := range []string{"产品: demo (演示产品)", "描述: 演示服务", "[已废弃] 旧接口"} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("product text missing %q:\n%s", want, output.String())
 		}
+	}
+	if strings.Contains(output.String(), "元数据来源") || strings.Contains(output.String(), "aliyun-cli-demo") {
+		t.Fatalf("product Text Help leaked provenance:\n%s", output.String())
 	}
 }
 

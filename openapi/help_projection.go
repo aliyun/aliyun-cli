@@ -10,6 +10,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"golang.org/x/term"
 )
 
 const noHelpSearchMatchesFormat = "No Help entries matched --help-search %q."
@@ -841,11 +842,6 @@ func renderCanonicalProductText(w io.Writer, document *machineHelpProductDocumen
 	if _, err := fmt.Fprintf(w, "\nProduct: %s (%s)\nVersion: %s\n", document.Product.Code, name, document.Product.SelectedVersion); err != nil {
 		return err
 	}
-	if provider := machineHelpPluginProvider(document.Product); provider != "" {
-		if _, err := fmt.Fprintf(w, "Provided by plugin: %s\n", provider); err != nil {
-			return err
-		}
-	}
 	if len(document.APIs) == 0 && search != "" {
 		if _, err := fmt.Fprintf(w, "\n"+noHelpSearchMatchesFormat+"\n", search); err != nil {
 			return err
@@ -884,21 +880,13 @@ func renderCanonicalRequestSearchText(w io.Writer, document *machineHelpAPIDocum
 	if document == nil {
 		return fmt.Errorf("request Help document is nil")
 	}
-	if provider := machineHelpPluginProvider(document.Product); provider != "" {
-		if _, err := fmt.Fprintf(w, "\nProvided by plugin: %s\n", provider); err != nil {
-			return err
-		}
-	}
 	parameters := activeMachineHelpParameters(document)
 	if len(parameters) == 0 && len(document.GlobalParameters) == 0 {
 		_, err := fmt.Fprintf(w, noHelpSearchMatchesFormat+"\n", search)
 		return err
 	}
 	if len(parameters) > 0 {
-		if _, err := fmt.Fprintln(w, "\nParameters:"); err != nil {
-			return err
-		}
-		if err := renderMachineHelpParameters(w, parameters); err != nil {
+		if err := renderMachineHelpParameterGroups(w, parameters); err != nil {
 			return err
 		}
 	}
@@ -929,11 +917,6 @@ func renderCanonicalRequestText(w io.Writer, document *machineHelpAPIDocument) e
 	); err != nil {
 		return err
 	}
-	if provider := machineHelpPluginProvider(document.Product); provider != "" {
-		if _, err := fmt.Fprintf(w, "\nProvided by plugin: %s\n", provider); err != nil {
-			return err
-		}
-	}
 	if _, err := fmt.Fprintf(w,
 		"\nDescription: %s%s\n\nAPI Version: %s\n\nUsage:\n  %s [parameters]\n",
 		description,
@@ -946,10 +929,15 @@ func renderCanonicalRequestText(w io.Writer, document *machineHelpAPIDocument) e
 
 	parameters := activeMachineHelpParameters(document)
 	if len(parameters) > 0 {
-		if _, err := fmt.Fprintln(w, "\nParameters:"); err != nil {
+		if err := renderMachineHelpParameterGroups(w, parameters); err != nil {
 			return err
 		}
-		if err := renderMachineHelpParameters(w, parameters); err != nil {
+	}
+	if len(document.GlobalParameters) > 0 {
+		if _, err := fmt.Fprintln(w, "\nGlobal Parameters:"); err != nil {
+			return err
+		}
+		if err := renderMachineHelpParameters(w, document.GlobalParameters); err != nil {
 			return err
 		}
 	}
@@ -1107,20 +1095,17 @@ func renderMachineHelpParameters(w io.Writer, parameters []machineHelpParameter)
 	// Continuation lines align under the type column, mirroring the engine's
 	// parameter Help layout, and leave room for readable wrapped text.
 	indent := strings.Repeat(" ", 2+machineHelpParameterNameWidth+1)
-	wrapWidth := machineHelpMaxLineLength() - len(indent)
+	maxLineLength := machineHelpMaxLineLength(w)
+	wrapWidth := maxLineLength - len(indent)
 	for _, parameter := range parameters {
 		name := parameter.Name
 		if len(parameter.Options) > 0 {
 			name = strings.Join(parameter.Options, ", ")
 		}
-		requiredLabel := "optional"
-		if parameter.Required {
-			requiredLabel = "required"
-		}
-		prefix := fmt.Sprintf("  %-*s %s (%s)", machineHelpParameterNameWidth, name, parameter.Type, requiredLabel)
+		prefix := fmt.Sprintf("  %-*s %s", machineHelpParameterNameWidth, name, parameter.Type)
 		help := localizedMachineHelpText(parameter.Help)
 		lines := wrapMachineHelpText(help, wrapWidth)
-		if len(lines) == 1 && len([]rune(prefix))+2+len([]rune(lines[0])) <= machineHelpMaxLineLength() {
+		if len(lines) == 1 && len([]rune(prefix))+2+len([]rune(lines[0])) <= maxLineLength {
 			if _, err := fmt.Fprintf(w, "%s  %s\n", prefix, lines[0]); err != nil {
 				return err
 			}
@@ -1130,6 +1115,12 @@ func renderMachineHelpParameters(w io.Writer, parameters []machineHelpParameter)
 			return err
 		}
 		for _, line := range lines {
+			if line == "" {
+				if _, err := fmt.Fprintln(w); err != nil {
+					return err
+				}
+				continue
+			}
 			if _, err := fmt.Fprintf(w, "%s%s\n", indent, line); err != nil {
 				return err
 			}
@@ -1138,10 +1129,63 @@ func renderMachineHelpParameters(w io.Writer, parameters []machineHelpParameter)
 	return nil
 }
 
-func machineHelpMaxLineLength() int {
-	if value := strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH")); value != "" {
-		if length, err := strconv.Atoi(value); err == nil && length > 0 {
-			return length
+func renderMachineHelpParameterGroups(w io.Writer, parameters []machineHelpParameter) error {
+	groups := []struct {
+		label    string
+		required bool
+	}{
+		{label: machineHelpLabel("Required Parameters", "必填参数"), required: true},
+		{label: machineHelpLabel("Optional Parameters", "可选参数")},
+	}
+	for _, group := range groups {
+		selected := make([]machineHelpParameter, 0, len(parameters))
+		for _, parameter := range parameters {
+			if parameter.Required == group.required {
+				selected = append(selected, parameter)
+			}
+		}
+		if len(selected) == 0 {
+			continue
+		}
+		if _, err := fmt.Fprintf(w, "\n%s:\n", group.label); err != nil {
+			return err
+		}
+		if err := renderMachineHelpParameters(w, selected); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func machineHelpLabel(en, zh string) string {
+	if localizedMachineHelpLanguage() == "zh" {
+		return zh
+	}
+	return en
+}
+
+var machineHelpIsTerminal = term.IsTerminal
+var machineHelpGetSize = term.GetSize
+
+func machineHelpMaxLineLength(w io.Writer) int {
+	if raw, present := os.LookupEnv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH"); present {
+		value := strings.TrimSpace(raw)
+		if value != "" {
+			if length, err := strconv.Atoi(value); err == nil && length > 0 {
+				return length
+			}
+			return 80
+		}
+	}
+	if writer, ok := w.(interface{ Fd() uintptr }); ok {
+		fd := int(writer.Fd())
+		if machineHelpIsTerminal(fd) {
+			if width, _, err := machineHelpGetSize(fd); err == nil && width > 0 {
+				if width > 120 {
+					return 120
+				}
+				return width
+			}
 		}
 	}
 	return 80
@@ -1161,17 +1205,40 @@ func wrapMachineHelpText(text string, width int) []string {
 	for _, paragraph := range strings.Split(text, "\n") {
 		paragraph = strings.TrimSpace(paragraph)
 		if paragraph == "" {
+			lines = append(lines, "")
 			continue
 		}
-		lines = append(lines, wrapMachineHelpLine(paragraph, width)...)
+		for _, segment := range splitMachineHelpMarkers(paragraph) {
+			lines = append(lines, wrapMachineHelpLine(segment, width)...)
+		}
 	}
 	return lines
+}
+
+func splitMachineHelpMarkers(text string) []string {
+	for _, marker := range []string{"Valid values:", "取值：", "取值:"} {
+		if index := strings.Index(text, marker); index >= 0 {
+			result := make([]string, 0, 3)
+			if prefix := strings.TrimSpace(text[:index]); prefix != "" {
+				result = append(result, prefix)
+			}
+			result = append(result, marker)
+			if rest := strings.TrimSpace(text[index+len(marker):]); rest != "" {
+				result = append(result, rest)
+			}
+			return result
+		}
+	}
+	return []string{text}
 }
 
 func wrapMachineHelpLine(text string, width int) []string {
 	runes := []rune(text)
 	if len(runes) <= width {
 		return []string{text}
+	}
+	if strings.Contains(text, "http://") || strings.Contains(text, "https://") {
+		return wrapMachineHelpURLLine(text, width)
 	}
 	lines := make([]string, 0, len(runes)/width+1)
 	for start := 0; start < len(runes); {
@@ -1190,14 +1257,40 @@ func wrapMachineHelpLine(text string, width int) []string {
 	return lines
 }
 
+func wrapMachineHelpURLLine(text string, width int) []string {
+	start := strings.Index(text, "https://")
+	if httpStart := strings.Index(text, "http://"); start < 0 || (httpStart >= 0 && httpStart < start) {
+		start = httpStart
+	}
+	if start < 0 {
+		return wrapMachineHelpLine(text, width)
+	}
+	end := len(text)
+	for index := start; index < len(text); index++ {
+		if text[index] <= ' ' || text[index] >= 0x80 {
+			end = index
+			break
+		}
+	}
+	lines := make([]string, 0, 3)
+	if prefix := strings.TrimSpace(text[:start]); prefix != "" {
+		lines = append(lines, wrapMachineHelpLine(prefix, width)...)
+	}
+	lines = append(lines, text[start:end])
+	if suffix := strings.TrimSpace(text[end:]); suffix != "" {
+		lines = append(lines, wrapMachineHelpLine(suffix, width)...)
+	}
+	return lines
+}
+
 // wrapBreakPoint finds a break position in the second half of the window so
 // wrapped lines keep a coherent chunk on each side. Spaces, ASCII and CJK
-// punctuation, and slashes (URLs and paths carry no spaces) all qualify; the
-// latest qualifying rune wins.
+// punctuation qualify; the latest qualifying rune wins. URLs are isolated by
+// wrapMachineHelpURLLine so a slash is never selected as a break point.
 func wrapBreakPoint(runes []rune, start, end int) int {
 	for i := end - 1; i > start+(end-start)/2; i-- {
 		switch runes[i] {
-		case ' ', ',', '.', ';', '/', '，', '。', '、', '：':
+		case ' ', ',', '.', ';', '，', '。', '、', '：':
 			return i + 1
 		}
 	}
@@ -1244,6 +1337,7 @@ func renderRequestQueryExampleText(w io.Writer, example *machineHelpQueryExample
 }
 
 func renderMachineHelpQueryOptions(w io.Writer, options []machineHelpQueryOption) error {
+	maxLineLength := machineHelpMaxLineLength(w)
 	for _, option := range options {
 		typeLabel := option.Type + " (optional)"
 		if option.Required {
@@ -1255,9 +1349,9 @@ func renderMachineHelpQueryOptions(w io.Writer, options []machineHelpQueryOption
 		prefix := fmt.Sprintf("  %-*s %s", machineHelpParameterNameWidth, option.Name, typeLabel)
 		help := localizedMachineHelpText(option.Help)
 		indent := strings.Repeat(" ", 2+machineHelpParameterNameWidth+1)
-		wrapWidth := machineHelpMaxLineLength() - len(indent)
+		wrapWidth := maxLineLength - len(indent)
 		lines := wrapMachineHelpText(help, wrapWidth)
-		if len(lines) == 1 && len([]rune(prefix))+2+len([]rune(lines[0])) <= machineHelpMaxLineLength() {
+		if len(lines) == 1 && len([]rune(prefix))+2+len([]rune(lines[0])) <= maxLineLength {
 			if _, err := fmt.Fprintf(w, "%s  %s\n", prefix, lines[0]); err != nil {
 				return err
 			}
@@ -1267,6 +1361,12 @@ func renderMachineHelpQueryOptions(w io.Writer, options []machineHelpQueryOption
 			return err
 		}
 		for _, line := range lines {
+			if line == "" {
+				if _, err := fmt.Fprintln(w); err != nil {
+					return err
+				}
+				continue
+			}
 			if _, err := fmt.Fprintf(w, "%s%s\n", indent, line); err != nil {
 				return err
 			}
