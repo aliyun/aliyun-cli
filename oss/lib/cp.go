@@ -2257,8 +2257,12 @@ func (cc *CopyCommand) preparePartOption(fileSize int64) (int64, int) {
 		partNum = (fileSize-1)/partSize + 1
 	}
 
-	if parallel, err := GetInt(OptionParallel, cc.command.options); err == nil {
-		return partSize, int(parallel)
+	if parallel, err := GetInt(OptionParallel, cc.command.options); err == nil &&
+		parallel >= MinParallel && parallel <= MaxParallel {
+		parallelInt, convertErr := checkedInt(parallel, OptionParallel)
+		if convertErr == nil {
+			return partSize, parallelInt
+		}
 	}
 
 	var rt int

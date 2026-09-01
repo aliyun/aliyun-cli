@@ -1472,6 +1472,13 @@ func (pc *ProbeCommand) DetectDownloadTime() error {
 	if parallel <= 0 {
 		parallel = 1
 	}
+	if parallel > MaxParallel {
+		return fmt.Errorf("invalid value, parallel %d exceeds maximum %d", parallel, MaxParallel)
+	}
+	parallelInt, err := checkedInt(parallel, OptionParallel)
+	if err != nil {
+		return err
+	}
 
 	if partSize > 0 {
 		i := 0
@@ -1496,9 +1503,9 @@ func (pc *ProbeCommand) DetectDownloadTime() error {
 	results := make(chan downloadPart, len(parts))
 	failed := make(chan error)
 	die := make(chan bool)
-	routines := int(parallel)
+	routines := parallelInt
 	var statBandwidth StatBandWidth
-	statBandwidth.Reset(int(parallel))
+	statBandwidth.Reset(parallelInt)
 
 	//fmt.Printf("\nDetectDownloadTime, partSize :%v, objectSize:%v, parallel:%v\n", partSize, objectSize, parallel)
 

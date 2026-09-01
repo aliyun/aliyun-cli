@@ -21,6 +21,24 @@ func Test(t *testing.T) {
 	TestingT(t)
 }
 
+func TestCheckedInt(t *testing.T) {
+	got, err := checkedInt(42, "test")
+	if err != nil || got != 42 {
+		t.Fatalf("checkedInt(42) = %d, %v", got, err)
+	}
+
+	if strconv.IntSize == 32 {
+		if _, err := checkedInt(MaxInt64, "test"); err == nil {
+			t.Fatal("checkedInt accepted a value outside the 32-bit int range")
+		}
+	} else {
+		got, err := checkedInt(MaxInt64, "test")
+		if err != nil || int64(got) != MaxInt64 {
+			t.Fatalf("checkedInt(MaxInt64) = %d, %v", got, err)
+		}
+	}
+}
+
 type OssutilCommandSuite struct {
 	startT time.Time
 }
