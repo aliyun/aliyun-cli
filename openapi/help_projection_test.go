@@ -150,6 +150,7 @@ func containsJSONField(data []byte, field string) bool {
 }
 
 func TestRenderMachineHelpParametersIndentsMultilineHelp(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH", "100")
 	parameters := []machineHelpParameter{
 		{
 			Name:    "page-size",
@@ -171,25 +172,35 @@ func TestRenderMachineHelpParametersIndentsMultilineHelp(t *testing.T) {
 	require.NoError(t, renderMachineHelpParameters(&out, parameters))
 
 	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
-	require.Len(t, lines, 5)
-	inline := fmt.Sprintf("  %-30s %s (%s)  %s", "--page-size", "int", "optional", "The page size.")
+	require.Len(t, lines, 7)
+	inline := fmt.Sprintf("  %-30s %s  %s", "--page-size", "int", "The page size.")
 	assert.Equal(t, inline, lines[0])
-	assert.Equal(t, fmt.Sprintf("  %-30s %s (%s)", "--accept-language", "string", "required"), lines[1])
+	assert.Equal(t, fmt.Sprintf("  %-30s %s", "--accept-language", "string"), lines[1])
 	indent := strings.Repeat(" ", 2+machineHelpParameterNameWidth+1)
-	assert.Equal(t, indent+"The language of the response. Valid values:", lines[2])
-	assert.Equal(t, indent+"zh-CN: Chinese.", lines[3])
-	assert.Equal(t, indent+"en-US (default): English", lines[4])
+	assert.Equal(t, indent+"The language of the response.", lines[2])
+	assert.Equal(t, indent+"Valid values:", lines[3])
+	assert.Empty(t, lines[4])
+	assert.Equal(t, indent+"zh-CN: Chinese.", lines[5])
+	assert.Equal(t, indent+"en-US (default): English", lines[6])
 }
 
-func TestWrapMachineHelpTextCollapsesBlankLinesAndWrapsLongLines(t *testing.T) {
+func TestWrapMachineHelpTextPreservesParagraphsMarkersAndURLs(t *testing.T) {
 	lines := wrapMachineHelpText("first paragraph\n\nsecond paragraph that is long enough to require wrapping at the configured width\n\n\nthird", 30)
 	require.NotEmpty(t, lines)
 	assert.Equal(t, "first paragraph", lines[0])
+	assert.Empty(t, lines[1])
 	assert.Equal(t, "third", lines[len(lines)-1])
 	for _, line := range lines {
-		assert.NotEmpty(t, line)
-		assert.LessOrEqual(t, len([]rune(line)), 30)
+		if line != "" {
+			assert.LessOrEqual(t, len([]rune(line)), 30)
+		}
 	}
+	assert.Equal(t, []string{"Description before marker.", "Valid values:", "one, two"},
+		wrapMachineHelpText("Description before marker. Valid values: one, two", 40))
+	assert.Equal(t, []string{"Valid values:", "one, two"}, wrapMachineHelpText("Valid values: one, two", 40))
+	url := "https://example.com/a/very/long/path/that/must/not/break"
+	assert.Equal(t, []string{"See", url, "for details."}, wrapMachineHelpText("See "+url+" for details.", 20))
+	assert.Equal(t, []string{"请使用", url, "接口查看详情。"}, wrapMachineHelpText("请使用"+url+"接口查看详情。", 20))
 }
 
 func TestAnnotatePluginProvenanceMarksMetaPluginProducts(t *testing.T) {

@@ -26,7 +26,7 @@ func exerciseWriterFailures(t *testing.T, render func(*failAfterWrites) error) {
 	t.Helper()
 	failures := 0
 	succeeded := false
-	for writes := 0; writes < 100; writes++ {
+	for writes := 0; writes < 500; writes++ {
 		err := render(&failAfterWrites{remaining: writes})
 		if err != nil {
 			failures++
