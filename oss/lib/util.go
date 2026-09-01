@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -109,9 +110,7 @@ func max(a, b int64) int64 {
 }
 
 func checkedInt(value int64, name string) (int, error) {
-	maxInt := int64(MaxInt)
-	minInt := -maxInt - 1
-	if value < minInt || value > maxInt {
+	if value < int64(math.MinInt) || value > int64(math.MaxInt) {
 		return 0, fmt.Errorf("%s value %d exceeds the platform int range", name, value)
 	}
 	return int(value), nil
