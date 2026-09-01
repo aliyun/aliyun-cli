@@ -14,6 +14,13 @@ type alwaysFailWriter struct{}
 
 func (alwaysFailWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
 
+type machineHelpFDWriter struct {
+	bytes.Buffer
+	fd uintptr
+}
+
+func (w *machineHelpFDWriter) Fd() uintptr { return w.fd }
+
 func TestRenderCanonicalRootTextAllSectionsAndSearch(t *testing.T) {
 	document := &machineHelpRootDocument{
 		Version:    "9.9.9",
@@ -27,12 +34,12 @@ func TestRenderCanonicalRootTextAllSectionsAndSearch(t *testing.T) {
 		Products:    []machineHelpProductSummary{{Code: "ecs", Name: machineHelpLocalizedText{EN: "Elastic Compute Service"}}},
 		Listing:     &machineHelpListing{Shown: 1, Total: 2, Hint: "list hint"},
 		Result:      HelpResult{Shown: 3, Total: 9, Truncated: true},
-		Next:        &HelpNext{ShowAll: "aliyun --help-all", Search: "aliyun --help-search ecs", SearchAll: "aliyun --help-search ecs --help-all"},
+		Next:        &HelpNext{Search: "aliyun --help-search <keyword>", SearchAll: "aliyun --help-search ecs --help-all", operation: HelpOperationSearch},
 	}
 	var out strings.Builder
 	require.NoError(t, renderCanonicalRootText(&out, document, ""))
 	rendered := out.String()
-	for _, expected := range []string{"Version 9.9.9", "Quick Start:", "Core Commands:", "Utilities:", "Global Flags:", "Extensions:", "Products:", "Showing 1 of 2 products", "Show all:", "Search:", "Show all matches:"} {
+	for _, expected := range []string{"Version 9.9.9", "Quick Start:", "Core Commands:", "Utilities:", "Global Flags:", "Extensions:", "Products:", "Showing 1 of 2 products", "Try another keyword:", "Show all matches:"} {
 		assert.Contains(t, rendered, expected)
 	}
 
@@ -71,9 +78,10 @@ func TestRenderCanonicalProductTextFullAndEmpty(t *testing.T) {
 	var out strings.Builder
 	require.NoError(t, renderCanonicalProductText(&out, document, ""))
 	rendered := out.String()
-	for _, expected := range []string{"Product: ecs", "Provided by plugin: aliyun-cli-ecs (1.2.3)", "Available API List:", "Create — Create an instance", "describe-instances", "Omitting 2 deprecated APIs", "Showing 2 of 4 APIs", "Show all:"} {
+	for _, expected := range []string{"Product: ecs", "Available API List:", "Create — Create an instance", "describe-instances", "Omitting 2 deprecated APIs", "Showing 2 of 4 APIs", "Show all:"} {
 		assert.Contains(t, rendered, expected)
 	}
+	assert.NotContains(t, rendered, "Provided by plugin")
 
 	out.Reset()
 	require.NoError(t, renderCanonicalProductText(&out, &machineHelpProductDocument{Product: machineHelpProduct{Code: "ecs"}}, "absent"))
@@ -84,6 +92,7 @@ func TestRenderCanonicalProductTextFullAndEmpty(t *testing.T) {
 
 func TestRenderCanonicalRequestSearchAndFullDocuments(t *testing.T) {
 	parameter := machineHelpParameter{Name: "instance-id", Type: "string", Required: true, Options: []string{"--InstanceId"}, Help: machineHelpLocalizedText{EN: "Instance ID"}}
+	optional := machineHelpParameter{Name: "page-size", Type: "integer", Options: []string{"--PageSize"}, Help: machineHelpLocalizedText{EN: "Page size"}}
 	document := &machineHelpAPIDocument{
 		Target:             machineHelpTarget{Path: []string{"aliyun", "ecs", "DescribeInstances"}},
 		Product:            machineHelpProduct{Plugin: "aliyun-cli-ecs"},
@@ -93,11 +102,11 @@ func TestRenderCanonicalRequestSearchAndFullDocuments(t *testing.T) {
 			Description: machineHelpLocalizedText{EN: "Returns detailed instance information"},
 			Operation:   machineHelpOperation{APIVersion: "2014-05-26"},
 		},
-		ParameterSets:    machineHelpParameterSets{Camel: []machineHelpParameter{parameter}},
+		ParameterSets:    machineHelpParameterSets{Camel: []machineHelpParameter{optional, parameter}},
 		GlobalParameters: []machineHelpParameter{{Name: "region", Type: "string", Options: []string{"--region"}, Help: machineHelpLocalizedText{EN: "Region"}}},
 		Listing:          &machineHelpListing{Shown: 1, Total: 2, Hint: "use all"},
 		Result:           HelpResult{Shown: 1, Total: 2, Truncated: true},
-		Next:             &HelpNext{Search: "aliyun ecs DescribeInstances --help-search id"},
+		Next:             &HelpNext{Search: "aliyun ecs DescribeInstances --help-search id", operation: HelpOperationAll},
 		QueryOptions:     []machineHelpQueryOption{{Name: "--cli-query", Type: "string", Required: true, Help: machineHelpLocalizedText{EN: "JMESPath expression"}}},
 		ResponseQuery:    &machineHelpQueryExample{Path: "Instances.Instance", SchemaCommand: "schema command", QueryCommand: "query command"},
 		Examples:         machineHelpExamples{Camel: "aliyun ecs DescribeInstances --InstanceId i-1"},
@@ -105,8 +114,12 @@ func TestRenderCanonicalRequestSearchAndFullDocuments(t *testing.T) {
 
 	var out strings.Builder
 	require.NoError(t, renderCanonicalRequestSearchText(&out, document, "instance"))
-	assert.Contains(t, out.String(), "Provided by plugin")
-	assert.Contains(t, out.String(), "Parameters:")
+	assert.NotContains(t, out.String(), "Provided by plugin")
+	assert.Contains(t, out.String(), "Required Parameters:")
+	assert.Contains(t, out.String(), "Optional Parameters:")
+	assert.Less(t, strings.Index(out.String(), "--InstanceId"), strings.Index(out.String(), "--PageSize"))
+	assert.NotContains(t, out.String(), "(required)")
+	assert.NotContains(t, out.String(), "(optional)")
 	assert.Contains(t, out.String(), "Global Parameters:")
 
 	out.Reset()
@@ -115,6 +128,9 @@ func TestRenderCanonicalRequestSearchAndFullDocuments(t *testing.T) {
 	for _, expected := range []string{"Description: Describe instances", "Details: Returns detailed instance information", "API Version: 2014-05-26", "Usage:", "Showing 1 of 2 parameters", "Query Options:", "JMESPath expression", "Response aggregation example", "Example:"} {
 		assert.Contains(t, rendered, expected)
 	}
+	assert.Contains(t, rendered, "Global Parameters:")
+	assert.Less(t, strings.Index(rendered, "Example:"), strings.Index(rendered, "Search this Help:"))
+	assert.True(t, strings.HasSuffix(rendered, "Search this Help:\n  aliyun ecs DescribeInstances --help-search id [--cli-output json]\n"))
 
 	out.Reset()
 	require.NoError(t, renderCanonicalRequestSearchText(&out, &machineHelpAPIDocument{}, "absent"))
@@ -140,13 +156,14 @@ func TestHelpProjectionSmallHelpers(t *testing.T) {
 
 	assert.Equal(t, "plain", stripHelpANSI("\x1b[31mplain\x1b[0m"))
 	assert.Equal(t, "before\x1b[", stripHelpANSI("before\x1b["))
+	assert.Equal(t, "plugin (1.2.3)", machineHelpPluginProvider(machineHelpProduct{Plugin: "plugin", PluginVersion: "1.2.3"}))
 	assert.Equal(t, "plugin", machineHelpPluginProvider(machineHelpProduct{Plugin: "plugin"}))
 	assert.Empty(t, machineHelpPluginProvider(machineHelpProduct{}))
 
 	t.Setenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH", "120")
-	assert.Equal(t, 120, machineHelpMaxLineLength())
+	assert.Equal(t, 120, machineHelpMaxLineLength(&bytes.Buffer{}))
 	t.Setenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH", "invalid")
-	assert.Equal(t, 80, machineHelpMaxLineLength())
+	assert.Equal(t, 80, machineHelpMaxLineLength(&bytes.Buffer{}))
 	assert.Nil(t, wrapMachineHelpText("  ", 8))
 	assert.Equal(t, []string{"short"}, wrapMachineHelpLine("short", 80))
 	assert.Equal(t, 12, len([]rune(wrapMachineHelpText("abcdefghijklmnopqrst", 1)[0])))
@@ -155,6 +172,21 @@ func TestHelpProjectionSmallHelpers(t *testing.T) {
 	require.NoError(t, renderTextListing(&output, "items", nil))
 	require.NoError(t, renderHelpProjectionResult(&output, "items", HelpResult{}, nil))
 	require.NoError(t, renderRequestQueryExampleText(&output, nil))
+}
+
+func TestMachineHelpMaxLineLengthUsesTerminalWidthWithCap(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH", "")
+	originalIsTerminal, originalGetSize := machineHelpIsTerminal, machineHelpGetSize
+	machineHelpIsTerminal = func(fd int) bool { return fd == 42 }
+	machineHelpGetSize = func(fd int) (int, int, error) { return 160, 40, nil }
+	t.Cleanup(func() {
+		machineHelpIsTerminal, machineHelpGetSize = originalIsTerminal, originalGetSize
+	})
+	assert.Equal(t, 120, machineHelpMaxLineLength(&machineHelpFDWriter{fd: 42}))
+	assert.Equal(t, 80, machineHelpMaxLineLength(&bytes.Buffer{}))
+
+	t.Setenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH", "60")
+	assert.Equal(t, 60, machineHelpMaxLineLength(&machineHelpFDWriter{fd: 42}))
 }
 
 func TestCanonicalTextRenderersPropagateFailuresFromLaterWrites(t *testing.T) {

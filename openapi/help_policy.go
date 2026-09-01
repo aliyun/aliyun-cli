@@ -31,6 +31,12 @@ type HelpNext struct {
 	// SearchAll re-runs the same Help search with --help-all to lift the
 	// result cap while keeping the keyword.
 	SearchAll string `json:"searchAll,omitempty"`
+	// ChildSearch moves one level deeper only after one unique exact match.
+	ChildSearch string `json:"childSearch,omitempty"`
+
+	operation HelpOperation
+	childKind helpHintChildKind
+	childName string
 }
 
 // HelpProjectionMode contains only policy inputs; operation parsing remains in

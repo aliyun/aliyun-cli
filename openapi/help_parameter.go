@@ -16,8 +16,13 @@ func renderParameterHelpText(w io.Writer, document *machineHelpParameterDocument
 	}
 	if document.Query != "" {
 		if len(document.Matches) == 0 {
-			_, err := fmt.Fprintf(w, noHelpSearchMatchesFormat+"\n", document.Query)
-			return err
+			if _, err := fmt.Fprintf(w, noHelpSearchMatchesFormat+"\n", document.Query); err != nil {
+				return err
+			}
+			if document.Result == nil {
+				return nil
+			}
+			return renderHelpProjectionResult(w, "matches", *document.Result, document.Next)
 		}
 		if _, err := fmt.Fprintln(w, "Matched fields:"); err != nil {
 			return err
@@ -31,20 +36,28 @@ func renderParameterHelpText(w io.Writer, document *machineHelpParameterDocument
 		if document.Result == nil {
 			return nil
 		}
-		return renderHelpProjectionResult(w, "matches", *document.Result, nil)
+		return renderHelpProjectionResult(w, "matches", *document.Result, document.Next)
 	}
 	name := helpParameterDisplayName(document.Parameter)
-	if _, err := fmt.Fprintf(w, "Parameter: %s\n", name); err != nil {
+	api := ""
+	if len(document.Target.Path) >= 2 {
+		api = document.Target.Path[len(document.Target.Path)-2]
+	}
+	if _, err := fmt.Fprintf(w, "%s: %s\n%s: %s\n%s: %s\n",
+		machineHelpLabel("Parameter", "参数"), name,
+		machineHelpLabel("API", "API"), api,
+		machineHelpLabel("API Version", "API 版本"), document.Target.APIVersion,
+	); err != nil {
 		return err
 	}
 	rootName := firstNonEmptyMachineHelpString(document.Parameter.RawName, document.Parameter.Name)
-	if err := renderMachineHelpParameterNode(w, document.Parameter, []string{rootName}, 2, false); err != nil {
+	if err := renderMachineHelpParameterNode(w, document.Parameter, []string{rootName}, 0, false); err != nil {
 		return err
 	}
 	if document.Result == nil {
-		return nil
+		return renderHelpHintFooter(w, document.Next, true)
 	}
-	return renderHelpProjectionResult(w, "matches", *document.Result, nil)
+	return renderHelpProjectionResult(w, "matches", *document.Result, document.Next)
 }
 
 func renderMachineHelpParameterNode(w io.Writer, parameter machineHelpParameter, path []string, indent int, printPath bool) error {
@@ -63,43 +76,47 @@ func renderMachineHelpParameterNode(w io.Writer, parameter machineHelpParameter,
 		_, err := fmt.Fprintf(w, "%s%s: %s\n", prefix, label, value)
 		return err
 	}
-	if err := write("Raw name", parameter.RawName); err != nil {
+	if err := write(machineHelpLabel("Type", "类型"), parameter.Type); err != nil {
 		return err
 	}
-	if err := write("Type", parameter.Type); err != nil {
+	if err := write(machineHelpLabel("Location", "位置"), parameter.Location); err != nil {
 		return err
 	}
-	if err := write("Location", parameter.Location); err != nil {
+	if _, err := fmt.Fprintf(w, "%s%s: %t\n", prefix, machineHelpLabel("Required", "必填"), parameter.Required); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "%sRequired: %t\n", prefix, parameter.Required); err != nil {
-		return err
+	if description := localizedMachineHelpText(parameter.Help); description != "" {
+		if _, err := fmt.Fprintf(w, "\n%s%s:\n", prefix, machineHelpLabel("Description", "描述")); err != nil {
+			return err
+		}
+		width := machineHelpMaxLineLength(w) - len([]rune(prefix)) - 2
+		for _, line := range wrapMachineHelpText(description, width) {
+			if line == "" {
+				if _, err := fmt.Fprintln(w); err != nil {
+					return err
+				}
+				continue
+			}
+			if _, err := fmt.Fprintf(w, "%s  %s\n", prefix, line); err != nil {
+				return err
+			}
+		}
 	}
-	if err := write("Serialization", parameter.Serialization); err != nil {
-		return err
+	if parameter.Example != "" {
+		if _, err := fmt.Fprintf(w, "\n%s%s:\n%s  %s\n", prefix, machineHelpLabel("Example", "示例"), prefix, parameter.Example); err != nil {
+			return err
+		}
 	}
-	if err := write("Help", localizedMachineHelpText(parameter.Help)); err != nil {
-		return err
-	}
-	if err := write("Example", parameter.Example); err != nil {
-		return err
-	}
-	if err := write("Enum", strings.Join(parameter.Constraints.Enum, ", ")); err != nil {
-		return err
-	}
-	for _, entry := range []struct{ label, value string }{
-		{"Pattern", parameter.Constraints.Pattern},
-		{"Minimum", parameter.Constraints.Minimum},
-		{"Maximum", parameter.Constraints.Maximum},
-		{"Minimum length", parameter.Constraints.MinLength},
-		{"Maximum length", parameter.Constraints.MaxLength},
-	} {
-		if err := write(entry.label, entry.value); err != nil {
+	if hasMachineHelpConstraints(parameter.Constraints) {
+		if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, machineHelpLabel("Constraints", "约束")); err != nil {
+			return err
+		}
+		if err := renderMachineHelpConstraints(w, prefix+"  ", parameter.Constraints); err != nil {
 			return err
 		}
 	}
 	if len(parameter.Fields) > 0 {
-		if _, err := fmt.Fprintf(w, "%sFields:\n", prefix); err != nil {
+		if _, err := fmt.Fprintf(w, "\n%s%s:\n", prefix, machineHelpLabel("Fields", "字段")); err != nil {
 			return err
 		}
 		for _, field := range parameter.Fields {
@@ -112,7 +129,7 @@ func renderMachineHelpParameterNode(w io.Writer, parameter machineHelpParameter,
 	for _, entry := range []struct {
 		label string
 		shape *machineHelpShape
-	}{{"Element", parameter.Element}, {"Value", parameter.Value}} {
+	}{{machineHelpLabel("Element", "元素"), parameter.Element}, {machineHelpLabel("Value", "值"), parameter.Value}} {
 		if entry.shape == nil {
 			continue
 		}
@@ -141,8 +158,13 @@ func renderMachineHelpShapeNode(w io.Writer, shape *machineHelpShape, path []str
 			return err
 		}
 	}
-	if err := renderMachineHelpConstraints(w, prefix, shape.Constraints); err != nil {
-		return err
+	if hasMachineHelpConstraints(shape.Constraints) {
+		if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, machineHelpLabel("Constraints", "约束")); err != nil {
+			return err
+		}
+		if err := renderMachineHelpConstraints(w, prefix+"  ", shape.Constraints); err != nil {
+			return err
+		}
 	}
 	for _, field := range shape.Fields {
 		name := firstNonEmptyMachineHelpString(field.RawName, field.Name)
@@ -153,7 +175,7 @@ func renderMachineHelpShapeNode(w io.Writer, shape *machineHelpShape, path []str
 	for _, entry := range []struct {
 		label string
 		shape *machineHelpShape
-	}{{"Element", shape.Element}, {"Value", shape.Value}} {
+	}{{machineHelpLabel("Element", "元素"), shape.Element}, {machineHelpLabel("Value", "值"), shape.Value}} {
 		if entry.shape == nil {
 			continue
 		}
@@ -169,12 +191,12 @@ func renderMachineHelpShapeNode(w io.Writer, shape *machineHelpShape, path []str
 
 func renderMachineHelpConstraints(w io.Writer, prefix string, constraints machineHelpConstraints) error {
 	entries := []struct{ label, value string }{
-		{"Enum", strings.Join(constraints.Enum, ", ")},
-		{"Pattern", constraints.Pattern},
-		{"Minimum", constraints.Minimum},
-		{"Maximum", constraints.Maximum},
-		{"Minimum length", constraints.MinLength},
-		{"Maximum length", constraints.MaxLength},
+		{machineHelpLabel("Enum", "枚举"), strings.Join(constraints.Enum, ", ")},
+		{machineHelpLabel("Pattern", "模式"), constraints.Pattern},
+		{machineHelpLabel("Minimum", "最小值"), constraints.Minimum},
+		{machineHelpLabel("Maximum", "最大值"), constraints.Maximum},
+		{machineHelpLabel("Minimum length", "最小长度"), constraints.MinLength},
+		{machineHelpLabel("Maximum length", "最大长度"), constraints.MaxLength},
 	}
 	for _, entry := range entries {
 		if entry.value == "" {
@@ -187,17 +209,23 @@ func renderMachineHelpConstraints(w io.Writer, prefix string, constraints machin
 	return nil
 }
 
+func hasMachineHelpConstraints(constraints machineHelpConstraints) bool {
+	return len(constraints.Enum) > 0 || constraints.Pattern != "" || constraints.Minimum != "" ||
+		constraints.Maximum != "" || constraints.MinLength != "" || constraints.MaxLength != ""
+}
+
 // machineHelpParameterDocument is the stable L3 document shared by default,
 // all, search, Text and JSON renderers. Parameter always remains the complete
 // finite tree; Search results are an orthogonal projection.
 type machineHelpParameterDocument struct {
 	SchemaVersion string                      `json:"schemaVersion"`
-	Kind          string                      `json:"kind"`
-	Target        machineHelpTarget           `json:"target"`
+	Kind          string                      `json:"helpLevel"`
+	Target        machineHelpTarget           `json:"-"`
 	Query         string                      `json:"query"`
 	Parameter     machineHelpParameter        `json:"parameter"`
 	Matches       []machineHelpParameterMatch `json:"matches"`
 	Result        *HelpResult                 `json:"result"`
+	Next          *HelpNext                   `json:"next,omitempty"`
 	AIModeHint    *machineHelpAIModeHint      `json:"aiModeHint"`
 }
 

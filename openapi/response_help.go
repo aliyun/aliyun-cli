@@ -11,11 +11,6 @@ func renderResponseHelpText(w io.Writer, document *machineHelpAPIResponseDocumen
 	if document == nil {
 		return fmt.Errorf("response Help document is nil")
 	}
-	if document.Provider != "" {
-		if _, err := fmt.Fprintf(w, "\nProvided by plugin: %s\n", document.Provider); err != nil {
-			return err
-		}
-	}
 	// Explicit Response Section Help is lossless: retain every response and
 	// print only its reachable component closure without inlining refs. Search
 	// projections continue through the filtered OutputSchema branch below.
@@ -47,8 +42,10 @@ func renderResponseHelpText(w io.Writer, document *machineHelpAPIResponseDocumen
 		return renderHelpProjectionResult(w, "matches", document.Result, document.Next)
 	}
 	if document.OutputSchema == nil {
-		_, err := fmt.Fprintln(w, document.Notice)
-		return err
+		if _, err := fmt.Fprintln(w, document.Notice); err != nil {
+			return err
+		}
+		return renderHelpProjectionResult(w, "matches", document.Result, document.Next)
 	}
 	if len(document.Matches) > 0 {
 		if _, err := fmt.Fprintln(w, "Matched Response Paths:"); err != nil {

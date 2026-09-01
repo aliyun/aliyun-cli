@@ -276,6 +276,24 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		assert.Equal(t, "Remove one of the conflicting options: --cli-dry-run-json, --pager.", envelope.Recovery.Hint)
 	})
 
+	t.Run("section all conflict recovers with same section search", func(t *testing.T) {
+		text := "--cli-section does not support --help-all without --help-search"
+		cause := &engine.UsageError{Code: "INVALID_OPTION_COMBINATION", Err: &engine.InvalidOptionCombinationError{
+			Options: []string{"--cli-section", "--help-all"}, Err: errors.New(text),
+		}}
+		envelope := requireAgentEnvelope(t, cause, []string{
+			"help", "ecs", "DescribeInstances", "--version", "2014-05-26",
+			"--cli-section", "request", "--cli-output", "json",
+		}, nil)
+
+		assert.Equal(t, text, envelope.Message)
+		assert.Equal(t, "fix_option_combination", envelope.Recovery.Action)
+		assert.Equal(t,
+			"aliyun help ecs DescribeInstances --version 2014-05-26 --cli-section request --help-search <keyword> --cli-output json",
+			envelope.Recovery.Command)
+		assert.Equal(t, "Search the same Help section with a keyword instead of using --help-all alone.", envelope.Recovery.Hint)
+	})
+
 	t.Run("invalid header searches validated header usage without copying its value", func(t *testing.T) {
 		cause := &engine.UsageError{Code: "INVALID_HEADER", Err: &engine.InvalidHeaderError{
 			Input: "Authorization=secret-value=still-secret", ExpectedFormat: "Name=Value",
@@ -1225,6 +1243,40 @@ func TestBuiltInSubcommandErrorKeepsNonAIText(t *testing.T) {
 	assert.Contains(t, stderr.String(), `ERROR: "profiel" is not a valid command`)
 	assert.False(t, strings.HasPrefix(strings.TrimSpace(stderr.String()), "{"))
 	assert.Equal(t, 1, strings.Count(stderr.String(), cli.AIModeEnableCommand))
+}
+
+func TestSectionHelpAllConflictPrintsTextRecoveryAndAIModeHint(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "false")
+	t.Setenv("NO_COLOR", "1")
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	root := &cli.Command{
+		Name: "aliyun", EnableUnknownFlag: true,
+		Run: func(*cli.Context, []string) error {
+			return &InvalidOptionCombinationError{
+				Options: []string{"--cli-section", "--help-all"},
+				Err:     errors.New("Help sections do not support --help-all"),
+			}
+		},
+	}
+	config.AddFlags(root.Flags())
+	AddFlags(root.Flags())
+	CliHelpSectionFlag(root.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(root.Flags()).SetValue("request")
+	CliHelpAllFlag(root.Flags()).SetAssigned(true)
+	commando := NewCommando(stdout, config.Profile{Language: "en"})
+	commando.InitWithCommand(root)
+
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	cli.DisableExitCode()
+	t.Cleanup(cli.EnableExitCode)
+	root.Execute(ctx, []string{"help", "demo", "CreateReport"})
+
+	assert.Contains(t, stderr.String(), "ERROR: Help sections do not support --help-all")
+	assert.Contains(t, stderr.String(),
+		"Search this Help:\n  aliyun help demo CreateReport --cli-section request --help-search <keyword> [--cli-output json]")
+	assert.True(t, strings.HasSuffix(stderr.String(), cli.AIModeEnableTextHint+"\n"))
 }
 
 func mapKeys(values map[string]interface{}) []string {

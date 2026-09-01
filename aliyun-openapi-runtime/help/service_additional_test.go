@@ -136,7 +136,7 @@ func TestServiceBuildsEveryHelpLevelThroughSmallInterfaces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if request.Kind != "request" || request.Target.APIVersion != "v2" || request.Provenance == nil {
+	if request.Kind != "api" || request.Target.APIVersion != "v2" || request.Provenance == nil {
 		t.Fatalf("compatibility request document = %#v", request)
 	}
 	action, err := service.BuildAction(" DEMO ", "v1", "list-things", HelpOptions{})
@@ -164,7 +164,7 @@ func TestServiceBuildsEveryHelpLevelThroughSmallInterfaces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.Kind != "response" || len(response.Responses) == 0 || response.Provenance == nil {
+	if response.Kind != "api" || len(response.Responses) == 0 || response.Provenance == nil {
 		t.Fatalf("response document = %#v", response)
 	}
 }
@@ -306,10 +306,13 @@ func TestProductTextRendererLocalizesAndMarksDeprecatedAPIs(t *testing.T) {
 	if err := Render(&output, document, HelpOptions{Language: "zh"}); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"产品: demo (演示产品)", "描述: 演示服务", "元数据来源: aliyun-cli-demo (2.0.0)", "[已废弃] 旧接口"} {
+	for _, want := range []string{"产品: demo (演示产品)", "描述: 演示服务", "[已废弃] 旧接口"} {
 		if !strings.Contains(output.String(), want) {
 			t.Fatalf("product text missing %q:\n%s", want, output.String())
 		}
+	}
+	if strings.Contains(output.String(), "元数据来源") || strings.Contains(output.String(), "aliyun-cli-demo") {
+		t.Fatalf("product Text Help leaked provenance:\n%s", output.String())
 	}
 }
 
@@ -418,7 +421,8 @@ func TestActionSearchReportsTheFullMatchCount(t *testing.T) {
 		t.Fatalf("limited action search = %#v", limited)
 	}
 	unlimited := BuildActionDocument(product, api, nil, HelpOptions{Search: "coverage probe", All: true})
-	if len(unlimited.Parameters) != 25 || unlimited.Result.Total != 25 || unlimited.Result.Truncated || unlimited.Next != nil {
+	if len(unlimited.Parameters) != 25 || unlimited.Result.Total != 25 || unlimited.Result.Truncated ||
+		unlimited.Next == nil || unlimited.Next.Search == "" || unlimited.Next.SearchAll != "" {
 		t.Fatalf("unlimited action search = %#v", unlimited)
 	}
 }

@@ -7,6 +7,7 @@ require (
 	github.com/alibabacloud-go/tea v1.5.2
 	github.com/aliyun/credentials-go v1.4.7
 	github.com/jmespath/go-jmespath v0.4.0
+	golang.org/x/term v0.45.0
 	google.golang.org/protobuf v1.36.11
 )
 
@@ -23,5 +24,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 )

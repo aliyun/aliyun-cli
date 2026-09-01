@@ -140,8 +140,8 @@ type machineHelpRootMatch struct {
 
 type machineHelpRootDocument struct {
 	SchemaVersion string                      `json:"schemaVersion"`
-	Kind          string                      `json:"kind"`
-	Target        machineHelpTarget           `json:"target"`
+	Kind          string                      `json:"helpLevel"`
+	Target        machineHelpTarget           `json:"-"`
 	Name          string                      `json:"name"`
 	Version       string                      `json:"version"`
 	Description   machineHelpLocalizedText    `json:"description"`
@@ -158,6 +158,7 @@ type machineHelpRootDocument struct {
 	Next          *HelpNext                   `json:"next"`
 	Listing       *machineHelpListing         `json:"listing"`
 	AIModeHint    *machineHelpAIModeHint      `json:"aiModeHint"`
+	helpHintExact helpHintExact
 }
 
 type machineHelpProduct struct {
@@ -171,8 +172,8 @@ type machineHelpProduct struct {
 	Distribution         string                   `json:"distribution,omitempty"`
 	// Plugin/PluginVersion identify the installed metadata plugin whose data
 	// serves this product. Empty for baseline-served products.
-	Plugin        string `json:"plugin,omitempty"`
-	PluginVersion string `json:"pluginVersion,omitempty"`
+	Plugin        string `json:"-"`
+	PluginVersion string `json:"-"`
 }
 
 type machineHelpAPISummary struct {
@@ -204,8 +205,8 @@ func (summary machineHelpAPISummary) MarshalJSON() ([]byte, error) {
 
 type machineHelpProductDocument struct {
 	SchemaVersion string                  `json:"schemaVersion"`
-	Kind          string                  `json:"kind"`
-	Target        machineHelpTarget       `json:"target"`
+	Kind          string                  `json:"helpLevel"`
+	Target        machineHelpTarget       `json:"-"`
 	Query         string                  `json:"query"`
 	Product       machineHelpProduct      `json:"product"`
 	APIs          []machineHelpAPISummary `json:"apis"`
@@ -213,6 +214,7 @@ type machineHelpProductDocument struct {
 	Next          *HelpNext               `json:"next"`
 	Listing       *machineHelpListing     `json:"listing"`
 	AIModeHint    *machineHelpAIModeHint  `json:"aiModeHint"`
+	helpHintExact helpHintExact
 }
 
 type machineHelpOperation struct {
@@ -287,9 +289,9 @@ type machineHelpExamples struct {
 
 type machineHelpAPIDocument struct {
 	SchemaVersion      string                   `json:"schemaVersion"`
-	Kind               string                   `json:"kind"`
+	Kind               string                   `json:"helpLevel"`
 	Section            string                   `json:"section"`
-	Target             machineHelpTarget        `json:"target"`
+	Target             machineHelpTarget        `json:"-"`
 	Query              string                   `json:"query"`
 	Product            machineHelpProduct       `json:"product"`
 	API                machineHelpAPI           `json:"api"`
@@ -307,6 +309,7 @@ type machineHelpAPIDocument struct {
 	Next               *HelpNext                `json:"next"`
 	Listing            *machineHelpListing      `json:"listing"`
 	AIModeHint         *machineHelpAIModeHint   `json:"aiModeHint"`
+	helpHintExact      helpHintExact
 }
 
 // machineHelpQueryOption describes one metadata-inspection flag in the same
@@ -351,14 +354,14 @@ type machineHelpOutputSchema struct {
 
 // machineHelpAPIResponseDocument intentionally omits the API and Product
 // blocks: the caller already knows which API it asked about, and the schema
-// is the payload. Provider keeps the plugin attribution in one string.
+// is the payload. Provider remains available internally for text rendering.
 type machineHelpAPIResponseDocument struct {
 	SchemaVersion string                   `json:"schemaVersion"`
-	Kind          string                   `json:"kind"`
+	Kind          string                   `json:"helpLevel"`
 	Section       string                   `json:"section"`
-	Target        machineHelpTarget        `json:"target"`
+	Target        machineHelpTarget        `json:"-"`
 	Query         string                   `json:"query"`
-	Provider      string                   `json:"provider,omitempty"`
+	Provider      string                   `json:"-"`
 	Responses     json.RawMessage          `json:"responses,omitempty"`
 	Components    *machineHelpComponents   `json:"components,omitempty"`
 	OutputSchema  *machineHelpOutputSchema `json:"outputSchema,omitempty"`

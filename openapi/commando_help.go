@@ -59,28 +59,42 @@ func (c *Commando) invalidBaselineCommandError(productCode, command string) erro
 
 func printProductHelpSwitchHint(ctx *cli.Context, productCode string, target productHelpSwitch) {
 	productCode = strings.ToLower(productCode)
-	var english, chinese, command string
+	var english, chinese, environment string
+	commandStyle := CommandStyleCamel
 	switch target {
 	case productHelpTraditionalToKebab:
 		english = "Note: This help shows traditional PascalCase commands. To view kebab-case commands, run:"
 		chinese = "提示：当前显示传统大驼峰命令。查看短横线命令，请运行："
-		command = baselineProductHelpEnv + "=true aliyun " + productCode + " --help"
+		environment = baselineProductHelpEnv + "=true "
+		commandStyle = CommandStyleKebab
 	case productHelpKebabToTraditional:
 		english = "Note: This help shows kebab-case commands. To return to traditional PascalCase commands, run:"
 		chinese = "提示：当前显示短横线命令。返回传统大驼峰命令，请运行："
-		command = baselineProductHelpEnv + "=false aliyun " + productCode + " --help"
+		environment = baselineProductHelpEnv + "=false "
 	case productHelpPluginToTraditional:
 		english = "Note: This help is provided by the installed plugin. To view traditional PascalCase commands, run:"
 		chinese = "提示：当前显示已安装插件提供的命令。查看传统大驼峰命令，请运行："
-		command = originalProductHelpEnv + "=true aliyun " + productCode + " --help"
+		environment = originalProductHelpEnv + "=true "
 	case productHelpTraditionalToPlugin:
 		english = "Note: This help shows traditional PascalCase commands. To return to the installed plugin commands, run:"
 		chinese = "提示：当前显示传统大驼峰命令。返回已安装插件提供的命令，请运行："
-		command = originalProductHelpEnv + "=false aliyun " + productCode + " --help"
+		environment = originalProductHelpEnv + "=false "
+		commandStyle = CommandStyleKebab
 	default:
 		return
 	}
-	cli.Printf(ctx.Stdout(), "\n%s\n\n  %s\n", i18n.T(english, chinese).Text(), command)
+	command, err := BuildHelpCommand(HelpTarget{
+		Level: HelpLevelProduct, Product: productCode, CommandStyle: commandStyle,
+		Operation: HelpOperationDefault, Output: HelpOutputText,
+	})
+	if err != nil {
+		return
+	}
+	displayCommand := environment + command
+	if target == productHelpTraditionalToKebab || target == productHelpKebabToTraditional {
+		displayCommand = helpHintTextCommand(displayCommand)
+	}
+	cli.Printf(ctx.Stdout(), "\n%s\n\n  %s\n", i18n.T(english, chinese).Text(), displayCommand)
 }
 
 func (c *Commando) printPluginIndexLoadHint(ctx *cli.Context) {

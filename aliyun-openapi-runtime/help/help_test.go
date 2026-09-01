@@ -87,7 +87,7 @@ func TestBuildActionKeepsRequiredParametersAndRequestIsComplete(t *testing.T) {
 	typeColumn, exampleColumn, constraintsColumn := -1, -1, -1
 	for _, line := range lines {
 		if strings.Contains(line, "identity") {
-			typeColumn = strings.Index(line, "string (required)")
+			typeColumn = strings.Index(line, "string,")
 		}
 		if strings.Contains(line, "example: id-1") {
 			exampleColumn = strings.Index(line, "example:")
@@ -101,7 +101,7 @@ func TestBuildActionKeepsRequiredParametersAndRequestIsComplete(t *testing.T) {
 			typeColumn, exampleColumn, constraintsColumn, actionOutput.String())
 	}
 	complete := BuildRequestDocument(&meta.Product{Code: "ecs"}, api, nil, HelpOptions{AIMode: true})
-	if complete.Kind != "request" || len(complete.Parameters) != 101 || complete.Result.Truncated {
+	if complete.Kind != "api" || len(complete.Parameters) != 101 || complete.Result.Truncated {
 		t.Fatalf("explicit request Help was truncated: %+v", complete.Result)
 	}
 	if len(complete.GlobalParameters) == 0 {
@@ -119,6 +119,7 @@ func TestBuildActionKeepsRequiredParametersAndRequestIsComplete(t *testing.T) {
 }
 
 func TestParameterDescriptionContinuationAlignsWithTypeColumn(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH", "60")
 	parameter := Parameter{
 		Name: "version-id", Type: meta.TypeString, Required: true,
 		Help: LocalizedText{EN: "The version to which the alias points"},
@@ -126,14 +127,16 @@ func TestParameterDescriptionContinuationAlignsWithTypeColumn(t *testing.T) {
 	var output bytes.Buffer
 	renderParameterText(&output, parameter, "en", "  ", false)
 	lines := strings.Split(strings.TrimSuffix(output.String(), "\n"), "\n")
-	if len(lines) != 2 {
+	if len(lines) < 2 {
 		t.Fatalf("parameter output lines = %d\n%s", len(lines), output.String())
 	}
-	typeColumn := strings.Index(lines[0], "string (required)")
-	continuationColumn := strings.Index(lines[1], "alias points")
-	if typeColumn < 0 || continuationColumn != typeColumn {
-		t.Fatalf("description continuation columns = type:%d continuation:%d\n%s",
-			typeColumn, continuationColumn, output.String())
+	typeColumn := strings.Index(lines[0], "string,")
+	for _, line := range lines[1:] {
+		continuationColumn := len(line) - len(strings.TrimLeft(line, " "))
+		if typeColumn < 0 || continuationColumn != typeColumn {
+			t.Fatalf("description continuation columns = type:%d continuation:%d\n%s",
+				typeColumn, continuationColumn, output.String())
+		}
 	}
 }
 
@@ -188,7 +191,7 @@ func TestBuildAPIParameterDocumentPreservesKebabCompositeShape(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(output.String(), "Parameter: --tags") ||
-		!strings.Contains(output.String(), "--key") {
+		!strings.Contains(output.String(), "Fields:\n    Key") {
 		t.Fatalf("parameter Help text = %q", output.String())
 	}
 }

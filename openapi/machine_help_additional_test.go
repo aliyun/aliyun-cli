@@ -83,7 +83,7 @@ func TestPrintMachineHelpAllTargetLevels(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			c, ctx, stdout, _ := newCanonicalHelpTestContext(t)
 			require.NoError(t, c.printMachineHelp(ctx, test.args, "json", test.options))
-			assert.Contains(t, stdout.String(), `"kind": "`+test.kind+`"`)
+			assert.Contains(t, stdout.String(), `"helpLevel": "`+test.kind+`"`)
 		})
 	}
 }

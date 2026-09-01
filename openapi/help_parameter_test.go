@@ -24,16 +24,14 @@ func TestParameterHelpJSONKeepsOnlyParameterContext(t *testing.T) {
 	var raw map[string]any
 	require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
 
-	assert.Len(t, raw, 5)
-	for _, key := range []string{"schemaVersion", "kind", "target", "parameter", "aiModeHint"} {
+	assert.Len(t, raw, 4)
+	for _, key := range []string{"schemaVersion", "helpLevel", "parameter", "aiModeHint"} {
 		assert.Contains(t, raw, key)
 	}
-	for _, key := range []string{"product", "api", "section", "result", "query", "matches"} {
+	for _, key := range []string{"kind", "target", "product", "api", "section", "result", "query", "matches"} {
 		assert.NotContains(t, raw, key)
 	}
-	target, ok := raw["target"].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "2026-01-01", target["apiVersion"])
+	assert.Equal(t, "2026-01-01", document.Target.APIVersion)
 }
 
 func TestParameterSearchJSONAddsOnlySearchProjection(t *testing.T) {
@@ -168,50 +166,92 @@ func TestActionParameterSearchIncludesExamplesAndConstraints(t *testing.T) {
 	}
 }
 
-func TestRenderParameterHelpTextGoldenKeepsNestedTree(t *testing.T) {
-	document := &machineHelpParameterDocument{Parameter: machineHelpParameter{
-		Name:          "config",
-		RawName:       "Config",
-		Options:       []string{"--config"},
-		Type:          "object",
-		Location:      "query",
-		Required:      true,
-		Serialization: "json",
-		Help:          machineHelpLocalizedText{EN: "The configuration."},
-		Example:       `{"mode":"safe"}`,
-		Fields: []machineHelpParameter{{
-			Name: "mode", RawName: "Mode", Type: "string",
-			Constraints: machineHelpConstraints{Enum: []string{"safe", "fast"}},
-		}},
-		Element: &machineHelpShape{
-			Type: "string", Format: "uuid",
-			Constraints: machineHelpConstraints{Pattern: "^res-", MinLength: "4"},
-			Element:     &machineHelpShape{Type: "integer"},
+func TestRenderParameterHelpTextGoldenKeepsStructuredNestedTree(t *testing.T) {
+	document := &machineHelpParameterDocument{
+		Target: machineHelpTarget{Path: []string{"aliyun", "demo", "create-report", "--config"}, APIVersion: "2026-01-01"},
+		Parameter: machineHelpParameter{
+			Name:          "config",
+			RawName:       "Config",
+			Options:       []string{"--config"},
+			Type:          "object",
+			Location:      "query",
+			Required:      true,
+			Serialization: "json",
+			Help:          machineHelpLocalizedText{EN: "The configuration."},
+			Example:       `{"mode":"safe"}`,
+			Fields: []machineHelpParameter{{
+				Name: "mode", RawName: "Mode", Type: "string",
+				Constraints: machineHelpConstraints{Enum: []string{"safe", "fast"}},
+			}},
+			Element: &machineHelpShape{
+				Type: "string", Format: "uuid",
+				Constraints: machineHelpConstraints{Pattern: "^res-", MinLength: "4"},
+				Element:     &machineHelpShape{Type: "integer"},
+			},
 		},
-	}}
+	}
 
 	var output bytes.Buffer
 	require.NoError(t, renderParameterHelpText(&output, document))
 	assert.Equal(t, ""+
 		"Parameter: --config\n"+
-		"  Raw name: Config\n"+
-		"  Type: object\n"+
-		"  Location: query\n"+
-		"  Required: true\n"+
-		"  Serialization: json\n"+
-		"  Help: The configuration.\n"+
-		"  Example: {\"mode\":\"safe\"}\n"+
-		"  Fields:\n"+
-		"    Config.Mode\n"+
-		"      Raw name: Mode\n"+
-		"      Type: string\n"+
-		"      Required: false\n"+
-		"      Enum: safe, fast\n"+
-		"  Element:\n"+
+		"API: create-report\n"+
+		"API Version: 2026-01-01\n"+
+		"Type: object\n"+
+		"Location: query\n"+
+		"Required: true\n"+
+		"\n"+
+		"Description:\n"+
+		"  The configuration.\n"+
+		"\n"+
+		"Example:\n"+
+		"  {\"mode\":\"safe\"}\n"+
+		"\n"+
+		"Fields:\n"+
+		"  Config.Mode\n"+
 		"    Type: string\n"+
-		"    Format: uuid\n"+
+		"    Required: false\n"+
+		"    Constraints:\n"+
+		"      Enum: safe, fast\n"+
+		"Element:\n"+
+		"  Type: string\n"+
+		"  Format: uuid\n"+
+		"  Constraints:\n"+
 		"    Pattern: ^res-\n"+
 		"    Minimum length: 4\n"+
-		"    Element:\n"+
-		"      Type: integer\n", output.String())
+		"  Element:\n"+
+		"    Type: integer\n", output.String())
+}
+
+func TestRenderParameterHelpTextWrapsStructuredDescription(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH", "60")
+	url := "https://help.aliyun.com/document_detail/12345678901234567890.html"
+	document := &machineHelpParameterDocument{
+		Target: machineHelpTarget{Path: []string{"aliyun", "demo", "create-report", "--config"}, APIVersion: "2026-01-01"},
+		Parameter: machineHelpParameter{
+			Name: "config", Type: "string", Location: "query",
+			Help: machineHelpLocalizedText{EN: "First paragraph.\n\nSecond paragraph. Valid values: safe fast\n请使用" + url + "接口"},
+		},
+	}
+	var output bytes.Buffer
+	require.NoError(t, renderParameterHelpText(&output, document))
+	rendered := output.String()
+	assert.Contains(t, rendered, "  First paragraph.\n\n  Second paragraph.\n  Valid values:\n  safe fast")
+	assert.Contains(t, rendered, "\n  "+url+"\n")
+	assert.NotContains(t, rendered, "help.aliyun.com/\n")
+}
+
+func TestRenderParameterHelpTextAllIncludesSearchHint(t *testing.T) {
+	document := &machineHelpParameterDocument{
+		Target:    machineHelpTarget{Path: []string{"aliyun", "demo", "create-report", "--config"}, APIVersion: "2026-01-01"},
+		Parameter: machineHelpParameter{Name: "config", Type: "string", Location: "query"},
+		Next: &HelpNext{
+			Search:    "aliyun demo create-report --config --help-search <keyword>",
+			operation: HelpOperationAll,
+		},
+	}
+
+	var output bytes.Buffer
+	require.NoError(t, renderParameterHelpText(&output, document))
+	assert.Contains(t, output.String(), "Search this Help:\n  aliyun demo create-report --config --help-search <keyword> [--cli-output json]")
 }

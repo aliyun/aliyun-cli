@@ -9,8 +9,8 @@ import (
 
 type machineHelpUtilityDocument struct {
 	SchemaVersion string                      `json:"schemaVersion"`
-	Kind          string                      `json:"kind"`
-	Target        machineHelpTarget           `json:"target"`
+	Kind          string                      `json:"helpLevel"`
+	Target        machineHelpTarget           `json:"-"`
 	Name          string                      `json:"name"`
 	Description   machineHelpLocalizedText    `json:"description"`
 	Usage         string                      `json:"usage"`
@@ -29,6 +29,8 @@ func (c *Commando) renderUtilityHelp(ctx *cli.Context, path []string, options cl
 		return err
 	}
 	applyUtilityHelpOptions(document, options)
+	target := utilityHelpTarget(path, options)
+	setUtilityHelpNext(document, target, aiMode)
 	jsonOutput := aiMode || options.Output == cli.HelpOutputJSON
 	if !aiMode && jsonOutput {
 		hint := cli.NewAIModeHint()
@@ -40,7 +42,7 @@ func (c *Commando) renderUtilityHelp(ctx *cli.Context, path []string, options cl
 	if err := renderUtilityHelpText(ctx, document); err != nil {
 		return err
 	}
-	return c.finishCanonicalTextHelp(ctx, aiMode)
+	return c.finishCanonicalTextHelp(ctx, aiMode, target)
 }
 
 func buildUtilityHelpDocument(root *cli.Command, path []string) (*machineHelpUtilityDocument, error) {
@@ -145,8 +147,10 @@ func renderUtilityHelpText(ctx *cli.Context, document *machineHelpUtilityDocumen
 		}
 	}
 	if document.Query != "" && len(document.Commands) == 0 && len(document.Flags) == 0 {
-		_, err := fmt.Fprintf(w, "\n"+noHelpSearchMatchesFormat+"\n", document.Query)
-		return err
+		if _, err := fmt.Fprintf(w, "\n"+noHelpSearchMatchesFormat+"\n", document.Query); err != nil {
+			return err
+		}
+		return renderHelpProjectionResult(w, "matches", document.Result, document.Next)
 	}
 	if len(document.Commands) > 0 {
 		if _, err := fmt.Fprintln(w, "\nCommands:"); err != nil {

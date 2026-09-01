@@ -185,17 +185,17 @@ func TestNewCommandContextDetectsAgentOnce(t *testing.T) {
 
 func TestMainMachineHelpJSON(t *testing.T) {
 	tests := []struct {
-		name      string
-		args      []string
-		wantKind  string
-		wantStyle string
+		name          string
+		args          []string
+		wantHelpLevel string
+		wantStyle     string
 	}{
-		{name: "root", args: []string{"--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "root"},
-		{name: "utils", args: []string{"utils", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "utility"},
-		{name: "utility leaf", args: []string{"utils", "list-supported-pricing-apis", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "utility"},
-		{name: "product", args: []string{"ecs", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "product"},
-		{name: "camel API", args: []string{"ecs", "DescribeInstances", "--version", "2014-05-26", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "api", wantStyle: "camel"},
-		{name: "kebab API", args: []string{"ecs", "describe-instances", "--api-version", "2014-05-26", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantKind: "api"},
+		{name: "root", args: []string{"--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantHelpLevel: "root"},
+		{name: "utils", args: []string{"utils", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantHelpLevel: "utility"},
+		{name: "utility leaf", args: []string{"utils", "list-supported-pricing-apis", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantHelpLevel: "utility"},
+		{name: "product", args: []string{"ecs", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantHelpLevel: "product"},
+		{name: "camel API", args: []string{"ecs", "DescribeInstances", "--version", "2014-05-26", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantHelpLevel: "api", wantStyle: "camel"},
+		{name: "kebab API", args: []string{"ecs", "describe-instances", "--api-version", "2014-05-26", "--help", "--cli-output", "json", "--no-cli-ai-mode"}, wantHelpLevel: "api"},
 	}
 
 	for _, tt := range tests {
@@ -212,14 +212,14 @@ func TestMainMachineHelpJSON(t *testing.T) {
 			}
 			var document struct {
 				SchemaVersion      string `json:"schemaVersion"`
-				Kind               string `json:"kind"`
+				HelpLevel          string `json:"helpLevel"`
 				ActiveParameterSet string `json:"activeParameterSet"`
 			}
 			if err := json.Unmarshal(stdout.Bytes(), &document); err != nil {
 				t.Fatalf("machine help is not JSON: %v\n%s", err, stdout.String())
 			}
-			if document.SchemaVersion != "v1" || document.Kind != tt.wantKind {
-				t.Fatalf("document = %#v, want schema v1 kind %s", document, tt.wantKind)
+			if document.SchemaVersion != "v1" || document.HelpLevel != tt.wantHelpLevel {
+				t.Fatalf("document = %#v, want schema v1 help level %s", document, tt.wantHelpLevel)
 			}
 			if document.ActiveParameterSet != tt.wantStyle {
 				t.Fatalf("activeParameterSet = %q, want %q", document.ActiveParameterSet, tt.wantStyle)

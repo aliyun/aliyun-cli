@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
+	"golang.org/x/term"
 )
 
 type TextRenderer struct{}
@@ -29,6 +30,8 @@ func (JSONRenderer) Render(w io.Writer, document any, options HelpOptions) error
 		return fmt.Errorf("help output is nil")
 	}
 	options = options.normalized()
+	attachRuntimeAIModeHint(document, !options.AIMode)
+	normalizeRuntimeNextOutput(document, !options.AIMode)
 	projected, err := localizeDocumentRawJSON(document, options.Language)
 	if err != nil {
 		return err
@@ -46,34 +49,25 @@ func (TextRenderer) Render(w io.Writer, document any, options HelpOptions) error
 		return fmt.Errorf("help output is nil")
 	}
 	options = options.normalized()
+	var err error
 	switch typed := document.(type) {
 	case *ProductDocument:
-		return renderProductText(w, typed, options.Language)
+		err = renderProductText(w, typed, options.Language)
 	case *ActionDocument:
-		return renderActionText(w, typed, options.Language)
+		err = renderActionText(w, typed, options.Language)
 	case *RequestDocument:
-		return renderRequestText(w, typed, options.Language)
+		err = renderRequestText(w, typed, options.Language)
 	case *APIParameterDocument:
-		return renderParameterDocumentText(w, typed, options.Language)
+		err = renderParameterDocumentText(w, typed, options.Language)
 	case *APIResponseDocument:
-		return renderResponseText(w, typed, options.Language)
+		err = renderResponseText(w, typed, options.Language)
 	default:
 		return fmt.Errorf("unsupported Runtime Help v1 document %T", document)
 	}
-}
-
-func renderProvenanceText(w io.Writer, provenance *MetadataProvenance, language string) {
-	if provenance == nil {
-		return
+	if err != nil {
+		return err
 	}
-	provider := provenance.Kind
-	if provenance.PluginName != "" {
-		provider = provenance.PluginName
-		if provenance.PluginVersion != "" {
-			provider += " (" + provenance.PluginVersion + ")"
-		}
-	}
-	fmt.Fprintf(w, "%s: %s\n", label(language, "Metadata provider", "元数据来源"), provider)
+	return renderRuntimeTextFooter(w, document, options)
 }
 
 func renderParameterDocumentText(w io.Writer, document *APIParameterDocument, language string) error {
@@ -82,8 +76,7 @@ func renderParameterDocumentText(w io.Writer, document *APIParameterDocument, la
 	}
 	fmt.Fprintf(w, "%s: --%s\n", label(language, "Parameter", "参数"), strings.TrimLeft(document.Parameter.Name, "-"))
 	fmt.Fprintf(w, "%s: %s\n", label(language, "API", "API"), document.Command)
-	fmt.Fprintf(w, "%s: %s\n\n", label(language, "API Version", "API 版本"), document.Target.APIVersion)
-	renderProvenanceText(w, document.Provenance, language)
+	fmt.Fprintf(w, "%s: %s\n", label(language, "API Version", "API 版本"), document.Target.APIVersion)
 	if document.Query != "" {
 		if len(document.Matches) == 0 {
 			fmt.Fprintf(w, "%s\n", fmt.Sprintf(
@@ -93,13 +86,13 @@ func renderParameterDocumentText(w io.Writer, document *APIParameterDocument, la
 			fmt.Fprintf(w, "%s:\n", label(language, "Matched parameter paths", "匹配的参数路径"))
 			for _, match := range document.Matches {
 				fmt.Fprintf(w, "\n  %s\n", match.Path)
-				renderParameterText(w, match.Parameter, language, "    ", true)
+				renderStructuredParameterNode(w, match.Parameter, language, "    ", nil, false)
 			}
 		}
 		return renderResult(w, document.Result, language, document.Next)
 	}
-	renderParameterText(w, document.Parameter, language, "", true)
-	return nil
+	renderStructuredParameterNode(w, document.Parameter, language, "", nil, false)
+	return renderResult(w, document.Result, language, document.Next)
 }
 
 func renderProductText(w io.Writer, document *ProductDocument, language string) error {
@@ -115,7 +108,6 @@ func renderProductText(w io.Writer, document *ProductDocument, language string) 
 	if description := document.Product.Description.Text(language); description != "" {
 		fmt.Fprintf(w, "%s: %s\n", label(language, "Description", "描述"), description)
 	}
-	renderProvenanceText(w, document.Provenance, language)
 	fmt.Fprintf(w, "\n%s:\n", label(language, "Available APIs", "可用 API"))
 	for _, api := range document.APIs {
 		name := api.Command
@@ -146,12 +138,8 @@ func renderActionText(w io.Writer, document *ActionDocument, language string) er
 	}
 	fmt.Fprintf(w, "%s: %s\n", label(language, "Description", "描述"), description)
 	fmt.Fprintf(w, "%s: %s\n", label(language, "API Version", "API 版本"), document.Target.APIVersion)
-	renderProvenanceText(w, document.Provenance, language)
 	fmt.Fprintf(w, "\n%s:\n  aliyun %s %s [parameters]\n", label(language, "Usage", "使用"), document.Target.Product, document.Command)
-	fmt.Fprintf(w, "\n%s:\n", label(language, "Parameters", "参数"))
-	for _, parameter := range document.Parameters {
-		renderParameterText(w, parameter, language, "  ", false)
-	}
+	renderParameterGroupsText(w, document.Parameters, language)
 	renderGlobalParametersText(w, document.GlobalParameters, language)
 	if err := renderQueryOptionsText(w, document.QueryOptions, language, document.ResponseQuery); err != nil {
 		return err
@@ -168,12 +156,8 @@ func renderRequestText(w io.Writer, document *APIRequestDocument, language strin
 	}
 	fmt.Fprintf(w, "%s: %s\n", label(language, "Description", "描述"), document.Description.Text(language))
 	fmt.Fprintf(w, "%s: %s\n", label(language, "API Version", "API 版本"), document.Target.APIVersion)
-	renderProvenanceText(w, document.Provenance, language)
 	fmt.Fprintf(w, "\n%s:\n  aliyun %s %s [parameters]\n", label(language, "Usage", "使用"), document.Target.Product, document.Command)
-	fmt.Fprintf(w, "\n%s:\n", label(language, "Parameters", "参数"))
-	for _, parameter := range document.Parameters {
-		renderParameterText(w, parameter, language, "  ", false)
-	}
+	renderParameterGroupsText(w, document.Parameters, language)
 	renderGlobalParametersText(w, document.GlobalParameters, language)
 	if err := renderQueryOptionsText(w, document.QueryOptions, language, document.ResponseQuery); err != nil {
 		return err
@@ -195,6 +179,29 @@ func renderGlobalParametersText(w io.Writer, parameters []GlobalParameter, langu
 			fmt.Fprintf(w, "  %s", text)
 		}
 		fmt.Fprintln(w)
+	}
+}
+
+func renderParameterGroupsText(w io.Writer, parameters []Parameter, language string) {
+	groups := []struct {
+		name     string
+		required bool
+	}{
+		{name: label(language, "Required Parameters", "必填参数"), required: true},
+		{name: label(language, "Optional Parameters", "可选参数")},
+	}
+	for _, group := range groups {
+		shownHeader := false
+		for _, parameter := range parameters {
+			if parameter.Required != group.required {
+				continue
+			}
+			if !shownHeader {
+				fmt.Fprintf(w, "\n%s:\n", group.name)
+				shownHeader = true
+			}
+			renderParameterText(w, parameter, language, "  ", false)
+		}
 	}
 }
 
@@ -221,13 +228,10 @@ func renderQueryOptionsText(w io.Writer, options []QueryOption, language string,
 
 func renderParameterText(w io.Writer, parameter Parameter, language, indent string, expanded bool) {
 	typeText := displayParameterType(parameter.Type)
-	if parameter.Required {
-		typeText += " (" + label(language, "required", "必填") + ")"
-	}
 	namePrefix := fmt.Sprintf("%s--%-26s ", indent, strings.TrimLeft(parameter.Name, "-"))
 	typeColumn := len([]rune(namePrefix))
 	prefix := namePrefix + typeText + ","
-	descriptionWidth := helpMaxLineLength() - len([]rune(prefix)) - 2
+	descriptionWidth := helpMaxLineLength(w) - len([]rune(prefix)) - 2
 	writeHelpWrappedWithWidth(w, prefix, parameter.Help.Text(language), typeColumn, descriptionWidth)
 	renderParameterDetails(w, parameter, language, strings.Repeat(" ", typeColumn))
 	if !expanded {
@@ -243,6 +247,95 @@ func renderParameterText(w io.Writer, parameter Parameter, language, indent stri
 	if parameter.Value != nil {
 		fmt.Fprintf(w, "%s  %s:\n", indent, label(language, "Value", "值"))
 		renderParameterShapeText(w, *parameter.Value, language, indent+"    ")
+	}
+}
+
+func renderStructuredParameterNode(w io.Writer, parameter Parameter, language, indent string, path []string, printPath bool) {
+	prefix := indent
+	if printPath {
+		fmt.Fprintf(w, "%s%s\n", prefix, strings.Join(path, "."))
+		prefix += "  "
+	}
+	write := func(name, value string) {
+		if value != "" {
+			fmt.Fprintf(w, "%s%s: %s\n", prefix, name, value)
+		}
+	}
+	write(label(language, "Type", "类型"), string(parameter.Type))
+	write(label(language, "Location", "位置"), string(parameter.Location))
+	fmt.Fprintf(w, "%s%s: %t\n", prefix, label(language, "Required", "必填"), parameter.Required)
+	if description := parameter.Help.Text(language); description != "" {
+		fmt.Fprintf(w, "\n%s%s:\n", prefix, label(language, "Description", "描述"))
+		width := helpMaxLineLength(w) - len([]rune(prefix)) - 2
+		for _, line := range wrapHelpText(description, width) {
+			if line == "" {
+				fmt.Fprintln(w)
+			} else {
+				fmt.Fprintf(w, "%s  %s\n", prefix, line)
+			}
+		}
+	}
+	if parameter.Example != "" {
+		fmt.Fprintf(w, "\n%s%s:\n%s  %s\n", prefix, label(language, "Example", "示例"), prefix, parameter.Example)
+	}
+	if hasConstraints(parameter.Constraints) {
+		fmt.Fprintf(w, "%s%s:\n", prefix, label(language, "Constraints", "约束"))
+		renderStructuredConstraints(w, parameter.Constraints, language, prefix+"  ")
+	}
+	if len(parameter.Fields) > 0 {
+		fmt.Fprintf(w, "\n%s%s:\n", prefix, label(language, "Fields", "字段"))
+		for _, field := range parameter.Fields {
+			name := field.RawName
+			if name == "" {
+				name = strings.TrimLeft(field.Name, "-")
+			}
+			renderStructuredParameterNode(w, field, language, prefix+"  ", appendParameterPath(path, name), true)
+		}
+	}
+	for _, entry := range []struct {
+		name  string
+		value *Parameter
+	}{
+		{name: label(language, "Element", "元素"), value: parameter.Element},
+		{name: label(language, "Value", "值"), value: parameter.Value},
+	} {
+		if entry.value == nil {
+			continue
+		}
+		fmt.Fprintf(w, "%s%s:\n", prefix, entry.name)
+		renderStructuredParameterNode(w, *entry.value, language, prefix+"  ", path, false)
+	}
+}
+
+func appendParameterPath(path []string, name string) []string {
+	result := append([]string(nil), path...)
+	if name != "" {
+		result = append(result, name)
+	}
+	return result
+}
+
+func hasConstraints(constraints Constraints) bool {
+	return len(constraints.Enum) > 0 || constraints.Pattern != "" || constraints.Minimum != "" ||
+		constraints.Maximum != "" || constraints.MinLength != "" || constraints.MaxLength != ""
+}
+
+func renderStructuredConstraints(w io.Writer, constraints Constraints, language, indent string) {
+	entries := []struct {
+		name  string
+		value string
+	}{
+		{name: label(language, "Enum", "枚举"), value: strings.Join(constraints.Enum, ", ")},
+		{name: label(language, "Pattern", "模式"), value: constraints.Pattern},
+		{name: label(language, "Minimum", "最小值"), value: constraints.Minimum},
+		{name: label(language, "Maximum", "最大值"), value: constraints.Maximum},
+		{name: label(language, "Minimum length", "最小长度"), value: constraints.MinLength},
+		{name: label(language, "Maximum length", "最大长度"), value: constraints.MaxLength},
+	}
+	for _, entry := range entries {
+		if entry.value != "" {
+			fmt.Fprintf(w, "%s%s: %s\n", indent, entry.name, entry.value)
+		}
 	}
 }
 
@@ -403,7 +496,7 @@ func parameterShape(parameter Parameter) string {
 }
 
 func writeHelpWrapped(w io.Writer, prefix, text string, continuationIndent int) {
-	writeHelpWrappedWithWidth(w, prefix, text, continuationIndent, helpMaxLineLength()-continuationIndent)
+	writeHelpWrappedWithWidth(w, prefix, text, continuationIndent, helpMaxLineLength(w)-continuationIndent)
 }
 
 func writeHelpWrappedWithWidth(w io.Writer, prefix, text string, continuationIndent, width int) {
@@ -415,7 +508,7 @@ func writeHelpWrappedWithWidth(w io.Writer, prefix, text string, continuationInd
 		width = 20
 	}
 	lines := wrapHelpText(text, width)
-	if len([]rune(prefix))+2+len([]rune(lines[0])) <= helpMaxLineLength() {
+	if len([]rune(prefix))+2+len([]rune(lines[0])) <= helpMaxLineLength(w) {
 		fmt.Fprintf(w, "%s  %s\n", prefix, lines[0])
 		lines = lines[1:]
 	} else {
@@ -423,40 +516,124 @@ func writeHelpWrappedWithWidth(w io.Writer, prefix, text string, continuationInd
 	}
 	indent := strings.Repeat(" ", continuationIndent)
 	for _, line := range lines {
+		if line == "" {
+			fmt.Fprintln(w)
+			continue
+		}
 		fmt.Fprintf(w, "%s%s\n", indent, line)
 	}
 }
 
-func helpMaxLineLength() int {
-	if value := strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH")); value != "" {
-		if width, err := strconv.Atoi(value); err == nil && width > 0 {
-			return width
+var helpIsTerminal = term.IsTerminal
+var helpGetSize = term.GetSize
+
+func helpMaxLineLength(w io.Writer) int {
+	if raw, present := os.LookupEnv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH"); present {
+		value := strings.TrimSpace(raw)
+		if value != "" {
+			if width, err := strconv.Atoi(value); err == nil && width > 0 {
+				return width
+			}
+			return 80
+		}
+	}
+	if writer, ok := w.(interface{ Fd() uintptr }); ok {
+		fd := int(writer.Fd())
+		if helpIsTerminal(fd) {
+			if width, _, err := helpGetSize(fd); err == nil && width > 0 {
+				if width > 120 {
+					return 120
+				}
+				return width
+			}
 		}
 	}
 	return 80
 }
 
 func wrapHelpText(text string, width int) []string {
-	var result []string
+	if width < 12 {
+		width = 12
+	}
+	result := make([]string, 0, 3)
 	for _, paragraph := range strings.Split(text, "\n") {
-		runes := []rune(strings.TrimSpace(paragraph))
-		for len(runes) > width {
-			end := width
-			for i := width - 1; i > width/2; i-- {
-				if strings.ContainsRune(" ,.;/，。、、：", runes[i]) {
-					end = i + 1
-					break
-				}
-			}
-			result = append(result, strings.TrimSpace(string(runes[:end])))
-			runes = []rune(strings.TrimSpace(string(runes[end:])))
+		paragraph = strings.TrimSpace(paragraph)
+		if paragraph == "" {
+			result = append(result, "")
+			continue
 		}
-		if len(runes) > 0 {
-			result = append(result, string(runes))
+		for _, segment := range splitHelpMarkers(paragraph) {
+			result = append(result, wrapHelpLine(segment, width)...)
 		}
 	}
-	if len(result) == 0 {
-		return []string{""}
+	return result
+}
+
+func splitHelpMarkers(text string) []string {
+	for _, marker := range []string{"Valid values:", "取值：", "取值:"} {
+		if index := strings.Index(text, marker); index >= 0 {
+			result := make([]string, 0, 3)
+			if prefix := strings.TrimSpace(text[:index]); prefix != "" {
+				result = append(result, prefix)
+			}
+			result = append(result, marker)
+			if rest := strings.TrimSpace(text[index+len(marker):]); rest != "" {
+				result = append(result, rest)
+			}
+			return result
+		}
+	}
+	return []string{text}
+}
+
+func wrapHelpLine(text string, width int) []string {
+	runes := []rune(text)
+	if len(runes) <= width {
+		return []string{text}
+	}
+	if strings.Contains(text, "http://") || strings.Contains(text, "https://") {
+		return wrapHelpURLLine(text, width)
+	}
+	result := make([]string, 0, len(runes)/width+1)
+	for len(runes) > width {
+		end := width
+		for i := width - 1; i > width/2; i-- {
+			if strings.ContainsRune(" ,.;，。、、：", runes[i]) {
+				end = i + 1
+				break
+			}
+		}
+		result = append(result, strings.TrimSpace(string(runes[:end])))
+		runes = []rune(strings.TrimSpace(string(runes[end:])))
+	}
+	if len(runes) > 0 {
+		result = append(result, string(runes))
+	}
+	return result
+}
+
+func wrapHelpURLLine(text string, width int) []string {
+	start := strings.Index(text, "https://")
+	if httpStart := strings.Index(text, "http://"); start < 0 || (httpStart >= 0 && httpStart < start) {
+		start = httpStart
+	}
+	if start < 0 {
+		return wrapHelpLine(text, width)
+	}
+	end := len(text)
+	for index := start; index < len(text); index++ {
+		if text[index] <= ' ' || text[index] >= 0x80 {
+			end = index
+			break
+		}
+	}
+	result := make([]string, 0, 3)
+	if prefix := strings.TrimSpace(text[:start]); prefix != "" {
+		result = append(result, wrapHelpLine(prefix, width)...)
+	}
+	result = append(result, text[start:end])
+	if suffix := strings.TrimSpace(text[end:]); suffix != "" {
+		result = append(result, wrapHelpLine(suffix, width)...)
 	}
 	return result
 }
@@ -480,7 +657,6 @@ func renderResponseText(w io.Writer, document *APIResponseDocument, language str
 	if document == nil {
 		return fmt.Errorf("response Help document is nil")
 	}
-	renderProvenanceText(w, document.Provenance, language)
 	if len(document.Warnings) > 0 {
 		fmt.Fprintf(w, "%s:\n", label(language, "Warnings", "警告"))
 		for _, warning := range document.Warnings {
@@ -549,30 +725,16 @@ func renderResponseText(w io.Writer, document *APIResponseDocument, language str
 }
 
 func renderResult(w io.Writer, result Result, language string, nextValues ...*Next) error {
-	if !result.Truncated {
-		return nil
-	}
-	if _, err := fmt.Fprintf(w, "\n%s\n",
-		fmt.Sprintf(label(language, "Showing %d of %d entries; use all mode for the complete document.", "显示 %d/%d 项；使用 all 模式查看完整文档。"), result.Shown, result.Total)); err != nil {
-		return err
-	}
-	if len(nextValues) == 0 || nextValues[0] == nil {
-		return nil
-	}
-	next := nextValues[0]
-	for _, item := range []struct {
-		label string
-		value string
-	}{
-		{label(language, "Show all", "显示全部"), next.ShowAll},
-		{label(language, "Search", "搜索"), next.Search},
-		{label(language, "Show all matches", "显示全部匹配"), next.SearchAll},
-	} {
-		if item.value != "" {
-			fmt.Fprintf(w, "%s: %s\n", item.label, item.value)
+	if result.Truncated {
+		if _, err := fmt.Fprintf(w, "\n%s\n",
+			fmt.Sprintf(label(language, "Showing %d of %d entries; use all mode for the complete document.", "显示 %d/%d 项；使用 all 模式查看完整文档。"), result.Shown, result.Total)); err != nil {
+			return err
 		}
 	}
-	return nil
+	if len(nextValues) == 0 {
+		return nil
+	}
+	return renderHelpHintFooter(w, nextValues[0], language, !result.Truncated)
 }
 
 func label(language, en, zh string) string {

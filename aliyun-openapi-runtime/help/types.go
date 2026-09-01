@@ -88,9 +88,19 @@ type Result struct {
 }
 
 type Next struct {
-	ShowAll   string `json:"showAll,omitempty"`
-	Search    string `json:"search,omitempty"`
-	SearchAll string `json:"searchAll,omitempty"`
+	ShowAll     string `json:"showAll,omitempty"`
+	Search      string `json:"search,omitempty"`
+	SearchAll   string `json:"searchAll,omitempty"`
+	ChildSearch string `json:"childSearch,omitempty"`
+
+	operation string
+	childKind helpHintKind
+	childName string
+}
+
+type AIModeHint struct {
+	Command string `json:"command"`
+	Message string `json:"message"`
 }
 
 // MetadataProvenance identifies the metadata layer that supplied a Help
@@ -122,14 +132,15 @@ type APISummary struct {
 
 type ProductDocument struct {
 	SchemaVersion string              `json:"schemaVersion"`
-	Kind          string              `json:"kind"`
-	Target        Target              `json:"target"`
-	Provenance    *MetadataProvenance `json:"provenance,omitempty"`
+	Kind          string              `json:"helpLevel"`
+	Target        Target              `json:"-"`
+	Provenance    *MetadataProvenance `json:"-"`
 	Query         string              `json:"query,omitempty"`
 	Product       Product             `json:"product"`
 	APIs          []APISummary        `json:"apis"`
 	Result        Result              `json:"result"`
 	Next          *Next               `json:"next,omitempty"`
+	AIModeHint    *AIModeHint         `json:"aiModeHint,omitempty"`
 }
 
 type Operation struct {
@@ -197,10 +208,10 @@ type QueryOption struct {
 // `aliyun <product> <kebab-action> --help`.
 type ActionDocument struct {
 	SchemaVersion    string              `json:"schemaVersion"`
-	Kind             string              `json:"kind"`
+	Kind             string              `json:"helpLevel"`
 	Section          Section             `json:"section"`
-	Target           Target              `json:"target"`
-	Provenance       *MetadataProvenance `json:"provenance,omitempty"`
+	Target           Target              `json:"-"`
+	Provenance       *MetadataProvenance `json:"-"`
 	Query            string              `json:"query,omitempty"`
 	Name             string              `json:"name"`
 	Command          string              `json:"command"`
@@ -217,16 +228,17 @@ type ActionDocument struct {
 	ResponseQuery    *QueryExample       `json:"responseQueryExample,omitempty"`
 	Result           Result              `json:"result"`
 	Next             *Next               `json:"next,omitempty"`
+	AIModeHint       *AIModeHint         `json:"aiModeHint,omitempty"`
 }
 
 // RequestDocument is the complete request metadata view selected explicitly
 // with `--cli-section request`.
 type RequestDocument struct {
 	SchemaVersion    string              `json:"schemaVersion"`
-	Kind             string              `json:"kind"`
+	Kind             string              `json:"helpLevel"`
 	Section          Section             `json:"section"`
-	Target           Target              `json:"target"`
-	Provenance       *MetadataProvenance `json:"provenance,omitempty"`
+	Target           Target              `json:"-"`
+	Provenance       *MetadataProvenance `json:"-"`
 	Query            string              `json:"query,omitempty"`
 	Product          Product             `json:"product"`
 	Name             string              `json:"name"`
@@ -244,6 +256,7 @@ type RequestDocument struct {
 	ResponseQuery    *QueryExample       `json:"responseQueryExample,omitempty"`
 	Result           Result              `json:"result"`
 	Next             *Next               `json:"next,omitempty"`
+	AIModeHint       *AIModeHint         `json:"aiModeHint,omitempty"`
 }
 
 // APIRequestDocument is retained as a source-compatible name for callers that
@@ -255,10 +268,10 @@ type APIRequestDocument = RequestDocument
 // Parameter so composite request shapes are preserved.
 type APIParameterDocument struct {
 	SchemaVersion string              `json:"schemaVersion"`
-	Kind          string              `json:"kind"`
+	Kind          string              `json:"helpLevel"`
 	Section       Section             `json:"section"`
-	Target        Target              `json:"target"`
-	Provenance    *MetadataProvenance `json:"provenance,omitempty"`
+	Target        Target              `json:"-"`
+	Provenance    *MetadataProvenance `json:"-"`
 	Product       Product             `json:"product"`
 	Name          string              `json:"name"`
 	Command       string              `json:"command"`
@@ -267,6 +280,7 @@ type APIParameterDocument struct {
 	Matches       []ParameterMatch    `json:"matches,omitempty"`
 	Result        Result              `json:"result"`
 	Next          *Next               `json:"next,omitempty"`
+	AIModeHint    *AIModeHint         `json:"aiModeHint,omitempty"`
 	Candidates    []string            `json:"candidates,omitempty"`
 }
 
@@ -296,10 +310,10 @@ type OutputSchema struct {
 
 type APIResponseDocument struct {
 	SchemaVersion string                     `json:"schemaVersion"`
-	Kind          string                     `json:"kind"`
+	Kind          string                     `json:"helpLevel"`
 	Section       Section                    `json:"section"`
-	Target        Target                     `json:"target"`
-	Provenance    *MetadataProvenance        `json:"provenance,omitempty"`
+	Target        Target                     `json:"-"`
+	Provenance    *MetadataProvenance        `json:"-"`
 	Query         string                     `json:"query,omitempty"`
 	Responses     json.RawMessage            `json:"responses,omitempty"`
 	Components    map[string]json.RawMessage `json:"components,omitempty"`
@@ -310,6 +324,7 @@ type APIResponseDocument struct {
 	ResponseQuery *QueryExample              `json:"responseQueryExample,omitempty"`
 	Result        Result                     `json:"result"`
 	Next          *Next                      `json:"next,omitempty"`
+	AIModeHint    *AIModeHint                `json:"aiModeHint,omitempty"`
 }
 
 // DataSource is deliberately compatible with the useful subset of loader.Loader.

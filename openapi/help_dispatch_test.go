@@ -94,7 +94,7 @@ func TestHelpNextBuildersAndDocumentSetters(t *testing.T) {
 		SearchQuery: "instance", Output: HelpOutputJSON,
 	}
 	next := buildHelpNext(target, false)
-	assert.Contains(t, next.ShowAll, "--help-all")
+	assert.Empty(t, next.ShowAll)
 	assert.Contains(t, next.Search, "--help-search")
 	assert.Contains(t, next.SearchAll, "instance")
 	assert.Contains(t, next.SearchAll, "--help-all")
@@ -108,9 +108,9 @@ func TestHelpNextBuildersAndDocumentSetters(t *testing.T) {
 	setRootHelpNext(root, target, false)
 	setProductHelpNext(product, target, false)
 	setActionHelpNext(action, target, false)
-	assert.Nil(t, root.Next)
-	assert.Nil(t, product.Next)
-	assert.Nil(t, action.Next)
+	assert.NotNil(t, root.Next)
+	assert.NotNil(t, product.Next)
+	assert.NotNil(t, action.Next)
 	root.Result.Truncated, product.Result.Truncated, action.Result.Truncated = true, true, true
 	setRootHelpNext(root, target, false)
 	setProductHelpNext(product, target, false)
