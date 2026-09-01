@@ -99,11 +99,10 @@ test-runtime:
 check-runtime: test-runtime
 
 test: deps
-	ALIYUN_CLI_META_DIR="$(META_DIR)" LANG="en_US.UTF-8" go test -race -coverprofile=coverage.txt -covermode=atomic \
-		./bundledmeta ./canonicalmeta \
-		./util/... ./cli/... ./config/... \
-		./i18n/... ./main/... ./openapi/... ./meta/... ./export/... \
-		./sysconfig/...
+	# Fail fast on broken packages under the module (e.g. stale go:embed).
+	go list ./... >/dev/null
+	go vet ./...
+	ALIYUN_CLI_META_DIR="$(META_DIR)" LANG="en_US.UTF-8" go test -race -coverprofile=coverage.txt -covermode=atomic ./...
 	go tool cover -html=coverage.txt -o coverage.html
 
 test-release: meta-pack
