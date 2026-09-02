@@ -80,6 +80,46 @@ func TestPromoteExtractedPlugin_rename(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "temp extract dir should be gone after rename")
 }
 
+func TestValidatePluginNameRejectsPathValues(t *testing.T) {
+	for _, name := range []string{
+		"aliyun-cli-ecs",
+		"plugin_name.v2",
+		"插件名称",
+	} {
+		t.Run("valid_"+name, func(t *testing.T) {
+			require.NoError(t, validatePluginName(name))
+		})
+	}
+
+	for _, name := range []string{
+		"", "   ", ".", "..", "../outside", `..\outside`,
+		"nested/plugin", `nested\plugin`, "/absolute", `C:\absolute`, "C:relative", "bad\nname",
+	} {
+		t.Run(fmt.Sprintf("invalid_%q", name), func(t *testing.T) {
+			require.Error(t, validatePluginName(name))
+		})
+	}
+}
+
+func TestPromoteExtractedPluginRejectsEscapingName(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "plugins")
+	require.NoError(t, os.MkdirAll(root, 0755))
+	outside := filepath.Join(parent, "outside")
+	require.NoError(t, os.MkdirAll(outside, 0755))
+	sentinel := filepath.Join(outside, "keep")
+	require.NoError(t, os.WriteFile(sentinel, []byte("keep"), 0644))
+
+	tmpExtract := filepath.Join(t.TempDir(), "extract")
+	require.NoError(t, os.MkdirAll(tmpExtract, 0755))
+	mgr := &Manager{rootDir: root}
+	_, err := mgr.promoteExtractedPlugin(tmpExtract, "../outside")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid plugin name")
+	assert.FileExists(t, sentinel)
+	assert.DirExists(t, tmpExtract)
+}
+
 func TestManager_InstallFromLocalFile(t *testing.T) {
 	t.Run("Success from tar.gz", func(t *testing.T) {
 		pluginRoot := t.TempDir()
@@ -375,6 +415,14 @@ func TestReadPluginManifestFromDir(t *testing.T) {
 		_, err := readPluginManifestFromDir(d)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid plugin manifest: version is empty")
+	})
+	t.Run("path name", func(t *testing.T) {
+		d := t.TempDir()
+		raw := `{"name":"../outside","version":"1.0.0"}`
+		require.NoError(t, os.WriteFile(filepath.Join(d, "manifest.json"), []byte(raw), 0644))
+		_, err := readPluginManifestFromDir(d)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "single path-safe component")
 	})
 	t.Run("missing name field", func(t *testing.T) {
 		d := t.TempDir()

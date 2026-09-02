@@ -286,6 +286,8 @@ AlibabaCloud-AIMode/enabled
 aliyun ecs describe-instances --no-cli-ai-mode
 ```
 
+JSON Help 协议、Agent 错误 envelope、退出状态、Trace Context 传播和 MCP 代理安全行为见 [MCP 代理、OpenTelemetry 与机器可读接口](./integrations.md)。
+
 ## 大驼峰命令的参数边界情况
 
 这条规则仅适用于传统大驼峰命名（PascalCase）命令。参数值以 `-` 开头时，使用 `--name=value` 形式，避免该值被解析成另一个 Flag：

@@ -1,6 +1,6 @@
 module github.com/aliyun/aliyun-openapi-runtime
 
-go 1.25.0
+go 1.25.14
 
 require (
 	github.com/alibabacloud-go/darabonba-openapi/v2 v2.2.4

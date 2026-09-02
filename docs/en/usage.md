@@ -286,6 +286,8 @@ To disable automatic agent mode for one command, use `--no-cli-ai-mode`:
 aliyun ecs describe-instances --no-cli-ai-mode
 ```
 
+See [MCP proxy, OpenTelemetry, and machine-readable interfaces](./integrations.md) for the JSON Help contract, Agent error envelope, exit statuses, trace-context propagation, and MCP proxy security behavior.
+
 ## PascalCase argument edge case
 
 This rule applies only to the traditional PascalCase command form. When a parameter value begins with `-`, use `--name=value` so the value is not parsed as another flag:

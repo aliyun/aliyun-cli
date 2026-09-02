@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
@@ -827,8 +828,8 @@ func readPluginManifestFromDir(extractDir string) (*PluginManifest, error) {
 	if err := json.NewDecoder(pluginManifestFile).Decode(&pManifest); err != nil {
 		return nil, fmt.Errorf("invalid plugin manifest: %w", err)
 	}
-	if strings.TrimSpace(pManifest.Name) == "" {
-		return nil, fmt.Errorf("invalid plugin manifest: name is empty")
+	if err := validatePluginName(pManifest.Name); err != nil {
+		return nil, fmt.Errorf("invalid plugin manifest: %w", err)
 	}
 	if strings.TrimSpace(pManifest.Version) == "" {
 		return nil, fmt.Errorf("invalid plugin manifest: version is empty")
@@ -837,6 +838,61 @@ func readPluginManifestFromDir(extractDir string) (*PluginManifest, error) {
 		return nil, err
 	}
 	return &pManifest, nil
+}
+
+// validatePluginName accepts existing single-component plugin names while
+// rejecting values that can be interpreted as paths on Unix or Windows.
+func validatePluginName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("name is empty")
+	}
+	if name == "." || name == ".." || filepath.IsAbs(name) || path.IsAbs(name) ||
+		strings.ContainsAny(name, `/\:`) || strings.IndexFunc(name, unicode.IsControl) >= 0 {
+		return fmt.Errorf("name %q must be a single path-safe component", name)
+	}
+	return nil
+}
+
+func resolvePluginInstallDir(rootDir, pluginName string) (string, error) {
+	if err := validatePluginName(pluginName); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(rootDir) == "" {
+		return "", fmt.Errorf("plugin root directory is empty")
+	}
+
+	rootAbs, err := filepath.Abs(rootDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve plugin root directory: %w", err)
+	}
+	finalDir := filepath.Join(rootAbs, pluginName)
+	rel, err := filepath.Rel(rootAbs, finalDir)
+	if err != nil || rel == "." || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("plugin directory escapes plugin root")
+	}
+	return finalDir, nil
+}
+
+func validateInstalledPluginPath(rootDir, pluginName, storedPath string) (string, error) {
+	expected, err := resolvePluginInstallDir(rootDir, pluginName)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(storedPath) == "" {
+		return "", fmt.Errorf("installed plugin path is empty")
+	}
+	actual, err := filepath.Abs(storedPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve installed plugin path: %w", err)
+	}
+	equal := filepath.Clean(actual) == filepath.Clean(expected)
+	if runtime.GOOS == "windows" {
+		equal = strings.EqualFold(filepath.Clean(actual), filepath.Clean(expected))
+	}
+	if !equal {
+		return "", fmt.Errorf("installed plugin path %q is outside its expected directory", storedPath)
+	}
+	return expected, nil
 }
 
 func validateAndResolvePackageType(extractDir string, manifest *PluginManifest) error {
@@ -892,7 +948,10 @@ func copyDirTree(src, dst string) error {
 }
 
 func (m *Manager) promoteExtractedPlugin(tmpExtract, pluginName string) (string, error) {
-	finalDir := filepath.Join(m.rootDir, pluginName)
+	finalDir, err := resolvePluginInstallDir(m.rootDir, pluginName)
+	if err != nil {
+		return "", fmt.Errorf("invalid plugin name: %w", err)
+	}
 	if err := os.RemoveAll(finalDir); err != nil {
 		return "", fmt.Errorf("failed to remove existing plugin directory: %w", err)
 	}
@@ -1044,6 +1103,9 @@ func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, userFacing s
 }
 
 func (m *Manager) loadAndValidatePluginManifest(extractDir, expectedName string) (*PluginManifest, error) {
+	if err := validatePluginName(expectedName); err != nil {
+		return nil, fmt.Errorf("invalid expected plugin name: %w", err)
+	}
 	pluginManifestPath := filepath.Join(extractDir, "manifest.json")
 	pluginManifestFile, err := os.Open(pluginManifestPath)
 	if err != nil {
@@ -1053,6 +1115,9 @@ func (m *Manager) loadAndValidatePluginManifest(extractDir, expectedName string)
 
 	var pManifest PluginManifest
 	if err := json.NewDecoder(pluginManifestFile).Decode(&pManifest); err != nil {
+		return nil, fmt.Errorf("invalid plugin manifest: %w", err)
+	}
+	if err := validatePluginName(pManifest.Name); err != nil {
 		return nil, fmt.Errorf("invalid plugin manifest: %w", err)
 	}
 
@@ -1070,6 +1135,9 @@ func (m *Manager) loadAndValidatePluginManifest(extractDir, expectedName string)
 }
 
 func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir string, pManifest *PluginManifest) error {
+	if err := validatePluginName(actualPluginName); err != nil {
+		return fmt.Errorf("invalid plugin name: %w", err)
+	}
 	localManifest, err := m.GetLocalManifest()
 	if err != nil {
 		return err
@@ -1110,6 +1178,9 @@ func populateMinCliVersionFromIndex(pManifest *PluginManifest, verInfo VersionIn
 
 func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, version string, enablePre bool, warnIfAlreadyInstalled bool) error {
 	actualPluginName := targetPlugin.Name
+	if err := validatePluginName(actualPluginName); err != nil {
+		return fmt.Errorf("invalid plugin name from repository: %w", err)
+	}
 
 	if version == "" {
 		// Auto-select version based on enablePre flag
@@ -1139,7 +1210,10 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 		m.printOverwriteIfPluginInstalled(ctx, actualPluginName, version)
 	}
 
-	extractDir := filepath.Join(m.rootDir, actualPluginName)
+	extractDir, err := resolvePluginInstallDir(m.rootDir, actualPluginName)
+	if err != nil {
+		return fmt.Errorf("invalid plugin name from repository: %w", err)
+	}
 	if err := m.extractPlugin(archivePath, extractDir, downloadURL); err != nil {
 		return err
 	}
@@ -1207,7 +1281,11 @@ func (m *Manager) Uninstall(ctx *cli.Context, pluginName string) error {
 		return err
 	}
 
-	if err := os.RemoveAll(plugin.Path); err != nil {
+	pluginPath, err := validateInstalledPluginPath(m.rootDir, actualPluginName, plugin.Path)
+	if err != nil {
+		return fmt.Errorf("refusing to uninstall plugin %q: %w", actualPluginName, err)
+	}
+	if err := os.RemoveAll(pluginPath); err != nil {
 		return fmt.Errorf("failed to remove plugin files: %w", err)
 	}
 

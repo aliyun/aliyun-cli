@@ -24,6 +24,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newTestContext() *cli.Context {
@@ -2208,6 +2209,22 @@ func createTestZip(archivePath string, files []testFile) error {
 }
 
 func TestManager_installPlugin(t *testing.T) {
+	t.Run("Error - repository name escapes plugin root", func(t *testing.T) {
+		parent := t.TempDir()
+		pluginRoot := filepath.Join(parent, "plugins")
+		require.NoError(t, os.MkdirAll(pluginRoot, 0755))
+		outside := filepath.Join(parent, "outside")
+		require.NoError(t, os.MkdirAll(outside, 0755))
+		sentinel := filepath.Join(outside, "keep")
+		require.NoError(t, os.WriteFile(sentinel, []byte("keep"), 0644))
+
+		mgr := &Manager{rootDir: pluginRoot}
+		err := mgr.installPlugin(newTestContext(), &PluginInfo{Name: "../outside"}, "1.0.0", false, true)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid plugin name from repository")
+		assert.FileExists(t, sentinel)
+	})
+
 	t.Run("Success - install plugin with specified version", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		mgr := &Manager{
@@ -2816,6 +2833,26 @@ func TestManager_Uninstall(t *testing.T) {
 		err := mgr.Uninstall(ctx, "nonexistent-plugin")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin nonexistent-plugin not found in local manifest")
+	})
+
+	t.Run("Error - stored path outside plugin root", func(t *testing.T) {
+		parent := t.TempDir()
+		pluginRoot := filepath.Join(parent, "plugins")
+		require.NoError(t, os.MkdirAll(pluginRoot, 0755))
+		outside := filepath.Join(parent, "outside")
+		require.NoError(t, os.MkdirAll(outside, 0755))
+		sentinel := filepath.Join(outside, "keep")
+		require.NoError(t, os.WriteFile(sentinel, []byte("keep"), 0644))
+
+		mgr := &Manager{rootDir: pluginRoot}
+		require.NoError(t, mgr.saveLocalManifest(&LocalManifest{Plugins: map[string]LocalPlugin{
+			"test-plugin": {Name: "test-plugin", Version: "1.0.0", Path: outside},
+		}}))
+
+		err := mgr.Uninstall(newTestContext(), "test-plugin")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "refusing to uninstall")
+		assert.FileExists(t, sentinel)
 	})
 
 	t.Run("Success - uninstall with short name", func(t *testing.T) {
