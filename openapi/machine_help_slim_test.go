@@ -123,6 +123,70 @@ func TestMachineHelpJSONOmitsDefaultAnnotationsAndRepeatedIdentity(t *testing.T)
 	assert.Equal(t, false, result["truncated"], "decision-relevant booleans stay explicit")
 }
 
+func TestMachineHelpSearchJSONOmitsProductContext(t *testing.T) {
+	product := machineHelpProduct{
+		Code:                 "demo",
+		Name:                 machineHelpLocalizedText{EN: "Demo Service"},
+		APIStyle:             "rpc",
+		LegacyDefaultVersion: "2026-01-01",
+		SelectedVersion:      "2026-01-01",
+	}
+	documents := []any{
+		&machineHelpProductDocument{
+			SchemaVersion: machineHelpSchemaVersion,
+			Kind:          "product",
+			Query:         "report",
+			Product:       product,
+			APIs:          []machineHelpAPISummary{{DisplayName: "CreateReport"}},
+			Result:        HelpResult{Shown: 1, Total: 1},
+		},
+		&machineHelpAPIDocument{
+			SchemaVersion:      machineHelpSchemaVersion,
+			Kind:               "api",
+			Section:            helpSectionRequest,
+			Query:              "report-id",
+			Product:            product,
+			ActiveParameterSet: "camel",
+			ParameterSets: machineHelpParameterSets{Camel: []machineHelpParameter{{
+				Name: "ReportId", Type: "string",
+			}}},
+			Result: HelpResult{Shown: 1, Total: 1},
+		},
+	}
+
+	for _, document := range documents {
+		var output bytes.Buffer
+		require.NoError(t, encodeMachineHelpJSON(&output, document, false))
+		var raw map[string]any
+		require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
+		assert.NotContains(t, raw, "product")
+	}
+}
+
+func TestMachineHelpJSONKeepsProductContextOutsideSearch(t *testing.T) {
+	documents := []any{
+		&machineHelpProductDocument{
+			SchemaVersion: machineHelpSchemaVersion,
+			Kind:          "product",
+			Product:       machineHelpProduct{Code: "demo"},
+		},
+		&machineHelpAPIDocument{
+			SchemaVersion: machineHelpSchemaVersion,
+			Kind:          "api",
+			Section:       helpSectionRequest,
+			Product:       machineHelpProduct{Code: "demo"},
+		},
+	}
+
+	for _, document := range documents {
+		var output bytes.Buffer
+		require.NoError(t, encodeMachineHelpJSON(&output, document, false))
+		var raw map[string]any
+		require.NoError(t, json.Unmarshal(output.Bytes(), &raw))
+		assert.Contains(t, raw, "product")
+	}
+}
+
 func TestMachineHelpJSONOmitsDerivableOptionsAndRawName(t *testing.T) {
 	doc := &machineHelpAPIDocument{
 		SchemaVersion:      machineHelpSchemaVersion,
