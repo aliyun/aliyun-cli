@@ -48,6 +48,57 @@ func requireAgentEnvelope(t *testing.T, err error, args []string, validator Reco
 	return agentErr.Envelope()
 }
 
+func TestKebabProfileCaseMismatchSuggestsLowercaseProfile(t *testing.T) {
+	args := []string{"ecs", "describe-instances", "--Profile", "default"}
+	newCause := func() error {
+		unknown := &argparser.UnknownFlagError{Flag: "Profile", Known: []string{"instance-type"}}
+		return &engine.UsageError{
+			Code: "UNKNOWN_FLAG",
+			Err:  fmt.Errorf("%w (run `aliyun ecs describe-instances --help` for accepted flags)", unknown),
+		}
+	}
+
+	newContext := func() (*Commando, *cli.Context) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		cmd := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
+		config.AddFlags(cmd.Flags())
+		AddFlags(cmd.Flags())
+		ctx.EnterCommand(cmd)
+		commando := &Commando{
+			profile:                 config.Profile{Language: "en"},
+			recoverySearchValidator: func(RecoverySearchRequest) bool { return false },
+		}
+		return commando, ctx
+	}
+
+	t.Run("text", func(t *testing.T) {
+		t.Setenv(aimode.EnvAIMode, "false")
+		commando, ctx := newContext()
+		got := commando.finishCommandRun(ctx, args, newCause())
+		require.Error(t, got)
+		assert.Contains(t, got.Error(), "unknown flag --Profile, did you mean --profile?")
+	})
+
+	t.Run("AI JSON", func(t *testing.T) {
+		t.Setenv(aimode.EnvAIMode, "true")
+		commando, ctx := newContext()
+		got := commando.finishCommandRun(ctx, args, newCause())
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		encoded, err := json.Marshal(agentErr.Envelope())
+		require.NoError(t, err)
+		assert.JSONEq(t, `{
+			"message":"unknown flag --Profile",
+			"did_you_mean":["--profile"],
+			"recovery":{
+				"action":"inspect_action_help",
+				"command":"aliyun ecs describe-instances --help",
+				"hint":"Inspect the action help and correct the parameter or flag."
+			}
+		}`, string(encoded))
+	})
+}
+
 func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 	t.Run("unknown product uses validated product search", func(t *testing.T) {
 		repo, err := meta.MockLoadRepository([]meta.Product{{Code: "Ecs"}})

@@ -31,6 +31,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
 
 	"encoding/json"
@@ -182,6 +183,7 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 	// chain), which must never reach stderr, logs, or models. Sanitize before
 	// the AI gate so non-AI output is protected too.
 	err = sanitizeNetworkTransportError(err)
+	err = suggestKebabProfileFlagCase(err, args)
 
 	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
 
@@ -205,6 +207,37 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 		})
 	}
 	return agentErrorNormalizer(err, normalizationArgs)
+}
+
+type kebabProfileFlagCaseError struct {
+	cause   error
+	product string
+	command string
+}
+
+func (e *kebabProfileFlagCaseError) Error() string {
+	return fmt.Sprintf("unknown flag --Profile, did you mean --profile? (run `aliyun %s %s --help` for accepted flags)",
+		e.product, e.command)
+}
+
+func (e *kebabProfileFlagCaseError) Unwrap() error { return e.cause }
+
+func (*kebabProfileFlagCaseError) AIRecoveryEligible() {}
+
+// suggestKebabProfileFlagCase preserves case-sensitive rejection while adding
+// the one host-flag correction approved for kebab OpenAPI commands.
+func suggestKebabProfileFlagCase(err error, args []string) error {
+	if len(args) < 2 || commandStyle(args[1]) != "kebab" {
+		return err
+	}
+	var unknown *argparser.UnknownFlagError
+	if !errors.As(err, &unknown) || unknown.Flag != "Profile" {
+		return err
+	}
+	if !containsString(unknown.Known, "profile") {
+		unknown.Known = append(append([]string(nil), unknown.Known...), "profile")
+	}
+	return &kebabProfileFlagCaseError{cause: err, product: args[0], command: args[1]}
 }
 
 type sectionHelpAllRecoveryError struct {
