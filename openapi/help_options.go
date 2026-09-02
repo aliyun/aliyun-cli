@@ -16,8 +16,8 @@ type helpOptions struct {
 	Section         string
 	SectionExplicit bool
 	Search          string
-	// SearchAll removes the search result cap when --help-all accompanies
-	// --help-search. All alone keeps the complete-document meaning.
+	// SearchAll removes the search result cap. Every public search enables it;
+	// an explicit --help-all remains accepted for compatibility.
 	SearchAll bool
 	All       bool
 	Output    cli.HelpOutput
@@ -80,6 +80,9 @@ func parseHelpOptions(ctx *cli.Context, target []string) (helpOptions, error) {
 		} else {
 			opts.All = true
 		}
+	}
+	if opts.Search != "" {
+		opts.SearchAll = true
 	}
 
 	if flag := CliOutputFlag(ctx.Flags()); flag != nil && flag.IsAssigned() {

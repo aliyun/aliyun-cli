@@ -47,6 +47,20 @@ func TestValidateReservedHelpPreservesSectionAllConflictForRecovery(t *testing.T
 	}
 }
 
+func TestHelpOptionsFromReservedMakesSearchImplicitlyUnlimited(t *testing.T) {
+	search := helpOptionsFromReserved(Request{}, argparser.Reserved{HelpSearch: "instance"})
+	searchAll := helpOptionsFromReserved(Request{}, argparser.Reserved{HelpSearch: "instance", HelpAll: true})
+	if !search.All || !reflect.DeepEqual(search, searchAll) {
+		t.Fatalf("search options = %#v, explicit search-all = %#v", search, searchAll)
+	}
+	if helpOptionsFromReserved(Request{}, argparser.Reserved{}).All {
+		t.Fatal("ordinary Help unexpectedly became all mode")
+	}
+	if !helpOptionsFromReserved(Request{}, argparser.Reserved{HelpAll: true}).All {
+		t.Fatal("independent --help-all stopped selecting all mode")
+	}
+}
+
 func TestHelpEntryValidation(t *testing.T) {
 	product := &meta.Product{}
 	index := &meta.APIIndex{}

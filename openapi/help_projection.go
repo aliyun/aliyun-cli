@@ -1308,6 +1308,11 @@ func renderTextListing(w io.Writer, noun string, listing *machineHelpListing) er
 }
 
 func renderHelpProjectionResult(w io.Writer, noun string, result HelpResult, next *HelpNext) error {
+	if !result.Truncated && next != nil && next.operation == HelpOperationSearch {
+		if _, err := fmt.Fprintf(w, "\nShowing %d of %d %s.\n", result.Shown, result.Total, noun); err != nil {
+			return err
+		}
+	}
 	if err := renderHelpProjectionStatistics(w, noun, result, next != nil); err != nil {
 		return err
 	}

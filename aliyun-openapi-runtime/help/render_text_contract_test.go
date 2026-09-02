@@ -350,3 +350,27 @@ func TestTextRendererOptionalBranchesAndErrors(t *testing.T) {
 		t.Fatal("writePrettyJSON accepted malformed JSON")
 	}
 }
+
+func TestRenderSearchResultKeepsCompleteStatisticsWithoutSearchAllHint(t *testing.T) {
+	var output bytes.Buffer
+	next := &Next{Search: "aliyun demo --help-search <keyword>", operation: "search"}
+	if err := renderResult(&output, Result{Shown: 17, Total: 17}, "en", next); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Showing 17 of 17 entries.", "Try another keyword:"} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("search output missing %q:\n%s", want, output.String())
+		}
+	}
+	if strings.Contains(output.String(), "Show all matches") || strings.Contains(output.String(), "--help-all") {
+		t.Fatalf("search output retained search-all hint:\n%s", output.String())
+	}
+
+	output.Reset()
+	if err := renderResult(&output, Result{Shown: 17, Total: 17}, "en"); err != nil {
+		t.Fatal(err)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("ordinary complete Help output changed: %q", output.String())
+	}
+}

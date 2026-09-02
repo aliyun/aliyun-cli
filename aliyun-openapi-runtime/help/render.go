@@ -730,6 +730,11 @@ func renderResult(w io.Writer, result Result, language string, nextValues ...*Ne
 			fmt.Sprintf(label(language, "Showing %d of %d entries; use all mode for the complete document.", "显示 %d/%d 项；使用 all 模式查看完整文档。"), result.Shown, result.Total)); err != nil {
 			return err
 		}
+	} else if len(nextValues) > 0 && nextValues[0] != nil && nextValues[0].operation == "search" {
+		if _, err := fmt.Fprintf(w, "\n%s\n",
+			fmt.Sprintf(label(language, "Showing %d of %d entries.", "显示 %d/%d 项。"), result.Shown, result.Total)); err != nil {
+			return err
+		}
 	}
 	if len(nextValues) == 0 {
 		return nil

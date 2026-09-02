@@ -41,8 +41,8 @@ type HelpOptions struct {
 	Requested   bool
 	Operation   HelpOperation
 	SearchQuery string
-	// SearchAll reports the --help-all modifier combined with --help-search:
-	// the keyword still filters, but the result cap is removed.
+	// SearchAll reports that a search is uncapped. Every public
+	// --help-search is uncapped; an explicit --help-all remains accepted.
 	SearchAll       bool
 	Output          HelpOutput
 	Section         HelpSection
@@ -173,6 +173,9 @@ func ParseHelpOptions(args []string) (HelpOptions, error) {
 				return HelpOptions{}, &HelpOptionError{Code: HelpOptionInvalidSection, Option: "--" + CLISectionFlagName, Value: value}
 			}
 		}
+	}
+	if opts.Operation == HelpOperationSearch {
+		opts.SearchAll = true
 	}
 	return opts, nil
 }
