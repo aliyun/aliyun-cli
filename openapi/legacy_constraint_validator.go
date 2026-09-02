@@ -94,6 +94,14 @@ func validateLegacyConstraints(ctx *cli.Context, api *canonicalmeta.API) error {
 }
 
 func validateLegacyDocRequired(ctx *cli.Context, api *canonicalmeta.API) error {
+	return validateLegacyDocRequiredWithImplicit(ctx, api, nil)
+}
+
+// validateLegacyDocRequiredWithImplicit includes values supplied by the legacy
+// invoker rather than explicit API flags. RegionId is the primary example: the
+// SDK v1 path resolves it from --region, --RegionId, or the active profile
+// before required-parameter validation.
+func validateLegacyDocRequiredWithImplicit(ctx *cli.Context, api *canonicalmeta.API, implicitNonEmpty map[string]bool) error {
 	if api == nil || ctx == nil || ctx.UnknownFlags() == nil || !legacyAIModeEnabled(ctx) {
 		return nil
 	}
@@ -107,6 +115,12 @@ func validateLegacyDocRequired(ctx *cli.Context, api *canonicalmeta.API) error {
 			if value != "" {
 				nonEmpty[flag.Name] = true
 			}
+		}
+	}
+	for name, present := range implicitNonEmpty {
+		if present {
+			assigned[name] = true
+			nonEmpty[name] = true
 		}
 	}
 
@@ -225,6 +239,18 @@ func legacyAPIForInvoker(invoker Invoker) *canonicalmeta.API {
 		return typed.api
 	default:
 		return nil
+	}
+}
+
+func legacyImplicitDocRequiredArgs(invoker Invoker) map[string]bool {
+	if invoker == nil || invoker.getRequest() == nil {
+		return nil
+	}
+	if invoker.getRequest().RegionId == "" {
+		return nil
+	}
+	return map[string]bool{
+		"RegionId": true,
 	}
 }
 

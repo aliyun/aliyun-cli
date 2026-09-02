@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -316,6 +317,20 @@ func TestLegacyRepeatListAndInvokerHelpers(t *testing.T) {
 	if got := legacyAPIForInvoker(nil); got != nil {
 		t.Fatalf("unknown invoker API = %#v", got)
 	}
+	if got := legacyImplicitDocRequiredArgs(nil); got != nil {
+		t.Fatalf("nil invoker implicit args = %#v", got)
+	}
+	if got := legacyImplicitDocRequiredArgs(&RpcInvoker{BasicInvoker: &BasicInvoker{}}); got != nil {
+		t.Fatalf("nil request implicit args = %#v", got)
+	}
+	invoker := &RpcInvoker{BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()}}
+	if got := legacyImplicitDocRequiredArgs(invoker); got != nil {
+		t.Fatalf("empty RegionId should not satisfy doc_required: %#v", got)
+	}
+	invoker.request.RegionId = "cn-hangzhou"
+	if got := legacyImplicitDocRequiredArgs(invoker); !got["RegionId"] {
+		t.Fatalf("effective RegionId should satisfy doc_required: %#v", got)
+	}
 
 	for _, name := range []string{"body", "BODY", "body-file", "BODY-FILE"} {
 		if !isRawBodyFlag(name) {
@@ -324,6 +339,23 @@ func TestLegacyRepeatListAndInvokerHelpers(t *testing.T) {
 	}
 	if isRawBodyFlag("payload") {
 		t.Fatal("payload must not be treated as raw body")
+	}
+}
+
+func TestValidateLegacyDocRequiredAcceptsInvokerResolvedRegion(t *testing.T) {
+	ctx := legacyConstraintContext(t, true, false)
+	api := &canonicalmeta.API{Parameters: []canonicalmeta.Parameter{{
+		Name: "region_id", RawName: "RegionId", Type: "string", Location: "query", DocRequired: true,
+	}}}
+
+	if err := validateLegacyDocRequired(ctx, api); err == nil {
+		t.Fatal("explicit-only validation should report the missing RegionId")
+	}
+	if err := validateLegacyDocRequiredWithImplicit(ctx, api, map[string]bool{"RegionId": true}); err != nil {
+		t.Fatalf("invoker-resolved RegionId should satisfy doc_required: %v", err)
+	}
+	if err := validateLegacyDocRequiredWithImplicit(ctx, api, map[string]bool{"RegionId": false}); err == nil {
+		t.Fatal("empty invoker RegionId should remain missing")
 	}
 }
 

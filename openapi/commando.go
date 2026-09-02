@@ -926,7 +926,7 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		return err
 	}
 	legacyAPI := legacyAPIForInvoker(invoker)
-	if err = validateLegacyDocRequired(ctx, legacyAPI); err != nil {
+	if err = validateLegacyDocRequiredWithImplicit(ctx, legacyAPI, legacyImplicitDocRequiredArgs(invoker)); err != nil {
 		return err
 	}
 	if err = validateLegacyConstraints(ctx, legacyAPI); err != nil {
