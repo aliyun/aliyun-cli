@@ -19,6 +19,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,6 +31,7 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/trust"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"golang.org/x/mod/semver"
 )
@@ -43,8 +45,9 @@ const (
 )
 
 var (
-	ossBaseURL    = "https://aliyuncli.alicdn.com"
-	ossVersionURL = ossBaseURL + "/version"
+	ossBaseURL            = "https://aliyuncli.alicdn.com"
+	ossVersionURL         = ossBaseURL + "/version"
+	ossUpgradeManifestURL = ossBaseURL + "/upgrade_manifest.json"
 )
 
 var (
@@ -63,6 +66,7 @@ type upgradeSource struct {
 	latestVersion string
 	downloadURL   string
 	assetName     string
+	checksum      string // hex sha256; empty means not provided (legacy path)
 }
 
 func NewUpgradeCommand() *cli.Command {
@@ -157,7 +161,7 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 	}
 
 	cli.Printf(w, "Downloading %s...\n  From: %s\n", source.assetName, source.downloadURL)
-	extractedBinary, cleanup, err := downloadAndExtract(w, source.downloadURL, source.assetName)
+	extractedBinary, cleanup, err := downloadAndExtract(w, source.downloadURL, source.assetName, source.checksum)
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -192,7 +196,7 @@ func confirmUpgrade(ctx *cli.Context, currentVersion, latestVersion string) bool
 	return input == "y" || input == "yes"
 }
 
-func downloadAndExtract(w io.Writer, downloadURL, assetName string) (binaryPath string, cleanup func(), err error) {
+func downloadAndExtract(w io.Writer, downloadURL, assetName, expectedChecksum string) (binaryPath string, cleanup func(), err error) {
 	tmpDir, err := os.MkdirTemp("", "aliyun-cli-upgrade-*")
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create temp directory: %s", err)
@@ -203,6 +207,20 @@ func downloadAndExtract(w io.Writer, downloadURL, assetName string) (binaryPath 
 	if err := downloadFile(w, downloadURL, archivePath); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("download failed: %s", err)
+	}
+
+	if expectedChecksum != "" {
+		actual, cerr := trust.SHA256File(archivePath)
+		if cerr != nil {
+			cleanup()
+			return "", nil, fmt.Errorf("checksum: %s", cerr)
+		}
+		if err := trust.RequireChecksum(expectedChecksum, actual); err != nil {
+			cleanup()
+			return "", nil, fmt.Errorf("upgrade package %w", err)
+		}
+	} else {
+		cli.Printf(w, "warning: upgrade package has no checksum from a signed manifest; authenticity is not fully verified\n")
 	}
 
 	binaryName := "aliyun"
@@ -231,6 +249,14 @@ func resolveExecPath() (string, error) {
 }
 
 func resolveUpgradeSource() (*upgradeSource, error) {
+	src, manErr := resolveUpgradeSourceFromManifest()
+	if manErr == nil {
+		return src, nil
+	}
+	if trust.DefaultPolicy().Enforce {
+		return nil, fmt.Errorf("signed upgrade manifest required: %w", manErr)
+	}
+
 	version, err := fetchVersionFromOSS()
 	if err != nil {
 		return nil, err
@@ -245,6 +271,107 @@ func resolveUpgradeSource() (*upgradeSource, error) {
 		latestVersion: version,
 		downloadURL:   ossBaseURL + "/" + assetName,
 		assetName:     assetName,
+	}, nil
+}
+
+// upgradeManifest is the signed self-upgrade catalog (Phase 1).
+type upgradeManifest struct {
+	Schema       int                         `json:"schema"`
+	IndexVersion int64                       `json:"index_version,omitempty"`
+	ExpiresAt    string                      `json:"expires_at,omitempty"`
+	Version      string                      `json:"version"`
+	Assets       map[string]upgradeAssetInfo `json:"assets"`
+}
+
+type upgradeAssetInfo struct {
+	URL      string `json:"url"`
+	Checksum string `json:"checksum"`
+	Name     string `json:"name,omitempty"`
+}
+
+func resolveUpgradeSourceFromManifest() (*upgradeSource, error) {
+	policy := trust.DefaultPolicy()
+
+	resp, err := httpClient.Get(ossUpgradeManifestURL)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("upgrade_manifest.json status %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+
+	var sigBytes []byte
+	sigResp, sigErr := httpClient.Get(ossUpgradeManifestURL + ".sig")
+	if sigErr == nil {
+		defer sigResp.Body.Close()
+		if sigResp.StatusCode == http.StatusOK {
+			sigBytes, _ = io.ReadAll(io.LimitReader(sigResp.Body, 1<<16))
+		}
+	}
+
+	keys, err := trust.ResolveVerifyKeys(trust.RoleUpgrade, func() ([]byte, error) {
+		rootURL := strings.TrimSuffix(ossBaseURL, "/") + "/trust/root.json"
+		r, e := httpClient.Get(rootURL)
+		if e != nil {
+			return nil, e
+		}
+		defer r.Body.Close()
+		if r.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("status %d", r.StatusCode)
+		}
+		return io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	}, nil, policy, false)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := trust.VerifyArtifactBytes(data, sigBytes, trust.RoleUpgrade, "upgrade_manifest", keys, policy); err != nil {
+		return nil, err
+	}
+
+	var man upgradeManifest
+	if err := json.Unmarshal(data, &man); err != nil {
+		return nil, fmt.Errorf("decode upgrade_manifest: %w", err)
+	}
+	if strings.TrimSpace(man.Version) == "" {
+		return nil, fmt.Errorf("upgrade_manifest missing version")
+	}
+
+	platformKey := runtime.GOOS + "-" + runtime.GOARCH
+	asset, ok := man.Assets[platformKey]
+	if !ok {
+		// macOS historical naming uses macosx in asset file names; allow alias key.
+		if runtime.GOOS == "darwin" {
+			asset, ok = man.Assets["macosx-"+runtime.GOARCH]
+		}
+	}
+	if !ok {
+		return nil, fmt.Errorf("upgrade_manifest has no asset for %s", platformKey)
+	}
+
+	assetName := asset.Name
+	if assetName == "" {
+		var err error
+		assetName, err = buildAssetName(man.Version)
+		if err != nil {
+			return nil, err
+		}
+	}
+	downloadURL := asset.URL
+	if downloadURL == "" {
+		downloadURL = ossBaseURL + "/" + assetName
+	}
+
+	return &upgradeSource{
+		latestVersion: man.Version,
+		downloadURL:   downloadURL,
+		assetName:     assetName,
+		checksum:      asset.Checksum,
 	}, nil
 }
 
