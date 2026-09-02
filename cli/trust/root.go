@@ -67,9 +67,8 @@ func ParseRoot(data []byte) (*RootDocument, error) {
 	if len(root.Keys) == 0 {
 		return nil, fmt.Errorf("root.json has no keys")
 	}
-	if len(root.Signatures) == 0 {
-		return nil, fmt.Errorf("root.json has no signatures")
-	}
+	// Signatures may be empty during Phase-1 CDN catalog bootstrap (no Root
+	// public key pinned in the CLI yet). VerifyRoot still requires them.
 	return &root, nil
 }
 

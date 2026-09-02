@@ -41,9 +41,11 @@ var (
 )
 
 func init() {
-	// Production plugin/upgrade public keys are embedded here once portal KMS
-	// signing is live. Until then the list may be empty: legacy indexes without
-	// a .sig still work unless ALIBABA_CLOUD_CLI_TRUST_ENFORCE=1.
+	// Production plugin/upgrade public keys are NOT embedded here.
+	// They are published in CDN trust/root.json (see DeriveTrustRootURL) and
+	// loaded at runtime. Optional ALIBABA_CLOUD_CLI_TRUST_PUBKEYS remains for
+	// break-glass / local debugging. Root signing keys may be embedded later
+	// for Phase-2 authenticity of root.json itself.
 	embeddedKeys = nil
 }
 
