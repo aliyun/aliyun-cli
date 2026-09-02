@@ -126,8 +126,8 @@ func NewConfigureCommand() *cli.Command {
 	c := &cli.Command{
 		Name: "configure",
 		Short: i18n.T(
-			"configure credential and settings",
-			"配置身份认证和其他信息"),
+			"configure credential, AI Mode and settings",
+			"配置身份认证、AI 模式和其他信息"),
 		Usage:  "configure --mode {AK|RamRoleArn|EcsRamRole|OIDC|External|CredentialsURI|ChainableRamRoleArn|CloudSSO|OAuth|BearerToken} --profile <profileName> [--config-path <configPath>]",
 		Sample: "aliyun configure --mode OAuth  (Recommended)",
 		Run: func(ctx *cli.Context, args []string) error {

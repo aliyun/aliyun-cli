@@ -174,6 +174,20 @@ func TestHelpProjectionSmallHelpers(t *testing.T) {
 	require.NoError(t, renderRequestQueryExampleText(&output, nil))
 }
 
+func TestSearchTextKeepsCompleteResultStatisticsWithoutSearchAllHint(t *testing.T) {
+	var output bytes.Buffer
+	next := &HelpNext{Search: "aliyun ecs --help-search <keyword>", operation: HelpOperationSearch}
+	require.NoError(t, renderHelpProjectionResult(&output, "matches", HelpResult{Shown: 17, Total: 17}, next))
+	assert.Contains(t, output.String(), "Showing 17 of 17 matches.")
+	assert.Contains(t, output.String(), "Try another keyword:")
+	assert.NotContains(t, output.String(), "Show all matches")
+	assert.NotContains(t, output.String(), "--help-all")
+
+	output.Reset()
+	require.NoError(t, renderHelpProjectionResult(&output, "matches", HelpResult{Shown: 17, Total: 17}, nil))
+	assert.Empty(t, output.String(), "ordinary complete Help must keep its existing output")
+}
+
 func TestMachineHelpMaxLineLengthUsesTerminalWidthWithCap(t *testing.T) {
 	t.Setenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH", "")
 	originalIsTerminal, originalGetSize := machineHelpIsTerminal, machineHelpGetSize

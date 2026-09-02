@@ -123,7 +123,6 @@ func TestRecoveryContextFallbackAndSuffixCommands(t *testing.T) {
 	assert.Equal(t, context.actionHelpCommand(), context.actionSearchCommand("bad token"))
 	parent := newRecoveryContext([]string{"ecs", "DescribeInstances"})
 	assert.Equal(t, "aliyun ecs --help", parent.parentHelpCommand("DescribeInstances"))
-	assert.Equal(t, "aliyun ecs --help", parent.parentSearchCommand("DescribeInstances", "bad token"))
 
 	assert.Equal(t, "aliyun --help", suffixHelpCommand("not-aliyun command"))
 	assert.Equal(t, "aliyun --help-search profile", suffixSearchCommand("not-aliyun command", "profile"))

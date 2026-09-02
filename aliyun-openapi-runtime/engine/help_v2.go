@@ -104,7 +104,7 @@ func requestHelpOptions(req Request, options HelpOptions) HelpOptions {
 func helpOptionsFromReserved(req Request, reserved argparser.Reserved) HelpOptions {
 	options := HelpOptions{
 		Search:   reserved.HelpSearch,
-		All:      reserved.HelpAll,
+		All:      reserved.HelpAll || reserved.HelpSearch != "",
 		AIMode:   req.AIMode,
 		Language: req.Lang,
 	}

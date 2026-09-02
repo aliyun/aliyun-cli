@@ -42,6 +42,7 @@ func TestParseHelpOptionsAcceptsResponseSearch(t *testing.T) {
 	assert.Equal(t, helpSectionResponse, opts.Section)
 	assert.True(t, opts.SectionExplicit)
 	assert.Equal(t, "instance-id", opts.Search)
+	assert.True(t, opts.SearchAll)
 }
 
 func TestParseHelpOptionsValidatesScopeAndValues(t *testing.T) {

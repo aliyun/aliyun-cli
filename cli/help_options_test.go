@@ -61,6 +61,7 @@ func TestParseHelpOptionsRecognizesFinalSurface(t *testing.T) {
 				Requested:       true,
 				Operation:       HelpOperationSearch,
 				SearchQuery:     "instance id",
+				SearchAll:       true,
 				Output:          HelpOutputText,
 				Section:         HelpSectionResponse,
 				SectionExplicit: true,
@@ -92,6 +93,14 @@ func TestParseHelpOptionsComposesSearchWithAll(t *testing.T) {
 			assert.True(t, opts.Requested)
 		})
 	}
+}
+
+func TestParseHelpOptionsSearchIsEquivalentToSearchAll(t *testing.T) {
+	search, err := ParseHelpOptions([]string{"--help-search", "instance"})
+	require.NoError(t, err)
+	searchAll, err := ParseHelpOptions([]string{"--help-search", "instance", "--help-all"})
+	require.NoError(t, err)
+	assert.Equal(t, searchAll, search)
 }
 
 func TestParseHelpOptionsRejectsInvalidCombinations(t *testing.T) {

@@ -203,7 +203,11 @@ func (ctx *Context) CheckFlags() error {
 			if len(f.ExcludeWith) > 0 {
 				for _, es := range f.ExcludeWith {
 					if _, ok := ctx.flags.GetValue(es); ok {
-						return fmt.Errorf("flag --%s is exclusive with --%s", f.Name, es)
+						cause := fmt.Errorf("flag --%s is exclusive with --%s", f.Name, es)
+						return &InvalidOptionCombinationError{
+							Options: []string{"--" + f.Name, "--" + es},
+							Err:     cause,
+						}
 					}
 				}
 			}

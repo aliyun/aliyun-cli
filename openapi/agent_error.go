@@ -84,17 +84,17 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 
 	var missing *runtime.MissingRequiredError
 	if errors.As(err, &missing) {
-		return missingRequiredAgentError(err, missingRequiredAgentMessage(missing), missing.Flags, context, validate)
+		return missingRequiredAgentError(err, missingRequiredAgentMessage(missing), context)
 	}
 
 	var legacyDocRequired *LegacyDocRequiredError
 	if errors.As(err, &legacyDocRequired) {
-		return missingRequiredAgentError(err, legacyDocRequired.Error(), legacyDocRequired.Flags, context, validate)
+		return missingRequiredAgentError(err, legacyDocRequired.Error(), context)
 	}
 
 	var legacyMissingRequired *LegacyMissingRequiredError
 	if errors.As(err, &legacyMissingRequired) {
-		return missingRequiredAgentError(err, legacyMissingRequired.Error(), legacyMissingRequiredFlagNames(legacyMissingRequired), context, validate)
+		return missingRequiredAgentError(err, legacyMissingRequired.Error(), context)
 	}
 
 	var runtimeConstraint *runtime.ConstraintViolationError
@@ -167,7 +167,7 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 
 	var invalidCommand *cli.InvalidCommandError
 	if errors.As(err, &invalidCommand) {
-		return unknownCommandAgentError(err, invalidCommand.Error(), invalidCommand.GetSuggestions(), invalidCommand.Name, context, validate)
+		return unknownCommandAgentError(err, invalidCommand.Error(), invalidCommand.GetSuggestions(), invalidCommand.Name, context)
 	}
 
 	var invalidArgument *argparser.InvalidArgumentError
@@ -185,6 +185,11 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	var invalidHelpOptions *cli.HelpOptionError
 	if errors.As(err, &invalidHelpOptions) {
 		return helpOptionAgentError(err, invalidHelpOptions)
+	}
+
+	var hostInvalidOptions *cli.InvalidOptionCombinationError
+	if errors.As(err, &hostInvalidOptions) {
+		return optionCombinationAgentError(err, hostInvalidOptions.Error(), hostInvalidOptions.Options, context)
 	}
 
 	var invalidOptions *engine.InvalidOptionCombinationError
@@ -211,13 +216,13 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 
 	var invalidBodyFile *engine.InvalidBodyFileError
 	if errors.As(err, &invalidBodyFile) {
-		return fixedParameterHelpAgentError(err, "unable to read --body-file", "fix_body_file", "body-file",
+		return fixedParameterHelpAgentError(err, bodyFileAgentMessage(invalidBodyFile.Path, invalidBodyFile.Err), "fix_body_file", "body-file",
 			"Check that --body-file points to a readable file.", context)
 	}
 
 	var legacyInvalidBodyFile *InvalidBodyFileError
 	if errors.As(err, &legacyInvalidBodyFile) {
-		return fixedParameterHelpAgentError(err, "unable to read --body-file", "fix_body_file", "body-file",
+		return fixedParameterHelpAgentError(err, bodyFileAgentMessage(legacyInvalidBodyFile.Path, legacyInvalidBodyFile.Err), "fix_body_file", "body-file",
 			"Check that --body-file points to a readable file.", context)
 	}
 
@@ -619,24 +624,12 @@ func unknownProductAgentError(cause error, message string, suggestions []string,
 }
 
 func unknownCommandAgentError(cause error, message string, suggestions []string, invalidName string,
-	context recoveryContext, validate RecoverySearchValidator) error {
-	suggestions = stableStrings(suggestions)
-	recovery := cli.AgentErrorRecovery{
-		Action:  "inspect_parent_help",
+	context recoveryContext) error {
+	return newLocalAgentError(cause, message, suggestions, cli.AgentErrorRecovery{
+		Action:  "inspect_command_help",
 		Command: context.parentHelpCommand(invalidName),
 		Hint:    "Inspect commands under the current parent.",
-	}
-	seeds := append(append([]string(nil), suggestions...), invalidName)
-	for _, candidate := range orderedSearchCandidates(seeds...) {
-		request := context.parentSearchRequest(invalidName, candidate)
-		if validate != nil && validate(request) {
-			recovery.Action = "search_command"
-			recovery.Command = context.parentSearchCommand(invalidName, candidate)
-			recovery.Hint = fmt.Sprintf("Search commands under the current parent related to %s.", candidate)
-			break
-		}
-	}
-	return newLocalAgentError(cause, message, suggestions, recovery)
+	})
 }
 
 func unknownHostFlagAgentError(cause error, message string, suggestions []string, invalidName, helpCommand string,
@@ -739,41 +732,12 @@ func missingRequiredAgentMessage(err *runtime.MissingRequiredError) string {
 	return "missing required parameter(s): " + strings.Join(err.Flags, ", ")
 }
 
-// legacyMissingRequiredFlagNames extracts the --Flag tokens from the wrapped
-// legacy error text, which formats them one per line.
-func legacyMissingRequiredFlagNames(err *LegacyMissingRequiredError) []string {
-	matches := missingRequiredFlagPattern.FindAllStringSubmatch(err.Error(), -1)
-	names := make([]string, 0, len(matches))
-	for _, match := range matches {
-		if match[1] != "" {
-			names = append(names, "--"+match[1])
-		}
-	}
-	return names
-}
-
-var missingRequiredFlagPattern = regexp.MustCompile(`--([A-Za-z0-9_.-]+)`)
-
-// missingRequiredAgentError upgrades the recovery command from the full
-// request Help to a targeted parameter search whenever the validator confirms
-// the missing flag would be found — the search returns the parameter's schema
-// alone instead of the complete request document.
-func missingRequiredAgentError(cause error, message string, flags []string,
-	context recoveryContext, validate RecoverySearchValidator) error {
-	recovery := cli.AgentErrorRecovery{
+func missingRequiredAgentError(cause error, message string, context recoveryContext) error {
+	return newLocalAgentError(cause, message, nil, cli.AgentErrorRecovery{
 		Action:  "inspect_request_help",
-		Command: context.requestHelpCommand(),
-		Hint:    "Inspect the complete request help and provide every required parameter.",
-	}
-	for _, keyword := range parameterSearchKeywordCandidates(context.style, flags...) {
-		if validate != nil && validate(context.searchRequest("request", context.api, keyword)) {
-			recovery.Action = "search_parameter"
-			recovery.Command = context.actionSearchCommand(keyword)
-			recovery.Hint = fmt.Sprintf("Search request parameters related to %s and provide the required value.", keyword)
-			break
-		}
-	}
-	return newLocalAgentError(cause, message, nil, recovery)
+		Command: context.actionHelpCommand(),
+		Hint:    "Inspect the API help for request parameters and provide every required value.",
+	})
 }
 
 func runtimeConstraintFacts(e *runtime.ConstraintViolationError) constraintFacts {
@@ -891,9 +855,27 @@ func optionCombinationAgentError(cause error, message string, options []string, 
 		hint = fmt.Sprintf("Remove one of the conflicting options: %s.", strings.Join(options, ", "))
 	}
 	return newLocalAgentError(cause, message, nil, cli.AgentErrorRecovery{
-		Action: "fix_option_combination",
-		Hint:   hint,
+		Action:  "fix_option_combination",
+		Command: context.actionHelpCommand(),
+		Hint:    hint,
 	})
+}
+
+func bodyFileAgentMessage(path string, cause error) string {
+	message := explicitLocalErrorText(cause, "unable to read --body-file")
+	path = strings.TrimSpace(path)
+	if path == "" || strings.Contains(message, path) {
+		return message
+	}
+	const prefix = "--body-file:"
+	if strings.HasPrefix(message, prefix) {
+		detail := strings.TrimSpace(strings.TrimPrefix(message, prefix))
+		if detail == "" {
+			return prefix + " " + path
+		}
+		return prefix + " " + path + ": " + detail
+	}
+	return prefix + " " + path + ": " + message
 }
 
 func containsString(values []string, target string) bool {
@@ -1129,30 +1111,6 @@ func (c recoveryContext) parentHelpCommand(invalidName string) string {
 		return "aliyun --help"
 	}
 	return "aliyun " + strings.Join(parts, " ") + " --help"
-}
-
-func (c recoveryContext) parentSearchCommand(invalidName, keyword string) string {
-	if !safeCommandToken(keyword) {
-		return c.parentHelpCommand(invalidName)
-	}
-	parts := c.parentCommandParts(invalidName)
-	if len(parts) == 0 {
-		return "aliyun --help-search " + keyword
-	}
-	return "aliyun " + strings.Join(parts, " ") + " --help-search " + keyword
-}
-
-func (c recoveryContext) parentSearchRequest(invalidName, keyword string) RecoverySearchRequest {
-	request := RecoverySearchRequest{Keyword: keyword}
-	parts := c.parentCommandParts(invalidName)
-	if len(parts) > 0 {
-		request.Product = parts[0]
-	}
-	if len(parts) > 1 {
-		request.API = parts[1]
-		request.Style = commandStyle(parts[1])
-	}
-	return request
 }
 
 func (c recoveryContext) parentCommandParts(invalidName string) []string {
