@@ -29,7 +29,8 @@ func TestNewMCPProxyCommand(t *testing.T) {
 	assert.Equal(t, "mcp-proxy", cmd.Name)
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Long)
-	assert.NotEmpty(t, cmd.Usage)
+	assert.Equal(t, "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME]", cmd.Usage)
+	assert.Equal(t, "aliyun utils mcp-proxy --region-type CN --port 8088", cmd.Sample)
 	assert.NotNil(t, cmd.Run)
 
 	// 检查标志

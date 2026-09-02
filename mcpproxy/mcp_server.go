@@ -400,7 +400,7 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	log.Println("MCP Proxy received request url", r.URL.String())
+	log.Printf("MCP Proxy received request method=%s url=%s", r.Method, safeURLForLog(r.URL))
 
 	// 读取并保存请求 Body，以便在需要重试时使用
 	var bodyBytes []byte
@@ -414,10 +414,10 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		_ = r.Body.Close()
-		log.Println("MCP Proxy upstream request body content", string(bodyBytes))
+		log.Printf("MCP Proxy received request body_bytes=%d", len(bodyBytes))
 		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	} else {
-		log.Println("MCP Proxy upstream request body <nil>")
+		log.Println("MCP Proxy received request body_bytes=0")
 	}
 
 	sendRequest := func(token string) (*http.Response, error) {
@@ -426,7 +426,7 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 			return nil, fmt.Errorf("failed to build upstream request: %w", err)
 		}
 
-		log.Println("MCP Proxy build upstream request url", upstreamReq.URL.String())
+		log.Printf("MCP Proxy built upstream request method=%s url=%s", upstreamReq.Method, safeURLForLog(upstreamReq.URL))
 
 		if len(bodyBytes) > 0 {
 			upstreamReq.Body = io.NopCloser(bytes.NewReader(bodyBytes))
@@ -736,7 +736,7 @@ func (p *MCPProxy) buildUpstreamRequest(r *http.Request, accessToken string) (*h
 }
 
 func (p *MCPProxy) handleSSE(w http.ResponseWriter, resp *http.Response) {
-	log.Println("MCP Proxy handle SSE response from upstream request url", resp.Request.URL.String())
+	log.Println("MCP Proxy handle SSE response from upstream request url", safeResponseURLForLog(resp))
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -779,14 +779,12 @@ func (p *MCPProxy) handleSSE(w http.ResponseWriter, resp *http.Response) {
 		if _, err = w.Write(line); err != nil {
 			break
 		}
-		log.Println("MCP Proxy handle SSE response line", string(line))
-
 		flusher.Flush()
 	}
 }
 
 func (p *MCPProxy) handleHTTP(w http.ResponseWriter, resp *http.Response) {
-	log.Println("MCP Proxy handle HTTP response from upstream request url", resp.Request.URL.String())
+	log.Println("MCP Proxy handle HTTP response from upstream request url", safeResponseURLForLog(resp))
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		http.Error(w, "Failed to read response body", http.StatusInternalServerError)
@@ -809,6 +807,30 @@ func (p *MCPProxy) handleHTTP(w http.ResponseWriter, resp *http.Response) {
 
 	w.WriteHeader(resp.StatusCode)
 	w.Write(bodyBytes)
+}
+
+// safeURLForLog keeps the request destination useful for diagnostics without
+// exposing credentials or user data carried in URL user-info, query values, or
+// fragments. Request and response payloads must be logged by size only.
+func safeURLForLog(value *url.URL) string {
+	if value == nil {
+		return "<unknown>"
+	}
+
+	safe := *value
+	safe.User = nil
+	safe.RawQuery = ""
+	safe.ForceQuery = false
+	safe.Fragment = ""
+	safe.RawFragment = ""
+	return safe.String()
+}
+
+func safeResponseURLForLog(resp *http.Response) string {
+	if resp == nil || resp.Request == nil {
+		return "<unknown>"
+	}
+	return safeURLForLog(resp.Request.URL)
 }
 
 func (r *TokenRefresher) Start() {

@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -77,6 +78,17 @@ func TestNewMCPProxy(t *testing.T) {
 	assert.Equal(t, port, proxy.TokenRefresher.port)
 	assert.Equal(t, scope, proxy.TokenRefresher.scope)
 	assert.Equal(t, autoOpenBrowser, proxy.TokenRefresher.autoOpenBrowser)
+}
+
+func TestSafeURLForLog(t *testing.T) {
+	value, err := url.Parse("https://user:password@example.com/mcp/server?access_token=secret&code=oauth-code#private")
+	assert.NoError(t, err)
+	assert.Equal(t, "https://example.com/mcp/server", safeURLForLog(value))
+	assert.Equal(t, "<unknown>", safeURLForLog(nil))
+
+	resp := &http.Response{Request: &http.Request{URL: value}}
+	assert.Equal(t, "https://example.com/mcp/server", safeResponseURLForLog(resp))
+	assert.Equal(t, "<unknown>", safeResponseURLForLog(nil))
 }
 
 func TestNewMCPProxy_ServerPathsMapping(t *testing.T) {

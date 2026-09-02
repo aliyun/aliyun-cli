@@ -472,7 +472,8 @@ func generateCodeChallenge(verifier string) string {
 
 func oauthRefresh(endpoint string, data url.Values) (*OAuthTokenResponse, error) {
 	fullURL := endpoint + "/v1/token"
-	log.Printf("OAuth refresh: attempting to refresh token at %s", fullURL)
+	parsedURL, _ := url.Parse(fullURL)
+	log.Printf("OAuth refresh: attempting to refresh token at %s", safeURLForLog(parsedURL))
 
 	req, err := http.NewRequest("POST", fullURL, strings.NewReader(data.Encode()))
 	if err != nil {
@@ -485,7 +486,7 @@ func oauthRefresh(endpoint string, data url.Values) (*OAuthTokenResponse, error)
 	duration := time.Since(startTime)
 
 	if err != nil {
-		log.Printf("OAuth refresh: HTTP request to %s failed after %v: %v", fullURL, duration, err)
+		log.Printf("OAuth refresh: HTTP request failed after %v: %v", duration, err)
 		return nil, fmt.Errorf("http request to %s failed after %v: %w", fullURL, duration, err)
 	}
 	defer resp.Body.Close()
@@ -496,7 +497,7 @@ func oauthRefresh(endpoint string, data url.Values) (*OAuthTokenResponse, error)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("OAuth refresh: received non-OK status %d after %v, body: %s", resp.StatusCode, duration, string(body))
+		log.Printf("OAuth refresh: received non-OK status %d after %v, body_bytes=%d", resp.StatusCode, duration, len(body))
 
 		// 检查是否是 OAuth 认证错误（不可重试的错误）
 		if resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnauthorized {
@@ -517,7 +518,7 @@ func oauthRefresh(endpoint string, data url.Values) (*OAuthTokenResponse, error)
 			}
 		}
 
-		return nil, fmt.Errorf("refresh failed: status %d, body: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("refresh failed: status %d, response body omitted (%d bytes)", resp.StatusCode, len(body))
 	}
 
 	var tokenResp OAuthTokenResponse
@@ -639,7 +640,7 @@ func executeOAuthFlow(ctx *cli.Context, clientId string, regionType RegionType, 
 	if code == "" {
 		return nil, fmt.Errorf("authorization code is empty")
 	}
-	log.Println("Oauth authorization successfully, code received:", code)
+	log.Println("OAuth authorization code received successfully")
 
 	return exchangeCodeForTokenWithPKCE(clientId, code, codeVerifier, redirectURI, EndpointMap[regionType].OAuth)
 }
