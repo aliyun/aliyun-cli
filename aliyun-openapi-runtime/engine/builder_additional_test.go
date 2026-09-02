@@ -558,7 +558,7 @@ func TestBuilderErrorAndRenderBranches(t *testing.T) {
 		t.Fatalf("API versions help = %q", versionsHelp.String())
 	}
 
-	if err := renderDryRun(io.Discard, "demo", nil, false); err == nil {
+	if err := renderDryRun(io.Discard, "demo", nil, false, false); err == nil {
 		t.Fatal("renderDryRun(nil) succeeded")
 	}
 	if _, err := buildCliDryRunOutput("demo", &runtime.AssembledRequest{Body: make(chan int)}); err == nil {
@@ -566,7 +566,7 @@ func TestBuilderErrorAndRenderBranches(t *testing.T) {
 	}
 	for _, body := range []any{[]byte(`{"password":"secret"}`), map[string]any{"name": "value"}} {
 		var out bytes.Buffer
-		if err := renderDryRun(&out, "demo", &runtime.AssembledRequest{Body: body}, false); err != nil {
+		if err := renderDryRun(&out, "demo", &runtime.AssembledRequest{Body: body}, false, false); err != nil {
 			t.Fatal(err)
 		}
 		if !strings.Contains(out.String(), "Body:") {

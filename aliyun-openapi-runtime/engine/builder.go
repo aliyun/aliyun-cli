@@ -594,7 +594,7 @@ func (e *Engine) executeStandard(out io.Writer, product string, ec *runtime.Exec
 		return err
 	}
 	if res.Reserved.DryRun {
-		return renderDryRun(out, product, resp.Assembled, res.Reserved.DryRunJSON)
+		return renderDryRun(out, product, resp.Assembled, res.Reserved.DryRunJSON, ec.MetadataPluginName != "")
 	}
 	if res.Reserved.Quiet {
 		return nil
@@ -758,7 +758,7 @@ func buildCliDryRunOutput(product string, req *runtime.AssembledRequest) (*cliDr
 // jsonMeta selects the one-line full request form (--cli-dry-run-json); otherwise a
 // human-readable multi-line dump (--cli-dry-run) matching the plugin
 // engine's layout, with a runtime-labelled footer for diff identification.
-func renderDryRun(w io.Writer, product string, req *runtime.AssembledRequest, jsonMeta bool) error {
+func renderDryRun(w io.Writer, product string, req *runtime.AssembledRequest, jsonMeta bool, metadataPlugin bool) error {
 	if req == nil {
 		return fmt.Errorf("dry-run produced no request")
 	}
@@ -810,7 +810,11 @@ func renderDryRun(w io.Writer, product string, req *runtime.AssembledRequest, js
 	}
 	fmt.Fprintf(w, "%s\nRequest NOT sent (dry-run mode)\n%s\n", bar, bar)
 	fmt.Fprintln(w, "{")
-	fmt.Fprintln(w, "\t\"message\": \"aliyun-openapi-runtime dry-run mode - no request sent\"")
+	if metadataPlugin {
+		fmt.Fprintln(w, "\t\"message\": \"aliyun-openapi-runtime meta plugin dry-run mode - no request sent\"")
+	} else {
+		fmt.Fprintln(w, "\t\"message\": \"aliyun-openapi-runtime baseline dry-run mode - no request sent\"")
+	}
 	fmt.Fprintln(w, "}")
 	return nil
 }

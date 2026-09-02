@@ -38,7 +38,7 @@ func TestRenderDryRunMasksSecrets(t *testing.T) {
 		Query:    map[string]string{"AccessKeyId": "LTAI5tRealKeyId", "RegionId": "cn-hangzhou"},
 		Body:     `{"password":"secret-value","name":"visible"}`,
 	}
-	if err := renderDryRun(&buf, "svc", req, false); err != nil {
+	if err := renderDryRun(&buf, "svc", req, false, false); err != nil {
 		t.Fatalf("renderDryRun: %v", err)
 	}
 	out := buf.String()
@@ -60,9 +60,21 @@ func TestRenderDryRunMasksSecrets(t *testing.T) {
 	wantFooter := "============================================================\n" +
 		"Request NOT sent (dry-run mode)\n" +
 		"============================================================\n" +
-		"{\n\t\"message\": \"aliyun-openapi-runtime dry-run mode - no request sent\"\n}\n"
+		"{\n\t\"message\": \"aliyun-openapi-runtime baseline dry-run mode - no request sent\"\n}\n"
 	if !strings.HasSuffix(out, wantFooter) {
 		t.Fatalf("unexpected aliyun-openapi-runtime dry-run footer:\n%s", out)
+	}
+}
+
+func TestRenderDryRunIdentifiesMetadataPluginSource(t *testing.T) {
+	var buf bytes.Buffer
+	req := &runtime.AssembledRequest{Method: "POST", Version: "2024-01-01"}
+	if err := renderDryRun(&buf, "svc", req, false, true); err != nil {
+		t.Fatalf("renderDryRun: %v", err)
+	}
+	const want = `"message": "aliyun-openapi-runtime meta plugin dry-run mode - no request sent"`
+	if !strings.Contains(buf.String(), want) {
+		t.Fatalf("metadata plugin source is missing from dry-run footer:\n%s", buf.String())
 	}
 }
 
@@ -86,7 +98,7 @@ func TestRenderDryRunJSONMasksSecretsWithoutMutatingRequest(t *testing.T) {
 		Body:        `{"TaskId":3460000290000487710,"password":"body-secret-value"}`,
 		ReqBodyType: "json",
 	}
-	if err := renderDryRun(&buf, "svc", req, true); err != nil {
+	if err := renderDryRun(&buf, "svc", req, true, false); err != nil {
 		t.Fatalf("renderDryRun: %v", err)
 	}
 
@@ -487,7 +499,7 @@ func TestDryRunJSONOneLine(t *testing.T) {
 		Region:      "cn-x",
 		Endpoint:    "https://svc.example.com",
 	}
-	if err := renderDryRun(&buf, "svc", req, true); err != nil {
+	if err := renderDryRun(&buf, "svc", req, true, false); err != nil {
 		t.Fatalf("renderDryRun json: %v", err)
 	}
 	out := strings.TrimSpace(buf.String())
@@ -533,7 +545,7 @@ func TestDryRunJSONIncludesActualRPCPathname(t *testing.T) {
 		Style:    "RPC",
 		Endpoint: "svc.example.com",
 	}
-	if err := renderDryRun(&buf, "svc", req, true); err != nil {
+	if err := renderDryRun(&buf, "svc", req, true, false); err != nil {
 		t.Fatalf("renderDryRun json: %v", err)
 	}
 	var got cliDryRunOutput
