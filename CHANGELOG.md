@@ -1,5 +1,18 @@
 # CHANGE LOG
-Newest change logs published with release description at https://github.com/aliyun/aliyun-cli/releases . This file just display change logs before version v3.0.1.
+
+Release notes are also published at https://github.com/aliyun/aliyun-cli/releases. This file summarizes the major changes in each version.
+
+### v3.5.0
+
+- Introduced a unified OpenAPI runtime backed by canonical, bundled metadata, with lazy loading and consistent behavior across built-in and plugin-provided APIs.
+- Added lowercase kebab-case commands and parameters alongside the existing PascalCase syntax, while preserving legacy command compatibility and improving command, API, and parameter validation.
+- Added versioned machine-readable Help with `--cli-output json`, including hierarchical request/response sections, Help search, response schemas, query examples, and navigation hints for automation.
+- Added agent-aware AI mode with structured error output, spelling suggestions, actionable recovery guidance, and safer fail-closed handling for invalid safety-policy files.
+- Improved OpenAPI request construction for RPC, ROA, form data, paths, arrays, maps, nested composite parameters, direct bodies, API versions, and endpoint resolution.
+- Expanded plugin metadata and installation support, enforced minimum CLI versions, and hardened plugin names and installation paths against directory traversal.
+- Hardened the MCP proxy by redacting sensitive logs and bounding request, connection, and upstream-header resource usage without terminating established SSE streams; also added finite CloudSSO HTTP timeouts and safer response handling.
+- Added comprehensive English and Simplified Chinese documentation for configuration, usage, plugins, MCP, OpenTelemetry, and machine-facing interfaces.
+- Upgraded the minimum Go version to 1.25.14, refreshed security-sensitive dependencies, and strengthened CI and release validation for the runtime and packed metadata.
 
 ### v3.0.0 GA Version
 
