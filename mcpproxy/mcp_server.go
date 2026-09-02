@@ -127,6 +127,7 @@ type MCPProxy struct {
 	AllowedServers  []string            // 允许访问的服务器列表（服务器名称、ID 或路径前缀），如果为空则允许所有服务器
 	BlockedServers  []string            // 禁止访问的服务器列表（服务器名称、ID 或路径前缀），黑名单优先级高于白名单
 	serverPaths     map[string][]string // 服务器名称/ID -> 路径列表的映射，启动时构建，避免重复解析
+	upstreamClient  *http.Client        // no overall timeout: SSE streams remain open after response headers arrive
 }
 
 const (
@@ -136,6 +137,9 @@ const (
 	RefreshTokenRefreshWindow     = 13 * time.Minute // Refresh token 提前重新授权窗口
 	WaitForRefreshTimeout         = 5 * time.Second
 	WaitForReauthorizationTimeout = 120 * time.Second
+	mcpReadHeaderTimeout          = 10 * time.Second
+	mcpIdleTimeout                = 2 * time.Minute
+	mcpUpstreamHeaderTimeout      = 2 * time.Minute
 )
 
 type TokenInfo struct {
@@ -211,6 +215,28 @@ func NewMCPProxy(config ProxyConfig) *MCPProxy {
 		AllowedServers:  config.AllowedServers,
 		BlockedServers:  config.BlockedServers,
 		serverPaths:     serverPaths,
+		upstreamClient:  newMCPUpstreamHTTPClient(),
+	}
+}
+
+func newMCPUpstreamHTTPClient() *http.Client {
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		// Respect a process-wide custom transport. It may provide its own timeout
+		// policy and cannot be cloned as an *http.Transport.
+		return &http.Client{Transport: http.DefaultTransport}
+	}
+	transport := defaultTransport.Clone()
+	transport.ResponseHeaderTimeout = mcpUpstreamHeaderTimeout
+	return &http.Client{Transport: transport}
+}
+
+func (p *MCPProxy) newHTTPServer(handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              fmt.Sprintf("%s:%d", p.Host, p.Port),
+		Handler:           handler,
+		ReadHeaderTimeout: mcpReadHeaderTimeout,
+		IdleTimeout:       mcpIdleTimeout,
 	}
 }
 
@@ -220,10 +246,7 @@ func (p *MCPProxy) Start() error {
 	mux.HandleFunc("/health", p.handleHealth)
 	mux.HandleFunc("/", p.ServeMCPProxyRequest)
 
-	p.Server = &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", p.Host, p.Port),
-		Handler: mux,
-	}
+	p.Server = p.newHTTPServer(mux)
 
 	log.Printf("MCP Proxy starting on %s:%d\n", p.Host, p.Port)
 
@@ -432,7 +455,12 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 			upstreamReq.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		}
 
-		client := &http.Client{Timeout: 0}
+		client := p.upstreamClient
+		if client == nil {
+			// Preserve compatibility for MCPProxy values constructed directly by
+			// callers instead of NewMCPProxy.
+			client = newMCPUpstreamHTTPClient()
+		}
 		resp, err := client.Do(upstreamReq)
 		if err != nil {
 			return nil, fmt.Errorf("failed to send request: %w", err)
