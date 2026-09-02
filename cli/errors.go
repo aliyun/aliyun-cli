@@ -27,6 +27,29 @@ type StructuredError interface {
 	ExitCode() int
 }
 
+// InvalidOptionCombinationError identifies flags that cannot be used together
+// while preserving the existing human-readable error text.
+type InvalidOptionCombinationError struct {
+	Options []string
+	Err     error
+}
+
+func (e *InvalidOptionCombinationError) Error() string {
+	if e == nil || e.Err == nil {
+		return "invalid option combination"
+	}
+	return e.Err.Error()
+}
+
+func (e *InvalidOptionCombinationError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func (*InvalidOptionCombinationError) AIRecoveryEligible() {}
+
 // If command.Execute return Noticeable error, print i18n Notice under error information
 type ErrorWithTip interface {
 	GetTip(lang string) string

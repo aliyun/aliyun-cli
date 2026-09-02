@@ -129,7 +129,9 @@ func TestCheckFlags(t *testing.T) {
 	ctx.flags.flags[0].Fields[0].Required = false
 	ctx.flags.flags[0].ExcludeWith = []string{"MrX"}
 	ctx.flags.flags[0].value = "M"
-	assert.EqualError(t, ctx.CheckFlags(), "flag --MrX is exclusive with --MrX")
+	conflict := ctx.CheckFlags()
+	assert.EqualError(t, conflict, "flag --MrX is exclusive with --MrX")
+	assert.True(t, IsAIRecoveryEligible(conflict))
 }
 
 func TestDetectFlag(t *testing.T) {

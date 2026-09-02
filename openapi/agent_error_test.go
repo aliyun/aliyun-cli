@@ -170,25 +170,25 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		cause := cli.NewInvalidCommandError("profiel", ctx)
 
 		envelope := requireAgentEnvelope(t, cause, []string{"configure", "profiel"}, nil)
-		assert.Equal(t, "inspect_parent_help", envelope.Recovery.Action)
+		assert.Equal(t, "inspect_command_help", envelope.Recovery.Action)
 		assert.Equal(t, "aliyun configure --help", envelope.Recovery.Command)
 		assert.Equal(t, "Inspect commands under the current parent.", envelope.Recovery.Hint)
 	})
 
-	t.Run("unknown CLI subcommand publishes only validated current-level search", func(t *testing.T) {
+	t.Run("unknown CLI subcommand keeps suggestions but never changes help into search", func(t *testing.T) {
 		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 		parent := &cli.Command{Name: "configure"}
 		parent.AddSubCommand(&cli.Command{Name: "profile"})
 		ctx.EnterCommand(parent)
 		cause := cli.NewInvalidCommandError("profiel", ctx)
 
-		envelope := requireAgentEnvelope(t, cause, []string{"configure", "profiel"}, func(request RecoverySearchRequest) bool {
-			assert.Equal(t, RecoverySearchRequest{Product: "configure", Keyword: "profile"}, request)
-			return true
+		envelope := requireAgentEnvelope(t, cause, []string{"configure", "profiel"}, func(RecoverySearchRequest) bool {
+			t.Fatal("UNKNOWN_COMMAND recovery must not validate a search command")
+			return false
 		})
-		assert.Equal(t, "search_command", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun configure --help-search profile", envelope.Recovery.Command)
-		assert.Equal(t, "Search commands under the current parent related to profile.", envelope.Recovery.Hint)
+		assert.Equal(t, []string{"profile"}, envelope.DidYouMean)
+		assert.Equal(t, "inspect_command_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun configure --help", envelope.Recovery.Command)
 	})
 
 	t.Run("unknown host flag publishes only validated current-level search", func(t *testing.T) {
@@ -254,8 +254,8 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 
 		assert.Empty(t, envelope.DidYouMean)
 		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help ecs run-instances --cli-section request", envelope.Recovery.Command)
-		assert.Equal(t, "Inspect the complete request help and provide every required parameter.", envelope.Recovery.Hint)
+		assert.Equal(t, "aliyun ecs run-instances --help", envelope.Recovery.Command)
+		assert.Equal(t, "Inspect the API help for request parameters and provide every required value.", envelope.Recovery.Hint)
 	})
 
 	t.Run("missing required parameter hides PascalCase wire paths", func(t *testing.T) {
@@ -277,8 +277,8 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		assert.Empty(t, envelope.DidYouMean)
 		assert.Equal(t, "required parameters not assigned: --InstanceId", envelope.Message)
 		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help ecs DescribeInstanceAttribute --cli-section request", envelope.Recovery.Command)
-		assert.Equal(t, "Inspect the complete request help and provide every required parameter.", envelope.Recovery.Hint)
+		assert.Equal(t, "aliyun ecs DescribeInstanceAttribute --help", envelope.Recovery.Command)
+		assert.Equal(t, "Inspect the API help for request parameters and provide every required value.", envelope.Recovery.Hint)
 	})
 
 	t.Run("invalid argument preserves typed parameter context", func(t *testing.T) {
@@ -323,8 +323,27 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 
 		assert.Equal(t, text, envelope.Message)
 		assert.Equal(t, "fix_option_combination", envelope.Recovery.Action)
-		assert.Empty(t, envelope.Recovery.Command)
+		assert.Equal(t, "aliyun ecs describe-instances --help", envelope.Recovery.Command)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, normalizeAgentError(cause, []string{"ecs", "describe-instances"}), &agentErr)
+		assert.Equal(t, 2, agentErr.ExitCode())
 		assert.Equal(t, "Remove one of the conflicting options: --cli-dry-run-json, --pager.", envelope.Recovery.Hint)
+	})
+
+	t.Run("host CheckFlags option conflict is normalized", func(t *testing.T) {
+		command := &cli.Command{Name: "aliyun"}
+		command.Flags().Add(&cli.Flag{Name: "cli-dry-run-json", AssignedMode: cli.AssignedNone, ExcludeWith: []string{"pager"}})
+		command.Flags().Add(&cli.Flag{Name: "pager", AssignedMode: cli.AssignedNone})
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		ctx.EnterCommand(command)
+		ctx.Flags().Get("cli-dry-run-json").SetAssigned(true)
+		ctx.Flags().Get("pager").SetAssigned(true)
+
+		cause := ctx.CheckFlags()
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "DescribeInstances", "--cli-dry-run-json", "--pager"}, nil)
+		assert.Equal(t, "flag --cli-dry-run-json is exclusive with --pager", envelope.Message)
+		assert.Equal(t, "fix_option_combination", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun ecs DescribeInstances --help", envelope.Recovery.Command)
 	})
 
 	t.Run("section all conflict recovers with same section search", func(t *testing.T) {
@@ -371,13 +390,15 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		})
 
 		assert.Equal(t, "fix_body_file", envelope.Recovery.Action)
+		assert.Equal(t, "--body-file: /private/secret/request.json: permission denied", envelope.Message)
 		assert.Equal(t, "aliyun ecs run-instances --body-file --help", envelope.Recovery.Command)
 		assert.NotContains(t, envelope.Recovery.Command, "/private/secret")
+		assert.NotContains(t, envelope.Recovery.Hint, "/private/secret")
 		assert.Equal(t, "Check that --body-file points to a readable file.", envelope.Recovery.Hint)
 	})
 }
 
-func TestNormalizeAgentErrorRedactsHeaderValuesAndBodyFilePaths(t *testing.T) {
+func TestNormalizeAgentErrorRedactsHeaderValuesButKeepsBodyFilePathsOnlyInMessage(t *testing.T) {
 	tests := []struct {
 		name      string
 		cause     error
@@ -398,25 +419,31 @@ func TestNormalizeAgentErrorRedactsHeaderValuesAndBodyFilePaths(t *testing.T) {
 		},
 		{
 			name:      "runtime body file",
-			cause:     &engine.InvalidBodyFileError{Err: errors.New("open /private/customer/request.json: permission denied")},
+			cause:     &engine.InvalidBodyFileError{Path: "/private/customer/request.json", Err: errors.New("--body-file: open /private/customer/request.json: permission denied")},
 			sensitive: "/private/customer/request.json",
-			message:   "unable to read --body-file",
+			message:   "--body-file: open /private/customer/request.json: permission denied",
 		},
 		{
 			name:      "legacy body file",
-			cause:     &InvalidBodyFileError{Err: errors.New("open /tmp/customer-body.json: no such file")},
+			cause:     &InvalidBodyFileError{Path: "/tmp/customer-body.json", Err: errors.New("--body-file: open /tmp/customer-body.json: no such file")},
 			sensitive: "/tmp/customer-body.json",
-			message:   "unable to read --body-file",
+			message:   "--body-file: open /tmp/customer-body.json: no such file",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			envelope := requireAgentEnvelope(t, tt.cause, []string{"ecs", "DescribeInstances"}, nil)
-			encoded, err := json.Marshal(envelope)
-			require.NoError(t, err)
 			assert.Equal(t, tt.message, envelope.Message)
-			assert.NotContains(t, string(encoded), tt.sensitive)
+			if strings.Contains(tt.name, "body file") {
+				assert.Contains(t, envelope.Message, tt.sensitive)
+				assert.NotContains(t, envelope.Recovery.Command, tt.sensitive)
+				assert.NotContains(t, envelope.Recovery.Hint, tt.sensitive)
+			} else {
+				encoded, err := json.Marshal(envelope)
+				require.NoError(t, err)
+				assert.NotContains(t, string(encoded), tt.sensitive)
+			}
 		})
 	}
 }
@@ -578,13 +605,13 @@ func TestNormalizeAgentErrorSearchValidationFallbackAndCommandStyle(t *testing.T
 		assert.Equal(t, "2014-05-26", request.Version)
 	})
 
-	t.Run("required recovery keeps prefix Section form and explicit API version", func(t *testing.T) {
+	t.Run("required recovery keeps API help and explicit API version", func(t *testing.T) {
 		cause := &runtime.MissingRequiredError{Flags: []string{"--instance-id"}}
 		envelope := requireAgentEnvelope(t, cause,
 			[]string{"ecs", "describe-instance-attribute", "--api-version=2014-05-26"}, nil)
 
 		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help ecs describe-instance-attribute --api-version 2014-05-26 --cli-section request", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun ecs describe-instance-attribute --api-version 2014-05-26 --help", envelope.Recovery.Command)
 	})
 }
 
@@ -1230,7 +1257,7 @@ func TestBuiltInSubcommandErrorUsesRootAIModeAdapter(t *testing.T) {
 	var envelope cli.AgentErrorEnvelope
 	require.NoError(t, json.Unmarshal(stderr.Bytes(), &envelope))
 	assert.Equal(t, []string{"profile"}, envelope.DidYouMean)
-	assert.Equal(t, "inspect_parent_help", envelope.Recovery.Action)
+	assert.Equal(t, "inspect_command_help", envelope.Recovery.Action)
 	assert.Equal(t, "aliyun configure --help", envelope.Recovery.Command)
 	assert.Equal(t, "\x1b[0;31mtext\x1b[0m", cli.Colorized(cli.Red, "text"), "AI no-color override must be restored after Execute")
 }
@@ -1352,30 +1379,28 @@ func TestTypedLocalErrorsPreserveHumanText(t *testing.T) {
 	}
 }
 
-func TestNormalizeAgentErrorMissingRequiredUpgradesToTargetedSearch(t *testing.T) {
-	t.Run("runtime missing required validates into parameter search", func(t *testing.T) {
+func TestNormalizeAgentErrorMissingRequiredAlwaysUsesAPIHelp(t *testing.T) {
+	t.Run("runtime missing required ignores parameter search", func(t *testing.T) {
 		cause := &engine.UsageError{Code: "MISSING_REQUIRED_PARAMETER", Err: &runtime.MissingRequiredError{
 			Flags: []string{"--image-id", "--instance-type"},
 		}}
-		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "run-instances"}, func(request RecoverySearchRequest) bool {
-			assert.Equal(t, "request", request.Section)
-			assert.Equal(t, "run-instances", request.API)
-			return request.Keyword == "image-id"
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "run-instances"}, func(RecoverySearchRequest) bool {
+			t.Fatal("missing required recovery must not validate a single-parameter search")
+			return false
 		})
 
-		assert.Equal(t, "search_parameter", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun ecs run-instances --help-search image-id", envelope.Recovery.Command)
+		assert.Empty(t, envelope.DidYouMean)
+		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun ecs run-instances --help", envelope.Recovery.Command)
 	})
 
-	t.Run("legacy doc required validates into parameter search", func(t *testing.T) {
+	t.Run("legacy doc required uses API help", func(t *testing.T) {
 		cause := &LegacyDocRequiredError{Flags: []string{"--RegionId"}}
-		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "DescribeInstances"}, func(request RecoverySearchRequest) bool {
-			return request.Keyword == "RegionId"
-		})
+		envelope := requireAgentEnvelope(t, cause, []string{"ecs", "DescribeInstances"}, nil)
 
 		assert.Equal(t, "missing required parameter(s): --RegionId", envelope.Message)
-		assert.Equal(t, "search_parameter", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun ecs DescribeInstances --help-search RegionId", envelope.Recovery.Command)
+		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
+		assert.Equal(t, "aliyun ecs DescribeInstances --help", envelope.Recovery.Command)
 	})
 
 	t.Run("validator rejection falls back to complete request help", func(t *testing.T) {
@@ -1385,7 +1410,7 @@ func TestNormalizeAgentErrorMissingRequiredUpgradesToTargetedSearch(t *testing.T
 		})
 
 		assert.Equal(t, "inspect_request_help", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun help ecs DescribeInstances --cli-section request", envelope.Recovery.Command)
+		assert.Equal(t, "aliyun ecs DescribeInstances --help", envelope.Recovery.Command)
 	})
 }
 
