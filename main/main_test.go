@@ -21,19 +21,18 @@ func TestDumpFilesCopiesEmbeddedTree(t *testing.T) {
 	output := t.TempDir()
 	dumpFiles(testDumpFS, "./testdata/dump", output)
 
-	root, err := os.ReadFile(filepath.Join(output, "testdata", "dump", "root.txt"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(root) != "root fixture\n" {
-		t.Fatalf("root fixture = %q", root)
-	}
-	child, err := os.ReadFile(filepath.Join(output, "testdata", "dump", "nested", "child.txt"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(child) != "child fixture\n" {
-		t.Fatalf("child fixture = %q", child)
+	for _, name := range []string{"testdata/dump/root.txt", "testdata/dump/nested/child.txt"} {
+		want, err := testDumpFS.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(filepath.Join(output, filepath.FromSlash(name)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("%s = %q, want embedded bytes %q", name, got, want)
+		}
 	}
 }
 

@@ -3480,6 +3480,7 @@ func TestValidateAndResolvePackageTypeBranches(t *testing.T) {
 func TestExpandPluginSourcePathHomeAndEmpty(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	path, err := expandPluginSourcePath("~/package.tgz")
 	assert.NoError(t, err)
 	assert.Equal(t, filepath.Join(home, "package.tgz"), path)
