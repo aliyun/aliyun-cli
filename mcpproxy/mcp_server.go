@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -138,8 +139,10 @@ const (
 	WaitForRefreshTimeout         = 5 * time.Second
 	WaitForReauthorizationTimeout = 120 * time.Second
 	mcpReadHeaderTimeout          = 10 * time.Second
+	mcpReadTimeout                = 2 * time.Minute
 	mcpIdleTimeout                = 2 * time.Minute
 	mcpUpstreamHeaderTimeout      = 2 * time.Minute
+	mcpMaxRequestBodyBytes        = 64 << 20
 )
 
 type TokenInfo struct {
@@ -236,8 +239,23 @@ func (p *MCPProxy) newHTTPServer(handler http.Handler) *http.Server {
 		Addr:              fmt.Sprintf("%s:%d", p.Host, p.Port),
 		Handler:           handler,
 		ReadHeaderTimeout: mcpReadHeaderTimeout,
+		ReadTimeout:       mcpReadTimeout,
 		IdleTimeout:       mcpIdleTimeout,
 	}
+}
+
+func readMCPRequestBody(w http.ResponseWriter, r *http.Request, limit int64) ([]byte, error) {
+	if r.Body == nil {
+		return nil, nil
+	}
+	if r.ContentLength > limit {
+		_ = r.Body.Close()
+		return nil, &http.MaxBytesError{Limit: limit}
+	}
+
+	body := http.MaxBytesReader(w, r.Body, limit)
+	defer body.Close()
+	return io.ReadAll(body)
 }
 
 func (p *MCPProxy) Start() error {
@@ -429,14 +447,18 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 	var bodyBytes []byte
 	if r.Body != nil {
 		var err error
-		bodyBytes, err = io.ReadAll(r.Body)
+		bodyBytes, err = readMCPRequestBody(w, r, mcpMaxRequestBodyBytes)
 		if err != nil {
 			log.Println("MCP Proxy upstream request body read error", err.Error())
 			atomic.AddInt64(&p.stats.ErrorRequests, 1)
-			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			var maxBytesError *http.MaxBytesError
+			if errors.As(err, &maxBytesError) {
+				http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			} else {
+				http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			}
 			return
 		}
-		_ = r.Body.Close()
 		log.Printf("MCP Proxy received request body_bytes=%d", len(bodyBytes))
 		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	} else {

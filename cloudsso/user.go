@@ -21,7 +21,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"time"
 )
 
 type ListUserParameter struct {
@@ -75,9 +74,8 @@ func (p *ListUserParameter) ListUsers(nextToken string, maxResults int) (*ListUs
 	req.Header.Add("authorization", fmt.Sprintf("Bearer %s", p.AccessToken))
 	req.Header.Add("user-agent", "aliyun/CLI-"+cli.Version)
 
-	p.HttpClient.Timeout = 10000 * time.Millisecond
-
-	resp, err := p.HttpClient.Do(req)
+	client := cloudSSOHTTPClient(p.HttpClient)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

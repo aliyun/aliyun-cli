@@ -40,7 +40,7 @@ The blocked list takes precedence over the allowed list. For backward compatibil
 
 ### Timeouts and streaming
 
-The local server limits request-header reads to 10 seconds and idle keep-alive connections to 2 minutes. Waiting for upstream response headers is limited to 2 minutes. There is no server-wide write timeout or HTTP client total timeout, so an established SSE stream is not terminated by these limits.
+The local server limits request-header reads to 10 seconds, complete request reads to 2 minutes, and request bodies to 64 MiB; an oversized body is rejected with HTTP 413. Idle keep-alive connections and waits for upstream response headers are each limited to 2 minutes. There is no server-wide write timeout or HTTP client total timeout, so an established SSE stream is not terminated by these limits.
 
 ### Logging and sensitive data
 
@@ -103,7 +103,7 @@ Machine Help writes one JSON document plus a trailing newline to stdout. Its com
 | `result.shown`, `result.total`, `result.truncated` | Projection and paging information |
 | `next` | Suggested commands for search, complete output, or another Help section |
 
-Use `--help-all` to remove the normal result cap. Use `--help-search <text>` to filter the current Help level; combine it with `--help-all` to return all matches. Consumers should branch on `schemaVersion` and `helpLevel`, ignore unknown fields, and use `next` instead of constructing follow-up commands themselves.
+Use `--help-all` by itself to remove the normal result cap. `--help-search <text>` filters the current Help level and returns every match by default. Combining search with `--help-all` remains accepted for compatibility, but does not change the result set. Use a specific search term to keep machine output compact. Consumers should branch on `schemaVersion` and `helpLevel`, ignore unknown fields, and use `next` instead of constructing follow-up commands themselves.
 
 Machine Help request errors are written to stderr and exit with status 2. They use a versioned envelope:
 

@@ -65,10 +65,7 @@ func (p *AccessConfigurationsParameter) ListAccessConfigurationsForAccount(req A
 	httpReq.Header.Set("User-Agent", "aliyun/CLI-"+cli.Version)
 
 	// 发送请求
-	client := p.HttpClient
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client := cloudSSOHTTPClient(p.HttpClient)
 
 	resp, err := client.Do(httpReq)
 	if err != nil {

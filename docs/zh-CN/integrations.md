@@ -40,7 +40,7 @@ aliyun utils mcp-proxy \
 
 ### 超时与流式连接
 
-本地 Server 的请求头读取超时为 10 秒，空闲 keep-alive 连接超时为 2 分钟；等待上游响应头的上限为 2 分钟。Server 没有全局写入超时，HTTP Client 也没有总请求超时，因此已经建立的 SSE 流不会被这些限制中断。
+本地 Server 的请求头读取超时为 10 秒，完整请求读取超时为 2 分钟，请求正文上限为 64 MiB；超限请求会返回 HTTP 413。空闲 keep-alive 连接超时和等待上游响应头的上限均为 2 分钟。Server 没有全局写入超时，HTTP Client 也没有总请求超时，因此已经建立的 SSE 流不会被这些限制中断。
 
 ### 日志与敏感数据
 
@@ -103,7 +103,7 @@ aliyun ecs --help-search instance --cli-output json
 | `result.shown`、`result.total`、`result.truncated` | 当前投影及截断信息 |
 | `next` | 搜索、完整输出或切换 Help section 的建议命令 |
 
-`--help-all` 可以取消正常结果数量上限。`--help-search <文本>` 用于筛选当前 Help 层级；与 `--help-all` 组合可以返回全部匹配项。调用方应根据 `schemaVersion` 和 `helpLevel` 分支处理，忽略未知字段，并优先使用 `next`，不要自行拼接后续命令。
+`--help-all` 单独使用时可以取消正常结果数量上限。`--help-search <文本>` 用于筛选当前 Help 层级，并默认返回全部匹配项。搜索时同时传入 `--help-all` 仍然兼容，但不会改变结果集。建议使用尽量具体的搜索词以控制机器输出体积。调用方应根据 `schemaVersion` 和 `helpLevel` 分支处理，忽略未知字段，并优先使用 `next`，不要自行拼接后续命令。
 
 机器 Help 请求错误会写入 stderr，并以状态码 2 退出，采用带版本号的 envelope：
 

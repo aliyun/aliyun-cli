@@ -50,11 +50,8 @@ func TryRefreshStsToken(signInUrl *string, accessToken *string, accessConfig *st
 	host := parsedUrl[1]
 	protocol := parsedUrl[0]
 
-	// 使用传入的HTTP客户端，如果为nil则使用默认客户端
-	httpClient := client
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
+	// 使用传入的 HTTP 客户端，未配置超时时补充有限的默认值。
+	httpClient := cloudSSOHTTPClient(client)
 
 	credential, err := CreateCloudCredential(protocol+"://"+host, *accessToken, CloudCredentialOptions{
 		AccountId:             *accountId,
@@ -108,9 +105,7 @@ type CloudCredentialResponseRaw struct {
 }
 
 func CreateCloudCredential(prefix string, accessToken string, options CloudCredentialOptions, client *http.Client) (*CloudCredentialResponse, error) {
-	if client == nil {
-		client = http.DefaultClient
-	}
+	client = cloudSSOHTTPClient(client)
 	urlFetch := fmt.Sprintf("%s/cloud-credentials", prefix)
 
 	// Prepare request body

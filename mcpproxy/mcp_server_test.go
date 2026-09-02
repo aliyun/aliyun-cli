@@ -91,9 +91,71 @@ func TestMCPProxyHTTPServerTimeoutsPreserveStreaming(t *testing.T) {
 	server := proxy.newHTTPServer(http.NewServeMux())
 
 	assert.Equal(t, mcpReadHeaderTimeout, server.ReadHeaderTimeout)
+	assert.Equal(t, mcpReadTimeout, server.ReadTimeout, "request body reads must have a finite deadline")
 	assert.Equal(t, mcpIdleTimeout, server.IdleTimeout)
-	assert.Zero(t, server.ReadTimeout, "request bodies retain their existing streaming behavior")
 	assert.Zero(t, server.WriteTimeout, "SSE responses must not be terminated by a server-wide deadline")
+}
+
+func TestReadMCPRequestBodyLimit(t *testing.T) {
+	tests := []struct {
+		name          string
+		body          string
+		contentLength int64
+		want          string
+		wantTooLarge  bool
+	}{
+		{
+			name:          "within limit",
+			body:          "1234",
+			contentLength: 4,
+			want:          "1234",
+		},
+		{
+			name:          "declared length exceeds limit",
+			body:          "12345",
+			contentLength: 5,
+			wantTooLarge:  true,
+		},
+		{
+			name:          "streamed body exceeds limit",
+			body:          "12345",
+			contentLength: -1,
+			wantTooLarge:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/mcp/test", bytes.NewBufferString(tt.body))
+			req.ContentLength = tt.contentLength
+			body, err := readMCPRequestBody(httptest.NewRecorder(), req, 4)
+
+			if tt.wantTooLarge {
+				var maxBytesError *http.MaxBytesError
+				require.ErrorAs(t, err, &maxBytesError)
+				assert.EqualValues(t, 4, maxBytesError.Limit)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(body))
+		})
+	}
+}
+
+func TestServeMCPProxyRequestRejectsOversizedBody(t *testing.T) {
+	profile := NewMcpProfile("test-profile")
+	profile.MCPOAuthAccessToken = "test-token"
+	profile.MCPOAuthAccessTokenExpire = time.Now().Unix() + 3600
+	proxy := NewMCPProxy(ProxyConfig{McpProfile: profile})
+	req := httptest.NewRequest(http.MethodPost, "/mcp/test", bytes.NewBufferString("{}"))
+	req.ContentLength = mcpMaxRequestBodyBytes + 1
+	recorder := httptest.NewRecorder()
+
+	proxy.ServeMCPProxyRequest(recorder, req)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "Request body too large")
+	assert.EqualValues(t, 1, atomic.LoadInt64(&proxy.stats.ErrorRequests))
 }
 
 func TestEmptyAllowListPreservesCompatibility(t *testing.T) {
