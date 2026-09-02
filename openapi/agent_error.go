@@ -659,7 +659,7 @@ func unknownAPIAgentError(cause error, message string, suggestions []string, con
 		Command: context.productHelpCommand(),
 		Hint:    "Inspect the available APIs for this product.",
 	}
-	seeds := append(append([]string(nil), suggestions...), context.api)
+	seeds := append([]string{context.api}, suggestions...)
 	for _, keyword := range apiSearchKeywordCandidates(context.style, seeds...) {
 		request := context.searchRequest("", "", keyword)
 		if validate != nil && validate(request) {
