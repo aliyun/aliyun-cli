@@ -137,8 +137,31 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		assert.Equal(t, "aliyun ecs --help-search Instance", envelope.Recovery.Command)
 		assert.Equal(t, "Search APIs related to Instance.", envelope.Recovery.Hint)
 		assert.Equal(t, []RecoverySearchRequest{
+			{Product: "ecs", Style: "pascal", Keyword: "Instnace"},
+			{Product: "ecs", Style: "pascal", Keyword: "Instnaces"},
 			{Product: "ecs", Style: "pascal", Keyword: "Instance"},
 		}, requests)
+	})
+
+	t.Run("unknown API prefers a validated keyword from the user input", func(t *testing.T) {
+		cause := &InvalidApiError{
+			Name: "DescribeResource",
+			product: &meta.Product{
+				Code: "tag", ApiNames: []string{
+					"DeleteAssociatedResourceRule", "ListResourcesByTag", "ListTagResources", "TagResources", "UntagResources",
+				},
+			},
+		}
+		var requests []RecoverySearchRequest
+		envelope := requireAgentEnvelope(t, cause, []string{"tag", "DescribeResource"}, func(got RecoverySearchRequest) bool {
+			requests = append(requests, got)
+			return got.Keyword == "Resource" || got.Keyword == "Rule"
+		})
+
+		assert.Equal(t, "aliyun tag --help-search Resource", envelope.Recovery.Command)
+		assert.Equal(t, "Search APIs related to Resource.", envelope.Recovery.Hint)
+		require.NotEmpty(t, requests)
+		assert.Equal(t, "Resource", requests[0].Keyword)
 	})
 
 	t.Run("short unknown API still uses validated product search", func(t *testing.T) {
