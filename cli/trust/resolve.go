@@ -55,6 +55,32 @@ func ResolveVerifyKeys(
 
 	store := VersionStore{Dir: policy.TrustDir}
 	lastRoot, _ := store.Load("root")
+
+	// Phase 1 bootstrap: when no Root public key is embedded yet, still accept
+	// delegated keys from CDN trust/root.json (operator-managed file). Authenticity
+	// of root.json itself then rides on HTTPS/CDN until Root keys are pinned.
+	if len(rootKeys) == 0 {
+		fromRoot, err := KeysFromRoot(root)
+		if err != nil {
+			if requireRoot {
+				return nil, err
+			}
+			return filterRole(base, role), nil
+		}
+		if lastRoot > 0 && root.Version < lastRoot {
+			err := fmt.Errorf("root version %d older than last accepted %d", root.Version, lastRoot)
+			if requireRoot {
+				return nil, err
+			}
+			return filterRole(base, role), nil
+		}
+		_ = store.Save("root", root.Version)
+		_ = SaveCachedRoot(policy.TrustDir, data)
+		merged := append([]VerifyKey(nil), fromRoot...)
+		merged = append(merged, base...)
+		return filterRole(merged, role), nil
+	}
+
 	if err := VerifyRoot(root, rootKeys, now, policy.MinRootVersion); err != nil {
 		if requireRoot {
 			return nil, err

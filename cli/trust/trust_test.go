@@ -198,3 +198,29 @@ func TestVersionStore(t *testing.T) {
 	_, err = os.Stat(filepath.Join(dir, "plugin_pkg_index_version"))
 	require.NoError(t, err)
 }
+
+func TestResolveVerifyKeys_WithoutBootstrapRootKeys(t *testing.T) {
+	pluginPub, _, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	root := &trust.RootDocument{
+		Schema:  trust.RootSchema,
+		Version: 1,
+		Keys: []trust.RootKey{{
+			KeyID:     "plugins-v1",
+			PublicKey: base64.StdEncoding.EncodeToString(pluginPub),
+			Roles:     []string{trust.RolePlugins},
+		}},
+	}
+	raw, err := json.Marshal(root)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	policy := trust.Policy{TrustDir: dir, Now: time.Now()}
+	keys, err := trust.ResolveVerifyKeys(trust.RolePlugins, func() ([]byte, error) {
+		return raw, nil
+	}, nil, policy, false)
+	require.NoError(t, err)
+	_, ok := trust.FindKey(keys, "plugins-v1", trust.RolePlugins)
+	assert.True(t, ok)
+}
