@@ -42,3 +42,35 @@ func TestInstalledPluginTypeAndPublicVersionValidation(t *testing.T) {
 	assert.False(t, goPlugin.IsMeta())
 	assert.False(t, (*LocalPlugin)(nil).IsMeta())
 }
+
+func TestInstalledPluginPackageVersion(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(EnvPluginsDir, dir)
+	manifest := LocalManifest{Plugins: map[string]LocalPlugin{
+		"aliyun-cli-actiontrail": {
+			Name:           "aliyun-cli-actiontrail",
+			Version:        "0.9.0-test.4",
+			ProductCode:    "Actiontrail",
+			Command:        "actiontrail",
+			CommandAliases: []string{"action-trail"},
+			Type:           PluginTypeMeta,
+		},
+	}}
+	encoded, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.json"), encoded, 0600))
+
+	name, version, err := InstalledPluginPackageVersion("actiontrail")
+	require.NoError(t, err)
+	assert.Equal(t, "aliyun-cli-actiontrail", name)
+	assert.Equal(t, "0.9.0-test.4", version)
+
+	name, version, err = InstalledPluginPackageVersion("action-trail")
+	require.NoError(t, err)
+	assert.Equal(t, "aliyun-cli-actiontrail", name)
+	assert.Equal(t, "0.9.0-test.4", version)
+
+	_, _, err = InstalledPluginPackageVersion("missing")
+	var notFound *ErrPluginNotFound
+	assert.ErrorAs(t, err, &notFound)
+}
