@@ -108,6 +108,9 @@ var machineHelpFalseDefaultBools = map[string]bool{
 }
 
 func omitMachineHelpJSONField(key string, item any, parent map[string]any) bool {
+	if key == "product" && machineHelpSearchOmitsProductContext(parent) {
+		return true
+	}
 	if machineHelpFalseDefaultBools[key] {
 		if flag, ok := item.(bool); ok && !flag {
 			return true
@@ -118,6 +121,22 @@ func omitMachineHelpJSONField(key string, item any, parent map[string]any) bool 
 		return machineHelpOptionsRepeatName(item, parent)
 	}
 	return false
+}
+
+// machineHelpSearchOmitsProductContext keeps search JSON focused on matches.
+// The invocation already identifies the product, while ordinary Product and
+// Request Help retain this context outside search.
+func machineHelpSearchOmitsProductContext(parent map[string]any) bool {
+	query, _ := parent["query"].(string)
+	if query == "" {
+		return false
+	}
+	helpLevel, _ := parent["helpLevel"].(string)
+	if helpLevel == "product" {
+		return true
+	}
+	section, _ := parent["section"].(string)
+	return helpLevel == "api" && section == helpSectionRequest
 }
 
 // machineHelpOptionsRepeatName reports whether options holds exactly the
