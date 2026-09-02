@@ -2843,6 +2843,68 @@ func TestMain_InstalledGoPluginOverridesBuiltInRuntime(t *testing.T) {
 	assert.ErrorContains(t, err, "failed to resolve plugin binary path")
 }
 
+func TestMain_InstalledMetaPluginVersionUsesPackageManifest(t *testing.T) {
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	command := NewCommando(w, config.Profile{Language: "en", RegionId: "cn-hangzhou"})
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-actiontrail")
+	assert.NoError(t, os.MkdirAll(pluginDir, 0755))
+	manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+	manifest := fmt.Sprintf(`{"plugins":{"aliyun-cli-actiontrail":{"name":"aliyun-cli-actiontrail","version":"0.9.0-test.4","type":"meta","path":%q,"command":"actiontrail"}}}`, pluginDir)
+	assert.NoError(t, os.WriteFile(manifestPath, []byte(manifest), 0644))
+
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+	os.Args = []string{"aliyun", "actiontrail", "version"}
+
+	err := command.main(ctx, []string{"actiontrail", "version"})
+	assert.NoError(t, err)
+	assert.Equal(t, "aliyun-cli-actiontrail 0.9.0-test.4\n", w.String())
+	assert.Empty(t, stderr.String())
+}
+
+func TestMain_InstalledGoPluginVersionStillExecutesPlugin(t *testing.T) {
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	command := NewCommando(w, config.Profile{Language: "en", RegionId: "cn-hangzhou"})
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-fc")
+	assert.NoError(t, os.MkdirAll(pluginDir, 0755))
+	manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+	manifest := fmt.Sprintf(`{"plugins":{"aliyun-cli-fc":{"name":"aliyun-cli-fc","version":"1.0.0","type":"go","path":%q,"command":"fc"}}}`, pluginDir)
+	assert.NoError(t, os.WriteFile(manifestPath, []byte(manifest), 0644))
+
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+	os.Args = []string{"aliyun", "fc", "version"}
+
+	err := command.main(ctx, []string{"fc", "version"})
+	assert.ErrorContains(t, err, "failed to resolve plugin binary path")
+}
+
 // TestMain_PluginExecution_ProfileFailFast 验证 plugin 路径下 profile 校验失败时必须 fail-fast，不能 silent 吞错回退到默认 profile。
 // 回归保护：历史上 commando.main 的 `if profile, err := LoadProfileWithContext(ctx); err == nil` 会把 err 吞掉，导致 `--profile xxx` 指向坏 profile 时悄悄换回默认 profile。
 func TestMain_PluginExecution_ProfileFailFast(t *testing.T) {

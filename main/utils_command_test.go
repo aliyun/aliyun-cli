@@ -45,4 +45,10 @@ func TestRootCommandRegistersOnlyCanonicalUtilsPathVisibly(t *testing.T) {
 		require.NotNil(t, legacy, "missing compatible root utility %s", name)
 		assert.True(t, legacy.Hidden, "compatible root utility must not be repeated in Root Help")
 	}
+
+	canonicalMCP := utils.GetSubCommand("mcp-proxy")
+	legacyMCP := root.GetSubCommand("mcp-proxy")
+	assert.Regexp(t, `^aliyun utils mcp-proxy(?: |$)`, canonicalMCP.GetUsageWithParent())
+	assert.Regexp(t, `^aliyun mcp-proxy(?: |$)`, legacyMCP.GetUsageWithParent())
+	assert.Equal(t, "aliyun utils mcp-proxy --region-type CN --port 8088", canonicalMCP.Sample)
 }

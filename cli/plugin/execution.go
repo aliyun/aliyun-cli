@@ -50,6 +50,21 @@ func InstalledPluginType(command string) (pluginType string, ok bool) {
 	return NormalizePluginType(lp.Type), true
 }
 
+func InstalledPluginPackageVersion(command string) (name string, version string, err error) {
+	mgr, err := NewManager()
+	if err != nil {
+		return "", "", err
+	}
+	pluginName, lp, err := mgr.findLocalPlugin(command)
+	if err != nil {
+		return "", "", err
+	}
+	if strings.TrimSpace(lp.Name) != "" {
+		pluginName = lp.Name
+	}
+	return pluginName, lp.Version, nil
+}
+
 func ValidateLocalPluginCliVersion(pluginName string, lp *LocalPlugin) error {
 	if lp == nil {
 		return fmt.Errorf("plugin is nil")

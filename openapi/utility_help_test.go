@@ -18,7 +18,10 @@ func utilityHelpRoot() *cli.Command {
 		Name: "utils", Short: i18n.T("Local utilities", "本地工具"),
 		Usage: "utils <command>", Sample: "aliyun utils doctor",
 	}
-	utils.AddSubCommand(&cli.Command{Name: "doctor", Short: i18n.T("Diagnose the CLI", "诊断 CLI")})
+	utils.AddSubCommand(&cli.Command{
+		Name: "doctor", Short: i18n.T("Diagnose the CLI", "诊断 CLI"),
+		Usage: "doctor [--verbose]", Sample: "aliyun utils doctor",
+	})
 	utils.AddSubCommand(&cli.Command{Name: "hidden", Hidden: true, Short: i18n.T("Hidden", "隐藏")})
 	utils.Flags().Add(&cli.Flag{
 		Name: "verbose", Shorthand: 'v', Aliases: []string{"debug"}, Category: "output",
@@ -64,6 +67,7 @@ func TestBuildUtilityHelpDocumentValidatesTargetsAndProjectsVisibleEntries(t *te
 	require.NoError(t, err)
 	assert.Equal(t, "utils doctor", child.Name)
 	assert.Equal(t, []string{"aliyun", "utils", "doctor"}, child.Target.Path)
+	assert.Equal(t, "utils doctor [--verbose]", child.Usage)
 }
 
 func TestUtilityHelpSearchProjectsCommandsFlagsAndNoMatches(t *testing.T) {
@@ -117,6 +121,16 @@ func TestRenderUtilityHelpTextAndJSON(t *testing.T) {
 		} {
 			assert.Contains(t, stdout.String(), want)
 		}
+		assert.Empty(t, stderr.String())
+	})
+
+	t.Run("leaf text", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		ctx := cli.NewCommandContext(&stdout, &stderr)
+		ctx.EnterCommand(root)
+		require.NoError(t, commando.renderUtilityHelp(ctx, []string{"utils", "doctor"}, cli.HelpOptions{}, false))
+		assert.Contains(t, stdout.String(), "Usage:\n  aliyun utils doctor [--verbose]")
+		assert.NotContains(t, stdout.String(), "aliyun doctor [--verbose]")
 		assert.Empty(t, stderr.String())
 	})
 

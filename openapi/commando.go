@@ -542,6 +542,16 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					if err := plugin.ValidatePluginCliVersion(args[0]); err != nil {
 						return err
 					}
+					// Meta plugins have no executable in which to register the package-level version command.
+					// Read it from the installed manifest instead of forwarding "version" to the OpenAPI runtime as an API name.
+					if apiOrMethod == "version" {
+						name, version, err := plugin.InstalledPluginPackageVersion(args[0])
+						if err != nil {
+							return err
+						}
+						cli.Printf(ctx.Stdout(), "%s %s\n", name, version)
+						return nil
+					}
 					return c.adaptEngineUnknownCommand(runtimehost.Dispatch(ctx, pluginArgs))
 				}
 			} else {

@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -26,6 +27,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewMCPProxy(t *testing.T) {
@@ -77,6 +79,39 @@ func TestNewMCPProxy(t *testing.T) {
 	assert.Equal(t, port, proxy.TokenRefresher.port)
 	assert.Equal(t, scope, proxy.TokenRefresher.scope)
 	assert.Equal(t, autoOpenBrowser, proxy.TokenRefresher.autoOpenBrowser)
+	require.NotNil(t, proxy.upstreamClient)
+	assert.Zero(t, proxy.upstreamClient.Timeout, "an overall timeout would terminate long-lived SSE streams")
+	transport, ok := proxy.upstreamClient.Transport.(*http.Transport)
+	require.True(t, ok)
+	assert.Equal(t, mcpUpstreamHeaderTimeout, transport.ResponseHeaderTimeout)
+}
+
+func TestMCPProxyHTTPServerTimeoutsPreserveStreaming(t *testing.T) {
+	proxy := &MCPProxy{Host: "127.0.0.1", Port: 8088}
+	server := proxy.newHTTPServer(http.NewServeMux())
+
+	assert.Equal(t, mcpReadHeaderTimeout, server.ReadHeaderTimeout)
+	assert.Equal(t, mcpIdleTimeout, server.IdleTimeout)
+	assert.Zero(t, server.ReadTimeout, "request bodies retain their existing streaming behavior")
+	assert.Zero(t, server.WriteTimeout, "SSE responses must not be terminated by a server-wide deadline")
+}
+
+func TestEmptyAllowListPreservesCompatibility(t *testing.T) {
+	proxy := NewMCPProxy(ProxyConfig{})
+
+	assert.True(t, proxy.isPathAllowed("/mcp/existing-server"))
+	assert.True(t, proxy.isServerAllowed(MCPServerInfo{Name: "existing-server"}))
+}
+
+func TestSafeURLForLog(t *testing.T) {
+	value, err := url.Parse("https://user:password@example.com/mcp/server?access_token=secret&code=oauth-code#private")
+	assert.NoError(t, err)
+	assert.Equal(t, "https://example.com/mcp/server", safeURLForLog(value))
+	assert.Equal(t, "<unknown>", safeURLForLog(nil))
+
+	resp := &http.Response{Request: &http.Request{URL: value}}
+	assert.Equal(t, "https://example.com/mcp/server", safeResponseURLForLog(resp))
+	assert.Equal(t, "<unknown>", safeResponseURLForLog(nil))
 }
 
 func TestNewMCPProxy_ServerPathsMapping(t *testing.T) {

@@ -60,13 +60,17 @@ func buildUtilityHelpDocument(root *cli.Command, path []string) (*machineHelpUti
 		}
 	}
 	targetPath := append([]string{"aliyun"}, path...)
+	usage := command.Usage
+	if len(path) == 2 && usage != "" && !strings.HasPrefix(usage, "utils ") {
+		usage = "utils " + usage
+	}
 	document := &machineHelpUtilityDocument{
 		SchemaVersion: machineHelpSchemaVersion,
 		Kind:          "utility",
 		Target:        machineHelpTarget{Path: targetPath, RequestedStyle: "utility"},
 		Name:          strings.Join(path, " "),
 		Description:   localizedText(command.Short.GetData()),
-		Usage:         command.Usage,
+		Usage:         usage,
 		Sample:        command.Sample,
 	}
 	for _, name := range command.SubCommandNames() {
