@@ -29,7 +29,7 @@ func TestNewRootHelpInputDeclaresStableGroupsAndFlags(t *testing.T) {
 
 	assert.Equal(t, []string{
 		"profile", "region", "language", "version", "output", "cli-query", "cli-output",
-		"dryrun", "yes", "cli-ai-mode", "help", "help-all", "help-search",
+		"cli-dry-run", "yes", "cli-ai-mode", "help", "help-all", "help-search",
 	}, rootHelpFlagNames(input.GlobalFlags, openapi.RootVisibilityDefault))
 	assert.Equal(t, []string{"api-version"}, input.GlobalFlags[3].Aliases)
 	assert.Equal(t, []string{"ecs"}, []string{input.Products[0].Code})
