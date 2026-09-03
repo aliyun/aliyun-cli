@@ -196,6 +196,57 @@ func TestBuildAPIParameterDocumentPreservesKebabCompositeShape(t *testing.T) {
 	}
 }
 
+func TestParameterHelpOmitsLocationOnNestedFields(t *testing.T) {
+	api := &meta.API{
+		Name: "CreateFunction", CmdName: "create-function", ProductCode: "fc", Version: "2023-03-30",
+		Parameters: []meta.Parameter{{
+			Name: "custom_runtime_config", RawName: "customRuntimeConfig", Type: meta.TypeObject,
+			Position: meta.PosBody, Options: []string{"--custom-runtime-config"},
+			Fields: []meta.Parameter{{
+				Name: "port", RawName: "port", Type: meta.TypeInteger, Position: meta.PosQuery,
+				Options: []string{"--port"},
+			}, {
+				Name: "health_check_config", RawName: "healthCheckConfig", Type: meta.TypeObject,
+				Position: meta.PosBody, Options: []string{"--health-check-config"},
+				Fields: []meta.Parameter{{
+					Name: "http_get_url", RawName: "httpGetUrl", Type: meta.TypeString,
+					Position: meta.PosQuery, Options: []string{"--http-get-url"},
+				}},
+			}},
+		}},
+	}
+	document, err := BuildAPIParameterDocument(
+		&meta.Product{Code: "fc"}, api, "--custom-runtime-config", HelpOptions{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if document.Parameter.Location != meta.PosBody {
+		t.Fatalf("top-level Location = %q, want body", document.Parameter.Location)
+	}
+	if len(document.Parameter.Fields) != 2 {
+		t.Fatalf("fields = %#v", document.Parameter.Fields)
+	}
+	if document.Parameter.Fields[0].Location != "" || document.Parameter.Fields[1].Location != "" {
+		t.Fatalf("nested fields still have Location: %#v", document.Parameter.Fields)
+	}
+	if len(document.Parameter.Fields[1].Fields) != 1 || document.Parameter.Fields[1].Fields[0].Location != "" {
+		t.Fatalf("deep nested field still has Location: %#v", document.Parameter.Fields[1])
+	}
+
+	var output bytes.Buffer
+	if err := Render(&output, document, HelpOptions{Language: "en"}); err != nil {
+		t.Fatal(err)
+	}
+	text := output.String()
+	if !strings.Contains(text, "Location: body") {
+		t.Fatalf("top-level body location missing:\n%s", text)
+	}
+	if strings.Count(text, "Location:") != 1 {
+		t.Fatalf("nested fields must not print Location:\n%s", text)
+	}
+}
+
 func TestProductDeprecatedAndNestedParameterCandidates(t *testing.T) {
 	product := &meta.Product{Code: "demo", Versions: []string{"v1"}}
 	index := &meta.APIIndex{ProductCode: "demo", Version: "v1", Entries: map[string]meta.APIIndexEntry{

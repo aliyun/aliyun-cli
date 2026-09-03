@@ -105,23 +105,34 @@ func mapLookup(m map[string]string, k string) string {
 }
 
 func mapArguments(args []crschema.ArgumentDefinition) []meta.Parameter {
+	return mapArgumentsAt(args, true)
+}
+
+func mapNestedArguments(args []crschema.ArgumentDefinition) []meta.Parameter {
+	return mapArgumentsAt(args, false)
+}
+
+func mapArgumentsAt(args []crschema.ArgumentDefinition, topLevel bool) []meta.Parameter {
 	if len(args) == 0 {
 		return nil
 	}
 	out := make([]meta.Parameter, 0, len(args))
 	for i := range args {
-		out = append(out, mapArgument(&args[i]))
+		out = append(out, mapArgumentAt(&args[i], topLevel))
 	}
 	return out
 }
 
 // Handles all four composite shapes: scalar / object / array / map.
 func mapArgument(a *crschema.ArgumentDefinition) meta.Parameter {
+	return mapArgumentAt(a, true)
+}
+
+func mapArgumentAt(a *crschema.ArgumentDefinition, topLevel bool) meta.Parameter {
 	p := meta.Parameter{
 		Name:        a.Name,
 		RawName:     a.RawName,
 		Type:        mapType(a.Type),
-		Position:    mapPosition(a.Location),
 		Required:    a.Required,
 		DocRequired: a.DocRequired,
 		DirectBody:  a.DirectBody,
@@ -137,10 +148,13 @@ func mapArgument(a *crschema.ArgumentDefinition) meta.Parameter {
 		ParamStyle:  a.ParamStyle,
 		IsWildcard:  a.IsWildcard,
 	}
+	if topLevel {
+		p.Position = mapPosition(a.Location)
+	}
 
 	switch p.Type {
 	case meta.TypeObject:
-		p.Fields = mapArguments(a.Fields)
+		p.Fields = mapNestedArguments(a.Fields)
 	case meta.TypeArray:
 		p.ItemType = mapTypeShape(a.Element)
 	case meta.TypeMap:
@@ -164,7 +178,7 @@ func mapTypeShape(s *crschema.TypeShape) *meta.Parameter {
 	}
 	switch shape.Type {
 	case meta.TypeObject:
-		shape.Fields = mapArguments(s.Fields)
+		shape.Fields = mapNestedArguments(s.Fields)
 	case meta.TypeArray:
 		shape.ItemType = mapTypeShape(s.Element)
 	case meta.TypeMap:

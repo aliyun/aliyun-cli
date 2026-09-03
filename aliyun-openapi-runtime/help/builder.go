@@ -733,6 +733,10 @@ func BuildAPIResponseDocument(api *meta.API, response *ResponseDocumentation, op
 }
 
 func projectParameter(source meta.Parameter) Parameter {
+	return projectParameterAt(source, true)
+}
+
+func projectParameterAt(source meta.Parameter, topLevel bool) Parameter {
 	name := source.RawName
 	if name == "" {
 		name = source.Name
@@ -740,22 +744,25 @@ func projectParameter(source meta.Parameter) Parameter {
 	name = strings.TrimLeft(firstOption(source.Options, "--"+kebabCase(name)), "-")
 	result := Parameter{
 		Name: name, RawName: source.RawName, Options: append([]string(nil), source.Options...),
-		Type: source.Type, Location: source.Position, Required: source.Required || source.DocRequired,
+		Type: source.Type, Required: source.Required || source.DocRequired,
 		Serialization: source.ParamStyle, Help: localized(source.Description), Example: source.Example,
 		Constraints: Constraints{
 			Enum: append([]string(nil), source.Enum...), Pattern: source.Pattern,
 			Minimum: source.Minimum, Maximum: source.Maximum, MinLength: source.MinLength, MaxLength: source.MaxLength,
 		},
 	}
+	if topLevel {
+		result.Location = source.Position
+	}
 	for i := range source.Fields {
-		result.Fields = append(result.Fields, projectParameter(source.Fields[i]))
+		result.Fields = append(result.Fields, projectParameterAt(source.Fields[i], false))
 	}
 	if source.ItemType != nil {
-		item := projectParameter(*source.ItemType)
+		item := projectParameterAt(*source.ItemType, false)
 		result.Element = &item
 	}
 	if source.ValueType != nil {
-		value := projectParameter(*source.ValueType)
+		value := projectParameterAt(*source.ValueType, false)
 		result.Value = &value
 	}
 	return result

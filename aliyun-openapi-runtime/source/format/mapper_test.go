@@ -104,6 +104,35 @@ func TestMapArgumentMapsRecursiveCompositeMetadata(t *testing.T) {
 		got.ValueType.ItemType.Fields[0].Type != meta.TypeBoolean {
 		t.Fatalf("recursive map shape was not mapped: %#v", got)
 	}
+	if got.ValueType.Position != "" || got.ValueType.ItemType.Position != "" ||
+		got.ValueType.ItemType.Fields[0].Position != "" {
+		t.Fatalf("nested shapes must not carry HTTP location: %#v", got)
+	}
+}
+
+func TestMapArgumentOmitsLocationOnNestedObjectFields(t *testing.T) {
+	arg := schema.ArgumentDefinition{
+		Name: "custom_runtime_config", RawName: "customRuntimeConfig", Type: "object", Location: "body",
+		Fields: []schema.ArgumentDefinition{{
+			Name: "port", RawName: "port", Type: "int", Location: "query",
+		}, {
+			Name: "health_check_config", RawName: "healthCheckConfig", Type: "object", Location: "body",
+			Fields: []schema.ArgumentDefinition{{
+				Name: "http_get_url", RawName: "httpGetUrl", Type: "string", Location: "query",
+			}},
+		}},
+	}
+
+	got := mapArgument(&arg)
+	if got.Position != meta.PosBody {
+		t.Fatalf("top-level Position = %q, want body", got.Position)
+	}
+	if len(got.Fields) != 2 || got.Fields[0].Position != "" || got.Fields[1].Position != "" {
+		t.Fatalf("nested object fields must not carry HTTP location: %#v", got.Fields)
+	}
+	if len(got.Fields[1].Fields) != 1 || got.Fields[1].Fields[0].Position != "" {
+		t.Fatalf("deep nested field still has HTTP location: %#v", got.Fields[1])
+	}
 }
 
 func TestMapArgumentSupportsArbitraryRecursiveContainerDepth(t *testing.T) {

@@ -262,7 +262,9 @@ func renderStructuredParameterNode(w io.Writer, parameter Parameter, language, i
 		}
 	}
 	write(label(language, "Type", "类型"), string(parameter.Type))
-	write(label(language, "Location", "位置"), string(parameter.Location))
+	if !printPath {
+		write(label(language, "Location", "位置"), string(parameter.Location))
+	}
 	fmt.Fprintf(w, "%s%s: %t\n", prefix, label(language, "Required", "必填"), parameter.Required)
 	if description := parameter.Help.Text(language); description != "" {
 		fmt.Fprintf(w, "\n%s%s:\n", prefix, label(language, "Description", "描述"))

@@ -130,6 +130,13 @@ func TestParameterTextUsesStructuredOrderedBlockAndKeepsNestedShapes(t *testing.
 	if !strings.Contains(text, "  Valid values:\n  safe fast") || !strings.Contains(text, "\n  "+url+"\n") || strings.Contains(text, "help.aliyun.com/\n") {
 		t.Fatalf("structured description did not preserve marker/URL wrapping:\n%s", text)
 	}
+	modeIndex := strings.Index(text, "\n  Mode\n")
+	if modeIndex < 0 {
+		t.Fatalf("nested field heading missing:\n%s", text)
+	}
+	if strings.Contains(text[modeIndex:], "Location:") {
+		t.Fatalf("nested field printed Location:\n%s", text[modeIndex:])
+	}
 }
 
 type runtimeHelpFDWriter struct {
