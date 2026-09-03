@@ -15,6 +15,7 @@ package openapi
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -347,6 +348,11 @@ func TestMainEstimateCostMissingProductOrApi(t *testing.T) {
 	err := command.main(ctx, []string{})
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "--estimate-cost requires a product and an API name")
+	var errorWithTip cli.ErrorWithTip
+	if assert.True(t, errors.As(err, &errorWithTip)) {
+		assert.Contains(t, errorWithTip.GetTip("en"), "aliyun utils list-supported-pricing-apis")
+		assert.NotContains(t, errorWithTip.GetTip("en"), "aliyun --list-supported-pricing-apis")
+	}
 
 	// product only (forgot API name)
 	err = command.main(ctx, []string{"ecs"})

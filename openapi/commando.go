@@ -478,7 +478,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		return cli.NewErrorWithTip(
 			fmt.Errorf("--estimate-cost requires a product and an API name"),
 			"example: aliyun ecs RunInstances --version 2014-05-26 --RegionId cn-hangzhou ... --estimate-cost\n"+
-				"        run `aliyun --list-supported-pricing-apis` to see every API that supports cost estimation")
+				"        run `aliyun utils list-supported-pricing-apis` to see every API that supports cost estimation")
 	}
 
 	// --estimate-cost-context only makes sense alongside --estimate-cost (it

@@ -398,8 +398,8 @@ func NewDryRunJsonFlag() *cli.Flag {
 }
 
 // NewEstimateCostFlag registers `--estimate-cost`. See estimate_cost.go for
-// the routing details. Cross-product enumeration lives in the top-level
-// `aliyun list-supported-pricing-apis` subcommand (main/main.go), not here.
+// the routing details. Cross-product enumeration lives in the
+// `aliyun utils list-supported-pricing-apis` subcommand (main/main.go).
 func NewEstimateCostFlag() *cli.Flag {
 	return &cli.Flag{
 		Category:     "caller",

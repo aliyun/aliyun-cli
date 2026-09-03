@@ -30,8 +30,8 @@ import (
 // pricing mapping registered, so Agents and humans can discover what supports
 // --estimate-cost without probing each API.
 //
-// Exposed as the hidden `aliyun utils list-supported-pricing-apis` subcommand:
-// the operation remains directly callable without appearing in command lists.
+// Exposed as `aliyun utils list-supported-pricing-apis` so the supported API
+// set is discoverable from utility Help as well as directly callable.
 const (
 	estimateCostListPath = "/api/v1/price/supported-apis"
 )
@@ -67,7 +67,7 @@ func newPricingApiVersionFlag() *cli.Flag {
 	}
 }
 
-// NewListSupportedPricingApisCommand returns the hidden utility subcommand.
+// NewListSupportedPricingApisCommand returns the pricing discovery utility.
 //
 // Output flags (--quiet / --cli-query / --output) are registered on the
 // command itself: they are NOT persistent flags, so they don't inherit from
@@ -78,14 +78,13 @@ func newPricingApiVersionFlag() *cli.Flag {
 // and inherit automatically.
 func NewListSupportedPricingApisCommand() *cli.Command {
 	cmd := &cli.Command{
-		Name:   "list-supported-pricing-apis",
-		Hidden: true,
+		Name: "list-supported-pricing-apis",
 		Short: i18n.T(
 			"List every OpenAPI that supports --estimate-cost. Output is JSON.",
 			"列出所有支持 --estimate-cost 的 OpenAPI 三元组，输出 JSON",
 		),
 		Usage: "list-supported-pricing-apis [--product <code>] [--api-version <version>] [--cli-query <jmespath>]",
-		Sample: "aliyun list-supported-pricing-apis --product Ecs\n" +
+		Sample: "aliyun utils list-supported-pricing-apis --product Ecs\n" +
 			"  aliyun ecs RunInstances --InstanceType ecs.e-c1m1.large ... --estimate-cost",
 		Run: func(ctx *cli.Context, args []string) error {
 			profile, err := config.LoadProfileWithContext(ctx)

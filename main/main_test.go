@@ -207,6 +207,9 @@ func TestMainMachineHelpJSON(t *testing.T) {
 				SchemaVersion      string `json:"schemaVersion"`
 				HelpLevel          string `json:"helpLevel"`
 				ActiveParameterSet string `json:"activeParameterSet"`
+				Commands           []struct {
+					Name string `json:"name"`
+				} `json:"commands"`
 			}
 			if err := json.Unmarshal(stdout.Bytes(), &document); err != nil {
 				t.Fatalf("machine help is not JSON: %v\n%s", err, stdout.String())
@@ -216,6 +219,18 @@ func TestMainMachineHelpJSON(t *testing.T) {
 			}
 			if document.ActiveParameterSet != tt.wantStyle {
 				t.Fatalf("activeParameterSet = %q, want %q", document.ActiveParameterSet, tt.wantStyle)
+			}
+			if tt.name == "utils" {
+				found := false
+				for _, command := range document.Commands {
+					if command.Name == "list-supported-pricing-apis" {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Fatalf("utils machine Help commands = %#v, want list-supported-pricing-apis", document.Commands)
+				}
 			}
 		})
 	}
