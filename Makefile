@@ -101,7 +101,7 @@ check-runtime: test-runtime
 test: deps
 	# Ensure every package under the module is listable/vettable (catches stale
 	# go:embed in submodules). Unit tests keep the historical package set —
-	# ./... also pulls cliext/*, cloudsso, oss/lib which need credentials or
+	# ./... also pulls cliext/* and oss/lib, which need credentials or
 	# are intentionally out of CI unit coverage.
 	go list ./... >/dev/null
 	go vet ./...
@@ -109,7 +109,7 @@ test: deps
 		./bundledmeta ./canonicalmeta \
 		./util/... ./cli/... ./config/... \
 		./i18n/... ./main/... ./openapi/... ./meta/... ./export/... \
-		./sysconfig/...
+		./sysconfig/... ./mcpproxy ./cloudsso
 	go tool cover -html=coverage.txt -o coverage.html
 
 test-release: meta-pack
