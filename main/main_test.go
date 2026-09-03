@@ -147,7 +147,7 @@ func clearAgentDetectionEnv(t *testing.T) {
 	for _, key := range []string{
 		"CURSOR_AGENT", "CLAUDECODE", "CLAUDE_CODE", "GEMINI_CLI",
 		"AUGMENT_AGENT", "OPENCODE", "OPENCODE_CLIENT", "CLINE_ACTIVE",
-		"CODEX_SANDBOX", "QODER_AGENT", "QODER_CLI", "AGENT",
+		"CODEX_SHELL", "CODEX_SANDBOX", "QODER_AGENT", "QODER_CLI", "AGENT",
 		"ALIBABA_CLOUD_CLI_AI_MODE", "NO_COLOR",
 	} {
 		t.Setenv(key, "")
@@ -155,13 +155,7 @@ func clearAgentDetectionEnv(t *testing.T) {
 }
 
 func TestNewCommandContextDetectsAgentOnce(t *testing.T) {
-	for _, key := range []string{
-		"CURSOR_AGENT", "CLAUDECODE", "CLAUDE_CODE", "GEMINI_CLI",
-		"AUGMENT_AGENT", "OPENCODE", "OPENCODE_CLIENT", "CLINE_ACTIVE",
-		"CODEX_SANDBOX", "QODER_AGENT", "QODER_CLI", "AGENT",
-	} {
-		t.Setenv(key, "")
-	}
+	clearAgentDetectionEnv(t)
 
 	ctx := newCommandContext(io.Discard, io.Discard)
 	if ctx.IsAgent() {
