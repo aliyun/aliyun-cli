@@ -148,6 +148,92 @@ func TestLoadProfile(t *testing.T) {
 	assert.EqualError(t, err, "init config failed error")
 }
 
+func TestLoadProfileForDryRunWithContext(t *testing.T) {
+	originalGetHomePath := hookGetHomePath
+	t.Cleanup(func() { hookGetHomePath = originalGetHomePath })
+
+	newContext := func() *cli.Context {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		AddFlags(ctx.Flags())
+		return ctx
+	}
+	assign := func(flag *cli.Flag, value string) {
+		flag.SetAssigned(true)
+		flag.SetValue(value)
+	}
+
+	t.Run("ignore profile still applies local flags", func(t *testing.T) {
+		t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
+		ctx := newContext()
+		assign(RegionFlag(ctx.Flags()), "cn-beijing")
+
+		profile, err := LoadProfileForDryRunWithContext(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, DefaultConfigProfileName, profile.Name)
+		assert.Equal(t, "cn-beijing", profile.RegionId)
+		assert.Empty(t, profile.AccessKeyId)
+	})
+
+	t.Run("missing default configuration uses empty default profile", func(t *testing.T) {
+		t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "")
+		t.Setenv("ALIBABACLOUD_IGNORE_PROFILE", "")
+		t.Setenv("ALIBABACLOUD_PROFILE", "")
+		t.Setenv("ALIBABA_CLOUD_PROFILE", "")
+		t.Setenv("ALICLOUD_PROFILE", "")
+		home := t.TempDir()
+		hookGetHomePath = func(func() string) func() string {
+			return func() string { return home }
+		}
+
+		profile, err := LoadProfileForDryRunWithContext(newContext())
+		assert.NoError(t, err)
+		assert.Equal(t, DefaultConfigProfileName, profile.Name)
+		assert.Equal(t, "json", profile.OutputFormat)
+		assert.NotNil(t, profile.parent)
+	})
+
+	t.Run("loads selected profile and overrides region", func(t *testing.T) {
+		t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "")
+		path := filepath.Join(t.TempDir(), "config.json")
+		content := `{"current":"work","profiles":[{"name":"work","mode":"AK","region_id":"cn-hangzhou","output_format":"json"}]}`
+		assert.NoError(t, os.WriteFile(path, []byte(content), 0600))
+
+		ctx := newContext()
+		assign(ConfigurePathFlag(ctx.Flags()), path)
+		assign(ProfileFlag(ctx.Flags()), "work")
+		assign(RegionFlag(ctx.Flags()), "cn-shanghai")
+
+		profile, err := LoadProfileForDryRunWithContext(ctx)
+		assert.NoError(t, err)
+		assert.Equal(t, "work", profile.Name)
+		assert.Equal(t, "cn-shanghai", profile.RegionId)
+		assert.Empty(t, profile.AccessKeyId)
+	})
+
+	t.Run("rejects explicit missing configuration", func(t *testing.T) {
+		t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "")
+		ctx := newContext()
+		path := filepath.Join(t.TempDir(), "missing.json")
+		assign(ConfigurePathFlag(ctx.Flags()), path)
+
+		_, err := LoadProfileForDryRunWithContext(ctx)
+		assert.EqualError(t, err, "config path input does not exist: "+path)
+	})
+
+	t.Run("rejects unknown selected profile", func(t *testing.T) {
+		t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "")
+		path := filepath.Join(t.TempDir(), "config.json")
+		assert.NoError(t, os.WriteFile(path, []byte(`{"current":"default","profiles":[{"name":"default"}]}`), 0600))
+
+		ctx := newContext()
+		assign(ConfigurePathFlag(ctx.Flags()), path)
+		assign(ProfileFlag(ctx.Flags()), "missing")
+
+		_, err := LoadProfileForDryRunWithContext(ctx)
+		assert.EqualError(t, err, "unknown profile missing, run configure to check")
+	})
+}
+
 func TestHomePath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		assert.Equal(t, os.Getenv("USERPROFILE"), GetHomePath())

@@ -144,6 +144,59 @@ func TestWaiterRequiresExprTo(t *testing.T) {
 	}
 }
 
+type errorExec struct{ err error }
+
+func (e errorExec) Execute(*ExecContext) (*Response, error) { return nil, e.err }
+
+func TestWaiterDefaultsErrorsAndResultTypes(t *testing.T) {
+	defaults := NewWaiter(nil)
+	if defaults.Timeout.Seconds() != 180 || defaults.Interval.Seconds() != 5 {
+		t.Fatalf("NewWaiter(nil) = %#v", defaults)
+	}
+	custom := NewWaiter(&argparser.WaiterConfig{Expr: "Value", To: "ready", Timeout: 2, Interval: 3})
+	if custom.Timeout.Seconds() != 2 || custom.Interval.Seconds() != 3 {
+		t.Fatalf("NewWaiter(custom) = %#v", custom)
+	}
+
+	wantErr := errors.New("execute failed")
+	if _, err := CallWithWaiter(errorExec{err: wantErr}, &ExecContext{}, &argparser.WaiterConfig{Expr: "Value", To: "ready"}); !errors.Is(err, wantErr) {
+		t.Fatalf("CallWithWaiter() error = %v, want %v", err, wantErr)
+	}
+	if _, err := CallWithWaiter(&fakeExec{bodies: []string{"{"}}, &ExecContext{}, &argparser.WaiterConfig{Expr: "Value", To: "ready"}); err == nil || !strings.Contains(err.Error(), "failed to evaluate expression") {
+		t.Fatalf("CallWithWaiter() malformed response error = %v", err)
+	}
+
+	tests := []struct {
+		name string
+		expr string
+		body string
+		want string
+	}{
+		{name: "number", expr: "Value", body: `{"Value":9007199254740993}`, want: "9007199254740993"},
+		{name: "bool", expr: "Value", body: `{"Value":true}`, want: "true"},
+		{name: "null", expr: "Value", body: `{"Value":null}`, want: ""},
+		{name: "object", expr: "Value", body: `{"Value":{"Name":"demo"}}`, want: "map[Name:demo]"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := custom.evaluateExpr([]byte(tc.body))
+			if err != nil {
+				t.Fatalf("evaluateExpr() error = %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("evaluateExpr() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+	if _, err := custom.evaluateExpr([]byte(`{"Value":1}`)); err != nil {
+		t.Fatalf("evaluateExpr(valid) error = %v", err)
+	}
+	badExpr := &Waiter{Expr: "["}
+	if _, err := badExpr.evaluateExpr([]byte(`{"Value":1}`)); err == nil || !strings.Contains(err.Error(), "jmespath search failed") {
+		t.Fatalf("evaluateExpr() bad expression error = %v", err)
+	}
+}
+
 func TestAssembleExtraQuery(t *testing.T) {
 	ec := &ExecContext{
 		API:        rpcAPI(),
