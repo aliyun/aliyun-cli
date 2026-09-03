@@ -231,7 +231,10 @@ func (a *HttpContext) getRequest() *openapiutil.OpenApiRequest {
 
 func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
-	initThrottlingLog(ctx)
+	dryRun := clientDryRunAssigned(ctx)
+	if !dryRun {
+		initThrottlingLog(ctx)
+	}
 	a.product = product
 	a.openapiRequest = &openapiutil.OpenApiRequest{
 		Query:   map[string]*string{},
@@ -249,7 +252,9 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	if config.SkipSecureVerify(ctx.Flags()).IsAssigned() {
 		a.openapiRuntime.SetIgnoreSSL(true)
 	}
-	a.throttlingRetryConfig = openapiThrottlingRetryConfig(ctx)
+	if !dryRun {
+		a.throttlingRetryConfig = openapiThrottlingRetryConfig(ctx)
+	}
 
 	if v, ok := config.EndpointFlag(ctx.Flags()).GetValue(); ok {
 		a.openapiRequest.EndpointOverride = tea.String(v)
@@ -266,6 +271,10 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 				}
 			}
 		}
+	}
+
+	if dryRun {
+		return nil
 	}
 
 	a.openapiClient, err = GetOpenapiClient(a.profile, ctx, product)
@@ -336,6 +345,8 @@ type OpenapiContext struct {
 	method string
 	path   string
 	api    *canonicalmeta.API
+
+	pathParams map[string]string
 }
 
 func (a *OpenapiContext) ProcessPullLogsHeaders(ctx *cli.Context) {
@@ -457,6 +468,7 @@ func (a *OpenapiContext) ProcessPath(ctx *cli.Context) error {
 			return fmt.Errorf("required parameter missing; %s is required", param.LegacyName())
 		}
 		if param.IsWildcard() {
+			pathParams[f.Name] = value
 			pathname = value
 			continue
 		}
@@ -468,6 +480,7 @@ func (a *OpenapiContext) ProcessPath(ctx *cli.Context) error {
 			pathname = strings.ReplaceAll(pathname, placeholder, value)
 		}
 	}
+	a.pathParams = pathParams
 	a.openapiParams.Pathname = tea.String(pathname)
 	return nil
 }

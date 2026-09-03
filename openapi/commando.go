@@ -698,13 +698,19 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 
 	// update current `Profile` with flags
 	var err error
-	c.profile, err = config.LoadProfileWithContext(ctx)
+	if clientDryRunAssigned(ctx) {
+		c.profile, err = config.LoadProfileForDryRunWithContext(ctx)
+	} else {
+		c.profile, err = config.LoadProfileWithContext(ctx)
+	}
 	if err != nil {
 		return cli.NewErrorWithTip(&credentialConfigurationError{Err: err}, "Configuration failed, use `aliyun configure` to configure it")
 	}
-	err = c.profile.Validate()
-	if err != nil {
-		return cli.NewErrorWithTip(&credentialConfigurationError{Err: err}, "Configuration failed, use `aliyun configure` to configure it.")
+	if !clientDryRunAssigned(ctx) {
+		err = c.profile.Validate()
+		if err != nil {
+			return cli.NewErrorWithTip(&credentialConfigurationError{Err: err}, "Configuration failed, use `aliyun configure` to configure it.")
+		}
 	}
 	i18n.SetLanguage(c.profile.Language)
 
@@ -1078,6 +1084,16 @@ func dryRunOpenapiEndpoint(ctx *cli.Context, o *OpenapiContext) string {
 			return rid + ".log.aliyuncs.com"
 		}
 	}
+	if h.product != nil {
+		region := effectiveDryRunRegion(ctx, h.profile)
+		endpointType := ""
+		if h.profile != nil {
+			endpointType = h.profile.EndpointType
+		}
+		if endpoint, err := h.product.GetEndpointWithType(region, nil, endpointType); err == nil {
+			return endpoint
+		}
+	}
 	return ""
 }
 
@@ -1372,7 +1388,7 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 		if method == "" {
 			method = "POST"
 		}
-		return &OpenapiContext{apiContext, method, path, api}, nil
+		return &OpenapiContext{HttpContext: apiContext, method: method, path: path, api: api}, nil
 	}
 
 	// RESTful style: validate method and path
@@ -1387,7 +1403,7 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 			product.GetLowerCode(),
 			product.GetLowerCode())
 	}
-	return &OpenapiContext{apiContext, method, path, api}, nil
+	return &OpenapiContext{HttpContext: apiContext, method: method, path: path, api: api}, nil
 }
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {

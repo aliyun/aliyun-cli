@@ -165,10 +165,13 @@ func parseCustomUserAgentSegments(s string) [][2]string {
 
 func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
-	initThrottlingLog(ctx)
+	dryRun := clientDryRunAssigned(ctx)
+	if !dryRun {
+		initThrottlingLog(ctx)
+	}
 	a.product = product
 
-	if a.profile.Mode == config.BearerToken {
+	if !dryRun && a.profile.Mode == config.BearerToken {
 		code := product.GetLowerCode()
 		return cli.NewErrorWithTip(
 			config.ErrBearerTokenRequiresPlugin(code),
@@ -178,8 +181,10 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 
 	a.request = requests.NewCommonRequest()
 	a.request.Product = product.Code
-	if cfg, cfgErr := throttlingretry.LoadEffective(config.GetConfigDir(ctx)); cfgErr == nil {
-		a.throttlingRetryConfig = cfg
+	if !dryRun {
+		if cfg, cfgErr := throttlingretry.LoadEffective(config.GetConfigDir(ctx)); cfgErr == nil {
+			a.throttlingRetryConfig = cfg
+		}
 	}
 
 	a.request.RegionId = a.profile.RegionId
@@ -187,6 +192,11 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 		a.request.RegionId = v
 	} else if v, ok := config.RegionIdFlag(ctx.Flags()).GetValue(); ok {
 		a.request.RegionId = v
+	}
+	if dryRun && a.request.RegionId == "" && ctx.UnknownFlags() != nil {
+		if regionFlag := ctx.UnknownFlags().Get("RegionId"); regionFlag != nil {
+			a.request.RegionId, _ = regionFlag.GetValue()
+		}
 	}
 
 	a.request.Version = product.Version
@@ -235,6 +245,18 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	if a.request.RegionId == "" {
 		return cli.NewErrorWithTip(fmt.Errorf("missing region for product %s", product.Code),
 			"Use flag --region <regionId> to assign region, %s", hint)
+	}
+
+	if dryRun {
+		if a.request.Domain == "" {
+			a.request.Domain, err = product.GetEndpointWithType(a.request.RegionId, nil, a.profile.EndpointType)
+			if err != nil {
+				return cli.NewErrorWithTip(
+					fmt.Errorf("unknown endpoint for %s/%s! failed %w", product.GetLowerCode(), a.request.RegionId, err),
+					"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, %s", hint)
+			}
+		}
+		return nil
 	}
 
 	a.client, err = GetClient(a.profile, ctx)
