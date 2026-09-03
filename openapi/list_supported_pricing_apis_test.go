@@ -24,12 +24,12 @@ import (
 )
 
 func TestNewListSupportedPricingApisCommand(t *testing.T) {
-	// Canonical utility metadata — the Run hook itself touches credentials
+	// Hidden canonical utility metadata — the Run hook itself touches credentials
 	// + network so we just lock the command shape here. Run-time behavior is
 	// covered by TestInvokeListSupportedPricingApis below.
 	cmd := NewListSupportedPricingApisCommand()
 	assert.Equal(t, "list-supported-pricing-apis", cmd.Name)
-	assert.False(t, cmd.Hidden)
+	assert.True(t, cmd.Hidden)
 	assert.NotNil(t, cmd.Run)
 	assert.NotEmpty(t, cmd.Short)
 	assert.Contains(t, cmd.Sample, "aliyun utils list-supported-pricing-apis")

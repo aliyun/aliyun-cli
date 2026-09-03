@@ -108,21 +108,6 @@ aliyun ecs run-instances ... --cli-dry-run
 
 Support depends on the API metadata. CLI dry-run validation is not a substitute for reviewing permissions and resource impact.
 
-## Estimate API cost
-
-Use `--estimate-cost` to request a cost estimate without invoking the target API:
-
-```sh
-aliyun ecs RunInstances --version 2014-05-26 --RegionId cn-hangzhou ... --estimate-cost
-```
-
-To discover the APIs that support cost estimation, use the utility command. The optional filters are case-insensitive for product codes and exact for API versions:
-
-```sh
-aliyun utils list-supported-pricing-apis
-aliyun utils list-supported-pricing-apis --product Ecs --api-version 2014-05-26
-```
-
 ## Filter and format output
 
 ### Table output

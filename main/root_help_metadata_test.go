@@ -22,8 +22,9 @@ func TestNewRootHelpInputDeclaresStableGroupsAndFlags(t *testing.T) {
 		"configure", "plugin", "upgrade", "version", "auto-completion", "mock", "utils",
 	}, rootHelpNamesByGroup(input.Commands, openapi.RootGroupCore))
 	assert.Equal(t, []string{
-		"utils list-supported-pricing-apis", "utils mcp-proxy", "utils go-migrate",
+		"utils mcp-proxy", "utils go-migrate",
 	}, rootHelpNamesByGroup(input.Commands, openapi.RootGroupUtils))
+	assert.NotContains(t, rootHelpNamesByGroup(input.Commands, openapi.RootGroupUtils), "utils list-supported-pricing-apis")
 	assert.NotEmpty(t, rootHelpNamesByGroup(input.Commands, openapi.RootGroupExtension))
 	assert.NotContains(t, rootHelpNamesByGroup(input.Commands, openapi.RootGroupExtension), "mcp-proxy")
 

@@ -207,9 +207,6 @@ func TestMainMachineHelpJSON(t *testing.T) {
 				SchemaVersion      string `json:"schemaVersion"`
 				HelpLevel          string `json:"helpLevel"`
 				ActiveParameterSet string `json:"activeParameterSet"`
-				Commands           []struct {
-					Name string `json:"name"`
-				} `json:"commands"`
 			}
 			if err := json.Unmarshal(stdout.Bytes(), &document); err != nil {
 				t.Fatalf("machine help is not JSON: %v\n%s", err, stdout.String())
@@ -220,17 +217,35 @@ func TestMainMachineHelpJSON(t *testing.T) {
 			if document.ActiveParameterSet != tt.wantStyle {
 				t.Fatalf("activeParameterSet = %q, want %q", document.ActiveParameterSet, tt.wantStyle)
 			}
-			if tt.name == "utils" {
-				found := false
-				for _, command := range document.Commands {
-					if command.Name == "list-supported-pricing-apis" {
-						found = true
-						break
-					}
-				}
-				if !found {
-					t.Fatalf("utils machine Help commands = %#v, want list-supported-pricing-apis", document.Commands)
-				}
+		})
+	}
+}
+
+func TestMainDefaultHelpHidesPricingDiscoveryUtility(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "root text", args: []string{"--help", "--no-cli-ai-mode", "--language", "en"}},
+		{name: "utils text", args: []string{"utils", "--help", "--no-cli-ai-mode", "--language", "en"}},
+		{name: "root machine", args: []string{"--help", "--cli-output", "json", "--no-cli-ai-mode"}},
+		{name: "utils machine", args: []string{"utils", "--help", "--cli-output", "json", "--no-cli-ai-mode"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearAgentDetectionEnv(t)
+			t.Setenv("HOME", t.TempDir())
+			var stdout, stderr bytes.Buffer
+			resetMainHooks(t, &stdout, &stderr, nil)
+
+			Main(tt.args)
+
+			if stderr.Len() != 0 {
+				t.Fatalf("stderr = %q, want empty", stderr.String())
+			}
+			if bytes.Contains(stdout.Bytes(), []byte("list-supported-pricing-apis")) {
+				t.Fatalf("default Help exposes hidden pricing utility:\n%s", stdout.String())
 			}
 		})
 	}

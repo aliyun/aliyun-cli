@@ -108,21 +108,6 @@ aliyun ecs run-instances ... --cli-dry-run
 
 具体支持情况取决于 API metadata。CLI dry-run 验证不能替代权限和资源影响审查。
 
-## 预估 API 调用费用
-
-使用 `--estimate-cost` 可以在不调用目标 API 的情况下请求费用预估：
-
-```sh
-aliyun ecs RunInstances --version 2014-05-26 --RegionId cn-hangzhou ... --estimate-cost
-```
-
-使用以下工具命令可查询支持费用预估的 API。产品代码过滤不区分大小写，API 版本过滤需精确匹配：
-
-```sh
-aliyun utils list-supported-pricing-apis
-aliyun utils list-supported-pricing-apis --product Ecs --api-version 2014-05-26
-```
-
 ## 筛选和格式化输出
 
 ### 表格输出

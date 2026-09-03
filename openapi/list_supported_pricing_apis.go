@@ -30,8 +30,8 @@ import (
 // pricing mapping registered, so Agents and humans can discover what supports
 // --estimate-cost without probing each API.
 //
-// Exposed as `aliyun utils list-supported-pricing-apis` so the supported API
-// set is discoverable from utility Help as well as directly callable.
+// Exposed as the hidden `aliyun utils list-supported-pricing-apis` subcommand:
+// errors can recommend the canonical path without adding it to default Help.
 const (
 	estimateCostListPath = "/api/v1/price/supported-apis"
 )
@@ -67,7 +67,7 @@ func newPricingApiVersionFlag() *cli.Flag {
 	}
 }
 
-// NewListSupportedPricingApisCommand returns the pricing discovery utility.
+// NewListSupportedPricingApisCommand returns the hidden pricing discovery utility.
 //
 // Output flags (--quiet / --cli-query / --output) are registered on the
 // command itself: they are NOT persistent flags, so they don't inherit from
@@ -78,7 +78,8 @@ func newPricingApiVersionFlag() *cli.Flag {
 // and inherit automatically.
 func NewListSupportedPricingApisCommand() *cli.Command {
 	cmd := &cli.Command{
-		Name: "list-supported-pricing-apis",
+		Name:   "list-supported-pricing-apis",
+		Hidden: true,
 		Short: i18n.T(
 			"List every OpenAPI that supports --estimate-cost. Output is JSON.",
 			"列出所有支持 --estimate-cost 的 OpenAPI 三元组，输出 JSON",
