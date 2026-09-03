@@ -39,7 +39,7 @@ func TestRenderCanonicalRootTextAllSectionsAndSearch(t *testing.T) {
 	var out strings.Builder
 	require.NoError(t, renderCanonicalRootText(&out, document, ""))
 	rendered := out.String()
-	for _, expected := range []string{"Version 9.9.9", "Quick Start:", "Core Commands:", "Utilities:", "Global Flags:", "Extensions:", "Products:", "Showing 1 of 2 products", "Try another keyword:", "Show all matches:"} {
+	for _, expected := range []string{"Version 9.9.9", "Quick Start:", "Commands:", "Utilities:", "Global Flags:", "Extensions:", "Products:", "Showing 1 of 2 products", "Try another keyword:", "Show all matches:"} {
 		assert.Contains(t, rendered, expected)
 	}
 

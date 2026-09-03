@@ -774,7 +774,7 @@ func renderCanonicalRootText(w io.Writer, document *machineHelpRootDocument, sea
 			}
 			return nil
 		}
-		if err := renderGroup("core", "Core Commands"); err != nil {
+		if err := renderGroup("core", "Commands"); err != nil {
 			return err
 		}
 		if err := renderGroup("utils", "Utilities"); err != nil {

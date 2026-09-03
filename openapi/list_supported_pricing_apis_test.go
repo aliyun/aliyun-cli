@@ -29,6 +29,7 @@ func TestNewListSupportedPricingApisCommand(t *testing.T) {
 	// covered by TestInvokeListSupportedPricingApis below.
 	cmd := NewListSupportedPricingApisCommand()
 	assert.Equal(t, "list-supported-pricing-apis", cmd.Name)
+	assert.True(t, cmd.Hidden)
 	assert.NotNil(t, cmd.Run)
 	assert.NotEmpty(t, cmd.Short)
 }

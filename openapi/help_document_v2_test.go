@@ -107,7 +107,7 @@ func TestRootSearchIncludesLocalCommandsAndProductsThenCapsGlobally(t *testing.T
 	}}
 	var rendered bytes.Buffer
 	require.NoError(t, renderCanonicalRootText(&rendered, renderDocument, ""))
-	assert.Contains(t, rendered.String(), "Core Commands:")
+	assert.Contains(t, rendered.String(), "Commands:")
 	assert.Contains(t, rendered.String(), "Utilities:")
 	assert.Contains(t, rendered.String(), "utils mcp-proxy")
 

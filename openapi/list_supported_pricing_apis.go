@@ -30,10 +30,8 @@ import (
 // pricing mapping registered, so Agents and humans can discover what supports
 // --estimate-cost without probing each API.
 //
-// Exposed as a top-level `aliyun list-supported-pricing-apis` subcommand
-// (not a flag): the operation is product-agnostic, takes no arguments, and
-// is a standalone action — same shape as `aliyun configure`, `aliyun upgrade`
-// etc. — so a subcommand reads more naturally than a global flag would.
+// Exposed as the hidden `aliyun utils list-supported-pricing-apis` subcommand:
+// the operation remains directly callable without appearing in command lists.
 const (
 	estimateCostListPath = "/api/v1/price/supported-apis"
 )
@@ -69,9 +67,7 @@ func newPricingApiVersionFlag() *cli.Flag {
 	}
 }
 
-// NewListSupportedPricingApisCommand returns the top-level subcommand
-// registration. Wired up from main/main.go alongside the other standalone
-// subcommands (configure, plugin, upgrade, ...).
+// NewListSupportedPricingApisCommand returns the hidden utility subcommand.
 //
 // Output flags (--quiet / --cli-query / --output) are registered on the
 // command itself: they are NOT persistent flags, so they don't inherit from
@@ -82,7 +78,8 @@ func newPricingApiVersionFlag() *cli.Flag {
 // and inherit automatically.
 func NewListSupportedPricingApisCommand() *cli.Command {
 	cmd := &cli.Command{
-		Name: "list-supported-pricing-apis",
+		Name:   "list-supported-pricing-apis",
+		Hidden: true,
 		Short: i18n.T(
 			"List every OpenAPI that supports --estimate-cost. Output is JSON.",
 			"列出所有支持 --estimate-cost 的 OpenAPI 三元组，输出 JSON",

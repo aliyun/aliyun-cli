@@ -15,7 +15,6 @@ var rootCommandHelpSpecs = []openapi.RootCommandSpec{
 	{Path: []string{"mock"}, Group: openapi.RootGroupCore},
 	{Path: []string{"utils"}, Group: openapi.RootGroupCore},
 
-	{Path: []string{"utils", "list-supported-pricing-apis"}, Group: openapi.RootGroupUtils, Aliases: []string{"list-supported-pricing-apis"}},
 	{Path: []string{"utils", "mcp-proxy"}, Group: openapi.RootGroupUtils, Aliases: []string{"mcp-proxy"}},
 	{Path: []string{"utils", "go-migrate"}, Group: openapi.RootGroupUtils, Aliases: []string{"go-migrate"}},
 

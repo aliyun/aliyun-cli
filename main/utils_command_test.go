@@ -32,6 +32,9 @@ func TestNewUtilsCommandsCreateCanonicalTreeAndCompatibleAliases(t *testing.T) {
 			assert.Equal(t, reflect.ValueOf(canonical.Run).Pointer(), reflect.ValueOf(legacy.Run).Pointer(), "new and compatible paths must share the same handler implementation")
 		}
 	}
+	assert.True(t, utils.GetSubCommand("list-supported-pricing-apis").Hidden)
+	assert.False(t, utils.GetSubCommand("mcp-proxy").Hidden)
+	assert.False(t, utils.GetSubCommand("go-migrate").Hidden)
 }
 
 func TestRootCommandRegistersOnlyCanonicalUtilsPathVisibly(t *testing.T) {
