@@ -889,11 +889,7 @@ func TestTokenRefresher_sendToken(t *testing.T) {
 }
 
 func TestTokenRefresher_atomicSaveProfile(t *testing.T) {
-	tmpDir := t.TempDir()
-	originalHome := getHomeEnv()
-	defer restoreHomeEnv(originalHome)
-
-	setHomeEnv(tmpDir)
+	setTestHome(t)
 
 	profile := NewMcpProfile("test-profile")
 	profile.MCPOAuthAccessToken = "test-token"
@@ -1041,21 +1037,4 @@ func TestTokenRefresher_refreshAccessToken_AccessTokenExpired(t *testing.T) {
 	accessTimeRemaining := profile.MCPOAuthAccessTokenExpire - currentTime
 	assert.LessOrEqual(t, accessTimeRemaining, int64(0), "access token should be expired")
 	assert.Less(t, accessTimeRemaining, int64(0), "access token should be expired (negative remaining time)")
-}
-
-// 辅助函数
-func getHomeEnv() string {
-	return os.Getenv("HOME")
-}
-
-func setHomeEnv(value string) {
-	os.Setenv("HOME", value)
-}
-
-func restoreHomeEnv(value string) {
-	if value != "" {
-		os.Setenv("HOME", value)
-	} else {
-		os.Unsetenv("HOME")
-	}
 }
