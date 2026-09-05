@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"testing/fstest"
 
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -25,6 +26,46 @@ import (
 	"bytes"
 	"testing"
 )
+
+func TestLibrary_GetStyle_PrefersCanonicalVersionIndex(t *testing.T) {
+	library := &Library{
+		builtinRepo: &meta.Repository{},
+		canonicalRepo: canonicalmeta.NewRepository(fstest.MapFS{
+			"canonical/accessanalyzer/2024-02-01/version.json": {Data: []byte(`{"style":"rpc","version":"2024-02-01"}`)},
+			"canonical/accessanalyzer/2025-01-01/version.json": {Data: []byte(`{"style":"restful","version":"2025-01-01"}`)},
+			"canonical/aegis/2016-11-11/version.json":          {Data: []byte(`{"style":"restful","version":"2016-11-11"}`)},
+			"canonical/empty/2024-02-01/version.json":          {Data: []byte(`{"version":"2024-02-01"}`)},
+		}),
+	}
+	for _, tc := range []struct {
+		product, version, style string
+		ok                      bool
+	}{
+		{"accessanalyzer", "2024-02-01", "rpc", true},
+		{"AccessAnalyzer", "2024-02-01", "rpc", true},
+		{"accessanalyzer", "2025-01-01", "restful", true},
+		{"aegis", "2016-11-11", "restful", true},
+		{"accessanalyzer", "1999-01-01", "", false},
+		{"missing", "2024-02-01", "", false},
+		{"empty", "2024-02-01", "", false},
+	} {
+		t.Run(tc.product+"/"+tc.version, func(t *testing.T) {
+			style, ok := library.GetStyle(tc.product, tc.version)
+			assert.Equal(t, tc.style, style)
+			assert.Equal(t, tc.ok, ok)
+		})
+	}
+
+	// Preserve the existing lookup when Canonical metadata is unavailable.
+	library.canonicalRepo = canonicalmeta.NewRepository(fstest.MapFS{})
+	style, ok := library.GetStyle("aegis", "2016-11-11")
+	assert.True(t, ok)
+	assert.Equal(t, "RPC", style)
+	library.canonicalRepo = nil
+	style, ok = library.GetStyle("aegis", "2016-11-11")
+	assert.True(t, ok)
+	assert.Equal(t, "RPC", style)
+}
 
 func TestLibrary_PrintProducts(t *testing.T) {
 	w := new(bytes.Buffer)
