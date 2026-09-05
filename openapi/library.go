@@ -96,6 +96,11 @@ func (a *Library) GetApiByPath(productCode string, version string, method string
 }
 
 func (a *Library) GetStyle(productCode string, version string) (string, bool) {
+	if a.canonicalRepo != nil {
+		if index, err := a.canonicalRepo.GetVersionIndex(productCode, version); err == nil && index != nil && index.Style != "" {
+			return index.Style, true
+		}
+	}
 	return a.builtinRepo.GetStyle(productCode, version)
 }
 
