@@ -40,8 +40,8 @@ func NewMCPProxyCommand() *cli.Command {
 				"代理自动处理 OAuth 认证，"+
 				"允许 MCP 客户端无需管理凭证即可连接。",
 		),
-		Usage:  "aliyun mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME]",
-		Sample: "aliyun mcp-proxy --region-type CN --port 8088",
+		Usage:  "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME]",
+		Sample: "aliyun utils mcp-proxy --region-type CN --port 8088",
 		Run: func(ctx *cli.Context, args []string) error {
 			return runMCPProxy(ctx)
 		},
@@ -193,7 +193,7 @@ func runMCPProxy(ctx *cli.Context) error {
 		UpstreamBaseURL: upstreamURL,
 		OAuthAppName:    oauthAppName,
 		AllowedServers:  allowedServers,
-		BlockedServers: blockedServers,
+		BlockedServers:  blockedServers,
 	}
 
 	mcpProfile, err := getOrCreateMCPProfile(ctx, proxyConfig)

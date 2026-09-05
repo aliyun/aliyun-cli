@@ -36,6 +36,57 @@ func IsPluginInstalled(command string) (bool, string, error) {
 	return true, pluginName, nil
 }
 
+// InstalledPluginType returns the distribution type ("go" | "meta") of the installed plugin serving command,
+// and ok=false when no plugin is installed for it. An installed plugin with an unset type is reported as "go" (legacy default).
+func InstalledPluginType(command string) (pluginType string, ok bool) {
+	mgr, err := NewManager()
+	if err != nil {
+		return "", false
+	}
+	_, lp, err := mgr.findLocalPlugin(command)
+	if err != nil || lp == nil {
+		return "", false
+	}
+	return NormalizePluginType(lp.Type), true
+}
+
+func InstalledPluginPackageVersion(command string) (name string, version string, err error) {
+	mgr, err := NewManager()
+	if err != nil {
+		return "", "", err
+	}
+	pluginName, lp, err := mgr.findLocalPlugin(command)
+	if err != nil {
+		return "", "", err
+	}
+	if strings.TrimSpace(lp.Name) != "" {
+		pluginName = lp.Name
+	}
+	return pluginName, lp.Version, nil
+}
+
+func ValidateLocalPluginCliVersion(pluginName string, lp *LocalPlugin) error {
+	if lp == nil {
+		return fmt.Errorf("plugin is nil")
+	}
+	if strings.TrimSpace(pluginName) == "" {
+		pluginName = lp.Name
+	}
+	return validatePluginCliVersion(pluginName, lp.Version, lp.MinCliVersion)
+}
+
+func ValidatePluginCliVersion(command string) error {
+	mgr, err := NewManager()
+	if err != nil {
+		return err
+	}
+	pluginName, lp, err := mgr.findLocalPlugin(command)
+	if err != nil {
+		return err
+	}
+	return ValidateLocalPluginCliVersion(pluginName, lp)
+}
+
 // Plugins explicitly opt out of host profile enforcement by setting `"profileRequired": false` in their manifest.json.
 // 走同一份 findLocalPlugin 查找，因此 alias 触发的命令也会读到与主命令一致的 profileRequired 配置。
 func IsProfileRequiredForCommand(command string) bool {
@@ -56,6 +107,17 @@ func IsProfileRequiredForCommand(command string) bool {
 // Returns (false, error) if there's an error finding the plugin or resolving the plugin binary path.
 // If ctx is nil, uses os.Stdout and os.Stderr.
 func ExecutePlugin(command string, args []string, ctx *cli.Context) (bool, error) {
+	return executePlugin(command, args, ctx, true)
+}
+
+// ExecutePluginRaw is reserved for provider-first Help routing. It forwards a
+// defensive copy of the product-tail argv without the historical lowercase or
+// plugin-help rewrite, so the installed plugin remains the sole Help parser.
+func ExecutePluginRaw(command string, args []string, ctx *cli.Context) (bool, error) {
+	return executePlugin(command, args, ctx, false)
+}
+
+func executePlugin(command string, args []string, ctx *cli.Context, adjust bool) (bool, error) {
 	mgr, err := NewManager()
 	if err != nil {
 		return false, nil
@@ -63,7 +125,7 @@ func ExecutePlugin(command string, args []string, ctx *cli.Context) (bool, error
 
 	// findLocalPlugin -> FindInstalledPluginInManifest 已经涵盖 alias 匹配；
 	// 插件自身在 Cobra command 上声明 Aliases，用户敲的 alias 名字通过 args 原样透传，plugin runtime 侧的 --help / usage 会显示对应命令。
-	_, plugin, err := mgr.findLocalPlugin(command)
+	pluginName, plugin, err := mgr.findLocalPlugin(command)
 	if err != nil {
 		var notFoundErr *ErrPluginNotFound
 		if errors.As(err, &notFoundErr) {
@@ -72,6 +134,9 @@ func ExecutePlugin(command string, args []string, ctx *cli.Context) (bool, error
 		// Real error (e.g., manifest file corrupted)
 		return false, err
 	}
+	if err := ValidateLocalPluginCliVersion(pluginName, plugin); err != nil {
+		return true, err
+	}
 
 	binPath, err := resolvePluginBinaryPath(plugin)
 	if err != nil {
@@ -79,7 +144,10 @@ func ExecutePlugin(command string, args []string, ctx *cli.Context) (bool, error
 	}
 
 	// Handle plugin-help subcommand: convert to --help, and trans first argument to lowercase for plugin system
-	adjustedArgs := adjustPluginArgs(args)
+	adjustedArgs := append([]string(nil), args...)
+	if adjust {
+		adjustedArgs = adjustPluginArgs(adjustedArgs)
+	}
 
 	var stdout, stderr io.Writer
 	if ctx != nil {

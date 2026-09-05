@@ -1,0 +1,63 @@
+{
+  "name": "DescribeRegions",
+  "deprecated": false,
+  "protocol": "HTTP|HTTPS",
+  "method": "GET|POST",
+  "pathPattern": "",
+  "cmd_full_name": "demo describe-regions",
+  "cmd_name": "describe-regions",
+  "product_code": "Demo",
+  "multi_version": false,
+  "description_zh": "查询地域列表。",
+  "description_en": "Queries regions.",
+  "operation": {
+    "method": "POST",
+    "url": "",
+    "api_version": "2026-01-01",
+    "action": "DescribeRegions",
+    "protocol": "HTTPS",
+    "api_style": "RPC"
+  },
+  "parameters": [
+    {
+      "name": "accept_language",
+      "raw_name": "AcceptLanguage",
+      "type": "string",
+      "options": ["--accept-language"],
+      "description_zh": "语言。",
+      "description_en": "The language.",
+      "required": false,
+      "location": "query"
+    },
+    {
+      "name": "tags",
+      "raw_name": "Tags",
+      "type": "array",
+      "options": ["--tags"],
+      "description_zh": "标签列表。",
+      "description_en": "The tag list.",
+      "required": false,
+      "location": "query",
+      "param_style": "repeatList",
+      "element": {
+        "type": "object",
+        "fields": [
+          {
+            "name": "key",
+            "raw_name": "Key",
+            "type": "string",
+            "required": false,
+            "example": "env"
+          },
+          {
+            "name": "value",
+            "raw_name": "Value",
+            "type": "string",
+            "required": false,
+            "example": "prod"
+          }
+        ]
+      }
+    }
+  ]
+}

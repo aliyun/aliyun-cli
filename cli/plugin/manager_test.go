@@ -18,11 +18,13 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func newTestContext() *cli.Context {
@@ -35,16 +37,6 @@ func TestManager_resolvedIndexURLsWithSourceBase(t *testing.T) {
 	m := &Manager{sourceBase: "https://mirror.example.com/plugins"}
 	assert.Equal(t, "https://mirror.example.com/plugins/plugin_pkg_index.json", m.resolvedPkgIndexURL())
 	assert.Equal(t, "https://mirror.example.com/plugins/plugin_search_index.json", m.resolvedCommandIndexURL())
-}
-
-func TestManager_resolvePackageDownloadURL(t *testing.T) {
-	orig := "https://aliyun-cli-pub.oss-cn-hangzhou.aliyuncs.com/plugins/pkgs/aliyun-cli-acc/0.2.0/aliyun-cli-acc-linux-amd64.tar.gz"
-	m := &Manager{sourceBase: "https://mirror.example.com/plugins"}
-	got := m.resolvePackageDownloadURL(orig, "aliyun-cli-acc", "0.2.0")
-	assert.Equal(t, "https://mirror.example.com/plugins/pkgs/aliyun-cli-acc/0.2.0/aliyun-cli-acc-linux-amd64.tar.gz", got)
-
-	m2 := &Manager{}
-	assert.Equal(t, orig, m2.resolvePackageDownloadURL(orig, "x", "1.0.0"))
 }
 
 func TestNewManager_LoadsSourceBaseFromFile(t *testing.T) {
@@ -1058,9 +1050,12 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 		pluginName   string
 		wantErr      bool
 		errContains  string
+		wantURL      string
+		preferGo     bool
+		goOnly       bool
 	}{
 		{
-			name: "Valid version and platform",
+			name: "Falls back to exact platform when any is absent",
 			targetPlugin: &PluginInfo{
 				Name: "test-plugin",
 				Versions: map[string]VersionInfo{
@@ -1077,6 +1072,138 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 			version:    "1.0.0",
 			pluginName: "test-plugin",
 			wantErr:    false,
+			wantURL:    "http://example.com/plugin.tar.gz",
+		},
+		{
+			name: "Uses platform-independent artifact",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							PluginPlatformAny: {
+								URL:      "http://example.com/plugin-any.zip",
+								Checksum: "any123",
+							},
+						},
+					},
+				},
+			},
+			version:    "1.0.0",
+			pluginName: "test-plugin",
+			wantURL:    "http://example.com/plugin-any.zip",
+		},
+		{
+			name: "Any takes precedence over exact platform",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							currentPlatform: {
+								URL:      "http://example.com/plugin-platform.tar.gz",
+								Checksum: "platform123",
+							},
+							PluginPlatformAny: {
+								URL:      "http://example.com/plugin-any.zip",
+								Checksum: "any123",
+							},
+						},
+					},
+				},
+			},
+			version:    "1.0.0",
+			pluginName: "test-plugin",
+			wantURL:    "http://example.com/plugin-any.zip",
+		},
+		{
+			name: "Prefers exact platform over any when requested",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							currentPlatform: {
+								URL:      "http://example.com/plugin-platform.tar.gz",
+								Checksum: "platform123",
+							},
+							PluginPlatformAny: {
+								URL:      "http://example.com/plugin-any.zip",
+								Checksum: "any123",
+							},
+						},
+					},
+				},
+			},
+			version:    "1.0.0",
+			pluginName: "test-plugin",
+			wantURL:    "http://example.com/plugin-platform.tar.gz",
+			preferGo:   true,
+		},
+		{
+			name: "Falls back to any when preferred exact platform is absent",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							PluginPlatformAny: {
+								URL:      "http://example.com/plugin-any.zip",
+								Checksum: "any123",
+							},
+						},
+					},
+				},
+			},
+			version:    "1.0.0",
+			pluginName: "test-plugin",
+			wantURL:    "http://example.com/plugin-any.zip",
+			preferGo:   true,
+		},
+		{
+			name: "Go-only skips any and uses exact platform",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							currentPlatform: {
+								URL:      "http://example.com/plugin-platform.tar.gz",
+								Checksum: "platform123",
+							},
+							PluginPlatformAny: {
+								URL:      "http://example.com/plugin-any.zip",
+								Checksum: "any123",
+							},
+						},
+					},
+				},
+			},
+			version:    "1.0.0",
+			pluginName: "test-plugin",
+			wantURL:    "http://example.com/plugin-platform.tar.gz",
+			goOnly:     true,
+		},
+		{
+			name: "Go-only does not fall back to any",
+			targetPlugin: &PluginInfo{
+				Name: "test-plugin",
+				Versions: map[string]VersionInfo{
+					"1.0.0": {
+						Platforms: map[string]PlatformInfo{
+							PluginPlatformAny: {
+								URL:      "http://example.com/plugin-any.zip",
+								Checksum: "any123",
+							},
+						},
+					},
+				},
+			},
+			version:     "1.0.0",
+			pluginName:  "test-plugin",
+			wantErr:     true,
+			errContains: "not supported on",
+			goOnly:      true,
 		},
 		{
 			name: "Version not found",
@@ -1122,6 +1249,8 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			mgr.preferGo = tt.preferGo
+			mgr.goOnly = tt.goOnly
 			ctx := newTestContext()
 			platInfo, err := mgr.validateVersionAndPlatform(ctx, tt.targetPlugin, tt.version, tt.pluginName)
 
@@ -1143,6 +1272,8 @@ func TestValidateVersionAndPlatform(t *testing.T) {
 
 			if platInfo == nil {
 				t.Errorf("validateVersionAndPlatform() expected PlatformInfo, got nil")
+			} else if tt.wantURL != "" && platInfo.URL != tt.wantURL {
+				t.Errorf("validateVersionAndPlatform() URL = %q, want %q", platInfo.URL, tt.wantURL)
 			}
 		})
 	}
@@ -1509,9 +1640,10 @@ func TestSavePluginToManifest(t *testing.T) {
 	version := "1.0.0"
 	extractDir := filepath.Join(tmpDir, "extracted")
 	pManifest := &PluginManifest{
-		Name:        pluginName,
-		Command:     "test",
-		Description: "Test plugin description",
+		Name:          pluginName,
+		Command:       "test",
+		Description:   "Test plugin description",
+		MinCliVersion: "3.2.0",
 	}
 
 	if err := os.MkdirAll(extractDir, 0755); err != nil {
@@ -1533,6 +1665,7 @@ func TestSavePluginToManifest(t *testing.T) {
 	assert.Equal(t, extractDir, plugin.Path)
 	assert.Equal(t, pManifest.Command, plugin.Command)
 	assert.Equal(t, pManifest.Description, plugin.Description)
+	assert.Equal(t, pManifest.MinCliVersion, plugin.MinCliVersion)
 	assert.Nil(t, plugin.ProfileRequired, "absent in manifest should stay nil")
 
 	t.Run("propagates explicit profileRequired=false", func(t *testing.T) {
@@ -2076,9 +2209,28 @@ func createTestZip(archivePath string, files []testFile) error {
 }
 
 func TestManager_installPlugin(t *testing.T) {
+	t.Run("Error - repository name escapes plugin root", func(t *testing.T) {
+		parent := t.TempDir()
+		pluginRoot := filepath.Join(parent, "plugins")
+		require.NoError(t, os.MkdirAll(pluginRoot, 0755))
+		outside := filepath.Join(parent, "outside")
+		require.NoError(t, os.MkdirAll(outside, 0755))
+		sentinel := filepath.Join(outside, "keep")
+		require.NoError(t, os.WriteFile(sentinel, []byte("keep"), 0644))
+
+		mgr := &Manager{rootDir: pluginRoot}
+		err := mgr.installPlugin(newTestContext(), &PluginInfo{Name: "../outside"}, "1.0.0", false, true)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid plugin name from repository")
+		assert.FileExists(t, sentinel)
+	})
+
 	t.Run("Success - install plugin with specified version", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		mgr := &Manager{rootDir: tmpDir}
+		mgr := &Manager{
+			rootDir:    tmpDir,
+			sourceBase: "http://127.0.0.1:1/custom-index",
+		}
 
 		archiveContent := createTestPluginArchive(t, "test-plugin", "1.0.0", "test")
 		expectedChecksum, err := calculateSHA256FromBytes(archiveContent)
@@ -2097,9 +2249,10 @@ func TestManager_installPlugin(t *testing.T) {
 			Name: "test-plugin",
 			Versions: map[string]VersionInfo{
 				"1.0.0": {
+					Metadata: &VersionMetadata{MinCliVersion: "9.0.0"},
 					Platforms: map[string]PlatformInfo{
 						platform: {
-							URL:      server.URL,
+							URL:      server.URL + "/artifacts/test-plugin.tar.gz",
 							Checksum: expectedChecksum,
 						},
 					},
@@ -2119,6 +2272,7 @@ func TestManager_installPlugin(t *testing.T) {
 		assert.Equal(t, "test-plugin", plugin.Name)
 		assert.Equal(t, "1.0.0", plugin.Version)
 		assert.Equal(t, "test", plugin.Command)
+		assert.Equal(t, "9.0.0", plugin.MinCliVersion)
 
 		pluginDir := filepath.Join(tmpDir, "test-plugin")
 		assert.DirExists(t, pluginDir)
@@ -2679,6 +2833,26 @@ func TestManager_Uninstall(t *testing.T) {
 		err := mgr.Uninstall(ctx, "nonexistent-plugin")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "plugin nonexistent-plugin not found in local manifest")
+	})
+
+	t.Run("Error - stored path outside plugin root", func(t *testing.T) {
+		parent := t.TempDir()
+		pluginRoot := filepath.Join(parent, "plugins")
+		require.NoError(t, os.MkdirAll(pluginRoot, 0755))
+		outside := filepath.Join(parent, "outside")
+		require.NoError(t, os.MkdirAll(outside, 0755))
+		sentinel := filepath.Join(outside, "keep")
+		require.NoError(t, os.WriteFile(sentinel, []byte("keep"), 0644))
+
+		mgr := &Manager{rootDir: pluginRoot}
+		require.NoError(t, mgr.saveLocalManifest(&LocalManifest{Plugins: map[string]LocalPlugin{
+			"test-plugin": {Name: "test-plugin", Version: "1.0.0", Path: outside},
+		}}))
+
+		err := mgr.Uninstall(newTestContext(), "test-plugin")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "refusing to uninstall")
+		assert.FileExists(t, sentinel)
 	})
 
 	t.Run("Success - uninstall with short name", func(t *testing.T) {
@@ -3245,6 +3419,400 @@ func TestManager_InstallAll(t *testing.T) {
 	})
 }
 
+func canonicalProductsFS(productsJSON string) fstest.MapFS {
+	return fstest.MapFS{
+		"metadatas/products.json": &fstest.MapFile{Data: []byte(productsJSON)},
+	}
+}
+
+func TestListCustomProductCodes(t *testing.T) {
+	t.Run("filters custom (distribution contains go) products and sorts case-insensitively", func(t *testing.T) {
+		fsys := canonicalProductsFS(`{
+			"products": [
+				{"code": "Sls", "distribution": "go"},
+				{"code": "ecs", "distribution": "meta"},
+				{"code": "pds", "distribution": "GO"},
+				{"code": "fc"},
+				{"code": "ros", "distribution": "openapi|go"},
+				{"code": "cs", "distribution": "openapi"},
+				{"code": "vpc", "distribution": " go | openapi "}
+			]
+		}`)
+		codes, err := listCustomProductCodes(fsys)
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"pds", "ros", "Sls", "vpc"}, codes)
+	})
+
+	t.Run("empty catalog", func(t *testing.T) {
+		codes, err := listCustomProductCodes(canonicalProductsFS(`{"products": []}`))
+		assert.NoError(t, err)
+		assert.Empty(t, codes)
+	})
+
+	t.Run("nil filesystem", func(t *testing.T) {
+		_, err := listCustomProductCodes(nil)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "canonical metadata filesystem is unavailable")
+	})
+
+	t.Run("missing products.json", func(t *testing.T) {
+		_, err := listCustomProductCodes(fstest.MapFS{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to load canonical products")
+	})
+}
+
+func TestCollectPluginsForProductCodes(t *testing.T) {
+	index := &Index{Plugins: []PluginInfo{
+		{Name: "aliyun-cli-sls", ProductCode: "Sls"},
+		{Name: "aliyun-cli-pds"},
+		{Name: "aliyun-cli-ecs", ProductCode: "ecs"},
+	}}
+
+	matched, missing := collectPluginsForProductCodes(index, []string{"Sls", "pds", "missing"})
+	assert.Equal(t, []string{"missing"}, missing)
+	assert.Len(t, matched, 2)
+	assert.Equal(t, "aliyun-cli-sls", matched[0].Name)
+	assert.Equal(t, "aliyun-cli-pds", matched[1].Name)
+}
+
+func TestValidateAndResolvePackageTypeBranches(t *testing.T) {
+	dir := t.TempDir()
+	metadata := &MetadataDescriptor{}
+
+	tests := []struct {
+		name     string
+		manifest PluginManifest
+		wantType string
+		wantErr  string
+	}{
+		{name: "legacy go default", manifest: PluginManifest{}, wantType: PluginTypeGo},
+		{name: "explicit go", manifest: PluginManifest{Type: " GO "}, wantType: PluginTypeGo},
+		{name: "go cannot declare metadata", manifest: PluginManifest{Type: PluginTypeGo, Metadata: metadata}, wantErr: `type "meta" is required`},
+		{name: "implicit go cannot declare metadata", manifest: PluginManifest{Metadata: metadata}, wantErr: `type "meta" is required`},
+		{name: "unsupported", manifest: PluginManifest{Type: "python"}, wantErr: "unsupported type"},
+		{name: "meta requires descriptor", manifest: PluginManifest{Type: PluginTypeMeta}, wantErr: "metadata descriptor is required"},
+		{name: "meta rejects binary", manifest: func() PluginManifest {
+			m := PluginManifest{Type: PluginTypeMeta, Metadata: metadata}
+			m.Bin.Path = "plugin"
+			return m
+		}(), wantErr: "bin.path must be empty"},
+		{name: "invalid metadata descriptor", manifest: PluginManifest{Type: PluginTypeMeta, Metadata: metadata}, wantErr: "metadata"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := test.manifest
+			err := validateAndResolvePackageType(dir, &manifest)
+			if test.wantErr != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), test.wantErr)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, test.wantType, manifest.Type)
+		})
+	}
+}
+
+func TestExpandPluginSourcePathHomeAndEmpty(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	path, err := expandPluginSourcePath("~/package.tgz")
+	assert.NoError(t, err)
+	assert.Equal(t, filepath.Join(home, "package.tgz"), path)
+	_, err = expandPluginSourcePath("   ")
+	assert.ErrorContains(t, err, "source path is empty")
+}
+
+func TestManager_InstallCustom(t *testing.T) {
+	t.Run("Success - install only custom products", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{
+			rootDir: tmpDir,
+			canonicalFS: canonicalProductsFS(`{
+				"products": [
+					{"code": "Sls", "distribution": "go"},
+					{"code": "ecs", "distribution": "meta"}
+				]
+			}`),
+		}
+
+		archiveGo := createTestPluginArchive(t, "aliyun-cli-sls", "1.0.0", "sls")
+		archiveMeta := createTestPluginArchive(t, "aliyun-cli-ecs", "1.0.0", "ecs")
+		checksumGo, _ := calculateSHA256FromBytes(archiveGo)
+		checksumMeta, _ := calculateSHA256FromBytes(archiveMeta)
+
+		serverGo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archiveGo)
+		}))
+		defer serverGo.Close()
+
+		serverMeta := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archiveMeta)
+		}))
+		defer serverMeta.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "aliyun-cli-sls",
+					"productCode": "Sls",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "` + serverGo.URL + `",
+								"checksum": "` + checksumGo + `"
+							}
+						}
+					}
+				},
+				{
+					"name": "aliyun-cli-ecs",
+					"productCode": "ecs",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "` + serverMeta.URL + `",
+								"checksum": "` + checksumMeta + `"
+							}
+						}
+					}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.InstallCustom(ctx, false)
+		assert.NoError(t, err)
+
+		localManifest, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+
+		sls, exists := localManifest.Plugins["aliyun-cli-sls"]
+		assert.True(t, exists)
+		assert.Equal(t, "1.0.0", sls.Version)
+		_, exists = localManifest.Plugins["aliyun-cli-ecs"]
+		assert.False(t, exists)
+	})
+
+	t.Run("Success - match by plugin name when productCode is absent", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{
+			rootDir: tmpDir,
+			canonicalFS: canonicalProductsFS(`{
+				"products": [{"code": "pds", "distribution": "go"}]
+			}`),
+		}
+
+		archive := createTestPluginArchive(t, "aliyun-cli-pds", "1.0.0", "pds")
+		checksum, _ := calculateSHA256FromBytes(archive)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "aliyun-cli-pds",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "` + server.URL + `",
+								"checksum": "` + checksum + `"
+							}
+						}
+					}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.InstallCustom(ctx, false)
+		assert.NoError(t, err)
+
+		localManifest, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		_, exists := localManifest.Plugins["aliyun-cli-pds"]
+		assert.True(t, exists)
+	})
+
+	t.Run("Success - skip already installed plugins", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		pluginDir := filepath.Join(tmpDir, "aliyun-cli-sls")
+		assert.NoError(t, os.MkdirAll(pluginDir, 0755))
+
+		mgr := &Manager{
+			rootDir: tmpDir,
+			canonicalFS: canonicalProductsFS(`{
+				"products": [
+					{"code": "Sls", "distribution": "go"},
+					{"code": "pds", "distribution": "go"}
+				]
+			}`),
+		}
+		assert.NoError(t, mgr.saveLocalManifest(&LocalManifest{
+			Plugins: map[string]LocalPlugin{
+				"aliyun-cli-sls": {Name: "aliyun-cli-sls", Version: "1.0.0", Path: pluginDir},
+			},
+		}))
+
+		archive := createTestPluginArchive(t, "aliyun-cli-pds", "1.0.0", "pds")
+		checksum, _ := calculateSHA256FromBytes(archive)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := `{
+			"plugins": [
+				{"name": "aliyun-cli-sls", "productCode": "Sls", "versions": {"1.0.0": {}}},
+				{
+					"name": "aliyun-cli-pds",
+					"productCode": "pds",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "` + server.URL + `",
+								"checksum": "` + checksum + `"
+							}
+						}
+					}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.InstallCustom(ctx, false)
+		assert.NoError(t, err)
+
+		localManifest, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		assert.Equal(t, "1.0.0", localManifest.Plugins["aliyun-cli-sls"].Version)
+		_, exists := localManifest.Plugins["aliyun-cli-pds"]
+		assert.True(t, exists)
+	})
+
+	t.Run("Success - no custom products", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{
+			rootDir:     tmpDir,
+			canonicalFS: canonicalProductsFS(`{"products": [{"code": "ecs", "distribution": "meta"}]}`),
+		}
+
+		ctx := newTestContext()
+		err := mgr.InstallCustom(ctx, false)
+		assert.NoError(t, err)
+	})
+
+	t.Run("Error - product has no plugin in index", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{
+			rootDir: tmpDir,
+			canonicalFS: canonicalProductsFS(`{
+				"products": [
+					{"code": "Sls", "distribution": "go"},
+					{"code": "missing", "distribution": "go"}
+				]
+			}`),
+		}
+
+		archive := createTestPluginArchive(t, "aliyun-cli-sls", "1.0.0", "sls")
+		checksum, _ := calculateSHA256FromBytes(archive)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Write(archive)
+		}))
+		defer server.Close()
+
+		platform := GetCurrentPlatform()
+		indexJSON := `{
+			"plugins": [
+				{
+					"name": "aliyun-cli-sls",
+					"productCode": "Sls",
+					"versions": {
+						"1.0.0": {
+							"` + platform + `": {
+								"url": "` + server.URL + `",
+								"checksum": "` + checksum + `"
+							}
+						}
+					}
+				}
+			]
+		}`
+		indexServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(indexJSON))
+		}))
+		defer indexServer.Close()
+		mgr.indexURL = indexServer.URL
+
+		ctx := newTestContext()
+		err := mgr.InstallCustom(ctx, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "1 plugin(s) failed to install")
+
+		localManifest, err := mgr.GetLocalManifest()
+		assert.NoError(t, err)
+		_, exists := localManifest.Plugins["aliyun-cli-sls"]
+		assert.True(t, exists)
+	})
+
+	t.Run("Error - index fetch fails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{
+			rootDir: tmpDir,
+			canonicalFS: canonicalProductsFS(`{
+				"products": [{"code": "Sls", "distribution": "go"}]
+			}`),
+			indexURL: "http://invalid-url-that-does-not-exist.local/index.json",
+		}
+
+		ctx := newTestContext()
+		err := mgr.InstallCustom(ctx, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get plugin index")
+	})
+
+	t.Run("Error - canonical products missing", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		mgr := &Manager{rootDir: tmpDir, canonicalFS: fstest.MapFS{}}
+
+		ctx := newTestContext()
+		err := mgr.InstallCustom(ctx, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to load canonical products")
+	})
+}
+
 func TestCompareVersion(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -3658,6 +4226,30 @@ func TestManager_InstallMultiple(t *testing.T) {
 		stdout := ctx.Stdout().(*bytes.Buffer).String()
 		assert.Contains(t, stdout, "Installing plugin1...")
 		assert.Contains(t, stdout, "Installed: 1")
+	})
+}
+
+func TestPopulateMinCliVersionFromIndex(t *testing.T) {
+	t.Run("fills missing package value from index", func(t *testing.T) {
+		manifest := &PluginManifest{}
+		populateMinCliVersionFromIndex(manifest, VersionInfo{
+			Metadata: &VersionMetadata{MinCliVersion: "3.4.0"},
+		})
+		assert.Equal(t, "3.4.0", manifest.MinCliVersion)
+	})
+
+	t.Run("package manifest value remains authoritative", func(t *testing.T) {
+		manifest := &PluginManifest{MinCliVersion: "3.5.0"}
+		populateMinCliVersionFromIndex(manifest, VersionInfo{
+			Metadata: &VersionMetadata{MinCliVersion: "3.4.0"},
+		})
+		assert.Equal(t, "3.5.0", manifest.MinCliVersion)
+	})
+
+	t.Run("missing values remain empty", func(t *testing.T) {
+		manifest := &PluginManifest{}
+		populateMinCliVersionFromIndex(manifest, VersionInfo{})
+		assert.Empty(t, manifest.MinCliVersion)
 	})
 }
 

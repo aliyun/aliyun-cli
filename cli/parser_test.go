@@ -169,6 +169,28 @@ func TestParserSetAllowUnknown(t *testing.T) {
 	assert.Equal(t, parser.allowUnknown, true)
 }
 
+func TestParserAllowUnknownConsumesDashLeadingValueForPendingLongFlag(t *testing.T) {
+	parser, fs := newTestParser("--test", "-1/-1")
+	parser.SetAllowUnknown(true)
+
+	_, flag, more, err := parser.readNext()
+	assert.Nil(t, err)
+	assert.True(t, more)
+	assert.NotNil(t, flag)
+	assert.Equal(t, "test", flag.Name)
+
+	arg, flag, more, err := parser.readNext()
+	assert.Nil(t, err)
+	assert.True(t, more)
+	assert.Equal(t, "", arg)
+	assert.Nil(t, flag)
+	assert.Nil(t, parser.currentFlag)
+
+	value, ok := fs.Get("test").GetValue()
+	assert.True(t, ok)
+	assert.Equal(t, "-1/-1", value)
+}
+
 // aliyun oss cp -r oss-url local-path
 // aliyun oss cp -r local-path oss-url
 // aliyun oss -e oss-cn-beijing.aliyuncs.com ls oss://bucket-name

@@ -32,8 +32,8 @@ func NewConfigureAiModeCommand() *cli.Command {
 			"管理全局 AI 模式及 API 调用的 User-Agent"),
 		Usage: "ai-mode [command] [--config-path <configPath>]",
 		Long: i18n.T(
-			`Configure global AI mode. When enabled, all CLI API requests append the configured User-Agent segment (default: AlibabaCloud-Agent-Skills), in addition to the normal Aliyun CLI UA.`,
-			`配置全局 AI 模式。启用后，所有 CLI API 请求会在常规 Aliyun CLI UA 之外追加配置的 User-Agent 段（默认：AlibabaCloud-Agent-Skills）。`),
+			`Configure global AI mode. When enabled, all CLI API requests append AlibabaCloud-AIMode/enabled (plus a custom User-Agent segment if set), in addition to the normal Aliyun CLI UA.`,
+			`配置全局 AI 模式。启用后，所有 CLI API 请求会在常规 Aliyun CLI UA 之外追加 AlibabaCloud-AIMode/enabled（若配置了自定义 User-Agent 段则一并追加）。`),
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
@@ -161,7 +161,7 @@ func newConfigureAiModeResetUserAgentCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "reset-user-agent",
 		Usage: "reset-user-agent [--config-path <configPath>]",
-		Short: i18n.T("clear custom User-Agent segment (use default when AI mode is on)", "清除自定义 UA 段（启用 AI 模式时使用默认值）"),
+		Short: i18n.T("clear custom User-Agent segment (AI mode then only appends AlibabaCloud-AIMode/enabled)", "清除自定义 UA 段（启用 AI 模式时仅追加 AlibabaCloud-AIMode/enabled）"),
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)

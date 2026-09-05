@@ -23,8 +23,6 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
-const DefaultUserAgent = "AlibabaCloud-Agent-Skills"
-
 const UserAgentEnabledMarker = "AlibabaCloud-AIMode/enabled"
 
 const AiConfigFileName = "ai-mode.json"
@@ -41,18 +39,11 @@ func DefaultAiConfig() *AiConfig {
 
 func EffectiveUserAgent(c *AiConfig) string {
 	if c == nil {
-		return util.SanitizeUserAgent(DefaultUserAgent)
+		return ""
 	}
-	s := strings.TrimSpace(c.UserAgent)
-	if s == "" {
-		return util.SanitizeUserAgent(DefaultUserAgent)
-	}
-	return util.SanitizeUserAgent(s)
+	return util.SanitizeUserAgent(strings.TrimSpace(c.UserAgent))
 }
 
-// RequestUserAgentSuffix is the full string appended to HTTP User-Agent when AI mode is enabled:
-// UserAgentEnabledMarker + configured or default skills segment.
-// Empty when disabled or nil config.
 func RequestUserAgentSuffix(c *AiConfig) string {
 	if c == nil || !c.Enabled {
 		return ""
@@ -148,23 +139,40 @@ func MergeAiModeIntoOssutilPayload(configDir string, envMap map[string]any, forc
 	}
 }
 
-// RequestUserAgentSuffixForCommand applies per-invocation overrides from the root CLI
 func RequestUserAgentSuffixForCommand(cfg *AiConfig, forceOn, forceOff bool) string {
-	if forceOff {
+	if !EnabledForCommand(cfg, forceOn, forceOff) {
 		return ""
+	}
+	effective := DefaultAiConfig()
+	if cfg != nil {
+		effective.UserAgent = cfg.UserAgent
+	}
+	effective.Enabled = true
+	return RequestUserAgentSuffix(effective)
+}
+
+func EnabledForCommand(cfg *AiConfig, forceOn, forceOff bool) bool {
+	if forceOff {
+		return false
 	}
 	if forceOn {
-		effective := DefaultAiConfig()
-		if cfg != nil {
-			effective.UserAgent = cfg.UserAgent
-		}
-		effective.Enabled = true
-		return RequestUserAgentSuffix(effective)
+		return true
 	}
-	if cfg == nil {
-		return ""
+	if enabled, ok := parseEnabledValue(os.Getenv(EnvAIMode)); ok {
+		return enabled
 	}
-	return RequestUserAgentSuffix(cfg)
+	return cfg != nil && cfg.Enabled
+}
+
+func parseEnabledValue(value string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true":
+		return true, true
+	case "0", "false":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 func MergeUserAgentIntoPluginEnvs(configDir string, envs map[string]string, forceOn, forceOff bool) {

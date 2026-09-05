@@ -6,13 +6,23 @@ import (
 
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	runtimeredact "github.com/aliyun/aliyun-openapi-runtime/redact"
 )
+
+// cliDryRunHeaderNote documents that the header set printed by --cli-dry-run is
+// only what the CLI itself assembled. The underlying SDK runtime signs and sends
+// the request later, adding signing/transport headers (user-agent, x-acs-date,
+// x-acs-signature-nonce, authorization, content-type, ...) that dry-run never
+// materialises. Kept as a note rather than synthesised headers so the CLI does
+// not fake — or drift with — whatever the SDK version chooses to add.
+const cliDryRunHeaderNote = "SDK runtime may add signing and transport headers before sending the request."
 
 type CliDryRunOutput struct {
 	Style      string            `json:"style"`
 	Endpoint   string            `json:"endpoint"`
 	Method     string            `json:"method"`
 	Headers    map[string]string `json:"headers"`
+	Note       string            `json:"note,omitempty"`
 	Query      map[string]string `json:"query,omitempty"`
 	Body       string            `json:"body,omitempty"`
 	BodyFormat string            `json:"bodyFormat,omitempty"`
@@ -27,40 +37,24 @@ type CliDryRunOutput struct {
 	Version string `json:"version,omitempty"`
 }
 
-var sensitiveHeaderKeys = []string{
-	"authorization",
-	"x-acs-accesskey-id",
-	"x-acs-security-token",
-	"x-acs-signature",
-}
-
 func sanitizeHeaders(headers map[string]string) map[string]string {
-	result := make(map[string]string, len(headers))
-	for k, v := range headers {
-		if isSensitiveHeader(k) {
-			result[k] = maskValue(v)
-		} else {
-			result[k] = v
-		}
-	}
-	return result
+	return sanitizeDryRunValues(headers)
 }
 
 func isSensitiveHeader(key string) bool {
-	lower := strings.ToLower(key)
-	for _, s := range sensitiveHeaderKeys {
-		if lower == s {
-			return true
-		}
-	}
-	return false
+	return runtimeredact.IsSensitive(key)
 }
 
 func maskValue(v string) string {
-	if len(v) <= 4 {
-		return "***"
+	return runtimeredact.MaskValue(v)
+}
+
+func sanitizeDryRunValues(values map[string]string) map[string]string {
+	result := make(map[string]string, len(values))
+	for key, value := range values {
+		result[key] = runtimeredact.MaskKV(key, value)
 	}
-	return v[:4] + "***"
+	return result
 }
 
 func buildCliDryRunFromInvoker(inv Invoker) *CliDryRunOutput {
@@ -70,29 +64,30 @@ func buildCliDryRunFromInvoker(inv Invoker) *CliDryRunOutput {
 		Endpoint: req.Domain,
 		Method:   req.Method,
 		Headers:  sanitizeHeaders(req.Headers),
+		Note:     cliDryRunHeaderNote,
 	}
 
 	if len(req.QueryParams) > 0 {
-		out.Query = copyMap(req.QueryParams)
+		out.Query = sanitizeDryRunValues(req.QueryParams)
 	}
 
 	if len(req.Content) > 0 {
-		out.Body = string(req.Content)
+		out.Body = runtimeredact.MaskBody(string(req.Content))
 		out.BodyFormat = "raw"
 	} else if len(req.FormParams) > 0 {
 		out.Query = mergeInto(out.Query, nil)
 		formJSON, _ := json.Marshal(req.FormParams)
-		out.Body = string(formJSON)
+		out.Body = runtimeredact.MaskBody(string(formJSON))
 		out.BodyFormat = "form"
 	}
 
 	if req.PathPattern != "" {
 		out.Style = "ROA"
 		out.PathPattern = req.PathPattern
-		out.Pathname = buildActualPath(req.PathPattern, req.PathParams)
 		if len(req.PathParams) > 0 {
-			out.PathParams = copyMap(req.PathParams)
+			out.PathParams = sanitizeDryRunValues(req.PathParams)
 		}
+		out.Pathname = buildActualPath(req.PathPattern, out.PathParams)
 	} else {
 		out.Style = "RPC"
 		out.Action = req.ApiName
@@ -103,9 +98,17 @@ func buildCliDryRunFromInvoker(inv Invoker) *CliDryRunOutput {
 }
 
 func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
+	// Style reflects the actual request style resolved in Prepare
+	// (RPC-style products are overridden to "RPC"); fall back to the
+	// ROA default when openapiParams hasn't been populated.
+	style := "ROA"
+	if oc.openapiParams != nil && oc.openapiParams.Style != nil {
+		style = tea.StringValue(oc.openapiParams.Style)
+	}
 	out := &CliDryRunOutput{
-		Style:  "ROA",
+		Style:  style,
 		Method: oc.method,
+		Note:   cliDryRunHeaderNote,
 	}
 
 	if oc.openapiRequest != nil && oc.openapiRequest.EndpointOverride != nil {
@@ -127,7 +130,7 @@ func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
 				h[k] = *v
 			}
 		}
-		out.Headers = sanitizeHeaders(h)
+		out.Headers = sanitizeDryRunValues(h)
 	}
 
 	if oc.openapiRequest != nil && oc.openapiRequest.Query != nil {
@@ -138,30 +141,48 @@ func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
 			}
 		}
 		if len(q) > 0 {
-			out.Query = q
+			out.Query = sanitizeDryRunValues(q)
 		}
 	}
 
 	if oc.openapiRequest != nil && oc.openapiRequest.Body != nil {
 		bodyJSON, err := json.Marshal(oc.openapiRequest.Body)
 		if err == nil && string(bodyJSON) != "null" {
-			out.Body = string(bodyJSON)
+			out.Body = runtimeredact.MaskBody(string(bodyJSON))
+			// Reflect the request-body encoding resolved in Prepare/ProcessBody:
+			// RPC-style products send form fields (ReqBodyType=formData), which
+			// the classic dry-run reports as "form"; ROA keeps the JSON body.
 			out.BodyFormat = "json"
+			if oc.openapiParams != nil && tea.StringValue(oc.openapiParams.ReqBodyType) == "formData" {
+				out.BodyFormat = "form"
+			}
 		}
 	}
 
-	if oc.openapiParams != nil && oc.openapiParams.Pathname != nil {
-		out.Pathname = tea.StringValue(oc.openapiParams.Pathname)
+	// Path fields are ROA-only: an RPC request always POSTs to "/" and routes
+	// by Action/Version (and the x-acs-action header), so pathPattern/pathname
+	// are meaningless for it. Mirror the classic invoker, which emits EITHER
+	// path fields (ROA) OR action/version (RPC), never both.
+	if style != "RPC" {
+		if oc.openapiParams != nil && oc.openapiParams.Pathname != nil {
+			out.Pathname = tea.StringValue(oc.openapiParams.Pathname)
+		}
+		if len(oc.pathParams) > 0 {
+			out.PathParams = sanitizeDryRunValues(oc.pathParams)
+			out.Pathname = sanitizedDryRunPathname(oc.path, out.Pathname, oc.pathParams, out.PathParams)
+		}
+		out.PathPattern = oc.path
 	}
-	out.PathPattern = oc.path
 	if oc.api != nil {
 		out.Action = oc.api.Name
-		out.Version = oc.api.Product.Version
+		if oc.product != nil {
+			out.Version = oc.product.Version
+		}
 	}
 
 	if oc.openapiRequest != nil && oc.openapiRequest.Body != nil {
 		if stream, ok := oc.openapiRequest.Body.([]byte); ok {
-			out.Body = string(stream)
+			out.Body = runtimeredact.MaskBody(string(stream))
 			if oc.openapiParams != nil && oc.openapiParams.ReqBodyType != nil {
 				out.BodyFormat = tea.StringValue(oc.openapiParams.ReqBodyType)
 			} else {
@@ -171,6 +192,40 @@ func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
 	}
 
 	return out
+}
+
+func sanitizedDryRunPathname(pattern, pathname string, raw, sanitized map[string]string) string {
+	result := pattern
+	replaced := false
+	for key, value := range sanitized {
+		placeholder := "[" + key + "]"
+		if strings.Contains(result, placeholder) {
+			result = strings.ReplaceAll(result, placeholder, value)
+			replaced = true
+			continue
+		}
+		// Wildcard path parameters replace the complete declared pattern.
+		if pathname == raw[key] {
+			result = value
+			replaced = true
+		}
+	}
+	if replaced {
+		return result
+	}
+	return pathname
+}
+
+func clientDryRunAssigned(ctx *cli.Context) bool {
+	if ctx == nil || ctx.Flags() == nil {
+		return false
+	}
+	for _, name := range []string{CliDryRunFlagName, CliDryRunJsonFlagName} {
+		if flag := ctx.Flags().Get(name); flag != nil && flag.IsAssigned() {
+			return true
+		}
+	}
+	return false
 }
 
 func marshalCliDryRunOutput(out *CliDryRunOutput) (string, error) {
@@ -213,6 +268,10 @@ func formatCliDryRunHuman(out *CliDryRunOutput) string {
 		for k, v := range out.Headers {
 			sb.WriteString("  " + k + ": " + v + "\n")
 		}
+	}
+
+	if out.Note != "" {
+		sb.WriteString("Note:     " + out.Note + "\n")
 	}
 
 	if len(out.Query) > 0 {

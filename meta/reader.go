@@ -15,13 +15,15 @@ package meta
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 
-	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
+	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
 )
 
 func ReadJsonFrom(path string, v interface{}) error {
-	buf, err := aliyunopenapimeta.Metadatas.ReadFile("metadatas/" + path)
+	buf, err := readMetaFile(path)
 	if err != nil {
 		return fmt.Errorf("read json from %s failed", path)
 	}
@@ -30,4 +32,23 @@ func ReadJsonFrom(path string, v interface{}) error {
 		return fmt.Errorf("unmarshal json %s failed %v", path, err)
 	}
 	return nil
+}
+
+func readMetaFile(path string) ([]byte, error) {
+	paths := []string{
+		"metadatas/" + path,
+		"canonical/metadatas/" + path,
+	}
+	var lastErr error
+	for _, candidate := range paths {
+		buf, err := fs.ReadFile(bundledmeta.Metadatas, candidate)
+		if err == nil {
+			return buf, nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+		lastErr = err
+	}
+	return nil, lastErr
 }

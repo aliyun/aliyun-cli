@@ -71,7 +71,7 @@ func TestMerge(t *testing.T) {
 		panic(err)
 	}
 
-	cli.Printf(new(bytes.Buffer), string(result))
+	cli.Print(new(bytes.Buffer), string(result))
 }
 
 func TestSearchList(t *testing.T) {

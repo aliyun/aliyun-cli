@@ -1622,7 +1622,7 @@ func (cc *CopyCommand) checkCopyOptions(opType operationType) error {
 func (cc *CopyCommand) progressBar() {
 	// fetch all reveal
 	for signal := range chProgressSignal {
-		fmt.Printf(cc.monitor.progressBar(signal.finish, signal.exitStat))
+		fmt.Print(cc.monitor.progressBar(signal.finish, signal.exitStat))
 	}
 }
 
@@ -1680,14 +1680,14 @@ func (cc *CopyCommand) uploadFiles(srcURLList []StorageURLer, destURL CloudURL) 
 			} else {
 				if !cc.cpOption.ctnu {
 					cc.closeProgress()
-					fmt.Printf(cc.monitor.progressBar(true, errExit))
+					fmt.Print(cc.monitor.progressBar(true, errExit))
 					return err
 				}
 			}
 		}
 	}
 	cc.closeProgress()
-	fmt.Printf(cc.monitor.progressBar(true, normalExit))
+	fmt.Print(cc.monitor.progressBar(true, normalExit))
 	return listError
 }
 
@@ -2187,7 +2187,7 @@ func (cc *CopyCommand) confirm(str string) bool {
 	defer mu.Unlock()
 
 	var val string
-	fmt.Printf(getClearStr(fmt.Sprintf("cp: overwrite \"%s\"(y or N)? ", str)))
+	fmt.Print(getClearStr(fmt.Sprintf("cp: overwrite \"%s\"(y or N)? ", str)))
 	if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
 		return false
 	}
@@ -2257,8 +2257,12 @@ func (cc *CopyCommand) preparePartOption(fileSize int64) (int64, int) {
 		partNum = (fileSize-1)/partSize + 1
 	}
 
-	if parallel, err := GetInt(OptionParallel, cc.command.options); err == nil {
-		return partSize, int(parallel)
+	if parallel, err := GetInt(OptionParallel, cc.command.options); err == nil &&
+		parallel >= MinParallel && parallel <= MaxParallel {
+		parallelInt, convertErr := checkedInt(parallel, OptionParallel)
+		if convertErr == nil {
+			return partSize, parallelInt
+		}
 	}
 
 	var rt int
@@ -2416,7 +2420,7 @@ func (cc *CopyCommand) downloadFiles(srcURL CloudURL, destURL FileURL) error {
 
 func (cc *CopyCommand) formatResultPrompt(err error) error {
 	cc.closeProgress()
-	fmt.Printf(cc.monitor.progressBar(true, normalExit))
+	fmt.Print(cc.monitor.progressBar(true, normalExit))
 	if err != nil && cc.cpOption.ctnu {
 		return nil
 	}
@@ -2898,7 +2902,7 @@ func (cc *CopyCommand) waitRoutinueComplete(chError, chListError <-chan error, o
 				ferr = err
 				if !cc.cpOption.ctnu {
 					cc.closeProgress()
-					fmt.Printf(cc.monitor.progressBar(true, errExit))
+					fmt.Print(cc.monitor.progressBar(true, errExit))
 					return err
 				}
 			}

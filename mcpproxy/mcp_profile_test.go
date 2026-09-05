@@ -134,19 +134,7 @@ func TestNewMcpProfileFromBytes(t *testing.T) {
 }
 
 func TestSaveMcpProfile(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	originalHome := os.Getenv("HOME")
-	defer func() {
-		if originalHome != "" {
-			os.Setenv("HOME", originalHome)
-		} else {
-			os.Unsetenv("HOME")
-		}
-	}()
-
-	// 设置 HOME 环境变量指向临时目录，这样 GetConfigPath() 会返回 tmpDir/.aliyun
-	os.Setenv("HOME", tmpDir)
+	tmpDir := setTestHome(t)
 
 	configPath := getMCPConfigPath()
 	testConfigPath := filepath.Join(tmpDir, ".aliyun", ".mcpproxy_config")
@@ -179,17 +167,7 @@ func TestSaveMcpProfile(t *testing.T) {
 
 func TestMcpProfileRegionType(t *testing.T) {
 	t.Run("region type is saved and loaded", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			if originalHome != "" {
-				os.Setenv("HOME", originalHome)
-			} else {
-				os.Unsetenv("HOME")
-			}
-		}()
-
-		os.Setenv("HOME", tmpDir)
+		setTestHome(t)
 
 		profile := NewMcpProfile("test-profile")
 		profile.MCPOAuthSiteType = string(RegionCN)
@@ -296,16 +274,7 @@ func TestMcpProfileJSONSerialization(t *testing.T) {
 
 func TestLoadExistingMCPProfile(t *testing.T) {
 	t.Run("config file not exists", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			if originalHome != "" {
-				os.Setenv("HOME", originalHome)
-			} else {
-				os.Unsetenv("HOME")
-			}
-		}()
-		os.Setenv("HOME", tmpDir)
+		setTestHome(t)
 
 		ctx := cli.NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
 		profile := config.NewProfile("test")
@@ -321,16 +290,7 @@ func TestLoadExistingMCPProfile(t *testing.T) {
 	})
 
 	t.Run("invalid json in config file", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			if originalHome != "" {
-				os.Setenv("HOME", originalHome)
-			} else {
-				os.Unsetenv("HOME")
-			}
-		}()
-		os.Setenv("HOME", tmpDir)
+		setTestHome(t)
 
 		// 创建无效的配置文件
 		configPath := getMCPConfigPath()
@@ -353,16 +313,7 @@ func TestLoadExistingMCPProfile(t *testing.T) {
 	})
 
 	t.Run("region type mismatch", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			if originalHome != "" {
-				os.Setenv("HOME", originalHome)
-			} else {
-				os.Unsetenv("HOME")
-			}
-		}()
-		os.Setenv("HOME", tmpDir)
+		setTestHome(t)
 
 		// 创建配置文件，region type 为 CN
 		profile := NewMcpProfile("test-profile")
@@ -388,16 +339,7 @@ func TestLoadExistingMCPProfile(t *testing.T) {
 	})
 
 	t.Run("app name mismatch", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			if originalHome != "" {
-				os.Setenv("HOME", originalHome)
-			} else {
-				os.Unsetenv("HOME")
-			}
-		}()
-		os.Setenv("HOME", tmpDir)
+		setTestHome(t)
 
 		// 创建配置文件，app name 为 "default-mcp"
 		profile := NewMcpProfile("test-profile")
@@ -424,16 +366,7 @@ func TestLoadExistingMCPProfile(t *testing.T) {
 	})
 
 	t.Run("empty AppId", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			if originalHome != "" {
-				os.Setenv("HOME", originalHome)
-			} else {
-				os.Unsetenv("HOME")
-			}
-		}()
-		os.Setenv("HOME", tmpDir)
+		setTestHome(t)
 
 		// 创建配置文件，AppId 为空
 		profile := NewMcpProfile("test-profile")
@@ -459,16 +392,7 @@ func TestLoadExistingMCPProfile(t *testing.T) {
 	})
 
 	t.Run("empty RefreshToken", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			if originalHome != "" {
-				os.Setenv("HOME", originalHome)
-			} else {
-				os.Unsetenv("HOME")
-			}
-		}()
-		os.Setenv("HOME", tmpDir)
+		setTestHome(t)
 
 		// 创建配置文件，RefreshToken 为空
 		profile := NewMcpProfile("test-profile")
@@ -494,16 +418,7 @@ func TestLoadExistingMCPProfile(t *testing.T) {
 	})
 
 	t.Run("expired RefreshToken", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			if originalHome != "" {
-				os.Setenv("HOME", originalHome)
-			} else {
-				os.Unsetenv("HOME")
-			}
-		}()
-		os.Setenv("HOME", tmpDir)
+		setTestHome(t)
 
 		// 创建配置文件，RefreshToken 已过期
 		profile := NewMcpProfile("test-profile")
@@ -529,16 +444,7 @@ func TestLoadExistingMCPProfile(t *testing.T) {
 	})
 
 	t.Run("valid profile but missing required fields", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		originalHome := os.Getenv("HOME")
-		defer func() {
-			if originalHome != "" {
-				os.Setenv("HOME", originalHome)
-			} else {
-				os.Unsetenv("HOME")
-			}
-		}()
-		os.Setenv("HOME", tmpDir)
+		setTestHome(t)
 
 		// 创建最小化的配置文件（缺少必要字段）
 		profile := NewMcpProfile("test-profile")

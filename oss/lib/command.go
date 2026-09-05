@@ -508,7 +508,11 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	maxUpSpeed, errUp := GetInt(OptionMaxUpSpeed, cmd.options)
 	if errUp == nil {
 		if maxUpSpeed >= 0 {
-			errUp = client.LimitUploadSpeed(int(maxUpSpeed))
+			maxUpSpeedInt, convertErr := checkedInt(maxUpSpeed, OptionMaxUpSpeed)
+			if convertErr != nil {
+				return nil, convertErr
+			}
+			errUp = client.LimitUploadSpeed(maxUpSpeedInt)
 			if errUp != nil {
 				return nil, errUp
 			} else {
@@ -522,7 +526,11 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	maxDownSpeed, errDown := GetInt(OptionMaxDownSpeed, cmd.options)
 	if errDown == nil {
 		if maxDownSpeed >= 0 {
-			errDown = client.LimitDownloadSpeed(int(maxDownSpeed))
+			maxDownSpeedInt, convertErr := checkedInt(maxDownSpeed, OptionMaxDownSpeed)
+			if convertErr != nil {
+				return nil, convertErr
+			}
+			errDown = client.LimitDownloadSpeed(maxDownSpeedInt)
 			if errDown != nil {
 				return nil, errDown
 			} else {
@@ -789,7 +797,7 @@ func (cmd *Command) updateMonitor(err error, monitor *Monitor) {
 	} else {
 		monitor.updateErrNum(1)
 	}
-	fmt.Printf(monitor.progressBar(false, normalExit))
+	fmt.Print(monitor.progressBar(false, normalExit))
 }
 
 func (cmd *Command) report(msg string, err error, option *batchOptionType) {

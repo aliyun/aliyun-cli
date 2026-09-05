@@ -58,7 +58,8 @@ func TestConfigureAiMode_Show_Default(t *testing.T) {
 	sub := enterAiModeSub(t, ctx, "show")
 	require.NoError(t, sub.Run(ctx, []string{}))
 	assert.Contains(t, w.String(), `"enabled": false`)
-	assert.Contains(t, w.String(), aimode.DefaultUserAgent)
+	assert.Contains(t, w.String(), `"effective_user_agent": ""`)
+	assert.NotContains(t, w.String(), "AlibabaCloud-Agent-Skills")
 }
 
 func TestConfigureAiMode_ParentRun_DefaultShows(t *testing.T) {
@@ -183,8 +184,8 @@ func TestConfigureAiMode_ParentRun_ExtraArgs(t *testing.T) {
 func TestConfigureAiMode_Show_IncludesOssutilInOutput(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, aimode.Save(dir, &aimode.AiConfig{
-		Enabled:  true,
-		UserAgent: "ua",
+		Enabled:              true,
+		UserAgent:            "ua",
 		PluginSpecialOSSUTIL: map[string]any{"a": true},
 	}))
 	ctx, w := testAiModeContext(t, dir)

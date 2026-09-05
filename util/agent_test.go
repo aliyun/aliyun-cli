@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -107,7 +108,7 @@ func TestMergeAgentSegmentIntoPluginEnvs_NoAgent(t *testing.T) {
 	snapshotAndUnsetAgentEnvs(t)
 	envs := map[string]string{}
 	MergeAgentSegmentIntoPluginEnvs(envs)
-	_, ok := envs[envCustomUserAgent]
+	_, ok := envs[sysconfig.EnvUserAgent]
 	assert.False(t, ok, "未检测到 agent 时不应写入任何 env")
 }
 
@@ -121,32 +122,32 @@ func TestMergeAgentSegmentIntoPluginEnvs_NilMap(t *testing.T) {
 
 func TestMergeAgentSegmentIntoPluginEnvs_FreshEnv(t *testing.T) {
 	snapshotAndUnsetAgentEnvs(t)
-	_ = os.Unsetenv(envCustomUserAgent)
+	_ = os.Unsetenv(sysconfig.EnvUserAgent)
 	_ = os.Setenv("CURSOR_AGENT", "1")
 	envs := map[string]string{}
 	MergeAgentSegmentIntoPluginEnvs(envs)
-	_, ok := envs[envCustomUserAgent]
+	_, ok := envs[sysconfig.EnvUserAgent]
 	assert.False(t, ok, "agent UA segment unset")
 }
 
 func TestMergeAgentSegmentIntoPluginEnvs_PreservesParentEnv(t *testing.T) {
 	snapshotAndUnsetAgentEnvs(t)
 	_ = os.Setenv("CURSOR_AGENT", "1")
-	t.Setenv(envCustomUserAgent, "skill/foo")
+	t.Setenv(sysconfig.EnvUserAgent, "skill/foo")
 	envs := map[string]string{}
 	MergeAgentSegmentIntoPluginEnvs(envs)
-	_, ok := envs[envCustomUserAgent]
+	_, ok := envs[sysconfig.EnvUserAgent]
 	assert.False(t, ok, "agent UA 关闭时不应写入 ALIBABA_CLOUD_USER_AGENT")
 }
 
 func TestMergeAgentSegmentIntoPluginEnvs_RuntimeEnvWinsOverParent(t *testing.T) {
 	snapshotAndUnsetAgentEnvs(t)
 	_ = os.Setenv("CURSOR_AGENT", "1")
-	t.Setenv(envCustomUserAgent, "from-parent")
+	t.Setenv(sysconfig.EnvUserAgent, "from-parent")
 	envs := map[string]string{
-		envCustomUserAgent: "from-runtime",
+		sysconfig.EnvUserAgent: "from-runtime",
 	}
 	MergeAgentSegmentIntoPluginEnvs(envs)
-	assert.Equal(t, "from-runtime", envs[envCustomUserAgent],
+	assert.Equal(t, "from-runtime", envs[sysconfig.EnvUserAgent],
 		"agent UA 关闭时不应追加 Agent 段")
 }

@@ -64,6 +64,37 @@ func TestNewCommandContext(t *testing.T) {
 	}, ctx)
 }
 
+func TestInvocationArgsAreDefensiveCopies(t *testing.T) {
+	ctx := NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	input := []string{"ecs", "DescribeInstances", "--InstanceIds", "--help"}
+	ctx.SetInvocationArgs(input)
+	input[0] = "mutated"
+
+	got := ctx.InvocationArgs()
+	assert.Equal(t, []string{"ecs", "DescribeInstances", "--InstanceIds", "--help"}, got)
+	got[1] = "mutated"
+	assert.Equal(t, "DescribeInstances", ctx.InvocationArgs()[1])
+}
+
+func TestContextAgentDetectionState(t *testing.T) {
+	ctx := NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	assert.False(t, ctx.IsAgent())
+	assert.Empty(t, ctx.AgentName())
+
+	ctx.SetAgentName("  codex  ")
+	assert.True(t, ctx.IsAgent())
+	assert.Equal(t, "codex", ctx.AgentName())
+
+	ctx.SetAgentName("  ")
+	assert.False(t, ctx.IsAgent())
+	assert.Empty(t, ctx.AgentName())
+
+	var nilContext *Context
+	assert.NotPanics(t, func() { nilContext.SetAgentName("codex") })
+	assert.False(t, nilContext.IsAgent())
+	assert.Empty(t, nilContext.AgentName())
+}
+
 func TestCtx(t *testing.T) {
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
@@ -98,7 +129,9 @@ func TestCheckFlags(t *testing.T) {
 	ctx.flags.flags[0].Fields[0].Required = false
 	ctx.flags.flags[0].ExcludeWith = []string{"MrX"}
 	ctx.flags.flags[0].value = "M"
-	assert.EqualError(t, ctx.CheckFlags(), "flag --MrX is exclusive with --MrX")
+	conflict := ctx.CheckFlags()
+	assert.EqualError(t, conflict, "flag --MrX is exclusive with --MrX")
+	assert.True(t, IsAIRecoveryEligible(conflict))
 }
 
 func TestDetectFlag(t *testing.T) {

@@ -16,40 +16,69 @@ package openapi
 import (
 	"bufio"
 	"bytes"
+	"errors"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/headers"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	"github.com/aliyun/aliyun-openapi-runtime/argparser"
+	"github.com/aliyun/aliyun-openapi-runtime/engine"
 
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"unicode"
 
 	jmespath "github.com/jmespath/go-jmespath"
 )
 
 // main entrance of aliyun cli
 type Commando struct {
-	profile        config.Profile
-	library        *Library
-	pluginIndex    *plugin.Index
-	pluginIndexErr error // set when remote plugin index could not be loaded
-	localManifest  *plugin.LocalManifest
-	pluginLoaded   bool
+	profile                 config.Profile
+	library                 *Library
+	pluginIndex             *plugin.Index
+	pluginIndexErr          error // set when remote plugin index could not be loaded
+	localManifest           *plugin.LocalManifest
+	localManifestErr        error
+	pluginLoaded            bool
+	localLoaded             bool
+	recoverySearchValidator RecoverySearchValidator
+	rootCommandHelpSpecs    []RootCommandSpec
+	rootFlagHelpSpecs       []RootFlagSpec
 }
 
 var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*responses.CommonResponse, error) {
 	return fn
+}
+
+var runtimeTryDispatch = runtimehost.TryDispatch
+
+var agentErrorNormalizer = normalizeAgentError
+
+var agentErrorNormalizerWithSearch = normalizeAgentErrorWithSearch
+
+type externalPluginError struct {
+	err error
+}
+
+func (e *externalPluginError) Error() string {
+	return e.err.Error()
+}
+
+func (e *externalPluginError) Unwrap() error {
+	return e.err
 }
 
 func NewCommando(w io.Writer, profile config.Profile) *Commando {
@@ -58,6 +87,20 @@ func NewCommando(w io.Writer, profile config.Profile) *Commando {
 	}
 	r.library = NewLibrary(w, profile.Language) //TODO: load from local repository
 	return r
+}
+
+// SetRecoverySearchValidator injects the host Help search validator used to
+// prove that a proposed --help-search recovery command has at least one match.
+// A nil validator always falls back to ordinary Help.
+func (c *Commando) SetRecoverySearchValidator(validate RecoverySearchValidator) {
+	c.recoverySearchValidator = validate
+}
+
+// SetRootHelpSpecs injects the explicit, locally registered root command and
+// flag classification used by the offline command-tree document.
+func (c *Commando) SetRootHelpSpecs(commands []RootCommandSpec, flags []RootFlagSpec) {
+	c.rootCommandHelpSpecs = append([]RootCommandSpec(nil), commands...)
+	c.rootFlagHelpSpecs = append([]RootFlagSpec(nil), flags...)
 }
 
 func (c *Commando) loadPlugins() {
@@ -73,6 +116,24 @@ func (c *Commando) loadPlugins() {
 	// Remote index may fail offline; local manifest still loads for installed plugins.
 	c.pluginIndex, c.pluginIndexErr = mgr.GetIndex()
 	c.localManifest, _ = mgr.GetLocalManifest()
+	c.localLoaded = true
+}
+
+// loadLocalPlugins reads only the on-disk manifest. Canonical Help paths use
+// it to preserve installed-plugin ownership without making Help depend on the
+// remote plugin index.
+func (c *Commando) loadLocalPlugins() {
+	if c.localLoaded || c.localManifest != nil {
+		c.localLoaded = true
+		return
+	}
+	c.localLoaded = true
+	mgr, err := plugin.NewManager()
+	if err != nil {
+		c.localManifestErr = err
+		return
+	}
+	c.localManifest, c.localManifestErr = mgr.GetLocalManifest()
 }
 
 func (c *Commando) printPluginIndexLoadFailureNote(ctx *cli.Context) {
@@ -85,9 +146,254 @@ func (c *Commando) printPluginIndexLoadFailureNote(ctx *cli.Context) {
 }
 
 func (c *Commando) InitWithCommand(cmd *cli.Command) {
-	cmd.Run = c.main
+	cmd.Run = c.run
 	cmd.Help = c.help
 	cmd.AutoComplete = c.complete
+	cmd.BeforeParseRoute = c.beforeParseHelpRoute
+	cmd.BeforeExecute = func(ctx *cli.Context, args []string) {
+		if c.isExtensionInvocation(args) {
+			return
+		}
+		c.applyEffectiveAIModeForArgs(ctx, args)
+	}
+	cmd.NormalizeError = c.finishCommandRun
+}
+
+func (c *Commando) run(ctx *cli.Context, args []string) error {
+	ctx.SetErrorNormalizationArgs(args)
+	c.applyEffectiveAIMode(ctx)
+	return c.main(ctx, args)
+}
+
+func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	var pluginErr *externalPluginError
+	if errors.As(err, &pluginErr) {
+		return pluginErr.err
+	}
+	if c.isExtensionInvocation(args) {
+		return err
+	}
+
+	// Credential-safe rendering in every mode: transport failures carry the
+	// signed request URL (AccessKeyId/Signature in the query for the legacy
+	// chain), which must never reach stderr, logs, or models. Sanitize before
+	// the AI gate so non-AI output is protected too.
+	err = sanitizeNetworkTransportError(err)
+	err = suggestKebabProfileFlagCase(err, args)
+
+	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
+
+	if !enabled && !explicitLocalErrorJSONRequested(ctx, err) {
+		normalizationArgs := recoveryNormalizationArgs(ctx, args, false)
+		context := newRecoveryContext(normalizationArgs)
+		if isSectionHelpAllConflict(err) {
+			if command := context.sectionSearchCommand("<keyword>"); command != "" {
+				return &sectionHelpAllRecoveryError{cause: err, command: command}
+			}
+		}
+		return err
+	}
+	normalizationArgs := recoveryNormalizationArgs(ctx, args, enabled)
+	if c.recoverySearchValidator != nil {
+		return agentErrorNormalizerWithSearch(err, normalizationArgs, c.recoverySearchValidator)
+	}
+	if c.library != nil && c.library.helpRepo != nil {
+		return agentErrorNormalizerWithSearch(err, normalizationArgs, func(request RecoverySearchRequest) bool {
+			return c.validateRecoverySearch(ctx, request)
+		})
+	}
+	return agentErrorNormalizer(err, normalizationArgs)
+}
+
+type kebabProfileFlagCaseError struct {
+	cause   error
+	product string
+	command string
+}
+
+func (e *kebabProfileFlagCaseError) Error() string {
+	return fmt.Sprintf("unknown flag --Profile, did you mean --profile? (run `aliyun %s %s --help` for accepted flags)",
+		e.product, e.command)
+}
+
+func (e *kebabProfileFlagCaseError) Unwrap() error { return e.cause }
+
+func (*kebabProfileFlagCaseError) AIRecoveryEligible() {}
+
+// suggestKebabProfileFlagCase preserves case-sensitive rejection while adding
+// the one host-flag correction approved for kebab OpenAPI commands.
+func suggestKebabProfileFlagCase(err error, args []string) error {
+	if len(args) < 2 || commandStyle(args[1]) != "kebab" {
+		return err
+	}
+	var unknown *argparser.UnknownFlagError
+	if !errors.As(err, &unknown) || unknown.Flag != "Profile" {
+		return err
+	}
+	if !containsString(unknown.Known, "profile") {
+		unknown.Known = append(append([]string(nil), unknown.Known...), "profile")
+	}
+	return &kebabProfileFlagCaseError{cause: err, product: args[0], command: args[1]}
+}
+
+type sectionHelpAllRecoveryError struct {
+	cause   error
+	command string
+}
+
+func (e *sectionHelpAllRecoveryError) Error() string     { return e.cause.Error() }
+func (e *sectionHelpAllRecoveryError) Unwrap() error     { return e.cause }
+func (*sectionHelpAllRecoveryError) AIRecoveryEligible() {}
+
+func (e *sectionHelpAllRecoveryError) GetTip(language string) string {
+	message := "Search this Help:"
+	if language == "zh" {
+		message = "搜索当前 Help："
+	}
+	return message + "\n  " + helpHintTextCommand(e.command)
+}
+
+func isSectionHelpAllConflict(err error) bool {
+	var runtimeConflict *engine.InvalidOptionCombinationError
+	if errors.As(err, &runtimeConflict) {
+		return containsString(runtimeConflict.Options, "--cli-section") && containsString(runtimeConflict.Options, "--help-all")
+	}
+	var hostConflict *InvalidOptionCombinationError
+	return errors.As(err, &hostConflict) &&
+		containsString(hostConflict.Options, "--cli-section") && containsString(hostConflict.Options, "--help-all")
+}
+
+// explicitLocalErrorJSONRequested reports whether the caller explicitly
+// selected JSON output for a CLI-local error. --cli-output is orthogonal to
+// Help, so this check belongs in the shared error-rendering gate rather than
+// the Help router. Remote server, network, and credential errors retain their
+// existing non-AI rendering.
+func explicitLocalErrorJSONRequested(ctx *cli.Context, err error) bool {
+	if ctx == nil || ctx.Flags() == nil || !cli.IsAIRecoveryEligible(err) {
+		return false
+	}
+	flag := CliOutputFlag(ctx.Flags())
+	if flag == nil || !flag.IsAssigned() {
+		return false
+	}
+	value, _ := flag.GetValue()
+	return strings.TrimSpace(value) == string(cli.HelpOutputJSON)
+}
+
+func (c *Commando) isExtensionInvocation(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	for _, spec := range c.rootCommandHelpSpecs {
+		if spec.Group == RootGroupExtension && len(spec.Path) > 0 && spec.Path[0] == args[0] {
+			return true
+		}
+	}
+	return false
+}
+
+// adaptEngineUnknownCommand wraps the engine's UnknownCommandError into the
+// host error type that carries suggestions, so kebab typos on engine-served
+// products (baseline or installed meta plugin) get did-you-mean output in
+// both human and AI modes. Other errors pass through unchanged.
+func (c *Commando) adaptEngineUnknownCommand(err error) error {
+	if err == nil {
+		return nil
+	}
+	var unknown *engine.UnknownCommandError
+	if !errors.As(err, &unknown) {
+		return err
+	}
+	return &InvalidBaselineCommandError{
+		Product:    unknown.Product,
+		Command:    unknown.Command,
+		Candidates: runtimehost.ProductCommands(unknown.Product),
+		Err:        err,
+	}
+}
+
+func (c *Commando) applyEffectiveAIMode(ctx *cli.Context) bool {
+	return c.applyEffectiveAIModeForArgs(ctx, nil)
+}
+
+func (c *Commando) applyEffectiveAIModeForArgs(ctx *cli.Context, args []string) bool {
+	cfg, loadErr := aimode.Load(config.GetConfigDir(ctx))
+	if loadErr != nil {
+		cfg = aimode.DefaultAiConfig()
+	}
+	forceOn, forceOff := CliAIOverridesForOpenAPI(ctx)
+	for _, arg := range args {
+		switch arg {
+		case "--no-cli-ai-mode":
+			forceOff = true
+		case "--cli-ai-mode":
+			forceOn = true
+		}
+	}
+	enabled := aimode.EnabledForCommand(cfg, forceOn, forceOff)
+	cli.SetNoColorOverride(enabled)
+	return enabled
+}
+
+func recoveryNormalizationArgs(ctx *cli.Context, args []string, aiMode ...bool) []string {
+	aiEnabled := len(aiMode) > 0 && aiMode[0]
+	result := make([]string, 0, len(args)+2)
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+		if arg != "--cli-ai-mode" && arg != "--no-cli-ai-mode" {
+			if aiEnabled && arg == "--"+CliOutputFlagName {
+				index++
+				continue
+			}
+			if aiEnabled && strings.HasPrefix(arg, "--"+CliOutputFlagName+"=") {
+				continue
+			}
+			result = append(result, arg)
+		}
+	}
+	if ctx == nil || ctx.Flags() == nil {
+		return result
+	}
+	if _, version := explicitVersion(result); version == "" {
+		versionFlag := VersionFlag(ctx.Flags())
+		if versionFlag != nil {
+			version, assigned := versionFlag.GetValue()
+			if assigned && strings.TrimSpace(version) != "" {
+				flagName := "--version"
+				pathOffset := 0
+				if len(result) > 0 && result[0] == "help" {
+					pathOffset = 1
+				}
+				if len(result) > pathOffset+1 && commandStyle(result[pathOffset+1]) == "kebab" {
+					flagName = "--api-version"
+				}
+				result = append(result, flagName, version)
+			}
+		}
+	}
+	if _, present := recoveryOptionValue(result, "--"+CliHelpSectionFlagName); !present {
+		if flag := CliHelpSectionFlag(ctx.Flags()); flag != nil && flag.IsAssigned() {
+			value, _ := flag.GetValue()
+			if value = strings.TrimSpace(value); value != "" {
+				result = append(result, "--"+CliHelpSectionFlagName, value)
+			}
+		}
+	}
+	if !aiEnabled {
+		if _, present := recoveryOptionValue(result, "--"+CliOutputFlagName); !present {
+			if flag := CliOutputFlag(ctx.Flags()); flag != nil && flag.IsAssigned() {
+				value, _ := flag.GetValue()
+				if strings.TrimSpace(value) == string(cli.HelpOutputJSON) {
+					result = append(result, "--"+CliOutputFlagName, string(cli.HelpOutputJSON))
+				}
+			}
+		}
+	}
+	return result
 }
 
 func DetectInConfigureMode(flags *cli.FlagSet) bool {
@@ -160,6 +466,9 @@ var stdin io.Reader = os.Stdin
 
 func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// fmt.Println("commando main", args)
+	if canonicalHelpOptionAssigned(ctx.Flags()) {
+		return c.help(ctx, args)
+	}
 
 	// --estimate-cost needs a product + api to estimate against. Without an
 	// early fail here, len(args) == 0 below would silently print usage and
@@ -169,7 +478,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		return cli.NewErrorWithTip(
 			fmt.Errorf("--estimate-cost requires a product and an API name"),
 			"example: aliyun ecs RunInstances --version 2014-05-26 --RegionId cn-hangzhou ... --estimate-cost\n"+
-				"        run `aliyun --list-supported-pricing-apis` to see every API that supports cost estimation")
+				"        run `aliyun utils list-supported-pricing-apis` to see every API that supports cost estimation")
 	}
 
 	// --estimate-cost-context only makes sense alongside --estimate-cost (it
@@ -177,80 +486,26 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	// forgotten --estimate-cost doesn't silently run the real API.
 	if EstimateCostContextFlag(ctx.Flags()).IsAssigned() && !EstimateCostFlag(ctx.Flags()).IsAssigned() {
 		return cli.NewErrorWithTip(
-			fmt.Errorf("--estimate-cost-context requires --estimate-cost"),
+			&InvalidOptionCombinationError{
+				Options: []string{"--estimate-cost-context", "--estimate-cost"},
+				Err:     fmt.Errorf("--estimate-cost-context requires --estimate-cost"),
+			},
 			"add --estimate-cost, e.g. aliyun ecs RunInstances ... --estimate-cost --estimate-cost-context EstimatedInternetTrafficOutGB=100")
 	}
 
 	// aliyun
 	if len(args) == 0 {
-		c.printUsage(ctx)
-		return nil
+		return c.help(ctx, args)
 	}
-
-	// Check if we should show original product help instead of plugin help, only and need to be applied in product level
-	envShowOriginalHelp := os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP")
-	showOriginalProductHelp := envShowOriginalHelp == "true" || envShowOriginalHelp == "1"
 
 	// Strategy: Plugin Execution
 	// If the second argument (API name) is all lowercase or version, use plugin.
-	// If only one arg and corresponding plugin is installed, use plugin, unless showOriginalProductHelp is true.
-	// If only one arg and corresponding plugin is not installed, show original product help.
+	// Product-level help (one arg) is routed centrally by printProductUsage.
 
 	// fmt.Println("args", args)
 	// fmt.Println("os.Args", os.Args)
-	if len(args) == 1 && !showOriginalProductHelp {
-		// 单产品输入，无论是否添加--help，都先由安装的插件运行，插件未安装则执行下面的运行逻辑
-		// 使用 ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP 环境变量可以显示原始产品的 help 信息，而不是插件 help
-		// 单产品运行就是--help
-		installed, pluginName, err := plugin.IsPluginInstalled(args[0])
-		if err != nil {
-			return fmt.Errorf("failed to check plugin status: %w", err)
-		}
-		if installed {
-			c.setLangEnv(ctx)
-			if os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP") == "true" {
-				// Fall through to built-in help
-			} else {
-				// Extract arguments from os.Args to preserve flags for plugin help, like --api-version
-				var pluginArgs []string
-				cmdIndex := -1
-				for i, arg := range os.Args {
-					if arg == args[0] {
-						cmdIndex = i
-						break
-					}
-				}
-				if cmdIndex != -1 && cmdIndex < len(os.Args) {
-					pluginArgs = os.Args[cmdIndex:]
-				} else {
-					pluginArgs = args
-				}
-
-				ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
-				if err != nil {
-					return err
-				}
-				if ok {
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\nNote: The help information for product '%s' is provided by the installed plugin '%s'.\n", args[0], pluginName)
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, "To view the legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true\n")
-					return nil
-				}
-			}
-		} else {
-			c.loadPlugins()
-			if c.pluginIndex != nil {
-				for _, pInfo := range c.pluginIndex.Plugins {
-					if strings.EqualFold(pInfo.ProductCode, args[0]) {
-						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "\n[Suggestion] A dedicated product plugin '%s' is available for '%s'.\n", pInfo.Name, args[0])
-						cli.PrintfWithColor(ctx.Stdout(), cli.Green, "Run 'aliyun plugin install --names %s' to install it for enhanced features.\n\n", pInfo.Name)
-						break
-					}
-				}
-			} else if c.pluginIndexErr != nil {
-				c.printPluginIndexLoadFailureNote(ctx)
-			}
-		}
-
+	if len(args) == 1 {
+		return c.help(ctx, args)
 	} else if len(args) > 1 {
 		apiOrMethod := args[1]
 		// Check if it's all lowercase (plugin format) and not an HTTP method
@@ -276,12 +531,44 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			if err != nil {
 				return fmt.Errorf("failed to check plugin status: %w", err)
 			}
+
+			// aliyun-openapi-runtime routing (does NOT absorb installed Go plugin processes). A product ships as exactly one form:
+			//   - installed Go plugin   -> fall through to ExecutePlugin
+			//   - installed meta plugin -> aliyun-openapi-runtime engine
+			//   - not installed but the engine resolves it (baseline / user meta plugin) -> aliyun-openapi-runtime engine.
+			//     Products marked distribution=="go" are abstained by the engine so they still reach auto-install.
+			if installed {
+				if ptype, ok := plugin.InstalledPluginType(args[0]); ok && ptype == plugin.PluginTypeMeta {
+					if err := plugin.ValidatePluginCliVersion(args[0]); err != nil {
+						return err
+					}
+					// Meta plugins have no executable in which to register the package-level version command.
+					// Read it from the installed manifest instead of forwarding "version" to the OpenAPI runtime as an API name.
+					if apiOrMethod == "version" {
+						name, version, err := plugin.InstalledPluginPackageVersion(args[0])
+						if err != nil {
+							return err
+						}
+						cli.Printf(ctx.Stdout(), "%s %s\n", name, version)
+						return nil
+					}
+					return c.adaptEngineUnknownCommand(runtimehost.Dispatch(ctx, pluginArgs))
+				}
+			} else {
+				if validationErr := c.validateCanonicalRuntimeCommand(args, ctx); validationErr != nil {
+					return validationErr
+				}
+				if handled, derr := runtimeTryDispatch(ctx, pluginArgs); handled {
+					return c.adaptEngineUnknownCommand(derr)
+				}
+			}
+
 			if !installed {
 				ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
 				// profile 加载 / 校验失败必须 fail-fast，不要 silent 吞错。否则会停留在main.go 启动时的默认 profile，--profile xxx 的语义丢失，用户毫无感知。
 				profile, err := config.LoadProfileWithContext(ctx)
 				if err != nil {
-					return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it")
+					return cli.NewErrorWithTip(&credentialConfigurationError{Err: err}, "Configuration failed, use `aliyun configure` to configure it")
 				}
 				c.profile = profile
 				// 需要判断是否plugin auto install enabled, 且支持环境变量
@@ -293,11 +580,19 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					return err
 				}
 				if foundPluginName == "" {
+					if runtimehost.HasProduct(args[0]) {
+						return &InvalidBaselineCommandError{
+							Product:    args[0],
+							Command:    args[1],
+							Candidates: runtimehost.ProductCommands(args[0]),
+							Err:        c.invalidBaselineCommandError(args[0], args[1]),
+						}
+					}
 					c.loadPlugins()
 					if c.pluginIndex != nil {
 						for _, pInfo := range c.pluginIndex.Plugins {
 							if strings.EqualFold(pInfo.ProductCode, args[0]) {
-								return fmt.Errorf("'%s' is not a valid built-in product.\nA plugin '%s' is available which supports this product.\nRun 'aliyun plugin install --names %s' to install it.", args[0], pInfo.Name, pInfo.Name)
+								return fmt.Errorf("'%s' is not a valid built-in product.\nA plugin '%s' is available which supports this product.\nRun 'aliyun plugin install --name %s' to install it.", args[0], pInfo.Name, pInfo.Name)
 							}
 						}
 					} else if c.pluginIndexErr != nil {
@@ -333,23 +628,23 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					envs, rtErr = c.profile.GetRuntimeEnv(ctx)
 					if rtErr != nil {
 						if profileRequired {
-							return cli.NewErrorWithTip(rtErr,
-								fmt.Sprintf("profile %q: failed to resolve credentials", c.profile.Name))
+							return cli.NewErrorWithTip(&credentialConfigurationError{Err: rtErr},
+								"profile %q: failed to resolve credentials", c.profile.Name)
 						}
 						envs = config.BuildBaselineEnv(ctx)
 					}
 				} else {
 					if profileRequired {
 						if profileErr != nil {
-							return cli.NewErrorWithTip(profileErr, "Configuration failed, use `aliyun configure` to configure it")
+							return cli.NewErrorWithTip(&credentialConfigurationError{Err: profileErr}, "Configuration failed, use `aliyun configure` to configure it")
 						}
-						return fmt.Errorf("profile not found, use `aliyun configure` to configure it")
+						return &credentialConfigurationError{Err: fmt.Errorf("profile not found, use `aliyun configure` to configure it")}
 					}
 					envs = config.BuildBaselineEnv(ctx)
 				}
 
 				configDir := config.GetConfigDir(ctx)
-				forceOn, forceOff := CliAIOverrides(ctx.Flags())
+				forceOn, forceOff := CliAIOverridesForOpenAPI(ctx)
 				aimode.MergeUserAgentIntoPluginEnvs(configDir, envs, forceOn, forceOff)
 				util.MergeAgentSegmentIntoPluginEnvs(envs)
 				safety.MergeSafetyPolicyPathIntoEnvs(configDir, envs)
@@ -377,7 +672,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 
 			ok, err := plugin.ExecutePlugin(args[0], pluginArgs, ctx)
 			if err != nil {
-				return err
+				return &externalPluginError{err: err}
 			}
 			if !ok {
 				return fmt.Errorf("plugin %s not found", pluginName)
@@ -390,18 +685,32 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		return c.help(ctx, args)
 	}
 
+	// Reject an unknown built-in API before profile resolution. This is a
+	// local command-tree error and must not be masked by an unrelated missing
+	// credential/region error. Installed and runtime plugins have already had
+	// the opportunity to own the invocation above.
+	if err := c.validateCanonicalAPICommand(args, ctx); err != nil {
+		return err
+	}
+
 	// detect if in configure mode
 	ctx.SetInConfigureMode(DetectInConfigureMode(ctx.Flags()))
 
 	// update current `Profile` with flags
 	var err error
-	c.profile, err = config.LoadProfileWithContext(ctx)
-	if err != nil {
-		return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it")
+	if clientDryRunAssigned(ctx) {
+		c.profile, err = config.LoadProfileForDryRunWithContext(ctx)
+	} else {
+		c.profile, err = config.LoadProfileWithContext(ctx)
 	}
-	err = c.profile.Validate()
 	if err != nil {
-		return cli.NewErrorWithTip(err, "Configuration failed, use `aliyun configure` to configure it.")
+		return cli.NewErrorWithTip(&credentialConfigurationError{Err: err}, "Configuration failed, use `aliyun configure` to configure it")
+	}
+	if !clientDryRunAssigned(ctx) {
+		err = c.profile.Validate()
+		if err != nil {
+			return cli.NewErrorWithTip(&credentialConfigurationError{Err: err}, "Configuration failed, use `aliyun configure` to configure it.")
+		}
 	}
 	i18n.SetLanguage(c.profile.Language)
 
@@ -410,11 +719,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	//   aliyun <productCode> <method> --param1 value1
 	//   aliyun <productCode> GET <path>
 	productName := args[0]
-	if len(args) == 1 {
-		// aliyun <productCode>
-		// TODO: aliyun pluginName ...
-		return c.library.PrintProductUsage(productName, true)
-	} else if len(args) == 2 {
+	if len(args) == 2 {
 		// rpc or restful call
 		// aliyun <productCode> <method> --param1 value1
 		product, _ := c.library.GetProduct(args[0])
@@ -441,7 +746,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			return err
 		}
 		if product.ApiStyle == "restful" {
-			api, found := meta.HookGetApi(c.library.GetApi)(product.Code, product.Version, args[1])
+			api, found := c.library.GetApi(product.Code, product.Version, args[1])
 			// For restful products, the 2-arg form `aliyun <product> <ApiName>` requires a valid ApiName so we can resolve the underlying Method + PathPattern from metadata.
 			// Otherwise we'd fall through with empty Method/PathPattern and surface the confusing "product 'xxx' need restful call" error from checkRestfulMethod.
 			force := ForceFlag(ctx.Flags()).IsAssigned()
@@ -461,15 +766,30 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					return &InvalidApiError{Name: args[1], product: &product}
 				}
 			}
-			c.CheckApiParamWithBuildInArgs(ctx, api)
 			ctx.Command().Name = args[1]
 			if ShouldUseOpenapi(ctx, &product) {
-				return c.processApiInvoke(ctx, &product, &api, api.Method, api.PathPattern)
+				if api == nil {
+					return &InvalidApiError{Name: args[1], product: &product}
+				}
+				c.CheckApiParamWithBuildInArgs(ctx, api)
+				return c.processApiInvoke(ctx, &product, api, api.Method, api.PathPattern)
 			}
+			if api == nil {
+				return c.processInvoke(ctx, productName, args[1], "")
+			}
+			c.CheckApiParamWithBuildInArgs(ctx, api)
 			return c.processInvoke(ctx, productName, api.Method, api.PathPattern)
 		} else {
 			// RPC need check API parameters too
-			api, _ := c.library.GetApi(product.Code, product.Version, args[1])
+			api, found := c.library.GetApi(product.Code, product.Version, args[1])
+			if ShouldUseOpenapi(ctx, &product) {
+				if !found || api == nil {
+					return &InvalidApiError{Name: args[1], product: &product}
+				}
+				ctx.Command().Name = args[1]
+				c.CheckApiParamWithBuildInArgs(ctx, api)
+				return c.processApiInvoke(ctx, &product, api, api.GetMethod(), api.PathPattern)
+			}
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 		}
 
@@ -478,7 +798,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		// restful call
 		// aliyun <productCode> {GET|PUT|POST|DELETE} <path> --
 		product, _ := c.library.GetProduct(productName)
-		api, find := meta.HookGetApiByPath(c.library.GetApiByPath)(product.Code, product.Version, args[1], args[2])
+		api, find := c.library.GetApiByPath(product.Code, product.Version, args[1], args[2])
 		force := ForceFlag(ctx.Flags()).IsAssigned()
 		if !find && !force {
 			// throw error, can not find api by path
@@ -500,7 +820,11 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				return cli.NewErrorWithTip(fmt.Errorf("too broad path: %s for method: %s, please use specific ApiName instead",
 					args[2], args[1]), "Please confirm the API path")
 			}
-			return c.processApiInvoke(ctx, &product, &api, args[1], args[2])
+			if api == nil {
+				return cli.NewErrorWithTip(fmt.Errorf("can not find api by path %s", args[2]),
+					"Please confirm if the API path exists")
+			}
+			return c.processApiInvoke(ctx, &product, api, args[1], args[2])
 		}
 		return c.processInvoke(ctx, productName, args[1], args[2])
 	} else {
@@ -509,13 +833,19 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 	}
 }
 
-func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api *meta.Api, method string, path string) error {
+func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api *canonicalmeta.API, method string, path string) error {
 	if product == nil {
 		return fmt.Errorf("invalid product, please check product code")
 	}
 
 	apiContext, err := c.createHttpContext(ctx, product, api, method, path)
 	if err != nil {
+		return err
+	}
+	if err = validateLegacyDocRequired(ctx, api); err != nil {
+		return err
+	}
+	if err = validateLegacyConstraints(ctx, api); err != nil {
 		return err
 	}
 	err = apiContext.Prepare(ctx)
@@ -553,6 +883,13 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 		return c.processEstimateCostOpenapi(ctx, oc)
 	}
 
+	// SSE APIs stream events instead of returning a single buffered response.
+	if oc, ok := apiContext.(*OpenapiContext); ok && oc.IsSSE() {
+		return hookHttpContextCall(func() error {
+			return oc.CallSSE(ctx.Stdout())
+		})()
+	}
+
 	err = hookHttpContextCall(apiContext.Call)()
 	if err != nil {
 		return err
@@ -583,7 +920,7 @@ func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api
 			return err
 		}
 	}
-	out = sortJSON(out)
+	out = formatResponseJSON(ctx, out)
 	cli.Println(ctx.Stdout(), out)
 	return nil
 }
@@ -592,6 +929,13 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 	// create specific invoker
 	invoker, err := c.createInvoker(ctx, productCode, apiOrMethod, path)
 	if err != nil {
+		return err
+	}
+	legacyAPI := legacyAPIForInvoker(invoker)
+	if err = validateLegacyDocRequiredWithImplicit(ctx, legacyAPI, legacyImplicitDocRequiredArgs(invoker)); err != nil {
+		return err
+	}
+	if err = validateLegacyConstraints(ctx, legacyAPI); err != nil {
 		return err
 	}
 	err = invoker.Prepare(ctx)
@@ -659,10 +1003,27 @@ func (c *Commando) processInvoke(ctx *cli.Context, productCode string, apiOrMeth
 		}
 	}
 
-	out = sortJSON(out)
+	out = formatResponseJSON(ctx, out)
 
 	cli.Println(ctx.Stdout(), out)
 	return nil
+}
+
+// formatResponseJSON normalizes response output for printing: AI mode gets a
+// compact encoding (server key order preserved), every other mode keeps the
+// pretty-printed, key-sorted form.
+func formatResponseJSON(ctx *cli.Context, content string) string {
+	if !legacyAIModeEnabled(ctx) {
+		return sortJSON(content)
+	}
+	if !json.Valid([]byte(content)) {
+		return content
+	}
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, []byte(content)); err != nil {
+		return content
+	}
+	return buf.String()
 }
 
 func sortJSON(content string) string {
@@ -723,6 +1084,16 @@ func dryRunOpenapiEndpoint(ctx *cli.Context, o *OpenapiContext) string {
 			return rid + ".log.aliyuncs.com"
 		}
 	}
+	if h.product != nil {
+		region := effectiveDryRunRegion(ctx, h.profile)
+		endpointType := ""
+		if h.profile != nil {
+			endpointType = h.profile.EndpointType
+		}
+		if endpoint, err := h.product.GetEndpointWithType(region, nil, endpointType); err == nil {
+			return endpoint
+		}
+	}
 	return ""
 }
 
@@ -750,7 +1121,7 @@ func dryRunRestfulAPIByPath(library *Library, productCode, version, method, path
 	if library == nil || productCode == "" || method == "" || path == "" {
 		return fallback
 	}
-	api, ok := meta.HookGetApiByPath(library.GetApiByPath)(productCode, version, method, path)
+	api, ok := library.GetApiByPath(productCode, version, method, path)
 	if ok && api.Name != "" {
 		return api.Name
 	}
@@ -841,7 +1212,10 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 			//
 			// Rpc call
 			if path != "" {
-				return nil, cli.NewErrorWithTip(fmt.Errorf("invalid argument %s", path),
+				return nil, cli.NewErrorWithTip(&InvalidArgumentError{
+					FieldPath: path,
+					Err:       fmt.Errorf("invalid argument %s", path),
+				},
 					"Use `aliyun help %s` see more information.", product.GetLowerCode())
 			}
 			if force {
@@ -850,10 +1224,10 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 					apiOrMethod,
 				}, nil
 			}
-			if api, ok := c.library.GetApi(product.Code, product.Version, apiOrMethod); ok {
+			if api := c.library.GetCanonicalApi(product.Code, product.Version, apiOrMethod); api != nil {
 				return &RpcInvoker{
 					basicInvoker,
-					&api,
+					api,
 				}, nil
 			}
 			c.loadPlugins()
@@ -881,13 +1255,13 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 				"Use `aliyun %s {GET|PUT|POST|DELETE} <path> ...`", product.GetLowerCode())
 		}
 
-		if api, ok := c.library.GetApi(product.Code, product.Version, ctx.Command().Name); ok {
+		if api := c.library.GetCanonicalApi(product.Code, product.Version, ctx.Command().Name); api != nil {
 			return &RestfulInvoker{
 				basicInvoker,
 				method,
 				path,
 				force,
-				&api,
+				api,
 			}, nil
 		}
 
@@ -957,7 +1331,7 @@ func ApplyQueryFilter(ctx *cli.Context, output string) (string, error) {
 
 	result, err := jmespath.Search(queryExpr, v)
 	if err != nil {
-		return output, fmt.Errorf("JMESPath query failed: %w", err)
+		return output, &engine.QueryFilterError{Expr: queryExpr, Err: err}
 	}
 
 	resultBytes, err := json.Marshal(result)
@@ -969,17 +1343,12 @@ func ApplyQueryFilter(ctx *cli.Context, output string) (string, error) {
 }
 
 // openapi context
-func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, api *meta.Api, method string, path string) (HttpInvoker, error) {
+func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, api *canonicalmeta.API, method string, path string) (HttpInvoker, error) {
 	if product == nil {
 		return nil, fmt.Errorf("invalid product, please check product code")
 	}
 
 	force := ForceFlag(ctx.Flags()).IsAssigned()
-	apiContext := NewHttpContext(&c.profile)
-	err := apiContext.Init(ctx, product)
-	if err != nil {
-		return nil, err
-	}
 	if force {
 		if version, _ := ctx.Flags().Get("version").GetValue(); version != "" {
 			if style, ok := c.library.GetStyle(product.Code, version); ok {
@@ -996,9 +1365,30 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 		}
 	}
 
-	if strings.ToLower(product.ApiStyle) == "rpc" || !ShouldUseOpenapi(ctx, product) {
+	// Validate routing before building the client: an unsupported product must
+	// report the style/product error, not an endpoint-resolution failure that
+	// only the routed channel would ever hit.
+	if !ShouldUseOpenapi(ctx, product) {
 		return nil, cli.NewErrorWithTip(fmt.Errorf("unchecked api style: %s or product: %s", product.ApiStyle, product.Code),
 			"Unsupported api style or product")
+	}
+
+	apiContext := NewHttpContext(&c.profile)
+	if err := apiContext.Init(ctx, product); err != nil {
+		return nil, err
+	}
+
+	// RPC style: the darabonba channel uses params.Pathname directly, so no
+	// restful method/path validation is needed. Default the pathname to "/"
+	// when the API declares no explicit path (the common RPC case).
+	if strings.ToLower(product.ApiStyle) == "rpc" {
+		if path == "" {
+			path = "/"
+		}
+		if method == "" {
+			method = "POST"
+		}
+		return &OpenapiContext{HttpContext: apiContext, method: method, path: path, api: api}, nil
 	}
 
 	// RESTful style: validate method and path
@@ -1013,11 +1403,119 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 			product.GetLowerCode(),
 			product.GetLowerCode())
 	}
-	return &OpenapiContext{apiContext, method, path, api}, nil
+	return &OpenapiContext{HttpContext: apiContext, method: method, path: path, api: api}, nil
 }
 
 func (c *Commando) help(ctx *cli.Context, args []string) error {
+	ctx.SetErrorNormalizationArgs(args)
+	raw := ctx.InvocationArgs()
+	if len(raw) == 0 {
+		raw = append(append([]string(nil), args...), "--help")
+	}
+	if delegated, err := c.delegateInstalledPluginHelp(ctx, raw); delegated {
+		return err
+	}
+	positionals := rawHelpPositionals(raw)
+	hostCommand := len(positionals) > 0 && ctx.Command() != nil && ctx.Command().GetSubCommand(positionals[0]) != nil
+	if !hostCommand && runtimeHelpCandidate(positionals) {
+		if handled, err := runtimeTryHelp(ctx, raw); handled {
+			return err
+		}
+	}
+	aiMode := c.applyEffectiveAIModeForArgs(ctx, raw)
+	target, _, err := c.resolveParsedHelpTarget(ctx, args)
+	if err != nil {
+		return err
+	}
+	return c.renderHostHelpTarget(ctx, target, aiMode)
+}
+
+// legacyHelp retains the pre-V2 implementation for focused compatibility
+// tests while every public host entry is routed through help above.
+func (c *Commando) legacyHelp(ctx *cli.Context, args []string) error {
+	ctx.SetErrorNormalizationArgs(args)
+	c.applyEffectiveAIMode(ctx)
 	// fmt.Println("commando help", args)
+	helpOpts, err := parseHelpOptions(ctx, args)
+	if err != nil {
+		return err
+	}
+	if formatFlag := MachineHelpFormatFlag(ctx.Flags()); formatFlag != nil && formatFlag.IsAssigned() {
+		format, _ := formatFlag.GetValue()
+		return c.printMachineHelp(ctx, args, format, helpOpts)
+	}
+
+	c.loadLocalPlugins()
+	aiMode := legacyAIModeEnabled(ctx)
+	installedPlugin := len(args) > 0 && c.hasInstalledProductPlugin(args[0])
+	if helpOpts.Section == helpSectionResponse && len(args) == 2 && !installedPlugin {
+		if c.library == nil || c.library.helpRepo == nil {
+			return fmt.Errorf("response Help is unavailable: canonical metadata repository is unavailable")
+		}
+		document, buildErr := newMachineHelpService(c.library.helpRepo).buildAPIResponse(args[0], args[1], requestedMachineHelpVersion(ctx))
+		if buildErr != nil {
+			return buildErr
+		}
+		if applyErr := applyResponseHelpOptions(document, helpOpts); applyErr != nil {
+			return applyErr
+		}
+		if helpOpts.Search != "" {
+			document.ResponseQuery = nil
+			if document.OutputSchema != nil {
+				document.ResponseQuery = projectResponseQueryExample(
+					helpResponseSchema(document),
+					document.Target.Path[1],
+					document.Target.Path[len(document.Target.Path)-1],
+					document.Target.RequestedStyle,
+					requestedMachineHelpVersion(ctx),
+				)
+			}
+		}
+		if renderErr := renderResponseHelpText(ctx.Stdout(), document); renderErr != nil {
+			return renderErr
+		}
+		return c.finishCanonicalTextHelp(ctx, aiMode)
+	}
+
+	// The new Search and AI listing views use only the local Canonical index.
+	// Installed plugins retain ownership of their text Help and bypass this path.
+	if !installedPlugin && c.library != nil && c.library.helpRepo != nil {
+		service := newMachineHelpService(c.library.helpRepo)
+		switch {
+		case len(args) == 0 && (helpOpts.Search != "" || helpOpts.All || aiMode):
+			document, buildErr := service.buildRoot(ctx.Command())
+			if buildErr != nil {
+				return buildErr
+			}
+			applyRootHelpOptions(document, helpOpts, aiMode)
+			if renderErr := renderCanonicalRootText(ctx.Stdout(), document, helpOpts.Search); renderErr != nil {
+				return renderErr
+			}
+			return c.finishCanonicalTextHelp(ctx, aiMode)
+		case len(args) == 1 && (helpOpts.Search != "" || helpOpts.All || aiMode):
+			style := ""
+			if productHelpEnvEnabled(originalProductHelpEnv) {
+				style = "camel"
+			} else if productHelpEnvEnabled(baselineProductHelpEnv) {
+				style = "kebab"
+			}
+			document, buildErr := service.buildProductForStyle(args[0], requestedMachineHelpVersion(ctx), style)
+			if buildErr != nil {
+				return buildErr
+			}
+			applyProductHelpOptions(document, helpOpts, aiMode)
+			if renderErr := renderCanonicalProductText(ctx.Stdout(), document, helpOpts.Search); renderErr != nil {
+				return renderErr
+			}
+			return c.finishCanonicalTextHelp(ctx, aiMode)
+		case len(args) == 2 && (helpOpts.Search != "" || helpOpts.All || aiMode):
+			document, buildErr := service.buildAPI(args[0], args[1], requestedMachineHelpVersion(ctx))
+			if buildErr != nil {
+				return buildErr
+			}
+			return c.renderProjectedOriginalRequestHelp(ctx, args, document, helpOpts, aiMode)
+		}
+	}
 	c.loadPlugins()
 	cmd := ctx.Command()
 	if len(args) == 0 {
@@ -1028,13 +1526,36 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 		cmd.PrintSample(ctx)
 		c.printProducts(ctx)
 		cmd.PrintTail(ctx)
+		if !aiMode {
+			return renderAIModeEnableHelpHint(ctx.Stdout())
+		}
 		return nil
 	} else if len(args) == 1 {
 		cmd.PrintHead(ctx)
-		return c.printProductUsage(ctx, args[0])
+		if err := c.printProductUsageForMode(ctx, args[0], aiMode); err != nil {
+			return err
+		}
+		if !installedPlugin && !aiMode {
+			return renderAIModeEnableHelpHint(ctx.Stdout())
+		}
+		return nil
 	} else if len(args) == 2 {
 		cmd.PrintHead(ctx)
-		return c.printApiUsage(ctx, args[0], args[1])
+		if err := c.printApiUsage(ctx, args[0], args[1]); err != nil {
+			return err
+		}
+		if !installedPlugin && c.library != nil && c.library.helpRepo != nil {
+			document, buildErr := newMachineHelpService(c.library.helpRepo).buildAPI(args[0], args[1], requestedMachineHelpVersion(ctx))
+			if buildErr == nil {
+				if renderErr := renderRequestQueryExampleText(ctx.Stdout(), document.ResponseQuery); renderErr != nil {
+					return renderErr
+				}
+			}
+		}
+		if !installedPlugin && !aiMode {
+			return renderAIModeEnableHelpHint(ctx.Stdout())
+		}
+		return nil
 	} else {
 		// Layer 3: plugin sub-command help (3+ levels deep).
 		if delegated, derr := c.tryDelegatePluginHelp(ctx, args); delegated {
@@ -1042,6 +1563,38 @@ func (c *Commando) help(ctx *cli.Context, args []string) error {
 		}
 		return fmt.Errorf("too many arguments: %d", len(args))
 	}
+}
+
+func (c *Commando) renderProjectedOriginalRequestHelp(
+	ctx *cli.Context,
+	args []string,
+	document *machineHelpAPIDocument,
+	options helpOptions,
+	aiMode bool,
+) error {
+	var original bytes.Buffer
+	captureCtx := cli.NewCommandContext(&original, ctx.Stderr())
+	captureCtx.SetAgentName(ctx.AgentName())
+	if cmd := ctx.Command(); cmd != nil {
+		captureCtx.EnterCommand(cmd)
+		cmd.PrintHead(captureCtx)
+	}
+	if err := c.printApiUsage(captureCtx, args[0], args[1]); err != nil {
+		_, _ = io.Copy(ctx.Stdout(), &original)
+		return err
+	}
+
+	projected, _ := projectOriginalRequestHelpText(original.String(), options, aiMode)
+	if _, err := io.WriteString(ctx.Stdout(), projected); err != nil {
+		return err
+	}
+	if err := renderRequestQueryExampleText(ctx.Stdout(), document.ResponseQuery); err != nil {
+		return err
+	}
+	if !aiMode {
+		return renderAIModeEnableHelpHint(ctx.Stdout())
+	}
+	return nil
 }
 
 func (c *Commando) complete(ctx *cli.Context, args []string) []string {
@@ -1069,24 +1622,27 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 
 	if product.ApiStyle == "rpc" {
 		if len(args) == 1 {
-			for _, name := range product.ApiNames {
-				if !strings.HasPrefix(strings.ToLower(name), strings.ToLower(ctx.Completion().Current)) {
+			kebabCase := c.shouldCompleteKebabCaseAPINames(product)
+			for _, completionName := range c.library.GetAPINamesForCompletion(product, kebabCase) {
+				if !strings.HasPrefix(strings.ToLower(completionName), strings.ToLower(ctx.Completion().Current)) {
 					continue
 				}
-				cli.PrintfWithColor(w, "", "%s\n", name)
+				cli.PrintfWithColor(w, "", "%s\n", completionName)
 			}
 			return r
 		}
-		api, ok := c.library.GetApi(product.Code, product.Version, args[1])
-		if !ok {
-			return r
+		canonicalApi := c.library.GetCanonicalApi(product.Code, product.Version, args[1])
+		if canonicalApi != nil {
+			canonicalApi.ForeachLegacyParameter(func(s string, v *canonicalmeta.LegacyParameterView) {
+				pos := v.LegacyPosition()
+				if pos == "Domain" || pos == "Header" {
+					return
+				}
+				if strings.HasPrefix("--"+strings.ToLower(s), strings.ToLower(ctx.Completion().Current)) {
+					cli.Printf(ctx.Stdout(), "--%s\n", s)
+				}
+			})
 		}
-
-		api.ForeachParameters(func(s string, p meta.Parameter) {
-			if strings.HasPrefix("--"+strings.ToLower(s), strings.ToLower(ctx.Completion().Current)) && !p.Hidden {
-				cli.Printf(ctx.Stdout(), "--%s\n", s)
-			}
-		})
 	} else if product.ApiStyle == "restful" {
 		if len(args) == 1 {
 			cli.PrintfWithColor(w, "", "GET\n")
@@ -1101,6 +1657,42 @@ func (c *Commando) complete(ctx *cli.Context, args []string) []string {
 	return r
 }
 
+func (c *Commando) shouldCompleteKebabCaseAPINames(product meta.Product) bool {
+	if productHelpEnvEnabled(originalProductHelpEnv) {
+		return false
+	}
+	if productHelpEnvEnabled(baselineProductHelpEnv) {
+		return true
+	}
+	installed, _, err := plugin.IsPluginInstalled(product.Code)
+	return err == nil && installed
+}
+
+func apiNameToKebab(name string) string {
+	var b strings.Builder
+	runes := []rune(name)
+	for i, r := range runes {
+		if r == '_' || unicode.IsSpace(r) {
+			if b.Len() > 0 {
+				b.WriteRune('-')
+			}
+			continue
+		}
+		if i > 0 && unicode.IsUpper(r) {
+			prev := runes[i-1]
+			var next rune
+			if i+1 < len(runes) {
+				next = runes[i+1]
+			}
+			if unicode.IsLower(prev) || unicode.IsDigit(prev) || (unicode.IsUpper(prev) && next != 0 && unicode.IsLower(next)) {
+				b.WriteRune('-')
+			}
+		}
+		b.WriteRune(unicode.ToLower(r))
+	}
+	return b.String()
+}
+
 func (c *Commando) printUsage(ctx *cli.Context) {
 	cmd := ctx.Command()
 	cmd.PrintHead(ctx)
@@ -1112,15 +1704,18 @@ func (c *Commando) printUsage(ctx *cli.Context) {
 	// fmt.Println("printUsage", cmd.Name)
 }
 
-func (c *Commando) CheckApiParamWithBuildInArgs(ctx *cli.Context, api meta.Api) {
-	for _, p := range api.Parameters {
+func (c *Commando) CheckApiParamWithBuildInArgs(ctx *cli.Context, api *canonicalmeta.API) {
+	if api == nil {
+		return
+	}
+	for _, p := range api.LegacyTopLevelParameters() {
 		// 如果参数中包含了known参数，且 known参数已经被赋值，则将 known 参数拷贝给 unknown 参数
-		if ep, ok := ctx.Flags().GetValue(p.Name); ok {
-			if p.Position != "Query" {
+		if ep, ok := ctx.Flags().GetValue(p.LegacyName()); ok {
+			if p.LegacyPosition() != "Query" {
 				continue
 			}
 			var flagNew = &cli.Flag{
-				Name: p.Name,
+				Name: p.LegacyName(),
 			}
 			flagNew.SetValue(ep)
 			flagNew.SetAssigned(true)
@@ -1236,8 +1831,7 @@ func (c *Commando) checkSafetyPolicy(ctx *cli.Context, productCode string, apiOr
 	configDir := config.GetConfigDir(ctx)
 	policy, err := safety.LoadEffectivePolicy(configDir)
 	if err != nil {
-		// Failed to load - skip policy check (fail open)
-		return nil
+		return fmt.Errorf("load safety policy failed: %w", err)
 	}
 	cmd := safety.CommandInfo{
 		Product:     productCode,

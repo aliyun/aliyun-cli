@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/util"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -50,7 +50,7 @@ func (receiver SsoLogin) JudgeLogin() (bool, error) {
 		return false, errors.New("signInUrl is required")
 	}
 	// if accessToken/accessConfig/accountId is empty, login is required
-	if receiver.AccessToken == "" {
+	if receiver.AccessToken == "" || receiver.AccessConfig == "" || receiver.AccountId == "" {
 		return true, nil
 	}
 	// if accessToken is not empty, check if it is expired
@@ -119,11 +119,11 @@ func (receiver SsoLogin) GetAccessToken() (*AccessTokenResponse, error) {
 		fmt.Printf("%s: %v\n", i18n.T("Error occurred while obtaining access token", "获取访问令牌时发生错误").GetMessage(), err)
 	}
 
-	fmt.Println(i18n.T("You have successfully logged in.", "您已成功登录。").GetMessage())
+	if accessTokenResponse == nil {
+		return nil, errors.New("access token response is nil")
+	}
 
-	// 设置访问令牌和过期时间（提前10秒过期）
-	receiver.AccessToken = accessTokenResponse.AccessToken
-	receiver.ExpireTime = util.GetCurrentUnixTime() + int64(accessTokenResponse.ExpiresIn) - 10
+	fmt.Println(i18n.T("You have successfully logged in.", "您已成功登录。").GetMessage())
 
 	return accessTokenResponse, nil
 }
@@ -244,7 +244,7 @@ func startDeviceAuthorization(signInUrl *url.URL) (*DeviceAuthorizationResponse,
 	defer resp.Body.Close()
 
 	// 读取响应
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %v", i18n.T("Error reading response", "读取响应错误").GetMessage(), err)
 	}
@@ -315,7 +315,7 @@ func createAccessToken(parsedSignInUrl string, deviceCode string) (*AccessTokenR
 	defer resp.Body.Close()
 
 	// 读取响应
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %v", i18n.T("Error reading response", "读取响应错误").GetMessage(), err)
 	}

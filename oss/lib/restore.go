@@ -566,7 +566,7 @@ func (rc *RestoreCommand) waitRoutinueComplete(chError, chListError <-chan error
 			} else {
 				ferr = err
 				if !rc.reOption.ctnu {
-					fmt.Printf(rc.monitor.progressBar(true, errExit))
+					fmt.Print(rc.monitor.progressBar(true, errExit))
 					return err
 				}
 			}
@@ -576,7 +576,7 @@ func (rc *RestoreCommand) waitRoutinueComplete(chError, chListError <-chan error
 }
 
 func (rc *RestoreCommand) formatResultPrompt(err error) error {
-	fmt.Printf(rc.monitor.progressBar(true, normalExit))
+	fmt.Print(rc.monitor.progressBar(true, normalExit))
 	if err != nil && rc.reOption.ctnu {
 		return nil
 	}

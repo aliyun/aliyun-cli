@@ -240,9 +240,6 @@ func (c *Commando) processEstimateCostOpenapi(ctx *cli.Context, oc *OpenapiConte
 		popCode = oc.product.Code
 		popVersion = oc.product.Version
 	}
-	if oc.api.Product != nil && oc.api.Product.Version != "" {
-		popVersion = oc.api.Product.Version
-	}
 
 	parameters, err := buildEstimateCostParametersFromOpenapi(ctx, oc)
 	if err != nil {
@@ -281,8 +278,8 @@ func buildEstimateCostParametersFromOpenapi(ctx *cli.Context, oc *OpenapiContext
 	}
 	if oc.api != nil && ctx.UnknownFlags() != nil {
 		for _, f := range ctx.UnknownFlags().Flags() {
-			param := oc.api.FindParameter(f.Name)
-			if param == nil || (param.Position != "Path" && param.Position != "Host") {
+			param := oc.api.FindLegacyParameter(f.Name)
+			if param == nil || (param.LegacyPosition() != "Path" && param.LegacyPosition() != "Host") {
 				continue
 			}
 			if value, ok := f.GetValue(); ok && value != "" {
@@ -350,7 +347,11 @@ func resolveEstimateCostApiName(library *Library, inv Invoker) (string, error) {
 		if r.api != nil && r.api.Name != "" {
 			return r.api.Name, nil
 		}
-		if api, found := meta.HookGetApiByPath(library.GetApiByPath)(req.Product, req.Version, r.method, r.path); found && api.Name != "" {
+		lookupVersion := req.Version
+		if r.product != nil && r.product.Version != "" {
+			lookupVersion = r.product.Version
+		}
+		if api, found := library.GetApiByPath(req.Product, lookupVersion, r.method, r.path); found && api.Name != "" {
 			return api.Name, nil
 		}
 		return "", cli.NewErrorWithTip(
@@ -507,7 +508,7 @@ func printEstimateCostResult(ctx *cli.Context, out string) error {
 			return err
 		}
 	}
-	out = sortJSON(out)
+	out = formatResponseJSON(ctx, out)
 	cli.Println(ctx.Stdout(), out)
 	return nil
 }

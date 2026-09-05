@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 )
@@ -76,7 +76,7 @@ func TestTryRefreshStsToken(t *testing.T) {
 			accountId:    strPtr("mockAccountId"),
 			mockResponse: &http.Response{
 				StatusCode: 200,
-				Body: ioutil.NopCloser(bytes.NewReader(func() []byte {
+				Body: io.NopCloser(bytes.NewReader(func() []byte {
 					resp := CloudCredentialResponse{
 						AccessKeyId:     "mockKeyId",
 						AccessKeySecret: "mockKeySecret",
@@ -124,7 +124,7 @@ func TestTryRefreshStsToken(t *testing.T) {
 			accountId:    strPtr("mockAccountId"),
 			mockResponse: &http.Response{
 				StatusCode: 403,
-				Body:       ioutil.NopCloser(bytes.NewReader([]byte(`{"ErrorCode": "Forbidden", "ErrorMessage": "Access Denied", "RequestId": "12345"}`))),
+				Body:       io.NopCloser(bytes.NewReader([]byte(`{"ErrorCode": "Forbidden", "ErrorMessage": "Access Denied", "RequestId": "12345"}`))),
 			},
 			mockError: nil,
 			expectErr: true,
@@ -156,6 +156,87 @@ func TestTryRefreshStsToken(t *testing.T) {
 				if !equalCloudCredentialResponse(got, tt.expectedToken) {
 					t.Errorf("TryRefreshStsToken() = %v, want %v", got, tt.expectedToken)
 				}
+			}
+		})
+	}
+}
+
+func TestTryRefreshStsTokenRejectsNilInputs(t *testing.T) {
+	signInURL := strPtr("https://example.com")
+	accessToken := strPtr("mockAccessToken")
+	accessConfig := strPtr("mockAccessConfig")
+	accountID := strPtr("mockAccountId")
+
+	tests := []struct {
+		name         string
+		accessToken  *string
+		accessConfig *string
+		accountID    *string
+		wantError    string
+	}{
+		{name: "nil access token", accessConfig: accessConfig, accountID: accountID, wantError: "accessToken is nil"},
+		{name: "nil access config", accessToken: accessToken, accountID: accountID, wantError: "accessConfig is nil"},
+		{name: "nil account ID", accessToken: accessToken, accessConfig: accessConfig, wantError: "accountId is nil"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := TryRefreshStsToken(signInURL, tt.accessToken, tt.accessConfig, tt.accountID, nil)
+			if err == nil || err.Error() != tt.wantError {
+				t.Fatalf("TryRefreshStsToken() error = %v, want %q", err, tt.wantError)
+			}
+		})
+	}
+}
+
+func TestCreateCloudCredentialResponseShapes(t *testing.T) {
+	tests := []struct {
+		name      string
+		body      string
+		wantErr   string
+		wantKeyID string
+	}{
+		{
+			name:      "nested current response",
+			body:      `{"CloudCredential":{"AccessKeyId":"nested-key","Expiration":"2015-04-09T11:52:19Z"},"RequestId":"request-id"}`,
+			wantKeyID: "nested-key",
+		},
+		{
+			name:      "top-level legacy response",
+			body:      `{"AccessKeyId":"legacy-key","Expiration":"2015-04-09T11:52:19Z"}`,
+			wantKeyID: "legacy-key",
+		},
+		{
+			name:    "missing credential",
+			body:    `{"RequestId":"request-id"}`,
+			wantErr: "cloud credential is missing from response",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &http.Client{Transport: &MockHttpClient{DoFunc: func(*http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(bytes.NewBufferString(tt.body)),
+				}, nil
+			}}}
+
+			credential, err := CreateCloudCredential("https://example.com", "token", CloudCredentialOptions{}, client)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Fatalf("CreateCloudCredential() error = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("CreateCloudCredential() error = %v", err)
+			}
+			if credential.AccessKeyId != tt.wantKeyID {
+				t.Fatalf("AccessKeyId = %q, want %q", credential.AccessKeyId, tt.wantKeyID)
+			}
+			if credential.ExpirationInt64 == 0 {
+				t.Fatal("ExpirationInt64 was not populated")
 			}
 		})
 	}

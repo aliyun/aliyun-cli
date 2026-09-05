@@ -38,6 +38,7 @@ func TestApply(t *testing.T) {
 }
 
 func TestPrintSuggestions(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	w := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := NewCommandContext(w, stderr)
@@ -98,5 +99,52 @@ func TestUnifyApply(t *testing.T) {
 		results := s.GetResults()
 		assert.Contains(t, results, "abc")
 		assert.Contains(t, results, "abd")
+	})
+}
+
+func TestPrefixSuggestions(t *testing.T) {
+	candidates := []string{
+		"AssumeRole",
+		"AssumeRoleWithOIDC",
+		"GetCallerIdentity",
+	}
+
+	t.Run("case-insensitive prefix", func(t *testing.T) {
+		results, total := PrefixSuggestions("Get", candidates, DefaultSuggestLimit)
+		assert.Equal(t, []string{"GetCallerIdentity"}, results)
+		assert.Equal(t, 1, total)
+	})
+
+	t.Run("dash-insensitive prefix", func(t *testing.T) {
+		results, total := PrefixSuggestions("get-caller", []string{"get-caller-identity", "assume-role"}, DefaultSuggestLimit)
+		assert.Equal(t, []string{"get-caller-identity"}, results)
+		assert.Equal(t, 1, total)
+	})
+
+	t.Run("no match returns nil", func(t *testing.T) {
+		results, total := PrefixSuggestions("xyz", candidates, DefaultSuggestLimit)
+		assert.Nil(t, results)
+		assert.Equal(t, 0, total)
+	})
+
+	t.Run("short input returns nil", func(t *testing.T) {
+		results, total := PrefixSuggestions("G", candidates, DefaultSuggestLimit)
+		assert.Nil(t, results)
+		assert.Equal(t, 0, total)
+	})
+
+	t.Run("truncates and reports total", func(t *testing.T) {
+		many := []string{"DescribeA", "DescribeB", "DescribeC", "DescribeD", "DescribeE", "DescribeF", "DescribeG"}
+		results, total := PrefixSuggestions("Describe", many, 5)
+		assert.Equal(t, 5, len(results))
+		assert.Equal(t, 7, total)
+		assert.Equal(t, many[:5], results)
+	})
+
+	t.Run("non-positive limit falls back to default", func(t *testing.T) {
+		many := []string{"DescribeA", "DescribeB", "DescribeC", "DescribeD", "DescribeE", "DescribeF"}
+		results, total := PrefixSuggestions("Describe", many, 0)
+		assert.Equal(t, 5, len(results))
+		assert.Equal(t, 6, total)
 	})
 }

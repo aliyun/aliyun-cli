@@ -24,6 +24,7 @@ func TestNewPluginCommand(t *testing.T) {
 	assert.NotNil(t, cmd.GetSubCommand("list"), "Should have list subcommand")
 	assert.NotNil(t, cmd.GetSubCommand("install"), "Should have install subcommand")
 	assert.NotNil(t, cmd.GetSubCommand("install-all"), "Should have install-all subcommand")
+	assert.NotNil(t, cmd.GetSubCommand("install-custom"), "Should have install-custom subcommand")
 	assert.NotNil(t, cmd.GetSubCommand("uninstall"), "Should have uninstall subcommand")
 	assert.NotNil(t, cmd.GetSubCommand("show"), "Should have show subcommand")
 	assert.NotNil(t, cmd.GetSubCommand("update"), "Should have update subcommand")
@@ -31,14 +32,34 @@ func TestNewPluginCommand(t *testing.T) {
 
 func TestNewPluginCommand_Run(t *testing.T) {
 	cmd := NewPluginCommand()
+	// plugin is a pure dispatcher: it has no Run of its own so that an unknown
+	// subcommand is reported as an invalid command (before flag parsing) and a
+	// bare `plugin` invocation falls back to help.
+	assert.Nil(t, cmd.Run)
+}
+
+func TestNewPluginCommand_UnknownSubcommand(t *testing.T) {
+	cli.DisableExitCode()
+	defer cli.EnableExitCode()
+
+	// Mirror the production hierarchy so the help hint reads `aliyun plugin`.
+	root := &cli.Command{Name: "aliyun"}
+	cmd := NewPluginCommand()
+	root.AddSubCommand(cmd)
+
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	ctx := cli.NewCommandContext(stdout, stderr)
 	ctx.EnterCommand(cmd)
 
-	err := cmd.Run(ctx, []string{})
-	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "command missing")
+	// `plugin remove --name bailian`: `remove` is not a valid subcommand.
+	// The error must be about the invalid command, not the trailing --name flag.
+	cmd.Execute(ctx, []string{"remove", "--name", "bailian"})
+
+	assert.Contains(t, stderr.String(), `"remove" is not a valid command`)
+	assert.NotContains(t, stderr.String(), "invalid flag")
+	// The error should also point the user to the plugin help.
+	assert.Contains(t, stderr.String(), "Use `aliyun plugin --help` for more information.")
 }
 
 func TestNewListCommand(t *testing.T) {
@@ -275,6 +296,11 @@ func TestNewInstallCommand(t *testing.T) {
 	sourceBaseFlag := flags.Get("source-base")
 	assert.NotNil(t, sourceBaseFlag)
 	assert.False(t, sourceBaseFlag.Required)
+
+	preferGoFlag := flags.Get("prefer-go")
+	assert.NotNil(t, preferGoFlag)
+	assert.False(t, preferGoFlag.Required)
+	assert.True(t, preferGoFlag.Hidden)
 }
 
 func TestNewInstallCommand_Run(t *testing.T) {
@@ -597,6 +623,21 @@ func TestNewInstallAllCommand(t *testing.T) {
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Usage)
 	assert.NotNil(t, cmd.Flags().Get("source-base"))
+	preferGoFlag := cmd.Flags().Get("prefer-go")
+	assert.NotNil(t, preferGoFlag)
+	assert.True(t, preferGoFlag.Hidden)
+}
+
+func TestNewInstallCustomCommand(t *testing.T) {
+	cmd := newInstallCustomCommand()
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "install-custom", cmd.Name)
+	assert.True(t, cmd.Hidden)
+	assert.NotEmpty(t, cmd.Short)
+	assert.NotEmpty(t, cmd.Usage)
+	assert.NotNil(t, cmd.Flags().Get("source-base"))
+	assert.NotNil(t, cmd.Flags().Get("enable-pre"))
+	assert.Nil(t, cmd.Flags().Get("prefer-go"))
 }
 
 func TestNewUninstallCommand(t *testing.T) {
@@ -710,11 +751,21 @@ func TestNewShowCommand_Run_Success(t *testing.T) {
 	manifest := LocalManifest{
 		Plugins: map[string]LocalPlugin{
 			"aliyun-cli-demo": {
-				Name:             "aliyun-cli-demo",
-				Version:          "2.0.0",
-				Path:             pluginPath,
-				ProductCode:      "demo-product",
-				Command:          "demo",
+				Name:           "aliyun-cli-demo",
+				Version:        "2.0.0",
+				Type:           PluginTypeMeta,
+				Path:           pluginPath,
+				ProductCode:    "demo-product",
+				Command:        "demo",
+				CommandAliases: []string{"demo-alias"},
+				MinCliVersion:  "3.3.1",
+				Metadata: &MetadataDescriptor{
+					Format:        "protobuf",
+					Schema:        "aliyun-openapi-meta",
+					SchemaVersion: 1,
+					Layout:        "indexed-pb",
+					LayoutVersion: 1,
+				},
 				ShortDescription: "short",
 				Description:      "full description",
 				Inner:            true,
@@ -741,7 +792,15 @@ func TestNewShowCommand_Run_Success(t *testing.T) {
 	out := stdout.String()
 	assert.Contains(t, out, "Name:\taliyun-cli-demo")
 	assert.Contains(t, out, "Version:\t2.0.0")
+	assert.Contains(t, out, "Type:\tmeta\n")
 	assert.Contains(t, out, "Product code:\tdemo-product\n")
+	assert.Contains(t, out, "Command:\tdemo\n")
+	assert.Contains(t, out, "Command aliases:\tdemo-alias\n")
+	assert.Contains(t, out, "Path:\t"+pluginPath+"\n")
+	assert.Contains(t, out, "Minimum CLI version:\t3.3.1\n")
+	assert.Contains(t, out, "Metadata format:\tprotobuf\n")
+	assert.NotContains(t, out, "Metadata layout:")
+	assert.NotContains(t, out, "Metadata schema:")
 	assert.Contains(t, out, "Short description:\tshort")
 	assert.Contains(t, out, "Description:\tfull description")
 	assert.Contains(t, out, "API default:\t2017-06-13\n")
@@ -762,6 +821,9 @@ func TestNewUpdateCommand(t *testing.T) {
 	assert.False(t, nameFlag.Required) // name is optional for update
 
 	assert.NotNil(t, flags.Get("source-base"))
+	preferGoFlag := flags.Get("prefer-go")
+	assert.NotNil(t, preferGoFlag)
+	assert.True(t, preferGoFlag.Hidden)
 }
 
 func TestNewManagerWithOptionalSourceBase(t *testing.T) {
@@ -794,6 +856,21 @@ func TestNewManagerWithOptionalSourceBase(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, mgr)
 		assert.Equal(t, "https://mirror.example/plugins", mgr.sourceBase)
+	})
+
+	t.Run("prefer go option is applied", func(t *testing.T) {
+		cmd := newUpdateCommand()
+		stdout := new(bytes.Buffer)
+		stderr := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, stderr)
+		ctx.EnterCommand(cmd)
+		f := ctx.Flags().Get("prefer-go")
+		assert.NotNil(t, f)
+		f.SetAssigned(true)
+		mgr, err := newManagerWithOptionalSourceBase(ctx)
+		assert.NoError(t, err)
+		assert.NotNil(t, mgr)
+		assert.True(t, mgr.preferGo)
 	})
 
 	t.Run("invalid scheme returns ApplySourceBaseOverride error", func(t *testing.T) {

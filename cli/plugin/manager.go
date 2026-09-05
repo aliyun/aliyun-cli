@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,16 +19,21 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
+	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
+	runtimesource "github.com/aliyun/aliyun-openapi-runtime/source"
 	"golang.org/x/mod/semver"
 )
 
 const (
-	IndexURL        = "https://aliyuncli.alicdn.com/plugins/plugin_pkg_index.json"    // 默认索引地址
-	CommandIndexURL = "https://aliyuncli.alicdn.com/plugins/plugin_search_index.json" // 命令倒排索引地址
-	EnvPluginsDir   = "ALIBABA_CLOUD_CLI_PLUGINS_DIR"
+	IndexURL        = "https://aliyuncli.alicdn.com/plugins-v2/plugin_pkg_index.json"    // 默认索引地址
+	CommandIndexURL = "https://aliyuncli.alicdn.com/plugins-v2/plugin_search_index.json" // 命令倒排索引地址
+	EnvPluginsDir   = sysconfig.EnvPluginsDir
 	EnvNoCache      = "ALIBABA_CLOUD_CLI_PLUGIN_NO_CACHE"
 
 	indexCacheFile         = "plugin_pkg_index_cache.json"
@@ -50,6 +56,12 @@ type Manager struct {
 	sourceBase      string // from plugin-settings.json / env; empty = use built-in index URLs
 	indexURL        string // For testing: allows overriding resolved package index URL
 	commandIndexURL string // For testing: allows overriding resolved command index URL
+	// canonicalFS overrides the bundled canonical metadata used by InstallCustom (tests).
+	canonicalFS fs.FS
+	// preferGo reverses the default package selection order from any -> current platform-arch to current platform-arch -> any.
+	preferGo bool
+	// goOnly selects only the current platform-arch package and never considers the platform-independent "any" (meta/pb) artifact. Used by install-custom.
+	goOnly bool
 	// skipPluginIndexCacheForCLI is set when --source-base is used on this command only.
 	skipPluginIndexCacheForCLI bool
 }
@@ -134,23 +146,6 @@ func (m *Manager) resolvedCommandIndexURL() string {
 		return b + "/plugin_search_index.json"
 	}
 	return CommandIndexURL
-}
-
-// common layout: .../pkgs/{name}/{version}/{basename}.
-func (m *Manager) resolvePackageDownloadURL(origURL, pluginName, version string) string {
-	if strings.TrimSpace(m.sourceBase) == "" {
-		return origURL
-	}
-	u, err := url.Parse(origURL)
-	if err != nil {
-		return origURL
-	}
-	baseName := path.Base(u.Path)
-	if baseName == "" || baseName == "." || baseName == "/" {
-		return origURL
-	}
-	b := strings.TrimRight(strings.TrimSpace(m.sourceBase), "/")
-	return fmt.Sprintf("%s/pkgs/%s/%s/%s", b, pluginName, version, baseName)
 }
 
 func (m *Manager) readCache(cacheFile string, ttl time.Duration, result interface{}) (hit bool, staleAvailable bool) {
@@ -377,6 +372,27 @@ func compareVersion(v1, v2 string) int {
 	return semver.Compare(v1, v2)
 }
 
+func validatePluginCliVersion(pluginName, pluginVersion, minCliVersion string) error {
+	minCliVersion = strings.TrimSpace(minCliVersion)
+	if minCliVersion == "" {
+		return nil
+	}
+
+	currentVersion := cli.GetVersion()
+	if isDevVersion(currentVersion) || compareVersion(currentVersion, minCliVersion) >= 0 {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"plugin %s version %s requires CLI version %s or higher, but you have %s\n%s",
+		pluginName,
+		pluginVersion,
+		minCliVersion,
+		currentVersion,
+		buildCliUpgradeTip(currentVersion),
+	)
+}
+
 // Pre-release versions contain hyphens (e.g., 1.0.0-alpha, 1.0.0-beta, 1.0.0-rc.1).
 func isPrerelease(version string) bool {
 	v := version
@@ -523,21 +539,29 @@ func (m *Manager) validateVersionAndPlatform(ctx *cli.Context, targetPlugin *Plu
 			cli.Printf(ctx.Stdout(),
 				"Skipping version check, plugin requires CLI version %s or higher\n",
 				verInfo.Metadata.MinCliVersion)
-		} else if compareVersion(currentVersion, verInfo.Metadata.MinCliVersion) < 0 {
-			return nil, fmt.Errorf(
-				"plugin %s version %s requires CLI version %s or higher, but you have %s\n%s",
-				actualPluginName,
-				version,
-				verInfo.Metadata.MinCliVersion,
-				currentVersion,
-				buildCliUpgradeTip(currentVersion),
-			)
+		} else if err := validatePluginCliVersion(actualPluginName, version, verInfo.Metadata.MinCliVersion); err != nil {
+			return nil, err
 		}
 	}
 
 	platform := GetCurrentPlatform()
-	platInfo, ok := verInfo.Platforms[platform]
-	if !ok {
+	candidates := []string{PluginPlatformAny, platform}
+	if m.goOnly {
+		candidates = []string{platform}
+	} else if m.preferGo {
+		candidates = []string{platform, PluginPlatformAny}
+	}
+
+	var platInfo PlatformInfo
+	found := false
+	for _, key := range candidates {
+		if info, ok := verInfo.Platforms[key]; ok {
+			platInfo = info
+			found = true
+			break
+		}
+	}
+	if !found {
 		return nil, fmt.Errorf("plugin %s version %s not supported on %s", actualPluginName, version, platform)
 	}
 
@@ -804,13 +828,99 @@ func readPluginManifestFromDir(extractDir string) (*PluginManifest, error) {
 	if err := json.NewDecoder(pluginManifestFile).Decode(&pManifest); err != nil {
 		return nil, fmt.Errorf("invalid plugin manifest: %w", err)
 	}
-	if strings.TrimSpace(pManifest.Name) == "" {
-		return nil, fmt.Errorf("invalid plugin manifest: name is empty")
+	if err := validatePluginName(pManifest.Name); err != nil {
+		return nil, fmt.Errorf("invalid plugin manifest: %w", err)
 	}
 	if strings.TrimSpace(pManifest.Version) == "" {
 		return nil, fmt.Errorf("invalid plugin manifest: version is empty")
 	}
+	if err := validateAndResolvePackageType(extractDir, &pManifest); err != nil {
+		return nil, err
+	}
 	return &pManifest, nil
+}
+
+// validatePluginName accepts existing single-component plugin names while
+// rejecting values that can be interpreted as paths on Unix or Windows.
+func validatePluginName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("name is empty")
+	}
+	if name == "." || name == ".." || filepath.IsAbs(name) || path.IsAbs(name) ||
+		strings.ContainsAny(name, `/\:`) || strings.IndexFunc(name, unicode.IsControl) >= 0 {
+		return fmt.Errorf("name %q must be a single path-safe component", name)
+	}
+	return nil
+}
+
+func resolvePluginInstallDir(rootDir, pluginName string) (string, error) {
+	if err := validatePluginName(pluginName); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(rootDir) == "" {
+		return "", fmt.Errorf("plugin root directory is empty")
+	}
+
+	rootAbs, err := filepath.Abs(rootDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve plugin root directory: %w", err)
+	}
+	finalDir := filepath.Join(rootAbs, pluginName)
+	rel, err := filepath.Rel(rootAbs, finalDir)
+	if err != nil || rel == "." || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("plugin directory escapes plugin root")
+	}
+	return finalDir, nil
+}
+
+func validateInstalledPluginPath(rootDir, pluginName, storedPath string) (string, error) {
+	expected, err := resolvePluginInstallDir(rootDir, pluginName)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(storedPath) == "" {
+		return "", fmt.Errorf("installed plugin path is empty")
+	}
+	actual, err := filepath.Abs(storedPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve installed plugin path: %w", err)
+	}
+	equal := filepath.Clean(actual) == filepath.Clean(expected)
+	if runtime.GOOS == "windows" {
+		equal = strings.EqualFold(filepath.Clean(actual), filepath.Clean(expected))
+	}
+	if !equal {
+		return "", fmt.Errorf("installed plugin path %q is outside its expected directory", storedPath)
+	}
+	return expected, nil
+}
+
+func validateAndResolvePackageType(extractDir string, manifest *PluginManifest) error {
+	declared := strings.ToLower(strings.TrimSpace(manifest.Type))
+	hasMetadata := manifest.Metadata != nil
+	hasBinary := strings.TrimSpace(manifest.Bin.Path) != ""
+
+	switch declared {
+	case "", PluginTypeGo:
+		// Legacy Go plugins may omit type.
+		if hasMetadata {
+			return fmt.Errorf("invalid plugin manifest: type %q is required when metadata is declared", PluginTypeMeta)
+		}
+		manifest.Type = PluginTypeGo
+		return nil
+	case PluginTypeMeta:
+		manifest.Type = PluginTypeMeta
+	default:
+		return fmt.Errorf("invalid plugin manifest: unsupported type %q", manifest.Type)
+	}
+
+	if !hasMetadata {
+		return fmt.Errorf("invalid metadata plugin: metadata descriptor is required")
+	}
+	if hasBinary {
+		return fmt.Errorf("invalid metadata plugin: bin.path must be empty")
+	}
+	return runtimesource.ValidateMetadataPlugin(extractDir, manifest.Metadata)
 }
 
 func copyDirTree(src, dst string) error {
@@ -838,7 +948,10 @@ func copyDirTree(src, dst string) error {
 }
 
 func (m *Manager) promoteExtractedPlugin(tmpExtract, pluginName string) (string, error) {
-	finalDir := filepath.Join(m.rootDir, pluginName)
+	finalDir, err := resolvePluginInstallDir(m.rootDir, pluginName)
+	if err != nil {
+		return "", fmt.Errorf("invalid plugin name: %w", err)
+	}
 	if err := os.RemoveAll(finalDir); err != nil {
 		return "", fmt.Errorf("failed to remove existing plugin directory: %w", err)
 	}
@@ -990,6 +1103,9 @@ func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, userFacing s
 }
 
 func (m *Manager) loadAndValidatePluginManifest(extractDir, expectedName string) (*PluginManifest, error) {
+	if err := validatePluginName(expectedName); err != nil {
+		return nil, fmt.Errorf("invalid expected plugin name: %w", err)
+	}
 	pluginManifestPath := filepath.Join(extractDir, "manifest.json")
 	pluginManifestFile, err := os.Open(pluginManifestPath)
 	if err != nil {
@@ -1001,6 +1117,9 @@ func (m *Manager) loadAndValidatePluginManifest(extractDir, expectedName string)
 	if err := json.NewDecoder(pluginManifestFile).Decode(&pManifest); err != nil {
 		return nil, fmt.Errorf("invalid plugin manifest: %w", err)
 	}
+	if err := validatePluginName(pManifest.Name); err != nil {
+		return nil, fmt.Errorf("invalid plugin manifest: %w", err)
+	}
 
 	if pManifest.Name != expectedName {
 		return nil, fmt.Errorf(
@@ -1008,11 +1127,17 @@ func (m *Manager) loadAndValidatePluginManifest(extractDir, expectedName string)
 			pManifest.Name, expectedName, extractDir,
 		)
 	}
+	if err := validateAndResolvePackageType(extractDir, &pManifest); err != nil {
+		return nil, err
+	}
 
 	return &pManifest, nil
 }
 
 func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir string, pManifest *PluginManifest) error {
+	if err := validatePluginName(actualPluginName); err != nil {
+		return fmt.Errorf("invalid plugin name: %w", err)
+	}
 	localManifest, err := m.GetLocalManifest()
 	if err != nil {
 		return err
@@ -1027,8 +1152,11 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 	localManifest.Plugins[actualPluginName] = LocalPlugin{
 		Name:             actualPluginName,
 		Version:          version,
+		MinCliVersion:    pManifest.MinCliVersion,
 		Path:             extractDir,
 		ProductCode:      pManifest.ProductCode,
+		Type:             pManifest.Type,
+		Metadata:         pManifest.Metadata,
 		Command:          pManifest.Command,
 		CommandAliases:   aliases,
 		ShortDescription: pManifest.ShortDescription,
@@ -1041,8 +1169,18 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 	return m.saveLocalManifest(localManifest)
 }
 
+func populateMinCliVersionFromIndex(pManifest *PluginManifest, verInfo VersionInfo) {
+	if pManifest == nil || strings.TrimSpace(pManifest.MinCliVersion) != "" || verInfo.Metadata == nil {
+		return
+	}
+	pManifest.MinCliVersion = verInfo.Metadata.MinCliVersion
+}
+
 func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, version string, enablePre bool, warnIfAlreadyInstalled bool) error {
 	actualPluginName := targetPlugin.Name
+	if err := validatePluginName(actualPluginName); err != nil {
+		return fmt.Errorf("invalid plugin name from repository: %w", err)
+	}
 
 	if version == "" {
 		// Auto-select version based on enablePre flag
@@ -1061,11 +1199,8 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 		return err
 	}
 
-	downloadURL := m.resolvePackageDownloadURL(platInfo.URL, actualPluginName, version)
-	platForDownload := *platInfo
-	platForDownload.URL = downloadURL
-
-	archivePath, err := m.downloadAndVerifyPlugin(ctx, &platForDownload, actualPluginName, version)
+	downloadURL := platInfo.URL
+	archivePath, err := m.downloadAndVerifyPlugin(ctx, platInfo, actualPluginName, version)
 	if err != nil {
 		return err
 	}
@@ -1075,7 +1210,10 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 		m.printOverwriteIfPluginInstalled(ctx, actualPluginName, version)
 	}
 
-	extractDir := filepath.Join(m.rootDir, actualPluginName)
+	extractDir, err := resolvePluginInstallDir(m.rootDir, actualPluginName)
+	if err != nil {
+		return fmt.Errorf("invalid plugin name from repository: %w", err)
+	}
 	if err := m.extractPlugin(archivePath, extractDir, downloadURL); err != nil {
 		return err
 	}
@@ -1083,6 +1221,10 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 	pManifest, err := m.loadAndValidatePluginManifest(extractDir, actualPluginName)
 	if err != nil {
 		return err
+	}
+
+	if verInfo, ok := targetPlugin.Versions[version]; ok {
+		populateMinCliVersionFromIndex(pManifest, verInfo)
 	}
 
 	if err := m.savePluginToManifest(actualPluginName, version, extractDir, pManifest); err != nil {
@@ -1139,7 +1281,11 @@ func (m *Manager) Uninstall(ctx *cli.Context, pluginName string) error {
 		return err
 	}
 
-	if err := os.RemoveAll(plugin.Path); err != nil {
+	pluginPath, err := validateInstalledPluginPath(m.rootDir, actualPluginName, plugin.Path)
+	if err != nil {
+		return fmt.Errorf("refusing to uninstall plugin %q: %w", actualPluginName, err)
+	}
+	if err := os.RemoveAll(pluginPath); err != nil {
 		return fmt.Errorf("failed to remove plugin files: %w", err)
 	}
 
@@ -1266,16 +1412,131 @@ func (m *Manager) InstallAll(ctx *cli.Context, enablePre bool) error {
 		return fmt.Errorf("failed to get plugin index: %w", err)
 	}
 
+	cli.Printf(ctx.Stdout(), "Found %d plugins in index\n", len(index.Plugins))
+	return m.installListedPlugins(ctx, pluginInfos(index), enablePre)
+}
+
+func (m *Manager) InstallCustom(ctx *cli.Context, enablePre bool) error {
+	m.goOnly = true
+	codes, err := listCustomProductCodes(m.canonicalMetaFS())
+	if err != nil {
+		return err
+	}
+	if len(codes) == 0 {
+		cli.Printf(ctx.Stdout(), "No custom product plugins in canonical metadata\n")
+		return nil
+	}
+
+	index, err := m.GetIndex()
+	if err != nil {
+		return fmt.Errorf("failed to get plugin index: %w", err)
+	}
+
+	matched, missing := collectPluginsForProductCodes(index, codes)
+	cli.Printf(ctx.Stdout(), "Found %d custom product plugins in canonical metadata\n", len(codes))
+	for _, code := range missing {
+		cli.Printf(ctx.Stdout(), "No plugin found in index for product %s\n", code)
+	}
+
+	err = m.installListedPlugins(ctx, matched, enablePre)
+	if len(missing) == 0 {
+		return err
+	}
+	if err != nil {
+		return fmt.Errorf("%w; %d custom product(s) had no plugin in the index", err, len(missing))
+	}
+	cli.Printf(ctx.Stdout(), "Failed: %d\n", len(missing))
+	return fmt.Errorf("%d plugin(s) failed to install", len(missing))
+}
+
+func (m *Manager) canonicalMetaFS() fs.FS {
+	if m.canonicalFS != nil {
+		return m.canonicalFS
+	}
+	return bundledmeta.Metadatas
+}
+
+func listCustomProductCodes(fsys fs.FS) ([]string, error) {
+	if fsys == nil {
+		return nil, fmt.Errorf("canonical metadata filesystem is unavailable")
+	}
+	catalog, err := canonicalmeta.NewRepository(fsys).GetProducts()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load canonical products: %w", err)
+	}
+
+	codes := make([]string, 0)
+	for _, p := range catalog.Products {
+		if p.HasDistribution(canonicalmeta.DistributionGo) {
+			codes = append(codes, p.Code)
+		}
+	}
+	sort.Slice(codes, func(i, j int) bool {
+		return strings.ToLower(codes[i]) < strings.ToLower(codes[j])
+	})
+	return codes, nil
+}
+
+func collectPluginsForProductCodes(index *Index, codes []string) (matched []*PluginInfo, missing []string) {
+	if index == nil {
+		return nil, append([]string(nil), codes...)
+	}
+	seen := make(map[string]struct{})
+	for _, code := range codes {
+		found := false
+		for i := range index.Plugins {
+			p := &index.Plugins[i]
+			if !pluginMatchesProductCode(p, code) {
+				continue
+			}
+			found = true
+			if _, ok := seen[p.Name]; !ok {
+				seen[p.Name] = struct{}{}
+				matched = append(matched, p)
+			}
+			break
+		}
+		if !found {
+			missing = append(missing, code)
+		}
+	}
+	return matched, missing
+}
+
+func pluginMatchesProductCode(p *PluginInfo, productCode string) bool {
+	if p == nil {
+		return false
+	}
+	code := strings.TrimSpace(productCode)
+	if code == "" {
+		return false
+	}
+	if strings.TrimSpace(p.ProductCode) != "" && strings.EqualFold(p.ProductCode, code) {
+		return true
+	}
+	return matchPluginName(p.Name, code)
+}
+
+func pluginInfos(index *Index) []*PluginInfo {
+	if index == nil {
+		return nil
+	}
+	out := make([]*PluginInfo, 0, len(index.Plugins))
+	for i := range index.Plugins {
+		out = append(out, &index.Plugins[i])
+	}
+	return out
+}
+
+func (m *Manager) installListedPlugins(ctx *cli.Context, plugins []*PluginInfo, enablePre bool) error {
 	localManifest, err := m.GetLocalManifest()
 	if err != nil {
 		return fmt.Errorf("failed to get local manifest: %w", err)
 	}
 
-	cli.Printf(ctx.Stdout(), "Found %d plugins in index\n", len(index.Plugins))
-
 	var installed, skipped, failed int
-	for i := range index.Plugins {
-		pluginName := index.Plugins[i].Name
+	for _, p := range plugins {
+		pluginName := p.Name
 
 		if _, exists := localManifest.Plugins[pluginName]; exists {
 			cli.Printf(ctx.Stdout(), "Skipping %s (already installed)\n", pluginName)
@@ -1285,7 +1546,7 @@ func (m *Manager) InstallAll(ctx *cli.Context, enablePre bool) error {
 
 		cli.Printf(ctx.Stdout(), "Installing %s...\n", pluginName)
 
-		if err := m.installPlugin(ctx, &index.Plugins[i], "", enablePre, false); err != nil {
+		if err := m.installPlugin(ctx, p, "", enablePre, false); err != nil {
 			cli.Printf(ctx.Stdout(), "Failed to install %s: %v\n", pluginName, err)
 			failed++
 			continue

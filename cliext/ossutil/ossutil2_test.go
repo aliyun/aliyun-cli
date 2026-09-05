@@ -713,8 +713,7 @@ func TestCheckOsTypeAndArchVariants(t *testing.T) {
 		c := NewContext(ctx)
 		c.CheckOsTypeAndArch()
 		if c.osSupport != tc.support {
-			f := fmt.Sprintf("expect support=%v for %s/%s got %v", tc.support, tc.os, tc.arch, c.osSupport)
-			t.Fatalf(f)
+			t.Fatalf("expect support=%v for %s/%s got %v", tc.support, tc.os, tc.arch, c.osSupport)
 		}
 		if tc.support && !strings.Contains(c.downloadPathSuffix, tc.suffixContains) {
 			t.Fatalf("suffix mismatch: %s vs %s", c.downloadPathSuffix, tc.suffixContains)

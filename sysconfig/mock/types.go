@@ -15,9 +15,9 @@ const (
 )
 
 const (
-	MaxDelayMs           = 3600000          // 1 hour
-	MaxResponseBodySize  = 100 * 1024 * 1024 // 100 MiB
-	responseBodyPadByte  = 'x'
+	MaxDelayMs          = 3600000           // 1 hour
+	MaxResponseBodySize = 100 * 1024 * 1024 // 100 MiB
+	responseBodyPadByte = 'x'
 )
 
 type Record struct {

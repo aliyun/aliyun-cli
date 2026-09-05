@@ -31,6 +31,7 @@ import (
 )
 
 func TestNewConfigureCommand(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	originhook := hookLoadOrCreateConfiguration
 	originhookLoad := hookLoadConfigurationWithContext
 	originhookSave := hookSaveConfigurationWithContext
@@ -56,8 +57,8 @@ func TestNewConfigureCommand(t *testing.T) {
 	excmd := &cli.Command{
 		Name: "configure",
 		Short: i18n.T(
-			"configure credential and settings",
-			"配置身份认证和其他信息"),
+			"configure credential, AI Mode and settings",
+			"配置身份认证、AI 模式和其他信息"),
 		Usage: "configure --mode <AuthenticateMode> --profile <profileName>",
 	}
 	configureGet := NewConfigureGetCommand()
@@ -122,6 +123,8 @@ func TestNewConfigureCommand(t *testing.T) {
 
 	//testcase
 	cmd := NewConfigureCommand()
+	assert.Equal(t, "configure credential, AI Mode and settings", cmd.Short.Get("en"))
+	assert.Equal(t, "配置身份认证、AI 模式和其他信息", cmd.Short.Get("zh"))
 	excmd.Run = cmd.Run
 	assert.ObjectsAreEqualValues(excmd, cmd)
 

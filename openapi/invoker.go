@@ -28,6 +28,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
@@ -145,7 +146,7 @@ func aiModeSuffixForContext(ctx *cli.Context) string {
 	if err != nil {
 		aiCfg = aimode.DefaultAiConfig()
 	}
-	forceOn, forceOff := CliAIOverrides(ctx.Flags())
+	forceOn, forceOff := CliAIOverridesForOpenAPI(ctx)
 	return aimode.RequestUserAgentSuffixForCommand(aiCfg, forceOn, forceOff)
 }
 
@@ -164,10 +165,13 @@ func parseCustomUserAgentSegments(s string) [][2]string {
 
 func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
-	initThrottlingLog(ctx)
+	dryRun := clientDryRunAssigned(ctx)
+	if !dryRun {
+		initThrottlingLog(ctx)
+	}
 	a.product = product
 
-	if a.profile.Mode == config.BearerToken {
+	if !dryRun && a.profile.Mode == config.BearerToken {
 		code := product.GetLowerCode()
 		return cli.NewErrorWithTip(
 			config.ErrBearerTokenRequiresPlugin(code),
@@ -177,8 +181,10 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 
 	a.request = requests.NewCommonRequest()
 	a.request.Product = product.Code
-	if cfg, cfgErr := throttlingretry.LoadEffective(config.GetConfigDir(ctx)); cfgErr == nil {
-		a.throttlingRetryConfig = cfg
+	if !dryRun {
+		if cfg, cfgErr := throttlingretry.LoadEffective(config.GetConfigDir(ctx)); cfgErr == nil {
+			a.throttlingRetryConfig = cfg
+		}
 	}
 
 	a.request.RegionId = a.profile.RegionId
@@ -186,6 +192,11 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 		a.request.RegionId = v
 	} else if v, ok := config.RegionIdFlag(ctx.Flags()).GetValue(); ok {
 		a.request.RegionId = v
+	}
+	if dryRun && a.request.RegionId == "" && ctx.UnknownFlags() != nil {
+		if regionFlag := ctx.UnknownFlags().Get("RegionId"); regionFlag != nil {
+			a.request.RegionId, _ = regionFlag.GetValue()
+		}
 	}
 
 	a.request.Version = product.Version
@@ -213,7 +224,11 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 				a.request.SetContentType(v)
 			}
 		} else {
-			return fmt.Errorf("invalid flag --header `%s` use `--header HeaderName=Value`", s)
+			return &InvalidHeaderError{
+				Input:          s,
+				ExpectedFormat: "HeaderName=Value",
+				Err:            fmt.Errorf("invalid flag --header `%s` use `--header HeaderName=Value`", s),
+			}
 		}
 	}
 
@@ -224,24 +239,36 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 
 	if a.request.Version == "" {
 		return cli.NewErrorWithTip(fmt.Errorf("missing version for product %s", product.Code),
-			"Use flag `--version <YYYY-MM-DD>` to assign version, "+hint)
+			"Use flag `--version <YYYY-MM-DD>` to assign version, %s", hint)
 	}
 
 	if a.request.RegionId == "" {
 		return cli.NewErrorWithTip(fmt.Errorf("missing region for product %s", product.Code),
-			"Use flag --region <regionId> to assign region, "+hint)
+			"Use flag --region <regionId> to assign region, %s", hint)
+	}
+
+	if dryRun {
+		if a.request.Domain == "" {
+			a.request.Domain, err = product.GetEndpointWithType(a.request.RegionId, nil, a.profile.EndpointType)
+			if err != nil {
+				return cli.NewErrorWithTip(
+					fmt.Errorf("unknown endpoint for %s/%s! failed %w", product.GetLowerCode(), a.request.RegionId, err),
+					"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, %s", hint)
+			}
+		}
+		return nil
 	}
 
 	a.client, err = GetClient(a.profile, ctx)
 	if err != nil {
-		return fmt.Errorf("init client failed %s", err)
+		return fmt.Errorf("init client failed: %w", err)
 	}
 	if vendorEnv, ok := os.LookupEnv("ALIBABA_CLOUD_VENDOR"); ok {
 		a.client.AppendUserAgent("vendor", vendorEnv)
 	}
 	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
 
-	if envUA := util.GetFromEnv("ALIBABA_CLOUD_USER_AGENT"); envUA != "" {
+	if envUA := util.GetFromEnv(sysconfig.EnvUserAgent); envUA != "" {
 		envUA = util.SanitizeUserAgent(envUA)
 		for _, pair := range parseCustomUserAgentSegments(envUA) {
 			a.client.AppendUserAgent(pair[0], pair[1])
@@ -277,9 +304,11 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 			endpointType := a.profile.EndpointType
 			a.request.Domain, err = product.GetEndpointWithType(a.request.RegionId, a.client, endpointType)
 			if err != nil {
+				// Wrap with %w (not %s) so *meta.InvalidEndpointError survives the
+				// chain and the AI-mode normalizer can render a JSON envelope.
 				return cli.NewErrorWithTip(
-					fmt.Errorf("unknown endpoint for %s/%s! failed %s", product.GetLowerCode(), a.request.RegionId, err),
-					"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, "+hint)
+					fmt.Errorf("unknown endpoint for %s/%s! failed %w", product.GetLowerCode(), a.request.RegionId, err),
+					"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, %s", hint)
 			}
 		}
 	}

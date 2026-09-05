@@ -1,0 +1,75 @@
+package openapi
+
+import (
+	"bytes"
+	"encoding/json"
+	"testing"
+
+	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestRenderResponseHelpText(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPIResponse("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+	doc.ResponseQuery = &machineHelpQueryExample{
+		Path:         "Reports.Report",
+		QueryCommand: "aliyun demo CreateReport --cli-query 'Reports.Report'",
+	}
+
+	var output bytes.Buffer
+	require.NoError(t, renderResponseHelpText(&output, doc))
+	assert.Contains(t, output.String(), "Responses:")
+	assert.Contains(t, output.String(), `"200": {`)
+	assert.Contains(t, output.String(), `"$ref": "#/components/schemas/ReportList"`)
+	assert.Contains(t, output.String(), "Components:")
+	assert.Contains(t, output.String(), `"ReportList": {`)
+	assert.NotContains(t, output.String(), `"Unused":`)
+	assert.Contains(t, output.String(), "Fetch any of these fields with --cli-query (JMESPath), e.g.:")
+	assert.Contains(t, output.String(), "aliyun demo CreateReport --cli-query 'Reports.Report'")
+}
+
+func TestRenderResponseHelpTextWithoutSchema(t *testing.T) {
+	service := testMachineHelpService(t)
+	doc, err := service.buildAPIResponse("demo", "DescribeRegions", "2026-01-01")
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	require.NoError(t, renderResponseHelpText(&output, doc))
+	assert.Equal(t, "No response schema is available for this API.\n", output.String())
+}
+
+func TestRenderResponseHelpTextKeepsFullResponsesWhenSuccessHasNoBody(t *testing.T) {
+	document := &machineHelpAPIResponseDocument{
+		Responses: json.RawMessage(`{"204":{"description":"No content"},"400":{"description":"Invalid request"}}`),
+		Notice:    "No response schema is available for this API.",
+		Result:    HelpResult{Shown: 2, Total: 2},
+	}
+
+	var output bytes.Buffer
+	require.NoError(t, renderResponseHelpText(&output, document))
+	assert.Contains(t, output.String(), "Responses:")
+	assert.Contains(t, output.String(), `"400": {`)
+	assert.Contains(t, output.String(), "Notice: No response schema is available for this API.")
+}
+
+func TestRenderResponseHelpTextUsesSelectedSchemaLanguage(t *testing.T) {
+	previousLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(previousLanguage) })
+	i18n.SetLanguage("zh")
+
+	service := testMachineHelpService(t)
+	document, err := service.buildAPIResponse("demo", "CreateReport", "2026-01-01")
+	require.NoError(t, err)
+
+	var output bytes.Buffer
+	require.NoError(t, renderResponseHelpText(&output, document))
+	assert.Contains(t, output.String(), `"description": "请求 ID。"`)
+	assert.Contains(t, output.String(), `"title": "报表 ID"`)
+	assert.NotContains(t, output.String(), `"description_en"`)
+	assert.NotContains(t, output.String(), `"description_zh"`)
+	assert.NotContains(t, output.String(), `"title_en"`)
+	assert.NotContains(t, output.String(), `"title_zh"`)
+}

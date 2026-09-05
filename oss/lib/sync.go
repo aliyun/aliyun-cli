@@ -923,7 +923,7 @@ func (sc *SyncCommand) confirm(keys []string) bool {
 		logBuffer.WriteString(fmt.Sprintf("%s\n", v))
 	}
 	logBuffer.WriteString(fmt.Sprintf("sync:delete above objects(y or N)? "))
-	fmt.Printf(logBuffer.String())
+	fmt.Print(logBuffer.String())
 
 	var val string
 	if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {

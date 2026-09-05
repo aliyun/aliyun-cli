@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"time"
@@ -39,14 +38,20 @@ func TryRefreshStsToken(signInUrl *string, accessToken *string, accessConfig *st
 	if len(parsedUrl) != 2 {
 		return nil, errors.New("invalid signInUrl")
 	}
+	if accessToken == nil {
+		return nil, errors.New("accessToken is nil")
+	}
+	if accessConfig == nil {
+		return nil, errors.New("accessConfig is nil")
+	}
+	if accountId == nil {
+		return nil, errors.New("accountId is nil")
+	}
 	host := parsedUrl[1]
 	protocol := parsedUrl[0]
 
-	// 使用传入的HTTP客户端，如果为nil则使用默认客户端
-	httpClient := client
-	if httpClient == nil {
-		httpClient = http.DefaultClient
-	}
+	// 使用传入的 HTTP 客户端，未配置超时时补充有限的默认值。
+	httpClient := cloudSSOHTTPClient(client)
 
 	credential, err := CreateCloudCredential(protocol+"://"+host, *accessToken, CloudCredentialOptions{
 		AccountId:             *accountId,
@@ -100,6 +105,7 @@ type CloudCredentialResponseRaw struct {
 }
 
 func CreateCloudCredential(prefix string, accessToken string, options CloudCredentialOptions, client *http.Client) (*CloudCredentialResponse, error) {
+	client = cloudSSOHTTPClient(client)
 	urlFetch := fmt.Sprintf("%s/cloud-credentials", prefix)
 
 	// Prepare request body
@@ -125,6 +131,12 @@ func CreateCloudCredential(prefix string, accessToken string, options CloudCrede
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
+	if resp == nil {
+		return nil, errors.New("cloud credential response is nil")
+	}
+	if resp.Body == nil {
+		return nil, errors.New("cloud credential response body is nil")
+	}
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
@@ -133,20 +145,16 @@ func CreateCloudCredential(prefix string, accessToken string, options CloudCrede
 	}(resp.Body)
 
 	// Read response body
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	// Handle HTTP errors
 	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-		bodyBytes, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read error response body: %w", err)
-		}
-		bodyString := string(bodyBytes)
+		bodyString := string(body)
 		var errResp map[string]interface{}
-		if err := json.Unmarshal(bodyBytes, &errResp); err != nil {
+		if err := json.Unmarshal(body, &errResp); err != nil {
 			// 如果解析 JSON 失败，返回原始响应体作为错误信息
 			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, bodyString)
 		}
@@ -159,14 +167,30 @@ func CreateCloudCredential(prefix string, accessToken string, options CloudCrede
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	if result.CloudCredential.Expiration != "" {
+	credential := result.CloudCredential
+	if credential == nil {
+		// Older endpoints and test doubles may return the credential object at
+		// the top level. Continue accepting that shape for compatibility.
+		var direct CloudCredentialResponse
+		if err := json.Unmarshal(body, &direct); err != nil {
+			return nil, fmt.Errorf("failed to parse cloud credential: %w", err)
+		}
+		if direct.AccessKeyId != "" || direct.AccessKeySecret != "" || direct.SecurityToken != "" || direct.Expiration != "" {
+			credential = &direct
+		}
+	}
+	if credential == nil {
+		return nil, errors.New("cloud credential is missing from response")
+	}
+
+	if credential.Expiration != "" {
 		// Parse expiration time
-		expiration, err := time.Parse(time.RFC3339, result.CloudCredential.Expiration)
+		expiration, err := time.Parse(time.RFC3339, credential.Expiration)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse expiration time: %w", err)
 		}
-		result.CloudCredential.ExpirationInt64 = expiration.Unix()
+		credential.ExpirationInt64 = expiration.Unix()
 	}
 
-	return result.CloudCredential, nil
+	return credential, nil
 }

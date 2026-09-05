@@ -16,7 +16,6 @@ package meta
 import (
 	"encoding/json"
 	"errors"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -51,14 +50,6 @@ func MockLoadRepository(Products []Product) (*Repository, error) {
 	return &r, nil
 }
 
-var HookGetApi = func(fn func(productCode string, version string, apiName string) (Api, bool)) func(productCode string, version string, apiName string) (Api, bool) {
-	return fn
-}
-
-var HookGetApiByPath = func(fn func(productCode string, version string, method string, path string) (Api, bool)) func(productCode string, version string, method string, path string) (Api, bool) {
-	return fn
-}
-
 func LoadRepository() *Repository {
 	var e ProductSet
 	err := ReadJsonFrom("products.json", &e)
@@ -88,51 +79,6 @@ func LoadRepository() *Repository {
 func (a *Repository) GetProduct(code string) (Product, bool) {
 	p, ok := a.index[strings.ToLower(code)]
 	return p, ok
-}
-
-func (a *Repository) GetApi(productCode string, version string, apiName string) (Api, bool) {
-	var result Api
-	product, ok := a.GetProduct(productCode)
-	if !ok {
-		return result, false
-	}
-
-	err := ReadJsonFrom(strings.ToLower(product.Code)+"/"+apiName+".json", &result)
-	if err != nil {
-		return result, false
-	}
-	result.Product = &product
-	return result, true
-}
-
-func (a *Repository) GetApiByPath(productCode string, version string, method string, path string) (Api, bool) {
-	var result Api
-	product, ok := a.GetProduct(productCode)
-	if !ok {
-		return result, false
-	}
-	// list all apis
-	for _, apiName := range product.ApiNames {
-		err := ReadJsonFrom(strings.ToLower(product.Code)+"/"+apiName+".json", &result)
-		if err != nil {
-			return result, false
-		}
-		// method not allowed
-		if !strings.Contains(result.Method, method) {
-			continue
-		}
-		// replace all [something] to *
-		// example /permissions/users/[uid]/update to /permissions/users/*/update
-		var pattern = ReplacePathPattern(result.PathPattern)
-		// match path
-		re := regexp.MustCompile("^" + pattern + "$")
-		if re.MatchString(path) {
-			result.Product = &product
-			return result, true
-		}
-	}
-	result = Api{}
-	return result, false
 }
 
 //go:embed versions.json
@@ -178,9 +124,4 @@ func (a *Repository) GetStyle(productCode, version string) (string, bool) {
 	}
 
 	return "", false
-}
-
-func ReplacePathPattern(pattern string) string {
-	re := regexp.MustCompile(`\[[^\]]+\]`)
-	return re.ReplaceAllString(pattern, "[0-9a-zA-Z_\\-\\.{}]+")
 }

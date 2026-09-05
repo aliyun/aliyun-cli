@@ -224,11 +224,8 @@ func TestDoUpgrade_DirectWhenNotBrew(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestUpgradeViaDirect_FullFlow(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("skipping test on non-linux platform")
-	}
 	binaryContent := []byte("#!/bin/sh\necho upgraded\n")
-	archive := createTarGzInMemory(t, "aliyun", binaryContent)
+	_, binaryName, archive := createUpgradeArchiveInMemory(t, "99.0.0", binaryContent)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
@@ -259,7 +256,7 @@ func TestUpgradeViaDirect_FullFlow(t *testing.T) {
 	ossVersionURL = server.URL + "/version"
 	stdin = strings.NewReader("y\n")
 
-	targetBinary := filepath.Join(t.TempDir(), "aliyun")
+	targetBinary := filepath.Join(t.TempDir(), binaryName)
 	os.WriteFile(targetBinary, []byte("old"), 0755)
 	resolveExecPathFunc = func() (string, error) { return targetBinary, nil }
 
@@ -376,11 +373,8 @@ func TestConfirmUpgrade_StdinEmpty(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestDownloadAndExtract_Success(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("skipping test on non-linux platform")
-	}
 	binaryContent := []byte("#!/bin/sh\necho upgraded\n")
-	archiveBuf := createTarGzInMemory(t, "aliyun", binaryContent)
+	assetName, _, archiveBuf := createUpgradeArchiveInMemory(t, "3.4.0", binaryContent)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", archiveBuf.Len()))
@@ -393,7 +387,7 @@ func TestDownloadAndExtract_Success(t *testing.T) {
 	defer func() { httpClient = origClient }()
 
 	var out bytes.Buffer
-	binaryPath, cleanup, err := downloadAndExtract(&out, server.URL+"/aliyun-cli-linux-3.4.0-amd64.tgz", "aliyun-cli-linux-3.4.0-amd64.tgz")
+	binaryPath, cleanup, err := downloadAndExtract(&out, server.URL+"/"+assetName, assetName)
 	assert.NoError(t, err)
 	assert.NotNil(t, cleanup)
 	defer cleanup()
@@ -916,6 +910,37 @@ func createTarGzInMemory(t *testing.T, fileName string, content []byte) *bytes.B
 	tw.Close()
 	gw.Close()
 	return &buf
+}
+
+func createZipInMemory(t *testing.T, fileName string, content []byte) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.Create(fileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return &buf
+}
+
+func createUpgradeArchiveInMemory(t *testing.T, version string, content []byte) (assetName, binaryName string, archive *bytes.Buffer) {
+	t.Helper()
+	assetName, err := buildAssetName(version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binaryName = "aliyun"
+	if runtime.GOOS == "windows" {
+		binaryName = "aliyun.exe"
+		return assetName, binaryName, createZipInMemory(t, binaryName, content)
+	}
+	return assetName, binaryName, createTarGzInMemory(t, binaryName, content)
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)

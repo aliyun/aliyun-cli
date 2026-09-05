@@ -15,8 +15,40 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"strings"
 )
+
+// StructuredError renders a machine-readable error without the decorations
+// used by the interactive error path.
+type StructuredError interface {
+	error
+	RenderError(io.Writer) error
+	ExitCode() int
+}
+
+// InvalidOptionCombinationError identifies flags that cannot be used together
+// while preserving the existing human-readable error text.
+type InvalidOptionCombinationError struct {
+	Options []string
+	Err     error
+}
+
+func (e *InvalidOptionCombinationError) Error() string {
+	if e == nil || e.Err == nil {
+		return "invalid option combination"
+	}
+	return e.Err.Error()
+}
+
+func (e *InvalidOptionCombinationError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func (*InvalidOptionCombinationError) AIRecoveryEligible() {}
 
 // If command.Execute return Noticeable error, print i18n Notice under error information
 type ErrorWithTip interface {
@@ -37,6 +69,10 @@ func NewErrorWithTip(err error, tipFormat string, args ...interface{}) error {
 
 func (e *errorWithTip) Error() string {
 	return e.err.Error()
+}
+
+func (e *errorWithTip) Unwrap() error {
+	return e.err
 }
 
 func (e *errorWithTip) GetTip(lang string) string {
@@ -60,12 +96,24 @@ func NewInvalidCommandError(name string, ctx *Context) error {
 }
 
 func (e *InvalidCommandError) Error() string {
-	return fmt.Sprintf("'%s' is not a valid command", e.Name)
+	return fmt.Sprintf("%q is not a valid command", e.Name)
 }
 
+func (*InvalidCommandError) AIRecoveryEligible() {}
+
 func (e *InvalidCommandError) GetSuggestions() []string {
+	if e == nil || e.ctx == nil || e.ctx.command == nil {
+		return nil
+	}
 	cmd := e.ctx.command
 	return cmd.GetSuggestions(e.Name)
+}
+
+func (e *InvalidCommandError) GetTip(lang string) string {
+	if e.ctx != nil && e.ctx.command != nil {
+		return fmt.Sprintf("Use `%s --help` for more information.", e.ctx.command.getName())
+	}
+	return "Use `--help` for more information."
 }
 
 type InvalidFlagError struct {
@@ -98,6 +146,38 @@ func (e *InvalidFlagError) Error() string {
 		return fmt.Sprintf("invalid flag %s; available flags: %s", display, strings.Join(available, ", "))
 	}
 	return fmt.Sprintf("invalid flag %s", display)
+}
+
+// AgentMessage keeps recovery instructions out of the structured error
+// message. Human Error() output remains unchanged.
+func (e *InvalidFlagError) AgentMessage() string {
+	return fmt.Sprintf("invalid flag %s", e.flagDisplay())
+}
+
+// AgentHelpCommand returns the ordinary Help entry for the command that
+// rejected this CLI flag. Built-in commands do not support Canonical
+// --help-search/--cli-section options.
+func (e *InvalidFlagError) AgentHelpCommand() string {
+	if e == nil || e.ctx == nil || e.ctx.command == nil {
+		return "aliyun help"
+	}
+	path := strings.TrimSpace(e.ctx.command.getName())
+	if path == "aliyun" {
+		return "aliyun help"
+	}
+	path = strings.TrimSpace(strings.TrimPrefix(path, "aliyun "))
+	if path == "" {
+		return "aliyun help"
+	}
+	return "aliyun help " + path
+}
+
+func (*InvalidFlagError) AIRecoveryEligible() {}
+
+// AgentSuggestions returns the same close flag matches used by Error without
+// exposing Context internals to the OpenAPI recovery adapter.
+func (e *InvalidFlagError) AgentSuggestions() []string {
+	return e.closeSuggestions()
 }
 
 func (e *InvalidFlagError) closeSuggestions() []string {

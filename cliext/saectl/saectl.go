@@ -173,11 +173,11 @@ func (c *Context) InitBasicInfo() {
 	c.configPath = getConfigurePathFunc()
 	c.checkVersionCacheFilePath = filepath.Join(c.configPath, ".saectl_version_check")
 	c.execFilePath = filepath.Join(c.configPath, "saectl")
-	
+
 	if runtime.GOOS == "windows" {
 		c.execFilePath += ".exe"
 	}
-	
+
 	c.installed = fileExists(c.execFilePath)
 }
 
@@ -203,22 +203,22 @@ func (c *Context) NeedCheckVersion() bool {
 
 func (c *Context) Install() error {
 	url := fmt.Sprintf("%s%s/saectl-%s-%s", saectlBaseUrl, c.versionRemote, c.versionRemote, c.downloadPathSuffix)
-	
+
 	tmpDir := os.TempDir()
-	
+
 	ext := ".zip"
 	if strings.HasSuffix(c.downloadPathSuffix, ".tar.gz") {
 		ext = ".tar.gz"
 	}
 	tmpFile := filepath.Join(tmpDir, "saectl_download"+ext)
-	
+
 	if fileExists(tmpFile) {
 		err := os.Remove(tmpFile)
 		if err != nil {
 			return err
 		}
 	}
-	
+
 	extractCenterDir := fmt.Sprintf("saectl-%s-%s", c.versionRemote, strings.TrimSuffix(c.downloadPathSuffix, ext))
 	err := downloadAndExtractFunc(url, tmpFile, c.execFilePath, extractCenterDir)
 	if err != nil {
@@ -248,7 +248,7 @@ func DownloadAndExtract(url string, destFile string, exeFilePath string, extract
 	if err = out.Close(); err != nil {
 		return fmt.Errorf("failed to close file %s: %v", destFile, err)
 	}
-	
+
 	destDir := filepath.Dir(destFile)
 	destDirUse := filepath.Join(destDir, "saectl_extract")
 	if fileExists(destDirUse) {
@@ -257,7 +257,7 @@ func DownloadAndExtract(url string, destFile string, exeFilePath string, extract
 			return fmt.Errorf("failed to remove existing dir %s: %v", destDirUse, err)
 		}
 	}
-	
+
 	if strings.HasSuffix(destFile, ".zip") {
 		err = unzip(destFile, destDirUse)
 	} else if strings.HasSuffix(destFile, ".tar.gz") {
@@ -265,16 +265,16 @@ func DownloadAndExtract(url string, destFile string, exeFilePath string, extract
 	} else {
 		return fmt.Errorf("unsupported archive format for %s", destFile)
 	}
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to extract file %s: %v", destFile, err)
 	}
-	
+
 	originExtractFile := "saectl"
 	if runtime.GOOS == "windows" {
 		originExtractFile += ".exe"
 	}
-	
+
 	sourceFile := filepath.Join(destDirUse, extractCenterDir, originExtractFile)
 	if !fileExists(sourceFile) {
 		// 回退查找根目录
@@ -283,7 +283,7 @@ func DownloadAndExtract(url string, destFile string, exeFilePath string, extract
 			return fmt.Errorf("extracted file %s not exist", sourceFile)
 		}
 	}
-	
+
 	if fileExists(exeFilePath) {
 		err := os.Remove(exeFilePath)
 		if err != nil {
@@ -294,14 +294,14 @@ func DownloadAndExtract(url string, destFile string, exeFilePath string, extract
 	if err != nil {
 		return err
 	}
-	
+
 	if runtime.GOOS != "windows" {
 		err = os.Chmod(exeFilePath, 0755)
 		if err != nil {
 			return fmt.Errorf("failed to set exec permission for file %s: %v", exeFilePath, err)
 		}
 	}
-	
+
 	err = os.Remove(destFile)
 	if err != nil {
 		return fmt.Errorf("failed to remove temp file %s: %v", destFile, err)
@@ -577,7 +577,7 @@ func (c *Context) PrepareEnv() error {
 	if err != nil {
 		return fmt.Errorf("config failed: %s", err.Error())
 	}
-	
+
 	var accessKeyId, accessKeySecret, stsToken string
 
 	mode := profile.Mode
@@ -647,12 +647,12 @@ func (c *Context) RemoveFlagsForMainCli(args []string) ([]string, error) {
 			}
 		}
 	}
-	
+
 	argsNew = stripArgsEqual(argsNew,
 		"--"+openapi.CliAIModeFlagName,
 		"--"+openapi.CliNoAIModeFlagName,
 	)
-	
+
 	return argsNew, nil
 }
 
@@ -714,6 +714,6 @@ func GetLatestSaeCtlVersion() (string, error) {
 	if version == "" {
 		return "", fmt.Errorf("failed to parse version from response body: empty string")
 	}
-	
+
 	return version, nil
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 )
 
 func GetFromEnv(args ...string) string {
@@ -140,7 +141,7 @@ func GetAliyunCliUserAgent() string {
 	if seg := GetAgentUserAgentSegment(); seg != "" {
 		ua += " " + seg
 	}
-	if custom := GetFromEnv("ALIBABA_CLOUD_USER_AGENT"); custom != "" {
+	if custom := GetFromEnv(sysconfig.EnvUserAgent); custom != "" {
 		ua += " " + SanitizeUserAgent(custom)
 	}
 	return ua

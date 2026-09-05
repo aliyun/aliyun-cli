@@ -118,7 +118,7 @@ func TestConfigureSafetyPolicy_Add_UpdatesExistingPattern(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, safety.SavePolicy(dir, &safety.Policy{
 		Enabled: true,
-		Rules: []safety.Rule{{Pattern: "x:Y", Action: safety.ActionDeny}},
+		Rules:   []safety.Rule{{Pattern: "x:Y", Action: safety.ActionDeny}},
 	}))
 
 	ctx, _ := testAiModeContext(t, dir)

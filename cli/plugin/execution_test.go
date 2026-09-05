@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMatchPluginCommand(t *testing.T) {
@@ -435,6 +437,37 @@ func TestExecutePlugin(t *testing.T) {
 		assert.Contains(t, stdout.String(), "test plugin output")
 	})
 
+	t.Run("Minimum CLI version is checked before resolving binary", func(t *testing.T) {
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		originalVersion := cli.Version
+		cli.Version = "3.3.5"
+		defer func() { cli.Version = originalVersion }()
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
+		assert.NoError(t, os.MkdirAll(pluginDir, 0755))
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		manifestJSON, err := json.Marshal(LocalManifest{Plugins: map[string]LocalPlugin{
+			"aliyun-cli-test": {
+				Name:          "aliyun-cli-test",
+				Version:       "1.0.0",
+				MinCliVersion: "9.0.0",
+				Path:          pluginDir,
+				Command:       "test",
+			},
+		}})
+		assert.NoError(t, err)
+		assert.NoError(t, os.WriteFile(manifestPath, manifestJSON, 0644))
+
+		ok, err := ExecutePlugin("test", []string{}, nil)
+		assert.True(t, ok)
+		assert.ErrorContains(t, err, "requires CLI version 9.0.0 or higher")
+		assert.ErrorContains(t, err, "but you have 3.3.5")
+		assert.NotContains(t, err.Error(), "plugin binary not found")
+	})
+
 	t.Run("Plugin binary path resolution fails", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("shell script test skipped on Windows")
@@ -492,6 +525,35 @@ func TestExecutePlugin(t *testing.T) {
 		assert.Contains(t, stdout.String(), "args: arg1 arg2")
 	})
 
+	t.Run("Raw Help execution preserves argv and caller slice", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("shell script test skipped on Windows")
+		}
+
+		testHome := t.TempDir()
+		cleanup := setTestHomeDir(t, testHome)
+		defer cleanup()
+
+		pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
+		require.NoError(t, os.MkdirAll(pluginDir, 0755))
+		binPath := filepath.Join(pluginDir, "aliyun-cli-test")
+		require.NoError(t, os.WriteFile(binPath, []byte("#!/bin/sh\nprintf 'args:%s\\n' \"$*\"\n"), 0755))
+
+		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
+		manifestJSON := `{"plugins":{"aliyun-cli-test":{"name":"aliyun-cli-test","version":"1.0.0","path":"` + pluginDir + `","command":"test"}}}`
+		require.NoError(t, os.WriteFile(manifestPath, []byte(manifestJSON), 0644))
+
+		stdout := new(bytes.Buffer)
+		ctx := cli.NewCommandContext(stdout, new(bytes.Buffer))
+		args := []string{"Test", "plugin-help", "--help-search", "FooBar"}
+		original := append([]string(nil), args...)
+		ok, err := ExecutePluginRaw("test", args, ctx)
+		require.NoError(t, err)
+		assert.True(t, ok)
+		assert.Equal(t, original, args)
+		assert.Contains(t, stdout.String(), "args:Test plugin-help --help-search FooBar")
+	})
+
 	t.Run("Plugin execution with plugin-help subcommand", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("shell script test skipped on Windows")
@@ -537,6 +599,40 @@ func TestExecutePlugin(t *testing.T) {
 			t.Error("ExecutePlugin() with invalid HOME expected ok=false, got ok=true")
 		}
 	})
+}
+
+func TestValidateLocalPluginCliVersion(t *testing.T) {
+	originalVersion := cli.Version
+	defer func() { cli.Version = originalVersion }()
+
+	tests := []struct {
+		name           string
+		currentVersion string
+		minVersion     string
+		wantErr        bool
+	}{
+		{name: "legacy entry without requirement", currentVersion: "3.1.0"},
+		{name: "current version equals minimum", currentVersion: "3.2.0", minVersion: "3.2.0"},
+		{name: "current version exceeds minimum", currentVersion: "3.3.0", minVersion: "3.2.0"},
+		{name: "development version skips check", currentVersion: "0.0.1", minVersion: "9.0.0"},
+		{name: "current version below minimum", currentVersion: "3.1.0", minVersion: "3.2.0", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cli.Version = tt.currentVersion
+			err := ValidateLocalPluginCliVersion("aliyun-cli-test", &LocalPlugin{
+				Name:          "aliyun-cli-test",
+				Version:       "1.0.0",
+				MinCliVersion: tt.minVersion,
+			})
+			if tt.wantErr {
+				assert.ErrorContains(t, err, "requires CLI version "+tt.minVersion+" or higher")
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
 }
 
 func TestManifestCorruptionHandling(t *testing.T) {

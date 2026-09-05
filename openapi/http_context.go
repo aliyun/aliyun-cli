@@ -18,7 +18,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +31,7 @@ import (
 	openapiTeaUtils "github.com/alibabacloud-go/tea-utils/v2/service"
 	"github.com/alibabacloud-go/tea/dara"
 	"github.com/alibabacloud-go/tea/tea"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -39,8 +42,13 @@ import (
 )
 
 func ShouldUseOpenapi(ctx *cli.Context, product *meta.Product) bool {
-	// sls use openapi, should be applied to all products later
-	return strings.ToLower(product.Code) == "sls"
+	// SLS is routed through the darabonba-openapi/v2 channel (v3 signature).
+	// Should be applied to all products later.
+	switch strings.ToLower(product.Code) {
+	case "sls":
+		return true
+	}
+	return false
 }
 
 var hookHttpContextCall = func(fn func() error) func() error {
@@ -70,6 +78,21 @@ func GetOpenapiClient(cp *config.Profile, ctx *cli.Context, product *meta.Produc
 		conf.Endpoint = tea.String(cp.Endpoint)
 	} else if strings.ToLower(product.Code) == "sls" {
 		conf.Endpoint = tea.String(cp.RegionId + ".log.aliyuncs.com") // should apply product template
+	} else if product.LocationServiceCode == "" {
+		// Products without a location service resolve their endpoint from the
+		// static regional endpoint table, so a nil sdk client is safe here.
+		ep, e := product.GetEndpointWithType(cp.RegionId, nil, cp.EndpointType)
+		if e != nil {
+			// An explicit --endpoint is applied as a request-time override, so a
+			// failed table lookup is only fatal when no override is present.
+			// Otherwise surface the resolution error (e.g. region not in the
+			// table and no global endpoint) instead of sending a request with no host.
+			if _, ok := config.EndpointFlag(ctx.Flags()).GetValue(); !ok {
+				return nil, e
+			}
+		} else {
+			conf.Endpoint = tea.String(ep)
+		}
 	}
 
 	ua := util.GetAliyunCliUserAgent()
@@ -208,7 +231,10 @@ func (a *HttpContext) getRequest() *openapiutil.OpenApiRequest {
 
 func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	var err error
-	initThrottlingLog(ctx)
+	dryRun := clientDryRunAssigned(ctx)
+	if !dryRun {
+		initThrottlingLog(ctx)
+	}
 	a.product = product
 	a.openapiRequest = &openapiutil.OpenApiRequest{
 		Query:   map[string]*string{},
@@ -226,7 +252,9 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 	if config.SkipSecureVerify(ctx.Flags()).IsAssigned() {
 		a.openapiRuntime.SetIgnoreSSL(true)
 	}
-	a.throttlingRetryConfig = openapiThrottlingRetryConfig(ctx)
+	if !dryRun {
+		a.throttlingRetryConfig = openapiThrottlingRetryConfig(ctx)
+	}
 
 	if v, ok := config.EndpointFlag(ctx.Flags()).GetValue(); ok {
 		a.openapiRequest.EndpointOverride = tea.String(v)
@@ -236,9 +264,17 @@ func (a *HttpContext) Init(ctx *cli.Context, product *meta.Product) error {
 			if k, v, ok := cli.SplitStringWithPrefix(s, "="); ok {
 				a.openapiRequest.Headers[k] = tea.String(v)
 			} else {
-				return fmt.Errorf("invalid flag --header `%s` use `--header HeaderName=Value`", s)
+				return &InvalidHeaderError{
+					Input:          s,
+					ExpectedFormat: "HeaderName=Value",
+					Err:            fmt.Errorf("invalid flag --header `%s` use `--header HeaderName=Value`", s),
+				}
 			}
 		}
+	}
+
+	if dryRun {
+		return nil
 	}
 
 	a.openapiClient, err = GetOpenapiClient(a.profile, ctx, product)
@@ -288,14 +324,29 @@ func (a *HttpContext) Call() error {
 }
 
 var httpContextExecuteFunc = func(a *HttpContext) (map[string]interface{}, error) {
-	return a.openapiClient.Execute(a.openapiParams, a.openapiRequest, a.openapiRuntime)
+	// Products with a self-built gateway (e.g. sls) plug in a Spi that handles
+	// host/endpoint management, so they go through Execute. Products without a
+	// gateway use CallApi, which signs and sends the request directly
+	// with the v3 (ACS3-HMAC-SHA256) algorithm and no Spi dependency.
+	if a.openapiClient.Spi != nil {
+		return a.openapiClient.Execute(a.openapiParams, a.openapiRequest, a.openapiRuntime)
+	}
+	return a.openapiClient.CallApi(a.openapiParams, a.openapiRequest, a.openapiRuntime)
+}
+
+// openapiCallSSEFunc launches the underlying SSE call in a goroutine. It is a
+// package-level variable so tests can substitute a fake event producer.
+var openapiCallSSEFunc = func(a *OpenapiContext, yield chan *openapiClient.SSEResponse, yieldErr chan error) {
+	go a.openapiClient.CallSSEApi(a.openapiParams, a.openapiRequest, a.openapiRuntime, yield, yieldErr)
 }
 
 type OpenapiContext struct {
 	*HttpContext
 	method string
 	path   string
-	api    *meta.Api
+	api    *canonicalmeta.API
+
+	pathParams map[string]string
 }
 
 func (a *OpenapiContext) ProcessPullLogsHeaders(ctx *cli.Context) {
@@ -306,16 +357,16 @@ func (a *OpenapiContext) ProcessPullLogsHeaders(ctx *cli.Context) {
 
 func (a *OpenapiContext) ProcessHeaders(ctx *cli.Context) error {
 	for _, f := range ctx.UnknownFlags().Flags() {
-		param := a.api.FindParameter(f.Name)
+		param := a.api.FindLegacyParameter(f.Name)
 		if param == nil {
-			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+			return NewInvalidParameterErrorFromCanonical(f.Name, a.api, a.product.GetLowerCode(), ctx.Flags())
 		}
-		if param.Position != "header" {
+		if param.LegacyPosition() != "header" {
 			continue
 		}
 		value, _ := f.GetValue()
-		if param.Required && value == "" {
-			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		if param.LegacyRequired() && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.LegacyName())
 		}
 		a.openapiRequest.Headers[f.Name] = &value
 	}
@@ -331,8 +382,11 @@ func (a *OpenapiContext) ProcessPutLogsBody(ctx *cli.Context) error {
 		body = []byte(v)
 	}
 
-	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok {
-		buf, _ := os.ReadFile(v)
+	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok && strings.TrimSpace(v) != "" {
+		buf, err := os.ReadFile(v)
+		if err != nil {
+			return &InvalidBodyFileError{Path: v, Err: fmt.Errorf("--body-file: %w", err)}
+		}
 		body = buf
 	}
 	if body == nil {
@@ -361,26 +415,38 @@ func (a *OpenapiContext) ProcessBody(ctx *cli.Context) error {
 		a.openapiRequest.SetBody([]byte(v))
 	}
 
-	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok {
-		buf, _ := os.ReadFile(v)
+	if v, ok := BodyFileFlag(ctx.Flags()).GetValue(); ok && strings.TrimSpace(v) != "" {
+		buf, err := os.ReadFile(v)
+		if err != nil {
+			return &InvalidBodyFileError{Path: v, Err: fmt.Errorf("--body-file: %w", err)}
+		}
 		a.openapiRequest.SetBody(buf)
 	}
 
+	body := map[string]interface{}{}
 	for _, f := range ctx.UnknownFlags().Flags() {
-		param := a.api.FindParameter(f.Name)
+		param := a.api.FindLegacyParameter(f.Name)
 		if param == nil {
-			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+			return NewInvalidParameterErrorFromCanonical(f.Name, a.api, a.product.GetLowerCode(), ctx.Flags())
 		}
-		if param.Position != "Body" {
+		if param.LegacyPosition() != "Body" {
 			continue
 		}
 		value, _ := f.GetValue()
-		if param.Required && value == "" {
-			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		if param.LegacyRequired() && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.LegacyName())
 		}
-		body := map[string]interface{}{}
 		body[f.Name] = value
+	}
+	if len(body) > 0 {
 		a.openapiRequest.Body = body
+		// RPC-style products (e.g. DAS) carry their body-position params as
+		// formData: the classic RPC channel sends them as form fields
+		// (application/x-www-form-urlencoded), so switch ReqBodyType away from
+		// the JSON default set in Init. ROA products keep the JSON body.
+		if a.openapiParams != nil && tea.StringValue(a.openapiParams.Style) == "RPC" {
+			a.openapiParams.ReqBodyType = tea.String("formData")
+		}
 	}
 
 	return nil
@@ -388,43 +454,49 @@ func (a *OpenapiContext) ProcessBody(ctx *cli.Context) error {
 
 func (a *OpenapiContext) ProcessPath(ctx *cli.Context) error {
 	pathParams := make(map[string]string)
+	pathname := a.path
 	for _, f := range ctx.UnknownFlags().Flags() {
-		param := a.api.FindParameter(f.Name)
+		param := a.api.FindLegacyParameter(f.Name)
 		if param == nil {
-			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+			return NewInvalidParameterErrorFromCanonical(f.Name, a.api, a.product.GetLowerCode(), ctx.Flags())
 		}
-		if param.Position != "Path" {
+		if param.LegacyPosition() != "Path" {
 			continue
 		}
 		value, _ := f.GetValue()
-		if param.Required && value == "" {
-			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		if param.LegacyRequired() && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.LegacyName())
+		}
+		if param.IsWildcard() {
+			pathParams[f.Name] = value
+			pathname = value
+			continue
 		}
 		pathParams[f.Name] = value
 	}
-	pathname := a.path
 	if len(pathParams) > 0 {
 		for key, value := range pathParams {
 			placeholder := "[" + key + "]"
 			pathname = strings.ReplaceAll(pathname, placeholder, value)
 		}
 	}
+	a.pathParams = pathParams
 	a.openapiParams.Pathname = tea.String(pathname)
 	return nil
 }
 
 func (a *OpenapiContext) ProcessHost(ctx *cli.Context) error {
 	for _, f := range ctx.UnknownFlags().Flags() {
-		param := a.api.FindParameter(f.Name)
+		param := a.api.FindLegacyParameter(f.Name)
 		if param == nil {
-			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+			return NewInvalidParameterErrorFromCanonical(f.Name, a.api, a.product.GetLowerCode(), ctx.Flags())
 		}
-		if param.Position != "Host" {
+		if param.LegacyPosition() != "Host" {
 			continue
 		}
 		value, _ := f.GetValue()
-		if param.Required && value == "" {
-			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		if param.LegacyRequired() && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.LegacyName())
 		}
 		a.openapiRequest.HostMap[strings.ToLower(f.Name)] = tea.String(value)
 	}
@@ -433,16 +505,16 @@ func (a *OpenapiContext) ProcessHost(ctx *cli.Context) error {
 
 func (a *OpenapiContext) ProcessQuery(ctx *cli.Context) error {
 	for _, f := range ctx.UnknownFlags().Flags() {
-		param := a.api.FindParameter(f.Name)
+		param := a.api.FindLegacyParameter(f.Name)
 		if param == nil {
-			return &InvalidParameterError{Name: f.Name, api: a.api, flags: ctx.Flags()}
+			return NewInvalidParameterErrorFromCanonical(f.Name, a.api, a.product.GetLowerCode(), ctx.Flags())
 		}
-		if param.Position != "Query" {
+		if param.LegacyPosition() != "Query" {
 			continue
 		}
 		value, _ := f.GetValue()
-		if param.Required && value == "" {
-			return fmt.Errorf("required parameter missing; %s is required", param.Name)
+		if param.LegacyRequired() && value == "" {
+			return fmt.Errorf("required parameter missing; %s is required", param.LegacyName())
 		}
 		a.openapiRequest.Query[f.Name] = &value
 	}
@@ -457,8 +529,14 @@ func (a *OpenapiContext) Prepare(ctx *cli.Context) error {
 	}
 	oaParams := a.openapiParams
 	oaParams.Action = tea.String(a.api.Name)
-	oaParams.Version = &a.api.Product.Version
+	oaParams.Version = &a.product.Version
 	oaParams.Method = &a.method
+
+	// Style defaults to ROA (set in Init); RPC-style products override it here so
+	// the darabonba channel adds the RPC-specific request headers.
+	if strings.ToLower(a.product.ApiStyle) == "rpc" {
+		oaParams.Style = tea.String("RPC")
+	}
 
 	oaParams.Protocol = tea.String(a.api.GetProtocol())
 	if _, ok := InsecureFlag(ctx.Flags()).GetValue(); ok {
@@ -480,30 +558,30 @@ func (a *OpenapiContext) checkRequiredParameters(ctx *cli.Context) error {
 	requiredPathParams := make(map[string]bool)
 	requiredHostParams := make(map[string]bool)
 
-	for _, param := range a.api.Parameters {
-		if param.Position == "Host" && param.Required {
-			requiredHostParams[param.Name] = false
+	for _, param := range a.api.LegacyTopLevelParameters() {
+		if param.LegacyPosition() == "Host" && param.LegacyRequired() {
+			requiredHostParams[param.LegacyName()] = false
 		}
-		if param.Position == "Path" && param.Required {
-			requiredPathParams[param.Name] = false
+		if param.LegacyPosition() == "Path" && param.LegacyRequired() {
+			requiredPathParams[param.LegacyName()] = false
 		}
 	}
 
 	for _, f := range ctx.UnknownFlags().Flags() {
-		param := a.api.FindParameter(f.Name)
+		param := a.api.FindLegacyParameter(f.Name)
 		if param == nil {
 			continue
 		}
-		if param.Position == "Host" && param.Required {
+		if param.LegacyPosition() == "Host" && param.LegacyRequired() {
 			value, _ := f.GetValue()
 			if value != "" {
-				requiredHostParams[param.Name] = true
+				requiredHostParams[param.LegacyName()] = true
 			}
 		}
-		if param.Position == "Path" && param.Required {
+		if param.LegacyPosition() == "Path" && param.LegacyRequired() {
 			value, _ := f.GetValue()
 			if value != "" {
-				requiredPathParams[param.Name] = true
+				requiredPathParams[param.LegacyName()] = true
 			}
 		}
 	}
@@ -529,6 +607,7 @@ func (a *OpenapiContext) checkRequiredParameters(ctx *cli.Context) error {
 	}
 
 	if len(allMissing) > 0 {
+		sort.Strings(allMissing)
 		return fmt.Errorf("required parameters missing: %s", strings.Join(allMissing, ", "))
 	}
 
@@ -585,4 +664,61 @@ func (a *OpenapiContext) GetResponse() (string, error) {
 	out := GetContentFromApiResponse(a.openapiResponse)
 
 	return out, nil
+}
+
+// IsSSE reports whether the API streams Server-Sent Events, detected from the
+// protocol candidate string (e.g. "HTTPS|SSE").
+func (a *OpenapiContext) IsSSE() bool {
+	if a.api == nil {
+		return false
+	}
+	return strings.Contains(strings.ToUpper(a.api.Protocol), "SSE")
+}
+
+// CallSSE invokes an SSE API and streams each event's data to w as it arrives.
+// It returns once the stream ends or on the first transport/server error.
+func (a *OpenapiContext) CallSSE(w io.Writer) error {
+	yield := make(chan *openapiClient.SSEResponse)
+	// buffered so the producer can report a terminal error without blocking on
+	// an unbuffered send while we are still draining events.
+	yieldErr := make(chan error, 1)
+	openapiCallSSEFunc(a, yield, yieldErr)
+
+	flush := func() {
+		if f, ok := w.(interface{ Flush() }); ok {
+			f.Flush()
+		}
+	}
+
+	var callErr error
+	// Both channels are closed by the producer when it finishes; select on both
+	// so an error sent before close cannot deadlock the drain loop.
+	for yield != nil || yieldErr != nil {
+		select {
+		case resp, ok := <-yield:
+			if !ok {
+				yield = nil
+				continue
+			}
+			if resp == nil || resp.Event == nil || resp.Event.Data == nil {
+				continue
+			}
+			if _, err := io.WriteString(w, tea.StringValue(resp.Event.Data)+"\n"); err != nil {
+				return err
+			}
+			flush()
+		case err, ok := <-yieldErr:
+			if !ok {
+				yieldErr = nil
+				continue
+			}
+			if err != nil {
+				callErr = err
+			}
+		}
+	}
+	if callErr != nil {
+		return dara.TeaSDKError(callErr)
+	}
+	return nil
 }

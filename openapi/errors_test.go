@@ -17,7 +17,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/stretchr/testify/assert"
@@ -28,7 +30,8 @@ func TestInvalidProductError_Error(t *testing.T) {
 		Code: "ecs",
 	}
 	str := err.Error()
-	assert.Equal(t, "'ecs' is not a valid command or product. See `aliyun help`.", str)
+	assert.Equal(t, `"ecs" is not a valid command or product. See `+"`aliyun help`"+`.`, str)
+	assert.Equal(t, `"ec's" is not a valid command or product. See `+"`aliyun help`"+`.`, (&InvalidProductError{Code: "EC'S"}).Error())
 }
 
 func TestInvalidProductError_GetSuggestions(t *testing.T) {
@@ -57,7 +60,11 @@ func TestInvalidApiError_Error(t *testing.T) {
 		},
 	}
 	str := err.Error()
-	assert.Equal(t, "'describeregion' is not a valid api. See `aliyun help ecs`.", str)
+	assert.Equal(t, `"describeregion" is not a valid api. Search matching APIs with `+"`ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help-search describeregion`"+`.`, str)
+	assert.Equal(t, `"describe'region" is not a valid api. Search matching APIs with `+"`ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help-search region`"+`.`, (&InvalidApiError{
+		Name:    "describe'region",
+		product: &meta.Product{Code: "ecs"},
+	}).Error())
 }
 
 func TestInvalidApiError_GetSuggestions(t *testing.T) {
@@ -75,36 +82,56 @@ func TestInvalidApiError_GetSuggestions(t *testing.T) {
 
 func TestInvalidParameterError_Error(t *testing.T) {
 	err := &InvalidParameterError{
-		Name: "ak",
-		api: &meta.Api{
-			Name: "describeregion",
-			Product: &meta.Product{
-				Code: "ecs",
-			},
-		},
+		Name:           "ak",
+		ProductCode:    "ecs",
+		ApiName:        "describeregion",
+		ParameterNames: []string{},
 	}
 	str := err.Error()
-	assert.Equal(t, "'--ak' is not a valid parameter or flag. See `aliyun help ecs describeregion`.", str)
+	assert.Equal(t, `"--ak" is not a valid parameter or flag. See `+"`aliyun help ecs describeregion`"+`.`, str)
+	assert.Equal(t, `"--a'k" is not a valid parameter or flag. See `+"`aliyun help ecs describeregion`"+`.`, (&InvalidParameterError{
+		Name:        "a'k",
+		ProductCode: "ecs",
+		ApiName:     "describeregion",
+	}).Error())
 }
 
 func TestInvalidParameterError_GetSuggestions(t *testing.T) {
+	flags := cli.NewFlagSet()
+	AddFlags(flags)
 	err := &InvalidParameterError{
-		Name: "secure",
-		api: &meta.Api{
-			Name: "describeregion",
-			Parameters: []meta.Parameter{
-				{
-					Name: "test",
-				},
-			},
-		},
-		flags: cli.NewFlagSet(),
+		Name:           "secure",
+		ProductCode:    "ecs",
+		ApiName:        "describeregion",
+		ParameterNames: []string{"test"},
+		flags:          flags,
 	}
-	AddFlags(err.flags)
-	err.GetSuggestions()
 	arrstr := err.GetSuggestions()
 	str := strings.Join(arrstr, ",")
 	assert.Contains(t, str, "secure")
+}
+
+func TestNewInvalidParameterErrorFromCanonical_SuggestionsIncludeNearestParameterExample(t *testing.T) {
+	flags := cli.NewFlagSet()
+	api := &canonicalmeta.API{
+		Name: "DescribeInstances",
+		Parameters: []canonicalmeta.Parameter{
+			{
+				RawName:  "InstanceId",
+				Location: "query",
+				Example:  "i-bp1234567890",
+			},
+			{
+				RawName:  "ImageId",
+				Location: "query",
+				Example:  "m-bp1234567890",
+			},
+		},
+	}
+
+	err := NewInvalidParameterErrorFromCanonical("InstancId", api, "ecs", flags)
+
+	assert.Equal(t, []string{"InstanceId (example: i-bp1234567890)"}, err.GetSuggestions())
 }
 
 func TestInvalidProductOrPluginError_Error(t *testing.T) {
@@ -112,7 +139,7 @@ func TestInvalidProductOrPluginError_Error(t *testing.T) {
 		err := &InvalidProductOrPluginError{
 			Code: "fcc",
 		}
-		assert.Equal(t, "'fcc' is not a valid product. See `aliyun help`.", err.Error())
+		assert.Equal(t, `"fcc" is not a valid product. See `+"`aliyun help`"+`.`, err.Error())
 	})
 
 	t.Run("hint is appended on its own line", func(t *testing.T) {
@@ -123,7 +150,7 @@ func TestInvalidProductOrPluginError_Error(t *testing.T) {
 			Hint: "If you meant an OpenAPI built-in call, the form is 'aliyun <product> <APIName>'.",
 		}
 		assert.Equal(t,
-			"'ecs' is not a valid product. See `aliyun help`.\n"+
+			`"ecs" is not a valid product. See `+"`aliyun help`"+`.`+"\n"+
 				"If you meant an OpenAPI built-in call, the form is 'aliyun <product> <APIName>'.",
 			err.Error(),
 			"hint must follow the legacy line on its own line — single-line legacy users keep their format")
@@ -172,7 +199,7 @@ func TestInvalidUnifiedApiError_Error(t *testing.T) {
 			Code: "ecs",
 		},
 	}
-	assert.Equal(t, "'describreregions' is not a valid api. See `aliyun help ecs`.", err.Error())
+	assert.Equal(t, `"describreregions" is not a valid api. Search matching APIs with `+"`ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help-search describreregion`"+`.`, err.Error())
 }
 
 func TestInvalidUnifiedApiError_GetSuggestions(t *testing.T) {
@@ -252,5 +279,157 @@ func TestRemoveDuplicates(t *testing.T) {
 	t.Run("Nil", func(t *testing.T) {
 		result := removeDuplicates(nil)
 		assert.Empty(t, result)
+	})
+}
+
+func TestInvalidApiError_GetSuggestions_PrefixFallback(t *testing.T) {
+	err := &InvalidApiError{
+		Name: "Get",
+		product: &meta.Product{
+			Code:     "sts",
+			ApiNames: []string{"AssumeRole", "AssumeRoleWithOIDC", "AssumeRoleWithSAML", "GetCallerIdentity"},
+		},
+	}
+	results := err.GetSuggestions()
+	assert.Equal(t, []string{"GetCallerIdentity"}, results)
+}
+
+func TestInvalidApiError_GetSuggestions_PrefixFallbackWithOverflow(t *testing.T) {
+	apiNames := []string{
+		"DescribeA", "DescribeB", "DescribeC", "DescribeD", "DescribeE", "DescribeF", "DescribeG",
+	}
+	err := &InvalidApiError{
+		Name:    "Des",
+		product: &meta.Product{Code: "ecs", ApiNames: apiNames},
+	}
+	results := err.GetSuggestions()
+	assert.Equal(t, 6, len(results))
+	assert.Equal(t, apiNames[:5], results[:5])
+	assert.Equal(t, "... and 2 more, run `aliyun ecs --help-search Des`", results[5])
+}
+
+func TestInvalidApiError_GetSuggestions_TypoStillPrefersEditDistance(t *testing.T) {
+	err := &InvalidApiError{
+		Name: "GetCallerIdentit",
+		product: &meta.Product{
+			Code:     "sts",
+			ApiNames: []string{"AssumeRole", "GetCallerIdentity"},
+		},
+	}
+	results := err.GetSuggestions()
+	assert.Equal(t, []string{"GetCallerIdentity"}, results)
+}
+
+func TestInvalidApiError_AgentSuggestions_PrefixFallback(t *testing.T) {
+	err := &InvalidApiError{
+		Name: "Get",
+		product: &meta.Product{
+			Code:     "sts",
+			ApiNames: []string{"AssumeRole", "GetCallerIdentity"},
+		},
+	}
+	assert.Equal(t, []string{"GetCallerIdentity"}, err.AgentSuggestions())
+}
+
+func TestInvalidApiError_CouponTokenSuggestionsInEveryMode(t *testing.T) {
+	apiNames := []string{"QueryAccountBalance", "QueryAccountDetails", "QueryCashCoupons", "QueryOrders"}
+	for _, input := range []string{"DescribeCoupons", "QueryAvailableCoupons", "QueryCouponDetails"} {
+		t.Run(input, func(t *testing.T) {
+			err := &InvalidApiError{
+				Name:    input,
+				product: &meta.Product{Code: "bssopenapi", ApiNames: apiNames},
+			}
+			assert.Equal(t, []string{"QueryCashCoupons"}, err.GetSuggestions())
+			assert.Equal(t, []string{"QueryCashCoupons"}, err.AgentSuggestions())
+			assert.Contains(t, err.Error(), "`aliyun bssopenapi --help-search Coupon`")
+		})
+	}
+}
+
+func TestInvalidAPIWithoutTokenMatchStillUsesTargetedSearch(t *testing.T) {
+	err := &InvalidApiError{
+		Name:    "QueryVoucherBalance",
+		product: &meta.Product{Code: "bssopenapi", ApiNames: []string{"QueryCashCoupons"}},
+	}
+	assert.Nil(t, err.GetSuggestions())
+	assert.Contains(t, err.Error(), "`aliyun bssopenapi --help-search Voucher`")
+}
+
+func TestInvalidBaselineCommandError_CouponTokenSuggestion(t *testing.T) {
+	err := &InvalidBaselineCommandError{
+		Product:    "bssopenapi",
+		Command:    "query-coupon-details",
+		Candidates: []string{"query-account-balance", "query-cash-coupons", "query-orders"},
+		Err:        assert.AnError,
+	}
+	assert.Equal(t, []string{"query-cash-coupons"}, err.GetSuggestions())
+	assert.Equal(t, []string{"query-cash-coupons"}, err.AgentSuggestions())
+	assert.Contains(t, err.Error(), "`ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun bssopenapi --help-search coupon`")
+}
+
+func TestSameStyleCandidates(t *testing.T) {
+	candidates := []string{"GetCallerIdentity", "get-caller-identity", "AssumeRole"}
+
+	pascal := sameStyleCandidates("Get", candidates)
+	assert.Equal(t, []string{"GetCallerIdentity", "AssumeRole"}, pascal)
+
+	kebab := sameStyleCandidates("get-caller", candidates)
+	assert.Equal(t, []string{"get-caller-identity"}, kebab)
+}
+
+func TestInvalidBaselineCommandError_Suggestions(t *testing.T) {
+	candidates := []string{"describe-instances", "describe-instance-attribute", "run-instances"}
+
+	t.Run("edit distance wins for typos", func(t *testing.T) {
+		err := &InvalidBaselineCommandError{
+			Product:    "Ecs",
+			Command:    "describe-instancez",
+			Candidates: candidates,
+			Err:        nil,
+		}
+		results := err.GetSuggestions()
+		assert.Contains(t, results, "describe-instances")
+		assert.Equal(t, []string{"describe-instances"}, err.AgentSuggestions())
+	})
+
+	t.Run("prefix fallback for partial commands", func(t *testing.T) {
+		err := &InvalidBaselineCommandError{
+			Product:    "Ecs",
+			Command:    "describe-i",
+			Candidates: candidates,
+			Err:        nil,
+		}
+		results := err.GetSuggestions()
+		assert.Contains(t, results, "describe-instances")
+		assert.Contains(t, results, "describe-instance-attribute")
+		assert.NotContains(t, results, "run-instances")
+
+		agentResults := err.AgentSuggestions()
+		assert.Contains(t, agentResults, "describe-instances")
+		assert.Contains(t, agentResults, "describe-instance-attribute")
+		assert.NotContains(t, agentResults, "run-instances")
+	})
+
+	t.Run("prefix fallback overflow hint", func(t *testing.T) {
+		many := []string{"describe-a", "describe-b", "describe-c", "describe-d", "describe-e", "describe-f"}
+		err := &InvalidBaselineCommandError{
+			Product:    "Ecs",
+			Command:    "desc",
+			Candidates: many,
+			Err:        nil,
+		}
+		results := err.GetSuggestions()
+		assert.Equal(t, 6, len(results))
+		assert.Equal(t, "... and 1 more, run `ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help-search desc`", results[5])
+	})
+
+	t.Run("no candidates yields nothing", func(t *testing.T) {
+		err := &InvalidBaselineCommandError{
+			Product: "Ecs",
+			Command: "describe-instancez",
+			Err:     nil,
+		}
+		assert.Nil(t, err.GetSuggestions())
+		assert.Nil(t, err.AgentSuggestions())
 	})
 }

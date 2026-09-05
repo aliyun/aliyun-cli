@@ -15,6 +15,8 @@
 package cli
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -57,6 +59,20 @@ type Command struct {
 	// auto compete
 	AutoComplete func(ctx *Context, args []string) []string
 
+	// BeforeExecute configures process-level behavior before parsing begins.
+	BeforeExecute func(ctx *Context, args []string)
+
+	// BeforeParseRoute may consume an invocation before the generic flag parser
+	// runs. It is intentionally a narrow root-command seam for routes that must
+	// inspect the original argv, such as installed-plugin Help and parameter
+	// Help ("--Parameter --help"). Returning handled=true prevents the parser
+	// and Run callback from processing the invocation.
+	BeforeParseRoute func(ctx *Context, args []string) (handled bool, err error)
+
+	// NormalizeError adapts errors from both this command and nested commands
+	// immediately before rendering.
+	NormalizeError func(ctx *Context, args []string, err error) error
+
 	parent      *Command
 	subCommands []*Command
 	flags       *FlagSet
@@ -97,8 +113,30 @@ func (c *Command) Flags() *FlagSet {
 }
 
 func (c *Command) Execute(ctx *Context, args []string) {
+	previousNoColorOverride := noColorOverride.Load()
+	defer noColorOverride.Store(previousNoColorOverride)
 	if ctx.completion != nil {
 		args = ctx.completion.GetArgs()
+	}
+	ctx.SetInvocationArgs(args)
+	ctx.errorNormalizer = nil
+	ctx.SetErrorNormalizationArgs(args)
+	if c.NormalizeError != nil {
+		ctx.errorNormalizer = func(err error) error {
+			return c.NormalizeError(ctx, append([]string(nil), ctx.errorNormalizeArgs...), err)
+		}
+	}
+	if c.BeforeParseRoute != nil {
+		handled, err := c.BeforeParseRoute(ctx, append([]string(nil), args...))
+		if handled {
+			if err != nil {
+				c.processError(ctx, err)
+			}
+			return
+		}
+	}
+	if c.BeforeExecute != nil {
+		c.BeforeExecute(ctx, args)
 	}
 
 	err := c.executeInner(ctx, args)
@@ -345,18 +383,43 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 }
 
 func (c *Command) processError(ctx *Context, err error) {
+	if ctx != nil && ctx.errorNormalizer != nil {
+		err = ctx.errorNormalizer(err)
+	}
+	if e, ok := err.(StructuredError); ok {
+		_ = e.RenderError(ctx.Stderr())
+		Exit(e.ExitCode())
+		return
+	}
+
+	var agentErr *AgentError
+	if errors.As(err, &agentErr) {
+		_ = json.NewEncoder(ctx.Stderr()).Encode(agentErr.Envelope())
+		Exit(agentErr.ExitCode())
+		return
+	}
+
 	Errorf(ctx.Stderr(), "ERROR: %s\n", err.Error())
-	if e, ok := err.(SuggestibleError); ok {
-		PrintSuggestions(ctx, i18n.GetLanguage(), e.GetSuggestions())
-		Exit(2)
-		return
+	exitCode := 1
+	var suggestible SuggestibleError
+	if errors.As(err, &suggestible) {
+		PrintSuggestions(ctx, i18n.GetLanguage(), suggestible.GetSuggestions())
+		exitCode = 2
 	}
-	if e, ok := err.(ErrorWithTip); ok {
-		Noticef(ctx.Stderr(), "\n%s\n", e.GetTip(i18n.GetLanguage()))
-		Exit(3)
-		return
+	// An error can be both suggestible and carry a tip (e.g. InvalidCommandError
+	// prints "did you mean" suggestions and points to `<cmd> --help`). Print the
+	// tip too, but keep the suggestible exit code when both apply.
+	var withTip ErrorWithTip
+	if errors.As(err, &withTip) {
+		Noticef(ctx.Stderr(), "\n%s\n", withTip.GetTip(i18n.GetLanguage()))
+		if exitCode == 1 {
+			exitCode = 3
+		}
 	}
-	Exit(1)
+	if IsAIRecoveryEligible(err) {
+		Printf(ctx.Stderr(), "\n%s\n", AIModeEnableTextHint)
+	}
+	Exit(exitCode)
 }
 
 func (c *Command) executeHelp(ctx *Context, args []string) {

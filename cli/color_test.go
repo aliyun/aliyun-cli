@@ -15,30 +15,43 @@ package cli
 
 import (
 	"bytes"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	assert.False(t, isNoColor())
-	os.Setenv("NO_COLOR", "1")
+	t.Setenv("NO_COLOR", "1")
 	assert.True(t, isNoColor())
-	os.Setenv("NO_COLOR", "true")
+	t.Setenv("NO_COLOR", "true")
 	assert.True(t, isNoColor())
-	os.Setenv("NO_COLOR", "")
+	t.Setenv("NO_COLOR", "")
 	assert.False(t, isNoColor())
 }
 
 func TestColorized(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	assert.Equal(t, "\x1b[0;31mtext\x1b[0m", Colorized(Red, "text"))
-	os.Setenv("NO_COLOR", "1")
+	t.Setenv("NO_COLOR", "1")
 	assert.Equal(t, "text", Colorized(Red, "text"))
-	os.Setenv("NO_COLOR", "")
+}
+
+func TestProcessNoColorOverride(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	SetNoColorOverride(false)
+	t.Cleanup(func() { SetNoColorOverride(false) })
+
+	assert.Equal(t, "\x1b[0;31mtext\x1b[0m", Colorized(Red, "text"))
+	SetNoColorOverride(true)
+	assert.Equal(t, "text", Colorized(Red, "text"))
+	SetNoColorOverride(false)
+	assert.Equal(t, "\x1b[0;31mtext\x1b[0m", Colorized(Red, "text"))
 }
 
 func TestCotainWriter(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	writer := new(bytes.Buffer)
 	n, err := PrintWithColor(writer, "red", "a")
 	assert.Equal(t, "reda\033[0m", writer.String())

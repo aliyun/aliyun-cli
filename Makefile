@@ -1,5 +1,11 @@
-export VERSION=3.0.0-beta
+export VERSION ?= 3.5.0
 export RELEASE_PATH="releases/aliyun-cli-${VERSION}"
+
+MODULE := github.com/aliyun/aliyun-cli/v3
+META_DIR := $(CURDIR)/aliyun-openapi-meta
+META_TAG := aliyun_cli_packed_meta
+RUNTIME_DIR := $(CURDIR)/aliyun-openapi-runtime
+LDFLAGS := -X '$(MODULE)/cli.Version=$(VERSION)'
 
 all: build
 publish: build build_mac build_linux build_windows build_linux_arm64 gen_version
@@ -9,31 +15,39 @@ deps:
 
 clean:
 	rm -rf out/*
+	rm -rf bundledmeta/.generated
 
-build: deps
-	go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+run: deps
+	ALIYUN_CLI_META_DIR="$(META_DIR)" go run ./main
+
+meta-pack: deps
+	go generate ./bundledmeta
+
+build: meta-pack
+	mkdir -p out
+	CGO_ENABLED=0 go build -tags "$(META_TAG)" -ldflags "$(LDFLAGS)" -o out/aliyun ./main
 
 install: build
 	cp out/aliyun /usr/local/bin
 
-build_mac:
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+build_mac: meta-pack
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -tags "$(META_TAG)" -ldflags "$(LDFLAGS)" -o out/aliyun ./main
 	tar zcvf out/aliyun-cli-macosx-${VERSION}-amd64.tgz -C out aliyun
 	aliyun oss cp out/aliyun-cli-macosx-${VERSION}-amd64.tgz oss://aliyun-cli --force --profile oss
 
-build_linux:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+build_linux: meta-pack
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags "$(META_TAG)" -ldflags "$(LDFLAGS)" -o out/aliyun ./main
 	tar zcvf out/aliyun-cli-linux-${VERSION}-amd64.tgz -C out aliyun
 	aliyun oss cp out/aliyun-cli-linux-${VERSION}-amd64.tgz oss://aliyun-cli --force --profile oss
 
-build_windows:
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o aliyun.exe main/main.go
+build_windows: meta-pack
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags "$(META_TAG)" -ldflags "$(LDFLAGS)" -o aliyun.exe ./main
 	zip -r out/aliyun-cli-windows-${VERSION}-amd64.zip aliyun.exe
 	aliyun oss cp out/aliyun-cli-windows-${VERSION}-amd64.zip oss://aliyun-cli --force --profile oss
 	rm aliyun.exe
 
-build_linux_arm64:
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+build_linux_arm64: meta-pack
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags "$(META_TAG)" -ldflags "$(LDFLAGS)" -o out/aliyun ./main
 	tar zcvf out/aliyun-cli-linux-${VERSION}-arm64.tgz -C out aliyun
 	aliyun oss cp out/aliyun-cli-linux-${VERSION}-arm64.tgz oss://aliyun-cli --force --profile oss
 
@@ -47,30 +61,62 @@ git_release: clean build make_release_dir release_mac release_linux release_linu
 make_release_dir:
 	mkdir -p ${RELEASE_PATH}
 
-release_mac:
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+release_mac: meta-pack
+	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -tags "$(META_TAG)" -ldflags "$(LDFLAGS)" -o out/aliyun ./main
 	tar zcvf ${RELEASE_PATH}/aliyun-cli-darwin-amd64.tar.gz -C out aliyun
 
-release_mac_arm64:
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+release_mac_arm64: meta-pack
+	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -tags "$(META_TAG)" -ldflags "$(LDFLAGS)" -o out/aliyun ./main
 	tar zcvf ${RELEASE_PATH}/aliyun-cli-darwin-arm64.tar.gz -C out aliyun
 
-release_linux:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+release_linux: meta-pack
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags "$(META_TAG)" -ldflags "$(LDFLAGS)" -o out/aliyun ./main
 	tar zcvf ${RELEASE_PATH}/aliyun-cli-linux-amd64.tar.gz -C out aliyun
 
-release_linux_arm64:
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o out/aliyun main/main.go
+release_linux_arm64: meta-pack
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags "$(META_TAG)" -ldflags "$(LDFLAGS)" -o out/aliyun ./main
 	tar zcvf ${RELEASE_PATH}/aliyun-cli-linux-arm64.tar.gz -C out aliyun
 
-release_windows:
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "-X 'github.com/aliyun/aliyun-cli/cli.Version=${VERSION}'" -o aliyun.exe main/main.go
+release_windows: meta-pack
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags "$(META_TAG)" -ldflags "$(LDFLAGS)" -o aliyun.exe ./main
 	zip -r ${RELEASE_PATH}/aliyun-cli-windows-amd64.exe.zip aliyun.exe
 	rm aliyun.exe
 
 fmt:
-	go fmt ./util/... ./cli/... ./config/... ./i18n/... ./main/... ./openapi/... ./oss/... ./resource/... ./meta/...
+	go fmt ./bundledmeta/... ./util/... ./cli/... ./config/... ./i18n/... ./main/... ./openapi/... ./oss/... ./resource/... ./meta/... ./export/...
 
-test:
-	LANG="en_US.UTF-8" go test -race -coverprofile=coverage.txt -covermode=atomic ./util/... ./cli/... ./config/... ./i18n/... ./main/... ./openapi/... ./meta/...
+check-fmt:
+	@files="$$(gofmt -l .)"; \
+	if [ -n "$$files" ]; then \
+		echo "The following Go files are not formatted with gofmt:"; \
+		echo "$$files"; \
+		exit 1; \
+	fi
+
+test-runtime:
+	cd "$(RUNTIME_DIR)" && go test -race -coverprofile="$(CURDIR)/coverage-runtime.txt" -covermode=atomic ./...
+
+check-runtime: test-runtime
+
+test: deps
+	# Ensure every package under the module is listable/vettable (catches stale
+	# go:embed in submodules). Unit tests keep the historical package set —
+	# ./... also pulls cliext/* and oss/lib, which need credentials or
+	# are intentionally out of CI unit coverage.
+	go list ./... >/dev/null
+	go vet ./...
+	ALIYUN_CLI_META_DIR="$(META_DIR)" LANG="en_US.UTF-8" go test -race -coverprofile=coverage.txt -covermode=atomic \
+		./bundledmeta ./canonicalmeta \
+		./util/... ./cli/... ./config/... \
+		./i18n/... ./main/... ./openapi/... ./meta/... ./export/... \
+		./sysconfig/... ./mcpproxy ./cloudsso
 	go tool cover -html=coverage.txt -o coverage.html
+
+test-release: meta-pack
+	LANG="en_US.UTF-8" go test -tags "$(META_TAG)" ./bundledmeta ./meta ./export ./openapi/runtimehost
+
+.PHONY: all publish install
+.PHONY: deps clean run fmt check-fmt test-runtime check-runtime test test-release
+.PHONY: meta-pack build build_mac build_linux build_windows build_linux_arm64
+.PHONY: gen_version git_release make_release_dir
+.PHONY: release_mac release_mac_arm64 release_linux release_linux_arm64 release_windows

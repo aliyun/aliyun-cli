@@ -22,11 +22,6 @@ import (
 	"path"
 	"strings"
 
-	"github.com/aliyun/aliyun-cli/v3/cliext/kmscli"
-	"github.com/aliyun/aliyun-cli/v3/cliext/lindormcli"
-	"github.com/aliyun/aliyun-cli/v3/cliext/mseutil"
-
-	aliyunopenapimeta "github.com/aliyun/aliyun-cli/v3/aliyun-openapi-meta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/cli/upgrade"
@@ -40,20 +35,23 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cliext/esacli"
 	"github.com/aliyun/aliyun-cli/v3/cliext/flowcli"
 	"github.com/aliyun/aliyun-cli/v3/cliext/iact3"
+	"github.com/aliyun/aliyun-cli/v3/cliext/kmscli"
+	"github.com/aliyun/aliyun-cli/v3/cliext/lindormcli"
 	"github.com/aliyun/aliyun-cli/v3/cliext/maxc"
+	"github.com/aliyun/aliyun-cli/v3/cliext/mseutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/ossutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/otsutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/rostran"
 	"github.com/aliyun/aliyun-cli/v3/cliext/saectl"
 	"github.com/aliyun/aliyun-cli/v3/cliext/sparksubmit"
 	"github.com/aliyun/aliyun-cli/v3/config"
-	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
+	"github.com/aliyun/aliyun-cli/v3/export"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
-	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
 	"github.com/aliyun/aliyun-cli/v3/mock"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
+	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 var (
@@ -86,12 +84,13 @@ func Main(args []string) {
 		return
 	}
 
-	// set language with current profile
-	i18n.SetLanguage(profile.Language)
+	// Resolve language before command routing so Core and OpenAPI Help observe
+	// the same deterministic priority: explicit flag > profile > system locale.
+	i18n.SetLanguage(effectiveLanguage(args, profile.Language))
 
 	rootCmd := newRootCommand(profile, stdout)
 
-	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx := newCommandContext(stdout, stderr)
 	ctx.EnterCommand(rootCmd)
 	ctx.SetCompletion(cli.ParseCompletionForShell())
 	ctx.SetInConfigureMode(openapi.DetectInConfigureMode(ctx.Flags()))
@@ -104,6 +103,38 @@ func Main(args []string) {
 	} else {
 		rootCmd.Execute(ctx, args)
 	}
+}
+
+func effectiveLanguage(args []string, profileLanguage string) string {
+	for i, arg := range args {
+		value := ""
+		switch {
+		case strings.HasPrefix(arg, "--language="):
+			value = strings.TrimSpace(strings.TrimPrefix(arg, "--language="))
+		case arg == "--language" && i+1 < len(args):
+			value = strings.TrimSpace(args[i+1])
+		}
+		if value == "" {
+			continue
+		}
+		switch strings.ToLower(value) {
+		case string(i18n.Zh):
+			return string(i18n.Zh)
+		case string(i18n.En):
+			return string(i18n.En)
+		default:
+			// Keep the existing CLI behavior for unsupported language values:
+			// fall back to English instead of allowing the profile to win.
+			return string(i18n.En)
+		}
+	}
+	return profileLanguage
+}
+
+func newCommandContext(stdout io.Writer, stderr io.Writer) *cli.Context {
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.SetAgentName(util.DetectAgentName())
+	return ctx
 }
 
 func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
@@ -125,8 +156,11 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	commando.InitWithCommand(rootCmd)
 
 	rootCmd.AddSubCommand(config.NewConfigureCommand())
-	// list-supported-pricing-apis: enumerate every OpenAPI that supports --estimate-cost
-	rootCmd.AddSubCommand(openapi.NewListSupportedPricingApisCommand())
+	utilsCmd, utilityAliases := newUtilsCommands()
+	rootCmd.AddSubCommand(utilsCmd)
+	for _, alias := range utilityAliases {
+		rootCmd.AddSubCommand(alias)
+	}
 	// oss old version, duplicate with ossutil, will remove in future
 	ossCmd := lib.NewOssCommand()
 	// `aliyun oss <ApiName> ... --estimate-cost` quotes via CloudControl; the
@@ -134,12 +168,10 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	// here (file-operation subcommands are matched first and stay untouched).
 	commando.AttachOssEstimateCost(ossCmd)
 	rootCmd.AddSubCommand(ossCmd)
-	rootCmd.AddSubCommand(cli.NewVersionCommand())
+	versionCmd := cli.NewVersionCommand()
+	versionCmd.Hidden = false
+	rootCmd.AddSubCommand(versionCmd)
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
-	// mcp proxy command
-	rootCmd.AddSubCommand(mcpproxy.NewMCPProxyCommand())
-	// go v1 to v2 migrate command
-	rootCmd.AddSubCommand(go_migrate.NewGoMigrateCommand())
 	// new oss command
 	rootCmd.AddSubCommand(ossutil.NewOssutilCommand())
 	// AgentBay command
@@ -184,6 +216,7 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(upgrade.NewUpgradeCommand())
 	// mock command
 	rootCmd.AddSubCommand(mock.NewMockCommand(config.GetConfigPath))
+	commando.SetRootHelpSpecs(rootCommandHelpSpecs, rootFlagHelpSpecs)
 
 	plugin.RegisterReservedTopLevelCommands(rootCmd.SubCommandNames())
 
@@ -266,5 +299,7 @@ func generateMetadata(rootCmd *cli.Command) {
 	versionPath := targetDir + "/version"
 	os.WriteFile(versionPath, []byte(cli.Version), 0666)
 
-	dumpFiles(aliyunopenapimeta.Metadatas, ".", targetDir)
+	if err := export.LegacyExportMetadata(targetDir); err != nil {
+		fmt.Println(err.Error())
+	}
 }

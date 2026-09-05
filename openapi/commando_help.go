@@ -24,9 +24,78 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
-	"github.com/aliyun/aliyun-cli/v3/newmeta"
+	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 )
+
+const (
+	originalProductHelpEnv = "ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP"
+	baselineProductHelpEnv = "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP"
+)
+
+type productHelpSwitch int
+
+const (
+	productHelpTraditionalToKebab productHelpSwitch = iota
+	productHelpKebabToTraditional
+	productHelpPluginToTraditional
+	productHelpTraditionalToPlugin
+)
+
+func productHelpEnvEnabled(name string) bool {
+	value := strings.TrimSpace(os.Getenv(name))
+	return value == "1" || strings.EqualFold(value, "true")
+}
+
+func (c *Commando) invalidBaselineCommandError(productCode, command string) error {
+	_, hasLegacyHelp := c.library.GetProduct(productCode)
+	if hasLegacyHelp {
+		return fmt.Errorf("'%s' is not a valid kebab-case command for product '%s'.\nRun 'aliyun %s --help' to view traditional PascalCase commands, or '%s=true aliyun %s --help' to view kebab-case commands.",
+			command, productCode, productCode, baselineProductHelpEnv, productCode)
+	}
+	return fmt.Errorf("'%s' is not a valid kebab-case command for product '%s'.\nRun 'aliyun %s --help' to view available kebab-case commands.",
+		command, productCode, productCode)
+}
+
+func printProductHelpSwitchHint(ctx *cli.Context, productCode string, target productHelpSwitch) {
+	productCode = strings.ToLower(productCode)
+	var english, chinese, environment string
+	commandStyle := CommandStyleCamel
+	switch target {
+	case productHelpTraditionalToKebab:
+		english = "Note: This help shows traditional PascalCase commands. To view kebab-case commands, run:"
+		chinese = "提示：当前显示传统大驼峰命令。查看短横线命令，请运行："
+		environment = baselineProductHelpEnv + "=true "
+		commandStyle = CommandStyleKebab
+	case productHelpKebabToTraditional:
+		english = "Note: This help shows kebab-case commands. To return to traditional PascalCase commands, run:"
+		chinese = "提示：当前显示短横线命令。返回传统大驼峰命令，请运行："
+		environment = baselineProductHelpEnv + "=false "
+	case productHelpPluginToTraditional:
+		english = "Note: This help is provided by the installed plugin. To view traditional PascalCase commands, run:"
+		chinese = "提示：当前显示已安装插件提供的命令。查看传统大驼峰命令，请运行："
+		environment = originalProductHelpEnv + "=true "
+	case productHelpTraditionalToPlugin:
+		english = "Note: This help shows traditional PascalCase commands. To return to the installed plugin commands, run:"
+		chinese = "提示：当前显示传统大驼峰命令。返回已安装插件提供的命令，请运行："
+		environment = originalProductHelpEnv + "=false "
+		commandStyle = CommandStyleKebab
+	default:
+		return
+	}
+	command, err := BuildHelpCommand(HelpTarget{
+		Level: HelpLevelProduct, Product: productCode, CommandStyle: commandStyle,
+		Operation: HelpOperationDefault, Output: HelpOutputText,
+	})
+	if err != nil {
+		return
+	}
+	displayCommand := environment + command
+	if target == productHelpTraditionalToKebab || target == productHelpKebabToTraditional {
+		displayCommand = helpHintTextCommand(displayCommand)
+	}
+	cli.Printf(ctx.Stdout(), "\n%s\n\n  %s\n", i18n.T(english, chinese).Text(), displayCommand)
+}
 
 func (c *Commando) printPluginIndexLoadHint(ctx *cli.Context) {
 	if c.pluginIndexErr == nil {
@@ -52,6 +121,52 @@ func (c *Commando) printAiModeHelpHint(ctx *cli.Context) {
 func (c *Commando) printHelpContextHints(ctx *cli.Context) {
 	c.printPluginIndexLoadHint(ctx)
 	c.printAiModeHelpHint(ctx)
+}
+
+func (c *Commando) hasInstalledProductPlugin(productCode string) bool {
+	if c == nil || c.localManifest == nil {
+		return false
+	}
+	_, installed, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode)
+	return ok && installed != nil
+}
+
+// installedMetaPluginProduct reports whether an installed metadata plugin
+// owns the product. Metadata plugins expose kebab commands only, so their
+// product Help defaults to the kebab style without any environment variable.
+func (c *Commando) installedMetaPluginProduct(productCode string) bool {
+	if c == nil || c.localManifest == nil {
+		return false
+	}
+	_, local, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode)
+	return ok && local != nil && local.IsMeta()
+}
+
+// annotatePluginProvenance records which installed metadata plugin serves the
+// product's data, so text and JSON Help both state the provider. Go plugins
+// render their own Help output and are not annotated here.
+func (c *Commando) annotatePluginProvenance(document any, productCode string) {
+	if c == nil || document == nil {
+		return
+	}
+	c.loadLocalPlugins()
+	if c.localManifest == nil {
+		return
+	}
+	name, local, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode)
+	if !ok || local == nil || !local.IsMeta() {
+		return
+	}
+	switch typed := document.(type) {
+	case *machineHelpProductDocument:
+		typed.Product.Plugin = name
+		typed.Product.PluginVersion = local.Version
+	case *machineHelpAPIDocument:
+		typed.Product.Plugin = name
+		typed.Product.PluginVersion = local.Version
+	case *machineHelpAPIResponseDocument:
+		typed.Provider = name
+	}
 }
 
 func getPluginArgsForHelp(productCode string) []string {
@@ -131,7 +246,7 @@ func (c *Commando) printProducts(ctx *cli.Context) {
 	// 2. From built-in: add or merge with existing
 	for _, product := range c.library.builtinRepo.Products {
 		lowerCode := strings.ToLower(product.Code)
-		productName, _ := newmeta.GetProductName(i18n.GetLanguage(), product.Code)
+		productName := getProductDisplayName(product)
 
 		if p, ok := productMap[lowerCode]; ok {
 			// Already from plugin index, add built-in info, for now it should always to be true
@@ -183,10 +298,16 @@ func (c *Commando) printProducts(ctx *cli.Context) {
 }
 
 func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error {
+	return c.printProductUsageForMode(ctx, productCode, false)
+}
+
+func (c *Commando) printProductUsageForMode(ctx *cli.Context, productCode string, aiMode bool) error {
 	c.printHelpContextHints(ctx)
-	// 1. Check if it's a plugin product
+	// Resolve remote catalog information and the locally installed plugin
+	// independently: package-installed plugins may not exist in the remote index.
 	var pluginName string
 	var isInstalled bool
+	var localPlugin plugin.LocalPlugin
 
 	if c.pluginIndex != nil {
 		for _, pInfo := range c.pluginIndex.Plugins {
@@ -199,31 +320,64 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 			}
 		}
 	}
-	// Locally installed plugin (e.g. plugin install --package) not in remote index.
-	// FindInstalledPluginInManifest 已经把 plugin name / short-name / manifest.commandAliases 一起纳入匹配，
-	// 与 ExecutePlugin 使用的查找路径一致，因此 alias（例如 "hologres"）也能命中对应插件。
-	if pluginName == "" && c.localManifest != nil {
-		if n, _, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode); ok {
-			pluginName = n
+	if c.localManifest != nil {
+		if pluginName != "" {
+			localPlugin, isInstalled = c.localManifest.Plugins[pluginName]
+		}
+		if !isInstalled {
+			// Includes plugin name / short name / command aliases.
+			if n, installedPlugin, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode); ok && installedPlugin != nil {
+				pluginName = n
+				localPlugin = *installedPlugin
+				isInstalled = true
+			}
 		}
 	}
+	product, hasLegacyHelp := c.library.GetProduct(productCode)
+	showOriginal := productHelpEnvEnabled(originalProductHelpEnv)
+	showBaseline := productHelpEnvEnabled(baselineProductHelpEnv)
 
-	// 2. Check if it's a built-in product
-	product, ok := c.library.GetProduct(productCode)
-	if !ok {
-		// If not a built-in product, but is a valid plugin product
+	// Installed plugins always own product help (Go and metadata alike), unless the user explicitly asks for legacy PascalCase help and it exists.
+	if isInstalled && (!showOriginal || !hasLegacyHelp) {
+		if hasLegacyHelp {
+			cli.Printf(ctx.Stdout(), "Note: The help information for product '%s' is provided by the installed plugin '%s'.\n", productCode, pluginName)
+		} else {
+			cli.Printf(ctx.Stdout(), "Product '%s' is provided by plugin '%s'\n", productCode, pluginName)
+		}
+		c.setLangEnv(ctx)
+		if localPlugin.IsMeta() {
+			if err := plugin.ValidateLocalPluginCliVersion(pluginName, &localPlugin); err != nil {
+				return err
+			}
+			if err := productHelpRender(ctx, productCode); err != nil {
+				return err
+			}
+		} else {
+			if _, err := helpDelegateExecute(productCode, getPluginArgsForHelp(productCode), ctx); err != nil {
+				return err
+			}
+		}
+		if hasLegacyHelp && !aiMode {
+			printProductHelpSwitchHint(ctx, productCode, productHelpPluginToTraditional)
+		}
+		return nil
+	}
+
+	// Without an installed plugin, legacy help remains the default.
+	// Explicitly requested baseline help (or a baseline-only product) is rendered by the common runtime.
+	if !isInstalled && (showBaseline || !hasLegacyHelp) && productHelpAvailable(productCode) {
+		if err := productHelpRender(ctx, productCode); err != nil {
+			return err
+		}
+		if hasLegacyHelp && !aiMode {
+			printProductHelpSwitchHint(ctx, productCode, productHelpKebabToTraditional)
+		}
+		return nil
+	}
+
+	if !hasLegacyHelp {
 		if pluginName != "" {
-			if c.localManifest != nil {
-				_, isInstalled = c.localManifest.Plugins[pluginName]
-			}
-			if isInstalled {
-				cli.Printf(ctx.Stdout(), "Product '%s' is provided by plugin '%s'\n", productCode, pluginName)
-				c.setLangEnv(ctx)
-				plugin.ExecutePlugin(productCode, getPluginArgsForHelp(productCode), ctx)
-				return nil
-			} else {
-				return fmt.Errorf("'%s' is not a valid product.\nDid you mean to install corresponding product plugin?\n  aliyun plugin install --names %s", productCode, pluginName)
-			}
+			return fmt.Errorf("'%s' is not a valid product.\nDid you mean to install corresponding product plugin?\n  aliyun plugin install --names %s", productCode, pluginName)
 		}
 		var plugList []plugin.PluginInfo
 		if c.pluginIndex != nil {
@@ -232,35 +386,13 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 		return &InvalidProductOrPluginError{Code: productCode, library: c.library, plugins: plugList}
 	}
 
-	if pluginName != "" {
-		if c.localManifest != nil {
-			_, isInstalled = c.localManifest.Plugins[pluginName]
-		}
-
-		if isInstalled {
-			// Built-in product AND installed plugin
-			if os.Getenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP") == "true" {
-				// Show built-in help (fall through)
-			} else {
-				cli.Printf(ctx.Stdout(), "Note: The help information for product '%s' is provided by the installed plugin '%s'.\n", productCode, pluginName)
-				cli.Printf(ctx.Stdout(), "To view legacy built-in help, set ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true\n")
-				c.setLangEnv(ctx)
-				plugin.ExecutePlugin(productCode, getPluginArgsForHelp(productCode), ctx)
-				return nil
-			}
-		} else {
-			cli.Printf(ctx.Stdout(), "\n[Suggestion] A dedicated product plugin is available for '%s'.\n", productCode)
-			cli.Printf(ctx.Stdout(), "Run 'aliyun plugin install --names %s' to install it for enhanced features.\n\n", pluginName)
-		}
-	}
-
 	if product.ApiStyle == "rpc" {
 		cli.Printf(ctx.Stdout(), "\nUsage:\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ...\n", strings.ToLower(product.Code))
 	} else {
 		cli.Printf(ctx.Stdout(), "\nUsage 1:\n  aliyun %s [GET|PUT|POST|DELETE] <PathPattern> --body \"...\" \n", strings.ToLower(product.Code))
 		cli.Printf(ctx.Stdout(), "\nUsage 2 (For API with NO PARAMS in PathPattern only.):\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ... --body \"...\"\n", strings.ToLower(product.Code))
 	}
-	productName, _ := newmeta.GetProductName(i18n.GetLanguage(), product.Code)
+	productName := getProductDisplayName(product)
 	cli.Printf(ctx.Stdout(), "\nProduct: %s (%s)\n", product.Code, productName)
 	cli.Printf(ctx.Stdout(), "Version: %s \n", product.Version)
 
@@ -278,23 +410,44 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 
 	for _, apiName := range product.ApiNames {
 		if product.ApiStyle == "restful" {
-			api, _ := c.library.GetApi(product.Code, product.Version, apiName)
-			ptn := fmt.Sprintf("  %%-%ds : %%s %%s\n", maxNameLen+1)
-			cli.PrintfWithColor(ctx.Stdout(), cli.Green, ptn, apiName, api.Method, api.PathPattern)
-		} else {
-			api, _ := newmeta.GetAPI(i18n.GetLanguage(), product.Code, apiName)
-			if api != nil {
-				apiDetail, _ := newmeta.GetAPIDetail(i18n.GetLanguage(), product.Code, apiName)
-				// use new api metadata
+			api := c.library.GetCanonicalApi(product.Code, product.Version, apiName)
+			if api == nil {
+				continue
+			}
+			summary := api.Description(i18n.GetLanguage())
+			if summary != "" {
 				if api.Deprecated {
+					summary = "[Deprecated]" + summary
+				}
+				ptn := fmt.Sprintf("  %%-%ds : %%s %%s  %%s\n", maxNameLen+1)
+				cli.PrintfWithColor(ctx.Stdout(), cli.Green, ptn, apiName, api.Method, api.PathPattern, summary)
+			} else {
+				ptn := fmt.Sprintf("  %%-%ds : %%s %%s\n", maxNameLen+1)
+				cli.PrintfWithColor(ctx.Stdout(), cli.Green, ptn, apiName, api.Method, api.PathPattern)
+			}
+		} else {
+			summary := ""
+			deprecated := false
+			anonymous := false
+
+			if c.library.canonicalRepo != nil {
+				if canonical, err := c.library.canonicalRepo.GetAPI(product.Code, product.Version, apiName); err == nil {
+					summary = canonical.Description(i18n.GetLanguage())
+					deprecated = canonical.Deprecated
+					anonymous = canonical.IsAnonymous()
+				}
+			}
+
+			if summary != "" {
+				if deprecated {
 					fmtStr := fmt.Sprintf("  %%-%ds [Deprecated]%%s\n", maxNameLen+1)
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, fmtStr, apiName, api.Summary)
-				} else if apiDetail.IsAnonymousAPI() {
+					cli.PrintfWithColor(ctx.Stdout(), cli.Green, fmtStr, apiName, summary)
+				} else if anonymous {
 					fmtStr := fmt.Sprintf("  %%-%ds [Anonymous]%%s\n", maxNameLen+1)
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, fmtStr, apiName, api.Summary)
+					cli.PrintfWithColor(ctx.Stdout(), cli.Green, fmtStr, apiName, summary)
 				} else {
 					fmtStr := fmt.Sprintf("  %%-%ds %%s\n", maxNameLen+1)
-					cli.PrintfWithColor(ctx.Stdout(), cli.Green, fmtStr, apiName, api.Summary)
+					cli.PrintfWithColor(ctx.Stdout(), cli.Green, fmtStr, apiName, summary)
 				}
 			} else {
 				cli.PrintfWithColor(ctx.Stdout(), cli.Green, "  %s\n", apiName)
@@ -303,11 +456,34 @@ func (c *Commando) printProductUsage(ctx *cli.Context, productCode string) error
 	}
 
 	cli.Printf(ctx.Stdout(), "\nRun `aliyun %s <ApiName> --help` to get more information about this API\n", product.GetLowerCode())
+	switch {
+	case aiMode:
+	case isInstalled && showOriginal:
+		printProductHelpSwitchHint(ctx, productCode, productHelpTraditionalToPlugin)
+	case !isInstalled && !showBaseline && productHelpAvailable(productCode):
+		printProductHelpSwitchHint(ctx, productCode, productHelpTraditionalToKebab)
+	}
 	return nil
 }
 
 func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName string) error {
 	c.printHelpContextHints(ctx)
+	if c.localManifest != nil {
+		if pluginName, lp, ok := plugin.FindInstalledPluginInManifest(c.localManifest, productCode); ok && lp.IsMeta() {
+			if err := plugin.ValidateLocalPluginCliVersion(pluginName, lp); err != nil {
+				return err
+			}
+		}
+	}
+
+	rawHelpArgs := ctx.InvocationArgs()
+	if len(rawHelpArgs) == 0 {
+		rawHelpArgs = []string{productCode, apiName}
+	}
+	if handled, herr := runtimeTryHelp(ctx, rawHelpArgs); handled {
+		return herr
+	}
+
 	// 0. Check if it's a plugin product
 	var pluginName string
 	var isInstalled bool
@@ -365,8 +541,11 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 	}
 
 	// Case B: Built-in product exists
-	api, ok := c.library.builtinRepo.GetApi(productCode, product.Version, apiName)
-	if !ok {
+	canonicalApi := c.library.GetCanonicalApi(productCode, product.Version, apiName)
+	if canonicalApi == nil {
+		if shouldTryPlugin && !isInstalled && runtimehost.HasProduct(productCode) {
+			return c.invalidBaselineCommandError(productCode, apiName)
+		}
 		// API not found in built-in metadata. api in plugin is different from api from built-in
 		if pluginName != "" {
 			if shouldTryPlugin { // 全小写进入插件执行及智能纠错系统， 未安装则提示安装
@@ -377,24 +556,21 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 				} else {
 					return fmt.Errorf("'%s' is not a valid built-in command.\nA plugin '%s' is available which might support this command.\nRun 'aliyun plugin install --names %s' to install it.", apiName, pluginName, pluginName)
 				}
-			} else { // 非插件命令形式，如果本地插件安装了，则返回插件帮助; 如果未安装，则打印插件提示信息，并继续原有api纠错系统
+			} else { // 非插件命令形式，如果本地插件安装了，则返回插件帮助; 如果未安装，则继续原有api纠错系统
 				if isInstalled {
 					return &InvalidUnifiedApiError{Name: apiName, product: &product, lPlugin: localPlugin}
-				} else {
-					cli.Printf(ctx.Stdout(), "\n[Suggestion] A dedicated product plugin is available for '%s'.\n", productCode)
-					cli.Printf(ctx.Stdout(), "Run 'aliyun plugin install --names %s' to install it for enhanced features.\n\n", pluginName)
 				}
 			}
 		}
 		return &InvalidApiError{Name: apiName, product: &product}
 	}
 
-	productName, _ := newmeta.GetProductName(i18n.GetLanguage(), productCode)
+	productName := getProductDisplayName(product)
 
 	if product.ApiStyle == "restful" {
 		cli.Printf(ctx.Stdout(), "\nProduct:     %s (%s)\n", product.Code, productName)
-		cli.Printf(ctx.Stdout(), "Method:      %s\n", api.Method)
-		cli.Printf(ctx.Stdout(), "PathPattern: %s\n", api.PathPattern)
+		cli.Printf(ctx.Stdout(), "Method:      %s\n", canonicalApi.Method)
+		cli.Printf(ctx.Stdout(), "PathPattern: %s\n", canonicalApi.PathPattern)
 	} else {
 		cli.Printf(ctx.Stdout(), "\nProduct: %s (%s)\n", product.Code, productName)
 	}
@@ -402,9 +578,10 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 	cli.Printf(ctx.Stdout(), "\nParameters:\n")
 
 	w := tabwriter.NewWriter(ctx.Stdout(), 8, 0, 1, ' ', 0)
-	detail, _ := newmeta.GetAPIDetail(i18n.GetLanguage(), productCode, apiName)
-	printParameters(w, api.Parameters, "", detail)
+	printCanonicalAPI(w, canonicalApi, "")
 	w.Flush()
+
+	printCanonicalExamples(ctx.Stdout(), canonicalApi, product.ApiStyle)
 
 	return nil
 }
@@ -412,6 +589,9 @@ func (c *Commando) printApiUsage(ctx *cli.Context, productCode string, apiName s
 var (
 	helpDelegateIsInstalled = plugin.IsPluginInstalled
 	helpDelegateExecute     = plugin.ExecutePlugin
+	productHelpRender       = runtimehost.ProductHelp
+	productHelpAvailable    = runtimehost.HasProduct
+	runtimeTryHelp          = runtimehost.TryHelp
 )
 
 // tryDelegatePluginHelp is layer-3 of the help hierarchy:

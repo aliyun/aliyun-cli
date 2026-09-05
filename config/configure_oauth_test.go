@@ -315,7 +315,18 @@ func TestExchangeFromOAuth_ExchangeFailed(t *testing.T) {
 
 	err := exchangeFromOAuth(w, cp)
 	assert.Error(t, err)
+	// The exchange endpoint reports camelCase requestId; the typed error must
+	// surface it alongside the code and description.
+	var oauthErr *OAuthTokenError
+	if assert.ErrorAs(t, err, &oauthErr) {
+		assert.Equal(t, 400, oauthErr.StatusCode)
+		assert.Equal(t, "invalid_token", oauthErr.Code)
+		assert.Equal(t, "The access token is invalid", oauthErr.Description)
+		assert.Equal(t, "mock_request_id", oauthErr.RequestID)
+	}
 	assert.Contains(t, err.Error(), "exchange failed")
+	assert.Contains(t, err.Error(), "error: invalid_token")
+	assert.Contains(t, err.Error(), "requestId: mock_request_id")
 }
 
 func TestTryRefreshOauthToken_Success(t *testing.T) {
@@ -365,6 +376,50 @@ func TestTryRefreshOauthToken_NoRefreshToken(t *testing.T) {
 	err := tryRefreshOauthToken(w, cp)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "refresh token is empty")
+}
+
+func TestTryRefreshOauthToken_FailureKeepsServerErrorFacts(t *testing.T) {
+	// The real /v1/token endpoint answers non-200 with the RFC 6749 error
+	// payload using snake_case request_id.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/token" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"error":             "invalid_grant",
+				"error_description": "invalid refreshToken",
+				"request_id":        "52beb483-d0bb-483d-bcfa-049bab9e2f6d",
+				"http_code":         400,
+			})
+		}
+	}))
+	defer server.Close()
+
+	originalOauthBaseUrlMap := oauthBaseUrlMap
+	defer func() { oauthBaseUrlMap = originalOauthBaseUrlMap }()
+	oauthBaseUrlMap["CN"] = server.URL
+
+	w := new(bytes.Buffer)
+	cp := &Profile{
+		Name:              "oauth",
+		Mode:              OAuth,
+		OAuthSiteType:     "CN",
+		OAuthRefreshToken: "mock_refresh_token",
+	}
+
+	err := tryRefreshOauthToken(w, cp)
+	assert.Error(t, err)
+	var oauthErr *OAuthTokenError
+	if assert.ErrorAs(t, err, &oauthErr) {
+		assert.Equal(t, 400, oauthErr.StatusCode)
+		assert.Equal(t, "invalid_grant", oauthErr.Code)
+		assert.Equal(t, "invalid refreshToken", oauthErr.Description)
+		assert.Equal(t, "52beb483-d0bb-483d-bcfa-049bab9e2f6d", oauthErr.RequestID)
+		assert.Equal(t, "aliyun configure --mode OAuth --oauth-site-type CN --profile oauth", oauthErr.ReLogin)
+	}
+	assert.Contains(t, err.Error(), "failed to refresh token, status code: 400")
+	assert.Contains(t, err.Error(), "error: invalid_grant")
+	assert.Contains(t, err.Error(), "requestId: 52beb483-d0bb-483d-bcfa-049bab9e2f6d")
+	assert.Contains(t, err.Error(), "aliyun configure --mode OAuth --oauth-site-type CN --profile oauth")
 }
 
 func TestTryRefreshOauthToken_InvalidSiteType(t *testing.T) {

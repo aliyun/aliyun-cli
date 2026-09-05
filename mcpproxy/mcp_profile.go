@@ -40,7 +40,7 @@ type McpProfile struct {
 }
 
 func getMCPConfigPath() string {
-	return config.GetConfigPath() + "/.mcpproxy_config"
+	return filepath.Join(config.GetConfigPath(), ".mcpproxy_config")
 }
 
 func NewMcpProfile(name string) *McpProfile {

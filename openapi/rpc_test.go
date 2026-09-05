@@ -19,8 +19,8 @@ import (
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
-	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -29,10 +29,7 @@ func TestRpcInvoker_Prepare(t *testing.T) {
 		BasicInvoker: &BasicInvoker{
 			request: requests.NewCommonRequest(),
 		},
-		api: &meta.Api{
-			Product: &meta.Product{
-				Code: "ecs",
-			},
+		api: &canonicalmeta.API{
 			Name:     "ecs",
 			Protocol: "https",
 			Method:   "GET",
@@ -57,63 +54,64 @@ func TestRpcInvoker_Prepare(t *testing.T) {
 	ctx.UnknownFlags().Add(NewBodyFlag())
 	err := a.Prepare(ctx)
 	assert.NotNil(t, err)
-	assert.Equal(t, "'--body' is not a valid parameter or flag. See `aliyun help ecs ecs`.", err.Error())
+	assert.Equal(t, `"--body" is not a valid parameter or flag. See `+"`aliyun help  ecs`"+`.`, err.Error())
 
-	a.api.Parameters = []meta.Parameter{
+	a.api.Parameters = []canonicalmeta.Parameter{
 		{
-			Name:     "body",
-			Position: "Domain",
+			Name: "body", RawName: "body",
+			Location: "host",
 		},
 		{
-			Name: "secure",
+			Name: "secure", RawName: "secure",
 		},
 	}
 	ctx.UnknownFlags().Add(NewSecureFlag())
 	err = a.Prepare(ctx)
 	assert.NotNil(t, err)
-	assert.Equal(t, "unknown parameter position; secure is ", err.Error())
+	assert.Equal(t, "unknown parameter position; body is Host", err.Error())
 
-	a.api.Parameters = []meta.Parameter{
+	a.api.Parameters = []canonicalmeta.Parameter{
 		{
-			Name:     "body",
-			Position: "Query",
+			Name: "body", RawName: "body",
+			Location: "query",
 			Required: true,
 		},
 		{
-			Name:     "secure",
-			Position: "Query",
+			Name: "secure", RawName: "secure",
+			Location: "query",
 			Required: true,
 		},
 		{
-			Name:     "RegionId",
+			Name: "RegionId", RawName: "RegionId",
 			Required: true,
 		},
 		{
-			Name:     "Action",
+			Name: "Action", RawName: "Action",
 			Required: true,
 		},
 	}
 	err = a.Prepare(ctx)
 	assert.NotNil(t, err)
 	assert.Equal(t, "required parameters not assigned: \n  --body\n  --secure\n  --RegionId", err.Error())
+	assert.True(t, cli.IsAIRecoveryEligible(err), "legacy missing-required errors must receive the non-AI AI-mode hint")
 
-	a.api.Parameters = []meta.Parameter{
+	a.api.Parameters = []canonicalmeta.Parameter{
 		{
-			Name:     "body",
-			Position: "Body",
+			Name: "body", RawName: "body",
+			Location: "body",
 		},
 		{
-			Name:     "secure",
-			Position: "Body",
+			Name: "secure", RawName: "secure",
+			Location: "body",
 		},
 	}
 	err = a.Prepare(ctx)
 	assert.Nil(t, err)
 
-	a.api.Parameters = []meta.Parameter{
+	a.api.Parameters = []canonicalmeta.Parameter{
 		{
-			Name:     "body",
-			Position: "Domain",
+			Name: "body", RawName: "body",
+			Location: "host",
 		},
 	}
 	ctx.SetUnknownFlags(cli.NewFlagSet())
@@ -124,6 +122,46 @@ func TestRpcInvoker_Prepare(t *testing.T) {
 	}()
 	a.Prepare(ctx)
 
+}
+
+func TestRpcInvoker_PrepareFormDataSubParameter(t *testing.T) {
+	a := &RpcInvoker{
+		BasicInvoker: &BasicInvoker{
+			request: requests.NewCommonRequest(),
+		},
+		api: &canonicalmeta.API{
+			Name:     "CreateEr",
+			Protocol: "https",
+			Method:   "POST",
+			Parameters: []canonicalmeta.Parameter{
+				{
+					Name:       "Tag",
+					RawName:    "Tag",
+					Type:       "array",
+					Location:   "form",
+					ParamStyle: "repeatList",
+					Element: &canonicalmeta.TypeShape{
+						Type: "object",
+						Fields: []canonicalmeta.Field{
+							{Name: "Key", RawName: "Key", Type: "string"},
+						},
+					},
+				},
+			},
+		},
+	}
+	w := new(bufio.Writer)
+	stderr := new(bufio.Writer)
+	ctx := cli.NewCommandContext(w, stderr)
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	flag, err := ctx.UnknownFlags().AddByName("Tag.1.Key")
+	assert.NoError(t, err)
+	flag.SetAssigned(true)
+	flag.SetValue("tag-key")
+
+	err = a.Prepare(ctx)
+	assert.Nil(t, err)
+	assert.Equal(t, "tag-key", a.request.FormParams["Tag.1.Key"])
 }
 
 func TestRpcInvoker_Call(t *testing.T) {

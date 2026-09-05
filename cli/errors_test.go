@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//	http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,12 +23,14 @@ import (
 )
 
 func TestErrorWithTip(t *testing.T) {
-	err := NewErrorWithTip(errors.New("err test"), "%s-%d", "nicai", 1)
+	cause := errors.New("err test")
+	err := NewErrorWithTip(cause, "%s-%d", "nicai", 1)
 	e, ok := err.(*errorWithTip)
 	assert.True(t, ok)
 	assert.Equal(t, &errorWithTip{err: errors.New("err test"), tip: fmt.Sprintf("%s-%d", "nicai", 1)}, e)
 	assert.Equal(t, e.Error(), "err test")
 	assert.Equal(t, "nicai-1", e.GetTip("ch"))
+	assert.ErrorIs(t, err, cause)
 }
 
 func TestInvalidCommandError(t *testing.T) {
@@ -38,7 +40,8 @@ func TestInvalidCommandError(t *testing.T) {
 	err := NewInvalidCommandError("MrX", ctx)
 	e, ok := err.(*InvalidCommandError)
 	assert.True(t, ok)
-	assert.Equal(t, "'MrX' is not a valid command", e.Error())
+	assert.Equal(t, `"MrX" is not a valid command`, e.Error())
+	assert.Equal(t, `"Mr'X" is not a valid command`, NewInvalidCommandError("Mr'X", ctx).Error())
 	e.ctx.EnterCommand(&Command{Name: "oss", flags: NewFlagSet()})
 	assert.Nil(t, e.GetSuggestions())
 }
@@ -123,4 +126,13 @@ func TestInvalidFlagError_NilContext(t *testing.T) {
 	assert.Equal(t, "invalid flag --x", e.Error())
 	assert.Nil(t, e.closeSuggestions())
 	assert.Nil(t, e.availableFlags())
+}
+
+func TestExplicitCLIUsageErrorsAreAIRecoveryEligible(t *testing.T) {
+	ctx := NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.EnterCommand(&Command{Name: "aliyun"})
+
+	assert.True(t, IsAIRecoveryEligible(NewInvalidCommandError("confgure", ctx)))
+	assert.True(t, IsAIRecoveryEligible(NewInvalidFlagError("regoin", ctx)))
+	assert.False(t, IsAIRecoveryEligible(errors.New("untyped internal failure")))
 }

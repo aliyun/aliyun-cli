@@ -17,11 +17,24 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/stretchr/testify/assert"
 )
+
+type structuredTestError struct{}
+
+func (structuredTestError) Error() string { return "fallback" }
+
+func (structuredTestError) RenderError(w io.Writer) error {
+	_, err := io.WriteString(w, "{\"schemaVersion\":\"v1\",\"error\":{\"code\":\"TEST\"}}\n")
+	return err
+}
+
+func (structuredTestError) ExitCode() int { return 2 }
 
 func TestCommand(t *testing.T) {
 	cmd := &Command{
@@ -192,6 +205,7 @@ func TestGetSubCommand(t *testing.T) {
 }
 
 func TestExecute(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	buf := new(bytes.Buffer)
 	buf2 := new(bytes.Buffer)
 	ctx := NewCommandContext(buf, buf2)
@@ -206,10 +220,90 @@ func TestExecute(t *testing.T) {
 	DisableExitCode()
 	defer EnableExitCode()
 	cmd.Execute(ctx, []string{})
-	assert.Equal(t, "\x1b[1;31mERROR: 'test' is not a valid command\n\x1b[0m", buf2.String())
+	assert.Equal(t, "\x1b[1;31mERROR: \"test\" is not a valid command\n\x1b[0m\x1b[1;33m\nUse `test --help` for more information.\n\x1b[0m\n"+AIModeEnableTextHint+"\n", buf2.String())
+}
+
+func TestBeforeParseRouteCanConsumeOriginalInvocation(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(stdout, stderr)
+	runCalled := false
+	beforeExecuteCalled := false
+	cmd := &Command{
+		Name:              "aliyun",
+		EnableUnknownFlag: true,
+		Run: func(ctx *Context, args []string) error {
+			runCalled = true
+			return nil
+		},
+	}
+	cmd.BeforeExecute = func(*Context, []string) { beforeExecuteCalled = true }
+	ctx.EnterCommand(cmd)
+	wantArgs := []string{"ecs", "DescribeInstances", "--InstanceIds", "--help"}
+	cmd.BeforeParseRoute = func(ctx *Context, args []string) (bool, error) {
+		assert.Equal(t, wantArgs, args)
+		fmt.Fprint(ctx.Stdout(), "parameter help")
+		return true, nil
+	}
+
+	cmd.Execute(ctx, wantArgs)
+
+	assert.False(t, runCalled)
+	assert.False(t, beforeExecuteCalled, "handled pre-parse routes must not apply host execution policy")
+	assert.Equal(t, "parameter help", stdout.String())
+	assert.Empty(t, stderr.String())
+}
+
+func TestBeforeParseRouteFallsThroughBeforeExecuteAndParser(t *testing.T) {
+	ctx := NewCommandContext(io.Discard, io.Discard)
+	events := make([]string, 0, 3)
+	cmd := &Command{
+		Name: "aliyun",
+		BeforeParseRoute: func(*Context, []string) (bool, error) {
+			events = append(events, "route")
+			return false, nil
+		},
+		BeforeExecute: func(*Context, []string) {
+			events = append(events, "before")
+		},
+		Run: func(*Context, []string) error {
+			events = append(events, "run")
+			return nil
+		},
+	}
+	ctx.EnterCommand(cmd)
+
+	cmd.Execute(ctx, nil)
+
+	assert.Equal(t, []string{"route", "before", "run"}, events)
+}
+
+func TestBeforeParseRouteErrorUsesCommandNormalizer(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	DisableExitCode()
+	defer EnableExitCode()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(stdout, stderr)
+	cmd := &Command{Name: "aliyun"}
+	ctx.EnterCommand(cmd)
+	cmd.BeforeParseRoute = func(*Context, []string) (bool, error) {
+		return true, errors.New("route failed")
+	}
+	cmd.NormalizeError = func(_ *Context, args []string, err error) error {
+		assert.Equal(t, []string{"ecs", "--help"}, args)
+		return fmt.Errorf("normalized: %w", err)
+	}
+
+	cmd.Execute(ctx, []string{"ecs", "--help"})
+
+	assert.Empty(t, stdout.String())
+	assert.Equal(t, "ERROR: normalized: route failed\n", stderr.String())
 }
 
 func TestProcessError(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	DisableExitCode()
 	defer EnableExitCode()
 	cmd := newAliyunCmd()
@@ -222,7 +316,68 @@ func TestProcessError(t *testing.T) {
 	assert.Equal(t, "\x1b[1;31mERROR: test error tip\n\x1b[0m\x1b[1;33m\n\n\x1b[0m", buf2.String())
 }
 
+func TestProcessStructuredError(t *testing.T) {
+	DisableExitCode()
+	defer EnableExitCode()
+	cmd := newAliyunCmd()
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(stdout, stderr)
+
+	cmd.processError(ctx, structuredTestError{})
+
+	assert.Equal(t, "{\"schemaVersion\":\"v1\",\"error\":{\"code\":\"TEST\"}}\n", stderr.String())
+	assert.Empty(t, stdout.String())
+}
+
+func TestProcessAgentErrorWritesOneJSONLineToStderr(t *testing.T) {
+	DisableExitCode()
+	defer EnableExitCode()
+
+	cmd := newAliyunCmd()
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(stdout, stderr)
+	err := NewAgentError(AgentErrorEnvelope{
+		Message:    "unknown flag --instnace-type",
+		DidYouMean: []string{"--instance-type"},
+		Recovery: AgentErrorRecovery{
+			Action:  "search_parameter",
+			Command: "aliyun ecs describe-instances --help-search instance-type",
+			Hint:    "Search request parameters related to instance-type.",
+		},
+	}, errors.New("unknown flag --instnace-type"))
+
+	cmd.processError(ctx, err)
+
+	assert.Empty(t, stdout.String())
+	assert.Equal(t, "{\"message\":\"unknown flag --instnace-type\",\"did_you_mean\":[\"--instance-type\"],\"recovery\":{\"action\":\"search_parameter\",\"command\":\"aliyun ecs describe-instances --help-search instance-type\",\"hint\":\"Search request parameters related to instance-type.\"}}\n", stderr.String())
+	assert.NotContains(t, stderr.String(), AIModeEnableTextHint)
+}
+
+type localAgentHintTestError struct{ message string }
+
+func (e localAgentHintTestError) Error() string { return e.message }
+
+func (localAgentHintTestError) AIRecoveryEligible() {}
+
+func TestProcessExplicitLocalErrorAppendsAIModeHintOnce(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	DisableExitCode()
+	defer EnableExitCode()
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := NewCommandContext(stdout, stderr)
+	newAliyunCmd().processError(ctx, localAgentHintTestError{message: "local failure"})
+
+	assert.Empty(t, stdout.String())
+	assert.Equal(t, "ERROR: local failure\n\n"+AIModeEnableTextHint+"\n", stderr.String())
+	assert.Equal(t, 1, strings.Count(stderr.String(), "export ALIBABA_CLOUD_CLI_AI_MODE=1"))
+}
+
 func TestExecuteHelp(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	cmd := newAliyunCmd()
 	buf := new(bytes.Buffer)
 	buf2 := new(bytes.Buffer)

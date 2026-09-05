@@ -19,7 +19,10 @@ releases/
 resource/metas.go
 local-*
 coverage.txt
+coverage-runtime.txt
 oss/lib/ossutil_test*
+# Go build cache (when GOCACHE points into the repo)
+.gocache/
 coverage.html
 coverage/
 integration/*.txt
@@ -27,3 +30,11 @@ cli-metadata/
 __debug_bin*
 .qoder
 docs/superpowers/
+
+# Generated only for packed release builds.
+/bundledmeta/.generated/
+
+# Local parser formal proof materials; not part of the runtime PR.
+.local-formal/
+formal/
+tools/parser-contract-gen/

@@ -25,10 +25,24 @@ func addPluginSourceBaseFlag(cmd *cli.Command) {
 	})
 }
 
+func addPreferGoFlag(cmd *cli.Command) {
+	cmd.Flags().Add(&cli.Flag{
+		Name: "prefer-go",
+		Short: i18n.T(
+			"Prefer the Go plugin package for the current platform-arch",
+			"优先选择当前 platform-arch 的 Go 插件包"),
+		AssignedMode: cli.AssignedNone,
+		Hidden:       true,
+	})
+}
+
 func newManagerWithOptionalSourceBase(ctx *cli.Context) (*Manager, error) {
 	mgr, err := NewManager()
 	if err != nil {
 		return nil, err
+	}
+	if f := ctx.Flags().Get("prefer-go"); f != nil && f.IsAssigned() {
+		mgr.preferGo = true
 	}
 	f := ctx.Flags().Get("source-base")
 	if f == nil || !f.IsAssigned() {
@@ -47,9 +61,10 @@ func NewPluginCommand() *cli.Command {
 		Short:                  i18n.T("Manage plugins", "管理插件"),
 		Usage:                  "plugin <command> [args]",
 		DisablePersistentFlags: true,
-		Run: func(ctx *cli.Context, args []string) error {
-			return cli.NewErrorWithTip(fmt.Errorf("command missing"), "Use `aliyun plugin --help` for more information.")
-		},
+		// No Run: plugin is a pure dispatcher. Leaving Run nil lets the
+		// framework report an unknown subcommand (e.g. `plugin remove`) as
+		// an invalid command before it tries to parse the trailing flags,
+		// and show help when invoked with no subcommand.
 	}
 
 	cmd.AddSubCommand(newListCommand())
@@ -58,6 +73,7 @@ func NewPluginCommand() *cli.Command {
 	cmd.AddSubCommand(newShowCommand())
 	cmd.AddSubCommand(newInstallCommand())
 	cmd.AddSubCommand(newInstallAllCommand())
+	cmd.AddSubCommand(newInstallCustomCommand())
 	cmd.AddSubCommand(newUninstallCommand())
 	cmd.AddSubCommand(newUpdateCommand())
 
@@ -209,8 +225,24 @@ func displayInstalledPluginDetails(ctx *cli.Context, canonicalName string, p *Lo
 	out := ctx.Stdout()
 	fmt.Fprintf(out, "Name:\t%s\n", canonicalName)
 	fmt.Fprintf(out, "Version:\t%s\n", p.Version)
+	fmt.Fprintf(out, "Type:\t%s\n", NormalizePluginType(p.Type))
 	if pc := strings.TrimSpace(p.ProductCode); pc != "" {
 		fmt.Fprintf(out, "Product code:\t%s\n", pc)
+	}
+	if command := strings.TrimSpace(p.Command); command != "" {
+		fmt.Fprintf(out, "Command:\t%s\n", command)
+	}
+	if len(p.CommandAliases) > 0 {
+		fmt.Fprintf(out, "Command aliases:\t%s\n", strings.Join(p.CommandAliases, ", "))
+	}
+	if path := strings.TrimSpace(p.Path); path != "" {
+		fmt.Fprintf(out, "Path:\t%s\n", path)
+	}
+	if minVersion := strings.TrimSpace(p.MinCliVersion); minVersion != "" {
+		fmt.Fprintf(out, "Minimum CLI version:\t%s\n", minVersion)
+	}
+	if metadata := p.Metadata; metadata != nil {
+		fmt.Fprintf(out, "Metadata format:\t%s\n", metadata.Format)
 	}
 	if p.ShortDescription != "" {
 		fmt.Fprintf(out, "Short description:\t%s\n", p.ShortDescription)
@@ -311,6 +343,7 @@ func newInstallCommand() *cli.Command {
 		DefaultValue: "",
 	})
 
+	addPreferGoFlag(cmd)
 	addPluginSourceBaseFlag(cmd)
 	return cmd
 }
@@ -333,6 +366,38 @@ func newInstallAllCommand() *cli.Command {
 			}
 
 			return mgr.InstallAll(ctx, enablePre)
+		},
+	}
+
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "enable-pre",
+		Short:        i18n.T("Allow installing pre-release versions", "允许安装预发布版本"),
+		AssignedMode: cli.AssignedNone,
+	})
+
+	addPreferGoFlag(cmd)
+	addPluginSourceBaseFlag(cmd)
+	return cmd
+}
+
+func newInstallCustomCommand() *cli.Command {
+	cmd := &cli.Command{
+		Name:   "install-custom",
+		Short:  i18n.T("Install plugins with product-side custom logic", "安装云产品定制逻辑插件"),
+		Usage:  "install-custom [--source-base <url>] [--enable-pre]",
+		Hidden: true,
+		Run: func(ctx *cli.Context, args []string) error {
+			mgr, err := newManagerWithOptionalSourceBase(ctx)
+			if err != nil {
+				return err
+			}
+
+			enablePre := false
+			if enablePreFlag := ctx.Flags().Get("enable-pre"); enablePreFlag != nil && enablePreFlag.IsAssigned() {
+				enablePre = true
+			}
+
+			return mgr.InstallCustom(ctx, enablePre)
 		},
 	}
 
@@ -421,6 +486,7 @@ func newUpdateCommand() *cli.Command {
 		AssignedMode: cli.AssignedNone,
 	})
 
+	addPreferGoFlag(cmd)
 	addPluginSourceBaseFlag(cmd)
 	return cmd
 }

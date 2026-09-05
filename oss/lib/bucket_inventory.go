@@ -314,7 +314,7 @@ func (bic *BucketInventoryCommand) PutBucketInventory() error {
 
 func (bic *BucketInventoryCommand) confirm(str string) bool {
 	var val string
-	fmt.Printf(getClearStr(fmt.Sprintf("bucket inventory: overwrite \"%s\"(y or N)? ", str)))
+	fmt.Print(getClearStr(fmt.Sprintf("bucket inventory: overwrite \"%s\"(y or N)? ", str)))
 	if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
 		return false
 	}

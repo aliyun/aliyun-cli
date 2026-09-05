@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/alibabacloud-go/tea/tea"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 )
 
 // 调用方上下文相关参数（source-ip / secure-transport）的注入键。
@@ -25,11 +26,11 @@ import (
 //   - RPC：通过 query 注入 SourceIp / SecureTransport
 const (
 	// EnvSourceIP 调用方源 IP。仅在为非空字符串时注入。
-	EnvSourceIP = "ALIBABA_CLOUD_SOURCE_IP"
+	EnvSourceIP = sysconfig.EnvSourceIP
 	// EnvSecureTransport 调用方是否走安全传输。仅在为非空字符串时注入；值原样透传，由网关自行解析。
-	EnvSecureTransport = "ALIBABA_CLOUD_SECURE_TRANSPORT"
+	EnvSecureTransport = sysconfig.EnvSecureTransport
 	// EnvCallContextSkipProducts 自建网关产品扩展跳过列表（逗号分隔，大小写不敏感，附加到默认列表）。
-	EnvCallContextSkipProducts = "ALIBABA_CLOUD_CALL_CONTEXT_SKIP_PRODUCTS"
+	EnvCallContextSkipProducts = sysconfig.EnvCallContextSkipProducts
 
 	headerSourceIP          = "x-acs-source-ip"
 	headerSecureTransport   = "x-acs-secure-transport"

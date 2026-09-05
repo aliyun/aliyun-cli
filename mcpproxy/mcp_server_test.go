@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -26,6 +27,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewMCPProxy(t *testing.T) {
@@ -77,6 +79,101 @@ func TestNewMCPProxy(t *testing.T) {
 	assert.Equal(t, port, proxy.TokenRefresher.port)
 	assert.Equal(t, scope, proxy.TokenRefresher.scope)
 	assert.Equal(t, autoOpenBrowser, proxy.TokenRefresher.autoOpenBrowser)
+	require.NotNil(t, proxy.upstreamClient)
+	assert.Zero(t, proxy.upstreamClient.Timeout, "an overall timeout would terminate long-lived SSE streams")
+	transport, ok := proxy.upstreamClient.Transport.(*http.Transport)
+	require.True(t, ok)
+	assert.Equal(t, mcpUpstreamHeaderTimeout, transport.ResponseHeaderTimeout)
+}
+
+func TestMCPProxyHTTPServerTimeoutsPreserveStreaming(t *testing.T) {
+	proxy := &MCPProxy{Host: "127.0.0.1", Port: 8088}
+	server := proxy.newHTTPServer(http.NewServeMux())
+
+	assert.Equal(t, mcpReadHeaderTimeout, server.ReadHeaderTimeout)
+	assert.Equal(t, mcpReadTimeout, server.ReadTimeout, "request body reads must have a finite deadline")
+	assert.Equal(t, mcpIdleTimeout, server.IdleTimeout)
+	assert.Zero(t, server.WriteTimeout, "SSE responses must not be terminated by a server-wide deadline")
+}
+
+func TestReadMCPRequestBodyLimit(t *testing.T) {
+	tests := []struct {
+		name          string
+		body          string
+		contentLength int64
+		want          string
+		wantTooLarge  bool
+	}{
+		{
+			name:          "within limit",
+			body:          "1234",
+			contentLength: 4,
+			want:          "1234",
+		},
+		{
+			name:          "declared length exceeds limit",
+			body:          "12345",
+			contentLength: 5,
+			wantTooLarge:  true,
+		},
+		{
+			name:          "streamed body exceeds limit",
+			body:          "12345",
+			contentLength: -1,
+			wantTooLarge:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/mcp/test", bytes.NewBufferString(tt.body))
+			req.ContentLength = tt.contentLength
+			body, err := readMCPRequestBody(httptest.NewRecorder(), req, 4)
+
+			if tt.wantTooLarge {
+				var maxBytesError *http.MaxBytesError
+				require.ErrorAs(t, err, &maxBytesError)
+				assert.EqualValues(t, 4, maxBytesError.Limit)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(body))
+		})
+	}
+}
+
+func TestServeMCPProxyRequestRejectsOversizedBody(t *testing.T) {
+	profile := NewMcpProfile("test-profile")
+	profile.MCPOAuthAccessToken = "test-token"
+	profile.MCPOAuthAccessTokenExpire = time.Now().Unix() + 3600
+	proxy := NewMCPProxy(ProxyConfig{McpProfile: profile})
+	req := httptest.NewRequest(http.MethodPost, "/mcp/test", bytes.NewBufferString("{}"))
+	req.ContentLength = mcpMaxRequestBodyBytes + 1
+	recorder := httptest.NewRecorder()
+
+	proxy.ServeMCPProxyRequest(recorder, req)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "Request body too large")
+	assert.EqualValues(t, 1, atomic.LoadInt64(&proxy.stats.ErrorRequests))
+}
+
+func TestEmptyAllowListPreservesCompatibility(t *testing.T) {
+	proxy := NewMCPProxy(ProxyConfig{})
+
+	assert.True(t, proxy.isPathAllowed("/mcp/existing-server"))
+	assert.True(t, proxy.isServerAllowed(MCPServerInfo{Name: "existing-server"}))
+}
+
+func TestSafeURLForLog(t *testing.T) {
+	value, err := url.Parse("https://user:password@example.com/mcp/server?access_token=secret&code=oauth-code#private")
+	assert.NoError(t, err)
+	assert.Equal(t, "https://example.com/mcp/server", safeURLForLog(value))
+	assert.Equal(t, "<unknown>", safeURLForLog(nil))
+
+	resp := &http.Response{Request: &http.Request{URL: value}}
+	assert.Equal(t, "https://example.com/mcp/server", safeResponseURLForLog(resp))
+	assert.Equal(t, "<unknown>", safeResponseURLForLog(nil))
 }
 
 func TestNewMCPProxy_ServerPathsMapping(t *testing.T) {
@@ -792,11 +889,7 @@ func TestTokenRefresher_sendToken(t *testing.T) {
 }
 
 func TestTokenRefresher_atomicSaveProfile(t *testing.T) {
-	tmpDir := t.TempDir()
-	originalHome := getHomeEnv()
-	defer restoreHomeEnv(originalHome)
-
-	setHomeEnv(tmpDir)
+	setTestHome(t)
 
 	profile := NewMcpProfile("test-profile")
 	profile.MCPOAuthAccessToken = "test-token"
@@ -944,21 +1037,4 @@ func TestTokenRefresher_refreshAccessToken_AccessTokenExpired(t *testing.T) {
 	accessTimeRemaining := profile.MCPOAuthAccessTokenExpire - currentTime
 	assert.LessOrEqual(t, accessTimeRemaining, int64(0), "access token should be expired")
 	assert.Less(t, accessTimeRemaining, int64(0), "access token should be expired (negative remaining time)")
-}
-
-// 辅助函数
-func getHomeEnv() string {
-	return os.Getenv("HOME")
-}
-
-func setHomeEnv(value string) {
-	os.Setenv("HOME", value)
-}
-
-func restoreHomeEnv(value string) {
-	if value != "" {
-		os.Setenv("HOME", value)
-	} else {
-		os.Unsetenv("HOME")
-	}
 }

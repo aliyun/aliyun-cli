@@ -517,7 +517,7 @@ func (sc *SetACLCommand) waitRoutinueComplete(chError, chListError <-chan error,
 			} else {
 				ferr = err
 				if !sc.saOption.ctnu {
-					fmt.Printf(sc.monitor.progressBar(true, errExit))
+					fmt.Print(sc.monitor.progressBar(true, errExit))
 					return err
 				}
 			}
@@ -527,7 +527,7 @@ func (sc *SetACLCommand) waitRoutinueComplete(chError, chListError <-chan error,
 }
 
 func (sc *SetACLCommand) formatResultPrompt(err error) error {
-	fmt.Printf(sc.monitor.progressBar(true, normalExit))
+	fmt.Print(sc.monitor.progressBar(true, normalExit))
 	if err != nil && sc.saOption.ctnu {
 		return nil
 	}

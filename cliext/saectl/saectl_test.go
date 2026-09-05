@@ -41,14 +41,14 @@ func TestPrepareEnv_Success(t *testing.T) {
 	home := t.TempDir()
 	_ = os.Setenv("HOME", home)
 	prepareConfig(t, home)
-	
+
 	ctx, _, _ := newOriginCtx()
 	c := NewContext(ctx)
 	c.InitBasicInfo()
 	if err := c.PrepareEnv(); err != nil {
 		t.Fatalf("PrepareEnv err: %v", err)
 	}
-	
+
 	if c.envMap["ALICLOUD_REGION"] != "cn-hangzhou" {
 		t.Fatalf("region mismatch: %v", c.envMap["ALICLOUD_REGION"])
 	}
@@ -63,7 +63,7 @@ func TestPrepareEnv_Success(t *testing.T) {
 func TestRemoveFlagsForMainCli_Success(t *testing.T) {
 	ctx, _, _ := newOriginCtx()
 	addConfigFlag(ctx, "profile", "test")
-	
+
 	c := NewContext(ctx)
 	args, err := c.RemoveFlagsForMainCli([]string{"aliyun", "sae", "get", "app", "--profile", "test"})
 	if err != nil {

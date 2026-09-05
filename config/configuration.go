@@ -159,6 +159,40 @@ func LoadProfileWithContext(ctx *cli.Context) (profile Profile, err error) {
 	return
 }
 
+// LoadProfileForDryRunWithContext resolves only local, non-executing profile
+// data. It intentionally skips profile validation because validation requires
+// credentials even though client-side dry-run never authenticates or sends a
+// request. Missing default configuration is represented by an empty default
+// profile; an explicitly selected missing config or profile still fails.
+func LoadProfileForDryRunWithContext(ctx *cli.Context) (profile Profile, err error) {
+	if util.GetFromEnv("ALIBABA_CLOUD_IGNORE_PROFILE", "ALIBABACLOUD_IGNORE_PROFILE") == "TRUE" {
+		profile = NewProfile(DefaultConfigProfileName)
+		profile.RegionId = "cn-hangzhou"
+		profile.OverwriteWithFlags(ctx)
+		return profile, nil
+	}
+
+	conf, err := LoadConfigurationWithContext(ctx)
+	if err != nil {
+		if _, explicit := ConfigurePathFlag(ctx.Flags()).GetValue(); explicit || !os.IsNotExist(err) {
+			return profile, err
+		}
+		conf = NewConfiguration()
+	}
+
+	profileName := getProfileName(ctx)
+	if profileName == "" {
+		profileName = conf.CurrentProfile
+	}
+	profile, ok := conf.GetProfile(profileName)
+	if !ok {
+		return profile, fmt.Errorf("unknown profile %s, run configure to check", profileName)
+	}
+	profile.parent = conf
+	profile.OverwriteWithFlags(ctx)
+	return profile, nil
+}
+
 func LoadOrCreateConfiguration(path string) (conf *Configuration, err error) {
 	_, statErr := os.Stat(path)
 	if os.IsNotExist(statErr) {

@@ -62,6 +62,23 @@ func TestVersionInfo_UnmarshalJSON(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "Platform-independent artifact",
+			jsonData: `{
+				"any": {
+					"url": "https://example.com/plugin-meta.zip",
+					"checksum": "meta123"
+				}
+			}`,
+			wantMetadata: nil,
+			wantPlatforms: map[string]PlatformInfo{
+				PluginPlatformAny: {
+					URL:      "https://example.com/plugin-meta.zip",
+					Checksum: "meta123",
+				},
+			},
+			expectError: false,
+		},
+		{
 			name: "Only metadata",
 			jsonData: `{
 				"metadata": {

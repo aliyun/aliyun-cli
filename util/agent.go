@@ -3,6 +3,8 @@ package util
 import (
 	"os"
 	"strings"
+
+	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 )
 
 // 设计原则：
@@ -29,6 +31,7 @@ var knownAgentEnv = []struct {
 	{"OPENCODE", "opencode"},
 	{"OPENCODE_CLIENT", "opencode"},
 	{"CLINE_ACTIVE", "cline"},
+	{"CODEX_SHELL", "codex"},
 	{"CODEX_SANDBOX", "codex"},
 	{"QODER_AGENT", "qoder"},
 	{"QODER_CLI", "qoder-cli"},
@@ -54,8 +57,6 @@ func GetAgentUserAgentSegment() string {
 	return ""
 }
 
-const envCustomUserAgent = "ALIBABA_CLOUD_USER_AGENT"
-
 func MergeAgentSegmentIntoPluginEnvs(envs map[string]string) {
 	if envs == nil {
 		return
@@ -64,15 +65,15 @@ func MergeAgentSegmentIntoPluginEnvs(envs map[string]string) {
 	if seg == "" {
 		return
 	}
-	base := strings.TrimSpace(envs[envCustomUserAgent])
+	base := strings.TrimSpace(envs[sysconfig.EnvUserAgent])
 	if base == "" {
-		base = strings.TrimSpace(os.Getenv(envCustomUserAgent))
+		base = strings.TrimSpace(os.Getenv(sysconfig.EnvUserAgent))
 	}
 	if base == "" {
-		envs[envCustomUserAgent] = seg
+		envs[sysconfig.EnvUserAgent] = seg
 		return
 	}
-	envs[envCustomUserAgent] = base + " " + seg
+	envs[sysconfig.EnvUserAgent] = base + " " + seg
 }
 
 // 仅保留 [a-z0-9._-]，最长 32 字符。

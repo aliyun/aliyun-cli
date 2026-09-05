@@ -15,6 +15,8 @@ package openapi
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,6 +24,7 @@ import (
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
 	sdkerrors "github.com/aliyun/alibaba-cloud-sdk-go/sdk/errors"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -86,7 +89,7 @@ func TestResolveEstimateCostApiName(t *testing.T) {
 	// RESTful style with resolved api metadata
 	restful := &RestfulInvoker{
 		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
-		api:          &meta.Api{Name: "DescribeClusters"},
+		api:          &canonicalmeta.API{Name: "DescribeClusters"},
 	}
 	name, err = resolveEstimateCostApiName(nil, restful)
 	assert.Nil(t, err)
@@ -106,6 +109,60 @@ func TestResolveEstimateCostApiName(t *testing.T) {
 	_, err = resolveEstimateCostApiName(library, bare)
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "cannot resolve the api name")
+}
+
+type versionSensitiveCanonicalRepo struct {
+	expectedVersion string
+	api             *canonicalmeta.API
+}
+
+func (r *versionSensitiveCanonicalRepo) GetAPI(productCode, version, apiName string) (*canonicalmeta.API, error) {
+	return nil, fmt.Errorf("api not found")
+}
+
+func (r *versionSensitiveCanonicalRepo) GetAPIByPath(productCode, version, method, path string, apiNames []string) (*canonicalmeta.API, error) {
+	if version != r.expectedVersion {
+		return nil, fmt.Errorf("unexpected version %s", version)
+	}
+	return r.api, nil
+}
+
+func (r *versionSensitiveCanonicalRepo) GetVersionIndex(productCode, version string) (*canonicalmeta.VersionIndex, error) {
+	return nil, fmt.Errorf("version index not found")
+}
+
+func TestResolveEstimateCostApiNameUsesProductDefaultVersionForPathLookup(t *testing.T) {
+	product := meta.Product{
+		Code:     "demo",
+		Version:  "2026-01-01",
+		ApiStyle: "restful",
+		ApiNames: []string{"DescribeItem"},
+	}
+	productRepo, err := meta.MockLoadRepository([]meta.Product{product})
+	assert.Nil(t, err)
+	library := &Library{
+		builtinRepo: productRepo,
+		canonicalRepo: &versionSensitiveCanonicalRepo{
+			expectedVersion: product.Version,
+			api:             &canonicalmeta.API{Name: "DescribeItem"},
+		},
+	}
+
+	req := requests.NewCommonRequest()
+	req.Product = product.Code
+	req.Version = "2099-01-01"
+	restful := &RestfulInvoker{
+		BasicInvoker: &BasicInvoker{
+			request: req,
+			product: &product,
+		},
+		method: "GET",
+		path:   "/items/1",
+	}
+
+	name, err := resolveEstimateCostApiName(library, restful)
+	assert.Nil(t, err)
+	assert.Equal(t, "DescribeItem", name)
 }
 
 func TestTranslateEstimateCostErrorPassthrough(t *testing.T) {
@@ -244,6 +301,13 @@ func TestProcessInvokeEstimateCostFlag(t *testing.T) {
 	EstimateCostFlag(ctx.Flags()).SetAssigned(true)
 	defer EstimateCostFlag(ctx.Flags()).SetAssigned(false)
 
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2014-05-26")
+	defer VersionFlag(ctx.Flags()).SetAssigned(false)
+
+	ForceFlag(ctx.Flags()).SetAssigned(true)
+	defer ForceFlag(ctx.Flags()).SetAssigned(false)
+
 	err := command.processInvoke(ctx, "ecs", "DescribeRegions", "")
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "estimate-cost.test.invalid")
@@ -284,6 +348,11 @@ func TestMainEstimateCostMissingProductOrApi(t *testing.T) {
 	err := command.main(ctx, []string{})
 	assert.NotNil(t, err)
 	assert.Contains(t, err.Error(), "--estimate-cost requires a product and an API name")
+	var errorWithTip cli.ErrorWithTip
+	if assert.True(t, errors.As(err, &errorWithTip)) {
+		assert.Contains(t, errorWithTip.GetTip("en"), "aliyun utils list-supported-pricing-apis")
+		assert.NotContains(t, errorWithTip.GetTip("en"), "aliyun --list-supported-pricing-apis")
+	}
 
 	// product only (forgot API name)
 	err = command.main(ctx, []string{"ecs"})
@@ -442,7 +511,7 @@ func TestEstimateCostBusinessErrorWithoutDetails(t *testing.T) {
 	assert.Contains(t, err.Error(), "cost estimation failed")
 }
 
-func newOpenapiEstimateCostContext(api *meta.Api) *OpenapiContext {
+func newOpenapiEstimateCostContext(api *canonicalmeta.API) *OpenapiContext {
 	return &OpenapiContext{
 		HttpContext: &HttpContext{
 			profile: &config.Profile{RegionId: "cn-hangzhou"},
@@ -467,12 +536,11 @@ func TestBuildEstimateCostParametersFromOpenapi(t *testing.T) {
 	AddFlags(cmd.Flags())
 	ctx.EnterCommand(cmd)
 
-	api := &meta.Api{
-		Name:    "CreateLogStore",
-		Product: &meta.Product{Version: "2020-12-30"},
-		Parameters: []meta.Parameter{
-			{Name: "project", Position: "Host"},
-			{Name: "logstoreName", Position: "Path"},
+	api := &canonicalmeta.API{
+		Name: "CreateLogStore",
+		Parameters: []canonicalmeta.Parameter{
+			{Name: "project", RawName: "project", Type: "string", Location: "host"},
+			{Name: "logstoreName", RawName: "logstoreName", Type: "string", Location: "path"},
 		},
 	}
 
@@ -512,7 +580,7 @@ func TestBuildEstimateCostParametersFromOpenapiBodyVariants(t *testing.T) {
 	ctx.EnterCommand(cmd)
 	ctx.SetUnknownFlags(cli.NewFlagSet())
 
-	api := &meta.Api{Name: "CreateLogStore", Product: &meta.Product{Version: "2020-12-30"}}
+	api := &canonicalmeta.API{Name: "CreateLogStore"}
 
 	// Per-flag body params arrive as an already-parsed map.
 	oc := newOpenapiEstimateCostContext(api)
@@ -581,9 +649,8 @@ func TestProcessApiInvokeEstimateCost(t *testing.T) {
 	}
 
 	product := &meta.Product{Code: "sls"}
-	api := &meta.Api{
-		Name:    "CreateLogStore",
-		Product: &meta.Product{Version: "2020-12-30"},
+	api := &canonicalmeta.API{
+		Name: "CreateLogStore",
 	}
 	err := command.processApiInvoke(ctx, product, api, "POST", "/logstores")
 	assert.Error(t, err)
@@ -600,7 +667,7 @@ func TestProcessEstimateCostOpenapiNoApiName(t *testing.T) {
 	ctx.EnterCommand(cmd)
 
 	command := NewCommando(w, config.Profile{Mode: "AK", AccessKeyId: "ak", AccessKeySecret: "sk", RegionId: "cn-hangzhou"})
-	oc := newOpenapiEstimateCostContext(&meta.Api{})
+	oc := newOpenapiEstimateCostContext(&canonicalmeta.API{})
 	err := command.processEstimateCostOpenapi(ctx, oc)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot resolve the api name")

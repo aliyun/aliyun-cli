@@ -108,6 +108,14 @@ func max(a, b int64) int64 {
 	return b
 }
 
+func checkedInt(value int64, name string) (int, error) {
+	converted, err := strconv.Atoi(strconv.FormatInt(value, 10))
+	if err != nil {
+		return 0, fmt.Errorf("%s value %d exceeds the platform int range: %w", name, value, err)
+	}
+	return converted, nil
+}
+
 func getSizeString(size int64) string {
 	prefix := ""
 	str := fmt.Sprintf("%d", size)

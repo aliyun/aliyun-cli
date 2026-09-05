@@ -48,12 +48,55 @@ type Context struct {
 	completion         *Completion
 	stdout             io.Writer
 	stderr             io.Writer
+	errorNormalizer    func(error) error
+	errorNormalizeArgs []string
+	invocationArgs     []string
 	inConfigureMode    bool
 	hasPluginSubCmd    bool
 	hasPluginSubCmdSet bool
+	// agentName is detected once at process startup and propagated through the
+	// command context. An empty value means the current environment was not
+	// recognized as an agent environment.
+	agentName string
 	// use http instead of https
 	insecure    bool
 	runtimeEnvs map[string]string
+}
+
+// SetInvocationArgs records the original argv passed to the root command.
+// The copy remains available after generic parsing has consumed flags and is
+// used by provider-first Help routing to preserve plugin and parameter tokens.
+func (ctx *Context) SetInvocationArgs(args []string) {
+	if ctx == nil {
+		return
+	}
+	ctx.invocationArgs = append(ctx.invocationArgs[:0], args...)
+}
+
+// InvocationArgs returns a defensive copy of the root invocation argv.
+func (ctx *Context) InvocationArgs() []string {
+	if ctx == nil {
+		return nil
+	}
+	return append([]string(nil), ctx.invocationArgs...)
+}
+
+func (ctx *Context) SetAgentName(name string) {
+	if ctx == nil {
+		return
+	}
+	ctx.agentName = strings.TrimSpace(name)
+}
+
+func (ctx *Context) AgentName() string {
+	if ctx == nil {
+		return ""
+	}
+	return ctx.agentName
+}
+
+func (ctx *Context) IsAgent() bool {
+	return ctx != nil && ctx.agentName != ""
 }
 
 func (ctx *Context) Insecure() bool {
@@ -114,6 +157,12 @@ func (ctx *Context) Stderr() io.Writer {
 	return ctx.stderr
 }
 
+// SetErrorNormalizationArgs records the parsed command identity used by a
+// root error adapter. Values are copied so callers cannot mutate the context.
+func (ctx *Context) SetErrorNormalizationArgs(args []string) {
+	ctx.errorNormalizeArgs = append(ctx.errorNormalizeArgs[:0], args...)
+}
+
 func (ctx *Context) UnknownFlags() *FlagSet {
 	return ctx.unknownFlags
 }
@@ -154,7 +203,11 @@ func (ctx *Context) CheckFlags() error {
 			if len(f.ExcludeWith) > 0 {
 				for _, es := range f.ExcludeWith {
 					if _, ok := ctx.flags.GetValue(es); ok {
-						return fmt.Errorf("flag --%s is exclusive with --%s", f.Name, es)
+						cause := fmt.Errorf("flag --%s is exclusive with --%s", f.Name, es)
+						return &InvalidOptionCombinationError{
+							Options: []string{"--" + f.Name, "--" + es},
+							Err:     cause,
+						}
 					}
 				}
 			}
@@ -178,10 +231,16 @@ func (ctx *Context) detectFlag(name string) (*Flag, error) {
 			if err != nil {
 				return nil, err
 			}
+			f.dynamicUnknown = true
 			f.allowRepeatedUnknown = true
 			return f, nil
 		}
-		return ctx.unknownFlags.AddByName(name)
+		f, err := ctx.unknownFlags.AddByName(name)
+		if err != nil {
+			return nil, err
+		}
+		f.dynamicUnknown = true
+		return f, nil
 	}
 	return nil, NewInvalidFlagError(name, ctx)
 }
@@ -201,10 +260,16 @@ func (ctx *Context) detectFlagByShorthand(ch rune) (*Flag, error) {
 			if err != nil {
 				return nil, err
 			}
+			f.dynamicUnknown = true
 			f.allowRepeatedUnknown = true
 			return f, nil
 		}
-		return ctx.unknownFlags.AddByName(shName)
+		f, err := ctx.unknownFlags.AddByName(shName)
+		if err != nil {
+			return nil, err
+		}
+		f.dynamicUnknown = true
+		return f, nil
 	}
 	return nil, fmt.Errorf("unknown flag -%s", string(ch))
 }

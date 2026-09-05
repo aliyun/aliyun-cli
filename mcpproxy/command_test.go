@@ -16,7 +16,6 @@ package mcpproxy
 
 import (
 	"bytes"
-	"os"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -29,7 +28,8 @@ func TestNewMCPProxyCommand(t *testing.T) {
 	assert.Equal(t, "mcp-proxy", cmd.Name)
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Long)
-	assert.NotEmpty(t, cmd.Usage)
+	assert.Equal(t, "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME]", cmd.Usage)
+	assert.Equal(t, "aliyun utils mcp-proxy --region-type CN --port 8088", cmd.Sample)
 	assert.NotNil(t, cmd.Run)
 
 	// 检查标志
@@ -153,26 +153,9 @@ func TestGetContentFromApiResponse(t *testing.T) {
 }
 
 func TestRunMCPProxy_InvalidPort(t *testing.T) {
-	// 保存原始环境变量
-	originalHome := os.Getenv("HOME")
-	originalIgnoreProfile := os.Getenv("ALIBABA_CLOUD_IGNORE_PROFILE")
-	defer func() {
-		if originalHome != "" {
-			os.Setenv("HOME", originalHome)
-		} else {
-			os.Unsetenv("HOME")
-		}
-		if originalIgnoreProfile != "" {
-			os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", originalIgnoreProfile)
-		} else {
-			os.Unsetenv("ALIBABA_CLOUD_IGNORE_PROFILE")
-		}
-	}()
-
 	// 设置临时目录和忽略配置文件，确保不会使用真实账号
-	tmpDir := t.TempDir()
-	os.Setenv("HOME", tmpDir)
-	os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
+	setTestHome(t)
+	t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
 
 	ctx := cli.NewCommandContext(bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 	portFlag := &cli.Flag{
@@ -197,25 +180,9 @@ func TestRunMCPProxy_InvalidPort(t *testing.T) {
 }
 
 func TestRunMCPProxy_InvalidRegionType(t *testing.T) {
-	originalHome := os.Getenv("HOME")
-	originalIgnoreProfile := os.Getenv("ALIBABA_CLOUD_IGNORE_PROFILE")
-	defer func() {
-		if originalHome != "" {
-			os.Setenv("HOME", originalHome)
-		} else {
-			os.Unsetenv("HOME")
-		}
-		if originalIgnoreProfile != "" {
-			os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", originalIgnoreProfile)
-		} else {
-			os.Unsetenv("ALIBABA_CLOUD_IGNORE_PROFILE")
-		}
-	}()
-
 	// 设置临时目录和忽略配置文件，确保不会使用真实账号
-	tmpDir := t.TempDir()
-	os.Setenv("HOME", tmpDir)
-	os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
+	setTestHome(t)
+	t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
 
 	ctx := cli.NewCommandContext(bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 	portFlag := &cli.Flag{
@@ -243,29 +210,12 @@ func TestRunMCPProxy_InvalidRegionType(t *testing.T) {
 }
 
 func TestRunMCPProxy_ValidRegionTypes(t *testing.T) {
-	// 保存原始环境变量
-	originalHome := os.Getenv("HOME")
-	originalIgnoreProfile := os.Getenv("ALIBABA_CLOUD_IGNORE_PROFILE")
-	defer func() {
-		if originalHome != "" {
-			os.Setenv("HOME", originalHome)
-		} else {
-			os.Unsetenv("HOME")
-		}
-		if originalIgnoreProfile != "" {
-			os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", originalIgnoreProfile)
-		} else {
-			os.Unsetenv("ALIBABA_CLOUD_IGNORE_PROFILE")
-		}
-	}()
-
 	regionTypes := []string{"CN", "INTL"}
 	for _, regionType := range regionTypes {
 		t.Run(regionType, func(t *testing.T) {
 			// 设置临时目录和忽略配置文件，确保不会使用真实账号
-			tmpDir := t.TempDir()
-			os.Setenv("HOME", tmpDir)
-			os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
+			setTestHome(t)
+			t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
 
 			ctx := cli.NewCommandContext(bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 			portFlag := &cli.Flag{

@@ -3,19 +3,24 @@ package openapi
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 )
 
 func newTestCommando() (*Commando, *bytes.Buffer, *bytes.Buffer) {
@@ -31,6 +36,26 @@ func newTestCommando() (*Commando, *bytes.Buffer, *bytes.Buffer) {
 
 func newTestContext(w, stderr *bytes.Buffer) *cli.Context {
 	return cli.NewCommandContext(w, stderr)
+}
+
+func TestPrintProductHelpSwitchHintUsesPlainText(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	cli.SetNoColorOverride(false)
+	t.Cleanup(func() { cli.SetNoColorOverride(false) })
+	_, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+
+	printProductHelpSwitchHint(ctx, "STS", productHelpKebabToTraditional)
+
+	assert.NotContains(t, stdout.String(), "\x1b[")
+	assert.Contains(t, stdout.String(), baselineProductHelpEnv+"=false aliyun sts --help")
+	assert.Contains(t, stdout.String(), "[--cli-output json]")
+
+	for _, target := range []productHelpSwitch{productHelpPluginToTraditional, productHelpTraditionalToPlugin} {
+		stdout.Reset()
+		printProductHelpSwitchHint(ctx, "STS", target)
+		assert.NotContains(t, stdout.String(), "[--cli-output json]", "plugin switch %v", target)
+	}
 }
 
 func TestPrintPluginIndexLoadFailureNote_NoError(t *testing.T) {
@@ -90,9 +115,123 @@ func TestPrintProductUsage_BuiltinProduct(t *testing.T) {
 	assert.Contains(t, output, "Available Api List")
 }
 
+func TestPrintProductUsage_LegacyBuiltinWinsOverBaselineProductHelp(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	c.library.builtinRepo = getRepository()
+	c.pluginIndex = &plugin.Index{}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
+
+	original := productHelpRender
+	called := false
+	productHelpRender = func(*cli.Context, string) error {
+		called = true
+		return nil
+	}
+	t.Cleanup(func() { productHelpRender = original })
+
+	err := c.printProductUsage(ctx, "ecs")
+	assert.NoError(t, err)
+	assert.False(t, called, "baseline product help must not run when legacy PascalCase help exists")
+	assert.Contains(t, stdout.String(), "Available Api List")
+	assert.Contains(t, stdout.String(), "DescribeInstances")
+}
+
+func TestPrintProductUsage_LegacyHelpAdvertisesBaselineSwitch(t *testing.T) {
+	t.Setenv(baselineProductHelpEnv, "")
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	c.library.builtinRepo = getRepository()
+	c.pluginIndex = &plugin.Index{}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
+
+	originalAvailable := productHelpAvailable
+	productHelpAvailable = func(product string) bool {
+		assert.Equal(t, "ecs", product)
+		return true
+	}
+	t.Cleanup(func() { productHelpAvailable = originalAvailable })
+
+	err := c.printProductUsage(ctx, "ecs")
+	assert.NoError(t, err)
+	assert.Contains(t, stdout.String(), "This help shows traditional PascalCase commands")
+	assert.Contains(t, stdout.String(), baselineProductHelpEnv+"=true aliyun ecs --help")
+}
+
+func TestPrintProductUsage_AIModeOmitsStyleSwitch(t *testing.T) {
+	t.Setenv(baselineProductHelpEnv, "")
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	c.library.builtinRepo = getRepository()
+	c.pluginIndex = &plugin.Index{}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
+
+	originalAvailable := productHelpAvailable
+	productHelpAvailable = func(string) bool { return true }
+	t.Cleanup(func() { productHelpAvailable = originalAvailable })
+
+	require.NoError(t, c.printProductUsageForMode(ctx, "ecs", true))
+	assert.NotContains(t, stdout.String(), baselineProductHelpEnv)
+}
+
+func TestPrintProductUsage_BaselineEnvSelectsKebabHelp(t *testing.T) {
+	t.Setenv(baselineProductHelpEnv, "1")
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	c.library.builtinRepo = getRepository()
+	c.pluginIndex = &plugin.Index{}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
+
+	originalAvailable := productHelpAvailable
+	productHelpAvailable = func(string) bool { return true }
+	t.Cleanup(func() { productHelpAvailable = originalAvailable })
+	originalRender := productHelpRender
+	productHelpRender = func(ctx *cli.Context, product string) error {
+		assert.Equal(t, "ecs", product)
+		fmt.Fprintln(ctx.Stdout(), "BASELINE_KEBAB_PRODUCT_HELP")
+		return nil
+	}
+	t.Cleanup(func() { productHelpRender = originalRender })
+
+	err := c.printProductUsage(ctx, "ecs")
+	assert.NoError(t, err)
+	out := stdout.String()
+	assert.Contains(t, out, "BASELINE_KEBAB_PRODUCT_HELP")
+	assert.Contains(t, out, "This help shows kebab-case commands")
+	assert.Contains(t, out, baselineProductHelpEnv+"=false aliyun ecs --help")
+	assert.NotContains(t, out, "Available Api List")
+}
+
+func TestPrintProductUsage_BaselineProductHelpFallback(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	repo, _ := meta.MockLoadRepository([]meta.Product{})
+	c.library.builtinRepo = repo
+	c.pluginIndex = &plugin.Index{}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
+
+	originalAvailable := productHelpAvailable
+	productHelpAvailable = func(string) bool { return true }
+	t.Cleanup(func() { productHelpAvailable = originalAvailable })
+	originalRender := productHelpRender
+	productHelpRender = func(ctx *cli.Context, product string) error {
+		assert.Equal(t, "baseline-only", product)
+		fmt.Fprintln(ctx.Stdout(), "BASELINE_KEBAB_PRODUCT_HELP")
+		return nil
+	}
+	t.Cleanup(func() { productHelpRender = originalRender })
+
+	err := c.printProductUsage(ctx, "baseline-only")
+	assert.NoError(t, err)
+	assert.Contains(t, stdout.String(), "BASELINE_KEBAB_PRODUCT_HELP")
+}
+
 func TestPrintProductUsage_UnknownProduct_NoPlugin(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	ctx := newTestContext(stdout, stderr)
+	original := productHelpAvailable
+	productHelpAvailable = func(string) bool { return false }
+	t.Cleanup(func() { productHelpAvailable = original })
 	c.library.builtinRepo = getRepository()
 	c.pluginIndex = &plugin.Index{}
 
@@ -119,14 +258,17 @@ func TestPrintProductUsage_PluginAvailableNotInstalled(t *testing.T) {
 	assert.NoError(t, err)
 
 	output := stdout.String()
-	assert.Contains(t, output, "[Suggestion]")
-	assert.Contains(t, output, "aliyun-cli-ecs")
+	assert.NotContains(t, output, "[Suggestion]")
+	assert.NotContains(t, output, "aliyun-cli-ecs")
 	assert.Contains(t, output, "Available Api List")
 }
 
 func TestPrintProductUsage_NonBuiltinProduct_PluginNotInstalled(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	ctx := newTestContext(stdout, stderr)
+	original := productHelpAvailable
+	productHelpAvailable = func(string) bool { return false }
+	t.Cleanup(func() { productHelpAvailable = original })
 
 	repo, _ := meta.MockLoadRepository([]meta.Product{})
 	c.library.builtinRepo = repo
@@ -147,6 +289,9 @@ func TestPrintProductUsage_NonBuiltinProduct_PluginNotInstalled(t *testing.T) {
 func TestPrintProductUsage_NonBuiltinProduct_NoPlugin(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	ctx := newTestContext(stdout, stderr)
+	original := productHelpAvailable
+	productHelpAvailable = func(string) bool { return false }
+	t.Cleanup(func() { productHelpAvailable = original })
 
 	repo, _ := meta.MockLoadRepository([]meta.Product{})
 	c.library.builtinRepo = repo
@@ -189,6 +334,33 @@ func TestPrintProductUsage_RestfulProduct(t *testing.T) {
 	assert.Contains(t, output, "[GET|PUT|POST|DELETE]")
 }
 
+func TestPrintProductUsage_RestfulProduct_ListShowsSummary(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "demo", Version: "2026-01-01", ApiStyle: "restful", ApiNames: []string{"ValidateThing"}},
+	})
+	assert.NoError(t, err)
+	c.library.builtinRepo = repo
+	c.library.canonicalRepo = &byNameOnlyCanonicalRepo{apis: map[string]*canonicalmeta.API{
+		"ValidateThing": {
+			Name:          "ValidateThing",
+			Method:        "POST",
+			PathPattern:   "/things/validate",
+			DescriptionZh: "验证一个对象",
+			DescriptionEn: "Validates a thing",
+		},
+	}}
+
+	err = c.printProductUsage(ctx, "demo")
+	assert.NoError(t, err)
+
+	output := stdout.String()
+	assert.Contains(t, output, "POST /things/validate")
+	assert.True(t, strings.Contains(output, "Validates a thing") || strings.Contains(output, "验证一个对象"), output)
+}
+
 func TestPrintApiUsage_BuiltinApi(t *testing.T) {
 	c, stdout, stderr := newTestCommando()
 	ctx := newTestContext(stdout, stderr)
@@ -200,6 +372,34 @@ func TestPrintApiUsage_BuiltinApi(t *testing.T) {
 	output := stdout.String()
 	assert.Contains(t, output, "Product:")
 	assert.Contains(t, output, "Parameters:")
+}
+
+func TestPrintApiUsage_PrintsCanonicalExamples(t *testing.T) {
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "demo", Version: "2026-01-01", ApiStyle: "rpc", ApiNames: []string{"CreateThing"}},
+	})
+	assert.NoError(t, err)
+	c.library.builtinRepo = repo
+	c.library.canonicalRepo = &byNameOnlyCanonicalRepo{apis: map[string]*canonicalmeta.API{
+		"CreateThing": {
+			Name:         "CreateThing",
+			Protocol:     "HTTPS",
+			Method:       "POST",
+			KebabExample: "aliyun demo create-thing --name foo",
+			CamelExample: "aliyun demo CreateThing --Name foo",
+		},
+	}}
+
+	err = c.printApiUsage(ctx, "demo", "CreateThing")
+	assert.NoError(t, err)
+	output := stdout.String()
+	assert.Contains(t, output, "Example:")
+	assert.Contains(t, output, "(Recommended) Command Style:")
+	assert.Contains(t, output, "aliyun demo create-thing --name foo")
+	assert.Contains(t, output, "PascalCase Style:")
+	assert.Contains(t, output, "aliyun demo CreateThing --Name foo")
 }
 
 func TestPrintApiUsage_UnknownApi_NoPlugin(t *testing.T) {
@@ -237,11 +437,14 @@ func TestPrintApiUsage_UnknownApi_PluginAvailableNotInstalled_Lowercase(t *testi
 		Plugins: map[string]plugin.LocalPlugin{},
 	}
 
-	// Lowercase API name triggers shouldTryPlugin=true, uninstalled plugin -> install hint
+	// The runtime can handle ECS, so an unknown lowercase command is reported
+	// as an invalid baseline command rather than suggesting its optional plugin.
 	err := c.printApiUsage(ctx, "ecs", "describeinstances")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "aliyun-cli-ecs")
-	assert.Contains(t, err.Error(), "aliyun plugin install --names")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "'describeinstances' is not a valid kebab-case command")
+	assert.Contains(t, err.Error(), "aliyun ecs --help")
+	assert.Contains(t, err.Error(), "ALIBABA_CLOUD_BASELINE_PRODUCT_HELP=true aliyun ecs --help")
+	assert.NotContains(t, err.Error(), "plugin install")
 }
 
 func TestPrintApiUsage_UnknownApi_PluginHint_NonLowercase(t *testing.T) {
@@ -257,14 +460,14 @@ func TestPrintApiUsage_UnknownApi_PluginHint_NonLowercase(t *testing.T) {
 		Plugins: map[string]plugin.LocalPlugin{},
 	}
 
-	// Non-lowercase (e.g. "BadApiName") -> prints suggestion, then returns InvalidApiError
+	// Non-lowercase (e.g. "BadApiName") -> returns InvalidApiError without plugin suggestion
 	err := c.printApiUsage(ctx, "ecs", "BadApiName")
 	assert.Error(t, err)
 	assert.IsType(t, &InvalidApiError{}, err)
 
 	output := stdout.String()
-	assert.Contains(t, output, "[Suggestion]")
-	assert.Contains(t, output, "aliyun-cli-ecs")
+	assert.NotContains(t, output, "[Suggestion]")
+	assert.NotContains(t, output, "aliyun-cli-ecs")
 }
 
 func TestPrintApiUsage_NonBuiltinProduct_PluginNotInstalled(t *testing.T) {
@@ -352,6 +555,12 @@ func setupInstalledPlugin(t *testing.T, pluginName string) {
 
 func TestPrintProductUsage_NonBuiltinProduct_PluginInstalled(t *testing.T) {
 	setupInstalledPlugin(t, "aliyun-cli-fc")
+	originalExecute := helpDelegateExecute
+	helpDelegateExecute = func(_ string, _ []string, ctx *cli.Context) (bool, error) {
+		fmt.Fprintln(ctx.Stdout(), "GO_PLUGIN_PRODUCT_HELP")
+		return true, nil
+	}
+	t.Cleanup(func() { helpDelegateExecute = originalExecute })
 
 	c, w, stderr := newTestCommando()
 	ctx := newTestContext(w, stderr)
@@ -373,12 +582,19 @@ func TestPrintProductUsage_NonBuiltinProduct_PluginInstalled(t *testing.T) {
 	assert.NoError(t, err)
 
 	output := w.String()
+	assert.Contains(t, output, "GO_PLUGIN_PRODUCT_HELP")
 	assert.Contains(t, output, "Product 'fc' is provided by plugin 'aliyun-cli-fc'")
 }
 
 func TestPrintProductUsage_BuiltinProduct_PluginInstalled(t *testing.T) {
 	setupInstalledPlugin(t, "aliyun-cli-ecs")
 	t.Setenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP", "")
+	originalExecute := helpDelegateExecute
+	helpDelegateExecute = func(_ string, _ []string, ctx *cli.Context) (bool, error) {
+		fmt.Fprintln(ctx.Stdout(), "GO_PLUGIN_PRODUCT_HELP")
+		return true, nil
+	}
+	t.Cleanup(func() { helpDelegateExecute = originalExecute })
 
 	c, w, stderr := newTestCommando()
 	ctx := newTestContext(w, stderr)
@@ -400,6 +616,433 @@ func TestPrintProductUsage_BuiltinProduct_PluginInstalled(t *testing.T) {
 	output := w.String()
 	assert.Contains(t, output, "Note: The help information for product 'ecs' is provided by the installed plugin 'aliyun-cli-ecs'")
 	assert.Contains(t, output, "ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP=true")
+	assert.Contains(t, output, "GO_PLUGIN_PRODUCT_HELP")
+	assert.NotContains(t, output, "Available Api List")
+}
+
+func TestPrintProductUsage_OriginalEnvSelectsLegacyHelp(t *testing.T) {
+	setupInstalledPlugin(t, "aliyun-cli-ecs")
+	t.Setenv(originalProductHelpEnv, "1")
+	originalExecute := helpDelegateExecute
+	helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
+		t.Fatal("original product help must not execute the installed plugin")
+		return false, nil
+	}
+	t.Cleanup(func() { helpDelegateExecute = originalExecute })
+
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	c.library.builtinRepo = getRepository()
+	c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{
+		{Name: "aliyun-cli-ecs", ProductCode: "ecs"},
+	}}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-ecs": {Name: "aliyun-cli-ecs", Version: "1.0.0"},
+	}}
+
+	err := c.printProductUsage(ctx, "ecs")
+	assert.NoError(t, err)
+	out := stdout.String()
+	assert.Contains(t, out, "Available Api List")
+	assert.Contains(t, out, "DescribeInstances")
+	assert.Contains(t, out, originalProductHelpEnv+"=false aliyun ecs --help")
+}
+
+func TestPrintProductUsage_BuiltinMetaPluginWinsAndUsesRuntimeHelp(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_ORIGINAL_PRODUCT_HELP", "")
+	c, stdout, stderr := newTestCommando()
+	ctx := newTestContext(stdout, stderr)
+	c.library.builtinRepo = getRepository()
+	c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{
+		{Name: "aliyun-cli-ecs", ProductCode: "ecs"},
+	}}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-ecs": {
+			Name: "aliyun-cli-ecs", Version: "0.7.4", Type: plugin.PluginTypeMeta,
+		},
+	}}
+
+	originalRender := productHelpRender
+	originalExecute := helpDelegateExecute
+	productHelpRender = func(ctx *cli.Context, product string) error {
+		assert.Equal(t, "ecs", product)
+		fmt.Fprintln(ctx.Stdout(), "META_PLUGIN_KEBAB_PRODUCT_HELP")
+		return nil
+	}
+	helpDelegateExecute = func(string, []string, *cli.Context) (bool, error) {
+		t.Fatal("metadata plugin product help must not execute a Go binary")
+		return false, nil
+	}
+	t.Cleanup(func() {
+		productHelpRender = originalRender
+		helpDelegateExecute = originalExecute
+	})
+
+	err := c.printProductUsage(ctx, "ecs")
+	assert.NoError(t, err)
+	out := stdout.String()
+	assert.Contains(t, out, "provided by the installed plugin 'aliyun-cli-ecs'")
+	assert.Contains(t, out, "META_PLUGIN_KEBAB_PRODUCT_HELP")
+	assert.NotContains(t, out, "Available Api List")
+}
+
+func TestPrintProductUsage_MetaPluginChecksMinCliVersionBeforeRuntimeHelp(t *testing.T) {
+	originalVersion := cli.Version
+	cli.Version = "3.3.5"
+	t.Cleanup(func() { cli.Version = originalVersion })
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := newTestContext(stdout, stderr)
+	repo, err := meta.MockLoadRepository(nil)
+	assert.NoError(t, err)
+	c := &Commando{library: &Library{builtinRepo: repo, writer: stdout}}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-ecs": {
+			Name: "aliyun-cli-ecs", Version: "1.0.0", Type: plugin.PluginTypeMeta, MinCliVersion: "9.0.0",
+		},
+	}}
+
+	originalRender := productHelpRender
+	productHelpRender = func(*cli.Context, string) error {
+		t.Fatal("runtime help must not run when minCliVersion is not satisfied")
+		return nil
+	}
+	t.Cleanup(func() { productHelpRender = originalRender })
+
+	err = c.printProductUsage(ctx, "ecs")
+	assert.ErrorContains(t, err, "requires CLI version 9.0.0 or higher")
+}
+
+func TestPrintApiUsage_MetaPluginChecksMinCliVersionBeforeRuntimeHelp(t *testing.T) {
+	originalVersion := cli.Version
+	cli.Version = "3.3.5"
+	t.Cleanup(func() { cli.Version = originalVersion })
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := newTestContext(stdout, stderr)
+	repo, err := meta.MockLoadRepository(nil)
+	assert.NoError(t, err)
+	c := &Commando{library: &Library{builtinRepo: repo, writer: stdout}}
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-ecs": {
+			Name: "aliyun-cli-ecs", Version: "1.0.0", Type: plugin.PluginTypeMeta, MinCliVersion: "9.0.0",
+		},
+	}}
+
+	err = c.printApiUsage(ctx, "ecs", "describe-instances")
+	assert.ErrorContains(t, err, "requires CLI version 9.0.0 or higher")
+}
+
+func TestPrintApiUsageAlwaysTriesRuntime(t *testing.T) {
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := newTestContext(stdout, stderr)
+	repo, err := meta.MockLoadRepository(nil)
+	assert.NoError(t, err)
+	c := &Commando{library: &Library{builtinRepo: repo, writer: stdout}}
+
+	wantErr := errors.New("runtime help handled request")
+	originalTryHelp := runtimeTryHelp
+	runtimeTryHelp = func(_ *cli.Context, args []string) (bool, error) {
+		assert.Equal(t, []string{"ecs", "describe-instances"}, args)
+		return true, wantErr
+	}
+	t.Cleanup(func() { runtimeTryHelp = originalTryHelp })
+
+	err = c.printApiUsage(ctx, "ecs", "describe-instances")
+	assert.ErrorIs(t, err, wantErr)
+}
+
+func TestHelpResponseSectionUsesHostCanonicalWhenPluginIsNotInstalled(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "0")
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.baselineHelpRepo = c.library.helpRepo
+	c.localLoaded = true
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	err := c.help(ctx, []string{"demo", "CreateReport"})
+	require.NoError(t, err)
+	assert.False(t, c.pluginLoaded, "host Canonical response Help must not load the remote plugin index")
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "Responses:")
+	assert.Contains(t, stdout.String(), `"200": {`)
+	assert.NotContains(t, stdout.String(), "Parameters:")
+}
+
+func TestHelpResponseSectionDoesNotOverrideInstalledPluginTextHelp(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "0")
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.baselineHelpRepo = c.library.helpRepo
+	c.pluginLoaded = true
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-demo": {Name: "aliyun-cli-demo", Type: plugin.PluginTypeMeta},
+	}}
+	c.pluginIndex = &plugin.Index{Plugins: []plugin.PluginInfo{{Name: "aliyun-cli-demo", ProductCode: "demo"}}}
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	originalDispatch := metaPluginHelpDispatch
+	dispatched := false
+	metaPluginHelpDispatch = func(ctx *cli.Context, args []string) error {
+		dispatched = true
+		fmt.Fprintln(ctx.Stdout(), "PLUGIN_OWNED_TEXT_HELP")
+		return nil
+	}
+	t.Cleanup(func() { metaPluginHelpDispatch = originalDispatch })
+
+	err := c.help(ctx, []string{"demo", "create-report"})
+	require.NoError(t, err)
+	assert.Empty(t, stderr.String())
+	// Metadata plugins are served by host Machine Help: no delegation to the
+	// engine text path, and the host renders the canonical response section.
+	assert.False(t, dispatched, "metadata-plugin Help must be rendered by host Machine Help")
+	assert.Contains(t, stdout.String(), "Responses:")
+	assert.Contains(t, stdout.String(), `"200": {`)
+	assert.NotContains(t, stdout.String(), "PLUGIN_OWNED_TEXT_HELP")
+}
+
+func newCanonicalHelpTestContext(t *testing.T) (*Commando, *cli.Context, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+	t.Setenv(aimode.EnvAIMode, "0")
+	c, stdout, stderr := newTestCommando()
+	c.library.helpRepo = canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.baselineHelpRepo = c.library.helpRepo
+	c.localLoaded = true
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{}}
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	return c, ctx, stdout, stderr
+}
+
+func TestCanonicalTextHelpSearchesRootProductAndRequestLocally(t *testing.T) {
+	t.Run("root product", func(t *testing.T) {
+		c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+		CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+		CliHelpSearchFlag(ctx.Flags()).SetValue("演示")
+
+		require.NoError(t, c.help(ctx, nil))
+		assert.False(t, c.pluginLoaded)
+		assert.Empty(t, stderr.String())
+		assert.Contains(t, stdout.String(), "demo")
+		assert.NotContains(t, stdout.String(), "Commands:")
+		assert.Contains(t, stdout.String(), cli.AIModeEnableCommand)
+	})
+
+	t.Run("product api", func(t *testing.T) {
+		t.Setenv(originalProductHelpEnv, "")
+		t.Setenv(baselineProductHelpEnv, "")
+		c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+		CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+		CliHelpSearchFlag(ctx.Flags()).SetValue("region")
+
+		require.NoError(t, c.help(ctx, []string{"demo"}))
+		assert.False(t, c.pluginLoaded)
+		assert.Empty(t, stderr.String())
+		assert.Contains(t, stdout.String(), "Version: 2026-01-01")
+		assert.Contains(t, stdout.String(), "  DescribeRegions")
+		assert.NotContains(t, stdout.String(), "  describe-regions")
+	})
+
+	t.Run("product api baseline kebab style", func(t *testing.T) {
+		t.Setenv(originalProductHelpEnv, "")
+		t.Setenv(baselineProductHelpEnv, "true")
+		c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+		CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+		CliHelpSearchFlag(ctx.Flags()).SetValue("region")
+
+		require.NoError(t, c.help(ctx, []string{"demo"}))
+		assert.False(t, c.pluginLoaded)
+		assert.Empty(t, stderr.String())
+		assert.Contains(t, stdout.String(), "Version: 2025-01-01")
+		assert.Contains(t, stdout.String(), "  describe-regions")
+		assert.NotContains(t, stdout.String(), "  DescribeRegions")
+	})
+
+	t.Run("request parameter", func(t *testing.T) {
+		c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+		CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+		CliHelpSearchFlag(ctx.Flags()).SetValue("workspace-id")
+		VersionFlag(ctx.Flags()).SetAssigned(true)
+		VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+		require.NoError(t, c.help(ctx, []string{"demo", "create-report"}))
+		assert.False(t, c.pluginLoaded)
+		assert.Empty(t, stderr.String())
+		assert.Contains(t, stdout.String(), "--workspace-id")
+		assert.NotContains(t, stdout.String(), "--report-id")
+		assert.NotContains(t, stdout.String(), "Response query example", "Search renders only matching request entries")
+	})
+}
+
+func TestCanonicalTextHelpOmitsEnableHintWhenAIModeIsOn(t *testing.T) {
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	t.Setenv(aimode.EnvAIMode, "1")
+	CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSearchFlag(ctx.Flags()).SetValue("demo")
+
+	require.NoError(t, c.help(ctx, nil))
+	assert.Empty(t, stderr.String())
+	assert.NotContains(t, stdout.String(), cli.AIModeEnableCommand)
+}
+
+func TestCanonicalCamelProductTextHelpIncludesKebabSwitchHint(t *testing.T) {
+	t.Setenv(baselineProductHelpEnv, "")
+	originalAvailable := productHelpAvailable
+	productHelpAvailable = func(product string) bool { return product == "demo" }
+	t.Cleanup(func() { productHelpAvailable = originalAvailable })
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	target := HelpTarget{
+		Level:        HelpLevelProduct,
+		Product:      "demo",
+		CommandStyle: CommandStyleCamel,
+		Operation:    HelpOperationDefault,
+		Output:       HelpOutputText,
+		Provider:     HelpProviderHost,
+	}
+
+	require.NoError(t, c.renderHostHelpTarget(ctx, target, false))
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "This help shows traditional PascalCase commands")
+	assert.Contains(t, stdout.String(), baselineProductHelpEnv+"=true aliyun demo --help")
+}
+
+func TestCanonicalKebabProductTextHelpIncludesTraditionalSwitchHint(t *testing.T) {
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	repo, err := meta.MockLoadRepository([]meta.Product{{
+		Code: "demo", Version: "2026-01-01", ApiStyle: "rpc", ApiNames: []string{"DescribeRegions"},
+	}})
+	require.NoError(t, err)
+	c.library.builtinRepo = repo
+	t.Setenv(baselineProductHelpEnv, "true")
+	target := HelpTarget{
+		Level:        HelpLevelProduct,
+		Product:      "demo",
+		CommandStyle: CommandStyleKebab,
+		Operation:    HelpOperationDefault,
+		Output:       HelpOutputText,
+		Provider:     HelpProviderHost,
+	}
+
+	require.NoError(t, c.renderHostHelpTarget(ctx, target, false))
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "This help shows kebab-case commands")
+	assert.Contains(t, stdout.String(), baselineProductHelpEnv+"=false aliyun demo --help")
+}
+
+func TestCanonicalProductHelpOmitsStyleSwitchInAIMode(t *testing.T) {
+	t.Setenv(baselineProductHelpEnv, "")
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	target := HelpTarget{
+		Level:        HelpLevelProduct,
+		Product:      "demo",
+		CommandStyle: CommandStyleCamel,
+		Operation:    HelpOperationDefault,
+		Output:       HelpOutputText,
+		Provider:     HelpProviderHost,
+	}
+
+	require.NoError(t, c.renderHostHelpTarget(ctx, target, true))
+	assert.Empty(t, stderr.String())
+	assert.NotContains(t, stdout.String(), baselineProductHelpEnv)
+	assert.True(t, json.Valid(stdout.Bytes()), "AI Mode product Help must remain structured JSON")
+}
+
+func TestCanonicalAPIHelpOmitsProductStyleSwitch(t *testing.T) {
+	t.Setenv(baselineProductHelpEnv, "")
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	target := HelpTarget{
+		Level:        HelpLevelAction,
+		Product:      "demo",
+		Action:       "CreateReport",
+		CommandStyle: CommandStyleCamel,
+		Operation:    HelpOperationDefault,
+		Output:       HelpOutputText,
+		Provider:     HelpProviderHost,
+	}
+
+	require.NoError(t, c.renderHostHelpTarget(ctx, target, false))
+	assert.Empty(t, stderr.String())
+	assert.NotContains(t, stdout.String(), baselineProductHelpEnv)
+}
+
+func TestCanonicalProductJSONHonorsRawLanguageFlagBeforeParsing(t *testing.T) {
+	previousLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(previousLanguage) })
+	i18n.SetLanguage("en")
+
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	ctx.SetInvocationArgs([]string{"demo", "--help-search", "report", "--cli-output", "json", "--language", "zh"})
+	target := HelpTarget{
+		Level:        HelpLevelProduct,
+		Product:      "demo",
+		CommandStyle: CommandStyleCamel,
+		Operation:    HelpOperationSearch,
+		SearchQuery:  "report",
+		Output:       HelpOutputJSON,
+		Provider:     HelpProviderHost,
+	}
+
+	require.NoError(t, c.renderHostHelpTarget(ctx, target, false))
+	assert.Empty(t, stderr.String())
+	var output map[string]any
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &output))
+	apis := output["apis"].([]any)
+	require.Len(t, apis, 1)
+	assert.Equal(t, "创建报表。", apis[0].(map[string]any)["description"])
+}
+
+func TestCanonicalTextHelpKeepsConfiguredAIModeDisableHint(t *testing.T) {
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	t.Cleanup(cleanup)
+
+	confDir := filepath.Join(testHome, ".aliyun")
+	require.NoError(t, os.MkdirAll(confDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(confDir, "ai-mode.json"), []byte(`{"enabled":true}`), 0600))
+
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	t.Setenv(aimode.EnvAIMode, "")
+	require.NoError(t, c.finishCanonicalTextHelp(ctx, true))
+	assert.NotContains(t, stdout.String(), cli.AIModeEnableCommand)
+	assert.Contains(t, stderr.String(), "aliyun configure ai-mode disable")
+}
+
+func TestCanonicalTextResponseSearchPrintsMatchedPathAndFilteredQuery(t *testing.T) {
+	c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+	CliHelpSectionFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSectionFlag(ctx.Flags()).SetValue("response")
+	CliHelpSearchFlag(ctx.Flags()).SetAssigned(true)
+	CliHelpSearchFlag(ctx.Flags()).SetValue("report-id")
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	require.NoError(t, c.help(ctx, []string{"demo", "CreateReport"}))
+	assert.False(t, c.pluginLoaded)
+	assert.Empty(t, stderr.String())
+	assert.Contains(t, stdout.String(), "Matched Response Paths:")
+	assert.Contains(t, stdout.String(), "Reports.Report.ReportId")
+	assert.Contains(t, stdout.String(), "aliyun demo CreateReport --version 2026-01-01 --ReportId <value> --WorkspaceId <value> --cli-query 'Reports.Report[*].{ReportId:ReportId}'")
+	assert.NotContains(t, stdout.String(), "Unused")
 }
 
 func TestPrintApiUsage_NonBuiltinProduct_PluginInstalled(t *testing.T) {
@@ -501,6 +1144,7 @@ func TestPrintApiUsage_LocalPluginNotInRemoteIndex(t *testing.T) {
 	err = c.printApiUsage(ctx, "localonly2", "SomeApi")
 	assert.NoError(t, err)
 	assert.Contains(t, w.String(), "Command 'localonly2 SomeApi' is provided by plugin 'aliyun-cli-localonly2'")
+	assert.Contains(t, w.String(), "HELP_FROM_LOCAL_PLUGIN")
 }
 
 func TestPrintProducts_PluginIndexLoadHint(t *testing.T) {
@@ -912,4 +1556,41 @@ func Test_tryDelegatePluginHelp_PluginPath(t *testing.T) {
 		assert.False(t, delegated, "PascalCase args[1] must fall through; legacy 'too many arguments' is the right error here")
 		assert.NoError(t, err)
 	})
+}
+
+func TestHostGeneratedHelpTextHidesMetaPluginProvider(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "0")
+	c, stdout, stderr := newTestCommando()
+	baseline := canonicalmeta.NewRepository(os.DirFS("../canonicalmeta/testdata"))
+	c.library.helpRepo = baseline
+	c.library.canonicalRepo = baseline
+	c.library.baselineHelpRepo = baseline
+	traditional, err := meta.MockLoadRepository([]meta.Product{{
+		Code: "demo", Version: "2026-01-01", ApiStyle: "rpc", ApiNames: []string{"CreateReport"},
+	}})
+	require.NoError(t, err)
+	c.library.builtinRepo = traditional
+	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-demo": {Name: "aliyun-cli-demo", Version: "1.2.3", Type: plugin.PluginTypeMeta},
+	}}
+	root := testMachineHelpRootCommand()
+	AddFlags(root.Flags())
+	ctx := cli.NewCommandContext(stdout, stderr)
+	ctx.EnterCommand(root)
+	VersionFlag(ctx.Flags()).SetAssigned(true)
+	VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+
+	require.NoError(t, c.help(ctx, []string{"demo", "create-report"}))
+	assert.Empty(t, stderr.String())
+	assert.NotContains(t, stdout.String(), "Provided by plugin")
+	assert.Contains(t, stdout.String(), "aliyun demo create-report")
+
+	stdout.Reset()
+	require.NoError(t, c.help(ctx, []string{"demo"}))
+	assert.NotContains(t, stdout.String(), "Provided by plugin")
+
+	stdout.Reset()
+	require.NoError(t, c.help(ctx, []string{"demo", "CreateReport"}))
+	assert.NotContains(t, stdout.String(), "Provided by plugin:")
+	assert.Contains(t, stdout.String(), "aliyun demo CreateReport")
 }

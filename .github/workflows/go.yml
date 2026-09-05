@@ -22,17 +22,28 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: "1.23"
+        go-version-file: go.mod
+
+    - name: Check Go formatting
+      run: make check-fmt
 
     - name: Unit Test
       run: make test
-    - name: Upload coverage infomartion
+    - name: Runtime Module Check
+      run: make check-runtime
+    - name: Packed metadata test
+      run: make test-release
+    - name: Upload coverage information
       uses: codecov/codecov-action@v4
+      with:
+        files: ./coverage.txt,./coverage-runtime.txt
+        disable_search: true
+        fail_ci_if_error: true
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Smoking Test
-      run: go run ./main/main.go
+      run: go run ./main
 
     - run: |
         make build

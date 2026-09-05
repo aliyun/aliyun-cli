@@ -762,7 +762,7 @@ func (sc *SetMetaCommand) waitRoutinueComplete(chError, chListError <-chan error
 			} else {
 				ferr = err
 				if !sc.smOption.ctnu {
-					fmt.Printf(sc.monitor.progressBar(true, errExit))
+					fmt.Print(sc.monitor.progressBar(true, errExit))
 					return err
 				}
 			}
@@ -772,7 +772,7 @@ func (sc *SetMetaCommand) waitRoutinueComplete(chError, chListError <-chan error
 }
 
 func (sc *SetMetaCommand) formatResultPrompt(err error) error {
-	fmt.Printf(sc.monitor.progressBar(true, normalExit))
+	fmt.Print(sc.monitor.progressBar(true, normalExit))
 	if err != nil && sc.smOption.ctnu {
 		return nil
 	}

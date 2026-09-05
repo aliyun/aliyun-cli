@@ -14,15 +14,16 @@
 package openapi
 
 import (
-	"bytes"
+	"bufio"
+	"path/filepath"
+	"testing"
+
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/stretchr/testify/assert"
-
-	"bufio"
-	"testing"
 )
 
 func TestRestfulInvoker_Prepare(t *testing.T) {
@@ -67,7 +68,7 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 	err = a.Prepare(ctx)
 	assert.Nil(t, err)
 
-	// testcase 2
+	// testcase 2 - using mock API since cs product not in canonical
 	a = &RestfulInvoker{
 		BasicInvoker: &BasicInvoker{
 			request: requests.NewCommonRequest(),
@@ -76,11 +77,20 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 		method: "GET",
 	}
 	a.request.RegionId = "cn-hangzhou"
-	buf := new(bytes.Buffer)
-	library := NewLibrary(buf, "en")
 
-	api, _ := library.GetApi("cs", "2015-12-15", "DescribeClusterUserKubeconfig")
-	a.api = &api
+	// Create mock API with ClusterId parameter
+	mockApi := &canonicalmeta.API{
+		Name: "DescribeClusterUserKubeconfig", Parameters: []canonicalmeta.Parameter{
+			{
+				Name: "ClusterId", RawName: "ClusterId",
+				Location: "path",
+				Type:     "String",
+				Required: true,
+			},
+		},
+	}
+	a.api = mockApi
+
 	w = new(bufio.Writer)
 	stderr = new(bufio.Writer)
 	ctx = cli.NewCommandContext(w, stderr)
@@ -97,7 +107,50 @@ func TestRestfulInvoker_Prepare(t *testing.T) {
 	ctx.UnknownFlags().AddByName("TestFlag")
 	ctx.UnknownFlags().Get("TestFlag").SetValue("testFlagValue")
 	err = a.Prepare(ctx)
-	assert.EqualError(t, err, "'--TestFlag' is not a valid parameter or flag. See `aliyun help cs DescribeClusterUserKubeconfig`.")
+	assert.EqualError(t, err, `"--TestFlag" is not a valid parameter or flag. See `+"`aliyun help  DescribeClusterUserKubeconfig`"+`.`)
+
+	missing := filepath.Join(t.TempDir(), "missing.json")
+	BodyFileFlag(ctx.Flags()).SetAssigned(true)
+	BodyFileFlag(ctx.Flags()).SetValue(missing)
+	err = a.Prepare(ctx)
+	var invalidBodyFile *InvalidBodyFileError
+	assert.ErrorAs(t, err, &invalidBodyFile)
+	assert.Equal(t, missing, invalidBodyFile.Path)
+}
+
+func TestRestfulInvokerPrepareWildcardPath(t *testing.T) {
+	a := &RestfulInvoker{
+		BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()},
+		path:         "/api/v1/providers/[provider]/products/[product]/resources/*",
+		method:       "GET",
+		api: &canonicalmeta.API{Parameters: []canonicalmeta.Parameter{{
+			Name: "request_path", RawName: "requestPath", Location: "path",
+			Type: "string", Required: true, IsWildcard: true,
+		}}},
+	}
+	ctx := cli.NewCommandContext(new(bufio.Writer), new(bufio.Writer))
+	ctx.SetUnknownFlags(cli.NewFlagSet())
+	ctx.Flags().Add(NewBodyFlag())
+	ctx.Flags().Add(NewSecureFlag())
+	ctx.Flags().Add(NewInsecureFlag())
+	ctx.Flags().Add(NewBodyFileFlag())
+	ctx.UnknownFlags().AddByName("requestPath")
+	ctx.UnknownFlags().Get("requestPath").SetAssigned(true)
+	ctx.UnknownFlags().Get("requestPath").SetValue("/api/v1/providers/qqq/products/dd/resources/dddd:4")
+
+	if err := a.Prepare(ctx); err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	if got, want := a.request.PathPattern, "/api/v1/providers/qqq/products/dd/resources/dddd:4"; got != want {
+		t.Fatalf("PathPattern = %q, want %q", got, want)
+	}
+	if len(a.request.PathParams) != 0 {
+		t.Fatalf("wildcard path must not remain in PathParams: %#v", a.request.PathParams)
+	}
+	a.request.TransToAcsRequest()
+	if got, want := a.request.BuildQueries(), "/api/v1/providers/qqq/products/dd/resources/dddd:4"; got != want {
+		t.Fatalf("signature resource path = %q, want %q", got, want)
+	}
 }
 
 func TestRestfulInvoker_Call(t *testing.T) {

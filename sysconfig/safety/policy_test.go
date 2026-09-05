@@ -276,8 +276,8 @@ func TestBuildCommandPattern(t *testing.T) {
 func TestMatchPattern(t *testing.T) {
 	tests := []struct {
 		pattern string
-		cmd    string
-		want   bool
+		cmd     string
+		want    bool
 	}{
 		{"*:Delete*", "ecs:DeleteInstance", true},
 		{"*:Delete*", "ecs:deleteinstance", true}, // case insensitive
@@ -424,4 +424,26 @@ func TestLoadEffectivePolicy_AppliesEnv(t *testing.T) {
 	assert.True(t, got.Enabled)
 	require.Len(t, got.Rules, 1)
 	assert.Equal(t, "ecs:Delete*", got.Rules[0].Pattern)
+}
+
+func TestLoadPolicy_MissingFileUsesDefault(t *testing.T) {
+	got, err := LoadPolicy(t.TempDir())
+	require.NoError(t, err)
+	assert.False(t, got.Enabled)
+	assert.Empty(t, got.Rules)
+}
+
+func TestLoadPolicy_UnreadableReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(GetPolicyFilePath(dir), 0755))
+	_, err := LoadPolicy(dir)
+	require.Error(t, err)
+}
+
+func TestLoadPolicy_InvalidJSONReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(GetPolicyFilePath(dir), []byte("{not-json"), 0600))
+	_, err := LoadPolicy(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parse safety policy")
 }

@@ -1,0 +1,562 @@
+// Copyright (c) 2009-present, Alibaba Cloud All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//	http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package engine
+
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/aliyun/aliyun-openapi-runtime/meta"
+	"github.com/aliyun/aliyun-openapi-runtime/runtime"
+)
+
+// TestRenderDryRunMasksSecrets verifies the human dump masks sensitive header/query values.
+func TestRenderDryRunMasksSecrets(t *testing.T) {
+	var buf bytes.Buffer
+	req := &runtime.AssembledRequest{
+		Action:   "DoThing",
+		Version:  "2024-01-01",
+		Method:   "POST",
+		Protocol: "HTTPS",
+		Style:    "RPC",
+		Endpoint: "svc.cn-hangzhou.aliyuncs.com",
+		Headers:  map[string]string{"x-acs-security-token": "SToKeNSecretValue", "content-type": "application/json"},
+		Query:    map[string]string{"AccessKeyId": "LTAI5tRealKeyId", "RegionId": "cn-hangzhou"},
+		Body:     `{"password":"secret-value","name":"visible"}`,
+	}
+	if err := renderDryRun(&buf, "svc", req, false, false); err != nil {
+		t.Fatalf("renderDryRun: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "SToKeNSecretValue") || strings.Contains(out, "LTAI5tRealKeyId") {
+		t.Fatalf("secret leaked:\n%s", out)
+	}
+	if !strings.Contains(out, "SToK***") || !strings.Contains(out, "LTAI***") {
+		t.Fatalf("expected masked fingerprints:\n%s", out)
+	}
+	if !strings.Contains(out, "RegionId: cn-hangzhou") {
+		t.Fatalf("non-secret should be visible:\n%s", out)
+	}
+	if strings.Contains(out, "secret-value") || !strings.Contains(out, `"password":"secr***"`) {
+		t.Fatalf("raw body secret was not masked:\n%s", out)
+	}
+	if strings.Contains(out, `"{\"password\"`) {
+		t.Fatalf("raw body should not be rendered as a quoted JSON string:\n%s", out)
+	}
+	wantFooter := "============================================================\n" +
+		"Request NOT sent (dry-run mode)\n" +
+		"============================================================\n" +
+		"{\n\t\"message\": \"aliyun-openapi-runtime baseline dry-run mode - no request sent\"\n}\n"
+	if !strings.HasSuffix(out, wantFooter) {
+		t.Fatalf("unexpected aliyun-openapi-runtime dry-run footer:\n%s", out)
+	}
+}
+
+func TestRenderDryRunIdentifiesMetadataPluginSource(t *testing.T) {
+	var buf bytes.Buffer
+	req := &runtime.AssembledRequest{Method: "POST", Version: "2024-01-01"}
+	if err := renderDryRun(&buf, "svc", req, false, true); err != nil {
+		t.Fatalf("renderDryRun: %v", err)
+	}
+	const want = `"message": "aliyun-openapi-runtime meta plugin dry-run mode - no request sent"`
+	if !strings.Contains(buf.String(), want) {
+		t.Fatalf("metadata plugin source is missing from dry-run footer:\n%s", buf.String())
+	}
+}
+
+func TestRenderDryRunJSONMasksSecretsWithoutMutatingRequest(t *testing.T) {
+	var buf bytes.Buffer
+	req := &runtime.AssembledRequest{
+		Action:   "DoThing",
+		Version:  "2024-01-01",
+		Method:   "POST",
+		Protocol: "HTTPS",
+		Style:    "RPC",
+		Endpoint: "svc.cn-hangzhou.aliyuncs.com",
+		Headers: map[string]string{
+			"Authorization": "header-secret-value",
+			"content-type":  "application/json",
+		},
+		Query: map[string]string{
+			"Password": "query-secret-value",
+			"RegionId": "cn-hangzhou",
+		},
+		Body:        `{"TaskId":3460000290000487710,"password":"body-secret-value"}`,
+		ReqBodyType: "json",
+	}
+	if err := renderDryRun(&buf, "svc", req, true, false); err != nil {
+		t.Fatalf("renderDryRun: %v", err)
+	}
+
+	var output cliDryRunOutput
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &output); err != nil {
+		t.Fatalf("invalid dry-run JSON: %v\n%s", err, buf.String())
+	}
+	if output.Headers["Authorization"] != "head***" {
+		t.Fatalf("header was not masked: %#v", output.Headers)
+	}
+	if output.Query["Password"] != "quer***" || output.Query["RegionId"] != "cn-hangzhou" {
+		t.Fatalf("query was not masked correctly: %#v", output.Query)
+	}
+	if output.Body != `{"TaskId":3460000290000487710,"password":"body***"}` {
+		t.Fatalf("body was not masked without changing its number: %s", output.Body)
+	}
+	if req.Headers["Authorization"] != "header-secret-value" || req.Query["Password"] != "query-secret-value" || strings.Contains(req.Body.(string), "body***") {
+		t.Fatal("dry-run redaction mutated the assembled request")
+	}
+}
+
+func TestRenderResponseCliQuery(t *testing.T) {
+	raw := []byte(`{"Instances":[{"Id":"i-1","Region":"cn-hangzhou"},{"Id":"i-2","Region":"cn-beijing"}]}`)
+	var parsed any
+	_ = json.Unmarshal(raw, &parsed)
+	resp := &runtime.Response{StatusCode: 200, Raw: raw, Parsed: parsed}
+
+	var buf bytes.Buffer
+	if err := renderResponse(&buf, resp, "Instances[].Id", false); err != nil {
+		t.Fatalf("cli-query json: %v", err)
+	}
+	if !strings.Contains(buf.String(), `"i-1"`) || !strings.Contains(buf.String(), `"i-2"`) {
+		t.Fatalf("filtered json:\n%s", buf.String())
+	}
+}
+
+// TestWriteJSONPrettyPrints matches the Go plugin FormatJSON behaviour:
+// default (unfiltered) JSON output is indented with tabs, not a compact
+// one-liner from the wire.
+func TestWriteJSONPrettyPrints(t *testing.T) {
+	raw := []byte(`{"Status":"200","Data":{"TotalCount":1}}`)
+	var parsed any
+	_ = json.Unmarshal(raw, &parsed)
+	var buf bytes.Buffer
+	if err := renderResponse(&buf, &runtime.Response{Raw: raw, Parsed: parsed}, "", false); err != nil {
+		t.Fatalf("renderResponse: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "{\n\t\"Status\"") {
+		t.Fatalf("expected tab-indented JSON, got:\n%s", out)
+	}
+	if strings.Count(strings.TrimSpace(out), "\n") < 2 {
+		t.Fatalf("expected multi-line pretty JSON:\n%s", out)
+	}
+}
+
+// TestWriteJSONCompactEmitsSingleLine keeps AI-mode responses on one line and
+// preserves the server's key order for both the raw and filtered branches.
+func TestWriteJSONCompactEmitsSingleLine(t *testing.T) {
+	raw := []byte(`{"Zones":{"Zone":[{"ZoneId":"cn-hangzhou-a"},{"ZoneId":"cn-hangzhou-b"}]},"RequestId":"req-1"}`)
+	var parsed any
+	_ = json.Unmarshal(raw, &parsed)
+
+	var buf bytes.Buffer
+	if err := renderResponse(&buf, &runtime.Response{Raw: raw, Parsed: parsed}, "", true); err != nil {
+		t.Fatalf("renderResponse compact: %v", err)
+	}
+	out := buf.String()
+	if strings.Count(strings.TrimSpace(out), "\n") != 0 {
+		t.Fatalf("expected single-line compact JSON:\n%s", out)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(out), `{"Zones":`) {
+		t.Fatalf("expected server key order preserved, got:\n%s", out)
+	}
+
+	buf.Reset()
+	if err := renderResponse(&buf, &runtime.Response{Raw: raw, Parsed: parsed}, "Zones.Zone", true); err != nil {
+		t.Fatalf("renderResponse compact filtered: %v", err)
+	}
+	if strings.Count(strings.TrimSpace(buf.String()), "\n") != 0 || !strings.Contains(buf.String(), `"cn-hangzhou-a"`) {
+		t.Fatalf("expected compact filtered JSON:\n%s", buf.String())
+	}
+}
+
+// TestPrintAPIHelpShowsGlobalOptions verifies engine reserved flags are
+// listed under a Global options section alongside the API parameters.
+func TestPrintAPIHelpShowsGlobalOptions(t *testing.T) {
+	var buf bytes.Buffer
+	api := &meta.API{
+		Name:        "ListTriggers",
+		CmdName:     "list-triggers",
+		Version:     "2023-03-30",
+		Description: meta.Description{EN: "List triggers of a function"},
+		Parameters: []meta.Parameter{
+			{Name: "function_name", Type: meta.TypeString, Required: true, Options: []string{"--function-name"}},
+		},
+	}
+	if err := printAPIHelp(&buf, "fc", api, "en"); err != nil {
+		t.Fatalf("printAPIHelp: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"Description: List triggers",
+		"API Version: 2023-03-30",
+		"Usage:",
+		"aliyun fc list-triggers [parameters]",
+		"Parameters:",
+		"--function-name",
+		"(required)",
+		"Global Parameters:",
+		"--cli-dry-run",
+		"--cli-query",
+		"--quiet",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("help missing %q in:\n%s", want, out)
+		}
+	}
+	// --output is hidden (plugin parity); --force was removed.
+	if strings.Contains(out, "--output") {
+		t.Errorf("help must not list hidden --output:\n%s", out)
+	}
+	if strings.Contains(out, "--force") {
+		t.Errorf("engine no longer supports --force:\n%s", out)
+	}
+	// Host credential flags must NOT be listed (host owns them).
+	if strings.Contains(out, "--profile") {
+		t.Errorf("help must not list host --profile:\n%s", out)
+	}
+}
+
+// TestPrintAPIHelpMarksDocRequiredAsRequired verifies doc_required parameters
+// render with the "(required)" label, matching the AI-mode interception that
+// treats them as required.
+func TestPrintAPIHelpMarksDocRequiredAsRequired(t *testing.T) {
+	var buf bytes.Buffer
+	api := &meta.API{
+		Name:    "GetUser",
+		CmdName: "get-user",
+		Version: "2015-05-01",
+		Parameters: []meta.Parameter{
+			{Name: "user_name", Type: meta.TypeString, Required: false, DocRequired: true, Options: []string{"--user-name"}},
+			{Name: "marker", Type: meta.TypeString, Required: false, DocRequired: false, Options: []string{"--marker"}},
+		},
+	}
+	if err := printAPIHelp(&buf, "ram", api, "en"); err != nil {
+		t.Fatalf("printAPIHelp: %v", err)
+	}
+	out := buf.String()
+	userNameIdx := strings.Index(out, "--user-name")
+	requiredIdx := strings.Index(out, "(required)")
+	if userNameIdx < 0 || requiredIdx < 0 || requiredIdx < userNameIdx {
+		t.Fatalf("doc_required parameter must carry the (required) label:\n%s", out)
+	}
+	// The optional parameter's line must not be labeled required.
+	markerIdx := strings.Index(out, "--marker")
+	if markerIdx >= 0 && strings.Contains(out[markerIdx:strings.Index(out, "Global Parameters:")], "(required)") {
+		t.Fatalf("optional --marker must not be labeled required:\n%s", out)
+	}
+}
+
+// TestPrintAPIHelpChineseLabels verifies section headers localize to
+// Chinese when lang == "zh".
+func TestPrintAPIHelpChineseLabels(t *testing.T) {
+	var buf bytes.Buffer
+	api := &meta.API{
+		Name: "ListTriggers", CmdName: "list-triggers", Version: "2023-03-30",
+		Description: meta.Description{ZH: "查询触发器列表"},
+		Parameters:  []meta.Parameter{{Name: "function_name", Type: meta.TypeString, Required: true, Options: []string{"--function-name"}}},
+		Examples:    []string{"aliyun fc list-triggers --function-name f"},
+	}
+	if err := printAPIHelp(&buf, "fc", api, "zh"); err != nil {
+		t.Fatalf("printAPIHelp: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{"描述:", "API 版本:", "使用:", "参数:", "全局参数:", "示例:", "查询触发器列表"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("zh help missing %q in:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Description:") {
+		t.Errorf("zh help should not contain English label:\n%s", out)
+	}
+}
+
+func TestPrintAPIHelpPreservesParameterDescriptionLines(t *testing.T) {
+	var buf bytes.Buffer
+	api := &meta.API{
+		Name: "Do", CmdName: "do", Version: "v1",
+		Parameters: []meta.Parameter{{
+			Name:        "mode",
+			Type:        meta.TypeString,
+			Options:     []string{"--mode"},
+			Description: meta.Description{EN: "Select a mode.\n- fast: lower latency\n- safe: stronger checks"},
+		}},
+	}
+	if err := printAPIHelp(&buf, "demo", api, "en"); err != nil {
+		t.Fatalf("printAPIHelp: %v", err)
+	}
+	out := buf.String()
+	fast := strings.Index(out, "- fast: lower latency")
+	safe := strings.Index(out, "- safe: stronger checks")
+	if fast < 0 || safe < 0 {
+		t.Fatalf("explicit description lines were not preserved:\n%s", out)
+	}
+	if lineStart := strings.LastIndex(out[:fast], "\n") + 1; strings.Contains(out[lineStart:fast], "--mode") {
+		t.Fatalf("continuation line repeated the parameter name:\n%s", out)
+	}
+}
+
+func TestPrintProductHelpUsesIndexWithoutLoadingAPIs(t *testing.T) {
+	var buf bytes.Buffer
+	product := &meta.Product{
+		Code:        "ecs",
+		Name:        meta.Description{EN: "Elastic Compute Service", ZH: "云服务器 ECS"},
+		Description: meta.Description{EN: "Compute service"},
+	}
+	index := &meta.APIIndex{
+		ProductCode: "ecs",
+		Version:     "2014-05-26",
+		Entries: map[string]meta.APIIndexEntry{
+			"StopInstances": {
+				APIName: "StopInstances", CmdName: "stop-instances",
+				Description: meta.Description{EN: "Stops instances"}, Deprecated: true,
+			},
+			"DescribeInstances": {
+				APIName: "DescribeInstances", CmdName: "describe-instances",
+				Description: meta.Description{EN: "Lists instances"},
+			},
+		},
+	}
+
+	if err := printProductHelp(&buf, product, index, "en", false); err != nil {
+		t.Fatalf("printProductHelp: %v", err)
+	}
+	out := buf.String()
+	for _, want := range []string{
+		"Product: ecs (Elastic Compute Service)",
+		"API Version: 2014-05-26",
+		"aliyun ecs <command> [parameters]",
+		"Available Commands:",
+		"describe-instances",
+		"Lists instances",
+		"stop-instances",
+		"[Deprecated] Stops instances",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("product help missing %q in:\n%s", want, out)
+		}
+	}
+	if strings.Index(out, "describe-instances") > strings.Index(out, "stop-instances") {
+		t.Fatalf("commands are not sorted:\n%s", out)
+	}
+}
+
+func TestPrintProductHelpWrapsCommandDescriptionsLikePluginRuntime(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH", "60")
+	var buf bytes.Buffer
+	product := &meta.Product{Code: "demo"}
+	index := &meta.APIIndex{
+		ProductCode: "demo",
+		Version:     "2024-01-01",
+		Entries: map[string]meta.APIIndexEntry{
+			"DescribeThings": {
+				APIName: "DescribeThings",
+				CmdName: "describe-things",
+				Description: meta.Description{
+					EN: "Describes all things in the selected region with enough detail to require multiple output lines.",
+				},
+			},
+		},
+	}
+
+	if err := printProductHelp(&buf, product, index, "en", false); err != nil {
+		t.Fatalf("printProductHelp: %v", err)
+	}
+	lines := strings.Split(buf.String(), "\n")
+	var commandLines []string
+	inCommands := false
+	for _, line := range lines {
+		if line == "Available Commands:" {
+			inCommands = true
+			continue
+		}
+		if inCommands {
+			if line == "" {
+				break
+			}
+			commandLines = append(commandLines, line)
+		}
+	}
+	if len(commandLines) < 2 {
+		t.Fatalf("expected wrapped command description:\n%s", buf.String())
+	}
+	const descriptionColumn = 33 // two spaces + fixed 30-char command column + one separator
+	if !strings.HasPrefix(commandLines[0], "  describe-things") {
+		t.Fatalf("first line missing command name: %q", commandLines[0])
+	}
+	if !strings.HasPrefix(commandLines[1], strings.Repeat(" ", descriptionColumn)) {
+		t.Fatalf("continuation is not aligned to description column: %q", commandLines[1])
+	}
+	for _, line := range commandLines {
+		if len([]rune(line)) > 60 {
+			t.Fatalf("line exceeds configured width: %d %q", len([]rune(line)), line)
+		}
+	}
+}
+
+// TestPrintAPIHelpWrapsAligned verifies long descriptions wrap at the
+// fixed line width and continuation lines keep the description column
+// aligned (empty padded name), matching the Go plugin help.
+func TestPrintAPIHelpWrapsAligned(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_CLI_MAX_LINE_LENGTH", "80")
+	long := strings.Repeat("word ", 40) // far longer than the desc column
+	var buf bytes.Buffer
+	api := &meta.API{
+		Name: "Do", CmdName: "do", Version: "v1",
+		Parameters: []meta.Parameter{{
+			Name: "region_id", Type: meta.TypeString, Required: true,
+			Options:     []string{"--region-id"},
+			Description: meta.Description{EN: long},
+		}},
+	}
+	if err := printAPIHelp(&buf, "demo", api, "en"); err != nil {
+		t.Fatalf("printAPIHelp: %v", err)
+	}
+	lines := strings.Split(buf.String(), "\n")
+	var paramLines []string
+	inParams := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "Parameters:") {
+			inParams = true
+			continue
+		}
+		if inParams {
+			if strings.HasPrefix(line, "Global Parameters:") || line == "" {
+				break
+			}
+			paramLines = append(paramLines, line)
+		}
+	}
+	if len(paramLines) < 2 {
+		t.Fatalf("expected wrapped description, got %d param lines:\n%s", len(paramLines), buf.String())
+	}
+	// First line carries the flag name; subsequent lines pad an empty
+	// name column so the description text starts at the same column.
+	first := paramLines[0]
+	second := paramLines[1]
+	nameIdx := strings.Index(first, "--region-id")
+	if nameIdx < 0 {
+		t.Fatalf("first line missing flag:\n%s", first)
+	}
+	// After tabwriter flush, description starts after the padded name.
+	// Continuation must begin with spaces (no flag name) and its first
+	// non-space should line up with the description on the first line.
+	descStart := -1
+	for i, r := range first {
+		if i > nameIdx+len("--region-id") && r != ' ' && r != '\t' {
+			// find type/desc start: first non-space after name column
+			descStart = i
+			break
+		}
+	}
+	// Simpler check: continuation has no "--" and starts with spaces;
+	// and no line exceeds the configured max length.
+	if strings.Contains(second, "--region-id") {
+		t.Errorf("continuation must not repeat the flag name:\n%s", second)
+	}
+	if !strings.HasPrefix(second, "  ") {
+		t.Errorf("continuation should be indented:\n%q", second)
+	}
+	for _, line := range paramLines {
+		if len([]rune(line)) > 80 {
+			t.Errorf("line exceeds max width (%d): %q", len([]rune(line)), line)
+		}
+		_ = descStart
+	}
+}
+
+// TestDryRunJSONOneLine checks the machine-readable form.
+func TestDryRunJSONOneLine(t *testing.T) {
+	var buf bytes.Buffer
+	req := &runtime.AssembledRequest{
+		Action:      "CreateThing",
+		Version:     "2026-01-01",
+		Method:      "POST",
+		Style:       "ROA",
+		PathPattern: "/things/{thingId}",
+		Pathname:    "/things/thing-1",
+		PathParams:  map[string]string{"thingId": "thing-1"},
+		Query:       map[string]string{"verbose": "true"},
+		Headers: map[string]string{
+			"Authorization": "secret-token",
+			"x-trace-id":    "trace-1",
+		},
+		Body:        map[string]any{"name": "demo"},
+		ReqBodyType: "json",
+		Region:      "cn-x",
+		Endpoint:    "https://svc.example.com",
+	}
+	if err := renderDryRun(&buf, "svc", req, true, false); err != nil {
+		t.Fatalf("renderDryRun json: %v", err)
+	}
+	out := strings.TrimSpace(buf.String())
+	if strings.Contains(out, "\n") {
+		t.Fatalf("json form must be one line: %q", out)
+	}
+	if strings.Contains(out, `"note"`) {
+		t.Fatalf("json form must not contain note: %s", out)
+	}
+	var got cliDryRunOutput
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("invalid dry-run JSON: %v\n%s", err, out)
+	}
+	if got.Style != "ROA" || got.Endpoint != "svc.example.com" || got.Method != "POST" {
+		t.Fatalf("request identity fields missing: %+v", got)
+	}
+	if got.Product != "svc" || got.API != "CreateThing" || got.Region != "cn-x" {
+		t.Fatalf("legacy metadata fields missing: %+v", got)
+	}
+	if got.Action != "CreateThing" || got.Version != "2026-01-01" {
+		t.Fatalf("API fields missing: %+v", got)
+	}
+	if got.Pathname != req.Pathname {
+		t.Fatalf("pathname = %q, want %q", got.Pathname, req.Pathname)
+	}
+	if strings.Contains(out, `"pathPattern"`) || strings.Contains(out, `"pathParams"`) {
+		t.Fatalf("dry-run JSON must not expose path template metadata: %s", out)
+	}
+	if got.Query["verbose"] != "true" || got.Body != `{"name":"demo"}` || got.BodyFormat != "json" {
+		t.Fatalf("payload fields missing: %+v", got)
+	}
+	if got.Headers["Authorization"] != "secr***" || got.Headers["x-trace-id"] != "trace-1" {
+		t.Fatalf("headers were not sanitized correctly: %#v", got.Headers)
+	}
+}
+
+func TestDryRunJSONIncludesActualRPCPathname(t *testing.T) {
+	var buf bytes.Buffer
+	req := &runtime.AssembledRequest{
+		Action:   "DescribeThings",
+		Version:  "2026-01-01",
+		Method:   "POST",
+		Style:    "RPC",
+		Endpoint: "svc.example.com",
+	}
+	if err := renderDryRun(&buf, "svc", req, true, false); err != nil {
+		t.Fatalf("renderDryRun json: %v", err)
+	}
+	var got cliDryRunOutput
+	if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &got); err != nil {
+		t.Fatalf("invalid dry-run JSON: %v", err)
+	}
+	if got.Pathname != "/" {
+		t.Fatalf("RPC pathname = %q, want /", got.Pathname)
+	}
+	out := strings.TrimSpace(buf.String())
+	if strings.Contains(out, `"pathPattern"`) || strings.Contains(out, `"pathParams"`) {
+		t.Fatalf("dry-run JSON must not expose path template metadata: %s", out)
+	}
+}

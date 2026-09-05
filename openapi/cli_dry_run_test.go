@@ -10,6 +10,7 @@ import (
 	openapiutil "github.com/alibabacloud-go/darabonba-openapi/v2/utils"
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -30,7 +31,7 @@ func TestIsSensitiveHeader(t *testing.T) {
 }
 
 func TestMaskValue(t *testing.T) {
-	assert.Equal(t, "***", maskValue(""))
+	assert.Equal(t, "", maskValue(""))
 	assert.Equal(t, "***", maskValue("ab"))
 	assert.Equal(t, "***", maskValue("abcd"))
 	assert.Equal(t, "abcd***", maskValue("abcde"))
@@ -122,6 +123,7 @@ func TestBuildCliDryRunFromInvoker_RPC(t *testing.T) {
 	req.Headers["Authorization"] = "Bearer secret-token"
 	req.QueryParams["RegionId"] = "cn-hangzhou"
 	req.QueryParams["PageSize"] = "10"
+	req.QueryParams["Password"] = "query-secret-value"
 
 	invoker := &ForceRpcInvoker{
 		BasicInvoker: &BasicInvoker{
@@ -138,6 +140,7 @@ func TestBuildCliDryRunFromInvoker_RPC(t *testing.T) {
 	assert.Equal(t, "2014-05-26", out.Version)
 	assert.Equal(t, "cn-hangzhou", out.Query["RegionId"])
 	assert.Equal(t, "10", out.Query["PageSize"])
+	assert.Equal(t, "quer***", out.Query["Password"])
 	assert.Equal(t, "application/json", out.Headers["Content-Type"])
 	assert.Equal(t, "Bear***", out.Headers["Authorization"])
 	assert.Empty(t, out.PathPattern)
@@ -176,6 +179,21 @@ func TestBuildCliDryRunFromInvoker_ROA(t *testing.T) {
 	assert.Empty(t, out.Version)
 }
 
+func TestBuildCliDryRunFromInvoker_MasksPathSecret(t *testing.T) {
+	req := requests.NewCommonRequest()
+	req.Domain = "example.cn-hangzhou.aliyuncs.com"
+	req.Method = "GET"
+	req.PathPattern = "/sessions/[Token]"
+	req.PathParams["Token"] = "path-secret-value"
+
+	invoker := &RestfulInvoker{BasicInvoker: &BasicInvoker{request: req}}
+	out := buildCliDryRunFromInvoker(invoker)
+
+	assert.Equal(t, "path***", out.PathParams["Token"])
+	assert.Equal(t, "/sessions/path***", out.Pathname)
+	assert.NotContains(t, out.Pathname, "path-secret-value")
+}
+
 func TestBuildCliDryRunFromInvoker_WithBody(t *testing.T) {
 	req := requests.NewCommonRequest()
 	req.Domain = "ecs.cn-hangzhou.aliyuncs.com"
@@ -183,7 +201,7 @@ func TestBuildCliDryRunFromInvoker_WithBody(t *testing.T) {
 	req.ApiName = "RunInstances"
 	req.Version = "2014-05-26"
 	req.Product = "Ecs"
-	req.SetContent([]byte(`{"InstanceType":"ecs.g6.large"}`))
+	req.SetContent([]byte(`{"InstanceType":"ecs.g6.large","Password":"body-secret-value"}`))
 
 	invoker := &ForceRpcInvoker{
 		BasicInvoker: &BasicInvoker{
@@ -193,7 +211,7 @@ func TestBuildCliDryRunFromInvoker_WithBody(t *testing.T) {
 	}
 
 	out := buildCliDryRunFromInvoker(invoker)
-	assert.Equal(t, `{"InstanceType":"ecs.g6.large"}`, out.Body)
+	assert.Equal(t, `{"InstanceType":"ecs.g6.large","Password":"body***"}`, out.Body)
 	assert.Equal(t, "raw", out.BodyFormat)
 }
 
@@ -206,6 +224,7 @@ func TestBuildCliDryRunFromInvoker_WithFormParams(t *testing.T) {
 	req.Product = "Ecs"
 	req.FormParams["InstanceType"] = "ecs.g6.large"
 	req.FormParams["RegionId"] = "cn-hangzhou"
+	req.FormParams["Password"] = "form-secret-value"
 
 	invoker := &ForceRpcInvoker{
 		BasicInvoker: &BasicInvoker{
@@ -218,6 +237,8 @@ func TestBuildCliDryRunFromInvoker_WithFormParams(t *testing.T) {
 	assert.Equal(t, "form", out.BodyFormat)
 	assert.Contains(t, out.Body, "InstanceType")
 	assert.Contains(t, out.Body, "ecs.g6.large")
+	assert.Contains(t, out.Body, `"Password":"form***"`)
+	assert.NotContains(t, out.Body, "form-secret-value")
 }
 
 func TestBuildCliDryRunFromOpenapi(t *testing.T) {
@@ -225,7 +246,7 @@ func TestBuildCliDryRunFromOpenapi(t *testing.T) {
 		Code:    "sls",
 		Version: "2020-12-30",
 	}
-	api := &meta.Api{
+	api := &testLegacyAPI{
 		Name:    "GetLogStore",
 		Product: product,
 	}
@@ -245,13 +266,14 @@ func TestBuildCliDryRunFromOpenapi(t *testing.T) {
 				},
 				Query: map[string]*string{
 					"logstoreName": tea.String("my-store"),
+					"Password":     tea.String("query-secret-value"),
 				},
 			},
 			openapiParams: newOpenapiParams("GET", "/logstores/my-store", "GetLogStore", "2020-12-30"),
 		},
 		method: "GET",
 		path:   "/logstores/[logstoreName]",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	out := buildCliDryRunFromOpenapi(oc)
@@ -261,15 +283,85 @@ func TestBuildCliDryRunFromOpenapi(t *testing.T) {
 	assert.Equal(t, "/logstores/[logstoreName]", out.PathPattern)
 	assert.Equal(t, "/logstores/my-store", out.Pathname)
 	assert.Equal(t, "my-store", out.Query["logstoreName"])
+	assert.Equal(t, "quer***", out.Query["Password"])
 	assert.Equal(t, "application/json", out.Headers["Content-Type"])
 	assert.Equal(t, "toke***", out.Headers["x-acs-security-token"])
 	assert.Equal(t, "GetLogStore", out.Action)
 	assert.Equal(t, "2020-12-30", out.Version)
 }
 
+func TestBuildCliDryRunFromOpenapi_MasksPathSecret(t *testing.T) {
+	product := &meta.Product{Code: "demo", Version: "2026-01-01"}
+	api := &testLegacyAPI{Name: "GetSession", Product: product}
+	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "example.com"}
+	oc := &OpenapiContext{
+		HttpContext: &HttpContext{
+			profile: profile,
+			product: product,
+			openapiRequest: &openapiutil.OpenApiRequest{
+				Headers: map[string]*string{},
+				Query:   map[string]*string{},
+			},
+			openapiParams: newOpenapiParams("GET", "/sessions/path-secret-value/details", "GetSession", product.Version),
+		},
+		method:     "GET",
+		path:       "/sessions/[Token]/details",
+		api:        canonicalTestAPI(api),
+		pathParams: map[string]string{"Token": "path-secret-value"},
+	}
+
+	out := buildCliDryRunFromOpenapi(oc)
+	assert.Equal(t, "path***", out.PathParams["Token"])
+	assert.Equal(t, "/sessions/path***/details", out.Pathname)
+	assert.NotContains(t, out.Pathname, "path-secret-value")
+}
+
+func TestBuildCliDryRunFromOpenapi_RPCStyle(t *testing.T) {
+	// RPC-style products routed through the openapi channel (e.g. DAS) have
+	// their style overridden to "RPC" in Prepare; the dry-run JSON must report
+	// that instead of the hardcoded ROA default. Regression for DAS showing ROA.
+	product := &meta.Product{Code: "das", Version: "2020-01-16"}
+	api := &testLegacyAPI{Name: "AddHDMInstance", Product: product}
+	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "example.com"}
+
+	params := newOpenapiParams("POST", "/", "AddHDMInstance", "2020-01-16")
+	params.Style = tea.String("RPC")
+
+	oc := &OpenapiContext{
+		HttpContext: &HttpContext{
+			profile: profile,
+			product: product,
+			openapiRequest: &openapiutil.OpenApiRequest{
+				Headers: map[string]*string{},
+				Query:   map[string]*string{"InstanceArea": tea.String("test-value")},
+			},
+			openapiParams: params,
+		},
+		method: "POST",
+		path:   "/",
+		api:    canonicalTestAPI(api),
+	}
+
+	out := buildCliDryRunFromOpenapi(oc)
+	assert.Equal(t, "RPC", out.Style)
+	assert.Equal(t, "POST", out.Method)
+	assert.Equal(t, "test-value", out.Query["InstanceArea"])
+	assert.Equal(t, "AddHDMInstance", out.Action)
+	assert.Equal(t, "2020-01-16", out.Version)
+	// Path fields are ROA-only; an RPC request must not carry them, matching
+	// the classic invoker (and the online SDK output).
+	assert.Empty(t, out.PathPattern)
+	assert.Empty(t, out.Pathname)
+	// Headers stay empty (the CLI added none), but the note must explain that
+	// the SDK runtime adds signing/transport headers at send time — so an empty
+	// map is not read as "no headers on the wire".
+	assert.Empty(t, out.Headers)
+	assert.Equal(t, cliDryRunHeaderNote, out.Note)
+}
+
 func TestBuildCliDryRunFromOpenapi_EndpointOverride(t *testing.T) {
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "ListProject", Product: product}
+	api := &testLegacyAPI{Name: "ListProject", Product: product}
 	profile := &config.Profile{RegionId: "cn-hangzhou"}
 
 	oc := &OpenapiContext{
@@ -285,7 +377,7 @@ func TestBuildCliDryRunFromOpenapi_EndpointOverride(t *testing.T) {
 		},
 		method: "GET",
 		path:   "/",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	out := buildCliDryRunFromOpenapi(oc)
@@ -294,7 +386,7 @@ func TestBuildCliDryRunFromOpenapi_EndpointOverride(t *testing.T) {
 
 func TestBuildCliDryRunFromOpenapi_SLSEndpointFallback(t *testing.T) {
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "ListProject", Product: product}
+	api := &testLegacyAPI{Name: "ListProject", Product: product}
 	profile := &config.Profile{RegionId: "cn-shanghai"}
 
 	oc := &OpenapiContext{
@@ -309,7 +401,7 @@ func TestBuildCliDryRunFromOpenapi_SLSEndpointFallback(t *testing.T) {
 		},
 		method: "GET",
 		path:   "/",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	out := buildCliDryRunFromOpenapi(oc)
@@ -318,12 +410,13 @@ func TestBuildCliDryRunFromOpenapi_SLSEndpointFallback(t *testing.T) {
 
 func TestBuildCliDryRunFromOpenapi_WithBody(t *testing.T) {
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "CreateLogStore", Product: product}
+	api := &testLegacyAPI{Name: "CreateLogStore", Product: product}
 	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "cn-hangzhou.log.aliyuncs.com"}
 
 	bodyContent := map[string]interface{}{
 		"logstoreName": "test-store",
 		"ttl":          30,
+		"password":     "body-secret-value",
 	}
 	oc := &OpenapiContext{
 		HttpContext: &HttpContext{
@@ -338,18 +431,20 @@ func TestBuildCliDryRunFromOpenapi_WithBody(t *testing.T) {
 		},
 		method: "POST",
 		path:   "/logstores",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	out := buildCliDryRunFromOpenapi(oc)
 	assert.Equal(t, "json", out.BodyFormat)
 	assert.Contains(t, out.Body, "logstoreName")
 	assert.Contains(t, out.Body, "test-store")
+	assert.Contains(t, out.Body, `"password":"body***"`)
+	assert.NotContains(t, out.Body, "body-secret-value")
 }
 
 func TestBuildCliDryRunFromOpenapi_WithBinaryBody(t *testing.T) {
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "PutLogs", Product: product}
+	api := &testLegacyAPI{Name: "PutLogs", Product: product}
 	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "cn-hangzhou.log.aliyuncs.com"}
 
 	binaryData := []byte("compressed-data-here")
@@ -366,7 +461,7 @@ func TestBuildCliDryRunFromOpenapi_WithBinaryBody(t *testing.T) {
 		},
 		method: "POST",
 		path:   "/logstores/store/shards",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 	oc.openapiParams.ReqBodyType = tea.String("binary")
 
@@ -377,7 +472,7 @@ func TestBuildCliDryRunFromOpenapi_WithBinaryBody(t *testing.T) {
 
 func TestBuildCliDryRunFromOpenapi_NilHeaders(t *testing.T) {
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "ListProject", Product: product}
+	api := &testLegacyAPI{Name: "ListProject", Product: product}
 	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "cn-hangzhou.log.aliyuncs.com"}
 
 	oc := &OpenapiContext{
@@ -391,7 +486,7 @@ func TestBuildCliDryRunFromOpenapi_NilHeaders(t *testing.T) {
 		},
 		method: "GET",
 		path:   "/",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	out := buildCliDryRunFromOpenapi(oc)
@@ -542,7 +637,7 @@ func TestProcessCliDryRunOpenapi(t *testing.T) {
 	ctx.EnterCommand(cmd)
 
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "GetLogStore", Product: product}
+	api := &testLegacyAPI{Name: "GetLogStore", Product: product}
 	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "cn-hangzhou.log.aliyuncs.com"}
 
 	oc := &OpenapiContext{
@@ -559,7 +654,7 @@ func TestProcessCliDryRunOpenapi(t *testing.T) {
 		},
 		method: "GET",
 		path:   "/logstores/[logstoreName]",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	err := processCliDryRunOpenapi(ctx, oc)
@@ -580,7 +675,7 @@ func TestProcessCliDryRunOpenapiJson(t *testing.T) {
 	ctx.EnterCommand(cmd)
 
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "GetLogStore", Product: product}
+	api := &testLegacyAPI{Name: "GetLogStore", Product: product}
 	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "cn-hangzhou.log.aliyuncs.com"}
 
 	oc := &OpenapiContext{
@@ -597,7 +692,7 @@ func TestProcessCliDryRunOpenapiJson(t *testing.T) {
 		},
 		method: "GET",
 		path:   "/logstores/[logstoreName]",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	err := processCliDryRunOpenapiJson(ctx, oc)
@@ -711,6 +806,195 @@ func TestProcessInvoke_CliDryRunJson_RPC(t *testing.T) {
 	assert.Equal(t, "ecs.cn-hangzhou.aliyuncs.com", parsed.Endpoint)
 }
 
+func TestClientDryRunJSONWithoutCredentialsMasksRequestSecrets(t *testing.T) {
+	t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
+
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	cmd := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+
+	password := &cli.Flag{Name: "Password"}
+	password.SetAssigned(true)
+	password.SetValue("request-secret-value")
+	ctx.UnknownFlags().Add(password)
+
+	product := meta.Product{
+		Code:     "demo",
+		Version:  "2026-01-01",
+		ApiStyle: "rpc",
+		ApiNames: []string{"CreateThing"},
+		RegionalEndpoints: map[string]string{
+			"cn-hangzhou": "demo.cn-hangzhou.aliyuncs.com",
+		},
+	}
+	repo, err := meta.MockLoadRepository([]meta.Product{product})
+	assert.NoError(t, err)
+	canonicalRepo := newFakeCanonicalRepo()
+	canonicalRepo.AddAPI("demo", product.Version, &canonicalmeta.API{
+		Name:     "CreateThing",
+		Protocol: "HTTPS",
+		Method:   "POST",
+		Parameters: []canonicalmeta.Parameter{
+			{Name: "password", RawName: "Password", Type: "string", Required: true, Location: "query"},
+		},
+	})
+
+	command := NewCommando(stdout, config.NewProfile("default"))
+	command.library = &Library{builtinRepo: repo, canonicalRepo: canonicalRepo}
+
+	err = command.main(ctx, []string{"demo", "CreateThing"})
+	assert.NoError(t, err)
+	assert.Empty(t, stderr.String())
+
+	var output CliDryRunOutput
+	assert.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &output))
+	assert.Equal(t, "demo.cn-hangzhou.aliyuncs.com", output.Endpoint)
+	assert.Equal(t, "requ***", output.Query["Password"])
+	assert.NotContains(t, stdout.String(), "request-secret-value")
+}
+
+func TestClientDryRunDoesNotResolveDynamicCredential(t *testing.T) {
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	cmd := &cli.Command{Name: "aliyun", EnableUnknownFlag: true}
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+	ForceFlag(ctx.Flags()).SetAssigned(true)
+
+	profile := config.Profile{
+		Mode:           config.CredentialsURI,
+		CredentialsURI: "://must-not-be-resolved",
+		RegionId:       "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+	repo, err := meta.MockLoadRepository([]meta.Product{{
+		Code:     "demo",
+		Version:  "2026-01-01",
+		ApiStyle: "rpc",
+		RegionalEndpoints: map[string]string{
+			"cn-hangzhou": "demo.cn-hangzhou.aliyuncs.com",
+		},
+	}})
+	assert.NoError(t, err)
+	command.library.builtinRepo = repo
+
+	err = command.processInvoke(ctx, "demo", "DescribeThings", "")
+	assert.NoError(t, err)
+	assert.Contains(t, stdout.String(), `"endpoint": "demo.cn-hangzhou.aliyuncs.com"`)
+}
+
+func TestProcessInvoke_CliDryRunJson_UsesProductRegionalEndpointWithoutAPIEndpointMap(t *testing.T) {
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+	}
+	command := NewCommando(stdout, profile)
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{
+			Code:     "demo",
+			Version:  "2026-01-01",
+			ApiStyle: "rpc",
+			ApiNames: []string{"DescribeThings"},
+			RegionalEndpoints: map[string]string{
+				"cn-hangzhou": "demo.cn-hangzhou.aliyuncs.com",
+			},
+		},
+	})
+	assert.Nil(t, err)
+	command.library.builtinRepo = repo
+	canonicalRepo := newFakeCanonicalRepo()
+	canonicalRepo.AddAPI("demo", "2026-01-01", &canonicalmeta.API{
+		Name:       "DescribeThings",
+		Protocol:   "HTTPS",
+		Method:     "POST",
+		Parameters: []canonicalmeta.Parameter{},
+	})
+	command.library.canonicalRepo = canonicalRepo
+
+	err = command.processInvoke(ctx, "demo", "DescribeThings", "")
+	assert.Nil(t, err)
+
+	output := strings.TrimSpace(stdout.String())
+	var parsed CliDryRunOutput
+	err = json.Unmarshal([]byte(output), &parsed)
+	assert.Nil(t, err)
+	assert.Equal(t, "RPC", parsed.Style)
+	assert.Equal(t, "DescribeThings", parsed.Action)
+	assert.Equal(t, "demo.cn-hangzhou.aliyuncs.com", parsed.Endpoint)
+}
+
+func TestProcessInvoke_CliDryRunJson_UsesProductRegionalVpcEndpointWithoutAPIEndpointMap(t *testing.T) {
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	ctx := cli.NewCommandContext(stdout, stderr)
+	cmd := &cli.Command{}
+	cmd.EnableUnknownFlag = true
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+
+	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+
+	profile := config.Profile{
+		Language:        "en",
+		Mode:            "AK",
+		AccessKeyId:     "accesskeyid",
+		AccessKeySecret: "accesskeysecret",
+		RegionId:        "cn-hangzhou",
+		EndpointType:    "vpc",
+	}
+	command := NewCommando(stdout, profile)
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{
+			Code:     "demo",
+			Version:  "2026-01-01",
+			ApiStyle: "rpc",
+			ApiNames: []string{"DescribeThings"},
+			RegionalEndpoints: map[string]string{
+				"cn-hangzhou": "demo.cn-hangzhou.aliyuncs.com",
+			},
+			RegionalVpcEndpoints: map[string]string{
+				"cn-hangzhou": "demo-vpc.cn-hangzhou.aliyuncs.com",
+			},
+		},
+	})
+	assert.Nil(t, err)
+	command.library.builtinRepo = repo
+	canonicalRepo := newFakeCanonicalRepo()
+	canonicalRepo.AddAPI("demo", "2026-01-01", &canonicalmeta.API{
+		Name:       "DescribeThings",
+		Protocol:   "HTTPS",
+		Method:     "POST",
+		Parameters: []canonicalmeta.Parameter{},
+	})
+	command.library.canonicalRepo = canonicalRepo
+
+	err = command.processInvoke(ctx, "demo", "DescribeThings", "")
+	assert.Nil(t, err)
+
+	output := strings.TrimSpace(stdout.String())
+	var parsed CliDryRunOutput
+	err = json.Unmarshal([]byte(output), &parsed)
+	assert.Nil(t, err)
+	assert.Equal(t, "RPC", parsed.Style)
+	assert.Equal(t, "DescribeThings", parsed.Action)
+	assert.Equal(t, "demo-vpc.cn-hangzhou.aliyuncs.com", parsed.Endpoint)
+}
+
 func TestProcessInvoke_CliDryRun_ROA(t *testing.T) {
 	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
 	ctx := cli.NewCommandContext(stdout, stderr)
@@ -744,8 +1028,13 @@ func TestProcessInvoke_CliDryRun_ROA(t *testing.T) {
 		RegionId:        "cn-hangzhou",
 	}
 	command := NewCommando(stdout, profile)
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "cs", Version: "2015-12-15", ApiStyle: "restful"},
+	})
+	assert.Nil(t, err)
+	command.library.builtinRepo = repo
 
-	err := command.processInvoke(ctx, "cs", "GET", "/clusters")
+	err = command.processInvoke(ctx, "cs", "GET", "/clusters")
 	assert.Nil(t, err)
 
 	output := stdout.String()
@@ -788,8 +1077,13 @@ func TestProcessInvoke_CliDryRunJson_ROA(t *testing.T) {
 		RegionId:        "cn-hangzhou",
 	}
 	command := NewCommando(stdout, profile)
+	repo, err := meta.MockLoadRepository([]meta.Product{
+		{Code: "cs", Version: "2015-12-15", ApiStyle: "restful"},
+	})
+	assert.Nil(t, err)
+	command.library.builtinRepo = repo
 
-	err := command.processInvoke(ctx, "cs", "GET", "/clusters")
+	err = command.processInvoke(ctx, "cs", "GET", "/clusters")
 	assert.Nil(t, err)
 
 	output := strings.TrimSpace(stdout.String())
@@ -935,7 +1229,7 @@ func TestBuildCliDryRunFromInvoker_NoQuery(t *testing.T) {
 
 func TestBuildCliDryRunFromOpenapi_EmptyQuery(t *testing.T) {
 	product := &meta.Product{Code: "sls", Version: "2020-12-30"}
-	api := &meta.Api{Name: "ListProject", Product: product}
+	api := &testLegacyAPI{Name: "ListProject", Product: product}
 	profile := &config.Profile{RegionId: "cn-hangzhou", Endpoint: "cn-hangzhou.log.aliyuncs.com"}
 
 	oc := &OpenapiContext{
@@ -950,7 +1244,7 @@ func TestBuildCliDryRunFromOpenapi_EmptyQuery(t *testing.T) {
 		},
 		method: "GET",
 		path:   "/",
-		api:    api,
+		api:    canonicalTestAPI(api),
 	}
 
 	out := buildCliDryRunFromOpenapi(oc)
