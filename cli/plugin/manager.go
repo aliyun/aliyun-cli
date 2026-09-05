@@ -24,6 +24,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/trust"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
 	runtimesource "github.com/aliyun/aliyun-openapi-runtime/source"
@@ -56,6 +57,8 @@ type Manager struct {
 	sourceBase      string // from plugin-settings.json / env; empty = use built-in index URLs
 	indexURL        string // For testing: allows overriding resolved package index URL
 	commandIndexURL string // For testing: allows overriding resolved command index URL
+	// trustDir overrides ~/.aliyun/trust for signature freshness state (tests).
+	trustDir string
 	// canonicalFS overrides the bundled canonical metadata used by InstallCustom (tests).
 	canonicalFS fs.FS
 	// preferGo reverses the default package selection order from any -> current platform-arch to current platform-arch -> any.
@@ -237,10 +240,75 @@ func (m *Manager) GetIndex() (*Index, error) {
 	indexURL := m.resolvedPkgIndexURL()
 	cacheFile := filepath.Join(m.rootDir, indexCacheFile)
 	var index Index
-	if err := m.fetchWithCache(indexURL, cacheFile, &index); err != nil {
+	if err := m.fetchVerifiedPkgIndex(indexURL, cacheFile, &index); err != nil {
 		return nil, fmt.Errorf("failed to fetch plugin index: %w", err)
 	}
 	return &index, nil
+}
+
+// fetchVerifiedPkgIndex loads the package index, verifies an optional detached
+// signature (plugin_pkg_index.json.sig), and enforces freshness when present.
+func (m *Manager) fetchVerifiedPkgIndex(indexURL, cacheFile string, result *Index) error {
+	policy := trust.DefaultPolicy()
+	if m.trustDir != "" {
+		policy.TrustDir = m.trustDir
+	}
+
+	tryCache := !noCacheEnabled() && !m.skipPluginIndexCache()
+	if tryCache {
+		var cached Index
+		hit, _ := m.readCache(cacheFile, cacheTTL, &cached)
+		if hit {
+			*result = cached
+			return nil
+		}
+	}
+
+	data, err := m.fetchRemote(indexURL)
+	if err != nil {
+		if tryCache {
+			var cached Index
+			_, stale := m.readCache(cacheFile, cacheTTL, &cached)
+			if stale {
+				*result = cached
+				return nil
+			}
+		}
+		return err
+	}
+
+	sigURL := indexURL + ".sig"
+	sigBytes, sigErr := m.fetchRemote(sigURL)
+	if sigErr != nil {
+		sigBytes = nil // missing signature is handled by trust policy
+	}
+
+	keys, keyErr := trust.ResolveVerifyKeys(trust.RolePlugins, func() ([]byte, error) {
+		rootURL := trust.DeriveTrustRootURL(indexURL)
+		if rootURL == "" {
+			return nil, fmt.Errorf("cannot derive trust root URL")
+		}
+		return m.fetchRemote(rootURL)
+	}, nil, policy, false)
+	if keyErr != nil {
+		return fmt.Errorf("resolve trust keys: %w", keyErr)
+	}
+
+	check, verr := trust.VerifyArtifactBytes(data, sigBytes, trust.RolePlugins, "plugin_pkg_index", keys, policy)
+	if verr != nil {
+		return verr
+	}
+	if check != nil && check.Warning != "" {
+		fmt.Fprintln(os.Stderr, check.Warning)
+	}
+
+	if err := json.Unmarshal(data, result); err != nil {
+		return fmt.Errorf("failed to decode: %w", err)
+	}
+	if tryCache {
+		m.writeCache(cacheFile, data)
+	}
+	return nil
 }
 
 func (m *Manager) GetCommandIndex() (*CommandIndex, error) {
@@ -995,8 +1063,12 @@ func (m *Manager) InstallFromPackage(ctx *cli.Context, ref string) error {
 		if !isRemotePluginPackageRef(ref) {
 			return fmt.Errorf("package URL path must end with .zip, .tar.gz, or .tgz")
 		}
+		cli.Printf(ctx.Stderr(),
+			"warning: installing from an arbitrary URL is outside the signed plugin index; authenticity is not verified\n")
 		return m.installFromRemotePackageURL(ctx, ref)
 	}
+	cli.Printf(ctx.Stderr(),
+		"warning: installing from a local package is outside the signed plugin index; authenticity is not verified\n")
 	return m.InstallFromLocalFile(ctx, ref)
 }
 
