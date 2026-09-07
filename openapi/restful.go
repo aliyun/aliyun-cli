@@ -145,7 +145,7 @@ func checkRestfulMethod(ctx *cli.Context, methodOrPath string, pathPattern strin
 
 func checkHttpMethod(s string) (string, bool) {
 	m := strings.ToUpper(s)
-	if m == "GET" || m == "POST" || m == "PUT" || m == "DELETE" {
+	if m == "GET" || m == "POST" || m == "PUT" || m == "DELETE" || m == "PATCH" {
 		return m, true
 	}
 	return "", false

@@ -796,7 +796,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		return c.processInvoke(ctx, productName, args[1], "")
 	} else if len(args) == 3 {
 		// restful call
-		// aliyun <productCode> {GET|PUT|POST|DELETE} <path> --
+		// aliyun <productCode> {GET|PUT|POST|DELETE|PATCH} <path> --
 		product, _ := c.library.GetProduct(productName)
 		api, find := c.library.GetApiByPath(product.Code, product.Version, args[1], args[2])
 		force := ForceFlag(ctx.Flags()).IsAssigned()
@@ -1252,7 +1252,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 
 		if !ok {
 			return nil, cli.NewErrorWithTip(fmt.Errorf("product '%s' need restful call", product.GetLowerCode()),
-				"Use `aliyun %s {GET|PUT|POST|DELETE} <path> ...`", product.GetLowerCode())
+				"Use `aliyun %s {GET|PUT|POST|DELETE|PATCH} <path> ...`", product.GetLowerCode())
 		}
 
 		if api := c.library.GetCanonicalApi(product.Code, product.Version, ctx.Command().Name); api != nil {
@@ -1397,9 +1397,9 @@ func (c *Commando) createHttpContext(ctx *cli.Context, product *meta.Product, ap
 		return nil, err
 	}
 	if !ok {
-		return nil, cli.NewErrorWithTip(fmt.Errorf("product '%s' need proper restful call with ApiName or {GET|PUT|POST|DELETE} <path>",
+		return nil, cli.NewErrorWithTip(fmt.Errorf("product '%s' need proper restful call with ApiName or {GET|PUT|POST|DELETE|PATCH} <path>",
 			product.GetLowerCode()),
-			"Use `aliyun %s <ApiName> ...` or `aliyun %s {GET|PUT|POST|DELETE} <path> ...`",
+			"Use `aliyun %s <ApiName> ...` or `aliyun %s {GET|PUT|POST|DELETE|PATCH} <path> ...`",
 			product.GetLowerCode(),
 			product.GetLowerCode())
 	}
