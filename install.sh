@@ -16,11 +16,6 @@ resolve_macos_package_arch() {
   esac
 }
 
-# Allow unit tests to source helper functions without running the installer.
-if [[ "${ALIYUN_CLI_INSTALL_SH_LIBONLY:-}" == "1" ]]; then
-  return 0 2>/dev/null || exit 0
-fi
-
 set -e +o pipefail
 
 show_help() {
