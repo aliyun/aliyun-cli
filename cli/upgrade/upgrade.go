@@ -314,9 +314,8 @@ func resolveUpgradeSourceFromManifest() (*upgradeSource, error) {
 		}
 	}
 
-	keys, err := trust.ResolveVerifyKeys(trust.RoleUpgrade, func() ([]byte, error) {
-		rootURL := strings.TrimSuffix(ossBaseURL, "/") + "/trust/root.json"
-		r, e := httpClient.Get(rootURL)
+	client := trust.NewClient(ossBaseURL, policy.TrustDir, func(u string) ([]byte, error) {
+		r, e := httpClient.Get(u)
 		if e != nil {
 			return nil, e
 		}
@@ -325,9 +324,25 @@ func resolveUpgradeSourceFromManifest() (*upgradeSource, error) {
 			return nil, fmt.Errorf("status %d", r.StatusCode)
 		}
 		return io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	}, nil, policy, false)
+	})
+	client.Now = policy.Now
+	keys, err := client.ResolveRoleKeys(trust.RoleUpgrade)
 	if err != nil {
-		return nil, err
+		keys, err = trust.ResolveVerifyKeys(trust.RoleUpgrade, func() ([]byte, error) {
+			rootURL := strings.TrimSuffix(ossBaseURL, "/") + "/trust/root.json"
+			r, e := httpClient.Get(rootURL)
+			if e != nil {
+				return nil, e
+			}
+			defer r.Body.Close()
+			if r.StatusCode != http.StatusOK {
+				return nil, fmt.Errorf("status %d", r.StatusCode)
+			}
+			return io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		}, nil, policy, false)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if _, err := trust.VerifyArtifactBytes(data, sigBytes, trust.RoleUpgrade, "upgrade_manifest", keys, policy); err != nil {

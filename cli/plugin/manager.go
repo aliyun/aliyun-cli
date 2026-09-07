@@ -283,15 +283,27 @@ func (m *Manager) fetchVerifiedPkgIndex(indexURL, cacheFile string, result *Inde
 		sigBytes = nil // missing signature is handled by trust policy
 	}
 
-	keys, keyErr := trust.ResolveVerifyKeys(trust.RolePlugins, func() ([]byte, error) {
-		rootURL := trust.DeriveTrustRootURL(indexURL)
-		if rootURL == "" {
-			return nil, fmt.Errorf("cannot derive trust root URL")
-		}
-		return m.fetchRemote(rootURL)
-	}, nil, policy, false)
+	origin := trust.DefaultArtifactOrigin
+	if i := strings.Index(indexURL, "/plugins"); i > 0 {
+		origin = indexURL[:i]
+	}
+	client := trust.NewClient(origin, policy.TrustDir, func(u string) ([]byte, error) {
+		return m.fetchRemote(u)
+	})
+	client.Now = policy.Now
+	keys, keyErr := client.ResolveRoleKeys(trust.RolePlugins)
 	if keyErr != nil {
-		return fmt.Errorf("resolve trust keys: %w", keyErr)
+		// Fall back to Phase-1 flat trust/root.json resolver for transition.
+		keys, keyErr = trust.ResolveVerifyKeys(trust.RolePlugins, func() ([]byte, error) {
+			rootURL := trust.DeriveTrustRootURL(indexURL)
+			if rootURL == "" {
+				return nil, fmt.Errorf("cannot derive trust root URL")
+			}
+			return m.fetchRemote(rootURL)
+		}, nil, policy, false)
+		if keyErr != nil {
+			return fmt.Errorf("resolve trust keys: %w", keyErr)
+		}
 	}
 
 	check, verr := trust.VerifyArtifactBytes(data, sigBytes, trust.RolePlugins, "plugin_pkg_index", keys, policy)

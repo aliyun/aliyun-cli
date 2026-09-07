@@ -10,9 +10,11 @@ import (
 )
 
 const (
-	RolePlugins = "plugins"
-	RoleUpgrade = "upgrade"
-	RoleRoot    = "root"
+	RolePlugins   = "plugins"
+	RoleUpgrade   = "upgrade"
+	RoleRoot      = "root"
+	RoleTimestamp = "timestamp"
+	RoleRecovery  = "recovery"
 )
 
 // VerifyKey is a public key the client will accept for a given role.
@@ -41,11 +43,9 @@ var (
 )
 
 func init() {
-	// Production plugin/upgrade public keys are NOT embedded here.
-	// They are published in CDN trust/root.json (see DeriveTrustRootURL) and
-	// loaded at runtime. Optional ALIBABA_CLOUD_CLI_TRUST_PUBKEYS remains for
-	// break-glass / local debugging. Root signing keys may be embedded later
-	// for Phase-2 authenticity of root.json itself.
+	// Design A embeds offline Root/Recovery public keys (see bootstrap.go).
+	// Business (plugins/upgrade/timestamp) keys are delegated via signed N.root.json
+	// on the official CDN; they are not hard-coded here.
 	embeddedKeys = nil
 }
 
