@@ -109,17 +109,22 @@ func MaskKV(key, value string) string {
 }
 
 func MaskBody(body string) string {
+	return truncate(MaskBodyFull(body))
+}
+
+// MaskBodyFull applies the same redaction policy without truncating dry-run output.
+func MaskBodyFull(body string) string {
 	var data any
 	if json.Valid([]byte(body)) {
 		decoder := json.NewDecoder(strings.NewReader(body))
 		decoder.UseNumber()
 		if err := decoder.Decode(&data); err == nil {
 			if masked, err := json.Marshal(maskJSON(data)); err == nil {
-				return truncate(string(masked))
+				return string(masked)
 			}
 		}
 	}
-	return truncate(body)
+	return body
 }
 
 func MaskAny(data any) any {

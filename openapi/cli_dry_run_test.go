@@ -194,6 +194,33 @@ func TestBuildCliDryRunFromInvoker_MasksPathSecret(t *testing.T) {
 	assert.NotContains(t, out.Pathname, "path-secret-value")
 }
 
+func TestCliDryRunPreservesLongBodyAndRedaction(t *testing.T) {
+	text := strings.Repeat("流水线", 450) + "正文末尾"
+	for _, tc := range []struct{ name, body, want string }{
+		{"raw", "name=" + text + "&pipelineId=123", "name=" + text + "&pipelineId=123"},
+		{"json", `{"content":"` + text + `","password":"secret-value"}`, `{"content":"` + text + `","password":"secr***"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := requests.NewCommonRequest()
+			req.SetContent([]byte(tc.body))
+			classic := buildCliDryRunFromInvoker(&RestfulInvoker{BasicInvoker: &BasicInvoker{request: req}})
+			openapi := buildCliDryRunFromOpenapi(&OpenapiContext{HttpContext: &HttpContext{
+				openapiRequest: &openapiutil.OpenApiRequest{Body: []byte(tc.body)},
+			}})
+			for _, out := range []*CliDryRunOutput{classic, openapi} {
+				assert.Equal(t, tc.want, out.Body)
+				assert.Contains(t, formatCliDryRunHuman(out), tc.want)
+				encoded, err := marshalCliDryRunOutput(out)
+				assert.NoError(t, err)
+				var decoded CliDryRunOutput
+				assert.NoError(t, json.Unmarshal([]byte(encoded), &decoded))
+				assert.Equal(t, tc.want, decoded.Body)
+			}
+			assert.Equal(t, tc.body, string(req.Content), "dry-run must not mutate the request")
+		})
+	}
+}
+
 func TestBuildCliDryRunFromInvoker_WithBody(t *testing.T) {
 	req := requests.NewCommonRequest()
 	req.Domain = "ecs.cn-hangzhou.aliyuncs.com"
@@ -225,6 +252,7 @@ func TestBuildCliDryRunFromInvoker_WithFormParams(t *testing.T) {
 	req.FormParams["InstanceType"] = "ecs.g6.large"
 	req.FormParams["RegionId"] = "cn-hangzhou"
 	req.FormParams["Password"] = "form-secret-value"
+	req.FormParams["Description"] = strings.Repeat("中文", 600)
 
 	invoker := &ForceRpcInvoker{
 		BasicInvoker: &BasicInvoker{
@@ -235,6 +263,7 @@ func TestBuildCliDryRunFromInvoker_WithFormParams(t *testing.T) {
 
 	out := buildCliDryRunFromInvoker(invoker)
 	assert.Equal(t, "form", out.BodyFormat)
+	assert.Contains(t, out.Body, req.FormParams["Description"])
 	assert.Contains(t, out.Body, "InstanceType")
 	assert.Contains(t, out.Body, "ecs.g6.large")
 	assert.Contains(t, out.Body, `"Password":"form***"`)
@@ -417,6 +446,7 @@ func TestBuildCliDryRunFromOpenapi_WithBody(t *testing.T) {
 		"logstoreName": "test-store",
 		"ttl":          30,
 		"password":     "body-secret-value",
+		"description":  strings.Repeat("中文", 600),
 	}
 	oc := &OpenapiContext{
 		HttpContext: &HttpContext{
@@ -436,6 +466,7 @@ func TestBuildCliDryRunFromOpenapi_WithBody(t *testing.T) {
 
 	out := buildCliDryRunFromOpenapi(oc)
 	assert.Equal(t, "json", out.BodyFormat)
+	assert.Contains(t, out.Body, bodyContent["description"])
 	assert.Contains(t, out.Body, "logstoreName")
 	assert.Contains(t, out.Body, "test-store")
 	assert.Contains(t, out.Body, `"password":"body***"`)

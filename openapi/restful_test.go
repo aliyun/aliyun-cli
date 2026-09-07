@@ -15,7 +15,9 @@ package openapi
 
 import (
 	"bufio"
+	"bytes"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
@@ -23,8 +25,67 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/meta"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestRestfulMethodsCompatibility(t *testing.T) {
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.Flags().Add(NewRoaFlag())
+	for _, input := range []string{"GET", "POST", "PUT", "DELETE", "PATCH", "patch", "PaTcH"} {
+		t.Run(input, func(t *testing.T) {
+			ok, method, path, err := checkRestfulMethod(ctx, input, "/items/1")
+			require.NoError(t, err)
+			require.True(t, ok)
+			assert.Equal(t, strings.ToUpper(input), method)
+			assert.Equal(t, "/items/1", path)
+			_, _, _, err = checkRestfulMethod(ctx, input, "items/1")
+			assert.EqualError(t, err, "bad restful path items/1")
+			ok, _, _, err = checkRestfulMethod(ctx, input, "")
+			assert.NoError(t, err)
+			assert.False(t, ok)
+		})
+	}
+	for _, input := range []string{"HEAD", "OPTIONS", "TRACE", "GET|POST", "PATCH|PUT", "PATC", " PATCH "} {
+		_, ok := checkHttpMethod(input)
+		assert.False(t, ok, "%q must remain unsupported", input)
+	}
+}
+
+func TestCreateInvokerPatch(t *testing.T) {
+	for _, product := range []string{"restful-demo", "unknown-demo"} {
+		t.Run(product, func(t *testing.T) {
+			profile := config.Profile{Mode: "AK", AccessKeyId: "testid", AccessKeySecret: "testsecret", RegionId: "cn-hangzhou", Endpoint: "example.com"}
+			command := NewCommando(new(bytes.Buffer), profile)
+			repo, err := meta.MockLoadRepository([]meta.Product{{Code: "restful-demo", Version: "2026-01-01", ApiStyle: "restful"}})
+			require.NoError(t, err)
+			command.library.builtinRepo = repo
+			ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+			ctx.EnterCommand(&cli.Command{Name: "PATCH", EnableUnknownFlag: true})
+			config.AddFlags(ctx.Flags())
+			AddFlags(ctx.Flags())
+			ForceFlag(ctx.Flags()).SetAssigned(true)
+			DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+			if product == "unknown-demo" {
+				VersionFlag(ctx.Flags()).SetAssigned(true)
+				VersionFlag(ctx.Flags()).SetValue("2026-01-01")
+			}
+			BodyFlag(ctx.Flags()).SetAssigned(true)
+			BodyFlag(ctx.Flags()).SetValue(`{"name":"updated"}`)
+			invoker, err := command.createInvoker(ctx, product, "PATCH", "/items/1")
+			require.NoError(t, err)
+			roa, ok := invoker.(*RestfulInvoker)
+			require.True(t, ok, "PATCH must not fall back to an RPC action")
+			require.NoError(t, roa.Prepare(ctx))
+			assert.Equal(t, "PATCH", roa.request.Method)
+			assert.Equal(t, "/items/1", roa.request.PathPattern)
+			assert.Equal(t, `{"name":"updated"}`, string(roa.request.Content))
+			assert.Equal(t, "application/json", roa.request.Headers["Content-Type"])
+		})
+	}
+}
 
 func TestRestfulInvoker_Prepare(t *testing.T) {
 	a := &RestfulInvoker{

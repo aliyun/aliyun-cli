@@ -246,8 +246,7 @@ func (c *Commando) hostOwnsLegacyHelpCommand(args []string) bool {
 		return false
 	}
 	command := positionals[1]
-	switch strings.ToUpper(command) {
-	case "GET", "POST", "PUT", "DELETE":
+	if _, ok := checkHttpMethod(command); ok {
 		return false
 	}
 	if strings.ToLower(command) == command {

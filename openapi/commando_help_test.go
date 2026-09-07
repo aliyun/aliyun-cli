@@ -331,7 +331,7 @@ func TestPrintProductUsage_RestfulProduct(t *testing.T) {
 	assert.NoError(t, err)
 
 	output := stdout.String()
-	assert.Contains(t, output, "[GET|PUT|POST|DELETE]")
+	assert.Contains(t, output, "[GET|PUT|POST|DELETE|PATCH]")
 }
 
 func TestPrintProductUsage_RestfulProduct_ListShowsSummary(t *testing.T) {
@@ -1200,7 +1200,7 @@ func Test_tryDelegatePluginHelp_RefusesHTTPMethod(t *testing.T) {
 	profile := config.Profile{Language: "en", Mode: "AK", AccessKeyId: "x", AccessKeySecret: "y", RegionId: "cn-hangzhou"}
 	c := NewCommando(w, profile)
 
-	for _, method := range []string{"GET", "POST", "PUT", "DELETE"} {
+	for _, method := range []string{"GET", "POST", "PUT", "DELETE", "PATCH"} {
 		t.Run("HTTP method "+method, func(t *testing.T) {
 			delegated, err := c.tryDelegatePluginHelp(ctx, []string{"ecs", method, "/path"})
 			assert.False(t, delegated, "RESTful shape must not be delegated to plugin")

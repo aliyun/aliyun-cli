@@ -16,6 +16,7 @@ package engine
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -491,6 +492,35 @@ func TestBuilderOptionAndRenderingHelpers(t *testing.T) {
 	}
 	if _, _, err := dryRunBody(make(chan int), ""); err == nil {
 		t.Fatal("dryRunBody accepted channel")
+	}
+}
+
+func TestDryRunPreservesLongBodyAndRedaction(t *testing.T) {
+	text := strings.Repeat("流水线", 450) + "正文末尾"
+	for _, tc := range []struct{ body, want string }{
+		{"name=" + text + "&pipelineId=123", "name=" + text + "&pipelineId=123"},
+		{`{"content":"` + text + `","password":"secret-value"}`, `{"content":"` + text + `","password":"secr***"}`},
+	} {
+		for _, body := range []any{tc.body, []byte(tc.body)} {
+			value, _, err := dryRunBody(body, "raw")
+			if err != nil || value != tc.want {
+				t.Fatalf("dryRunBody(%T) lost body content or redaction: %v", body, err)
+			}
+			for _, jsonOutput := range []bool{false, true} {
+				var out bytes.Buffer
+				if err := renderDryRun(&out, "demo", &runtime.AssembledRequest{Body: body}, jsonOutput, false); err != nil {
+					t.Fatal(err)
+				}
+				if jsonOutput {
+					var decoded cliDryRunOutput
+					if err := json.Unmarshal(out.Bytes(), &decoded); err != nil || decoded.Body != tc.want {
+						t.Fatalf("JSON dry-run lost body content or redaction: %v", err)
+					}
+				} else if !strings.Contains(out.String(), tc.want) {
+					t.Fatal("text dry-run lost body content or redaction")
+				}
+			}
+		}
 	}
 }
 

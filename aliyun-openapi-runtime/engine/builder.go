@@ -704,7 +704,7 @@ func dryRunBody(body any, reqBodyType string) (value, format string, err error) 
 		if strings.EqualFold(format, "formData") {
 			format = "form"
 		}
-		return redact.MaskBody(data), format, nil
+		return redact.MaskBodyFull(data), format, nil
 	}
 	if data, ok := body.([]byte); ok {
 		format = reqBodyType
@@ -714,7 +714,7 @@ func dryRunBody(body any, reqBodyType string) (value, format string, err error) 
 		if strings.EqualFold(format, "formData") {
 			format = "form"
 		}
-		return redact.MaskBody(string(data)), format, nil
+		return redact.MaskBodyFull(string(data)), format, nil
 	}
 	b, err := json.Marshal(redact.MaskAny(body))
 	if err != nil {
@@ -800,9 +800,9 @@ func renderDryRun(w io.Writer, product string, req *runtime.AssembledRequest, js
 		switch body := req.Body.(type) {
 		case string:
 			// Raw --body/--body-file strings are sent as-is by the SDK.
-			fmt.Fprintf(w, "Body:\n  %s\n", redact.MaskBody(body))
+			fmt.Fprintf(w, "Body:\n  %s\n", redact.MaskBodyFull(body))
 		case []byte:
-			fmt.Fprintf(w, "Body:\n  %s\n", redact.MaskBody(string(body)))
+			fmt.Fprintf(w, "Body:\n  %s\n", redact.MaskBodyFull(string(body)))
 		default:
 			b, _ := json.Marshal(redact.MaskAny(req.Body))
 			fmt.Fprintf(w, "Body:\n  %s\n", string(b))

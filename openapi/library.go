@@ -185,7 +185,7 @@ func (a *Library) PrintProductUsage(productCode string, withApi bool) error {
 	if product.ApiStyle == "rpc" {
 		cli.Printf(a.writer, "\nUsage:\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ...\n", strings.ToLower(product.Code))
 	} else {
-		cli.Printf(a.writer, "\nUsage 1:\n  aliyun %s [GET|PUT|POST|DELETE] <PathPattern> --body \"...\" \n", strings.ToLower(product.Code))
+		cli.Printf(a.writer, "\nUsage 1:\n  aliyun %s [GET|PUT|POST|DELETE|PATCH] <PathPattern> --body \"...\" \n", strings.ToLower(product.Code))
 		cli.Printf(a.writer, "\nUsage 2 (For API with NO PARAMS in PathPattern only.):\n  aliyun %s <ApiName> --parameter1 value1 --parameter2 value2 ... --body \"...\"\n", strings.ToLower(product.Code))
 	}
 	productName := getProductDisplayName(product)

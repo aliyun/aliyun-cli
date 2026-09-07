@@ -397,6 +397,7 @@ func TestHostOwnsLegacyHelpCommand(t *testing.T) {
 	assert.False(t, c.hostOwnsLegacyHelpCommand([]string{"sts", "get-caller-identity"}), "kebab commands belong to the plugin chain")
 	assert.False(t, c.hostOwnsLegacyHelpCommand([]string{"cs", "GET", "/clusters"}), "HTTP verbs stay with the plugin (method+path exceeds the host Help model)")
 	assert.False(t, c.hostOwnsLegacyHelpCommand([]string{"cs", "get", "/clusters"}), "HTTP verbs are case-insensitive")
+	assert.False(t, c.hostOwnsLegacyHelpCommand([]string{"cs", "PATCH", "/clusters/1"}), "PATCH Help keeps the same ownership as other HTTP verbs")
 	assert.False(t, c.hostOwnsLegacyHelpCommand([]string{"sts", "--help"}), "product-level Help keeps plugin ownership")
 	assert.False(t, c.hostOwnsLegacyHelpCommand([]string{"demo", "CreateReport", "--help"}), "products unknown to the host stay plugin-owned")
 }
