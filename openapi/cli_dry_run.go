@@ -72,12 +72,12 @@ func buildCliDryRunFromInvoker(inv Invoker) *CliDryRunOutput {
 	}
 
 	if len(req.Content) > 0 {
-		out.Body = runtimeredact.MaskBody(string(req.Content))
+		out.Body = runtimeredact.MaskBodyFull(string(req.Content))
 		out.BodyFormat = "raw"
 	} else if len(req.FormParams) > 0 {
 		out.Query = mergeInto(out.Query, nil)
 		formJSON, _ := json.Marshal(req.FormParams)
-		out.Body = runtimeredact.MaskBody(string(formJSON))
+		out.Body = runtimeredact.MaskBodyFull(string(formJSON))
 		out.BodyFormat = "form"
 	}
 
@@ -148,7 +148,7 @@ func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
 	if oc.openapiRequest != nil && oc.openapiRequest.Body != nil {
 		bodyJSON, err := json.Marshal(oc.openapiRequest.Body)
 		if err == nil && string(bodyJSON) != "null" {
-			out.Body = runtimeredact.MaskBody(string(bodyJSON))
+			out.Body = runtimeredact.MaskBodyFull(string(bodyJSON))
 			// Reflect the request-body encoding resolved in Prepare/ProcessBody:
 			// RPC-style products send form fields (ReqBodyType=formData), which
 			// the classic dry-run reports as "form"; ROA keeps the JSON body.
@@ -182,7 +182,7 @@ func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
 
 	if oc.openapiRequest != nil && oc.openapiRequest.Body != nil {
 		if stream, ok := oc.openapiRequest.Body.([]byte); ok {
-			out.Body = runtimeredact.MaskBody(string(stream))
+			out.Body = runtimeredact.MaskBodyFull(string(stream))
 			if oc.openapiParams != nil && oc.openapiParams.ReqBodyType != nil {
 				out.BodyFormat = tea.StringValue(oc.openapiParams.ReqBodyType)
 			} else {
