@@ -287,11 +287,19 @@ func (m *Manager) fetchVerifiedPkgIndex(indexURL, cacheFile string, result *Inde
 	if i := strings.Index(indexURL, "/plugins"); i > 0 {
 		origin = indexURL[:i]
 	}
-	client := trust.NewClient(origin, policy.TrustDir, func(u string) ([]byte, error) {
+	fetch := func(u string) ([]byte, error) {
 		return m.fetchRemote(u)
-	})
-	client.Now = policy.Now
-	keys, keyErr := client.ResolveRoleKeys(trust.RolePlugins)
+	}
+	var keys []trust.VerifyKey
+	var keyErr error
+	plus := trust.NewPlusClient(policy.TrustDir, fetch)
+	plus.Now = policy.Now
+	keys, keyErr = plus.ResolveRoleKeys(trust.RolePlugins)
+	if keyErr != nil {
+		client := trust.NewClient(origin, policy.TrustDir, fetch)
+		client.Now = policy.Now
+		keys, keyErr = client.ResolveRoleKeys(trust.RolePlugins)
+	}
 	if keyErr != nil {
 		// Fall back to Phase-1 flat trust/root.json resolver for transition.
 		keys, keyErr = trust.ResolveVerifyKeys(trust.RolePlugins, func() ([]byte, error) {

@@ -1,5 +1,6 @@
-// Package trust implements Design A artifact authenticity for aliyun-cli:
-// builtin Root/Recovery anchors, versioned N.root.json chains, timestamp
-// freshness, detached Ed25519 signatures over plugin indexes / upgrade
-// manifests, and fail-closed verification for official sources.
+// Package trust implements artifact authenticity for aliyun-cli.
+//
+// Design A: builtin Root/Recovery, versioned N.root.json, timestamp, recovery patches.
+// Design B+: fixed Discovery for location + builtin Root for authenticity of
+// artifact-keys and the Root chain Discovery points to.
 package trust

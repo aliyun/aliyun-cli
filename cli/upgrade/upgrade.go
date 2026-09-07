@@ -314,7 +314,7 @@ func resolveUpgradeSourceFromManifest() (*upgradeSource, error) {
 		}
 	}
 
-	client := trust.NewClient(ossBaseURL, policy.TrustDir, func(u string) ([]byte, error) {
+	fetch := func(u string) ([]byte, error) {
 		r, e := httpClient.Get(u)
 		if e != nil {
 			return nil, e
@@ -324,21 +324,19 @@ func resolveUpgradeSourceFromManifest() (*upgradeSource, error) {
 			return nil, fmt.Errorf("status %d", r.StatusCode)
 		}
 		return io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	})
-	client.Now = policy.Now
-	keys, err := client.ResolveRoleKeys(trust.RoleUpgrade)
+	}
+	plus := trust.NewPlusClient(policy.TrustDir, fetch)
+	plus.Now = policy.Now
+	keys, err := plus.ResolveRoleKeys(trust.RoleUpgrade)
+	if err != nil {
+		client := trust.NewClient(ossBaseURL, policy.TrustDir, fetch)
+		client.Now = policy.Now
+		keys, err = client.ResolveRoleKeys(trust.RoleUpgrade)
+	}
 	if err != nil {
 		keys, err = trust.ResolveVerifyKeys(trust.RoleUpgrade, func() ([]byte, error) {
 			rootURL := strings.TrimSuffix(ossBaseURL, "/") + "/trust/root.json"
-			r, e := httpClient.Get(rootURL)
-			if e != nil {
-				return nil, e
-			}
-			defer r.Body.Close()
-			if r.StatusCode != http.StatusOK {
-				return nil, fmt.Errorf("status %d", r.StatusCode)
-			}
-			return io.ReadAll(io.LimitReader(r.Body, 1<<20))
+			return fetch(rootURL)
 		}, nil, policy, false)
 		if err != nil {
 			return nil, err
