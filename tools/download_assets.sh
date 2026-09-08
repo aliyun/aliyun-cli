@@ -1,23 +1,17 @@
 #!/usr/bin/env bash
+# Download every release asset, then write a fresh SHASUMS256.txt.
+# Checksum is committed only after the full set is present and hashed.
+# A non-zero status must stop upload_asset.sh and finish_release.sh.
+set -euo pipefail
 
-VERSION=$1
+VERSION=${1:-}
+if [[ -z "${VERSION}" ]]; then
+  echo "download_assets: version is required" >&2
+  exit 1
+fi
 
-LIST=(
-    "aliyun-cli-macosx-$VERSION-amd64.tgz"
-    "aliyun-cli-macosx-$VERSION-arm64.tgz"
-    "aliyun-cli-$VERSION.pkg"
-    "aliyun-cli-macosx-$VERSION-universal.tgz"
-    "aliyun-cli-linux-$VERSION-amd64.tgz"
-    "aliyun-cli-linux-$VERSION-arm64.tgz"
-    "aliyun-cli-windows-$VERSION-amd64.zip"
-)
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
+cd "${REPO_ROOT}"
 
-for filename in "${LIST[@]}"
-do
-    curl -fsSL -O \
-        -H "Authorization: Bearer $GITHUB_TOKEN" \
-        https://github.com/aliyun/aliyun-cli/releases/download/v"$VERSION"/"$filename"
-    shasum -a 256 "$filename" >> SHASUMS256.txt
-done
-
-cat ./SHASUMS256.txt
+exec go run ./tools/downloadassets/cmd/downloadassets -- "${VERSION}"
