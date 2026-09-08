@@ -65,6 +65,12 @@ var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*respons
 
 var runtimeTryDispatch = runtimehost.TryDispatch
 
+var runtimeDispatch = runtimehost.Dispatch
+
+var installPluginForCommand = func(c *Commando, ctx *cli.Context, commandName, productCode string) (string, error) {
+	return c.findAndInstallPlugin(ctx, commandName, productCode)
+}
+
 var agentErrorNormalizer = normalizeAgentError
 
 var agentErrorNormalizerWithSearch = normalizeAgentErrorWithSearch
@@ -538,21 +544,8 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			//   - not installed but the engine resolves it (baseline / user meta plugin) -> aliyun-openapi-runtime engine.
 			//     Products marked distribution=="go" are abstained by the engine so they still reach auto-install.
 			if installed {
-				if ptype, ok := plugin.InstalledPluginType(args[0]); ok && ptype == plugin.PluginTypeMeta {
-					if err := plugin.ValidatePluginCliVersion(args[0]); err != nil {
-						return err
-					}
-					// Meta plugins have no executable in which to register the package-level version command.
-					// Read it from the installed manifest instead of forwarding "version" to the OpenAPI runtime as an API name.
-					if apiOrMethod == "version" {
-						name, version, err := plugin.InstalledPluginPackageVersion(args[0])
-						if err != nil {
-							return err
-						}
-						cli.Printf(ctx.Stdout(), "%s %s\n", name, version)
-						return nil
-					}
-					return c.adaptEngineUnknownCommand(runtimehost.Dispatch(ctx, pluginArgs))
+				if handled, dispatchErr := c.dispatchInstalledMetaPlugin(ctx, args[0], apiOrMethod, pluginArgs); handled {
+					return dispatchErr
 				}
 			} else {
 				if validationErr := c.validateCanonicalRuntimeCommand(args, ctx); validationErr != nil {
@@ -575,7 +568,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				commandName := buildCommandName(args)
 				// fmt.Println("commandName", commandName, pluginArgs)
 
-				foundPluginName, err := c.findAndInstallPlugin(ctx, commandName, args[0])
+				foundPluginName, err := installPluginForCommand(c, ctx, commandName, args[0])
 				if err != nil {
 					return err
 				}
@@ -605,6 +598,12 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					return &InvalidProductOrPluginError{Code: args[0], library: c.library, plugins: plugins}
 				}
 				pluginName = foundPluginName
+
+				// Installation may have added a metadata-only plugin.
+				// Re-evaluate its type in the same invocation instead of falling through to the Go-plugin executor, which would look for a non-existent binary.
+				if handled, dispatchErr := c.dispatchInstalledMetaPlugin(ctx, args[0], apiOrMethod, pluginArgs); handled {
+					return dispatchErr
+				}
 			}
 
 			// Prepare config related env for plugin
@@ -831,6 +830,28 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		return cli.NewErrorWithTip(fmt.Errorf("too many arguments"),
 			"Use `aliyun --help` to show usage")
 	}
+}
+
+// dispatchInstalledMetaPlugin routes an installed metadata plugin through the in-process OpenAPI runtime.
+// It returns handled=false for Go plugins so the caller can continue to the external binary execution path.
+func (c *Commando) dispatchInstalledMetaPlugin(ctx *cli.Context, productCode, apiOrMethod string, pluginArgs []string) (bool, error) {
+	ptype, ok := plugin.InstalledPluginType(productCode)
+	if !ok || ptype != plugin.PluginTypeMeta {
+		return false, nil
+	}
+	if err := plugin.ValidatePluginCliVersion(productCode); err != nil {
+		return true, err
+	}
+	// Meta plugins have no executable in which to register the package-level version command. Read it from the installed manifest instead.
+	if apiOrMethod == "version" {
+		name, version, err := plugin.InstalledPluginPackageVersion(productCode)
+		if err != nil {
+			return true, err
+		}
+		cli.Printf(ctx.Stdout(), "%s %s\n", name, version)
+		return true, nil
+	}
+	return true, c.adaptEngineUnknownCommand(runtimeDispatch(ctx, pluginArgs))
 }
 
 func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api *canonicalmeta.API, method string, path string) error {

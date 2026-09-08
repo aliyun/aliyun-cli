@@ -2807,6 +2807,62 @@ func TestMain_UninstalledPluginAlwaysTriesBuiltInRuntime(t *testing.T) {
 	assert.ErrorIs(t, err, wantErr)
 }
 
+func TestMain_AutoInstalledMetaPluginDispatchesWithoutBinary(t *testing.T) {
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+	pluginRoot := filepath.Join(testHome, ".aliyun", "plugins")
+	assert.NoError(t, os.MkdirAll(pluginRoot, 0755))
+	assert.NoError(t, os.WriteFile(filepath.Join(pluginRoot, "manifest.json"), []byte(`{"plugins":{}}`), 0644))
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	repo, err := meta.MockLoadRepository(nil)
+	assert.NoError(t, err)
+	command := &Commando{library: &Library{builtinRepo: repo, writer: w}}
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	originalTryDispatch := runtimeTryDispatch
+	runtimeTryDispatch = func(_ *cli.Context, _ []string) (bool, error) {
+		return false, nil
+	}
+	t.Cleanup(func() { runtimeTryDispatch = originalTryDispatch })
+
+	originalInstall := installPluginForCommand
+	installPluginForCommand = func(_ *Commando, _ *cli.Context, commandName, productCode string) (string, error) {
+		assert.Equal(t, "bssopenapi create-instance", commandName)
+		assert.Equal(t, "bssopenapi", productCode)
+		pluginDir := filepath.Join(pluginRoot, "aliyun-cli-bssopenapi")
+		assert.NoError(t, os.MkdirAll(pluginDir, 0755))
+		manifest := fmt.Sprintf(`{"plugins":{"aliyun-cli-bssopenapi":{"name":"aliyun-cli-bssopenapi","version":"0.9.0","type":"meta","path":%q,"command":"bssopenapi"}}}`, pluginDir)
+		assert.NoError(t, os.WriteFile(filepath.Join(pluginRoot, "manifest.json"), []byte(manifest), 0644))
+		return "aliyun-cli-bssopenapi", nil
+	}
+	t.Cleanup(func() { installPluginForCommand = originalInstall })
+
+	wantErr := errors.New("metadata runtime invoked")
+	originalDispatch := runtimeDispatch
+	runtimeDispatch = func(_ *cli.Context, got []string) error {
+		assert.Equal(t, []string{"bssopenapi", "create-instance", "--product-code", "kms"}, got)
+		return wantErr
+	}
+	t.Cleanup(func() { runtimeDispatch = originalDispatch })
+
+	originalArgs := os.Args
+	t.Cleanup(func() { os.Args = originalArgs })
+	os.Args = []string{"aliyun", "bssopenapi", "create-instance", "--product-code", "kms"}
+
+	err = command.main(ctx, []string{"bssopenapi", "create-instance"})
+	assert.ErrorIs(t, err, wantErr)
+	assert.NotContains(t, err.Error(), "plugin binary")
+}
+
 func TestMain_InstalledGoPluginOverridesBuiltInRuntime(t *testing.T) {
 	testHome := t.TempDir()
 	cleanup := setTestHomeDir(t, testHome)
