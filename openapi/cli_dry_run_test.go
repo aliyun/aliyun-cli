@@ -206,7 +206,7 @@ func TestCliDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 		{
 			"form",
 			"name=" + text + "&password=" + secret,
-			"name=" + text + "&password=FAKE%2A%2A%2A",
+			"name=" + text + "&password=FAKE***",
 		},
 		{
 			"xml",
@@ -722,7 +722,7 @@ func TestProcessCliDryRunJson(t *testing.T) {
 func TestProcessCliDryRunRedactsTextBodyInStdoutAndStderr(t *testing.T) {
 	const secret = "FAKE_SECRET_123"
 	body := strings.Repeat("x", 1100) + "&password=" + secret
-	want := strings.Repeat("x", 1100) + "&password=FAKE%2A%2A%2A"
+	want := strings.Repeat("x", 1100) + "&password=FAKE***"
 
 	for _, jsonOutput := range []bool{false, true} {
 		name := "human"

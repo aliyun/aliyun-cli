@@ -40,7 +40,7 @@ func TestCSDryRunJSONRedactsRawPassword(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
 		t.Fatalf("invalid JSON output: %v; stdout: %s", err, &stdout)
 	}
-	if output.Method != "POST" || output.Pathname != "/clusters" || output.Body != "password=FAKE%2A%2A%2A" {
+	if output.Method != "POST" || output.Pathname != "/clusters" || output.Body != "password=FAKE***" {
 		t.Fatalf("unexpected dry-run output: %+v", output)
 	}
 	t.Logf("actual dry-run JSON: %s", &stdout)

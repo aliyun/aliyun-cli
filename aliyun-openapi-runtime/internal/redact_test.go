@@ -102,12 +102,14 @@ func TestMaskBodyTextFormats(t *testing.T) {
 		hints            []string
 	}{
 		{"empty", "", "", []string{"binary"}},
-		{"form", "name=visible&Password=" + secret, "name=visible&Password=FAKE%2A%2A%2A", []string{"formData"}},
-		{"encoded form keys", "%50assword=" + secret + "&Password=another-secret&name=%E4%B8%AD", "%50assword=FAKE%2A%2A%2A&Password=anot%2A%2A%2A&name=%E4%B8%AD", nil},
+		{"form", "name=visible&Password=" + secret, "name=visible&Password=FAKE***", []string{"formData"}},
+		{"encoded form keys", "%50assword=" + secret + "&Password=another-secret&name=%E4%B8%AD", "%50assword=FAKE***&Password=anot***&name=%E4%B8%AD", nil},
+		{"form escaped delimiters", "password=a%26%3D%2BSECRET&name=alice", "password=a%26%3D%2B***&name=alice", []string{"formData"}},
+		{"form empty and short secrets", "password=&token=x&name=alice", "password=&token=***&name=alice", []string{"formData"}},
 		{"raw lines", "name: visible\nPassword: " + secret + "\nregion: cn-hangzhou", "name: visible\nPassword: ***\nregion: cn-hangzhou", []string{"raw"}},
 		{"raw assignments", "name=visible, password=" + secret + ", region=cn-hangzhou", "name=visible, password=***, region=cn-hangzhou", []string{"raw"}},
 		{"raw space separated fields", "name=visible password=" + secret, "name=visible password=***", []string{"raw"}},
-		{"form literal newline", "%50assword=" + secret + "\ncontinued&name=visible", "%50assword=FAKE%2A%2A%2A&name=visible", []string{"formData"}},
+		{"form literal newline", "%50assword=" + secret + "\ncontinued&name=visible", "%50assword=FAKE***&name=visible", []string{"formData"}},
 		{"raw quoted values", `name: visible, token: "` + secret + `, with spaces", region: cn-hangzhou`, `name: visible, token: ***, region: cn-hangzhou`, nil},
 		{"raw quoted assignment", `name=visible password="` + secret + `&continued-secret"`, `name=visible password=***`, []string{"raw"}},
 		{"plain text", "ordinary text 正文末尾", "ordinary text 正文末尾", []string{"raw"}},
@@ -133,15 +135,15 @@ func TestMaskBodyNestedForm(t *testing.T) {
 		t.Run(key, func(t *testing.T) {
 			body := key + "=" + secret + "&user.name=alice"
 			got := MaskBodyFull(body, "formData")
-			if want := key + "=FAKE%2A%2A%2A&user.name=alice"; got != want {
+			if want := key + "=FAKE***&user.name=alice"; got != want {
 				t.Fatalf("got %q, want %q", got, want)
 			}
 		})
 	}
 	for _, tc := range []struct{ name, body, want string }{
-		{"embedded JSON", "config=" + url.QueryEscape(nested), "config=" + url.QueryEscape(maskedNested)},
-		{"embedded JSON array", "config=" + url.QueryEscape("["+nested+"]"), "config=" + url.QueryEscape("["+maskedNested+"]")},
-		{"repeated JSON fields", "config=" + url.QueryEscape(nested) + "&config=" + url.QueryEscape(nested), "config=" + url.QueryEscape(maskedNested) + "&config=" + url.QueryEscape(maskedNested)},
+		{"embedded JSON", "config=" + url.QueryEscape(nested), "config=" + strings.ReplaceAll(url.QueryEscape(maskedNested), "%2A", "*")},
+		{"embedded JSON array", "config=" + url.QueryEscape("["+nested+"]"), "config=" + strings.ReplaceAll(url.QueryEscape("["+maskedNested+"]"), "%2A", "*")},
+		{"repeated JSON fields", "config=" + url.QueryEscape(nested) + "&config=" + url.QueryEscape(nested), "config=" + strings.ReplaceAll(url.QueryEscape(maskedNested), "%2A", "*") + "&config=" + strings.ReplaceAll(url.QueryEscape(maskedNested), "%2A", "*")},
 		{"ordinary encoded value", "name=%E4%B8%AD&note=hello%20world", "name=%E4%B8%AD&note=hello%20world"},
 		{"non-sensitive JSON spelling", "config=" + url.QueryEscape(`{ "name": "alice", "id": 1 }`), "config=" + url.QueryEscape(`{ "name": "alice", "id": 1 }`)},
 		{"flat form map", `{"user.password.1":"FAKE_SECRET_123","user.name":"alice"}`, `{"user.name":"alice","user.password.1":"FAKE***"}`},

@@ -187,11 +187,11 @@ func MaskBodyFull(body string, formats ...string) string {
 			}
 			if found && isSensitivePath(name) {
 				decoded, _ := url.QueryUnescape(value)
-				parts[i] = key + "=" + url.QueryEscape(MaskValue(decoded))
+				parts[i] = key + "=" + strings.ReplaceAll(url.QueryEscape(MaskValue(decoded)), "%2A", "*")
 			} else {
 				decoded, _ := url.QueryUnescape(value)
 				if masked := maskEmbeddedJSON(decoded); found && masked != decoded {
-					parts[i] = key + "=" + url.QueryEscape(masked)
+					parts[i] = key + "=" + strings.ReplaceAll(url.QueryEscape(masked), "%2A", "*")
 				} else {
 					parts[i] = maskTextFields(part)
 				}

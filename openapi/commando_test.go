@@ -1576,7 +1576,7 @@ func TestProcessApiInvoke_DryRunJSON(t *testing.T) {
 	assert.Equal(t, "GetProject", m.Action)
 	assert.Equal(t, "2020-03-31", m.Version)
 	assert.Equal(t, "json", m.BodyFormat)
-	assert.Equal(t, strings.Repeat("x", 1100)+"&password=FAKE%2A%2A%2A", m.Body)
+	assert.Equal(t, strings.Repeat("x", 1100)+"&password=FAKE***", m.Body)
 	assert.NotContains(t, stdout.String(), secret)
 	assert.NotContains(t, stderr.String(), secret)
 	assert.Empty(t, stderr.String())

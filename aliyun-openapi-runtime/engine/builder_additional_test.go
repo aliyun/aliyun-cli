@@ -507,7 +507,7 @@ func TestDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 		{
 			"form",
 			"name=" + text + "&password=" + secret,
-			"name=" + text + "&password=FAKE%2A%2A%2A",
+			"name=" + text + "&password=FAKE***",
 		},
 		{
 			"xml",
