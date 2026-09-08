@@ -127,6 +127,24 @@ func TestMaskBodyTextFormats(t *testing.T) {
 	}
 }
 
+func TestMaskBodyFormKeepsOriginalStarsEncoded(t *testing.T) {
+	for _, tc := range []struct{ name, body, want string }{
+		{"password prefix", "password=*abcSECRET&note=***", "password=%2Aabc***&note=%2A%2A%2A"},
+		{"star-only prefix", "password=****SECRET", "password=%2A%2A%2A%2A***"},
+		{"already encoded stars", "password=%2AabcSECRET&note=%2A%2A%2A", "password=%2Aabc***&note=%2A%2A%2A"},
+		{"ordinary field", "note=***", "note=%2A%2A%2A"},
+		{"embedded JSON", "config=" + url.QueryEscape(`{"note":"***","password":"*abcSECRET"}`), "config=%7B%22note%22%3A%22%2A%2A%2A%22%2C%22password%22%3A%22%2Aabc***%22%7D"},
+		{"embedded JSON array", "config=" + url.QueryEscape(`[{"note":"*","token":123}]`), "config=%5B%7B%22note%22%3A%22%2A%22%2C%22token%22%3A%22***%22%7D%5D"},
+		{"nested JSON string and marker collision", "config=" + url.QueryEscape(`{"inner":"{\"note\":\"\\u005f_REDACTED__***\",\"password\":\"*abcSECRET\"}"}`), "config=%7B%22inner%22%3A%22%7B%5C%22note%5C%22%3A%5C%22__REDACTED__%2A%2A%2A%5C%22%2C%5C%22password%5C%22%3A%5C%22%2Aabc***%5C%22%7D%22%7D"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := MaskBodyFull(tc.body, "formData"); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestMaskBodyNestedForm(t *testing.T) {
 	const secret = "FAKE_SECRET_123"
 	const nested = `{"name":"alice","password":"FAKE_SECRET_123","id":3460000290000487710}`
