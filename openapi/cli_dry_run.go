@@ -72,16 +72,12 @@ func buildCliDryRunFromInvoker(inv Invoker) *CliDryRunOutput {
 	}
 
 	if len(req.Content) > 0 {
+		out.Body = runtimeredact.MaskBodyFull(string(req.Content), dryRunContentType(req.Headers))
 		out.BodyFormat = "raw"
-		out.Body = runtimeredact.MaskBodyForDryRun(
-			string(req.Content), out.BodyFormat, dryRunHeaderValue(req.Headers, "Content-Type"),
-		)
 	} else if len(req.FormParams) > 0 {
 		out.Query = mergeInto(out.Query, nil)
 		formJSON, _ := json.Marshal(req.FormParams)
-		// FormParams are structured values, so their JSON projection can be
-		// redacted by key even though the wire encoding is form data.
-		out.Body = runtimeredact.MaskBodyForDryRun(string(formJSON))
+		out.Body = runtimeredact.MaskBodyFull(string(formJSON))
 		out.BodyFormat = "form"
 	}
 
@@ -150,25 +146,35 @@ func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
 	}
 
 	if oc.openapiRequest != nil && oc.openapiRequest.Body != nil {
-		if stream, ok := oc.openapiRequest.Body.([]byte); ok {
+		body := oc.openapiRequest.Body
+		hints := []string{dryRunContentType(out.Headers)}
+		if oc.openapiParams != nil {
+			hints = append(hints, tea.StringValue(oc.openapiParams.ReqBodyType))
+		}
+		if oc.api != nil && oc.api.Operation != nil {
+			hints = append(hints, oc.api.Operation.ReqBodyType, oc.api.Operation.ContentType)
+		}
+		switch value := body.(type) {
+		case string:
+			out.Body = runtimeredact.MaskBodyFull(value, hints...)
+			out.BodyFormat = "raw"
+		case []byte:
+			out.Body = runtimeredact.MaskBodyFull(string(value), hints...)
 			out.BodyFormat = "binary"
-			if oc.openapiParams != nil && oc.openapiParams.ReqBodyType != nil {
-				out.BodyFormat = tea.StringValue(oc.openapiParams.ReqBodyType)
-			}
-			out.Body = runtimeredact.MaskBodyForDryRun(
-				string(stream), out.BodyFormat, dryRunHeaderValue(out.Headers, "Content-Type"),
-			)
-		} else {
-			bodyJSON, err := json.Marshal(oc.openapiRequest.Body)
+		default:
+			bodyJSON, err := json.Marshal(body)
 			if err == nil && string(bodyJSON) != "null" {
-				out.Body = runtimeredact.MaskBodyForDryRun(string(bodyJSON))
-				// Reflect the request-body encoding resolved in Prepare/ProcessBody:
-				// RPC-style products send form fields (ReqBodyType=formData), which
-				// the classic dry-run reports as "form"; ROA keeps the JSON body.
-				out.BodyFormat = "json"
-				if oc.openapiParams != nil && tea.StringValue(oc.openapiParams.ReqBodyType) == "formData" {
-					out.BodyFormat = "form"
-				}
+				out.Body = runtimeredact.MaskBodyFull(string(bodyJSON), hints...)
+			}
+			// Reflect the request-body encoding resolved in Prepare/ProcessBody:
+			// RPC-style products send form fields (ReqBodyType=formData), which
+			// the classic dry-run reports as "form"; ROA keeps the JSON body.
+			out.BodyFormat = "json"
+		}
+		if oc.openapiParams != nil && tea.StringValue(oc.openapiParams.ReqBodyType) != "" {
+			out.BodyFormat = tea.StringValue(oc.openapiParams.ReqBodyType)
+			if out.BodyFormat == "formData" {
+				out.BodyFormat = "form"
 			}
 		}
 	}
@@ -197,9 +203,9 @@ func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
 	return out
 }
 
-func dryRunHeaderValue(headers map[string]string, name string) string {
+func dryRunContentType(headers map[string]string) string {
 	for key, value := range headers {
-		if strings.EqualFold(key, name) {
+		if strings.EqualFold(key, "Content-Type") {
 			return value
 		}
 	}

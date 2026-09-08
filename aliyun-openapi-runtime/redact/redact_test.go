@@ -29,11 +29,11 @@ func TestPublicRedactionContract(t *testing.T) {
 	if got := MaskBody(`{"password":"secret-value"}`); got != `{"password":"secr***"}` {
 		t.Fatalf("MaskBody = %q", got)
 	}
-	if got := MaskBodyFull("password=secret-value"); got != "[body omitted: 21 bytes]" {
+	if got := MaskBodyFull("password=secret-value"); got != "password=secr%2A%2A%2A" {
 		t.Fatalf("MaskBodyFull = %q", got)
 	}
-	if got := MaskBodyForDryRun(`{"name":"visible"}`, "binary"); got != "[body omitted: 18 bytes]" {
-		t.Fatalf("MaskBodyForDryRun = %q", got)
+	if got := MaskBodyFull(`{"name":"visible"}`, "binary"); got != "[body omitted: 18 bytes]" {
+		t.Fatalf("MaskBodyFull = %q", got)
 	}
 	masked := MaskAny(map[string]any{"token": "secret-value"}).(map[string]any)
 	if masked["token"] != "secr***" {

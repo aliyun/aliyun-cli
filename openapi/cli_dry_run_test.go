@@ -195,7 +195,7 @@ func TestBuildCliDryRunFromInvoker_MasksPathSecret(t *testing.T) {
 	assert.NotContains(t, out.Pathname, "path-secret-value")
 }
 
-func TestCliDryRunOmitsNonJSONAndPreservesLongRedactedJSON(t *testing.T) {
+func TestCliDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 	const secret = "FAKE_SECRET_123"
 	text := strings.Repeat("流水线", 450) + "正文末尾"
 	for _, tc := range []struct {
@@ -206,13 +206,14 @@ func TestCliDryRunOmitsNonJSONAndPreservesLongRedactedJSON(t *testing.T) {
 		{
 			"form",
 			"name=" + text + "&password=" + secret,
-			fmt.Sprintf("[body omitted: %d bytes]", len("name="+text+"&password="+secret)),
+			"name=" + text + "&password=FAKE%2A%2A%2A",
 		},
 		{
 			"xml",
 			"<Name>" + text + "</Name><Password>" + secret + "</Password>",
 			fmt.Sprintf("[body omitted: %d bytes]", len("<Name>"+text+"</Name><Password>"+secret+"</Password>")),
 		},
+		{"raw", "name: " + text + "\npassword: " + secret, "name: " + text + "\npassword: ***"},
 		{
 			"json",
 			`{"content":"` + text + `","password":"` + secret + `"}`,
@@ -228,7 +229,8 @@ func TestCliDryRunOmitsNonJSONAndPreservesLongRedactedJSON(t *testing.T) {
 				openapiRequest: &openapiutil.OpenApiRequest{Body: stream},
 				openapiParams:  &openapiClient.Params{ReqBodyType: tea.String("json")},
 			}})
-			for _, out := range []*CliDryRunOutput{classic, openapi} {
+			textBody := buildCliDryRunFromOpenapi(&OpenapiContext{HttpContext: &HttpContext{openapiRequest: &openapiutil.OpenApiRequest{Body: tc.body}}})
+			for _, out := range []*CliDryRunOutput{classic, openapi, textBody} {
 				assert.Equal(t, tc.want, out.Body)
 				human := formatCliDryRunHuman(out)
 				assert.Contains(t, human, tc.want)
@@ -293,6 +295,37 @@ func TestBuildCliDryRunFromInvoker_WithFormParams(t *testing.T) {
 	assert.Contains(t, out.Body, "ecs.g6.large")
 	assert.Contains(t, out.Body, `"Password":"form***"`)
 	assert.NotContains(t, out.Body, "form-secret-value")
+}
+
+func TestCliDryRunNestedForm(t *testing.T) {
+	const secret = "FAKE_SECRET_123"
+	fields := map[string]string{
+		"user.password.1": secret,
+		"user.2.password": secret,
+		"user.name":       "alice",
+		"config":          `{"name":"alice","password":"FAKE_SECRET_123"}`,
+	}
+	req := requests.NewCommonRequest()
+	req.FormParams = fields
+	classic := buildCliDryRunFromInvoker(&RestfulInvoker{BasicInvoker: &BasicInvoker{request: req}})
+	oc := &OpenapiContext{HttpContext: &HttpContext{
+		openapiRequest: &openapiutil.OpenApiRequest{Body: fields},
+		openapiParams:  &openapiClient.Params{ReqBodyType: tea.String("formData")},
+	}}
+	for _, out := range []*CliDryRunOutput{classic, buildCliDryRunFromOpenapi(oc)} {
+		var body map[string]string
+		assert.NoError(t, json.Unmarshal([]byte(out.Body), &body))
+		assert.Equal(t, "FAKE***", body["user.password.1"])
+		assert.Equal(t, "FAKE***", body["user.2.password"])
+		assert.Equal(t, "alice", body["user.name"])
+		assert.Equal(t, `{"name":"alice","password":"FAKE***"}`, body["config"])
+		assert.NotContains(t, formatCliDryRunHuman(out), secret)
+		encoded, err := marshalCliDryRunOutput(out)
+		assert.NoError(t, err)
+		assert.NotContains(t, encoded, secret)
+	}
+	assert.Equal(t, secret, fields["user.password.1"])
+	assert.Equal(t, `{"name":"alice","password":"FAKE_SECRET_123"}`, fields["config"])
 }
 
 func TestBuildCliDryRunFromOpenapi(t *testing.T) {
@@ -686,10 +719,10 @@ func TestProcessCliDryRunJson(t *testing.T) {
 	assert.Equal(t, "ecs.cn-hangzhou.aliyuncs.com", parsed.Endpoint)
 }
 
-func TestProcessCliDryRunOmitsNonJSONBodyFromStdoutAndStderr(t *testing.T) {
+func TestProcessCliDryRunRedactsTextBodyInStdoutAndStderr(t *testing.T) {
 	const secret = "FAKE_SECRET_123"
 	body := strings.Repeat("x", 1100) + "&password=" + secret
-	want := fmt.Sprintf("[body omitted: %d bytes]", len(body))
+	want := strings.Repeat("x", 1100) + "&password=FAKE%2A%2A%2A"
 
 	for _, jsonOutput := range []bool{false, true} {
 		name := "human"
@@ -716,7 +749,13 @@ func TestProcessCliDryRunOmitsNonJSONBodyFromStdoutAndStderr(t *testing.T) {
 				err = processCliDryRun(ctx, invoker)
 			}
 			assert.NoError(t, err)
-			assert.Contains(t, stdout.String(), want)
+			if jsonOutput {
+				var decoded CliDryRunOutput
+				assert.NoError(t, json.Unmarshal(stdout.Bytes(), &decoded))
+				assert.Equal(t, want, decoded.Body)
+			} else {
+				assert.Contains(t, stdout.String(), want)
+			}
 			assert.NotContains(t, stdout.String(), secret)
 			assert.NotContains(t, stderr.String(), secret)
 			assert.Empty(t, stderr.String())
@@ -1355,5 +1394,34 @@ func newOpenapiParams(method, pathname, action, version string) *openapiClient.P
 		Pathname: tea.String(pathname),
 		Action:   tea.String(action),
 		Version:  tea.String(version),
+	}
+}
+
+func TestCliDryRunExplicitContentTypes(t *testing.T) {
+	const body = `<Name>visible</Name><Password>FAKE_SECRET_123</Password>`
+	for _, tc := range []struct{ contentType, want string }{
+		{"application/xml", fmt.Sprintf("[body omitted: %d bytes]", len(body))},
+		{"application/octet-stream", fmt.Sprintf("[body omitted: %d bytes]", len(body))},
+		{"application/x-custom-format", fmt.Sprintf("[body omitted: %d bytes]", len(body))},
+	} {
+		t.Run(tc.contentType, func(t *testing.T) {
+			req := requests.NewCommonRequest()
+			req.Content = []byte(body)
+			req.Headers["cOnTeNt-TyPe"] = tc.contentType
+			classic := buildCliDryRunFromInvoker(&RestfulInvoker{BasicInvoker: &BasicInvoker{request: req}})
+			oc := &OpenapiContext{
+				HttpContext: &HttpContext{openapiRequest: &openapiutil.OpenApiRequest{Body: []byte(body)}},
+				api:         &canonicalmeta.API{Operation: &canonicalmeta.Operation{ContentType: tc.contentType}},
+			}
+			for _, out := range []*CliDryRunOutput{classic, buildCliDryRunFromOpenapi(oc)} {
+				assert.Equal(t, tc.want, out.Body)
+				assert.NotContains(t, formatCliDryRunHuman(out), "FAKE_SECRET_123")
+				encoded, err := marshalCliDryRunOutput(out)
+				assert.NoError(t, err)
+				assert.NotContains(t, encoded, "FAKE_SECRET_123")
+			}
+			assert.Equal(t, body, string(req.Content))
+			assert.Equal(t, body, string(oc.openapiRequest.Body.([]byte)))
+		})
 	}
 }

@@ -709,25 +709,21 @@ func dryRunBody(body any, reqBodyType string, formatHints ...string) (value, for
 	if len(formatHints) > 0 {
 		declaredFormat = formatHints[0]
 	}
-	rawFormats := append([]string{reqBodyType}, formatHints...)
+	formats := append([]string{reqBodyType}, formatHints...)
 	if data, ok := body.(string); ok {
 		format = dryRunBodyFormat(reqBodyType, declaredFormat, "raw")
-		return redact.MaskBodyForDryRun(data, rawFormats...), format, nil
+		return redact.MaskBodyFull(data, formats...), format, nil
 	}
 	if data, ok := body.([]byte); ok {
 		format = dryRunBodyFormat(reqBodyType, declaredFormat, "binary")
-		return redact.MaskBodyForDryRun(string(data), rawFormats...), format, nil
+		return redact.MaskBodyFull(string(data), formats...), format, nil
 	}
 	b, err := json.Marshal(body)
 	if err != nil {
 		return "", "", err
 	}
-	structuredFormats := []string{reqBodyType}
-	if declaredFormat != "" {
-		structuredFormats = append(structuredFormats, declaredFormat)
-	}
 	format = dryRunBodyFormat(reqBodyType, declaredFormat, "json")
-	return redact.MaskBodyForDryRun(string(b), structuredFormats...), format, nil
+	return redact.MaskBodyFull(string(b), formats...), format, nil
 }
 
 func dryRunBodyFormat(reqBodyType, declaredFormat, fallback string) string {
@@ -789,11 +785,11 @@ func renderDryRun(w io.Writer, product string, req *runtime.AssembledRequest, js
 	if req == nil {
 		return fmt.Errorf("dry-run produced no request")
 	}
+	output, err := buildCliDryRunOutput(product, req)
+	if err != nil {
+		return err
+	}
 	if jsonMeta {
-		output, err := buildCliDryRunOutput(product, req)
-		if err != nil {
-			return err
-		}
 		b, err := json.Marshal(output)
 		if err != nil {
 			return err
@@ -824,17 +820,7 @@ func renderDryRun(w io.Writer, product string, req *runtime.AssembledRequest, js
 	printSortedKV(w, "Headers", req.Headers)
 	printSortedKV(w, "Query Parameters", req.Query)
 	if req.Body != nil {
-		body, _, err := dryRunBody(
-			req.Body,
-			req.ReqBodyType,
-			req.DeclaredReqBodyType,
-			req.DeclaredContentType,
-			dryRunHeaderValue(req.Headers, "Content-Type"),
-		)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(w, "Body:\n  %s\n", body)
+		fmt.Fprintf(w, "Body:\n  %s\n", output.Body)
 	}
 	fmt.Fprintf(w, "%s\nRequest NOT sent (dry-run mode)\n%s\n", bar, bar)
 	fmt.Fprintln(w, "{")

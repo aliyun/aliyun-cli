@@ -17,6 +17,7 @@ package internal
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -94,67 +95,182 @@ func TestMaskBodyMasksBeforeTruncating(t *testing.T) {
 	}
 }
 
-func TestMaskBodyFullOmitsNonJSON(t *testing.T) {
+func TestMaskBodyTextFormats(t *testing.T) {
 	const secret = "FAKE_SECRET_123"
-	cases := map[string]string{
-		"form":        "password=" + secret + "&name=test",
-		"xml":         "<Password>" + secret + "</Password>",
-		"raw":         "prefix:" + secret,
-		"long-tail":   strings.Repeat("x", 1100) + secret,
-		"binary":      string(append([]byte{0x00, 0xff, 0x01}, []byte(secret)...)),
-		"json-prefix": "payload=" + `{"password":"` + secret + `"}`,
-	}
-
-	for name, input := range cases {
-		t.Run(name, func(t *testing.T) {
-			want := fmt.Sprintf("[body omitted: %d bytes]", len(input))
-			if got := MaskBodyFull(input); got != want {
-				t.Fatalf("MaskBodyFull() = %q, want %q", got, want)
+	for _, tc := range []struct {
+		name, body, want string
+		hints            []string
+	}{
+		{"empty", "", "", []string{"binary"}},
+		{"form", "name=visible&Password=" + secret, "name=visible&Password=FAKE%2A%2A%2A", []string{"formData"}},
+		{"encoded form keys", "%50assword=" + secret + "&Password=another-secret&name=%E4%B8%AD", "%50assword=FAKE%2A%2A%2A&Password=anot%2A%2A%2A&name=%E4%B8%AD", nil},
+		{"raw lines", "name: visible\nPassword: " + secret + "\nregion: cn-hangzhou", "name: visible\nPassword: ***\nregion: cn-hangzhou", []string{"raw"}},
+		{"raw assignments", "name=visible, password=" + secret + ", region=cn-hangzhou", "name=visible, password=***, region=cn-hangzhou", []string{"raw"}},
+		{"raw space separated fields", "name=visible password=" + secret, "name=visible password=***", []string{"raw"}},
+		{"form literal newline", "%50assword=" + secret + "\ncontinued&name=visible", "%50assword=FAKE%2A%2A%2A&name=visible", []string{"formData"}},
+		{"raw quoted values", `name: visible, token: "` + secret + `, with spaces", region: cn-hangzhou`, `name: visible, token: ***, region: cn-hangzhou`, nil},
+		{"raw quoted assignment", `name=visible password="` + secret + `&continued-secret"`, `name=visible password=***`, []string{"raw"}},
+		{"plain text", "ordinary text 正文末尾", "ordinary text 正文末尾", []string{"raw"}},
+		{"JSON without declaration", `{"name":"visible","password":"` + secret + `"}`, `{"name":"visible","password":"FAKE***"}`, nil},
+		{"JSON with raw declaration", `{"name":"visible","password":"` + secret + `"}`, `{"name":"visible","password":"FAKE***"}`, []string{"raw"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := MaskBodyFull(tc.body, tc.hints...); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+			if got := MaskBody(tc.body); strings.Contains(got, secret) {
+				t.Errorf("log body leaked secret: %q", got)
 			}
 		})
 	}
 }
 
-func TestMaskBodyForDryRunHonorsOpaqueFormat(t *testing.T) {
+func TestMaskBodyNestedForm(t *testing.T) {
+	const secret = "FAKE_SECRET_123"
+	const nested = `{"name":"alice","password":"FAKE_SECRET_123","id":3460000290000487710}`
+	const maskedNested = `{"id":3460000290000487710,"name":"alice","password":"FAKE***"}`
+	for _, key := range []string{"user.password", "user.password.1", "user.password.2", "user.1.password", "user[password]", "user[1][password]", "user.%70assword.1"} {
+		t.Run(key, func(t *testing.T) {
+			body := key + "=" + secret + "&user.name=alice"
+			got := MaskBodyFull(body, "formData")
+			if want := key + "=FAKE%2A%2A%2A&user.name=alice"; got != want {
+				t.Fatalf("got %q, want %q", got, want)
+			}
+		})
+	}
+	for _, tc := range []struct{ name, body, want string }{
+		{"embedded JSON", "config=" + url.QueryEscape(nested), "config=" + url.QueryEscape(maskedNested)},
+		{"embedded JSON array", "config=" + url.QueryEscape("["+nested+"]"), "config=" + url.QueryEscape("["+maskedNested+"]")},
+		{"repeated JSON fields", "config=" + url.QueryEscape(nested) + "&config=" + url.QueryEscape(nested), "config=" + url.QueryEscape(maskedNested) + "&config=" + url.QueryEscape(maskedNested)},
+		{"ordinary encoded value", "name=%E4%B8%AD&note=hello%20world", "name=%E4%B8%AD&note=hello%20world"},
+		{"non-sensitive JSON spelling", "config=" + url.QueryEscape(`{ "name": "alice", "id": 1 }`), "config=" + url.QueryEscape(`{ "name": "alice", "id": 1 }`)},
+		{"flat form map", `{"user.password.1":"FAKE_SECRET_123","user.name":"alice"}`, `{"user.name":"alice","user.password.1":"FAKE***"}`},
+		{"non-sensitive similar names", "user.passwordHint=visible&tokenizer.1=visible", "user.passwordHint=visible&tokenizer.1=visible"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := MaskBodyFull(tc.body, "formData"); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+	// ParamStyle=json stores JSON inside a string in the form map.
+	body, _ := json.Marshal(map[string]any{"config": nested})
+	got := MaskBodyFull(string(body), "formData")
+	var decoded map[string]string
+	if err := json.Unmarshal([]byte(got), &decoded); err != nil || decoded["config"] != maskedNested {
+		t.Fatalf("JSON string field = %s, error = %v", got, err)
+	}
+	// A JSON-valued form field can itself contain another JSON string field.
+	inner, _ := json.Marshal(map[string]string{"inner": nested})
+	body = []byte("config=" + url.QueryEscape(string(inner)))
+	form, err := url.ParseQuery(MaskBodyFull(string(body), "formData"))
+	if err != nil || json.Unmarshal([]byte(form.Get("config")), &decoded) != nil || decoded["inner"] != maskedNested {
+		t.Fatalf("nested JSON string field = %v, error = %v", form, err)
+	}
+	// Damaged nested JSON must not escape via a non-sensitive outer field.
+	broken := `{"password":"FAKE_SECRET_123`
+	body = []byte("config=" + url.QueryEscape(broken) + "&name=alice")
+	if got := MaskBodyFull(string(body), "formData"); strings.Contains(got, secret) || !strings.Contains(got, "name=alice") {
+		t.Fatalf("unsafe malformed JSON value: %s", got)
+	}
+}
+
+func TestMaskBodyFullOmitsXML(t *testing.T) {
+	for _, body := range []string{
+		`<Request><Password>FAKE_SECRET_123</Password></Request>`,
+		" \n<?xml version=\"1.0\"?><credentials><User>中文</User><Password>FAKE_SECRET_123</Password></credentials>",
+		`<Request><Password>FAKE_SECRET_123</Request>`,
+	} {
+		for _, format := range []string{"", "raw", "application/xml"} {
+			want := fmt.Sprintf("[body omitted: %d bytes]", len(body))
+			if got := MaskBodyFull(body, format); got != want {
+				t.Errorf("MaskBodyFull(%q, %q) = %q, want %q", body, format, got, want)
+			}
+		}
+	}
+}
+
+func TestMaskBodyUnsafeFormats(t *testing.T) {
+	for _, body := range []string{
+		`{"password":"FAKE_SECRET_123`,
+		`%50assword=FAKE_SECRET_123&name=%zz`,
+		"password: \"FAKE_SECRET_123\ncontinued-secret",
+		"password:\n  FAKE_SECRET_123",
+	} {
+		if got, want := MaskBodyFull(body), fmt.Sprintf("[body redacted: %d bytes]", len(body)); got != want {
+			t.Errorf("malformed text: got %q, want %q", got, want)
+		}
+	}
+	for _, tc := range []struct{ body, format string }{
+		{"\x00FAKE_SECRET_123", "raw"},
+		{"\xffFAKE_SECRET_123", ""},
+		{`{"password":"FAKE_SECRET_123"}`, "binary"},
+		{"Password=FAKE_SECRET_123", "Application/Octet-Stream; charset=utf-8"},
+	} {
+		if got, want := MaskBodyFull(tc.body, tc.format), fmt.Sprintf("[body omitted: %d bytes]", len(tc.body)); got != want {
+			t.Errorf("binary: got %q, want %q", got, want)
+		}
+	}
+}
+
+func TestMaskBodyFullOmitsUnsupportedFormats(t *testing.T) {
 	const body = `{"password":"FAKE_SECRET_123"}`
 	for _, format := range []string{
 		"byte",
 		"binary",
 		"application/octet-stream",
 		"application/x-protobuf",
-		"application/xml; charset=utf-8",
-		"application/example+xml",
-		"multipart/form-data; boundary=example",
-		"application/x-www-form-urlencoded",
-		"text/plain",
 		"application/pdf",
 		"application/zip",
 		"application/cbor",
 		"application/msgpack",
+		"application/x-custom-format",
+		" FutureFormat ; version=2",
 		"yaml",
+		"text/yaml",
+		"text/csv",
+		"multipart/form-data; boundary=example",
+		"image/png",
+		"audio/ogg",
+		"video/webm",
+		"not-a-media-type+json",
+		"text/plain",
+		"text/xml",
+		"application/xml; charset=utf-8",
+		"text",
+		"xml",
+		"application/example+xml; charset=utf-8",
+		"image/svg+xml",
 	} {
 		t.Run(format, func(t *testing.T) {
 			want := fmt.Sprintf("[body omitted: %d bytes]", len(body))
-			if got := MaskBodyForDryRun(body, format); got != want {
-				t.Fatalf("MaskBodyForDryRun(%q) = %q, want %q", format, got, want)
+			for _, hints := range [][]string{{format}, {"json", format}, {format, "application/json"}} {
+				if got := MaskBodyFull(body, hints...); got != want {
+					t.Fatalf("MaskBodyFull(%q) = %q, want %q", hints, got, want)
+				}
 			}
 		})
 	}
 }
 
-func TestMaskBodyForDryRunAllowsDeclaredJSONAndRawJSON(t *testing.T) {
+func TestMaskBodyFullAllowsSupportedTextFormats(t *testing.T) {
 	const body = `{"password":"FAKE_SECRET_123","name":"visible"}`
 	for _, format := range []string{
 		"",
 		"raw",
 		"json",
+		"form",
+		"formData",
+		" Application/JSON ; charset=utf-8",
 		"application/json; charset=utf-8",
 		"application/problem+json",
+		"text/json",
+		"application/x-www-form-urlencoded",
 	} {
 		t.Run(format, func(t *testing.T) {
-			got := MaskBodyForDryRun(body, format)
+			got := MaskBodyFull(body, format)
 			if got != `{"password":"FAKE***","name":"visible"}` && got != `{"name":"visible","password":"FAKE***"}` {
-				t.Fatalf("MaskBodyForDryRun(%q) = %q", format, got)
+				t.Fatalf("MaskBodyFull(%q) = %q", format, got)
 			}
 		})
 	}
