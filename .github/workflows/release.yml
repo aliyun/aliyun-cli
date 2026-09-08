@@ -159,6 +159,7 @@ jobs:
         run: go generate ./bundledmeta
       - name: Download assets and compute shasum
         run: |
+          set -euo pipefail
           TAG=${{ github.ref_name }}
           VERSION=${TAG#v}
           bash tools/download_assets.sh ${VERSION}
