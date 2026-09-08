@@ -643,6 +643,9 @@ func TestNonFormBodyMetadataKeepsLegacyJSONExecution(t *testing.T) {
 	if req.ReqBodyType != "json" {
 		t.Fatalf("ReqBodyType = %q, want json", req.ReqBodyType)
 	}
+	if req.DeclaredReqBodyType != "byte" || req.DeclaredContentType != "application/vnd.example.payload" {
+		t.Fatalf("dry-run body hints = %q, %q", req.DeclaredReqBodyType, req.DeclaredContentType)
+	}
 	if _, exists := req.Headers["content-type"]; exists {
 		t.Fatalf("non-form metadata must not override content-type: %#v", req.Headers)
 	}

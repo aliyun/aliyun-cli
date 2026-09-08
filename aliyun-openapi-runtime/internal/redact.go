@@ -17,6 +17,7 @@ package internal
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -109,22 +110,69 @@ func MaskKV(key, value string) string {
 }
 
 func MaskBody(body string) string {
-	return truncate(MaskBodyFull(body))
+	if masked, ok := maskJSONBody(body); ok {
+		return truncate(masked)
+	}
+	return truncate(body)
 }
 
-// MaskBodyFull applies the same redaction policy without truncating dry-run output.
+// MaskBodyFull returns a complete, redacted JSON body for dry-run output.
+// Content that cannot be parsed and redacted as JSON is omitted rather than
+// echoed because it may contain secrets in an unknown representation.
 func MaskBodyFull(body string) string {
+	return MaskBodyForDryRun(body)
+}
+
+// MaskBodyForDryRun applies the full-body dry-run policy. Explicit opaque
+// formats take precedence over JSON sniffing so binary content is never
+// exposed merely because its bytes happen to form valid JSON.
+func MaskBodyForDryRun(body string, formats ...string) string {
+	if body == "" {
+		return ""
+	}
+	for _, format := range formats {
+		if isOpaqueBodyFormat(format) {
+			return omittedBody(body)
+		}
+	}
+	if masked, ok := maskJSONBody(body); ok {
+		return masked
+	}
+	return omittedBody(body)
+}
+
+func maskJSONBody(body string) (string, bool) {
 	var data any
 	if json.Valid([]byte(body)) {
 		decoder := json.NewDecoder(strings.NewReader(body))
 		decoder.UseNumber()
 		if err := decoder.Decode(&data); err == nil {
 			if masked, err := json.Marshal(maskJSON(data)); err == nil {
-				return string(masked)
+				return string(masked), true
 			}
 		}
 	}
-	return body
+	return "", false
+}
+
+func isOpaqueBodyFormat(format string) bool {
+	format = strings.ToLower(strings.TrimSpace(format))
+	if mediaType, _, found := strings.Cut(format, ";"); found {
+		format = strings.TrimSpace(mediaType)
+	}
+	// Empty/raw formats have no trustworthy declaration, so JSON sniffing is
+	// still useful for --body '{...}'. Structured form maps are projected as
+	// JSON by callers before reaching this helper. Every other explicit format
+	// fails closed unless it is a JSON media type.
+	switch format {
+	case "", "raw", "form", "formdata", "json", "application/json", "text/json":
+		return false
+	}
+	return !strings.HasSuffix(format, "+json")
+}
+
+func omittedBody(body string) string {
+	return fmt.Sprintf("[body omitted: %d bytes]", len(body))
 }
 
 func MaskAny(data any) any {

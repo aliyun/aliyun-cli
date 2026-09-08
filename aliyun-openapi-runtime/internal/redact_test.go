@@ -16,6 +16,7 @@ package internal
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -90,6 +91,94 @@ func TestMaskBodyMasksBeforeTruncating(t *testing.T) {
 	}
 	if !strings.HasSuffix(output, "... (truncated)") {
 		t.Fatalf("long body was not truncated: %q", output)
+	}
+}
+
+func TestMaskBodyFullOmitsNonJSON(t *testing.T) {
+	const secret = "FAKE_SECRET_123"
+	cases := map[string]string{
+		"form":        "password=" + secret + "&name=test",
+		"xml":         "<Password>" + secret + "</Password>",
+		"raw":         "prefix:" + secret,
+		"long-tail":   strings.Repeat("x", 1100) + secret,
+		"binary":      string(append([]byte{0x00, 0xff, 0x01}, []byte(secret)...)),
+		"json-prefix": "payload=" + `{"password":"` + secret + `"}`,
+	}
+
+	for name, input := range cases {
+		t.Run(name, func(t *testing.T) {
+			want := fmt.Sprintf("[body omitted: %d bytes]", len(input))
+			if got := MaskBodyFull(input); got != want {
+				t.Fatalf("MaskBodyFull() = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestMaskBodyForDryRunHonorsOpaqueFormat(t *testing.T) {
+	const body = `{"password":"FAKE_SECRET_123"}`
+	for _, format := range []string{
+		"byte",
+		"binary",
+		"application/octet-stream",
+		"application/x-protobuf",
+		"application/xml; charset=utf-8",
+		"application/example+xml",
+		"multipart/form-data; boundary=example",
+		"application/x-www-form-urlencoded",
+		"text/plain",
+		"application/pdf",
+		"application/zip",
+		"application/cbor",
+		"application/msgpack",
+		"yaml",
+	} {
+		t.Run(format, func(t *testing.T) {
+			want := fmt.Sprintf("[body omitted: %d bytes]", len(body))
+			if got := MaskBodyForDryRun(body, format); got != want {
+				t.Fatalf("MaskBodyForDryRun(%q) = %q, want %q", format, got, want)
+			}
+		})
+	}
+}
+
+func TestMaskBodyForDryRunAllowsDeclaredJSONAndRawJSON(t *testing.T) {
+	const body = `{"password":"FAKE_SECRET_123","name":"visible"}`
+	for _, format := range []string{
+		"",
+		"raw",
+		"json",
+		"application/json; charset=utf-8",
+		"application/problem+json",
+	} {
+		t.Run(format, func(t *testing.T) {
+			got := MaskBodyForDryRun(body, format)
+			if got != `{"password":"FAKE***","name":"visible"}` && got != `{"name":"visible","password":"FAKE***"}` {
+				t.Fatalf("MaskBodyForDryRun(%q) = %q", format, got)
+			}
+		})
+	}
+}
+
+func TestMaskBodyFullPreservesCompleteRedactedJSON(t *testing.T) {
+	padding := strings.Repeat("x", 1200)
+	input := `{"content":"` + padding + `","password":"FAKE_SECRET_123"}`
+	output := MaskBodyFull(input)
+
+	if strings.Contains(output, "FAKE_SECRET_123") {
+		t.Fatalf("secret leaked from JSON body: %s", output)
+	}
+	if !strings.Contains(output, padding) {
+		t.Fatal("dry-run JSON body was truncated")
+	}
+	if !strings.Contains(output, `"password":"FAKE***"`) {
+		t.Fatalf("JSON secret was not masked: %s", output)
+	}
+}
+
+func TestMaskBodyFullEmpty(t *testing.T) {
+	if got := MaskBodyFull(""); got != "" {
+		t.Fatalf("MaskBodyFull(empty) = %q", got)
 	}
 }
 

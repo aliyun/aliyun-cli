@@ -1515,6 +1515,8 @@ func TestProcessApiInvokeFilterError(t *testing.T) {
 }
 
 func TestProcessApiInvoke_DryRunJSON(t *testing.T) {
+	const secret = "FAKE_SECRET_123"
+	body := strings.Repeat("x", 1100) + "&password=" + secret
 	profile := config.Profile{
 		Language:        "en",
 		Mode:            "AK",
@@ -1531,6 +1533,8 @@ func TestProcessApiInvoke_DryRunJSON(t *testing.T) {
 	AddFlags(cmd.Flags())
 	ctx.EnterCommand(cmd)
 	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+	BodyFlag(ctx.Flags()).SetAssigned(true)
+	BodyFlag(ctx.Flags()).SetValue(body)
 
 	command := NewCommando(stdout, profile)
 	product := &meta.Product{Code: "sls", Version: "2020-03-31"}
@@ -1559,7 +1563,7 @@ func TestProcessApiInvoke_DryRunJSON(t *testing.T) {
 		}
 	}
 
-	err := command.processApiInvoke(ctx, product, canonicalTestAPI(api), "GET", "/projects/foo")
+	err := command.processApiInvoke(ctx, product, canonicalTestAPI(api), "POST", "/clusters")
 	assert.NoError(t, err)
 
 	output := strings.TrimSpace(stdout.String())
@@ -1568,9 +1572,14 @@ func TestProcessApiInvoke_DryRunJSON(t *testing.T) {
 	var m CliDryRunOutput
 	assert.Nil(t, json.Unmarshal([]byte(output), &m), "stdout must be valid JSON: %q", output)
 	assert.Equal(t, "ROA", m.Style)
-	assert.Equal(t, "GET", m.Method)
+	assert.Equal(t, "POST", m.Method)
 	assert.Equal(t, "GetProject", m.Action)
 	assert.Equal(t, "2020-03-31", m.Version)
+	assert.Equal(t, "json", m.BodyFormat)
+	assert.Equal(t, fmt.Sprintf("[body omitted: %d bytes]", len(body)), m.Body)
+	assert.NotContains(t, stdout.String(), secret)
+	assert.NotContains(t, stderr.String(), secret)
+	assert.Empty(t, stderr.String())
 	// SLS without --endpoint / profile.Endpoint falls back to {region}.log.aliyuncs.com.
 	assert.Equal(t, "cn-hangzhou.log.aliyuncs.com", m.Endpoint)
 }
