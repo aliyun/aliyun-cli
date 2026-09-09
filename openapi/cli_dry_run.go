@@ -72,7 +72,7 @@ func buildCliDryRunFromInvoker(inv Invoker) *CliDryRunOutput {
 	}
 
 	if len(req.Content) > 0 {
-		out.Body = runtimeredact.MaskBodyFull(string(req.Content))
+		out.Body = runtimeredact.MaskBodyFull(string(req.Content), dryRunContentType(req.Headers))
 		out.BodyFormat = "raw"
 	} else if len(req.FormParams) > 0 {
 		out.Query = mergeInto(out.Query, nil)
@@ -146,14 +146,34 @@ func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
 	}
 
 	if oc.openapiRequest != nil && oc.openapiRequest.Body != nil {
-		bodyJSON, err := json.Marshal(oc.openapiRequest.Body)
-		if err == nil && string(bodyJSON) != "null" {
-			out.Body = runtimeredact.MaskBodyFull(string(bodyJSON))
+		body := oc.openapiRequest.Body
+		hints := []string{dryRunContentType(out.Headers)}
+		if oc.openapiParams != nil {
+			hints = append(hints, tea.StringValue(oc.openapiParams.ReqBodyType))
+		}
+		if oc.api != nil && oc.api.Operation != nil {
+			hints = append(hints, oc.api.Operation.ReqBodyType, oc.api.Operation.ContentType)
+		}
+		switch value := body.(type) {
+		case string:
+			out.Body = runtimeredact.MaskBodyFull(value, hints...)
+			out.BodyFormat = "raw"
+		case []byte:
+			out.Body = runtimeredact.MaskBodyFull(string(value), hints...)
+			out.BodyFormat = "binary"
+		default:
+			bodyJSON, err := json.Marshal(body)
+			if err == nil && string(bodyJSON) != "null" {
+				out.Body = runtimeredact.MaskBodyFull(string(bodyJSON), hints...)
+			}
 			// Reflect the request-body encoding resolved in Prepare/ProcessBody:
 			// RPC-style products send form fields (ReqBodyType=formData), which
 			// the classic dry-run reports as "form"; ROA keeps the JSON body.
 			out.BodyFormat = "json"
-			if oc.openapiParams != nil && tea.StringValue(oc.openapiParams.ReqBodyType) == "formData" {
+		}
+		if oc.openapiParams != nil && tea.StringValue(oc.openapiParams.ReqBodyType) != "" {
+			out.BodyFormat = tea.StringValue(oc.openapiParams.ReqBodyType)
+			if out.BodyFormat == "formData" {
 				out.BodyFormat = "form"
 			}
 		}
@@ -180,18 +200,16 @@ func buildCliDryRunFromOpenapi(oc *OpenapiContext) *CliDryRunOutput {
 		}
 	}
 
-	if oc.openapiRequest != nil && oc.openapiRequest.Body != nil {
-		if stream, ok := oc.openapiRequest.Body.([]byte); ok {
-			out.Body = runtimeredact.MaskBodyFull(string(stream))
-			if oc.openapiParams != nil && oc.openapiParams.ReqBodyType != nil {
-				out.BodyFormat = tea.StringValue(oc.openapiParams.ReqBodyType)
-			} else {
-				out.BodyFormat = "binary"
-			}
+	return out
+}
+
+func dryRunContentType(headers map[string]string) string {
+	for key, value := range headers {
+		if strings.EqualFold(key, "Content-Type") {
+			return value
 		}
 	}
-
-	return out
+	return ""
 }
 
 func sanitizedDryRunPathname(pattern, pathname string, raw, sanitized map[string]string) string {

@@ -692,43 +692,66 @@ func sanitizeDryRunValues(values map[string]string) map[string]string {
 	return out
 }
 
-func dryRunBody(body any, reqBodyType string) (value, format string, err error) {
+func dryRunHeaderValue(headers map[string]string, name string) string {
+	for key, value := range headers {
+		if strings.EqualFold(key, name) {
+			return value
+		}
+	}
+	return ""
+}
+
+func dryRunBody(body any, reqBodyType string, formatHints ...string) (value, format string, err error) {
 	if body == nil {
 		return "", "", nil
 	}
+	declaredFormat := ""
+	if len(formatHints) > 0 {
+		declaredFormat = formatHints[0]
+	}
+	formats := append([]string{reqBodyType}, formatHints...)
 	if data, ok := body.(string); ok {
-		format = reqBodyType
-		if format == "" {
-			format = "raw"
-		}
-		if strings.EqualFold(format, "formData") {
-			format = "form"
-		}
-		return redact.MaskBodyFull(data), format, nil
+		format = dryRunBodyFormat(reqBodyType, declaredFormat, "raw")
+		return redact.MaskBodyFull(data, formats...), format, nil
 	}
 	if data, ok := body.([]byte); ok {
-		format = reqBodyType
-		if format == "" {
-			format = "binary"
-		}
-		if strings.EqualFold(format, "formData") {
-			format = "form"
-		}
-		return redact.MaskBodyFull(string(data)), format, nil
+		format = dryRunBodyFormat(reqBodyType, declaredFormat, "binary")
+		return redact.MaskBodyFull(string(data), formats...), format, nil
 	}
-	b, err := json.Marshal(redact.MaskAny(body))
+	b, err := json.Marshal(body)
 	if err != nil {
 		return "", "", err
 	}
-	format = "json"
-	if strings.EqualFold(reqBodyType, "formData") {
-		format = "form"
+	format = dryRunBodyFormat(reqBodyType, declaredFormat, "json")
+	return redact.MaskBodyFull(string(b), formats...), format, nil
+}
+
+func dryRunBodyFormat(reqBodyType, declaredFormat, fallback string) string {
+	format := strings.TrimSpace(declaredFormat)
+	if format == "" {
+		format = strings.TrimSpace(reqBodyType)
 	}
-	return string(b), format, nil
+	if format == "" {
+		format = fallback
+	}
+	switch {
+	case strings.EqualFold(format, "formData"):
+		return "form"
+	case strings.EqualFold(format, "byte"), strings.EqualFold(format, "bytes"), strings.EqualFold(format, "binary"):
+		return "binary"
+	default:
+		return format
+	}
 }
 
 func buildCliDryRunOutput(product string, req *runtime.AssembledRequest) (*cliDryRunOutput, error) {
-	body, bodyFormat, err := dryRunBody(req.Body, req.ReqBodyType)
+	body, bodyFormat, err := dryRunBody(
+		req.Body,
+		req.ReqBodyType,
+		req.DeclaredReqBodyType,
+		req.DeclaredContentType,
+		dryRunHeaderValue(req.Headers, "Content-Type"),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -762,11 +785,11 @@ func renderDryRun(w io.Writer, product string, req *runtime.AssembledRequest, js
 	if req == nil {
 		return fmt.Errorf("dry-run produced no request")
 	}
+	output, err := buildCliDryRunOutput(product, req)
+	if err != nil {
+		return err
+	}
 	if jsonMeta {
-		output, err := buildCliDryRunOutput(product, req)
-		if err != nil {
-			return err
-		}
 		b, err := json.Marshal(output)
 		if err != nil {
 			return err
@@ -797,16 +820,7 @@ func renderDryRun(w io.Writer, product string, req *runtime.AssembledRequest, js
 	printSortedKV(w, "Headers", req.Headers)
 	printSortedKV(w, "Query Parameters", req.Query)
 	if req.Body != nil {
-		switch body := req.Body.(type) {
-		case string:
-			// Raw --body/--body-file strings are sent as-is by the SDK.
-			fmt.Fprintf(w, "Body:\n  %s\n", redact.MaskBodyFull(body))
-		case []byte:
-			fmt.Fprintf(w, "Body:\n  %s\n", redact.MaskBodyFull(string(body)))
-		default:
-			b, _ := json.Marshal(redact.MaskAny(req.Body))
-			fmt.Fprintf(w, "Body:\n  %s\n", string(b))
-		}
+		fmt.Fprintf(w, "Body:\n  %s\n", output.Body)
 	}
 	fmt.Fprintf(w, "%s\nRequest NOT sent (dry-run mode)\n%s\n", bar, bar)
 	fmt.Fprintln(w, "{")

@@ -17,9 +17,15 @@ package internal
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/url"
 	"os"
+	"reflect"
+	"regexp"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 )
 
 const (
@@ -101,58 +107,205 @@ func MaskValue(value string) string {
 	return value[:4] + "***"
 }
 
+// Form/RPC serializers flatten objects and arrays into keys such as
+// user.password.1 and user.1.password. Match whole path components only.
+func isSensitivePath(field string) bool {
+	if IsSensitive(field) {
+		return true
+	}
+	for _, part := range strings.FieldsFunc(field, func(r rune) bool { return r == '.' || r == '[' || r == ']' }) {
+		if IsSensitive(part) {
+			return true
+		}
+	}
+	return false
+}
+
 func MaskKV(key, value string) string {
-	if IsSensitive(key) {
+	if isSensitivePath(key) {
 		return MaskValue(value)
 	}
-	return value
+	return maskEmbeddedJSON(value, "***")
 }
 
 func MaskBody(body string) string {
 	return truncate(MaskBodyFull(body))
 }
 
-// MaskBodyFull applies the same redaction policy without truncating dry-run output.
-func MaskBodyFull(body string) string {
+// MaskBodyFull redacts text without truncation. Only supported format declarations
+// enter text redaction; unknown declarations are omitted even if the body is JSON.
+func MaskBodyFull(body string, formats ...string) string {
+	if body == "" {
+		return ""
+	}
+	form := false
+	for _, format := range formats {
+		format = strings.ToLower(strings.TrimSpace(strings.SplitN(format, ";", 2)[0]))
+		switch format {
+		case "", "raw", "json", "application/json", "text/json":
+		case "form", "formdata", "application/x-www-form-urlencoded":
+			form = true
+		default:
+			if !strings.Contains(format, "/") || !strings.HasSuffix(format, "+json") {
+				return fmt.Sprintf("[body omitted: %d bytes]", len(body))
+			}
+		}
+	}
+	if !utf8.ValidString(body) || strings.ContainsFunc(body, func(r rune) bool {
+		return unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t'
+	}) {
+		return fmt.Sprintf("[body omitted: %d bytes]", len(body))
+	}
 	var data any
 	if json.Valid([]byte(body)) {
 		decoder := json.NewDecoder(strings.NewReader(body))
 		decoder.UseNumber()
 		if err := decoder.Decode(&data); err == nil {
-			if masked, err := json.Marshal(maskJSON(data)); err == nil {
+			if masked, err := json.Marshal(maskJSON(data, "***")); err == nil {
 				return string(masked)
 			}
 		}
 	}
-	return body
+	trimmed := strings.TrimSpace(body)
+	if strings.HasPrefix(trimmed, "<") {
+		return fmt.Sprintf("[body omitted: %d bytes]", len(body))
+	}
+	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+		return redactedText(body)
+	}
+	if form || (strings.Contains(body, "=") && !strings.ContainsAny(body, ",;\"'")) {
+		if _, err := url.ParseQuery(body); err != nil {
+			return redactedText(body)
+		}
+		parts := strings.Split(body, "&")
+		isForm := true
+		for i, part := range parts {
+			part = strings.ReplaceAll(part, "*", "%2A")
+			parts[i] = part
+			key, value, found := strings.Cut(part, "=")
+			name, _ := url.QueryUnescape(key)
+			if strings.ContainsAny(name, " \t:\"'") {
+				isForm = false
+			}
+			if found && isSensitivePath(name) {
+				decoded, _ := url.QueryUnescape(value)
+				if decoded != "" {
+					prefix := strings.TrimSuffix(MaskValue(decoded), "***")
+					parts[i] = key + "=" + url.QueryEscape(prefix) + "***"
+				}
+			} else {
+				decoded, _ := url.QueryUnescape(value)
+				if masked := maskEmbeddedJSON(decoded, "***"); found && masked != decoded {
+					// Pick a marker absent from the normal output, including decoded
+					// nested JSON, so original stars and marker-like text stay encoded.
+					marker := "__REDACTED__"
+					for strings.Contains(masked, marker) {
+						marker += "_"
+					}
+					marked := maskEmbeddedJSON(decoded, marker)
+					parts[i] = key + "=" + strings.ReplaceAll(url.QueryEscape(marked), marker, "***")
+				} else {
+					parts[i] = maskTextFields(part)
+				}
+			}
+		}
+		if isForm {
+			return strings.Join(parts, "&")
+		}
+	}
+	return maskTextFields(body)
+}
+
+func redactedText(body string) string {
+	return fmt.Sprintf("[body redacted: %d bytes]", len(body))
+}
+
+// ParamStyle=json puts serialized JSON inside a form field's string value.
+// Retain its string type, and preserve the original spelling when unchanged.
+func maskEmbeddedJSON(value, marker string) string {
+	trimmed := strings.TrimSpace(value)
+	if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") && !strings.HasPrefix(trimmed, `"`) {
+		return value
+	}
+	var data any
+	decoder := json.NewDecoder(strings.NewReader(value))
+	decoder.UseNumber()
+	if !json.Valid([]byte(value)) || decoder.Decode(&data) != nil {
+		return redactedText(value)
+	}
+	masked := maskJSON(data, marker)
+	if reflect.DeepEqual(data, masked) {
+		return value
+	}
+	b, err := json.Marshal(masked)
+	if err != nil {
+		return redactedText(value)
+	}
+	return string(b)
+}
+
+// ponytail: raw text supports named key/value pairs, not secrets in arbitrary
+// prose; add a format parser when another structured text format is supported.
+var textField = regexp.MustCompile(`([\w.\[\]-]+|"[\w.\[\]-]+"|'[\w.\[\]-]+')([ \t]*[:=][ \t]*)`)
+var textValue = regexp.MustCompile(`^("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n&,;]+)`)
+
+func maskTextFields(body string) string {
+	var out strings.Builder
+	last := 0
+	for _, match := range textField.FindAllStringSubmatchIndex(body, -1) {
+		if match[0] < last || !isSensitivePath(strings.Trim(body[match[2]:match[3]], `"'`)) {
+			continue
+		}
+		value := textValue.FindString(body[match[1]:])
+		if value == "" {
+			if strings.TrimSpace(body[match[1]:]) != "" && strings.ContainsAny(body[match[1]:match[1]+1], "\r\n") {
+				return redactedText(body)
+			}
+			continue
+		}
+		if (value[0] == '"' || value[0] == '\'') && (len(value) == 1 || value[len(value)-1] != value[0]) {
+			return redactedText(body)
+		}
+		out.WriteString(body[last:match[1]])
+		out.WriteString("***")
+		last = match[1] + len(value)
+	}
+	out.WriteString(body[last:])
+	return out.String()
 }
 
 func MaskAny(data any) any {
-	return maskJSON(data)
+	return maskJSON(data, "***")
 }
 
-func maskJSON(data any) any {
+func maskJSON(data any, marker string) any {
 	switch value := data.(type) {
 	case map[string]any:
 		out := make(map[string]any, len(value))
 		for key, item := range value {
-			if IsSensitive(key) {
+			if isSensitivePath(key) {
 				if text, ok := item.(string); ok {
-					out[key] = MaskValue(text)
+					masked := MaskValue(text)
+					if text != "" {
+						masked = strings.TrimSuffix(masked, "***") + marker
+					}
+					out[key] = masked
 				} else {
-					out[key] = "***"
+					out[key] = marker
 				}
 				continue
 			}
-			out[key] = maskJSON(item)
+			out[key] = maskJSON(item, marker)
 		}
 		return out
 	case []any:
 		out := make([]any, len(value))
 		for i, item := range value {
-			out[i] = maskJSON(item)
+			out[i] = maskJSON(item, marker)
 		}
 		return out
+	case string:
+		return maskEmbeddedJSON(value, marker)
 	default:
 		return data
 	}

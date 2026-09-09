@@ -28,6 +28,8 @@ func MaskKV(key, value string) string { return internal.MaskKV(key, value) }
 func MaskBody(body string) string { return internal.MaskBody(body) }
 
 // MaskBodyFull redacts the complete body for dry-run output without a size limit.
-func MaskBodyFull(body string) string { return internal.MaskBodyFull(body) }
+func MaskBodyFull(body string, formats ...string) string {
+	return internal.MaskBodyFull(body, formats...)
+}
 
 func MaskAny(data any) any { return internal.MaskAny(data) }
