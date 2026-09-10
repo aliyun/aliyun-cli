@@ -2467,6 +2467,82 @@ func TestManager_installPlugin(t *testing.T) {
 		assert.Contains(t, err.Error(), "Expected: wrong-checksum")
 	})
 
+	t.Run("Error - corrupt archive preserves existing plugin", func(t *testing.T) {
+		root := t.TempDir()
+		mgr := &Manager{rootDir: root}
+		pluginDir := filepath.Join(root, "test-plugin")
+		require.NoError(t, os.MkdirAll(pluginDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "old-binary"), []byte("old"), 0755))
+		require.NoError(t, mgr.saveLocalManifest(&LocalManifest{Plugins: map[string]LocalPlugin{
+			"test-plugin": {
+				Name: "test-plugin", Version: "1.0.0", Path: pluginDir, Command: "test",
+			},
+		}}))
+
+		corruptArchive := []byte("not a gzip archive")
+		checksum, err := calculateSHA256FromBytes(corruptArchive)
+		require.NoError(t, err)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write(corruptArchive)
+		}))
+		defer server.Close()
+
+		targetPlugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"2.0.0": {Platforms: map[string]PlatformInfo{
+					GetCurrentPlatform(): {URL: server.URL + "/test-plugin.tgz", Checksum: checksum},
+				}},
+			},
+		}
+
+		err = mgr.installPlugin(newTestContext(), targetPlugin, "2.0.0", false, false)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "gzip")
+		assert.FileExists(t, filepath.Join(pluginDir, "old-binary"))
+		localManifest, manifestErr := mgr.GetLocalManifest()
+		require.NoError(t, manifestErr)
+		assert.Equal(t, "1.0.0", localManifest.Plugins["test-plugin"].Version)
+	})
+
+	t.Run("Error - invalid staged manifest preserves existing plugin", func(t *testing.T) {
+		root := t.TempDir()
+		mgr := &Manager{rootDir: root}
+		pluginDir := filepath.Join(root, "test-plugin")
+		require.NoError(t, os.MkdirAll(pluginDir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "old-binary"), []byte("old"), 0755))
+		require.NoError(t, mgr.saveLocalManifest(&LocalManifest{Plugins: map[string]LocalPlugin{
+			"test-plugin": {
+				Name: "test-plugin", Version: "1.0.0", Path: pluginDir, Command: "test",
+			},
+		}}))
+
+		archiveContent := createTestPluginArchiveWithoutManifest(t)
+		checksum, err := calculateSHA256FromBytes(archiveContent)
+		require.NoError(t, err)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write(archiveContent)
+		}))
+		defer server.Close()
+
+		targetPlugin := &PluginInfo{
+			Name: "test-plugin",
+			Versions: map[string]VersionInfo{
+				"2.0.0": {Platforms: map[string]PlatformInfo{
+					GetCurrentPlatform(): {URL: server.URL + "/test-plugin.tgz", Checksum: checksum},
+				}},
+			},
+		}
+
+		err = mgr.installPlugin(newTestContext(), targetPlugin, "2.0.0", false, false)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "manifest.json not found")
+		assert.FileExists(t, filepath.Join(pluginDir, "old-binary"))
+		localManifest, manifestErr := mgr.GetLocalManifest()
+		require.NoError(t, manifestErr)
+		assert.Equal(t, "1.0.0", localManifest.Plugins["test-plugin"].Version)
+	})
+
 	t.Run("Error - manifest not found in archive", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		mgr := &Manager{rootDir: tmpDir}
