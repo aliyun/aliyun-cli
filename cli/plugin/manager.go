@@ -1,9 +1,6 @@
 package plugin
 
 import (
-	"archive/tar"
-	"archive/zip"
-	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -64,6 +61,10 @@ type Manager struct {
 	goOnly bool
 	// skipPluginIndexCacheForCLI is set when --source-base is used on this command only.
 	skipPluginIndexCacheForCLI bool
+	// saveLocalManifestHook injects manifest commit failures in transaction tests.
+	saveLocalManifestHook func(*LocalManifest) error
+	// archiveLimits overrides package resource boundaries in tests.
+	archiveLimits *pluginArchiveLimits
 }
 
 func getHomePath() string {
@@ -480,16 +481,49 @@ func (m *Manager) GetLocalManifest() (*LocalManifest, error) {
 }
 
 func (m *Manager) saveLocalManifest(manifest *LocalManifest) error {
+	if m.saveLocalManifestHook != nil {
+		return m.saveLocalManifestHook(manifest)
+	}
+	if err := os.MkdirAll(m.rootDir, 0755); err != nil {
+		return err
+	}
 	path := filepath.Join(m.rootDir, "manifest.json")
-	f, err := os.Create(path)
+	f, err := os.CreateTemp(m.rootDir, ".manifest-*.tmp")
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	tmpPath := f.Name()
+	removeTemp := true
+	defer func() {
+		if removeTemp {
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
-	return enc.Encode(manifest)
+	if err := enc.Encode(manifest); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, 0644); err != nil {
+		return err
+	}
+
+	replacement, err := replacePathWithRollback(tmpPath, path, ".manifest-rollback-*")
+	if err != nil {
+		return err
+	}
+	removeTemp = false
+	replacement.commit()
+	return nil
 }
 
 func (m *Manager) findPluginInIndex(pluginName string) (*PluginInfo, error) {
@@ -568,153 +602,6 @@ func (m *Manager) validateVersionAndPlatform(ctx *cli.Context, targetPlugin *Plu
 	return &platInfo, nil
 }
 
-func downloadFile(url, dest string) error {
-	resp, err := httpGet(url, pluginArchiveDLTimeout)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download failed: %d", resp.StatusCode)
-	}
-
-	out, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, resp.Body)
-	return err
-}
-
-func untar(src, dest string) error {
-	f, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	gzr, err := gzip.NewReader(f)
-	if err != nil {
-		return err
-	}
-	defer gzr.Close()
-
-	tr := tar.NewReader(gzr)
-
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		// check if the path is absolute or contains suspicious patterns
-		if filepath.IsAbs(header.Name) {
-			return fmt.Errorf("illegal absolute path in archive: %s", header.Name)
-		}
-		if strings.Contains(header.Name, "..") {
-			return fmt.Errorf("illegal path with '..' in archive: %s", header.Name)
-		}
-		// Reject paths starting with / or \ for cross-platform security
-		if strings.HasPrefix(header.Name, "/") || strings.HasPrefix(header.Name, "\\") {
-			return fmt.Errorf("illegal path starting with separator in archive: %s", header.Name)
-		}
-
-		target := filepath.Join(dest, header.Name)
-		target = filepath.Clean(target)
-
-		// Double-check: ensure the target path is within the destination directory
-		destPath := filepath.Clean(dest) + string(os.PathSeparator)
-		if !strings.HasPrefix(target, destPath) {
-			return fmt.Errorf("illegal file path in archive: %s", header.Name)
-		}
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(f, tr); err != nil {
-				f.Close()
-				return err
-			}
-			f.Close()
-		}
-	}
-	return nil
-}
-
-func unzip(src, dest string) error {
-	r, err := zip.OpenReader(src)
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-
-	for _, f := range r.File {
-		// check if the path is absolute or contains suspicious patterns
-		if filepath.IsAbs(f.Name) {
-			return fmt.Errorf("illegal absolute path in archive: %s", f.Name)
-		}
-		if strings.Contains(f.Name, "..") {
-			return fmt.Errorf("illegal path with '..' in archive: %s", f.Name)
-		}
-		// Reject paths starting with / or \ for cross-platform security
-		if strings.HasPrefix(f.Name, "/") || strings.HasPrefix(f.Name, "\\") {
-			return fmt.Errorf("illegal path starting with separator in archive: %s", f.Name)
-		}
-
-		fpath := filepath.Join(dest, f.Name)
-		fpath = filepath.Clean(fpath)
-
-		// Double-check: ensure the target path is within the destination directory
-		destPath := filepath.Clean(dest) + string(os.PathSeparator)
-		if !strings.HasPrefix(fpath, destPath) {
-			return fmt.Errorf("illegal file path in archive: %s", f.Name)
-		}
-
-		if f.FileInfo().IsDir() {
-			os.MkdirAll(fpath, os.ModePerm)
-			continue
-		}
-
-		if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
-			return err
-		}
-
-		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
-		if err != nil {
-			return err
-		}
-
-		rc, err := f.Open()
-		if err != nil {
-			outFile.Close()
-			return err
-		}
-
-		_, err = io.Copy(outFile, rc)
-
-		outFile.Close()
-		rc.Close()
-
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func calculateSHA256(filePath string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -739,7 +626,7 @@ func (m *Manager) downloadAndVerifyPlugin(ctx *cli.Context, platInfo *PlatformIn
 	}
 
 	archivePath := filepath.Join(tmpDir, "plugin.archive")
-	if err := downloadFile(platInfo.URL, archivePath); err != nil {
+	if err := downloadFileWithLimit(platInfo.URL, archivePath, m.effectiveArchiveLimits().archiveBytes); err != nil {
 		os.RemoveAll(tmpDir)
 		return "", err
 	}
@@ -763,18 +650,23 @@ func (m *Manager) downloadAndVerifyPlugin(ctx *cli.Context, platInfo *PlatformIn
 	return archivePath, nil
 }
 
-func (m *Manager) extractPlugin(archivePath, extractDir, downloadURL string) error {
+func (m *Manager) extractPlugin(archivePath, extractDir, downloadURL string) (err error) {
 	if err := os.RemoveAll(extractDir); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(extractDir, 0755); err != nil {
 		return err
 	}
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(extractDir)
+		}
+	}()
 
 	if strings.HasSuffix(strings.ToLower(downloadURL), ".zip") {
-		return unzip(archivePath, extractDir)
+		return unzipWithLimits(archivePath, extractDir, m.effectiveArchiveLimits())
 	}
-	return untar(archivePath, extractDir)
+	return untarWithLimits(archivePath, extractDir, m.effectiveArchiveLimits())
 }
 
 func expandPluginSourcePath(raw string) (string, error) {
@@ -923,48 +815,23 @@ func validateAndResolvePackageType(extractDir string, manifest *PluginManifest) 
 	return runtimesource.ValidateMetadataPlugin(extractDir, manifest.Metadata)
 }
 
-func copyDirTree(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dst, rel)
-		if info.IsDir() {
-			return os.MkdirAll(target, info.Mode().Perm())
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-			return err
-		}
-		return os.WriteFile(target, data, info.Mode().Perm())
-	})
+func (m *Manager) newPluginStagingDir(pattern string) (string, error) {
+	if err := os.MkdirAll(m.rootDir, 0755); err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(m.rootDir, pattern)
 }
 
-func (m *Manager) promoteExtractedPlugin(tmpExtract, pluginName string) (string, error) {
+func (m *Manager) promoteExtractedPlugin(tmpExtract, pluginName string) (*pathReplacement, error) {
 	finalDir, err := resolvePluginInstallDir(m.rootDir, pluginName)
 	if err != nil {
-		return "", fmt.Errorf("invalid plugin name: %w", err)
+		return nil, fmt.Errorf("invalid plugin name: %w", err)
 	}
-	if err := os.RemoveAll(finalDir); err != nil {
-		return "", fmt.Errorf("failed to remove existing plugin directory: %w", err)
+	replacement, err := replacePathWithRollback(tmpExtract, finalDir, "."+pluginName+"-rollback-*")
+	if err != nil {
+		return nil, err
 	}
-	if err := os.Rename(tmpExtract, finalDir); err == nil {
-		return finalDir, nil
-	}
-	if err := copyDirTree(tmpExtract, finalDir); err != nil {
-		return "", fmt.Errorf("failed to copy plugin files: %w", err)
-	}
-	if err := os.RemoveAll(tmpExtract); err != nil {
-		return "", fmt.Errorf("failed to remove temporary extract directory: %w", err)
-	}
-	return finalDir, nil
+	return replacement, nil
 }
 
 func (m *Manager) printOverwriteIfPluginInstalled(ctx *cli.Context, pluginName, incomingVersion string) {
@@ -1027,11 +894,12 @@ func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL string) e
 		return fmt.Errorf("package URL path must end with .zip, .tar.gz, or .tgz")
 	}
 
-	cli.Printf(ctx.Stdout(), "Downloading plugin package from %s...\n", rawURL)
+	displayURL := safePluginPackageURL(u)
+	cli.Printf(ctx.Stdout(), "Downloading plugin package from %s...\n", displayURL)
 
 	resp, err := httpGet(rawURL, pluginArchiveDLTimeout)
 	if err != nil {
-		return fmt.Errorf("download plugin package: %w", err)
+		return safePluginDownloadError(err, displayURL)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -1049,19 +917,11 @@ func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL string) e
 		base = "plugin.tgz"
 	}
 	dest := filepath.Join(tmpParent, base)
-	out, err := os.Create(dest)
-	if err != nil {
-		return fmt.Errorf("create temp package file: %w", err)
-	}
-	if _, err := io.Copy(out, resp.Body); err != nil {
-		out.Close()
-		return fmt.Errorf("write plugin package: %w", err)
-	}
-	if err := out.Close(); err != nil {
+	if err := writePluginArchiveResponse(resp, dest, m.effectiveArchiveLimits().archiveBytes); err != nil {
 		return fmt.Errorf("write plugin package: %w", err)
 	}
 
-	return m.installFromPackageFile(ctx, dest, rawURL)
+	return m.installFromPackageFile(ctx, dest, displayURL)
 }
 
 func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, userFacing string) error {
@@ -1071,7 +931,7 @@ func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, userFacing s
 
 	cli.Printf(ctx.Stdout(), "Installing plugin from %s...\n", userFacing)
 
-	tmpParent, err := os.MkdirTemp("", "aliyun-plugin-local-*")
+	tmpParent, err := m.newPluginStagingDir(".aliyun-plugin-local-*")
 	if err != nil {
 		return err
 	}
@@ -1089,14 +949,18 @@ func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, userFacing s
 
 	m.printOverwriteIfPluginInstalled(ctx, pManifest.Name, pManifest.Version)
 
-	finalDir, err := m.promoteExtractedPlugin(tmpExtract, pManifest.Name)
+	promotion, err := m.promoteExtractedPlugin(tmpExtract, pManifest.Name)
 	if err != nil {
 		return err
 	}
 
-	if err := m.savePluginToManifest(pManifest.Name, pManifest.Version, finalDir, pManifest); err != nil {
+	if err := m.savePluginToManifest(pManifest.Name, pManifest.Version, promotion.finalPath, pManifest); err != nil {
+		if rollbackErr := promotion.rollback(); rollbackErr != nil {
+			return fmt.Errorf("%w; failed to restore previous plugin: %v", err, rollbackErr)
+		}
 		return err
 	}
+	promotion.commit()
 
 	cli.Printf(ctx.Stdout(), "Plugin %s %s installed successfully!\n", pManifest.Name, pManifest.Version)
 	return nil
@@ -1210,10 +1074,12 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 		m.printOverwriteIfPluginInstalled(ctx, actualPluginName, version)
 	}
 
-	extractDir, err := resolvePluginInstallDir(m.rootDir, actualPluginName)
+	stagingParent, err := m.newPluginStagingDir("." + actualPluginName + "-staging-*")
 	if err != nil {
-		return fmt.Errorf("invalid plugin name from repository: %w", err)
+		return fmt.Errorf("create plugin staging directory: %w", err)
 	}
+	defer os.RemoveAll(stagingParent)
+	extractDir := filepath.Join(stagingParent, "extract")
 	if err := m.extractPlugin(archivePath, extractDir, downloadURL); err != nil {
 		return err
 	}
@@ -1227,9 +1093,17 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 		populateMinCliVersionFromIndex(pManifest, verInfo)
 	}
 
-	if err := m.savePluginToManifest(actualPluginName, version, extractDir, pManifest); err != nil {
+	promotion, err := m.promoteExtractedPlugin(extractDir, actualPluginName)
+	if err != nil {
 		return err
 	}
+	if err := m.savePluginToManifest(actualPluginName, version, promotion.finalPath, pManifest); err != nil {
+		if rollbackErr := promotion.rollback(); rollbackErr != nil {
+			return fmt.Errorf("%w; failed to restore previous plugin: %v", err, rollbackErr)
+		}
+		return err
+	}
+	promotion.commit()
 
 	cli.Printf(ctx.Stdout(), "Plugin %s %s installed successfully!\n", actualPluginName, version)
 	return nil

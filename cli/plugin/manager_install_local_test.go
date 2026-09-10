@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -16,52 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCopyDirTree(t *testing.T) {
-	src := t.TempDir()
-	dst := filepath.Join(t.TempDir(), "out")
-
-	require.NoError(t, os.MkdirAll(filepath.Join(src, "nested"), 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(src, "nested", "b.txt"), []byte("beta"), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(src, "a.txt"), []byte("alpha"), 0644))
-
-	require.NoError(t, copyDirTree(src, dst))
-
-	b, err := os.ReadFile(filepath.Join(dst, "nested", "b.txt"))
-	require.NoError(t, err)
-	assert.Equal(t, "beta", string(b))
-	a, err := os.ReadFile(filepath.Join(dst, "a.txt"))
-	require.NoError(t, err)
-	assert.Equal(t, "alpha", string(a))
-}
-
-func TestCopyDirTree_emptyTree(t *testing.T) {
-	src := t.TempDir()
-	dst := filepath.Join(t.TempDir(), "empty-out")
-	require.NoError(t, os.MkdirAll(filepath.Join(src, "child"), 0755))
-
-	require.NoError(t, copyDirTree(src, dst))
-
-	st, err := os.Stat(filepath.Join(dst, "child"))
-	require.NoError(t, err)
-	assert.True(t, st.IsDir())
-}
-
-func TestCopyDirTree_preservesFilePerm(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("file permission bits differ on Windows")
-	}
-	src := t.TempDir()
-	dst := filepath.Join(t.TempDir(), "perm-out")
-	p := filepath.Join(src, "secret")
-	require.NoError(t, os.WriteFile(p, []byte("x"), 0600))
-
-	require.NoError(t, copyDirTree(src, dst))
-
-	st, err := os.Stat(filepath.Join(dst, "secret"))
-	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0600), st.Mode().Perm())
-}
-
 func TestPromoteExtractedPlugin_rename(t *testing.T) {
 	root := t.TempDir()
 	tmpExtract := filepath.Join(root, "_extract_me")
@@ -69,15 +22,36 @@ func TestPromoteExtractedPlugin_rename(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(tmpExtract, "manifest.json"), []byte("{}"), 0644))
 
 	mgr := &Manager{rootDir: root}
-	finalDir, err := mgr.promoteExtractedPlugin(tmpExtract, "myplugin")
+	promotion, err := mgr.promoteExtractedPlugin(tmpExtract, "myplugin")
 	require.NoError(t, err)
+	promotion.commit()
 
 	want := filepath.Join(root, "myplugin")
-	assert.Equal(t, want, finalDir)
+	assert.Equal(t, want, promotion.finalPath)
 	_, err = os.Stat(filepath.Join(want, "manifest.json"))
 	require.NoError(t, err)
 	_, err = os.Stat(tmpExtract)
 	assert.True(t, os.IsNotExist(err), "temp extract dir should be gone after rename")
+}
+
+func TestPromoteExtractedPlugin_rollbackRestoresExistingDirectory(t *testing.T) {
+	root := t.TempDir()
+	finalDir := filepath.Join(root, "myplugin")
+	require.NoError(t, os.MkdirAll(finalDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(finalDir, "version"), []byte("old"), 0644))
+
+	tmpExtract := filepath.Join(root, "_extract_me")
+	require.NoError(t, os.MkdirAll(tmpExtract, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpExtract, "version"), []byte("new"), 0644))
+
+	mgr := &Manager{rootDir: root}
+	promotion, err := mgr.promoteExtractedPlugin(tmpExtract, "myplugin")
+	require.NoError(t, err)
+	require.NoError(t, promotion.rollback())
+
+	version, err := os.ReadFile(filepath.Join(finalDir, "version"))
+	require.NoError(t, err)
+	assert.Equal(t, "old", string(version))
 }
 
 func TestValidatePluginNameRejectsPathValues(t *testing.T) {
@@ -240,16 +214,33 @@ func TestManager_InstallFromPackage_RemoteURL(t *testing.T) {
 	mgr := &Manager{rootDir: pluginRoot}
 	archiveBody := createTestPluginArchive(t, "remote-url-plugin", "7.8.9", "x")
 
+	type requestDetails struct {
+		username string
+		password string
+		token    string
+	}
+	requests := make(chan requestDetails, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username, password, _ := r.BasicAuth()
+		requests <- requestDetails{
+			username: username,
+			password: password,
+			token:    r.URL.Query().Get("token"),
+		}
 		w.Header().Set("Content-Type", "application/octet-stream")
 		_, _ = w.Write(archiveBody)
 	}))
 	defer srv.Close()
-	archiveURL := srv.URL + "/pkgs/remote-url-plugin/7.8.9/plugin.tgz"
+	archiveURL := strings.Replace(srv.URL, "http://", "http://log-user:log-password@", 1) +
+		"/pkgs/remote-url-plugin/7.8.9/plugin.tgz?token=query-secret&signature=signature-secret#fragment-secret"
 
 	ctx := newTestContext()
 	err := mgr.InstallFromPackage(ctx, archiveURL)
 	require.NoError(t, err)
+	request := <-requests
+	assert.Equal(t, "log-user", request.username)
+	assert.Equal(t, "log-password", request.password)
+	assert.Equal(t, "query-secret", request.token)
 
 	manifest, err := mgr.GetLocalManifest()
 	require.NoError(t, err)
@@ -259,6 +250,12 @@ func TestManager_InstallFromPackage_RemoteURL(t *testing.T) {
 	out := ctx.Stdout().(*bytes.Buffer).String()
 	assert.Contains(t, out, "Downloading plugin package from")
 	assert.Contains(t, out, "Installing plugin from")
+	assert.Contains(t, out, srv.URL+"/pkgs/remote-url-plugin/7.8.9/plugin.tgz")
+	assert.NotContains(t, out, "log-user")
+	assert.NotContains(t, out, "log-password")
+	assert.NotContains(t, out, "query-secret")
+	assert.NotContains(t, out, "signature-secret")
+	assert.NotContains(t, out, "fragment-secret")
 }
 
 func TestManager_InstallFromPackage_RemoteURLBadSuffix(t *testing.T) {
@@ -292,9 +289,15 @@ func TestManager_installFromRemotePackageURL_downloadErrors(t *testing.T) {
 		}))
 		base := srv.URL
 		srv.Close()
-		err := mgr.installFromRemotePackageURL(ctx, base+"/plugin.tgz")
+		rawURL := strings.Replace(base, "http://", "http://error-user:error-password@", 1) +
+			"/plugin.tgz?token=error-token#fragment-secret"
+		err := mgr.installFromRemotePackageURL(ctx, rawURL)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "download plugin package:")
+		assert.Contains(t, err.Error(), "download plugin package from "+base+"/plugin.tgz:")
+		assert.NotContains(t, err.Error(), "error-user")
+		assert.NotContains(t, err.Error(), "error-password")
+		assert.NotContains(t, err.Error(), "error-token")
+		assert.NotContains(t, err.Error(), "fragment-secret")
 	})
 
 	t.Run("non-OK status", func(t *testing.T) {
@@ -308,30 +311,35 @@ func TestManager_installFromRemotePackageURL_downloadErrors(t *testing.T) {
 	})
 }
 
-func TestInstallFromPackageFile_saveLocalManifestFails(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("read-only manifest.json via chmod is not reliable on Windows")
-	}
+func TestInstallFromPackageFile_saveLocalManifestFailsRollsBack(t *testing.T) {
 	root := t.TempDir()
-	mani := filepath.Join(root, "manifest.json")
-	require.NoError(t, os.WriteFile(mani, []byte(`{"plugins":{}}`), 0644))
-	require.NoError(t, os.Chmod(mani, 0444))
-	defer func() { _ = os.Chmod(mani, 0644) }()
-
 	mgr := &Manager{rootDir: root}
-	archiveBody := createTestPluginArchive(t, "save-fail-pl", "2.0.0", "x")
-	archivePath := filepath.Join(t.TempDir(), "save-fail.tgz")
-	require.NoError(t, os.WriteFile(archivePath, archiveBody, 0644))
-
 	ctx := newTestContext()
+
+	v1 := createTestPluginArchive(t, "save-fail-pl", "1.0.0", "x")
+	v1Path := filepath.Join(t.TempDir(), "v1.tgz")
+	require.NoError(t, os.WriteFile(v1Path, v1, 0644))
+	require.NoError(t, mgr.installFromPackageFile(ctx, v1Path, v1Path))
+
+	mgr.saveLocalManifestHook = func(*LocalManifest) error {
+		return fmt.Errorf("injected manifest commit failure")
+	}
+	v2 := createTestPluginArchive(t, "save-fail-pl", "2.0.0", "x")
+	archivePath := filepath.Join(t.TempDir(), "save-fail.tgz")
+	require.NoError(t, os.WriteFile(archivePath, v2, 0644))
+
 	err := mgr.installFromPackageFile(ctx, archivePath, archivePath)
 	require.Error(t, err)
-	lowered := strings.ToLower(err.Error())
-	require.True(t,
-		strings.Contains(lowered, "permission denied") ||
-			strings.Contains(lowered, "operation not permitted"),
-		"unexpected error from saveLocalManifest: %v", err,
-	)
+	assert.Contains(t, err.Error(), "injected manifest commit failure")
+
+	mgr.saveLocalManifestHook = nil
+	localManifest, err := mgr.GetLocalManifest()
+	require.NoError(t, err)
+	assert.Equal(t, "1.0.0", localManifest.Plugins["save-fail-pl"].Version)
+
+	packageManifest, err := readPluginManifestFromDir(filepath.Join(root, "save-fail-pl"))
+	require.NoError(t, err)
+	assert.Equal(t, "1.0.0", packageManifest.Version)
 }
 
 func TestFindInstalledPluginInManifest(t *testing.T) {
