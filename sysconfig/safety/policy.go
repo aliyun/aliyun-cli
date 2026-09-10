@@ -15,8 +15,10 @@
 package safety
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -83,6 +85,9 @@ type CommandInfo struct {
 	// `aliyun sls ListProject`, `*:DELETE` matches `aliyun cs DELETE /clusters`,
 	// and `fc:function:*` matches `aliyun fc function create ...`.
 	ApiOrMethod string
+	// CanonicalApiOrMethod is the metadata-resolved API name for built-in
+	// OpenAPI commands. It is empty for plugins and raw REST method/path calls.
+	CanonicalApiOrMethod string
 	// Path is only set for REST style invocations that supply a path
 	// (e.g. `aliyun cs DELETE /clusters` -> Path = "/clusters").
 	Path string
@@ -93,18 +98,36 @@ func (p *Policy) Check(cmd CommandInfo) CheckResult {
 		return CheckResult{Action: ActionAllow, Matched: false}
 	}
 
-	cmdPattern := buildCommandPattern(cmd)
+	cmdPatterns := []string{buildCommandPattern(cmd)}
+	if cmd.CanonicalApiOrMethod != "" && cmd.Path == "" &&
+		!strings.EqualFold(cmd.CanonicalApiOrMethod, cmd.ApiOrMethod) {
+		canonical := cmd
+		canonical.ApiOrMethod = cmd.CanonicalApiOrMethod
+		cmdPatterns = append(cmdPatterns, buildCommandPattern(canonical))
+	}
 
 	// Rules are evaluated in order; first match wins
 	for i := range p.Rules {
 		rule := &p.Rules[i]
-		if matchPattern(rule.Pattern, cmdPattern) {
+		matched := false
+		for _, cmdPattern := range cmdPatterns {
+			if matchPattern(rule.Pattern, cmdPattern) {
+				matched = true
+				break
+			}
+		}
+		if matched {
 			action := rule.Action
 			if action == ActionForbid {
 				action = ActionConfirm
 			}
 			if action == "" {
-				action = ActionAllow
+				action = ActionDeny
+			}
+			if action != ActionAllow && action != ActionDeny && action != ActionConfirm {
+				// A policy assembled in memory must fail closed just like a
+				// malformed policy loaded from disk.
+				action = ActionDeny
 			}
 			return CheckResult{
 				Action:  action,
@@ -183,13 +206,43 @@ func LoadPolicy(configDir string) (*Policy, error) {
 		return nil, err
 	}
 	var p Policy
-	if err := json.Unmarshal(data, &p); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&p); err != nil {
 		return nil, fmt.Errorf("parse safety policy: %w", err)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err == nil {
+		return nil, fmt.Errorf("parse safety policy: multiple JSON values")
+	} else if err != io.EOF {
+		return nil, fmt.Errorf("parse safety policy: trailing data: %w", err)
 	}
 	if p.Rules == nil {
 		p.Rules = []Rule{}
 	}
+	if err := validatePolicy(&p); err != nil {
+		return nil, fmt.Errorf("validate safety policy: %w", err)
+	}
 	return &p, nil
+}
+
+func validatePolicy(policy *Policy) error {
+	if policy == nil {
+		return fmt.Errorf("policy is nil")
+	}
+	for i, rule := range policy.Rules {
+		policy.Rules[i].Pattern = strings.TrimSpace(rule.Pattern)
+		policy.Rules[i].Action = Action(strings.ToLower(strings.TrimSpace(string(rule.Action))))
+		if policy.Rules[i].Pattern == "" {
+			return fmt.Errorf("rules[%d].pattern is empty", i)
+		}
+		switch Action(strings.ToLower(strings.TrimSpace(string(rule.Action)))) {
+		case ActionAllow, ActionDeny, ActionConfirm, ActionForbid:
+		default:
+			return fmt.Errorf("rules[%d].action %q is invalid", i, rule.Action)
+		}
+	}
+	return nil
 }
 
 const EnvSafetyPolicyEnabled = "ALIBABA_CLOUD_SAFETY_POLICY_ENABLED"
@@ -288,12 +341,71 @@ func MergePolicyFromEnv(base *Policy) *Policy {
 	return &Policy{Enabled: enabled, Rules: rules}
 }
 
+func MergePolicyFromEnvStrict(base *Policy) (*Policy, error) {
+	if base == nil {
+		base = DefaultPolicy()
+	}
+	if err := validatePolicy(base); err != nil {
+		return nil, err
+	}
+
+	enabled := base.Enabled
+	if v, ok := os.LookupEnv(EnvSafetyPolicyEnabled); ok {
+		parsed, err := strconv.ParseBool(strings.TrimSpace(v))
+		if err != nil {
+			return nil, fmt.Errorf("%s: invalid boolean %q", EnvSafetyPolicyEnabled, v)
+		}
+		enabled = parsed
+	}
+
+	rules := copyPolicyRules(base.Rules)
+	if raw0, ok := os.LookupEnv(EnvSafetyPolicyRules); ok {
+		raw := strings.TrimSpace(raw0)
+		if raw == "" {
+			rules = []Rule{}
+		} else {
+			parsed, err := parseEnvRulesListStrict(raw)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", EnvSafetyPolicyRules, err)
+			}
+			rules = parsed
+		}
+	}
+	return &Policy{Enabled: enabled, Rules: rules}, nil
+}
+
+func parseEnvRulesListStrict(raw string) ([]Rule, error) {
+	parts := strings.Split(raw, ",")
+	out := make([]Rule, 0, len(parts))
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return nil, fmt.Errorf("entry %d is empty", i+1)
+		}
+		pattern, actionStr, found := strings.Cut(part, "=")
+		if !found {
+			return nil, fmt.Errorf("entry %d must use pattern=action", i+1)
+		}
+		pattern = strings.TrimSpace(pattern)
+		actionStr = strings.TrimSpace(actionStr)
+		if pattern == "" {
+			return nil, fmt.Errorf("entry %d has an empty pattern", i+1)
+		}
+		action, ok := actionFromEnvToken(actionStr)
+		if !ok {
+			return nil, fmt.Errorf("entry %d has invalid action %q", i+1, actionStr)
+		}
+		out = append(out, Rule{Pattern: pattern, Action: action})
+	}
+	return out, nil
+}
+
 func LoadEffectivePolicy(configDir string) (*Policy, error) {
 	p, err := LoadPolicy(configDir)
 	if err != nil {
 		return nil, err
 	}
-	return MergePolicyFromEnv(p), nil
+	return MergePolicyFromEnvStrict(p)
 }
 
 const EnvSafetyPolicyFile = "ALIBABA_CLOUD_CLI_SAFETY_POLICY_FILE"

@@ -263,6 +263,8 @@ aliyun configure safety-policy --help
 
 `--yes` 可以在非交互场景跳过确认提示，但不能绕过 deny 策略。在自动化中使用前，请检查命令和资源范围。
 
+安全策略默认关闭，`confirm` 只是 CLI 本地执行前确认，不代表云端授权或审批。使用 `show`/`list` 查看当前生效策略；如果设置了 `ALIBABA_CLOUD_SAFETY_POLICY_ENABLED` 或 `ALIBABA_CLOUD_SAFETY_POLICY_RULES`，展示结果包含环境变量覆盖后的配置。策略文件或环境规则无法完整解析时，CLI 会拒绝继续执行。
+
 ## 面向 Agent 的优化与 AI mode
 
 AI mode 可以全局管理，也可以针对单次命令控制：

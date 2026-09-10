@@ -447,3 +447,69 @@ func TestLoadPolicy_InvalidJSONReturnsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parse safety policy")
 }
+
+func TestLoadPolicy_RejectsUnknownFieldsAndActions(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "unknown policy field",
+			body: `{"enabeld":true,"rules":[]}`,
+		},
+		{
+			name: "unknown rule action",
+			body: `{"enabled":true,"rules":[{"pattern":"ecs:Delete*","action":"dney"}]}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(GetPolicyFilePath(dir), []byte(tt.body), 0600))
+			_, err := LoadPolicy(dir)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "safety policy")
+		})
+	}
+}
+
+func TestLoadEffectivePolicy_RejectsPartiallyInvalidEnvRules(t *testing.T) {
+	unsetEnvForTest(t, EnvSafetyPolicyEnabled)
+	dir := t.TempDir()
+	require.NoError(t, SavePolicy(dir, &Policy{
+		Enabled: true,
+		Rules:   []Rule{{Pattern: "ecs:Delete*", Action: ActionDeny}},
+	}))
+	t.Setenv(EnvSafetyPolicyRules, "ecs:Delete*=dney,ecs:Describe*=allow")
+	_, err := LoadEffectivePolicy(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), EnvSafetyPolicyRules)
+}
+
+func TestPolicy_Check_UnknownActionFailsClosed(t *testing.T) {
+	policy := &Policy{Enabled: true, Rules: []Rule{{Pattern: "ecs:Delete*", Action: Action("dney")}}}
+	result := policy.Check(CommandInfo{Product: "ecs", ApiOrMethod: "DeleteInstance"})
+	assert.True(t, result.Matched)
+	assert.Equal(t, ActionDeny, result.Action)
+}
+
+func TestPolicy_Check_CanonicalAPIAlsoMatchesUserKebabEntry(t *testing.T) {
+	policy := &Policy{Enabled: true, Rules: []Rule{{Pattern: "ecs:DeleteInstance", Action: ActionDeny}}}
+	result := policy.Check(CommandInfo{
+		Product:              "ecs",
+		ApiOrMethod:          "delete-instance",
+		CanonicalApiOrMethod: "DeleteInstance",
+	})
+	assert.True(t, result.Matched)
+	assert.Equal(t, ActionDeny, result.Action)
+}
+
+func TestPolicy_Check_CanonicalAPIDoesNotMatchUnrelatedCommand(t *testing.T) {
+	policy := &Policy{Enabled: true, Rules: []Rule{{Pattern: "ecs:DeleteInstance", Action: ActionDeny}}}
+	result := policy.Check(CommandInfo{
+		Product:              "ecs",
+		ApiOrMethod:          "describe-instances",
+		CanonicalApiOrMethod: "DescribeInstances",
+	})
+	assert.False(t, result.Matched)
+}

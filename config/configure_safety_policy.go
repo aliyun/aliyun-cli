@@ -84,6 +84,15 @@ func loadSafetyPolicy(ctx *cli.Context) (configDir string, policy *safety.Policy
 	return configDir, policy, nil
 }
 
+func loadEffectiveSafetyPolicy(ctx *cli.Context) (configDir string, policy *safety.Policy, err error) {
+	configDir = GetConfigDir(ctx)
+	policy, err = safety.LoadEffectivePolicy(configDir)
+	if err != nil {
+		return "", nil, fmt.Errorf("load effective safety policy failed: %w", err)
+	}
+	return configDir, policy, nil
+}
+
 func newConfigureSafetyPolicyShowCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "show",
@@ -93,7 +102,7 @@ func newConfigureSafetyPolicyShowCommand() *cli.Command {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			configDir, policy, err := loadSafetyPolicy(ctx)
+			configDir, policy, err := loadEffectiveSafetyPolicy(ctx)
 			if err != nil {
 				return err
 			}
@@ -183,7 +192,7 @@ func newConfigureSafetyPolicyListCommand() *cli.Command {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			configDir, policy, err := loadSafetyPolicy(ctx)
+			configDir, policy, err := loadEffectiveSafetyPolicy(ctx)
 			if err != nil {
 				return err
 			}
