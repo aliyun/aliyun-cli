@@ -2,9 +2,9 @@ name: Go
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, v351-develop ]
   pull_request:
-    branches: [ master ]
+    branches: [ master, v351-develop ]
 
 jobs:
 
