@@ -16,6 +16,7 @@ package openapi
 import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 )
 
 func AddFlags(fs *cli.FlagSet) {
@@ -556,8 +557,8 @@ func CliAIOverrides(fs *cli.FlagSet) (forceOn bool, forceOff bool) {
 }
 
 // CliAIOverridesForOpenAPI combines explicit command flags with the agent environment detected at process startup.
-// Used by in-process OpenAPI and when injecting AI-mode env into Go plugins.
-// An explicit opt-out always wins.
+// Explicit command and AI-mode environment configuration take precedence over automatic Agent enablement.
+// ALIBABA_CLOUD_CLI_AGENT_INTEGRATION controls Agent-triggered integrations.
 func CliAIOverridesForOpenAPI(ctx *cli.Context) (forceOn bool, forceOff bool) {
 	if ctx == nil {
 		return false, false
@@ -566,5 +567,14 @@ func CliAIOverridesForOpenAPI(ctx *cli.Context) (forceOn bool, forceOff bool) {
 	if forceOff {
 		return false, true
 	}
-	return forceOn || ctx.IsAgent(), false
+	if forceOn {
+		return true, false
+	}
+	if _, ok := aimode.EnvironmentOverride(); ok {
+		return false, false
+	}
+	if !aimode.AgentAIModeIntegrationEnabled() {
+		return false, false
+	}
+	return ctx.IsAgent(), false
 }

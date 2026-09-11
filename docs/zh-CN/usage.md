@@ -286,6 +286,14 @@ AlibabaCloud-AIMode/enabled
 aliyun ecs describe-instances --no-cli-ai-mode
 ```
 
+需要在当前环境中持续关闭 Agent 自动探测带来的 AI mode（包括 AI Help 文本）时，显式设置：
+
+```sh
+export ALIBABA_CLOUD_CLI_AGENT_INTEGRATION=disabled
+```
+
+该变量控制由 Agent 探测触发的集成。当前支持 `disabled`、`ai-mode` 和 `all`。设置为 `disabled` 只关闭 Agent 自动集成，不会覆盖`configure ai-mode enable`。显式传入 `--cli-ai-mode` 仍可为单次命令重新开启。
+
 JSON Help 协议、Agent 错误 envelope、退出状态、Trace Context 传播和 MCP 代理安全行为见 [MCP 代理、OpenTelemetry 与机器可读接口](./integrations.md)。
 
 ## 大驼峰命令的参数边界情况

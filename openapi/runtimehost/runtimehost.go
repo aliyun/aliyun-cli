@@ -159,32 +159,57 @@ func buildUserAgentSuffix(ctx *cli.Context) string {
 		}
 	}
 
-	cfg, forceOn, forceOff := commandAIModeState(ctx)
-	if suf := aimode.RequestUserAgentSuffixForCommand(cfg, forceOn, forceOff); suf != "" {
+	cfg, enabled := commandAIModeState(ctx, nil)
+	if suf := requestUserAgentSuffix(cfg, enabled); suf != "" {
 		parts = append(parts, suf)
 	}
 	return strings.TrimSpace(strings.Join(parts, " "))
 }
 
-func commandAIModeState(ctx *cli.Context) (*aimode.AiConfig, bool, bool) {
+func commandAIModeState(ctx *cli.Context, args []string) (*aimode.AiConfig, bool) {
 	cfg, err := aimode.Load(config.GetConfigDir(ctx))
 	if err != nil {
 		cfg = aimode.DefaultAiConfig()
 	}
 	forceOn := flagAssigned(ctx, "cli-ai-mode")
 	forceOff := flagAssigned(ctx, "no-cli-ai-mode")
+	for _, arg := range args {
+		switch strings.SplitN(arg, "=", 2)[0] {
+		case "--cli-ai-mode":
+			forceOn = true
+		case "--no-cli-ai-mode":
+			forceOff = true
+		}
+	}
 	if forceOff {
-		return cfg, false, true
+		return cfg, false
 	}
-	if ctx != nil && ctx.IsAgent() {
-		forceOn = true
+	if forceOn {
+		return cfg, true
 	}
-	return cfg, forceOn, false
+	if enabled, ok := aimode.EnvironmentOverride(); ok {
+		return cfg, enabled
+	}
+	if ctx != nil && ctx.IsAgent() && aimode.AgentAIModeIntegrationEnabled() {
+		return cfg, true
+	}
+	return cfg, cfg != nil && cfg.Enabled
+}
+
+func requestUserAgentSuffix(cfg *aimode.AiConfig, enabled bool) string {
+	if !enabled {
+		return ""
+	}
+	effective := aimode.DefaultAiConfig()
+	effective.Enabled = true
+	if cfg != nil {
+		effective.UserAgent = cfg.UserAgent
+	}
+	return aimode.RequestUserAgentSuffix(effective)
 }
 
 func aiModeForCommand(ctx *cli.Context) (*aimode.AiConfig, bool) {
-	cfg, forceOn, forceOff := commandAIModeState(ctx)
-	return cfg, aimode.EnabledForCommand(cfg, forceOn, forceOff)
+	return commandAIModeState(ctx, nil)
 }
 
 func flagAssigned(ctx *cli.Context, name string) bool {
@@ -420,16 +445,8 @@ func helpLanguageFromArgs(args []string) string {
 }
 
 func helpAIMode(ctx *cli.Context, args []string) bool {
-	cfg, forceOn, forceOff := commandAIModeState(ctx)
-	for _, arg := range args {
-		switch strings.SplitN(arg, "=", 2)[0] {
-		case "--cli-ai-mode":
-			forceOn = true
-		case "--no-cli-ai-mode":
-			forceOff = true
-		}
-	}
-	return aimode.EnabledForCommand(cfg, forceOn, forceOff)
+	_, enabled := commandAIModeState(ctx, args)
+	return enabled
 }
 
 func runtimeHelpArgs(rawArgs []string) (args []string, product, command string) {
