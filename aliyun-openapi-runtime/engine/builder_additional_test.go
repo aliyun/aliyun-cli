@@ -103,6 +103,9 @@ func TestEngineDiscoveryAndHelpEntryPoints(t *testing.T) {
 	if !engine.Resolvable("demo", "run-thing") || engine.Resolvable("demo", "missing") || engine.Resolvable("missing", "run-thing") {
 		t.Fatal("Resolvable returned unexpected result")
 	}
+	if !engine.Resolvable("DeMo", "run-thing") {
+		t.Fatal("Resolvable must treat product code case-insensitively")
+	}
 
 	if err := engine.ProductHelp(Request{}); err == nil {
 		t.Fatal("ProductHelp without product succeeded")
@@ -127,6 +130,10 @@ func TestEngineDiscoveryAndHelpEntryPoints(t *testing.T) {
 	}
 	if !strings.Contains(apiHelp.String(), "--instance-type") {
 		t.Fatalf("APIHelp output = %q", apiHelp.String())
+	}
+	apiHelp.Reset()
+	if err := engine.APIHelp(Request{Args: []string{"DEMO", "run-thing"}, Out: &apiHelp}); err != nil {
+		t.Fatalf("APIHelp with uppercase product: %v", err)
 	}
 	if !strings.Contains(apiHelp.String(), "Global Parameters:") ||
 		!strings.Contains(apiHelp.String(), "--cli-dry-run") {
