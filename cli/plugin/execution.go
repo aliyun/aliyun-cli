@@ -107,17 +107,18 @@ func IsProfileRequiredForCommand(command string) bool {
 // Returns (false, error) if there's an error finding the plugin or resolving the plugin binary path.
 // If ctx is nil, uses os.Stdout and os.Stderr.
 func ExecutePlugin(command string, args []string, ctx *cli.Context) (bool, error) {
-	return executePlugin(command, args, ctx, true)
+	return executePlugin(command, args, ctx)
 }
 
 // ExecutePluginRaw is reserved for provider-first Help routing. It forwards a
-// defensive copy of the product-tail argv without the historical lowercase or
-// plugin-help rewrite, so the installed plugin remains the sole Help parser.
+// defensive copy of the product-tail argv without rewriting Help operations,
+// so the installed plugin remains the sole Help parser. Only the product code
+// is normalized to lowercase, matching ordinary plugin execution.
 func ExecutePluginRaw(command string, args []string, ctx *cli.Context) (bool, error) {
-	return executePlugin(command, args, ctx, false)
+	return executePlugin(command, args, ctx)
 }
 
-func executePlugin(command string, args []string, ctx *cli.Context, adjust bool) (bool, error) {
+func executePlugin(command string, args []string, ctx *cli.Context) (bool, error) {
 	mgr, err := NewManager()
 	if err != nil {
 		return false, nil
@@ -143,11 +144,7 @@ func executePlugin(command string, args []string, ctx *cli.Context, adjust bool)
 		return true, fmt.Errorf("failed to resolve plugin binary path: %w", err)
 	}
 
-	// Handle plugin-help subcommand: convert to --help, and trans first argument to lowercase for plugin system
-	adjustedArgs := append([]string(nil), args...)
-	if adjust {
-		adjustedArgs = adjustPluginArgs(adjustedArgs)
-	}
+	adjustedArgs := normalizePluginArgs(append([]string(nil), args...))
 
 	var stdout, stderr io.Writer
 	if ctx != nil {
@@ -210,21 +207,10 @@ func mergeEnvs(base []string, overrides map[string]string) []string {
 	return result
 }
 
-func adjustPluginArgs(args []string) []string {
+func normalizePluginArgs(args []string) []string {
 	if len(args) > 0 {
 		args[0] = strings.ToLower(args[0])
 	}
-
-	if len(args) <= 1 {
-		return args
-	}
-
-	// Check if first argument is "plugin-help"
-	if args[1] == "plugin-help" {
-		// Replace plugin-help with --help and drop the rest of the arguments
-		return []string{args[0], "--help"}
-	}
-
 	return args
 }
 

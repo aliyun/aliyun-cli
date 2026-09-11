@@ -115,8 +115,12 @@ type defaultLoader struct {
 	products map[string]*productEntry
 }
 
+func normalizeProductCode(code string) string {
+	return strings.ToLower(strings.TrimSpace(code))
+}
+
 func (l *defaultLoader) EnsureProduct(code string) error {
-	code = strings.ToLower(strings.TrimSpace(code))
+	code = normalizeProductCode(code)
 	if code == "" {
 		return fmt.Errorf("product code is empty")
 	}
@@ -139,6 +143,7 @@ func (l *defaultLoader) EnsureProduct(code string) error {
 }
 
 func (l *defaultLoader) LookupProduct(code string) *meta.Product {
+	code = normalizeProductCode(code)
 	e := l.products[code]
 	if e == nil {
 		return nil
@@ -147,6 +152,7 @@ func (l *defaultLoader) LookupProduct(code string) *meta.Product {
 }
 
 func (l *defaultLoader) Provenance(product string) *source.Provenance {
+	product = normalizeProductCode(product)
 	if e := l.products[product]; e != nil {
 		return e.prov
 	}
@@ -154,6 +160,7 @@ func (l *defaultLoader) Provenance(product string) *source.Provenance {
 }
 
 func (l *defaultLoader) owner(product string) (source.Source, error) {
+	product = normalizeProductCode(product)
 	e := l.products[product]
 	if e == nil || e.src == nil {
 		return nil, fmt.Errorf("unknown product %q", product)
@@ -162,6 +169,7 @@ func (l *defaultLoader) owner(product string) (source.Source, error) {
 }
 
 func (l *defaultLoader) ResolveVersion(product, requested string) (string, error) {
+	product = normalizeProductCode(product)
 	p := l.LookupProduct(product)
 	if p == nil {
 		return "", fmt.Errorf("unknown product %q", product)
@@ -187,6 +195,7 @@ func defaultVersionEnvVar(product string) string {
 }
 
 func (l *defaultLoader) GetAPIIndex(product, version string) (*meta.APIIndex, error) {
+	product = normalizeProductCode(product)
 	src, err := l.owner(product)
 	if err != nil {
 		return nil, err
@@ -202,6 +211,7 @@ func (l *defaultLoader) ResolveCommand(product, cmdName string) (meta.APIRef, er
 // so a command that lives only in a non-default version is still recognised — e.g. by the host router when the user will pass --api-version.
 // Unknown products short-circuit to false without any index I/O.
 func (l *defaultLoader) CommandExists(product, cmdName string) bool {
+	product = normalizeProductCode(product)
 	if product == "" || cmdName == "" {
 		return false
 	}
@@ -221,6 +231,7 @@ func (l *defaultLoader) CommandExists(product, cmdName string) bool {
 }
 
 func (l *defaultLoader) FindCommandVersions(product, cmdName string) []string {
+	product = normalizeProductCode(product)
 	if product == "" || cmdName == "" {
 		return nil
 	}
@@ -242,6 +253,7 @@ func (l *defaultLoader) FindCommandVersions(product, cmdName string) []string {
 }
 
 func (l *defaultLoader) ResolveCommandVersion(product, cmdName, version string) (meta.APIRef, error) {
+	product = normalizeProductCode(product)
 	if product == "" || cmdName == "" {
 		return meta.APIRef{}, ErrCommandNotFound
 	}
@@ -261,6 +273,7 @@ func (l *defaultLoader) ResolveCommandVersion(product, cmdName, version string) 
 }
 
 func (l *defaultLoader) GetAPI(product, version, name string) (*meta.API, error) {
+	product = normalizeProductCode(product)
 	src, err := l.owner(product)
 	if err != nil {
 		return nil, err

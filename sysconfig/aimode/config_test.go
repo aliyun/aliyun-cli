@@ -184,3 +184,51 @@ func TestEnabledForCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestEnvironmentOverride(t *testing.T) {
+	tests := []struct {
+		value       string
+		wantEnabled bool
+		wantOK      bool
+	}{
+		{value: "1", wantEnabled: true, wantOK: true},
+		{value: " true ", wantEnabled: true, wantOK: true},
+		{value: "0", wantEnabled: false, wantOK: true},
+		{value: " FALSE ", wantEnabled: false, wantOK: true},
+		{value: "", wantEnabled: false, wantOK: false},
+		{value: "disabled", wantEnabled: false, wantOK: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.value, func(t *testing.T) {
+			t.Setenv(EnvAIMode, tt.value)
+			enabled, ok := EnvironmentOverride()
+			assert.Equal(t, tt.wantEnabled, enabled)
+			assert.Equal(t, tt.wantOK, ok)
+		})
+	}
+}
+
+func TestAgentAIModeIntegrationEnabled(t *testing.T) {
+	tests := []struct {
+		value string
+		want  bool
+	}{
+		{value: "", want: true},
+		{value: "disabled", want: false},
+		{value: "all", want: true},
+		{value: "ai-mode", want: true},
+		{value: "user-agent", want: false},
+		{value: "ai-mode,user-agent", want: true},
+		{value: " ALL ", want: true},
+		{value: "all,disabled", want: false},
+		{value: "invalid", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.value, func(t *testing.T) {
+			t.Setenv(EnvAgentIntegration, tt.value)
+			assert.Equal(t, tt.want, AgentAIModeIntegrationEnabled())
+		})
+	}
+}

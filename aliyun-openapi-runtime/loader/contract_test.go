@@ -78,6 +78,33 @@ func TestLoaderCommandDiscoveryAndAccessors(t *testing.T) {
 	}
 }
 
+func TestLoaderProductCodeIsCaseInsensitive(t *testing.T) {
+	loader := newTwoVersionLoader(t)
+
+	if product := loader.LookupProduct(" DeMo "); product == nil || product.Code != "demo" {
+		t.Fatalf("LookupProduct(DeMo) = %#v", product)
+	}
+	if provenance := loader.Provenance("DEMO"); provenance == nil {
+		t.Fatal("Provenance(DEMO) = nil")
+	}
+	if !loader.CommandExists("DEMO", "do-thing") {
+		t.Fatal("CommandExists(DEMO, do-thing) = false")
+	}
+	if got, want := loader.FindCommandVersions("DeMo", "do-thing"), []string{"2018-01-01", "2020-01-01"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("FindCommandVersions(DeMo) = %v, want %v", got, want)
+	}
+	ref, err := loader.ResolveCommand("DeMo", "do-thing")
+	if err != nil || ref.Product != "demo" || ref.Name != "DoThingV2" {
+		t.Fatalf("ResolveCommand(Demo) = %#v, %v", ref, err)
+	}
+	if _, err := loader.GetAPIIndex("DEMO", "2020-01-01"); err != nil {
+		t.Fatalf("GetAPIIndex(DEMO): %v", err)
+	}
+	if api, err := loader.GetAPI("DeMo", "2020-01-01", "DoThingV2"); err != nil || api.Name != "DoThingV2" {
+		t.Fatalf("GetAPI(DeMo) = %#v, %v", api, err)
+	}
+}
+
 type loaderContractSource struct {
 	product    *meta.Product
 	productErr error

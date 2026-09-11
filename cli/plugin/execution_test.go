@@ -289,49 +289,33 @@ func TestResolvePluginBinaryPath(t *testing.T) {
 	}
 }
 
-func TestAdjustPluginArgs(t *testing.T) {
-	t.Run("Adjust plugin-help to --help", func(t *testing.T) {
-		args := []string{"fc", "plugin-help"}
-		adjusted := adjustPluginArgs(args)
-		if len(adjusted) != 2 || adjusted[1] != "--help" {
-			t.Errorf("adjustPluginArgs(%v) = %v, want [--help]", args, adjusted)
-		}
-	})
-
+func TestNormalizePluginArgs(t *testing.T) {
 	t.Run("Keep other args unchanged", func(t *testing.T) {
 		args := []string{"describe-regions", "--region-id", "cn-hangzhou"}
-		adjusted := adjustPluginArgs(args)
+		adjusted := normalizePluginArgs(args)
 		if len(adjusted) != len(args) {
-			t.Errorf("adjustPluginArgs(%v) length = %d, want %d", args, len(adjusted), len(args))
+			t.Errorf("normalizePluginArgs(%v) length = %d, want %d", args, len(adjusted), len(args))
 		}
 		for i := range args {
 			if adjusted[i] != args[i] {
-				t.Errorf("adjustPluginArgs(%v)[%d] = %q, want %q", args, i, adjusted[i], args[i])
+				t.Errorf("normalizePluginArgs(%v)[%d] = %q, want %q", args, i, adjusted[i], args[i])
 			}
 		}
 	})
 
 	t.Run("Empty args unchanged", func(t *testing.T) {
 		args := []string{}
-		adjusted := adjustPluginArgs(args)
+		adjusted := normalizePluginArgs(args)
 		if len(adjusted) != 0 {
-			t.Errorf("adjustPluginArgs(%v) = %v, want []", args, adjusted)
-		}
-	})
-
-	t.Run("plugin-help with additional args", func(t *testing.T) {
-		args := []string{"fc", "plugin-help", "--verbose"}
-		adjusted := adjustPluginArgs(args)
-		if len(adjusted) != 2 || adjusted[1] != "--help" {
-			t.Errorf("adjustPluginArgs(%v) = %v, want [--help]", args, adjusted)
+			t.Errorf("normalizePluginArgs(%v) = %v, want []", args, adjusted)
 		}
 	})
 
 	t.Run("First arg to lower case", func(t *testing.T) {
 		args := []string{"FC", "help"}
-		adjusted := adjustPluginArgs(args)
+		adjusted := normalizePluginArgs(args)
 		if adjusted[0] != "fc" {
-			t.Errorf("adjustPluginArgs(%v)[0] = %q, want %q", args, adjusted[0], "fc")
+			t.Errorf("normalizePluginArgs(%v)[0] = %q, want %q", args, adjusted[0], "fc")
 		}
 	})
 }
@@ -525,7 +509,7 @@ func TestExecutePlugin(t *testing.T) {
 		assert.Contains(t, stdout.String(), "args: arg1 arg2")
 	})
 
-	t.Run("Raw Help execution preserves argv and caller slice", func(t *testing.T) {
+	t.Run("Raw Help normalizes product and preserves remaining argv and caller slice", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("shell script test skipped on Windows")
 		}
@@ -551,10 +535,10 @@ func TestExecutePlugin(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, ok)
 		assert.Equal(t, original, args)
-		assert.Contains(t, stdout.String(), "args:Test plugin-help --help-search FooBar")
+		assert.Contains(t, stdout.String(), "args:test plugin-help --help-search FooBar")
 	})
 
-	t.Run("Plugin execution with plugin-help subcommand", func(t *testing.T) {
+	t.Run("Plugin execution preserves plugin-help subcommand", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("shell script test skipped on Windows")
 		}
@@ -566,7 +550,7 @@ func TestExecutePlugin(t *testing.T) {
 		pluginDir := filepath.Join(testHome, ".aliyun", "plugins", "aliyun-cli-test")
 		os.MkdirAll(pluginDir, 0755)
 		binPath := filepath.Join(pluginDir, "aliyun-cli-test")
-		scriptContent := "#!/bin/sh\nif [ \"$2\" = \"--help\" ]; then echo 'plugin help'; exit 0; fi\nexit 1\n"
+		scriptContent := "#!/bin/sh\nif [ \"$2\" = \"plugin-help\" ]; then echo 'plugin help'; exit 0; fi\nexit 1\n"
 		os.WriteFile(binPath, []byte(scriptContent), 0755)
 
 		manifestPath := filepath.Join(testHome, ".aliyun", "plugins", "manifest.json")
@@ -574,7 +558,6 @@ func TestExecutePlugin(t *testing.T) {
 		manifestJSON := `{"plugins":{"aliyun-cli-test":{"name":"aliyun-cli-test","version":"1.0.0","description":"Test plugin","path":"` + pluginDir + `","command":"test"}}}`
 		os.WriteFile(manifestPath, []byte(manifestJSON), 0644)
 
-		// Test that plugin-help is converted to --help
 		ok, err := ExecutePlugin("test", []string{"test", "plugin-help"}, nil)
 		assert.NoError(t, err)
 		assert.True(t, ok)
