@@ -28,6 +28,12 @@ func NormalizePluginType(t string) string {
 }
 
 type Index struct {
+	// Freshness / authenticity metadata (optional; used when the index is signed).
+	Schema       int    `json:"schema,omitempty"`
+	IndexVersion int64  `json:"index_version,omitempty"`
+	CreatedAt    string `json:"created_at,omitempty"`
+	ExpiresAt    string `json:"expires_at,omitempty"`
+
 	Plugins []PluginInfo `json:"plugins"`
 }
 
