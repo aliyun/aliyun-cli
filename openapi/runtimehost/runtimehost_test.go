@@ -69,6 +69,8 @@ func TestBuildUserAgentSuffix(t *testing.T) {
 }
 
 func TestBuildUserAgentSuffixForDetectedAgentUsesMarkerOnly(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "")
+	t.Setenv(aimode.EnvAgentIntegration, "")
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	ctx.Flags().Add(config.NewConfigurePathFlag())
 	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
@@ -79,6 +81,22 @@ func TestBuildUserAgentSuffixForDetectedAgentUsesMarkerOnly(t *testing.T) {
 
 	if got := buildUserAgentSuffix(ctx); got != aimode.UserAgentEnabledMarker {
 		t.Fatalf("agent suffix = %q, want marker only", got)
+	}
+
+	t.Setenv(aimode.EnvAIMode, "0")
+	if got := buildUserAgentSuffix(ctx); got != "" {
+		t.Fatalf("agent suffix with environment opt-out = %q, want empty", got)
+	}
+
+	t.Setenv(aimode.EnvAIMode, "")
+	t.Setenv(aimode.EnvAgentIntegration, "disabled")
+	if got := buildUserAgentSuffix(ctx); got != "" {
+		t.Fatalf("agent suffix with disabled integration = %q, want empty", got)
+	}
+
+	ctx.Flags().Get("cli-ai-mode").SetAssigned(true)
+	if got := buildUserAgentSuffix(ctx); got != aimode.UserAgentEnabledMarker {
+		t.Fatalf("explicit force-on suffix = %q, want marker", got)
 	}
 }
 

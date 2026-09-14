@@ -113,6 +113,9 @@ func Save(configDir string, c *AiConfig) error {
 
 const EnvAIMode = "ALIBABA_CLOUD_CLI_AI_MODE"
 const EnvAIUserAgent = "ALIBABA_CLOUD_CLI_AI_USER_AGENT"
+const EnvAgentIntegration = "ALIBABA_CLOUD_CLI_AGENT_INTEGRATION"
+
+const agentIntegrationAIMode = "ai-mode"
 
 // Keys inside the JSON payload encoded as OSSUTIL_CONFIG_VALUE.
 const (
@@ -158,10 +161,45 @@ func EnabledForCommand(cfg *AiConfig, forceOn, forceOff bool) bool {
 	if forceOn {
 		return true
 	}
-	if enabled, ok := parseEnabledValue(os.Getenv(EnvAIMode)); ok {
+	if enabled, ok := EnvironmentOverride(); ok {
 		return enabled
 	}
 	return cfg != nil && cfg.Enabled
+}
+
+// EnvironmentOverride returns the explicit AI-mode value from the process environment.
+// The boolean result is false when the variable is unset or invalid, so callers can distinguish an explicit "0"/"false" from no environment override.
+func EnvironmentOverride() (enabled bool, ok bool) {
+	return parseEnabledValue(os.Getenv(EnvAIMode))
+}
+
+// AgentAIModeIntegrationEnabled reports whether Agent detection may automatically enable AI mode.
+func AgentAIModeIntegrationEnabled() bool {
+	return agentIntegrationEnabled(agentIntegrationAIMode)
+}
+
+// agentIntegrationEnabled reports whether an effect triggered by Agent detection is enabled.
+// An unset variable preserves the default integrations.
+// A non-empty list is an allowlist; "disabled" disables all and "all" enables all integrations.
+func agentIntegrationEnabled(integration string) bool {
+	raw := strings.TrimSpace(os.Getenv(EnvAgentIntegration))
+	if raw == "" {
+		return true
+	}
+	enabled := false
+	for _, item := range strings.Split(strings.ToLower(raw), ",") {
+		switch item = strings.TrimSpace(item); item {
+		case "disabled":
+			return false
+		case "all":
+			enabled = true
+		default:
+			if item == integration {
+				enabled = true
+			}
+		}
+	}
+	return enabled
 }
 
 func parseEnabledValue(value string) (bool, bool) {
