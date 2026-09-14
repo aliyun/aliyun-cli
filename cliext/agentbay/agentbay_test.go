@@ -576,7 +576,7 @@ func TestNeedCheckVersionVariants(t *testing.T) {
 	if c.NeedCheckVersion() {
 		t.Fatalf("not installed should return false")
 	}
-	writeExecutable(t, filepath.Join(tmpDir, "agentbay"), "#!/bin/sh\n")
+	writeExecutable(t, c.execFilePath, "#!/bin/sh\n")
 	c.InitBasicInfo()
 	if !c.NeedCheckVersion() {
 		t.Fatalf("installed no cache => true")

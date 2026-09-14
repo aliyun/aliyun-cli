@@ -29,6 +29,10 @@ func addConfigFlag(ctx *cli.Context, name string, value string) {
 }
 
 func prepareConfig(t *testing.T, home string) {
+	t.Helper()
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("USERPROFILE", home)
 	cfgDir := filepath.Join(home, ".aliyun")
 	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
 		t.Fatalf("mkdir cfg: %v", err)
@@ -307,7 +311,7 @@ func TestEnsurePrefixAndPackage_ExecPathOverrideMissing(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error for missing exec path override")
 	}
-	if !strings.Contains(err.Error(), "ALIBABA_CLOUD_ESA_CLI_EXEC_PATH") || !strings.Contains(err.Error(), missing) {
+	if !strings.Contains(err.Error(), "ALIBABA_CLOUD_ESA_CLI_EXEC_PATH") || !strings.Contains(err.Error(), c.execFilePath) {
 		t.Errorf("error should name the env var and path: %v", err)
 	}
 }

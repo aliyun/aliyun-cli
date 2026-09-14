@@ -59,6 +59,8 @@ func prepareConfigHome(t *testing.T) string {
 		t.Fatalf("write config: %v", err)
 	}
 	t.Setenv("HOME", home)
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
 	t.Setenv("USERPROFILE", home)
 	return home
 }
@@ -928,6 +930,8 @@ func TestRun_NotInstalled_FreshInstallAndExecute(t *testing.T) {
 
 	ctx, _, _ := newOriginCtx()
 	m := New(testConfig(), ctx)
+	m.runtimeGOOSFn = func() string { return "linux" }
+	m.runtimeGOARCHFn = func() string { return "amd64" }
 	installCount := 0
 	m.downloadBinaryFn = func(ctx context.Context, url, exe string) error {
 		installCount++
@@ -971,6 +975,8 @@ func TestRun_Installed_SkipDownload(t *testing.T) {
 
 	ctx, _, _ := newOriginCtx()
 	m := New(testConfig(), ctx)
+	m.runtimeGOOSFn = func() string { return "linux" }
+	m.runtimeGOARCHFn = func() string { return "amd64" }
 	installCount := 0
 	m.downloadBinaryFn = func(ctx context.Context, url, exe string) error { installCount++; return nil }
 	m.execCommandFn = mockOKExec

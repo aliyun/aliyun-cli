@@ -194,10 +194,11 @@ func TestInitBasicInfo_DerivesPathFromConfig(t *testing.T) {
 	c := &Context{}
 	c.InitBasicInfo()
 
-	if c.installDir != "/tmp/test-aliyun/maxc" {
-		t.Errorf("installDir = %q, want /tmp/test-aliyun/maxc", c.installDir)
+	wantInstallDir := filepath.Join("/tmp/test-aliyun", "maxc")
+	if c.installDir != wantInstallDir {
+		t.Errorf("installDir = %q, want %q", c.installDir, wantInstallDir)
 	}
-	wantExec := "/tmp/test-aliyun/maxc/maxc"
+	wantExec := filepath.Join(wantInstallDir, "maxc")
 	if runtimeGOOSFunc() == "windows" {
 		wantExec += ".exe"
 	}
@@ -379,13 +380,36 @@ func newCtxForExecute(t *testing.T) *Context {
 	}
 }
 
+func maxcTestCommand(mode string) *exec.Cmd {
+	return exec.Command(os.Args[0], "-test.run=^TestMaxcHelperProcess$", "--", mode)
+}
+
+func TestMaxcHelperProcess(t *testing.T) {
+	if len(os.Args) < 2 || os.Args[len(os.Args)-2] != "--" {
+		return
+	}
+	switch os.Args[len(os.Args)-1] {
+	case "success":
+		return
+	case "exit-42":
+		os.Exit(42)
+	case "injected-yes":
+		if os.Getenv("INJECTED") == "yes" {
+			return
+		}
+		os.Exit(1)
+	default:
+		os.Exit(2)
+	}
+}
+
 func TestExecute_PassesArgsAndEnv(t *testing.T) {
 	var spyName string
 	var spyArgs []string
 	withExecCommandStub(t, func(name string, arg ...string) *exec.Cmd {
 		spyName = name
 		spyArgs = append([]string(nil), arg...)
-		return exec.Command("/bin/sh", "-c", "exit 0")
+		return maxcTestCommand("success")
 	})
 
 	c := newCtxForExecute(t)
@@ -402,7 +426,7 @@ func TestExecute_PassesArgsAndEnv(t *testing.T) {
 
 func TestExecute_ForwardsExitCode(t *testing.T) {
 	withExecCommandStub(t, func(name string, arg ...string) *exec.Cmd {
-		return exec.Command("/bin/sh", "-c", "exit 42")
+		return maxcTestCommand("exit-42")
 	})
 
 	c := newCtxForExecute(t)
@@ -421,7 +445,7 @@ func TestExecute_ForwardsExitCode(t *testing.T) {
 
 func TestExecute_MergesEnvOverride(t *testing.T) {
 	withExecCommandStub(t, func(name string, arg ...string) *exec.Cmd {
-		return exec.Command("/bin/sh", "-c", `test "$INJECTED" = "yes"`)
+		return maxcTestCommand("injected-yes")
 	})
 	c := newCtxForExecute(t)
 	if err := c.Execute(nil); err != nil {
@@ -432,7 +456,7 @@ func TestExecute_MergesEnvOverride(t *testing.T) {
 func TestExecute_OverrideWinsOverInherited(t *testing.T) {
 	t.Setenv("INJECTED", "parent-value")
 	withExecCommandStub(t, func(name string, arg ...string) *exec.Cmd {
-		return exec.Command("/bin/sh", "-c", `test "$INJECTED" = "yes"`)
+		return maxcTestCommand("injected-yes")
 	})
 	c := newCtxForExecute(t)
 	if err := c.Execute(nil); err != nil {
@@ -569,7 +593,7 @@ func TestDownloadAndInstall_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat exec: %v", err)
 	}
-	if fi.Mode().Perm()&0o100 == 0 {
+	if runtime.GOOS != "windows" && fi.Mode().Perm()&0o100 == 0 {
 		t.Errorf("execFilePath mode = %v, expected execute bit set", fi.Mode())
 	}
 
@@ -981,11 +1005,15 @@ func TestExtractTarGz_SymlinkFailPropagatesOnNonWindows(t *testing.T) {
 }
 
 func TestExtractTarGz_RejectsSymlinkEscape(t *testing.T) {
+	tmp := t.TempDir()
+	linkTarget := "/etc/passwd"
+	if runtime.GOOS == "windows" {
+		linkTarget = filepath.Join(filepath.VolumeName(tmp)+string(filepath.Separator), "Windows", "win.ini")
+	}
 	tarBytes := buildTarGz(t, []tarEntry{
 		{Name: "pkg/", Mode: 0o755},
-		{Name: "pkg/badlink", Linkname: "/etc/passwd"},
+		{Name: "pkg/badlink", Linkname: linkTarget},
 	})
-	tmp := t.TempDir()
 	tarPath := filepath.Join(tmp, "evil.tar.gz")
 	if err := os.WriteFile(tarPath, tarBytes, 0o644); err != nil {
 		t.Fatal(err)
@@ -1243,7 +1271,7 @@ func TestRun_FullChain_Mocked(t *testing.T) {
 	withExecCommandStub(t, func(name string, arg ...string) *exec.Cmd {
 		got.name = name
 		got.args = append([]string(nil), arg...)
-		got.cmd = exec.Command("/bin/sh", "-c", "exit 0")
+		got.cmd = maxcTestCommand("success")
 		return got.cmd
 	})
 

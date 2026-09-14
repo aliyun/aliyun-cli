@@ -139,7 +139,7 @@ func TestRun_NotInstalled_FreshInstallAndExecute(t *testing.T) {
 	timeNowFunc = func() time.Time { return fixedNow }
 	execCommandFunc = func(name string, args ...string) *exec.Cmd {
 		// mock main execution always success
-		return exec.Command("bash", "-c", "exit 0")
+		return exec.Command(os.Args[0], "-test.run=^$")
 	}
 	t.Cleanup(func() {
 		getLatestOssUtilVersionFunc = origGetLatest
@@ -182,6 +182,9 @@ func TestRun_Installed_NoVersionCheckWithinTTL(t *testing.T) {
 
 	// prepare existing binary
 	execPath := filepath.Join(config.GetConfigPath(), "ossutil")
+	if runtime.GOOS == "windows" {
+		execPath += ".exe"
+	}
 	writeExecutable(t, execPath, "#!/bin/sh\n")
 
 	// create fresh cache timestamp (recent)
@@ -194,7 +197,9 @@ func TestRun_Installed_NoVersionCheckWithinTTL(t *testing.T) {
 	getLatestOssUtilVersionFunc = func() (string, error) { getCalls++; return "1.2.3", nil }
 	installCount := 0
 	downloadAndUnzipFunc = func(url, dest, exe, center string) error { installCount++; return nil }
-	execCommandFunc = func(name string, args ...string) *exec.Cmd { return exec.Command("bash", "-c", "exit 0") }
+	execCommandFunc = func(name string, args ...string) *exec.Cmd {
+		return exec.Command(os.Args[0], "-test.run=^$")
+	}
 	t.Cleanup(func() {
 		getLatestOssUtilVersionFunc = origGetLatest
 		downloadAndUnzipFunc = origDownload
@@ -224,6 +229,9 @@ func TestRun_Installed_UpdateWhenExpired(t *testing.T) {
 	prepareConfig(t, home, "en")
 
 	execPath := filepath.Join(config.GetConfigPath(), "ossutil")
+	if runtime.GOOS == "windows" {
+		execPath += ".exe"
+	}
 	writeExecutable(t, execPath, "#!/bin/sh\n")
 	old := time.Now().Unix() - int64(VersionCheckTTL) - 10
 	_ = os.WriteFile(filepath.Join(config.GetConfigPath(), ".ossutil_version_check"), []byte(fmt.Sprintf("%d", old)), 0644)
@@ -234,7 +242,9 @@ func TestRun_Installed_UpdateWhenExpired(t *testing.T) {
 	getLatestOssUtilVersionFunc = func() (string, error) { return "1.0.1", nil }
 	installCount := 0
 	downloadAndUnzipFunc = func(url, dest, exe, center string) error { installCount++; return nil }
-	execCommandFunc = func(name string, args ...string) *exec.Cmd { return exec.Command("bash", "-c", "exit 0") }
+	execCommandFunc = func(name string, args ...string) *exec.Cmd {
+		return exec.Command(os.Args[0], "-test.run=^$")
+	}
 	t.Cleanup(func() {
 		getLatestOssUtilVersionFunc = origGetLatest
 		downloadAndUnzipFunc = origDownload
@@ -571,6 +581,9 @@ func TestPrepareEnv_ProfileOssutilInConfigIgnored(t *testing.T) {
 	defer func() { _ = os.Setenv("HOME", origHOME) }()
 	home := t.TempDir()
 	_ = os.Setenv("HOME", home)
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("USERPROFILE", home)
 	cfgDir := filepath.Join(home, ".aliyun")
 	if err := os.MkdirAll(cfgDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
