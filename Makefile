@@ -99,17 +99,15 @@ test-runtime:
 check-runtime: test-runtime
 
 test: deps
-	# Ensure every package under the module is listable/vettable (catches stale
-	# go:embed in submodules). Unit tests keep the historical package set —
-	# ./... also pulls cliext/* and oss/lib, which need credentials or
-	# are intentionally out of CI unit coverage.
+	# Ensure every package under the module is listable/vettable (catches stale go:embed in submodules). 
+	# Keep oss/lib out of unit coverage because its gocheck suites require live OSS/STS credentials and cloud resources.
 	go list ./... >/dev/null
 	go vet ./...
 	ALIYUN_CLI_META_DIR="$(META_DIR)" LANG="en_US.UTF-8" go test -race -coverprofile=coverage.txt -covermode=atomic \
 		./bundledmeta ./canonicalmeta \
 		./util/... ./cli/... ./config/... \
 		./i18n/... ./main/... ./openapi/... ./meta/... ./export/... \
-		./sysconfig/... ./mcpproxy ./cloudsso
+		./sysconfig/... ./mcpproxy ./cloudsso ./cliext/...
 	go tool cover -html=coverage.txt -o coverage.html
 
 test-release: meta-pack

@@ -43,6 +43,10 @@ func NewCms2Command() *cli.Command {
 					// to print an ANSI-colored "ERROR: ..." line on stdout,
 					// which corrupts the subprocess's JSON stream.
 					cli.Exit(exitErr.Code)
+					// cli.Exit normally terminates the process.
+					// It returns only when exit handling is disabled by tests;
+					// keep the same no-framework-error behavior in that test path.
+					return nil
 				}
 				return err
 			}
