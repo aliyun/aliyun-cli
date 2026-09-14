@@ -311,7 +311,8 @@ func TestEnsurePrefixAndPackage_ExecPathOverrideMissing(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error for missing exec path override")
 	}
-	if !strings.Contains(err.Error(), "ALIBABA_CLOUD_ESA_CLI_EXEC_PATH") || !strings.Contains(err.Error(), c.execFilePath) {
+	if !strings.Contains(err.Error(), "ALIBABA_CLOUD_ESA_CLI_EXEC_PATH") ||
+		!strings.Contains(err.Error(), fmt.Sprintf("%q", c.execFilePath)) {
 		t.Errorf("error should name the env var and path: %v", err)
 	}
 }
