@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -111,6 +112,9 @@ func TestFindToolRoot(t *testing.T) {
 }
 
 func TestEnsureToolBinExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable permission bits are not supported on Windows")
+	}
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
