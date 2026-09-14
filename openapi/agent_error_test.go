@@ -118,6 +118,18 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		assert.Equal(t, RecoverySearchRequest{Keyword: "ecs"}, request)
 	})
 
+	t.Run("unknown PascalCase token reverse-looks up the owning product", func(t *testing.T) {
+		repo, err := meta.MockLoadRepository([]meta.Product{{Code: "ecs", ApiNames: []string{"DescribeRegions"}}})
+		require.NoError(t, err)
+		cause := &InvalidProductError{Code: "DescribeRegions", library: &Library{builtinRepo: repo}}
+		envelope := requireAgentEnvelope(t, cause, []string{"DescribeRegions"}, func(RecoverySearchRequest) bool {
+			return true
+		})
+
+		assert.Equal(t, `"DescribeRegions" is not a valid command or product.`, envelope.Message)
+		assert.Equal(t, []string{"aliyun ecs DescribeRegions"}, envelope.DidYouMean)
+	})
+
 	t.Run("unknown API derives a resource keyword from a real candidate", func(t *testing.T) {
 		cause := &InvalidApiError{
 			Name: "DescribeInstnaces",

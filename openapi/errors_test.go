@@ -14,6 +14,7 @@
 package openapi
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -31,7 +32,7 @@ func TestInvalidProductError_Error(t *testing.T) {
 	}
 	str := err.Error()
 	assert.Equal(t, `"ecs" is not a valid command or product. See `+"`aliyun help`"+`.`, str)
-	assert.Equal(t, `"ec's" is not a valid command or product. See `+"`aliyun help`"+`.`, (&InvalidProductError{Code: "EC'S"}).Error())
+	assert.Equal(t, `"EC'S" is not a valid command or product. See `+"`aliyun help`"+`.`, (&InvalidProductError{Code: "EC'S"}).Error())
 }
 
 func TestInvalidProductError_GetSuggestions(t *testing.T) {
@@ -255,33 +256,6 @@ func TestInvalidUnifiedApiError_GetSuggestions(t *testing.T) {
 	})
 }
 
-func TestRemoveDuplicates(t *testing.T) {
-	t.Run("No duplicates", func(t *testing.T) {
-		result := removeDuplicates([]string{"a", "b", "c"})
-		assert.Equal(t, []string{"a", "b", "c"}, result)
-	})
-
-	t.Run("With duplicates", func(t *testing.T) {
-		result := removeDuplicates([]string{"a", "b", "a", "c", "b"})
-		assert.Equal(t, []string{"a", "b", "c"}, result)
-	})
-
-	t.Run("All same", func(t *testing.T) {
-		result := removeDuplicates([]string{"x", "x", "x"})
-		assert.Equal(t, []string{"x"}, result)
-	})
-
-	t.Run("Empty", func(t *testing.T) {
-		result := removeDuplicates([]string{})
-		assert.Empty(t, result)
-	})
-
-	t.Run("Nil", func(t *testing.T) {
-		result := removeDuplicates(nil)
-		assert.Empty(t, result)
-	})
-}
-
 func TestInvalidApiError_GetSuggestions_PrefixFallback(t *testing.T) {
 	err := &InvalidApiError{
 		Name: "Get",
@@ -432,4 +406,96 @@ func TestInvalidBaselineCommandError_Suggestions(t *testing.T) {
 		assert.Nil(t, err.GetSuggestions())
 		assert.Nil(t, err.AgentSuggestions())
 	})
+}
+
+func newProductSuggestionLibrary(products ...meta.Product) *Library {
+	return &Library{builtinRepo: &meta.Repository{Products: products}}
+}
+
+func TestInvalidProductError_ErrorPreservesInputCase(t *testing.T) {
+	err := &InvalidProductError{Code: "DescribeRegions"}
+	assert.Contains(t, err.Error(), `"DescribeRegions" is not a valid command or product`)
+	assert.Contains(t, err.AgentMessage(), `"DescribeRegions" is not a valid command or product`)
+}
+
+func TestInvalidProductError_GetSuggestions_ProductPrefixParity(t *testing.T) {
+	// "openapiex" is a prefix of "openapiexplorer" (edit distance 5): the
+	// human path must surface it through the same prefix tier AI mode uses.
+	err := &InvalidProductError{
+		Code:    "openapiex",
+		library: newProductSuggestionLibrary(meta.Product{Code: "ecs"}, meta.Product{Code: "openapiexplorer"}),
+	}
+	assert.Equal(t, []string{"openapiexplorer"}, err.GetSuggestions())
+}
+
+func TestInvalidProductError_SuggestionsFromAPIReverseLookup(t *testing.T) {
+	library := newProductSuggestionLibrary(
+		meta.Product{Code: "ecs", ApiNames: []string{"DescribeRegions", "DescribeInstances"}},
+		meta.Product{Code: "ecd", ApiNames: []string{"DescribeRegions"}},
+		meta.Product{Code: "sts", ApiNames: []string{"GetCallerIdentity"}},
+		meta.Product{Code: "oss", ApiNames: []string{"PutBucket"}},
+	)
+
+	t.Run("pascal case input suggests runnable full commands", func(t *testing.T) {
+		err := &InvalidProductError{Code: "DescribeRegions", library: library}
+		assert.Equal(t, []string{"aliyun ecd DescribeRegions", "aliyun ecs DescribeRegions"}, err.GetSuggestions())
+	})
+
+	t.Run("kebab case input keeps the kebab style", func(t *testing.T) {
+		err := &InvalidProductError{Code: "describe-regions", library: library}
+		assert.Equal(t, []string{"aliyun ecd describe-regions", "aliyun ecs describe-regions"}, err.GetSuggestions())
+	})
+
+	t.Run("camel case api name resolves its owning product", func(t *testing.T) {
+		err := &InvalidProductError{Code: "getCallerIdentity", library: library}
+		assert.Equal(t, []string{"aliyun sts GetCallerIdentity"}, err.GetSuggestions())
+	})
+
+	t.Run("singular api name matches its plural candidate", func(t *testing.T) {
+		err := &InvalidProductError{Code: "DescribeRegion", library: library}
+		assert.Equal(t, []string{"aliyun ecd DescribeRegions", "aliyun ecs DescribeRegions"}, err.GetSuggestions())
+	})
+
+	t.Run("unknown garbage yields nothing", func(t *testing.T) {
+		err := &InvalidProductError{Code: "zzzznotexist", library: library}
+		assert.Nil(t, err.GetSuggestions())
+	})
+
+	t.Run("results are capped at the default suggest limit", func(t *testing.T) {
+		products := make([]meta.Product, 0, cli.DefaultSuggestLimit+1)
+		for i := 0; i < cli.DefaultSuggestLimit+1; i++ {
+			products = append(products, meta.Product{Code: fmt.Sprintf("prod%d", i), ApiNames: []string{"DescribeRegions"}})
+		}
+		err := &InvalidProductError{Code: "DescribeRegions", library: newProductSuggestionLibrary(products...)}
+		assert.Len(t, err.GetSuggestions(), cli.DefaultSuggestLimit)
+	})
+}
+
+func TestInvalidProductError_HumanAndAISuggestionsMatch(t *testing.T) {
+	library := newProductSuggestionLibrary(
+		meta.Product{Code: "ecs", ApiNames: []string{"DescribeRegions", "DescribeInstances"}},
+		meta.Product{Code: "ahas-openapi", ApiNames: []string{"GetToken"}},
+	)
+	for _, code := range []string{"openapiex", "Ecsx", "ahas-openap", "DescribeRegions", "describe-regions", "getCallerIdentity"} {
+		err := &InvalidProductError{Code: code, library: library}
+		assert.Equal(t, err.GetSuggestions(), err.AgentSuggestions(), code)
+	}
+}
+
+func TestInvalidApiError_OverflowHintOmittedWithoutRecoveryCommand(t *testing.T) {
+	// An all-verb input such as "Describe" yields no usable search keyword, so
+	// apiRecoveryCommand returns "". The overflow hint must be dropped rather
+	// than rendered as "... and N more, run ``".
+	err := &InvalidApiError{
+		Name: "Describe",
+		product: &meta.Product{Code: "ecs", ApiNames: []string{
+			"DescribeAccessPoints", "DescribeAccountAttributes", "DescribeActivations",
+			"DescribeAddresses", "DescribeAdviserCapacity", "DescribeAggregateCompliancePacks",
+		}},
+	}
+	results := err.GetSuggestions()
+	assert.Len(t, results, cli.DefaultSuggestLimit)
+	for _, r := range results {
+		assert.NotContains(t, r, "run ``")
+	}
 }

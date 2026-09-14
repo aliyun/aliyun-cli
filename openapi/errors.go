@@ -65,32 +65,23 @@ type InvalidProductError struct {
 }
 
 func (e *InvalidProductError) Error() string {
-	return fmt.Sprintf("%q is not a valid command or product. See `aliyun help`.", strings.ToLower(e.Code))
+	return fmt.Sprintf("%q is not a valid command or product. See `aliyun help`.", e.Code)
 }
 
 func (e *InvalidProductError) AgentMessage() string {
-	return fmt.Sprintf("%q is not a valid command or product.", strings.ToLower(e.Code))
+	return fmt.Sprintf("%q is not a valid command or product.", e.Code)
 }
 
 func (*InvalidProductError) AIRecoveryEligible() {}
 
+// GetSuggestions and AgentSuggestions must render the same candidate list in
+// both output modes, so both delegate to the shared productSuggestions pipeline.
 func (e *InvalidProductError) GetSuggestions() []string {
-	sr := cli.NewSuggester(strings.ToLower(e.Code), 2)
-	for _, p := range e.library.GetProducts() {
-		sr.Apply(strings.ToLower(p.Code))
-	}
-	return sr.GetResults()
+	return productSuggestions(e.Code, e.library)
 }
 
 func (e *InvalidProductError) AgentSuggestions() []string {
-	if e.library == nil {
-		return nil
-	}
-	candidates := make([]string, 0)
-	for _, product := range e.library.GetProducts() {
-		candidates = append(candidates, strings.ToLower(product.Code))
-	}
-	return apiSuggestions(strings.ToLower(e.Code), candidates)
+	return productSuggestions(e.Code, e.library)
 }
 
 // return when use unknown api
@@ -114,6 +105,9 @@ func (e *InvalidApiError) AgentMessage() string {
 func (*InvalidApiError) AIRecoveryEligible() {}
 
 func (e *InvalidApiError) GetSuggestions() []string {
+	if e.product == nil {
+		return nil
+	}
 	return humanAPISuggestions(e.Name, e.product.ApiNames,
 		apiRecoveryCommand(e.Name, e.product.GetLowerCode(), e.product.ApiNames))
 }
@@ -365,6 +359,9 @@ func explicitLocalErrorText(err error, fallback string) string {
 }
 
 func (e *InvalidUnifiedApiError) GetSuggestions() []string {
+	if e.product == nil {
+		return nil
+	}
 	candidates := append(append([]string(nil), e.product.ApiNames...), e.lPlugin.CmdNames...)
 	return humanAPISuggestions(e.Name, candidates,
 		apiRecoveryCommand(e.Name, e.product.GetLowerCode(), candidates))
@@ -377,20 +374,6 @@ func (e *InvalidUnifiedApiError) AgentSuggestions() []string {
 	candidates := append([]string(nil), e.product.ApiNames...)
 	candidates = append(candidates, e.lPlugin.CmdNames...)
 	return apiSuggestions(e.Name, candidates)
-}
-
-func removeDuplicates(slice []string) []string {
-	seen := make(map[string]bool)
-	result := []string{}
-
-	for _, item := range slice {
-		if !seen[item] {
-			seen[item] = true
-			result = append(result, item)
-		}
-	}
-
-	return result
 }
 
 // sameStyleCandidates keeps only candidates written in the input's command
@@ -410,7 +393,7 @@ func sameStyleCandidates(input string, candidates []string) []string {
 
 func prefixSuggestionsWithOverflow(input string, candidates []string, helpCommand string) []string {
 	results, total := cli.PrefixSuggestions(input, sameStyleCandidates(input, candidates), cli.DefaultSuggestLimit)
-	if total > len(results) {
+	if total > len(results) && helpCommand != "" {
 		results = append(results, fmt.Sprintf("... and %d more, run `%s`", total-len(results), helpCommand))
 	}
 	return results
