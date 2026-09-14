@@ -17,7 +17,17 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 )
 
+func useTestHome(t *testing.T, home string) {
+	t.Helper()
+	t.Setenv("HOME", home)
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("USERPROFILE", home)
+}
+
 func prepareConfig(t *testing.T, home string, language string) {
+	t.Helper()
+	useTestHome(t, home)
 	cfgDir := filepath.Join(home, ".aliyun")
 	if err := os.MkdirAll(cfgDir, 0755); err != nil {
 		t.Fatalf("mkdir cfg: %v", err)
@@ -479,8 +489,7 @@ func TestPrepareEnv_AIModeUserAgentEmptyNotInjected(t *testing.T) {
 
 func TestPrepareEnv_RamRoleArnNoStaticAKLeak(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	useTestHome(t, home)
 	os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
 
 	cfgDir := filepath.Join(home, ".aliyun")

@@ -1053,6 +1053,7 @@ func TestEnsureInstalled_ExecPathValidRuns(t *testing.T) {
 	ctx, _, _ := newOriginCtx()
 	c := NewContext(ctx)
 	c.InitBasicInfo()
+	c.CheckOsTypeAndArch()
 	if err := c.validateExecPathOverride(); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
@@ -1765,6 +1766,9 @@ func TestUnzipArchive_DuplicateEntries(t *testing.T) {
 func TestGetLocalVersion_NoVersionFile(t *testing.T) {
 	setupTestHome(t)
 	execPath := filepath.Join(config.GetConfigPath(), "ecctl")
+	if runtime.GOOS == "windows" {
+		execPath += ".exe"
+	}
 	writeExecutable(t, execPath, "x")
 	ctx, _, _ := newOriginCtx()
 	c := NewContext(ctx)

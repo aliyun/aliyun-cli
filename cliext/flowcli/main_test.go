@@ -85,7 +85,7 @@ func TestNewFlowcliCommand_RunSuppressesExitError(t *testing.T) {
 	origExec := execCommandFunc
 	defer func() { execCommandFunc = origExec }()
 	execCommandFunc = func(name string, args ...string) *exec.Cmd {
-		return exec.Command("bash", "-c", "exit 7")
+		return testExitCommand(7)
 	}
 
 	ctx, stdout, _ := newOriginCtx()
