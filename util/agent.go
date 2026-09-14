@@ -14,8 +14,6 @@ import (
 const (
 	agentEnvProposal = "AGENT"
 
-	agentSegmentPrefix = "Agent/"
-
 	maxAgentNameLen = 32
 )
 
