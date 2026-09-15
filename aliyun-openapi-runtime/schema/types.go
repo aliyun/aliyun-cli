@@ -183,6 +183,9 @@ type CommandDefinition struct {
 
 // OperationConfig describes the HTTP request shape for one API.
 type OperationConfig struct {
+	// SignatureAlgorithm selects the SDK signer; empty retains its ACS3 default.
+	SignatureAlgorithm string `json:"signature_algorithm,omitempty"`
+
 	Action          string `json:"action"`
 	APIStyle        string `json:"api_style,omitempty"`
 	APIVersion      string `json:"api_version"`

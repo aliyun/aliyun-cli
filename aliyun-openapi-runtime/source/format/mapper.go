@@ -41,6 +41,7 @@ func schemaToAPI(def *crschema.CommandDefinition) *meta.API {
 		Components:   cloneRawJSON(def.Components),
 	}
 	if def.Operation != nil {
+		api.SignatureAlgorithm = def.Operation.SignatureAlgorithm
 		api.Version = def.Operation.APIVersion
 		api.Method = strings.ToUpper(def.Operation.Method)
 		api.URL = def.Operation.URL

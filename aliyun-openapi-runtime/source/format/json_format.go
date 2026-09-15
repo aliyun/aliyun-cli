@@ -111,6 +111,15 @@ func DecodeCommandDefinition(def *crschema.CommandDefinition, identity string) (
 	if def.Operation == nil {
 		return nil, fmt.Errorf("api %s: missing operation block", identity)
 	}
+	switch def.Operation.SignatureAlgorithm {
+	case "", "ACS3-HMAC-SHA256", "ACS3-HMAC-SM3", "ACS3-RSA-SHA256":
+	case "v2":
+		if def.Operation.IsSSE {
+			return nil, fmt.Errorf("api %s: signature_algorithm v2 does not support SSE", identity)
+		}
+	default:
+		return nil, fmt.Errorf("api %s: unsupported signature_algorithm %q", identity, def.Operation.SignatureAlgorithm)
+	}
 	for i := range def.Parameters {
 		if err := validateArgumentShape(&def.Parameters[i], fmt.Sprintf("parameters[%d]", i)); err != nil {
 			return nil, fmt.Errorf("api %s: %w", identity, err)

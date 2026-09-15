@@ -17,6 +17,7 @@ package format
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -92,6 +93,43 @@ func TestDecodeAPIJSONAcceptsRecursiveCompositeShapes(t *testing.T) {
 		api.Parameters[0].ValueType.ItemType == nil ||
 		api.Parameters[0].ValueType.ItemType.Type != meta.TypeString {
 		t.Fatalf("unexpected recursive parameter: %#v", api.Parameters)
+	}
+}
+
+func TestDecodeAPIJSONSignatureAlgorithm(t *testing.T) {
+	for _, test := range []struct {
+		algorithm string
+		sse       bool
+		invalid   bool
+	}{
+		{}, {algorithm: "v2"}, {algorithm: "ACS3-HMAC-SHA256"},
+		{algorithm: "ACS3-HMAC-SM3"}, {algorithm: "ACS3-RSA-SHA256"},
+		{sse: true}, {algorithm: "ACS3-HMAC-SHA256", sse: true},
+		{algorithm: "v3", invalid: true}, {algorithm: "V2", invalid: true},
+		{algorithm: "v2", sse: true, invalid: true},
+	} {
+		t.Run(fmt.Sprintf("%s/sse=%t", test.algorithm, test.sse), func(t *testing.T) {
+			definition := schema.CommandDefinition{Operation: &schema.OperationConfig{
+				SignatureAlgorithm: test.algorithm, IsSSE: test.sse,
+			}}
+			data, err := json.Marshal(definition)
+			if err != nil {
+				t.Fatal(err)
+			}
+			api, err := DecodeAPIJSON(data, "signature-test")
+			if test.invalid {
+				if err == nil || !strings.Contains(err.Error(), "signature_algorithm") {
+					t.Fatalf("expected signature_algorithm validation error, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if api.SignatureAlgorithm != test.algorithm {
+				t.Fatalf("signature algorithm = %q, want %q", api.SignatureAlgorithm, test.algorithm)
+			}
+		})
 	}
 }
 

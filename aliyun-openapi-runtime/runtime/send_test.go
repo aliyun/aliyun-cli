@@ -15,6 +15,9 @@
 package runtime
 
 import (
+	"crypto/hmac"
+	"crypto/sha1"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -108,6 +111,143 @@ func TestSendAgainstMockServer(t *testing.T) {
 	}
 	if num.String() != "9007199254740993" {
 		t.Fatalf("precision lost: %s", num.String())
+	}
+}
+
+func TestSendMetadataSignatureAlgorithm(t *testing.T) {
+	form := map[string]string{"FlowName": "test-flow", "Input": `{"key":"a+b&中文"}`}
+	query := map[string]string{"Limit": "10", "NextToken": "next+&中文"}
+	tests := []struct {
+		name, product, action, method, algorithm, token string
+		query, form                                     map[string]string
+	}{
+		{name: "fnf POST", product: "fnf", action: "StartSyncExecution", method: "POST", algorithm: "v2", form: form},
+		{name: "fnf GET", product: "fnf", action: "ListFlows", method: "GET", algorithm: "v2", query: query},
+		{name: "another legacy RPC", product: "legacy-demo", action: "SubmitForm", method: "POST", algorithm: "v2", query: query, form: form},
+		{name: "default ACS3", product: "demo", action: "SubmitForm", method: "POST", query: query, form: form},
+		{name: "explicit ACS3", product: "demo", action: "SubmitForm", method: "POST", algorithm: "ACS3-HMAC-SHA256", form: form},
+		{name: "legacy STS", product: "fnf", action: "StartSyncExecution", method: "POST", algorithm: "v2", token: "fake-sts-token", form: form},
+		{name: "ACS3 STS", product: "demo", action: "SubmitForm", method: "POST", token: "fake-sts-token", form: form},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotQuery, gotForm url.Values
+			var gotHeader http.Header
+			var gotMethod string
+			var captureErr error
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotMethod, gotHeader, gotQuery = r.Method, r.Header.Clone(), r.URL.Query()
+				var body []byte
+				body, captureErr = io.ReadAll(r.Body)
+				if captureErr == nil {
+					gotForm, captureErr = url.ParseQuery(string(body))
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"RequestId":"test","Total":9007199254740993}`))
+			}))
+			defer srv.Close()
+
+			api := &meta.API{
+				Name: tt.action, ProductCode: tt.product, Version: "2019-03-15", Method: tt.method,
+				Style: meta.StyleRPC, Protocol: "HTTP", SignatureAlgorithm: tt.algorithm,
+			}
+			args := map[string]any{}
+			for name, value := range tt.query {
+				api.Parameters = append(api.Parameters, meta.Parameter{Name: name, RawName: name, Type: meta.TypeString, Position: meta.PosQuery})
+				args[name] = value
+			}
+			for name, value := range tt.form {
+				api.Parameters = append(api.Parameters, meta.Parameter{Name: name, RawName: name, Type: meta.TypeString, Position: meta.PosFormData})
+				args[name] = value
+				api.ReqBodyType = "formData"
+			}
+			credential := staticAKCredential(t)
+			if tt.token != "" {
+				var err error
+				credential, err = credentialsv2.NewCredential(new(credentialsv2.Config).
+					SetType("sts").SetAccessKeyId("LTAI-test-id").SetAccessKeySecret("test-secret").SetSecurityToken(tt.token))
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			response, err := NewExecutor().Execute(&ExecContext{
+				API: api, Args: args, Credential: credential, Endpoint: strings.TrimPrefix(srv.URL, "http://"),
+			})
+			if err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			if captureErr != nil {
+				t.Fatal(captureErr)
+			}
+			if response.StatusCode != 200 || response.Parsed.(map[string]any)["Total"] != json.Number("9007199254740993") {
+				t.Fatal("response status or integer precision changed")
+			}
+			if gotMethod != tt.method {
+				t.Fatalf("method = %q, want %q", gotMethod, tt.method)
+			}
+			for name, value := range tt.query {
+				if gotQuery.Get(name) != value || gotForm.Has(name) {
+					t.Errorf("query parameter %s changed value or location", name)
+				}
+			}
+			for name, value := range tt.form {
+				if gotForm.Get(name) != value || gotQuery.Has(name) {
+					t.Errorf("form parameter %s changed value or location", name)
+				}
+			}
+			if len(gotForm) != len(tt.form) {
+				t.Fatalf("form has %d fields, want %d", len(gotForm), len(tt.form))
+			}
+			if len(tt.form) > 0 && gotHeader.Get("Content-Type") != "application/x-www-form-urlencoded" {
+				t.Fatalf("Content-Type = %q", gotHeader.Get("Content-Type"))
+			}
+			if tt.algorithm != "v2" {
+				if !strings.HasPrefix(gotHeader.Get("Authorization"), "ACS3-HMAC-SHA256 ") || len(gotQuery) != len(tt.query) {
+					t.Fatal("ACS3 request switched to legacy signing")
+				}
+				if gotHeader.Get("x-acs-security-token") != tt.token {
+					t.Fatal("ACS3 security token changed")
+				}
+				return
+			}
+			if gotHeader.Get("Authorization") != "" || gotHeader.Get("x-acs-content-sha256") != "" {
+				t.Fatal("legacy RPC request contains ACS3 signing headers")
+			}
+			for name, want := range map[string]string{
+				"Action": tt.action, "Version": api.Version, "Format": "json", "AccessKeyId": "LTAI-test-id",
+				"SignatureMethod": "HMAC-SHA1", "SignatureVersion": "1.0", "SecurityToken": tt.token,
+			} {
+				if gotQuery.Get(name) != want {
+					t.Errorf("legacy RPC public query parameter %s changed", name)
+				}
+			}
+			if gotQuery.Get("Timestamp") == "" || gotQuery.Get("SignatureNonce") == "" || gotHeader.Get("x-acs-security-token") != "" {
+				t.Fatal("legacy RPC public signing fields are missing or misplaced")
+			}
+			// Verify the SDK signs both query and form parameters, including STS and escaped input.
+			signature := gotQuery.Get("Signature")
+			gotQuery.Del("Signature")
+			for name, values := range gotForm {
+				gotQuery[name] = values
+			}
+			canonical := strings.ReplaceAll(gotQuery.Encode(), "+", "%20")
+			mac := hmac.New(sha1.New, []byte("test-secret&"))
+			_, _ = mac.Write([]byte(tt.method + "&%2F&" + url.QueryEscape(canonical)))
+			if signature != base64.StdEncoding.EncodeToString(mac.Sum(nil)) {
+				t.Fatal("legacy RPC signature does not cover query and form parameters")
+			}
+		})
+	}
+}
+
+func TestExecuteSSERejectsLegacySignature(t *testing.T) {
+	for _, isSSE := range []bool{false, true} {
+		err := NewExecutor().ExecuteSSE(&ExecContext{
+			API: &meta.API{SignatureAlgorithm: "v2", IsSSE: isSSE},
+		}, nil)
+		if err == nil || err.Error() != "runtime: SSE does not support signature algorithm v2" {
+			t.Fatalf("ExecuteSSE(IsSSE=%t) error = %v", isSSE, err)
+		}
 	}
 }
 

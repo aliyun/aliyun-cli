@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package aliyun.openapi.meta.v1;
+
+option go_package = "github.com/aliyun/aliyun-openapi-runtime/source/format/pbmeta;pbmeta";
+
+// Existing fields were recovered from the checked-in Go descriptor. Keep field
+// numbers stable and synchronize additions with metadata plugin producers.
+// Regenerate here with protoc and protoc-gen-go v1.36.11 on PATH:
+//   protoc --go_out=. --go_opt=paths=source_relative aliyun_openapi_meta.proto
+//   mv aliyun_openapi_meta.pb.go meta.pb.go
+
+// CommandDefinition is the stable, API-agnostic metadata schema interpreted by
+// common-runtime. It describes an operation; it does not generate one Go type
+// per Alibaba Cloud API.
+message CommandDefinition {
+  string product_code = 1;
+  string name = 2;
+  string cmd_name = 3;
+  string cmd_full_name = 4;
+  string description_zh = 5;
+  string description_en = 6;
+  string method = 7;
+  bool multi_version = 8;
+  bool deprecated = 9;
+  string kebab_example = 10;
+  string camel_example = 11;
+  Operation operation = 12;
+  repeated Argument parameters = 13;
+  // JSON-encoded OpenAPI “responses“ object (status code -> response object).
+  // Opaque bytes preserve $ref, composition keywords, and bilingual descriptions
+  // without expanding the protobuf schema.
+  bytes responses = 14;
+  // JSON-encoded “components“ object (typically “schemas“ for response $ref).
+  bytes components = 15;
+}
+
+message Operation {
+  string action = 1;
+  string api_style = 2;
+  string api_version = 3;
+  string method = 4;
+  string protocol = 5;
+  string url = 6;
+  bool is_sse = 7;
+  string req_body_type = 8;
+  string content_type = 9;
+  bool has_wildcard_path = 10;
+  string signature_algorithm = 11;
+}
+
+message Argument {
+  string name = 1;
+  string raw_name = 2;
+  string type = 3;
+  repeated string options = 4;
+  string help_zh = 5;
+  string help_en = 6;
+  bool required = 7;
+  string location = 8;
+  string param_style = 9;
+  repeated Argument fields = 10;
+  TypeShape element = 11;
+  TypeShape value = 12;
+  string example = 13;
+  bool is_wildcard = 14;
+  repeated string enum = 15;
+  string minimum = 16;
+  string maximum = 17;
+  string pattern = 18;
+  string format = 19;
+  string min_length = 20;
+  string max_length = 21;
+  bool doc_required = 22;
+  bool direct_body = 23;
+}
+
+// TypeShape is a depth-independent recursive description of a container
+// child. Arrays use element and maps use value at every level.
+message TypeShape {
+  string type = 1;
+  repeated Argument fields = 2;
+  TypeShape element = 3;
+  TypeShape value = 4;
+  repeated string enum = 5;
+  string minimum = 6;
+  string maximum = 7;
+  string pattern = 8;
+  string format = 9;
+  string min_length = 10;
+  string max_length = 11;
+}

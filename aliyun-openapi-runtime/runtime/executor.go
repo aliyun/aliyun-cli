@@ -543,6 +543,9 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 	}
 
 	conf := &openapiClient.Config{Credential: ec.Credential}
+	if ec.API.SignatureAlgorithm != "" {
+		conf.SignatureAlgorithm = tea.String(ec.API.SignatureAlgorithm)
+	}
 	if ec.Region != "" {
 		conf.RegionId = tea.String(ec.Region)
 	}

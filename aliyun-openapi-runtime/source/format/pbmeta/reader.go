@@ -116,16 +116,17 @@ func toCanonical(def *CommandDefinition) (*schema.CommandDefinition, error) {
 	}
 	if def.Operation != nil {
 		canonical.Operation = &schema.OperationConfig{
-			Action:          def.Operation.Action,
-			APIStyle:        def.Operation.ApiStyle,
-			APIVersion:      def.Operation.ApiVersion,
-			Method:          def.Operation.Method,
-			Protocol:        def.Operation.Protocol,
-			URL:             def.Operation.Url,
-			IsSSE:           def.Operation.IsSse,
-			ReqBodyType:     def.Operation.ReqBodyType,
-			ContentType:     def.Operation.ContentType,
-			HasWildcardPath: def.Operation.HasWildcardPath,
+			Action:             def.Operation.Action,
+			APIStyle:           def.Operation.ApiStyle,
+			APIVersion:         def.Operation.ApiVersion,
+			Method:             def.Operation.Method,
+			Protocol:           def.Operation.Protocol,
+			URL:                def.Operation.Url,
+			IsSSE:              def.Operation.IsSse,
+			ReqBodyType:        def.Operation.ReqBodyType,
+			ContentType:        def.Operation.ContentType,
+			HasWildcardPath:    def.Operation.HasWildcardPath,
+			SignatureAlgorithm: def.Operation.SignatureAlgorithm,
 		}
 	}
 	parameters, err := toCanonicalArguments(def.Parameters)
