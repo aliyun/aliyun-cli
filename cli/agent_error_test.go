@@ -48,6 +48,7 @@ func TestAgentErrorPreservesCompactLocalEnvelope(t *testing.T) {
 	require.NoError(t, marshalErr)
 	assert.JSONEq(t, `{
 		"message":"unknown flag --instnace-type",
+		"schema_version":1,
 		"did_you_mean":["--instance-type"],
 		"recovery":{
 			"action":"search_parameter",
@@ -113,6 +114,7 @@ func TestAgentErrorRecursivelyOmitsEmptyOptionalValues(t *testing.T) {
 	require.NoError(t, marshalErr)
 	assert.JSONEq(t, `{
 		"message":"invalid local usage",
+		"schema_version":1,
 		"did_you_mean":["--instance-id"],
 		"recovery":{
 			"action":"inspect_request_help",
@@ -135,6 +137,7 @@ func TestAgentErrorOmitsEmptyOptionalFields(t *testing.T) {
 	require.NoError(t, marshalErr)
 	assert.JSONEq(t, `{
 		"message":"missing required parameter(s): --region-id",
+		"schema_version":1,
 		"recovery":{
 			"action":"inspect_request_help",
 			"hint":"Inspect the complete request help."
@@ -142,6 +145,29 @@ func TestAgentErrorOmitsEmptyOptionalFields(t *testing.T) {
 	}`, string(encoded))
 	assert.NotContains(t, string(encoded), "did_you_mean")
 	assert.NotContains(t, string(encoded), "command")
+}
+
+// The schema version is protocol metadata injected at the single construction
+// point: unset envelopes get the current version, explicitly pinned producer
+// versions are preserved.
+func TestAgentErrorSchemaVersion(t *testing.T) {
+	valid := AgentErrorEnvelope{
+		Message: "invalid local usage",
+		Recovery: AgentErrorRecovery{
+			Action: "inspect_request_help",
+			Hint:   "Inspect the request help.",
+		},
+	}
+
+	err := NewAgentError(valid, errors.New("cause"))
+	require.NotNil(t, err)
+	assert.Equal(t, AgentErrorSchemaVersion, err.Envelope().SchemaVersion)
+
+	pinned := valid
+	pinned.SchemaVersion = AgentErrorSchemaVersion + 1
+	err = NewAgentError(pinned, errors.New("cause"))
+	require.NotNil(t, err)
+	assert.Equal(t, AgentErrorSchemaVersion+1, err.Envelope().SchemaVersion)
 }
 
 func TestAIModeEnableHintsShareStableContent(t *testing.T) {

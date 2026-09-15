@@ -514,8 +514,8 @@ func NewCliAIModeFlag() *cli.Flag {
 		Name:         CliAIModeFlagName,
 		AssignedMode: cli.AssignedNone,
 		Short: i18n.T(
-			"for this command only, append AI-mode User-Agent segment (skills from configure ai-mode) even if global ai-mode is off",
-			"仅本次命令追加 AI 模式 UA 段（skills 来自 configure ai-mode），即使全局 ai-mode 未开启",
+			"enable AI mode for this command only (structured JSON errors, compact Help, recovery guidance), even when global ai-mode is off",
+			"仅本次命令启用 AI 模式（结构化 JSON 错误、精简帮助、恢复指引），即使全局 ai-mode 未开启",
 		),
 	}
 }
@@ -527,8 +527,8 @@ func NewCliNoAIModeFlag() *cli.Flag {
 		AssignedMode: cli.AssignedNone,
 		Hidden:       true,
 		Short: i18n.T(
-			"for this command only, do not append AI-mode User-Agent segment even if global ai-mode is on",
-			"仅本次命令不追加 AI 模式 UA 段，即使全局 ai-mode 已开启",
+			"disable AI mode for this command only, even when global ai-mode is on or an agent environment is detected",
+			"仅本次命令关闭 AI 模式，即使全局 ai-mode 已开启或检测到 Agent 环境",
 		),
 	}
 }

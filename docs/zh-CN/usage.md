@@ -274,7 +274,7 @@ aliyun configure ai-mode --help
 aliyun ecs describe-instances --cli-ai-mode
 ```
 
-检测到受支持的 Agent 环境时，进程内 OpenAPI 命令会自动启用面向 Agent 的交互和执行优化。目前包括更严格的 metadata 参数校验和更结构化的错误输出，但具体优化行为可能随版本调整，不属于稳定兼容协议。
+检测到受支持的 Agent 环境时，进程内 OpenAPI 命令会自动启用面向 Agent 的交互和执行优化。目前包括更严格的 metadata 参数校验和更结构化的错误输出；其中 Agent 错误信封已通过 `schema_version` 版本化（见 [MCP 代理、OpenTelemetry 与机器可读接口](./integrations.md)），其余优化行为可能随版本调整。
 
 通过自动探测启用后，请求会增加以下通用 UA 标记：
 

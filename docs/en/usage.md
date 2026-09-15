@@ -274,7 +274,7 @@ aliyun configure ai-mode --help
 aliyun ecs describe-instances --cli-ai-mode
 ```
 
-When a supported agent environment is detected, in-process OpenAPI commands automatically enable agent-oriented interaction and execution optimizations. These optimizations currently include stricter metadata-based validation and more structured error output, but the exact behavior may change and is not a stable compatibility contract.
+When a supported agent environment is detected, in-process OpenAPI commands automatically enable agent-oriented interaction and execution optimizations. These optimizations currently include stricter metadata-based validation and more structured error output; the Agent error envelope is versioned via `schema_version` (see [MCP proxy, OpenTelemetry, and machine-readable interfaces](./integrations.md)), while other optimizations may change across versions.
 
 Requests made through this automatically enabled mode append the following generic User-Agent marker:
 

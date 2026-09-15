@@ -89,6 +89,7 @@ func TestKebabProfileCaseMismatchSuggestsLowercaseProfile(t *testing.T) {
 		require.NoError(t, err)
 		assert.JSONEq(t, `{
 			"message":"unknown flag --Profile",
+			"schema_version":1,
 			"did_you_mean":["--profile"],
 			"recovery":{
 				"action":"inspect_action_help",
@@ -1160,7 +1161,7 @@ func TestAgentErrorEnvelopeEndToEndIsOneCleanJSONDocument(t *testing.T) {
 	assert.NotContains(t, stderr.String(), cli.AIModeEnableTextHint)
 	var decoded map[string]interface{}
 	require.NoError(t, json.Unmarshal(stderr.Bytes(), &decoded))
-	assert.ElementsMatch(t, []string{"message", "did_you_mean", "recovery"}, mapKeys(decoded))
+	assert.ElementsMatch(t, []string{"message", "schema_version", "did_you_mean", "recovery"}, mapKeys(decoded))
 	assert.Equal(t, []interface{}{"--instance-type"}, decoded["did_you_mean"])
 	recovery := decoded["recovery"].(map[string]interface{})
 	assert.Equal(t, "search_parameter", recovery["action"])
@@ -1208,7 +1209,7 @@ func TestCLIOutputJSONStructuresLocalErrorWhenAIModeIsDisabled(t *testing.T) {
 	assert.NotContains(t, stderr.String(), cli.AIModeEnableTextHint)
 	var decoded map[string]interface{}
 	require.NoError(t, json.Unmarshal(stderr.Bytes(), &decoded))
-	assert.ElementsMatch(t, []string{"message", "did_you_mean", "recovery"}, mapKeys(decoded))
+	assert.ElementsMatch(t, []string{"message", "schema_version", "did_you_mean", "recovery"}, mapKeys(decoded))
 	assert.Equal(t, []interface{}{"--instance-type"}, decoded["did_you_mean"])
 	recovery := decoded["recovery"].(map[string]interface{})
 	assert.Equal(t, "search_parameter", recovery["action"])

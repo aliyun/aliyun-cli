@@ -129,11 +129,20 @@ export ALIBABA_CLOUD_CLI_AI_MODE=1
 aliyun ecs describe-instances --cli-ai-mode
 ```
 
+AI mode takes effect in this order of precedence (highest first):
+
+1. `--no-cli-ai-mode` on a single command (explicit opt-out, always wins)
+2. `--cli-ai-mode` on a single command (explicit opt-in)
+3. The `ALIBABA_CLOUD_CLI_AI_MODE=1/0` environment variable (explicit value)
+4. Agent-environment auto-detection (gated by `ALIBABA_CLOUD_CLI_AGENT_INTEGRATION`, enabled by default)
+5. The global `configure ai-mode` setting (`~/.aliyun/ai-mode.json`, off by default)
+
 Supported local usage, query, transport, OAuth, and server errors are written as one compact JSON object to stderr. Success output remains on stdout. Optional fields are omitted when unavailable:
 
 ```json
 {
   "message": "unknown flag --instnace-type",
+  "schema_version": 1,
   "did_you_mean": ["--instance-type"],
   "recovery": {
     "action": "search_parameter",
@@ -143,9 +152,13 @@ Supported local usage, query, transport, OAuth, and server errors are written as
 }
 ```
 
-Remote server errors may additionally include `error_code`, `status_code`, and `request_id`. `did_you_mean` and `recovery.command` are also optional; `message`, `recovery.action`, and `recovery.hint` are present in every structured Agent error.
+Remote server errors may additionally include `error_code`, `status_code`, and `request_id`. `did_you_mean` and `recovery.command` are also optional; `message`, `schema_version`, `recovery.action`, and `recovery.hint` are present in every structured Agent error.
 
-The Agent error object is a separate compact interface and currently has no `schemaVersion`; the Machine Help `v1` contract does not apply to it. Not every error is normalized yet, so consumers must also tolerate human-readable stderr.
+`schema_version` is the envelope's protocol version (currently `1`) — protocol metadata, not error content. Backward-compatible field additions do not bump it; only breaking shape changes do. Consumers should ignore unknown fields and branch on `schema_version`.
+
+In AI mode, API responses are written as compact single-line JSON preserving the server's key order; other modes pretty-print with sorted keys. JSON key order is not part of the contract — never parse it byte-wise.
+
+The Agent error object is a compact protocol separate from Machine Help: Machine Help uses `schemaVersion: "v1"` (camelCase, on stdout), while Agent errors use `schema_version: 1` (snake_case, on stderr). Not every error is normalized yet, so consumers must also tolerate human-readable stderr.
 
 | Exit status | Meaning |
 | --- | --- |

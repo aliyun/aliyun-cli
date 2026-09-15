@@ -45,8 +45,15 @@ type AgentErrorRecovery struct {
 	Hint    string `json:"hint"`
 }
 
+// AgentErrorSchemaVersion is the current schema version of the agent error
+// envelope. It is protocol metadata, not error content; consumers must ignore
+// unknown fields. Backward-compatible field additions do not bump the
+// version; only breaking shape changes do.
+const AgentErrorSchemaVersion = 1
+
 type AgentErrorEnvelope struct {
-	Message string `json:"message"`
+	Message       string `json:"message"`
+	SchemaVersion int    `json:"schema_version"`
 	// Structured server-error facts, populated only for remote server errors so
 	// agents can branch on them instead of parsing the message string.
 	ErrorCode  string             `json:"error_code,omitempty"`
@@ -64,6 +71,9 @@ type AgentError struct {
 // NewAgentError returns nil when the required compact-envelope fields are
 // incomplete. Optional data is normalized before it can reach JSON output.
 func NewAgentError(envelope AgentErrorEnvelope, cause error) *AgentError {
+	if envelope.SchemaVersion == 0 {
+		envelope.SchemaVersion = AgentErrorSchemaVersion
+	}
 	envelope.DidYouMean = compactStrings(envelope.DidYouMean)
 	envelope.Recovery.Command = strings.TrimSpace(envelope.Recovery.Command)
 	if strings.TrimSpace(envelope.Message) == "" ||
