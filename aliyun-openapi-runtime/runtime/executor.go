@@ -535,7 +535,7 @@ type preparedCall struct {
 }
 
 func usesLegacySignature(product string) bool {
-	// ponytail: product-level allowlist; refine by API/version only if a listed product needs mixed signing generations.
+	// FNF endpoints require legacy RPC signing.
 	switch strings.ToLower(product) {
 	case "fnf":
 		return true
