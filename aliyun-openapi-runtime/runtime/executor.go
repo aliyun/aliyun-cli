@@ -534,6 +534,15 @@ type preparedCall struct {
 	runtime *dara.RuntimeOptions
 }
 
+func usesLegacySignature(product string) bool {
+	// FNF endpoints require legacy RPC signing.
+	switch strings.ToLower(product) {
+	case "fnf":
+		return true
+	}
+	return false
+}
+
 func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) {
 	if ec.Credential == nil {
 		return nil, errors.New("runtime: no credential resolved; run `aliyun configure` or pass --dry-run")
@@ -543,6 +552,9 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 	}
 
 	conf := &openapiClient.Config{Credential: ec.Credential}
+	if usesLegacySignature(ec.API.ProductCode) {
+		conf.SignatureAlgorithm = tea.String("v2")
+	}
 	if ec.Region != "" {
 		conf.RegionId = tea.String(ec.Region)
 	}
