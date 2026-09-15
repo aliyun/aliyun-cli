@@ -190,6 +190,8 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 	// the AI gate so non-AI output is protected too.
 	err = sanitizeNetworkTransportError(err)
 	err = suggestKebabProfileFlagCase(err, args)
+	err = c.adaptStyleMixedFlagError(err, args, ctx)
+	err = annotateRegionConfusion(err, ctx)
 
 	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
 

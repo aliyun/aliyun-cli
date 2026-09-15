@@ -22,6 +22,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/meta"
+	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 )
 
 // LegacyMissingRequiredError marks required-parameter validation failures from
@@ -127,6 +128,14 @@ type InvalidParameterError struct {
 	ParameterNames    []string
 	ParameterExamples map[string]string
 	flags             *cli.FlagSet
+	// kebabToRaw/rawToKebab carry the metadata rename tables of this API's
+	// parameters (e.g. biz-region-id <-> RegionId); they power cross-style
+	// suggestions. kebabCommand/equivalentCommand are filled only when the
+	// unknown flag is a confirmed kebab-style name (style mixing).
+	kebabToRaw        map[string]string
+	rawToKebab        map[string]string
+	kebabCommand      string
+	equivalentCommand string
 }
 
 func (e *InvalidParameterError) Error() string {
@@ -141,33 +150,49 @@ func (e *InvalidParameterError) AgentMessage() string {
 func (*InvalidParameterError) AIRecoveryEligible() {}
 
 func (e *InvalidParameterError) GetSuggestions() []string {
-	sr := cli.NewSuggester(e.Name, 2)
-	for _, name := range e.ParameterNames {
-		sr.Apply(name)
-	}
-	if e.flags != nil {
-		for _, f := range e.flags.Flags() {
-			sr.Apply(f.Name)
-		}
-	}
-
-	results := sr.GetResults()
-	for i, name := range results {
+	names := e.candidateNames()
+	results := make([]string, 0, len(names))
+	for _, name := range names {
 		if example := e.ParameterExamples[name]; example != "" {
-			results[i] = fmt.Sprintf("%s (example: %s)", name, example)
+			results = append(results, fmt.Sprintf("%s (example: %s)", name, example))
+		} else {
+			results = append(results, name)
 		}
 	}
 	return results
 }
 
 func (e *InvalidParameterError) AgentSuggestions() []string {
+	names := e.candidateNames()
+	results := make([]string, 0, len(names))
+	for _, name := range names {
+		results = append(results, "--"+strings.TrimLeft(name, "-"))
+	}
+	return results
+}
+
+// candidateNames computes the suggestion names shared by human and AI output:
+// a metadata-driven cross-style rename hit comes first (the flag is a valid
+// kebab-style parameter name of this API), then the usual typo suggestions.
+func (e *InvalidParameterError) candidateNames() []string {
+	name := strings.TrimLeft(e.Name, "-")
+	if raw, ok := e.kebabToRaw[name]; ok {
+		return []string{raw}
+	}
 	candidates := append([]string(nil), e.ParameterNames...)
 	if e.flags != nil {
-		for _, flag := range e.flags.Flags() {
-			candidates = append(candidates, flag.Name)
+		for _, f := range e.flags.Flags() {
+			candidates = append(candidates, f.Name)
 		}
 	}
-	return flagSuggestions(e.Name, candidates)
+	if suggestions := closeSuggestions(name, candidates, false); len(suggestions) > 0 {
+		return suggestions
+	}
+	suggestions := crossStyleFlagSuggestions(name, candidates)
+	for i := range suggestions {
+		suggestions[i] = strings.TrimLeft(suggestions[i], "-")
+	}
+	return suggestions
 }
 
 // NewInvalidParameterErrorFromCanonical creates error from canonical API
@@ -186,6 +211,7 @@ func NewInvalidParameterErrorFromCanonical(name string, api *canonicalmeta.API, 
 			examples[name] = example
 		}
 	}
+	kebabToRaw, rawToKebab := styleRenameMaps(api)
 	return &InvalidParameterError{
 		Name:              name,
 		ProductCode:       productCode,
@@ -193,7 +219,50 @@ func NewInvalidParameterErrorFromCanonical(name string, api *canonicalmeta.API, 
 		ParameterNames:    params,
 		ParameterExamples: examples,
 		flags:             flags,
+		kebabToRaw:        kebabToRaw,
+		rawToKebab:        rawToKebab,
 	}
+}
+
+// attachStyleMigration precomputes the kebab command name and the equivalent
+// kebab command when the unknown flag is a confirmed kebab-style rename of
+// one of this API's parameters (i.e. the caller mixed command styles). Plain
+// typos keep both fields empty.
+func (e *InvalidParameterError) attachStyleMigration(api *canonicalmeta.API, ctx *cli.Context) {
+	name := strings.TrimLeft(e.Name, "-")
+	if _, ok := e.kebabToRaw[name]; !ok {
+		return
+	}
+	e.kebabCommand = ""
+	if api != nil {
+		e.kebabCommand = api.CmdName
+	}
+	if e.kebabCommand == "" {
+		e.kebabCommand = apiNameToKebab(e.ApiName)
+	}
+	// The kebab command name is only useful when the engine actually serves
+	// it for this product; otherwise the equivalent would advise a command
+	// that cannot run.
+	if !containsString(runtimehost.ProductCommands(e.ProductCode), e.kebabCommand) {
+		e.kebabCommand = ""
+		return
+	}
+	e.equivalentCommand = rebuildStyleEquivalentCommand(e.ProductCode, e.kebabCommand, ctx, e.rawToKebab, keySet(e.kebabToRaw))
+}
+
+// styleMigrationTip renders the cross-style hint for human output, or "" when
+// the flag is not a style-mixing rename. Without a served kebab command it
+// degrades to naming the style-correct flag only.
+func (e *InvalidParameterError) styleMigrationTip() string {
+	name := strings.TrimLeft(e.Name, "-")
+	raw, ok := e.kebabToRaw[name]
+	if !ok {
+		return ""
+	}
+	if e.equivalentCommand != "" {
+		return fmt.Sprintf("--%s is the kebab-style name of --%s. Equivalent command:\n  %s", name, raw, e.equivalentCommand)
+	}
+	return fmt.Sprintf("--%s is the kebab-style name of --%s; use --%s here.", name, raw, raw)
 }
 
 type InvalidProductOrPluginError struct {
