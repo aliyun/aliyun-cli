@@ -105,7 +105,14 @@ func rebuildStyleEquivalentCommand(product, targetCommand string, ctx *cli.Conte
 			if f == nil || !f.IsAssigned() {
 				continue
 			}
-			name := strings.TrimSuffix(f.Name, "-FILE")
+			// The -FILE suffix means "read the value from this file" on the
+			// PascalCase chain. Stripping it would silently turn file content
+			// into a literal path value, and the kebab engine has no
+			// per-parameter -FILE convention to preserve it — fail closed.
+			if strings.HasSuffix(f.Name, "-FILE") {
+				return ""
+			}
+			name := f.Name
 			switch {
 			case validTarget[name]:
 				// already spelled in the target style

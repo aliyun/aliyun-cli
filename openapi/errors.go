@@ -91,6 +91,9 @@ type InvalidApiError struct {
 }
 
 func (e *InvalidApiError) Error() string {
+	if e.product == nil {
+		return fmt.Sprintf("%q is not a valid api.", e.Name)
+	}
 	product := e.product.GetLowerCode()
 	if command := apiRecoveryCommand(e.Name, product, e.product.ApiNames); command != "" {
 		return fmt.Sprintf("%q is not a valid api. Search matching APIs with `%s`.", e.Name, command)
@@ -316,6 +319,9 @@ type InvalidUnifiedApiError struct {
 }
 
 func (e *InvalidUnifiedApiError) Error() string {
+	if e.product == nil {
+		return fmt.Sprintf("%q is not a valid api.", e.Name)
+	}
 	product := e.product.GetLowerCode()
 	candidates := append(append([]string(nil), e.product.ApiNames...), e.lPlugin.CmdNames...)
 	if command := apiRecoveryCommand(e.Name, product, candidates); command != "" {

@@ -136,6 +136,20 @@ func TestRebuildStyleEquivalentCommand(t *testing.T) {
 		got := rebuildStyleEquivalentCommand("ecs", "describe-instances", ctx, rawToKebab, keySet(kebabToRaw))
 		assert.Equal(t, "", got)
 	})
+
+	t.Run("FILE-suffixed flags fail closed", func(t *testing.T) {
+		// --body-FILE reads the value from a file on the PascalCase chain;
+		// the kebab engine has no per-parameter -FILE convention, so the
+		// equivalent must not be rebuilt at all rather than lose the
+		// read-from-file semantics.
+		ctx := newContext()
+		unknown := cli.NewFlagSet()
+		unknown.Add(newAssignedFlag("biz-region-id", "cn-hangzhou"))
+		unknown.Add(newAssignedFlag("body-FILE", "/tmp/x.json"))
+		ctx.SetUnknownFlags(unknown)
+		got := rebuildStyleEquivalentCommand("ecs", "describe-instances", ctx, rawToKebab, keySet(kebabToRaw))
+		assert.Equal(t, "", got)
+	})
 }
 
 // stubEngineServedCommands pins the engine-serving gate for deterministic

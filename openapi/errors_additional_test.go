@@ -64,6 +64,8 @@ func TestProductAPIAndParameterAgentContracts(t *testing.T) {
 	assert.Nil(t, (&InvalidApiError{Name: "missing"}).AgentSuggestions())
 	assert.Nil(t, (&InvalidApiError{Name: "missing"}).GetSuggestions())
 	assert.Nil(t, (&InvalidUnifiedApiError{Name: "missing"}).GetSuggestions())
+	assert.Equal(t, `"missing" is not a valid api.`, (&InvalidApiError{Name: "missing"}).Error())
+	assert.Equal(t, `"missing" is not a valid api.`, (&InvalidUnifiedApiError{Name: "missing"}).Error())
 
 	flags := cli.NewFlagSet()
 	flags.Add(&cli.Flag{Name: "region"})
