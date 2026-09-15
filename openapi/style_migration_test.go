@@ -138,16 +138,44 @@ func TestRebuildStyleEquivalentCommand(t *testing.T) {
 	})
 }
 
+// stubEngineServedCommands pins the engine-serving gate for deterministic
+// tests; the real engine metadata is not available in unit test environments.
+func stubEngineServedCommands(t *testing.T, served []string) {
+	t.Helper()
+	original := engineServedCommands
+	engineServedCommands = func(string) []string { return served }
+	t.Cleanup(func() { engineServedCommands = original })
+}
+
 func TestInvalidParameterError_StyleMigrationTipWithoutServedKebabCommand(t *testing.T) {
-	// In the test environment the engine serves no product, so the tip
-	// degrades to naming the style-correct flag only.
+	// The engine serves nothing for this product: the tip degrades to naming
+	// the style-correct flag only, and no unrunnable equivalent is advised.
+	stubEngineServedCommands(t, nil)
 	err := NewInvalidParameterErrorFromCanonical("biz-region-id", styleMigrationTestAPI(), "ecs", cli.NewFlagSet())
 	err.attachStyleMigration(styleMigrationTestAPI(), cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer)))
 	assert.Equal(t, "--biz-region-id is the kebab-style name of --RegionId; use --RegionId here.", err.styleMigrationTip())
+	assert.Equal(t, "", err.equivalentCommand)
 
 	plain := NewInvalidParameterErrorFromCanonical("InstnaceId", styleMigrationTestAPI(), "ecs", cli.NewFlagSet())
 	plain.attachStyleMigration(styleMigrationTestAPI(), cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer)))
 	assert.Equal(t, "", plain.styleMigrationTip())
+}
+
+func TestInvalidParameterError_StyleMigrationTipWithEquivalentCommand(t *testing.T) {
+	// The engine serves the kebab command: the tip carries the rebuilt
+	// equivalent command with every assigned flag translated.
+	stubEngineServedCommands(t, []string{"describe-instances"})
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	unknown := cli.NewFlagSet()
+	unknown.Add(newAssignedFlag("biz-region-id", "cn-hangzhou"))
+	unknown.Add(newAssignedFlag("InstanceId", "i-123"))
+	ctx.SetUnknownFlags(unknown)
+
+	err := NewInvalidParameterErrorFromCanonical("biz-region-id", styleMigrationTestAPI(), "ecs", cli.NewFlagSet())
+	err.attachStyleMigration(styleMigrationTestAPI(), ctx)
+	tip := err.styleMigrationTip()
+	assert.Contains(t, tip, "Equivalent command:")
+	assert.Contains(t, tip, "aliyun ecs describe-instances --biz-region-id cn-hangzhou --instance-id i-123")
 }
 
 func newStyleMixedTestCommando(t *testing.T) *Commando {

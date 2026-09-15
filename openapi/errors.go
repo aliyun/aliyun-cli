@@ -22,7 +22,6 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/meta"
-	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 )
 
 // LegacyMissingRequiredError marks required-parameter validation failures from
@@ -243,7 +242,7 @@ func (e *InvalidParameterError) attachStyleMigration(api *canonicalmeta.API, ctx
 	// The kebab command name is only useful when the engine actually serves
 	// it for this product; otherwise the equivalent would advise a command
 	// that cannot run.
-	if !containsString(runtimehost.ProductCommands(e.ProductCode), e.kebabCommand) {
+	if !containsString(engineServedCommands(e.ProductCode), e.kebabCommand) {
 		e.kebabCommand = ""
 		return
 	}

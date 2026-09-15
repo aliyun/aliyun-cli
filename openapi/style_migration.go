@@ -21,9 +21,16 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/openapi/runtimehost"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/runtime"
 )
+
+// engineServedCommands reports the kebab command names the runtime engine
+// serves for a product. It is a package-level variable so tests can pin the
+// gate deterministically (the real engine metadata is not available in unit
+// test environments).
+var engineServedCommands = runtimehost.ProductCommands
 
 // styleRenameMaps builds the bidirectional rename tables between the kebab
 // option names the engine serves and the legacy raw parameter names of one
