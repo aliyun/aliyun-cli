@@ -244,7 +244,7 @@ func maskEmbeddedJSON(value, marker string) string {
 	return string(b)
 }
 
-// Raw text supports named key/value pairs, not secrets in arbitrary
+// ponytail: raw text supports named key/value pairs, not secrets in arbitrary
 // prose; add a format parser when another structured text format is supported.
 var textField = regexp.MustCompile(`([\w.\[\]-]+|"[\w.\[\]-]+"|'[\w.\[\]-]+')([ \t]*[:=][ \t]*)`)
 var textValue = regexp.MustCompile(`^("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n&,;]+)`)
