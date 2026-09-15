@@ -483,41 +483,6 @@ func TestHostSettingsAppliedToExecContext(t *testing.T) {
 	}
 }
 
-func TestKebabCommandsSelectMetadataSignatureAlgorithm(t *testing.T) {
-	for _, test := range []struct {
-		args      []string
-		algorithm string
-	}{
-		{[]string{"fnf", "start-sync-execution", "--flow-name", "test-flow", "--input", `{"key":"a+b&中文"}`}, "v2"},
-		{[]string{"fnf", "list-flows"}, "v2"},
-		{[]string{"ecs", "describe-regions"}, ""},
-	} {
-		t.Run(strings.Join(test.args[:2], " "), func(t *testing.T) {
-			capture := &captureExecutor{}
-			eng := openapiruntime.NewEngine(openapiruntime.Options{BaselineFS: bundledmeta.Metadatas, BundledBy: "test"}, capture)
-			if _, err := runOapi(t, eng, "cn-shanghai", test.args...); err != nil {
-				t.Fatal(err)
-			}
-			if capture.last == nil || capture.last.API.SignatureAlgorithm != test.algorithm {
-				t.Fatalf("executor did not receive signature algorithm %q", test.algorithm)
-			}
-			if test.args[1] == "start-sync-execution" {
-				request, err := runtime.Assemble(capture.last)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if request.Endpoint != "cn-shanghai.fnf.aliyuncs.com" || request.ReqBodyType != "formData" {
-					t.Fatalf("FNF endpoint/body encoding = %q/%q", request.Endpoint, request.ReqBodyType)
-				}
-				wantBody := map[string]any{"FlowName": "test-flow", "Input": `{"key":"a+b&中文"}`}
-				if !reflect.DeepEqual(request.Body, wantBody) {
-					t.Fatalf("FNF form parameters = %#v", request.Body)
-				}
-			}
-		})
-	}
-}
-
 // baselineEngine boots an engine over the embedded baseline metadata,
 // exactly as the production wiring does (minus user/override layers).
 func baselineEngine(t *testing.T) *engine.Engine {

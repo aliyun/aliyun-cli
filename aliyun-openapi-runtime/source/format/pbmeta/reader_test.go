@@ -1,7 +1,6 @@
 package pbmeta
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,50 +11,10 @@ import (
 	"testing"
 
 	"github.com/aliyun/aliyun-openapi-runtime/schema"
-	"github.com/aliyun/aliyun-openapi-runtime/source/format"
 	"github.com/aliyun/aliyun-openapi-runtime/source/format/indexed"
 	"github.com/aliyun/aliyun-openapi-runtime/source/storage"
 	"google.golang.org/protobuf/proto"
 )
-
-func TestSignatureAlgorithmWireCompatibility(t *testing.T) {
-	for _, test := range []struct {
-		name      string
-		algorithm string
-		wire      []byte
-	}{
-		{name: "legacy absent field"},
-		{name: "v2 field 11", algorithm: "v2", wire: []byte{0x5a, 0x02, 'v', '2'}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			encoded, err := proto.Marshal(&Operation{SignatureAlgorithm: test.algorithm})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(encoded, test.wire) {
-				t.Fatalf("encoded operation = %x, want %x", encoded, test.wire)
-			}
-			var operation Operation
-			if err := proto.Unmarshal(test.wire, &operation); err != nil {
-				t.Fatal(err)
-			}
-			operation.Action = "ListFlows"
-			operation.ApiVersion = "2019-03-15"
-			operation.ApiStyle = "RPC"
-			canonical, err := toCanonical(&CommandDefinition{Name: "ListFlows", Operation: &operation})
-			if err != nil {
-				t.Fatal(err)
-			}
-			api, err := format.DecodeCommandDefinition(canonical, "fnf/ListFlows")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if api.SignatureAlgorithm != test.algorithm {
-				t.Fatalf("signature algorithm = %q, want %q", api.SignatureAlgorithm, test.algorithm)
-			}
-		})
-	}
-}
 
 func TestToCanonicalMapsResponseMetadata(t *testing.T) {
 	t.Run("protobuf", func(t *testing.T) {

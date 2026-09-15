@@ -31,8 +31,6 @@ type API struct {
 	Version     string // API version (e.g. "2014-05-26")
 
 	// Wire.
-	SignatureAlgorithm string // empty: SDK default; "v2": legacy RPC/ROA signing
-
 	Method          string // "GET" / "POST" / ...
 	URL             string // RESTful path template; empty for RPC
 	Style           APIStyle

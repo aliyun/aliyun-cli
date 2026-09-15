@@ -27,7 +27,7 @@ type SSEEvent json.RawMessage
 
 func sendSSE(ec *ExecContext, req *AssembledRequest, yield func(SSEEvent)) error {
 	// CallSSEApi does not dispatch to the SDK's legacy v2 signer.
-	if ec.API.SignatureAlgorithm == "v2" {
+	if usesLegacySignature(ec.API.ProductCode) {
 		return fmt.Errorf("runtime: SSE does not support signature algorithm v2")
 	}
 	call, err := prepareCall(ec, req)

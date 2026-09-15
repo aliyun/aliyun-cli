@@ -62,12 +62,10 @@ func TestGeneratedOperationAccessors(t *testing.T) {
 	message := &Operation{
 		Action: "Run", ApiStyle: "ROA", ApiVersion: "v1", Method: "POST", Protocol: "HTTPS", Url: "/run",
 		IsSse: true, ReqBodyType: "json", ContentType: "application/json", HasWildcardPath: true,
-		SignatureAlgorithm: "v2",
 	}
 	if message.GetAction() != "Run" || message.GetApiStyle() != "ROA" || message.GetApiVersion() != "v1" ||
 		message.GetMethod() != "POST" || message.GetProtocol() != "HTTPS" || message.GetUrl() != "/run" ||
-		!message.GetIsSse() || message.GetReqBodyType() != "json" || message.GetContentType() != "application/json" || !message.GetHasWildcardPath() ||
-		message.GetSignatureAlgorithm() != "v2" {
+		!message.GetIsSse() || message.GetReqBodyType() != "json" || message.GetContentType() != "application/json" || !message.GetHasWildcardPath() {
 		t.Fatalf("generated getters returned unexpected values: %#v", message)
 	}
 	if message.String() == "" || message.ProtoReflect().Descriptor().FullName() == "" {
@@ -81,7 +79,7 @@ func TestGeneratedOperationAccessors(t *testing.T) {
 	var zero *Operation
 	if zero.GetAction() != "" || zero.GetApiStyle() != "" || zero.GetApiVersion() != "" || zero.GetMethod() != "" ||
 		zero.GetProtocol() != "" || zero.GetUrl() != "" || zero.GetIsSse() || zero.GetReqBodyType() != "" ||
-		zero.GetContentType() != "" || zero.GetHasWildcardPath() || zero.GetSignatureAlgorithm() != "" {
+		zero.GetContentType() != "" || zero.GetHasWildcardPath() {
 		t.Fatal("nil Operation getters did not return zero values")
 	}
 	if zero.ProtoReflect().Descriptor().FullName() == "" {
@@ -89,7 +87,7 @@ func TestGeneratedOperationAccessors(t *testing.T) {
 	}
 
 	message.Reset()
-	if message.GetAction() != "" || message.GetIsSse() || message.GetSignatureAlgorithm() != "" {
+	if message.GetAction() != "" || message.GetIsSse() {
 		t.Fatalf("Reset() left data behind: %#v", message)
 	}
 }

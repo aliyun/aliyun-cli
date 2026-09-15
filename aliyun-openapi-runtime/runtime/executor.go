@@ -534,6 +534,15 @@ type preparedCall struct {
 	runtime *dara.RuntimeOptions
 }
 
+func usesLegacySignature(product string) bool {
+	// ponytail: product-level allowlist; refine by API/version only if a listed product needs mixed signing generations.
+	switch strings.ToLower(product) {
+	case "fnf":
+		return true
+	}
+	return false
+}
+
 func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) {
 	if ec.Credential == nil {
 		return nil, errors.New("runtime: no credential resolved; run `aliyun configure` or pass --dry-run")
@@ -543,8 +552,8 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 	}
 
 	conf := &openapiClient.Config{Credential: ec.Credential}
-	if ec.API.SignatureAlgorithm != "" {
-		conf.SignatureAlgorithm = tea.String(ec.API.SignatureAlgorithm)
+	if usesLegacySignature(ec.API.ProductCode) {
+		conf.SignatureAlgorithm = tea.String("v2")
 	}
 	if ec.Region != "" {
 		conf.RegionId = tea.String(ec.Region)

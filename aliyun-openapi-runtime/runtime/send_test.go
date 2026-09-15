@@ -114,19 +114,20 @@ func TestSendAgainstMockServer(t *testing.T) {
 	}
 }
 
-func TestSendMetadataSignatureAlgorithm(t *testing.T) {
+func TestSendProductSignatureAlgorithm(t *testing.T) {
 	form := map[string]string{"FlowName": "test-flow", "Input": `{"key":"a+b&中文"}`}
 	query := map[string]string{"Limit": "10", "NextToken": "next+&中文"}
 	tests := []struct {
-		name, product, action, method, algorithm, token string
-		query, form                                     map[string]string
+		name, product, action, method, token string
+		legacy                               bool
+		query, form                          map[string]string
 	}{
-		{name: "fnf POST", product: "fnf", action: "StartSyncExecution", method: "POST", algorithm: "v2", form: form},
-		{name: "fnf GET", product: "fnf", action: "ListFlows", method: "GET", algorithm: "v2", query: query},
-		{name: "another legacy RPC", product: "legacy-demo", action: "SubmitForm", method: "POST", algorithm: "v2", query: query, form: form},
+		{name: "fnf POST", product: "fnf", action: "StartSyncExecution", method: "POST", legacy: true, form: form},
+		{name: "fnf GET", product: "fnf", action: "ListFlows", method: "GET", legacy: true, query: query},
+		{name: "mixed-case FNF", product: "FnF", action: "StartSyncExecution", method: "POST", legacy: true, query: query, form: form},
 		{name: "default ACS3", product: "demo", action: "SubmitForm", method: "POST", query: query, form: form},
-		{name: "explicit ACS3", product: "demo", action: "SubmitForm", method: "POST", algorithm: "ACS3-HMAC-SHA256", form: form},
-		{name: "legacy STS", product: "fnf", action: "StartSyncExecution", method: "POST", algorithm: "v2", token: "fake-sts-token", form: form},
+		{name: "similar product is ACS3", product: "fnf-other", action: "StartSyncExecution", method: "POST", form: form},
+		{name: "FNF STS", product: "fnf", action: "StartSyncExecution", method: "POST", legacy: true, token: "fake-sts-token", form: form},
 		{name: "ACS3 STS", product: "demo", action: "SubmitForm", method: "POST", token: "fake-sts-token", form: form},
 	}
 	for _, tt := range tests {
@@ -149,7 +150,7 @@ func TestSendMetadataSignatureAlgorithm(t *testing.T) {
 
 			api := &meta.API{
 				Name: tt.action, ProductCode: tt.product, Version: "2019-03-15", Method: tt.method,
-				Style: meta.StyleRPC, Protocol: "HTTP", SignatureAlgorithm: tt.algorithm,
+				Style: meta.StyleRPC, Protocol: "HTTP",
 			}
 			args := map[string]any{}
 			for name, value := range tt.query {
@@ -201,7 +202,7 @@ func TestSendMetadataSignatureAlgorithm(t *testing.T) {
 			if len(tt.form) > 0 && gotHeader.Get("Content-Type") != "application/x-www-form-urlencoded" {
 				t.Fatalf("Content-Type = %q", gotHeader.Get("Content-Type"))
 			}
-			if tt.algorithm != "v2" {
+			if !tt.legacy {
 				if !strings.HasPrefix(gotHeader.Get("Authorization"), "ACS3-HMAC-SHA256 ") || len(gotQuery) != len(tt.query) {
 					t.Fatal("ACS3 request switched to legacy signing")
 				}
@@ -243,7 +244,7 @@ func TestSendMetadataSignatureAlgorithm(t *testing.T) {
 func TestExecuteSSERejectsLegacySignature(t *testing.T) {
 	for _, isSSE := range []bool{false, true} {
 		err := NewExecutor().ExecuteSSE(&ExecContext{
-			API: &meta.API{SignatureAlgorithm: "v2", IsSSE: isSSE},
+			API: &meta.API{ProductCode: "FnF", IsSSE: isSSE},
 		}, nil)
 		if err == nil || err.Error() != "runtime: SSE does not support signature algorithm v2" {
 			t.Fatalf("ExecuteSSE(IsSSE=%t) error = %v", isSSE, err)

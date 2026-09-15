@@ -40,7 +40,7 @@ func TestReaderRandomAccess(t *testing.T) {
 		},
 		{
 			Name: "GetThing", CmdName: "get-thing", DescriptionEN: "Get one thing",
-			Operation: &schema.OperationConfig{Action: "GetThing", APIVersion: "2020-01-01", Method: "GET", APIStyle: "ROA", URL: "/things/{id}", SignatureAlgorithm: "v2"},
+			Operation: &schema.OperationConfig{Action: "GetThing", APIVersion: "2020-01-01", Method: "GET", APIStyle: "ROA", URL: "/things/{id}"},
 		},
 	}
 	data, records := encodeDefinitions(t, definitions)
@@ -70,9 +70,6 @@ func TestReaderRandomAccess(t *testing.T) {
 	}
 	if api.Name != "GetThing" || api.Version != "2020-01-01" {
 		t.Fatalf("decoded API = %s/%s", api.Version, api.Name)
-	}
-	if api.SignatureAlgorithm != "v2" {
-		t.Fatalf("JSONL signature algorithm = %q, want v2", api.SignatureAlgorithm)
 	}
 	if spy.readAt != 1 || spy.dataReadAll != 0 {
 		t.Fatalf("ReadAPI access: ReadAt=%d data ReadAll=%d, want 1/0", spy.readAt, spy.dataReadAll)
