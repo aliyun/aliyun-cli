@@ -263,11 +263,16 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 
 	var queryErr *engine.QueryFilterError
 	if errors.As(err, &queryErr) {
-		return newLocalAgentError(err, queryErr.Error(), nil, cli.AgentErrorRecovery{
+		recovery := cli.AgentErrorRecovery{
 			Action:  "fix_cli_query",
 			Command: context.responseSectionCommand(),
 			Hint:    "The --cli-query JMESPath expression is invalid. Check its syntax; the command shows the response structure to build a valid query from.",
-		})
+		}
+		if rawHelpRequested(args) || context.section != "" {
+			recovery.Command = ""
+			recovery.Hint = "The --cli-query JMESPath expression is invalid. Remove --cli-query to inspect the Help JSON, then correct the expression."
+		}
+		return newLocalAgentError(err, queryErr.Error(), nil, recovery)
 	}
 
 	// This is intentionally an allowlist. Other credential failures, plugins,
@@ -513,20 +518,14 @@ func endpointAgentError(cause error, message string, context recoveryContext) er
 	})
 }
 
-// endpointDiagnosticsCommand builds the OpenAPI Explorer product-endpoints
-// invocation in the caller's command style, projecting to the region/endpoint
-// pairs so the recovery stays small; empty when the product is unknown.
+// Endpoint discovery is local: it must work even when the original request
+// cannot resolve an endpoint or credentials are unavailable.
 func endpointDiagnosticsCommand(context recoveryContext) string {
 	product := strings.TrimSpace(context.product)
 	if product == "" {
 		return ""
 	}
-	code := firstRuneUpper(product)
-	const projection = "--cli-query 'data.endpoints[*].{regionId:regionId,endpoint:endpoint}'"
-	if context.style == "pascal" {
-		return "aliyun openapiexplorer GetProductEndpoints --product " + code + " --region cn-hangzhou " + projection
-	}
-	return "aliyun openapiexplorer get-product-endpoints --product " + code + " --region cn-hangzhou " + projection
+	return "aliyun " + product + " --help --cli-output json --cli-query 'product.endpoints'"
 }
 
 // transportError is the credential-safe rendering of a network transport

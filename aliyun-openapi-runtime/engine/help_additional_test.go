@@ -24,8 +24,30 @@ import (
 	"text/tabwriter"
 
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
+	runtimehelp "github.com/aliyun/aliyun-openapi-runtime/help"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
 )
+
+func TestHelpCLIQuery(t *testing.T) {
+	document := runtimehelp.BuildProductDocument(&meta.Product{Code: "demo"}, &meta.APIIndex{}, HelpOptions{})
+	for _, aiMode := range []bool{false, true} {
+		options := helpOptionsFromReserved(Request{AIMode: aiMode}, argparser.Reserved{CliQuery: "product.code"})
+		var output bytes.Buffer
+		if err := RenderHelp(&output, document, options); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.TrimSpace(output.String()); got != `"demo"` {
+			t.Fatalf("query output = %s", got)
+		}
+	}
+	options := helpOptionsFromReserved(Request{}, argparser.Reserved{CliQuery: "invalid["})
+	var output bytes.Buffer
+	err := RenderHelp(&output, document, options)
+	var queryError *QueryFilterError
+	if !errors.As(err, &queryError) || output.Len() != 0 {
+		t.Fatalf("error=%v output=%q", err, output.String())
+	}
+}
 
 func TestValidateReservedHelpPreservesSectionAllConflictForRecovery(t *testing.T) {
 	err := validateReservedHelp(argparser.Reserved{HelpSection: "request", HelpAll: true}, false)

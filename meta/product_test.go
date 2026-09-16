@@ -173,7 +173,7 @@ func TestProduct_GetEndpointWithType(t *testing.T) {
 		}
 
 		_, err := product.GetEndpointWithType("unknown-region", nil, "")
-		assert.EqualError(t, err, "unknown endpoint for region unknown-region\n  you need to add --endpoint xxx.aliyuncs.com, sample: --endpoint test.unknown-region.aliyuncs.com")
+		assert.EqualError(t, err, "unknown endpoint for region unknown-region")
 		assert.NotContains(t, err.Error(), "LC_Error")
 	})
 

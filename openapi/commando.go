@@ -33,6 +33,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/util"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
+	runtime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 
 	"encoding/json"
 	"fmt"
@@ -196,6 +197,12 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 	if !enabled && !explicitLocalErrorJSONRequested(ctx, err) {
 		normalizationArgs := recoveryNormalizationArgs(ctx, args, false)
 		context := newRecoveryContext(normalizationArgs)
+		var legacyEndpoint *meta.InvalidEndpointError
+		var runtimeEndpoint *runtime.EndpointNotResolvedError
+		if errors.As(err, &legacyEndpoint) || errors.As(err, &runtimeEndpoint) {
+			return cli.NewErrorWithTip(err,
+				"List available endpoints with `%s`, use a supported --region, or pass --endpoint <host> explicitly.", endpointDiagnosticsCommand(context))
+		}
 		if isSectionHelpAllConflict(err) {
 			if command := context.sectionSearchCommand("<keyword>"); command != "" {
 				return &sectionHelpAllRecoveryError{cause: err, command: command}
@@ -204,6 +211,10 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 		return err
 	}
 	normalizationArgs := recoveryNormalizationArgs(ctx, args, enabled)
+	var queryError *engine.QueryFilterError
+	if errors.As(err, &queryError) && rawHelpRequested(ctx.InvocationArgs()) {
+		normalizationArgs = append(normalizationArgs, "--help")
+	}
 	if c.recoverySearchValidator != nil {
 		return agentErrorNormalizerWithSearch(err, normalizationArgs, c.recoverySearchValidator)
 	}
