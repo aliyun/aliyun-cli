@@ -513,3 +513,27 @@ func TestPolicy_Check_CanonicalAPIDoesNotMatchUnrelatedCommand(t *testing.T) {
 	})
 	assert.False(t, result.Matched)
 }
+
+func TestPolicy_Check_CanonicalCommandMatchesPascalInput(t *testing.T) {
+	policy := &Policy{Enabled: true, Rules: []Rule{{Pattern: "ecs:delete-instance", Action: ActionDeny}}}
+	result := policy.Check(CommandInfo{
+		Product:              "ecs",
+		ApiOrMethod:          "DeleteInstance",
+		CanonicalApiOrMethod: "DeleteInstance",
+		CanonicalCommand:     "delete-instance",
+	})
+	assert.True(t, result.Matched)
+	assert.Equal(t, ActionDeny, result.Action)
+}
+
+func TestPolicy_Check_CanonicalCommandMatchesKebabInput(t *testing.T) {
+	policy := &Policy{Enabled: true, Rules: []Rule{{Pattern: "ecs:delete-instance", Action: ActionDeny}}}
+	result := policy.Check(CommandInfo{
+		Product:              "ecs",
+		ApiOrMethod:          "delete-instance",
+		CanonicalApiOrMethod: "DeleteInstance",
+		CanonicalCommand:     "delete-instance",
+	})
+	assert.True(t, result.Matched)
+	assert.Equal(t, ActionDeny, result.Action)
+}

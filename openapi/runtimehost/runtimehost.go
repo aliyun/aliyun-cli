@@ -243,6 +243,7 @@ func checkSafetyPolicy(ctx *cli.Context, rawArgs []string) error {
 		return fmt.Errorf("load safety policy failed: %w", err)
 	}
 	canonicalCommand := ""
+	canonicalCLICommand := ""
 	if ldr, loaderErr := Engine().Loader(); loaderErr == nil {
 		if ensureErr := ldr.EnsureProduct(rawArgs[0]); ensureErr == nil {
 			version := ""
@@ -251,6 +252,11 @@ func checkSafetyPolicy(ctx *cli.Context, rawArgs []string) error {
 			}
 			if ref, resolveErr := ldr.ResolveCommandVersion(rawArgs[0], command, version); resolveErr == nil {
 				canonicalCommand = ref.Name
+				if index, indexErr := ldr.GetAPIIndex(ref.Product, ref.Version); indexErr == nil {
+					if entry, ok := index.Entries[ref.Name]; ok {
+						canonicalCLICommand = entry.CmdName
+					}
+				}
 			}
 		}
 	}
@@ -261,6 +267,7 @@ func checkSafetyPolicy(ctx *cli.Context, rawArgs []string) error {
 		Product:              rawArgs[0],
 		ApiOrMethod:          command,
 		CanonicalApiOrMethod: canonicalCommand,
+		CanonicalCommand:     canonicalCLICommand,
 	}, skipConfirm)
 }
 

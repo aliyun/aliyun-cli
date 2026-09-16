@@ -88,6 +88,9 @@ type CommandInfo struct {
 	// CanonicalApiOrMethod is the metadata-resolved API name for built-in
 	// OpenAPI commands. It is empty for plugins and raw REST method/path calls.
 	CanonicalApiOrMethod string
+	// CanonicalCommand is the metadata-resolved kebab-case command name for
+	// built-in OpenAPI commands. It is empty for plugins and raw REST calls.
+	CanonicalCommand string
 	// Path is only set for REST style invocations that supply a path
 	// (e.g. `aliyun cs DELETE /clusters` -> Path = "/clusters").
 	Path string
@@ -99,11 +102,22 @@ func (p *Policy) Check(cmd CommandInfo) CheckResult {
 	}
 
 	cmdPatterns := []string{buildCommandPattern(cmd)}
-	if cmd.CanonicalApiOrMethod != "" && cmd.Path == "" &&
-		!strings.EqualFold(cmd.CanonicalApiOrMethod, cmd.ApiOrMethod) {
-		canonical := cmd
-		canonical.ApiOrMethod = cmd.CanonicalApiOrMethod
-		cmdPatterns = append(cmdPatterns, buildCommandPattern(canonical))
+	if cmd.Path == "" {
+		for _, alias := range []string{cmd.CanonicalApiOrMethod, cmd.CanonicalCommand} {
+			if alias == "" {
+				continue
+			}
+			duplicate := false
+			for _, pattern := range cmdPatterns {
+				if strings.EqualFold(pattern, buildCommandPatternWithApi(cmd, alias)) {
+					duplicate = true
+					break
+				}
+			}
+			if !duplicate {
+				cmdPatterns = append(cmdPatterns, buildCommandPatternWithApi(cmd, alias))
+			}
+		}
 	}
 
 	// Rules are evaluated in order; first match wins
@@ -149,11 +163,15 @@ func (p *Policy) Check(cmd CommandInfo) CheckResult {
 // HTTP methods are upper-cased so rules like `*:DELETE` work regardless of how the user typed the verb.
 // ApiOrMethod preserves the original casing because matching itself is case-insensitive.
 func buildCommandPattern(cmd CommandInfo) string {
+	return buildCommandPatternWithApi(cmd, cmd.ApiOrMethod)
+}
+
+func buildCommandPatternWithApi(cmd CommandInfo, apiOrMethod string) string {
 	product := strings.ToLower(cmd.Product)
 	if cmd.Path != "" {
-		return fmt.Sprintf("%s:%s%s", product, strings.ToUpper(cmd.ApiOrMethod), cmd.Path)
+		return fmt.Sprintf("%s:%s%s", product, strings.ToUpper(apiOrMethod), cmd.Path)
 	}
-	return fmt.Sprintf("%s:%s", product, cmd.ApiOrMethod)
+	return fmt.Sprintf("%s:%s", product, apiOrMethod)
 }
 
 func matchPattern(pattern, cmd string) bool {
