@@ -31,8 +31,8 @@ func NewConfigureSafetyPolicyCommand() *cli.Command {
 			"管理安全策略和人工确认规则"),
 		Usage: "safety-policy [command] [--config-path <configPath>]",
 		Long: i18n.T(
-			`Configure safety policy to deny or require confirmation for destructive operations.`,
-			`配置安全策略，用于拒绝或要求确认破坏性操作。`),
+			`Configure safety policy to deny or require confirmation for destructive operations. Rules currently match CLI command patterns; API-level alias mapping is not enabled.`,
+			`配置安全策略，用于拒绝或要求确认破坏性操作。当前规则按 CLI 命令模式匹配，尚未启用 API 级别的别名映射。`),
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
