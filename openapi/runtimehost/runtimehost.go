@@ -242,32 +242,12 @@ func checkSafetyPolicy(ctx *cli.Context, rawArgs []string) error {
 	if err != nil {
 		return fmt.Errorf("load safety policy failed: %w", err)
 	}
-	canonicalCommand := ""
-	canonicalCLICommand := ""
-	if ldr, loaderErr := Engine().Loader(); loaderErr == nil {
-		if ensureErr := ldr.EnsureProduct(rawArgs[0]); ensureErr == nil {
-			version := ""
-			if flag := ctx.Flags().Get("version"); flag != nil {
-				version, _ = flag.GetValue()
-			}
-			if ref, resolveErr := ldr.ResolveCommandVersion(rawArgs[0], command, version); resolveErr == nil {
-				canonicalCommand = ref.Name
-				if index, indexErr := ldr.GetAPIIndex(ref.Product, ref.Version); indexErr == nil {
-					if entry, ok := index.Entries[ref.Name]; ok {
-						canonicalCLICommand = entry.CmdName
-					}
-				}
-			}
-		}
-	}
 	skipConfirm := flagAssigned(ctx, "yes") ||
 		os.Getenv("ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM") == "1" ||
 		strings.EqualFold(os.Getenv("ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM"), "true")
 	return safety.CheckAndConfirm(ctx, policy, safety.CommandInfo{
-		Product:              rawArgs[0],
-		ApiOrMethod:          command,
-		CanonicalApiOrMethod: canonicalCommand,
-		CanonicalCommand:     canonicalCLICommand,
+		Product:     rawArgs[0],
+		ApiOrMethod: command,
 	}, skipConfirm)
 }
 

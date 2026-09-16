@@ -263,7 +263,7 @@ aliyun configure safety-policy --help
 
 `--yes` skips a confirmation prompt for non-interactive use, but does not override a deny policy. Review the exact command and scope before using it in automation.
 
-Safety policy is disabled by default, and `confirm` is a local CLI confirmation rather than cloud authorization or approval. Use `show` or `list` to inspect the effective policy. When `ALIBABA_CLOUD_SAFETY_POLICY_ENABLED` or `ALIBABA_CLOUD_SAFETY_POLICY_RULES` is set, the displayed policy includes those environment overrides. The CLI refuses to continue when the policy file or environment rules cannot be fully parsed.
+Safety policy is disabled by default, and `confirm` is a local CLI confirmation rather than cloud authorization or approval. Rules currently match CLI command patterns; API-level alias mapping is not enabled, so PascalCase and kebab-case entry points need separate rules. Use `show` or `list` to inspect the effective policy. When `ALIBABA_CLOUD_SAFETY_POLICY_ENABLED` or `ALIBABA_CLOUD_SAFETY_POLICY_RULES` is set, the displayed policy includes those environment overrides. The CLI refuses to continue when the policy file or environment rules cannot be fully parsed.
 
 ## Agent-aware optimization and AI mode
 

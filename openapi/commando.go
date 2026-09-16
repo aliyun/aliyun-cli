@@ -1870,17 +1870,6 @@ func (c *Commando) checkSafetyPolicy(ctx *cli.Context, productCode string, apiOr
 		ApiOrMethod: apiOrMethod,
 		Path:        path,
 	}
-	// Legacy PascalCase OpenAPI commands do not pass through the runtime
-	// command router. Resolve their metadata here so the safety policy sees
-	// the same APIName/CmdName aliases as the kebab-case runtime path.
-	if path == "" {
-		if product, ok := c.library.GetProduct(productCode); ok {
-			if api, found := c.library.GetApi(product.Code, product.Version, apiOrMethod); found && api != nil {
-				cmd.CanonicalApiOrMethod = api.Name
-				cmd.CanonicalCommand = api.CmdName
-			}
-		}
-	}
 	// --yes / -y or ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM=1: skip confirm prompt for agent/non-interactive
 	skipConfirm := YesFlag(ctx.Flags()).IsAssigned() ||
 		os.Getenv("ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM") == "1" ||
