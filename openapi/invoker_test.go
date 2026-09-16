@@ -94,7 +94,7 @@ func TestBasicInvoker_Init(t *testing.T) {
 	invoker.profile.RegionId = "cn-hangzhou"
 	err = invoker.Init(ctx, product)
 	assert.NotNil(t, err)
-	assert.Equal(t, "unknown endpoint for /cn-hangzhou! failed unknown endpoint for region cn-hangzhou\n  you need to add --endpoint xxx.aliyuncs.com", err.Error())
+	assert.Equal(t, "unknown endpoint for /cn-hangzhou! failed unknown endpoint for region cn-hangzhou", err.Error())
 
 	endpointflag.SetAssigned(true)
 	err = invoker.Init(ctx, product)

@@ -426,7 +426,7 @@ func TestGetOpenapiClient(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, client)
 		assert.Contains(t, err.Error(), "unknown endpoint for region cn-hangzhou")
-		assert.Contains(t, err.Error(), "--endpoint")
+		assert.NotContains(t, err.Error(), "xxx.aliyuncs.com")
 	})
 
 	t.Run("DASProductUnresolvableRegionRescuedByEndpointFlag", func(t *testing.T) {

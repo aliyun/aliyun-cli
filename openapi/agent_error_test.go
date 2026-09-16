@@ -929,7 +929,7 @@ func TestNormalizeAgentErrorServerErrorKeepsTipPath(t *testing.T) {
 func TestNormalizeAgentErrorEndpointResolution(t *testing.T) {
 	// Client-side endpoint resolution failures are wrapped exactly as invoker.go
 	// wraps them (ErrorWithTip around a %w chain) and must become an envelope
-	// whose diagnostics command matches the caller's command style.
+	// whose diagnostics command reads local Help without making another API call.
 	newEndpointError := func() error {
 		endpointErr := &meta.InvalidEndpointError{Region: "invalid-region-xxx", Product: &meta.Product{}}
 		return cli.NewErrorWithTip(
@@ -945,7 +945,7 @@ func TestNormalizeAgentErrorEndpointResolution(t *testing.T) {
 		envelope := agentErr.Envelope()
 		assert.Contains(t, envelope.Message, "unknown endpoint for region invalid-region-xxx")
 		assert.Equal(t, "fix_endpoint_or_region", envelope.Recovery.Action)
-		assert.Equal(t, "aliyun openapiexplorer get-product-endpoints --product Ecs --region cn-hangzhou "+endpointProjection, envelope.Recovery.Command)
+		assert.Equal(t, endpointHelpCommand, envelope.Recovery.Command)
 		assert.NotEmpty(t, envelope.Recovery.Hint)
 		assert.Equal(t, 2, agentErr.ExitCode())
 	})
@@ -955,11 +955,11 @@ func TestNormalizeAgentErrorEndpointResolution(t *testing.T) {
 		var agentErr *cli.AgentError
 		require.ErrorAs(t, got, &agentErr)
 		envelope := agentErr.Envelope()
-		assert.Equal(t, "aliyun openapiexplorer GetProductEndpoints --product Ecs --region cn-hangzhou "+endpointProjection, envelope.Recovery.Command)
+		assert.Equal(t, endpointHelpCommand, envelope.Recovery.Command)
 	})
 }
 
-const endpointProjection = "--cli-query 'data.endpoints[*].{regionId:regionId,endpoint:endpoint}'"
+const endpointHelpCommand = "aliyun ecs --help --cli-output json --cli-query 'product.endpoints'"
 
 func TestSanitizeNetworkTransportErrorStripsSignedURL(t *testing.T) {
 	signedURL := "https://ecs.cn-shanghai.aliyuncs.com/?AccessKeyId=REAL-AK&Signature=abc%2Fsig&SignatureNonce=n1&RegionId=cn-shanghai"
@@ -1003,7 +1003,7 @@ func TestNormalizeAgentErrorTransport(t *testing.T) {
 		assert.Contains(t, envelope.Message, "request to ecs.cn-shanghai.aliyuncs.com failed")
 		assert.NotContains(t, envelope.Message, "AccessKeyId")
 		assert.Equal(t, "retry_or_fix_endpoint", envelope.Recovery.Action)
-		assert.Contains(t, envelope.Recovery.Command, "GetProductEndpoints --product Ecs")
+		assert.Equal(t, endpointHelpCommand, envelope.Recovery.Command)
 		assert.Equal(t, 2, agentErr.ExitCode())
 	})
 
@@ -1012,12 +1012,19 @@ func TestNormalizeAgentErrorTransport(t *testing.T) {
 		got := normalizeAgentErrorWithSearch(sanitizeNetworkTransportError(wrapped), []string{"ecs", "describe-instances"}, nil)
 		var agentErr *cli.AgentError
 		require.ErrorAs(t, got, &agentErr)
-		assert.Contains(t, agentErr.Envelope().Recovery.Command, "get-product-endpoints --product Ecs")
+		assert.Equal(t, endpointHelpCommand, agentErr.Envelope().Recovery.Command)
 	})
 }
 
 func TestNormalizeAgentErrorQueryFilter(t *testing.T) {
 	queryErr := &engine.QueryFilterError{Expr: "invalid[", Err: errors.New("SyntaxError: Incomplete expression")}
+	t.Run("Help query", func(t *testing.T) {
+		got := normalizeAgentErrorWithSearch(queryErr, []string{"ecs", "--help", "--cli-query", "invalid["}, nil)
+		var agentErr *cli.AgentError
+		require.ErrorAs(t, got, &agentErr)
+		assert.Empty(t, agentErr.Envelope().Recovery.Command)
+		assert.Contains(t, agentErr.Envelope().Recovery.Hint, "Help JSON")
+	})
 
 	t.Run("camel", func(t *testing.T) {
 		got := normalizeAgentErrorWithSearch(queryErr, []string{"ecs", "DescribeZones"}, nil)
@@ -1047,7 +1054,7 @@ func TestNormalizeAgentErrorKebabEndpointResolution(t *testing.T) {
 	envelope := agentErr.Envelope()
 	assert.Contains(t, envelope.Message, `endpoint not resolved for product "ecs" region "invalid-region-for-ai-check"`)
 	assert.Equal(t, "fix_endpoint_or_region", envelope.Recovery.Action)
-	assert.Equal(t, "aliyun openapiexplorer get-product-endpoints --product Ecs --region cn-hangzhou "+endpointProjection, envelope.Recovery.Command)
+	assert.Equal(t, endpointHelpCommand, envelope.Recovery.Command)
 	assert.Equal(t, 2, agentErr.ExitCode())
 }
 

@@ -31,13 +31,14 @@ func (c *Commando) renderUtilityHelp(ctx *cli.Context, path []string, options cl
 	applyUtilityHelpOptions(document, options)
 	target := utilityHelpTarget(path, options)
 	setUtilityHelpNext(document, target, aiMode)
-	jsonOutput := aiMode || options.Output == cli.HelpOutputJSON
+	query := helpFlagValue(ctx, QueryFlagName, "")
+	jsonOutput := aiMode || options.Output == cli.HelpOutputJSON || query != ""
 	if !aiMode && jsonOutput {
 		hint := cli.NewAIModeHint()
 		document.AIModeHint = &machineHelpAIModeHint{Command: hint.Command, Message: hint.Message}
 	}
 	if jsonOutput {
-		return encodeMachineHelpJSON(ctx.Stdout(), document, aiMode)
+		return encodeMachineHelpJSON(ctx.Stdout(), document, aiMode, query)
 	}
 	if err := renderUtilityHelpText(ctx, document); err != nil {
 		return err

@@ -484,7 +484,8 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 	}
 	c.applyHostHelpLanguage(ctx)
 	service := newMachineHelpService(c.helpRepositoryForStyle(string(target.CommandStyle)))
-	jsonOutput := aiMode || target.Output == HelpOutputJSON
+	query := helpFlagValue(ctx, QueryFlagName, "")
+	jsonOutput := aiMode || target.Output == HelpOutputJSON || query != ""
 	opts := helpOptions{
 		Section:         string(target.Section),
 		SectionExplicit: target.SectionExplicit,
@@ -504,8 +505,9 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 			setRootHelpNext(document.(*machineHelpRootDocument), target, aiMode)
 		}
 	case HelpLevelProduct:
-		document, err = service.buildProductForStyle(target.Product, target.Version, string(target.CommandStyle))
+		document, err = service.buildProductForStyle(target.Product, target.Version, string(target.CommandStyle), helpFlagValue(ctx, config.EndpointTypeFlagName, c.profile.EndpointType))
 		if err == nil {
+			document.(*machineHelpProductDocument).setCurrentRegion(helpFlagValue(ctx, config.RegionFlagName, c.profile.RegionId))
 			applyProductHelpOptions(document.(*machineHelpProductDocument), opts, aiMode)
 			setProductHelpNext(document.(*machineHelpProductDocument), target, aiMode)
 		}
@@ -584,7 +586,7 @@ func (c *Commando) renderHostHelpTarget(ctx *cli.Context, target HelpTarget, aiM
 		attachMachineHelpAIModeHint(document)
 	}
 	if jsonOutput {
-		return encodeMachineHelpJSON(ctx.Stdout(), document, aiMode)
+		return encodeMachineHelpJSON(ctx.Stdout(), document, aiMode, query)
 	}
 	if err := renderHostHelpText(ctx, document, target.SearchQuery); err != nil {
 		return err
