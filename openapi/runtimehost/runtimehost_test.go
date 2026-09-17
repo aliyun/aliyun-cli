@@ -68,6 +68,7 @@ func isolateAgentDetectionEnvs(t *testing.T) {
 		"CODEX_SANDBOX",
 		"QODER_AGENT",
 		"QODER_CLI",
+		"QODERCN_CLI",
 		"WORKBUDDY_APP_NAME",
 		"TRAE_BRAND_NAME",
 		"HERMES_AGENT",
@@ -154,6 +155,27 @@ func TestBuildUserAgentSuffixIncludesDetectedAgentSegment(t *testing.T) {
 	ctx.SetAgentName("cursor")
 	if got, want := buildUserAgentSuffix(ctx), "Agent/cursor skill/foo run/1 "+aimode.UserAgentEnabledMarker; got != want {
 		t.Fatalf("suffix with agent env and AI mode = %q, want %q", got, want)
+	}
+}
+
+// Disabling AI mode must not suppress agent attribution on API requests.
+func TestQoderUserAgentWithAIModeDisabled(t *testing.T) {
+	for _, env := range []string{"QODER_CLI", "QODERCN_CLI"} {
+		t.Run(env, func(t *testing.T) {
+			isolateAgentDetectionEnvs(t)
+			t.Setenv(env, "1")
+			t.Setenv(sysconfig.EnvUserAgent, "")
+			ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+			ctx.Flags().Add(config.NewConfigurePathFlag())
+			config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+			config.ConfigurePathFlag(ctx.Flags()).SetValue(filepath.Join(t.TempDir(), "config.json"))
+			ctx.Flags().Add(&cli.Flag{Name: "no-cli-ai-mode", AssignedMode: cli.AssignedOnce})
+			ctx.Flags().Get("no-cli-ai-mode").SetAssigned(true)
+			ctx.SetAgentName("qoder-cli")
+			if got := buildUserAgentSuffix(ctx); got != "Agent/qoder-cli" {
+				t.Fatalf("suffix = %q, want Agent/qoder-cli", got)
+			}
+		})
 	}
 }
 

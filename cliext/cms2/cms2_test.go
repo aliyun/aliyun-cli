@@ -911,7 +911,7 @@ func clearAgentEnvs(t *testing.T) {
 	for _, name := range []string{
 		"CURSOR_AGENT", "CLAUDECODE", "CLAUDE_CODE", "GEMINI_CLI",
 		"AUGMENT_AGENT", "OPENCODE", "OPENCODE_CLIENT", "CLINE_ACTIVE",
-		"CODEX_SANDBOX", "QODER_AGENT", "QODER_CLI", "AGENT",
+		"CODEX_SANDBOX", "QODER_AGENT", "QODER_CLI", "QODERCN_CLI", "AGENT",
 	} {
 		t.Setenv(name, "")
 	}
