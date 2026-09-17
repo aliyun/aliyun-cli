@@ -65,32 +65,23 @@ type InvalidProductError struct {
 }
 
 func (e *InvalidProductError) Error() string {
-	return fmt.Sprintf("%q is not a valid command or product. See `aliyun help`.", strings.ToLower(e.Code))
+	return fmt.Sprintf("%q is not a valid command or product. See `aliyun help`.", e.Code)
 }
 
 func (e *InvalidProductError) AgentMessage() string {
-	return fmt.Sprintf("%q is not a valid command or product.", strings.ToLower(e.Code))
+	return fmt.Sprintf("%q is not a valid command or product.", e.Code)
 }
 
 func (*InvalidProductError) AIRecoveryEligible() {}
 
+// GetSuggestions and AgentSuggestions must render the same candidate list in
+// both output modes, so both delegate to the shared productSuggestions pipeline.
 func (e *InvalidProductError) GetSuggestions() []string {
-	sr := cli.NewSuggester(strings.ToLower(e.Code), 2)
-	for _, p := range e.library.GetProducts() {
-		sr.Apply(strings.ToLower(p.Code))
-	}
-	return sr.GetResults()
+	return productSuggestions(e.Code, e.library)
 }
 
 func (e *InvalidProductError) AgentSuggestions() []string {
-	if e.library == nil {
-		return nil
-	}
-	candidates := make([]string, 0)
-	for _, product := range e.library.GetProducts() {
-		candidates = append(candidates, strings.ToLower(product.Code))
-	}
-	return apiSuggestions(strings.ToLower(e.Code), candidates)
+	return productSuggestions(e.Code, e.library)
 }
 
 // return when use unknown api
@@ -100,6 +91,9 @@ type InvalidApiError struct {
 }
 
 func (e *InvalidApiError) Error() string {
+	if e.product == nil {
+		return fmt.Sprintf("%q is not a valid api.", e.Name)
+	}
 	product := e.product.GetLowerCode()
 	if command := apiRecoveryCommand(e.Name, product, e.product.ApiNames); command != "" {
 		return fmt.Sprintf("%q is not a valid api. Search matching APIs with `%s`.", e.Name, command)
@@ -114,6 +108,9 @@ func (e *InvalidApiError) AgentMessage() string {
 func (*InvalidApiError) AIRecoveryEligible() {}
 
 func (e *InvalidApiError) GetSuggestions() []string {
+	if e.product == nil {
+		return nil
+	}
 	return humanAPISuggestions(e.Name, e.product.ApiNames,
 		apiRecoveryCommand(e.Name, e.product.GetLowerCode(), e.product.ApiNames))
 }
@@ -133,6 +130,14 @@ type InvalidParameterError struct {
 	ParameterNames    []string
 	ParameterExamples map[string]string
 	flags             *cli.FlagSet
+	// kebabToRaw/rawToKebab carry the metadata rename tables of this API's
+	// parameters (e.g. biz-region-id <-> RegionId); they power cross-style
+	// suggestions. kebabCommand/equivalentCommand are filled only when the
+	// unknown flag is a confirmed kebab-style name (style mixing).
+	kebabToRaw        map[string]string
+	rawToKebab        map[string]string
+	kebabCommand      string
+	equivalentCommand string
 }
 
 func (e *InvalidParameterError) Error() string {
@@ -147,33 +152,49 @@ func (e *InvalidParameterError) AgentMessage() string {
 func (*InvalidParameterError) AIRecoveryEligible() {}
 
 func (e *InvalidParameterError) GetSuggestions() []string {
-	sr := cli.NewSuggester(e.Name, 2)
-	for _, name := range e.ParameterNames {
-		sr.Apply(name)
-	}
-	if e.flags != nil {
-		for _, f := range e.flags.Flags() {
-			sr.Apply(f.Name)
-		}
-	}
-
-	results := sr.GetResults()
-	for i, name := range results {
+	names := e.candidateNames()
+	results := make([]string, 0, len(names))
+	for _, name := range names {
 		if example := e.ParameterExamples[name]; example != "" {
-			results[i] = fmt.Sprintf("%s (example: %s)", name, example)
+			results = append(results, fmt.Sprintf("%s (example: %s)", name, example))
+		} else {
+			results = append(results, name)
 		}
 	}
 	return results
 }
 
 func (e *InvalidParameterError) AgentSuggestions() []string {
+	names := e.candidateNames()
+	results := make([]string, 0, len(names))
+	for _, name := range names {
+		results = append(results, "--"+strings.TrimLeft(name, "-"))
+	}
+	return results
+}
+
+// candidateNames computes the suggestion names shared by human and AI output:
+// a metadata-driven cross-style rename hit comes first (the flag is a valid
+// kebab-style parameter name of this API), then the usual typo suggestions.
+func (e *InvalidParameterError) candidateNames() []string {
+	name := strings.TrimLeft(e.Name, "-")
+	if raw, ok := e.kebabToRaw[name]; ok {
+		return []string{raw}
+	}
 	candidates := append([]string(nil), e.ParameterNames...)
 	if e.flags != nil {
-		for _, flag := range e.flags.Flags() {
-			candidates = append(candidates, flag.Name)
+		for _, f := range e.flags.Flags() {
+			candidates = append(candidates, f.Name)
 		}
 	}
-	return flagSuggestions(e.Name, candidates)
+	if suggestions := closeSuggestions(name, candidates, false); len(suggestions) > 0 {
+		return suggestions
+	}
+	suggestions := crossStyleFlagSuggestions(name, candidates)
+	for i := range suggestions {
+		suggestions[i] = strings.TrimLeft(suggestions[i], "-")
+	}
+	return suggestions
 }
 
 // NewInvalidParameterErrorFromCanonical creates error from canonical API
@@ -192,6 +213,7 @@ func NewInvalidParameterErrorFromCanonical(name string, api *canonicalmeta.API, 
 			examples[name] = example
 		}
 	}
+	kebabToRaw, rawToKebab := styleRenameMaps(api)
 	return &InvalidParameterError{
 		Name:              name,
 		ProductCode:       productCode,
@@ -199,7 +221,50 @@ func NewInvalidParameterErrorFromCanonical(name string, api *canonicalmeta.API, 
 		ParameterNames:    params,
 		ParameterExamples: examples,
 		flags:             flags,
+		kebabToRaw:        kebabToRaw,
+		rawToKebab:        rawToKebab,
 	}
+}
+
+// attachStyleMigration precomputes the kebab command name and the equivalent
+// kebab command when the unknown flag is a confirmed kebab-style rename of
+// one of this API's parameters (i.e. the caller mixed command styles). Plain
+// typos keep both fields empty.
+func (e *InvalidParameterError) attachStyleMigration(api *canonicalmeta.API, ctx *cli.Context) {
+	name := strings.TrimLeft(e.Name, "-")
+	if _, ok := e.kebabToRaw[name]; !ok {
+		return
+	}
+	e.kebabCommand = ""
+	if api != nil {
+		e.kebabCommand = api.CmdName
+	}
+	if e.kebabCommand == "" {
+		e.kebabCommand = apiNameToKebab(e.ApiName)
+	}
+	// The kebab command name is only useful when the engine actually serves
+	// it for this product; otherwise the equivalent would advise a command
+	// that cannot run.
+	if !containsString(engineServedCommands(e.ProductCode), e.kebabCommand) {
+		e.kebabCommand = ""
+		return
+	}
+	e.equivalentCommand = rebuildStyleEquivalentCommand(e.ProductCode, e.kebabCommand, ctx, e.rawToKebab, keySet(e.kebabToRaw))
+}
+
+// styleMigrationTip renders the cross-style hint for human output, or "" when
+// the flag is not a style-mixing rename. Without a served kebab command it
+// degrades to naming the style-correct flag only.
+func (e *InvalidParameterError) styleMigrationTip() string {
+	name := strings.TrimLeft(e.Name, "-")
+	raw, ok := e.kebabToRaw[name]
+	if !ok {
+		return ""
+	}
+	if e.equivalentCommand != "" {
+		return fmt.Sprintf("--%s is the kebab-style name of --%s. Equivalent command:\n  %s", name, raw, e.equivalentCommand)
+	}
+	return fmt.Sprintf("--%s is the kebab-style name of --%s; use --%s here.", name, raw, raw)
 }
 
 type InvalidProductOrPluginError struct {
@@ -254,6 +319,9 @@ type InvalidUnifiedApiError struct {
 }
 
 func (e *InvalidUnifiedApiError) Error() string {
+	if e.product == nil {
+		return fmt.Sprintf("%q is not a valid api.", e.Name)
+	}
 	product := e.product.GetLowerCode()
 	candidates := append(append([]string(nil), e.product.ApiNames...), e.lPlugin.CmdNames...)
 	if command := apiRecoveryCommand(e.Name, product, candidates); command != "" {
@@ -365,6 +433,9 @@ func explicitLocalErrorText(err error, fallback string) string {
 }
 
 func (e *InvalidUnifiedApiError) GetSuggestions() []string {
+	if e.product == nil {
+		return nil
+	}
 	candidates := append(append([]string(nil), e.product.ApiNames...), e.lPlugin.CmdNames...)
 	return humanAPISuggestions(e.Name, candidates,
 		apiRecoveryCommand(e.Name, e.product.GetLowerCode(), candidates))
@@ -377,20 +448,6 @@ func (e *InvalidUnifiedApiError) AgentSuggestions() []string {
 	candidates := append([]string(nil), e.product.ApiNames...)
 	candidates = append(candidates, e.lPlugin.CmdNames...)
 	return apiSuggestions(e.Name, candidates)
-}
-
-func removeDuplicates(slice []string) []string {
-	seen := make(map[string]bool)
-	result := []string{}
-
-	for _, item := range slice {
-		if !seen[item] {
-			seen[item] = true
-			result = append(result, item)
-		}
-	}
-
-	return result
 }
 
 // sameStyleCandidates keeps only candidates written in the input's command
@@ -410,7 +467,7 @@ func sameStyleCandidates(input string, candidates []string) []string {
 
 func prefixSuggestionsWithOverflow(input string, candidates []string, helpCommand string) []string {
 	results, total := cli.PrefixSuggestions(input, sameStyleCandidates(input, candidates), cli.DefaultSuggestLimit)
-	if total > len(results) {
+	if total > len(results) && helpCommand != "" {
 		results = append(results, fmt.Sprintf("... and %d more, run `%s`", total-len(results), helpCommand))
 	}
 	return results

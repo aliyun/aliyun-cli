@@ -51,7 +51,7 @@ func TestLocalErrorContractsCoverMessagesMarkersAndUnwrap(t *testing.T) {
 
 func TestProductAPIAndParameterAgentContracts(t *testing.T) {
 	product := &InvalidProductError{Code: "ECX"}
-	assert.Equal(t, `"ecx" is not a valid command or product.`, product.AgentMessage())
+	assert.Equal(t, `"ECX" is not a valid command or product.`, product.AgentMessage())
 	product.AIRecoveryEligible()
 	assert.Nil(t, product.AgentSuggestions())
 
@@ -62,6 +62,10 @@ func TestProductAPIAndParameterAgentContracts(t *testing.T) {
 	api.AIRecoveryEligible()
 	assert.Contains(t, api.AgentSuggestions(), "DescribeInstances")
 	assert.Nil(t, (&InvalidApiError{Name: "missing"}).AgentSuggestions())
+	assert.Nil(t, (&InvalidApiError{Name: "missing"}).GetSuggestions())
+	assert.Nil(t, (&InvalidUnifiedApiError{Name: "missing"}).GetSuggestions())
+	assert.Equal(t, `"missing" is not a valid api.`, (&InvalidApiError{Name: "missing"}).Error())
+	assert.Equal(t, `"missing" is not a valid api.`, (&InvalidUnifiedApiError{Name: "missing"}).Error())
 
 	flags := cli.NewFlagSet()
 	flags.Add(&cli.Flag{Name: "region"})

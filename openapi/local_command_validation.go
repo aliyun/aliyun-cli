@@ -37,7 +37,12 @@ func (c *Commando) validateCanonicalAPICommand(args []string, ctx *cli.Context) 
 			}
 			name := strings.TrimSuffix(flag.Name, "-FILE")
 			if resolved.API.FindLegacyParameter(name) == nil {
-				return NewInvalidParameterErrorFromCanonical(name, resolved.API, args[0], ctx.Flags())
+				paramErr := NewInvalidParameterErrorFromCanonical(name, resolved.API, args[0], ctx.Flags())
+				paramErr.attachStyleMigration(resolved.API, ctx)
+				if tip := paramErr.styleMigrationTip(); tip != "" {
+					return cli.NewErrorWithTip(paramErr, "%s", tip)
+				}
+				return paramErr
 			}
 		}
 		return nil

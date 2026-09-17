@@ -129,11 +129,20 @@ export ALIBABA_CLOUD_CLI_AI_MODE=1
 aliyun ecs describe-instances --cli-ai-mode
 ```
 
+AI mode 的生效优先级（从高到低）：
+
+1. 单次命令 `--no-cli-ai-mode`（显式关闭，永远优先）
+2. 单次命令 `--cli-ai-mode`（显式开启）
+3. 环境变量 `ALIBABA_CLOUD_CLI_AI_MODE=1/0`（显式值）
+4. Agent 环境自动探测（受 `ALIBABA_CLOUD_CLI_AGENT_INTEGRATION` 门控，默认开启）
+5. 全局配置 `configure ai-mode`（`~/.aliyun/ai-mode.json`，兜底默认关闭）
+
 目前支持的本地用法错误、查询错误、传输错误、OAuth 错误和服务端错误会以单个紧凑 JSON 对象写入 stderr；成功结果仍写入 stdout。没有值的可选字段会被省略：
 
 ```json
 {
   "message": "unknown flag --instnace-type",
+  "schema_version": 1,
   "did_you_mean": ["--instance-type"],
   "recovery": {
     "action": "search_parameter",
@@ -143,9 +152,13 @@ aliyun ecs describe-instances --cli-ai-mode
 }
 ```
 
-远端服务错误还可能包含 `error_code`、`status_code` 和 `request_id`。`did_you_mean` 和 `recovery.command` 也是可选字段；每个结构化 Agent 错误都会包含 `message`、`recovery.action` 和 `recovery.hint`。
+远端服务错误还可能包含 `error_code`、`status_code` 和 `request_id`。`did_you_mean` 和 `recovery.command` 也是可选字段；每个结构化 Agent 错误都会包含 `message`、`schema_version`、`recovery.action` 和 `recovery.hint`。
 
-Agent 错误对象是一套独立的紧凑接口，目前没有 `schemaVersion`；机器 Help 的 `v1` 协议不适用于它。并非所有错误都已经结构化，因此调用方还必须兼容 stderr 中的人类可读错误。
+`schema_version` 是信封的协议版本（当前为 `1`），属于协议元数据而非错误内容。向后兼容的新增字段不升版本；只有破坏性变更才会递增。调用方应忽略未知字段，并按 `schema_version` 分支处理。
+
+Agent 模式下的 API 响应输出为紧凑单行 JSON（保留服务端返回的 key 顺序）；非 Agent 模式为美化缩进并按 key 排序。JSON key 顺序不属于契约，解析时请不要依赖字节顺序。
+
+Agent 错误对象是独立于机器 Help 的紧凑协议：机器 Help 使用 `schemaVersion: "v1"`（camelCase，写入 stdout），Agent 错误使用 `schema_version: 1`（snake_case，写入 stderr），两者不混用。并非所有错误都已经结构化，因此调用方还必须兼容 stderr 中的人类可读错误。
 
 | 退出状态 | 含义 |
 | --- | --- |

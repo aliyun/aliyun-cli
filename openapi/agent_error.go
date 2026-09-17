@@ -76,6 +76,23 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 
 	context := newRecoveryContext(args)
 
+	var styleMixed *styleMixedFlagError
+	if errors.As(err, &styleMixed) {
+		recovery := cli.AgentErrorRecovery{
+			Action:  "inspect_action_help",
+			Command: context.actionHelpCommand(),
+			Hint:    fmt.Sprintf("--%s is a PascalCase parameter name; the kebab command accepts --%s.", styleMixed.flag, strings.TrimPrefix(styleMixed.suggestion, "--")),
+		}
+		if styleMixed.equivalent != "" {
+			recovery = cli.AgentErrorRecovery{
+				Action:  "switch_command_style",
+				Command: styleMixed.equivalent,
+				Hint:    "The flag belongs to the PascalCase command style. Run the equivalent PascalCase command, or keep the kebab command and use the suggested flag.",
+			}
+		}
+		return newLocalAgentError(err, styleMixed.AgentMessage(), styleMixed.AgentSuggestions(), recovery)
+	}
+
 	var unknownFlag *argparser.UnknownFlagError
 	if errors.As(err, &unknownFlag) {
 		suggestions := flagSuggestions(unknownFlag.Flag, unknownFlag.Known)
@@ -84,17 +101,25 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 
 	var missing *runtime.MissingRequiredError
 	if errors.As(err, &missing) {
-		return missingRequiredAgentError(err, missingRequiredAgentMessage(missing), context)
+		// The --region routing-flag clarification is computed once in
+		// finishCommandRun (where the parsed flags are available) and carried
+		// by the wrapper; here it enriches the hint without a second parse.
+		note := ""
+		var regionErr *regionConfusionError
+		if errors.As(err, &regionErr) {
+			note = regionErr.note
+		}
+		return missingRequiredAgentError(err, missingRequiredAgentMessage(missing), context, note)
 	}
 
 	var legacyDocRequired *LegacyDocRequiredError
 	if errors.As(err, &legacyDocRequired) {
-		return missingRequiredAgentError(err, legacyDocRequired.Error(), context)
+		return missingRequiredAgentError(err, legacyDocRequired.Error(), context, "")
 	}
 
 	var legacyMissingRequired *LegacyMissingRequiredError
 	if errors.As(err, &legacyMissingRequired) {
-		return missingRequiredAgentError(err, legacyMissingRequired.Error(), context)
+		return missingRequiredAgentError(err, legacyMissingRequired.Error(), context, "")
 	}
 
 	var runtimeConstraint *runtime.ConstraintViolationError
@@ -111,6 +136,13 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	if errors.As(err, &invalidParameter) {
 		parameterContext := context.withProductAPI(invalidParameter.ProductCode, invalidParameter.ApiName)
 		suggestions := invalidParameter.AgentSuggestions()
+		if invalidParameter.equivalentCommand != "" {
+			return newLocalAgentError(err, invalidParameter.AgentMessage(), suggestions, cli.AgentErrorRecovery{
+				Action:  "switch_command_style",
+				Command: invalidParameter.equivalentCommand,
+				Hint:    "The flag belongs to the kebab command style. Run the equivalent kebab command, or keep the PascalCase command and use the suggested flag.",
+			})
+		}
 		return parameterSearchAgentError(err, invalidParameter.AgentMessage(), suggestions,
 			invalidParameter.Name, parameterContext, validate)
 	}
@@ -732,11 +764,15 @@ func missingRequiredAgentMessage(err *runtime.MissingRequiredError) string {
 	return "missing required parameter(s): " + strings.Join(err.Flags, ", ")
 }
 
-func missingRequiredAgentError(cause error, message string, context recoveryContext) error {
+func missingRequiredAgentError(cause error, message string, context recoveryContext, note string) error {
+	hint := "Inspect the API help for request parameters and provide every required value."
+	if note != "" {
+		hint = hint + " " + note
+	}
 	return newLocalAgentError(cause, message, nil, cli.AgentErrorRecovery{
 		Action:  "inspect_request_help",
 		Command: context.actionHelpCommand(),
-		Hint:    "Inspect the API help for request parameters and provide every required value.",
+		Hint:    hint,
 	})
 }
 

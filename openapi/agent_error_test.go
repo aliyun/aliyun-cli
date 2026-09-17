@@ -89,6 +89,7 @@ func TestKebabProfileCaseMismatchSuggestsLowercaseProfile(t *testing.T) {
 		require.NoError(t, err)
 		assert.JSONEq(t, `{
 			"message":"unknown flag --Profile",
+			"schema_version":1,
 			"did_you_mean":["--profile"],
 			"recovery":{
 				"action":"inspect_action_help",
@@ -116,6 +117,18 @@ func TestNormalizeAgentErrorSupportedLocalRecoveries(t *testing.T) {
 		assert.Equal(t, "aliyun --help-search ecs", envelope.Recovery.Command)
 		assert.Equal(t, "Search products related to ecs.", envelope.Recovery.Hint)
 		assert.Equal(t, RecoverySearchRequest{Keyword: "ecs"}, request)
+	})
+
+	t.Run("unknown PascalCase token reverse-looks up the owning product", func(t *testing.T) {
+		repo, err := meta.MockLoadRepository([]meta.Product{{Code: "ecs", ApiNames: []string{"DescribeRegions"}}})
+		require.NoError(t, err)
+		cause := &InvalidProductError{Code: "DescribeRegions", library: &Library{builtinRepo: repo}}
+		envelope := requireAgentEnvelope(t, cause, []string{"DescribeRegions"}, func(RecoverySearchRequest) bool {
+			return true
+		})
+
+		assert.Equal(t, `"DescribeRegions" is not a valid command or product.`, envelope.Message)
+		assert.Equal(t, []string{"aliyun ecs DescribeRegions"}, envelope.DidYouMean)
 	})
 
 	t.Run("unknown API derives a resource keyword from a real candidate", func(t *testing.T) {
@@ -1148,7 +1161,7 @@ func TestAgentErrorEnvelopeEndToEndIsOneCleanJSONDocument(t *testing.T) {
 	assert.NotContains(t, stderr.String(), cli.AIModeEnableTextHint)
 	var decoded map[string]interface{}
 	require.NoError(t, json.Unmarshal(stderr.Bytes(), &decoded))
-	assert.ElementsMatch(t, []string{"message", "did_you_mean", "recovery"}, mapKeys(decoded))
+	assert.ElementsMatch(t, []string{"message", "schema_version", "did_you_mean", "recovery"}, mapKeys(decoded))
 	assert.Equal(t, []interface{}{"--instance-type"}, decoded["did_you_mean"])
 	recovery := decoded["recovery"].(map[string]interface{})
 	assert.Equal(t, "search_parameter", recovery["action"])
@@ -1196,7 +1209,7 @@ func TestCLIOutputJSONStructuresLocalErrorWhenAIModeIsDisabled(t *testing.T) {
 	assert.NotContains(t, stderr.String(), cli.AIModeEnableTextHint)
 	var decoded map[string]interface{}
 	require.NoError(t, json.Unmarshal(stderr.Bytes(), &decoded))
-	assert.ElementsMatch(t, []string{"message", "did_you_mean", "recovery"}, mapKeys(decoded))
+	assert.ElementsMatch(t, []string{"message", "schema_version", "did_you_mean", "recovery"}, mapKeys(decoded))
 	assert.Equal(t, []interface{}{"--instance-type"}, decoded["did_you_mean"])
 	recovery := decoded["recovery"].(map[string]interface{})
 	assert.Equal(t, "search_parameter", recovery["action"])
