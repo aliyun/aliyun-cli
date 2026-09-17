@@ -525,7 +525,7 @@ func endpointDiagnosticsCommand(context recoveryContext) string {
 	if product == "" {
 		return ""
 	}
-	return "aliyun " + product + " --help --cli-output json --cli-query 'product.endpoints'"
+	return "aliyun " + product + " --help --cli-output json --cli-query 'endpoints'"
 }
 
 // transportError is the credential-safe rendering of a network transport

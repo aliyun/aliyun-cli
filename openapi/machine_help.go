@@ -164,7 +164,6 @@ type machineHelpRootDocument struct {
 }
 
 type machineHelpProduct struct {
-	Endpoints            []machineHelpEndpoint    `json:"endpoints,omitempty"`
 	Code                 string                   `json:"code"`
 	Name                 machineHelpLocalizedText `json:"name"`
 	APIStyle             string                   `json:"apiStyle"`
@@ -207,6 +206,7 @@ func (summary machineHelpAPISummary) MarshalJSON() ([]byte, error) {
 }
 
 type machineHelpProductDocument struct {
+	Endpoints     []machineHelpEndpoint   `json:"endpoints,omitempty"`
 	SchemaVersion string                  `json:"schemaVersion"`
 	Kind          string                  `json:"helpLevel"`
 	Target        machineHelpTarget       `json:"-"`
@@ -220,6 +220,7 @@ type machineHelpProductDocument struct {
 	helpHintExact helpHintExact
 
 	unsupportedRegion string
+	useVPCEndpoint    bool
 }
 
 type machineHelpOperation struct {
@@ -508,14 +509,15 @@ func (s *machineHelpService) buildProductForStyle(code, requestedVersion, style 
 	}
 
 	productDoc := buildMachineHelpProduct(*product, versions, selected)
-	productDoc.Endpoints = productHelpEndpoints(*product, len(endpointType) > 0 && endpointType[0] == "vpc")
 	code = productDoc.Code
 	return &machineHelpProductDocument{
-		SchemaVersion: machineHelpSchemaVersion,
-		Kind:          "product",
-		Target:        machineHelpTarget{Path: []string{"aliyun", code}, RequestedStyle: style},
-		Product:       productDoc,
-		APIs:          apis,
+		SchemaVersion:  machineHelpSchemaVersion,
+		Kind:           "product",
+		Target:         machineHelpTarget{Path: []string{"aliyun", code}, RequestedStyle: style},
+		Product:        productDoc,
+		Endpoints:      productHelpEndpoints(*product),
+		useVPCEndpoint: len(endpointType) > 0 && endpointType[0] == "vpc",
+		APIs:           apis,
 	}, nil
 }
 
@@ -976,6 +978,12 @@ func projectLegacyParameter(view *canonicalmeta.LegacyParameterView, prefix stri
 	children := view.LegacyChildren()
 	if view.IsLegacyRepeatList() {
 		result.Serialization = "repeatList"
+		if view.IsRPCFlatArray() {
+			result.Serialization = "flat"
+			if len(children) == 0 {
+				result.Options = append(result.Options, "--"+optionPath+".1")
+			}
+		}
 		if len(children) > 0 {
 			result.Element = &machineHelpShape{Type: "object"}
 			for _, child := range children {

@@ -3,6 +3,8 @@ package openapi
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
@@ -20,8 +22,7 @@ func TestProductHelpEndpointModesAndText(t *testing.T) {
 		RegionalEndpoints:    map[string]string{"cn-beijing": "public.example.com"},
 		RegionalVPCEndpoints: map[string]string{"cn-beijing": "vpc.example.com", "cn-hangzhou": "vpc-hz.example.com"},
 	}
-	assert.Equal(t, []machineHelpEndpoint{{RegionID: "cn-beijing", Endpoint: "public.example.com"}}, productHelpEndpoints(product, false))
-	assert.Equal(t, []machineHelpEndpoint{{RegionID: "cn-beijing", Endpoint: "vpc.example.com"}, {RegionID: "cn-hangzhou", Endpoint: "vpc-hz.example.com"}}, productHelpEndpoints(product, true))
+	assert.Equal(t, []machineHelpEndpoint{{RegionID: "cn-beijing", Endpoint: "public.example.com", VPCEndpoint: "vpc.example.com"}, {RegionID: "cn-hangzhou", VPCEndpoint: "vpc-hz.example.com"}}, productHelpEndpoints(product))
 
 	service := newMachineHelpService(&stubMachineHelpRepository{products: &canonicalmeta.ProductsIndex{Products: []canonicalmeta.ProductEntry{product}}})
 	doc, err := service.buildProductForStyle("demo", "", "camel")
@@ -37,12 +38,58 @@ func TestProductHelpEndpointModesAndText(t *testing.T) {
 	assert.NotContains(t, output.String(), "ENDPOINTS")
 
 	product.GlobalEndpoint = "global.example.com"
-	doc.Product.Endpoints = productHelpEndpoints(product, false)
+	doc.Endpoints = productHelpEndpoints(product)
 	doc.unsupportedRegion = ""
 	doc.setCurrentRegion("cn-shanghai")
 	assert.Empty(t, doc.unsupportedRegion)
-	assert.Equal(t, machineHelpEndpoint{Endpoint: "global.example.com"}, doc.Product.Endpoints[1])
-	assert.Empty(t, productHelpEndpoints(canonicalmeta.ProductEntry{}, false))
+	assert.Equal(t, machineHelpEndpoint{Endpoint: "global.example.com"}, doc.Endpoints[2])
+	assert.Empty(t, productHelpEndpoints(canonicalmeta.ProductEntry{}))
+	applyProductHelpOptions(doc, helpOptions{Search: "memory"}, true)
+	output.Reset()
+	require.NoError(t, encodeMachineHelpJSON(&output, doc, true))
+	assert.NotContains(t, output.String(), `"endpoints"`)
+}
+
+func TestProductHelpEndpointTopLevelLocalizedFourColumns(t *testing.T) {
+	var product canonicalmeta.ProductEntry
+	require.NoError(t, json.Unmarshal([]byte(`{"code":"demo","version":"2026-01-01",
+		"regional_endpoints":{"cn-beijing":"public.example.com"},
+		"regional_vpc_endpoints":{"cn-beijing":"vpc.example.com"},
+		"region_names":{"cn-beijing":{"zh":"华北2（北京）","en":"China (Beijing)"}}}`), &product))
+	service := newMachineHelpService(&stubMachineHelpRepository{products: &canonicalmeta.ProductsIndex{Products: []canonicalmeta.ProductEntry{product}}})
+	oldLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(oldLanguage) })
+	for _, language := range []string{"en", "zh"} {
+		t.Setenv("ALIBABA_CLOUD_LANGUAGE", language)
+		i18n.SetLanguage(language)
+		doc, err := service.buildProductForStyle("demo", "", "camel")
+		require.NoError(t, err)
+		var output bytes.Buffer
+		require.NoError(t, encodeMachineHelpJSON(&output, doc, false, "endpoints"))
+		name := map[string]string{"en": "China (Beijing)", "zh": "华北2（北京）"}[language]
+		assert.Contains(t, output.String(), `"regionName": "`+name+`"`)
+		assert.Contains(t, output.String(), `"vpcEndpoint": "vpc.example.com"`)
+		output.Reset()
+		require.NoError(t, encodeMachineHelpJSON(&output, doc, false, "product.endpoints"))
+		assert.Equal(t, "null\n", output.String())
+		output.Reset()
+		require.NoError(t, renderCanonicalProductText(&output, doc, ""))
+		for _, value := range []string{"RegionId", "RegionName", "Endpoint", "VpcEndpoint", name, "public.example.com", "vpc.example.com"} {
+			assert.Contains(t, output.String(), value)
+		}
+		lines := strings.Split(output.String(), "\n")
+		var headerColumn, valueColumn int
+		for _, line := range lines {
+			if index := strings.Index(line, "Endpoint  "); index >= 0 {
+				headerColumn = endpointCellWidth(line[:index])
+			}
+			if index := strings.Index(line, "public.example.com"); index >= 0 {
+				valueColumn = endpointCellWidth(line[:index])
+			}
+		}
+		assert.Positive(t, headerColumn)
+		assert.Equal(t, headerColumn, valueColumn)
+	}
 }
 
 func TestUtilityAndEarlyParameterHelpQuery(t *testing.T) {
@@ -90,7 +137,7 @@ func TestProductHelpEndpointQuery(t *testing.T) {
 				RegionalEndpoints: map[string]string{"cn-beijing": "demo.cn-beijing.aliyuncs.com", "ap-southeast-1": "demo.ap-southeast-1.aliyuncs.com"},
 			}}}}
 			c.library.baselineHelpRepo = c.library.helpRepo
-			ctx.SetInvocationArgs([]string{"demo", "--help", "--cli-output", "json", "--cli-query", "product.endpoints"})
+			ctx.SetInvocationArgs([]string{"demo", "--help", "--cli-output", "json", "--cli-query", "endpoints"})
 			err := c.renderHostHelpTarget(ctx, HelpTarget{Level: HelpLevelProduct, Product: "demo", CommandStyle: CommandStyleCamel, Output: HelpOutputJSON}, aiMode)
 			require.NoError(t, err)
 			assert.JSONEq(t, `[{"regionId":"ap-southeast-1","endpoint":"demo.ap-southeast-1.aliyuncs.com"},{"regionId":"cn-beijing","endpoint":"demo.cn-beijing.aliyuncs.com"}]`, stdout.String())
@@ -142,7 +189,7 @@ func TestInvalidHelpQueryProducesNoPartialOutput(t *testing.T) {
 func TestEndpointRecoveryUsesOfflineHelp(t *testing.T) {
 	for _, action := range []string{"ListMemoryNodes", "list-memory-nodes"} {
 		got := endpointDiagnosticsCommand(newRecoveryContext([]string{"bailian", action}))
-		assert.Equal(t, "aliyun bailian --help --cli-output json --cli-query 'product.endpoints'", got)
+		assert.Equal(t, "aliyun bailian --help --cli-output json --cli-query 'endpoints'", got)
 	}
 	assert.Empty(t, endpointDiagnosticsCommand(newRecoveryContext(nil)))
 }
@@ -151,12 +198,18 @@ func TestEndpointTextRecoveryAcrossExecutionChains(t *testing.T) {
 	for _, err := range []error{
 		&meta.InvalidEndpointError{Region: "cn-shanghai", Product: &meta.Product{Code: "Bailian"}},
 		&runtime.EndpointNotResolvedError{Region: "cn-shanghai", Product: "bailian"},
+		cli.NewErrorWithTip(&meta.InvalidEndpointError{Region: "cn-shanghai", Product: &meta.Product{Code: "Bailian"}}, "old tip"),
 	} {
 		c, ctx, _, _ := newCanonicalHelpTestContext(t)
 		got := c.finishCommandRun(ctx, []string{"bailian", "ListMemoryNodes"}, err)
 		var tip cli.ErrorWithTip
-		require.ErrorAs(t, got, &tip)
-		assert.Contains(t, tip.GetTip("en"), "aliyun bailian --help --cli-output json --cli-query 'product.endpoints'")
+		var originalTip cli.ErrorWithTip
+		assert.Equal(t, errors.As(err, &originalTip), errors.As(got, &tip), "preserve the existing exit-code classification")
+		text := got.Error()
+		if tip != nil {
+			text += tip.GetTip("en")
+		}
+		assert.Contains(t, text, "aliyun bailian --help --cli-output json --cli-query 'endpoints'")
 		assert.ErrorIs(t, got, err)
 	}
 }

@@ -96,7 +96,18 @@ func (a *RpcInvoker) Prepare(ctx *cli.Context) error {
 			return request.ApiName != ""
 		default:
 			f := ctx.UnknownFlags().Get(s)
-			return f != nil && f.IsAssigned()
+			if f != nil && f.IsAssigned() {
+				return true
+			}
+			if p := api.FindLegacyParameter(s); p != nil && p.IsRPCFlatArray() {
+				// The assignment loop already validated every indexed field.
+				for _, flag := range ctx.UnknownFlags().Flags() {
+					if flag.IsAssigned() && strings.HasPrefix(flag.Name, s+".") {
+						return true
+					}
+				}
+			}
+			return false
 		}
 	})
 
