@@ -132,10 +132,9 @@ type AssembledRequest struct {
 	// ReqBodyType is the request body encoding: "json" (default) or "formData".
 	// Empty and all non-formData metadata values are treated as "json" to match aliyun-cli-runtime.
 	ReqBodyType string `json:"req_body_type,omitempty"`
-	// DeclaredReqBodyType and DeclaredContentType retain metadata hints solely
-	// for safe dry-run rendering. Sending continues to use ReqBodyType above.
+	// DeclaredReqBodyType retains the metadata body type for dry-run display.
+	// Sending continues to use ReqBodyType above.
 	DeclaredReqBodyType string `json:"-"`
-	DeclaredContentType string `json:"-"`
 	Endpoint            string `json:"endpoint,omitempty"`
 	Region              string `json:"region,omitempty"`
 }
@@ -221,7 +220,6 @@ func newAssembledRequest(api *meta.API) *AssembledRequest {
 		// aliyun-cli-runtime defaults every operation to json and only generated formData APIs call SetReqBodyType("formData").
 		ReqBodyType:         resolveReqBodyType(api),
 		DeclaredReqBodyType: strings.TrimSpace(api.ReqBodyType),
-		DeclaredContentType: strings.TrimSpace(api.ContentType),
 	}
 	if !strings.EqualFold(style, string(meta.StyleRPC)) {
 		req.PathPattern = api.URL

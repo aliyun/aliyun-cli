@@ -11,7 +11,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 )
 
-func TestCSDryRunJSONPreservesRawBody(t *testing.T) {
+func TestCSDryRunJSONRedactsFormWithoutContentType(t *testing.T) {
 	clearAgentDetectionEnv(t)
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	profileJSON := []byte(`{"current":"default","profiles":[{"name":"default","mode":"AK","access_key_id":"test-access-key-id","access_key_secret":"test-access-key-secret","region_id":"cn-hangzhou","language":"en"}]}`)
@@ -37,7 +37,7 @@ func TestCSDryRunJSONPreservesRawBody(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
 		t.Fatalf("invalid JSON output: %v; stdout: %s", err, &stdout)
 	}
-	if output.Method != "POST" || output.Pathname != "/clusters" || output.Body != "password=FAKE_SECRET_123" {
+	if output.Method != "POST" || output.Pathname != "/clusters" || output.Body != "password=FAKE***" {
 		t.Fatalf("unexpected dry-run output: %+v", output)
 	}
 	t.Logf("actual dry-run JSON: %s", &stdout)
@@ -49,7 +49,7 @@ func TestBtripDryRunJSONFormBody(t *testing.T) {
 	for _, tc := range []struct{ name, body, want string }{
 		{"original example", example, example},
 		{"valid nested JSON", `ext_params={"key":"example-string"}`, `ext_params={"key":"example-string"}`},
-		{"sensitive nested JSON", `ext_params={"password":"example-secret"}`, `ext_params=%7B%22password%22%3A%22exam***%22%7D`},
+		{"sensitive nested JSON", `ext_params={"password":"example-secret"}`, `ext_params={"password":"exam***"}`},
 		{"malformed nested JSON and sensitive field", `ext_params={password=example-secret}&password=example-secret`, `ext_params={password=example-secret}&password=exam***`},
 		{"malformed form", `password=example-secret&ext_params=%zz`, `password=example-secret&ext_params=%zz`},
 		{"JSON form representation", `{"password":"example-secret"}`, `{"password":"exam***"}`},

@@ -562,7 +562,7 @@ func TestBuildCliDryRunFromOpenapi_WithBinaryBody(t *testing.T) {
 
 	out := buildCliDryRunFromOpenapi(oc)
 	assert.Equal(t, "binary", out.BodyFormat)
-	assert.Equal(t, string(binaryData), out.Body)
+	assert.Equal(t, `{"password":"FAKE***"}`, out.Body)
 	assert.Equal(t, `{"password":"FAKE_SECRET_123"}`, string(binaryData), "dry-run must not mutate binary data")
 }
 
@@ -1430,6 +1430,27 @@ func TestCliDryRunExplicitContentTypes(t *testing.T) {
 			}
 			assert.Equal(t, body, string(req.Content))
 			assert.Equal(t, body, string(oc.openapiRequest.Body.([]byte)))
+		})
+	}
+}
+
+func TestCliDryRunDetectsFormRegardlessOfContentType(t *testing.T) {
+	const body = `password=example-secret&note=hello%20world&ext_params={key=example-string}`
+	const want = `password=exam***&note=hello%20world&ext_params={key=example-string}`
+	for _, contentType := range []string{"", "application/json", "application/x-www-form-urlencoded", "application/octet-stream"} {
+		t.Run(contentType, func(t *testing.T) {
+			req := requests.NewCommonRequest()
+			req.Content = []byte(body)
+			req.Headers["Content-Type"] = contentType
+			classic := buildCliDryRunFromInvoker(&RestfulInvoker{BasicInvoker: &BasicInvoker{request: req}})
+			oc := &OpenapiContext{HttpContext: &HttpContext{
+				openapiRequest: &openapiutil.OpenApiRequest{Body: body, Headers: map[string]*string{"Content-Type": tea.String(contentType)}},
+				openapiParams:  &openapiClient.Params{ReqBodyType: tea.String("raw")},
+			}}
+			assert.Equal(t, want, classic.Body)
+			assert.Equal(t, want, buildCliDryRunFromOpenapi(oc).Body)
+			assert.Equal(t, body, string(req.Content))
+			assert.Equal(t, body, oc.openapiRequest.Body)
 		})
 	}
 }

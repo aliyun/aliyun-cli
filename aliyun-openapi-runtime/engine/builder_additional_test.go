@@ -558,15 +558,18 @@ func TestDryRunPreservesLongBodyAndRedaction(t *testing.T) {
 	}
 }
 
-func TestDryRunPreservesExplicitBinaryEvenWhenBodyIsJSON(t *testing.T) {
+func TestDryRunRedactsJSONRegardlessOfDeclaredFormat(t *testing.T) {
 	const body = `{"password":"FAKE_SECRET_123"}`
-	want := body
+	want := `{"password":"FAKE***"}`
 	for name, req := range map[string]*runtime.AssembledRequest{
+		"raw": {
+			Body:        []byte(body),
+			ReqBodyType: "raw",
+		},
 		"metadata": {
 			Body:                []byte(body),
 			ReqBodyType:         "json",
 			DeclaredReqBodyType: "byte",
-			DeclaredContentType: "application/octet-stream",
 		},
 		"header": {
 			Body:        []byte(body),
@@ -579,8 +582,6 @@ func TestDryRunPreservesExplicitBinaryEvenWhenBodyIsJSON(t *testing.T) {
 				req.Body,
 				req.ReqBodyType,
 				req.DeclaredReqBodyType,
-				req.DeclaredContentType,
-				dryRunHeaderValue(req.Headers, "Content-Type"),
 			)
 			if err != nil || value != want {
 				t.Fatalf("dryRunBody(binary) = %q, %v; want %q", value, err, want)
@@ -628,7 +629,7 @@ func TestDryRunNestedForm(t *testing.T) {
 			if strings.Contains(out.String(), secret) || !strings.Contains(out.String(), "alice") || !strings.Contains(out.String(), "FAKE***") {
 				t.Fatalf("incorrect nested form redaction: %s", out.String())
 			}
-			if strings.Contains(out.String(), "DeclaredReqBodyType") || strings.Contains(out.String(), "DeclaredContentType") {
+			if strings.Contains(out.String(), "DeclaredReqBodyType") {
 				t.Fatal("internal format hints must not be printed")
 			}
 		}
@@ -636,13 +637,6 @@ func TestDryRunNestedForm(t *testing.T) {
 		if !bytes.Equal(before, after) {
 			t.Fatal("dry-run mutated the form request")
 		}
-	}
-	// Structured bodies must also honor all declared formats, not just ReqBodyType.
-	req.DeclaredContentType = "application/octet-stream"
-	bodyJSON, _ := json.Marshal(req.Body)
-	out, err := buildCliDryRunOutput("demo", req)
-	if err != nil || out.Body != string(bodyJSON) {
-		t.Fatalf("lost binary format hint for structured body: %+v, %v", out, err)
 	}
 }
 
@@ -749,8 +743,6 @@ func TestDryRunExplicitBodyFormats(t *testing.T) {
 		{"XML", runtime.AssembledRequest{Headers: map[string]string{"Content-Type": "application/xml"}}, body},
 		{"binary", runtime.AssembledRequest{ReqBodyType: "binary"}, body},
 		{"declared binary", runtime.AssembledRequest{ReqBodyType: "json", DeclaredReqBodyType: "byte"}, body},
-		{"declared content type", runtime.AssembledRequest{DeclaredContentType: "application/octet-stream"}, body},
-		{"unknown content type", runtime.AssembledRequest{ReqBodyType: "json", DeclaredContentType: "application/x-custom-format"}, body},
 		{"header", runtime.AssembledRequest{Headers: map[string]string{"cOnTeNt-TyPe": "application/octet-stream"}}, body},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
