@@ -106,6 +106,8 @@ aliyun configure set \
   --auto-plugin-install-enable-pre true
 ```
 
+When a command installs its required plugin automatically or after confirmation, installation progress is written to stderr so stdout contains only the command output. Explicit `aliyun plugin install` commands retain their existing output behavior.
+
 For deterministic CI environments, explicitly install and pin the required plugins instead of relying on automatic installation.
 
 ## Storage and troubleshooting
