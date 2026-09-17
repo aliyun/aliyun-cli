@@ -293,6 +293,8 @@ func TestParseAndGetEndpoint(t *testing.T) {
 }
 
 func TestParseAndRunCommandFromCli(t *testing.T) {
+	clearEndpointTestEnv(t)
+	path := writeEndpointTestConfig(t, "", "", "cn-hangzhou")
 	type args struct {
 		ctx  *cli.Context
 		args []string
@@ -433,6 +435,11 @@ func TestParseAndRunCommandFromCli(t *testing.T) {
 			originalArgs := os.Args
 			defer func() { os.Args = originalArgs }()
 
+			if config.ConfigurePathFlag(tt.args.ctx.Flags()) == nil {
+				tt.args.ctx.Flags().Add(config.NewConfigurePathFlag())
+			}
+			config.ConfigurePathFlag(tt.args.ctx.Flags()).SetAssigned(true)
+			config.ConfigurePathFlag(tt.args.ctx.Flags()).SetValue(path)
 			err := ParseAndRunCommandFromCli(tt.args.ctx, tt.args.args)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ParseAndRunCommandFromCli() error = %v, wantErr %v", err, tt.wantErr)

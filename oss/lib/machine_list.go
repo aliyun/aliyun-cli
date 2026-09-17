@@ -282,7 +282,7 @@ func (lc *ListCommand) machinePage(target CloudURL, stage string, directory bool
 		next = page.NextMarker
 		truncated = page.IsTruncated
 	case "versions":
-		page, e := bucket.ListObjectVersions(append(options, oss.KeyMarker(c.Marker), oss.VersionIdMarker(c.Secondary), oss.MaxKeys(c.PageSize))...)
+		page, e := lc.command.ossListObjectVersionsRetry(bucket, append(options, oss.KeyMarker(c.Marker), oss.VersionIdMarker(c.Secondary), oss.MaxKeys(c.PageSize))...)
 		if e != nil {
 			return nil, "", "", false, e
 		}

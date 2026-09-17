@@ -31,6 +31,9 @@ type machineInvocation struct {
 var activeMachine *machineInvocation
 
 func addMachineFlags(fs *cli.FlagSet) {
+	if fs.Get("yes") == nil {
+		fs.Add(&cli.Flag{Name: "yes", Shorthand: 'y', AssignedMode: cli.AssignedNone, Persistent: true, Short: i18n.T("Skip safety policy confirmation after approval.", "获得授权后跳过安全策略确认。")})
+	}
 	for _, f := range []struct {
 		name, help string
 		mode       cli.AssignedMode
@@ -161,6 +164,15 @@ func (m *machineInvocation) adaptError(err error) error {
 		envelope.ErrorCode = "ConfirmationRequired"
 		facts.Status = "confirmation_required"
 		envelope.Recovery = cli.AgentErrorRecovery{Action: "request_confirmation", Hint: "Obtain user authorization before using the command's existing force option. Earlier work may already have completed."}
+	}
+
+	if m.phase == "policy" {
+		envelope.ErrorCode = "SafetyPolicyError"
+		envelope.Recovery = cli.AgentErrorRecovery{Action: "check_safety_policy", Hint: "Inspect the host safety policy and its environment overrides; denied operations cannot be approved with --yes or --force."}
+		if errors.Is(err, errConfirmationRequired) {
+			envelope.ErrorCode = "ConfirmationRequired"
+			envelope.Recovery = cli.AgentErrorRecovery{Action: "request_confirmation", Hint: "Obtain user authorization, then rerun with --yes to approve the safety policy confirmation; --force alone does not approve it."}
+		}
 	}
 	var service oss.ServiceError
 	serviceFound := errors.As(err, &service)

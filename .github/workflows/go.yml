@@ -29,6 +29,8 @@ jobs:
 
     - name: Unit Test
       run: make test
+    - name: Check distributor entrypoint
+      run: make check-entrypoint
     - name: Runtime Module Check
       run: make check-runtime
     - name: Packed metadata test
@@ -36,7 +38,7 @@ jobs:
     - name: Upload coverage information
       uses: codecov/codecov-action@v4
       with:
-        files: ./coverage.txt,./coverage-runtime.txt
+        files: ./coverage.txt,./coverage-runtime.txt,./coverage-oss.txt
         disable_search: true
         fail_ci_if_error: true
       env:

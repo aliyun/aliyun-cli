@@ -3,8 +3,11 @@ package computenestutil
 import (
 	"bytes"
 	"fmt"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -80,11 +83,39 @@ func TestComputenestCommandRunInstalledSkipNetwork(t *testing.T) {
 	getConfigurePathFunc = func() string { return tmpDir }
 	defer func() { getConfigurePathFunc = oldGet }()
 
-	// 创建假可执行文件(computenest-cli)
-	execPath := filepath.Join(tmpDir, "computenest-cli")
-	if err := os.WriteFile(execPath, []byte("#!/bin/sh\necho dummy\n"), 0755); err != nil {
-		t.Fatalf("write fake exec: %v", err)
+	t.Setenv("PATH", t.TempDir())
+	fixture := NewContext(cli.NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{}))
+	if err := fixture.InitBasicInfo(); err != nil {
+		t.Fatal(err)
 	}
+	for _, path := range []string{fixture.execFilePath, fixture.venvPythonPath, fixture.getEmbeddedPythonPath()} {
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("fixture"), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	originalTransport := http.DefaultTransport
+	http.DefaultTransport = pythonDownloadTransport(func(r *http.Request) (*http.Response, error) {
+		t.Errorf("unexpected network request: %s", r.URL)
+		return nil, fmt.Errorf("network forbidden")
+	})
+	t.Cleanup(func() { http.DefaultTransport = originalTransport })
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	originalCommand := execCommandFunc
+	execCommandFunc = func(name string, args ...string) *exec.Cmd {
+		if name != fixture.execFilePath || len(args) != 1 || args[0] != "--version" {
+			t.Fatalf("unexpected subprocess: %s %v", name, args)
+		}
+		calls++
+		return exec.Command(executable, "-test.run=^TestComputenestInstalledProcess$", "--", "computenest-fixture")
+	}
+	t.Cleanup(func() { execCommandFunc = originalCommand })
 
 	// 创建版本缓存文件，跳过远程版本检查（占位符URL暂不可用）
 	cacheFile := filepath.Join(tmpDir, ".computenest_version_check")
@@ -102,11 +133,18 @@ func TestComputenestCommandRunInstalledSkipNetwork(t *testing.T) {
 	stderr := &bytes.Buffer{}
 	ctx := cli.NewCommandContext(stdout, stderr)
 
-	// 直接调用Run函数，空参数下 computenest-cli 会执行并返回
-	err := cmd.Run(ctx, []string{"--version"})
-	// 假的 shell 脚本会输出 dummy 然后退出，不会返回错误
-	if err != nil {
-		// 可能因为平台差异导致执行失败，允许 exec 相关错误
-		t.Logf("Run returned error (may be expected on some platforms): %v", err)
+	if err := cmd.Run(ctx, []string{"--version"}); err != nil {
+		t.Fatal(err)
 	}
+	if calls != 1 || strings.TrimSpace(stdout.String()) != "dummy" {
+		t.Fatalf("calls=%d stdout=%q stderr=%q", calls, stdout, stderr)
+	}
+}
+
+func TestComputenestInstalledProcess(t *testing.T) {
+	if os.Args[len(os.Args)-1] != "computenest-fixture" {
+		return
+	}
+	fmt.Fprintln(os.Stdout, "dummy")
+	os.Exit(0)
 }

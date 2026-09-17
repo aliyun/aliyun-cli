@@ -410,12 +410,19 @@ func (rc *RemoveCommand) RunCommand() error {
 	}
 
 	// start progressbar
-	go rc.entryStatistic(bucket, cloudURL)
+	scanDone := make(chan struct{})
+	go func() {
+		defer close(scanDone)
+		rc.entryStatistic(bucket, cloudURL)
+	}()
+	defer func() { <-scanDone }()
 
 	exitStat := normalExit
 	if err = rc.removeEntry(bucket, cloudURL); err != nil {
 		exitStat = errExit
 	}
+	// Join the scan before rendering totals and restoring invocation globals.
+	<-scanDone
 	fmt.Print(rc.monitor.progressBar(true, exitStat))
 	return err
 }
@@ -686,7 +693,7 @@ func (rc *RemoveCommand) removeObject(bucket *oss.Bucket, cloudURL CloudURL) err
 	exist, err := rc.touchObject(bucket, cloudURL)
 	if err != nil || exist {
 		err = rc.deleteObjectWithMonitor(bucket, cloudURL.object)
-		if err != nil && rc.monitor.op == objectType {
+		if err != nil && rc.monitor.getOP() == objectType {
 			// remove single object error, return error information, do not print progressbar
 			rc.monitor.setOP(0)
 		}
@@ -970,7 +977,7 @@ func (rc *RemoveCommand) ossDeleteBucketRetry(client *oss.Client, bucket string)
 // version
 func (rc *RemoveCommand) removeObjectVersion(bucket *oss.Bucket, cloudURL CloudURL, versionId string) error {
 	err := rc.deleteObjectWithMonitorVersion(bucket, cloudURL.object, versionId)
-	if err != nil && rc.monitor.op == objectType {
+	if err != nil && rc.monitor.getOP() == objectType {
 		// remove single object error, return error information, do not print progressbar
 		rc.monitor.setOP(0)
 	}

@@ -195,6 +195,7 @@ type RMMonitor struct {
 	seekAheadEnd     bool
 	finish           bool
 	_                uint32 //Add padding to make sure the next data 64bits alignment
+	stateMu          sync.Mutex
 }
 
 func (m *RMMonitor) init() {
@@ -212,27 +213,45 @@ func (m *RMMonitor) init() {
 }
 
 func (m *RMMonitor) updateOP(op int64) {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	m.op = m.op | op
 }
 
 func (m *RMMonitor) setOP(op int64) {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	m.op = op
 }
 
+func (m *RMMonitor) getOP() int64 {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
+	return m.op
+}
+
 func (m *RMMonitor) setScanError(err error) {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	m.seekAheadError = err
 	m.seekAheadEnd = true
 }
 
 func (m *RMMonitor) updateScanNum(num int64) {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	m.totalObjectNum = m.totalObjectNum + num
 }
 
 func (m *RMMonitor) updateScanUploadIdNum(num int64) {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	m.totalUploadIdNum = m.totalUploadIdNum + num
 }
 
 func (m *RMMonitor) setScanEnd() {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	m.seekAheadEnd = true
 }
 
@@ -253,15 +272,18 @@ func (m *RMMonitor) updateErrUploadIdNum(num int64) {
 }
 
 func (m *RMMonitor) updateRemovedBucket(bucket string) {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	m.removedBucket = bucket
 }
 
+// Rendering helpers below are called with stateMu held by progressBar.
 func (m *RMMonitor) getSnapshot() *RMMonitorSnap {
 	var snap RMMonitorSnap
-	snap.objectNum = m.objectNum
-	snap.uploadIdNum = m.uploadIdNum
-	snap.errObjectNum = m.errObjectNum
-	snap.errUploadIdNum = m.errUploadIdNum
+	snap.objectNum = atomic.LoadInt64(&m.objectNum)
+	snap.uploadIdNum = atomic.LoadInt64(&m.uploadIdNum)
+	snap.errObjectNum = atomic.LoadInt64(&m.errObjectNum)
+	snap.errUploadIdNum = atomic.LoadInt64(&m.errUploadIdNum)
 	snap.dealNum = snap.objectNum + snap.uploadIdNum + snap.errObjectNum + snap.errUploadIdNum
 	snap.errNum = snap.errObjectNum + snap.errUploadIdNum
 	snap.removedBucket = m.removedBucket
@@ -269,6 +291,8 @@ func (m *RMMonitor) getSnapshot() *RMMonitorSnap {
 }
 
 func (m *RMMonitor) progressBar(finish bool, exitStat int) string {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	if m.finish {
 		return ""
 	}

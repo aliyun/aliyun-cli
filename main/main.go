@@ -20,8 +20,10 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/cli/upgrade"
@@ -46,10 +48,13 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cliext/sparksubmit"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/export"
+	go_migrate "github.com/aliyun/aliyun-cli/v3/go-migrate"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/mcpproxy"
 	"github.com/aliyun/aliyun-cli/v3/mock"
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
@@ -317,4 +322,206 @@ func generateMetadata(rootCmd *cli.Command) {
 	if err := export.LegacyExportMetadata(targetDir); err != nil {
 		fmt.Println(err.Error())
 	}
+}
+
+// Keep the entrypoint self-contained for distributors building main/main.go directly.
+
+type utilityCommandFactory func() *cli.Command
+
+var utilityCommandFactories = []utilityCommandFactory{
+	openapi.NewListSupportedPricingApisCommand,
+	mcpproxy.NewMCPProxyCommand,
+	go_migrate.NewGoMigrateCommand,
+}
+
+// newUtilsCommands creates distinct command instances for the canonical
+// subtree and the hidden root compatibility entrypoints. Each pair comes from
+// the same factory/handler implementation; sharing a *cli.Command would be
+// unsafe because AddSubCommand assigns its parent and flags retain parse state.
+func newUtilsCommands() (*cli.Command, []*cli.Command) {
+	utils := &cli.Command{
+		Name:  "utils",
+		Short: i18n.T("Local Alibaba Cloud CLI utilities", "阿里云 CLI 本地工具"),
+		Usage: "utils <name> [flags]",
+	}
+	aliases := make([]*cli.Command, 0, len(utilityCommandFactories))
+	for _, factory := range utilityCommandFactories {
+		canonical := factory()
+		prepareUtilityCommand(canonical, true)
+		utils.AddSubCommand(canonical)
+
+		legacy := factory()
+		prepareUtilityCommand(legacy, false)
+		legacy.Hidden = true
+		aliases = append(aliases, legacy)
+	}
+	return utils, aliases
+}
+
+func prepareUtilityCommand(command *cli.Command, canonical bool) {
+	if command == nil {
+		return
+	}
+	legacyPrefix := "aliyun " + command.Name
+	if strings.HasPrefix(command.Usage, legacyPrefix) {
+		command.Usage = command.Name + strings.TrimPrefix(command.Usage, legacyPrefix)
+	}
+	if canonical && command.Sample != "" {
+		command.Sample = strings.ReplaceAll(command.Sample, legacyPrefix, "aliyun utils "+command.Name)
+	}
+}
+
+var rootCommandHelpSpecs = []openapi.RootCommandSpec{
+	{Path: []string{"configure"}, Group: openapi.RootGroupCore},
+	{Path: []string{"plugin"}, Group: openapi.RootGroupCore},
+	{Path: []string{"upgrade"}, Group: openapi.RootGroupCore},
+	{Path: []string{"version"}, Group: openapi.RootGroupCore},
+	{Path: []string{"auto-completion"}, Group: openapi.RootGroupCore},
+	{Path: []string{"mock"}, Group: openapi.RootGroupCore},
+	{Path: []string{"utils"}, Group: openapi.RootGroupCore},
+
+	{Path: []string{"utils", "mcp-proxy"}, Group: openapi.RootGroupUtils, Aliases: []string{"mcp-proxy"}},
+	{Path: []string{"utils", "go-migrate"}, Group: openapi.RootGroupUtils, Aliases: []string{"go-migrate"}},
+
+	{Path: []string{"oss"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"ossutil"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"agentbay"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"otsutil"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"kmscli"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"lindorm"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"mseutil"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"acrutil"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"codeup-cli"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"saectl"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"appmanager"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"computenest-cli"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"ecctl"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"esa-cli"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"flow-cli"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"cms2"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"maxc"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"iact3"}, Group: openapi.RootGroupExtension},
+	{Path: []string{"rostran"}, Group: openapi.RootGroupExtension},
+}
+
+var rootFlagHelpSpecs = []openapi.RootFlagSpec{
+	{Name: "profile", Visibility: openapi.RootVisibilityDefault},
+	{Name: "region", Visibility: openapi.RootVisibilityDefault},
+	{Name: "language", Visibility: openapi.RootVisibilityDefault},
+	{Name: "version", Visibility: openapi.RootVisibilityDefault},
+	{Name: "output", Visibility: openapi.RootVisibilityDefault},
+	{Name: "cli-query", Visibility: openapi.RootVisibilityDefault},
+	{Name: "cli-output", Visibility: openapi.RootVisibilityDefault},
+	{Name: "cli-dry-run", Visibility: openapi.RootVisibilityDefault},
+	{Name: "yes", Visibility: openapi.RootVisibilityDefault},
+	{Name: "cli-ai-mode", Visibility: openapi.RootVisibilityDefault},
+	{Name: "help", Visibility: openapi.RootVisibilityDefault},
+	{Name: "help-all", Visibility: openapi.RootVisibilityDefault},
+	{Name: "help-search", Visibility: openapi.RootVisibilityDefault},
+
+	{Name: "mode", Visibility: openapi.RootVisibilityExtended},
+	{Name: "config-path", Visibility: openapi.RootVisibilityExtended},
+	{Name: "access-key-id", Visibility: openapi.RootVisibilityExtended},
+	{Name: "access-key-secret", Visibility: openapi.RootVisibilityExtended},
+	{Name: "sts-token", Visibility: openapi.RootVisibilityExtended},
+	{Name: "sts-region", Visibility: openapi.RootVisibilityExtended},
+	{Name: "sts-endpoint", Visibility: openapi.RootVisibilityExtended},
+	{Name: "ram-role-name", Visibility: openapi.RootVisibilityExtended},
+	{Name: "ram-role-arn", Visibility: openapi.RootVisibilityExtended},
+	{Name: "source-profile", Visibility: openapi.RootVisibilityExtended},
+	{Name: "role-session-name", Visibility: openapi.RootVisibilityExtended},
+	{Name: "external-id", Visibility: openapi.RootVisibilityExtended},
+	{Name: "private-key", Visibility: openapi.RootVisibilityExtended},
+	{Name: "key-pair-name", Visibility: openapi.RootVisibilityExtended},
+	{Name: "read-timeout", Visibility: openapi.RootVisibilityExtended},
+	{Name: "connect-timeout", Visibility: openapi.RootVisibilityExtended},
+	{Name: "retry-count", Visibility: openapi.RootVisibilityExtended},
+	{Name: "skip-secure-verify", Visibility: openapi.RootVisibilityExtended},
+	{Name: "expired-seconds", Visibility: openapi.RootVisibilityExtended},
+	{Name: "process-command", Visibility: openapi.RootVisibilityExtended},
+	{Name: "oidc-provider-arn", Visibility: openapi.RootVisibilityExtended},
+	{Name: "oidc-token-file", Visibility: openapi.RootVisibilityExtended},
+	{Name: "cloud-sso-sign-in-url", Visibility: openapi.RootVisibilityExtended},
+	{Name: "cloud-sso-access-config", Visibility: openapi.RootVisibilityExtended},
+	{Name: "cloud-sso-account-id", Visibility: openapi.RootVisibilityExtended},
+	{Name: "oauth-site-type", Visibility: openapi.RootVisibilityExtended},
+	{Name: "endpoint-type", Visibility: openapi.RootVisibilityExtended},
+	{Name: "endpoint", Visibility: openapi.RootVisibilityExtended},
+	{Name: "external-account-type", Visibility: openapi.RootVisibilityExtended},
+	{Name: "auto-plugin-install", Visibility: openapi.RootVisibilityExtended},
+	{Name: "auto-plugin-install-enable-pre", Visibility: openapi.RootVisibilityExtended},
+	{Name: "bearer-token", Visibility: openapi.RootVisibilityExtended},
+	{Name: "bearer-token-header-key", Visibility: openapi.RootVisibilityExtended},
+	{Name: "secure", Visibility: openapi.RootVisibilityExtended},
+	{Name: "force", Visibility: openapi.RootVisibilityExtended},
+	{Name: "header", Visibility: openapi.RootVisibilityExtended},
+	{Name: "body", Visibility: openapi.RootVisibilityExtended},
+	{Name: "pager", Visibility: openapi.RootVisibilityExtended},
+	{Name: "waiter", Visibility: openapi.RootVisibilityExtended},
+	{Name: "dryrun", Visibility: openapi.RootVisibilityExtended},
+	{Name: "estimate-cost", Visibility: openapi.RootVisibilityExtended},
+	{Name: "estimate-cost-context", Visibility: openapi.RootVisibilityExtended},
+	{Name: "quiet", Visibility: openapi.RootVisibilityExtended},
+	{Name: "log-level", Visibility: openapi.RootVisibilityExtended},
+	{Name: "method", Visibility: openapi.RootVisibilityExtended},
+	{Name: "cli-section", Visibility: openapi.RootVisibilityExtended},
+}
+
+func newRootHelpInput(root *cli.Command, catalog *canonicalmeta.ProductsIndex) (openapi.RootHelpInput, error) {
+	return openapi.BuildRootHelpInput(root, catalog, rootCommandHelpSpecs, rootFlagHelpSpecs)
+}
+
+// Resolve AI mode without loading the broken credential configuration or
+// executing a command. Respect flag values and the positional terminator.
+func startupAIMode(args []string) bool {
+	flags := cli.NewFlagSet()
+	config.AddFlags(flags)
+	openapi.AddFlags(flags)
+	forceOn, forceOff := false, false
+	configDir := config.GetConfigPath()
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		name, value, inline := strings.Cut(arg, "=")
+		if !strings.HasPrefix(name, "-") {
+			continue
+		}
+		flag := flags.Get(strings.TrimPrefix(name, "--"))
+		if flag == nil && len(name) == 2 && name[0] == '-' {
+			flag = flags.GetByShorthand(rune(name[1]))
+		}
+		if flag == nil {
+			continue
+		}
+		if flag.AssignedMode != cli.AssignedNone && !inline && i+1 < len(args) {
+			i++
+			value = args[i]
+		}
+		switch flag.Name {
+		case "cli-ai-mode":
+			forceOn = true
+		case "no-cli-ai-mode":
+			forceOff = true
+		case "config-path":
+			if value != "" {
+				configDir = filepath.Dir(value)
+			}
+		}
+	}
+	cfg, _ := aimode.Load(configDir)
+	if forceOff {
+		return false
+	}
+	if forceOn {
+		return true
+	}
+	if enabled, ok := aimode.EnvironmentOverride(); ok {
+		return enabled
+	}
+	if util.DetectAgentName() != "" && aimode.AgentAIModeIntegrationEnabled() {
+		return true
+	}
+	return aimode.EnabledForCommand(cfg, false, false)
 }
