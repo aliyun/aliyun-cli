@@ -84,7 +84,7 @@ func (re *Reporter) ReportError(msg string) {
 func (re *Reporter) Prompt(err error) {
 	if re != nil && re.written && re.HasPrompt() {
 		re.prompted = true
-		fmt.Printf("\r%s\rError occurs, message: %s. See more information in file: %s\n", clearStr, err.Error(), re.path)
+		_, _ = fmt.Fprintf(os.Stderr, "\r%s\rError occurs, message: %s. See more information in file: %s\n", clearStr, err.Error(), re.path)
 	}
 }
 

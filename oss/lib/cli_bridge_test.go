@@ -593,13 +593,11 @@ func createMockBucketCname() *cli.Context {
 	ctx.SetCommand(cmd)
 
 	// Add flags for the command
-	flag := cli.Flag{Name: "method"}
-	flag.SetValue("put")
-	ctx.Flags().Add(&flag)
+	methodFlag := cli.Flag{Name: "method", AssignedMode: cli.AssignedOnce}
+	ctx.Flags().Add(&methodFlag)
 
-	flag = cli.Flag{Name: "item"}
-	flag.SetValue("certificate")
-	ctx.Flags().Add(&flag)
+	itemFlag := cli.Flag{Name: "item", AssignedMode: cli.AssignedOnce}
+	ctx.Flags().Add(&itemFlag)
 
 	return ctx
 }
@@ -620,7 +618,7 @@ func createMockContextWithProxyFlags(cmdName string) *cli.Context {
 	ctx.SetCommand(cmd)
 
 	// Add proxy-host flag
-	flag := cli.Flag{Name: "proxy-host"}
+	flag := cli.Flag{Name: "proxy-host", AssignedMode: cli.AssignedOnce}
 	ctx.Flags().Add(&flag)
 
 	return ctx
@@ -635,7 +633,7 @@ func createMockContextWithEndpointFlags(cmdName string) *cli.Context {
 	ctx.SetCommand(cmd)
 
 	// Add endpoint flag
-	flag := cli.Flag{Name: "endpoint"}
+	flag := cli.Flag{Name: "endpoint", AssignedMode: cli.AssignedOnce}
 	ctx.Flags().Add(&flag)
 
 	return ctx
@@ -650,7 +648,7 @@ func createMockContextWithEndpointFlagsInsecure(cmdName string) *cli.Context {
 	ctx.SetCommand(cmd)
 
 	// Add endpoint flag
-	flag := cli.Flag{Name: "endpoint"}
+	flag := cli.Flag{Name: "endpoint", AssignedMode: cli.AssignedOnce}
 	ctx.Flags().Add(&flag)
 	ctx.SetInsecure(true)
 
@@ -666,11 +664,11 @@ func createMockContextWithMultipleFlags(cmdName string) *cli.Context {
 	ctx.SetCommand(cmd)
 
 	// Add include flag
-	flag := cli.Flag{Name: "include"}
+	flag := cli.Flag{Name: "include", AssignedMode: cli.AssignedOnce}
 	ctx.Flags().Add(&flag)
 
 	// Add recursive flag
-	flag2 := cli.Flag{Name: "recursive"}
+	flag2 := cli.Flag{Name: "recursive", AssignedMode: cli.AssignedNone}
 	ctx.Flags().Add(&flag2)
 
 	return ctx

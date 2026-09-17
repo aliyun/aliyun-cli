@@ -1185,14 +1185,17 @@ func (s *OssutilCommandSuite) TestUploadOutputDir(c *C) {
 	// err copy with -r -> outputdir
 	testResultFile, _ = os.OpenFile(resultPath, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
 	out := os.Stdout
+	errOut := os.Stderr
 	os.Stdout = testResultFile
+	os.Stderr = testResultFile
 	showElapse, err = s.rawCPWithOutputDir(ufile, CloudURLToString(bucketName, object), true, true, false, 1, dir)
 	os.Stdout = out
+	os.Stderr = errOut
 	str := s.readFile(resultPath, c)
 	c.Assert(strings.Contains(str, "Error occurs"), Equals, true)
 	c.Assert(strings.Contains(str, "See more information in file"), Equals, true)
-	c.Assert(err, IsNil)
-	c.Assert(showElapse, Equals, true)
+	c.Assert(err, NotNil)
+	c.Assert(showElapse, Equals, false)
 	_, err = os.Stat(dir)
 	c.Assert(err, IsNil)
 
@@ -1269,14 +1272,17 @@ func (s *OssutilCommandSuite) TestBatchUploadOutputDir(c *C) {
 	s.createFile(configFile, data, c)
 	testResultFile, _ = os.OpenFile(resultPath, os.O_RDWR|os.O_TRUNC|os.O_CREATE, 0664)
 	out := os.Stdout
+	errOut := os.Stderr
 	os.Stdout = testResultFile
+	os.Stderr = testResultFile
 	showElapse, err = s.rawCPWithOutputDir(udir, CloudURLToString(bucketName, udir+"/"), true, true, false, 1, dir)
 	os.Stdout = out
+	os.Stderr = errOut
 	str := s.readFile(resultPath, c)
 	c.Assert(strings.Contains(str, "Error occurs"), Equals, true)
 	c.Assert(strings.Contains(str, "See more information in file"), Equals, true)
-	c.Assert(err, IsNil)
-	c.Assert(showElapse, Equals, true)
+	c.Assert(err, NotNil)
+	c.Assert(showElapse, Equals, false)
 	_, err = os.Stat(dir)
 	c.Assert(err, IsNil)
 
@@ -1626,11 +1632,10 @@ func (s *OssutilCommandSuite) TestCopyFunction(c *C) {
 	err = fmt.Errorf("test error")
 	copyCommand.cpOption.ctnu = true
 	err = copyCommand.formatResultPrompt(err)
-	c.Assert(err, IsNil)
+	c.Assert(err, NotNil)
 	os.Stdout = out
 	str := strings.ToLower(s.readFile(resultPath, c))
-	c.Assert(strings.Contains(str, "succeed"), Equals, true)
-	c.Assert(strings.Contains(str, "error"), Equals, false)
+	c.Assert(strings.Contains(str, "when error happens"), Equals, true)
 
 	// test download file error
 	err = copyCommand.ossDownloadFileRetry(bucket, "object", downloadFileName)

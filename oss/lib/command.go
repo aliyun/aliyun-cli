@@ -52,6 +52,7 @@ type Command struct {
 	options          OptionMapType
 	configOptions    OptionMapType
 	inputKeySecret   string
+	rawOutput        bool
 }
 
 // Commander is the interface of all commands

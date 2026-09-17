@@ -631,10 +631,10 @@ func (sc *SyncCommand) DeleteExtraObjects(keys map[string]string, sUrl StorageUR
 				if err != nil {
 					return err
 				}
+				deleteCount += len(objects)
+				fmt.Printf("\rdelete object count:%d", deleteCount)
 			}
 			objects = []string{}
-			deleteCount += MaxBatchCount
-			fmt.Printf("\rdelete object count:%d", deleteCount)
 		}
 		// prefix + relativeKey
 		objects = append(objects, v+k)

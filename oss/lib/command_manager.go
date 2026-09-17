@@ -2,6 +2,7 @@ package lib
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"reflect"
 	"runtime"
@@ -68,7 +69,86 @@ func ParseAndRunCommand() error {
 }
 
 func getCommandLine() string {
-	return strings.Join(os.Args, " ")
+	return strings.Join(redactCommandLineArgs(os.Args), " ")
+}
+
+// redactCommandLineArgs removes credentials and signed URL secrets before a
+// command line is written to the OSS log or a batch report. The OSS CLI bridge
+// injects profile credentials into os.Args, so this must cover values the user
+// never typed as well as explicit command-line credentials.
+func redactCommandLineArgs(args []string) []string {
+	redacted := make([]string, len(args))
+	sensitiveLong := map[string]struct{}{
+		"--access-key-id": {}, "--access-key-secret": {}, "--sts-token": {},
+		"--proxy-pwd": {}, "--private-key": {}, "--bearer-token": {},
+		"--oidc-token-file": {},
+	}
+	sensitiveShort := map[string]struct{}{"-i": {}, "-k": {}, "-t": {}}
+	redactNext := false
+	for i, arg := range args {
+		if redactNext {
+			redacted[i] = "[REDACTED]"
+			redactNext = false
+			continue
+		}
+		if _, ok := sensitiveLong[arg]; ok {
+			redacted[i] = arg
+			redactNext = true
+			continue
+		}
+		if _, ok := sensitiveShort[arg]; ok {
+			redacted[i] = arg
+			redactNext = true
+			continue
+		}
+		matched := false
+		for name := range sensitiveLong {
+			if strings.HasPrefix(arg, name+"=") {
+				redacted[i] = name + "=[REDACTED]"
+				matched = true
+				break
+			}
+		}
+		if matched {
+			continue
+		}
+		for name := range sensitiveShort {
+			if strings.HasPrefix(arg, name+"=") || (strings.HasPrefix(arg, name) && len(arg) > len(name)) {
+				redacted[i] = name + "[REDACTED]"
+				matched = true
+				break
+			}
+		}
+		if matched {
+			continue
+		}
+		redacted[i] = redactSignedURL(arg)
+	}
+	return redacted
+}
+
+func redactSignedURL(value string) string {
+	if !strings.Contains(value, "://") || !strings.Contains(value, "?") {
+		return value
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return value
+	}
+	query := parsed.Query()
+	changed := false
+	for key := range query {
+		switch strings.ToLower(key) {
+		case "accesskeyid", "ossaccesskeyid", "signature", "signaturevalue", "securitytoken", "x-oss-credential", "x-oss-security-token", "x-oss-signature":
+			query.Set(key, "[REDACTED]")
+			changed = true
+		}
+	}
+	if !changed {
+		return value
+	}
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
 }
 
 func clearEnv() {
@@ -121,8 +201,10 @@ func (cm *CommandManager) RunCommand(commandName string, args []string, options 
 		if err := cmd.(Commander).RunCommand(); err != nil {
 			return false, err
 		}
-		group := reflect.ValueOf(cmd).Elem().FieldByName("command").FieldByName("group").String()
-		return group == GroupTypeNormalCommand, nil
+		commandValue := reflect.ValueOf(cmd).Elem().FieldByName("command")
+		group := commandValue.FieldByName("group").String()
+		rawOutput := commandValue.FieldByName("rawOutput").Bool()
+		return group == GroupTypeNormalCommand && !rawOutput, nil
 	}
 	return false, fmt.Errorf("no such command: \"%s\", please try \"help\" for more information", commandName)
 }

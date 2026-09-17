@@ -3,6 +3,7 @@ package lib
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/alibabacloud-go/tea/tea"
@@ -89,7 +90,7 @@ func NewCommandBridge(cmd Command) *cli.Command {
 		Long:     i18n.T(cmd.specEnglish.detailHelpText, cmd.specChinese.detailHelpText),
 		KeepArgs: true,
 		Run: func(ctx *cli.Context, args []string) error {
-			return ParseAndRunCommandFromCli(ctx, args)
+			return parseAndRunCommandFromCli(ctx, args, &cmd)
 		},
 	}
 
@@ -108,11 +109,21 @@ func NewCommandBridge(cmd Command) *cli.Command {
 		}
 
 		if result.Flags().Get(name) == nil {
+			assignedMode := cli.AssignedOnce
+			switch opt.optionType {
+			case OptionTypeFlagTrue:
+				assignedMode = cli.AssignedNone
+			case OptionTypeStrings:
+				assignedMode = cli.AssignedRepeatable
+			}
+			if s == OptionInclude || s == OptionExclude {
+				assignedMode = cli.AssignedRepeatable
+			}
 			result.Flags().Add(&cli.Flag{
-				Name:      name,
-				Shorthand: shorthand,
-				Short:     i18n.T(opt.helpEnglish, opt.helpChinese),
-				// Assignable: opt.optionType todo
+				Name:         name,
+				Shorthand:    shorthand,
+				Short:        i18n.T(opt.helpEnglish, opt.helpChinese),
+				AssignedMode: assignedMode,
 			})
 		}
 	}
@@ -250,17 +261,28 @@ func ParseAndGetEndpoint(ctx *cli.Context, args []string) (string, error) {
 }
 
 func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
-	// 修改 ctx flag的标记，允许所以flag 可以重复
-	if ctx.Flags() != nil && ctx.Flags().Flags() != nil {
-		for _, f := range ctx.Flags().Flags() {
-			f.AssignedMode = cli.AssignedRepeatable
-		}
-	}
+	return parseAndRunCommandFromCli(ctx, args, nil)
+}
+
+func parseAndRunCommandFromCli(ctx *cli.Context, args []string, command *Command) error {
+	// KeepArgs preserves the original tokens, but the command router still
+	// parses leading flags while searching for the first positional argument.
+	// Reset only flags present in this raw slice before parsing the full command
+	// so a leading boolean such as `cp --recursive src dst` is not seen twice.
+	resetRawOssFlags(ctx, args)
 	// 利用 parser 解析 flags，否则下文读不到
 	parser := cli.NewParser(args, ctx)
 	_, err := parser.ReadAll()
 	if err != nil {
 		return err
+	}
+	if command != nil {
+		if err := validateCommandArgCount(command, ossPositionalArgs(ctx, args)); err != nil {
+			return err
+		}
+		if command.name == "hash" {
+			return runLocalOssCommand(ctx, args)
+		}
 	}
 
 	profile, err := config.LoadProfileWithContext(ctx)
@@ -310,17 +332,9 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 		}
 	}
 	configs["endpoint"] = endpoint
-	// if args has --endpoint, remove it and next arg
-	if endpoint != "" {
-		for i, arg := range args {
-			if arg == "--endpoint" {
-				if i+1 < len(args) {
-					args = append(args[:i], args[i+2:]...)
-					break
-				}
-			}
-		}
-	}
+	// The resolved endpoint is appended once below. Remove either accepted raw
+	// form so --endpoint=value is not duplicated during the bridge handoff.
+	args = stripOptionWithValue(args, "--endpoint")
 
 	// Drop CLI-only config flags (e.g. --profile) before forwarding to OSS goopt.
 	// Credentials were already resolved from the selected profile above.
@@ -329,49 +343,17 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	a2 := []string{"aliyun", "oss"}
 	a2 = append(a2, ctx.Command().Name)
 	a2 = append(a2, args...)
-	configFlagSet := cli.NewFlagSet()
-	config.AddFlags(configFlagSet)
 
-	for _, f := range ctx.Flags().Flags() {
-		if configFlagSet.Get(f.Name) != nil {
-			continue
-		}
-		if configs != nil {
-			// 如果 flag 的值在 configs 中已经存在，则跳过
-			// 因为后续会重新 set
-			if v, ok := configs[f.Name]; ok && v != "" {
-				continue
-			}
-		}
-		if f.IsAssigned() {
-			flagName := "--" + f.Name
-			// if already in args, skip
-			containFlag := false
-			for _, a := range args {
-				if strings.EqualFold(a, flagName) {
-					containFlag = true
-					break
-				}
-			}
-			if containFlag {
-				continue
-			}
-			a2 = append(a2, "--"+f.Name)
-			// if f.getValues is not nil and more than one value, we need to append all values
-			// otherwise, just append f.value
-			if f.GetValues() != nil && len(f.GetValues()) > 0 {
-				for _, v := range f.GetValues() {
-					a2 = append(a2, v)
-				}
-				continue
-			}
-			if s2, ok := f.GetValue(); ok && s2 != "" {
-				a2 = append(a2, s2)
-			}
-		}
+	// OSS options are already present in args in their original order. Replaying
+	// parsed flags here changes include/exclude precedence and duplicates the
+	// --name=value form. Only append bridge-resolved configuration values.
+	configKeys := make([]string, 0, len(configs))
+	for k := range configs {
+		configKeys = append(configKeys, k)
 	}
-
-	for k, v := range configs {
+	sort.Strings(configKeys)
+	for _, k := range configKeys {
+		v := configs[k]
 		if v != "" {
 			a2 = append(a2, "--"+k)
 			a2 = append(a2, v)
@@ -379,4 +361,96 @@ func ParseAndRunCommandFromCli(ctx *cli.Context, args []string) error {
 	}
 	os.Args = a2[1:]
 	return parseAndRunCommandImpl()
+}
+
+func ossPositionalArgs(ctx *cli.Context, args []string) []string {
+	positional := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
+		prefix, _, hasInlineValue := cli.SplitStringWithPrefix(arg, "=:")
+		var flag *cli.Flag
+		switch {
+		case strings.HasPrefix(prefix, "--") && len(prefix) > 2:
+			flag = ctx.Flags().Get(prefix[2:])
+		case strings.HasPrefix(prefix, "-") && len(prefix) == 2:
+			flag = ctx.Flags().GetByShorthand(rune(prefix[1]))
+		case strings.HasPrefix(prefix, "-"):
+			// Let the host parser report unsupported compact flag forms.
+			continue
+		default:
+			positional = append(positional, arg)
+			continue
+		}
+		if flag != nil && flag.AssignedMode != cli.AssignedNone && !hasInlineValue && i+1 < len(args) {
+			i++
+		}
+	}
+	return positional
+}
+
+func resetRawOssFlags(ctx *cli.Context, args []string) {
+	if ctx == nil || ctx.Flags() == nil {
+		return
+	}
+	for _, arg := range args {
+		prefix, _, _ := cli.SplitStringWithPrefix(arg, "=:")
+		var flag *cli.Flag
+		switch {
+		case strings.HasPrefix(prefix, "--") && len(prefix) > 2:
+			flag = ctx.Flags().Get(prefix[2:])
+		case strings.HasPrefix(prefix, "-") && len(prefix) == 2:
+			flag = ctx.Flags().GetByShorthand(rune(prefix[1]))
+		}
+		if flag != nil {
+			flag.SetAssigned(false)
+			flag.SetValue("")
+			flag.SetValues(nil)
+		}
+	}
+}
+
+func validateCommandArgCount(command *Command, args []string) error {
+	if len(args) < command.minArgc {
+		plural := ""
+		if command.minArgc > 1 {
+			plural = "s"
+		}
+		return CommandError{command.name, fmt.Sprintf("the command needs at least %d argument%s", command.minArgc, plural)}
+	}
+	if len(args) > command.maxArgc {
+		plural := ""
+		if command.maxArgc > 1 {
+			plural = "s"
+		}
+		return CommandError{command.name, fmt.Sprintf("the command needs at most %d argument%s", command.maxArgc, plural)}
+	}
+	return nil
+}
+
+func runLocalOssCommand(ctx *cli.Context, args []string) error {
+	args = stripCliOnlyFlagsFromArgs(args)
+	os.Args = append([]string{"oss", ctx.Command().Name}, args...)
+	return parseAndRunCommandImpl()
+}
+
+func stripOptionWithValue(args []string, option string) []string {
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == option {
+			if i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, option+"=") {
+			continue
+		}
+		out = append(out, arg)
+	}
+	return out
 }
