@@ -11,6 +11,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 )
 
 // ParseAndRunCommandFunc 定义ParseAndRunCommand函数类型
@@ -219,7 +220,7 @@ func stripCliOnlyFlagsFromArgs(args []string) []string {
 			}
 		}
 	}
-	for _, name := range []string{"--cli-ai-mode", "--no-cli-ai-mode", "--cli-non-interactive", "--cli-validate", "--cli-plan"} {
+	for _, name := range []string{"--yes", "-y", "--cli-ai-mode", "--no-cli-ai-mode", "--cli-non-interactive", "--cli-validate", "--cli-plan"} {
 		hostOnly[name] = false
 	}
 	for _, name := range []string{"--cli-output", "--cli-cursor", "--cli-failure-report"} {
@@ -351,6 +352,11 @@ func parseAndRunCommandFromCli(ctx *cli.Context, args []string, command *Command
 	if help {
 		return printHostOSSHelp(ctx, nil)
 	}
+	machine.phase = "policy"
+	if err := checkOSSSafetyPolicy(ctx, machine.command); err != nil {
+		return err
+	}
+	machine.phase = "validation"
 	forwarded := stripCliOnlyFlagsFromArgs(args)
 	_, parsed, err := parseOSSOptions(forwarded)
 	if err != nil {
@@ -717,4 +723,19 @@ func stripOptionWithValue(args []string, option string) []string {
 		out = append(out, arg)
 	}
 	return out
+}
+
+// Enforce the host policy before any credentials, previews or OSS requests.
+func checkOSSSafetyPolicy(ctx *cli.Context, command string) error {
+	policy, err := safety.LoadEffectivePolicy(config.GetConfigDir(ctx))
+	if err != nil {
+		return fmt.Errorf("load safety policy failed: %w", err)
+	}
+	info := safety.CommandInfo{Product: "oss", ApiOrMethod: command}
+	flag := ctx.Flags().Get("yes")
+	skip := (flag != nil && flag.IsAssigned()) || os.Getenv("ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM") == "1" || strings.EqualFold(os.Getenv("ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM"), "true")
+	if policy.Check(info).Action == safety.ActionConfirm && !skip && (machineInputBlocked() || !safety.IsInteractive()) {
+		return fmt.Errorf("%w: safety policy requires approval; rerun with --yes after approval", errConfirmationRequired)
+	}
+	return safety.CheckAndConfirm(ctx, policy, info, skip)
 }

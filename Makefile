@@ -100,7 +100,7 @@ check-runtime: test-runtime
 
 test: deps
 	# Ensure every package under the module is listable/vettable (catches stale go:embed in submodules). 
-	# Keep oss/lib out of unit coverage because its gocheck suites require live OSS/STS credentials and cloud resources.
+	# The live OSS gocheck runner is excluded separately by test-oss.
 	go list ./... >/dev/null
 	go vet ./...
 	ALIYUN_CLI_META_DIR="$(META_DIR)" LANG="en_US.UTF-8" go test -race -coverprofile=coverage.txt -covermode=atomic \
@@ -109,6 +109,7 @@ test: deps
 		./i18n/... ./main/... ./openapi/... ./meta/... ./export/... \
 		./sysconfig/... ./mcpproxy ./cloudsso ./cliext/... ./tools/...
 	go tool cover -html=coverage.txt -o coverage.html
+	$(MAKE) test-oss
 
 test-release: meta-pack
 	LANG="en_US.UTF-8" go test -tags "$(META_TAG)" ./bundledmeta ./meta ./export ./openapi/runtimehost
@@ -118,3 +119,13 @@ test-release: meta-pack
 .PHONY: meta-pack build build_mac build_linux build_windows build_linux_arm64
 .PHONY: gen_version git_release make_release_dir
 .PHONY: release_mac release_mac_arm64 release_linux release_linux_arm64 release_windows
+
+# Only Test is the legacy gocheck runner requiring real cloud resources.
+test-oss:
+	go test -race -coverprofile=coverage-oss.txt -covermode=atomic ./oss/lib -skip '^Test$$'
+
+check-entrypoint:
+	mkdir -p out
+	go build -o out/aliyun-single-file ./main/main.go
+
+.PHONY: test-oss check-entrypoint

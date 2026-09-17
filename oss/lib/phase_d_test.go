@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -168,7 +169,11 @@ func TestPhaseDFailureManifestConcurrentAndExclusive(t *testing.T) {
 	}
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	// Windows Mode().Perm() reflects the read-only attribute, not ACLs.
+	// Keep the exclusive creation and concurrent JSONL checks above on all OSes.
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	}
 }
 func TestPhaseDFailedUploadManifest(t *testing.T) {
 	clearEndpointTestEnv(t)

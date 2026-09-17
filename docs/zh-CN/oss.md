@@ -31,12 +31,14 @@ aliyun oss rm oss://example-bucket/example.txt --cli-plan
 
 使用 `--cli-ai-mode` 获取结构化错误，使用 `--cli-non-interactive` 禁止读取确认输入。AI 模式或显式 JSON/JSONL 输出也会禁止交互输入，这些参数均不代表写操作授权。需要确认时返回 `ConfirmationRequired`。获得授权后，可按操作需要使用其已有的强制选项；多项操作中，之前的部分工作可能已经完成。
 
+内置 OSS 在加载凭据和发送请求前检查宿主安全策略（包括校验和计划模式，帮助除外），规则按命令匹配，例如 `oss:rm` 或 `oss:*`。`deny` 不能被 `--force`、`--yes` 或 AI 模式绕过；策略无效时也会停止执行。`confirm` 在非交互模式下返回 `ConfirmationRequired`，获得授权后使用 `--yes`（或 `-y`）确认策略；原有删除确认仍按需使用 `--force`。策略阶段的其他结构化错误使用 `SafetyPolicyError`，并标记 `oss.phase: "policy"` 和无副作用。
+
 AI 模式下，共享错误信封包含 `schemaVersion: "v1"`；非 AI 模式显式请求的 JSON 错误保持原有格式。结构化错误写入 stderr，包含 Agent 错误字段及 `oss` 对象，后者带有 `schema_version: "1"`、`phase`、`status`、`side_effects`、`retryable`，适用时还包含失败报告信息。这类经过适配的 OSS 错误退出码为 **1**，与 OpenAPI Agent 错误不同。`--no-cli-ai-mode` 关闭 AI 错误，但显式 JSON/JSONL 输出仍使用结构化错误。进入 OSS 桥接层之前的初始配置加载错误，在启动 AI 模式启用时也使用共享的版本化信封。
 
 `cat` 始终保持 stdout 原始字节，即使指定 `--cli-output json`。除此以外，JSON/JSONL 成功输出仅支持 `ls` 和预览模式；不支持的组合在执行前失败。仅开启 AI 模式不会把所有成功输出转换为 JSON。
 
 ## 失败报告与重试
 
-执行 `cp` 或 `sync` 时可添加 `--cli-failure-report <新文件路径>`。报告使用独占创建方式及 `0600` 权限，目标文件已存在时会拒绝执行。内容为 JSONL `failed_item` 记录和最后的 `summary`，包含 `schema_version: "1"`、结果信息及 `automatic_retry: false`。不能与校验或计划模式组合使用。
+执行 `cp` 或 `sync` 时可添加 `--cli-failure-report <新文件路径>`。报告使用独占创建方式，目标文件已存在时会拒绝执行。Unix 下以 `0600` 权限创建；Windows 下访问权限由 Windows ACL 控制，CLI 不会设置仅当前用户可访问的 ACL。内容为 JSONL `failed_item` 记录和最后的 `summary`，包含 `schema_version: "1"`、结果信息及 `automatic_retry: false`。不能与校验或计划模式组合使用。
 
 失败报告不会重放操作，也不能证明失败的写请求没有产生效果。重试选定条目前，应检查报告和实际资源状态，不要自动重放整个同步或删除操作。允许重试的临时故障使用带抖动的退避；永久错误或结果不明确的写失败会停止重试。
