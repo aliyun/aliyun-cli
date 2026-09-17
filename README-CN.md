@@ -142,6 +142,7 @@ aliyun plugin update --name <plugin-name>
 | 配置与凭证 | [指南](./docs/zh-CN/configuration.md) | [Guide](./docs/en/configuration.md) |
 | 命令、输出与自动化 | [指南](./docs/zh-CN/usage.md) | [Guide](./docs/en/usage.md) |
 | MCP、OpenTelemetry 与机器接口 | [指南](./docs/zh-CN/integrations.md) | [Guide](./docs/en/integrations.md) |
+| 内置 OSS 自动化 | [指南](./docs/zh-CN/oss.md) | [Guide](./docs/en/oss.md) |
 | 插件管理 | [指南](./docs/zh-CN/plugins.md) | [Guide](./docs/en/plugins.md) |
 
 其他资源：

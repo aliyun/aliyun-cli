@@ -77,6 +77,8 @@ aliyun ecs describe-instances --help
 
 ## Endpoints and unsupported metadata
 
+Product JSON Help exposes `product.endpoints` entries with `regionId` (when regional) and `endpoint`. Query them locally with `aliyun ecs --help --cli-output json --cli-query product.endpoints`; add `--endpoint-type vpc` for VPC endpoint selection.
+
 The CLI normally resolves API versions and endpoints from metadata. To call an API not present in the bundled metadata, use `--force` together with an explicit version and endpoint:
 
 ```sh
@@ -290,6 +292,8 @@ aliyun ecs describe-instances --cli-ai-mode
 
 When a supported agent environment is detected, in-process OpenAPI commands automatically enable agent-oriented interaction and execution optimizations. These optimizations currently include stricter metadata-based validation and more structured error output, but the exact behavior may change and is not a stable compatibility contract.
 
+`ALIBABA_CLOUD_CLI_AGENT_INTEGRATION` controls automatic Agent integration: unset enables the defaults, `disabled` disables all integrations, `all` enables all, and a comma-separated list such as `ai-mode` enables only named integrations. This does not enable safety policy. Detected Agent identities also add a fixed `Agent/<name>` User-Agent segment independently of the AI-mode integration switch.
+
 Requests made through this automatically enabled mode append the following generic User-Agent marker:
 
 ```text
@@ -311,5 +315,9 @@ This rule applies only to the traditional PascalCase command form. When a parame
 ```sh
 aliyun ecs SomeOperation --PortRange=-1/-1
 ```
+
+## Built-in OSS
+
+See the [built-in OSS automation guide](./oss.md) for JSON/JSONL listing, read-only plans, confirmation, and failure reports.
 
 Next: [manage product plugins](./plugins.md).

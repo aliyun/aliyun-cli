@@ -142,6 +142,7 @@ See [command usage](./docs/en/usage.md) and [plugin management](./docs/en/plugin
 | Configuration and credentials | [Guide](./docs/en/configuration.md) | [指南](./docs/zh-CN/configuration.md) |
 | Commands, output, and automation | [Guide](./docs/en/usage.md) | [指南](./docs/zh-CN/usage.md) |
 | MCP, OpenTelemetry, and machine interfaces | [Guide](./docs/en/integrations.md) | [指南](./docs/zh-CN/integrations.md) |
+| Built-in OSS automation | [Guide](./docs/en/oss.md) | [指南](./docs/zh-CN/oss.md) |
 | Plugin management | [Guide](./docs/en/plugins.md) | [指南](./docs/zh-CN/plugins.md) |
 
 Additional resources:

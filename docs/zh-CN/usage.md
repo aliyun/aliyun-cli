@@ -77,6 +77,8 @@ aliyun ecs describe-instances --help
 
 ## Endpoint 与 metadata 未收录的 API
 
+产品 JSON Help 通过 `product.endpoints` 返回 endpoint 列表，字段包含 `endpoint` 和地域端点适用的 `regionId`。可本地执行 `aliyun ecs --help --cli-output json --cli-query product.endpoints` 查询，添加 `--endpoint-type vpc` 可选择 VPC endpoint。
+
 CLI 通常从 metadata 解析 API 版本和 Endpoint。调用内置 metadata 未收录的 API 时，需要同时指定版本、Endpoint 和 `--force`：
 
 ```sh
@@ -308,7 +310,7 @@ aliyun ecs describe-instances --no-cli-ai-mode
 export ALIBABA_CLOUD_CLI_AGENT_INTEGRATION=disabled
 ```
 
-该变量控制由 Agent 探测触发的集成。当前支持 `disabled`、`ai-mode` 和 `all`。设置为 `disabled` 只关闭 Agent 自动集成，不会覆盖`configure ai-mode enable`。显式传入 `--cli-ai-mode` 仍可为单次命令重新开启。
+`ALIBABA_CLOUD_CLI_AGENT_INTEGRATION` 控制自动 Agent 集成：未设置时启用默认集成，`disabled` 全部关闭，`all` 全部开启，逗号分隔的列表（如 `ai-mode`）仅开启指定集成。此开关不会启用安全策略。检测到 Agent 时还会添加固定的 `Agent/<name>` User-Agent 标识，该标识独立于 AI 模式集成开关。 设置为 `disabled` 不会覆盖 `configure ai-mode enable`；显式 `--cli-ai-mode` 仍可开启单次命令的 AI 模式。
 
 JSON Help 协议、Agent 错误 envelope、退出状态、Trace Context 传播和 MCP 代理安全行为见 [MCP 代理、OpenTelemetry 与机器可读接口](./integrations.md)。
 
@@ -319,5 +321,9 @@ JSON Help 协议、Agent 错误 envelope、退出状态、Trace Context 传播�
 ```sh
 aliyun ecs SomeOperation --PortRange=-1/-1
 ```
+
+## 内置 OSS
+
+内置 OSS 的 JSON/JSONL 列表、只读计划、确认和失败报告见 [OSS 自动化指南](./oss.md)。
 
 下一步：[管理产品插件](./plugins.md)。

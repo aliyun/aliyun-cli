@@ -80,7 +80,21 @@ func Main(args []string) {
 	// load current configuration
 	profile, err := config.LoadOrCreateDefaultProfile()
 	if err != nil {
-		cli.Errorf(stderr, "ERROR: load current configuration failed %s", err)
+		if startupAIMode(args) {
+			// Configuration errors can contain configuration values. Keep the
+			// machine diagnostic stable without echoing potentially secret data.
+			agentErr := cli.NewAgentError(cli.AgentErrorEnvelope{
+				Message:   "load current configuration failed",
+				ErrorCode: "ConfigurationError",
+				Recovery: cli.AgentErrorRecovery{
+					Action: "check_configuration",
+					Hint:   "Check that the CLI configuration is readable, contains valid JSON, and selects an existing profile; repair it before retrying.",
+				},
+			}, err).WithSchemaVersion()
+			_ = json.NewEncoder(stderr).Encode(agentErr.Envelope())
+		} else {
+			cli.Errorf(stderr, "ERROR: load current configuration failed %s", err)
+		}
 		exit(1)
 		return
 	}

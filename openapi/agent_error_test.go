@@ -88,6 +88,7 @@ func TestKebabProfileCaseMismatchSuggestsLowercaseProfile(t *testing.T) {
 		encoded, err := json.Marshal(agentErr.Envelope())
 		require.NoError(t, err)
 		assert.JSONEq(t, `{
+			"schemaVersion":"v1",
 			"message":"unknown flag --Profile",
 			"did_you_mean":["--profile"],
 			"recovery":{
@@ -1155,7 +1156,8 @@ func TestAgentErrorEnvelopeEndToEndIsOneCleanJSONDocument(t *testing.T) {
 	assert.NotContains(t, stderr.String(), cli.AIModeEnableTextHint)
 	var decoded map[string]interface{}
 	require.NoError(t, json.Unmarshal(stderr.Bytes(), &decoded))
-	assert.ElementsMatch(t, []string{"message", "did_you_mean", "recovery"}, mapKeys(decoded))
+	assert.Equal(t, "v1", decoded["schemaVersion"])
+	assert.ElementsMatch(t, []string{"schemaVersion", "message", "did_you_mean", "recovery"}, mapKeys(decoded))
 	assert.Equal(t, []interface{}{"--instance-type"}, decoded["did_you_mean"])
 	recovery := decoded["recovery"].(map[string]interface{})
 	assert.Equal(t, "search_parameter", recovery["action"])
