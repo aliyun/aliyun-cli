@@ -39,6 +39,6 @@ In AI mode, the shared error envelope includes `schemaVersion: "v1"`; non-AI exp
 
 ## Failure reports and retries
 
-For an executing `cp` or `sync`, add `--cli-failure-report <new-path>`. The report is a new file created exclusively with mode `0600`; an existing path is rejected. It contains JSONL `failed_item` records and a final `summary`, using `schema_version: "1"`, outcome information, and `automatic_retry: false`. It cannot be combined with validation or planning.
+For an executing `cp` or `sync`, add `--cli-failure-report <new-path>`. The report is a new file created exclusively; an existing path is rejected. On Unix, it is created with mode `0600`. On Windows, access is governed by Windows ACLs; the CLI does not set a user-only ACL. It contains JSONL `failed_item` records and a final `summary`, using `schema_version: "1"`, outcome information, and `automatic_retry: false`. It cannot be combined with validation or planning.
 
 A failure report does not replay operations or prove that a failed write had no effect. Inspect the report and actual resource state before retrying selected items; never replay a whole sync/delete operation automatically. Eligible transient retries use jittered backoff; permanent errors and ambiguous write failures stop retrying.

@@ -39,6 +39,6 @@ AI 模式下，共享错误信封包含 `schemaVersion: "v1"`；非 AI 模式显
 
 ## 失败报告与重试
 
-执行 `cp` 或 `sync` 时可添加 `--cli-failure-report <新文件路径>`。报告使用独占创建方式及 `0600` 权限，目标文件已存在时会拒绝执行。内容为 JSONL `failed_item` 记录和最后的 `summary`，包含 `schema_version: "1"`、结果信息及 `automatic_retry: false`。不能与校验或计划模式组合使用。
+执行 `cp` 或 `sync` 时可添加 `--cli-failure-report <新文件路径>`。报告使用独占创建方式，目标文件已存在时会拒绝执行。Unix 下以 `0600` 权限创建；Windows 下访问权限由 Windows ACL 控制，CLI 不会设置仅当前用户可访问的 ACL。内容为 JSONL `failed_item` 记录和最后的 `summary`，包含 `schema_version: "1"`、结果信息及 `automatic_retry: false`。不能与校验或计划模式组合使用。
 
 失败报告不会重放操作，也不能证明失败的写请求没有产生效果。重试选定条目前，应检查报告和实际资源状态，不要自动重放整个同步或删除操作。允许重试的临时故障使用带抖动的退避；永久错误或结果不明确的写失败会停止重试。
