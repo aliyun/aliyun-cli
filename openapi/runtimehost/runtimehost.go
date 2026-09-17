@@ -228,6 +228,8 @@ func checkSafetyPolicy(ctx *cli.Context, rawArgs []string) error {
 	// Metadata commands are interpreted in-process, so they never reach the Go-plugin safety check in openapi.Commando.
 	// Keep read-only help/version requests aligned with that path and guard every actual metadata command here,
 	// where both bundled baseline and installed meta plugins converge.
+	// Policy deliberately matches the user's command spelling, not the
+	// canonical API name resolved later by the engine.
 	command := rawArgs[1]
 	if strings.EqualFold(command, "version") || flagAssigned(ctx, "help") {
 		return nil

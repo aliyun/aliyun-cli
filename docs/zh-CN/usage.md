@@ -265,6 +265,20 @@ aliyun configure safety-policy --help
 
 安全策略默认关闭，`confirm` 只是 CLI 本地执行前确认，不代表云端授权或审批。使用 `show`/`list` 查看当前生效策略；如果设置了 `ALIBABA_CLOUD_SAFETY_POLICY_ENABLED` 或 `ALIBABA_CLOUD_SAFETY_POLICY_RULES`，展示结果包含环境变量覆盖后的配置。策略文件或环境规则无法完整解析时，CLI 会拒绝继续执行。
 
+### 命令匹配约定
+
+安全策略按调用方输入的命令写法匹配，这是预期设计，不会根据解析后的 OpenAPI 身份合并规则。匹配不区分大小写，`*` 可以匹配任意长度的字符序列；不会展开 API 别名，也不会在大驼峰和短横线写法之间转换。例如，`ecs:DeleteInstance` 匹配 `ECS:deleteinstance`，但不匹配 `ecs:delete-instance`，即使两种命令调用的是同一个 API。AI mode 也遵循这一约定。
+
+应为脚本或 Agent 使用的每种写法分别配置规则：
+
+```sh
+aliyun configure safety-policy add --pattern 'ecs:DeleteInstance' --action deny
+aliyun configure safety-policy add --pattern 'ecs:delete-instance' --action deny
+aliyun configure safety-policy enable
+```
+
+规则按顺序检查，第一条匹配的规则生效；未匹配的命令允许执行。`ecs:Delete*` 这样的通配符可以通过共同前缀覆盖上述两种写法，但不会自动识别所有具有破坏性效果的 API。REST 方法与路径采用 `product:METHOD/path`（如 `cs:DELETE/clusters`），`cs:DELETE/*` 匹配路径以 `/` 开头的 DELETE 命令；插件子命令层级以 `:` 分隔（如 `fc:function:create`）。按需分别配置 API 名称、方法与路径、插件命令等形式。云端授权仍由服务端与 RAM 权限控制。
+
 ## 面向 Agent 的优化与 AI mode
 
 AI mode 可以全局管理，也可以针对单次命令控制：

@@ -42,11 +42,14 @@ const (
 
 type Rule struct {
 	// Pattern: "product:ApiName" or "product:METHOD" or "product:METHOD/path"
-	// Supports wildcard: * matches any. Examples:
-	//   "*:Delete*"   - deny all delete operations across products
-	//   "ecs:Delete*" - deny delete on ECS
-	//   "ecs:Update*" - require confirm for ECS update operations
-	//   "*:DELETE"    - REST: deny all DELETE HTTP method
+	// Matching is case-insensitive and * matches any sequence. By design,
+	// patterns match command spelling, not the resolved API identity: aliases,
+	// PascalCase and kebab-case are not expanded into equivalent commands.
+	// Examples (the rule's Action determines whether to deny or confirm):
+	//   "ecs:DeleteInstance" - matches DeleteInstance, not delete-instance
+	//   "ecs:delete-instance" - matches the kebab-case spelling separately
+	//   "*:Delete*" - matches command names starting with Delete across products
+	//   "*:DELETE/*" - matches REST DELETE with a slash-prefixed path
 	Pattern string `json:"pattern"`
 	// Action: allow, deny, confirm (or forbid)
 	Action Action `json:"action"`
@@ -82,8 +85,10 @@ type CommandInfo struct {
 	// In other words, safety always sees the command exactly as the user typed it,
 	// with ':' acting as the canonical hierarchy separator (the same one used between
 	// product and the command), so a rule like `sls:ListProject` matches
-	// `aliyun sls ListProject`, `*:DELETE` matches `aliyun cs DELETE /clusters`,
+	// `aliyun sls ListProject`, `*:DELETE/*` matches `aliyun cs DELETE /clusters`,
 	// and `fc:function:*` matches `aliyun fc function create ...`.
+	// Keep the user's spelling here even when metadata resolves an API alias;
+	// semantic alias matching is intentionally outside the policy contract.
 	ApiOrMethod string
 	// Path is only set for REST style invocations that supply a path
 	// (e.g. `aliyun cs DELETE /clusters` -> Path = "/clusters").

@@ -265,6 +265,20 @@ aliyun configure safety-policy --help
 
 Safety policy is disabled by default, and `confirm` is a local CLI confirmation rather than cloud authorization or approval. Use `show` or `list` to inspect the effective policy. When `ALIBABA_CLOUD_SAFETY_POLICY_ENABLED` or `ALIBABA_CLOUD_SAFETY_POLICY_RULES` is set, the displayed policy includes those environment overrides. The CLI refuses to continue when the policy file or environment rules cannot be fully parsed.
 
+### Command matching contract
+
+By design, safety policy matches the command spelling supplied by the caller, not the resolved OpenAPI identity. Matching is case-insensitive and supports `*` for any sequence of characters. It does not expand API aliases or convert between PascalCase and kebab-case. For example, `ecs:DeleteInstance` matches `ECS:deleteinstance`, but does not match `ecs:delete-instance`, even though both command forms invoke the same API. This behavior also applies in AI mode.
+
+Configure each spelling used by your scripts or agents:
+
+```sh
+aliyun configure safety-policy add --pattern 'ecs:DeleteInstance' --action deny
+aliyun configure safety-policy add --pattern 'ecs:delete-instance' --action deny
+aliyun configure safety-policy enable
+```
+
+Rules are evaluated in order: the first match wins, and unmatched commands are allowed. A wildcard such as `ecs:Delete*` can cover both spellings by their shared prefix, but does not identify every API with a destructive effect. REST method/path commands use `product:METHOD/path` (for example, `cs:DELETE/clusters`); use `cs:DELETE/*` to match slash-prefixed DELETE paths. Plugin subcommand hierarchies use `:` (for example, `fc:function:create`). Configure API-name, method/path, and plugin forms separately when needed. Cloud authorization remains enforced by the service and RAM permissions.
+
 ## Agent-aware optimization and AI mode
 
 AI mode can be managed globally or per command:

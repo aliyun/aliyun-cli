@@ -56,6 +56,58 @@ func TestMainWithNoArgs(t *testing.T) {
 	Main([]string{})
 }
 
+func TestMainConfigLoadFailureExitsNonzero(t *testing.T) {
+	for _, failure := range []string{"invalid JSON", "config is directory", "missing current profile"} {
+		for _, aiMode := range []string{"0", "1"} {
+			t.Run(failure+"/ai="+aiMode, func(t *testing.T) {
+				clearAgentDetectionEnv(t)
+				t.Setenv(sysmock.EnvMockEnabled, "false")
+				t.Setenv("ALIBABA_CLOUD_CLI_AI_MODE", aiMode)
+				home := t.TempDir()
+				t.Setenv("HOME", home)
+				t.Setenv("HOMEDRIVE", "")
+				t.Setenv("HOMEPATH", "")
+				t.Setenv("USERPROFILE", home)
+				configDir := filepath.Join(home, ".aliyun")
+				if err := os.MkdirAll(configDir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				configPath := filepath.Join(configDir, "config.json")
+				if failure == "config is directory" {
+					if err := os.Mkdir(configPath, 0o755); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					data := `{invalid JSON`
+					if failure == "missing current profile" {
+						data = `{"current":"missing","profiles":[]}`
+					}
+					if err := os.WriteFile(configPath, []byte(data), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				var stdout, stderr bytes.Buffer
+				var exitCodes []int
+				resetMainHooks(t, &stdout, &stderr, func(code int) {
+					exitCodes = append(exitCodes, code)
+				})
+				Main([]string{"ecs", "--help", "--cli-output", "json"})
+
+				if len(exitCodes) != 1 || exitCodes[0] != 1 {
+					t.Fatalf("exit codes = %v, want [1]", exitCodes)
+				}
+				if stdout.Len() != 0 {
+					t.Fatalf("stdout = %q, want no command output after configuration failure", stdout.String())
+				}
+				if !bytes.Contains(stderr.Bytes(), []byte("load current configuration failed")) {
+					t.Fatalf("stderr = %q, want configuration error", stderr.String())
+				}
+			})
+		}
+	}
+}
+
 func TestMainExplicitLanguageOverridesProfileForCoreAndOpenAPIHelp(t *testing.T) {
 	tests := []struct {
 		name    string

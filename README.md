@@ -88,6 +88,8 @@ aliyun ecs DescribeRegions
 aliyun ecs describe-regions
 ```
 
+Safety policy matches command spelling by design: it ignores case but does not expand API aliases or equate PascalCase with kebab-case. Configure rules for each spelling your automation uses; see the [matching contract](./docs/en/usage.md#command-matching-contract).
+
 ### 3. Explore help
 
 ```sh
