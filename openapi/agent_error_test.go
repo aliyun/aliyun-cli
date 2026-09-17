@@ -960,7 +960,7 @@ func TestNormalizeAgentErrorEndpointResolution(t *testing.T) {
 	})
 }
 
-const endpointHelpCommand = "aliyun ecs --help --cli-output json --cli-query 'product.endpoints'"
+const endpointHelpCommand = "aliyun ecs --help --cli-output json --cli-query 'endpoints'"
 
 func TestSanitizeNetworkTransportErrorStripsSignedURL(t *testing.T) {
 	signedURL := "https://ecs.cn-shanghai.aliyuncs.com/?AccessKeyId=REAL-AK&Signature=abc%2Fsig&SignatureNonce=n1&RegionId=cn-shanghai"

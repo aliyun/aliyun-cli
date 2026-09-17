@@ -3,6 +3,7 @@ package canonicalmeta
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -27,6 +28,7 @@ type LegacyParameterView struct {
 	resolvedPosition string // pre-resolved uppercase position for top-level and body views
 	isTopBody        bool   // true for top-level v1_body_parameters views
 	isWildcard       bool   // inherited from the canonical parameter for V1 views
+	rpcFlatArray     bool   // RPC query flat arrays also accept indexed camel flags
 }
 
 // Constraints contains optional schema restrictions used by AI-mode validation.
@@ -273,7 +275,7 @@ func (v *LegacyParameterView) LegacyHasChildren() bool {
 	}
 	p := v.canonical
 	return p.Type == "array" &&
-		p.ParamStyle != "flat" &&
+		(p.ParamStyle != "flat" || v.rpcFlatArray) &&
 		len(objectShapeFields(p.Element)) > 0
 }
 
@@ -291,9 +293,13 @@ func (v *LegacyParameterView) IsLegacyRepeatList() bool {
 	}
 	p := v.canonical
 	return p.Type == "array" &&
-		p.ParamStyle != "flat" &&
+		(p.ParamStyle != "flat" || v.rpcFlatArray) &&
 		p.ParamStyle != "json"
 }
+
+// IsRPCFlatArray identifies the additive indexed syntax, without changing the
+// metadata serialization style or the legacy behavior of other array formats.
+func (v *LegacyParameterView) IsRPCFlatArray() bool { return v.rpcFlatArray }
 
 // LegacyChildren returns the sub-parameter views for this parameter.
 // For Canonical parameters, returns the object fields under element.
@@ -530,6 +536,9 @@ func (api *API) LegacyTopLevelParameters() []*LegacyParameterView {
 	for _, v := range result {
 		if v.source == SourceCanonical {
 			v.resolvedPosition = legacyPosition(v.canonical.Location)
+			p := v.canonical
+			v.rpcFlatArray = api.Operation != nil && strings.EqualFold(api.Operation.APIStyle, "RPC") &&
+				v.resolvedPosition == "Query" && p.Type == "array" && p.ParamStyle == "flat"
 		}
 		if v.source == SourceBody {
 			v.isTopBody = true
@@ -599,12 +608,18 @@ func findLegacyParameter(params []*LegacyParameterView, name string) *LegacyPara
 		// Check for sub-parameter access: Name.suffix
 		if strings.HasPrefix(name, pName+".") {
 			suffix := name[len(pName)+1:]
+			if v.IsRPCFlatArray() {
+				index, _, hasField := strings.Cut(suffix, ".")
+				n, err := strconv.Atoi(index)
+				if err != nil || n < 1 || strings.HasPrefix(index, "+") || (hasField && !v.LegacyHasChildren()) {
+					return nil
+				}
+			}
 
 			children := v.LegacyChildren()
 			if len(children) > 0 {
-				// Has children: preserve old loose index parsing. The middle
-				// segment is not validated, but a child lookup needs two dots:
-				// Tag.foo.Key and Tag..Key match Key; Tag.Key does not.
+				// Existing RepeatList keeps loose index parsing; new flat arrays
+				// were checked above. A child lookup still needs two dots.
 				remainder := name[len(pName):]
 				if len(remainder) >= 4 && remainder[0] == '.' && strings.Count(remainder, ".") >= 2 {
 					dotIdx := strings.Index(suffix, ".")

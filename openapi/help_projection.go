@@ -203,6 +203,7 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 	})
 	searched := options.Search != ""
 	if searched {
+		document.Endpoints = nil // API search keeps only matching APIs, as before.
 		document.Query = options.Search
 		candidates := make([]HelpSearchCandidate, 0, len(document.APIs))
 		for index := range document.APIs {
@@ -842,23 +843,9 @@ func renderCanonicalProductText(w io.Writer, document *machineHelpProductDocumen
 	if _, err := fmt.Fprintf(w, "\nProduct: %s (%s)\nVersion: %s\n", document.Product.Code, name, document.Product.SelectedVersion); err != nil {
 		return err
 	}
-	if search == "" && len(document.Product.Endpoints) > 0 {
-		if _, err := fmt.Fprintln(w, "\nENDPOINTS\n  RegionId             Endpoint"); err != nil {
+	if search == "" && len(document.Endpoints) > 0 {
+		if err := renderProductEndpoints(w, document); err != nil {
 			return err
-		}
-		for _, endpoint := range document.Product.Endpoints {
-			region := endpoint.RegionID
-			if region == "" {
-				region = "(global)"
-			}
-			if _, err := fmt.Fprintf(w, "  %-20s %s\n", region, endpoint.Endpoint); err != nil {
-				return err
-			}
-		}
-		if document.unsupportedRegion != "" {
-			if _, err := fmt.Fprintf(w, "Note: current region %s is not supported by this product.\n", document.unsupportedRegion); err != nil {
-				return err
-			}
 		}
 	}
 	if len(document.APIs) == 0 && search != "" {

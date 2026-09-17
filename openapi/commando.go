@@ -205,8 +205,15 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 		var legacyEndpoint *meta.InvalidEndpointError
 		var runtimeEndpoint *runtime.EndpointNotResolvedError
 		if errors.As(err, &legacyEndpoint) || errors.As(err, &runtimeEndpoint) {
-			return cli.NewErrorWithTip(err,
+			tip := fmt.Sprintf(
 				"List available endpoints with `%s`, use a supported --region, or pass --endpoint <host> explicitly.", endpointDiagnosticsCommand(context))
+			var originalTip cli.ErrorWithTip
+			if errors.As(err, &originalTip) {
+				return cli.NewErrorWithTip(err, "%s", tip)
+			}
+			// Adding guidance must not turn a plain error (exit 1) into an
+			// ErrorWithTip (exit 3).
+			return fmt.Errorf("%w\n\n%s", err, tip)
 		}
 		if isSectionHelpAllConflict(err) {
 			if command := context.sectionSearchCommand("<keyword>"); command != "" {

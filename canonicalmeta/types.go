@@ -75,6 +75,8 @@ type ProductEntry struct {
 	Versions             []string          `json:"versions"`
 	APIs                 []string          `json:"apis"`
 	Distribution         string            `json:"distribution,omitempty"`
+
+	RegionNames map[string]map[string]string `json:"region_names,omitempty"`
 }
 
 // VersionIndex is the lightweight API index stored beside per-API JSON files.

@@ -161,6 +161,11 @@ func validateLegacyDocRequiredNode(
 	if parameter == nil {
 		return
 	}
+	// Keep the previously accepted parent-value form unchanged. Indexed flat
+	// arrays use the same per-instance checks as existing RepeatList flags.
+	if parameter.IsRPCFlatArray() && nonEmpty[path] {
+		return
+	}
 
 	children := parameter.LegacyChildren()
 	if len(children) > 0 {
