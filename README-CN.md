@@ -88,6 +88,8 @@ aliyun ecs DescribeRegions
 aliyun ecs describe-regions
 ```
 
+安全策略按命令写法匹配，这是预期设计：不区分大小写，但不会展开 API 别名或将大驼峰与短横线写法视为等价。请为自动化使用的各类写法配置规则，详见[命令匹配约定](./docs/zh-CN/usage.md#命令匹配约定)。
+
 ### 3. 查看帮助
 
 ```sh

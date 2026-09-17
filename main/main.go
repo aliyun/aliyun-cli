@@ -81,6 +81,7 @@ func Main(args []string) {
 	profile, err := config.LoadOrCreateDefaultProfile()
 	if err != nil {
 		cli.Errorf(stderr, "ERROR: load current configuration failed %s", err)
+		exit(1)
 		return
 	}
 

@@ -1799,7 +1799,8 @@ func (c *Commando) autoInstallPlugin(ctx *cli.Context, mgr *plugin.Manager, plug
 		cli.Printf(ctx.Stderr(), "Auto-installing plugin '%s'...\n", pluginName)
 	}
 
-	err := mgr.Install(ctx, pluginName, "", enablePre)
+	// Installation is a prerequisite here; reserve stdout for the requested command.
+	err := mgr.Install(cli.NewCommandContext(ctx.Stderr(), ctx.Stderr()), pluginName, "", enablePre)
 	if err != nil {
 		c.handleInstallError(ctx, err, pluginName, enablePre)
 		return "", fmt.Errorf("failed to install plugin '%s': %w", pluginName, err)
@@ -1839,7 +1840,7 @@ func (c *Commando) interactiveInstallPlugin(ctx *cli.Context, mgr *plugin.Manage
 		cli.Printf(ctx.Stderr(), "Installing plugin '%s'...\n", pluginName)
 	}
 
-	err = mgr.Install(ctx, pluginName, "", enablePre)
+	err = mgr.Install(cli.NewCommandContext(ctx.Stderr(), ctx.Stderr()), pluginName, "", enablePre)
 	if err != nil {
 		c.handleInstallError(ctx, err, pluginName, enablePre)
 		return "", fmt.Errorf("failed to install plugin '%s': %w", pluginName, err)

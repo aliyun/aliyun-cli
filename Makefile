@@ -107,7 +107,7 @@ test: deps
 		./bundledmeta ./canonicalmeta \
 		./util/... ./cli/... ./config/... \
 		./i18n/... ./main/... ./openapi/... ./meta/... ./export/... \
-		./sysconfig/... ./mcpproxy ./cloudsso ./cliext/...
+		./sysconfig/... ./mcpproxy ./cloudsso ./cliext/... ./tools/...
 	go tool cover -html=coverage.txt -o coverage.html
 
 test-release: meta-pack

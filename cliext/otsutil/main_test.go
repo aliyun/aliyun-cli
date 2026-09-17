@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -79,14 +81,28 @@ func TestOtsCommandRunInstalledSkipNetwork(t *testing.T) {
 	defer func() { getConfigurePathFunc = oldGet }()
 
 	// 创建假可执行文件(ts)
-	execPath := filepath.Join(tmpDir, "ts")
+	filename := "ts"
+	if runtime.GOOS == "windows" {
+		filename += ".exe"
+	}
+	execPath := filepath.Join(tmpDir, filename)
 	if err := os.WriteFile(execPath, []byte("#!/bin/sh\necho dummy\n"), 0755); err != nil {
 		t.Fatalf("write fake exec: %v", err)
 	}
 
+	cacheFile := filepath.Join(tmpDir, ".otsutil_version_check")
+	if err := os.WriteFile(cacheFile, []byte(strconv.FormatInt(timeNowFunc().Unix(), 10)), 0644); err != nil {
+		t.Fatal(err)
+	}
+
 	// 设置忽略profile，避免真实配置依赖
-	os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
-	defer os.Unsetenv("ALIBABA_CLOUD_IGNORE_PROFILE")
+	t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
+	oldLatest := getLatestOtsUtilVersionFunc
+	getLatestOtsUtilVersionFunc = func() (string, error) {
+		t.Fatal("fresh version cache must not request the remote version")
+		return "", nil
+	}
+	t.Cleanup(func() { getLatestOtsUtilVersionFunc = oldLatest })
 
 	cmd := NewOtsutilCommand()
 	stdout := &bytes.Buffer{}

@@ -154,6 +154,8 @@ The Agent error object is a separate compact interface and currently has no `sch
 | `2` | Usage error, structured Agent error, or Machine Help request error |
 | `3` | Failure accompanied by a CLI recovery tip |
 
+Configuration loading failures, including malformed configuration files or a missing current profile, exit with status `1` before command execution. These startup errors are currently human-readable on stderr, including in AI mode; stdout remains empty.
+
 For request inspection without invoking the API, `--cli-dry-run-json` emits structured request details. `--cli-dry-run` is the human-readable form.
 
 Next: [commands, output, and automation](./usage.md).

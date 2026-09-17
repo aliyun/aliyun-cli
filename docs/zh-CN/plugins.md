@@ -106,6 +106,8 @@ aliyun configure set \
   --auto-plugin-install-enable-pre true
 ```
 
+执行命令时，无论自动安装所需插件还是确认后安装，安装进度都写入 stderr，stdout 仅保留命令结果。显式执行 `aliyun plugin install` 的输出行为保持不变。
+
 在需要可复现的 CI 环境中，应显式安装并固定所需插件，不建议依赖自动安装。
 
 ## 存储与问题排查

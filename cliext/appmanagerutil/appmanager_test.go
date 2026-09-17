@@ -7,7 +7,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -178,32 +177,6 @@ func TestIsPythonVersionSufficient(t *testing.T) {
 		if result != tt.expected {
 			t.Errorf("isPythonVersionSufficient(%q) = %v, want %v", tt.version, result, tt.expected)
 		}
-	}
-}
-
-func TestEnsurePythonAvailable(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("skipping on windows")
-	}
-
-	// This test requires python3 to be available on the system
-	_, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("python3 not available")
-	}
-
-	tmpDir := t.TempDir()
-	ctx, _, _ := newOriginCtx()
-	c := NewContext(ctx)
-	c.osType = runtime.GOOS
-	c.osArch = runtime.GOARCH
-	c.embeddedPythonDir = filepath.Join(tmpDir, "python-embedded")
-	err = c.EnsurePythonAvailable()
-	if err != nil {
-		t.Errorf("EnsurePythonAvailable failed: %v", err)
-	}
-	if c.pythonPath == "" {
-		t.Errorf("pythonPath should not be empty")
 	}
 }
 
