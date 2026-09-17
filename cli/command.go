@@ -62,6 +62,10 @@ type Command struct {
 	// BeforeExecute configures process-level behavior before parsing begins.
 	BeforeExecute func(ctx *Context, args []string)
 
+	// AfterExecute observes the final result before an error is rendered and
+	// before processError may terminate the process.
+	AfterExecute func(ctx *Context, args []string, err error)
+
 	// BeforeParseRoute may consume an invocation before the generic flag parser
 	// runs. It is intentionally a narrow root-command seam for routes that must
 	// inspect the original argv, such as installed-plugin Help and parameter
@@ -132,6 +136,9 @@ func (c *Command) Execute(ctx *Context, args []string) {
 	if c.BeforeParseRoute != nil {
 		handled, err := c.BeforeParseRoute(ctx, append([]string(nil), args...))
 		if handled {
+			if c.AfterExecute != nil {
+				c.AfterExecute(ctx, args, err)
+			}
 			if err != nil {
 				c.processError(ctx, err)
 			}
@@ -143,6 +150,9 @@ func (c *Command) Execute(ctx *Context, args []string) {
 	}
 
 	err := c.executeInner(ctx, args)
+	if c.AfterExecute != nil {
+		c.AfterExecute(ctx, args, err)
+	}
 	if err != nil {
 		c.processError(ctx, err)
 	}

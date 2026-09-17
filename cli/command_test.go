@@ -229,6 +229,8 @@ func TestBeforeParseRouteCanConsumeOriginalInvocation(t *testing.T) {
 	ctx := NewCommandContext(stdout, stderr)
 	runCalled := false
 	beforeExecuteCalled := false
+	afterExecuteCalled := false
+	wantArgs := []string{"ecs", "DescribeInstances", "--InstanceIds", "--help"}
 	cmd := &Command{
 		Name:              "aliyun",
 		EnableUnknownFlag: true,
@@ -238,8 +240,12 @@ func TestBeforeParseRouteCanConsumeOriginalInvocation(t *testing.T) {
 		},
 	}
 	cmd.BeforeExecute = func(*Context, []string) { beforeExecuteCalled = true }
+	cmd.AfterExecute = func(_ *Context, args []string, err error) {
+		afterExecuteCalled = true
+		assert.Equal(t, wantArgs, args)
+		assert.NoError(t, err)
+	}
 	ctx.EnterCommand(cmd)
-	wantArgs := []string{"ecs", "DescribeInstances", "--InstanceIds", "--help"}
 	cmd.BeforeParseRoute = func(ctx *Context, args []string) (bool, error) {
 		assert.Equal(t, wantArgs, args)
 		fmt.Fprint(ctx.Stdout(), "parameter help")
@@ -250,13 +256,14 @@ func TestBeforeParseRouteCanConsumeOriginalInvocation(t *testing.T) {
 
 	assert.False(t, runCalled)
 	assert.False(t, beforeExecuteCalled, "handled pre-parse routes must not apply host execution policy")
+	assert.True(t, afterExecuteCalled, "handled pre-parse routes must still run completion observers")
 	assert.Equal(t, "parameter help", stdout.String())
 	assert.Empty(t, stderr.String())
 }
 
 func TestBeforeParseRouteFallsThroughBeforeExecuteAndParser(t *testing.T) {
 	ctx := NewCommandContext(io.Discard, io.Discard)
-	events := make([]string, 0, 3)
+	events := make([]string, 0, 4)
 	cmd := &Command{
 		Name: "aliyun",
 		BeforeParseRoute: func(*Context, []string) (bool, error) {
@@ -270,12 +277,15 @@ func TestBeforeParseRouteFallsThroughBeforeExecuteAndParser(t *testing.T) {
 			events = append(events, "run")
 			return nil
 		},
+		AfterExecute: func(*Context, []string, error) {
+			events = append(events, "after")
+		},
 	}
 	ctx.EnterCommand(cmd)
 
 	cmd.Execute(ctx, nil)
 
-	assert.Equal(t, []string{"route", "before", "run"}, events)
+	assert.Equal(t, []string{"route", "before", "run", "after"}, events)
 }
 
 func TestBeforeParseRouteErrorUsesCommandNormalizer(t *testing.T) {

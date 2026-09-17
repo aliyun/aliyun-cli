@@ -58,6 +58,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/oss/lib"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
 	sysmock "github.com/aliyun/aliyun-cli/v3/sysconfig/mock"
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/telemetry"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -70,6 +71,11 @@ var (
 func Main(args []string) {
 	stdout := newStdoutWriter()
 	stderr := newStderrWriter()
+
+	if len(args) > 0 && args[0] == "__telemetry-upload" {
+		exit(telemetry.RunUploadCommand(args[1:]))
+		return
+	}
 
 	if sysmock.FirstCommandToken(args) != "mock" {
 		result := sysmock.Intercept(sysmock.Options{
@@ -119,6 +125,24 @@ func Main(args []string) {
 	// use http force, current use in oss bridge
 	insecure, _ := ParseInSecure(args)
 	ctx.SetInsecure(insecure)
+
+	rootCmd.AfterExecute = telemetry.HookEnd
+	plugin.SetBeforePluginExit(telemetry.EndWithExitCode)
+	configDir := config.GetConfigPath()
+	commandArgs := sysmock.StripLeadingGlobalFlags(args)
+	commandToken := ""
+	if len(commandArgs) > 0 {
+		commandToken = commandArgs[0]
+	}
+	telemetry.Begin(telemetry.BeginInput{
+		ConfigDir:    configDir,
+		CommandArgs:  commandArgs,
+		CommandToken: commandToken,
+		Profile: telemetry.ProfileFromRegionEndpoint(
+			profile.RegionId,
+			profile.Endpoint,
+		),
+	})
 
 	if os.Getenv("GENERATE_METADATA") == "YES" {
 		generateMetadata(rootCmd)
