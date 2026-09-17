@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"time"
 )
 
 type Reporter struct {
+	mu         sync.Mutex
 	rlogger    *log.Logger
 	written    bool
 	prompted   bool
@@ -34,10 +36,11 @@ func (re *Reporter) Init(outputDir, comment string) error {
 	re.comment = comment
 	re.written = false
 	re.prompted = false
-	f, err := os.OpenFile(re.path, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0664)
+	f, err := os.CreateTemp(re.outputDir, ReportPrefix+time.Now().Format("20060102_150405")+"-*"+ReportSuffix)
 	if err != nil {
 		return fmt.Errorf("Create reporter file error: %s", err.Error())
 	}
+	re.path = f.Name()
 	re.fileHandle = f
 	re.rlogger = log.New(f, "", log.Ldate|log.Ltime)
 	re.Comment()
@@ -46,6 +49,10 @@ func (re *Reporter) Init(outputDir, comment string) error {
 }
 
 func (re *Reporter) Clear() {
+	if re != nil {
+		re.mu.Lock()
+		defer re.mu.Unlock()
+	}
 	if re != nil && re.fileHandle != nil {
 		re.fileHandle.Close()
 	}
@@ -53,7 +60,7 @@ func (re *Reporter) Clear() {
 	if re != nil && !re.written {
 		os.Remove(re.path)
 		if re.createDir {
-			os.RemoveAll(re.outputDir)
+			os.Remove(re.outputDir)
 		}
 	}
 }
@@ -74,6 +81,11 @@ func (re *Reporter) Comment() {
 }
 
 func (re *Reporter) ReportError(msg string) {
+	if re != nil {
+		re.mu.Lock()
+		defer re.mu.Unlock()
+	}
+	msg = redactOSSDiagnostic(msg)
 	if re != nil && re.rlogger != nil {
 		re.written = true
 		re.rlogger.SetPrefix("[Error] ")
@@ -82,9 +94,13 @@ func (re *Reporter) ReportError(msg string) {
 }
 
 func (re *Reporter) Prompt(err error) {
+	if re != nil {
+		re.mu.Lock()
+		defer re.mu.Unlock()
+	}
 	if re != nil && re.written && re.HasPrompt() {
 		re.prompted = true
-		fmt.Printf("\r%s\rError occurs, message: %s. See more information in file: %s\n", clearStr, err.Error(), re.path)
+		_, _ = fmt.Fprintf(os.Stderr, "\r%s\rError occurs, message: %s. See more information in file: %s\n", clearStr, redactOSSDiagnostic(err.Error()), re.path)
 	}
 }
 

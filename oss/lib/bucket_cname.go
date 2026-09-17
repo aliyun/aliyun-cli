@@ -333,7 +333,7 @@ func (bwc *BucketCnameCommand) RunCommand() error {
 func (bwc *BucketCnameCommand) confirm(str string) bool {
 	var val string
 	fmt.Print(getClearStr(fmt.Sprintf("bucket cname: overwrite \"%s\"(y or N)? ", str)))
-	if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
+	if _, err := scanOSSInput(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
 		return false
 	}
 	return true

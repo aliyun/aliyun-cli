@@ -3,6 +3,8 @@ package lib
 import (
 	"errors"
 	"fmt"
+	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -309,17 +311,85 @@ type OptionMapType map[string]interface{}
 
 // ParseArgOptions parse command line and returns args and options
 func ParseArgOptions() ([]string, OptionMapType, error) {
-	options := initOption()
-	goopt.Args = make([]string, 0, 4)
-	goopt.Description = func() string {
-		return "Simple tool for access OSS."
+	if len(os.Args) == 0 {
+		return parseOSSOptions(nil)
 	}
-	goopt.Parse(nil)
+	return parseOSSOptions(os.Args[1:])
+}
+
+// parseOSSOptions is invocation-local and never prints help or exits the process.
+// Scalars keep the legacy last-value-wins rule; lists retain every occurrence.
+func parseOSSOptions(tokens []string) ([]string, OptionMapType, error) {
+	options := make(OptionMapType, len(OptionMap))
+	names := make(map[string]string)
+	for name, opt := range OptionMap {
+		names[opt.nameAlias] = name
+		if opt.name != "" {
+			names[opt.name] = name
+		}
+		switch opt.optionType {
+		case OptionTypeFlagTrue:
+			v := false
+			options[name] = &v
+		case OptionTypeStrings:
+			v := []string{}
+			options[name] = &v
+		default:
+			v := ""
+			options[name] = &v
+		}
+	}
+	args := []string{}
+	for i := 0; i < len(tokens); i++ {
+		token := tokens[i]
+		if token == "--" {
+			args = append(args, tokens[i+1:]...)
+			break
+		}
+		if !strings.HasPrefix(token, "-") || token == "-" {
+			args = append(args, token)
+			continue
+		}
+		key, value, inline := strings.Cut(token, "=")
+		name, ok := names[key]
+		if !ok {
+			return nil, nil, fmt.Errorf("unknown OSS option %s", key)
+		}
+		opt := OptionMap[name]
+		if opt.optionType == OptionTypeFlagTrue {
+			if inline {
+				return nil, nil, fmt.Errorf("option %s does not take a value", key)
+			}
+			*options[name].(*bool) = true
+			continue
+		}
+		if !inline {
+			if i+1 == len(tokens) || strings.HasPrefix(tokens[i+1], "--") {
+				return nil, nil, fmt.Errorf("option %s requires a value", key)
+			}
+			i++
+			value = tokens[i]
+		}
+		if opt.optionType == OptionTypeStrings {
+			v := options[name].(*[]string)
+			*v = append(*v, value)
+		} else {
+			*options[name].(*string) = value
+		}
+	}
 	if err := checkOption(options); err != nil {
 		return nil, nil, err
 	}
+	return args, options, nil
+}
 
-	return goopt.Args, options, nil
+func sortedOptionNames() []string {
+	names := make([]string, 0, len(OptionMap))
+	for name := range OptionMap {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func initOption() OptionMapType {
@@ -393,25 +463,26 @@ func makeNames(option Option) ([]string, error) {
 }
 
 func checkOption(options OptionMapType) error {
-	for name, optionInfo := range OptionMap {
+	for _, name := range sortedOptionNames() {
+		optionInfo := OptionMap[name]
 		if option, ok := options[name]; ok {
 			if optionInfo.optionType == OptionTypeInt64 {
 				if val, ook := option.(*string); ook && *val != "" {
 					num, err := strconv.ParseInt(*val, 10, 64)
 					if err != nil {
-						return fmt.Errorf("invalid option value of %s, the value: %s is not int64, please check", name, *val)
+						return fmt.Errorf("invalid option value of %s, the value: %s is not int64, please check", optionInfo.nameAlias, *val)
 					}
 
 					if optionInfo.minVal != "" {
 						minv, _ := strconv.ParseInt(optionInfo.minVal, 10, 64)
 						if num < minv {
-							return fmt.Errorf("invalid option value of %s, the value: %d is smaller than the min value range: %d", name, num, minv)
+							return fmt.Errorf("invalid option value of %s, the value: %d is smaller than the min value range: %d", optionInfo.nameAlias, num, minv)
 						}
 					}
 					if optionInfo.maxVal != "" {
 						maxv, _ := strconv.ParseInt(optionInfo.maxVal, 10, 64)
 						if num > maxv {
-							return fmt.Errorf("invalid option value of %s, the value: %d is bigger than the max value range: %d", name, num, maxv)
+							return fmt.Errorf("invalid option value of %s, the value: %d is bigger than the max value range: %d", optionInfo.nameAlias, num, maxv)
 						}
 					}
 				}
@@ -420,7 +491,7 @@ func checkOption(options OptionMapType) error {
 				if val, ook := option.(*string); ook && *val != "" {
 					vals := strings.Split(optionInfo.minVal, "/")
 					if FindPosCaseInsen(*val, vals) == -1 {
-						return fmt.Errorf("invalid option value of %s, the value: %s is not anyone of %s", name, *val, optionInfo.minVal)
+						return fmt.Errorf("invalid option value of %s, the value: %s is not anyone of %s", optionInfo.nameAlias, *val, optionInfo.minVal)
 					}
 				}
 			}

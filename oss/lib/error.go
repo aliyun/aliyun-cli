@@ -52,3 +52,8 @@ type CopyError struct {
 func (e CopyError) Error() string {
 	return e.err.Error()
 }
+
+func (e BucketError) Unwrap() error { return e.err }
+func (e ObjectError) Unwrap() error { return e.err }
+func (e FileError) Unwrap() error   { return e.err }
+func (e CopyError) Unwrap() error   { return e.err }

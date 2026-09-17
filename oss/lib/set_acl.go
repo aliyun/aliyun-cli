@@ -366,7 +366,7 @@ func (sc *SetACLCommand) getACL(aclType setACLType, recursive bool) (oss.ACLType
 			}
 		}
 		fmt.Printf("Please enter the acl you want to set on the %s(%s):", str, formatACLString(aclType, ", "))
-		if _, err := fmt.Scanln(&acl); err != nil {
+		if _, err := scanOSSInput(&acl); err != nil {
 			return "", fmt.Errorf("invalid acl: %s, please check", acl)
 		}
 	}
@@ -400,7 +400,7 @@ func (sc *SetACLCommand) ossSetBucketACLRetry(client *oss.Client, bucket string,
 		if err == nil {
 			return err
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, false) {
 			return BucketError{err, bucket}
 		}
 	}
@@ -430,7 +430,7 @@ func (sc *SetACLCommand) ossSetObjectACLRetry(bucket *oss.Bucket, object string,
 		if err == nil {
 			return err
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, false) {
 			return ObjectError{err, bucket.BucketName, object}
 		}
 	}
@@ -440,7 +440,7 @@ func (sc *SetACLCommand) batchSetObjectACL(bucket *oss.Bucket, cloudURL CloudURL
 	if !force {
 		var val string
 		fmt.Printf("Do you really mean to recursivlly set acl on objects of %s(y or N)? ", sc.command.args[0])
-		if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
+		if _, err := scanOSSInput(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
 			fmt.Println("operation is canceled.")
 			return nil
 		}

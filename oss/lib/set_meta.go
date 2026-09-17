@@ -491,7 +491,7 @@ func (sc *SetMetaCommand) checkOptions(cloudURL CloudURL, isUpdate, isDelete, fo
 			return nil
 		}
 		fmt.Printf("Do you really mean to recursivlly set meta on objects of %s(y or N)? ", sc.command.args[0])
-		if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
+		if _, err := scanOSSInput(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
 			fmt.Println("operation is canceled.")
 			return nil
 		}
@@ -507,7 +507,7 @@ func (sc *SetMetaCommand) checkOptions(cloudURL CloudURL, isUpdate, isDelete, fo
 			fmt.Printf("警告：--update选项更新指定的header，--delete选项删除指定的header，两者同时缺失会更改object的全量meta信息，请确认是否要更改全量meta信息(y or N)? ")
 		}
 		var str string
-		if _, err := fmt.Scanln(&str); err != nil || (strings.ToLower(str) != "yes" && strings.ToLower(str) != "y") {
+		if _, err := scanOSSInput(&str); err != nil || (strings.ToLower(str) != "yes" && strings.ToLower(str) != "y") {
 			return fmt.Errorf("operation is canceled")
 		}
 		fmt.Println("")
@@ -530,7 +530,7 @@ func (sc *SetMetaCommand) getMetaData(force bool, language string) (string, erro
 		fmt.Printf("你是否确定你想设置的meta信息为空（或者忘记了输入header:value对）? \n输入yes(y)使用空meta继续设置，输入no(n)来展示支持的headers，其他输入将取消操作：")
 	}
 	var str string
-	if _, err := fmt.Scanln(&str); err != nil || (strings.ToLower(str) != "yes" && strings.ToLower(str) != "y" && strings.ToLower(str) != "no" && strings.ToLower(str) != "n") {
+	if _, err := scanOSSInput(&str); err != nil || (strings.ToLower(str) != "yes" && strings.ToLower(str) != "y" && strings.ToLower(str) != "no" && strings.ToLower(str) != "n") {
 		return "", fmt.Errorf("unknown input, operation is canceled")
 	}
 	if strings.ToLower(str) == "yes" || strings.ToLower(str) == "y" {
@@ -542,7 +542,7 @@ func (sc *SetMetaCommand) getMetaData(force bool, language string) (string, erro
 	} else {
 		fmt.Printf("\n支持的headers:\n    %s\n    以及以\"%s\"开头的headers\n\n请输入你想设置的header:value#header:value...：", formatHeaderString(headerOptionMap, "\n    "), oss.HTTPHeaderOssMetaPrefix)
 	}
-	if _, err := fmt.Scanln(&str); err != nil {
+	if _, err := scanOSSInput(&str); err != nil {
 		return "", fmt.Errorf("meta empty, please check, operation is canceled")
 	}
 	return strings.TrimSpace(str), nil
@@ -688,7 +688,7 @@ func (sc *SetMetaCommand) ossSetObjectMetaRetry(bucket *oss.Bucket, object strin
 		if err == nil {
 			return nil
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, false) {
 			return ObjectError{err, bucket.BucketName, object}
 		}
 	}

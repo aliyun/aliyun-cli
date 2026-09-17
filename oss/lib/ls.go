@@ -437,6 +437,9 @@ func (lc *ListCommand) Init(args []string, options OptionMapType) error {
 
 // RunCommand simulate inheritance, and polymorphism
 func (lc *ListCommand) RunCommand() error {
+	if activeMachine != nil && (activeMachine.format == "json" || activeMachine.format == "jsonl") {
+		return lc.listMachine(activeMachine)
+	}
 	if len(lc.command.args) == 0 {
 		return lc.listBuckets("")
 	}
@@ -534,7 +537,7 @@ func (lc *ListCommand) ossListBucketsRetry(client *oss.Client, options ...oss.Op
 	retryTimes, _ := GetInt(OptionRetryTimes, lc.command.options)
 	for i := 1; ; i++ {
 		lbr, err := client.ListBuckets(options...)
-		if err == nil || int64(i) >= retryTimes {
+		if err == nil || !retryOSS(err, i, retryTimes, true) {
 			return lbr, err
 		}
 	}

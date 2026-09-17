@@ -217,7 +217,7 @@ func (cc *CreateSymlinkCommand) ossCreateSymlinkRetry(bucket *oss.Bucket, symlin
 		if err == nil {
 			return err
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, false) {
 			return ObjectError{err, bucket.BucketName, symlinkObject}
 		}
 	}

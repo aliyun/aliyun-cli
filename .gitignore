@@ -30,6 +30,7 @@ cli-metadata/
 __debug_bin*
 .qoder
 docs/superpowers/
+docs/design/
 
 # Generated only for packed release builds.
 /bundledmeta/.generated/

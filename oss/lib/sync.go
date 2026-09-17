@@ -533,6 +533,9 @@ func (sc *SyncCommand) RunCommand() error {
 		return copyCommand.RunCommand()
 	}
 
+	if activeMachine != nil && activeMachine.failures != nil {
+		activeMachine.failures.deletePhase = "not_started"
+	}
 	// sync command add '/' afert cloud prefix
 	// cp command must have the same action when run as sync command
 	srcURL = sc.adjustCloudUrl(srcURL)
@@ -593,11 +596,21 @@ func (sc *SyncCommand) RunCommand() error {
 		return err
 	}
 
+	if activeMachine != nil && activeMachine.confirmation.Load() {
+		return errConfirmationRequired
+	}
+
+	if activeMachine != nil && activeMachine.failures != nil {
+		activeMachine.failures.deletePhase = "started"
+	}
 	// move dest files or rm dest objects which not exist in src
 	if opType == operationTypeCopy || opType == operationTypePut {
 		err = sc.DeleteExtraObjects(destKeys, destURL)
 	} else {
 		err = sc.RemoveExtraFiles(destKeys, destURL)
+	}
+	if err == nil && activeMachine != nil && !activeMachine.confirmation.Load() && activeMachine.failures != nil {
+		activeMachine.failures.deletePhase = "completed"
 	}
 	return err
 }
@@ -631,10 +644,10 @@ func (sc *SyncCommand) DeleteExtraObjects(keys map[string]string, sUrl StorageUR
 				if err != nil {
 					return err
 				}
+				deleteCount += len(objects)
+				fmt.Printf("\rdelete object count:%d", deleteCount)
 			}
 			objects = []string{}
-			deleteCount += MaxBatchCount
-			fmt.Printf("\rdelete object count:%d", deleteCount)
 		}
 		// prefix + relativeKey
 		objects = append(objects, v+k)
@@ -926,7 +939,7 @@ func (sc *SyncCommand) confirm(keys []string) bool {
 	fmt.Print(logBuffer.String())
 
 	var val string
-	if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
+	if _, err := scanOSSInput(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
 		return false
 	}
 	return true

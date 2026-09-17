@@ -482,8 +482,10 @@ func TestParseAndRunCommandFromCli_ProfileFlagStrippedAndApplied(t *testing.T) {
 	config.ConfigurePathFlag(ctx.Flags()).SetValue(path)
 
 	var capturedArgs []string
+	var capturedOptions OptionMapType
 	parseAndRunCommandImpl = func() error {
 		capturedArgs = append([]string{}, os.Args...)
+		capturedOptions = bridgeResolvedOptions
 		return nil
 	}
 
@@ -497,9 +499,11 @@ func TestParseAndRunCommandFromCli_ProfileFlagStrippedAndApplied(t *testing.T) {
 	joined := strings.Join(capturedArgs, " ")
 	assert.NotContains(t, joined, "--profile")
 	assert.NotContains(t, joined, "mac16@oyj")
-	assert.Contains(t, joined, "--access-key-id")
-	assert.Contains(t, joined, "profile-ak")
-	assert.Contains(t, joined, "profile-sk")
+	assert.NotContains(t, joined, "--access-key-id")
+	assert.NotContains(t, joined, "profile-ak")
+	assert.NotContains(t, joined, "profile-sk")
+	assert.Equal(t, "profile-ak", *capturedOptions[OptionAccessKeyID].(*string))
+	assert.Equal(t, "profile-sk", *capturedOptions[OptionAccessKeySecret].(*string))
 	assert.Contains(t, joined, "oss://oyj-test-role/file.vsix")
 	assert.Contains(t, joined, "/tmp/Downloads")
 }
@@ -544,8 +548,10 @@ func TestParseAndRunCommandFromCli_ProfileEqualsForm(t *testing.T) {
 	config.ConfigurePathFlag(ctx.Flags()).SetValue(path)
 
 	var capturedArgs []string
+	var capturedOptions OptionMapType
 	parseAndRunCommandImpl = func() error {
 		capturedArgs = append([]string{}, os.Args...)
+		capturedOptions = bridgeResolvedOptions
 		return nil
 	}
 
@@ -555,7 +561,8 @@ func TestParseAndRunCommandFromCli_ProfileEqualsForm(t *testing.T) {
 	joined := strings.Join(capturedArgs, " ")
 	assert.NotContains(t, joined, "--profile")
 	assert.NotContains(t, joined, "--profile=alt")
-	assert.Contains(t, joined, "alt-ak")
+	assert.NotContains(t, joined, "alt-ak")
+	assert.Equal(t, "alt-ak", *capturedOptions[OptionAccessKeyID].(*string))
 	assert.Contains(t, joined, "oss://bucket")
 }
 
@@ -593,13 +600,11 @@ func createMockBucketCname() *cli.Context {
 	ctx.SetCommand(cmd)
 
 	// Add flags for the command
-	flag := cli.Flag{Name: "method"}
-	flag.SetValue("put")
-	ctx.Flags().Add(&flag)
+	methodFlag := cli.Flag{Name: "method", AssignedMode: cli.AssignedOnce}
+	ctx.Flags().Add(&methodFlag)
 
-	flag = cli.Flag{Name: "item"}
-	flag.SetValue("certificate")
-	ctx.Flags().Add(&flag)
+	itemFlag := cli.Flag{Name: "item", AssignedMode: cli.AssignedOnce}
+	ctx.Flags().Add(&itemFlag)
 
 	return ctx
 }
@@ -620,7 +625,7 @@ func createMockContextWithProxyFlags(cmdName string) *cli.Context {
 	ctx.SetCommand(cmd)
 
 	// Add proxy-host flag
-	flag := cli.Flag{Name: "proxy-host"}
+	flag := cli.Flag{Name: "proxy-host", AssignedMode: cli.AssignedOnce}
 	ctx.Flags().Add(&flag)
 
 	return ctx
@@ -635,7 +640,7 @@ func createMockContextWithEndpointFlags(cmdName string) *cli.Context {
 	ctx.SetCommand(cmd)
 
 	// Add endpoint flag
-	flag := cli.Flag{Name: "endpoint"}
+	flag := cli.Flag{Name: "endpoint", AssignedMode: cli.AssignedOnce}
 	ctx.Flags().Add(&flag)
 
 	return ctx
@@ -650,7 +655,7 @@ func createMockContextWithEndpointFlagsInsecure(cmdName string) *cli.Context {
 	ctx.SetCommand(cmd)
 
 	// Add endpoint flag
-	flag := cli.Flag{Name: "endpoint"}
+	flag := cli.Flag{Name: "endpoint", AssignedMode: cli.AssignedOnce}
 	ctx.Flags().Add(&flag)
 	ctx.SetInsecure(true)
 
@@ -666,11 +671,11 @@ func createMockContextWithMultipleFlags(cmdName string) *cli.Context {
 	ctx.SetCommand(cmd)
 
 	// Add include flag
-	flag := cli.Flag{Name: "include"}
+	flag := cli.Flag{Name: "include", AssignedMode: cli.AssignedOnce}
 	ctx.Flags().Add(&flag)
 
 	// Add recursive flag
-	flag2 := cli.Flag{Name: "recursive"}
+	flag2 := cli.Flag{Name: "recursive", AssignedMode: cli.AssignedNone}
 	ctx.Flags().Add(&flag2)
 
 	return ctx

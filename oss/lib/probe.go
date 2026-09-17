@@ -1030,13 +1030,10 @@ func (pc *ProbeCommand) deleteObject(objectName string) error {
 			}
 		}
 
-		_, noNeedRetry := err.(oss.ServiceError)
-		if int64(i) >= retryTimes || noNeedRetry {
+		if !retryOSS(err, i, retryTimes, false) {
 			return err
 		}
 
-		// wait 1 second
-		time.Sleep(time.Duration(1) * time.Second)
 	}
 }
 
@@ -1162,7 +1159,7 @@ func pingProcess(logFile *os.File, instruction string, args ...string) {
 func confirm(str string) bool {
 	var val string
 	fmt.Print(getClearStr(fmt.Sprintf("probe: overwrite \"%s\"(y or N)? ", str)))
-	if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
+	if _, err := scanOSSInput(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
 		return false
 	}
 	return true

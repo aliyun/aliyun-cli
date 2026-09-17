@@ -79,6 +79,9 @@ type Command struct {
 
 	// Keep args
 	KeepArgs bool
+
+	// RawArgs delegates token parsing to Run while retaining host help routing.
+	RawArgs bool
 	// skip main process help
 	SkipDefaultHelp bool
 
@@ -285,7 +288,13 @@ func (c *Command) ExecuteComplete(ctx *Context, args []string) {
 }
 
 func (c *Command) executeInner(ctx *Context, args []string) error {
-	//fmt.Printf(">>> Execute Command: %s args=%v\n", c.Name, args)
+	if c.RawArgs && ctx.completion == nil {
+		if (ctx.help || rawArgsRequestHelp(ctx, args)) && !c.SkipDefaultHelp {
+			c.executeHelp(ctx, args)
+			return nil
+		}
+		return c.Run(ctx, args)
+	}
 	parser := NewParser(args, ctx)
 	// allow unknown flags
 	parser.SetAllowUnknown(c.EnableUnknownFlag)
@@ -380,6 +389,31 @@ func (c *Command) executeInner(ctx *Context, args []string) error {
 	}
 
 	return c.Run(ctx, callArgs)
+}
+
+// rawArgsRequestHelp recognizes help only in option position, leaving values
+// and everything following '--' to the command's own parser.
+func rawArgsRequestHelp(ctx *Context, args []string) bool {
+	for i := 0; i < len(args); i++ {
+		token := args[i]
+		if token == "--" {
+			return false
+		}
+		if token == "--help" || token == "-h" {
+			return true
+		}
+		key, _, inline := strings.Cut(token, "=")
+		var flag *Flag
+		if strings.HasPrefix(key, "--") {
+			flag = ctx.Flags().Get(key[2:])
+		} else if len(key) == 2 && key[0] == '-' {
+			flag = ctx.Flags().GetByShorthand(rune(key[1]))
+		}
+		if flag != nil && flag.AssignedMode != AssignedNone && !inline {
+			i++
+		}
+	}
+	return false
 }
 
 func (c *Command) processError(ctx *Context, err error) {

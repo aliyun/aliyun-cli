@@ -221,7 +221,7 @@ func (sc *StatCommand) ossGetBucketStatRetry(bucket *oss.Bucket) (oss.GetBucketI
 		if err == nil {
 			return gbar, err
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, true) {
 			return gbar, BucketError{err, bucket.BucketName}
 		}
 	}
@@ -297,7 +297,7 @@ func (sc *StatCommand) ossGetObjectACLRetry(bucket *oss.Bucket, object string) (
 		if err == nil {
 			return goar, err
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, true) {
 			return goar, ObjectError{err, bucket.BucketName, object}
 		}
 	}
