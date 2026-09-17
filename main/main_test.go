@@ -537,3 +537,69 @@ func TestParseInSecure(t *testing.T) {
 		})
 	}
 }
+
+// Root help exercises the public query/output path without credentials or API
+// requests. Keep these cases in both normal and packed build test runs.
+func TestMainQueryNumericRegressions(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{
+			name:  "distinct large integers",
+			query: "`9007199254740992` == `9007199254740993`",
+			want:  "false",
+		},
+		{
+			name:  "empty average is null",
+			query: "avg(`[]`)",
+			want:  "null",
+		},
+		{
+			name:  "empty average does not equal a number",
+			query: "avg(`[]`) == `100`",
+			want:  "false",
+		},
+		{
+			name:  "empty average equals null",
+			query: "avg(`[]`) == `null`",
+			want:  "true",
+		},
+		{
+			name:  "empty average does not select a record",
+			query: "`[{\"id\":\"empty\",\"values\":[]},{\"id\":\"match\",\"values\":[100]},{\"id\":\"other\",\"values\":[200]}]`[?avg(values) == `100`].id",
+			want:  `["match"]`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearAgentDetectionEnv(t)
+			t.Setenv(sysmock.EnvMockEnabled, "false")
+			t.Setenv("GENERATE_METADATA", "")
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("HOMEDRIVE", "")
+			t.Setenv("HOMEPATH", "")
+			t.Setenv("USERPROFILE", home)
+
+			var stdout, stderr bytes.Buffer
+			resetMainHooks(t, &stdout, &stderr, func(code int) {
+				t.Fatalf("unexpected exit(%d)", code)
+			})
+			Main([]string{"--help", "--cli-output", "json", "--cli-query", tt.query})
+
+			if stderr.Len() != 0 {
+				t.Fatalf("stderr = %q, want empty", stderr.String())
+			}
+			var compact bytes.Buffer
+			if err := json.Compact(&compact, stdout.Bytes()); err != nil {
+				t.Fatalf("query output is not JSON: %v; stdout = %q", err, stdout.String())
+			}
+			if got := compact.String(); got != tt.want {
+				t.Fatalf("query %q: got %s, want %s", tt.query, got, tt.want)
+			}
+		})
+	}
+}
