@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	configparser "github.com/alyu/configparser"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 var specChineseConfig = SpecText{
@@ -396,6 +397,9 @@ func (cc *ConfigCommand) filterNonInputOptions() {
 }
 
 func (cc *ConfigCommand) runCommandInteractive(configFile, language string) error {
+	if !terminal.IsTerminal(int(os.Stdin.Fd())) {
+		return fmt.Errorf("oss config requires an interactive terminal; use explicit configuration options and --config-file for scripted configuration")
+	}
 	llanguage := strings.ToLower(language)
 	if llanguage == LEnglishLanguage {
 		fmt.Println("The command creates a configuration file and stores credentials.")

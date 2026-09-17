@@ -1,4 +1,4 @@
-export VERSION ?= 3.5.0
+export VERSION ?= 3.5.1
 export RELEASE_PATH="releases/aliyun-cli-${VERSION}"
 
 MODULE := github.com/aliyun/aliyun-cli/v3

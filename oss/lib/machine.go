@@ -177,7 +177,11 @@ func (m *machineInvocation) adaptError(err error) error {
 		envelope.RequestId = service.RequestID
 		switch service.Code {
 		case "AccessDenied":
-			envelope.Recovery = cli.AgentErrorRecovery{Action: "check_permissions", Hint: "Check the selected identity, resource policy and required OSS action using the request ID; do not broaden permissions automatically."}
+			if service.Ec == "0003-00001403" || strings.Contains(strings.ToLower(service.Message), "must be addressed using the specified endpoint") {
+				envelope.Recovery = cli.AgentErrorRecovery{Action: "check_endpoint", Hint: "Verify the bucket region, endpoint and signing region; do not guess a replacement or disable TLS."}
+			} else {
+				envelope.Recovery = cli.AgentErrorRecovery{Action: "check_permissions", Hint: "Check the selected identity, resource policy and required OSS action using the request ID; also verify that the endpoint and signing region match the bucket region. Do not broaden permissions automatically."}
+			}
 		case "NoSuchKey", "NoSuchBucket", "NoSuchVersion":
 			envelope.Recovery = cli.AgentErrorRecovery{Action: "check_resource", Hint: "Verify the bucket, exact key and version ID before retrying."}
 		case "InvalidAccessKeyId", "SecurityTokenExpired", "InvalidSecurityToken":

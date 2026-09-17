@@ -76,6 +76,7 @@ func NewOssCommand() *cli.Command {
 		bucketResourceGroupCommand.command,
 	}
 
+	result.Help = printHostOSSHelp
 	addMachineFlags(result.Flags())
 	for _, cmd := range cmds {
 		result.AddSubCommand(NewCommandBridge(cmd))
@@ -87,7 +88,9 @@ func NewCommandBridge(cmd Command) *cli.Command {
 
 	result := &cli.Command{
 		Name:     cmd.name,
-		Usage:    cmd.specEnglish.syntaxText,
+		Usage:    cmd.name + " " + cmd.specEnglish.paramText,
+		Hidden:   cmd.name == "update",
+		Help:     printHostOSSHelp,
 		Short:    i18n.T(cmd.specEnglish.synopsisText, cmd.specChinese.synopsisText),
 		Long:     i18n.T(cmd.specEnglish.detailHelpText, cmd.specChinese.detailHelpText),
 		KeepArgs: true,
@@ -346,8 +349,7 @@ func parseAndRunCommandFromCli(ctx *cli.Context, args []string, command *Command
 		}
 	}
 	if help {
-		_, err := RunCommand([]string{"help", ctx.Command().Name}, OptionMapType{})
-		return err
+		return printHostOSSHelp(ctx, nil)
 	}
 	forwarded := stripCliOnlyFlagsFromArgs(args)
 	_, parsed, err := parseOSSOptions(forwarded)

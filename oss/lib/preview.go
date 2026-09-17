@@ -53,7 +53,7 @@ func preparePreview(cmd *Command, args, tokens []string, options OptionMapType, 
 	// Allow configuration/transport flags, but reject every business flag whose
 	// semantics have not been implemented here (including filters and recursion).
 	allowed := map[string]bool{}
-	for _, name := range []string{OptionEndpoint, OptionAccessKeyID, OptionAccessKeySecret, OptionSTSToken, OptionRegion, OptionSignVersion, OptionRetryTimes, OptionReadTimeout, OptionConnectTimeout, OptionConfigFile, OptionForce, OptionForcePathStyle, OptionSkipVerifyCert, OptionProxyHost, OptionProxyUser, OptionProxyPwd} {
+	for _, name := range []string{OptionUserAgent, OptionEndpoint, OptionAccessKeyID, OptionAccessKeySecret, OptionSTSToken, OptionRegion, OptionSignVersion, OptionRetryTimes, OptionReadTimeout, OptionConnectTimeout, OptionConfigFile, OptionForce, OptionForcePathStyle, OptionSkipVerifyCert, OptionProxyHost, OptionProxyUser, OptionProxyPwd} {
 		allowed[OptionMap[name].nameAlias] = true
 		if OptionMap[name].name != "" {
 			allowed[OptionMap[name].name] = true
