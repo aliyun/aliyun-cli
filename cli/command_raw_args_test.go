@@ -45,3 +45,20 @@ func TestRawArgsHelpBoundary(t *testing.T) {
 		}
 	}
 }
+
+func TestRawArgsHelpDoesNotExecuteCommand(t *testing.T) {
+	called := false
+	helpCalled := false
+	command := &Command{Name: "raw", RawArgs: true, Help: func(*Context, []string) error { helpCalled = true; return nil }, Run: func(*Context, []string) error { called = true; return nil }}
+	ctx := NewCommandContext(io.Discard, io.Discard)
+	ctx.SetCommand(command)
+	if err := command.executeInner(ctx, []string{"--help"}); err != nil {
+		t.Fatal(err)
+	}
+	if !helpCalled {
+		t.Fatal("help handler was not called")
+	}
+	if called {
+		t.Fatal("help executed raw command")
+	}
+}

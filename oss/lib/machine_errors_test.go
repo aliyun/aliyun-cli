@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aliyun/aliyun-cli/v3/cli"
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/aliyun/credentials-go/credentials"
 	"github.com/stretchr/testify/require"
@@ -230,4 +231,42 @@ func TestMachineListRejectsInvalidStateAndOutputFailures(t *testing.T) {
 		_, _, _, _, err = lc.machinePage(CloudURL{bucket: "bucket"}, stage, false, listCursor{PageSize: 1})
 		require.Error(t, err)
 	}
+}
+
+func TestPreviewConfigurationAndURIErrorBoundaries(t *testing.T) {
+	clearEndpointTestEnv(t)
+	for _, target := range []string{"oss://bucket", "oss://bucket/"} {
+		_, err := preparePreview(&removeCommand.command, []string{target}, nil, nil, "validate")
+		require.Error(t, err)
+	}
+	_, err := preparePreview(&removeCommand.command, []string{"oss://bucket/key"}, []string{"--version-id=v1"}, nil, "validate")
+	require.NoError(t, err)
+	for _, endpoint := range []string{"://invalid", "http://127.0.0.1:1"} {
+		_, opts, err := parseOSSOptions(nil)
+		require.NoError(t, err)
+		opts[OptionEndpoint] = &endpoint
+		cmd := removeCommand.command
+		p := &ossPreview{Mode: "plan", Items: []previewItem{{Target: "oss://INVALID/key"}}}
+		ctx := cli.NewCommandContext(io.Discard, io.Discard)
+		require.Error(t, p.run(ctx, cmd, opts, nil))
+	}
+	p := &ossPreview{Mode: "plan"}
+	cmd := removeCommand.command
+	_, opts, err := parseOSSOptions(nil)
+	require.NoError(t, err)
+	bad := "invalid"
+	opts[OptionRetryTimes] = &bad
+	require.Error(t, p.run(cli.NewCommandContext(io.Discard, io.Discard), cmd, opts, nil))
+}
+
+func TestMachineErrorIncludesFailedItemReport(t *testing.T) {
+	file, err := os.Create(filepath.Join(t.TempDir(), "report"))
+	require.NoError(t, err)
+	defer file.Close()
+	m := &machineInvocation{format: "json", command: "sync", phase: "execution", failures: &failureManifest{file: file, deletePhase: "not_started"}}
+	var ae *ossAgentError
+	require.ErrorAs(t, m.adaptError(errors.New("transfer failed")), &ae)
+	require.Equal(t, file.Name(), ae.facts.FailureReport)
+	require.Equal(t, "not_started", ae.facts.DeletePhase)
+	require.Equal(t, "inspect_failed_items", ae.Envelope().Recovery.Action)
 }

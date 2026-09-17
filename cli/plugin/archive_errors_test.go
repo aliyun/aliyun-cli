@@ -1,6 +1,8 @@
 package plugin
 
 import (
+	"archive/zip"
+	"compress/gzip"
 	"errors"
 	"io"
 	"os"
@@ -81,4 +83,26 @@ func TestArchiveInvalidSourcesAndDestinations(t *testing.T) {
 		require.Error(t, err)
 	}
 	require.Equal(t, defaultPluginArchiveLimits, (*Manager)(nil).effectiveArchiveLimits())
+}
+
+func TestArchiveRejectsCorruptedTarAndUnsupportedZipMethod(t *testing.T) {
+	dir := t.TempDir()
+	tarPath := filepath.Join(dir, "broken.tgz")
+	f, err := os.Create(tarPath)
+	require.NoError(t, err)
+	gz := gzip.NewWriter(f)
+	_, err = gz.Write([]byte("truncated tar header"))
+	require.NoError(t, err)
+	require.NoError(t, gz.Close())
+	require.NoError(t, f.Close())
+	require.ErrorIs(t, untar(tarPath, filepath.Join(dir, "tar")), io.ErrUnexpectedEOF)
+	zipPath := filepath.Join(dir, "unsupported.zip")
+	f, err = os.Create(zipPath)
+	require.NoError(t, err)
+	zw := zip.NewWriter(f)
+	_, err = zw.CreateRaw(&zip.FileHeader{Name: "file", Method: 99})
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+	require.NoError(t, f.Close())
+	require.ErrorIs(t, unzip(zipPath, filepath.Join(dir, "zip")), zip.ErrAlgorithm)
 }

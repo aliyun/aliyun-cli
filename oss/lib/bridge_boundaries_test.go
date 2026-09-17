@@ -55,3 +55,17 @@ func TestLocalHashThroughBridge(t *testing.T) {
 	ctx.SetCommand(NewCommandBridge(hashCommand.command))
 	require.NoError(t, parseAndRunCommandFromCli(ctx, []string{path}, &hashCommand.command))
 }
+
+func TestParseOSSOptionsWithoutProcessArgs(t *testing.T) {
+	old := os.Args
+	os.Args = nil
+	defer func() { os.Args = old }()
+	args, options, err := ParseArgOptions()
+	require.NoError(t, err)
+	require.Empty(t, args)
+	require.NotEmpty(t, options)
+	args, options, err = parseOSSOptions([]string{"--query-param", "first=1", "--query-param", "second=2"})
+	require.NoError(t, err)
+	require.Empty(t, args)
+	require.Equal(t, []string{"first=1", "second=2"}, *options[OptionQueryParam].(*[]string))
+}
