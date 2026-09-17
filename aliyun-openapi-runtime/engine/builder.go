@@ -692,15 +692,6 @@ func sanitizeDryRunValues(values map[string]string) map[string]string {
 	return out
 }
 
-func dryRunHeaderValue(headers map[string]string, name string) string {
-	for key, value := range headers {
-		if strings.EqualFold(key, name) {
-			return value
-		}
-	}
-	return ""
-}
-
 func dryRunBody(body any, reqBodyType string, formatHints ...string) (value, format string, err error) {
 	if body == nil {
 		return "", "", nil
@@ -709,21 +700,20 @@ func dryRunBody(body any, reqBodyType string, formatHints ...string) (value, for
 	if len(formatHints) > 0 {
 		declaredFormat = formatHints[0]
 	}
-	formats := append([]string{reqBodyType}, formatHints...)
 	if data, ok := body.(string); ok {
 		format = dryRunBodyFormat(reqBodyType, declaredFormat, "raw")
-		return redact.MaskBodyFull(data, formats...), format, nil
+		return redact.MaskBodyFull(data), format, nil
 	}
 	if data, ok := body.([]byte); ok {
 		format = dryRunBodyFormat(reqBodyType, declaredFormat, "binary")
-		return redact.MaskBodyFull(string(data), formats...), format, nil
+		return redact.MaskBodyFull(string(data)), format, nil
 	}
 	b, err := json.Marshal(body)
 	if err != nil {
 		return "", "", err
 	}
 	format = dryRunBodyFormat(reqBodyType, declaredFormat, "json")
-	return redact.MaskBodyFull(string(b), formats...), format, nil
+	return redact.MaskBodyFull(string(b)), format, nil
 }
 
 func dryRunBodyFormat(reqBodyType, declaredFormat, fallback string) string {
@@ -749,8 +739,6 @@ func buildCliDryRunOutput(product string, req *runtime.AssembledRequest) (*cliDr
 		req.Body,
 		req.ReqBodyType,
 		req.DeclaredReqBodyType,
-		req.DeclaredContentType,
-		dryRunHeaderValue(req.Headers, "Content-Type"),
 	)
 	if err != nil {
 		return nil, err
