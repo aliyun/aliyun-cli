@@ -62,10 +62,20 @@ func TestUtilityAndEarlyParameterHelpQuery(t *testing.T) {
 
 func TestHelpQueryUsesLocalizedJSONAndPreservesNumbers(t *testing.T) {
 	var output bytes.Buffer
-	doc := map[string]any{"name": machineHelpLocalizedText{EN: "Demo", ZH: "演示"}, "id": json.Number("9007199254740993")}
+	doc := map[string]any{
+		"name":       machineHelpLocalizedText{EN: "Demo", ZH: "演示"},
+		"id":         json.Number("9007199254740993"),
+		"previousId": json.Number("9007199254740992"),
+	}
 	require.NoError(t, encodeMachineHelpJSON(&output, doc, false, "{name:name,id:id}"))
 	assert.Contains(t, output.String(), "9007199254740993")
 	assert.NotContains(t, output.String(), `"en"`)
+	output.Reset()
+	require.NoError(t, encodeMachineHelpJSON(&output, doc, false, "id == previousId"))
+	assert.Equal(t, "false\n", output.String())
+	output.Reset()
+	require.NoError(t, encodeMachineHelpJSON(&output, doc, false, "id > previousId"))
+	assert.Equal(t, "true\n", output.String())
 	output.Reset()
 	require.NoError(t, encodeMachineHelpJSON(&output, doc, false, "missing"))
 	assert.Equal(t, "null\n", output.String())

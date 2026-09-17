@@ -2217,6 +2217,22 @@ func TestApplyQueryFilter(t *testing.T) {
 		assert.Equal(t, "42", result)
 	})
 
+	t.Run("LargeJSONNumbersCompareExactly", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		output := `[{"A":9007199254740992,"B":9007199254740993}]`
+
+		queryFlag.SetValue("[?A == B]")
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, "[]", result)
+
+		queryFlag.SetValue("[?A < B]")
+		result, err = ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, output, result)
+	})
+
 	t.Run("QueryReturnsBoolean", func(t *testing.T) {
 		queryFlag := QueryFlag(ctx.Flags())
 		queryFlag.SetAssigned(true)
