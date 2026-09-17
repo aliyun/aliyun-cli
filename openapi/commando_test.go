@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -4440,4 +4441,69 @@ func newTestCommandoForResponse(t *testing.T, aimodeEnv string) (*Commando, *cli
 	ctx := cli.NewCommandContext(stdout, stderr)
 	ctx.EnterCommand(root)
 	return c, ctx, stdout, stderr
+}
+
+func TestApplyQueryFilterNumericRegressions(t *testing.T) {
+	// F06: response numbers and expression literals must keep adjacent IDs
+	// distinct above 2^53, including when filtering and ordering records.
+	const response = `{"A":9007199254740992,"B":9007199254740993,"Items":[{"Id":9007199254740993,"Name":"B"},{"Id":9007199254740992,"Name":"A"}]}`
+	for _, tc := range []struct {
+		name, query, want string
+	}{
+		{"adjacent IDs differ", "A == B", "false"},
+		{"inequality", "A != B", "true"},
+		{"less than", "A < B", "true"},
+		{"greater than", "B > A", "true"},
+		{"literal does not round down", "A == `9007199254740993`", "false"},
+		{"literal matches exact ID", "B == `9007199254740993`", "true"},
+		{"filter exact ID", "Items[?Id == `9007199254740993`].Name", `["B"]`},
+		{"filter greater IDs", "Items[?Id > `9007199254740992`].Name", `["B"]`},
+		{"sorted IDs retain precision", "sort(Items[].Id)", "[9007199254740992,9007199254740993]"},
+		{"largest record", "max_by(Items, &Id).Name", `"B"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checkNumericQuery(t, response, tc.query, tc.want)
+		})
+	}
+}
+
+func TestApplyQueryFilterEmptyAverageRegression(t *testing.T) {
+	// F07: a record without samples must not match a numeric condition.
+	const response = `{"Items":[{"Name":"empty","Values":[]},{"Name":"match","Values":[90,110]},{"Name":"other","Values":[200]}]}`
+	for _, tc := range []struct {
+		name, query, want string
+	}{
+		{"empty average is null", "avg(`[]`)", "null"},
+		{"empty average is not 100", "avg(`[]`) == `100`", "false"},
+		{"reversed equality", "`100` == avg(`[]`)", "false"},
+		{"empty average inequality", "avg(`[]`) != `100`", "true"},
+		{"empty average equals null", "avg(`[]`) == `null`", "true"},
+		{"less than null", "avg(`[]`) < `100`", "null"},
+		{"less than or equal null", "avg(`[]`) <= `100`", "null"},
+		{"greater than null", "avg(`[]`) > `100`", "null"},
+		{"greater than or equal null", "avg(`[]`) >= `100`", "null"},
+		{"filter excludes empty samples", "Items[?avg(Values) == `100`].Name", `["match"]`},
+		{"filter includes only numeric averages", "Items[?avg(Values) >= `100`].Name", `["match","other"]`},
+		{"find records without samples", "Items[?avg(Values) == `null`].Name", `["empty"]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checkNumericQuery(t, response, tc.query, tc.want)
+		})
+	}
+}
+
+func checkNumericQuery(t *testing.T, response, query, want string) {
+	t.Helper()
+	ctx := cli.NewCommandContext(io.Discard, io.Discard)
+	AddFlags(ctx.Flags())
+	flag := QueryFlag(ctx.Flags())
+	flag.SetAssigned(true)
+	flag.SetValue(query)
+	got, err := ApplyQueryFilter(ctx, response)
+	if err != nil {
+		t.Fatalf("query %q: %v", query, err)
+	}
+	if got != want {
+		t.Fatalf("query %q: got %s, want %s", query, got, want)
+	}
 }

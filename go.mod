@@ -60,6 +60,6 @@ require (
 )
 
 // should be removed after related pr merged in upstream jmespath/go-jmespath
-replace github.com/jmespath/go-jmespath => github.com/alibabacloud-go/go-jmespath v0.4.0-aliyun.2
+replace github.com/jmespath/go-jmespath => github.com/alibabacloud-go/go-jmespath v0.4.0-aliyun.3
 
 replace github.com/aliyun/aliyun-openapi-runtime => ./aliyun-openapi-runtime
