@@ -52,7 +52,32 @@ func (c *captureExecutor) Execute(ec *runtime.ExecContext) (*runtime.Response, e
 	return &runtime.Response{StatusCode: 200, Raw: []byte(`{}`)}, nil
 }
 
+func isolateAgentDetectionEnvs(t *testing.T) {
+	t.Helper()
+	for _, env := range []string{
+		"AGENT",
+		"CURSOR_AGENT",
+		"CLAUDECODE",
+		"CLAUDE_CODE",
+		"GEMINI_CLI",
+		"AUGMENT_AGENT",
+		"OPENCODE",
+		"OPENCODE_CLIENT",
+		"CLINE_ACTIVE",
+		"CODEX_SHELL",
+		"CODEX_SANDBOX",
+		"QODER_AGENT",
+		"QODER_CLI",
+		"WORKBUDDY_APP_NAME",
+		"TRAE_BRAND_NAME",
+		"HERMES_AGENT",
+	} {
+		t.Setenv(env, "")
+	}
+}
+
 func TestBuildUserAgentSuffix(t *testing.T) {
+	isolateAgentDetectionEnvs(t)
 	t.Setenv(sysconfig.EnvUserAgent, "env-\nagent/1")
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
 	userAgent := &cli.Flag{Name: "user-agent", AssignedMode: cli.AssignedOnce}
@@ -69,6 +94,7 @@ func TestBuildUserAgentSuffix(t *testing.T) {
 }
 
 func TestBuildUserAgentSuffixForDetectedAgentUsesMarkerOnly(t *testing.T) {
+	isolateAgentDetectionEnvs(t)
 	t.Setenv(aimode.EnvAIMode, "")
 	t.Setenv(aimode.EnvAgentIntegration, "")
 	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
@@ -97,6 +123,37 @@ func TestBuildUserAgentSuffixForDetectedAgentUsesMarkerOnly(t *testing.T) {
 	ctx.Flags().Get("cli-ai-mode").SetAssigned(true)
 	if got := buildUserAgentSuffix(ctx); got != aimode.UserAgentEnabledMarker {
 		t.Fatalf("explicit force-on suffix = %q, want marker", got)
+	}
+}
+
+func TestBuildUserAgentSuffixIncludesDetectedAgentSegment(t *testing.T) {
+	isolateAgentDetectionEnvs(t)
+	t.Setenv("CURSOR_AGENT", "1")
+	t.Setenv(sysconfig.EnvUserAgent, "skill/foo")
+	t.Setenv(aimode.EnvAIMode, "")
+	t.Setenv(aimode.EnvAgentIntegration, "")
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	ctx.Flags().Add(config.NewConfigurePathFlag())
+	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
+	config.ConfigurePathFlag(ctx.Flags()).SetValue(filepath.Join(t.TempDir(), "config.json"))
+	userAgent := &cli.Flag{Name: "user-agent", AssignedMode: cli.AssignedOnce}
+	ctx.Flags().Add(userAgent)
+	userAgent.SetAssigned(true)
+	userAgent.SetValue("run/1")
+	ctx.Flags().Add(&cli.Flag{Name: "cli-ai-mode"})
+	forceOff := &cli.Flag{Name: "no-cli-ai-mode", AssignedMode: cli.AssignedOnce}
+	ctx.Flags().Add(forceOff)
+	forceOff.SetAssigned(true)
+
+	if got, want := buildUserAgentSuffix(ctx), "Agent/cursor skill/foo run/1"; got != want {
+		t.Fatalf("suffix with agent env = %q, want %q", got, want)
+	}
+
+	forceOff.SetAssigned(false)
+	ctx.SetAgentName("cursor")
+	if got, want := buildUserAgentSuffix(ctx), "Agent/cursor skill/foo run/1 "+aimode.UserAgentEnabledMarker; got != want {
+		t.Fatalf("suffix with agent env and AI mode = %q, want %q", got, want)
 	}
 }
 

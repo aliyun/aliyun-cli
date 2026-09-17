@@ -140,12 +140,15 @@ func splitCommaList(raw string) []string {
 	return values
 }
 
-// buildUserAgentSuffix merges ALIBABA_CLOUD_USER_AGENT and --user-agent
-// with the host AI-mode suffix.
+// buildUserAgentSuffix merges detected Agent/<name>, ALIBABA_CLOUD_USER_AGENT
+// and --user-agent with the host AI-mode suffix
 // (config + detected agent + --cli-ai-mode / --no-cli-ai-mode).
 // The engine prefixes Aliyun-CLI/{cliVer} aliyun-openapi-runtime/{ver}.
 func buildUserAgentSuffix(ctx *cli.Context) string {
 	var parts []string
+	if seg := util.GetAgentUserAgentSegment(); seg != "" {
+		parts = append(parts, seg)
+	}
 	if value := strings.TrimSpace(os.Getenv(sysconfig.EnvUserAgent)); value != "" {
 		if value = strings.TrimSpace(util.SanitizeUserAgent(value)); value != "" {
 			parts = append(parts, value)

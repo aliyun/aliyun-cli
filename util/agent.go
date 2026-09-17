@@ -14,7 +14,9 @@ import (
 const (
 	agentEnvProposal = "AGENT"
 
-	maxAgentNameLen = 32
+	agentSegmentPrefix = "Agent/"
+
+	agentProposalName = "1"
 )
 
 var knownAgentEnv = []struct {
@@ -33,26 +35,30 @@ var knownAgentEnv = []struct {
 	{"CODEX_SANDBOX", "codex"},
 	{"QODER_AGENT", "qoder"},
 	{"QODER_CLI", "qoder-cli"},
+	{"WORKBUDDY_APP_NAME", "workbuddy"},
+	{"TRAE_BRAND_NAME", "trae"},
+	{"HERMES_AGENT", "hermes"},
 }
 
-// Agent 标识（小写、固定枚举或 sanitize 后的 AGENT 值）；
+// Agent 标识（小写固定枚举；AGENT 变量仅作兜底，固定为 1）；
 func DetectAgentName() string {
 	for _, item := range knownAgentEnv {
 		if os.Getenv(item.env) != "" {
 			return item.name
 		}
 	}
-	if v := strings.TrimSpace(os.Getenv(agentEnvProposal)); v != "" {
-		if s := sanitizeAgentName(v); s != "" {
-			return s
-		}
+	if strings.TrimSpace(os.Getenv(agentEnvProposal)) != "" {
+		return agentProposalName
 	}
 	return ""
 }
 
-// Agent UA 待接入inner plugin。
 func GetAgentUserAgentSegment() string {
-	return ""
+	name := DetectAgentName()
+	if name == "" {
+		return ""
+	}
+	return agentSegmentPrefix + name
 }
 
 func MergeAgentSegmentIntoPluginEnvs(envs map[string]string) {
@@ -72,25 +78,4 @@ func MergeAgentSegmentIntoPluginEnvs(envs map[string]string) {
 		return
 	}
 	envs[sysconfig.EnvUserAgent] = base + " " + seg
-}
-
-// 仅保留 [a-z0-9._-]，最长 32 字符。
-func sanitizeAgentName(raw string) string {
-	raw = strings.ToLower(raw)
-	if len(raw) > maxAgentNameLen {
-		raw = raw[:maxAgentNameLen]
-	}
-	buf := make([]byte, 0, len(raw))
-	for i := 0; i < len(raw); i++ {
-		c := raw[i]
-		switch {
-		case c >= 'a' && c <= 'z':
-		case c >= '0' && c <= '9':
-		case c == '.' || c == '_' || c == '-':
-		default:
-			continue
-		}
-		buf = append(buf, c)
-	}
-	return string(buf)
 }

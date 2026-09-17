@@ -50,7 +50,7 @@ func TestDetectAgentName_KnownEnvs(t *testing.T) {
 			snapshotAndUnsetAgentEnvs(t)
 			_ = os.Setenv(c.env, "1")
 			assert.Equal(t, c.name, DetectAgentName())
-			assert.Equal(t, "", GetAgentUserAgentSegment(), "agent UA segment unset")
+			assert.Equal(t, "Agent/"+c.name, GetAgentUserAgentSegment())
 		})
 	}
 }
@@ -72,28 +72,21 @@ func TestDetectAgentName_SpecificEnvWinsOverProposal(t *testing.T) {
 func TestDetectAgentName_ProposalUsedWhenNoSpecific(t *testing.T) {
 	snapshotAndUnsetAgentEnvs(t)
 	_ = os.Setenv(agentEnvProposal, "Goose")
-	assert.Equal(t, "goose", DetectAgentName())
+	assert.Equal(t, agentProposalName, DetectAgentName())
+	assert.Equal(t, "Agent/1", GetAgentUserAgentSegment())
 }
 
-func TestDetectAgentName_ProposalSanitize(t *testing.T) {
+func TestDetectAgentName_ProposalIgnoresValue(t *testing.T) {
 	snapshotAndUnsetAgentEnvs(t)
 	_ = os.Setenv(agentEnvProposal, "  My-Agent.v1_x  ")
-	assert.Equal(t, "my-agent.v1_x", DetectAgentName())
+	assert.Equal(t, agentProposalName, DetectAgentName(),
+		"AGENT 兜底不读取变量值，固定为 1")
 }
 
-func TestDetectAgentName_ProposalAllInvalidCharsReturnsEmpty(t *testing.T) {
+func TestDetectAgentName_ProposalEmptyIgnored(t *testing.T) {
 	snapshotAndUnsetAgentEnvs(t)
-	_ = os.Setenv(agentEnvProposal, "$$$ ###")
-	assert.Equal(t, "", DetectAgentName(),
-		"完全无效的 AGENT 值经 sanitize 后为空；无专有变量兜底时返回空")
-}
-
-func TestDetectAgentName_ProposalTruncated(t *testing.T) {
-	snapshotAndUnsetAgentEnvs(t)
-	long := "abcdefghij1234567890ABCDEFGHIJ-_.zzzzz"
-	_ = os.Setenv(agentEnvProposal, long)
-	got := DetectAgentName()
-	assert.LessOrEqual(t, len(got), maxAgentNameLen)
+	_ = os.Setenv(agentEnvProposal, "   ")
+	assert.Equal(t, "", DetectAgentName())
 }
 
 func TestDetectAgentName_PriorityOrder(t *testing.T) {
@@ -126,8 +119,7 @@ func TestMergeAgentSegmentIntoPluginEnvs_FreshEnv(t *testing.T) {
 	_ = os.Setenv("CURSOR_AGENT", "1")
 	envs := map[string]string{}
 	MergeAgentSegmentIntoPluginEnvs(envs)
-	_, ok := envs[sysconfig.EnvUserAgent]
-	assert.False(t, ok, "agent UA segment unset")
+	assert.Equal(t, "Agent/cursor", envs[sysconfig.EnvUserAgent])
 }
 
 func TestMergeAgentSegmentIntoPluginEnvs_PreservesParentEnv(t *testing.T) {
@@ -136,8 +128,8 @@ func TestMergeAgentSegmentIntoPluginEnvs_PreservesParentEnv(t *testing.T) {
 	t.Setenv(sysconfig.EnvUserAgent, "skill/foo")
 	envs := map[string]string{}
 	MergeAgentSegmentIntoPluginEnvs(envs)
-	_, ok := envs[sysconfig.EnvUserAgent]
-	assert.False(t, ok, "agent UA 关闭时不应写入 ALIBABA_CLOUD_USER_AGENT")
+	assert.Equal(t, "skill/foo Agent/cursor", envs[sysconfig.EnvUserAgent],
+		"已 export 的 ALIBABA_CLOUD_USER_AGENT 必须保留并在末尾追加 Agent 段")
 }
 
 func TestMergeAgentSegmentIntoPluginEnvs_RuntimeEnvWinsOverParent(t *testing.T) {
@@ -148,6 +140,6 @@ func TestMergeAgentSegmentIntoPluginEnvs_RuntimeEnvWinsOverParent(t *testing.T) 
 		sysconfig.EnvUserAgent: "from-runtime",
 	}
 	MergeAgentSegmentIntoPluginEnvs(envs)
-	assert.Equal(t, "from-runtime", envs[sysconfig.EnvUserAgent],
-		"agent UA 关闭时不应追加 Agent 段")
+	assert.Equal(t, "from-runtime Agent/cursor", envs[sysconfig.EnvUserAgent],
+		"envs 中已有值时优先使用 envs 中的值")
 }
