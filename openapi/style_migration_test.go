@@ -335,3 +335,169 @@ func TestRegionConfusionAgentHint(t *testing.T) {
 	noNote := requireAgentEnvelope(t, cause, []string{"ecs", "describe-instances"}, nil)
 	assert.NotContains(t, noNote.Recovery.Hint, "--region only selects the region")
 }
+
+func TestStyleMixedFlagErrorDegradedVariants(t *testing.T) {
+	t.Run("degraded error text without equivalent", func(t *testing.T) {
+		err := &styleMixedFlagError{
+			cause:      unknownFlagUsageError("RegionId", "biz-region-id"),
+			product:    "ecs",
+			command:    "describe-instances",
+			flag:       "RegionId",
+			suggestion: "--biz-region-id",
+		}
+		assert.Contains(t, err.Error(), "--RegionId is a PascalCase parameter name; kebab commands use --biz-region-id.")
+		assert.NotContains(t, err.Error(), "Equivalent command")
+	})
+
+	t.Run("empty suggestion yields nil", func(t *testing.T) {
+		err := &styleMixedFlagError{cause: unknownFlagUsageError("RegionId"), suggestion: ""}
+		assert.Nil(t, err.GetSuggestions())
+	})
+
+	t.Run("both wrappers are AI recovery eligible", func(t *testing.T) {
+		assert.True(t, cli.IsAIRecoveryEligible(&styleMixedFlagError{cause: unknownFlagUsageError("RegionId")}))
+		assert.True(t, cli.IsAIRecoveryEligible(&regionConfusionError{cause: unknownFlagUsageError("x")}))
+	})
+}
+
+func TestAdaptStyleMixedFlagErrorPassthrough(t *testing.T) {
+	args := []string{"ecs", "describe-instances"}
+
+	t.Run("nil library passes through", func(t *testing.T) {
+		c := &Commando{}
+		cause := unknownFlagUsageError("RegionId", "biz-region-id")
+		assert.Equal(t, cause, c.adaptStyleMixedFlagError(cause, args, nil))
+	})
+
+	t.Run("unknown product passes through", func(t *testing.T) {
+		products, err := meta.MockLoadRepository([]meta.Product{{Code: "oss", Version: "v1"}})
+		require.NoError(t, err)
+		c := &Commando{library: &Library{builtinRepo: products, canonicalRepo: newFakeCanonicalRepo()}}
+		cause := unknownFlagUsageError("RegionId", "biz-region-id")
+		assert.Equal(t, cause, c.adaptStyleMixedFlagError(cause, args, nil))
+	})
+
+	t.Run("kebab command absent from canonical passes through", func(t *testing.T) {
+		products, err := meta.MockLoadRepository([]meta.Product{{Code: "ecs", Version: "2014-05-26"}})
+		require.NoError(t, err)
+		c := &Commando{library: &Library{builtinRepo: products, canonicalRepo: newFakeCanonicalRepo()}}
+		cause := unknownFlagUsageError("RegionId", "biz-region-id")
+		assert.Equal(t, cause, c.adaptStyleMixedFlagError(cause, args, nil))
+	})
+}
+
+func TestRebuildStyleEquivalentCommandEdgeCases(t *testing.T) {
+	api := styleMigrationTestAPI()
+	kebabToRaw, rawToKebab := styleRenameMaps(api)
+
+	t.Run("empty target command fails closed", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		assert.Equal(t, "", rebuildStyleEquivalentCommand("ecs", "", ctx, rawToKebab, keySet(kebabToRaw)))
+	})
+
+	t.Run("unassigned flags are skipped", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		ctx.Flags().Add(&cli.Flag{Name: "region"}) // not assigned
+		unknown := cli.NewFlagSet()
+		unknown.Add(&cli.Flag{Name: "biz-region-id"}) // not assigned
+		unknown.Add(newAssignedFlag("InstanceId", "i-123"))
+		ctx.SetUnknownFlags(unknown)
+		got := rebuildStyleEquivalentCommand("ecs", "describe-instances", ctx, rawToKebab, keySet(kebabToRaw))
+		assert.Equal(t, "aliyun ecs describe-instances --instance-id i-123", got)
+	})
+
+	t.Run("repeatable flag keeps every value", func(t *testing.T) {
+		ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+		unknown := cli.NewFlagSet()
+		f := &cli.Flag{Name: "InstanceId", AssignedMode: cli.AssignedRepeatable}
+		f.SetAssigned(true)
+		f.SetValues([]string{"i-1", "i-2"})
+		unknown.Add(f)
+		ctx.SetUnknownFlags(unknown)
+		got := rebuildStyleEquivalentCommand("ecs", "describe-instances", ctx, rawToKebab, keySet(kebabToRaw))
+		assert.Equal(t, "aliyun ecs describe-instances --instance-id i-1 --instance-id i-2", got)
+	})
+}
+
+func TestStyleRenameMapsSkipsIncompleteParameters(t *testing.T) {
+	kebabToRaw, rawToKebab := styleRenameMaps(&canonicalmeta.API{Parameters: []canonicalmeta.Parameter{
+		{Name: "no_raw_name", Options: []string{"--no-raw-name"}, Location: "query"}, // no RawName
+		{RawName: "NoKebab", Location: "query"},                                      // no Name and no Options
+		{Name: "instance_id", RawName: "InstanceId", Options: []string{"--instance-id"}, Location: "query"},
+	}})
+	assert.Len(t, kebabToRaw, 1)
+	assert.Len(t, rawToKebab, 1)
+	assert.Equal(t, "InstanceId", kebabToRaw["instance-id"])
+}
+
+func TestValidateCanonicalAPICommandWrapsStyleMigrationTip(t *testing.T) {
+	api := styleMigrationTestAPI()
+	products, err := meta.MockLoadRepository([]meta.Product{{Code: "ecs", Version: "2014-05-26", ApiNames: []string{"DescribeInstances"}}})
+	require.NoError(t, err)
+	canonical := newFakeCanonicalRepo()
+	canonical.AddVersionIndex("ecs", "2014-05-26", &canonicalmeta.VersionIndex{APIs: map[string]canonicalmeta.VersionAPIEntry{
+		"DescribeInstances": {CmdName: "describe-instances"},
+	}})
+	canonical.AddAPI("ecs", "2014-05-26", api)
+	helpRepo := &stubMachineHelpRepository{
+		products: &canonicalmeta.ProductsIndex{Products: []canonicalmeta.ProductEntry{
+			{Code: "ecs", Version: "2014-05-26", Versions: []string{"2014-05-26"}},
+		}},
+		versionIndex: &canonicalmeta.VersionIndex{APIs: map[string]canonicalmeta.VersionAPIEntry{
+			"DescribeInstances": {CmdName: "describe-instances"},
+		}},
+		apis: map[string]*canonicalmeta.API{"ecs": api},
+	}
+	c := &Commando{library: &Library{builtinRepo: products, canonicalRepo: canonical, helpRepo: helpRepo}}
+
+	ctx := cli.NewCommandContext(new(bytes.Buffer), new(bytes.Buffer))
+	unknown := cli.NewFlagSet()
+	unknown.Add(newAssignedFlag("biz-region-id", "cn-hangzhou"))
+	ctx.SetUnknownFlags(unknown)
+
+	err = c.validateCanonicalAPICommand([]string{"ecs", "DescribeInstances"}, ctx)
+	require.Error(t, err)
+	var paramErr *InvalidParameterError
+	require.ErrorAs(t, err, &paramErr)
+	var withTip cli.ErrorWithTip
+	require.ErrorAs(t, err, &withTip)
+	assert.Contains(t, withTip.GetTip("en"), "--biz-region-id is the kebab-style name of --RegionId")
+}
+
+func TestAPINameProductSuggestionsEdgeCases(t *testing.T) {
+	products := []meta.Product{
+		{Code: "ecs", ApiNames: []string{"DescribeInstances"}},
+		{Code: "odd", ApiNames: []string{"!!!"}}, // compacts to empty and must be skipped
+	}
+	assert.Nil(t, apiNameProductSuggestions("", products))
+	assert.Nil(t, apiNameProductSuggestions("DescribeInstances", nil))
+	assert.Nil(t, apiNameProductSuggestions("!!!", products))
+	assert.Equal(t, []string{"aliyun ecs DescribeInstances"}, apiNameProductSuggestions("DescribeInstances", products))
+}
+
+func TestFlagAssignedValuesVariants(t *testing.T) {
+	// Single value carried by GetValue (not via GetValues).
+	single := &cli.Flag{Name: "single", AssignedMode: cli.AssignedOnce}
+	single.SetAssigned(true)
+	single.SetValue("v1")
+	assert.Equal(t, []string{"v1"}, flagAssignedValues(single))
+
+	// Valueless (boolean) flag.
+	boolean := &cli.Flag{Name: "force", AssignedMode: cli.AssignedOnce}
+	boolean.SetAssigned(true)
+	assert.Nil(t, flagAssignedValues(boolean))
+}
+
+func TestAdaptStyleMixedFlagErrorCanonicalIndexWithoutAPI(t *testing.T) {
+	products, err := meta.MockLoadRepository([]meta.Product{{Code: "ecs", Version: "2014-05-26"}})
+	require.NoError(t, err)
+	repo := newFakeCanonicalRepo()
+	repo.AddVersionIndex("ecs", "2014-05-26", &canonicalmeta.VersionIndex{APIs: map[string]canonicalmeta.VersionAPIEntry{
+		"DescribeInstances": {CmdName: "describe-instances"},
+	}})
+	// version index entry exists but the API definition itself is missing:
+	// GetAPI fails and the adapter must fall back to the original error.
+	c := &Commando{library: &Library{builtinRepo: products, canonicalRepo: repo}}
+	cause := unknownFlagUsageError("RegionId", "biz-region-id")
+	assert.Equal(t, cause, c.adaptStyleMixedFlagError(cause, []string{"ecs", "describe-instances"}, nil))
+}
