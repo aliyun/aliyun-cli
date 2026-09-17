@@ -75,11 +75,7 @@ func (e *InvalidProductError) AgentMessage() string {
 func (*InvalidProductError) AIRecoveryEligible() {}
 
 func (e *InvalidProductError) GetSuggestions() []string {
-	sr := cli.NewSuggester(strings.ToLower(e.Code), 2)
-	for _, p := range e.library.GetProducts() {
-		sr.Apply(strings.ToLower(p.Code))
-	}
-	return sr.GetResults()
+	return e.AgentSuggestions()
 }
 
 func (e *InvalidProductError) AgentSuggestions() []string {
@@ -90,7 +86,7 @@ func (e *InvalidProductError) AgentSuggestions() []string {
 	for _, product := range e.library.GetProducts() {
 		candidates = append(candidates, strings.ToLower(product.Code))
 	}
-	return apiSuggestions(strings.ToLower(e.Code), candidates)
+	return productSuggestions(e.Code, candidates)
 }
 
 // return when use unknown api
@@ -229,14 +225,7 @@ func (e *InvalidProductOrPluginError) AgentMessage() string {
 func (*InvalidProductOrPluginError) AIRecoveryEligible() {}
 
 func (e *InvalidProductOrPluginError) GetSuggestions() []string {
-	sr := cli.NewSuggester(strings.ToLower(e.Code), 2)
-	for _, p := range e.plugins {
-		sr.Apply(strings.ToLower(p.ProductCode))
-	}
-	// for _, p := range e.library.GetProducts() {
-	// 	sr.Apply(strings.ToLower(p.Code))
-	// }
-	return sr.GetResults()
+	return e.AgentSuggestions()
 }
 
 func (e *InvalidProductOrPluginError) AgentSuggestions() []string {
@@ -244,7 +233,7 @@ func (e *InvalidProductOrPluginError) AgentSuggestions() []string {
 	for _, product := range e.plugins {
 		candidates = append(candidates, strings.ToLower(product.ProductCode))
 	}
-	return apiSuggestions(strings.ToLower(e.Code), candidates)
+	return productSuggestions(e.Code, candidates)
 }
 
 type InvalidUnifiedApiError struct {
