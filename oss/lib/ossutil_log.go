@@ -37,7 +37,7 @@ func InitLogger(level int, name string) {
 	if err != nil {
 		return
 	}
-	utilLogger = log.New(f, "", log.LstdFlags|log.Lmicroseconds)
+	utilLogger = log.New(redactingLogWriter{f}, "", log.LstdFlags|log.Lmicroseconds)
 	logFile = f
 }
 
@@ -90,4 +90,15 @@ func LogDebug(format string, a ...interface{}) {
 		return
 	}
 	writeLog(oss.Debug, format, a...)
+}
+
+// Include SDK debug output in the same credential redaction boundary.
+type redactingLogWriter struct{ file *os.File }
+
+func (w redactingLogWriter) Write(p []byte) (int, error) {
+	_, err := w.file.Write([]byte(redactOSSDiagnostic(string(p))))
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }

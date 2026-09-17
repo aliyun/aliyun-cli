@@ -32,6 +32,10 @@ func ParseAndRunCommand() error {
 		return err
 	}
 
+	for name, value := range bridgeResolvedOptions {
+		options[name] = value
+	}
+
 	var level = oss.LogOff
 	strLevel, err := getLoglevelFromOptions(options)
 	if strLevel == "info" {
@@ -60,7 +64,7 @@ func ParseAndRunCommand() error {
 		LogError("%s.\n", err.Error())
 		return err
 	}
-	if showElapse {
+	if showElapse && (activeMachine == nil || (activeMachine.format != "json" && activeMachine.format != "jsonl")) {
 		te := time.Now().UnixNano()
 		fmt.Printf("\n%.6f(s) elapsed\n", float64(te-ts)/1e9)
 		return nil
@@ -200,6 +204,9 @@ func (cm *CommandManager) RunCommand(commandName string, args []string, options 
 		}
 		if err := cmd.(Commander).RunCommand(); err != nil {
 			return false, err
+		}
+		if activeMachine != nil && activeMachine.confirmation.Load() {
+			return false, errConfirmationRequired
 		}
 		commandValue := reflect.ValueOf(cmd).Elem().FieldByName("command")
 		group := commandValue.FieldByName("group").String()

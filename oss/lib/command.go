@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
@@ -76,6 +76,7 @@ func (cmd *Command) Init(args []string, options OptionMapType, cmder interface{}
 	cmd.args = args
 	cmd.options = options
 	cmd.configOptions = OptionMapType{}
+	cmd.inputKeySecret = ""
 
 	if err := cmd.checkArgs(); err != nil {
 		return err
@@ -138,7 +139,12 @@ func (cmd *Command) needConfigFile() bool {
 }
 
 func (cmd *Command) checkOptions() error {
+	names := make([]string, 0, len(cmd.options))
 	for name := range cmd.options {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
 		msg := fmt.Sprintf("the command does not support option: \"%s\"", name)
 		switch OptionMap[name].optionType {
 		case OptionTypeFlagTrue:
@@ -501,6 +507,9 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 		options = append(options, oss.ForcePathStyle(true))
 	}
 
+	if bridgeCredentialProvider != nil {
+		options = append(options, oss.SetCredentialsProvider(bridgeCredentialProvider))
+	}
 	client, err := oss.New(endpoint, accessKeyID, accessKeySecret, options...)
 	if err != nil {
 		return nil, err
@@ -635,16 +644,9 @@ func (cmd *Command) ossListObjectsRetry(bucket *oss.Bucket, options ...oss.Optio
 		if err == nil {
 			return lor, err
 		}
-
-		// http 4XX error no need to retry
-		// only network error or internal error need to retry
-		serviceError, noNeedRetry := err.(oss.ServiceError)
-		if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
+		if !retryOSS(err, i, retryTimes, true) {
 			return lor, ObjectError{err, bucket.BucketName, ""}
 		}
-
-		// wait 1 second
-		time.Sleep(time.Duration(1) * time.Second)
 	}
 }
 
@@ -655,7 +657,7 @@ func (cmd *Command) ossListObjectVersionsRetry(bucket *oss.Bucket, options ...os
 		if err == nil {
 			return lor, err
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, true) {
 			return lor, BucketError{err, bucket.BucketName}
 		}
 	}
@@ -668,16 +670,9 @@ func (cmd *Command) ossListMultipartUploadsRetry(bucket *oss.Bucket, options ...
 		if err == nil {
 			return lmr, err
 		}
-
-		// http 4XX error no need to retry
-		// only network error or internal error need to retry
-		serviceError, noNeedRetry := err.(oss.ServiceError)
-		if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
+		if !retryOSS(err, i, retryTimes, true) {
 			return lmr, ObjectError{err, bucket.BucketName, ""}
 		}
-
-		// wait 1 second
-		time.Sleep(time.Duration(1) * time.Second)
 	}
 }
 
@@ -688,16 +683,9 @@ func (cmd *Command) ossGetObjectStatRetry(bucket *oss.Bucket, object string, opt
 		if err == nil {
 			return props, err
 		}
-
-		// http 4XX error no need to retry
-		// only network error or internal error need to retry
-		serviceError, noNeedRetry := err.(oss.ServiceError)
-		if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
+		if !retryOSS(err, i, retryTimes, true) {
 			return props, ObjectError{err, bucket.BucketName, object}
 		}
-
-		// wait 1 second
-		time.Sleep(time.Duration(1) * time.Second)
 	}
 }
 
@@ -708,16 +696,9 @@ func (cmd *Command) ossGetObjectMetaRetry(bucket *oss.Bucket, object string, opt
 		if err == nil {
 			return props, err
 		}
-
-		// http 4XX error no need to retry
-		// only network error or internal error need to retry
-		serviceError, noNeedRetry := err.(oss.ServiceError)
-		if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
+		if !retryOSS(err, i, retryTimes, true) {
 			return props, ObjectError{err, bucket.BucketName, object}
 		}
-
-		// wait 1 second
-		time.Sleep(time.Duration(1) * time.Second)
 	}
 }
 

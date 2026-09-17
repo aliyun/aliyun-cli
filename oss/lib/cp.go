@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
@@ -89,7 +90,7 @@ var (
 	mu               sync.RWMutex // mu is the mutex for interacting with user
 	snapmu           sync.RWMutex
 	chProgressSignal chan chProgressSignalType
-	signalNum        = 0
+	signalNum        int64 = 0
 )
 
 type chProgressSignalType struct {
@@ -98,7 +99,7 @@ type chProgressSignalType struct {
 }
 
 func freshProgress() {
-	if len(chProgressSignal) <= signalNum {
+	if int64(len(chProgressSignal)) <= atomic.LoadInt64(&signalNum) {
 		chProgressSignal <- chProgressSignalType{false, normalExit}
 	}
 }
@@ -1244,9 +1245,10 @@ Usage:
 
 // CopyCommand is the command upload, download and copy objects
 type CopyCommand struct {
-	monitor  CPMonitor //Put first for atomic op on some fileds
-	command  Command
-	cpOption copyOptionType
+	monitor     CPMonitor //Put first for atomic op on some fileds
+	command     Command
+	cpOption    copyOptionType
+	stopWorkers atomic.Bool
 }
 
 var copyCommand = CopyCommand{
@@ -1503,11 +1505,15 @@ func (cc *CopyCommand) RunCommand() error {
 		cc.cpOption.partitionCount = 0
 	}
 
+	cc.stopWorkers.Store(false)
 	cc.monitor.init(opType)
 	cc.cpOption.opType = opType
 
 	chProgressSignal = make(chan chProgressSignalType, 10)
-	go cc.progressBar()
+	atomic.StoreInt64(&signalNum, 0)
+	progressDone := make(chan struct{})
+	go func() { defer close(progressDone); cc.progressBar() }()
+	defer func() { close(chProgressSignal); <-progressDone }()
 
 	startT := time.Now().UnixNano() / 1000 / 1000
 	switch opType {
@@ -1627,7 +1633,7 @@ func (cc *CopyCommand) progressBar() {
 }
 
 func (cc *CopyCommand) closeProgress() {
-	signalNum = -1
+	atomic.StoreInt64(&signalNum, -1)
 }
 
 // function for upload files
@@ -1652,13 +1658,15 @@ func (cc *CopyCommand) uploadFiles(srcURLList []StorageURLer, destURL CloudURL) 
 	chFiles := make(chan fileInfoType, ChannelBuf)
 	chError := make(chan error, cc.cpOption.routines)
 	chListError := make(chan error, 1)
-	go cc.fileStatistic(srcURLList)
-	go cc.fileProducer(srcURLList, chFiles, chListError)
+	var workers sync.WaitGroup
+	defer finishTransferWorkers(&cc.stopWorkers, &workers, chFiles, chError)
+	workers.Go(func() { cc.fileStatistic(srcURLList) })
+	workers.Go(func() { cc.fileProducer(srcURLList, chFiles, chListError) })
 
 	LogInfo("upload files,routin count:%d,multi part size threshold:%d\n",
 		cc.cpOption.routines, cc.cpOption.threshold)
 	for i := 0; int64(i) < cc.cpOption.routines; i++ {
-		go cc.uploadConsumer(bucket, destURL, chFiles, chError)
+		workers.Go(func() { cc.uploadConsumer(bucket, destURL, chFiles, chError) })
 	}
 
 	completed := 0
@@ -1998,11 +2006,15 @@ func (cc *CopyCommand) getFileList(dpath string, chFiles chan<- fileInfoType) er
 
 func (cc *CopyCommand) uploadConsumer(bucket *oss.Bucket, destURL CloudURL, chFiles <-chan fileInfoType, chError chan<- error) {
 	for file := range chFiles {
+		if cc.stopWorkers.Load() {
+			continue
+		}
 		if cc.filterFile(file, cc.cpOption.cpDir) {
 			err := cc.uploadFileWithReport(bucket, destURL, file)
 			if err != nil {
 				chError <- err
 				if !cc.cpOption.ctnu {
+					cc.stopWorkers.Store(true)
 					return
 				}
 				continue
@@ -2060,6 +2072,7 @@ func (cc *CopyCommand) uploadFileWithReport(bucket *oss.Bucket, destURL CloudURL
 	}
 
 	cc.updateMonitor(skip, err, isDir, size)
+	recordTransferFailure("upload", filepath.Join(file.dir, file.filePath), CloudURLToString(bucket.BucketName, cc.makeObjectName(destURL, file)), "", err)
 	cc.report(msg, err)
 	return err
 }
@@ -2197,7 +2210,7 @@ func (cc *CopyCommand) confirm(str string) bool {
 
 	var val string
 	fmt.Print(getClearStr(fmt.Sprintf("cp: overwrite \"%s\"(y or N)? ", str)))
-	if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
+	if _, err := scanOSSInput(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
 		return false
 	}
 	return true
@@ -2207,7 +2220,6 @@ func (cc *CopyCommand) ossPutObjectRetry(bucket *oss.Bucket, objectName string, 
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
 		if i > 1 {
-			time.Sleep(time.Duration(3) * time.Second)
 			if int64(i) >= retryTimes {
 				fmt.Printf("\nretry count:%d:put object:%s.\n", i-1, objectName)
 			}
@@ -2217,11 +2229,7 @@ func (cc *CopyCommand) ossPutObjectRetry(bucket *oss.Bucket, objectName string, 
 		if err == nil {
 			return err
 		}
-
-		// http 4XX error no need to retry
-		// only network error or internal error need to retry
-		serviceError, noNeedRetry := err.(oss.ServiceError)
-		if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
+		if !retryOSS(err, i, retryTimes, false) {
 			return ObjectError{err, bucket.BucketName, objectName}
 		}
 	}
@@ -2231,7 +2239,6 @@ func (cc *CopyCommand) ossUploadFileRetry(bucket *oss.Bucket, objectName string,
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
 		if i > 1 {
-			time.Sleep(time.Duration(3) * time.Second)
 			if int64(i) >= retryTimes {
 				fmt.Printf("\nretry count:%d:upload file:%s\n", i-1, filePath)
 			}
@@ -2247,11 +2254,7 @@ func (cc *CopyCommand) ossUploadFileRetry(bucket *oss.Bucket, objectName string,
 		} else {
 			LogError("try count:%d,upload file error %s,cost:%d(ms),error:%s\n", i, filePath, cost, err.Error())
 		}
-
-		// http 4XX error no need to retry
-		// only network error or internal error need to retry
-		serviceError, noNeedRetry := err.(oss.ServiceError)
-		if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
+		if !retryOSS(err, i, retryTimes, false) {
 			return FileError{err, filePath}
 		}
 	}
@@ -2316,7 +2319,6 @@ func (cc *CopyCommand) ossResumeUploadRetry(bucket *oss.Bucket, objectName strin
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
 		if i > 1 {
-			time.Sleep(time.Duration(3) * time.Second)
 			if int64(i) >= retryTimes {
 				fmt.Printf("\nretry count:%d,multipart upload file:%s.\n", i-1, filePath)
 			}
@@ -2331,7 +2333,7 @@ func (cc *CopyCommand) ossResumeUploadRetry(bucket *oss.Bucket, objectName strin
 		} else {
 			LogError("try count:%d,multipart upload file error %s,cost:%d(ms),error:%s\n", i, filePath, cost, err.Error())
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, false) {
 			return FileError{err, filePath}
 		}
 	}
@@ -2498,6 +2500,7 @@ func (cc *CopyCommand) downloadSingleFileWithReport(bucket *oss.Bucket, objectIn
 	}
 
 	cc.updateMonitor(skip, err, false, size)
+	recordTransferFailure("download", CloudURLToString(bucket.BucketName, objectInfo.prefix+objectInfo.relativeKey), cc.makeFileName(objectInfo.relativeKey, filePath), cc.cpOption.versionId, err)
 	cc.report(msg, err)
 	return err
 }
@@ -2623,7 +2626,6 @@ func (cc *CopyCommand) ossDownloadFileRetry(bucket *oss.Bucket, objectName, file
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
 		if i > 1 {
-			time.Sleep(time.Duration(3) * time.Second)
 			if int64(i) >= retryTimes {
 				fmt.Printf("\nretry count:%d:get object to file:%s.\n", i-1, fileName)
 			}
@@ -2639,11 +2641,7 @@ func (cc *CopyCommand) ossDownloadFileRetry(bucket *oss.Bucket, objectName, file
 		} else {
 			LogError("try count:%d,GetObjectToFile error %s,cost:%d(ms),error:%s\n", i, fileName, cost, err.Error())
 		}
-
-		// http 4XX error no need to retry
-		// only network error or internal error need to retry
-		serviceError, noNeedRetry := err.(oss.ServiceError)
-		if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
+		if !retryOSS(err, i, retryTimes, true) {
 			return ObjectError{err, bucket.BucketName, objectName}
 		}
 	}
@@ -2653,7 +2651,6 @@ func (cc *CopyCommand) ossResumeDownloadRetry(bucket *oss.Bucket, objectName str
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
 		if i > 1 {
-			time.Sleep(time.Duration(3) * time.Second)
 			if int64(i) >= retryTimes {
 				fmt.Printf("\nretry count:%d:mulitpart download file:%s.\n", i-1, objectName)
 			}
@@ -2663,7 +2660,7 @@ func (cc *CopyCommand) ossResumeDownloadRetry(bucket *oss.Bucket, objectName str
 		if err == nil {
 			return cc.truncateFile(filePath, size)
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, true) {
 			return ObjectError{err, bucket.BucketName, objectName}
 		}
 	}
@@ -2697,12 +2694,14 @@ func (cc *CopyCommand) batchDownloadFiles(bucket *oss.Bucket, srcURL CloudURL, f
 	chError := make(chan error, cc.cpOption.routines)
 	chListError := make(chan error, 1)
 	// both objectStatistic & object Producer will list objects, this is duplicate
-	go cc.objectStatistic(bucket, srcURL)
-	go cc.objectProducer(bucket, srcURL, chObjects, chListError)
+	var workers sync.WaitGroup
+	defer finishTransferWorkers(&cc.stopWorkers, &workers, chObjects, chError)
+	workers.Go(func() { cc.objectStatistic(bucket, srcURL) })
+	workers.Go(func() { cc.objectProducer(bucket, srcURL, chObjects, chListError) })
 
 	LogInfo("batch download files,routin count:%d,srcurl:%s,filepath:%s\n", cc.cpOption.routines, srcURL.ToString(), filePath)
 	for i := 0; int64(i) < cc.cpOption.routines; i++ {
-		go cc.downloadConsumer(bucket, filePath, chObjects, chError)
+		workers.Go(func() { cc.downloadConsumer(bucket, filePath, chObjects, chError) })
 	}
 	return cc.waitRoutinueComplete(chError, chListError, opDownload)
 }
@@ -2882,10 +2881,14 @@ func (cc *CopyCommand) objectProducer(bucket *oss.Bucket, cloudURL CloudURL, chO
 
 func (cc *CopyCommand) downloadConsumer(bucket *oss.Bucket, filePath string, chObjects <-chan objectInfoType, chError chan<- error) {
 	for objectInfo := range chObjects {
+		if cc.stopWorkers.Load() {
+			continue
+		}
 		err := cc.downloadSingleFileWithReport(bucket, objectInfo, filePath)
 		if err != nil {
 			chError <- err
 			if !cc.cpOption.ctnu {
+				cc.stopWorkers.Store(true)
 				return
 			}
 			continue
@@ -2988,6 +2991,7 @@ func (cc *CopyCommand) checkCopyFileArgs(srcURL, destURL CloudURL) error {
 func (cc *CopyCommand) copySingleFileWithReport(bucket *oss.Bucket, objectInfo objectInfoType, srcURL, destURL CloudURL) error {
 	skip, err, size, msg := cc.copySingleFile(bucket, objectInfo, srcURL, destURL)
 	cc.updateMonitor(skip, err, false, size)
+	recordTransferFailure("copy", CloudURLToString(srcURL.bucket, objectInfo.prefix+objectInfo.relativeKey), CloudURLToString(destURL.bucket, cc.makeCopyObjectName(objectInfo.relativeKey, destURL.object)), cc.cpOption.versionId, err)
 	cc.report(msg, err)
 	return err
 }
@@ -3084,7 +3088,6 @@ func (cc *CopyCommand) ossCopyObjectRetry(bucket *oss.Bucket, objectName, destBu
 	options = append(options, oss.TaggingDirective(oss.TaggingReplace))
 	for i := 1; ; i++ {
 		if i > 1 {
-			time.Sleep(time.Duration(3) * time.Second)
 			if int64(i) >= retryTimes {
 				fmt.Printf("\nretry count:%d,copy object:%s.\n", i-1, objectName)
 			}
@@ -3093,11 +3096,7 @@ func (cc *CopyCommand) ossCopyObjectRetry(bucket *oss.Bucket, objectName, destBu
 		if err == nil {
 			return err
 		}
-
-		// http 4XX error no need to retry
-		// only network error or internal error need to retry
-		serviceError, noNeedRetry := err.(oss.ServiceError)
-		if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
+		if !retryOSS(err, i, retryTimes, false) {
 			return ObjectError{err, bucket.BucketName, objectName}
 		}
 	}
@@ -3111,7 +3110,6 @@ func (cc *CopyCommand) ossResumeCopyRetry(bucketName, objectName, destBucketName
 	retryTimes, _ := GetInt(OptionRetryTimes, cc.command.options)
 	for i := 1; ; i++ {
 		if i > 1 {
-			time.Sleep(time.Duration(3) * time.Second)
 			if int64(i) >= retryTimes {
 				fmt.Printf("\nretry count:%d, resume copy object:%s.\n", i-1, objectName)
 			}
@@ -3121,7 +3119,7 @@ func (cc *CopyCommand) ossResumeCopyRetry(bucketName, objectName, destBucketName
 		if err == nil {
 			return err
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, false) {
 			return ObjectError{err, bucket.BucketName, objectName}
 		}
 	}
@@ -3132,11 +3130,13 @@ func (cc *CopyCommand) batchCopyFiles(bucket *oss.Bucket, srcURL, destURL CloudU
 	chObjects := make(chan objectInfoType, ChannelBuf)
 	chError := make(chan error, cc.cpOption.routines)
 	chListError := make(chan error, 1)
-	go cc.objectStatistic(bucket, srcURL)
-	go cc.objectProducer(bucket, srcURL, chObjects, chListError)
+	var workers sync.WaitGroup
+	defer finishTransferWorkers(&cc.stopWorkers, &workers, chObjects, chError)
+	workers.Go(func() { cc.objectStatistic(bucket, srcURL) })
+	workers.Go(func() { cc.objectProducer(bucket, srcURL, chObjects, chListError) })
 
 	for i := 0; int64(i) < cc.cpOption.routines; i++ {
-		go cc.copyConsumer(bucket, srcURL, destURL, chObjects, chError)
+		workers.Go(func() { cc.copyConsumer(bucket, srcURL, destURL, chObjects, chError) })
 	}
 
 	return cc.waitRoutinueComplete(chError, chListError, opDownload)
@@ -3144,10 +3144,14 @@ func (cc *CopyCommand) batchCopyFiles(bucket *oss.Bucket, srcURL, destURL CloudU
 
 func (cc *CopyCommand) copyConsumer(bucket *oss.Bucket, srcURL, destURL CloudURL, chObjects <-chan objectInfoType, chError chan<- error) {
 	for objectInfo := range chObjects {
+		if cc.stopWorkers.Load() {
+			continue
+		}
 		err := cc.copySingleFileWithReport(bucket, objectInfo, srcURL, destURL)
 		if err != nil {
 			chError <- err
 			if !cc.cpOption.ctnu {
+				cc.stopWorkers.Store(true)
 				return
 			}
 			continue
@@ -3155,4 +3159,26 @@ func (cc *CopyCommand) copyConsumer(bucket *oss.Bucket, srcURL, destURL CloudURL
 	}
 
 	chError <- nil
+}
+
+// Join all in-flight work before closing reports or restoring bridge globals.
+// Drain queued items/errors to release producers after stop-on-error returns.
+func finishTransferWorkers[T any](stop *atomic.Bool, workers *sync.WaitGroup, items <-chan T, errs <-chan error) {
+	stop.Store(true)
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for range items {
+		}
+	}()
+	done := make(chan struct{})
+	go func() { workers.Wait(); close(done) }()
+	for {
+		select {
+		case <-errs:
+		case <-done:
+			<-drained
+			return
+		}
+	}
 }

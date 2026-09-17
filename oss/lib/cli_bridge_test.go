@@ -482,8 +482,10 @@ func TestParseAndRunCommandFromCli_ProfileFlagStrippedAndApplied(t *testing.T) {
 	config.ConfigurePathFlag(ctx.Flags()).SetValue(path)
 
 	var capturedArgs []string
+	var capturedOptions OptionMapType
 	parseAndRunCommandImpl = func() error {
 		capturedArgs = append([]string{}, os.Args...)
+		capturedOptions = bridgeResolvedOptions
 		return nil
 	}
 
@@ -497,9 +499,11 @@ func TestParseAndRunCommandFromCli_ProfileFlagStrippedAndApplied(t *testing.T) {
 	joined := strings.Join(capturedArgs, " ")
 	assert.NotContains(t, joined, "--profile")
 	assert.NotContains(t, joined, "mac16@oyj")
-	assert.Contains(t, joined, "--access-key-id")
-	assert.Contains(t, joined, "profile-ak")
-	assert.Contains(t, joined, "profile-sk")
+	assert.NotContains(t, joined, "--access-key-id")
+	assert.NotContains(t, joined, "profile-ak")
+	assert.NotContains(t, joined, "profile-sk")
+	assert.Equal(t, "profile-ak", *capturedOptions[OptionAccessKeyID].(*string))
+	assert.Equal(t, "profile-sk", *capturedOptions[OptionAccessKeySecret].(*string))
 	assert.Contains(t, joined, "oss://oyj-test-role/file.vsix")
 	assert.Contains(t, joined, "/tmp/Downloads")
 }
@@ -544,8 +548,10 @@ func TestParseAndRunCommandFromCli_ProfileEqualsForm(t *testing.T) {
 	config.ConfigurePathFlag(ctx.Flags()).SetValue(path)
 
 	var capturedArgs []string
+	var capturedOptions OptionMapType
 	parseAndRunCommandImpl = func() error {
 		capturedArgs = append([]string{}, os.Args...)
+		capturedOptions = bridgeResolvedOptions
 		return nil
 	}
 
@@ -555,7 +561,8 @@ func TestParseAndRunCommandFromCli_ProfileEqualsForm(t *testing.T) {
 	joined := strings.Join(capturedArgs, " ")
 	assert.NotContains(t, joined, "--profile")
 	assert.NotContains(t, joined, "--profile=alt")
-	assert.Contains(t, joined, "alt-ak")
+	assert.NotContains(t, joined, "alt-ak")
+	assert.Equal(t, "alt-ak", *capturedOptions[OptionAccessKeyID].(*string))
 	assert.Contains(t, joined, "oss://bucket")
 }
 

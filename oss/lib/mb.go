@@ -301,7 +301,7 @@ func (mc *MakeBucketCommand) getACL(aclStr, language string) (oss.ACLType, error
 			fmt.Printf("acl: %s非法\n", aclStr)
 			fmt.Printf("合法的acl有:\n\t%s\n请输入你想设置的acl：", formatACLString(bucketACL, "\n\t"))
 		}
-		if _, err := fmt.Scanln(&aclStr); err != nil {
+		if _, err := scanOSSInput(&aclStr); err != nil {
 			return "", fmt.Errorf("invalid acl: %s, please check", aclStr)
 		}
 		acl, err = mc.command.checkACL(aclStr, bucketACL)
@@ -320,7 +320,7 @@ func (mc *MakeBucketCommand) ossCreateBucketRetry(client *oss.Client, bucket str
 		if err == nil {
 			return err
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, false) {
 			return BucketError{err, bucket}
 		}
 	}

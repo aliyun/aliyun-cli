@@ -200,7 +200,11 @@ func filterObjectsFromChanWithPattern(srcCh <-chan string, pattern string, dstCh
 // Following for strings
 func getFilter(cmdline []string) (bool, []filterOptionType) {
 	filters := make([]filterOptionType, 0)
-	for i, item := range cmdline {
+	for i := 0; i < len(cmdline); i++ {
+		item := cmdline[i]
+		if item == "--" {
+			break
+		}
 		var strTag = ""
 		if strings.Index(item, IncludePrompt) == 0 {
 			strTag = IncludePrompt
@@ -214,7 +218,11 @@ func getFilter(cmdline []string) (bool, []filterOptionType) {
 
 			filter.name = strTag
 			if item == strTag {
-				strArg = cmdline[i+1]
+				if i+1 >= len(cmdline) {
+					break
+				}
+				i++
+				strArg = cmdline[i]
 			} else if item[len(strTag)] == '=' {
 				strArg = item[len(strTag)+1:]
 			}
@@ -706,6 +714,10 @@ func getObjectListCommon(bucket *oss.Bucket, cloudURL CloudURL, chObjects chan<-
 }
 
 func GetPassword(prompt string) ([]byte, error) {
+	if machineInputBlocked() {
+		activeMachine.confirmation.Store(true)
+		return nil, errConfirmationRequired
+	}
 	fd := int(os.Stdin.Fd())
 	if terminal.IsTerminal(fd) {
 		state, err := terminal.MakeRaw(fd)

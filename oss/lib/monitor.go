@@ -3,6 +3,7 @@ package lib
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -417,6 +418,7 @@ type CPMonitor struct {
 	finish         bool
 	_              uint32 //Add padding to make sure the next data 64bits alignment
 	lastSnapTime   time.Time
+	stateMu        sync.Mutex
 }
 
 func (m *CPMonitor) init(op operationType) {
@@ -439,20 +441,28 @@ func (m *CPMonitor) init(op operationType) {
 }
 
 func (m *CPMonitor) setScanError(err error) {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	m.seekAheadError = err
 	m.seekAheadEnd = true
 }
 
 func (m *CPMonitor) updateScanNum(num int64) {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	m.totalNum = m.totalNum + num
 }
 
 func (m *CPMonitor) updateScanSizeNum(size, num int64) {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	m.totalSize = m.totalSize + size
 	m.totalNum = m.totalNum + num
 }
 
 func (m *CPMonitor) setScanEnd() {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	m.seekAheadEnd = true
 }
 
@@ -492,16 +502,16 @@ func (m *CPMonitor) updateErr(size, num int64) {
 
 func (m *CPMonitor) getSnapshot() *CPMonitorSnap {
 	var snap CPMonitorSnap
-	snap.transferSize = m.transferSize
-	snap.skipSize = m.skipSize
-	snap.dealSize = m.dealSize + snap.skipSize
-	snap.fileNum = m.fileNum
-	snap.dirNum = m.dirNum
-	snap.skipNum = m.skipNum
-	snap.errNum = m.errNum
+	snap.transferSize = atomic.LoadInt64(&m.transferSize)
+	snap.skipSize = atomic.LoadInt64(&m.skipSize)
+	snap.dealSize = atomic.LoadInt64(&m.dealSize) + snap.skipSize
+	snap.fileNum = atomic.LoadInt64(&m.fileNum)
+	snap.dirNum = atomic.LoadInt64(&m.dirNum)
+	snap.skipNum = atomic.LoadInt64(&m.skipNum)
+	snap.errNum = atomic.LoadInt64(&m.errNum)
 	snap.okNum = snap.fileNum + snap.dirNum + snap.skipNum
 	snap.dealNum = snap.okNum + snap.errNum
-	snap.skipNumDir = m.skipNumDir
+	snap.skipNumDir = atomic.LoadInt64(&m.skipNumDir)
 	now := time.Now()
 	snap.duration = now.Sub(m.lastSnapTime).Nanoseconds()
 
@@ -509,6 +519,8 @@ func (m *CPMonitor) getSnapshot() *CPMonitorSnap {
 }
 
 func (m *CPMonitor) progressBar(finish bool, exitStat int) string {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	if m.finish {
 		return ""
 	}
@@ -528,7 +540,7 @@ func (m *CPMonitor) getProgressBar() string {
 		return ""
 	} else {
 		m.lastSnapTime = time.Now()
-		snap.incrementSize = m.transferSize - m.lastSnapSize
+		snap.incrementSize = snap.transferSize - m.lastSnapSize
 		m.lastSnapSize = snap.transferSize
 	}
 

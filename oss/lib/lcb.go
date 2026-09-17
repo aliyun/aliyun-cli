@@ -166,7 +166,7 @@ func (lc *LcbCommand) ossListCloudBoxesRetry(client *oss.Client, options ...oss.
 	retryTimes, _ := GetInt(OptionRetryTimes, lc.command.options)
 	for i := 1; ; i++ {
 		lbr, err := client.ListCloudBoxes(options...)
-		if err == nil || int64(i) >= retryTimes {
+		if err == nil || !retryOSS(err, i, retryTimes, true) {
 			return lbr, err
 		}
 	}

@@ -410,7 +410,7 @@ func (cc *ConfigCommand) runCommandInteractive(configFile, language string) erro
 			fmt.Print("\n请输入配置文件名,文件名可以带路径(默认为：" + DecideConfigFile("") + "，回车将使用默认配置文件。如果用户设置为其它文件，在使用命令时需要将--config-file选项设置为该文件）：")
 		}
 
-		if _, err := fmt.Scanln(&configFile); err != nil {
+		if _, err := scanOSSInput(&configFile); err != nil {
 			if llanguage == LEnglishLanguage {
 				fmt.Println("No config file entered, will use the default config file " + DecideConfigFile("") + "\n")
 			} else {
@@ -446,7 +446,7 @@ func (cc *ConfigCommand) configInteractive(configFile, language string) error {
 		} else {
 			fmt.Printf("请输入语言(%s，默认为：%s，该配置项将在此次config命令成功结束后生效)：", OptionMap[OptionLanguage].minVal, DefaultLanguage)
 		}
-		if _, err := fmt.Scanln(&val); err == nil {
+		if _, err := scanOSSInput(&val); err == nil {
 			vals := strings.Split(OptionMap[OptionLanguage].minVal, "/")
 			if FindPosCaseInsen(val, vals) == -1 {
 				return fmt.Errorf("invalid option value of %s, the value: %s is not anyone of %s", OptionLanguage, val, OptionMap[OptionLanguage].minVal)

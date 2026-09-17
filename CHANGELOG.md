@@ -2,6 +2,15 @@
 
 Release notes are also published at https://github.com/aliyun/aliyun-cli/releases. This file summarizes the major changes in each version.
 
+### Unreleased
+
+- Added opt-in OSS validation/read-only plans for single-file uploads and single-object deletion, exclusive JSONL transfer-failure manifests, and request-time host credential refresh. OSS retry loops now stop on permanent errors and ambiguous write failures, with jittered backoff for eligible retries. See `docs/design/oss-plan-recovery.md` for operation-level support and recovery limits.
+
+- Added opt-in OSS JSON/JSONL listing with bounded pages and resumable cursors, AI error envelopes with recovery guidance, and non-interactive confirmation failures. Raw `cat` output remains byte-preserving; unsupported structured-output and dry-run operations fail before execution. See `docs/design/oss-machine-output.md` for the contract.
+
+- Fixed the built-in OSS bridge to preserve option order and `--`, return parser errors to the host, and retain wrapped service errors. Profile region, timeouts and retry budgets now reach OSS execution; resolved credentials are no longer appended to argv.
+- `aliyun oss update` now reports that the host CLI must be updated through its installation method instead of invoking the standalone ossutil updater.
+
 ### v3.5.0
 
 - Introduced a unified OpenAPI runtime backed by canonical, bundled metadata, with lazy loading and consistent behavior across built-in and plugin-provided APIs.
