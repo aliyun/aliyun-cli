@@ -172,7 +172,7 @@ func (c *Commando) run(ctx *cli.Context, args []string) error {
 	return c.main(ctx, args)
 }
 
-func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) error {
+func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) (result error) {
 	if err == nil {
 		return nil
 	}
@@ -193,6 +193,11 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 	err = suggestKebabProfileFlagCase(err, args)
 
 	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
+	defer func() {
+		if agentErr, ok := result.(*cli.AgentError); enabled && ok {
+			result = agentErr.WithSchemaVersion()
+		}
+	}()
 
 	if !enabled && !explicitLocalErrorJSONRequested(ctx, err) {
 		normalizationArgs := recoveryNormalizationArgs(ctx, args, false)

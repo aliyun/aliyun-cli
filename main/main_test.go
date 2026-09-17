@@ -100,6 +100,22 @@ func TestMainConfigLoadFailureExitsNonzero(t *testing.T) {
 				if stdout.Len() != 0 {
 					t.Fatalf("stdout = %q, want no command output after configuration failure", stdout.String())
 				}
+				if aiMode == "1" {
+					var envelope cli.AgentErrorEnvelope
+					if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+						t.Fatal(err)
+					}
+					if envelope.SchemaVersion != "v1" || envelope.ErrorCode != "ConfigurationError" || envelope.Recovery.Action != "check_configuration" {
+						t.Fatalf("unexpected envelope: %+v", envelope)
+					}
+				} else {
+					_, cause := config.LoadOrCreateDefaultProfile()
+					var expected bytes.Buffer
+					cli.Errorf(&expected, "ERROR: load current configuration failed %s", cause)
+					if stderr.String() != expected.String() {
+						t.Fatalf("non-AI output changed: %q != %q", stderr.String(), expected.String())
+					}
+				}
 				if !bytes.Contains(stderr.Bytes(), []byte("load current configuration failed")) {
 					t.Fatalf("stderr = %q, want configuration error", stderr.String())
 				}
@@ -200,6 +216,7 @@ func clearAgentDetectionEnv(t *testing.T) {
 		"CURSOR_AGENT", "CLAUDECODE", "CLAUDE_CODE", "GEMINI_CLI",
 		"AUGMENT_AGENT", "OPENCODE", "OPENCODE_CLIENT", "CLINE_ACTIVE",
 		"CODEX_SHELL", "CODEX_SANDBOX", "QODER_AGENT", "QODER_CLI", "AGENT",
+		"WORKBUDDY_APP_NAME", "TRAE_BRAND_NAME", "HERMES_AGENT",
 		"ALIBABA_CLOUD_CLI_AI_MODE", "ALIBABA_CLOUD_CLI_AGENT_INTEGRATION", "NO_COLOR",
 	} {
 		t.Setenv(key, "")

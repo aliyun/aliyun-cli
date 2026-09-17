@@ -202,7 +202,11 @@ func (m *machineInvocation) adaptError(err error) error {
 	if facts.FailureReport != "" {
 		envelope.Recovery = cli.AgentErrorRecovery{Action: "inspect_failed_items", Hint: "Inspect the failure report and operation state; retry only reviewed failed items, never replay the entire sync/delete operation automatically."}
 	}
-	return &ossAgentError{cli.NewAgentError(envelope, err), facts}
+	agentErr := cli.NewAgentError(envelope, err)
+	if m.ai {
+		agentErr = agentErr.WithSchemaVersion()
+	}
+	return &ossAgentError{agentErr, facts}
 }
 
 func machineInputBlocked() bool {

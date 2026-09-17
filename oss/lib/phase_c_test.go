@@ -412,3 +412,35 @@ func TestPhaseCVersionPageOffset(t *testing.T) {
 	assert.Empty(t, cursor)
 	assert.Equal(t, []string{"deleted", "older"}, versions)
 }
+
+func TestOSSAIErrorVersionPreservesNonAIContracts(t *testing.T) {
+	for _, tc := range []struct {
+		name, format string
+		ai           bool
+	}{
+		{name: "text"}, {name: "explicit JSON", format: "json"}, {name: "AI", ai: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cause := errors.New("invalid input")
+			m := &machineInvocation{ai: tc.ai, format: tc.format, phase: "validation", command: "ls"}
+			err := m.adaptError(cause)
+			if !m.structured() {
+				require.Same(t, cause, err)
+				return
+			}
+			structured, ok := err.(*ossAgentError)
+			require.True(t, ok)
+			var out bytes.Buffer
+			require.NoError(t, structured.RenderError(&out))
+			var data map[string]interface{}
+			require.NoError(t, json.Unmarshal(out.Bytes(), &data))
+			if tc.ai {
+				assert.Equal(t, "v1", data["schemaVersion"])
+			} else {
+				assert.NotContains(t, data, "schemaVersion")
+			}
+			assert.Equal(t, "1", data["oss"].(map[string]interface{})["schema_version"])
+			assert.Equal(t, 1, structured.ExitCode())
+		})
+	}
+}
