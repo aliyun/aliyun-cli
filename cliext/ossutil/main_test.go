@@ -6,8 +6,11 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 )
@@ -82,18 +85,27 @@ func TestOssutilCommandRunInstalledSkipNetwork(t *testing.T) {
 	defer func() { getConfigurePathFunc = oldGet }()
 
 	// 创建假可执行文件(ossutil)
-	execPath := filepath.Join(tmpDir, "ossutil")
+	filename := "ossutil"
+	if runtime.GOOS == "windows" {
+		filename += ".exe"
+	}
+	execPath := filepath.Join(tmpDir, filename)
 	if err := os.WriteFile(execPath, []byte("#!/bin/sh\necho dummy\n"), 0755); err != nil {
 		t.Fatalf("write fake exec: %v", err)
 	}
 	// 创建版本检查缓存，避免触发远程版本请求
 	cacheFile := filepath.Join(tmpDir, ".ossutil_version_check")
-	if err := os.WriteFile(cacheFile, []byte("0"), 0644); err != nil {
+	if err := os.WriteFile(cacheFile, []byte(strconv.FormatInt(time.Now().Unix(), 10)), 0644); err != nil {
 		t.Fatalf("write cache: %v", err)
 	}
 	// 设置忽略profile，避免真实配置依赖
-	os.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
-	defer os.Unsetenv("ALIBABA_CLOUD_IGNORE_PROFILE")
+	t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
+	oldLatest := getLatestOssUtilVersionFunc
+	getLatestOssUtilVersionFunc = func() (string, error) {
+		t.Fatal("fresh version cache must not request the remote version")
+		return "", nil
+	}
+	t.Cleanup(func() { getLatestOssUtilVersionFunc = oldLatest })
 
 	cmd := NewOssutilCommand()
 	stdout := &bytes.Buffer{}

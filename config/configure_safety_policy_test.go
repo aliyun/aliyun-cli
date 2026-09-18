@@ -46,6 +46,20 @@ func TestConfigureSafetyPolicy_Show_Default(t *testing.T) {
 	assert.Empty(t, p.Rules)
 }
 
+func TestConfigureSafetyPolicy_Show_UsesEffectivePolicy(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, safety.SavePolicy(dir, &safety.Policy{Enabled: true,
+		Rules: []safety.Rule{{Pattern: "ecs:Delete*", Action: safety.ActionDeny}}}))
+	t.Setenv(safety.EnvSafetyPolicyEnabled, "false")
+	ctx, w := testAiModeContext(t, dir)
+	sub := enterSafetyPolicySub(t, ctx, "show")
+	require.NoError(t, sub.Run(ctx, []string{}))
+	var p safety.Policy
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(w.String())), &p))
+	assert.False(t, p.Enabled)
+	assert.Len(t, p.Rules, 1)
+}
+
 func TestConfigureSafetyPolicy_ParentRun_DefaultShow(t *testing.T) {
 	dir := t.TempDir()
 	ctx, w := testAiModeContext(t, dir)

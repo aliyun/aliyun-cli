@@ -33,6 +33,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/util"
 	"github.com/aliyun/aliyun-openapi-runtime/argparser"
 	"github.com/aliyun/aliyun-openapi-runtime/engine"
+	runtime "github.com/aliyun/aliyun-openapi-runtime/runtime"
 
 	"encoding/json"
 	"fmt"
@@ -64,6 +65,12 @@ var hookdo = func(fn func() (*responses.CommonResponse, error)) func() (*respons
 }
 
 var runtimeTryDispatch = runtimehost.TryDispatch
+
+var runtimeDispatch = runtimehost.Dispatch
+
+var installPluginForCommand = func(c *Commando, ctx *cli.Context, commandName, productCode string) (string, error) {
+	return c.findAndInstallPlugin(ctx, commandName, productCode)
+}
 
 var agentErrorNormalizer = normalizeAgentError
 
@@ -165,7 +172,7 @@ func (c *Commando) run(ctx *cli.Context, args []string) error {
 	return c.main(ctx, args)
 }
 
-func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) error {
+func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) (result error) {
 	if err == nil {
 		return nil
 	}
@@ -186,10 +193,28 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 	err = suggestKebabProfileFlagCase(err, args)
 
 	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
+	defer func() {
+		if agentErr, ok := result.(*cli.AgentError); enabled && ok {
+			result = agentErr.WithSchemaVersion()
+		}
+	}()
 
 	if !enabled && !explicitLocalErrorJSONRequested(ctx, err) {
 		normalizationArgs := recoveryNormalizationArgs(ctx, args, false)
 		context := newRecoveryContext(normalizationArgs)
+		var legacyEndpoint *meta.InvalidEndpointError
+		var runtimeEndpoint *runtime.EndpointNotResolvedError
+		if errors.As(err, &legacyEndpoint) || errors.As(err, &runtimeEndpoint) {
+			tip := fmt.Sprintf(
+				"List available endpoints with `%s`, use a supported --region, or pass --endpoint <host> explicitly.", endpointDiagnosticsCommand(context))
+			var originalTip cli.ErrorWithTip
+			if errors.As(err, &originalTip) {
+				return cli.NewErrorWithTip(err, "%s", tip)
+			}
+			// Adding guidance must not turn a plain error (exit 1) into an
+			// ErrorWithTip (exit 3).
+			return fmt.Errorf("%w\n\n%s", err, tip)
+		}
 		if isSectionHelpAllConflict(err) {
 			if command := context.sectionSearchCommand("<keyword>"); command != "" {
 				return &sectionHelpAllRecoveryError{cause: err, command: command}
@@ -198,6 +223,10 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 		return err
 	}
 	normalizationArgs := recoveryNormalizationArgs(ctx, args, enabled)
+	var queryError *engine.QueryFilterError
+	if errors.As(err, &queryError) && rawHelpRequested(ctx.InvocationArgs()) {
+		normalizationArgs = append(normalizationArgs, "--help")
+	}
 	if c.recoverySearchValidator != nil {
 		return agentErrorNormalizerWithSearch(err, normalizationArgs, c.recoverySearchValidator)
 	}
@@ -538,21 +567,8 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			//   - not installed but the engine resolves it (baseline / user meta plugin) -> aliyun-openapi-runtime engine.
 			//     Products marked distribution=="go" are abstained by the engine so they still reach auto-install.
 			if installed {
-				if ptype, ok := plugin.InstalledPluginType(args[0]); ok && ptype == plugin.PluginTypeMeta {
-					if err := plugin.ValidatePluginCliVersion(args[0]); err != nil {
-						return err
-					}
-					// Meta plugins have no executable in which to register the package-level version command.
-					// Read it from the installed manifest instead of forwarding "version" to the OpenAPI runtime as an API name.
-					if apiOrMethod == "version" {
-						name, version, err := plugin.InstalledPluginPackageVersion(args[0])
-						if err != nil {
-							return err
-						}
-						cli.Printf(ctx.Stdout(), "%s %s\n", name, version)
-						return nil
-					}
-					return c.adaptEngineUnknownCommand(runtimehost.Dispatch(ctx, pluginArgs))
+				if handled, dispatchErr := c.dispatchInstalledMetaPlugin(ctx, args[0], apiOrMethod, pluginArgs); handled {
+					return dispatchErr
 				}
 			} else {
 				if validationErr := c.validateCanonicalRuntimeCommand(args, ctx); validationErr != nil {
@@ -575,7 +591,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				commandName := buildCommandName(args)
 				// fmt.Println("commandName", commandName, pluginArgs)
 
-				foundPluginName, err := c.findAndInstallPlugin(ctx, commandName, args[0])
+				foundPluginName, err := installPluginForCommand(c, ctx, commandName, args[0])
 				if err != nil {
 					return err
 				}
@@ -605,6 +621,12 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 					return &InvalidProductOrPluginError{Code: args[0], library: c.library, plugins: plugins}
 				}
 				pluginName = foundPluginName
+
+				// Installation may have added a metadata-only plugin.
+				// Re-evaluate its type in the same invocation instead of falling through to the Go-plugin executor, which would look for a non-existent binary.
+				if handled, dispatchErr := c.dispatchInstalledMetaPlugin(ctx, args[0], apiOrMethod, pluginArgs); handled {
+					return dispatchErr
+				}
 			}
 
 			// Prepare config related env for plugin
@@ -831,6 +853,28 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		return cli.NewErrorWithTip(fmt.Errorf("too many arguments"),
 			"Use `aliyun --help` to show usage")
 	}
+}
+
+// dispatchInstalledMetaPlugin routes an installed metadata plugin through the in-process OpenAPI runtime.
+// It returns handled=false for Go plugins so the caller can continue to the external binary execution path.
+func (c *Commando) dispatchInstalledMetaPlugin(ctx *cli.Context, productCode, apiOrMethod string, pluginArgs []string) (bool, error) {
+	ptype, ok := plugin.InstalledPluginType(productCode)
+	if !ok || ptype != plugin.PluginTypeMeta {
+		return false, nil
+	}
+	if err := plugin.ValidatePluginCliVersion(productCode); err != nil {
+		return true, err
+	}
+	// Meta plugins have no executable in which to register the package-level version command. Read it from the installed manifest instead.
+	if apiOrMethod == "version" {
+		name, version, err := plugin.InstalledPluginPackageVersion(productCode)
+		if err != nil {
+			return true, err
+		}
+		cli.Printf(ctx.Stdout(), "%s %s\n", name, version)
+		return true, nil
+	}
+	return true, c.adaptEngineUnknownCommand(runtimeDispatch(ctx, pluginArgs))
 }
 
 func (c *Commando) processApiInvoke(ctx *cli.Context, product *meta.Product, api *canonicalmeta.API, method string, path string) error {
@@ -1767,7 +1811,8 @@ func (c *Commando) autoInstallPlugin(ctx *cli.Context, mgr *plugin.Manager, plug
 		cli.Printf(ctx.Stderr(), "Auto-installing plugin '%s'...\n", pluginName)
 	}
 
-	err := mgr.Install(ctx, pluginName, "", enablePre)
+	// Installation is a prerequisite here; reserve stdout for the requested command.
+	err := mgr.Install(cli.NewCommandContext(ctx.Stderr(), ctx.Stderr()), pluginName, "", enablePre)
 	if err != nil {
 		c.handleInstallError(ctx, err, pluginName, enablePre)
 		return "", fmt.Errorf("failed to install plugin '%s': %w", pluginName, err)
@@ -1807,7 +1852,7 @@ func (c *Commando) interactiveInstallPlugin(ctx *cli.Context, mgr *plugin.Manage
 		cli.Printf(ctx.Stderr(), "Installing plugin '%s'...\n", pluginName)
 	}
 
-	err = mgr.Install(ctx, pluginName, "", enablePre)
+	err = mgr.Install(cli.NewCommandContext(ctx.Stderr(), ctx.Stderr()), pluginName, "", enablePre)
 	if err != nil {
 		c.handleInstallError(ctx, err, pluginName, enablePre)
 		return "", fmt.Errorf("failed to install plugin '%s': %w", pluginName, err)

@@ -15,6 +15,10 @@ jobs:
         with:
           submodules: true
           ref: ${{ github.ref }}
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
       - name: Create Release
         run: |
           bash tools/create_release.sh ${{ github.ref_name }}
@@ -159,6 +163,7 @@ jobs:
         run: go generate ./bundledmeta
       - name: Download assets and compute shasum
         run: |
+          set -euo pipefail
           TAG=${{ github.ref_name }}
           VERSION=${TAG#v}
           bash tools/download_assets.sh ${VERSION}

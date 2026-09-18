@@ -203,6 +203,7 @@ func applyProductHelpOptions(document *machineHelpProductDocument, options helpO
 	})
 	searched := options.Search != ""
 	if searched {
+		document.Endpoints = nil // API search keeps only matching APIs, as before.
 		document.Query = options.Search
 		candidates := make([]HelpSearchCandidate, 0, len(document.APIs))
 		for index := range document.APIs {
@@ -841,6 +842,11 @@ func renderCanonicalProductText(w io.Writer, document *machineHelpProductDocumen
 	name := localizedMachineHelpText(document.Product.Name)
 	if _, err := fmt.Fprintf(w, "\nProduct: %s (%s)\nVersion: %s\n", document.Product.Code, name, document.Product.SelectedVersion); err != nil {
 		return err
+	}
+	if search == "" && len(document.Endpoints) > 0 {
+		if err := renderProductEndpoints(w, document); err != nil {
+			return err
+		}
 	}
 	if len(document.APIs) == 0 && search != "" {
 		if _, err := fmt.Fprintf(w, "\n"+noHelpSearchMatchesFormat+"\n", search); err != nil {

@@ -9,6 +9,8 @@ import (
 )
 
 func TestCliAIOverridesForOpenAPIIncludesDetectedAgent(t *testing.T) {
+	t.Setenv(aimode.EnvAIMode, "")
+	t.Setenv(aimode.EnvAgentIntegration, "")
 	ctx := cli.NewCommandContext(io.Discard, io.Discard)
 	AddFlags(ctx.Flags())
 
@@ -21,6 +23,25 @@ func TestCliAIOverridesForOpenAPIIncludesDetectedAgent(t *testing.T) {
 	on, off = CliAIOverridesForOpenAPI(ctx)
 	if !on || off {
 		t.Fatalf("agent context overrides = %v, %v", on, off)
+	}
+
+	t.Setenv(aimode.EnvAIMode, "0")
+	on, off = CliAIOverridesForOpenAPI(ctx)
+	if on || off {
+		t.Fatalf("environment opt-out did not suppress agent override = %v, %v", on, off)
+	}
+
+	t.Setenv(aimode.EnvAIMode, "")
+	t.Setenv(aimode.EnvAgentIntegration, "disabled")
+	on, off = CliAIOverridesForOpenAPI(ctx)
+	if on || off {
+		t.Fatalf("disabled Agent integration did not suppress agent override = %v, %v", on, off)
+	}
+
+	CliAIModeFlag(ctx.Flags()).SetAssigned(true)
+	on, off = CliAIOverridesForOpenAPI(ctx)
+	if !on || off {
+		t.Fatalf("explicit force-on did not override environment opt-out = %v, %v", on, off)
 	}
 
 	CliNoAIModeFlag(ctx.Flags()).SetAssigned(true)

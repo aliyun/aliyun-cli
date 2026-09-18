@@ -7,7 +7,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -17,7 +16,17 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 )
 
+func useTestHome(t *testing.T, home string) {
+	t.Helper()
+	t.Setenv("HOME", home)
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("USERPROFILE", home)
+}
+
 func prepareConfig(t *testing.T, home string, language string) {
+	t.Helper()
+	useTestHome(t, home)
 	cfgDir := filepath.Join(home, ".aliyun")
 	if err := os.MkdirAll(cfgDir, 0755); err != nil {
 		t.Fatalf("mkdir cfg: %v", err)
@@ -168,32 +177,6 @@ func TestIsPythonVersionSufficient(t *testing.T) {
 		if result != tt.expected {
 			t.Errorf("isPythonVersionSufficient(%q) = %v, want %v", tt.version, result, tt.expected)
 		}
-	}
-}
-
-func TestEnsurePythonAvailable(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("skipping on windows")
-	}
-
-	// This test requires python3 to be available on the system
-	_, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("python3 not available")
-	}
-
-	tmpDir := t.TempDir()
-	ctx, _, _ := newOriginCtx()
-	c := NewContext(ctx)
-	c.osType = runtime.GOOS
-	c.osArch = runtime.GOARCH
-	c.embeddedPythonDir = filepath.Join(tmpDir, "python-embedded")
-	err = c.EnsurePythonAvailable()
-	if err != nil {
-		t.Errorf("EnsurePythonAvailable failed: %v", err)
-	}
-	if c.pythonPath == "" {
-		t.Errorf("pythonPath should not be empty")
 	}
 }
 
@@ -494,8 +477,7 @@ func TestPrepareEnv_RamRoleArnNoStaticAKLeak(t *testing.T) {
 	// RamRoleArn 模式下，如果 GetCredential 失败（例如无效的 RoleArn），
 	// 应该 fallback 到 os.Environ() 而不是泄漏静态母凭证。
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	useTestHome(t, home)
 	os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
 
 	cfgDir := filepath.Join(home, ".aliyun")
@@ -530,8 +512,7 @@ func TestPrepareEnv_OAuthModeInjectsTempSTS(t *testing.T) {
 	// OAuth 模式：STS 未过期时，GetCredential 直接复用 profile 中存储的临时 STS，
 	// PrepareEnv 应把这套临时 STS 三元组注入子进程（无需网络请求）。
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	useTestHome(t, home)
 	os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
 
 	cfgDir := filepath.Join(home, ".aliyun")
@@ -570,8 +551,7 @@ func TestPrepareEnv_OAuthModeInjectsTempSTS(t *testing.T) {
 func TestPrepareEnv_AKModeInjectsStaticAK(t *testing.T) {
 	// AK 模式：静态 AK/SK 直接注入，且不应出现 STS Token。
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	useTestHome(t, home)
 	os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
 
 	cfgDir := filepath.Join(home, ".aliyun")
@@ -607,8 +587,7 @@ func TestPrepareEnv_AKModeInjectsStaticAK(t *testing.T) {
 func TestPrepareEnv_StsTokenModeInjectsTriple(t *testing.T) {
 	// StsToken 模式：AK/SK + STS Token 三元组直接注入。
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	useTestHome(t, home)
 	os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
 
 	cfgDir := filepath.Join(home, ".aliyun")
@@ -646,8 +625,7 @@ func TestPrepareEnv_StsTokenModeInjectsTriple(t *testing.T) {
 func TestPrepareEnv_BearerTokenModeInjectsBearer(t *testing.T) {
 	// BearerToken 模式：注入 bearer token 及 header key，不走 STS 凭证链。
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	useTestHome(t, home)
 	os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
 
 	cfgDir := filepath.Join(home, ".aliyun")

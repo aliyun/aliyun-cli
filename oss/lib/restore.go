@@ -348,7 +348,7 @@ func (rc *RestoreCommand) checkOptions(cloudURL CloudURL, recursive, force bool,
 			return nil
 		}
 		fmt.Printf("Do you really mean to recursivlly restore objects of %s(y or N)? ", rc.command.args[0])
-		if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
+		if _, err := scanOSSInput(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
 			fmt.Println("operation is canceled.")
 			return nil
 		}
@@ -417,7 +417,7 @@ func (rc *RestoreCommand) ossRestoreObjectRetry(bucket *oss.Bucket, object strin
 			}
 		}
 
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, false) {
 			return ObjectError{err, bucket.BucketName, object}
 		}
 	}

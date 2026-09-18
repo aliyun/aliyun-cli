@@ -31,8 +31,14 @@ func NewConfigureSafetyPolicyCommand() *cli.Command {
 			"管理安全策略和人工确认规则"),
 		Usage: "safety-policy [command] [--config-path <configPath>]",
 		Long: i18n.T(
-			`Configure safety policy to deny or require confirmation for destructive operations.`,
-			`配置安全策略，用于拒绝或要求确认破坏性操作。`),
+			`Configure safety policy to deny or require confirmation for destructive operations.
+Rules match command spelling case-insensitively, with * as a wildcard; API aliases are not expanded.
+For example, ecs:DeleteInstance does not match ecs:delete-instance. Add a rule for each spelling you use.
+The first matching rule wins; unmatched commands are allowed.`,
+			`配置安全策略，用于拒绝或要求确认破坏性操作。
+规则按命令写法匹配，不区分大小写，支持 * 通配符；不会展开 API 别名。
+例如 ecs:DeleteInstance 不匹配 ecs:delete-instance，需要分别配置所使用的写法。
+第一条匹配的规则生效；未匹配的命令允许执行。`),
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
@@ -51,8 +57,8 @@ func NewConfigureSafetyPolicyCommand() *cli.Command {
 		AssignedMode: cli.AssignedOnce,
 		Persistent:   true,
 		Short: i18n.T(
-			"command pattern for rule (e.g. *:Delete* or ecs:UpdateInstance)",
-			"规则的命令模式 (如 *:Delete* 或 ecs:UpdateInstance)"),
+			"case-insensitive command pattern with * wildcard; ecs:DeleteInstance does not match ecs:delete-instance",
+			"命令写法匹配，不区分大小写，支持 *；ecs:DeleteInstance 不匹配 ecs:delete-instance"),
 	})
 	cmd.Flags().Add(&cli.Flag{
 		Category:     "safety",
@@ -84,6 +90,15 @@ func loadSafetyPolicy(ctx *cli.Context) (configDir string, policy *safety.Policy
 	return configDir, policy, nil
 }
 
+func loadEffectiveSafetyPolicy(ctx *cli.Context) (configDir string, policy *safety.Policy, err error) {
+	configDir = GetConfigDir(ctx)
+	policy, err = safety.LoadEffectivePolicy(configDir)
+	if err != nil {
+		return "", nil, fmt.Errorf("load effective safety policy failed: %w", err)
+	}
+	return configDir, policy, nil
+}
+
 func newConfigureSafetyPolicyShowCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "show",
@@ -93,7 +108,7 @@ func newConfigureSafetyPolicyShowCommand() *cli.Command {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			configDir, policy, err := loadSafetyPolicy(ctx)
+			configDir, policy, err := loadEffectiveSafetyPolicy(ctx)
 			if err != nil {
 				return err
 			}
@@ -183,7 +198,7 @@ func newConfigureSafetyPolicyListCommand() *cli.Command {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			configDir, policy, err := loadSafetyPolicy(ctx)
+			configDir, policy, err := loadEffectiveSafetyPolicy(ctx)
 			if err != nil {
 				return err
 			}

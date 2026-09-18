@@ -22,7 +22,65 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestRpcFlatArrayIndexedParameters(t *testing.T) {
+	api := &canonicalmeta.API{Name: "TagResources", Method: "POST", Protocol: "HTTPS",
+		Operation: &canonicalmeta.Operation{APIStyle: "RPC"},
+		Parameters: []canonicalmeta.Parameter{
+			{RawName: "ResourceId", Type: "array", Location: "query", ParamStyle: "flat", Required: true, DocRequired: true,
+				Element: &canonicalmeta.TypeShape{Type: "string"}},
+			{RawName: "Tag", Type: "array", Location: "query", ParamStyle: "flat", Required: true, DocRequired: true,
+				Element: &canonicalmeta.TypeShape{Type: "object", Fields: []canonicalmeta.Field{
+					{RawName: "Key", Type: "string", DocRequired: true},
+					{RawName: "Value", Type: "string"},
+				}}},
+		},
+	}
+	for _, aiMode := range []bool{false, true} {
+		for _, indexed := range []bool{false, true} {
+			ctx := legacyConstraintContext(t, aiMode, false)
+			ctx.Flags().Add(NewInsecureFlag())
+			ctx.Flags().Add(NewSecureFlag())
+			ctx.Flags().Add(NewMethodFlag())
+			values := map[string]string{"ResourceId": "rg-test", "Tag": `[{"Key":"purpose","Value":"test"}]`}
+			if indexed {
+				values = map[string]string{"ResourceId.1": "rg-test", "ResourceId.2": "rg-test-2", "Tag.1.Key": "purpose", "Tag.1.Value": "test"}
+			}
+			for name, value := range values {
+				assignLegacyUnknown(t, ctx, name, value)
+				require.NotNil(t, api.FindLegacyParameter(name), name)
+			}
+			require.NoError(t, validateLegacyDocRequired(ctx, api), "ai=%v indexed=%v", aiMode, indexed)
+			require.NoError(t, validateLegacyConstraints(ctx, api))
+			invoker := &RpcInvoker{BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()}, api: api}
+			require.NoError(t, invoker.Prepare(ctx), "ai=%v indexed=%v", aiMode, indexed)
+			assert.Equal(t, values, invoker.request.QueryParams)
+		}
+	}
+	resourceHelp := projectLegacyParameter(api.LegacyTopLevelParameters()[0], "")
+	assert.Contains(t, resourceHelp.Options, "--ResourceId", "keep the existing parameter Help entrypoint")
+	assert.Contains(t, resourceHelp.Options, "--ResourceId.1")
+	ctx := legacyConstraintContext(t, false, false)
+	ctx.Flags().Add(NewInsecureFlag())
+	ctx.Flags().Add(NewSecureFlag())
+	ctx.Flags().Add(NewMethodFlag())
+	invoker := &RpcInvoker{BasicInvoker: &BasicInvoker{request: requests.NewCommonRequest()}, api: api}
+	require.ErrorContains(t, invoker.Prepare(ctx), "required parameters not assigned")
+	assert.Nil(t, api.FindLegacyParameter("Tag.1.Unknown"))
+	for _, name := range []string{"ResourceId.", "ResourceId.foo", "ResourceId.1.Unknown", "ResourceId.1.", "ResourceId.0", "ResourceId.-1", "Tag..Key", "Tag.foo.Key"} {
+		assert.Nil(t, api.FindLegacyParameter(name), name)
+	}
+	for _, variant := range []struct{ style, location, serialization string }{
+		{"ROA", "query", "flat"}, {"RPC", "body", "flat"}, {"RPC", "formData", "flat"}, {"RPC", "query", "json"},
+	} {
+		other := &canonicalmeta.API{Operation: &canonicalmeta.Operation{APIStyle: variant.style}, Parameters: []canonicalmeta.Parameter{
+			{RawName: "ResourceId", Type: "array", Location: variant.location, ParamStyle: variant.serialization},
+		}}
+		assert.Nil(t, other.FindLegacyParameter("ResourceId.1"), "%+v", variant)
+	}
+}
 
 func TestRpcInvoker_Prepare(t *testing.T) {
 	a := &RpcInvoker{

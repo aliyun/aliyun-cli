@@ -77,6 +77,8 @@ aliyun ecs describe-instances --help
 
 ## Endpoints and unsupported metadata
 
+Product JSON Help exposes `product.endpoints` entries with `regionId` (when regional) and `endpoint`. Query them locally with `aliyun ecs --help --cli-output json --cli-query product.endpoints`; add `--endpoint-type vpc` for VPC endpoint selection.
+
 The CLI normally resolves API versions and endpoints from metadata. To call an API not present in the bundled metadata, use `--force` together with an explicit version and endpoint:
 
 ```sh
@@ -263,6 +265,24 @@ aliyun configure safety-policy --help
 
 `--yes` skips a confirmation prompt for non-interactive use, but does not override a deny policy. Review the exact command and scope before using it in automation.
 
+Safety policy is disabled by default, and `confirm` is a local CLI confirmation rather than cloud authorization or approval. Use `show` or `list` to inspect the effective policy. When `ALIBABA_CLOUD_SAFETY_POLICY_ENABLED` or `ALIBABA_CLOUD_SAFETY_POLICY_RULES` is set, the displayed policy includes those environment overrides. The CLI refuses to continue when the policy file or environment rules cannot be fully parsed.
+
+### Command matching contract
+
+By design, safety policy matches the command spelling supplied by the caller, not the resolved OpenAPI identity. Matching is case-insensitive and supports `*` for any sequence of characters. It does not expand API aliases or convert between PascalCase and kebab-case. For example, `ecs:DeleteInstance` matches `ECS:deleteinstance`, but does not match `ecs:delete-instance`, even though both command forms invoke the same API. This behavior also applies in AI mode.
+
+Configure each spelling used by your scripts or agents:
+
+```sh
+aliyun configure safety-policy add --pattern 'ecs:DeleteInstance' --action deny
+aliyun configure safety-policy add --pattern 'ecs:delete-instance' --action deny
+aliyun configure safety-policy enable
+```
+
+Rules are evaluated in order: the first match wins, and unmatched commands are allowed. A wildcard such as `ecs:Delete*` can cover both spellings by their shared prefix, but does not identify every API with a destructive effect. REST method/path commands use `product:METHOD/path` (for example, `cs:DELETE/clusters`); use `cs:DELETE/*` to match slash-prefixed DELETE paths. Plugin subcommand hierarchies use `:` (for example, `fc:function:create`). Configure API-name, method/path, and plugin forms separately when needed. Cloud authorization remains enforced by the service and RAM permissions.
+
+Built-in extensions (such as `saectl`, `ossutil`, `acrutil`, and `spark-submit`) also check policy before dispatch, ahead of extension installation, credential resolution, and execution. Their identifiers join positional arguments with `:`, for example `saectl:restore` or `acrutil:diagnosis:restore`; `*restore*` matches both. Host configuration options are excluded. Non-option tokens following unknown extension options are retained, so use wildcards when a rule needs to cover additional arguments. Invocations without extension arguments and standalone `help`/`--help`/`-h` or `version`/`--version` requests are exempt. Other invocations are checked even if they contain `--help`, so an option value cannot accidentally bypass policy as a help request.
+
 ## Agent-aware optimization and AI mode
 
 AI mode can be managed globally or per command:
@@ -273,6 +293,8 @@ aliyun ecs describe-instances --cli-ai-mode
 ```
 
 When a supported agent environment is detected, in-process OpenAPI commands automatically enable agent-oriented interaction and execution optimizations. These optimizations currently include stricter metadata-based validation and more structured error output, but the exact behavior may change and is not a stable compatibility contract.
+
+`ALIBABA_CLOUD_CLI_AGENT_INTEGRATION` controls automatic Agent integration: unset enables the defaults, `disabled` disables all integrations, `all` enables all, and a comma-separated list such as `ai-mode` enables only named integrations. This does not enable safety policy. Detected Agent identities also add a fixed `Agent/<name>` User-Agent segment independently of the AI-mode integration switch.
 
 Requests made through this automatically enabled mode append the following generic User-Agent marker:
 
@@ -295,5 +317,9 @@ This rule applies only to the traditional PascalCase command form. When a parame
 ```sh
 aliyun ecs SomeOperation --PortRange=-1/-1
 ```
+
+## Built-in OSS
+
+See the [built-in OSS automation guide](./oss.md) for JSON/JSONL listing, read-only plans, confirmation, and failure reports.
 
 Next: [manage product plugins](./plugins.md).

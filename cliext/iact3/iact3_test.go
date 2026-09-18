@@ -14,6 +14,10 @@ import (
 )
 
 func prepareConfig(t *testing.T, home string) {
+	t.Helper()
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("USERPROFILE", home)
 	cfgDir := filepath.Join(home, ".aliyun")
 	if err := os.MkdirAll(cfgDir, 0755); err != nil {
 		t.Fatalf("mkdir cfg: %v", err)
@@ -36,6 +40,22 @@ func addConfigFlag(ctx *cli.Context, name string, value string) {
 	f.SetAssigned(true)
 	f.SetValue(value)
 	ctx.Flags().Add(f)
+}
+
+func useSupportedTestPlatform(t *testing.T) {
+	t.Helper()
+	oldGOOS := runtimeGOOSFunc
+	oldGOARCH := runtimeGOARCHFunc
+	runtimeGOOSFunc = func() string { return "linux" }
+	runtimeGOARCHFunc = func() string { return "amd64" }
+	t.Cleanup(func() {
+		runtimeGOOSFunc = oldGOOS
+		runtimeGOARCHFunc = oldGOARCH
+	})
+}
+
+func successfulTestCommand() *exec.Cmd {
+	return exec.Command(os.Args[0], "-test.run=^$")
 }
 
 func TestPrepareEnv_Success(t *testing.T) {
@@ -114,6 +134,7 @@ func TestRemoveFlagsForMainCli_SpaceValueAndShorthand(t *testing.T) {
 }
 
 func TestRun_UpgradeAfterMainFlags(t *testing.T) {
+	useSupportedTestPlatform(t)
 	tmpDir := t.TempDir()
 	oldGet := getConfigurePathFunc
 	getConfigurePathFunc = func() string { return tmpDir }
@@ -344,6 +365,7 @@ func TestSelfUpgrade_NeedsUpgrade(t *testing.T) {
 }
 
 func TestRun_NoAutoUpgrade(t *testing.T) {
+	useSupportedTestPlatform(t)
 	tmpDir := t.TempDir()
 	oldGet := getConfigurePathFunc
 	getConfigurePathFunc = func() string { return tmpDir }
@@ -357,6 +379,11 @@ func TestRun_NoAutoUpgrade(t *testing.T) {
 
 	execPath := filepath.Join(tmpDir, "iact3")
 	_ = os.WriteFile(execPath, []byte("fake"), 0755)
+	writeCache(t, tmpDir, iact3VersionCache{
+		InstalledVersion: "0.1.12",
+		LastKnownRemote:  "0.1.13",
+		LastRemoteCheck:  time.Now().Unix(),
+	})
 
 	verCheckCalled := false
 	oldGetVer := getLatestIact3VersionFunc
@@ -368,7 +395,7 @@ func TestRun_NoAutoUpgrade(t *testing.T) {
 
 	oldExec := execCommandFunc
 	execCommandFunc = func(name string, args ...string) *exec.Cmd {
-		return exec.Command("true")
+		return successfulTestCommand()
 	}
 	defer func() { execCommandFunc = oldExec }()
 
@@ -408,6 +435,7 @@ func writeCache(t *testing.T, dir string, c iact3VersionCache) {
 }
 
 func TestRun_FreshInstallWritesCache(t *testing.T) {
+	useSupportedTestPlatform(t)
 	tmpDir := t.TempDir()
 	oldGet := getConfigurePathFunc
 	getConfigurePathFunc = func() string { return tmpDir }
@@ -430,7 +458,7 @@ func TestRun_FreshInstallWritesCache(t *testing.T) {
 	defer func() { downloadAndExtractFunc = oldDownload }()
 
 	oldExec := execCommandFunc
-	execCommandFunc = func(name string, args ...string) *exec.Cmd { return exec.Command("true") }
+	execCommandFunc = func(name string, args ...string) *exec.Cmd { return successfulTestCommand() }
 	defer func() { execCommandFunc = oldExec }()
 
 	ctx, _, _ := newOriginCtx()

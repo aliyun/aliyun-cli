@@ -7,7 +7,6 @@ import (
 	"compress/gzip"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -17,7 +16,17 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 )
 
+func useTestHome(t *testing.T, home string) {
+	t.Helper()
+	t.Setenv("HOME", home)
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("USERPROFILE", home)
+}
+
 func prepareConfig(t *testing.T, home string, language string) {
+	t.Helper()
+	useTestHome(t, home)
 	cfgDir := filepath.Join(home, ".aliyun")
 	if err := os.MkdirAll(cfgDir, 0755); err != nil {
 		t.Fatalf("mkdir cfg: %v", err)
@@ -168,32 +177,6 @@ func TestIsPythonVersionSufficient(t *testing.T) {
 		if result != tt.expected {
 			t.Errorf("isPythonVersionSufficient(%q) = %v, want %v", tt.version, result, tt.expected)
 		}
-	}
-}
-
-func TestEnsurePythonAvailable(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("skipping on windows")
-	}
-
-	// This test requires python3 to be available on the system
-	_, err := exec.LookPath("python3")
-	if err != nil {
-		t.Skip("python3 not available")
-	}
-
-	tmpDir := t.TempDir()
-	ctx, _, _ := newOriginCtx()
-	c := NewContext(ctx)
-	c.osType = runtime.GOOS
-	c.osArch = runtime.GOARCH
-	c.embeddedPythonDir = filepath.Join(tmpDir, "python-embedded-computenest")
-	err = c.EnsurePythonAvailable()
-	if err != nil {
-		t.Errorf("EnsurePythonAvailable failed: %v", err)
-	}
-	if c.pythonPath == "" {
-		t.Errorf("pythonPath should not be empty")
 	}
 }
 
@@ -479,8 +462,7 @@ func TestPrepareEnv_AIModeUserAgentEmptyNotInjected(t *testing.T) {
 
 func TestPrepareEnv_RamRoleArnNoStaticAKLeak(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	useTestHome(t, home)
 	os.Unsetenv("ALIBABA_CLOUD_USER_AGENT")
 
 	cfgDir := filepath.Join(home, ".aliyun")

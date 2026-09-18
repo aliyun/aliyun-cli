@@ -2,8 +2,13 @@ package sparksubmit
 
 import (
 	"bytes"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -52,16 +57,55 @@ func TestDefaultDownloadURLs(t *testing.T) {
 }
 
 func TestGetLatestVersionParsesBody(t *testing.T) {
-	v, err := GetLatestVersion("https://example.com/spark")
-	if err != nil {
-		// network may fail in CI; only assert fallback when unreachable
-		if v != defaultToolVersion {
-			t.Fatalf("fallback version = %q, want %q", v, defaultToolVersion)
-		}
-		return
+	for _, tt := range []struct {
+		name       string
+		status     int
+		body, want string
+	}{
+		{"version", 200, "  1.17.2\n", "1.17.2"},
+		{"empty", 200, "", defaultToolVersion},
+		{"whitespace", 200, " \n\t", defaultToolVersion},
+		{"not found", 404, "not found", defaultToolVersion},
+		{"server error", 500, "failure", defaultToolVersion},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/spark/version.txt" {
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL)
+				}
+				if got := r.Header.Get("User-Agent"); got != "aliyun-cli/"+cli.Version {
+					t.Errorf("User-Agent = %q", got)
+				}
+				w.WriteHeader(tt.status)
+				_, _ = io.WriteString(w, tt.body)
+			}))
+			defer server.Close()
+			v, err := GetLatestVersion(server.URL + "/spark/")
+			if err != nil || v != tt.want {
+				t.Fatalf("version = %q, err = %v; want %q", v, err, tt.want)
+			}
+		})
 	}
-	if strings.TrimSpace(v) == "" {
-		t.Fatal("empty version")
+}
+
+func TestGetLatestVersionConnectionError(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	server.Close()
+	v, err := GetLatestVersion(server.URL)
+	if err == nil || v != "" {
+		t.Fatalf("expected empty version and connection error, got %q, %v", v, err)
+	}
+}
+
+func TestGetLatestVersionReadError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "100")
+		_, _ = io.WriteString(w, "1.17")
+	}))
+	defer server.Close()
+	v, err := GetLatestVersion(server.URL)
+	if !errors.Is(err, io.ErrUnexpectedEOF) || v != "" {
+		t.Fatalf("expected empty version and truncated-body error, got %q, %v", v, err)
 	}
 }
 
@@ -111,6 +155,9 @@ func TestFindToolRoot(t *testing.T) {
 }
 
 func TestEnsureToolBinExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable permission bits are not supported on Windows")
+	}
 	dir := t.TempDir()
 	binDir := filepath.Join(dir, "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {

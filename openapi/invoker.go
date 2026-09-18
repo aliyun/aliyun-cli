@@ -253,7 +253,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 			if err != nil {
 				return cli.NewErrorWithTip(
 					fmt.Errorf("unknown endpoint for %s/%s! failed %w", product.GetLowerCode(), a.request.RegionId, err),
-					"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, %s", hint)
+					"List available endpoints with `%s`, use a supported --region, or pass --endpoint <host> explicitly.", endpointDiagnosticsCommand(recoveryContext{product: product.GetLowerCode()}))
 			}
 		}
 		return nil
@@ -267,6 +267,10 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 		a.client.AppendUserAgent("vendor", vendorEnv)
 	}
 	a.client.AppendUserAgent("Aliyun-CLI", cli.GetVersion())
+
+	if name := util.DetectAgentName(); name != "" {
+		a.client.AppendUserAgent("Agent", name)
+	}
 
 	if envUA := util.GetFromEnv(sysconfig.EnvUserAgent); envUA != "" {
 		envUA = util.SanitizeUserAgent(envUA)
@@ -308,7 +312,7 @@ func (a *BasicInvoker) Init(ctx *cli.Context, product *meta.Product) error {
 				// chain and the AI-mode normalizer can render a JSON envelope.
 				return cli.NewErrorWithTip(
 					fmt.Errorf("unknown endpoint for %s/%s! failed %w", product.GetLowerCode(), a.request.RegionId, err),
-					"Use flag --endpoint xxx.aliyuncs.com to assign endpoint, %s", hint)
+					"List available endpoints with `%s`, use a supported --region, or pass --endpoint <host> explicitly.", endpointDiagnosticsCommand(recoveryContext{product: product.GetLowerCode()}))
 			}
 		}
 	}

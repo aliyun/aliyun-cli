@@ -133,6 +133,7 @@ Supported local usage, query, transport, OAuth, and server errors are written as
 
 ```json
 {
+  "schemaVersion": "v1",
   "message": "unknown flag --instnace-type",
   "did_you_mean": ["--instance-type"],
   "recovery": {
@@ -145,7 +146,15 @@ Supported local usage, query, transport, OAuth, and server errors are written as
 
 Remote server errors may additionally include `error_code`, `status_code`, and `request_id`. `did_you_mean` and `recovery.command` are also optional; `message`, `recovery.action`, and `recovery.hint` are present in every structured Agent error.
 
-The Agent error object is a separate compact interface and currently has no `schemaVersion`; the Machine Help `v1` contract does not apply to it. Not every error is normalized yet, so consumers must also tolerate human-readable stderr.
+In AI mode, the shared Agent error envelope includes `schemaVersion: "v1"`. This version is independent of Machine Help, even though both currently use `v1`. Consumers should ignore unknown fields. Non-AI output is unchanged, including existing errors requested explicitly with `--cli-output json`, which do not gain this field. Not every error is normalized yet, and external tools retain their own contracts.
+
+| Error source in AI mode | Contract | Exit status |
+| --- | --- | --- |
+| Supported OpenAPI errors | Shared `schemaVersion: "v1"` envelope and recovery fields | `2` |
+| Built-in OSS adapted errors | Shared envelope plus `oss`; `oss.schema_version: "1"` versions only the OSS extension | `1` |
+| Initial configuration loading | Shared envelope with `error_code: "ConfigurationError"` and `recovery.action: "check_configuration"` | `1` |
+
+OSS stderr may contain progress text before the final error envelope; see [OSS automation](./oss.md). The version field does not change exit statuses or successful output.
 
 | Exit status | Meaning |
 | --- | --- |
@@ -153,6 +162,8 @@ The Agent error object is a separate compact interface and currently has no `sch
 | `1` | General execution failure |
 | `2` | Usage error, structured Agent error, or Machine Help request error |
 | `3` | Failure accompanied by a CLI recovery tip |
+
+Configuration loading failures, including malformed configuration files or a missing current profile, exit with status `1` before command execution. In AI mode, these startup errors are a single JSON envelope on stderr; otherwise their existing human-readable output is preserved. stdout remains empty. Startup mode resolution honors explicit opt-out, explicit opt-in, the AI-mode environment override, automatic Agent integration, and saved AI settings, in that order. The startup message does not echo configuration contents; inspect the local configuration to diagnose the underlying problem.
 
 For request inspection without invoking the API, `--cli-dry-run-json` emits structured request details. `--cli-dry-run` is the human-readable form.
 

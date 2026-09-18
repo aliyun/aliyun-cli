@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -27,7 +28,18 @@ func addConfigFlag(ctx *cli.Context, name string, value string) {
 	ctx.Flags().Add(f)
 }
 
+func testExitCommand(code int) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		return exec.Command("cmd", "/c", fmt.Sprintf("exit %d", code))
+	}
+	return exec.Command("sh", "-c", fmt.Sprintf("exit %d", code))
+}
+
 func prepareConfig(t *testing.T, home string) {
+	t.Helper()
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("USERPROFILE", home)
 	cfgDir := filepath.Join(home, ".aliyun")
 	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
 		t.Fatalf("mkdir cfg: %v", err)
@@ -531,7 +543,7 @@ func TestExecuteFlowcli_ExitCode(t *testing.T) {
 	origExec := execCommandFunc
 	defer func() { execCommandFunc = origExec }()
 	execCommandFunc = func(name string, args ...string) *exec.Cmd {
-		return exec.Command("bash", "-c", "exit 42")
+		return testExitCommand(42)
 	}
 
 	ctx, _, _ := newOriginCtx()
@@ -560,7 +572,7 @@ func TestExecuteFlowcli_Success(t *testing.T) {
 	origExec := execCommandFunc
 	defer func() { execCommandFunc = origExec }()
 	execCommandFunc = func(name string, args ...string) *exec.Cmd {
-		return exec.Command("bash", "-c", "exit 0")
+		return testExitCommand(0)
 	}
 
 	ctx, _, _ := newOriginCtx()

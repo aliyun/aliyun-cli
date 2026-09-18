@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +12,7 @@ import (
 	runtimehelp "github.com/aliyun/aliyun-openapi-runtime/help"
 	"github.com/aliyun/aliyun-openapi-runtime/loader"
 	"github.com/aliyun/aliyun-openapi-runtime/meta"
+	"github.com/aliyun/aliyun-openapi-runtime/runtime"
 )
 
 // HelpOptions is the renderer-independent Runtime Help v1 policy.
@@ -84,6 +87,23 @@ func (e *Engine) BuildParameterHelp(req Request, parameter string, options HelpO
 
 // RenderHelp renders a structured Runtime Help v1 document.
 func RenderHelp(w io.Writer, document HelpDocument, options HelpOptions) error {
+	if options.Query != "" {
+		if w == nil {
+			return fmt.Errorf("help output is nil")
+		}
+		options.Format = runtimehelp.FormatJSON
+		var output bytes.Buffer
+		if err := runtimehelp.Render(&output, document, options); err != nil {
+			return err
+		}
+		var value any
+		decoder := json.NewDecoder(&output)
+		decoder.UseNumber()
+		if err := decoder.Decode(&value); err != nil {
+			return err
+		}
+		return renderResponse(w, &runtime.Response{Parsed: value}, options.Query, options.AIMode)
+	}
 	return runtimehelp.Render(w, document, options)
 }
 
@@ -104,6 +124,7 @@ func requestHelpOptions(req Request, options HelpOptions) HelpOptions {
 func helpOptionsFromReserved(req Request, reserved argparser.Reserved) HelpOptions {
 	options := HelpOptions{
 		Search:   reserved.HelpSearch,
+		Query:    reserved.CliQuery,
 		All:      reserved.HelpAll || reserved.HelpSearch != "",
 		AIMode:   req.AIMode,
 		Language: req.Lang,
@@ -117,7 +138,7 @@ func helpOptionsFromReserved(req Request, reserved argparser.Reserved) HelpOptio
 	} else {
 		options.Section = runtimehelp.SectionRequest
 	}
-	if reserved.HelpOutput == "json" {
+	if reserved.HelpOutput == "json" || reserved.CliQuery != "" {
 		options.Format = runtimehelp.FormatJSON
 	} else if !req.AIMode {
 		options.Format = runtimehelp.FormatText

@@ -45,8 +45,12 @@ type AgentErrorRecovery struct {
 	Hint    string `json:"hint"`
 }
 
+// AgentErrorSchemaVersion versions the shared AI error envelope, independently of Help.
+const AgentErrorSchemaVersion = "v1"
+
 type AgentErrorEnvelope struct {
-	Message string `json:"message"`
+	SchemaVersion string `json:"schemaVersion,omitempty"`
+	Message       string `json:"message"`
 	// Structured server-error facts, populated only for remote server errors so
 	// agents can branch on them instead of parsing the message string.
 	ErrorCode  string             `json:"error_code,omitempty"`
@@ -72,6 +76,14 @@ func NewAgentError(envelope AgentErrorEnvelope, cause error) *AgentError {
 		return nil
 	}
 	return &AgentError{envelope: envelope, cause: cause}
+}
+
+// WithSchemaVersion returns a versioned copy for AI output. Explicit JSON errors
+// outside AI mode retain their existing wire format.
+func (e *AgentError) WithSchemaVersion() *AgentError {
+	copy := *e
+	copy.envelope.SchemaVersion = AgentErrorSchemaVersion
+	return &copy
 }
 
 func (e *AgentError) Error() string {

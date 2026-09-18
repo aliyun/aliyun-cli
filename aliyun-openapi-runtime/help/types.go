@@ -32,6 +32,7 @@ type HelpOptions struct {
 	Section          Section
 	ExplicitSection  bool
 	Search           string
+	Query            string
 	All              bool
 	AIMode           bool
 	Format           Format

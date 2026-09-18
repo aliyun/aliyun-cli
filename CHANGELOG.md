@@ -2,6 +2,18 @@
 
 Release notes are also published at https://github.com/aliyun/aliyun-cli/releases. This file summarizes the major changes in each version.
 
+### v3.5.1
+
+- Added a shared `schemaVersion: "v1"` to AI-mode OpenAPI and OSS error envelopes, and structured initial configuration-loading failures in AI mode. Preserved non-AI output, existing exit statuses, and the separately versioned OSS extension.
+
+- Added opt-in built-in OSS JSON/JSONL listings with bounded pages and resumable cursors, structured errors with recovery guidance, and non-interactive confirmation handling. Added local validation and read-only plans for single-file uploads and single-object deletion, plus exclusive JSONL failure reports for `cp`/`sync`. See the [OSS automation guide](docs/en/oss.md) ([简体中文](docs/zh-CN/oss.md)) for supported operations and contract limits.
+- Fixed the built-in OSS bridge to preserve option order and `--`, propagate parser and service errors, pass profile region/timeouts/retry budgets, and refresh host credentials at request time without appending resolved credentials to argv. Retry loops stop on permanent errors and ambiguous write failures, with jittered backoff for eligible retries. `aliyun oss update` now directs users to update the host CLI through its installation method.
+- Added queryable product endpoints to machine-readable Help and case-insensitive product routing for in-process OpenAPI commands. Added `ALIBABA_CLOUD_CLI_AGENT_INTEGRATION` controls for automatic AI mode and expanded Agent detection and User-Agent identification.
+- Hardened safety-policy parsing and environment overrides to fail closed on invalid configuration. Documented command-spelling matching, startup errors, and exit statuses; API aliases and PascalCase/kebab-case spellings remain separate policy matches.
+- Fixed dry-run redaction for JSON, form bodies, and embedded JSON values based on body content, and limited legacy FNF request-signing compatibility to the intended products.
+- Hardened plugin archive extraction, package replacement, and download URL diagnostics. Newly installed metadata plugins can now execute in the current process.
+- Fixed installation to prefer native macOS architecture packages and reject incomplete release downloads. Prerelease versions no longer update the stable latest pointer; expanded required CI checks to cover CLI extensions and cross-platform behavior.
+
 ### v3.5.0
 
 - Introduced a unified OpenAPI runtime backed by canonical, bundled metadata, with lazy loading and consistent behavior across built-in and plugin-provided APIs.

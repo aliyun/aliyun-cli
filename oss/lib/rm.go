@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
@@ -411,12 +410,19 @@ func (rc *RemoveCommand) RunCommand() error {
 	}
 
 	// start progressbar
-	go rc.entryStatistic(bucket, cloudURL)
+	scanDone := make(chan struct{})
+	go func() {
+		defer close(scanDone)
+		rc.entryStatistic(bucket, cloudURL)
+	}()
+	defer func() { <-scanDone }()
 
 	exitStat := normalExit
 	if err = rc.removeEntry(bucket, cloudURL); err != nil {
 		exitStat = errExit
 	}
+	// Join the scan before rendering totals and restoring invocation globals.
+	<-scanDone
 	fmt.Print(rc.monitor.progressBar(true, exitStat))
 	return err
 }
@@ -503,7 +509,7 @@ func (rc *RemoveCommand) confirmRemoveObject(cloudURL CloudURL) bool {
 		}
 		var val string
 		fmt.Printf("Do you really mean to remove recursively %s of %s(y or N)? ", strings.Join(stringList, " and "), rc.command.args[0])
-		if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
+		if _, err := scanOSSInput(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
 			fmt.Println("operation is canceled.")
 			return false
 		}
@@ -551,7 +557,7 @@ func (rc *RemoveCommand) ossIsObjectExistRetry(bucket *oss.Bucket, object string
 		if err == nil {
 			return exist, err
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, false) {
 			return false, ObjectError{err, bucket.BucketName, object}
 		}
 	}
@@ -687,7 +693,7 @@ func (rc *RemoveCommand) removeObject(bucket *oss.Bucket, cloudURL CloudURL) err
 	exist, err := rc.touchObject(bucket, cloudURL)
 	if err != nil || exist {
 		err = rc.deleteObjectWithMonitor(bucket, cloudURL.object)
-		if err != nil && rc.monitor.op == objectType {
+		if err != nil && rc.monitor.getOP() == objectType {
 			// remove single object error, return error information, do not print progressbar
 			rc.monitor.setOP(0)
 		}
@@ -713,7 +719,7 @@ func (rc *RemoveCommand) ossDeleteObjectRetry(bucket *oss.Bucket, object string)
 		if err == nil {
 			return err
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, false) {
 			return ObjectError{err, bucket.BucketName, object}
 		}
 	}
@@ -779,8 +785,7 @@ func (rc *RemoveCommand) ossBatchDeleteObjectsRetry(bucket *oss.Bucket, objects 
 		}
 
 		if err != nil {
-			serviceError, noNeedRetry := err.(oss.ServiceError)
-			if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
+			if !retryOSS(err, i, retryTimes, false) {
 				return deletedNum, fmt.Errorf("%s,delete objects: %#v failed", err.Error(), objects)
 			}
 		}
@@ -921,7 +926,7 @@ func (rc *RemoveCommand) ossAbortMultipartUploadRetry(bucket *oss.Bucket, key, u
 			}
 		}
 
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, false) {
 			return ObjectError{err, bucket.BucketName, key}
 		}
 	}
@@ -944,7 +949,7 @@ func (rc *RemoveCommand) confirmRemoveBucket(cloudURL CloudURL) bool {
 	if !rc.rmOption.force {
 		var val string
 		fmt.Print(getClearStr(fmt.Sprintf("Do you really mean to remove the Bucket: %s(y or N)? ", cloudURL.bucket)))
-		if _, err := fmt.Scanln(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
+		if _, err := scanOSSInput(&val); err != nil || (strings.ToLower(val) != "yes" && strings.ToLower(val) != "y") {
 			fmt.Println("operation is canceled.")
 			return false
 		}
@@ -960,26 +965,19 @@ func (rc *RemoveCommand) ossDeleteBucketRetry(client *oss.Client, bucket string)
 		if err == nil {
 			return err
 		}
-
-		// http 4XX error no need to retry
-		// only network error or internal error need to retry
-		serviceError, noNeedRetry := err.(oss.ServiceError)
-		if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
+		if !retryOSS(err, i, retryTimes, false) {
 			if strings.Contains(err.Error(), "bucket you tried to delete is not empty") {
 				fmt.Printf("\nWhether new objects were uploaded during the deletion?\n\n")
 			}
 			return BucketError{err, bucket}
 		}
-
-		// wait 1 second
-		time.Sleep(time.Duration(1) * time.Second)
 	}
 }
 
 // version
 func (rc *RemoveCommand) removeObjectVersion(bucket *oss.Bucket, cloudURL CloudURL, versionId string) error {
 	err := rc.deleteObjectWithMonitorVersion(bucket, cloudURL.object, versionId)
-	if err != nil && rc.monitor.op == objectType {
+	if err != nil && rc.monitor.getOP() == objectType {
 		// remove single object error, return error information, do not print progressbar
 		rc.monitor.setOP(0)
 	}
@@ -1005,7 +1003,7 @@ func (rc *RemoveCommand) ossDeleteObjectRetryVersion(bucket *oss.Bucket, object 
 		if err == nil {
 			return err
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, false) {
 			return ObjectError{err, bucket.BucketName, object}
 		}
 	}
@@ -1185,8 +1183,7 @@ func (rc *RemoveCommand) ossBatchDeleteObjectsRetryVersion(bucket *oss.Bucket, o
 		}
 
 		if err != nil {
-			serviceError, noNeedRetry := err.(oss.ServiceError)
-			if int64(i) >= retryTimes || (noNeedRetry && serviceError.StatusCode < 500) {
+			if !retryOSS(err, i, retryTimes, false) {
 				return deletedNum, fmt.Errorf("%s,delete versioning objects: %#v failed", err.Error(), objectVersions)
 			}
 		}

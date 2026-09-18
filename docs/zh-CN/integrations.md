@@ -133,6 +133,7 @@ aliyun ecs describe-instances --cli-ai-mode
 
 ```json
 {
+  "schemaVersion": "v1",
   "message": "unknown flag --instnace-type",
   "did_you_mean": ["--instance-type"],
   "recovery": {
@@ -145,7 +146,15 @@ aliyun ecs describe-instances --cli-ai-mode
 
 远端服务错误还可能包含 `error_code`、`status_code` 和 `request_id`。`did_you_mean` 和 `recovery.command` 也是可选字段；每个结构化 Agent 错误都会包含 `message`、`recovery.action` 和 `recovery.hint`。
 
-Agent 错误对象是一套独立的紧凑接口，目前没有 `schemaVersion`；机器 Help 的 `v1` 协议不适用于它。并非所有错误都已经结构化，因此调用方还必须兼容 stderr 中的人类可读错误。
+AI 模式下，共享 Agent 错误信封包含 `schemaVersion: "v1"`。这个版本独立于机器 Help，虽然当前两者均使用 `v1`。消费者应忽略未知字段。非 AI 模式的输出保持不变，包括显式 `--cli-output json` 请求的已有错误格式，不会额外添加该字段。并非所有错误都已结构化，外部工具仍保留各自的接口约定。
+
+| AI 模式下的错误来源 | 契约 | 退出码 |
+| --- | --- | --- |
+| 已支持的 OpenAPI 错误 | 共享 `schemaVersion: "v1"` 信封及恢复字段 | `2` |
+| 内置 OSS 适配后的错误 | 共享信封加 `oss`；`oss.schema_version: "1"` 仅标识 OSS 扩展版本 | `1` |
+| 初始配置加载 | 共享信封，`error_code: "ConfigurationError"`，`recovery.action: "check_configuration"` | `1` |
+
+OSS 的 stderr 可能在最终错误信封之前包含进度文本，详见 [OSS 自动化](./oss.md)。新增版本字段不会改变退出码或成功输出。
 
 | 退出状态 | 含义 |
 | --- | --- |
@@ -153,6 +162,8 @@ Agent 错误对象是一套独立的紧凑接口，目前没有 `schemaVersion`�
 | `1` | 一般执行失败 |
 | `2` | 用法错误、结构化 Agent 错误或机器 Help 请求错误 |
 | `3` | 带 CLI 恢复提示的失败 |
+
+配置加载失败（包括配置文件格式错误或当前 profile 不存在）时，CLI 会在执行命令前以状态码 `1` 退出。AI 模式下，这类启动错误以单个 JSON 信封写入 stderr；非 AI 模式保留原有人类可读输出，stdout 保持为空。启动阶段依次按显式关闭、显式开启、AI 模式环境变量、自动 Agent 集成、已保存的 AI 配置判断模式。启动错误消息不回显配置内容，具体原因需检查本地配置。
 
 需要在不调用 API 的情况下检查请求时，`--cli-dry-run-json` 会输出结构化请求详情；`--cli-dry-run` 是人类可读形式。
 

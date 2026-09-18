@@ -89,6 +89,7 @@ var catCommand = CatCommand{
 		specChinese: specChineseCat,
 		specEnglish: specEnglishCat,
 		group:       GroupTypeNormalCommand,
+		rawOutput:   true,
 		validOptionNames: []string{
 			OptionConfigFile,
 			OptionEndpoint,
@@ -185,8 +186,10 @@ func (catc *CatCommand) RunCommand() error {
 	}
 
 	defer body.Close()
-	io.Copy(os.Stdout, body)
-	fmt.Printf("\n")
+	return copyCatBody(os.Stdout, body)
+}
 
+func copyCatBody(dst io.Writer, src io.Reader) error {
+	_, err := io.Copy(dst, src)
 	return err
 }

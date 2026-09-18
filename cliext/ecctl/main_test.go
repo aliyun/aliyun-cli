@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/config"
 )
 
 func TestNewEcctlCommand(t *testing.T) {
@@ -88,8 +89,12 @@ func TestNewEcctlCommand_ExitErrorSubprocess(t *testing.T) {
 		defer func() { execCommandFunc = origExec }()
 		cmd := NewEcctlCommand()
 		ctx := cli.NewCommandContext(&bytes.Buffer{}, &bytes.Buffer{})
-		_ = cmd.Run(ctx, []string{"version"})
-		return
+		config.AddFlags(ctx.Flags())
+		configPathFlag := ctx.Flags().Get(config.ConfigurePathFlagName)
+		configPathFlag.SetAssigned(true)
+		configPathFlag.SetValue(filepath.Join(cfgDir, "config.json"))
+		err := cmd.Run(ctx, []string{"version"})
+		t.Fatalf("command returned instead of exiting with code 3: %v", err)
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=TestNewEcctlCommand_ExitErrorSubprocess", "-test.count=1")
 	cmd.Env = append(os.Environ(), "ECCTL_EXIT_SUBTEST=1")

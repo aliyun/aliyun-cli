@@ -56,6 +56,74 @@ func TestMainWithNoArgs(t *testing.T) {
 	Main([]string{})
 }
 
+func TestMainConfigLoadFailureExitsNonzero(t *testing.T) {
+	for _, failure := range []string{"invalid JSON", "config is directory", "missing current profile"} {
+		for _, aiMode := range []string{"0", "1"} {
+			t.Run(failure+"/ai="+aiMode, func(t *testing.T) {
+				clearAgentDetectionEnv(t)
+				t.Setenv(sysmock.EnvMockEnabled, "false")
+				t.Setenv("ALIBABA_CLOUD_CLI_AI_MODE", aiMode)
+				home := t.TempDir()
+				t.Setenv("HOME", home)
+				t.Setenv("HOMEDRIVE", "")
+				t.Setenv("HOMEPATH", "")
+				t.Setenv("USERPROFILE", home)
+				configDir := filepath.Join(home, ".aliyun")
+				if err := os.MkdirAll(configDir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				configPath := filepath.Join(configDir, "config.json")
+				if failure == "config is directory" {
+					if err := os.Mkdir(configPath, 0o755); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					data := `{invalid JSON`
+					if failure == "missing current profile" {
+						data = `{"current":"missing","profiles":[]}`
+					}
+					if err := os.WriteFile(configPath, []byte(data), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				var stdout, stderr bytes.Buffer
+				var exitCodes []int
+				resetMainHooks(t, &stdout, &stderr, func(code int) {
+					exitCodes = append(exitCodes, code)
+				})
+				Main([]string{"ecs", "--help", "--cli-output", "json"})
+
+				if len(exitCodes) != 1 || exitCodes[0] != 1 {
+					t.Fatalf("exit codes = %v, want [1]", exitCodes)
+				}
+				if stdout.Len() != 0 {
+					t.Fatalf("stdout = %q, want no command output after configuration failure", stdout.String())
+				}
+				if aiMode == "1" {
+					var envelope cli.AgentErrorEnvelope
+					if err := json.Unmarshal(stderr.Bytes(), &envelope); err != nil {
+						t.Fatal(err)
+					}
+					if envelope.SchemaVersion != "v1" || envelope.ErrorCode != "ConfigurationError" || envelope.Recovery.Action != "check_configuration" {
+						t.Fatalf("unexpected envelope: %+v", envelope)
+					}
+				} else {
+					_, cause := config.LoadOrCreateDefaultProfile()
+					var expected bytes.Buffer
+					cli.Errorf(&expected, "ERROR: load current configuration failed %s", cause)
+					if stderr.String() != expected.String() {
+						t.Fatalf("non-AI output changed: %q != %q", stderr.String(), expected.String())
+					}
+				}
+				if !bytes.Contains(stderr.Bytes(), []byte("load current configuration failed")) {
+					t.Fatalf("stderr = %q, want configuration error", stderr.String())
+				}
+			})
+		}
+	}
+}
+
 func TestMainExplicitLanguageOverridesProfileForCoreAndOpenAPIHelp(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -75,8 +143,9 @@ func TestMainExplicitLanguageOverridesProfileForCoreAndOpenAPIHelp(t *testing.T)
 				"ecs", "DescribeInstances", "--version", "2014-05-26",
 				"--help", "--cli-output", "json", "--no-cli-ai-mode", "--language", "en",
 			},
-			want:    "Queries the list of instances",
-			notWant: "查询一台或多台实例的详细信息",
+			// Assert host-owned localized Help text, not mutable API metadata prose.
+			want:    "inspect this API's structure: request parameters (default) or response schema",
+			notWant: "查看该 API 的结构：request 参数（默认）或 response 响应结构",
 		},
 		{
 			name: "kebab OpenAPI",
@@ -84,8 +153,8 @@ func TestMainExplicitLanguageOverridesProfileForCoreAndOpenAPIHelp(t *testing.T)
 				"fc", "create-alias", "--api-version", "2023-03-30",
 				"--help", "--cli-output", "json", "--no-cli-ai-mode", "--language", "en",
 			},
-			want:    "Creates an alias",
-			notWant: "创建别名",
+			want:    "inspect request parameters or the response schema",
+			notWant: "查看 request 请求参数或 response 响应结构",
 		},
 	}
 
@@ -147,8 +216,9 @@ func clearAgentDetectionEnv(t *testing.T) {
 	for _, key := range []string{
 		"CURSOR_AGENT", "CLAUDECODE", "CLAUDE_CODE", "GEMINI_CLI",
 		"AUGMENT_AGENT", "OPENCODE", "OPENCODE_CLIENT", "CLINE_ACTIVE",
-		"CODEX_SHELL", "CODEX_SANDBOX", "QODER_AGENT", "QODER_CLI", "AGENT",
-		"ALIBABA_CLOUD_CLI_AI_MODE", "NO_COLOR",
+		"CODEX_SHELL", "CODEX_SANDBOX", "QODER_AGENT", "QODER_CLI", "QODERCN_CLI", "AGENT",
+		"WORKBUDDY_APP_NAME", "TRAE_BRAND_NAME", "HERMES_AGENT",
+		"ALIBABA_CLOUD_CLI_AI_MODE", "ALIBABA_CLOUD_CLI_AGENT_INTEGRATION", "NO_COLOR",
 	} {
 		t.Setenv(key, "")
 	}
@@ -464,6 +534,72 @@ func TestParseInSecure(t *testing.T) {
 			result, _ := ParseInSecure(tt.args)
 			if result != tt.expected {
 				t.Errorf("ParseInSecure(%v) = %v; want %v", tt.args, result, tt.expected)
+			}
+		})
+	}
+}
+
+// Root help exercises the public query/output path without credentials or API
+// requests. Keep these cases in both normal and packed build test runs.
+func TestMainQueryNumericRegressions(t *testing.T) {
+	tests := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{
+			name:  "distinct large integers",
+			query: "`9007199254740992` == `9007199254740993`",
+			want:  "false",
+		},
+		{
+			name:  "empty average is null",
+			query: "avg(`[]`)",
+			want:  "null",
+		},
+		{
+			name:  "empty average does not equal a number",
+			query: "avg(`[]`) == `100`",
+			want:  "false",
+		},
+		{
+			name:  "empty average equals null",
+			query: "avg(`[]`) == `null`",
+			want:  "true",
+		},
+		{
+			name:  "empty average does not select a record",
+			query: "`[{\"id\":\"empty\",\"values\":[]},{\"id\":\"match\",\"values\":[100]},{\"id\":\"other\",\"values\":[200]}]`[?avg(values) == `100`].id",
+			want:  `["match"]`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearAgentDetectionEnv(t)
+			t.Setenv(sysmock.EnvMockEnabled, "false")
+			t.Setenv("GENERATE_METADATA", "")
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("HOMEDRIVE", "")
+			t.Setenv("HOMEPATH", "")
+			t.Setenv("USERPROFILE", home)
+
+			var stdout, stderr bytes.Buffer
+			resetMainHooks(t, &stdout, &stderr, func(code int) {
+				t.Fatalf("unexpected exit(%d)", code)
+			})
+			Main([]string{"--help", "--cli-output", "json", "--cli-query", tt.query})
+
+			if stderr.Len() != 0 {
+				t.Fatalf("stderr = %q, want empty", stderr.String())
+			}
+			var compact bytes.Buffer
+			if err := json.Compact(&compact, stdout.Bytes()); err != nil {
+				t.Fatalf("query output is not JSON: %v; stdout = %q", err, stdout.String())
+			}
+			if got := compact.String(); got != tt.want {
+				t.Fatalf("query %q: got %s, want %s", tt.query, got, tt.want)
 			}
 		})
 	}

@@ -20,6 +20,10 @@ import (
 )
 
 func prepareConfig(t *testing.T, home string) {
+	t.Helper()
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("USERPROFILE", home)
 	cfgDir := filepath.Join(home, ".aliyun")
 	if err := os.MkdirAll(cfgDir, 0755); err != nil {
 		t.Fatalf("mkdir cfg: %v", err)
@@ -42,6 +46,25 @@ func addConfigFlag(ctx *cli.Context, name string, value string) {
 	f.SetAssigned(true)
 	f.SetValue(value)
 	ctx.Flags().Add(f)
+}
+
+func useSupportedTestPlatform(t *testing.T) {
+	t.Helper()
+	oldGOOS := runtimeGOOSFunc
+	oldGOARCH := runtimeGOARCHFunc
+	runtimeGOOSFunc = func() string { return "darwin" }
+	runtimeGOARCHFunc = func() string { return "arm64" }
+	t.Cleanup(func() {
+		runtimeGOOSFunc = oldGOOS
+		runtimeGOARCHFunc = oldGOARCH
+	})
+}
+
+func successfulTestCommand() *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		return exec.Command("cmd", "/c", "exit", "0")
+	}
+	return exec.Command("true")
 }
 
 func TestPrepareEnv_Success(t *testing.T) {
@@ -103,6 +126,7 @@ func TestRemoveFlagsForMainCli_PreservesStandaloneVersionFlag(t *testing.T) {
 }
 
 func TestRun_UpgradeAfterMainFlags(t *testing.T) {
+	useSupportedTestPlatform(t)
 	tmpDir := t.TempDir()
 	oldGet := getConfigurePathFunc
 	getConfigurePathFunc = func() string { return tmpDir }
@@ -463,6 +487,9 @@ func TestCopyDirPreservesSafeSymlinks(t *testing.T) {
 }
 
 func TestInstallSetsExecPathInsidePreservedDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable permission bits are not supported on Windows")
+	}
 	tmpDir := t.TempDir()
 	oldGet := getConfigurePathFunc
 	getConfigurePathFunc = func() string { return tmpDir }
@@ -535,6 +562,7 @@ func writeCache(t *testing.T, dir string, c rostranVersionCache) {
 }
 
 func TestRun_FreshInstallWritesCache(t *testing.T) {
+	useSupportedTestPlatform(t)
 	tmpDir := t.TempDir()
 	oldGet := getConfigurePathFunc
 	getConfigurePathFunc = func() string { return tmpDir }
@@ -561,7 +589,7 @@ func TestRun_FreshInstallWritesCache(t *testing.T) {
 	defer func() { downloadAndExtractFunc = oldDownload }()
 
 	oldExec := execCommandFunc
-	execCommandFunc = func(name string, args ...string) *exec.Cmd { return exec.Command("true") }
+	execCommandFunc = func(name string, args ...string) *exec.Cmd { return successfulTestCommand() }
 	defer func() { execCommandFunc = oldExec }()
 
 	ctx, _, _ := newOriginCtx()

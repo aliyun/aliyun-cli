@@ -130,6 +130,9 @@ func engineProductEntry(product string) (canonicalmeta.ProductEntry, bool) {
 		PluginDefaultVersion: loaded.DefaultVersion,
 		Versions:             append([]string(nil), loaded.Versions...),
 		Distribution:         "meta",
+		GlobalEndpoint:       loaded.Endpoints.Global,
+		RegionalEndpoints:    loaded.Endpoints.Public,
+		RegionalVPCEndpoints: loaded.Endpoints.VPC,
 	}, true
 }
 

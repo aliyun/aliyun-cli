@@ -88,6 +88,8 @@ aliyun ecs DescribeRegions
 aliyun ecs describe-regions
 ```
 
+安全策略按命令写法匹配，这是预期设计：不区分大小写，但不会展开 API 别名或将大驼峰与短横线写法视为等价。请为自动化使用的各类写法配置规则，详见[命令匹配约定](./docs/zh-CN/usage.md#命令匹配约定)。
+
 ### 3. 查看帮助
 
 ```sh
@@ -140,6 +142,7 @@ aliyun plugin update --name <plugin-name>
 | 配置与凭证 | [指南](./docs/zh-CN/configuration.md) | [Guide](./docs/en/configuration.md) |
 | 命令、输出与自动化 | [指南](./docs/zh-CN/usage.md) | [Guide](./docs/en/usage.md) |
 | MCP、OpenTelemetry 与机器接口 | [指南](./docs/zh-CN/integrations.md) | [Guide](./docs/en/integrations.md) |
+| 内置 OSS 自动化 | [指南](./docs/zh-CN/oss.md) | [Guide](./docs/en/oss.md) |
 | 插件管理 | [指南](./docs/zh-CN/plugins.md) | [Guide](./docs/en/plugins.md) |
 
 其他资源：

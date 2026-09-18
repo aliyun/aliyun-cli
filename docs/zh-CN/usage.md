@@ -77,6 +77,8 @@ aliyun ecs describe-instances --help
 
 ## Endpoint 与 metadata 未收录的 API
 
+产品 JSON Help 通过 `product.endpoints` 返回 endpoint 列表，字段包含 `endpoint` 和地域端点适用的 `regionId`。可本地执行 `aliyun ecs --help --cli-output json --cli-query product.endpoints` 查询，添加 `--endpoint-type vpc` 可选择 VPC endpoint。
+
 CLI 通常从 metadata 解析 API 版本和 Endpoint。调用内置 metadata 未收录的 API 时，需要同时指定版本、Endpoint 和 `--force`：
 
 ```sh
@@ -263,6 +265,24 @@ aliyun configure safety-policy --help
 
 `--yes` 可以在非交互场景跳过确认提示，但不能绕过 deny 策略。在自动化中使用前，请检查命令和资源范围。
 
+安全策略默认关闭，`confirm` 只是 CLI 本地执行前确认，不代表云端授权或审批。使用 `show`/`list` 查看当前生效策略；如果设置了 `ALIBABA_CLOUD_SAFETY_POLICY_ENABLED` 或 `ALIBABA_CLOUD_SAFETY_POLICY_RULES`，展示结果包含环境变量覆盖后的配置。策略文件或环境规则无法完整解析时，CLI 会拒绝继续执行。
+
+### 命令匹配约定
+
+安全策略按调用方输入的命令写法匹配，这是预期设计，不会根据解析后的 OpenAPI 身份合并规则。匹配不区分大小写，`*` 可以匹配任意长度的字符序列；不会展开 API 别名，也不会在大驼峰和短横线写法之间转换。例如，`ecs:DeleteInstance` 匹配 `ECS:deleteinstance`，但不匹配 `ecs:delete-instance`，即使两种命令调用的是同一个 API。AI mode 也遵循这一约定。
+
+应为脚本或 Agent 使用的每种写法分别配置规则：
+
+```sh
+aliyun configure safety-policy add --pattern 'ecs:DeleteInstance' --action deny
+aliyun configure safety-policy add --pattern 'ecs:delete-instance' --action deny
+aliyun configure safety-policy enable
+```
+
+规则按顺序检查，第一条匹配的规则生效；未匹配的命令允许执行。`ecs:Delete*` 这样的通配符可以通过共同前缀覆盖上述两种写法，但不会自动识别所有具有破坏性效果的 API。REST 方法与路径采用 `product:METHOD/path`（如 `cs:DELETE/clusters`），`cs:DELETE/*` 匹配路径以 `/` 开头的 DELETE 命令；插件子命令层级以 `:` 分隔（如 `fc:function:create`）。按需分别配置 API 名称、方法与路径、插件命令等形式。云端授权仍由服务端与 RAM 权限控制。
+
+内置扩展（如 `saectl`、`ossutil`、`acrutil`、`spark-submit`）也在分发前检查策略，早于扩展的安装、凭据解析和执行。命令标识以 `:` 连接位置参数，例如 `saectl:restore`、`acrutil:diagnosis:restore`；`*restore*` 可匹配这些写法。宿主配置选项不参与匹配；扩展未知选项后的非选项参数会保留，因此需要覆盖额外参数时应使用通配符。不带扩展参数、单独的 `help`/`--help`/`-h` 或 `version`/`--version` 不触发检查；其他调用即使包含 `--help` 也会检查，避免把选项值误当成帮助请求而绕过策略。
+
 ## 面向 Agent 的优化与 AI mode
 
 AI mode 可以全局管理，也可以针对单次命令控制：
@@ -286,6 +306,14 @@ AlibabaCloud-AIMode/enabled
 aliyun ecs describe-instances --no-cli-ai-mode
 ```
 
+需要在当前环境中持续关闭 Agent 自动探测带来的 AI mode（包括 AI Help 文本）时，显式设置：
+
+```sh
+export ALIBABA_CLOUD_CLI_AGENT_INTEGRATION=disabled
+```
+
+`ALIBABA_CLOUD_CLI_AGENT_INTEGRATION` 控制自动 Agent 集成：未设置时启用默认集成，`disabled` 全部关闭，`all` 全部开启，逗号分隔的列表（如 `ai-mode`）仅开启指定集成。此开关不会启用安全策略。检测到 Agent 时还会添加固定的 `Agent/<name>` User-Agent 标识，该标识独立于 AI 模式集成开关。 设置为 `disabled` 不会覆盖 `configure ai-mode enable`；显式 `--cli-ai-mode` 仍可开启单次命令的 AI 模式。
+
 JSON Help 协议、Agent 错误 envelope、退出状态、Trace Context 传播和 MCP 代理安全行为见 [MCP 代理、OpenTelemetry 与机器可读接口](./integrations.md)。
 
 ## 大驼峰命令的参数边界情况
@@ -295,5 +323,9 @@ JSON Help 协议、Agent 错误 envelope、退出状态、Trace Context 传播�
 ```sh
 aliyun ecs SomeOperation --PortRange=-1/-1
 ```
+
+## 内置 OSS
+
+内置 OSS 的 JSON/JSONL 列表、只读计划、确认和失败报告见 [OSS 自动化指南](./oss.md)。
 
 下一步：[管理产品插件](./plugins.md)。

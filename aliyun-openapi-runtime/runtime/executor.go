@@ -132,8 +132,11 @@ type AssembledRequest struct {
 	// ReqBodyType is the request body encoding: "json" (default) or "formData".
 	// Empty and all non-formData metadata values are treated as "json" to match aliyun-cli-runtime.
 	ReqBodyType string `json:"req_body_type,omitempty"`
-	Endpoint    string `json:"endpoint,omitempty"`
-	Region      string `json:"region,omitempty"`
+	// DeclaredReqBodyType retains the metadata body type for dry-run display.
+	// Sending continues to use ReqBodyType above.
+	DeclaredReqBodyType string `json:"-"`
+	Endpoint            string `json:"endpoint,omitempty"`
+	Region              string `json:"region,omitempty"`
 }
 
 // Response is what Execute returns.
@@ -215,7 +218,8 @@ func newAssembledRequest(api *meta.API) *AssembledRequest {
 		Query:    map[string]string{},
 		Headers:  map[string]string{},
 		// aliyun-cli-runtime defaults every operation to json and only generated formData APIs call SetReqBodyType("formData").
-		ReqBodyType: resolveReqBodyType(api),
+		ReqBodyType:         resolveReqBodyType(api),
+		DeclaredReqBodyType: strings.TrimSpace(api.ReqBodyType),
 	}
 	if !strings.EqualFold(style, string(meta.StyleRPC)) {
 		req.PathPattern = api.URL
@@ -528,6 +532,15 @@ type preparedCall struct {
 	runtime *dara.RuntimeOptions
 }
 
+func usesLegacySignature(product string) bool {
+	// FNF endpoints require legacy RPC signing.
+	switch strings.ToLower(product) {
+	case "fnf":
+		return true
+	}
+	return false
+}
+
 func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) {
 	if ec.Credential == nil {
 		return nil, errors.New("runtime: no credential resolved; run `aliyun configure` or pass --dry-run")
@@ -537,6 +550,9 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 	}
 
 	conf := &openapiClient.Config{Credential: ec.Credential}
+	if usesLegacySignature(ec.API.ProductCode) {
+		conf.SignatureAlgorithm = tea.String("v2")
+	}
 	if ec.Region != "" {
 		conf.RegionId = tea.String(ec.Region)
 	}

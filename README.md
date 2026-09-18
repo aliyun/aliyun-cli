@@ -88,6 +88,8 @@ aliyun ecs DescribeRegions
 aliyun ecs describe-regions
 ```
 
+Safety policy matches command spelling by design: it ignores case but does not expand API aliases or equate PascalCase with kebab-case. Configure rules for each spelling your automation uses; see the [matching contract](./docs/en/usage.md#command-matching-contract).
+
 ### 3. Explore help
 
 ```sh
@@ -140,6 +142,7 @@ See [command usage](./docs/en/usage.md) and [plugin management](./docs/en/plugin
 | Configuration and credentials | [Guide](./docs/en/configuration.md) | [指南](./docs/zh-CN/configuration.md) |
 | Commands, output, and automation | [Guide](./docs/en/usage.md) | [指南](./docs/zh-CN/usage.md) |
 | MCP, OpenTelemetry, and machine interfaces | [Guide](./docs/en/integrations.md) | [指南](./docs/zh-CN/integrations.md) |
+| Built-in OSS automation | [Guide](./docs/en/oss.md) | [指南](./docs/zh-CN/oss.md) |
 | Plugin management | [Guide](./docs/en/plugins.md) | [指南](./docs/zh-CN/plugins.md) |
 
 Additional resources:

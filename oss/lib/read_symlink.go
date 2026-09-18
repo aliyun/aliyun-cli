@@ -226,7 +226,7 @@ func (rc *ReadSymlinkCommand) ossGetSymlinkRetry(bucket *oss.Bucket, symlinkObje
 		if err == nil {
 			return props, err
 		}
-		if int64(i) >= retryTimes {
+		if !retryOSS(err, i, retryTimes, true) {
 			return props, ObjectError{err, bucket.BucketName, symlinkObject}
 		}
 	}

@@ -11,6 +11,8 @@ import (
 
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-openapi-runtime/engine"
+	"github.com/jmespath/go-jmespath"
 )
 
 const machineHelpSchemaVersion = "v1"
@@ -204,6 +206,7 @@ func (summary machineHelpAPISummary) MarshalJSON() ([]byte, error) {
 }
 
 type machineHelpProductDocument struct {
+	Endpoints     []machineHelpEndpoint   `json:"endpoints,omitempty"`
 	SchemaVersion string                  `json:"schemaVersion"`
 	Kind          string                  `json:"helpLevel"`
 	Target        machineHelpTarget       `json:"-"`
@@ -215,6 +218,9 @@ type machineHelpProductDocument struct {
 	Listing       *machineHelpListing     `json:"listing"`
 	AIModeHint    *machineHelpAIModeHint  `json:"aiModeHint"`
 	helpHintExact helpHintExact
+
+	unsupportedRegion string
+	useVPCEndpoint    bool
 }
 
 type machineHelpOperation struct {
@@ -445,7 +451,7 @@ func (s *machineHelpService) buildProduct(code, requestedVersion string) (*machi
 
 // buildProductForStyle reads only products.json plus the selected version.json;
 // it never loads per-Action JSON while producing product Help.
-func (s *machineHelpService) buildProductForStyle(code, requestedVersion, style string) (*machineHelpProductDocument, error) {
+func (s *machineHelpService) buildProductForStyle(code, requestedVersion, style string, endpointType ...string) (*machineHelpProductDocument, error) {
 	product, err := s.findProduct(code)
 	if err != nil {
 		return nil, err
@@ -505,11 +511,13 @@ func (s *machineHelpService) buildProductForStyle(code, requestedVersion, style 
 	productDoc := buildMachineHelpProduct(*product, versions, selected)
 	code = productDoc.Code
 	return &machineHelpProductDocument{
-		SchemaVersion: machineHelpSchemaVersion,
-		Kind:          "product",
-		Target:        machineHelpTarget{Path: []string{"aliyun", code}, RequestedStyle: style},
-		Product:       productDoc,
-		APIs:          apis,
+		SchemaVersion:  machineHelpSchemaVersion,
+		Kind:           "product",
+		Target:         machineHelpTarget{Path: []string{"aliyun", code}, RequestedStyle: style},
+		Product:        productDoc,
+		Endpoints:      productHelpEndpoints(*product),
+		useVPCEndpoint: len(endpointType) > 0 && endpointType[0] == "vpc",
+		APIs:           apis,
 	}, nil
 }
 
@@ -970,6 +978,12 @@ func projectLegacyParameter(view *canonicalmeta.LegacyParameterView, prefix stri
 	children := view.LegacyChildren()
 	if view.IsLegacyRepeatList() {
 		result.Serialization = "repeatList"
+		if view.IsRPCFlatArray() {
+			result.Serialization = "flat"
+			if len(children) == 0 {
+				result.Options = append(result.Options, "--"+optionPath+".1")
+			}
+		}
 		if len(children) > 0 {
 			result.Element = &machineHelpShape{Type: "object"}
 			for _, child := range children {
@@ -1134,7 +1148,11 @@ func (c *Commando) printMachineHelp(ctx *cli.Context, args []string, format stri
 			typed.AIModeHint = projected
 		}
 	}
-	if err := encodeMachineHelpJSON(ctx.Stdout(), document, aiMode); err != nil {
+	if err := encodeMachineHelpJSON(ctx.Stdout(), document, aiMode, helpFlagValue(ctx, QueryFlagName, "")); err != nil {
+		var queryError *engine.QueryFilterError
+		if errors.As(err, &queryError) {
+			return err
+		}
 		return newMachineHelpUnavailableError(target, err)
 	}
 	return nil
@@ -1154,7 +1172,7 @@ func newMachineHelpUnavailableError(target []string, cause error) *machineHelpEr
 // encodeMachineHelpJSON writes the canonical Machine Help document. compact
 // drops the pretty indentation for AI-mode consumers; slimming (single-language
 // collapse plus omission of default-valued fields) applies to every encoding.
-func encodeMachineHelpJSON(w io.Writer, value any, compact bool) error {
+func encodeMachineHelpJSON(w io.Writer, value any, compact bool, query ...string) error {
 	if root, ok := value.(*machineHelpRootDocument); ok {
 		root.prepareJSONGroups()
 	}
@@ -1170,6 +1188,12 @@ func encodeMachineHelpJSON(w io.Writer, value any, compact bool) error {
 	}
 	document, _ = pruneMachineHelpEmptyAt(document, nil)
 	document, _ = slimMachineHelpJSON(document, helpResponseLanguage())
+	if len(query) > 0 && query[0] != "" {
+		document, err = jmespath.Search(query[0], document)
+		if err != nil {
+			return &engine.QueryFilterError{Expr: query[0], Err: err}
+		}
+	}
 
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)

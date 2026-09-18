@@ -34,6 +34,10 @@ func writeExecutable(t *testing.T, path string, content string) {
 }
 
 func prepareConfig(t *testing.T, home string, language string) {
+	t.Helper()
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("USERPROFILE", home)
 	cfgDir := filepath.Join(home, ".aliyun")
 	if err := os.MkdirAll(cfgDir, 0755); err != nil {
 		t.Fatalf("mkdir cfg: %v", err)
@@ -46,6 +50,10 @@ func prepareConfig(t *testing.T, home string, language string) {
 
 // prepareConfigWithMode creates a config file with specific authentication mode
 func prepareConfigWithMode(t *testing.T, home string, mode string, extraFields map[string]string) {
+	t.Helper()
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("USERPROFILE", home)
 	cfgDir := filepath.Join(home, ".aliyun")
 	if err := os.MkdirAll(cfgDir, 0755); err != nil {
 		t.Fatalf("mkdir cfg: %v", err)
@@ -131,7 +139,7 @@ func TestRun_NotInstalled_FreshInstallAndExecute(t *testing.T) {
 	timeNowFunc = func() time.Time { return fixedNow }
 	execCommandFunc = func(name string, args ...string) *exec.Cmd {
 		// mock main execution always success
-		return exec.Command("bash", "-c", "exit 0")
+		return exec.Command(os.Args[0], "-test.run=^$")
 	}
 	t.Cleanup(func() {
 		getLatestOssUtilVersionFunc = origGetLatest
@@ -174,6 +182,9 @@ func TestRun_Installed_NoVersionCheckWithinTTL(t *testing.T) {
 
 	// prepare existing binary
 	execPath := filepath.Join(config.GetConfigPath(), "ossutil")
+	if runtime.GOOS == "windows" {
+		execPath += ".exe"
+	}
 	writeExecutable(t, execPath, "#!/bin/sh\n")
 
 	// create fresh cache timestamp (recent)
@@ -186,7 +197,9 @@ func TestRun_Installed_NoVersionCheckWithinTTL(t *testing.T) {
 	getLatestOssUtilVersionFunc = func() (string, error) { getCalls++; return "1.2.3", nil }
 	installCount := 0
 	downloadAndUnzipFunc = func(url, dest, exe, center string) error { installCount++; return nil }
-	execCommandFunc = func(name string, args ...string) *exec.Cmd { return exec.Command("bash", "-c", "exit 0") }
+	execCommandFunc = func(name string, args ...string) *exec.Cmd {
+		return exec.Command(os.Args[0], "-test.run=^$")
+	}
 	t.Cleanup(func() {
 		getLatestOssUtilVersionFunc = origGetLatest
 		downloadAndUnzipFunc = origDownload
@@ -216,6 +229,9 @@ func TestRun_Installed_UpdateWhenExpired(t *testing.T) {
 	prepareConfig(t, home, "en")
 
 	execPath := filepath.Join(config.GetConfigPath(), "ossutil")
+	if runtime.GOOS == "windows" {
+		execPath += ".exe"
+	}
 	writeExecutable(t, execPath, "#!/bin/sh\n")
 	old := time.Now().Unix() - int64(VersionCheckTTL) - 10
 	_ = os.WriteFile(filepath.Join(config.GetConfigPath(), ".ossutil_version_check"), []byte(fmt.Sprintf("%d", old)), 0644)
@@ -226,7 +242,9 @@ func TestRun_Installed_UpdateWhenExpired(t *testing.T) {
 	getLatestOssUtilVersionFunc = func() (string, error) { return "1.0.1", nil }
 	installCount := 0
 	downloadAndUnzipFunc = func(url, dest, exe, center string) error { installCount++; return nil }
-	execCommandFunc = func(name string, args ...string) *exec.Cmd { return exec.Command("bash", "-c", "exit 0") }
+	execCommandFunc = func(name string, args ...string) *exec.Cmd {
+		return exec.Command(os.Args[0], "-test.run=^$")
+	}
 	t.Cleanup(func() {
 		getLatestOssUtilVersionFunc = origGetLatest
 		downloadAndUnzipFunc = origDownload
@@ -258,8 +276,7 @@ func TestNeedCheckVersionVariants(t *testing.T) {
 		t.Fatalf("not installed should return false")
 	}
 	// simulate installed
-	execPath := filepath.Join(config.GetConfigPath(), "ossutil")
-	writeExecutable(t, execPath, "#!/bin/sh\n")
+	writeExecutable(t, c.execFilePath, "#!/bin/sh\n")
 	c.InitBasicInfo()
 	if !c.NeedCheckVersion() {
 		t.Fatalf("installed no cache => true")
@@ -336,13 +353,17 @@ func TestGetLatestOssUtilVersionWithServer(t *testing.T) {
 }
 
 func TestDownloadAndUnzip(t *testing.T) {
-	// create zip with structure ossutil-1.0.0-mac-amd64/ossutil
+	// Create a zip using the executable name expected by the host platform.
 	zipFile := filepath.Join(t.TempDir(), "ossutil.zip")
 	buf := &bytes.Buffer{}
 	zw := zip.NewWriter(buf)
 	center := "ossutil-1.0.0-mac-amd64"
+	executableName := "ossutil"
+	if runtime.GOOS == "windows" {
+		executableName += ".exe"
+	}
 	// add file
-	f, _ := zw.Create(center + "/ossutil")
+	f, _ := zw.Create(center + "/" + executableName)
 	_, _ = f.Write([]byte("#!/bin/sh\n"))
 	_ = zw.Close()
 	if err := os.WriteFile(zipFile, buf.Bytes(), 0644); err != nil {
@@ -361,7 +382,7 @@ func TestDownloadAndUnzip(t *testing.T) {
 	defer func() { httpGetFunc = origHTTPGet }()
 
 	destFile := filepath.Join(t.TempDir(), "d.zip")
-	exeFile := filepath.Join(t.TempDir(), "ossutil")
+	exeFile := filepath.Join(t.TempDir(), executableName)
 	if err := DownloadAndUnzip("http://example/zip", destFile, exeFile, center); err != nil {
 		t.Fatalf("DownloadAndUnzip: %v", err)
 	}
@@ -560,6 +581,9 @@ func TestPrepareEnv_ProfileOssutilInConfigIgnored(t *testing.T) {
 	defer func() { _ = os.Setenv("HOME", origHOME) }()
 	home := t.TempDir()
 	_ = os.Setenv("HOME", home)
+	t.Setenv("HOMEDRIVE", "")
+	t.Setenv("HOMEPATH", "")
+	t.Setenv("USERPROFILE", home)
 	cfgDir := filepath.Join(home, ".aliyun")
 	if err := os.MkdirAll(cfgDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)

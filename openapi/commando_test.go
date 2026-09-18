@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1515,6 +1516,8 @@ func TestProcessApiInvokeFilterError(t *testing.T) {
 }
 
 func TestProcessApiInvoke_DryRunJSON(t *testing.T) {
+	const secret = "FAKE_SECRET_123"
+	body := `{"content":"` + strings.Repeat("x", 1100) + `","password":"` + secret + `"}`
 	profile := config.Profile{
 		Language:        "en",
 		Mode:            "AK",
@@ -1531,6 +1534,8 @@ func TestProcessApiInvoke_DryRunJSON(t *testing.T) {
 	AddFlags(cmd.Flags())
 	ctx.EnterCommand(cmd)
 	DryRunJsonFlag(ctx.Flags()).SetAssigned(true)
+	BodyFlag(ctx.Flags()).SetAssigned(true)
+	BodyFlag(ctx.Flags()).SetValue(body)
 
 	command := NewCommando(stdout, profile)
 	product := &meta.Product{Code: "sls", Version: "2020-03-31"}
@@ -1559,7 +1564,7 @@ func TestProcessApiInvoke_DryRunJSON(t *testing.T) {
 		}
 	}
 
-	err := command.processApiInvoke(ctx, product, canonicalTestAPI(api), "GET", "/projects/foo")
+	err := command.processApiInvoke(ctx, product, canonicalTestAPI(api), "POST", "/clusters")
 	assert.NoError(t, err)
 
 	output := strings.TrimSpace(stdout.String())
@@ -1568,9 +1573,14 @@ func TestProcessApiInvoke_DryRunJSON(t *testing.T) {
 	var m CliDryRunOutput
 	assert.Nil(t, json.Unmarshal([]byte(output), &m), "stdout must be valid JSON: %q", output)
 	assert.Equal(t, "ROA", m.Style)
-	assert.Equal(t, "GET", m.Method)
+	assert.Equal(t, "POST", m.Method)
 	assert.Equal(t, "GetProject", m.Action)
 	assert.Equal(t, "2020-03-31", m.Version)
+	assert.Equal(t, "json", m.BodyFormat)
+	assert.Equal(t, `{"content":"`+strings.Repeat("x", 1100)+`","password":"FAKE***"}`, m.Body)
+	assert.NotContains(t, stdout.String(), secret)
+	assert.NotContains(t, stderr.String(), secret)
+	assert.Empty(t, stderr.String())
 	// SLS without --endpoint / profile.Endpoint falls back to {region}.log.aliyuncs.com.
 	assert.Equal(t, "cn-hangzhou.log.aliyuncs.com", m.Endpoint)
 }
@@ -2208,6 +2218,22 @@ func TestApplyQueryFilter(t *testing.T) {
 		assert.Equal(t, "42", result)
 	})
 
+	t.Run("LargeJSONNumbersCompareExactly", func(t *testing.T) {
+		queryFlag := QueryFlag(ctx.Flags())
+		queryFlag.SetAssigned(true)
+		output := `[{"A":9007199254740992,"B":9007199254740993}]`
+
+		queryFlag.SetValue("[?A == B]")
+		result, err := ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, "[]", result)
+
+		queryFlag.SetValue("[?A < B]")
+		result, err = ApplyQueryFilter(ctx, output)
+		assert.NoError(t, err)
+		assert.Equal(t, output, result)
+	})
+
 	t.Run("QueryReturnsBoolean", func(t *testing.T) {
 		queryFlag := QueryFlag(ctx.Flags())
 		queryFlag.SetAssigned(true)
@@ -2805,6 +2831,62 @@ func TestMain_UninstalledPluginAlwaysTriesBuiltInRuntime(t *testing.T) {
 
 	err = command.main(ctx, []string{"ecs", "describe-instances"})
 	assert.ErrorIs(t, err, wantErr)
+}
+
+func TestMain_AutoInstalledMetaPluginDispatchesWithoutBinary(t *testing.T) {
+	testHome := t.TempDir()
+	cleanup := setTestHomeDir(t, testHome)
+	defer cleanup()
+	writeMinimalConfigJSON(t, testHome)
+	pluginRoot := filepath.Join(testHome, ".aliyun", "plugins")
+	assert.NoError(t, os.MkdirAll(pluginRoot, 0755))
+	assert.NoError(t, os.WriteFile(filepath.Join(pluginRoot, "manifest.json"), []byte(`{"plugins":{}}`), 0644))
+
+	w := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, stderr)
+	repo, err := meta.MockLoadRepository(nil)
+	assert.NoError(t, err)
+	command := &Commando{library: &Library{builtinRepo: repo, writer: w}}
+	cmd := &cli.Command{EnableUnknownFlag: true}
+	command.InitWithCommand(cmd)
+	AddFlags(cmd.Flags())
+	ctx.EnterCommand(cmd)
+	ctx.Command().Short = &i18n.Text{}
+
+	originalTryDispatch := runtimeTryDispatch
+	runtimeTryDispatch = func(_ *cli.Context, _ []string) (bool, error) {
+		return false, nil
+	}
+	t.Cleanup(func() { runtimeTryDispatch = originalTryDispatch })
+
+	originalInstall := installPluginForCommand
+	installPluginForCommand = func(_ *Commando, _ *cli.Context, commandName, productCode string) (string, error) {
+		assert.Equal(t, "bssopenapi create-instance", commandName)
+		assert.Equal(t, "bssopenapi", productCode)
+		pluginDir := filepath.Join(pluginRoot, "aliyun-cli-bssopenapi")
+		assert.NoError(t, os.MkdirAll(pluginDir, 0755))
+		manifest := fmt.Sprintf(`{"plugins":{"aliyun-cli-bssopenapi":{"name":"aliyun-cli-bssopenapi","version":"0.9.0","type":"meta","path":%q,"command":"bssopenapi"}}}`, pluginDir)
+		assert.NoError(t, os.WriteFile(filepath.Join(pluginRoot, "manifest.json"), []byte(manifest), 0644))
+		return "aliyun-cli-bssopenapi", nil
+	}
+	t.Cleanup(func() { installPluginForCommand = originalInstall })
+
+	wantErr := errors.New("metadata runtime invoked")
+	originalDispatch := runtimeDispatch
+	runtimeDispatch = func(_ *cli.Context, got []string) error {
+		assert.Equal(t, []string{"bssopenapi", "create-instance", "--product-code", "kms"}, got)
+		return wantErr
+	}
+	t.Cleanup(func() { runtimeDispatch = originalDispatch })
+
+	originalArgs := os.Args
+	t.Cleanup(func() { os.Args = originalArgs })
+	os.Args = []string{"aliyun", "bssopenapi", "create-instance", "--product-code", "kms"}
+
+	err = command.main(ctx, []string{"bssopenapi", "create-instance"})
+	assert.ErrorIs(t, err, wantErr)
+	assert.NotContains(t, err.Error(), "plugin binary")
 }
 
 func TestMain_InstalledGoPluginOverridesBuiltInRuntime(t *testing.T) {
@@ -4359,4 +4441,69 @@ func newTestCommandoForResponse(t *testing.T, aimodeEnv string) (*Commando, *cli
 	ctx := cli.NewCommandContext(stdout, stderr)
 	ctx.EnterCommand(root)
 	return c, ctx, stdout, stderr
+}
+
+func TestApplyQueryFilterNumericRegressions(t *testing.T) {
+	// F06: response numbers and expression literals must keep adjacent IDs
+	// distinct above 2^53, including when filtering and ordering records.
+	const response = `{"A":9007199254740992,"B":9007199254740993,"Items":[{"Id":9007199254740993,"Name":"B"},{"Id":9007199254740992,"Name":"A"}]}`
+	for _, tc := range []struct {
+		name, query, want string
+	}{
+		{"adjacent IDs differ", "A == B", "false"},
+		{"inequality", "A != B", "true"},
+		{"less than", "A < B", "true"},
+		{"greater than", "B > A", "true"},
+		{"literal does not round down", "A == `9007199254740993`", "false"},
+		{"literal matches exact ID", "B == `9007199254740993`", "true"},
+		{"filter exact ID", "Items[?Id == `9007199254740993`].Name", `["B"]`},
+		{"filter greater IDs", "Items[?Id > `9007199254740992`].Name", `["B"]`},
+		{"sorted IDs retain precision", "sort(Items[].Id)", "[9007199254740992,9007199254740993]"},
+		{"largest record", "max_by(Items, &Id).Name", `"B"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checkNumericQuery(t, response, tc.query, tc.want)
+		})
+	}
+}
+
+func TestApplyQueryFilterEmptyAverageRegression(t *testing.T) {
+	// F07: a record without samples must not match a numeric condition.
+	const response = `{"Items":[{"Name":"empty","Values":[]},{"Name":"match","Values":[90,110]},{"Name":"other","Values":[200]}]}`
+	for _, tc := range []struct {
+		name, query, want string
+	}{
+		{"empty average is null", "avg(`[]`)", "null"},
+		{"empty average is not 100", "avg(`[]`) == `100`", "false"},
+		{"reversed equality", "`100` == avg(`[]`)", "false"},
+		{"empty average inequality", "avg(`[]`) != `100`", "true"},
+		{"empty average equals null", "avg(`[]`) == `null`", "true"},
+		{"less than null", "avg(`[]`) < `100`", "null"},
+		{"less than or equal null", "avg(`[]`) <= `100`", "null"},
+		{"greater than null", "avg(`[]`) > `100`", "null"},
+		{"greater than or equal null", "avg(`[]`) >= `100`", "null"},
+		{"filter excludes empty samples", "Items[?avg(Values) == `100`].Name", `["match"]`},
+		{"filter includes only numeric averages", "Items[?avg(Values) >= `100`].Name", `["match","other"]`},
+		{"find records without samples", "Items[?avg(Values) == `null`].Name", `["empty"]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			checkNumericQuery(t, response, tc.query, tc.want)
+		})
+	}
+}
+
+func checkNumericQuery(t *testing.T, response, query, want string) {
+	t.Helper()
+	ctx := cli.NewCommandContext(io.Discard, io.Discard)
+	AddFlags(ctx.Flags())
+	flag := QueryFlag(ctx.Flags())
+	flag.SetAssigned(true)
+	flag.SetValue(query)
+	got, err := ApplyQueryFilter(ctx, response)
+	if err != nil {
+		t.Fatalf("query %q: %v", query, err)
+	}
+	if got != want {
+		t.Fatalf("query %q: got %s, want %s", query, got, want)
+	}
 }

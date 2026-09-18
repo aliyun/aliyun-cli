@@ -1,5 +1,21 @@
 #!/usr/bin/env bash
 
+# Maps uname -m to the macOS package arch suffix published on CDN.
+# Prefer single-arch packages; fall back to universal when unknown.
+resolve_macos_package_arch() {
+  case "${1}" in
+    arm64)
+      printf '%s\n' "arm64"
+      ;;
+    x86_64)
+      printf '%s\n' "amd64"
+      ;;
+    *)
+      printf '%s\n' "universal"
+      ;;
+  esac
+}
+
 set -e +o pipefail
 
 show_help() {
@@ -69,8 +85,9 @@ echo -e "
 
 if [[ -n "${CLI_ON_MACOS-}" ]]
 then
-  curl -O -fsSL https://aliyuncli.alicdn.com/aliyun-cli-macosx-"$VERSION"-universal.tgz
-  tar zxf aliyun-cli-macosx-"$VERSION"-universal.tgz
+  MACOS_ARCH="$(resolve_macos_package_arch "$(uname -m)")"
+  curl -O -fsSL https://aliyuncli.alicdn.com/aliyun-cli-macosx-"$VERSION"-"$MACOS_ARCH".tgz
+  tar zxf aliyun-cli-macosx-"$VERSION"-"$MACOS_ARCH".tgz
   mv ./aliyun /usr/local/bin/
 fi
 

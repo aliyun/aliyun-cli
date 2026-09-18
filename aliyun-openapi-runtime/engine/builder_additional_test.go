@@ -103,6 +103,9 @@ func TestEngineDiscoveryAndHelpEntryPoints(t *testing.T) {
 	if !engine.Resolvable("demo", "run-thing") || engine.Resolvable("demo", "missing") || engine.Resolvable("missing", "run-thing") {
 		t.Fatal("Resolvable returned unexpected result")
 	}
+	if !engine.Resolvable("DeMo", "run-thing") {
+		t.Fatal("Resolvable must treat product code case-insensitively")
+	}
 
 	if err := engine.ProductHelp(Request{}); err == nil {
 		t.Fatal("ProductHelp without product succeeded")
@@ -127,6 +130,10 @@ func TestEngineDiscoveryAndHelpEntryPoints(t *testing.T) {
 	}
 	if !strings.Contains(apiHelp.String(), "--instance-type") {
 		t.Fatalf("APIHelp output = %q", apiHelp.String())
+	}
+	apiHelp.Reset()
+	if err := engine.APIHelp(Request{Args: []string{"DEMO", "run-thing"}, Out: &apiHelp}); err != nil {
+		t.Fatalf("APIHelp with uppercase product: %v", err)
 	}
 	if !strings.Contains(apiHelp.String(), "Global Parameters:") ||
 		!strings.Contains(apiHelp.String(), "--cli-dry-run") {
@@ -496,30 +503,139 @@ func TestBuilderOptionAndRenderingHelpers(t *testing.T) {
 }
 
 func TestDryRunPreservesLongBodyAndRedaction(t *testing.T) {
+	const secret = "FAKE_SECRET_123"
 	text := strings.Repeat("流水线", 450) + "正文末尾"
-	for _, tc := range []struct{ body, want string }{
-		{"name=" + text + "&pipelineId=123", "name=" + text + "&pipelineId=123"},
-		{`{"content":"` + text + `","password":"secret-value"}`, `{"content":"` + text + `","password":"secr***"}`},
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			"form",
+			"name=" + text + "&password=" + secret,
+			"name=" + text + "&password=FAKE***",
+		},
+		{
+			"xml",
+			"<Name>" + text + "</Name><Password>" + secret + "</Password>",
+			"<Name>" + text + "</Name><Password>" + secret + "</Password>",
+		},
+		{"raw", "name: " + text + "\npassword: " + secret, "name: " + text + "\npassword: " + secret},
+		{
+			"json",
+			`{"content":"` + text + `","password":"` + secret + `"}`,
+			`{"content":"` + text + `","password":"FAKE***"}`,
+		},
 	} {
-		for _, body := range []any{tc.body, []byte(tc.body)} {
-			value, _, err := dryRunBody(body, "raw")
-			if err != nil || value != tc.want {
-				t.Fatalf("dryRunBody(%T) lost body content or redaction: %v", body, err)
+		t.Run(tc.name, func(t *testing.T) {
+			for _, body := range []any{tc.body, []byte(tc.body)} {
+				value, _, err := dryRunBody(body, tc.name)
+				if err != nil || value != tc.want {
+					t.Fatalf("dryRunBody(%T) = %q, %v; want %q", body, value, err, tc.want)
+				}
+				for _, jsonOutput := range []bool{false, true} {
+					var out bytes.Buffer
+					if err := renderDryRun(&out, "demo", &runtime.AssembledRequest{Body: body, ReqBodyType: tc.name}, jsonOutput, false); err != nil {
+						t.Fatal(err)
+					}
+					if !strings.Contains(tc.want, secret) && strings.Contains(out.String(), secret) {
+						t.Fatalf("secret leaked from %T dry-run output: %s", body, out.String())
+					}
+					if jsonOutput {
+						var decoded cliDryRunOutput
+						if err := json.Unmarshal(out.Bytes(), &decoded); err != nil || decoded.Body != tc.want {
+							t.Fatalf("JSON dry-run body = %q, %v; want %q", decoded.Body, err, tc.want)
+						}
+					} else if !strings.Contains(out.String(), tc.want) {
+						t.Fatalf("text dry-run body missing %q", tc.want)
+					}
+				}
+				if data, ok := body.([]byte); ok && string(data) != tc.body {
+					t.Fatal("dry-run mutated byte body")
+				}
+			}
+		})
+	}
+}
+
+func TestDryRunRedactsJSONRegardlessOfDeclaredFormat(t *testing.T) {
+	const body = `{"password":"FAKE_SECRET_123"}`
+	want := `{"password":"FAKE***"}`
+	for name, req := range map[string]*runtime.AssembledRequest{
+		"raw": {
+			Body:        []byte(body),
+			ReqBodyType: "raw",
+		},
+		"metadata": {
+			Body:                []byte(body),
+			ReqBodyType:         "json",
+			DeclaredReqBodyType: "byte",
+		},
+		"header": {
+			Body:        []byte(body),
+			ReqBodyType: "json",
+			Headers:     map[string]string{"Content-Type": "application/octet-stream"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			value, _, err := dryRunBody(
+				req.Body,
+				req.ReqBodyType,
+				req.DeclaredReqBodyType,
+			)
+			if err != nil || value != want {
+				t.Fatalf("dryRunBody(binary) = %q, %v; want %q", value, err, want)
 			}
 			for _, jsonOutput := range []bool{false, true} {
 				var out bytes.Buffer
-				if err := renderDryRun(&out, "demo", &runtime.AssembledRequest{Body: body}, jsonOutput, false); err != nil {
+				if err := renderDryRun(&out, "demo", req, jsonOutput, false); err != nil {
 					t.Fatal(err)
 				}
 				if jsonOutput {
 					var decoded cliDryRunOutput
-					if err := json.Unmarshal(out.Bytes(), &decoded); err != nil || decoded.Body != tc.want {
-						t.Fatalf("JSON dry-run lost body content or redaction: %v", err)
+					if err := json.Unmarshal(out.Bytes(), &decoded); err != nil || decoded.Body != want {
+						t.Fatalf("binary dry-run body = %q, error = %v", decoded.Body, err)
 					}
-				} else if !strings.Contains(out.String(), tc.want) {
-					t.Fatal("text dry-run lost body content or redaction")
+				} else if !strings.Contains(out.String(), want) {
+					t.Fatalf("changed binary dry-run output: %s", out.String())
 				}
 			}
+			if string(req.Body.([]byte)) != body {
+				t.Fatal("dry-run mutated binary request body")
+			}
+		})
+	}
+}
+
+func TestDryRunNestedForm(t *testing.T) {
+	const secret = "FAKE_SECRET_123"
+	req, err := runtime.Assemble(&runtime.ExecContext{
+		API: &meta.API{Name: "Submit", ReqBodyType: "formData", Parameters: []meta.Parameter{
+			{Name: "config", RawName: "config", Type: meta.TypeObject, Position: meta.PosFormData, ParamStyle: "json"},
+		}},
+		Args: map[string]any{"config": map[string]any{"name": "alice", "password": secret}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, body := range []any{req.Body, map[string]any{"user.password.1": secret, "user.name": "alice"}} {
+		req.Body = body
+		before, _ := json.Marshal(body)
+		for _, jsonOutput := range []bool{false, true} {
+			var out bytes.Buffer
+			if err := renderDryRun(&out, "demo", req, jsonOutput, false); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(out.String(), secret) || !strings.Contains(out.String(), "alice") || !strings.Contains(out.String(), "FAKE***") {
+				t.Fatalf("incorrect nested form redaction: %s", out.String())
+			}
+			if strings.Contains(out.String(), "DeclaredReqBodyType") {
+				t.Fatal("internal format hints must not be printed")
+			}
+		}
+		after, _ := json.Marshal(body)
+		if !bytes.Equal(before, after) {
+			t.Fatal("dry-run mutated the form request")
 		}
 	}
 }
@@ -614,5 +730,40 @@ func TestBuilderErrorAndRenderBranches(t *testing.T) {
 	}
 	if err := writeJSON(io.Discard, make(chan int), nil, "filtered", false); err == nil {
 		t.Fatal("writeJSON accepted channel")
+	}
+}
+
+func TestDryRunExplicitBodyFormats(t *testing.T) {
+	const body = `<Request><Name>visible</Name><Password>FAKE_SECRET_123</Password></Request>`
+	for _, tc := range []struct {
+		name string
+		req  runtime.AssembledRequest
+		want string
+	}{
+		{"XML", runtime.AssembledRequest{Headers: map[string]string{"Content-Type": "application/xml"}}, body},
+		{"binary", runtime.AssembledRequest{ReqBodyType: "binary"}, body},
+		{"declared binary", runtime.AssembledRequest{ReqBodyType: "json", DeclaredReqBodyType: "byte"}, body},
+		{"header", runtime.AssembledRequest{Headers: map[string]string{"cOnTeNt-TyPe": "application/octet-stream"}}, body},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.req.Body = []byte(body)
+			for _, jsonOutput := range []bool{false, true} {
+				var out bytes.Buffer
+				if err := renderDryRun(&out, "demo", &tc.req, jsonOutput, false); err != nil {
+					t.Fatal(err)
+				}
+				if jsonOutput {
+					var decoded cliDryRunOutput
+					if err := json.Unmarshal(out.Bytes(), &decoded); err != nil || decoded.Body != tc.want {
+						t.Fatalf("body = %q, err = %v", decoded.Body, err)
+					}
+				} else if !strings.Contains(out.String(), tc.want) {
+					t.Fatalf("unexpected text output: %s", &out)
+				}
+				if string(tc.req.Body.([]byte)) != body {
+					t.Fatal("dry-run changed the request body")
+				}
+			}
+		})
 	}
 }
