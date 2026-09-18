@@ -920,7 +920,7 @@ func TestServerAgentErrorFallsBackToActionHelpWithoutCode(t *testing.T) {
 func TestNormalizeAgentErrorServerErrorKeepsTipPath(t *testing.T) {
 	tipped := cli.NewErrorWithTip(
 		sdkerrors.NewServerError(400, `{"Code":"PricingNotSupported","Message":"no pricing"}`, ""),
-		"this OpenAPI either incurs no cost or has no pricing mapping registered yet",
+		"no pricing mapping is registered for this OpenAPI yet, so it cannot be quoted; this does not mean the call is free — an API confirmed to be free is reported as cost-irrelevant instead",
 	)
 	got := normalizeAgentErrorWithSearch(tipped, []string{"ecs", "describe-instances"}, nil)
 	assert.Same(t, tipped, got)
