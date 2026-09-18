@@ -27,6 +27,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 	"github.com/aliyun/aliyun-cli/v3/cli/upgrade"
+	"github.com/aliyun/aliyun-cli/v3/cliext"
 	"github.com/aliyun/aliyun-cli/v3/cliext/acrutil"
 	"github.com/aliyun/aliyun-cli/v3/cliext/agentbay"
 	"github.com/aliyun/aliyun-cli/v3/cliext/appmanagerutil"
@@ -243,7 +244,7 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	rootCmd.AddSubCommand(mock.NewMockCommand(config.GetConfigPath))
 	commando.SetRootHelpSpecs(rootCommandHelpSpecs, rootFlagHelpSpecs)
 
-	attachExtensionSafetyPolicy(rootCmd, extensions)
+	cliext.AttachSafetyPolicy(rootCmd, extensions)
 
 	plugin.RegisterReservedTopLevelCommands(rootCmd.SubCommandNames())
 

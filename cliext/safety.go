@@ -1,4 +1,4 @@
-package main
+package cliext
 
 import (
 	"fmt"
@@ -12,10 +12,10 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 )
 
-// Guard extensions at the root, before their own parsers, nested commands,
+// AttachSafetyPolicy guards extensions at the root, before their own parsers, nested commands,
 // credential resolution, auto-installation or subprocesses can run. These
 // commands never enter the OpenAPI/installed-plugin execution path.
-func attachExtensionSafetyPolicy(root *cli.Command, extensions map[string]bool) {
+func AttachSafetyPolicy(root *cli.Command, extensions map[string]bool) {
 	previous := root.BeforeParseRoute
 	root.BeforeParseRoute = func(ctx *cli.Context, args []string) (bool, error) {
 		if err := checkExtensionSafetyPolicy(ctx, args, extensions); err != nil {

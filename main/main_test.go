@@ -143,8 +143,9 @@ func TestMainExplicitLanguageOverridesProfileForCoreAndOpenAPIHelp(t *testing.T)
 				"ecs", "DescribeInstances", "--version", "2014-05-26",
 				"--help", "--cli-output", "json", "--no-cli-ai-mode", "--language", "en",
 			},
-			want:    "Queries the list of instances",
-			notWant: "查询一台或多台实例的详细信息",
+			// Assert host-owned localized Help text, not mutable API metadata prose.
+			want:    "inspect this API's structure: request parameters (default) or response schema",
+			notWant: "查看该 API 的结构：request 参数（默认）或 response 响应结构",
 		},
 		{
 			name: "kebab OpenAPI",
@@ -152,8 +153,8 @@ func TestMainExplicitLanguageOverridesProfileForCoreAndOpenAPIHelp(t *testing.T)
 				"fc", "create-alias", "--api-version", "2023-03-30",
 				"--help", "--cli-output", "json", "--no-cli-ai-mode", "--language", "en",
 			},
-			want:    "Creates an alias",
-			notWant: "创建别名",
+			want:    "inspect request parameters or the response schema",
+			notWant: "查看 request 请求参数或 response 响应结构",
 		},
 	}
 

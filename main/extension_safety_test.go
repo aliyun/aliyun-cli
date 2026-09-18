@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cliext"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
@@ -100,7 +101,9 @@ func TestExtensionSafetyRoutingAndMatching(t *testing.T) {
 			extensionPolicyHome(t, tc.pattern, safety.ActionDeny)
 			_, ctx := extensionRootContext()
 			original := append([]string(nil), tc.args...)
-			err := checkExtensionSafetyPolicy(ctx, tc.args, map[string]bool{"saectl": true, "acrutil": true})
+			guard := &cli.Command{}
+			cliext.AttachSafetyPolicy(guard, map[string]bool{"saectl": true, "acrutil": true})
+			_, err := guard.BeforeParseRoute(ctx, tc.args)
 			if tc.blocked {
 				require.ErrorContains(t, err, "blocked by safety policy")
 			} else {
@@ -171,7 +174,7 @@ func TestExtensionSafetyPreservesPreviousRouter(t *testing.T) {
 		require.Equal(t, []string{"saectl", "status"}, args)
 		return true, nil
 	}
-	attachExtensionSafetyPolicy(root, map[string]bool{"saectl": true})
+	cliext.AttachSafetyPolicy(root, map[string]bool{"saectl": true})
 	handled, err := root.BeforeParseRoute(ctx, []string{"saectl", "restore"})
 	require.True(t, handled)
 	require.Error(t, err)
