@@ -237,8 +237,21 @@ func postPriceQuoteSigned(cred credentialsv2.Credential, endpoint string, pr *pr
 		return nil, fmt.Errorf("call pricing service: %w", err)
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
+	// A short read must not be mistaken for a response: the body is what
+	// decides success vs failure below, so a truncated one would produce a
+	// misleading error — or, worse, an unrecognised cost-irrelevant answer
+	// reported as "cannot be quoted", which is the wrong billing signal.
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read pricing service response: %w", err)
+	}
 	if resp.StatusCode/100 != 2 {
+		// A confirmed cost-irrelevant API arrives as an error status, but it
+		// is a successful determination — hand back a result document so the
+		// caller prints it and succeeds like any other quote.
+		if out, isCostIrrelevant := costIrrelevantFromResponse(pr, raw); isCostIrrelevant {
+			return out, nil
+		}
 		return nil, parsePricingHTTPError(pr, resp.StatusCode, raw)
 	}
 	return raw, nil
@@ -285,39 +298,131 @@ func hmacSHA1Base64(key, data string) string {
 	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
 
-func parsePricingHTTPError(pr *priceRequest, status int, raw []byte) error {
-	var pe struct {
-		Code      string `json:"Code"`
-		Message   string `json:"Message"`
-		RequestId string `json:"RequestId"`
-		Recommend string `json:"Recommend"`
+// Quote-service error codes the runtime treats specially. They are
+// deliberately distinct: "confirmed free" answers the question "what does this
+// call cost?", while "not supported" means the question cannot be answered
+// yet. Collapsing them leaves users unable to tell a free API from an unmapped
+// one — a billing-relevant mistake.
+const (
+	pricingCodeNotRequired  = "PricingNotRequired"
+	pricingCodeNotSupported = "PricingNotSupported"
+)
+
+// popErrorEnvelope is the POP gateway error shape (PascalCase).
+type popErrorEnvelope struct {
+	Code      string `json:"Code"`
+	Message   string `json:"Message"`
+	RequestId string `json:"RequestId"`
+	Recommend string `json:"Recommend"`
+}
+
+// priceErrorEnvelope is the ccapi-business error shape (camelCase), seen when
+// ALIBABA_CLOUD_PRICING_ENDPOINT points straight at a CloudControl instance
+// instead of going through the gateway. Either shape can carry either code, so
+// both are understood rather than only the gateway one.
+type priceErrorEnvelope struct {
+	ErrorCode string `json:"errorCode"`
+	ErrorMsg  string `json:"errorMsg"`
+	RequestId string `json:"requestId"`
+}
+
+// costIrrelevantQuote is what --estimate-cost prints for an API the pricing
+// side has confirmed as free.
+//
+// It is a normal result, not an error: the user asked what the call costs and
+// got a definitive answer — nothing. Failing here would make scripts and
+// agents that gate on the exit code abort on exactly the operations that are
+// free to run. Shape matches aliyun-cli's built-in --estimate-cost path so
+// both front-ends print the same document for the same situation.
+type costIrrelevantQuote struct {
+	CostIrrelevant bool   `json:"costIrrelevant"`
+	PopCode        string `json:"popCode"`
+	PopVersion     string `json:"popVersion"`
+	ApiName        string `json:"apiName"`
+	Message        string `json:"message"`
+}
+
+// costIrrelevantMessage is the runtime's own wording for the confirmed-free
+// answer. The server's message says the same thing but is localized (Chinese),
+// and CLI output is read by an international audience and by scripts, so the
+// text is fixed here instead of passed through. Matches aliyun-cli's built-in
+// --estimate-cost path verbatim.
+const costIrrelevantMessage = "this OpenAPI is confirmed to incur no charge, so there is nothing to quote"
+
+// costIrrelevantFromResponse recognises the confirmed-free answer in a non-2xx
+// body and renders it as a result document.
+func costIrrelevantFromResponse(pr *priceRequest, raw []byte) ([]byte, bool) {
+	code, _, _, _ := pricingErrorFields(raw)
+	if code != pricingCodeNotRequired {
+		return nil, false
 	}
+	// Marshalling a fixed struct of one bool and four strings cannot fail.
+	out, _ := json.Marshal(costIrrelevantQuote{
+		CostIrrelevant: true,
+		PopCode:        pr.PopCode,
+		PopVersion:     pr.PopVersion,
+		ApiName:        pr.ApiName,
+		Message:        costIrrelevantMessage,
+	})
+	return out, true
+}
+
+// pricingErrorFields extracts the error fields from whichever envelope the
+// body carries. An all-empty return means neither shape matched, so the caller
+// falls back to reporting the raw body. recommend is gateway-only.
+func pricingErrorFields(raw []byte) (code string, message string, requestId string, recommend string) {
+	var pe popErrorEnvelope
 	if json.Unmarshal(raw, &pe) == nil && pe.Code != "" {
-		if pe.Code == "PricingNotSupported" {
-			base := fmt.Sprintf("no pricing information for %s/%s/%s: this OpenAPI either incurs no cost or has no pricing mapping registered yet",
-				pr.PopCode, pr.PopVersion, pr.ApiName)
-			if pe.RequestId != "" {
-				base += "\n  requestId: " + pe.RequestId
-			}
-			return fmt.Errorf("%s", base)
-		}
-		var b strings.Builder
-		if pe.Message != "" {
-			fmt.Fprintf(&b, "%s — %s", pe.Code, pe.Message)
-		} else {
-			b.WriteString(pe.Code)
-		}
-		if pe.RequestId != "" {
-			fmt.Fprintf(&b, "\n  requestId: %s", pe.RequestId)
-		}
-		if pe.Recommend != "" {
-			fmt.Fprintf(&b, "\n  help: %s", pe.Recommend)
-		}
-		return fmt.Errorf("%s", b.String())
+		return pe.Code, pe.Message, pe.RequestId, pe.Recommend
 	}
-	body := strings.TrimSpace(string(raw))
-	if len(body) > 256 {
-		body = body[:256] + "…"
+	var env priceErrorEnvelope
+	if json.Unmarshal(raw, &env) == nil && (env.ErrorCode != "" || env.ErrorMsg != "") {
+		return env.ErrorCode, env.ErrorMsg, env.RequestId, ""
 	}
-	return fmt.Errorf("pricing service returned HTTP %d: %s", status, body)
+	return "", "", "", ""
+}
+
+// parsePricingHTTPError turns a 4xx/5xx response body into a readable error.
+// PricingNotSupported keeps a friendly hint (the user just needs to know the
+// API has no pricing mapping yet); other errors lead with code+message so the
+// signal is visible at a glance, then requestId on its own line for easy copy,
+// then the troubleshoot URL last so it doesn't compete with the message.
+//
+// The hint says explicitly that "not supported" does not mean "free": an API
+// confirmed to incur no charge reports PricingNotRequired and is handled as a
+// successful result before this is reached, and reading the two as the same
+// thing is a billing-relevant mistake.
+func parsePricingHTTPError(pr *priceRequest, status int, raw []byte) error {
+	code, message, requestId, recommend := pricingErrorFields(raw)
+	if code == "" && message == "" {
+		body := strings.TrimSpace(string(raw))
+		if len(body) > 256 {
+			body = body[:256] + "…"
+		}
+		return fmt.Errorf("pricing service returned HTTP %d: %s", status, body)
+	}
+	if code == pricingCodeNotSupported {
+		base := fmt.Sprintf("no pricing information for %s/%s/%s: no pricing mapping is registered for this OpenAPI yet, so it cannot be quoted. This does not mean the call is free — an API confirmed to be free is reported as cost-irrelevant instead",
+			pr.PopCode, pr.PopVersion, pr.ApiName)
+		if requestId != "" {
+			base += "\n  requestId: " + requestId
+		}
+		return fmt.Errorf("%s", base)
+	}
+	var b strings.Builder
+	switch {
+	case code != "" && message != "":
+		fmt.Fprintf(&b, "%s — %s", code, message)
+	case code != "":
+		b.WriteString(code)
+	default:
+		b.WriteString(message)
+	}
+	if requestId != "" {
+		fmt.Fprintf(&b, "\n  requestId: %s", requestId)
+	}
+	if recommend != "" {
+		fmt.Fprintf(&b, "\n  help: %s", recommend)
+	}
+	return fmt.Errorf("%s", b.String())
 }
