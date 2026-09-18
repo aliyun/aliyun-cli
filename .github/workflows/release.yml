@@ -15,6 +15,10 @@ jobs:
         with:
           submodules: true
           ref: ${{ github.ref }}
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
       - name: Create Release
         run: |
           bash tools/create_release.sh ${{ github.ref_name }}
