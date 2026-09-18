@@ -281,6 +281,8 @@ aliyun configure safety-policy enable
 
 规则按顺序检查，第一条匹配的规则生效；未匹配的命令允许执行。`ecs:Delete*` 这样的通配符可以通过共同前缀覆盖上述两种写法，但不会自动识别所有具有破坏性效果的 API。REST 方法与路径采用 `product:METHOD/path`（如 `cs:DELETE/clusters`），`cs:DELETE/*` 匹配路径以 `/` 开头的 DELETE 命令；插件子命令层级以 `:` 分隔（如 `fc:function:create`）。按需分别配置 API 名称、方法与路径、插件命令等形式。云端授权仍由服务端与 RAM 权限控制。
 
+内置扩展（如 `saectl`、`ossutil`、`acrutil`、`spark-submit`）也在分发前检查策略，早于扩展的安装、凭据解析和执行。命令标识以 `:` 连接位置参数，例如 `saectl:restore`、`acrutil:diagnosis:restore`；`*restore*` 可匹配这些写法。宿主配置选项不参与匹配；扩展未知选项后的非选项参数会保留，因此需要覆盖额外参数时应使用通配符。不带扩展参数、单独的 `help`/`--help`/`-h` 或 `version`/`--version` 不触发检查；其他调用即使包含 `--help` 也会检查，避免把选项值误当成帮助请求而绕过策略。
+
 ## 面向 Agent 的优化与 AI mode
 
 AI mode 可以全局管理，也可以针对单次命令控制：

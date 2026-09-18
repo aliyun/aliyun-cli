@@ -281,6 +281,8 @@ aliyun configure safety-policy enable
 
 Rules are evaluated in order: the first match wins, and unmatched commands are allowed. A wildcard such as `ecs:Delete*` can cover both spellings by their shared prefix, but does not identify every API with a destructive effect. REST method/path commands use `product:METHOD/path` (for example, `cs:DELETE/clusters`); use `cs:DELETE/*` to match slash-prefixed DELETE paths. Plugin subcommand hierarchies use `:` (for example, `fc:function:create`). Configure API-name, method/path, and plugin forms separately when needed. Cloud authorization remains enforced by the service and RAM permissions.
 
+Built-in extensions (such as `saectl`, `ossutil`, `acrutil`, and `spark-submit`) also check policy before dispatch, ahead of extension installation, credential resolution, and execution. Their identifiers join positional arguments with `:`, for example `saectl:restore` or `acrutil:diagnosis:restore`; `*restore*` matches both. Host configuration options are excluded. Non-option tokens following unknown extension options are retained, so use wildcards when a rule needs to cover additional arguments. Invocations without extension arguments and standalone `help`/`--help`/`-h` or `version`/`--version` requests are exempt. Other invocations are checked even if they contain `--help`, so an option value cannot accidentally bypass policy as a help request.
+
 ## Agent-aware optimization and AI mode
 
 AI mode can be managed globally or per command:

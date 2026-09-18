@@ -192,44 +192,49 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	versionCmd.Hidden = false
 	rootCmd.AddSubCommand(versionCmd)
 	rootCmd.AddSubCommand(cli.NewAutoCompleteCommand())
+	extensions := make(map[string]bool)
+	addExtension := func(command *cli.Command) {
+		extensions[command.Name] = true
+		rootCmd.AddSubCommand(command)
+	}
 	// new oss command
-	rootCmd.AddSubCommand(ossutil.NewOssutilCommand())
+	addExtension(ossutil.NewOssutilCommand())
 	// AgentBay command
-	rootCmd.AddSubCommand(agentbay.NewAgentBayCommand())
+	addExtension(agentbay.NewAgentBayCommand())
 	// tablestore command
-	rootCmd.AddSubCommand(otsutil.NewOtsutilCommand())
+	addExtension(otsutil.NewOtsutilCommand())
 	// EMR Serverless spark-submit command
-	rootCmd.AddSubCommand(sparksubmit.NewSparkSubmitCommand())
+	addExtension(sparksubmit.NewSparkSubmitCommand())
 	// kmscli command
-	rootCmd.AddSubCommand(kmscli.NewKmscliCommand())
+	addExtension(kmscli.NewKmscliCommand())
 	// lindorm command
-	rootCmd.AddSubCommand(lindormcli.NewLindormCliCommand())
+	addExtension(lindormcli.NewLindormCliCommand())
 	// mseutil command
-	rootCmd.AddSubCommand(mseutil.NewMseutilCommand())
+	addExtension(mseutil.NewMseutilCommand())
 	// acr command
-	rootCmd.AddSubCommand(acrutil.NewAcrutilCommand())
+	addExtension(acrutil.NewAcrutilCommand())
 	// codeup command
-	rootCmd.AddSubCommand(codeup.NewCodeupCliCommand())
+	addExtension(codeup.NewCodeupCliCommand())
 	// sae command
-	rootCmd.AddSubCommand(saectl.NewSaectlCommand())
+	addExtension(saectl.NewSaectlCommand())
 	// appmanager command
-	rootCmd.AddSubCommand(appmanagerutil.NewAppManagerCommand())
+	addExtension(appmanagerutil.NewAppManagerCommand())
 	// computenest command
-	rootCmd.AddSubCommand(computenestutil.NewComputenestCommand())
+	addExtension(computenestutil.NewComputenestCommand())
 	// ecctl command
-	rootCmd.AddSubCommand(ecctl.NewEcctlCommand())
+	addExtension(ecctl.NewEcctlCommand())
 	// esa-cli command
-	rootCmd.AddSubCommand(esacli.NewEsacliCommand())
+	addExtension(esacli.NewEsacliCommand())
 	// flow-cli command (云效 Flow)
-	rootCmd.AddSubCommand(flowcli.NewFlowcliCommand())
+	addExtension(flowcli.NewFlowcliCommand())
 	// cms2 command
-	rootCmd.AddSubCommand(cms2.NewCms2Command())
+	addExtension(cms2.NewCms2Command())
 	// maxc command
-	rootCmd.AddSubCommand(maxc.NewMaxcCommand())
+	addExtension(maxc.NewMaxcCommand())
 	// iact3 command
-	rootCmd.AddSubCommand(iact3.NewIact3Command())
+	addExtension(iact3.NewIact3Command())
 	// rostran command
-	rootCmd.AddSubCommand(rostran.NewRostranCommand())
+	addExtension(rostran.NewRostranCommand())
 	// plugin command
 	rootCmd.AddSubCommand(plugin.NewPluginCommand())
 	// upgrade command
@@ -237,6 +242,8 @@ func newRootCommand(profile config.Profile, stdout io.Writer) *cli.Command {
 	// mock command
 	rootCmd.AddSubCommand(mock.NewMockCommand(config.GetConfigPath))
 	commando.SetRootHelpSpecs(rootCommandHelpSpecs, rootFlagHelpSpecs)
+
+	attachExtensionSafetyPolicy(rootCmd, extensions)
 
 	plugin.RegisterReservedTopLevelCommands(rootCmd.SubCommandNames())
 
