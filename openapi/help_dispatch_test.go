@@ -316,6 +316,36 @@ func TestBeforeParseHelpRouteRejectsUnknownRootFlag(t *testing.T) {
 	assert.Equal(t, "--regoin", invalid.Flag)
 }
 
+func TestBeforeParseHelpRoutePreservesProductWithForce(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		args         []string
+		productIndex int
+	}{
+		{"before product", []string{"--force", "ada", "SubmitExecuteJob"}, 1},
+		{"before action", []string{"ada", "--force", "SubmitExecuteJob"}, 0},
+		{"after action", []string{"ada", "SubmitExecuteJob", "--force"}, 0},
+		{"after valued flag", []string{"--profile", "test", "--force", "ada", "SubmitExecuteJob"}, 3},
+		{"without force", []string{"ada", "SubmitExecuteJob"}, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			args := append(append([]string(nil), tt.args...),
+				"--version", "2026-07-01", "--ConnectorId", "test-connector", "--Script", "select 1")
+			assert.Equal(t, []string{"ada", "SubmitExecuteJob"}, rawHelpPositionals(args))
+			product, index := rawHelpProduct(args)
+			assert.Equal(t, "ada", product)
+			assert.Equal(t, tt.productIndex, index)
+
+			c, ctx, stdout, stderr := newCanonicalHelpTestContext(t)
+			handled, err := c.beforeParseHelpRoute(ctx, args)
+			require.NoError(t, err)
+			assert.False(t, handled, "API calls must reach the normal request parser")
+			assert.Empty(t, stdout.String())
+			assert.Empty(t, stderr.String())
+		})
+	}
+}
+
 func TestBeforeParseHelpRouteRejectsUnknownProductFlag(t *testing.T) {
 	c, ctx, _, _ := newCanonicalHelpTestContext(t)
 	c.localManifest = &plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
