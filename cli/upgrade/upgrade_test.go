@@ -387,7 +387,7 @@ func TestDownloadAndExtract_Success(t *testing.T) {
 	defer func() { httpClient = origClient }()
 
 	var out bytes.Buffer
-	binaryPath, cleanup, err := downloadAndExtract(&out, server.URL+"/"+assetName, assetName)
+	binaryPath, cleanup, err := downloadAndExtract(&out, server.URL+"/"+assetName, assetName, "")
 	assert.NoError(t, err)
 	assert.NotNil(t, cleanup)
 	defer cleanup()
@@ -408,7 +408,7 @@ func TestDownloadAndExtract_DownloadFails(t *testing.T) {
 	defer func() { httpClient = origClient }()
 
 	var out bytes.Buffer
-	_, cleanup, err := downloadAndExtract(&out, server.URL+"/missing.tgz", "missing.tgz")
+	_, cleanup, err := downloadAndExtract(&out, server.URL+"/missing.tgz", "missing.tgz", "")
 	assert.Error(t, err)
 	assert.Nil(t, cleanup)
 	assert.Contains(t, err.Error(), "download failed")
@@ -425,7 +425,7 @@ func TestDownloadAndExtract_ExtractFails(t *testing.T) {
 	defer func() { httpClient = origClient }()
 
 	var out bytes.Buffer
-	_, cleanup, err := downloadAndExtract(&out, server.URL+"/bad.tgz", "bad.tgz")
+	_, cleanup, err := downloadAndExtract(&out, server.URL+"/bad.tgz", "bad.tgz", "")
 	assert.Error(t, err)
 	assert.Nil(t, cleanup)
 	assert.Contains(t, err.Error(), "extraction failed")
