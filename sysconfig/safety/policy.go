@@ -236,7 +236,7 @@ func validatePolicy(policy *Policy) error {
 
 const EnvSafetyPolicyEnabled = "ALIBABA_CLOUD_SAFETY_POLICY_ENABLED"
 
-// Comma-separated entries, each entry is pattern=action (first '=' separates pattern and action).
+// Comma-separated pattern=action entries, or a JSON object containing rules.
 // Example: *:Delete*=deny,ecs:Update*=confirm
 const EnvSafetyPolicyRules = "ALIBABA_CLOUD_SAFETY_POLICY_RULES"
 
@@ -364,6 +364,30 @@ func MergePolicyFromEnvStrict(base *Policy) (*Policy, error) {
 }
 
 func parseEnvRulesListStrict(raw string) ([]Rule, error) {
+	if strings.HasPrefix(raw, "{") {
+		var policy Policy
+		decoder := json.NewDecoder(strings.NewReader(raw))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&policy); err != nil {
+			return nil, fmt.Errorf("parse JSON rules: %w", err)
+		}
+		var extra any
+		if err := decoder.Decode(&extra); err == nil {
+			return nil, fmt.Errorf("parse JSON rules: multiple JSON values")
+		} else if err != io.EOF {
+			return nil, fmt.Errorf("parse JSON rules: trailing data: %w", err)
+		}
+		if policy.Rules == nil {
+			return nil, fmt.Errorf("JSON rules must contain a rules array")
+		}
+		if err := validatePolicy(&policy); err != nil {
+			return nil, err
+		}
+		// This variable overrides rules only; enabled still comes from the
+		// policy file or ALIBABA_CLOUD_SAFETY_POLICY_ENABLED.
+		return policy.Rules, nil
+	}
+
 	parts := strings.Split(raw, ",")
 	out := make([]Rule, 0, len(parts))
 	for i, part := range parts {
