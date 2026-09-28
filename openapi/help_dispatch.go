@@ -295,7 +295,7 @@ func rawHelpPositionalsWithIndexes(args []string) []indexedHelpToken {
 	result := make([]indexedHelpToken, 0, 3)
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		if i == 0 && arg == "help" {
+		if (i == 0 && arg == "help") || arg == "--"+ForceFlagName {
 			continue
 		}
 		name, hasValue := splitLongHelpOption(arg)
