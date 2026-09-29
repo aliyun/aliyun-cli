@@ -25,11 +25,21 @@ func startManualOauthFlow(w io.Writer, cp *Profile) error {
 		"code_challenge": {generateCodeChallenge(verifier)}, "code_challenge_method": {"S256"},
 	}
 	authURL := signInMap[cp.OAuthSiteType] + "/oauth2/v1/auth?" + query.Encode()
-	if _, err := fmt.Fprintf(w, "Open this URL in a browser to sign in:\n%s\nCopy the full callback URL from your browser's address bar, even if the page fails to load.\nExample: %s?code=abc123xyz&state=example-state\nPaste your URL below. Press Ctrl+C to cancel.\n", authURL, redirectURI); err != nil {
+	if _, err := fmt.Fprintf(w, `Open this link in a browser on your computer or phone:
+%s
+
+Sign in. The browser will redirect to a local address starting with:
+%s
+The page may fail to load. This is expected.
+
+Paste the entire redirected URL from your browser's address bar below.
+Example: %s?code=abc123xyz&state=example-state
+
+`, authURL, redirectURI, redirectURI); err != nil {
 		return err
 	}
 	for {
-		if _, err := fmt.Fprint(w, "Callback URL: "); err != nil {
+		if _, err := fmt.Fprint(w, "Callback URL (Ctrl+C to cancel): "); err != nil {
 			return err
 		}
 		line, err := readOAuthCallbackLine(stdin)
