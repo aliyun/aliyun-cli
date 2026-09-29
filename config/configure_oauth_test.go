@@ -474,9 +474,11 @@ func TestGenerateCodeChallenge(t *testing.T) {
 	assert.NotContains(t, result, "=") // base64url should not have padding
 }
 
-func TestOAuthDetectPortUse(t *testing.T) {
+func TestOAuthListenCallback(t *testing.T) {
 	// Test normal case - should find an available port
-	port, err := detectPortUse(12345, 12349)
-	assert.NoError(t, err)
-	assert.True(t, port >= 12345 && port <= 12349)
+	listener, err := listenOAuthCallback(12345, 12349)
+	if assert.NoError(t, err) {
+		defer listener.Close()
+		assert.Contains(t, listener.Addr().String(), "127.0.0.1:")
+	}
 }

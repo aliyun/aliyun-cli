@@ -203,6 +203,18 @@ Saving profile[oidc-profile] ...Done.
 
 ### OAuth
 
+远程机器没有浏览器时，使用手动回调模式：
+
+```sh
+aliyun configure --mode OAuth --profile oauth-profile --no-browser
+```
+
+在另一台设备的浏览器中打开授权链接，登录后复制地址栏中的完整回调 URL
+（包含 `code` 和 `state`），粘贴回当前终端。回调页面提示连接失败不影响此操作。
+CLI 会校验回调地址和本次登录的 `state`，再通过 PKCE 兑换凭证。
+此模式不监听本地端口、不需要端口转发；按 Ctrl+C 可取消。`--no-browser` 仅适用于 OAuth。
+
+
 OAuth 会打开基于浏览器的登录流程，并将获得的临时凭证保存到 Profile：
 
 ```text
