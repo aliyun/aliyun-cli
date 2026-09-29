@@ -293,7 +293,7 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 			if err != nil {
 				return err
 			}
-			cli.Printf(w, "OAuth configuration completed. The temporary Access Key Id and Access Key Secret have been set in the profile.\n")
+			cli.Printf(w, "OAuth configuration completed. The temporary Access Key Id and Access Key Secret have been set in the profile.\n\n")
 		case BearerToken:
 			cp.Mode = BearerToken
 			err := configureBearerToken(w, &cp)
