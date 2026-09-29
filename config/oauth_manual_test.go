@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -84,6 +85,11 @@ func TestParseOAuthCallbackURL(t *testing.T) {
 		denied    bool
 	}{
 		{"code only", "secret", false},
+		{"malformed URL", "http://[invalid", false},
+		{"userinfo", "http://user@127.0.0.1:12345/cli/callback?state=s&code=c", false},
+		{"opaque URL", "http:callback?state=s&code=c", false},
+		{"empty code", base + "?state=s&code=", false},
+		{"blank code", base + "?state=s&code=%20", false},
 		{"wrong host", "http://example.com:12345/cli/callback?state=s&code=c", false},
 		{"wrong port", "http://127.0.0.1:12346/cli/callback?state=s&code=c", false},
 		{"wrong path", "http://127.0.0.1:12345/other?state=s&code=c", false},
@@ -142,4 +148,113 @@ func TestConfigureSelectsManualOAuth(t *testing.T) {
 	ctx.Flags().Add(flag)
 	require.ErrorIs(t, doConfigure(ctx, "manual", "OAuth"), io.EOF)
 	require.ErrorContains(t, doConfigure(ctx, "manual", "AK"), "--no-browser is only supported")
+}
+
+type oauthOutputFunc func([]byte) (int, error)
+
+func (f oauthOutputFunc) Write(p []byte) (int, error) { return f(p) }
+
+func TestManualOAuthOutputFailures(t *testing.T) {
+	for _, failAt := range []int{1, 2, 3} {
+		t.Run(fmt.Sprintf("write_%d", failAt), func(t *testing.T) {
+			old := stdin
+			defer func() { stdin = old }()
+			reads := 0
+			input := strings.NewReader("invalid-url\n")
+			stdin = oauthInputFunc(func(p []byte) (int, error) {
+				reads++
+				return input.Read(p)
+			})
+			failure := errors.New("output unavailable")
+			writes := 0
+			writer := oauthOutputFunc(func(p []byte) (int, error) {
+				writes++
+				if writes == failAt {
+					return 0, failure
+				}
+				return len(p), nil
+			})
+			err := startManualOauthFlow(writer, &Profile{OAuthSiteType: "CN"})
+			require.ErrorIs(t, err, failure)
+			require.Equal(t, failAt, writes, "stop prompting when output is unavailable")
+			if failAt < 3 {
+				require.Zero(t, reads, "do not consume input before displaying the prompt")
+			}
+		})
+	}
+}
+
+func TestManualOAuthInvalidSite(t *testing.T) {
+	var output bytes.Buffer
+	err := startManualOauthFlow(&output, &Profile{OAuthSiteType: "invalid"})
+	require.ErrorContains(t, err, "invalid OAuth site type")
+	require.Empty(t, output.String())
+}
+
+func TestManualOAuthAuthorizationDenied(t *testing.T) {
+	oldInput, oldClient := stdin, utilNewHttpClient
+	defer func() { stdin = oldInput; utilNewHttpClient = oldClient }()
+	utilNewHttpClient = func() *http.Client {
+		t.Error("denied authorization must not attempt token exchange")
+		return &http.Client{}
+	}
+	var output bytes.Buffer
+	var input *strings.Reader
+	stdin = oauthInputFunc(func(p []byte) (int, error) {
+		if input == nil {
+			auth, err := url.Parse(strings.Split(output.String(), "\n")[1])
+			require.NoError(t, err)
+			require.Equal(t, "signin.alibabacloud.com", auth.Host)
+			require.Equal(t, oauthClientMap["INTL"], auth.Query().Get("client_id"))
+			query := url.Values{"state": {auth.Query().Get("state")}, "error": {"access_denied"}}
+			input = strings.NewReader(auth.Query().Get("redirect_uri") + "?" + query.Encode() + "\n")
+		}
+		return input.Read(p)
+	})
+	profile := &Profile{OAuthSiteType: "INTL"}
+	err := startManualOauthFlow(&output, profile)
+	require.ErrorContains(t, err, "authorization was denied or failed")
+	require.Empty(t, profile.OAuthAccessToken)
+	require.Equal(t, 1, strings.Count(output.String(), "Callback URL ("), "denial ends the flow instead of prompting again")
+}
+
+func TestReadOAuthCallbackLine(t *testing.T) {
+	failure := errors.New("input disconnected")
+	tests := []struct {
+		name      string
+		input     io.Reader
+		want      string
+		wantErr   error
+		errorText string
+	}{
+		{name: "newline", input: strings.NewReader("callback\n"), want: "callback"},
+		{name: "EOF after input", input: strings.NewReader("callback"), want: "callback"},
+		{name: "empty EOF", input: strings.NewReader(""), wantErr: io.EOF},
+		{name: "reader failure", input: oauthInputFunc(func([]byte) (int, error) { return 0, failure }), wantErr: failure},
+		{name: "partial input failure", input: io.MultiReader(strings.NewReader("partial"), oauthInputFunc(func([]byte) (int, error) { return 0, failure })), wantErr: failure},
+		{name: "maximum accepted line", input: strings.NewReader(strings.Repeat("a", 16*1024-1) + "\n"), want: strings.Repeat("a", 16*1024-1)},
+		{name: "oversized input", input: strings.NewReader(strings.Repeat("a", 16*1024) + "\n"), errorText: "callback URL is too long"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := readOAuthCallbackLine(tt.input)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			} else if tt.errorText != "" {
+				require.ErrorContains(t, err, tt.errorText)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tt.want, got)
+		})
+	}
+	t.Run("preserve subsequent answers", func(t *testing.T) {
+		input := strings.NewReader("callback\r\nregion\n")
+		got, err := readOAuthCallbackLine(input)
+		require.NoError(t, err)
+		require.Equal(t, "callback\r", got)
+		remaining, err := io.ReadAll(input)
+		require.NoError(t, err)
+		require.Equal(t, "region\n", string(remaining))
+	})
 }
