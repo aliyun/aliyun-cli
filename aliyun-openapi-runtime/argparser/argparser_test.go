@@ -958,7 +958,6 @@ func TestFlagLevelJSONScalarArray(t *testing.T) {
 
 func TestFlagLevelJSONObjectRejectedForScalarArray(t *testing.T) {
 	for _, itemType := range []meta.DataType{
-		meta.TypeString,
 		meta.TypeInteger,
 		meta.TypeLong,
 		meta.TypeFloat,
@@ -978,6 +977,71 @@ func TestFlagLevelJSONObjectRejectedForScalarArray(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFlagLevelJSONObjectPreservedForStringArray(t *testing.T) {
+	params := []meta.Parameter{{
+		Name: "items", RawName: "Items", Type: meta.TypeArray,
+		Options: []string{"--items"}, ItemType: &meta.Parameter{Type: meta.TypeString},
+	}}
+	res, err := Parse(params, []string{
+		"--items", `{"key":"value"}`,
+		"--items", `{not-json-but-still-a-string}`,
+	})
+	if err != nil {
+		t.Fatalf("Parse object-looking string elements: %v", err)
+	}
+	want := []any{`{"key":"value"}`, `{not-json-but-still-a-string}`}
+	if !reflect.DeepEqual(res.Args["Items"], want) {
+		t.Fatalf("items = %#v, want %#v", res.Args["Items"], want)
+	}
+}
+
+func TestFlagLevelJSONArrayObjectRejectedForStringArray(t *testing.T) {
+	params := []meta.Parameter{{
+		Name: "items", RawName: "Items", Type: meta.TypeArray,
+		Options: []string{"--items"}, ItemType: &meta.Parameter{Type: meta.TypeString},
+	}}
+	res, err := Parse(params, []string{"--items", `[{"key":"value"}]`})
+	if err == nil {
+		t.Fatalf("Parse accepted an object element for array<string>: %#v", res.Args["Items"])
+	}
+	if !strings.Contains(err.Error(), "expected a JSON string element") {
+		t.Fatalf("Parse error = %q, want string element type error", err)
+	}
+}
+
+func TestFlagLevelArrayWithoutItemTypePreservesExistingBehavior(t *testing.T) {
+	params := []meta.Parameter{{
+		Name: "items", RawName: "Items", Type: meta.TypeArray,
+		Options: []string{"--items"},
+	}}
+	t.Run("JSON array preserves complex elements", func(t *testing.T) {
+		res, err := Parse(params, []string{"--items", `[{"key":"value"},["a"]]`})
+		if err != nil {
+			t.Fatalf("Parse array without item type: %v", err)
+		}
+		want := []any{map[string]any{"key": "value"}, []any{"a"}}
+		if !reflect.DeepEqual(res.Args["Items"], want) {
+			t.Fatalf("items = %#v, want %#v", res.Args["Items"], want)
+		}
+	})
+	t.Run("bare tokens remain strings", func(t *testing.T) {
+		res, err := Parse(params, []string{"--items", "a", "b"})
+		if err != nil {
+			t.Fatalf("Parse bare tokens: %v", err)
+		}
+		if !reflect.DeepEqual(res.Args["Items"], []any{"a", "b"}) {
+			t.Fatalf("items = %#v", res.Args["Items"])
+		}
+	})
+	t.Run("object occurrence does not use string exception", func(t *testing.T) {
+		for _, input := range []string{`{"key":"value"}`, `{not-json}`} {
+			if _, err := Parse(params, []string{"--items", input}); err == nil {
+				t.Fatalf("Parse accepted object-looking input %q without item type", input)
+			}
+		}
+	})
 }
 
 func TestFlagLevelJSONObjectAcceptedForAnyArray(t *testing.T) {
