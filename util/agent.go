@@ -40,6 +40,11 @@ var knownAgentEnv = []struct {
 	{"WORKBUDDY_APP_NAME", "workbuddy"},
 	{"TRAE_BRAND_NAME", "trae"},
 	{"HERMES_AGENT", "hermes"},
+	{"DSH_SHELL", "dsh"},
+	{"MAVIS_SESSION_TRANSFER_CLIENT", "minimax"},
+	{"KIMI_AGENT_CLIENT_ID", "kimi"},
+	{"ZCODE_APP_VERSION", "zcode"},
+	{"PI_CODING_AGENT", "pi"},
 }
 
 // Agent 标识（小写固定枚举；AGENT 变量仅作兜底，固定为 1）；
