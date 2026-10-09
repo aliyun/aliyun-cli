@@ -184,7 +184,7 @@ func TestBridgeRejectsInvalidMachineInvocations(t *testing.T) {
 		{listCommand.command, []string{"--cli-output=json", "--cli-cursor=x"}, "cursor"},
 		{listCommand.command, []string{"a", "b"}, "at most"},
 		{copyCommand.command, []string{}, "at least"},
-		{copyCommand.command, []string{"a", "oss://bucket/b", "--dryrun"}, "unknown OSS option"},
+		{copyCommand.command, []string{"a", "oss://bucket/b", "--dryrun"}, "flag --dryrun is a global aliyun CLI flag for OpenAPI commands"},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			_, err := phaseCInvoke(t, tc.cmd, "http://127.0.0.1:1", tc.args...)
