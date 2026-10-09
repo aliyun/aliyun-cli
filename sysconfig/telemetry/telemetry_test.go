@@ -1,6 +1,9 @@
 package telemetry
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -90,7 +93,7 @@ func TestInnerAutoOnDefault(t *testing.T) {
 	}
 }
 
-func TestAppendEvent(t *testing.T) {
+func TestWriteEvent(t *testing.T) {
 	dir := t.TempDir()
 	cache := GetInnerCacheDir(dir)
 	ev, err := BuildEvent(BuildInput{
@@ -102,7 +105,11 @@ func TestAppendEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := AppendEvent(cache, ev); err != nil {
+	path, err := WriteEvent(cache, ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); err != nil {
 		t.Fatal(err)
 	}
 	st := InnerCacheStats(cache)
@@ -110,4 +117,120 @@ func TestAppendEvent(t *testing.T) {
 		t.Fatalf("unexpected stats: %+v", st)
 	}
 	_ = os.RemoveAll(dir)
+}
+
+func TestUploadInnerFileUsesVersionedExtensibleContract(t *testing.T) {
+	var batches [][]map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/telemetry/events" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		var batch []map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+			t.Errorf("decode request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		batches = append(batches, batch)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	t.Setenv(
+		"ALIYUN_CLI_TELEMETRY_INNER_ENDPOINT",
+		server.URL+"/v1/telemetry/events",
+	)
+
+	configDir := t.TempDir()
+	cacheDir := GetInnerCacheDir(configDir)
+	event := Event{
+		Schema:       "1",
+		EventID:      "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
+		Timestamp:    "2026-10-09T12:20:30Z",
+		Pipeline:     "inner",
+		InnerTrigger: "plugin_manifest",
+		Command:      "rdc list",
+		RawCommand:   "rdc list secret-position-value",
+		Params:       []string{"region-id", "output"},
+		Result:       "Success",
+		ErrorSummary: "must not be uploaded",
+		DurationMs:   42,
+		Plugin:       "aliyun-cli-rdc@1.0.0",
+		CLIVersion:   "3.0.300",
+		OS:           "darwin",
+		Arch:         "arm64",
+		GoVersion:    "go1.25.1",
+		RegionID:     "cn-hangzhou",
+		Mode:         "default",
+		InstanceID:   "d69b3a04-b81c-47e7-a882-504e5865352d",
+	}
+	cacheFile, err := WriteEvent(cacheDir, event)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := UploadInnerFile(configDir, cacheFile); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(batches) != 1 || len(batches[0]) != 1 {
+		t.Fatalf("unexpected batches: %v", batches)
+	}
+	got := batches[0][0]
+	if got["schemaVersion"] != "1" ||
+		got["eventType"] != "cli.command.completed" ||
+		got["clientName"] != "aliyun-cli" ||
+		got["instanceId"] != event.InstanceID ||
+		got["status"] != "success" {
+		t.Fatalf("unexpected upload event: %#v", got)
+	}
+	attributes, ok := got["attributes"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing attributes: %#v", got)
+	}
+	if attributes["command"] != event.Command {
+		t.Fatalf("unexpected attributes: %#v", attributes)
+	}
+	if _, exists := got["rawCommand"]; exists {
+		t.Fatal("raw command must not be uploaded")
+	}
+	if _, exists := attributes["errorSummary"]; exists {
+		t.Fatal("error summary must not be uploaded")
+	}
+	if _, err := os.Stat(cacheFile); !os.IsNotExist(err) {
+		t.Fatalf("uploaded cache should be removed, stat error: %v", err)
+	}
+}
+
+func TestUploadInnerFileDropsEventAfterFailedAttempt(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	t.Setenv("ALIYUN_CLI_TELEMETRY_INNER_ENDPOINT", server.URL)
+
+	configDir := t.TempDir()
+	cacheFile, err := WriteEvent(GetInnerCacheDir(configDir), Event{
+		Schema:     "1",
+		EventID:    "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
+		Timestamp:  "2026-10-09T12:20:30Z",
+		Pipeline:   "inner",
+		Command:    "rdc list",
+		Result:     "Success",
+		CLIVersion: "3.0.300",
+		OS:         "darwin",
+		Arch:       "arm64",
+		GoVersion:  "go1.25.1",
+		Mode:       "default",
+		InstanceID: "d69b3a04-b81c-47e7-a882-504e5865352d",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := UploadInnerFile(configDir, cacheFile); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(cacheFile); !os.IsNotExist(err) {
+		t.Fatalf("failed upload cache should be dropped, stat error: %v", err)
+	}
 }
