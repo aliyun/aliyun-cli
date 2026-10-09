@@ -79,25 +79,38 @@ func flush(exitCode *int, err error) {
 		return
 	}
 	cacheDir := GetInnerCacheDir(s.configDir)
-	if appendErr := AppendEvent(cacheDir, ev); appendErr != nil {
+	cacheFile, writeErr := WriteEvent(cacheDir, ev)
+	if writeErr != nil {
 		return
 	}
-	spawnInnerUpload(s.configDir)
+	spawnInnerUpload(s.configDir, cacheFile)
 }
 
-func spawnInnerUpload(configDir string) {
+func spawnInnerUpload(configDir, cacheFile string) {
 	exe, err := os.Executable()
 	if err != nil {
+		_ = os.Remove(cacheFile)
 		return
 	}
-	cmd := exec.Command(exe, "__telemetry-upload", "--pipeline=inner", "--config-dir", configDir)
+	cmd := exec.Command(
+		exe,
+		"__telemetry-upload",
+		"--pipeline=inner",
+		"--config-dir",
+		configDir,
+		"--cache-file",
+		cacheFile,
+	)
 	detachProcess(cmd)
-	_ = cmd.Start()
+	if err := cmd.Start(); err != nil {
+		_ = os.Remove(cacheFile)
+	}
 }
 
 // RunUploadCommand handles the hidden __telemetry-upload entrypoint.
 func RunUploadCommand(args []string) int {
 	configDir := ""
+	cacheFile := ""
 	pipeline := ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -111,12 +124,17 @@ func RunUploadCommand(args []string) int {
 				pipeline = args[i+1]
 				i++
 			}
+		case "--cache-file":
+			if i+1 < len(args) {
+				cacheFile = args[i+1]
+				i++
+			}
 		}
 	}
-	if pipeline != "inner" || configDir == "" {
+	if pipeline != "inner" || configDir == "" || cacheFile == "" {
 		return 0
 	}
-	_ = UploadInner(configDir)
+	_ = UploadInnerFile(configDir, cacheFile)
 	return 0
 }
 

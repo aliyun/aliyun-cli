@@ -21,27 +21,27 @@ import (
 	"strings"
 )
 
-const currentNDJSON = "current.ndjson"
-
-func AppendEvent(cacheDir string, ev Event) error {
+func WriteEvent(cacheDir string, ev Event) (string, error) {
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
-		return err
+		return "", err
 	}
-	path := filepath.Join(cacheDir, currentNDJSON)
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	path := filepath.Join(cacheDir, "event-"+ev.EventID+".ndjson")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer f.Close()
 
 	line, err := json.Marshal(ev)
 	if err != nil {
-		return err
+		_ = os.Remove(path)
+		return "", err
 	}
 	if _, err := f.Write(append(line, '\n')); err != nil {
-		return err
+		_ = os.Remove(path)
+		return "", err
 	}
-	return nil
+	return path, nil
 }
 
 type CacheStats struct {
@@ -72,31 +72,4 @@ func InnerCacheStats(cacheDir string) CacheStats {
 		stats.TotalBytes += info.Size()
 	}
 	return stats
-}
-
-func ListNDJSONFiles(cacheDir string) ([]string, error) {
-	entries, err := os.ReadDir(cacheDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	var files []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if name == currentNDJSON || strings.HasSuffix(name, ".ndjson") {
-			files = append(files, filepath.Join(cacheDir, name))
-		}
-	}
-	return files, nil
-}
-
-func RemoveFiles(paths []string) {
-	for _, p := range paths {
-		_ = os.Remove(p)
-	}
 }
