@@ -612,7 +612,7 @@ func parseBridgeFlags(ctx *cli.Context, args []string) ([]string, bool, error) {
 			flag = ctx.Flags().GetByShorthand(rune(key[1]))
 		}
 		if flag == nil {
-			return nil, false, fmt.Errorf("unknown OSS option %s", key)
+			return nil, false, ossUnknownOptionError(key)
 		}
 		if flag.AssignedMode == cli.AssignedNone {
 			if inline {
