@@ -353,7 +353,7 @@ func parseOSSOptions(tokens []string) ([]string, OptionMapType, error) {
 		key, value, inline := strings.Cut(token, "=")
 		name, ok := names[key]
 		if !ok {
-			return nil, nil, fmt.Errorf("unknown OSS option %s", key)
+			return nil, nil, ossUnknownOptionError(key)
 		}
 		opt := OptionMap[name]
 		if opt.optionType == OptionTypeFlagTrue {
