@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli/plugin"
 )
@@ -117,6 +119,64 @@ func TestWriteEvent(t *testing.T) {
 		t.Fatalf("unexpected stats: %+v", st)
 	}
 	_ = os.RemoveAll(dir)
+}
+
+func TestEventCacheFileNameIncludesSortableUTCTimestamp(t *testing.T) {
+	createdAt := time.Date(
+		2026, time.October, 10, 16, 38, 12, 345000000,
+		time.FixedZone("UTC+8", 8*60*60),
+	)
+	got := eventCacheFileName(createdAt, "event-id")
+	want := "event-20261010T083812.345Z-event-id.ndjson"
+	if got != want {
+		t.Fatalf("eventCacheFileName() = %q, want %q", got, want)
+	}
+}
+
+func TestWriteEventCleansExpiredOrphanEventFiles(t *testing.T) {
+	cacheDir := t.TempDir()
+	oldEvent := filepath.Join(cacheDir, "event-old.ndjson")
+	recentEvent := filepath.Join(cacheDir, "event-recent.ndjson")
+	unrelated := filepath.Join(cacheDir, "other-old.ndjson")
+	for _, path := range []string{oldEvent, recentEvent, unrelated} {
+		if err := os.WriteFile(path, []byte("{}\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	now := time.Now()
+	oldTime := now.Add(-4 * 24 * time.Hour)
+	for _, path := range []string{oldEvent, unrelated} {
+		if err := os.Chtimes(path, oldTime, oldTime); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv(cacheRetentionDaysEnv, "3")
+
+	newFile, err := WriteEvent(cacheDir, Event{EventID: "new"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(oldEvent); !os.IsNotExist(err) {
+		t.Fatalf("expired event should be deleted, stat error: %v", err)
+	}
+	for _, path := range []string{recentEvent, unrelated, newFile} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("file should be retained: %s: %v", path, err)
+		}
+	}
+}
+
+func TestCacheRetentionUsesSafeDefaultForInvalidValues(t *testing.T) {
+	for _, value := range []string{"", "0", "-1", "invalid", "3651"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv(cacheRetentionDaysEnv, value)
+			want := time.Duration(defaultCacheRetentionDays) * 24 * time.Hour
+			if got := cacheRetention(); got != want {
+				t.Fatalf("cacheRetention() = %s, want %s", got, want)
+			}
+		})
+	}
 }
 
 func TestUploadInnerFileUsesVersionedExtensibleContract(t *testing.T) {
@@ -232,5 +292,73 @@ func TestUploadInnerFileDropsEventAfterFailedAttempt(t *testing.T) {
 	}
 	if _, err := os.Stat(cacheFile); !os.IsNotExist(err) {
 		t.Fatalf("failed upload cache should be dropped, stat error: %v", err)
+	}
+}
+
+func TestRunUploadCommandAcceptsHiddenArgumentForms(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	t.Setenv("ALIYUN_CLI_TELEMETRY_INNER_ENDPOINT", server.URL)
+
+	for _, test := range []struct {
+		name string
+		args func(configDir, cacheFile string) []string
+	}{
+		{
+			name: "separate",
+			args: func(configDir, cacheFile string) []string {
+				return []string{
+					"--pipeline", "inner",
+					"--config-dir", configDir,
+					"--cache-file", cacheFile,
+				}
+			},
+		},
+		{
+			name: "equals",
+			args: func(configDir, cacheFile string) []string {
+				return []string{
+					"--pipeline=inner",
+					"--config-dir=" + configDir,
+					"--cache-file=" + cacheFile,
+				}
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			configDir := t.TempDir()
+			cacheFile, err := WriteEvent(GetInnerCacheDir(configDir), Event{
+				Schema:     "1",
+				EventID:    "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
+				Timestamp:  "2026-10-09T12:20:30Z",
+				Pipeline:   "inner",
+				Command:    "cspec",
+				Result:     "Success",
+				CLIVersion: "3.0.300",
+				OS:         "darwin",
+				Arch:       "arm64",
+				GoVersion:  "go1.25.1",
+				Mode:       "default",
+				InstanceID: "d69b3a04-b81c-47e7-a882-504e5865352d",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if code := RunUploadCommand(test.args(configDir, cacheFile)); code != 0 {
+				t.Fatalf("unexpected exit code: %d", code)
+			}
+			if _, err := os.Stat(cacheFile); !os.IsNotExist(err) {
+				t.Fatalf("cache should be consumed, stat error: %v", err)
+			}
+		})
+	}
+
+	if requests != 2 {
+		t.Fatalf("got %d upload requests, want 2", requests)
 	}
 }
