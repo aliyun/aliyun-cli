@@ -49,6 +49,23 @@ func TestExtractParamNames(t *testing.T) {
 	}
 }
 
+func TestBuildEventKeepsDeepPluginCommandHierarchy(t *testing.T) {
+	event, err := BuildEvent(BuildInput{
+		Scope: Scope{Active: true, Pipeline: PipelinePublic},
+		RootArgs: []string{
+			"custom-plugin", "resource", "policy", "list",
+		},
+		InstanceID: "instance-id",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.Command != "custom-plugin-resource-policy-list" ||
+		event.RawCommand != "custom-plugin resource policy list" {
+		t.Fatalf("unexpected command fields: command=%q raw=%q", event.Command, event.RawCommand)
+	}
+}
+
 func TestSanitizeSummary(t *testing.T) {
 	in := "failed for /Users/alice/proj secret LTAIabcdefghijklmnop012345"
 	out := SanitizeSummary(in)
@@ -93,13 +110,144 @@ func TestInnerAutoOnDefault(t *testing.T) {
 	if !InnerAutoOnEnabled(cfg) {
 		t.Fatal("inner auto on should default true")
 	}
+	if !cfg.Enabled {
+		t.Fatal("public telemetry should default to enabled")
+	}
+}
+
+func TestPublicTelemetryDefaultAndExplicitDisablePersistence(t *testing.T) {
+	configDir := t.TempDir()
+	cfg, err := Load(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Enabled {
+		t.Fatal("missing config file must use the enabled default")
+	}
+	cfg.Enabled = false
+	if err := Save(configDir, cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err = Load(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Enabled {
+		t.Fatal("explicit public telemetry disable must persist")
+	}
+}
+
+func TestSelectScopeUsesPublicPipelineByDefaultAndAllowsOptOut(t *testing.T) {
+	cfg := DefaultConfig()
+	ok, scope := SelectScope("configure", ProfileSnapshot{}, cfg)
+	if !ok || scope.Pipeline != PipelinePublic {
+		t.Fatalf("public telemetry must default to enabled: ok=%v scope=%+v", ok, scope)
+	}
+	cfg.Enabled = false
+	if ok, _ := SelectScope("configure", ProfileSnapshot{}, cfg); ok {
+		t.Fatal("explicitly disabled public telemetry must not collect")
+	}
+	cfg.Enabled = true
+	t.Setenv("ALIYUN_CLI_TELEMETRY_OPTOUT", "true")
+	if ok, _ := SelectScope("configure", ProfileSnapshot{}, cfg); ok {
+		t.Fatal("global opt out must disable public telemetry")
+	}
+}
+
+func TestSelectScopeKeepsInnerAndPublicPluginsSeparated(t *testing.T) {
+	pluginsDir := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv(plugin.EnvPluginsDir, pluginsDir)
+	manifest := plugin.LocalManifest{Plugins: map[string]plugin.LocalPlugin{
+		"aliyun-cli-inner-test": {
+			Name: "aliyun-cli-inner-test", Command: "inner-test", Version: "1.0.0", Inner: true,
+		},
+		"aliyun-cli-public-test": {
+			Name: "aliyun-cli-public-test", Command: "public-test", Version: "2.0.0",
+		},
+	}}
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginsDir, "manifest.json"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := DefaultConfig()
+	cfg.Enabled = true
+	ok, scope := SelectScope("inner-test", ProfileSnapshot{}, cfg)
+	if !ok || scope.Pipeline != PipelineInner {
+		t.Fatalf("inner plugin did not use inner pipeline: ok=%v scope=%+v", ok, scope)
+	}
+	off := false
+	cfg.InnerAutoOn = &off
+	if ok, _ := SelectScope("inner-test", ProfileSnapshot{}, cfg); ok {
+		t.Fatal("disabled inner plugin must not fall through to public telemetry")
+	}
+	ok, scope = SelectScope("public-test", ProfileSnapshot{}, cfg)
+	if !ok ||
+		scope.Pipeline != PipelinePublic ||
+		scope.PluginName != "aliyun-cli-public-test" ||
+		scope.PluginVer != "2.0.0" {
+		t.Fatalf("unexpected public plugin scope: ok=%v scope=%+v", ok, scope)
+	}
+}
+
+func TestBuildPluginManagementEvent(t *testing.T) {
+	event, err := BuildEvent(BuildInput{
+		Scope: Scope{
+			Active: true, Pipeline: PipelinePublic, Trigger: "public_default",
+		},
+		RootArgs: []string{
+			"plugin", "install",
+			"--name", "aliyun-cli-demo",
+			"--version", "1.2.3",
+			"--source-base", "https://must-not-be-collected.example/path",
+		},
+		InstanceID: "instance-id",
+		PluginAction: DetectPluginManagement([]string{
+			"plugin", "install",
+			"--name", "aliyun-cli-demo",
+			"--version", "1.2.3",
+			"--source-base", "https://must-not-be-collected.example/path",
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.EventType != "cli.plugin.management.completed" {
+		t.Fatalf("unexpected event type: %s", event.EventType)
+	}
+	if event.InnerTrigger != "" {
+		t.Fatalf("public event must not have inner trigger: %q", event.InnerTrigger)
+	}
+	action := event.PluginAction
+	if action == nil ||
+		action.Operation != "install" ||
+		len(action.PluginNames) != 1 ||
+		action.PluginNames[0] != "aliyun-cli-demo" ||
+		action.ToVersion != "1.2.3" ||
+		action.SourceType != "catalog" {
+		t.Fatalf("unexpected plugin action: %+v", action)
+	}
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if contains(string(encoded), "must-not-be-collected") {
+		t.Fatalf("plugin source leaked into event: %s", encoded)
+	}
 }
 
 func TestWriteEvent(t *testing.T) {
 	dir := t.TempDir()
 	cache := GetInnerCacheDir(dir)
 	ev, err := BuildEvent(BuildInput{
-		Scope:      InnerScope{Active: true, Trigger: "plugin_manifest", PluginName: "p", PluginVer: "1"},
+		Scope: Scope{
+			Active: true, Pipeline: PipelineInner, Trigger: "plugin_manifest",
+			PluginName: "p", PluginVer: "1",
+		},
 		RootArgs:   []string{"rdc", "list"},
 		Profile:    ProfileSnapshot{RegionID: "cn-hangzhou"},
 		InstanceID: "test-id",
@@ -179,7 +327,7 @@ func TestCacheRetentionUsesSafeDefaultForInvalidValues(t *testing.T) {
 	}
 }
 
-func TestUploadInnerFileUsesVersionedExtensibleContract(t *testing.T) {
+func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 	var batches [][]map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/telemetry/events" {
@@ -195,10 +343,7 @@ func TestUploadInnerFileUsesVersionedExtensibleContract(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	t.Setenv(
-		"ALIYUN_CLI_TELEMETRY_INNER_ENDPOINT",
-		server.URL+"/v1/telemetry/events",
-	)
+	t.Setenv("ALIYUN_CLI_TELEMETRY_ENDPOINT", server.URL+"/v1/telemetry/events")
 
 	configDir := t.TempDir()
 	cacheDir := GetInnerCacheDir(configDir)
@@ -228,7 +373,7 @@ func TestUploadInnerFileUsesVersionedExtensibleContract(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := UploadInnerFile(configDir, cacheFile); err != nil {
+	if err := UploadFile(configDir, PipelineInner, cacheFile); err != nil {
 		t.Fatal(err)
 	}
 
@@ -261,12 +406,79 @@ func TestUploadInnerFileUsesVersionedExtensibleContract(t *testing.T) {
 	}
 }
 
-func TestUploadInnerFileDropsEventAfterFailedAttempt(t *testing.T) {
+func TestUploadPublicPluginManagementEventUsesSharedEndpoint(t *testing.T) {
+	var got map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var batch []map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+			t.Errorf("decode request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if len(batch) == 1 {
+			got = batch[0]
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	t.Setenv("ALIYUN_CLI_TELEMETRY_ENDPOINT", server.URL)
+
+	configDir := t.TempDir()
+	cacheFile, err := WriteEvent(GetPublicCacheDir(configDir), Event{
+		Schema:     "1",
+		EventID:    "44f505ad-0b0d-4ae8-bbd0-8db24b288fa2",
+		EventType:  "cli.plugin.management.completed",
+		Timestamp:  "2026-10-09T12:20:30Z",
+		Pipeline:   PipelinePublic,
+		Command:    "plugin install",
+		Result:     "Success",
+		DurationMs: 12,
+		CLIVersion: "3.0.300",
+		OS:         "darwin",
+		Arch:       "arm64",
+		GoVersion:  "go1.25.1",
+		Mode:       "default",
+		InstanceID: "d69b3a04-b81c-47e7-a882-504e5865352d",
+		PluginAction: &PluginManagementEvent{
+			Operation:   "install",
+			PluginNames: []string{"aliyun-cli-demo"},
+			ToVersion:   "1.2.3",
+			SourceType:  "catalog",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := UploadFile(configDir, PipelinePublic, cacheFile); err != nil {
+		t.Fatal(err)
+	}
+	if got["eventType"] != "cli.plugin.management.completed" {
+		t.Fatalf("unexpected upload: %#v", got)
+	}
+	attributes, ok := got["attributes"].(map[string]any)
+	if !ok ||
+		attributes["pipeline"] != PipelinePublic ||
+		attributes["operation"] != "install" {
+		t.Fatalf("unexpected attributes: %#v", got["attributes"])
+	}
+	if _, exists := attributes["innerTrigger"]; exists {
+		t.Fatalf("public event must not include innerTrigger: %#v", attributes)
+	}
+	cfg, err := Load(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LastUploadedAt == "" || cfg.LastUploadedAtInner != "" {
+		t.Fatalf("unexpected upload timestamps: %+v", cfg)
+	}
+}
+
+func TestUploadFileDropsEventAfterFailedAttempt(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer server.Close()
-	t.Setenv("ALIYUN_CLI_TELEMETRY_INNER_ENDPOINT", server.URL)
+	t.Setenv("ALIYUN_CLI_TELEMETRY_ENDPOINT", server.URL)
 
 	configDir := t.TempDir()
 	cacheFile, err := WriteEvent(GetInnerCacheDir(configDir), Event{
@@ -287,7 +499,7 @@ func TestUploadInnerFileDropsEventAfterFailedAttempt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := UploadInnerFile(configDir, cacheFile); err != nil {
+	if err := UploadFile(configDir, PipelineInner, cacheFile); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(cacheFile); !os.IsNotExist(err) {
@@ -302,7 +514,7 @@ func TestRunUploadCommandAcceptsHiddenArgumentForms(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
-	t.Setenv("ALIYUN_CLI_TELEMETRY_INNER_ENDPOINT", server.URL)
+	t.Setenv("ALIYUN_CLI_TELEMETRY_ENDPOINT", server.URL)
 
 	for _, test := range []struct {
 		name string

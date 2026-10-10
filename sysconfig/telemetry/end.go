@@ -31,18 +31,18 @@ type BeginInput struct {
 }
 
 func Begin(in BeginInput) {
-	resetSessionState()
+	resetExecutionState()
 	cfg, err := Load(in.ConfigDir)
 	if err != nil {
 		return
 	}
-	ok, scope := ShouldCollectInner(in.CommandToken, in.Profile, cfg)
+	ok, scope := SelectScope(in.CommandToken, in.Profile, cfg)
 	if !ok {
 		return
 	}
 	aiCfg, _ := aimode.Load(in.ConfigDir)
 	aiOn := aiCfg != nil && aiCfg.Enabled
-	beginSession(in.ConfigDir, scope, in.Profile, in.CommandArgs, aiOn, cfg)
+	beginCommandExecution(in.ConfigDir, scope, in.Profile, in.CommandArgs, aiOn, cfg)
 }
 
 func End(err error) {
@@ -54,40 +54,44 @@ func EndWithExitCode(exitCode int) {
 }
 
 func flush(exitCode *int, err error) {
-	s, ok := takeSessionForEnd()
+	execution, ok := takeCommandExecutionForEnd()
 	if !ok {
 		return
 	}
-	cfg := s.cfg
+	cfg := execution.cfg
 	if cfg == nil {
-		cfg, _ = Load(s.configDir)
+		cfg, _ = Load(execution.configDir)
 	}
-	instanceID, idErr := EnsureInstanceID(s.configDir, cfg)
+	instanceID, idErr := EnsureInstanceID(execution.configDir, cfg)
 	if idErr != nil {
 		return
 	}
+	if classifyResult(err, exitCode) == "Success" {
+		CompletePluginManagement(execution.pluginAction)
+	}
 	ev, buildErr := BuildEvent(BuildInput{
-		Scope:      s.scope,
-		RootArgs:   s.rootArgs,
-		Profile:    s.profile,
-		InstanceID: instanceID,
-		DurationMs: sessionDurationMs(s),
-		Err:        err,
-		ExitCode:   exitCode,
-		AIMode:     s.aiMode,
+		Scope:        execution.scope,
+		RootArgs:     execution.rootArgs,
+		Profile:      execution.profile,
+		InstanceID:   instanceID,
+		DurationMs:   commandExecutionDurationMs(execution),
+		Err:          err,
+		ExitCode:     exitCode,
+		AIMode:       execution.aiMode,
+		PluginAction: execution.pluginAction,
 	})
 	if buildErr != nil {
 		return
 	}
-	cacheDir := GetInnerCacheDir(s.configDir)
+	cacheDir := GetCacheDir(execution.configDir, execution.scope.Pipeline)
 	cacheFile, writeErr := WriteEvent(cacheDir, ev)
 	if writeErr != nil {
 		return
 	}
-	spawnInnerUpload(s.configDir, cacheFile)
+	spawnUpload(execution.configDir, execution.scope.Pipeline, cacheFile)
 }
 
-func spawnInnerUpload(configDir, cacheFile string) {
+func spawnUpload(configDir, pipeline, cacheFile string) {
 	exe, err := os.Executable()
 	if err != nil {
 		_ = os.Remove(cacheFile)
@@ -97,7 +101,7 @@ func spawnInnerUpload(configDir, cacheFile string) {
 		exe,
 		"__telemetry-upload",
 		"--pipeline",
-		"inner",
+		pipeline,
 		"--config-dir",
 		configDir,
 		"--cache-file",
@@ -139,10 +143,12 @@ func RunUploadCommand(args []string) int {
 			}
 		}
 	}
-	if pipeline != "inner" || configDir == "" || cacheFile == "" {
+	if (pipeline != PipelineInner && pipeline != PipelinePublic) ||
+		configDir == "" ||
+		cacheFile == "" {
 		return 0
 	}
-	_ = UploadInnerFile(configDir, cacheFile)
+	_ = UploadFile(configDir, pipeline, cacheFile)
 	return 0
 }
 

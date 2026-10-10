@@ -16,27 +16,34 @@ package telemetry
 
 import "github.com/aliyun/aliyun-cli/v3/cli/plugin"
 
-type InnerScope struct {
+const (
+	PipelinePublic = "public"
+	PipelineInner  = "inner"
+)
+
+type Scope struct {
 	Active       bool
+	Pipeline     string
 	Trigger      string
 	PluginName   string
 	PluginVer    string
 	CommandToken string
 }
 
-func DetectInnerScope(commandToken string) InnerScope {
+func DetectInnerScope(commandToken string) Scope {
 	if commandToken == "" {
-		return InnerScope{}
+		return Scope{}
 	}
 	if plugin.IsReservedTopLevelCommand(commandToken) {
-		return InnerScope{}
+		return Scope{}
 	}
 	lp, err := plugin.LookupLocalPlugin(commandToken)
 	if err != nil || lp == nil || !lp.Inner {
-		return InnerScope{}
+		return Scope{}
 	}
-	return InnerScope{
+	return Scope{
 		Active:       true,
+		Pipeline:     PipelineInner,
 		Trigger:      "plugin_manifest",
 		PluginName:   lp.Name,
 		PluginVer:    lp.Version,
@@ -44,9 +51,38 @@ func DetectInnerScope(commandToken string) InnerScope {
 	}
 }
 
-func ShouldCollectInner(commandToken string, p ProfileSnapshot, cfg *Config) (bool, InnerScope) {
+func SelectScope(commandToken string, p ProfileSnapshot, cfg *Config) (bool, Scope) {
+	if commandToken == "" {
+		return false, Scope{}
+	}
+	inner := DetectInnerScope(commandToken)
+	if inner.Active {
+		if InnerPipelineDisabled(p, cfg) {
+			return false, Scope{}
+		}
+		return true, inner
+	}
+	if PublicPipelineDisabled(p, cfg) {
+		return false, Scope{}
+	}
+	scope := Scope{
+		Active:       true,
+		Pipeline:     PipelinePublic,
+		Trigger:      "public_default",
+		CommandToken: commandToken,
+	}
+	if !plugin.IsReservedTopLevelCommand(commandToken) {
+		if lp, err := plugin.LookupLocalPlugin(commandToken); err == nil && lp != nil {
+			scope.PluginName = lp.Name
+			scope.PluginVer = lp.Version
+		}
+	}
+	return true, scope
+}
+
+func ShouldCollectInner(commandToken string, p ProfileSnapshot, cfg *Config) (bool, Scope) {
 	if InnerPipelineDisabled(p, cfg) {
-		return false, InnerScope{}
+		return false, Scope{}
 	}
 	scope := DetectInnerScope(commandToken)
 	return scope.Active, scope

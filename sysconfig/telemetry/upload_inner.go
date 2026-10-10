@@ -25,46 +25,30 @@ import (
 	"time"
 )
 
-const defaultInnerEndpoint = "https://telemetry-inner.aliyun-inc.com/v1/telemetry/events"
+const defaultTelemetryEndpoint = "https://telemetry-inner.aliyun-inc.com/v1/telemetry/events"
 
-type innerUploadEvent struct {
-	SchemaVersion string                `json:"schemaVersion"`
-	EventID       string                `json:"eventId"`
-	EventType     string                `json:"eventType"`
-	Timestamp     string                `json:"timestamp"`
-	ClientName    string                `json:"clientName"`
-	ClientVersion string                `json:"clientVersion"`
-	InstanceID    string                `json:"instanceId"`
-	Status        string                `json:"status"`
-	DurationMs    int64                 `json:"durationMs"`
-	Attributes    innerUploadAttributes `json:"attributes"`
+type uploadEvent struct {
+	SchemaVersion string         `json:"schemaVersion"`
+	EventID       string         `json:"eventId"`
+	EventType     string         `json:"eventType"`
+	Timestamp     string         `json:"timestamp"`
+	ClientName    string         `json:"clientName"`
+	ClientVersion string         `json:"clientVersion"`
+	InstanceID    string         `json:"instanceId"`
+	Status        string         `json:"status"`
+	DurationMs    int64          `json:"durationMs"`
+	Attributes    map[string]any `json:"attributes"`
 }
 
-type innerUploadAttributes struct {
-	Pipeline       string   `json:"pipeline"`
-	InnerTrigger   string   `json:"innerTrigger,omitempty"`
-	Command        string   `json:"command"`
-	ParameterNames []string `json:"parameterNames,omitempty"`
-	ErrorType      string   `json:"errorType,omitempty"`
-	Plugin         string   `json:"plugin,omitempty"`
-	OS             string   `json:"os"`
-	Arch           string   `json:"arch"`
-	GoVersion      string   `json:"goVersion"`
-	RegionID       string   `json:"regionId,omitempty"`
-	Mode           string   `json:"mode"`
-	AgentName      string   `json:"agentName,omitempty"`
-	Vendor         string   `json:"vendor,omitempty"`
-}
-
-func innerUploadEndpoint() string {
-	if v := strings.TrimSpace(os.Getenv("ALIYUN_CLI_TELEMETRY_INNER_ENDPOINT")); v != "" {
+func telemetryUploadEndpoint() string {
+	if v := strings.TrimSpace(os.Getenv("ALIYUN_CLI_TELEMETRY_ENDPOINT")); v != "" {
 		return v
 	}
-	return defaultInnerEndpoint
+	return defaultTelemetryEndpoint
 }
 
-func UploadInnerFile(configDir, cacheFile string) error {
-	cacheDir := GetInnerCacheDir(configDir)
+func UploadFile(configDir, pipeline, cacheFile string) error {
+	cacheDir := GetCacheDir(configDir, pipeline)
 	absCacheDir, err := filepath.Abs(cacheDir)
 	if err != nil {
 		return nil
@@ -85,21 +69,24 @@ func UploadInnerFile(configDir, cacheFile string) error {
 	if err := json.Unmarshal(lines[0], &event); err != nil {
 		return nil
 	}
-	if !postInnerBatch([]innerUploadEvent{newInnerUploadEvent(event)}) {
+	if event.Pipeline != pipeline {
+		return nil
+	}
+	if !postTelemetryBatch([]uploadEvent{newUploadEvent(event)}) {
 		return nil
 	}
 	cfg, _ := Load(configDir)
-	return MarkInnerUploaded(configDir, cfg)
+	return MarkUploaded(configDir, cfg, pipeline)
 }
 
-func postInnerBatch(batch []innerUploadEvent) bool {
+func postTelemetryBatch(batch []uploadEvent) bool {
 	body, err := json.Marshal(batch)
 	if err != nil {
 		return false
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest(http.MethodPost, innerUploadEndpoint(), bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, telemetryUploadEndpoint(), bytes.NewReader(body))
 	if err != nil {
 		return false
 	}
@@ -116,32 +103,58 @@ func postInnerBatch(batch []innerUploadEvent) bool {
 	return true
 }
 
-func newInnerUploadEvent(event Event) innerUploadEvent {
-	return innerUploadEvent{
+func newUploadEvent(event Event) uploadEvent {
+	attributes := map[string]any{
+		"pipeline":  event.Pipeline,
+		"command":   event.Command,
+		"os":        event.OS,
+		"arch":      event.Arch,
+		"goVersion": event.GoVersion,
+		"mode":      event.Mode,
+	}
+	addAttribute(attributes, "innerTrigger", event.InnerTrigger)
+	if len(event.Params) > 0 {
+		attributes["parameterNames"] = event.Params
+	}
+	addAttribute(attributes, "errorType", event.ErrorType)
+	addAttribute(attributes, "plugin", event.Plugin)
+	addAttribute(attributes, "regionId", event.RegionID)
+	addAttribute(attributes, "agentName", event.AgentName)
+	addAttribute(attributes, "vendor", event.Vendor)
+	if action := event.PluginAction; action != nil {
+		attributes["operation"] = action.Operation
+		if len(action.PluginNames) > 0 {
+			attributes["pluginNames"] = action.PluginNames
+		}
+		addAttribute(attributes, "fromVersion", action.FromVersion)
+		addAttribute(attributes, "toVersion", action.ToVersion)
+		addAttribute(attributes, "pluginType", action.PluginType)
+		if action.Inner != nil {
+			attributes["inner"] = *action.Inner
+		}
+		addAttribute(attributes, "sourceType", action.SourceType)
+	}
+	eventType := event.EventType
+	if eventType == "" {
+		eventType = "cli.command.completed"
+	}
+	return uploadEvent{
 		SchemaVersion: event.Schema,
 		EventID:       event.EventID,
-		EventType:     "cli.command.completed",
+		EventType:     eventType,
 		Timestamp:     event.Timestamp,
 		ClientName:    "aliyun-cli",
 		ClientVersion: event.CLIVersion,
 		InstanceID:    event.InstanceID,
 		Status:        uploadStatus(event.Result),
 		DurationMs:    event.DurationMs,
-		Attributes: innerUploadAttributes{
-			Pipeline:       event.Pipeline,
-			InnerTrigger:   event.InnerTrigger,
-			Command:        event.Command,
-			ParameterNames: event.Params,
-			ErrorType:      event.ErrorType,
-			Plugin:         event.Plugin,
-			OS:             event.OS,
-			Arch:           event.Arch,
-			GoVersion:      event.GoVersion,
-			RegionID:       event.RegionID,
-			Mode:           event.Mode,
-			AgentName:      event.AgentName,
-			Vendor:         event.Vendor,
-		},
+		Attributes:    attributes,
+	}
+}
+
+func addAttribute(attributes map[string]any, name, value string) {
+	if value != "" {
+		attributes[name] = value
 	}
 }
 

@@ -30,39 +30,42 @@ import (
 const schemaVersion = "1"
 
 type Event struct {
-	Schema       string   `json:"schema"`
-	EventID      string   `json:"event_id"`
-	Timestamp    string   `json:"timestamp"`
-	Pipeline     string   `json:"pipeline"`
-	InnerTrigger string   `json:"inner_trigger,omitempty"`
-	Command      string   `json:"command"`
-	RawCommand   string   `json:"raw_command"`
-	Params       []string `json:"params,omitempty"`
-	Result       string   `json:"result"`
-	ErrorType    string   `json:"error_type,omitempty"`
-	ErrorSummary string   `json:"error_summary,omitempty"`
-	DurationMs   int64    `json:"duration_ms"`
-	Plugin       string   `json:"plugin,omitempty"`
-	CLIVersion   string   `json:"cli_version"`
-	OS           string   `json:"os"`
-	Arch         string   `json:"arch"`
-	GoVersion    string   `json:"go_version"`
-	RegionID     string   `json:"region_id,omitempty"`
-	Mode         string   `json:"mode"`
-	AgentName    string   `json:"agent_name,omitempty"`
-	Vendor       string   `json:"vendor,omitempty"`
-	InstanceID   string   `json:"instance_id"`
+	Schema       string                 `json:"schema"`
+	EventID      string                 `json:"event_id"`
+	EventType    string                 `json:"event_type"`
+	Timestamp    string                 `json:"timestamp"`
+	Pipeline     string                 `json:"pipeline"`
+	InnerTrigger string                 `json:"inner_trigger,omitempty"`
+	Command      string                 `json:"command"`
+	RawCommand   string                 `json:"raw_command"`
+	Params       []string               `json:"params,omitempty"`
+	Result       string                 `json:"result"`
+	ErrorType    string                 `json:"error_type,omitempty"`
+	ErrorSummary string                 `json:"error_summary,omitempty"`
+	DurationMs   int64                  `json:"duration_ms"`
+	Plugin       string                 `json:"plugin,omitempty"`
+	CLIVersion   string                 `json:"cli_version"`
+	OS           string                 `json:"os"`
+	Arch         string                 `json:"arch"`
+	GoVersion    string                 `json:"go_version"`
+	RegionID     string                 `json:"region_id,omitempty"`
+	Mode         string                 `json:"mode"`
+	AgentName    string                 `json:"agent_name,omitempty"`
+	Vendor       string                 `json:"vendor,omitempty"`
+	InstanceID   string                 `json:"instance_id"`
+	PluginAction *PluginManagementEvent `json:"plugin_action,omitempty"`
 }
 
 type BuildInput struct {
-	Scope      InnerScope
-	RootArgs   []string
-	Profile    ProfileSnapshot
-	InstanceID string
-	DurationMs int64
-	Err        error
-	ExitCode   *int
-	AIMode     bool
+	Scope        Scope
+	RootArgs     []string
+	Profile      ProfileSnapshot
+	InstanceID   string
+	DurationMs   int64
+	Err          error
+	ExitCode     *int
+	AIMode       bool
+	PluginAction *PluginManagementEvent
 }
 
 func classifyResult(err error, exitCode *int) string {
@@ -125,13 +128,22 @@ func BuildEvent(in BuildInput) (Event, error) {
 		}
 		pluginField = in.Scope.PluginName + "@" + ver
 	}
+	eventType := "cli.command.completed"
+	if in.PluginAction != nil {
+		eventType = "cli.plugin.management.completed"
+	}
+	innerTrigger := ""
+	if in.Scope.Pipeline == PipelineInner {
+		innerTrigger = in.Scope.Trigger
+	}
 
 	return Event{
 		Schema:       schemaVersion,
 		EventID:      eventID,
+		EventType:    eventType,
 		Timestamp:    time.Now().Format(time.RFC3339),
-		Pipeline:     "inner",
-		InnerTrigger: in.Scope.Trigger,
+		Pipeline:     in.Scope.Pipeline,
+		InnerTrigger: innerTrigger,
 		Command:      command,
 		RawCommand:   raw,
 		Params:       ExtractParamNames(in.RootArgs),
@@ -149,6 +161,7 @@ func BuildEvent(in BuildInput) (Event, error) {
 		AgentName:    util.DetectAgentName(),
 		Vendor:       sanitizeVendor(os.Getenv("ALIBABA_CLOUD_VENDOR")),
 		InstanceID:   in.InstanceID,
+		PluginAction: in.PluginAction,
 	}, nil
 }
 

@@ -24,19 +24,17 @@ import (
 const ConfigFileName = "telemetry.json"
 
 type Config struct {
-	Enabled             bool   `json:"enabled,omitempty"`
+	Enabled             bool   `json:"enabled"`
 	InnerAutoOn         *bool  `json:"inner_auto_on,omitempty"`
 	InstanceID          string `json:"instance_id,omitempty"`
 	LastUploadedAtInner string `json:"last_uploaded_at_inner,omitempty"`
-	ConsentVersion      string `json:"consent_version,omitempty"`
-	ConsentAt           string `json:"consent_at,omitempty"`
 	LastUploadedAt      string `json:"last_uploaded_at,omitempty"`
 }
 
 func DefaultConfig() *Config {
 	on := true
 	return &Config{
-		Enabled:     false,
+		Enabled:     true,
 		InnerAutoOn: &on,
 	}
 }
@@ -54,6 +52,17 @@ func GetConfigFilePath(configDir string) string {
 
 func GetInnerCacheDir(configDir string) string {
 	return filepath.Join(configDir, "telemetry", "inner")
+}
+
+func GetPublicCacheDir(configDir string) string {
+	return filepath.Join(configDir, "telemetry", "public")
+}
+
+func GetCacheDir(configDir, pipeline string) string {
+	if pipeline == PipelineInner {
+		return GetInnerCacheDir(configDir)
+	}
+	return GetPublicCacheDir(configDir)
 }
 
 func Load(configDir string) (*Config, error) {
@@ -108,7 +117,7 @@ func EnsureInstanceID(configDir string, c *Config) (string, error) {
 	return id, nil
 }
 
-func MarkInnerUploaded(configDir string, c *Config) error {
+func MarkUploaded(configDir string, c *Config, pipeline string) error {
 	if c == nil {
 		var err error
 		c, err = Load(configDir)
@@ -116,7 +125,12 @@ func MarkInnerUploaded(configDir string, c *Config) error {
 			return err
 		}
 	}
-	c.LastUploadedAtInner = time.Now().Format(time.RFC3339)
+	now := time.Now().Format(time.RFC3339)
+	if pipeline == PipelineInner {
+		c.LastUploadedAtInner = now
+	} else {
+		c.LastUploadedAt = now
+	}
 	return Save(configDir, c)
 }
 
