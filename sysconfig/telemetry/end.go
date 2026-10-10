@@ -17,6 +17,7 @@ package telemetry
 import (
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/aimode"
@@ -95,7 +96,8 @@ func spawnInnerUpload(configDir, cacheFile string) {
 	cmd := exec.Command(
 		exe,
 		"__telemetry-upload",
-		"--pipeline=inner",
+		"--pipeline",
+		"inner",
 		"--config-dir",
 		configDir,
 		"--cache-file",
@@ -113,18 +115,24 @@ func RunUploadCommand(args []string) int {
 	cacheFile := ""
 	pipeline := ""
 	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--config-dir":
+		switch {
+		case strings.HasPrefix(args[i], "--config-dir="):
+			configDir = strings.TrimPrefix(args[i], "--config-dir=")
+		case args[i] == "--config-dir":
 			if i+1 < len(args) {
 				configDir = args[i+1]
 				i++
 			}
-		case "--pipeline":
+		case strings.HasPrefix(args[i], "--pipeline="):
+			pipeline = strings.TrimPrefix(args[i], "--pipeline=")
+		case args[i] == "--pipeline":
 			if i+1 < len(args) {
 				pipeline = args[i+1]
 				i++
 			}
-		case "--cache-file":
+		case strings.HasPrefix(args[i], "--cache-file="):
+			cacheFile = strings.TrimPrefix(args[i], "--cache-file=")
+		case args[i] == "--cache-file":
 			if i+1 < len(args) {
 				cacheFile = args[i+1]
 				i++
