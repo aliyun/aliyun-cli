@@ -69,3 +69,10 @@ func InnerPipelineDisabled(p ProfileSnapshot, cfg *Config) bool {
 	}
 	return false
 }
+
+func PublicPipelineDisabled(p ProfileSnapshot, cfg *Config) bool {
+	if L1HardDisabled(p) || GlobalOptOut() {
+		return true
+	}
+	return cfg == nil || !cfg.Enabled
+}
