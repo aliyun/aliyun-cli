@@ -37,6 +37,8 @@ var knownAgentEnv = []struct {
 	{"QODER_CLI", "qoder-cli"},
 	// Qoder CLI's China distribution uses a different shell identification variable.
 	{"QODERCN_CLI", "qoder-cli"},
+	{"QODER_WORK_INTEGRATION_PRODUCT", "qoder"},
+	{"QWENPAW_LOG_LEVEL", "qwenpaw"},
 	{"WORKBUDDY_APP_NAME", "workbuddy"},
 	{"TRAE_BRAND_NAME", "trae"},
 	{"HERMES_AGENT", "hermes"},
