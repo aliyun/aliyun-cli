@@ -41,6 +41,20 @@ type Constraints struct {
 	Pattern   string
 }
 
+// ImportanceScore belongs to this exact node; parent annotations are not inherited.
+func (v *LegacyParameterView) ImportanceScore() *float64 {
+	switch v.source {
+	case SourceCanonical:
+		return v.canonical.ImportanceScore.Value()
+	case SourceField:
+		return v.field.ImportanceScore.Value()
+	case SourceBody, SourceV1:
+		return v.body.ImportanceScore.Value()
+	default:
+		return nil
+	}
+}
+
 // Constraints returns canonical restrictions for this parameter. V1-only
 // compatibility projections intentionally have no constraints.
 func (v *LegacyParameterView) Constraints() Constraints {

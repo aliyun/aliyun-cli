@@ -667,6 +667,19 @@ func invalidMachineHelpParameter(target HelpTarget, action *machineHelpAPIDocume
 		return cause
 	}
 	names := make([]string, 0)
+	importance := map[string]float64{}
+	for _, parameter := range activeMachineHelpParameters(action) {
+		if parameter.importanceScore == nil {
+			continue
+		}
+		if len(parameter.Options) > 0 {
+			for _, option := range parameter.Options {
+				importance[strings.TrimPrefix(option, "--")] = *parameter.importanceScore
+			}
+		} else {
+			importance[firstNonEmptyMachineHelpString(parameter.Name, parameter.RawName)] = *parameter.importanceScore
+		}
+	}
 	for _, parameter := range append(activeMachineHelpParameters(action), action.GlobalParameters...) {
 		if len(parameter.Options) > 0 {
 			for _, option := range parameter.Options {
@@ -677,11 +690,12 @@ func invalidMachineHelpParameter(target HelpTarget, action *machineHelpAPIDocume
 		names = append(names, firstNonEmptyMachineHelpString(parameter.Name, parameter.RawName))
 	}
 	return &InvalidParameterError{
-		Name:           strings.TrimPrefix(target.Parameter, "--"),
-		ProductCode:    target.Product,
-		ApiName:        target.Action,
-		ParameterNames: names,
-		flags:          flags,
+		ImportanceScores: importance,
+		Name:             strings.TrimPrefix(target.Parameter, "--"),
+		ProductCode:      target.Product,
+		ApiName:          target.Action,
+		ParameterNames:   names,
+		flags:            flags,
 	}
 }
 

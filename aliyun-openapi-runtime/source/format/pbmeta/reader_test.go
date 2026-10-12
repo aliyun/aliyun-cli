@@ -46,6 +46,29 @@ func TestToCanonicalMapsResponseMetadata(t *testing.T) {
 	})
 }
 
+func TestPBImportancePreservesOptionalZero(t *testing.T) {
+	zero := 0.0
+	message := &CommandDefinition{Parameters: []*Argument{{Name: "zero", Type: "string", ImportanceScore: &zero}, {Name: "missing", Type: "string"}}}
+	data, err := proto.Marshal(message)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded CommandDefinition
+	if err := proto.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := toCanonical(&decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if score := canonical.Parameters[0].ImportanceScore.Value(); score == nil || *score != 0 {
+		t.Fatal("zero presence lost")
+	}
+	if canonical.Parameters[1].ImportanceScore.Value() != nil {
+		t.Fatal("missing became zero")
+	}
+}
+
 func TestToCanonicalRejectsIncompleteRecursivePBShapes(t *testing.T) {
 	tests := []struct {
 		name string

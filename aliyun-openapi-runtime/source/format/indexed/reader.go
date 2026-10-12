@@ -67,17 +67,18 @@ func (p Product) Endpoints() meta.Endpoints {
 // Record identifies one payload range and carries enough presentation
 // metadata to build command stubs without reading the full record.
 type Record struct {
-	APIVersion    string `json:"apiVersion"`
-	APIName       string `json:"apiName"`
-	CommandName   string `json:"commandName"`
-	CmdFullName   string `json:"cmdFullName,omitempty"`
-	TitleZH       string `json:"titleZh,omitempty"`
-	TitleEN       string `json:"titleEn,omitempty"`
-	DescriptionZH string `json:"descriptionZh,omitempty"`
-	DescriptionEN string `json:"descriptionEn,omitempty"`
-	Deprecated    bool   `json:"deprecated,omitempty"`
-	Offset        int64  `json:"offset"`
-	Length        int64  `json:"length"`
+	ImportanceScore *meta.ImportanceScore `json:"importanceScore,omitempty"`
+	APIVersion      string                `json:"apiVersion"`
+	APIName         string                `json:"apiName"`
+	CommandName     string                `json:"commandName"`
+	CmdFullName     string                `json:"cmdFullName,omitempty"`
+	TitleZH         string                `json:"titleZh,omitempty"`
+	TitleEN         string                `json:"titleEn,omitempty"`
+	DescriptionZH   string                `json:"descriptionZh,omitempty"`
+	DescriptionEN   string                `json:"descriptionEn,omitempty"`
+	Deprecated      bool                  `json:"deprecated,omitempty"`
+	Offset          int64                 `json:"offset"`
+	Length          int64                 `json:"length"`
 }
 
 // Reader is an immutable random-access view over a validated index and data
@@ -205,7 +206,8 @@ func (r *Reader) APIIndex(product, version string) (*meta.APIIndex, error) {
 			continue
 		}
 		idx.Entries[rec.APIName] = meta.APIIndexEntry{
-			APIName: rec.APIName, CmdName: rec.CommandName, CmdFullName: rec.CmdFullName,
+			ImportanceScore: rec.ImportanceScore.Value(),
+			APIName:         rec.APIName, CmdName: rec.CommandName, CmdFullName: rec.CmdFullName,
 			Title:       meta.Description{ZH: rec.TitleZH, EN: rec.TitleEN},
 			Description: meta.Description{ZH: rec.DescriptionZH, EN: rec.DescriptionEN}, Deprecated: rec.Deprecated,
 		}

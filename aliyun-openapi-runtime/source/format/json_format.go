@@ -64,11 +64,12 @@ func (JSONFormat) DecodeIndex(vol storage.Volume, version string) (*meta.APIInde
 	}
 	for name, e := range raw.APIs {
 		idx.Entries[name] = meta.APIIndexEntry{
-			APIName:     name,
-			CmdName:     e.CmdName,
-			Title:       meta.Description{ZH: e.TitleZH, EN: e.TitleEN},
-			Description: meta.Description{ZH: e.DescriptionZH, EN: e.DescriptionEN},
-			Deprecated:  e.Deprecated,
+			ImportanceScore: e.ImportanceScore.Value(),
+			APIName:         name,
+			CmdName:         e.CmdName,
+			Title:           meta.Description{ZH: e.TitleZH, EN: e.TitleEN},
+			Description:     meta.Description{ZH: e.DescriptionZH, EN: e.DescriptionEN},
+			Deprecated:      e.Deprecated,
 		}
 	}
 	// Materialise the cmd-name -> APIName reverse map once, so command

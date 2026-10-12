@@ -1,6 +1,9 @@
 package canonicalmeta
 
-import "encoding/json"
+import (
+	"encoding/json"
+	runtimemeta "github.com/aliyun/aliyun-openapi-runtime/meta"
+)
 
 // API represents a Canonical API JSON file.
 // Fields not needed by the old CLI are omitted from deserialization.
@@ -88,12 +91,13 @@ type VersionIndex struct {
 
 // VersionAPIEntry is one API entry in version.json.
 type VersionAPIEntry struct {
-	CmdName       string `json:"cmd_name"`
-	Deprecated    bool   `json:"deprecated"`
-	TitleZh       string `json:"title_zh,omitempty"`
-	TitleEn       string `json:"title_en,omitempty"`
-	DescriptionZh string `json:"description_zh"`
-	DescriptionEn string `json:"description_en"`
+	ImportanceScore *runtimemeta.ImportanceScore `json:"importance_score,omitempty"`
+	CmdName         string                       `json:"cmd_name"`
+	Deprecated      bool                         `json:"deprecated"`
+	TitleZh         string                       `json:"title_zh,omitempty"`
+	TitleEn         string                       `json:"title_en,omitempty"`
+	DescriptionZh   string                       `json:"description_zh"`
+	DescriptionEn   string                       `json:"description_en"`
 }
 
 // Description returns the API-level description for the given language.
@@ -176,23 +180,24 @@ type TypeShape struct {
 
 // Parameter represents a Canonical API parameter.
 type Parameter struct {
-	Name        string   `json:"name"`
-	RawName     string   `json:"raw_name"`
-	Type        string   `json:"type"`
-	Required    bool     `json:"required"`
-	DocRequired bool     `json:"doc_required,omitempty"`
-	Location    string   `json:"location"`
-	ParamStyle  string   `json:"param_style,omitempty"`
-	IsWildcard  bool     `json:"is_wildcard,omitempty"`
-	Format      string   `json:"format,omitempty"`
-	Enum        []string `json:"enum,omitempty"`
-	Minimum     string   `json:"minimum,omitempty"`
-	Maximum     string   `json:"maximum,omitempty"`
-	MinLength   string   `json:"min_length,omitempty"`
-	MaxLength   string   `json:"max_length,omitempty"`
-	Pattern     string   `json:"pattern,omitempty"`
-	Example     string   `json:"example,omitempty"`
-	Options     []string `json:"options,omitempty"`
+	ImportanceScore *runtimemeta.ImportanceScore `json:"importance_score,omitempty"`
+	Name            string                       `json:"name"`
+	RawName         string                       `json:"raw_name"`
+	Type            string                       `json:"type"`
+	Required        bool                         `json:"required"`
+	DocRequired     bool                         `json:"doc_required,omitempty"`
+	Location        string                       `json:"location"`
+	ParamStyle      string                       `json:"param_style,omitempty"`
+	IsWildcard      bool                         `json:"is_wildcard,omitempty"`
+	Format          string                       `json:"format,omitempty"`
+	Enum            []string                     `json:"enum,omitempty"`
+	Minimum         string                       `json:"minimum,omitempty"`
+	Maximum         string                       `json:"maximum,omitempty"`
+	MinLength       string                       `json:"min_length,omitempty"`
+	MaxLength       string                       `json:"max_length,omitempty"`
+	Pattern         string                       `json:"pattern,omitempty"`
+	Example         string                       `json:"example,omitempty"`
+	Options         []string                     `json:"options,omitempty"`
 
 	DescriptionZh string `json:"description_zh,omitempty"`
 	DescriptionEn string `json:"description_en,omitempty"`
@@ -215,19 +220,20 @@ func (p *Parameter) Help(lang string) string {
 // Field represents a nested field within a parameter.
 // Fields do not have independent location or param_style.
 type Field struct {
-	Name        string   `json:"name"`
-	RawName     string   `json:"raw_name"`
-	Type        string   `json:"type"`
-	Required    bool     `json:"required"`
-	DocRequired bool     `json:"doc_required,omitempty"`
-	Format      string   `json:"format,omitempty"`
-	Minimum     string   `json:"minimum,omitempty"`
-	Maximum     string   `json:"maximum,omitempty"`
-	MinLength   string   `json:"min_length,omitempty"`
-	MaxLength   string   `json:"max_length,omitempty"`
-	Pattern     string   `json:"pattern,omitempty"`
-	Example     string   `json:"example,omitempty"`
-	Enum        []string `json:"enum,omitempty"`
+	ImportanceScore *runtimemeta.ImportanceScore `json:"importance_score,omitempty"`
+	Name            string                       `json:"name"`
+	RawName         string                       `json:"raw_name"`
+	Type            string                       `json:"type"`
+	Required        bool                         `json:"required"`
+	DocRequired     bool                         `json:"doc_required,omitempty"`
+	Format          string                       `json:"format,omitempty"`
+	Minimum         string                       `json:"minimum,omitempty"`
+	Maximum         string                       `json:"maximum,omitempty"`
+	MinLength       string                       `json:"min_length,omitempty"`
+	MaxLength       string                       `json:"max_length,omitempty"`
+	Pattern         string                       `json:"pattern,omitempty"`
+	Example         string                       `json:"example,omitempty"`
+	Enum            []string                     `json:"enum,omitempty"`
 
 	DescriptionZh string `json:"description_zh,omitempty"`
 	DescriptionEn string `json:"description_en,omitempty"`
@@ -249,17 +255,18 @@ func (f *Field) Help(lang string) string {
 
 // V1Parameter represents a v1_parameters/v1_body_parameters compatibility projection.
 type V1Parameter struct {
-	Name          string        `json:"name"`
-	Position      string        `json:"position"`
-	Type          string        `json:"type"`
-	ParamStyle    string        `json:"param_style,omitempty"`
-	Required      bool          `json:"required"`
-	DescriptionZh string        `json:"description_zh,omitempty"`
-	DescriptionEn string        `json:"description_en,omitempty"`
-	HelpZh        string        `json:"help_zh,omitempty"`
-	HelpEn        string        `json:"help_en,omitempty"`
-	Example       string        `json:"example,omitempty"`
-	SubParameters []V1Parameter `json:"sub_parameters,omitempty"`
+	ImportanceScore *runtimemeta.ImportanceScore `json:"importance_score,omitempty"`
+	Name            string                       `json:"name"`
+	Position        string                       `json:"position"`
+	Type            string                       `json:"type"`
+	ParamStyle      string                       `json:"param_style,omitempty"`
+	Required        bool                         `json:"required"`
+	DescriptionZh   string                       `json:"description_zh,omitempty"`
+	DescriptionEn   string                       `json:"description_en,omitempty"`
+	HelpZh          string                       `json:"help_zh,omitempty"`
+	HelpEn          string                       `json:"help_en,omitempty"`
+	Example         string                       `json:"example,omitempty"`
+	SubParameters   []V1Parameter                `json:"sub_parameters,omitempty"`
 }
 
 // HelpOrDescription returns the CLI-facing V1 parameter help for the locale.
