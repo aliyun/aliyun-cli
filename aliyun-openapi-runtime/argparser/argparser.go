@@ -115,10 +115,14 @@ func ParseWithOptions(params []meta.Parameter, args []string, opts ParseOptions)
 			}
 		}
 
-		// Scalars consume one value; composites consume through the next registered flag.
+		// A complete JSON array in one token terminates an array occurrence.
+		// Other composites consume through the next registered flag as before.
 		var occ []string
 		if hasInline {
 			occ = []string{inlineVal}
+		} else if p.Type == meta.TypeArray && i < len(args) && isCompleteJSONArray(args[i]) {
+			occ = args[i : i+1]
+			i++
 		} else if p.IsComposite() {
 			occ, i = takeValues(args, i, externalFlags, apiParams)
 		} else {
@@ -448,6 +452,11 @@ func tryFlagJSON(tokens []string) (value any, recognized bool, err error) {
 		return nil, true, fmt.Errorf("invalid JSON: unexpected trailing content")
 	}
 	return v, true, nil
+}
+
+func isCompleteJSONArray(token string) bool {
+	s := stripOuterQuotes(strings.TrimSpace(token))
+	return strings.HasPrefix(s, "[") && json.Valid([]byte(s))
 }
 
 // resolveNames recursively validates the keys of a decoded JSON value against the parameter schema.

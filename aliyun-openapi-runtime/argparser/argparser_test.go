@@ -947,6 +947,51 @@ func TestFlagLevelExplicitEmptyJSONArrayIsPreserved(t *testing.T) {
 	}
 }
 
+func TestCompleteJSONArrayStopsValueConsumption(t *testing.T) {
+	for _, input := range []string{`["i-local-parser-repro"]`, `[]`, `  ["a"]  `, `'["a"]'`} {
+		t.Run(input, func(t *testing.T) {
+			_, err := Parse(schema(), []string{"--images", input, "--max-results", "100"})
+			var unknown *UnknownFlagError
+			if !errors.As(err, &unknown) || unknown.Flag != "max-results" {
+				t.Fatalf("error = %v, want unknown flag --max-results", err)
+			}
+		})
+	}
+	_, err := Parse(schema(), []string{"--images", `["a"]`, "extra"})
+	if err == nil || !strings.Contains(err.Error(), `unexpected positional argument "extra"`) {
+		t.Fatalf("error = %v, want unexpected positional argument", err)
+	}
+	res := mustParse(t, "--images", `["a"]`, "--count", "100", "--images", `["b"]`)
+	if !reflect.DeepEqual(res.Args["Images"], []any{"a", "b"}) || res.Args["Count"].(json.Number).String() != "100" {
+		t.Fatalf("args = %#v", res.Args)
+	}
+}
+
+func TestArrayValueConsumptionCompatibility(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		values []string
+		want   []any
+	}{
+		{"plain values", []string{"a", "--unknown", "100"}, []any{"a", "--unknown", "100"}},
+		{"split JSON", []string{`["a",`, `"b"]`}, []any{"a", "b"}},
+		{"object string", []string{`{"key":"value"}`, "--unknown"}, []any{`{"key":"value"} --unknown`}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			res := mustParse(t, append([]string{"--images"}, tt.values...)...)
+			if !reflect.DeepEqual(res.Args["Images"], tt.want) {
+				t.Fatalf("images = %#v, want %#v", res.Args["Images"], tt.want)
+			}
+		})
+	}
+	for _, input := range []string{`["a"`, `["a",]`, `["a"] extra`} {
+		_, err := Parse(schema(), []string{"--images", input, "--unknown"})
+		if err == nil || !strings.Contains(err.Error(), "invalid JSON") {
+			t.Fatalf("input %q: error = %v, want invalid JSON", input, err)
+		}
+	}
+}
+
 // TestFlagLevelJSONScalarArray: a JSON array on a scalar-array flag
 // expands too (superset of the plugin's default branch).
 func TestFlagLevelJSONScalarArray(t *testing.T) {
