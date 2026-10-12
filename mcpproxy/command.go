@@ -41,20 +41,12 @@ func NewMCPProxyCommand() *cli.Command {
 				"代理默认自动处理 OAuth 认证，也可通过 --mode 使用 CLI 凭据认证，"+
 				"允许 MCP 客户端无需管理凭证即可连接。",
 		),
-		Usage:  "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--auth-type oauth|credentials] [--mode MODE] [--profile NAME]",
+		Usage:  "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--mode MODE] [--profile NAME]",
 		Sample: "aliyun utils mcp-proxy --region-type CN --port 8088",
 		Run: func(ctx *cli.Context, args []string) error {
 			return runMCPProxy(ctx)
 		},
 	}
-
-	cmd.Flags().Add(&cli.Flag{
-		Name: "auth-type",
-		Short: i18n.T(
-			"MCP authentication: oauth (default), or credentials to use the CLI profile. An explicit --mode selects credentials unless --auth-type is set. BearerToken and Anonymous are not supported.",
-			"MCP 认证方式：oauth（默认）或 credentials（使用 CLI profile）。显式指定 --mode 时使用 credentials，除非同时指定 --auth-type。不支持 BearerToken 和 Anonymous。",
-		),
-	})
 
 	cmd.Flags().Add(&cli.Flag{
 		Name:         "port",
@@ -211,30 +203,15 @@ func runMCPProxy(ctx *cli.Context) error {
 	return startMCPProxy(ctx, proxyConfig)
 }
 
-func selectMCPAuthType(ctx *cli.Context) (string, error) {
-	authType, explicit := ctx.Flags().Get("auth-type").GetValue()
-	if !explicit {
-		authType = "oauth"
-		if mode, assigned := config.ModeFlag(ctx.Flags()).GetValue(); assigned && strings.TrimSpace(mode) != "" {
-			authType = "credentials"
-		}
-	}
-	switch authType {
-	case "oauth", "credentials":
-		return authType, nil
-	default:
-		return "", fmt.Errorf("invalid auth-type %q: must be oauth or credentials", authType)
-	}
+func usesCLICredentials(ctx *cli.Context) bool {
+	mode, assigned := config.ModeFlag(ctx.Flags()).GetValue()
+	return assigned && strings.TrimSpace(mode) != ""
 }
 
 func configureMCPAuthentication(ctx *cli.Context, proxyConfig *ProxyConfig) error {
-	authType, err := selectMCPAuthType(ctx)
-	if err != nil {
-		return err
-	}
-	if authType == "credentials" {
+	if usesCLICredentials(ctx) {
 		if ctx.Flags().Get("oauth-app-name").IsAssigned() || ctx.Flags().Get("scope").IsAssigned() {
-			return fmt.Errorf("--oauth-app-name and --scope require --auth-type oauth")
+			return fmt.Errorf("--oauth-app-name and --scope apply to MCP OAuth; omit --mode to use that flow")
 		}
 		// A mode selects MCP credentials even when all its fields come from a profile or the environment.
 		ctx.SetInConfigureMode(true)

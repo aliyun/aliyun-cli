@@ -259,8 +259,56 @@ func TestCLICredentialSourceResolvesRoleAndOIDC(t *testing.T) {
 				model, err := source()
 				require.NoError(t, err)
 				require.Equal(t, fmt.Sprintf("role-%d", call), tea.StringValue(model.AccessKeyId))
+				if mode != config.ChainableRamRoleArn {
+					cached, err := source()
+					require.NoError(t, err)
+					require.Equal(t, model, cached)
+					require.Equal(t, call, calls)
+				}
 			}
 			require.Equal(t, 2, calls)
+		})
+	}
+}
+
+func TestCLICredentialSourceUsesSDKRoleRefresh(t *testing.T) {
+	for _, mode := range []config.AuthenticateMode{config.RamRoleArn, config.OIDC} {
+		t.Run(string(mode), func(t *testing.T) {
+			ctx := newMCPCredentialTestContext(t)
+			calls := 0
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				require.NoError(t, r.ParseForm())
+				if mode == config.OIDC {
+					require.Equal(t, fmt.Sprintf("oidc-%d", calls), r.Form.Get("OIDCToken"))
+				}
+				validity := time.Hour
+				if calls == 1 {
+					validity = time.Minute
+				}
+				fmt.Fprintf(w, `{"Credentials":{"AccessKeyId":"role-%d","AccessKeySecret":"secret","SecurityToken":"token","Expiration":%q}}`,
+					calls, time.Now().Add(validity).UTC().Format(time.RFC3339))
+			}))
+			defer server.Close()
+			previousTransport := http.DefaultTransport
+			http.DefaultTransport = server.Client().Transport
+			t.Cleanup(func() { http.DefaultTransport = previousTransport })
+			profile := mcpTestAKProfile("default", "source")
+			profile.Mode = mode
+			profile.RamRoleArn = "acs:ram::123:role/test"
+			profile.RoleSessionName = "test-session"
+			profile.StsEndpoint = strings.TrimPrefix(server.URL, "https://")
+			profile.OIDCProviderARN = "acs:ram::123:oidc-provider/test"
+			profile.OIDCTokenFile = filepath.Join(t.TempDir(), "oidc-token")
+			writeMCPCredentialTestConfig(t, ctx, profile)
+			source := newCLICredentialSource(ctx)
+			for _, expected := range []int{1, 2, 2} {
+				require.NoError(t, os.WriteFile(profile.OIDCTokenFile, []byte(fmt.Sprintf("oidc-%d", expected)), 0600))
+				model, err := source()
+				require.NoError(t, err)
+				require.Equal(t, fmt.Sprintf("role-%d", expected), tea.StringValue(model.AccessKeyId))
+				require.Equal(t, expected, calls)
+			}
 		})
 	}
 }
@@ -278,8 +326,12 @@ func TestCLICredentialSourceRefreshesECSRoles(t *testing.T) {
 				require.Equal(t, "/latest/meta-data/ram/security-credentials/test-role", r.URL.Path)
 				require.Equal(t, "metadata-session-token", r.Header.Get("x-aliyun-ecs-metadata-token"))
 				metadataCalls++
+				validity := time.Hour
+				if mode == config.EcsRamRole && metadataCalls == 1 {
+					validity = time.Minute
+				}
 				fmt.Fprintf(w, `{"Code":"Success","AccessKeyId":"ecs-%d","AccessKeySecret":"secret","SecurityToken":"ecs-token-%d","Expiration":%q}`,
-					metadataCalls, metadataCalls, time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+					metadataCalls, metadataCalls, time.Now().Add(validity).UTC().Format(time.RFC3339))
 			}))
 			defer metadata.Close()
 			sts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -327,6 +379,11 @@ func TestCLICredentialSourceRefreshesECSRoles(t *testing.T) {
 				}
 				require.Equal(t, fmt.Sprintf("%s-%d", prefix, call), tea.StringValue(model.AccessKeyId))
 			}
+			if mode == config.EcsRamRole {
+				cached, err := source()
+				require.NoError(t, err)
+				require.Equal(t, "ecs-2", tea.StringValue(cached.AccessKeyId))
+			}
 			require.Equal(t, 2, metadataCalls)
 			if mode == config.RamRoleArnWithEcs {
 				require.Equal(t, 2, stsCalls)
@@ -349,7 +406,7 @@ func TestCLICredentialSourceRSAHelper(t *testing.T) {
 	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
 	config.ConfigurePathFlag(ctx.Flags()).SetValue(os.Getenv("MCP_CREDENTIAL_RSA_CONFIG"))
 	source := newCLICredentialSource(ctx)
-	for call := 1; call <= 2; call++ {
+	for _, call := range []int{1, 2, 2} {
 		model, err := source()
 		require.NoError(t, err)
 		require.Equal(t, fmt.Sprintf("rsa-%d", call), tea.StringValue(model.AccessKeyId))
@@ -365,8 +422,12 @@ func TestCLICredentialSourceRefreshesRSAKeyPair(t *testing.T) {
 		calls++
 		require.Equal(t, "GenerateSessionAccessKey", r.URL.Query().Get("Action"))
 		require.NotEmpty(t, r.URL.Query().Get("Signature"))
+		validity := time.Hour
+		if calls == 1 {
+			validity = time.Second
+		}
 		fmt.Fprintf(w, `{"SessionAccessKey":{"SessionAccessKeyId":"rsa-%d","SessionAccessKeySecret":"secret","Expiration":%q}}`,
-			calls, time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+			calls, time.Now().Add(validity).UTC().Format(time.RFC3339))
 	}))
 	defer server.Close()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)

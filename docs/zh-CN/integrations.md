@@ -19,7 +19,7 @@ aliyun utils mcp-proxy --region-type CN --port 8088
 | `--host` | `127.0.0.1` | 本地监听地址 |
 | `--port` | `8088` | 本地监听端口 |
 | `--region-type` | `CN` | Endpoint 类型，可选 `CN` 或 `INTL` |
-| `--auth-type` | `oauth` | 设为 `credentials` 可复用 CLI 凭据；显式传 `--mode` 时自动选择凭据认证，除非同时指定 `--auth-type` |
+| `--mode` | 不指定 | 显式指定 CLI 凭据模式时使用凭据认证；省略时保留 MCP OAuth |
 | `--scope` | `/acs/mcp-server` | OAuth scope |
 | `--no-browser` | 关闭 | 启用后不自动打开浏览器，改为手工输入授权码 |
 | `--oauth-app-name` | 空 | 按名称复用已有 OAuth 应用 |
@@ -29,16 +29,18 @@ aliyun utils mcp-proxy --region-type CN --port 8088
 
 ### CLI 凭据认证
 
-已有命令保留 MCP OAuth 行为，包括只指定 `--profile` 或 `--no-browser` 的命令。显式选择凭据模式，或者直接复用 profile 中保存的模式：
+不指定 `--mode` 时保留 MCP OAuth 行为，包括只指定 `--profile` 或 `--no-browser` 的命令。使用 CLI 凭据时，通过 `--mode` 指定模式，通过 `--profile` 选择提供配置的 profile：
 
 ```sh
 aliyun utils mcp-proxy --mode AK --profile automation
-aliyun utils mcp-proxy --auth-type credentials --profile automation
+aliyun utils mcp-proxy --mode RamRoleArn --profile deployment-role
 ```
 
-支持 `AK`、`StsToken`、`RamRoleArn`、`EcsRamRole`、`RsaKeyPair`、`RamRoleArnWithRoleName`、`ChainableRamRoleArn`、`External`、`CredentialsURI`、`OIDC`、`CloudSSO` 和 CLI `OAuth`，暂不支持 `BearerToken` 和 `Anonymous`。CLI `OAuth` 会将已配置的 CLI 登录身份解析为 STS 凭据，与代理默认的 MCP OAuth 登录是两个独立流程。
+可选的 CLI 凭据来源为 `AK`、`StsToken`、`RamRoleArn`、`EcsRamRole`、`RsaKeyPair`、`RamRoleArnWithRoleName`、`ChainableRamRoleArn`、`External`、`CredentialsURI`、`OIDC`、`CloudSSO` 和 CLI `OAuth`，暂不支持 `BearerToken` 和 `Anonymous`。这些是获取 AK/STS 的本地方式，不是 MCP 服务端的独立鉴权类型；取得的凭据仍须被令牌服务接受，并满足 MCP 的身份、权限及应用授权要求。CLI `OAuth` 会将已配置的 CLI 登录身份解析为 STS 凭据，与不传 `--mode` 时的 MCP OAuth 登录是两个独立流程。
 
-凭据认证复用 CLI 的 profile、命令行参数和环境变量解析规则，将取得的 AK/STS 凭据换成 MCP Access Token 并缓存在内存中，在到期前重新获取；收到 HTTP 401 时重新获取并重试一次。每次换取 Token 都重新加载启动时选定的 profile，使外部凭据和角色链可以轮换；切换默认 profile 不会改变运行中代理的身份。手动提供的 STS 到期后仍需替换；CloudSSO 登录过期后仍需重新登录。
+凭据认证复用 CLI 的 profile、命令行参数和环境变量解析规则，通过 `GenerateAccessToken` 将 AK/STS 换成 MCP Access Token，以 Bearer 方式连接 MCP。代理缓存 MCP Token，在到期前重新获取；收到 HTTP 401 时重新获取并重试一次。
+
+底层凭据与 MCP Token 的生命周期分开管理：SDK 原生凭据 provider 会复用缓存，由 `GetCredential()` 按需刷新；CLI 当前只返回凭据快照的 External、CredentialsURI、CloudSSO、OAuth 和角色链，则在换取 MCP Token 时重新解析。每次兑换也会检查启动时选定的 profile，配置变化时重建 provider；切换默认 profile 不会改变运行中代理的身份。手动提供的 STS 到期后仍需替换；CloudSSO 登录过期后仍需重新登录。
 
 首次使用前，应为凭据对应的 RAM 身份授予 `AliyunOpenAPIMCPServerStaticCredentialAccess`，以及业务 API 和 MCP Server 发现所需权限，并通过官方代理的预检查完成账号级应用授权：
 
@@ -48,7 +50,7 @@ uvx alibabacloud.mcp-proxy@latest --server-url '<MCP 连接地址>' pre-check
 
 此预检查可以在另一台有浏览器的机器完成。完成后，凭据认证不会创建 CLI 代理专用 OAuth 应用，也无需额外进行 MCP OAuth 登录。完整前提条件和连接地址获取方式见 [OpenAPI MCP Server 使用指南](https://help.aliyun.com/zh/openapi/user-guide/openapi-mcp-server-guide)。
 
-国际站使用 `--region-type INTL`。显式指定 `--auth-type oauth` 可保留原有 MCP OAuth 流程，即使同时传了 `--mode`。`--oauth-app-name` 和 `--scope` 仅适用于该流程，`--no-browser` 仅控制该流程的浏览器交互。
+国际站使用 `--region-type INTL`。使用原有 MCP OAuth 流程时省略 `--mode`；`--oauth-app-name` 和 `--scope` 仅适用于该流程，`--no-browser` 仅控制该流程的浏览器交互。
 
 ### 访问控制
 

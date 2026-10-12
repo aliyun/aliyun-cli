@@ -33,7 +33,7 @@ func TestNewMCPProxyCommand(t *testing.T) {
 	assert.Equal(t, "mcp-proxy", cmd.Name)
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Long)
-	assert.Equal(t, "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--auth-type oauth|credentials] [--mode MODE] [--profile NAME]", cmd.Usage)
+	assert.Equal(t, "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--mode MODE] [--profile NAME]", cmd.Usage)
 	assert.Equal(t, "aliyun utils mcp-proxy --region-type CN --port 8088", cmd.Sample)
 	assert.NotNil(t, cmd.Run)
 
@@ -262,45 +262,35 @@ func setMCPCommandTestFlag(ctx *cli.Context, name, value string) {
 	flag.SetValue(value)
 }
 
-func TestSelectMCPAuthType(t *testing.T) {
+func TestUsesCLICredentials(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		flags   map[string]string
-		want    string
-		wantErr bool
+		name  string
+		flags map[string]string
+		want  bool
 	}{
-		{name: "unchanged default", want: "oauth"},
-		{name: "empty mode preserves OAuth", flags: map[string]string{"mode": ""}, want: "oauth"},
-		{name: "profile alone preserves OAuth", flags: map[string]string{"profile": "existing"}, want: "oauth"},
-		{name: "no browser preserves OAuth", flags: map[string]string{"no-browser": ""}, want: "oauth"},
-		{name: "explicit mode uses credentials", flags: map[string]string{"mode": "ak"}, want: "credentials"},
-		{name: "CLI OAuth profile uses credentials", flags: map[string]string{"mode": "OAuth"}, want: "credentials"},
-		{name: "profile credential auth", flags: map[string]string{"auth-type": "credentials", "profile": "role"}, want: "credentials"},
-		{name: "explicit OAuth wins over mode", flags: map[string]string{"auth-type": "oauth", "mode": "AK"}, want: "oauth"},
-		{name: "invalid auth type", flags: map[string]string{"auth-type": "invalid"}, wantErr: true},
-		{name: "empty auth type", flags: map[string]string{"auth-type": ""}, wantErr: true},
+		{name: "unchanged default"},
+		{name: "empty mode preserves OAuth", flags: map[string]string{"mode": ""}},
+		{name: "whitespace mode preserves OAuth", flags: map[string]string{"mode": " "}},
+		{name: "profile alone preserves OAuth", flags: map[string]string{"profile": "existing"}},
+		{name: "no browser preserves OAuth", flags: map[string]string{"no-browser": ""}},
+		{name: "explicit mode uses credentials", flags: map[string]string{"mode": "ak"}, want: true},
+		{name: "CLI OAuth profile uses credentials", flags: map[string]string{"mode": "OAuth"}, want: true},
+		{name: "role profile", flags: map[string]string{"mode": "RamRoleArn", "profile": "role"}, want: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := cli.NewCommandContext(bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 			for name, value := range tc.flags {
 				setMCPCommandTestFlag(ctx, name, value)
 			}
-			got, err := selectMCPAuthType(ctx)
-			if tc.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			require.Equal(t, tc.want, got)
+			require.Equal(t, tc.want, usesCLICredentials(ctx))
 		})
 	}
 }
 
 func TestConfigureMCPCredentialAuthentication(t *testing.T) {
-	for _, tc := range []struct{ name, mode, authType string }{
+	for _, tc := range []struct{ name, mode string }{
 		{name: "AK flag", mode: "ak"},
 		{name: "STS flag", mode: "StsToken"},
-		{name: "selected profile", authType: "credentials"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := newMCPCredentialTestContext(t)
@@ -310,12 +300,7 @@ func TestConfigureMCPCredentialAuthentication(t *testing.T) {
 			writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("default", "wrong-key"), profile)
 			setMCPCommandTestFlag(ctx, "profile", "selected")
 			setMCPCommandTestFlag(ctx, "no-browser", "")
-			if tc.mode != "" {
-				setMCPCommandTestFlag(ctx, "mode", tc.mode)
-			}
-			if tc.authType != "" {
-				setMCPCommandTestFlag(ctx, "auth-type", tc.authType)
-			}
+			setMCPCommandTestFlag(ctx, "mode", tc.mode)
 			oldTransport := http.DefaultTransport
 			t.Cleanup(func() { http.DefaultTransport = oldTransport })
 			calls := 0
@@ -348,8 +333,8 @@ func TestConfigureMCPAuthenticationRejectsUnsupportedOptions(t *testing.T) {
 		{name: "BearerToken", mode: "BearerToken", message: "not supported"},
 		{name: "Anonymous", mode: "Anonymous", message: "not supported"},
 		{name: "unknown", mode: "unknown", message: "invalid mode"},
-		{name: "OAuth app name", mode: "AK", option: "oauth-app-name", message: "require --auth-type oauth"},
-		{name: "OAuth scope", mode: "AK", option: "scope", message: "require --auth-type oauth"},
+		{name: "OAuth app name", mode: "AK", option: "oauth-app-name", message: "omit --mode"},
+		{name: "OAuth scope", mode: "AK", option: "scope", message: "omit --mode"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := newMCPCredentialTestContext(t)
@@ -371,7 +356,7 @@ func TestMCPCredentialAuthenticationPinsSelectedProfile(t *testing.T) {
 	first := mcpTestAKProfile("first", "first-key")
 	second := mcpTestAKProfile("second", "second-key")
 	writeMCPCredentialTestConfig(t, ctx, first, second)
-	setMCPCommandTestFlag(ctx, "auth-type", "credentials")
+	setMCPCommandTestFlag(ctx, "mode", "AK")
 	oldTransport := http.DefaultTransport
 	t.Cleanup(func() { http.DefaultTransport = oldTransport })
 	var accessKeys []string

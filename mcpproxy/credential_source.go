@@ -2,6 +2,7 @@ package mcpproxy
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -12,16 +13,41 @@ import (
 type mcpCredentialSource func() (*credentialsv2.CredentialModel, error)
 
 func newCLICredentialSource(ctx *cli.Context) mcpCredentialSource {
+	var cachedProfile config.Profile
+	var cachedCredential credentialsv2.Credential
 	return func() (*credentialsv2.CredentialModel, error) {
 		if ctx == nil {
 			return nil, fmt.Errorf("CLI context is required for MCP credential authentication")
 		}
-		// Recreate the provider on each refresh so external sources and source profiles can rotate.
 		profile, err := config.LoadProfileWithContext(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load MCP credential profile: %w", err)
 		}
-		return resolveMCPProfileCredential(ctx, profile)
+		var reusable bool
+		switch profile.Mode {
+		case config.AK, config.StsToken, config.RamRoleArn, config.EcsRamRole, config.RsaKeyPair, config.OIDC:
+			reusable = true
+		}
+		credential := cachedCredential
+		// Native providers own their refresh cache; CLI snapshot resolvers must be evaluated again.
+		if !reusable || credential == nil || !reflect.DeepEqual(profile, cachedProfile) {
+			credential, err = resolveMCPProfileCredential(ctx, profile)
+			if err != nil {
+				return nil, err
+			}
+			cachedProfile, cachedCredential = profile, nil
+			if reusable {
+				cachedCredential = credential
+			}
+		}
+		model, err := credential.GetCredential()
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve MCP credential: %w", err)
+		}
+		if err := validateMCPCredential(model); err != nil {
+			return nil, err
+		}
+		return model, nil
 	}
 }
 
@@ -36,7 +62,7 @@ func validateMCPProfileMode(mode config.AuthenticateMode) error {
 	}
 }
 
-func resolveMCPProfileCredential(ctx *cli.Context, profile config.Profile) (*credentialsv2.CredentialModel, error) {
+func resolveMCPProfileCredential(ctx *cli.Context, profile config.Profile) (credentialsv2.Credential, error) {
 	if err := validateMCPProfileMode(profile.Mode); err != nil {
 		return nil, err
 	}
@@ -50,14 +76,7 @@ func resolveMCPProfileCredential(ctx *cli.Context, profile config.Profile) (*cre
 	if credential == nil {
 		return nil, fmt.Errorf("MCP credential profile did not return an AK or STS credential")
 	}
-	model, err := credential.GetCredential()
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve MCP credential: %w", err)
-	}
-	if err := validateMCPCredential(model); err != nil {
-		return nil, err
-	}
-	return model, nil
+	return credential, nil
 }
 
 func validateMCPCredential(model *credentialsv2.CredentialModel) error {
