@@ -4,7 +4,7 @@
 
 ## MCP proxy
 
-The MCP proxy exposes discovered Alibaba Cloud API MCP servers through one local endpoint and handles the OAuth flow used to reach the upstream service.
+The MCP proxy exposes discovered Alibaba Cloud API MCP servers through one local endpoint. It uses MCP OAuth by default and can also authenticate with CLI credentials.
 
 Start it with the public command path:
 
@@ -19,12 +19,36 @@ The defaults are:
 | `--host` | `127.0.0.1` | Local listen address |
 | `--port` | `8088` | Local listen port |
 | `--region-type` | `CN` | Endpoint family; use `CN` or `INTL` |
+| `--auth-type` | `oauth` | Use `credentials` to reuse CLI credentials; an explicit `--mode` selects this unless `--auth-type` is set |
 | `--scope` | `/acs/mcp-server` | OAuth scope |
 | `--no-browser` | off | When set, use manual authorization-code input instead of opening a browser |
 | `--oauth-app-name` | empty | Reuse an existing OAuth application by name |
 | `--upstream-url` | empty | Override the configured upstream MCP endpoint |
 
 After startup, the CLI prints the local MCP and SSE URLs for the discovered servers. Configure the MCP client with the printed URL rather than constructing a path from the server name.
+
+### CLI credential authentication
+
+Keep existing commands unchanged to continue using MCP OAuth, including commands that only select `--profile` or `--no-browser`. To use a credential mode explicitly, or reuse the mode saved in a profile:
+
+```sh
+aliyun utils mcp-proxy --mode AK --profile automation
+aliyun utils mcp-proxy --auth-type credentials --profile automation
+```
+
+Supported modes are `AK`, `StsToken`, `RamRoleArn`, `EcsRamRole`, `RsaKeyPair`, `RamRoleArnWithRoleName`, `ChainableRamRoleArn`, `External`, `CredentialsURI`, `OIDC`, `CloudSSO`, and CLI `OAuth`. `BearerToken` and `Anonymous` are not supported. CLI `OAuth` resolves a configured CLI login to STS credentials; it is separate from the proxy's default MCP OAuth login.
+
+Credential authentication uses the same profile, flag, and environment-variable resolution as CLI credentials. It exchanges the resulting AK/STS credentials for an MCP access token, caches it in memory, and reacquires it before expiry or once after an HTTP 401. Each exchange reloads the selected profile so external credentials and role chains can rotate; changing the default profile does not change the running proxy's identity. A manually supplied STS token still needs to be replaced when it expires; an expired CloudSSO login still requires logging in again.
+
+Before first use, grant the credential's RAM identity `AliyunOpenAPIMCPServerStaticCredentialAccess` and the permissions needed by the requested APIs and MCP server discovery. Complete the account-level application authorization using the official proxy's pre-check:
+
+```sh
+uvx alibabacloud.mcp-proxy@latest --server-url '<MCP endpoint>' pre-check
+```
+
+This one-time check may run on a different machine with a browser. Afterwards, credential authentication does not create the CLI proxy's OAuth application or require a separate MCP OAuth login. See the [OpenAPI MCP Server guide](https://help.aliyun.com/zh/openapi/user-guide/openapi-mcp-server-guide) for the prerequisites and endpoint.
+
+Use `--region-type INTL` for international endpoints. `--auth-type oauth` explicitly retains the original MCP OAuth flow, even alongside `--mode`. The `--oauth-app-name` and `--scope` options only apply to that flow; `--no-browser` only controls its browser interaction.
 
 ### Access control
 

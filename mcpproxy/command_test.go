@@ -16,10 +16,15 @@ package mcpproxy
 
 import (
 	"bytes"
+	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewMCPProxyCommand(t *testing.T) {
@@ -28,7 +33,7 @@ func TestNewMCPProxyCommand(t *testing.T) {
 	assert.Equal(t, "mcp-proxy", cmd.Name)
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Long)
-	assert.Equal(t, "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME]", cmd.Usage)
+	assert.Equal(t, "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--auth-type oauth|credentials] [--mode MODE] [--profile NAME]", cmd.Usage)
 	assert.Equal(t, "aliyun utils mcp-proxy --region-type CN --port 8088", cmd.Sample)
 	assert.NotNil(t, cmd.Run)
 
@@ -245,4 +250,140 @@ func TestRunMCPProxy_ValidRegionTypes(t *testing.T) {
 			assert.Contains(t, err.Error(), "failed to load profile")
 		})
 	}
+}
+
+func setMCPCommandTestFlag(ctx *cli.Context, name, value string) {
+	flag := ctx.Flags().Get(name)
+	if flag == nil {
+		flag = &cli.Flag{Name: name}
+		ctx.Flags().Add(flag)
+	}
+	flag.SetAssigned(true)
+	flag.SetValue(value)
+}
+
+func TestSelectMCPAuthType(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		flags   map[string]string
+		want    string
+		wantErr bool
+	}{
+		{name: "unchanged default", want: "oauth"},
+		{name: "empty mode preserves OAuth", flags: map[string]string{"mode": ""}, want: "oauth"},
+		{name: "profile alone preserves OAuth", flags: map[string]string{"profile": "existing"}, want: "oauth"},
+		{name: "no browser preserves OAuth", flags: map[string]string{"no-browser": ""}, want: "oauth"},
+		{name: "explicit mode uses credentials", flags: map[string]string{"mode": "ak"}, want: "credentials"},
+		{name: "CLI OAuth profile uses credentials", flags: map[string]string{"mode": "OAuth"}, want: "credentials"},
+		{name: "profile credential auth", flags: map[string]string{"auth-type": "credentials", "profile": "role"}, want: "credentials"},
+		{name: "explicit OAuth wins over mode", flags: map[string]string{"auth-type": "oauth", "mode": "AK"}, want: "oauth"},
+		{name: "invalid auth type", flags: map[string]string{"auth-type": "invalid"}, wantErr: true},
+		{name: "empty auth type", flags: map[string]string{"auth-type": ""}, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := cli.NewCommandContext(bytes.NewBuffer(nil), bytes.NewBuffer(nil))
+			for name, value := range tc.flags {
+				setMCPCommandTestFlag(ctx, name, value)
+			}
+			got, err := selectMCPAuthType(ctx)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestConfigureMCPCredentialAuthentication(t *testing.T) {
+	for _, tc := range []struct{ name, mode, authType string }{
+		{name: "AK flag", mode: "ak"},
+		{name: "STS flag", mode: "StsToken"},
+		{name: "selected profile", authType: "credentials"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := newMCPCredentialTestContext(t)
+			ctx.SetInConfigureMode(false)
+			profile := mcpTestAKProfile("selected", "selected-key")
+			profile.StsToken = "selected-sts"
+			writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("default", "wrong-key"), profile)
+			setMCPCommandTestFlag(ctx, "profile", "selected")
+			setMCPCommandTestFlag(ctx, "no-browser", "")
+			if tc.mode != "" {
+				setMCPCommandTestFlag(ctx, "mode", tc.mode)
+			}
+			if tc.authType != "" {
+				setMCPCommandTestFlag(ctx, "auth-type", tc.authType)
+			}
+			oldTransport := http.DefaultTransport
+			t.Cleanup(func() { http.DefaultTransport = oldTransport })
+			calls := 0
+			http.DefaultTransport = credentialRoundTripper(func(req *http.Request) (*http.Response, error) {
+				calls++
+				require.Equal(t, "ramoauth.aliyuncs.com", req.URL.Host)
+				require.Equal(t, "GenerateAccessToken", req.URL.Query().Get("Action"))
+				require.Equal(t, "selected-key", req.URL.Query().Get("AccessKeyId"))
+				if tc.mode == "StsToken" {
+					require.Equal(t, "selected-sts", req.URL.Query().Get("SecurityToken"))
+				}
+				return credentialResponse(200, `{"Data":{"AccessToken":"mcp-test-token","ExpiresIn":3600}}`), nil
+			})
+			proxyConfig := ProxyConfig{RegionType: RegionCN}
+			require.NoError(t, configureMCPAuthentication(ctx, &proxyConfig))
+			require.NotNil(t, proxyConfig.CredentialAuth)
+			require.Nil(t, proxyConfig.McpProfile)
+			token, err := proxyConfig.CredentialAuth.GetToken()
+			require.NoError(t, err)
+			require.Equal(t, "mcp-test-token", token)
+			require.Equal(t, 1, calls)
+			_, err = os.Stat(filepath.Join(config.GetConfigPath(), ".mcpproxy_config"))
+			require.True(t, os.IsNotExist(err), "credential authentication must not create an MCP OAuth profile")
+		})
+	}
+}
+
+func TestConfigureMCPAuthenticationRejectsUnsupportedOptions(t *testing.T) {
+	for _, tc := range []struct{ name, mode, option, message string }{
+		{name: "BearerToken", mode: "BearerToken", message: "not supported"},
+		{name: "Anonymous", mode: "Anonymous", message: "not supported"},
+		{name: "unknown", mode: "unknown", message: "invalid mode"},
+		{name: "OAuth app name", mode: "AK", option: "oauth-app-name", message: "require --auth-type oauth"},
+		{name: "OAuth scope", mode: "AK", option: "scope", message: "require --auth-type oauth"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := newMCPCredentialTestContext(t)
+			profile := mcpTestAKProfile("default", "key")
+			profile.BearerTokenValue = "test-bearer"
+			writeMCPCredentialTestConfig(t, ctx, profile)
+			setMCPCommandTestFlag(ctx, "mode", tc.mode)
+			if tc.option != "" {
+				setMCPCommandTestFlag(ctx, tc.option, "custom")
+			}
+			err := configureMCPAuthentication(ctx, &ProxyConfig{RegionType: RegionCN})
+			require.ErrorContains(t, err, tc.message)
+		})
+	}
+}
+
+func TestMCPCredentialAuthenticationPinsSelectedProfile(t *testing.T) {
+	ctx := newMCPCredentialTestContext(t)
+	first := mcpTestAKProfile("first", "first-key")
+	second := mcpTestAKProfile("second", "second-key")
+	writeMCPCredentialTestConfig(t, ctx, first, second)
+	setMCPCommandTestFlag(ctx, "auth-type", "credentials")
+	oldTransport := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = oldTransport })
+	var accessKeys []string
+	http.DefaultTransport = credentialRoundTripper(func(req *http.Request) (*http.Response, error) {
+		accessKeys = append(accessKeys, req.URL.Query().Get("AccessKeyId"))
+		return credentialResponse(200, `{"Data":{"AccessToken":"mcp-test-token","ExpiresIn":3600}}`), nil
+	})
+	proxyConfig := ProxyConfig{RegionType: RegionCN}
+	require.NoError(t, configureMCPAuthentication(ctx, &proxyConfig))
+	first.AccessKeyId = "first-rotated-key"
+	writeMCPCredentialTestConfig(t, ctx, second, first)
+	_, err := proxyConfig.CredentialAuth.RefreshToken("mcp-test-token")
+	require.NoError(t, err)
+	require.Equal(t, []string{"first-key", "first-rotated-key"}, accessKeys)
 }

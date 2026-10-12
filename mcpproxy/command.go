@@ -25,6 +25,7 @@ import (
 	"syscall"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
@@ -34,18 +35,26 @@ func NewMCPProxyCommand() *cli.Command {
 		Short: i18n.T("Start MCP server proxy", "启动 MCP 服务器代理"),
 		Long: i18n.T(
 			"Start a local proxy server for Aliyun API MCP Servers. "+
-				"The proxy handles OAuth authentication automatically, "+
+				"The proxy handles OAuth authentication automatically. Use --mode to authenticate with CLI credentials, "+
 				"allowing MCP clients to connect without managing credentials.",
 			"启动阿里云 API MCP Server 的本地代理服务。"+
-				"代理自动处理 OAuth 认证，"+
+				"代理默认自动处理 OAuth 认证，也可通过 --mode 使用 CLI 凭据认证，"+
 				"允许 MCP 客户端无需管理凭证即可连接。",
 		),
-		Usage:  "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME]",
+		Usage:  "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--auth-type oauth|credentials] [--mode MODE] [--profile NAME]",
 		Sample: "aliyun utils mcp-proxy --region-type CN --port 8088",
 		Run: func(ctx *cli.Context, args []string) error {
 			return runMCPProxy(ctx)
 		},
 	}
+
+	cmd.Flags().Add(&cli.Flag{
+		Name: "auth-type",
+		Short: i18n.T(
+			"MCP authentication: oauth (default), or credentials to use the CLI profile. An explicit --mode selects credentials unless --auth-type is set. BearerToken and Anonymous are not supported.",
+			"MCP 认证方式：oauth（默认）或 credentials（使用 CLI profile）。显式指定 --mode 时使用 credentials，除非同时指定 --auth-type。不支持 BearerToken 和 Anonymous。",
+		),
+	})
 
 	cmd.Flags().Add(&cli.Flag{
 		Name:         "port",
@@ -196,12 +205,66 @@ func runMCPProxy(ctx *cli.Context) error {
 		BlockedServers:  blockedServers,
 	}
 
-	mcpProfile, err := getOrCreateMCPProfile(ctx, proxyConfig)
+	if err := configureMCPAuthentication(ctx, &proxyConfig); err != nil {
+		return err
+	}
+	return startMCPProxy(ctx, proxyConfig)
+}
+
+func selectMCPAuthType(ctx *cli.Context) (string, error) {
+	authType, explicit := ctx.Flags().Get("auth-type").GetValue()
+	if !explicit {
+		authType = "oauth"
+		if mode, assigned := config.ModeFlag(ctx.Flags()).GetValue(); assigned && strings.TrimSpace(mode) != "" {
+			authType = "credentials"
+		}
+	}
+	switch authType {
+	case "oauth", "credentials":
+		return authType, nil
+	default:
+		return "", fmt.Errorf("invalid auth-type %q: must be oauth or credentials", authType)
+	}
+}
+
+func configureMCPAuthentication(ctx *cli.Context, proxyConfig *ProxyConfig) error {
+	authType, err := selectMCPAuthType(ctx)
+	if err != nil {
+		return err
+	}
+	if authType == "credentials" {
+		if ctx.Flags().Get("oauth-app-name").IsAssigned() || ctx.Flags().Get("scope").IsAssigned() {
+			return fmt.Errorf("--oauth-app-name and --scope require --auth-type oauth")
+		}
+		// A mode selects MCP credentials even when all its fields come from a profile or the environment.
+		ctx.SetInConfigureMode(true)
+		profile, err := config.LoadProfileWithContext(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to load profile: %w", err)
+		}
+		if err := validateMCPProfileMode(profile.Mode); err != nil {
+			return err
+		}
+		// Reload rotating credentials from this profile without following later default-profile switches.
+		profileFlag := config.ProfileFlag(ctx.Flags())
+		if profileFlag == nil {
+			profileFlag = config.NewProfileFlag()
+			ctx.Flags().Add(profileFlag)
+		}
+		profileFlag.SetAssigned(true)
+		profileFlag.SetValue(profile.Name)
+		proxyConfig.CredentialAuth = newCredentialAuth(newCLICredentialSource(ctx), proxyConfig.RegionType)
+		if _, err := proxyConfig.CredentialAuth.GetToken(); err != nil {
+			return fmt.Errorf("failed to authenticate MCP with CLI credentials: %w", err)
+		}
+		return nil
+	}
+	mcpProfile, err := getOrCreateMCPProfile(ctx, *proxyConfig)
 	if err != nil {
 		return err
 	}
 	proxyConfig.McpProfile = mcpProfile
-	return startMCPProxy(ctx, proxyConfig)
+	return nil
 }
 
 func startMCPProxy(ctx *cli.Context, config ProxyConfig) error {
@@ -218,13 +281,19 @@ func startMCPProxy(ctx *cli.Context, config ProxyConfig) error {
 	config.ExistMcpServers = servers
 
 	proxy := NewMCPProxy(config)
-	go proxy.TokenRefresher.Start()
+	var fatalErrCh <-chan error
+	if proxy.TokenRefresher != nil {
+		go proxy.TokenRefresher.Start()
+		defer proxy.TokenRefresher.Stop()
+		fatalErrCh = proxy.TokenRefresher.fatalErrCh
+	}
 
 	printProxyInfo(ctx, proxy)
 
 	// 设置信号处理，捕获 Ctrl+C (SIGINT) 和 SIGTERM
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
 
 	// 在 goroutine 中启动服务器
 	serverErrChan := make(chan error, 1)
@@ -238,9 +307,6 @@ func startMCPProxy(ctx *cli.Context, config ProxyConfig) error {
 	select {
 	case sig := <-sigChan:
 		cli.Printf(ctx.Stdout(), "\nReceived signal: %v, shutting down gracefully...\n", sig)
-		if proxy.TokenRefresher != nil {
-			proxy.TokenRefresher.Stop()
-		}
 		if err := proxy.Stop(); err != nil {
 			// 如果是超时错误，记录日志但不返回错误，因为服务器已经关闭
 			cli.Printf(ctx.Stderr(), "Warning: %v\n", err)
@@ -249,12 +315,9 @@ func startMCPProxy(ctx *cli.Context, config ProxyConfig) error {
 		return nil
 	case err := <-serverErrChan:
 		return err
-	case fatalErr := <-proxy.TokenRefresher.fatalErrCh:
+	case fatalErr := <-fatalErrCh:
 		cli.Printf(ctx.Stderr(), "\nFatal error: %v\n", fatalErr)
 		cli.Printf(ctx.Stdout(), "Shutting down gracefully...\n")
-		if proxy.TokenRefresher != nil {
-			proxy.TokenRefresher.Stop()
-		}
 		if err := proxy.Stop(); err != nil {
 			cli.Printf(ctx.Stderr(), "Warning: %v\n", err)
 		}

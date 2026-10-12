@@ -472,6 +472,20 @@ func mergeProfileAfterCredentialRefresh(disk Profile, cp *Profile) Profile {
 	return out
 }
 
+func saveRefreshedCredentials(ctx *cli.Context, cp *Profile) error {
+	conf, err := hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(getConfigurePath(ctx))
+	if err != nil {
+		return err
+	}
+	for i, profile := range conf.Profiles {
+		if profile.Name == cp.Name {
+			conf.Profiles[i] = mergeProfileAfterCredentialRefresh(profile, cp)
+			break
+		}
+	}
+	return saveConfigurationFunc(ctx, conf)
+}
+
 func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred credentialsv2.Credential, err error) {
 	config := new(credentialsv2.Config)
 	// The AK, StsToken are direct credential
@@ -618,8 +632,6 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		// 解析得到新的 profile 配置
 		err = json.Unmarshal(buf, cp)
 		if err != nil {
-			fmt.Println(cp.ProcessCommand)
-			fmt.Println(string(buf))
 			return nil, err
 		}
 		return cp.GetCredential(ctx, proxyHost)
@@ -720,19 +732,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			cp.StsToken = token.SecurityToken
 			// update expiration
 			cp.StsExpiration = token.ExpirationInt64 - 5
-			// flush back
-			conf, err := loadOrCreateConfiguration()
-			if err != nil {
-				return nil, err
-			}
-			for i, profile := range conf.Profiles {
-				if profile.Name == cp.Name {
-					conf.Profiles[i] = mergeProfileAfterCredentialRefresh(profile, cp)
-					break
-				}
-			}
-			err = saveConfigurationFunc(conf)
-			if err != nil {
+			if err := saveRefreshedCredentials(ctx, cp); err != nil {
 				return nil, err
 			}
 		}
@@ -765,18 +765,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			if err != nil {
 				return nil, err
 			}
-			conf, err := loadOrCreateConfiguration()
-			if err != nil {
-				return nil, err
-			}
-			for i, profile := range conf.Profiles {
-				if profile.Name == cp.Name {
-					conf.Profiles[i] = mergeProfileAfterCredentialRefresh(profile, cp)
-					break
-				}
-			}
-			err = saveConfigurationFunc(conf)
-			if err != nil {
+			if err := saveRefreshedCredentials(ctx, cp); err != nil {
 				return nil, err
 			}
 			config.SetType("sts").
@@ -801,7 +790,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 	return credentialsv2.NewCredential(config)
 }
 
-var saveConfigurationFunc = SaveConfiguration
+var saveConfigurationFunc = SaveConfigurationWithContext
 
 func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 	envs := map[string]string{
