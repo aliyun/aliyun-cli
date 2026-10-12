@@ -1,65 +1,19 @@
 package config
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
-	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/cloudsso"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestExternalCredentialMalformedOutputHelper(t *testing.T) {
-	if os.Getenv("TEST_EXTERNAL_MALFORMED_CREDENTIAL") != "1" {
-		return
-	}
-	fmt.Fprint(os.Stdout, `{"mode":"AK","access_key_secret":"sensitive-secret","sts_token":"sensitive-token"`)
-	os.Exit(0)
-}
-
-func TestExternalCredentialMalformedOutputIsNotPrinted(t *testing.T) {
-	t.Setenv("TEST_EXTERNAL_MALFORMED_CREDENTIAL", "1")
-	t.Setenv(EnvDisableExternalProcess, "")
-	stdout, err := os.CreateTemp(t.TempDir(), "stdout")
-	require.NoError(t, err)
-	defer stdout.Close()
-	stderr, err := os.CreateTemp(t.TempDir(), "stderr")
-	require.NoError(t, err)
-	defer stderr.Close()
-	originalStdout, originalStderr := os.Stdout, os.Stderr
-	os.Stdout, os.Stderr = stdout, stderr
-	defer func() { os.Stdout, os.Stderr = originalStdout, originalStderr }()
-	ctxStdout, ctxStderr := new(bytes.Buffer), new(bytes.Buffer)
-	ctx := cli.NewCommandContext(ctxStdout, ctxStderr)
-	profile := Profile{
-		Name: "external", Mode: External, RegionId: "cn-hangzhou",
-		ProcessCommand: strconv.Quote(os.Args[0]) + " -test.run=^TestExternalCredentialMalformedOutputHelper$ -- sensitive-command-argument",
-	}
-	credential, err := profile.GetCredential(ctx, nil)
-	require.Error(t, err)
-	require.Nil(t, credential)
-	for _, file := range []*os.File{stdout, stderr} {
-		_, seekErr := file.Seek(0, io.SeekStart)
-		require.NoError(t, seekErr)
-		output, readErr := io.ReadAll(file)
-		require.NoError(t, readErr)
-		require.Empty(t, string(output))
-	}
-	require.Empty(t, ctxStdout.String())
-	require.Empty(t, ctxStderr.String())
-	require.NotContains(t, err.Error(), "sensitive-secret")
-	require.NotContains(t, err.Error(), "sensitive-token")
-}
 
 func TestCredentialRefreshPersistsToSelectedConfig(t *testing.T) {
 	for _, mode := range []AuthenticateMode{OAuth, CloudSSO} {

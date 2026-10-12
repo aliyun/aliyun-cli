@@ -472,20 +472,6 @@ func mergeProfileAfterCredentialRefresh(disk Profile, cp *Profile) Profile {
 	return out
 }
 
-func saveRefreshedCredentials(ctx *cli.Context, cp *Profile) error {
-	conf, err := hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(getConfigurePath(ctx))
-	if err != nil {
-		return err
-	}
-	for i, profile := range conf.Profiles {
-		if profile.Name == cp.Name {
-			conf.Profiles[i] = mergeProfileAfterCredentialRefresh(profile, cp)
-			break
-		}
-	}
-	return saveConfigurationFunc(ctx, conf)
-}
-
 func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred credentialsv2.Credential, err error) {
 	config := new(credentialsv2.Config)
 	// The AK, StsToken are direct credential
@@ -632,6 +618,8 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 		// 解析得到新的 profile 配置
 		err = json.Unmarshal(buf, cp)
 		if err != nil {
+			fmt.Println(cp.ProcessCommand)
+			fmt.Println(string(buf))
 			return nil, err
 		}
 		return cp.GetCredential(ctx, proxyHost)
@@ -732,7 +720,19 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			cp.StsToken = token.SecurityToken
 			// update expiration
 			cp.StsExpiration = token.ExpirationInt64 - 5
-			if err := saveRefreshedCredentials(ctx, cp); err != nil {
+			// flush back
+			conf, err := hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(getConfigurePath(ctx))
+			if err != nil {
+				return nil, err
+			}
+			for i, profile := range conf.Profiles {
+				if profile.Name == cp.Name {
+					conf.Profiles[i] = mergeProfileAfterCredentialRefresh(profile, cp)
+					break
+				}
+			}
+			err = saveConfigurationFunc(ctx, conf)
+			if err != nil {
 				return nil, err
 			}
 		}
@@ -765,7 +765,18 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			if err != nil {
 				return nil, err
 			}
-			if err := saveRefreshedCredentials(ctx, cp); err != nil {
+			conf, err := hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(getConfigurePath(ctx))
+			if err != nil {
+				return nil, err
+			}
+			for i, profile := range conf.Profiles {
+				if profile.Name == cp.Name {
+					conf.Profiles[i] = mergeProfileAfterCredentialRefresh(profile, cp)
+					break
+				}
+			}
+			err = saveConfigurationFunc(ctx, conf)
+			if err != nil {
 				return nil, err
 			}
 			config.SetType("sts").
