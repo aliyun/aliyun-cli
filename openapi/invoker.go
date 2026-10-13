@@ -47,9 +47,6 @@ func (a *BasicInvoker) applyBackendTimeout(api *canonicalmeta.API) {
 	if api.Operation != nil && api.Operation.APIVersion != "" && a.request.Version != "" && api.Operation.APIVersion != a.request.Version {
 		return
 	}
-	if _, exists := sdk.GetAPIMaxTimeout(a.request.Product, api.Name); exists {
-		return
-	}
 	if timeout := runtimemeta.BackendReadTimeout(api.BackendTimeoutMS); timeout > 0 {
 		a.request.SetReadTimeout(timeout)
 	}
