@@ -10,11 +10,15 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/openapi"
 )
 
-func ossUnknownOptionError(key string) error {
-	const help = "Run 'aliyun oss --help' for supported oss options."
+func ossUnknownOptionError(key, command string) error {
+	helpCommand := "aliyun oss"
+	if command != "" {
+		helpCommand += " " + command
+	}
+	help := fmt.Sprintf("Run '%s --help' for supported oss options.", helpCommand)
 	known := ossKnownOptionNames()
 	if _, ok := known[key]; ok {
-		return fmt.Errorf("invalid flag %s for oss commands.\n%s", key, help)
+		return fmt.Errorf("invalid option %s for oss commands.\n%s", key, help)
 	}
 
 	// This set is for diagnostics only; unsupported OpenAPI flags must not be stripped.
@@ -24,7 +28,7 @@ func ossUnknownOptionError(key string) error {
 	for _, flag := range hostFlags.Flags() {
 		for _, name := range flag.GetFormations() {
 			if key == name {
-				return fmt.Errorf("flag %s is a global aliyun CLI flag for OpenAPI commands, not an oss command option.\n%s", key, help)
+				return fmt.Errorf("%s is not an oss command option.\n%s", key, help)
 			}
 		}
 	}
@@ -46,7 +50,7 @@ func ossUnknownOptionError(key string) error {
 		suggestions = suggestions[:cli.DefaultSuggestLimit]
 	}
 	if len(suggestions) > 0 {
-		return fmt.Errorf("invalid flag %s for oss commands, did you mean %s?", key, strings.Join(suggestions, " or "))
+		return fmt.Errorf("invalid option %s for oss commands, did you mean %s?", key, strings.Join(suggestions, " or "))
 	}
-	return fmt.Errorf("invalid flag %s for oss commands.\n%s", key, help)
+	return fmt.Errorf("invalid option %s for oss commands.\n%s", key, help)
 }

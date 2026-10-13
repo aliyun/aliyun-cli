@@ -184,7 +184,7 @@ func TestBridgeRejectsInvalidMachineInvocations(t *testing.T) {
 		{listCommand.command, []string{"--cli-output=json", "--cli-cursor=x"}, "cursor"},
 		{listCommand.command, []string{"a", "b"}, "at most"},
 		{copyCommand.command, []string{}, "at least"},
-		{copyCommand.command, []string{"a", "oss://bucket/b", "--dryrun"}, "flag --dryrun is a global aliyun CLI flag for OpenAPI commands, not an oss command option.\nRun 'aliyun oss --help' for supported oss options."},
+		{copyCommand.command, []string{"a", "oss://bucket/b", "--dryrun"}, "--dryrun is not an oss command option.\nRun 'aliyun oss cp --help' for supported oss options."},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			_, err := phaseCInvoke(t, tc.cmd, "http://127.0.0.1:1", tc.args...)
@@ -205,7 +205,7 @@ func TestMachineListRejectsInvalidStateAndOutputFailures(t *testing.T) {
 		{[]string{"oss://bucket"}, OptionLimitedNum, "0", "limited-num"},
 		{[]string{"oss://"}, "", "", ""},
 	} {
-		_, opts, err := parseOSSOptions(nil)
+		_, opts, err := parseOSSOptions(nil, "")
 		require.NoError(t, err)
 		if tc.key != "" {
 			v := tc.value
@@ -222,7 +222,7 @@ func TestMachineListRejectsInvalidStateAndOutputFailures(t *testing.T) {
 		}
 	}
 	for _, stage := range []string{"buckets", "objects"} {
-		_, opts, err := parseOSSOptions(nil)
+		_, opts, err := parseOSSOptions(nil, "")
 		require.NoError(t, err)
 		endpoint := "://invalid"
 		opts[OptionEndpoint] = &endpoint
@@ -242,7 +242,7 @@ func TestPreviewConfigurationAndURIErrorBoundaries(t *testing.T) {
 	_, err := preparePreview(&removeCommand.command, []string{"oss://bucket/key"}, []string{"--version-id=v1"}, nil, "validate")
 	require.NoError(t, err)
 	for _, endpoint := range []string{"://invalid", "http://127.0.0.1:1"} {
-		_, opts, err := parseOSSOptions(nil)
+		_, opts, err := parseOSSOptions(nil, "")
 		require.NoError(t, err)
 		opts[OptionEndpoint] = &endpoint
 		cmd := removeCommand.command
@@ -252,7 +252,7 @@ func TestPreviewConfigurationAndURIErrorBoundaries(t *testing.T) {
 	}
 	p := &ossPreview{Mode: "plan"}
 	cmd := removeCommand.command
-	_, opts, err := parseOSSOptions(nil)
+	_, opts, err := parseOSSOptions(nil, "")
 	require.NoError(t, err)
 	bad := "invalid"
 	opts[OptionRetryTimes] = &bad

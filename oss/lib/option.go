@@ -312,14 +312,22 @@ type OptionMapType map[string]interface{}
 // ParseArgOptions parse command line and returns args and options
 func ParseArgOptions() ([]string, OptionMapType, error) {
 	if len(os.Args) == 0 {
-		return parseOSSOptions(nil)
+		return parseOSSOptions(nil, "")
 	}
-	return parseOSSOptions(os.Args[1:])
+	command := ""
+	if len(os.Args) > 1 {
+		manager := CommandManager{}
+		manager.Init()
+		if _, ok := manager.commandMap[os.Args[1]]; ok {
+			command = os.Args[1]
+		}
+	}
+	return parseOSSOptions(os.Args[1:], command)
 }
 
 // parseOSSOptions is invocation-local and never prints help or exits the process.
 // Scalars keep the legacy last-value-wins rule; lists retain every occurrence.
-func parseOSSOptions(tokens []string) ([]string, OptionMapType, error) {
+func parseOSSOptions(tokens []string, command string) ([]string, OptionMapType, error) {
 	options := make(OptionMapType, len(OptionMap))
 	names := make(map[string]string)
 	for name, opt := range OptionMap {
@@ -353,7 +361,7 @@ func parseOSSOptions(tokens []string) ([]string, OptionMapType, error) {
 		key, value, inline := strings.Cut(token, "=")
 		name, ok := names[key]
 		if !ok {
-			return nil, nil, ossUnknownOptionError(key)
+			return nil, nil, ossUnknownOptionError(key, command)
 		}
 		opt := OptionMap[name]
 		if opt.optionType == OptionTypeFlagTrue {
