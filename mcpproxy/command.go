@@ -27,6 +27,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
+	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 func NewMCPProxyCommand() *cli.Command {
@@ -35,13 +36,13 @@ func NewMCPProxyCommand() *cli.Command {
 		Short: i18n.T("Start MCP server proxy", "启动 MCP 服务器代理"),
 		Long: i18n.T(
 			"Start a local proxy server for Aliyun API MCP Servers. "+
-				"The proxy handles OAuth authentication automatically. Use --mode to authenticate with CLI credentials, "+
+				"The proxy handles OAuth authentication automatically. Use --profile to authenticate with the selected CLI profile's credential mode, "+
 				"allowing MCP clients to connect without managing credentials.",
 			"启动阿里云 API MCP Server 的本地代理服务。"+
-				"代理默认自动处理 OAuth 认证，也可通过 --mode 使用 CLI 凭据认证，"+
+				"代理默认自动处理 OAuth 认证，也可通过 --profile 按指定 CLI 配置中的模式认证，"+
 				"允许 MCP 客户端无需管理凭证即可连接。",
 		),
-		Usage:  "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--mode MODE] [--profile NAME]",
+		Usage:  "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--profile NAME]",
 		Sample: "aliyun utils mcp-proxy --region-type CN --port 8088",
 		Run: func(ctx *cli.Context, args []string) error {
 			return runMCPProxy(ctx)
@@ -204,17 +205,24 @@ func runMCPProxy(ctx *cli.Context) error {
 }
 
 func usesCLICredentials(ctx *cli.Context) bool {
-	mode, assigned := config.ModeFlag(ctx.Flags()).GetValue()
-	return assigned && strings.TrimSpace(mode) != ""
+	_, assigned := config.ProfileFlag(ctx.Flags()).GetValue()
+	return assigned
 }
 
 func configureMCPAuthentication(ctx *cli.Context, proxyConfig *ProxyConfig) error {
 	if usesCLICredentials(ctx) {
-		if ctx.Flags().Get("oauth-app-name").IsAssigned() || ctx.Flags().Get("scope").IsAssigned() {
-			return fmt.Errorf("--oauth-app-name and --scope apply to MCP OAuth; omit --mode to use that flow")
+		if name, _ := config.ProfileFlag(ctx.Flags()).GetValue(); strings.TrimSpace(name) == "" {
+			return fmt.Errorf("--profile requires a non-empty profile name")
 		}
-		// A mode selects MCP credentials even when all its fields come from a profile or the environment.
-		ctx.SetInConfigureMode(true)
+		if mode, assigned := config.ModeFlag(ctx.Flags()).GetValue(); assigned && strings.TrimSpace(mode) != "" {
+			return fmt.Errorf("MCP credential mode comes from the selected profile; omit --mode")
+		}
+		if util.GetFromEnv("ALIBABA_CLOUD_IGNORE_PROFILE", "ALIBABACLOUD_IGNORE_PROFILE") == "TRUE" {
+			return fmt.Errorf("--profile cannot be used when ALIBABA_CLOUD_IGNORE_PROFILE or ALIBABACLOUD_IGNORE_PROFILE is TRUE")
+		}
+		if ctx.Flags().Get("oauth-app-name").IsAssigned() || ctx.Flags().Get("scope").IsAssigned() {
+			return fmt.Errorf("--oauth-app-name and --scope apply to MCP OAuth; omit --profile to use that flow")
+		}
 		profile, err := config.LoadProfileWithContext(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to load profile: %w", err)
@@ -222,14 +230,6 @@ func configureMCPAuthentication(ctx *cli.Context, proxyConfig *ProxyConfig) erro
 		if err := validateMCPProfileMode(profile.Mode); err != nil {
 			return err
 		}
-		// Reload rotating credentials from this profile without following later default-profile switches.
-		profileFlag := config.ProfileFlag(ctx.Flags())
-		if profileFlag == nil {
-			profileFlag = config.NewProfileFlag()
-			ctx.Flags().Add(profileFlag)
-		}
-		profileFlag.SetAssigned(true)
-		profileFlag.SetValue(profile.Name)
 		proxyConfig.CredentialAuth = newCredentialAuth(newCLICredentialSource(ctx), proxyConfig.RegionType)
 		if _, err := proxyConfig.CredentialAuth.GetToken(); err != nil {
 			return fmt.Errorf("failed to authenticate MCP with CLI credentials: %w", err)

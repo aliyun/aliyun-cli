@@ -19,7 +19,7 @@ aliyun utils mcp-proxy --region-type CN --port 8088
 | `--host` | `127.0.0.1` | 本地监听地址 |
 | `--port` | `8088` | 本地监听端口 |
 | `--region-type` | `CN` | Endpoint 类型，可选 `CN` 或 `INTL` |
-| `--mode` | 不指定 | 显式指定 CLI 凭据模式时使用凭据认证；省略时保留 MCP OAuth |
+| `--profile` | 不指定 | 使用指定 CLI profile 中保存的凭据模式；省略时保留 MCP OAuth |
 | `--scope` | `/acs/mcp-server` | OAuth scope |
 | `--no-browser` | 关闭 | 启用后不自动打开浏览器，改为手工输入授权码 |
 | `--oauth-app-name` | 空 | 按名称复用已有 OAuth 应用 |
@@ -29,14 +29,16 @@ aliyun utils mcp-proxy --region-type CN --port 8088
 
 ### CLI 凭据认证
 
-不指定 `--mode` 时保留 MCP OAuth 行为，包括只指定 `--profile` 或 `--no-browser` 的命令。使用 CLI 凭据时，通过 `--mode` 指定模式，通过 `--profile` 选择提供配置的 profile：
+通过 `--profile` 选择已配置的 CLI profile，代理自动读取其中的 `mode` 和凭据，无需再指定模式。例如，下面两个命令分别使用 `AkProfile` 和 `oauth` 的配置：
 
 ```sh
-aliyun utils mcp-proxy --mode AK --profile automation
-aliyun utils mcp-proxy --mode RamRoleArn --profile deployment-role
+aliyun utils mcp-proxy --profile AkProfile
+aliyun utils mcp-proxy --profile oauth
 ```
 
-可选的 CLI 凭据来源为 `AK`、`StsToken`、`RamRoleArn`、`EcsRamRole`、`RsaKeyPair`、`RamRoleArnWithRoleName`、`ChainableRamRoleArn`、`External`、`CredentialsURI`、`OIDC`、`CloudSSO` 和 CLI `OAuth`，暂不支持 `BearerToken` 和 `Anonymous`。这些是获取 AK/STS 的本地方式，不是 MCP 服务端的独立鉴权类型；取得的凭据仍须被令牌服务接受，并满足 MCP 的身份、权限及应用授权要求。CLI `OAuth` 会将已配置的 CLI 登录身份解析为 STS 凭据，与不传 `--mode` 时的 MCP OAuth 登录是两个独立流程。
+profile 中的 `mode` 可以是 `AK`、`StsToken`、`RamRoleArn`、`EcsRamRole`、`RsaKeyPair`、`RamRoleArnWithRoleName`、`ChainableRamRoleArn`、`External`、`CredentialsURI`、`OIDC`、`CloudSSO` 或 CLI `OAuth`，暂不支持 `BearerToken` 和 `Anonymous`。这些是获取 AK/STS 的本地方式，不是 MCP 服务端的独立鉴权类型；取得的凭据仍须被令牌服务接受，并满足 MCP 的身份、权限及应用授权要求。CLI `OAuth` 会将已配置的 CLI 登录身份解析为 STS 凭据，与不传 `--profile` 时的 MCP OAuth 登录是两个独立流程。
+
+不显式指定 `--profile` 时保留原有 MCP OAuth 行为，单独传 `--mode` 或设置 profile 环境变量不会切换到凭据认证。指定 `--profile` 时不要再传 `--mode`；profile 不存在或模式不支持时会报错，不会回退到其他 profile。
 
 凭据认证复用 CLI 的 profile、命令行参数和环境变量解析规则，通过 `GenerateAccessToken` 将 AK/STS 换成 MCP Access Token，以 Bearer 方式连接 MCP。代理缓存 MCP Token，在到期前重新获取；收到 HTTP 401 时重新获取并重试一次。
 
@@ -50,7 +52,7 @@ uvx alibabacloud.mcp-proxy@latest --server-url '<MCP 连接地址>' pre-check
 
 此预检查可以在另一台有浏览器的机器完成。完成后，凭据认证不会创建 CLI 代理专用 OAuth 应用，也无需额外进行 MCP OAuth 登录。完整前提条件和连接地址获取方式见 [OpenAPI MCP Server 使用指南](https://help.aliyun.com/zh/openapi/user-guide/openapi-mcp-server-guide)。
 
-国际站使用 `--region-type INTL`。使用原有 MCP OAuth 流程时省略 `--mode`；`--oauth-app-name` 和 `--scope` 仅适用于该流程，`--no-browser` 仅控制该流程的浏览器交互。
+国际站使用 `--region-type INTL`。使用原有 MCP OAuth 流程时省略 `--profile`；`--oauth-app-name` 和 `--scope` 仅适用于该流程，`--no-browser` 仅控制该流程的浏览器交互。
 
 ### 访问控制
 

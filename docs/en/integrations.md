@@ -19,7 +19,7 @@ The defaults are:
 | `--host` | `127.0.0.1` | Local listen address |
 | `--port` | `8088` | Local listen port |
 | `--region-type` | `CN` | Endpoint family; use `CN` or `INTL` |
-| `--mode` | omitted | An explicit CLI credential mode selects credential authentication; omit it to retain MCP OAuth |
+| `--profile` | omitted | Use the credential mode saved in the selected CLI profile; omit it to retain MCP OAuth |
 | `--scope` | `/acs/mcp-server` | OAuth scope |
 | `--no-browser` | off | When set, use manual authorization-code input instead of opening a browser |
 | `--oauth-app-name` | empty | Reuse an existing OAuth application by name |
@@ -29,14 +29,16 @@ After startup, the CLI prints the local MCP and SSE URLs for the discovered serv
 
 ### CLI credential authentication
 
-Omitting `--mode` preserves MCP OAuth, including commands that only select `--profile` or `--no-browser`. To use CLI credentials, specify the mode with `--mode` and select its configuration with `--profile`:
+Select a configured CLI profile with `--profile`. The proxy reads its saved `mode` and credentials without a separate mode option. For example, these commands use the configurations named `AkProfile` and `oauth`:
 
 ```sh
-aliyun utils mcp-proxy --mode AK --profile automation
-aliyun utils mcp-proxy --mode RamRoleArn --profile deployment-role
+aliyun utils mcp-proxy --profile AkProfile
+aliyun utils mcp-proxy --profile oauth
 ```
 
-Available CLI credential sources are `AK`, `StsToken`, `RamRoleArn`, `EcsRamRole`, `RsaKeyPair`, `RamRoleArnWithRoleName`, `ChainableRamRoleArn`, `External`, `CredentialsURI`, `OIDC`, `CloudSSO`, and CLI `OAuth`. `BearerToken` and `Anonymous` are not supported. These are local ways to obtain AK/STS credentials, not separate MCP server authentication types. The resulting credentials must still be accepted by the token service and meet MCP identity, permission, and application-authorization requirements. CLI `OAuth` resolves a configured CLI login to STS credentials; it is separate from the MCP OAuth flow used when `--mode` is omitted.
+The profile's `mode` can be `AK`, `StsToken`, `RamRoleArn`, `EcsRamRole`, `RsaKeyPair`, `RamRoleArnWithRoleName`, `ChainableRamRoleArn`, `External`, `CredentialsURI`, `OIDC`, `CloudSSO`, or CLI `OAuth`. `BearerToken` and `Anonymous` are not supported. These are local ways to obtain AK/STS credentials, not separate MCP server authentication types. The resulting credentials must still be accepted by the token service and meet MCP identity, permission, and application-authorization requirements. CLI `OAuth` resolves a configured CLI login to STS credentials; it is separate from the MCP OAuth flow used when `--profile` is omitted.
+
+Without an explicit `--profile`, the proxy retains its original MCP OAuth behavior. A standalone `--mode` or a profile environment variable does not select credential authentication. Do not combine `--profile` with `--mode`; a missing profile or an unsupported mode causes an error instead of falling back to another profile.
 
 Credential authentication uses the same profile, flag, and environment-variable resolution as CLI credentials. It exchanges AK/STS credentials through `GenerateAccessToken` and connects to MCP with the resulting Bearer token. The proxy caches this MCP token in memory and reacquires it before expiry or once after an HTTP 401.
 
@@ -50,7 +52,7 @@ uvx alibabacloud.mcp-proxy@latest --server-url '<MCP endpoint>' pre-check
 
 This one-time check may run on a different machine with a browser. Afterwards, credential authentication does not create the CLI proxy's OAuth application or require a separate MCP OAuth login. See the [OpenAPI MCP Server guide](https://help.aliyun.com/zh/openapi/user-guide/openapi-mcp-server-guide) for the prerequisites and endpoint.
 
-Use `--region-type INTL` for international endpoints. Omit `--mode` to retain the original MCP OAuth flow. The `--oauth-app-name` and `--scope` options only apply to that flow; `--no-browser` only controls its browser interaction.
+Use `--region-type INTL` for international endpoints. Omit `--profile` to retain the original MCP OAuth flow. The `--oauth-app-name` and `--scope` options only apply to that flow; `--no-browser` only controls its browser interaction.
 
 ### Access control
 

@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -33,7 +34,7 @@ func TestNewMCPProxyCommand(t *testing.T) {
 	assert.Equal(t, "mcp-proxy", cmd.Name)
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Long)
-	assert.Equal(t, "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--mode MODE] [--profile NAME]", cmd.Usage)
+	assert.Equal(t, "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--profile NAME]", cmd.Usage)
 	assert.Equal(t, "aliyun utils mcp-proxy --region-type CN --port 8088", cmd.Sample)
 	assert.NotNil(t, cmd.Run)
 
@@ -262,22 +263,42 @@ func setMCPCommandTestFlag(ctx *cli.Context, name, value string) {
 	flag.SetValue(value)
 }
 
+func forbidMCPCommandTestNetwork(t *testing.T) {
+	t.Helper()
+	previousTransport := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = previousTransport })
+	http.DefaultTransport = credentialRoundTripper(func(req *http.Request) (*http.Response, error) {
+		t.Errorf("invalid authentication options must not make a request to %s", req.URL.Host)
+		return credentialResponse(http.StatusForbidden, `{"Code":"Forbidden"}`), nil
+	})
+}
+
 func TestUsesCLICredentials(t *testing.T) {
 	for _, tc := range []struct {
-		name  string
-		flags map[string]string
-		want  bool
+		name       string
+		flags      map[string]string
+		profileEnv string
+		ignoreEnv  string
+		want       bool
 	}{
 		{name: "unchanged default"},
 		{name: "empty mode preserves OAuth", flags: map[string]string{"mode": ""}},
 		{name: "whitespace mode preserves OAuth", flags: map[string]string{"mode": " "}},
-		{name: "profile alone preserves OAuth", flags: map[string]string{"profile": "existing"}},
+		{name: "explicit profile uses credentials", flags: map[string]string{"profile": "existing"}, want: true},
+		{name: "empty explicit profile requires validation", flags: map[string]string{"profile": ""}, want: true},
 		{name: "no browser preserves OAuth", flags: map[string]string{"no-browser": ""}},
-		{name: "explicit mode uses credentials", flags: map[string]string{"mode": "ak"}, want: true},
-		{name: "CLI OAuth profile uses credentials", flags: map[string]string{"mode": "OAuth"}, want: true},
-		{name: "role profile", flags: map[string]string{"mode": "RamRoleArn", "profile": "role"}, want: true},
+		{name: "mode alone preserves OAuth", flags: map[string]string{"mode": "AK"}},
+		{name: "OAuth mode alone preserves MCP OAuth", flags: map[string]string{"mode": "OAuth"}},
+		{name: "environment profile preserves OAuth", profileEnv: "environment"},
+		{name: "mode and environment preserve OAuth", flags: map[string]string{"mode": "AK"}, profileEnv: "environment"},
+		{name: "ignored profile environment preserves OAuth", profileEnv: "environment", ignoreEnv: "ALIBABA_CLOUD_IGNORE_PROFILE"},
+		{name: "legacy ignored profile environment preserves OAuth", profileEnv: "environment", ignoreEnv: "ALIBABACLOUD_IGNORE_PROFILE"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ALIBABA_CLOUD_PROFILE", tc.profileEnv)
+			if tc.ignoreEnv != "" {
+				t.Setenv(tc.ignoreEnv, "TRUE")
+			}
 			ctx := cli.NewCommandContext(bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 			for name, value := range tc.flags {
 				setMCPCommandTestFlag(ctx, name, value)
@@ -288,19 +309,20 @@ func TestUsesCLICredentials(t *testing.T) {
 }
 
 func TestConfigureMCPCredentialAuthentication(t *testing.T) {
-	for _, tc := range []struct{ name, mode string }{
-		{name: "AK flag", mode: "ak"},
-		{name: "STS flag", mode: "StsToken"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, mode := range []config.AuthenticateMode{config.AK, config.StsToken, config.OAuth} {
+		t.Run(string(mode), func(t *testing.T) {
 			ctx := newMCPCredentialTestContext(t)
 			ctx.SetInConfigureMode(false)
 			profile := mcpTestAKProfile("selected", "selected-key")
+			profile.Mode = mode
 			profile.StsToken = "selected-sts"
-			writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("default", "wrong-key"), profile)
+			profile.StsExpiration = time.Now().Add(time.Hour).Unix()
+			profile.OAuthSiteType = "CN"
+			writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("default", "wrong-key"),
+				mcpTestAKProfile("environment", "environment-key"), profile)
+			t.Setenv("ALIBABA_CLOUD_PROFILE", "environment")
 			setMCPCommandTestFlag(ctx, "profile", "selected")
 			setMCPCommandTestFlag(ctx, "no-browser", "")
-			setMCPCommandTestFlag(ctx, "mode", tc.mode)
 			oldTransport := http.DefaultTransport
 			t.Cleanup(func() { http.DefaultTransport = oldTransport })
 			calls := 0
@@ -309,13 +331,16 @@ func TestConfigureMCPCredentialAuthentication(t *testing.T) {
 				require.Equal(t, "ramoauth.aliyuncs.com", req.URL.Host)
 				require.Equal(t, "GenerateAccessToken", req.URL.Query().Get("Action"))
 				require.Equal(t, "selected-key", req.URL.Query().Get("AccessKeyId"))
-				if tc.mode == "StsToken" {
+				if mode == config.StsToken || mode == config.OAuth {
 					require.Equal(t, "selected-sts", req.URL.Query().Get("SecurityToken"))
+				} else {
+					require.Empty(t, req.URL.Query().Get("SecurityToken"))
 				}
 				return credentialResponse(200, `{"Data":{"AccessToken":"mcp-test-token","ExpiresIn":3600}}`), nil
 			})
 			proxyConfig := ProxyConfig{RegionType: RegionCN}
 			require.NoError(t, configureMCPAuthentication(ctx, &proxyConfig))
+			require.False(t, ctx.InConfigureMode(), "MCP must preserve the caller's credential flag policy")
 			require.NotNil(t, proxyConfig.CredentialAuth)
 			require.Nil(t, proxyConfig.McpProfile)
 			token, err := proxyConfig.CredentialAuth.GetToken()
@@ -329,19 +354,25 @@ func TestConfigureMCPCredentialAuthentication(t *testing.T) {
 }
 
 func TestConfigureMCPAuthenticationRejectsUnsupportedOptions(t *testing.T) {
-	for _, tc := range []struct{ name, mode, option, message string }{
-		{name: "BearerToken", mode: "BearerToken", message: "not supported"},
-		{name: "Anonymous", mode: "Anonymous", message: "not supported"},
+	for _, tc := range []struct {
+		name, option, message string
+		mode                  config.AuthenticateMode
+	}{
+		{name: "BearerToken", mode: config.BearerToken, message: "not supported"},
+		{name: "Anonymous", mode: config.Anonymous, message: "not supported"},
 		{name: "unknown", mode: "unknown", message: "invalid mode"},
-		{name: "OAuth app name", mode: "AK", option: "oauth-app-name", message: "omit --mode"},
-		{name: "OAuth scope", mode: "AK", option: "scope", message: "omit --mode"},
+		{name: "OAuth app name", mode: config.AK, option: "oauth-app-name", message: "omit --profile"},
+		{name: "OAuth scope", mode: config.AK, option: "scope", message: "omit --profile"},
+		{name: "mode override", mode: config.AK, option: "mode", message: "--mode"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := newMCPCredentialTestContext(t)
-			profile := mcpTestAKProfile("default", "key")
+			forbidMCPCommandTestNetwork(t)
+			profile := mcpTestAKProfile("selected", "key")
+			profile.Mode = tc.mode
 			profile.BearerTokenValue = "test-bearer"
-			writeMCPCredentialTestConfig(t, ctx, profile)
-			setMCPCommandTestFlag(ctx, "mode", tc.mode)
+			writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("default", "fallback-key"), profile)
+			setMCPCommandTestFlag(ctx, "profile", "selected")
 			if tc.option != "" {
 				setMCPCommandTestFlag(ctx, tc.option, "custom")
 			}
@@ -351,12 +382,75 @@ func TestConfigureMCPAuthenticationRejectsUnsupportedOptions(t *testing.T) {
 	}
 }
 
+func TestConfigureMCPAuthenticationRejectsInvalidProfileWithoutFallback(t *testing.T) {
+	for _, profileName := range []string{"", " \t ", "missing"} {
+		t.Run(profileName, func(t *testing.T) {
+			ctx := newMCPCredentialTestContext(t)
+			forbidMCPCommandTestNetwork(t)
+			writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("default", "default-key"),
+				mcpTestAKProfile("environment", "environment-key"))
+			t.Setenv("ALIBABA_CLOUD_PROFILE", "environment")
+			setMCPCommandTestFlag(ctx, "profile", profileName)
+			proxyConfig := ProxyConfig{RegionType: RegionCN}
+
+			err := configureMCPAuthentication(ctx, &proxyConfig)
+
+			if profileName == "missing" {
+				require.ErrorContains(t, err, "unknown profile missing")
+			} else {
+				require.ErrorContains(t, err, "--profile requires a non-empty profile name")
+			}
+			require.Nil(t, proxyConfig.CredentialAuth)
+			require.Nil(t, proxyConfig.McpProfile)
+		})
+	}
+}
+
+func TestConfigureMCPAuthenticationRejectsIgnoringExplicitProfile(t *testing.T) {
+	for _, variable := range []string{"ALIBABA_CLOUD_IGNORE_PROFILE", "ALIBABACLOUD_IGNORE_PROFILE"} {
+		t.Run(variable, func(t *testing.T) {
+			ctx := newMCPCredentialTestContext(t)
+			forbidMCPCommandTestNetwork(t)
+			writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("selected", "selected-key"))
+			setMCPCommandTestFlag(ctx, "profile", "selected")
+			t.Setenv(variable, "TRUE")
+			t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "environment-key")
+			t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "environment-secret")
+			proxyConfig := ProxyConfig{RegionType: RegionCN}
+
+			err := configureMCPAuthentication(ctx, &proxyConfig)
+
+			require.ErrorContains(t, err, "--profile cannot be used")
+			require.Nil(t, proxyConfig.CredentialAuth, "ignoring an explicit profile must not authenticate an environment identity")
+			require.Nil(t, proxyConfig.McpProfile)
+		})
+	}
+}
+
+func TestConfigureMCPAuthenticationDistinguishesProfilesWithSameMode(t *testing.T) {
+	ctx := newMCPCredentialTestContext(t)
+	writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("first", "first-key"), mcpTestAKProfile("second", "second-key"))
+	t.Setenv("ALIBABA_CLOUD_PROFILE", "first")
+	oldTransport := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = oldTransport })
+	var accessKeys []string
+	http.DefaultTransport = credentialRoundTripper(func(req *http.Request) (*http.Response, error) {
+		accessKeys = append(accessKeys, req.URL.Query().Get("AccessKeyId"))
+		return credentialResponse(200, `{"Data":{"AccessToken":"mcp-test-token","ExpiresIn":3600}}`), nil
+	})
+	for _, name := range []string{"first", "second"} {
+		setMCPCommandTestFlag(ctx, "profile", name)
+		require.NoError(t, configureMCPAuthentication(ctx, &ProxyConfig{RegionType: RegionCN}))
+	}
+	require.Equal(t, []string{"first-key", "second-key"}, accessKeys)
+}
+
 func TestMCPCredentialAuthenticationPinsSelectedProfile(t *testing.T) {
 	ctx := newMCPCredentialTestContext(t)
 	first := mcpTestAKProfile("first", "first-key")
 	second := mcpTestAKProfile("second", "second-key")
 	writeMCPCredentialTestConfig(t, ctx, first, second)
-	setMCPCommandTestFlag(ctx, "mode", "AK")
+	setMCPCommandTestFlag(ctx, "profile", "first")
 	oldTransport := http.DefaultTransport
 	t.Cleanup(func() { http.DefaultTransport = oldTransport })
 	var accessKeys []string
@@ -370,5 +464,9 @@ func TestMCPCredentialAuthenticationPinsSelectedProfile(t *testing.T) {
 	writeMCPCredentialTestConfig(t, ctx, second, first)
 	_, err := proxyConfig.CredentialAuth.RefreshToken("mcp-test-token")
 	require.NoError(t, err)
+	require.Equal(t, []string{"first-key", "first-rotated-key"}, accessKeys)
+	writeMCPCredentialTestConfig(t, ctx, second)
+	_, err = proxyConfig.CredentialAuth.RefreshToken("mcp-test-token")
+	require.Error(t, err, "a deleted selected profile must not fall back to the new default")
 	require.Equal(t, []string{"first-key", "first-rotated-key"}, accessKeys)
 }
