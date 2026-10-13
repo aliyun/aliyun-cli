@@ -39,6 +39,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	runtimemeta "github.com/aliyun/aliyun-openapi-runtime/meta"
 )
 
 func ShouldUseOpenapi(ctx *cli.Context, product *meta.Product) bool {
@@ -531,6 +532,11 @@ func (a *OpenapiContext) Prepare(ctx *cli.Context) error {
 	oaParams.Action = tea.String(a.api.Name)
 	oaParams.Version = &a.product.Version
 	oaParams.Method = &a.method
+	if a.openapiClient != nil && (a.profile == nil || a.profile.ReadTimeout <= 0) && (a.api.Operation == nil || !a.api.Operation.IsSSE) {
+		if timeout := runtimemeta.BackendReadTimeout(a.api.BackendTimeoutMS); timeout > 0 {
+			a.openapiClient.ReadTimeout = tea.Int(int(timeout / time.Millisecond))
+		}
+	}
 
 	// Style defaults to ROA (set in Init); RPC-style products override it here so
 	// the darabonba channel adds the RPC-specific request headers.

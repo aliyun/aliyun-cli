@@ -29,16 +29,17 @@ import (
 // Endpoints are NOT set here — they live at the product level in the canonical layout and are injected by the Source after decoding.
 func schemaToAPI(def *crschema.CommandDefinition) *meta.API {
 	api := &meta.API{
-		Name:         def.Name,
-		CmdName:      def.CmdName,
-		CmdFullName:  def.CmdFullName,
-		Title:        meta.Description{ZH: def.TitleZH, EN: def.TitleEN},
-		Description:  meta.Description{ZH: def.DescriptionZH, EN: def.DescriptionEN},
-		Deprecated:   def.Deprecated,
-		MultiVersion: def.MultiVersion,
-		Examples:     exampleList(def),
-		Responses:    cloneRawJSON(def.Responses),
-		Components:   cloneRawJSON(def.Components),
+		BackendTimeoutMS: def.BackendTimeoutMS,
+		Name:             def.Name,
+		CmdName:          def.CmdName,
+		CmdFullName:      def.CmdFullName,
+		Title:            meta.Description{ZH: def.TitleZH, EN: def.TitleEN},
+		Description:      meta.Description{ZH: def.DescriptionZH, EN: def.DescriptionEN},
+		Deprecated:       def.Deprecated,
+		MultiVersion:     def.MultiVersion,
+		Examples:         exampleList(def),
+		Responses:        cloneRawJSON(def.Responses),
+		Components:       cloneRawJSON(def.Components),
 	}
 	if def.Operation != nil {
 		api.Version = def.Operation.APIVersion
