@@ -45,7 +45,7 @@ uvx alibabacloud.mcp-proxy@latest --server-url '<MCP 连接地址>' pre-check
 
 预检查可以在另一台有浏览器的机器完成。完整前提条件和连接地址获取方式见 [OpenAPI MCP Server 使用指南](https://help.aliyun.com/zh/openapi/user-guide/openapi-mcp-server-guide)。手动配置的 STS 过期后需更新配置；CloudSSO 登录过期后需重新登录。
 
-国际站添加 `--region-type INTL`。省略 `--profile` 时默认使用 MCP OAuth；`--oauth-app-name`、`--scope` 和 `--no-browser` 仅适用于默认的 MCP OAuth 流程。
+省略 `--profile` 时默认使用 MCP OAuth；`--oauth-app-name`、`--scope` 和 `--no-browser` 仅适用于默认的 MCP OAuth 流程。
 
 ### 访问控制
 

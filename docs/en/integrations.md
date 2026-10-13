@@ -45,7 +45,7 @@ uvx alibabacloud.mcp-proxy@latest --server-url '<MCP endpoint>' pre-check
 
 The pre-check may run on a different machine with a browser. See the [OpenAPI MCP Server guide](https://help.aliyun.com/zh/openapi/user-guide/openapi-mcp-server-guide) for the prerequisites and endpoint. Update manually configured STS credentials when they expire, and log in again if a CloudSSO login expires.
 
-Add `--region-type INTL` for international endpoints. Omitting `--profile` defaults to MCP OAuth; `--oauth-app-name`, `--scope`, and `--no-browser` only apply to this default flow.
+Omitting `--profile` defaults to MCP OAuth; `--oauth-app-name`, `--scope`, and `--no-browser` only apply to this default flow.
 
 ### Access control
 
