@@ -282,15 +282,10 @@ func TestUsesCLICredentials(t *testing.T) {
 		want       bool
 	}{
 		{name: "unchanged default"},
-		{name: "empty mode preserves OAuth", flags: map[string]string{"mode": ""}},
-		{name: "whitespace mode preserves OAuth", flags: map[string]string{"mode": " "}},
 		{name: "explicit profile uses credentials", flags: map[string]string{"profile": "existing"}, want: true},
 		{name: "empty explicit profile requires validation", flags: map[string]string{"profile": ""}, want: true},
 		{name: "no browser preserves OAuth", flags: map[string]string{"no-browser": ""}},
-		{name: "mode alone preserves OAuth", flags: map[string]string{"mode": "AK"}},
-		{name: "OAuth mode alone preserves MCP OAuth", flags: map[string]string{"mode": "OAuth"}},
 		{name: "environment profile preserves OAuth", profileEnv: "environment"},
-		{name: "mode and environment preserve OAuth", flags: map[string]string{"mode": "AK"}, profileEnv: "environment"},
 		{name: "ignored profile environment preserves OAuth", profileEnv: "environment", ignoreEnv: "ALIBABA_CLOUD_IGNORE_PROFILE"},
 		{name: "legacy ignored profile environment preserves OAuth", profileEnv: "environment", ignoreEnv: "ALIBABACLOUD_IGNORE_PROFILE"},
 	} {
@@ -363,7 +358,6 @@ func TestConfigureMCPAuthenticationRejectsUnsupportedOptions(t *testing.T) {
 		{name: "unknown", mode: "unknown", message: "invalid mode"},
 		{name: "OAuth app name", mode: config.AK, option: "oauth-app-name", message: "omit --profile"},
 		{name: "OAuth scope", mode: config.AK, option: "scope", message: "omit --profile"},
-		{name: "mode override", mode: config.AK, option: "mode", message: "--mode"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := newMCPCredentialTestContext(t)

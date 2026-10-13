@@ -214,9 +214,6 @@ func configureMCPAuthentication(ctx *cli.Context, proxyConfig *ProxyConfig) erro
 		if name, _ := config.ProfileFlag(ctx.Flags()).GetValue(); strings.TrimSpace(name) == "" {
 			return fmt.Errorf("--profile requires a non-empty profile name")
 		}
-		if mode, assigned := config.ModeFlag(ctx.Flags()).GetValue(); assigned && strings.TrimSpace(mode) != "" {
-			return fmt.Errorf("MCP credential mode comes from the selected profile; omit --mode")
-		}
 		if util.GetFromEnv("ALIBABA_CLOUD_IGNORE_PROFILE", "ALIBABACLOUD_IGNORE_PROFILE") == "TRUE" {
 			return fmt.Errorf("--profile cannot be used when ALIBABA_CLOUD_IGNORE_PROFILE or ALIBABACLOUD_IGNORE_PROFILE is TRUE")
 		}

@@ -29,11 +29,10 @@ After startup, the CLI prints the local MCP and SSE URLs for the discovered serv
 
 ### CLI credential authentication
 
-Use `--profile` to select a named profile from the default CLI configuration file, `~/.aliyun/config.json`. The proxy reads its saved `mode` and credentials. For example, these commands use the configurations named `AkProfile` and `oauth`:
+Use `--profile` to select a named profile from `~/.aliyun/config.json`. The proxy uses the `mode` and credentials saved in that profile. This command selects the profile named `my-profile`:
 
 ```sh
-aliyun utils mcp-proxy --profile AkProfile
-aliyun utils mcp-proxy --profile oauth
+aliyun utils mcp-proxy --profile my-profile
 ```
 
 The profile's `mode` can be `AK`, `StsToken`, `RamRoleArn`, `EcsRamRole`, `RsaKeyPair`, `RamRoleArnWithRoleName`, `ChainableRamRoleArn`, `External`, `CredentialsURI`, `OIDC`, `CloudSSO`, or CLI `OAuth`. `BearerToken` and `Anonymous` are not supported. These are local ways to obtain AK/STS credentials, not separate MCP server authentication types. The resulting credentials must still be accepted by the token service and meet MCP identity, permission, and application-authorization requirements. CLI `OAuth` resolves a configured CLI login to STS credentials; it is separate from the MCP OAuth flow used when `--profile` is omitted.

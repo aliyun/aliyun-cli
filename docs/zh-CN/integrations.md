@@ -29,11 +29,10 @@ MCP 代理支持本节列出的参数，默认值如下：
 
 ### CLI 凭据认证
 
-通过 `--profile` 从默认 CLI 配置文件 `~/.aliyun/config.json` 中按名称选择 profile，代理自动读取其中的 `mode` 和凭据。例如，下面两个命令分别使用 `AkProfile` 和 `oauth` 的配置：
+通过 `--profile` 从 `~/.aliyun/config.json` 中按名称选择 profile，代理使用该配置中保存的 `mode` 和凭据。以下命令选择名为 `my-profile` 的配置：
 
 ```sh
-aliyun utils mcp-proxy --profile AkProfile
-aliyun utils mcp-proxy --profile oauth
+aliyun utils mcp-proxy --profile my-profile
 ```
 
 profile 中的 `mode` 可以是 `AK`、`StsToken`、`RamRoleArn`、`EcsRamRole`、`RsaKeyPair`、`RamRoleArnWithRoleName`、`ChainableRamRoleArn`、`External`、`CredentialsURI`、`OIDC`、`CloudSSO` 或 CLI `OAuth`，暂不支持 `BearerToken` 和 `Anonymous`。这些是获取 AK/STS 的本地方式，不是 MCP 服务端的独立鉴权类型；取得的凭据仍须被令牌服务接受，并满足 MCP 的身份、权限及应用授权要求。CLI `OAuth` 会将已配置的 CLI 登录身份解析为 STS 凭据，与不传 `--profile` 时的 MCP OAuth 登录是两个独立流程。

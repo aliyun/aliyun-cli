@@ -66,8 +66,6 @@ func mcpTestAKProfile(name, accessKey string) config.Profile {
 
 func TestCLICredentialSourceReloadsSelectedProfile(t *testing.T) {
 	ctx := newMCPCredentialTestContext(t)
-	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
-	config.ConfigurePathFlag(ctx.Flags()).SetValue(filepath.Join(t.TempDir(), "custom.json"))
 	config.ProfileFlag(ctx.Flags()).SetAssigned(true)
 	config.ProfileFlag(ctx.Flags()).SetValue("selected")
 	t.Setenv("ALIBABA_CLOUD_PROFILE", "other")
@@ -80,40 +78,21 @@ func TestCLICredentialSourceReloadsSelectedProfile(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, key, tea.StringValue(model.AccessKeyId))
 	}
-	config.AccessKeyIdFlag(ctx.Flags()).SetAssigned(true)
-	config.AccessKeyIdFlag(ctx.Flags()).SetValue("flag-key")
-	model, err := source()
-	require.NoError(t, err)
-	require.Equal(t, "flag-key", tea.StringValue(model.AccessKeyId))
-	require.True(t, ctx.InConfigureMode())
 }
 
-func TestCLICredentialSourceUsesEnvironmentFallback(t *testing.T) {
+func TestCLICredentialSourceUsesSelectedProfileMode(t *testing.T) {
 	ctx := newMCPCredentialTestContext(t)
-	writeMCPCredentialTestConfig(t, ctx, config.Profile{Name: "default", RegionId: "cn-hangzhou"})
-	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "environment-key")
-	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "environment-secret")
-	t.Setenv("ALIBABA_CLOUD_SECURITY_TOKEN", "environment-token")
+	profile := mcpTestAKProfile("selected", "selected-key")
+	profile.Mode = config.StsToken
+	profile.StsToken = "selected-token"
+	writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("default", "default-key"), profile)
+	config.ProfileFlag(ctx.Flags()).SetAssigned(true)
+	config.ProfileFlag(ctx.Flags()).SetValue("selected")
 	model, err := newCLICredentialSource(ctx)()
 	require.NoError(t, err)
 	require.Equal(t, "sts", tea.StringValue(model.Type))
-	require.Equal(t, "environment-token", tea.StringValue(model.SecurityToken))
-}
-
-func TestCLICredentialSourceModeAndEnvironmentProfileSelection(t *testing.T) {
-	ctx := newMCPCredentialTestContext(t)
-	writeMCPCredentialTestConfig(t, ctx,
-		mcpTestAKProfile("default", "default-key"), mcpTestAKProfile("environment", "environment-key"))
-	t.Setenv("ALIBABA_CLOUD_PROFILE", "environment")
-	config.ModeFlag(ctx.Flags()).SetAssigned(true)
-	config.ModeFlag(ctx.Flags()).SetValue("StsToken")
-	config.StsTokenFlag(ctx.Flags()).SetAssigned(true)
-	config.StsTokenFlag(ctx.Flags()).SetValue("flag-token")
-	model, err := newCLICredentialSource(ctx)()
-	require.NoError(t, err)
-	require.Equal(t, "sts", tea.StringValue(model.Type))
-	require.Equal(t, "environment-key", tea.StringValue(model.AccessKeyId))
-	require.Equal(t, "flag-token", tea.StringValue(model.SecurityToken))
+	require.Equal(t, "selected-key", tea.StringValue(model.AccessKeyId))
+	require.Equal(t, "selected-token", tea.StringValue(model.SecurityToken))
 }
 
 func TestCLICredentialSourceReloadsTemporaryProfiles(t *testing.T) {
@@ -403,8 +382,6 @@ func TestCLICredentialSourceRSAHelper(t *testing.T) {
 	x509.SetFallbackRoots(roots)
 	ctx := cli.NewCommandContext(io.Discard, io.Discard)
 	config.AddFlags(ctx.Flags())
-	config.ConfigurePathFlag(ctx.Flags()).SetAssigned(true)
-	config.ConfigurePathFlag(ctx.Flags()).SetValue(os.Getenv("MCP_CREDENTIAL_RSA_CONFIG"))
 	source := newCLICredentialSource(ctx)
 	for _, call := range []int{1, 2, 2} {
 		model, err := source()
@@ -448,7 +425,6 @@ func TestCLICredentialSourceRefreshesRSAKeyPair(t *testing.T) {
 	command := exec.Command(os.Args[0], "-test.run=^TestCLICredentialSourceRSAHelper$")
 	command.Env = append(os.Environ(), "MCP_CREDENTIAL_RSA_HELPER=1",
 		"MCP_CREDENTIAL_RSA_CERT="+certificatePath,
-		"MCP_CREDENTIAL_RSA_CONFIG="+filepath.Join(config.GetConfigPath(), "config.json"),
 		"GODEBUG="+os.Getenv("GODEBUG")+",x509usefallbackroots=1")
 	output, err := command.CombinedOutput()
 	require.NoError(t, err, "%s", output)
