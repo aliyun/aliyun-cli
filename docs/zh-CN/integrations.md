@@ -12,7 +12,7 @@ MCP 代理通过一个本地入口暴露已发现的阿里云 API MCP Server，�
 aliyun utils mcp-proxy --region-type CN --port 8088
 ```
 
-默认配置如下：
+MCP 代理支持本节列出的参数，默认值如下：
 
 | 参数 | 默认值 | 含义 |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ aliyun utils mcp-proxy --region-type CN --port 8088
 
 ### CLI 凭据认证
 
-通过 `--profile` 选择已配置的 CLI profile，代理自动读取其中的 `mode` 和凭据，无需再指定模式。例如，下面两个命令分别使用 `AkProfile` 和 `oauth` 的配置：
+通过 `--profile` 从默认 CLI 配置文件 `~/.aliyun/config.json` 中按名称选择 profile，代理自动读取其中的 `mode` 和凭据。例如，下面两个命令分别使用 `AkProfile` 和 `oauth` 的配置：
 
 ```sh
 aliyun utils mcp-proxy --profile AkProfile
@@ -38,9 +38,9 @@ aliyun utils mcp-proxy --profile oauth
 
 profile 中的 `mode` 可以是 `AK`、`StsToken`、`RamRoleArn`、`EcsRamRole`、`RsaKeyPair`、`RamRoleArnWithRoleName`、`ChainableRamRoleArn`、`External`、`CredentialsURI`、`OIDC`、`CloudSSO` 或 CLI `OAuth`，暂不支持 `BearerToken` 和 `Anonymous`。这些是获取 AK/STS 的本地方式，不是 MCP 服务端的独立鉴权类型；取得的凭据仍须被令牌服务接受，并满足 MCP 的身份、权限及应用授权要求。CLI `OAuth` 会将已配置的 CLI 登录身份解析为 STS 凭据，与不传 `--profile` 时的 MCP OAuth 登录是两个独立流程。
 
-不显式指定 `--profile` 时保留原有 MCP OAuth 行为，单独传 `--mode` 或设置 profile 环境变量不会切换到凭据认证。指定 `--profile` 时不要再传 `--mode`；profile 不存在或模式不支持时会报错，不会回退到其他 profile。
+不显式指定 `--profile` 时保留原有 MCP OAuth 行为。指定的 profile 不存在或模式不支持时会报错，不会回退到其他 profile。
 
-凭据认证复用 CLI 的 profile、命令行参数和环境变量解析规则，通过 `GenerateAccessToken` 将 AK/STS 换成 MCP Access Token，以 Bearer 方式连接 MCP。代理缓存 MCP Token，在到期前重新获取；收到 HTTP 401 时重新获取并重试一次。
+代理从所选 profile 获取 AK/STS 凭据，通过 `GenerateAccessToken` 将其换成 MCP Access Token，以 Bearer 方式连接 MCP。代理缓存 MCP Token，在到期前重新获取；收到 HTTP 401 时重新获取并重试一次。
 
 底层凭据与 MCP Token 的生命周期分开管理：SDK 原生凭据 provider 会复用缓存，由 `GetCredential()` 按需刷新；CLI 当前只返回凭据快照的 External、CredentialsURI、CloudSSO、OAuth 和角色链，则在换取 MCP Token 时重新解析。每次兑换也会检查启动时选定的 profile，配置变化时重建 provider；切换默认 profile 不会改变运行中代理的身份。手动提供的 STS 到期后仍需替换；CloudSSO 登录过期后仍需重新登录。
 

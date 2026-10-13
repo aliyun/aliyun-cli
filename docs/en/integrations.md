@@ -12,7 +12,7 @@ Start it with the public command path:
 aliyun utils mcp-proxy --region-type CN --port 8088
 ```
 
-The defaults are:
+The MCP proxy supports the options listed in this section. Their defaults are:
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ After startup, the CLI prints the local MCP and SSE URLs for the discovered serv
 
 ### CLI credential authentication
 
-Select a configured CLI profile with `--profile`. The proxy reads its saved `mode` and credentials without a separate mode option. For example, these commands use the configurations named `AkProfile` and `oauth`:
+Use `--profile` to select a named profile from the default CLI configuration file, `~/.aliyun/config.json`. The proxy reads its saved `mode` and credentials. For example, these commands use the configurations named `AkProfile` and `oauth`:
 
 ```sh
 aliyun utils mcp-proxy --profile AkProfile
@@ -38,9 +38,9 @@ aliyun utils mcp-proxy --profile oauth
 
 The profile's `mode` can be `AK`, `StsToken`, `RamRoleArn`, `EcsRamRole`, `RsaKeyPair`, `RamRoleArnWithRoleName`, `ChainableRamRoleArn`, `External`, `CredentialsURI`, `OIDC`, `CloudSSO`, or CLI `OAuth`. `BearerToken` and `Anonymous` are not supported. These are local ways to obtain AK/STS credentials, not separate MCP server authentication types. The resulting credentials must still be accepted by the token service and meet MCP identity, permission, and application-authorization requirements. CLI `OAuth` resolves a configured CLI login to STS credentials; it is separate from the MCP OAuth flow used when `--profile` is omitted.
 
-Without an explicit `--profile`, the proxy retains its original MCP OAuth behavior. A standalone `--mode` or a profile environment variable does not select credential authentication. Do not combine `--profile` with `--mode`; a missing profile or an unsupported mode causes an error instead of falling back to another profile.
+Without an explicit `--profile`, the proxy retains its original MCP OAuth behavior. A missing selected profile or an unsupported mode causes an error instead of falling back to another profile.
 
-Credential authentication uses the same profile, flag, and environment-variable resolution as CLI credentials. It exchanges AK/STS credentials through `GenerateAccessToken` and connects to MCP with the resulting Bearer token. The proxy caches this MCP token in memory and reacquires it before expiry or once after an HTTP 401.
+The proxy obtains AK/STS credentials from the selected profile, exchanges them through `GenerateAccessToken`, and connects to MCP with the resulting Bearer token. The proxy caches this MCP token in memory and reacquires it before expiry or once after an HTTP 401.
 
 Cloud credentials and MCP tokens have separate lifecycles. Native SDK providers retain their caches and refresh credentials through `GetCredential()` as needed. External, CredentialsURI, CloudSSO, OAuth, and role-chain paths currently return credential snapshots in the CLI, so these sources are resolved again when acquiring an MCP token. Each exchange also checks the selected profile and rebuilds the provider if its configuration changes; changing the default profile does not change the running proxy's identity. A manually supplied STS token still needs to be replaced when it expires; an expired CloudSSO login still requires logging in again.
 
