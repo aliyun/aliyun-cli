@@ -95,56 +95,100 @@ func TestCLICredentialSourceUsesSelectedProfileMode(t *testing.T) {
 	require.Equal(t, "selected-token", tea.StringValue(model.SecurityToken))
 }
 
-func TestCLICredentialSourceIgnoresUnrelatedCLIConfiguration(t *testing.T) {
-	ctx := newMCPCredentialTestContext(t)
-	alternatePath := filepath.Join(t.TempDir(), "unrelated-config.json")
-	alternateConfig, err := json.Marshal(&config.Configuration{
-		CurrentProfile: "selected",
-		Profiles:       []config.Profile{mcpTestAKProfile("selected", "alternate-key")},
-	})
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(alternatePath, alternateConfig, 0600))
-	setMCPCommandTestFlag(ctx, "profile", "selected")
-	for name, value := range map[string]string{
-		"mode": "AK", "config-path": alternatePath,
-		"access-key-id": "flag-key", "access-key-secret": "flag-secret", "sts-token": "flag-token",
+func TestCLICredentialSourceUsesCLIProfileSelection(t *testing.T) {
+	for _, tc := range []struct {
+		name, environment, profile, selected string
+		customPath                           bool
+	}{
+		{name: "current", selected: "current"},
+		{name: "environment", environment: "ALIBABA_CLOUD_PROFILE", selected: "environment"},
+		{name: "environment alias", environment: "ALIBABACLOUD_PROFILE", selected: "environment"},
+		{name: "legacy environment alias", environment: "ALICLOUD_PROFILE", selected: "environment"},
+		{name: "custom current", customPath: true, selected: "current"},
+		{name: "custom environment", customPath: true, environment: "ALIBABA_CLOUD_PROFILE", selected: "environment"},
+		{name: "custom explicit profile", customPath: true, environment: "ALIBABA_CLOUD_PROFILE", profile: "selected", selected: "selected"},
 	} {
-		setMCPCommandTestFlag(ctx, name, value)
-	}
-	source := newCLICredentialSource(ctx)
-	for _, generation := range []string{"first", "rotated"} {
-		profile := mcpTestAKProfile("selected", generation+"-key")
-		profile.Mode = config.StsToken
-		profile.StsToken = generation + "-token"
-		writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("default", "default-key"), profile)
+		for _, mode := range []config.AuthenticateMode{config.AK, config.StsToken} {
+			t.Run(tc.name+"/"+string(mode), func(t *testing.T) {
+				ctx := newMCPCredentialTestContext(t)
+				if tc.environment != "" {
+					t.Setenv(tc.environment, "environment")
+				}
+				if tc.profile != "" {
+					setMCPCommandTestFlag(ctx, "profile", tc.profile)
+				}
+				prefix := "default-"
+				if tc.customPath {
+					setMCPCommandTestFlag(ctx, "config-path", filepath.Join(t.TempDir(), "config.json"))
+					writeMCPCredentialTestConfig(t, ctx,
+						mcpTestAKProfile("current", "default-current"),
+						mcpTestAKProfile("environment", "default-environment"),
+						mcpTestAKProfile("selected", "default-selected"))
+					prefix = "custom-"
+				}
+				source := newCLICredentialSource(ctx)
+				for _, generation := range []string{"first", "rotated"} {
+					profiles := make([]config.Profile, 0, 3)
+					for _, name := range []string{"current", "environment", "selected"} {
+						profile := mcpTestAKProfile(name, prefix+generation+"-"+name)
+						profile.Mode = mode
+						if mode == config.StsToken {
+							profile.StsToken = generation + "-token"
+						}
+						profiles = append(profiles, profile)
+					}
+					require.NoError(t, config.SaveConfigurationWithContext(ctx, &config.Configuration{
+						CurrentProfile: "current", Profiles: profiles,
+					}))
 
-		model, err := source()
+					model, err := source()
 
-		require.NoError(t, err)
-		require.Equal(t, "sts", tea.StringValue(model.Type))
-		require.Equal(t, generation+"-key", tea.StringValue(model.AccessKeyId))
-		require.Equal(t, "test-secret", tea.StringValue(model.AccessKeySecret))
-		require.Equal(t, generation+"-token", tea.StringValue(model.SecurityToken))
+					require.NoError(t, err)
+					require.Equal(t, prefix+generation+"-"+tc.selected, tea.StringValue(model.AccessKeyId))
+					require.Equal(t, "test-secret", tea.StringValue(model.AccessKeySecret))
+					if mode == config.StsToken {
+						require.Equal(t, "sts", tea.StringValue(model.Type))
+						require.Equal(t, generation+"-token", tea.StringValue(model.SecurityToken))
+					} else {
+						require.Equal(t, "access_key", tea.StringValue(model.Type))
+						require.Empty(t, tea.StringValue(model.SecurityToken))
+					}
+				}
+			})
+		}
 	}
-	unchanged, err := os.ReadFile(alternatePath)
-	require.NoError(t, err)
-	require.Equal(t, alternateConfig, unchanged)
 }
 
-func TestLoadCredentialProfileUsesStoredCurrentProfile(t *testing.T) {
-	ctx := newMCPCredentialTestContext(t)
-	writeMCPCredentialTestConfig(t, ctx,
-		mcpTestAKProfile("configured-current", "current-key"), mcpTestAKProfile("environment", "environment-key"))
-	t.Setenv("ALIBABA_CLOUD_PROFILE", "environment")
-	t.Setenv("ALIBABA_CLOUD_IGNORE_PROFILE", "TRUE")
-	t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "environment-override-key")
-
-	profile, err := loadCredentialProfile(ctx)
-
-	require.NoError(t, err)
-	require.Equal(t, "configured-current", profile.Name)
-	require.Equal(t, config.AK, profile.Mode)
-	require.Equal(t, "current-key", profile.AccessKeyId)
+func TestCLICredentialSourceUsesEnvironmentWhenIgnoringProfiles(t *testing.T) {
+	for _, environment := range []string{"ALIBABA_CLOUD_IGNORE_PROFILE", "ALIBABACLOUD_IGNORE_PROFILE"} {
+		for _, mode := range []config.AuthenticateMode{config.AK, config.StsToken} {
+			t.Run(environment+"/"+string(mode), func(t *testing.T) {
+				ctx := newMCPCredentialTestContext(t)
+				writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("selected", "stored-key"))
+				setMCPCommandTestFlag(ctx, "profile", "selected")
+				t.Setenv(environment, "TRUE")
+				source := newCLICredentialSource(ctx)
+				for _, generation := range []string{"first", "rotated"} {
+					t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", generation+"-key")
+					t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", generation+"-secret")
+					if mode == config.StsToken {
+						t.Setenv("ALIBABA_CLOUD_SECURITY_TOKEN", generation+"-token")
+					}
+					model, err := source()
+					require.NoError(t, err)
+					require.Equal(t, generation+"-key", tea.StringValue(model.AccessKeyId))
+					require.Equal(t, generation+"-secret", tea.StringValue(model.AccessKeySecret))
+					if mode == config.StsToken {
+						require.Equal(t, "sts", tea.StringValue(model.Type))
+						require.Equal(t, generation+"-token", tea.StringValue(model.SecurityToken))
+					} else {
+						require.Equal(t, "access_key", tea.StringValue(model.Type))
+						require.Empty(t, tea.StringValue(model.SecurityToken))
+					}
+				}
+			})
+		}
+	}
 }
 
 func TestCLICredentialSourceReloadsTemporaryProfiles(t *testing.T) {

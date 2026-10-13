@@ -4,7 +4,7 @@
 
 ## MCP proxy
 
-The MCP proxy exposes discovered Alibaba Cloud API MCP servers through one local endpoint. It uses MCP OAuth by default; use `--profile` to authenticate with a selected configuration instead.
+The MCP proxy exposes discovered Alibaba Cloud API MCP servers through one local endpoint. It uses MCP OAuth by default. Add `--skip-mcp-oauth` to authenticate with credentials from your CLI configuration.
 
 Start it with the public command path:
 
@@ -19,7 +19,9 @@ The MCP proxy supports the options listed in this section. Their defaults are:
 | `--host` | `127.0.0.1` | Local listen address |
 | `--port` | `8088` | Local listen port |
 | `--region-type` | `CN` | Endpoint family; use `CN` or `INTL` |
-| `--profile` | omitted | Select a configured profile by name; defaults to MCP OAuth when omitted |
+| `--skip-mcp-oauth` | `false` | Skip MCP OAuth and authenticate with CLI credentials; `true` when used without a value |
+| `--profile` | CLI selection rules | Select a configured profile by name |
+| `--config-path` | CLI default configuration file | Specify the CLI configuration file path |
 | `--scope` | `/acs/mcp-server` | OAuth scope |
 | `--no-browser` | off | When set, use manual authorization-code input instead of opening a browser |
 | `--oauth-app-name` | empty | Reuse an existing OAuth application by name |
@@ -27,25 +29,29 @@ The MCP proxy supports the options listed in this section. Their defaults are:
 
 After startup, the CLI prints the local MCP and SSE URLs for the discovered servers. Configure the MCP client with the printed URL rather than constructing a path from the server name.
 
-### Select a configuration with `--profile`
+### Use CLI credentials to skip MCP OAuth
 
-Configure a profile in the CLI, then pass its name with `--profile`. This command uses the profile named `my-profile` in `~/.aliyun/config.json`:
+Configure credentials in the CLI, then add `--skip-mcp-oauth`. Without an explicit profile, the CLI's current configuration selection rules apply:
 
 ```sh
-aliyun utils mcp-proxy --profile my-profile
+aliyun utils mcp-proxy --skip-mcp-oauth
 ```
 
-The saved `mode` in the selected profile determines the authentication method. `BearerToken` and `Anonymous` are not supported. A missing profile or an unsupported mode causes an error.
+You can also select a configuration with the CLI's `--profile` and `--config-path` options:
 
-Before first use, grant the profile's RAM identity `AliyunOpenAPIMCPServerStaticCredentialAccess` and the permissions needed by the requested APIs and MCP server discovery. Complete the one-time authorization pre-check:
+```sh
+aliyun utils mcp-proxy --skip-mcp-oauth --profile my-profile --config-path /path/to/config.json
+```
+
+`--skip-mcp-oauth` also accepts an explicit `true` or `false`. Omitting it or setting it to `false` uses MCP OAuth. Using `--profile` or `--config-path` alone does not skip MCP OAuth. `BearerToken` and `Anonymous` credentials are not supported when skipping MCP OAuth.
+
+Before first using CLI credentials, grant the corresponding RAM identity `AliyunOpenAPIMCPServerStaticCredentialAccess` and the permissions needed by the requested APIs and MCP server discovery. Complete the one-time authorization pre-check:
 
 ```sh
 uvx alibabacloud.mcp-proxy@latest --server-url '<MCP endpoint>' pre-check
 ```
 
 The pre-check may run on a different machine with a browser. See the [OpenAPI MCP Server guide](https://help.aliyun.com/zh/openapi/user-guide/openapi-mcp-server-guide) for the prerequisites and endpoint. Update manually configured STS credentials when they expire, and log in again if a CloudSSO login expires.
-
-Omitting `--profile` defaults to MCP OAuth; `--oauth-app-name`, `--scope`, and `--no-browser` only apply to this default flow.
 
 ### Access control
 

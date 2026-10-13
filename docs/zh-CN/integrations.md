@@ -4,7 +4,7 @@
 
 ## MCP 代理
 
-MCP 代理通过一个本地入口暴露已发现的阿里云 API MCP Server，默认使用 MCP OAuth，也可通过 `--profile` 指定配置进行认证。
+MCP 代理通过一个本地入口暴露已发现的阿里云 API MCP Server，默认使用 MCP OAuth。添加 `--skip-mcp-oauth` 可使用 CLI 配置中的凭据进行认证。
 
 使用公开命令路径启动：
 
@@ -19,7 +19,9 @@ MCP 代理支持本节列出的参数，默认值如下：
 | `--host` | `127.0.0.1` | 本地监听地址 |
 | `--port` | `8088` | 本地监听端口 |
 | `--region-type` | `CN` | Endpoint 类型，可选 `CN` 或 `INTL` |
-| `--profile` | 不指定 | 按名称使用已配置的 profile；省略时默认使用 MCP OAuth |
+| `--skip-mcp-oauth` | `false` | 跳过 MCP OAuth，使用 CLI 配置中的凭据认证；不带值时为 `true` |
+| `--profile` | 沿用 CLI 选择规则 | 按名称选择已配置的 profile |
+| `--config-path` | CLI 默认配置文件 | 指定 CLI 配置文件路径 |
 | `--scope` | `/acs/mcp-server` | OAuth scope |
 | `--no-browser` | 关闭 | 启用后不自动打开浏览器，改为手工输入授权码 |
 | `--oauth-app-name` | 空 | 按名称复用已有 OAuth 应用 |
@@ -27,25 +29,29 @@ MCP 代理支持本节列出的参数，默认值如下：
 
 启动后，CLI 会输出已发现 Server 对应的本地 MCP 和 SSE 地址。MCP 客户端应使用输出的地址，不要根据 Server 名称自行拼接路径。
 
-### 使用 `--profile` 指定配置
+### 使用 CLI 凭据跳过 MCP OAuth
 
-先在 CLI 中配置 profile，再通过 `--profile` 指定其名称。以下命令使用 `~/.aliyun/config.json` 中名为 `my-profile` 的配置：
+先在 CLI 中配置凭据，再添加 `--skip-mcp-oauth`。不指定 profile 时，沿用 CLI 当前配置的选择规则：
 
 ```sh
-aliyun utils mcp-proxy --profile my-profile
+aliyun utils mcp-proxy --skip-mcp-oauth
 ```
 
-鉴权方式由所选 profile 中保存的 `mode` 决定，暂不支持 `BearerToken` 和 `Anonymous`。指定的 profile 不存在或模式不支持时会报错。
+也可通过 CLI 的 `--profile` 和 `--config-path` 选择配置，例如：
 
-首次使用前，请为该 profile 对应的 RAM 身份授予 `AliyunOpenAPIMCPServerStaticCredentialAccess`，以及业务 API 和 MCP Server 发现所需权限，并完成一次预检查授权：
+```sh
+aliyun utils mcp-proxy --skip-mcp-oauth --profile my-profile --config-path /path/to/config.json
+```
+
+`--skip-mcp-oauth` 支持显式指定 `true` 或 `false`；省略该参数或设为 `false` 时使用 MCP OAuth。仅指定 `--profile` 或 `--config-path` 不会跳过 MCP OAuth。跳过 MCP OAuth 时，暂不支持 `BearerToken` 和 `Anonymous` 凭据。
+
+首次使用 CLI 凭据认证前，请为对应的 RAM 身份授予 `AliyunOpenAPIMCPServerStaticCredentialAccess`，以及业务 API 和 MCP Server 发现所需权限，并完成一次预检查授权：
 
 ```sh
 uvx alibabacloud.mcp-proxy@latest --server-url '<MCP 连接地址>' pre-check
 ```
 
 预检查可以在另一台有浏览器的机器完成。完整前提条件和连接地址获取方式见 [OpenAPI MCP Server 使用指南](https://help.aliyun.com/zh/openapi/user-guide/openapi-mcp-server-guide)。手动配置的 STS 过期后需更新配置；CloudSSO 登录过期后需重新登录。
-
-省略 `--profile` 时默认使用 MCP OAuth；`--oauth-app-name`、`--scope` 和 `--no-browser` 仅适用于默认的 MCP OAuth 流程。
 
 ### 访问控制
 

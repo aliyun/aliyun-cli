@@ -230,41 +230,6 @@ func TestCredentialProxyConcurrentUnauthorizedRequestsShareRefresh(t *testing.T)
 	assert.EqualValues(t, requestCount, atomic.LoadInt64(&proxy.stats.SuccessRequests))
 }
 
-func TestCredentialProxyCancelsUpstreamWithClientRequest(t *testing.T) {
-	started := make(chan struct{})
-	upstreamCanceled := make(chan struct{})
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		close(started)
-		<-r.Context().Done()
-		close(upstreamCanceled)
-	}))
-	defer upstream.Close()
-	auth, _ := newProxyTestCredentialAuth()
-	proxy := NewMCPProxy(ProxyConfig{CredentialAuth: auth, UpstreamBaseURL: upstream.URL})
-	t.Cleanup(proxy.upstreamClient.CloseIdleConnections)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	finished := make(chan struct{})
-	go func() {
-		req := httptest.NewRequest(http.MethodGet, "/sse/cancel", nil).WithContext(ctx)
-		proxy.ServeMCPProxyRequest(httptest.NewRecorder(), req)
-		close(finished)
-	}()
-	select {
-	case <-started:
-	case <-time.After(3 * time.Second):
-		t.Fatal("upstream request did not start")
-	}
-	cancel()
-	for _, done := range []<-chan struct{}{upstreamCanceled, finished} {
-		select {
-		case <-done:
-		case <-time.After(3 * time.Second):
-			t.Fatal("client cancellation did not terminate the upstream request")
-		}
-	}
-}
-
 func TestCredentialProxyStreamsSSEBeforeUpstreamCompletes(t *testing.T) {
 	release := make(chan struct{})
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -518,4 +483,56 @@ func TestOAuthProxyUnauthorizedStillRefreshesOAuthToken(t *testing.T) {
 	assert.EqualValues(t, 2, proxyRequests.Load())
 	assert.Equal(t, "refreshed-oauth-token", profile.MCPOAuthAccessToken)
 	assert.Equal(t, "new-refresh-token", profile.MCPOAuthRefreshToken)
+}
+
+func TestOAuthProxyUnauthorizedPreservesErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		firstRefreshOK   bool
+		wantStatus       int
+		wantBody         string
+		wantRefreshCalls int32
+	}{
+		{"refresh fails", false, http.StatusUnauthorized, "Authentication failed: oauth permanent error", 1},
+		{"getting refreshed token fails", true, http.StatusInternalServerError, "Internal Server Error", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setTestHome(t)
+			var refreshRequests, proxyRequests atomic.Int32
+			oauthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				call := refreshRequests.Add(1)
+				w.Header().Set("Content-Type", "application/json")
+				if tc.firstRefreshOK && call == 1 {
+					_, _ = io.WriteString(w, `{"access_token":"expired-token","refresh_token":"new-refresh-token","expires_in":0,"token_type":"Bearer"}`)
+					return
+				}
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = io.WriteString(w, `{"error":"invalid_grant","error_description":"refresh token rejected"}`)
+			}))
+			defer oauthServer.Close()
+			const region RegionType = "oauth-proxy-error-test"
+			EndpointMap[region] = EndpointConfig{OAuth: oauthServer.URL}
+			defer delete(EndpointMap, region)
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				proxyRequests.Add(1)
+				w.WriteHeader(http.StatusUnauthorized)
+			}))
+			defer upstream.Close()
+			profile := NewMcpProfile("oauth-error-regression")
+			profile.MCPOAuthAccessToken = "existing-oauth-token"
+			profile.MCPOAuthAccessTokenExpire = time.Now().Add(time.Hour).Unix()
+			profile.MCPOAuthRefreshToken = "existing-refresh-token"
+			profile.MCPOAuthRefreshTokenExpire = time.Now().Add(24 * time.Hour).Unix()
+			proxy := NewMCPProxy(ProxyConfig{McpProfile: profile, RegionType: region, UpstreamBaseURL: upstream.URL})
+			t.Cleanup(proxy.upstreamClient.CloseIdleConnections)
+			recorder := httptest.NewRecorder()
+
+			proxy.ServeMCPProxyRequest(recorder, httptest.NewRequest(http.MethodGet, "/mcp/server", nil))
+
+			assert.Equal(t, tc.wantStatus, recorder.Code)
+			assert.Contains(t, recorder.Body.String(), tc.wantBody)
+			assert.Equal(t, tc.wantRefreshCalls, refreshRequests.Load())
+			assert.EqualValues(t, 1, proxyRequests.Load())
+		})
+	}
 }

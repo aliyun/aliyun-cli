@@ -3,8 +3,6 @@ package mcpproxy
 import (
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -29,8 +27,7 @@ func TestOAuthProfileExchangesSTSCredentialsForMCPToken(t *testing.T) {
 			profile.OAuthAccessTokenExpire = time.Now().Add(time.Hour).Unix()
 			writeMCPCredentialTestConfig(t, ctx, profile)
 			setMCPCommandTestFlag(ctx, "profile", profile.Name)
-			unrelatedPath := filepath.Join(t.TempDir(), "unrelated-config.json")
-			setMCPCommandTestFlag(ctx, "config-path", unrelatedPath)
+			setMCPCommandTestFlag(ctx, "skip-mcp-oauth", "true")
 
 			oldTransport := http.DefaultTransport
 			t.Cleanup(func() { http.DefaultTransport = oldTransport })
@@ -68,13 +65,11 @@ func TestOAuthProfileExchangesSTSCredentialsForMCPToken(t *testing.T) {
 			require.Equal(t, "mcp-token-1", token)
 			require.Equal(t, []string{"exchange-sts", "generate-mcp-token"}, requests)
 
-			saved, err := loadCredentialProfile(ctx)
+			saved, err := config.LoadProfileWithContext(ctx)
 			require.NoError(t, err)
 			require.Equal(t, config.OAuth, saved.Mode)
 			require.Equal(t, "oauth-sts-key", saved.AccessKeyId)
 			require.Equal(t, "oauth-sts-token", saved.StsToken)
-			_, err = os.Stat(unrelatedPath)
-			require.True(t, os.IsNotExist(err))
 			token, err = proxyConfig.CredentialAuth.RefreshToken(token)
 			require.NoError(t, err)
 			require.Equal(t, "mcp-token-2", token)

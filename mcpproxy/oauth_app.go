@@ -828,9 +828,6 @@ type GetApplicationResponse struct {
 }
 
 func newOpenAPIClient(ctx *cli.Context, profile config.Profile, endpoint string) (*openapiClient.Client, error) {
-	if ctx != nil {
-		ctx = cli.NewCommandContext(ctx.Stdout(), ctx.Stderr())
-	}
 	credential, err := profile.GetCredential(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get credential: %w", err)

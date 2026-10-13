@@ -35,13 +35,13 @@ func NewMCPProxyCommand() *cli.Command {
 		Short: i18n.T("Start MCP server proxy", "启动 MCP 服务器代理"),
 		Long: i18n.T(
 			"Start a local proxy server for Aliyun API MCP Servers. "+
-				"The proxy handles OAuth authentication automatically. Use --profile to authenticate with the selected CLI profile's credential mode, "+
+				"The proxy handles OAuth authentication automatically. Use --skip-mcp-oauth to authenticate with CLI credentials, "+
 				"allowing MCP clients to connect without managing credentials.",
 			"启动阿里云 API MCP Server 的本地代理服务。"+
-				"代理默认自动处理 OAuth 认证，也可通过 --profile 按指定 CLI 配置中的模式认证，"+
+				"代理默认自动处理 OAuth 认证，也可通过 --skip-mcp-oauth 使用 CLI 凭据认证，"+
 				"允许 MCP 客户端无需管理凭证即可连接。",
 		),
-		Usage:  "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--profile NAME]",
+		Usage:  "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--skip-mcp-oauth]",
 		Sample: "aliyun utils mcp-proxy --region-type CN --port 8088",
 		Run: func(ctx *cli.Context, args []string) error {
 			return runMCPProxy(ctx)
@@ -72,6 +72,15 @@ func NewMCPProxyCommand() *cli.Command {
 		Short: i18n.T(
 			"Region type: CN or INTL",
 			"地域类型: CN 或 INTL",
+		),
+	})
+
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "skip-mcp-oauth",
+		DefaultValue: "false",
+		Short: i18n.T(
+			"Skip MCP OAuth and authenticate with CLI credentials (true or false; default: false)",
+			"跳过 MCP OAuth，使用 CLI 凭据认证（true 或 false，默认 false）",
 		),
 	})
 
@@ -203,17 +212,23 @@ func runMCPProxy(ctx *cli.Context) error {
 	return startMCPProxy(ctx, proxyConfig)
 }
 
-func usesCLICredentials(ctx *cli.Context) bool {
-	_, assigned := config.ProfileFlag(ctx.Flags()).GetValue()
-	return assigned
-}
-
 func configureMCPAuthentication(ctx *cli.Context, proxyConfig *ProxyConfig) error {
-	if usesCLICredentials(ctx) {
-		if ctx.Flags().Get("oauth-app-name").IsAssigned() || ctx.Flags().Get("scope").IsAssigned() {
-			return fmt.Errorf("--oauth-app-name and --scope apply to MCP OAuth; omit --profile to use that flow")
+	skipMCPOAuth := false
+	if value, assigned := ctx.Flags().Get("skip-mcp-oauth").GetValue(); assigned {
+		skipMCPOAuth = true
+		if value != "" {
+			var err error
+			skipMCPOAuth, err = strconv.ParseBool(value)
+			if err != nil {
+				return fmt.Errorf("--skip-mcp-oauth must be true or false")
+			}
 		}
-		profile, err := loadCredentialProfile(ctx)
+	}
+	if skipMCPOAuth {
+		if ctx.Flags().Get("oauth-app-name").IsAssigned() || ctx.Flags().Get("scope").IsAssigned() {
+			return fmt.Errorf("--oauth-app-name and --scope apply to MCP OAuth; omit --skip-mcp-oauth to use that flow")
+		}
+		profile, err := config.LoadProfileWithContext(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to load profile: %w", err)
 		}
@@ -251,7 +266,6 @@ func startMCPProxy(ctx *cli.Context, config ProxyConfig) error {
 	var fatalErrCh <-chan error
 	if proxy.TokenRefresher != nil {
 		go proxy.TokenRefresher.Start()
-		defer proxy.TokenRefresher.Stop()
 		fatalErrCh = proxy.TokenRefresher.fatalErrCh
 	}
 
@@ -260,7 +274,6 @@ func startMCPProxy(ctx *cli.Context, config ProxyConfig) error {
 	// 设置信号处理，捕获 Ctrl+C (SIGINT) 和 SIGTERM
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(sigChan)
 
 	// 在 goroutine 中启动服务器
 	serverErrChan := make(chan error, 1)
@@ -274,6 +287,9 @@ func startMCPProxy(ctx *cli.Context, config ProxyConfig) error {
 	select {
 	case sig := <-sigChan:
 		cli.Printf(ctx.Stdout(), "\nReceived signal: %v, shutting down gracefully...\n", sig)
+		if proxy.TokenRefresher != nil {
+			proxy.TokenRefresher.Stop()
+		}
 		if err := proxy.Stop(); err != nil {
 			// 如果是超时错误，记录日志但不返回错误，因为服务器已经关闭
 			cli.Printf(ctx.Stderr(), "Warning: %v\n", err)
@@ -285,6 +301,9 @@ func startMCPProxy(ctx *cli.Context, config ProxyConfig) error {
 	case fatalErr := <-fatalErrCh:
 		cli.Printf(ctx.Stderr(), "\nFatal error: %v\n", fatalErr)
 		cli.Printf(ctx.Stdout(), "Shutting down gracefully...\n")
+		if proxy.TokenRefresher != nil {
+			proxy.TokenRefresher.Stop()
+		}
 		if err := proxy.Stop(); err != nil {
 			cli.Printf(ctx.Stderr(), "Warning: %v\n", err)
 		}

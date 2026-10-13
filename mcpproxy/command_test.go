@@ -16,6 +16,7 @@ package mcpproxy
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,7 +35,7 @@ func TestNewMCPProxyCommand(t *testing.T) {
 	assert.Equal(t, "mcp-proxy", cmd.Name)
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotEmpty(t, cmd.Long)
-	assert.Equal(t, "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--profile NAME]", cmd.Usage)
+	assert.Equal(t, "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--skip-mcp-oauth]", cmd.Usage)
 	assert.Equal(t, "aliyun utils mcp-proxy --region-type CN --port 8088", cmd.Sample)
 	assert.NotNil(t, cmd.Run)
 
@@ -57,6 +58,7 @@ func TestNewMCPProxyCommand(t *testing.T) {
 	scopeFlag := flags.Get("scope")
 	assert.NotNil(t, scopeFlag)
 	assert.Equal(t, "/acs/mcp-server", scopeFlag.DefaultValue)
+	assert.Equal(t, "false", flags.Get("skip-mcp-oauth").DefaultValue)
 }
 
 func TestGetContentFromApiResponse(t *testing.T) {
@@ -273,40 +275,137 @@ func forbidMCPCommandTestNetwork(t *testing.T) {
 	})
 }
 
-func TestUsesCLICredentials(t *testing.T) {
+func TestConfigureMCPAuthenticationDefaultsToOAuth(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		flags      map[string]string
 		profileEnv string
-		ignoreEnv  string
-		want       bool
 	}{
-		{name: "unchanged default"},
-		{name: "explicit profile uses credentials", flags: map[string]string{"profile": "existing"}, want: true},
-		{name: "empty explicit profile requires validation", flags: map[string]string{"profile": ""}, want: true},
-		{name: "no browser preserves OAuth", flags: map[string]string{"no-browser": ""}},
-		{name: "environment profile preserves OAuth", profileEnv: "environment"},
-		{name: "ignored profile environment preserves OAuth", profileEnv: "environment", ignoreEnv: "ALIBABA_CLOUD_IGNORE_PROFILE"},
-		{name: "legacy ignored profile environment preserves OAuth", profileEnv: "environment", ignoreEnv: "ALIBABACLOUD_IGNORE_PROFILE"},
+		{name: "default"},
+		{name: "explicit profile", flags: map[string]string{"profile": "selected"}},
+		{name: "explicit false", flags: map[string]string{"skip-mcp-oauth": "false", "profile": "selected"}},
+		{name: "environment profile", profileEnv: "selected"},
+		{name: "no browser", flags: map[string]string{"no-browser": ""}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			ctx := newMCPCredentialTestContext(t)
+			writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("current", "current-key"), mcpTestAKProfile("selected", "selected-key"))
 			t.Setenv("ALIBABA_CLOUD_PROFILE", tc.profileEnv)
-			if tc.ignoreEnv != "" {
-				t.Setenv(tc.ignoreEnv, "TRUE")
-			}
-			ctx := cli.NewCommandContext(bytes.NewBuffer(nil), bytes.NewBuffer(nil))
 			for name, value := range tc.flags {
 				setMCPCommandTestFlag(ctx, name, value)
 			}
-			require.Equal(t, tc.want, usesCLICredentials(ctx))
+			forbidMCPCommandTestNetwork(t)
+			originalEndpoint := EndpointMap[RegionCN]
+			t.Cleanup(func() { EndpointMap[RegionCN] = originalEndpoint })
+			endpoint := originalEndpoint
+			// Stop OAuth application lookup locally before the SDK can send a request.
+			endpoint.IMS = "invalid endpoint"
+			EndpointMap[RegionCN] = endpoint
+			proxyConfig := ProxyConfig{RegionType: RegionCN, OAuthAppName: "missing-test-app"}
+			err := configureMCPAuthentication(ctx, &proxyConfig)
+			require.ErrorContains(t, err, "failed to find OAuth application 'missing-test-app'")
+			require.Nil(t, proxyConfig.CredentialAuth)
+		})
+	}
+}
+
+func TestConfigureMCPAuthenticationRejectsInvalidSkipValue(t *testing.T) {
+	ctx := newMCPCredentialTestContext(t)
+	forbidMCPCommandTestNetwork(t)
+	setMCPCommandTestFlag(ctx, "skip-mcp-oauth", "invalid")
+	err := configureMCPAuthentication(ctx, &ProxyConfig{RegionType: RegionCN})
+	require.ErrorContains(t, err, "--skip-mcp-oauth must be true or false")
+}
+
+func TestMCPProxyParsesInheritedConfigurationAndSkipFlag(t *testing.T) {
+	cli.DisableExitCode()
+	t.Cleanup(cli.EnableExitCode)
+	for _, tc := range []struct {
+		name, profileEnv, wantKey, skipValue string
+		args                                 []string
+		skipAssigned, duplicate              bool
+	}{
+		{name: "current", args: []string{"utils", "mcp-proxy"}, wantKey: "current-key"},
+		{name: "root profile", args: []string{"--profile", "selected", "utils", "mcp-proxy"}, wantKey: "selected-key"},
+		{name: "child profile", args: []string{"utils", "mcp-proxy", "--profile", "selected"}, wantKey: "selected-key"},
+		{name: "environment profile", profileEnv: "selected", args: []string{"utils", "mcp-proxy"}, wantKey: "selected-key"},
+		{name: "explicit profile overrides environment", profileEnv: "current", args: []string{"utils", "mcp-proxy", "--profile", "selected"}, wantKey: "selected-key"},
+		{name: "root config path and profile", args: []string{"--config-path", "CUSTOM", "--profile", "selected", "utils", "mcp-proxy"}, wantKey: "custom-selected-key"},
+		{name: "child config path current", args: []string{"utils", "mcp-proxy", "--config-path", "CUSTOM"}, wantKey: "custom-current-key"},
+		{name: "root config path child profile bare skip", args: []string{"--config-path", "CUSTOM", "utils", "mcp-proxy", "--profile", "selected", "--skip-mcp-oauth"}, wantKey: "custom-selected-key", skipAssigned: true},
+		{name: "skip true", args: []string{"utils", "mcp-proxy", "--skip-mcp-oauth", "true"}, wantKey: "current-key", skipAssigned: true, skipValue: "true"},
+		{name: "skip equals true", args: []string{"utils", "mcp-proxy", "--skip-mcp-oauth=true"}, wantKey: "current-key", skipAssigned: true, skipValue: "true"},
+		{name: "skip false", args: []string{"utils", "mcp-proxy", "--skip-mcp-oauth", "false"}, wantKey: "current-key", skipAssigned: true, skipValue: "false"},
+		{name: "skip equals false", args: []string{"utils", "mcp-proxy", "--skip-mcp-oauth=false"}, wantKey: "current-key", skipAssigned: true, skipValue: "false"},
+		{name: "existing duplicate profile error", args: []string{"--profile", "selected", "utils", "mcp-proxy", "--profile", "current"}, duplicate: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixtureCtx := newMCPCredentialTestContext(t)
+			writeMCPCredentialTestConfig(t, fixtureCtx, mcpTestAKProfile("current", "current-key"), mcpTestAKProfile("selected", "selected-key"))
+			t.Setenv("ALIBABA_CLOUD_PROFILE", tc.profileEnv)
+			customPath := filepath.Join(t.TempDir(), "config.json")
+			customConfig, err := json.Marshal(&config.Configuration{
+				CurrentProfile: "current",
+				Profiles:       []config.Profile{mcpTestAKProfile("current", "custom-current-key"), mcpTestAKProfile("selected", "custom-selected-key")},
+			})
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(customPath, customConfig, 0600))
+			args := append([]string(nil), tc.args...)
+			for i := range args {
+				if args[i] == "CUSTOM" {
+					args[i] = customPath
+				}
+			}
+			root := &cli.Command{Name: "aliyun"}
+			config.AddFlags(root.Flags())
+			utils := &cli.Command{Name: "utils"}
+			command := NewMCPProxyCommand()
+			called := false
+			command.Run = func(ctx *cli.Context, args []string) error {
+				called = true
+				require.Empty(t, args)
+				profile, err := config.LoadProfileWithContext(ctx)
+				require.NoError(t, err)
+				require.Equal(t, tc.wantKey, profile.AccessKeyId)
+				value, assigned := ctx.Flags().Get("skip-mcp-oauth").GetValue()
+				require.Equal(t, tc.skipAssigned, assigned)
+				require.Equal(t, tc.skipValue, value)
+				return nil
+			}
+			utils.AddSubCommand(command)
+			root.AddSubCommand(utils)
+			stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+			ctx := cli.NewCommandContext(stdout, stderr)
+			ctx.EnterCommand(root)
+			ctx.SetInConfigureMode(true)
+
+			root.Execute(ctx, args)
+
+			if tc.duplicate {
+				require.False(t, called)
+				require.Contains(t, stderr.String(), "--profile duplicated")
+			} else {
+				require.True(t, called, "%s", stderr.String())
+				require.Empty(t, stderr.String())
+			}
 		})
 	}
 }
 
 func TestConfigureMCPCredentialAuthentication(t *testing.T) {
-	for _, mode := range []config.AuthenticateMode{config.AK, config.StsToken, config.OAuth} {
-		t.Run(string(mode), func(t *testing.T) {
+	for _, tc := range []struct {
+		mode config.AuthenticateMode
+		skip string
+	}{
+		{config.AK, ""},
+		{config.AK, "true"},
+		{config.StsToken, "true"},
+		{config.OAuth, "true"},
+	} {
+		t.Run(string(tc.mode)+"/"+tc.skip, func(t *testing.T) {
+			mode := tc.mode
 			ctx := newMCPCredentialTestContext(t)
+			setMCPCommandTestFlag(ctx, "skip-mcp-oauth", tc.skip)
 			ctx.SetInConfigureMode(false)
 			profile := mcpTestAKProfile("selected", "selected-key")
 			profile.Mode = mode
@@ -356,11 +455,12 @@ func TestConfigureMCPAuthenticationRejectsUnsupportedOptions(t *testing.T) {
 		{name: "BearerToken", mode: config.BearerToken, message: "not supported"},
 		{name: "Anonymous", mode: config.Anonymous, message: "not supported"},
 		{name: "unknown", mode: "unknown", message: "invalid mode"},
-		{name: "OAuth app name", mode: config.AK, option: "oauth-app-name", message: "omit --profile"},
-		{name: "OAuth scope", mode: config.AK, option: "scope", message: "omit --profile"},
+		{name: "OAuth app name", mode: config.AK, option: "oauth-app-name", message: "omit --skip-mcp-oauth"},
+		{name: "OAuth scope", mode: config.AK, option: "scope", message: "omit --skip-mcp-oauth"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := newMCPCredentialTestContext(t)
+			setMCPCommandTestFlag(ctx, "skip-mcp-oauth", "true")
 			forbidMCPCommandTestNetwork(t)
 			profile := mcpTestAKProfile("selected", "key")
 			profile.Mode = tc.mode
@@ -377,9 +477,10 @@ func TestConfigureMCPAuthenticationRejectsUnsupportedOptions(t *testing.T) {
 }
 
 func TestConfigureMCPAuthenticationRejectsInvalidProfileWithoutFallback(t *testing.T) {
-	for _, profileName := range []string{"", " \t ", "missing"} {
+	for _, profileName := range []string{" \t ", "missing"} {
 		t.Run(profileName, func(t *testing.T) {
 			ctx := newMCPCredentialTestContext(t)
+			setMCPCommandTestFlag(ctx, "skip-mcp-oauth", "true")
 			forbidMCPCommandTestNetwork(t)
 			writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("default", "default-key"),
 				mcpTestAKProfile("environment", "environment-key"))
@@ -389,21 +490,18 @@ func TestConfigureMCPAuthenticationRejectsInvalidProfileWithoutFallback(t *testi
 
 			err := configureMCPAuthentication(ctx, &proxyConfig)
 
-			if profileName == "missing" {
-				require.ErrorContains(t, err, "unknown profile missing")
-			} else {
-				require.ErrorContains(t, err, "--profile requires a non-empty profile name")
-			}
+			require.ErrorContains(t, err, "unknown profile")
 			require.Nil(t, proxyConfig.CredentialAuth)
 			require.Nil(t, proxyConfig.McpProfile)
 		})
 	}
 }
 
-func TestConfigureMCPAuthenticationIgnoresCredentialEnvironment(t *testing.T) {
+func TestConfigureMCPAuthenticationUsesCredentialEnvironment(t *testing.T) {
 	for _, variable := range []string{"ALIBABA_CLOUD_IGNORE_PROFILE", "ALIBABACLOUD_IGNORE_PROFILE"} {
 		t.Run(variable, func(t *testing.T) {
 			ctx := newMCPCredentialTestContext(t)
+			setMCPCommandTestFlag(ctx, "skip-mcp-oauth", "true")
 			writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("default", "default-key"),
 				mcpTestAKProfile("environment", "environment-profile-key"), mcpTestAKProfile("selected", "selected-key"))
 			setMCPCommandTestFlag(ctx, "profile", "selected")
@@ -417,7 +515,7 @@ func TestConfigureMCPAuthenticationIgnoresCredentialEnvironment(t *testing.T) {
 			http.DefaultTransport = credentialRoundTripper(func(req *http.Request) (*http.Response, error) {
 				calls++
 				require.Equal(t, "GenerateAccessToken", req.URL.Query().Get("Action"))
-				require.Equal(t, "selected-key", req.URL.Query().Get("AccessKeyId"))
+				require.Equal(t, "environment-key", req.URL.Query().Get("AccessKeyId"))
 				return credentialResponse(200, `{"Data":{"AccessToken":"mcp-test-token","ExpiresIn":3600}}`), nil
 			})
 			proxyConfig := ProxyConfig{RegionType: RegionCN}
@@ -434,6 +532,7 @@ func TestConfigureMCPAuthenticationIgnoresCredentialEnvironment(t *testing.T) {
 
 func TestConfigureMCPAuthenticationDistinguishesProfilesWithSameMode(t *testing.T) {
 	ctx := newMCPCredentialTestContext(t)
+	setMCPCommandTestFlag(ctx, "skip-mcp-oauth", "true")
 	writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("first", "first-key"), mcpTestAKProfile("second", "second-key"))
 	t.Setenv("ALIBABA_CLOUD_PROFILE", "first")
 	oldTransport := http.DefaultTransport
@@ -452,6 +551,7 @@ func TestConfigureMCPAuthenticationDistinguishesProfilesWithSameMode(t *testing.
 
 func TestMCPCredentialAuthenticationPinsSelectedProfile(t *testing.T) {
 	ctx := newMCPCredentialTestContext(t)
+	setMCPCommandTestFlag(ctx, "skip-mcp-oauth", "true")
 	first := mcpTestAKProfile("first", "first-key")
 	second := mcpTestAKProfile("second", "second-key")
 	writeMCPCredentialTestConfig(t, ctx, first, second)

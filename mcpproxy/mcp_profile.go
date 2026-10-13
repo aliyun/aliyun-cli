@@ -20,7 +20,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
@@ -42,18 +41,6 @@ type McpProfile struct {
 
 func getMCPConfigPath() string {
 	return filepath.Join(config.GetConfigPath(), ".mcpproxy_config")
-}
-
-func loadCredentialProfile(ctx *cli.Context) (config.Profile, error) {
-	name, assigned := config.ProfileFlag(ctx.Flags()).GetValue()
-	if assigned && strings.TrimSpace(name) == "" {
-		return config.Profile{}, fmt.Errorf("--profile requires a non-empty profile name")
-	}
-	profile, err := config.LoadProfile(filepath.Join(config.GetConfigPath(), "config.json"), name)
-	if err != nil {
-		return config.Profile{}, err
-	}
-	return profile, profile.Validate()
 }
 
 func NewMcpProfile(name string) *McpProfile {
@@ -170,7 +157,7 @@ func loadExistingMCPProfile(ctx *cli.Context, profile config.Profile, opts Proxy
 }
 
 func getOrCreateMCPProfile(ctx *cli.Context, opts ProxyConfig) (*McpProfile, error) {
-	profile, err := loadCredentialProfile(ctx)
+	profile, err := config.LoadProfileWithContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load profile: %w", err)
 	}

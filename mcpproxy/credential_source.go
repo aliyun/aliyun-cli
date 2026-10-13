@@ -19,7 +19,7 @@ func newCLICredentialSource(ctx *cli.Context) mcpCredentialSource {
 		if ctx == nil {
 			return nil, fmt.Errorf("CLI context is required for MCP credential authentication")
 		}
-		profile, err := loadCredentialProfile(ctx)
+		profile, err := config.LoadProfileWithContext(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load MCP credential profile: %w", err)
 		}
@@ -68,9 +68,6 @@ func resolveMCPProfileCredential(ctx *cli.Context, profile config.Profile) (cred
 	}
 	if err := profile.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid MCP credential profile: %w", err)
-	}
-	if ctx != nil {
-		ctx = cli.NewCommandContext(ctx.Stdout(), ctx.Stderr())
 	}
 	credential, err := profile.GetCredential(ctx, nil)
 	if err != nil {
