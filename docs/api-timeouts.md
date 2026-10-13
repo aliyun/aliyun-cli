@@ -15,4 +15,6 @@ For example, ECS CreateInstance with backend `80000` keeps the legacy SDK table'
 
 The legacy SDK lookup is currently supplied by the pinned `pl0301/alibaba-cloud-sdk-go` fork commit `c91cb18aa1a17ab58d0833ef585eda899a76da26`, based on SDK v1.63.107. The change only exports the existing table lookup. Once upstream publishes that accessor, replace the fork dependency with the corresponding official SDK version.
 
+The metadata submodule temporarily uses `pl0301/aliyun-openapi-meta` so a fresh checkout can fetch the regenerated metadata commit on this feature branch. After that commit is available upstream, restore the official metadata repository URL.
+
 Compiled Go plugins receive the raw budget through generated `http.WithBackendTimeoutMS(...)` options and the updated `aliyun-cli-runtime`. Product plugins must be rebuilt and republished to use the new defaults. Existing environment variables continue to transport user configuration; API defaults are embedded in plugin source.
