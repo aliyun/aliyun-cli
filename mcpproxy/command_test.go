@@ -400,23 +400,34 @@ func TestConfigureMCPAuthenticationRejectsInvalidProfileWithoutFallback(t *testi
 	}
 }
 
-func TestConfigureMCPAuthenticationRejectsIgnoringExplicitProfile(t *testing.T) {
+func TestConfigureMCPAuthenticationIgnoresCredentialEnvironment(t *testing.T) {
 	for _, variable := range []string{"ALIBABA_CLOUD_IGNORE_PROFILE", "ALIBABACLOUD_IGNORE_PROFILE"} {
 		t.Run(variable, func(t *testing.T) {
 			ctx := newMCPCredentialTestContext(t)
-			forbidMCPCommandTestNetwork(t)
-			writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("selected", "selected-key"))
+			writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("default", "default-key"),
+				mcpTestAKProfile("environment", "environment-profile-key"), mcpTestAKProfile("selected", "selected-key"))
 			setMCPCommandTestFlag(ctx, "profile", "selected")
 			t.Setenv(variable, "TRUE")
+			t.Setenv("ALIBABA_CLOUD_PROFILE", "environment")
 			t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "environment-key")
 			t.Setenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "environment-secret")
+			previousTransport := http.DefaultTransport
+			t.Cleanup(func() { http.DefaultTransport = previousTransport })
+			calls := 0
+			http.DefaultTransport = credentialRoundTripper(func(req *http.Request) (*http.Response, error) {
+				calls++
+				require.Equal(t, "GenerateAccessToken", req.URL.Query().Get("Action"))
+				require.Equal(t, "selected-key", req.URL.Query().Get("AccessKeyId"))
+				return credentialResponse(200, `{"Data":{"AccessToken":"mcp-test-token","ExpiresIn":3600}}`), nil
+			})
 			proxyConfig := ProxyConfig{RegionType: RegionCN}
 
 			err := configureMCPAuthentication(ctx, &proxyConfig)
 
-			require.ErrorContains(t, err, "--profile cannot be used")
-			require.Nil(t, proxyConfig.CredentialAuth, "ignoring an explicit profile must not authenticate an environment identity")
+			require.NoError(t, err)
+			require.NotNil(t, proxyConfig.CredentialAuth)
 			require.Nil(t, proxyConfig.McpProfile)
+			require.Equal(t, 1, calls)
 		})
 	}
 }

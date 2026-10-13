@@ -27,7 +27,6 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
-	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
 func NewMCPProxyCommand() *cli.Command {
@@ -211,16 +210,10 @@ func usesCLICredentials(ctx *cli.Context) bool {
 
 func configureMCPAuthentication(ctx *cli.Context, proxyConfig *ProxyConfig) error {
 	if usesCLICredentials(ctx) {
-		if name, _ := config.ProfileFlag(ctx.Flags()).GetValue(); strings.TrimSpace(name) == "" {
-			return fmt.Errorf("--profile requires a non-empty profile name")
-		}
-		if util.GetFromEnv("ALIBABA_CLOUD_IGNORE_PROFILE", "ALIBABACLOUD_IGNORE_PROFILE") == "TRUE" {
-			return fmt.Errorf("--profile cannot be used when ALIBABA_CLOUD_IGNORE_PROFILE or ALIBABACLOUD_IGNORE_PROFILE is TRUE")
-		}
 		if ctx.Flags().Get("oauth-app-name").IsAssigned() || ctx.Flags().Get("scope").IsAssigned() {
 			return fmt.Errorf("--oauth-app-name and --scope apply to MCP OAuth; omit --profile to use that flow")
 		}
-		profile, err := config.LoadProfileWithContext(ctx)
+		profile, err := loadCredentialProfile(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to load profile: %w", err)
 		}

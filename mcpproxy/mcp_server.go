@@ -24,7 +24,6 @@ import (
 	"github.com/alibabacloud-go/tea/tea"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
-	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/util"
 )
 
@@ -46,7 +45,7 @@ type ListMCPServersResponse struct {
 }
 
 func ListMCPServers(ctx *cli.Context, regionType RegionType) ([]MCPServerInfo, error) {
-	profile, err := config.LoadProfileWithContext(ctx)
+	profile, err := loadCredentialProfile(ctx)
 	if err != nil {
 		return nil, err
 	}
