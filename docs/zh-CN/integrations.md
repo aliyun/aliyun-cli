@@ -4,7 +4,7 @@
 
 ## MCP 代理
 
-MCP 代理通过一个本地入口暴露已发现的阿里云 API MCP Server，默认使用 MCP OAuth，也支持通过 CLI 凭据认证。
+MCP 代理通过一个本地入口暴露已发现的阿里云 API MCP Server，默认使用 MCP OAuth，也可通过 `--profile` 指定配置进行认证。
 
 使用公开命令路径启动：
 
@@ -19,7 +19,7 @@ MCP 代理支持本节列出的参数，默认值如下：
 | `--host` | `127.0.0.1` | 本地监听地址 |
 | `--port` | `8088` | 本地监听端口 |
 | `--region-type` | `CN` | Endpoint 类型，可选 `CN` 或 `INTL` |
-| `--profile` | 不指定 | 使用指定 CLI profile 中保存的凭据模式；省略时保留 MCP OAuth |
+| `--profile` | 不指定 | 按名称使用已配置的 profile；省略时默认使用 MCP OAuth |
 | `--scope` | `/acs/mcp-server` | OAuth scope |
 | `--no-browser` | 关闭 | 启用后不自动打开浏览器，改为手工输入授权码 |
 | `--oauth-app-name` | 空 | 按名称复用已有 OAuth 应用 |
@@ -27,31 +27,25 @@ MCP 代理支持本节列出的参数，默认值如下：
 
 启动后，CLI 会输出已发现 Server 对应的本地 MCP 和 SSE 地址。MCP 客户端应使用输出的地址，不要根据 Server 名称自行拼接路径。
 
-### CLI 凭据认证
+### 使用 `--profile` 指定配置
 
-通过 `--profile` 从 `~/.aliyun/config.json` 中按名称选择 profile，代理使用该配置中保存的 `mode` 和凭据。以下命令选择名为 `my-profile` 的配置：
+先在 CLI 中配置 profile，再通过 `--profile` 指定其名称。以下命令使用 `~/.aliyun/config.json` 中名为 `my-profile` 的配置：
 
 ```sh
 aliyun utils mcp-proxy --profile my-profile
 ```
 
-profile 中的 `mode` 可以是 `AK`、`StsToken`、`RamRoleArn`、`EcsRamRole`、`RsaKeyPair`、`RamRoleArnWithRoleName`、`ChainableRamRoleArn`、`External`、`CredentialsURI`、`OIDC`、`CloudSSO` 或 CLI `OAuth`，暂不支持 `BearerToken` 和 `Anonymous`。这些是获取 AK/STS 的本地方式，不是 MCP 服务端的独立鉴权类型；取得的凭据仍须被令牌服务接受，并满足 MCP 的身份、权限及应用授权要求。选中的 profile 为 `OAuth` 模式时，先复用尚未过期的 STS；需要更新时，通过 CLI OAuth Access Token 调用 `/v1/exchange` 获取 STS，再参与下面的 MCP Token 兑换。
+鉴权方式由所选 profile 中保存的 `mode` 决定，暂不支持 `BearerToken` 和 `Anonymous`。指定的 profile 不存在或模式不支持时会报错。
 
-不显式指定 `--profile` 时保留原有 MCP OAuth 行为，通过授权码获取 Access Token，并使用 refresh token 续期，不经过 AK/STS 兑换流程。指定的 profile 不存在或模式不支持时会报错，不会回退到其他 profile。
-
-代理从所选 profile 获取 AK/STS 凭据，通过 `GenerateAccessToken` 将其换成 MCP Access Token，以 Bearer 方式连接 MCP。代理缓存 MCP Token，每次请求前检查，剩余有效期不超过 60 秒时重新获取；收到 HTTP 401 时重新获取并重试一次。
-
-底层凭据与 MCP Token 的生命周期分开管理：SDK 原生凭据 provider 会复用缓存，由 `GetCredential()` 按需刷新；CLI 当前只返回凭据快照的 External、CredentialsURI、CloudSSO、OAuth 和角色链，则在换取 MCP Token 时重新解析。每次兑换也会检查启动时选定的 profile，配置变化时重建 provider；切换默认 profile 不会改变运行中代理的身份。手动提供的 STS 到期后仍需替换；CloudSSO 登录过期后仍需重新登录。
-
-首次使用前，应为凭据对应的 RAM 身份授予 `AliyunOpenAPIMCPServerStaticCredentialAccess`，以及业务 API 和 MCP Server 发现所需权限，并通过官方代理的预检查完成账号级应用授权：
+首次使用前，请为该 profile 对应的 RAM 身份授予 `AliyunOpenAPIMCPServerStaticCredentialAccess`，以及业务 API 和 MCP Server 发现所需权限，并完成一次预检查授权：
 
 ```sh
 uvx alibabacloud.mcp-proxy@latest --server-url '<MCP 连接地址>' pre-check
 ```
 
-此预检查可以在另一台有浏览器的机器完成。完成后，凭据认证不会创建 CLI 代理专用 OAuth 应用，也无需额外进行 MCP OAuth 登录。完整前提条件和连接地址获取方式见 [OpenAPI MCP Server 使用指南](https://help.aliyun.com/zh/openapi/user-guide/openapi-mcp-server-guide)。
+预检查可以在另一台有浏览器的机器完成。完整前提条件和连接地址获取方式见 [OpenAPI MCP Server 使用指南](https://help.aliyun.com/zh/openapi/user-guide/openapi-mcp-server-guide)。手动配置的 STS 过期后需更新配置；CloudSSO 登录过期后需重新登录。
 
-国际站使用 `--region-type INTL`。使用原有 MCP OAuth 流程时省略 `--profile`；`--oauth-app-name` 和 `--scope` 仅适用于该流程，`--no-browser` 仅控制该流程的浏览器交互。
+国际站添加 `--region-type INTL`。省略 `--profile` 时默认使用 MCP OAuth；`--oauth-app-name`、`--scope` 和 `--no-browser` 仅适用于默认的 MCP OAuth 流程。
 
 ### 访问控制
 
