@@ -19,8 +19,10 @@ func TestLegacyBackendTimeoutPrecedence(t *testing.T) {
 	}{
 		{"rds", "CreateDBInstance", 55000, 0, false, 65 * time.Second},
 		{"rds", "CreateDBInstance", 55000, 2, false, 0},
-		{"ecs", "CreateInstance", 80000, 0, false, 0},
-		{"ecs", "DescribeInstances", 80000, 0, false, 0},
+		{"ecs", "CreateInstance", 80000, 0, false, 90 * time.Second},
+		{"ecs", "DescribeInstances", 6000, 0, false, 16 * time.Second},
+		{"ecs", "CreateInstance", 80000, 2, false, 0},
+		{"ecs", "CreateInstance", 0, 0, false, 0},
 		{"rds", "CreateDBInstance", 0, 0, false, 0},
 		{"rds", "CreateDBInstance", -1, 0, false, 0},
 		{"rds", "CreateDBInstance", 55000, 0, true, 0},
@@ -33,6 +35,16 @@ func TestLegacyBackendTimeoutPrecedence(t *testing.T) {
 		if got := request.GetReadTimeout(); got != tc.want {
 			t.Errorf("%s/%s backend=%d user=%d sse=%v: got %v, want %v", tc.product, tc.action, tc.backend, tc.user, tc.sse, got, tc.want)
 		}
+	}
+}
+
+func TestBackendTimeoutPreservesRequestTimeout(t *testing.T) {
+	request := requests.NewCommonRequest()
+	request.SetReadTimeout(3 * time.Second)
+	invoker := &BasicInvoker{request: request}
+	invoker.applyBackendTimeout(&canonicalmeta.API{BackendTimeoutMS: 55000})
+	if got := request.GetReadTimeout(); got != 3*time.Second {
+		t.Fatalf("request timeout = %v, want 3s", got)
 	}
 }
 

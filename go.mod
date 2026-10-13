@@ -63,5 +63,3 @@ require (
 replace github.com/jmespath/go-jmespath => github.com/alibabacloud-go/go-jmespath v0.4.0-aliyun.3
 
 replace github.com/aliyun/aliyun-openapi-runtime => ./aliyun-openapi-runtime
-
-replace github.com/aliyun/alibaba-cloud-sdk-go => github.com/pl0301/alibaba-cloud-sdk-go v1.63.108-0.20261013022424-c91cb18aa1a1
