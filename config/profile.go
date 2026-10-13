@@ -721,7 +721,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			// update expiration
 			cp.StsExpiration = token.ExpirationInt64 - 5
 			// flush back
-			conf, err := hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(getConfigurePath(ctx))
+			conf, err := loadOrCreateConfiguration()
 			if err != nil {
 				return nil, err
 			}
@@ -731,7 +731,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 					break
 				}
 			}
-			err = saveConfigurationFunc(ctx, conf)
+			err = saveConfigurationFunc(conf)
 			if err != nil {
 				return nil, err
 			}
@@ -765,7 +765,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 			if err != nil {
 				return nil, err
 			}
-			conf, err := hookLoadOrCreateConfiguration(LoadOrCreateConfiguration)(getConfigurePath(ctx))
+			conf, err := loadOrCreateConfiguration()
 			if err != nil {
 				return nil, err
 			}
@@ -775,7 +775,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 					break
 				}
 			}
-			err = saveConfigurationFunc(ctx, conf)
+			err = saveConfigurationFunc(conf)
 			if err != nil {
 				return nil, err
 			}
@@ -801,7 +801,7 @@ func (cp *Profile) GetCredential(ctx *cli.Context, proxyHost *string) (cred cred
 	return credentialsv2.NewCredential(config)
 }
 
-var saveConfigurationFunc = SaveConfigurationWithContext
+var saveConfigurationFunc = SaveConfiguration
 
 func (cp *Profile) GetRuntimeEnv(ctx *cli.Context) (map[string]string, error) {
 	envs := map[string]string{
