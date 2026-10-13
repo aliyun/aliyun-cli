@@ -317,6 +317,31 @@ func TestConfigureMCPAuthenticationRejectsInvalidSkipValue(t *testing.T) {
 	require.ErrorContains(t, err, "--skip-mcp-oauth must be true or false")
 }
 
+func TestConfigureMCPAuthenticationReturnsTokenExchangeFailure(t *testing.T) {
+	ctx := newMCPCredentialTestContext(t)
+	writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("default", "test-key"))
+	setMCPCommandTestFlag(ctx, "skip-mcp-oauth", "true")
+	previousTransport := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = previousTransport })
+	calls := 0
+	http.DefaultTransport = credentialRoundTripper(func(req *http.Request) (*http.Response, error) {
+		calls++
+		require.Equal(t, "GenerateAccessToken", req.URL.Query().Get("Action"))
+		return credentialResponse(http.StatusForbidden, `{"Code":"Forbidden","Message":"sensitive-response"}`), nil
+	})
+	proxyConfig := ProxyConfig{RegionType: RegionCN}
+
+	err := configureMCPAuthentication(ctx, &proxyConfig)
+
+	require.ErrorContains(t, err, "failed to authenticate MCP with CLI credentials: GenerateAccessToken failed")
+	require.NotContains(t, err.Error(), "sensitive-response")
+	require.Equal(t, 1, calls)
+	require.Nil(t, proxyConfig.McpProfile)
+	expiresAt, failed := proxyConfig.CredentialAuth.Snapshot()
+	require.True(t, expiresAt.IsZero())
+	require.True(t, failed)
+}
+
 func TestMCPProxyParsesInheritedConfigurationAndSkipFlag(t *testing.T) {
 	cli.DisableExitCode()
 	t.Cleanup(cli.EnableExitCode)

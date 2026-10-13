@@ -16,6 +16,7 @@ package mcpproxy
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -95,6 +96,7 @@ func (a *credentialAuth) refreshLocked() (string, error) {
 		return "", a.lastErr
 	}
 	a.token, a.expiresAt = token, expiresAt
+	log.Printf("MCP auth: GenerateAccessToken succeeded; MCP access token cached, expires_at=%s", expiresAt.Format(time.RFC3339))
 	return token, nil
 }
 
@@ -139,6 +141,7 @@ func (a *credentialAuth) exchange(startedAt time.Time) (string, time.Time, error
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("failed to initialize MCP credential authentication")
 	}
+	log.Printf("MCP auth: calling GenerateAccessToken, endpoint=%s, credential_type=%q, has_sts_token=%t", endpoint, dara.StringValue(credential.Type), dara.StringValue(credential.SecurityToken) != "")
 	response, err := client.CallApi(&openapiutil.Params{
 		Action:      dara.String("GenerateAccessToken"),
 		Version:     dara.String("2026-04-21"),

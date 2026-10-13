@@ -346,6 +346,53 @@ func TestCLICredentialSourceResolvesRoleAndOIDC(t *testing.T) {
 	}
 }
 
+func TestCLICredentialSourceRecoversFromOIDCTokenFileFailure(t *testing.T) {
+	ctx := newMCPCredentialTestContext(t)
+	profile := mcpTestAKProfile("default", "unused")
+	profile.Mode = config.OIDC
+	profile.RamRoleArn = "acs:ram::123:role/test"
+	profile.RoleSessionName = "test-session"
+	profile.OIDCProviderARN = "acs:ram::123:oidc-provider/test"
+	profile.OIDCTokenFile = filepath.Join(t.TempDir(), "oidc-token")
+	calls := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		calls++
+		require.Equal(t, http.MethodPost, request.Method)
+		require.NoError(t, request.ParseForm())
+		require.Equal(t, "AssumeRoleWithOIDC", request.Form.Get("Action"))
+		require.Equal(t, "recovered-oidc-token", request.Form.Get("OIDCToken"))
+		fmt.Fprintf(w,
+			`{"Credentials":{"AccessKeyId":"recovered-key","AccessKeySecret":"secret","SecurityToken":"recovered-token","Expiration":%q}}`,
+			time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+	}))
+	defer server.Close()
+	profile.StsEndpoint = strings.TrimPrefix(server.URL, "https://")
+	writeMCPCredentialTestConfig(t, ctx, profile)
+	previousTransport := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	t.Cleanup(func() { http.DefaultTransport = previousTransport })
+	source := newCLICredentialSource(ctx)
+
+	model, err := source()
+	require.ErrorContains(t, err, "failed to retrieve MCP credential")
+	require.ErrorIs(t, err, os.ErrNotExist)
+	require.Nil(t, model)
+	require.Zero(t, calls)
+
+	require.NoError(t, os.WriteFile(profile.OIDCTokenFile, []byte("recovered-oidc-token"), 0600))
+	model, err = source()
+	require.NoError(t, err)
+	require.Equal(t, "oidc_role_arn", tea.StringValue(model.Type))
+	require.Equal(t, "recovered-key", tea.StringValue(model.AccessKeyId))
+	require.Equal(t, "recovered-token", tea.StringValue(model.SecurityToken))
+	require.Equal(t, 1, calls)
+
+	cached, err := source()
+	require.NoError(t, err)
+	require.Equal(t, model, cached)
+	require.Equal(t, 1, calls)
+}
+
 func TestCLICredentialSourceUsesSDKRoleRefresh(t *testing.T) {
 	for _, mode := range []config.AuthenticateMode{config.RamRoleArn, config.OIDC} {
 		t.Run(string(mode), func(t *testing.T) {

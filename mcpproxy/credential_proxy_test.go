@@ -25,6 +25,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -416,6 +417,56 @@ func TestCredentialProxyStartFailureAndStop(t *testing.T) {
 	}
 }
 
+func TestOAuthProxyStartRegistersCallback(t *testing.T) {
+	manager := NewOAuthCallbackManager()
+	manager.StartWaiting()
+	t.Cleanup(manager.StopWaiting)
+	proxy := NewMCPProxy(ProxyConfig{
+		Host: "127.0.0.1", Port: -1,
+		McpProfile: NewMcpProfile("oauth-callback"), CallbackManager: manager,
+	})
+	t.Cleanup(func() { require.NoError(t, proxy.Stop()) })
+
+	require.Error(t, proxy.Start())
+	require.NotNil(t, proxy.Server)
+	request := httptest.NewRequest(http.MethodGet, "/callback?code=callback-test-code", nil)
+	mux, ok := proxy.Server.Handler.(*http.ServeMux)
+	require.True(t, ok)
+	_, pattern := mux.Handler(request)
+	require.Equal(t, "/callback", pattern)
+	recorder := httptest.NewRecorder()
+
+	proxy.Server.Handler.ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Equal(t, "text/html; charset=utf-8", recorder.Header().Get("Content-Type"))
+	select {
+	case code := <-manager.pendingAuth:
+		assert.Equal(t, "callback-test-code", code)
+	default:
+		t.Fatal("registered callback did not deliver the authorization code")
+	}
+}
+
+func TestOAuthProxyHealthWithExpiredRefreshToken(t *testing.T) {
+	profile := NewMcpProfile("oauth-expired-refresh-token")
+	profile.MCPOAuthAccessTokenExpire = time.Now().Add(time.Hour).Unix()
+	profile.MCPOAuthRefreshTokenExpire = time.Now().Add(-time.Hour).Unix()
+	proxy := NewMCPProxy(ProxyConfig{McpProfile: profile})
+	recorder := httptest.NewRecorder()
+
+	proxy.handleHealth(recorder, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+	assert.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	var health map[string]any
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &health))
+	assert.Equal(t, "oauth", health["auth_type"])
+	assert.Equal(t, "degraded", health["status"])
+	assert.Equal(t, "valid", health["token_status"])
+	assert.Equal(t, "expired", health["refresh_token_status"])
+	assert.NotContains(t, health, "refresh_token_expires_in")
+}
+
 func TestOAuthProxyContinuesUsingOAuthToken(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "Bearer existing-oauth-token", r.Header.Get("Authorization"))
@@ -535,4 +586,55 @@ func TestOAuthProxyUnauthorizedPreservesErrors(t *testing.T) {
 			assert.EqualValues(t, 1, proxyRequests.Load())
 		})
 	}
+}
+
+func TestOAuthProxyUnauthorizedReauthorizationRequiresInteractiveInput(t *testing.T) {
+	stdin, err := os.CreateTemp(t.TempDir(), "stdin")
+	require.NoError(t, err)
+	originalStdin := os.Stdin
+	os.Stdin = stdin
+	t.Cleanup(func() {
+		os.Stdin = originalStdin
+		require.NoError(t, stdin.Close())
+	})
+
+	var oauthRequests, proxyRequests atomic.Int32
+	oauthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		oauthRequests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"error":"invalid_grant"}`)
+	}))
+	t.Cleanup(oauthServer.Close)
+	originalEndpoint := EndpointMap[RegionCN]
+	EndpointMap[RegionCN] = EndpointConfig{OAuth: oauthServer.URL, SignIn: oauthServer.URL}
+	t.Cleanup(func() { EndpointMap[RegionCN] = originalEndpoint })
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxyRequests.Add(1)
+		assert.Equal(t, "Bearer existing-oauth-token", r.Header.Get("Authorization"))
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(upstream.Close)
+	profile := NewMcpProfile("oauth-reauthorization")
+	profile.MCPOAuthAccessToken = "existing-oauth-token"
+	profile.MCPOAuthAccessTokenExpire = time.Now().Add(time.Hour).Unix()
+	profile.MCPOAuthRefreshToken = "expired-refresh-token"
+	profile.MCPOAuthRefreshTokenExpire = time.Now().Add(-time.Hour).Unix()
+	proxy := NewMCPProxy(ProxyConfig{
+		McpProfile: profile, RegionType: RegionCN, UpstreamBaseURL: upstream.URL,
+		AutoOpenBrowser: false, CallbackManager: NewOAuthCallbackManager(),
+	})
+	t.Cleanup(proxy.upstreamClient.CloseIdleConnections)
+	recorder := httptest.NewRecorder()
+
+	proxy.ServeMCPProxyRequest(recorder, httptest.NewRequest(http.MethodGet, "/mcp/server", nil))
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "OAuth re-authorization failed: manual authorization required but standard input is not interactive")
+	assert.EqualValues(t, 1, proxyRequests.Load())
+	assert.Zero(t, oauthRequests.Load())
+	assert.EqualValues(t, 1, atomic.LoadInt64(&proxy.stats.TokenRefreshErrors))
+	assert.False(t, proxy.TokenRefresher.reauthorizing)
+	assert.Equal(t, "existing-oauth-token", profile.MCPOAuthAccessToken)
+	assert.Equal(t, "expired-refresh-token", profile.MCPOAuthRefreshToken)
 }

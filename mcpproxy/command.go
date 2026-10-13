@@ -17,6 +17,7 @@ package mcpproxy
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"os/signal"
@@ -235,12 +236,14 @@ func configureMCPAuthentication(ctx *cli.Context, proxyConfig *ProxyConfig) erro
 		if err := validateMCPProfileMode(profile.Mode); err != nil {
 			return err
 		}
+		log.Printf("MCP auth: skip_mcp_oauth=true, profile=%q, profile_mode=%q; using AK/STS credentials", profile.Name, profile.Mode)
 		proxyConfig.CredentialAuth = newCredentialAuth(newCLICredentialSource(ctx), proxyConfig.RegionType)
 		if _, err := proxyConfig.CredentialAuth.GetToken(); err != nil {
 			return fmt.Errorf("failed to authenticate MCP with CLI credentials: %w", err)
 		}
 		return nil
 	}
+	log.Print("MCP auth: skip_mcp_oauth=false; using MCP OAuth")
 	mcpProfile, err := getOrCreateMCPProfile(ctx, *proxyConfig)
 	if err != nil {
 		return err
