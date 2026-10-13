@@ -25,6 +25,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/responses"
 
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
@@ -33,7 +34,26 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/otel"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/throttlingretry"
 	"github.com/aliyun/aliyun-cli/v3/util"
+	runtimemeta "github.com/aliyun/aliyun-openapi-runtime/meta"
 )
+
+func (a *BasicInvoker) applyBackendTimeout(api *canonicalmeta.API) {
+	if api == nil || a.request == nil || (api.Operation != nil && api.Operation.IsSSE) {
+		return
+	}
+	if a.request.GetReadTimeout() != 0 || (a.profile != nil && a.profile.ReadTimeout > 0) {
+		return
+	}
+	if api.Operation != nil && api.Operation.APIVersion != "" && a.request.Version != "" && api.Operation.APIVersion != a.request.Version {
+		return
+	}
+	if _, exists := sdk.GetAPIMaxTimeout(a.request.Product, api.Name); exists {
+		return
+	}
+	if timeout := runtimemeta.BackendReadTimeout(api.BackendTimeoutMS); timeout > 0 {
+		a.request.SetReadTimeout(timeout)
+	}
+}
 
 func GetClient(cp *config.Profile, ctx *cli.Context) (client *sdk.Client, err error) {
 	if cp.Mode == config.Anonymous {

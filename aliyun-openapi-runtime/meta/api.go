@@ -14,7 +14,10 @@
 
 package meta
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // API is the complete in-memory description of one OpenAPI operation.
 // Instances are constructed by format.Format implementations from the
@@ -27,8 +30,9 @@ type API struct {
 	CmdFullName string // fully-qualified CLI path (e.g. "ecs describe-instances")
 
 	// Ownership.
-	ProductCode string // e.g. "Ecs" (as reported by upstream meta)
-	Version     string // API version (e.g. "2014-05-26")
+	ProductCode      string // e.g. "Ecs" (as reported by upstream meta)
+	Version          string // API version (e.g. "2014-05-26")
+	BackendTimeoutMS int64  // raw backend budget, without client margin
 
 	// Wire.
 	Method          string // "GET" / "POST" / ...
@@ -56,6 +60,15 @@ type API struct {
 	// Lifecycle.
 	Deprecated   bool
 	MultiVersion bool
+}
+
+// BackendReadTimeout adds the client margin to a valid millisecond budget.
+func BackendReadTimeout(ms int64) time.Duration {
+	const margin = 10 * time.Second
+	if ms <= 0 || ms > (1<<63-1-int64(margin))/int64(time.Millisecond) {
+		return 0
+	}
+	return time.Duration(ms)*time.Millisecond + margin
 }
 
 // FindParameter returns a top-level Parameter by its Name (snake_case

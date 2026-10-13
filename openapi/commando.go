@@ -1262,6 +1262,9 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 				},
 					"Use `aliyun help %s` see more information.", product.GetLowerCode())
 			}
+			if force || basicInvoker.request.Version != product.Version {
+				basicInvoker.applyBackendTimeout(c.library.GetCanonicalApi(product.Code, basicInvoker.request.Version, apiOrMethod))
+			}
 			if force {
 				return &ForceRpcInvoker{
 					basicInvoker,

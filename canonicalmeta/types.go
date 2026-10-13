@@ -5,15 +5,16 @@ import "encoding/json"
 // API represents a Canonical API JSON file.
 // Fields not needed by the old CLI are omitted from deserialization.
 type API struct {
-	Name         string `json:"name"`
-	CmdName      string `json:"cmd_name,omitempty"`
-	CmdFullName  string `json:"cmd_full_name,omitempty"`
-	ProductCode  string `json:"product_code,omitempty"`
-	MultiVersion bool   `json:"multi_version,omitempty"`
-	Deprecated   bool   `json:"deprecated,omitempty"`
-	Protocol     string `json:"protocol"`
-	Method       string `json:"method"`
-	PathPattern  string `json:"pathPattern"`
+	BackendTimeoutMS int64  `json:"backend_timeout_ms,omitempty"`
+	Name             string `json:"name"`
+	CmdName          string `json:"cmd_name,omitempty"`
+	CmdFullName      string `json:"cmd_full_name,omitempty"`
+	ProductCode      string `json:"product_code,omitempty"`
+	MultiVersion     bool   `json:"multi_version,omitempty"`
+	Deprecated       bool   `json:"deprecated,omitempty"`
+	Protocol         string `json:"protocol"`
+	Method           string `json:"method"`
+	PathPattern      string `json:"pathPattern"`
 
 	Security []string `json:"security,omitempty"`
 

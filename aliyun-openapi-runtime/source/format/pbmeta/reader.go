@@ -101,18 +101,19 @@ func (r *Reader) ReadAPI(version, name string) (*meta.API, error) {
 
 func toCanonical(def *CommandDefinition) (*schema.CommandDefinition, error) {
 	canonical := &schema.CommandDefinition{
-		Name:          def.Name,
-		CmdName:       def.CmdName,
-		CmdFullName:   def.CmdFullName,
-		DescriptionZH: def.DescriptionZh,
-		DescriptionEN: def.DescriptionEn,
-		Method:        def.Method,
-		MultiVersion:  def.MultiVersion,
-		Deprecated:    def.Deprecated,
-		KebabExample:  def.KebabExample,
-		CamelExample:  def.CamelExample,
-		Responses:     append([]byte(nil), def.Responses...),
-		Components:    append([]byte(nil), def.Components...),
+		BackendTimeoutMS: def.BackendTimeoutMs,
+		Name:             def.Name,
+		CmdName:          def.CmdName,
+		CmdFullName:      def.CmdFullName,
+		DescriptionZH:    def.DescriptionZh,
+		DescriptionEN:    def.DescriptionEn,
+		Method:           def.Method,
+		MultiVersion:     def.MultiVersion,
+		Deprecated:       def.Deprecated,
+		KebabExample:     def.KebabExample,
+		CamelExample:     def.CamelExample,
+		Responses:        append([]byte(nil), def.Responses...),
+		Components:       append([]byte(nil), def.Components...),
 	}
 	if def.Operation != nil {
 		canonical.Operation = &schema.OperationConfig{
