@@ -33,6 +33,8 @@ func TestOSSSafetyPolicyBeforeExecution(t *testing.T) {
 		{name: "allow", enabled: "true", rule: "oss:rm=allow", allowed: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			originalCommand := removeCommand.command
+			t.Cleanup(func() { removeCommand.command = originalCommand })
 			t.Setenv("ALIBABA_CLOUD_SAFETY_POLICY_ENABLED", tc.enabled)
 			t.Setenv("ALIBABA_CLOUD_SAFETY_POLICY_RULES", tc.rule)
 			t.Setenv("ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM", "false")
