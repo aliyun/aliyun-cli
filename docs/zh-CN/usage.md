@@ -33,11 +33,11 @@ aliyun ecs describe-instance-attribute --instance-id i-1234567890abcdef
 一般来说：
 
 - 大驼峰命令使用 API 原始操作名，例如 `DescribeInstances`，参数名通常也是 API 文档里的原始字段名，例如 `--RegionId`、`--InstanceId`。
-- 短横线命令使用 metadata 生成的命令名，参数名通常也改为短横线形式；具体名称以命令帮助为准。例如 `describe-instances` 使用 `--biz-region-id`，`describe-instance-attribute` 使用 `--instance-id`。
+- 短横线命令使用元数据生成的命令名，参数名通常也改为短横线形式；具体名称以命令帮助为准。例如 `describe-instances` 使用 `--biz-region-id`，`describe-instance-attribute` 使用 `--instance-id`。
 
-子命令的大小写决定由哪个引擎处理调用：全小写的子命令进入插件/runtime 引擎，包含大写字母的子命令走内置 OpenAPI 链路。不要在同一条命令里混用两种写法——`aliyun ecs DescribeInstances --biz-region-id cn-hangzhou` 会报未知参数错误；`--RegionId` 与 `DescribeInstances` 配对，`--biz-region-id` 与 `describe-instances` 配对。
+命令名称与参数名称必须采用对应的格式。例如，`aliyun ecs DescribeInstances --biz-region-id cn-hangzhou` 会报未知参数错误；`--RegionId` 与 `DescribeInstances` 配对，`--biz-region-id` 与 `describe-instances` 配对。
 
-产品级帮助同样遵循该规则。未安装产品插件时，`aliyun ecs --help` 默认展示大驼峰命令列表；仅存在于内置 metadata 中的产品则展示短横线命令列表。可以通过一次性环境变量切换产品帮助；下面的写法只影响当前这次命令，不会修改 Shell 的持久配置：
+产品级帮助同样遵循该规则。未安装产品插件时，`aliyun ecs --help` 默认展示大驼峰命令列表；仅存在于内置元数据中的产品则展示短横线命令列表。可以通过一次性环境变量切换产品帮助；下面的写法只影响当前这次命令，不会修改 Shell 的持久配置：
 
 ```sh
 # 从传统大驼峰帮助切换到短横线帮助
@@ -75,11 +75,11 @@ aliyun ecs DescribeInstances --help
 aliyun ecs describe-instances --help
 ```
 
-## Endpoint 与 metadata 未收录的 API
+## Endpoint 与元数据未收录的 API
 
 产品 JSON Help 通过 `product.endpoints` 返回 endpoint 列表，字段包含 `endpoint` 和地域端点适用的 `regionId`。可本地执行 `aliyun ecs --help --cli-output json --cli-query product.endpoints` 查询，添加 `--endpoint-type vpc` 可选择 VPC endpoint。
 
-CLI 通常从 metadata 解析 API 版本和 Endpoint。调用内置 metadata 未收录的 API 时，需要同时指定版本、Endpoint 和 `--force`：
+CLI 通常从元数据解析 API 版本和 Endpoint。调用内置元数据未收录的 API 时，需要同时指定版本、Endpoint 和 `--force`：
 
 ```sh
 aliyun newproduct SomeAction \
@@ -89,9 +89,9 @@ aliyun newproduct SomeAction \
   --force
 ```
 
-如果请求里的 API 或参数未包含在本地 metadata 中，CLI 会返回 `unknown api` 或 `unknown parameter`。`--force` 用于跳过这类本地检查，继续发起调用。
+如果请求里的 API 或参数未包含在本地元数据中，CLI 会返回 `unknown api` 或 `unknown parameter`。`--force` 用于跳过这类本地检查，继续发起调用。
 
-`--force` 只跳过本地 API 和参数 metadata 校验，不会绕过服务端鉴权或校验。
+`--force` 只跳过本地 API 和参数元数据校验，不会绕过服务端鉴权或校验。
 
 使用 `--force` 时，通常需要同时明确以下参数：
 
@@ -108,7 +108,7 @@ aliyun newproduct SomeAction \
 aliyun ecs run-instances ... --cli-dry-run
 ```
 
-具体支持情况取决于 API metadata。CLI dry-run 验证不能替代权限和资源影响审查。
+具体支持情况取决于 API 元数据。CLI dry-run 验证不能替代权限和资源影响审查。
 
 ## 筛选和格式化输出
 
@@ -166,7 +166,7 @@ aliyun ecs DescribeInstances \
   --output cols=InstanceId,Status rows=Instances.Instance[] num=true
 ```
 
-`rows` 表达式必须得到数组。缺少 `cols`、JMESPath 表达式无效或行结果不是数组时，命令会返回错误，不会静默输出不完整的表格。
+`rows` 表达式必须得到数组。缺少 `cols`、JMESPath 表达式无效或行结果不是数组时，命令会返回错误，不会输出不完整的表格。
 
 ### JMESPath 查询
 
@@ -236,7 +236,7 @@ aliyun ecs DescribeInstances \
 
 表达式匹配后，CLI 停止轮询并输出最后一次 API 响应。支持以下字段：
 
-- `expr`：必填。每次响应上求值的 JMESPath 表达式。
+- `expr`：必填。用于查询每次响应的 JMESPath 表达式。
 - `to`：必填。期望值，与表达式结果按文本比较。
 - `timeout`：可选。默认 180 秒；为了兼容不同命令形式，应使用 1 到 600 秒。
 - `interval`：可选。默认 5 秒；为了兼容不同命令形式，应使用 2 到 10 秒。
@@ -253,7 +253,7 @@ aliyun ecs DescribeInstances \
   timeout=300
 ```
 
-API 调用或 JMESPath 求值失败时，Waiter 会立即停止。到达超时时间时，错误信息会包含表达式、期望值和最后一次观测值。`--waiter` 不能与 `--pager` 或 `--cli-dry-run` 同时使用。
+API 调用或 JMESPath 求值失败时，Waiter 会立即停止。到达超时时间时，错误信息会包含表达式、期望值和最后一次查询结果。`--waiter` 不能与 `--pager` 或 `--cli-dry-run` 同时使用。
 
 ## 安全策略与非交互使用
 
@@ -269,7 +269,7 @@ aliyun configure safety-policy --help
 
 ### 命令匹配规则
 
-要让已知内置 API 的两种命令写法受同一条规则约束，可配置精确规则：
+对于内置 API，一条不含通配符的规则可以同时匹配大驼峰（PascalCase）和短横线（kebab-case）命令名称。例如，以下规则可同时禁止执行 `ecs DeleteInstance` 和 `ecs delete-instance`。两种名称的对应关系须包含在所选版本的本地 API 元数据中：
 
 ```sh
 aliyun configure safety-policy add --pattern 'ecs:DeleteInstance' --action deny
@@ -284,7 +284,7 @@ aliyun configure safety-policy enable
 - **包含 `*` 的规则**：仅匹配用户输入的原始命令，不区分大小写。例如，`ecs:Delete*` 通过共同前缀匹配两种写法，但 `ecs:DeleteI*` 不匹配 `delete-instance`。产品名含通配符时同样不会自动匹配另一种名称。例如，`*:DeleteInstance` 不匹配 `ecs:delete-instance`。
 - **插件命令（包括通过元数据插件提供的命令）和 REST 请求**：按输入的命令名称或路径匹配，不区分大小写。API 未知，或本地元数据缺失、无效、无法唯一确定 API 时，也采用此方式；如需限制多种命令名称，请分别配置规则。
 
-两种命令名称的对应关系仅在本次调用选定的 API 版本内有效，不使用其他版本的对应关系。传统 API 命令通过 `--version` 选择版本；新版命令通过 `--api-version` 或对应产品的 API 版本环境变量选择版本。匹配范围以该版本的本地 API 元数据为准。AI 模式同样适用。
+两种命令名称的对应关系仅在本次调用选定的 API 版本内有效，不使用其他版本的对应关系。大驼峰命令通过 `--version` 选择版本；短横线命令通过 `--api-version` 或对应产品的 API 版本环境变量选择版本。匹配范围以该版本的本地 API 元数据为准。AI 模式同样适用。
 
 多条规则匹配时，按拒绝（`deny`）、确认（`confirm`）、允许（`allow`）的优先级选择规则。`forbid` 是 `confirm` 的别名。规则操作相同时，优先选择精确匹配已识别 API 的规则；匹配优先级也相同时，选择配置顺序靠前的规则。未匹配任何规则的命令允许执行。
 
@@ -292,20 +292,20 @@ aliyun configure safety-policy enable
 
 REST 方法与路径采用 `product:METHOD/path`（如 `cs:DELETE/clusters`），`cs:DELETE/*` 匹配路径以 `/` 开头的 DELETE 命令；插件子命令层级以 `:` 分隔（如 `fc:function:create`）。这两类命令不会自动匹配 API 的其他名称。云端授权仍由服务端与 RAM 权限控制。
 
-内置扩展（如 `saectl`、`ossutil`、`acrutil`、`spark-submit`）也在分发前检查策略，早于扩展的安装、凭据解析和执行。命令标识以 `:` 连接位置参数，例如 `saectl:restore`、`acrutil:diagnosis:restore`；`*restore*` 可匹配这些写法。宿主配置选项不参与匹配；扩展未知选项后的非选项参数会保留，因此需要覆盖额外参数时应使用通配符。不带扩展参数、单独的 `help`/`--help`/`-h` 或 `version`/`--version` 不触发检查；其他调用即使包含 `--help` 也会检查，避免把选项值误当成帮助请求而绕过策略。
+内置扩展（如 `saectl`、`ossutil`、`acrutil`、`spark-submit`）也在调用扩展前检查策略，早于扩展的安装、凭据解析和执行。命令标识以 `:` 连接位置参数，例如 `saectl:restore`、`acrutil:diagnosis:restore`；`*restore*` 可匹配这些写法。CLI 全局配置参数不参与匹配；扩展未知选项后的非选项参数会保留，因此需要覆盖额外参数时应使用通配符。不带扩展参数、单独的 `help`/`--help`/`-h` 或 `version`/`--version` 不触发检查；其他调用即使包含 `--help` 也会检查，避免把选项值误当成帮助请求而绕过策略。
 
-## 面向 Agent 的优化与 AI mode
+## Agent 集成与 AI 模式
 
-AI mode 可以全局管理，也可以针对单次命令控制：
+AI 模式可以全局管理，也可以针对单次命令控制：
 
 ```sh
 aliyun configure ai-mode --help
 aliyun ecs describe-instances --cli-ai-mode
 ```
 
-检测到受支持的 Agent 环境时，进程内 OpenAPI 命令会自动启用面向 Agent 的交互和执行优化。目前包括更严格的 metadata 参数校验和更结构化的错误输出，但具体优化行为可能随版本调整，不属于稳定兼容协议。
+检测到受支持的 Agent 环境时，由 CLI 直接执行的 OpenAPI 命令会自动启用面向 Agent 的交互和执行优化。目前包括更严格的元数据参数校验和更结构化的错误输出，但具体优化行为可能随版本调整，不属于稳定兼容协议。
 
-通过自动探测启用后，请求会增加以下通用 UA 标记：
+通过自动探测启用后，请求会增加以下 User-Agent 标记：
 
 ```text
 AlibabaCloud-AIMode/enabled
@@ -317,19 +317,19 @@ AlibabaCloud-AIMode/enabled
 aliyun ecs describe-instances --no-cli-ai-mode
 ```
 
-需要在当前环境中持续关闭 Agent 自动探测带来的 AI mode（包括 AI Help 文本）时，显式设置：
+需要在当前环境中持续关闭 Agent 自动探测带来的 AI 模式（包括 AI Help 文本）时，显式设置：
 
 ```sh
 export ALIBABA_CLOUD_CLI_AGENT_INTEGRATION=disabled
 ```
 
-`ALIBABA_CLOUD_CLI_AGENT_INTEGRATION` 控制自动 Agent 集成：未设置时启用默认集成，`disabled` 全部关闭，`all` 全部开启，逗号分隔的列表（如 `ai-mode`）仅开启指定集成。此开关不会启用安全策略。检测到 Agent 时还会添加固定的 `Agent/<name>` User-Agent 标识，该标识独立于 AI 模式集成开关。 设置为 `disabled` 不会覆盖 `configure ai-mode enable`；显式 `--cli-ai-mode` 仍可开启单次命令的 AI 模式。
+`ALIBABA_CLOUD_CLI_AGENT_INTEGRATION` 控制自动 Agent 集成：未设置时启用默认集成，`disabled` 全部关闭，`all` 全部开启，逗号分隔的列表（如 `ai-mode`）仅开启指定集成。此开关不会启用安全策略。检测到 Agent 时还会添加固定的 `Agent/<name>` User-Agent 标识，该标识独立于 AI 模式集成开关。设置为 `disabled` 不会覆盖 `configure ai-mode enable`；显式 `--cli-ai-mode` 仍可开启单次命令的 AI 模式。
 
-JSON Help 协议、Agent 错误 envelope、退出状态、Trace Context 传播和 MCP 代理安全行为见 [MCP 代理、OpenTelemetry 与机器可读接口](./integrations.md)。
+JSON 帮助格式、Agent 错误格式、退出状态、Trace Context 传播和 MCP 代理安全行为见 [MCP 代理、OpenTelemetry 与机器可读接口](./integrations.md)。
 
 ## 大驼峰命令的参数边界情况
 
-这条规则仅适用于传统大驼峰命名（PascalCase）命令。参数值以 `-` 开头时，使用 `--name=value` 形式，避免该值被解析成另一个 Flag：
+这条规则仅适用于传统大驼峰命名（PascalCase）命令。参数值以 `-` 开头时，使用 `--name=value` 形式，避免该值被解析成另一个参数：
 
 ```sh
 aliyun ecs SomeOperation --PortRange=-1/-1

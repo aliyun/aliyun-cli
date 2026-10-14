@@ -1,14 +1,18 @@
-## Pre-requisite
+# ECS helper scripts
 
-1. Make sure aliyun binary is installed on your laptop and add location of aliyun into system env variable PATH
-2. Install jq on your laptop thru 'brew install jq`./
+These shell scripts list and manage ECS instances through Alibaba Cloud CLI. Configure CLI credentials before use. Stop, reboot, and reload commands affect the selected instance; verify the target before running them.
+
+## Prerequisites
+
+1. Install Alibaba Cloud CLI and add its directory to `PATH`.
+2. Install `jq`. On macOS with Homebrew, run `brew install jq`.
 
 
-## Install convient script to your laptop
+## Install the scripts
 
-1. `clone git@gitlab.alibaba-inc.com:aliopensource/aliyun-cli.git ` then `cd aliyun-cli`
-2. Add <aliyun-cli repo path>/bin into PATH of env variable `echo PAHT=<aliyun-cli repo path>/bin:%PATH >> ~/.zshrc`
-3. Add following alias to your ~/.zshrc or ~/.bashrc
+1. Clone this repository with `git clone https://github.com/aliyun/aliyun-cli.git`, then run `cd aliyun-cli`.
+2. Add `export PATH="/absolute/path/to/aliyun-cli/bin:$PATH"` to `~/.zshrc` or `~/.bashrc`. Replace the example path with the repository path.
+3. Add the following aliases to the same shell configuration file:
 
 ```
 alias aliyun-cn-qingdao="print_table cn-qingdao "
@@ -30,11 +34,11 @@ alias aliyun-eu-central-1="print_table eu-central-1 "
 alias aliyun-region="aliyun ecs DescribeRegions  | jq -r .Regions.Region | jq -r '.[] | .RegionId'"
 ```
 
-4. 'source ~/.zshrc' to activate setting in shell env.
+4. Run `source ~/.zshrc` (or `source ~/.bashrc`) to load the settings.
 
-#### Have a summary of ecs in different region. 
+## List ECS instances by region
 
-Type aliyun-cn + Tab to select any region to view list of ecs.
+Run the alias for the target region, for example `aliyun-cn-hangzhou`.
 
 ```
 aliyun-cn-hangzhou
@@ -53,9 +57,9 @@ i-bp1fveanl3zy002cfyyw	iZbp1fveanl3zy002cfyywZ	47.96.14.140	192.168.33.59	cn-han
 ```
 
 
-#### Lookup any ECS instance from any region with instanceId, private ip, public ip or hostname
+## Find an ECS instance
 
-`aliyun-lookup <any instanceid, public/private ip, hostname>`
+`aliyun-lookup <instance-id-or-ip-or-hostname>`
 
 
 ```
@@ -66,9 +70,11 @@ ID                	Hostname            	Public IP	Internal IP	ZoneId	    Status	
 i-j6cg0s7swgbn77gmrcll	eric-hongkong-1	47.75.14.57	10.1.2.48	cn-hongkong-b	Starting	centos_7_04_64_20G_alibase_201701015.vhd
 ```
 
-#### Reload system disk with original image
+## Recreate the system disk from its original image
 
-`aliyun-reload <any instanceid, public/private ip, hostname>`
+This operation replaces the system disk contents. Back up required data before proceeding.
+
+`aliyun-reload <instance-id-or-ip-or-hostname>`
 
 
 ```
@@ -105,16 +111,16 @@ ID                	Hostname            	Public IP	Internal IP	ZoneId	    Status	
 i-j6cg0s7swgbn77gmrcll	eric-hongkong-1	47.75.14.57	10.1.2.48	cn-hongkong-b	Running	centos_7_04_64_20G_alibase_201701015.vhd
 ```
 
-#### Reload instance with specific system disk
+## Recreate the system disk from a specified image
 
-`aliyun-reload <any instanceid, public/private ip, hostname> <image_id>`
+`aliyun-reload <instance-id-or-ip-or-hostname> <image_id>`
 
-e.g.
+For example:
 
 `aliyun-reload i-bp185dy2o3o6lnlo4f07 sles_12_sp2_64_20G_alibase_20170907.vhd`
 
 
-#### Stop any instance with instanceId, private ip, public ip or hostname
+## Stop an instance
 
 `aliyun-stop i-j6cg0s7swgbn77gmrcll`
 
@@ -124,7 +130,7 @@ ID                	Hostname            	Public IP	Internal IP	ZoneId	    Status	
 i-j6cg0s7swgbn77gmrcll	eric-hongkong-1		10.1.2.48	cn-hongkong-b	Stopped	centos_7_04_64_20G_alibase_201701015.vhd
 ```
 
-#### Force to stop an instance or reload
+## Force a stop or system disk replacement
 
 ```
 #export FORCE=true
@@ -135,9 +141,9 @@ ID                	Hostname            	Public IP	Internal IP	ZoneId	    Status	
 i-bp185dy2o3o6lnlo4f07	iZbp185dy2o3o6lnlo4f07Z		192.168.33.71	cn-hangzhou-f	Stopped	sles_12_sp2_64_20G_alibase_20170907.vhd
 ```
 
-#### Start any instance with instanceId, private ip, public ip or hostname
+## Start an instance
 
-`aliyun-start <any instanceid, public/private ip, hostname>`
+`aliyun-start <instance-id-or-ip-or-hostname>`
 
 ```
 #aliyun-start i-j6cg0s7swgbn77gmrcll
@@ -151,9 +157,9 @@ ID                	Hostname            	Public IP	Internal IP	ZoneId	    Status	
 i-j6cg0s7swgbn77gmrcll	eric-hongkong-1	47.75.14.57	10.1.2.48	cn-hongkong-b	Starting	centos_7_04_64_20G_alibase_201701015.vhd
 ```
 
-#### Reboot ECS with instanceId, private ip, public ip or hostname
+## Restart an instance
 
-`aliyun-reboot <any instanceid, public/private ip, hostname>`
+`aliyun-reboot <instance-id-or-ip-or-hostname>`
 
 ```
 #aliyun-reboot 47.75.14.57
@@ -167,6 +173,3 @@ ID                	Hostname            	Public IP	Internal IP	ZoneId	    Status	
 i-j6cg0s7swgbn77gmrcll	eric-hongkong-1	47.75.14.57	10.1.2.48	cn-hongkong-b	Stopping	centos_7_04_64_20G_alibase_201701015.vhd
 
 ```
-
-
-

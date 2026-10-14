@@ -53,7 +53,7 @@ aliyun upgrade
 
 PATH 配置、源码构建和升级方法见[安装指南](./docs/zh-CN/installation.md)。
 
-如果暂时不想在本地安装，可以通过[阿里云 Cloud Shell](https://shell.aliyun.com/)试用：
+如需免安装使用，可通过[阿里云 Cloud Shell](https://shell.aliyun.com/)试用：
 
 <a href="https://shell.aliyun.com/" target="cloudshell">
   <img src="https://img.alicdn.com/tfs/TB1wt1zq9zqK1RjSZFpXXakSXXa-1066-166.png" width="180" alt="Alibaba Cloud Shell" />
@@ -61,7 +61,7 @@ PATH 配置、源码构建和升级方法见[安装指南](./docs/zh-CN/installa
 
 ## 快速开始
 
-### 1. 配置 Profile
+### 1. 创建凭证配置（Profile）
 
 本地交互环境推荐使用 OAuth，避免保存长期 AccessKey：
 
@@ -88,7 +88,7 @@ aliyun ecs DescribeRegions
 aliyun ecs describe-regions
 ```
 
-安全策略按命令写法匹配，这是预期设计：不区分大小写，但不会展开 API 别名或将大驼峰与短横线写法视为等价。请为自动化使用的各类写法配置规则，详见[命令匹配约定](./docs/zh-CN/usage.md#命令匹配约定)。
+内置 API 的安全策略可通过一条不含通配符的规则匹配两种命令名称，前提是所选版本的本地 API 元数据包含对应关系。通配符、插件和 REST 请求的匹配方式见[命令匹配规则](./docs/zh-CN/usage.md#命令匹配规则)。
 
 ### 3. 查看帮助
 

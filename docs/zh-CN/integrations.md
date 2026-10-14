@@ -4,9 +4,9 @@
 
 ## MCP 代理
 
-MCP 代理通过一个本地入口暴露已发现的阿里云 API MCP Server，并负责访问上游服务所需的 OAuth 流程。
+MCP 代理通过本地地址提供已发现的阿里云 API MCP Server，并负责访问上游服务所需的 OAuth 流程。
 
-使用公开命令路径启动：
+运行以下命令启动代理：
 
 ```sh
 aliyun utils mcp-proxy --region-type CN --port 8088
@@ -44,11 +44,11 @@ aliyun utils mcp-proxy \
 
 ### 日志与敏感数据
 
-代理日志会保留排障所需的 HTTP 方法、URL origin/path、状态、耗时和载荷字节数。URL user-info、查询参数、fragment、请求正文、OAuth 授权码、OAuth 错误正文和 SSE 消息内容不会写入日志。不要把凭证放在 MCP Server 路径中，因为路径会用于路由诊断并保留在日志里。
+代理日志会保留排障所需的 HTTP 方法、URL 的协议、主机、端口和路径、响应状态、耗时以及请求和响应的数据大小。URL 中的用户名和密码、查询参数、片段标识、请求正文、OAuth 授权码、OAuth 错误正文和 SSE 消息内容不会写入日志。不要把凭证放在 MCP Server 路径中，因为路径会用于路由诊断并保留在日志里。
 
 ## OpenTelemetry Trace Context 传播
 
-阿里云 CLI 可以把 W3C Trace Context 传播到 OpenAPI 请求。该能力只负责向出站请求注入 Header；CLI 本身不会因此创建 span 或向遥测后端导出数据。
+阿里云 CLI 可以把 W3C Trace Context 传播到 OpenAPI 请求。该能力只负责向发出的请求添加 HTTP 请求头；CLI 本身不会因此创建链路追踪记录（span）或向遥测后端导出数据。
 
 | 环境变量 | 行为 |
 | --- | --- |
@@ -71,13 +71,13 @@ aliyun ecs DescribeRegions
 00-<32 位十六进制 trace id>-<16 位十六进制 parent id>-<2 位十六进制 flags>
 ```
 
-无效的 `traceparent` 值会被忽略，并向 stderr 输出警告。环境变量中合法、非空的 `traceparent` 或 `baggage` 值优先于通过 `--header` 指定的同名 Header。兼容的子插件会通过内部编码环境变量接收相同值，用户不应直接设置该内部变量。
+无效的 `traceparent` 值会被忽略，并向标准错误（stderr）输出警告。环境变量中合法、非空的 `traceparent` 或 `baggage` 值优先于通过 `--header` 指定的同名 Header。兼容的子插件会通过内部编码环境变量接收相同值，用户不应直接设置该内部变量。
 
 应把 baggage 视为会发送给目标服务的数据，不要放入 AccessKey、Token、授权码、密码或其他机密信息。
 
-## 机器可读 Help
+## 机器可读帮助
 
-在 Help 操作中使用 `--cli-output json` 显式请求 JSON：
+在帮助命令中使用 `--cli-output json` 显式请求 JSON：
 
 ```sh
 aliyun --help --cli-output json
@@ -88,24 +88,24 @@ aliyun ecs DescribeInstances --cli-section response --help --cli-output json
 aliyun ecs --help-search instance --cli-output json
 ```
 
-`--cli-output json` 只选择 Help 格式，不是 API 执行结果格式参数。OpenAPI 成功响应默认已经是 JSON；需要格式化 API 响应时使用 `--output` 或 `--cli-query`。
+`--cli-output json` 只选择帮助格式，不是 API 执行结果格式参数。OpenAPI 成功响应默认已经是 JSON；需要格式化 API 响应时使用 `--output` 或 `--cli-query`。
 
-机器 Help 会向 stdout 写入一个 JSON 文档，并以换行结尾。通用字段如下：
+机器可读帮助会向标准输出（stdout）写入一个 JSON 文档，并以换行结尾。通用字段如下：
 
 | 字段 | 含义 |
 | --- | --- |
-| `schemaVersion` | 机器 Help 协议版本，当前为 `v1` |
+| `schemaVersion` | 机器可读帮助协议版本，当前为 `v1` |
 | `helpLevel` | `root`、`utility`、`product`、`api` 或 `parameter` |
-| `name` | 当前 Help 目标 |
+| `name` | 当前查询的帮助对象 |
 | `description` | 当前输出语言对应的说明 |
 | `target` | 解析后的命令路径、命令风格及适用时的 API 版本 |
 | `commands`、`parameters`、`flags` | 当前层级可用的条目 |
-| `result.shown`、`result.total`、`result.truncated` | 当前投影及截断信息 |
-| `next` | 搜索、完整输出或切换 Help section 的建议命令 |
+| `result.shown`、`result.total`、`result.truncated` | 已显示条目数、总条目数和是否截断 |
+| `next` | 搜索、完整输出或切换帮助章节的命令建议 |
 
-`--help-all` 单独使用时可以取消正常结果数量上限。`--help-search <文本>` 用于筛选当前 Help 层级，并默认返回全部匹配项。搜索时同时传入 `--help-all` 仍然兼容，但不会改变结果集。建议使用尽量具体的搜索词以控制机器输出体积。调用方应根据 `schemaVersion` 和 `helpLevel` 分支处理，忽略未知字段，并优先使用 `next`，不要自行拼接后续命令。
+`--help-all` 单独使用时可以取消正常结果数量上限。`--help-search <文本>` 用于筛选当前帮助层级，并默认返回全部匹配项。搜索时同时传入 `--help-all` 仍然兼容，但不会改变结果集。建议使用尽量具体的搜索词以控制机器输出体积。调用方应根据 `schemaVersion` 和 `helpLevel` 分支处理，忽略未知字段，并优先使用 `next`，不要自行拼接后续命令。
 
-机器 Help 请求错误会写入 stderr，并以状态码 2 退出，采用带版本号的 envelope：
+机器可读帮助请求错误会写入标准错误（stderr），并以状态码 2 退出，采用带版本号的 JSON 错误对象：
 
 ```json
 {
@@ -129,7 +129,7 @@ export ALIBABA_CLOUD_CLI_AI_MODE=1
 aliyun ecs describe-instances --cli-ai-mode
 ```
 
-目前支持的本地用法错误、查询错误、传输错误、OAuth 错误和服务端错误会以单个紧凑 JSON 对象写入 stderr；成功结果仍写入 stdout。没有值的可选字段会被省略：
+目前支持的本地用法错误、查询错误、传输错误、OAuth 错误和服务端错误会以单个紧凑 JSON 对象写入标准错误（stderr）；成功结果仍写入标准输出（stdout）。没有值的可选字段会被省略：
 
 ```json
 {
@@ -146,24 +146,24 @@ aliyun ecs describe-instances --cli-ai-mode
 
 远端服务错误还可能包含 `error_code`、`status_code` 和 `request_id`。`did_you_mean` 和 `recovery.command` 也是可选字段；每个结构化 Agent 错误都会包含 `message`、`recovery.action` 和 `recovery.hint`。
 
-AI 模式下，共享 Agent 错误信封包含 `schemaVersion: "v1"`。这个版本独立于机器 Help，虽然当前两者均使用 `v1`。消费者应忽略未知字段。非 AI 模式的输出保持不变，包括显式 `--cli-output json` 请求的已有错误格式，不会额外添加该字段。并非所有错误都已结构化，外部工具仍保留各自的接口约定。
+AI 模式下，统一的 Agent 错误对象包含 `schemaVersion: "v1"`。这个版本独立于机器可读帮助，虽然当前两者均使用 `v1`。调用程序应忽略未知字段。非 AI 模式的输出保持不变，包括显式 `--cli-output json` 请求的已有错误格式，不会额外添加该字段。并非所有错误都已结构化，外部工具仍保留各自的接口约定。
 
-| AI 模式下的错误来源 | 契约 | 退出码 |
+| AI 模式下的错误来源 | 输出格式 | 退出码 |
 | --- | --- | --- |
-| 已支持的 OpenAPI 错误 | 共享 `schemaVersion: "v1"` 信封及恢复字段 | `2` |
-| 内置 OSS 适配后的错误 | 共享信封加 `oss`；`oss.schema_version: "1"` 仅标识 OSS 扩展版本 | `1` |
-| 初始配置加载 | 共享信封，`error_code: "ConfigurationError"`，`recovery.action: "check_configuration"` | `1` |
+| 已支持的 OpenAPI 错误 | 共享 `schemaVersion: "v1"` 错误对象及恢复字段 | `2` |
+| 内置 OSS 结构化错误 | 统一错误对象加 `oss`；`oss.schema_version: "1"` 仅标识 OSS 扩展版本 | `1` |
+| 初始配置加载 | 统一错误对象，`error_code: "ConfigurationError"`，`recovery.action: "check_configuration"` | `1` |
 
-OSS 的 stderr 可能在最终错误信封之前包含进度文本，详见 [OSS 自动化](./oss.md)。新增版本字段不会改变退出码或成功输出。
+OSS 的标准错误（stderr）可能在最终错误对象之前包含进度文本，详见 [OSS 自动化](./oss.md)。新增版本字段不会改变退出码或成功输出。
 
 | 退出状态 | 含义 |
 | --- | --- |
-| `0` | 命令或 Help 成功 |
+| `0` | 命令或帮助查询成功 |
 | `1` | 一般执行失败 |
-| `2` | 用法错误、结构化 Agent 错误或机器 Help 请求错误 |
+| `2` | 用法错误、结构化 Agent 错误或机器可读帮助请求错误 |
 | `3` | 带 CLI 恢复提示的失败 |
 
-配置加载失败（包括配置文件格式错误或当前 profile 不存在）时，CLI 会在执行命令前以状态码 `1` 退出。AI 模式下，这类启动错误以单个 JSON 信封写入 stderr；非 AI 模式保留原有人类可读输出，stdout 保持为空。启动阶段依次按显式关闭、显式开启、AI 模式环境变量、自动 Agent 集成、已保存的 AI 配置判断模式。启动错误消息不回显配置内容，具体原因需检查本地配置。
+配置加载失败（包括配置文件格式错误或当前 Profile 不存在）时，CLI 会在执行命令前以状态码 `1` 退出。AI 模式下，这类启动错误以单个 JSON 错误对象写入标准错误（stderr）；非 AI 模式保留原有人类可读输出，标准输出（stdout）保持为空。启动阶段依次按显式关闭、显式开启、AI 模式环境变量、自动 Agent 集成、已保存的 AI 配置判断模式。启动错误消息不回显配置内容，具体原因需检查本地配置。
 
 需要在不调用 API 的情况下检查请求时，`--cli-dry-run-json` 会输出结构化请求详情；`--cli-dry-run` 是人类可读形式。
 

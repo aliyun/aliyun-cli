@@ -2,7 +2,7 @@
 
 [文档索引](../README.md) | [English](../en/plugins.md)
 
-阿里云 CLI 可以通过插件扩展产品命令。如果根帮助中某个产品显示“插件可用但未安装”，无需替换主 CLI 二进制即可安装对应插件。
+阿里云 CLI 可以通过插件扩展产品命令。如果根帮助中某个产品显示“插件可用但未安装”，无需替换CLI 可执行文件即可安装对应插件。
 
 ## 查找插件
 
@@ -80,7 +80,7 @@ aliyun plugin uninstall --name <plugin-name>
 aliyun configure plugin-settings show
 ```
 
-设置或清除自定义插件树根地址：
+设置或清除自定义插件源地址：
 
 ```sh
 aliyun configure plugin-settings set --source-base https://example.com/plugins
@@ -91,7 +91,7 @@ aliyun configure plugin-settings clear
 
 ## 自动安装产品插件
 
-自动安装可以保存在 Profile 中：
+在 Profile 中启用插件自动安装：
 
 ```sh
 aliyun configure set --profile default --auto-plugin-install true
@@ -128,6 +128,4 @@ aliyun plugin update --name <plugin-name>
 - 是否可以访问配置的插件源；
 - 插件包是否支持当前操作系统和 CPU 架构；
 - 插件要求的最低 CLI 版本是否高于当前版本；
-- 除非正在排查本地安装损坏，否则不要手动修改插件 manifest。
-
-隐藏的内部批量安装命令不属于公开工作流，也不提供兼容性承诺。
+- 除非正在排查本地安装损坏，否则不要手动修改插件清单文件。

@@ -18,7 +18,7 @@
 
 所有已发布版本见 [GitHub Releases](https://github.com/aliyun/aliyun-cli/releases)。
 
-在 macOS 或 Linux 上可以这样手动安装：
+在 macOS 或 Linux 上按以下步骤手动安装：
 
 ```sh
 tar -xzf <下载的压缩包>.tgz
@@ -67,11 +67,11 @@ aliyun upgrade
 
 环境要求：
 
-- 支持 submodule 的 Git
+- 支持子模块的 Git
 - [`go.mod`](../../go.mod) 声明的 Go 版本
 - 所选 Make 目标需要的平台工具
 
-拉取子模块并构建带内置 metadata 的发布形式二进制：
+拉取子模块并构建包含 API 元数据的可执行文件：
 
 ```sh
 git clone --recurse-submodules https://github.com/aliyun/aliyun-cli.git
@@ -80,7 +80,7 @@ make build
 ./out/aliyun version
 ```
 
-开发构建会直接读取已检出的 metadata 子模块：
+开发构建会直接读取本地的 API 元数据子模块：
 
 ```sh
 go build -o out/aliyun ./main

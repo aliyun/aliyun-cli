@@ -1,25 +1,20 @@
 ---
 name: "Bug Report"
-about: Create a report to help us improve
+about: Report a reproducible problem with Alibaba Cloud CLI
 ---
 
 <!--
-Thank you for reporting a possible bug in Alibaba Cloud CLI
-Please fill in as much of the template below as you can.
-
-Command Format: The Command Format you are working on when bug occurs.
-Execution Command: If it is convenient, please provide your real running command.
-(Please be careful not to expose sensitive information,like AK.)
-Output: Output after running the command.
-If crash, please provide the stack trace.
-
-If build error, please provide compiler information: compiler and version, etc
+Provide the CLI version, operating system, command, and output.
+Remove credentials and other sensitive information before submitting.
+For crashes, include the stack trace. For build failures, include the Go version and build command.
 -->
 
-* **Command Format**:
+* **CLI version and operating system**:
 
-* **Execution Command**:
+* **Command**:
 
-* **Output**:
+* **Expected behavior**:
 
-<!-- Please provide more details below this comment. -->
+* **Actual output**:
+
+* **Additional information**:

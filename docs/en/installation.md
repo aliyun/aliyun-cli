@@ -61,7 +61,7 @@ The CLI includes an upgrade command:
 aliyun upgrade
 ```
 
-If the CLI was installed through a package manager, prefer that package manager's upgrade command. You can always replace a standalone binary with a newer package from the Releases page.
+If the CLI was installed through a package manager, prefer that package manager's upgrade command. You can also replace a standalone binary with a newer package from the Releases page.
 
 ## Build from source
 
@@ -71,7 +71,7 @@ Requirements:
 - The Go version declared in [`go.mod`](../../go.mod)
 - Platform tools required by the selected Make target
 
-Clone submodules and build the release-style binary with packed metadata:
+Clone submodules and build an executable with bundled API metadata:
 
 ```sh
 git clone --recurse-submodules https://github.com/aliyun/aliyun-cli.git

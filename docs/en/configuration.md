@@ -2,7 +2,7 @@
 
 [Documentation index](../README.md) | [简体中文](../zh-CN/configuration.md)
 
-Alibaba Cloud CLI stores named profiles in `~/.aliyun/config.json` by default.
+A profile is a named set of credentials and CLI settings. Alibaba Cloud CLI stores profiles in `~/.aliyun/config.json` by default.
 
 ## Create and manage profiles
 
@@ -78,7 +78,7 @@ Do not put real secrets in scripts, shell history, source control, or issue repo
 
 ## Temporary STS credentials
 
-Use `StsToken` when all three credential values have already been issued:
+Use `StsToken` when you have a temporary AccessKey ID, AccessKey secret, and SecurityToken:
 
 Interactive example:
 
@@ -319,7 +319,7 @@ Set `ALIBABA_CLOUD_DISABLE_EXTERNAL_PROCESS=true` to block both external process
 
 ## Environment variables
 
-Environment variables can select a profile or fill fields not supplied by flags/profile configuration. Important variables include:
+Environment variables can select a profile or fill fields not supplied by command-line flags or profile configuration. Important variables include:
 
 | Variable | Purpose |
 | --- | --- |

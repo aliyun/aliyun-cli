@@ -1,4 +1,4 @@
-# CHANGE LOG
+# Changelog
 
 Release notes are also published at https://github.com/aliyun/aliyun-cli/releases. This file summarizes the major changes in each version.
 
@@ -29,8 +29,8 @@ Release notes are also published at https://github.com/aliyun/aliyun-cli/release
 
 ### v3.0.0 GA Version
 
-- refactoring cli package design, support composite flag with fields
-- refactoring openapi package design, make it more extensible
+- Refactored the CLI package and added flags with multiple fields.
+- Refactored the OpenAPI package to support extensions.
 - support `--quiet` flag
 - support `--dryrun` flag
 - support `aliyun oss --profile xxx`
@@ -53,7 +53,7 @@ Release notes are also published at https://github.com/aliyun/aliyun-cli/release
 
 - integrate `ossutil` toolset with aliyun-cli
 - optimize `--help` command messages
-- config flags (such as ak, profile, sts) can used with openapi call
+- Allowed configuration flags (such as ak, profile, and sts) in OpenAPI calls.
 - support `configure delete`
 - fix bug with restful force call
 
@@ -93,12 +93,12 @@ Release notes are also published at https://github.com/aliyun/aliyun-cli/release
 
 - integrate with 64 products meta
 - implemented help command for product and api
-- support fully certificated mode AK|StsToken|RamRoleArn|EcsRamRole|RsaKeyPair,
+- Added credential modes: AK, StsToken, RamRoleArn, EcsRamRole, and RsaKeyPair.
 
 ### 0.16
 
 - support --content-type flag to set Header
-- support --body-file flat to use file as body input
+- Added the --body-file flag to read the request body from a file.
 
 ### 0.15
 

@@ -80,7 +80,7 @@ Show the global plugin settings:
 aliyun configure plugin-settings show
 ```
 
-Set or clear a custom plugin tree base URL:
+Set or clear a custom plugin source URL:
 
 ```sh
 aliyun configure plugin-settings set --source-base https://example.com/plugins
@@ -91,7 +91,7 @@ For one command, `--source-base <url>` overrides the global setting. The environ
 
 ## Automatic product-plugin installation
 
-Automatic installation can be saved in a profile:
+Enable automatic installation in a profile:
 
 ```sh
 aliyun configure set --profile default --auto-plugin-install true
@@ -129,5 +129,3 @@ If installation fails:
 - check that the package supports the current operating system and architecture;
 - update the main CLI if the plugin requires a newer minimum CLI version;
 - do not manually edit the plugin manifest unless diagnosing a corrupted local installation.
-
-Internal hidden bulk-install commands are intentionally not part of the public workflow or compatibility contract.

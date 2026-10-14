@@ -35,7 +35,7 @@ In practice:
 - PascalCase commands use the original API operation name, such as `DescribeInstances`, and usually keep the original API parameter names such as `--RegionId` and `--InstanceId`.
 - Kebab-case commands use the metadata-derived command name, and parameter names are also exposed in kebab-case where defined by metadata. Use the local command help for the exact flag names. For example, `describe-instances` uses `--biz-region-id`, while `describe-instance-attribute` uses `--instance-id`.
 
-The subcommand casing decides which engine handles the call: an all-lowercase subcommand is routed to the plugin/runtime engine, while a subcommand containing uppercase letters goes through the built-in OpenAPI path. Do not mix the two spellings in one command — `aliyun ecs DescribeInstances --biz-region-id cn-hangzhou` fails with an unknown parameter error; pair `--RegionId` with `DescribeInstances` and `--biz-region-id` with `describe-instances`.
+Use the parameter names that correspond to the command form. For example, `aliyun ecs DescribeInstances --biz-region-id cn-hangzhou` fails with an unknown parameter error; pair `--RegionId` with `DescribeInstances` and `--biz-region-id` with `describe-instances`.
 
 Product-level help follows the same split. Without an installed product plugin, `aliyun ecs --help` shows the PascalCase command list by default; products that exist only in the bundled metadata show the kebab-case list. One-shot environment variables can switch the product Help style. The forms below affect only that invocation and do not persist in the shell:
 
@@ -75,7 +75,7 @@ aliyun ecs DescribeInstances --help
 aliyun ecs describe-instances --help
 ```
 
-## Endpoints and unsupported metadata
+## Endpoints and APIs missing from local metadata
 
 Product JSON Help exposes `product.endpoints` entries with `regionId` (when regional) and `endpoint`. Query them locally with `aliyun ecs --help --cli-output json --cli-query product.endpoints`; add `--endpoint-type vpc` for VPC endpoint selection.
 
@@ -269,7 +269,7 @@ Safety policy is disabled by default, and `confirm` is a local CLI confirmation 
 
 ### Command matching rules
 
-To apply the same rule to both spellings of a known built-in API, configure one exact rule:
+For built-in APIs, one rule without wildcards can match both PascalCase and kebab-case names. The following rule blocks both `ecs DeleteInstance` and `ecs delete-instance`, provided local metadata for the selected API version defines both names:
 
 ```sh
 aliyun configure safety-policy add --pattern 'ecs:DeleteInstance' --action deny
@@ -284,7 +284,7 @@ Rules are classified as follows:
 - **Any rule containing `*`:** match only the original command spelling, case-insensitively. For example, `ecs:Delete*` matches both spellings by their shared prefix, but `ecs:DeleteI*` does not match `delete-instance`. A wildcard in the product name also prevents alias matching: `*:DeleteInstance` does not match `ecs:delete-instance`.
 - **Plugin commands (including commands provided by metadata plugins) and REST requests:** match the command name or path as entered, without case sensitivity. This also applies when the API is unknown or local metadata is missing, invalid, or cannot uniquely identify the API. Configure separate rules for each command name when needed.
 
-The correspondence between command names is specific to the API version selected for the invocation. Traditional API commands select the version with `--version`; newer commands use `--api-version` or the product-specific API-version environment variable. Matching is limited to the local API metadata for that version. These rules also apply in AI mode.
+The correspondence between command names is specific to the API version selected for the invocation. PascalCase commands select the version with `--version`; kebab-case commands use `--api-version` or the product-specific API-version environment variable. Matching is limited to the local API metadata for that version. These rules also apply in AI mode.
 
 All matching rules are evaluated with **`deny > confirm > allow`** (`forbid` is an alias for `confirm`). For rules with the same action, an exact match to a recognized API takes precedence; remaining ties use configuration order. Unmatched commands remain allowed.
 

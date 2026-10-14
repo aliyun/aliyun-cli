@@ -81,14 +81,14 @@ See [configuration and credentials](./docs/en/configuration.md) before using a p
 
 ### 2. Call an API
 
-Both the traditional PascalCase form and the metadata-driven kebab-case form are supported where metadata is available:
+Where local API metadata is available, commands support both PascalCase and kebab-case names:
 
 ```sh
 aliyun ecs DescribeRegions
 aliyun ecs describe-regions
 ```
 
-Safety policy matches command spelling by design: it ignores case but does not expand API aliases or equate PascalCase with kebab-case. Configure rules for each spelling your automation uses; see the [matching contract](./docs/en/usage.md#command-matching-contract).
+For built-in APIs, one safety rule without wildcards can match both command names when local metadata for the selected version defines their correspondence. See [command matching rules](./docs/en/usage.md#command-matching-rules) for wildcard, plugin, and REST matching.
 
 ### 3. Explore help
 

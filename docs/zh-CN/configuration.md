@@ -2,11 +2,11 @@
 
 [文档索引](../README.md) | [English](../en/configuration.md)
 
-阿里云 CLI 默认将具名 Profile 保存在 `~/.aliyun/config.json`。
+Profile 是一组命名的凭证和 CLI 配置。阿里云 CLI 默认将其保存在 `~/.aliyun/config.json`。
 
 ## 创建和管理 Profile
 
-本地交互使用推荐从 OAuth 开始：
+在本地交互环境中，使用 OAuth 登录：
 
 ```sh
 aliyun configure --mode OAuth --profile default
@@ -58,11 +58,11 @@ export ALIBABA_CLOUD_PROFILE=production
 | `BearerToken` | 为支持 Bearer 认证的 API 提供 Token |
 | `Anonymous` | 不使用凭证调用，仅适用于允许匿名访问的 API |
 
-各模式支持的字段可以通过 `aliyun configure --help` 查看。
+各模式支持的配置字段可以通过 `aliyun configure --help` 查看。
 
 ## 非交互配置
 
-下面的示例在无提示的情况下写入 AK Profile：
+以下示例无需交互输入即可创建 AK Profile：
 
 ```sh
 aliyun configure set \
@@ -74,11 +74,11 @@ aliyun configure set \
   --language zh
 ```
 
-不要把真实密钥写进脚本、Shell 历史、源码仓库或 Issue。优先使用密钥管理系统注入、工作负载身份或临时凭证。
+不要把真实密钥写进脚本、Shell 历史记录、源码仓库或 Issue。优先使用密钥管理系统注入、工作负载身份或临时凭证。
 
 ## STS 临时凭证
 
-已经获得三个临时凭证字段时，可以使用 `StsToken`：
+已获取 AccessKey ID、AccessKey Secret 和 SecurityToken 时，使用 `StsToken` 模式配置临时凭证：
 
 交互式配置示例：
 
@@ -319,7 +319,7 @@ Saving profile[uri] ...Done.
 
 ## 环境变量
 
-环境变量可以选择 Profile，或补全命令参数/Profile 中未提供的字段。常用变量包括：
+环境变量可以选择 Profile，或补全命令行参数或 Profile 中未提供的字段。常用变量包括：
 
 | 环境变量 | 用途 |
 | --- | --- |

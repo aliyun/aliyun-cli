@@ -2,9 +2,9 @@
 
 [Documentation index](../README.md) | [简体中文](../zh-CN/oss.md)
 
-These interfaces apply to built-in `aliyun oss` in v3.5.1, not the separately installed `ossutil` tool. Run `aliyun oss <command> --help` for command-specific options. Host profiles supply credentials and region; host timeout and retry settings reach OSS execution. Refreshable host credentials are resolved at request time. Update the host CLI through its installation method; `aliyun oss update` does not run the standalone updater.
+These interfaces apply to built-in `aliyun oss` in v3.5.1, not the separately installed `ossutil` tool. Run `aliyun oss <command> --help` for command-specific options. CLI profiles supply credentials and region. CLI timeout and retry settings also apply to OSS commands. Credentials that support automatic refresh are obtained when each request is sent. Update the CLI through its installation method; `aliyun oss update` does not run the standalone updater.
 
-## Bounded listings
+## Paginated listings
 
 ```sh
 aliyun oss ls oss://example-bucket/prefix/ --cli-output json --limited-num 100
@@ -13,9 +13,9 @@ aliyun oss ls oss://example-bucket/prefix/ --cli-output json --cli-cursor '<next
 
 `--cli-output json` emits `schema_version: "1"`, `items`, `returned`, `complete`, `truncated`, and optional `next_cursor`. JSONL emits `type: "item"` records containing `item`, followed by one `type: "summary"` record with pagination fields; every record has `schema_version: "1"`. Items identify their `kind` and contain applicable bucket, key, size, ETag, version, or upload fields.
 
-The default bound is 100 items; `--limited-num` accepts 1–1000. Bucket, object, version, prefix, and multipart-upload listings use the applicable command options. Keep the list query unchanged when resuming and treat cursors as opaque. A filtered page may be empty while still having `next_cursor`; continue until `complete` is true. Listing is not a snapshot: a changed replayed page can require restarting.
+Each query returns up to 100 items by default; `--limited-num` accepts 1–1000. Bucket, object, version, prefix, and multipart-upload listings use the applicable command options. Keep the list query unchanged when resuming and pass the returned cursor unchanged. A filtered page may be empty while still having `next_cursor`; continue until `complete` is true. Listing is not a snapshot: changes to a previously read page may require restarting the query.
 
-## Validation and read-only plans
+## Local validation and operation previews
 
 ```sh
 aliyun oss cp ./example.txt oss://example-bucket/example.txt --cli-validate
@@ -31,9 +31,9 @@ The plan contains `schema_version: "1"`, `mode`, `command`, `complete`, `side_ef
 
 Use `--cli-ai-mode` for structured errors and `--cli-non-interactive` to prevent confirmation input. AI mode or explicit JSON/JSONL output also blocks interactive input; none of these flags authorizes a write. A blocked prompt returns `ConfirmationRequired`. After obtaining authorization, use the operation's existing force option where appropriate; earlier work in a multi-item command may already have completed.
 
-Built-in OSS checks the host safety policy before loading credentials or sending requests, including validation and plan modes; help is exempt. Rules match command names such as `oss:rm` or `oss:*`. Neither `--force`, `--yes`, nor AI mode bypasses `deny`; invalid policies also stop execution. In non-interactive mode, `confirm` returns `ConfirmationRequired`. After authorization, use `--yes` (or `-y`) for policy confirmation and the existing `--force` option where the operation also requires it. Other structured policy errors use `SafetyPolicyError`, with `oss.phase: "policy"` and no side effects.
+Built-in OSS checks the CLI safety policy before loading credentials or sending requests, including validation and plan modes; help is exempt. Rules match command names such as `oss:rm` or `oss:*`. Neither `--force`, `--yes`, nor AI mode bypasses `deny`; invalid policies also stop execution. In non-interactive mode, `confirm` returns `ConfirmationRequired`. After authorization, use `--yes` (or `-y`) for policy confirmation and the existing `--force` option where the operation also requires it. Other structured policy errors use `SafetyPolicyError`, with `oss.phase: "policy"` and no side effects.
 
-In AI mode, the shared error envelope includes `schemaVersion: "v1"`; non-AI explicit JSON errors keep their existing format. Structured errors go to stderr and include the Agent error fields plus an `oss` object with `schema_version: "1"`, `phase`, `status`, `side_effects`, and `retryable`; failure-report details appear when available. These adapted OSS errors exit with status **1**, unlike the OpenAPI Agent error status. `--no-cli-ai-mode` disables AI errors, but explicit JSON/JSONL output still requests structured errors. Initial configuration-loading errors also use the shared versioned envelope when startup AI mode is enabled.
+In AI mode, the shared error object includes `schemaVersion: "v1"`; non-AI explicit JSON errors keep their existing format. Structured errors go to stderr and include the Agent error fields plus an `oss` object with `schema_version: "1"`, `phase`, `status`, `side_effects`, and `retryable`; failure-report details appear when available. These OSS errors exit with status **1**, unlike the OpenAPI Agent error status. `--no-cli-ai-mode` disables AI errors, but explicit JSON/JSONL output still requests structured errors. Initial configuration-loading errors also use the shared versioned error object when startup AI mode is enabled.
 
 `cat` always preserves raw stdout bytes, even with `--cli-output json`. JSON/JSONL success output is otherwise limited to `ls` and the preview modes; unsupported combinations fail before execution. AI mode alone does not convert all successful command output to JSON.
 
