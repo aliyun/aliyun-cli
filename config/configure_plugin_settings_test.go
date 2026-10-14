@@ -187,7 +187,7 @@ func TestConfigurePluginSettings_Set_SourceBaseNotHTTP(t *testing.T) {
 	f.SetValue("ftp://mirror.example/plugins")
 	err := set.Run(ctx, nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "http://")
+	assert.Contains(t, err.Error(), "https://")
 }
 
 func TestConfigurePluginSettings_Set_SourceBaseBareHost(t *testing.T) {
@@ -203,7 +203,23 @@ func TestConfigurePluginSettings_Set_SourceBaseBareHost(t *testing.T) {
 	f.SetValue("mirror.example/plugins")
 	err := set.Run(ctx, nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "http://")
+	assert.Contains(t, err.Error(), "https://")
+}
+
+func TestConfigurePluginSettings_Set_SourceBaseHTTP(t *testing.T) {
+	ctx, _, _ := testPluginSettingsIsolatedHome(t)
+	root := NewConfigurePluginSettingsCommand()
+	ctx.EnterCommand(root)
+	set := root.GetSubCommand("set")
+	require.NotNil(t, set)
+	ctx.EnterCommand(set)
+	f := ctx.Flags().Get("source-base")
+	require.NotNil(t, f)
+	f.SetAssigned(true)
+	f.SetValue("http://mirror.example/plugins")
+	err := set.Run(ctx, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "https://")
 }
 
 func TestConfigurePluginSettings_Clear_InvalidArg(t *testing.T) {

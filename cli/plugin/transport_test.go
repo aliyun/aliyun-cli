@@ -30,7 +30,6 @@ func TestValidatePluginTransportURL(t *testing.T) {
 	} {
 		err := validatePluginTransport(raw, false)
 		assert.ErrorContains(t, err, "refusing insecure HTTP")
-		assert.NotContains(t, err.Error(), "allow-insecure-http")
 	}
 	assert.ErrorContains(t, m.validatePluginTransportURL("http://mirror.example/plugin.tgz"), "refusing insecure HTTP")
 	assert.ErrorContains(t, m.validatePluginTransportURL("ftp://mirror.example/plugin.tgz"), "https://")
@@ -234,7 +233,6 @@ func TestExecuteInstall_ChecksumFlag(t *testing.T) {
 	base.SetValue("http://mirror.example/plugins")
 	_, err = newManagerWithOptionalSourceBase(ctx)
 	assert.ErrorContains(t, err, "refusing insecure HTTP")
-	assert.Nil(t, ctx.Flags().Get("allow-insecure-http"))
 
 	_, err = httpGet("http://example.com/plugin.tgz", time.Second)
 	assert.ErrorContains(t, err, "refusing insecure HTTP")

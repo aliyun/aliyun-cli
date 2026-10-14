@@ -274,7 +274,7 @@ func TestManager_installFromRemotePackageURL_invalidSchemeAndPath(t *testing.T) 
 
 	err := mgr.installFromRemotePackageURL(ctx, "ftp://example.com/pkg.tgz")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "package URL must use http or https")
+	assert.Contains(t, err.Error(), "package URL must use https")
 
 	err = mgr.installFromRemotePackageURL(ctx, "https://example.com/not-an-archive")
 	require.Error(t, err)

@@ -130,7 +130,7 @@ func (m *Manager) ApplySourceBaseOverride(raw string) error {
 		scheme = strings.ToLower(u.Scheme)
 	}
 	if err != nil || u == nil || u.Host == "" || (scheme != "http" && scheme != "https") {
-		return fmt.Errorf("source-base must start with http:// or https://")
+		return fmt.Errorf("source-base must use https://")
 	}
 	if err := m.validatePluginTransportURL(v); err != nil {
 		return fmt.Errorf("source-base: %w", err)
@@ -932,7 +932,7 @@ func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL string) e
 		return fmt.Errorf("invalid package URL: %w", err)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("package URL must use http or https")
+		return fmt.Errorf("package URL must use https")
 	}
 	if !isPluginArchivePath(u.Path) {
 		return fmt.Errorf("package URL path must end with .zip, .tar.gz, or .tgz")
