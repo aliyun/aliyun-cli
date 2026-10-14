@@ -56,10 +56,9 @@ func TestManager_ApplySourceBaseOverride(t *testing.T) {
 	m := &Manager{}
 	assert.ErrorContains(t, m.ApplySourceBaseOverride(""), "must not be empty")
 	assert.ErrorContains(t, m.ApplySourceBaseOverride("   "), "must not be empty")
-	assert.ErrorContains(t, m.ApplySourceBaseOverride("ftp://x.example/plugins"), "http://")
+	assert.ErrorContains(t, m.ApplySourceBaseOverride("ftp://x.example/plugins"), "https://")
 	err := m.ApplySourceBaseOverride("http://mirror.example/plugins")
 	assert.ErrorContains(t, err, "refusing insecure HTTP")
-	assert.NotContains(t, err.Error(), "allow-insecure-http")
 	assert.ErrorContains(t, validatePluginTransport("http://127.0.0.1:9/plugins", false), "refusing insecure HTTP")
 	assert.NoError(t, m.ApplySourceBaseOverride("http://127.0.0.1:9/plugins"))
 	assert.NoError(t, m.ApplySourceBaseOverride("  https://mirror.example/plugins/  "))

@@ -885,7 +885,7 @@ func TestNewManagerWithOptionalSourceBase(t *testing.T) {
 		mgr, err := newManagerWithOptionalSourceBase(ctx)
 		assert.Error(t, err)
 		assert.Nil(t, mgr)
-		assert.Contains(t, err.Error(), "source-base must start with http:// or https://")
+		assert.Contains(t, err.Error(), "source-base must use https://")
 	})
 
 	t.Run("whitespace only value returns error", func(t *testing.T) {
