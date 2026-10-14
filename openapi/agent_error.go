@@ -252,6 +252,17 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 		return oauthAgentError(err, oauthErr)
 	}
 
+	var configurationErr *credentialConfigurationError
+	var runtimeCredentialErr *engine.CredentialError
+	if errors.As(err, &configurationErr) || errors.As(err, &runtimeCredentialErr) {
+		return profileConfigurationAgentError(err)
+	}
+	configurePath := rawHelpPositionals(args)
+	if len(configurePath) > 0 && configurePath[0] == "configure" &&
+		(len(configurePath) == 1 || containsString([]string{"get", "set", "list", "delete", "switch"}, configurePath[1])) {
+		return profileConfigurationAgentError(err)
+	}
+
 	if normalized := normalizeServerAgentError(err, context); normalized != nil {
 		return normalized
 	}
@@ -280,6 +291,24 @@ func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySe
 	// UsageError, and untyped errors all retain their original rendering and
 	// identity.
 	return err
+}
+
+func profileConfigurationAgentError(cause error) error {
+	exitCode := 1
+	var withTip cli.ErrorWithTip
+	if errors.As(cause, &withTip) {
+		exitCode = 3
+	}
+	// Configuration and credential-provider errors may contain secret values.
+	return cli.NewAgentError(cli.AgentErrorEnvelope{
+		Message:   "profile configuration failed",
+		ErrorCode: "ConfigurationError",
+		Recovery: cli.AgentErrorRecovery{
+			Action:  "check_configuration",
+			Command: "aliyun configure",
+			Hint:    "Check that the selected profile exists and its configuration is valid. Use `aliyun configure list` to inspect profiles, then configure the profile before retrying.",
+		},
+	}, cause).WithExitCode(exitCode)
 }
 
 // oauthAgentError renders an OAuth credential failure (expired or revoked
