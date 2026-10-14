@@ -40,6 +40,17 @@ func AssetNames(version string) []string {
 	}
 }
 
+// TraceNames are the SBOM and provenance files published beside each archive.
+// They are not part of SHASUMS256.txt.
+func TraceNames(version string) []string {
+	archives := AssetNames(version)
+	names := make([]string, 0, len(archives)*2)
+	for _, name := range archives {
+		names = append(names, name+".cdx.json", name+".provenance.json")
+	}
+	return names
+}
+
 // Options controls a download. Tests inject Client and Summer so HTTP and
 // checksum failures never depend on the network or the shasum binary.
 type Options struct {
@@ -119,20 +130,22 @@ func Download(ctx context.Context, opt Options) error {
 		}
 		sums = append(sums, line)
 
-		sigName := name + ".minisig"
-		sigDest := filepath.Join(staging, sigName)
-		if err := downloadFile(ctx, client, assetURL+".minisig", opt.Token, sigDest, timeout); err != nil {
-			return fmt.Errorf("download assets: publisher signature %s: %w", name, err)
+		if err := stageSignature(ctx, client, opt.Token, assetURL, name, dest, timeout); err != nil {
+			return err
 		}
-		sig, err := os.ReadFile(sigDest)
-		if err != nil {
-			return fmt.Errorf("download assets: publisher signature %s: %w", name, err)
+	}
+
+	for _, name := range TraceNames(version) {
+		dest := filepath.Join(staging, name)
+		assetURL := base + "/" + name
+		if err := downloadFile(ctx, client, assetURL, opt.Token, dest, timeout); err != nil {
+			return fmt.Errorf("download assets: %s: %w", name, err)
 		}
-		if len(sig) == 0 || len(sig) > 4096 {
-			return fmt.Errorf("download assets: publisher signature %s: missing or too large", name)
+		if err := ensureAsset(dest); err != nil {
+			return fmt.Errorf("download assets: %s: %w", name, err)
 		}
-		if err := verifyReleaseAsset(name, dest, sig); err != nil {
-			return fmt.Errorf("download assets: publisher signature %s: %w", name, err)
+		if err := stageSignature(ctx, client, opt.Token, assetURL, name, dest, timeout); err != nil {
+			return err
 		}
 	}
 
@@ -148,6 +161,9 @@ func Download(ctx context.Context, opt Options) error {
 	if err := commitAssets(staging, workDir, names); err != nil {
 		return err
 	}
+	if err := commitSigned(staging, workDir, TraceNames(version)); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -160,6 +176,24 @@ func cleanVersion(version string) (string, error) {
 		return "", fmt.Errorf("download assets: invalid version %q", version)
 	}
 	return version, nil
+}
+
+func stageSignature(ctx context.Context, client *http.Client, token, assetURL, name, dest string, timeout time.Duration) error {
+	sigDest := dest + ".minisig"
+	if err := downloadFile(ctx, client, assetURL+".minisig", token, sigDest, timeout); err != nil {
+		return fmt.Errorf("download assets: publisher signature %s: %w", name, err)
+	}
+	sig, err := os.ReadFile(sigDest)
+	if err != nil {
+		return fmt.Errorf("download assets: publisher signature %s: %w", name, err)
+	}
+	if len(sig) == 0 || len(sig) > 4096 {
+		return fmt.Errorf("download assets: publisher signature %s: missing or too large", name)
+	}
+	if err := verifyReleaseAsset(name, dest, sig); err != nil {
+		return fmt.Errorf("download assets: publisher signature %s: %w", name, err)
+	}
+	return nil
 }
 
 func downloadFile(ctx context.Context, client *http.Client, assetURL, token, dest string, timeout time.Duration) error {
@@ -261,6 +295,16 @@ func verifyChecksum(body string, names []string) error {
 }
 
 func commitAssets(staging, workDir string, names []string) error {
+	if err := commitSigned(staging, workDir, names); err != nil {
+		return err
+	}
+	if err := replaceFile(filepath.Join(staging, checksumName), filepath.Join(workDir, checksumName)); err != nil {
+		return fmt.Errorf("download assets: commit checksum: %w", err)
+	}
+	return nil
+}
+
+func commitSigned(staging, workDir string, names []string) error {
 	for _, name := range names {
 		if err := replaceFile(filepath.Join(staging, name), filepath.Join(workDir, name)); err != nil {
 			return fmt.Errorf("download assets: commit %s: %w", name, err)
@@ -269,9 +313,6 @@ func commitAssets(staging, workDir string, names []string) error {
 		if err := replaceFile(filepath.Join(staging, sigName), filepath.Join(workDir, sigName)); err != nil {
 			return fmt.Errorf("download assets: commit %s: %w", sigName, err)
 		}
-	}
-	if err := replaceFile(filepath.Join(staging, checksumName), filepath.Join(workDir, checksumName)); err != nil {
-		return fmt.Errorf("download assets: commit checksum: %w", err)
 	}
 	return nil
 }

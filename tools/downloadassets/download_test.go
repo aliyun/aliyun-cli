@@ -1,6 +1,7 @@
 package downloadassets
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -332,6 +333,55 @@ func TestDownloadInvalidDigestDoesNotCommit(t *testing.T) {
 	}
 }
 
+func TestPublisherSignatureFailuresDoNotCommit(t *testing.T) {
+	names := AssetNames("1.2.3")
+	cases := []struct {
+		name string
+		body []byte
+		want string
+	}{
+		{name: "rejected", body: []byte("not-a-signature"), want: "publisher signature"},
+		{name: "too-large", body: bytes.Repeat([]byte("a"), 5000), want: "too large"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if filepath.Base(r.URL.Path) == names[0]+".minisig" {
+					_, _ = w.Write(tc.body)
+					return
+				}
+				signedHandler(func(string) []byte { return []byte("ok") })(w, r)
+			}))
+			defer srv.Close()
+			dir := t.TempDir()
+			err := Download(context.Background(), Options{Version: "1.2.3", BaseURL: srv.URL, WorkDir: dir})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %s, got %v", tc.want, err)
+			}
+			if _, statErr := os.Stat(filepath.Join(dir, checksumName)); !os.IsNotExist(statErr) {
+				t.Fatal("bad signature committed checksum")
+			}
+		})
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if filepath.Base(r.URL.Path) == names[0]+".cdx.json.minisig" {
+			http.NotFound(w, r)
+			return
+		}
+		signedHandler(func(string) []byte { return []byte("ok") })(w, r)
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	err := Download(context.Background(), Options{Version: "1.2.3", BaseURL: srv.URL, WorkDir: dir})
+	if err == nil || !strings.Contains(err.Error(), "HTTP 404") {
+		t.Fatalf("expected missing trace signature, got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, checksumName)); !os.IsNotExist(statErr) {
+		t.Fatal("missing trace signature committed checksum")
+	}
+}
+
 func assertFreshChecksum(t *testing.T, dir string, names []string, body string) {
 	t.Helper()
 	if err := verifyChecksum(body, names); err != nil {
@@ -345,6 +395,21 @@ func assertFreshChecksum(t *testing.T, dir string, names []string, body string) 
 		}
 		if strings.Count(body, name) != 1 {
 			t.Fatalf("checksum listing for %s is not unique:\n%s", name, body)
+		}
+		if _, err := os.Stat(path + ".minisig"); err != nil {
+			t.Fatalf("signature for %s missing after success: %v", name, err)
+		}
+		for _, suffix := range []string{".cdx.json", ".provenance.json"} {
+			trace := path + suffix
+			if _, err := os.Stat(trace); err != nil {
+				t.Fatalf("trace %s missing after success: %v", trace, err)
+			}
+			if _, err := os.Stat(trace + ".minisig"); err != nil {
+				t.Fatalf("signature for %s missing after success: %v", trace, err)
+			}
+			if strings.Contains(body, name+suffix) {
+				t.Fatalf("checksum includes trace file %s:\n%s", name+suffix, body)
+			}
 		}
 	}
 }
