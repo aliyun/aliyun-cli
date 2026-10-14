@@ -235,6 +235,8 @@ func TestMachineListRejectsInvalidStateAndOutputFailures(t *testing.T) {
 
 func TestPreviewConfigurationAndURIErrorBoundaries(t *testing.T) {
 	clearEndpointTestEnv(t)
+	t.Setenv("ALIBABA_CLOUD_SAFETY_POLICY_ENABLED", "false")
+	t.Setenv("ALIBABA_CLOUD_SAFETY_POLICY_RULES", "")
 	for _, target := range []string{"oss://bucket", "oss://bucket/"} {
 		_, err := preparePreview(&removeCommand.command, []string{target}, nil, nil, "validate")
 		require.Error(t, err)
