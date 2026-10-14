@@ -41,15 +41,9 @@ const (
 )
 
 type Rule struct {
-	// Pattern: "product:ApiName" or "product:METHOD" or "product:METHOD/path"
-	// Matching is case-insensitive and * matches any sequence. By design,
-	// patterns match command spelling, not the resolved API identity: aliases,
-	// PascalCase and kebab-case are not expanded into equivalent commands.
-	// Examples (the rule's Action determines whether to deny or confirm):
-	//   "ecs:DeleteInstance" - matches DeleteInstance, not delete-instance
-	//   "ecs:delete-instance" - matches the kebab-case spelling separately
-	//   "*:Delete*" - matches command names starting with Delete across products
-	//   "*:DELETE/*" - matches REST DELETE with a slash-prefixed path
+	// Pattern is product:command or product:METHOD/path. Exact known built-in
+	// APIs match metadata identity; wildcards and unresolved commands match
+	// the user's spelling, case-insensitively, with * matching any sequence.
 	Pattern string `json:"pattern"`
 	// Action: allow, deny, confirm (or forbid)
 	Action Action `json:"action"`
@@ -88,11 +82,14 @@ type CommandInfo struct {
 	// `aliyun sls ListProject`, `*:DELETE/*` matches `aliyun cs DELETE /clusters`,
 	// and `fc:function:*` matches `aliyun fc function create ...`.
 	// Keep the user's spelling here even when metadata resolves an API alias;
-	// semantic alias matching is intentionally outside the policy contract.
+	// identity metadata is attached separately for built-in API calls.
 	ApiOrMethod string
 	// Path is only set for REST style invocations that supply a path
 	// (e.g. `aliyun cs DELETE /clusters` -> Path = "/clusters").
 	Path string
+
+	// identities is an immutable index scoped to this product and API version.
+	identities map[string]string
 }
 
 func (p *Policy) Check(cmd CommandInfo) CheckResult {
@@ -100,33 +97,33 @@ func (p *Policy) Check(cmd CommandInfo) CheckResult {
 		return CheckResult{Action: ActionAllow, Matched: false}
 	}
 
-	cmdPattern := buildCommandPattern(cmd)
-
-	// Rules are evaluated in order; first match wins
+	result := CheckResult{Action: ActionAllow}
+	bestPriority, bestSpecificity := -1, -1
 	for i := range p.Rules {
 		rule := &p.Rules[i]
-		if matchPattern(rule.Pattern, cmdPattern) {
-			action := rule.Action
-			if action == ActionForbid {
-				action = ActionConfirm
-			}
-			if action == "" {
-				action = ActionDeny
-			}
-			if action != ActionAllow && action != ActionDeny && action != ActionConfirm {
-				// A policy assembled in memory must fail closed just like a
-				// malformed policy loaded from disk.
-				action = ActionDeny
-			}
-			return CheckResult{
-				Action:  action,
-				Matched: true,
-				Rule:    rule,
-			}
+		matched, specificity := matchRule(rule.Pattern, cmd)
+		if !matched {
+			continue
+		}
+		action := rule.Action
+		if action == ActionForbid {
+			action = ActionConfirm
+		}
+		priority := 0
+		switch action {
+		case ActionAllow:
+		case ActionConfirm:
+			priority = 1
+		default:
+			// Invalid in-memory actions fail closed, just like malformed files.
+			action, priority = ActionDeny, 2
+		}
+		if priority > bestPriority || (priority == bestPriority && specificity > bestSpecificity) {
+			result = CheckResult{Action: action, Matched: true, Rule: rule}
+			bestPriority, bestSpecificity = priority, specificity
 		}
 	}
-
-	return CheckResult{Action: ActionAllow, Matched: false}
+	return result
 }
 
 // buildCommandPattern renders the user-typed command as a single identifier:

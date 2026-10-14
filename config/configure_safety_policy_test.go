@@ -16,6 +16,7 @@ package config
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -46,18 +47,116 @@ func TestConfigureSafetyPolicy_Show_Default(t *testing.T) {
 	assert.Empty(t, p.Rules)
 }
 
-func TestConfigureSafetyPolicy_Show_UsesEffectivePolicy(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, safety.SavePolicy(dir, &safety.Policy{Enabled: true,
-		Rules: []safety.Rule{{Pattern: "ecs:Delete*", Action: safety.ActionDeny}}}))
-	t.Setenv(safety.EnvSafetyPolicyEnabled, "false")
-	ctx, w := testAiModeContext(t, dir)
-	sub := enterSafetyPolicySub(t, ctx, "show")
-	require.NoError(t, sub.Run(ctx, []string{}))
-	var p safety.Policy
-	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(w.String())), &p))
-	assert.False(t, p.Enabled)
-	assert.Len(t, p.Rules, 1)
+func TestConfigureSafetyPolicy_Display_UsesEffectivePolicyWithoutSaving(t *testing.T) {
+	for _, command := range []string{"default", "show", "list"} {
+		for _, tc := range []struct {
+			name        string
+			fileEnabled bool
+			enabledEnv  string
+			rulesEnv    string
+			want        safety.Policy
+		}{
+			{
+				name:       "enable_and_replace_rules",
+				enabledEnv: "true",
+				rulesEnv:   "ecs:Update*=confirm",
+				want: safety.Policy{Enabled: true, Rules: []safety.Rule{
+					{Pattern: "ecs:Update*", Action: safety.ActionConfirm},
+				}},
+			},
+			{
+				name:        "disable_and_replace_rules",
+				fileEnabled: true,
+				enabledEnv:  "false",
+				rulesEnv:    "ecs:Update*=confirm",
+				want: safety.Policy{Enabled: false, Rules: []safety.Rule{
+					{Pattern: "ecs:Update*", Action: safety.ActionConfirm},
+				}},
+			},
+			{
+				name:        "empty_override_clears_rules",
+				fileEnabled: true,
+				enabledEnv:  "true",
+				want:        safety.Policy{Enabled: true, Rules: []safety.Rule{}},
+			},
+		} {
+			t.Run(command+"/"+tc.name, func(t *testing.T) {
+				dir := t.TempDir()
+				require.NoError(t, safety.SavePolicy(dir, &safety.Policy{Enabled: tc.fileEnabled,
+					Rules: []safety.Rule{{Pattern: "ecs:Delete*", Action: safety.ActionDeny}}}))
+				path := safety.GetPolicyFilePath(dir)
+				before, err := os.ReadFile(path)
+				require.NoError(t, err)
+				t.Setenv(safety.EnvSafetyPolicyEnabled, tc.enabledEnv)
+				t.Setenv(safety.EnvSafetyPolicyRules, tc.rulesEnv)
+
+				ctx, w := testAiModeContext(t, dir)
+				cmd := NewConfigureSafetyPolicyCommand()
+				ctx.EnterCommand(cmd)
+				if command != "default" {
+					cmd = cmd.GetSubCommand(command)
+					require.NotNil(t, cmd)
+					ctx.EnterCommand(cmd)
+				}
+				require.NoError(t, cmd.Run(ctx, nil))
+				if command == "list" {
+					assert.Contains(t, w.String(), "Safety policy: "+enabledStatus(tc.want.Enabled)+"\n")
+					assert.NotContains(t, w.String(), "ecs:Delete*")
+					for _, rule := range tc.want.Rules {
+						assert.Contains(t, w.String(), rule.Pattern+" -> "+string(rule.Action))
+					}
+				} else {
+					var got safety.Policy
+					require.NoError(t, json.Unmarshal(w.Bytes(), &got))
+					assert.Equal(t, tc.want, got)
+				}
+				after, err := os.ReadFile(path)
+				require.NoError(t, err)
+				assert.Equal(t, before, after, "displaying effective policy must not overwrite the file policy")
+			})
+		}
+	}
+}
+
+func TestConfigureSafetyPolicy_Display_RejectsInvalidEnvironment(t *testing.T) {
+	for _, command := range []string{"default", "show", "list"} {
+		for _, tc := range []struct {
+			name       string
+			enabledEnv string
+			rulesEnv   string
+			errorEnv   string
+		}{
+			{"invalid_enabled", "invalid", "ecs:Update*=confirm", safety.EnvSafetyPolicyEnabled},
+			{"invalid_rules", "true", "ecs:Update*=confirm,invalid", safety.EnvSafetyPolicyRules},
+		} {
+			t.Run(command+"/"+tc.name, func(t *testing.T) {
+				dir := t.TempDir()
+				require.NoError(t, safety.SavePolicy(dir, &safety.Policy{Enabled: true,
+					Rules: []safety.Rule{{Pattern: "ecs:Delete*", Action: safety.ActionDeny}}}))
+				path := safety.GetPolicyFilePath(dir)
+				before, err := os.ReadFile(path)
+				require.NoError(t, err)
+				t.Setenv(safety.EnvSafetyPolicyEnabled, tc.enabledEnv)
+				t.Setenv(safety.EnvSafetyPolicyRules, tc.rulesEnv)
+
+				ctx, w := testAiModeContext(t, dir)
+				cmd := NewConfigureSafetyPolicyCommand()
+				ctx.EnterCommand(cmd)
+				if command != "default" {
+					cmd = cmd.GetSubCommand(command)
+					require.NotNil(t, cmd)
+					ctx.EnterCommand(cmd)
+				}
+				err = cmd.Run(ctx, nil)
+				assert.ErrorContains(t, err, "load effective safety policy failed")
+				assert.ErrorContains(t, err, tc.errorEnv)
+				assert.Empty(t, w.String(), "an invalid effective policy must not display the file policy as a fallback")
+				after, err := os.ReadFile(path)
+				require.NoError(t, err)
+				assert.Equal(t, before, after)
+			})
+		}
+	}
 }
 
 func TestConfigureSafetyPolicy_ParentRun_DefaultShow(t *testing.T) {

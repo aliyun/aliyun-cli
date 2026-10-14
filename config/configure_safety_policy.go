@@ -32,18 +32,20 @@ func NewConfigureSafetyPolicyCommand() *cli.Command {
 		Usage: "safety-policy [command] [--config-path <configPath>]",
 		Long: i18n.T(
 			`Configure safety policy to deny or require confirmation for destructive operations.
-Rules match command spelling case-insensitively, with * as a wildcard; API aliases are not expanded.
-For example, ecs:DeleteInstance does not match ecs:delete-instance. Add a rule for each spelling you use.
-The first matching rule wins; unmatched commands are allowed.`,
+For built-in APIs recognized in the selected API version, rules without wildcards match both PascalCase and kebab-case command names.
+Rules containing * and commands for plugins or REST requests are matched as entered, without case sensitivity. The same applies when an API name cannot be uniquely resolved.
+When multiple rules match, deny takes precedence over confirm, followed by allow. For rules with the same action, an exact match to a recognized API takes precedence; remaining ties use configuration order.
+Earlier versions applied the first matching rule. An allow rule can no longer override a matching deny or confirm rule, regardless of order. Commands that match no rule are allowed.`,
 			`配置安全策略，用于拒绝或要求确认破坏性操作。
-规则按命令写法匹配，不区分大小写，支持 * 通配符；不会展开 API 别名。
-例如 ecs:DeleteInstance 不匹配 ecs:delete-instance，需要分别配置所使用的写法。
-第一条匹配的规则生效；未匹配的命令允许执行。`),
+对于所选 API 版本中可识别的内置 API，不含通配符的规则同时匹配 PascalCase 和 kebab-case 两种命令名称。
+含 * 的规则、插件命令和 REST 请求按输入的命令名称或路径匹配，不区分大小写。API 名称无法唯一识别时，也采用此方式。
+多条规则匹配时，按拒绝（deny）、确认（confirm）、允许（allow）的优先级执行。规则操作相同时，优先选择精确匹配已识别 API 的规则；匹配优先级也相同时，选择配置顺序靠前的规则。
+旧版本仅执行首条匹配规则。当前版本中，无论配置顺序如何，allow 规则均不能覆盖匹配的 deny 或 confirm 规则。未匹配任何规则的命令允许执行。`),
 		Run: func(ctx *cli.Context, args []string) error {
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			configDir, policy, err := loadSafetyPolicy(ctx)
+			configDir, policy, err := loadEffectiveSafetyPolicy(ctx)
 			if err != nil {
 				return err
 			}
@@ -57,8 +59,8 @@ The first matching rule wins; unmatched commands are allowed.`,
 		AssignedMode: cli.AssignedOnce,
 		Persistent:   true,
 		Short: i18n.T(
-			"case-insensitive command pattern with * wildcard; ecs:DeleteInstance does not match ecs:delete-instance",
-			"命令写法匹配，不区分大小写，支持 *；ecs:DeleteInstance 不匹配 ecs:delete-instance"),
+			"API or command matching pattern (case-insensitive; supports * wildcards)",
+			"API 或命令匹配模式，不区分大小写，支持 * 通配符"),
 	})
 	cmd.Flags().Add(&cli.Flag{
 		Category:     "safety",
@@ -66,8 +68,8 @@ The first matching rule wins; unmatched commands are allowed.`,
 		AssignedMode: cli.AssignedOnce,
 		Persistent:   true,
 		Short: i18n.T(
-			"action for rule: deny or confirm",
-			"规则动作: deny 或 confirm"),
+			"action for rule: deny, confirm (forbid), or allow",
+			"规则操作：deny（拒绝）、confirm（确认，别名为 forbid）或 allow（允许）"),
 	})
 
 	AddFlags(cmd.Flags())

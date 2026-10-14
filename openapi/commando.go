@@ -687,7 +687,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 			// Users can still match coarsely with wildcards like `fc:function:*` or `fc:function*`.
 			if !isHelp && !isVersion {
 				cmdName := strings.Join(args[1:], ":")
-				if err := c.checkSafetyPolicy(ctx, args[0], cmdName, ""); err != nil {
+				if err := c.checkSafetyPolicy(ctx, args[0], cmdName, "", false); err != nil {
 					return err
 				}
 			}
@@ -762,9 +762,9 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 				}
 			}
 		}
-		// Safety policy is keyed on what the user actually typed, so a rule like `sls:ListProject` matches `aliyun sls ListProject`
-		// regardless of how the cli later dispatches it (REST GET /, RPC, etc.).
-		if err := c.checkSafetyPolicy(ctx, product.Code, args[1], ""); err != nil {
+		// Built-in API rules can match metadata identity; raw REST and plugins
+		// retain syntactic matching.
+		if err := c.checkSafetyPolicy(ctx, product.Code, args[1], "", true); err != nil {
 			return err
 		}
 		if product.ApiStyle == "restful" {
@@ -830,7 +830,7 @@ func (c *Commando) main(ctx *cli.Context, args []string) error {
 		if find {
 			c.CheckApiParamWithBuildInArgs(ctx, api)
 		}
-		if err := c.checkSafetyPolicy(ctx, product.Code, args[1], args[2]); err != nil {
+		if err := c.checkSafetyPolicy(ctx, product.Code, args[1], args[2], false); err != nil {
 			return err
 		}
 		if ShouldUseOpenapi(ctx, &product) {
@@ -1872,7 +1872,7 @@ func (c *Commando) handleInstallError(ctx *cli.Context, err error, pluginName st
 	}
 }
 
-func (c *Commando) checkSafetyPolicy(ctx *cli.Context, productCode string, apiOrMethod string, path string) error {
+func (c *Commando) checkSafetyPolicy(ctx *cli.Context, productCode string, apiOrMethod string, path string, builtin bool) error {
 	configDir := config.GetConfigDir(ctx)
 	policy, err := safety.LoadEffectivePolicy(configDir)
 	if err != nil {
@@ -1882,6 +1882,23 @@ func (c *Commando) checkSafetyPolicy(ctx *cli.Context, productCode string, apiOr
 		Product:     productCode,
 		ApiOrMethod: apiOrMethod,
 		Path:        path,
+	}
+	if builtin && policy.Enabled && len(policy.Rules) > 0 && c.library != nil && c.library.canonicalRepo != nil {
+		if product, ok := c.library.GetProduct(productCode); ok {
+			version := product.Version
+			if flag := VersionFlag(ctx.Flags()); flag != nil {
+				if value, assigned := flag.GetValue(); assigned {
+					version = value
+				}
+			}
+			if index, err := c.library.canonicalRepo.GetVersionIndex(product.Code, version); err == nil && index != nil {
+				aliases := make(map[string]string, len(index.APIs))
+				for name, entry := range index.APIs {
+					aliases[name] = entry.CmdName
+				}
+				cmd = safety.WithAPIIdentities(cmd, aliases)
+			}
+		}
 	}
 	// --yes / -y or ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM=1: skip confirm prompt for agent/non-interactive
 	skipConfirm := YesFlag(ctx.Flags()).IsAssigned() ||
