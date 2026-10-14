@@ -65,45 +65,57 @@ go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli
 
 FLAGS="oss://aliyun-cli --force --access-key-id ${ACCESS_KEY_ID} --access-key-secret ${ACCESS_KEY_SECRET} --region cn-hangzhou"
 
+# Upload the publisher signature before the bytes it covers. Versioned
+# signatures come from the build jobs. latest aliases are signed here
+# because the asset name is part of the signed message.
+publish_oss() {
+  local file=$1
+  if [[ ! -f "${file}.minisig" ]]; then
+    bash "${SCRIPT_DIR}/sign_asset.sh" "${file}"
+  fi
+  ${ALIYUN} oss cp "${file}.minisig" $FLAGS
+  ${ALIYUN} oss cp "${file}" $FLAGS
+}
+
 # mac amd64
-${ALIYUN} oss cp ./aliyun-cli-macosx-"${VERSION}"-amd64.tgz $FLAGS
+publish_oss ./aliyun-cli-macosx-"${VERSION}"-amd64.tgz
 # mac arm64
-${ALIYUN} oss cp ./aliyun-cli-macosx-"${VERSION}"-arm64.tgz $FLAGS
+publish_oss ./aliyun-cli-macosx-"${VERSION}"-arm64.tgz
 # mac universal
-${ALIYUN} oss cp ./aliyun-cli-macosx-"${VERSION}"-universal.tgz $FLAGS
+publish_oss ./aliyun-cli-macosx-"${VERSION}"-universal.tgz
 # mac pkg
-${ALIYUN} oss cp ./aliyun-cli-"${VERSION}".pkg $FLAGS
+publish_oss ./aliyun-cli-"${VERSION}".pkg
   # linux amd64
-${ALIYUN} oss cp ./aliyun-cli-linux-"${VERSION}"-amd64.tgz $FLAGS
+publish_oss ./aliyun-cli-linux-"${VERSION}"-amd64.tgz
 # linux arm64
-${ALIYUN} oss cp ./aliyun-cli-linux-"${VERSION}"-arm64.tgz $FLAGS
+publish_oss ./aliyun-cli-linux-"${VERSION}"-arm64.tgz
 # windows
-${ALIYUN} oss cp ./aliyun-cli-windows-"${VERSION}"-amd64.zip $FLAGS
+publish_oss ./aliyun-cli-windows-"${VERSION}"-amd64.zip
 
 if [[ "${update_latest}" != "1" && "${write_stable_version}" != "1" && "${mark_official}" != "1" ]]; then
   echo "prerelease. skip."
 else
   if [[ "${update_latest}" == "1" ]]; then
     cp ./aliyun-cli-macosx-"${VERSION}"-amd64.tgz ./aliyun-cli-macosx-latest-amd64.tgz
-    ${ALIYUN} oss cp ./aliyun-cli-macosx-latest-amd64.tgz $FLAGS
+    publish_oss ./aliyun-cli-macosx-latest-amd64.tgz
 
     cp ./aliyun-cli-macosx-"${VERSION}"-arm64.tgz ./aliyun-cli-macosx-latest-arm64.tgz
-    ${ALIYUN} oss cp ./aliyun-cli-macosx-latest-arm64.tgz $FLAGS
+    publish_oss ./aliyun-cli-macosx-latest-arm64.tgz
 
     cp ./aliyun-cli-macosx-"${VERSION}"-universal.tgz ./aliyun-cli-macosx-latest-universal.tgz
-    ${ALIYUN} oss cp ./aliyun-cli-macosx-latest-universal.tgz $FLAGS
+    publish_oss ./aliyun-cli-macosx-latest-universal.tgz
 
     cp ./aliyun-cli-"${VERSION}".pkg ./aliyun-cli-latest.pkg
-    ${ALIYUN} oss cp ./aliyun-cli-latest.pkg $FLAGS
+    publish_oss ./aliyun-cli-latest.pkg
 
     cp ./aliyun-cli-linux-"${VERSION}"-amd64.tgz ./aliyun-cli-linux-latest-amd64.tgz
-    ${ALIYUN} oss cp ./aliyun-cli-linux-latest-amd64.tgz $FLAGS
+    publish_oss ./aliyun-cli-linux-latest-amd64.tgz
 
     cp ./aliyun-cli-linux-"${VERSION}"-arm64.tgz ./aliyun-cli-linux-latest-arm64.tgz
-    ${ALIYUN} oss cp ./aliyun-cli-linux-latest-arm64.tgz $FLAGS
+    publish_oss ./aliyun-cli-linux-latest-arm64.tgz
 
     cp ./aliyun-cli-windows-"${VERSION}"-amd64.zip ./aliyun-cli-windows-latest-amd64.zip
-    ${ALIYUN} oss cp ./aliyun-cli-windows-latest-amd64.zip $FLAGS
+    publish_oss ./aliyun-cli-windows-latest-amd64.zip
   fi
 
   if [[ "${write_stable_version}" == "1" ]]; then

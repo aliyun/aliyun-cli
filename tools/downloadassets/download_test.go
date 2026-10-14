@@ -23,12 +23,15 @@ func TestDownloadSuccessAndRerunReplacesChecksum(t *testing.T) {
 	var seenAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seenAuth = r.Header.Get("Authorization")
-		name := strings.TrimPrefix(r.URL.Path, "/")
-		if !strings.Contains(name, "1.2.3") {
+		name := filepath.Base(r.URL.Path)
+		asset := strings.TrimSuffix(name, ".minisig")
+		if !strings.Contains(asset, "1.2.3") {
 			http.NotFound(w, r)
 			return
 		}
-		_, _ = w.Write([]byte("asset-" + filepath.Base(name)))
+		signedHandler(func(assetName string) []byte {
+			return []byte("asset-" + assetName)
+		})(w, r)
 	}))
 	defer srv.Close()
 
@@ -73,11 +76,11 @@ func TestDownloadSuccessAndRerunReplacesChecksum(t *testing.T) {
 func TestDownloadHTTP404DoesNotCommitChecksum(t *testing.T) {
 	names := AssetNames("1.2.3")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, names[2]) {
+		if strings.HasSuffix(filepath.Base(r.URL.Path), names[2]) || filepath.Base(r.URL.Path) == names[2] {
 			http.NotFound(w, r)
 			return
 		}
-		_, _ = w.Write([]byte("ok"))
+		signedHandler(func(string) []byte { return []byte("ok") })(w, r)
 	}))
 	defer srv.Close()
 
@@ -125,11 +128,11 @@ func TestDownloadTimeoutDoesNotCommitChecksum(t *testing.T) {
 func TestDownloadEmptyAssetIsMissing(t *testing.T) {
 	names := AssetNames("1.2.3")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, names[1]) {
+		if filepath.Base(r.URL.Path) == names[1] {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		_, _ = w.Write([]byte("ok"))
+		signedHandler(func(string) []byte { return []byte("ok") })(w, r)
 	}))
 	defer srv.Close()
 
