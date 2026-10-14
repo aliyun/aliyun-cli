@@ -23,6 +23,13 @@ func addPluginSourceBaseFlag(cmd *cli.Command) {
 		AssignedMode: cli.AssignedOnce,
 		DefaultValue: "",
 	})
+	cmd.Flags().Add(&cli.Flag{
+		Name: "allow-insecure-http",
+		Short: i18n.T(
+			"Allow non-loopback HTTP for this command. Transport is not protected; printed as a warning",
+			"本次命令允许非本机 HTTP。传输不受保护，会打印警告"),
+		AssignedMode: cli.AssignedNone,
+	})
 }
 
 func addPreferGoFlag(cmd *cli.Command) {
@@ -41,8 +48,12 @@ func newManagerWithOptionalSourceBase(ctx *cli.Context) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
+	mgr.commandCtx = ctx
 	if f := ctx.Flags().Get("prefer-go"); f != nil && f.IsAssigned() {
 		mgr.preferGo = true
+	}
+	if f := ctx.Flags().Get("allow-insecure-http"); f != nil && f.IsAssigned() {
+		mgr.allowInsecureHTTP = true
 	}
 	f := ctx.Flags().Get("source-base")
 	if f == nil || !f.IsAssigned() {
@@ -294,9 +305,9 @@ func newInstallCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "install",
 		Short: i18n.T("Install a plugin (from remote index or package file/URL)", "安装插件（远程索引或指定包文件/URL）"),
-		Usage: "install [--source-base <url>] (--name <plugin_name> | --names <plugin1> [<plugin2> ...]) [--version <version>] [--enable-pre] | install --package <path-or-url>",
+		Usage: "install [--source-base <url>] [--allow-insecure-http] (--name <plugin_name> | --names <plugin1> [<plugin2> ...]) [--version <version>] [--enable-pre] | install --package <path-or-url> [--checksum <sha256>]",
 		Run: func(ctx *cli.Context, args []string) error {
-			names, pkgRef, version, enablePre, err := parseInstallArgs(ctx)
+			names, pkgRef, version, enablePre, checksum, err := parseInstallArgs(ctx)
 			if err != nil {
 				return err
 			}
@@ -306,7 +317,7 @@ func newInstallCommand() *cli.Command {
 				return err
 			}
 
-			return executeInstall(ctx, validatedNames, pkgRef, version, enablePre)
+			return executeInstall(ctx, validatedNames, pkgRef, version, enablePre, checksum)
 		},
 	}
 
@@ -338,7 +349,14 @@ func newInstallCommand() *cli.Command {
 
 	cmd.Flags().Add(&cli.Flag{
 		Name:         "package",
-		Short:        i18n.T("Path or http(s) URL of the plugin package file (.zip, .tar.gz, .tgz)", "插件包文件的路径或 http(s) URL（.zip、.tar.gz、.tgz）"),
+		Short:        i18n.T("Path or https URL of the plugin package file (.zip, .tar.gz, .tgz)", "插件包文件的路径或 https URL（.zip、.tar.gz、.tgz）"),
+		AssignedMode: cli.AssignedOnce,
+		DefaultValue: "",
+	})
+
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "checksum",
+		Short:        i18n.T("SHA-256 of the package given to --package. Required to mark the install as verified", "传给 --package 的包的 SHA-256。只有提供正确摘要才会标记为已验证安装"),
 		AssignedMode: cli.AssignedOnce,
 		DefaultValue: "",
 	})
@@ -491,14 +509,14 @@ func newUpdateCommand() *cli.Command {
 	return cmd
 }
 
-func parseInstallArgs(ctx *cli.Context) (names []string, pkgRef string, version string, enablePre bool, err error) {
+func parseInstallArgs(ctx *cli.Context) (names []string, pkgRef string, version string, enablePre bool, checksum string, err error) {
 	nameFlag := ctx.Flags().Get("name")
 	namesFlag := ctx.Flags().Get("names")
 	nameAssigned := nameFlag != nil && nameFlag.IsAssigned()
 	namesAssigned := namesFlag != nil && namesFlag.IsAssigned()
 
 	if nameAssigned && namesAssigned {
-		return nil, "", "", false, fmt.Errorf("--name and --names cannot be used together")
+		return nil, "", "", false, "", fmt.Errorf("--name and --names cannot be used together")
 	}
 
 	if nameAssigned {
@@ -525,7 +543,13 @@ func parseInstallArgs(ctx *cli.Context) (names []string, pkgRef string, version 
 		enablePre = true
 	}
 
-	return names, pkgRef, version, enablePre, nil
+	if f := ctx.Flags().Get("checksum"); f != nil && f.IsAssigned() {
+		if v, ok := f.GetValue(); ok {
+			checksum = strings.TrimSpace(v)
+		}
+	}
+
+	return names, pkgRef, version, enablePre, checksum, nil
 }
 
 func validateInstallArgs(names []string, pkgRef string) ([]string, error) {
@@ -552,14 +576,18 @@ func validateInstallArgs(names []string, pkgRef string) ([]string, error) {
 	return validNames, nil
 }
 
-func executeInstall(ctx *cli.Context, names []string, pkgRef, version string, enablePre bool) error {
+func executeInstall(ctx *cli.Context, names []string, pkgRef, version string, enablePre bool, checksum string) error {
 	mgr, err := newManagerWithOptionalSourceBase(ctx)
 	if err != nil {
 		return err
 	}
 
 	if strings.TrimSpace(pkgRef) != "" {
+		mgr.expectedPackageChecksum = strings.TrimSpace(checksum)
 		return mgr.InstallFromPackage(ctx, pkgRef)
+	}
+	if strings.TrimSpace(checksum) != "" {
+		return fmt.Errorf("--checksum is only valid with --package")
 	}
 
 	if len(names) == 1 {
