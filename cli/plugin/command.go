@@ -23,13 +23,6 @@ func addPluginSourceBaseFlag(cmd *cli.Command) {
 		AssignedMode: cli.AssignedOnce,
 		DefaultValue: "",
 	})
-	cmd.Flags().Add(&cli.Flag{
-		Name: "allow-insecure-http",
-		Short: i18n.T(
-			"Allow non-loopback HTTP for this command. Transport is not protected; printed as a warning",
-			"本次命令允许非本机 HTTP。传输不受保护，会打印警告"),
-		AssignedMode: cli.AssignedNone,
-	})
 }
 
 func addPreferGoFlag(cmd *cli.Command) {
@@ -48,12 +41,8 @@ func newManagerWithOptionalSourceBase(ctx *cli.Context) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
-	mgr.commandCtx = ctx
 	if f := ctx.Flags().Get("prefer-go"); f != nil && f.IsAssigned() {
 		mgr.preferGo = true
-	}
-	if f := ctx.Flags().Get("allow-insecure-http"); f != nil && f.IsAssigned() {
-		mgr.allowInsecureHTTP = true
 	}
 	f := ctx.Flags().Get("source-base")
 	if f == nil || !f.IsAssigned() {
@@ -305,7 +294,7 @@ func newInstallCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name:  "install",
 		Short: i18n.T("Install a plugin (from remote index or package file/URL)", "安装插件（远程索引或指定包文件/URL）"),
-		Usage: "install [--source-base <url>] [--allow-insecure-http] (--name <plugin_name> | --names <plugin1> [<plugin2> ...]) [--version <version>] [--enable-pre] | install --package <path-or-url> [--checksum <sha256>]",
+		Usage: "install [--source-base <url>] (--name <plugin_name> | --names <plugin1> [<plugin2> ...]) [--version <version>] [--enable-pre] | install --package <path-or-url> [--checksum <sha256>]",
 		Run: func(ctx *cli.Context, args []string) error {
 			names, pkgRef, version, enablePre, checksum, err := parseInstallArgs(ctx)
 			if err != nil {

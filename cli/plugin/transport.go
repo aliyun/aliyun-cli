@@ -6,23 +6,11 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
+	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 )
-
-// EnvAllowInsecureHTTP opts this process into non-loopback HTTP for plugin
-// index and package downloads. The CLI prints a warning when such a URL is used.
-const EnvAllowInsecureHTTP = "ALIBABA_CLOUD_CLI_PLUGIN_ALLOW_INSECURE_HTTP"
-
-func (m *Manager) insecureHTTPAllowed() bool {
-	if m != nil && m.allowInsecureHTTP {
-		return true
-	}
-	v := strings.TrimSpace(os.Getenv(EnvAllowInsecureHTTP))
-	return v == "1" || strings.EqualFold(v, "true")
-}
 
 func isLoopbackHost(host string) bool {
 	host = strings.Trim(strings.TrimSpace(strings.ToLower(host)), "[]")
@@ -33,9 +21,14 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// validatePluginTransportURL accepts HTTPS, loopback HTTP, and other HTTP only
-// when insecure HTTP was explicitly enabled. Every redirect hop is checked too.
+// validatePluginTransportURL accepts HTTPS only. HTTP is refused, including
+// loopback. go test still allows loopback HTTP so httptest fixtures can run;
+// that switch is not a CLI option.
 func (m *Manager) validatePluginTransportURL(raw string) error {
+	return validatePluginTransport(raw, testing.Testing())
+}
+
+func validatePluginTransport(raw string, allowLoopbackHTTP bool) error {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u == nil || u.Host == "" {
 		return fmt.Errorf("plugin URL must use https://")
@@ -44,10 +37,10 @@ func (m *Manager) validatePluginTransportURL(raw string) error {
 	case "https":
 		return nil
 	case "http":
-		if m.insecureHTTPAllowed() || isLoopbackHost(u.Hostname()) {
+		if allowLoopbackHTTP && isLoopbackHost(u.Hostname()) {
 			return nil
 		}
-		return fmt.Errorf("refusing insecure HTTP URL %s: plugin sources and packages must use HTTPS (pass --allow-insecure-http for local development)", safePluginPackageURL(u))
+		return fmt.Errorf("refusing insecure HTTP URL %s: plugin sources and packages must use HTTPS", safePluginPackageURL(u))
 	default:
 		return fmt.Errorf("plugin URL must use https://")
 	}
@@ -70,34 +63,14 @@ func (m *Manager) checkPluginRedirect(req *http.Request, via []*http.Request) er
 	if err := m.validatePluginTransportURL(req.URL.String()); err != nil {
 		return err
 	}
-	if len(via) > 0 && via[0] != nil && httpsDowngradedToHTTP(via[0].URL, req.URL) && !m.insecureHTTPAllowed() {
+	if len(via) > 0 && via[0] != nil && httpsDowngradedToHTTP(via[0].URL, req.URL) {
 		return fmt.Errorf("refusing redirect that downgrades HTTPS to HTTP (%s)", safePluginPackageURL(req.URL))
 	}
-	m.noteInsecureHTTP(req.URL.String())
 	return nil
-}
-
-func (m *Manager) noteInsecureHTTP(raw string) {
-	if m == nil || m.commandCtx == nil || m.insecureHTTPNoted {
-		return
-	}
-	u, err := url.Parse(raw)
-	if err != nil || u == nil || !strings.EqualFold(u.Scheme, "http") || isLoopbackHost(u.Hostname()) {
-		return
-	}
-	if !m.insecureHTTPAllowed() {
-		return
-	}
-	m.insecureHTTPNoted = true
-	cli.Printf(m.commandCtx.Stderr(), "Warning: insecure HTTP is explicitly enabled; plugin transport is not protected (%s).\n", safePluginPackageURL(u))
 }
 
 func (m *Manager) acceptPluginTransport(raw string) error {
-	if err := m.validatePluginTransportURL(raw); err != nil {
-		return err
-	}
-	m.noteInsecureHTTP(raw)
-	return nil
+	return m.validatePluginTransportURL(raw)
 }
 
 func normalizeSHA256Checksum(expected string) (string, error) {

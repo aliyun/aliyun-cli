@@ -23,21 +23,20 @@ func TestValidatePluginTransportURL(t *testing.T) {
 	assert.NoError(t, m.validatePluginTransportURL("http://127.0.0.1:8080/plugin.tgz"))
 	assert.NoError(t, m.validatePluginTransportURL("http://localhost/plugin.tgz"))
 	assert.NoError(t, m.validatePluginTransportURL("http://[::1]/plugin.tgz"))
+	for _, raw := range []string{
+		"http://mirror.example/plugin.tgz",
+		"http://127.0.0.1:8080/plugin.tgz",
+		"http://localhost/plugin.tgz",
+	} {
+		err := validatePluginTransport(raw, false)
+		assert.ErrorContains(t, err, "refusing insecure HTTP")
+		assert.NotContains(t, err.Error(), "allow-insecure-http")
+	}
 	assert.ErrorContains(t, m.validatePluginTransportURL("http://mirror.example/plugin.tgz"), "refusing insecure HTTP")
 	assert.ErrorContains(t, m.validatePluginTransportURL("ftp://mirror.example/plugin.tgz"), "https://")
 	assert.ErrorContains(t, m.validatePluginTransportURL("http:///plugin.tgz"), "https://")
 	assert.ErrorContains(t, m.validatePluginTransportURL("://bad"), "https://")
-
-	m.allowInsecureHTTP = true
-	assert.NoError(t, m.validatePluginTransportURL("http://mirror.example/plugin.tgz"))
 	assert.False(t, httpsDowngradedToHTTP(nil, nil))
-	stdout, stderr := new(strings.Builder), new(strings.Builder)
-	blocked := &Manager{commandCtx: cli.NewCommandContext(stdout, stderr)}
-	blocked.noteInsecureHTTP("http://mirror.example/plugin.tgz")
-	assert.Empty(t, stderr.String())
-
-	t.Setenv(EnvAllowInsecureHTTP, "true")
-	assert.NoError(t, (&Manager{}).validatePluginTransportURL("http://mirror.example/plugin.tgz"))
 }
 
 func TestCheckPluginRedirect(t *testing.T) {
@@ -62,13 +61,8 @@ func TestCheckPluginRedirect(t *testing.T) {
 		via[i] = req("https://mirror.example/a.tgz")
 	}
 	assert.ErrorContains(t, m.checkPluginRedirect(req("https://mirror.example/b.tgz"), via), "10 redirects")
-
-	stdout, stderr := new(strings.Builder), new(strings.Builder)
-	allowed := &Manager{allowInsecureHTTP: true, commandCtx: cli.NewCommandContext(stdout, stderr)}
-	require.NoError(t, allowed.checkPluginRedirect(req("http://mirror.example/plugin.tgz"), []*http.Request{req("https://aliyuncli.alicdn.com/plugin.tgz")}))
-	require.NoError(t, allowed.checkPluginRedirect(req("http://mirror.example/other.tgz"), []*http.Request{req("https://aliyuncli.alicdn.com/plugin.tgz")}))
-	assert.Equal(t, 1, strings.Count(stderr.String(), "insecure HTTP is explicitly enabled"))
-	assert.NotContains(t, stderr.String(), "not protected (http://127.0.0.1")
+	err = m.checkPluginRedirect(req("http://mirror.example/plugin.tgz"), []*http.Request{req("https://aliyuncli.alicdn.com/plugin.tgz")})
+	assert.ErrorContains(t, err, "refusing insecure HTTP")
 }
 
 func TestNormalizeAndVerifySHA256(t *testing.T) {
@@ -240,14 +234,7 @@ func TestExecuteInstall_ChecksumFlag(t *testing.T) {
 	base.SetValue("http://mirror.example/plugins")
 	_, err = newManagerWithOptionalSourceBase(ctx)
 	assert.ErrorContains(t, err, "refusing insecure HTTP")
-
-	allow := ctx.Flags().Get("allow-insecure-http")
-	require.NotNil(t, allow)
-	allow.SetAssigned(true)
-	mgr, err := newManagerWithOptionalSourceBase(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, "http://mirror.example/plugins", mgr.sourceBase)
-	assert.Contains(t, stderr.String(), "insecure HTTP is explicitly enabled")
+	assert.Nil(t, ctx.Flags().Get("allow-insecure-http"))
 
 	_, err = httpGet("http://example.com/plugin.tgz", time.Second)
 	assert.ErrorContains(t, err, "refusing insecure HTTP")

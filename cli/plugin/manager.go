@@ -65,15 +65,8 @@ type Manager struct {
 	saveLocalManifestHook func(*LocalManifest) error
 	// archiveLimits overrides package resource boundaries in tests.
 	archiveLimits *pluginArchiveLimits
-	// allowInsecureHTTP permits non-loopback HTTP when --allow-insecure-http or
-	// ALIBABA_CLOUD_CLI_PLUGIN_ALLOW_INSECURE_HTTP is set.
-	allowInsecureHTTP bool
 	// expectedPackageChecksum is the caller-supplied SHA-256 for --package installs.
 	expectedPackageChecksum string
-	// commandCtx receives the insecure-HTTP warning. Nil in unit tests that do not care.
-	commandCtx *cli.Context
-	// insecureHTTPNoted prints the insecure-HTTP warning at most once per command.
-	insecureHTTPNoted bool
 	// httpTransport overrides the HTTP transport in tests (for example httptest TLS).
 	httpTransport http.RoundTripper
 }
@@ -142,7 +135,6 @@ func (m *Manager) ApplySourceBaseOverride(raw string) error {
 	if err := m.validatePluginTransportURL(v); err != nil {
 		return fmt.Errorf("source-base: %w", err)
 	}
-	m.noteInsecureHTTP(v)
 	m.sourceBase = strings.TrimRight(v, "/")
 	m.skipPluginIndexCacheForCLI = true
 	return nil
