@@ -13,6 +13,7 @@ upload_one() {
   case "${base}" in
     *.tgz) type=application/x-compressed-tar ;;
     *.txt|*.minisig) type=text/plain ;;
+    *.json) type=application/json ;;
     *) type=application/zip ;;
   esac
 
@@ -57,7 +58,7 @@ upload_one() {
 }
 
 case "$(basename "${ASSET}")" in
-  *.tgz|*.zip|*.pkg)
+  *.tgz|*.zip|*.pkg|*.cdx.json|*.provenance.json)
     bash "${SCRIPT_DIR}/sign_asset.sh" "${ASSET}"
     upload_one "${ASSET}"
     upload_one "${ASSET}.minisig"

@@ -77,45 +77,51 @@ publish_oss() {
   ${ALIYUN} oss cp "${file}" $FLAGS
 }
 
+publish_traced() {
+  local file=$1
+  publish_oss "${file}"
+  publish_oss "${file}.cdx.json"
+  publish_oss "${file}.provenance.json"
+}
+
+retarget_latest() {
+  local src=$1
+  local dst=$2
+  cp "${src}" "${dst}"
+  cp "${src}.cdx.json" "${dst}.cdx.json"
+  go run ./tools/buildtrace/cmd/buildtrace retarget \
+    --from "${src}.provenance.json" \
+    --asset "${dst}" \
+    --sbom "${dst}.cdx.json"
+  publish_traced "${dst}"
+}
+
 # mac amd64
-publish_oss ./aliyun-cli-macosx-"${VERSION}"-amd64.tgz
+publish_traced ./aliyun-cli-macosx-"${VERSION}"-amd64.tgz
 # mac arm64
-publish_oss ./aliyun-cli-macosx-"${VERSION}"-arm64.tgz
+publish_traced ./aliyun-cli-macosx-"${VERSION}"-arm64.tgz
 # mac universal
-publish_oss ./aliyun-cli-macosx-"${VERSION}"-universal.tgz
+publish_traced ./aliyun-cli-macosx-"${VERSION}"-universal.tgz
 # mac pkg
-publish_oss ./aliyun-cli-"${VERSION}".pkg
-  # linux amd64
-publish_oss ./aliyun-cli-linux-"${VERSION}"-amd64.tgz
+publish_traced ./aliyun-cli-"${VERSION}".pkg
+# linux amd64
+publish_traced ./aliyun-cli-linux-"${VERSION}"-amd64.tgz
 # linux arm64
-publish_oss ./aliyun-cli-linux-"${VERSION}"-arm64.tgz
+publish_traced ./aliyun-cli-linux-"${VERSION}"-arm64.tgz
 # windows
-publish_oss ./aliyun-cli-windows-"${VERSION}"-amd64.zip
+publish_traced ./aliyun-cli-windows-"${VERSION}"-amd64.zip
 
 if [[ "${update_latest}" != "1" && "${write_stable_version}" != "1" && "${mark_official}" != "1" ]]; then
   echo "prerelease. skip."
 else
   if [[ "${update_latest}" == "1" ]]; then
-    cp ./aliyun-cli-macosx-"${VERSION}"-amd64.tgz ./aliyun-cli-macosx-latest-amd64.tgz
-    publish_oss ./aliyun-cli-macosx-latest-amd64.tgz
-
-    cp ./aliyun-cli-macosx-"${VERSION}"-arm64.tgz ./aliyun-cli-macosx-latest-arm64.tgz
-    publish_oss ./aliyun-cli-macosx-latest-arm64.tgz
-
-    cp ./aliyun-cli-macosx-"${VERSION}"-universal.tgz ./aliyun-cli-macosx-latest-universal.tgz
-    publish_oss ./aliyun-cli-macosx-latest-universal.tgz
-
-    cp ./aliyun-cli-"${VERSION}".pkg ./aliyun-cli-latest.pkg
-    publish_oss ./aliyun-cli-latest.pkg
-
-    cp ./aliyun-cli-linux-"${VERSION}"-amd64.tgz ./aliyun-cli-linux-latest-amd64.tgz
-    publish_oss ./aliyun-cli-linux-latest-amd64.tgz
-
-    cp ./aliyun-cli-linux-"${VERSION}"-arm64.tgz ./aliyun-cli-linux-latest-arm64.tgz
-    publish_oss ./aliyun-cli-linux-latest-arm64.tgz
-
-    cp ./aliyun-cli-windows-"${VERSION}"-amd64.zip ./aliyun-cli-windows-latest-amd64.zip
-    publish_oss ./aliyun-cli-windows-latest-amd64.zip
+    retarget_latest ./aliyun-cli-macosx-"${VERSION}"-amd64.tgz ./aliyun-cli-macosx-latest-amd64.tgz
+    retarget_latest ./aliyun-cli-macosx-"${VERSION}"-arm64.tgz ./aliyun-cli-macosx-latest-arm64.tgz
+    retarget_latest ./aliyun-cli-macosx-"${VERSION}"-universal.tgz ./aliyun-cli-macosx-latest-universal.tgz
+    retarget_latest ./aliyun-cli-"${VERSION}".pkg ./aliyun-cli-latest.pkg
+    retarget_latest ./aliyun-cli-linux-"${VERSION}"-amd64.tgz ./aliyun-cli-linux-latest-amd64.tgz
+    retarget_latest ./aliyun-cli-linux-"${VERSION}"-arm64.tgz ./aliyun-cli-linux-latest-arm64.tgz
+    retarget_latest ./aliyun-cli-windows-"${VERSION}"-amd64.zip ./aliyun-cli-windows-latest-amd64.zip
   fi
 
   if [[ "${write_stable_version}" == "1" ]]; then
