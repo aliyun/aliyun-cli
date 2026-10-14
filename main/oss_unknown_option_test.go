@@ -17,14 +17,28 @@ func TestOSSUnknownOptionsThroughRoot(t *testing.T) {
 	t.Cleanup(cli.EnableExitCode)
 	for _, command := range []string{"ls", "cp"} {
 		help := "\nRun 'aliyun oss " + command + " --help' for supported oss options."
-		for _, tc := range []struct {
+		cases := []struct {
 			flag, want string
 		}{
 			{"--header=private-header-value", "--header is not an oss command option." + help},
 			{"--dryrun", "--dryrun is not an oss command option." + help},
-			{"--versin", "invalid option --versin for oss commands, did you mean --version?"},
-			{"--zzzzzz", "invalid option --zzzzzz for oss commands." + help},
-		} {
+			{"--versin", "invalid option --versin for oss " + command + "." + help},
+			{"--zzzzzz", "invalid option --zzzzzz for oss " + command + "." + help},
+		}
+		if command == "ls" {
+			cases = append(cases, []struct{ flag, want string }{
+				{"--vers", "invalid option --vers for oss ls, did you mean --version-id-marker?"},
+				{"--markr", "invalid option --markr for oss ls, did you mean --marker?"},
+				{"--version", "invalid option --version for oss ls." + help},
+				{"--version-id", "invalid option --version-id for oss ls." + help},
+			}...)
+		} else {
+			cases = append(cases, []struct{ flag, want string }{
+				{"--vers", "invalid option --vers for oss cp, did you mean --version-id?"},
+				{"--recursiv", "invalid option --recursiv for oss cp, did you mean --recursive?"},
+			}...)
+		}
+		for _, tc := range cases {
 			for _, format := range []string{"human", "json"} {
 				t.Run(command+"/"+tc.flag+"/"+format, func(t *testing.T) {
 					var stdout, stderr bytes.Buffer
