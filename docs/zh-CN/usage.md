@@ -267,30 +267,21 @@ aliyun configure safety-policy --help
 
 安全策略默认关闭，`confirm` 只是 CLI 本地执行前确认，不代表云端授权或审批。使用 `show`/`list` 查看当前生效策略；如果设置了 `ALIBABA_CLOUD_SAFETY_POLICY_ENABLED` 或 `ALIBABA_CLOUD_SAFETY_POLICY_RULES`，展示结果包含环境变量覆盖后的配置。策略文件或环境规则无法完整解析时，CLI 会拒绝继续执行。
 
+添加或更新规则成功后，CLI 会在标准错误（stderr）中提示检查 PascalCase 和 kebab-case 两种命令名称的覆盖情况。此提示不会自动新增规则，也不会改变规则的匹配顺序。
+
 ### 命令匹配规则
 
-对于内置 API，一条不含通配符的规则可以同时匹配大驼峰（PascalCase）和短横线（kebab-case）命令名称。例如，以下规则可同时禁止执行 `ecs DeleteInstance` 和 `ecs delete-instance`。两种名称的对应关系须包含在所选版本的本地 API 元数据中：
+安全策略按输入的命令名称匹配，不会自动识别同一 API 的其他名称。匹配不区分大小写，`*` 可以匹配任意长度的字符序列；不会展开 API 别名，也不会在大驼峰和短横线写法之间转换。例如，`ecs:DeleteInstance` 匹配 `ECS:deleteinstance`，但不匹配 `ecs:delete-instance`，即使两种命令调用的是同一个 API。AI 模式同样适用。
+
+应为脚本或 Agent 使用的每种写法分别配置规则：
 
 ```sh
 aliyun configure safety-policy add --pattern 'ecs:DeleteInstance' --action deny
+aliyun configure safety-policy add --pattern 'ecs:delete-instance' --action deny
 aliyun configure safety-policy enable
 ```
 
-当所选 API 版本的元数据明确将 `DeleteInstance` 映射到 `delete-instance` 时，上述规则会拒绝两种写法。将规则写为 `ecs:delete-instance`，效果相同。不含通配符的 `confirm` 和 `allow` 规则也采用相同的匹配方式。
-
-匹配方式按规则类型区分：
-
-- **不含通配符的内置 API 规则**：对于所选版本中可识别的 API，同时匹配其 PascalCase 和 kebab-case 命令名称。两种名称的对应关系以本地 API 元数据为准。
-- **包含 `*` 的规则**：仅匹配用户输入的原始命令，不区分大小写。例如，`ecs:Delete*` 通过共同前缀匹配两种写法，但 `ecs:DeleteI*` 不匹配 `delete-instance`。产品名含通配符时同样不会自动匹配另一种名称。例如，`*:DeleteInstance` 不匹配 `ecs:delete-instance`。
-- **插件命令（包括通过元数据插件提供的命令）和 REST 请求**：按输入的命令名称或路径匹配，不区分大小写。API 未知，或本地元数据缺失、无效、无法唯一确定 API 时，也采用此方式；如需限制多种命令名称，请分别配置规则。
-
-两种命令名称的对应关系仅在本次调用选定的 API 版本内有效，不使用其他版本的对应关系。大驼峰命令通过 `--version` 选择版本；短横线命令通过 `--api-version` 或对应产品的 API 版本环境变量选择版本。匹配范围以该版本的本地 API 元数据为准。AI 模式同样适用。
-
-多条规则匹配时，按拒绝（`deny`）、确认（`confirm`）、允许（`allow`）的优先级选择规则。`forbid` 是 `confirm` 的别名。规则操作相同时，优先选择精确匹配已识别 API 的规则；匹配优先级也相同时，选择配置顺序靠前的规则。未匹配任何规则的命令允许执行。
-
-**兼容性变化**：旧版本仅执行首条匹配规则。当前版本中，即使 `allow` 配置在前或匹配范围更小，也不能覆盖匹配的 `deny` 或 `confirm`，插件和 REST 规则同样适用。升级前请检查重叠规则；如需允许特定命令执行，应调整限制规则的匹配范围或移除冲突规则，仅调整配置顺序不会改变结果。例如，先配置 `ecs:*=allow`，再配置 `ecs:DeleteInstance=deny`，当所选版本的本地元数据可识别该 API 的两种名称时，两种命令均会被拒绝。
-
-REST 方法与路径采用 `product:METHOD/path`（如 `cs:DELETE/clusters`），`cs:DELETE/*` 匹配路径以 `/` 开头的 DELETE 命令；插件子命令层级以 `:` 分隔（如 `fc:function:create`）。这两类命令不会自动匹配 API 的其他名称。云端授权仍由服务端与 RAM 权限控制。
+规则按顺序检查，第一条匹配的规则生效；未匹配的命令允许执行。`ecs:Delete*` 这样的通配符可以通过共同前缀覆盖上述两种写法，但不会自动识别所有具有破坏性效果的 API。REST 方法与路径采用 `product:METHOD/path`（如 `cs:DELETE/clusters`），`cs:DELETE/*` 匹配路径以 `/` 开头的 DELETE 命令；插件子命令层级以 `:` 分隔（如 `fc:function:create`）。按需分别配置 API 名称、方法与路径、插件命令等形式。云端授权仍由服务端与 RAM 权限控制。
 
 内置扩展（如 `saectl`、`ossutil`、`acrutil`、`spark-submit`）也在调用扩展前检查策略，早于扩展的安装、凭据解析和执行。命令标识以 `:` 连接位置参数，例如 `saectl:restore`、`acrutil:diagnosis:restore`；`*restore*` 可匹配这些写法。CLI 全局配置参数不参与匹配；扩展未知选项后的非选项参数会保留，因此需要覆盖额外参数时应使用通配符。不带扩展参数、单独的 `help`/`--help`/`-h` 或 `version`/`--version` 不触发检查；其他调用即使包含 `--help` 也会检查，避免把选项值误当成帮助请求而绕过策略。
 

@@ -88,7 +88,7 @@ aliyun ecs DescribeRegions
 aliyun ecs describe-regions
 ```
 
-For built-in APIs, one safety rule without wildcards can match both command names when local metadata for the selected version defines their correspondence. See [command matching rules](./docs/en/usage.md#command-matching-rules) for wildcard, plugin, and REST matching.
+Safety policy matches command names case-insensitively, without expanding API aliases. Configure a rule for each command name used by your automation. See [command matching rules](./docs/en/usage.md#command-matching-rules).
 
 ### 3. Explore help
 

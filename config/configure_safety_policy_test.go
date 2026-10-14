@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/safety"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -334,4 +335,47 @@ func TestConfigureSafetyPolicy_List_NoRulesMessage(t *testing.T) {
 	assert.True(t,
 		strings.Contains(w.String(), "No rules") || strings.Contains(w.String(), "未配置"),
 		"output: %s", w.String())
+}
+
+func TestConfigureSafetyPolicy_AddStyleNotice(t *testing.T) {
+	originalLanguage := i18n.GetLanguage()
+	t.Cleanup(func() { i18n.SetLanguage(originalLanguage) })
+	for _, lang := range []string{"en", "zh"} {
+		i18n.SetLanguage(lang)
+		for _, pattern := range []string{"ecs:DeleteInstance", "ecs:delete-instance", "ecs:DeleteI*", "*:Delete*"} {
+			t.Run(lang+"/"+pattern, func(t *testing.T) {
+				dir := t.TempDir()
+				// Exercise both insertion and update without adding a second rule.
+				for _, action := range []string{"deny", "confirm"} {
+					ctx, stdout := testAiModeContext(t, dir)
+					cmd := enterSafetyPolicySub(t, ctx, "add")
+					ctx.Flags().Get("pattern").SetAssigned(true)
+					ctx.Flags().Get("pattern").SetValue(pattern)
+					ctx.Flags().Get("action").SetAssigned(true)
+					ctx.Flags().Get("action").SetValue(action)
+					require.NoError(t, cmd.Run(ctx, nil))
+					stderr := ctx.Stderr().(interface{ String() string }).String()
+					assert.Contains(t, stderr, pattern)
+					assert.Contains(t, stderr, "PascalCase")
+					assert.Contains(t, stderr, "kebab-case")
+					assert.Empty(t, stdout.String())
+					policy, err := safety.LoadPolicy(dir)
+					require.NoError(t, err)
+					require.Equal(t, []safety.Rule{{Pattern: pattern, Action: safety.Action(action)}}, policy.Rules)
+				}
+			})
+		}
+	}
+}
+
+func TestConfigureSafetyPolicy_AddFailureHasNoStyleNotice(t *testing.T) {
+	ctx, stdout := testAiModeContext(t, t.TempDir())
+	cmd := enterSafetyPolicySub(t, ctx, "add")
+	ctx.Flags().Get("pattern").SetAssigned(true)
+	ctx.Flags().Get("pattern").SetValue("ecs:DeleteInstance")
+	ctx.Flags().Get("action").SetAssigned(true)
+	ctx.Flags().Get("action").SetValue("invalid")
+	require.Error(t, cmd.Run(ctx, nil))
+	assert.Empty(t, ctx.Stderr().(interface{ String() string }).String())
+	assert.Empty(t, stdout.String())
 }

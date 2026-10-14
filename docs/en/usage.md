@@ -267,30 +267,21 @@ aliyun configure safety-policy --help
 
 Safety policy is disabled by default, and `confirm` is a local CLI confirmation rather than cloud authorization or approval. Use `show` or `list` to inspect the effective policy. When `ALIBABA_CLOUD_SAFETY_POLICY_ENABLED` or `ALIBABA_CLOUD_SAFETY_POLICY_RULES` is set, the displayed policy includes those environment overrides. The CLI refuses to continue when the policy file or environment rules cannot be fully parsed.
 
+After saving a new or updated rule, the CLI writes a reminder to stderr to check coverage of PascalCase and kebab-case command names. This notice does not add rules or change their matching order.
+
 ### Command matching rules
 
-For built-in APIs, one rule without wildcards can match both PascalCase and kebab-case names. The following rule blocks both `ecs DeleteInstance` and `ecs delete-instance`, provided local metadata for the selected API version defines both names:
+Safety policy matches the command name supplied by the caller. It does not automatically match alternative names for the same API. Matching is case-insensitive and supports `*` for any sequence of characters. It does not expand API aliases or convert between PascalCase and kebab-case. For example, `ecs:DeleteInstance` matches `ECS:deleteinstance`, but does not match `ecs:delete-instance`, even though both command forms invoke the same API. This behavior also applies in AI mode.
+
+Configure each spelling used by your scripts or agents:
 
 ```sh
 aliyun configure safety-policy add --pattern 'ecs:DeleteInstance' --action deny
+aliyun configure safety-policy add --pattern 'ecs:delete-instance' --action deny
 aliyun configure safety-policy enable
 ```
 
-With metadata that maps `DeleteInstance` to `delete-instance` for the selected API version, this rule blocks both command forms. Writing the rule as `ecs:delete-instance` has the same effect. Exact `confirm` and `allow` rules use the same matching behavior.
-
-Rules are classified as follows:
-
-- **Built-in API rules without wildcards:** match both PascalCase and kebab-case names when local metadata for the selected API version identifies them as the same API.
-- **Any rule containing `*`:** match only the original command spelling, case-insensitively. For example, `ecs:Delete*` matches both spellings by their shared prefix, but `ecs:DeleteI*` does not match `delete-instance`. A wildcard in the product name also prevents alias matching: `*:DeleteInstance` does not match `ecs:delete-instance`.
-- **Plugin commands (including commands provided by metadata plugins) and REST requests:** match the command name or path as entered, without case sensitivity. This also applies when the API is unknown or local metadata is missing, invalid, or cannot uniquely identify the API. Configure separate rules for each command name when needed.
-
-The correspondence between command names is specific to the API version selected for the invocation. PascalCase commands select the version with `--version`; kebab-case commands use `--api-version` or the product-specific API-version environment variable. Matching is limited to the local API metadata for that version. These rules also apply in AI mode.
-
-All matching rules are evaluated with **`deny > confirm > allow`** (`forbid` is an alias for `confirm`). For rules with the same action, an exact match to a recognized API takes precedence; remaining ties use configuration order. Unmatched commands remain allowed.
-
-**Compatibility change:** earlier versions used the first matching rule. An earlier or more specific `allow` can no longer override a matching `deny` or `confirm`, including for plugin and REST rules. Review overlapping rules before upgrading; narrow or remove a conflicting restriction instead of reordering an `allow` exception. For example, `ecs:*=allow` followed by `ecs:DeleteInstance=deny` now denies both spellings of that API when local metadata for the selected version identifies both command names.
-
-REST method/path commands use `product:METHOD/path` (for example, `cs:DELETE/clusters`); `cs:DELETE/*` matches slash-prefixed DELETE paths. Plugin subcommand hierarchies use `:` (for example, `fc:function:create`). Neither form automatically matches alternative API names. Cloud authorization remains enforced by the service and RAM permissions.
+Rules are evaluated in order: the first match wins, and unmatched commands are allowed. A wildcard such as `ecs:Delete*` can cover both spellings by their shared prefix, but does not identify every API with a destructive effect. REST method/path commands use `product:METHOD/path` (for example, `cs:DELETE/clusters`); use `cs:DELETE/*` to match slash-prefixed DELETE paths. Plugin subcommand hierarchies use `:` (for example, `fc:function:create`). Configure API-name, method/path, and plugin forms separately when needed. Cloud authorization remains enforced by the service and RAM permissions.
 
 Built-in extensions (such as `saectl`, `ossutil`, `acrutil`, and `spark-submit`) also check policy before dispatch, ahead of extension installation, credential resolution, and execution. Their identifiers join positional arguments with `:`, for example `saectl:restore` or `acrutil:diagnosis:restore`; `*restore*` matches both. Host configuration options are excluded. Non-option tokens following unknown extension options are retained, so use wildcards when a rule needs to cover additional arguments. Invocations without extension arguments and standalone `help`/`--help`/`-h` or `version`/`--version` requests are exempt. Other invocations are checked even if they contain `--help`, so an option value cannot accidentally bypass policy as a help request.
 

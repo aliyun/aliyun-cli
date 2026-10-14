@@ -88,7 +88,7 @@ aliyun ecs DescribeRegions
 aliyun ecs describe-regions
 ```
 
-内置 API 的安全策略可通过一条不含通配符的规则匹配两种命令名称，前提是所选版本的本地 API 元数据包含对应关系。通配符、插件和 REST 请求的匹配方式见[命令匹配规则](./docs/zh-CN/usage.md#命令匹配规则)。
+安全策略按输入的命令名称匹配，不区分大小写，但不会自动匹配同一 API 的其他名称。请为使用的每种命令名称分别配置规则，详见[命令匹配规则](./docs/zh-CN/usage.md#命令匹配规则)。
 
 ### 3. 查看帮助
 

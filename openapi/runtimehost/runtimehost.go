@@ -231,8 +231,8 @@ func checkSafetyPolicy(ctx *cli.Context, rawArgs []string) error {
 	// Metadata commands are interpreted in-process, so they never reach the Go-plugin safety check in openapi.Commando.
 	// Keep read-only help/version requests aligned with that path and guard every actual metadata command here,
 	// where both bundled baseline and installed meta plugins converge.
-	// Preserve the spelling for wildcard rules; only baseline APIs acquire
-	// metadata identities for exact rules.
+	// Policy deliberately matches the user's command spelling, not the
+	// canonical API name resolved later by the engine.
 	command := rawArgs[1]
 	if strings.EqualFold(command, "version") || flagAssigned(ctx, "help") {
 		return nil
@@ -250,11 +250,10 @@ func checkSafetyPolicy(ctx *cli.Context, rawArgs []string) error {
 	skipConfirm := flagAssigned(ctx, "yes") ||
 		os.Getenv("ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM") == "1" ||
 		strings.EqualFold(os.Getenv("ALIBABA_CLOUD_SAFETY_SKIP_CONFIRM"), "true")
-	cmd := safety.CommandInfo{Product: rawArgs[0], ApiOrMethod: command}
-	if policy.Enabled && len(policy.Rules) > 0 {
-		cmd = safetyAPICommand(cmd, rawArgs[2:])
-	}
-	return safety.CheckAndConfirm(ctx, policy, cmd, skipConfirm)
+	return safety.CheckAndConfirm(ctx, policy, safety.CommandInfo{
+		Product:     rawArgs[0],
+		ApiOrMethod: command,
+	}, skipConfirm)
 }
 
 // Credential resolves the caller's credential from the profile.
