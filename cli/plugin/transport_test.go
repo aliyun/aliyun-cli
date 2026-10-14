@@ -232,7 +232,7 @@ func TestExecuteInstall_ChecksumFlag(t *testing.T) {
 	base.SetAssigned(true)
 	base.SetValue("http://mirror.example/plugins")
 	_, err = newManagerWithOptionalSourceBase(ctx)
-	assert.ErrorContains(t, err, "refusing insecure HTTP")
+	assert.ErrorContains(t, err, "source-base must use https://")
 
 	_, err = httpGet("http://example.com/plugin.tgz", time.Second)
 	assert.ErrorContains(t, err, "refusing insecure HTTP")

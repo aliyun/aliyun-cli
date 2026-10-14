@@ -129,11 +129,12 @@ func (m *Manager) ApplySourceBaseOverride(raw string) error {
 	if err == nil && u != nil {
 		scheme = strings.ToLower(u.Scheme)
 	}
-	if err != nil || u == nil || u.Host == "" || (scheme != "http" && scheme != "https") {
-		return fmt.Errorf("source-base must use https://")
-	}
-	if err := m.validatePluginTransportURL(v); err != nil {
-		return fmt.Errorf("source-base: %w", err)
+	if err != nil || u == nil || u.Host == "" || scheme != "https" {
+		// Public HTTP is rejected here. go test still accepts loopback HTTP
+		// through validatePluginTransportURL so httptest fixtures keep working.
+		if scheme != "http" || m.validatePluginTransportURL(v) != nil {
+			return fmt.Errorf("source-base must use https://")
+		}
 	}
 	m.sourceBase = strings.TrimRight(v, "/")
 	m.skipPluginIndexCacheForCLI = true
