@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
 )
 
 const (
@@ -18,6 +20,11 @@ const (
 	defaultTimeout   = 10 * time.Minute
 	githubReleaseURL = "https://github.com/aliyun/aliyun-cli/releases/download/v"
 )
+
+// verifyReleaseAsset checks the publisher signature. Tests replace it.
+var verifyReleaseAsset = func(assetName, assetPath string, sig []byte) error {
+	return publishsig.VerifyFile(publishsig.TrustedPublicKeys(), assetName, assetPath, sig)
+}
 
 // AssetNames is the release set finish_release.sh promotes. Order is stable
 // so a regenerated checksum file does not reshuffle on rerun.
@@ -111,6 +118,22 @@ func Download(ctx context.Context, opt Options) error {
 			return fmt.Errorf("download assets: checksum %s: %w", name, err)
 		}
 		sums = append(sums, line)
+
+		sigName := name + ".minisig"
+		sigDest := filepath.Join(staging, sigName)
+		if err := downloadFile(ctx, client, assetURL+".minisig", opt.Token, sigDest, timeout); err != nil {
+			return fmt.Errorf("download assets: publisher signature %s: %w", name, err)
+		}
+		sig, err := os.ReadFile(sigDest)
+		if err != nil {
+			return fmt.Errorf("download assets: publisher signature %s: %w", name, err)
+		}
+		if len(sig) == 0 || len(sig) > 4096 {
+			return fmt.Errorf("download assets: publisher signature %s: missing or too large", name)
+		}
+		if err := verifyReleaseAsset(name, dest, sig); err != nil {
+			return fmt.Errorf("download assets: publisher signature %s: %w", name, err)
+		}
 	}
 
 	sumPath := filepath.Join(staging, checksumName)
@@ -241,6 +264,10 @@ func commitAssets(staging, workDir string, names []string) error {
 	for _, name := range names {
 		if err := replaceFile(filepath.Join(staging, name), filepath.Join(workDir, name)); err != nil {
 			return fmt.Errorf("download assets: commit %s: %w", name, err)
+		}
+		sigName := name + ".minisig"
+		if err := replaceFile(filepath.Join(staging, sigName), filepath.Join(workDir, sigName)); err != nil {
+			return fmt.Errorf("download assets: commit %s: %w", sigName, err)
 		}
 	}
 	if err := replaceFile(filepath.Join(staging, checksumName), filepath.Join(workDir, checksumName)); err != nil {
