@@ -517,6 +517,78 @@ func TestDownloadAndExtract_RejectsSignatureForOtherAsset(t *testing.T) {
 	assert.Contains(t, err.Error(), "publisher signature rejected")
 }
 
+func TestDownloadAndExtract_SignatureDownloadFails(t *testing.T) {
+	binaryContent := []byte("#!/bin/sh\necho upgraded\n")
+	assetName, _, archiveBuf := createUpgradeArchiveInMemory(t, "3.4.0", binaryContent)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".minisig") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Write(archiveBuf.Bytes())
+	}))
+	defer server.Close()
+
+	origClient := httpClient
+	httpClient = server.Client()
+	defer func() { httpClient = origClient }()
+
+	var out bytes.Buffer
+	_, cleanup, err := downloadAndExtract(&out, server.URL+"/"+assetName, assetName)
+	assert.Error(t, err)
+	assert.Nil(t, cleanup)
+	assert.Contains(t, err.Error(), "publisher signature download failed")
+}
+
+func TestDownloadAndExtract_RejectsOversizedSignature(t *testing.T) {
+	binaryContent := []byte("#!/bin/sh\necho upgraded\n")
+	assetName, _, archiveBuf := createUpgradeArchiveInMemory(t, "3.4.0", binaryContent)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".minisig") {
+			w.Write(bytes.Repeat([]byte("a"), 4097))
+			return
+		}
+		w.Write(archiveBuf.Bytes())
+	}))
+	defer server.Close()
+
+	origClient := httpClient
+	httpClient = server.Client()
+	defer func() { httpClient = origClient }()
+
+	var out bytes.Buffer
+	_, cleanup, err := downloadAndExtract(&out, server.URL+"/"+assetName, assetName)
+	assert.Error(t, err)
+	assert.Nil(t, cleanup)
+	assert.Contains(t, err.Error(), "document is too large")
+}
+
+func TestDownloadAndExtract_SignatureReadFails(t *testing.T) {
+	binaryContent := []byte("#!/bin/sh\necho upgraded\n")
+	assetName, _, archiveBuf := createUpgradeArchiveInMemory(t, "3.4.0", binaryContent)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body := archiveBuf.Bytes()
+		if strings.HasSuffix(r.URL.Path, ".minisig") {
+			body = []byte("sig")
+		}
+		w.Write(body)
+	}))
+	defer server.Close()
+
+	origClient := httpClient
+	httpClient = server.Client()
+	defer func() { httpClient = origClient }()
+	origRead := readSignatureFile
+	readSignatureFile = func(string) ([]byte, error) { return nil, fmt.Errorf("unreadable") }
+	defer func() { readSignatureFile = origRead }()
+
+	var out bytes.Buffer
+	_, cleanup, err := downloadAndExtract(&out, server.URL+"/"+assetName, assetName)
+	assert.Error(t, err)
+	assert.Nil(t, cleanup)
+	assert.Contains(t, err.Error(), "publisher signature download failed")
+}
+
 func useTestPublisher(t *testing.T) ed25519.PrivateKey {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(nil)
@@ -951,6 +1023,20 @@ func TestNewUpgradeCommand(t *testing.T) {
 	yesFlag := cmd.Flags().Get("yes")
 	assert.NotNil(t, yesFlag)
 	assert.Equal(t, 'y', rune(yesFlag.Shorthand))
+
+	origDetect := detectInstallerFunc
+	origExec := execCommand
+	detectInstallerFunc = func() installerType { return installerHomebrew }
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		return exec.Command("false")
+	}
+	t.Cleanup(func() {
+		detectInstallerFunc = origDetect
+		execCommand = origExec
+	})
+	err := cmd.Run(newTestContext(), nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "brew update failed")
 }
 
 // ---------------------------------------------------------------------------

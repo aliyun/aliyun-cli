@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	testPub  ed25519.PublicKey
-	testPriv ed25519.PrivateKey
+	testPub          ed25519.PublicKey
+	testPriv         ed25519.PrivateKey
+	productionVerify = verifyReleaseAsset
 )
 
 func TestMain(m *testing.M) {

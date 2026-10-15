@@ -382,6 +382,49 @@ func TestPublisherSignatureFailuresDoNotCommit(t *testing.T) {
 	}
 }
 
+func TestTraceDownloadAndCommitFailures(t *testing.T) {
+	trace := TraceNames("1.2.3")[0]
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if filepath.Base(r.URL.Path) == trace {
+			http.NotFound(w, r)
+			return
+		}
+		signedHandler(func(string) []byte { return []byte("ok") })(w, r)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	err := Download(context.Background(), Options{Version: "1.2.3", BaseURL: srv.URL, WorkDir: dir})
+	if err == nil || !strings.Contains(err.Error(), "HTTP 404") {
+		t.Fatalf("expected missing trace, got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, checksumName)); !os.IsNotExist(statErr) {
+		t.Fatal("missing trace committed checksum")
+	}
+
+	dir = t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, trace), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ok := httptest.NewServer(signedHandler(func(string) []byte { return []byte("ok") }))
+	defer ok.Close()
+	err = Download(context.Background(), Options{Version: "1.2.3", BaseURL: ok.URL, WorkDir: dir})
+	if err == nil || !strings.Contains(err.Error(), "commit "+trace) {
+		t.Fatalf("expected trace commit failure, got %v", err)
+	}
+}
+
+func TestProductionVerifierRejectsUnsignedAsset(t *testing.T) {
+	dir := t.TempDir()
+	asset := filepath.Join(dir, "a.tgz")
+	if err := os.WriteFile(asset, []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := productionVerify("a.tgz", asset, []byte("not-a-signature")); err == nil {
+		t.Fatal("expected the production verifier to reject an unsigned asset")
+	}
+}
+
 func assertFreshChecksum(t *testing.T, dir string, names []string, body string) {
 	t.Helper()
 	if err := verifyChecksum(body, names); err != nil {

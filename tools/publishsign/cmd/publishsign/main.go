@@ -10,26 +10,31 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
+	os.Exit(run(os.Args))
+}
+
+func run(args []string) int {
+	if len(args) < 2 {
 		usage()
-		os.Exit(2)
+		return 2
 	}
 	var err error
-	switch os.Args[1] {
+	switch args[1] {
 	case "keygen":
-		err = keygen(os.Args[2:])
+		err = keygen(args[2:])
 	case "sign":
-		err = sign(os.Args[2:])
+		err = sign(args[2:])
 	case "verify":
-		err = verify(os.Args[2:])
+		err = verify(args[2:])
 	default:
 		usage()
-		os.Exit(2)
+		return 2
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func usage() {

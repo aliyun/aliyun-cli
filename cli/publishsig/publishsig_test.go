@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"encoding/base64"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -197,4 +198,31 @@ func TestFormatAndMalformedDocuments(t *testing.T) {
 	if err := VerifyFile(keys, "a.tgz", filepath.Join(dir, "missing.tgz"), doc); err == nil {
 		t.Fatal("expected missing verify target to fail")
 	}
+}
+
+func TestVerifyAndKeyListFailures(t *testing.T) {
+	pub, priv, err := Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ParsePublicKeys([]string{FormatPublicKey(pub), "@@@@"}); err == nil {
+		t.Fatal("expected one bad key to fail the list")
+	}
+	doc, err := Sign(priv, "a.tgz", bytes.NewReader([]byte("x")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Verify([]ed25519.PublicKey{pub}, " a.tgz", bytes.NewReader([]byte("x")), doc); err == nil {
+		t.Fatal("expected padded asset name to fail")
+	}
+	err = Verify([]ed25519.PublicKey{pub}, "a.tgz", failReader{}, doc)
+	if err == nil || !strings.Contains(err.Error(), "read failed") {
+		t.Fatalf("reader error = %v", err)
+	}
+}
+
+type failReader struct{}
+
+func (failReader) Read([]byte) (int, error) {
+	return 0, errors.New("read failed")
 }

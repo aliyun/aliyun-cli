@@ -56,8 +56,9 @@ var (
 	detectInstallerFunc = detectInstaller
 	resolveExecPathFunc = resolveExecPath
 
-	osExecutable = os.Executable
-	evalSymlinks = filepath.EvalSymlinks
+	osExecutable      = os.Executable
+	evalSymlinks      = filepath.EvalSymlinks
+	readSignatureFile = os.ReadFile
 
 	// publisherKeys are the keys allowed to replace this binary.
 	// Tests replace the slice; production uses the keys embedded in the CLI.
@@ -214,7 +215,7 @@ func downloadAndExtract(w io.Writer, downloadURL, assetName string) (binaryPath 
 		cleanup()
 		return "", nil, fmt.Errorf("publisher signature download failed: %s", err)
 	}
-	sig, err := os.ReadFile(sigPath)
+	sig, err := readSignatureFile(sigPath)
 	if err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("publisher signature download failed: %s", err)
