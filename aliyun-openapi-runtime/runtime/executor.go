@@ -571,7 +571,7 @@ func prepareCall(ec *ExecContext, req *AssembledRequest) (*preparedCall, error) 
 	if ec.ReadTimeout > 0 {
 		conf.ReadTimeout = tea.Int(int(ec.ReadTimeout / time.Millisecond))
 	} else if !ec.API.IsSSE {
-		if timeout := meta.BackendReadTimeout(ec.API.BackendTimeoutMS); timeout > 0 {
+		if timeout := meta.MetadataReadTimeout(ec.API.TimeoutMS); timeout > 0 {
 			conf.ReadTimeout = tea.Int(int(timeout / time.Millisecond))
 		}
 	}

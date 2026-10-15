@@ -533,7 +533,7 @@ func (a *OpenapiContext) Prepare(ctx *cli.Context) error {
 	oaParams.Version = &a.product.Version
 	oaParams.Method = &a.method
 	if a.openapiClient != nil && (a.profile == nil || a.profile.ReadTimeout <= 0) && (a.api.Operation == nil || !a.api.Operation.IsSSE) {
-		if timeout := runtimemeta.BackendReadTimeout(a.api.BackendTimeoutMS); timeout > 0 {
+		if timeout := runtimemeta.MetadataReadTimeout(a.api.TimeoutMS); timeout > 0 {
 			a.openapiClient.ReadTimeout = tea.Int(int(timeout / time.Millisecond))
 		}
 	}

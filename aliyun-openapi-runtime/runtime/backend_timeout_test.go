@@ -18,14 +18,16 @@ func TestPrepareCallBackendTimeoutPrecedence(t *testing.T) {
 		sse     bool
 		want    int
 	}{
-		{55000, 0, false, 65000},
-		{80000, 0, false, 90000},
+		{55000, 0, false, 57000},
+		{60000, 0, false, 62000},
+		{10001, 0, false, 12001},
 		{55000, 2 * time.Second, false, 2000},
+		{60000, 120 * time.Second, false, 120000},
 		{0, 0, false, 0}, {-1, 0, false, 0},
 		{55000, 0, true, 0},
 	} {
 		call, err := prepareCall(&ExecContext{Credential: credential, ReadTimeout: tc.user,
-			API: &meta.API{ProductCode: "ecs", BackendTimeoutMS: tc.backend, IsSSE: tc.sse}},
+			API: &meta.API{ProductCode: "ecs", TimeoutMS: tc.backend, IsSSE: tc.sse}},
 			&AssembledRequest{Endpoint: "example.com", Protocol: "HTTPS", Action: "CreateInstance", Method: "POST"})
 		if err != nil {
 			t.Fatal(err)

@@ -37,7 +37,7 @@ import (
 	runtimemeta "github.com/aliyun/aliyun-openapi-runtime/meta"
 )
 
-func (a *BasicInvoker) applyBackendTimeout(api *canonicalmeta.API) {
+func (a *BasicInvoker) applyMetadataTimeout(api *canonicalmeta.API) {
 	if api == nil || a.request == nil || (api.Operation != nil && api.Operation.IsSSE) {
 		return
 	}
@@ -47,7 +47,7 @@ func (a *BasicInvoker) applyBackendTimeout(api *canonicalmeta.API) {
 	if api.Operation != nil && api.Operation.APIVersion != "" && a.request.Version != "" && api.Operation.APIVersion != a.request.Version {
 		return
 	}
-	if timeout := runtimemeta.BackendReadTimeout(api.BackendTimeoutMS); timeout > 0 {
+	if timeout := runtimemeta.MetadataReadTimeout(api.TimeoutMS); timeout > 0 {
 		a.request.SetReadTimeout(timeout)
 	}
 }

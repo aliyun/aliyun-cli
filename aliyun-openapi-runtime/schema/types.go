@@ -161,21 +161,21 @@ type VersionAPIEntry struct {
 // but composite parameters are strict: arrays require element and maps require
 // value at every nesting level.
 type CommandDefinition struct {
-	BackendTimeoutMS int64                `json:"backend_timeout_ms,omitempty"`
-	Name             string               `json:"name"`
-	CmdName          string               `json:"cmd_name"`
-	CmdFullName      string               `json:"cmd_full_name"`
-	TitleZH          string               `json:"title_zh,omitempty"`
-	TitleEN          string               `json:"title_en,omitempty"`
-	DescriptionZH    string               `json:"description_zh,omitempty"`
-	DescriptionEN    string               `json:"description_en,omitempty"`
-	Method           string               `json:"method,omitempty"`
-	MultiVersion     bool                 `json:"multi_version"`
-	Deprecated       bool                 `json:"deprecated"`
-	KebabExample     string               `json:"kebab_example,omitempty"`
-	CamelExample     string               `json:"camel_example,omitempty"`
-	Operation        *OperationConfig     `json:"operation"`
-	Parameters       []ArgumentDefinition `json:"parameters,omitempty"`
+	TimeoutMS     int64                `json:"timeout_ms,omitempty"`
+	Name          string               `json:"name"`
+	CmdName       string               `json:"cmd_name"`
+	CmdFullName   string               `json:"cmd_full_name"`
+	TitleZH       string               `json:"title_zh,omitempty"`
+	TitleEN       string               `json:"title_en,omitempty"`
+	DescriptionZH string               `json:"description_zh,omitempty"`
+	DescriptionEN string               `json:"description_en,omitempty"`
+	Method        string               `json:"method,omitempty"`
+	MultiVersion  bool                 `json:"multi_version"`
+	Deprecated    bool                 `json:"deprecated"`
+	KebabExample  string               `json:"kebab_example,omitempty"`
+	CamelExample  string               `json:"camel_example,omitempty"`
+	Operation     *OperationConfig     `json:"operation"`
+	Parameters    []ArgumentDefinition `json:"parameters,omitempty"`
 	// Responses and Components retain optional response metadata in encoded
 	// form. Command execution ignores them; Help consumers decode explicitly.
 	Responses  json.RawMessage `json:"responses,omitempty"`
