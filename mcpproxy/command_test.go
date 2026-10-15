@@ -479,7 +479,7 @@ func TestConfigureMCPAuthenticationRejectsUnsupportedOptions(t *testing.T) {
 	}{
 		{name: "BearerToken", mode: config.BearerToken, message: "not supported"},
 		{name: "Anonymous", mode: config.Anonymous, message: "not supported"},
-		{name: "unknown", mode: "unknown", message: "invalid mode"},
+		{name: "unknown", mode: "unknown", message: "profile configuration failed"},
 		{name: "OAuth app name", mode: config.AK, option: "oauth-app-name", message: "omit --skip-mcp-oauth"},
 		{name: "OAuth scope", mode: config.AK, option: "scope", message: "omit --skip-mcp-oauth"},
 	} {
@@ -515,7 +515,7 @@ func TestConfigureMCPAuthenticationRejectsInvalidProfileWithoutFallback(t *testi
 
 			err := configureMCPAuthentication(ctx, &proxyConfig)
 
-			require.ErrorContains(t, err, "unknown profile")
+			require.EqualError(t, err, "profile configuration failed")
 			require.Nil(t, proxyConfig.CredentialAuth)
 			require.Nil(t, proxyConfig.McpProfile)
 		})

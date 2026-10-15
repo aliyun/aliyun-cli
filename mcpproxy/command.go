@@ -17,6 +17,7 @@ package mcpproxy
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/url"
 	"os"
@@ -213,6 +214,30 @@ func runMCPProxy(ctx *cli.Context) error {
 	return startMCPProxy(ctx, proxyConfig)
 }
 
+type mcpAuthenticationError struct {
+	envelope cli.AgentErrorEnvelope
+}
+
+func (e *mcpAuthenticationError) Error() string { return e.envelope.Message }
+
+func (e *mcpAuthenticationError) RenderError(w io.Writer) error {
+	return json.NewEncoder(w).Encode(e.envelope)
+}
+
+// Authentication failures retain the command's existing exit status.
+func (e *mcpAuthenticationError) ExitCode() int { return 1 }
+
+func newMCPAuthenticationError(message, action, hint string) error {
+	return &mcpAuthenticationError{envelope: cli.AgentErrorEnvelope{
+		SchemaVersion: cli.AgentErrorSchemaVersion,
+		Message:       message,
+		Recovery: cli.AgentErrorRecovery{
+			Action: action,
+			Hint:   hint,
+		},
+	}}
+}
+
 func configureMCPAuthentication(ctx *cli.Context, proxyConfig *ProxyConfig) error {
 	skipMCPOAuth := false
 	if value, assigned := ctx.Flags().Get("skip-mcp-oauth").GetValue(); assigned {
@@ -221,25 +246,30 @@ func configureMCPAuthentication(ctx *cli.Context, proxyConfig *ProxyConfig) erro
 			var err error
 			skipMCPOAuth, err = strconv.ParseBool(value)
 			if err != nil {
-				return fmt.Errorf("--skip-mcp-oauth must be true or false")
+				return newMCPAuthenticationError("--skip-mcp-oauth must be true or false", "inspect_command_help",
+					"Pass --skip-mcp-oauth without a value, or set it to true or false. Use `aliyun utils mcp-proxy --help` to inspect the command options.")
 			}
 		}
 	}
 	if skipMCPOAuth {
 		if ctx.Flags().Get("oauth-app-name").IsAssigned() || ctx.Flags().Get("scope").IsAssigned() {
-			return fmt.Errorf("--oauth-app-name and --scope apply to MCP OAuth; omit --skip-mcp-oauth to use that flow")
+			return newMCPAuthenticationError("--oauth-app-name and --scope apply to MCP OAuth; omit --skip-mcp-oauth to use that flow", "fix_option_combination",
+				"Remove --oauth-app-name and --scope when using --skip-mcp-oauth, or omit --skip-mcp-oauth to use MCP OAuth.")
 		}
 		profile, err := config.LoadProfileWithContext(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to load profile: %w", err)
+			return newMCPAuthenticationError("profile configuration failed", "check_configuration",
+				"Check that the selected profile exists and its configuration is valid. Use `aliyun configure list` to inspect profiles, then configure the profile before retrying.")
 		}
 		if err := validateMCPProfileMode(profile.Mode); err != nil {
-			return err
+			return newMCPAuthenticationError(err.Error(), "check_configuration",
+				"Select a profile that provides AK or STS credentials with --profile. BearerToken and Anonymous are not supported with --skip-mcp-oauth. Use `aliyun configure list` to inspect profiles.")
 		}
 		log.Printf("MCP auth: skip_mcp_oauth=true, profile=%q, profile_mode=%q; using AK/STS credentials", profile.Name, profile.Mode)
 		proxyConfig.CredentialAuth = newCredentialAuth(newCLICredentialSource(ctx), proxyConfig.RegionType)
 		if _, err := proxyConfig.CredentialAuth.GetToken(); err != nil {
-			return fmt.Errorf("failed to authenticate MCP with CLI credentials: %w", err)
+			return newMCPAuthenticationError(fmt.Sprintf("failed to authenticate MCP with CLI credentials: %s", err), "check_mcp_authentication",
+				"Verify the selected profile's AK/STS credentials, the AliyunOpenAPIMCPServerStaticCredentialAccess permission, and the account's MCP static-credential pre-check, then retry.")
 		}
 		return nil
 	}
