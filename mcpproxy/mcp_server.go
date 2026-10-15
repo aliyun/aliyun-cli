@@ -54,6 +54,7 @@ func ListMCPServers(ctx *cli.Context, regionType RegionType) ([]MCPServerInfo, e
 	if err != nil {
 		return nil, err
 	}
+	client.UserAgent = tea.String(util.GetAliyunCliUserAgent() + "/aliyun-cli-mcp-proxy")
 	params := &openapiClient.Params{
 		Action:      tea.String("ListApiMcpServers"),
 		Version:     tea.String("2024-11-30"),

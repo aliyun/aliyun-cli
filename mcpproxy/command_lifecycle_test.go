@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aliyun/aliyun-cli/v3/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,6 +49,8 @@ func TestMCPProxyCommandLifecycleHelper(t *testing.T) {
 		return
 	}
 	ctx := newMCPCredentialTestContext(t)
+	t.Setenv("ALIBABA_CLOUD_VENDOR", "test-vendor")
+	t.Setenv("ALIBABA_CLOUD_USER_AGENT", "test-source/1")
 	writeMCPCredentialTestConfig(t, ctx, mcpTestAKProfile("default", "test-key"))
 	command := NewMCPProxyCommand()
 	ctx.EnterCommand(command)
@@ -70,6 +73,7 @@ func TestMCPProxyCommandLifecycleHelper(t *testing.T) {
 			fmt.Fprintf(w, `{"Application":{"AppId":"test-app-id","AppName":%q,"AppType":"NativeApp","RedirectUris":{"RedirectUri":[%q]},"DelegatedScope":{"PredefinedScopes":{"PredefinedScope":[{"Name":"/acs/mcp-server"}]}},"AccessTokenValidity":3600,"RefreshTokenValidity":86400}}`, MCPOAuthAppName, buildRedirectUri("127.0.0.1", port))
 		case r.URL.Path == "/apimcpservers":
 			listCalls.Add(1)
+			assert.Contains(t, r.UserAgent(), util.GetAliyunCliUserAgent()+"/aliyun-cli-mcp-proxy")
 			_, _ = io.WriteString(w, `{"apiMcpServers":[{"id":"server","name":"server","urls":{"mcp":"https://example.invalid/mcp/server"}}]}`)
 		case r.URL.Path == "/v1/token":
 			refreshCalls.Add(1)
