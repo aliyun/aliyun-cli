@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -21,6 +22,7 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/trust"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig"
 	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
 	runtimesource "github.com/aliyun/aliyun-openapi-runtime/source"
@@ -69,6 +71,19 @@ type Manager struct {
 	expectedPackageChecksum string
 	// httpTransport overrides the HTTP transport in tests (for example httptest TLS).
 	httpTransport http.RoundTripper
+	// trustClient is the only source for the official package index.
+	trustClient artifactFetcher
+	// allowUnverifiedPlugin is an explicit opt-in for custom sources/packages.
+	allowUnverifiedPlugin  bool
+	indexTrustVerification *TrustVerification
+}
+
+type artifactFetcher interface {
+	FetchArtifact(context.Context, string, string) (*trust.VerifiedArtifact, error)
+}
+
+var newArtifactTrustClient = func(cacheDir string) artifactFetcher {
+	return trust.New(trust.Config{CacheDir: cacheDir})
 }
 
 func getHomePath() string {
@@ -116,7 +131,11 @@ func NewManager() (*Manager, error) {
 		settings = pluginsettings.Default()
 	}
 	base := pluginsettings.EffectiveSourceBase(settings)
-	return &Manager{rootDir: rootDir, sourceBase: base}, nil
+	return &Manager{
+		rootDir:     rootDir,
+		sourceBase:  base,
+		trustClient: newArtifactTrustClient(filepath.Join(sysDir, "trust")),
+	}, nil
 }
 
 func (m *Manager) ApplySourceBaseOverride(raw string) error {
@@ -275,6 +294,25 @@ func (m *Manager) fetchWithCache(url, cacheFile string, result interface{}) erro
 }
 
 func (m *Manager) GetIndex() (*Index, error) {
+	if m.sourceBase == "" && m.indexURL == "" {
+		if m.trustClient == nil {
+			return nil, fmt.Errorf("official plugin index trust client is not configured")
+		}
+		artifact, err := m.trustClient.FetchArtifact(context.Background(), trust.PurposePluginIndex, "plugins")
+		if err != nil {
+			return nil, fmt.Errorf("failed to verify official plugin index: %w", err)
+		}
+		var index Index
+		if err := trust.DecodeStrictJSON(artifact.Bytes, &index); err != nil {
+			return nil, fmt.Errorf("failed to decode verified plugin index: %w", err)
+		}
+		m.indexTrustVerification = &TrustVerification{
+			KeyIDs:       append([]string(nil), artifact.KeyIDs...),
+			IndexVersion: artifact.Descriptor.Version,
+			VerifiedAt:   artifact.SignedAt,
+		}
+		return &index, nil
+	}
 	indexURL := m.resolvedPkgIndexURL()
 	cacheFile := filepath.Join(m.rootDir, indexCacheFile)
 	var index Index
@@ -687,6 +725,17 @@ func (m *Manager) downloadAndVerifyPlugin(ctx *cli.Context, platInfo *PlatformIn
 			actualPluginName, version, platInfo.Checksum, actualChecksum,
 		)
 	}
+	if platInfo.Length > 0 {
+		info, err := os.Stat(archivePath)
+		if err != nil {
+			os.RemoveAll(tmpDir)
+			return "", fmt.Errorf("failed to stat downloaded plugin: %w", err)
+		}
+		if info.Size() != platInfo.Length {
+			os.RemoveAll(tmpDir)
+			return "", fmt.Errorf("plugin length verification failed: expected %d, got %d", platInfo.Length, info.Size())
+		}
+	}
 	return archivePath, nil
 }
 
@@ -1061,21 +1110,28 @@ func (m *Manager) savePluginToManifest(actualPluginName, version, extractDir str
 		return err
 	}
 
+	var verification *TrustVerification
+	if m.indexTrustVerification != nil {
+		copy := *m.indexTrustVerification
+		copy.KeyIDs = append([]string(nil), copy.KeyIDs...)
+		verification = &copy
+	}
 	localManifest.Plugins[actualPluginName] = LocalPlugin{
-		Name:             actualPluginName,
-		Version:          version,
-		MinCliVersion:    pManifest.MinCliVersion,
-		Path:             extractDir,
-		ProductCode:      pManifest.ProductCode,
-		Type:             pManifest.Type,
-		Metadata:         pManifest.Metadata,
-		Command:          pManifest.Command,
-		CommandAliases:   aliases,
-		ShortDescription: pManifest.ShortDescription,
-		Description:      pManifest.Description,
-		CmdNames:         pManifest.CmdNames,
-		Inner:            pManifest.Inner,
-		ProfileRequired:  pManifest.ProfileRequired,
+		Name:              actualPluginName,
+		Version:           version,
+		MinCliVersion:     pManifest.MinCliVersion,
+		Path:              extractDir,
+		ProductCode:       pManifest.ProductCode,
+		Type:              pManifest.Type,
+		Metadata:          pManifest.Metadata,
+		Command:           pManifest.Command,
+		CommandAliases:    aliases,
+		ShortDescription:  pManifest.ShortDescription,
+		Description:       pManifest.Description,
+		CmdNames:          pManifest.CmdNames,
+		Inner:             pManifest.Inner,
+		ProfileRequired:   pManifest.ProfileRequired,
+		TrustVerification: verification,
 	}
 
 	return m.saveLocalManifest(localManifest)
@@ -1109,6 +1165,9 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 	platInfo, err := m.validateVersionAndPlatform(ctx, targetPlugin, version, actualPluginName)
 	if err != nil {
 		return err
+	}
+	if m.indexTrustVerification != nil {
+		m.indexTrustVerification.Checksum = platInfo.Checksum
 	}
 
 	downloadURL := platInfo.URL

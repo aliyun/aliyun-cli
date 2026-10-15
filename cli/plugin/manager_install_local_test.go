@@ -195,6 +195,7 @@ func TestNewInstallCommand_Run_WithPackageFlagSuccess(t *testing.T) {
 	assert.NotNil(t, pkgFlag)
 	pkgFlag.SetAssigned(true)
 	pkgFlag.SetValue(archivePath)
+	ctx.Flags().Get("allow-unverified-plugin").SetAssigned(true)
 
 	err := cmd.Run(ctx, []string{})
 	assert.NoError(t, err)
