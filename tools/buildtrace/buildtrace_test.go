@@ -28,8 +28,8 @@ func TestWriteAndRetarget(t *testing.T) {
 		Asset:     asset,
 		Version:   "3.5.2",
 		Tag:       "v3.5.2",
-		Commit:    strings.Repeat("a", 40),
-		Gitlink:   strings.Repeat("b", 40),
+		Commit:    strings.Repeat("a", 39) + "0",
+		Gitlink:   strings.Repeat("b", 39) + "1",
 		RunURL:    "https://github.com/aliyun/aliyun-cli/actions/runs/1",
 		BuildInfo: sampleInfo,
 	}
