@@ -14,6 +14,4 @@ For example, ECS CreateInstance with backend `80000` emits `timeout_ms: 60000` a
 
 Legacy commands use the official `github.com/aliyun/alibaba-cloud-sdk-go` dependency without SDK changes or a fork replacement.
 
-The metadata submodule temporarily uses `pl0301/aliyun-openapi-meta` so a fresh checkout can fetch the regenerated metadata commit on this feature branch. After that commit is available upstream, restore the official metadata repository URL.
-
 Compiled Go plugins receive the metadata timeout through generated `http.WithTimeoutMS(...)` options and the updated `aliyun-cli-runtime`. Product plugins must be regenerated, rebuilt and republished to use the new defaults. Existing environment variables continue to transport user configuration; API defaults are embedded in plugin source.
