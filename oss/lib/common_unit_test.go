@@ -150,12 +150,14 @@ func TestStorageURLAndSmallUtilityBoundaries(t *testing.T) {
 	for _, tc := range []struct{ input, encoding, want string }{
 		{"oss://bucket/a%20b", URLEncodingType, "oss://bucket/a b"},
 		{"a%20b", URLEncodingType, "a b"},
-		{"~/file", "", filepath.Join(currentHomeDir(), "file")},
 	} {
 		u, err := StorageURLFromString(tc.input, tc.encoding)
 		require.NoError(t, err)
 		require.Equal(t, tc.want, u.ToString())
 	}
+	homeFile, err := StorageURLFromString(filepath.Join("~", "file"), "")
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(currentHomeDir(), "file"), filepath.Clean(homeFile.ToString()))
 	for _, input := range []string{"oss://bucket/%zz", "oss://%62ucket", "%zz"} {
 		_, err := StorageURLFromString(input, URLEncodingType)
 		require.Error(t, err)

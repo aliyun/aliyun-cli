@@ -183,7 +183,7 @@ func TestSyncLocalBackupAndPathOperations(t *testing.T) {
 	sc.syncOption.backupDir = backup
 	require.NoError(t, sc.CheckDestBackupDir(FileURL{urlStr: source}))
 	require.DirExists(t, backup)
-	require.NoError(t, sc.RemoveExtraFiles(map[string]string{"child/file": "", "child/": ""}, FileURL{urlStr: source + string(os.PathSeparator)}))
+	require.NoError(t, sc.RemoveExtraFiles(map[string]string{filepath.Join("child", "file"): "", "child" + string(os.PathSeparator): ""}, FileURL{urlStr: source + string(os.PathSeparator)}))
 	data, err := os.ReadFile(filepath.Join(backup, "child", "file"))
 	require.NoError(t, err)
 	require.Equal(t, "preserved", string(data))
@@ -349,7 +349,6 @@ func TestCopyRejectsInvalidCombinationsBeforeTransfer(t *testing.T) {
 		{"invalid ACL", []string{source, "oss://bucket/key"}, OptionMapType{OptionACL: stringPointer("invalid")}, "invalid acl"},
 		{"payer", []string{source, "oss://bucket/key"}, OptionMapType{OptionRequestPayer: stringPointer("invalid")}, "invalid request payer"},
 		{"meta", []string{source, "oss://bucket/key"}, OptionMapType{OptionMeta: stringPointer("unsupported:value")}, "unsupported header"},
-		{"checkpoint", []string{source, "oss://bucket/key"}, OptionMapType{OptionCheckpointDir: &source}, "not a directory"},
 		{"snapshot", []string{source, "oss://bucket/key"}, OptionMapType{OptionSnapshotPath: &source}, "load snapshot error"},
 		{"upload partition", []string{source, "oss://bucket/key"}, OptionMapType{OptionPartitionDownload: stringPointer("1:2")}, "doesn't support"},
 		{"partition format", []string{"oss://bucket/key", source}, OptionMapType{OptionPartitionDownload: stringPointer("invalid")}, "parsar"},
@@ -361,6 +360,13 @@ func TestCopyRejectsInvalidCombinationsBeforeTransfer(t *testing.T) {
 			require.ErrorContains(t, cmd.RunCommand(), tc.want)
 		})
 	}
+	t.Run("checkpoint", func(t *testing.T) {
+		cmd := CopyCommand{command: dataCommand(t, "http://127.0.0.1", copyCommand.command, []string{source, "oss://bucket/key"}, OptionMapType{OptionCheckpointDir: &source})}
+		var pathErr *os.PathError
+		require.ErrorAs(t, cmd.RunCommand(), &pathErr)
+		require.Equal(t, "mkdir", pathErr.Op)
+		require.Equal(t, source, pathErr.Path)
+	})
 }
 
 func TestRestoreMetadataAndACLValidation(t *testing.T) {

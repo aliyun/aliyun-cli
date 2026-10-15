@@ -123,12 +123,8 @@ ecsAk = http://credentials
 	require.Empty(t, level)
 	_, err = readLoglevelFromFile(filepath.Join(path, "missing"))
 	require.Error(t, err)
-	defaultPath := DefaultConfigFile
-	if strings.HasPrefix(defaultPath, "~/") {
-		defaultPath = filepath.Join(currentHomeDir(), strings.TrimPrefix(defaultPath, "~/"))
-	}
-	require.Equal(t, defaultPath, DecideConfigFile(""))
-	require.Equal(t, filepath.Join(currentHomeDir(), "oss-config"), DecideConfigFile("~/oss-config"))
+	require.Equal(t, filepath.Join(currentHomeDir(), ".ossutilconfig"), filepath.Clean(DecideConfigFile("")))
+	require.Equal(t, filepath.Join(currentHomeDir(), "oss-config"), filepath.Clean(DecideConfigFile(filepath.Join("~", "oss-config"))))
 }
 
 func TestOSSReporterLifecycle(t *testing.T) {
