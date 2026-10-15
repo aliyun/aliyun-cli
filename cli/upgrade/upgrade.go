@@ -19,17 +19,22 @@ import (
 	"archive/zip"
 	"bufio"
 	"compress/gzip"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/trust"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"golang.org/x/mod/semver"
 )
@@ -57,12 +62,20 @@ var (
 
 	osExecutable = os.Executable
 	evalSymlinks = filepath.EvalSymlinks
+
+	upgradeTrustClient artifactFetcher = trust.New(trust.Config{})
 )
 
 type upgradeSource struct {
 	latestVersion string
 	downloadURL   string
 	assetName     string
+	checksum      string
+	length        int64
+}
+
+type artifactFetcher interface {
+	FetchArtifact(context.Context, string, string) (*trust.VerifiedArtifact, error)
 }
 
 func NewUpgradeCommand() *cli.Command {
@@ -140,7 +153,7 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 	w := ctx.Stdout()
 
 	cli.Printf(w, "Checking for latest version...\n")
-	source, err := resolveUpgradeSource()
+	source, err := resolveTrustedUpgradeSource(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to check for updates: %s", err)
 	}
@@ -157,7 +170,9 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 	}
 
 	cli.Printf(w, "Downloading %s...\n  From: %s\n", source.assetName, source.downloadURL)
-	extractedBinary, cleanup, err := downloadAndExtract(w, source.downloadURL, source.assetName)
+	extractedBinary, cleanup, err := downloadAndExtractVerified(
+		w, source.downloadURL, source.assetName, source.checksum, source.length,
+	)
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -179,6 +194,43 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 	return nil
 }
 
+func resolveTrustedUpgradeSource(ctx context.Context) (*upgradeSource, error) {
+	if upgradeTrustClient == nil {
+		return nil, fmt.Errorf("upgrade trust client is not configured")
+	}
+	artifact, err := upgradeTrustClient.FetchArtifact(ctx, trust.PurposeUpgrade, "upgrade")
+	if err != nil {
+		return nil, fmt.Errorf("verify upgrade manifest: %w", err)
+	}
+	var manifest trust.UpgradeManifest
+	if err := trust.DecodeStrictJSON(artifact.Bytes, &manifest); err != nil {
+		return nil, fmt.Errorf("decode upgrade manifest: %w", err)
+	}
+	now := time.Now().UTC()
+	if manifest.Type != trust.PurposeUpgrade || manifest.SchemaVersion != trust.SchemaVersion ||
+		strings.TrimSpace(manifest.ReleaseVersion) == "" || !now.Before(manifest.ExpiresAt) {
+		return nil, fmt.Errorf("invalid or expired upgrade manifest")
+	}
+	descriptor, ok := manifest.Artifacts[runtime.GOOS+"-"+runtime.GOARCH]
+	if !ok {
+		return nil, fmt.Errorf("upgrade manifest has no artifact for %s-%s", runtime.GOOS, runtime.GOARCH)
+	}
+	if descriptor.Length < 0 || strings.TrimSpace(descriptor.SHA256) == "" || !now.Before(descriptor.ExpiresAt) {
+		return nil, fmt.Errorf("invalid upgrade artifact descriptor")
+	}
+	assetName := path.Base(descriptor.URL)
+	if assetName == "." || assetName == "/" || assetName == "" {
+		return nil, fmt.Errorf("invalid upgrade artifact URL")
+	}
+	return &upgradeSource{
+		latestVersion: manifest.ReleaseVersion,
+		downloadURL:   descriptor.URL,
+		assetName:     assetName,
+		checksum:      descriptor.SHA256,
+		length:        descriptor.Length,
+	}, nil
+}
+
 func confirmUpgrade(ctx *cli.Context, currentVersion, latestVersion string) bool {
 	yesFlag := ctx.Flags().Get("yes")
 	if yesFlag != nil && yesFlag.IsAssigned() {
@@ -193,6 +245,10 @@ func confirmUpgrade(ctx *cli.Context, currentVersion, latestVersion string) bool
 }
 
 func downloadAndExtract(w io.Writer, downloadURL, assetName string) (binaryPath string, cleanup func(), err error) {
+	return downloadAndExtractVerified(w, downloadURL, assetName, "", 0)
+}
+
+func downloadAndExtractVerified(w io.Writer, downloadURL, assetName, checksum string, length int64) (binaryPath string, cleanup func(), err error) {
 	tmpDir, err := os.MkdirTemp("", "aliyun-cli-upgrade-*")
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to create temp directory: %s", err)
@@ -203,6 +259,12 @@ func downloadAndExtract(w io.Writer, downloadURL, assetName string) (binaryPath 
 	if err := downloadFile(w, downloadURL, archivePath); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("download failed: %s", err)
+	}
+	if checksum != "" || length > 0 {
+		if err := verifyDownloadedArtifact(archivePath, checksum, length); err != nil {
+			cleanup()
+			return "", nil, err
+		}
 	}
 
 	binaryName := "aliyun"
@@ -216,6 +278,28 @@ func downloadAndExtract(w io.Writer, downloadURL, assetName string) (binaryPath 
 	}
 
 	return extractedPath, cleanup, nil
+}
+
+func verifyDownloadedArtifact(filePath, expectedSHA256 string, expectedLength int64) error {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	hash := sha256.New()
+	size, err := io.Copy(hash, f)
+	if err != nil {
+		return err
+	}
+	if expectedLength > 0 && size != expectedLength {
+		return fmt.Errorf("upgrade artifact length mismatch: expected %d, got %d", expectedLength, size)
+	}
+	actual := hex.EncodeToString(hash.Sum(nil))
+	expected := strings.TrimPrefix(expectedSHA256, "sha256:")
+	if expected != "" && !strings.EqualFold(actual, expected) {
+		return fmt.Errorf("upgrade artifact SHA-256 mismatch")
+	}
+	return nil
 }
 
 func resolveExecPath() (string, error) {

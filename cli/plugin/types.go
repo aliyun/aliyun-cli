@@ -3,6 +3,7 @@ package plugin
 import (
 	"encoding/json"
 	"runtime"
+	"time"
 
 	runtimeschema "github.com/aliyun/aliyun-openapi-runtime/schema"
 )
@@ -102,6 +103,7 @@ type VersionMetadata struct {
 type PlatformInfo struct {
 	URL      string `json:"url"`
 	Checksum string `json:"checksum"`
+	Length   int64  `json:"length,omitempty"`
 }
 
 type LocalManifest struct {
@@ -145,6 +147,16 @@ type LocalPlugin struct {
 	// The plugin remains responsible for per-API auth validation.
 	// Use a pointer so an absent field in legacy manifests is reliably distinguishable from an explicit `false`.
 	ProfileRequired *bool `json:"profileRequired,omitempty"`
+	// TrustVerification records the signed index and package digest used for
+	// this installation. It is absent for explicitly allowed unverified installs.
+	TrustVerification *TrustVerification `json:"trustVerification,omitempty"`
+}
+
+type TrustVerification struct {
+	KeyIDs       []string  `json:"key_ids"`
+	IndexVersion uint64    `json:"index_version"`
+	Checksum     string    `json:"checksum"`
+	VerifiedAt   time.Time `json:"verified_at"`
 }
 
 func (lp *LocalPlugin) IsProfileRequired() bool {

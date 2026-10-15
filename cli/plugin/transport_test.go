@@ -219,7 +219,7 @@ func TestExecuteInstall_ChecksumFlag(t *testing.T) {
 	out, err := run(map[string]string{
 		"package":  archivePath,
 		"checksum": hex.EncodeToString(sum[:]),
-	})
+	}, "allow-unverified-plugin")
 	require.NoError(t, err)
 	assert.Contains(t, out, "SHA-256 checksum verified")
 

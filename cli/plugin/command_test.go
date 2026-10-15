@@ -159,6 +159,7 @@ func TestNewListRemoteCommand_Run(t *testing.T) {
 			},
 		},
 	}
+	usePluginTrustIndex(t, index)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(index)
@@ -349,6 +350,7 @@ func assignSourceBaseFlag(ctx *cli.Context, base string) {
 	f := ctx.Flags().Get("source-base")
 	f.SetAssigned(true)
 	f.SetValue(base)
+	ctx.Flags().Get("allow-unverified-plugin").SetAssigned(true)
 }
 
 func TestNewInstallCommand_Run_WithNamesFlag(t *testing.T) {
@@ -852,6 +854,7 @@ func TestNewManagerWithOptionalSourceBase(t *testing.T) {
 		assert.NotNil(t, f)
 		f.SetAssigned(true)
 		f.SetValue("  https://mirror.example/plugins/  ")
+		ctx.Flags().Get("allow-unverified-plugin").SetAssigned(true)
 		mgr, err := newManagerWithOptionalSourceBase(ctx)
 		assert.NoError(t, err)
 		assert.NotNil(t, mgr)
