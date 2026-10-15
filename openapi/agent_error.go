@@ -301,8 +301,7 @@ func profileConfigurationAgentError(cause error) error {
 	}
 	// Configuration and credential-provider errors may contain secret values.
 	return cli.NewAgentError(cli.AgentErrorEnvelope{
-		Message:   "profile configuration failed",
-		ErrorCode: "ConfigurationError",
+		Message: "profile configuration failed",
 		Recovery: cli.AgentErrorRecovery{
 			Action:  "check_configuration",
 			Command: "aliyun configure",
