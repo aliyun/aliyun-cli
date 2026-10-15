@@ -17,11 +17,12 @@ func TestLegacyBackendTimeoutPrecedence(t *testing.T) {
 		sse             bool
 		want            time.Duration
 	}{
-		{"rds", "CreateDBInstance", 55000, 0, false, 65 * time.Second},
+		{"rds", "CreateDBInstance", 55000, 0, false, 57 * time.Second},
 		{"rds", "CreateDBInstance", 55000, 2, false, 0},
-		{"ecs", "CreateInstance", 80000, 0, false, 90 * time.Second},
-		{"ecs", "DescribeInstances", 6000, 0, false, 16 * time.Second},
-		{"ecs", "CreateInstance", 80000, 2, false, 0},
+		{"ecs", "CreateInstance", 60000, 0, false, 62 * time.Second},
+		{"ecs", "DescribeInstances", 0, 0, false, 0},
+		{"ecs", "CreateInstance", 60000, 2, false, 0},
+		{"ecs", "CreateInstance", 60000, 120, false, 0},
 		{"ecs", "CreateInstance", 0, 0, false, 0},
 		{"rds", "CreateDBInstance", 0, 0, false, 0},
 		{"rds", "CreateDBInstance", -1, 0, false, 0},
@@ -30,7 +31,7 @@ func TestLegacyBackendTimeoutPrecedence(t *testing.T) {
 		request := requests.NewCommonRequest()
 		request.Product = tc.product
 		invoker := &BasicInvoker{request: request, profile: &config.Profile{ReadTimeout: tc.user}}
-		invoker.applyBackendTimeout(&canonicalmeta.API{Name: tc.action, BackendTimeoutMS: tc.backend,
+		invoker.applyMetadataTimeout(&canonicalmeta.API{Name: tc.action, TimeoutMS: tc.backend,
 			Operation: &canonicalmeta.Operation{IsSSE: tc.sse}})
 		if got := request.GetReadTimeout(); got != tc.want {
 			t.Errorf("%s/%s backend=%d user=%d sse=%v: got %v, want %v", tc.product, tc.action, tc.backend, tc.user, tc.sse, got, tc.want)
@@ -42,7 +43,7 @@ func TestBackendTimeoutPreservesRequestTimeout(t *testing.T) {
 	request := requests.NewCommonRequest()
 	request.SetReadTimeout(3 * time.Second)
 	invoker := &BasicInvoker{request: request}
-	invoker.applyBackendTimeout(&canonicalmeta.API{BackendTimeoutMS: 55000})
+	invoker.applyMetadataTimeout(&canonicalmeta.API{TimeoutMS: 55000})
 	if got := request.GetReadTimeout(); got != 3*time.Second {
 		t.Fatalf("request timeout = %v, want 3s", got)
 	}
@@ -52,7 +53,7 @@ func TestBackendTimeoutDoesNotUseAnotherAPIVersion(t *testing.T) {
 	request := requests.NewCommonRequest()
 	request.Product, request.Version = "rds", "2025-01-01"
 	invoker := &BasicInvoker{request: request, profile: &config.Profile{}}
-	invoker.applyBackendTimeout(&canonicalmeta.API{Name: "CreateDBInstance", BackendTimeoutMS: 55000,
+	invoker.applyMetadataTimeout(&canonicalmeta.API{Name: "CreateDBInstance", TimeoutMS: 55000,
 		Operation: &canonicalmeta.Operation{APIVersion: "2014-08-15"}})
 	if request.GetReadTimeout() != 0 {
 		t.Fatal("used a budget from another API version")
