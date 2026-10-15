@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
@@ -46,7 +47,8 @@ func TestKeygenSignAndVerify(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	// Windows does not store the Unix mode passed to WriteFile.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("secret mode = %o", info.Mode().Perm())
 	}
 
