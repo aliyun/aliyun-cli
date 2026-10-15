@@ -252,11 +252,12 @@ func TestPreviewConfigurationAndURIErrorBoundaries(t *testing.T) {
 	}
 	p := &ossPreview{Mode: "plan"}
 	cmd := removeCommand.command
+	cmd.args = []string{"oss://bucket/key"}
 	_, opts, err := parseOSSOptions(nil)
 	require.NoError(t, err)
-	bad := "invalid"
-	opts[OptionRetryTimes] = &bad
-	require.Error(t, p.run(cli.NewCommandContext(io.Discard, io.Discard), cmd, opts, nil))
+	missingConfig := filepath.Join(t.TempDir(), "missing-config")
+	opts[OptionConfigFile] = &missingConfig
+	require.ErrorContains(t, p.run(cli.NewCommandContext(io.Discard, io.Discard), cmd, opts, nil), "missing-config")
 }
 
 func TestMachineErrorIncludesFailedItemReport(t *testing.T) {

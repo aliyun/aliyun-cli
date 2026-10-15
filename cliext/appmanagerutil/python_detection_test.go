@@ -71,7 +71,7 @@ func TestEnsurePythonAvailable(t *testing.T) {
 					t.Fatalf("unexpected Python probe: %q %v", name, args)
 				}
 				cmd := exec.Command(executable, "-test.run=^TestPythonVersionProbeProcess$")
-				cmd.Env = append(os.Environ(), "ALIYUN_TEST_PYTHON_PROBE=1", "ALIYUN_TEST_PYTHON_VERSION="+version)
+				cmd.Env = append(os.Environ(), "ALIYUN_TEST_PYTHON_PROBE=1", "ALIYUN_TEST_PYTHON_VERSION="+version, "GOCOVERDIR="+t.TempDir())
 				return cmd
 			}
 			t.Cleanup(func() { execCommandFunc = originalCommand })
