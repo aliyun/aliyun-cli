@@ -102,3 +102,21 @@ func TestManagerFlagAndVersionBoundaries(t *testing.T) {
 		t.Fatal("invalid version URL accepted")
 	}
 }
+
+func TestBaseStripFlagsPreserveChildOptions(t *testing.T) {
+	flags := BaseStripFlags()
+	for _, name := range []string{"profile", "config-path", "read-timeout", "header", "cli-query", "cli-ai-mode", "no-cli-ai-mode"} {
+		if !flags[name] {
+			t.Errorf("host option %q would leak to child", name)
+		}
+	}
+	for _, name := range []string{"mode", "yes", "quiet", "region", "endpoint", "output"} {
+		if flags[name] {
+			t.Errorf("child option %q would be stripped", name)
+		}
+	}
+	delete(flags, "profile")
+	if !BaseStripFlags()["profile"] {
+		t.Fatal("one child mutated another child's strip flags")
+	}
+}

@@ -27,11 +27,11 @@ func TestTemporaryCredentialModes(t *testing.T) {
 		status     int
 		wantErr    bool
 	}{
-		{name: "static session", mode: "StsToken", status: 200}, {name: "credential URI", mode: "CredentialsURI", status: 200}, {name: "credential URI rejected", mode: "CredentialsURI", status: 403, wantErr: true}, {name: "invalid saved mode", mode: "invalid", status: 200, wantErr: true},
+		{name: "static session", mode: "StsToken", status: 200}, {name: "RAM role session", mode: "RamRoleArn", status: 200}, {name: "credential URI", mode: "CredentialsURI", status: 200}, {name: "credential URI rejected", mode: "CredentialsURI", status: 403, wantErr: true}, {name: "invalid saved mode", mode: "invalid", status: 200, wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			profile := map[string]any{"name": "default", "mode": tc.mode, "access_key_id": "id", "access_key_secret": "secret", "sts_token": "token", "credentials_uri": "https://credentials.example.invalid/temporary", "region_id": "cn-hangzhou"}
+			profile := map[string]any{"name": "default", "mode": tc.mode, "access_key_id": "id", "access_key_secret": "secret", "sts_token": "token", "credentials_uri": "https://credentials.example.invalid/temporary", "ram_role_arn": "acs:ram::123:role/test", "ram_session_name": "session", "region_id": "cn-hangzhou"}
 			data, err := json.Marshal(map[string]any{"current": "default", "profiles": []any{profile}})
 			if err != nil {
 				t.Fatal(err)
