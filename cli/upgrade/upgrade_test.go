@@ -5,6 +5,10 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,10 +19,41 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/trust"
 	"github.com/stretchr/testify/assert"
 )
+
+type fakeUpgradeArtifactFetcher struct {
+	artifact *trust.VerifiedArtifact
+	err      error
+}
+
+func (f fakeUpgradeArtifactFetcher) FetchArtifact(context.Context, string, string) (*trust.VerifiedArtifact, error) {
+	return f.artifact, f.err
+}
+
+func useUpgradeManifest(t *testing.T, version, rawURL string, archive []byte) {
+	t.Helper()
+	sum := sha256.Sum256(archive)
+	manifest := trust.UpgradeManifest{
+		Type: trust.PurposeUpgrade, SchemaVersion: trust.SchemaVersion,
+		Version: 1, ExpiresAt: time.Now().Add(time.Hour), ReleaseVersion: version,
+		Artifacts: map[string]trust.ArtifactDescriptor{
+			runtime.GOOS + "-" + runtime.GOARCH: {
+				URL: rawURL, SHA256: hex.EncodeToString(sum[:]), Length: int64(len(archive)),
+				Version: 1, ExpiresAt: time.Now().Add(time.Hour),
+			},
+		},
+	}
+	payload, err := json.Marshal(manifest)
+	assert.NoError(t, err)
+	original := upgradeTrustClient
+	upgradeTrustClient = fakeUpgradeArtifactFetcher{artifact: &trust.VerifiedArtifact{Bytes: payload}}
+	t.Cleanup(func() { upgradeTrustClient = original })
+}
 
 // ---------------------------------------------------------------------------
 // Version helpers
@@ -225,7 +260,7 @@ func TestDoUpgrade_DirectWhenNotBrew(t *testing.T) {
 
 func TestUpgradeViaDirect_FullFlow(t *testing.T) {
 	binaryContent := []byte("#!/bin/sh\necho upgraded\n")
-	_, binaryName, archive := createUpgradeArchiveInMemory(t, "99.0.0", binaryContent)
+	assetName, binaryName, archive := createUpgradeArchiveInMemory(t, "99.0.0", binaryContent)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
@@ -237,6 +272,7 @@ func TestUpgradeViaDirect_FullFlow(t *testing.T) {
 	})
 	server := httptest.NewServer(mux)
 	defer server.Close()
+	useUpgradeManifest(t, "99.0.0", server.URL+"/"+assetName, archive.Bytes())
 
 	origClient := httpClient
 	origOSSBase := ossBaseURL
@@ -274,6 +310,7 @@ func TestUpgradeViaDirect_AlreadyLatest(t *testing.T) {
 		w.Write([]byte("3.0.0\n"))
 	}))
 	defer server.Close()
+	useUpgradeManifest(t, "3.0.0", server.URL+"/unused.tgz", nil)
 
 	origClient := httpClient
 	origOSSBase := ossBaseURL
@@ -303,6 +340,7 @@ func TestUpgradeViaDirect_UserCancels(t *testing.T) {
 		w.Write([]byte("99.0.0\n"))
 	}))
 	defer server.Close()
+	useUpgradeManifest(t, "99.0.0", server.URL+"/unused.tgz", nil)
 
 	origClient := httpClient
 	origOSSBase := ossBaseURL
