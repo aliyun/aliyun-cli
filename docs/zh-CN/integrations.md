@@ -45,13 +45,9 @@ aliyun utils mcp-proxy --skip-mcp-oauth --profile my-profile --config-path /path
 
 `--skip-mcp-oauth` 支持显式指定 `true` 或 `false`；省略该参数或设为 `false` 时使用 MCP OAuth。仅指定 `--profile` 或 `--config-path` 不会跳过 MCP OAuth。跳过 MCP OAuth 时，暂不支持 `BearerToken` 和 `Anonymous` 凭据。
 
-首次使用 CLI 凭据认证前，请为对应的 RAM 身份授予 `AliyunOpenAPIMCPServerStaticCredentialAccess`，以及业务 API 和 MCP Server 发现所需权限，并完成一次预检查授权：
+使用 CLI 凭据认证时，请为对应的 RAM 身份授予 `AliyunOpenAPIMCPServerStaticCredentialAccess`，以及业务 API 和 MCP Server 发现所需权限。
 
-```sh
-uvx alibabacloud.mcp-proxy@latest --server-url '<MCP 连接地址>' pre-check
-```
-
-预检查可以在另一台有浏览器的机器完成。完整前提条件和连接地址获取方式见 [OpenAPI MCP Server 使用指南](https://help.aliyun.com/zh/openapi/user-guide/openapi-mcp-server-guide)。手动配置的 STS 过期后需更新配置；CloudSSO 登录过期后需重新登录。
+手动配置的 STS 过期后需更新配置；CloudSSO 登录过期后需重新登录。
 
 ### 访问控制
 

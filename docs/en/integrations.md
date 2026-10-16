@@ -45,13 +45,9 @@ aliyun utils mcp-proxy --skip-mcp-oauth --profile my-profile --config-path /path
 
 `--skip-mcp-oauth` also accepts an explicit `true` or `false`. Omitting it or setting it to `false` uses MCP OAuth. Using `--profile` or `--config-path` alone does not skip MCP OAuth. `BearerToken` and `Anonymous` credentials are not supported when skipping MCP OAuth.
 
-Before first using CLI credentials, grant the corresponding RAM identity `AliyunOpenAPIMCPServerStaticCredentialAccess` and the permissions needed by the requested APIs and MCP server discovery. Complete the one-time authorization pre-check:
+When using CLI credentials, grant the corresponding RAM identity `AliyunOpenAPIMCPServerStaticCredentialAccess` and the permissions needed by the requested APIs and MCP server discovery.
 
-```sh
-uvx alibabacloud.mcp-proxy@latest --server-url '<MCP endpoint>' pre-check
-```
-
-The pre-check may run on a different machine with a browser. See the [OpenAPI MCP Server guide](https://help.aliyun.com/zh/openapi/user-guide/openapi-mcp-server-guide) for the prerequisites and endpoint. Update manually configured STS credentials when they expire, and log in again if a CloudSSO login expires.
+Update manually configured STS credentials when they expire, and log in again if a CloudSSO login expires.
 
 ### Access control
 
