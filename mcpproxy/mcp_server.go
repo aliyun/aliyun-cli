@@ -54,6 +54,7 @@ func ListMCPServers(ctx *cli.Context, regionType RegionType) ([]MCPServerInfo, e
 	if err != nil {
 		return nil, err
 	}
+	client.UserAgent = tea.String(util.GetAliyunCliUserAgent() + "/aliyun-cli-mcp-proxy")
 	params := &openapiClient.Params{
 		Action:      tea.String("ListApiMcpServers"),
 		Version:     tea.String("2024-11-30"),
@@ -106,6 +107,7 @@ type ProxyConfig struct {
 	RegionType      RegionType
 	Scope           string
 	McpProfile      *McpProfile
+	CredentialAuth  *credentialAuth
 	ExistMcpServers []MCPServerInfo
 	CallbackManager *OAuthCallbackManager
 	AutoOpenBrowser bool
@@ -122,6 +124,7 @@ type MCPProxy struct {
 	Server          *http.Server // 只会在 Start() 中赋值一次，如果程序改变执行流，则需要加锁保护
 	ExistMcpServers []MCPServerInfo
 	TokenRefresher  *TokenRefresher
+	CredentialAuth  *credentialAuth
 	stopCh          chan struct{}
 	stats           *RuntimeStats
 	UpstreamBaseURL string              // 用户自定义的上游服务器地址，如果为空则使用 EndpointMap 配置
@@ -194,12 +197,22 @@ func NewMCPProxy(config ProxyConfig) *MCPProxy {
 		}
 	}
 
-	return &MCPProxy{
+	proxy := &MCPProxy{
 		Host:            config.Host,
 		Port:            config.Port,
 		RegionType:      config.RegionType,
 		ExistMcpServers: config.ExistMcpServers,
-		TokenRefresher: &TokenRefresher{
+		CredentialAuth:  config.CredentialAuth,
+		stopCh:          make(chan struct{}),
+		stats:           stats,
+		UpstreamBaseURL: config.UpstreamBaseURL,
+		AllowedServers:  config.AllowedServers,
+		BlockedServers:  config.BlockedServers,
+		serverPaths:     serverPaths,
+		upstreamClient:  newMCPUpstreamHTTPClient(),
+	}
+	if config.CredentialAuth == nil {
+		proxy.TokenRefresher = &TokenRefresher{
 			profile:         config.McpProfile,
 			regionType:      config.RegionType,
 			callbackManager: config.CallbackManager,
@@ -211,15 +224,9 @@ func NewMCPProxy(config ProxyConfig) *MCPProxy {
 			tokenCh:         make(chan TokenInfo, 1), // 带缓冲的 channel，存储最新的 token
 			fatalErrCh:      make(chan error, 1),
 			stats:           stats,
-		},
-		stopCh:          make(chan struct{}),
-		stats:           stats,
-		UpstreamBaseURL: config.UpstreamBaseURL,
-		AllowedServers:  config.AllowedServers,
-		BlockedServers:  config.BlockedServers,
-		serverPaths:     serverPaths,
-		upstreamClient:  newMCPUpstreamHTTPClient(),
+		}
 	}
+	return proxy
 }
 
 func newMCPUpstreamHTTPClient() *http.Client {
@@ -260,7 +267,9 @@ func readMCPRequestBody(w http.ResponseWriter, r *http.Request, limit int64) ([]
 
 func (p *MCPProxy) Start() error {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/callback", p.handleOAuthCallback)
+	if p.TokenRefresher != nil {
+		mux.HandleFunc("/callback", p.handleOAuthCallback)
+	}
 	mux.HandleFunc("/health", p.handleHealth)
 	mux.HandleFunc("/", p.ServeMCPProxyRequest)
 
@@ -295,6 +304,10 @@ func (p *MCPProxy) Stop() error {
 }
 
 func (p *MCPProxy) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	if p.TokenRefresher == nil {
+		http.NotFound(w, r)
+		return
+	}
 	showCode := !p.TokenRefresher.autoOpenBrowser
 	handleOAuthCallbackRequest(w, r, p.TokenRefresher.callbackManager.HandleCallback, showCode)
 }
@@ -312,30 +325,48 @@ func (p *MCPProxy) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"uptime_seconds": time.Since(p.stats.StartTime).Seconds(),
 	}
 
-	p.TokenRefresher.mu.RLock()
-	currentTime := util.GetCurrentUnixTime()
-	tokenExpired := p.TokenRefresher.profile.MCPOAuthAccessTokenExpire <= currentTime
-	tokenExpiresIn := p.TokenRefresher.profile.MCPOAuthAccessTokenExpire - currentTime
-	refreshTokenExpired := p.TokenRefresher.profile.MCPOAuthRefreshTokenExpire <= currentTime
-	refreshTokenExpiresIn := p.TokenRefresher.profile.MCPOAuthRefreshTokenExpire - currentTime
-	p.TokenRefresher.mu.RUnlock()
-
-	if tokenExpired {
-		health["status"] = "degraded"
-		health["token_status"] = "expired"
+	if p.CredentialAuth != nil {
+		health["auth_type"] = "credentials"
+		expiresAt, failed := p.CredentialAuth.Snapshot()
+		switch {
+		case failed || expiresAt.IsZero():
+			health["status"] = "degraded"
+			health["token_status"] = "unavailable"
+		case !expiresAt.After(now):
+			health["status"] = "degraded"
+			health["token_status"] = "expired"
+		default:
+			health["token_status"] = "valid"
+			health["token_expires_in"] = int64(expiresAt.Sub(now).Seconds())
+		}
 	} else {
-		health["token_status"] = "valid"
-		health["token_expires_in"] = tokenExpiresIn
-		health["token_expires_inh"] = time.Duration(tokenExpiresIn * int64(time.Second)).String()
-	}
+		health["auth_type"] = "oauth"
+		p.TokenRefresher.mu.RLock()
+		currentTime := util.GetCurrentUnixTime()
+		tokenExpired := p.TokenRefresher.profile.MCPOAuthAccessTokenExpire <= currentTime
+		tokenExpiresIn := p.TokenRefresher.profile.MCPOAuthAccessTokenExpire - currentTime
+		refreshTokenExpired := p.TokenRefresher.profile.MCPOAuthRefreshTokenExpire <= currentTime
+		refreshTokenExpiresIn := p.TokenRefresher.profile.MCPOAuthRefreshTokenExpire - currentTime
+		p.TokenRefresher.mu.RUnlock()
 
-	if refreshTokenExpired {
-		health["status"] = "degraded"
-		health["refresh_token_status"] = "expired"
-	} else {
-		health["refresh_token_status"] = "valid"
-		health["refresh_token_expires_in"] = refreshTokenExpiresIn
-		health["refresh_token_expires_inh"] = time.Duration(refreshTokenExpiresIn * int64(time.Second)).String()
+		if tokenExpired {
+			health["status"] = "degraded"
+			health["token_status"] = "expired"
+		} else {
+			health["token_status"] = "valid"
+			health["token_expires_in"] = tokenExpiresIn
+			health["token_expires_inh"] = time.Duration(tokenExpiresIn * int64(time.Second)).String()
+		}
+
+		if refreshTokenExpired {
+			health["status"] = "degraded"
+			health["refresh_token_status"] = "expired"
+		} else {
+			health["refresh_token_status"] = "valid"
+			health["refresh_token_expires_in"] = refreshTokenExpiresIn
+			health["refresh_token_expires_inh"] = time.Duration(refreshTokenExpiresIn * int64(time.Second)).String()
+		}
+
 	}
 
 	// 检查内存
@@ -505,25 +536,36 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 	// 如果响应状态码为 401，先尝试刷新 token，然后重试请求
 	if resp.StatusCode == http.StatusUnauthorized {
 		log.Println("MCP Proxy gets mcp server response status code 401, attempting to refresh token")
+		var newAccessToken string
 		var refreshErr error
-		p.TokenRefresher.mu.RLock()
-		MCPOAuthRefreshTokenExpire := p.TokenRefresher.profile.MCPOAuthRefreshTokenExpire
-		currentTime := util.GetCurrentUnixTime()
-		p.TokenRefresher.mu.RUnlock()
-		if MCPOAuthRefreshTokenExpire > currentTime {
-			// refresh token 未过期，尝试刷新 access token
-			log.Println("Received 401, attempting to refresh access token using refresh token")
-			refreshErr = p.TokenRefresher.refreshAccessToken()
+		if p.CredentialAuth != nil {
+			newAccessToken, refreshErr = p.CredentialAuth.RefreshToken(accessToken)
 		} else {
-			// refresh token 已过期，需要重新授权
-			log.Println("Received 401, refresh token expired, reauthorizing")
-			refreshErr = p.TokenRefresher.reauthorizeWithProxy()
+			p.TokenRefresher.mu.RLock()
+			MCPOAuthRefreshTokenExpire := p.TokenRefresher.profile.MCPOAuthRefreshTokenExpire
+			currentTime := util.GetCurrentUnixTime()
+			p.TokenRefresher.mu.RUnlock()
+			if MCPOAuthRefreshTokenExpire > currentTime {
+				// refresh token 未过期，尝试刷新 access token
+				log.Println("Received 401, attempting to refresh access token using refresh token")
+				refreshErr = p.TokenRefresher.refreshAccessToken()
+			} else {
+				// refresh token 已过期，需要重新授权
+				log.Println("Received 401, refresh token expired, reauthorizing")
+				refreshErr = p.TokenRefresher.reauthorizeWithProxy()
+			}
 		}
 
 		if refreshErr != nil {
-			log.Printf("Failed to handle 401: %v", refreshErr)
+			message := "Authentication failed; check proxy logs for details"
+			if p.CredentialAuth == nil {
+				log.Printf("Failed to handle 401: %v", refreshErr)
+				message = fmt.Sprintf("Authentication failed: %v", refreshErr)
+			} else {
+				log.Print("MCP credential refresh failed; check CLI credentials and MCP application authorization")
+			}
 			atomic.AddInt64(&p.stats.ErrorRequests, 1)
-			http.Error(w, fmt.Sprintf("Authentication failed: %v", refreshErr), http.StatusUnauthorized)
+			http.Error(w, message, http.StatusUnauthorized)
 			return
 		}
 
@@ -536,12 +578,14 @@ func (p *MCPProxy) ServeMCPProxyRequest(w http.ResponseWriter, r *http.Request) 
 			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		}
 
-		newAccessToken, err := p.getMCPAccessToken()
-		if err != nil {
-			log.Printf("Failed to get new access token after refresh: %v", err)
-			atomic.AddInt64(&p.stats.ErrorRequests, 1)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
+		if p.CredentialAuth == nil {
+			newAccessToken, err = p.getMCPAccessToken()
+			if err != nil {
+				log.Printf("Failed to get new access token after refresh: %v", err)
+				atomic.AddInt64(&p.stats.ErrorRequests, 1)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				return
+			}
 		}
 
 		resp, err = sendRequest(newAccessToken)
@@ -702,6 +746,9 @@ func (p *MCPProxy) isPathAllowed(requestPath string) bool {
 }
 
 func (p *MCPProxy) getMCPAccessToken() (string, error) {
+	if p.CredentialAuth != nil {
+		return p.CredentialAuth.GetToken()
+	}
 	var tokenInfo TokenInfo
 	select {
 	case tokenInfo = <-p.TokenRefresher.tokenCh:
