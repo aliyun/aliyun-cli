@@ -184,7 +184,7 @@ func TestBridgeRejectsInvalidMachineInvocations(t *testing.T) {
 		{listCommand.command, []string{"--cli-output=json", "--cli-cursor=x"}, "cursor"},
 		{listCommand.command, []string{"a", "b"}, "at most"},
 		{copyCommand.command, []string{}, "at least"},
-		{copyCommand.command, []string{"a", "oss://bucket/b", "--dryrun"}, "unknown OSS option"},
+		{copyCommand.command, []string{"a", "oss://bucket/b", "--dryrun"}, "--dryrun is not an oss command option.\nRun 'aliyun oss cp --help' for supported oss options."},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			_, err := phaseCInvoke(t, tc.cmd, "http://127.0.0.1:1", tc.args...)
@@ -205,7 +205,7 @@ func TestMachineListRejectsInvalidStateAndOutputFailures(t *testing.T) {
 		{[]string{"oss://bucket"}, OptionLimitedNum, "0", "limited-num"},
 		{[]string{"oss://"}, "", "", ""},
 	} {
-		_, opts, err := parseOSSOptions(nil)
+		_, opts, err := parseOSSOptions(nil, "")
 		require.NoError(t, err)
 		if tc.key != "" {
 			v := tc.value
@@ -222,7 +222,7 @@ func TestMachineListRejectsInvalidStateAndOutputFailures(t *testing.T) {
 		}
 	}
 	for _, stage := range []string{"buckets", "objects"} {
-		_, opts, err := parseOSSOptions(nil)
+		_, opts, err := parseOSSOptions(nil, "")
 		require.NoError(t, err)
 		endpoint := "://invalid"
 		opts[OptionEndpoint] = &endpoint
@@ -235,28 +235,34 @@ func TestMachineListRejectsInvalidStateAndOutputFailures(t *testing.T) {
 
 func TestPreviewConfigurationAndURIErrorBoundaries(t *testing.T) {
 	clearEndpointTestEnv(t)
+	t.Setenv("ALIBABA_CLOUD_SAFETY_POLICY_ENABLED", "false")
+	t.Setenv("ALIBABA_CLOUD_SAFETY_POLICY_RULES", "")
 	for _, target := range []string{"oss://bucket", "oss://bucket/"} {
 		_, err := preparePreview(&removeCommand.command, []string{target}, nil, nil, "validate")
 		require.Error(t, err)
 	}
 	_, err := preparePreview(&removeCommand.command, []string{"oss://bucket/key"}, []string{"--version-id=v1"}, nil, "validate")
 	require.NoError(t, err)
-	for _, endpoint := range []string{"://invalid", "http://127.0.0.1:1"} {
-		_, opts, err := parseOSSOptions(nil)
+	configPath := filepath.Join(t.TempDir(), "ossutilconfig")
+	require.NoError(t, os.WriteFile(configPath, []byte("[Credentials]\naccessKeyID=fake-ak\naccessKeySecret=fake-secret\n"), 0600))
+	for _, tc := range []struct {
+		endpoint, want string
+	}{
+		{"http://[::1", "missing ']' in host"},
+		{"http://127.0.0.1:1", "bucket name INVALID can only include lowercase letters, numbers, and -"},
+	} {
+		_, opts, err := parseOSSOptions(nil, "")
 		require.NoError(t, err)
-		opts[OptionEndpoint] = &endpoint
+		opts[OptionConfigFile] = &configPath
+		opts[OptionEndpoint] = &tc.endpoint
 		cmd := removeCommand.command
+		cmd.args = []string{"oss://bucket/key"}
 		p := &ossPreview{Mode: "plan", Items: []previewItem{{Target: "oss://INVALID/key"}}}
 		ctx := cli.NewCommandContext(io.Discard, io.Discard)
-		require.Error(t, p.run(ctx, cmd, opts, nil))
+		require.ErrorContains(t, p.run(ctx, cmd, opts, nil), tc.want)
 	}
-	p := &ossPreview{Mode: "plan"}
-	cmd := removeCommand.command
-	_, opts, err := parseOSSOptions(nil)
-	require.NoError(t, err)
-	bad := "invalid"
-	opts[OptionRetryTimes] = &bad
-	require.Error(t, p.run(cli.NewCommandContext(io.Discard, io.Discard), cmd, opts, nil))
+	_, err = phaseCInvoke(t, removeCommand.command, "http://127.0.0.1:1", "oss://bucket/key", "--cli-plan", "--retry-times=invalid")
+	require.ErrorContains(t, err, "invalid option value of --retry-times, the value: invalid is not int64")
 }
 
 func TestMachineErrorIncludesFailedItemReport(t *testing.T) {
