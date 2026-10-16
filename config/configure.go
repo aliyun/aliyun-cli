@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"time"
@@ -167,6 +168,11 @@ func NewConfigureCommand() *cli.Command {
 		},
 	}
 
+	c.Flags().Add(&cli.Flag{
+		Name:         "no-browser",
+		AssignedMode: cli.AssignedNone,
+		Short:        i18n.T("Complete OAuth login by pasting the callback URL, without opening a browser", "不打开浏览器，通过粘贴回调 URL 完成 OAuth 登录"),
+	})
 	c.AddSubCommand(NewConfigureGetCommand())
 	c.AddSubCommand(NewConfigureSetCommand())
 	c.AddSubCommand(NewConfigureListCommand())
@@ -220,6 +226,11 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 	}
 
 	normalizedMode := NormalizeMode(mode)
+	noBrowser := ctx.Flags().Get("no-browser")
+	manualOAuth := noBrowser != nil && noBrowser.IsAssigned()
+	if manualOAuth && normalizedMode != OAuth {
+		return fmt.Errorf("--no-browser is only supported with --mode OAuth")
+	}
 	cli.Printf(w, "Configuring profile '%s' in '%s' authenticate mode...\n", profileName, normalizedMode)
 
 	if mode != "" {
@@ -274,11 +285,15 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 			// only siteType is supported now
 			cp.Mode = OAuth
 			// restart oauth flow
-			err := configureOAuth(w, &cp)
+			flow := oauthStartOauthFlow
+			if manualOAuth {
+				flow = startManualOauthFlow
+			}
+			err := configureOAuthWithFlow(w, &cp, flow)
 			if err != nil {
 				return err
 			}
-			cli.Printf(w, "OAuth configuration completed. The temporary Access Key Id and Access Key Secret have been set in the profile.\n")
+			cli.Printf(w, "OAuth configuration completed. The temporary Access Key Id and Access Key Secret have been set in the profile.\n\n")
 		case BearerToken:
 			cp.Mode = BearerToken
 			err := configureBearerToken(w, &cp)
@@ -334,6 +349,10 @@ func doConfigure(ctx *cli.Context, profileName string, mode string) error {
 }
 
 func configureOAuth(w io.Writer, cp *Profile) error {
+	return configureOAuthWithFlow(w, cp, oauthStartOauthFlow)
+}
+
+func configureOAuthWithFlow(w io.Writer, cp *Profile, flow func(io.Writer, *Profile) error) error {
 	var oauthSiteType = cp.OAuthSiteType
 	startChooseSiteType := false
 	if oauthSiteType != "CN" && oauthSiteType != "INTL" {
@@ -360,7 +379,7 @@ func configureOAuth(w io.Writer, cp *Profile) error {
 	}
 	cp.OAuthSiteType = oauthSiteType
 	// start oauth flow
-	err := oauthStartOauthFlow(w, cp)
+	err := flow(w, cp)
 	if err != nil {
 		return err
 	}
@@ -578,20 +597,29 @@ func tryRefreshOauthToken(w io.Writer, cp *Profile) error {
 }
 
 func startOauthFlow(w io.Writer, cp *Profile) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	return startOauthFlowWithContext(ctx, w, cp)
+}
+
+func startOauthFlowWithContext(ctx context.Context, w io.Writer, cp *Profile) error {
 	currentOauthSiteType := cp.OAuthSiteType
 	if currentOauthSiteType != "CN" && currentOauthSiteType != "INTL" {
 		return fmt.Errorf("invalid OAuth site type: %s, only support CN or INTL", currentOauthSiteType)
 	}
 	oauthClientId := oauthClientMap[cp.OAuthSiteType]
-	oauthBaseUrl := oauthBaseUrlMap[cp.OAuthSiteType]
 	signInUrl := signInMap[cp.OAuthSiteType]
 	// start port and listen to callback
 	// port range 12345 - 12349
-	port, err := detectPortUse(12345, 12349)
+	listener, err := listenOAuthCallback(12345, 12349)
 	if err != nil {
 		return err
 	}
-	// start http server
+	defer listener.Close()
+	port := listener.Addr().(*net.TCPAddr).Port
+	// Keep the listener bound until the callback server finishes.
 	redirectUri := fmt.Sprintf("http://127.0.0.1:%s/cli/callback", strconv.Itoa(port))
 	state := util.RandStringBytesMaskImprSrc(16)
 	codeVerifier := generateCodeVerifier()
@@ -602,17 +630,18 @@ func startOauthFlow(w io.Writer, cp *Profile) error {
 	if err != nil {
 		return err
 	}
-	// open browser
-	_ = utilOpenBrowser(oauthUrl)
-	fmt.Println(i18n.T("If the browser does not open automatically, use the following URL to complete the login process:",
-		"如果浏览器没有自动打开，请使用以下URL完成登录过程:").GetMessage())
-	fmt.Println()
-	fmt.Printf("%s: %s\n", i18n.T("SignIn url", "登录URL").GetMessage(), oauthUrl)
-	fmt.Println()
-	fmt.Println(i18n.T("Now you can login to your account with OAuth configuration in the browser.", "现在您可以在浏览器中使用OAuth配置登录您的账户。").GetMessage())
 
-	codeCh := make(chan string)
-	errCh := make(chan error)
+	type callbackResult struct {
+		code string
+		err  error
+	}
+	resultCh := make(chan callbackResult, 1)
+	deliver := func(result callbackResult) {
+		select {
+		case resultCh <- result:
+		default:
+		}
+	}
 
 	// Create a new ServeMux to avoid conflicts with global handlers
 	mux := http.NewServeMux()
@@ -622,13 +651,13 @@ func startOauthFlow(w io.Writer, cp *Profile) error {
 			return
 		}
 		if r.FormValue("state") != state {
-			errCh <- fmt.Errorf("invalid state")
+			deliver(callbackResult{err: fmt.Errorf("invalid state")})
 			http.Error(w, "Invalid state", http.StatusBadRequest)
 			return
 		}
 		code := r.FormValue("code")
 		if code == "" {
-			errCh <- fmt.Errorf("code not found")
+			deliver(callbackResult{err: fmt.Errorf("code not found")})
 			http.Error(w, "Code not found", http.StatusBadRequest)
 			return
 		}
@@ -636,29 +665,42 @@ func startOauthFlow(w io.Writer, cp *Profile) error {
 		if err != nil {
 			return
 		}
-		codeCh <- code
+		deliver(callbackResult{code: code})
 	})
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
+		Addr:    listener.Addr().String(),
 		Handler: mux,
 	}
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
+		if err := srv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			deliver(callbackResult{err: err})
 		}
 	}()
-	// wait for code or error
+	// open browser
+	_ = utilOpenBrowser(oauthUrl)
+	fmt.Println(i18n.T("If the browser does not open automatically, use the following URL to complete the login process:",
+		"如果浏览器没有自动打开，请使用以下URL完成登录过程:").GetMessage())
+	fmt.Println()
+	fmt.Printf("%s: %s\n", i18n.T("SignIn url", "登录URL").GetMessage(), oauthUrl)
+	fmt.Println()
+	fmt.Println(i18n.T("Now you can login to your account with OAuth configuration in the browser.", "现在您可以在浏览器中使用OAuth配置登录您的账户。").GetMessage())
+
+	// wait for code, server error, cancellation, or timeout
 	var code string
 	select {
-	case code = <-codeCh:
-	case err = <-errCh:
+	case result := <-resultCh:
+		code, err = result.code, result.err
+	case <-ctx.Done():
+		err = fmt.Errorf("waiting for OAuth callback at %s: %w", redirectUri, ctx.Err())
 	}
 	// shutdown server
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if srv != nil {
-		_ = srv.Shutdown(shutdownCtx)
+		if shutdownErr := srv.Shutdown(shutdownCtx); shutdownErr != nil {
+			_ = srv.Close()
+		}
 	}
 	if err != nil {
 		return err
@@ -666,6 +708,12 @@ func startOauthFlow(w io.Writer, cp *Profile) error {
 	if code == "" {
 		return fmt.Errorf("code not found")
 	}
+	return exchangeOAuthCode(ctx, cp, code, codeVerifier, redirectUri)
+}
+
+func exchangeOAuthCode(ctx context.Context, cp *Profile, code, codeVerifier, redirectUri string) error {
+	oauthClientId := oauthClientMap[cp.OAuthSiteType]
+	oauthBaseUrl := oauthBaseUrlMap[cp.OAuthSiteType]
 	// exchange code for token with PKCE
 	tokenUrl := fmt.Sprintf("%s/v1/token", oauthBaseUrl)
 	data := url.Values{}
@@ -674,7 +722,7 @@ func startOauthFlow(w io.Writer, cp *Profile) error {
 	data.Set("client_id", oauthClientId)
 	data.Set("redirect_uri", redirectUri)
 	data.Set("code_verifier", codeVerifier)
-	req, err := http.NewRequest("POST", tokenUrl, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", tokenUrl, strings.NewReader(data.Encode()))
 	if err != nil {
 		return err
 	}
@@ -684,6 +732,7 @@ func startOauthFlow(w io.Writer, cp *Profile) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	var tokenRespErr struct {
 		Error            string `json:"error"`
 		ErrorDescription string `json:"error_description"`
@@ -732,15 +781,14 @@ func generateCodeChallenge(codeVerifier string) string {
 	return base64.RawURLEncoding.EncodeToString(h[:])
 }
 
-func detectPortUse(start int, end int) (int, error) {
+func listenOAuthCallback(start int, end int) (net.Listener, error) {
 	for port := start; port <= end; port++ {
-		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+		ln, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 		if err == nil {
-			_ = ln.Close()
-			return port, nil
+			return ln, nil
 		}
 	}
-	return 0, fmt.Errorf("no available port found in range %d-%d", start, end)
+	return nil, fmt.Errorf("no available OAuth callback port on 127.0.0.1 in range %d-%d", start, end)
 }
 
 func configureBearerToken(w io.Writer, cp *Profile) error {
