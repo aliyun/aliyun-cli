@@ -267,6 +267,8 @@ aliyun configure safety-policy --help
 
 Safety policy is disabled by default, and `confirm` is a local CLI confirmation rather than cloud authorization or approval. Use `show` or `list` to inspect the effective policy. When `ALIBABA_CLOUD_SAFETY_POLICY_ENABLED` or `ALIBABA_CLOUD_SAFETY_POLICY_RULES` is set, the displayed policy includes those environment overrides. The CLI refuses to continue when the policy file or environment rules cannot be fully parsed.
 
+`ALIBABA_CLOUD_SAFETY_POLICY_RULES` accepts comma-separated `pattern=action` entries or a JSON object such as `{"rules":[{"pattern":"ecs:Delete*","action":"deny"}]}`. An empty value or `{"rules":[]}` explicitly clears the rules. The JSON `enabled` field does not override the policy enablement setting; use `ALIBABA_CLOUD_SAFETY_POLICY_ENABLED` for that.
+
 ### Command matching contract
 
 By design, safety policy matches the command spelling supplied by the caller, not the resolved OpenAPI identity. Matching is case-insensitive and supports `*` for any sequence of characters. It does not expand API aliases or convert between PascalCase and kebab-case. For example, `ecs:DeleteInstance` matches `ECS:deleteinstance`, but does not match `ecs:delete-instance`, even though both command forms invoke the same API. This behavior also applies in AI mode.
