@@ -27,7 +27,10 @@
 // in aliyun-openapi-runtime/source/format.
 package schema
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"github.com/aliyun/aliyun-openapi-runtime/meta"
+)
 
 // ============================================================================
 // On-disk layout constants
@@ -145,12 +148,13 @@ type VersionIndex struct {
 // VersionAPIEntry is one API's lightweight index entry:
 // enough to build command stubs and the kebab->API route table without loading the full per-API JSON.
 type VersionAPIEntry struct {
-	CmdName       string `json:"cmd_name"`
-	Deprecated    bool   `json:"deprecated"`
-	TitleZH       string `json:"title_zh,omitempty"`
-	TitleEN       string `json:"title_en,omitempty"`
-	DescriptionZH string `json:"description_zh"`
-	DescriptionEN string `json:"description_en"`
+	ImportanceScore *meta.ImportanceScore `json:"importance_score,omitempty"`
+	CmdName         string                `json:"cmd_name"`
+	Deprecated      bool                  `json:"deprecated"`
+	TitleZH         string                `json:"title_zh,omitempty"`
+	TitleEN         string                `json:"title_en,omitempty"`
+	DescriptionZH   string                `json:"description_zh"`
+	DescriptionEN   string                `json:"description_en"`
 }
 
 // ============================================================================
@@ -214,27 +218,28 @@ type TypeShape struct {
 
 // ArgumentDefinition describes a single CLI parameter.
 type ArgumentDefinition struct {
-	Name        string               `json:"name"`
-	RawName     string               `json:"raw_name"`
-	Type        string               `json:"type"`
-	Format      string               `json:"format,omitempty"`
-	Enum        []string             `json:"enum,omitempty"`
-	Minimum     string               `json:"minimum,omitempty"`
-	Maximum     string               `json:"maximum,omitempty"`
-	MinLength   string               `json:"min_length,omitempty"`
-	MaxLength   string               `json:"max_length,omitempty"`
-	Pattern     string               `json:"pattern,omitempty"`
-	Options     []string             `json:"options,omitempty"`
-	HelpZH      string               `json:"help_zh,omitempty"`
-	HelpEN      string               `json:"help_en,omitempty"`
-	Example     string               `json:"example,omitempty"`
-	Required    bool                 `json:"required"`
-	DocRequired bool                 `json:"doc_required,omitempty"`
-	DirectBody  bool                 `json:"direct_body,omitempty"`
-	Location    string               `json:"location,omitempty"`
-	ParamStyle  string               `json:"param_style,omitempty"`
-	IsWildcard  bool                 `json:"is_wildcard,omitempty"`
-	Fields      []ArgumentDefinition `json:"fields,omitempty"`
-	Element     *TypeShape           `json:"element,omitempty"`
-	Value       *TypeShape           `json:"value,omitempty"`
+	ImportanceScore *meta.ImportanceScore `json:"importance_score,omitempty"`
+	Name            string                `json:"name"`
+	RawName         string                `json:"raw_name"`
+	Type            string                `json:"type"`
+	Format          string                `json:"format,omitempty"`
+	Enum            []string              `json:"enum,omitempty"`
+	Minimum         string                `json:"minimum,omitempty"`
+	Maximum         string                `json:"maximum,omitempty"`
+	MinLength       string                `json:"min_length,omitempty"`
+	MaxLength       string                `json:"max_length,omitempty"`
+	Pattern         string                `json:"pattern,omitempty"`
+	Options         []string              `json:"options,omitempty"`
+	HelpZH          string                `json:"help_zh,omitempty"`
+	HelpEN          string                `json:"help_en,omitempty"`
+	Example         string                `json:"example,omitempty"`
+	Required        bool                  `json:"required"`
+	DocRequired     bool                  `json:"doc_required,omitempty"`
+	DirectBody      bool                  `json:"direct_body,omitempty"`
+	Location        string                `json:"location,omitempty"`
+	ParamStyle      string                `json:"param_style,omitempty"`
+	IsWildcard      bool                  `json:"is_wildcard,omitempty"`
+	Fields          []ArgumentDefinition  `json:"fields,omitempty"`
+	Element         *TypeShape            `json:"element,omitempty"`
+	Value           *TypeShape            `json:"value,omitempty"`
 }

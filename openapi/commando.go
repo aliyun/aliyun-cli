@@ -191,6 +191,7 @@ func (c *Commando) finishCommandRun(ctx *cli.Context, args []string, err error) 
 	// the AI gate so non-AI output is protected too.
 	err = sanitizeNetworkTransportError(err)
 	err = suggestKebabProfileFlagCase(err, args)
+	c.attachAPIImportance(err, args)
 
 	enabled := c.applyEffectiveAIModeForArgs(ctx, args)
 	defer func() {
@@ -1282,7 +1283,7 @@ func (c *Commando) createInvoker(ctx *cli.Context, productCode string, apiOrMeth
 					return nil, &InvalidUnifiedApiError{Name: apiOrMethod, product: &product, lPlugin: localPlugin}
 				}
 			}
-			return nil, &InvalidApiError{apiOrMethod, &product}
+			return nil, &InvalidApiError{Name: apiOrMethod, product: &product}
 		}
 
 		//

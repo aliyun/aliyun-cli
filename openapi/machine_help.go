@@ -266,7 +266,8 @@ type machineHelpShape struct {
 }
 
 type machineHelpParameter struct {
-	Name string `json:"name"`
+	importanceScore *float64
+	Name            string `json:"name"`
 	// RawName carries the wire name for legacy-camel views where it is set;
 	// it is only ever equal to Name, so it stays struct-only.
 	RawName       string                   `json:"-"`
@@ -873,14 +874,15 @@ func projectCanonicalParameter(parameter *canonicalmeta.Parameter) machineHelpPa
 		return machineHelpParameter{}
 	}
 	result := machineHelpParameter{
-		Name:          parameter.Name,
-		Options:       append([]string(nil), parameter.Options...),
-		Type:          parameter.Type,
-		Location:      strings.ToLower(parameter.Location),
-		Required:      parameter.Required || parameter.DocRequired,
-		Serialization: parameter.ParamStyle,
-		Help:          machineHelpLocalizedText{EN: parameter.HelpEn, ZH: parameter.HelpZh},
-		Example:       parameter.Example,
+		importanceScore: parameter.ImportanceScore.Value(),
+		Name:            parameter.Name,
+		Options:         append([]string(nil), parameter.Options...),
+		Type:            parameter.Type,
+		Location:        strings.ToLower(parameter.Location),
+		Required:        parameter.Required || parameter.DocRequired,
+		Serialization:   parameter.ParamStyle,
+		Help:            machineHelpLocalizedText{EN: parameter.HelpEn, ZH: parameter.HelpZh},
+		Example:         parameter.Example,
 		Constraints: machineHelpConstraints{
 			Enum:      append([]string(nil), parameter.Enum...),
 			Pattern:   parameter.Pattern,
@@ -903,12 +905,13 @@ func projectCanonicalField(field *canonicalmeta.Field) machineHelpParameter {
 		return machineHelpParameter{}
 	}
 	result := machineHelpParameter{
-		Name:     field.Name,
-		Options:  make([]string, 0),
-		Type:     field.Type,
-		Required: field.Required || field.DocRequired,
-		Help:     machineHelpLocalizedText{EN: field.HelpEn, ZH: field.HelpZh},
-		Example:  field.Example,
+		importanceScore: field.ImportanceScore.Value(),
+		Name:            field.Name,
+		Options:         make([]string, 0),
+		Type:            field.Type,
+		Required:        field.Required || field.DocRequired,
+		Help:            machineHelpLocalizedText{EN: field.HelpEn, ZH: field.HelpZh},
+		Example:         field.Example,
 		Constraints: machineHelpConstraints{
 			Enum:      append([]string(nil), field.Enum...),
 			Pattern:   field.Pattern,
@@ -958,14 +961,15 @@ func projectLegacyParameter(view *canonicalmeta.LegacyParameterView, prefix stri
 	}
 	constraints := view.Constraints()
 	result := machineHelpParameter{
-		Name:     name,
-		RawName:  name,
-		Options:  []string{"--" + optionPath},
-		Type:     view.LegacyType(),
-		Location: strings.ToLower(view.LegacyPosition()),
-		Required: view.LegacyRequired() || view.DocRequired(),
-		Help:     machineHelpLocalizedText{EN: view.LegacyDescription("en"), ZH: view.LegacyDescription("zh")},
-		Example:  view.LegacyExample(),
+		importanceScore: view.ImportanceScore(),
+		Name:            name,
+		RawName:         name,
+		Options:         []string{"--" + optionPath},
+		Type:            view.LegacyType(),
+		Location:        strings.ToLower(view.LegacyPosition()),
+		Required:        view.LegacyRequired() || view.DocRequired(),
+		Help:            machineHelpLocalizedText{EN: view.LegacyDescription("en"), ZH: view.LegacyDescription("zh")},
+		Example:         view.LegacyExample(),
 		Constraints: machineHelpConstraints{
 			Enum:      append([]string(nil), constraints.Enum...),
 			Pattern:   constraints.Pattern,
