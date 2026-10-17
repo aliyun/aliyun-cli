@@ -17,6 +17,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
@@ -99,8 +100,9 @@ func newPluginSettingsSetCommand() *cli.Command {
 			if v == "" {
 				return fmt.Errorf("source-base must not be empty (use 'configure plugin-settings clear' to reset)")
 			}
-			if !strings.HasPrefix(strings.ToLower(v), "http://") && !strings.HasPrefix(strings.ToLower(v), "https://") {
-				return fmt.Errorf("source-base must start with http:// or https://")
+			u, parseErr := url.Parse(v)
+			if parseErr != nil || u == nil || u.Host == "" || !strings.EqualFold(u.Scheme, "https") {
+				return fmt.Errorf("source-base must use https://")
 			}
 			configDir, cfg, err := loadPluginSettings()
 			if err != nil {
