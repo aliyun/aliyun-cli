@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
 )
 
 const (
@@ -18,6 +20,11 @@ const (
 	defaultTimeout   = 10 * time.Minute
 	githubReleaseURL = "https://github.com/aliyun/aliyun-cli/releases/download/v"
 )
+
+// verifyReleaseAsset checks the publisher signature. Tests replace it.
+var verifyReleaseAsset = func(assetName, assetPath string, sig []byte) error {
+	return publishsig.VerifyFile(publishsig.TrustedPublicKeys(), assetName, assetPath, sig)
+}
 
 // AssetNames is the release set finish_release.sh promotes. Order is stable
 // so a regenerated checksum file does not reshuffle on rerun.
@@ -31,6 +38,17 @@ func AssetNames(version string) []string {
 		fmt.Sprintf("aliyun-cli-linux-%s-arm64.tgz", version),
 		fmt.Sprintf("aliyun-cli-windows-%s-amd64.zip", version),
 	}
+}
+
+// TraceNames are the SBOM and provenance files published beside each archive.
+// They are not part of SHASUMS256.txt.
+func TraceNames(version string) []string {
+	archives := AssetNames(version)
+	names := make([]string, 0, len(archives)*2)
+	for _, name := range archives {
+		names = append(names, name+".cdx.json", name+".provenance.json")
+	}
+	return names
 }
 
 // Options controls a download. Tests inject Client and Summer so HTTP and
@@ -111,6 +129,24 @@ func Download(ctx context.Context, opt Options) error {
 			return fmt.Errorf("download assets: checksum %s: %w", name, err)
 		}
 		sums = append(sums, line)
+
+		if err := stageSignature(ctx, client, opt.Token, assetURL, name, dest, timeout); err != nil {
+			return err
+		}
+	}
+
+	for _, name := range TraceNames(version) {
+		dest := filepath.Join(staging, name)
+		assetURL := base + "/" + name
+		if err := downloadFile(ctx, client, assetURL, opt.Token, dest, timeout); err != nil {
+			return fmt.Errorf("download assets: %s: %w", name, err)
+		}
+		if err := ensureAsset(dest); err != nil {
+			return fmt.Errorf("download assets: %s: %w", name, err)
+		}
+		if err := stageSignature(ctx, client, opt.Token, assetURL, name, dest, timeout); err != nil {
+			return err
+		}
 	}
 
 	sumPath := filepath.Join(staging, checksumName)
@@ -125,6 +161,9 @@ func Download(ctx context.Context, opt Options) error {
 	if err := commitAssets(staging, workDir, names); err != nil {
 		return err
 	}
+	if err := commitSigned(staging, workDir, TraceNames(version)); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -137,6 +176,24 @@ func cleanVersion(version string) (string, error) {
 		return "", fmt.Errorf("download assets: invalid version %q", version)
 	}
 	return version, nil
+}
+
+func stageSignature(ctx context.Context, client *http.Client, token, assetURL, name, dest string, timeout time.Duration) error {
+	sigDest := dest + ".minisig"
+	if err := downloadFile(ctx, client, assetURL+".minisig", token, sigDest, timeout); err != nil {
+		return fmt.Errorf("download assets: publisher signature %s: %w", name, err)
+	}
+	sig, err := os.ReadFile(sigDest)
+	if err != nil {
+		return fmt.Errorf("download assets: publisher signature %s: %w", name, err)
+	}
+	if len(sig) == 0 || len(sig) > 4096 {
+		return fmt.Errorf("download assets: publisher signature %s: missing or too large", name)
+	}
+	if err := verifyReleaseAsset(name, dest, sig); err != nil {
+		return fmt.Errorf("download assets: publisher signature %s: %w", name, err)
+	}
+	return nil
 }
 
 func downloadFile(ctx context.Context, client *http.Client, assetURL, token, dest string, timeout time.Duration) error {
@@ -238,13 +295,24 @@ func verifyChecksum(body string, names []string) error {
 }
 
 func commitAssets(staging, workDir string, names []string) error {
+	if err := commitSigned(staging, workDir, names); err != nil {
+		return err
+	}
+	if err := replaceFile(filepath.Join(staging, checksumName), filepath.Join(workDir, checksumName)); err != nil {
+		return fmt.Errorf("download assets: commit checksum: %w", err)
+	}
+	return nil
+}
+
+func commitSigned(staging, workDir string, names []string) error {
 	for _, name := range names {
 		if err := replaceFile(filepath.Join(staging, name), filepath.Join(workDir, name)); err != nil {
 			return fmt.Errorf("download assets: commit %s: %w", name, err)
 		}
-	}
-	if err := replaceFile(filepath.Join(staging, checksumName), filepath.Join(workDir, checksumName)); err != nil {
-		return fmt.Errorf("download assets: commit checksum: %w", err)
+		sigName := name + ".minisig"
+		if err := replaceFile(filepath.Join(staging, sigName), filepath.Join(workDir, sigName)); err != nil {
+			return fmt.Errorf("download assets: commit %s: %w", sigName, err)
+		}
 	}
 	return nil
 }

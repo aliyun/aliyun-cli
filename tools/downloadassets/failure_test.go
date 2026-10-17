@@ -34,6 +34,9 @@ func TestAssetFilesystemFailures(t *testing.T) {
 	require.ErrorContains(t, verifyChecksum(line+line, []string{"a", "a"}), "duplicate")
 	require.ErrorContains(t, commitAssets(dir, t.TempDir(), []string{"missing"}), "commit missing")
 	require.ErrorContains(t, commitAssets(dir, t.TempDir(), nil), "commit checksum")
+	staged := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(staged, "a.tgz"), []byte("x"), 0o644))
+	require.ErrorContains(t, commitSigned(staged, t.TempDir(), []string{"a.tgz"}), "a.tgz.minisig")
 }
 func TestAssetDownloadPropagatesCopyAndChecksumErrors(t *testing.T) {
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {

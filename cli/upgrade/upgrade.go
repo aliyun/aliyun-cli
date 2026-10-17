@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"golang.org/x/mod/semver"
 )
@@ -55,8 +56,13 @@ var (
 	detectInstallerFunc = detectInstaller
 	resolveExecPathFunc = resolveExecPath
 
-	osExecutable = os.Executable
-	evalSymlinks = filepath.EvalSymlinks
+	osExecutable      = os.Executable
+	evalSymlinks      = filepath.EvalSymlinks
+	readSignatureFile = os.ReadFile
+
+	// publisherKeys are the keys allowed to replace this binary.
+	// Tests replace the slice; production uses the keys embedded in the CLI.
+	publisherKeys = publishsig.TrustedPublicKeys()
 )
 
 type upgradeSource struct {
@@ -203,6 +209,24 @@ func downloadAndExtract(w io.Writer, downloadURL, assetName string) (binaryPath 
 	if err := downloadFile(w, downloadURL, archivePath); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("download failed: %s", err)
+	}
+	sigPath := archivePath + ".minisig"
+	if err := downloadFile(w, downloadURL+".minisig", sigPath); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("publisher signature download failed: %s", err)
+	}
+	sig, err := readSignatureFile(sigPath)
+	if err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("publisher signature download failed: %s", err)
+	}
+	if len(sig) > 4096 {
+		cleanup()
+		return "", nil, fmt.Errorf("publisher signature rejected: document is too large")
+	}
+	if err := publishsig.VerifyFile(publisherKeys, assetName, archivePath, sig); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("publisher signature rejected: %s", err)
 	}
 
 	binaryName := "aliyun"
