@@ -20,8 +20,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 
@@ -317,8 +319,11 @@ func TestBuildROAStringToSignAndPricingErrors(t *testing.T) {
 		want string
 	}{
 		{"unsupported", `{"Code":"PricingNotSupported","RequestId":"req-1"}`, "no pricing information for ecs/v1/Run"},
+		{"unsupported, business envelope", `{"errorCode":"PricingNotSupported","requestId":"req-1"}`, "no pricing information for ecs/v1/Run"},
 		{"detailed", `{"Code":"BadRequest","Message":"bad input","RequestId":"req-2","Recommend":"fix it"}`, "BadRequest — bad input"},
+		{"detailed, business envelope", `{"errorCode":"BadRequest","errorMsg":"bad input","requestId":"req-2"}`, "BadRequest — bad input"},
 		{"code only", `{"Code":"BadRequest"}`, "BadRequest"},
+		{"message only", `{"errorMsg":"bad input"}`, "bad input"},
 		{"plain", "service unavailable", "HTTP 503: service unavailable"},
 		{"truncated", strings.Repeat("x", 300), "…"},
 	}
@@ -326,6 +331,148 @@ func TestBuildROAStringToSignAndPricingErrors(t *testing.T) {
 		err := parsePricingHTTPError(pr, 503, []byte(test.raw))
 		if !strings.Contains(err.Error(), test.want) {
 			t.Fatalf("%s: error = %q, want substring %q", test.name, err, test.want)
+		}
+	}
+}
+
+// quoteResponder points the price client at a stub that answers every quote
+// with the given status and body, so the classification is asserted on the
+// real request path (signing, transport, status handling) rather than on the
+// body parser alone.
+func quoteResponder(t *testing.T, status int, body string) (*ExecContext, *AssembledRequest) {
+	t.Helper()
+	oldClient := priceHTTPClient
+	t.Cleanup(func() { priceHTTPClient = oldClient })
+	priceHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: status,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    req,
+		}, nil
+	})}
+	credential := pricingTestCredential{model: &credentialsv2.CredentialModel{
+		AccessKeyId: stringPointer("ak"), AccessKeySecret: stringPointer("secret"),
+	}}
+	ec := &ExecContext{Credential: credential, API: &meta.API{ProductCode: "hbr"}}
+	return ec, &AssembledRequest{Action: "EnableBackupPlan", Version: "2017-09-08"}
+}
+
+func TestEstimateCostCostIrrelevantSucceeds(t *testing.T) {
+	// The whole point of the change: a confirmed-free API arrives as a 4xx and
+	// the quote must still succeed, so the command prints the answer and
+	// exits 0. Both envelopes carry the code, so both are covered.
+	for _, test := range []struct {
+		name string
+		body string
+	}{
+		{"pop gateway envelope", `{"RequestId":"req-pnr","Code":"PricingNotRequired","Message":"该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。"}`},
+		{"ccapi business envelope", `{"requestId":"req-pnr","errorCode":"PricingNotRequired","errorMsg":"该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。"}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ec, req := quoteResponder(t, http.StatusBadRequest, test.body)
+			quote, err := EstimateCost(ec, req, nil)
+			if err != nil {
+				t.Fatalf("EstimateCost() error = %v, want success", err)
+			}
+			var got costIrrelevantQuote
+			if err := json.Unmarshal([]byte(quote), &got); err != nil {
+				t.Fatalf("quote is not the cost-irrelevant document: %v (%q)", err, quote)
+			}
+			if !got.CostIrrelevant || got.PopCode != "hbr" || got.PopVersion != "2017-09-08" ||
+				got.ApiName != "EnableBackupPlan" || got.Message != costIrrelevantMessage {
+				t.Fatalf("document = %#v", got)
+			}
+			if !strings.Contains(quote, "\n") {
+				t.Fatalf("quote = %q, want pretty JSON", quote)
+			}
+		})
+	}
+}
+
+func TestEstimateCostNotSupportedStillFails(t *testing.T) {
+	// The sibling code must keep failing — "cannot be quoted" is a real error —
+	// and must not be readable as "free", which is a billing-relevant mistake.
+	for _, test := range []struct {
+		name string
+		body string
+	}{
+		{"pop gateway envelope", `{"RequestId":"req-pns","Code":"PricingNotSupported","Message":"该 OpenAPI 暂不支持询价"}`},
+		{"ccapi business envelope", `{"requestId":"req-pns","errorCode":"PricingNotSupported","errorMsg":"该 OpenAPI 暂不支持询价"}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ec, req := quoteResponder(t, http.StatusNotFound, test.body)
+			quote, err := EstimateCost(ec, req, nil)
+			if err == nil {
+				t.Fatalf("EstimateCost() = %q, want error", quote)
+			}
+			if !strings.Contains(err.Error(), "no pricing information for hbr/2017-09-08/EnableBackupPlan") {
+				t.Fatalf("error = %q", err)
+			}
+			if !strings.Contains(err.Error(), "does not mean the call is free") {
+				t.Fatalf("error must not read as 'free': %q", err)
+			}
+			if !strings.Contains(err.Error(), "requestId: req-pns") {
+				t.Fatalf("error should carry the requestId: %q", err)
+			}
+		})
+	}
+}
+
+func TestEstimateCostSurfacesShortRead(t *testing.T) {
+	// The body decides success vs failure, so a truncated read must fail
+	// loudly rather than be classified as "cannot be quoted".
+	oldClient := priceHTTPClient
+	t.Cleanup(func() { priceHTTPClient = oldClient })
+	priceHTTPClient = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusBadRequest,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(iotest.ErrReader(errors.New("connection reset"))),
+			Request:    req,
+		}, nil
+	})}
+	credential := pricingTestCredential{model: &credentialsv2.CredentialModel{
+		AccessKeyId: stringPointer("ak"), AccessKeySecret: stringPointer("secret"),
+	}}
+	_, err := EstimateCost(
+		&ExecContext{Credential: credential, API: &meta.API{ProductCode: "hbr"}},
+		&AssembledRequest{Action: "EnableBackupPlan", Version: "2017-09-08"},
+		nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), "read pricing service response") {
+		t.Fatalf("short read error = %v", err)
+	}
+}
+
+func TestCostIrrelevantDocumentShapeIsMarshalSafe(t *testing.T) {
+	// This is what lets costIrrelevantFromResponse ignore the json.Marshal
+	// error: the document is a bool and four strings, which cannot fail to
+	// marshal. If a future field changes that, this breaks loudly — better
+	// than a branch that can never be exercised and would silently report a
+	// free API as unquotable, which is the wrong billing signal.
+	documentType := reflect.TypeOf(costIrrelevantQuote{})
+	for i := 0; i < documentType.NumField(); i++ {
+		switch kind := documentType.Field(i).Type.Kind(); kind {
+		case reflect.Bool, reflect.String:
+		default:
+			t.Fatalf("field %s has kind %s; json.Marshal can now fail, so its error must be handled",
+				documentType.Field(i).Name, kind)
+		}
+	}
+}
+
+func TestCostIrrelevantFromResponseIgnoresOtherAnswers(t *testing.T) {
+	pr := &priceRequest{PopCode: "hbr", PopVersion: "2017-09-08", ApiName: "EnableBackupPlan"}
+	for _, raw := range []string{
+		`{"Code":"PricingNotSupported"}`,
+		`{"errorCode":"PricingNotSupported"}`,
+		`{"Code":"InvalidParameter"}`,
+		`not json at all`,
+		`{}`,
+	} {
+		if _, ok := costIrrelevantFromResponse(pr, []byte(raw)); ok {
+			t.Fatalf("costIrrelevantFromResponse(%q) claimed cost-irrelevant", raw)
 		}
 	}
 }
