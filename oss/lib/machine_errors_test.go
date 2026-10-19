@@ -261,6 +261,14 @@ func TestPreviewConfigurationAndURIErrorBoundaries(t *testing.T) {
 		ctx := cli.NewCommandContext(io.Discard, io.Discard)
 		require.ErrorContains(t, p.run(ctx, cmd, opts, nil), tc.want)
 	}
+	p := &ossPreview{Mode: "plan"}
+	cmd := removeCommand.command
+	cmd.args = []string{"oss://bucket/key"}
+	_, opts, err := parseOSSOptions(nil, "rm")
+	require.NoError(t, err)
+	missingConfig := filepath.Join(t.TempDir(), "missing-config")
+	opts[OptionConfigFile] = &missingConfig
+	require.ErrorContains(t, p.run(cli.NewCommandContext(io.Discard, io.Discard), cmd, opts, nil), "missing-config")
 	_, err = phaseCInvoke(t, removeCommand.command, "http://127.0.0.1:1", "oss://bucket/key", "--cli-plan", "--retry-times=invalid")
 	require.ErrorContains(t, err, "invalid option value of --retry-times, the value: invalid is not int64")
 }
