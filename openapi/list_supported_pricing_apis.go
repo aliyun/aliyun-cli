@@ -185,7 +185,7 @@ func invokeListSupportedPricingApis(ctx *cli.Context, profile *config.Profile) (
 		request.Version = estimateCostApiVersion
 		request.Method = "GET"
 		request.PathPattern = estimateCostListPath
-		request.Domain = estimateCostEndpoint()
+		setEstimateCostEndpoint(request)
 		request.Scheme = "https"
 		if host := os.Getenv(estimateCostHostEnv); host != "" {
 			request.Headers["Host"] = host

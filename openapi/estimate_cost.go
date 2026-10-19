@@ -16,6 +16,7 @@ package openapi
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"regexp"
 
@@ -491,6 +492,16 @@ func estimateCostEndpoint() string {
 	return defaultEstimateCostHost
 }
 
+func setEstimateCostEndpoint(request *requests.CommonRequest) {
+	request.Domain = estimateCostEndpoint()
+	// The legacy SDK appends Port when building the URL, so an explicit
+	// endpoint port must be kept separate from Domain.
+	if host, port, err := net.SplitHostPort(request.Domain); err == nil {
+		request.Domain = host
+		request.Port = port
+	}
+}
+
 // invokeEstimateCost issues the signed quote request and returns the raw
 // response body. Reuses the standard authenticated client so signing and
 // credential refresh behave identically to a real OpenAPI call.
@@ -515,7 +526,7 @@ func invokeEstimateCost(ctx *cli.Context, profile *config.Profile, popCode strin
 	request.Version = estimateCostApiVersion
 	request.Method = "POST"
 	request.PathPattern = estimateCostQuotePath
-	request.Domain = estimateCostEndpoint()
+	setEstimateCostEndpoint(request)
 	request.Scheme = "https"
 	if host := os.Getenv(estimateCostHostEnv); host != "" {
 		request.Headers["Host"] = host
