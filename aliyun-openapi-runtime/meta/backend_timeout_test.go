@@ -10,7 +10,7 @@ func TestMetadataReadTimeout(t *testing.T) {
 		ms   int64
 		want time.Duration
 	}{
-		{55000, 57 * time.Second}, {60000, 62 * time.Second}, {10001, 12001 * time.Millisecond},
+		{57000, 57 * time.Second}, {62000, 62 * time.Second}, {12001, 12001 * time.Millisecond},
 		{0, 0}, {-1, 0}, {1<<63 - 1, 0},
 	} {
 		if got := MetadataReadTimeout(tc.ms); got != tc.want {

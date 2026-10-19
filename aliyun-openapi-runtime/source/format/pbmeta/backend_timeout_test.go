@@ -8,7 +8,7 @@ import (
 )
 
 func TestBackendTimeoutSurvivesProtobufDecoding(t *testing.T) {
-	original := &CommandDefinition{Name: "CreateDBInstance", ProductCode: "Rds", TimeoutMs: 55000,
+	original := &CommandDefinition{Name: "CreateDBInstance", ProductCode: "Rds", TimeoutMs: 57000,
 		Operation: &Operation{Action: "CreateDBInstance", ApiVersion: "2014-08-15", Method: "POST", Protocol: "HTTPS", ApiStyle: "RPC"}}
 	data, err := proto.Marshal(original)
 	if err != nil {
@@ -26,7 +26,7 @@ func TestBackendTimeoutSurvivesProtobufDecoding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if api.TimeoutMS != 55000 {
-		t.Fatalf("backend timeout = %d, want 55000", api.TimeoutMS)
+	if api.TimeoutMS != 57000 {
+		t.Fatalf("metadata timeout = %d, want 57000", api.TimeoutMS)
 	}
 }

@@ -47,7 +47,7 @@ type CommandDefinition struct {
 	Responses []byte `protobuf:"bytes,14,opt,name=responses,proto3" json:"responses,omitempty"`
 	// JSON-encoded “components“ object (typically “schemas“ for response $ref).
 	Components []byte `protobuf:"bytes,15,opt,name=components,proto3" json:"components,omitempty"`
-	// Client timeout base in milliseconds, capped at 60000; zero means absent.
+	// Final client read timeout in milliseconds, including margin, capped at 62000; zero means absent.
 	TimeoutMs int64 `protobuf:"varint,16,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
 }
 

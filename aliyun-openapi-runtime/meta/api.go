@@ -32,7 +32,7 @@ type API struct {
 	// Ownership.
 	ProductCode string // e.g. "Ecs" (as reported by upstream meta)
 	Version     string // API version (e.g. "2014-05-26")
-	TimeoutMS   int64  // metadata timeout, without client margin
+	TimeoutMS   int64  // final read timeout in milliseconds, including the client margin
 
 	// Wire.
 	Method          string // "GET" / "POST" / ...
@@ -62,13 +62,12 @@ type API struct {
 	MultiVersion bool
 }
 
-// MetadataReadTimeout adds the client margin to a valid millisecond budget.
+// MetadataReadTimeout converts the final metadata timeout to a duration.
 func MetadataReadTimeout(ms int64) time.Duration {
-	const margin = 2 * time.Second
-	if ms <= 0 || ms > (1<<63-1-int64(margin))/int64(time.Millisecond) {
+	if ms <= 0 || ms > (1<<63-1)/int64(time.Millisecond) {
 		return 0
 	}
-	return time.Duration(ms)*time.Millisecond + margin
+	return time.Duration(ms) * time.Millisecond
 }
 
 // FindParameter returns a top-level Parameter by its Name (snake_case
