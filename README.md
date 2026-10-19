@@ -69,6 +69,18 @@ For an interactive local environment, OAuth avoids storing a long-lived AccessKe
 aliyun configure --mode OAuth --profile default
 ```
 
+For a remote machine without a browser, use:
+
+```shell
+aliyun configure --mode OAuth --profile default --no-browser
+```
+
+Open the printed authorization link on a device with a browser. After signing in,
+copy the complete callback URL from the address bar and paste it into the CLI,
+even if the browser reports a connection error. Include both `code` and `state`.
+This mode does not start a local callback server or require port forwarding.
+Press Ctrl+C to cancel.
+
 You can also use AK, StsToken, RamRoleArn, EcsRamRole, OIDC, External, CredentialsURI, ChainableRamRoleArn, CloudSSO, BearerToken, or Anonymous mode where applicable.
 
 ```sh
