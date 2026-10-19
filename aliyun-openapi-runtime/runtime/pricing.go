@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
-	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 )
 
@@ -60,10 +59,12 @@ func PriceModeEnabled(flag bool) bool {
 }
 
 type priceRequest struct {
-	PopCode    string                 `json:"popCode"`
-	PopVersion string                 `json:"popVersion"`
-	ApiName    string                 `json:"apiName"`
-	Parameters map[string]interface{} `json:"parameters"`
+	ResponseVersion string                 `json:"responseVersion"`
+	Language        string                 `json:"language"`
+	PopCode         string                 `json:"popCode"`
+	PopVersion      string                 `json:"popVersion"`
+	ApiName         string                 `json:"apiName"`
+	Parameters      map[string]interface{} `json:"parameters"`
 }
 
 // EstimateCost quotes the assembled call via CloudControl GetApiPrice
@@ -153,10 +154,12 @@ func buildPriceRequest(ec *ExecContext, req *AssembledRequest, pricingContext ma
 	}
 
 	return &priceRequest{
-		PopCode:    popCode,
-		PopVersion: req.Version,
-		ApiName:    req.Action,
-		Parameters: out,
+		ResponseVersion: "2",
+		Language:        ec.Language,
+		PopCode:         popCode,
+		PopVersion:      req.Version,
+		ApiName:         req.Action,
+		Parameters:      out,
 	}
 }
 
@@ -197,6 +200,11 @@ func postPriceQuoteSigned(cred credentialsv2.Credential, endpoint string, pr *pr
 	accessKeySecret := tea.StringValue(credModel.AccessKeySecret)
 	securityToken := tea.StringValue(credModel.SecurityToken)
 
+	pr.ResponseVersion = "2"
+	if strings.TrimSpace(language) == "" {
+		language = "en"
+	}
+	pr.Language = language
 	payload, err := json.Marshal(pr)
 	if err != nil {
 		return nil, err
@@ -247,11 +255,9 @@ func postPriceQuoteSigned(cred credentialsv2.Credential, endpoint string, pr *pr
 		return nil, fmt.Errorf("read pricing service response: %w", err)
 	}
 	if resp.StatusCode/100 != 2 {
-		// A confirmed cost-irrelevant API arrives as an error status, but it
-		// is a successful determination — hand back a result document so the
-		// caller prints it and succeeds like any other quote.
-		if out, isCostIrrelevant := costIrrelevantFromResponse(pr, raw, language); isCostIrrelevant {
-			return out, nil
+		code, _, _, _ := pricingErrorFields(raw)
+		if code == pricingCodeNotRequired || code == pricingCodeNotSupported {
+			return raw, nil
 		}
 		return nil, parsePricingHTTPError(pr, resp.StatusCode, raw)
 	}
@@ -327,49 +333,6 @@ type priceErrorEnvelope struct {
 	RequestId string `json:"requestId"`
 }
 
-// costIrrelevantQuote is what --estimate-cost prints for an API the pricing
-// side has confirmed as free.
-//
-// It is a normal result, not an error: the user asked what the call costs and
-// got a definitive answer — nothing. Failing here would make scripts and
-// agents that gate on the exit code abort on exactly the operations that are
-// free to run. Shape matches aliyun-cli's built-in --estimate-cost path so
-// both front-ends print the same document for the same situation.
-type costIrrelevantQuote struct {
-	CostIrrelevant bool   `json:"costIrrelevant"`
-	PopCode        string `json:"popCode"`
-	PopVersion     string `json:"popVersion"`
-	ApiName        string `json:"apiName"`
-	Message        string `json:"message"`
-}
-
-// costIrrelevantMessage is the runtime's own wording for the confirmed-free
-// answer, localized using the language supplied by the host. Reuse the runtime's
-// bilingual text support without depending on the embedding CLI's i18n package.
-// Keep both translations aligned with aliyun-cli's built-in --estimate-cost path.
-var costIrrelevantMessage = meta.Description{
-	EN: "this OpenAPI is confirmed to incur no charge, so there is nothing to quote",
-	ZH: "该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。",
-}
-
-// costIrrelevantFromResponse recognises the confirmed-free answer in a non-2xx
-// body and renders it as a result document.
-func costIrrelevantFromResponse(pr *priceRequest, raw []byte, language string) ([]byte, bool) {
-	code, _, _, _ := pricingErrorFields(raw)
-	if code != pricingCodeNotRequired {
-		return nil, false
-	}
-	// Marshalling a fixed struct of one bool and four strings cannot fail.
-	out, _ := json.Marshal(costIrrelevantQuote{
-		CostIrrelevant: true,
-		PopCode:        pr.PopCode,
-		PopVersion:     pr.PopVersion,
-		ApiName:        pr.ApiName,
-		Message:        costIrrelevantMessage.Localized(language),
-	})
-	return out, true
-}
-
 // pricingErrorFields extracts the error fields from whichever envelope the
 // body carries. An all-empty return means neither shape matched, so the caller
 // falls back to reporting the raw body. recommend is gateway-only.
@@ -385,16 +348,7 @@ func pricingErrorFields(raw []byte) (code string, message string, requestId stri
 	return "", "", "", ""
 }
 
-// parsePricingHTTPError turns a 4xx/5xx response body into a readable error.
-// PricingNotSupported keeps a friendly hint (the user just needs to know the
-// API has no pricing mapping yet); other errors lead with code+message so the
-// signal is visible at a glance, then requestId on its own line for easy copy,
-// then the troubleshoot URL last so it doesn't compete with the message.
-//
-// The hint says explicitly that "not supported" does not mean "free": an API
-// confirmed to incur no charge reports PricingNotRequired and is handled as a
-// successful result before this is reached, and reading the two as the same
-// thing is a billing-relevant mistake.
+// parsePricingHTTPError preserves diagnostic fields for transport/server failures.
 func parsePricingHTTPError(pr *priceRequest, status int, raw []byte) error {
 	code, message, requestId, recommend := pricingErrorFields(raw)
 	if code == "" && message == "" {
@@ -404,14 +358,7 @@ func parsePricingHTTPError(pr *priceRequest, status int, raw []byte) error {
 		}
 		return fmt.Errorf("pricing service returned HTTP %d: %s", status, body)
 	}
-	if code == pricingCodeNotSupported {
-		base := fmt.Sprintf("no pricing information for %s/%s/%s: no pricing mapping is registered for this OpenAPI yet, so it cannot be quoted. This does not mean the call is free — an API confirmed to be free is reported as cost-irrelevant instead",
-			pr.PopCode, pr.PopVersion, pr.ApiName)
-		if requestId != "" {
-			base += "\n  requestId: " + requestId
-		}
-		return fmt.Errorf("%s", base)
-	}
+
 	var b strings.Builder
 	switch {
 	case code != "" && message != "":

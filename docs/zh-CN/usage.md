@@ -255,6 +255,27 @@ aliyun ecs DescribeInstances \
 
 API 调用或 JMESPath 求值失败时，Waiter 会立即停止。到达超时时间时，错误信息会包含表达式、期望值和最后一次观测值。`--waiter` 不能与 `--pager` 或 `--cli-dry-run` 同时使用。
 
+## 询价结果
+
+在 OpenAPI 命令后添加 `--estimate-cost`，CLI 会调用询价服务，返回费用估算。例如：
+
+```sh
+aliyun ecs CreateDisk --RegionId cn-hangzhou --ZoneId cn-hangzhou-i \
+  --DiskCategory cloud_essd --Size 40 --estimate-cost
+```
+
+CLI 请求服务端第 2 版响应信封，并保留服务端的 `success`、`code`、`message`、`requestId` 和 `price` 字段：
+
+| 结果 | success | code | price | 退出码 |
+| --- | --- | --- | --- | --- |
+| 获得报价 | true | Success | 报价对象 | 0 |
+| 确认费用无关 | true | PricingNotRequired | null | 0 |
+| 暂不支持询价 | false | PricingNotSupported | null | 3 |
+
+业务结果写入标准输出，失败时不会再向标准错误重复输出错误文本。`--cli-query`、表格输出和 `--quiet` 只影响展示，退出码由未过滤响应的顶层 `success` 决定。文案语言由 CLI 的 `--language`、profile 和系统语言设置传给服务端。
+
+滚动升级期间，CLI 也能读取旧服务端的报价或业务错误 JSON，保留原始字段及 RequestId。鉴权、参数校验和网络错误继续使用通常的错误处理。
+
 ## 安全策略与非交互使用
 
 有潜在破坏性的操作可能受到 CLI 安全策略和人工确认控制。管理安全策略：
