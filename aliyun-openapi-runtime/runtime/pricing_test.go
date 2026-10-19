@@ -273,7 +273,7 @@ func TestPriceRequestHelpers(t *testing.T) {
 func TestPostPriceQuoteSignedFailures(t *testing.T) {
 	request := &priceRequest{Parameters: map[string]interface{}{}}
 	credentialFailure := pricingTestCredential{err: errors.New("credential failed")}
-	if _, err := postPriceQuoteSigned(credentialFailure, "example.com", request); err == nil || !strings.Contains(err.Error(), "get credential") {
+	if _, err := postPriceQuoteSigned(credentialFailure, "example.com", request, "en"); err == nil || !strings.Contains(err.Error(), "get credential") {
 		t.Fatalf("credential error = %v", err)
 	}
 
@@ -281,11 +281,11 @@ func TestPostPriceQuoteSignedFailures(t *testing.T) {
 		AccessKeyId: stringPointer("ak"), AccessKeySecret: stringPointer("secret"),
 	}}
 	request.Parameters["bad"] = make(chan int)
-	if _, err := postPriceQuoteSigned(credential, "example.com", request); err == nil {
+	if _, err := postPriceQuoteSigned(credential, "example.com", request, "en"); err == nil {
 		t.Fatal("unmarshalable request succeeded")
 	}
 	delete(request.Parameters, "bad")
-	if _, err := postPriceQuoteSigned(credential, "%", request); err == nil {
+	if _, err := postPriceQuoteSigned(credential, "%", request, "en"); err == nil {
 		t.Fatal("invalid endpoint succeeded")
 	}
 
@@ -294,7 +294,7 @@ func TestPostPriceQuoteSignedFailures(t *testing.T) {
 	priceHTTPClient = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return nil, errors.New("transport failed")
 	})}
-	if _, err := postPriceQuoteSigned(credential, "example.com", request); err == nil || !strings.Contains(err.Error(), "call pricing service") {
+	if _, err := postPriceQuoteSigned(credential, "example.com", request, "en"); err == nil || !strings.Contains(err.Error(), "call pricing service") {
 		t.Fatalf("transport error = %v", err)
 	}
 }
@@ -366,25 +366,37 @@ func TestEstimateCostCostIrrelevantSucceeds(t *testing.T) {
 		name string
 		body string
 	}{
-		{"pop gateway envelope", `{"RequestId":"req-pnr","Code":"PricingNotRequired","Message":"该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。"}`},
-		{"ccapi business envelope", `{"requestId":"req-pnr","errorCode":"PricingNotRequired","errorMsg":"该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。"}`},
+		{"pop gateway envelope", `{"RequestId":"req-pnr","Code":"PricingNotRequired","Message":"server-only message"}`},
+		{"ccapi business envelope", `{"requestId":"req-pnr","errorCode":"PricingNotRequired","errorMsg":"server-only message"}`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			ec, req := quoteResponder(t, http.StatusBadRequest, test.body)
-			quote, err := EstimateCost(ec, req, nil)
-			if err != nil {
-				t.Fatalf("EstimateCost() error = %v, want success", err)
-			}
-			var got costIrrelevantQuote
-			if err := json.Unmarshal([]byte(quote), &got); err != nil {
-				t.Fatalf("quote is not the cost-irrelevant document: %v (%q)", err, quote)
-			}
-			if !got.CostIrrelevant || got.PopCode != "hbr" || got.PopVersion != "2017-09-08" ||
-				got.ApiName != "EnableBackupPlan" || got.Message != costIrrelevantMessage {
-				t.Fatalf("document = %#v", got)
-			}
-			if !strings.Contains(quote, "\n") {
-				t.Fatalf("quote = %q, want pretty JSON", quote)
+			for _, language := range []struct {
+				name, value, message string
+			}{
+				{"English", "en", "this OpenAPI is confirmed to incur no charge, so there is nothing to quote"},
+				{"Chinese", "zh", "该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。"},
+				{"default", "", "this OpenAPI is confirmed to incur no charge, so there is nothing to quote"},
+				{"unsupported", "fr", "this OpenAPI is confirmed to incur no charge, so there is nothing to quote"},
+			} {
+				t.Run(language.name, func(t *testing.T) {
+					ec, req := quoteResponder(t, http.StatusBadRequest, test.body)
+					ec.Language = language.value
+					quote, err := EstimateCost(ec, req, nil)
+					if err != nil {
+						t.Fatalf("EstimateCost() error = %v, want success", err)
+					}
+					var got costIrrelevantQuote
+					if err := json.Unmarshal([]byte(quote), &got); err != nil {
+						t.Fatalf("quote is not the cost-irrelevant document: %v (%q)", err, quote)
+					}
+					if !got.CostIrrelevant || got.PopCode != "hbr" || got.PopVersion != "2017-09-08" ||
+						got.ApiName != "EnableBackupPlan" || got.Message != language.message {
+						t.Fatalf("document = %#v", got)
+					}
+					if !strings.Contains(quote, "\n") {
+						t.Fatalf("quote = %q, want pretty JSON", quote)
+					}
+				})
 			}
 		})
 	}
@@ -471,7 +483,7 @@ func TestCostIrrelevantFromResponseIgnoresOtherAnswers(t *testing.T) {
 		`not json at all`,
 		`{}`,
 	} {
-		if _, ok := costIrrelevantFromResponse(pr, []byte(raw)); ok {
+		if _, ok := costIrrelevantFromResponse(pr, []byte(raw), "en"); ok {
 			t.Fatalf("costIrrelevantFromResponse(%q) claimed cost-irrelevant", raw)
 		}
 	}

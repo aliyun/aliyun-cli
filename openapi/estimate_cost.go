@@ -24,6 +24,7 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
+	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"github.com/aliyun/aliyun-cli/v3/meta"
 )
 
@@ -77,15 +78,19 @@ type costIrrelevantQuote struct {
 }
 
 // costIrrelevantMessage is the CLI's own wording for the confirmed-free
-// answer. The server's message says the same thing but is localized (Chinese),
-// and CLI output is read by an international audience and by scripts, so the
-// text is fixed here instead of passed through.
-const costIrrelevantMessage = "this OpenAPI is confirmed to incur no charge, so there is nothing to quote"
+// answer, localized using the effective CLI language rather than the server's.
+var costIrrelevantMessage = i18n.T(
+	"this OpenAPI is confirmed to incur no charge, so there is nothing to quote",
+	"该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。",
+)
 
 // newCostIrrelevantQuote renders the confirmed-free answer as JSON so the
 // normal output pipeline (--cli-query / --output / --quiet) works on it like
 // any other quote.
-func newCostIrrelevantQuote(popCode string, popVersion string, apiName string) string {
+func newCostIrrelevantQuote(popCode string, popVersion string, apiName string, language string) string {
+	if language == "" {
+		language = i18n.GetLanguage()
+	}
 	// Marshalling a fixed struct of one bool and four strings cannot fail, so
 	// there is no error to propagate through every caller.
 	body, _ := json.Marshal(costIrrelevantQuote{
@@ -93,7 +98,7 @@ func newCostIrrelevantQuote(popCode string, popVersion string, apiName string) s
 		PopCode:        popCode,
 		PopVersion:     popVersion,
 		ApiName:        apiName,
-		Message:        costIrrelevantMessage,
+		Message:        costIrrelevantMessage.Get(language),
 	})
 	return string(body)
 }
@@ -102,12 +107,12 @@ func newCostIrrelevantQuote(popCode string, popVersion string, apiName string) s
 // channel and renders it as a result document. ok=false means "this is a real
 // error, translate it normally" — kept separate from the HTTP call so the
 // classification is testable without standing up a signed quote server.
-func costIrrelevantFromError(popCode string, popVersion string, apiName string, err error) (string, bool) {
+func costIrrelevantFromError(popCode string, popVersion string, apiName string, err error, language string) (string, bool) {
 	serverErr, isServerErr := err.(*sdkerrors.ServerError)
 	if !isServerErr || serverErr.ErrorCode() != estimateCostCodeNotRequired {
 		return "", false
 	}
-	return newCostIrrelevantQuote(popCode, popVersion, apiName), true
+	return newCostIrrelevantQuote(popCode, popVersion, apiName, language), true
 }
 
 // processEstimateCost handles --estimate-cost for both RPC and ROA(restful)
@@ -540,7 +545,9 @@ func invokeEstimateCost(ctx *cli.Context, profile *config.Profile, popCode strin
 		// quote service models it as errorCode=PricingNotRequired — but it is
 		// a successful determination. Turn it into a normal result document
 		// so callers print it and exit 0 like any other quote.
-		if out, isCostIrrelevant := costIrrelevantFromError(popCode, popVersion, apiName, err); isCostIrrelevant {
+		// Use the resolved profile explicitly: OSS quote entry points can load
+		// a different profile without changing the process-wide i18n language.
+		if out, isCostIrrelevant := costIrrelevantFromError(popCode, popVersion, apiName, err, profile.Language); isCostIrrelevant {
 			return out, nil
 		}
 		return "", translateEstimateCostError(popCode, popVersion, apiName, err)

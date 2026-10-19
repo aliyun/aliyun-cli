@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/alibabacloud-go/tea/tea"
+	"github.com/aliyun/aliyun-openapi-runtime/meta"
 	credentialsv2 "github.com/aliyun/credentials-go/credentials"
 )
 
@@ -76,7 +77,7 @@ func EstimateCost(ec *ExecContext, req *AssembledRequest, pricingContext map[str
 		return "", fmt.Errorf("price mode requires resolved credentials; run the command without --estimate-cost once to verify configuration")
 	}
 	pr := buildPriceRequest(ec, req, pricingContext)
-	raw, err := postPriceQuoteSigned(ec.Credential, pricingEndpoint(), pr)
+	raw, err := postPriceQuoteSigned(ec.Credential, pricingEndpoint(), pr, ec.Language)
 	if err != nil {
 		return "", err
 	}
@@ -187,7 +188,7 @@ func prettyJSON(raw []byte) string {
 	return buf.String()
 }
 
-func postPriceQuoteSigned(cred credentialsv2.Credential, endpoint string, pr *priceRequest) ([]byte, error) {
+func postPriceQuoteSigned(cred credentialsv2.Credential, endpoint string, pr *priceRequest, language string) ([]byte, error) {
 	credModel, err := cred.GetCredential()
 	if err != nil {
 		return nil, fmt.Errorf("get credential: %w", err)
@@ -249,7 +250,7 @@ func postPriceQuoteSigned(cred credentialsv2.Credential, endpoint string, pr *pr
 		// A confirmed cost-irrelevant API arrives as an error status, but it
 		// is a successful determination — hand back a result document so the
 		// caller prints it and succeeds like any other quote.
-		if out, isCostIrrelevant := costIrrelevantFromResponse(pr, raw); isCostIrrelevant {
+		if out, isCostIrrelevant := costIrrelevantFromResponse(pr, raw, language); isCostIrrelevant {
 			return out, nil
 		}
 		return nil, parsePricingHTTPError(pr, resp.StatusCode, raw)
@@ -343,15 +344,17 @@ type costIrrelevantQuote struct {
 }
 
 // costIrrelevantMessage is the runtime's own wording for the confirmed-free
-// answer. The server's message says the same thing but is localized (Chinese),
-// and CLI output is read by an international audience and by scripts, so the
-// text is fixed here instead of passed through. Matches aliyun-cli's built-in
-// --estimate-cost path verbatim.
-const costIrrelevantMessage = "this OpenAPI is confirmed to incur no charge, so there is nothing to quote"
+// answer, localized using the language supplied by the host. Reuse the runtime's
+// bilingual text support without depending on the embedding CLI's i18n package.
+// Keep both translations aligned with aliyun-cli's built-in --estimate-cost path.
+var costIrrelevantMessage = meta.Description{
+	EN: "this OpenAPI is confirmed to incur no charge, so there is nothing to quote",
+	ZH: "该 OpenAPI 已确认为费用无关 API，调用不产生费用，无需询价。",
+}
 
 // costIrrelevantFromResponse recognises the confirmed-free answer in a non-2xx
 // body and renders it as a result document.
-func costIrrelevantFromResponse(pr *priceRequest, raw []byte) ([]byte, bool) {
+func costIrrelevantFromResponse(pr *priceRequest, raw []byte, language string) ([]byte, bool) {
 	code, _, _, _ := pricingErrorFields(raw)
 	if code != pricingCodeNotRequired {
 		return nil, false
@@ -362,7 +365,7 @@ func costIrrelevantFromResponse(pr *priceRequest, raw []byte) ([]byte, bool) {
 		PopCode:        pr.PopCode,
 		PopVersion:     pr.PopVersion,
 		ApiName:        pr.ApiName,
-		Message:        costIrrelevantMessage,
+		Message:        costIrrelevantMessage.Localized(language),
 	})
 	return out, true
 }
