@@ -40,7 +40,7 @@ func TestPluginSourceOverrideRejectsInvalidScheme(t *testing.T) {
 	flag := ctx.Flags().Get("source-base")
 	flag.SetValue("ftp://mirror.example/plugins")
 	flag.SetAssigned(true)
-	require.ErrorContains(t, command.Run(ctx, nil), "source-base must start with http:// or https://")
+	require.ErrorContains(t, command.Run(ctx, nil), "plugin URL must use https://")
 }
 
 type failingIndexTransport struct{}

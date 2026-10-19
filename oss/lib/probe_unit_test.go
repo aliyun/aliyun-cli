@@ -18,7 +18,7 @@ import (
 
 func localOSSCommand(t *testing.T, endpoint string) Command {
 	t.Helper()
-	_, opts, err := parseOSSOptions([]string{"--endpoint=" + endpoint, "--access-key-id=id", "--access-key-secret=secret", "--disable-crc64", "--force-path-style", "--retry-times=1"})
+	_, opts, err := parseOSSOptions([]string{"--endpoint=" + endpoint, "--access-key-id=id", "--access-key-secret=secret", "--disable-crc64", "--force-path-style", "--retry-times=1"}, "")
 	require.NoError(t, err)
 	return Command{options: opts, configOptions: OptionMapType{}}
 }

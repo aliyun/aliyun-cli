@@ -75,7 +75,7 @@ func TestProbeCommandInitializationAndExecutionErrors(t *testing.T) {
 		require.FileExists(t, pc.pbOption.logName)
 	}
 	for _, bypass := range []string{"cycle-symlink", "download", "none"} {
-		_, opts, err := parseOSSOptions(nil)
+		_, opts, err := parseOSSOptions(nil, "probe")
 		require.NoError(t, err)
 		opts[OptionConfigFile] = stringPointer(filepath.Join(t.TempDir(), "missing"))
 		if bypass == "cycle-symlink" {

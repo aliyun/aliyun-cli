@@ -264,7 +264,7 @@ func TestPreviewConfigurationAndURIErrorBoundaries(t *testing.T) {
 	p := &ossPreview{Mode: "plan"}
 	cmd := removeCommand.command
 	cmd.args = []string{"oss://bucket/key"}
-	_, opts, err := parseOSSOptions(nil)
+	_, opts, err := parseOSSOptions(nil, "rm")
 	require.NoError(t, err)
 	missingConfig := filepath.Join(t.TempDir(), "missing-config")
 	opts[OptionConfigFile] = &missingConfig

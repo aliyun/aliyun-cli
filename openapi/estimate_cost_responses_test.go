@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
@@ -35,7 +35,32 @@ func TestEstimateCostEntryPointsUseQuoteResponseAndPropagateOutputErrors(t *test
 					io.WriteString(w, `{"Success":true,"price":{"amount":42}}`)
 				}))
 				defer server.Close()
-				t.Setenv(estimateCostEndpointEnv, strings.TrimPrefix(server.URL, "https://"))
+				// The SDK keeps endpoint domains and ports separate; tunnel the test hostname to the local TLS server.
+				proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					if !assert.Equal(t, http.MethodConnect, r.Method) {
+						http.Error(w, "CONNECT required", http.StatusMethodNotAllowed)
+						return
+					}
+					upstream, err := net.Dial("tcp", server.Listener.Addr().String())
+					if !assert.NoError(t, err) {
+						http.Error(w, "quote server unavailable", http.StatusBadGateway)
+						return
+					}
+					defer upstream.Close()
+					conn, buffered, err := w.(http.Hijacker).Hijack()
+					if !assert.NoError(t, err) {
+						return
+					}
+					defer conn.Close()
+					io.WriteString(conn, "HTTP/1.1 200 Connection Established\r\n\r\n")
+					go io.Copy(upstream, buffered)
+					io.Copy(conn, upstream)
+				}))
+				defer proxy.Close()
+				t.Setenv(estimateCostEndpointEnv, "quote.test.invalid")
+				t.Setenv("HTTPS_PROXY", proxy.URL)
+				t.Setenv("NO_PROXY", "")
+				t.Setenv("no_proxy", "")
 				var output bytes.Buffer
 				ctx := cli.NewCommandContext(&output, io.Discard)
 				cmd := &cli.Command{Name: "quote", EnableUnknownFlag: true}

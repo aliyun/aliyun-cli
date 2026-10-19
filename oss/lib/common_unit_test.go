@@ -232,7 +232,7 @@ func TestCommandConfigurationLookupAndClientValidation(t *testing.T) {
 		{OptionLocalHost, "invalid host!", "net.ResolveIPAddr"},
 	} {
 		t.Run(tc.name+tc.value, func(t *testing.T) {
-			_, opts, err := parseOSSOptions([]string{"--endpoint=http://127.0.0.1", "--access-key-id=id", "--access-key-secret=secret"})
+			_, opts, err := parseOSSOptions([]string{"--endpoint=http://127.0.0.1", "--access-key-id=id", "--access-key-secret=secret"}, "")
 			require.NoError(t, err)
 			opts[tc.name] = &tc.value
 			cmd := Command{options: opts, configOptions: OptionMapType{}}

@@ -14,7 +14,7 @@ import (
 
 func TestOSSConfigurationFileRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config")
-	_, opts, err := parseOSSOptions([]string{"--config-file=" + path, "--endpoint=http://localhost", "--access-key-id=id", "--access-key-secret=secret", "--sts-token=token", "--language=EN"})
+	_, opts, err := parseOSSOptions([]string{"--config-file=" + path, "--endpoint=http://localhost", "--access-key-id=id", "--access-key-secret=secret", "--sts-token=token", "--language=EN"}, "config")
 	require.NoError(t, err)
 	cmd := ConfigCommand{command: configCommand.command}
 	require.NoError(t, cmd.Init(nil, opts))
@@ -28,7 +28,7 @@ func TestOSSConfigurationFileRoundTrip(t *testing.T) {
 	require.Equal(t, "EN", loaded[OptionLanguage])
 	_, err = LoadConfig(filepath.Dir(path))
 	require.Error(t, err)
-	_, opts, err = parseOSSOptions(nil)
+	_, opts, err = parseOSSOptions(nil, "config")
 	require.NoError(t, err)
 	cmd.command.options = opts
 	cmd.command.configOptions = OptionMapType{OptionLanguage: "CN"}
