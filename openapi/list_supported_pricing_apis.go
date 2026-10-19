@@ -81,8 +81,8 @@ func NewListSupportedPricingApisCommand() *cli.Command {
 		Name:   "list-supported-pricing-apis",
 		Hidden: true,
 		Short: i18n.T(
-			"List every OpenAPI that supports --estimate-cost. Output is JSON.",
-			"列出所有支持 --estimate-cost 的 OpenAPI 三元组，输出 JSON",
+			"List every OpenAPI that supports --estimate-cost.",
+			"列出所有支持 --estimate-cost 询价的 OpenAPI",
 		),
 		Usage: "list-supported-pricing-apis [--product <code>] [--api-version <version>] [--cli-query <jmespath>]",
 		Sample: "aliyun utils list-supported-pricing-apis --product Ecs\n" +
