@@ -19,30 +19,47 @@ import (
 
 func TestLegacyMetadataHelpSortsRequiredFieldsAndHidesTransportParameters(t *testing.T) {
 	previous := i18n.GetLanguage()
-	i18n.SetLanguage("en")
-	t.Cleanup(func() { i18n.SetLanguage(previous) })
-	repo, err := meta.MockLoadRepository([]meta.Product{{Code: "zulu"}, {Code: "alpha", Name: map[string]string{"fr": "Service Français"}}})
-	require.NoError(t, err)
-	var output bytes.Buffer
-	library := &Library{writer: &output, builtinRepo: repo, canonicalRepo: newFakeCanonicalRepo()}
-	library.PrintProducts()
-	require.Less(t, strings.Index(output.String(), "alpha"), strings.Index(output.String(), "zulu"))
-	require.Contains(t, output.String(), "Service Français")
-	require.ErrorContains(t, library.PrintApiUsage("alpha", "Missing"), "not a valid api")
-	api := &canonicalmeta.API{Parameters: []canonicalmeta.Parameter{
-		{Name: "Zulu", RawName: "Zulu", Type: "string", Location: "query", Required: true},
-		{Name: "Alpha", RawName: "Alpha", Type: "string", Location: "query", Required: true},
-		{Name: "SecretHeader", RawName: "SecretHeader", Type: "string", Location: "header"},
-		{Name: "SecretDomain", RawName: "SecretDomain", Type: "string", Location: "domain"},
-	}}
-	output.Reset()
-	printCanonicalAPI(&output, api, "")
-	require.Less(t, strings.Index(output.String(), "--Alpha"), strings.Index(output.String(), "--Zulu"))
-	require.NotContains(t, output.String(), "SecretHeader")
-	require.NotContains(t, output.String(), "SecretDomain")
-	output.Reset()
-	printBodyFields(&output, []*canonicalmeta.Parameter{{RawName: "Z", Type: "string"}, {RawName: "A", Type: "string"}}, "en")
-	require.Less(t, strings.Index(output.String(), "|- A"), strings.Index(output.String(), "|- Z"))
+	t.Cleanup(func() { i18n.SetLanguage(previous); cli.SetNoColorOverride(false) })
+	for _, language := range []string{"en", "zh"} {
+		for _, color := range []bool{false, true} {
+			t.Run(language+map[bool]string{false: "/plain", true: "/color"}[color], func(t *testing.T) {
+				t.Setenv("NO_COLOR", "")
+				i18n.SetLanguage(language)
+				cli.SetNoColorOverride(!color)
+				repo, err := meta.MockLoadRepository([]meta.Product{{Code: "zulu"}, {Code: "alpha", Name: map[string]string{"fr": "Service Français"}}})
+				require.NoError(t, err)
+				var output bytes.Buffer
+				library := &Library{writer: &output, builtinRepo: repo, canonicalRepo: newFakeCanonicalRepo()}
+				library.PrintProducts()
+				text := stripHelpANSI(output.String())
+				require.Contains(t, text, "alpha")
+				require.Contains(t, text, "zulu")
+				require.Less(t, strings.Index(text, "alpha"), strings.Index(text, "zulu"))
+				require.Contains(t, text, "Service Français")
+				require.ErrorContains(t, library.PrintApiUsage("alpha", "Missing"), "not a valid api")
+				api := &canonicalmeta.API{Parameters: []canonicalmeta.Parameter{
+					{Name: "Zulu", RawName: "Zulu", Type: "string", Location: "query", Required: true},
+					{Name: "Alpha", RawName: "Alpha", Type: "string", Location: "query", Required: true},
+					{Name: "SecretHeader", RawName: "SecretHeader", Type: "string", Location: "header"},
+					{Name: "SecretDomain", RawName: "SecretDomain", Type: "string", Location: "domain"},
+				}}
+				output.Reset()
+				printCanonicalAPI(&output, api, "")
+				text = stripHelpANSI(output.String())
+				require.Contains(t, text, "--Alpha")
+				require.Contains(t, text, "--Zulu")
+				require.Less(t, strings.Index(text, "--Alpha"), strings.Index(text, "--Zulu"))
+				require.NotContains(t, text, "SecretHeader")
+				require.NotContains(t, text, "SecretDomain")
+				output.Reset()
+				printBodyFields(&output, []*canonicalmeta.Parameter{{RawName: "Z", Type: "string"}, {RawName: "A", Type: "string"}}, language)
+				text = stripHelpANSI(output.String())
+				require.Contains(t, text, "|- A")
+				require.Contains(t, text, "|- Z")
+				require.Less(t, strings.Index(text, "|- A"), strings.Index(text, "|- Z"))
+			})
+		}
+	}
 }
 
 func TestAPISuggestionsDeduplicateAndPreferSpecificResourceKeywords(t *testing.T) {
