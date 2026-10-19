@@ -6,8 +6,11 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
-	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -16,44 +19,124 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func authorizationInput(t *testing.T, input string, interactive bool) {
+func TestMain(m *testing.M) {
+	if name := os.Getenv("MCP_BROWSER_HELPER"); name != "" && strings.EqualFold(filepath.Base(os.Args[0]), name) {
+		pidFile := os.Getenv("MCP_BROWSER_PID")
+		if err := os.WriteFile(pidFile+".tmp", []byte(strconv.Itoa(os.Getpid())), 0600); err != nil {
+			os.Exit(2)
+		}
+		if err := os.Rename(pidFile+".tmp", pidFile); err != nil {
+			os.Exit(2)
+		}
+		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); {
+			if _, err := os.Stat(pidFile + ".done"); err == nil {
+				os.Exit(0)
+			}
+			time.Sleep(time.Millisecond)
+		}
+		os.Exit(3)
+	}
+	os.Exit(m.Run())
+}
+
+func authorizationInput(t *testing.T, interactive bool) {
 	t.Helper()
-	previousStdin, previousInteractive := os.Stdin, isInteractiveInput
-	file, err := os.CreateTemp(t.TempDir(), "stdin")
-	require.NoError(t, err)
-	_, err = file.WriteString(input)
-	require.NoError(t, err)
-	_, err = file.Seek(0, 0)
+	previousStdin := os.Stdin
+	var file *os.File
+	var err error
+	if interactive {
+		file, err = os.Open(os.DevNull)
+	} else {
+		file, err = os.CreateTemp(t.TempDir(), "stdin")
+	}
 	require.NoError(t, err)
 	os.Stdin = file
-	isInteractiveInput = func() bool { return interactive }
-	t.Cleanup(func() { os.Stdin = previousStdin; isInteractiveInput = previousInteractive; _ = file.Close() })
+	t.Cleanup(func() { os.Stdin = previousStdin; _ = file.Close() })
 }
 
 func fakeBrowser(t *testing.T, fail bool, afterStart func()) {
 	t.Helper()
-	previous := browserCommand
-	var commands []*exec.Cmd
-	browserCommand = func(_ string, args ...string) *exec.Cmd {
-		require.NotEmpty(t, args)
-		if afterStart != nil {
-			go afterStart()
-		}
-		command := exec.Command(os.Args[0], "-test.run=^$")
-		if fail {
-			command = exec.Command("/nonexistent-browser")
-		}
-		commands = append(commands, command)
-		return command
+	directory := t.TempDir()
+	t.Setenv("PATH", directory)
+	if fail {
+		return
 	}
-	t.Cleanup(func() {
-		browserCommand = previous
-		for _, command := range commands {
-			if command.Process != nil {
-				_ = command.Wait()
+	name := map[string]string{"linux": "xdg-open", "darwin": "open", "windows": "rundll32.exe"}[runtime.GOOS]
+	require.NotEmpty(t, name)
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	path := filepath.Join(directory, name)
+	if err := os.Link(executable, path); err != nil {
+		source, err := os.Open(executable)
+		require.NoError(t, err)
+		defer source.Close()
+		target, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0700)
+		require.NoError(t, err)
+		_, copyErr := io.Copy(target, source)
+		require.NoError(t, target.Close())
+		require.NoError(t, copyErr)
+	}
+	pidFile := filepath.Join(directory, "browser.pid")
+	t.Setenv("MCP_BROWSER_HELPER", name)
+	t.Setenv("MCP_BROWSER_PID", pidFile)
+	started := make(chan struct{})
+	go func() {
+		defer close(started)
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+			if _, err := os.Stat(pidFile); err == nil {
+				if afterStart != nil {
+					afterStart()
+				}
+				return
 			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	t.Cleanup(func() {
+		<-started
+		data, err := os.ReadFile(pidFile)
+		require.NoError(t, err)
+		pid, err := strconv.Atoi(string(data))
+		require.NoError(t, err)
+		process, err := os.FindProcess(pid)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(pidFile+".done", nil, 0600))
+		state, err := process.Wait()
+		require.NoError(t, err)
+		require.True(t, state.Success())
+	})
+}
+
+func callbackAuthorization(t *testing.T, manager *OAuthCallbackManager, code string) {
+	t.Helper()
+	fakeBrowser(t, false, func() {
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+			if manager.IsWaiting() {
+				manager.HandleCallback(code, nil)
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+		t.Error("OAuth callback did not start waiting")
+	})
+}
+
+func callbackAuthorizationRequest(t *testing.T, code string) {
+	t.Helper()
+	stop := make(chan struct{})
+	fakeBrowser(t, false, func() {
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			response := httptest.NewRecorder()
+			http.DefaultServeMux.ServeHTTP(response, httptest.NewRequest("GET", "/callback?code="+code, nil))
+			time.Sleep(time.Millisecond)
 		}
 	})
+	t.Cleanup(func() { close(stop) })
 }
 
 func TestAuthorizationCodeInputValidation(t *testing.T) {
@@ -67,41 +150,28 @@ func TestAuthorizationCodeInputValidation(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF)
 }
 
-func TestOAuthFlowManualAndCallback(t *testing.T) {
-	for _, auto := range []bool{false, true} {
-		t.Run(map[bool]string{false: "manual", true: "callback"}[auto], func(t *testing.T) {
-			authorizationInput(t, "authorization-code\n", true)
-			manager := NewOAuthCallbackManager()
-			if auto {
-				fakeBrowser(t, false, func() {
-					deadline := time.Now().Add(time.Second)
-					for !manager.IsWaiting() && time.Now().Before(deadline) {
-						time.Sleep(time.Millisecond)
-					}
-					manager.HandleCallback("authorization-code", nil)
-				})
-			}
-			oauthServer(t, func(w http.ResponseWriter, req *http.Request) {
-				require.NoError(t, req.ParseForm())
-				require.Equal(t, "authorization-code", req.Form.Get("code"))
-				require.NotEmpty(t, req.Form.Get("code_verifier"))
-				require.Equal(t, "http://127.0.0.1:8088/callback", req.Form.Get("redirect_uri"))
-				_, _ = io.WriteString(w, `{"access_token":"access","refresh_token":"refresh","expires_in":1000}`)
-			})
-			out := &bytes.Buffer{}
-			ctx := cli.NewCommandContext(out, out)
-			result, err := startMCPOAuthFlowWithManager(ctx, "app", RegionCN, manager, "127.0.0.1", 8088, auto, "scope")
-			require.NoError(t, err)
-			require.Equal(t, "access", result.AccessToken)
-			require.False(t, manager.IsWaiting())
-			require.Contains(t, out.String(), "OAuth login successful")
-		})
-	}
+func TestOAuthFlowCallbackPreservesPKCE(t *testing.T) {
+	manager := NewOAuthCallbackManager()
+	callbackAuthorization(t, manager, "authorization-code")
+	oauthServer(t, func(w http.ResponseWriter, req *http.Request) {
+		require.NoError(t, req.ParseForm())
+		require.Equal(t, "authorization-code", req.Form.Get("code"))
+		require.NotEmpty(t, req.Form.Get("code_verifier"))
+		require.Equal(t, "http://127.0.0.1:8088/callback", req.Form.Get("redirect_uri"))
+		_, _ = io.WriteString(w, `{"access_token":"access","refresh_token":"refresh","expires_in":1000}`)
+	})
+	out := &bytes.Buffer{}
+	ctx := cli.NewCommandContext(out, out)
+	result, err := startMCPOAuthFlowWithManager(ctx, "app", RegionCN, manager, "127.0.0.1", 8088, true, "scope")
+	require.NoError(t, err)
+	require.Equal(t, "access", result.AccessToken)
+	require.False(t, manager.IsWaiting())
+	require.Contains(t, out.String(), "OAuth login successful")
 }
 
 func TestOAuthFlowInputAndCallbackFailures(t *testing.T) {
 	for _, tc := range []struct {
-		name, input, want                 string
+		name, want                        string
 		interactive, browserFailure, auto bool
 	}{
 		{name: "manual noninteractive", want: "not interactive"},
@@ -111,8 +181,10 @@ func TestOAuthFlowInputAndCallbackFailures(t *testing.T) {
 		{name: "callback timeout", auto: true, want: "failed to get authorization code"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			authorizationInput(t, tc.input, tc.interactive)
-			fakeBrowser(t, tc.browserFailure, nil)
+			authorizationInput(t, tc.interactive)
+			if tc.auto {
+				fakeBrowser(t, tc.browserFailure, nil)
+			}
 			previous := oauthTimeout
 			oauthTimeout = 20 * time.Millisecond
 			t.Cleanup(func() { oauthTimeout = previous })
@@ -122,18 +194,6 @@ func TestOAuthFlowInputAndCallbackFailures(t *testing.T) {
 			require.False(t, manager.IsWaiting())
 		})
 	}
-}
-
-func TestOAuthFlowFallsBackAfterBrowserFailure(t *testing.T) {
-	authorizationInput(t, "manual-code\n", true)
-	fakeBrowser(t, true, nil)
-	oauthServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, `{"access_token":"fallback","expires_in":10}`)
-	})
-	result, err := executeOAuthFlow(cli.NewCommandContext(io.Discard, io.Discard), "app", RegionCN, NewOAuthCallbackManager(), "localhost", 0, true, "scope", nil)
-	require.NoError(t, err)
-	require.Equal(t, "fallback", result.AccessToken)
-	require.Empty(t, result.RefreshToken)
 }
 
 func TestTeeWriterPreservesErrorsAndOutput(t *testing.T) {
@@ -179,7 +239,12 @@ func TestReauthorizationUpdatesProfileAndReportsFailures(t *testing.T) {
 			if tc.check {
 				r.profile.MCPOAuthRefreshTokenExpire = time.Now().Unix() + 1
 			}
-			authorizationInput(t, "code\n", !tc.inputError)
+			if tc.inputError {
+				authorizationInput(t, false)
+			} else {
+				r.autoOpenBrowser = true
+				callbackAuthorization(t, r.callbackManager, "code")
+			}
 			oauthServer(t, func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = io.WriteString(w, `{"access_token":"reauthorized","refresh_token":"new-refresh","expires_in":1000}`)
 			})

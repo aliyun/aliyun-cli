@@ -29,7 +29,7 @@ func TestMCPCommandServerLifecycle(t *testing.T) {
 				args = append(args, "-test.gocoverdir="+dir.Value.String())
 			}
 			cmd := exec.CommandContext(ctx, os.Args[0], args...)
-			cmd.Env = append(os.Environ(), "MCP_LIFECYCLE_TEST="+mode)
+			cmd.Env = append(os.Environ(), "MCP_LIFECYCLE_TEST="+mode, "MCP_TLS_TEST_CHILD=1", "GODEBUG="+os.Getenv("GODEBUG")+",x509usefallbackroots=1")
 			output, err := cmd.CombinedOutput()
 			require.NoError(t, err, "%s", output)
 			require.NoError(t, ctx.Err(), "%s", output)
@@ -62,9 +62,7 @@ func TestMCPCommandServerLifecycleProcess(t *testing.T) {
 	if mode == "reauthorization failure" {
 		opts.Port = 0
 		opts.McpProfile.MCPOAuthRefreshTokenExpire = time.Now().Add(-time.Hour).Unix()
-		previous := isInteractiveInput
-		isInteractiveInput = func() bool { return false }
-		t.Cleanup(func() { isInteractiveInput = previous })
+		authorizationInput(t, false)
 	}
 	if mode == "interrupt" {
 		listener, err := net.Listen("tcp", "127.0.0.1:0")

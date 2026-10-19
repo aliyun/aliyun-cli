@@ -71,7 +71,8 @@ func TestProxyRetriesUnauthorizedWithFreshTokenAndBody(t *testing.T) {
 			proxy := testProxy(t)
 			if tc.expiredRefresh {
 				proxy.TokenRefresher.profile.MCPOAuthRefreshTokenExpire = time.Now().Add(-time.Hour).Unix()
-				authorizationInput(t, "authorization-code\n", true)
+				proxy.TokenRefresher.autoOpenBrowser = true
+				callbackAuthorization(t, proxy.TokenRefresher.callbackManager, "authorization-code")
 			}
 			oauthServer(t, func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = io.WriteString(w, `{"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600}`)

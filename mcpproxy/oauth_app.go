@@ -721,7 +721,7 @@ func getStderrWriter(ctx *cli.Context) io.Writer {
 	return stderrWriter
 }
 
-var isInteractiveInput = func() bool {
+func isInteractiveInput() bool {
 	info, err := os.Stdin.Stat()
 	if err != nil {
 		return false
@@ -765,18 +765,16 @@ func promptAuthorizationCode(stderr io.Writer, reader *bufio.Reader) (string, er
 	}
 }
 
-var browserCommand = exec.Command
-
 func OpenBrowser(url string) error {
 	// return errors.New("not implemented")
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "linux":
-		cmd = browserCommand("xdg-open", url)
+		cmd = exec.Command("xdg-open", url)
 	case "windows":
-		cmd = browserCommand("rundll32", "url.dll,FileProtocolHandler", url)
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	case "darwin":
-		cmd = browserCommand("open", url)
+		cmd = exec.Command("open", url)
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
@@ -829,7 +827,7 @@ type GetApplicationResponse struct {
 	Application IMSApplication `json:"Application"`
 }
 
-var newOpenAPIClient = func(ctx *cli.Context, profile config.Profile, endpoint string) (*openapiClient.Client, error) {
+func newOpenAPIClient(ctx *cli.Context, profile config.Profile, endpoint string) (*openapiClient.Client, error) {
 	credential, err := profile.GetCredential(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get credential: %w", err)

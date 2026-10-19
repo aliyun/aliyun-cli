@@ -2,14 +2,22 @@ package mcpproxy
 
 import (
 	"bytes"
+	"context"
+	"crypto/x509"
+	"encoding/json"
 	"errors"
+	"flag"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
+	"regexp"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
-	openapiClient "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/stretchr/testify/require"
@@ -17,21 +25,57 @@ import (
 
 type sdkHTTPHandler func(*http.Request) (*http.Response, error)
 
-func (f sdkHTTPHandler) Call(req *http.Request, _ *http.Transport) (*http.Response, error) {
-	return f(req)
+var sdkTestRoots sync.Once
+
+func oauthSDKSubprocess(t *testing.T) bool {
+	t.Helper()
+	if os.Getenv("MCP_TLS_TEST_CHILD") == "1" {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	args := []string{"-test.run=^" + regexp.QuoteMeta(t.Name()) + "$"}
+	if dir := flag.Lookup("test.gocoverdir"); dir != nil && dir.Value.String() != "" {
+		args = append(args, "-test.gocoverdir="+dir.Value.String())
+	}
+	command := exec.CommandContext(ctx, os.Args[0], args...)
+	command.Env = append(os.Environ(), "MCP_TLS_TEST_CHILD=1", "GODEBUG="+os.Getenv("GODEBUG")+",x509usefallbackroots=1")
+	output, err := command.CombinedOutput()
+	require.NoError(t, err, "%s", output)
+	require.NoError(t, ctx.Err(), "%s", output)
+	return true
 }
 
 func installAPIHandler(t *testing.T, handler sdkHTTPHandler) {
 	t.Helper()
-	original := newOpenAPIClient
-	newOpenAPIClient = func(ctx *cli.Context, profile config.Profile, endpoint string) (*openapiClient.Client, error) {
-		client, err := original(ctx, profile, endpoint)
-		if err == nil {
-			client.HttpClient = handler
+	require.Equal(t, "1", os.Getenv("MCP_TLS_TEST_CHILD"))
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		response, err := handler(request)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{"Code": "ServiceUnavailable", "Message": err.Error(), "RequestId": "local-request"})
+			return
 		}
-		return client, err
-	}
-	t.Cleanup(func() { newOpenAPIClient = original })
+		defer response.Body.Close()
+		for key, values := range response.Header {
+			w.Header()[key] = values
+		}
+		w.WriteHeader(response.StatusCode)
+		_, _ = io.Copy(w, response.Body)
+	}))
+	sdkTestRoots.Do(func() {
+		roots := x509.NewCertPool()
+		roots.AddCert(server.Certificate())
+		x509.SetFallbackRoots(roots)
+	})
+	previous := EndpointMap[RegionCN]
+	endpoint := previous
+	endpoint.IMS, endpoint.MCP = server.Listener.Addr().String(), server.Listener.Addr().String()
+	EndpointMap[RegionCN] = endpoint
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("https_proxy", "")
+	t.Cleanup(func() { EndpointMap[RegionCN] = previous; server.Close() })
 }
 
 func testCLIProfile(t *testing.T) (*cli.Context, config.Profile) {
@@ -64,6 +108,9 @@ func sdkAction(req *http.Request) string {
 const applicationJSON = `{"AppId":"app-id","AppName":"aliyun-cli-mcp-proxy","DisplayName":"MCP test","AppType":"NativeApp","AccessTokenValidity":1000,"RefreshTokenValidity":9000,"RedirectUris":{"RedirectUri":["http://127.0.0.1:8088/callback"]},"DelegatedScope":{"PredefinedScopes":{"PredefinedScope":[{"Name":"/acs/mcp-server"},{"Name":"other"}]}}}`
 
 func TestOAuthApplicationAPIsMapRequestsAndResponses(t *testing.T) {
+	if oauthSDKSubprocess(t) {
+		return
+	}
 	ctx, profile := testCLIProfile(t)
 	installAPIHandler(t, func(req *http.Request) (*http.Response, error) {
 		require.NotEmpty(t, req.Header.Get("Authorization"))
@@ -101,14 +148,17 @@ func TestOAuthApplicationAPIsMapRequestsAndResponses(t *testing.T) {
 }
 
 func TestOAuthApplicationAPIFailures(t *testing.T) {
-	for _, failure := range []string{"credential", "network", "invalid JSON"} {
+	if oauthSDKSubprocess(t) {
+		return
+	}
+	for _, failure := range []string{"credential", "server", "invalid JSON"} {
 		t.Run(failure, func(t *testing.T) {
 			ctx, profile := testCLIProfile(t)
 			if failure == "credential" {
 				profile.AccessKeyId, profile.AccessKeySecret = "", ""
 			}
 			installAPIHandler(t, func(*http.Request) (*http.Response, error) {
-				if failure == "network" {
+				if failure == "server" {
 					return nil, errors.New("network unavailable")
 				}
 				return sdkJSONResponse(`{"Application":[],"Applications":[]}`), nil
@@ -123,7 +173,10 @@ func TestOAuthApplicationAPIFailures(t *testing.T) {
 	}
 }
 
-func TestListMCPServersPreservesCredentialsAndTransportFailures(t *testing.T) {
+func TestListMCPServersPreservesCredentialsAndServerFailures(t *testing.T) {
+	if oauthSDKSubprocess(t) {
+		return
+	}
 	ctx, profile := testCLIProfile(t)
 	installAPIHandler(t, func(*http.Request) (*http.Response, error) {
 		return nil, errors.New("MCP catalog unavailable")
@@ -137,6 +190,9 @@ func TestListMCPServersPreservesCredentialsAndTransportFailures(t *testing.T) {
 }
 
 func TestListMCPServersAndStartValidation(t *testing.T) {
+	if oauthSDKSubprocess(t) {
+		return
+	}
 	ctx, _ := testCLIProfile(t)
 	body := `{"apiMcpServers":[{"id":"id","name":"name","sourceType":"api","product":"ecs","urls":{"mcp":"https://upstream/mcp/test","sse":"https://upstream/sse/test"}}]}`
 	installAPIHandler(t, func(req *http.Request) (*http.Response, error) {
@@ -157,6 +213,9 @@ func TestListMCPServersAndStartValidation(t *testing.T) {
 }
 
 func TestGetOrCreateProfileReusesValidatedApplication(t *testing.T) {
+	if oauthSDKSubprocess(t) {
+		return
+	}
 	ctx, _ := testCLIProfile(t)
 	profile := &McpProfile{Name: "test", MCPOAuthSiteType: "CN", MCPOAuthAppName: MCPOAuthAppName, MCPOAuthAppId: "app-id", MCPOAuthAccessToken: "access", MCPOAuthRefreshToken: "refresh", MCPOAuthRefreshTokenExpire: 4102444800}
 	require.NoError(t, saveMcpProfile(profile))
@@ -172,6 +231,9 @@ func TestGetOrCreateProfileReusesValidatedApplication(t *testing.T) {
 }
 
 func TestGetOrCreateMCPProfileAuthorization(t *testing.T) {
+	if oauthSDKSubprocess(t) {
+		return
+	}
 	for _, tc := range []struct {
 		name, wantError                                                      string
 		missing, custom, invalidApp, emptyRefresh, oauthFailure, saveFailure bool
@@ -189,7 +251,6 @@ func TestGetOrCreateMCPProfileAuthorization(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, _ := testCLIProfile(t)
-			authorizationInput(t, "authorization-code\n", true)
 			previousMux := http.DefaultServeMux
 			http.DefaultServeMux = http.NewServeMux()
 			t.Cleanup(func() { http.DefaultServeMux = previousMux })
@@ -234,7 +295,10 @@ func TestGetOrCreateMCPProfileAuthorization(t *testing.T) {
 			if tc.saveFailure {
 				require.NoError(t, os.MkdirAll(getMCPConfigPath()+".tmp", 0700))
 			}
-			opts := ProxyConfig{Host: "127.0.0.1", Port: 0, RegionType: RegionCN, Scope: "/acs/mcp-server"}
+			if !tc.invalidApp && !(tc.custom && tc.missing) && !tc.listFailure && !tc.createFailure {
+				callbackAuthorizationRequest(t, "authorization-code")
+			}
+			opts := ProxyConfig{Host: "127.0.0.1", Port: 0, RegionType: RegionCN, Scope: "/acs/mcp-server", AutoOpenBrowser: true}
 			if tc.custom {
 				opts.OAuthAppName = "custom-app"
 			}
@@ -259,6 +323,9 @@ func TestGetOrCreateMCPProfileAuthorization(t *testing.T) {
 }
 
 func TestMCPCommandParsesAccessListsAndReusesProfile(t *testing.T) {
+	if oauthSDKSubprocess(t) {
+		return
+	}
 	ctx, _ := testCLIProfile(t)
 	profile := &McpProfile{Name: "test", MCPOAuthSiteType: "CN", MCPOAuthAppName: MCPOAuthAppName, MCPOAuthAppId: "app-id", MCPOAuthRefreshToken: "refresh", MCPOAuthRefreshTokenExpire: 4102444800}
 	require.NoError(t, saveMcpProfile(profile))
@@ -282,6 +349,9 @@ func TestMCPCommandParsesAccessListsAndReusesProfile(t *testing.T) {
 }
 
 func TestSavedProfileRemoteValidationFailures(t *testing.T) {
+	if oauthSDKSubprocess(t) {
+		return
+	}
 	for _, failure := range []string{"network", "missing application", "invalid application", "save"} {
 		t.Run(failure, func(t *testing.T) {
 			ctx, configProfile := testCLIProfile(t)

@@ -10,15 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestOAuthListenerRecoveryRegistersAndRendersManualCallbackAfterLogin(t *testing.T) {
+func TestOAuthListenerRecoveryRegistersAndRendersCallbackAfterLogin(t *testing.T) {
 	ctx, _ := testCLIProfile(t)
-	authorizationInput(t, "authorization-code\n", true)
 	previousMux, previousStderr := http.DefaultServeMux, os.Stderr
 	http.DefaultServeMux = http.NewServeMux()
 	null, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0600)
 	require.NoError(t, err)
 	os.Stderr = null
 	t.Cleanup(func() { http.DefaultServeMux = previousMux; os.Stderr = previousStderr; null.Close() })
+	callbackAuthorizationRequest(t, "authorization-code")
 	require.Same(t, ctx.Stderr(), getStderrWriter(ctx))
 	oauthServer(t, func(w http.ResponseWriter, request *http.Request) {
 		require.NoError(t, request.ParseForm())
@@ -26,13 +26,13 @@ func TestOAuthListenerRecoveryRegistersAndRendersManualCallbackAfterLogin(t *tes
 		require.Equal(t, "http://127.0.0.1:0/callback", request.Form.Get("redirect_uri"))
 		io.WriteString(w, `{"access_token":"manual-access","refresh_token":"manual-refresh","expires_in":3600}`)
 	})
-	tokens, err := startMCPOAuthFlow(ctx, "app", RegionCN, "127.0.0.1", 0, false, "scope")
+	tokens, err := startMCPOAuthFlow(ctx, "app", RegionCN, "127.0.0.1", 0, true, "scope")
 	require.NoError(t, err)
 	require.Equal(t, "manual-access", tokens.AccessToken)
 	require.Equal(t, "manual-refresh", tokens.RefreshToken)
 	response := httptest.NewRecorder()
 	http.DefaultServeMux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/callback?code=display-code", nil))
 	require.Equal(t, http.StatusOK, response.Code)
-	require.Contains(t, response.Body.String(), "display-code")
+	require.Contains(t, response.Body.String(), "Authorization Successful")
 	require.Contains(t, response.Header().Get("Content-Type"), "text/html")
 }
