@@ -264,13 +264,13 @@ aliyun ecs CreateDisk --RegionId cn-hangzhou --ZoneId cn-hangzhou-i \
   --DiskCategory cloud_essd --Size 40 --estimate-cost
 ```
 
-CLI 请求服务端第 2 版响应信封，并保留服务端的 `success`、`code`、`message`、`requestId` 和 `price` 字段：
+CLI 请求服务端第 2 版响应信封，并保留服务端的 `success`、`code`、`message`、`requestId` 字段。有报价时返回 `price`，无报价时省略该字段；CLI 不补造字段，也兼容服务端显式返回 `price: null`。
 
 | 结果 | success | code | price | 退出码 |
 | --- | --- | --- | --- | --- |
 | 获得报价 | true | Success | 报价对象 | 0 |
-| 确认费用无关 | true | PricingNotRequired | null | 0 |
-| 暂不支持询价 | false | PricingNotSupported | null | 3 |
+| 确认费用无关 | true | PricingNotRequired | 省略 | 0 |
+| 暂不支持询价 | false | PricingNotSupported | 省略 | 3 |
 
 业务结果写入标准输出，失败时不会再向标准错误重复输出错误文本。`--cli-query`、表格输出和 `--quiet` 只影响展示，退出码由未过滤响应的顶层 `success` 决定。文案语言由 CLI 的 `--language`、profile 和系统语言设置传给服务端。
 

@@ -28,6 +28,9 @@ func TestPricingResponseClassification(t *testing.T) {
 		{"priced", `{"success":true,"code":"Success","message":"ok","requestId":"r","price":{"success":true}}`, false, false},
 		{"free", `{"success":true,"code":"PricingNotRequired","message":"free","requestId":"r","price":null}`, false, false},
 		{"unsupported", `{"success":false,"code":"PricingNotSupported","message":"unsupported","requestId":"r","price":null}`, true, false},
+		{"free without price", `{"success":true,"code":"PricingNotRequired","message":"free","requestId":"r"}`, false, false},
+		{"unsupported without price", `{"success":false,"code":"PricingNotSupported","message":"unsupported","requestId":"r"}`, true, false},
+		{"failure without price", `{"success":false,"code":"UpstreamError","message":"failed","requestId":"r"}`, true, false},
 		{"top level controls failure", `{"success":false,"code":"UpstreamError","message":"failed","requestId":"r","price":{"success":true}}`, true, false},
 		{"legacy price", `{"price":{"success":true},"requestId":"r"}`, false, false},
 		{"legacy failed price", `{"price":{"success":false,"errorCode":"InvalidParameter"},"requestId":"r"}`, true, false},
@@ -63,6 +66,8 @@ func TestEstimateCostPreservesBusinessEnvelopes(t *testing.T) {
 		{`{"success":true,"code":"Success","message":"quoted","requestId":"r","price":{"success":true,"totalAmount":0.084},"newField":"preserve me"}`, 200},
 		{`{"success":true,"code":"PricingNotRequired","message":"服务端免费","requestId":"r","price":null}`, 200},
 		{`{"success":false,"code":"PricingNotSupported","message":"服务端不支持","requestId":"r","price":null}`, 200},
+		{`{"success":true,"code":"PricingNotRequired","message":"服务端免费","requestId":"r"}`, 200},
+		{`{"success":false,"code":"PricingNotSupported","message":"服务端不支持","requestId":"r"}`, 200},
 		{`{"Code":"PricingNotRequired","Message":"legacy free","RequestId":"r"}`, http.StatusBadRequest},
 		{`{"Code":"PricingNotSupported","Message":"legacy unsupported","RequestId":"r"}`, http.StatusBadRequest},
 	} {

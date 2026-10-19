@@ -33,6 +33,8 @@ func TestEstimateCostServerEnvelopes(t *testing.T) {
 		{"quoted", `{"success":true,"code":"Success","message":"server quoted","requestId":"req-priced","price":{"success":true,"totalAmount":0.084,"currency":"CNY"},"futureField":42}`, 200, 0},
 		{"free", `{"success":true,"code":"PricingNotRequired","message":"server free","requestId":"req-free","price":null}`, 200, 0},
 		{"unsupported", `{"success":false,"code":"PricingNotSupported","message":"server unsupported","requestId":"req-unsupported","price":null}`, 200, 3},
+		{"free without price", `{"success":true,"code":"PricingNotRequired","message":"server free","requestId":"req-free"}`, 200, 0},
+		{"unsupported without price", `{"success":false,"code":"PricingNotSupported","message":"server unsupported","requestId":"req-unsupported"}`, 200, 3},
 		{"upstream failure", `{"success":false,"code":"UpstreamFailure","message":"server failure","requestId":"req-failure","price":{"success":true}}`, 200, 3},
 		{"legacy free", `{"Code":"PricingNotRequired","Message":"legacy free","RequestId":"legacy-free"}`, 400, 0},
 		{"legacy unsupported", `{"Code":"PricingNotSupported","Message":"legacy unsupported","RequestId":"legacy-unsupported"}`, 400, 3},
@@ -77,7 +79,7 @@ func TestEstimateCostNegotiatesVersionAndServerLanguage(t *testing.T) {
 }
 
 func TestEstimateCostFailureSurvivesOutputFiltering(t *testing.T) {
-	const body = `{"success":false,"code":"PricingNotSupported","message":"unsupported","requestId":"r","price":null}`
+	const body = `{"success":false,"code":"PricingNotSupported","message":"unsupported","requestId":"r"}`
 	for _, quiet := range []bool{false, true} {
 		ctx, output, _ := quoteServer(t, 200, body)
 		QueryFlag(ctx.Flags()).SetAssigned(true)

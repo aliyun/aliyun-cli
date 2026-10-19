@@ -51,7 +51,11 @@ func TestEstimateCostEnvelopeAndFilteredExitStatus(t *testing.T) {
 		for _, mode := range []string{"full", "query", "quiet"} {
 			t.Run(code+"/"+mode, func(t *testing.T) {
 				failed := code == "PricingNotSupported"
-				body, _ := json.Marshal(map[string]any{"success": !failed, "code": code, "message": "server message", "requestId": "r", "price": nil})
+				envelope := map[string]any{"success": !failed, "code": code, "message": "server message", "requestId": "r"}
+				if code == "Success" {
+					envelope["price"] = map[string]any{"success": true, "totalAmount": 0.084}
+				}
+				body, _ := json.Marshal(envelope)
 				http.DefaultTransport = quoteTransport(func(req *http.Request) (*http.Response, error) {
 					var payload map[string]any
 					if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {

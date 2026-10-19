@@ -56,7 +56,12 @@ func PricingResponseError(raw string) error {
 			return fmt.Errorf("invalid pricing response: message must be a string")
 		}
 		price, present := fields["price"]
-		if !present || (string(price) != "null" && (len(price) == 0 || price[0] != '{')) {
+		// POP omits null fields for outcomes without a quote. Preserve that
+		// shape; a successful quote still needs its price data.
+		if !present && stringField("code") == "Success" {
+			return fmt.Errorf("invalid pricing response: successful quote requires price")
+		}
+		if present && string(price) != "null" && (len(price) == 0 || price[0] != '{') {
 			return fmt.Errorf("invalid pricing response: price must be an object or null")
 		}
 		if !*success {

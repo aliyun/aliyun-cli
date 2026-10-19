@@ -264,13 +264,13 @@ aliyun ecs CreateDisk --RegionId cn-hangzhou --ZoneId cn-hangzhou-i \
   --DiskCategory cloud_essd --Size 40 --estimate-cost
 ```
 
-The CLI requests response version 2 and preserves the server's `success`, `code`, `message`, `requestId`, and `price` fields:
+The CLI requests response version 2 and preserves the server's `success`, `code`, `message`, and `requestId` fields. The service returns `price` when a quote is available and omits it otherwise. The CLI does not synthesize missing fields and also accepts an explicit `price: null` from the service.
 
 | Outcome | success | code | price | Exit code |
 | --- | --- | --- | --- | --- |
 | Quote obtained | true | Success | Quote object | 0 |
-| Confirmed cost-irrelevant | true | PricingNotRequired | null | 0 |
-| Quote unavailable | false | PricingNotSupported | null | 3 |
+| Confirmed cost-irrelevant | true | PricingNotRequired | Omitted | 0 |
+| Quote unavailable | false | PricingNotSupported | Omitted | 3 |
 
 Business outcomes are written to stdout without a second error document on stderr. `--cli-query`, table output, and `--quiet` affect presentation only: exit status is determined from the unfiltered response's top-level `success`. The CLI sends the language selected by `--language`, the profile, or the system locale to the service.
 
