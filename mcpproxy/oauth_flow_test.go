@@ -83,7 +83,13 @@ func fakeBrowser(t *testing.T, fail bool, callback func()) {
 	executable, err := os.Executable()
 	require.NoError(t, err)
 	path := filepath.Join(directory, name)
-	if err := os.Link(executable, path); err != nil {
+	linked := false
+	// Windows keeps the parent test executable mapped, so its hard links cannot
+	// be removed even after the browser helper has exited.
+	if runtime.GOOS != "windows" {
+		linked = os.Link(executable, path) == nil
+	}
+	if !linked {
 		source, err := os.Open(executable)
 		require.NoError(t, err)
 		defer source.Close()
@@ -117,6 +123,25 @@ func fakeBrowser(t *testing.T, fail bool, callback func()) {
 		require.NoError(t, err)
 		require.True(t, state.Success())
 	})
+}
+
+func TestFakeBrowserLifecycleRemovesExitedExecutable(t *testing.T) {
+	var path string
+	t.Run("browser process", func(t *testing.T) {
+		fakeBrowser(t, false, nil)
+		path = filepath.Join(os.Getenv("PATH"), os.Getenv("MCP_BROWSER_HELPER"))
+		require.NoError(t, OpenBrowser("https://browser.example.invalid/callback"))
+		if runtime.GOOS == "windows" {
+			executable, err := os.Executable()
+			require.NoError(t, err)
+			parentInfo, err := os.Stat(executable)
+			require.NoError(t, err)
+			helperInfo, err := os.Stat(path)
+			require.NoError(t, err)
+			require.False(t, os.SameFile(parentInfo, helperInfo), "the helper must own a separate executable image")
+		}
+	})
+	require.NoFileExists(t, path, "helper executable should be removable after the process is reaped")
 }
 
 func callbackAuthorization(t *testing.T, manager *OAuthCallbackManager, code string) {
