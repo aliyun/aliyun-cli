@@ -123,6 +123,19 @@ func TestOAuthApplicationAPIFailures(t *testing.T) {
 	}
 }
 
+func TestListMCPServersPreservesCredentialsAndTransportFailures(t *testing.T) {
+	ctx, profile := testCLIProfile(t)
+	installAPIHandler(t, func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("MCP catalog unavailable")
+	})
+	_, err := ListMCPServers(ctx, RegionCN)
+	require.ErrorContains(t, err, "MCP catalog unavailable")
+	profile.AccessKeyId, profile.AccessKeySecret = "", ""
+	require.NoError(t, config.SaveConfiguration(&config.Configuration{CurrentProfile: "default", Profiles: []config.Profile{profile}}))
+	_, err = ListMCPServers(ctx, RegionCN)
+	require.Error(t, err)
+}
+
 func TestListMCPServersAndStartValidation(t *testing.T) {
 	ctx, _ := testCLIProfile(t)
 	body := `{"apiMcpServers":[{"id":"id","name":"name","sourceType":"api","product":"ecs","urls":{"mcp":"https://upstream/mcp/test","sse":"https://upstream/sse/test"}}]}`
@@ -162,6 +175,7 @@ func TestGetOrCreateMCPProfileAuthorization(t *testing.T) {
 	for _, tc := range []struct {
 		name, wantError                                                      string
 		missing, custom, invalidApp, emptyRefresh, oauthFailure, saveFailure bool
+		listFailure, createFailure                                           bool
 	}{
 		{name: "existing application"},
 		{name: "create default", missing: true},
@@ -170,6 +184,8 @@ func TestGetOrCreateMCPProfileAuthorization(t *testing.T) {
 		{name: "empty refresh token", emptyRefresh: true, wantError: "empty RefreshToken"},
 		{name: "OAuth failure", oauthFailure: true, wantError: "OAuth login failed"},
 		{name: "save failure", saveFailure: true, wantError: "failed to save mcp profile"},
+		{name: "list failure", listFailure: true, wantError: "failed to find OAuth application"},
+		{name: "create failure", missing: true, createFailure: true, wantError: "failed to create default OAuth application"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, _ := testCLIProfile(t)
@@ -185,11 +201,17 @@ func TestGetOrCreateMCPProfileAuthorization(t *testing.T) {
 			installAPIHandler(t, func(req *http.Request) (*http.Response, error) {
 				switch sdkAction(req) {
 				case "ListApplications":
+					if tc.listFailure {
+						return nil, errors.New("application list unavailable")
+					}
 					if tc.missing {
 						return sdkJSONResponse(`{"Applications":{"Application":[]}}`), nil
 					}
 					return sdkJSONResponse(`{"Applications":{"Application":[` + appJSON + `]}}`), nil
 				case "CreateApplication":
+					if tc.createFailure {
+						return nil, errors.New("application creation denied")
+					}
 					created = true
 					return sdkJSONResponse(`{"Application":` + appJSON + `}`), nil
 				default:
@@ -260,7 +282,7 @@ func TestMCPCommandParsesAccessListsAndReusesProfile(t *testing.T) {
 }
 
 func TestSavedProfileRemoteValidationFailures(t *testing.T) {
-	for _, failure := range []string{"network", "invalid application", "save"} {
+	for _, failure := range []string{"network", "missing application", "invalid application", "save"} {
 		t.Run(failure, func(t *testing.T) {
 			ctx, configProfile := testCLIProfile(t)
 			profile := &McpProfile{Name: "test", MCPOAuthSiteType: "CN", MCPOAuthAppName: MCPOAuthAppName, MCPOAuthAppId: "app-id", MCPOAuthRefreshToken: "refresh", MCPOAuthRefreshTokenExpire: 4102444800}
@@ -268,6 +290,9 @@ func TestSavedProfileRemoteValidationFailures(t *testing.T) {
 			installAPIHandler(t, func(req *http.Request) (*http.Response, error) {
 				if failure == "network" {
 					return nil, errors.New("offline")
+				}
+				if failure == "missing application" {
+					return sdkJSONResponse(`{}`), nil
 				}
 				body := applicationJSON
 				if failure == "invalid application" {

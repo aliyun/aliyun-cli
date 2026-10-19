@@ -13,6 +13,8 @@ import (
 	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
+var newOSSClient = oss.New
+
 // group spec text of all commands
 const (
 	GroupTypeNormalCommand string = "\nCommands:\n"
@@ -510,7 +512,7 @@ func (cmd *Command) ossClient(bucket string) (*oss.Client, error) {
 	if bridgeCredentialProvider != nil {
 		options = append(options, oss.SetCredentialsProvider(bridgeCredentialProvider))
 	}
-	client, err := oss.New(endpoint, accessKeyID, accessKeySecret, options...)
+	client, err := newOSSClient(endpoint, accessKeyID, accessKeySecret, options...)
 	if err != nil {
 		return nil, err
 	}

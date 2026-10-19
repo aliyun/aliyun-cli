@@ -69,3 +69,18 @@ func TestLegacyParameterProjectionDeduplicatesAndHonorsBodyOverrides(t *testing.
 	require.NoError(t, api.CheckLegacyRequiredParameters(func(name string) bool { checked = append(checked, name); return true }))
 	require.Equal(t, []string{"Duplicate", "Shared"}, checked)
 }
+
+func TestLegacyRequiredBodyParametersAreCheckedOnce(t *testing.T) {
+	body := []V1Parameter{{Name: "Id", Required: true}, {Name: "Id", Required: true}}
+	api := &API{V1BodyParameters: &body}
+	var checked []string
+	require.NoError(t, api.CheckLegacyRequiredParameters(func(name string) bool {
+		checked = append(checked, name)
+		return true
+	}))
+	require.Equal(t, []string{"Id"}, checked)
+	view := &LegacyParameterView{source: SourceCanonical, canonical: &Parameter{Location: "query"}, resolvedPosition: "Body"}
+	require.Equal(t, "Body", view.LegacyPosition())
+	require.Equal(t, "https", (&API{Protocol: "http|https"}).GetProtocol())
+	require.Nil(t, (&API{Parameters: []Parameter{{RawName: "Id", Location: "query", Type: "string"}}}).FindLegacyParameter("Missing"))
+}

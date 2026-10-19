@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"testing/iotest"
+	"testing/synctest"
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
@@ -127,6 +128,53 @@ func TestRefreshWaitersAndAlreadyInProgress(t *testing.T) {
 	require.NoError(t, r.waitForRefresh(r.profile.MCPOAuthAccessTokenExpire-1))
 	require.NoError(t, r.waitForReauthorization(r.profile.MCPOAuthRefreshTokenExpire-1))
 	require.ErrorContains(t, r.waitForRefresh(r.profile.MCPOAuthAccessTokenExpire), "timeout")
+}
+
+func TestExpiredTokensWaitForConcurrentRefresh(t *testing.T) {
+	for _, reauthorize := range []bool{false, true} {
+		t.Run(map[bool]string{false: "access token", true: "refresh token"}[reauthorize], func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				r := testProxy(t).TokenRefresher
+				expired := time.Now().Add(-time.Hour).Unix()
+				r.profile.MCPOAuthAccessTokenExpire = expired
+				r.profile.MCPOAuthRefreshTokenExpire = expired
+				r.refreshing, r.reauthorizing = true, true
+				done := make(chan error, 1)
+				go func() {
+					if reauthorize {
+						done <- r.reauthorizeWithProxy()
+					} else {
+						done <- r.refreshAccessToken()
+					}
+				}()
+				synctest.Wait()
+				select {
+				case err := <-done:
+					t.Fatalf("expired token returned before refresh completed: %v", err)
+				default:
+				}
+				r.mu.Lock()
+				r.profile.MCPOAuthAccessTokenExpire = time.Now().Add(time.Hour).Unix()
+				r.profile.MCPOAuthRefreshTokenExpire = time.Now().Add(24 * time.Hour).Unix()
+				r.refreshing, r.reauthorizing = false, false
+				r.mu.Unlock()
+				require.NoError(t, <-done)
+			})
+		})
+	}
+}
+
+func TestTokenWaitsReportTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		proxy := testProxy(t)
+		r := proxy.TokenRefresher
+		r.refreshing = true
+		r.tokenCh <- TokenInfo{Token: "expired", ExpiresAt: time.Now().Add(-time.Hour).Unix()}
+		_, err := proxy.getMCPAccessToken()
+		require.ErrorContains(t, err, "timeout waiting for refreshed token")
+		r.reauthorizing = true
+		require.ErrorContains(t, r.waitForReauthorization(r.profile.MCPOAuthRefreshTokenExpire), "timeout waiting for reauthorization")
+	})
 }
 
 func TestRefresherStartStopAndHealthCheck(t *testing.T) {

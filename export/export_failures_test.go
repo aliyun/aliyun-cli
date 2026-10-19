@@ -59,3 +59,19 @@ func TestProductLoadingFallbackAndMalformedMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "fallback", products.Products[0].Code)
 }
+
+func TestLegacyExportReportsEachCatalogOutputFailure(t *testing.T) {
+	previous := bundledmeta.Metadatas
+	t.Cleanup(func() { bundledmeta.Metadatas = previous })
+	bundledmeta.Metadatas = fstest.MapFS{"metadatas/products.json": {Data: []byte(`{"products":[]}`)}}
+	for _, name := range []string{"metadatas/products.json", "en-US/products.json", "zh-CN/products.json"} {
+		t.Run(name, func(t *testing.T) {
+			output := t.TempDir()
+			require.NoError(t, os.MkdirAll(filepath.Join(output, "metadatas"), 0700))
+			require.NoError(t, os.MkdirAll(filepath.Join(output, name), 0700))
+			require.ErrorContains(t, LegacyExportMetadata(output), "export "+name)
+		})
+	}
+	bundledmeta.Metadatas = fstest.MapFS{"metadatas/products.json": {Data: []byte(`{"products":[{"code":"missing","apis":["Find"]}]}`)}}
+	require.ErrorContains(t, LegacyExportMetadata(t.TempDir()), "export missing")
+}

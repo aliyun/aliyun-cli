@@ -3,6 +3,7 @@ package mcpproxy
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -56,16 +57,22 @@ func TestProxyForwardsResponsesAndCountsRequests(t *testing.T) {
 
 func TestProxyRetriesUnauthorizedWithFreshTokenAndBody(t *testing.T) {
 	for _, tc := range []struct {
-		name        string
-		retryStatus int
-		retryError  bool
+		name           string
+		retryStatus    int
+		retryError     bool
+		expiredRefresh bool
 	}{
 		{name: "success", retryStatus: 200},
 		{name: "still unauthorized", retryStatus: 401},
 		{name: "retry network failure", retryError: true},
+		{name: "reauthorize expired refresh token", retryStatus: 200, expiredRefresh: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			proxy := testProxy(t)
+			if tc.expiredRefresh {
+				proxy.TokenRefresher.profile.MCPOAuthRefreshTokenExpire = time.Now().Add(-time.Hour).Unix()
+				authorizationInput(t, "authorization-code\n", true)
+			}
 			oauthServer(t, func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = io.WriteString(w, `{"access_token":"new-access","refresh_token":"new-refresh","expires_in":3600}`)
 			})
@@ -99,6 +106,41 @@ func TestProxyRetriesUnauthorizedWithFreshTokenAndBody(t *testing.T) {
 				require.Equal(t, "response", w.Body.String())
 			}
 			require.Equal(t, int64(1), proxy.stats.TokenRefreshes)
+		})
+	}
+}
+
+func TestProxyRejectsExpiredTokensWhenRefreshFails(t *testing.T) {
+	for _, initiallyExpired := range []bool{true, false} {
+		t.Run(fmt.Sprint(initiallyExpired), func(t *testing.T) {
+			proxy := testProxy(t)
+			if initiallyExpired {
+				proxy.TokenRefresher.profile.MCPOAuthAccessTokenExpire = time.Now().Add(-time.Hour).Unix()
+			}
+			refreshes := 0
+			oauthServer(t, func(w http.ResponseWriter, _ *http.Request) {
+				refreshes++
+				if !initiallyExpired && refreshes == 1 {
+					_, _ = io.WriteString(w, `{"access_token":"expired","refresh_token":"refresh","expires_in":0}`)
+					return
+				}
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = io.WriteString(w, `{"error":"invalid_grant"}`)
+			})
+			upstreamCalls := 0
+			proxy.upstreamClient = &http.Client{Transport: proxyRoundTripper(func(*http.Request) (*http.Response, error) {
+				upstreamCalls++
+				return &http.Response{StatusCode: 401, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("unauthorized"))}, nil
+			})}
+			response := httptest.NewRecorder()
+			proxy.ServeMCPProxyRequest(response, httptest.NewRequest("GET", "/mcp/test", nil))
+			require.Equal(t, http.StatusInternalServerError, response.Code)
+			require.Equal(t, int64(1), proxy.stats.ErrorRequests)
+			if initiallyExpired {
+				require.Zero(t, upstreamCalls)
+			} else {
+				require.Equal(t, 1, upstreamCalls)
+			}
 		})
 	}
 }

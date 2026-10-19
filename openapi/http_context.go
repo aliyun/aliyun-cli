@@ -691,30 +691,20 @@ func (a *OpenapiContext) CallSSE(w io.Writer) error {
 	}
 
 	var callErr error
-	// Both channels are closed by the producer when it finishes; select on both
-	// so an error sent before close cannot deadlock the drain loop.
-	for yield != nil || yieldErr != nil {
-		select {
-		case resp, ok := <-yield:
-			if !ok {
-				yield = nil
-				continue
-			}
-			if resp == nil || resp.Event == nil || resp.Event.Data == nil {
-				continue
-			}
-			if _, err := io.WriteString(w, tea.StringValue(resp.Event.Data)+"\n"); err != nil {
-				return err
-			}
-			flush()
-		case err, ok := <-yieldErr:
-			if !ok {
-				yieldErr = nil
-				continue
-			}
-			if err != nil {
-				callErr = err
-			}
+	// The SDK also consumes yieldErr internally; wait for its event stream to
+	// close before reading the buffered terminal error to avoid stealing it.
+	for resp := range yield {
+		if resp == nil || resp.Event == nil || resp.Event.Data == nil {
+			continue
+		}
+		if _, err := io.WriteString(w, tea.StringValue(resp.Event.Data)+"\n"); err != nil {
+			return err
+		}
+		flush()
+	}
+	for err := range yieldErr {
+		if err != nil {
+			callErr = err
 		}
 	}
 	if callErr != nil {
