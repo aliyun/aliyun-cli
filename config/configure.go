@@ -685,6 +685,9 @@ func startOauthFlowWithContext(ctx context.Context, w io.Writer, cp *Profile) er
 	fmt.Printf("%s: %s\n", i18n.T("SignIn url", "登录URL").GetMessage(), oauthUrl)
 	fmt.Println()
 	fmt.Println(i18n.T("Now you can login to your account with OAuth configuration in the browser.", "现在您可以在浏览器中使用OAuth配置登录您的账户。").GetMessage())
+	fmt.Println(i18n.T(
+		"On a remote machine or a machine without a browser, press Ctrl+C and rerun this command with --no-browser. You can then sign in on another device and paste the complete callback URL into the CLI.",
+		"如果当前是远程机器或没有浏览器，请按 Ctrl+C 取消，然后在原命令后添加 --no-browser 重新运行。您可以在其他设备上登录，再将完整的回调 URL 粘贴到 CLI 中。").GetMessage())
 
 	// wait for code, server error, cancellation, or timeout
 	var code string
