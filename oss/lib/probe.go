@@ -378,17 +378,17 @@ var probeCommand = ProbeCommand{
 
 type TestAppendReader struct {
 	RandText []byte
-	bClosed  atomic.Bool
+	bClosed  bool
 }
 
 // Read
 func (r *TestAppendReader) Close() {
-	r.bClosed.Store(true)
+	r.bClosed = true
 }
 
 // Read
 func (r *TestAppendReader) Read(p []byte) (n int, err error) {
-	if r.bClosed.Load() {
+	if r.bClosed {
 		return 0, fmt.Errorf("ossutil probe closed")
 	}
 
@@ -599,7 +599,6 @@ func (pc *ProbeCommand) DetectBandWidth() error {
 	statBandwidth.Reset(numCpu)
 
 	var appendReader TestAppendReader
-	defer appendReader.Close()
 	if pc.pbOption.probeItem == "upload-speed" {
 		appendReader.RandText = []byte(strings.Repeat("1", 32*1024))
 	}
@@ -676,6 +675,7 @@ func (pc *ProbeCommand) DetectBandWidth() error {
 	}
 
 	cancel()
+	appendReader.Close()
 
 	maxIndex := 0
 	maxSpeed := 0.0
@@ -1384,7 +1384,6 @@ type downloadPart struct {
 type downloadWorkerArg struct {
 	bucket *oss.Bucket
 	key    string
-	ctx    context.Context
 }
 
 func getPartEnd(begin int64, total int64, per int64) int64 {
@@ -1396,25 +1395,13 @@ func getPartEnd(begin int64, total int64, per int64) int64 {
 
 func downloadWorker(id int, arg downloadWorkerArg, jobs <-chan downloadPart, results chan<- downloadPart, failed chan<- error, die <-chan bool, st *StatBandWidth) {
 	for part := range jobs {
-		select {
-		case <-die:
-			return
-		default:
-		}
 		var options []oss.Option
 		r := oss.Range(part.Start, part.End)
 		options = append(options, r, oss.Progress(st))
 		options = append(options, oss.AcceptEncoding("identity"))
-		if arg.ctx != nil {
-			options = append(options, oss.WithContext(arg.ctx))
-		}
 		result, err := arg.bucket.DoGetObject(&oss.GetObjectRequest{ObjectKey: arg.key}, options)
 		if err != nil {
 			fmt.Printf("GetObject error,%s", err.Error())
-			select {
-			case failed <- err:
-			case <-die:
-			}
 			return
 		}
 		_, err = io.Copy(ioutil.Discard, result.Response.Body)
@@ -1427,17 +1414,10 @@ func downloadWorker(id int, arg downloadWorkerArg, jobs <-chan downloadPart, res
 		}
 
 		if err != nil {
-			select {
-			case failed <- err:
-			case <-die:
-			}
-			return
+			failed <- err
+			break
 		}
-		select {
-		case results <- part:
-		case <-die:
-			return
-		}
+		results <- part
 	}
 }
 
@@ -1526,32 +1506,18 @@ func (pc *ProbeCommand) DetectDownloadTime() error {
 
 	//fmt.Printf("\nDetectDownloadTime, partSize :%v, objectSize:%v, parallel:%v\n", partSize, objectSize, parallel)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	arg := downloadWorkerArg{bucket: bucket, key: pc.pbOption.objectName, ctx: ctx}
-	var workers sync.WaitGroup
+	arg := downloadWorkerArg{bucket, pc.pbOption.objectName}
 	for w := 1; w <= routines; w++ {
-		workers.Add(1)
-		go func(id int) {
-			defer workers.Done()
-			downloadWorker(id, arg, jobs, results, failed, die, &statBandwidth)
-		}(w)
+		go downloadWorker(w, arg, jobs, results, failed, die, &statBandwidth)
 	}
 
 	// Download parts concurrently
 	go downloadScheduler(jobs, parts)
 
-	progressDone := make(chan struct{})
 	go func() {
-		defer close(progressDone)
-		ticker := time.NewTicker(2 * time.Second)
-		defer ticker.Stop()
 		oldStat := statBandwidth.GetStat()
 		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
+			time.Sleep(time.Duration(2) * time.Second)
 			nowStat := statBandwidth.GetStat()
 			nowTick := time.Now().UnixNano() / 1000 / 1000
 
@@ -1566,12 +1532,6 @@ func (pc *ProbeCommand) DetectDownloadTime() error {
 			fmt.Printf("\rdownloading average speed:%.2f(KB/s),current speed:%.2f(KB/s),max speed:%.2f(KB/s)", averSpeed, nowSpeed, maxSpeed)
 		}
 	}()
-	defer func() {
-		cancel()
-		close(die)
-		workers.Wait()
-		<-progressDone
-	}()
 
 	completed := 0
 	for completed < len(parts) {
@@ -1580,6 +1540,7 @@ func (pc *ProbeCommand) DetectDownloadTime() error {
 			completed++
 			_ = (part.End - part.Start + 1)
 		case err := <-failed:
+			close(die)
 			return err
 		}
 		if completed >= len(parts) {

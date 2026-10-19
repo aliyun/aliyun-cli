@@ -119,8 +119,7 @@ type MCPProxy struct {
 	Host            string
 	Port            int
 	RegionType      RegionType
-	Server          *http.Server
-	serverMu        sync.Mutex
+	Server          *http.Server // 只会在 Start() 中赋值一次，如果程序改变执行流，则需要加锁保护
 	ExistMcpServers []MCPServerInfo
 	TokenRefresher  *TokenRefresher
 	stopCh          chan struct{}
@@ -265,20 +264,11 @@ func (p *MCPProxy) Start() error {
 	mux.HandleFunc("/health", p.handleHealth)
 	mux.HandleFunc("/", p.ServeMCPProxyRequest)
 
-	server := p.newHTTPServer(mux)
-	p.serverMu.Lock()
-	select {
-	case <-p.stopCh:
-		p.serverMu.Unlock()
-		return nil
-	default:
-	}
-	p.Server = server
-	p.serverMu.Unlock()
+	p.Server = p.newHTTPServer(mux)
 
 	log.Printf("MCP Proxy starting on %s:%d\n", p.Host, p.Port)
 
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := p.Server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("proxy server failed: %w", err)
 	}
 
@@ -286,23 +276,16 @@ func (p *MCPProxy) Start() error {
 }
 
 func (p *MCPProxy) Stop() error {
-	p.serverMu.Lock()
-	select {
-	case <-p.stopCh:
-	default:
-		close(p.stopCh)
-	}
-	server := p.Server
-	p.serverMu.Unlock()
+	close(p.stopCh)
 
-	if server != nil {
+	if p.Server != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := server.Shutdown(ctx); err != nil {
+		if err := p.Server.Shutdown(ctx); err != nil {
 			// 如果优雅关闭超时，强制关闭
 			if err == context.DeadlineExceeded {
 				log.Println("Graceful shutdown timeout, forcing close...")
-				return server.Close()
+				return p.Server.Close()
 			}
 			return err
 		}

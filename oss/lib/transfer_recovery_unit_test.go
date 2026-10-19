@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/stretchr/testify/require"
 	"github.com/syndtr/goleveldb/leveldb"
 )
@@ -235,7 +234,7 @@ func TestCopyRetriesRejectedRequestsUntilTransferSucceeds(t *testing.T) {
 	for _, operation := range []string{"directory", "upload", "multipart upload", "download", "multipart download", "copy", "multipart copy"} {
 		t.Run(operation, func(t *testing.T) {
 			var attempts atomic.Int32
-			client := &http.Client{Transport: maintenanceTransport(func(r *http.Request) (*http.Response, error) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				status, body := http.StatusOK, "content"
 				if attempts.Add(1) == 1 {
 					status, body = http.StatusTooManyRequests, `<Error><Code>Throttling</Code><Message>retry locally</Message></Error>`
@@ -270,18 +269,20 @@ func TestCopyRetriesRejectedRequestsUntilTransferSucceeds(t *testing.T) {
 						}
 					}
 				}
-				header := http.Header{"Content-Length": {fmt.Sprint(len(body))}, "Etag": {`"etag"`}}
-				if r.Method == http.MethodHead && status == 200 {
-					header.Set("Content-Length", "7")
+				w.Header().Set("Content-Length", fmt.Sprint(len(body)))
+				w.Header().Set("ETag", `"etag"`)
+				if r.Method == http.MethodHead && status == http.StatusOK {
+					w.Header().Set("Content-Length", "7")
 				}
-				return &http.Response{StatusCode: status, Header: header, Body: io.NopCloser(strings.NewReader(body)), ContentLength: int64(len(body)), Request: r}, nil
-			})}
-			previous := newOSSClient
-			newOSSClient = func(endpoint, id, secret string, options ...oss.ClientOption) (*oss.Client, error) {
-				return previous(endpoint, id, secret, append(options, oss.HTTPClient(client))...)
-			}
-			defer func() { newOSSClient = previous }()
-			cc := CopyCommand{command: localOSSCommand(t, "http://oss.test")}
+				w.WriteHeader(status)
+				if r.Method != http.MethodHead {
+					if _, err := io.WriteString(w, body); err != nil {
+						t.Error(err)
+					}
+				}
+			}))
+			defer server.Close()
+			cc := CopyCommand{command: localOSSCommand(t, server.URL)}
 			cc.command.options[OptionRetryTimes] = stringPointer("2")
 			bucket, err := cc.command.ossBucket("bucket")
 			require.NoError(t, err)

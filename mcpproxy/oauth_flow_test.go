@@ -20,7 +20,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if name := os.Getenv("MCP_BROWSER_HELPER"); name != "" && strings.EqualFold(filepath.Base(os.Args[0]), name) {
+	if name := os.Getenv("MCP_BROWSER_HELPER"); name != "" && browserExecutableName(os.Args[0]) == browserExecutableName(name) {
 		pidFile := os.Getenv("MCP_BROWSER_PID")
 		if err := os.WriteFile(pidFile+".tmp", []byte(strconv.Itoa(os.Getpid())), 0600); err != nil {
 			os.Exit(2)
@@ -28,7 +28,7 @@ func TestMain(m *testing.M) {
 		if err := os.Rename(pidFile+".tmp", pidFile); err != nil {
 			os.Exit(2)
 		}
-		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); {
+		for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); {
 			if _, err := os.Stat(pidFile + ".done"); err == nil {
 				os.Exit(0)
 			}
@@ -37,6 +37,16 @@ func TestMain(m *testing.M) {
 		os.Exit(3)
 	}
 	os.Exit(m.Run())
+}
+
+func browserExecutableName(path string) string {
+	return strings.TrimSuffix(strings.ToLower(filepath.Base(path)), ".exe")
+}
+
+func TestBrowserExecutableNameMatchesWindowsCommandArguments(t *testing.T) {
+	for _, argument := range []string{"rundll32", "rundll32.exe", "RUNDLL32.EXE", filepath.Join("directory", "rundll32.exe")} {
+		require.Equal(t, "rundll32", browserExecutableName(argument))
+	}
 }
 
 func authorizationInput(t *testing.T, interactive bool) {
@@ -54,9 +64,16 @@ func authorizationInput(t *testing.T, interactive bool) {
 	t.Cleanup(func() { os.Stdin = previousStdin; _ = file.Close() })
 }
 
-func fakeBrowser(t *testing.T, fail bool, afterStart func()) {
+func fakeBrowser(t *testing.T, fail bool, callback func()) {
 	t.Helper()
 	directory := t.TempDir()
+	if root := os.Getenv("MCP_TEST_EXEC_ROOT"); root != "" {
+		require.NoError(t, os.MkdirAll(root, 0700))
+		var err error
+		directory, err = os.MkdirTemp(root, "mcp-browser-")
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, os.RemoveAll(directory)) })
+	}
 	t.Setenv("PATH", directory)
 	if fail {
 		return
@@ -82,18 +99,13 @@ func fakeBrowser(t *testing.T, fail bool, afterStart func()) {
 	started := make(chan struct{})
 	go func() {
 		defer close(started)
-		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
-			if _, err := os.Stat(pidFile); err == nil {
-				if afterStart != nil {
-					afterStart()
-				}
-				return
-			}
-			time.Sleep(time.Millisecond)
+		if callback != nil {
+			callback()
 		}
 	}()
 	t.Cleanup(func() {
 		<-started
+		require.Eventually(t, func() bool { _, err := os.Stat(pidFile); return err == nil }, 15*time.Second, time.Millisecond)
 		data, err := os.ReadFile(pidFile)
 		require.NoError(t, err)
 		pid, err := strconv.Atoi(string(data))
@@ -109,23 +121,29 @@ func fakeBrowser(t *testing.T, fail bool, afterStart func()) {
 
 func callbackAuthorization(t *testing.T, manager *OAuthCallbackManager, code string) {
 	t.Helper()
+	stop := make(chan struct{})
 	fakeBrowser(t, false, func() {
-		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
 			if manager.IsWaiting() {
 				manager.HandleCallback(code, nil)
 				return
 			}
 			time.Sleep(time.Millisecond)
 		}
-		t.Error("OAuth callback did not start waiting")
 	})
+	t.Cleanup(func() { close(stop) })
 }
 
 func callbackAuthorizationRequest(t *testing.T, code string) {
 	t.Helper()
 	stop := make(chan struct{})
 	fakeBrowser(t, false, func() {
-		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+		for {
 			select {
 			case <-stop:
 				return

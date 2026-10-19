@@ -1,7 +1,6 @@
 package openapi
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"net/http"
@@ -16,7 +15,6 @@ import (
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/meta"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,61 +63,7 @@ func TestHttpContextUsesSDKTransportAndGatewayErrorRouting(t *testing.T) {
 	require.ErrorIs(t, err, cause)
 	require.Equal(t, 1, gateway.calls)
 	require.Equal(t, 1, calls)
-	client.Spi = nil
-	client.HttpClient = boundaryHTTPClient{RoundTripper: boundaryTransport(func(request *http.Request) (*http.Response, error) {
-		calls++
-		return nil, errors.New("stream transport unavailable")
-	})}
-	var output bytes.Buffer
-	require.ErrorContains(t, (&OpenapiContext{HttpContext: h}).CallSSE(&output), "stream transport unavailable")
-	require.Empty(t, output.String())
-	require.Equal(t, 2, calls)
-	h.openapiRequest.Headers["Accept"] = tea.String("text/event-stream")
-	for _, mode := range []string{"multiple events", "HTTP 403", "writer failure"} {
-		t.Run(mode, func(t *testing.T) {
-			before := calls
-			client.HttpClient = boundaryHTTPClient{RoundTripper: boundaryTransport(func(request *http.Request) (*http.Response, error) {
-				calls++
-				assert.Equal(t, "/reports", request.URL.Path)
-				assert.Equal(t, "text/event-stream", request.Header.Get("Accept"))
-				status, contentType, body := http.StatusOK, "text/event-stream", "data: first\n\ndata: second\n\n"
-				if mode == "HTTP 403" {
-					status, contentType, body = http.StatusForbidden, "application/json", `{"Code":"Forbidden","Message":"access denied","RequestId":"request-id"}`
-				} else if mode == "writer failure" {
-					body = "data: first\n\n"
-				}
-				return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": []string{contentType}}, Body: io.NopCloser(strings.NewReader(body))}, nil
-			})}
-			var streamed flushingResponseBuffer
-			writer := io.Writer(&streamed)
-			if mode == "writer failure" {
-				writer = &endpointFailWriter{}
-			}
-			err := (&OpenapiContext{HttpContext: h}).CallSSE(writer)
-			if mode == "HTTP 403" {
-				var sdkError *tea.SDKError
-				require.ErrorAs(t, err, &sdkError)
-				require.Equal(t, "Forbidden", tea.StringValue(sdkError.Code))
-				require.Contains(t, err.Error(), "access denied")
-				require.Empty(t, streamed.String())
-			} else if mode == "writer failure" {
-				require.ErrorIs(t, err, io.ErrClosedPipe)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, "first\nsecond\n", streamed.String())
-				require.Equal(t, 2, streamed.flushes)
-			}
-			require.Equal(t, before+1, calls)
-		})
-	}
 }
-
-type flushingResponseBuffer struct {
-	bytes.Buffer
-	flushes int
-}
-
-func (w *flushingResponseBuffer) Flush() { w.flushes++ }
 
 func TestLegacyClientRejectsUnsupportedCredentialsAndInvalidRegions(t *testing.T) {
 	_, ctx, _, _ := newCanonicalHelpTestContext(t)

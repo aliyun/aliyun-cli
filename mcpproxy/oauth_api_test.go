@@ -34,7 +34,7 @@ func oauthSDKSubprocess(t *testing.T) bool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	args := []string{"-test.run=^" + regexp.QuoteMeta(t.Name()) + "$"}
+	args := []string{"-test.run=^" + regexp.QuoteMeta(t.Name()) + "$", "-test.v", "-test.timeout=30s"}
 	if dir := flag.Lookup("test.gocoverdir"); dir != nil && dir.Value.String() != "" {
 		args = append(args, "-test.gocoverdir="+dir.Value.String())
 	}
