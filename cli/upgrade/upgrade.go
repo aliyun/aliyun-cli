@@ -26,6 +26,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -65,12 +66,6 @@ var (
 	publisherKeys = publishsig.TrustedPublicKeys()
 )
 
-type upgradeSource struct {
-	latestVersion string
-	downloadURL   string
-	assetName     string
-}
-
 func NewUpgradeCommand() *cli.Command {
 	cmd := &cli.Command{
 		Name: "upgrade",
@@ -80,10 +75,12 @@ func NewUpgradeCommand() *cli.Command {
 		Long: i18n.T(
 			"Upgrade Alibaba Cloud CLI to the latest release.\n"+
 				"If installed via Homebrew, delegates to 'brew upgrade'.\n"+
-				"Otherwise downloads from Alibaba Cloud OSS mirror.",
+				"Otherwise downloads from Alibaba Cloud OSS mirror.\n"+
+				"Only a release newer than this CLI is installed, and only after its publisher signature verifies.",
 			"升级阿里云CLI到最新版本。\n"+
 				"如果通过Homebrew安装，自动调用brew upgrade升级。\n"+
-				"否则从阿里云OSS镜像源下载。"),
+				"否则从阿里云OSS镜像源下载。\n"+
+				"只会安装比当前更新、且发行方签名校验通过的版本。"),
 		Usage: "upgrade [--yes]",
 		Run: func(ctx *cli.Context, args []string) error {
 			return doUpgrade(ctx)
@@ -146,29 +143,71 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 	w := ctx.Stdout()
 
 	cli.Printf(w, "Checking for latest version...\n")
-	source, err := resolveUpgradeSource()
+	pointer, err := fetchVersionFromOSS()
 	if err != nil {
 		return fmt.Errorf("failed to check for updates: %s", err)
 	}
-	cli.Printf(w, "Latest version:  %s\n\n", source.latestVersion)
-
-	if !isNewer(currentVersion, source.latestVersion) {
+	listed, listErr := fetchVersionList()
+	if listErr != nil {
+		cli.Printf(w, "Version history is unavailable (%s); checking the latest release only.\n", listErr)
+		listed = nil
+	}
+	candidates := selectUpgradeVersions(currentVersion, pointer, listed)
+	if len(candidates) == 0 {
 		cli.PrintfWithColor(w, cli.Green, "You are already using the latest version.\n")
 		return nil
 	}
+	latest := candidates[0]
+	cli.Printf(w, "Latest version:  %s\n\n", latest)
 
-	if !confirmUpgrade(ctx, currentVersion, source.latestVersion) {
+	if !confirmUpgrade(ctx, currentVersion, latest) {
 		cli.Printf(w, "Upgrade cancelled.\n")
 		return nil
 	}
 
-	cli.Printf(w, "Downloading %s...\n  From: %s\n", source.assetName, source.downloadURL)
-	extractedBinary, cleanup, err := downloadAndExtract(w, source.downloadURL, source.assetName)
+	var (
+		installed string
+		extracted string
+		cleanup   func()
+		lastErr   error
+	)
+	for _, version := range candidates {
+		assetName, err := buildAssetName(version)
+		if err != nil {
+			return err
+		}
+		downloadURL := ossBaseURL + "/" + assetName
+		cli.Printf(w, "Downloading %s...\n  From: %s\n", assetName, downloadURL)
+		binaryPath, clean, err := downloadAndExtract(w, downloadURL, assetName)
+		if err != nil {
+			lastErr = err
+			if len(candidates) > 1 {
+				cli.Printf(w, "Skipped %s: %s\n", version, err)
+			}
+			continue
+		}
+		if !isNewer(currentVersion, version) {
+			if clean != nil {
+				clean()
+			}
+			return fmt.Errorf("refusing to install %s because it is not newer than %s", version, currentVersion)
+		}
+		installed = version
+		extracted = binaryPath
+		cleanup = clean
+		break
+	}
+	if installed == "" {
+		if len(candidates) == 1 && lastErr != nil {
+			return lastErr
+		}
+		if lastErr == nil {
+			return fmt.Errorf("no newer release passed publisher signature verification")
+		}
+		return fmt.Errorf("no newer release passed publisher signature verification: %s", lastErr)
+	}
 	if cleanup != nil {
 		defer cleanup()
-	}
-	if err != nil {
-		return err
 	}
 
 	execPath, err := resolveExecPathFunc()
@@ -176,12 +215,15 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 		return err
 	}
 	cli.Printf(w, "Installing new version to %s ...\n", execPath)
-	if err := replaceBinary(extractedBinary, execPath); err != nil {
+	if err := replaceBinary(extracted, execPath); err != nil {
 		return fmt.Errorf("installation failed: %s\nYou may need to run with elevated privileges (sudo)", err)
 	}
 
 	cli.PrintfWithColor(w, cli.Green,
-		"\nSuccessfully upgraded Alibaba Cloud CLI from %s to %s!\n", currentVersion, source.latestVersion)
+		"\nSuccessfully upgraded Alibaba Cloud CLI from %s to %s!\n", currentVersion, installed)
+	if installed != latest {
+		cli.Printf(w, "%s did not pass publisher signature verification. Run `aliyun upgrade` again to continue.\n", latest)
+	}
 	return nil
 }
 
@@ -254,24 +296,6 @@ func resolveExecPath() (string, error) {
 	return execPath, nil
 }
 
-func resolveUpgradeSource() (*upgradeSource, error) {
-	version, err := fetchVersionFromOSS()
-	if err != nil {
-		return nil, err
-	}
-
-	assetName, err := buildAssetName(version)
-	if err != nil {
-		return nil, err
-	}
-
-	return &upgradeSource{
-		latestVersion: version,
-		downloadURL:   ossBaseURL + "/" + assetName,
-		assetName:     assetName,
-	}, nil
-}
-
 func fetchVersionFromOSS() (string, error) {
 	resp, err := httpClient.Get(ossVersionURL)
 	if err != nil {
@@ -293,6 +317,124 @@ func fetchVersionFromOSS() (string, error) {
 		return "", fmt.Errorf("empty version from OSS")
 	}
 	return version, nil
+}
+
+const maxVersionListBytes = 256 * 1024
+
+// fetchVersionList reads the stable history published beside /version.
+// A missing object is an empty history so upgrades still follow /version.
+func fetchVersionList() ([]string, error) {
+	resp, err := httpClient.Get(ossBaseURL + "/versions")
+	if err != nil {
+		return nil, fmt.Errorf("failed to reach OSS: %s", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("OSS versions file returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxVersionListBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	truncated := len(body) > maxVersionListBytes
+	if truncated {
+		body = body[:maxVersionListBytes]
+	}
+	return parseVersionList(body, truncated), nil
+}
+
+func parseVersionList(body []byte, truncated bool) []string {
+	text := string(body)
+	if truncated {
+		newline := strings.LastIndex(text, "\n")
+		if newline < 0 {
+			return nil
+		}
+		text = text[:newline]
+	}
+	var listed []string
+	for _, line := range strings.Split(text, "\n") {
+		if version, ok := canonicalUpgradeVersion(line); ok {
+			listed = append(listed, version)
+		}
+	}
+	return listed
+}
+
+// selectUpgradeVersions returns versions this CLI may install, newest first.
+// Every candidate is newer than current and no newer than the /version pointer.
+// An older signed release therefore cannot replace the binary.
+func selectUpgradeVersions(current, pointer string, listed []string) []string {
+	pointer = strings.TrimSpace(pointer)
+	if len(listed) == 0 {
+		if pointer != "" && isNewer(current, pointer) {
+			return []string{pointer}
+		}
+		return nil
+	}
+	ceiling, ok := canonicalUpgradeVersion(pointer)
+	if !ok {
+		if pointer != "" && isNewer(current, pointer) {
+			return []string{pointer}
+		}
+		return nil
+	}
+	if !semver.IsValid(ensureVPrefix(current)) {
+		if isNewer(current, pointer) {
+			return []string{pointer}
+		}
+		return nil
+	}
+	seen := make(map[string]bool)
+	var selected []string
+	for _, raw := range append(append([]string{}, listed...), pointer) {
+		version, ok := canonicalUpgradeVersion(raw)
+		if !ok || seen[version] {
+			continue
+		}
+		if semver.Compare("v"+version, "v"+ceiling) > 0 {
+			continue
+		}
+		if !isNewer(current, version) {
+			continue
+		}
+		seen[version] = true
+		selected = append(selected, version)
+	}
+	sort.Slice(selected, func(i, j int) bool {
+		return semver.Compare("v"+selected[i], "v"+selected[j]) > 0
+	})
+	return selected
+}
+
+func canonicalUpgradeVersion(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.ContainsAny(raw, " \t/\\") {
+		return "", false
+	}
+	if strings.HasPrefix(raw, "v") || strings.HasPrefix(raw, "V") {
+		raw = raw[1:]
+	}
+	if !semver.IsValid("v" + raw) {
+		return "", false
+	}
+	core := raw
+	if i := strings.IndexAny(core, "-+"); i >= 0 {
+		core = core[:i]
+	}
+	parts := strings.Split(core, ".")
+	if len(parts) != 3 {
+		return "", false
+	}
+	for _, part := range parts {
+		if part == "" {
+			return "", false
+		}
+	}
+	return raw, true
 }
 
 func buildAssetName(version string) (string, error) {

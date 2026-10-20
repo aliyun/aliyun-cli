@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,7 +21,8 @@ func TestUpgradeCommandPropagatesDownloadAndInstallationFailures(t *testing.T) {
 	t.Cleanup(func() {
 		httpClient, ossVersionURL, resolveExecPathFunc, detectInstallerFunc, stdin = oldClient, oldSource, oldResolve, oldDetect, oldInput
 	})
-	_, _, archive := createUpgradeArchiveInMemory(t, "99.0.0", []byte("replacement"))
+	assetName, _, archive := createUpgradeArchiveInMemory(t, "99.0.0", []byte("replacement"))
+	priv := useTestPublisher(t)
 	cause := errors.New("executable disappeared")
 	for _, stage := range []string{"download", "resolve", "replace"} {
 		t.Run(stage, func(t *testing.T) {
@@ -30,9 +32,18 @@ func TestUpgradeCommandPropagatesDownloadAndInstallationFailures(t *testing.T) {
 			httpClient = &http.Client{Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 				body := archive.Bytes()
 				status := 200
-				if req.URL.Path == "/version" {
+				switch {
+				case req.URL.Path == "/version":
 					body = []byte("99.0.0")
-				} else if stage == "download" {
+				case req.URL.Path == "/versions":
+					status = http.StatusNotFound
+				case strings.HasSuffix(req.URL.Path, ".minisig"):
+					doc, err := publishsig.Sign(priv, assetName, bytes.NewReader(archive.Bytes()))
+					if err != nil {
+						return nil, err
+					}
+					body = doc
+				case stage == "download":
 					status = 503
 				}
 				return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(body))}, nil

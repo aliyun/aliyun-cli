@@ -342,6 +342,251 @@ func TestUpgradeViaDirect_UserCancels(t *testing.T) {
 	assert.Contains(t, stdout.String(), "Upgrade cancelled")
 }
 
+func TestFetchVersionList(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/missing/versions"):
+			http.NotFound(w, r)
+		case strings.HasSuffix(r.URL.Path, "/bad/versions"):
+			w.WriteHeader(http.StatusBadGateway)
+		default:
+			w.Write([]byte("3.5.1\n3.5.2\n"))
+		}
+	}))
+	defer server.Close()
+	origClient, origBase := httpClient, ossBaseURL
+	defer func() {
+		httpClient, ossBaseURL = origClient, origBase
+	}()
+	httpClient = server.Client()
+
+	ossBaseURL = server.URL
+	listed, err := fetchVersionList()
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"3.5.1", "3.5.2"}, listed)
+
+	ossBaseURL = server.URL + "/missing"
+	listed, err = fetchVersionList()
+	assert.NoError(t, err)
+	assert.Nil(t, listed)
+
+	ossBaseURL = server.URL + "/bad"
+	_, err = fetchVersionList()
+	assert.ErrorContains(t, err, "status 502")
+}
+
+func TestUpgradeViaDirect_HistoryUnavailableFallsBackToPointer(t *testing.T) {
+	assetName, binaryName, archive := createUpgradeArchiveInMemory(t, "4.0.0", []byte("from-pointer"))
+	priv := useTestPublisher(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/versions", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	})
+	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("4.0.0\n"))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		body := archive.Bytes()
+		if strings.HasSuffix(r.URL.Path, ".minisig") {
+			doc, err := publishsig.Sign(priv, assetName, bytes.NewReader(body))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			body = doc
+		}
+		w.Write(body)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	origClient, origBase, origVer, origStdin, origResolve := httpClient, ossBaseURL, ossVersionURL, stdin, resolveExecPathFunc
+	defer func() {
+		httpClient, ossBaseURL, ossVersionURL, stdin, resolveExecPathFunc = origClient, origBase, origVer, origStdin, origResolve
+	}()
+	httpClient = server.Client()
+	ossBaseURL = server.URL
+	ossVersionURL = server.URL + "/version"
+	stdin = strings.NewReader("y\n")
+	target := filepath.Join(t.TempDir(), binaryName)
+	os.WriteFile(target, []byte("old"), 0755)
+	resolveExecPathFunc = func() (string, error) { return target, nil }
+
+	var stdout bytes.Buffer
+	ctx := cli.NewCommandContext(&stdout, &bytes.Buffer{})
+	ctx.EnterCommand(NewUpgradeCommand())
+	err := upgradeViaDirect(ctx, "3.0.0")
+	assert.NoError(t, err)
+	assert.Contains(t, stdout.String(), "Version history is unavailable")
+	got, err := os.ReadFile(target)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("from-pointer"), got)
+}
+
+func TestUpgradeViaDirect_RejectsEveryCandidate(t *testing.T) {
+	_, _, archive := createUpgradeArchiveInMemory(t, "3.2.0", []byte("nope"))
+	mux := http.NewServeMux()
+	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("3.2.0\n"))
+	})
+	mux.HandleFunc("/versions", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("3.1.0\n3.2.0\n"))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		body := archive.Bytes()
+		if strings.HasSuffix(r.URL.Path, ".minisig") {
+			body = []byte("not-a-signature")
+		}
+		w.Write(body)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	origClient, origBase, origVer, origStdin := httpClient, ossBaseURL, ossVersionURL, stdin
+	defer func() {
+		httpClient, ossBaseURL, ossVersionURL, stdin = origClient, origBase, origVer, origStdin
+	}()
+	httpClient = server.Client()
+	ossBaseURL = server.URL
+	ossVersionURL = server.URL + "/version"
+	stdin = strings.NewReader("y\n")
+
+	var stdout bytes.Buffer
+	ctx := cli.NewCommandContext(&stdout, &bytes.Buffer{})
+	ctx.EnterCommand(NewUpgradeCommand())
+	err := upgradeViaDirect(ctx, "3.0.0")
+	assert.ErrorContains(t, err, "no newer release passed publisher signature verification")
+	assert.Contains(t, stdout.String(), "Skipped 3.2.0")
+	assert.Contains(t, stdout.String(), "Skipped 3.1.0")
+}
+
+func TestSelectUpgradeVersions(t *testing.T) {
+	listed := []string{"1.0.0", "3.1.0", "3.2.0", "9.9.9", "not-a-version", "3.2.0"}
+	got := selectUpgradeVersions("3.0.0", "3.2.0", listed)
+	assert.Equal(t, []string{"3.2.0", "3.1.0"}, got)
+
+	assert.Nil(t, selectUpgradeVersions("3.2.0", "3.1.0", []string{"1.0.0", "3.1.0", "9.9.9"}))
+	assert.Equal(t, []string{"3.2.0"}, selectUpgradeVersions("3.0.0", "3.2.0", nil))
+	assert.Nil(t, selectUpgradeVersions("3.2.0", "3.2.0", nil))
+	assert.Equal(t, []string{"latest"}, selectUpgradeVersions("3.0.0", "latest", []string{"3.4.0"}))
+	assert.Equal(t, []string{"3.4.0"}, selectUpgradeVersions("dev", "3.4.0", []string{"9.9.9", "3.4.0"}))
+	_, ok := canonicalUpgradeVersion("3.5")
+	assert.False(t, ok)
+	_, ok = canonicalUpgradeVersion("3.5.1/evil")
+	assert.False(t, ok)
+
+	body := []byte("3.0.0\n# note\nv3.1.0\n\n3.1\n")
+	assert.Equal(t, []string{"3.0.0", "3.1.0"}, parseVersionList(body, false))
+	truncated := []byte("3.0.0\n3.1.0\n3.2.0-partial")
+	assert.Equal(t, []string{"3.0.0", "3.1.0"}, parseVersionList(truncated, true))
+}
+
+func TestUpgradeViaDirect_InstallsNewestVerifiedAndSkipsOlderSigned(t *testing.T) {
+	latestName, binaryName, latestArchive := createUpgradeArchiveInMemory(t, "3.2.0", []byte("latest-bytes"))
+	midName, _, midArchive := createUpgradeArchiveInMemory(t, "3.1.0", []byte("mid-bytes"))
+	oldName, _, oldArchive := createUpgradeArchiveInMemory(t, "1.0.0", []byte("old-bytes"))
+	priv := useTestPublisher(t)
+	_, other, err := ed25519.GenerateKey(nil)
+	assert.NoError(t, err)
+
+	seen := map[string]int{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("3.2.0\n"))
+	})
+	mux.HandleFunc("/versions", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("1.0.0\n3.1.0\n3.2.0\n# keep\n"))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		seen[r.URL.Path]++
+		var body []byte
+		var signWith ed25519.PrivateKey
+		var asset string
+		switch {
+		case strings.Contains(r.URL.Path, latestName):
+			body, signWith, asset = latestArchive.Bytes(), other, latestName
+		case strings.Contains(r.URL.Path, midName):
+			body, signWith, asset = midArchive.Bytes(), priv, midName
+		case strings.Contains(r.URL.Path, oldName):
+			body, signWith, asset = oldArchive.Bytes(), priv, oldName
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, ".minisig") {
+			doc, err := publishsig.Sign(signWith, asset, bytes.NewReader(body))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			body = doc
+		}
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
+		w.Write(body)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	origClient, origBase, origVer, origStdin, origResolve := httpClient, ossBaseURL, ossVersionURL, stdin, resolveExecPathFunc
+	defer func() {
+		httpClient, ossBaseURL, ossVersionURL, stdin, resolveExecPathFunc = origClient, origBase, origVer, origStdin, origResolve
+	}()
+	httpClient = server.Client()
+	ossBaseURL = server.URL
+	ossVersionURL = server.URL + "/version"
+	stdin = strings.NewReader("y\n")
+	target := filepath.Join(t.TempDir(), binaryName)
+	os.WriteFile(target, []byte("current"), 0755)
+	resolveExecPathFunc = func() (string, error) { return target, nil }
+
+	var stdout bytes.Buffer
+	ctx := cli.NewCommandContext(&stdout, &bytes.Buffer{})
+	ctx.EnterCommand(NewUpgradeCommand())
+	err = upgradeViaDirect(ctx, "3.0.0")
+	assert.NoError(t, err)
+	got, err := os.ReadFile(target)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("mid-bytes"), got)
+	assert.Contains(t, stdout.String(), "Run `aliyun upgrade` again")
+	assert.Zero(t, seen["/"+oldName], "older than the installed candidate must not be downloaded")
+	assert.Zero(t, seen["/"+oldName+".minisig"])
+}
+
+func TestUpgradeViaDirect_DoesNotInstallOlderSignedRelease(t *testing.T) {
+	var requested []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requested = append(requested, r.URL.Path)
+		switch r.URL.Path {
+		case "/version":
+			w.Write([]byte("3.1.0\n"))
+		case "/versions":
+			w.Write([]byte("1.0.0\n3.1.0\n9.9.9\n"))
+		default:
+			t.Errorf("unexpected download %s", r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	origClient, origBase, origVer := httpClient, ossBaseURL, ossVersionURL
+	defer func() {
+		httpClient, ossBaseURL, ossVersionURL = origClient, origBase, origVer
+	}()
+	httpClient = server.Client()
+	ossBaseURL = server.URL
+	ossVersionURL = server.URL + "/version"
+
+	var stdout bytes.Buffer
+	ctx := cli.NewCommandContext(&stdout, &bytes.Buffer{})
+	ctx.EnterCommand(NewUpgradeCommand())
+	err := upgradeViaDirect(ctx, "3.2.0")
+	assert.NoError(t, err)
+	assert.Contains(t, stdout.String(), "already using the latest version")
+	for _, path := range requested {
+		assert.NotContains(t, path, "aliyun-cli-")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // confirmUpgrade
 // ---------------------------------------------------------------------------

@@ -125,6 +125,35 @@ else
   fi
 
   if [[ "${write_stable_version}" == "1" ]]; then
+    # /version stays one version plus a newline. History is a separate object
+    # so already-released CLIs keep reading a single version token.
+    versions_file="out/versions"
+    versions_err=$(mktemp)
+    rm -f "${versions_file}"
+    set +e
+    ${ALIYUN} oss cp oss://aliyun-cli/versions "${versions_file}" \
+      --access-key-id "${ACCESS_KEY_ID}" \
+      --access-key-secret "${ACCESS_KEY_SECRET}" \
+      --region cn-hangzhou >"${versions_err}" 2>&1
+    versions_status=$?
+    set -e
+    if [[ ${versions_status} -ne 0 ]]; then
+      if grep -Eq 'NoSuchKey|No such object|does not exist|404' "${versions_err}"; then
+        : > "${versions_file}"
+      else
+        echo "refuse release: cannot read oss://aliyun-cli/versions" >&2
+        cat "${versions_err}" >&2
+        rm -f "${versions_err}"
+        exit 1
+      fi
+    fi
+    rm -f "${versions_err}"
+    go run ./tools/releasever/cmd/releasever append-version -- "${VERSION}" "${versions_file}" > out/versions.next
+    mv out/versions.next "${versions_file}"
+    ${ALIYUN} oss cp "${versions_file}" oss://aliyun-cli --force \
+      --access-key-id "${ACCESS_KEY_ID}" \
+      --access-key-secret "${ACCESS_KEY_SECRET}" \
+      --region cn-hangzhou
     echo "${VERSION}" > out/version
     ${ALIYUN} oss cp out/version $FLAGS
   fi

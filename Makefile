@@ -51,6 +51,8 @@ build_linux_arm64: meta-pack
 	tar zcvf out/aliyun-cli-linux-${VERSION}-arm64.tgz -C out aliyun
 	aliyun oss cp out/aliyun-cli-linux-${VERSION}-arm64.tgz oss://aliyun-cli --force --profile oss
 
+# Legacy manual publish. Stable history is appended by tools/finish_release.sh.
+# This target still writes only the single-version pointer.
 gen_version:
 	-rm out/version
 	echo ${VERSION} >> out/version
