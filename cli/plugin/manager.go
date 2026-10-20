@@ -65,6 +65,10 @@ type Manager struct {
 	saveLocalManifestHook func(*LocalManifest) error
 	// archiveLimits overrides package resource boundaries in tests.
 	archiveLimits *pluginArchiveLimits
+	// expectedPackageChecksum is the caller-supplied SHA-256 for --package installs.
+	expectedPackageChecksum string
+	// httpTransport overrides the HTTP transport in tests (for example httptest TLS).
+	httpTransport http.RoundTripper
 }
 
 func getHomePath() string {
@@ -120,9 +124,12 @@ func (m *Manager) ApplySourceBaseOverride(raw string) error {
 	if v == "" {
 		return fmt.Errorf("source-base must not be empty")
 	}
-	lower := strings.ToLower(v)
-	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
-		return fmt.Errorf("source-base must start with http:// or https://")
+	u, err := url.Parse(v)
+	if err != nil || u == nil || u.Host == "" {
+		return fmt.Errorf("source-base must use https://")
+	}
+	if err := m.validatePluginTransportURL(v); err != nil {
+		return fmt.Errorf("source-base: %w", err)
 	}
 	m.sourceBase = strings.TrimRight(v, "/")
 	m.skipPluginIndexCacheForCLI = true
@@ -171,18 +178,51 @@ func (m *Manager) writeCache(cacheFile string, data []byte) {
 	_ = os.WriteFile(cacheFile, data, 0644)
 }
 
-func httpGet(url string, timeout time.Duration) (*http.Response, error) {
-	client := &http.Client{Timeout: timeout}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+func httpGet(rawURL string, timeout time.Duration) (*http.Response, error) {
+	return (&Manager{}).httpGet(rawURL, timeout)
+}
+
+func (m *Manager) httpGet(rawURL string, timeout time.Duration) (*http.Response, error) {
+	if m == nil {
+		m = &Manager{}
+	}
+	if err := m.acceptPluginTransport(rawURL); err != nil {
+		return nil, err
+	}
+	client := &http.Client{
+		Timeout:       timeout,
+		Transport:     m.httpTransport,
+		CheckRedirect: m.checkPluginRedirect,
+	}
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept-Encoding", "identity")
-	return client.Do(req)
+	resp, err := client.Do(req)
+	if err != nil {
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (m *Manager) downloadPluginArchive(rawURL, dest string, limit int64) error {
+	resp, err := m.httpGet(rawURL, pluginArchiveDLTimeout)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed: %d", resp.StatusCode)
+	}
+	return writePluginArchiveResponse(resp, dest, limit)
 }
 
 func (m *Manager) fetchRemote(url string) ([]byte, error) {
-	resp, err := httpGet(url, fetchTimeout)
+	resp, err := m.httpGet(url, fetchTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -626,7 +666,7 @@ func (m *Manager) downloadAndVerifyPlugin(ctx *cli.Context, platInfo *PlatformIn
 	}
 
 	archivePath := filepath.Join(tmpDir, "plugin.archive")
-	if err := downloadFileWithLimit(platInfo.URL, archivePath, m.effectiveArchiveLimits().archiveBytes); err != nil {
+	if err := m.downloadPluginArchive(platInfo.URL, archivePath, m.effectiveArchiveLimits().archiveBytes); err != nil {
 		os.RemoveAll(tmpDir)
 		return "", err
 	}
@@ -888,7 +928,7 @@ func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL string) e
 		return fmt.Errorf("invalid package URL: %w", err)
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("package URL must use http or https")
+		return fmt.Errorf("package URL must use https")
 	}
 	if !isPluginArchivePath(u.Path) {
 		return fmt.Errorf("package URL path must end with .zip, .tar.gz, or .tgz")
@@ -897,7 +937,7 @@ func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL string) e
 	displayURL := safePluginPackageURL(u)
 	cli.Printf(ctx.Stdout(), "Downloading plugin package from %s...\n", displayURL)
 
-	resp, err := httpGet(rawURL, pluginArchiveDLTimeout)
+	resp, err := m.httpGet(rawURL, pluginArchiveDLTimeout)
 	if err != nil {
 		return safePluginDownloadError(err, displayURL)
 	}
@@ -927,6 +967,14 @@ func (m *Manager) installFromRemotePackageURL(ctx *cli.Context, rawURL string) e
 func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, userFacing string) error {
 	if !isPluginArchivePath(absPath) {
 		return fmt.Errorf("unsupported package format (use .zip, .tar.gz, or .tgz): %s", absPath)
+	}
+
+	verified := false
+	if strings.TrimSpace(m.expectedPackageChecksum) != "" {
+		if err := verifySHA256File(absPath, m.expectedPackageChecksum); err != nil {
+			return err
+		}
+		verified = true
 	}
 
 	cli.Printf(ctx.Stdout(), "Installing plugin from %s...\n", userFacing)
@@ -962,7 +1010,7 @@ func (m *Manager) installFromPackageFile(ctx *cli.Context, absPath, userFacing s
 	}
 	promotion.commit()
 
-	cli.Printf(ctx.Stdout(), "Plugin %s %s installed successfully!\n", pManifest.Name, pManifest.Version)
+	reportPackageInstall(ctx, pManifest.Name, pManifest.Version, verified)
 	return nil
 }
 
@@ -1105,7 +1153,7 @@ func (m *Manager) installPlugin(ctx *cli.Context, targetPlugin *PluginInfo, vers
 	}
 	promotion.commit()
 
-	cli.Printf(ctx.Stdout(), "Plugin %s %s installed successfully!\n", actualPluginName, version)
+	reportPackageInstall(ctx, actualPluginName, version, true)
 	return nil
 }
 

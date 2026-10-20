@@ -63,6 +63,7 @@ type AgentErrorEnvelope struct {
 type AgentError struct {
 	envelope AgentErrorEnvelope
 	cause    error
+	exitCode int
 }
 
 // NewAgentError returns nil when the required compact-envelope fields are
@@ -86,6 +87,13 @@ func (e *AgentError) WithSchemaVersion() *AgentError {
 	return &copy
 }
 
+// WithExitCode preserves the original command's status when adding JSON output.
+func (e *AgentError) WithExitCode(code int) *AgentError {
+	copy := *e
+	copy.exitCode = code
+	return &copy
+}
+
 func (e *AgentError) Error() string {
 	if e.envelope.Message != "" {
 		return e.envelope.Message
@@ -106,9 +114,13 @@ func (e *AgentError) Envelope() AgentErrorEnvelope {
 	return envelope
 }
 
-// Supported agent-local errors are usage errors and retain the conventional
-// command-line usage exit status.
-func (e *AgentError) ExitCode() int { return 2 }
+// Agent errors default to the conventional command-line usage exit status.
+func (e *AgentError) ExitCode() int {
+	if e.exitCode != 0 {
+		return e.exitCode
+	}
+	return 2
+}
 
 // AIRecoveryEligible is a structural marker implemented only by explicit CLI
 // local error types. It intentionally has no text-based fallback.

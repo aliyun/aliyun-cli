@@ -899,7 +899,7 @@ func (lc *ListCommand) listMultipartUploads(bucket *oss.Bucket, cloudURL CloudUR
 			return multipartNum, err
 		}
 		pre = oss.Prefix(lmr.Prefix)
-		keyMarker = oss.Marker(lmr.NextKeyMarker)
+		keyMarker = oss.KeyMarker(lmr.NextKeyMarker)
 		uploadIdMarker = oss.UploadIDMarker(lmr.NextUploadIDMarker)
 		multipartNum += lc.displayMultipartUploadsResult(lmr, cloudURL.bucket, shortFormat, directory, i, limitedNum)
 		if !lmr.IsTruncated {

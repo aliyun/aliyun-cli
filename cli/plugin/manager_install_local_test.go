@@ -251,6 +251,8 @@ func TestManager_InstallFromPackage_RemoteURL(t *testing.T) {
 	assert.Contains(t, out, "Downloading plugin package from")
 	assert.Contains(t, out, "Installing plugin from")
 	assert.Contains(t, out, srv.URL+"/pkgs/remote-url-plugin/7.8.9/plugin.tgz")
+	assert.Contains(t, out, "package integrity was not checked")
+	assert.NotContains(t, out, "SHA-256 checksum verified")
 	assert.NotContains(t, out, "log-user")
 	assert.NotContains(t, out, "log-password")
 	assert.NotContains(t, out, "query-secret")
@@ -272,7 +274,7 @@ func TestManager_installFromRemotePackageURL_invalidSchemeAndPath(t *testing.T) 
 
 	err := mgr.installFromRemotePackageURL(ctx, "ftp://example.com/pkg.tgz")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "package URL must use http or https")
+	assert.Contains(t, err.Error(), "package URL must use https")
 
 	err = mgr.installFromRemotePackageURL(ctx, "https://example.com/not-an-archive")
 	require.Error(t, err)

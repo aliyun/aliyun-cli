@@ -358,7 +358,7 @@ func parseAndRunCommandFromCli(ctx *cli.Context, args []string, command *Command
 	}
 	machine.phase = "validation"
 	forwarded := stripCliOnlyFlagsFromArgs(args)
-	_, parsed, err := parseOSSOptions(forwarded)
+	_, parsed, err := parseOSSOptions(forwarded, ctx.Command().Name)
 	if err != nil {
 		return err
 	}
@@ -612,7 +612,7 @@ func parseBridgeFlags(ctx *cli.Context, args []string) ([]string, bool, error) {
 			flag = ctx.Flags().GetByShorthand(rune(key[1]))
 		}
 		if flag == nil {
-			return nil, false, fmt.Errorf("unknown OSS option %s", key)
+			return nil, false, ossUnknownOptionError(key, ctx.Command().Name)
 		}
 		if flag.AssignedMode == cli.AssignedNone {
 			if inline {

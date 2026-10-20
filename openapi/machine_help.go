@@ -515,7 +515,7 @@ func (s *machineHelpService) buildProductForStyle(code, requestedVersion, style 
 		Kind:           "product",
 		Target:         machineHelpTarget{Path: []string{"aliyun", code}, RequestedStyle: style},
 		Product:        productDoc,
-		Endpoints:      productHelpEndpoints(*product),
+		Endpoints:      productHelpEndpoints(*product, index),
 		useVPCEndpoint: len(endpointType) > 0 && endpointType[0] == "vpc",
 		APIs:           apis,
 	}, nil

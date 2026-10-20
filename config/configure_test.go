@@ -1336,154 +1336,27 @@ func TestNewConfigureCommandRun(t *testing.T) {
 	}
 }
 
-func TestDetectPortUse(t *testing.T) {
-	// Test case 1: 正常情况 - 应该能找到可用端口
-	t.Run("normal case - find available port", func(t *testing.T) {
-		// 使用一个较大的端口范围来确保能找到可用端口
-		port, err := detectPortUse(15000, 15010)
-		assert.NoError(t, err)
-		assert.True(t, port >= 15000 && port <= 15010, "返回的端口应该在指定范围内")
-		assert.Greater(t, port, 0, "端口号应该大于0")
-	})
-
-	// Test case 2: 单个端口范围
-	t.Run("single port range", func(t *testing.T) {
-		// 使用单个端口进行测试
-		port, err := detectPortUse(15020, 15020)
-		if err != nil {
-			// 如果端口被占用，这是正常的
-			assert.Contains(t, err.Error(), "no available port found")
-		} else {
-			assert.Equal(t, 15020, port)
-		}
-	})
-
-	// Test case 3: 无效范围 - start > end
-	t.Run("invalid range - start greater than end", func(t *testing.T) {
-		port, err := detectPortUse(15030, 15025)
-		assert.Error(t, err)
-		assert.Equal(t, 0, port)
-		assert.Contains(t, err.Error(), "no available port found in range 15030-15025")
-	})
-
-	// Test case 4: 占用端口后测试
-	t.Run("port already in use", func(t *testing.T) {
-		// 先占用一个端口
-		testPort := 15040
-		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", testPort))
-		if err != nil {
-			// 如果端口已被占用，跳过此测试
-			t.Skipf("Port %d already in use, skipping test", testPort)
+func TestListenOAuthCallback(t *testing.T) {
+	t.Run("listener remains reserved", func(t *testing.T) {
+		listener, err := listenOAuthCallback(15000, 15010)
+		if !assert.NoError(t, err) {
 			return
 		}
-		defer ln.Close()
-
-		// 现在测试在只包含被占用端口的范围内查找
-		port, err := detectPortUse(testPort, testPort)
-		assert.Error(t, err)
-		assert.Equal(t, 0, port)
-		assert.Contains(t, err.Error(), fmt.Sprintf("no available port found in range %d-%d", testPort, testPort))
-	})
-
-	// Test case 5: 边界值测试
-	t.Run("boundary values", func(t *testing.T) {
-		// 测试端口号1（通常需要root权限）
-		port, err := detectPortUse(1, 1)
-		if err != nil {
-			// 预期的错误，因为通常需要特殊权限
-			assert.Contains(t, err.Error(), "no available port found")
-		}
-		assert.True(t, port == 0 || port == 1)
-
-		// 测试一个较大的端口号
-		port, err = detectPortUse(65534, 65534)
-		if err != nil {
-			assert.Contains(t, err.Error(), "no available port found")
-		}
-		assert.True(t, port == 0 || port == 65534)
-	})
-
-	// Test case 6: 中等范围测试
-	t.Run("medium range", func(t *testing.T) {
-		// 测试一个中等大小的范围
-		port, err := detectPortUse(15050, 15060)
-		assert.NoError(t, err)
-		assert.True(t, port >= 15050 && port <= 15060)
-	})
-
-	// Test case 7: 端口范围内部分端口被占用
-	t.Run("some ports in range are occupied", func(t *testing.T) {
-		startPort := 15070
-		endPort := 15075
-
-		// 占用范围内的前几个端口
-		var listeners []net.Listener
-		for i := 0; i < 3; i++ {
-			ln, err := net.Listen("tcp", fmt.Sprintf(":%d", startPort+i))
-			if err == nil {
-				listeners = append(listeners, ln)
-			}
-		}
-
-		// 确保在测试结束后关闭所有监听器
-		defer func() {
-			for _, ln := range listeners {
-				ln.Close()
-			}
-		}()
-
-		// 应该能找到一个可用的端口（范围内未被占用的端口）
-		port, err := detectPortUse(startPort, endPort)
-		if err != nil {
-			// 如果所有端口都被占用，这也是可能的
-			assert.Contains(t, err.Error(), "no available port found")
-		} else {
-			assert.True(t, port >= startPort && port <= endPort)
-			// 验证返回的端口确实可用
-			testLn, testErr := net.Listen("tcp", fmt.Sprintf(":%d", port))
-			assert.NoError(t, testErr)
-			if testLn != nil {
-				testLn.Close()
-			}
+		defer listener.Close()
+		addr := listener.Addr().(*net.TCPAddr)
+		assert.Equal(t, "127.0.0.1", addr.IP.String())
+		assert.True(t, addr.Port >= 15000 && addr.Port <= 15010)
+		second, err := net.Listen("tcp4", listener.Addr().String())
+		assert.Error(t, err, "the chosen callback address must remain reserved")
+		if second != nil {
+			second.Close()
 		}
 	})
-
-	// Test case 8: 零值测试
-	t.Run("zero values", func(t *testing.T) {
-		port, err := detectPortUse(0, 0)
-		// 当请求端口0时，函数会尝试绑定端口0
-		// 如果成功，函数返回0（请求的端口号），但系统实际分配了一个随机端口
-		// 如果失败，则返回错误
-		if err != nil {
-			assert.Equal(t, 0, port)
-			assert.Contains(t, err.Error(), "no available port found in range 0-0")
-		} else {
-			// 函数成功绑定了端口0，返回请求的端口号0
-			assert.Equal(t, 0, port, "函数应该返回请求的端口号0")
-		}
-	})
-
-	// Test case 9: 负值测试
-	t.Run("negative values", func(t *testing.T) {
-		port, err := detectPortUse(-1, -1)
-		assert.Error(t, err)
-		assert.Equal(t, 0, port)
-		assert.Contains(t, err.Error(), "no available port found")
-	})
-
-	// Test case 10: 函数返回值验证
-	t.Run("return value validation", func(t *testing.T) {
-		port, err := detectPortUse(15080, 15090)
-		if err == nil {
-			// 如果成功找到端口，验证端口确实可用
-			ln, testErr := net.Listen("tcp", fmt.Sprintf(":%d", port))
-			assert.NoError(t, testErr, "返回的端口应该是可用的")
-			if ln != nil {
-				ln.Close()
-			}
-		} else {
-			// 如果没有找到可用端口，确保返回值为0
-			assert.Equal(t, 0, port, "当没有找到可用端口时，应该返回0")
-		}
-	})
+	for _, bounds := range [][2]int{{15030, 15025}, {-1, -1}} {
+		t.Run(fmt.Sprint(bounds), func(t *testing.T) {
+			listener, err := listenOAuthCallback(bounds[0], bounds[1])
+			assert.Error(t, err)
+			assert.Nil(t, listener)
+		})
+	}
 }

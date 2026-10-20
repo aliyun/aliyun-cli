@@ -308,3 +308,27 @@ func testPackBlobStart(pack []byte) int {
 	pathsSize := int(binary.LittleEndian.Uint32(pack[16:20]))
 	return packHeaderSize + dictionarySize + count*packEntrySize + pathsSize
 }
+
+func TestPackedMetadataOpenAndStatRejectMalformedBundle(t *testing.T) {
+	metadata := newPackedMetadataFS([]byte("invalid header"))
+	for _, name := range []string{"canonical", "missing.json"} {
+		if _, err := metadata.Open(name); err == nil {
+			t.Fatalf("Open(%q) accepted malformed metadata", name)
+		}
+	}
+	if _, err := metadata.Stat("canonical"); err == nil {
+		t.Fatal("Stat accepted malformed metadata")
+	}
+	if _, err := metadata.loadDecoder(); err == nil {
+		t.Fatal("decoder accepted malformed metadata")
+	}
+
+	metadata = newPackedMetadataFS(buildTestMetadataPack(t))
+	entries, err := metadata.ReadDir("canonical")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 || entries[0].Name() != "ecs" || entries[1].Name() != "vpc" {
+		t.Fatalf("product directories were not deduplicated: %v", entries)
+	}
+}
