@@ -18,6 +18,7 @@ func TestCredentialRefreshPropagatesConfigurationFailures(t *testing.T) {
 	})
 	cause := errors.New("configuration unavailable")
 	ctx := cli.NewCommandContext(io.Discard, io.Discard)
+	AddFlags(ctx.Flags())
 	for _, mode := range []AuthenticateMode{OAuth, CloudSSO} {
 		for _, stage := range []string{"load", "save", "persist matching profile"} {
 			t.Run(string(mode)+"/"+stage, func(t *testing.T) {
@@ -39,7 +40,8 @@ func TestCredentialRefreshPropagatesConfigurationFailures(t *testing.T) {
 					}
 				}
 				saves := 0
-				saveConfigurationFunc = func(conf *Configuration) error {
+				saveConfigurationFunc = func(saveCtx *cli.Context, conf *Configuration) error {
+					require.Same(t, ctx, saveCtx)
 					saves++
 					if stage == "save" {
 						return cause
