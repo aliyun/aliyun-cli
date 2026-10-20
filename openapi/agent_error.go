@@ -64,7 +64,8 @@ func normalizeAgentError(err error, args []string) error {
 	return normalizeAgentErrorWithSearch(err, args, nil)
 }
 
-func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySearchValidator) error {
+func normalizeAgentErrorWithSearch(err error, args []string, validate RecoverySearchValidator) (result error) {
+	defer func() { result = withImportanceSuggestions(err, args, result) }()
 	if err == nil {
 		return nil
 	}

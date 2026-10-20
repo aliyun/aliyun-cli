@@ -52,12 +52,13 @@ func (p *Product) HasVersion(v string) bool {
 // share a Version and ProductCode, which is why those fields are
 // pushed into APIIndex (the container) rather than repeated here.
 type APIIndexEntry struct {
-	APIName     string // PascalCase, matches API.Name and the file basename
-	CmdName     string
-	CmdFullName string
-	Title       Description
-	Description Description
-	Deprecated  bool
+	ImportanceScore *float64 `json:"-"`
+	APIName         string   // PascalCase, matches API.Name and the file basename
+	CmdName         string
+	CmdFullName     string
+	Title           Description
+	Description     Description
+	Deprecated      bool
 }
 
 // APIIndex groups the lightweight entries of one (product, version)

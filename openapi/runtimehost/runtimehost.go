@@ -370,6 +370,13 @@ func ProductCommands(product string) []string {
 	return Engine().ProductCommands(product)
 }
 
+func ProductCommandImportance(product string, args []string) map[string]float64 {
+	if product == "" {
+		return nil
+	}
+	return Engine().ProductCommandImportance(product, args)
+}
+
 // MetaPluginProvenance resolves product ownership through the engine loader.
 // A non-nil record whose Kind is not KindBaseline means an installed metadata
 // plugin (user or override layer) owns the product and its data must be

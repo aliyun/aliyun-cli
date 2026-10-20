@@ -143,6 +143,29 @@ func (e *Engine) ProductCommands(product string) []string {
 	return productCommands(ldr, product)
 }
 
+// ProductCommandImportance reads only the owning source and selected version.
+func (e *Engine) ProductCommandImportance(product string, args []string) map[string]float64 {
+	ldr, err := e.getLoader()
+	if err != nil || ldr.EnsureProduct(product) != nil {
+		return nil
+	}
+	version, err := ldr.ResolveVersion(product, scanAPIVersion(args))
+	if err != nil {
+		return nil
+	}
+	index, err := ldr.GetAPIIndex(product, version)
+	if err != nil || index == nil {
+		return nil
+	}
+	scores := map[string]float64{}
+	for _, entry := range index.Entries {
+		if value := meta.NewImportanceScore(entry.ImportanceScore); value != nil && entry.CmdName != "" {
+			scores[entry.CmdName] = *value.Value()
+		}
+	}
+	return scores
+}
+
 func productCommands(ldr loader.Loader, product string) []string {
 	productMeta := ldr.LookupProduct(product)
 	if productMeta == nil {

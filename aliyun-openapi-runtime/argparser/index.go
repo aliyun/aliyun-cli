@@ -84,8 +84,10 @@ func (pi *paramIndex) optionNames() []string {
 // name nor any schema parameter. It carries the known option names so
 // the CLI layer can render a "did you mean" hint.
 type UnknownFlagError struct {
-	Flag  string
-	Known []string
+	ImportanceScores map[string]float64
+	GlobalNames      map[string]bool
+	Flag             string
+	Known            []string
 }
 
 func (e *UnknownFlagError) Error() string {
@@ -93,3 +95,26 @@ func (e *UnknownFlagError) Error() string {
 }
 
 func (*UnknownFlagError) AIRecoveryEligible() {}
+
+func (pi *paramIndex) importanceScores(externalFlags *externalFlagIndex) (map[string]float64, map[string]bool) {
+	var scores map[string]float64
+	globals := map[string]bool{}
+	for name, parameter := range pi.byName {
+		_, _, _, _, reserved := reservedFlags.match("--" + name)
+		_, _, _, external := externalFlags.match("--" + name)
+		if reserved || external {
+			globals[name] = true
+			continue
+		}
+		if score := meta.NewImportanceScore(parameter.ImportanceScore); score != nil {
+			if scores == nil {
+				scores = map[string]float64{}
+			}
+			scores[name] = *score.Value()
+		}
+	}
+	if len(scores) == 0 {
+		return nil, nil
+	}
+	return scores, globals
+}

@@ -25,6 +25,7 @@ package meta
 // Only the fields relevant to the parameter's Type are populated;
 // consumers MUST tolerate zero values for the others.
 type Parameter struct {
+	ImportanceScore *float64 `json:"-"`
 	// Identity.
 	Name    string // snake_case CLI-facing key (e.g. "region_id")
 	RawName string // wire-side field name (e.g. "RegionId")
