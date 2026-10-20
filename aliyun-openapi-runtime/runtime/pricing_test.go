@@ -185,11 +185,22 @@ func TestEstimateCostSignsAndPostsQuote(t *testing.T) {
 		if !strings.HasPrefix(req.Header.Get("Authorization"), "acs test-ak:") {
 			t.Errorf("Authorization = %q", req.Header.Get("Authorization"))
 		}
+		payload, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(payload, &fields); err != nil {
+			t.Fatal(err)
+		}
+		if _, present := fields["responseVersion"]; present {
+			t.Error("quote requests must not select a response version")
+		}
 		var body priceRequest
-		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+		if err := json.Unmarshal(payload, &body); err != nil {
 			t.Errorf("decode request: %v", err)
 		}
-		if body.ResponseVersion != "2" || body.Language != "zh" || body.PopCode != "ecs" || body.PopVersion != "v1" || body.ApiName != "RunInstances" {
+		if body.Language != "zh" || body.PopCode != "ecs" || body.PopVersion != "v1" || body.ApiName != "RunInstances" {
 			t.Errorf("request body = %#v", body)
 		}
 		return &http.Response{

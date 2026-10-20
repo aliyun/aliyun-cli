@@ -59,12 +59,11 @@ func PriceModeEnabled(flag bool) bool {
 }
 
 type priceRequest struct {
-	ResponseVersion string                 `json:"responseVersion"`
-	Language        string                 `json:"language"`
-	PopCode         string                 `json:"popCode"`
-	PopVersion      string                 `json:"popVersion"`
-	ApiName         string                 `json:"apiName"`
-	Parameters      map[string]interface{} `json:"parameters"`
+	Language   string                 `json:"language"`
+	PopCode    string                 `json:"popCode"`
+	PopVersion string                 `json:"popVersion"`
+	ApiName    string                 `json:"apiName"`
+	Parameters map[string]interface{} `json:"parameters"`
 }
 
 // EstimateCost quotes the assembled call via CloudControl GetApiPrice
@@ -154,12 +153,11 @@ func buildPriceRequest(ec *ExecContext, req *AssembledRequest, pricingContext ma
 	}
 
 	return &priceRequest{
-		ResponseVersion: "2",
-		Language:        ec.Language,
-		PopCode:         popCode,
-		PopVersion:      req.Version,
-		ApiName:         req.Action,
-		Parameters:      out,
+		Language:   ec.Language,
+		PopCode:    popCode,
+		PopVersion: req.Version,
+		ApiName:    req.Action,
+		Parameters: out,
 	}
 }
 
@@ -200,7 +198,6 @@ func postPriceQuoteSigned(cred credentialsv2.Credential, endpoint string, pr *pr
 	accessKeySecret := tea.StringValue(credModel.AccessKeySecret)
 	securityToken := tea.StringValue(credModel.SecurityToken)
 
-	pr.ResponseVersion = "2"
 	if strings.TrimSpace(language) == "" {
 		language = "en"
 	}

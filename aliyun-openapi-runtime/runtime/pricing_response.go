@@ -32,8 +32,8 @@ func (e *PricingBusinessError) Error() string {
 func (*PricingBusinessError) ExitCode() int               { return 3 }
 func (*PricingBusinessError) RenderError(io.Writer) error { return nil }
 
-// PricingResponseError classifies the unfiltered server document. Version 2
-// uses top-level success. Legacy servers remain readable without synthesizing
+// PricingResponseError classifies the unfiltered server document. The unified
+// envelope uses top-level success. Legacy servers remain readable without synthesizing
 // a new response or losing their request IDs and messages.
 func PricingResponseError(raw string) error {
 	var fields map[string]json.RawMessage
@@ -45,7 +45,7 @@ func PricingResponseError(raw string) error {
 		_ = json.Unmarshal(fields[key], &value)
 		return value
 	}
-	if _, v2 := fields["code"]; v2 {
+	if _, unified := fields["code"]; unified {
 		var success *bool
 		if err := json.Unmarshal(fields["success"], &success); err != nil || success == nil ||
 			strings.TrimSpace(stringField("code")) == "" || strings.TrimSpace(stringField("requestId")) == "" {

@@ -47,12 +47,11 @@ const (
 )
 
 type estimateCostRequest struct {
-	ResponseVersion string                 `json:"responseVersion"`
-	Language        string                 `json:"language"`
-	PopCode         string                 `json:"popCode"`
-	PopVersion      string                 `json:"popVersion"`
-	ApiName         string                 `json:"apiName"`
-	Parameters      map[string]interface{} `json:"parameters"`
+	Language   string                 `json:"language"`
+	PopCode    string                 `json:"popCode"`
+	PopVersion string                 `json:"popVersion"`
+	ApiName    string                 `json:"apiName"`
+	Parameters map[string]interface{} `json:"parameters"`
 }
 
 // processEstimateCost handles --estimate-cost for both RPC and ROA(restful)
@@ -423,12 +422,11 @@ func invokeEstimateCost(ctx *cli.Context, profile *config.Profile, popCode strin
 		language = i18n.GetLanguage()
 	}
 	content, err := json.Marshal(estimateCostRequest{
-		ResponseVersion: "2",
-		Language:        language,
-		PopCode:         popCode,
-		PopVersion:      popVersion,
-		ApiName:         apiName,
-		Parameters:      parameters,
+		Language:   language,
+		PopCode:    popCode,
+		PopVersion: popVersion,
+		ApiName:    apiName,
+		Parameters: parameters,
 	})
 	if err != nil {
 		return "", err

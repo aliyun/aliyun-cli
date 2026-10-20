@@ -60,16 +60,16 @@ func TestEstimateCostServerEnvelopes(t *testing.T) {
 	}
 }
 
-func TestEstimateCostNegotiatesVersionAndServerLanguage(t *testing.T) {
+func TestEstimateCostUsesDefaultEnvelopeAndServerLanguage(t *testing.T) {
 	ctx, _, profile := quoteServer(t, 200, `{}`)
 	profile.Language = "zh"
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/api/v1/price/quote", r.URL.Path)
-		var request estimateCostRequest
+		var request map[string]interface{}
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
-		require.Equal(t, "2", request.ResponseVersion)
-		require.Equal(t, "zh", request.Language)
-		require.Equal(t, "p", request.Parameters["PlanId"])
+		require.NotContains(t, request, "responseVersion")
+		require.Equal(t, "zh", request["language"])
+		require.Equal(t, "p", request["parameters"].(map[string]interface{})["PlanId"])
 		_, _ = w.Write([]byte(`{"success":true,"code":"PricingNotRequired","message":"服务端文案","requestId":"r","price":null}`))
 	}))
 	defer server.Close()

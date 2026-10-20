@@ -61,7 +61,8 @@ func TestEstimateCostEnvelopeAndFilteredExitStatus(t *testing.T) {
 					if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
 						t.Fatal(err)
 					}
-					if payload["responseVersion"] != "2" || payload["language"] != "zh" || req.URL.Path != "/api/v1/price/quote" {
+					_, hasVersion := payload["responseVersion"]
+					if hasVersion || payload["language"] != "zh" || req.URL.Path != "/api/v1/price/quote" {
 						t.Fatalf("unexpected quote request: %v", payload)
 					}
 					return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(body)), Request: req}, nil
