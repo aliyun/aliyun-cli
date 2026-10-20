@@ -17,6 +17,8 @@ package mcpproxy
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/url"
 	"os"
 	"os/signal"
@@ -25,6 +27,7 @@ import (
 	"syscall"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/config"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 )
 
@@ -34,13 +37,13 @@ func NewMCPProxyCommand() *cli.Command {
 		Short: i18n.T("Start MCP server proxy", "启动 MCP 服务器代理"),
 		Long: i18n.T(
 			"Start a local proxy server for Aliyun API MCP Servers. "+
-				"The proxy handles OAuth authentication automatically, "+
+				"The proxy handles OAuth authentication automatically. Use --skip-mcp-oauth to authenticate with CLI credentials, "+
 				"allowing MCP clients to connect without managing credentials.",
 			"启动阿里云 API MCP Server 的本地代理服务。"+
-				"代理自动处理 OAuth 认证，"+
+				"代理默认自动处理 OAuth 认证，也可通过 --skip-mcp-oauth 使用 CLI 凭据认证，"+
 				"允许 MCP 客户端无需管理凭证即可连接。",
 		),
-		Usage:  "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME]",
+		Usage:  "mcp-proxy [--port PORT] [--host HOST] [--region-type REGION_TYPE] [--upstream-url URL] [--oauth-app-name NAME] [--skip-mcp-oauth]",
 		Sample: "aliyun utils mcp-proxy --region-type CN --port 8088",
 		Run: func(ctx *cli.Context, args []string) error {
 			return runMCPProxy(ctx)
@@ -71,6 +74,15 @@ func NewMCPProxyCommand() *cli.Command {
 		Short: i18n.T(
 			"Region type: CN or INTL",
 			"地域类型: CN 或 INTL",
+		),
+	})
+
+	cmd.Flags().Add(&cli.Flag{
+		Name:         "skip-mcp-oauth",
+		DefaultValue: "false",
+		Short: i18n.T(
+			"Skip MCP OAuth and authenticate with CLI credentials (true or false; default: false)",
+			"跳过 MCP OAuth，使用 CLI 凭据认证（true 或 false，默认 false）",
 		),
 	})
 
@@ -196,12 +208,78 @@ func runMCPProxy(ctx *cli.Context) error {
 		BlockedServers:  blockedServers,
 	}
 
-	mcpProfile, err := getOrCreateMCPProfile(ctx, proxyConfig)
+	if err := configureMCPAuthentication(ctx, &proxyConfig); err != nil {
+		return err
+	}
+	return startMCPProxy(ctx, proxyConfig)
+}
+
+type mcpAuthenticationError struct {
+	envelope cli.AgentErrorEnvelope
+}
+
+func (e *mcpAuthenticationError) Error() string { return e.envelope.Message }
+
+func (e *mcpAuthenticationError) RenderError(w io.Writer) error {
+	return json.NewEncoder(w).Encode(e.envelope)
+}
+
+// Authentication failures retain the command's existing exit status.
+func (e *mcpAuthenticationError) ExitCode() int { return 1 }
+
+func newMCPAuthenticationError(message, action, hint string) error {
+	return &mcpAuthenticationError{envelope: cli.AgentErrorEnvelope{
+		SchemaVersion: cli.AgentErrorSchemaVersion,
+		Message:       message,
+		Recovery: cli.AgentErrorRecovery{
+			Action: action,
+			Hint:   hint,
+		},
+	}}
+}
+
+func configureMCPAuthentication(ctx *cli.Context, proxyConfig *ProxyConfig) error {
+	skipMCPOAuth := false
+	if value, assigned := ctx.Flags().Get("skip-mcp-oauth").GetValue(); assigned {
+		skipMCPOAuth = true
+		if value != "" {
+			var err error
+			skipMCPOAuth, err = strconv.ParseBool(value)
+			if err != nil {
+				return newMCPAuthenticationError("--skip-mcp-oauth must be true or false", "inspect_command_help",
+					"Pass --skip-mcp-oauth without a value, or set it to true or false. Use `aliyun utils mcp-proxy --help` to inspect the command options.")
+			}
+		}
+	}
+	if skipMCPOAuth {
+		if ctx.Flags().Get("oauth-app-name").IsAssigned() || ctx.Flags().Get("scope").IsAssigned() {
+			return newMCPAuthenticationError("--oauth-app-name and --scope apply to MCP OAuth; omit --skip-mcp-oauth to use that flow", "fix_option_combination",
+				"Remove --oauth-app-name and --scope when using --skip-mcp-oauth, or omit --skip-mcp-oauth to use MCP OAuth.")
+		}
+		profile, err := config.LoadProfileWithContext(ctx)
+		if err != nil {
+			return newMCPAuthenticationError("profile configuration failed", "check_configuration",
+				"Check that the selected profile exists and its configuration is valid. Use `aliyun configure list` to inspect profiles, then configure the profile before retrying.")
+		}
+		if err := validateMCPProfileMode(profile.Mode); err != nil {
+			return newMCPAuthenticationError(err.Error(), "check_configuration",
+				"Select a profile that provides AK or STS credentials with --profile. BearerToken and Anonymous are not supported with --skip-mcp-oauth. Use `aliyun configure list` to inspect profiles.")
+		}
+		log.Printf("MCP auth: skip_mcp_oauth=true, profile=%q, profile_mode=%q; using AK/STS credentials", profile.Name, profile.Mode)
+		proxyConfig.CredentialAuth = newCredentialAuth(newCLICredentialSource(ctx), proxyConfig.RegionType)
+		if _, err := proxyConfig.CredentialAuth.GetToken(); err != nil {
+			return newMCPAuthenticationError(fmt.Sprintf("failed to authenticate MCP with CLI credentials: %s", err), "check_mcp_authentication",
+				"Verify the selected profile's AK/STS credentials, the AliyunOpenAPIMCPServerStaticCredentialAccess permission, and the account's MCP static-credential pre-check, then retry.")
+		}
+		return nil
+	}
+	log.Print("MCP auth: skip_mcp_oauth=false; using MCP OAuth")
+	mcpProfile, err := getOrCreateMCPProfile(ctx, *proxyConfig)
 	if err != nil {
 		return err
 	}
 	proxyConfig.McpProfile = mcpProfile
-	return startMCPProxy(ctx, proxyConfig)
+	return nil
 }
 
 func startMCPProxy(ctx *cli.Context, config ProxyConfig) error {
@@ -218,7 +296,11 @@ func startMCPProxy(ctx *cli.Context, config ProxyConfig) error {
 	config.ExistMcpServers = servers
 
 	proxy := NewMCPProxy(config)
-	go proxy.TokenRefresher.Start()
+	var fatalErrCh <-chan error
+	if proxy.TokenRefresher != nil {
+		go proxy.TokenRefresher.Start()
+		fatalErrCh = proxy.TokenRefresher.fatalErrCh
+	}
 
 	printProxyInfo(ctx, proxy)
 
@@ -249,7 +331,7 @@ func startMCPProxy(ctx *cli.Context, config ProxyConfig) error {
 		return nil
 	case err := <-serverErrChan:
 		return err
-	case fatalErr := <-proxy.TokenRefresher.fatalErrCh:
+	case fatalErr := <-fatalErrCh:
 		cli.Printf(ctx.Stderr(), "\nFatal error: %v\n", fatalErr)
 		cli.Printf(ctx.Stdout(), "Shutting down gracefully...\n")
 		if proxy.TokenRefresher != nil {
