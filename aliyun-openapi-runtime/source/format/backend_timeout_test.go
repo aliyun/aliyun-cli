@@ -1,18 +1,27 @@
 package format
 
 import (
-	"encoding/json"
 	"testing"
-
-	"github.com/aliyun/aliyun-openapi-runtime/schema"
 )
 
 func TestBackendTimeoutSurvivesJSONDecoding(t *testing.T) {
-	var definition schema.CommandDefinition
-	if err := json.Unmarshal([]byte(`{"name":"CreateDBInstance","timeout_ms":57000,"operation":{"action":"CreateDBInstance","api_version":"2014-08-15","method":"POST"}}`), &definition); err != nil {
-		t.Fatal(err)
-	}
-	if got := schemaToAPI(&definition).TimeoutMS; got != 57000 {
-		t.Fatalf("metadata timeout = %d, want 57000", got)
+	for _, tc := range []struct {
+		name, field string
+		want        int64
+	}{
+		{"old metadata without timeout", "", 0},
+		{"milliseconds preserved", `,"timeout_ms":12001`, 12001},
+		{"final timeout", `,"timeout_ms":57000`, 57000},
+		{"final cap", `,"timeout_ms":62000`, 62000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			api, err := DecodeAPIJSON([]byte(`{"name":"CreateDBInstance","operation":{"action":"CreateDBInstance","api_version":"2014-08-15","method":"POST"}`+tc.field+`}`), "test")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if api.TimeoutMS != tc.want {
+				t.Fatalf("metadata timeout = %d, want %d", api.TimeoutMS, tc.want)
+			}
+		})
 	}
 }
