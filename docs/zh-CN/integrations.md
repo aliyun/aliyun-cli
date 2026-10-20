@@ -20,8 +20,6 @@ MCP 代理支持本节列出的参数，默认值如下：
 | `--port` | `8088` | 本地监听端口 |
 | `--region-type` | `CN` | Endpoint 类型，可选 `CN` 或 `INTL` |
 | `--skip-mcp-oauth` | `false` | 跳过 MCP OAuth，使用 CLI 配置中的凭据认证；不带值时为 `true` |
-| `--profile` | 沿用 CLI 选择规则 | 按名称选择已配置的 profile |
-| `--config-path` | CLI 默认配置文件 | 指定 CLI 配置文件路径 |
 | `--scope` | `/acs/mcp-server` | OAuth scope |
 | `--no-browser` | 关闭 | 启用后不自动打开浏览器，改为手工输入授权码 |
 | `--oauth-app-name` | 空 | 按名称复用已有 OAuth 应用 |
@@ -31,19 +29,13 @@ MCP 代理支持本节列出的参数，默认值如下：
 
 ### 使用 CLI 凭据跳过 MCP OAuth
 
-先在 CLI 中配置凭据，再添加 `--skip-mcp-oauth`。不指定 profile 时，沿用 CLI 当前配置的选择规则：
+先在 CLI 中配置凭据，再添加 `--skip-mcp-oauth`：
 
 ```sh
 aliyun utils mcp-proxy --skip-mcp-oauth
 ```
 
-也可通过 CLI 的 `--profile` 和 `--config-path` 选择配置，例如：
-
-```sh
-aliyun utils mcp-proxy --skip-mcp-oauth --profile my-profile --config-path /path/to/config.json
-```
-
-`--skip-mcp-oauth` 支持显式指定 `true` 或 `false`；省略该参数或设为 `false` 时使用 MCP OAuth。仅指定 `--profile` 或 `--config-path` 不会跳过 MCP OAuth。跳过 MCP OAuth 时，暂不支持 `BearerToken` 和 `Anonymous` 凭据。
+使用 `--skip-mcp-oauth` 时，暂不支持 `BearerToken` 和 `Anonymous` 凭据。
 
 使用 CLI 凭据认证时，请为对应的 RAM 身份授予 `AliyunOpenAPIMCPServerStaticCredentialAccess`，以及业务 API 和 MCP Server 发现所需权限。
 

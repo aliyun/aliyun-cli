@@ -20,8 +20,6 @@ The MCP proxy supports the options listed in this section. Their defaults are:
 | `--port` | `8088` | Local listen port |
 | `--region-type` | `CN` | Endpoint family; use `CN` or `INTL` |
 | `--skip-mcp-oauth` | `false` | Skip MCP OAuth and authenticate with CLI credentials; `true` when used without a value |
-| `--profile` | CLI selection rules | Select a configured profile by name |
-| `--config-path` | CLI default configuration file | Specify the CLI configuration file path |
 | `--scope` | `/acs/mcp-server` | OAuth scope |
 | `--no-browser` | off | When set, use manual authorization-code input instead of opening a browser |
 | `--oauth-app-name` | empty | Reuse an existing OAuth application by name |
@@ -31,19 +29,13 @@ After startup, the CLI prints the local MCP and SSE URLs for the discovered serv
 
 ### Use CLI credentials to skip MCP OAuth
 
-Configure credentials in the CLI, then add `--skip-mcp-oauth`. Without an explicit profile, the CLI's current configuration selection rules apply:
+Configure credentials in the CLI, then add `--skip-mcp-oauth`:
 
 ```sh
 aliyun utils mcp-proxy --skip-mcp-oauth
 ```
 
-You can also select a configuration with the CLI's `--profile` and `--config-path` options:
-
-```sh
-aliyun utils mcp-proxy --skip-mcp-oauth --profile my-profile --config-path /path/to/config.json
-```
-
-`--skip-mcp-oauth` also accepts an explicit `true` or `false`. Omitting it or setting it to `false` uses MCP OAuth. Using `--profile` or `--config-path` alone does not skip MCP OAuth. `BearerToken` and `Anonymous` credentials are not supported when skipping MCP OAuth.
+`BearerToken` and `Anonymous` credentials are not supported with `--skip-mcp-oauth`.
 
 When using CLI credentials, grant the corresponding RAM identity `AliyunOpenAPIMCPServerStaticCredentialAccess` and the permissions needed by the requested APIs and MCP server discovery.
 
