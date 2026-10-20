@@ -1,83 +1,106 @@
 package releasever
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
 )
 
 func TestAppendStableVersion(t *testing.T) {
-	got, err := AppendStableVersion(nil, "v3.5.2")
+	got, err := AppendStableVersion(nil, "v3.5.2", "1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != "3.5.2\n" {
-		t.Fatalf("first record = %q", got)
+	doc := decodeCatalog(t, got)
+	if doc.Format != publishsig.VersionsFormat || len(doc.Versions) != 1 {
+		t.Fatalf("first record = %s", got)
+	}
+	if doc.Versions[0].Version != "3.5.2" || doc.Versions[0].SignatureVersion != "1" {
+		t.Fatalf("entry = %+v", doc.Versions[0])
+	}
+	if doc.Versions[0].Description != publishsig.SignatureVersionDescription {
+		t.Fatalf("description = %q", doc.Versions[0].Description)
 	}
 
-	got, err = AppendStableVersion(got, "3.5.3")
+	got, err = AppendStableVersion(got, "3.5.3", "2")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != "3.5.2\n3.5.3\n" {
-		t.Fatalf("append = %q", got)
+	doc = decodeCatalog(t, got)
+	if len(doc.Versions) != 2 || doc.Versions[0].Version != "3.5.2" || doc.Versions[1].Version != "3.5.3" {
+		t.Fatalf("append = %+v", doc.Versions)
+	}
+	if doc.Versions[1].Description != "publisher signature version 2" {
+		t.Fatalf("other generation description = %q", doc.Versions[1].Description)
 	}
 
-	again, err := AppendStableVersion(got, "v3.5.2")
+	again, err := AppendStableVersion(got, "v3.5.2", "1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(again) != string(got) {
-		t.Fatalf("duplicate changed history: %q", again)
+		t.Fatalf("duplicate changed history:\n%s\n%s", again, got)
 	}
 
-	withNote := []byte("# stable history\n3.5.2\n")
-	got, err = AppendStableVersion(withNote, "3.5.4")
+	updated, err := AppendStableVersion(got, "3.5.2", "2")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != "# stable history\n3.5.2\n3.5.4\n" {
-		t.Fatalf("preserved lines = %q", got)
+	doc = decodeCatalog(t, updated)
+	if len(doc.Versions) != 2 || doc.Versions[0].SignatureVersion != "2" || doc.Versions[1].Version != "3.5.3" {
+		t.Fatalf("in-place update = %+v", doc.Versions)
 	}
 
-	if _, err := AppendStableVersion(nil, "3.5.2-beta.1"); err == nil || !strings.Contains(err.Error(), "prerelease") {
+	if _, err := AppendStableVersion(nil, "3.5.2-beta.1", "1"); err == nil || !strings.Contains(err.Error(), "prerelease") {
 		t.Fatalf("prerelease err = %v", err)
 	}
-	if _, err := AppendStableVersion(nil, "latest"); err == nil {
+	if _, err := AppendStableVersion(nil, "latest", "1"); err == nil {
 		t.Fatal("invalid version was recorded")
 	}
-
-	withoutNewline, err := AppendStableVersion([]byte("3.5.1"), "3.5.1")
-	if err != nil {
-		t.Fatal(err)
+	if _, err := AppendStableVersion(nil, "3.5.2", "no spaces"); err == nil {
+		t.Fatal("invalid signature version was recorded")
 	}
-	if string(withoutNewline) != "3.5.1\n" {
-		t.Fatalf("missing newline = %q", withoutNewline)
-	}
-	withBeta, err := AppendStableVersion([]byte("3.5.2-beta.1\n"), "3.5.2")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(withBeta) != "3.5.2-beta.1\n3.5.2\n" {
-		t.Fatalf("prerelease line = %q", withBeta)
+	if _, err := AppendStableVersion([]byte(`{"format":"aliyun-cli-versions v9"}`), "3.5.2", "1"); err == nil {
+		t.Fatal("foreign catalog was rewritten")
 	}
 }
 
 func TestAppendVersionCommand(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "versions")
-	if err := os.WriteFile(path, []byte("3.5.1\n"), 0o644); err != nil {
+	first, err := AppendStableVersion(nil, "3.5.1", "1")
+	if err != nil {
 		t.Fatal(err)
 	}
-	stdout, stderr, code := runCLI(t, "append-version", "--", "3.5.2", path)
+	if err := os.WriteFile(path, first, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code := runCLI(t, "append-version", "--", "3.5.2", path, "1")
 	if code != 0 || stderr != "" {
 		t.Fatalf("code=%d stderr=%q", code, stderr)
 	}
-	if stdout != "3.5.1\n3.5.2\n" {
-		t.Fatalf("stdout = %q", stdout)
+	doc := decodeCatalog(t, []byte(stdout))
+	if len(doc.Versions) != 2 || doc.Versions[1].Version != "3.5.2" {
+		t.Fatalf("stdout = %s", stdout)
 	}
 	if _, stderr, code := runCLI(t, "append-version", "3.5.2"); code == 0 || !strings.Contains(stderr, "usage:") {
 		t.Fatalf("code=%d stderr=%q", code, stderr)
 	}
+	out, stderr, code := runCLI(t, "signature-version")
+	if code != 0 || stderr != "" || out != publishsig.SignatureVersion+"\n" {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, out, stderr)
+	}
+}
+
+func decodeCatalog(t *testing.T, body []byte) versionCatalog {
+	t.Helper()
+	var doc versionCatalog
+	if err := json.Unmarshal(body, &doc); err != nil {
+		t.Fatal(err)
+	}
+	return doc
 }

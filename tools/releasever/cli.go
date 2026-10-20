@@ -5,13 +5,16 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
 )
 
 // Execute runs the releasever CLI. Commands:
 //
 //	classify <version>                 prints stable or prerelease
 //	plan <version>                     prints the publish policy as key=value lines
-//	append-version <version> <file>    appends one stable version and writes the file to stdout
+//	append-version <version> <file> <signature-version>
+//	signature-version                  prints the publisher generation embedded in this source
 func Execute(args []string, stdout, stderr io.Writer) int {
 	filtered, err := parseArgs(args)
 	if err != nil {
@@ -46,8 +49,15 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		return 0
+	case "signature-version":
+		if len(filtered) != 1 {
+			fmt.Fprintln(stderr, usageText())
+			return 1
+		}
+		fmt.Fprintln(stdout, publishsig.SignatureVersion)
+		return 0
 	case "append-version":
-		if len(filtered) != 3 || filtered[1] == "" || filtered[2] == "" {
+		if len(filtered) != 4 || filtered[1] == "" || filtered[2] == "" || filtered[3] == "" {
 			fmt.Fprintln(stderr, usageText())
 			return 1
 		}
@@ -56,7 +66,7 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, err)
 			return 1
 		}
-		updated, err := AppendStableVersion(existing, filtered[1])
+		updated, err := AppendStableVersion(existing, filtered[1], filtered[3])
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return 1
@@ -73,7 +83,7 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 }
 
 func usageText() string {
-	return "usage: releasever classify|plan <version> | append-version <version> <file>"
+	return "usage: releasever classify|plan <version> | append-version <version> <file> <signature-version> | signature-version"
 }
 
 func parseArgs(args []string) ([]string, error) {

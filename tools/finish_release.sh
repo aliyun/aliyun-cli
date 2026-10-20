@@ -148,7 +148,14 @@ else
       fi
     fi
     rm -f "${versions_err}"
-    go run ./tools/releasever/cmd/releasever append-version -- "${VERSION}" "${versions_file}" > out/versions.next
+    # Default is the generation compiled into this source. A bridge release
+    # signed by the previous key sets CLI_RELEASE_SIGNATURE_VERSION to that
+    # previous generation.
+    sig_version="${CLI_RELEASE_SIGNATURE_VERSION:-}"
+    if [[ -z "${sig_version}" ]]; then
+      sig_version=$(go run ./tools/releasever/cmd/releasever signature-version)
+    fi
+    go run ./tools/releasever/cmd/releasever append-version -- "${VERSION}" "${versions_file}" "${sig_version}" > out/versions.next
     mv out/versions.next "${versions_file}"
     ${ALIYUN} oss cp "${versions_file}" oss://aliyun-cli --force \
       --access-key-id "${ACCESS_KEY_ID}" \

@@ -1,13 +1,30 @@
 package releasever
 
-import "strings"
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"strings"
 
-// AppendStableVersion adds one stable version to the history file.
-// Existing lines are kept in order, including lines this version does not
-// understand, so a newer history format is not stripped by this release.
-// The version is recorded once, without a leading v, and the result ends
-// with a newline.
-func AppendStableVersion(existing []byte, raw string) ([]byte, error) {
+	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
+)
+
+type versionRecord struct {
+	Version          string `json:"version"`
+	SignatureVersion string `json:"signature_version"`
+	Description      string `json:"description"`
+}
+
+type versionCatalog struct {
+	Format   string          `json:"format"`
+	Versions []versionRecord `json:"versions"`
+}
+
+// AppendStableVersion records one stable release in the JSON history.
+// The signature version is the publisher generation that signed the release.
+// Existing entries stay in order. Publishing the same version again updates
+// its signature note in place.
+func AppendStableVersion(existing []byte, raw, signatureVersion string) ([]byte, error) {
 	kind, err := Classify(raw)
 	if err != nil {
 		return nil, err
@@ -19,39 +36,70 @@ func AppendStableVersion(existing []byte, raw string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	line := strings.TrimPrefix(canonical, "v")
+	if !validSignatureVersion(signatureVersion) {
+		return nil, fmt.Errorf("invalid signature version %q", signatureVersion)
+	}
+	version := strings.TrimPrefix(canonical, "v")
+	record := versionRecord{
+		Version:          version,
+		SignatureVersion: signatureVersion,
+		Description:      publishsig.DescribeSignatureVersion(signatureVersion),
+	}
 
-	text := string(existing)
-	if text != "" && !strings.HasSuffix(text, "\n") {
-		text += "\n"
-	}
-	for _, existingLine := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
-		if existingLine == "" && text == "" {
-			continue
-		}
-		if sameStableVersion(existingLine, line) {
-			return []byte(text), nil
-		}
-	}
-	if text == "\n" {
-		text = ""
-	}
-	return []byte(text + line + "\n"), nil
-}
-
-func sameStableVersion(existingLine, want string) bool {
-	canonical, err := canonicalVersion(existingLine)
+	catalog, err := readCatalog(existing)
 	if err != nil {
-		return false
+		return nil, err
 	}
-	if semverPrerelease(canonical) {
-		return false
+	replaced := false
+	for i := range catalog.Versions {
+		if catalog.Versions[i].Version == version {
+			catalog.Versions[i] = record
+			replaced = true
+			break
+		}
 	}
-	return strings.TrimPrefix(canonical, "v") == want
+	if !replaced {
+		catalog.Versions = append(catalog.Versions, record)
+	}
+	body, err := json.MarshalIndent(catalog, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(body, '\n'), nil
 }
 
-func semverPrerelease(canonical string) bool {
-	return strings.Contains(strings.TrimPrefix(canonical, "v"), "-")
+func readCatalog(existing []byte) (versionCatalog, error) {
+	if len(bytes.TrimSpace(existing)) == 0 {
+		return versionCatalog{Format: publishsig.VersionsFormat, Versions: []versionRecord{}}, nil
+	}
+	var catalog versionCatalog
+	if err := json.Unmarshal(existing, &catalog); err != nil {
+		return versionCatalog{}, fmt.Errorf("versions file: %w", err)
+	}
+	if catalog.Format != publishsig.VersionsFormat {
+		return versionCatalog{}, fmt.Errorf("versions file: unsupported format %q", catalog.Format)
+	}
+	if catalog.Versions == nil {
+		catalog.Versions = []versionRecord{}
+	}
+	return catalog, nil
+}
+
+func validSignatureVersion(version string) bool {
+	if version == "" || len(version) > 64 {
+		return false
+	}
+	for _, r := range version {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '.' || r == '_' || r == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func errPrerelease(raw string) error {
