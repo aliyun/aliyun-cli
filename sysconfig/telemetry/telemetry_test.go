@@ -333,13 +333,15 @@ func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 		if r.URL.Path != "/v1/telemetry/events" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
-		var batch []map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+		var request struct {
+			Events []map[string]any `json:"events"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Errorf("decode request: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		batches = append(batches, batch)
+		batches = append(batches, request.Events)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -409,14 +411,16 @@ func TestUploadFileUsesVersionedExtensibleContract(t *testing.T) {
 func TestUploadPublicPluginManagementEventUsesSharedEndpoint(t *testing.T) {
 	var got map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var batch []map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+		var request struct {
+			Events []map[string]any `json:"events"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 			t.Errorf("decode request: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if len(batch) == 1 {
-			got = batch[0]
+		if len(request.Events) == 1 {
+			got = request.Events[0]
 		}
 		w.WriteHeader(http.StatusOK)
 	}))

@@ -40,6 +40,10 @@ type uploadEvent struct {
 	Attributes    map[string]any `json:"attributes"`
 }
 
+type uploadBatch struct {
+	Events []uploadEvent `json:"events"`
+}
+
 func telemetryUploadEndpoint() string {
 	if v := strings.TrimSpace(os.Getenv("ALIYUN_CLI_TELEMETRY_ENDPOINT")); v != "" {
 		return v
@@ -80,7 +84,7 @@ func UploadFile(configDir, pipeline, cacheFile string) error {
 }
 
 func postTelemetryBatch(batch []uploadEvent) bool {
-	body, err := json.Marshal(batch)
+	body, err := json.Marshal(uploadBatch{Events: batch})
 	if err != nil {
 		return false
 	}
