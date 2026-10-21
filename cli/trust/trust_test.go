@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -458,4 +459,26 @@ func TestRecoveryReplacementAndDualAnchorMismatch(t *testing.T) {
 	f.responses["/recovery"] = signedJSON(t, patch, recovery)
 	_, err = f.client.CheckAndApplyRecovery(context.Background(), f.server.URL+"/recovery", cache, f.root, &state)
 	assert.ErrorContains(t, err, "contains denied key")
+}
+
+func TestDiscoveryURLForSite(t *testing.T) {
+	assert.Equal(t, DiscoveryURLCN, DiscoveryURLForSite("cn"))
+	assert.Equal(t, DiscoveryURLIntl, DiscoveryURLForSite("intl"))
+	assert.Equal(t, DiscoveryURLCN, DiscoveryURLForSite(""))
+	assert.Equal(t, DiscoveryURLCN, DiscoveryURLForSite("invalid"))
+}
+
+func TestNewUsesConfiguredPluginSite(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv(pluginsettings.EnvSite, "")
+	require.NoError(t, pluginsettings.Save(
+		filepath.Join(home, ".aliyun"),
+		&pluginsettings.PluginSettings{Site: pluginsettings.SiteIntl},
+	))
+
+	client := New(Config{})
+
+	assert.Equal(t, DiscoveryURLIntl, client.cfg.DiscoveryURL)
+	assert.Contains(t, client.cfg.MetadataHosts, "api.alibabacloud.com")
 }

@@ -15,6 +15,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/aliyun/aliyun-cli/v3/sysconfig/pluginsettings"
 )
 
 type Config struct {
@@ -36,7 +38,7 @@ type Client struct {
 
 func New(cfg Config) *Client {
 	if cfg.DiscoveryURL == "" {
-		cfg.DiscoveryURL = DiscoveryURL
+		cfg.DiscoveryURL = defaultDiscoveryURL()
 	}
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = &http.Client{Timeout: 15 * time.Second}
@@ -65,6 +67,23 @@ func New(cfg Config) *Client {
 		}
 	}
 	return &Client{cfg: cfg}
+}
+
+func DiscoveryURLForSite(site string) string {
+	if pluginsettings.NormalizeSite(site) == pluginsettings.SiteIntl {
+		return DiscoveryURLIntl
+	}
+	return DiscoveryURLCN
+}
+
+func defaultDiscoveryURL() string {
+	var settings *pluginsettings.PluginSettings
+	if home, err := os.UserHomeDir(); err == nil {
+		if loaded, loadErr := pluginsettings.Load(filepath.Join(home, ".aliyun")); loadErr == nil {
+			settings = loaded
+		}
+	}
+	return DiscoveryURLForSite(pluginsettings.EffectiveSite(settings))
 }
 
 func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*VerifiedArtifact, error) {
