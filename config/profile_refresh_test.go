@@ -33,7 +33,7 @@ func TestCredentialRefreshPersistsToSelectedConfig(t *testing.T) {
 				hookGetHomePath = func(func() string) func() string { return func() string { return home } }
 				hookLoadOrCreateConfiguration = func(fn func(string) (*Configuration, error)) func(string) (*Configuration, error) { return fn }
 				saveConfigurationFunc = SaveConfigurationWithContext
-				exchangeFromOAuthFunc = exchangeFromOAuth
+				exchangeFromOAuthFunc = exchangeFromOAuthWithCheckpoint
 				tryRefreshStsTokenFunc = cloudsso.TryRefreshStsToken
 				oauthTryRefreshOauthToken = tryRefreshOauthToken
 				utilGetCurrentUnixTime = func() int64 { return time.Now().Unix() }

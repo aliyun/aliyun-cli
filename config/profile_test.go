@@ -1484,7 +1484,7 @@ func TestGetCredentialWithOAuthStsExpired(t *testing.T) {
 						AccessKeyId:            "mock-ak-id",
 						AccessKeySecret:        "mock-ak-secret",
 						StsToken:               "mock-sts-token",
-						StsExpiration:          time.Now().Unix() + 1800,
+						StsExpiration:          time.Now().Unix() - 1800,
 					},
 				},
 			}, nil
@@ -1492,7 +1492,7 @@ func TestGetCredentialWithOAuthStsExpired(t *testing.T) {
 	}
 
 	// Mock exchangeFromOAuth函数
-	exchangeFromOAuthFunc = func(w io.Writer, cp *Profile) error {
+	exchangeFromOAuthFunc = func(w io.Writer, cp *Profile, _ func() error) error {
 		// 模拟OAuth刷新成功，更新STS凭证
 		cp.AccessKeyId = "refreshed-ak-id"
 		cp.AccessKeySecret = "refreshed-ak-secret"
@@ -1601,7 +1601,7 @@ func TestGetCredentialWithOAuthRefreshError(t *testing.T) {
 	}
 
 	// Mock exchangeFromOAuth函数返回错误
-	exchangeFromOAuthFunc = func(w io.Writer, cp *Profile) error {
+	exchangeFromOAuthFunc = func(w io.Writer, cp *Profile, _ func() error) error {
 		return fmt.Errorf("mock refresh error: invalid token")
 	}
 
@@ -1694,7 +1694,7 @@ func TestGetCredentialWithOAuthMissingCredentials(t *testing.T) {
 	}
 
 	// Mock exchangeFromOAuth函数
-	exchangeFromOAuthFunc = func(w io.Writer, cp *Profile) error {
+	exchangeFromOAuthFunc = func(w io.Writer, cp *Profile, _ func() error) error {
 		// 模拟OAuth刷新成功，更新STS凭证
 		cp.AccessKeyId = "new-ak-id"
 		cp.AccessKeySecret = "new-ak-secret"
