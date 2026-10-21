@@ -475,7 +475,7 @@ func resolveSTSEndpoint(cp *Profile) string {
 // in-memory profile may include one-off CLI overrides(e.g. --endpoint) merged via OverwriteWithFlags; those must not overwrite stored settings.
 func mergeProfileAfterCredentialRefresh(disk Profile, cp *Profile) Profile {
 	out := disk
-	if cp.Mode == CloudSSO && (cp.SSOSession != "" || disk.SSOSession != "") && cloudSSOTarget(&disk) != cloudSSOTarget(cp) {
+	if cp.Mode == CloudSSO && cloudSSOTarget(&disk) != cloudSSOTarget(cp) {
 		return out
 	}
 	out.AccessKeyId = cp.AccessKeyId
