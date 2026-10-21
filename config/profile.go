@@ -372,11 +372,11 @@ func (cp *Profile) OverwriteWithFlags(ctx *cli.Context) {
 		cp.OIDCProviderARN = util.GetFromEnv("ALIBABACLOUD_OIDC_PROVIDER_ARN", "ALIBABA_CLOUD_OIDC_PROVIDER_ARN")
 	}
 
-	if cp.OIDCToken == "" {
+	if cp.OIDCToken == "" && cp.OIDCTokenFile == "" {
 		cp.OIDCToken = os.Getenv("ALIBABA_CLOUD_OIDC_TOKEN")
 	}
 
-	if cp.OIDCTokenFile == "" {
+	if cp.OIDCToken == "" && cp.OIDCTokenFile == "" {
 		cp.OIDCTokenFile = util.GetFromEnv("ALIBABACLOUD_OIDC_TOKEN_FILE", "ALIBABA_CLOUD_OIDC_TOKEN_FILE")
 	}
 

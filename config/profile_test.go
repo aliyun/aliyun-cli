@@ -383,6 +383,34 @@ func TestOverwriteWithFlagsWithRegionIDEnv(t *testing.T) {
 	assert.Equal(t, exp, actual)
 }
 
+func TestOverwriteWithFlagsOIDCExplicitFileBeatsEnvToken(t *testing.T) {
+	resetEnv()
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN", "env-token")
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN_FILE", "/env/token")
+
+	buf := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(buf, stderr)
+	AddFlags(ctx.Flags())
+
+	withFile := newProfile()
+	withFile.OIDCTokenFile = "/explicit/token"
+	withFile.OverwriteWithFlags(ctx)
+	assert.Empty(t, withFile.OIDCToken)
+	assert.Equal(t, "/explicit/token", withFile.OIDCTokenFile)
+
+	fromEnv := newProfile()
+	fromEnv.OverwriteWithFlags(ctx)
+	assert.Equal(t, "env-token", fromEnv.OIDCToken)
+	assert.Empty(t, fromEnv.OIDCTokenFile)
+
+	t.Setenv("ALIBABA_CLOUD_OIDC_TOKEN", "")
+	fileOnly := newProfile()
+	fileOnly.OverwriteWithFlags(ctx)
+	assert.Empty(t, fileOnly.OIDCToken)
+	assert.Equal(t, "/env/token", fileOnly.OIDCTokenFile)
+}
+
 func TestOverwriteWithFlagsWithStsTokenEnv(t *testing.T) {
 	resetEnv()
 	buf := new(bytes.Buffer)
