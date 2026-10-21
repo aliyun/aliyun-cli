@@ -10,8 +10,11 @@ var (
 )
 
 const (
-	DiscoveryURL = "https://api.aliyun.com/.well-known/aliyun-cli-trust.json"
+	DiscoveryURLCN   = "https://api.aliyun.com/.well-known/aliyun-cli-trust.json"
+	DiscoveryURLIntl = "https://api.alibabacloud.com/.well-known/aliyun-cli-trust.json"
+	// DiscoveryURL remains as the compatibility name for the default cn site.
+	DiscoveryURL = DiscoveryURLCN
 )
 
-var MetadataHostAllowlist = []string{"api.aliyun.com"}
-var RecoveryHostAllowlist = []string{"api.aliyun.com"}
+var MetadataHostAllowlist = []string{"api.aliyun.com", "api.alibabacloud.com"}
+var RecoveryHostAllowlist = []string{"api.aliyun.com", "api.alibabacloud.com"}

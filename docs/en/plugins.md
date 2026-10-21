@@ -80,14 +80,18 @@ Show the global plugin settings:
 aliyun configure plugin-settings show
 ```
 
-Set or clear a custom plugin tree base URL:
+Choose the official trust site, or set and clear a custom plugin tree base URL:
 
 ```sh
+# Default: https://api.aliyun.com
+aliyun configure plugin-settings set --site cn
+# Use https://api.alibabacloud.com when the cn site is slow or unreachable
+aliyun configure plugin-settings set --site intl
 aliyun configure plugin-settings set --source-base https://example.com/plugins
 aliyun configure plugin-settings clear
 ```
 
-For one command, `--source-base <url>` overrides the global setting. The environment variable `ALIBABA_CLOUD_CLI_PLUGIN_SOURCE_BASE` has priority over the saved setting.
+`site` only selects the official trust Discovery endpoint; it does not trust a custom source. For one command, `--source-base <url>` overrides the global setting. `ALIBABA_CLOUD_CLI_PLUGIN_SITE` and `ALIBABA_CLOUD_CLI_PLUGIN_SOURCE_BASE` have priority over saved settings.
 
 ## Automatic product-plugin installation
 

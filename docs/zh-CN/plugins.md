@@ -80,14 +80,18 @@ aliyun plugin uninstall --name <plugin-name>
 aliyun configure plugin-settings show
 ```
 
-设置或清除自定义插件树根地址：
+选择官方信任站点，或设置、清除自定义插件树根地址：
 
 ```sh
+# 默认访问 https://api.aliyun.com
+aliyun configure plugin-settings set --site cn
+# 国内站超时或不可达时改用 https://api.alibabacloud.com
+aliyun configure plugin-settings set --site intl
 aliyun configure plugin-settings set --source-base https://example.com/plugins
 aliyun configure plugin-settings clear
 ```
 
-单次命令可以使用 `--source-base <url>` 覆盖全局设置。环境变量 `ALIBABA_CLOUD_CLI_PLUGIN_SOURCE_BASE` 的优先级高于已保存设置。
+`site` 只选择官方信任 Discovery 站点，不会让自定义插件源自动变成可信源。单次命令可以使用 `--source-base <url>` 覆盖全局设置。环境变量 `ALIBABA_CLOUD_CLI_PLUGIN_SITE` 和 `ALIBABA_CLOUD_CLI_PLUGIN_SOURCE_BASE` 的优先级高于已保存设置。
 
 ## 自动安装产品插件
 
