@@ -100,7 +100,7 @@ aliyun ecs DescribeRegions
 aliyun ecs describe-regions
 ```
 
-Safety policy matches command spelling by design: it ignores case but does not expand API aliases or equate PascalCase with kebab-case. Configure rules for each spelling your automation uses; see the [matching contract](./docs/en/usage.md#command-matching-contract).
+Safety policy matches command names case-insensitively, without expanding API aliases. Configure a rule for each command name used by your automation. See [command matching rules](./docs/en/usage.md#command-matching-rules).
 
 ### 3. Explore help
 

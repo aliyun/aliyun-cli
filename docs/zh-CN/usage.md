@@ -267,9 +267,11 @@ aliyun configure safety-policy --help
 
 安全策略默认关闭，`confirm` 只是 CLI 本地执行前确认，不代表云端授权或审批。使用 `show`/`list` 查看当前生效策略；如果设置了 `ALIBABA_CLOUD_SAFETY_POLICY_ENABLED` 或 `ALIBABA_CLOUD_SAFETY_POLICY_RULES`，展示结果包含环境变量覆盖后的配置。策略文件或环境规则无法完整解析时，CLI 会拒绝继续执行。
 
-### 命令匹配约定
+添加或更新精确规则后，CLI 根据内置默认 API 版本的元数据查找另一种命令名称。如果该名称尚未被配置文件中的相同动作规则覆盖，会在标准错误（stderr）中提示具体名称。通配符、REST 路径、插件命令层级及无法明确识别的名称不触发提示。此提示不会自动新增规则，也不会改变规则的匹配顺序。
 
-安全策略按调用方输入的命令写法匹配，这是预期设计，不会根据解析后的 OpenAPI 身份合并规则。匹配不区分大小写，`*` 可以匹配任意长度的字符序列；不会展开 API 别名，也不会在大驼峰和短横线写法之间转换。例如，`ecs:DeleteInstance` 匹配 `ECS:deleteinstance`，但不匹配 `ecs:delete-instance`，即使两种命令调用的是同一个 API。AI mode 也遵循这一约定。
+### 命令匹配规则
+
+安全策略按输入的命令名称匹配，不会自动识别同一 API 的其他名称。匹配不区分大小写，`*` 可以匹配任意长度的字符序列；不会展开 API 别名，也不会在大驼峰和短横线写法之间转换。例如，`ecs:DeleteInstance` 匹配 `ECS:deleteinstance`，但不匹配 `ecs:delete-instance`，即使两种命令调用的是同一个 API。AI 模式同样适用。
 
 应为脚本或 Agent 使用的每种写法分别配置规则：
 

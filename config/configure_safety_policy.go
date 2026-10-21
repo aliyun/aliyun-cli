@@ -17,6 +17,10 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
+
+	"github.com/aliyun/aliyun-cli/v3/bundledmeta"
+	"github.com/aliyun/aliyun-cli/v3/canonicalmeta"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
@@ -43,7 +47,7 @@ The first matching rule wins; unmatched commands are allowed.`,
 			if len(args) > 0 {
 				return cli.NewInvalidCommandError(args[0], ctx)
 			}
-			configDir, policy, err := loadSafetyPolicy(ctx)
+			configDir, policy, err := loadEffectiveSafetyPolicy(ctx)
 			if err != nil {
 				return err
 			}
@@ -245,7 +249,7 @@ func doSafetyPolicyAdd(ctx *cli.Context, configDir string, policy *safety.Policy
 	for i := range policy.Rules {
 		if policy.Rules[i].Pattern == pattern {
 			policy.Rules[i].Action = action
-			return safety.SavePolicy(configDir, policy)
+			return saveSafetyPolicyWithStyleNotice(ctx, configDir, policy, pattern)
 		}
 	}
 
@@ -253,7 +257,83 @@ func doSafetyPolicyAdd(ctx *cli.Context, configDir string, policy *safety.Policy
 		Pattern: pattern,
 		Action:  action,
 	})
-	return safety.SavePolicy(configDir, policy)
+	return saveSafetyPolicyWithStyleNotice(ctx, configDir, policy, pattern)
+}
+
+// Metadata is used only for configuration advice. Never expand stored rules or
+// change runtime first-match ordering. Inspect the saved file policy even when
+// disabled: this advice concerns rules being configured, not environment overrides.
+func saveSafetyPolicyWithStyleNotice(ctx *cli.Context, configDir string, policy *safety.Policy, pattern string) error {
+	if err := safety.SavePolicy(configDir, policy); err != nil {
+		return err
+	}
+	alternative := safetyAlternativeName(canonicalmeta.NewRepository(bundledmeta.Metadatas), pattern)
+	if alternative == "" {
+		return nil
+	}
+	parts := strings.SplitN(alternative, ":", 2)
+	configured := safety.Policy{Enabled: true, Rules: policy.Rules}
+	covered := configured.Check(safety.CommandInfo{Product: parts[0], ApiOrMethod: parts[1]})
+	var action safety.Action
+	for _, rule := range policy.Rules {
+		if rule.Pattern == pattern {
+			action = rule.Action
+			break
+		}
+	}
+	if action == safety.ActionForbid {
+		action = safety.ActionConfirm
+	}
+	if covered.Matched && covered.Action == action {
+		return nil
+	}
+	_, _ = fmt.Fprintf(ctx.Stderr(), i18n.T(
+		"Rule saved. This rule does not match %q. To apply the same restriction to that command, add a separate rule.\n",
+		"已保存规则。此规则不匹配 %q，如需对该命令应用相同限制，请另行添加规则。\n",
+	).GetMessage(), alternative)
+	return nil
+}
+
+// Only exact, unambiguous names from the bundled default API version qualify.
+// Wildcards, REST paths and plugin command hierarchies cannot be converted by
+// changing case or removing hyphens. Missing metadata must not prevent saving.
+func safetyAlternativeName(repo *canonicalmeta.Repository, pattern string) string {
+	if strings.ContainsAny(pattern, "*/") || strings.Count(pattern, ":") != 1 {
+		return ""
+	}
+	parts := strings.SplitN(pattern, ":", 2)
+	products, err := repo.GetProducts()
+	if err != nil {
+		return ""
+	}
+	for _, product := range products.Products {
+		if !strings.EqualFold(product.Code, parts[0]) {
+			continue
+		}
+		index, err := repo.GetVersionIndex(product.Code, product.Version)
+		if err != nil {
+			return ""
+		}
+		alternative, matches := "", 0
+		for name, entry := range index.APIs {
+			if !strings.EqualFold(name, parts[1]) && !strings.EqualFold(entry.CmdName, parts[1]) {
+				continue
+			}
+			matches++
+			other := entry.CmdName
+			if strings.EqualFold(entry.CmdName, parts[1]) {
+				other = name
+			}
+			if other != "" && !strings.EqualFold(other, parts[1]) {
+				alternative = parts[0] + ":" + other
+			}
+		}
+		if matches == 1 {
+			return alternative
+		}
+		return ""
+	}
+	return ""
 }
 
 func doSafetyPolicyRemove(ctx *cli.Context, configDir string, policy *safety.Policy) error {
