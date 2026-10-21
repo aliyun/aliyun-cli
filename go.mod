@@ -11,7 +11,7 @@ require (
 	github.com/aliyun/alibaba-cloud-sdk-go v1.63.107
 	github.com/aliyun/aliyun-openapi-runtime v0.0.0-00010101000000-000000000000
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
-	github.com/aliyun/credentials-go v1.4.14-0.20261021091546-4df1d06f3a1d
+	github.com/aliyun/credentials-go v1.4.14-0.20261021105256-80ba02b533c0
 	github.com/alyu/configparser v0.0.0-20191103060215-744e9a66e7bc
 	github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1
 	github.com/gogo/protobuf v1.3.2
