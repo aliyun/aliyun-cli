@@ -78,7 +78,11 @@ func doConfigureList(ctx *cli.Context) error {
 		case CredentialsURI:
 			cred = "CredentialsURI:" + pf.CredentialsURI
 		case OIDC:
-			cred = "OIDC:" + "***" + GetLastChars(pf.OIDCProviderARN, 5) + "@***" + GetLastChars(pf.OIDCTokenFile, 5) + "@" + pf.RamRoleArn
+			tokenHint := pf.OIDCTokenFile
+			if pf.OIDCToken != "" {
+				tokenHint = pf.OIDCToken
+			}
+			cred = "OIDC:" + "***" + GetLastChars(pf.OIDCProviderARN, 5) + "@***" + GetLastChars(tokenHint, 5) + "@" + pf.RamRoleArn
 		case CloudSSO:
 			cred = "CloudSSO:" + pf.CloudSSOAccountId + "@" + pf.CloudSSOAccessConfig
 		case OAuth:

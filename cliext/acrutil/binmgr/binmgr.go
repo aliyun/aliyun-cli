@@ -606,6 +606,7 @@ func BaseStripFlags() map[string]bool {
 		"expired-seconds":                true,
 		"process-command":                true,
 		"oidc-provider-arn":              true,
+		"oidc-token":                     true,
 		"oidc-token-file":                true,
 		"cloud-sso-sign-in-url":          true,
 		"cloud-sso-access-config":        true,

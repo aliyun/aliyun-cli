@@ -475,6 +475,11 @@ func DetectInConfigureMode(flags *cli.FlagSet) bool {
 	if oidcProviderArnExist {
 		return true
 	}
+	// OIDCTokenFlagName
+	_, oidcTokenExist := flags.GetValue(config.OIDCTokenFlagName)
+	if oidcTokenExist {
+		return true
+	}
 	// OIDCTokenFileFlagName
 	_, oidcTokenFileExist := flags.GetValue(config.OIDCTokenFileFlagName)
 	if oidcTokenFileExist {
