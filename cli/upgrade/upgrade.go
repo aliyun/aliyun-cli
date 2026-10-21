@@ -80,11 +80,11 @@ func NewUpgradeCommand() *cli.Command {
 			"Upgrade Alibaba Cloud CLI to the latest release.\n"+
 				"If installed via Homebrew, delegates to 'brew upgrade'.\n"+
 				"Otherwise downloads from Alibaba Cloud OSS mirror.\n"+
-				"Only a release newer than this CLI and carrying the same publisher signature version is installed, after its publisher signature verifies.",
+				"Only a release newer than this CLI and listing this CLI's publisher key generation is installed, after its publisher signature verifies.",
 			"升级阿里云CLI到最新版本。\n"+
 				"如果通过Homebrew安装，自动调用brew upgrade升级。\n"+
 				"否则从阿里云OSS镜像源下载。\n"+
-				"只会安装比当前更新、签名版本与本包相同、且发行方签名校验通过的版本。"),
+				"只会安装比当前更新、且列出本包公钥版本、并且发行方签名校验通过的版本。"),
 		Usage: "upgrade [--yes]",
 		Run: func(ctx *cli.Context, args []string) error {
 			return doUpgrade(ctx)
@@ -197,7 +197,7 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 	cli.PrintfWithColor(w, cli.Green,
 		"\nSuccessfully upgraded Alibaba Cloud CLI from %s to %s!\n", currentVersion, latest)
 	if isNewer(latest, pointer) {
-		cli.Printf(w, "Installed %s, the latest release with signature version %s. Published latest is %s. Run `aliyun upgrade` again to continue.\n",
+		cli.Printf(w, "Installed %s, the latest release that supports publisher key generation %s. Published latest is %s. Run `aliyun upgrade` again to continue.\n",
 			latest, clientSignatureVersion, strings.TrimSpace(pointer))
 	}
 	return nil
@@ -298,9 +298,9 @@ func fetchVersionFromOSS() (string, error) {
 const maxVersionListBytes = 256 * 1024
 
 type publishedVersion struct {
-	Version          string `json:"version"`
-	SignatureVersion string `json:"signature_version"`
-	Description      string `json:"description"`
+	Version     string   `json:"version"`
+	PublicKeys  []string `json:"public_keys"`
+	Description string   `json:"description"`
 }
 
 // fetchVersionList reads the stable history published beside /version.
@@ -350,7 +350,9 @@ func parseVersionCatalog(body []byte) ([]publishedVersion, error) {
 
 // selectUpgradeVersion returns the single release to install.
 // It is the newest catalog entry newer than current, not newer than the
-// /version pointer, and carrying the same signature version as this binary.
+// /version pointer, whose public_keys list contains this binary's generation.
+// Support for several generations is read from that list, not from the
+// version's position between two other releases.
 // When the catalog is absent, the pointer itself is that one release.
 func selectUpgradeVersion(current, pointer, signatureVersion string, listed []publishedVersion, catalogPresent bool) string {
 	pointer = strings.TrimSpace(pointer)
@@ -369,7 +371,7 @@ func selectUpgradeVersion(current, pointer, signatureVersion string, listed []pu
 	}
 	best := ""
 	for _, entry := range listed {
-		if entry.SignatureVersion != signatureVersion {
+		if !listsPublicKey(entry.PublicKeys, signatureVersion) {
 			continue
 		}
 		version, ok := canonicalUpgradeVersion(entry.Version)
@@ -384,6 +386,15 @@ func selectUpgradeVersion(current, pointer, signatureVersion string, listed []pu
 		}
 	}
 	return best
+}
+
+func listsPublicKey(keys []string, want string) bool {
+	for _, key := range keys {
+		if strings.TrimSpace(key) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func canonicalUpgradeVersion(raw string) (string, bool) {

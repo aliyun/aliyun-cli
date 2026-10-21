@@ -13,8 +13,8 @@ import (
 //
 //	classify <version>                 prints stable or prerelease
 //	plan <version>                     prints the publish policy as key=value lines
-//	append-version <version> <file> <signature-version>
-//	signature-version                  prints the publisher generation embedded in this source
+//	append-version <version> <file> <public-keys>
+//	supported-public-keys              prints the key generations embedded in this source, comma-separated
 func Execute(args []string, stdout, stderr io.Writer) int {
 	filtered, err := parseArgs(args)
 	if err != nil {
@@ -49,12 +49,12 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 		return 0
-	case "signature-version":
+	case "supported-public-keys":
 		if len(filtered) != 1 {
 			fmt.Fprintln(stderr, usageText())
 			return 1
 		}
-		fmt.Fprintln(stdout, publishsig.SignatureVersion)
+		fmt.Fprintln(stdout, strings.Join(publishsig.SupportedPublicKeyVersions, ","))
 		return 0
 	case "append-version":
 		if len(filtered) != 4 || filtered[1] == "" || filtered[2] == "" || filtered[3] == "" {
@@ -83,7 +83,7 @@ func Execute(args []string, stdout, stderr io.Writer) int {
 }
 
 func usageText() string {
-	return "usage: releasever classify|plan <version> | append-version <version> <file> <signature-version> | signature-version"
+	return "usage: releasever classify|plan <version> | append-version <version> <file> <public-keys> | supported-public-keys"
 }
 
 func parseArgs(args []string) ([]string, error) {

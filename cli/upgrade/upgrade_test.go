@@ -345,8 +345,8 @@ func TestUpgradeViaDirect_UserCancels(t *testing.T) {
 
 func TestFetchVersionList(t *testing.T) {
 	catalog := versionCatalogBody(t,
-		publishedVersion{Version: "3.5.1", SignatureVersion: "1", Description: "Ed25519 publisher key generation 1"},
-		publishedVersion{Version: "3.5.2", SignatureVersion: "1", Description: "Ed25519 publisher key generation 1"},
+		publishedVersion{Version: "3.5.1", PublicKeys: []string{"1"}, Description: "publisher key generation 1"},
+		publishedVersion{Version: "3.5.2", PublicKeys: []string{"1"}, Description: "publisher key generation 1"},
 	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -370,7 +370,7 @@ func TestFetchVersionList(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, present)
 	assert.Equal(t, "3.5.1", listed[0].Version)
-	assert.Equal(t, "1", listed[1].SignatureVersion)
+	assert.Equal(t, []string{"1"}, listed[1].PublicKeys)
 
 	ossBaseURL = server.URL + "/missing"
 	listed, present, err = fetchVersionList()
@@ -442,8 +442,8 @@ func TestUpgradeViaDirect_RejectsEveryCandidate(t *testing.T) {
 	})
 	mux.HandleFunc("/versions", func(w http.ResponseWriter, r *http.Request) {
 		w.Write(versionCatalogBody(t,
-			publishedVersion{Version: "3.1.0", SignatureVersion: "1"},
-			publishedVersion{Version: "3.2.0", SignatureVersion: "1"},
+			publishedVersion{Version: "3.1.0", PublicKeys: []string{"1"}},
+			publishedVersion{Version: "3.2.0", PublicKeys: []string{"1"}},
 		))
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -477,19 +477,20 @@ func TestUpgradeViaDirect_RejectsEveryCandidate(t *testing.T) {
 
 func TestSelectUpgradeVersion(t *testing.T) {
 	listed := []publishedVersion{
-		{Version: "1.0.0", SignatureVersion: "1"},
-		{Version: "3.1.0", SignatureVersion: "1"},
-		{Version: "3.2.0", SignatureVersion: "2"},
-		{Version: "9.9.9", SignatureVersion: "1"},
-		{Version: "not-a-version", SignatureVersion: "1"},
-		{Version: "3.1.0", SignatureVersion: "1"},
+		{Version: "1.0.0", PublicKeys: []string{"1"}},
+		{Version: "3.1.0", PublicKeys: []string{"1"}},
+		{Version: "3.1.5", PublicKeys: []string{"2"}},
+		{Version: "3.1.8", PublicKeys: []string{"1", "2"}},
+		{Version: "3.2.0", PublicKeys: []string{"2"}},
+		{Version: "9.9.9", PublicKeys: []string{"1"}},
+		{Version: "not-a-version", PublicKeys: []string{"1"}},
 	}
-	assert.Equal(t, "3.1.0", selectUpgradeVersion("3.0.0", "3.2.0", "1", listed, true))
+	assert.Equal(t, "3.1.8", selectUpgradeVersion("3.0.0", "3.2.0", "1", listed, true))
 	assert.Equal(t, "3.2.0", selectUpgradeVersion("3.0.0", "3.2.0", "2", listed, true))
 	assert.Equal(t, "", selectUpgradeVersion("3.2.0", "3.1.0", "1", []publishedVersion{
-		{Version: "1.0.0", SignatureVersion: "1"},
-		{Version: "3.1.0", SignatureVersion: "1"},
-		{Version: "9.9.9", SignatureVersion: "1"},
+		{Version: "1.0.0", PublicKeys: []string{"1"}},
+		{Version: "3.1.0", PublicKeys: []string{"1"}},
+		{Version: "9.9.9", PublicKeys: []string{"1"}},
 	}, true))
 	assert.Equal(t, "3.2.0", selectUpgradeVersion("3.0.0", "3.2.0", "1", nil, false))
 	assert.Equal(t, "", selectUpgradeVersion("3.2.0", "3.2.0", "1", nil, false))
@@ -516,9 +517,9 @@ func TestUpgradeViaDirect_InstallsNewestVerifiedAndSkipsOlderSigned(t *testing.T
 	})
 	mux.HandleFunc("/versions", func(w http.ResponseWriter, r *http.Request) {
 		w.Write(versionCatalogBody(t,
-			publishedVersion{Version: "1.0.0", SignatureVersion: "1"},
-			publishedVersion{Version: "3.1.0", SignatureVersion: "1"},
-			publishedVersion{Version: "3.2.0", SignatureVersion: "2"},
+			publishedVersion{Version: "1.0.0", PublicKeys: []string{"1"}},
+			publishedVersion{Version: "3.1.0", PublicKeys: []string{"1"}},
+			publishedVersion{Version: "3.2.0", PublicKeys: []string{"2"}},
 		))
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -571,7 +572,7 @@ func TestUpgradeViaDirect_InstallsNewestVerifiedAndSkipsOlderSigned(t *testing.T
 	got, err := os.ReadFile(target)
 	assert.NoError(t, err)
 	assert.Equal(t, []byte("mid-bytes"), got)
-	assert.Contains(t, stdout.String(), "signature version "+publishsig.SignatureVersion)
+	assert.Contains(t, stdout.String(), "publisher key generation "+publishsig.SignatureVersion)
 	assert.Contains(t, stdout.String(), "Run `aliyun upgrade` again")
 	assert.Zero(t, seen["/"+oldName])
 	assert.Zero(t, seen["/"+oldName+".minisig"])
@@ -588,9 +589,9 @@ func TestUpgradeViaDirect_DoesNotInstallOlderSignedRelease(t *testing.T) {
 			w.Write([]byte("3.1.0\n"))
 		case "/versions":
 			w.Write(versionCatalogBody(t,
-				publishedVersion{Version: "1.0.0", SignatureVersion: "1"},
-				publishedVersion{Version: "3.1.0", SignatureVersion: "1"},
-				publishedVersion{Version: "9.9.9", SignatureVersion: "2"},
+				publishedVersion{Version: "1.0.0", PublicKeys: []string{"1"}},
+				publishedVersion{Version: "3.1.0", PublicKeys: []string{"1"}},
+				publishedVersion{Version: "9.9.9", PublicKeys: []string{"2"}},
 			))
 		default:
 			t.Errorf("unexpected download %s", r.URL.Path)

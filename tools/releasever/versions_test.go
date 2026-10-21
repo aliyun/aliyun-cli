@@ -19,14 +19,17 @@ func TestAppendStableVersion(t *testing.T) {
 	if doc.Format != publishsig.VersionsFormat || len(doc.Versions) != 1 {
 		t.Fatalf("first record = %s", got)
 	}
-	if doc.Versions[0].Version != "3.5.2" || doc.Versions[0].SignatureVersion != "1" {
+	if doc.Versions[0].Version != "3.5.2" || strings.Join(doc.Versions[0].PublicKeys, ",") != "1" {
 		t.Fatalf("entry = %+v", doc.Versions[0])
 	}
-	if doc.Versions[0].Description != publishsig.SignatureVersionDescription {
+	if doc.Versions[0].Description != "publisher key generation 1" {
 		t.Fatalf("description = %q", doc.Versions[0].Description)
 	}
+	if strings.Contains(doc.Versions[0].Description, "Ed25519") || strings.Contains(strings.ToLower(doc.Versions[0].Description), "ed25519") {
+		t.Fatalf("description names an algorithm: %q", doc.Versions[0].Description)
+	}
 
-	got, err = AppendStableVersion(got, "3.5.3", "2")
+	got, err = AppendStableVersion(got, "3.5.3", "1, 2, 1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,8 +37,11 @@ func TestAppendStableVersion(t *testing.T) {
 	if len(doc.Versions) != 2 || doc.Versions[0].Version != "3.5.2" || doc.Versions[1].Version != "3.5.3" {
 		t.Fatalf("append = %+v", doc.Versions)
 	}
-	if doc.Versions[1].Description != "publisher signature version 2" {
-		t.Fatalf("other generation description = %q", doc.Versions[1].Description)
+	if strings.Join(doc.Versions[1].PublicKeys, ",") != "1,2" {
+		t.Fatalf("public keys = %#v", doc.Versions[1].PublicKeys)
+	}
+	if doc.Versions[1].Description != "publisher key generations 1, 2" {
+		t.Fatalf("description = %q", doc.Versions[1].Description)
 	}
 
 	again, err := AppendStableVersion(got, "v3.5.2", "1")
@@ -46,13 +52,16 @@ func TestAppendStableVersion(t *testing.T) {
 		t.Fatalf("duplicate changed history:\n%s\n%s", again, got)
 	}
 
-	updated, err := AppendStableVersion(got, "3.5.2", "2")
+	updated, err := AppendStableVersion(got, "3.5.2", "1,2")
 	if err != nil {
 		t.Fatal(err)
 	}
 	doc = decodeCatalog(t, updated)
-	if len(doc.Versions) != 2 || doc.Versions[0].SignatureVersion != "2" || doc.Versions[1].Version != "3.5.3" {
+	if len(doc.Versions) != 2 || strings.Join(doc.Versions[0].PublicKeys, ",") != "1,2" || doc.Versions[1].Version != "3.5.3" {
 		t.Fatalf("in-place update = %+v", doc.Versions)
+	}
+	if doc.Versions[0].Description != "publisher key generations 1, 2" {
+		t.Fatalf("updated description = %q", doc.Versions[0].Description)
 	}
 
 	if _, err := AppendStableVersion(nil, "3.5.2-beta.1", "1"); err == nil || !strings.Contains(err.Error(), "prerelease") {
@@ -62,7 +71,7 @@ func TestAppendStableVersion(t *testing.T) {
 		t.Fatal("invalid version was recorded")
 	}
 	if _, err := AppendStableVersion(nil, "3.5.2", "no spaces"); err == nil {
-		t.Fatal("invalid signature version was recorded")
+		t.Fatal("invalid public key version was recorded")
 	}
 	if _, err := AppendStableVersion([]byte(`{"format":"aliyun-cli-versions v9"}`), "3.5.2", "1"); err == nil {
 		t.Fatal("foreign catalog was rewritten")
@@ -79,19 +88,19 @@ func TestAppendVersionCommand(t *testing.T) {
 	if err := os.WriteFile(path, first, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	stdout, stderr, code := runCLI(t, "append-version", "--", "3.5.2", path, "1")
+	stdout, stderr, code := runCLI(t, "append-version", "--", "3.5.2", path, "1,2")
 	if code != 0 || stderr != "" {
 		t.Fatalf("code=%d stderr=%q", code, stderr)
 	}
 	doc := decodeCatalog(t, []byte(stdout))
-	if len(doc.Versions) != 2 || doc.Versions[1].Version != "3.5.2" {
+	if len(doc.Versions) != 2 || doc.Versions[1].Version != "3.5.2" || strings.Join(doc.Versions[1].PublicKeys, ",") != "1,2" {
 		t.Fatalf("stdout = %s", stdout)
 	}
 	if _, stderr, code := runCLI(t, "append-version", "3.5.2"); code == 0 || !strings.Contains(stderr, "usage:") {
 		t.Fatalf("code=%d stderr=%q", code, stderr)
 	}
-	out, stderr, code := runCLI(t, "signature-version")
-	if code != 0 || stderr != "" || out != publishsig.SignatureVersion+"\n" {
+	out, stderr, code := runCLI(t, "supported-public-keys")
+	if code != 0 || stderr != "" || out != strings.Join(publishsig.SupportedPublicKeyVersions, ",")+"\n" {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, out, stderr)
 	}
 }

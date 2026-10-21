@@ -10,9 +10,9 @@ import (
 )
 
 type versionRecord struct {
-	Version          string `json:"version"`
-	SignatureVersion string `json:"signature_version"`
-	Description      string `json:"description"`
+	Version     string   `json:"version"`
+	PublicKeys  []string `json:"public_keys"`
+	Description string   `json:"description"`
 }
 
 type versionCatalog struct {
@@ -21,10 +21,10 @@ type versionCatalog struct {
 }
 
 // AppendStableVersion records one stable release in the JSON history.
-// The signature version is the publisher generation that signed the release.
-// Existing entries stay in order. Publishing the same version again updates
-// its signature note in place.
-func AppendStableVersion(existing []byte, raw, signatureVersion string) ([]byte, error) {
+// publicKeys is a comma-separated list of the publisher key generations that
+// release supports. Existing entries stay in order. Publishing the same
+// version again updates that entry in place.
+func AppendStableVersion(existing []byte, raw, publicKeys string) ([]byte, error) {
 	kind, err := Classify(raw)
 	if err != nil {
 		return nil, err
@@ -36,14 +36,15 @@ func AppendStableVersion(existing []byte, raw, signatureVersion string) ([]byte,
 	if err != nil {
 		return nil, err
 	}
-	if !validSignatureVersion(signatureVersion) {
-		return nil, fmt.Errorf("invalid signature version %q", signatureVersion)
+	keys, err := parsePublicKeyVersions(publicKeys)
+	if err != nil {
+		return nil, err
 	}
 	version := strings.TrimPrefix(canonical, "v")
 	record := versionRecord{
-		Version:          version,
-		SignatureVersion: signatureVersion,
-		Description:      publishsig.DescribeSignatureVersion(signatureVersion),
+		Version:     version,
+		PublicKeys:  keys,
+		Description: publishsig.DescribePublicKeys(keys),
 	}
 
 	catalog, err := readCatalog(existing)
@@ -83,6 +84,29 @@ func readCatalog(existing []byte) (versionCatalog, error) {
 		catalog.Versions = []versionRecord{}
 	}
 	return catalog, nil
+}
+
+func parsePublicKeyVersions(raw string) ([]string, error) {
+	seen := make(map[string]bool)
+	var keys []string
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if !validSignatureVersion(part) {
+			return nil, fmt.Errorf("invalid public key version %q", part)
+		}
+		if seen[part] {
+			continue
+		}
+		seen[part] = true
+		keys = append(keys, part)
+	}
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("public key versions are required")
+	}
+	return keys, nil
 }
 
 func validSignatureVersion(version string) bool {

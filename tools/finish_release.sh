@@ -148,14 +148,14 @@ else
       fi
     fi
     rm -f "${versions_err}"
-    # Default is the generation compiled into this source. A bridge release
-    # signed by the previous key sets CLI_RELEASE_SIGNATURE_VERSION to that
-    # previous generation.
-    sig_version="${CLI_RELEASE_SIGNATURE_VERSION:-}"
-    if [[ -z "${sig_version}" ]]; then
-      sig_version=$(go run ./tools/releasever/cmd/releasever signature-version)
+    # The list is the key generations this binary supports, not a range inferred
+    # from neighboring versions. CLI_RELEASE_PUBLIC_KEYS overrides it, for
+    # example "1,2" on a bridge release.
+    public_keys="${CLI_RELEASE_PUBLIC_KEYS:-}"
+    if [[ -z "${public_keys}" ]]; then
+      public_keys=$(go run ./tools/releasever/cmd/releasever supported-public-keys)
     fi
-    go run ./tools/releasever/cmd/releasever append-version -- "${VERSION}" "${versions_file}" "${sig_version}" > out/versions.next
+    go run ./tools/releasever/cmd/releasever append-version -- "${VERSION}" "${versions_file}" "${public_keys}" > out/versions.next
     mv out/versions.next "${versions_file}"
     ${ALIYUN} oss cp "${versions_file}" oss://aliyun-cli --force \
       --access-key-id "${ACCESS_KEY_ID}" \
