@@ -68,6 +68,9 @@ type ExecContext struct {
 	// objects and maps.
 	Args map[string]any
 
+	// Language selects local user-facing messages ("zh" / "en"); empty uses English.
+	Language string
+
 	// Wire-time knobs.
 	Region         string
 	Endpoint       string // if non-empty, overrides Endpoints.Resolve

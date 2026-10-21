@@ -407,8 +407,8 @@ func NewEstimateCostFlag() *cli.Flag {
 		Name:         EstimateCostFlagName,
 		AssignedMode: cli.AssignedNone,
 		Short: i18n.T(
-			"use `--estimate-cost` to estimate the cost of an OpenAPI call via CloudControl GetApiPrice without invoking it. Requires a product and an API name, e.g. `aliyun ecs RunInstances ... --estimate-cost`. Output is JSON.",
-			"使用 `--estimate-cost` 跳过实际调用，通过 CloudControl GetApiPrice 预估 OpenAPI 调用费用。需带 product 和 API 名（如 `aliyun ecs RunInstances ... --estimate-cost`），输出 JSON",
+			"add `--estimate-cost` to your existing aliyun CLI command to estimate its cost without actually calling the target API.",
+			"在原有的 aliyun CLI 调用命令中加上 `--estimate-cost`，即可预估该调用的费用，不会实际调用目标 API",
 		),
 		ExcludeWith: []string{PagerFlag.Name, WaiterFlag.Name, DryRunFlagName, CliDryRunFlagName, CliDryRunJsonFlagName},
 	}
