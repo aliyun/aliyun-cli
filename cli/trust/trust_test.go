@@ -263,6 +263,23 @@ func TestClientFetchArtifactAndKeyRotation(t *testing.T) {
 	assert.Equal(t, []string{"plugin-b"}, second.KeyIDs)
 }
 
+func TestClientAllowsDiscoveryMirrorWithSharedSignedMetadata(t *testing.T) {
+	f := newTrustFixture(t)
+	var discovery Discovery
+	require.NoError(t, json.Unmarshal(f.responses["/discovery"], &discovery))
+	discovery.Authority = "https://api.alibabacloud.com"
+	data, err := json.Marshal(discovery)
+	require.NoError(t, err)
+	f.responses["/discovery"] = data
+
+	artifact, err := f.client.FetchArtifact(
+		context.Background(), PurposePluginIndex, "plugins",
+	)
+
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"plugins":[]}`, string(artifact.Bytes))
+}
+
 func TestClientUsesUnexpiredDiscoveryAndIndexLKGOnNetworkFailure(t *testing.T) {
 	f := newTrustFixture(t)
 	first, err := f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
@@ -481,4 +498,12 @@ func TestNewUsesConfiguredPluginSite(t *testing.T) {
 
 	assert.Equal(t, DiscoveryURLIntl, client.cfg.DiscoveryURL)
 	assert.Contains(t, client.cfg.MetadataHosts, "api.alibabacloud.com")
+}
+
+func TestBuiltinMaterialPrefersLinkerInjectedBase64(t *testing.T) {
+	assert.Equal(t, []byte("encoded"), builtinMaterial(
+		"plain", base64.StdEncoding.EncodeToString([]byte("encoded")),
+	))
+	assert.Nil(t, builtinMaterial("plain", "not-base64"))
+	assert.Equal(t, []byte("plain"), builtinMaterial("plain", ""))
 }
