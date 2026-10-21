@@ -1,10 +1,8 @@
 package downloadassets
 
 import (
-	"bytes"
 	"context"
-	"io"
-	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,10 +18,9 @@ func TestDownloadChecksumAndCommitFailuresKeepPublishedChecksum(t *testing.T) {
 			checksum := filepath.Join(work, checksumName)
 			require.NoError(t, os.WriteFile(checksum, []byte("published"), 0600))
 			names := AssetNames("1.2.3")
-			client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-				return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewBufferString("asset")), Header: make(http.Header)}, nil
-			})}
-			err := Download(context.Background(), Options{Version: "1.2.3", BaseURL: "https://assets.example.invalid", WorkDir: work, Client: client, Summer: func(path string) (string, error) {
+			server := httptest.NewServer(signedHandler(func(string) []byte { return []byte("asset") }))
+			t.Cleanup(server.Close)
+			err := Download(context.Background(), Options{Version: "1.2.3", BaseURL: server.URL, WorkDir: work, Client: server.Client(), Summer: func(path string) (string, error) {
 				if filepath.Base(path) == names[len(names)-1] {
 					if stage == "checksum" {
 						require.NoError(t, os.Mkdir(filepath.Join(filepath.Dir(path), checksumName), 0700))

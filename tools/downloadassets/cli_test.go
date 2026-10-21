@@ -36,7 +36,9 @@ func TestExecuteSuccessAndHTTPFailure(t *testing.T) {
 			http.Error(w, "nope", http.StatusGatewayTimeout)
 			return
 		}
-		_, _ = w.Write([]byte("body-" + filepath.Base(r.URL.Path)))
+		signedHandler(func(name string) []byte {
+			return []byte("body-" + name)
+		})(w, r)
 	}))
 	defer srv.Close()
 
@@ -76,9 +78,7 @@ func (failWriter) Write([]byte) (int, error) {
 }
 
 func TestExecuteStdoutFailure(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("ok"))
-	}))
+	srv := httptest.NewServer(signedHandler(func(string) []byte { return []byte("ok") }))
 	defer srv.Close()
 
 	dir := t.TempDir()

@@ -19,6 +19,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,6 +31,7 @@ import (
 	"time"
 
 	"github.com/aliyun/aliyun-cli/v3/cli"
+	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
 	"github.com/aliyun/aliyun-cli/v3/i18n"
 	"golang.org/x/mod/semver"
 )
@@ -55,15 +57,22 @@ var (
 	detectInstallerFunc = detectInstaller
 	resolveExecPathFunc = resolveExecPath
 
-	osExecutable = os.Executable
-	evalSymlinks = filepath.EvalSymlinks
-)
+	osExecutable       = os.Executable
+	evalSymlinks       = filepath.EvalSymlinks
+	readSignatureFile  = os.ReadFile
+	buildAssetNameFunc = buildAssetName
+	// releaseIsNewer repeats the newer-than-current check immediately before
+	// the binary is replaced, so a selected release cannot roll the install back.
+	releaseIsNewer = isNewer
 
-type upgradeSource struct {
-	latestVersion string
-	downloadURL   string
-	assetName     string
-}
+	// publisherKeys are the keys allowed to replace this binary.
+	// Tests replace the slice; production uses the keys embedded in the CLI.
+	publisherKeys = publishsig.TrustedPublicKeys()
+
+	// clientSignatureVersion selects which releases this binary will install.
+	// Tests replace it.
+	clientSignatureVersion = publishsig.SignatureVersion
+)
 
 func NewUpgradeCommand() *cli.Command {
 	cmd := &cli.Command{
@@ -74,10 +83,12 @@ func NewUpgradeCommand() *cli.Command {
 		Long: i18n.T(
 			"Upgrade Alibaba Cloud CLI to the latest release.\n"+
 				"If installed via Homebrew, delegates to 'brew upgrade'.\n"+
-				"Otherwise downloads from Alibaba Cloud OSS mirror.",
+				"Otherwise downloads from Alibaba Cloud OSS mirror.\n"+
+				"Only a release newer than this CLI and listing this CLI's publisher key generation is installed, after its publisher signature verifies.",
 			"升级阿里云CLI到最新版本。\n"+
 				"如果通过Homebrew安装，自动调用brew upgrade升级。\n"+
-				"否则从阿里云OSS镜像源下载。"),
+				"否则从阿里云OSS镜像源下载。\n"+
+				"只会安装比当前更新、且列出本包公钥版本、并且发行方签名校验通过的版本。"),
 		Usage: "upgrade [--yes]",
 		Run: func(ctx *cli.Context, args []string) error {
 			return doUpgrade(ctx)
@@ -140,29 +151,42 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 	w := ctx.Stdout()
 
 	cli.Printf(w, "Checking for latest version...\n")
-	source, err := resolveUpgradeSource()
+	pointer, err := fetchVersionFromOSS()
 	if err != nil {
 		return fmt.Errorf("failed to check for updates: %s", err)
 	}
-	cli.Printf(w, "Latest version:  %s\n\n", source.latestVersion)
-
-	if !isNewer(currentVersion, source.latestVersion) {
+	listed, catalogPresent, listErr := fetchVersionList()
+	if listErr != nil {
+		cli.Printf(w, "Version history is unavailable (%s); checking the latest release only.\n", listErr)
+		catalogPresent = false
+	}
+	latest := selectUpgradeVersion(currentVersion, pointer, clientSignatureVersion, listed, catalogPresent)
+	if latest == "" {
 		cli.PrintfWithColor(w, cli.Green, "You are already using the latest version.\n")
 		return nil
 	}
+	cli.Printf(w, "Latest version:  %s\n\n", latest)
 
-	if !confirmUpgrade(ctx, currentVersion, source.latestVersion) {
+	if !confirmUpgrade(ctx, currentVersion, latest) {
 		cli.Printf(w, "Upgrade cancelled.\n")
 		return nil
 	}
 
-	cli.Printf(w, "Downloading %s...\n  From: %s\n", source.assetName, source.downloadURL)
-	extractedBinary, cleanup, err := downloadAndExtract(w, source.downloadURL, source.assetName)
+	assetName, err := buildAssetNameFunc(latest)
+	if err != nil {
+		return err
+	}
+	downloadURL := ossBaseURL + "/" + assetName
+	cli.Printf(w, "Downloading %s...\n  From: %s\n", assetName, downloadURL)
+	extracted, cleanup, err := downloadAndExtract(w, downloadURL, assetName)
 	if cleanup != nil {
 		defer cleanup()
 	}
 	if err != nil {
 		return err
+	}
+	if !releaseIsNewer(currentVersion, latest) {
+		return fmt.Errorf("refusing to install %s because it is not newer than %s", latest, currentVersion)
 	}
 
 	execPath, err := resolveExecPathFunc()
@@ -170,12 +194,16 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 		return err
 	}
 	cli.Printf(w, "Installing new version to %s ...\n", execPath)
-	if err := replaceBinary(extractedBinary, execPath); err != nil {
+	if err := replaceBinary(extracted, execPath); err != nil {
 		return fmt.Errorf("installation failed: %s\nYou may need to run with elevated privileges (sudo)", err)
 	}
 
 	cli.PrintfWithColor(w, cli.Green,
-		"\nSuccessfully upgraded Alibaba Cloud CLI from %s to %s!\n", currentVersion, source.latestVersion)
+		"\nSuccessfully upgraded Alibaba Cloud CLI from %s to %s!\n", currentVersion, latest)
+	if isNewer(latest, pointer) {
+		cli.Printf(w, "Installed %s, the latest release that supports publisher key generation %s. Published latest is %s. Run `aliyun upgrade` again to continue.\n",
+			latest, clientSignatureVersion, strings.TrimSpace(pointer))
+	}
 	return nil
 }
 
@@ -204,6 +232,24 @@ func downloadAndExtract(w io.Writer, downloadURL, assetName string) (binaryPath 
 		cleanup()
 		return "", nil, fmt.Errorf("download failed: %s", err)
 	}
+	sigPath := archivePath + ".minisig"
+	if err := downloadFile(w, downloadURL+".minisig", sigPath); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("publisher signature download failed: %s", err)
+	}
+	sig, err := readSignatureFile(sigPath)
+	if err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("publisher signature download failed: %s", err)
+	}
+	if len(sig) > 4096 {
+		cleanup()
+		return "", nil, fmt.Errorf("publisher signature rejected: document is too large")
+	}
+	if err := publishsig.VerifyFile(publisherKeys, assetName, archivePath, sig); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("publisher signature rejected: %s", err)
+	}
 
 	binaryName := "aliyun"
 	if runtime.GOOS == "windows" {
@@ -230,24 +276,6 @@ func resolveExecPath() (string, error) {
 	return execPath, nil
 }
 
-func resolveUpgradeSource() (*upgradeSource, error) {
-	version, err := fetchVersionFromOSS()
-	if err != nil {
-		return nil, err
-	}
-
-	assetName, err := buildAssetName(version)
-	if err != nil {
-		return nil, err
-	}
-
-	return &upgradeSource{
-		latestVersion: version,
-		downloadURL:   ossBaseURL + "/" + assetName,
-		assetName:     assetName,
-	}, nil
-}
-
 func fetchVersionFromOSS() (string, error) {
 	resp, err := httpClient.Get(ossVersionURL)
 	if err != nil {
@@ -269,6 +297,130 @@ func fetchVersionFromOSS() (string, error) {
 		return "", fmt.Errorf("empty version from OSS")
 	}
 	return version, nil
+}
+
+const maxVersionListBytes = 256 * 1024
+
+type publishedVersion struct {
+	Version     string   `json:"version"`
+	PublicKeys  []string `json:"public_keys"`
+	Description string   `json:"description"`
+}
+
+// fetchVersionList reads the stable history published beside /version.
+// A missing object is not an error: the caller follows /version once.
+func fetchVersionList() ([]publishedVersion, bool, error) {
+	resp, err := httpClient.Get(ossBaseURL + "/versions")
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to reach OSS: %s", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, false, fmt.Errorf("OSS versions file returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxVersionListBytes+1))
+	if err != nil {
+		return nil, false, err
+	}
+	if len(body) > maxVersionListBytes {
+		return nil, false, fmt.Errorf("OSS versions file is too large")
+	}
+	listed, err := parseVersionCatalog(body)
+	if err != nil {
+		return nil, false, err
+	}
+	return listed, true, nil
+}
+
+func parseVersionCatalog(body []byte) ([]publishedVersion, error) {
+	var doc struct {
+		Format   string             `json:"format"`
+		Versions []publishedVersion `json:"versions"`
+	}
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return nil, fmt.Errorf("OSS versions file: %s", err)
+	}
+	if doc.Format != publishsig.VersionsFormat {
+		return nil, fmt.Errorf("OSS versions file: unsupported format %q", doc.Format)
+	}
+	if doc.Versions == nil {
+		return []publishedVersion{}, nil
+	}
+	return doc.Versions, nil
+}
+
+// selectUpgradeVersion returns the single release to install.
+// It is the newest catalog entry newer than current, not newer than the
+// /version pointer, whose public_keys list contains this binary's generation.
+// Support for several generations is read from that list, not from the
+// version's position between two other releases.
+// When the catalog is absent, the pointer itself is that one release.
+func selectUpgradeVersion(current, pointer, signatureVersion string, listed []publishedVersion, catalogPresent bool) string {
+	pointer = strings.TrimSpace(pointer)
+	if !catalogPresent {
+		if pointer != "" && isNewer(current, pointer) {
+			return pointer
+		}
+		return ""
+	}
+	ceiling, ok := canonicalUpgradeVersion(pointer)
+	if !ok {
+		return ""
+	}
+	if _, ok := canonicalUpgradeVersion(current); !ok {
+		return ""
+	}
+	best := ""
+	for _, entry := range listed {
+		if !listsPublicKey(entry.PublicKeys, signatureVersion) {
+			continue
+		}
+		version, ok := canonicalUpgradeVersion(entry.Version)
+		if !ok || !isNewer(current, version) {
+			continue
+		}
+		if semver.Compare("v"+version, "v"+ceiling) > 0 {
+			continue
+		}
+		if best == "" || semver.Compare("v"+version, "v"+best) > 0 {
+			best = version
+		}
+	}
+	return best
+}
+
+func listsPublicKey(keys []string, want string) bool {
+	for _, key := range keys {
+		if strings.TrimSpace(key) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func canonicalUpgradeVersion(raw string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.ContainsAny(raw, " \t/\\") {
+		return "", false
+	}
+	if strings.HasPrefix(raw, "v") || strings.HasPrefix(raw, "V") {
+		raw = raw[1:]
+	}
+	if !semver.IsValid("v" + raw) {
+		return "", false
+	}
+	core := raw
+	if i := strings.IndexAny(core, "-+"); i >= 0 {
+		core = core[:i]
+	}
+	parts := strings.Split(core, ".")
+	if len(parts) != 3 {
+		return "", false
+	}
+	return raw, true
 }
 
 func buildAssetName(version string) (string, error) {

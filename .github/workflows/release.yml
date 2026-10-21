@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+      CLI_RELEASE_SIGNING_KEY: ${{ secrets.CLI_RELEASE_SIGNING_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,8 +27,13 @@ jobs:
     needs: [create_release]
     name: Build for MacOSX
     runs-on: macos-14
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+      CLI_RELEASE_SIGNING_KEY: ${{ secrets.CLI_RELEASE_SIGNING_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,7 +68,7 @@ jobs:
             --options runtime \
             --timestamp out/aliyun
           tar zcvf out/aliyun-cli-macosx-${VERSION}-amd64.tgz -C out aliyun
-          bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-macosx-${VERSION}-amd64.tgz
+          bash tools/publish_archive.sh ${VERSION} out/aliyun-cli-macosx-${VERSION}-amd64.tgz out/aliyun
           cp out/aliyun out/aliyun.amd64
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun ./main
           codesign --sign "${{ secrets.APPLE_TEAM_ID }}" \
@@ -70,11 +76,11 @@ jobs:
             --options runtime \
             --timestamp out/aliyun
           tar zcvf out/aliyun-cli-macosx-${VERSION}-arm64.tgz -C out aliyun
-          bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-macosx-${VERSION}-arm64.tgz
+          bash tools/publish_archive.sh ${VERSION} out/aliyun-cli-macosx-${VERSION}-arm64.tgz out/aliyun
           cp out/aliyun out/aliyun.arm64
           lipo -output out/aliyun -create out/aliyun.amd64 out/aliyun.arm64
           tar zcvf out/aliyun-cli-macosx-${VERSION}-universal.tgz -C out aliyun
-          bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-macosx-${VERSION}-universal.tgz
+          bash tools/publish_archive.sh ${VERSION} out/aliyun-cli-macosx-${VERSION}-universal.tgz out/aliyun
           # generate out/aliyun-cli-${VERSION}.pkg
           bash tools/build_pkg.sh ${VERSION}
           productsign --sign "${{ secrets.APPLE_TEAM_ID }}" out/aliyun-cli-${VERSION}.pkg out/aliyun-cli-${VERSION}.pkg.signed
@@ -85,13 +91,26 @@ jobs:
             --password "${{ secrets.APPLE_APP_PASSWORD }}" \
             --wait
           xcrun stapler staple out/aliyun-cli-${VERSION}.pkg
-          bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-${VERSION}.pkg
+          bash tools/publish_archive.sh ${VERSION} out/aliyun-cli-${VERSION}.pkg out/aliyun
+      - name: Attest macOS release archives
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            out/*.tgz
+            out/*.pkg
+            out/*.cdx.json
+            out/*.provenance.json
   build_for_linux:
     needs: [create_release]
     name: Build for Linux
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+      CLI_RELEASE_SIGNING_KEY: ${{ secrets.CLI_RELEASE_SIGNING_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -110,17 +129,29 @@ jobs:
           # build for Linux amd64
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun ./main
           tar zcvf out/aliyun-cli-linux-${VERSION}-amd64.tgz -C out aliyun
-          bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-linux-${VERSION}-amd64.tgz
+          bash tools/publish_archive.sh ${VERSION} out/aliyun-cli-linux-${VERSION}-amd64.tgz out/aliyun
           # build for Linux arm64
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${VERSION}'" -o out/aliyun ./main
           tar zcvf out/aliyun-cli-linux-${VERSION}-arm64.tgz -C out aliyun
-          bash tools/upload_asset.sh ${VERSION} out/aliyun-cli-linux-${VERSION}-arm64.tgz
+          bash tools/publish_archive.sh ${VERSION} out/aliyun-cli-linux-${VERSION}-arm64.tgz out/aliyun
+      - name: Attest Linux release archives
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            out/*.tgz
+            out/*.cdx.json
+            out/*.provenance.json
   build_for_windows:
     needs: [create_release]
     name: Build for Windows
     runs-on: windows-latest
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLI_RELEASE_SIGNING_KEY: ${{ secrets.CLI_RELEASE_SIGNING_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -141,13 +172,21 @@ jobs:
           $env:CGO_ENABLED = "0"
           go build -tags aliyun_cli_packed_meta -ldflags "-X 'github.com/aliyun/aliyun-cli/v3/cli.Version=${version}'" -o ./out/aliyun.exe ./main
           Compress-Archive -Path ./out/aliyun.exe -DestinationPath ./out/aliyun-cli-windows-${version}-amd64.zip
-          bash ./tools/upload_asset.sh ${version} ./out/aliyun-cli-windows-${version}-amd64.zip
+          bash ./tools/publish_archive.sh ${version} ./out/aliyun-cli-windows-${version}-amd64.zip ./out/aliyun.exe
+      - name: Attest Windows release archives
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            out/*.zip
+            out/*.cdx.json
+            out/*.provenance.json
   finish_release:
     needs: [build_for_macosx, build_for_linux, build_for_windows]
     name: Finish the release
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLI_RELEASE_SIGNING_KEY: ${{ secrets.CLI_RELEASE_SIGNING_KEY }}
       ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
       ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
     steps:
