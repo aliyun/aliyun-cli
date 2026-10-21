@@ -39,7 +39,7 @@ func usePluginTrustIndex(t *testing.T, index *Index) *fakePluginArtifactFetcher 
 		SignedAt: time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC),
 	}}
 	original := newArtifactTrustClient
-	newArtifactTrustClient = func(string) artifactFetcher { return fetcher }
+	newArtifactTrustClient = func(string, string) artifactFetcher { return fetcher }
 	t.Cleanup(func() { newArtifactTrustClient = original })
 	return fetcher
 }
@@ -59,6 +59,30 @@ func TestOfficialIndexUsesTrustClientWithoutUnsignedFallback(t *testing.T) {
 	fetcher.err = fmt.Errorf("bad signature")
 	_, err = manager.GetIndex()
 	assert.ErrorContains(t, err, "bad signature")
+}
+
+func TestSourceBaseReconfiguresRepositoryTrustClient(t *testing.T) {
+	var capturedSource string
+	fetcher := &fakePluginArtifactFetcher{err: fmt.Errorf("not configured")}
+	original := newArtifactTrustClient
+	newArtifactTrustClient = func(_ string, sourceBase string) artifactFetcher {
+		capturedSource = sourceBase
+		return fetcher
+	}
+	t.Cleanup(func() { newArtifactTrustClient = original })
+
+	manager := &Manager{rootDir: t.TempDir(), trustCacheDir: t.TempDir()}
+	require.NoError(t, manager.ApplySourceBaseOverride(
+		"https://cli-inner.example.com/pre/plugins-v2/",
+	))
+	assert.Equal(
+		t,
+		"https://cli-inner.example.com/pre/plugins-v2",
+		capturedSource,
+	)
+
+	_, err := manager.GetIndex()
+	assert.ErrorContains(t, err, "failed to verify plugin index")
 }
 
 func TestPluginAuditFieldsRoundTripAndDisplay(t *testing.T) {

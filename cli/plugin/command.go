@@ -58,9 +58,6 @@ func newManagerWithOptionalSourceBase(ctx *cli.Context) (*Manager, error) {
 	if f := ctx.Flags().Get("allow-unverified-plugin"); f != nil && f.IsAssigned() {
 		mgr.allowUnverifiedPlugin = true
 	}
-	if strings.TrimSpace(mgr.sourceBase) != "" && !mgr.allowUnverifiedPlugin {
-		return nil, fmt.Errorf("non-official plugin source requires --allow-unverified-plugin")
-	}
 	f := ctx.Flags().Get("source-base")
 	if f == nil || !f.IsAssigned() {
 		return mgr, nil
@@ -68,9 +65,6 @@ func newManagerWithOptionalSourceBase(ctx *cli.Context) (*Manager, error) {
 	v, _ := f.GetValue()
 	if err := mgr.ApplySourceBaseOverride(v); err != nil {
 		return nil, err
-	}
-	if !mgr.allowUnverifiedPlugin {
-		return nil, fmt.Errorf("--source-base requires --allow-unverified-plugin")
 	}
 	return mgr, nil
 }

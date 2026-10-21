@@ -72,7 +72,8 @@ type Manager struct {
 	// httpTransport overrides the HTTP transport in tests (for example httptest TLS).
 	httpTransport http.RoundTripper
 	// trustClient is the only source for the official package index.
-	trustClient artifactFetcher
+	trustClient   artifactFetcher
+	trustCacheDir string
 	// allowUnverifiedPlugin is an explicit opt-in for custom sources/packages.
 	allowUnverifiedPlugin  bool
 	indexTrustVerification *TrustVerification
@@ -82,8 +83,8 @@ type artifactFetcher interface {
 	FetchArtifact(context.Context, string, string) (*trust.VerifiedArtifact, error)
 }
 
-var newArtifactTrustClient = func(cacheDir string) artifactFetcher {
-	return trust.New(trust.Config{CacheDir: cacheDir})
+var newArtifactTrustClient = func(cacheDir, sourceBase string) artifactFetcher {
+	return trust.New(trust.Config{CacheDir: cacheDir, SourceBase: sourceBase})
 }
 
 func getHomePath() string {
@@ -131,10 +132,12 @@ func NewManager() (*Manager, error) {
 		settings = pluginsettings.Default()
 	}
 	base := pluginsettings.EffectiveSourceBase(settings)
+	trustCacheDir := filepath.Join(sysDir, "trust")
 	return &Manager{
-		rootDir:     rootDir,
-		sourceBase:  base,
-		trustClient: newArtifactTrustClient(filepath.Join(sysDir, "trust")),
+		rootDir:       rootDir,
+		sourceBase:    base,
+		trustCacheDir: trustCacheDir,
+		trustClient:   newArtifactTrustClient(trustCacheDir, base),
 	}, nil
 }
 
@@ -151,6 +154,7 @@ func (m *Manager) ApplySourceBaseOverride(raw string) error {
 		return fmt.Errorf("source-base: %w", err)
 	}
 	m.sourceBase = strings.TrimRight(v, "/")
+	m.trustClient = newArtifactTrustClient(m.trustCacheDir, m.sourceBase)
 	m.skipPluginIndexCacheForCLI = true
 	return nil
 }
@@ -294,24 +298,26 @@ func (m *Manager) fetchWithCache(url, cacheFile string, result interface{}) erro
 }
 
 func (m *Manager) GetIndex() (*Index, error) {
-	if m.sourceBase == "" && m.indexURL == "" {
+	if m.indexURL == "" {
 		if m.trustClient == nil {
-			return nil, fmt.Errorf("official plugin index trust client is not configured")
+			return nil, fmt.Errorf("plugin index trust client is not configured")
 		}
 		artifact, err := m.trustClient.FetchArtifact(context.Background(), trust.PurposePluginIndex, "plugins")
-		if err != nil {
-			return nil, fmt.Errorf("failed to verify official plugin index: %w", err)
+		if err == nil {
+			var index Index
+			if err := trust.DecodeStrictJSON(artifact.Bytes, &index); err != nil {
+				return nil, fmt.Errorf("failed to decode verified plugin index: %w", err)
+			}
+			m.indexTrustVerification = &TrustVerification{
+				KeyIDs:       append([]string(nil), artifact.KeyIDs...),
+				IndexVersion: artifact.Descriptor.Version,
+				VerifiedAt:   artifact.SignedAt,
+			}
+			return &index, nil
 		}
-		var index Index
-		if err := trust.DecodeStrictJSON(artifact.Bytes, &index); err != nil {
-			return nil, fmt.Errorf("failed to decode verified plugin index: %w", err)
+		if m.sourceBase == "" || !m.allowUnverifiedPlugin {
+			return nil, fmt.Errorf("failed to verify plugin index for configured source: %w", err)
 		}
-		m.indexTrustVerification = &TrustVerification{
-			KeyIDs:       append([]string(nil), artifact.KeyIDs...),
-			IndexVersion: artifact.Descriptor.Version,
-			VerifiedAt:   artifact.SignedAt,
-		}
-		return &index, nil
 	}
 	indexURL := m.resolvedPkgIndexURL()
 	cacheFile := filepath.Join(m.rootDir, indexCacheFile)

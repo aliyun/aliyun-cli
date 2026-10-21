@@ -23,6 +23,7 @@ import (
 type Config struct {
 	CacheDir      string
 	DiscoveryURL  string
+	SourceBase    string
 	HTTPClient    *http.Client
 	Now           func() time.Time
 	MetadataHosts []string
@@ -41,6 +42,10 @@ func New(cfg Config) *Client {
 	if cfg.DiscoveryURL == "" {
 		cfg.DiscoveryURL = defaultDiscoveryURL()
 	}
+	if strings.TrimSpace(cfg.SourceBase) == "" {
+		cfg.SourceBase = defaultSourceBase()
+	}
+	cfg.SourceBase = strings.TrimRight(strings.TrimSpace(cfg.SourceBase), "/")
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = &http.Client{Timeout: 15 * time.Second}
 	}
@@ -105,6 +110,19 @@ func defaultDiscoveryURL() string {
 	return DiscoveryURLForSite(pluginsettings.EffectiveSite(settings))
 }
 
+func defaultSourceBase() string {
+	var settings *pluginsettings.PluginSettings
+	if home, err := os.UserHomeDir(); err == nil {
+		if loaded, loadErr := pluginsettings.Load(filepath.Join(home, ".aliyun")); loadErr == nil {
+			settings = loaded
+		}
+	}
+	if source := pluginsettings.EffectiveSourceBase(settings); source != "" {
+		return source
+	}
+	return "https://aliyuncli.alicdn.com/plugins-v2"
+}
+
 func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*VerifiedArtifact, error) {
 	if len(c.cfg.BootstrapRoot) == 0 {
 		return nil, fmt.Errorf("artifact trust bootstrap root is not configured")
@@ -142,7 +160,9 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 	if origin == "" {
 		return nil, fmt.Errorf("discovery has no valid official artifact origin")
 	}
-	cacheDir := filepath.Join(c.cfg.CacheDir, digest(authority), digest(origin))
+	cacheDir := filepath.Join(
+		c.cfg.CacheDir, digest(authority), digest(c.cfg.SourceBase), digest(origin),
+	)
 	state := c.readState(cacheDir)
 	deny := make(map[string]bool)
 	for _, id := range state.DenyKeyIDs {
@@ -270,8 +290,12 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 
 func (c *Client) loadDiscovery(ctx context.Context, purpose string, now time.Time) (Discovery, error) {
 	var discovery Discovery
-	cache := filepath.Join(c.cfg.CacheDir, "discovery", digest(c.cfg.DiscoveryURL)+".json")
-	data, remote, err := c.fetchWithLKG(ctx, c.cfg.DiscoveryURL, cache, c.cfg.MetadataHosts)
+	discoveryURL, err := c.discoveryURL()
+	if err != nil {
+		return discovery, err
+	}
+	cache := filepath.Join(c.cfg.CacheDir, "discovery", digest(discoveryURL)+".json")
+	data, remote, err := c.fetchWithLKG(ctx, discoveryURL, cache, c.cfg.MetadataHosts)
 	if err != nil {
 		return discovery, fmt.Errorf("fetch discovery: %w", err)
 	}
@@ -279,7 +303,9 @@ func (c *Client) loadDiscovery(ctx context.Context, purpose string, now time.Tim
 		if err := strictJSON(raw, &discovery); err != nil {
 			return fmt.Errorf("decode discovery: %w", err)
 		}
-		if discovery.SchemaVersion != SchemaVersion || !now.Before(discovery.ExpiresAt) ||
+		if discovery.SchemaVersion != SchemaVersion ||
+			discovery.SourceBase != c.cfg.SourceBase ||
+			!now.Before(discovery.ExpiresAt) ||
 			discovery.CacheMaxAgeSeconds <= 0 ||
 			!contains(discovery.SupportedSignatureAlgorithms, AlgorithmEd25519) ||
 			!contains(discovery.SupportedArtifactTypes, purpose) {
@@ -306,6 +332,23 @@ func (c *Client) loadDiscovery(ctx context.Context, purpose string, now time.Tim
 		}
 	}
 	return discovery, nil
+}
+
+func (c *Client) discoveryURL() (string, error) {
+	source, err := url.Parse(c.cfg.SourceBase)
+	if err != nil || source.Host == "" || source.User != nil ||
+		source.RawQuery != "" || source.Fragment != "" ||
+		(source.Scheme != "https" && !(c.cfg.AllowTestHTTP && source.Scheme == "http")) {
+		return "", fmt.Errorf("invalid plugin source-base")
+	}
+	discovery, err := url.Parse(c.cfg.DiscoveryURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid discovery URL: %w", err)
+	}
+	query := discovery.Query()
+	query.Set("source_base", c.cfg.SourceBase)
+	discovery.RawQuery = query.Encode()
+	return discovery.String(), nil
 }
 
 func (c *Client) loadPersistedRoot(cacheDir string, root Root, state State, now time.Time, deny map[string]bool) (Root, error) {
@@ -581,8 +624,15 @@ func (c *Client) fetchStatus(ctx context.Context, rawURL string, hosts []string)
 
 func (c *Client) validateURL(raw string, hosts []string) error {
 	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+	if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" {
 		return fmt.Errorf("invalid trust URL")
+	}
+	if u.RawQuery != "" {
+		query := u.Query()
+		values, ok := query["source_base"]
+		if !ok || len(query) != 1 || len(values) != 1 || values[0] != c.cfg.SourceBase {
+			return fmt.Errorf("invalid trust URL query")
+		}
 	}
 	if u.Scheme != "https" && !(c.cfg.AllowTestHTTP && u.Scheme == "http" && isLoopback(u.Hostname())) {
 		return fmt.Errorf("trust URL must use HTTPS")
