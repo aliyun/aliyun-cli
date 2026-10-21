@@ -3,6 +3,7 @@ package trust
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -53,13 +54,21 @@ func New(cfg Config) *Client {
 		cfg.RecoveryHosts = append([]string(nil), RecoveryHostAllowlist...)
 	}
 	if len(cfg.BootstrapRoot) == 0 {
-		cfg.BootstrapRoot = []byte(BuiltinRootEnvelope)
+		cfg.BootstrapRoot = builtinMaterial(
+			BuiltinRootEnvelope, BuiltinRootEnvelopeBase64,
+		)
 	}
 	if len(cfg.RecoveryKeys) == 0 {
-		_ = strictJSON([]byte(BuiltinRecoveryKeysJSON), &cfg.RecoveryKeys)
+		_ = strictJSON(
+			builtinMaterial(BuiltinRecoveryKeysJSON, BuiltinRecoveryKeysBase64),
+			&cfg.RecoveryKeys,
+		)
 	}
 	if cfg.RecoveryRole.Threshold == 0 {
-		_ = strictJSON([]byte(BuiltinRecoveryRoleJSON), &cfg.RecoveryRole)
+		_ = strictJSON(
+			builtinMaterial(BuiltinRecoveryRoleJSON, BuiltinRecoveryRoleBase64),
+			&cfg.RecoveryRole,
+		)
 	}
 	if cfg.CacheDir == "" {
 		if home, err := os.UserHomeDir(); err == nil {
@@ -67,6 +76,16 @@ func New(cfg Config) *Client {
 		}
 	}
 	return &Client{cfg: cfg}
+}
+
+func builtinMaterial(plain, encoded string) []byte {
+	if strings.TrimSpace(encoded) != "" {
+		if decoded, err := base64.StdEncoding.DecodeString(encoded); err == nil {
+			return decoded
+		}
+		return nil
+	}
+	return []byte(plain)
 }
 
 func DiscoveryURLForSite(site string) string {
@@ -185,7 +204,7 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 	timestamp, _, err := VerifyTyped[Timestamp](timestampBytes, keys, "timestamp", "timestamp", now, deny)
 	timestampValid := func(value Timestamp, verifyErr error) bool {
 		return verifyErr == nil && value.Type == "timestamp" && value.SchemaVersion == SchemaVersion &&
-			value.Authority == discovery.Authority && value.Version >= state.TimestampVersion && now.Before(value.ExpiresAt)
+			value.Authority == root.Authority && value.Version >= state.TimestampVersion && now.Before(value.ExpiresAt)
 	}
 	if !timestampValid(timestamp, err) && timestampRemote {
 		if cached, readErr := os.ReadFile(timestampCache); readErr == nil {

@@ -4,9 +4,12 @@ package trust
 // them with generated production material. Test keys belong in _test.go files.
 // An empty value makes every trust-changing operation fail closed.
 var (
-	BuiltinRootEnvelope     string
-	BuiltinRecoveryKeysJSON string
-	BuiltinRecoveryRoleJSON string
+	BuiltinRootEnvelope       string
+	BuiltinRecoveryKeysJSON   string
+	BuiltinRecoveryRoleJSON   string
+	BuiltinRootEnvelopeBase64 string
+	BuiltinRecoveryKeysBase64 string
+	BuiltinRecoveryRoleBase64 string
 )
 
 const (
