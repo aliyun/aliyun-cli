@@ -46,7 +46,7 @@ export ALIBABA_CLOUD_PROFILE=production
 | Mode | Intended use |
 | --- | --- |
 | `OAuth` | Interactive sign-in for a local user; avoids storing a long-lived AccessKey |
-| `CloudSSO` | Alibaba Cloud CloudSSO workforce access |
+| `CloudSSO` | CloudSSO workforce access with shared sessions across profiles |
 | `AK` | Static AccessKey ID and secret; use only when a stronger option is unavailable |
 | `StsToken` | An already-issued temporary AccessKey plus SecurityToken; does not refresh automatically |
 | `RamRoleArn` | Assume a RAM role from an AccessKey-based identity |
@@ -217,16 +217,88 @@ Saving profile[oauth-profile] ...Done.
 
 ### CloudSSO
 
-CloudSSO starts an interactive sign-in flow through the configured CloudSSO portal:
+CloudSSO supports a shared session for multiple profiles. The session stores the sign-in URL and AccessToken; each profile selects its own Alibaba Cloud account and access configuration and stores its own STS credentials.
 
-```text
-$ aliyun configure --mode CloudSSO --profile cloud-sso
-Configuring profile 'cloud-sso' in 'CloudSSO' authenticate mode...
-CloudSSO Sign In Url []: https://signin-cn-shanghai.alibabacloudsso.com/start/login
-Follow the displayed instructions to sign in and select the account/access configuration.
-Default Region Id []: cn-hangzhou
-Saving profile[cloud-sso] ...Done.
+#### Shared session
+
+Configure the session and log in in one step:
+
+```sh
+aliyun configure sso login --sso-session company \
+  --cloud-sso-sign-in-url 'https://signin-example.alibabacloudsso.com/device/login'
 ```
+
+Replace the example URL with your CloudSSO sign-in URL. The command saves the configuration and opens a browser for authorization. If you omit the URL, an existing session reuses its saved URL; a new session prompts for one. If authorization fails, the configuration remains available for retry. A failed login with an unchanged URL preserves the previous token.
+
+To save configuration without logging in, use:
+
+```sh
+aliyun configure sso set --sso-session company \
+  --cloud-sso-sign-in-url 'https://signin-example.alibabacloudsso.com/device/login'
+```
+
+After logging in, configure a profile interactively to select an account and access configuration:
+
+```sh
+aliyun configure --mode CloudSSO --profile prod-readonly --sso-session company
+```
+
+Configure another profile using the same session without interactive account selection:
+
+```sh
+aliyun configure set --mode CloudSSO --profile test-admin \
+  --sso-session company \
+  --cloud-sso-account-id '<AccountId>' \
+  --cloud-sso-access-config '<AccessConfigurationId>' \
+  --region cn-hangzhou
+```
+
+Replace the account and access configuration IDs with values assigned to your CloudSSO user. Different profiles can use different accounts and permissions while sharing the same login:
+
+```sh
+aliyun sts GetCallerIdentity --profile prod-readonly
+aliyun sts GetCallerIdentity --profile test-admin
+```
+
+While the shared session is valid, the CLI obtains or refreshes each profile's STS credentials as needed without opening a browser. When the session expires, log in once for all referencing profiles:
+
+```sh
+aliyun configure sso login --sso-session company
+# Alternatively, select the session through a profile.
+aliyun configure sso login --profile prod-readonly
+```
+
+Logging in again does not clear still-valid STS credentials. Use separate session names for different user identities. Changing a profile's session, account, or access configuration clears that profile's cached STS credentials.
+
+#### Delete a session
+
+Delete an unused session with:
+
+```sh
+aliyun configure sso delete --sso-session company
+```
+
+Deletion is refused while any profile references the session; the error lists those profiles. Reassign or explicitly delete the profiles first.
+
+#### Existing profile-based flow
+
+Existing CloudSSO profiles without `sso_session` continue to use the original flow:
+
+```sh
+aliyun configure --mode CloudSSO --profile cloud-sso
+aliyun sts GetCallerIdentity --profile cloud-sso
+```
+
+Follow the prompts to enter the sign-in URL, authorize in the browser, and select an account and access configuration. The URL, AccessToken, and STS credentials remain in that profile. When its login expires, run the same `configure` command again.
+
+Existing profiles are not migrated automatically. To attach one to a shared session, log in to the session and run:
+
+```sh
+aliyun configure --mode CloudSSO --profile cloud-sso --sso-session company
+```
+
+The profile reuses its account and access configuration if they are still available. Once saved, the profile references the shared session and no longer stores its own CloudSSO URL or AccessToken.
+
 
 ## External credential sources
 

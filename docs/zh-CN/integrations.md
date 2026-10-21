@@ -39,7 +39,7 @@ aliyun utils mcp-proxy --skip-mcp-oauth
 
 使用 CLI 凭据认证时，请为对应的 RAM 身份授予 `AliyunOpenAPIMCPServerStaticCredentialAccess`，以及业务 API 和 MCP Server 发现所需权限。
 
-手动配置的 STS 过期后需更新配置；CloudSSO 登录过期后需重新登录。
+手动配置的 STS 过期后需更新配置。共享 CloudSSO session 过期后，执行 `aliyun configure sso login --sso-session <name>` 重新登录，详见 [CloudSSO 配置](configuration.md#cloudsso)。
 
 ### 访问控制
 
