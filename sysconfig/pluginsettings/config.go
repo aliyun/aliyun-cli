@@ -39,8 +39,8 @@ type PluginSettings struct {
 	// Index: {SourceBase}/plugin_pkg_index.json, {SourceBase}/plugin_search_index.json
 	// Packages: {SourceBase}/pkgs/{name}/{version}/{filename}
 	SourceBase string `json:"source_base,omitempty"`
-	// Site selects the official trust Discovery endpoint. It does not make
-	// custom source-base content trusted.
+	// Site selects the trust Discovery portal. SourceBase selects which
+	// allowlisted repository-specific signed metadata the portal returns.
 	Site string `json:"site"`
 }
 

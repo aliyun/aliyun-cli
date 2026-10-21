@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -197,6 +198,7 @@ func newTrustFixture(t *testing.T) *trustFixture {
 	f.client = New(Config{
 		CacheDir:      f.cacheDir,
 		DiscoveryURL:  f.server.URL + "/discovery",
+		SourceBase:    f.server.URL + "/plugins-v2",
 		HTTPClient:    f.server.Client(),
 		Now:           func() time.Time { return f.now },
 		MetadataHosts: []string{"127.0.0.1"},
@@ -234,6 +236,7 @@ func (f *trustFixture) publish(index []byte, keysVersion, artifactVersion uint64
 	f.responses["/timestamp"] = signedJSON(f.t, timestamp, f.timestamp)
 	discovery := Discovery{
 		SchemaVersion: SchemaVersion, Authority: f.server.URL,
+		SourceBase:                   f.server.URL + "/plugins-v2",
 		RootMetadataURI:              f.server.URL + "/roots",
 		ArtifactKeysURI:              f.server.URL + "/keys",
 		TimestampURI:                 f.server.URL + "/timestamp",
@@ -278,6 +281,26 @@ func TestClientAllowsDiscoveryMirrorWithSharedSignedMetadata(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"plugins":[]}`, string(artifact.Bytes))
+}
+
+func TestClientBindsDiscoveryToConfiguredSourceBase(t *testing.T) {
+	f := newTrustFixture(t)
+	discoveryURL, err := f.client.discoveryURL()
+	require.NoError(t, err)
+	parsed, err := url.Parse(discoveryURL)
+	require.NoError(t, err)
+	assert.Equal(t, f.server.URL+"/plugins-v2", parsed.Query().Get("source_base"))
+
+	var discovery Discovery
+	require.NoError(t, json.Unmarshal(f.responses["/discovery"], &discovery))
+	discovery.SourceBase = f.server.URL + "/other"
+	f.responses["/discovery"], err = json.Marshal(discovery)
+	require.NoError(t, err)
+
+	_, err = f.client.FetchArtifact(
+		context.Background(), PurposePluginIndex, "plugins",
+	)
+	assert.ErrorContains(t, err, "invalid or expired discovery")
 }
 
 func TestClientUsesUnexpiredDiscoveryAndIndexLKGOnNetworkFailure(t *testing.T) {
@@ -405,7 +428,12 @@ func TestInvalidRemoteMetadataDoesNotReplaceLKGAndExpiredLKGFails(t *testing.T) 
 	f := newTrustFixture(t)
 	_, err := f.client.FetchArtifact(context.Background(), PurposePluginIndex, "plugins")
 	require.NoError(t, err)
-	cacheDir := filepath.Join(f.cacheDir, digest(f.server.URL), digest(f.server.URL))
+	cacheDir := filepath.Join(
+		f.cacheDir,
+		digest(f.server.URL),
+		digest(f.server.URL+"/plugins-v2"),
+		digest(f.server.URL),
+	)
 	keysPath := filepath.Join(cacheDir, "artifact-keys.json")
 	before, err := os.ReadFile(keysPath)
 	require.NoError(t, err)

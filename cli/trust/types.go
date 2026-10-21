@@ -64,6 +64,7 @@ type ArtifactKeys struct {
 type Discovery struct {
 	SchemaVersion                int       `json:"schema_version"`
 	Authority                    string    `json:"authority"`
+	SourceBase                   string    `json:"source_base"`
 	RootMetadataURI              string    `json:"root_metadata_uri"`
 	ArtifactKeysURI              string    `json:"artifact_keys_uri"`
 	TimestampURI                 string    `json:"timestamp_uri"`

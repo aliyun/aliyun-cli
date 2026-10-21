@@ -91,7 +91,13 @@ aliyun configure plugin-settings set --source-base https://example.com/plugins
 aliyun configure plugin-settings clear
 ```
 
-`site` only selects the official trust Discovery endpoint; it does not trust a custom source. For one command, `--source-base <url>` overrides the global setting. `ALIBABA_CLOUD_CLI_PLUGIN_SITE` and `ALIBABA_CLOUD_CLI_PLUGIN_SOURCE_BASE` have priority over saved settings.
+`site` only selects the trust Discovery portal. The CLI sends its effective
+`source-base` to that portal and verifies the signed index for the selected
+repository. A repository that is not configured by the portal fails closed;
+only an explicit `--allow-unverified-plugin` permits an unverified fallback.
+For one command, `--source-base <url>` overrides the global setting.
+`ALIBABA_CLOUD_CLI_PLUGIN_SITE` and
+`ALIBABA_CLOUD_CLI_PLUGIN_SOURCE_BASE` have priority over saved settings.
 
 ## Automatic product-plugin installation
 
