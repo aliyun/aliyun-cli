@@ -255,3 +255,39 @@ func TestDoConfigureList_BearerToken(t *testing.T) {
 	assert.Contains(t, out, "Valid")
 	assert.Contains(t, out, "cn-hangzhou")
 }
+
+func TestDoConfigureList_OIDCToken(t *testing.T) {
+	w := new(bytes.Buffer)
+	ctx := cli.NewCommandContext(w, bytes.NewBuffer(nil))
+	AddFlags(ctx.Flags())
+
+	originhook := hookLoadConfigurationWithContext
+	defer func() {
+		hookLoadConfigurationWithContext = originhook
+	}()
+
+	hookLoadConfigurationWithContext = func(fn func(ctx *cli.Context) (*Configuration, error)) func(ctx *cli.Context) (*Configuration, error) {
+		return func(ctx *cli.Context) (*Configuration, error) {
+			return &Configuration{
+				CurrentProfile: "oidc",
+				Profiles: []Profile{
+					{
+						Name:            "oidc",
+						Mode:            OIDC,
+						OIDCProviderARN: "acs:ram::1234567890:oidc-provider/example",
+						OIDCToken:       "header.payload.sig",
+						RamRoleArn:      "acs:ram::1234567890:role/example",
+						RoleSessionName: "session",
+						RegionId:        "cn-hangzhou",
+					},
+				},
+			}, nil
+		}
+	}
+
+	err := doConfigureList(ctx)
+	assert.NoError(t, err)
+	out := w.String()
+	assert.Contains(t, out, "OIDC:***ample@***d.sig@acs:ram::1234567890:role/example")
+	assert.NotContains(t, out, "header.payload.sig")
+}
