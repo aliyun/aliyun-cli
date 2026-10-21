@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -44,6 +45,9 @@ func TestSharedSSOStorageFailures(t *testing.T) {
 		require.Error(t, err)
 	})
 	t.Run("atomic write failure propagates", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("requires Unix symlink semantics")
+		}
 		ctx := sharedSSOContext(t)
 		f := CloudSSOSignInUrlFlag(ctx.Flags())
 		f.SetValue("https://example.invalid")
@@ -100,6 +104,9 @@ func TestSharedSSOCommandInputAndReferenceFailures(t *testing.T) {
 		require.Error(t, err)
 	})
 	t.Run("profile config path blocked", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("requires Unix ENOTDIR semantics")
+		}
 		ctx := sharedSSOContext(t)
 		blocker := filepath.Join(t.TempDir(), "file")
 		require.NoError(t, os.WriteFile(blocker, []byte("blocked"), 0600))

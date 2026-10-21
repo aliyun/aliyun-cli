@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -45,9 +46,14 @@ func TestSharedSSOSessionStorageAndDelete(t *testing.T) {
 	session.AccessToken = "private-token"
 	session.ExpiresAt = time.Now().Add(time.Hour).Unix()
 	require.NoError(t, saveSSOSession(ctx, session))
-	info, err := os.Stat(ssoSessionPath(ctx, "company"))
-	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	t.Run("owner-only permissions", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Unix permission bits are not supported on Windows")
+		}
+		info, err := os.Stat(ssoSessionPath(ctx, "company"))
+		require.NoError(t, err)
+		require.Equal(t, os.FileMode(0600), info.Mode().Perm())
+	})
 	conf := &Configuration{Profiles: []Profile{{Name: "prod", Mode: CloudSSO, SSOSession: "company"}}}
 	require.NoError(t, SaveConfigurationWithContext(ctx, conf))
 	require.ErrorContains(t, cmd.GetSubCommand("delete").Run(ctx, nil), "prod")
