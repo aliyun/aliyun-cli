@@ -57,9 +57,13 @@ var (
 	detectInstallerFunc = detectInstaller
 	resolveExecPathFunc = resolveExecPath
 
-	osExecutable      = os.Executable
-	evalSymlinks      = filepath.EvalSymlinks
-	readSignatureFile = os.ReadFile
+	osExecutable       = os.Executable
+	evalSymlinks       = filepath.EvalSymlinks
+	readSignatureFile  = os.ReadFile
+	buildAssetNameFunc = buildAssetName
+	// releaseIsNewer repeats the newer-than-current check immediately before
+	// the binary is replaced, so a selected release cannot roll the install back.
+	releaseIsNewer = isNewer
 
 	// publisherKeys are the keys allowed to replace this binary.
 	// Tests replace the slice; production uses the keys embedded in the CLI.
@@ -168,7 +172,7 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 		return nil
 	}
 
-	assetName, err := buildAssetName(latest)
+	assetName, err := buildAssetNameFunc(latest)
 	if err != nil {
 		return err
 	}
@@ -181,7 +185,7 @@ func upgradeViaDirect(ctx *cli.Context, currentVersion string) error {
 	if err != nil {
 		return err
 	}
-	if !isNewer(currentVersion, latest) {
+	if !releaseIsNewer(currentVersion, latest) {
 		return fmt.Errorf("refusing to install %s because it is not newer than %s", latest, currentVersion)
 	}
 
@@ -415,11 +419,6 @@ func canonicalUpgradeVersion(raw string) (string, bool) {
 	parts := strings.Split(core, ".")
 	if len(parts) != 3 {
 		return "", false
-	}
-	for _, part := range parts {
-		if part == "" {
-			return "", false
-		}
 	}
 	return raw, true
 }

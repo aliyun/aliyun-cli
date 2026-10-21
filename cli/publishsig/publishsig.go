@@ -138,6 +138,9 @@ func Sign(priv ed25519.PrivateKey, assetName string, r io.Reader) ([]byte, error
 	return []byte(doc), nil
 }
 
+// fileStat reads the opened asset. Tests replace it.
+var fileStat = func(f *os.File) (os.FileInfo, error) { return f.Stat() }
+
 // SignFile signs the file at path. The asset name is the base name of path.
 func SignFile(priv ed25519.PrivateKey, path string) ([]byte, error) {
 	f, err := os.Open(path)
@@ -145,7 +148,7 @@ func SignFile(priv ed25519.PrivateKey, path string) ([]byte, error) {
 		return nil, err
 	}
 	defer f.Close()
-	info, err := f.Stat()
+	info, err := fileStat(f)
 	if err != nil {
 		return nil, err
 	}

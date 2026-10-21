@@ -2,8 +2,10 @@ package buildtrace
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -269,5 +271,84 @@ func TestNamesAndFailurePaths(t *testing.T) {
 	}
 	if _, err := fileSHA(empty); err == nil {
 		t.Fatal("expected empty digest to fail")
+	}
+}
+
+func traceOptions(dir string) Options {
+	return Options{
+		Binary: "b", Asset: filepath.Join(dir, "a.tgz"), Version: "3.5.2", Tag: "v3.5.2",
+		Commit: strings.Repeat("a", 40), Gitlink: strings.Repeat("b", 40),
+		RunURL:    "https://github.com/aliyun/aliyun-cli/actions/runs/1",
+		BuildInfo: sampleInfo,
+	}
+}
+
+func TestWriteAndProvenanceFailures(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		dir := t.TempDir()
+		opt := traceOptions(dir)
+		if err := os.WriteFile(opt.Asset, []byte("archive"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(dir, 0o555); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+		if err := Write(opt); err == nil {
+			t.Fatal("expected an unwritable directory to fail")
+		}
+	}
+
+	dir := t.TempDir()
+	opt := traceOptions(dir)
+	if err := writeProvenance(opt, filepath.Join(dir, "sbom.json")); err == nil {
+		t.Fatal("expected a missing archive digest to fail")
+	}
+	if err := os.WriteFile(opt.Asset, []byte("archive"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeProvenance(opt, filepath.Join(dir, "missing.cdx.json")); err == nil {
+		t.Fatal("expected a missing sbom digest to fail")
+	}
+	sbom := opt.Asset + ".cdx.json"
+	if err := os.WriteFile(sbom, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(opt); err != nil {
+		t.Fatal(err)
+	}
+	origDigest := digestFile
+	digestFile = func(path string) (string, error) {
+		if strings.HasSuffix(path, ".cdx.json") {
+			return "", fmt.Errorf("digest failed")
+		}
+		return fileSHA(path)
+	}
+	if err := Retarget(opt.Asset+".provenance.json", opt.Asset, sbom); err == nil || !strings.Contains(err.Error(), "digest failed") {
+		digestFile = origDigest
+		t.Fatalf("sbom digest = %v", err)
+	}
+	digestFile = origDigest
+
+	origMarshal := marshalIndent
+	marshalIndent = func(any, string, string) ([]byte, error) {
+		return nil, fmt.Errorf("marshal failed")
+	}
+	t.Cleanup(func() { marshalIndent = origMarshal })
+	if err := writeProvenance(opt, sbom); err == nil || !strings.Contains(err.Error(), "marshal failed") {
+		t.Fatalf("provenance marshal = %v", err)
+	}
+	if err := Retarget(opt.Asset+".provenance.json", opt.Asset, sbom); err == nil || !strings.Contains(err.Error(), "marshal failed") {
+		t.Fatalf("sbom marshal = %v", err)
+	}
+	plain := filepath.Join(dir, "plain.json")
+	if err := os.WriteFile(plain, []byte(`{"metadata":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Retarget(opt.Asset+".provenance.json", opt.Asset, plain); err == nil || !strings.Contains(err.Error(), "marshal failed") {
+		t.Fatalf("retarget marshal = %v", err)
+	}
+	if err := Write(opt); err == nil || !strings.Contains(err.Error(), "marshal failed") {
+		t.Fatalf("cyclonedx marshal = %v", err)
 	}
 }

@@ -384,6 +384,128 @@ func TestFetchVersionList(t *testing.T) {
 
 	_, err = parseVersionCatalog([]byte(`{"format":"other"}`))
 	assert.ErrorContains(t, err, "unsupported format")
+
+	listed, err = parseVersionCatalog([]byte(`{"format":"` + publishsig.VersionsFormat + `"}`))
+	assert.NoError(t, err)
+	assert.Empty(t, listed)
+}
+
+func TestFetchVersionListTransportFailures(t *testing.T) {
+	origClient, origBase := httpClient, ossBaseURL
+	defer func() {
+		httpClient, ossBaseURL = origClient, origBase
+	}()
+	httpClient = &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		switch {
+		case strings.Contains(r.URL.Path, "/read/"):
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(failingReader{}), Header: make(http.Header)}, nil
+		case strings.Contains(r.URL.Path, "/huge/"):
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewReader(bytes.Repeat([]byte("x"), maxVersionListBytes+1))),
+				Header:     make(http.Header),
+			}, nil
+		default:
+			return nil, fmt.Errorf("network down")
+		}
+	})}
+
+	ossBaseURL = "http://versions.invalid"
+	_, _, err := fetchVersionList()
+	assert.ErrorContains(t, err, "failed to reach OSS")
+
+	ossBaseURL = "http://versions.invalid/read"
+	_, _, err = fetchVersionList()
+	assert.ErrorContains(t, err, "simulated body read failure")
+
+	ossBaseURL = "http://versions.invalid/huge"
+	_, _, err = fetchVersionList()
+	assert.ErrorContains(t, err, "too large")
+}
+
+func TestCanonicalUpgradeVersion(t *testing.T) {
+	version, ok := canonicalUpgradeVersion("  V3.5.1  ")
+	assert.True(t, ok)
+	assert.Equal(t, "3.5.1", version)
+	version, ok = canonicalUpgradeVersion("3.5.1-beta.1")
+	assert.True(t, ok)
+	assert.Equal(t, "3.5.1-beta.1", version)
+	version, ok = canonicalUpgradeVersion("3.5.1+meta")
+	assert.True(t, ok)
+	assert.Equal(t, "3.5.1+meta", version)
+
+	for _, raw := range []string{"", "  ", "v", "3.5", "3.5.1 beta"} {
+		if _, ok := canonicalUpgradeVersion(raw); ok {
+			t.Fatalf("%q was accepted", raw)
+		}
+	}
+}
+
+func TestUpgradeViaDirect_AssetNameError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("9.9.9\n"))
+	}))
+	defer server.Close()
+
+	origClient, origBase, origVer, origStdin, origBuild := httpClient, ossBaseURL, ossVersionURL, stdin, buildAssetNameFunc
+	defer func() {
+		httpClient, ossBaseURL, ossVersionURL, stdin, buildAssetNameFunc = origClient, origBase, origVer, origStdin, origBuild
+	}()
+	httpClient = server.Client()
+	ossBaseURL = server.URL
+	ossVersionURL = server.URL + "/version"
+	stdin = strings.NewReader("y\n")
+	buildAssetNameFunc = func(string) (string, error) {
+		return "", fmt.Errorf("unsupported operating system: plan9")
+	}
+
+	err := upgradeViaDirect(newTestContext(), "1.0.0")
+	assert.ErrorContains(t, err, "unsupported operating system")
+}
+
+func TestUpgradeViaDirect_RefusesVersionThatIsNoLongerNewer(t *testing.T) {
+	binaryContent := []byte("#!/bin/sh\necho upgraded\n")
+	assetName, binaryName, archive := createUpgradeArchiveInMemory(t, "99.0.0", binaryContent)
+	priv := useTestPublisher(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("99.0.0\n"))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		body := archive.Bytes()
+		if strings.HasSuffix(r.URL.Path, ".minisig") {
+			doc, err := publishsig.Sign(priv, assetName, bytes.NewReader(body))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			body = doc
+		}
+		w.Write(body)
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	origClient, origBase, origVer, origStdin, origResolve, origNewer := httpClient, ossBaseURL, ossVersionURL, stdin, resolveExecPathFunc, releaseIsNewer
+	defer func() {
+		httpClient, ossBaseURL, ossVersionURL, stdin, resolveExecPathFunc, releaseIsNewer = origClient, origBase, origVer, origStdin, origResolve, origNewer
+	}()
+	httpClient = server.Client()
+	ossBaseURL = server.URL
+	ossVersionURL = server.URL + "/version"
+	stdin = strings.NewReader("y\n")
+	targetBinary := filepath.Join(t.TempDir(), binaryName)
+	if err := os.WriteFile(targetBinary, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resolveExecPathFunc = func() (string, error) { return targetBinary, nil }
+	releaseIsNewer = func(string, string) bool { return false }
+
+	err := upgradeViaDirect(newTestContext(), "3.0.0")
+	assert.ErrorContains(t, err, "not newer than 3.0.0")
+	got, readErr := os.ReadFile(targetBinary)
+	assert.NoError(t, readErr)
+	assert.Equal(t, []byte("old"), got)
 }
 
 func TestUpgradeViaDirect_HistoryUnavailableFallsBackToPointer(t *testing.T) {

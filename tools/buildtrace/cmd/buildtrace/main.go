@@ -8,8 +8,10 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/tools/buildtrace"
 )
 
+var osExit = os.Exit
+
 func main() {
-	os.Exit(run(os.Args))
+	osExit(run(os.Args))
 }
 
 func run(args []string) int {

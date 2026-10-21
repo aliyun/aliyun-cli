@@ -7,7 +7,11 @@ import (
 	"strings"
 
 	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
+	"golang.org/x/mod/semver"
 )
+
+// marshalIndent encodes a catalog. Tests replace it.
+var marshalIndent = json.MarshalIndent
 
 type versionRecord struct {
 	Version     string   `json:"version"`
@@ -25,16 +29,12 @@ type versionCatalog struct {
 // release supports. Existing entries stay in order. Publishing the same
 // version again updates that entry in place.
 func AppendStableVersion(existing []byte, raw, publicKeys string) ([]byte, error) {
-	kind, err := Classify(raw)
-	if err != nil {
-		return nil, err
-	}
-	if kind != KindStable {
-		return nil, errPrerelease(raw)
-	}
 	canonical, err := canonicalVersion(raw)
 	if err != nil {
 		return nil, err
+	}
+	if semver.Prerelease(canonical) != "" {
+		return nil, errPrerelease(raw)
 	}
 	keys, err := parsePublicKeyVersions(publicKeys)
 	if err != nil {
@@ -62,7 +62,7 @@ func AppendStableVersion(existing []byte, raw, publicKeys string) ([]byte, error
 	if !replaced {
 		catalog.Versions = append(catalog.Versions, record)
 	}
-	body, err := json.MarshalIndent(catalog, "", "  ")
+	body, err := marshalIndent(catalog, "", "  ")
 	if err != nil {
 		return nil, err
 	}

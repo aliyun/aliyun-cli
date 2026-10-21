@@ -457,6 +457,30 @@ func assertFreshChecksum(t *testing.T, dir string, names []string, body string) 
 	}
 }
 
+func TestTraceEnsureAndSignatureReadFailures(t *testing.T) {
+	origEnsure := ensurePresent
+	ensurePresent = func(path string) error {
+		return errors.New("not a regular file")
+	}
+	defer func() { ensurePresent = origEnsure }()
+	srv := httptest.NewServer(signedHandler(func(string) []byte { return []byte("ok") }))
+	defer srv.Close()
+	dir := t.TempDir()
+	err := Download(context.Background(), Options{Version: "1.2.3", BaseURL: srv.URL, WorkDir: dir})
+	if err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("trace check = %v", err)
+	}
+
+	ensurePresent = origEnsure
+	origRead := readFile
+	readFile = func(string) ([]byte, error) { return nil, errors.New("read signature") }
+	defer func() { readFile = origRead }()
+	err = Download(context.Background(), Options{Version: "1.2.3", BaseURL: srv.URL, WorkDir: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "read signature") {
+		t.Fatalf("signature read = %v", err)
+	}
+}
+
 func mustRead(t *testing.T, path string) string {
 	t.Helper()
 	b, err := os.ReadFile(path)

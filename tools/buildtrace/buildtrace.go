@@ -21,6 +21,12 @@ const (
 	cycloneVersion = "1.5"
 )
 
+// marshalIndent and digestFile are the JSON and digest steps. Tests replace them.
+var (
+	marshalIndent = json.MarshalIndent
+	digestFile    = fileSHA
+)
+
 // Options describes one published archive.
 type Options struct {
 	Binary    string
@@ -114,14 +120,14 @@ func Retarget(from, assetPath, sbomPath string) error {
 	if err != nil {
 		return err
 	}
-	sbomSum, err := fileSHA(sbomPath)
+	sbomSum, err := digestFile(sbomPath)
 	if err != nil {
 		return err
 	}
 	doc.Asset = filepath.Base(assetPath)
 	doc.SHA256 = assetSum
 	doc.SBOM = Digest{File: filepath.Base(sbomPath), SHA256: sbomSum}
-	body, err := json.MarshalIndent(doc, "", "  ")
+	body, err := marshalIndent(doc, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -147,7 +153,7 @@ func retargetSBOM(path, assetName string) error {
 	if !updated {
 		return nil
 	}
-	body, err := json.MarshalIndent(doc, "", "  ")
+	body, err := marshalIndent(doc, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -173,7 +179,7 @@ func writeProvenance(opt Options, sbomPath string) error {
 		WorkflowRun: opt.RunURL,
 		SBOM:        Digest{File: filepath.Base(sbomPath), SHA256: sbomSum},
 	}
-	body, err := json.MarshalIndent(doc, "", "  ")
+	body, err := marshalIndent(doc, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -241,7 +247,7 @@ func cyclonedx(buildInfo, assetName, version string) ([]byte, error) {
 		},
 		Components: components,
 	}
-	body, err := json.MarshalIndent(doc, "", "  ")
+	body, err := marshalIndent(doc, "", "  ")
 	if err != nil {
 		return nil, err
 	}

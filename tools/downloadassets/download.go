@@ -26,6 +26,12 @@ var verifyReleaseAsset = func(assetName, assetPath string, sig []byte) error {
 	return publishsig.VerifyFile(publishsig.TrustedPublicKeys(), assetName, assetPath, sig)
 }
 
+// ensurePresent confirms a downloaded trace is a regular file. Tests replace it.
+var ensurePresent = ensureAsset
+
+// readFile reads a downloaded publisher signature. Tests replace it.
+var readFile = os.ReadFile
+
 // AssetNames is the release set finish_release.sh promotes. Order is stable
 // so a regenerated checksum file does not reshuffle on rerun.
 func AssetNames(version string) []string {
@@ -141,7 +147,7 @@ func Download(ctx context.Context, opt Options) error {
 		if err := downloadFile(ctx, client, assetURL, opt.Token, dest, timeout); err != nil {
 			return fmt.Errorf("download assets: %s: %w", name, err)
 		}
-		if err := ensureAsset(dest); err != nil {
+		if err := ensurePresent(dest); err != nil {
 			return fmt.Errorf("download assets: %s: %w", name, err)
 		}
 		if err := stageSignature(ctx, client, opt.Token, assetURL, name, dest, timeout); err != nil {
@@ -183,7 +189,7 @@ func stageSignature(ctx context.Context, client *http.Client, token, assetURL, n
 	if err := downloadFile(ctx, client, assetURL+".minisig", token, sigDest, timeout); err != nil {
 		return fmt.Errorf("download assets: publisher signature %s: %w", name, err)
 	}
-	sig, err := os.ReadFile(sigDest)
+	sig, err := readFile(sigDest)
 	if err != nil {
 		return fmt.Errorf("download assets: publisher signature %s: %w", name, err)
 	}

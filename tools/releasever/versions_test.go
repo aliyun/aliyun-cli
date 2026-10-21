@@ -78,6 +78,57 @@ func TestAppendStableVersion(t *testing.T) {
 	}
 }
 
+func TestVersionCatalogEdges(t *testing.T) {
+	got, err := AppendStableVersion(nil, "3.5.4", "1,,2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := decodeCatalog(t, got)
+	if strings.Join(doc.Versions[0].PublicKeys, ",") != "1,2" {
+		t.Fatalf("public keys = %#v", doc.Versions[0].PublicKeys)
+	}
+	got, err = AppendStableVersion(nil, "3.5.4", "A.b_c-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc = decodeCatalog(t, got)
+	if doc.Versions[0].PublicKeys[0] != "A.b_c-1" {
+		t.Fatalf("public keys = %#v", doc.Versions[0].PublicKeys)
+	}
+	if _, err := AppendStableVersion(nil, "3.5.4", strings.Repeat("a", 65)); err == nil {
+		t.Fatal("oversized public key version was accepted")
+	}
+	if validSignatureVersion("") || validSignatureVersion(strings.Repeat("b", 65)) {
+		t.Fatal("empty or oversized version was valid")
+	}
+	if !validSignatureVersion(strings.Repeat("c", 64)) {
+		t.Fatal("64-character version was rejected")
+	}
+	for _, keys := range []string{"", ",", " , "} {
+		if _, err := AppendStableVersion(nil, "3.5.4", keys); err == nil || !strings.Contains(err.Error(), "required") {
+			t.Fatalf("keys %q err = %v", keys, err)
+		}
+	}
+	if _, err := AppendStableVersion([]byte("{"), "3.5.4", "1"); err == nil || !strings.Contains(err.Error(), "versions file") {
+		t.Fatalf("invalid json err = %v", err)
+	}
+	got, err = AppendStableVersion([]byte(`{"format":"`+publishsig.VersionsFormat+`"}`), "3.5.4", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc = decodeCatalog(t, got)
+	if len(doc.Versions) != 1 || doc.Versions[0].Version != "3.5.4" {
+		t.Fatalf("missing versions key = %+v", doc.Versions)
+	}
+
+	orig := marshalIndent
+	marshalIndent = func(any, string, string) ([]byte, error) { return nil, os.ErrInvalid }
+	defer func() { marshalIndent = orig }()
+	if _, err := AppendStableVersion(nil, "3.5.4", "1"); err == nil {
+		t.Fatal("marshal error was ignored")
+	}
+}
+
 func TestAppendVersionCommand(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "versions")

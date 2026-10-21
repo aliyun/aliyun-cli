@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/ed25519"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -101,5 +102,30 @@ func TestKeygenSignAndVerify(t *testing.T) {
 	os.Remove(asset)
 	if code := run([]string{"publishsign", "verify", "--public-key", pub, "--asset", asset}); code != 1 {
 		t.Fatal("verify accepted a deleted asset")
+	}
+}
+
+func TestMainAndKeygenFailures(t *testing.T) {
+	origExit := osExit
+	origArgs := os.Args
+	defer func() {
+		osExit = origExit
+		os.Args = origArgs
+	}()
+	var code int
+	osExit = func(c int) { code = c }
+	os.Args = []string{"publishsign"}
+	main()
+	if code != 2 {
+		t.Fatalf("exit = %d", code)
+	}
+
+	origGenerate := generateKeyPair
+	generateKeyPair = func() (ed25519.PublicKey, ed25519.PrivateKey, error) {
+		return nil, nil, errors.New("entropy failed")
+	}
+	defer func() { generateKeyPair = origGenerate }()
+	if code := run([]string{"publishsign", "keygen", "--secret-out", filepath.Join(t.TempDir(), "key")}); code != 1 {
+		t.Fatalf("keygen exit = %d", code)
 	}
 }

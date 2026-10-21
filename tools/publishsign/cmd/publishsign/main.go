@@ -9,8 +9,10 @@ import (
 	"github.com/aliyun/aliyun-cli/v3/cli/publishsig"
 )
 
+var osExit = os.Exit
+
 func main() {
-	os.Exit(run(os.Args))
+	osExit(run(os.Args))
 }
 
 func run(args []string) int {
@@ -41,6 +43,9 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "usage: publishsign keygen|sign|verify")
 }
 
+// generateKeyPair creates a publisher key. Tests replace it.
+var generateKeyPair = publishsig.Generate
+
 func keygen(args []string) error {
 	fs := flag.NewFlagSet("keygen", flag.ContinueOnError)
 	secretOut := fs.String("secret-out", "", "path for the new secret key")
@@ -53,7 +58,7 @@ func keygen(args []string) error {
 	if _, err := os.Stat(*secretOut); err == nil {
 		return fmt.Errorf("keygen: %s already exists", *secretOut)
 	}
-	pub, priv, err := publishsig.Generate()
+	pub, priv, err := generateKeyPair()
 	if err != nil {
 		return err
 	}

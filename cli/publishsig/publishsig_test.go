@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -225,4 +226,47 @@ type failReader struct{}
 
 func (failReader) Read([]byte) (int, error) {
 	return 0, errors.New("read failed")
+}
+
+func TestDescribePublicKeys(t *testing.T) {
+	if got := DescribePublicKeys(nil); got != "publisher key generations" {
+		t.Fatalf("empty = %q", got)
+	}
+	if got := DescribePublicKeys([]string{"1"}); got != "publisher key generation 1" {
+		t.Fatalf("one = %q", got)
+	}
+	if got := DescribePublicKeys([]string{"1", "2"}); got != "publisher key generations 1, 2" {
+		t.Fatalf("many = %q", got)
+	}
+}
+
+func TestTrustedPublicKeysPanicsOnBadEmbeddedKey(t *testing.T) {
+	prev := embeddedPublicKeys
+	embeddedPublicKeys = []string{"@@@"}
+	defer func() { embeddedPublicKeys = prev }()
+	defer func() {
+		recovered := recover()
+		if recovered == nil || !strings.Contains(fmt.Sprint(recovered), "publishsig: embedded publisher key") {
+			t.Fatalf("panic = %v", recovered)
+		}
+	}()
+	TrustedPublicKeys()
+}
+
+func TestSignFileStatError(t *testing.T) {
+	orig := fileStat
+	fileStat = func(*os.File) (os.FileInfo, error) { return nil, errors.New("stat failed") }
+	defer func() { fileStat = orig }()
+
+	_, priv, err := Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "a.tgz")
+	if err := os.WriteFile(path, []byte("pkg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SignFile(priv, path); err == nil || !strings.Contains(err.Error(), "stat failed") {
+		t.Fatalf("stat error = %v", err)
+	}
 }

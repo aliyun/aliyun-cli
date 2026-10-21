@@ -108,6 +108,22 @@ func TestCLIWritesAndRetargets(t *testing.T) {
 	}
 }
 
+func TestMainExitCode(t *testing.T) {
+	origExit := osExit
+	origArgs := os.Args
+	defer func() {
+		osExit = origExit
+		os.Args = origArgs
+	}()
+	var code int
+	osExit = func(c int) { code = c }
+	os.Args = []string{"buildtrace"}
+	main()
+	if code != 1 {
+		t.Fatalf("exit = %d", code)
+	}
+}
+
 func mustRead(t *testing.T, path string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(path)
