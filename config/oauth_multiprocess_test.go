@@ -3,6 +3,7 @@ package config
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aliyun/aliyun-cli/v3/cli"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,6 +41,25 @@ func TestOAuthRefreshProcess(t *testing.T) {
 	fmt.Println("READY")
 	_, err = bufio.NewReader(os.Stdin).ReadString('\n')
 	require.NoError(t, err)
+	if os.Getenv("CLI_OAUTH_TEST_EXPORT") == "1" {
+		var out, stderr bytes.Buffer
+		exportCtx := cli.NewCommandContext(&out, &stderr)
+		AddFlags(exportCtx.Flags())
+		ConfigurePathFlag(exportCtx.Flags()).SetValue(os.Getenv("CLI_OAUTH_TEST_CONFIG"))
+		ConfigurePathFlag(exportCtx.Flags()).SetAssigned(true)
+		ProfileFlag(exportCtx.Flags()).SetValue(name)
+		ProfileFlag(exportCtx.Flags()).SetAssigned(true)
+		require.NoError(t, NewConfigureOAuthCredentialCommand().Run(exportCtx, nil))
+		var got map[string]interface{}
+		require.NoError(t, json.Unmarshal(out.Bytes(), &got))
+		require.Len(t, got, 6)
+		require.Equal(t, "renewed-key", got["AccessKeyId"])
+		require.Equal(t, "renewed-token", got["SecurityToken"])
+		require.Empty(t, stderr.String())
+		require.NotContains(t, out.String(), "refresh-new")
+		require.NotContains(t, out.String(), "access-new")
+		return
+	}
 	cred, err := p.GetCredential(ctx, nil)
 	require.NoError(t, err)
 	model, err := cred.GetCredential()
@@ -185,4 +206,15 @@ func testOAuthRefreshMultipleProcesses(t *testing.T, profiles int, nearExpiry bo
 	defer mu.Unlock()
 	require.Equal(t, profiles, refreshes)
 	require.Equal(t, profiles, exchanges)
+}
+
+func TestOAuthCredentialMultipleProcesses(t *testing.T) {
+	t.Setenv("CLI_OAUTH_TEST_EXPORT", "1")
+	for _, profiles := range []int{1, 2} {
+		for _, nearExpiry := range []bool{false, true} {
+			t.Run(fmt.Sprintf("profiles=%d/nearExpiry=%t", profiles, nearExpiry), func(t *testing.T) {
+				testOAuthRefreshMultipleProcesses(t, profiles, nearExpiry)
+			})
+		}
+	}
 }

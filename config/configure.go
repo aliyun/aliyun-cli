@@ -174,6 +174,7 @@ func NewConfigureCommand() *cli.Command {
 		Short:        i18n.T("Complete OAuth login by pasting the callback URL, without opening a browser", "不打开浏览器，通过粘贴回调 URL 完成 OAuth 登录"),
 	})
 	c.AddSubCommand(NewConfigureGetCommand())
+	c.AddSubCommand(NewConfigureOAuthCredentialCommand())
 	c.AddSubCommand(NewConfigureSetCommand())
 	c.AddSubCommand(NewConfigureListCommand())
 	c.AddSubCommand(NewConfigureDeleteCommand())
