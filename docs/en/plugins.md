@@ -51,14 +51,14 @@ Install a local or HTTPS plugin archive:
 
 ```sh
 aliyun plugin install --package ./plugin-package.tar.gz
-aliyun plugin install --package https://example.com/plugin-package.zip --allow-unverified-plugin
+aliyun plugin install --package https://example.com/plugin-package.zip --skip-signature-verify
 ```
 
 Supported archive suffixes are `.zip`, `.tar.gz`, and `.tgz`. A local-file
-install does not contact remote Discovery and does not require
-`--allow-unverified-plugin`; use `--checksum <sha256>` for optional local-file
+install does not contact remote Discovery and does not use
+`--skip-signature-verify`; use `--checksum <sha256>` for optional local-file
 integrity checking. Installing a remote URL directly bypasses the signed index
-and therefore requires `--allow-unverified-plugin`.
+and therefore uses `--skip-signature-verify`.
 
 ## Update and remove
 
@@ -99,8 +99,8 @@ aliyun configure plugin-settings clear
 verified through that portal. A non-public `source-base` is not sent to the
 portal; the CLI keeps the shared trust anchors from the public repository and
 reads that source's own signed timestamp directly. A repository whose
-timestamp is not signed by the built-in trust anchor fails closed;
-only an explicit `--allow-unverified-plugin` permits an unverified fallback.
+timestamp is not signed by the built-in trust anchor stops the install.
+`--skip-signature-verify` skips signature verification for that command.
 For one command, `--source-base <url>` overrides the global setting.
 `ALIBABA_CLOUD_CLI_PLUGIN_SITE` and
 `ALIBABA_CLOUD_CLI_PLUGIN_SOURCE_BASE` have priority over saved settings.

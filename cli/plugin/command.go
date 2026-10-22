@@ -26,12 +26,12 @@ func addPluginSourceBaseFlag(cmd *cli.Command) {
 	})
 }
 
-func addAllowUnverifiedPluginFlag(cmd *cli.Command) {
+func addSkipSignatureVerifyFlag(cmd *cli.Command) {
 	cmd.Flags().Add(&cli.Flag{
-		Name: "allow-unverified-plugin",
+		Name: "skip-signature-verify",
 		Short: i18n.T(
-			"Explicitly allow an unverified custom plugin source or package",
-			"显式允许未经官方签名验证的自定义插件源或安装包"),
+			"Skip signature verification for this custom plugin source or package",
+			"本次跳过自定义插件源或安装包的签名校验"),
 		AssignedMode: cli.AssignedNone,
 	})
 }
@@ -55,8 +55,8 @@ func newManagerWithOptionalSourceBase(ctx *cli.Context) (*Manager, error) {
 	if f := ctx.Flags().Get("prefer-go"); f != nil && f.IsAssigned() {
 		mgr.preferGo = true
 	}
-	if f := ctx.Flags().Get("allow-unverified-plugin"); f != nil && f.IsAssigned() {
-		mgr.allowUnverifiedPlugin = true
+	if f := ctx.Flags().Get("skip-signature-verify"); f != nil && f.IsAssigned() {
+		mgr.skipSignatureVerify = true
 	}
 	f := ctx.Flags().Get("source-base")
 	if f == nil || !f.IsAssigned() {
@@ -160,7 +160,7 @@ func newListRemoteCommand() *cli.Command {
 		},
 	}
 	addPluginSourceBaseFlag(cmd)
-	addAllowUnverifiedPluginFlag(cmd)
+	addSkipSignatureVerifyFlag(cmd)
 	return cmd
 }
 
@@ -174,7 +174,7 @@ func newSearchCommand() *cli.Command {
 		},
 	}
 	addPluginSourceBaseFlag(cmd)
-	addAllowUnverifiedPluginFlag(cmd)
+	addSkipSignatureVerifyFlag(cmd)
 	return cmd
 }
 
@@ -382,7 +382,7 @@ func newInstallCommand() *cli.Command {
 
 	addPreferGoFlag(cmd)
 	addPluginSourceBaseFlag(cmd)
-	addAllowUnverifiedPluginFlag(cmd)
+	addSkipSignatureVerifyFlag(cmd)
 	return cmd
 }
 
@@ -415,7 +415,7 @@ func newInstallAllCommand() *cli.Command {
 
 	addPreferGoFlag(cmd)
 	addPluginSourceBaseFlag(cmd)
-	addAllowUnverifiedPluginFlag(cmd)
+	addSkipSignatureVerifyFlag(cmd)
 	return cmd
 }
 
@@ -447,7 +447,7 @@ func newInstallCustomCommand() *cli.Command {
 	})
 
 	addPluginSourceBaseFlag(cmd)
-	addAllowUnverifiedPluginFlag(cmd)
+	addSkipSignatureVerifyFlag(cmd)
 	return cmd
 }
 
@@ -528,7 +528,7 @@ func newUpdateCommand() *cli.Command {
 
 	addPreferGoFlag(cmd)
 	addPluginSourceBaseFlag(cmd)
-	addAllowUnverifiedPluginFlag(cmd)
+	addSkipSignatureVerifyFlag(cmd)
 	return cmd
 }
 
@@ -610,8 +610,8 @@ func executeInstall(ctx *cli.Context, names []string, pkgRef, version string, en
 		isRemote := strings.HasPrefix(lowerRef, "http://") ||
 			strings.HasPrefix(lowerRef, "https://")
 		if isRemote {
-			if f := ctx.Flags().Get("allow-unverified-plugin"); f == nil || !f.IsAssigned() {
-				return fmt.Errorf("remote --package URL requires --allow-unverified-plugin")
+			if f := ctx.Flags().Get("skip-signature-verify"); f == nil || !f.IsAssigned() {
+				return fmt.Errorf("remote --package URL requires --skip-signature-verify")
 			}
 		}
 		mgr.expectedPackageChecksum = strings.TrimSpace(checksum)

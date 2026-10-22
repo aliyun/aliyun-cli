@@ -74,8 +74,9 @@ type Manager struct {
 	// trustClient is the only source for the official package index.
 	trustClient   artifactFetcher
 	trustCacheDir string
-	// allowUnverifiedPlugin is an explicit opt-in for custom sources/packages.
-	allowUnverifiedPlugin  bool
+	// skipSignatureVerify lets a configured custom source or remote package
+	// continue when signature verification is not used.
+	skipSignatureVerify    bool
 	indexTrustVerification *TrustVerification
 }
 
@@ -315,7 +316,7 @@ func (m *Manager) GetIndex() (*Index, error) {
 			}
 			return &index, nil
 		}
-		if m.sourceBase == "" || !m.allowUnverifiedPlugin {
+		if m.sourceBase == "" || !m.skipSignatureVerify {
 			return nil, fmt.Errorf("failed to verify plugin index for configured source: %w", err)
 		}
 	}

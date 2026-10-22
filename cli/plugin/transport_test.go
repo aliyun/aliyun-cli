@@ -226,7 +226,7 @@ func TestExecuteInstall_ChecksumFlag(t *testing.T) {
 	_, err = run(map[string]string{
 		"package": "https://example.com/plugin.tgz",
 	})
-	assert.ErrorContains(t, err, "remote --package URL requires --allow-unverified-plugin")
+	assert.ErrorContains(t, err, "remote --package URL requires --skip-signature-verify")
 
 	stdout := new(strings.Builder)
 	stderr := new(strings.Builder)
