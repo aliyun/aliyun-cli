@@ -60,7 +60,9 @@ func New(cfg Config) *Client {
 	}
 	if host := sourceHost(cfg.SourceBase); host != "" {
 		cfg.MetadataHosts = appendHost(cfg.MetadataHosts, host)
-		cfg.RecoveryHosts = appendHost(cfg.RecoveryHosts, host)
+		if !directRepositoryHost(host, cfg.DiscoveryURL) {
+			cfg.RecoveryHosts = appendHost(cfg.RecoveryHosts, host)
+		}
 	}
 	if len(cfg.BootstrapRoot) == 0 {
 		cfg.BootstrapRoot = builtinMaterial(
@@ -145,6 +147,9 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 	}
 	if err := c.validateURL(discovery.ArtifactKeysURI, c.cfg.MetadataHosts); err != nil {
 		return nil, err
+	}
+	if c.directRepositoryTrust() {
+		discovery.TimestampURI = c.repositoryTimestampURL()
 	}
 	if err := c.validateURL(discovery.TimestampURI, c.cfg.MetadataHosts); err != nil {
 		return nil, err
@@ -260,12 +265,20 @@ func (c *Client) FetchArtifact(ctx context.Context, purpose, roleName string) (*
 	if descriptor.Version < minimumVersion {
 		return nil, fmt.Errorf("artifact version rollback")
 	}
-	if err := c.validateURL(descriptor.URL, discovery.OfficialArtifactOrigins); err != nil {
+	artifactHosts := discovery.OfficialArtifactOrigins
+	if c.directRepositoryTrust() {
+		origin, originErr := sourceOrigin(c.cfg.SourceBase)
+		if originErr != nil {
+			return nil, originErr
+		}
+		artifactHosts = []string{origin}
+	}
+	if err := c.validateURL(descriptor.URL, artifactHosts); err != nil {
 		return nil, err
 	}
 	artifactCache := filepath.Join(cacheDir, purpose+".envelope.json")
 	envelopeBytes, envelopeRemote, err := c.fetchWithLKG(
-		ctx, descriptor.URL, artifactCache, discovery.OfficialArtifactOrigins,
+		ctx, descriptor.URL, artifactCache, artifactHosts,
 	)
 	if err != nil {
 		return nil, err
@@ -308,7 +321,7 @@ func (c *Client) loadDiscovery(ctx context.Context, purpose string, now time.Tim
 			return fmt.Errorf("decode discovery: %w", err)
 		}
 		if discovery.SchemaVersion != SchemaVersion ||
-			discovery.SourceBase != c.cfg.SourceBase ||
+			discovery.SourceBase != c.advertisedSourceBase() ||
 			!now.Before(discovery.ExpiresAt) ||
 			discovery.CacheMaxAgeSeconds <= 0 ||
 			!contains(discovery.SupportedSignatureAlgorithms, AlgorithmEd25519) ||
@@ -350,9 +363,40 @@ func (c *Client) discoveryURL() (string, error) {
 		return "", fmt.Errorf("invalid discovery URL: %w", err)
 	}
 	query := discovery.Query()
-	query.Set("source_base", c.cfg.SourceBase)
+	query.Set("source_base", c.advertisedSourceBase())
 	discovery.RawQuery = query.Encode()
 	return discovery.String(), nil
+}
+
+func (c *Client) directRepositoryTrust() bool {
+	return directRepositoryHost(sourceHost(c.cfg.SourceBase), c.cfg.DiscoveryURL)
+}
+
+func (c *Client) advertisedSourceBase() string {
+	if c.directRepositoryTrust() {
+		return "https://aliyuncli.alicdn.com/plugins-v2"
+	}
+	return c.cfg.SourceBase
+}
+
+func (c *Client) repositoryTimestampURL() string {
+	return strings.TrimRight(c.cfg.SourceBase, "/") + "/trust/timestamp.json"
+}
+
+func directRepositoryHost(sourceHostname, discoveryURL string) bool {
+	sourceHostname = strings.ToLower(strings.TrimSuffix(sourceHostname, "."))
+	if sourceHostname == "" || sourceHostname == "aliyuncli.alicdn.com" {
+		return false
+	}
+	return sourceHostname != sourceHost(discoveryURL)
+}
+
+func sourceOrigin(raw string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", fmt.Errorf("invalid plugin source-base")
+	}
+	return u.Scheme + "://" + u.Host, nil
 }
 
 func (c *Client) loadPersistedRoot(cacheDir string, root Root, state State, now time.Time, deny map[string]bool) (Root, error) {

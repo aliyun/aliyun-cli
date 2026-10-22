@@ -95,11 +95,11 @@ aliyun configure plugin-settings set --source-base https://example.com/plugins
 aliyun configure plugin-settings clear
 ```
 
-`site` only selects the trust Discovery portal. The CLI sends its effective
-`source-base` to that portal, then fetches that repository's signed `trust/`
-tree and plugin index directly. Inner repositories on `cli.aliyun-inc.com`
-work for employees who can reach both the public portal and the company
-network. A repository that is not configured by the portal fails closed;
+`site` only selects the trust Discovery portal. Public repositories are
+verified through that portal. A non-public `source-base` is not sent to the
+portal; the CLI keeps the shared trust anchors from the public repository and
+reads that source's own signed timestamp directly. A repository whose
+timestamp is not signed by the built-in trust anchor fails closed;
 only an explicit `--allow-unverified-plugin` permits an unverified fallback.
 For one command, `--source-base <url>` overrides the global setting.
 `ALIBABA_CLOUD_CLI_PLUGIN_SITE` and
